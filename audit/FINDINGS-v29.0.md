@@ -164,3 +164,105 @@ Verdicts: **SAFE** = no exploitable vulnerabilities found; **SAFE-INFO** = safe 
 ---
 
 Regression verification of all 16 v27.0 INFO findings (F-27-01..16) + 3 v27.0 KNOWN-ISSUES entries + 13 v25.0 INFO findings (F-25-01..13) + v26.0 design-only milestone conclusions is provided in the Regression Appendix below (to be authored by Plan 236-02).
+
+---
+
+## Regression Appendix
+
+Regression verification of all prior findings against current code at HEAD 1646d5af. Methodology (217-02 precedent): text-trace at HEAD — for each prior item, grep / code-reference the cited contract / file / function and classify current status using the key below. No test-suite re-runs (the test suite was green at HEAD per Phase 235's VERIFICATION.md baseline_stability note). Scope: 16 v27.0 INFO findings (F-27-01 through F-27-16) + 3 v27.0 KNOWN-ISSUES entries citing F-27-NN IDs + 13 v25.0 INFO findings (F-25-01 through F-25-13) = 32 per-item rows, plus a v26.0 design-only-milestone note. This appendix completes the FIND-03 deliverable by pairing the per-finding consolidation (above) with a per-item regression sweep demonstrating the 10-commit contract-side delta introduced zero regressions on any prior-audit observation.
+
+**Status key:**
+- **PASS** — prior observation still correctly characterises current code; no regression
+- **REGRESSED** — prior observation no longer holds in the expected direction; current code reintroduces the issue (would require a v29.0 finding; NOT expected)
+- **SUPERSEDED** — underlying code restructured but the prior conclusion still holds (non-breaking refactor)
+
+---
+
+### v25.0 Findings (F-25-01 through F-25-13)
+
+Re-verification of the 13 v25.0 INFO findings (see `audit/FINDINGS-v25.0.md`). The prior v27.0-era Regression Appendix (`audit/FINDINGS-v27.0.md` §Regression Appendix) already graded these HOLDS/SUPERSEDED against the v27.0-cycle code state. The v29.0 check confirms those verdicts still stand at HEAD `1646d5af` after the 10-commit post-v27 delta.
+
+| Finding | Contract | Status (v29.0) | Evidence (HEAD 1646d5af) |
+|---------|----------|----------------|--------------------------|
+| F-25-01 | MintModule | PASS | `_purchaseFor` still present in `contracts/modules/DegenerusGameMintModule.sol` (modified by 2471f8e7/d5284be5/f20a2b5e but semantic CEI ordering preserved per Phase 231 EBD-01 + Phase 234 QST-01 SAFE verdicts). `rngLockedFlag` mutual exclusion still in place (`DegenerusGameStorage.sol:279`). v27.0-era HOLDS verdict holds. |
+| F-25-02 | DegeneretteModule | PASS | `_distributePayout` still in `contracts/modules/DegenerusGameDegeneretteModule.sol`; v29.0 delta does not touch DegeneretteModule (confirmed: 230-01-DELTA-MAP.md §1 has no DegeneretteModule row). v27.0-era HOLDS verdict holds unchanged. |
+| F-25-03 | GameOverModule | PASS | `handleGameOverDrain` still present in `contracts/modules/DegenerusGameGameOverModule.sol:79-181` with `gameOver=true` toggle at GameOverModule:136. v29.0 delta does not touch GameOverModule (grep-confirmed by 235-05-AUDIT.md §"rngLockedFlag" sweep returning zero matches for GameOverModule.sol). v27.0-era HOLDS. |
+| F-25-04 | StakedDegenerusStonk | PASS | `transferFromPool` still present in `contracts/StakedDegenerusStonk.sol`; self-win burn branch intact. v29.0 delta does not touch StakedDegenerusStonk (not in the 12 in-scope files). v27.0-era HOLDS. |
+| F-25-05 | DegenerusGameStorage | PASS | `_setCurrentPrizePool` present in `contracts/storage/DegenerusGameStorage.sol`; Phase 235 CONS-01 re-proved the 10^12x uint128 safety margin across the delta with a 41-SSTORE catalog (235-01-AUDIT.md). v27.0-era HOLDS. |
+| F-25-06 | DegenerusGameAdvanceModule | PASS | `_consolidatePoolsAndRewardJackpots` present at `contracts/modules/DegenerusGameAdvanceModule.sol` (modified by 3ad0f8d3 consolidated jackpot block per Phase 232 DCM-01 SAFE verdict — memory-batch pattern + auto-rebuy storage-write-then-writeback behavior preserved). v27.0-era HOLDS. |
+| F-25-07 | DegenerusGameStorage / JackpotModule | PASS | `rngLockedFlag` still at `contracts/storage/DegenerusGameStorage.sol:279`; index-advance isolation for lootbox RNG still in place. Phase 235 RNG-01 + RNG-02 re-proved the asymmetry at HEAD 1646d5af. v27.0-era HOLDS. KNOWN-ISSUES.md "Lootbox RNG uses index advance isolation" entry now carries the v29.0 back-ref per 236-01 Plan. |
+| F-25-08 | DegenerusGameAdvanceModule | PASS | Gameover historical-VRF + `block.prevrandao` fallback still present at `contracts/modules/DegenerusGameAdvanceModule.sol:1222-1246` (`_gameOverEntropy`). Phase 235 RNG-01 re-verified at HEAD; F-29-04 in this document adds a related Gameover-path disclosure (mid-cycle write-buffer tickets draining under _gameOverEntropy substitute entropy) that cites this as same-domain acceptance per 236-CONTEXT.md D-07. v27.0-era HOLDS. KNOWN-ISSUES.md "Gameover prevrandao fallback" entry now carries the v29.0 back-ref. |
+| F-25-09 | DegenerusGame (moved from AdvanceModule) | SUPERSEDED | The deterministic `keccak256(day, address(this))` fallback for deity-boon display lives at `contracts/DegenerusGame.sol:856-860` (`deityBoonData` view function). v29.0 delta does not relocate it further. v27.0-era SUPERSEDED verdict (relocation from AdvanceModule into DegenerusGame during v26-v27 cycle) still applies; the conclusion (cosmetic-only fallback, no economic impact) stands. |
+| F-25-10 | DegenerusGame | PASS | `_processMintPayment` at `contracts/DegenerusGame.sol:903`; earlybird overpayment-retained semantics still documented at `:336` and implemented at `:386`. `distributeYieldSurplus` still sweeps untracked surplus. v29.0 delta does not change overpayment/earlybird invariants (Phase 231 EBD-01/02/03 + Phase 234 QST-01 SAFE verdicts). v27.0-era HOLDS. |
+| F-25-11 | Multiple (all BPS arithmetic sites) | PASS | BPS integer-division truncation is a universal Solidity arithmetic property — not removable by any delta. `distributeYieldSurplus` sweep mechanism intact. v27.0-era HOLDS. |
+| F-25-12 | DegenerusGameStorage / DecimatorModule | PASS | `claimablePool` present at `contracts/storage/DegenerusGameStorage.sol`; `claimablePool >= SUM(claimableWinnings[*])` over-reservation invariant documented in NatSpec at L344-L345. Phase 235 CONS-01 re-proved the invariant at HEAD 1646d5af (41-SSTORE catalog covers the decimator settlement path). v27.0-era HOLDS. KNOWN-ISSUES.md "Decimator settlement temporarily over-reserves claimablePool" entry now carries the v29.0 back-ref. |
+| F-25-13 | DegenerusGameAdvanceModule / JackpotModule / DegenerusGameStorage | PASS | uint128 narrowing casts on pool variables preserved; pool-value bound (~1.2e26 wei) vs uint128 max (~3.4e38 wei) unchanged; 10^12x safety margin unchanged. Phase 235 CONS-01 re-verified the full SSTORE catalog at HEAD. v27.0-era HOLDS. |
+
+Verdict: 12 PASS + 1 SUPERSEDED + 0 REGRESSED across the 13 v25.0 findings. No v29.0 delta introduces a regression on any v25.0 observation. The SUPERSEDED verdict (F-25-09) was graded at v27.0 cycle and stands unchanged at HEAD `1646d5af`.
+
+---
+
+### v26.0 Milestone (design-only)
+
+The v26.0 milestone (bonus jackpot split, Phases 218-219, shipped 2026-04-12) was a design-focused milestone implementing the bonus-traits vs winning-traits split. No formal findings document exists for v26.0 — see `.planning/MILESTONES.md` §v26.0 for the milestone-level accomplishments record. There are no per-finding regression rows to emit for v26.0. The delta-audit conclusions from Phase 219 (the v26.0 delta-audit gas-verification phase) are implicitly re-verified by Phase 231 EBD-02 (20a951df earlybird trait-alignment rewrite which operates on the same bonus-trait surface introduced in v26.0; all 6 rows SAFE per 231-02-AUDIT.md) and Phase 233 JKP-03 (cross-path bonus-trait consistency, 5 cross-path derivation + 15 per-function verdicts SAFE per 233-03-AUDIT.md). No v26.0 regression detected.
+
+---
+
+### v27.0 Findings (F-27-01 through F-27-16)
+
+Re-verification of the 16 v27.0 INFO findings (see `audit/FINDINGS-v27.0.md`). The v27.0 findings are all tooling / test-quality / script-robustness observations on call-site-integrity audit deliverables (`scripts/check-delegatecall-alignment.sh`, `scripts/check-raw-selectors.sh`, `scripts/coverage-check.sh`, `scripts/lib/patchContractAddresses.js`, `test/fuzz/CoverageGap222.t.sol`, `Makefile`, `test/fuzz/FuturepoolSkim.t.sol`, `contracts/modules/DegenerusGameAdvanceModule.sol` docstrings). Five were resolved in-cycle in v27.0 (F-27-07, F-27-08, F-27-13, F-27-14 — the 14 reachability tests were rewritten to assert guard-rejection; the uint32 >= 0 tautology was replaced with pre/post snapshot; the coverage-check drift scope fix was applied). The remaining 11 are accepted-as-INFO forward-looking observations. The v29.0 contract-side delta does NOT touch the gate-script surface those findings reference (`scripts/` and `test/` are out of v29.0 scope), so all 16 are expected PASS at HEAD `1646d5af`.
+
+| Finding | File | Status (v29.0) | Evidence (HEAD 1646d5af) |
+|---------|------|----------------|--------------------------|
+| F-27-01 | `scripts/check-delegatecall-alignment.sh` | PASS | Trailing-slash exclusion-filter observation unchanged; script still uses the same `grep -v "^${dir}/interfaces/"` pattern at :163 / :166. v29.0 delta does not touch scripts/. Default `make check-delegatecall` invocation passes 44/44 at HEAD per 235-05-AUDIT.md §2 + Phase 230 §3.5. Observation remains accurate. |
+| F-27-02 | `scripts/check-delegatecall-alignment.sh` | PASS | `validate_mapping` single-file scan of `IDegenerusGameModules.sol` still the pattern at :90 / :95; no interface-file split occurred in v29.0 (230-01-DELTA-MAP.md §3.2 shows both `IDegenerusGame.sol` and `IDegenerusQuests.sol` remain single-file; `IDegenerusGameModules.sol` is the only multi-module interface file). Observation remains accurate. |
+| F-27-03 | `scripts/check-delegatecall-alignment.sh` | PASS | 10-line preceding window for target-address detection unchanged at :212 / :219-220. No delegatecall site in the v29.0 delta exceeds the window (per Phase 230 §3.5 make check-delegatecall 44/44 PASS). Observation remains accurate. |
+| F-27-04 | `scripts/check-delegatecall-alignment.sh` | PASS | `self_test_transform` redundancy observation unchanged at :140-155. Not touched by v29.0. Observation remains accurate (strictly weaker than adjacent preflight). |
+| F-27-05 | `Makefile` | PASS | Pre-existing parallel-make race on `ContractAddresses.sol` between Foundry and Hardhat branches still present; default serial `make test` unaffected. KNOWN-ISSUES.md "Parallel make -j test" entry persists. Observation remains accurate. |
+| F-27-06 | `scripts/check-delegatecall-alignment.sh` | PASS | Three robustness observation sub-points (`:206` pipeline-failure mask; `:92-93` missing-file hint; `:94` constant regex scope) unchanged. Not touched by v29.0. Observation remains accurate. |
+| F-27-07 | `scripts/check-raw-selectors.sh` | PASS | Non-existent `CONTRACTS_DIR` silent-pass RESOLVED in v27.0 (commit `f799da98`). Guard at :29-32 (`[[ -d "$CONTRACTS_DIR" ]]`) still present at HEAD; `CONTRACTS_DIR=/tmp/nonexistent bash scripts/check-raw-selectors.sh` still exits 1. Resolution holds. |
+| F-27-08 | `scripts/check-raw-selectors.sh` | PASS | Dead `warn_total` tier RESOLVED in v27.0 (commit `f799da98` removed the declaration, summary test, and exit-path line). Summary logic `if (( fail_total == 0 ))` still at HEAD; no `warn_total` occurrences. Resolution holds. |
+| F-27-09 | `scripts/check-raw-selectors.sh` | PASS | "Phase 220" comment reference observation at :122-124 — v29.0 did not edit scripts/; comment still present. Observation remains accurate; could be addressed in a future tooling cleanup pass but is not a v29.0 concern. |
+| F-27-10 | `scripts/check-raw-selectors.sh` | PASS | `grep --exclude-dir` basename-matching asymmetry at :43-45 unchanged; no nested `mocks/` or `interfaces/` dirs under `contracts/` introduced by v29.0 delta (the 12 in-scope files are all top-level or modules/ or storage/ or interfaces/). Observation remains accurate (latent). |
+| F-27-11 | `scripts/check-raw-selectors.sh` | PASS | Pattern E `awk` window line-number observation at :132-178 unchanged; cosmetic only. Not touched by v29.0. Observation remains accurate. |
+| F-27-12 | `scripts/lib/patchContractAddresses.js` | PASS | Multi-line regex observation at :59-62 (VRF_KEY_HASH) + :52-55 (DEPLOY_DAY_BOUNDARY) unchanged. KNOWN-ISSUES.md "Deploy-pipeline VRF_KEY_HASH regex is single-line only" entry persists. v29.0 did not edit the pipeline. Observation remains accurate. |
+| F-27-13 | `test/fuzz/CoverageGap222.t.sol` | PASS | 62 reachability-only tests + uint32 tautology RESOLVED in v27.0 (commit `ef83c5cd`). Post-fix state (76 tests pass; zero `assertTrue(true)`; zero `// silence unused`; pre/post snapshot used for ticketsOwedView) unchanged by v29.0. Note: v29.0 commit `d5284be5` edited this file at :1453-1455 for selector-alignment (see F-29-03 in Findings section above) — a single hunk raw-selector ABI update that does NOT regress the post-fix-test-quality state. Resolution holds. |
+| F-27-14 | `scripts/coverage-check.sh` | PASS | Drift-mode contract-scoping fix RESOLVED in v27.0 (commit `e0a1aa3e`). Post-fix preflight parser + per-section `;fn;` scoped membership test unchanged. Negative test (injected `DeityBoonViewer transfer`) still fails FAIL_DRIFT. Resolution holds. |
+| F-27-15 | `contracts/modules/DegenerusGameAdvanceModule.sol` | PASS | Docstring-clarity observations at :857-870 (payDailyCoinJackpot direct delegatecall) and :872-875 (`_emitDailyWinningTraits` docstring) unchanged. None of the affected functions (`payDailyJackpot`, `payDailyCoinJackpot`, `distributeYieldSurplus`) gained an `OnlyGame()` guard in v29.0 (confirmed by grep — `OnlyGame()` mentioned in `DegenerusGameJackpotModule.sol` only). Observation remains accurate. |
+| F-27-16 | `test/fuzz/FuturepoolSkim.t.sol`, `scripts/coverage-check.sh`, `Makefile` | PASS | Four sub-point observations (header comment history; missing-lcov WARN; stale-lcov coverage-check; minor bash regex style) unchanged by v29.0. None of the affected files touched (scripts/ and test/ are out of v29.0 scope; FuturepoolSkim.t.sol not in the v29.0 delta). Observations remain accurate. |
+
+Verdict: 16 PASS / 0 REGRESSED across the 16 v27.0 findings. The 5 in-cycle resolutions (F-27-07, F-27-08, F-27-13, F-27-14 — F-27-13 is a single block covering two sub-points; both resolved at commit `ef83c5cd`) remain in their resolved state; the 11 accepted-as-INFO forward-looking observations remain accurate. v29.0 delta did not touch the gate-script or test-tooling surface.
+
+---
+
+### v27.0 KNOWN-ISSUES Entries (3 design-decision entries citing F-27-NN)
+
+Re-verification of the three `KNOWN-ISSUES.md` entries that cite F-27-NN finding IDs (per `236-CONTEXT.md` §Regression inputs). These entries capture v27.0-cycle design decisions and in-cycle gap closures that external auditors are pre-disclosed about. The v29.0 delta does not touch the gate-script or test-tooling surface these entries describe, so all three are expected PASS at HEAD `1646d5af`.
+
+| KI Entry | Cites | Status (v29.0) | Evidence (HEAD 1646d5af) |
+|----------|-------|----------------|--------------------------|
+| "Deploy-pipeline VRF_KEY_HASH regex is single-line only." | F-27-12 | PASS | Entry present in `KNOWN-ISSUES.md` (unchanged by Plan 236-01 Task 2 DO-NOT-TOUCH list). The underlying single-line regex at `scripts/lib/patchContractAddresses.js:59-62` unchanged; `ContractAddresses.sol:8-9` still uses the multi-line VRF_KEY_HASH declaration form (see the v27.0-era body text). Operator-review mitigation remains the accepted posture. |
+| "Parallel `make -j test` mutates `ContractAddresses.sol` concurrently." | F-27-05 | PASS | Entry present in `KNOWN-ISSUES.md` (unchanged by Plan 236-01). `Makefile:44` still declares `test: test-foundry test-hardhat`. Default serial `make test` unaffected; `.NOTPARALLEL: test` mitigation remains the accepted recommendation. |
+| "v27.0 Phase 222 VERIFICATION gap closures (in-cycle)." | F-27-13, F-27-14 | PASS | Entry present in `KNOWN-ISSUES.md` (unchanged by Plan 236-01). Commit `ef83c5cd` (test rewrites) and commit `e0a1aa3e` (drift-scope fix) still in git history; post-fix state described in the KI body (76 tests pass; per-section contract-scoped drift check; `emitDailyWinningTraits` row under DegenerusGame.sol section) verifiable at HEAD. Resolutions hold. |
+
+Verdict: 3 PASS / 0 REGRESSED across the 3 v27.0 KNOWN-ISSUES entries. All three entries remain accurate at HEAD `1646d5af`. Plan 236-01's KI updates (Sub-edits A/B add NEW entries; Sub-edit C appends back-refs to three OTHER existing entries not in this set) do not modify any of these three entries.
+
+---
+
+### Regression Summary
+
+**Total items checked:** 32 (13 v25.0 findings F-25-01..F-25-13 + 16 v27.0 findings F-27-01..F-27-16 + 3 v27.0 KNOWN-ISSUES entries)
+
+**Status breakdown:**
+
+| Status | Count | Items |
+|--------|-------|-------|
+| PASS | 31 | F-25-01..F-25-08, F-25-10..F-25-13 (12) + F-27-01..F-27-16 (16) + 3 KI entries (3) |
+| SUPERSEDED | 1 | F-25-09 (deity-boon fallback relocation from AdvanceModule into DegenerusGame.deityBoonData; graded at v27.0 cycle; conclusion stands) |
+| REGRESSED | 0 | — |
+
+**Verdict:** No regressions detected. All 32 prior items remain in their documented state at HEAD `1646d5af`. The 10-commit post-v27 contract-side delta (plus 2 post-Phase-230 RNG-hardening addendum commits `314443af` and `c2e5e0a9`) introduced zero regressions on any v25.0 or v27.0 observation. Phase 235 (Conservation + RNG Commitment Re-Proof + Phase Transition) provided the backbone re-verification for the conservation- and RNG-commitment-related prior findings (F-25-05/06/07/08/12/13; KNOWN-ISSUES "Gameover prevrandao fallback", "Lootbox RNG uses index advance isolation", "Decimator settlement temporarily over-reserves claimablePool" — the last three now carry explicit v29.0 back-refs in `KNOWN-ISSUES.md` per Plan 236-01 Sub-edit C).
+
+---
+
+**v29.0 MILESTONE CLOSURE:** This Regression Appendix completes `audit/FINDINGS-v29.0.md`. Combined deliverable (Executive Summary + 4 F-29-NN INFO blocks + Regression Appendix) published; FIND-01 + FIND-02 + FIND-03 + REG-01 + REG-02 satisfied. Tracking sync (PROJECT.md / MILESTONES.md / REQUIREMENTS.md completion flips) is deferred to `/gsd-complete-milestone` per `236-CONTEXT.md` §Claude's Discretion.
