@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v29.0
 milestone_name: Post-v27 Contract Delta Audit
 status: executing
-stopped_at: "Phase 232.1 functionally complete (3/3 plans shipped including Plan 01 Revision 4 selector fix at 26cea00b). Recommended next: /gsd-verify-phase 232.1 for goal-backward verification before push. Phase 233 / 234 / 235 / 236 sequencing per ROADMAP unchanged."
-last_updated: "2026-04-18T23:45:00Z"
-last_activity: 2026-04-18 -- Phase 232.1 Plan 03 executed (AC-4 + AC-5 + AC-7 + AC-9 PASS; phase functionally complete)
+stopped_at: "Phase 232.1 VERIFIED at cfc7f036 (6/6 ROADMAP SC + 9/9 SPEC AC closed). Next: /gsd-discuss-phase 233 (Jackpot/BAF + Entropy Audit). Phase 234 parallelizable. 235/236 downstream."
+last_updated: "2026-04-19T00:35:00Z"
+last_activity: 2026-04-19 -- Phase 232.1 verified + committed at cfc7f036 (UAT + VERIFICATION docs)
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 11
-  completed_plans: 10
-  percent: 91
+  completed_plans: 11
+  percent: 100
 ---
 
 # Project State
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 232 COMPLETE — next: Phase 233 (Jackpot/BAF + Entropy) or Phase 234 (Quests/Boons/Misc), both parallelizable per ROADMAP
+**Current focus:** Phase 232.1 VERIFIED at cfc7f036 — next: Phase 233 (Jackpot/BAF + Entropy) or Phase 234 (Quests/Boons/Misc), both parallelizable per ROADMAP
 
 ## Current Position
 
-Phase: 232.1 (RNG-Index Ticket Drain Ordering Enforcement) — **functionally complete, 3/3 plans shipped**
+Phase: 232.1 (RNG-Index Ticket Drain Ordering Enforcement) — **VERIFIED 2026-04-19 at cfc7f036; 6/6 ROADMAP SC + 9/9 SPEC AC closed**
 Plan: 3 of 3 (Plan 01 fix across four revisions; Plan 02 forge test suite; Plan 03 sim-replay regression + PFTB audit)
 Milestone: v29.0 — Post-v27 Contract Delta Audit
-Status: Awaiting `/gsd-verify-phase 232.1` then user-initiated push; next milestone phase is 233 (Jackpot/BAF + Entropy)
-Last activity: 2026-04-18 -- Phase 232.1 Plan 03 executed (AC-4 + AC-5 + AC-7 + AC-9 PASS; phase functionally complete)
+Status: Phase 232.1 verified + documented (UAT + VERIFICATION committed at cfc7f036). Ready for `/gsd-discuss-phase 233` when user advances; push of the phase-wide diff remains user-initiated per `feedback_manual_review_before_push.md`.
+Last activity: 2026-04-19 -- Phase 232.1 verified via auto-verified UAT + goal-backward VERIFICATION.md (cfc7f036)
 
 ## Accumulated Context
 
