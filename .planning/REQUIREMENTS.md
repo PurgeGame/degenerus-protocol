@@ -71,9 +71,9 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Findings Consolidation
 
-- [ ] **FIND-01**: All findings severity-classified (CRITICAL / HIGH / MEDIUM / LOW / INFO) in `audit/FINDINGS-v29.0.md` using v27.0-style per-finding blocks
-- [ ] **FIND-02**: `audit/KNOWN-ISSUES.md` updated with any new design-decision entries referencing `F-29-NN` IDs
-- [ ] **FIND-03**: Executive summary table (per-phase counts + per-severity totals) + combined deliverable published
+- [x] **FIND-01**: All findings severity-classified (CRITICAL / HIGH / MEDIUM / LOW / INFO) in `audit/FINDINGS-v29.0.md` using v27.0-style per-finding blocks — satisfied 2026-04-18 by Plan 236-01 (4 F-29-NN INFO blocks: F-29-01/02 BAF event-widening; F-29-03 QST-01 companion-test-coverage; F-29-04 Gameover RNG substitution; 0/0/0/0/4 severity distribution)
+- [x] **FIND-02**: `KNOWN-ISSUES.md` (repo root; audit/KNOWN-ISSUES.md path in spec is a typo, confirmed non-existent) updated with any new design-decision entries referencing `F-29-NN` IDs — satisfied 2026-04-18 by Plan 236-01 (2 new entries: BAF event-widening + BAF_TRAIT_SENTINEL=420 pattern referencing F-29-01/F-29-02; Gameover RNG substitution for mid-cycle write-buffer tickets referencing F-29-04 and codifying the "RNG-consumer determinism" invariant; 3 targeted v29.0 back-refs appended on existing entries — Gameover prevrandao fallback / Lootbox RNG index advance isolation / Decimator settlement over-reserves claimablePool)
+- [ ] **FIND-03**: Executive summary table (per-phase counts + per-severity totals) + combined deliverable published — partial (exec summary portion complete in Plan 236-01 at `audit/FINDINGS-v29.0.md`; regression-row portion pending in Plan 236-02)
 
 ## Future Requirements
 
@@ -116,9 +116,9 @@ None — this is a terminal delta-audit milestone.
 | TRNX-01 | 235 | Pending |
 | REG-01 | 236 | Pending |
 | REG-02 | 236 | Pending |
-| FIND-01 | 236 | Pending |
-| FIND-02 | 236 | Pending |
-| FIND-03 | 236 | Pending |
+| FIND-01 | 236 | Complete (2026-04-18) |
+| FIND-02 | 236 | Complete (2026-04-18) |
+| FIND-03 | 236 | Partial (exec summary done 2026-04-18 by Plan 236-01; regression rows pending Plan 236-02) |
 
 **Coverage:**
 - v29.0 requirements: 25 total

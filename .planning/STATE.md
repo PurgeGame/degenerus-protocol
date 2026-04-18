@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v29.0
 milestone_name: Post-v27 Contract Delta Audit
 status: executing
-stopped_at: Phase 236 context gathered
-last_updated: "2026-04-18T19:29:44.208Z"
-last_activity: 2026-04-18 -- Phase 236 planning complete
+stopped_at: Phase 236 Plan 01 complete; Plan 02 (regression appendix) remaining
+last_updated: "2026-04-18T19:40:27Z"
+last_activity: 2026-04-18 -- Phase 236 Plan 01 shipped (audit/FINDINGS-v29.0.md with 4 F-29-NN INFO blocks + KNOWN-ISSUES.md updates)
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 21
-  completed_plans: 19
-  percent: 90
+  completed_plans: 20
+  percent: 95
 ---
 
 # Project State
@@ -21,20 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phases 233 + 234 VERIFIED 2026-04-19 (autonomous parallel run while user slept) — next: Phase 235 (Conservation + RNG Re-Proof + Phase Transition, depends on 231/232/233/234 which are all now complete)
+**Current focus:** Phase 236 — regression-findings-consolidation
 
 ## Current Position
 
-Phase: 235 (Conservation + RNG Commitment Re-Proof + Phase Transition) — **EXECUTED 2026-04-18; 5/5 plans shipped in parallel Wave 1**
+Phase: 236 (regression-findings-consolidation) — EXECUTING
+Plan: 2 of 2 (Plan 01 shipped)
 
-- Plans complete: 235-01 CONS-01 (6e09cdca + 950cc7f5; 41 SSTORE rows + 10 path proofs) / 235-02 CONS-02 (9e93cd3a + fa9eaf77; 10 mint + 6 burn sites) / 235-03 RNG-01 (23f9c8ca + 0e963b05; 28 backward-trace rows including 19 c2e5e0a9 + 314443af) / 235-04 RNG-02 (4f1a5233 + 0e963b05; 19 commitment-window rows + 25-var global state enumeration) / 235-05 TRNX-01 (0006a014 + 950cc7f5; 4-path walk + buffer-swap at AdvanceModule:292)
-- Aggregate: zero VULNERABLE / zero DEFERRED / zero Finding Candidate: Y rows across all 5 plans (clean closure of the v29.0 conservation + RNG + phase-transition re-proof surface)
-- Race-commit artifacts (documented, same 4a06e5af-class pattern from Phases 233/234): 0e963b05 "docs(235-04)" subject also committed 235-03-SUMMARY.md; 950cc7f5 "docs(235-01)" subject also committed 235-05-SUMMARY.md. Content correct and in right directory in both cases; only commit subjects are skewed.
-- Next: /gsd-verify-work for goal-backward verification, then /gsd-execute-phase 236 for regression sweep + findings consolidation.
+- Plans complete (236): 236-01 Findings Consolidation + KNOWN-ISSUES updates — 519b57e8 (audit/FINDINGS-v29.0.md: 166-line v27.0-style consolidated report, 0/0/0/0/4 severity distribution, 4 F-29-NN INFO blocks F-29-01/02/03/04, six per-phase subsections 231→232→232.1→233→234→235, Exec Summary + Audit Trail) + 5de8ad0c (KNOWN-ISSUES.md +7/-3: 2 new Design-Decisions entries [BAF event-widening + BAF_TRAIT_SENTINEL=420 pattern citing F-29-01/02; Gameover RNG substitution for mid-cycle write-buffer tickets citing F-29-04 and codifying the "RNG-consumer determinism" invariant name] + 3 v29.0 Phase 235 back-refs on existing entries [Gameover prevrandao fallback → RNG-01; Lootbox index advance isolation → RNG-01 + RNG-02; Decimator over-reserves claimablePool → CONS-01])
+- Plans complete (235): 235-01 CONS-01 (6e09cdca + 950cc7f5; 41 SSTORE rows + 10 path proofs) / 235-02 CONS-02 (9e93cd3a + fa9eaf77; 10 mint + 6 burn sites) / 235-03 RNG-01 (23f9c8ca + 0e963b05; 28 backward-trace rows including 19 c2e5e0a9 + 314443af) / 235-04 RNG-02 (4f1a5233 + 0e963b05; 19 commitment-window rows + 25-var global state enumeration) / 235-05 TRNX-01 (0006a014 + 950cc7f5; 4-path walk + buffer-swap at AdvanceModule:292)
+- 236-01 aggregate: 46 automated acceptance-criteria gates passed across both tasks (Task 1 27 gates; Task 2 19 gates). Zero contracts/ or test/ writes. No stray audit/KNOWN-ISSUES.md. FIND-01 + FIND-02 satisfied; FIND-03 partial (exec summary done; regression-row portion pending Plan 236-02).
+- Suppressions honored: D-09 (232.1 RNG-index ordering NOT promoted to KI); D-10 (F-29-03 NOT promoted to KI); D-11 (v28.0's D-229-10 KI-promotion-suppression does not apply to v29.0).
+- Race-commit artifacts from prior phases (documented): 0e963b05 subject `docs(235-04)` includes 235-03-SUMMARY.md; 950cc7f5 subject `docs(235-01)` includes 235-05-SUMMARY.md. Content correct; only subjects skewed. Phase 236 Plan 01 executed sequentially — no race artifacts this round.
+- Next: /gsd-execute-phase 236 to run Plan 236-02 (Regression Appendix appending 32-row v25.0 + v27.0 + v27.0-KI regression table to audit/FINDINGS-v29.0.md at the placeholder cross-reference paragraph).
 
-Milestone: v29.0 — Post-v27 Contract Delta Audit (7 of 8 phases complete — only Phase 236 REG + FIND remains)
-Status: Ready to execute
-Last activity: 2026-04-18 -- Phase 236 planning complete
+Milestone: v29.0 — Post-v27 Contract Delta Audit (7 of 8 phases complete — Phase 236 Plan 01 shipped; only Phase 236 Plan 02 Regression Appendix remains)
+Status: Executing Phase 236 (Plan 02 remaining)
+Last activity: 2026-04-18 -- Phase 236 Plan 01 shipped (FIND-01 + FIND-02 complete; FIND-03 exec-summary portion done)
 Known racy artifact: commit 4a06e5af has the WRONG commit subject (says "docs(233-02)" but actually stages 234-01-SUMMARY.md — a race between the two parallel executors). File content is correct and in the right directory; only the commit subject is mislabeled. Recovery commit 00499a1d holds the actual 233-02-AUDIT.md with the correct subject.
 
 ## Accumulated Context
@@ -99,7 +102,9 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-18T19:10:16.282Z
+Last session: 2026-04-18T19:40:27Z
 
-This session: 2026-04-18 — Phase 235 (Conservation + RNG Commitment Re-Proof + Phase Transition) fully executed in one sitting: `/gsd-discuss-phase` → `/gsd-plan-phase --auto` → `/gsd-execute-phase --auto`. Discuss-phase resolved 4 gray areas (plan shape = 5 plans strict per-req all parallel Wave 1; evidence reuse = fresh re-prove + cross-cite prior + re-verify at HEAD; addendum = full per-site backward-trace + commitment-window for all 17 c2e5e0a9 sites + 314443af inclusion; TRNX-01 depth = medium invariant + 4-path walk). User-mandated corrections: (a) per-requirement ticket-processing impact sub-section in every plan because ticket surface moved under three phases (230 baseline → 232.1 fix series → HEAD); (b) rngLocked invariant reframed — blocks ONLY far-future queue writes + active read-buffer writes, NOT general ticket queueing; buffer swap fires at RNG request time. CONTEXT.md with 17 decisions D-01..D-17 committed at c4430745. Plan-phase generated 5 PLAN.md files (7cd233fc) passing the gsd-plan-checker on all 14 critical checks + standard dimensions; one head_sha acceptance-criteria wording fix committed at 52a1f678 to clarify 1646d5af is the locked audit baseline (not dynamic git HEAD) since docs-only commits had advanced HEAD. Execute-phase spawned 5 parallel gsd-executor agents on the main working tree; all 5 completed with SAFE verdicts and zero Finding Candidate: Y rows. Aggregate output: 41 SSTORE catalog rows + 10 named-path algebraic proofs (CONS-01), 10 mint-site + 6 burn-site rows (CONS-02), 28 backward-trace rows with 19 c2e5e0a9 + 314443af (RNG-01), 19 c2e5e0a9 commitment-window rows + 25-variable global state enumeration + D-11 rngLocked invariant sub-section (RNG-02), 4-path walk (Normal/Gameover/Skip-split/Phase-transition freeze) with buffer-swap site cited at `DegenerusGameAdvanceModule.sol:292` in `_swapAndFreeze(purchaseLevel)` (TRNX-01). Two race-commit artifacts (same 4a06e5af pattern): `0e963b05` subject is `docs(235-04)` but includes 235-03-SUMMARY.md; `950cc7f5` subject is `docs(235-01)` but includes 235-05-SUMMARY.md — content correct and in right directory in both cases, only commit subjects are skewed. Zero `contracts/` or `test/` writes across the entire phase (D-17 READ-only honored). Zero STATE.md or ROADMAP.md writes by executors (orchestrator owns those). Baseline stability verified via `git diff --stat 1646d5af..HEAD -- contracts/ test/` returning empty throughout.
-Stopped at: Phase 236 context gathered
+This session: 2026-04-18 — Phase 236 Plan 01 (Findings Consolidation) executed sequentially on the main working tree. Task 1 committed at 519b57e8 creating audit/FINDINGS-v29.0.md (166 lines, v27.0 structural precedent, 0/0/0/0/4 severity, four F-29-NN INFO blocks, six per-phase subsections in phase order). Task 2 committed at 5de8ad0c updating root KNOWN-ISSUES.md with 2 new design-decision entries (BAF event-widening pattern + Gameover RNG substitution codifying the "RNG-consumer determinism" invariant) and 3 targeted v29.0 back-refs on existing entries (Gameover prevrandao fallback; Lootbox RNG index advance isolation; Decimator settlement over-reserves claimablePool). 46/46 automated acceptance gates passed across both tasks. Zero contracts/ or test/ writes. No stray audit/KNOWN-ISSUES.md created. FIND-01 + FIND-02 requirements marked Complete; FIND-03 marked Partial (exec summary done; regression-row portion deferred to Plan 236-02). 236-01-SUMMARY.md (112 lines) authored at .planning/phases/236-regression-findings-consolidation/236-01-SUMMARY.md. Duration: ~8 minutes end-to-end. Plan 236-02 (Regression Appendix — 32-row re-verification table for v25.0 + v27.0 + v27.0-KI entries at HEAD 1646d5af) is the sole remaining v29.0 plan.
+
+Prior session: 2026-04-18 — Phase 235 (Conservation + RNG Commitment Re-Proof + Phase Transition) fully executed in one sitting: `/gsd-discuss-phase` → `/gsd-plan-phase --auto` → `/gsd-execute-phase --auto`. Discuss-phase resolved 4 gray areas (plan shape = 5 plans strict per-req all parallel Wave 1; evidence reuse = fresh re-prove + cross-cite prior + re-verify at HEAD; addendum = full per-site backward-trace + commitment-window for all 17 c2e5e0a9 sites + 314443af inclusion; TRNX-01 depth = medium invariant + 4-path walk). User-mandated corrections: (a) per-requirement ticket-processing impact sub-section in every plan because ticket surface moved under three phases (230 baseline → 232.1 fix series → HEAD); (b) rngLocked invariant reframed — blocks ONLY far-future queue writes + active read-buffer writes, NOT general ticket queueing; buffer swap fires at RNG request time. CONTEXT.md with 17 decisions D-01..D-17 committed at c4430745. Plan-phase generated 5 PLAN.md files (7cd233fc) passing the gsd-plan-checker on all 14 critical checks + standard dimensions; one head_sha acceptance-criteria wording fix committed at 52a1f678 to clarify 1646d5af is the locked audit baseline (not dynamic git HEAD) since docs-only commits had advanced HEAD. Execute-phase spawned 5 parallel gsd-executor agents on the main working tree; all 5 completed with SAFE verdicts and zero Finding Candidate: Y rows. Aggregate output: 41 SSTORE catalog rows + 10 named-path algebraic proofs (CONS-01), 10 mint-site + 6 burn-site rows (CONS-02), 28 backward-trace rows with 19 c2e5e0a9 + 314443af (RNG-01), 19 c2e5e0a9 commitment-window rows + 25-variable global state enumeration + D-11 rngLocked invariant sub-section (RNG-02), 4-path walk (Normal/Gameover/Skip-split/Phase-transition freeze) with buffer-swap site cited at `DegenerusGameAdvanceModule.sol:292` in `_swapAndFreeze(purchaseLevel)` (TRNX-01). Two race-commit artifacts (same 4a06e5af pattern): `0e963b05` subject is `docs(235-04)` but includes 235-03-SUMMARY.md; `950cc7f5` subject is `docs(235-01)` but includes 235-05-SUMMARY.md — content correct and in right directory in both cases, only commit subjects are skewed. Zero `contracts/` or `test/` writes across the entire phase (D-17 READ-only honored). Zero STATE.md or ROADMAP.md writes by executors (orchestrator owns those). Baseline stability verified via `git diff --stat 1646d5af..HEAD -- contracts/ test/` returning empty throughout.
+Stopped at: Phase 236 Plan 01 complete (FINDINGS-v29.0.md + KNOWN-ISSUES updates shipped); Plan 02 Regression Appendix remains
