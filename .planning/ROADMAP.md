@@ -59,9 +59,9 @@
 <details open>
 <summary>🚧 v29.0 Post-v27 Contract Delta Audit (Phases 230-236) — IN PROGRESS</summary>
 
-**Milestone Goal:** Full adversarial audit of every `contracts/` change since the v27.0 baseline (2026-04-13). v28.0 audited the sibling `database/` repo only; contracts have been unaudited for 10 commits touching 12 files across entropy passthrough, earlybird rewrites, decimator changes, BAF sentinel, quest wei fix, and boon exposure. Read-only audit — no `contracts/` or `test/` writes this milestone. Deliverable: `audit/FINDINGS-v29.0.md`.
+**Milestone Goal:** Full adversarial audit of every `contracts/` change since the v27.0 baseline (2026-04-13). v28.0 audited the sibling `database/` repo only; contracts have been unaudited for 10 commits (+ 2 post-Phase-230 RNG-hardening commits captured via `230-02-DELTA-ADDENDUM.md`) touching 12 files across entropy passthrough, earlybird rewrites, decimator changes, BAF sentinel, quest wei fix, boon exposure, and non-keccak-entropy-mixing fixes. Read-only audit from Phase 231 onward; the two addendum commits (`314443af`, `c2e5e0a9`) are bug fixes landed mid-milestone with downstream phases updated to cover their surface. Deliverable: `audit/FINDINGS-v29.0.md`.
 
-- [x] **Phase 230: Delta Extraction & Scope Map** - Function-level changelog, cross-module interaction map, and interface-drift catalog across the 10-commit / 12-file delta — completed 2026-04-17
+- [x] **Phase 230: Delta Extraction & Scope Map** - Function-level changelog, cross-module interaction map, and interface-drift catalog across the 10-commit / 12-file delta — completed 2026-04-17; extended by `230-02-DELTA-ADDENDUM.md` on 2026-04-17 to capture 2 post-Phase-230 RNG-hardening commits (`314443af`, `c2e5e0a9`)
 - [x] **Phase 231: Earlybird Jackpot Audit** - Adversarial audit of the purchase-phase finalize refactor and the trait-alignment rewrite + combined state-machine verification — completed 2026-04-17 (40 PASS verdicts across 3 plans; zero FAIL, zero DEFER)
 - [ ] **Phase 232: Decimator Audit** - Adversarial audit of burn-key-by-resolution-level, event emission, and terminal-claim passthrough
 - [ ] **Phase 233: Jackpot/BAF + Entropy Audit** - Adversarial audit of `traitId=420` sentinel, explicit entropy passthrough, and cross-path bonus-trait consistency

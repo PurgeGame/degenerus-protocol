@@ -47,6 +47,9 @@ The Phase 230 catalog (`230-01-DELTA-MAP.md`) is the exclusive scope source. Sec
 ### Findings Discipline
 - **D-11 (no finding IDs emitted):** Phase 233 does NOT emit `F-29-NN` finding IDs. Plans produce per-function verdicts + cross-path proofs that become the finding-candidate pool. Phase 236 (FIND-01/02/03) owns ID assignment, severity classification, and consolidation into `audit/FINDINGS-v29.0.md`. Every verdict Phase 233 produces cites commit SHA + file:line so Phase 236 can anchor without re-discovery.
 
+### Post-Phase-230 Addendum Integration
+- **D-12 (Phase 230 scope extended via 230-02-DELTA-ADDENDUM.md):** Two contract commits landed AFTER Phase 230 locked its DELTA-MAP: `314443af` (MintModule `_raritySymbolBatch` keccak-seed fix) and `c2e5e0a9` (17 JackpotModule + MintModule + PayoutUtils entropy-mixing keccak replacements, plus new `EntropyLib.hash2` helper). Phase 233 MUST read both `230-01-DELTA-MAP.md` AND `230-02-DELTA-ADDENDUM.md`. The JKP-02 entropy-passthrough audit is the MOST AFFECTED requirement — every `entropy` consumer downstream of the new `processFutureTicketBatch` argument now threads through `EntropyLib.hash2` or `keccak256(abi.encode(...))` formulations instead of XOR+entropyStep. JKP-02 plans MUST include verdict rows for the post-`c2e5e0a9` formulations (validate cryptographic equivalence + no domain-collision between 2-input `hash2` and 3-input `abi.encode` forms). JKP-03 cross-path consistency is INDIRECTLY affected — the three readers of `bonusTraitsPacked` now also thread through the new keccak formulations where they mix `entropy` with `lvl` for sub-selection; JKP-03 verdict rows must confirm the cross-path agreement holds post-hardening. Scope source: `230-02-DELTA-ADDENDUM.md` per-site verdict table is the starting evidence set; Phase 233 re-verifies from HEAD source per the fresh-read methodology.
+
 </decisions>
 
 <canonical_refs>
