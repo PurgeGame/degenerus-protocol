@@ -238,37 +238,33 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
         }
 
-        // --- Daily drain gate: ensure read slot is fully processed before RNG ---
-        if (!ticketsFullyProcessed) {
-            uint48 idx = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;
-            if (lootboxRngWordByIndex[idx] == 0) {
-                uint256 cw = rngWordCurrent;
-                if (cw == 0) revert NotTimeYet();
-                _finalizeLootboxRng(cw);
-            }
-            uint24 rk = _tqReadKey(purchaseLevel);
-            if (ticketQueue[rk].length > 0) {
-                (
-                    bool ticketWorked,
-                    bool ticketsFinished
-                ) = _runProcessTicketBatch(purchaseLevel);
-                if (ticketWorked || !ticketsFinished) {
-                    emit Advance(STAGE_TICKETS_WORKING, lvl);
-                    coinflip.creditFlip(
-                        caller,
-                        (ADVANCE_BOUNTY_ETH *
-                            PRICE_COIN_UNIT *
-                            bountyMultiplier) /
-                            PriceLookupLib.priceForLevel(lvl)
-                    );
-                    return;
-                }
-            }
-            ticketsFullyProcessed = true;
-        }
-
         uint8 stage;
         do {
+            // --- Daily drain gate: ensure read slot is fully processed before RNG ---
+            if (!ticketsFullyProcessed) {
+                uint24 preRk = _tqReadKey(purchaseLevel);
+                if (ticketQueue[preRk].length > 0) {
+                    uint48 preIdx = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;
+                    if (lootboxRngWordByIndex[preIdx] == 0) {
+                        uint256 cw = rngWordCurrent;
+                        if (cw == 0) revert NotTimeYet();
+                        unchecked {
+                            cw += totalFlipReversals;
+                        }
+                        _finalizeLootboxRng(cw);
+                    }
+                    (
+                        bool preWorked,
+                        bool preFinished
+                    ) = _runProcessTicketBatch(purchaseLevel);
+                    if (preWorked || !preFinished) {
+                        stage = STAGE_TICKETS_WORKING;
+                        break;
+                    }
+                }
+                ticketsFullyProcessed = true;
+            }
+
             // RNG: use existing word or request new one
             bool bonusFlip = (inJackpot && jackpotCounter == 0) || lvl == 0;
             (uint256 rngWord, uint32 gapDays) = rngGate(
