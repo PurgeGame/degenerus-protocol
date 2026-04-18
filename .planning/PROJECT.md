@@ -8,20 +8,11 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v29.0 Post-v27 Contract Delta Audit
+## Completed Milestone: v29.0 Post-v27 Contract Delta Audit
 
-**Goal:** Full adversarial audit of all `contracts/` changes since the v27.0 (2026-04-13) audit baseline. v28.0 audited the sibling `database/` repo only, so contract code has been unaudited since v27.0. Covers 10 contract-touching commits: phase-transition RNG lock removal, entropy passthrough refactor, earlybird finalize-at-transition + trait-alignment rewrite, decimator burn-key + event emission + terminal-claim passthrough, BAF trait-sentinel, `mint_ETH` quest wei fix, and `boonPacked` mapping exposure.
+**Status:** Complete (2026-04-18)
 
-**Target features:**
-- Delta extraction & scope map (10 commits, 12 contract/interface files)
-- Earlybird jackpot path audit (both the purchase-phase refactor and today's trait-roll/queue-level rewrite)
-- Decimator changes (burn-key by resolution level, event emission, terminal-claim passthrough, consolidated jackpot block)
-- Jackpot/BAF + entropy refactors (traitId=420 sentinel, explicit entropy passthrough to `processFutureTicketBatch`)
-- Quest/boon/interface drift (`mint_ETH` wei credit, `boonPacked` exposure, `IDegenerusQuests` + `IDegenerusGame` alignment)
-- Phase-transition RNG lock removal (`_unlockRng` no longer fires at jackpot→purchase; housekeeping packs into last jackpot physical day)
-- ETH / BURNIE conservation + RNG commitment-window re-proof across the delta
-- Regression sweep against v25.0/v26.0/v27.0 findings
-- Findings consolidation → `audit/FINDINGS-v29.0.md` + KNOWN-ISSUES.md sync
+**Result:** 8 phases (230, 231, 232, 232.1, 233, 234, 235, 236), 21 plans, 25/25 requirements satisfied. Full adversarial audit of every `contracts/` change since the v27.0 (2026-04-13) baseline — 10 contract-touching commits across 12 files plus 2 post-Phase-230 RNG-hardening commits captured via `230-02-DELTA-ADDENDUM.md`. Phase 232.1 inserted mid-milestone for RNG-index ticket-drain ordering enforcement. **Zero on-chain vulnerabilities.** 4 INFO findings consolidated into `audit/FINDINGS-v29.0.md` (F-29-01/02 BAF event-widening; F-29-03 QST-01 companion-test-coverage observation; F-29-04 Gameover RNG substitution for mid-cycle write-buffer tickets — user-surfaced retroactively, codifies the new "RNG-consumer determinism" invariant). 32 prior findings re-verified at HEAD `1646d5af`: 31 PASS + 1 SUPERSEDED (F-25-09 EndgameModule deletion) + 0 REGRESSED. ETH + BURNIE conservation re-proven (41 SSTORE rows + 10 named-path proofs; 10 mint + 6 burn sites); RNG commitment integrity re-proven for every new consumer (28+ backward-trace rows + 19 commitment-window rows + 25-variable global state-space enumeration); TRNX-01 4-path walk verified rngLocked invariant preserved across the packed phase-transition. KNOWN-ISSUES.md updated with 1 new design-decision entry (Gameover RNG substitution), then refined for warden-facing scope (4 out-of-scope test/script entries removed, all internal audit-artifact cross-references stripped). Cross-repo READ-only pattern from v28.0 carried forward — zero `contracts/` or `test/` writes. Deliverable: `audit/FINDINGS-v29.0.md`.
 
 ## Completed Milestone: v28.0 Database & API Intent Alignment Audit
 
@@ -210,6 +201,9 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v22.0 Delta Audit & Payout Reference Rewrite — purchase phase jackpot redesign, event catalog — v22.0 Phases 199-200
 - ✓ v23.0 Redemption Coinflip Fix — phantom creditFlip removed from 3 resolution paths, EQUIVALENT delta audit, 4/4 requirements — v23.0 Phases 201-202
 - ✓ v25.0 Full Audit (Post-v5.0 Delta + Fresh RNG) — 5 phases, 18 plans, 18/18 requirements. Delta extraction (99 chains), adversarial (700+ verdicts, 0 VULNERABLE), RNG fresh-eyes (SOUND), ETH conservation (algebraic proof), findings consolidation (13 INFO, 31 regressions checked, 0 regressed) — v25.0 Phases 213-217
+- ✓ v27.0 Call-Site Integrity Audit — 4 phases, 9 plans, 14/14 requirements. Delegatecall target alignment (43 sites ALIGNED), raw-selector audit (5 INFO), external function coverage (308 functions classified, 76 integration tests close all 177 CRITICAL_GAPs), 16 INFO consolidated into audit/FINDINGS-v27.0.md, all 13 v25.0 findings re-verified — v27.0 Phases 220-223
+- ✓ v28.0 Database & API Intent Alignment Audit — 6 phases, 13 plans, 17/17 requirements. Cross-repo READ-only audit pattern formalized; 27/27/27 API alignment, Drizzle ↔ SQL migration audit, indexer event-processor coverage, cursor/reorg/view-refresh state machines; 69 findings (0 CRITICAL/HIGH/MEDIUM, 27 LOW, 42 INFO) — v28.0 Phases 224-229
+- ✓ v29.0 Post-v27 Contract Delta Audit — 8 phases, 21 plans, 25/25 requirements. Adversarial audit of 10 contract-touching commits since v27.0 baseline; ETH + BURNIE conservation re-proven; RNG commitment integrity re-proven for every new consumer; TRNX-01 4-path rngLocked invariant verified. **0 on-chain vulnerabilities.** 4 INFO findings (F-29-01..04) including the user-surfaced "RNG-consumer determinism" invariant disclosure. 32 prior findings re-verified (31 PASS + 1 SUPERSEDED + 0 REGRESSED). KNOWN-ISSUES.md cleaned for warden-facing scope. Deliverable: audit/FINDINGS-v29.0.md — v29.0 Phases 230-236
 
 ## Completed Milestone: v8.1 Final Audit Prep
 
@@ -361,7 +355,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v26.0 Bonus Jackpot Split milestone started (2026-04-11). Splitting jackpot system into two independent drawings: main (ETH, current-level tickets, main traits) and bonus (BURNIE, future-level tickets, independent trait roll with hero preserved). Both `payDailyCoinJackpot` (purchase phase) and `payDailyJackpotCoinAndTickets` coin+carryover portions (jackpot phase) affected. No storage for bonus traits — emit event only.
+v29.0 Post-v27 Contract Delta Audit shipped 2026-04-18. All 25 requirements satisfied across 8 phases / 21 plans. Zero on-chain vulnerabilities. 4 INFO findings consolidated into `audit/FINDINGS-v29.0.md`; 32 prior v25.0 + v27.0 + v27.0-KI findings re-verified at HEAD `1646d5af` (31 PASS + 1 SUPERSEDED + 0 REGRESSED). Contract code at HEAD `1646d5af` is the audited baseline; subsequent docs-only commits do not advance the audited surface. KNOWN-ISSUES.md refined for warden-facing delivery — internal audit-artifact cross-references stripped, out-of-scope test/script entries removed, new "Gameover RNG substitution" entry codifies the "RNG-consumer determinism" invariant. Ready for next milestone — invoke `/gsd-new-milestone` when scope is defined.
 
 ## Completed Milestone: v17.1 Comment Correctness Sweep
 
@@ -431,4 +425,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-13 — v28.0 Database & API Intent Alignment Audit milestone started. Audit target: sibling `database/` repo (API handlers, DB schema + migrations, indexer) against API.md + openapi.yaml + in-source comments. Deliverable: audit/FINDINGS-v28.0.md.*
+*Last updated: 2026-04-18 — v29.0 Post-v27 Contract Delta Audit complete. 8 phases, 21 plans, 25/25 requirements; 4 INFO findings, 0 on-chain vulnerabilities; 32 prior findings re-verified with 31 PASS + 1 SUPERSEDED + 0 REGRESSED at HEAD `1646d5af`. Deliverable: audit/FINDINGS-v29.0.md. Ready for next milestone via `/gsd-new-milestone`.*

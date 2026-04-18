@@ -1,5 +1,28 @@
 # Milestones
 
+## v29.0 Post-v27 Contract Delta Audit (Shipped: 2026-04-18)
+
+**Phases completed:** 8 phases (230, 231, 232, 232.1, 233, 234, 235, 236), 21 plans, 25/25 requirements
+**Audit baseline:** v27.0 HEAD `14cb45e1` → v29.0 HEAD `1646d5af` (10 contract-touching commits across 12 in-scope files)
+**Result:** Zero on-chain vulnerabilities. 4 INFO findings (F-29-01..04). 32 prior findings re-verified: 31 PASS + 1 SUPERSEDED (F-25-09 EndgameModule deletion) + 0 REGRESSED.
+
+**Key accomplishments:**
+
+- **Adversarial audit of every contract delta**: 9 in-scope commits audited end-to-end across 5 themes — Earlybird Jackpot (3 plans, EBD-01/02/03), Decimator (3 plans, DCM-01/02/03), Jackpot/BAF + Entropy (3 plans, JKP-01/02/03), Quests/Boons/Misc (1 plan, QST-01/02/03), Phase Transition RNG Lock (TRNX-01). Plus 232.1 inserted hardening series for RNG-index ticket-drain ordering.
+- **ETH + BURNIE conservation re-proven across the delta** (Phase 235 Plans 01-02): every pool-mutating SSTORE site catalogued (41 rows / 10 named-path proofs); every BURNIE mint/burn site routed through one of three caller-gated gateways with closed Quest Credit Algebra.
+- **RNG commitment integrity re-proven** (Phase 235 Plans 03-04): per-consumer backward-trace from every new RNG consumer to `rawFulfillRandomWords` (28+ rows); commitment-window enumeration with rngLocked invariant formally annotated across 25-variable state-space.
+- **First explicit disclosure of "RNG-consumer determinism" invariant** (F-29-04, user-surfaced during consolidation review): gameover path technically substitutes `_gameOverEntropy` for the originally-anticipated mid-day VRF word when a mid-cycle ticket-buffer swap is in flight at gameover trigger; non-exploitable, accepted design, codified in `KNOWN-ISSUES.md`.
+- **`audit/FINDINGS-v29.0.md` published** in v27.0 structural form: Executive Summary (0/0/0/0/4) + per-phase sections + 4 F-29-NN INFO blocks + 32-row Regression Appendix re-verifying all v25.0 + v27.0 + v27.0-KI items against HEAD `1646d5af`.
+- **`KNOWN-ISSUES.md` refined for warden-facing scope**: 1 new design-decision entry (Gameover RNG substitution / RNG-consumer determinism invariant); 4 out-of-scope test/script entries removed; all internal audit-artifact cross-references stripped (no F-25-NN, F-27-NN, FINDINGS-vXX.0.md, or audit/* paths remain).
+
+**Process notes:**
+
+- Tracking sync from Plan 236-02 deferred to milestone close per CONTEXT D-Claude's-Discretion; resolved during this close-out (REQUIREMENTS.md traceability table flipped Pending → Complete for 11 rows; FIND-03 Partial → Complete; Phase 231 VERIFICATION bookkeeping gap resolved).
+- Known deferred items at close: 2 quick-task tracker false-positives (260327-n7h, 260327-q8y) — both have SUMMARY.md, audit tool prefix-naming mismatch only. See STATE.md "Deferred Items".
+- Two race-commit-subject artifacts from parallel Phase 235 executors (`0e963b05`, `950cc7f5`) — content correct, only commit subjects skewed.
+
+---
+
 ## v28.0 Database & API Intent Alignment Audit (Shipped: 2026-04-15)
 
 **Phases completed:** 6 phases (224–229), 13 plans

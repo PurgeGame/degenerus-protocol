@@ -279,6 +279,53 @@
 
 ---
 
+## Milestone: v29.0 — Post-v27 Contract Delta Audit
+
+**Shipped:** 2026-04-18
+**Phases:** 8 (230, 231, 232, 232.1, 233, 234, 235, 236) | **Plans:** 21 | **Requirements:** 25/25 satisfied
+
+### What Was Built
+- Adversarial audit of every `contracts/` change since the v27.0 (2026-04-13) baseline — 10 in-scope commits across 12 contract/interface files plus 2 post-Phase-230 RNG-hardening commits captured via `230-02-DELTA-ADDENDUM.md`
+- ETH + BURNIE conservation re-proven across the delta (41 SSTORE catalog rows + 10 named-path proofs; 10 mint + 6 burn sites)
+- Per-consumer RNG commitment-window re-proof for every new RNG consumer (28+ backward-trace rows + 19 commitment-window rows + 25-variable global state-space enumeration); rngLocked invariant formally annotated
+- TRNX-01 4-path walk verifying rngLocked invariant preserved across the packed phase-transition (Normal / Gameover / Skip-split / Phase-transition freeze)
+- `audit/FINDINGS-v29.0.md` published in v27.0 structural form with 4 INFO findings (F-29-01..04) and 32-row Regression Appendix
+- `KNOWN-ISSUES.md` refined for warden-facing scope: 1 new design-decision entry codifying the "RNG-consumer determinism" invariant; 4 out-of-scope test/script entries removed; all internal audit-artifact cross-references stripped
+
+### What Worked
+- Mid-milestone phase insertion (232.1) handled cleanly when RNG-index ticket-drain ordering surfaced as a separate hardening concern — `/gsd-insert-phase` decimal-numbering pattern preserved phase ordering without renumbering 233+
+- 5-plan parallel Wave 1 in Phase 235 (CONS-01/02 + RNG-01/02 + TRNX-01) executed in one sitting via `/gsd-execute-phase --auto` with all 5 SAFE verdicts and zero candidate findings
+- Phase 230 lightweight scope-map pattern (modeled on v25.0's 213-03 + v28.0's 224-01) gave every downstream phase a precise per-file/per-function delta to audit, eliminating ambiguity at planning time
+- Strong precedent reuse — Phase 236 followed 217-01/217-02 (consolidation + regression) verbatim with `feedback_skip_research_test_phases.md` correctly applied to skip the research step
+- Cross-repo READ-only pattern from v28.0 (D-229) carried forward — zero `contracts/` or `test/` writes throughout the milestone
+- User-surfaced retroactive disclosure (F-29-04 Gameover RNG substitution) caught a subtle invariant violation that the formal audit had marked SAFE — adversarial review cycle on KI text proved valuable beyond the original audit pass
+
+### What Was Inefficient
+- Plan 236-02 deferred tracking sync (REQUIREMENTS.md flips, FIND-03 status) to `/gsd-complete-milestone`, which then surfaced as a verification gap during pre-close audit — could have been folded into Plan 02 SUMMARY directly with no extra cost
+- Initial F-29-04 entry in `audit/FINDINGS-v29.0.md` and `KNOWN-ISSUES.md` carried internal audit-artifact cross-references that had to be stripped post-close for warden delivery — KI text should be drafted warden-facing from the start
+- BAF event-widening and 3 test/script entries were initially added to `KNOWN-ISSUES.md` per Plan 236-01, then removed during user review — the consolidation plan should have explicit "warden-facing scope" gate before promoting items to KI
+- Two race-commit-subject artifacts during Phase 235 parallel execution (`0e963b05`, `950cc7f5`) — same class of bug as 4a06e5af in Phase 233/234 parallel runs; suggests the sequential-dispatch-with-run_in_background pattern from execute-phase doesn't fully eliminate the race
+
+### Patterns Established
+- **User-surfaced retroactive findings during consolidation review** — Phase 236 pre-publication review caught the F-29-04 Gameover RNG substitution disclosure that formal audit had marked SAFE/Finding-Candidate-N. Surface-area for "things the audit didn't flag but a warden should know" lives in the consolidation phase, not the original audit phase.
+- **"RNG-consumer determinism" as a named protocol invariant** — established this milestone; future RNG audits should cite by name and verify each new consumer against it
+- **Warden-facing scope gate for KI promotions** — KI is for things wardens might find-and-flag; not every audit observation belongs there. Test tooling, deploy scripts, and internal audit cross-references stay in `audit/FINDINGS-vXX.0.md` (which may not even ship in delivery)
+- **Tracking-sync deferral pattern is fragile** — plans that defer REQUIREMENTS.md/STATE.md flips to milestone-close should explicitly call out which flips and own the gap until close-out
+
+### Key Lessons
+- A "clean cycle" milestone (zero on-chain findings) still produces meaningful disclosure work — the F-29-04 retrospective surfacing shows audit substance and disclosure substance are different deliverables
+- KNOWN-ISSUES.md is warden-facing, not internal — every cross-reference to internal audit artifacts (`audit/FINDINGS-vXX.0.md`, phase IDs, `F-XX-NN` IDs) needs scope review before publication
+- `feedback_skip_research_test_phases.md` is reliably applicable to consolidation phases with strong precedent (217, 229 → 236) — saves an entire researcher agent spawn cycle without quality loss
+- Mid-milestone phase insertions (232.1) with decimal numbering work well; the renumber-other-phases anti-pattern is correctly avoided
+- Pre-close artifact audit (`audit-open --json`) is essential — caught a bookkeeping gap (Phase 231 EBD-03 traceability row stale) AND a tracking-sync deferral that would have shipped with stale Pending statuses
+
+### Cost Observations
+- Model mix: ~95% opus (planner + executor on all phases), ~5% sonnet (plan-checker + verifier)
+- Sessions: 2 (Phases 230-235 in session 1 on 2026-04-17/18; Phase 236 + close-out in session 2)
+- Notable: Phase 235 5-plan parallel Wave 1 executed in a single user prompt cycle via `/gsd-execute-phase --auto` — high efficiency on independent-plan parallelization
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -298,6 +345,7 @@
 | v4.1 | 3 | 4 | Accumulating test file; analytical proof + Foundry test pairing; zero-stranding sweep helper |
 | v6.0 | 6 | 12 | Implementation milestone: test cleanup, storage/gas fixes, DegenerusCharity contract, game integration |
 | v7.0 | 4 | 11 | Delta audit methodology; formatting-only triage; plan-vs-reality reconciliation; parallel adversarial audits |
+| v29.0 | 8 | 21 | Mid-milestone phase insertion (232.1) with decimal numbering; user-surfaced retroactive disclosure pattern (F-29-04); 5-plan parallel Wave 1 in single execution; warden-facing scope gate for KI promotions; "RNG-consumer determinism" invariant named |
 
 ### Top Lessons (Verified Across Milestones)
 
