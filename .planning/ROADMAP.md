@@ -176,7 +176,9 @@
   2. All 13 v25.0 findings and the v26.0 delta-audit conclusions are re-verified against current code with no regression introduced by the 10-commit delta
   3. `audit/FINDINGS-v29.0.md` exists in v27.0-style per-finding block format — every finding from phases 231-235 has a stable `F-29-NN` ID, severity (CRITICAL/HIGH/MEDIUM/LOW/INFO), source phase + file:line, and resolution status
   4. `audit/KNOWN-ISSUES.md` is updated with any new design-decision entries referencing `F-29-NN` IDs, and the executive summary table (per-phase counts + per-severity totals) is published in the deliverable
-**Plans**: TBD (expected 2 plans — one regression sweep + one consolidation, modeled on 217-01/217-02 + 223-01/223-02)
+**Plans**: 2 plans — sequenced (236-02 depends_on 236-01; both write audit/FINDINGS-v29.0.md, Plan 01 creates + Plan 02 appends Regression Appendix). Modeled on 217-01/217-02 + 223-01/223-02 + 229-01 precedents. Tracking sync (PROJECT.md / MILESTONES.md / REQUIREMENTS.md) deferred to /gsd-complete-milestone per 236-CONTEXT.md Claude's Discretion.
+- [ ] 236-01-PLAN.md — Produce `audit/FINDINGS-v29.0.md` (new file, v27.0-style): Executive Summary (0/0/0/0/4 per D-04) + per-phase subsections (231/232/232.1/233/234/235 in phase order per D-02) + 4 F-29-NN INFO blocks (F-29-01/02 BAF event-widening per D-05; F-29-03 QST-01 FC-234-A companion-test-coverage; F-29-04 Gameover RNG substitution per D-06/D-07); update KNOWN-ISSUES.md with 2 new design-decision entries (BAF pattern + Gameover RNG substitution) + 3 targeted v29.0 back-refs on existing entries per D-08 (Gameover prevrandao fallback; Lootbox RNG index advance isolation; Decimator settlement over-reserves claimablePool). Satisfies FIND-01, FIND-02, and the Executive-Summary portion of FIND-03.
+- [ ] 236-02-PLAN.md — Append Regression Appendix to `audit/FINDINGS-v29.0.md`: 32 per-item rows (13 v25.0 F-25-01..F-25-13 + 16 v27.0 F-27-01..F-27-16 + 3 v27.0 KNOWN-ISSUES entries citing F-27-NN) with PASS/REGRESSED/SUPERSEDED verdicts + evidence at HEAD 1646d5af; one-paragraph v26.0 design-only-milestone note; Regression Summary block (expected 31 PASS + 1 SUPERSEDED (F-25-09) + 0 REGRESSED). Satisfies REG-01, REG-02, and the regression-row portion of FIND-03. Depends on Plan 01.
 
 ## Progress
 
@@ -196,3 +198,4 @@ Phase 230 first. Phases 231, 232, 233, 234 can execute in parallel after 230 com
 
 </details>
 </content>
+</output>

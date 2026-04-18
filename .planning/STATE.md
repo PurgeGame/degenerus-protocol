@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v29.0
 milestone_name: Post-v27 Contract Delta Audit
-status: completed
+status: executing
 stopped_at: Phase 236 context gathered
-last_updated: "2026-04-18T19:10:16.285Z"
-last_activity: 2026-04-18 -- Phase 235 Wave 1 executed in parallel (5 gsd-executor agents on main working tree); 10 commits; 5 AUDIT.md + 5 SUMMARY.md
+last_updated: "2026-04-18T19:29:44.208Z"
+last_activity: 2026-04-18 -- Phase 236 planning complete
 progress:
   total_phases: 8
   completed_phases: 7
-  total_plans: 19
+  total_plans: 21
   completed_plans: 19
-  percent: 100
+  percent: 90
 ---
 
 # Project State
@@ -33,8 +33,8 @@ Phase: 235 (Conservation + RNG Commitment Re-Proof + Phase Transition) — **EXE
 - Next: /gsd-verify-work for goal-backward verification, then /gsd-execute-phase 236 for regression sweep + findings consolidation.
 
 Milestone: v29.0 — Post-v27 Contract Delta Audit (7 of 8 phases complete — only Phase 236 REG + FIND remains)
-Status: Phase 235 execution complete. All 5 audits produced clean SAFE verdicts; the v29.0 contract-side delta has been proven conservation-preserving + RNG-sound + phase-transition-safe. Push of the v29.0 phase-wide diff remains user-initiated per `feedback_manual_review_before_push.md`.
-Last activity: 2026-04-18 -- Phase 235 Wave 1 executed in parallel (5 gsd-executor agents on main working tree); 10 commits; 5 AUDIT.md + 5 SUMMARY.md
+Status: Ready to execute
+Last activity: 2026-04-18 -- Phase 236 planning complete
 Known racy artifact: commit 4a06e5af has the WRONG commit subject (says "docs(233-02)" but actually stages 234-01-SUMMARY.md — a race between the two parallel executors). File content is correct and in the right directory; only the commit subject is mislabeled. Recovery commit 00499a1d holds the actual 233-02-AUDIT.md with the correct subject.
 
 ## Accumulated Context
