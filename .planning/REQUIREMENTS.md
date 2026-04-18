@@ -38,7 +38,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Adversarial Audit — Decimator
 
 - [x] **DCM-01**: Decimator burn-key refactor (`3ad0f8d3`) audited — keys now by resolution level; every read site uses the matching key (level-bump timing model proves WRITE-key `level()+1` and READ-key post-bump `lvl` align at every hop), no off-by-one in pro-rata share calculation, consolidated jackpot block x00/x5 mutually exclusive (structural + arithmetic disjointness proofs) with `decPoolWei` zero-deterministic outside both branches and `runDecimatorJackpot` self-call args/CEI byte-identical to pre-fix — completed 2026-04-18 (23 verdict rows / 21 SAFE + 2 SAFE-INFO across 11 target functions; zero VULNERABLE / zero DEFERRED row-level verdicts; 2 Finding Candidate: Y rows for Phase 236 FIND-01 (DECIMATOR_MIN_BUCKET_100 dead-code revival; "prev"-prefixed naming vestige); BurnieCoin sum-in/sum-out hand-off to Phase 235 CONS-02 per D-14; see `.planning/phases/232-decimator-audit/232-01-AUDIT.md`)
-- [ ] **DCM-02**: Decimator event emission (`67031e7d`) audited — `DecimatorClaimed` + `TerminalDecimatorClaimed` fire at correct CEI position, argument correctness, indexer compatibility with v28.0 event surface
+- [x] **DCM-02**: Decimator event emission (`67031e7d`) audited — `DecimatorClaimed` + `TerminalDecimatorClaimed` fire at correct CEI position (3 emit sites: gameOver fast-path post-`_creditClaimable` + normal ETH/lootbox split post-`_setFuturePrizePool` + terminal post-`_consumeTerminalDecClaim`+`_creditClaimable` — zero SSTORE/external call between final mutation and emit at every site), argument correctness verified algebraically (`ethPortion + lootboxPortion == amountWei` identity at both DecimatorClaimed sites; `lvl` storage-sourced from `lastTerminalDecClaimRound.lvl` for TerminalDecimatorClaimed eliminating caller-injection; `amountWei` matches consumed return value), v28.0 Phase 227 indexer-compat OBSERVATION recorded per D-10 (neither event signature in v28.0 baseline scope — routes to Phase 236 FIND-02 KNOWN-ISSUES candidate, not contract-side finding) — completed 2026-04-18 (14 verdict rows / 9 SAFE + 5 SAFE-INFO across 3 emit sites + 2 event declarations + 1 OBSERVATION row; zero VULNERABLE / zero DEFERRED row-level verdicts; 1 Finding Candidate: Y row for indexer-compat OBSERVATION; see `.planning/phases/232-decimator-audit/232-02-AUDIT.md`)
 - [ ] **DCM-03**: `claimTerminalDecimatorJackpot` passthrough (`858d83e4`) audited — caller restriction, reentrancy, parameter pass-through to module, no privilege escalation
 
 ### Adversarial Audit — Jackpot/BAF + Entropy
@@ -101,7 +101,7 @@ None — this is a terminal delta-audit milestone.
 | EBD-02 | 231 | Complete (2026-04-17) |
 | EBD-03 | 231 | Complete (2026-04-17) |
 | DCM-01 | 232 | Complete (2026-04-18) |
-| DCM-02 | 232 | Pending |
+| DCM-02 | 232 | Complete (2026-04-18) |
 | DCM-03 | 232 | Pending |
 | JKP-01 | 233 | Pending |
 | JKP-02 | 233 | Pending |
@@ -127,4 +127,4 @@ None — this is a terminal delta-audit milestone.
 
 ---
 *Requirements defined: 2026-04-17*
-*Last updated: 2026-04-18 — DCM-01 marked Complete (Phase 232 Plan 01 shipped, 23 verdict rows / all SAFE or SAFE-INFO)*
+*Last updated: 2026-04-18 — DCM-02 marked Complete (Phase 232 Plan 02 shipped, 14 verdict rows / 9 SAFE + 5 SAFE-INFO; 1 Finding Candidate: Y for v28.0 Phase 227 indexer-compat OBSERVATION)*
