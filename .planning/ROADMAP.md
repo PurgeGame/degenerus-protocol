@@ -113,13 +113,20 @@
 
 ### Phase 232.1: RNG-index ticket drain ordering enforcement (INSERTED)
 
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
+**Goal**: Every ticket queued at lootbox RNG index X is fully resolved using the correct non-zero `lootboxRngWordByIndex[X]` before any bucket-swap advances `LR_INDEX` to X+1 and requests a new VRF — under all reachable code paths (normal end-of-day, mid-day threshold cross, game-over)
 **Depends on:** Phase 232
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd-plan-phase 232.1 to break down)
+**Requirements**: SPEC §R1 normal end-of-day drain-before-swap, §R2 mid-day drain-before-swap, §R3 game-over / terminal drain-before-swap, §R4 processTicketBatch entropy consumption, §R5 ticket↔RNG binding consistency, §R6 sim-replay regression (locked in 232.1-SPEC.md; not registered in REQUIREMENTS.md as URGENT-inserted phase)
+**Success Criteria** (what must be TRUE):
+  1. The lazy pre-finalize gate locked in CONTEXT.md D-01 is inserted at the entry of the daily-drain block in `DegenerusGameAdvanceModule.advanceGame` — `make check-delegatecall` passes 44/44 — empirical gas delta within +5% of pre-fix baseline
+  2. Forge invariant test demonstrates `_swapAndFreeze` cannot advance `LR_INDEX` while any read-slot ticket remains undrained (fails on pre-fix HEAD~1, passes on post-fix HEAD)
+  3. Forge invariant test demonstrates `_raritySymbolBatch` is never invoked with `entropyWord == 0` under any reachable advanceGame stage sequence (normal end-of-day, mid-day threshold cross, game-over) — D-05's vacuous-safety claim made testable via dedicated path-isolation forge test
+  4. Sim-replay regression: post-fix 25L/100P turbo sim shows ZERO `_raritySymbolBatch` events with `entropyWord == 0`; per-quadrant cat-0/cat-7 percentages at L5 within ±1pp of design; zero zero-hit trait IDs at L5
+  5. `processFutureTicketBatch` reachable-caller audit confirms every call site supplies non-zero `entropy` — no code change to that function per SPEC §Out of Scope ("audit only")
+  6. All `contracts/` and `test/` diffs reviewed and explicitly approved by user before commit (per `feedback_no_contract_commits.md`)
+**Plans**: 3 plans (one per natural deliverable boundary: contract fix + diff review; forge test suite + pre-fix replay; sim replay + processFutureTicketBatch audit)
+- [ ] 232.1-01-PLAN.md — Apply CONTEXT.md D-01 lazy pre-finalize gate at the daily-drain entry of `advanceGame`; produce `232.1-01-FIX.md` (diff + theoretical-then-empirical gas analysis + make-gate output) for explicit user diff review BEFORE commit (`autonomous: false`; SPEC R1, R2, R4, R5; AC-8, AC-9)
+- [ ] 232.1-02-PLAN.md — Forge test suite: invariant (drain-before-swap + no-zero-entropy), binding consistency (entropy == lootboxRngWordByIndex[X]), game-over path-isolation (D-05 vacuous safety made testable); pre-fix replay verifies tests FAIL on HEAD~1 and PASS on HEAD; explicit user approval before commit (`autonomous: false`; SPEC R1, R2, R3, R5, R6; AC-1, AC-2, AC-3, AC-6)
+- [ ] 232.1-03-PLAN.md — Sim-replay regression (AC-4 + AC-5: post-fix turbo sim shows zero entropy=0 events + trait distribution within ±1pp of design) + `processFutureTicketBatch` reachable-caller audit (AC-7: every reachable call site supplies non-zero entropy; no code change); fully autonomous (zero contracts/ or test/ writes — only `.planning/` artifacts) (SPEC R6 + audit-only PFTB scope)
 
 ### Phase 233: Jackpot/BAF + Entropy Audit
 **Goal**: Every jackpot-side and entropy-passthrough change is proven safe — the `traitId=420` sentinel, the explicit entropy passthrough, and cross-path bonus-trait consistency all verified
@@ -176,6 +183,7 @@ Phase 230 first. Phases 231, 232, 233, 234 can execute in parallel after 230 com
 | 230. Delta Extraction & Scope Map | 1/1 | Complete | 2026-04-17 |
 | 231. Earlybird Jackpot Audit | 3/3 | Complete | 2026-04-17 |
 | 232. Decimator Audit | 3/3 | Complete | 2026-04-18 |
+| 232.1. RNG-Index Ticket Drain Ordering Enforcement | 0/3 | Planned | — |
 | 233. Jackpot/BAF + Entropy Audit | 0/3 | Not started | — |
 | 234. Quests / Boons / Misc Audit | 0/1 | Not started | — |
 | 235. Conservation + RNG Commitment Re-Proof | 0/2 | Not started | — |
