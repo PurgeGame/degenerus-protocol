@@ -204,7 +204,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     uint256 word = lootboxRngWordByIndex[
                         uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1
                     ];
-                    if (word == 0) revert NotTimeYet();
+                    if (word == 0) revert RngNotReady();
                 }
 
                 uint24 rk = _tqReadKey(purchaseLevel);
@@ -260,7 +260,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     uint48 preIdx = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;
                     if (lootboxRngWordByIndex[preIdx] == 0) {
                         uint256 cw = rngWordCurrent;
-                        if (cw == 0) revert NotTimeYet();
+                        if (cw == 0) revert RngNotReady();
                         unchecked {
                             cw += totalFlipReversals;
                         }
