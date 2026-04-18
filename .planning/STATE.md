@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v29.0
 milestone_name: Post-v27 Contract Delta Audit
 status: executing
-stopped_at: Phase 231 verified + complete (40 PASS verdicts across 3 plans; zero FAIL, zero DEFER); ready for Phase 232 (Decimator) / 233 (Jackpot/BAF) / 234 (Quests/Boons/Misc) — all three can proceed in parallel (Depends on Phase 230 only; all three already have CONTEXT.md committed)
-last_updated: "2026-04-17T23:00:00.000Z"
-last_activity: 2026-04-17 -- Phase 231 verified (4/4 ROADMAP success criteria met; REQUIREMENTS traceability-table gap closed; VERIFICATION.md committed)
+stopped_at: Phase 232 Plan 01 complete (DCM-01 burn-key refactor adversarial audit shipped — 23 verdict rows / 21 SAFE + 2 SAFE-INFO / zero VULNERABLE / zero DEFERRED); next: Phase 232 Plan 02 (DCM-02 events) or parallel 233/234
+last_updated: "2026-04-18T00:30:00.000Z"
+last_activity: 2026-04-18 -- Phase 232 Plan 01 (DCM-01 decimator burn-key audit) shipped; AUDIT committed at a7d497e7
 progress:
   total_phases: 7
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
-  percent: 70
+  total_plans: 7
+  completed_plans: 5
+  percent: 71
 ---
 
 # Project State
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v29.0 Post-v27 Contract Delta Audit — 7 phases (230-236) covering delta extraction, three adversarial themes (EBD / DCM / JKP), quests/boons/misc grab-bag, conservation + RNG re-proof, and regression + findings consolidation.
+**Current focus:** Phase 232 — Decimator Audit
 
 ## Current Position
 
-Phase: 231 complete (3/3 plans) → next: parallel 232/233/234 (ROADMAP waves) or sequential 232 (Decimator Audit)
-Plan: 231-01 complete (EBD-01 AUDIT + SUMMARY shipped); 231-02 complete (EBD-02 AUDIT + SUMMARY shipped); 231-03 complete (EBD-03 AUDIT + SUMMARY shipped)
+Phase: 232 (Decimator Audit) — EXECUTING (1/3 plans complete)
+Plan: 2 of 3 (Plan 01 DCM-01 complete; next Plan 02 DCM-02 event emission)
 Milestone: v29.0 — Post-v27 Contract Delta Audit
-Status: Executing
-Last activity: 2026-04-17 -- Phase 231 Plan 03 complete (EBD-03 combined earlybird state-machine adversarial audit, 13 PASS verdicts across 4 paths × 4 attack vectors)
+Status: Executing Phase 232
+Last activity: 2026-04-18 -- Phase 232 Plan 01 DCM-01 shipped (23 verdict rows, all SAFE / SAFE-INFO; AUDIT committed at a7d497e7)
 
 ## Accumulated Context
 
@@ -73,6 +73,7 @@ Recent decisions affecting current work:
 - [Phase 231-01]: EBD-01 adversarial audit of `f20a2b5e` (earlybird purchase-phase finalize refactor) — ALL PASS. 21 verdict rows across 9 target functions (`_finalizeRngRequest`, `_finalizeEarlybird`, `_purchaseFor`, `_callTicketPurchase`, `_purchaseWhaleBundle`, `_purchaseLazyPass`, `_purchaseDeityPass`, `recordMint`, `_awardEarlybirdDgnrs`) covering all 7 EBD-01 attack vectors from CONTEXT.md D-08. Zero FAIL, zero DEFER at row level. Three DEFER hand-offs documented as scope boundaries (not findings): algebraic pool closure → Phase 235 CONS-01; RNG commitment → Phase 235 RNG-01/02 (N/A for EBD-01 — f20a2b5e adds no new RNG consumer); severity classification → Phase 236 FIND-01. Key evidence: unified `_awardEarlybirdDgnrs(buyer, ticketFreshEth + lootboxFreshEth)` fires exactly once per purchase at `DegenerusGameMintModule:1165`; signature contraction safe (storage body at `DegenerusGameStorage:1001-1044` contains zero `level()` substitute reads); `_finalizeEarlybird` one-shot idempotent via `earlybirdDgnrsPoolStart == type(uint256).max` sentinel flipped BEFORE the external `dgnrs.transferBetweenPools` call (CEI compliant); `recordMint` award-block removal is zero-regression (only production caller is `_callTicketPurchase:1276`, which now routes through `_purchaseFor:1165`). Net gas: strict improvement (one fewer external call per combined purchase).
 - [Phase 231-02]: EBD-02 adversarial audit of `20a951df` (earlybird trait-alignment rewrite) — ALL PASS. 6 verdict rows across 2 target functions (`_runEarlyBirdLootboxJackpot` MODIFIED, `_rollWinningTraits` read-only re-verification) covering all 4 EBD-02 attack vectors from CONTEXT.md D-08. Zero FAIL, zero DEFER at row level. Three DEFER hand-offs documented as scope boundaries (not findings): cross-path bonus-trait identity → Phase 233 JKP-03; algebraic pool closure → Phase 235 CONS-01; RNG commitment → Phase 235 RNG-01/02. Key evidence: `_rollWinningTraits(rngWord, true)` call at `DegenerusGameJackpotModule:677` is byte-identical in arg order and salt flag to bonus consumers at lines 1679 and 1705; `BONUS_TRAITS_TAG = keccak256("BONUS_TRAITS")` compile-time constant (line 171) is the cryptographic domain separator giving preimage-resistant isolation between `bonus=true` and `bonus=false` branches; `lvl+1` queue fix verified via direct pre-fix (`20a951df^`) vs post-fix code quote — pre-fix used `baseLevel + levelOffset` with `levelOffset = uint24(entropy % 5)` spreading winners across `baseLevel..baseLevel+4`, post-fix queues all winners at single argument `lvl` (caller passes `lvl + 1` at `payDailyJackpot:379`, matching DCM-01 `decimatorBurn` convention at §1.8). futurePool → nextPool CEI is trivially conserved: single `totalBudget` local debited from futurePool at line 668 and credited to nextPool at line 711 with no mutation in between. Rewrite narrows surface strictly: 100 `_randTraitTicket` calls → 4, 200 `EntropyLib.entropyStep` calls → 0, `levelPrices[5]` scratch array eliminated. Winner-selection salt spaces across the module are disjoint: earlybird [0,3], coin-near-future [252,255] via `DAILY_COIN_SALT_BASE = 252`, other callers [200,203].
 - [Phase 231-03]: EBD-03 adversarial audit of the combined earlybird state machine spanning both in-scope commits (`f20a2b5e` purchase-phase finalize + `20a951df` jackpot-phase trait-alignment) — ALL PASS. 13 verdict rows across 4 paths × 4 attack vectors from CONTEXT.md D-08 EBD-03. Path A (Normal Level Progression) + Path B (Skip-Split / Phase-Transition) + Path C (Game-Over Before EBD-END) + Path D (Game-Over At-or-After EBD-END), each PASS on no-double-spend / no-orphaned-reserves / no-missed-emission / cross-commit-invariant where applicable. Zero FAIL, zero row-level DEFER. Three scope-boundary hand-offs documented (not findings): algebraic pool closure → Phase 235 CONS-01; phase-transition interaction → Phase 235 TRNX-01; orphaned-reserve characterization in dead-game terminal state → Phase 236 REG-01. Key clarification of the cross-commit invariant: `_finalizeEarlybird` moves DGNRS tokens in the external StakedDegenerusStonk contract (Pool.Earlybird → Pool.Lootbox) while `_runEarlyBirdLootboxJackpot` operates on ETH-side `futurePrizePool` in DegenerusGameStorage — the two sides use ORTHOGONAL storage namespaces; the EBD-03 invariant reduces to temporal + causal ordering (finalize fires at the `lvl==EARLYBIRD_END_LEVEL=3` RNG-request transition via `_finalizeRngRequest`, and `_runEarlyBirdLootboxJackpot` runs on the first jackpot-phase day of the FOLLOWING tx). Game-over path cleanly isolated from the hook: `_finalizeRngRequest` and `_finalizeEarlybird` appear only in `DegenerusGameAdvanceModule.sol` (grep-confirmed, never in `DegenerusGameGameOverModule.sol`); the inner `_gameOverEntropy:1206 → _tryRequestRng → _finalizeRngRequest` call reaches with `isTicketJackpotDay=false` per the `_handleGameOverPath` line 178 entry guard, skipping the level-increment + hook branch at line 1510. Phase-transition block (2471f8e7 packing context) cannot fire the hook either — `_finalizeRngRequest` is unreachable from inside the `phaseTransitionActive` branch at line 283. Sentinel dual role (`earlybirdDgnrsPoolStart` at `DegenerusGameStorage:978`): guards both `_finalizeEarlybird` double-dump (AdvanceModule:1583) AND post-finalize `_awardEarlybirdDgnrs` double-allocation (Storage:1011), flipped as FIRST state mutation inside `_finalizeEarlybird` (line 1584, pre-external-call CEI).
+- [Phase 232-01]: DCM-01 adversarial audit of `3ad0f8d3` (decimator burn-key refactor + consolidated jackpot block) — ALL SAFE. 23 verdict rows (21 SAFE + 2 SAFE-INFO) across 11 target functions covering all 7 attack vectors from CONTEXT.md D-06 + D-07. Zero VULNERABLE, zero row-level DEFERRED. Two SAFE-INFO Finding Candidate: Y rows for Phase 236 FIND-01 (DECIMATOR_MIN_BUCKET_100 dead-code revival now active at L100 boundary; "prev"-prefixed naming vestige inside `_consolidatePoolsAndRewardJackpots`). Three scope-boundary hand-offs (not findings): BurnieCoin sum-in/sum-out → Phase 235 CONS-02 per D-14; Phase 235 RNG-01/02 N/A (no new RNG consumer); storage-layout interaction re-check → Phase 236 REG-01. Key evidence: WRITE-key (BurnieCoin's `level()+1` at burn time, line 574) and READ-key (post-bump `lvl` at jackpot resolution) are the SAME integer at every hop because `_finalizeRngRequest` synchronously increments `level` (AdvanceModule:1514) at VRF request time, and `_consolidatePoolsAndRewardJackpots` runs at line 402-408 on jackpot-phase day 1 (one tx after the bump). x00 / x5 mutual exclusivity proven both structurally (else-if at AdvanceModule:758-762) AND arithmetically (`prevMod100==0 ⇒ prevMod10==0≠5`; `prevMod10==5 ⇒ prevMod100∈{5,15,...,95}`, none equal 0). `decPoolWei` is zero-initialized at line 757 and only assigned at lines 759/761 — `if (decPoolWei != 0)` tail at line 764 is correctly skipped when neither branch fires. `runDecimatorJackpot` self-call args `(decPoolWei, lvl, rngWord)` and ordering `returnWei=... → spend → memFuture-=spend → claimableDelta+=spend` byte-identical to pre-fix per `git show 3ad0f8d3^` comparison; CEI preserved (only post-self-call mutations are local-memory variables, no SSTORE). Terminal decimator path (`recordTerminalDecBurn` / `runTerminalDecimatorJackpot` / `claimTerminalDecimatorJackpot` / `terminalDecClaimable`) is INTENTIONALLY unaffected by `3ad0f8d3` — keys by `lvl=level` (no `+1`) because gameover has no level-bump between burn and resolution; writer (`level` via `terminalDecWindow()`) and reader (`level` via `GameOverModule.handleGameOverDrain`) match by construction. DECIMATOR_MIN_BUCKET_100 dead-code revival is the express commit-message intent — pre-fix `lvl % 100 == 0` was unreachable (decimator window closed at every L100 boundary); post-fix `lvl=level()+1` evaluates to 100 during the L99 OPEN window, activating better-odds bucket as intended. AUDIT committed at `a7d497e7`.
 
 ### Pending Todos
 
@@ -85,5 +86,5 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-17 — Phase 231 Plan 03 executed end-to-end (EBD-03 combined earlybird state-machine adversarial audit shipped; AUDIT committed at `84440ef9`, SUMMARY + STATE/ROADMAP/REQUIREMENTS updates committed in metadata commit)
-Stopped at: Phase 231 complete (3/3 plans — EBD-01/EBD-02/EBD-03 all shipped with all-PASS verdicts); parallel execution of 232/233/234 still open per ROADMAP
+Last session: 2026-04-18 — Phase 232 Plan 01 executed end-to-end (DCM-01 decimator burn-key refactor adversarial audit shipped; AUDIT committed at `a7d497e7`, SUMMARY + STATE/ROADMAP/REQUIREMENTS updates committed in metadata commit)
+Stopped at: Phase 232 Plan 01 complete (DCM-01 shipped with all SAFE / SAFE-INFO verdicts); next: Phase 232 Plan 02 DCM-02 (event emission) or Plan 03 DCM-03 (terminal claim passthrough); parallel execution of 233/234 still open per ROADMAP
