@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v29.0
 milestone_name: Post-v27 Contract Delta Audit
 status: executing
-stopped_at: Phase 232 COMPLETE (all 3 plans shipped — DCM-01 + DCM-02 + DCM-03 all SAFE; zero VULNERABLE / zero DEFERRED across the entire decimator surface); next: Phase 233 (Jackpot/BAF + Entropy) or Phase 234 (Quests/Boons/Misc) — both parallelizable per ROADMAP
-last_updated: "2026-04-18T01:30:00.000Z"
-last_activity: 2026-04-18 -- Phase 232 Plan 03 (DCM-03 terminal claim passthrough audit) shipped; AUDIT committed at 84618141; Phase 232 (Decimator Audit) COMPLETE
+stopped_at: Phase 232.1 context gathered (lazy pre-finalize at L242 entry locked; rngWordCurrent removal deferred; ready for /gsd-plan-phase 232.1)
+last_updated: "2026-04-17T20:30:00.000Z"
+last_activity: 2026-04-17 -- Phase 232.1 CONTEXT.md + DISCUSSION-LOG.md committed at 7bf2db23 (5 locked decisions across structural fix + entropy sourcing + game-over scope + L190 guard + rngWordCurrent deferral)
 progress:
   total_phases: 7
   completed_phases: 3
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 
 ## Current Position
 
-Phase: 232 (Decimator Audit) — COMPLETE (3/3 plans complete: DCM-01 SAFE / DCM-02 SAFE / DCM-03 SAFE)
-Plan: 3 of 3 complete (Plans 01 DCM-01 + 02 DCM-02 + 03 DCM-03 all shipped); Phase 232 finalized
+Phase: 232.1 (RNG-Index Ticket Drain Ordering Enforcement) — context gathered, ready for planning
+Plan: 0 of TBD (CONTEXT.md + DISCUSSION-LOG.md committed; planner to break down via /gsd-plan-phase 232.1)
 Milestone: v29.0 — Post-v27 Contract Delta Audit
-Status: Phase 232 COMPLETE; awaiting Phase 233 / 234 start (parallelizable per ROADMAP)
-Last activity: 2026-04-18 -- Phase 232 Plan 03 DCM-03 shipped (7 verdict rows / 6 SAFE + 1 SAFE-INFO; zero VULNERABLE / zero DEFERRED / zero Finding Candidate: Y; AUDIT committed at 84618141; Phase 232 COMPLETE)
+Status: Phase 232 COMPLETE; Phase 232.1 (URGENT inserted) context captured — 5 locked decisions covering structural fix mechanism, entropy sourcing, game-over scope, mid-day guard handling, and rngWordCurrent-removal deferral
+Last activity: 2026-04-17 -- Phase 232.1 CONTEXT.md + DISCUSSION-LOG.md committed at 7bf2db23 (lazy pre-finalize at L242 entry locked; no processTicketBatch signature change; game-over path verified vacuously safe; L190-194 mid-day guard left alone; rngWordCurrent removal deferred to potential future Phase 232.2 / v30+)
 
 ## Accumulated Context
 
@@ -93,4 +93,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-04-18 — Phase 232 Plan 03 executed end-to-end (DCM-03 terminal-decimator-claim passthrough adversarial audit shipped; AUDIT committed at `84618141`, SUMMARY + STATE/ROADMAP/REQUIREMENTS updates committed in metadata commit). Phase 232 (Decimator Audit) NOW COMPLETE — all 3 plans shipped (DCM-01 + DCM-02 + DCM-03), zero VULNERABLE / zero DEFERRED across the entire decimator surface, total Finding Candidate: Y rows across the 3 plans = 3 (2 from DCM-01 SAFE-INFO + 1 from DCM-02 SAFE-INFO; 0 from DCM-03).
-Stopped at: Phase 232 COMPLETE (3/3 plans); next: Phase 233 (Jackpot/BAF + Entropy) or Phase 234 (Quests/Boons/Misc), both parallelizable per ROADMAP. Phase 235 + Phase 236 await Phase 233/234 completion.
+
+This session: 2026-04-17 — Phase 232.1 (RNG-Index Ticket Drain Ordering Enforcement, URGENT inserted) discuss-phase complete. Path enumeration traced every reachable read of `lootboxRngWordByIndex[LR_INDEX-1]` and identified the daily-flow asymmetry (mid-day callback writes lootbox slot atomically at L1632; daily callback only writes `rngWordCurrent` and defers slot-write to inside rngGate at L1108, racing the L242-262 drain). Locked the lazy pre-finalize at L242 entry: `if (slot==0) { if (rngWordCurrent==0) revert NotTimeYet(); _finalizeLootboxRng(rngWordCurrent); }`. Backfill semantic shift accepted (in-flight slot gets raw word; verified harmless because LR_INDEX bumps exactly once per stall and orphaned earlier slots have no readers). No `processTicketBatch` signature change. Game-over path verified vacuously safe (audit-only). L190-194 mid-day guard left alone. `rngWordCurrent` removal explored mid-discussion and deferred (multi-module refactor; out of SPEC scope). CONTEXT.md + DISCUSSION-LOG.md committed at 7bf2db23.
+Stopped at: Phase 232.1 context gathered; next: /gsd-plan-phase 232.1 to break down the lazy-pre-finalize fix + 3 forge tests (invariant + binding-consistency + sim-replay regression) into executable plans. Phase 233 / 234 / 235 / 236 sequencing per ROADMAP unchanged.
