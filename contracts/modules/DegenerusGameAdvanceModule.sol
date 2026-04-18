@@ -175,9 +175,22 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         bool lastPurchase = (!inJackpot) && lastPurchaseDay;
         // Level already incremented at RNG request when lastPurchase=true
         uint24 purchaseLevel = (lastPurchase && rngLockedFlag) ? lvl : lvl + 1;
-        if (!inJackpot && !lastPurchase && _handleGameOverPath(day, lvl, psd)) {
-            emit Advance(STAGE_GAMEOVER, lvl);
-            return;
+        if (!inJackpot && !lastPurchase) {
+            (bool goReturn, uint8 goStage) = _handleGameOverPath(day, lvl, psd);
+            if (goReturn) {
+                emit Advance(goStage, lvl);
+                if (goStage == STAGE_TICKETS_WORKING) {
+                    // Game-over path surfaced a partial drain: pay caller the
+                    // advance bounty so they are incentivised to retry until
+                    // the queue is drained and terminal jackpot can run.
+                    coinflip.creditFlip(
+                        caller,
+                        (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) /
+                            PriceLookupLib.priceForLevel(lvl)
+                    );
+                }
+                return;
+            }
         }
 
         _enforceDailyMintGate(caller, purchaseLevel, dailyIdx);
@@ -499,19 +512,22 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       +======================================================================+*/
 
     /// @dev Handles gameover state and liveness guard checks.
-    ///      Returns true if advanceGame should exit early.
+    ///      Returns (shouldReturn, stage). shouldReturn=true means advanceGame
+    ///      should emit `stage` and exit. Stages used:
+    ///         STAGE_GAMEOVER -- normal game-over completion or final sweep
+    ///         STAGE_TICKETS_WORKING -- partial best-effort drain; caller retries
     function _handleGameOverPath(
         uint32 day,
         uint24 lvl,
         uint32 psd
-    ) private returns (bool shouldReturn) {
-        // Liveness guard: prevent permanent lockup if game is abandoned
-        uint32 currentDay = day;
-        bool livenessTriggered = (lvl == 0 &&
-            currentDay - psd > DEPLOY_IDLE_TIMEOUT_DAYS) ||
-            (lvl != 0 && currentDay - psd > 120);
-
-        if (!livenessTriggered) return false;
+    ) private returns (bool shouldReturn, uint8 stage) {
+        // Liveness guard: prevent permanent lockup if game is abandoned.
+        // Uses the shared _livenessTriggered() helper so purchase paths (in
+        // DegenerusGameMintModule) can reuse the same predicate to block new
+        // purchases during the multi-tx game-over drain sequence.
+        psd; // silence unused-param warning after refactor to shared helper
+        day;
+        if (!_livenessTriggered()) return (false, 0);
 
         bool ok;
         bytes memory data;
@@ -524,12 +540,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 )
             );
             if (!ok) _revertDelegate(data);
-            return true;
+            return (true, STAGE_GAMEOVER);
         }
 
         // Safety: don't activate game over if nextPool requirement is already met
         if (lvl != 0 && _getNextPrizePool() >= levelPrizePool[lvl]) {
-            return false;
+            return (false, 0);
         }
 
         // Pre-gameover: acquire RNG, drain, then unlock
@@ -540,7 +556,63 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 lvl,
                 lastPurchaseDay
             );
-            if (rngWord == 1 || rngWord == 0) return true;
+            if (rngWord == 1 || rngWord == 0) return (true, STAGE_GAMEOVER);
+        }
+
+        // Best-effort dual-round drain of queued tickets so every purchased
+        // ticket is eligible for the terminal jackpot trait-bucket share.
+        // Round 1: drain the current read slot under the now-populated lootbox
+        //          RNG slot.
+        // Round 2: after round 1 fully finishes, swap the write slot into the
+        //          read position and drain it too (covers tickets purchased
+        //          after the most recent swap).
+        //
+        // Partial rounds (succeeded but unfinished) break out with
+        // STAGE_TICKETS_WORKING so the caller can retry until the queue is
+        // exhausted -- mirrors the do-while stage/break pattern.
+        //
+        // Catastrophic delegatecall reverts (e.g., queue exceeds the block
+        // gas limit) are swallowed so game-over continues to terminal jackpot
+        // distribution; undrained tickets forfeit trait-bucket eligibility but
+        // fund release is never blocked.
+        if (!ticketsFullyProcessed) {
+            (bool d1Ok, bytes memory d1Data) = ContractAddresses
+                .GAME_MINT_MODULE
+                .delegatecall(
+                    abi.encodeWithSelector(
+                        IDegenerusGameMintModule.processTicketBatch.selector,
+                        lvl + 1
+                    )
+                );
+            if (d1Ok && d1Data.length >= 32) {
+                bool d1Finished = abi.decode(d1Data, (bool));
+                if (!d1Finished) {
+                    return (true, STAGE_TICKETS_WORKING);
+                }
+                // Round 1 completed: read slot drained. Swap write->read
+                // (safe because queue is now empty) and run round 2 so
+                // write-slot tickets also get their traits.
+                _swapTicketSlot(lvl + 1);
+                (bool d2Ok, bytes memory d2Data) = ContractAddresses
+                    .GAME_MINT_MODULE
+                    .delegatecall(
+                        abi.encodeWithSelector(
+                            IDegenerusGameMintModule
+                                .processTicketBatch
+                                .selector,
+                            lvl + 1
+                        )
+                    );
+                if (d2Ok && d2Data.length >= 32) {
+                    bool d2Finished = abi.decode(d2Data, (bool));
+                    if (!d2Finished) {
+                        return (true, STAGE_TICKETS_WORKING);
+                    }
+                    ticketsFullyProcessed = true;
+                }
+                // d2Ok=false -> swallow, fall through to handleGameOverDrain
+            }
+            // d1Ok=false -> swallow, fall through to handleGameOverDrain
         }
 
         (ok, data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
@@ -551,7 +623,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         );
         if (!ok) _revertDelegate(data);
         _unlockRng(day);
-        return true;
+        return (true, STAGE_GAMEOVER);
     }
 
     /*+======================================================================+

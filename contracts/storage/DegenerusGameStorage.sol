@@ -562,6 +562,10 @@ abstract contract DegenerusGameStorage {
     ) internal {
         if (quantity == 0) return;
         emit TicketsQueued(buyer, targetLevel, quantity);
+        // Block new tickets once the liveness-timeout game-over trigger is
+        // active -- terminal jackpot must not be manipulable by adding tickets
+        // after the VRF word that resolves it becomes known.
+        if (_livenessTriggered()) revert E();
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
         uint24 wk = isFarFuture
@@ -591,6 +595,8 @@ abstract contract DegenerusGameStorage {
         bool rngBypass
     ) internal {
         if (quantityScaled == 0) return;
+        // Block new tickets once liveness-timeout is active (see _queueTickets).
+        if (_livenessTriggered()) revert E();
         emit TicketsQueuedScaled(buyer, targetLevel, quantityScaled);
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
@@ -642,6 +648,8 @@ abstract contract DegenerusGameStorage {
         uint32 ticketsPerLevel,
         bool rngBypass
     ) internal {
+        // Block new tickets once liveness-timeout is active (see _queueTickets).
+        if (_livenessTriggered()) revert E();
         emit TicketsQueuedRange(buyer, startLevel, numLevels, ticketsPerLevel);
         uint24 currentLevel = level; // cache outside loop to avoid repeated SLOAD
         uint24 lvl = startLevel;
@@ -1203,6 +1211,22 @@ abstract contract DegenerusGameStorage {
     /// @dev Returns the current day index.
     function _simulatedDayIndex() internal view returns (uint32) {
         return GameTimeLib.currentDayIndex();
+    }
+
+    /// @dev Whether the liveness-timeout game-over trigger is active.
+    ///      Mirrors the logic in DegenerusGameAdvanceModule._handleGameOverPath.
+    ///      Level 0: deploy idle timeout (365 days since purchaseStartDay).
+    ///      Level 1+: 120-day inactivity timeout since purchaseStartDay.
+    ///      Used by purchase paths in DegenerusGameMintModule to block
+    ///      purchases once game-over is inevitable, so that new tickets never
+    ///      arrive mid-way through the multi-tx game-over drain sequence.
+    function _livenessTriggered() internal view returns (bool) {
+        uint24 lvl = level;
+        uint32 psd = purchaseStartDay;
+        uint32 currentDay = _simulatedDayIndex();
+        return
+            (lvl == 0 && currentDay - psd > _DEPLOY_IDLE_TIMEOUT_DAYS) ||
+            (lvl != 0 && currentDay - psd > 120);
     }
 
     /// @dev Returns the day index for a specific timestamp.
