@@ -43,15 +43,15 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Adversarial Audit — Jackpot/BAF + Entropy
 
-- [ ] **JKP-01**: BAF `traitId=420` sentinel (`104b5d42`) audited — no collision with real trait IDs (0-255 domain), event consumers tolerate sentinel, no downstream logic treats 420 as a real trait
-- [ ] **JKP-02**: Explicit entropy passthrough to `processFutureTicketBatch` (`52242a10`) audited — verify passed entropy is cryptographically equivalent to prior derivation, no commitment-window widening, no re-use across calls in the same transaction
-- [ ] **JKP-03**: Combined jackpot-side changes + today's earlybird rewrite verified consistent — all jackpot paths using `bonusTraitsPacked` produce identical 4-trait set for the same VRF word
+- [x] **JKP-01**: BAF `traitId=420` sentinel (`104b5d42`) audited — completed 2026-04-19; 22 SAFE + 2 SAFE-INFO verdicts in 233-01-AUDIT.md; 2 Finding Candidate: Y (event-widening indexer-compat OBSERVATIONS for off-chain ABI regeneration, routed to Phase 236 FIND-01/02)
+- [x] **JKP-02**: Explicit entropy passthrough to `processFutureTicketBatch` (`52242a10`) audited — completed 2026-04-19; 23 SAFE per-function verdict rows + 16 SAFE commitment-window enumeration rows in 233-02-AUDIT.md; 0 Finding Candidate: Y; D-06 backward-trace + commitment-window rules applied explicitly (per `feedback_rng_backward_trace.md` + `feedback_rng_commitment_window.md`)
+- [x] **JKP-03**: Combined jackpot-side changes + today's earlybird rewrite verified consistent — completed 2026-04-19; 5 SAFE cross-path derivation + 15 SAFE per-function verdicts in 233-03-AUDIT.md; 0 Finding Candidate: Y; D-09 non-overlap with Phase 231 EBD-02 explicit
 
 ### Adversarial Audit — Quests / Boons / Misc
 
-- [ ] **QST-01**: `mint_ETH` quest wei-credit fix (`d5284be5`) audited — 1:1 wei credit correctness, interaction with fresh-ETH detection, no double-credit with companion quests, mint-module integration, test file change reviewed
-- [ ] **QST-02**: `boonPacked` mapping exposure (`e0a7f7bc`) audited — read-only accessor safety, storage layout preserved, no write path introduced, slot accessibility matches intent
-- [ ] **QST-03**: `BurnieCoin.sol` change audited — isolated cause/effect (only decimator-burn-key-related), no supply conservation impact
+- [x] **QST-01**: `mint_ETH` quest wei-credit fix (`d5284be5`) audited — completed 2026-04-19; 11 rows (9 SAFE + 2 SAFE-INFO) in 234-01-AUDIT.md §QST-01; 1 Finding Candidate: Y (FC-234-A companion-test-coverage observation, routed to Phase 236)
+- [x] **QST-02**: `boonPacked` mapping exposure (`e0a7f7bc`) audited — completed 2026-04-19; 5 rows (4 SAFE + 1 SAFE-INFO) in 234-01-AUDIT.md §QST-02; 0 Finding Candidate: Y; D-08 document-and-accept on interface-non-declaration
+- [x] **QST-03**: `BurnieCoin.sol` change audited — completed 2026-04-19; 7 rows (6 SAFE + 1 SAFE-INFO) in 234-01-AUDIT.md §QST-03; 0 Finding Candidate: Y; D-11 overlap-non-conflict with Phase 232 DCM-01; Phase 235 CONS-02 hand-off for BURNIE supply conservation
 
 ### Phase Transition (RNG Lock)
 
@@ -103,12 +103,12 @@ None — this is a terminal delta-audit milestone.
 | DCM-01 | 232 | Complete (2026-04-18) |
 | DCM-02 | 232 | Complete (2026-04-18) |
 | DCM-03 | 232 | Complete (2026-04-18) |
-| JKP-01 | 233 | Pending |
-| JKP-02 | 233 | Pending |
-| JKP-03 | 233 | Pending |
-| QST-01 | 234 | Pending |
-| QST-02 | 234 | Pending |
-| QST-03 | 234 | Pending |
+| JKP-01 | 233 | Complete (2026-04-19) |
+| JKP-02 | 233 | Complete (2026-04-19) |
+| JKP-03 | 233 | Complete (2026-04-19) |
+| QST-01 | 234 | Complete (2026-04-19) |
+| QST-02 | 234 | Complete (2026-04-19) |
+| QST-03 | 234 | Complete (2026-04-19) |
 | CONS-01 | 235 | Pending |
 | CONS-02 | 235 | Pending |
 | RNG-01 | 235 | Pending |

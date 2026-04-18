@@ -64,8 +64,8 @@
 - [x] **Phase 230: Delta Extraction & Scope Map** - Function-level changelog, cross-module interaction map, and interface-drift catalog across the 10-commit / 12-file delta — completed 2026-04-17; extended by `230-02-DELTA-ADDENDUM.md` on 2026-04-17 to capture 2 post-Phase-230 RNG-hardening commits (`314443af`, `c2e5e0a9`)
 - [x] **Phase 231: Earlybird Jackpot Audit** - Adversarial audit of the purchase-phase finalize refactor and the trait-alignment rewrite + combined state-machine verification — completed 2026-04-17 (40 PASS verdicts across 3 plans; zero FAIL, zero DEFER)
 - [x] **Phase 232: Decimator Audit** - Adversarial audit of burn-key-by-resolution-level, event emission, and terminal-claim passthrough — completed 2026-04-18 (44 verdict rows across 3 plans / 36 SAFE + 8 SAFE-INFO; zero VULNERABLE / zero DEFERRED; 3 SAFE-INFO Finding Candidate: Y rows total — 2 for Phase 236 FIND-01 from DCM-01 + 1 for Phase 236 FIND-02 from DCM-02 indexer-compat OBSERVATION; DCM-03 contributes zero candidate findings)
-- [ ] **Phase 233: Jackpot/BAF + Entropy Audit** - Adversarial audit of `traitId=420` sentinel, explicit entropy passthrough, and cross-path bonus-trait consistency
-- [ ] **Phase 234: Quests / Boons / Misc Audit** - Adversarial audit of `mint_ETH` wei-credit fix, `boonPacked` exposure, and incidental `BurnieCoin.sol` change
+- [x] **Phase 233: Jackpot/BAF + Entropy Audit** - Adversarial audit of `traitId=420` sentinel, explicit entropy passthrough, and cross-path bonus-trait consistency — completed 2026-04-19 (77 verdict rows across 3 plans / 75 SAFE + 2 SAFE-INFO; zero VULNERABLE / zero DEFERRED; 2 Finding Candidate: Y — both event-widening indexer-compat OBSERVATIONS for off-chain ABI regeneration routed to Phase 236 FIND-01/02)
+- [x] **Phase 234: Quests / Boons / Misc Audit** - Adversarial audit of `mint_ETH` wei-credit fix, `boonPacked` exposure, and incidental `BurnieCoin.sol` change — completed 2026-04-19 (23 verdict rows in one consolidated plan / 19 SAFE + 4 SAFE-INFO; zero VULNERABLE / zero DEFERRED; 1 Finding Candidate: Y — FC-234-A QST-01 companion-test-coverage observation, not a contract finding)
 - [ ] **Phase 235: Conservation + RNG Commitment Re-Proof + Phase Transition** - ETH + BURNIE conservation across the delta, RNG commitment-window re-proof for every new consumer, and phase-transition RNG lock removal audit
 - [ ] **Phase 236: Regression + Findings Consolidation** - v25.0/v26.0/v27.0 regression sweep and `audit/FINDINGS-v29.0.md` consolidation
 
@@ -184,8 +184,8 @@ Phase 230 first. Phases 231, 232, 233, 234 can execute in parallel after 230 com
 | 231. Earlybird Jackpot Audit | 3/3 | Complete | 2026-04-17 |
 | 232. Decimator Audit | 3/3 | Complete | 2026-04-18 |
 | 232.1. RNG-Index Ticket Drain Ordering Enforcement | 3/3 | Complete | 2026-04-18 |
-| 233. Jackpot/BAF + Entropy Audit | 0/3 | Not started | — |
-| 234. Quests / Boons / Misc Audit | 0/1 | Not started | — |
+| 233. Jackpot/BAF + Entropy Audit | 3/3 | Complete | 2026-04-19 |
+| 234. Quests / Boons / Misc Audit | 1/1 | Complete | 2026-04-19 |
 | 235. Conservation + RNG Commitment Re-Proof | 0/2 | Not started | — |
 | 236. Regression + Findings Consolidation | 0/2 | Not started | — |
 

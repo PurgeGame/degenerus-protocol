@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v29.0
 milestone_name: Post-v27 Contract Delta Audit
 status: executing
-stopped_at: "Phase 232.1 VERIFIED at cfc7f036 (6/6 ROADMAP SC + 9/9 SPEC AC closed). Next: /gsd-discuss-phase 233 (Jackpot/BAF + Entropy Audit). Phase 234 parallelizable. 235/236 downstream."
-last_updated: "2026-04-19T00:35:00Z"
-last_activity: 2026-04-19 -- Phase 232.1 verified + committed at cfc7f036 (UAT + VERIFICATION docs)
+stopped_at: "Phases 233 + 234 VERIFIED 2026-04-19 (autonomous parallel run). 100 total verdict rows across 4 plans / 94 SAFE + 6 SAFE-INFO; zero VULNERABLE / zero DEFERRED; 3 Finding Candidate: Y routed to Phase 236. Next: /gsd-discuss-phase 235 (Conservation + RNG Re-Proof + Phase Transition — depends on 231/232/233/234, all complete)."
+last_updated: "2026-04-19T01:30:00Z"
+last_activity: 2026-04-19 -- Phases 233 (JKP audit) + 234 (QST audit) executed in parallel; 8 audit + summary commits; 2 VERIFICATION.md docs
 progress:
   total_phases: 8
-  completed_phases: 4
-  total_plans: 11
-  completed_plans: 11
+  completed_phases: 6
+  total_plans: 15
+  completed_plans: 15
   percent: 100
 ---
 
@@ -21,15 +21,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 232.1 VERIFIED at cfc7f036 — next: Phase 233 (Jackpot/BAF + Entropy) or Phase 234 (Quests/Boons/Misc), both parallelizable per ROADMAP
+**Current focus:** Phases 233 + 234 VERIFIED 2026-04-19 (autonomous parallel run while user slept) — next: Phase 235 (Conservation + RNG Re-Proof + Phase Transition, depends on 231/232/233/234 which are all now complete)
 
 ## Current Position
 
-Phase: 232.1 (RNG-Index Ticket Drain Ordering Enforcement) — **VERIFIED 2026-04-19 at cfc7f036; 6/6 ROADMAP SC + 9/9 SPEC AC closed**
-Plan: 3 of 3 (Plan 01 fix across four revisions; Plan 02 forge test suite; Plan 03 sim-replay regression + PFTB audit)
-Milestone: v29.0 — Post-v27 Contract Delta Audit
-Status: Phase 232.1 verified + documented (UAT + VERIFICATION committed at cfc7f036). Ready for `/gsd-discuss-phase 233` when user advances; push of the phase-wide diff remains user-initiated per `feedback_manual_review_before_push.md`.
-Last activity: 2026-04-19 -- Phase 232.1 verified via auto-verified UAT + goal-backward VERIFICATION.md (cfc7f036)
+Phase: 233 + 234 (parallel audit phases) — **BOTH VERIFIED 2026-04-19; 16/16 + 16/16 must-haves in their respective VERIFICATION.md files**
+- Phase 233 (Jackpot/BAF + Entropy Audit): 3/3 plans shipped; 77 verdict rows (75 SAFE + 2 SAFE-INFO); 2 Finding Candidate: Y routed to Phase 236
+- Phase 234 (Quests/Boons/Misc Audit): 1/1 consolidated plan shipped; 23 verdict rows (19 SAFE + 4 SAFE-INFO); 1 Finding Candidate: Y routed to Phase 236
+Milestone: v29.0 — Post-v27 Contract Delta Audit (6 of 8 phases complete)
+Status: v29.0 adversarial-audit slice (Phases 231+232+232.1+233+234) fully closed. Phase 235 (Conservation + RNG Re-Proof + TRNX-01 phase-transition audit) unblocked — all upstream dependencies complete. Push of the v29.0 phase-wide diff remains user-initiated per `feedback_manual_review_before_push.md`.
+Last activity: 2026-04-19 -- Phases 233 + 234 executed in parallel via gsd-executor agents (autonomous while user sleeping); 8 audit/summary commits + 2 VERIFICATION.md docs
+Known racy artifact: commit 4a06e5af has the WRONG commit subject (says "docs(233-02)" but actually stages 234-01-SUMMARY.md — a race between the two parallel executors). File content is correct and in the right directory; only the commit subject is mislabeled. Recovery commit 00499a1d holds the actual 233-02-AUDIT.md with the correct subject.
 
 ## Accumulated Context
 
