@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v29.0
 milestone_name: Post-v27 Contract Delta Audit
 status: executing
-stopped_at: Phase 232.1 context gathered (lazy pre-finalize at L242 entry locked; rngWordCurrent removal deferred; ready for /gsd-plan-phase 232.1)
-last_updated: "2026-04-17T20:30:00.000Z"
-last_activity: 2026-04-17 -- Phase 232.1 CONTEXT.md + DISCUSSION-LOG.md committed at 7bf2db23 (5 locked decisions across structural fix + entropy sourcing + game-over scope + L190 guard + rngWordCurrent deferral)
+stopped_at: "Phase 232.1 context gathered; next: /gsd-plan-phase 232.1 to break down the lazy-pre-finalize fix + 3 forge tests (invariant + binding-consistency + sim-replay regression) into executable plans. Phase 233 / 234 / 235 / 236 sequencing per ROADMAP unchanged."
+last_updated: "2026-04-18T03:19:08.460Z"
+last_activity: 2026-04-18 -- Phase 232.1 planning complete
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 3
-  total_plans: 7
+  total_plans: 10
   completed_plans: 7
-  percent: 100
+  percent: 70
 ---
 
 # Project State
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 Phase: 232.1 (RNG-Index Ticket Drain Ordering Enforcement) — context gathered, ready for planning
 Plan: 0 of TBD (CONTEXT.md + DISCUSSION-LOG.md committed; planner to break down via /gsd-plan-phase 232.1)
 Milestone: v29.0 — Post-v27 Contract Delta Audit
-Status: Phase 232 COMPLETE; Phase 232.1 (URGENT inserted) context captured — 5 locked decisions covering structural fix mechanism, entropy sourcing, game-over scope, mid-day guard handling, and rngWordCurrent-removal deferral
-Last activity: 2026-04-17 -- Phase 232.1 CONTEXT.md + DISCUSSION-LOG.md committed at 7bf2db23 (lazy pre-finalize at L242 entry locked; no processTicketBatch signature change; game-over path verified vacuously safe; L190-194 mid-day guard left alone; rngWordCurrent removal deferred to potential future Phase 232.2 / v30+)
+Status: Ready to execute
+Last activity: 2026-04-18 -- Phase 232.1 planning complete
 
 ## Accumulated Context
 
