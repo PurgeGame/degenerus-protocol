@@ -63,7 +63,7 @@
 
 - [x] **Phase 230: Delta Extraction & Scope Map** - Function-level changelog, cross-module interaction map, and interface-drift catalog across the 10-commit / 12-file delta — completed 2026-04-17; extended by `230-02-DELTA-ADDENDUM.md` on 2026-04-17 to capture 2 post-Phase-230 RNG-hardening commits (`314443af`, `c2e5e0a9`)
 - [x] **Phase 231: Earlybird Jackpot Audit** - Adversarial audit of the purchase-phase finalize refactor and the trait-alignment rewrite + combined state-machine verification — completed 2026-04-17 (40 PASS verdicts across 3 plans; zero FAIL, zero DEFER)
-- [ ] **Phase 232: Decimator Audit** - Adversarial audit of burn-key-by-resolution-level, event emission, and terminal-claim passthrough
+- [x] **Phase 232: Decimator Audit** - Adversarial audit of burn-key-by-resolution-level, event emission, and terminal-claim passthrough — completed 2026-04-18 (44 verdict rows across 3 plans / 36 SAFE + 8 SAFE-INFO; zero VULNERABLE / zero DEFERRED; 3 SAFE-INFO Finding Candidate: Y rows total — 2 for Phase 236 FIND-01 from DCM-01 + 1 for Phase 236 FIND-02 from DCM-02 indexer-compat OBSERVATION; DCM-03 contributes zero candidate findings)
 - [ ] **Phase 233: Jackpot/BAF + Entropy Audit** - Adversarial audit of `traitId=420` sentinel, explicit entropy passthrough, and cross-path bonus-trait consistency
 - [ ] **Phase 234: Quests / Boons / Misc Audit** - Adversarial audit of `mint_ETH` wei-credit fix, `boonPacked` exposure, and incidental `BurnieCoin.sol` change
 - [ ] **Phase 235: Conservation + RNG Commitment Re-Proof + Phase Transition** - ETH + BURNIE conservation across the delta, RNG commitment-window re-proof for every new consumer, and phase-transition RNG lock removal audit
@@ -109,7 +109,7 @@
 **Plans**: 3 plans — one per DCM requirement (per 232-CONTEXT.md D-01 + v29.0 auto-mode rule)
 - [x] 232-01-PLAN.md — Produce 232-01-AUDIT.md: per-function verdict table for DCM-01 decimator burn-key refactor (`3ad0f8d3`) — pro-rata off-by-one under lvl+1 keying, read/write key-space alignment across every decBurns/decBurnBuckets/decPool consumer, consolidated jackpot-block x00/x5 mutual exclusivity + decPoolWei determinism + runDecimatorJackpot self-call args/CEI preserved, DECIMATOR_MIN_BUCKET_100 reachability side-effect; BurnieCoin conservation deferred to Phase 235 CONS-02 per D-14 — completed 2026-04-18 (23 verdict rows / 21 SAFE + 2 SAFE-INFO; zero VULNERABLE / zero DEFERRED row-level verdicts; 2 SAFE-INFO Finding Candidate: Y rows for Phase 236 FIND-01)
 - [x] 232-02-PLAN.md — Produce 232-02-AUDIT.md: per-function verdict table for DCM-02 decimator event emission (`67031e7d`) — CEI position of all 3 emit sites (DecimatorClaimed gameOver fast-path + normal ETH/lootbox split; TerminalDecimatorClaimed terminal), event-argument correctness invariants (ethPortion+lootboxPortion==amountWei, lvl from input/storage, player==msg.sender), v28.0 Phase 227 indexer-compat OBSERVATION per D-10 — completed 2026-04-18 (14 verdict rows / 9 SAFE + 5 SAFE-INFO; zero VULNERABLE / zero DEFERRED row-level verdicts; 1 SAFE-INFO Finding Candidate: Y for v28.0 Phase 227 indexer-compat OBSERVATION routing to Phase 236 FIND-02)
-- [ ] 232-03-PLAN.md — Produce 232-03-AUDIT.md: per-function verdict table for DCM-03 terminal-claim passthrough (`858d83e4`) — D-11 attack vectors (caller restriction, reentrancy, parameter pass-through, privilege escalation) + IM-08 delegatecall chain end-to-end + interface/implementer lockstep (ID-30/ID-93) + check-delegatecall 44/44 corroboration per D-12
+- [x] 232-03-PLAN.md — Produce 232-03-AUDIT.md: per-function verdict table for DCM-03 terminal-claim passthrough (`858d83e4`) — D-11 attack vectors (caller restriction, reentrancy, parameter pass-through, privilege escalation) + IM-08 delegatecall chain end-to-end + interface/implementer lockstep (ID-30/ID-93) + check-delegatecall 44/44 corroboration per D-12 — completed 2026-04-18 (7 verdict rows / 6 SAFE + 1 SAFE-INFO; zero VULNERABLE / zero DEFERRED row-level verdicts; ZERO Finding Candidate: Y rows; DCM-03 contributes zero candidate findings to Phase 236 FIND-01 pool)
 
 ### Phase 233: Jackpot/BAF + Entropy Audit
 **Goal**: Every jackpot-side and entropy-passthrough change is proven safe — the `traitId=420` sentinel, the explicit entropy passthrough, and cross-path bonus-trait consistency all verified
@@ -164,8 +164,8 @@ Phase 230 first. Phases 231, 232, 233, 234 can execute in parallel after 230 com
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 230. Delta Extraction & Scope Map | 1/1 | Complete | 2026-04-17 |
-| 231. Earlybird Jackpot Audit | 1/3 | In progress | — |
-| 232. Decimator Audit | 0/3 | In progress (plans created) | — |
+| 231. Earlybird Jackpot Audit | 3/3 | Complete | 2026-04-17 |
+| 232. Decimator Audit | 3/3 | Complete | 2026-04-18 |
 | 233. Jackpot/BAF + Entropy Audit | 0/3 | Not started | — |
 | 234. Quests / Boons / Misc Audit | 0/1 | Not started | — |
 | 235. Conservation + RNG Commitment Re-Proof | 0/2 | Not started | — |
