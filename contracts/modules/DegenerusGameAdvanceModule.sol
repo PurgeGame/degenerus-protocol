@@ -240,6 +240,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         // --- Daily drain gate: ensure read slot is fully processed before RNG ---
         if (!ticketsFullyProcessed) {
+            uint48 idx = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;
+            if (lootboxRngWordByIndex[idx] == 0) {
+                uint256 cw = rngWordCurrent;
+                if (cw == 0) revert NotTimeYet();
+                _finalizeLootboxRng(cw);
+            }
             uint24 rk = _tqReadKey(purchaseLevel);
             if (ticketQueue[rk].length > 0) {
                 (
