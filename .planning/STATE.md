@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v30.0
 milestone_name: Full Fresh-Eyes VRF Consumer Determinism Audit
-status: completed
-last_updated: "2026-04-19T04:17:34.409Z"
+status: executing
+last_updated: "2026-04-19T04:46:39.035Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 6
+  total_plans: 9
   completed_plans: 6
-  percent: 100
+  percent: 67
 ---
 
 # Project State
@@ -29,7 +29,7 @@ Plan: 3 of 3 executed. Wave 1 (238-01 BWD commit `d0a37c75` + 238-02 FWD commit 
 **Milestone:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit
 **Phase:** 238 COMPLETE 2026-04-19 — all 6 requirements (BWD-01/02/03 + FWD-01/02/03) satisfied. Final consolidated `audit/v30-FREEZE-PROOF.md` (459 lines, 146-row Consolidated Freeze-Proof Table + 26-requirement Consumer Index) committed at `9a8f423d`. Phase 237 complete (3/3). Phase 238 complete (3/3).
 **Plan:** 238-03 complete — `audit/v30-238-03-GATING.md` (308 lines; 146-row Gating Verification Table with 6 columns per D-06; Named Gate distribution: rngLocked=106, lootbox-index-advance=20, phase-transition-gate=0, semantic-path-gate=18, NO_GATE_NEEDED_ORTHOGONAL=2; Mutation-Path Coverage: EVERY_PATH_BLOCKED=144, PARTIAL_COVERAGE=0, NO_GATE_NEEDED_ORTHOGONAL=2) + `audit/v30-FREEZE-PROOF.md` (459 lines; 146-row Consolidated Freeze-Proof Table merging BWD + FWD + gating; 19-row Gameover-Flow subset + 22-row KI-Exception subset + 26-requirement Consumer Index + merged Finding Candidates + merged Scope-Guard Deferrals including Phase 239 audit assumption). Effectiveness distribution: 124 SAFE + 22 EXCEPTION + 0 CANDIDATE_FINDING = 146. Zero F-30-NN IDs. Zero contracts/test writes. Inventory + 238-01 + 238-02 all unmodified (D-16/D-18).
-**Status:** Phase 238 complete. Phases 239 (rngLocked invariant + permissionless sweep, RNG-01..03) / 240 (gameover jackpot safety, GO-01..05) / 241 (exception closure, EXC-01..04) unblocked and parallelizable. Phase 242 (regression + findings consolidation, REG-01/02, FIND-01..03) requires all 4 to complete. Phase 239 RNG-01/RNG-03 closes the audit-assumption recorded in Plan 238-03 Scope-Guard Deferral #1 (rngLocked + lootbox-index-advance first-principles re-proof).
+**Status:** Ready to execute
 **Last activity:** 2026-04-19
 
 **Audit baseline:** HEAD `7ab515fe` (contract tree identical to v29.0 `1646d5af`; all post-v29 commits are docs-only)
