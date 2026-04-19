@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v30.0
 milestone_name: Full Fresh-Eyes VRF Consumer Determinism Audit
 status: executing
-last_updated: "2026-04-19T02:16:00Z"
+last_updated: "2026-04-19T14:00:00Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 3
   completed_plans: 3
-  percent: 100
+  percent: 17
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-18)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 237 — VRF Consumer Inventory & Call Graph
+**Current focus:** Phase 238 — Backward & Forward Freeze Proofs (context gathered; planning next)
 
 ## Current Position
 
-Phase: 237 (VRF Consumer Inventory & Call Graph) — COMPLETE (3/3 plans)
-Plan: 3 of 3 done (Wave 2 — 237-02 complete 2026-04-19; 237-03 complete 2026-04-19)
+Phase: 238 (Backward & Forward Freeze Proofs) — CONTEXT GATHERED, planning next
+Plan: 0 of 3 planned (238-01 BWD + 238-02 FWD-01/02 Wave 1; 238-03 FWD-03 + consolidation Wave 2 per D-01/D-02)
 **Milestone:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit
-**Phase:** 237 (VRF Consumer Inventory & Call Graph) — all 3 plans complete; final consolidated deliverable `audit/v30-CONSUMER-INVENTORY.md` assembled. Downstream Phases 238-242 unblocked.
-**Plan:** 237-01 complete (Wave 1 / INV-01 universe list, commit `20ed1c75`); 237-02 complete (Wave 2 / INV-02 classification, commit `f142adaf`); 237-03 complete (Wave 2 / INV-03 call-graphs `0ccdef72` + consolidated `audit/v30-CONSUMER-INVENTORY.md` `4c507f8a`).
-**Status:** Phase 237 complete (awaiting verification / transition). Ready for Phase 238 (BWD/FWD) + Phase 239 (rngLocked) + Phase 240 (Gameover) + Phase 241 (Exception Closure) to execute in parallel.
+**Phase:** 238 CONTEXT.md committed 2026-04-19 (auto-decided via Phase 235 / Phase 237 precedents per user directive "run all the parallel shit you can"). Phase 237 complete (3/3 plans, `audit/v30-CONSUMER-INVENTORY.md` assembled).
+**Plan:** Pending `/gsd-plan-phase 238` invocation. 3-plan shape per D-01: 238-01 BWD-01/02/03 (all 146 rows) + 238-02 FWD-01/02 (all 146 rows) + 238-03 FWD-03 gating + consolidation.
+**Status:** Phase 238 context captured; ready for planning. Phases 239 (rngLocked) + 240 (Gameover) + 241 (Exception Closure) still unblocked and parallelizable.
 **Last activity:** 2026-04-19
 
 **Audit baseline:** HEAD `7ab515fe` (contract tree identical to v29.0 `1646d5af`; all post-v29 commits are docs-only)
@@ -103,13 +103,23 @@ Prior RNG-related milestone artifacts worth referencing during v30.0 planning (b
 - 5 Finding Candidates surfaced during call-graph construction (all INFO): dual-trigger delegatecall boundary observation, resolveLootboxDirect gameover-caller marker, prevrandao-mix recursion citation, INV-237-124 sole daily-family EntropyLib caller, F-29-04 swap-site liveness. Merged with 5 (237-01) + 7 (237-02) = 17 total FC routed to Phase 242.
 - No F-30-NN IDs emitted per D-15. No edits to `audit/v30-237-01-UNIVERSE.md` or `audit/v30-237-02-CLASSIFICATION.md` (D-16 READ-only-after-commit). Zero `contracts/` or `test/` writes per D-18. HEAD anchor `7ab515fe` attested (D-17).
 
+### Phase 238 Context Decisions (2026-04-19)
+
+- 3 plans, 2 waves per D-01/D-02: 238-01 BWD-01/02/03 (all 146) + 238-02 FWD-01/02 (all 146) parallel Wave 1; 238-03 FWD-03 gating + final consolidated `audit/v30-FREEZE-PROOF.md` Wave 2 (reads 238-02 mutation-path output).
+- 4-actor closed adversarial-closure taxonomy per D-07: player / admin / validator / VRF oracle. VRF oracle added beyond REQUIREMENTS.md literal wording because the 14-day prevrandao fallback (KI EXC-02) is the accepted escape hatch for indefinite withholding.
+- 4-gate closed FWD-03 gating taxonomy per D-13: `rngLocked` / `lootbox-index-advance` / `phase-transition-gate` / `semantic-path-gate`. Any row outside the taxonomy is `CANDIDATE_FINDING` per D-14.
+- KI-exception rows (22) + gameover-flow rows (19) IN Phase 238 scope per D-11/D-12 with `EXCEPTION (KI: <header>)` verdict; no re-litigation. Phase 241 EXC-01..04 closes acceptance; Phase 240 GO-01..05 layers gameover-jackpot-specific overlay.
+- Fresh re-prove + cross-cite prior with `re-verified at HEAD 7ab515fe` note per D-09/D-10 (Phase 235 D-03/D-04 pattern). Cross-cite sources: Phase 235-03/04/05, Phase 215-02/03, Phase 232.1-03-PFTB, v3.7/v3.8.
+- Single consolidated `audit/v30-FREEZE-PROOF.md` deliverable per D-16 (Phase 237 D-08 precedent) + 3 per-plan intermediate files. Grep-friendly tabular, no mermaid (237 D-09).
+- No F-30-NN emission per D-15 (Phase 237 D-15 / Phase 235 D-14 / Phase 230 D-06 pattern across 3 prior phases). READ-only scope per D-20. Scope-guard deferral rule per D-18.
+
 ### Blockers/Concerns
 
-_(none — Phase 237 complete (3/3 plans); `audit/v30-CONSUMER-INVENTORY.md` assembled; Phases 238/239/240/241 unblocked and can execute in parallel; Phase 242 requires 238+239+240+241)_
+_(none — Phase 237 complete (3/3 plans); `audit/v30-CONSUMER-INVENTORY.md` assembled; Phase 238 context committed; Phases 239/240/241 still unblocked and parallelizable; Phase 242 requires 238+239+240+241)_
 
 ## Session Continuity
 
-Last session: 2026-04-19T02:16:00Z (Phase 237 Wave 2 — Plan 03 INV-03 call graphs committed in `0ccdef72` + final consolidated `audit/v30-CONSUMER-INVENTORY.md` committed in `4c507f8a`; Phase 237 complete)
+Last session: 2026-04-19T14:00:00Z (Phase 238 CONTEXT.md + DISCUSSION-LOG.md committed; auto-decided via Phase 235 / Phase 237 precedents; plan-phase next per auto_advance)
 
 ## Deferred Items
 
