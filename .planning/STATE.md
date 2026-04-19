@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v30.0
 milestone_name: Full Fresh-Eyes VRF Consumer Determinism Audit
 status: executing
-last_updated: "2026-04-19T17:30:00Z"
+last_updated: "2026-04-19T19:00:00Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 6
-  completed_plans: 5
-  percent: 28
+  completed_phases: 2
+  total_plans: 7
+  completed_plans: 6
+  percent: 50
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-18)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 238 — Backward & Forward Freeze Proofs (planned, ready to execute)
+**Current focus:** Phase 238 COMPLETE — Phases 239, 240, 241 unblocked and parallelizable; Phase 242 requires 239+240+241 to complete.
 
 ## Current Position
 
-Phase: 238 (Backward & Forward Freeze Proofs) — EXECUTING, 2/3 plans complete (Plan 238-01 BWD-01/02/03 committed at `d0a37c75`; Plan 238-02 FWD-01/02 committed at `8b0bd585`), 1/3 remaining (238-03 Wave 2 now UNBLOCKED).
-Plan: 2 of 3 executed. Wave 1 (238-01 BWD + 238-02 FWD-01/02) both COMPLETE; Wave 2 (238-03 FWD-03 + consolidated `audit/v30-FREEZE-PROOF.md`) unblocked and ready per D-01/D-02.
+Phase: 238 (Backward & Forward Freeze Proofs) — COMPLETE (3/3 plans), Phase 238 closed.
+Plan: 3 of 3 executed. Wave 1 (238-01 BWD commit `d0a37c75` + 238-02 FWD commit `8b0bd585`) + Wave 2 (238-03 gating commit `1f302d6e` + consolidated commit `9a8f423d`) all done per D-01/D-02.
 **Milestone:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit
-**Phase:** 238 CONTEXT.md + 238-01/02/03-PLAN.md committed 2026-04-19. Plan 238-01 executed + committed 2026-04-19 at `d0a37c75`. Plan 238-02 executed + committed 2026-04-19 at `8b0bd585` (docs(238-02): FWD-01/02 per-consumer forward freeze proof at HEAD 7ab515fe). Phase 237 complete (3/3 plans).
-**Plan:** 238-02 complete — `audit/v30-238-02-FWD.md` (660 lines; 146 Forward Enumeration Table rows with 7 columns per D-05 + Forward Mutation Paths per-chain + bespoke-tail tuples as Plan 238-03 FWD-03 direct input + 19 Gameover-Flow subset matching Plan 238-01; 22 EXCEPTION matching EXC-01..04 distribution + 124 SAFE; zero CANDIDATE_FINDING; zero F-30-NN; zero contracts/test writes; inventory + Plan 238-01 BWD both unmodified). 238-03 now unblocked.
-**Status:** Plan 238-03 (FWD-03 gating verification + final consolidated `audit/v30-FREEZE-PROOF.md`) ready for execute as Wave 2 sequential — both Wave 1 inputs now available (238-01 BWD + 238-02 FWD). Phases 239 / 240 / 241 still unblocked and parallelizable.
+**Phase:** 238 COMPLETE 2026-04-19 — all 6 requirements (BWD-01/02/03 + FWD-01/02/03) satisfied. Final consolidated `audit/v30-FREEZE-PROOF.md` (459 lines, 146-row Consolidated Freeze-Proof Table + 26-requirement Consumer Index) committed at `9a8f423d`. Phase 237 complete (3/3). Phase 238 complete (3/3).
+**Plan:** 238-03 complete — `audit/v30-238-03-GATING.md` (308 lines; 146-row Gating Verification Table with 6 columns per D-06; Named Gate distribution: rngLocked=106, lootbox-index-advance=20, phase-transition-gate=0, semantic-path-gate=18, NO_GATE_NEEDED_ORTHOGONAL=2; Mutation-Path Coverage: EVERY_PATH_BLOCKED=144, PARTIAL_COVERAGE=0, NO_GATE_NEEDED_ORTHOGONAL=2) + `audit/v30-FREEZE-PROOF.md` (459 lines; 146-row Consolidated Freeze-Proof Table merging BWD + FWD + gating; 19-row Gameover-Flow subset + 22-row KI-Exception subset + 26-requirement Consumer Index + merged Finding Candidates + merged Scope-Guard Deferrals including Phase 239 audit assumption). Effectiveness distribution: 124 SAFE + 22 EXCEPTION + 0 CANDIDATE_FINDING = 146. Zero F-30-NN IDs. Zero contracts/test writes. Inventory + 238-01 + 238-02 all unmodified (D-16/D-18).
+**Status:** Phase 238 complete. Phases 239 (rngLocked invariant + permissionless sweep, RNG-01..03) / 240 (gameover jackpot safety, GO-01..05) / 241 (exception closure, EXC-01..04) unblocked and parallelizable. Phase 242 (regression + findings consolidation, REG-01/02, FIND-01..03) requires all 4 to complete. Phase 239 RNG-01/RNG-03 closes the audit-assumption recorded in Plan 238-03 Scope-Guard Deferral #1 (rngLocked + lootbox-index-advance first-principles re-proof).
 **Last activity:** 2026-04-19
 
 **Audit baseline:** HEAD `7ab515fe` (contract tree identical to v29.0 `1646d5af`; all post-v29 commits are docs-only)
@@ -113,6 +113,20 @@ Prior RNG-related milestone artifacts worth referencing during v30.0 planning (b
 - Single consolidated `audit/v30-FREEZE-PROOF.md` deliverable per D-16 (Phase 237 D-08 precedent) + 3 per-plan intermediate files. Grep-friendly tabular, no mermaid (237 D-09).
 - No F-30-NN emission per D-15 (Phase 237 D-15 / Phase 235 D-14 / Phase 230 D-06 pattern across 3 prior phases). READ-only scope per D-20. Scope-guard deferral rule per D-18.
 
+### Phase 238 Plan 03 Decisions (2026-04-19)
+
+- 146-row Gating Verification Table + 146-row Consolidated Freeze-Proof Table built at HEAD `7ab515fe` across two deliverables: `audit/v30-238-03-GATING.md` (308 lines, commit `1f302d6e`, 6 required sections) + `audit/v30-FREEZE-PROOF.md` (459 lines, commit `9a8f423d`, 10 required sections). Phase 238 complete (BWD-01/02/03 + FWD-01/02/03 all satisfied).
+- Named Gate distribution in Gating Verification Table: `rngLocked` = 106 rows (90 PREFIX-DAILY + 7 PREFIX-GAMEOVER + 6 library-wrapper + 3 request-origination); `lootbox-index-advance` = 20 rows (19 PREFIX-MIDDAY + 1 daily-subset INV-237-124 EXC-04); `phase-transition-gate` = 0 rows as PRIMARY gate (appears as COMPANION gate in Forward Mutation Paths for phaseTransitionActive slot on PREFIX-DAILY/MIDDAY/GAMEOVER chains — documented via in-section note); `semantic-path-gate` = 18 rows (3 PREFIX-GAP + 8 EXC-02 prevrandao + 4 EXC-03 F-29-04 + 2 fulfillment-callback + 1 view-deterministic-fallback); `NO_GATE_NEEDED_ORTHOGONAL` = 2 rows (EXC-01 affiliate). Total 146.
+- Mutation-Path Coverage distribution: EVERY_PATH_BLOCKED = 144 rows; PARTIAL_COVERAGE = 0 rows; NO_GATE_NEEDED_ORTHOGONAL = 2 rows (EXC-01 affiliate). Zero CANDIDATE_FINDING rows surfaced per D-14.
+- EXCEPTION routing per D-06/D-11 matches 237-02 SUMMARY + 238-01 + 238-02 distribution verbatim: EXC-01 = 2 rows `NO_GATE_NEEDED_ORTHOGONAL` (INV-237-005, -006); EXC-02 = 8 rows `semantic-path-gate` citing 14-day `GAMEOVER_RNG_FALLBACK_DELAY` @ AdvanceModule:109 + call-site @:1252 (INV-237-055..062); EXC-03 = 4 rows `semantic-path-gate` citing terminal-state gameover @:292 + :1082 + :1222-1246 (INV-237-024, -045, -053, -054); EXC-04 = 8 rows `lootbox-index-advance` (INV-237-124, -131, -132, -134..138) — EntropyLib.entropyStep seeded per-player/day/amount via keccak(rngWord, ...) with VRF-derived rngWord, XOR-shift determinism accepted per KI envelope.
+- Phase 239 audit-assumption branch taken per CONTEXT.md Claude's Discretion: `ls .planning/phases/239-*/239-*-SUMMARY.md` returned no matches at Task 1 + Task 3 run time — Phase 239 NOT committed. `rngLocked` + `lootbox-index-advance` gate correctness stated as audit assumption pending Phase 239 RNG-01 + RNG-03 re-proof. Corroborating evidence: 235-05-TRNX-01.md v29.0 4-path rngLocked re-proof + KI-accepted `"Lootbox RNG uses index advance isolation instead of rngLockedFlag"` entry. Scope-Guard Deferral #1 recorded in both `audit/v30-238-03-GATING.md` and `audit/v30-FREEZE-PROOF.md` for Phase 242 cross-check.
+- Consolidated Freeze-Proof Table derived per Task 3 Step 2 rule: Effectiveness Verdict = SAFE iff {BWD-Trace, BWD-03, FWD} = SAFE AND Mutation-Path Coverage ∈ {EVERY_PATH_BLOCKED, NO_GATE_NEEDED_ORTHOGONAL}; EXCEPTION iff any of {BWD-Trace, BWD-03, FWD} = EXCEPTION; CANDIDATE_FINDING otherwise. Distribution: 124 SAFE + 22 EXCEPTION + 0 CANDIDATE_FINDING = 146.
+- Consumer Index in `audit/v30-FREEZE-PROOF.md` maps all 26 v30.0 requirement IDs to concrete Row-ID subsets — no TBD. RNG-01 scope computed = 106 rows (Named Gate = `rngLocked`); RNG-03 scope computed = 20 rows (Named Gate = `lootbox-index-advance`); RNG-02 = ALL 146. GO-01..04 = 19 gameover-flow rows (identical to Phase 237 Consumer Index); GO-05 = 4 F-29-04 rows. EXC-01..04 = 2/8/4/8 matching KI headers. REG-01 = 4 F-29-04 rows; REG-02 = 29 confirmed-fresh-matches-prior rows. FIND-01 = 21 pre-existing Phase 237 FCs + 22 informational EXCEPTION from Phase 238 + 0 new CANDIDATE_FINDING; FIND-02 = REG-01 ∪ REG-02 = 33 distinct rows; FIND-03 = 3 Phase 237 candidate rows + 0 new.
+- Prior-milestone cross-cite scope at 13 artifacts in consolidated file (merged from 238-01's 7 + 238-02's 6 + 238-03's 7 with deduplication): 235-03, 235-04, 235-05, 235-CONTEXT D-13, 215-02, 215-03, 232.1-03, 230-01 §2, 230-02, ACCESS-CONTROL-MATRIX, STORAGE-WRITE-MAP, KNOWN-ISSUES, Phase 239 conditional (NOT committed — stated as assumption). Every cite carries `re-verified at HEAD 7ab515fe` note with structural-equivalence statement (7 instances in gating file + 11 instances in consolidated file).
+- Task split across 2 commits (not single-commit like 238-01 / 238-02): Task 1 (build gating file) + Task 2 (commit gating file) → single commit `1f302d6e`; Task 3 (assemble + commit consolidated file) → commit `9a8f423d`. Two-commit pattern because the consolidated file assembly requires the gating file to be committed first (Wave-2-within-plan-03 dependency; per Plan 237-03 Task 3 precedent for consolidated-file assembly via Python merge script in `/tmp/freeze-proof-build/`).
+- Python merge scripts `/tmp/freeze-proof-build/build_gating.py` + `/tmp/freeze-proof-build/build_freeze_proof.py` reused the Phase 237 Plan 03 Task 3 pattern. `build_freeze_proof.py` parser handles markdown-table `\|` pipe-escapes (special case for INV-237-065 / -066 fulfillment-callback rows whose FWD table cells contain literal `\|\|` Solidity OR-operator documentation in the `rngLockedFlag == true` guard citation).
+- Zero F-30-NN IDs emitted; zero `contracts/` or `test/` writes; `audit/v30-CONSUMER-INVENTORY.md` unmodified (D-18); `audit/v30-238-01-BWD.md` + `audit/v30-238-02-FWD.md` unmodified (D-16/D-18 READ-only-after-commit); Row-ID integrity diff empty across all 5 files (inventory + BWD + FWD + GATING + FREEZE-PROOF = 146 set-equal).
+
 ### Phase 238 Plan 02 Decisions (2026-04-19)
 
 - 146 Forward Enumeration Table rows + complete Forward Mutation Paths tuple set built at HEAD `7ab515fe` in a single 660-line file `audit/v30-238-02-FWD.md` with 8 required sections per D-05/D-07/D-08/D-09/D-10/D-11/D-12/D-15/D-17/D-18/D-19/D-20 compliance. Forward Enumeration Table columns locked at 7 values in D-05 exact order (Row ID | Consumer | Consumption-Site Storage Reads | Write Paths To Each Read | Mutable-After-Request Actors | Actor-Class Closure | FWD-Verdict).
@@ -138,11 +152,11 @@ Prior RNG-related milestone artifacts worth referencing during v30.0 planning (b
 
 ### Blockers/Concerns
 
-_(none — Phase 237 complete (3/3 plans); Phase 238 Wave 1 complete (2/3 plans — 238-01 BWD + 238-02 FWD both committed); 238-03 Wave 2 now UNBLOCKED; Phases 239/240/241 still unblocked and parallelizable; Phase 242 requires 238+239+240+241)_
+_(none — Phase 237 complete (3/3 plans); Phase 238 complete (3/3 plans — 238-01 BWD + 238-02 FWD + 238-03 gating/consolidation all committed); Phases 239/240/241 unblocked and parallelizable; Phase 242 requires 239+240+241 — will close audit-assumption #1 from Plan 238-03 Scope-Guard Deferrals via Phase 239 RNG-01/RNG-03 first-principles re-proof at consolidation time)_
 
 ## Session Continuity
 
-Last session: 2026-04-19T17:30:00Z (Plan 238-02 executed + committed at `8b0bd585`; Wave 1 deliverables complete — both `audit/v30-238-01-BWD.md` (d0a37c75) and `audit/v30-238-02-FWD.md` (8b0bd585) ready; Plan 238-03 FWD-03 gating verification + final consolidated `audit/v30-FREEZE-PROOF.md` assembly now unblocked as next sequential target)
+Last session: 2026-04-19T19:00:00Z (Plan 238-03 executed + committed — Task 1+2 built `audit/v30-238-03-GATING.md` (308 lines) at `1f302d6e`; Task 3 assembled + committed final consolidated `audit/v30-FREEZE-PROOF.md` (459 lines) at `9a8f423d`. Phase 238 complete (3/3 plans). Phases 239 / 240 / 241 unblocked as next parallel targets.)
 
 ## Deferred Items
 
