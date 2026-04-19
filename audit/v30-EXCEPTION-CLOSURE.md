@@ -98,3 +98,61 @@ Comment-line hits (lines beginning with `*`, `//`, or inside `///` NatSpec) excl
 ### Combined Closure Verdict
 
 Per D-08: **`ONLY_NESS_HOLDS_AT_HEAD`** — Gate A PASSES (set-equality with Phase 238's 22-EXCEPTION distribution at HEAD `7ab515fe`) AND Gate B PASSES (grep backstop zero CANDIDATE_FINDING). The 4 KNOWN-ISSUES RNG entries (EXC-01/02/03/04) are confirmed as the ONLY violations of the RNG-consumer determinism invariant at HEAD `7ab515fe`. The universal ONLY-ness claim holds.
+
+## 5. EXC-02 Predicate Re-Verification
+
+Per D-10 — EXC-02 predicate re-derivation fresh at HEAD `7ab515fe`. Two predicates; BOTH must hold for `EXC-02 RE_VERIFIED_AT_HEAD`.
+
+### Grep Commands (reproducibility)
+
+```
+grep -rn '_getHistoricalRngFallback' contracts/ --include='*.sol'
+grep -rn 'GAMEOVER_RNG_FALLBACK_DELAY' contracts/ --include='*.sol'
+```
+
+### Predicate Table
+
+| Predicate ID | Predicate Name | Target file:line | Grep Command | Hits | Gate Expression | HEAD Verdict |
+| ------------ | -------------- | ---------------- | ------------ | ---- | --------------- | ------------ |
+| EXC-02-P1 | Single-call-site predicate | `contracts/modules/DegenerusGameAdvanceModule.sol:1252` (sole CALL_SITE) + `:1301` (DEFINITION_SITE) | `grep -rn '_getHistoricalRngFallback' contracts/ --include='*.sol'` | 2 total: 1 DEFINITION (`:1301`) + 1 CALL_SITE (`:1252`, inside `_gameOverEntropy`). Zero additional callers. Zero COMMENT_OR_DOC hits outside DEFINITION/CALL scope. | Sole reachable invocation: `uint256 fallbackWord = _getHistoricalRngFallback(day);` at `:1252`, inside the enclosing `if (rngRequestTime != 0) { ... if (elapsed >= GAMEOVER_RNG_FALLBACK_DELAY) { ... }` body — NO other call site in any contract or module at HEAD `7ab515fe`. | RE_VERIFIED_AT_HEAD |
+| EXC-02-P2 | 14-day gate predicate | `contracts/modules/DegenerusGameAdvanceModule.sol:109` (constant decl) + `:1250` (gate check) | `grep -rn 'GAMEOVER_RNG_FALLBACK_DELAY' contracts/ --include='*.sol'` | 2 total: 1 declaration (`:109` — `uint48 private constant GAMEOVER_RNG_FALLBACK_DELAY = 14 days;`) + 1 gate check (`:1250` — `if (elapsed >= GAMEOVER_RNG_FALLBACK_DELAY) { ... }`). Zero additional usages. | `_gameOverEntropy` branch at `:1248-1277` wraps the fallback call inside `if (rngRequestTime != 0)` outer guard + `uint48 elapsed = ts - rngRequestTime; if (elapsed >= GAMEOVER_RNG_FALLBACK_DELAY)` inner guard. Every reachable path into `_getHistoricalRngFallback` at `:1252` is preceded by the 14-day delay comparison. The `else` branch (elapsed < 14 days) reverts with `RngNotReady()` at `:1277`. | RE_VERIFIED_AT_HEAD |
+
+### Section-Level Verdict
+
+**`EXC-02 RE_VERIFIED_AT_HEAD`** — both predicates hold at HEAD `7ab515fe`.
+
+### Cross-Cites (per D-12, corroborating only)
+
+- **CITE Phase 239 `audit/v30-RNGLOCK-STATE-MACHINE.md` RNG-01 `AIRTIGHT`** — `re-verified at HEAD 7ab515fe`. Structural equivalence statement: the `rngLockedFlag` state machine at HEAD (1 Set-Site `AdvanceModule:1579` + 3 Clear-Sites + 9 Path Enumeration rows) is unchanged from Phase 239-01's proof (commit `5764c8a4`); no set-without-clear or clear-without-matching-set at HEAD; gameover-entry paths into `_gameOverEntropy` remain gated by the `rngLockedFlag` state machine, corroborating reachability closure for the `_getHistoricalRngFallback` caller.
+- **CITE Phase 240 `audit/v30-GAMEOVER-JACKPOT-SAFETY.md` GO-02 VRF-available-branch determinism** — `re-verified at HEAD 7ab515fe`. Structural equivalence statement: 8-row prevrandao-fallback inventory (GO-240-008..015) at Phase 240 identifies consumer-level EXC-02 presence for the 8 INV-237-055..062 rows; each row decorated with `See Phase 241 EXC-02` forward-cite token; Phase 241's 2-predicate re-verification here discharges consumer-level presence to per-predicate closure for those 8 consumer rows.
+
+## 8. Forward-Cite Discharge Ledger
+
+Per D-11 — explicit line-item discharge of the 29 cross-phase forward-cite tokens Phase 240 emitted expecting Phase 241 closure (17 `See Phase 241 EXC-02` + 12 `See Phase 241 EXC-03`). Ledger columns: `EXC-241-NNN | Forward-Cite Source (Phase 240 file:line token) | Phase 240 Source Row ID | Phase 241 Discharging Row/Predicate | Discharge Verdict | Predicate Used`.
+
+Grep confirms 17 EXC-02 tokens + 12 EXC-03 tokens at HEAD `7ab515fe` in `audit/v30-GAMEOVER-JACKPOT-SAFETY.md` (commands preserved in § 4 reproducibility block — re-runnable as `grep -c 'See Phase 241 EXC-02' audit/v30-GAMEOVER-JACKPOT-SAFETY.md` = 17 and `grep -c 'See Phase 241 EXC-03' audit/v30-GAMEOVER-JACKPOT-SAFETY.md` = 12).
+
+### 8a. EXC-02 Forward-Cite Discharges (17 rows)
+
+Each discharge row closes a single `See Phase 241 EXC-02` token via the two-predicate combination **EXC-02-P1 (single-call-site) + EXC-02-P2 (14-day gate)** both re-verified at HEAD `7ab515fe` in § 5 above.
+
+| EXC-241-NNN | Forward-Cite Source (Phase 240 file:line token) | Phase 240 Source Row ID | Phase 241 Discharging Row/Predicate | Discharge Verdict | Predicate Used |
+| ----------- | ----------------------------------------------- | ---------------------- | ----------------------------------- | ----------------- | -------------- |
+| EXC-241-023 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:163` (GO-02 table-header meta-token) | GO-02 section-summary (covers GO-240-008..015) | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | Fallback reachable only inside `_gameOverEntropy:1252` + 14-day delay enforced at `:109/:1250` — both predicates hold at HEAD 7ab515fe |
+| EXC-241-024 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:180` (GO-240-008 row forward-cite) | GO-240-008 (`_gameOverEntropy` historical fallback call) — consumer at `AdvanceModule:1252` (INV-237-055) | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | Single call-site at `:1252` confirmed sole caller; 14-day gate at `:1250` guards this exact path — both predicates hold at HEAD 7ab515fe |
+| EXC-241-025 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:181` (GO-240-009 row forward-cite) | GO-240-009 (`_gameOverEntropy` fallback apply) — consumer at `AdvanceModule:1253` (INV-237-056) | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | `_applyDailyRng(day, fallbackWord)` consumes post-gate fallback word only; path reachable only via `:1252` call — both predicates hold at HEAD 7ab515fe |
+| EXC-241-026 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:182` (GO-240-010 row forward-cite) | GO-240-010 (`_gameOverEntropy` fallback coinflip) — consumer at `AdvanceModule:1257` (INV-237-057) | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | `processCoinflipPayouts(fallbackWord)` reachable only through `:1252` → post-14-day-gate branch — both predicates hold at HEAD 7ab515fe |
+| EXC-241-027 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:183` (GO-240-011 row forward-cite) | GO-240-011 (`_gameOverEntropy` fallback redemption roll) — consumer at `AdvanceModule:1268` (INV-237-058) | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | Redemption roll `((fallbackWord >> 8) % 151) + 25` reachable only through `:1252` → post-14-day-gate branch — both predicates hold at HEAD 7ab515fe |
+| EXC-241-028 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:184` (GO-240-012 row forward-cite) | GO-240-012 (`_gameOverEntropy` fallback lootbox finalize) — consumer at `AdvanceModule:1274` (INV-237-059) | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | `_finalizeLootboxRng(fallbackWord)` reachable only through `:1252` → post-14-day-gate branch — both predicates hold at HEAD 7ab515fe |
+| EXC-241-029 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:185` (GO-240-013 row forward-cite) | GO-240-013 (`_getHistoricalRngFallback` historical SLOAD) — consumer at `AdvanceModule:1308` (INV-237-060) | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | Historical-word SLOAD inside `_getHistoricalRngFallback` body; function reachable only via sole caller `:1252` gated by `:1250` 14-day check — both predicates hold at HEAD 7ab515fe |
+| EXC-241-030 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:186` (GO-240-014 row forward-cite) | GO-240-014 (`_getHistoricalRngFallback` combined keccak) — consumer at `AdvanceModule:1310` (INV-237-061) | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | Cumulative keccak `combined = keccak(combined, w)` inside fallback body; same caller + gate constraints — both predicates hold at HEAD 7ab515fe |
+| EXC-241-031 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:187` (GO-240-015 row forward-cite) | GO-240-015 (`_getHistoricalRngFallback` prevrandao mix) — consumer at `AdvanceModule:1322` (INV-237-062) | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | Final `keccak256(abi.encodePacked(combined, currentDay, block.prevrandao))` prevrandao mix inside fallback body; same caller + gate constraints + 1-bit validator proposer bias KI-accepted — both predicates hold at HEAD 7ab515fe |
+| EXC-241-032 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:195` (forward-cite-count attestation meta-token) | GO-02 attestation line (covers GO-240-008..015) | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | Attestation-level meta-token; closure flows from per-row discharge of GO-240-008..015 above — both predicates hold at HEAD 7ab515fe |
+| EXC-241-033 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:211` (GO-02 validator-column narrative) | GO-02 section narrative — validator closure on VRF-available branch routing to EXC-02 fallback | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | Validator withholding ≥14 days routes to EXC-02 prevrandao fallback; 14-day gate at `:109/:1250` + single caller at `:1252` — both predicates hold at HEAD 7ab515fe |
+| EXC-241-034 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:308` (GO-04 Non-Player Narrative meta-token) | GO-04 Non-Player Narrative (validator + VRF-oracle) section-summary | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | Non-player actor narrative closure; both validator and VRF-oracle closed verdicts route to EXC-02 fallback via same 14-day gate — both predicates hold at HEAD 7ab515fe |
+| EXC-241-035 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:354` (GO-04 Validator closed verdict `BOUNDED_BY_14DAY_EXC02_FALLBACK`) | GO-04 Validator narrative row (`GOTRIG-240-NNN` validator-column cross-cite) | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | `BOUNDED_BY_14DAY_EXC02_FALLBACK` bounded by the 14-day `GAMEOVER_RNG_FALLBACK_DELAY` constant at `:109` — both predicates hold at HEAD 7ab515fe |
+| EXC-241-036 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:364` (GO-04 VRF-oracle closed verdict `EXC-02_FALLBACK_ACCEPTED`) | GO-04 VRF-oracle narrative row | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | `EXC-02_FALLBACK_ACCEPTED` — VRF-oracle withholding ≥14 days routes to `_getHistoricalRngFallback:1301-1325` via sole caller `:1252` — both predicates hold at HEAD 7ab515fe |
+| EXC-241-037 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:567` (meta-token in per-D-22 consolidation summary) | Consolidation-file D-22 meta-line (covers GO-02 prevrandao 8 rows + GO-04 non-player narrative 2 additional cites) | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | Summary-level meta-token; closure flows from per-row discharges EXC-241-024..031 + narrative discharges EXC-241-033..036 — both predicates hold at HEAD 7ab515fe |
+| EXC-241-038 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:702` (GO-03 GOVAR `Role` forward-cite — validator + VRF-oracle narrative attribution) | GO-03 `Role` metadata line (attributes 2 forward-cite tokens for `GOVAR-240-004`/`-028` surface) | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | GO-03 per-variable attribution of validator + VRF-oracle narratives to `rngRequestTime` / `GAMEOVER_RNG_FALLBACK_DELAY`; closure flows from 14-day gate at `:109/:1250` — both predicates hold at HEAD 7ab515fe |
+| EXC-241-039 | `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:822` (attestation-counter meta-token for `See Phase 241 EXC-02`) | Consolidation-file attestation-counter line (enumerates 8 + 6 = 14+ EXC-02 tokens across consolidated file) | EXC-02-P1 + EXC-02-P2 | DISCHARGED_RE_VERIFIED_AT_HEAD | Attestation-counter meta-token; closure flows from aggregate per-row and narrative discharges above — both predicates hold at HEAD 7ab515fe |
+
