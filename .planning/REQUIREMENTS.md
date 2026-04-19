@@ -25,9 +25,9 @@
 
 ### BWD — Backward Freeze Proof (per consumer)
 
-- [ ] **BWD-01**: For each consumer, trace backward from the consumption site to its originating VRF request. Every storage read on the consumption path must map to a write site that either (a) executed before the VRF request, or (b) is unreachable by any actor between request and consumption.
-- [ ] **BWD-02**: For each consumer, enumerate every storage variable read at consumption time. Classify each as `written-before-request` OR `unreachable-after-request`. No variable may be `mutable-after-request` except via an explicitly-documented KNOWN-ISSUES exception.
-- [ ] **BWD-03**: For each consumer, perform adversarial closure: can a player, admin, or validator mutate any backward-input state between request and consumption? Exhaustively answered per consumer, not sampled.
+- [x] **BWD-01**: For each consumer, trace backward from the consumption site to its originating VRF request. Every storage read on the consumption path must map to a write site that either (a) executed before the VRF request, or (b) is unreachable by any actor between request and consumption. (Completed 2026-04-19 — Plan 238-01; 146 Backward Freeze Table rows in `audit/v30-238-01-BWD.md` with 6 shared-prefix chains + 16 bespoke-tail rows; commit `d0a37c75`.)
+- [x] **BWD-02**: For each consumer, enumerate every storage variable read at consumption time. Classify each as `written-before-request` OR `unreachable-after-request`. No variable may be `mutable-after-request` except via an explicitly-documented KNOWN-ISSUES exception. (Completed 2026-04-19 — Plan 238-01; Write-Site Classification column populated for all 146 rows: 124 `written-before-request` + 22 `EXCEPTION` with KI Cross-Ref; forbidden mutable verdict absent from every data cell; commit `d0a37c75`.)
+- [x] **BWD-03**: For each consumer, perform adversarial closure: can a player, admin, or validator mutate any backward-input state between request and consumption? Exhaustively answered per consumer, not sampled. (Completed 2026-04-19 — Plan 238-01; 146 Backward Adversarial Closure Table rows with 4-actor taxonomy per D-07 [player/admin/validator/VRF oracle] and closed 4-value actor-cell vocabulary per D-08 in `audit/v30-238-01-BWD.md`; BWD-03 Verdict: 124 SAFE + 22 EXCEPTION + 0 CANDIDATE_FINDING; commit `d0a37c75`.)
 
 ### FWD — Forward Freeze Proof (per consumer)
 

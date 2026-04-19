@@ -112,7 +112,7 @@
   4. Every consumer's forward-gating mechanism (FWD-03 — `rngLocked` / lootbox index-advance / phase-transition gate / semantic path gate) is named and proven to block every forward mutation path identified in FWD-01/02 — gating is demonstrated effective, never assumed
   5. Any row that cannot be proven SAFE is promoted to the Phase 242 finding candidate pool with severity classification and supporting evidence
 **Plans**: 3 plans (2 waves per 238-CONTEXT.md D-01/D-02)
-  - [ ] 238-01-PLAN.md — BWD-01/02/03 per-consumer backward freeze (146 rows) — Wave 1 (parallel with 238-02); outputs audit/v30-238-01-BWD.md
+  - [x] 238-01-PLAN.md — BWD-01/02/03 per-consumer backward freeze (146 rows) — Wave 1 (parallel with 238-02); completed 2026-04-19 at commit `d0a37c75`: `audit/v30-238-01-BWD.md` (620 lines; 146 Backward Freeze Table rows + 146 Backward Adversarial Closure Table rows + 19-row Gameover-Flow subset + 6 shared-prefix chains + 7 prior-artifact cross-cites; 22 EXCEPTION matching EXC-01..04 distribution + 124 SAFE + 0 CANDIDATE_FINDING; zero F-30-NN; zero contracts/test writes; inventory unmodified)
   - [ ] 238-02-PLAN.md — FWD-01/02 per-consumer forward enumeration + adversarial closure (146 rows) — Wave 1 (parallel with 238-01); outputs audit/v30-238-02-FWD.md
   - [ ] 238-03-PLAN.md — FWD-03 per-consumer gating verification + final consolidated audit/v30-FREEZE-PROOF.md assembly — Wave 2 (depends on 238-01 + 238-02); outputs audit/v30-238-03-GATING.md + audit/v30-FREEZE-PROOF.md
 
@@ -169,7 +169,7 @@ Phase 237 first (inventory is the scope foundation). After 237 completes, Phases
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 237. VRF Consumer Inventory & Call Graph | 3/3 | Complete — 146 Row IDs; `audit/v30-CONSUMER-INVENTORY.md` assembled; downstream 238-242 unblocked | 2026-04-19 |
-| 238. Backward & Forward Freeze Proofs | 0/3 | Planned — 3 plans (2 waves per 238-CONTEXT.md D-01/D-02); scope anchored on 146 Row IDs per Consumer Index | — |
+| 238. Backward & Forward Freeze Proofs | 1/3 | Executing — Plan 238-01 BWD-01/02/03 complete (commit `d0a37c75`; `audit/v30-238-01-BWD.md`). 238-02 (FWD-01/02) + 238-03 (FWD-03 + consolidation) pending | — |
 | 239. rngLocked Invariant & Permissionless Sweep | 0/TBD | Not started | — |
 | 240. Gameover Jackpot Safety | 0/TBD | Not started | — |
 | 241. Exception Closure | 0/TBD | Not started | — |
