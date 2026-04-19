@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v30.0
 milestone_name: Full Fresh-Eyes VRF Consumer Determinism Audit
 status: executing
-last_updated: "2026-04-19T01:39:06Z"
+last_updated: "2026-04-19T01:51:18Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 237 (VRF Consumer Inventory & Call Graph) — EXECUTING (Wave 1 complete)
-Plan: 2 of 3 (Wave 2 — 237-02 and 237-03 ready for parallel execution)
+Phase: 237 (VRF Consumer Inventory & Call Graph) — EXECUTING (Wave 2 in progress)
+Plan: 3 of 3 (Wave 2 — 237-02 complete 2026-04-19; 237-03 pending)
 **Milestone:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit
-**Phase:** 237 (VRF Consumer Inventory & Call Graph) — Wave 1 of 2 complete
-**Plan:** 237-01 complete (Wave 1 / INV-01 universe list); 237-02 + 237-03 ready (Wave 2)
-**Status:** Wave 1 of Phase 237 complete; Wave 2 ready
+**Phase:** 237 (VRF Consumer Inventory & Call Graph) — Wave 2 in progress (2/3 plans complete)
+**Plan:** 237-01 complete (Wave 1 / INV-01 universe list); 237-02 complete (Wave 2 / INV-02 classification); 237-03 pending (Wave 2 / INV-03 call-graph + consolidation)
+**Status:** Wave 2 of Phase 237 in progress; 237-03 ready to execute
 **Last activity:** 2026-04-19
 
 **Audit baseline:** HEAD `7ab515fe` (contract tree identical to v29.0 `1646d5af`; all post-v29 commits are docs-only)
@@ -72,7 +72,7 @@ Prior RNG-related milestone artifacts worth referencing during v30.0 planning (b
 
 ### Pending Todos
 
-- Execute Wave 2 of Phase 237 (Plans 237-02 classification + 237-03 call-graph; can run in parallel per D-14)
+- Execute Plan 237-03 (Wave 2 / INV-03 per-consumer call-graphs + Consumer Index + final consolidation into `audit/v30-CONSUMER-INVENTORY.md`)
 - After 237-03 emits final consolidated `audit/v30-CONSUMER-INVENTORY.md`, unblock Phases 238-241
 
 ### Phase 237 Plan 01 Decisions (2026-04-19)
@@ -83,13 +83,20 @@ Prior RNG-related milestone artifacts worth referencing during v30.0 planning (b
 - 5 finding candidates surfaced (all severity INFO), routed to Phase 242 per D-15.
 - Zero F-30-NN IDs emitted per D-15. Zero `contracts/` or `test/` writes per D-18.
 
+### Phase 237 Plan 02 Decisions (2026-04-19)
+
+- Classification distribution at 146-row granularity: `daily` 91 / `mid-day-lootbox` 19 / `gap-backfill` 3 / `gameover-entropy` 7 / `other` 26 = 146. `daily` share (62.3%) exceeds the planner's 30-50% heuristic — not a classification error; driven by D-01 fine-grained expansion. Flagged in Finding Candidates as sanity-check observation.
+- KI-exception rules (1 / 2 / 3 per decision procedure) take precedence over path-family rules (4 / 5 / 6 / 7). Consequence: `_gameOverEntropy` cluster splits across 3 family labels: 7 rows → `gameover-entropy`, 2 rows → `other / exception-mid-cycle-substitution`, 8 rows → `other / exception-prevrandao-fallback`. Effective gameover-flow scope (for Phase 240 GO-01) = 19 rows across those 3 labels.
+- KI Cross-Ref distribution (D-06 proof-subject set for Phase 241 EXC-01..04): EXC-01 2 rows / EXC-02 8 rows / EXC-03 4 rows / EXC-04 8 rows = 22 proof targets. Phase 239 RNG-03 index-advance re-justification set = 13 rows.
+- 7 Finding Candidates surfaced (all severity INFO), routed to Phase 242 per D-15. No F-30-NN IDs emitted. No edits to `audit/v30-237-01-UNIVERSE.md` (D-16 READ-only-after-commit honoured). Zero `contracts/` or `test/` writes per D-18.
+
 ### Blockers/Concerns
 
-_(none — Wave 1 of Phase 237 shipped clean; Wave 2 unblocked; v30.0 roadmap coverage 26/26 requirements, zero orphans)_
+_(none — Waves 1 and 2 of Phase 237 shipped clean (2/3 plans); 237-03 unblocked; v30.0 roadmap coverage 26/26 requirements, zero orphans)_
 
 ## Session Continuity
 
-Last session: 2026-04-19T01:39:06Z (Phase 237 Wave 1 complete — Plan 01 INV-01 committed in 18f519b7 + 20ed1c75)
+Last session: 2026-04-19T01:51:18Z (Phase 237 Wave 2 — Plan 02 INV-02 classification committed in `f142adaf`; 237-03 pending)
 
 ## Deferred Items
 

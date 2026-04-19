@@ -20,7 +20,7 @@
 ### INV — VRF Consumer Inventory
 
 - [ ] **INV-01**: Exhaustively enumerate every VRF-consuming call site in `contracts/` (no sampling). The universe list of consumers — daily RNG reads, mid-day lootbox RNG reads, gap backfill reads, gameover entropy reads, and any other surfaces discovered fresh-eyes.
-- [ ] **INV-02**: Classify each consumer by path family: `daily` / `mid-day-lootbox` / `gap-backfill` / `gameover-entropy` / `other`. Produce a typed inventory table.
+- [x] **INV-02**: Classify each consumer by path family: `daily` / `mid-day-lootbox` / `gap-backfill` / `gameover-entropy` / `other`. Produce a typed inventory table. (Completed 2026-04-19 — Plan 237-02; 146 rows classified in `audit/v30-237-02-CLASSIFICATION.md`; commit `f142adaf`.)
 - [ ] **INV-03**: Per-consumer, produce the full call graph from VRF request origination through `rawFulfillRandomWords` to consumption site, including all intermediate storage touchpoints.
 
 ### BWD — Backward Freeze Proof (per consumer)
@@ -93,7 +93,7 @@ Every v30.0 requirement maps to exactly one phase. Coverage: 26/26 (100%). No or
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | INV-01 | Phase 237 | Pending |
-| INV-02 | Phase 237 | Pending |
+| INV-02 | Phase 237 | ✅ Complete (2026-04-19, Plan 237-02) |
 | INV-03 | Phase 237 | Pending |
 | BWD-01 | Phase 238 | Pending |
 | BWD-02 | Phase 238 | Pending |
