@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v30.0
 milestone_name: Full Fresh-Eyes VRF Consumer Determinism Audit
 status: executing
-last_updated: "2026-04-19T05:00:00.000Z"
+last_updated: "2026-04-19T05:22:00.000Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 9
-  completed_plans: 7
-  percent: 78
+  completed_plans: 8
+  percent: 89
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 ## Current Position
 
 Phase: 239 (rngLocked Invariant & Permissionless Sweep) — EXECUTING
-Plan: 2 of 3 (239-01 complete; 239-02 + 239-03 remain in Wave 1 parallel)
+Plan: 3 of 3 (239-01 complete; 239-02 complete; 239-03 remains in Wave 1)
 **Milestone:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit
-**Phase:** 239 IN PROGRESS 2026-04-19 — 1/3 plans complete. 239-01 RNG-01 rngLockedFlag state machine proof committed at `5764c8a4` (`audit/v30-RNGLOCK-STATE-MACHINE.md`, 317 lines). Phase 238 COMPLETE (audit/v30-FREEZE-PROOF.md 459 lines, 146-row Consolidated Freeze-Proof Table; committed `9a8f423d`). Phase 237 complete (3/3). 239-02 (RNG-02 permissionless sweep) + 239-03 (RNG-03 asymmetry re-justification) remain parallel in Wave 1 — no cross-dependencies at HEAD `7ab515fe`.
+**Phase:** 239 IN PROGRESS 2026-04-19 — 2/3 plans complete. 239-01 RNG-01 rngLockedFlag state machine proof committed at `5764c8a4` (`audit/v30-RNGLOCK-STATE-MACHINE.md`, 317 lines). 239-02 RNG-02 permissionless sweep committed at `0877d282` (`audit/v30-PERMISSIONLESS-SWEEP.md`, 328 lines; 62-row Permissionless Sweep Table with 3-class D-08 closed taxonomy; distribution respects-rngLocked=24 / respects-equivalent-isolation=0 / proven-orthogonal=38 / CANDIDATE_FINDING=0). Phase 238 COMPLETE (audit/v30-FREEZE-PROOF.md 459 lines, 146-row Consolidated Freeze-Proof Table; committed `9a8f423d`). Phase 237 complete (3/3). 239-03 (RNG-03 asymmetry re-justification) remains parallel in Wave 1 — no cross-dependencies at HEAD `7ab515fe`.
 **Plan:** 239-01 complete — `audit/v30-RNGLOCK-STATE-MACHINE.md` (317 lines; 11 sections: Executive Summary / State-Machine Overview (Prose Diagram) / Set-Site Table (1 row `AdvanceModule.sol:1579`) / Clear-Site Table (3 rows: `_unlockRng :1676`, `updateVrfCoordinatorAndSub :1635`, L1700 `rawFulfillRandomWords` Clear-Site-Ref per D-06) / Path Enumeration Table (9 rows; 7 SET_CLEARS_ON_ALL_PATHS + 2 CLEAR_WITHOUT_SET_UNREACHABLE + 0 CANDIDATE_FINDING) / Invariant Proof (closed-form biconditional with both Invariant 1 set→clear + Invariant 2 clear←set directions; corollary `RNG-01 AIRTIGHT`) / Prior-Artifact Cross-Cites (5 cites × 7 re-verified-at-HEAD notes — v29.0 Phase 235-05 / v3.7 Phase 63 / v3.8 Phases 68-72 / v25.0 Phase 215 / v29.0 Phase 232.1-03) / Grep Commands reproducibility / Finding Candidates `None surfaced` / Scope-Guard Deferrals `None surfaced` / Attestation). Mandatory dedicated rows per D-06 (L1700 = RNGLOCK-239-C-03 + RNGLOCK-239-P-002), D-07 (12h retry-timeout = RNGLOCK-239-P-004 CLEAR_WITHOUT_SET_UNREACHABLE), D-19 (gameover-VRF-request bracket = RNGLOCK-239-P-007; jackpot-input determinism OUT → Phase 240 GO-02). Phase 238-03 Scope-Guard Deferral #1 rngLocked audit assumption DISCHARGED per D-29 (no re-edit of 238 files). Zero F-30-NN per D-22. Zero contracts/test writes per D-27. HEAD anchor `7ab515fe` locked per D-26.
 **Status:** Executing Phase 239 (Plan 2/3)
 **Last activity:** 2026-04-19
@@ -164,13 +164,26 @@ Prior RNG-related milestone artifacts worth referencing during v30.0 planning (b
 - One minor in-plan re-tally corrected before commit: initial Executive Summary draft listed Path verdict distribution as `SET_CLEARS_ON_ALL_PATHS=8 / CLEAR_WITHOUT_SET_UNREACHABLE=1`; row-by-row re-inspection showed correct distribution is `7 / 2` (P-004 + P-009 are the two primary CLEAR_WITHOUT_SET_UNREACHABLE rows; P-003 is primary SET_CLEARS_ON_ALL_PATHS with CLEAR_WITHOUT_SET_UNREACHABLE as explanatory reference for the revert-rollback sub-case). Corrected before commit. Not a deviation — internal accounting fix during build.
 - Task 1 (Set/Clear tables build) + Task 2 (Path Enumeration + Invariant Proof + cross-cites + commit) landed as single commit `5764c8a4` (same pattern as 237-02 / 237-03 / 238-01 / 238-02 Task 1+2 consolidation for audit-file-only deliverables). Task 3 (SUMMARY + ROADMAP/STATE updates + commit) lands separately as the plan-close commit per Phase 238 precedent (238-01 `d283696d`, 238-03 `7dc79e6b`). Zero F-30-NN IDs emitted; zero `contracts/` or `test/` writes; `audit/v30-CONSUMER-INVENTORY.md` + `audit/v30-238-01-BWD.md` + `audit/v30-238-02-FWD.md` + `audit/v30-238-03-GATING.md` + `audit/v30-FREEZE-PROOF.md` + `KNOWN-ISSUES.md` all unchanged (D-27/D-28/D-29 READ-only-after-commit).
 
+### Phase 239 Plan 02 Decisions (2026-04-19)
+
+- 62 permissionless functions at HEAD `7ab515fe` classified per D-08 3-class closed taxonomy across 328 lines in `audit/v30-PERMISSIONLESS-SWEEP.md` committed at `0877d282`. Two-pass methodology per D-11 executed: Pass 1 mechanical grep over `contracts/` (excluding mocks) produced the permissionless candidate universe from 201 implementations + 176 forward-declarations = 377 total mutating external/public declarations; Pass 2 semantic classification against Phase 237 `audit/v30-CONSUMER-INVENTORY.md` Consumer Index produced the final 62 Pass 1 candidates (35 admin-gated + 59 game-internal + 43 module-delegatecall-targets + 176 forward-decls + 169 view/pure excluded — 482 total excluded from 417 raw first-line matches + 176 forward-decls-only-by-multi-line-parse).
+- Classification distribution: `respects-rngLocked` = 24 / `respects-equivalent-isolation` = 0 / `proven-orthogonal` = 38 / `CANDIDATE_FINDING` = 0 (24+0+38+0 = 62). Classification Distribution Heatmap (Contract × Classification) reconciles: grand total = 62 = Permissionless Sweep Table row count = Pass 1 candidate count.
+- `respects-equivalent-isolation` count = 0 at permissionless-function level is a STRUCTURAL OBSERVATION (not a deviation): the lootbox-index-advance asymmetry per CONTEXT.md "canonical member of this class" applies at the CONSUMER level (Phase 237 INV-237-107..125 mid-day-lootbox consumer family per Consumer Index), not at the permissionless-function level. Permissionless entry points for mid-day lootbox VRF (`openLootBox` / `openBurnieLootBox` / `requestLootboxRng` — rows PERM-239-046 / -047 / -061) are all `respects-rngLocked` via the daily-RNG lockout at `DegenerusGameAdvanceModule.sol:1031` that subsumes the index-advance freeze need at the function level.
+- D-15 forward-cite to Plan 239-03 RNG-03(a) § Asymmetry A: 3 rows cite `audit/v30-ASYMMETRY-RE-JUSTIFICATION.md § Asymmetry A` by file+section path as FORWARD-ONLY-CORROBORATION (primary warrant is the direct `rngLockedFlag` revert). Plan 239-03 NOT YET committed at time of 239-02 commit `0877d282`; cite held by path. If 239-03 lands with divergent § Asymmetry A structure, no 239-02 classification would change (forward-cite is cosmetic corroboration) — reconciliation erratum would be strictly cosmetic per D-16 READ-only-after-commit.
+- Zero CANDIDATE_FINDING rows across 62 permissionless function rows — no routing to Phase 242 FIND-01 intake from this plan. Zero scope-guard deferrals — every permissionless-function-touched RNG-consumer state maps to an existing INV-237-NNN Universe List row.
+- 5 prior-milestone cross-cites × 6+ `re-verified at HEAD 7ab515fe` notes (v3.8 Phases 68-72 87-permissionless-path baseline / `audit/STORAGE-WRITE-MAP.md` / `audit/ACCESS-CONTROL-MATRIX.md` / v25.0 Phase 215 SOUND / Phase 237 inventory / v29.0 Phase 235-05-TRNX-01.md). All CORROBORATING; verdicts re-derived fresh at HEAD.
+- Grep commands preserved in both audit file `## Pass 1 — Mechanical Grep Discovery` section AND plan SUMMARY `## Grep Commands` section per CONTEXT.md Claude's Discretion encouragement — enables reviewer sanity-check by re-running 4 canonical greps at HEAD 7ab515fe.
+- One minor row-count errata documented pre-commit: `reverseFlip` initially provisionally absorbed into aggregate `respects-rngLocked` count but not slotted as its own PERM-239-NNN row; corrected by adding PERM-239-062 with dedicated Errata subsection (row count 61 → 62; distribution corrected from 23/0/38/0 to 24/0/38/0). Not a deviation — internal accounting fix during build.
+- Zero F-30-NN IDs emitted per D-22. Zero `contracts/` or `test/` writes per D-27. `audit/v30-CONSUMER-INVENTORY.md`, `audit/v30-238-*.md`, `audit/v30-FREEZE-PROOF.md`, `audit/v30-RNGLOCK-STATE-MACHINE.md`, `KNOWN-ISSUES.md` all unchanged per D-28/D-27. HEAD anchor `7ab515fe` locked in frontmatter + body + Attestation.
+- Task split across 2 commits (single-commit pattern as with 237-02/03, 238-01/02, 239-01): Task 1 (build Pass 1 section) + Task 2 (Pass 2 classification + remaining sections + commit) → single commit `0877d282`; Task 3 (SUMMARY + ROADMAP/STATE updates + commit) → plan-close commit.
+
 ### Blockers/Concerns
 
-_(none — Phase 237 complete (3/3 plans); Phase 238 complete (3/3 plans — 238-01 BWD + 238-02 FWD + 238-03 gating/consolidation all committed); Phase 239 in progress (1/3 plans — 239-01 RNG-01 complete at commit `5764c8a4`; 239-02 RNG-02 + 239-03 RNG-03 remain in Wave 1 parallel, no cross-dependencies); Phase 240/241 unblocked and parallelizable; Phase 242 requires 239+240+241 — will close audit-assumption #1 from Plan 238-03 Scope-Guard Deferrals once 239-03 also commits (239-01 discharges the rngLocked portion; 239-03 discharges the lootbox-index-advance portion))_
+_(none — Phase 237 complete (3/3 plans); Phase 238 complete (3/3 plans — 238-01 BWD + 238-02 FWD + 238-03 gating/consolidation all committed); Phase 239 in progress (2/3 plans — 239-01 RNG-01 complete at commit `5764c8a4`; 239-02 RNG-02 complete at commit `0877d282`; 239-03 RNG-03 remains in Wave 1, no cross-dependencies); Phase 240/241 unblocked and parallelizable; Phase 242 requires 239+240+241 — will close audit-assumption #1 from Plan 238-03 Scope-Guard Deferrals once 239-03 also commits (239-01 discharges the rngLocked portion; 239-03 discharges the lootbox-index-advance portion))_
 
 ## Session Continuity
 
-Last session: 2026-04-19T05:00:00.000Z — Plan 239-01 RNG-01 complete at commit `5764c8a4`. Stopped after: plan 239-01 close sequence (SUMMARY + ROADMAP + STATE updates committed). Next up: Plan 239-02 (RNG-02 permissionless sweep) OR Plan 239-03 (RNG-03 asymmetry re-justification) — either can execute next (Wave 1 parallel per D-02).
+Last session: 2026-04-19T05:22:00.000Z — Plan 239-02 RNG-02 complete at commit `0877d282` (audit/v30-PERMISSIONLESS-SWEEP.md 328 lines). Stopped after: plan 239-02 close sequence (SUMMARY + ROADMAP + STATE updates committed). Next up: Plan 239-03 (RNG-03 asymmetry re-justification) — only remaining plan in Wave 1.
 
 ## Deferred Items
 
