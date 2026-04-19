@@ -8,6 +8,23 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
+## Current Milestone: v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit
+
+**Goal:** For every function in `contracts/` that consumes a VRF word, prove that from the moment the VRF request is fired, every variable influencing how that word is eventually consumed is frozen — backward (input state committed) and forward (consumption-site state unchangeable by any actor), exhaustively enumerated. The only accepted violations are the four documented exceptions in `KNOWN-ISSUES.md` (Affiliate winner roll non-VRF seed, Gameover prevrandao fallback, Gameover RNG substitution for mid-cycle write-buffer tickets, EntropyLib XOR-shift PRNG).
+
+**Target features:**
+- Exhaustive inventory of every VRF-consuming call site in `contracts/` (daily RNG, mid-day lootbox RNG, gap backfill, gameover entropy, any others surfaced fresh-eyes)
+- Per-consumer backward freeze proof — from VRF request → fulfillment, every input parameter / storage variable the consumer will read at fulfillment is already written or unreachable by any actor
+- Per-consumer forward freeze proof — from VRF fulfillment → consumption, nothing the consumer reads can be mutated by any actor (player, admin, validator) after request
+- Global state-space enumeration per consumer — every storage variable touched in the read path, mapped to write-path, checked for post-request mutability
+- `rngLocked` / `rngLockedFlag` invariant re-proof — all protected paths gated, all documented asymmetries (e.g. lootbox index-advance isolation) justified
+- Adversarial closure per consumer — "what *could* a player / admin / validator do between request and consumption?" answered exhaustively
+- Consolidated deliverable `audit/FINDINGS-v30.0.md` with per-consumer proof table, 0/0/0/0/N findings counts, and regression appendix re-verifying all v29.0 RNG-adjacent items
+
+**Scope boundary:** `contracts/` only. Indexer, database, sim, frontend out of scope. READ-only — no `contracts/` or `test/` edits (carry forward v28/v29 cross-repo READ-only pattern).
+
+**Audit baseline:** HEAD `7ab515fe` at milestone start. Contract tree is identical to v29.0 baseline `1646d5af` — all post-v29.0 commits are docs-only. If post-v29.0 contract changes land mid-milestone, the baseline advances to whatever HEAD shows when the consolidation phase runs.
+
 ## Completed Milestone: v29.0 Post-v27 Contract Delta Audit
 
 **Status:** Complete (2026-04-18)
@@ -355,7 +372,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v29.0 Post-v27 Contract Delta Audit shipped 2026-04-18. All 25 requirements satisfied across 8 phases / 21 plans. Zero on-chain vulnerabilities. 4 INFO findings consolidated into `audit/FINDINGS-v29.0.md`; 32 prior v25.0 + v27.0 + v27.0-KI findings re-verified at HEAD `1646d5af` (31 PASS + 1 SUPERSEDED + 0 REGRESSED). Contract code at HEAD `1646d5af` is the audited baseline; subsequent docs-only commits do not advance the audited surface. KNOWN-ISSUES.md refined for warden-facing delivery — internal audit-artifact cross-references stripped, out-of-scope test/script entries removed, new "Gameover RNG substitution" entry codifies the "RNG-consumer determinism" invariant. Ready for next milestone — invoke `/gsd-new-milestone` when scope is defined.
+v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit started 2026-04-18. Awaiting requirements + roadmap. Contract baseline at HEAD `7ab515fe` (identical to v29.0 `1646d5af` — all post-v29 commits are docs-only). Read-only audit pattern (no `contracts/` / `test/` edits). Deliverable target: `audit/FINDINGS-v30.0.md`.
 
 ## Completed Milestone: v17.1 Comment Correctness Sweep
 
@@ -425,4 +442,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-18 — v29.0 Post-v27 Contract Delta Audit complete. 8 phases, 21 plans, 25/25 requirements; 4 INFO findings, 0 on-chain vulnerabilities; 32 prior findings re-verified with 31 PASS + 1 SUPERSEDED + 0 REGRESSED at HEAD `1646d5af`. Deliverable: audit/FINDINGS-v29.0.md. Ready for next milestone via `/gsd-new-milestone`.*
+*Last updated: 2026-04-18 — v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit started. Contract baseline HEAD `7ab515fe` (contract tree identical to v29.0 `1646d5af`). Awaiting requirements + roadmap.*
