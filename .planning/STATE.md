@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v30.0
 milestone_name: Full Fresh-Eyes VRF Consumer Determinism Audit
-status: executing
-last_updated: "2026-04-19T05:41:00.000Z"
+status: planning
+last_updated: "2026-04-19T05:54:00.787Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 6
@@ -27,9 +27,9 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 Phase: 239 (rngLocked Invariant & Permissionless Sweep) — COMPLETE (3/3 plans)
 Plan: 3 of 3 complete
 **Milestone:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit
-**Phase:** 239 COMPLETE 2026-04-19 — 3/3 plans. 239-01 RNG-01 rngLockedFlag state machine proof (commit `5764c8a4`, `audit/v30-RNGLOCK-STATE-MACHINE.md` 317 lines; RNG-01 AIRTIGHT). 239-02 RNG-02 permissionless sweep (commit `0877d282`, `audit/v30-PERMISSIONLESS-SWEEP.md` 328 lines; 62-row Permissionless Sweep Table with 3-class D-08 closed taxonomy; distribution respects-rngLocked=24 / respects-equivalent-isolation=0 / proven-orthogonal=38 / CANDIDATE_FINDING=0). 239-03 RNG-03 asymmetry re-justification (commit `7e4b3170`, `audit/v30-ASYMMETRY-RE-JUSTIFICATION.md` 296 lines; § Asymmetry A 5 Write Sites + 7 Read Sites + closed-form Equivalence Proof; § Asymmetry B 13 SSTORE sites + Call-Chain Rooting Proof + No-Player-Reachable-Mutation-Path Proof; KI entry named SUBJECT not warrant per D-14). Phase 238-03 Scope-Guard Deferral #1 fully discharged per D-29 across all three portions: rngLocked (via 239-01) + lootbox-index-advance (via 239-03 § A) + phase-transition-gate (via 239-03 § B). Phase 238 COMPLETE. Phase 237 COMPLETE. Phases 240/241 unblocked and parallelizable. Phase 242 requires 238+239+240+241.
-**Plan:** 239-03 complete — `audit/v30-ASYMMETRY-RE-JUSTIFICATION.md` (296 lines; 7 required top-level sections: Executive Summary / § Asymmetry A (6 sub-sections: Asymmetry Statement / Storage Primitives / Write Sites 5 rows / Read Sites 7 rows / Equivalence Proof / Discharge of Phase 238-03 lootbox-index-advance D-29) / § Asymmetry B (6 sub-sections: Asymmetry Statement / Storage Primitives / Enumerated SSTORE Sites Under phaseTransitionActive=true 13 rows / Call-Chain Rooting Proof / No Player-Reachable Mutation-Path Proof / Discharge of Phase 238-03 phase-transition-gate D-29) / Prior-Artifact Cross-Cites (7 cites × 7 `re-verified at HEAD 7ab515fe` backtick-quoted-phrase notes) / Finding Candidates `None surfaced` / Scope-Guard Deferrals `None surfaced` / Attestation). D-14 proof-by-exhaustion discipline — every claim enumerates specific storage slots + SSTORE sites + call chains at HEAD `7ab515fe`. D-14 KI-as-SUBJECT discipline — KNOWN-ISSUES.md `"Lootbox RNG uses index advance isolation instead of rngLockedFlag"` entry named SUBJECT of Asymmetry A (NOT warrant); proof holds independently of KI entry existence. D-15 forward-cite reconciliation: Plan 239-02 committed FIRST at `0877d282`; § Asymmetry A heading structurally matches 239-02 forward-cite; no reconciliation erratum needed. Zero F-30-NN per D-22. Zero contracts/test writes per D-27. HEAD anchor `7ab515fe` locked per D-26.
-**Status:** Phase 239 COMPLETE (3/3); Phase 240 + 241 unblocked
+**Phase:** 240
+**Plan:** Not started
+**Status:** Ready to plan
 **Last activity:** 2026-04-19
 
 **Audit baseline:** HEAD `7ab515fe` (contract tree identical to v29.0 `1646d5af`; all post-v29 commits are docs-only)
