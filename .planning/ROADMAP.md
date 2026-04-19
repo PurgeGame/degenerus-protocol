@@ -96,7 +96,10 @@
   2. The inventory classification column (INV-02) resolves every consumer into exactly one path family; any consumer that does not fit an existing family is added under `other` with a named subcategory and justification
   3. Per-consumer call graphs (INV-03) are recorded either inline in the inventory or in companion `audit/v30-237-CALLGRAPH-*.md` files, covering every intermediate storage touchpoint between VRF request, `rawFulfillRandomWords`, and the consumption site
   4. The inventory is usable as the authoritative scope definition for Phases 238-241 — downstream phases reference inventory row IDs without needing additional discovery
-**Plans**: TBD (expected 2-3 plans — enumeration sweep, classification + path-family assignment, per-consumer call graph)
+**Plans**: 3 plans
+  - [ ] 237-01-PLAN.md — INV-01 Enumeration sweep (wave 1, solo): zero-glance fresh-eyes pass at HEAD 7ab515fe + post-hoc reconciliation against prior milestone artifacts (v29.0 Phase 235 03/04, v25.0 Phase 215, v3.7/v3.8). Outputs `audit/v30-237-01-UNIVERSE.md` (with TBD placeholders for 237-02 / 237-03 downstream columns).
+  - [ ] 237-02-PLAN.md — INV-02 Path-family classification + subcategory + KI cross-ref (wave 2, parallel with 237-03, depends on 237-01). Outputs `audit/v30-237-02-CLASSIFICATION.md` — replaces 237-01's TBD-237-02 placeholders with locked path families (`daily` / `mid-day-lootbox` / `gap-backfill` / `gameover-entropy` / `other` + named subcategory) and KI Cross-Ref column mapping every KI-exception row to a KNOWN-ISSUES.md entry.
+  - [ ] 237-03-PLAN.md — INV-03 Per-consumer call graphs + Consumer Index + final consolidation (wave 2, parallel with 237-02, depends on 237-01). Outputs `audit/v30-237-03-CALLGRAPH.md` (call graphs per D-11 stop-at-consumption + D-12 companion files) and assembles the final `audit/v30-CONSUMER-INVENTORY.md` by merging 237-01 + 237-02 + 237-03 (D-08).
 
 ### Phase 238: Backward & Forward Freeze Proofs (per consumer)
 **Goal**: Every consumer in the Phase 237 inventory has an exhaustive backward freeze proof (inputs committed at VRF request time) AND forward freeze proof (consumption-site state un-mutable between request and consumption), with adversarial closure and gating verification documented per consumer
@@ -162,7 +165,7 @@ Phase 237 first (inventory is the scope foundation). After 237 completes, Phases
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 237. VRF Consumer Inventory & Call Graph | 0/TBD | Not started | — |
+| 237. VRF Consumer Inventory & Call Graph | 0/3 | Plans created (2 waves) | — |
 | 238. Backward & Forward Freeze Proofs | 0/TBD | Not started | — |
 | 239. rngLocked Invariant & Permissionless Sweep | 0/TBD | Not started | — |
 | 240. Gameover Jackpot Safety | 0/TBD | Not started | — |
@@ -177,3 +180,4 @@ Phase 237 first (inventory is the scope foundation). After 237 completes, Phases
 - v3.8 Phases 68-72: VRF commitment window audit
 
 </details>
+</content>
