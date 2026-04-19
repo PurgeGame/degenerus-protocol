@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v30.0
 milestone_name: Full Fresh-Eyes VRF Consumer Determinism Audit
 status: executing
-last_updated: "2026-04-19T01:51:18Z"
+last_updated: "2026-04-19T02:16:00Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 67
+  completed_plans: 3
+  percent: 100
 ---
 
 # Project State
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 237 (VRF Consumer Inventory & Call Graph) — EXECUTING (Wave 2 in progress)
-Plan: 3 of 3 (Wave 2 — 237-02 complete 2026-04-19; 237-03 pending)
+Phase: 237 (VRF Consumer Inventory & Call Graph) — COMPLETE (3/3 plans)
+Plan: 3 of 3 done (Wave 2 — 237-02 complete 2026-04-19; 237-03 complete 2026-04-19)
 **Milestone:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit
-**Phase:** 237 (VRF Consumer Inventory & Call Graph) — Wave 2 in progress (2/3 plans complete)
-**Plan:** 237-01 complete (Wave 1 / INV-01 universe list); 237-02 complete (Wave 2 / INV-02 classification); 237-03 pending (Wave 2 / INV-03 call-graph + consolidation)
-**Status:** Wave 2 of Phase 237 in progress; 237-03 ready to execute
+**Phase:** 237 (VRF Consumer Inventory & Call Graph) — all 3 plans complete; final consolidated deliverable `audit/v30-CONSUMER-INVENTORY.md` assembled. Downstream Phases 238-242 unblocked.
+**Plan:** 237-01 complete (Wave 1 / INV-01 universe list, commit `20ed1c75`); 237-02 complete (Wave 2 / INV-02 classification, commit `f142adaf`); 237-03 complete (Wave 2 / INV-03 call-graphs `0ccdef72` + consolidated `audit/v30-CONSUMER-INVENTORY.md` `4c507f8a`).
+**Status:** Phase 237 complete (awaiting verification / transition). Ready for Phase 238 (BWD/FWD) + Phase 239 (rngLocked) + Phase 240 (Gameover) + Phase 241 (Exception Closure) to execute in parallel.
 **Last activity:** 2026-04-19
 
 **Audit baseline:** HEAD `7ab515fe` (contract tree identical to v29.0 `1646d5af`; all post-v29 commits are docs-only)
@@ -72,8 +72,11 @@ Prior RNG-related milestone artifacts worth referencing during v30.0 planning (b
 
 ### Pending Todos
 
-- Execute Plan 237-03 (Wave 2 / INV-03 per-consumer call-graphs + Consumer Index + final consolidation into `audit/v30-CONSUMER-INVENTORY.md`)
-- After 237-03 emits final consolidated `audit/v30-CONSUMER-INVENTORY.md`, unblock Phases 238-241
+- Launch Phase 238 (Backward & Forward Freeze Proofs) — 146 Row IDs from `audit/v30-CONSUMER-INVENTORY.md` are the per-consumer scope anchor; Consumer Index BWD-01/02/03 + FWD-01/02/03 rows all map to `ALL` (full universe). Expected 3-5 plans per ROADMAP.
+- Launch Phase 239 (rngLocked Invariant & Permissionless Sweep) — 94-row daily+infrastructure scope for RNG-01; all 146 for RNG-02; 19-row mid-day-lootbox for RNG-03.
+- Launch Phase 240 (Gameover Jackpot Safety) — 19-row gameover-flow scope (7 gameover-entropy + 4 F-29-04 + 8 prevrandao-fallback) for GO-01..05.
+- Launch Phase 241 (Exception Closure) — 22 proof subjects across 4 KI categories.
+- Phase 242 (Regression + Findings Consolidation) requires 238+239+240+241; 17-item merged Finding Candidate pool from Phase 237 is the FIND-01..03 input.
 
 ### Phase 237 Plan 01 Decisions (2026-04-19)
 
@@ -90,13 +93,23 @@ Prior RNG-related milestone artifacts worth referencing during v30.0 planning (b
 - KI Cross-Ref distribution (D-06 proof-subject set for Phase 241 EXC-01..04): EXC-01 2 rows / EXC-02 8 rows / EXC-03 4 rows / EXC-04 8 rows = 22 proof targets. Phase 239 RNG-03 index-advance re-justification set = 13 rows.
 - 7 Finding Candidates surfaced (all severity INFO), routed to Phase 242 per D-15. No F-30-NN IDs emitted. No edits to `audit/v30-237-01-UNIVERSE.md` (D-16 READ-only-after-commit honoured). Zero `contracts/` or `test/` writes per D-18.
 
+### Phase 237 Plan 03 Decisions (2026-04-19)
+
+- 146 per-consumer call graphs constructed per D-11 (request → fulfillment → consumption, stop-at-consumption). 6 shared-prefix chains (PREFIX-DAILY / PREFIX-MIDDAY / PREFIX-GAMEOVER / PREFIX-PREVRANDAO / PREFIX-AFFILIATE / PREFIX-GAP) absorb 130 of 146 rows (89%); remaining 16 carry bespoke short graphs.
+- Zero companion `audit/v30-237-CALLGRAPH-*.md` files created — D-12's ~30-line soft threshold not reached because shared-prefix deduplication kept per-consumer tails to 1-3 rows. All call graphs inlined.
+- Delegatecall + library-call hops traced per D-11: IM-13 `_processFutureTicketBatch` delegatecall boundary (AdvanceModule:1390-1394 → MintModule:568/:652), EntropyLib.hash2 library calls named with `hash2(uint256, uint256) → uint256` signature, EntropyLib.entropyStep XOR-shift library calls named per KI exception, JackpotBucketLib.soloBucketIndex library call explicit.
+- Final consolidated `audit/v30-CONSUMER-INVENTORY.md` assembled per D-08 via Python merge script (`/tmp/build_consolidated.py`) — 2362 lines, 13 required sections, 146 Universe List rows (all TBD placeholders replaced), 146 Per-Consumer Call Graphs verbatim from 237-03, 26-row Consumer Index mapping every v30.0 requirement ID to its INV-237-NNN subset per D-10.
+- Consumer Index scopes computed: INV/BWD/FWD × 3 = `ALL` (9 rows); RNG-01 = 94 rows (daily + VRF infrastructure); RNG-02 = `ALL`; RNG-03 = 19 rows (mid-day-lootbox family); GO-01..04 = 19 rows (gameover + F-29-04 + prevrandao-fallback); GO-05 = 4 rows (F-29-04); EXC-01/02/03/04 = 2/8/4/8 KI proof subjects; REG-01 = 4 rows (F-29-04); REG-02 = 29 rows (v25.0/v3.7/v3.8 confirmed matches); FIND-01 = 21 rows (union of 3 sub-plan FC sets); FIND-02 = REG-01 ∪ REG-02; FIND-03 = 3 candidate rows pending Phase 242 review.
+- 5 Finding Candidates surfaced during call-graph construction (all INFO): dual-trigger delegatecall boundary observation, resolveLootboxDirect gameover-caller marker, prevrandao-mix recursion citation, INV-237-124 sole daily-family EntropyLib caller, F-29-04 swap-site liveness. Merged with 5 (237-01) + 7 (237-02) = 17 total FC routed to Phase 242.
+- No F-30-NN IDs emitted per D-15. No edits to `audit/v30-237-01-UNIVERSE.md` or `audit/v30-237-02-CLASSIFICATION.md` (D-16 READ-only-after-commit). Zero `contracts/` or `test/` writes per D-18. HEAD anchor `7ab515fe` attested (D-17).
+
 ### Blockers/Concerns
 
-_(none — Waves 1 and 2 of Phase 237 shipped clean (2/3 plans); 237-03 unblocked; v30.0 roadmap coverage 26/26 requirements, zero orphans)_
+_(none — Phase 237 complete (3/3 plans); `audit/v30-CONSUMER-INVENTORY.md` assembled; Phases 238/239/240/241 unblocked and can execute in parallel; Phase 242 requires 238+239+240+241)_
 
 ## Session Continuity
 
-Last session: 2026-04-19T01:51:18Z (Phase 237 Wave 2 — Plan 02 INV-02 classification committed in `f142adaf`; 237-03 pending)
+Last session: 2026-04-19T02:16:00Z (Phase 237 Wave 2 — Plan 03 INV-03 call graphs committed in `0ccdef72` + final consolidated `audit/v30-CONSUMER-INVENTORY.md` committed in `4c507f8a`; Phase 237 complete)
 
 ## Deferred Items
 
