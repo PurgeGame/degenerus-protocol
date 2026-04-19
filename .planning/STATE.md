@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v30.0
 milestone_name: Full Fresh-Eyes VRF Consumer Determinism Audit
 status: executing
-last_updated: "2026-04-19T15:00:00Z"
+last_updated: "2026-04-19T17:30:00Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
-  percent: 22
+  completed_plans: 5
+  percent: 28
 ---
 
 # Project State
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 238 (Backward & Forward Freeze Proofs) — EXECUTING, 1/3 plans complete (Plan 238-01 BWD-01/02/03 committed at `d0a37c75`), 2/3 remaining (238-02 Wave 1 + 238-03 Wave 2).
-Plan: 1 of 3 executed. Wave 1 (238-01 BWD + 238-02 FWD-01/02) parallel; Wave 2 (238-03 FWD-03 + consolidated `audit/v30-FREEZE-PROOF.md`) sequential per D-01/D-02.
+Phase: 238 (Backward & Forward Freeze Proofs) — EXECUTING, 2/3 plans complete (Plan 238-01 BWD-01/02/03 committed at `d0a37c75`; Plan 238-02 FWD-01/02 committed at `8b0bd585`), 1/3 remaining (238-03 Wave 2 now UNBLOCKED).
+Plan: 2 of 3 executed. Wave 1 (238-01 BWD + 238-02 FWD-01/02) both COMPLETE; Wave 2 (238-03 FWD-03 + consolidated `audit/v30-FREEZE-PROOF.md`) unblocked and ready per D-01/D-02.
 **Milestone:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit
-**Phase:** 238 CONTEXT.md + 238-01/02/03-PLAN.md committed 2026-04-19. Plan 238-01 executed + committed 2026-04-19 at `d0a37c75` (docs(238-01): BWD-01/02/03 per-consumer backward freeze proof at HEAD 7ab515fe). Phase 237 complete (3/3 plans).
-**Plan:** 238-01 complete — `audit/v30-238-01-BWD.md` (620 lines; 146 Backward Freeze Table rows + 146 Backward Adversarial Closure Table rows + 19 Gameover-Flow subset; 22 EXCEPTION matching EXC-01..04 distribution + 124 SAFE; zero CANDIDATE_FINDING; zero F-30-NN; zero contracts/test writes; inventory unmodified). 238-02 + 238-03 still pending.
-**Status:** Plan 238-02 (FWD-01/02) ready for execute (Wave 1 parallel-parent with completed 238-01; actually runnable independently since both consume the inventory). 238-03 (FWD-03 + consolidation) still blocked on 238-02 completion per D-02 (Wave 2 depends on 238-02 mutation-path output). Phases 239 / 240 / 241 still unblocked and parallelizable.
+**Phase:** 238 CONTEXT.md + 238-01/02/03-PLAN.md committed 2026-04-19. Plan 238-01 executed + committed 2026-04-19 at `d0a37c75`. Plan 238-02 executed + committed 2026-04-19 at `8b0bd585` (docs(238-02): FWD-01/02 per-consumer forward freeze proof at HEAD 7ab515fe). Phase 237 complete (3/3 plans).
+**Plan:** 238-02 complete — `audit/v30-238-02-FWD.md` (660 lines; 146 Forward Enumeration Table rows with 7 columns per D-05 + Forward Mutation Paths per-chain + bespoke-tail tuples as Plan 238-03 FWD-03 direct input + 19 Gameover-Flow subset matching Plan 238-01; 22 EXCEPTION matching EXC-01..04 distribution + 124 SAFE; zero CANDIDATE_FINDING; zero F-30-NN; zero contracts/test writes; inventory + Plan 238-01 BWD both unmodified). 238-03 now unblocked.
+**Status:** Plan 238-03 (FWD-03 gating verification + final consolidated `audit/v30-FREEZE-PROOF.md`) ready for execute as Wave 2 sequential — both Wave 1 inputs now available (238-01 BWD + 238-02 FWD). Phases 239 / 240 / 241 still unblocked and parallelizable.
 **Last activity:** 2026-04-19
 
 **Audit baseline:** HEAD `7ab515fe` (contract tree identical to v29.0 `1646d5af`; all post-v29 commits are docs-only)
@@ -113,6 +113,18 @@ Prior RNG-related milestone artifacts worth referencing during v30.0 planning (b
 - Single consolidated `audit/v30-FREEZE-PROOF.md` deliverable per D-16 (Phase 237 D-08 precedent) + 3 per-plan intermediate files. Grep-friendly tabular, no mermaid (237 D-09).
 - No F-30-NN emission per D-15 (Phase 237 D-15 / Phase 235 D-14 / Phase 230 D-06 pattern across 3 prior phases). READ-only scope per D-20. Scope-guard deferral rule per D-18.
 
+### Phase 238 Plan 02 Decisions (2026-04-19)
+
+- 146 Forward Enumeration Table rows + complete Forward Mutation Paths tuple set built at HEAD `7ab515fe` in a single 660-line file `audit/v30-238-02-FWD.md` with 8 required sections per D-05/D-07/D-08/D-09/D-10/D-11/D-12/D-15/D-17/D-18/D-19/D-20 compliance. Forward Enumeration Table columns locked at 7 values in D-05 exact order (Row ID | Consumer | Consumption-Site Storage Reads | Write Paths To Each Read | Mutable-After-Request Actors | Actor-Class Closure | FWD-Verdict).
+- 22 EXCEPTION rows matching 237-02 Plan SUMMARY + Plan 238-01 BWD distribution verbatim (EXC-01=2 / EXC-02=8 / EXC-03=4 / EXC-04=8); 124 SAFE rows; 0 CANDIDATE_FINDING actor-cells surfaced during fresh re-derivation.
+- 6 shared-prefix chains from 237-03 adopted verbatim mirroring Plan 238-01 BWD (PREFIX-DAILY 91 / PREFIX-MIDDAY 19 / PREFIX-GAMEOVER 7 / PREFIX-PREVRANDAO 8 / PREFIX-AFFILIATE 2 / PREFIX-GAP 3 = 130 rows absorbed); 16 bespoke-tail rows inline their forward-enumeration; chain bodies use 3-column (Slot | Consumption-Site SLOAD | Write Paths) + 4-column (Actor | Verdict | Path | Gate) sub-table format as the forward-facing mirror of Plan 238-01's 5-column Step format.
+- FWD-02 actor-cell taxonomy mirrors Plan 238-01 BWD-03 (symmetric reachability window): daily-family + gap-backfill + gameover-entropy SAFE rows use PATH_BLOCKED_BY_GATE (rngLocked) for 3 on-chain actors + NO_REACHABLE_PATH for VRF oracle; mid-day-lootbox SAFE rows use PATH_BLOCKED_BY_GATE (lootbox-index-advance); gap-backfill derived-word SSTOREs use PATH_BLOCKED_BY_GATE (semantic-path-gate) for on-chain actors (backfill loop non-interruptibility); fulfillment-callback rows use NO_REACHABLE_PATH for 3 on-chain actors + PATH_BLOCKED_BY_GATE (semantic-path-gate) for VRF oracle. EXC-01 places EXCEPTION in player column; EXC-02 in validator column + VRF oracle gated by 14-day semantic-path-gate timer; EXC-03 + EXC-04 in VRF oracle column.
+- Forward Mutation Paths section organized as per-chain uniform 4-actor × per-slot tuple tables (91+19+7+8+2+3 = 130 rows absorbed into 6 chain tables) + bespoke-tail tuples for 16 rows — authoritative Plan 238-03 FWD-03 input per D-05 Wave-2 contract (Plan 238-03 joins by Row ID and verifies each PATH_BLOCKED_BY_GATE tuple against the named gate's implementation site). EntropyLib EXC-04 subset (INV-237-124 + 7 LootboxModule rows) adds one additional (entropy-source-level XOR-shift, VRF oracle, EXCEPTION, EXCEPTION (KI: ...)) tuple per row.
+- 19-row Gameover-Flow Forward-Enumeration Subset enumerated for Phase 240 hand-off: 7 SAFE (`gameover-entropy`) + 12 EXCEPTION (8 prevrandao + 4 F-29-04) = 19. Identical Row ID set to Plan 238-01 BWD Gameover subset.
+- 6 prior-milestone artifacts CROSS-CITED with `re-verified at HEAD 7ab515fe` notes (235-04-COMMITMENT-WINDOW.md for 12 v29.0-delta rows, 215-03-COMMITMENT-WINDOW.md for 29 confirmed-fresh-matches-prior rows, ACCESS-CONTROL-MATRIX.md for admin-actor closure, STORAGE-WRITE-MAP.md for Write Paths column corroboration, 232.1-03-PFTB-AUDIT.md for semantic-path-gate archetype, 230-01-DELTA-MAP §2 IM-10..IM-16 for delegatecall boundary corroboration). Every cite carries structural-equivalence statement; 9 total `re-verified at HEAD 7ab515fe` instances in file.
+- Zero F-30-NN IDs emitted; zero `contracts/` or `test/` writes; `audit/v30-CONSUMER-INVENTORY.md` unmodified (D-18); `audit/v30-238-01-BWD.md` (Wave 1 sibling) unmodified (D-18 READ-only after Plan 238-01 commit); Row-ID integrity diff empty (146 in inventory = 146 in FWD file, set-equal with BWD file).
+- Task 1 (build file) + Task 2 (commit) landed as single commit `8b0bd585` (same pattern as 237-02 / 237-03 / 238-01 Task 1+2 consolidation). All verify assertions pass inline.
+
 ### Phase 238 Plan 01 Decisions (2026-04-19)
 
 - 146 Backward Freeze Table rows + 146 Backward Adversarial Closure Table rows built at HEAD `7ab515fe` in a single 620-line file `audit/v30-238-01-BWD.md` with 8 required sections per D-04/D-07/D-08/D-09/D-10/D-11/D-12/D-15/D-17/D-18/D-19/D-20 compliance.
@@ -126,11 +138,11 @@ Prior RNG-related milestone artifacts worth referencing during v30.0 planning (b
 
 ### Blockers/Concerns
 
-_(none — Phase 237 complete (3/3 plans); Phase 238 Plan 01 complete (1/3); 238-02 + 238-03 remaining; Phases 239/240/241 still unblocked and parallelizable; Phase 242 requires 238+239+240+241)_
+_(none — Phase 237 complete (3/3 plans); Phase 238 Wave 1 complete (2/3 plans — 238-01 BWD + 238-02 FWD both committed); 238-03 Wave 2 now UNBLOCKED; Phases 239/240/241 still unblocked and parallelizable; Phase 242 requires 238+239+240+241)_
 
 ## Session Continuity
 
-Last session: 2026-04-19T15:00:00Z (Plan 238-01 executed + committed at `d0a37c75`; Wave 1 deliverable `audit/v30-238-01-BWD.md` ready for 238-03 consolidation in Wave 2; 238-02 FWD-01/02 next parallel target)
+Last session: 2026-04-19T17:30:00Z (Plan 238-02 executed + committed at `8b0bd585`; Wave 1 deliverables complete — both `audit/v30-238-01-BWD.md` (d0a37c75) and `audit/v30-238-02-FWD.md` (8b0bd585) ready; Plan 238-03 FWD-03 gating verification + final consolidated `audit/v30-FREEZE-PROOF.md` assembly now unblocked as next sequential target)
 
 ## Deferred Items
 
