@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v30.0
 milestone_name: Full Fresh-Eyes VRF Consumer Determinism Audit
 status: executing
-last_updated: "2026-04-19T04:46:39.035Z"
+last_updated: "2026-04-19T05:00:00.000Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 9
-  completed_plans: 6
-  percent: 67
+  completed_plans: 7
+  percent: 78
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-18)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 238 COMPLETE — Phases 239, 240, 241 unblocked and parallelizable; Phase 242 requires 239+240+241 to complete.
+**Current focus:** Phase 239 — rngLocked Invariant & Permissionless Sweep
 
 ## Current Position
 
-Phase: 238 (Backward & Forward Freeze Proofs) — COMPLETE (3/3 plans), Phase 238 closed.
-Plan: 3 of 3 executed. Wave 1 (238-01 BWD commit `d0a37c75` + 238-02 FWD commit `8b0bd585`) + Wave 2 (238-03 gating commit `1f302d6e` + consolidated commit `9a8f423d`) all done per D-01/D-02.
+Phase: 239 (rngLocked Invariant & Permissionless Sweep) — EXECUTING
+Plan: 2 of 3 (239-01 complete; 239-02 + 239-03 remain in Wave 1 parallel)
 **Milestone:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit
-**Phase:** 238 COMPLETE 2026-04-19 — all 6 requirements (BWD-01/02/03 + FWD-01/02/03) satisfied. Final consolidated `audit/v30-FREEZE-PROOF.md` (459 lines, 146-row Consolidated Freeze-Proof Table + 26-requirement Consumer Index) committed at `9a8f423d`. Phase 237 complete (3/3). Phase 238 complete (3/3).
-**Plan:** 238-03 complete — `audit/v30-238-03-GATING.md` (308 lines; 146-row Gating Verification Table with 6 columns per D-06; Named Gate distribution: rngLocked=106, lootbox-index-advance=20, phase-transition-gate=0, semantic-path-gate=18, NO_GATE_NEEDED_ORTHOGONAL=2; Mutation-Path Coverage: EVERY_PATH_BLOCKED=144, PARTIAL_COVERAGE=0, NO_GATE_NEEDED_ORTHOGONAL=2) + `audit/v30-FREEZE-PROOF.md` (459 lines; 146-row Consolidated Freeze-Proof Table merging BWD + FWD + gating; 19-row Gameover-Flow subset + 22-row KI-Exception subset + 26-requirement Consumer Index + merged Finding Candidates + merged Scope-Guard Deferrals including Phase 239 audit assumption). Effectiveness distribution: 124 SAFE + 22 EXCEPTION + 0 CANDIDATE_FINDING = 146. Zero F-30-NN IDs. Zero contracts/test writes. Inventory + 238-01 + 238-02 all unmodified (D-16/D-18).
-**Status:** Ready to execute
+**Phase:** 239 IN PROGRESS 2026-04-19 — 1/3 plans complete. 239-01 RNG-01 rngLockedFlag state machine proof committed at `5764c8a4` (`audit/v30-RNGLOCK-STATE-MACHINE.md`, 317 lines). Phase 238 COMPLETE (audit/v30-FREEZE-PROOF.md 459 lines, 146-row Consolidated Freeze-Proof Table; committed `9a8f423d`). Phase 237 complete (3/3). 239-02 (RNG-02 permissionless sweep) + 239-03 (RNG-03 asymmetry re-justification) remain parallel in Wave 1 — no cross-dependencies at HEAD `7ab515fe`.
+**Plan:** 239-01 complete — `audit/v30-RNGLOCK-STATE-MACHINE.md` (317 lines; 11 sections: Executive Summary / State-Machine Overview (Prose Diagram) / Set-Site Table (1 row `AdvanceModule.sol:1579`) / Clear-Site Table (3 rows: `_unlockRng :1676`, `updateVrfCoordinatorAndSub :1635`, L1700 `rawFulfillRandomWords` Clear-Site-Ref per D-06) / Path Enumeration Table (9 rows; 7 SET_CLEARS_ON_ALL_PATHS + 2 CLEAR_WITHOUT_SET_UNREACHABLE + 0 CANDIDATE_FINDING) / Invariant Proof (closed-form biconditional with both Invariant 1 set→clear + Invariant 2 clear←set directions; corollary `RNG-01 AIRTIGHT`) / Prior-Artifact Cross-Cites (5 cites × 7 re-verified-at-HEAD notes — v29.0 Phase 235-05 / v3.7 Phase 63 / v3.8 Phases 68-72 / v25.0 Phase 215 / v29.0 Phase 232.1-03) / Grep Commands reproducibility / Finding Candidates `None surfaced` / Scope-Guard Deferrals `None surfaced` / Attestation). Mandatory dedicated rows per D-06 (L1700 = RNGLOCK-239-C-03 + RNGLOCK-239-P-002), D-07 (12h retry-timeout = RNGLOCK-239-P-004 CLEAR_WITHOUT_SET_UNREACHABLE), D-19 (gameover-VRF-request bracket = RNGLOCK-239-P-007; jackpot-input determinism OUT → Phase 240 GO-02). Phase 238-03 Scope-Guard Deferral #1 rngLocked audit assumption DISCHARGED per D-29 (no re-edit of 238 files). Zero F-30-NN per D-22. Zero contracts/test writes per D-27. HEAD anchor `7ab515fe` locked per D-26.
+**Status:** Executing Phase 239 (Plan 2/3)
 **Last activity:** 2026-04-19
 
 **Audit baseline:** HEAD `7ab515fe` (contract tree identical to v29.0 `1646d5af`; all post-v29 commits are docs-only)
@@ -150,13 +150,27 @@ Prior RNG-related milestone artifacts worth referencing during v30.0 planning (b
 - Zero F-30-NN IDs emitted; zero `contracts/` or `test/` writes; `audit/v30-CONSUMER-INVENTORY.md` unmodified (D-18); Row-ID integrity diff empty (146 in inventory = 146 in BWD file, set-equal).
 - Task 1 (build file) + Task 2 (commit) landed as single commit `d0a37c75` (same pattern as 237-02 + 237-03 Task 1+2 consolidation). BWD-02-forbidden mutable verdict absent from every data cell; two attestation lines were rephrased to avoid literal-string collision with the forbidden token during automated verify (non-deviation — explanatory text only).
 
+### Phase 239 Plan 01 Decisions (2026-04-19)
+
+- 1 Set-Site + 3 Clear-Sites + 9 Path Enumeration rows built at HEAD `7ab515fe` in a single 317-line file `audit/v30-RNGLOCK-STATE-MACHINE.md` with 11 sections per D-04/D-05/D-06/D-07/D-16/D-17/D-19/D-22/D-25/D-26/D-27/D-28/D-29 compliance.
+- Fresh `contracts/`-tree grep confirmed exactly 1 `rngLockedFlag = true` SSTORE (`AdvanceModule.sol:1579` inside `_finalizeRngRequest`) + 2 `rngLockedFlag = false` SSTOREs (`AdvanceModule.sol:1635` inside `updateVrfCoordinatorAndSub` emergency rotation + `AdvanceModule.sol:1676` inside `_unlockRng` called from 6 sites in `advanceGame` do-while). No set/clear SSTOREs outside `AdvanceModule.sol`; all other rngLockedFlag references (7 revert-guards + 2 combinational reads + 3 storage-helper far-future guards + 2 public-view exposures + 1 storage declaration) are READ sites informing Path Enumeration `Entry Condition`.
+- D-06 L1700 `rawFulfillRandomWords` branch treated as dedicated `RNGLOCK-239-C-03` Clear-Site-Ref row (control-flow structure, not SSTORE) per D-06 literal — makes the state-machine structure visible to reviewers and enables Phase 242 grep-anchoring. Cross-refs dedicated Path row `RNGLOCK-239-P-002`.
+- Path Enumeration 9 rows exceed v29.0 Phase 235-05 4-path walk lower bound by 5 rows: (P-003) fresh-vs-retry idempotent-set, (P-005) phase-transition-done, (P-006) jackpot-resume + coin+tickets + `_endPhase` interaction, (P-008) admin-rotation-clear, (P-009) tx-revert-rollback. All D-06/D-07/D-19 mandatory coverage satisfied via RNGLOCK-239-P-002 / -004 / -007 dedicated rows.
+- Closed verdict distribution: Set-Site AIRTIGHT=1 / Clear-Site AIRTIGHT=3 / Path SET_CLEARS_ON_ALL_PATHS=7 (P-001, P-002, P-003, P-005, P-006, P-007, P-008) + CLEAR_WITHOUT_SET_UNREACHABLE=2 (P-004 12h-retry-timeout + P-009 tx-revert-rollback) + CANDIDATE_FINDING=0. Zero candidates route to Phase 242 FIND-01 from this plan.
+- Closed-form biconditional Invariant Proof with both directions (Invariant 1 set→clear by Path Enumeration; Invariant 2 clear←set by Clear-Site `Companion Set Path(s)` inspection) + corollary `RNG-01 AIRTIGHT`. No hedged verdicts per D-05.
+- 5 prior-milestone cross-cites × 7 `re-verified at HEAD 7ab515fe` notes (v29.0 Phase 235-05-TRNX-01.md 4-path walk / v3.7 Phase 63 rawFulfillRandomWords revert-safety / v3.8 Phases 68-72 commitment window 51/51 SAFE / v25.0 Phase 215 RNG fresh-eyes SOUND / v29.0 Phase 232.1-03-PFTB-AUDIT.md non-zero-entropy + semantic-path-gate archetypes). All CORROBORATING, not relied upon.
+- D-29 Phase 238 discharge: Phase 238-03 FWD-03 Scope-Guard Deferral #1 (`rngLocked` gate correctness audit assumption pending Phase 239 RNG-01) DISCHARGED by this plan commit `5764c8a4`. Evidenced by first-principles re-proof (not by edit to 238 files — Phase 237 inventory + Phase 238 BWD/FWD/GATING/FREEZE-PROOF outputs all unchanged per `git status --porcelain`). Phase 242 REG-01/02 cross-checks at milestone consolidation. Note: the Phase 238 Scope-Guard Deferral #1 also bundled `lootbox-index-advance` gate correctness — that portion is Plan 239-03 RNG-03(a) scope, NOT discharged here.
+- Prose state-machine diagram included per CONTEXT.md Claude's Discretion (ASCII box-drawing characters, no mermaid per D-25) — complements tabular enumeration at-a-glance. Grep commands preserved in dedicated `## Grep Commands (reproducibility)` section per Claude's Discretion encouragement carried from Plan 02 precedent.
+- One minor in-plan re-tally corrected before commit: initial Executive Summary draft listed Path verdict distribution as `SET_CLEARS_ON_ALL_PATHS=8 / CLEAR_WITHOUT_SET_UNREACHABLE=1`; row-by-row re-inspection showed correct distribution is `7 / 2` (P-004 + P-009 are the two primary CLEAR_WITHOUT_SET_UNREACHABLE rows; P-003 is primary SET_CLEARS_ON_ALL_PATHS with CLEAR_WITHOUT_SET_UNREACHABLE as explanatory reference for the revert-rollback sub-case). Corrected before commit. Not a deviation — internal accounting fix during build.
+- Task 1 (Set/Clear tables build) + Task 2 (Path Enumeration + Invariant Proof + cross-cites + commit) landed as single commit `5764c8a4` (same pattern as 237-02 / 237-03 / 238-01 / 238-02 Task 1+2 consolidation for audit-file-only deliverables). Task 3 (SUMMARY + ROADMAP/STATE updates + commit) lands separately as the plan-close commit per Phase 238 precedent (238-01 `d283696d`, 238-03 `7dc79e6b`). Zero F-30-NN IDs emitted; zero `contracts/` or `test/` writes; `audit/v30-CONSUMER-INVENTORY.md` + `audit/v30-238-01-BWD.md` + `audit/v30-238-02-FWD.md` + `audit/v30-238-03-GATING.md` + `audit/v30-FREEZE-PROOF.md` + `KNOWN-ISSUES.md` all unchanged (D-27/D-28/D-29 READ-only-after-commit).
+
 ### Blockers/Concerns
 
-_(none — Phase 237 complete (3/3 plans); Phase 238 complete (3/3 plans — 238-01 BWD + 238-02 FWD + 238-03 gating/consolidation all committed); Phases 239/240/241 unblocked and parallelizable; Phase 242 requires 239+240+241 — will close audit-assumption #1 from Plan 238-03 Scope-Guard Deferrals via Phase 239 RNG-01/RNG-03 first-principles re-proof at consolidation time)_
+_(none — Phase 237 complete (3/3 plans); Phase 238 complete (3/3 plans — 238-01 BWD + 238-02 FWD + 238-03 gating/consolidation all committed); Phase 239 in progress (1/3 plans — 239-01 RNG-01 complete at commit `5764c8a4`; 239-02 RNG-02 + 239-03 RNG-03 remain in Wave 1 parallel, no cross-dependencies); Phase 240/241 unblocked and parallelizable; Phase 242 requires 239+240+241 — will close audit-assumption #1 from Plan 238-03 Scope-Guard Deferrals once 239-03 also commits (239-01 discharges the rngLocked portion; 239-03 discharges the lootbox-index-advance portion))_
 
 ## Session Continuity
 
-Last session: 2026-04-19T04:17:34.406Z
+Last session: 2026-04-19T05:00:00.000Z — Plan 239-01 RNG-01 complete at commit `5764c8a4`. Stopped after: plan 239-01 close sequence (SUMMARY + ROADMAP + STATE updates committed). Next up: Plan 239-02 (RNG-02 permissionless sweep) OR Plan 239-03 (RNG-03 asymmetry re-justification) — either can execute next (Wave 1 parallel per D-02).
 
 ## Deferred Items
 
