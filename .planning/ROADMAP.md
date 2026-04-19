@@ -140,7 +140,10 @@
   3. A GO-03 state-freeze enumeration lists every state variable that feeds into gameover jackpot resolution (winner indices, pool totals, trait arrays, pending queues, counter state) with a verdict of `frozen-at-request` for each — any variable that cannot be proven frozen is promoted to the Phase 242 finding candidate pool
   4. A GO-04 trigger-timing analysis disproves the hypothesis that an attacker can manipulate gameover trigger timing (120-day liveness stall / pool deficit) to align with a specific mid-cycle state that biases the jackpot on the VRF-available branch
   5. A GO-05 scope-containment section explicitly delineates the VRF-available gameover-jackpot branch from the F-29-04 mid-cycle ticket substitution path — jackpot inputs must be proven frozen irrespective of write-buffer swap state, and F-29-04 must be shown not to leak into jackpot-input determinism
-**Plans**: TBD (expected 2-3 plans — GO-01 consumer inventory + GO-02 determinism proof, GO-03 state-freeze + GO-04 trigger-timing disproof, GO-05 F-29-04 scope containment)
+**Plans**: 3 plans
+  - [x] 240-01-PLAN.md — GO-01 Gameover-VRF Consumer Inventory + GO-02 VRF-Available Determinism Proof (wave 1, parallel with 240-02). Completed 2026-04-19 at commit `22b8b109`: `audit/v30-240-01-INV-DET.md` (333 lines) — 19-row GO-01 fresh-eyes inventory (7 gameover-entropy + 8 prevrandao-fallback + 4 F-29-04; all CONFIRMED_FRESH_MATCHES_237) + 19-row GO-02 VRF-available-branch determinism proof (7 SAFE_VRF_AVAILABLE + 8 EXCEPTION (KI: EXC-02) + 4 EXCEPTION (KI: EXC-03); zero CANDIDATE_FINDING) + 12 forward-cite tokens to Phase 241 EXC-02/EXC-03 per D-19 + 9 Prior-Artifact Cross-Cites with 14 re-verified-at-HEAD notes + 0 F-30-NN; Phase 237/238/239 outputs untouched per D-31.
+  - [ ] 240-02-PLAN.md — GO-03 State-Freeze Enumeration + GO-04 Trigger-Timing Disproof (wave 1, parallel with 240-01).
+  - [ ] 240-03-PLAN.md — GO-05 F-29-04 Scope Containment + Final Consolidation (wave 2, depends on 240-01 + 240-02).
 
 ### Phase 241: Exception Closure
 **Goal**: The four documented KNOWN-ISSUES RNG entries are confirmed to be the *only* violations of the determinism invariant — no latent non-VRF entropy source, no additional prevrandao entry point, F-29-04 scope unchanged, EntropyLib seed still keccak-derived
@@ -174,7 +177,7 @@ Phase 237 first (inventory is the scope foundation). After 237 completes, Phases
 | 237. VRF Consumer Inventory & Call Graph | 3/3 | Complete — 146 Row IDs; `audit/v30-CONSUMER-INVENTORY.md` assembled; downstream 238-242 unblocked | 2026-04-19 |
 | 238. Backward & Forward Freeze Proofs | 3/3 | Complete — 238-01 BWD-01/02/03 (commit `d0a37c75`) + 238-02 FWD-01/02 (commit `8b0bd585`) + 238-03 FWD-03 gating (commit `1f302d6e`) + 238-03 consolidated `audit/v30-FREEZE-PROOF.md` (commit `9a8f423d`). 146 rows × 3 verdicts each; 124 SAFE + 22 EXCEPTION + 0 CANDIDATE_FINDING. Phase 239 RNG-01/RNG-03 audit assumption routed to Phase 242 cross-check | 2026-04-19 |
 | 239. rngLocked Invariant & Permissionless Sweep | 3/3 | Complete    | 2026-04-19 |
-| 240. Gameover Jackpot Safety | 0/TBD | Not started | — |
+| 240. Gameover Jackpot Safety | 1/3 | In progress — 240-01 GO-01 + GO-02 complete at `22b8b109` (19-row fresh-eyes inventory + VRF-available determinism proof: 7 SAFE + 8 EXC-02 + 4 EXC-03; 12 forward-cites to Phase 241); 240-02 Wave 1 parallel; 240-03 Wave 2 | — |
 | 241. Exception Closure | 0/TBD | Not started | — |
 | 242. Regression + Findings Consolidation | 0/TBD | Not started | — |
 
