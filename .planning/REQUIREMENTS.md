@@ -51,10 +51,10 @@
 
 ### EXC — Confirm Exceptions are Exhaustive
 
-- [ ] **EXC-01**: Confirm the affiliate winner roll is the *only* non-VRF-seeded randomness consumer in `contracts/`. No other deterministic-seed surface (`block.timestamp`, `block.number`, packed counters, etc.) leaks into any RNG-derived payout or winner-selection path.
-- [ ] **EXC-02**: Verify the gameover prevrandao fallback trigger gating still holds: only reachable inside `_gameOverEntropy`, only when an in-flight VRF request has been outstanding ≥ `GAMEOVER_RNG_FALLBACK_DELAY = 14 days`. No additional entry points exist.
-- [ ] **EXC-03**: Verify F-29-04 (mid-cycle RNG substitution) scope unchanged — terminal-state only, no player-reachable timing, applies only to tickets in the post-swap write buffer. Distinct from GO-02 which covers the VRF-available gameover-jackpot branch.
-- [ ] **EXC-04**: Verify `EntropyLib.entropyStep()` seed derivation remains fully VRF-derived via `keccak256(rngWord, player, day, amount)`. No new entry point bypasses the keccak seed construction.
+- [x] **EXC-01**: Confirm the affiliate winner roll is the *only* non-VRF-seeded randomness consumer in `contracts/`. No other deterministic-seed surface (`block.timestamp`, `block.number`, packed counters, etc.) leaks into any RNG-derived payout or winner-selection path. (Completed 2026-04-19 — Plan 241-01; `audit/v30-EXCEPTION-CLOSURE.md` § 3 22-row ONLY-ness table + § 4 Gate B grep backstop; Gate A PASSES (set-equality with Phase 238 22-EXCEPTION distribution at HEAD 7ab515fe) + Gate B PASSES (D-07 surface universe: every hit classifies as ORTHOGONAL_NOT_RNG_CONSUMED or BELONGS_TO_KI_EXC_NN); combined verdict ONLY_NESS_HOLDS_AT_HEAD; zero CANDIDATE_FINDING; commit `e6b3a396`.)
+- [x] **EXC-02**: Verify the gameover prevrandao fallback trigger gating still holds: only reachable inside `_gameOverEntropy`, only when an in-flight VRF request has been outstanding ≥ `GAMEOVER_RNG_FALLBACK_DELAY = 14 days`. No additional entry points exist. (Completed 2026-04-19 — Plan 241-01; `audit/v30-EXCEPTION-CLOSURE.md` § 5 two-predicate table: EXC-02-P1 single-call-site `_gameOverEntropy` at `AdvanceModule:1252` (fresh grep 1 DEFINITION + 1 CALL_SITE, zero additional callers) + EXC-02-P2 14-day gate `GAMEOVER_RNG_FALLBACK_DELAY = 14 days` intact at `:109` + gate check at `:1250` guards every reachable fallback path; section verdict EXC-02 RE_VERIFIED_AT_HEAD; § 8a 17-row forward-cite discharge (EXC-241-023..039) all DISCHARGED_RE_VERIFIED_AT_HEAD; commit `e6b3a396`.)
+- [x] **EXC-03**: Verify F-29-04 (mid-cycle RNG substitution) scope unchanged — terminal-state only, no player-reachable timing, applies only to tickets in the post-swap write buffer. Distinct from GO-02 which covers the VRF-available gameover-jackpot branch. (Completed 2026-04-19 — Plan 241-01; `audit/v30-EXCEPTION-CLOSURE.md` § 6 tri-gate table: EXC-03-P1 terminal-state only via `_gameOverEntropy:1222-1246` + EXC-03-P2 no-player-reachable-timing (cross-cite Phase 240 GO-04 2 DISPROVEN_PLAYER_REACHABLE_VECTOR rows) + EXC-03-P3 buffer-scope only at `_swapAndFreeze:292` + `_swapTicketSlot:1082` (cross-cite Phase 240 GO-05 BOTH_DISJOINT); section verdict EXC-03 RE_VERIFIED_AT_HEAD; § 8b 12-row forward-cite discharge (EXC-241-040..051) all DISCHARGED_RE_VERIFIED_AT_HEAD; commit `e6b3a396`.)
+- [x] **EXC-04**: Verify `EntropyLib.entropyStep()` seed derivation remains fully VRF-derived via `keccak256(rngWord, player, day, amount)`. No new entry point bypasses the keccak seed construction. (Completed 2026-04-19 — Plan 241-01; `audit/v30-EXCEPTION-CLOSURE.md` § 7 two-part predicate: EXC-04-P1a EntropyLib.entropyStep XOR-shift body intact at `EntropyLib.sol:16-23` (signature + 3 XOR-shift lines inside `unchecked` block + zero keccak inside body) + EXC-04-P1b all 8 caller-site `keccak256(abi.encode(rngWord, ...))` constructions VRF-sourced at `DegenerusGame:1769`, `StakedDegenerusStonk:660`, `JackpotModule:1799`, `LootboxModule:554/628/673/708/1753`; 8 `EntropyLib.entropyStep` call sites at `LootboxModule:813/817/1548/1569/1585/1599/1635` + `JackpotModule:2119` set-equal with Phase 237's 8 EXC-04 rows; every rngWord traces to rawFulfillRandomWords:1690; section verdict EXC-04 RE_VERIFIED_AT_HEAD; commit `e6b3a396`.)
 
 ### REG — Regression Appendix
 
@@ -109,10 +109,10 @@ Every v30.0 requirement maps to exactly one phase. Coverage: 26/26 (100%). No or
 | GO-03 | Phase 240 | Pending |
 | GO-04 | Phase 240 | Pending |
 | GO-05 | Phase 240 | Pending |
-| EXC-01 | Phase 241 | Pending |
-| EXC-02 | Phase 241 | Pending |
-| EXC-03 | Phase 241 | Pending |
-| EXC-04 | Phase 241 | Pending |
+| EXC-01 | Phase 241 | ✅ Complete (2026-04-19, Plan 241-01) |
+| EXC-02 | Phase 241 | ✅ Complete (2026-04-19, Plan 241-01) |
+| EXC-03 | Phase 241 | ✅ Complete (2026-04-19, Plan 241-01) |
+| EXC-04 | Phase 241 | ✅ Complete (2026-04-19, Plan 241-01) |
 | REG-01 | Phase 242 | Pending |
 | REG-02 | Phase 242 | Pending |
 | FIND-01 | Phase 242 | Pending |
