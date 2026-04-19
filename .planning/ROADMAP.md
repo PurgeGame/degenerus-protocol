@@ -165,7 +165,7 @@ Phase 237 first (inventory is the scope foundation). After 237 completes, Phases
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 237. VRF Consumer Inventory & Call Graph | 0/3 | Plans created (2 waves) | — |
+| 237. VRF Consumer Inventory & Call Graph | 1/3 | Wave 1 complete (Plan 01 INV-01); Wave 2 ready (Plans 02 + 03 parallel) | — |
 | 238. Backward & Forward Freeze Proofs | 0/TBD | Not started | — |
 | 239. rngLocked Invariant & Permissionless Sweep | 0/TBD | Not started | — |
 | 240. Gameover Jackpot Safety | 0/TBD | Not started | — |

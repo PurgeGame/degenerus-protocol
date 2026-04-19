@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v30.0
 milestone_name: Full Fresh-Eyes VRF Consumer Determinism Audit
 status: executing
-last_updated: "2026-04-19T01:13:32.548Z"
+last_updated: "2026-04-19T01:39:06Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 33
 ---
 
 # Project State
@@ -20,14 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-18)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit — prove every VRF-consuming function in `contracts/` is completely deterministic from the moment of RNG request (backward + forward freeze), with only the four documented KNOWN-ISSUES exceptions accepted.
+**Current focus:** Phase 237 — VRF Consumer Inventory & Call Graph
 
 ## Current Position
 
+Phase: 237 (VRF Consumer Inventory & Call Graph) — EXECUTING (Wave 1 complete)
+Plan: 2 of 3 (Wave 2 — 237-02 and 237-03 ready for parallel execution)
 **Milestone:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit
-**Phase:** 237 (VRF Consumer Inventory & Call Graph) — ready to start
-**Plan:** —
-**Status:** Ready to execute
+**Phase:** 237 (VRF Consumer Inventory & Call Graph) — Wave 1 of 2 complete
+**Plan:** 237-01 complete (Wave 1 / INV-01 universe list); 237-02 + 237-03 ready (Wave 2)
+**Status:** Wave 1 of Phase 237 complete; Wave 2 ready
 **Last activity:** 2026-04-19
 
 **Audit baseline:** HEAD `7ab515fe` (contract tree identical to v29.0 `1646d5af`; all post-v29 commits are docs-only)
@@ -70,15 +72,24 @@ Prior RNG-related milestone artifacts worth referencing during v30.0 planning (b
 
 ### Pending Todos
 
-_(none — Phase 237 plan creation is the next action)_
+- Execute Wave 2 of Phase 237 (Plans 237-02 classification + 237-03 call-graph; can run in parallel per D-14)
+- After 237-03 emits final consolidated `audit/v30-CONSUMER-INVENTORY.md`, unblock Phases 238-241
+
+### Phase 237 Plan 01 Decisions (2026-04-19)
+
+- D-07 two-pass zero-glance + reconciliation methodology honoured: Task 1 fresh-eyes file committed standalone (`18f519b7`) BEFORE Task 2 began any prior-artifact read. Auditable ex-post via git log separation.
+- 146 INV-237-NNN rows at HEAD `7ab515fe` (5.2× prior 235-03 baseline — expansion entirely driven by finer D-01/D-02/D-03/D-06 granularity, not by any post-v29 contract change).
+- Reconciliation verdict distribution: 45 confirmed-fresh-matches-prior / 12 new-since-prior-audit / 0 was-missed-now-added / 0 was-spurious-before-not-at-HEAD.
+- 5 finding candidates surfaced (all severity INFO), routed to Phase 242 per D-15.
+- Zero F-30-NN IDs emitted per D-15. Zero `contracts/` or `test/` writes per D-18.
 
 ### Blockers/Concerns
 
-_(none — v29.0 shipped clean; v30.0 roadmap coverage 26/26 requirements, zero orphans)_
+_(none — Wave 1 of Phase 237 shipped clean; Wave 2 unblocked; v30.0 roadmap coverage 26/26 requirements, zero orphans)_
 
 ## Session Continuity
 
-Last session: 2026-04-19T00:42:28.934Z
+Last session: 2026-04-19T01:39:06Z (Phase 237 Wave 1 complete — Plan 01 INV-01 committed in 18f519b7 + 20ed1c75)
 
 ## Deferred Items
 
