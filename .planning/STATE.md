@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v30.0
 milestone_name: Full Fresh-Eyes VRF Consumer Determinism Audit
 status: executing
-last_updated: "2026-04-19T14:00:00.000Z"
+last_updated: "2026-04-19T22:00:00.000Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 6
@@ -24,13 +24,20 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 240 (Gameover Jackpot Safety) — COMPLETE (3/3 plans; GO-01 + GO-02 + GO-03 + GO-04 + GO-05 all closed; final consolidated `audit/v30-GAMEOVER-JACKPOT-SAFETY.md` assembled per D-27 at commit `4e8a7d51` satisfying ROADMAP Phase 240 Success Criterion 1 literal)
-Plan: 240-03 COMPLETE — scope file + consolidated file + plan-close all committed
+Phase: 241 (Exception Closure) — CONTEXT gathered (discuss-phase complete; 28 decisions locked in 241-CONTEXT.md at commit `5f9e4c65`)
+Plan: 241-01 PENDING (single consolidated plan per D-01; 5 tasks per D-03 — EXC-01 ONLY-ness + EXC-02/03/04 predicate re-verifications + consolidation into `audit/v30-EXCEPTION-CLOSURE.md`)
 **Milestone:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit
-**Phase:** 240 COMPLETE. Next phase: 241 (Exception Closure) — unblocked.
-**Plan:** 240-01 complete at commit `22b8b109`; 240-02 complete at commit `1003ad31`; 240-03 complete at commits `b0a6487d` (scope file) + `4e8a7d51` (consolidated file) + this plan-close commit (SUMMARY + ROADMAP + STATE)
-**Status:** Phase 240 complete; awaiting Phase 241 launch
-**Last activity:** 2026-04-19
+**Phase:** 241 (Exception Closure) — CONTEXT phase complete; plan-phase ready to launch.
+**Plan:** 241-01 pending (single plan per D-01). ROADMAP "expected 1-2 plans" → chose single consolidated plan option given all 4 EXC-NN requirements are HEAD re-verifications against documented KIs with Phase 237/238/239/240 cross-cite availability.
+**Status:** Phase 241 context gathered at 2026-04-19; awaiting `/gsd-plan-phase 241` launch
+**Last activity:** 2026-04-19 (241-CONTEXT.md commit `5f9e4c65`)
+
+**Phase 241 scope anchors:**
+- 4 KNOWN-ISSUES RNG entries confirmed as the ONLY determinism-invariant violations at HEAD `7ab515fe`
+- 22 EXCEPTION proof subjects (2 EXC-01 + 8 EXC-02 + 4 EXC-03 + 8 EXC-04 — set-equal with Phase 238's 22-EXCEPTION count)
+- User-specified exploitability frame (D-05) — NOT randomness distribution quality
+- Single consolidated deliverable `audit/v30-EXCEPTION-CLOSURE.md` per ROADMAP SC-1 literal (D-22)
+- 29 Phase 240 forward-cite tokens (17 EXC-02 + 12 EXC-03) require explicit line-item discharge per D-11 (Phase 239 D-29 precedent)
 
 **Audit baseline:** HEAD `7ab515fe` (contract tree identical to v29.0 `1646d5af`; all post-v29 commits are docs-only)
 **Write policy:** READ-only — no `contracts/` / `test/` edits (carry forward v28/v29 cross-repo READ-only pattern). Writes confined to `.planning/`, `audit/`, and possibly `KNOWN-ISSUES.md` (for FIND-03 promotions).
