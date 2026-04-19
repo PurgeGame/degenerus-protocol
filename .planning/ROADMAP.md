@@ -154,7 +154,8 @@
   2. An EXC-02 trigger-gating re-verification confirms the gameover prevrandao fallback (`_getHistoricalRngFallback`) is reachable only inside `_gameOverEntropy` AND only when an in-flight VRF request has been outstanding ≥ `GAMEOVER_RNG_FALLBACK_DELAY = 14 days` — no additional entry points exist at HEAD
   3. An EXC-03 F-29-04 scope re-verification confirms the mid-cycle RNG substitution is terminal-state only, has no player-reachable timing, and applies only to tickets in the post-swap write buffer — distinct from GO-02 coverage of the VRF-available gameover-jackpot branch
   4. An EXC-04 EntropyLib re-verification confirms `EntropyLib.entropyStep()` seed derivation remains fully VRF-derived via `keccak256(rngWord, player, day, amount)` — no new entry point bypasses the keccak seed construction
-**Plans**: TBD (expected 1-2 plans — EXC-01/02 paired (affiliate + prevrandao), EXC-03/04 paired (F-29-04 + EntropyLib); or a single consolidated exception-closure plan)
+**Plans**: 1 plan (single consolidated per CONTEXT.md D-01)
+  - [ ] 241-01-PLAN.md — EXC-01 ONLY-ness + EXC-02/03/04 predicate re-verification + 29-row Phase 240 forward-cite discharge → single consolidated deliverable `audit/v30-EXCEPTION-CLOSURE.md` (10 sections per D-24); 5 sequential tasks per D-03 (EXC-01 dual-gate / EXC-02 single-call-site + 14-day gate / EXC-03 tri-gate / EXC-04 keccak seed / consolidation); HEAD anchor `7ab515fe` per D-25; READ-only contracts/test per D-26
 
 ### Phase 242: Regression + Findings Consolidation
 **Goal**: Every prior RNG-adjacent finding is regression-checked against the current baseline, and all v30.0 findings are consolidated into `audit/FINDINGS-v30.0.md` with per-consumer proof table, dedicated gameover-jackpot section, and regression appendix; any new KI-eligible items are promoted to `KNOWN-ISSUES.md`
