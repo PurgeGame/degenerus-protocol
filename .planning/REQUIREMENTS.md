@@ -88,4 +88,45 @@ _(none deferred this milestone)_
 
 ## Traceability
 
-_(to be filled by `/gsd-new-milestone` roadmapper step — maps each REQ-ID to the phase that delivers it)_
+Every v30.0 requirement maps to exactly one phase. Coverage: 26/26 (100%). No orphans.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| INV-01 | Phase 237 | Pending |
+| INV-02 | Phase 237 | Pending |
+| INV-03 | Phase 237 | Pending |
+| BWD-01 | Phase 238 | Pending |
+| BWD-02 | Phase 238 | Pending |
+| BWD-03 | Phase 238 | Pending |
+| FWD-01 | Phase 238 | Pending |
+| FWD-02 | Phase 238 | Pending |
+| FWD-03 | Phase 238 | Pending |
+| RNG-01 | Phase 239 | Pending |
+| RNG-02 | Phase 239 | Pending |
+| RNG-03 | Phase 239 | Pending |
+| GO-01 | Phase 240 | Pending |
+| GO-02 | Phase 240 | Pending |
+| GO-03 | Phase 240 | Pending |
+| GO-04 | Phase 240 | Pending |
+| GO-05 | Phase 240 | Pending |
+| EXC-01 | Phase 241 | Pending |
+| EXC-02 | Phase 241 | Pending |
+| EXC-03 | Phase 241 | Pending |
+| EXC-04 | Phase 241 | Pending |
+| REG-01 | Phase 242 | Pending |
+| REG-02 | Phase 242 | Pending |
+| FIND-01 | Phase 242 | Pending |
+| FIND-02 | Phase 242 | Pending |
+| FIND-03 | Phase 242 | Pending |
+
+**Coverage summary by phase:**
+
+| Phase | Requirements | Count |
+|-------|--------------|-------|
+| 237 — VRF Consumer Inventory & Call Graph | INV-01, INV-02, INV-03 | 3 |
+| 238 — Backward & Forward Freeze Proofs | BWD-01..03, FWD-01..03 | 6 |
+| 239 — rngLocked Invariant & Permissionless Sweep | RNG-01, RNG-02, RNG-03 | 3 |
+| 240 — Gameover Jackpot Safety | GO-01..05 | 5 |
+| 241 — Exception Closure | EXC-01..04 | 4 |
+| 242 — Regression + Findings Consolidation | REG-01, REG-02, FIND-01..03 | 5 |
+| **Total** | | **26** |

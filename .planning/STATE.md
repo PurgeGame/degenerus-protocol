@@ -2,16 +2,18 @@
 gsd_state_version: 1.0
 milestone: v30.0
 milestone_name: Full Fresh-Eyes VRF Consumer Determinism Audit
-status: defining-requirements
-stopped_at: v30.0 milestone started 2026-04-18; defining requirements
-last_updated: "2026-04-18T23:00:00Z"
+status: roadmap-ready
+stopped_at: v30.0 roadmap approved 2026-04-18; Phase 237 ready to start
+last_updated: "2026-04-18T23:30:00Z"
 last_activity: 2026-04-18
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
   percent: 0
+  first_phase: 237
+  next_phase: 237
 ---
 
 # Project State
@@ -26,13 +28,13 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 ## Current Position
 
 **Milestone:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit
-**Phase:** Not started (defining requirements)
+**Phase:** 237 (VRF Consumer Inventory & Call Graph) — ready to start
 **Plan:** —
-**Status:** Defining requirements
-**Last activity:** 2026-04-18 — Milestone v30.0 started via `/gsd-new-milestone`
+**Status:** Roadmap ready — 6 phases (237-242), 26/26 requirements mapped, awaiting Phase 237 plan creation
+**Last activity:** 2026-04-18 — Roadmap authored via `/gsd-new-milestone` roadmapper step
 
 **Audit baseline:** HEAD `7ab515fe` (contract tree identical to v29.0 `1646d5af`; all post-v29 commits are docs-only)
-**Write policy:** READ-only — no `contracts/` / `test/` edits (carry forward v28/v29 cross-repo READ-only pattern)
+**Write policy:** READ-only — no `contracts/` / `test/` edits (carry forward v28/v29 cross-repo READ-only pattern). Writes confined to `.planning/`, `audit/`, and possibly `KNOWN-ISSUES.md` (for FIND-03 promotions).
 **Deliverable target:** `audit/FINDINGS-v30.0.md`
 
 **Accepted RNG exceptions (out of scope for re-litigation — documented in KNOWN-ISSUES.md):**
@@ -40,6 +42,19 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 2. Gameover prevrandao fallback — `_getHistoricalRngFallback` after 14-day VRF outage
 3. Gameover RNG substitution for mid-cycle write-buffer tickets (F-29-04 invariant disclosure)
 4. EntropyLib XOR-shift PRNG — VRF-seeded, known theoretical non-uniformity
+
+## Phase Structure (6 phases, 237-242)
+
+| Phase | Name | Requirements | Depends On |
+|-------|------|--------------|------------|
+| 237 | VRF Consumer Inventory & Call Graph | INV-01, INV-02, INV-03 | — |
+| 238 | Backward & Forward Freeze Proofs | BWD-01..03, FWD-01..03 | 237 |
+| 239 | rngLocked Invariant & Permissionless Sweep | RNG-01, RNG-02, RNG-03 | 237 |
+| 240 | Gameover Jackpot Safety | GO-01..05 | 237 |
+| 241 | Exception Closure | EXC-01..04 | 237 |
+| 242 | Regression + Findings Consolidation | REG-01, REG-02, FIND-01..03 | 238, 239, 240, 241 |
+
+**Execution order:** 237 first. After 237 completes, 238/239/240/241 can execute in parallel. 242 requires all four.
 
 ## Accumulated Context
 
@@ -56,15 +71,15 @@ Prior RNG-related milestone artifacts worth referencing during v30.0 planning (b
 
 ### Pending Todos
 
-_(none — orphan commit `2471f8e7` was folded into v29.0 and shipped)_
+_(none — Phase 237 plan creation is the next action)_
 
 ### Blockers/Concerns
 
-_(none — v29.0 shipped clean)_
+_(none — v29.0 shipped clean; v30.0 roadmap coverage 26/26 requirements, zero orphans)_
 
 ## Session Continuity
 
-Last session: 2026-04-18 — `/gsd-new-milestone` invoked. Scope locked: full fresh-eyes audit of every VRF-consuming function in `contracts/`, proving determinism at the moment of VRF request (backward + forward freeze), exhaustively enumerated. Four KNOWN-ISSUES RNG entries accepted as exceptions. READ-only write policy. Current HEAD `7ab515fe`; contract tree identical to v29.0 `1646d5af`.
+Last session: 2026-04-18 — `/gsd-new-milestone` roadmapper step. 6 phases (237-242) derived from 26 requirements across 8 categories (INV, BWD, FWD, RNG, GO, EXC, REG, FIND). Coverage 100%. Phase 237 (inventory) gates Phases 238-241 (parallel audit lanes). Phase 242 consolidates. Next action: `/gsd-plan-phase 237`.
 
 ## Deferred Items
 
