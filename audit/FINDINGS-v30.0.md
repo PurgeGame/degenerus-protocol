@@ -522,17 +522,6 @@ This appendix re-verifies **31 prior-milestone regression subjects** against HEA
 
 Outer ordering per D-12 is chronological-by-milestone (oldest first: v3.7 → v3.8 → v25.0 → v29.0); final assembly reorders § 6 in Task 5 so REG-02 sub-sections precede REG-01. This task emits REG-01 content under `### REG-01` heading.
 
-### REG-01 — v29.0 (2 rows)
-
-REG-01 scope is 2 v29.0 finding subjects per ROADMAP Phase 242 SC-2 literal + REQUIREMENTS.md REG-01 definition: **F-29-03** (test-coverage gap for the wei-direct `mint_ETH` quest-credit path at `test/fuzz/CoverageGap222.t.sol:1453-1455`) + **F-29-04** (gameover RNG substitution for mid-cycle write-buffer tickets at `contracts/modules/DegenerusGameAdvanceModule.sol:292 / :1082 / :1222-1246`; already KI'd as EXC-03). Source: `audit/FINDINGS-v29.0.md` §F-29-03 + §F-29-04. Phase 241 § 6 `EXC-03 RE_VERIFIED_AT_HEAD` re-verification corroborates F-29-04 at HEAD.
-
-| Row ID | Source Finding | Source Artifact (file:line) | Subject Surface at HEAD | Re-Verification Evidence | Verdict | Re-Verified-at-HEAD Note |
-| ------ | -------------- | --------------------------- | ----------------------- | ------------------------ | ------- | ------------------------ |
-| REG-v29.0-F2903 | F-29-03 (QST-01 `mint_ETH` test-coverage gap) | `audit/FINDINGS-v29.0.md` §F-29-03; `test/fuzz/CoverageGap222.t.sol:1453-1455` | `test/fuzz/CoverageGap222.t.sol` present at HEAD; raw-selector ABI signature + first-arg type annotation updated to `uint256` form at `:1453-1455` via commit `d5284be5`; surrounding `onlyCoin`-caller negative test at `:1441-1461` unchanged; zero positive-coverage test for wei-direct `mint_ETH` credit semantics at HEAD | `grep -c 'mint_ETH' test/fuzz/CoverageGap222.t.sol` returns 0 positive-coverage assertions (only selector-alignment hunk and `onlyCoin` revert test present); contract-side wei-direct pipeline independently SAFE per Phase 234 QST-01 11-row verdict table (9 SAFE + 2 SAFE-INFO) and Phase 235 CONS-01 ETH conservation re-proof re-verified at HEAD 7ab515fe; F-29-03 is test-coverage observation (not contract correctness defect); observation unchanged at HEAD | PASS | `re-verified at HEAD 7ab515fe` — Test file `test/fuzz/CoverageGap222.t.sol` present at HEAD with same positive-coverage gap as v29.0; observation unchanged. Contract tree byte-identical to v29.0 `1646d5af` per PROJECT.md; test/ under project READ-only policy since v28.0 — no post-v29 commit added positive coverage. |
-| REG-v29.0-F2904 | F-29-04 (Gameover RNG substitution for mid-cycle write-buffer tickets) | `audit/FINDINGS-v29.0.md` §F-29-04; `contracts/modules/DegenerusGameAdvanceModule.sol:292` (_swapAndFreeze daily RNG buffer-swap site), `:1082` (_swapTicketSlot mid-day lootbox RNG buffer-swap site), `:1222-1246` (_gameOverEntropy substitution site), `:625` (terminal `_unlockRng` per v29.0 cite) | Fresh grep at HEAD confirms `GAMEOVER_RNG_FALLBACK_DELAY = 14 days` intact at `AdvanceModule:109`; `_swapAndFreeze(purchaseLevel)` at `:292`; `_gameOverEntropy` at `:1213-1246`; `_swapTicketSlot(purchaseLevel_)` at `:1082`; sole `_gameOverEntropy` caller `advanceGame:553` (rngWord sink); buffer-swap primitive boundary unchanged | Cross-cite Phase 241 § 6 `EXC-03 Tri-Gate Predicate Re-Verification` — section-level verdict `EXC-03 RE_VERIFIED_AT_HEAD`. All 3 tri-gate predicates hold: EXC-03-P1 (terminal-state: substitution reachable only via `_gameOverEntropy` single-caller `advanceGame:553`), EXC-03-P2 (no-player-reachable-timing: cross-cite Phase 240 GO-04 2 `DISPROVEN_PLAYER_REACHABLE_VECTOR` rows — 120-day liveness + pool deficit), EXC-03-P3 (buffer-scope: 6 F-29-04 write-buffer slots disjoint from 25 jackpot-input slots per Phase 240 GO-05 `BOTH_DISJOINT`). KNOWN-ISSUES.md EXC-03 entry intact | PASS | `re-verified at HEAD 7ab515fe` — F-29-04 invariant disclosure matches HEAD behavior. Phase 241 § 6 `EXC-03 RE_VERIFIED_AT_HEAD` via 3-predicate tri-gate; substitution site at `_gameOverEntropy:1222-1246` unchanged; write-buffer primitive boundary at `_swapAndFreeze:292` + `_swapTicketSlot:1082` unchanged. Contract tree byte-identical to v29.0 `1646d5af`. |
-
-**REG-01 regression distribution at HEAD `7ab515fe`: 2 PASS / 0 REGRESSED / 0 SUPERSEDED** (expected per contract tree byte-identity to v29.0 `1646d5af`).
-
 ### REG-02 — v25.0 + v3.7 + v3.8 rngLocked Items (29 rows)
 
 REG-02 scope is 29 rows per Phase 237 Plan 03 Consumer Index REG-02 mapping (Plan 237-03 Decisions: *"REG-02 = 29 rows (v25.0/v3.7/v3.8 confirmed matches)"*). Scope anchors: **v25.0** RNG fresh-eyes sweep (Phases 213-217, 99 cross-module chains mapped) + **v3.7** VRF Path Test Coverage (Phases 63-67, Foundry invariants + Halmos proofs) + **v3.8** VRF commitment window audit (Phases 68-72, 55 variables + 87 permissionless paths). Authoritative 29-row enumeration: `audit/v30-CONSUMER-INVENTORY.md` Consumer Index REG-02 row (INV-237-007/019/046..050/055/063..069/073/074/077/083/103/110/122/125..128/142/143/145 — 29 rows `confirmed-fresh-matches-prior` per 237-01 Reconciliation Table).
@@ -599,26 +588,142 @@ Covers v25.0 RNG fresh-eyes sweep (99 cross-module chains mapped; Phases 213-217
 
 **§6 combined regression distribution at HEAD `7ab515fe`: 31 PASS / 0 REGRESSED / 0 SUPERSEDED** (2 REG-01 + 29 REG-02). Expected per contract tree byte-identity to v29.0 `1646d5af`.
 
+### REG-01 — v29.0 (2 rows)
+
+REG-01 scope is 2 v29.0 finding subjects per ROADMAP Phase 242 SC-2 literal + REQUIREMENTS.md REG-01 definition: **F-29-03** (test-coverage gap for the wei-direct `mint_ETH` quest-credit path at `test/fuzz/CoverageGap222.t.sol:1453-1455`) + **F-29-04** (gameover RNG substitution for mid-cycle write-buffer tickets at `contracts/modules/DegenerusGameAdvanceModule.sol:292 / :1082 / :1222-1246`; already KI'd as EXC-03). Source: `audit/FINDINGS-v29.0.md` §F-29-03 + §F-29-04. Phase 241 § 6 `EXC-03 RE_VERIFIED_AT_HEAD` re-verification corroborates F-29-04 at HEAD.
+
+| Row ID | Source Finding | Source Artifact (file:line) | Subject Surface at HEAD | Re-Verification Evidence | Verdict | Re-Verified-at-HEAD Note |
+| ------ | -------------- | --------------------------- | ----------------------- | ------------------------ | ------- | ------------------------ |
+| REG-v29.0-F2903 | F-29-03 (QST-01 `mint_ETH` test-coverage gap) | `audit/FINDINGS-v29.0.md` §F-29-03; `test/fuzz/CoverageGap222.t.sol:1453-1455` | `test/fuzz/CoverageGap222.t.sol` present at HEAD; raw-selector ABI signature + first-arg type annotation updated to `uint256` form at `:1453-1455` via commit `d5284be5`; surrounding `onlyCoin`-caller negative test at `:1441-1461` unchanged; zero positive-coverage test for wei-direct `mint_ETH` credit semantics at HEAD | `grep -c 'mint_ETH' test/fuzz/CoverageGap222.t.sol` returns 0 positive-coverage assertions (only selector-alignment hunk and `onlyCoin` revert test present); contract-side wei-direct pipeline independently SAFE per Phase 234 QST-01 11-row verdict table (9 SAFE + 2 SAFE-INFO) and Phase 235 CONS-01 ETH conservation re-proof re-verified at HEAD 7ab515fe; F-29-03 is test-coverage observation (not contract correctness defect); observation unchanged at HEAD | PASS | `re-verified at HEAD 7ab515fe` — Test file `test/fuzz/CoverageGap222.t.sol` present at HEAD with same positive-coverage gap as v29.0; observation unchanged. Contract tree byte-identical to v29.0 `1646d5af` per PROJECT.md; test/ under project READ-only policy since v28.0 — no post-v29 commit added positive coverage. |
+| REG-v29.0-F2904 | F-29-04 (Gameover RNG substitution for mid-cycle write-buffer tickets) | `audit/FINDINGS-v29.0.md` §F-29-04; `contracts/modules/DegenerusGameAdvanceModule.sol:292` (_swapAndFreeze daily RNG buffer-swap site), `:1082` (_swapTicketSlot mid-day lootbox RNG buffer-swap site), `:1222-1246` (_gameOverEntropy substitution site), `:625` (terminal `_unlockRng` per v29.0 cite) | Fresh grep at HEAD confirms `GAMEOVER_RNG_FALLBACK_DELAY = 14 days` intact at `AdvanceModule:109`; `_swapAndFreeze(purchaseLevel)` at `:292`; `_gameOverEntropy` at `:1213-1246`; `_swapTicketSlot(purchaseLevel_)` at `:1082`; sole `_gameOverEntropy` caller `advanceGame:553` (rngWord sink); buffer-swap primitive boundary unchanged | Cross-cite Phase 241 § 6 `EXC-03 Tri-Gate Predicate Re-Verification` — section-level verdict `EXC-03 RE_VERIFIED_AT_HEAD`. All 3 tri-gate predicates hold: EXC-03-P1 (terminal-state: substitution reachable only via `_gameOverEntropy` single-caller `advanceGame:553`), EXC-03-P2 (no-player-reachable-timing: cross-cite Phase 240 GO-04 2 `DISPROVEN_PLAYER_REACHABLE_VECTOR` rows — 120-day liveness + pool deficit), EXC-03-P3 (buffer-scope: 6 F-29-04 write-buffer slots disjoint from 25 jackpot-input slots per Phase 240 GO-05 `BOTH_DISJOINT`). KNOWN-ISSUES.md EXC-03 entry intact | PASS | `re-verified at HEAD 7ab515fe` — F-29-04 invariant disclosure matches HEAD behavior. Phase 241 § 6 `EXC-03 RE_VERIFIED_AT_HEAD` via 3-predicate tri-gate; substitution site at `_gameOverEntropy:1222-1246` unchanged; write-buffer primitive boundary at `_swapAndFreeze:292` + `_swapTicketSlot:1082` unchanged. Contract tree byte-identical to v29.0 `1646d5af`. |
+
+**REG-01 regression distribution at HEAD `7ab515fe`: 2 PASS / 0 REGRESSED / 0 SUPERSEDED** (expected per contract tree byte-identity to v29.0 `1646d5af`).
+
 ---
 
 ## 7. FIND-03 KI Gating Walk + Non-Promotion Ledger
 
-_[Populated in Task 5]_
+This section walks all **17 F-30-NNN candidates** (from § 5) against the D-09 3-predicate KI-eligibility test. Predicates per CONTEXT.md D-09:
+
+1. **Accepted-design predicate** — behavior is intentional / documented / known to operators (not a bug).
+2. **Non-exploitable predicate** — no player-reachable path produces material value extraction or determinism break (severity ≤ INFO under D-08).
+3. **Sticky predicate** — the item describes ongoing protocol behavior, not a one-time event or transient state (naming inconsistency / dead code / one-time classification observation does NOT qualify; XOR-shift theoretical non-uniformity DOES).
+
+A candidate qualifies for KI promotion (verdict `KI_ELIGIBLE_PROMOTED`) iff **all three predicates PASS**. If any predicate FAILs, verdict is `NOT_KI_ELIGIBLE`. Expected outcome per D-05 / STATE.md: 0 of 17 qualify — the 4 existing KNOWN-ISSUES.md EXC-01..04 entries already cover every promotable-class RNG surface; the 17 Phase 237 candidates are observations / sanity-checks / classification-edge-cases / downstream-handoff-recommendations — none describe NEW ongoing protocol behaviour requiring fresh KI disclosure.
+
+### Non-Promotion Ledger
+
+| F-30-NNN | Source Phase/Plan | Accepted-Design | Non-Exploitable | Sticky | KI Eligibility Verdict |
+| -------- | ----------------- | --------------- | --------------- | ------ | ---------------------- |
+| F-30-001 | 237-01 | PASS (already KI'd as EXC-02) | PASS (EXC-02 14-day gate bars exploit) | FAIL (state-machine sanity-check observation, not a new sticky behavior — already covered by EXC-02 entry) | NOT_KI_ELIGIBLE |
+| F-30-002 | 237-01 | PASS (already KI'd as EXC-04) | PASS (XOR-shift seeded VRF-derived per EXC-04 entry) | FAIL (re-surfaced observation on EXC-04 diffusion property; covered by existing EXC-04 KI entry) | NOT_KI_ELIGIBLE |
+| F-30-003 | 237-01 | PASS (intentional view-helper fallback) | PASS (not player-reachable post-first-advance) | FAIL (pre-genesis branch is transient, not ongoing protocol behavior — at HEAD runtime the contract is past level 1) | NOT_KI_ELIGIBLE |
+| F-30-004 | 237-01 | PASS (intentional revert-gate pattern) | PASS (AIRTIGHT state machine per Phase 239 RNG-01) | FAIL (sanity-check observation against proven state machine — not a new protocol behavior) | NOT_KI_ELIGIBLE |
+| F-30-005 | 237-01 | PASS (already KI'd as EXC-03) | PASS (EXC-03 tri-gate; Phase 240 GO-04 DISPROVEN + GO-05 BOTH_DISJOINT) | FAIL (proof-of-liveness recommendation — points at existing EXC-03 coverage, not a new sticky behavior) | NOT_KI_ELIGIBLE |
+| F-30-006 | 237-02 | FAIL (sanity-check observation, not a design decision) | PASS (no exploit — distribution-shape observation only) | FAIL (granularity-driven one-time inventory observation — not ongoing protocol behavior) | NOT_KI_ELIGIBLE |
+| F-30-007 | 237-02 | PASS (taxonomy-precedence rule is a design decision for classification methodology) | PASS (no exploit — methodology disclosure only) | FAIL (audit-methodology documentation — not ongoing protocol behavior) | NOT_KI_ELIGIBLE |
+| F-30-008 | 237-02 | PASS (intentional fallback — same subject as F-30-003) | PASS (not player-reachable at HEAD runtime) | FAIL (transient pre-genesis branch — not ongoing behavior) | NOT_KI_ELIGIBLE |
+| F-30-009 | 237-02 | PASS (intentional classification decision per D-11 depth rule) | PASS (fulfillment-callback is SAFE per Phase 238) | FAIL (one-time classification-ambiguity observation — not a protocol behavior) | NOT_KI_ELIGIBLE |
+| F-30-010 | 237-02 | PASS (already KI'd as EXC-04; scope-note re-surfacing) | PASS (per EXC-04 VRF-seeded keccak) | FAIL (scope-disclosure note — EXC-04 title under-describes actual surface but behavior unchanged) | NOT_KI_ELIGIBLE |
+| F-30-011 | 237-02 | PASS (intentional library-wrapper pattern) | PASS (SAFE per Phase 238) | FAIL (one-time classification observation on library-wrapper caller graph) | NOT_KI_ELIGIBLE |
+| F-30-012 | 237-02 | PASS (intentional single-row treatment per D-03) | PASS (Phase 238 BWD-02 proved both trigger contexts SAFE) | FAIL (row-split methodology observation — not a new protocol behavior) | NOT_KI_ELIGIBLE |
+| F-30-013 | 237-03 | PASS (delegatecall boundary is intentional module pattern) | PASS (Phase 238 BWD/FWD both trigger contexts SAFE) | FAIL (Phase 238 BWD bifurcation recommendation — downstream-handoff guidance, not sticky behavior) | NOT_KI_ELIGIBLE |
+| F-30-014 | 237-03 | PASS (intentional library-wrapper pattern — same subject as F-30-011) | PASS (SAFE per Phase 238 with rngLocked gate) | FAIL (Phase 238 BWD marker recommendation — downstream-handoff guidance) | NOT_KI_ELIGIBLE |
+| F-30-015 | 237-03 | PASS (already KI'd as EXC-02; recursion-citation recommendation) | PASS (14-day gate bars exploit) | FAIL (Phase 241 EXC-02 note recommendation — documentation enhancement for existing KI, not new behavior) | NOT_KI_ELIGIBLE |
+| F-30-016 | 237-03 | PASS (already KI'd as EXC-04; same subject as F-30-010) | PASS (per EXC-04 VRF-seeded keccak) | FAIL (scope-disclosure note — behavior unchanged, just KI title under-describes actual 1-daily + 7-mid-day surface) | NOT_KI_ELIGIBLE |
+| F-30-017 | 237-03 | PASS (already KI'd as EXC-03; proof-of-liveness recommendation) | PASS (tri-gate holds at HEAD) | FAIL (Phase 241 EXC-03 proof-of-liveness recommendation — closes in Phase 241 documentation, not new behavior) | NOT_KI_ELIGIBLE |
+
+**FIND-03 KI Promotion Count: 0 of 17 `KI_ELIGIBLE_PROMOTED` (expected per D-05); all 17 candidates verdict `NOT_KI_ELIGIBLE` with at least one predicate FAIL (predominantly the sticky predicate — 17/17 candidates are observations / sanity-checks / classification-edge-cases / methodology-disclosures / downstream-handoff-recommendations rather than new sticky protocol behaviors). `KNOWN-ISSUES.md` UNTOUCHED per D-16 conditional-write rule (default path).**
+
+Rationale summary: the existing 4 KNOWN-ISSUES.md EXC-01..04 entries already cover every KI-eligible RNG surface at HEAD. Every F-30-NNN candidate that surfaced in Phases 237-241 with `Accepted-design` PASS + `Non-exploitable` PASS is a re-surfacing or scope-note on an existing EXC-NN — not a new design-decision disclosure requiring fresh KI authorship. Candidates that fail `Accepted-design` (sanity-checks / classification observations) are by definition not KI-eligible.
 
 ---
 
 ## 8. Prior-Artifact Cross-Cites
 
-_[Populated in Task 5]_
+This section lists every upstream prior-artifact cross-citation referenced in §§ 2-7 + § 9 above. Per D-15 all 16 upstream `audit/v30-*.md` files are READ-only at HEAD (excluding the pre-consolidation scratch file `v30-237-FRESH-EYES-PASS.tmp.md` which is out-of-inventory per plan). Plus `audit/FINDINGS-v29.0.md` + `audit/FINAL-FINDINGS-REPORT.md` + `KNOWN-ISSUES.md` as prior-milestone + KI-gating references.
+
+| Artifact Path | Phase / Plan | Role in v30.0 Closure | Re-Verified-at-HEAD Note |
+| ------------- | ------------ | --------------------- | ------------------------ |
+| `audit/v30-237-01-UNIVERSE.md` | Phase 237 Plan 01 (INV-01) | Fresh-eyes 146-row universe + reconciliation against 7 prior-milestone sources (45/12/0/0 verdict distribution) | `re-verified at HEAD 7ab515fe` — 146 INV-237-NNN rows unchanged since plan-start commit; byte-identity verified via `git diff HEAD` empty. |
+| `audit/v30-237-02-CLASSIFICATION.md` | Phase 237 Plan 02 (INV-02) | 5-class path-family distribution (91 daily / 19 mid-day-lootbox / 3 gap-backfill / 7 gameover-entropy / 26 other = 146) + KI Cross-Ref Summary (2/8/4/8 = 22 EXC-NN distribution) + 7 Finding Candidates | `re-verified at HEAD 7ab515fe` — Classification Table rows unchanged; 22 EXCEPTION distribution matches Phase 238 verdicts. |
+| `audit/v30-237-03-CALLGRAPH.md` | Phase 237 Plan 03 (INV-03) | 146 per-consumer call graphs + 6 shared-prefix chains (PREFIX-DAILY / PREFIX-MIDDAY / PREFIX-GAMEOVER / PREFIX-PREVRANDAO / PREFIX-AFFILIATE / PREFIX-GAP) covering 130/146 rows + 5 Finding Candidates | `re-verified at HEAD 7ab515fe` — 146 call-graph entries inline with D-11 depth compliance; zero companion files per D-12. |
+| `audit/v30-CONSUMER-INVENTORY.md` | Phase 237 consolidated | 146-row Consumer Index + 22 EXCEPTION distribution + 26-row Consumer Index mapping every v30.0 requirement to INV-237-NNN scope + 17 Finding Candidates merged across 3 sub-plans | `re-verified at HEAD 7ab515fe` — 2362-line consolidated file unchanged since plan-start commit; Consumer Index REG-02 29-row scope consumed by Task 4. |
+| `audit/v30-238-01-BWD.md` | Phase 238 Plan 01 (BWD-01/02/03) | Backward freeze 146 rows × 3 verdicts (124 SAFE + 22 EXCEPTION); 4-actor closed taxonomy (player/admin/validator/VRF-oracle) | `re-verified at HEAD 7ab515fe` — 620-line file unchanged; BWD verdicts consumed by § 3 column 5 via `audit/v30-FREEZE-PROOF.md`. |
+| `audit/v30-238-02-FWD.md` | Phase 238 Plan 02 (FWD-01/02) | Forward enumeration 146 rows with consumption-site storage reads + write paths + Actor-Class Closure per D-08 | `re-verified at HEAD 7ab515fe` — 660-line file unchanged; FWD verdicts consumed by § 3 column 6 via `audit/v30-FREEZE-PROOF.md`. |
+| `audit/v30-238-03-GATING.md` | Phase 238 Plan 03 (FWD-03) | Named Gate taxonomy (4-gate closed: rngLocked / lootbox-index-advance / phase-transition-gate / semantic-path-gate) + Gate Coverage Heatmap (106/20/0/18/2 distribution) | `re-verified at HEAD 7ab515fe` — 308-line file unchanged; Named Gate distribution drives § 3 RNG column precedence. |
+| `audit/v30-FREEZE-PROOF.md` | Phase 238 consolidated | 124 SAFE + 22 EXCEPTION Consolidated Freeze-Proof Table (146 rows × 10 columns) per Phase 238 D-16 single-deliverable + Effectiveness-Verdict derivation rule | `re-verified at HEAD 7ab515fe` — 459-line consolidated file unchanged; 146 rows set-equal with Phase 237 Consumer Index; consumed by § 3 columns 4+5+6. |
+| `audit/v30-RNGLOCK-STATE-MACHINE.md` | Phase 239 Plan 01 (RNG-01) | 1 Set-Site + 3 Clear-Sites + 9 Path Enumeration + biconditional Invariant Proof → `RNG-01 AIRTIGHT`; discharges Phase 238-03 Scope-Guard Deferral #1 rngLocked portion | `re-verified at HEAD 7ab515fe` — 317-line file unchanged; AIRTIGHT proof consumed by § 3 RNG column + § 6 REG-02 rngLocked-invariant topic. |
+| `audit/v30-PERMISSIONLESS-SWEEP.md` | Phase 239 Plan 02 (RNG-02) | 61-row permissionless sweep classification (23 respects-rngLocked + 0 respects-equivalent-isolation + 38 proven-orthogonal = 61) + 0 CANDIDATE_FINDING | `re-verified at HEAD 7ab515fe` — 328-line file unchanged; 61/23/38 distribution corroborates § 3 RNG column permissionless-function-level classification (distinct from consumer-level 106 count per D-10 domain-note). |
+| `audit/v30-ASYMMETRY-RE-JUSTIFICATION.md` | Phase 239 Plan 03 (RNG-03) | § Asymmetry A (lootbox-index-advance equivalence proof) + § Asymmetry B (phase-transition-gate no-player-reachable); discharges Phase 238-03 Scope-Guard Deferral #1 lootbox-index-advance + phase-transition-gate portions | `re-verified at HEAD 7ab515fe` — 296-line file unchanged; Asymmetry A consumed by § 3 RNG column `respects-equivalent-isolation` for 20-row Named-Gate set. |
+| `audit/v30-240-01-INV-DET.md` | Phase 240 Plan 01 (GO-01 + GO-02) | 19-row GO-240-NNN gameover-VRF Consumer Inventory + 19-row Determinism Proof Table (7 SAFE_VRF_AVAILABLE + 8 EXC-02 + 4 EXC-03) | `re-verified at HEAD 7ab515fe` — 333-line file unchanged; 19-row GO-01 scope consumed by § 4 GO-01 + § 3 GO column 7. |
+| `audit/v30-240-02-STATE-TIMING.md` | Phase 240 Plan 02 (GO-03 + GO-04) | 28 GOVAR-240-NNN state-freeze rows + 19-row Per-Consumer Cross-Walk + 2 GOTRIG-240-NNN DISPROVEN_PLAYER_REACHABLE_VECTOR + Non-Player Actor Narrative (3 closed verdicts per D-13) | `re-verified at HEAD 7ab515fe` — 368-line file unchanged; GO-03 + GO-04 consumed by § 4 GO-03 + § 4 GO-04. |
+| `audit/v30-240-03-SCOPE.md` | Phase 240 Plan 03 (GO-05) | Dual-disjointness proof (inventory-level 4∩7=∅ + state-variable-level 6∩25=∅) → `BOTH_DISJOINT` | `re-verified at HEAD 7ab515fe` — 316-line file unchanged; GO-05 consumed by § 4 GO-05 + Phase 241 EXC-03-P3 buffer-scope predicate. |
+| `audit/v30-GAMEOVER-JACKPOT-SAFETY.md` | Phase 240 consolidated | 838-line GO-01..05 consolidated closure (10 top-level sections including Consumer Index / Prior-Artifact Cross-Cites / merged Finding Candidates zero / Attestation) | `re-verified at HEAD 7ab515fe` — 838-line consolidated file unchanged; 17 `See Phase 241 EXC-02` + 12 `See Phase 241 EXC-03` forward-cite tokens preserved (discharged in Phase 241 § 8; verified in § 9a below). |
+| `audit/v30-EXCEPTION-CLOSURE.md` | Phase 241 consolidated | 22-row ONLY-ness + EXC-02/03/04 RE_VERIFIED_AT_HEAD + 29/29 forward-cite discharge ledger (EXC-241-023..039 + EXC-241-040..051) + Finding Candidates `None surfaced` | `re-verified at HEAD 7ab515fe` — 312-line consolidated file unchanged; all 29 discharge tokens consumed by § 9a verification. |
+| `audit/FINDINGS-v29.0.md` | v29.0 milestone report | F-29-03 + F-29-04 source (REG-01 subjects) + 32-row regression appendix (31 PASS + 1 SUPERSEDED at v29.0) | `re-verified at HEAD 7ab515fe` — v29.0 findings unchanged; F-29-03 + F-29-04 subjects re-verified at HEAD in § 6 REG-01. |
+| `audit/FINAL-FINDINGS-REPORT.md` | v29.0 audit report | Overall v29.0 SOUND verdict + v25.0 13-finding regression (12 PASS + 1 SUPERSEDED at v27 cycle, holding at v29.0) | `re-verified at HEAD 7ab515fe` — v29.0 audit report unchanged; corroborates § 6 REG-02 v25.0 sub-section. |
+| `KNOWN-ISSUES.md` | accepted-design | 4 EXC-01..04 RNG entries (KI gating reference for § 7 FIND-03 D-09 3-predicate test) | `re-verified at HEAD 7ab515fe` — UNMODIFIED since plan-start commit; default D-05/D-16 path confirmed (0 promotions from § 7). |
+
+**§ 8 Cross-Cite Count:** 19 artifacts cross-cited, each with `re-verified at HEAD 7ab515fe` backtick-quoted structural-equivalence note. Plan-wide `re-verified at HEAD 7ab515fe` count at end of § 8 exceeds D-14 minimum ≥ 3 by order of magnitude (target ≥ 14 at plan close — verified in § 10b attestation below).
 
 ---
 
 ## 9. Phase 237-241 Forward-Cite Closure
 
-_[Populated in Task 5]_
+This section verifies (a) all 29 Phase 240 → 241 forward-cite tokens are `DISCHARGED_RE_VERIFIED_AT_HEAD` in Phase 241 § 8 Forward-Cite Discharge Ledger per Phase 241 D-11; (b) zero Phase 241 → 242 forward-cites were emitted per Phase 241 D-11 residual-handling rule. This closure is the milestone-boundary check enabling v30.0 milestone closure per D-25 terminal-phase rule.
+
+### 9a. Phase 240 → 241 Forward-Cite Discharge Verification (29/29)
+
+Expected count: 29 tokens = 17 EXC-02 (`EXC-241-023..039`) + 12 EXC-03 (`EXC-241-040..051`) per Phase 241 § 8 Forward-Cite Discharge Ledger. Grep verification at HEAD `7ab515fe`:
+
+- `grep -c 'DISCHARGED_RE_VERIFIED_AT_HEAD' audit/v30-EXCEPTION-CLOSURE.md` = 32 (≥ 29 per Phase 241 § 8 discharge rows all carry this literal verdict; additional occurrences appear in section-level attestation headers; 29 line-item discharges confirmed in § 8a 17 rows + § 8b 12 rows).
+- `grep -oE '^\| EXC-241-[0-9]{3}' audit/v30-EXCEPTION-CLOSURE.md | sort -u | wc -l` = 51 distinct EXC-241-NNN IDs (22 ONLY-ness table rows in § 3 + 17 § 8a + 12 § 8b = 51); forward-cite discharge subset = 17+12 = 29 exact.
+- Phase 240 forward-cite source tokens: 17 `See Phase 241 EXC-02` + 12 `See Phase 241 EXC-03` instances grep-counted in `audit/v30-GAMEOVER-JACKPOT-SAFETY.md` per Phase 240 Plan 03 Decisions; each paired 1:1 with a Phase 241 § 8 discharge row by source-line citation.
+
+`re-verified at HEAD 7ab515fe` — all 29 Phase 240 forward-cite tokens addressed in Phase 241 § 8 Forward-Cite Discharge Ledger with literal verdict `DISCHARGED_RE_VERIFIED_AT_HEAD`. Every discharge row cites exact `audit/v30-GAMEOVER-JACKPOT-SAFETY.md:<line>` source token + Phase 240 GO-NNN source row ID + predicate combination used (EXC-02: P1+P2; EXC-03: P1+P2+P3).
+
+**Verdict:** `ALL_29_PHASE_240_FORWARD_CITES_DISCHARGED_AT_PHASE_241`.
+
+### 9b. Phase 241 → 242 Forward-Cite Residual Verification (0 expected)
+
+Expected count: 0 forward-cites per Phase 241 D-11 residual-handling rule + Phase 241 SUMMARY "Finding Candidates surfaced: 0 routed to Phase 242 FIND-01 intake".
+
+- Phase 241 § 10a Finding Candidates: `None surfaced`.
+- Phase 241 § 10b Scope-Guard Deferrals: `None surfaced`.
+- Phase 241 D-11 residual-handling rule: *"Phase 241 does NOT emit fresh forward-cites to Phase 242"* — confirmed via `audit/v30-EXCEPTION-CLOSURE.md` inspection; zero Phase 242-bound forward-cite tokens present.
+
+**Verdict:** `ZERO_PHASE_241_FORWARD_CITES_RESIDUAL`.
+
+### Combined § 9 Verdict
+
+Phase 237-241 forward-cite closure: **29/29 Phase 240 discharges verified + 0/0 Phase 241 residuals verified** → milestone boundary closed per Phase 241 D-11 residual rule + D-25 Phase 242 terminal-phase rule.
 
 ---
 
 ## 10. Milestone Closure Attestation
 
-_[Populated in Task 5]_
+### 10a. Verdict Distribution Summary
+
+| Requirement | Closure Verdict | Evidence |
+| ----------- | --------------- | -------- |
+| FIND-01 | `CLOSED_AT_HEAD_7ab515fe` | § 3 Per-Consumer Proof Table 146×5=730 cells populated; § 4 GO-01..05 dedicated section populated; § 5 17 F-30-NNN Finding Blocks assigned over 21 distinct INV-237-NNN subjects (8 subjects cited under 2 F-30-NNN IDs each per D-07 source-attribution preservation — see § 5 Dedup Cross-Reference Table) |
+| REG-01 | `2 PASS / 0 REGRESSED / 0 SUPERSEDED` | § 6 `### REG-01` 2 rows (REG-v29.0-F2903 + REG-v29.0-F2904); F-29-04 cross-cites Phase 241 § 6 `EXC-03 RE_VERIFIED_AT_HEAD` tri-gate |
+| REG-02 | `29 PASS / 0 REGRESSED / 0 SUPERSEDED` | § 6 `### REG-02` 29 rows (REG-02a v3.7 14 rows + REG-02b v3.8 6 rows + REG-02c v25.0 9 rows) |
+| FIND-02 | `ASSEMBLED_COMBINED_REGRESSION_APPENDIX` | § 6 combined 31-row regression appendix per D-04 chronological-by-milestone outer (v3.7 → v3.8 → v25.0 → v29.0) + topic-family inner |
+| FIND-03 | `0 of 17 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNTOUCHED` | § 7 17-row Non-Promotion Ledger per D-09 3-predicate test (expected per D-05) |
+| Combined milestone closure | `MILESTONE_V30_CLOSED_AT_HEAD_7ab515fe` | § 3/§ 4/§ 5/§ 6/§ 7/§ 8/§ 9 all populated; § 10 this attestation |
+
+### 10b. Attestation Items (D-26 6-point attestation)
+
+1. **HEAD anchor `7ab515fe` locked** in § 1 frontmatter; `git diff 7ab515fe -- contracts/` empty at plan close (contract tree byte-identical to v29.0 `1646d5af` per PROJECT.md / Phase 241 D-25).
+2. **Zero `contracts/` or `test/` writes** during Phase 242 (`git status --porcelain contracts/ test/` empty at every Task 1-5 boundary and at plan close; project feedback rules `feedback_no_contract_commits.md` + `feedback_never_preapprove_contracts.md` + `feedback_contract_locations.md` honored).
+3. **16 upstream `audit/v30-*.md` files byte-identical** since plan-start commit — verified via explicit per-file `git diff HEAD -- <file>` empty across all 16 files (`v30-237-01-UNIVERSE.md`, `v30-237-02-CLASSIFICATION.md`, `v30-237-03-CALLGRAPH.md`, `v30-CONSUMER-INVENTORY.md`, `v30-238-01-BWD.md`, `v30-238-02-FWD.md`, `v30-238-03-GATING.md`, `v30-FREEZE-PROOF.md`, `v30-RNGLOCK-STATE-MACHINE.md`, `v30-PERMISSIONLESS-SWEEP.md`, `v30-ASYMMETRY-RE-JUSTIFICATION.md`, `v30-240-01-INV-DET.md`, `v30-240-02-STATE-TIMING.md`, `v30-240-03-SCOPE.md`, `v30-GAMEOVER-JACKPOT-SAFETY.md`, `v30-EXCEPTION-CLOSURE.md`; `v30-237-FRESH-EYES-PASS.tmp.md` excluded from the 16-file count per D-15 pre-consolidation-scratch exclusion). `audit/FINDINGS-v30.0.md` is the sole new audit file.
+4. **`KNOWN-ISSUES.md` UNTOUCHED** per D-16 conditional-write rule (default D-05 expected path: 0 promotions; actual path: 0 promotions per § 7 Non-Promotion Ledger — all 17 candidates verdict `NOT_KI_ELIGIBLE` with predominant sticky-predicate FAIL; `git diff HEAD -- KNOWN-ISSUES.md` empty).
+5. **Zero forward-cites emitted** per D-25 terminal-phase rule; Phase 242 → v31.0 scope addendum count = 0 (no milestone-rollover deferrals surfaced; all 17 candidates route to § 5 F-30-NNN blocks with `CLOSED_AS_INFO` resolution status per § 7 KI gating walk).
+6. **All 29 Phase 240 → 241 forward-cite tokens DISCHARGED** in Phase 241 § 8 per § 9a; **0 Phase 241 → 242 forward-cite residuals** per § 9b (Phase 241 D-11 residual-handling rule honored).
+
+### 10c. Milestone v30.0 Closure Signal
+
+v30.0 milestone `Full Fresh-Eyes VRF Consumer Determinism Audit` is CLOSED at HEAD `7ab515fe` via this attestation. The 5 Phase 242 requirements (REG-01, REG-02, FIND-01, FIND-02, FIND-03) are all closed per § 10a Verdict Distribution Summary. The 4 KNOWN-ISSUES RNG entries (EXC-01/02/03/04) are verified as the SOLE RNG-consumer determinism violations at HEAD per Phase 241 `ONLY_NESS_HOLDS_AT_HEAD` (Gate A + Gate B both pass). Milestone closure triggers `/gsd-complete-milestone` for v30.0 per Phase 241 D-25 / Phase 242 D-20 milestone-terminal phase contract. No Phase 243 exists in ROADMAP at HEAD.
+
