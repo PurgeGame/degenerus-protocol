@@ -257,7 +257,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (!ticketsFullyProcessed) {
                 uint24 preRk = _tqReadKey(purchaseLevel);
                 if (ticketQueue[preRk].length > 0) {
-                    uint48 preIdx = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;
+                    uint48 preIdx = uint48(
+                        _lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)
+                    ) - 1;
                     if (lootboxRngWordByIndex[preIdx] == 0) {
                         uint256 cw = rngWordCurrent;
                         if (cw == 0) revert RngNotReady();
@@ -266,10 +268,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         }
                         _finalizeLootboxRng(cw);
                     }
-                    (
-                        bool preWorked,
-                        bool preFinished
-                    ) = _runProcessTicketBatch(purchaseLevel);
+                    (bool preWorked, bool preFinished) = _runProcessTicketBatch(
+                        purchaseLevel
+                    );
                     if (preWorked || !preFinished) {
                         stage = STAGE_TICKETS_WORKING;
                         break;
@@ -448,7 +449,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Complete ETH distribution (call 2 of two-call split)
             if (resumeEthPool != 0) {
                 payDailyJackpot(true, lvl, rngWord);
-                _unlockRng(day);
                 stage = STAGE_JACKPOT_ETH_RESUME;
                 break;
             }
