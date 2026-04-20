@@ -77,6 +77,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     );
 
     /// @dev Ticket jackpot win. See JackpotEthWin for traitId sentinel semantics.
+    ///      ticketCount is always scaled ×TICKET_SCALE (=100); divide by 100 for
+    ///      whole tickets. Trait-matched paths have zero fractional part; BAF
+    ///      lootbox rolls (traitId = BAF_TRAIT_SENTINEL) may carry a fractional
+    ///      remainder that resolves later either by carry into the next scaled
+    ///      queue at the same (level,buyer) slot or by a probabilistic roll at
+    ///      trait-assignment time (see _rollRemainder in DegenerusGameMintModule).
     event JackpotTicketWin(
         address indexed winner,
         uint24 indexed ticketLevel,
@@ -689,11 +695,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     address winner = winners[i];
                     if (winner != address(0)) {
                         _queueTickets(winner, lvl, ticketCount, true);
+                        // ticketCount emitted scaled ×TICKET_SCALE for UI consistency.
                         emit JackpotTicketWin(
                             winner,
                             lvl,
                             traitId,
-                            ticketCount,
+                            ticketCount * uint32(TICKET_SCALE),
                             lvl,
                             ticketIndexes[i]
                         );
@@ -991,11 +998,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
             if (winner != address(0) && units != 0) {
                 _queueTickets(winner, queueLvl, uint32(units), true);
+                // ticketCount emitted scaled ×TICKET_SCALE for UI consistency.
                 emit JackpotTicketWin(
                     winner,
                     queueLvl,
                     traitId,
-                    uint32(units),
+                    uint32(units * TICKET_SCALE),
                     sourceLvl,
                     ticketIndexes[i]
                 );
@@ -2004,14 +2012,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
                 // Lootbox half: small amounts awarded immediately, large deferred
                 if (lootboxPortion <= LOOTBOX_CLAIM_THRESHOLD) {
-                    // Small lootbox: award immediately (2 rolls, probabilistic targeting)
+                    // Small lootbox: award immediately (2 rolls, probabilistic targeting).
+                    // JackpotTicketWin is emitted per-roll inside _jackpotTicketRoll
+                    // with the real targetLevel and scaled ticketCount.
                     rngWord = _awardJackpotTickets(
                         winner,
                         lootboxPortion,
                         lvl,
                         rngWord
                     );
-                    emit JackpotTicketWin(winner, lvl, BAF_TRAIT_SENTINEL, 0, lvl, 0);
                 } else {
                     // Large lootbox: defer to claim (whale pass equivalent)
                     _queueWhalePassClaimCore(winner, lootboxPortion);
@@ -2033,9 +2042,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 claimableDelta += cd;
                 emit JackpotEthWin(winner, lvl, BAF_TRAIT_SENTINEL, amount, 0, rl, rt);
             } else {
-                // Odd index: 100% lootbox (upside exposure)
+                // Odd index: 100% lootbox (upside exposure).
+                // JackpotTicketWin is emitted per-roll inside _jackpotTicketRoll;
+                // whale-pass fallback (amount > LOOTBOX_CLAIM_THRESHOLD) emits
+                // JackpotWhalePassWin inside _awardJackpotTickets.
                 rngWord = _awardJackpotTickets(winner, amount, lvl, rngWord);
-                emit JackpotTicketWin(winner, lvl, BAF_TRAIT_SENTINEL, 0, lvl, 0);
             }
 
             unchecked {
@@ -2069,6 +2080,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // Large amounts (> 5 ETH): defer to whale pass claim system
         if (amount > LOOTBOX_CLAIM_THRESHOLD) {
             _queueWhalePassClaimCore(winner, amount);
+            emit JackpotWhalePassWin(
+                winner,
+                minTargetLevel,
+                amount / HALF_WHALE_PASS_PRICE
+            );
             return entropy;
         }
 
@@ -2141,6 +2157,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         uint256 quantityScaled = (amount * TICKET_SCALE) / targetPrice;
         _queueLootboxTickets(winner, targetLevel, quantityScaled, true);
+
+        // ticketCount is scaled (×TICKET_SCALE). Fractional remainder resolves
+        // later via carry or _rollRemainder at assignment time — see event doc.
+        emit JackpotTicketWin(
+            winner,
+            targetLevel,
+            BAF_TRAIT_SENTINEL,
+            uint32(quantityScaled),
+            minTargetLevel,
+            0
+        );
 
         return entropy;
     }
