@@ -8,22 +8,15 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit
+## Current Milestone: _(planning next milestone)_
 
-**Goal:** For every function in `contracts/` that consumes a VRF word, prove that from the moment the VRF request is fired, every variable influencing how that word is eventually consumed is frozen — backward (input state committed) and forward (consumption-site state unchangeable by any actor), exhaustively enumerated. The only accepted violations are the four documented exceptions in `KNOWN-ISSUES.md` (Affiliate winner roll non-VRF seed, Gameover prevrandao fallback, Gameover RNG substitution for mid-cycle write-buffer tickets, EntropyLib XOR-shift PRNG).
+v30.0 shipped 2026-04-20. No active milestone — run `/gsd-new-milestone` to define the next one.
 
-**Target features:**
-- Exhaustive inventory of every VRF-consuming call site in `contracts/` (daily RNG, mid-day lootbox RNG, gap backfill, gameover entropy, any others surfaced fresh-eyes)
-- Per-consumer backward freeze proof — from VRF request → fulfillment, every input parameter / storage variable the consumer will read at fulfillment is already written or unreachable by any actor
-- Per-consumer forward freeze proof — from VRF fulfillment → consumption, nothing the consumer reads can be mutated by any actor (player, admin, validator) after request
-- Global state-space enumeration per consumer — every storage variable touched in the read path, mapped to write-path, checked for post-request mutability
-- `rngLocked` / `rngLockedFlag` invariant re-proof — all protected paths gated, all documented asymmetries (e.g. lootbox index-advance isolation) justified
-- Adversarial closure per consumer — "what *could* a player / admin / validator do between request and consumption?" answered exhaustively
-- Consolidated deliverable `audit/FINDINGS-v30.0.md` with per-consumer proof table, 0/0/0/0/N findings counts, and regression appendix re-verifying all v29.0 RNG-adjacent items
+## Completed Milestone: v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit
 
-**Scope boundary:** `contracts/` only. Indexer, database, sim, frontend out of scope. READ-only — no `contracts/` or `test/` edits (carry forward v28/v29 cross-repo READ-only pattern).
+**Status:** Complete (2026-04-20)
 
-**Audit baseline:** HEAD `7ab515fe` at milestone start. Contract tree is identical to v29.0 baseline `1646d5af` — all post-v29.0 commits are docs-only. If post-v29.0 contract changes land mid-milestone, the baseline advances to whatever HEAD shows when the consolidation phase runs.
+**Result:** 6 phases (237-242), 14 plans, 26/26 requirements satisfied. Full fresh-eyes per-consumer VRF determinism audit at HEAD `7ab515fe` (contract tree byte-identical to v29.0 `1646d5af`; all post-v29 commits docs-only). **Zero on-chain vulnerabilities.** 17 INFO findings (F-30-001..F-30-017) consolidated into `audit/FINDINGS-v30.0.md` (729 lines, 10 sections). 31 prior RNG-adjacent findings re-verified (v29.0 F-29-03/04 + v25.0 + v3.7 + v3.8 rngLocked items): 31 PASS / 0 REGRESSED / 0 SUPERSEDED. 17-row FIND-03 KI Non-Promotion Ledger emitted (0 of 17 candidates qualified under D-09 3-predicate gating — accepted-design + non-exploitable + sticky; `KNOWN-ISSUES.md` UNMODIFIED per D-16 default path). Phase 238 per-consumer freeze proofs closed 146 rows (124 SAFE + 22 EXCEPTION matching EXC-01..04 distribution); Phase 239 proved `rngLockedFlag` AIRTIGHT + 62-row permissionless sweep (24 respects-rngLocked + 38 proven-orthogonal) + re-justified both documented asymmetries (lootbox index-advance + `phaseTransitionActive`) from first principles; Phase 240 proved VRF-available gameover-jackpot branch fully deterministic (19-row inventory / determinism proof / 28 GOVAR / 2 GOTRIG DISPROVEN_PLAYER_REACHABLE_VECTOR / BOTH_DISJOINT vs F-29-04); Phase 241 confirmed ONLY_NESS_HOLDS_AT_HEAD with Gate A set-equality + Gate B grep backstop, discharging 29/29 Phase 240 forward-cite tokens (`DISCHARGED_RE_VERIFIED_AT_HEAD`); Phase 242 emitted zero forward-cites (D-25 terminal-phase rule). Cross-repo READ-only pattern from v28.0/v29.0 carried forward — zero `contracts/` or `test/` writes throughout the milestone. Deliverable: `audit/FINDINGS-v30.0.md`.
 
 ## Completed Milestone: v29.0 Post-v27 Contract Delta Audit
 

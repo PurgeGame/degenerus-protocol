@@ -326,6 +326,61 @@
 
 ---
 
+## Milestone: v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit
+
+**Shipped:** 2026-04-20
+**Phases:** 6 (237, 238, 239, 240, 241, 242) | **Plans:** 14 | **Requirements:** 26/26 satisfied
+
+### What Was Built
+- Exhaustive per-consumer VRF determinism audit at HEAD `7ab515fe` — 146 VRF-consuming call sites enumerated (no sampling) and classified into 5 path families
+- Per-consumer backward freeze + forward freeze + gating verification on all 146 rows (124 SAFE + 22 EXCEPTION matching EXC-01..04 distribution; 0 CANDIDATE_FINDING at the freeze-proof layer)
+- `rngLockedFlag` proven AIRTIGHT with closed-form biconditional Invariant Proof; 62-row permissionless sweep (3-class closed taxonomy); both documented asymmetries (lootbox index-advance + `phaseTransitionActive`) re-justified from first principles
+- VRF-available gameover-jackpot branch proven fully deterministic — 19-row inventory / 28-row GOVAR state-freeze / 2-row GOTRIG trigger-timing DISPROVEN / GO-05 dual-disjointness BOTH_DISJOINT
+- ONLY_NESS_HOLDS_AT_HEAD for the 4 KNOWN-ISSUES RNG exceptions — Gate A set-equality + Gate B grep backstop; EXC-02/03/04 predicates all RE_VERIFIED_AT_HEAD
+- `audit/FINDINGS-v30.0.md` published (729 lines, 10 sections per D-23): 17 F-30-NNN INFO finding blocks + 31-row Regression Appendix (31 PASS / 0 REGRESSED / 0 SUPERSEDED) + 17-row FIND-03 Non-Promotion Ledger (0 KI promotions) + §10 MILESTONE_V30_CLOSED_AT_HEAD_7ab515fe attestation
+- 29/29 Phase 240 → 241 forward-cite tokens discharged with literal `DISCHARGED_RE_VERIFIED_AT_HEAD`; 0 Phase 241 → 242 residuals (D-25 terminal-phase rule satisfied)
+
+### What Worked
+- **Fresh-eyes-from-first-principles discipline paid off** — every assertion re-proven at HEAD `7ab515fe`; prior-milestone artifacts (v25.0 Phase 215, v29.0 Phase 235 Plans 03-04, v3.7/v3.8) cited as context but NOT relied upon. No false-confidence carry-over.
+- **HEAD anchor lockdown (D-17) caught zero drift** — contract tree byte-identical to v29.0 `1646d5af` throughout the milestone; every phase verified `git diff 7ab515fe -- contracts/` empty at task boundaries, so any mid-milestone contract change would have been visible immediately.
+- **146-row universe-set pattern** gave every downstream phase a precise row-aligned scope — Phase 238's BWD/FWD/gating tables, Phase 240's gameover subset (19 rows), Phase 241's 22 EXCEPTION row set-equality all reconcile cleanly against a single 146-row inventory. Removed ambiguity about "what's in scope."
+- **Closed verdict taxonomies per phase** (BWD-03 4-value actor-cell vocabulary, 3-class permissionless sweep, Named Gate 5-value taxonomy, FIND-03 3-predicate + 2-verdict KI ledger) prevented free-form verdicts and made row-level mechanical reconciliation possible between phases.
+- **Forward-cite discharge ledger pattern** (Phase 240 → 241) — 29 tokens with unique IDs (EXC-241-023..051) preserved audit chain-of-custody across parallel phase execution; every token verifiable at Phase 242 § 9 without re-running the underlying proofs.
+- **D-26 two-commit plan-close pattern** (Phase 242 Task 5): audit file + SUMMARY in Commit 1; STATE + ROADMAP orchestrator-driven in Commit 2. Enables forensic reconstruction and keeps the audit deliverable commit separate from the orchestrator tracking commit.
+- **D-01 single consolidated plan per phase** (Phase 241 + Phase 242 both overrode ROADMAP's 2-plan split) — enabled atomic milestone-closure attestation where all 5 task commits are sequentially attributable to one plan's scope.
+- **Pre-existing `feedback_rng_backward_trace.md` + `feedback_rng_commitment_window.md`** (from v29.0 retrospective) were applied uniformly across Phase 238 — backward trace from every consumer to rawFulfillRandomWords paired with commitment-window enumeration at every request-fulfillment boundary.
+
+### What Was Inefficient
+- **No MILESTONE-AUDIT.md was run** — followed v28.0/v29.0 precedent (optional), but the pre-close artifact audit DID surface 2 stale quick-task tracker entries (`260327-n7h`, `260327-q8y`) that an earlier MILESTONE-AUDIT would have caught cleaner. They're unrelated to v30.0 but now carry forward as "known deferred items at close" in MILESTONES.md a second time (first time in v29.0).
+- **REQUIREMENTS.md traceability table stayed stale during execution** — remained "Pending" through the milestone even as phases completed; only the archived `v30.0-REQUIREMENTS.md` reflects final status. Same tracking-sync deferral pattern flagged as fragile in v29.0 retrospective.
+- **ROADMAP.md accumulated extensive per-phase detail during execution** (the v30.0 `<details>` block grew to ~120 lines including Phase Details + Progress table) — all of which had to be extracted at milestone-close into `milestones/v30.0-ROADMAP.md`. Future milestones may benefit from keeping ROADMAP.md compact throughout execution and accumulating detail directly into the archive-target file.
+- **Phase 242 plan was 1130 lines** with 5 sequential tasks in a single plan — worked cleanly but the verifier's `key_links` regex patterns in the 244-line plan went through 1 revision iteration (3 BLOCKER + 4 WARNING) before plan-checker approval. Plan-checker is carrying real value; allow for revision cycles in terminal consolidation plans.
+
+### Patterns Established
+- **HEAD anchor lockdown (D-17) as a cross-phase discipline** — every phase verifies `git diff {HEAD_ANCHOR} -- contracts/` empty at every task boundary. Catches any silent contract drift within the milestone.
+- **Closed verdict taxonomies per phase dimension** — no free-form verdicts; every cell value comes from an explicitly-enumerated vocabulary (BWD-03 4-actor cells; RNG-02 3-class; Named Gate 5-value; GO-02 3-verdict; FIND-03 3-predicate). Enables mechanical cross-phase reconciliation and prevents verdict creep.
+- **Forward-cite discharge ledger** (prev-phase emits tokens with unique IDs → next-phase emits `DISCHARGED_RE_VERIFIED_AT_HEAD` ledger) — chain-of-custody for audit assertions across parallel phases; avoids re-running proofs at consolidation.
+- **D-26 two-commit plan-close** — audit deliverable + SUMMARY in one commit; STATE + ROADMAP orchestrator tracking in a second commit. Separates content from tracking and gives clean forensic boundaries.
+- **D-09 KI-eligibility 3-predicate gate** (accepted-design + non-exploitable + sticky) — not every audit observation belongs in `KNOWN-ISSUES.md`; codifies the warden-facing scope gate first established in v29.0 as a formal 3-predicate test. 0 of 17 candidates qualified under this gate in v30.0.
+- **D-25 terminal-phase zero-forward-cites rule** — any finding that cannot close in the milestone MUST route to an F-NN-NNN block or explicit user-acknowledged rollover addendum. Prevents "deferred to next milestone" scope creep.
+- **Universe-set per-row reconciliation** — establish the universe as a numbered row set once (Phase 237 INV-237-NNN = 146 rows), then every downstream phase cites by row ID rather than re-deriving. Phase 240 gameover = 19-row subset; Phase 241 EXCEPTION = 22-row subset; Phase 242 proof table = full 146×5 grid.
+
+### Key Lessons
+1. **Fresh-eyes audits are a different product from delta audits** — v29.0 was a delta audit (10 commits in scope); v30.0 was a fresh-eyes universe audit (every VRF consumer in `contracts/`, prior-artifact cites optional not load-bearing). Same methodology (BWD + FWD + adversarial closure) but different scope posture — fresh-eyes requires re-proving assertions you could have trusted in a delta.
+2. **146 rows × 5 proof dimensions = 730 verdict cells** is tractable when every column has a closed taxonomy and the universe is row-aligned upstream. Without universe alignment, cross-phase verdict reconciliation would explode combinatorially.
+3. **"ONLY-ness" claims require two gates**: set-equality with a prior exhaustive enumeration (Gate A) + fresh-grep backstop over the pattern space (Gate B). Either alone is insufficient: Gate A trusts prior enumeration is exhaustive; Gate B trusts the grep pattern space is exhaustive. Combining them covers the cases where either assumption drifts.
+4. **Re-justifying documented asymmetries from first principles** (RNG-03 § A and § B) was more valuable than the direct RNG-01/RNG-02 sweep — asymmetries are where prior-milestone shortcuts most likely hide, and proving them by exhaustion over the storage-primitive set produced clean first-principles warrants.
+5. **Zero on-chain vulnerabilities is the expected outcome of a READ-only carry-forward audit, not a success claim** — the value is the audit artifact (730-cell proof table + 17 F-30-NNN INFO blocks + 29/29 forward-cite discharges), which now exists as public evidence the invariant holds. The deliverable IS the product.
+6. **Plan-checker carries real value on large consolidation plans** — Phase 242's 1130-line plan went through 3 BLOCKER + 4 WARNING resolutions before approval; the plan that executed was measurably better than the first draft. Allow time for plan-checker iteration on terminal-phase plans.
+7. **Byte-identity checks on upstream deliverables** (`git diff {plan_start_commit} -- 'audit/v30-*.md' ':!scratch'` empty) caught zero drift but would have caught any silent mid-execution edit. Cheap to run at task boundaries, high signal if it ever fires.
+
+### Cost Observations
+- Model mix: ~95% opus (planner + executor across all phases), ~5% sonnet (plan-checker + verifier)
+- Sessions: ~3 (planning + parallel execution of 238/239/240 + terminal 241/242)
+- Notable: Phase 242 executor produced a 729-line audit deliverable + 230-line SUMMARY in one sustained run (~25 min wall-clock, fully autonomous, no checkpoints hit, ~113 tool uses, ~429k tokens). Single-plan consolidation with 5 sequential tasks scales well with 1M-context models.
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -346,6 +401,7 @@
 | v6.0 | 6 | 12 | Implementation milestone: test cleanup, storage/gas fixes, DegenerusCharity contract, game integration |
 | v7.0 | 4 | 11 | Delta audit methodology; formatting-only triage; plan-vs-reality reconciliation; parallel adversarial audits |
 | v29.0 | 8 | 21 | Mid-milestone phase insertion (232.1) with decimal numbering; user-surfaced retroactive disclosure pattern (F-29-04); 5-plan parallel Wave 1 in single execution; warden-facing scope gate for KI promotions; "RNG-consumer determinism" invariant named |
+| v30.0 | 6 | 14 | Fresh-eyes universe-audit posture (146-row VRF consumer inventory); HEAD anchor lockdown (D-17) as cross-phase discipline; closed verdict taxonomies per dimension; forward-cite discharge ledger chain-of-custody; D-09 3-predicate KI-eligibility gate; D-26 two-commit plan-close; D-25 terminal-phase zero-forward-cites; Gate A + Gate B two-gate ONLY-ness proof pattern |
 
 ### Top Lessons (Verified Across Milestones)
 

@@ -1,5 +1,33 @@
 # Milestones
 
+## v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit (Shipped: 2026-04-20)
+
+**Phases completed:** 6 phases (237, 238, 239, 240, 241, 242), 14 plans, 26/26 requirements
+**Audit baseline:** HEAD `7ab515fe` (contract tree byte-identical to v29.0 `1646d5af`; all post-v29 commits docs-only)
+**Result:** Zero on-chain vulnerabilities. 17 INFO findings (F-30-001..F-30-017). 31 prior findings re-verified: 31 PASS + 0 REGRESSED + 0 SUPERSEDED. 0 of 17 candidates promoted to KNOWN-ISSUES.md (D-05 default path).
+
+**Key accomplishments:**
+
+- **Exhaustive per-consumer VRF determinism proof at HEAD `7ab515fe`**: Phase 237 enumerated 146 VRF-consuming call sites in `contracts/` (no sampling) typed across 5 path families (daily 91 / mid-day-lootbox 19 / gap-backfill 3 / gameover-entropy 7 / other 26); Phase 238 produced per-consumer backward freeze + forward freeze + gating verification on all 146 rows (124 SAFE + 22 EXCEPTION matching the EXC-01..04 distribution); Named Gate distribution rngLocked=106 / lootbox-index-advance=20 / semantic-path-gate=18 / NO_GATE_NEEDED_ORTHOGONAL=2 with Mutation-Path Coverage EVERY_PATH_BLOCKED=144.
+- **`rngLockedFlag` proven AIRTIGHT** (Phase 239 Plan 01): 1 Set-Site + 3 Clear-Sites + 9-row Path Enumeration (7 SET_CLEARS_ON_ALL_PATHS + 2 CLEAR_WITHOUT_SET_UNREACHABLE); closed-form biconditional Invariant Proof; zero reachable path produces set-without-clear or clear-without-matching-set.
+- **62-row permissionless sweep** (Phase 239 Plan 02): closed 3-class classification (respects-rngLocked=24 / respects-equivalent-isolation=0 / proven-orthogonal=38 / CANDIDATE_FINDING=0); two-pass methodology (mechanical grep + semantic classification) with reviewer-reproducible commands.
+- **Two documented asymmetries re-justified from first principles** (Phase 239 Plan 03): lootbox index-advance proven equivalent to flag-based isolation via 6-step freeze-guarantee composition; `phaseTransitionActive` exemption proven to admit only advanceGame-origin writes via single-caller rooting proof.
+- **VRF-available gameover-jackpot branch proven fully deterministic** (Phase 240): 19-row inventory + GO-02 determinism proof (7 SAFE + 8 EXC-02 + 4 EXC-03); 28-row GOVAR state-freeze enumeration + 19-row Per-Consumer Cross-Walk; GO-04 2-row trigger-timing DISPROVEN_PLAYER_REACHABLE_VECTOR + 3 non-player closed verdicts; GO-05 dual-disjointness BOTH_DISJOINT (F-29-04 scope distinct from gameover jackpot-input determinism at both inventory-level and state-variable-level).
+- **ONLY_NESS_HOLDS_AT_HEAD for the 4 KNOWN-ISSUES RNG exceptions** (Phase 241): Gate A set-equality with Phase 238's 22-EXCEPTION distribution + Gate B grep backstop over D-07 surface universe; EXC-02 / EXC-03 / EXC-04 all RE_VERIFIED_AT_HEAD via their closed predicate tests; 29/29 Phase 240 forward-cite tokens discharged `DISCHARGED_RE_VERIFIED_AT_HEAD`.
+- **`audit/FINDINGS-v30.0.md` published** (Phase 242, 729 lines, 10 sections per D-23): Executive Summary + D-08 5-bucket severity rubric + 146×5=730-cell Per-Consumer Proof Table + dedicated Gameover-Jackpot Section + 17 F-30-NNN Finding Blocks (F-30-001..F-30-017) + 31-row Regression Appendix (D-12 chronological-oldest-first) + 17-row Non-Promotion Ledger (all NOT_KI_ELIGIBLE) + 29/29 forward-cite closure verification + §10 MILESTONE_V30_CLOSED_AT_HEAD_7ab515fe attestation.
+- **Zero forward-cites emitted** per D-25 terminal-phase rule — any finding that could not close in v30.0 would have routed to an F-30-NNN block or explicit rollover addendum; actual emitted count was 0.
+- **`KNOWN-ISSUES.md` UNMODIFIED** per D-16 default path — all 17 F-30-NNN candidates failed D-09 3-predicate KI gating (accepted-design + non-exploitable + sticky; predominantly failing the sticky predicate).
+- **Cross-repo READ-only pattern carried forward** from v28.0/v29.0 — zero `contracts/` or `test/` writes throughout the milestone; 16 upstream `audit/v30-*.md` files byte-identical since Phase 242 plan-start commit `7add576d`.
+
+**Process notes:**
+
+- Both Phase 241 and Phase 242 consolidated to single plans (D-01), overriding the original ROADMAP's 2-plan split — enabled atomic milestone-closure attestation.
+- D-26 two-commit plan-close pattern established for Phase 242: audit file + SUMMARY in Commit 1 (`97f9e386`); STATE + ROADMAP orchestrator-driven in Commit 2 (`f10d7751`). Enables forensic reconstruction.
+- 17 F-30-NNN IDs span 21 distinct INV-237-NNN subjects (8 dual-cited per D-07 source-attribution preservation). All INFO per D-08 / Phase 237 D-15 precedent.
+- Known deferred items at close: 2 stale quick-task tracker entries (`260327-n7h`, `260327-q8y` — dated 2026-03-27, pre-v30.0 carryover). Both have SUMMARY.md; audit tool flags them on frontmatter status only. See STATE.md "Deferred Items".
+
+---
+
 ## v29.0 Post-v27 Contract Delta Audit (Shipped: 2026-04-18)
 
 **Phases completed:** 8 phases (230, 231, 232, 232.1, 233, 234, 235, 236), 21 plans, 25/25 requirements
