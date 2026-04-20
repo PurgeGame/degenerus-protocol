@@ -166,7 +166,8 @@
   2. A regression appendix in `audit/FINDINGS-v30.0.md` re-verifies v29.0 RNG-adjacent findings (F-29-03, F-29-04) + v25.0 + v3.7 + v3.8 rngLocked invariant items against current baseline with PASS / REGRESSED / SUPERSEDED verdicts per item
   3. Every finding emitted by Phases 237-241 has a stable `F-30-NN` ID, severity classification, source phase + file:line citation, and resolution status in `audit/FINDINGS-v30.0.md`
   4. `KNOWN-ISSUES.md` is updated with any new design-decision entries referencing `F-30-NN` IDs — items that qualify are accepted design decisions, tolerable theoretical non-uniformities, or non-exploitable asymmetries discovered fresh-eyes in v30.0
-**Plans**: TBD (expected 2 plans — Plan 01 creates `audit/FINDINGS-v30.0.md` with executive summary + per-consumer proof table + gameover section + F-30-NN blocks; Plan 02 appends regression appendix + KI promotions; modeled on 236-01/236-02 and 217-01/217-02 precedents)
+**Plans**: 1 plan (single consolidated per CONTEXT.md D-01; overrides ROADMAP's expected 2-plan split)
+  - [ ] 242-01-PLAN.md — FIND-01 (executive summary + 146×5=730-cell per-consumer proof table + dedicated gameover-jackpot section + 17 F-30-NNN finding blocks) + REG-01 (v29.0 F-29-03 + F-29-04 regression, 2 rows) + REG-02 (v3.7 + v3.8 + v25.0 rngLocked invariant items regression, 29 rows) + FIND-02 (combined 31-row regression appendix) + FIND-03 (D-09 3-predicate KI gating walk on all 17 candidates, expected 0 promotions per D-05) → single consolidated deliverable `audit/FINDINGS-v30.0.md` with 10 sections per D-23; 5 sequential tasks per D-03 (Task 1 exec summary + F-30-NNN IDs / Task 2 proof table + gameover section / Task 3 REG-01 / Task 4 REG-02 / Task 5 FIND-02 + FIND-03 + milestone closure attestation); HEAD anchor `7ab515fe` per D-17; READ-only contracts/test per D-24; terminal-phase zero forward-cites per D-25.
 
 ## Progress
 
