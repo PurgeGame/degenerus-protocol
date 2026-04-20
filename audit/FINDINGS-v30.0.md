@@ -73,16 +73,235 @@ See § 10 Milestone Closure Attestation for the D-26 6-point attestation block t
 
 ## 3. Per-Consumer Proof Table
 
-_[Populated in Task 2 — see Task 2 section below]_
+Consolidates Phases 237/238/239/240 outputs per ROADMAP SC-1 literal ("per-consumer proof table covering INV + BWD + FWD + RNG + GO outputs from Phases 237-240"). Sources: `audit/v30-CONSUMER-INVENTORY.md` (INV) / `audit/v30-FREEZE-PROOF.md` (BWD + FWD + Named Gate) / `audit/v30-RNGLOCK-STATE-MACHINE.md` + `audit/v30-PERMISSIONLESS-SWEEP.md` + `audit/v30-ASYMMETRY-RE-JUSTIFICATION.md` (RNG) / `audit/v30-GAMEOVER-JACKPOT-SAFETY.md` (GO). All cross-cites are READ-only lookups (D-18); no fresh derivation. Sources `re-verified at HEAD 7ab515fe`.
+
+Table is grep-stable Markdown pipe-table per D-22. Row IDs are literal three-digit-zero-padded `INV-237-NNN`.
+
+**Column semantics:**
+
+- **Row ID:** Phase 237 Consumer Index anchor.
+- **Consumer:** function/site label from Phase 237 Universe List.
+- **KI Cross-Ref:** `KI: EXC-NN` for the 22 KI-exception rows (2 EXC-01 + 8 EXC-02 + 4 EXC-03 + 8 EXC-04 per Phase 237 Plan 02 Decisions); `—` (em-dash) for the 124 SAFE rows.
+- **INV:** path-family verdict from Phase 237 Plan 02 Classification (`daily` 91 / `mid-day-lootbox` 19 / `gap-backfill` 3 / `gameover-entropy` 7 / `other` 26); KI-exception rows display `KI:EXC-NN` instead per D-10.
+- **BWD:** Phase 238 BWD-01/02/03 verdict (124 `SAFE` / 22 `EXCEPTION (KI: EXC-NN)`).
+- **FWD:** Phase 238 FWD-01/02/03 verdict (matches BWD per Phase 238-03 Effectiveness-Verdict derivation rule — both derived from the 146-row Consolidated Freeze-Proof Table).
+- **RNG:** Phase 239 verdict by Named Gate precedence: `respects-rngLocked` (106 rows Named Gate = `rngLocked` SAFE) / `respects-equivalent-isolation` (12 rows Named Gate = `lootbox-index-advance` SAFE; Asymmetry A equivalence per `audit/v30-ASYMMETRY-RE-JUSTIFICATION.md`) / `proven-orthogonal` (6 rows Named Gate = `semantic-path-gate` SAFE) / `N/A (KI:EXC-NN)` (22 KI-exception rows; includes EXC-01 `NO_GATE_NEEDED_ORTHOGONAL` rows).
+- **GO:** Phase 240 GO-01 19-row gameover-cluster classification; `gameover-cluster` for the 19 rows in Phase 240 GO-01 inventory / `N/A` for the 127 non-gameover rows.
+
+**Domain-note (per Plan D-10 clarification):** the 106-row `respects-rngLocked` count below is the Phase 239 RNG-01 **consumer-level** scope (over 146 consumers), DISTINCT from the 23-row `respects-rngLocked` count in the Phase 239 RNG-02 61-row **permissionless-sweep** scope (over 61 external/public mutating functions). The two counts measure different domains. Per-consumer table uses 106 (consumers); any permissionless-sweep cross-cite uses `23 / 61` per `audit/v30-PERMISSIONLESS-SWEEP.md:23` ground truth.
+
+| Row ID | Consumer | KI Cross-Ref | INV | BWD | FWD | RNG | GO |
+| ------ | -------- | ------------ | --- | --- | --- | --- | -- |
+| INV-237-001 | processCoinflipPayouts | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-002 | processCoinflipPayouts | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-003 | processCoinflipPayouts | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-004 | processCoinflipPayouts | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-005 | processAffiliatePayment (no-referrer branch) | KI: EXC-01 | KI:EXC-01 | EXCEPTION (KI: EXC-01) | EXCEPTION (KI: EXC-01) | N/A (KI:EXC-01) | N/A |
+| INV-237-006 | processAffiliatePayment (referred branch) | KI: EXC-01 | KI:EXC-01 | EXCEPTION (KI: EXC-01) | EXCEPTION (KI: EXC-01) | N/A (KI:EXC-01) | N/A |
+| INV-237-007 | deityBoonData (view helper) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-008 | deityBoonData (view helper) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-009 | deityBoonData (view helper) | — | other | SAFE | SAFE | proven-orthogonal | N/A |
+| INV-237-010 | resolveRedemptionLootbox (re-hashing loop) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-011 | sampleFarFutureTickets (view) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-012 | runBafJackpot (slice B pick) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-013 | runBafJackpot (slice D far-future 1st draw) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-014 | runBafJackpot (slice D2 far-future 2nd draw) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-015 | runBafJackpot (scatter per-round) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-016 | rollDailyQuest | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-017 | _bonusQuestType (weighted roll helper) | — | other | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-018 | rollLevelQuest | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-019 | deityBoonSlots (pure view) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-020 | claimRedemption (lootbox-portion path) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-021 | advanceGame (mid-day lootbox gate check) | — | mid-day-lootbox | SAFE | SAFE | respects-equivalent-isolation | N/A |
+| INV-237-022 | advanceGame (daily-drain gate pre-check) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-023 | advanceGame (daily-drain gate pre-check) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-024 | advanceGame (ticket-buffer swap for daily RNG) | KI: EXC-03 | KI:EXC-03 | EXCEPTION (KI: EXC-03) | EXCEPTION (KI: EXC-03) | N/A (KI:EXC-03) | gameover-cluster |
+| INV-237-025 | advanceGame (FF drain processing) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-026 | advanceGame (near-future ticket prep) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-027 | advanceGame (L1 emitDailyWinningTraits) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-028 | advanceGame (L1 main coin jackpot) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-029 | advanceGame (L1 bonus coin jackpot) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-030 | advanceGame (purchase-phase daily jackpot) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-031 | advanceGame (purchase-phase near-future coin jackpot) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-032 | advanceGame (purchase-phase consolidation yieldSurplus) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-033 | advanceGame (purchase-phase pool consolidation) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-034 | advanceGame (rollLevelQuest call) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-035 | advanceGame (jackpot-phase resume) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-036 | advanceGame (jackpot-phase coin+tickets) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-037 | advanceGame (jackpot-phase fresh daily) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-038 | _consolidatePoolsAndRewardJackpots | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-039 | _consolidatePoolsAndRewardJackpots | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-040 | _consolidatePoolsAndRewardJackpots | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-041 | _consolidatePoolsAndRewardJackpots | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-042 | _consolidatePoolsAndRewardJackpots | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-043 | _consolidatePoolsAndRewardJackpots (keep-roll seed) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-044 | requestLootboxRng (VRF request origination, mid-day) | — | other | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-045 | requestLootboxRng (ticket buffer swap) | KI: EXC-03 | KI:EXC-03 | EXCEPTION (KI: EXC-03) | EXCEPTION (KI: EXC-03) | N/A (KI:EXC-03) | gameover-cluster |
+| INV-237-046 | rngGate | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-047 | rngGate | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-048 | rngGate (_applyDailyRng call) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-049 | rngGate (redemption roll) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-050 | rngGate (_finalizeLootboxRng call) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-051 | _finalizeLootboxRng | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-052 | _gameOverEntropy (short-circuit) | — | gameover-entropy | SAFE | SAFE | respects-rngLocked | gameover-cluster |
+| INV-237-053 | _gameOverEntropy (fresh VRF word) | KI: EXC-03 | KI:EXC-03 | EXCEPTION (KI: EXC-03) | EXCEPTION (KI: EXC-03) | N/A (KI:EXC-03) | gameover-cluster |
+| INV-237-054 | _gameOverEntropy (consumer cluster) | KI: EXC-03 | KI:EXC-03 | EXCEPTION (KI: EXC-03) | EXCEPTION (KI: EXC-03) | N/A (KI:EXC-03) | gameover-cluster |
+| INV-237-055 | _gameOverEntropy (historical fallback call) | KI: EXC-02 | KI:EXC-02 | EXCEPTION (KI: EXC-02) | EXCEPTION (KI: EXC-02) | N/A (KI:EXC-02) | gameover-cluster |
+| INV-237-056 | _gameOverEntropy (fallback apply) | KI: EXC-02 | KI:EXC-02 | EXCEPTION (KI: EXC-02) | EXCEPTION (KI: EXC-02) | N/A (KI:EXC-02) | gameover-cluster |
+| INV-237-057 | _gameOverEntropy (fallback coinflip) | KI: EXC-02 | KI:EXC-02 | EXCEPTION (KI: EXC-02) | EXCEPTION (KI: EXC-02) | N/A (KI:EXC-02) | gameover-cluster |
+| INV-237-058 | _gameOverEntropy (fallback redemption roll) | KI: EXC-02 | KI:EXC-02 | EXCEPTION (KI: EXC-02) | EXCEPTION (KI: EXC-02) | N/A (KI:EXC-02) | gameover-cluster |
+| INV-237-059 | _gameOverEntropy (fallback lootbox finalize) | KI: EXC-02 | KI:EXC-02 | EXCEPTION (KI: EXC-02) | EXCEPTION (KI: EXC-02) | N/A (KI:EXC-02) | gameover-cluster |
+| INV-237-060 | _getHistoricalRngFallback | KI: EXC-02 | KI:EXC-02 | EXCEPTION (KI: EXC-02) | EXCEPTION (KI: EXC-02) | N/A (KI:EXC-02) | gameover-cluster |
+| INV-237-061 | _getHistoricalRngFallback | KI: EXC-02 | KI:EXC-02 | EXCEPTION (KI: EXC-02) | EXCEPTION (KI: EXC-02) | N/A (KI:EXC-02) | gameover-cluster |
+| INV-237-062 | _getHistoricalRngFallback | KI: EXC-02 | KI:EXC-02 | EXCEPTION (KI: EXC-02) | EXCEPTION (KI: EXC-02) | N/A (KI:EXC-02) | gameover-cluster |
+| INV-237-063 | _requestRng (VRF request origination, daily) | — | other | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-064 | _tryRequestRng (VRF request origination, try branch) | — | other | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-065 | rawFulfillRandomWords (daily branch SSTORE) | — | other | SAFE | SAFE | proven-orthogonal | N/A |
+| INV-237-066 | rawFulfillRandomWords (mid-day branch SSTORE) | — | other | SAFE | SAFE | proven-orthogonal | N/A |
+| INV-237-067 | _backfillGapDays | — | gap-backfill | SAFE | SAFE | proven-orthogonal | N/A |
+| INV-237-068 | _backfillGapDays (coinflip payouts) | — | gap-backfill | SAFE | SAFE | proven-orthogonal | N/A |
+| INV-237-069 | _backfillOrphanedLootboxIndices | — | gap-backfill | SAFE | SAFE | proven-orthogonal | N/A |
+| INV-237-070 | runDecimatorJackpot | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-071 | _decWinningSubbucket (library-wrapper helper) | — | other | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-072 | runTerminalDecimatorJackpot | — | gameover-entropy | SAFE | SAFE | respects-rngLocked | gameover-cluster |
+| INV-237-073 | _placeFullTicketBetCore (gate) | — | mid-day-lootbox | SAFE | SAFE | respects-equivalent-isolation | N/A |
+| INV-237-074 | _resolveFullTicketBet | — | mid-day-lootbox | SAFE | SAFE | respects-equivalent-isolation | N/A |
+| INV-237-075 | _resolveFullTicketBet (spin 0) | — | mid-day-lootbox | SAFE | SAFE | respects-equivalent-isolation | N/A |
+| INV-237-076 | _resolveFullTicketBet (spin N>0) | — | mid-day-lootbox | SAFE | SAFE | respects-equivalent-isolation | N/A |
+| INV-237-077 | handleGameOverDrain (rngWord SLOAD) | — | gameover-entropy | SAFE | SAFE | respects-rngLocked | gameover-cluster |
+| INV-237-078 | handleGameOverDrain (terminal decimator) | — | gameover-entropy | SAFE | SAFE | respects-rngLocked | gameover-cluster |
+| INV-237-079 | handleGameOverDrain (terminal jackpot) | — | gameover-entropy | SAFE | SAFE | respects-rngLocked | gameover-cluster |
+| INV-237-080 | runTerminalJackpot | — | gameover-entropy | SAFE | SAFE | respects-rngLocked | gameover-cluster |
+| INV-237-081 | runTerminalJackpot (_rollWinningTraits) | — | gameover-entropy | SAFE | SAFE | respects-rngLocked | gameover-cluster |
+| INV-237-082 | payDailyJackpot (jackpot phase main _rollWinningTraits) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-083 | payDailyJackpot (source-level offset) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-084 | payDailyJackpot (jackpot phase entropyDaily) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-085 | payDailyJackpot (solo bucket index) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-086 | payDailyJackpot (jackpot phase bonus traits) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-087 | payDailyJackpot (bonus target level) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-088 | payDailyJackpot (purchase phase _rollWinningTraits) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-089 | payDailyJackpot (purchase phase bonus traits) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-090 | payDailyJackpot (purchase phase bonus target level) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-091 | payDailyJackpot (purchase phase _executeJackpot entropy) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-092 | payDailyJackpot (_distributeLootboxAndTickets rngWord passthrough) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-093 | payDailyJackpotCoinAndTickets (Phase 2 trait rolls) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-094 | payDailyJackpotCoinAndTickets (entropyDaily) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-095 | payDailyJackpotCoinAndTickets (entropyNext) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-096 | payDailyJackpotCoinAndTickets (near-future coin) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-097 | _runEarlyBirdLootboxJackpot | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-098 | _runEarlyBirdLootboxJackpot (_randTraitTicket call) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-099 | distributeYieldSurplus (_addClaimableEth entropy passthrough) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-100 | _distributeLootboxAndTickets | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-101 | _distributeTicketsToBuckets | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-102 | _executeJackpot (solo bucket shares) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-103 | _runJackpotEthFlow (offset) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-104 | _resumeDailyEth (entropy) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-105 | _resumeDailyEth (_rollWinningTraits) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-106 | _resumeDailyEth (shareBpsByBucket) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-107 | _processDailyEth (remainderIdx) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-108 | _processDailyEth (bucket entropy rotation) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-109 | _resolveTraitWinners (entropy advance) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-110 | _randTraitTicket (winner selection) | — | other | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-111 | payDailyCoinJackpot (bonus traits) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-112 | payDailyCoinJackpot (entropy + target) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-113 | emitDailyWinningTraits (main traits) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-114 | emitDailyWinningTraits (salted rng) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-115 | emitDailyWinningTraits (bonus traits) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-116 | _awardDailyCoinToTraitWinners (cursor) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-117 | _awardDailyCoinToTraitWinners (per-trait advance) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-118 | _awardFarFutureCoinJackpot (entropy seed) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-119 | _awardFarFutureCoinJackpot (per-sample advance) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-120 | _awardFarFutureCoinJackpot (level pick) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-121 | _awardFarFutureCoinJackpot (ticket pick) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-122 | _rollWinningTraits (bonus salted path) | — | other | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-123 | _dailyCurrentPoolBps | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-124 | _jackpotTicketRoll | KI: EXC-04 | KI:EXC-04 | EXCEPTION (KI: EXC-04) | EXCEPTION (KI: EXC-04) | N/A (KI:EXC-04) | N/A |
+| INV-237-125 | openLootBox (SLOAD rngWord) | — | mid-day-lootbox | SAFE | SAFE | respects-equivalent-isolation | N/A |
+| INV-237-126 | openLootBox (entropy derivation) | — | mid-day-lootbox | SAFE | SAFE | respects-equivalent-isolation | N/A |
+| INV-237-127 | openBurnieLootBox (SLOAD rngWord) | — | mid-day-lootbox | SAFE | SAFE | respects-equivalent-isolation | N/A |
+| INV-237-128 | openBurnieLootBox (entropy derivation) | — | mid-day-lootbox | SAFE | SAFE | respects-equivalent-isolation | N/A |
+| INV-237-129 | resolveLootboxDirect (entropy derivation) | — | other | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-130 | resolveRedemptionLootbox (entropy derivation) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-131 | _rollTargetLevel (first entropyStep) | KI: EXC-04 | KI:EXC-04 | EXCEPTION (KI: EXC-04) | EXCEPTION (KI: EXC-04) | N/A (KI:EXC-04) | N/A |
+| INV-237-132 | _rollTargetLevel (far-future entropyStep) | KI: EXC-04 | KI:EXC-04 | EXCEPTION (KI: EXC-04) | EXCEPTION (KI: EXC-04) | N/A (KI:EXC-04) | N/A |
+| INV-237-133 | _rollLootboxBoons (roll) | — | mid-day-lootbox | SAFE | SAFE | respects-equivalent-isolation | N/A |
+| INV-237-134 | _resolveLootboxRoll (entropyStep) | KI: EXC-04 | KI:EXC-04 | EXCEPTION (KI: EXC-04) | EXCEPTION (KI: EXC-04) | N/A (KI:EXC-04) | N/A |
+| INV-237-135 | _resolveLootboxRoll (DGNRS entropyStep) | KI: EXC-04 | KI:EXC-04 | EXCEPTION (KI: EXC-04) | EXCEPTION (KI: EXC-04) | N/A (KI:EXC-04) | N/A |
+| INV-237-136 | _resolveLootboxRoll (WWXRP entropyStep) | KI: EXC-04 | KI:EXC-04 | EXCEPTION (KI: EXC-04) | EXCEPTION (KI: EXC-04) | N/A (KI:EXC-04) | N/A |
+| INV-237-137 | _resolveLootboxRoll (large BURNIE entropyStep) | KI: EXC-04 | KI:EXC-04 | EXCEPTION (KI: EXC-04) | EXCEPTION (KI: EXC-04) | N/A (KI:EXC-04) | N/A |
+| INV-237-138 | _lootboxTicketCount (entropyStep) | KI: EXC-04 | KI:EXC-04 | EXCEPTION (KI: EXC-04) | EXCEPTION (KI: EXC-04) | N/A (KI:EXC-04) | N/A |
+| INV-237-139 | _lootboxDgnrsReward (tier selection) | — | mid-day-lootbox | SAFE | SAFE | respects-equivalent-isolation | N/A |
+| INV-237-140 | deityBoonSlots (rngWord gate view) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-141 | issueDeityBoon (rngWord gate) | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-142 | _deityBoonForSlot | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-143 | _raritySymbolBatch | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-144 | _rollRemainder | — | daily | SAFE | SAFE | respects-rngLocked | N/A |
+| INV-237-145 | processTicketBatch (entropy SLOAD) | — | mid-day-lootbox | SAFE | SAFE | respects-equivalent-isolation | N/A |
+| INV-237-146 | _calcAutoRebuy | — | other | SAFE | SAFE | respects-rngLocked | N/A |
+
+**Total cell count: 146 × 5 = 730 cells (per D-10); 124 SAFE rows × 5 verdict columns + 22 EXCEPTION rows × 5 verdict columns = 730.** Row count 146 is set-equal with Phase 237 Consumer Index (INV-237-001..INV-237-146 continuous, each appearing exactly once) and Phase 238 Consolidated Freeze-Proof Table (distribution 124 SAFE + 22 EXCEPTION).
+
+### § 3 Distribution Summary
+
+Reconciles per-column distributions against Phase 237-240 source counts (sources `re-verified at HEAD 7ab515fe`).
+
+| Column | SAFE / equivalent | EXCEPTION / KI | Total |
+| ------ | ----------------- | -------------- | ----- |
+| INV | 124 path-family (90 daily + 12 mid-day-lootbox + 3 gap-backfill + 7 gameover-entropy + 12 other) | 22 KI cross-ref (2 EXC-01 + 8 EXC-02 + 4 EXC-03 + 8 EXC-04) | 146 |
+| BWD | 124 SAFE | 22 EXCEPTION | 146 |
+| FWD | 124 SAFE | 22 EXCEPTION | 146 |
+| RNG | 106 respects-rngLocked + 12 respects-equivalent-isolation + 6 proven-orthogonal = 124 | 22 N/A (KI:EXC-NN) — closed-taxonomy per D-10 | 146 |
+| GO | 19 gameover-cluster | 127 N/A (non-gameover) | 146 |
+
+**INV-column note:** Phase 237 Plan 02 Classification assigns 91 daily / 19 mid-day-lootbox / 3 gap-backfill / 7 gameover-entropy / 26 other = 146. In the table above, path-family cells for KI-exception rows are replaced by `KI:EXC-NN` per D-10 — so the 124 SAFE rows split as (90 daily — INV-237-124 moves to KI:EXC-04) + (12 mid-day-lootbox — 7 mid-day EXC-04 rows move to KI) + 3 gap-backfill + 7 gameover-entropy + (12 other — 14 KI-exception rows originally in "other" move to KI) = 124. The 22 KI-exception rows are displayed with their KI labels. Reconciles to 146 total.
+
+**RNG-column precedence:** Phase 239 precedence order is rngLocked > lootbox-index-advance > proven-orthogonal > N/A. 22 KI-exception rows receive `N/A (KI:EXC-NN)` because D-10 prescribes KI cross-ref in lieu of redundant Phase 239 verdict (those rows' accepted-design KI covers the non-compliance envelope per Phase 241 § 3-§ 7 RE_VERIFIED_AT_HEAD verdicts).
 
 ---
 
 ## 4. Dedicated Gameover-Jackpot Section
 
-_[Populated in Task 2]_
+This section consolidates Phase 240's GO-01..05 verdicts at header-level summary depth per ROADMAP SC-1 literal ("dedicated gameover-jackpot section consolidating GO-01..05 verdicts"). References the Phase 240 consolidated 838-line deliverable `audit/v30-GAMEOVER-JACKPOT-SAFETY.md` for the full proof. All cross-cites are READ-only lookups (D-18); no fresh derivation of Phase 240 verdicts. Sources `re-verified at HEAD 7ab515fe`.
+
+### 4a. GO-01 — Gameover-VRF Consumer Inventory (19 rows)
+
+Phase 240 Plan 01 GO-01 Inventory: 19-row gameover-flow scope = 7 `gameover-entropy` (INV-237-052, -072, -077..081) + 8 `exception-prevrandao-fallback` (INV-237-055..062) + 4 `exception-mid-cycle-substitution` (INV-237-024, -045, -053, -054) per Phase 237 Plan 02 Decisions / Phase 240 GO-01 19-row scope. Full 19-row GO-240-001..019 enumeration at `audit/v30-240-01-INV-DET.md` § GO-01 + `audit/v30-GAMEOVER-JACKPOT-SAFETY.md` § GO-01.
+
+**Verdict:** `INVENTORY_MATCHES_PHASE_237_19_ROW_GAMEOVER_FLOW_SCOPE`.
+
+### 4b. GO-02 — VRF-Available Branch Determinism Proof
+
+Phase 240 Plan 01 GO-02 Determinism Proof Table: distribution `7 SAFE_VRF_AVAILABLE + 8 EXCEPTION (KI: EXC-02) + 4 EXCEPTION (KI: EXC-03) = 19` (matches Phase 240 Plan 01 Decisions exactly). 7 gameover-entropy rows use `NO_INFLUENCE_PATH (rngLocked)` for Player/Admin/Validator. 8 prevrandao-fallback rows use Player/Admin `NO_INFLUENCE_PATH (rngLocked)` + Validator `EXCEPTION` (per EXC-02 14-day gate). 4 F-29-04 rows use all 3 on-chain actors `NO_INFLUENCE_PATH (semantic-path-gate)` + VRF-oracle `EXCEPTION` (per EXC-03 tri-gate).
+
+Phase 241 § 5 (EXC-02) + § 6 (EXC-03) predicate re-verifications close both exception clusters at HEAD — `EXC-02 RE_VERIFIED_AT_HEAD` + `EXC-03 RE_VERIFIED_AT_HEAD`.
+
+**Verdict:** `VRF_AVAILABLE_BRANCH_SAFE_OR_KI_ACCEPTED_AT_HEAD`.
+
+### 4c. GO-03 — GOVAR State-Timing Proof + Per-Consumer Cross-Walk
+
+Phase 240 Plan 02 GO-03: 28 `GOVAR-240-NNN` rows × 6 columns per D-09. Named Gate distribution: `rngLocked` = 18 / `lootbox-index-advance` = 1 / `phase-transition-gate` = 4 / `semantic-path-gate` = 5 / `NO_GATE_NEEDED_ORTHOGONAL` = 0 = 28. Verdict distribution: `FROZEN_AT_REQUEST` = 3 / `FROZEN_BY_GATE` = 19 / `EXCEPTION (KI: EXC-02)` = 3 / `EXCEPTION (KI: EXC-03)` = 3 / `CANDIDATE_FINDING` = 0 = 28.
+
+19-row Per-Consumer Cross-Walk set-bijective with Plan 240-01 GO-240-NNN per D-24. Aggregate Verdict distribution: `SAFE` = 7 + `EXCEPTION (KI: EXC-02)` = 8 + `EXCEPTION (KI: EXC-03)` = 4 = 19. Full detail at `audit/v30-240-02-STATE-TIMING.md` § GO-03 + `audit/v30-GAMEOVER-JACKPOT-SAFETY.md` § GO-03.
+
+**Verdict:** `STATE_TIMING_FROZEN_AT_VRF_REQUEST_TIME_OR_KI_ACCEPTED`.
+
+### 4d. GO-04 — Trigger-Timing Disproof
+
+Phase 240 Plan 02 GO-04 Trigger Surface Table: 2 `GOTRIG-240-NNN` rows, both verdict `DISPROVEN_PLAYER_REACHABLE_VECTOR`. `GOTRIG-240-001` = 120-day liveness stall via `_livenessTriggered()` @ `DegenerusGameStorage.sol:1223-1230` (sole gameover-trigger predicate at HEAD — 4 call-sites); `GOTRIG-240-002` = pool-deficit safety-escape at `_handleGameOverPath:547` (protects against false-positive gameover). Fresh grep at HEAD surfaced no additional gameover-trigger surface (`gameOver = true` at `GameOverModule:136`). Corroborated by Phase 241 § 6 EXC-03-P2 `no-player-reachable-timing` predicate (uses Phase 240 GO-04 as evidence).
+
+**Verdict:** `NO_PLAYER_REACHABLE_TRIGGER_TIMING`.
+
+### 4e. GO-05 — Dual-Disjointness
+
+Phase 240 Plan 03 GO-05 `BOTH_DISJOINT` verdict. Inventory-level disjointness: `{4 F-29-04 rows: INV-237-024, -045, -053, -054}` ∩ `{7 VRF-available gameover-entropy rows: INV-237-052, -072, -077..081}` = ∅ (Set A=4, Set B=7, A∩B=0, A∪B=11 pairwise-distinct Row IDs). State-variable-level disjointness: `{6 F-29-04 write-buffer-swap primitive slots: ticketWriteSlot @ Storage:320 + ticketsFullyProcessed @:304 + ticketQueue[] @:456 + ticketsOwedPacked[][] @:460 + ticketCursor @:467 + ticketLevel @:470}` ∩ `{25 GOVAR-240-NNN jackpot-input sub-universe slots (28 GOVAR − 3 EXC-03 rows per D-14 jackpot-input sub-universe definition)}` = ∅ (Set C=6, Set D=25, C∩D=0). Corroborated by Phase 241 § 6 EXC-03-P3 `buffer-scope` predicate.
+
+**Verdict:** `BOTH_DISJOINT_VERIFIED_AT_HEAD`.
+
+### Combined § 4 Verdict
+
+`GAMEOVER_JACKPOT_SAFETY_CLOSED_AT_HEAD` — GO-01 inventory matches Phase 237 19-row gameover-flow scope; GO-02 VRF-available branch determinism proven SAFE or KI-accepted at HEAD; GO-03 state-timing frozen at VRF request time or KI-accepted; GO-04 no player-reachable trigger timing; GO-05 dual-disjointness verified. All 5 GO-NN verdicts closed at HEAD `7ab515fe`. Full proof depth in `audit/v30-GAMEOVER-JACKPOT-SAFETY.md` (838 lines, READ-only per D-15).
 
 ---
-
 ## 5. F-30-NNN Finding Blocks
 
 § 5 emits **17 F-30-NNN distinct observation emissions** (not 17 distinct INV-237-NNN subjects). 8 `INV-237-NNN` rows are cited under 2 F-30-NNN IDs each preserving source-attribution per D-07; the (F-30-XXX, F-30-YYY) cross-reference pairs are enumerated in the Dedup Cross-Reference Table below.
