@@ -969,14 +969,12 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         uint32 burnieMintUnits;
         uint32 adjustedQty;
         uint24 targetLevel;
-        uint256 ticketFreshEth;
         if (ticketCost != 0) {
             (
                 lootboxFlipCredit,
                 adjustedQty,
                 targetLevel,
-                burnieMintUnits,
-                ticketFreshEth
+                burnieMintUnits
             ) = _callTicketPurchase(
                     buyer,
                     buyer,
@@ -1087,9 +1085,9 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         }
 
         // --- Single quest handler call (post-action: handlers execute before score) ---
-        // MINT_ETH quest progress is credited 1:1 in wei from fresh ETH across both paths
-        // (ticket costWei + lootbox fresh ETH). Claimable-funded spend does not count.
-        uint256 ethFreshWei = ticketFreshEth + lootboxFreshEth;
+        // MINT_ETH quest progress is credited 1:1 in wei on the gross ETH-denominated
+        // ticket + lootbox spend, regardless of fresh-vs-recycled funding source.
+        uint256 ethMintSpendWei = ticketCost + lootBoxAmount;
         uint32 questStreak;
         {
             (
@@ -1099,7 +1097,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 bool questCompleted
             ) = quests.handlePurchase(
                     buyer,
-                    ethFreshWei,
+                    ethMintSpendWei,
                     burnieMintUnits,
                     lootBoxAmount,
                     priceWei,
@@ -1108,7 +1106,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             questStreak = streak;
             if (questCompleted) {
                 lootboxFlipCredit += questReward;
-                if (ethFreshWei > 0 && questType == 1) {
+                if (ethMintSpendWei > 0 && questType == 1) {
                     IDegenerusGame(address(this)).recordMintQuestStreak(buyer);
                 }
             }
@@ -1168,9 +1166,10 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             }
         }
 
-        // Unified earlybird award: one call per purchase covering both ticket and lootbox fresh ETH.
-        // Mathematically equivalent to two separate calls (quadratic curve telescopes).
-        _awardEarlybirdDgnrs(buyer, ticketFreshEth + lootboxFreshEth);
+        // Unified earlybird award: one call per purchase covering the full ticket +
+        // lootbox spend (fresh + recycled). Quadratic curve telescopes, so one call
+        // is mathematically equivalent to two.
+        _awardEarlybirdDgnrs(buyer, ticketCost + lootBoxAmount);
 
         uint256 finalClaimable = payKind == MintPaymentKind.DirectEth
             ? initialClaimable
@@ -1204,7 +1203,6 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     /// @return adjustedQty32 Adjusted ticket quantity (with boost, without x00 bonus)
     /// @return targetLevel The level tickets are queued to
     /// @return burnieMintUnits BURNIE-paid mint quest units
-    /// @return freshEth Fresh ETH portion of the ticket payment (0 for payInCoin and Claimable)
     function _callTicketPurchase(
         address buyer,
         address payer,
@@ -1221,8 +1219,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             uint256 bonusCredit,
             uint32 adjustedQty32,
             uint24 targetLevel,
-            uint32 burnieMintUnits,
-            uint256 freshEth
+            uint32 burnieMintUnits
         )
     {
         if (quantity == 0) revert E();
@@ -1289,6 +1286,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 payKind
             );
 
+            uint256 freshEth;
             if (payKind == MintPaymentKind.DirectEth) {
                 if (value < costWei) revert E();
                 freshEth = costWei;
