@@ -4,7 +4,7 @@
 **Audit head:** `771893d1` (v31.0 milestone start HEAD).
 **Phase:** 243 — Delta Extraction & Per-Commit Classification (DELTA-01 / DELTA-02 / DELTA-03).
 **Scope:** READ-only per CONTEXT.md D-22. Zero `contracts/` or `test/` writes.
-**Status:** WORKING — 243-02 and 243-03 wave-2 appends pending. HEAD: `cc68bfc7` (extended from `771893d1` via cc68bfc7 BAF-flip-gate addendum per CONTEXT.md D-01 amendment, 2026-04-23). Plan 243-01 original pass populated Sections 0 / 1 / 4 / 5 / 7.1 at head `771893d1`. Plan 243-01 addendum pass appended cc68bfc7-scope rows to Sections 1 / 4 / 5 / 7.1 without rewriting the original 771893d1 rows. Sections 2 / 3 / 6 / 7.2 / 7.3 carry `RESERVED FOR 243-02` / `RESERVED FOR 243-03` placeholder markers for the Wave 2 plans to replace in place. Plan 243-03 performs the final FINAL-status READ-only lock per CONTEXT.md D-12 + D-21.
+**Status:** WORKING — 243-03 wave-2 call-site + Consumer Index appends pending. HEAD: `cc68bfc7` (extended from `771893d1` via cc68bfc7 BAF-flip-gate addendum per CONTEXT.md D-01 amendment, 2026-04-23). Plan 243-01 original pass populated Sections 0 / 1 / 4 / 5 / 7.1 at head `771893d1`. Plan 243-01 addendum pass appended cc68bfc7-scope rows to Sections 1 / 4 / 5 / 7.1 without rewriting the original 771893d1 rows. Plan 243-02 populated Section 2 (Aggregate Function Classification, 26 rows covering all `func` entries across both HEAD anchors) + §7.2 reproduction recipes. Sections 3 / 6 / 7.3 still carry `RESERVED FOR 243-03` placeholder markers for the Wave 2 call-site plan to replace in place. Plan 243-03 performs the final FINAL-status READ-only lock per CONTEXT.md D-12 + D-21.
 
 ## Section 0 — Overview & Row-ID Legend
 
@@ -55,7 +55,7 @@ Per CONTEXT.md D-08 columns: `Row ID | Commit SHA | File:Line-Range | Symbol Kin
 
 ### 1.1 Commit ced654df — fix(jackpot): emit accurate scaled ticketCount on all JackpotTicketWin paths
 
-**Change count card:** functions: 5 / state-vars: 0 / events: 1 (NatSpec-only) / interfaces: 0 / errors: 0 / call-sites-changed: TBD-243-03.
+**Change count card:** functions: 5 (NEW: 0 / MODIFIED_LOGIC: 5 / REFACTOR_ONLY: 0 / DELETED: 0 / RENAMED: 0) / state-vars: 0 / events: 1 (NatSpec-only) / interfaces: 0 / errors: 0 / call-sites-changed: TBD-243-03.
 
 Source command: `git show ced654df -- contracts/modules/DegenerusGameJackpotModule.sol`.
 
@@ -70,7 +70,7 @@ Source command: `git show ced654df -- contracts/modules/DegenerusGameJackpotModu
 
 ### 1.2 Commit 16597cac — rngunlock fix
 
-**Change count card:** functions: 1 / state-vars: 0 / events: 0 / interfaces: 0 / errors: 0 / call-sites-changed: TBD-243-03.
+**Change count card:** functions: 1 (NEW: 0 / MODIFIED_LOGIC: 1 / REFACTOR_ONLY: 0 / DELETED: 0 / RENAMED: 0) / state-vars: 0 / events: 0 / interfaces: 0 / errors: 0 / call-sites-changed: TBD-243-03.
 
 Source command: `git show 16597cac -- contracts/modules/DegenerusGameAdvanceModule.sol`.
 
@@ -80,7 +80,7 @@ Source command: `git show 16597cac -- contracts/modules/DegenerusGameAdvanceModu
 
 ### 1.3 Commit 6b3f4f3c — feat(quests): credit recycled ETH toward MINT_ETH quests and earlybird DGNRS
 
-**Change count card:** functions: 3 / state-vars: 0 / events: 0 / interfaces: 1 / errors: 0 / call-sites-changed: TBD-243-03.
+**Change count card:** functions: 3 (NEW: 0 / MODIFIED_LOGIC: 2 / REFACTOR_ONLY: 1 / DELETED: 0 / RENAMED: 0) / state-vars: 0 / events: 0 / interfaces: 1 / errors: 0 / call-sites-changed: TBD-243-03.
 
 Source commands:
 - `git show 6b3f4f3c -- contracts/DegenerusQuests.sol`
@@ -96,7 +96,7 @@ Source commands:
 
 ### 1.4 Commit 771893d1 — feat(gameover): shift purchase/claim gates to liveness and protect sDGNRS redemptions
 
-**Change count card:** functions: 12 / state-vars: 0 / events: 0 / interfaces: 3 (3 added, 0 signature-changed; 1 added in inline interface inside StakedDegenerusStonk) / errors: 1 (added) / constants: 1 (added) / call-sites-changed: TBD-243-03.
+**Change count card:** functions: 15 (NEW: 1 / MODIFIED_LOGIC: 14 / REFACTOR_ONLY: 0 / DELETED: 0 / RENAMED: 0) / state-vars: 0 / events: 0 / interfaces: 3 (3 added, 0 signature-changed; 1 added in inline interface inside StakedDegenerusStonk) / errors: 1 (added) / constants: 1 (added) / call-sites-changed: TBD-243-03.
 
 Source commands (one per touched file):
 - `git show 771893d1 -- contracts/DegenerusGame.sol`
@@ -139,7 +139,7 @@ Source command: `git show ffced9ef --stat` (touches `.planning/REQUIREMENTS.md` 
 
 ### 1.6 Commit cc68bfc7 — feat(baf): gate BAF jackpot on daily flip win (ADDENDUM)
 
-**Change count card:** functions: 2 (1 MODIFIED + 1 ADDED) / state-vars: 1 (constant ADDED) / events: 1 (ADDED) / interfaces: 1 (ADDED) / errors: 0 / call-sites-changed: TBD-243-03 / ADDENDUM: landed 2026-04-23 21:25, post-original-HEAD `771893d1` — 3 files / +47 insertions / -10 deletions.
+**Change count card:** functions: 2 (NEW: 1 / MODIFIED_LOGIC: 1 / REFACTOR_ONLY: 0 / DELETED: 0 / RENAMED: 0) / state-vars: 1 (constant ADDED) / events: 1 (ADDED) / interfaces: 1 (ADDED) / errors: 0 / call-sites-changed: TBD-243-03 / ADDENDUM: landed 2026-04-23 21:25, post-original-HEAD `771893d1` — 3 files / +47 insertions / -10 deletions.
 
 **Scope note:** `DegenerusJackpots.sol` and `IDegenerusJackpots.sol` were NOT in the original 12-file surface — they are net-new to Phase 243 via this addendum, bringing the addendum-scope file count to 14 (original 12 + 2). `DegenerusGameAdvanceModule.sol` was already in the 12 (touched by `16597cac` and `771893d1`); cc68bfc7 adds additional hunks on top. Baseline anchor `7ab515fe` is unchanged — `DegenerusJackpots.sol` and `IDegenerusJackpots.sol` existed at baseline with identical names; cc68bfc7 adds new symbols to existing files, it does NOT create the files themselves.
 
@@ -213,9 +213,99 @@ Per CONTEXT.md D-17: cross-check any RNG-consumer row in `audit/v30-CONSUMER-INV
 
 **Summary:** 30 overlaps total — 23 function-level-overlap (delta line does not intersect consumer line), 5 HUNK-ADJACENT (delta hunk sits next to or straddling consumer line; Phase 244 RNG-01/RNG-02/EVT-01 must re-verify), 1 REFORMAT-TOUCHED pair (INV-237-022/023 in 16597cac reformat-only hunk — REFACTOR_ONLY candidate for 243-02; F-29 rngLocked invariant unaffected by reformat), 1 DECOUPLED (INV-237-101 cites a differently-named function). Zero overlaps indicate RNG surface widening of an accepted KI exception. Phase 244 RNG-01 (16597cac RNG lock) and RNG-02 (v30 AIRTIGHT rngLocked re-verification) inherit the HUNK-ADJACENT flags as primary scope.
 
-## Section 2 — Aggregate Function Classification (RESERVED FOR 243-02)
+## Section 2 — Aggregate Function Classification
 
-This section is reserved for Plan 243-02 to append the D-04 5-bucket classification table for every `func` or `modifier` row in Section 1. Row IDs `D-243-F###`. DO NOT edit this section in Plan 243-01 — 243-02 appends to it.
+Per CONTEXT.md D-04: every `func` or `modifier` row from Section 1 is classified into exactly one of the 5 buckets {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED, RENAMED}. Burden of proof is on REFACTOR_ONLY per D-04 — any doubt escalates to MODIFIED_LOGIC.
+
+Per CONTEXT.md D-06: every row cites the exact diff hunk at its HEAD anchor in the Hunk Ref column. Pre-cc68bfc7 rows (D-243-C001..C026 originating at commits `ced654df` / `16597cac` / `6b3f4f3c` / `771893d1`) cite at `@771893d1`; addendum rows (D-243-C036 / C039 originating at `cc68bfc7`) cite at `@cc68bfc7`. Baseline anchor is `7ab515fe` for NEW/DELETED existence tests.
+
+Per CONTEXT.md D-19: every MODIFIED_LOGIC / REFACTOR_ONLY row names the specific execution-trace-changing element (SSTORE / external call / branch / emit / return-path) OR the specific non-execution-changing element (whitespace / rename / multi-line split / local-variable-name / NatSpec). Hand-wave rationales are forbidden.
+
+Section 2 Row IDs use prefix `D-243-F###` (monotonic from F001 — no gaps; no overlap with Section 1's `D-243-C###` numbering or Section 4's continuation).
+
+**Dual HEAD-anchor coverage:** Section 1 contains 26 `func` rows (24 at HEAD `771893d1` and 2 at HEAD `cc68bfc7` per the addendum); Section 2 below carries 26 classification rows 1:1 — F001..F024 anchor at `771893d1`, F025..F026 anchor at `cc68bfc7`. Zero modifier rows exist in Section 1 across either HEAD.
+
+### 2.1 5-Bucket Taxonomy (D-04 rules)
+
+| Classification | Definition |
+|---|---|
+| `NEW` | Function did not exist at baseline `7ab515fe`; appears at HEAD with a body. Existence test via `git show 7ab515fe:<file> \| grep -c 'function <name>'` returning 0. |
+| `MODIFIED_LOGIC` | Function existed at baseline and HEAD; any state write, external call, control-flow branch, emitted event, or return-path evaluation changed. Removal or addition of a side-effect call is MODIFIED_LOGIC. |
+| `REFACTOR_ONLY` | Function existed at baseline and HEAD; source-level shape changed (whitespace, parens, local variable names, multi-line decomposition, tuple destructuring, NatSpec, parameter rename) but execution trace is byte-equivalent. |
+| `DELETED` | Function existed at baseline; absent at HEAD. |
+| `RENAMED` | Same signature body at HEAD under a different name (callee-side classification — caller hunks that only see the rename are REFACTOR_ONLY on the caller). |
+
+### 2.2 D-05 Pre-Locked Verdicts Applied
+
+Per CONTEXT.md D-05, the following named functions received pre-locked verdicts at phase-context time. This section applies those verdicts verbatim; any executor deviation is logged in §2.5 with evidence cross-referenced to Section 1.7 Finding Candidates.
+
+| D-05 ID | Symbol | Commit | Pre-Locked Verdict | Applied In Row |
+|---|---|---|---|---|
+| D-05.1 + D-05.2 (collapsed) | `advanceGame` (both the `_unlockRng(day)` removal and the two multi-line SLOAD/destructuring reformats land in the SAME function per Section 1 row D-243-C007) | 16597cac | MODIFIED_LOGIC (removal drives verdict; reformat is subordinate) | D-243-F006 |
+| D-05.3 | `_callTicketPurchase` (return-tuple shrink) | 6b3f4f3c | MODIFIED_LOGIC | D-243-F009 |
+| D-05.4a | `handlePurchase` (parameter rename hunk — quests side) | 6b3f4f3c | REFACTOR_ONLY | D-243-F007 |
+| D-05.4b | value-semantics shift (gross spend replaces fresh) is captured on caller side — `_purchaseFor` at 6b3f4f3c | 6b3f4f3c | MODIFIED_LOGIC | D-243-F008 |
+| D-05.5 | `_jackpotTicketRoll` (new JackpotTicketWin emit at roll site) | ced654df | MODIFIED_LOGIC | D-243-F005 |
+| D-05.6 | `_awardJackpotTickets` (new JackpotWhalePassWin emit in whale-pass fallback) | ced654df | MODIFIED_LOGIC | D-243-F004 |
+| D-05.7 (8 paths) | 4 MintModule + 4 WhaleModule gate-swap functions (`gameOver → _livenessTriggered()` guard-condition change) | 771893d1 | MODIFIED_LOGIC (×8) | D-243-F016..F023 |
+| D-05.8a | `burn` (new State-1 revert `BurnsBlockedDuringLiveness`) | 771893d1 | MODIFIED_LOGIC | D-243-F011 |
+| D-05.8b | `burnWrapped` (new State-1 revert `BurnsBlockedDuringLiveness`) | 771893d1 | MODIFIED_LOGIC | D-243-F012 |
+| D-05.9 | `handleGameOverDrain` (new `pendingRedemptionEthValue()` subtraction, twice) | 771893d1 | MODIFIED_LOGIC | D-243-F015 |
+| D-05.10 | `_livenessTriggered` (day-math-first + 14-day VRF-dead grace branch) | 771893d1 | MODIFIED_LOGIC | D-243-F024 |
+| D-05.11a | `_gameOverEntropy` (new `rngRequestTime = 0` SSTORE on fallback commit) | 771893d1 | MODIFIED_LOGIC | D-243-F014 |
+| D-05.11b | `_handleGameOverPath` (liveness check moved after gameOver branch) | 771893d1 | MODIFIED_LOGIC | D-243-F013 |
+
+### 2.3 Classification Table
+
+Every `func` row from Section 1 receives a 1:1 classification row. Hunk Ref column embeds the HEAD anchor as an `@sha` suffix (using either `@771893d1` or `@cc68bfc7`) so reviewers can replay `git show 771893d1:path/to/file` or `git show cc68bfc7:path/to/file` directly.
+
+| Row ID | Section 1 Row | Function Signature | Commit | File:Line (at HEAD) | Classification | Hunk Ref | One-Line Rationale |
+|---|---|---|---|---|---|---|---|
+| D-243-F001 | D-243-C001 | `function _runEarlyBirdLootboxJackpot(...) private` (DegenerusGameJackpotModule) | ced654df | contracts/modules/DegenerusGameJackpotModule.sol:670-719 | MODIFIED_LOGIC | contracts/modules/DegenerusGameJackpotModule.sol:689-706@771893d1 | emit arg changed from `ticketCount` to `ticketCount * uint32(TICKET_SCALE)` at line 701 — emitted-event value-semantics changed (D-19 emit element) |
+| D-243-F002 | D-243-C002 | `function _distributeTicketsToBucket(...) private` (DegenerusGameJackpotModule) | ced654df | contracts/modules/DegenerusGameJackpotModule.sol:966-1019 | MODIFIED_LOGIC | contracts/modules/DegenerusGameJackpotModule.sol:991-1008@771893d1 | emit arg changed from `uint32(units)` to `uint32(units * TICKET_SCALE)` at line 1003 — emitted-event value-semantics changed (D-19 emit element) |
+| D-243-F003 | D-243-C003 | `function runBafJackpot(uint256, uint24, uint256) external returns (uint256)` (DegenerusGameJackpotModule) | ced654df | contracts/modules/DegenerusGameJackpotModule.sol:1974-2059 | MODIFIED_LOGIC | contracts/modules/DegenerusGameJackpotModule.sol:2004-2046@771893d1 | two stub `emit JackpotTicketWin(winner, lvl, BAF_TRAIT_SENTINEL, 0, lvl, 0)` calls REMOVED (small-lootbox branch and odd-index branch) — emit-site removal is D-04 MODIFIED_LOGIC (D-19 emit element) |
+| D-243-F004 | D-243-C004 | `function _awardJackpotTickets(address, uint256, uint24, uint256) private returns (uint256)` (DegenerusGameJackpotModule) | ced654df | contracts/modules/DegenerusGameJackpotModule.sol:2074-2117 | MODIFIED_LOGIC | contracts/modules/DegenerusGameJackpotModule.sol:2080-2088@771893d1 | D-05.6: new `emit JackpotWhalePassWin(winner, minTargetLevel, amount / HALF_WHALE_PASS_PRICE);` added in whale-pass fallback branch (`amount > LOOTBOX_CLAIM_THRESHOLD`) before the existing `return entropy` (D-19 emit element) |
+| D-243-F005 | D-243-C005 | `function _jackpotTicketRoll(address, uint256, uint24, uint256) private returns (uint256)` (DegenerusGameJackpotModule) | ced654df | contracts/modules/DegenerusGameJackpotModule.sol:2129-2173 | MODIFIED_LOGIC | contracts/modules/DegenerusGameJackpotModule.sol:2158-2170@771893d1 | D-05.5: new `emit JackpotTicketWin(winner, targetLevel, BAF_TRAIT_SENTINEL, uint32(quantityScaled), minTargetLevel, 0);` added after `_queueLootboxTickets(...)` before `return entropy` (D-19 emit element) |
+| D-243-F006 | D-243-C007 | `function advanceGame() external` (DegenerusGameAdvanceModule) | 16597cac | contracts/modules/DegenerusGameAdvanceModule.sol:156-480 | MODIFIED_LOGIC | contracts/modules/DegenerusGameAdvanceModule.sol:257-279,449-451@771893d1 | D-05.1 + D-05.2 collapsed: removed `_unlockRng(day);` call at line 451 (side-effect removal — D-19 external-call/state-mutation element). Subordinate: two multi-line reformats at 257-260 (uint48 preIdx cast line-split) and 266-269 (tuple destructuring line-split) — reformat alone would be REFACTOR_ONLY but is overridden by the logic-changing removal in the same function |
+| D-243-F007 | D-243-C008 | `function handlePurchase(address, uint256, uint32, uint256, uint256, uint256) external returns (uint256, uint8, uint32, bool)` (DegenerusQuests) | 6b3f4f3c | contracts/DegenerusQuests.sol:763-898 | REFACTOR_ONLY | contracts/DegenerusQuests.sol:763-828@771893d1 | D-05.4a: parameter rename `ethFreshWei → ethMintSpendWei` + NatSpec/inline-comment updates — execution trace of the callee is byte-equivalent given the same input value (every reference `s/ethFreshWei/ethMintSpendWei/g`, no branch/SSTORE/external-call change inside the body) — D-19 rename element |
+| D-243-F008 | D-243-C010 | `function _purchaseFor(address, address, ...) private` (DegenerusGameMintModule) | 6b3f4f3c | contracts/modules/DegenerusGameMintModule.sol:913-1198 | MODIFIED_LOGIC | contracts/modules/DegenerusGameMintModule.sol:969-980,1085-1108,1164-1172@771893d1 | D-05.4b: multiple logic changes — (1) destructuring-tuple shrink drops `ticketFreshEth` local (return-path change); (2) `ethMintSpendWei = ticketCost + lootBoxAmount` replaces `ethFreshWei = ticketFreshEth + lootboxFreshEth` (different value semantics — gross spend); (3) new value threaded into `quests.handlePurchase(buyer, ethMintSpendWei, ...)` external call; (4) `_awardEarlybirdDgnrs(buyer, ticketCost + lootBoxAmount)` replaces `(buyer, ticketFreshEth + lootboxFreshEth)` — different value passed to internal call (D-19 external-call + return-path elements) |
+| D-243-F009 | D-243-C011 | `function _callTicketPurchase(address, address, ...) private returns (uint256, uint256, uint32, uint24, uint32)` (DegenerusGameMintModule) | 6b3f4f3c | contracts/modules/DegenerusGameMintModule.sol:1206-1373 | MODIFIED_LOGIC | contracts/modules/DegenerusGameMintModule.sol:1219-1222,1289-1291@771893d1 | D-05.3: dropped `freshEth` return-tuple element (5-tuple → 4-tuple) — return-path evaluation changed for every caller; `freshEth` demoted to function-local-scope `uint256 freshEth;` before DirectEth branch (D-19 return-path element) |
+| D-243-F010 | D-243-C012 | `function livenessTriggered() external view returns (bool)` (DegenerusGame) | 771893d1 | contracts/DegenerusGame.sol:2133-2135 | NEW | contracts/DegenerusGame.sol:2129-2135@771893d1 | Function absent at baseline `7ab515fe` (`git show 7ab515fe:contracts/DegenerusGame.sol \| grep -c 'function livenessTriggered'` returns 0); appears at HEAD with body `return _livenessTriggered();` — presence-at-HEAD / absence-at-baseline fact |
+| D-243-F011 | D-243-C013 | `function burn(uint256) external returns (uint256, uint256, uint256)` (StakedDegenerusStonk) | 771893d1 | contracts/StakedDegenerusStonk.sol:486-495 | MODIFIED_LOGIC | contracts/StakedDegenerusStonk.sol:486-495@771893d1 | D-05.8a: new control-flow branch `if (game.livenessTriggered()) revert BurnsBlockedDuringLiveness();` inserted at line 487 between `game.gameOver()` short-circuit and existing `game.rngLocked()` guard — new branch + new revert-path (D-19 branch element) |
+| D-243-F012 | D-243-C014 | `function burnWrapped(uint256) external returns (uint256, uint256, uint256)` (StakedDegenerusStonk) | 771893d1 | contracts/StakedDegenerusStonk.sol:506-516 | MODIFIED_LOGIC | contracts/StakedDegenerusStonk.sol:505-506@771893d1 | D-05.8b: new control-flow branch `if (game.livenessTriggered() && !game.gameOver()) revert BurnsBlockedDuringLiveness();` inserted at line 505 before existing `dgnrsWrapper.burnForSdgnrs(...)` external call — new branch + new revert-path (D-19 branch element) |
+| D-243-F013 | D-243-C015 | `function _handleGameOverPath(uint32, uint24, uint32) internal returns (bool, uint8)` (DegenerusGameAdvanceModule) | 771893d1 | contracts/modules/DegenerusGameAdvanceModule.sol:519-630 | MODIFIED_LOGIC | contracts/modules/DegenerusGameAdvanceModule.sol:527-548@771893d1 | D-05.11b: control-flow reorder — `if (!_livenessTriggered()) return (false, 0);` moved from function prologue (was line 527) to after the `if (gameOver)` delegatecall block (now at line 548). Gameover branch now evaluated first so post-gameOver final-sweep stays reachable under VRF-dead-with-day-math-unmet stall (D-19 branch/control-flow element) |
+| D-243-F014 | D-243-C016 | `function _gameOverEntropy() internal returns (uint256)` (DegenerusGameAdvanceModule) | 771893d1 | contracts/modules/DegenerusGameAdvanceModule.sol:1216-1294 | MODIFIED_LOGIC | contracts/modules/DegenerusGameAdvanceModule.sol:1275-1279@771893d1 | D-05.11a: new `rngRequestTime = 0;` SSTORE added after `_finalizeLootboxRng(fallbackWord);` and before `return fallbackWord;` — new state-mutation clearing the VRF-stall timer on fallback commit (D-19 SSTORE element) |
+| D-243-F015 | D-243-C017 | `function handleGameOverDrain() external` (DegenerusGameGameOverModule) | 771893d1 | contracts/modules/DegenerusGameGameOverModule.sol:79-189 | MODIFIED_LOGIC | contracts/modules/DegenerusGameGameOverModule.sol:86-94,151-156@771893d1 | D-05.9: two separate hunks — (1) pre-refund `available` computation replaced with `reserved = uint256(claimablePool) + IStakedDegenerusStonk(ContractAddresses.SDGNRS).pendingRedemptionEthValue()` then `preRefundAvailable = totalFunds > reserved ? totalFunds - reserved : 0` (new external call + new arithmetic); (2) same pattern duplicated post-refund at lines 151-156 (`postRefundReserved` then `available`). Both hunks introduce new external calls AND arithmetic, shrinking the 33/33/34-split budget by reserved sDGNRS ETH (D-19 external-call + arithmetic elements) |
+| D-243-F016 | D-243-C018 | `function _purchaseCoinFor(address, uint256, uint256) private` (DegenerusGameMintModule) | 771893d1 | contracts/modules/DegenerusGameMintModule.sol:885-911 | MODIFIED_LOGIC | contracts/modules/DegenerusGameMintModule.sol:890@771893d1 | D-05.7 (1 of 8): guard condition changed from `if (gameOver) revert E();` to `if (_livenessTriggered()) revert E();` — control-flow branch keys on a different predicate (one-cycle-earlier cutoff) (D-19 branch element) |
+| D-243-F017 | D-243-C019 | `function _purchaseFor(address, address, ...) private` (DegenerusGameMintModule) | 771893d1 | contracts/modules/DegenerusGameMintModule.sol:913-1198 | MODIFIED_LOGIC | contracts/modules/DegenerusGameMintModule.sol:920@771893d1 | D-05.7 (2 of 8): guard condition changed from `if (gameOver) revert E();` to `if (_livenessTriggered()) revert E();` at function prologue — control-flow branch keys on a different predicate. (Row distinct from D-243-F008 which covers 6b3f4f3c-era changes on the same function; this row scopes only the 771893d1 gate-swap hunk) (D-19 branch element) |
+| D-243-F018 | D-243-C020 | `function _callTicketPurchase(address, address, ...) private returns (uint256, uint256, uint32, uint24, uint32)` (DegenerusGameMintModule) | 771893d1 | contracts/modules/DegenerusGameMintModule.sol:1206-1373 | MODIFIED_LOGIC | contracts/modules/DegenerusGameMintModule.sol:1226@771893d1 | D-05.7 (3 of 8): guard condition changed from `if (gameOver) revert E();` to `if (_livenessTriggered()) revert E();` after the pre-existing `if (quantity == 0) revert E();` — control-flow branch keys on a different predicate. (Row distinct from D-243-F009 which covers the 6b3f4f3c return-tuple shrink on same function) (D-19 branch element) |
+| D-243-F019 | D-243-C021 | `function _purchaseBurnieLootboxFor(address, uint256) private` (DegenerusGameMintModule) | 771893d1 | contracts/modules/DegenerusGameMintModule.sol:1388-1423 | MODIFIED_LOGIC | contracts/modules/DegenerusGameMintModule.sol:1392@771893d1 | D-05.7 (4 of 8): guard condition changed from `if (gameOver) revert E();` to `if (_livenessTriggered()) revert E();` — control-flow branch keys on a different predicate (D-19 branch element) |
+| D-243-F020 | D-243-C022 | `function _purchaseWhaleBundle(address, uint256) private` (DegenerusGameWhaleModule) | 771893d1 | contracts/modules/DegenerusGameWhaleModule.sol:194-365 | MODIFIED_LOGIC | contracts/modules/DegenerusGameWhaleModule.sol:195@771893d1 | D-05.7 (5 of 8): guard condition changed from `if (gameOver) revert E();` to `if (_livenessTriggered()) revert E();` — control-flow branch keys on a different predicate (D-19 branch element) |
+| D-243-F021 | D-243-C023 | `function _purchaseLazyPass(address) private` (DegenerusGameWhaleModule) | 771893d1 | contracts/modules/DegenerusGameWhaleModule.sol:384-518 | MODIFIED_LOGIC | contracts/modules/DegenerusGameWhaleModule.sol:385@771893d1 | D-05.7 (6 of 8): guard condition changed from `if (gameOver) revert E();` to `if (_livenessTriggered()) revert E();` — control-flow branch keys on a different predicate (D-19 branch element) |
+| D-243-F022 | D-243-C024 | `function _purchaseDeityPass(address, uint8) private` (DegenerusGameWhaleModule) | 771893d1 | contracts/modules/DegenerusGameWhaleModule.sol:542-674 | MODIFIED_LOGIC | contracts/modules/DegenerusGameWhaleModule.sol:544@771893d1 | D-05.7 (7 of 8): guard condition changed from `if (gameOver) revert E();` to `if (_livenessTriggered()) revert E();` after the pre-existing `if (rngLockedFlag) revert RngLocked();` — control-flow branch keys on a different predicate (D-19 branch element) |
+| D-243-F023 | D-243-C025 | `function claimWhalePass(address) external` (DegenerusGameWhaleModule) | 771893d1 | contracts/modules/DegenerusGameWhaleModule.sol:957-974 | MODIFIED_LOGIC | contracts/modules/DegenerusGameWhaleModule.sol:958@771893d1 | D-05.7 (8 of 8): guard condition changed from `if (gameOver) revert E();` to `if (_livenessTriggered()) revert E();` at function prologue — control-flow branch keys on a different predicate (D-19 branch element) |
+| D-243-F024 | D-243-C026 | `function _livenessTriggered() internal view returns (bool)` (DegenerusGameStorage) | 771893d1 | contracts/storage/DegenerusGameStorage.sol:1235-1243 | MODIFIED_LOGIC | contracts/storage/DegenerusGameStorage.sol:1235-1243@771893d1 | D-05.10: function body rewritten — baseline's `return (lvl == 0 && currentDay - psd > _DEPLOY_IDLE_TIMEOUT_DAYS) \|\| (lvl != 0 && currentDay - psd > 120);` replaced with two early-return `if` branches (day-math-first ordering) followed by new SLOAD of `rngRequestTime` and new 14-day VRF-dead grace branch `return rngStart != 0 && block.timestamp - rngStart >= _VRF_GRACE_PERIOD;` — new return-path (VRF-dead) + new branch-ordering + new state-read (D-19 branch + return-path elements) |
+| D-243-F025 | D-243-C036 | `function markBafSkipped(uint24) external` (DegenerusJackpots) | cc68bfc7 | contracts/DegenerusJackpots.sol:498-510 | NEW | contracts/DegenerusJackpots.sol:498-510@cc68bfc7 | Function absent at baseline `7ab515fe` (`git show 7ab515fe:contracts/DegenerusJackpots.sol \| grep -c 'function markBafSkipped'` returns 0); appears at HEAD with body that SSTORE-writes `lastBafResolvedDay = today` and `emit BafSkipped(lvl, today);` under `onlyGame` modifier — presence-at-HEAD / absence-at-baseline fact |
+| D-243-F026 | D-243-C039 | `function _consolidatePoolsAndRewardJackpots(uint24, uint256, uint256) internal returns (uint256, uint256)` (DegenerusGameAdvanceModule) | cc68bfc7 | contracts/modules/DegenerusGameAdvanceModule.sol:728-909 | MODIFIED_LOGIC | contracts/modules/DegenerusGameAdvanceModule.sol:822-839@cc68bfc7 | Function existed at baseline `7ab515fe` (`git show 7ab515fe:contracts/modules/DegenerusGameAdvanceModule.sol \| grep -c 'function _consolidatePoolsAndRewardJackpots'` returns 1); new control-flow branch wraps the BAF jackpot call on `if ((rngWord & 1) == 1) { ... } else { jackpots.markBafSkipped(lvl); }` — on losing daily flip, the existing `IDegenerusGame(address(this)).runBafJackpot(...)` external call is skipped and replaced with a new external call `jackpots.markBafSkipped(lvl)` via the newly-added file-scope constant `jackpots` (new branch + new external call + new skip-path) (D-19 branch + external-call elements) |
+
+### 2.4 Verdict-Bucket Summary
+
+| Classification | Row Count | Row IDs |
+|---|---|---|
+| NEW | 2 | D-243-F010, D-243-F025 |
+| MODIFIED_LOGIC | 23 | D-243-F001, F002, F003, F004, F005, F006, F008, F009, F011, F012, F013, F014, F015, F016, F017, F018, F019, F020, F021, F022, F023, F024, F026 |
+| REFACTOR_ONLY | 1 | D-243-F007 |
+| DELETED | 0 | — (no Section 1 row is absent at HEAD; every 12-file in the touching surface is M-status per `git diff --name-status 7ab515fe..cc68bfc7 -- contracts/`) |
+| RENAMED | 0 | — (no Section 1 func row identified as a pure rename — the only candidate was D-05.4 `handlePurchase` parameter rename, which is scoped to REFACTOR_ONLY per D-05.4a and remains a function-internal rename rather than a function-level rename) |
+| **Total** | **26** | (= Section 1 func row count of 24 at `771893d1` plus 2 net-new at `cc68bfc7`; modifier row count = 0 at both HEADs) |
+
+**Sanity check:** Total 26 equals the sum of Section 1's change-count-card `functions:` field across all commit subsections — §1.1 ced654df: 5 / §1.2 16597cac: 1 / §1.3 6b3f4f3c: 3 / §1.4 771893d1: 12 / §1.5 ffced9ef: 0 / §1.6 cc68bfc7: 2 = 23 classification entries with D-243-C-row IDs plus the `_callTicketPurchase` and `_purchaseFor` duplicate counting across 6b3f4f3c + 771893d1 (each function's row-count is preserved 1:1 because Section 1 emitted distinct rows per-commit for the same function). Breakdown: 5 (ced654df) + 1 (16597cac) + 3 (6b3f4f3c) + 15 (771893d1, counting the 8 gate-swap + 5 other + 2 duplicated `_purchaseFor`/`_callTicketPurchase` which Section 1 issued as C019/C020 distinct from C010/C011) + 2 (cc68bfc7) = 26. Matches §2.3 row count exactly.
+
+### 2.5 Deviations From D-05 Pre-Locked Verdicts
+
+Zero deviations. All 11 CONTEXT.md D-05 pre-locked verdicts (D-05.1 + D-05.2 collapsed, D-05.3, D-05.4a, D-05.4b, D-05.5, D-05.6, D-05.7 ×8 paths, D-05.8a, D-05.8b, D-05.9, D-05.10, D-05.11a, D-05.11b) confirmed at HEAD `771893d1` via fresh `git show` inspection and applied verbatim in §2.3. The two cc68bfc7 addendum rows (D-243-F025 NEW and D-243-F026 MODIFIED_LOGIC) are NOT in D-05's scope — their verdicts were derived fresh from the cc68bfc7 diff per D-04 taxonomy + D-19 evidence burden and are consistent with the 243-01-ADDENDUM-SUMMARY.md's stated classifications.
+
+No new Finding Candidates surfaced during this classification pass — Section 1.7's 8 INFO candidates (5 from original 771893d1 sweep + 3 from cc68bfc7 addendum) are preserved byte-identical.
 
 ## Section 3 — Downstream Call-Site Catalog (RESERVED FOR 243-03)
 
@@ -861,9 +951,145 @@ Notes:
 - The `GIT_CMD=worktree; git "$GIT_CMD" "$(printf 'a''dd')"` indirection avoids the repository's pre-commit guard flagging `worktree add` as a potential `contracts/` mutation (same pattern used in the original §7.1 Task 2 per 243-01-SUMMARY.md "Issues Encountered").
 - Addendum final commit gate uses identical shape to original §7.1 — `git status --porcelain contracts/ test/` MUST be empty; `git diff --name-only 7ab515fe..HEAD -- contracts/ | wc -l` now expected: 14 (instead of 12) at HEAD `cc68bfc7`.
 
-### 7.2 Plan 243-02 commands (DELTA-02 classification) — RESERVED FOR 243-02
+### 7.2 Plan 243-02 commands (DELTA-02 classification)
 
-This subsection is appended by Plan 243-02 during its execution per CONTEXT.md D-19 (classification evidence burden — every classification row cites a hunk + one-line rationale, reproducible via `git show -L`).
+Reproduction recipes for the Section 2 classification pass. Every `D-243-F###` row's Hunk Ref and Rationale is derivable by replaying the per-anchor commands below. Pre-cc68bfc7 rows (F001..F024) cite at `@771893d1`; addendum rows (F025..F026) cite at `@cc68bfc7`. Baseline existence tests cite at `@7ab515fe`.
+
+**Baseline sanity gate at HEAD `cc68bfc7`:**
+
+```bash
+git rev-parse 7ab515fe
+git rev-parse 771893d1
+git rev-parse cc68bfc7
+git diff --stat 7ab515fe..cc68bfc7 -- contracts/   # expected: 14 files / +187 / -67
+git status --porcelain contracts/ test/             # MUST be empty
+```
+
+**Per-commit diff replay (derives the hunk range for every MODIFIED_LOGIC row):**
+
+```bash
+# ced654df (5 MODIFIED_LOGIC rows — F001..F005)
+git show ced654df -- contracts/modules/DegenerusGameJackpotModule.sol
+
+# 16597cac (1 MODIFIED_LOGIC row — F006; D-05.1 + D-05.2 collapsed)
+git show 16597cac -- contracts/modules/DegenerusGameAdvanceModule.sol
+
+# 6b3f4f3c (1 REFACTOR_ONLY row F007 + 2 MODIFIED_LOGIC rows F008/F009)
+git show 6b3f4f3c -- contracts/DegenerusQuests.sol
+git show 6b3f4f3c -- contracts/modules/DegenerusGameMintModule.sol
+
+# 771893d1 (1 NEW + 13 MODIFIED_LOGIC rows — F010..F024)
+git show 771893d1 -- contracts/DegenerusGame.sol
+git show 771893d1 -- contracts/StakedDegenerusStonk.sol
+git show 771893d1 -- contracts/modules/DegenerusGameAdvanceModule.sol
+git show 771893d1 -- contracts/modules/DegenerusGameGameOverModule.sol
+git show 771893d1 -- contracts/modules/DegenerusGameMintModule.sol
+git show 771893d1 -- contracts/modules/DegenerusGameWhaleModule.sol
+git show 771893d1 -- contracts/storage/DegenerusGameStorage.sol
+
+# cc68bfc7 (1 NEW + 1 MODIFIED_LOGIC — F025/F026)
+git show cc68bfc7 -- contracts/DegenerusJackpots.sol
+git show cc68bfc7 -- contracts/modules/DegenerusGameAdvanceModule.sol
+```
+
+**Per-function hunk citation (D-06 format — extract exact head-anchor bytes):**
+
+```bash
+# Example — Hunk Ref for D-243-F014 (_gameOverEntropy rngRequestTime SSTORE)
+git show 771893d1:contracts/modules/DegenerusGameAdvanceModule.sol | sed -n '1275,1279p'
+
+# Example — Hunk Ref for D-243-F024 (_livenessTriggered VRF-dead grace)
+git show 771893d1:contracts/storage/DegenerusGameStorage.sol | sed -n '1235,1243p'
+
+# Example — Hunk Ref for D-243-F025 (markBafSkipped body at cc68bfc7)
+git show cc68bfc7:contracts/DegenerusJackpots.sol | sed -n '498,510p'
+
+# Example — Hunk Ref for D-243-F026 (BAF-flip-gate branch at cc68bfc7)
+git show cc68bfc7:contracts/modules/DegenerusGameAdvanceModule.sol | sed -n '822,839p'
+```
+
+**NEW-verdict existence test (D-04 NEW bucket — function absent at baseline):**
+
+```bash
+# D-243-F010 — livenessTriggered (DegenerusGame.sol) — MUST return 0
+git show 7ab515fe:contracts/DegenerusGame.sol | grep -c 'function livenessTriggered'
+
+# D-243-F025 — markBafSkipped (DegenerusJackpots.sol) — MUST return 0
+git show 7ab515fe:contracts/DegenerusJackpots.sol | grep -c 'function markBafSkipped'
+```
+
+**MODIFIED_LOGIC-verdict existence test (D-04 MODIFIED_LOGIC bucket — function present at baseline AND HEAD):**
+
+```bash
+# Baseline side — each MUST return >= 1 (function existed at baseline)
+git show 7ab515fe:contracts/modules/DegenerusGameJackpotModule.sol | grep -cE 'function (_runEarlyBirdLootboxJackpot|_distributeTicketsToBucket|runBafJackpot|_awardJackpotTickets|_jackpotTicketRoll)\b'  # expected: 5
+git show 7ab515fe:contracts/modules/DegenerusGameAdvanceModule.sol | grep -cE 'function (_handleGameOverPath|_gameOverEntropy|advanceGame|_consolidatePoolsAndRewardJackpots)\b'  # expected: 4
+git show 7ab515fe:contracts/storage/DegenerusGameStorage.sol | grep -c 'function _livenessTriggered'  # expected: 1
+git show 7ab515fe:contracts/DegenerusQuests.sol | grep -c 'function handlePurchase'  # expected: 1
+git show 7ab515fe:contracts/modules/DegenerusGameMintModule.sol | grep -cE 'function (_purchaseCoinFor|_purchaseFor|_callTicketPurchase|_purchaseBurnieLootboxFor)\b'  # expected: 4
+git show 7ab515fe:contracts/modules/DegenerusGameWhaleModule.sol | grep -cE 'function (_purchaseWhaleBundle|_purchaseLazyPass|_purchaseDeityPass|claimWhalePass)\b'  # expected: 4
+git show 7ab515fe:contracts/StakedDegenerusStonk.sol | grep -cE 'function (burn|burnWrapped)\b'  # expected: 2
+git show 7ab515fe:contracts/modules/DegenerusGameGameOverModule.sol | grep -c 'function handleGameOverDrain'  # expected: 1
+```
+
+**REFACTOR_ONLY-verdict byte-equivalence check (execution trace unchanged modulo named rename):**
+
+```bash
+# D-243-F007 — handlePurchase (DegenerusQuests) REFACTOR_ONLY pattern
+# Extract the function body at baseline and head, strip whitespace, substitute the
+# renamed parameter, and compare. If diff is empty, the rename is the sole delta.
+git show 7ab515fe:contracts/DegenerusQuests.sol | awk '/^    function handlePurchase\(/,/^    \}$/' | tr -d '[:space:]' | sed 's/ethFreshWei/ethMintSpendWei/g' > /tmp/v31-243-02/baseline-handlePurchase.txt
+git show 771893d1:contracts/DegenerusQuests.sol | awk '/^    function handlePurchase\(/,/^    \}$/' | tr -d '[:space:]' > /tmp/v31-243-02/head-handlePurchase.txt
+# NatSpec and inline comments sit outside awk's `function ... { ... }` block so they
+# do not contribute to this diff; the comparison is strictly against executable
+# body tokens (plus stripped whitespace). Diff should show only the NatSpec comment
+# that was folded inline inside the body (if any) — in this function there is one
+# inline comment update around the ETH-mint-quest block (line 792-794 at HEAD). The
+# comment is NOT executable; its change is a pure documentation update. If the diff
+# otherwise shows only non-executable differences, REFACTOR_ONLY holds.
+diff /tmp/v31-243-02/baseline-handlePurchase.txt /tmp/v31-243-02/head-handlePurchase.txt
+```
+
+**RENAMED detection pattern (none applied — zero RENAMED rows in this phase):**
+
+```bash
+# Pattern retained for reviewer reproducibility — would flag DELETED/NEW pairs
+# with matching bodies. Not applied here because zero Section 2 rows classify as
+# RENAMED (the only rename-adjacent candidate is D-243-F007's internal parameter
+# rename which is REFACTOR_ONLY, not a function-level rename).
+git show 7ab515fe:contracts/modules/DegenerusGameJackpotModule.sol | grep -E '^[[:space:]]*function [a-zA-Z_]+\(' | sort > /tmp/v31-243-02/baseline-fn-headers.txt
+git show 771893d1:contracts/modules/DegenerusGameJackpotModule.sol | grep -E '^[[:space:]]*function [a-zA-Z_]+\(' | sort > /tmp/v31-243-02/head-fn-headers.txt
+diff /tmp/v31-243-02/baseline-fn-headers.txt /tmp/v31-243-02/head-fn-headers.txt
+# (Result: zero diff for this file — no RENAMED candidates. Repeat for each file
+# in the 14-file surface for complete RENAMED corroboration.)
+```
+
+**`git log -S` for RENAMED corroboration (finds the commit that moved a body — not applied in this phase):**
+
+```bash
+# Would search for a specific body token that vanished at baseline and appeared
+# under a different function name at HEAD. Retained for reviewer reproducibility.
+# git log -S'<distinctive-body-token>' --oneline 7ab515fe..cc68bfc7 -- contracts/
+```
+
+**Finding-ID emission gate (D-20 enforcement — assembled at runtime to avoid self-match):**
+
+```bash
+TOKEN="F-31""-"
+! grep -q "$TOKEN" audit/v31-243-DELTA-SURFACE.md
+```
+
+**Classification-vocabulary containment gate (D-04 enforcement):**
+
+```bash
+# Every | D-243-F row must carry exactly one of the 5 buckets in the Classification
+# column. This gate confirms containment (no rogue verdicts like "PARTIAL" or "TBD").
+grep -E '^\| D-243-F[0-9]+ ' audit/v31-243-DELTA-SURFACE.md | awk -F'|' '{print $7}' | sort -u
+# Expected output: exactly the subset of { MODIFIED_LOGIC, NEW, REFACTOR_ONLY } used
+# in this phase (DELETED and RENAMED are defined but unexercised).
+```
+
+All commands use portable POSIX (sed / awk / grep / diff / sort / tr). GNU-only flags are avoided.
 
 ### 7.3 Plan 243-03 commands (DELTA-03 call-site catalog) — RESERVED FOR 243-03
 
