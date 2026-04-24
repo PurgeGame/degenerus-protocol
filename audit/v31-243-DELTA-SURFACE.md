@@ -748,8 +748,11 @@ done
 **Finding-ID emission gate (D-20 enforcement):**
 
 ```bash
-# Must return exit code 1 (no matches)
-! grep -q 'F-31-' audit/v31-243-DELTA-SURFACE.md
+# Must return exit code 1 (no matches) — token assembled at runtime so the gate
+# command itself does not match. Phase 246 owns finding-ID assignment; this
+# phase deliberately emits zero such IDs.
+TOKEN="F-31""-"
+! grep -q "$TOKEN" audit/v31-243-DELTA-SURFACE.md
 ```
 
 **Final commit gate (zero contracts/ or test/ writes):**
