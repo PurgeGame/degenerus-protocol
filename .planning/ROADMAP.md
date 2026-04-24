@@ -106,7 +106,11 @@
   2. Every changed function labeled with one of {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED, RENAMED}, with the diff hunk cited and hunk-level annotation attached — zero function is "unclassified" (DELTA-02)
   3. Every changed function's and interface's downstream call sites enumerated across `contracts/` via reproducible grep output — zero caller unaccounted for (DELTA-03)
   4. `.planning/phases/243-*/` artifacts committed + `audit/v31-243-DELTA-SURFACE.md` (or equivalent upstream file) published, referenced by Phase 244 plans as their sole scope input
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 243-01-PLAN.md — DELTA-01 enumeration wave 1: per-commit function/state/event/interface inventory + storage slot-layout diff + reproduction recipe (populates Sections 0/1/4/5/7.1)
+- [ ] 243-02-PLAN.md — DELTA-02 classification wave 2: D-04 5-bucket verdict per function with hunk citation + D-19 evidence burden (populates Section 2 + updates Section 1 change-count cards + §7.2)
+- [ ] 243-03-PLAN.md — DELTA-03 call-site catalog wave 2: grep-reproducible downstream call sites + Consumer Index + final READ-only lock (populates Sections 3/6/§7.3 and flips file status to FINAL)
 
 ### Phase 244: Per-Commit Adversarial Audit (EVT + RNG + QST + GOX)
 **Goal**: Adversarially audit every contract code change in the 5 post-v30 commits against its commit-message behavior claim — surface every finding candidate (SAFE / INFO / LOW / MEDIUM / HIGH / CRITICAL) before Phase 245/246 consolidation
@@ -152,7 +156,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 243. Delta Extraction & Per-Commit Classification | 0/? | Not started | — |
+| 243. Delta Extraction & Per-Commit Classification | 0/3 | Planned | — |
 | 244. Per-Commit Adversarial Audit (EVT + RNG + QST + GOX) | 0/? | Not started | — |
 | 245. sDGNRS Redemption Gameover Safety + Pre-Existing Gameover Invariant Re-Verification | 0/? | Not started | — |
 | 246. Findings Consolidation + Lean Regression Appendix | 0/? | Not started | — |
