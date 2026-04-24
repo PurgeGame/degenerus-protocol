@@ -27,6 +27,12 @@ interface IDegenerusJackpots {
     /// @param amount The amount deposited (for leaderboard ranking).
     function recordBafFlip(address player, uint24 lvl, uint256 amount) external;
 
+    /// @notice Mark a BAF bracket as skipped when the daily flip loses.
+    /// @dev Bumps lastBafResolvedDay so pre-skip winning-flip credit cannot
+    ///      roll forward into future bracket leaderboards.
+    /// @param lvl Level whose BAF was skipped.
+    function markBafSkipped(uint24 lvl) external;
+
     /// @notice Day index of the most recent BAF jackpot resolution.
     function getLastBafResolvedDay() external view returns (uint32);
 }

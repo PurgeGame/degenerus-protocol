@@ -68,6 +68,11 @@ contract DegenerusJackpots is IDegenerusJackpots {
         uint256 newTotal
     );
 
+    /// @notice Emitted when a BAF bracket is skipped because the daily flip lost.
+    /// @param lvl Level whose BAF was skipped.
+    /// @param day Day index on which the skip occurred.
+    event BafSkipped(uint24 indexed lvl, uint32 day);
+
     /*+======================================================================+
       |                              STRUCTS                                 |
       +======================================================================+
@@ -488,6 +493,20 @@ contract DegenerusJackpots is IDegenerusJackpots {
         unchecked { ++bafEpoch[lvl]; }
         lastBafResolvedDay = degenerusGame.currentDayView();
         return (winners, amounts, toReturn);
+    }
+
+    /// @notice Mark a BAF bracket as skipped because the daily flip lost.
+    /// @dev Bumps lastBafResolvedDay so pre-skip winning-flip credit is filtered
+    ///      out of future claims (BurnieCoinflip gates winningBafCredit on
+    ///      cursor > lastBafResolvedDay). Leaderboard state for lvl is left
+    ///      as-is — no new writes ever target a past bracket, so clearing
+    ///      would only burn gas.
+    /// @param lvl Level whose BAF was skipped.
+    /// @custom:access Restricted to game contract via onlyGame modifier.
+    function markBafSkipped(uint24 lvl) external onlyGame {
+        uint32 today = degenerusGame.currentDayView();
+        lastBafResolvedDay = today;
+        emit BafSkipped(lvl, today);
     }
 
     /*+======================================================================+

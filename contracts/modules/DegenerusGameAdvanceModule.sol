@@ -4,6 +4,7 @@ pragma solidity 0.8.34;
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
+import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 import {
     IDegenerusGameGameOverModule,
     IDegenerusGameJackpotModule,
@@ -101,6 +102,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @notice GNRUS contract for governance resolution at level transitions
     IGNRUSResolve private constant charityResolve =
         IGNRUSResolve(ContractAddresses.GNRUS);
+    /// @notice Jackpots contract — direct handle for skip-marker on losing flip days.
+    IDegenerusJackpots private constant jackpots =
+        IDegenerusJackpots(ContractAddresses.JACKPOTS);
     /*+======================================================================+
       |                           CONSTANTS                                  |
       +======================================================================+*/
@@ -815,18 +819,25 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint24 prevMod100 = lvl % 100;
         uint256 claimableDelta;
 
-        // BAF Jackpot (every 10 levels)
+        // BAF Jackpot (every 10 levels) — only if the daily flip won (bit 0 of
+        // rngWord = 1). On a losing flip the bracket is marked skipped, the pool
+        // stays in futurePool, and pre-skip winning-flip credit is filtered out
+        // of future claims via the lastBafResolvedDay bump.
         if (prevMod10 == 0) {
-            uint256 bafPct = prevMod100 == 0 ? 20 : (lvl == 50 ? 20 : 10);
-            uint256 bafPoolWei = (baseMemFuture * bafPct) / 100;
+            if ((rngWord & 1) == 1) {
+                uint256 bafPct = prevMod100 == 0 ? 20 : (lvl == 50 ? 20 : 10);
+                uint256 bafPoolWei = (baseMemFuture * bafPct) / 100;
 
-            uint256 claimed = IDegenerusGame(address(this)).runBafJackpot(
-                bafPoolWei,
-                lvl,
-                rngWord
-            );
-            memFuture -= claimed;
-            claimableDelta += claimed;
+                uint256 claimed = IDegenerusGame(address(this)).runBafJackpot(
+                    bafPoolWei,
+                    lvl,
+                    rngWord
+                );
+                memFuture -= claimed;
+                claimableDelta += claimed;
+            } else {
+                jackpots.markBafSkipped(lvl);
+            }
         }
 
         // Decimator jackpot fires at the window-close bump.
@@ -1117,6 +1128,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     // Bit(s)   Consumer                    Operation                         Location
     // ------   --------                    ---------                         --------
     // 0        Coinflip win/loss           rngWord & 1                       BurnieCoinflip._resolveDay
+    // 0        BAF fire gate               rngWord & 1                       AdvanceModule._consolidatePoolsAndRewardJackpots
     // 8+       Redemption roll             (currentWord >> 8) % 151 + 25     AdvanceModule.rngGate
     // full     Coinflip reward percent     keccak256(rngWord, epoch) % 20    BurnieCoinflip._resolveDay
     // full     Jackpot winner selection    via delegatecall (full word)      JackpotModule (payDailyJackpot)
