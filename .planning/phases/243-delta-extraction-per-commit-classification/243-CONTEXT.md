@@ -22,9 +22,9 @@ Three requirements:
 ## Implementation Decisions
 
 ### Diff Boundary
-- **D-01 (baseline = v30.0 HEAD `7ab515fe`, current = `771893d1`):** Range: `7ab515fe..771893d1`. 5 commits chronological: `ced654df` → `16597cac` → `6b3f4f3c` → `771893d1` → `ffced9ef`. Note that `ffced9ef` is later in log order but commit order per REQUIREMENTS.md enumeration controls. Verified: 12 files touched in `contracts/` (`git diff --stat 7ab515fe..771893d1 -- contracts/`).
-- **D-02 (fresh `git diff` is the single authoritative source):** Phase 243 plans derive the catalog from `git diff 7ab515fe..771893d1 -- contracts/` and per-commit `git show {sha} -- contracts/`. No synthesis from commit messages, no reliance on prior catalogs — messages may be cited for CONTEXT but do not replace the diff as the source of truth (carries v29.0 Phase 230 D-02 forward).
-- **D-03 (HEAD anchor locked in every plan frontmatter):** Every Phase 243 plan's frontmatter freezes `baseline=7ab515fe`, `head=771893d1`. If any new contract commit lands before Phase 244 begins, the baseline resets and Phase 243 re-opens for a scope addendum (Phase 230 D-06 / Phase 237 D-17 pattern).
+- **D-01 (baseline = v30.0 HEAD `7ab515fe`, current = `cc68bfc7`) [AMENDED 2026-04-23 for cc68bfc7 addendum]:** Range: `7ab515fe..cc68bfc7`. 6 commits chronological: `ced654df` → `16597cac` → `6b3f4f3c` → `771893d1` → `ffced9ef` → `cc68bfc7`. Original anchor was `771893d1` (5 commits); the `cc68bfc7` commit "feat(baf): gate BAF jackpot on daily flip win" landed mid-Phase-243 execution (2026-04-23 21:25) touching 3 files in-scope (`contracts/DegenerusJackpots.sol` +19, `contracts/interfaces/IDegenerusJackpots.sol` +6, `contracts/modules/DegenerusGameAdvanceModule.sol` +22/-10). Per original D-03, the baseline reset and Phase 243 re-opened for a scope addendum. Verified: 14 files touched in `contracts/` at `7ab515fe..cc68bfc7` (`git diff --stat 7ab515fe..cc68bfc7 -- contracts/`) — original 12 + 2 new (`DegenerusJackpots.sol`, `IDegenerusJackpots.sol`); one file in the original 12 (`DegenerusGameAdvanceModule.sol`) receives additional hunks.
+- **D-02 (fresh `git diff` is the single authoritative source):** Phase 243 plans derive the catalog from `git diff 7ab515fe..cc68bfc7 -- contracts/` and per-commit `git show {sha} -- contracts/`. No synthesis from commit messages, no reliance on prior catalogs — messages may be cited for CONTEXT but do not replace the diff as the source of truth (carries v29.0 Phase 230 D-02 forward).
+- **D-03 (HEAD anchor locked in every plan frontmatter):** Every Phase 243 plan's frontmatter freezes `baseline=7ab515fe`, `head=cc68bfc7`. Amended from original `head=771893d1` after the `cc68bfc7` scope addendum landed mid-execution. If any FURTHER new contract commit lands before Phase 244 begins, the baseline resets again and Phase 243 re-opens for another addendum (Phase 230 D-06 / Phase 237 D-17 pattern). Phase 244 plan-start will capture the final HEAD SHA.
 
 ### Change Significance Taxonomy (DELTA-02)
 - **D-04 (5-bucket classification + REFACTOR_ONLY bar):** Every changed function classified as one of {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED, RENAMED}:
@@ -106,17 +106,18 @@ Three requirements:
 - `.planning/ROADMAP.md` — Phase 243 success criteria (4 items); execution-order narrative; deliverable target `audit/v31-243-DELTA-SURFACE.md`
 - `.planning/PROJECT.md` — Current Milestone section lists the 5 in-scope commits + READ-only write policy
 
-### In-scope commits (chronological order per REQUIREMENTS.md)
+### In-scope commits (chronological order per REQUIREMENTS.md) — 6 commits after cc68bfc7 addendum
 - `ced654df` — fix(jackpot): emit accurate scaled ticketCount on all JackpotTicketWin paths (`DegenerusGameJackpotModule.sol` +33/-6)
 - `16597cac` — rngunlock fix (`DegenerusGameAdvanceModule.sol` +6/-6)
 - `6b3f4f3c` — feat(quests): credit recycled ETH toward MINT_ETH quests + earlybird DGNRS (`DegenerusQuests.sol`, `IDegenerusQuests.sol`, `DegenerusGameMintModule.sol`)
 - `771893d1` — feat(gameover): shift purchase/claim gates to liveness + protect sDGNRS redemptions (8 files: `DegenerusGame.sol`, `StakedDegenerusStonk.sol`, `IDegenerusGame.sol`, `IStakedDegenerusStonk.sol`, `AdvanceModule`, `GameOverModule`, `MintModule`, `WhaleModule`, `DegenerusGameStorage.sol`)
 - `ffced9ef` — chore: remove v30.0 REQUIREMENTS.md (docs-only; enumerated for completeness per D-13)
+- `cc68bfc7` — feat(baf): gate BAF jackpot on daily flip win (`DegenerusJackpots.sol` +19, `IDegenerusJackpots.sol` +6, `DegenerusGameAdvanceModule.sol` +22/-10) — ADDENDUM COMMIT (landed 2026-04-23 21:25 mid-Phase-243 execution; re-scoped per amended D-01)
 
-### In-scope files (12 touched in `contracts/`)
-- **Top-level:** `contracts/DegenerusGame.sol`, `contracts/DegenerusQuests.sol`, `contracts/StakedDegenerusStonk.sol`
-- **Interfaces:** `contracts/interfaces/IDegenerusGame.sol`, `contracts/interfaces/IDegenerusQuests.sol`, `contracts/interfaces/IStakedDegenerusStonk.sol`
-- **Modules:** `contracts/modules/DegenerusGameAdvanceModule.sol`, `contracts/modules/DegenerusGameGameOverModule.sol`, `contracts/modules/DegenerusGameJackpotModule.sol`, `contracts/modules/DegenerusGameMintModule.sol`, `contracts/modules/DegenerusGameWhaleModule.sol`
+### In-scope files (14 touched in `contracts/` after cc68bfc7 addendum)
+- **Top-level:** `contracts/DegenerusGame.sol`, `contracts/DegenerusQuests.sol`, `contracts/StakedDegenerusStonk.sol`, `contracts/DegenerusJackpots.sol` (added by cc68bfc7)
+- **Interfaces:** `contracts/interfaces/IDegenerusGame.sol`, `contracts/interfaces/IDegenerusQuests.sol`, `contracts/interfaces/IStakedDegenerusStonk.sol`, `contracts/interfaces/IDegenerusJackpots.sol` (added by cc68bfc7)
+- **Modules:** `contracts/modules/DegenerusGameAdvanceModule.sol` (receives additional hunks from cc68bfc7 beyond its 771893d1 + 16597cac + 6b3f4f3c content), `contracts/modules/DegenerusGameGameOverModule.sol`, `contracts/modules/DegenerusGameJackpotModule.sol`, `contracts/modules/DegenerusGameMintModule.sol`, `contracts/modules/DegenerusGameWhaleModule.sol`
 - **Storage:** `contracts/storage/DegenerusGameStorage.sol`
 
 ### Methodology precedents (carried forward, not re-litigated)
