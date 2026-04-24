@@ -36,7 +36,7 @@ Plan: 4 of 4 — all plans closed at cc68bfc7; `audit/v31-244-PER-COMMIT-AUDIT.m
 
 **Phase 244 aggregate (all 4 plans closed 2026-04-24):** 87 V-rows across 19 REQs (EVT 22 + RNG 20 + QST 24 + GOX 21); 0 finding candidates; all 19 REQs SAFE floor severity; 7 INFO observations (NatSpec-disclosed surfaces + by-design RE_VERIFIED envelopes + direction-only bytecode commentary); 8/8 Phase 243 §1.7 INFO finding candidates CLOSED in-phase (zero rolled forward to Phase 245). KI EXC-02 + EXC-03 envelopes RE_VERIFIED_AT_HEAD cc68bfc7 unchanged per CONTEXT.md D-22. Zero contracts/ or test/ writes; zero edits to audit/v31-243-DELTA-SURFACE.md; zero F-31-NN finding-IDs (all per CONTEXT.md D-18/D-20/D-21).
 
-**Status:** Phase 244 COMPLETE (4/4 plans); `audit/v31-244-PER-COMMIT-AUDIT.md` FINAL READ-ONLY; Phase 245 ready for planning.
+**Status:** Phase 244 COMPLETE (4/4 plans); `audit/v31-244-PER-COMMIT-AUDIT.md` FINAL READ-ONLY; VERIFICATION PASSED 8/8 dimensions (244-VERIFICATION.md); Phase 245 ready for planning.
 **Last shipped:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit (closed 2026-04-20 at HEAD `7ab515fe`; tag `v30.0`)
 **Delta baseline:** v30.0 HEAD `7ab515fe` → current HEAD `cc68bfc7` (amended from `771893d1` per 243-CONTEXT.md D-01/D-03 after the cc68bfc7 BAF-flip-gate addendum landed 2026-04-23)
 **Delta scope (finalized at cc68bfc7):** 14 files / +187 insertions / -67 deletions — 42 D-243-C### row changelog + 26 D-243-F### classification rows + 60 D-243-X### call-site rows + 41 D-243-I### Consumer Index rows + 2 D-243-S### storage rows in `audit/v31-243-DELTA-SURFACE.md` (FINAL READ-only per D-21)
