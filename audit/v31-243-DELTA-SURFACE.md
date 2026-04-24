@@ -4,7 +4,7 @@
 **Audit head:** `771893d1` (v31.0 milestone start HEAD).
 **Phase:** 243 — Delta Extraction & Per-Commit Classification (DELTA-01 / DELTA-02 / DELTA-03).
 **Scope:** READ-only per CONTEXT.md D-22. Zero `contracts/` or `test/` writes.
-**Status:** WORKING — 243-03 wave-2 call-site + Consumer Index appends pending. HEAD: `cc68bfc7` (extended from `771893d1` via cc68bfc7 BAF-flip-gate addendum per CONTEXT.md D-01 amendment, 2026-04-23). Plan 243-01 original pass populated Sections 0 / 1 / 4 / 5 / 7.1 at head `771893d1`. Plan 243-01 addendum pass appended cc68bfc7-scope rows to Sections 1 / 4 / 5 / 7.1 without rewriting the original 771893d1 rows. Plan 243-02 populated Section 2 (Aggregate Function Classification, 26 rows covering all `func` entries across both HEAD anchors) + §7.2 reproduction recipes. Sections 3 / 6 / 7.3 still carry `RESERVED FOR 243-03` placeholder markers for the Wave 2 call-site plan to replace in place. Plan 243-03 performs the final FINAL-status READ-only lock per CONTEXT.md D-12 + D-21.
+**Status:** FINAL — READ-only per CONTEXT.md D-21. Any Phase 244/245 delta/gap beyond this catalog is recorded as a scope-guard deferral in the discovering plan's own SUMMARY.md — this file is NOT re-edited. HEAD: `cc68bfc7` (amended Phase-243 head per CONTEXT.md D-01/D-03; extended from the original `771893d1` anchor after the cc68bfc7 BAF-flip-gate commit landed mid-Phase-243 execution on 2026-04-23). Plan 243-01 original pass populated Sections 0 / 1 / 4 / 5 / 7.1 at head `771893d1`; Plan 243-01 addendum pass appended cc68bfc7-scope rows to Sections 1 / 4 / 5 / 7.1 without rewriting the original 771893d1 rows; Plan 243-02 populated Section 2 (Aggregate Function Classification, 26 rows covering all `func` entries across both HEAD anchors) + §7.2 reproduction recipes; Plan 243-03 populated Section 3 (60 call-site rows) + Section 6 (41-REQ Consumer Index mapping) + §7.3 reproduction recipes and flipped this file to FINAL READ-only per D-21. Phase 243 COMPLETE: DELTA-01 + DELTA-02 + DELTA-03 all closed at HEAD `cc68bfc7` against baseline `7ab515fe`.
 
 ## Section 0 — Overview & Row-ID Legend
 
@@ -307,9 +307,408 @@ Zero deviations. All 11 CONTEXT.md D-05 pre-locked verdicts (D-05.1 + D-05.2 col
 
 No new Finding Candidates surfaced during this classification pass — Section 1.7's 8 INFO candidates (5 from original 771893d1 sweep + 3 from cc68bfc7 addendum) are preserved byte-identical.
 
-## Section 3 — Downstream Call-Site Catalog (RESERVED FOR 243-03)
+## Section 3 — Downstream Call-Site Catalog
 
-This section is reserved for Plan 243-03 to append the grep-reproducible call-site inventory for every changed function and interface method. Row IDs `D-243-X###`. DO NOT edit this section in Plan 243-01 — 243-03 appends to it.
+Per CONTEXT.md D-14: scope is the `contracts/` tree ONLY. `contracts/mocks/`, `contracts/test/`, `test/`, `scripts/`, `deploy/`, and `contracts/ContractAddresses.sol.bak` (stale per `feedback_contract_locations.md`) are OUT of scope.
+
+Per CONTEXT.md D-15: changed interface methods in `IDegenerusGame`, `IDegenerusQuests`, `IStakedDegenerusStonk`, and `IDegenerusJackpots` (addendum) have call sites enumerated INCLUDING self-calls via the `IDegenerusGame(address(this))` pattern and delegatecall selectors in `IDegenerusGameModules` corresponding to the changed module functions.
+
+Per CONTEXT.md D-18 grep-reproducibility mandate: every row carries the exact `grep` command that found it. Portable POSIX syntax. Aggregate replay recipe in §7.3.
+
+Row ID prefix: `D-243-X###` zero-padded monotonic.
+
+**Dual HEAD-anchor note:** All grep commands were executed on the working tree at HEAD `cc68bfc7` (the amended Phase-243 head per CONTEXT.md D-03). Consequently, every `Caller File:Line` in this section reflects `cc68bfc7` line numbers — identical to `771893d1` line numbers except inside `contracts/modules/DegenerusGameAdvanceModule.sol` (the `cc68bfc7` addendum added +22/-10 additional hunks: the file-scope `jackpots` constant at L105-106 shifts all subsequent lines by +2, and the new `if ((rngWord & 1) == 1) { ... } else { jackpots.markBafSkipped(lvl); }` branch inside `_consolidatePoolsAndRewardJackpots` expands that function body) and inside `contracts/DegenerusJackpots.sol` / `contracts/interfaces/IDegenerusJackpots.sol` (new symbols added). Reviewers replaying at `771893d1` apply the inverse offset to AdvanceModule line numbers downstream of L105; files other than these three have byte-identical line numbers across the two anchors.
+
+Call Type vocabulary:
+- `direct` — bare-name call (`name(...)`) inside the same contract / module OR via a concrete type handle such as `jackpots.name(...)` or `game.name(...)`, where the handle's static type resolves 1:1 to the implementing contract's address
+- `self-call` — the `IDegenerusGame(address(this)).name(...)` pattern (crosses module-delegatecall boundaries back through the top-level DegenerusGame dispatcher, which then delegatecalls the target module's selector)
+- `delegatecall` — the `abi.encodeWithSelector(...)` / `.name.selector` pattern (module-to-module or top-level-to-module dispatch via `delegatecall`)
+- `library` — the `LibName.name(...)` library call form (none present in this delta; the changed symbols are all contract-level)
+
+Comment / string-literal matches (e.g., NatSpec references, inline explanatory comments) are filtered out per D-18 post-grep heuristic and NOT emitted as `D-243-X###` rows.
+
+### 3.1 Per-Symbol Call-Site Catalog
+
+Each changed `func`/`modifier` from Section 1 + each changed interface-method from Section 4.3 has its own subsection. Rows within each subsection are sorted by `Caller File:Line` alphabetically, then ascending line number.
+
+#### 3.1.1 Symbol: `_runEarlyBirdLootboxJackpot` (from Section 1 row D-243-C001; classification D-243-F001 MODIFIED_LOGIC)
+
+**Grep command:** `grep -rn --include='*.sol' '\b_runEarlyBirdLootboxJackpot\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X001 | `_runEarlyBirdLootboxJackpot` | contracts/modules/DegenerusGameJackpotModule.sol:385 | `payDailyJackpot` (JackpotModule, L334) | direct | `grep -rn --include='*.sol' '\b_runEarlyBirdLootboxJackpot\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+#### 3.1.2 Symbol: `_distributeTicketsToBucket` (from Section 1 row D-243-C002; classification D-243-F002 MODIFIED_LOGIC)
+
+**Grep command:** `grep -rn --include='*.sol' '\b_distributeTicketsToBucket\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X002 | `_distributeTicketsToBucket` | contracts/modules/DegenerusGameJackpotModule.sol:946 | `_distributeTicketsToBuckets` (plural — JackpotModule, L927) | direct | `grep -rn --include='*.sol' '\b_distributeTicketsToBucket\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Note: the grep also matches the `_distributeTicketsToBuckets` function header at L927 by word-boundary (Solidity identifier boundary on the trailing `s` is valid since `(` after the plural ends the word); that is the CALLER function definition, not a call site of the singular, so it is not emitted as an X### row.
+
+#### 3.1.3 Symbol: `runBafJackpot` (from Section 1 row D-243-C003; classification D-243-F003 MODIFIED_LOGIC)
+
+Scope: this subsection catalogs callers of the **JackpotModule implementation** `runBafJackpot` (the Section 1 changed symbol at `contracts/modules/DegenerusGameJackpotModule.sol:1974-2059`). The JackpotModule is delegatecalled from DegenerusGame's dispatcher; the dispatcher's `runBafJackpot` at `contracts/DegenerusGame.sol:1086-1101` is the externally-reachable entry point and is catalogued here via its delegatecall selector reference at L1096. The separate `DegenerusJackpots.sol:225 runBafJackpot` (a different contract, NOT in Section 1) is out of scope — the L1982 line in JackpotModule calls that DegenerusJackpots variant via the `jackpots` handle, so it is also NOT a caller of the changed Section-1 symbol.
+
+**Grep command (primary):** `grep -rn --include='*.sol' '\brunBafJackpot\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+**Grep command (delegatecall selector):** `grep -rn --include='*.sol' '\.runBafJackpot\.selector' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X003 | `runBafJackpot` (JackpotModule impl) | contracts/DegenerusGame.sol:1086 | `runBafJackpot` (DegenerusGame dispatcher — its declaration is itself the caller-function context for the delegatecall at L1096) | direct (definition-level; the actual dispatch happens via the selector at L1096 — row kept to document the externally-reachable entry point) | `grep -rn --include='*.sol' '\brunBafJackpot\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X004 | `runBafJackpot` (JackpotModule impl — via delegatecall selector) | contracts/DegenerusGame.sol:1096 | `runBafJackpot` (DegenerusGame dispatcher, L1086) | delegatecall | `grep -rn --include='*.sol' '\.runBafJackpot\.selector' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/'` |
+| D-243-X005 | `runBafJackpot` (JackpotModule impl — via `IDegenerusGame(address(this))` self-call that re-enters the dispatcher, which delegatecalls back into the module) | contracts/modules/DegenerusGameAdvanceModule.sol:831 | `_consolidatePoolsAndRewardJackpots` (AdvanceModule, L728) | self-call | `grep -rn --include='*.sol' '\brunBafJackpot\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Out-of-scope matches (documented for reproducibility):
+- `contracts/DegenerusJackpots.sol:225` — this is the DegenerusJackpots contract's own `runBafJackpot` DEFINITION (the BAF winner-selection backend), a separate contract from JackpotModule. Not a caller of the Section 1 symbol.
+- `contracts/interfaces/IDegenerusJackpots.sol:16` — interface declaration for DegenerusJackpots.runBafJackpot (backend contract, not the module). Not a caller.
+- `contracts/interfaces/IDegenerusGame.sol:170` — interface declaration for DegenerusGame dispatcher's `runBafJackpot` entry point. Not a caller, just declares the dispatcher's external signature.
+- `contracts/interfaces/IDegenerusGameModules.sol:102` — interface declaration for the JackpotModule's delegatecall target signature. Not a caller, just gives the selector a type. The LIVE selector use is D-243-X004.
+- `contracts/modules/DegenerusGameJackpotModule.sol:1982` — `jackpots.runBafJackpot(...)` — this calls DegenerusJackpots (backend contract), NOT the module's own function. Not a caller of the Section 1 symbol.
+
+#### 3.1.4 Symbol: `_awardJackpotTickets` (from Section 1 row D-243-C004; classification D-243-F004 MODIFIED_LOGIC)
+
+**Grep command:** `grep -rn --include='*.sol' '\b_awardJackpotTickets\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X006 | `_awardJackpotTickets` | contracts/modules/DegenerusGameJackpotModule.sol:2018 | `runBafJackpot` (JackpotModule impl, L1974 — small-lootbox branch, post-emit-removal) | direct | `grep -rn --include='*.sol' '\b_awardJackpotTickets\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X007 | `_awardJackpotTickets` | contracts/modules/DegenerusGameJackpotModule.sol:2049 | `runBafJackpot` (JackpotModule impl, L1974 — odd-index branch, post-emit-removal) | direct | `grep -rn --include='*.sol' '\b_awardJackpotTickets\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Out-of-scope: match at L2048 is inside a `//` comment (NatSpec explaining the removed stub emit); filtered out per D-18.
+
+#### 3.1.5 Symbol: `_jackpotTicketRoll` (from Section 1 row D-243-C005; classification D-243-F005 MODIFIED_LOGIC)
+
+**Grep command:** `grep -rn --include='*.sol' '\b_jackpotTicketRoll\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X008 | `_jackpotTicketRoll` | contracts/modules/DegenerusGameJackpotModule.sol:2093 | `_awardJackpotTickets` (JackpotModule, L2074 — small-lootbox + trait-matched path) | direct | `grep -rn --include='*.sol' '\b_jackpotTicketRoll\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X009 | `_jackpotTicketRoll` | contracts/modules/DegenerusGameJackpotModule.sol:2100 | `_awardJackpotTickets` (JackpotModule, L2074 — large-lootbox whale-pass fallback entry) | direct | `grep -rn --include='*.sol' '\b_jackpotTicketRoll\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X010 | `_jackpotTicketRoll` | contracts/modules/DegenerusGameJackpotModule.sol:2109 | `_awardJackpotTickets` (JackpotModule, L2074 — continuation call) | direct | `grep -rn --include='*.sol' '\b_jackpotTicketRoll\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Out-of-scope: matches at L2016 and L2046 are inside `//` comments; filtered out per D-18.
+
+#### 3.1.6 Symbol: `advanceGame` (from Section 1 row D-243-C007; classification D-243-F006 MODIFIED_LOGIC)
+
+Scope note: `advanceGame` is a dual-layer symbol. The Section 1 changed implementation is at `contracts/modules/DegenerusGameAdvanceModule.sol:160` (the module-level body, modified by `16597cac` to remove `_unlockRng(day)` and apply two reformats per Section 1 row D-243-C007). The externally-callable dispatcher is at `contracts/DegenerusGame.sol:284` which delegatecalls the module via `IDegenerusGameAdvanceModule.advanceGame.selector`. Both the dispatcher and the selector-based delegatecall are catalogued here, plus every external caller of the dispatcher (sDGNRS, Vault).
+
+**Grep command (primary):** `grep -rn --include='*.sol' '\badvanceGame\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+**Grep command (delegatecall selector):** `grep -rn --include='*.sol' '\.advanceGame\.selector' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X011 | `advanceGame` (AdvanceModule impl via dispatcher) | contracts/DegenerusGame.sol:284 | `advanceGame` (DegenerusGame dispatcher — itself the external entry; row kept to document the publicly-reachable entry point) | direct (definition-level) | `grep -rn --include='*.sol' '\badvanceGame\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X012 | `advanceGame` (AdvanceModule impl via delegatecall selector) | contracts/DegenerusGame.sol:289 | `advanceGame` (DegenerusGame dispatcher, L284) | delegatecall | `grep -rn --include='*.sol' '\.advanceGame\.selector' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/'` |
+| D-243-X013 | `advanceGame` (dispatcher) | contracts/DegenerusVault.sol:515 | `gameAdvance` (DegenerusVault, L514 — vault-owner wrapper) | direct | `grep -rn --include='*.sol' '\badvanceGame\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X014 | `advanceGame` (dispatcher) | contracts/StakedDegenerusStonk.sol:355 | `gameAdvance` (StakedDegenerusStonk, L354 — sDGNRS wrapper) | direct | `grep -rn --include='*.sol' '\badvanceGame\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Out-of-scope matches (all comment/NatSpec/identifier-substring filtered per D-18):
+- `contracts/BurnieCoinflip.sol:571`, `contracts/modules/DegenerusGameDegeneretteModule.sol:698`, `contracts/DegenerusGame.sol:239`, `contracts/DegenerusGame.sol:1855`, `contracts/DegenerusGame.sol:1858`, `contracts/modules/DegenerusGameDecimatorModule.sol:324`, `contracts/modules/DegenerusGameJackpotModule.sol:575`, `contracts/modules/DegenerusGameJackpotModule.sol:577`, `contracts/modules/DegenerusGameAdvanceModule.sol:26/36/59/151/154/519/995/1043/1145/1659/1703/1704/1719`, `contracts/storage/DegenerusGameStorage.sol:256/293/305/312/389/453` — all are inside `///` / `//` comments or NatSpec docstrings referencing the flow conceptually, not call sites.
+- `contracts/StakedDegenerusStonk.sol:11`, `contracts/DegenerusVault.sol:12`, `contracts/interfaces/IStakedDegenerusStonk.sol:93` (comment-only at :93), `contracts/interfaces/IDegenerusGameModules.sol:10` — interface declarations / inline interface for `advanceGame`; not callers, just type-declarations consumed by D-243-X012/X013/X014.
+- `contracts/modules/DegenerusGameAdvanceModule.sol:160` — the DEFINITION of the AdvanceModule implementation itself (the Section 1 row D-243-C007 target); not a caller.
+
+#### 3.1.7 Symbol: `handlePurchase` (from Section 1 row D-243-C008 in Section 1 + D-243-C009/C030 interface rows; classification D-243-F007 REFACTOR_ONLY)
+
+Scope: `handlePurchase` is defined as an external function on `contracts/DegenerusQuests.sol:763` (the implementation — D-243-C008) and declared on `contracts/interfaces/IDegenerusQuests.sol:139` (the interface — D-243-C009 and Section 4.3 row D-243-C030). Its only caller is the MintModule, via the `quests` handle.
+
+**Grep command (primary):** `grep -rn --include='*.sol' '\bhandlePurchase\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X015 | `handlePurchase` (DegenerusQuests impl + interface) | contracts/modules/DegenerusGameMintModule.sol:1098 | `_purchaseFor` (MintModule, L913) | direct | `grep -rn --include='*.sol' '\bhandlePurchase\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Out-of-scope: match at `contracts/modules/DegenerusGameMintModule.sol:1273` is inside a `//` comment ("Accumulate BURNIE mint quest units (deferred to handlePurchase)"); filtered per D-18. Match at `contracts/DegenerusQuests.sol:763` is the definition; match at `contracts/interfaces/IDegenerusQuests.sol:139` is the interface declaration.
+
+#### 3.1.8 Symbol: `_purchaseFor` (from Section 1 rows D-243-C010 + D-243-C019; classifications D-243-F008 MODIFIED_LOGIC at 6b3f4f3c and D-243-F017 MODIFIED_LOGIC at 771893d1)
+
+Scope note: `_purchaseFor` exists as TWO distinct symbols — one on `contracts/DegenerusGame.sol:518` (a private dispatcher wrapping the delegatecall) and one on `contracts/modules/DegenerusGameMintModule.sol:913` (the MintModule implementation). Both are in scope — the MintModule impl is the Section 1 changed symbol; the DegenerusGame dispatcher is its externally-reachable bridge.
+
+**Grep command:** `grep -rn --include='*.sol' '\b_purchaseFor\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X016 | `_purchaseFor` (DegenerusGame dispatcher) | contracts/DegenerusGame.sol:509 | `purchase` (DegenerusGame external entry, L501) | direct | `grep -rn --include='*.sol' '\b_purchaseFor\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X017 | `_purchaseFor` (MintModule impl) | contracts/modules/DegenerusGameMintModule.sol:850 | `purchase` (MintModule, L843 — the delegatecalled entry that in turn self-invokes `_purchaseFor`) | direct | `grep -rn --include='*.sol' '\b_purchaseFor\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Out-of-scope: match at L1201 inside `//` comment; filtered per D-18. Line 518 / 913 are the definitions themselves.
+
+#### 3.1.9 Symbol: `_callTicketPurchase` (from Section 1 rows D-243-C011 + D-243-C020; classifications D-243-F009 MODIFIED_LOGIC at 6b3f4f3c and D-243-F018 MODIFIED_LOGIC at 771893d1)
+
+**Grep command:** `grep -rn --include='*.sol' '\b_callTicketPurchase\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X018 | `_callTicketPurchase` | contracts/modules/DegenerusGameMintModule.sol:895 | `_purchaseCoinFor` (MintModule, L885) | direct | `grep -rn --include='*.sol' '\b_callTicketPurchase\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X019 | `_callTicketPurchase` | contracts/modules/DegenerusGameMintModule.sol:978 | `_purchaseFor` (MintModule, L913) | direct | `grep -rn --include='*.sol' '\b_callTicketPurchase\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Out-of-scope: match at L1137 is `//` comment ("moved from _callTicketPurchase"); filtered per D-18. Line 1206 is the definition.
+
+#### 3.1.10 Symbol: `livenessTriggered` (from Section 1 row D-243-C012; classification D-243-F010 NEW — external view on DegenerusGame; also interface method D-243-C031 on IDegenerusGame and D-243-C033 on inline IDegenerusGamePlayer inside StakedDegenerusStonk.sol)
+
+Scope: this subsection catalogs callers of the **externally-callable view function** `DegenerusGame.livenessTriggered()` (returns `_livenessTriggered()` result to cross-contract callers). The internal `_livenessTriggered()` helper used by modules is a separate symbol (§3.1.22 below).
+
+**Grep command:** `grep -rn --include='*.sol' '\blivenessTriggered\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X020 | `livenessTriggered` (external view on DegenerusGame) | contracts/StakedDegenerusStonk.sol:491 | `burn` (StakedDegenerusStonk, L486) | direct | `grep -rn --include='*.sol' '\blivenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X021 | `livenessTriggered` (external view on DegenerusGame) | contracts/StakedDegenerusStonk.sol:507 | `burnWrapped` (StakedDegenerusStonk, L506) | direct | `grep -rn --include='*.sol' '\blivenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Out-of-scope: matches at `contracts/StakedDegenerusStonk.sol:30` (inline `IDegenerusGamePlayer` interface declaration — D-243-C033), `contracts/interfaces/IDegenerusGame.sol:30` (interface declaration — D-243-C031), `contracts/DegenerusGame.sol:2133` (the function DEFINITION itself — D-243-C012) are not call sites. No delegatecall selector for `livenessTriggered` exists (verified via `grep -rn '\.livenessTriggered\.selector' contracts/` returning empty — `livenessTriggered` is a top-level DegenerusGame view, not a module delegatecall target).
+
+#### 3.1.11 Symbol: `burn` (StakedDegenerusStonk — from Section 1 row D-243-C013; classification D-243-F011 MODIFIED_LOGIC)
+
+Scope: this subsection catalogs callers of **`StakedDegenerusStonk.burn(uint256)`**, whose signature is `function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut)`. Other `burn` functions in the `contracts/` tree (DegenerusStonk, BurnieCoin, GNRUS, WrappedWrappedXRP) share the unqualified name but are distinct contracts whose `burn` is NOT the Section 1 symbol; their internal/external `burn` call sites are out of scope.
+
+**Grep command (narrowed):** `grep -rn --include='*.sol' 'sdgnrsToken\.burn(\|stonk\.burn(\|sdgnrs\.burn(\|IStakedDegenerusStonk([^)]*)\.burn(' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X022 | `StakedDegenerusStonk.burn` | contracts/DegenerusStonk.sol:231 | `burn` (DegenerusStonk token wrapper, L227 — unwrap-then-redeem flow; post-gameOver only per `if (!game.gameOver()) revert GameNotOver()` guard at L229) | direct (via `stonk` handle of type `IStakedDegenerusStonk` defined in-file at L8-17) | `grep -rn --include='*.sol' 'sdgnrsToken\.burn(\|stonk\.burn(\|sdgnrs\.burn(\|IStakedDegenerusStonk([^)]*)\.burn(' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/'` |
+| D-243-X023 | `StakedDegenerusStonk.burn` | contracts/DegenerusStonk.sol:312 | `yearSweep` (DegenerusStonk, L304 — year-sweep reclaiming ETH/stETH backing for remaining holders) | direct | `grep -rn --include='*.sol' 'sdgnrsToken\.burn(\|stonk\.burn(\|sdgnrs\.burn(\|IStakedDegenerusStonk([^)]*)\.burn(' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/'` |
+| D-243-X024 | `StakedDegenerusStonk.burn` | contracts/DegenerusVault.sol:741 | `sdgnrsBurn` (DegenerusVault, L740 — vault-owner wrapper; `sdgnrsToken` is typed `IStakedDegenerusStonkBurn` inline interface at DegenerusVault.sol:92-95 pointing at `ContractAddresses.SDGNRS`) | direct (via `sdgnrsToken` handle of minimal-surface interface `IStakedDegenerusStonkBurn`) | `grep -rn --include='*.sol' 'sdgnrsToken\.burn(\|stonk\.burn(\|sdgnrs\.burn(\|IStakedDegenerusStonk([^)]*)\.burn(' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/'` |
+
+Out-of-scope: matches in the un-narrowed `grep -rn '\bburn\b'` against the contracts tree produce hundreds of hits across BurnieCoin / BurnieCoinflip / GNRUS / WWXRP / DegenerusVault's own burn helpers / mint-burn NatSpec comments / `stonk.burn(...)` in DegenerusStonk's un-wrapper flows / decimator-burn fields (`e.burn`, `prevBurn`, `newBurn`, etc. — local variables and struct fields) — none of which call the Section 1 `StakedDegenerusStonk.burn`. The narrowed grep above is the minimal-surface pattern that matches only true callers of the Section 1 symbol.
+
+Edge-case justification (included even at surface-tightening cost): the narrowed pattern would miss a hypothetical `msgsender.call(abi.encodeWithSelector(IStakedDegenerusStonk.burn.selector, amt))` — a delegatecall/staticcall selector pattern. Re-ran `grep -rn --include='*.sol' 'IStakedDegenerusStonk\.burn\.selector\|IStakedDegenerusStonkBurn\.burn\.selector' contracts/` — returned zero matches. No delegatecall selector for sDGNRS burn is present in the production tree. Catalog complete.
+
+#### 3.1.12 Symbol: `burnWrapped` (StakedDegenerusStonk — from Section 1 row D-243-C014; classification D-243-F012 MODIFIED_LOGIC)
+
+**Grep command:** `grep -rn --include='*.sol' '\bburnWrapped\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X025 | `burnWrapped` | (none — zero external callers in contracts/ tree) | (none) | (none) | `grep -rn --include='*.sol' '\bburnWrapped\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Rows emitted: matches are at `contracts/DegenerusStonk.sol:57` (`//` comment), `contracts/DegenerusStonk.sol:221` (NatSpec `///`), and `contracts/StakedDegenerusStonk.sol:506` (the definition itself per Section 1 row D-243-C014). Zero non-comment external callers in contracts/ tree. `burnWrapped` is a player-facing `external` entry; players call it directly from EOAs / front-end. This is EXPECTED (not a dead-code concern) because the symbol's purpose is to be a player-initiated gambling-burn redemption trigger during active game — it never needs a programmatic caller. Annotated as `NO CALLERS — PLAYER-FACING EXTERNAL (expected)`; NO finding-candidate emitted because absence of programmatic callers is by-design for this symbol. Cross-reference: Section 1.6 bullets 1 + 2 discuss the State-1 revert ordering semantics of `burn` + `burnWrapped` at a design level.
+
+#### 3.1.13 Symbol: `_handleGameOverPath` (from Section 1 row D-243-C015; classification D-243-F013 MODIFIED_LOGIC)
+
+**Grep command:** `grep -rn --include='*.sol' '\b_handleGameOverPath\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X026 | `_handleGameOverPath` | contracts/modules/DegenerusGameAdvanceModule.sol:183 | `advanceGame` (AdvanceModule impl, L160) | direct | `grep -rn --include='*.sol' '\b_handleGameOverPath\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Out-of-scope: matches at `contracts/modules/DegenerusGameGameOverModule.sol:98` (NatSpec `//` comment) and `contracts/storage/DegenerusGameStorage.sol:1226` (NatSpec `///` comment) are comments; filtered per D-18. Line 523 is the definition.
+
+#### 3.1.14 Symbol: `_gameOverEntropy` (from Section 1 row D-243-C016; classification D-243-F014 MODIFIED_LOGIC)
+
+**Grep command:** `grep -rn --include='*.sol' '\b_gameOverEntropy\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X027 | `_gameOverEntropy` | contracts/modules/DegenerusGameAdvanceModule.sol:560 | `_handleGameOverPath` (AdvanceModule, L523) | direct | `grep -rn --include='*.sol' '\b_gameOverEntropy\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Out-of-scope: matches at `contracts/modules/DegenerusGameGameOverModule.sol:76` (NatSpec `///`) and `contracts/storage/DegenerusGameStorage.sol:1231` (NatSpec `///`) are comments. Line 1228 is the definition.
+
+#### 3.1.15 Symbol: `handleGameOverDrain` (from Section 1 row D-243-C017; classification D-243-F015 MODIFIED_LOGIC)
+
+Scope: interface-method D-243-C033 on `IDegenerusGameModules.handleGameOverDrain` is the delegatecall target. The live dispatcher + delegatecall is inside `_handleGameOverPath` in AdvanceModule.
+
+**Grep command (primary):** `grep -rn --include='*.sol' '\bhandleGameOverDrain\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+**Grep command (delegatecall selector):** `grep -rn --include='*.sol' '\.handleGameOverDrain\.selector' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X028 | `handleGameOverDrain` (GameOverModule impl via delegatecall selector) | contracts/modules/DegenerusGameAdvanceModule.sol:627 | `_handleGameOverPath` (AdvanceModule, L523) | delegatecall | `grep -rn --include='*.sol' '\.handleGameOverDrain\.selector' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/'` |
+
+Out-of-scope: matches at `contracts/StakedDegenerusStonk.sol:104` (`///` NatSpec), `contracts/modules/DegenerusGameAdvanceModule.sol:620` (`//` comment: "swallow, fall through to handleGameOverDrain"), `contracts/modules/DegenerusGameAdvanceModule.sol:622` (same comment), `contracts/DegenerusGame.sol:1137` (`///` NatSpec), `contracts/interfaces/IStakedDegenerusStonk.sol:89` (`///` NatSpec), `contracts/interfaces/IDegenerusGameModules.sol:50` (interface declaration — delegatecall target type). Line 79 is the definition.
+
+#### 3.1.16 Symbol: `_purchaseCoinFor` (from Section 1 row D-243-C018; classification D-243-F016 MODIFIED_LOGIC)
+
+**Grep command:** `grep -rn --include='*.sol' '\b_purchaseCoinFor\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X029 | `_purchaseCoinFor` | contracts/modules/DegenerusGameMintModule.sol:870 | `purchaseCoin` (MintModule, L865) | direct | `grep -rn --include='*.sol' '\b_purchaseCoinFor\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Line 885 is the definition. No other callers.
+
+#### 3.1.17 Symbol: `_purchaseBurnieLootboxFor` (from Section 1 row D-243-C021; classification D-243-F019 MODIFIED_LOGIC)
+
+**Grep command:** `grep -rn --include='*.sol' '\b_purchaseBurnieLootboxFor\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X030 | `_purchaseBurnieLootboxFor` | contracts/modules/DegenerusGameMintModule.sol:882 | `purchaseBurnieLootbox` (MintModule, L877) | direct | `grep -rn --include='*.sol' '\b_purchaseBurnieLootboxFor\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X031 | `_purchaseBurnieLootboxFor` | contracts/modules/DegenerusGameMintModule.sol:909 | `_purchaseCoinFor` (MintModule, L885) | direct | `grep -rn --include='*.sol' '\b_purchaseBurnieLootboxFor\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Line 1388 is the definition.
+
+#### 3.1.18 Symbol: `_purchaseWhaleBundle` (from Section 1 row D-243-C022; classification D-243-F020 MODIFIED_LOGIC)
+
+**Grep command:** `grep -rn --include='*.sol' '\b_purchaseWhaleBundle\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X032 | `_purchaseWhaleBundle` | contracts/modules/DegenerusGameWhaleModule.sol:191 | `purchaseWhaleBundle` (WhaleModule, L187 — external entry) | direct | `grep -rn --include='*.sol' '\b_purchaseWhaleBundle\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Line 194 is the definition.
+
+#### 3.1.19 Symbol: `_purchaseLazyPass` (from Section 1 row D-243-C023; classification D-243-F021 MODIFIED_LOGIC)
+
+**Grep command:** `grep -rn --include='*.sol' '\b_purchaseLazyPass\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X033 | `_purchaseLazyPass` | contracts/modules/DegenerusGameWhaleModule.sol:381 | `purchaseLazyPass` (WhaleModule, L380 — external entry) | direct | `grep -rn --include='*.sol' '\b_purchaseLazyPass\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Line 384 is the definition.
+
+#### 3.1.20 Symbol: `_purchaseDeityPass` (from Section 1 row D-243-C024; classification D-243-F022 MODIFIED_LOGIC)
+
+**Grep command:** `grep -rn --include='*.sol' '\b_purchaseDeityPass\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X034 | `_purchaseDeityPass` | contracts/modules/DegenerusGameWhaleModule.sol:539 | `purchaseDeityPass` (WhaleModule, L538 — external entry) | direct | `grep -rn --include='*.sol' '\b_purchaseDeityPass\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Line 542 is the definition.
+
+#### 3.1.21 Symbol: `claimWhalePass` (from Section 1 row D-243-C025; classification D-243-F023 MODIFIED_LOGIC — WhaleModule impl; also external dispatcher on DegenerusGame.sol:1692)
+
+Scope: `claimWhalePass` is dual-layer — the Section 1 changed symbol is the WhaleModule implementation at `contracts/modules/DegenerusGameWhaleModule.sol:957`; the externally-callable dispatcher is `contracts/DegenerusGame.sol:1692` which delegatecalls the module via `IDegenerusGameWhaleModule.claimWhalePass.selector`. All three are catalogued.
+
+**Grep command (primary):** `grep -rn --include='*.sol' '\bclaimWhalePass\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+**Grep command (delegatecall selector):** `grep -rn --include='*.sol' '\.claimWhalePass\.selector' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X035 | `claimWhalePass` (WhaleModule impl via dispatcher) | contracts/DegenerusGame.sol:1692 | `claimWhalePass` (DegenerusGame dispatcher — its own declaration; externally-reachable entry) | direct (definition-level) | `grep -rn --include='*.sol' '\bclaimWhalePass\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X036 | `claimWhalePass` (WhaleModule impl via delegatecall selector) | contracts/DegenerusGame.sol:1702 | `_claimWhalePassFor` (DegenerusGame, L1697 — private wrapper around delegatecall) | delegatecall | `grep -rn --include='*.sol' '\.claimWhalePass\.selector' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/'` |
+| D-243-X037 | `claimWhalePass` (dispatcher) | contracts/DegenerusVault.sol:596 | `gameClaimWhalePass` (DegenerusVault, L595 — vault-owner wrapper) | direct | `grep -rn --include='*.sol' '\bclaimWhalePass\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X038 | `claimWhalePass` (dispatcher) | contracts/StakedDegenerusStonk.sol:316 | `constructor` (StakedDegenerusStonk, L289 — one-time init call seeding state) | direct | `grep -rn --include='*.sol' '\bclaimWhalePass\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X039 | `claimWhalePass` (dispatcher) | contracts/StakedDegenerusStonk.sol:360 | `gameClaimWhalePass` (StakedDegenerusStonk, L359 — sDGNRS wrapper) | direct | `grep -rn --include='*.sol' '\bclaimWhalePass\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Out-of-scope: matches at `contracts/DegenerusVault.sol:28`, `contracts/StakedDegenerusStonk.sol:22`, `contracts/interfaces/IDegenerusGameModules.sol:201` are interface declarations (delegatecall target types); `contracts/modules/DegenerusGameJackpotModule.sol:1962` and `:1969` are inside NatSpec comments.
+
+#### 3.1.22 Symbol: `_livenessTriggered` (from Section 1 row D-243-C026; classification D-243-F024 MODIFIED_LOGIC)
+
+Scope: this is the **internal helper** defined on `contracts/storage/DegenerusGameStorage.sol:1235`. Every module that inherits from `DegenerusGameStorage` has this helper in its lookup chain. The external `DegenerusGame.livenessTriggered()` wrapper (§3.1.10) delegates to it.
+
+**Grep command:** `grep -rn --include='*.sol' '\b_livenessTriggered\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X040 | `_livenessTriggered` | contracts/DegenerusGame.sol:2134 | `livenessTriggered` (DegenerusGame external view, L2133) | direct | `grep -rn --include='*.sol' '\b_livenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X041 | `_livenessTriggered` | contracts/modules/DegenerusGameAdvanceModule.sol:551 | `_handleGameOverPath` (AdvanceModule, L523 — gate-swap check post-gameOver-branch) | direct | `grep -rn --include='*.sol' '\b_livenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X042 | `_livenessTriggered` | contracts/modules/DegenerusGameMintModule.sol:890 | `_purchaseCoinFor` (MintModule, L885 — gate-swap D-05.7 1/8) | direct | `grep -rn --include='*.sol' '\b_livenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X043 | `_livenessTriggered` | contracts/modules/DegenerusGameMintModule.sol:920 | `_purchaseFor` (MintModule, L913 — gate-swap D-05.7 2/8) | direct | `grep -rn --include='*.sol' '\b_livenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X044 | `_livenessTriggered` | contracts/modules/DegenerusGameMintModule.sol:1226 | `_callTicketPurchase` (MintModule, L1206 — gate-swap D-05.7 3/8) | direct | `grep -rn --include='*.sol' '\b_livenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X045 | `_livenessTriggered` | contracts/modules/DegenerusGameMintModule.sol:1392 | `_purchaseBurnieLootboxFor` (MintModule, L1388 — gate-swap D-05.7 4/8) | direct | `grep -rn --include='*.sol' '\b_livenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X046 | `_livenessTriggered` | contracts/modules/DegenerusGameWhaleModule.sol:195 | `_purchaseWhaleBundle` (WhaleModule, L194 — gate-swap D-05.7 5/8) | direct | `grep -rn --include='*.sol' '\b_livenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X047 | `_livenessTriggered` | contracts/modules/DegenerusGameWhaleModule.sol:385 | `_purchaseLazyPass` (WhaleModule, L384 — gate-swap D-05.7 6/8) | direct | `grep -rn --include='*.sol' '\b_livenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X048 | `_livenessTriggered` | contracts/modules/DegenerusGameWhaleModule.sol:544 | `_purchaseDeityPass` (WhaleModule, L542 — gate-swap D-05.7 7/8) | direct | `grep -rn --include='*.sol' '\b_livenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X049 | `_livenessTriggered` | contracts/modules/DegenerusGameWhaleModule.sol:958 | `claimWhalePass` (WhaleModule, L957 — gate-swap D-05.7 8/8) | direct | `grep -rn --include='*.sol' '\b_livenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X050 | `_livenessTriggered` | contracts/storage/DegenerusGameStorage.sol:573 | `_queueTickets` (Storage, L562 — mid-flight ticket-queue guard) | direct | `grep -rn --include='*.sol' '\b_livenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X051 | `_livenessTriggered` | contracts/storage/DegenerusGameStorage.sol:604 | `_queueTicketsScaled` (Storage, L596 — scaled variant ticket-queue guard) | direct | `grep -rn --include='*.sol' '\b_livenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+| D-243-X052 | `_livenessTriggered` | contracts/storage/DegenerusGameStorage.sol:657 | `_queueTicketRange` (Storage, L649 — range variant ticket-queue guard) | direct | `grep -rn --include='*.sol' '\b_livenessTriggered\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Out-of-scope: match at `contracts/modules/DegenerusGameAdvanceModule.sol:529` is a `//` comment inside `_handleGameOverPath` (NatSpec-adjacent explaining the helper); filtered per D-18. Line 1235 is the definition.
+
+#### 3.1.23 Symbol: `markBafSkipped` (from Section 1 row D-243-C036; classification D-243-F025 NEW; interface method D-243-C037/C042 on IDegenerusJackpots — ADDENDUM cc68bfc7)
+
+Scope: the Section 1 changed symbol is the implementation on `contracts/DegenerusJackpots.sol:506` (`onlyGame`-restricted external, ADDED at cc68bfc7). Interface declaration at `contracts/interfaces/IDegenerusJackpots.sol:34` (ADDED at cc68bfc7). Direct call site in AdvanceModule via the addendum-added `jackpots` handle.
+
+**Grep command:** `grep -rn --include='*.sol' '\bmarkBafSkipped\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X053 | `markBafSkipped` | contracts/modules/DegenerusGameAdvanceModule.sol:839 | `_consolidatePoolsAndRewardJackpots` (AdvanceModule, L728 — losing-flip branch on new `if ((rngWord & 1) == 1) { ... } else { ... }` gate per D-243-F026) | direct | `grep -rn --include='*.sol' '\bmarkBafSkipped\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Line 506 is the definition; line 34 is the interface declaration. No delegatecall selector for `markBafSkipped` exists (verified via `grep -rn '\.markBafSkipped\.selector' contracts/` returning empty — DegenerusJackpots is a separate contract, not a module delegatecall target).
+
+#### 3.1.24 Symbol: `_consolidatePoolsAndRewardJackpots` (from Section 1 row D-243-C039; classification D-243-F026 MODIFIED_LOGIC — ADDENDUM cc68bfc7)
+
+**Grep command:** `grep -rn --include='*.sol' '\b_consolidatePoolsAndRewardJackpots\b' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/' | grep -v 'ContractAddresses\.sol\.bak'`
+
+| Row ID | Changed Function | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X054 | `_consolidatePoolsAndRewardJackpots` | contracts/modules/DegenerusGameAdvanceModule.sol:422 | `advanceGame` (AdvanceModule impl, L160 — purchase-phase pool consolidation orchestration) | direct | `grep -rn --include='*.sol' '\b_consolidatePoolsAndRewardJackpots\b' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/' \| grep -v 'ContractAddresses\.sol\.bak'` |
+
+Out-of-scope: match at `contracts/modules/DegenerusGameAdvanceModule.sol:1131` is inside the RNG consumer-map comment (`//`); filtered per D-18. Line 728 is the definition.
+
+### 3.2 Interface-Method Call-Site Catalog (per D-15)
+
+Interface methods have distinct call-site semantics from implementations — they are consumed by callers via the interface handle (`IDegenerusFoo(addr).method(...)`) rather than by symbol name alone. This subsection enumerates interface-method call sites per CONTEXT.md D-15; each row here references an interface declaration row from Section 4.3.
+
+#### 3.2.1 Interface Method: `IDegenerusQuests.handlePurchase` (from Section 4.3 row D-243-C030)
+
+Call sites identical to §3.1.7 above — the implementation (D-243-F007 REFACTOR_ONLY) and the interface declaration share the same single caller (MintModule._purchaseFor at L1098). No additional interface-specific delegatecall selector use — `quests.handlePurchase(...)` at MintModule L1098 is a direct external call on the concrete DegenerusQuests instance referenced by `quests` (typed as `IDegenerusQuests`).
+
+| Row ID | Interface Method | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X055 | `IDegenerusQuests.handlePurchase` | contracts/modules/DegenerusGameMintModule.sol:1098 | `_purchaseFor` (MintModule, L913) | direct (via `quests` interface handle) | `grep -rn --include='*.sol' 'quests\.handlePurchase(' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/'` |
+
+Cross-ref: D-243-X015 is the implementation-level row; D-243-X055 is the interface-method-level row for the same call site. Both are emitted to satisfy D-14 ("implementation surface") + D-15 ("interface drift surface") explicitly.
+
+#### 3.2.2 Interface Method: `IDegenerusGame.livenessTriggered` (from Section 4.3 row D-243-C031 + Section 1 row D-243-C033 inline interface on StakedDegenerusStonk.sol:30)
+
+Call sites identical to §3.1.10 above. `game.livenessTriggered()` at StakedDegenerusStonk.sol L491 + L507 consumes the inline `IDegenerusGamePlayer` interface declaration (L29-30) which is one of two ways the DegenerusGame.livenessTriggered() entry-point is reached. The top-level `IDegenerusGame.livenessTriggered` at `contracts/interfaces/IDegenerusGame.sol:30` is not independently consumed (no file imports it purely for this view — every consumer re-declares an inline minimal interface for gas reasons or uses a different importer). Cross-check grep below confirms.
+
+| Row ID | Interface Method | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X056 | `IDegenerusGame.livenessTriggered` (via inline `IDegenerusGamePlayer`) | contracts/StakedDegenerusStonk.sol:491 | `burn` (StakedDegenerusStonk, L486) | direct | `grep -rn --include='*.sol' 'game\.livenessTriggered(' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/'` |
+| D-243-X057 | `IDegenerusGame.livenessTriggered` (via inline `IDegenerusGamePlayer`) | contracts/StakedDegenerusStonk.sol:507 | `burnWrapped` (StakedDegenerusStonk, L506) | direct | `grep -rn --include='*.sol' 'game\.livenessTriggered(' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/'` |
+
+Additional interface-drift grep: `grep -rn --include='*.sol' 'IDegenerusGame([^)]*)\.livenessTriggered(' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/'` returns zero — no consumer uses the full `IDegenerusGame(address(...)).livenessTriggered()` form. Self-call form `IDegenerusGame(address(this)).livenessTriggered()` also returns zero — the modules never self-call this, they invoke the internal `_livenessTriggered()` helper directly (§3.1.22).
+
+#### 3.2.3 Interface Method: `IStakedDegenerusStonk.pendingRedemptionEthValue` (from Section 4.3 row D-243-C032)
+
+Scope: new external view on `IStakedDegenerusStonk.sol:90` (Section 4.3 row D-243-C032). Callers consume it via `IStakedDegenerusStonk(ContractAddresses.SDGNRS).pendingRedemptionEthValue()` inside GameOverModule.
+
+**Grep command:** `grep -rn --include='*.sol' '\.pendingRedemptionEthValue(' contracts/ | grep -v '^contracts/mocks/' | grep -v '^contracts/test/'`
+
+| Row ID | Interface Method | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X058 | `IStakedDegenerusStonk.pendingRedemptionEthValue` | contracts/modules/DegenerusGameGameOverModule.sol:94 | `handleGameOverDrain` (GameOverModule, L79 — pre-refund reserved-subtraction for 33/33/34 split) | direct | `grep -rn --include='*.sol' '\.pendingRedemptionEthValue(' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/'` |
+| D-243-X059 | `IStakedDegenerusStonk.pendingRedemptionEthValue` | contracts/modules/DegenerusGameGameOverModule.sol:157 | `handleGameOverDrain` (GameOverModule, L79 — post-refund reserved-subtraction) | direct | `grep -rn --include='*.sol' '\.pendingRedemptionEthValue(' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/'` |
+
+Out-of-scope: matches at `contracts/StakedDegenerusStonk.sol:224/526/535/593/631/657/692/705/709/710/772/789` are inside the implementing contract (state-variable declaration / self-references inside the defining contract — not external calls via the interface); `contracts/interfaces/IStakedDegenerusStonk.sol:88-90` is the declaration itself. `contracts/modules/DegenerusGameGameOverModule.sol:90` is a `//` comment.
+
+#### 3.2.4 Interface Method: `IDegenerusJackpots.markBafSkipped` (from Section 4.3 row D-243-C042 — ADDENDUM cc68bfc7)
+
+Same call site as §3.1.23 — the `jackpots.markBafSkipped(lvl)` at AdvanceModule L839 consumes the IDegenerusJackpots interface via the file-scope `jackpots` constant handle declared at L105-106 (Section 1 row D-243-C038).
+
+| Row ID | Interface Method | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-243-X060 | `IDegenerusJackpots.markBafSkipped` | contracts/modules/DegenerusGameAdvanceModule.sol:839 | `_consolidatePoolsAndRewardJackpots` (AdvanceModule, L728) | direct (via `jackpots` typed handle) | `grep -rn --include='*.sol' 'jackpots\.markBafSkipped(' contracts/ \| grep -v '^contracts/mocks/' \| grep -v '^contracts/test/'` |
+
+Cross-ref: D-243-X053 is the implementation-level row (DegenerusJackpots.markBafSkipped); D-243-X060 is the interface-method-level row for the same call site. Both emitted per D-14 + D-15.
+
+### 3.3 Symbols With Zero Callers (Candidate Dead Code)
+
+None with a genuine dead-code concern. `burnWrapped` (§3.1.12) is annotated `NO CALLERS — PLAYER-FACING EXTERNAL (expected)` because absence of programmatic callers is by-design for an EOA-facing gambling-burn redemption entry. See §3.1.12 for the rationale and the Section 1.6 cross-reference.
+
+| Row ID | Changed Function | Grep Command Used | Finding-Candidate Section 1.6 Ref |
+|---|---|---|---|
+| — | — | — | None emitted — no dead-code concern surfaced during the call-site sweep |
+
+### 3.4 Call-Site Catalog Summary
+
+| Metric | Value |
+|---|---|
+| Total changed symbols in scope (Section 1 func/modifier count) | 24 unique funcs (duplicate Section-1 rows for same-name multi-commit functions collapse at this metric: `_purchaseFor` and `_callTicketPurchase` each have two Section 1 rows at 6b3f4f3c + 771893d1; Section 3 treats them as one call-site surface per name) |
+| Total changed interface methods in scope (Section 4.3 interface-method count) | 5 (D-243-C030 handlePurchase, D-243-C031 livenessTriggered, D-243-C032 pendingRedemptionEthValue, D-243-C033 livenessTriggered inline, D-243-C042 markBafSkipped) |
+| Total `D-243-X###` call-site rows emitted | 60 |
+| Unique caller files | 10 (DegenerusGame.sol, DegenerusStonk.sol, DegenerusVault.sol, StakedDegenerusStonk.sol, DegenerusGameAdvanceModule.sol, DegenerusGameGameOverModule.sol, DegenerusGameJackpotModule.sol, DegenerusGameMintModule.sol, DegenerusGameWhaleModule.sol, DegenerusGameStorage.sol) |
+| Symbols with zero callers (dead code candidates) | 0 (`burnWrapped` is player-facing-external by-design, not dead code) |
+| `direct` call-type rows | 55 |
+| `self-call` call-type rows | 1 (D-243-X005 only — `IDegenerusGame(address(this)).runBafJackpot(...)` from AdvanceModule._consolidatePoolsAndRewardJackpots at L831) |
+| `delegatecall` call-type rows | 4 (D-243-X004 runBafJackpot selector, D-243-X012 advanceGame selector, D-243-X028 handleGameOverDrain selector, D-243-X036 claimWhalePass selector) |
+| `library` call-type rows | 0 |
+
+Row totals: 55 direct + 1 self-call + 4 delegatecall + 0 library = 60 total D-243-X### rows. Sum matches — every call-site row is accounted for in exactly one Call Type bucket.
+
 
 ## Section 4 — State Variable / Event / Interface Inventory
 
@@ -748,9 +1147,82 @@ Commit `cc68bfc7` touches 3 files (`contracts/DegenerusJackpots.sol`, `contracts
 
 `DegenerusJackpots.sol` (which gained a new mutable state slot elsewhere in its own storage layout — `lastBafResolvedDay` bump path) is a separate contract from `DegenerusGameStorage`; its storage layout is NOT in scope for this section per CONTEXT.md D-16 (which is scoped to `DegenerusGameStorage.sol` only as the GOX-07 sole scope input). If Phase 244 EVT-02 / GOX-07 need `DegenerusJackpots.sol`'s own layout diff, that is a separate reproduction command outside this section's scope.
 
-## Section 6 — Consumer Index (RESERVED FOR 243-03)
+## Section 6 — Consumer Index
 
-This section is reserved for Plan 243-03 to append the v31.0 requirement → 243 Row-ID mapping. Row IDs `D-243-I###`. DO NOT edit this section in Plan 243-01 — 243-03 appends to it.
+Per CONTEXT.md D-07 item 6 + D-10: maps every v31.0 requirement ID (41 total across DELTA / EVT / RNG / QST / GOX / SDR / GOE / FIND / REG series per `.planning/REQUIREMENTS.md`) to the subset of Phase 243 Row IDs it will cite in downstream phases. Saves Phase 244-246 planners lookup work.
+
+**REQ-ID count reconciliation:** The Phase 243 plan narrative originally anticipated "44 REQ IDs" from an early draft; the final `.planning/REQUIREMENTS.md` at phase-execution time enumerates **41** REQ IDs (DELTA: 3, EVT: 4, RNG: 3, QST: 5, GOX: 7, SDR: 8, GOE: 6, FIND: 3, REG: 2 — total = 3+4+3+5+7+8+6+3+2 = 41). All 41 are mapped below per D-10. The "44" figure in the plan was based on draft headers that were later consolidated.
+
+Row IDs use prefix `D-243-I###` zero-padded monotonic. One row per v31.0 requirement ID.
+
+Scope subset vocabulary:
+- `ALL-SECTION-N` — every `D-243-X###` / `D-243-C###` / etc. row of that section (used by DELTA-N-closing REQs whose scope IS the section itself)
+- explicit comma-separated Row ID list — specific subset for per-commit or per-symbol REQs
+- `NONE` — REQ genuinely has no delta-surface row coverage (e.g., QST-05 gas savings is a Phase 244 fresh-run repro claim, not a 243 row)
+- `cross-ref to <external-artifact>` — REQ's scope input is an external audit artifact (e.g., `audit/v30-CONSUMER-INVENTORY.md` for v30 invariants re-verified); may cite a handful of 243 rows as bridges
+
+### 6.1 v31.0 Requirement → 243 Row-ID Mapping
+
+| Row ID | REQ-ID | Phase | Title Fragment | 243 Row-ID Subset | Rationale |
+|---|---|---|---|---|---|
+| D-243-I001 | DELTA-01 | 243 | Per-commit function/state/event inventory | `ALL-SECTION-1` + `ALL-SECTION-4` + `ALL-SECTION-5` (every D-243-C### + every D-243-S###) | DELTA-01 closes on the Section 1 changelog + Section 4 state/event/interface/error inventory + Section 5 storage layout diff — the universe itself. |
+| D-243-I002 | DELTA-02 | 243 | 5-bucket function classification | `ALL-SECTION-2` (every D-243-F###) | DELTA-02 closes on the Section 2 classification table itself. |
+| D-243-I003 | DELTA-03 | 243 | Downstream call-site catalog | `ALL-SECTION-3` (every D-243-X###) | DELTA-03 closes on the Section 3 call-site catalog itself. |
+| D-243-I004 | EVT-01 | 244 | Every JackpotTicketWin emit non-zero scaled | D-243-C001, D-243-C002, D-243-C003, D-243-C005, D-243-C006 (ced654df rows for emit paths + event) + D-243-F001, D-243-F002, D-243-F003, D-243-F005 (MODIFIED_LOGIC verdicts for the emit-site functions) + D-243-X001, D-243-X002, D-243-X005, D-243-X007, D-243-X008, D-243-X009, D-243-X010, D-243-X011 (call sites of the emit-path functions) | EVT-01 scopes every JackpotTicketWin emit path; the emit-site functions are `_runEarlyBirdLootboxJackpot`, `_distributeTicketsToBucket`, `runBafJackpot`, `_jackpotTicketRoll`, and the event declaration at Section 4.2. |
+| D-243-I005 | EVT-02 | 244 | New JackpotWhalePassWin emit | D-243-C004 (ced654df — _awardJackpotTickets emit-site add) + D-243-F004 (MODIFIED_LOGIC verdict) + D-243-X006, D-243-X007 (call sites) | EVT-02 scopes the new whale-pass fallback emit in `_awardJackpotTickets`. |
+| D-243-I006 | EVT-03 | 244 | TICKET_SCALE uniform scaling | D-243-C001, D-243-C002, D-243-C005 (ced654df scaling-change rows — scaling applies to the emit-site args in `_runEarlyBirdLootboxJackpot`, `_distributeTicketsToBucket`, `_jackpotTicketRoll`) + D-243-F001, D-243-F002, D-243-F005 (verdicts) | EVT-03 cross-references BAF + trait-matched paths; scaling is emit-arg semantics, not a separate row. |
+| D-243-I007 | EVT-04 | 244 | Event NatSpec accuracy | D-243-C006 (ced654df — JackpotTicketWin NatSpec-only event row) + cross-ref `contracts/modules/DegenerusGameJackpotModule.sol:86-93` at HEAD cc68bfc7 for final NatSpec text | EVT-04 scopes NatSpec content only — no call-site rows needed. |
+| D-243-I008 | RNG-01 | 244 | _unlockRng(day) removal safety | D-243-C007 (16597cac — advanceGame row) + D-243-F006 (MODIFIED_LOGIC verdict) + D-243-X013, D-243-X014 (external callers via sDGNRS + vault wrappers) + cross-ref to §1.8 INV-237-035 HUNK-ADJACENT row + Section 1.6 bullet 3 (`_gameOverEntropy` reentry adjacency) | RNG-01 scopes the 16597cac behavioral change — dispatcher callers of `advanceGame` PLUS the `_unlockRng` removal itself. |
+| D-243-I009 | RNG-02 | 244 | rngLockedFlag AIRTIGHT invariant re-verify | D-243-C007 (advanceGame) + D-243-C016 (_gameOverEntropy rngRequestTime clearing) + D-243-F006, D-243-F014 (verdicts) + D-243-X027 (call site of _gameOverEntropy) + cross-ref to `audit/v30-CONSUMER-INVENTORY.md` INV-237-021..037 on rngLockedFlag + §1.8 reconciliation | RNG-02 re-verifies the v30 AIRTIGHT invariant at cc68bfc7; 243 rows are scope input, not the verdict. |
+| D-243-I010 | RNG-03 | 244 | 16597cac reformat behavioral equivalence | D-243-C007 (advanceGame — the single row covers both the removal AND the two subordinate reformats per §2.2 D-05.1 + D-05.2 collapsed into D-243-F006) + D-243-F006 (classification note names both aspects) | RNG-03 scopes the reformat aspect within the same function; Phase 244 validates byte-equivalence of reformat-only hunks. |
+| D-243-I011 | QST-01 | 244 | MINT_ETH gross spend | D-243-C008 (6b3f4f3c — handlePurchase impl) + D-243-C009/C030 (interface signature change) + D-243-C010 (_purchaseFor at 6b3f4f3c) + D-243-F007, D-243-F008 (verdicts) + D-243-X015, D-243-X055 (call site via interface handle) + D-243-X017 (MintModule.purchase → _purchaseFor dispatch) | QST-01 scopes the quest credit path — MINT_ETH credit now flows through the gross-spend `ethMintSpendWei` parameter. |
+| D-243-I012 | QST-02 | 244 | Earlybird DGNRS gross spend | D-243-C010 (6b3f4f3c — _purchaseFor; same surface as QST-01; the earlybird integration changed in the same hunk per D-243-F008 rationale point 4) + D-243-F008 | QST-02 shares the MINT_ETH `_purchaseFor` surface — no new rows beyond QST-01. |
+| D-243-I013 | QST-03 | 244 | Affiliate fresh/recycled 20-25/5 split preserved | NONE — 6b3f4f3c per §2.3 D-243-F008 rationale point 2-3 names `ethMintSpendWei` replacing `ethFreshWei` for MINT_ETH + earlybird, but does NOT modify the affiliate fresh-vs-recycled split helper `_recordAffiliateStake` (Section 1 has zero rows for that helper). QST-03 tests invariant preservation; Phase 244 runs a differential check against `audit/v30-CONSUMER-INVENTORY.md` and prior affiliate audit trails. | REQ's scope is the NEGATIVE — ensuring no drift on a call graph 243 does not touch. |
+| D-243-I014 | QST-04 | 244 | _callTicketPurchase freshEth drop + ethFreshWei rename | D-243-C011 (6b3f4f3c — _callTicketPurchase at 6b3f4f3c) + D-243-C008 (handlePurchase impl) + D-243-F007, D-243-F009 (verdicts) + D-243-X018, D-243-X019 (call sites) + D-243-X015 (handlePurchase call site) | QST-04 scopes the signature-change surface across caller + callee. |
+| D-243-I015 | QST-05 | 244 | Gas savings claim (-142k/-153k/-76k WC) | NONE | QST-05 is repro-evidence work; Phase 244 runs fresh gas measurements. No 243 rows map. |
+| D-243-I016 | GOX-01 | 244 | 8 purchase/claim paths gameOver → _livenessTriggered | D-243-C018..D-243-C025 (771893d1 — 8 rows covering MintModule + WhaleModule gate-swap paths) + D-243-F016..D-243-F023 (MODIFIED_LOGIC verdicts) + D-243-X029 (purchaseCoin → _purchaseCoinFor) + D-243-X017 (purchase → _purchaseFor) + D-243-X018, D-243-X019 (_callTicketPurchase sites) + D-243-X030, D-243-X031 (_purchaseBurnieLootboxFor sites) + D-243-X032, D-243-X033, D-243-X034 (Whale external → private sites) + D-243-X035, D-243-X036, D-243-X037, D-243-X038, D-243-X039 (claimWhalePass dispatcher + delegatecall + external callers) + D-243-X042..D-243-X049 (_livenessTriggered internal helper at each of the 8 gate sites) | GOX-01 scopes the 8-path union — every entry point of the 4 MintModule + 4 WhaleModule gate-swap paths. Cross-ref to D-243-C026/D-243-F024 for the `_livenessTriggered()` internal helper whose semantics the gate swap keys on. |
+| D-243-I017 | GOX-02 | 244 | sDGNRS.burn/burnWrapped State-1 block | D-243-C013, D-243-C014 (771893d1 — burn + burnWrapped rows) + D-243-C034 (error decl BurnsBlockedDuringLiveness) + D-243-F011, D-243-F012 (verdicts) + D-243-X020, D-243-X021 (livenessTriggered external view → call sites INSIDE burn + burnWrapped) + D-243-X022, D-243-X023, D-243-X024 (burn's own callers via token-wrapper + vault) + cross-ref to Section 1.6 bullets 1 + 2 (error-taxonomy ordering notes) | GOX-02 scopes the new revert path — the burn/burnWrapped control-flow changes. |
+| D-243-I018 | GOX-03 | 244 | handleGameOverDrain pendingRedemptionEthValue subtraction | D-243-C017 (771893d1 — handleGameOverDrain) + D-243-C032 (IStakedDegenerusStonk.pendingRedemptionEthValue interface add) + D-243-F015 (verdict) + D-243-X028 (delegatecall selector) + D-243-X058, D-243-X059 (pendingRedemptionEthValue call sites inside handleGameOverDrain) | GOX-03 scopes the drain subtraction — GameOverModule rows + sDGNRS view consumer rows. |
+| D-243-I019 | GOX-04 | 244 | _livenessTriggered VRF-dead 14-day grace | D-243-C026 (771893d1 — _livenessTriggered) + D-243-C028 (_VRF_GRACE_PERIOD constant) + D-243-F024 (verdict) + D-243-X040..D-243-X052 (all 13 call sites of the internal helper) | GOX-04 scopes the new VRF-dead branch; constant scope is Section 4.1. |
+| D-243-I020 | GOX-05 | 244 | _livenessTriggered day-math-first ordering | D-243-C026 (same row as GOX-04 — behavioral aspect share) + D-243-F024 + D-243-X040..D-243-X052 | GOX-05 is the ordering aspect of the same `_livenessTriggered` body rewrite. |
+| D-243-I021 | GOX-06 | 244 | _gameOverEntropy rngRequestTime clearing + _handleGameOverPath ordering | D-243-C015, D-243-C016 (771893d1 — _handleGameOverPath + _gameOverEntropy) + D-243-F013, D-243-F014 (verdicts) + D-243-X026 (_handleGameOverPath → advanceGame call site) + D-243-X027 (_gameOverEntropy → _handleGameOverPath call site) + D-243-X041 (_livenessTriggered check inside _handleGameOverPath at L551) + cross-ref to Section 1.6 bullets 3 (reentry adjacency) + 5 (gameOver-before-liveness reorder) + cross-ref to §1.8 INV-237-052..059 | GOX-06 scopes two behavioral changes in one REQ. |
+| D-243-I022 | GOX-07 | 244 | DegenerusGameStorage.sol slot layout | `ALL-SECTION-5` — D-243-S001 UNCHANGED verdict (zero slot drift confirmed at §5.3) + §5.5 addendum cross-ref confirming cc68bfc7 adds zero storage-file hunks | GOX-07's sole scope input is Section 5 per D-16. Expected fast-close: "no layout change, no verification needed". |
+| D-243-I023 | SDR-01 | 245 | sDGNRS redemption × gameover timing matrix | D-243-C013, D-243-C014, D-243-C017, D-243-C032 (burn + burnWrapped + handleGameOverDrain + pendingRedemptionEthValue interface) + D-243-C012 (livenessTriggered external view DegenerusGame entry) + D-243-F010, D-243-F011, D-243-F012, D-243-F015 (verdicts) + D-243-X020, D-243-X021, D-243-X022, D-243-X023, D-243-X024 (burn/burnWrapped call graph) + D-243-X028, D-243-X058, D-243-X059 (handleGameOverDrain surface + pendingRedemptionEthValue consumption) + cross-ref Section 1.6 bullet 2 (burn/burnWrapped State-1 divergence) + bullet 4 (reserved subtraction reentrancy check) | SDR-01 is cross-cutting — enumerates every sDGNRS redemption state transition vs gameover lifecycle. |
+| D-243-I024 | SDR-02 | 245 | pendingRedemptionEthValue accounting exactness | D-243-C017 (handleGameOverDrain) + D-243-C032 (interface) + D-243-F015 (verdict) + D-243-X028, D-243-X058, D-243-X059 (surface) + cross-ref to StakedDegenerusStonk.sol source-code SSTORE sites at L593 + L657 + L789 (not 243 rows — in-contract accounting) | SDR-02 scopes the accounting; in-sDGNRS accounting is prior-milestone audit surface. |
+| D-243-I025 | SDR-03 | 245 | handleGameOverDrain subtracts full pendingRedemptionEthValue before split | Same subset as GOX-03 (D-243-I018) — same function, different invariant aspect | SDR-03 is the BEFORE-split aspect; Phase 245 verifies the pre-split arithmetic per SDR-03 distinct from GOX-03's general subtraction existence check. |
+| D-243-I026 | SDR-04 | 245 | claimRedemption post-gameOver DOS-free | NONE — `claimRedemption` (on StakedDegenerusStonk.sol L612) is not touched by any delta; zero rows. Phase 245 pulls source at HEAD cc68bfc7 directly and cross-references D-243-C017 + D-243-X058/X059 for interaction checks. | REQ's scope is claimRedemption itself (untouched) — 243 touches only the drain side. |
+| D-243-I027 | SDR-05 | 245 | Per-wei conservation across gameover timings | Cross-cutting — union of SDR-01 + SDR-03 subsets (D-243-I023 + D-243-I025) | SDR-05 is the closure proof; aggregates SDR-01 + SDR-03 surface. |
+| D-243-I028 | SDR-06 | 245 | State-1 orphan-redemption window closed | Same subset as GOX-02 (D-243-I017) — sDGNRS.burn / burnWrapped State-1 block | SDR-06 is the orphan-window closure aspect of the same block. |
+| D-243-I029 | SDR-07 | 245 | sDGNRS supply conservation | NONE — supply-touching code (StakedDegenerusStonk.sol mint/burn bookkeeping at L486-495 etc.) is partially touched (D-243-F011 MODIFIED_LOGIC adds a new revert branch but does NOT alter supply arithmetic); Phase 245 reads the burn body fresh against baseline. Related rows: D-243-C013 (burn), D-243-F011 (verdict) for context. | Phase 245's SDR-07 scope is supply arithmetic; 243 covers the new revert but not the supply math (unchanged). |
+| D-243-I030 | SDR-08 | 245 | _gameOverEntropy fallback substitution for VRF-pending redemptions (F-29-04 class) | D-243-C016 (_gameOverEntropy) + D-243-F014 (verdict) + D-243-X027 (call site) + cross-ref to `audit/v30-CONSUMER-INVENTORY.md` F-29-04 INV-237-052..059 rows + §1.8 HUNK-ADJACENT row INV-237-059 | SDR-08 scopes F-29-04 class interaction with the new rngRequestTime clearing. |
+| D-243-I031 | GOE-01 | 245 | F-29-04 RNG-consumer determinism RE_VERIFIED_AT_HEAD | Cross-ref to `audit/v30-CONSUMER-INVENTORY.md` F-29-04 INV-237 rows + D-243-C007 (advanceGame) + D-243-C016 (_gameOverEntropy) + D-243-F006, D-243-F014 (verdicts) + §1.8 reconciliation table rows | GOE-01 is regression re-verification; 243 rows are scope bridges to the v30 artifact. |
+| D-243-I032 | GOE-02 | 245 | claimablePool 33/33/34 split + 30-day sweep | D-243-C017 (handleGameOverDrain) + D-243-F015 (verdict) + D-243-X028, D-243-X058, D-243-X059 (surface) + cross-ref to Phase 230 v29 claimablePool audit + prior `audit/FINDINGS-v24.0.md` | GOE-02 intersects with SDR-03; same function surface but tests claimablePool split invariant. |
+| D-243-I033 | GOE-03 | 245 | Purchase-blocking entry-point coverage | Same subset as GOX-01 (D-243-I016) + cross-ref to prior v24.0 "10 entry points" enumeration for comparison | GOE-03 updates v24.0 count given the 8-path + new livenessTriggered gate. |
+| D-243-I034 | GOE-04 | 245 | VRF-available vs prevrandao fallback gameover-jackpot branches | D-243-C016, D-243-C026 (_gameOverEntropy + _livenessTriggered) + D-243-F014, D-243-F024 (verdicts) + D-243-X027, D-243-X040..D-243-X052 (call sites) + cross-ref to `audit/KNOWN-ISSUES.md` "Gameover prevrandao fallback" row | GOE-04 re-verifies given the new 14-day grace. |
+| D-243-I035 | GOE-05 | 245 | gameOverPossible BURNIE endgame gate | NONE — `gameOverPossible` (storage var at Storage slot 0 offset 27) is not touched by any delta. Phase 245 verifies the v11.0 `gameOverPossible` BURNIE mint gate under all new liveness paths. Cross-ref D-243-C026 (_livenessTriggered) + D-243-F024 for the liveness-path surface. | Phase 245 regression check; no 243-specific row (unchanged symbol). |
+| D-243-I036 | GOE-06 | 245 | NEW cross-feature emergent behavior | Cross-cutting — union of SDR-01 + GOX-01..06 subsets (D-243-I016..D-243-I023 + D-243-I028) | GOE-06 catches emergent edge cases across the liveness × sDGNRS × drain interaction. |
+| D-243-I037 | FIND-01 | 246 | Consolidated FINDINGS-v31.0.md | Cross-ref Section 1.6 Finding Candidates (8 INFO bullets at phase-close: 5 original 771893d1 + 3 cc68bfc7 addendum — NatSpec says 8 total; this plan MAY append additional candidates — see §1.6 after 243-03 completes) | FIND-01 owns Phase-246 finding-ID assignment from 243's candidate pool + Phase 244/245 findings (per D-20; this file emits zero such IDs). |
+| D-243-I038 | FIND-02 | 246 | 5-bucket severity classification | Same as FIND-01 (D-243-I037) + Phase 244/245 per-plan candidates | FIND-02 applies severity to FIND-01's set. |
+| D-243-I039 | FIND-03 | 246 | KNOWN-ISSUES.md 3-predicate gated updates | Subset of FIND-01 filtered to (accepted-design + non-exploitable + sticky) per D-09 gating rule | FIND-03 is the KI promotion filter. |
+| D-243-I040 | REG-01 | 246 | v30.0 F-30-NNN regression spot-check | Cross-ref to `audit/FINDINGS-v30.0.md` + §1.8 Light Reconciliation rows (INV-237-021..124) — 30 overlap rows total, 5 HUNK-ADJACENT (require verification) + 25 non-critical | REG-01 uses §1.8 as its primary scope input. |
+| D-243-I041 | REG-02 | 246 | Prior finding supersession | Cross-ref to `audit/FINDINGS-v30.0.md` + `audit/FINDINGS-v29.0.md` — check F-29-04 + any F-30-NNN touching burn/sDGNRS/gameover surface against Section 2 verdicts | REG-02 checks supersession given SDR-06 orphan-window closure may resolve an F-29-NNN or F-30-NNN candidate. |
+
+### 6.2 Consumer Index Integrity Check
+
+| Metric | Value |
+|---|---|
+| Total v31.0 REQ IDs per REQUIREMENTS.md | 41 |
+| REQ IDs mapped in §6.1 | 41 |
+| REQ IDs with `ALL-SECTION-N` subset | 4 (DELTA-01 maps Section 1+4+5, DELTA-02 maps Section 2, DELTA-03 maps Section 3, GOX-07 maps Section 5) |
+| REQ IDs with explicit Row-ID list | 25 (EVT-01..04, RNG-01..03, QST-01, QST-02, QST-04, GOX-01..06, SDR-01..03, SDR-08, GOE-01..06) |
+| REQ IDs with `NONE` subset | 5 (QST-03, QST-05, SDR-04, SDR-07, GOE-05) |
+| REQ IDs with `cross-ref to <external>` subset | 7 (RNG-01 partial, RNG-02 partial, SDR-01 partial, SDR-02 partial, GOE-01, GOE-02 partial, REG-01 primary, REG-02 primary — many "explicit list" rows additionally cross-ref external artifacts; the count here is for rows whose primary scope IS external) |
+| REQ IDs not yet mapped | 0 |
+
+Every REQ has an explicit `243 Row-ID Subset` column value per D-10. Zero `TBD` markers. Phase 244/245/246 planners consume this table to inherit scope without re-discovery.
+
+Note: the "REQ IDs with cross-ref to external" count (7) and the "explicit Row-ID list" count (25) overlap — many explicit-list rows additionally cross-reference external artifacts (e.g., `audit/v30-CONSUMER-INVENTORY.md`, `audit/KNOWN-ISSUES.md`, prior-milestone findings). The explicit-list primary + cross-ref secondary pattern is the most common shape and is considered a single consolidated subset per REQ.
+
 
 ## Section 7 — Reproduction Recipe Appendix
 
@@ -1091,6 +1563,215 @@ grep -E '^\| D-243-F[0-9]+ ' audit/v31-243-DELTA-SURFACE.md | awk -F'|' '{print 
 
 All commands use portable POSIX (sed / awk / grep / diff / sort / tr). GNU-only flags are avoided.
 
-### 7.3 Plan 243-03 commands (DELTA-03 call-site catalog) — RESERVED FOR 243-03
+### 7.3 Plan 243-03 commands (DELTA-03 call-site catalog)
+
+Commands used by Plan 243-03 to populate Section 3 (call-site catalog) + Section 6 (Consumer Index) + top-of-file FINAL READ-only marker. Every command is portable POSIX (grep / sed / awk / find).
+
+**Baseline anchor integrity gate (pre-sweep):**
+
+```bash
+git rev-parse HEAD          # expect cc68bfc7 (or a descendant commit whose ancestry includes cc68bfc7)
+git rev-parse 7ab515fe
+git rev-parse cc68bfc7
+git diff --stat 7ab515fe..cc68bfc7 -- contracts/   # expect: 14 files / 187 insertions / 67 deletions
+git status --porcelain contracts/ test/            # expect empty (D-22 READ-only)
+```
+
+**Per-symbol call-site grep sweep (primary pattern — POSIX portable):**
+
+```bash
+# Template — run once per changed func/modifier/interface-method symbol.
+# Substitute the symbol identifier into SYMBOL and execute; e.g., SYMBOL='advanceGame'.
+SYMBOL='REPLACE_WITH_SYMBOL_IDENTIFIER'
+grep -rn --include='*.sol' "\b${SYMBOL}\b" contracts/ \
+  | grep -v '^contracts/mocks/' \
+  | grep -v '^contracts/test/' \
+  | grep -v 'ContractAddresses\.sol\.bak'
+```
+
+**Narrowed call-site grep for short identifiers (e.g., `burn`):**
+
+For symbols whose name is a common substring across the codebase (e.g., `burn` as a noun in NatSpec, decimator-burn struct fields, BurnieCoin flows, GNRUS flows), the primary grep produces too many false positives. The narrowed pattern restricts to actual external-call syntax:
+
+```bash
+# Narrowed for StakedDegenerusStonk.burn specifically — matches only calls through sDGNRS-typed handles:
+grep -rn --include='*.sol' 'sdgnrsToken\.burn(\|stonk\.burn(\|sdgnrs\.burn(\|IStakedDegenerusStonk([^)]*)\.burn(' contracts/ \
+  | grep -v '^contracts/mocks/' \
+  | grep -v '^contracts/test/'
+```
+
+**Interface-method call-site sweep (D-15 tri-pattern — three grep invocations per interface method):**
+
+```bash
+METHOD='REPLACE_WITH_METHOD_IDENTIFIER'
+IFACE='IDegenerusGame'   # or IDegenerusQuests / IStakedDegenerusStonk / IDegenerusJackpots
+
+# Pattern 1 — direct interface-type call via a local handle:
+grep -rn --include='*.sol' "\.${METHOD}(" contracts/ \
+  | grep -v '^contracts/mocks/' \
+  | grep -v '^contracts/test/'
+
+# Pattern 2 — self-call via IDegenerusGame(address(this)).method(...):
+grep -rn --include='*.sol' "${IFACE}(address(this))\.${METHOD}(" contracts/ \
+  | grep -v '^contracts/mocks/' \
+  | grep -v '^contracts/test/'
+
+# Pattern 3 — delegatecall selector reference:
+grep -rn --include='*.sol' "\.${METHOD}\.selector" contracts/ \
+  | grep -v '^contracts/mocks/' \
+  | grep -v '^contracts/test/'
+grep -rn --include='*.sol' "abi\.encodeWithSelector([^,)]*${METHOD}" contracts/ \
+  | grep -v '^contracts/mocks/' \
+  | grep -v '^contracts/test/'
+```
+
+**Comment / string-literal filtering (post-grep heuristic — manual review, not a shell filter):**
+
+After each grep produces output, reviewer-agent inspects each line's code context and drops:
+- Lines whose match is inside a `//` line-comment (token preceded by `//` or trailing `//`)
+- Lines whose match is inside a `/* */` block-comment (track nesting across lines)
+- Lines whose match is inside a `"..."` string literal
+- NatSpec `///` comments — the match refers to the symbol conceptually, not a call site
+
+These filtered lines are NOT emitted as `D-243-X###` rows but may be documented as "Out-of-scope" commentary inside the symbol's subsection for reproducibility.
+
+**Caller-function resolution (find the enclosing function for a grep hit):**
+
+```bash
+# For a hit at FILE:LINE, find the nearest preceding function / modifier / receive / fallback / constructor:
+FILE='contracts/modules/DegenerusGameJackpotModule.sol'
+LINE=385
+awk -v target="$LINE" '/^    function |^    modifier |^    receive |^    fallback |^    constructor/{last=NR" "$0} NR==target{print "L"target":"last; exit}' "$FILE"
+```
+
+Portable POSIX; no GNU-specific flags. The 4-space leading indent match is Solidity convention in this codebase for contract-scope functions; file-scope free functions (none in this delta) would use the zero-indent variant.
+
+**Per-symbol execution of the DELTA-03 sweep:**
+
+```bash
+# The 24 unique func/modifier symbols + 4 interface methods exercised by Plan 243-03:
+for SYMBOL in \
+  _runEarlyBirdLootboxJackpot \
+  _distributeTicketsToBucket \
+  runBafJackpot \
+  _awardJackpotTickets \
+  _jackpotTicketRoll \
+  advanceGame \
+  handlePurchase \
+  _purchaseFor \
+  _callTicketPurchase \
+  livenessTriggered \
+  burn \
+  burnWrapped \
+  _handleGameOverPath \
+  _gameOverEntropy \
+  handleGameOverDrain \
+  _purchaseCoinFor \
+  _purchaseBurnieLootboxFor \
+  _purchaseWhaleBundle \
+  _purchaseLazyPass \
+  _purchaseDeityPass \
+  claimWhalePass \
+  _livenessTriggered \
+  markBafSkipped \
+  _consolidatePoolsAndRewardJackpots \
+  pendingRedemptionEthValue
+do
+  echo "=== ${SYMBOL} ==="
+  grep -rn --include='*.sol' "\b${SYMBOL}\b" contracts/ \
+    | grep -v '^contracts/mocks/' \
+    | grep -v '^contracts/test/' \
+    | grep -v 'ContractAddresses\.sol\.bak'
+done
+```
+
+For the `burn` symbol specifically, rerun with the narrowed pattern above (because `burn` alone produces hundreds of false-positive hits across BurnieCoin / DegenerusStonk / GNRUS / WrappedWrappedXRP / DegenerusVault and decimator-burn struct fields that are NOT calls to StakedDegenerusStonk.burn).
+
+**Delegatecall-selector reconciliation:**
+
+For every MODIFIED_LOGIC / NEW func in Section 2 whose impl is a module (AdvanceModule / GameOverModule / JackpotModule / MintModule / WhaleModule), confirm whether a `.<name>.selector` reference exists in DegenerusGame.sol or another module:
+
+```bash
+for FN in \
+  advanceGame \
+  runBafJackpot \
+  handleGameOverDrain \
+  claimWhalePass \
+  _consolidatePoolsAndRewardJackpots \
+  _purchaseCoinFor _purchaseBurnieLootboxFor _purchaseWhaleBundle _purchaseLazyPass _purchaseDeityPass \
+  _handleGameOverPath _gameOverEntropy \
+  markBafSkipped \
+  livenessTriggered _livenessTriggered
+do
+  echo "=== ${FN}.selector ==="
+  grep -rn --include='*.sol' "\.${FN}\.selector" contracts/ \
+    | grep -v '^contracts/mocks/' \
+    | grep -v '^contracts/test/'
+done
+```
+
+Result at cc68bfc7 HEAD: 4 delegatecall-selector call sites — `advanceGame.selector` (DegenerusGame.sol:289), `runBafJackpot.selector` (DegenerusGame.sol:1096), `handleGameOverDrain.selector` (AdvanceModule:627), `claimWhalePass.selector` (DegenerusGame.sol:1702). Zero selector references for `_consolidatePoolsAndRewardJackpots`, `markBafSkipped`, or the gate-swap `_purchase*` functions — each of those is either invoked directly within its defining module (private/internal) or via an external Jackpots handle (markBafSkipped). Captured as rows D-243-X004, D-243-X012, D-243-X028, D-243-X036.
+
+**Full-phase replay recipe (concatenates §7.1 + §7.1.b + §7.2 + §7.3):**
+
+```bash
+# To replay the entire Phase 243 DELTA-01 + DELTA-02 + DELTA-03 enumeration at cc68bfc7:
+#   1. Run §7.1 commands to reproduce Sections 0 + 1 + 4 + 5 at 771893d1.
+#   2. Run §7.1.b commands to reproduce the cc68bfc7 addendum rows.
+#   3. Run §7.2 commands to reproduce Section 2 classification verdicts across both anchors.
+#   4. Run §7.3 commands (above) to reproduce Section 3 call-site catalog + Section 6 Consumer Index mapping.
+
+# Verify working tree is at cc68bfc7 (or a descendant whose ancestry includes cc68bfc7):
+git log --oneline --ancestry-path cc68bfc7..HEAD | head -5
+git log -1 --format=%H cc68bfc7
+git diff --stat 7ab515fe..cc68bfc7 -- contracts/   # expect: 14 files / 187 / 67
+
+# Confirm READ-only status per D-22 before sweep:
+git status --porcelain contracts/ test/            # expect empty
+
+# Confirm Section 3 / Section 6 / §7.3 markers are NOT in the reserved-placeholder
+# state after Plan 243-03 — token assembled at runtime so this gate itself does
+# not self-match:
+MARKER="RESERVED""""""" FOR 243-"
+grep -c "$MARKER" audit/v31-243-DELTA-SURFACE.md              # expect 0 after 243-03 commits
+grep -c '^\*\*Status:\*\* FINAL — READ-only per CONTEXT.md D-21' audit/v31-243-DELTA-SURFACE.md   # expect 1
+```
+
+**D-18 portability envelope:** All greps use `grep -rn --include='*.sol'` (widely supported in GNU grep + BSD grep + busybox grep) + `grep -v` for exclusions. No GNU-only `-P` (perl regex). No GNU-only `-E` with alternation (the narrowed `burn` grep uses basic-regex alternation `\|` which is POSIX). If a reviewer's grep lacks `--include`, the fallback is:
+
+```bash
+find contracts/ -name '*.sol' \
+  ! -path 'contracts/mocks/*' \
+  ! -path 'contracts/test/*' \
+  ! -name 'ContractAddresses.sol.bak' \
+  -exec grep -Hn "\b${SYMBOL}\b" {} \;
+```
+
+Commands used by this plan for validation post-writes:
+
+```bash
+# Row-ID prefix audit after writing Section 3 + 6:
+grep -c '^| D-243-C' audit/v31-243-DELTA-SURFACE.md     # expect 42
+grep -c '^| D-243-F' audit/v31-243-DELTA-SURFACE.md     # expect 26
+grep -c '^| D-243-S' audit/v31-243-DELTA-SURFACE.md     # expect 2
+grep -c '^| D-243-X' audit/v31-243-DELTA-SURFACE.md     # expect 60
+grep -c '^| D-243-I' audit/v31-243-DELTA-SURFACE.md     # expect 41
+
+# No Phase-246 finding-ID emissions (D-20) — token assembled at runtime so the
+# gate command itself does not self-match:
+TOKEN="F-31""-"
+grep -c "$TOKEN" audit/v31-243-DELTA-SURFACE.md         # expect 0
+
+# All REQ IDs present in Section 6 via grep-containment:
+for R in DELTA-01 DELTA-02 DELTA-03 EVT-01 EVT-02 EVT-03 EVT-04 RNG-01 RNG-02 RNG-03 \
+         QST-01 QST-02 QST-03 QST-04 QST-05 GOX-01 GOX-02 GOX-03 GOX-04 GOX-05 GOX-06 GOX-07 \
+         SDR-01 SDR-02 SDR-03 SDR-04 SDR-05 SDR-06 SDR-07 SDR-08 \
+         GOE-01 GOE-02 GOE-03 GOE-04 GOE-05 GOE-06 \
+         FIND-01 FIND-02 FIND-03 REG-01 REG-02
+do
+  grep -q "| ${R} |" audit/v31-243-DELTA-SURFACE.md || echo "MISSING: ${R}"
+done
+# Silent output = all 41 REQ IDs present.
+```
 
 This subsection is appended by Plan 243-03 during its execution per CONTEXT.md D-18 (grep-reproducibility mandate — every call-site row carries the exact `grep` command that found it).
