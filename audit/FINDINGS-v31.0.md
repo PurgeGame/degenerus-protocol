@@ -200,3 +200,62 @@ KI envelope re-verifications (EXC-02 + EXC-03 RE_VERIFIED_AT_HEAD `cc68bfc7` fro
 
 ---
 
+## 5. Regression Appendix
+
+This appendix is the LEAN spot-check regression deliverable per ROADMAP REG-01 / REG-02 phrasing ("Skip the full v30.0 31-row regression sweep per milestone scope decision"). REG-01 covers the 5 F-30-NNN candidates whose evidence cites a consumer / path / site / state-var / event / interface method touched by ≥1 of the 5 v31.0 deltas (per CONTEXT.md D-08 inclusion rule = domain-cite + delta-surface mapping using the Phase 243 §6 Consumer Index as authoritative source) + F-29-04 explicitly NAMED per REG-01 REQ description. REG-02 covers 1 pre-identified SUPERSEDED candidate frozen in `246-01-PLAN.md` frontmatter `supersession_candidates` array per CONTEXT.md D-10 + D-11.
+
+Verdict taxonomy per CONTEXT.md D-09 closed set: `{PASS / REGRESSED / SUPERSEDED}`. Each row carries an `re-verified at HEAD cc68bfc7` backtick-quoted note + one-line structural-equivalence statement against the originating-milestone source artifact.
+
+### 5a. REG-01 — Delta-Touched F-30-NNN + F-29-04 (6 rows)
+
+REG-01 inclusion rule (CONTEXT.md D-08): a prior finding is "directly touched by deltas" iff its evidence cites a consumer / path / site / state-var / event / interface method that is itself touched by ≥1 of the 5 v31.0 deltas. The 246-01-PLAN.md frontmatter `reg_01_candidates` array lists the 6 candidates included; `reg_01_excluded` documents the 12 F-30-NNN rows excluded with one-line rationale per row.
+
+| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `cc68bfc7` | Re-Verification Evidence | Verdict |
+| ------ | -------------- | --------- | ---------------------------------- | ------------------------ | ------- |
+| REG-v30.0-F30001 | F-30-001 prevrandao fallback state-machine check (`AdvanceModule:1322` `_getHistoricalRngFallback`) | 771893d1 | 14-day VRF-dead grace adds liveness TRIGGER at Storage:1242 + AdvanceModule:109 GAMEOVER_RNG_FALLBACK_DELAY constant intact; sole prevrandao site remains AdvanceModule:1340 inside `_getHistoricalRngFallback`; no new prevrandao-consumption path. Tier-1 + Tier-2 14-day gates derive from same `rngRequestTime` source. | Phase 244 GOX-04-V02 + Phase 245 GOE-04-V02 RE_VERIFIED_AT_HEAD cc68bfc7. EXC-02 envelope non-widening per CONTEXT.md D-22; KI EXC-02 entry intact at HEAD. | PASS |
+| REG-v30.0-F30005 | F-30-005 F-29-04 liveness-proof note (`_swapAndFreeze:292` + `_swapTicketSlot:1082` write-buffer-swap sites) | 771893d1 + cc68bfc7 | `_gameOverEntropy:1222-1246` substitution site unchanged; `_handleGameOverPath:519-627` reordered with gameover-before-liveness check (Phase 244 GOX-06-V02). cc68bfc7 BAF addendum touches `_purchaseCoinFor` / `runBafJackpot` but NOT swap sites. F-29-04 envelope non-widening. | Phase 245 SDR-08-V01 + GOE-01-V01 RE_VERIFIED_AT_HEAD cc68bfc7 (dual carriers); cross-cites Phase 244 RNG-01-V11 PRIMARY. EXC-03 tri-gate predicates (terminal-state + no-player-reachable-timing + buffer-scope) all hold per Phase 244 GOX-06 + Phase 245 SDR-01-T{a-f} foundation. | PASS |
+| REG-v30.0-F30007 | F-30-007 KI-exception precedence over path-family rules (taxonomy-precedence rule disclosure) | 771893d1 | New 14-day-grace path-family ordering does not introduce new path-families requiring re-classification. Phase 245 GOE-03 walks full external-function inventory (25+ entries gate-classified i/ii/iii beyond Phase 244 GOX-01 8-path primary). | Phase 245 GOE-03 — all new external-function entries classified under existing taxonomy; KI-exception precedence rule still resolves correctly at HEAD. | PASS |
+| REG-v30.0-F30015 | F-30-015 prevrandao-mix recursion citation (INV-237-060..062 cluster at `AdvanceModule:1301-1325`) | 771893d1 | Same domain as F-30-001 (prevrandao fallback under EXC-02). 14-day grace adds liveness TRIGGER at Storage:1242 but NOT new prevrandao-consumption path; INV-237-060..062 cluster unchanged. | Phase 244 GOX-04-V02 + Phase 245 GOE-04-V02 RE_VERIFIED_AT_HEAD cc68bfc7. EXC-02 envelope non-widening per CONTEXT.md D-22. | PASS |
+| REG-v30.0-F30017 | F-30-017 F-29-04 swap-site liveness recommendation (write-buffer-swap sites pre-VRF-request commitment) | 771893d1 + cc68bfc7 | Same domain as F-30-005 (write-buffer-swap sites under EXC-03). Distinct F-30-NNN ID per v30 D-07 source-attribution preservation. | Phase 245 SDR-08-V01 + GOE-01-V01 RE_VERIFIED_AT_HEAD cc68bfc7 (dual carriers). EXC-03 envelope non-widening per CONTEXT.md D-22. | PASS |
+| REG-v29.0-F2904 | **F-29-04 (Gameover RNG substitution for mid-cycle write-buffer tickets)** — explicitly NAMED per CONTEXT.md D-08 + REG-01 REQ description | 771893d1 + cc68bfc7 | `GAMEOVER_RNG_FALLBACK_DELAY = 14 days` intact at AdvanceModule:109; `_swapAndFreeze(purchaseLevel)` at :292; `_gameOverEntropy` at :1222-1246; `_swapTicketSlot(purchaseLevel_)` at :1082; sole `_gameOverEntropy` caller `advanceGame:553` (rngWord sink); buffer-swap primitive boundary unchanged. EXC-03 envelope re-verified non-widening. | Phase 245 SDR-08-V01 + GOE-01-V01 RE_VERIFIED_AT_HEAD cc68bfc7 (dual carriers); cross-cites Phase 244 RNG-01-V11 PRIMARY. EXC-03 tri-gate predicates all hold at HEAD: P1 (terminal-state — `_gameOverEntropy` single-caller advanceGame:553), P2 (no-player-reachable-timing — Phase 244 GOX-06 + Phase 240 GO-04 DISPROVEN_PLAYER_REACHABLE_VECTOR), P3 (buffer-scope — Phase 245 SDR-08-V01 + Phase 240 GO-05 BOTH_DISJOINT). KNOWN-ISSUES.md EXC-03 entry intact at HEAD. | PASS |
+
+**REG-01 distribution at HEAD `cc68bfc7`: 6 PASS / 0 REGRESSED / 0 SUPERSEDED** (5 F-30-NNN delta-touched candidates + F-29-04 explicitly NAMED). Expected per Phase 244 + Phase 245 zero-finding-candidate input + KI EXC-02 + EXC-03 envelopes RE_VERIFIED_AT_HEAD without widening per CONTEXT.md D-22.
+
+#### REG-01 Exclusion Log
+
+12 F-30-NNN rows from `audit/FINDINGS-v30.0.md` §5 inspected against the 5 v31.0 deltas and excluded per CONTEXT.md D-08 inclusion rule (no domain-cite match). Authoritative list lives in `246-01-PLAN.md` frontmatter `reg_01_excluded` array. Summary:
+
+- **F-30-002** (boon-roll entropy XOR-shift; LootboxModule:1059) — lootbox roll path NOT delta-touched.
+- **F-30-003** + **F-30-008** (deityBoonData view-deterministic-fallback; DegenerusGame.sol:852) — deity-boon view path NOT delta-touched (duplicate subject).
+- **F-30-004** (mid-day gate off-by-one; AdvanceModule:204-208) — reformatted by 16597cac per Phase 244 RNG-03 (multi-line SLOAD + tuple destructuring); behaviorally equivalent; conservative exclusion as not semantically delta-touched.
+- **F-30-006** (daily-share 62.3% sanity observation) — meta-observation, not file-line bound; not delta-touchable.
+- **F-30-009** (rawFulfillRandomWords mid-day branch SSTORE; AdvanceModule:1706) — fulfillment-callback NOT delta-touched.
+- **F-30-010** + **F-30-016** (INV-237-124 _jackpotTicketRoll EntropyLib EXC-04 scope-note; JackpotModule:2119) — entropyStep call site NOT delta-touched (duplicate subject).
+- **F-30-011** + **F-30-014** (INV-237-129 resolveLootboxDirect library-wrapper; LootboxModule:673) — LootboxModule NOT delta-touched (duplicate subject).
+- **F-30-012** + **F-30-013** (INV-237-143/-144 _raritySymbolBatch / _rollRemainder dual-trigger; MintModule:568/652) — 6b3f4f3c modifies MintModule but Phase 244 QST-04 confirmed _raritySymbolBatch + _rollRemainder unchanged; NOT semantically delta-touched (duplicate subject).
+
+### 5b. REG-02 — SUPERSEDED Sweep (1 row)
+
+REG-02 scope per CONTEXT.md D-10 + D-11 = explicit pre-identified bounded candidate list frozen in `246-01-PLAN.md` frontmatter `supersession_candidates` array. The seed candidate is the sDGNRS orphan-redemption window structurally closed by `771893d1` (per REQ description hint). Planner-identified additional candidates: 0.
+
+5-column table per CONTEXT.md D-12: `Prior-Finding-ID | Delta-SHA | Verdict | Evidence | Citation`.
+
+| Prior-Finding-ID | Delta SHA | Verdict | Evidence | Citation |
+| ---------------- | --------- | ------- | -------- | -------- |
+| Pre-existing orphan-redemption edge case (v24.0 / v25.0 sDGNRS lifecycle prior to liveness-gate landing — implicit acceptance window in v25/v29/v30 sDGNRS redemption design; not a numbered F-NN-NN ID) | 771893d1 | SUPERSEDED | (a) `sDGNRS.burn` + `burnWrapped` State-1 block closes orphan-redemption creation window when liveness fired but gameOver not latched per Phase 244 GOX-02-V01/V02 SAFE; (b) `handleGameOverDrain` subtracts `pendingRedemptionEthValue` BEFORE 33/33/34 split per Phase 245 SDR-03 SAFE + Phase 244 GOX-03 SAFE — preserves reserved ETH for `claimRedemption`; (c) State-1 orphan-redemption negative-space sweep at Phase 245 SDR-06 SAFE confirms no reachable creator path; (d) per-wei conservation closed for every wei entering pendingRedemptionEthValue at Phase 245 SDR-05 SAFE. Combined: any prior partial-state redemption gap that could leave a redemption pending across State-0 → State-1 → State-2 transition is structurally closed at HEAD `cc68bfc7`. | `audit/v31-244-PER-COMMIT-AUDIT.md` GOX-02-V01/V02 + GOX-03-V01; `audit/v31-245-SDR-GOE.md` SDR-03 + SDR-05 + SDR-06 |
+
+**REG-02 distribution at HEAD `cc68bfc7`: 0 PASS / 0 REGRESSED / 1 SUPERSEDED.** Expected per Phase 245 SDR + GOE buckets all SAFE floor + structural closure of pre-existing redemption gap by 771893d1 sDGNRS-protection delta.
+
+### 5c. Combined REG-01 + REG-02 Distribution at HEAD `cc68bfc7`
+
+| Verdict | REG-01 | REG-02 | Combined |
+| ------- | ------ | ------ | -------- |
+| PASS | 6 | 0 | 6 |
+| REGRESSED | 0 | 0 | 0 |
+| SUPERSEDED | 0 | 1 | 1 |
+| **Total** | **6** | **1** | **7** |
+
+`re-verified at HEAD cc68bfc7` — all 7 prior-finding rows accounted for under CONTEXT.md D-09 verdict taxonomy. Zero regressions detected. The 1 SUPERSEDED row reflects 771893d1's structural closure of a pre-existing implicit acceptance window in the sDGNRS redemption design.
+
+---
+
