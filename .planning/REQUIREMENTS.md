@@ -112,47 +112,47 @@ _(Filled by roadmapper — maps each REQ-ID to its phase assignment.)_
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| DELTA-01 | _TBD_ | Pending |
-| DELTA-02 | _TBD_ | Pending |
-| DELTA-03 | _TBD_ | Pending |
-| EVT-01 | _TBD_ | Pending |
-| EVT-02 | _TBD_ | Pending |
-| EVT-03 | _TBD_ | Pending |
-| EVT-04 | _TBD_ | Pending |
-| RNG-01 | _TBD_ | Pending |
-| RNG-02 | _TBD_ | Pending |
-| RNG-03 | _TBD_ | Pending |
-| QST-01 | _TBD_ | Pending |
-| QST-02 | _TBD_ | Pending |
-| QST-03 | _TBD_ | Pending |
-| QST-04 | _TBD_ | Pending |
-| QST-05 | _TBD_ | Pending |
-| GOX-01 | _TBD_ | Pending |
-| GOX-02 | _TBD_ | Pending |
-| GOX-03 | _TBD_ | Pending |
-| GOX-04 | _TBD_ | Pending |
-| GOX-05 | _TBD_ | Pending |
-| GOX-06 | _TBD_ | Pending |
-| GOX-07 | _TBD_ | Pending |
-| SDR-01 | _TBD_ | Pending |
-| SDR-02 | _TBD_ | Pending |
-| SDR-03 | _TBD_ | Pending |
-| SDR-04 | _TBD_ | Pending |
-| SDR-05 | _TBD_ | Pending |
-| SDR-06 | _TBD_ | Pending |
-| SDR-07 | _TBD_ | Pending |
-| SDR-08 | _TBD_ | Pending |
-| GOE-01 | _TBD_ | Pending |
-| GOE-02 | _TBD_ | Pending |
-| GOE-03 | _TBD_ | Pending |
-| GOE-04 | _TBD_ | Pending |
-| GOE-05 | _TBD_ | Pending |
-| GOE-06 | _TBD_ | Pending |
-| FIND-01 | _TBD_ | Pending |
-| FIND-02 | _TBD_ | Pending |
-| FIND-03 | _TBD_ | Pending |
-| REG-01 | _TBD_ | Pending |
-| REG-02 | _TBD_ | Pending |
+| DELTA-01 | Phase 243 | Pending |
+| DELTA-02 | Phase 243 | Pending |
+| DELTA-03 | Phase 243 | Pending |
+| EVT-01 | Phase 244 | Pending |
+| EVT-02 | Phase 244 | Pending |
+| EVT-03 | Phase 244 | Pending |
+| EVT-04 | Phase 244 | Pending |
+| RNG-01 | Phase 244 | Pending |
+| RNG-02 | Phase 244 | Pending |
+| RNG-03 | Phase 244 | Pending |
+| QST-01 | Phase 244 | Pending |
+| QST-02 | Phase 244 | Pending |
+| QST-03 | Phase 244 | Pending |
+| QST-04 | Phase 244 | Pending |
+| QST-05 | Phase 244 | Pending |
+| GOX-01 | Phase 244 | Pending |
+| GOX-02 | Phase 244 | Pending |
+| GOX-03 | Phase 244 | Pending |
+| GOX-04 | Phase 244 | Pending |
+| GOX-05 | Phase 244 | Pending |
+| GOX-06 | Phase 244 | Pending |
+| GOX-07 | Phase 244 | Pending |
+| SDR-01 | Phase 245 | Pending |
+| SDR-02 | Phase 245 | Pending |
+| SDR-03 | Phase 245 | Pending |
+| SDR-04 | Phase 245 | Pending |
+| SDR-05 | Phase 245 | Pending |
+| SDR-06 | Phase 245 | Pending |
+| SDR-07 | Phase 245 | Pending |
+| SDR-08 | Phase 245 | Pending |
+| GOE-01 | Phase 245 | Pending |
+| GOE-02 | Phase 245 | Pending |
+| GOE-03 | Phase 245 | Pending |
+| GOE-04 | Phase 245 | Pending |
+| GOE-05 | Phase 245 | Pending |
+| GOE-06 | Phase 245 | Pending |
+| FIND-01 | Phase 246 | Pending |
+| FIND-02 | Phase 246 | Pending |
+| FIND-03 | Phase 246 | Pending |
+| REG-01 | Phase 246 | Pending |
+| REG-02 | Phase 246 | Pending |
 
 ---
 

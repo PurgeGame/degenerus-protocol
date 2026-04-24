@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v31.0
 milestone_name: Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
-status: defining_requirements
+status: defining_phase_plan
 last_updated: "2026-04-23T00:00:00Z"
 last_activity: 2026-04-23
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -25,16 +25,27 @@ See: .planning/PROJECT.md (updated 2026-04-23 for v31.0 milestone start)
 ## Current Position
 
 **Milestone:** v31.0 — Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
-**Phase:** Not started (defining requirements)
+**Phase:** 243 — Delta Extraction & Per-Commit Classification
 **Plan:** —
-**Status:** Defining requirements
+**Status:** Defining phase plan
 **Last shipped:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit (closed 2026-04-20 at HEAD `7ab515fe`; tag `v30.0`)
 **Delta baseline:** v30.0 HEAD `7ab515fe` → current HEAD `771893d1`
-**Last activity:** 2026-04-23 — Milestone v31.0 started
+**Last activity:** 2026-04-23 — v31.0 ROADMAP.md created (4 phases: 243-246; 41/41 requirements mapped)
+
+## Roadmap Overview
+
+Phases 243-246 (4 phases total, continuing from v30.0's last phase 242):
+
+- **Phase 243** — Delta Extraction & Per-Commit Classification (DELTA-01..03, 3 REQs)
+- **Phase 244** — Per-Commit Adversarial Audit (EVT-01..04, RNG-01..03, QST-01..05, GOX-01..07; 19 REQs)
+- **Phase 245** — sDGNRS Redemption Gameover Safety + Pre-Existing Gameover Invariant Re-Verification (SDR-01..08, GOE-01..06; 14 REQs)
+- **Phase 246** — Findings Consolidation + Lean Regression Appendix (FIND-01..03, REG-01..02; 5 REQs)
+
+See `.planning/ROADMAP.md` for full phase details and success criteria.
 
 ## Deferred Items
 
-Items acknowledged and deferred at milestone close on 2026-04-20:
+Items acknowledged and deferred at v30.0 milestone close on 2026-04-20:
 
 | Category | Item | Status | Notes |
 |----------|------|--------|-------|
@@ -59,6 +70,6 @@ Audit deliverables:
 
 ## Global Project State
 
-- Contract tree at HEAD (post-v30.0): byte-identical to v29.0 `1646d5af`; baseline `7ab515fe` locked
-- READ-only audit pattern carried forward from v28.0/v29.0 — any next milestone that re-opens `contracts/` or `test/` writes must explicitly lift the READ-only gate
-- KNOWN-ISSUES.md: 4 accepted RNG-determinism exceptions (affiliate roll / prevrandao fallback / F-29-04 mid-cycle substitution / EntropyLib XOR-shift) — all re-verified at HEAD `7ab515fe` in v30.0 Phase 241
+- Contract tree at current HEAD `771893d1`: 5 commits above v30.0 baseline `7ab515fe` (12 files, 4 code-touching); these deltas are the v31.0 audit surface
+- READ-only audit pattern carried forward from v28.0/v29.0/v30.0 — any next milestone that re-opens `contracts/` or `test/` writes must explicitly lift the READ-only gate
+- KNOWN-ISSUES.md: 4 accepted RNG-determinism exceptions (affiliate roll / prevrandao fallback / F-29-04 mid-cycle substitution / EntropyLib XOR-shift) — all re-verified at HEAD `7ab515fe` in v30.0 Phase 241; v31.0 re-verifies only if deltas widen the surface
