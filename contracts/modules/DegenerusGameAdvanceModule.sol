@@ -527,11 +527,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // purchases during the multi-tx game-over drain sequence.
         psd; // silence unused-param warning after refactor to shared helper
         day;
-        if (!_livenessTriggered()) return (false, 0);
-
         bool ok;
         bytes memory data;
 
+        // gameOver check precedes liveness so the post-gameover final-sweep path
+        // stays reachable after the VRF-dead path latches gameOver with day-math
+        // still below the 120/365 threshold (e.g., VRF breaks on day 14).
         if (gameOver) {
             // Post-gameover: check for final sweep (1 month after gameover)
             (ok, data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
@@ -542,6 +543,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (!ok) _revertDelegate(data);
             return (true, STAGE_GAMEOVER);
         }
+
+        if (!_livenessTriggered()) return (false, 0);
 
         // Safety: don't activate game over if nextPool requirement is already met
         if (lvl != 0 && _getNextPrizePool() >= levelPrizePool[lvl]) {
@@ -1272,6 +1275,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     }
                 }
                 _finalizeLootboxRng(fallbackWord);
+                // Release the stall lock once fallback has committed; liveness now reads
+                // from day math alone instead of short-circuiting on a stale VRF timer.
+                rngRequestTime = 0;
                 return fallbackWord;
             }
             revert RngNotReady();

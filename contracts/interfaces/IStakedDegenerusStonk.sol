@@ -85,6 +85,10 @@ interface IStakedDegenerusStonk {
     /// @return True if current period has pending base amounts
     function hasPendingRedemptions() external view returns (bool);
 
+    /// @notice Total ETH physically held but reserved for in-flight gambling-burn redemptions.
+    /// @dev handleGameOverDrain subtracts this so reserved ETH is not swept into terminal payouts.
+    function pendingRedemptionEthValue() external view returns (uint256);
+
     /// @notice Resolve the current gambling burn period with RNG results
     /// @dev Only callable by game contract during advanceGame
     /// @param roll The random roll (25-175)

@@ -2126,6 +2126,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return uint48(_goRead(GO_TIME_SHIFT, GO_TIME_MASK));
     }
 
+    /// @notice Whether the liveness-timeout game-over trigger is currently active.
+    /// @dev Returns true either on day-timeout (365/120) with VRF healthy, or
+    ///      whenever VRF has been stalled for _VRF_GRACE_PERIOD. During a sub-grace
+    ///      VRF stall, returns false so proposal-based coordinator rotation is possible.
+    function livenessTriggered() external view returns (bool) {
+        return _livenessTriggered();
+    }
+
     /// @notice Get the yield surplus (stETH appreciation above all pool obligations).
     /// @dev Calculated as: (ETH balance + stETH balance) - (current + next + claimable + future pools)
     /// @return The yield surplus value (ETH wei).

@@ -24,6 +24,11 @@ interface IDegenerusGame {
     /// @notice Check if the game has ended (terminal state).
     function gameOver() external view returns (bool);
 
+    /// @notice Whether the liveness-timeout game-over trigger is currently active.
+    /// @dev True on day-timeout (365 at level 0, 120 at level 1+) with VRF healthy,
+    ///      or whenever VRF has been stalled ≥ 14 days. False during sub-grace VRF stalls.
+    function livenessTriggered() external view returns (bool);
+
     /// @notice Check if the final sweep has executed (all funds forfeited).
     function isFinalSwept() external view returns (bool);
 

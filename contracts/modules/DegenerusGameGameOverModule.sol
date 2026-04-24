@@ -86,8 +86,13 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         uint256 totalFunds = ethBal + stBal;
 
         // Compute available funds FIRST (before any side effects)
-        // Deity pass refunds have not happened yet, so claimablePool is pre-refund
-        uint256 preRefundAvailable = totalFunds > claimablePool ? totalFunds - claimablePool : 0;
+        // Deity pass refunds have not happened yet, so claimablePool is pre-refund.
+        // pendingRedemptionEthValue is ETH physically held on-chain but reserved for
+        // sDGNRS gambling-burn claimants; excluding it prevents double-spend when
+        // claimRedemption runs after the drain.
+        uint256 reserved = uint256(claimablePool) +
+            IStakedDegenerusStonk(ContractAddresses.SDGNRS).pendingRedemptionEthValue();
+        uint256 preRefundAvailable = totalFunds > reserved ? totalFunds - reserved : 0;
 
         // RNG gate: when distributable funds exist, require RNG word.
         // Defense-in-depth -- caller (_handleGameOverPath) already guarantees
@@ -146,8 +151,11 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         _setCurrentPrizePool(0);
         yieldAccumulator = 0;
 
-        // Recalculate available after refunds (claimablePool may have grown)
-        uint256 available = totalFunds > claimablePool ? totalFunds - claimablePool : 0;
+        // Recalculate available after refunds (claimablePool may have grown).
+        // Pending sDGNRS redemption ETH remains reserved for claimRedemption payouts.
+        uint256 postRefundReserved = uint256(claimablePool) +
+            IStakedDegenerusStonk(ContractAddresses.SDGNRS).pendingRedemptionEthValue();
+        uint256 available = totalFunds > postRefundReserved ? totalFunds - postRefundReserved : 0;
 
         if (available == 0) return;
 

@@ -192,7 +192,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     }
 
     function _purchaseWhaleBundle(address buyer, uint256 quantity) private {
-        if (gameOver) revert E();
+        if (_livenessTriggered()) revert E();
         uint24 passLevel = level + 1;
 
         if (quantity == 0 || quantity > 100) revert E();
@@ -382,7 +382,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     }
 
     function _purchaseLazyPass(address buyer) private {
-        if (gameOver) revert E();
+        if (_livenessTriggered()) revert E();
         uint24 currentLevel = level;
         bool hasValidBoon = false;
         BoonPacked storage bpLazy = boonPacked[buyer];
@@ -541,7 +541,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     function _purchaseDeityPass(address buyer, uint8 symbolId) private {
         if (rngLockedFlag) revert RngLocked();
-        if (gameOver) revert E();
+        if (_livenessTriggered()) revert E();
         if (symbolId >= 32) revert E();
         if (deityBySymbol[symbolId] != address(0)) revert E();
         if (
@@ -955,7 +955,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ///      Tickets start at current level + 1 to avoid giving tickets for an already-active level.
     /// @param player Player address to claim for.
     function claimWhalePass(address player) external {
-        if (gameOver) revert E();
+        if (_livenessTriggered()) revert E();
         uint256 halfPasses = whalePassClaims[player];
         if (halfPasses == 0) return;
 

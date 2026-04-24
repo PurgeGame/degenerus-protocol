@@ -887,7 +887,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         uint256 ticketQuantity,
         uint256 lootBoxBurnieAmount
     ) private {
-        if (gameOver) revert E();
+        if (_livenessTriggered()) revert E();
 
         if (ticketQuantity != 0) {
             // ENF-01: Block BURNIE tickets when drip projection cannot cover nextPool deficit.
@@ -917,7 +917,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) private {
-        if (gameOver) revert E();
+        if (_livenessTriggered()) revert E();
         uint256 lootboxFlipCredit;
         bool cachedJpFlag = jackpotPhaseFlag;
         uint24 cachedLevel = level;
@@ -1223,7 +1223,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         )
     {
         if (quantity == 0) revert E();
-        if (gameOver) revert E();
+        if (_livenessTriggered()) revert E();
         uint8 cachedComp = compressedJackpotFlag;
         uint8 cachedCnt = jackpotCounter;
         targetLevel = cachedJpFlag ? cachedLevel : cachedLevel + 1;
@@ -1389,7 +1389,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         address buyer,
         uint256 burnieAmount
     ) private {
-        if (gameOver) revert E();
+        if (_livenessTriggered()) revert E();
         if (burnieAmount < BURNIE_LOOTBOX_MIN) revert E();
         uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
         if (index == 0) revert E();

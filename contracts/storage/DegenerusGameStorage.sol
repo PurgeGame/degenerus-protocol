@@ -197,6 +197,11 @@ abstract contract DegenerusGameStorage {
     /// @dev Deploy idle timeout in days (mirrors DegenerusGame / AdvanceModule).
     uint32 internal constant _DEPLOY_IDLE_TIMEOUT_DAYS = 365;
 
+    /// @dev VRF stall duration that flips liveness from "grace" to "VRF-dead game-over".
+    ///      Below this, liveness is suppressed so players can propose a coordinator rotation.
+    ///      At or above, liveness fires so the game-over fallback path engages.
+    uint48 internal constant _VRF_GRACE_PERIOD = 14 days;
+
     // =========================================================================
     // Errors
     // =========================================================================
@@ -1214,19 +1219,27 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Whether the liveness-timeout game-over trigger is active.
-    ///      Mirrors the logic in DegenerusGameAdvanceModule._handleGameOverPath.
     ///      Level 0: deploy idle timeout (365 days since purchaseStartDay).
     ///      Level 1+: 120-day inactivity timeout since purchaseStartDay.
-    ///      Used by purchase paths in DegenerusGameMintModule to block
-    ///      purchases once game-over is inevitable, so that new tickets never
-    ///      arrive mid-way through the multi-tx game-over drain sequence.
+    ///
+    ///      Day math is evaluated first so mid-drain RNG requests (which set
+    ///      rngRequestTime during _handleGameOverPath) cannot transiently flip
+    ///      liveness back to false while the drain is in progress.
+    ///
+    ///      VRF-dead override: if day math has not yet been met, a VRF stall of
+    ///      _VRF_GRACE_PERIOD fires liveness so the game-over historical-fallback
+    ///      path in _gameOverEntropy can engage. Below that threshold, liveness
+    ///      stays false — players can propose a coordinator rotation via
+    ///      DegenerusAdmin, and missed days are credited back to purchaseStartDay
+    ///      in AdvanceModule.rngGate on fulfillment.
     function _livenessTriggered() internal view returns (bool) {
         uint24 lvl = level;
         uint32 psd = purchaseStartDay;
         uint32 currentDay = _simulatedDayIndex();
-        return
-            (lvl == 0 && currentDay - psd > _DEPLOY_IDLE_TIMEOUT_DAYS) ||
-            (lvl != 0 && currentDay - psd > 120);
+        if (lvl == 0 && currentDay - psd > _DEPLOY_IDLE_TIMEOUT_DAYS) return true;
+        if (lvl != 0 && currentDay - psd > 120) return true;
+        uint48 rngStart = rngRequestTime;
+        return rngStart != 0 && block.timestamp - rngStart >= _VRF_GRACE_PERIOD;
     }
 
     /// @dev Returns the day index for a specific timestamp.

@@ -26,6 +26,8 @@ interface IDegenerusGamePlayer {
     function rngLocked() external view returns (bool);
     /// @notice Check if game is over.
     function gameOver() external view returns (bool);
+    /// @notice Check if the liveness-timeout game-over trigger is active (State 1 precursor).
+    function livenessTriggered() external view returns (bool);
     /// @notice Get current day index.
     function currentDayView() external view returns (uint32);
     /// @notice Get RNG word for a specific day.
@@ -96,6 +98,11 @@ contract StakedDegenerusStonk {
 
     /// @notice Thrown when burns are attempted during RNG resolution
     error BurnsBlockedDuringRng();
+
+    /// @notice Thrown when burns are attempted after liveness fires but before gameOver latches.
+    ///         Gambling-path redemptions submitted in this window would resolve but the
+    ///         reserved ETH is swept by handleGameOverDrain before claimRedemption can run.
+    error BurnsBlockedDuringLiveness();
 
     /// @notice Thrown when a player tries to submit a new claim while one is unresolved
     error UnresolvedClaim();
@@ -475,11 +482,13 @@ contract StakedDegenerusStonk {
     /// @return stethOut stETH received (deterministic path only)
     /// @return burnieOut BURNIE received (deterministic path only)
     /// @custom:reverts BurnsBlockedDuringRng If called during active VRF request (rngLocked).
+    /// @custom:reverts BurnsBlockedDuringLiveness If liveness fired but gameOver has not yet latched.
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
         if (game.gameOver()) {
             (ethOut, stethOut) = _deterministicBurn(msg.sender, amount);
             return (ethOut, stethOut, 0);
         }
+        if (game.livenessTriggered()) revert BurnsBlockedDuringLiveness();
         if (game.rngLocked()) revert BurnsBlockedDuringRng();
         _submitGamblingClaim(msg.sender, amount);
         return (0, 0, 0);
@@ -493,7 +502,9 @@ contract StakedDegenerusStonk {
     /// @return stethOut stETH received (deterministic path only)
     /// @return burnieOut BURNIE received (deterministic path only)
     /// @custom:reverts BurnsBlockedDuringRng If called during active VRF request (rngLocked).
+    /// @custom:reverts BurnsBlockedDuringLiveness If liveness fired but gameOver has not yet latched.
     function burnWrapped(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
+        if (game.livenessTriggered() && !game.gameOver()) revert BurnsBlockedDuringLiveness();
         dgnrsWrapper.burnForSdgnrs(msg.sender, amount);
         if (game.gameOver()) {
             (ethOut, stethOut) = _deterministicBurnFrom(msg.sender, ContractAddresses.DGNRS, amount);
