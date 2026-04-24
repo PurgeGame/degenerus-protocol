@@ -4,7 +4,7 @@
 **Audit head:** `771893d1` (v31.0 milestone start HEAD).
 **Phase:** 243 — Delta Extraction & Per-Commit Classification (DELTA-01 / DELTA-02 / DELTA-03).
 **Scope:** READ-only per CONTEXT.md D-22. Zero `contracts/` or `test/` writes.
-**Status:** IN PROGRESS — Plan 243-01 populates Sections 0 / 1 / 4 / 5 / 7. Sections 2 / 3 / 6 are placeholder stubs reserved for Plans 243-02 (classification) and 243-03 (call-site catalog + Consumer Index + final READ-only lock).
+**Status:** WORKING — 243-02 and 243-03 wave-2 appends pending. Plan 243-01 has populated Sections 0 / 1 / 4 / 5 / 7.1. Sections 2 / 3 / 6 / 7.2 / 7.3 carry `RESERVED FOR 243-02` / `RESERVED FOR 243-03` placeholder markers for the Wave 2 plans to replace in place. Plan 243-03 performs the final FINAL-status READ-only lock per CONTEXT.md D-12 + D-21.
 
 ## Section 0 — Overview & Row-ID Legend
 
