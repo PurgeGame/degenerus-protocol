@@ -91,9 +91,9 @@
 ### v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit (Phases 243-246)
 
 - [x] **Phase 243: Delta Extraction & Per-Commit Classification** — COMPLETE at HEAD `cc68bfc7` (all 3 plans closed 2026-04-23): single authoritative delta-surface catalog `audit/v31-243-DELTA-SURFACE.md` published with 42 changelog + 26 classification + 60 call-site + 41 Consumer-Index + 2 storage rows; FINAL READ-only per D-21
-- [ ] **Phase 244: Per-Commit Adversarial Audit (EVT + RNG + QST + GOX)** — Audit every post-v30 code change adversarially against its commit-message behavior claim
+- [x] **Phase 244: Per-Commit Adversarial Audit (EVT + RNG + QST + GOX)** — COMPLETE + VERIFIED at HEAD `cc68bfc7` (all 4 plans closed 2026-04-24): single authoritative `audit/v31-244-PER-COMMIT-AUDIT.md` (2858 lines) published with 87 V-rows / 19 REQs all SAFE floor; 0 finding candidates; KI EXC-02 RE_VERIFIED via GOX-04-V02; FINAL READ-only per D-05
 - [x] **Phase 245: sDGNRS Redemption Gameover Safety + Pre-Existing Gameover Invariant Re-Verification** — Prove every redemption path × gameover-timing matrix is fund-conserving and re-verify pre-existing gameover invariants against the new delta (2026-04-24)
-- [ ] **Phase 246: Findings Consolidation + Lean Regression Appendix** — Publish `audit/FINDINGS-v31.0.md` and update `KNOWN-ISSUES.md` only if D-09 3-predicate gating passes
+- [x] **Phase 246: Findings Consolidation + Lean Regression Appendix** — COMPLETE at HEAD `cc68bfc7` (1/1 plan closed 2026-04-24): `audit/FINDINGS-v31.0.md` (403 lines) FINAL READ-only published with severity 0/0/0/0/0; REG-01 6 PASS / REG-02 1 SUPERSEDED; FIND-03 0/0 KI promoted; KNOWN-ISSUES.md UNMODIFIED per CONTEXT.md D-07; closure signal `MILESTONE_V31_CLOSED_AT_HEAD_cc68bfc7` emitted
 
 ## Phase Details
 
@@ -156,7 +156,9 @@ Plans:
   4. Lean regression appendix published: every v30.0 F-30-NNN or prior finding directly touched by the 5 in-scope deltas spot-checked, F-29-04 RE_VERIFIED_AT_HEAD, and any prior finding superseded by the new code explicitly marked SUPERSEDED with citation. The full v30.0 31-row sweep is NOT re-run per milestone scope decision (REG-01, REG-02)
   5. D-25 terminal-phase rule honored — zero forward-cites emitted; any finding that cannot close in v31.0 routes to an F-31-NN block with explicit rollover addendum or is closed via regression verdict
 
-**Plans**: TBD
+**Plans**: 1 plan, single-wave (per 246-CONTEXT.md D-01..D-04 — single-plan 6-task consolidation matching v30 Phase 242 precedent)
+Plans:
+- [x] 246-01-PLAN.md — Single-plan 6-task consolidation COMPLETE at cc68bfc7 (2026-04-24): `audit/FINDINGS-v31.0.md` published 403 lines FINAL READ-only mirroring v30 10-section shape with v31 9-section variant (drops v30 §4 Phase-240-specific). Severity counts CRITICAL 0 / HIGH 0 / MEDIUM 0 / LOW 0 / INFO 0; total F-31-NN = 0. REG-01 LEAN 6-row spot-check (5 F-30-NNN delta-touched + F-29-04 NAMED) + 12-row exclusion log: 6 PASS / 0 REGRESSED / 0 SUPERSEDED. REG-02 1-row sweep: 0 PASS / 0 REGRESSED / 1 SUPERSEDED (sDGNRS orphan-redemption window structurally closed by 771893d1). FIND-03 zero-row Non-Promotion Ledger + 4-row envelope-non-widening attestation (EXC-01/02/03/04 all NON-WIDENING at HEAD); KNOWN-ISSUES.md UNMODIFIED per CONTEXT.md D-07 default path. Forward-cite closure attested (17/17 Phase 244 Pre-Flag CLOSED + 0 Phase 245 residual + 0 Phase 246 emissions). 6-point milestone-closure attestation per D-18 emits closure signal `MILESTONE_V31_CLOSED_AT_HEAD_cc68bfc7`. Commits: `348785f7` (Task 1) + `1ba3a0be` (Task 2) + `005e15b1` (Task 3) + `896a8793` (Task 4) + `91ce6856` (Task 5) + `86eb12ae` (Task 6)
 
 ## Progress
 
@@ -167,6 +169,6 @@ Plans:
 | 243. Delta Extraction & Per-Commit Classification | 3/3 | Complete | 2026-04-23 |
 | 244. Per-Commit Adversarial Audit (EVT + RNG + QST + GOX) | 4/4 | Complete | 2026-04-24 |
 | 245. sDGNRS Redemption Gameover Safety + Pre-Existing Gameover Invariant Re-Verification | 2/2 | Complete | 2026-04-24 |
-| 246. Findings Consolidation + Lean Regression Appendix | 0/? | Not started | — |
+| 246. Findings Consolidation + Lean Regression Appendix | 1/1 | Complete | 2026-04-24 |
 
 Plan counts will be filled in as each phase is planned via `/gsd-plan-phase N`.

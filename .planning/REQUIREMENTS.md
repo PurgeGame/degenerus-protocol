@@ -148,11 +148,11 @@ _(Filled by roadmapper — maps each REQ-ID to its phase assignment.)_
 | GOE-04 | Phase 245 | Pending |
 | GOE-05 | Phase 245 | Pending |
 | GOE-06 | Phase 245 | Pending |
-| FIND-01 | Phase 246 | Pending |
-| FIND-02 | Phase 246 | Pending |
-| FIND-03 | Phase 246 | Pending |
-| REG-01 | Phase 246 | Pending |
-| REG-02 | Phase 246 | Pending |
+| FIND-01 | Phase 246 | COMPLETE (246-01 closed at cc68bfc7 — audit/FINDINGS-v31.0.md FINAL READ-only published, 403 lines, 9-section v31 shape) |
+| FIND-02 | Phase 246 | COMPLETE (246-01 closed at cc68bfc7 — D-08 5-bucket severity rubric reproduced verbatim; severity counts 0/0/0/0/0; total F-31-NN = 0) |
+| FIND-03 | Phase 246 | COMPLETE (246-01 closed at cc68bfc7 — zero-row Non-Promotion Ledger; 4-row envelope-non-widening attestation table; KNOWN-ISSUES.md UNMODIFIED per CONTEXT.md D-07 default path) |
+| REG-01 | Phase 246 | COMPLETE (246-01 closed at cc68bfc7 — LEAN spot-check 6 PASS / 0 REGRESSED / 0 SUPERSEDED; F-29-04 explicitly NAMED RE_VERIFIED via SDR-08-V01 + GOE-01-V01 dual carriers; 12-row exclusion log) |
+| REG-02 | Phase 246 | COMPLETE (246-01 closed at cc68bfc7 — 1-row sweep 0 PASS / 0 REGRESSED / 1 SUPERSEDED; pre-existing orphan-redemption window structurally closed by 771893d1; LEAN explicit candidate list per CONTEXT.md D-10) |
 
 ---
 
