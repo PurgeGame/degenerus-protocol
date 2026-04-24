@@ -259,3 +259,45 @@ REG-02 scope per CONTEXT.md D-10 + D-11 = explicit pre-identified bounded candid
 
 ---
 
+## 6. FIND-03 KI Gating Walk + Non-Promotion Ledger (Zero-Row Variant)
+
+This section walks the FIND-01 finding-candidate pool against the CONTEXT.md D-06 3-predicate KI-eligibility test for `KNOWN-ISSUES.md` promotion. Predicates per CONTEXT.md D-06 (verbatim from v30 D-09):
+
+1. **Accepted-design predicate** — behavior is intentional / documented / load-bearing for the protocol's design (not an oversight or accident).
+2. **Non-exploitable predicate** — no player-reachable path produces material value extraction or determinism break (severity ≤ INFO under CONTEXT.md D-05).
+3. **Sticky predicate** — the item describes ongoing protocol behavior, not a one-time event or transient state.
+
+A candidate qualifies for KI promotion (verdict `KI_ELIGIBLE_PROMOTED`) iff **all three predicates PASS**. ANY false ⇒ Non-Promotion Ledger entry with the failing predicate identified. Default outcome per CONTEXT.md D-07 + zero-finding-candidate input from Phase 244 + Phase 245: `KNOWN-ISSUES.md` UNMODIFIED.
+
+### 6a. Non-Promotion Ledger (Zero-Row Variant per CONTEXT.md D-15)
+
+The FIND-01 finding-candidate pool from Phase 244 + Phase 245 is empty (per §4 zero-attestation). The Non-Promotion Ledger is therefore a zero-row variant — the table is published with header + zero data rows + explanatory paragraph for v30/v31 cross-document symmetry per CONTEXT.md D-15.
+
+| F-31-NN | Source Phase/Plan | Accepted-Design | Non-Exploitable | Sticky | KI Eligibility Verdict |
+| ------- | ----------------- | --------------- | --------------- | ------ | ---------------------- |
+| _(zero rows — empty FIND-01 pool)_ | — | — | — | — | — |
+
+**Explanatory paragraph (per CONTEXT.md D-15):** Zero finding candidates surfaced across Phase 244 (87 V-rows / 19 REQs all SAFE floor / 0 candidates per `audit/v31-244-PER-COMMIT-AUDIT.md`) + Phase 245 (55 V-rows / 14 REQs all SAFE floor / 0 candidates per `audit/v31-245-SDR-GOE.md`). The Non-Promotion Ledger is therefore a zero-row variant with explanatory header. `KNOWN-ISSUES.md` is **UNMODIFIED** per CONTEXT.md D-07 default path. The 4 existing accepted-design RNG entries (EXC-01 affiliate non-VRF roll / EXC-02 Gameover prevrandao fallback / EXC-03 Gameover RNG substitution / EXC-04 EntropyLib XOR-shift) cover every promotable-class RNG surface at HEAD `cc68bfc7`; no new design-decision disclosure required for the v31.0 deltas.
+
+### 6b. KI Envelope Re-Verifications (Envelope-Non-Widening Attestations — NOT KI Promotions per CONTEXT.md D-22)
+
+Per CONTEXT.md D-22 carry, the 4 accepted RNG exceptions in `KNOWN-ISSUES.md` are RE_VERIFIED at HEAD `cc68bfc7` for envelope-non-widening only. Phase 246 cites Phase 244 + Phase 245 RE_VERIFIED_AT_HEAD attestations — does NOT re-derive the envelope checks. **Acceptance is NOT re-litigated.** These are envelope-non-widening attestations, NOT new KI rows.
+
+| KI Entry | Carrier(s) | Source Phase / V-row | Envelope-Widening at cc68bfc7? |
+| -------- | ---------- | -------------------- | ------------------------------ |
+| EXC-01 (Non-VRF entropy for affiliate winner roll) | n/a (QST-03 NEGATIVE-scope per Phase 244) | Phase 244 QST-03 (DegenerusAffiliate.sol byte-identical baseline vs HEAD; affiliate 20-25/5 split preserved untouched) | NO — affiliate roll path NOT touched by 6b3f4f3c |
+| EXC-02 (Gameover prevrandao fallback) | GOX-04-V02 (Phase 244) + GOE-04-V02 (Phase 245) | Phase 244 GOX-04-V02 PRIMARY + Phase 245 GOE-04-V02 RE_VERIFIED | NO — 14-day grace adds liveness TRIGGER but NOT a new prevrandao-consumption path; sole prevrandao site remains AdvanceModule:1340 inside `_getHistoricalRngFallback`; Tier-1 + Tier-2 14-day gates derive from same `rngRequestTime` source. Per Phase 245 GOE-04 4×4 VRF vs prevrandao branch disjointness matrix. |
+| EXC-03 (Gameover RNG substitution / F-29-04 mid-cycle write-buffer tickets) | RNG-01-V11 (Phase 244) + SDR-08-V01 + GOE-01-V01 (Phase 245 dual carriers) | Phase 244 RNG-01-V11 PRIMARY + Phase 245 SDR-08-V01 + GOE-01-V01 RE_VERIFIED | NO — `_swapAndFreeze:292` + `_swapTicketSlot:1082` write-buffer-swap sites unchanged; `_gameOverEntropy:1222-1246` substitution site unchanged; tri-gate predicates (terminal-state + no-player-reachable-timing + buffer-scope) all hold per Phase 244 GOX-06-V03 + Phase 240 GO-04 DISPROVEN_PLAYER_REACHABLE_VECTOR + Phase 240 GO-05 BOTH_DISJOINT carry-forward. |
+| EXC-04 (EntropyLib XOR-shift PRNG for lootbox outcome rolls) | n/a (lootbox roll path NOT delta-touched) | Phase 244 buckets do NOT touch LootboxModule entropyStep call sites; Phase 245 SDR/GOE buckets do NOT touch boon/lootbox roll paths | NO — entropyStep call sites at LootboxModule:673/JackpotModule:2119 unchanged; KI EXC-04 entry intact at HEAD cc68bfc7. |
+
+`KNOWN-ISSUES.md` UNMODIFIED at HEAD `cc68bfc7` per CONTEXT.md D-07 default path. Verified at Task 6 §9 attestation (`git diff HEAD -- KNOWN-ISSUES.md` empty).
+
+### 6c. FIND-03 Verdict Summary
+
+- KI Promotion Count: **0 of 0 `KI_ELIGIBLE_PROMOTED`** (zero-row Non-Promotion Ledger per CONTEXT.md D-15 — empty FIND-01 pool)
+- KI Envelope Re-Verifications: **4 of 4 envelopes RE_VERIFIED_AT_HEAD cc68bfc7 without widening** per CONTEXT.md D-22 (EXC-01 not delta-touched; EXC-02 + EXC-03 dual-carrier RE_VERIFIED; EXC-04 lootbox path not delta-touched)
+- KNOWN-ISSUES.md State: **UNMODIFIED** per CONTEXT.md D-07 default path
+- Combined FIND-03 verdict: `0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED` (matches §2 Closure Verdict Summary literal string)
+
+---
+
