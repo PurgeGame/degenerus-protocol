@@ -182,3 +182,21 @@ Per-bucket prose:
 
 ---
 
+## 4. F-31-NN Finding Blocks
+
+**F-31-NN: NONE** (sentinel header per CONTEXT.md D-13 Claude's Discretion grep-friendliness option).
+
+Phase 244 (`audit/v31-244-PER-COMMIT-AUDIT.md` FINAL READ-only) emitted 87 verdict rows across 19 REQs (EVT 22 + RNG 20 + QST 24 + GOX 21) all SAFE floor severity with 0 finding candidates and 7 INFO observations all closed in-phase per CONTEXT.md Phase 244 D-14. Phase 245 (`audit/v31-245-SDR-GOE.md` FINAL READ-only) emitted 55 verdict rows across 14 REQs (SDR 40 + GOE 15) all SAFE floor severity with 0 finding candidates and zero INFO observations beyond the absorbed-SAFE claimRedemption gate per CONTEXT.md Phase 245 D-09. Combined across both phases: **142 verdict rows across 33 REQs all SAFE floor severity; 0 F-31-NN finding candidates surfaced.**
+
+The Phase 246 FIND-01 finding-candidate pool is therefore **empty**. No `F-31-NN` IDs are assigned in this milestone deliverable. FIND-02 has no candidates to classify under the §2 D-05 5-bucket severity rubric. The §6 FIND-03 Non-Promotion Ledger is a zero-row variant per CONTEXT.md D-15.
+
+The zero-attestation source is the Phase 245 §5 Phase-246-Input subsection at `audit/v31-245-SDR-GOE.md` L1623-1637 per CONTEXT.md Phase 245 D-18:
+
+> Zero finding candidates emitted — Phase 246 FIND-01 pool from Phase 245 is empty; FIND-02 has no candidates to reclassify; FIND-03 KI delta is zero.
+
+The terminal-phase rule (CONTEXT.md D-17 / D-25) is honored: zero forward-cites emitted from Phase 246 to v32.0+. Any finding candidate that surfaced post-Phase-245 closure (none did) would have routed to a `F-31-NN — TBD-v32` block with explicit rollover addendum per the Phase 245 → 246 hand-off contract; the rollover-addendum mechanism is documented for future-reader benefit but unused at HEAD `cc68bfc7`.
+
+KI envelope re-verifications (EXC-02 + EXC-03 RE_VERIFIED_AT_HEAD `cc68bfc7` from Phase 245 SDR-08-V01 + GOE-01-V01 + GOE-04-V02 dual carriers) are **NOT** F-31-NN finding candidates and are **NOT** KI promotions per CONTEXT.md D-22. They confirm existing `KNOWN-ISSUES.md` entries' acceptance envelopes did not widen against the v31.0 deltas. They are documented in §6 KI Gating Walk as "envelope-non-widening attestations."
+
+---
+
