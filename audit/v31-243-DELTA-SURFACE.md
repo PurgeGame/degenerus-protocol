@@ -626,6 +626,143 @@ Change Type vocabulary (only one option exercised in this milestone):
 
 This section is reserved for Plan 243-03 to append the v31.0 requirement → 243 Row-ID mapping. Row IDs `D-243-I###`. DO NOT edit this section in Plan 243-01 — 243-03 appends to it.
 
-## Section 7 — Reproduction Recipe Appendix — RESERVED FOR TASK 3
+## Section 7 — Reproduction Recipe Appendix
 
-This section is written in Task 3 of this plan (Reproduction Recipes). Task 1 leaves a placeholder note here.
+Per CONTEXT.md D-18: every command used by Phase 243 plans preserved here so a reviewer can replay the entire DELTA-01 / DELTA-02 / DELTA-03 enumeration from shell.
+
+Portable POSIX syntax only. Commands are grouped by plan (243-01 / 243-02 / 243-03). This pass covers 243-01 (Tasks 1 + 2). Plan 243-02 and Plan 243-03 append their own subsections (§7.2 / §7.3) during their execution.
+
+### 7.1 Plan 243-01 commands (DELTA-01 enumeration + storage layout)
+
+**Baseline sanity gate:**
+
+```bash
+git rev-parse 7ab515fe
+git rev-parse 771893d1
+git rev-parse HEAD
+git diff --stat 7ab515fe..771893d1 -- contracts/
+git log --format='%H %s' 7ab515fe..771893d1
+git diff --name-status 7ab515fe..771893d1 -- contracts/
+git status --porcelain contracts/ test/
+```
+
+Expected output: `git diff --stat` reports `12 files changed, 140 insertions(+), 57 deletions(-)`; `git log` lists 5 commits in reverse-chronological order (`771893d1` / `6b3f4f3c` / `16597cac` / `ced654df` / `ffced9ef`); `git diff --name-status` lists exactly 12 M-status files; `git status --porcelain contracts/ test/` returns empty.
+
+**Per-commit diff enumeration (Section 1):**
+
+```bash
+# Commit 1 — ced654df (JackpotModule only)
+git show ced654df -- contracts/modules/DegenerusGameJackpotModule.sol
+
+# Commit 2 — 16597cac (AdvanceModule only)
+git show 16597cac -- contracts/modules/DegenerusGameAdvanceModule.sol
+
+# Commit 3 — 6b3f4f3c (3 files)
+git show 6b3f4f3c -- contracts/DegenerusQuests.sol
+git show 6b3f4f3c -- contracts/interfaces/IDegenerusQuests.sol
+git show 6b3f4f3c -- contracts/modules/DegenerusGameMintModule.sol
+
+# Commit 4 — 771893d1 (9 files)
+git show 771893d1 -- contracts/DegenerusGame.sol
+git show 771893d1 -- contracts/StakedDegenerusStonk.sol
+git show 771893d1 -- contracts/interfaces/IDegenerusGame.sol
+git show 771893d1 -- contracts/interfaces/IStakedDegenerusStonk.sol
+git show 771893d1 -- contracts/modules/DegenerusGameAdvanceModule.sol
+git show 771893d1 -- contracts/modules/DegenerusGameGameOverModule.sol
+git show 771893d1 -- contracts/modules/DegenerusGameMintModule.sol
+git show 771893d1 -- contracts/modules/DegenerusGameWhaleModule.sol
+git show 771893d1 -- contracts/storage/DegenerusGameStorage.sol
+
+# Commit 5 — ffced9ef (docs-only per D-13; no contracts/ touch)
+git show ffced9ef --stat
+```
+
+**Per-function line-range resolution (for Section 1 / Section 4 File:Line-Range columns):**
+
+```bash
+# Example — find the head-side header line for a specific function
+grep -n '^\s*function _livenessTriggered' contracts/modules/DegenerusGameAdvanceModule.sol
+grep -n '^\s*function _livenessTriggered' contracts/storage/DegenerusGameStorage.sol
+
+# Compute function end via matching brace count — programmatic helper
+# (every Section 1 row's end line derived by walking from the header line forward
+# and counting { vs } until depth returns to 0)
+```
+
+**Baseline-side source reads (for DELETED/RENAMED detection and baseline line-number context):**
+
+```bash
+git show 7ab515fe:contracts/DegenerusGame.sol > /tmp/v31-243/baseline-DegenerusGame.sol
+git show 7ab515fe:contracts/DegenerusQuests.sol > /tmp/v31-243/baseline-DegenerusQuests.sol
+git show 7ab515fe:contracts/StakedDegenerusStonk.sol > /tmp/v31-243/baseline-StakedDegenerusStonk.sol
+git show 7ab515fe:contracts/interfaces/IDegenerusGame.sol > /tmp/v31-243/baseline-IDegenerusGame.sol
+git show 7ab515fe:contracts/interfaces/IDegenerusQuests.sol > /tmp/v31-243/baseline-IDegenerusQuests.sol
+git show 7ab515fe:contracts/interfaces/IStakedDegenerusStonk.sol > /tmp/v31-243/baseline-IStakedDegenerusStonk.sol
+git show 7ab515fe:contracts/modules/DegenerusGameAdvanceModule.sol > /tmp/v31-243/baseline-AdvanceModule.sol
+git show 7ab515fe:contracts/modules/DegenerusGameGameOverModule.sol > /tmp/v31-243/baseline-GameOverModule.sol
+git show 7ab515fe:contracts/modules/DegenerusGameJackpotModule.sol > /tmp/v31-243/baseline-JackpotModule.sol
+git show 7ab515fe:contracts/modules/DegenerusGameMintModule.sol > /tmp/v31-243/baseline-MintModule.sol
+git show 7ab515fe:contracts/modules/DegenerusGameWhaleModule.sol > /tmp/v31-243/baseline-WhaleModule.sol
+git show 7ab515fe:contracts/storage/DegenerusGameStorage.sol > /tmp/v31-243/baseline-DegenerusGameStorage.sol
+```
+
+**Storage slot layout diff (Section 5):**
+
+```bash
+# Head-side layout (run at HEAD 771893d1 in the main working tree)
+forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storage-layout > /tmp/v31-243/storage-layout-head.txt
+
+# Baseline-side layout via temporary worktree (avoids touching main working tree)
+WORKTREE_DIR=$(mktemp -d -t v31-243-baseline-XXXXXX)
+git worktree add --detach "$WORKTREE_DIR" 7ab515fe
+(cd "$WORKTREE_DIR" && forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storage-layout) > /tmp/v31-243/storage-layout-baseline.txt
+git worktree remove --force "$WORKTREE_DIR"
+
+# Visual diff (expected: byte-identical — see Section 5 verdict)
+diff /tmp/v31-243/storage-layout-baseline.txt /tmp/v31-243/storage-layout-head.txt
+```
+
+**Light v30 consumer reconciliation (Section 1.7):**
+
+```bash
+# For each of the 12 delta files, scan audit/v30-CONSUMER-INVENTORY.md for INV-237-NNN
+# rows whose Consumption File:Line sits inside the file.
+for delta_file in \
+  contracts/DegenerusGame.sol \
+  contracts/DegenerusQuests.sol \
+  contracts/StakedDegenerusStonk.sol \
+  contracts/interfaces/IDegenerusGame.sol \
+  contracts/interfaces/IDegenerusQuests.sol \
+  contracts/interfaces/IStakedDegenerusStonk.sol \
+  contracts/modules/DegenerusGameAdvanceModule.sol \
+  contracts/modules/DegenerusGameGameOverModule.sol \
+  contracts/modules/DegenerusGameJackpotModule.sol \
+  contracts/modules/DegenerusGameMintModule.sol \
+  contracts/modules/DegenerusGameWhaleModule.sol \
+  contracts/storage/DegenerusGameStorage.sol
+do
+  grep -n "$delta_file" audit/v30-CONSUMER-INVENTORY.md || true
+done
+```
+
+**Finding-ID emission gate (D-20 enforcement):**
+
+```bash
+# Must return exit code 1 (no matches)
+! grep -q 'F-31-' audit/v31-243-DELTA-SURFACE.md
+```
+
+**Final commit gate (zero contracts/ or test/ writes):**
+
+```bash
+git status --porcelain contracts/ test/   # MUST be empty
+git diff --name-only 7ab515fe..HEAD -- contracts/ | wc -l   # expected: 12
+```
+
+### 7.2 Plan 243-02 commands (DELTA-02 classification) — RESERVED FOR 243-02
+
+This subsection is appended by Plan 243-02 during its execution per CONTEXT.md D-19 (classification evidence burden — every classification row cites a hunk + one-line rationale, reproducible via `git show -L`).
+
+### 7.3 Plan 243-03 commands (DELTA-03 call-site catalog) — RESERVED FOR 243-03
+
+This subsection is appended by Plan 243-03 during its execution per CONTEXT.md D-18 (grep-reproducibility mandate — every call-site row carries the exact `grep` command that found it).
