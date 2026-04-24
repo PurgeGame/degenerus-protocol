@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v31.0
 milestone_name: Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
-status: executing
-last_updated: "2026-04-24T11:00:00.000Z"
+status: discussing
+last_updated: "2026-04-24T12:00:00.000Z"
 last_activity: 2026-04-24
 progress:
   total_phases: 4
@@ -20,12 +20,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23 for v31.0 milestone start)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 244 — Per-Commit Adversarial Audit COMPLETE (all 4 plans closed at cc68bfc7; `audit/v31-244-PER-COMMIT-AUDIT.md` FINAL READ-ONLY at 2,858 lines). Ready for `/gsd-plan-phase 245`.
+**Current focus:** Phase 245 — CONTEXT locked (2 gray areas user-selected: claimRedemption SAFE-absorption + prose+spot-check accounting rigor; plan split + GOE-06 depth auto-decided via 244 precedent). Ready for `/gsd-plan-phase 245`.
 
 ## Current Position
 
-Phase: 244 (Per-Commit Adversarial Audit — EVT + RNG + QST + GOX) — COMPLETE (all 4 plans closed: 244-01 EVT + 244-02 RNG + 244-03 QST + 244-04 GOX + consolidation DONE)
-Plan: 4 of 4 — all plans closed at cc68bfc7; `audit/v31-244-PER-COMMIT-AUDIT.md` (2,858 lines) FINAL READ-ONLY at 244-04 SUMMARY commit per CONTEXT.md D-05 consolidation pattern.
+Phase: 245 (sDGNRS Redemption Gameover Safety + Pre-Existing Gameover Invariant Re-Verification) — CONTEXT LOCKED (2 plans to be created: 245-01 SDR + 245-02 GOE per CONTEXT.md D-01/D-02 single-wave parallel)
+Plan: 0 of 2 — CONTEXT captured; `/gsd-plan-phase 245` next to generate 245-01-PLAN.md + 245-02-PLAN.md.
+**Phase 244 COMPLETE + VERIFIED (prior):** 4/4 plans; `audit/v31-244-PER-COMMIT-AUDIT.md` FINAL READ-ONLY at 2,858 lines; 244-VERIFICATION.md PASSED 8/8 dimensions.
 **Milestone:** v31.0 — Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
 **Phase:** 244 — Per-Commit Adversarial Audit (EVT + RNG + QST + GOX) — CONTEXT locked at HEAD `cc68bfc7` (commit `f26d79b0`)
 **Plan split (per 244-CONTEXT.md D-01):** 4 plans, single-wave parallel: 244-01 EVT (`ced654df` + `cc68bfc7` BAF addendum) [COMPLETE] / 244-02 RNG (`16597cac`) [COMPLETE] / 244-03 QST (`6b3f4f3c`) [COMPLETE] / 244-04 GOX (`771893d1`); 244-04 also pre-flags Phase 245 SDR/GOE candidates per D-16 and consolidates the 4 bucket working files into `audit/v31-244-PER-COMMIT-AUDIT.md` per D-05.
@@ -36,7 +37,8 @@ Plan: 4 of 4 — all plans closed at cc68bfc7; `audit/v31-244-PER-COMMIT-AUDIT.m
 
 **Phase 244 aggregate (all 4 plans closed 2026-04-24):** 87 V-rows across 19 REQs (EVT 22 + RNG 20 + QST 24 + GOX 21); 0 finding candidates; all 19 REQs SAFE floor severity; 7 INFO observations (NatSpec-disclosed surfaces + by-design RE_VERIFIED envelopes + direction-only bytecode commentary); 8/8 Phase 243 §1.7 INFO finding candidates CLOSED in-phase (zero rolled forward to Phase 245). KI EXC-02 + EXC-03 envelopes RE_VERIFIED_AT_HEAD cc68bfc7 unchanged per CONTEXT.md D-22. Zero contracts/ or test/ writes; zero edits to audit/v31-243-DELTA-SURFACE.md; zero F-31-NN finding-IDs (all per CONTEXT.md D-18/D-20/D-21).
 
-**Status:** Phase 244 COMPLETE (4/4 plans); `audit/v31-244-PER-COMMIT-AUDIT.md` FINAL READ-ONLY; VERIFICATION PASSED 8/8 dimensions (244-VERIFICATION.md); Phase 245 ready for planning.
+**Status:** Phase 244 COMPLETE (4/4 plans + VERIFICATION PASSED 8/8); Phase 245 CONTEXT LOCKED at HEAD `333b7420` (zero contracts/ drift vs anchor cc68bfc7); ready for `/gsd-plan-phase 245`.
+**Phase 245 CONTEXT (2026-04-24, 14 REQs = SDR-01..08 + GOE-01..06):** 2-plan split per D-01 (245-01 SDR / 245-02 GOE — single-wave parallel per D-02, same shape as 244). SDR-01 matrix per-REQ re-walk per D-03 (no mega-matrix). Single consolidated `audit/v31-245-SDR-GOE.md` per D-04 (4 sections: SDR + GOE + Consumer Index + Reproduction Recipe); 245-02 owns terminal consolidation per D-05. User-selected gray areas: **D-09** claimRedemption ungated state = property-to-prove SAFE (absorb into SDR-01/04/05, no standalone INFO — implicit `roll != 0` gate is algorithmically load-bearing); **D-10 + D-11** per-wei accounting rigor for SDR-02/SDR-05 = prose + spot-check per 244 style (one worked example per timing). Auto-decided: **D-12** GOE-06 depth = close the 2 Phase-244-Pre-Flag candidates only (skipped-BAF-pool × drain + wrapper-held-backing conservation); exhaustive sweep deferred. Phase 244 §Phase-245-Pre-Flag (17 bullets at v31-244-PER-COMMIT-AUDIT.md L2470-2521) consumed as ADVISORY input per D-25. READ-only scope + HEAD anchor + zero-F-31-NN + KI RE_VERIFIED_AT_HEAD envelope-only all carry from 243/244 (D-20..D-24).
 **Last shipped:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit (closed 2026-04-20 at HEAD `7ab515fe`; tag `v30.0`)
 **Delta baseline:** v30.0 HEAD `7ab515fe` → current HEAD `cc68bfc7` (amended from `771893d1` per 243-CONTEXT.md D-01/D-03 after the cc68bfc7 BAF-flip-gate addendum landed 2026-04-23)
 **Delta scope (finalized at cc68bfc7):** 14 files / +187 insertions / -67 deletions — 42 D-243-C### row changelog + 26 D-243-F### classification rows + 60 D-243-X### call-site rows + 41 D-243-I### Consumer Index rows + 2 D-243-S### storage rows in `audit/v31-243-DELTA-SURFACE.md` (FINAL READ-only per D-21)
