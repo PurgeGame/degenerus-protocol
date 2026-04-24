@@ -8,9 +8,24 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: _(planning next milestone)_
+## Current Milestone: v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
 
-v30.0 shipped 2026-04-20. No active milestone — run `/gsd-new-milestone` to define the next one.
+**Goal:** Adversarially audit every post-v30.0 contract change (5 commits, 12 files, 4 code-touching) AND re-verify the gameover path's edge cases — with a focused sub-audit on the new liveness gates and sDGNRS redemption protection.
+
+**Target features / scope:**
+
+- Delta audit of all 5 commits above v30.0 baseline `7ab515fe`:
+  - `ced654df` — JackpotTicketWin ticketCount scaling (event correctness across all emit paths)
+  - `16597cac` — rngunlock fix
+  - `6b3f4f3c` — Quests: recycled ETH credits MINT_ETH quests + earlybird DGNRS
+  - `771893d1` — Gameover: purchase/claim gates shifted to liveness; sDGNRS redemption protection
+  - `ffced9ef` — REQUIREMENTS.md removal (docs-only; enumerated for completeness)
+- Gameover targeted edge-case sub-audit:
+  - New edges opened by liveness-gate shift (purchase + claim) and sDGNRS redemption protection
+  - Re-verify pre-existing invariants impacted by the delta: F-29-04 RNG substitution, claimablePool 33/33/34 split + 30-day sweep, purchase blocking across all entry points, VRF-available vs prevrandao fallback gameover-jackpot branches, gameOverPossible BURNIE endgame gate
+- Findings consolidated into `audit/FINDINGS-v31.0.md` with lean regression appendix (only prior findings touched by the deltas)
+
+**Audit mode:** READ-only (v28/v29/v30 pattern) — zero `contracts/` or `test/` writes throughout the milestone.
 
 ## Completed Milestone: v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit
 
@@ -435,4 +450,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-18 — v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit started. Contract baseline HEAD `7ab515fe` (contract tree identical to v29.0 `1646d5af`). Awaiting requirements + roadmap.*
+*Last updated: 2026-04-23 — v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit started. Contract baseline for the delta: v30.0 HEAD `7ab515fe` → current HEAD `771893d1` (5 commits, 12 files, 4 code-touching). READ-only pattern preserved. Awaiting requirements + roadmap.*

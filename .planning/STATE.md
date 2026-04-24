@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: null
-milestone_name: null
-status: awaiting_next_milestone
-last_updated: "2026-04-20T01:15:00Z"
-last_activity: 2026-04-20
+milestone: v31.0
+milestone_name: Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
+status: defining_requirements
+last_updated: "2026-04-23T00:00:00Z"
+last_activity: 2026-04-23
 progress:
   total_phases: 0
   completed_phases: 0
@@ -17,16 +17,20 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-20 after v30.0 milestone close)
+See: .planning/PROJECT.md (updated 2026-04-23 for v31.0 milestone start)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** No active milestone. v30.0 shipped 2026-04-20 — run `/gsd-new-milestone` to define the next one.
+**Current focus:** v31.0 — audit 5 post-v30 commits (12 files, 4 code-touching) and re-verify gameover path edge cases. READ-only pattern preserved.
 
 ## Current Position
 
-**Milestone:** none — awaiting `/gsd-new-milestone`
+**Milestone:** v31.0 — Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
+**Phase:** Not started (defining requirements)
+**Plan:** —
+**Status:** Defining requirements
 **Last shipped:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit (closed 2026-04-20 at HEAD `7ab515fe`; tag `v30.0`)
-**Last activity:** 2026-04-20
+**Delta baseline:** v30.0 HEAD `7ab515fe` → current HEAD `771893d1`
+**Last activity:** 2026-04-23 — Milestone v31.0 started
 
 ## Deferred Items
 
