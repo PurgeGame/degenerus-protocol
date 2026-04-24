@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v31.0
 milestone_name: Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
 status: executing
-last_updated: "2026-04-24T01:58:49.276Z"
+last_updated: "2026-04-24T03:53:47Z"
 last_activity: 2026-04-24
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 0
-  percent: 0
+  completed_plans: 3
+  percent: 25
 ---
 
 # Project State
@@ -20,18 +20,19 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23 for v31.0 milestone start)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 243 — Delta Extraction & Per-Commit Classification
+**Current focus:** Phase 244 — Per-Commit Adversarial Audit (next; Phase 243 COMPLETE)
 
 ## Current Position
 
-Phase: 243 (Delta Extraction & Per-Commit Classification) — EXECUTING
-Plan: 1 of 3
+Phase: 243 (Delta Extraction & Per-Commit Classification) — COMPLETE (all 3 plans closed)
+Plan: 3 of 3 closed — ready for Phase 244 planning
 **Milestone:** v31.0 — Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
-**Phase:** 243 — Delta Extraction & Per-Commit Classification
-**Plan:** — (context gathered; planning next)
-**Status:** Executing Phase 243
+**Phase:** 243 — Delta Extraction & Per-Commit Classification — CLOSED at HEAD `cc68bfc7`
+**Plan:** 243-03 CLOSED (DELTA-03 call-site catalog + Consumer Index + FINAL READ-only lock; commit `87e68995`)
+**Status:** Phase 243 COMPLETE; Phase 244 (Per-Commit Adversarial Audit) next
 **Last shipped:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit (closed 2026-04-20 at HEAD `7ab515fe`; tag `v30.0`)
-**Delta baseline:** v30.0 HEAD `7ab515fe` → current HEAD `771893d1`
+**Delta baseline:** v30.0 HEAD `7ab515fe` → current HEAD `cc68bfc7` (amended from `771893d1` per 243-CONTEXT.md D-01/D-03 after the cc68bfc7 BAF-flip-gate addendum landed 2026-04-23)
+**Delta scope (finalized at cc68bfc7):** 14 files / +187 insertions / -67 deletions — 42 D-243-C### row changelog + 26 D-243-F### classification rows + 60 D-243-X### call-site rows + 41 D-243-I### Consumer Index rows + 2 D-243-S### storage rows in `audit/v31-243-DELTA-SURFACE.md` (FINAL READ-only per D-21)
 **Last activity:** 2026-04-24
 
 ## Roadmap Overview

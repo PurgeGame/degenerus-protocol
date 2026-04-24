@@ -32,9 +32,9 @@
 
 ### DELTA — Delta Extraction & Classification
 
-- [ ] **DELTA-01**: Enumerate every function / state variable / event changed by the 5 post-v30.0 commits with per-commit and aggregate counts
-- [ ] **DELTA-02**: Classify each changed function as {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED, RENAMED} with evidence (diff hunks + hunk-level annotation)
-- [ ] **DELTA-03**: Identify every downstream call site of each changed function and interface across `contracts/` (grep-reproducible inventory)
+- [x] **DELTA-01**: Enumerate every function / state variable / event changed by the 5 post-v30.0 commits with per-commit and aggregate counts — COMPLETE at cc68bfc7 (`audit/v31-243-DELTA-SURFACE.md` Sections 0+1+4+5)
+- [x] **DELTA-02**: Classify each changed function as {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED, RENAMED} with evidence (diff hunks + hunk-level annotation) — COMPLETE at cc68bfc7 (`audit/v31-243-DELTA-SURFACE.md` Section 2; 26 rows — 2 NEW / 23 MODIFIED_LOGIC / 1 REFACTOR_ONLY / 0 DELETED / 0 RENAMED)
+- [x] **DELTA-03**: Identify every downstream call site of each changed function and interface across `contracts/` (grep-reproducible inventory) — COMPLETE at cc68bfc7 (`audit/v31-243-DELTA-SURFACE.md` Section 3; 60 D-243-X### rows + Section 6 Consumer Index of 41 D-243-I### rows)
 
 ### EVT — JackpotTicketWin Event Correctness (`ced654df`)
 
@@ -112,9 +112,9 @@ _(Filled by roadmapper — maps each REQ-ID to its phase assignment.)_
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| DELTA-01 | Phase 243 | Pending |
-| DELTA-02 | Phase 243 | Pending |
-| DELTA-03 | Phase 243 | Pending |
+| DELTA-01 | Phase 243 | COMPLETE (243-01 + 243-01-addendum, at cc68bfc7) |
+| DELTA-02 | Phase 243 | COMPLETE (243-02, at cc68bfc7) |
+| DELTA-03 | Phase 243 | COMPLETE (243-03, at cc68bfc7) |
 | EVT-01 | Phase 244 | Pending |
 | EVT-02 | Phase 244 | Pending |
 | EVT-03 | Phase 244 | Pending |

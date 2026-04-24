@@ -90,7 +90,7 @@
 
 ### v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit (Phases 243-246)
 
-- [ ] **Phase 243: Delta Extraction & Per-Commit Classification** — Build the exact surface to audit before per-commit adversarial work begins
+- [x] **Phase 243: Delta Extraction & Per-Commit Classification** — COMPLETE at HEAD `cc68bfc7` (all 3 plans closed 2026-04-23): single authoritative delta-surface catalog `audit/v31-243-DELTA-SURFACE.md` published with 42 changelog + 26 classification + 60 call-site + 41 Consumer-Index + 2 storage rows; FINAL READ-only per D-21
 - [ ] **Phase 244: Per-Commit Adversarial Audit (EVT + RNG + QST + GOX)** — Audit every post-v30 code change adversarially against its commit-message behavior claim
 - [ ] **Phase 245: sDGNRS Redemption Gameover Safety + Pre-Existing Gameover Invariant Re-Verification** — Prove every redemption path × gameover-timing matrix is fund-conserving and re-verify pre-existing gameover invariants against the new delta
 - [ ] **Phase 246: Findings Consolidation + Lean Regression Appendix** — Publish `audit/FINDINGS-v31.0.md` and update `KNOWN-ISSUES.md` only if D-09 3-predicate gating passes
@@ -108,9 +108,9 @@
   4. `.planning/phases/243-*/` artifacts committed + `audit/v31-243-DELTA-SURFACE.md` (or equivalent upstream file) published, referenced by Phase 244 plans as their sole scope input
 **Plans:** 3 plans
 Plans:
-- [ ] 243-01-PLAN.md — DELTA-01 enumeration wave 1: per-commit function/state/event/interface inventory + storage slot-layout diff + reproduction recipe (populates Sections 0/1/4/5/7.1)
-- [ ] 243-02-PLAN.md — DELTA-02 classification wave 2: D-04 5-bucket verdict per function with hunk citation + D-19 evidence burden (populates Section 2 + updates Section 1 change-count cards + §7.2)
-- [ ] 243-03-PLAN.md — DELTA-03 call-site catalog wave 2: grep-reproducible downstream call sites + Consumer Index + final READ-only lock (populates Sections 3/6/§7.3 and flips file status to FINAL)
+- [x] 243-01-PLAN.md — DELTA-01 enumeration wave 1 COMPLETE at 771893d1 (original pass) + cc68bfc7 (addendum pass): per-commit function/state/event/interface inventory + storage slot-layout diff + reproduction recipe (populated Sections 0/1/4/5/7.1 + 7.1.b)
+- [x] 243-02-PLAN.md — DELTA-02 classification wave 2 COMPLETE at cc68bfc7 (commit `cfafebd8` + plan-close `cb91dfef`): D-04 5-bucket verdict per function with hunk citation + D-19 evidence burden (populated Section 2 + Section 1 change-count cards + §7.2; 2 NEW / 23 MODIFIED_LOGIC / 1 REFACTOR_ONLY / 0 DELETED / 0 RENAMED across 26 D-243-F rows)
+- [x] 243-03-PLAN.md — DELTA-03 call-site catalog wave 2 COMPLETE at cc68bfc7 (commit `87e68995`): grep-reproducible downstream call sites + Consumer Index + final READ-only lock (populated Sections 3/6/§7.3 and flipped file status to FINAL; 60 D-243-X + 41 D-243-I rows)
 
 ### Phase 244: Per-Commit Adversarial Audit (EVT + RNG + QST + GOX)
 **Goal**: Adversarially audit every contract code change in the 5 post-v30 commits against its commit-message behavior claim — surface every finding candidate (SAFE / INFO / LOW / MEDIUM / HIGH / CRITICAL) before Phase 245/246 consolidation
@@ -156,7 +156,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 243. Delta Extraction & Per-Commit Classification | 0/3 | Planned | — |
+| 243. Delta Extraction & Per-Commit Classification | 3/3 | Complete | 2026-04-23 |
 | 244. Per-Commit Adversarial Audit (EVT + RNG + QST + GOX) | 0/? | Not started | — |
 | 245. sDGNRS Redemption Gameover Safety + Pre-Existing Gameover Invariant Re-Verification | 0/? | Not started | — |
 | 246. Findings Consolidation + Lean Regression Appendix | 0/? | Not started | — |
