@@ -10,7 +10,7 @@ requirements: [REG-01, REG-02, FIND-01, FIND-02, FIND-03]
 phase_status: terminal
 write_policy: READ-only on the contract-and-test surface; writes confined to .planning/ and audit/FINDINGS-v31.0.md; KNOWN-ISSUES.md untouched unless FIND-03 promotes >=1 candidate per CONTEXT.md D-07 (default = UNMODIFIED)
 supersedes: none
-status: executing
+status: FINAL — READ-ONLY
 generated_at: 2026-04-24T23:38:06Z
 ---
 
@@ -301,3 +301,103 @@ Per CONTEXT.md D-22 carry, the 4 accepted RNG exceptions in `KNOWN-ISSUES.md` ar
 
 ---
 
+## 7. Prior-Artifact Cross-Cites
+
+Every upstream prior-artifact cross-citation referenced in §§ 1-6 + § 8-9 is enumerated below. Per CONTEXT.md D-21, all upstream `audit/v31-*.md` artifacts are FINAL READ-only at HEAD `cc68bfc7`. Plus `audit/FINDINGS-v30.0.md` + `audit/FINDINGS-v29.0.md` + `KNOWN-ISSUES.md` as prior-milestone + KI-gating references per CONTEXT.md D-13 §8.
+
+| Artifact Path | Phase / Plan | Role in v31.0 Closure | Re-Verified-at-HEAD Note |
+| ------------- | ------------ | --------------------- | ------------------------ |
+| `audit/v31-243-DELTA-SURFACE.md` | Phase 243 (3 plans consolidated) | 42 D-243-C changelog + 26 D-243-F classification + 60 D-243-X call-site + 41 D-243-I Consumer Index + 2 D-243-S storage rows; §6 Consumer Index drives REG-01 inclusion-rule mapping per CONTEXT.md D-08 | `re-verified at HEAD cc68bfc7` — FINAL READ-only per Phase 243 D-21 |
+| `audit/v31-244-PER-COMMIT-AUDIT.md` | Phase 244 (4 plans consolidated, 2858 lines) | 87 V-rows across 19 REQs all SAFE floor; 0 finding candidates; KI EXC-02 RE_VERIFIED_AT_HEAD cc68bfc7 via GOX-04-V02; §Phase-245-Pre-Flag 17 bullets consumed by Phase 245 ADVISORY | `re-verified at HEAD cc68bfc7` — FINAL READ-only per Phase 244 D-05 |
+| `audit/v31-244-EVT.md` | Phase 244 Plan 244-01 | 394-line EVT bucket working file (22 V-rows EVT-01..04) | `re-verified at HEAD cc68bfc7` — READ-only appendix per Phase 244 D-05 + CONTEXT.md D-21 |
+| `audit/v31-244-RNG.md` | Phase 244 Plan 244-02 | 447-line RNG bucket working file (20 V-rows RNG-01..03) | `re-verified at HEAD cc68bfc7` — READ-only appendix per Phase 244 D-05 + CONTEXT.md D-21 |
+| `audit/v31-244-QST.md` | Phase 244 Plan 244-03 | 800-line QST bucket working file (24 V-rows QST-01..05) | `re-verified at HEAD cc68bfc7` — READ-only appendix per Phase 244 D-05 + CONTEXT.md D-21 |
+| `audit/v31-244-GOX.md` | Phase 244 Plan 244-04 | 801-line GOX bucket working file (21 V-rows GOX-01..07) | `re-verified at HEAD cc68bfc7` — READ-only appendix per Phase 244 D-05 + CONTEXT.md D-21 |
+| `audit/v31-245-SDR-GOE.md` | Phase 245 (2 plans consolidated, 1636 lines) | 55 V-rows across 14 REQs all SAFE floor; 0 finding candidates; KI EXC-02 + EXC-03 RE_VERIFIED_AT_HEAD cc68bfc7 via GOE-04-V02 + SDR-08-V01 + GOE-01-V01; §5 Phase-246-Input zero-state at L1623-1637 | `re-verified at HEAD cc68bfc7` — FINAL READ-only per Phase 245 D-05 |
+| `audit/v31-245-SDR.md` | Phase 245 Plan 245-01 | 924-line SDR bucket working file (40 V-rows SDR-01..08) | `re-verified at HEAD cc68bfc7` — READ-only appendix per Phase 245 D-05 + CONTEXT.md D-21 |
+| `audit/v31-245-GOE.md` | Phase 245 Plan 245-02 | 432-line GOE bucket working file (15 V-rows GOE-01..06) | `re-verified at HEAD cc68bfc7` — READ-only appendix per Phase 245 D-05 + CONTEXT.md D-21 |
+| `audit/FINDINGS-v30.0.md` | v30.0 milestone report | 729-line 10-section shape template mirrored by Phase 246 per CONTEXT.md D-13; REG-01 F-30-NNN source (5 delta-touched candidates + 12 excluded rows) | `re-verified at HEAD cc68bfc7` — v30.0 deliverable unchanged |
+| `audit/FINDINGS-v29.0.md` | v29.0 milestone report | F-29-04 source (REG-01 row) + SUPERSEDED row precedent (F-25-09) for CONTEXT.md D-12 | `re-verified at HEAD cc68bfc7` — v29.0 deliverable unchanged |
+| `KNOWN-ISSUES.md` | accepted-design (4 entries) | EXC-01 affiliate non-VRF / EXC-02 Gameover prevrandao fallback / EXC-03 Gameover RNG substitution / EXC-04 EntropyLib XOR-shift | `re-verified at HEAD cc68bfc7` — UNMODIFIED per CONTEXT.md D-07 default path |
+| `.planning/ROADMAP.md` | roadmap + milestone structure | Phase 243-246 v31.0 phase list + success criteria + plan-list | `re-verified at HEAD cc68bfc7` — updated via standard phase-close checkbox flips |
+| `.planning/REQUIREMENTS.md` | requirement definitions | DELTA-01..03 / EVT-01..04 / RNG-01..03 / QST-01..05 / GOX-01..07 / SDR-01..08 / GOE-01..06 / FIND-01..03 / REG-01..02 (33 REQs total) + traceability table | `re-verified at HEAD cc68bfc7` — traceability table FIND-01..03 + REG-01..02 flipped to COMPLETE via Task 6 plan-close commit |
+| `.planning/phases/246-*/246-CONTEXT.md` | Phase 246 context / decisions | 25 decisions D-01..D-25 locked; user-selected D-01..D-04 + D-10..D-12; auto-decided D-08..D-09 + D-13..D-16 per Claude's Discretion with v30 Phase 242 precedent | `re-verified at HEAD cc68bfc7` — decision authority consumed by Phase 246 planner + executor |
+
+**§7 Cross-Cite Count:** 15 artifacts cross-cited, each with `re-verified at HEAD cc68bfc7` backtick-quoted structural-equivalence note.
+
+---
+
+## 8. Forward-Cite Closure (CONTEXT.md D-17 + D-25 Terminal-Phase Rule)
+
+This section verifies (a) all 17 Phase 244 → Phase 245 Pre-Flag bullets (17 bullets at `audit/v31-244-PER-COMMIT-AUDIT.md` L2470-2521) are CLOSED in Phase 245 per CONTEXT.md Phase 245 D-25 hand-off contract; (b) zero Phase 245 → Phase 246 forward-cites were emitted per Phase 245 §5 zero-state at L1623-1637; (c) zero Phase 246 → v32.0+ forward-cites are emitted per CONTEXT.md D-17 + D-25 terminal-phase rule.
+
+### 8a. Phase 244 → Phase 245 Pre-Flag Bullet Closure (17/17)
+
+Expected count: 17 bullets = 10 SDR-grouped (L2477/2478/2481/2482/2485/2488/2491/2494/2497/2500) + 7 GOE-grouped (L2503/2506/2509/2512/2515/2518/2519). Per Phase 245 §4 consolidation at `audit/v31-245-SDR-GOE.md`, all 17 bullets CLOSED in-phase (10 in 245-01 SDR + 7 in 245-02 GOE).
+
+`re-verified at HEAD cc68bfc7` — all 17 Phase 244 Pre-Flag bullets closed in Phase 245 without rollover; zero Phase 246-bound Pre-Flag tokens present in `audit/v31-244-PER-COMMIT-AUDIT.md`.
+
+**Verdict:** `ALL_17_PHASE_244_PRE_FLAG_BULLETS_CLOSED_IN_PHASE_245`.
+
+### 8b. Phase 245 → Phase 246 Forward-Cite Residual Verification (0 expected)
+
+Expected count: 0 forward-cites per Phase 245 §5 zero-state attestation at `audit/v31-245-SDR-GOE.md` L1623-1637. Quote:
+
+> Zero finding candidates emitted — Phase 246 FIND-01 pool from Phase 245 is empty; FIND-02 has no candidates to reclassify; FIND-03 KI delta is zero.
+
+`re-verified at HEAD cc68bfc7` — zero Phase 246-bound forward-cite tokens present in `audit/v31-245-SDR-GOE.md`. Phase 245 finding-candidate pool = 0 per §4 zero-attestation above.
+
+**Verdict:** `ZERO_PHASE_245_FORWARD_CITES_RESIDUAL`.
+
+### 8c. Phase 246 → v32.0+ Forward-Cite Emission (0 expected per CONTEXT.md D-17 + D-25 terminal-phase rule)
+
+Phase 246 is the terminal v31.0 phase. Per CONTEXT.md D-17 + D-25, any finding that cannot close in Phase 246 routes to an explicit F-31-NN rollover addendum block with explicit carry-forward note (e.g., "F-31-NN — TBD-v32") — NEVER an implicit "deferred" or "TBD" annotation. With zero finding candidates from Phase 244 + Phase 245, no rollover addenda are expected.
+
+`re-verified at HEAD cc68bfc7` — zero Phase 246-emitted forward-cite tokens present in `audit/FINDINGS-v31.0.md` (§4 F-31-NN section is zero-attestation prose; §6 Non-Promotion Ledger is zero-row variant; no F-31-NN rollover addendum blocks present).
+
+**Verdict:** `ZERO_PHASE_246_FORWARD_CITES_EMITTED` (v32.0+ scope addendum count = 0).
+
+### 8d. Combined §8 Verdict
+
+Phase 244 → 245 → 246 forward-cite closure: **17/17 Phase 244 Pre-Flag bullets closed + 0/0 Phase 245 residuals + 0/0 Phase 246 emissions** → milestone boundary closed per CONTEXT.md D-17 + D-25 terminal-phase rule. v31.0 milestone deliverable is self-contained at HEAD `cc68bfc7`; no forward-cite residual awaits v32.0+ audit cycle.
+
+---
+
+## 9. Milestone Closure Attestation
+
+### 9a. Verdict Distribution Summary
+
+| Requirement | Closure Verdict | Evidence |
+| ----------- | --------------- | -------- |
+| FIND-01 | `CLOSED_AT_HEAD_cc68bfc7` | §3 Per-Phase Sections populated (243 + 244 + 245 condensed summaries) + §4 F-31-NN zero-attestation prose + §2 severity counts 0/0/0/0/0 |
+| REG-01 | `6 PASS / 0 REGRESSED / 0 SUPERSEDED` | §5a REG-01 table (6 rows: 5 F-30-NNN delta-touched + F-29-04 explicitly NAMED); F-29-04 cross-cites Phase 245 SDR-08-V01 + GOE-01-V01 dual carriers + Phase 244 RNG-01-V11 PRIMARY |
+| REG-02 | `0 PASS / 0 REGRESSED / 1 SUPERSEDED` | §5b REG-02 table (1 row: sDGNRS orphan-redemption window structurally closed by 771893d1); cross-cites Phase 244 GOX-02-V01/V02 + GOX-03-V01 + Phase 245 SDR-03 + SDR-05 + SDR-06 |
+| FIND-02 | `ASSEMBLED_COMBINED_REGRESSION_APPENDIX` | §5c Combined REG-01 + REG-02 distribution (6 PASS + 1 SUPERSEDED + 0 REGRESSED = 7 prior-finding rows) |
+| FIND-03 | `0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED` | §6 FIND-03 KI Gating Walk zero-row Non-Promotion Ledger per CONTEXT.md D-15; 4-row envelope-non-widening attestation table per CONTEXT.md D-22; KNOWN-ISSUES.md UNMODIFIED per CONTEXT.md D-07 default path |
+| Combined milestone closure | `MILESTONE_V31_CLOSED_AT_HEAD_cc68bfc7` | §1 + §2 + §3 + §4 + §5 + §6 + §7 + §8 all populated; §9 this attestation; forward-cite closure verified in §8 (17/17 Phase 244 Pre-Flag closed + 0/0 Phase 245 residual + 0/0 Phase 246 emissions) |
+
+### 9b. 6-Point Attestation Items (CONTEXT.md D-18 verbatim)
+
+1. **HEAD anchor verified** — `git rev-parse HEAD` returns current git HEAD `117da286` (docs-only above contract-tree HEAD `cc68bfc7`); contract-tree HEAD remains `cc68bfc7`; `git diff cc68bfc7..HEAD` over the contract-and-test surface is empty at every Task 1-6 boundary (contract tree unchanged throughout Phase 246; zero contract-surface writes per CONTEXT.md D-20 carry from v28/v29/v30/Phase 243/244/245).
+
+2. **Phase 243/244/245 deliverables FINAL READ-only** — frontmatter `status: FINAL — READ-ONLY` confirmed on `audit/v31-243-DELTA-SURFACE.md` + `audit/v31-244-PER-COMMIT-AUDIT.md` + `audit/v31-245-SDR-GOE.md` per CONTEXT.md D-21; working files preserved as READ-only appendices per Phase 244 D-05 + Phase 245 D-05 carry; `git diff HEAD -- audit/v31-243-DELTA-SURFACE.md audit/v31-244-PER-COMMIT-AUDIT.md audit/v31-245-SDR-GOE.md` empty throughout Phase 246.
+
+3. **Zero forward-cites emitted by Phase 244/245/246** — `grep -rE 'forward-cite|defer-to-Phase-247|TBD-v32' audit/v31-*.md audit/FINDINGS-v31.0.md` returns only documented rollover-addendum-mechanism language in `audit/FINDINGS-v31.0.md` §4 (zero actual rollover addenda present). §8a verifies 17/17 Phase 244 Pre-Flag bullets CLOSED in Phase 245; §8b verifies 0 Phase 245 → Phase 246 residual; §8c verifies 0 Phase 246 → v32.0+ emissions.
+
+4. **KI envelope re-verifications confirmed** — EXC-02 + EXC-03 envelopes RE_VERIFIED_AT_HEAD `cc68bfc7` without widening per CONTEXT.md D-22:
+   - EXC-02 via Phase 244 GOX-04-V02 PRIMARY + Phase 245 GOE-04-V02 RE_VERIFIED (4×4 VRF vs prevrandao branch disjointness matrix)
+   - EXC-03 via Phase 244 RNG-01-V11 PRIMARY + Phase 245 SDR-08-V01 + GOE-01-V01 RE_VERIFIED (dual carriers; full `_gameOverEntropy` scope)
+   - EXC-01 not delta-touched (affiliate roll path unchanged per Phase 244 QST-03 NEGATIVE-scope)
+   - EXC-04 not delta-touched (LootboxModule entropyStep call sites unchanged)
+
+5. **Severity distribution attested** — CRITICAL 0 / HIGH 0 / MEDIUM 0 / LOW 0 / INFO 0; total F-31-NN = 0 per §2 severity counts + §4 F-31-NN zero-attestation. Combined Phase 244 + Phase 245 = 142 V-rows across 33 REQs all SAFE floor with 0 finding candidates.
+
+6. **Combined milestone closure signal** — `MILESTONE_V31_CLOSED_AT_HEAD_cc68bfc7`. All 5 Phase 246 requirements (FIND-01, FIND-02, FIND-03, REG-01, REG-02) closed per §9a. The 4 KNOWN-ISSUES.md RNG entries (EXC-01/02/03/04) verified unchanged at HEAD per CONTEXT.md D-07 default UNMODIFIED path. Milestone closure triggers `/gsd-complete-milestone` for v31.0 per CONTEXT.md D-18 / D-25 terminal-phase contract.
+
+### 9c. Milestone v31.0 Closure Signal
+
+v31.0 milestone **Post-v30 Delta Audit + Gameover Edge-Case Re-Audit** is CLOSED at HEAD `cc68bfc7` via this attestation. No Phase 247 exists in ROADMAP at HEAD (terminal phase confirmed). Next milestone (v32.0+) boots from this signal with a fresh baseline of `cc68bfc7`.
+
+---
+
+*Phase 246 plan-close: per CONTEXT.md D-04 the Task 6 final commit flips this deliverable's frontmatter `status: executing` → `status: FINAL — READ-ONLY`. After this commit, `audit/FINDINGS-v31.0.md` is READ-ONLY for the v31.0 milestone lifecycle.*
