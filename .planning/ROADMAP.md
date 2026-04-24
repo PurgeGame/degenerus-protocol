@@ -122,7 +122,12 @@ Plans:
   3. `MINT_ETH` quest progress + earlybird DGNRS counting proven correct on gross spend (fresh + recycled) with no double-counting; affiliate fresh-vs-recycled 20-25/5 split proven preserved; `_callTicketPurchase` return drop + `ethFreshWei → ethMintSpendWei` rename proven behaviorally equivalent; gas-savings claim (-142k/-153k/-76k WC) either reproduced or flagged INFO-unreproducible (QST-01..QST-05)
   4. All 8 purchase/claim paths moved from `gameOver` → `_livenessTriggered` enumerated and shown consistent with existing ticket-queue guards; `sDGNRS.burn`/`burnWrapped` State-1 block proven to close the orphan-redemption window; `handleGameOverDrain` proven to subtract `pendingRedemptionEthValue` BEFORE the 33/33/34 split; VRF-dead 14-day grace fallback + `_gameOverEntropy` `rngRequestTime` clearing + gameover-before-liveness ordering in `_handleGameOverPath` all proven correct; `DegenerusGameStorage.sol` (+27 lines) slot-layout change verified via `forge inspect` (GOX-01..GOX-07)
   5. Every audited REQ receives a closed per-commit verdict {SAFE / INFO / LOW / MEDIUM / HIGH / CRITICAL} with evidence — all finding candidates surfaced into the v31.0 candidate pool before Phase 246 consolidation
-**Plans**: TBD
+**Plans**: 4 plans, single-wave parallel per 244-CONTEXT.md D-01/D-02
+Plans:
+- [x] 244-01-PLAN.md — EVT bucket (ced654df + cc68bfc7 BAF-coupling addendum per D-03): EVT-01/EVT-02/EVT-03/EVT-04 closed at cc68bfc7 with 22 V-rows (5+5+8+4) across 4 REQs; 19 SAFE + 7 INFO; 0 finding candidates; 1.7 bullets 6 + 7 closed per CONTEXT.md D-09; bullet 8 deferred-NOTE to 244-02/244-04. Working file: `audit/v31-244-EVT.md`. Commits: `61e5f1b9` (Task 1) + `4b714a84` (Task 2)
+- [ ] 244-02-PLAN.md — RNG bucket (16597cac): RNG-01/RNG-02/RNG-03
+- [ ] 244-03-PLAN.md — QST bucket (6b3f4f3c): QST-01..QST-05
+- [ ] 244-04-PLAN.md — GOX bucket (771893d1) + consolidation into `audit/v31-244-PER-COMMIT-AUDIT.md`: GOX-01..GOX-07
 
 ### Phase 245: sDGNRS Redemption Gameover Safety + Pre-Existing Gameover Invariant Re-Verification
 **Goal**: Prove the sDGNRS redemption lifecycle × gameover-timing matrix is fund-conserving with hard guarantees (every redemption path works as intended, no funds lost, math closes exactly), AND re-verify every pre-existing gameover invariant (v24.0 / v29.0) still holds against the new liveness-gate + `pendingRedemptionEthValue` drain-subtraction delta
