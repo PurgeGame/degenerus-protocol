@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v31.0
 milestone_name: Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
 status: executing
-last_updated: "2026-04-24T04:00:00Z"
+last_updated: "2026-04-24T05:44:56.213Z"
 last_activity: 2026-04-24
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 25
+  total_plans: 7
+  completed_plans: 4
+  percent: 57
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23 for v31.0 milestone start)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 244 — Per-Commit Adversarial Audit (CONTEXT locked; ready for `/gsd-plan-phase 244`)
+**Current focus:** Phase 244 — Per-Commit Adversarial Audit (PLANNED; 4 plans verified PASSED by checker; ready for `/gsd-execute-phase 244`)
 
 ## Current Position
 
-Phase: 244 (Per-Commit Adversarial Audit — EVT + RNG + QST + GOX) — CONTEXT GATHERED (ready for planning)
-Plan: 0 of (TBD-4) — `/gsd-plan-phase 244` next
+Phase: 244 (Per-Commit Adversarial Audit — EVT + RNG + QST + GOX) — PLANNED (4 plans, single-wave parallel; checker VERIFICATION PASSED)
+Plan: 0 of 4 — `/gsd-execute-phase 244` next
 **Milestone:** v31.0 — Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
 **Phase:** 244 — Per-Commit Adversarial Audit (EVT + RNG + QST + GOX) — CONTEXT locked at HEAD `cc68bfc7` (commit `f26d79b0`)
 **Plan split (per 244-CONTEXT.md D-01):** 4 plans, single-wave parallel: 244-01 EVT (`ced654df` + `cc68bfc7` BAF addendum) / 244-02 RNG (`16597cac`) / 244-03 QST (`6b3f4f3c`) / 244-04 GOX (`771893d1`); 244-04 also pre-flags Phase 245 SDR/GOE candidates per D-16
-**Status:** Phase 244 CONTEXT GATHERED (1 gray area discussed: QST-05 bytecode-delta-only methodology + direction-only verdict bar; all others auto-decided via Phase 230/237/238/243 precedents)
+**Status:** Ready to execute
 **Last shipped:** v30.0 — Full Fresh-Eyes VRF Consumer Determinism Audit (closed 2026-04-20 at HEAD `7ab515fe`; tag `v30.0`)
 **Delta baseline:** v30.0 HEAD `7ab515fe` → current HEAD `cc68bfc7` (amended from `771893d1` per 243-CONTEXT.md D-01/D-03 after the cc68bfc7 BAF-flip-gate addendum landed 2026-04-23)
 **Delta scope (finalized at cc68bfc7):** 14 files / +187 insertions / -67 deletions — 42 D-243-C### row changelog + 26 D-243-F### classification rows + 60 D-243-X### call-site rows + 41 D-243-I### Consumer Index rows + 2 D-243-S### storage rows in `audit/v31-243-DELTA-SURFACE.md` (FINAL READ-only per D-21)
