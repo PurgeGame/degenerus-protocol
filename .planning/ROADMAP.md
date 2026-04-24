@@ -125,7 +125,7 @@ Plans:
 **Plans**: 4 plans, single-wave parallel per 244-CONTEXT.md D-01/D-02
 Plans:
 - [x] 244-01-PLAN.md — EVT bucket (ced654df + cc68bfc7 BAF-coupling addendum per D-03): EVT-01/EVT-02/EVT-03/EVT-04 closed at cc68bfc7 with 22 V-rows (5+5+8+4) across 4 REQs; 19 SAFE + 7 INFO; 0 finding candidates; 1.7 bullets 6 + 7 closed per CONTEXT.md D-09; bullet 8 deferred-NOTE to 244-02/244-04. Working file: `audit/v31-244-EVT.md`. Commits: `61e5f1b9` (Task 1) + `4b714a84` (Task 2)
-- [ ] 244-02-PLAN.md — RNG bucket (16597cac): RNG-01/RNG-02/RNG-03
+- [x] 244-02-PLAN.md — RNG bucket (16597cac): RNG-01/RNG-02/RNG-03 closed at cc68bfc7 with 20 V-rows (11+7+2) across 3 REQs; 18 SAFE + 2 RE_VERIFIED_AT_HEAD (EXC-02 + EXC-03); 0 finding candidates; §1.7 bullet 3 CLOSED via RNG-02-V04 SAFE; §1.7 bullet 8 DEFERRED to 244-04 GOX-06 with hand-off note. Working file: `audit/v31-244-RNG.md`. Commits: `c7aad619` (Task 1) + `aa70e46f` (Task 2)
 - [ ] 244-03-PLAN.md — QST bucket (6b3f4f3c): QST-01..QST-05
 - [ ] 244-04-PLAN.md — GOX bucket (771893d1) + consolidation into `audit/v31-244-PER-COMMIT-AUDIT.md`: GOX-01..GOX-07
 
@@ -162,7 +162,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 243. Delta Extraction & Per-Commit Classification | 3/3 | Complete | 2026-04-23 |
-| 244. Per-Commit Adversarial Audit (EVT + RNG + QST + GOX) | 0/? | Not started | — |
+| 244. Per-Commit Adversarial Audit (EVT + RNG + QST + GOX) | 2/4 | Executing | — (244-01 EVT + 244-02 RNG closed; 244-03 QST + 244-04 GOX pending) |
 | 245. sDGNRS Redemption Gameover Safety + Pre-Existing Gameover Invariant Re-Verification | 0/? | Not started | — |
 | 246. Findings Consolidation + Lean Regression Appendix | 0/? | Not started | — |
 
