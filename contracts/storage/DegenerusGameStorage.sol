@@ -1222,6 +1222,17 @@ abstract contract DegenerusGameStorage {
     ///      Level 0: deploy idle timeout (365 days since purchaseStartDay).
     ///      Level 1+: 120-day inactivity timeout since purchaseStartDay.
     ///
+    ///      Productive-phase pause: returns false while lastPurchaseDay or
+    ///      jackpotPhaseFlag is set. The day clock would otherwise fire
+    ///      inside the multi-call window between target-met and phase
+    ///      transition close (when purchaseStartDay is finally updated to
+    ///      the new level's start), but _handleGameOverPath is unreachable
+    ///      in that window (gated by !inJackpot && !lastPurchase at
+    ///      AdvanceModule:182), so a fire would deadlock _queueTickets calls
+    ///      with no path to clear rngLockedFlag. phaseTransitionActive is
+    ///      implied by jackpotPhaseFlag throughout — they clear together at
+    ///      AdvanceModule:328-331.
+    ///
     ///      Day math is evaluated first so mid-drain RNG requests (which set
     ///      rngRequestTime during _handleGameOverPath) cannot transiently flip
     ///      liveness back to false while the drain is in progress.
@@ -1233,6 +1244,7 @@ abstract contract DegenerusGameStorage {
     ///      DegenerusAdmin, and missed days are credited back to purchaseStartDay
     ///      in AdvanceModule.rngGate on fulfillment.
     function _livenessTriggered() internal view returns (bool) {
+        if (lastPurchaseDay || jackpotPhaseFlag) return false;
         uint24 lvl = level;
         uint32 psd = purchaseStartDay;
         uint32 currentDay = _simulatedDayIndex();
