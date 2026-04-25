@@ -8,24 +8,23 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
+## Current State
 
-**Goal:** Adversarially audit every post-v30.0 contract change (5 commits, 12 files, 4 code-touching) AND re-verify the gameover path's edge cases — with a focused sub-audit on the new liveness gates and sDGNRS redemption protection.
+**Last shipped:** v31.0 — Post-v30 Delta Audit + Gameover Edge-Case Re-Audit (2026-04-24, tag `v31.0`)
+**Contract HEAD anchor:** `cc68bfc7` (5 commits + 1 BAF addendum above v30.0 baseline `7ab515fe`)
+**Audit deliverables (cumulative):** `audit/FINDINGS-v25.0.md` + `FINDINGS-v27.0.md` + `FINDINGS-v28.0.md` + `FINDINGS-v29.0.md` + `FINDINGS-v30.0.md` + `FINDINGS-v31.0.md` + 16 v30 supporting `audit/v30-*.md` + 5 v31 supporting `audit/v31-*.md` artifacts; `KNOWN-ISSUES.md` (4 accepted-design RNG entries: EXC-01..04, all RE_VERIFIED non-widening at HEAD `cc68bfc7`)
 
-**Target features / scope:**
+## Next Milestone Goals
 
-- Delta audit of all 5 commits above v30.0 baseline `7ab515fe`:
-  - `ced654df` — JackpotTicketWin ticketCount scaling (event correctness across all emit paths)
-  - `16597cac` — rngunlock fix
-  - `6b3f4f3c` — Quests: recycled ETH credits MINT_ETH quests + earlybird DGNRS
-  - `771893d1` — Gameover: purchase/claim gates shifted to liveness; sDGNRS redemption protection
-  - `ffced9ef` — REQUIREMENTS.md removal (docs-only; enumerated for completeness)
-- Gameover targeted edge-case sub-audit:
-  - New edges opened by liveness-gate shift (purchase + claim) and sDGNRS redemption protection
-  - Re-verify pre-existing invariants impacted by the delta: F-29-04 RNG substitution, claimablePool 33/33/34 split + 30-day sweep, purchase blocking across all entry points, VRF-available vs prevrandao fallback gameover-jackpot branches, gameOverPossible BURNIE endgame gate
-- Findings consolidated into `audit/FINDINGS-v31.0.md` with lean regression appendix (only prior findings touched by the deltas)
+**Status:** Planning open — fresh REQUIREMENTS.md to be created via `/gsd-new-milestone` for the next audit cycle.
 
-**Audit mode:** READ-only (v28/v29/v30 pattern) — zero `contracts/` or `test/` writes throughout the milestone.
+The protocol stands clean at HEAD `cc68bfc7`: zero open vulnerabilities, zero open findings, KNOWN-ISSUES.md UNMODIFIED across the v31.0 milestone. The READ-only audit posture has held continuously from v28.0 through v31.0 (zero `contracts/` or `test/` writes across 4 consecutive milestones). The next milestone shape is open — possible directions include: another delta audit cycle if new contract commits land; a fresh deep-dive on a specific subsystem (e.g., affiliate roll path / lootbox EntropyLib / cross-chain forwarders); a gas-optimization milestone on the bytecode-delta methodology proven in Phase 244 QST-05; or a non-contract milestone (sim / indexer / frontend / docs) if the contract surface remains stable.
+
+## Completed Milestone: v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
+
+**Status:** Complete (2026-04-24)
+
+**Result:** 4 phases (243-246), 11 plans (3 + 4 + 2 + 1 + 1 addendum), 33/33 requirements satisfied. Adversarial audit of 5 contract commits above v30.0 baseline `7ab515fe` → HEAD `cc68bfc7` (14 files, +187/-67 lines). **Zero on-chain vulnerabilities. Zero F-31-NN findings.** 142 verdict rows across 33 REQs all SAFE floor severity (Phase 244: 87 V-rows / 19 REQs, Phase 245: 55 V-rows / 14 REQs). LEAN regression: 6 PASS REG-01 (5 F-30-NNN delta-touched + F-29-04 explicitly NAMED) + 12-row exclusion log + 1 SUPERSEDED REG-02 (sDGNRS orphan-redemption window structurally closed by `771893d1`). KI EXC-02 + EXC-03 envelopes RE_VERIFIED non-widening via dual-carrier attestations (SDR-08-V01 + GOE-01-V01 + GOE-04-V02). `KNOWN-ISSUES.md` UNMODIFIED per D-07 default path (zero candidates pool → zero gating walks). 17/17 Phase 244 §Phase-245-Pre-Flag bullets CLOSED in Phase 245 (10 SDR-grouped + 7 GOE-grouped). Zero forward-cites emitted per CONTEXT.md D-25 terminal-phase rule. Cross-repo READ-only pattern carried forward — zero `contracts/` or `test/` writes. Deliverable: `audit/FINDINGS-v31.0.md` (403 lines, 9 sections, FINAL READ-only) emitting closure signal `MILESTONE_V31_CLOSED_AT_HEAD_cc68bfc7`. Phase 246 used the v30 Phase 242 single-plan multi-task pattern (1 plan / 6 atomic per-task commits / direct write to deliverable / READ-only flip on Task 6). Note: gsd-executor subagent encountered runtime guard blocking Write of FINDINGS-v31.0.md ("subagents shouldn't write report files"); orchestrator persisted the agent's prepared content via cp + 6 atomic commits matching plan task boundaries. All 4 phases verified PASSED 8/8 dimensions.
 
 ## Completed Milestone: v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit
 

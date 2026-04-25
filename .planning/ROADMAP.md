@@ -11,7 +11,7 @@
 - ✅ **v28.0 Database & API Intent Alignment Audit** — Phases 224-229 (shipped 2026-04-15) — see [milestones/v28.0-ROADMAP.md](milestones/v28.0-ROADMAP.md)
 - ✅ **v29.0 Post-v27 Contract Delta Audit** — Phases 230-236 (shipped 2026-04-18) — see [milestones/v29.0-ROADMAP.md](milestones/v29.0-ROADMAP.md)
 - ✅ **v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit** — Phases 237-242 (shipped 2026-04-20) — see [milestones/v30.0-ROADMAP.md](milestones/v30.0-ROADMAP.md)
-- 🟢 **v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit** — Phases 243-246 (in progress, started 2026-04-23)
+- ✅ **v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit** — Phases 243-246 (shipped 2026-04-24) — see [milestones/v31.0-ROADMAP.md](milestones/v31.0-ROADMAP.md)
 
 ## Phases
 
@@ -88,87 +88,26 @@
 
 </details>
 
-### v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit (Phases 243-246)
+<details>
+<summary>✅ v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit (Phases 243-246) — SHIPPED 2026-04-24</summary>
 
-- [x] **Phase 243: Delta Extraction & Per-Commit Classification** — COMPLETE at HEAD `cc68bfc7` (all 3 plans closed 2026-04-23): single authoritative delta-surface catalog `audit/v31-243-DELTA-SURFACE.md` published with 42 changelog + 26 classification + 60 call-site + 41 Consumer-Index + 2 storage rows; FINAL READ-only per D-21
-- [x] **Phase 244: Per-Commit Adversarial Audit (EVT + RNG + QST + GOX)** — COMPLETE + VERIFIED at HEAD `cc68bfc7` (all 4 plans closed 2026-04-24): single authoritative `audit/v31-244-PER-COMMIT-AUDIT.md` (2858 lines) published with 87 V-rows / 19 REQs all SAFE floor; 0 finding candidates; KI EXC-02 RE_VERIFIED via GOX-04-V02; FINAL READ-only per D-05
-- [x] **Phase 245: sDGNRS Redemption Gameover Safety + Pre-Existing Gameover Invariant Re-Verification** — Prove every redemption path × gameover-timing matrix is fund-conserving and re-verify pre-existing gameover invariants against the new delta (2026-04-24)
-- [x] **Phase 246: Findings Consolidation + Lean Regression Appendix** — COMPLETE at HEAD `cc68bfc7` (1/1 plan closed 2026-04-24): `audit/FINDINGS-v31.0.md` (403 lines) FINAL READ-only published with severity 0/0/0/0/0; REG-01 6 PASS / REG-02 1 SUPERSEDED; FIND-03 0/0 KI promoted; KNOWN-ISSUES.md UNMODIFIED per CONTEXT.md D-07; closure signal `MILESTONE_V31_CLOSED_AT_HEAD_cc68bfc7` emitted
+- [x] Phase 243: Delta Extraction & Per-Commit Classification (3/3 plans) — completed 2026-04-23
+- [x] Phase 244: Per-Commit Adversarial Audit (EVT + RNG + QST + GOX) (4/4 plans) — completed 2026-04-24
+- [x] Phase 245: sDGNRS Redemption Gameover Safety + Pre-Existing Gameover Invariant Re-Verification (2/2 plans) — completed 2026-04-24
+- [x] Phase 246: Findings Consolidation + Lean Regression Appendix (1/1 plan) — completed 2026-04-24
+
+**Findings:** Zero F-31-NN findings (0 CRITICAL/HIGH/MEDIUM/LOW/INFO across 142 V-rows / 33 REQs). LEAN regression: 6 PASS REG-01 + 1 SUPERSEDED REG-02. KI EXC-02 + EXC-03 envelopes RE_VERIFIED non-widening; KNOWN-ISSUES.md UNMODIFIED per D-07 default. Closure signal `MILESTONE_V31_CLOSED_AT_HEAD_cc68bfc7`. See [milestones/v31.0-ROADMAP.md](milestones/v31.0-ROADMAP.md) and [audit/FINDINGS-v31.0.md](../audit/FINDINGS-v31.0.md).
+
+</details>
+
+### Next Milestone (TBD — planning open)
+
+The next milestone shape is open. Run `/gsd-new-milestone` to scope.
 
 ## Phase Details
 
-### Phase 243: Delta Extraction & Per-Commit Classification
-**Goal**: Establish the exact audit surface — every changed function, state variable, event, and downstream call site — for the 5 post-v30.0 commits, so per-commit adversarial audit has a complete, grep-reproducible target list
-**Depends on**: Nothing (first phase of v31.0)
-**Requirements**: DELTA-01, DELTA-02, DELTA-03
-**Success Criteria** (what must be TRUE):
-  1. Per-commit function/state/event inventory published covering all 5 commits (`ced654df`, `16597cac`, `6b3f4f3c`, `771893d1`, `ffced9ef`) with per-commit + aggregate counts — reviewer can reproduce via the documented `git diff` commands (DELTA-01)
-  2. Every changed function labeled with one of {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED, RENAMED}, with the diff hunk cited and hunk-level annotation attached — zero function is "unclassified" (DELTA-02)
-  3. Every changed function's and interface's downstream call sites enumerated across `contracts/` via reproducible grep output — zero caller unaccounted for (DELTA-03)
-  4. `.planning/phases/243-*/` artifacts committed + `audit/v31-243-DELTA-SURFACE.md` (or equivalent upstream file) published, referenced by Phase 244 plans as their sole scope input
-**Plans:** 3 plans
-Plans:
-- [x] 243-01-PLAN.md — DELTA-01 enumeration wave 1 COMPLETE at 771893d1 (original pass) + cc68bfc7 (addendum pass): per-commit function/state/event/interface inventory + storage slot-layout diff + reproduction recipe (populated Sections 0/1/4/5/7.1 + 7.1.b)
-- [x] 243-02-PLAN.md — DELTA-02 classification wave 2 COMPLETE at cc68bfc7 (commit `cfafebd8` + plan-close `cb91dfef`): D-04 5-bucket verdict per function with hunk citation + D-19 evidence burden (populated Section 2 + Section 1 change-count cards + §7.2; 2 NEW / 23 MODIFIED_LOGIC / 1 REFACTOR_ONLY / 0 DELETED / 0 RENAMED across 26 D-243-F rows)
-- [x] 243-03-PLAN.md — DELTA-03 call-site catalog wave 2 COMPLETE at cc68bfc7 (commit `87e68995`): grep-reproducible downstream call sites + Consumer Index + final READ-only lock (populated Sections 3/6/§7.3 and flipped file status to FINAL; 60 D-243-X + 41 D-243-I rows)
-
-### Phase 244: Per-Commit Adversarial Audit (EVT + RNG + QST + GOX)
-**Goal**: Adversarially audit every contract code change in the 5 post-v30 commits against its commit-message behavior claim — surface every finding candidate (SAFE / INFO / LOW / MEDIUM / HIGH / CRITICAL) before Phase 245/246 consolidation
-**Depends on**: Phase 243
-**Requirements**: EVT-01, EVT-02, EVT-03, EVT-04, RNG-01, RNG-02, RNG-03, QST-01, QST-02, QST-03, QST-04, QST-05, GOX-01, GOX-02, GOX-03, GOX-04, GOX-05, GOX-06, GOX-07
-**Success Criteria** (what must be TRUE):
-  1. Every `JackpotTicketWin` emit path proven to emit non-zero `TICKET_SCALE`-scaled `ticketCount`, with the new `JackpotWhalePassWin` emit proven to cover the previously-silent large-amount odd-index BAF path and event NatSpec proven accurate (EVT-01..EVT-04)
-  2. `_unlockRng(day)` removal from the two-call-split continuation proven safe — every reaching path enumerated and shown to clear `rngLocked` elsewhere on the same tick; v30.0 `rngLockedFlag` AIRTIGHT invariant RE_VERIFIED_AT_HEAD `771893d1`; reformat-only sub-change proven behaviorally equivalent (RNG-01..RNG-03)
-  3. `MINT_ETH` quest progress + earlybird DGNRS counting proven correct on gross spend (fresh + recycled) with no double-counting; affiliate fresh-vs-recycled 20-25/5 split proven preserved; `_callTicketPurchase` return drop + `ethFreshWei → ethMintSpendWei` rename proven behaviorally equivalent; gas-savings claim (-142k/-153k/-76k WC) either reproduced or flagged INFO-unreproducible (QST-01..QST-05)
-  4. All 8 purchase/claim paths moved from `gameOver` → `_livenessTriggered` enumerated and shown consistent with existing ticket-queue guards; `sDGNRS.burn`/`burnWrapped` State-1 block proven to close the orphan-redemption window; `handleGameOverDrain` proven to subtract `pendingRedemptionEthValue` BEFORE the 33/33/34 split; VRF-dead 14-day grace fallback + `_gameOverEntropy` `rngRequestTime` clearing + gameover-before-liveness ordering in `_handleGameOverPath` all proven correct; `DegenerusGameStorage.sol` (+27 lines) slot-layout change verified via `forge inspect` (GOX-01..GOX-07)
-  5. Every audited REQ receives a closed per-commit verdict {SAFE / INFO / LOW / MEDIUM / HIGH / CRITICAL} with evidence — all finding candidates surfaced into the v31.0 candidate pool before Phase 246 consolidation
-**Plans**: 4 plans, single-wave parallel per 244-CONTEXT.md D-01/D-02
-Plans:
-- [x] 244-01-PLAN.md — EVT bucket (ced654df + cc68bfc7 BAF-coupling addendum per D-03): EVT-01/EVT-02/EVT-03/EVT-04 closed at cc68bfc7 with 22 V-rows (5+5+8+4) across 4 REQs; 19 SAFE + 7 INFO; 0 finding candidates; 1.7 bullets 6 + 7 closed per CONTEXT.md D-09; bullet 8 deferred-NOTE to 244-02/244-04. Working file: `audit/v31-244-EVT.md`. Commits: `61e5f1b9` (Task 1) + `4b714a84` (Task 2)
-- [x] 244-02-PLAN.md — RNG bucket (16597cac): RNG-01/RNG-02/RNG-03 closed at cc68bfc7 with 20 V-rows (11+7+2) across 3 REQs; 18 SAFE + 2 RE_VERIFIED_AT_HEAD (EXC-02 + EXC-03); 0 finding candidates; §1.7 bullet 3 CLOSED via RNG-02-V04 SAFE; §1.7 bullet 8 DEFERRED to 244-04 GOX-06 with hand-off note. Working file: `audit/v31-244-RNG.md`. Commits: `c7aad619` (Task 1) + `aa70e46f` (Task 2)
-- [x] 244-03-PLAN.md — QST bucket (6b3f4f3c): QST-01/QST-02/QST-03/QST-04/QST-05 closed at cc68bfc7 with 24 V-rows (7+5+4+5+3) across 5 REQs; all 5 REQs SAFE floor severity; 0 finding candidates. QST-03 NEGATIVE-scope — `DegenerusAffiliate.sol` byte-identical baseline vs HEAD; affiliate 20-25/5 split preserved untouched. QST-05 BYTECODE-DELTA-ONLY methodology per CONTEXT.md D-13 LOCKED with DIRECTION-ONLY verdict bar per D-14 LOCKED — DegenerusQuests stripped body BYTE-IDENTICAL; DegenerusGameMintModule stripped body SHRANK by 36 bytes (direction matches commit-msg claim). No gas benchmarks run. Working file: `audit/v31-244-QST.md`. Commits: `39867bca` (Task 1) + `9f0cce2a` (Task 2)
-- [x] 244-04-PLAN.md — GOX bucket (771893d1) + FINAL CONSOLIDATION into `audit/v31-244-PER-COMMIT-AUDIT.md`: GOX-01/GOX-02/GOX-03/GOX-04/GOX-05/GOX-06/GOX-07 closed at cc68bfc7 with 21 V-rows (8+3+3+2+1+3+1) across 7 REQs; all 7 REQs SAFE floor severity; 0 finding candidates; §1.7 bullets 1+2+4 closed via GOX-02-V01/V02 + GOX-03-V03; §1.7 bullets 3+5+8 closed via GOX-06-V01 (bullet 3 cross-cite to 244-02 RNG-02-V04 primary) + GOX-06-V02 (bullet 5) + GOX-06-V03 (bullet 8 PRIMARY closure per CONTEXT.md D-09). KI EXC-02 RE_VERIFIED_AT_HEAD cc68bfc7 via GOX-04-V02 (14-day grace adds trigger, not prevrandao-consumption path). GOX-07 FAST-CLOSE per CONTEXT.md D-15 citing D-243-S001 UNCHANGED. §Phase-245-Pre-Flag subsection emits 16 SDR/GOE observations per CONTEXT.md D-16. Working file: `audit/v31-244-GOX.md`. FINAL consolidated deliverable `audit/v31-244-PER-COMMIT-AUDIT.md` (2,858 lines; status FINAL READ-ONLY) assembled from 4 working files + §5 Consumer Index + §6 Reproduction Recipe Appendix per CONTEXT.md D-04 + D-05. Commits: `0b72daba` (Task 1 GOX-01..03) + `bce57eef` (Task 2 GOX-04..06 + KI EXC-02) + `4faec613` (Task 3 GOX-07 FAST-CLOSE + Pre-Flag) + `1c3244bd` (Task 4 consolidation FINAL flip)
-
-### Phase 245: sDGNRS Redemption Gameover Safety + Pre-Existing Gameover Invariant Re-Verification
-**Goal**: Prove the sDGNRS redemption lifecycle × gameover-timing matrix is fund-conserving with hard guarantees (every redemption path works as intended, no funds lost, math closes exactly), AND re-verify every pre-existing gameover invariant (v24.0 / v29.0) still holds against the new liveness-gate + `pendingRedemptionEthValue` drain-subtraction delta
-**Depends on**: Phase 243 (delta surface), Phase 244 (per-commit verdicts inform interaction-surface entries)
-**Requirements**: SDR-01, SDR-02, SDR-03, SDR-04, SDR-05, SDR-06, SDR-07, SDR-08, GOE-01, GOE-02, GOE-03, GOE-04, GOE-05, GOE-06
-**Success Criteria** (what must be TRUE):
-  1. Full redemption-state-transition × gameover-timing matrix enumerated across all six timings (a)-(f) from SDR-01 (pre-liveness all three steps / VRF-pending crossings / post-gameOver request blocked / VRF-dead `_gameOverEntropy` fallback resolution) — every cell closed with a named verdict (SDR-01)
-  2. `pendingRedemptionEthValue` accounting proven exact at every entry/exit (request → resolve → claim or fail-roll return) with zero dust and zero overshoot, AND `handleGameOverDrain` proven to subtract the full `pendingRedemptionEthValue` BEFORE the 33/33/34 claimable split (SDR-02, SDR-03)
-  3. Per-wei conservation closed for every wei entering `pendingRedemptionEthValue`: exactly one exit (to claimer OR back to pool) under every gameover timing — never both, never neither. `claimRedemption` post-gameOver proven DOS-free, starvation-free, underflow-free, and race-free vs the 30-day sweep (SDR-04, SDR-05)
-  4. State-1 orphan-redemption window proven closed (sDGNRS.burn + burnWrapped block covers every reachable creator path), sDGNRS supply conservation proven across the full redemption lifecycle including gameover interception, and `_gameOverEntropy` fallback substitution (F-29-04 class) proven fair for VRF-pending redemptions with no pending-limbo post-gameOver (SDR-06, SDR-07, SDR-08)
-  5. Every pre-existing gameover invariant RE_VERIFIED_AT_HEAD `771893d1`: F-29-04 RNG-consumer determinism; v24.0 claimablePool 33/33/34 split + 30-day sweep; purchase-blocking entry-point coverage (updated for liveness-gate shift); VRF-available vs prevrandao fallback gameover-jackpot branches given the new 14-day grace; `gameOverPossible` BURNIE endgame gate (v11.0) (GOE-01..GOE-05)
-  6. Any cross-feature emergent behavior introduced by the liveness-gate × sDGNRS-redemption × `pendingRedemptionEthValue`-drain-subtraction interaction enumerated exhaustively — either closed with verdict or surfaced as finding candidate for Phase 246 (GOE-06)
-**Plans**: 2 plans, single-wave parallel per 245-CONTEXT.md D-01/D-02
-Plans:
-- [x] 245-01-PLAN.md — SDR bucket (SDR-01..SDR-08, 8 REQs, 3 tasks) COMPLETE at cc68bfc7: 40 verdict rows (6 `SDR-01-T{a-f}` foundation + 34 standard V-rows) across SDR-01..08; all 8 REQs SAFE floor; 0 finding candidates; EXC-03 envelope RE_VERIFIED_AT_HEAD at SDR-08-V01 (cross-cites Phase 244 RNG-01-V11 primary). Working file `audit/v31-245-SDR.md` (924 lines). Commits: `4ad05b89` + `53e6ef2d` + `e49f61cd` + `1446b570`
-- [x] 245-02-PLAN.md — GOE bucket + FINAL CONSOLIDATION (GOE-01..GOE-06, 6 REQs, 4 tasks) COMPLETE at cc68bfc7: 15 GOE verdict rows across GOE-01..06; all 6 REQs SAFE floor; 0 finding candidates. GOE-06 closes both Pre-Flag candidates SAFE per D-12 (Candidate 1 skipped-BAF × drain: wei captured in totalFunds not stranded; Candidate 2 burnWrapped wrapper-backing: storage-key separation preserves backing through burnAtGameOver). KI EXC-02 RE_VERIFIED at GOE-04-V02 (cross-cites Phase 244 GOX-04-V02 primary); KI EXC-03 RE_VERIFIED at GOE-01-V01 (full `_gameOverEntropy` scope; cross-cites SDR-08-V01 + RNG-01-V11). Task 4 consolidated `audit/v31-245-SDR-GOE.md` (1636 lines, FINAL READ-only per D-05, 4 sections + §Phase-246-Input zero-state per D-18). 17/17 Pre-Flag bullets CLOSED across bucket cross-walks (10 SDR + 7 GOE). Working file `audit/v31-245-GOE.md` (432 lines). Commits: `386a8a68` + `0c4c5a79` + `60a4e93e` + `098e66f5` + `43afc3de`
-
-### Phase 246: Findings Consolidation + Lean Regression Appendix
-**Goal**: Publish `audit/FINDINGS-v31.0.md` as the milestone deliverable with executive summary, per-phase sections, F-31-NN finding blocks under the D-08 5-bucket severity rubric, and a LEAN regression appendix (only prior findings directly touched by the deltas — not the full v30.0 31-row sweep); promote to `KNOWN-ISSUES.md` only items passing D-09 3-predicate gating
-**Depends on**: Phase 243, Phase 244, Phase 245 (terminal phase; consolidates all prior output)
-**Requirements**: FIND-01, FIND-02, FIND-03, REG-01, REG-02
-**Success Criteria** (what must be TRUE):
-  1. `audit/FINDINGS-v31.0.md` published in v29/v30 shape — executive summary, per-phase sections, F-31-NN finding blocks, milestone-close attestation at HEAD `771893d1` (or current HEAD at phase-close) (FIND-01)
-  2. Every finding classified under the D-08 5-bucket severity rubric {CRITICAL, HIGH, MEDIUM, LOW, INFO} with justification — zero finding is severity-unlabeled (FIND-02)
-  3. `KNOWN-ISSUES.md` either updated with new accepted-design entries that pass D-09 3-predicate gating (accepted-design + non-exploitable + sticky) OR explicitly left UNMODIFIED per D-16 default path — the Non-Promotion Ledger lists every candidate that failed gating with the failing predicate identified (FIND-03)
-  4. Lean regression appendix published: every v30.0 F-30-NNN or prior finding directly touched by the 5 in-scope deltas spot-checked, F-29-04 RE_VERIFIED_AT_HEAD, and any prior finding superseded by the new code explicitly marked SUPERSEDED with citation. The full v30.0 31-row sweep is NOT re-run per milestone scope decision (REG-01, REG-02)
-  5. D-25 terminal-phase rule honored — zero forward-cites emitted; any finding that cannot close in v31.0 routes to an F-31-NN block with explicit rollover addendum or is closed via regression verdict
-
-**Plans**: 1 plan, single-wave (per 246-CONTEXT.md D-01..D-04 — single-plan 6-task consolidation matching v30 Phase 242 precedent)
-Plans:
-- [x] 246-01-PLAN.md — Single-plan 6-task consolidation COMPLETE at cc68bfc7 (2026-04-24): `audit/FINDINGS-v31.0.md` published 403 lines FINAL READ-only mirroring v30 10-section shape with v31 9-section variant (drops v30 §4 Phase-240-specific). Severity counts CRITICAL 0 / HIGH 0 / MEDIUM 0 / LOW 0 / INFO 0; total F-31-NN = 0. REG-01 LEAN 6-row spot-check (5 F-30-NNN delta-touched + F-29-04 NAMED) + 12-row exclusion log: 6 PASS / 0 REGRESSED / 0 SUPERSEDED. REG-02 1-row sweep: 0 PASS / 0 REGRESSED / 1 SUPERSEDED (sDGNRS orphan-redemption window structurally closed by 771893d1). FIND-03 zero-row Non-Promotion Ledger + 4-row envelope-non-widening attestation (EXC-01/02/03/04 all NON-WIDENING at HEAD); KNOWN-ISSUES.md UNMODIFIED per CONTEXT.md D-07 default path. Forward-cite closure attested (17/17 Phase 244 Pre-Flag CLOSED + 0 Phase 245 residual + 0 Phase 246 emissions). 6-point milestone-closure attestation per D-18 emits closure signal `MILESTONE_V31_CLOSED_AT_HEAD_cc68bfc7`. Commits: `348785f7` (Task 1) + `1ba3a0be` (Task 2) + `005e15b1` (Task 3) + `896a8793` (Task 4) + `91ce6856` (Task 5) + `86eb12ae` (Task 6)
+_(No active milestone phases — populated by `/gsd-new-milestone` when next audit cycle begins. Full v31.0 phase details archived in [milestones/v31.0-ROADMAP.md](milestones/v31.0-ROADMAP.md).)_
 
 ## Progress
 
-**Execution Order:** Phase 243 first (delta surface foundation). Phase 244 depends on 243. Phase 245 depends on 243 (delta surface) and 244 (candidate verdicts). Phase 246 is terminal and depends on 243/244/245. Phases 244 and 245 may partially overlap once 243 lands (SDR/GOE plans in 245 can begin against the Phase 243 surface without waiting on every Phase 244 verdict — SDR interaction points are statically enumerable from the delta surface + 244 verdicts merge in during consolidation).
-
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 243. Delta Extraction & Per-Commit Classification | 3/3 | Complete | 2026-04-23 |
-| 244. Per-Commit Adversarial Audit (EVT + RNG + QST + GOX) | 4/4 | Complete | 2026-04-24 |
-| 245. sDGNRS Redemption Gameover Safety + Pre-Existing Gameover Invariant Re-Verification | 2/2 | Complete | 2026-04-24 |
-| 246. Findings Consolidation + Lean Regression Appendix | 1/1 | Complete | 2026-04-24 |
-
-Plan counts will be filled in as each phase is planned via `/gsd-plan-phase N`.
+_(Populated by `/gsd-new-milestone` when next audit cycle begins.)_
