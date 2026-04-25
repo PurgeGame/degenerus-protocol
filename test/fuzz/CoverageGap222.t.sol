@@ -1257,16 +1257,14 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o5, ) = address(vault).call(
             abi.encodeWithSignature(
-                "burnCoin(address,uint256)",
-                buyer,
+                "burnCoin(uint256)",
                 uint256(1)
             )
         );
         vm.prank(buyer);
         (bool o6, ) = address(vault).call(
             abi.encodeWithSignature(
-                "burnEth(address,uint256)",
-                buyer,
+                "burnEth(uint256)",
                 uint256(1)
             )
         );
@@ -1274,8 +1272,8 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(o2, "vault.jackpotsClaimDecimator rejected non-vaultOwner caller");
         assertFalse(o3, "vault.sdgnrsBurn rejected non-vaultOwner caller");
         assertFalse(o4, "vault.sdgnrsClaimRedemption rejected non-vaultOwner caller");
-        assertFalse(o5, "vault.burnCoin rejected non-vaultOwner caller");
-        assertFalse(o6, "vault.burnEth rejected non-vaultOwner caller");
+        assertFalse(o5, "vault.burnCoin rejected caller with no DGVB shares");
+        assertFalse(o6, "vault.burnEth rejected caller with no DGVE shares");
     }
 
     // ====================================================================

@@ -75,7 +75,7 @@ contract VaultHandler is Test {
         amount = bound(amount, 1, 1e18); // Burn a tiny fraction of 1T supply
 
         vm.prank(creator);
-        try vault.burnEth(creator, amount) returns (uint256 ethOut, uint256 stEthOut) {
+        try vault.burnEth(amount) returns (uint256 ethOut, uint256 stEthOut) {
             ghost_burnEthSuccess++;
             ghost_ethBurned += amount;
             ghost_ethReceived += ethOut + stEthOut;
@@ -90,7 +90,7 @@ contract VaultHandler is Test {
         amount = bound(amount, 1, 1e18);
 
         vm.prank(creator);
-        try vault.burnCoin(creator, amount) returns (uint256 coinOut) {
+        try vault.burnCoin(amount) returns (uint256 coinOut) {
             ghost_burnCoinSuccess++;
             ghost_coinBurned += amount;
             ghost_coinReceived += coinOut;

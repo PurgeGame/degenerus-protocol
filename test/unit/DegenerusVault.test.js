@@ -147,14 +147,14 @@ describe("DegenerusVault", function () {
     it("reverts when amount is zero", async function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).burnCoin(ZERO_ADDRESS, 0n)
+        vault.connect(alice).burnCoin(0n)
       ).to.be.revertedWithCustomError(vault, "Insufficient");
     });
 
     it("reverts when player has no DGVB shares", async function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).burnCoin(ZERO_ADDRESS, eth("1"))
+        vault.connect(alice).burnCoin(eth("1"))
       ).to.be.reverted;
     });
 
@@ -164,33 +164,11 @@ describe("DegenerusVault", function () {
       // Try burning a small amount - may have 0 coin reserve which is fine
       // burnCoin will emit Claim(player, amount, 0, 0, coinOut) even if coinOut = 0
       const smallAmount = eth("1"); // burn 1 DGVB
-      const tx = await vault.connect(deployer).burnCoin(ZERO_ADDRESS, smallAmount);
+      const tx = await vault.connect(deployer).burnCoin(smallAmount);
       const ev = await getEvent(tx, vault, "Claim");
       expect(ev.args.sharesBurned).to.equal(smallAmount);
       expect(ev.args.stEthOut).to.equal(0n);
       expect(ev.args.ethOut).to.equal(0n);
-    });
-
-    it("reverts when unauthorized user tries to burn for another player", async function () {
-      const { vault, alice, bob } = await loadFixture(deployFullProtocol);
-      await expect(
-        vault.connect(alice).burnCoin(bob.address, eth("1"))
-      ).to.be.revertedWithCustomError(vault, "NotApproved");
-    });
-
-    it("operator can burn on behalf of player", async function () {
-      const { vault, game, deployer, alice } = await loadFixture(
-        deployFullProtocol
-      );
-      // Need to approve alice as operator for deployer in the game contract
-      await game.connect(deployer).setOperatorApproval(alice.address, true);
-      // Now alice can burn on behalf of deployer
-      // Deployer has 1T DGVB shares
-      const tx = await vault
-        .connect(alice)
-        .burnCoin(deployer.address, eth("1"));
-      const ev = await getEvent(tx, vault, "Claim");
-      expect(ev.args.from).to.equal(deployer.address);
     });
 
     it("refill mechanism: burning all shares mints 1T new shares to player", async function () {
@@ -199,7 +177,7 @@ describe("DegenerusVault", function () {
       // burn the entire initial supply
       const tx = await vault
         .connect(deployer)
-        .burnCoin(ZERO_ADDRESS, INITIAL_SUPPLY);
+        .burnCoin(INITIAL_SUPPLY);
       const evClaim = await getEvent(tx, vault, "Claim");
       expect(evClaim.args.sharesBurned).to.equal(INITIAL_SUPPLY);
       // After refill, deployer should have 1T new shares
@@ -215,31 +193,24 @@ describe("DegenerusVault", function () {
     it("reverts when amount is zero", async function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).burnEth(ZERO_ADDRESS, 0n)
+        vault.connect(alice).burnEth(0n)
       ).to.be.revertedWithCustomError(vault, "Insufficient");
     });
 
     it("reverts when player has no DGVE shares", async function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).burnEth(ZERO_ADDRESS, eth("1"))
+        vault.connect(alice).burnEth(eth("1"))
       ).to.be.reverted;
     });
 
     it("deployer can burn DGVE shares with zero ETH reserve", async function () {
       const { vault, deployer } = await loadFixture(deployFullProtocol);
       // Burn a small amount; vault has 0 ETH but 0 stETH so claimValue = 0
-      const tx = await vault.connect(deployer).burnEth(ZERO_ADDRESS, eth("1"));
+      const tx = await vault.connect(deployer).burnEth(eth("1"));
       const ev = await getEvent(tx, vault, "Claim");
       expect(ev.args.sharesBurned).to.equal(eth("1"));
       expect(ev.args.coinOut).to.equal(0n);
-    });
-
-    it("reverts when unauthorized user tries to burn for another player", async function () {
-      const { vault, alice, bob } = await loadFixture(deployFullProtocol);
-      await expect(
-        vault.connect(alice).burnEth(bob.address, eth("1"))
-      ).to.be.revertedWithCustomError(vault, "NotApproved");
     });
 
     it("ETH is redeemed proportionally when vault has ETH balance", async function () {
@@ -260,7 +231,7 @@ describe("DegenerusVault", function () {
       const INITIAL_SUPPLY = 1_000_000_000_000n * eth("1");
       const tx = await vault
         .connect(deployer)
-        .burnEth(ZERO_ADDRESS, INITIAL_SUPPLY);
+        .burnEth(INITIAL_SUPPLY);
       const evClaim = await getEvent(tx, vault, "Claim");
       expect(evClaim.args.sharesBurned).to.equal(INITIAL_SUPPLY);
       await expect(vault.previewEth(1n)).to.not.be.reverted;

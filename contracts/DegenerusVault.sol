@@ -2,7 +2,7 @@
 pragma solidity 0.8.34;
 
 import {ContractAddresses} from "./ContractAddresses.sol";
-import {IDegenerusGame, MintPaymentKind} from "./interfaces/IDegenerusGame.sol";
+import {MintPaymentKind} from "./interfaces/IDegenerusGame.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
 
@@ -353,8 +353,6 @@ contract DegenerusVault {
     error Insufficient();
     /// @notice ETH or token transfer failed
     error TransferFailed();
-    /// @notice Caller is not the player and not an approved operator
-    error NotApproved();
 
     // ---------------------------------------------------------------------
     // EVENTS
@@ -396,8 +394,6 @@ contract DegenerusVault {
     // ---------------------------------------------------------------------
     // WIRING (Constants)
     // ---------------------------------------------------------------------
-    /// @dev Game contract for operator approval checks
-    IDegenerusGame internal constant game = IDegenerusGame(ContractAddresses.GAME);
     /// @dev Game contract for player actions
     IDegenerusGamePlayerActions internal constant gamePlayer =
         IDegenerusGamePlayerActions(ContractAddresses.GAME);
@@ -437,14 +433,6 @@ contract DegenerusVault {
     modifier onlyVaultOwner() {
         if (!_isVaultOwner(msg.sender)) revert NotVaultOwner();
         _;
-    }
-
-    /// @dev Reverts if caller is not the player and not an approved operator for the player
-    /// @param player The player address to check approval for
-    function _requireApproved(address player) private view {
-        if (msg.sender != player && !game.isOperatorApproved(player, msg.sender)) {
-            revert NotApproved();
-        }
     }
 
     /// @dev Check if account holds >50.1% of DGVE supply (balance * 1000 > supply * 501)
@@ -755,26 +743,11 @@ contract DegenerusVault {
     /// @dev Formula: coinOut = (DGVB reserve * sharesBurned) / totalSupply.
     ///      If burning entire supply, caller receives 1T new shares (refill mechanism).
     ///      Pays from vault balance first, then claimable coinflips, then mints remainder.
-    /// @param player Player address to burn for (address(0) uses msg.sender)
     /// @param amount Amount of DGVB shares to burn
-    /// @return coinOut Amount of BURNIE sent to player
+    /// @return coinOut Amount of BURNIE sent to caller
     /// @custom:reverts Insufficient If amount is 0 or reserve is insufficient
-    /// @custom:reverts NotApproved If caller is not player and not approved operator
     /// @custom:reverts TransferFailed If BURNIE transfer fails
-    function burnCoin(address player, uint256 amount) external returns (uint256 coinOut) {
-        if (player == address(0)) {
-            player = msg.sender;
-        } else if (player != msg.sender) {
-            _requireApproved(player);
-        }
-        return _burnCoinFor(player, amount);
-    }
-
-    /// @dev Internal implementation for burning DGVB shares
-    /// @param player Player address receiving the BURNIE
-    /// @param amount Amount of DGVB shares to burn
-    /// @return coinOut Amount of BURNIE sent to player
-    function _burnCoinFor(address player, uint256 amount) private returns (uint256 coinOut) {
+    function burnCoin(uint256 amount) external returns (uint256 coinOut) {
         DegenerusVaultShare share = coinShare;
         if (amount == 0) revert Insufficient();
 
@@ -787,31 +760,31 @@ contract DegenerusVault {
         }
         coinOut = (coinBal * amount) / supplyBefore;
 
-        share.vaultBurn(player, amount);
+        share.vaultBurn(msg.sender, amount);
         if (supplyBefore == amount) {
-            share.vaultMint(player, REFILL_SUPPLY);
+            share.vaultMint(msg.sender, REFILL_SUPPLY);
         }
 
-        emit Claim(player, amount, 0, 0, coinOut);
+        emit Claim(msg.sender, amount, 0, 0, coinOut);
         if (coinOut != 0) {
             uint256 remaining = coinOut;
             if (vaultBal != 0) {
                 uint256 payBal = remaining <= vaultBal ? remaining : vaultBal;
                 remaining -= payBal;
-                if (!coinToken.transfer(player, payBal)) revert TransferFailed();
+                if (!coinToken.transfer(msg.sender, payBal)) revert TransferFailed();
             }
 
             if (remaining != 0 && claimable != 0) {
                 uint256 claimed = coinflipPlayer.claimCoinflips(address(this), remaining);
                 if (claimed != 0) {
                     remaining -= claimed;
-                    if (!coinToken.transfer(player, claimed)) revert TransferFailed();
+                    if (!coinToken.transfer(msg.sender, claimed)) revert TransferFailed();
                 }
             }
 
             if (remaining != 0) {
                 coinTracked -= remaining;
-                coinToken.vaultMintTo(player, remaining);
+                coinToken.vaultMintTo(msg.sender, remaining);
             }
         }
     }
@@ -821,34 +794,12 @@ contract DegenerusVault {
     ///      Formula: claimValue = (DGVE reserve * sharesBurned) / totalSupply.
     ///      If burning entire supply, caller receives 1T new shares (refill mechanism).
     ///      May auto-claim game winnings if needed to fulfill the redemption.
-    /// @param player Player address to burn for (address(0) uses msg.sender)
     /// @param amount Amount of DGVE shares to burn
-    /// @return ethOut Amount of ETH sent to player
-    /// @return stEthOut Amount of stETH sent to player
+    /// @return ethOut Amount of ETH sent to caller
+    /// @return stEthOut Amount of stETH sent to caller
     /// @custom:reverts Insufficient If amount is 0 or reserve is insufficient
-    /// @custom:reverts NotApproved If caller is not player and not approved operator
     /// @custom:reverts TransferFailed If ETH or stETH transfer fails
-    function burnEth(
-        address player,
-        uint256 amount
-    ) external returns (uint256 ethOut, uint256 stEthOut) {
-        if (player == address(0)) {
-            player = msg.sender;
-        } else if (player != msg.sender) {
-            _requireApproved(player);
-        }
-        return _burnEthFor(player, amount);
-    }
-
-    /// @dev Internal implementation for burning DGVE shares
-    /// @param player Player address receiving the ETH/stETH
-    /// @param amount Amount of DGVE shares to burn
-    /// @return ethOut Amount of ETH sent to player
-    /// @return stEthOut Amount of stETH sent to player
-    function _burnEthFor(
-        address player,
-        uint256 amount
-    ) private returns (uint256 ethOut, uint256 stEthOut) {
+    function burnEth(uint256 amount) external returns (uint256 ethOut, uint256 stEthOut) {
         DegenerusVaultShare share = ethShare;
         if (amount == 0) revert Insufficient();
 
@@ -879,15 +830,15 @@ contract DegenerusVault {
             if (stEthOut > stBal) revert Insufficient();
         }
 
-        share.vaultBurn(player, amount);
+        share.vaultBurn(msg.sender, amount);
         if (supplyBefore == amount) {
-            share.vaultMint(player, REFILL_SUPPLY);
+            share.vaultMint(msg.sender, REFILL_SUPPLY);
         }
 
-        emit Claim(player, amount, ethOut, stEthOut, 0);
+        emit Claim(msg.sender, amount, ethOut, stEthOut, 0);
 
-        if (stEthOut != 0) _paySteth(player, stEthOut);
-        if (ethOut != 0) _payEth(player, ethOut);
+        if (stEthOut != 0) _paySteth(msg.sender, stEthOut);
+        if (ethOut != 0) _payEth(msg.sender, ethOut);
     }
 
     // ---------------------------------------------------------------------
