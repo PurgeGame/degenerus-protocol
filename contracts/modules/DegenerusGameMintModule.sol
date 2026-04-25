@@ -894,7 +894,6 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             if (gameOverPossible) revert GameOverPossible();
             _callTicketPurchase(
                 buyer,
-                msg.sender,
                 ticketQuantity,
                 MintPaymentKind.DirectEth,
                 true,
@@ -976,7 +975,6 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 targetLevel,
                 burnieMintUnits
             ) = _callTicketPurchase(
-                    buyer,
                     buyer,
                     ticketQuantity,
                     payKind,
@@ -1205,7 +1203,6 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     /// @return burnieMintUnits BURNIE-paid mint quest units
     function _callTicketPurchase(
         address buyer,
-        address payer,
         uint256 quantity,
         MintPaymentKind payKind,
         bool payInCoin,
@@ -1252,7 +1249,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         uint256 adjustedQuantity = quantity;
         if (!payInCoin) {
             uint16 boostBps = IDegenerusGame(address(this))
-                .consumePurchaseBoost(payer);
+                .consumePurchaseBoost(buyer);
             if (boostBps != 0) {
                 uint256 cappedValue = costWei > LOOTBOX_BOOST_MAX_VALUE
                     ? LOOTBOX_BOOST_MAX_VALUE
@@ -1268,7 +1265,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         if (payInCoin) {
             uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) /
                 TICKET_SCALE;
-            _coinReceive(payer, coinCost);
+            _coinReceive(buyer, coinCost);
 
             // Accumulate BURNIE mint quest units (deferred to handlePurchase)
             uint32 questQty = uint32(quantity / (4 * TICKET_SCALE));
@@ -1279,7 +1276,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             uint32 mintUnits = adjustedQty32;
 
             IDegenerusGame(address(this)).recordMint{value: value}(
-                payer,
+                buyer,
                 targetLevel,
                 costWei,
                 mintUnits,
