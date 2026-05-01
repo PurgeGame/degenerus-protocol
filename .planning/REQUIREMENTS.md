@@ -102,16 +102,40 @@
 
 | REQ-ID | Target Phase | Status |
 |--------|--------------|--------|
-| DELTA-01..03 | Phase 247 | Pending |
-| BFL-01..06 | Phase 248 | Pending |
-| PLV-01..06 | Phase 249 | Pending |
-| SIB-01..05 | Phase 250 | Pending |
-| TST-01..04 | Phase 251 | Pending |
-| POST31-01..02 | Phase 252 | Pending |
-| FIND-01..04 | Phase 253 | Pending |
-| REG-01..02 | Phase 253 | Pending |
+| DELTA-01 | Phase 247 | Pending |
+| DELTA-02 | Phase 247 | Pending |
+| DELTA-03 | Phase 247 | Pending |
+| BFL-01 | Phase 248 | Pending |
+| BFL-02 | Phase 248 | Pending |
+| BFL-03 | Phase 248 | Pending |
+| BFL-04 | Phase 248 | Pending |
+| BFL-05 | Phase 248 | Pending |
+| BFL-06 | Phase 248 | Pending |
+| PLV-01 | Phase 249 | Pending |
+| PLV-02 | Phase 249 | Pending |
+| PLV-03 | Phase 249 | Pending |
+| PLV-04 | Phase 249 | Pending |
+| PLV-05 | Phase 249 | Pending |
+| PLV-06 | Phase 249 | Pending |
+| SIB-01 | Phase 250 | Pending |
+| SIB-02 | Phase 250 | Pending |
+| SIB-03 | Phase 250 | Pending |
+| SIB-04 | Phase 250 | Pending |
+| SIB-05 | Phase 250 | Pending |
+| TST-01 | Phase 251 | Pending |
+| TST-02 | Phase 251 | Pending |
+| TST-03 | Phase 251 | Pending |
+| TST-04 | Phase 251 | Pending |
+| POST31-01 | Phase 252 | Pending |
+| POST31-02 | Phase 252 | Pending |
+| FIND-01 | Phase 253 | Pending |
+| FIND-02 | Phase 253 | Pending |
+| FIND-03 | Phase 253 | Pending |
+| FIND-04 | Phase 253 | Pending |
+| REG-01 | Phase 253 | Pending |
+| REG-02 | Phase 253 | Pending |
 
-(Phase numbering tentative — final numbering set by roadmapper.)
+(Phase numbering FINAL — set by v32.0 roadmap 2026-04-30.)
 
 ---
 

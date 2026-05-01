@@ -12,6 +12,7 @@
 - ✅ **v29.0 Post-v27 Contract Delta Audit** — Phases 230-236 (shipped 2026-04-18) — see [milestones/v29.0-ROADMAP.md](milestones/v29.0-ROADMAP.md)
 - ✅ **v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit** — Phases 237-242 (shipped 2026-04-20) — see [milestones/v30.0-ROADMAP.md](milestones/v30.0-ROADMAP.md)
 - ✅ **v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit** — Phases 243-246 (shipped 2026-04-24) — see [milestones/v31.0-ROADMAP.md](milestones/v31.0-ROADMAP.md)
+- 🚧 **v32.0 Backfill Idempotency + purchaseLevel Underflow Audit** — Phases 247-253 (in progress, started 2026-04-30)
 
 ## Phases
 
@@ -100,14 +101,119 @@
 
 </details>
 
-### Next Milestone (TBD — planning open)
+### 🚧 v32.0 Backfill Idempotency + purchaseLevel Underflow Audit (In Progress)
 
-The next milestone shape is open. Run `/gsd-new-milestone` to scope.
+**Milestone Goal:** Prove the two testnet bugs in `DegenerusGameAdvanceModule.sol` are correctly fixed by the WIP guards (backfill double-execution → underflow; turbo-vs-rngLockedFlag race → `purchaseLevel = 0` panic 0x11), and sweep AdvanceModule + delegating modules for sibling-pattern races between `rngLockedFlag` / `lastPurchaseDay` / `jackpotPhaseFlag` / `dailyIdx` that could produce other underflows, double-execution, or skipped updates.
+
+**Audit baseline:** v31.0 HEAD `cc68bfc7` → current HEAD `48554f8f` (4 post-v31.0 contract-touching commits) + WIP work-tree (`ContractAddresses.sol`, `DegenerusGameAdvanceModule.sol`, new `test/edge/LastPurchaseDayRace.test.js`).
+
+**Audit posture:** READ-only LIFTED (was held continuously v28.0–v31.0). Audit-then-commit. WIP turbo guard, backfill guard, and reproduction test — plus any new contract / test changes surfaced by the sibling sweep — land via explicit per-commit user approval per `feedback_no_contract_commits.md`. No autonomous contract or test writes by any agent.
+
+**Deliverable target:** `audit/FINDINGS-v32.0.md`.
+
+- [ ] **Phase 247: Delta Extraction & Classification** — Establish the v32.0 audit surface for the 4 post-v31.0 landed commits + WIP working-tree guards (changed functions, state vars, events, downstream call sites).
+- [ ] **Phase 248: Backfill Idempotency Proof** — Prove the new `rngWordByDay[idx + 1] == 0` guard makes `_backfillGapDays` callable at most once per VRF lock window across every reachable `advanceGame` path, with conservation closed and KI EXC-02/EXC-03 envelopes RE_VERIFIED non-widening.
+- [ ] **Phase 249: purchaseLevel Correctness Proof** — 4-dimensional state-space sweep over `(lastPurchaseDay, rngLockedFlag, jackpotPhaseFlag, level)` proving `purchaseLevel` cannot be 0 once the `!rngLockedFlag` turbo guard at L167 is in place; underflow audit at every `purchaseLevel`-arithmetic call site.
+- [ ] **Phase 250: Sibling-Pattern Sweep** — Hunt other turbo-class and backfill-class races between `rngLockedFlag` / `lastPurchaseDay` / `jackpotPhaseFlag` / `dailyIdx` / `phaseTransitionActive` across AdvanceModule and every delegating module.
+- [ ] **Phase 251: Reproduction Tests** — Verify `test/edge/LastPurchaseDayRace.test.js` triggers panic 0x11 pre-fix and passes post-fix; verify `LivenessProductivePause` / `LivenessMidJackpot` regressions still pass; add a backfill double-execution reproduction if missing.
+- [ ] **Phase 252: Post-v31.0 Landed-Commit Sanity** — Delta-sanity verify the 4 landed post-v31.0 commits (`8bdeabc2`, `ad41973c`, `6a63705b`, `48554f8f`) against the bug envelopes; RE_VERIFY `8bdeabc2` liveness pause composes with the new turbo guard.
+- [ ] **Phase 253: Findings Consolidation + Lean Regression** — Publish `audit/FINDINGS-v32.0.md` with executive summary, F-32-NN finding blocks, KI gating walk, lean regression appendix, and fix-readiness signal `MILESTONE_V32_AT_HEAD_<sha>`.
 
 ## Phase Details
 
-_(No active milestone phases — populated by `/gsd-new-milestone` when next audit cycle begins. Full v31.0 phase details archived in [milestones/v31.0-ROADMAP.md](milestones/v31.0-ROADMAP.md).)_
+### Phase 247: Delta Extraction & Classification
+**Goal**: Establish the exact v32.0 audit surface — every changed function, state variable, event, and downstream call site — across the 4 post-v31.0 landed commits + WIP working-tree guards, so the proof phases (248-250) and sanity phase (252) have a complete, grep-reproducible target list anchored at HEAD `48554f8f` + WIP overlay.
+**Depends on**: Nothing (first phase of v32.0)
+**Requirements**: DELTA-01, DELTA-02, DELTA-03
+**Success Criteria** (verifier checklist):
+  1. `audit/v32-247-DELTA-SURFACE.md` exists and Section 1 enumerates every changed function, state variable, and event across `git diff cc68bfc7..48554f8f` plus the working-tree diff (turbo guard at AdvanceModule L167, backfill guard at AdvanceModule L1167, untracked `test/edge/LastPurchaseDayRace.test.js`, `ContractAddresses.sol` regen) with hunk-level `path:line` evidence per row.
+  2. Section 2 classifies every changed function under the D-04 5-bucket rubric (NEW / MODIFIED_LOGIC / REFACTOR_ONLY / DELETED / RENAMED) with the source commit (`8bdeabc2` / `ad41973c` / `6a63705b` / `48554f8f` / WIP) cited per row.
+  3. Section 3 emits a grep-reproducible Consumer Index of every downstream call site for each changed function and interface across `contracts/` (one row per call site, with the exact `grep` command preserved).
+  4. Reproduction recipe at end of file regenerates Sections 1–3 deterministically from the recorded HEAD anchor (`48554f8f` + WIP overlay), and the file is marked FINAL READ-only on plan-close commit.
+**Plans**: TBD
+
+### Phase 248: Backfill Idempotency Proof
+**Goal**: Prove the new `rngWordByDay[idx + 1] == 0` guard makes `_backfillGapDays` execute at most once per VRF lock window across every reachable `advanceGame` re-entry path, that conservation closes across the gap range (no doubled `purchaseStartDay`, no doubled coinflip credits), and that KI EXC-02 / EXC-03 envelopes are RE_VERIFIED non-widening.
+**Depends on**: Phase 247 (delta surface and call-site catalog)
+**Requirements**: BFL-01, BFL-02, BFL-03, BFL-04, BFL-05, BFL-06
+**Success Criteria** (verifier checklist):
+  1. `audit/v32-248-BFL.md` exists with one `BFL-01-Vnn` row per code path that reaches `_backfillGapDays` (sole call site at AdvanceModule:1176 inside `rngGate`'s fresh-word branch); every row carries a verdict in {SAFE, FINDING_CANDIDATE} with explicit guard-evaluation evidence.
+  2. Every state write inside `_backfillGapDays` (`purchaseStartDay`, coinflip pool credits, `rngWordByDay[d]`, daily ticket processing side effects) has its own row proving the `rngWordByDay[idx + 1] == 0` sentinel correctly skips repeated execution and is the right index (no off-by-one against `idx` or `day`); BFL-02 verdicts are all SAFE.
+  3. BFL-03 contains a worked numeric multi-day VRF stall scenario reproducing the testnet underflow trigger sequence (lock window crosses ≥2 wall-clock days, `rngGate` fresh-word path re-enters before `_unlockRng`) and shows the guard short-circuits the second call before any state write executes.
+  4. BFL-05 RE_VERIFIES KI EXC-02 (prevrandao fallback) and EXC-03 (gameover RNG substitution) envelopes against the backfill guard with explicit NON-WIDENING attestations carrying `path:line` cites; either both attestations land non-widening or KNOWN-ISSUES.md is updated per D-09 with full gating walk recorded inline.
+  5. BFL-06 conservation proof closes algebraically: total ETH credited to coinflip pools across the gap range matches the expected non-doubled amount, `purchaseStartDay` increments exactly once per gap day, and sDGNRS / DGNRS / BURNIE supplies are invariant across the lock window with per-mutation row evidence.
+**Plans**: TBD
+
+### Phase 249: purchaseLevel Correctness Proof
+**Goal**: Prove `purchaseLevel` can never be 0 (or otherwise produce the panic 0x11 underflow at `levelPrizePool[uint24(0) - 1]`) at any reachable `(lastPurchaseDay, rngLockedFlag, jackpotPhaseFlag, level)` combination once the WIP `!rngLockedFlag` turbo guard at AdvanceModule:167 is in place, and that no `purchaseLevel`-arithmetic call site can underflow / overflow / index out of bounds.
+**Depends on**: Phase 247 (delta surface), Phase 248 (RNG lock-window invariants)
+**Requirements**: PLV-01, PLV-02, PLV-03, PLV-04, PLV-05, PLV-06
+**Success Criteria** (verifier checklist):
+  1. `audit/v32-249-PLV.md` Section 1 enumerates every read site of `purchaseLevel` across AdvanceModule and every delegating module (one `PLV-01-Vnn` row per read site) tagged with the local invariant required (`≥1`, `> level`, `level + 1`, etc.) and a verifier-reproducible grep recipe.
+  2. Section 2 contains the explicit 4-dimensional state-space sweep over `(lastPurchaseDay ∈ {false, true}) × (rngLockedFlag ∈ {false, true}) × (jackpotPhaseFlag ∈ {false, true}) × (level ∈ {0, 1, …, levelMax})`; every reachable cell has a verdict proving `purchaseLevel ≥ 1` at the bind line (AdvanceModule:185), and every cell marked unreachable has an explicit reachability-disproof citation.
+  3. Section 3 names the unreachable state `(lastPurchase = true ∧ rngLockedFlag = true ∧ lvl = 0)` and proves the ternary at AdvanceModule:185 cannot return 0 by showing the `!rngLockedFlag` turbo guard at L167 short-circuits before that combination can bind.
+  4. Section 4 lists every `purchaseLevel`-arithmetic call site (notably AdvanceModule:748 `levelPrizePool[uint24(purchaseLevel) - 1]`, plus all `+1`, `+4`, `_tqReadKey(purchaseLevel)` sites) with one verdict row each proving no underflow / overflow / out-of-bounds at any reachable `purchaseLevel` value.
+  5. Section 5 symbolically reproduces the testnet panic 0x11 trigger sequence (blocks 10759449 + 10761786) and shows step-by-step that the new turbo guard short-circuits the path before the binding ternary; Section 6 proves the daily-jackpot region (lines 372–404) does not strand state in a "target met but never resolves" condition under the guard.
+**Plans**: TBD
+
+### Phase 250: Sibling-Pattern Sweep
+**Goal**: Hunt other turbo-class and backfill-class races across AdvanceModule and every delegating module — every interaction between `rngLockedFlag` / `lastPurchaseDay` / `jackpotPhaseFlag` / `dailyIdx` / `level` / `purchaseStartDay` / `rngWordByDay[*]` / `phaseTransitionActive` is enumerated and classified, so any latent sibling bug surfaces as an explicit F-32-NN candidate before consolidation.
+**Depends on**: Phase 247 (delta + call-site surface), Phase 248 (backfill race shape understood), Phase 249 (turbo race shape understood)
+**Requirements**: SIB-01, SIB-02, SIB-03, SIB-04, SIB-05
+**Success Criteria** (verifier checklist):
+  1. `audit/v32-250-SIB.md` Section 1 enumerates every interaction in `DegenerusGameAdvanceModule.sol` where `rngLockedFlag` is read or written alongside `lastPurchaseDay`, `jackpotPhaseFlag`, `dailyIdx`, `level`, `purchaseStartDay`, `rngWordByDay[*]`, or `phaseTransitionActive` (one `SIB-01-Vnn` row per interaction) with `path:line` evidence and a grep-reproducible discovery recipe.
+  2. Section 2 classifies every interaction under the {turbo-class, backfill-class, ORTHOGONAL_PROVEN} taxonomy with explicit reasoning per row; ORTHOGONAL_PROVEN rows carry an isolation argument equivalent in form to the v30 Phase 239 lootbox-index-advance / `phaseTransitionActive` proofs.
+  3. Section 3 audits each delegating module (`DegenerusGameMintModule`, `DegenerusGameJackpotModule`, `DegenerusGameWhaleModule`, `DegenerusGameLootboxModule`, `DegenerusGameDegenetteModule`, `DegenerusGameBoonModule`, `DegenerusGameDecimatorModule`, `DegenerusGameGameOverModule`) for the same patterns reading the same state, with at least one row per module (or a documented NEGATIVE-scope verdict).
+  4. Section 4 cross-checks the 4 post-v31.0 landed commits (`8bdeabc2`, `ad41973c`, `6a63705b`, `48554f8f`) for sibling patterns, with `8bdeabc2` (liveness pause during productive multi-call window) called out explicitly as the closest sibling shape and verdict-justified.
+  5. Section 5 documents every new bug found with a reproducible trigger sequence, severity classification under the D-08 5-bucket rubric, and an explicit `awaiting-approval` proposed fix block per `feedback_no_contract_commits.md`; if zero new bugs, Section 5 contains an explicit zero-state attestation. No contract or test edits are landed without prior recorded user approval.
+**Plans**: TBD
+
+### Phase 251: Reproduction Tests
+**Goal**: Empirically validate the WIP guards by running the working-tree reproduction test pre-fix vs post-fix, regressing the prior committed liveness tests, and ensuring at least one reproduction test exists per fixed bug class (turbo race + backfill double-execution). Surface any test commit candidates as `awaiting-approval` per `feedback_no_contract_commits.md`.
+**Depends on**: Phase 247 (delta surface includes the new test file), Phase 248 + Phase 249 (the WIP guards under test)
+**Requirements**: TST-01, TST-02, TST-03, TST-04
+**Success Criteria** (verifier checklist):
+  1. `audit/v32-251-TST.md` records the explicit pre-fix run of `test/edge/LastPurchaseDayRace.test.js` against the contract tree with WIP guards reverted: TST-01 verdict carries the verbatim panic 0x11 reverter trace and confirms the test fails reliably without the `!rngLockedFlag` turbo guard.
+  2. TST-02 verdict records the post-fix run with both WIP guards (`!rngLockedFlag` at L167 + `rngWordByDay[idx + 1] == 0` at L1167) in place: the test passes deterministically; the harness command and full passing output are quoted verbatim.
+  3. TST-03 verdict shows `test/edge/LivenessProductivePause.test.js` and `test/edge/LivenessMidJackpot.test.js` (committed in `8bdeabc2` / `ad41973c`) still pass against the WIP guards, with no new failures introduced; verbatim test runner output is preserved.
+  4. TST-04 verdict either confirms `LastPurchaseDayRace.test.js` already covers the backfill double-execution underflow (with the asserting lines quoted), OR adds a new reproduction test under `test/edge/` that fails pre-fix (no backfill guard) and passes post-fix (guard in place); the new test, if added, is queued as an `awaiting-approval` commit candidate, NOT autonomously committed.
+  5. Every test commit candidate (existing untracked file or new test) is listed in a Section 5 commit-readiness register with status {awaiting-approval, approved-and-committed} and an explicit user-approval audit trail; no test files outside `audit/` or `.planning/` are written or committed by any agent without that audit trail.
+**Plans**: TBD
+
+### Phase 252: Post-v31.0 Landed-Commit Sanity
+**Goal**: Delta-sanity verify the 4 landed post-v31.0 commits do not widen the bug envelopes being fixed by v32.0 — i.e. the liveness pause (`8bdeabc2`), liveness regression test (`ad41973c`), purchaseCoin buyer-charge fix (`6a63705b`), and vault redemption decoupling (`48554f8f`) introduce no new turbo-class or backfill-class races; and prove the productive-phase liveness pause composes correctly with the WIP `!rngLockedFlag` turbo guard.
+**Depends on**: Phase 247 (delta surface), Phase 248 + Phase 249 (bug envelopes characterised), Phase 250 (sibling taxonomy and SIB-04 cross-check)
+**Requirements**: POST31-01, POST31-02
+**Success Criteria** (verifier checklist):
+  1. `audit/v32-252-POST31.md` Section 1 contains one verdict row per landed commit (`8bdeabc2`, `ad41973c`, `6a63705b`, `48554f8f`) with explicit NON-WIDENING attestations against both bug envelopes (turbo-class and backfill-class), each carrying `path:line` evidence and a domain-cite to the SIB-04 row.
+  2. Section 2 enumerates every interaction between the new `_pauseDeathClockDuringProductivePhase`-class state (`8bdeabc2`) and the WIP `!rngLockedFlag` turbo guard at L167, proving the death clock pauses when expected and resumes correctly without leaving liveness state stranded under the guard.
+  3. Section 3 records POST31-02 composition proofs for at least three scenarios: (a) productive multi-call window with WIP turbo guard active, (b) death-clock-paused-and-resumed across a VRF lock window with backfill guard active, (c) a documented edge where turbo would previously fire but is now blocked — and shows liveness gates the same in all three.
+  4. Section 4 references the SIB-04 row(s) from `audit/v32-250-SIB.md` to confirm zero double-counting between the SIB sweep verdict and POST31 sanity verdict, and explicitly attests both phases agree on the per-commit risk classification.
+**Plans**: TBD
+
+### Phase 253: Findings Consolidation + Lean Regression
+**Goal**: Publish `audit/FINDINGS-v32.0.md` as the milestone-closure deliverable mirroring v29/v30/v31 shape (executive summary, per-phase sections, F-32-NN finding blocks, lean regression appendix, KI gating walk, milestone-closure attestation); promote items to `KNOWN-ISSUES.md` only if D-09 3-predicate gating passes; emit fix-readiness signal once any approved WIP guard / test commits land.
+**Depends on**: Phase 247, Phase 248, Phase 249, Phase 250, Phase 251, Phase 252 (terminal phase — consumes every prior phase artifact)
+**Requirements**: FIND-01, FIND-02, FIND-03, FIND-04, REG-01, REG-02
+**Success Criteria** (verifier checklist):
+  1. `audit/FINDINGS-v32.0.md` exists in canonical v29/v30/v31 deliverable shape: executive summary with severity counts under D-08 5-bucket rubric, per-phase sections covering Phases 247-252, F-32-NN finding blocks (one per surfaced finding, each with severity / source phase / `path:line` / proposed-or-applied resolution), and the FINAL READ-only frontmatter on plan-close commit.
+  2. Every F-32-NN finding is classified under D-08 (CRITICAL / HIGH / MEDIUM / LOW / INFO) with explicit severity-justification prose; severity counts in §1 reconcile to the F-32-NN block tally line by line.
+  3. The KI gating section runs the D-09 3-predicate walk (accepted-design + non-exploitable + sticky) per F-32-NN candidate and emits either an updated `KNOWN-ISSUES.md` (with diff cited inline) OR an explicit Non-Promotion Ledger documenting the gating decision per row when no candidate qualifies.
+  4. The Lean Regression Appendix (REG-01) spot-checks every prior v29 / v30 / v31 finding directly touched by the WIP guards or the post-v31 commits — at minimum every row referencing `_backfillGapDays`, `purchaseLevel`, `rngLockedFlag`, `lastPurchaseDay`, `dailyIdx`, or the turbo block — with verdict in {PASS, REGRESSED, SUPERSEDED} and a domain-cite per row; REG-02 lists any prior finding superseded by the new guards with structural-closure proof.
+  5. Section §Milestone-Closure emits the fix-readiness signal `MILESTONE_V32_AT_HEAD_<sha>` (where `<sha>` is the post-WIP-commit HEAD if any guards / tests landed via approved commits, otherwise the at-audit-close HEAD), and a commit-readiness register names every contract / test path landed during the milestone with its review-and-approval audit trail and the user-approval commit reference.
+**Plans**: TBD
 
 ## Progress
 
-_(Populated by `/gsd-new-milestone` when next audit cycle begins.)_
+**Execution Order:**
+Phases execute in numeric order: 247 → 248 → 249 → 250 → 251 → 252 → 253. Phases 248 / 249 / 250 / 251 / 252 are independent of each other once Phase 247 lands the delta surface; orchestrator may parallelize where the working-file model permits.
+
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 247. Delta Extraction & Classification | v32.0 | 0/TBD | Not started | - |
+| 248. Backfill Idempotency Proof | v32.0 | 0/TBD | Not started | - |
+| 249. purchaseLevel Correctness Proof | v32.0 | 0/TBD | Not started | - |
+| 250. Sibling-Pattern Sweep | v32.0 | 0/TBD | Not started | - |
+| 251. Reproduction Tests | v32.0 | 0/TBD | Not started | - |
+| 252. Post-v31.0 Landed-Commit Sanity | v32.0 | 0/TBD | Not started | - |
+| 253. Findings Consolidation + Lean Regression | v32.0 | 0/TBD | Not started | - |
