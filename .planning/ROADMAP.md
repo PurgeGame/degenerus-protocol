@@ -111,7 +111,7 @@
 
 **Deliverable target:** `audit/FINDINGS-v32.0.md`.
 
-- [ ] **Phase 247: Delta Extraction & Classification** — Establish the v32.0 audit surface for the 4 post-v31.0 landed commits + WIP working-tree guards (changed functions, state vars, events, downstream call sites).
+- [x] **Phase 247: Delta Extraction & Classification** — Established the v32.0 audit surface for the 4 post-v31.0 contract-touching commits (8bdeabc2 / 6a63705b / 48554f8f / acd88512). Delivered `audit/v32-247-DELTA-SURFACE.md` FINAL READ-only at HEAD `acd88512` with closure signal `PHASE_247_CATALOG_FINAL_AT_HEAD_acd88512`. 7-section single-deliverable: 16 D-247-C### per-source + state/event/error rows / 11 D-247-F### classification rows (8 MODIFIED_LOGIC + 3 DELETED) / 1 D-247-S### storage-layout UNCHANGED row / 30 D-247-X### call-site rows / 29 D-247-I### Consumer Index rows mapping every Phase 248..253 REQ-ID. 5 atomic per-task commits (e2cacc5c → 9961c91a). Zero `F-32-` IDs (Phase 253 owns). Zero contracts/ or test/ writes per D-247-05.
 - [ ] **Phase 248: Backfill Idempotency Proof** — Prove the new `rngWordByDay[idx + 1] == 0` guard makes `_backfillGapDays` callable at most once per VRF lock window across every reachable `advanceGame` path, with conservation closed and KI EXC-02/EXC-03 envelopes RE_VERIFIED non-widening.
 - [ ] **Phase 249: purchaseLevel Correctness Proof** — 4-dimensional state-space sweep over `(lastPurchaseDay, rngLockedFlag, jackpotPhaseFlag, level)` proving `purchaseLevel` cannot be 0 once the `!rngLockedFlag` turbo guard at L167 is in place; underflow audit at every `purchaseLevel`-arithmetic call site.
 - [ ] **Phase 250: Sibling-Pattern Sweep** — Hunt other turbo-class and backfill-class races between `rngLockedFlag` / `lastPurchaseDay` / `jackpotPhaseFlag` / `dailyIdx` / `phaseTransitionActive` across AdvanceModule and every delegating module.
@@ -213,7 +213,7 @@ Phases execute in numeric order: 247 → 248 → 249 → 250 → 251 → 252 →
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 247. Delta Extraction & Classification | v32.0 | 0/TBD | Not started | - |
+| 247. Delta Extraction & Classification | v32.0 | 1/1 | COMPLETE | 2026-04-30 |
 | 248. Backfill Idempotency Proof | v32.0 | 0/TBD | Not started | - |
 | 249. purchaseLevel Correctness Proof | v32.0 | 0/TBD | Not started | - |
 | 250. Sibling-Pattern Sweep | v32.0 | 0/TBD | Not started | - |

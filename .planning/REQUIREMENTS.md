@@ -42,9 +42,9 @@
 
 ### DELTA — Delta Extraction & Classification (3 REQs)
 
-- [ ] **DELTA-01**: Enumerate every function / state variable / event changed across the post-v31.0 surface (4 landed commits + WIP guards) with per-source and aggregate counts. Reproducible with `git diff cc68bfc7..HEAD` plus working-tree diff.
-- [ ] **DELTA-02**: Classify each changed function as {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED, RENAMED} with hunk-level evidence.
-- [ ] **DELTA-03**: Identify every downstream call site of each changed function and interface across `contracts/` (grep-reproducible inventory).
+- [x] **DELTA-01**: Enumerate every function / state variable / event changed across the post-v31.0 surface (4 landed commits + WIP guards) with per-source and aggregate counts. Reproducible with `git diff cc68bfc7..HEAD` plus working-tree diff. — COMPLETE in Phase 247 Plan 247-01 (audit/v32-247-DELTA-SURFACE.md §1 + §4 + §5; 16 D-247-C### rows + 1 D-247-S### storage-layout UNCHANGED row).
+- [x] **DELTA-02**: Classify each changed function as {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED, RENAMED} with hunk-level evidence. — COMPLETE in Phase 247 Plan 247-01 (audit/v32-247-DELTA-SURFACE.md §2; 11 D-247-F### rows: 8 MODIFIED_LOGIC + 3 DELETED + 0 NEW/REFACTOR_ONLY/RENAMED; D-247-07 pre-locked floors honored zero deviations).
+- [x] **DELTA-03**: Identify every downstream call site of each changed function and interface across `contracts/` (grep-reproducible inventory). — COMPLETE in Phase 247 Plan 247-01 (audit/v32-247-DELTA-SURFACE.md §3; 30 D-247-X### rows; D-247-19 grep-reproducibility mandate honored).
 
 ### BFL — Backfill Idempotency Proof (6 REQs)
 
@@ -102,9 +102,9 @@
 
 | REQ-ID | Target Phase | Status |
 |--------|--------------|--------|
-| DELTA-01 | Phase 247 | Pending |
-| DELTA-02 | Phase 247 | Pending |
-| DELTA-03 | Phase 247 | Pending |
+| DELTA-01 | Phase 247 | COMPLETE (Plan 247-01 / commit e2cacc5c — §1 + §4 + §5 of audit/v32-247-DELTA-SURFACE.md) |
+| DELTA-02 | Phase 247 | COMPLETE (Plan 247-01 / commit 8e7e1f7c — §2 of audit/v32-247-DELTA-SURFACE.md; D-247-07 floors honored) |
+| DELTA-03 | Phase 247 | COMPLETE (Plan 247-01 / commit 4cc1f829 — §3 of audit/v32-247-DELTA-SURFACE.md; D-247-19 grep-reproducibility honored) |
 | BFL-01 | Phase 248 | Pending |
 | BFL-02 | Phase 248 | Pending |
 | BFL-03 | Phase 248 | Pending |
