@@ -151,20 +151,57 @@ Per CONTEXT.md D-247-18: cross-check any v31 row whose underlying function is to
 
 5 confirmed-delta-touches-v31-row entries (4 unique v31 row IDs spanning 5 v32 row mappings — `_callTicketPurchase` overlaps v31 in two distinct rows D-243-C011 and D-243-C020 but maps to a single v32 row D-247-C003). 2 no-overlap clusters covering Vault redemption (5 v32 rows) and `rngGate`/`_backfillGapDays` (1 v32 row).
 
-## Section 2 — Aggregate Function Classification (RESERVED FOR TASK 2)
+## Section 2 — Aggregate Function Classification
 
-This section is reserved for Task 2 of this plan to populate the D-247-06 5-bucket classification table for every `func` row in Section 1. Row IDs `D-247-F###`. DO NOT edit this section in Task 1 — Task 2 replaces this stub in place.
+Per CONTEXT.md D-247-06 5-bucket rubric: every `func` row in Section 1 receives one of {NEW / MODIFIED_LOGIC / REFACTOR_ONLY / DELETED / RENAMED}. Per D-247-08, every row cites a real diff hunk via `file:line-range` AND a one-line rationale per D-247-20 naming the specific execution-trace-changing element (SSTORE / external call / branch / emit / return-path / arithmetic operand) OR the specific non-execution-changing element (whitespace / rename / multi-line split). Pre-locked verdicts from D-247-07 are honored as floor.
 
-Pre-locked classification floors per CONTEXT.md D-247-07 (Task 2 MUST honor these as floor; any contradiction requires explicit override rationale):
+**Universe size:** 11 func rows from Section 1 (§1.1 = 1, §1.2 = 3, §1.3 = 5, §1.4 = 2; §1.5 ad41973c emits zero func rows; Section 1's NATSPEC-ONLY row D-247-C002 is not a separate function — it is the same `_livenessTriggered` symbol carrying the NatSpec block, classified once under D-247-F001 and not double-counted here).
 
-- `acd88512` AdvanceModule turbo block guard at L173 (inside `advanceGame`): MODIFIED_LOGIC (control-flow branch added)
-- `acd88512` AdvanceModule rngGate backfill guard at L1173 (inside `rngGate`): MODIFIED_LOGIC (control-flow branch added)
-- `8bdeabc2` `_livenessTriggered` (in GameStorage.sol): MODIFIED_LOGIC (early-return short-circuit — death-clock state change)
-- `6a63705b` MintModule `_callTicketPurchase`: MODIFIED_LOGIC (signature change drops `payer` + external-call target change at 4 internal sites)
-- `6a63705b` MintModule `_purchaseCoinFor` / `_purchaseFor` (callers of `_callTicketPurchase`): MODIFIED_LOGIC (argument-list change at call site — observable effect)
-- `48554f8f` Vault `burnCoin` / `burnEth`: MODIFIED_LOGIC (operator-approval gate removal — control-flow branch removed; signature change drops address param)
-- `48554f8f` Vault `_burnCoinFor` / `_burnEthFor`: REFACTOR_ONLY for pure inline relocation IF baseline body byte-identically appears at head's burnCoin/burnEth body (Task 2 verifies); else MODIFIED_LOGIC. D-247-06 burden of proof — any doubt → MODIFIED_LOGIC.
-- `48554f8f` Vault `_requireApproved`: DELETED (helper removed; no caller at HEAD)
+Columns per CONTEXT.md D-247-10: `Row ID | Section 1 Row | Function Signature | Commit | File:Line (at HEAD) | Classification | Hunk Ref | One-Line Rationale`. Hunk Ref column embeds the HEAD anchor as an `@sha` suffix (using either `@acd88512` for HEAD-side rows or `@cc68bfc7` for DELETED rows whose body lives only at baseline) so reviewers can replay `git show <sha> -L <start>,<end>:<path>` directly per D-247-20.
+
+| Row ID | Section 1 Row | Function Signature | Commit | File:Line (at HEAD) | Classification | Hunk Ref | One-Line Rationale |
+|---|---|---|---|---|---|---|---|
+| D-247-F001 | D-247-C001 + D-247-C002 | `function _livenessTriggered() internal view returns (bool)` (DegenerusGameStorage) | 8bdeabc2 | contracts/storage/DegenerusGameStorage.sol:1246-1255 | MODIFIED_LOGIC | contracts/storage/DegenerusGameStorage.sol:1246-1247@acd88512 (`git show 8bdeabc2 -L 1246,1247:contracts/storage/DegenerusGameStorage.sol`) | D-247-07 floor: new early-return branch `if (lastPurchaseDay \|\| jackpotPhaseFlag) return false;` short-circuits the death clock during the productive multi-call window — control-flow branch added (D-247-20 branch + return-path elements) |
+| D-247-F002 | D-247-C003 | `function _callTicketPurchase(address buyer, uint256 quantity, MintPaymentKind payKind, bool payInCoin, ...) private returns (uint256, uint256, uint32, uint24, uint32)` (DegenerusGameMintModule) | 6a63705b | contracts/modules/DegenerusGameMintModule.sol:1204-1370 | MODIFIED_LOGIC | contracts/modules/DegenerusGameMintModule.sol:1206,1252,1268,1279@acd88512 (`git show 6a63705b -L 1200,1290:contracts/modules/DegenerusGameMintModule.sol`) | D-247-07 floor: signature change drops `address payer` parameter (5-arg → 4-arg); 4 internal call-site arg swaps — `consumePurchaseBoost(payer→buyer)` at L1252, `_coinReceive(payer→buyer)` at L1268, `recordMint(payer→buyer)` at L1279 — all charge `buyer` instead of operator (D-247-20 external-call target element) |
+| D-247-F003 | D-247-C004 | `function _purchaseCoinFor(address buyer, uint256 ticketQuantity, ...) private` (DegenerusGameMintModule) | 6a63705b | contracts/modules/DegenerusGameMintModule.sol:885-910 | MODIFIED_LOGIC | contracts/modules/DegenerusGameMintModule.sol:894-902@acd88512 (`git show 6a63705b -L 894,902:contracts/modules/DegenerusGameMintModule.sol`) | D-247-07 floor: argument-list change at `_callTicketPurchase` call site — `msg.sender,` payer arg dropped at L897 (was line 897 pre-fix) so the BURNIE/quest charge target swaps from operator to buyer (D-247-20 external-call/internal-call argument-list element) |
+| D-247-F004 | D-247-C005 | `function _purchaseFor(address buyer, address ticketRecipient, uint256 ticketQuantity, ...) private` (DegenerusGameMintModule) | 6a63705b | contracts/modules/DegenerusGameMintModule.sol:912-1196 | MODIFIED_LOGIC | contracts/modules/DegenerusGameMintModule.sol:975-983@acd88512 (`git show 6a63705b -L 975,983:contracts/modules/DegenerusGameMintModule.sol`) | D-247-07 floor: argument-list change at `_callTicketPurchase` call site — duplicate `buyer,` payer arg dropped (the call now passes `buyer` exactly once) so the destructured 5-tuple `(..., burnieMintUnits) = _callTicketPurchase(buyer, ticketQuantity, payKind, ...)` has its arity reduced 1 (D-247-20 internal-call argument-list element) |
+| D-247-F005 | D-247-C006 | `function burnCoin(uint256 amount) external returns (uint256 coinOut)` (DegenerusVault) | 48554f8f | contracts/DegenerusVault.sol:750-790 | MODIFIED_LOGIC | contracts/DegenerusVault.sol:750-790@acd88512 vs contracts/DegenerusVault.sol:764-817@cc68bfc7 (`git show 48554f8f -L 750,790:contracts/DegenerusVault.sol`) | D-247-07 floor: signature change drops `address player` param (1-arg now); the public wrapper's `if (player == address(0)) ... else if (player != msg.sender) _requireApproved(player); return _burnCoinFor(player, amount);` 4-line dispatch is removed and the helper body is inlined with `player` → `msg.sender` substitution. Operator-approval `_requireApproved` revert path removed; emit and 4 transfer call sites all retarget from `player` to `msg.sender` (D-247-20 control-flow branch + external-call target elements) |
+| D-247-F006 | D-247-C007 | `function burnEth(uint256 amount) external returns (uint256 ethOut, uint256 stEthOut)` (DegenerusVault) | 48554f8f | contracts/DegenerusVault.sol:802-842 | MODIFIED_LOGIC | contracts/DegenerusVault.sol:802-842@acd88512 vs contracts/DegenerusVault.sol:831-891@cc68bfc7 (`git show 48554f8f -L 802,842:contracts/DegenerusVault.sol`) | D-247-07 floor: same shape as F005 — signature drops `address player`, 4-line public wrapper dispatch + `_requireApproved(player)` gate removed, helper body inlined with `player` → `msg.sender`. `_paySteth(player, ...)` and `_payEth(player, ...)` both retarget to `msg.sender` (D-247-20 control-flow branch + external-call target elements) |
+| D-247-F007 | D-247-C008 | `function _burnCoinFor(address player, uint256 amount) private returns (uint256 coinOut)` (DegenerusVault — baseline-only) | 48554f8f | (none — absent at HEAD; lived at contracts/DegenerusVault.sol:777-817@cc68bfc7) | DELETED | contracts/DegenerusVault.sol:777-817@cc68bfc7 (`git show cc68bfc7 -L 777,817:contracts/DegenerusVault.sol`) | D-247-07 floor: helper existed at baseline as a private function with its own header/closing-brace; absent at HEAD. The body content is preserved inside `burnCoin` at HEAD (with `player` → `msg.sender` substitution), but the function-as-symbol is gone — `git show acd88512:contracts/DegenerusVault.sol \| grep -c '^\s*function _burnCoinFor'` returns 0. Per D-247-06 the function-level verdict is DELETED; the body-preservation fact is captured in F005's rationale. |
+| D-247-F008 | D-247-C009 | `function _burnEthFor(address player, uint256 amount) private returns (uint256 ethOut, uint256 stEthOut)` (DegenerusVault — baseline-only) | 48554f8f | (none — absent at HEAD; lived at contracts/DegenerusVault.sol:848-891@cc68bfc7) | DELETED | contracts/DegenerusVault.sol:848-891@cc68bfc7 (`git show cc68bfc7 -L 848,891:contracts/DegenerusVault.sol`) | D-247-07 floor: same shape as F007 — helper existed at baseline as a private function with its own header/closing-brace; absent at HEAD; body-preserved inside `burnEth` with `player` → `msg.sender` substitution. `git show acd88512:contracts/DegenerusVault.sol \| grep -c '^\s*function _burnEthFor'` returns 0 — function-as-symbol DELETED. |
+| D-247-F009 | D-247-C010 | `function _requireApproved(address player) private view` (DegenerusVault — baseline-only) | 48554f8f | (none — absent at HEAD; lived at contracts/DegenerusVault.sol:444-448@cc68bfc7) | DELETED | contracts/DegenerusVault.sol:444-448@cc68bfc7 (`git show cc68bfc7 -L 444,448:contracts/DegenerusVault.sol`) | D-247-07 floor: helper removed; no caller at HEAD (the 2 baseline call sites at burnCoin / burnEth public-wrapper dispatch were removed alongside in F005 / F006). `git show acd88512:contracts/DegenerusVault.sol \| grep -c '^\s*function _requireApproved'` returns 0 — function fully eliminated. |
+| D-247-F010 | D-247-C011 | `function advanceGame() external` (DegenerusGameAdvanceModule) | acd88512 | contracts/modules/DegenerusGameAdvanceModule.sol:160-488 | MODIFIED_LOGIC | contracts/modules/DegenerusGameAdvanceModule.sol:167-176@acd88512 (`git show acd88512 -L 160,180:contracts/modules/DegenerusGameAdvanceModule.sol`) | D-247-07 floor: turbo block `if (!inJackpot && !lastPurchaseDay)` gains conjunctive guard `&& !rngLockedFlag` at L173 — new control-flow branch (turbo no longer fires when VRF lock is held, preventing the missed level pre-increment that triggered testnet panic 0x11 at blocks 10759449 + 10761786). NatSpec block at L167-172 expanded to document the rationale (D-247-20 branch element) |
+| D-247-F011 | D-247-C012 | `function rngGate(uint256 currentWord, bool bonusFlip) internal returns (...)` (DegenerusGameAdvanceModule) | acd88512 | contracts/modules/DegenerusGameAdvanceModule.sol:1152-1224 | MODIFIED_LOGIC | contracts/modules/DegenerusGameAdvanceModule.sol:1166-1175@acd88512 (`git show acd88512 -L 1160,1180:contracts/modules/DegenerusGameAdvanceModule.sol`) | D-247-07 floor: backfill branch entry guard `if (day > idx + 1)` gains conjunctive guard `&& rngWordByDay[idx + 1] == 0` at L1173 — new control-flow branch (the `_backfillGapDays` call now runs at most once per VRF lock window since `dailyIdx` only advances inside `_unlockRng`; multi-day stalls no longer doubly-credit `purchaseStartDay` or re-run resolved coinflip payouts). NatSpec block at L1166-1172 expanded to document the rationale (D-247-20 branch element + new SLOAD on rngWordByDay[idx + 1]) |
+
+### 2.1 Classification distribution (count card)
+
+| Verdict | Count | Function List |
+|---|---|---|
+| NEW | 0 | — (no Section 1 row is absent at baseline; every changed function existed at `cc68bfc7`) |
+| MODIFIED_LOGIC | 8 | D-247-F001 (`_livenessTriggered`), D-247-F002 (`_callTicketPurchase`), D-247-F003 (`_purchaseCoinFor`), D-247-F004 (`_purchaseFor`), D-247-F005 (`burnCoin`), D-247-F006 (`burnEth`), D-247-F010 (`advanceGame`), D-247-F011 (`rngGate`) |
+| REFACTOR_ONLY | 0 | — (no func row classified as pure non-execution-trace-changing; the 11 NatSpec lines from `8bdeabc2` and the NatSpec expansions from `acd88512` are subordinate to the in-same-function MODIFIED_LOGIC verdicts and not counted as separate REFACTOR_ONLY rows per D-247-06) |
+| DELETED | 3 | D-247-F007 (`_burnCoinFor`), D-247-F008 (`_burnEthFor`), D-247-F009 (`_requireApproved`) |
+| RENAMED | 0 | — (no Section 1 func row identified as a pure rename; the closest candidate is the `_burnCoinFor` body re-appearing as `burnCoin` body, but the rename is paired with a signature change AND a control-flow gate removal, so per D-247-06 burden of proof the verdict for the disappearing helper is DELETED and for the public wrapper is MODIFIED_LOGIC) |
+| **Total** | **11** | matches universe size of 11 func rows from Section 1 (1.1 = 1 / 1.2 = 3 / 1.3 = 5 / 1.4 = 2). NatSpec-only row D-247-C002 collapsed into D-247-F001 per Section 2 universe-construction note above. |
+
+**Sanity:** MODIFIED_LOGIC count = 8 (recount: F001, F002, F003, F004, F005, F006, F010, F011 = 8) + DELETED count = 3 (F007, F008, F009) = 11 = Section 1 func universe size. NEW = REFACTOR_ONLY = RENAMED = 0.
+
+### 2.2 D-247-07 Pre-Locked Floor Compliance Attestation
+
+All 7 pre-locked CONTEXT.md D-247-07 verdicts were applied verbatim with zero deviations:
+
+| D-247-07 Floor | Applied In Row | Floor Verdict | Applied Verdict | Match |
+|---|---|---|---|---|
+| acd88512 turbo guard at L173 (inside `advanceGame`) | D-247-F010 | MODIFIED_LOGIC | MODIFIED_LOGIC | ✓ |
+| acd88512 backfill guard at L1173 (inside `rngGate`) | D-247-F011 | MODIFIED_LOGIC | MODIFIED_LOGIC | ✓ |
+| 8bdeabc2 `_livenessTriggered` productive-pause | D-247-F001 | MODIFIED_LOGIC | MODIFIED_LOGIC | ✓ |
+| 6a63705b `_callTicketPurchase` charge swap | D-247-F002 | MODIFIED_LOGIC | MODIFIED_LOGIC | ✓ |
+| 6a63705b callers of `_callTicketPurchase` (the 2 sites that drop the duplicate arg) | D-247-F003 + D-247-F004 | MODIFIED_LOGIC | MODIFIED_LOGIC | ✓ |
+| 48554f8f Vault `burnCoin` / `burnEth` operator-approval gate removal | D-247-F005 + D-247-F006 | MODIFIED_LOGIC | MODIFIED_LOGIC | ✓ |
+| 48554f8f Vault `_burnCoinFor` / `_burnEthFor` (per-row) | D-247-F007 + D-247-F008 | DELETED (or REFACTOR_ONLY for inline relocation IF body byte-equivalent in caller) | DELETED | ✓ — function-as-symbol gone at HEAD; body-preservation captured in F005/F006 rationale rather than as a separate REFACTOR_ONLY row, per D-247-06 burden of proof (the body is paired with both a signature change and a control-flow gate removal, so the helper-as-function classification is unambiguously DELETED) |
+| 48554f8f Vault `_requireApproved` | D-247-F009 | DELETED | DELETED | ✓ |
+
+Zero deviations. No `OVERRIDE RATIONALE` blocks required.
 
 ## Section 3 — Downstream Call-Site Catalog (RESERVED FOR TASK 3)
 
@@ -522,9 +559,83 @@ for fn in _livenessTriggered advanceGame rngGate _backfillGapDays _callTicketPur
 done
 ```
 
-### 7.2 Task 2 commands (DELTA-02 classification) — RESERVED FOR TASK 2
+### 7.2 Task 2 commands (DELTA-02 classification)
 
-This subsection is appended by Task 2 of this plan during its execution per CONTEXT.md D-247-08 / D-247-20 (every classification row cites a hunk + one-line rationale, reproducible via `git show -L`).
+Per CONTEXT.md D-247-08 / D-247-20: every classification verdict cites a hunk reproducible via `git show -L`. Commands are grouped by source SHA. Line ranges in the `git show -L` flag use the head-side range from the hunk reference column of Section 2 (or the cc68bfc7 baseline range for the 3 DELETED rows F007 / F008 / F009 whose body lives only at baseline).
+
+**Per-row hunk extraction:**
+
+```bash
+# F001 — 8bdeabc2 _livenessTriggered productive-pause early-return (single-line addition + 11-line NatSpec block)
+git show 8bdeabc2 -L 1246,1247:contracts/storage/DegenerusGameStorage.sol
+git show 8bdeabc2 -L 1225,1235:contracts/storage/DegenerusGameStorage.sol   # NatSpec block context
+
+# F002 — 6a63705b _callTicketPurchase signature change + 4 internal call-site charge swaps
+git show 6a63705b -L 1200,1290:contracts/modules/DegenerusGameMintModule.sol
+
+# F003 — 6a63705b _purchaseCoinFor caller-side arg drop (msg.sender,)
+git show 6a63705b -L 894,902:contracts/modules/DegenerusGameMintModule.sol
+
+# F004 — 6a63705b _purchaseFor caller-side arg drop (duplicate buyer,)
+git show 6a63705b -L 975,983:contracts/modules/DegenerusGameMintModule.sol
+
+# F005 — 48554f8f burnCoin signature change + operator-approval gate removal + body inline
+git show 48554f8f -L 750,790:contracts/DegenerusVault.sol
+git show cc68bfc7 -L 764,776:contracts/DegenerusVault.sol  # baseline-side public-wrapper dispatch
+
+# F006 — 48554f8f burnEth signature change + operator-approval gate removal + body inline
+git show 48554f8f -L 802,842:contracts/DegenerusVault.sol
+git show cc68bfc7 -L 831,847:contracts/DegenerusVault.sol  # baseline-side public-wrapper dispatch
+
+# F007 — 48554f8f _burnCoinFor DELETED helper (baseline-side read for body preservation cross-cite)
+git show cc68bfc7 -L 777,817:contracts/DegenerusVault.sol
+
+# F008 — 48554f8f _burnEthFor DELETED helper (baseline-side read for body preservation cross-cite)
+git show cc68bfc7 -L 848,891:contracts/DegenerusVault.sol
+
+# F009 — 48554f8f _requireApproved DELETED helper (baseline-side read for confirmation; 5-line body)
+git show cc68bfc7 -L 444,448:contracts/DegenerusVault.sol
+
+# F010 — acd88512 advanceGame turbo guard at L173 (3-line body diff + 6-line NatSpec expansion)
+git show acd88512 -L 160,180:contracts/modules/DegenerusGameAdvanceModule.sol
+
+# F011 — acd88512 rngGate backfill guard at L1173 (1-line body diff + 6-line NatSpec expansion)
+git show acd88512 -L 1160,1180:contracts/modules/DegenerusGameAdvanceModule.sol
+```
+
+**DELETED-helper sanity (zero-callers-at-HEAD verification — referenced by F007 / F008 / F009 rationales):**
+
+```bash
+# Confirm function-as-symbol absence at HEAD
+git show acd88512:contracts/DegenerusVault.sol | grep -c '^\s*function _burnCoinFor'        # expected: 0
+git show acd88512:contracts/DegenerusVault.sol | grep -c '^\s*function _burnEthFor'         # expected: 0
+git show acd88512:contracts/DegenerusVault.sol | grep -c '^\s*function _requireApproved'    # expected: 0
+
+# Confirm function-as-symbol presence at baseline
+git show cc68bfc7:contracts/DegenerusVault.sol | grep -c '^\s*function _burnCoinFor'        # expected: 1
+git show cc68bfc7:contracts/DegenerusVault.sol | grep -c '^\s*function _burnEthFor'         # expected: 1
+git show cc68bfc7:contracts/DegenerusVault.sol | grep -c '^\s*function _requireApproved'    # expected: 1
+```
+
+**REFACTOR_ONLY-vs-DELETED body-equivalence check (F007 / F008 rationale support — body-preservation fact):**
+
+```bash
+# Pattern: extract baseline helper body + head burnCoin body via sed, normalize player→msg.sender, diff
+git show cc68bfc7:contracts/DegenerusVault.sol | sed -n '778,816p' \
+  | sed -E 's/\bplayer\b/msg.sender/g' > /tmp/v32-247-baseline-burnCoinFor-body.sol
+git show acd88512:contracts/DegenerusVault.sol | sed -n '751,789p'   > /tmp/v32-247-head-burnCoin-body.sol
+diff /tmp/v32-247-baseline-burnCoinFor-body.sol /tmp/v32-247-head-burnCoin-body.sol
+# Expected: empty diff after the player→msg.sender normalization, confirming the baseline _burnCoinFor body
+# byte-equivalently appears inside HEAD's burnCoin. Per D-247-06 burden of proof the helper-as-function
+# verdict is still DELETED (function-symbol gone) and the public wrapper is MODIFIED_LOGIC because the
+# operator-approval branch + 4-line dispatch wrapper were removed alongside.
+
+git show cc68bfc7:contracts/DegenerusVault.sol | sed -n '849,890p' \
+  | sed -E 's/\bplayer\b/msg.sender/g' > /tmp/v32-247-baseline-burnEthFor-body.sol
+git show acd88512:contracts/DegenerusVault.sol | sed -n '803,841p'   > /tmp/v32-247-head-burnEth-body.sol
+diff /tmp/v32-247-baseline-burnEthFor-body.sol /tmp/v32-247-head-burnEth-body.sol
+# Expected: empty diff modulo the player→msg.sender normalization (same conclusion as burnCoin).
+```
 
 ### 7.3 Task 3 commands (DELTA-03 call-site catalog) — RESERVED FOR TASK 3
 
