@@ -2,15 +2,14 @@
 gsd_state_version: 1.0
 milestone: v32.0
 milestone_name: Backfill Idempotency + purchaseLevel Underflow Audit
-status: planning
-last_updated: "2026-04-30T00:00:00.000Z"
-last_activity: 2026-04-30
+status: Roadmap defined; READ-only LIFTED for v32.0. Awaiting `/gsd-plan-phase 247`.
+last_updated: "2026-05-01T02:47:20.992Z"
+last_activity: 2026-04-30 — Milestone v32.0 roadmap created (7 phases / 32 requirements / 100% coverage).
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
-  percent: 0
 ---
 
 # Project State
