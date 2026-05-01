@@ -1,10 +1,11 @@
 ---
-status: IN_PROGRESS — Plan 247-01 single-plan multi-task
+status: FINAL — READ-ONLY (Phase 247 closed at HEAD acd88512 per CONTEXT.md D-247-22 — scope-guard deferral rule applies; gaps recorded in Phase 248-252 plan SUMMARYs, not re-edited here)
 phase: 247 — Delta Extraction & Classification
 milestone: v32.0 Backfill Idempotency + purchaseLevel Underflow Audit
 baseline: cc68bfc7
 head: acd88512
 plan: 247-01
+closure_signal: PHASE_247_CATALOG_FINAL_AT_HEAD_acd88512
 ---
 
 # v32.0 Phase 247 — Delta Surface Catalog
@@ -13,7 +14,7 @@ plan: 247-01
 **Audit head:** `acd88512` (current contract-tree HEAD; latest contract-touching commit at planning time 2026-04-30).
 **Phase:** 247 — Delta Extraction & Classification (DELTA-01 / DELTA-02 / DELTA-03).
 **Scope:** READ-only-LIFTED at milestone level but Phase 247 is pure-catalog per D-247-05; zero `contracts/` or `test/` writes.
-**Status:** IN PROGRESS — Plan 247-01 Task 1 populates Sections 0 / 1 / 4 / 5 / 7.1. Sections 2 / 3 / 6 are placeholder stubs reserved for Tasks 2 / 3 / 4 of the same plan. Task 5 flips this file to FINAL READ-only.
+**Status:** FINAL — READ-ONLY per CONTEXT.md D-247-22. Plan 247-01 Tasks 1-5 complete. Phase 247 COMPLETE: DELTA-01 + DELTA-02 + DELTA-03 all closed at HEAD `acd88512` against baseline `cc68bfc7`. Sections 0-7 finalized. Any Phase 248-252 finding of a changed function / state-var / event / interface method / call site NOT in this catalog is recorded as a scope-guard deferral in the discovering plan's own SUMMARY.md — this file is NOT re-edited per D-247-22. Closure signal: `PHASE_247_CATALOG_FINAL_AT_HEAD_acd88512`.
 
 ## Section 0 — Overview & Row-ID Legend
 
