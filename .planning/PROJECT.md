@@ -14,11 +14,21 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 **Contract HEAD anchor:** `cc68bfc7` (5 commits + 1 BAF addendum above v30.0 baseline `7ab515fe`)
 **Audit deliverables (cumulative):** `audit/FINDINGS-v25.0.md` + `FINDINGS-v27.0.md` + `FINDINGS-v28.0.md` + `FINDINGS-v29.0.md` + `FINDINGS-v30.0.md` + `FINDINGS-v31.0.md` + 16 v30 supporting `audit/v30-*.md` + 5 v31 supporting `audit/v31-*.md` artifacts; `KNOWN-ISSUES.md` (4 accepted-design RNG entries: EXC-01..04, all RE_VERIFIED non-widening at HEAD `cc68bfc7`)
 
-## Next Milestone Goals
+## Current Milestone: v32.0 Backfill Idempotency + purchaseLevel Underflow Audit
 
-**Status:** Planning open — fresh REQUIREMENTS.md to be created via `/gsd-new-milestone` for the next audit cycle.
+**Goal:** Prove the two testnet bugs (backfill double-execution causing underflow, and `purchaseLevel = 0` panic 0x11) are correctly fixed by the WIP guards in `DegenerusGameAdvanceModule.sol`, and sweep the module for sibling-pattern races between `rngLockedFlag` / `lastPurchaseDay` / `jackpotPhaseFlag` / `dailyIdx` that could produce other underflows, double-execution, or skipped updates.
 
-The protocol stands clean at HEAD `cc68bfc7`: zero open vulnerabilities, zero open findings, KNOWN-ISSUES.md UNMODIFIED across the v31.0 milestone. The READ-only audit posture has held continuously from v28.0 through v31.0 (zero `contracts/` or `test/` writes across 4 consecutive milestones). The next milestone shape is open — possible directions include: another delta audit cycle if new contract commits land; a fresh deep-dive on a specific subsystem (e.g., affiliate roll path / lootbox EntropyLib / cross-chain forwarders); a gas-optimization milestone on the bytecode-delta methodology proven in Phase 244 QST-05; or a non-contract milestone (sim / indexer / frontend / docs) if the contract surface remains stable.
+**Target features:**
+- Backfill idempotency proof — `rngWordByDay[idx+1]==0` guard makes `_backfillGapDays` callable at most once per lock window across every reachable `advanceGame` path; RE_VERIFY EXC-02/EXC-03 envelopes; sweep all `_backfillGapDays` callers
+- `purchaseLevel` correctness proof — across every `(lastPurchaseDay, rngLockedFlag, jackpotPhaseFlag, level)` combination, prove `purchaseLevel` can never be 0 when it should be ≥1; audit every callsite that reads it
+- Reproduction tests — verify `LastPurchaseDayRace.test.js` triggers panic 0x11 pre-fix and passes post-fix; verify productive-pause test still passes; add a backfill-double-execution reproduction test if missing
+- Sibling-pattern sweep — hunt other `rngLockedFlag`-vs-other-state races in AdvanceModule (and modules that delegate into it) that could produce underflows, double-execution, or skipped updates
+
+**Audit posture:** READ-only posture lifted (was held continuously v28.0–v31.0). Audit-then-commit. WIP turbo guard + backfill guard + reproduction test land via explicit per-commit user approval (per `feedback_no_contract_commits.md`). New contract/test changes surfaced by the sweep also require explicit approval.
+
+**Baseline:** v31.0 HEAD `cc68bfc7` → current HEAD `48554f8f` (4 post-v31.0 contract-touching commits) + WIP (`ContractAddresses.sol`, `DegenerusGameAdvanceModule.sol`, new `test/edge/LastPurchaseDayRace.test.js`).
+
+**Trigger context:** Testnet panic 0x11 reproduced at blocks 10759449 and 10761786. Underflow trigger: `dailyIdx` only updated by `_unlockRng`, so multi-day VRF stalls re-enter backfill on each new wall-clock day. Panic trigger: turbo block fires while `rngLockedFlag=true` → fresh-word path skips the level pre-increment → `(lastPurchase && rngLockedFlag) ? lvl : lvl + 1` returns `lvl=0` → `purchaseLevel = 0` → revert at `levelPrizePool[uint24(0) - 1]`.
 
 ## Completed Milestone: v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
 
@@ -379,7 +389,7 @@ The protocol stands clean at HEAD `cc68bfc7`: zero open vulnerabilities, zero op
 
 ## Current State
 
-v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit started 2026-04-18. Awaiting requirements + roadmap. Contract baseline at HEAD `7ab515fe` (identical to v29.0 `1646d5af` — all post-v29 commits are docs-only). Read-only audit pattern (no `contracts/` / `test/` edits). Deliverable target: `audit/FINDINGS-v30.0.md`.
+v32.0 Backfill Idempotency + purchaseLevel Underflow Audit started 2026-04-30. Awaiting requirements + roadmap. Contract baseline: v31.0 HEAD `cc68bfc7` → HEAD `48554f8f` + WIP guards in `DegenerusGameAdvanceModule.sol`. READ-only posture LIFTED for this milestone — WIP fixes commit per explicit approval rule. Deliverable target: `audit/FINDINGS-v32.0.md`.
 
 ## Completed Milestone: v17.1 Comment Correctness Sweep
 
@@ -449,4 +459,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-23 — v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit started. Contract baseline for the delta: v30.0 HEAD `7ab515fe` → current HEAD `771893d1` (5 commits, 12 files, 4 code-touching). READ-only pattern preserved. Awaiting requirements + roadmap.*
+*Last updated: 2026-04-30 — v32.0 Backfill Idempotency + purchaseLevel Underflow Audit started. Contract baseline for the delta: v31.0 HEAD `cc68bfc7` → current HEAD `48554f8f` (4 post-v31 commits) + WIP turbo + backfill guards in `DegenerusGameAdvanceModule.sol`. READ-only posture LIFTED — audit-then-commit with explicit per-commit approval. Awaiting requirements + roadmap.*

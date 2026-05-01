@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v31.0
-milestone_name: Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
-status: shipped
-last_updated: "2026-04-24T19:00:00.000Z"
-last_activity: 2026-04-24
+milestone: v32.0
+milestone_name: Backfill Idempotency + purchaseLevel Underflow Audit
+status: planning
+last_updated: "2026-05-01T01:48:53.625Z"
+last_activity: 2026-05-01
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,7 +24,10 @@ See: .planning/PROJECT.md (updated 2026-04-24 after v31.0 milestone close)
 
 ## Current Position
 
-**No active milestone.** v31.0 is closed and archived. Contract HEAD `cc68bfc7` is the new baseline for any subsequent delta audit. The protocol stands clean: zero open findings, KNOWN-ISSUES.md UNMODIFIED across the v31.0 cycle, READ-only audit posture held continuously from v28.0 → v31.0 (4 consecutive milestones, zero `contracts/` or `test/` writes).
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-01 — Milestone v32.0 started
 
 ## Last Shipped Milestone
 
