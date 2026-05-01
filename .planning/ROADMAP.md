@@ -130,7 +130,10 @@
   2. Section 2 classifies every changed function under the D-04 5-bucket rubric (NEW / MODIFIED_LOGIC / REFACTOR_ONLY / DELETED / RENAMED) with the source commit (`8bdeabc2` / `ad41973c` / `6a63705b` / `48554f8f` / WIP) cited per row.
   3. Section 3 emits a grep-reproducible Consumer Index of every downstream call site for each changed function and interface across `contracts/` (one row per call site, with the exact `grep` command preserved).
   4. Reproduction recipe at end of file regenerates Sections 1–3 deterministically from the recorded HEAD anchor (`48554f8f` + WIP overlay), and the file is marked FINAL READ-only on plan-close commit.
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 247-01-PLAN.md — DELTA-01 + DELTA-02 + DELTA-03 single-plan multi-task catalog at HEAD acd88512 (5 atomic per-task commits per D-247-14)
 
 ### Phase 248: Backfill Idempotency Proof
 **Goal**: Prove the new `rngWordByDay[idx + 1] == 0` guard makes `_backfillGapDays` execute at most once per VRF lock window across every reachable `advanceGame` re-entry path, that conservation closes across the gap range (no doubled `purchaseStartDay`, no doubled coinflip credits), and that KI EXC-02 / EXC-03 envelopes are RE_VERIFIED non-widening.
