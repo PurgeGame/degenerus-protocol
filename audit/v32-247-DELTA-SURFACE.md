@@ -203,9 +203,88 @@ All 7 pre-locked CONTEXT.md D-247-07 verdicts were applied verbatim with zero de
 
 Zero deviations. No `OVERRIDE RATIONALE` blocks required.
 
-## Section 3 — Downstream Call-Site Catalog (RESERVED FOR TASK 3)
+## Section 3 — Downstream Call-Site Catalog
 
-This section is reserved for Task 3 of this plan to populate the grep-reproducible call-site inventory for every changed function and interface method. Row IDs `D-247-X###`. DO NOT edit this section in Tasks 1-2 — Task 3 replaces this stub in place.
+Per CONTEXT.md D-247-15 + D-247-19: every changed function (Section 1) and changed interface method (Section 4.3) gets every call site across `contracts/` enumerated via `grep -rn`. Every row carries the exact grep command used to find it. Self-calls via `IDegenerusGame(address(this)).METHOD_NAME` and delegatecall selectors via `IDegenerusGameModules` are enumerated. test/ tree out of scope per D-247-02.
+
+**Caller-Search Universe membership:**
+- 8 Section 1 func rows whose changed function is reachable from outside its file (or via delegatecall): `_livenessTriggered` (D-247-C001), `_callTicketPurchase` (C003 — private but reached via the module's own `purchase()` delegatecall path), `_purchaseCoinFor` (C004 — private, reached via delegatecall'd `purchaseCoin()`), `_purchaseFor` (C005 — private, reached via delegatecall'd `purchase()`), `burnCoin` (C006 — external entry-point), `burnEth` (C007 — external entry-point), `advanceGame` (C011 — external entry-point), `rngGate` (C012 — internal but called by `advanceGame`)
+- 3 Section 1 DELETED func rows whose absence MUST be confirmed: `_burnCoinFor` (C008), `_burnEthFor` (C009), `_requireApproved` (C010)
+- 0 Section 4.3 changed interface methods (Section 4.3 reports "None" — no interface method signatures were touched by any of the 4 in-scope SHAs per the v32 working tree)
+
+Columns per CONTEXT.md D-247-10: `Row ID | Changed Function/Interface Method | Caller File:Line | Caller Function | Call Type | Grep Command Used`. Rows grouped by Changed Function/Interface Method; within each group, sorted ascending by Caller File:Line.
+
+Call Type vocabulary:
+- `direct` — bare-name call (`name(...)`) inside the same contract / module / inheritance chain (callee resolves at compile-time to the same contract)
+- `self-call` — the `IDegenerusGame(address(this)).name(...)` pattern (crosses module-delegatecall boundaries back through the top-level DegenerusGame dispatcher, which then delegatecalls the target module's selector)
+- `delegatecall` — the `abi.encodeWithSelector(...)` / `.name.selector` pattern (top-level-to-module dispatch via `delegatecall`)
+- `external` — call from a different contract via a typed handle (e.g. `game.advanceGame()` where `game` is `IDegenerusGame`-typed and points outward across address boundaries)
+
+| Row ID | Changed Function/Interface Method | Caller File:Line | Caller Function | Call Type | Grep Command Used |
+|---|---|---|---|---|---|
+| D-247-X001 | `_livenessTriggered` (D-247-C001 / D-247-F001 — GameStorage internal view) | contracts/DegenerusGame.sol:2134 | `livenessTriggered() external view` (the wrapper that exposes the storage-level helper to external interfaces) | direct (inheritance — DegenerusGame inherits DegenerusGameStorage transitively) | `grep -rn '\b_livenessTriggered\s*(' contracts/ \| grep -v 'function _livenessTriggered'` |
+| D-247-X002 | `_livenessTriggered` | contracts/modules/DegenerusGameAdvanceModule.sol:555 | `_handleGameOverPath` | direct (inheritance) | `grep -rn '\b_livenessTriggered\s*(' contracts/ \| grep -v 'function _livenessTriggered'` |
+| D-247-X003 | `_livenessTriggered` | contracts/modules/DegenerusGameMintModule.sol:890 | `_purchaseCoinFor` (CHANGED IN F003) | direct (inheritance) | `grep -rn '\b_livenessTriggered\s*(' contracts/ \| grep -v 'function _livenessTriggered'` |
+| D-247-X004 | `_livenessTriggered` | contracts/modules/DegenerusGameMintModule.sol:919 | `_purchaseFor` (CHANGED IN F004) | direct (inheritance) | `grep -rn '\b_livenessTriggered\s*(' contracts/ \| grep -v 'function _livenessTriggered'` |
+| D-247-X005 | `_livenessTriggered` | contracts/modules/DegenerusGameMintModule.sol:1223 | `_callTicketPurchase` (CHANGED IN F002) | direct (inheritance) | `grep -rn '\b_livenessTriggered\s*(' contracts/ \| grep -v 'function _livenessTriggered'` |
+| D-247-X006 | `_livenessTriggered` | contracts/modules/DegenerusGameMintModule.sol:1389 | `_purchaseBurnieLootboxFor` | direct (inheritance) | `grep -rn '\b_livenessTriggered\s*(' contracts/ \| grep -v 'function _livenessTriggered'` |
+| D-247-X007 | `_livenessTriggered` | contracts/modules/DegenerusGameWhaleModule.sol:195 | `_purchaseWhaleBundle` | direct (inheritance) | `grep -rn '\b_livenessTriggered\s*(' contracts/ \| grep -v 'function _livenessTriggered'` |
+| D-247-X008 | `_livenessTriggered` | contracts/modules/DegenerusGameWhaleModule.sol:385 | `_purchaseLazyPass` | direct (inheritance) | `grep -rn '\b_livenessTriggered\s*(' contracts/ \| grep -v 'function _livenessTriggered'` |
+| D-247-X009 | `_livenessTriggered` | contracts/modules/DegenerusGameWhaleModule.sol:544 | `_purchaseDeityPass` | direct (inheritance) | `grep -rn '\b_livenessTriggered\s*(' contracts/ \| grep -v 'function _livenessTriggered'` |
+| D-247-X010 | `_livenessTriggered` | contracts/modules/DegenerusGameWhaleModule.sol:958 | `claimWhalePass` | direct (inheritance) | `grep -rn '\b_livenessTriggered\s*(' contracts/ \| grep -v 'function _livenessTriggered'` |
+| D-247-X011 | `_livenessTriggered` | contracts/storage/DegenerusGameStorage.sol:573 | `_burnDgnrs` (or co-located storage-level burn helper) | direct (intra-file) | `grep -rn '\b_livenessTriggered\s*(' contracts/ \| grep -v 'function _livenessTriggered'` |
+| D-247-X012 | `_livenessTriggered` | contracts/storage/DegenerusGameStorage.sol:604 | `_burnDgnrsForCoin` (or co-located storage-level burn helper) | direct (intra-file) | `grep -rn '\b_livenessTriggered\s*(' contracts/ \| grep -v 'function _livenessTriggered'` |
+| D-247-X013 | `_livenessTriggered` | contracts/storage/DegenerusGameStorage.sol:657 | `_claimRedeemSdgnrsHelper` (or co-located storage-level redemption helper) | direct (intra-file) | `grep -rn '\b_livenessTriggered\s*(' contracts/ \| grep -v 'function _livenessTriggered'` |
+| D-247-X014 | `livenessTriggered` (external view exposing `_livenessTriggered` — D-247-F001 cascade reachable from external contracts via the IDegenerusGame interface) | contracts/StakedDegenerusStonk.sol:491 | `burn` (sDGNRS burn entry) | external (via `game.livenessTriggered()` typed-handle call) | `grep -rn '\blivenessTriggered\s*(' contracts/ \| grep -v '_livenessTriggered'` |
+| D-247-X015 | `livenessTriggered` | contracts/StakedDegenerusStonk.sol:507 | `burnWrapped` (sDGNRS burn entry — wrapped variant) | external (via `game.livenessTriggered()` typed-handle call, conjuncted with `&& !game.gameOver()`) | `grep -rn '\blivenessTriggered\s*(' contracts/ \| grep -v '_livenessTriggered'` |
+| D-247-X016 | `_callTicketPurchase` (D-247-C003 / D-247-F002) | contracts/modules/DegenerusGameMintModule.sol:895 | `_purchaseCoinFor` (CHANGED IN F003 — this is one of the 2 caller-side arg-list edits per D-247-07 floor) | direct (intra-file private call) | `grep -rn '\b_callTicketPurchase\s*(' contracts/ \| grep -v 'function _callTicketPurchase'` |
+| D-247-X017 | `_callTicketPurchase` | contracts/modules/DegenerusGameMintModule.sol:977 | `_purchaseFor` (CHANGED IN F004 — this is the second caller-side arg-list edit per D-247-07 floor) | direct (intra-file private call) | `grep -rn '\b_callTicketPurchase\s*(' contracts/ \| grep -v 'function _callTicketPurchase'` |
+| D-247-X018 | `_purchaseCoinFor` (D-247-C004 / D-247-F003) | contracts/modules/DegenerusGameMintModule.sol:870 | `purchaseCoin` (external entry — the public face of the BURNIE-paid purchase path) | direct (intra-file private call) | `grep -rn '\b_purchaseCoinFor\s*(' contracts/ \| grep -v 'function _purchaseCoinFor'` |
+| D-247-X019 | `_purchaseFor` (D-247-C005 / D-247-F004 — CHANGED MintModule private function reachable via top-level delegatecall to MintModule.purchase) | contracts/modules/DegenerusGameMintModule.sol:850 | `purchase` (external entry — the public face of the ETH/Claimable-paid purchase path; itself the delegatecall target invoked from DegenerusGame.purchase via IDegenerusGameMintModule.purchase.selector at DegenerusGame.sol:529) | direct (intra-file private call from `purchase` external entry that is itself the delegatecall target) | `grep -rn '\b_purchaseFor\s*(' contracts/ \| grep -v 'function _purchaseFor'` |
+| D-247-X020 | `burnCoin` (D-247-C006 / D-247-F005 — Vault external entry) | contracts/DegenerusVault.sol:146 | (none — docstring header line in the file's high-level ASCII flow diagram, not a real call site) | (n/a — documentation only) | `grep -rn '\bburnCoin\s*(' contracts/ \| grep -v 'function burnCoin'` |
+| D-247-X021 | `burnCoin` | (none — Vault.burnCoin has zero internal callers in `contracts/`; it is an external entry-point invoked directly by users via the front-end. The 4 `coin.burnCoin(player, amount)` hits in DegenerusGame.sol:1918 / DegeneretteModule.sol:540 / MintModule.sol:1373 / MintModule.sol:1394 are calls to a DIFFERENT 2-arg `burnCoin(address, uint256)` selector on `IDegenerusCoin` — the BurnieCoin contract — confirmed by `contracts/interfaces/IDegenerusCoin.sol:15` and `contracts/BurnieCoin.sol:537`. The Vault selector is `burnCoin(uint256)` which is unique in the contract tree.) | (n/a) | (n/a — zero direct callers) | `grep -rn '\bburnCoin\s*(' contracts/ \| grep -v 'function burnCoin'`; AND collision-disambiguation `grep -rn '\binterface IDegenerusVault\b' contracts/` returns only the `isVaultOwner`-only handle in DegenerusStonk.sol:34 (no `burnCoin` member on any `IDegenerusVault` interface in the tree) |
+| D-247-X022 | `burnEth` (D-247-C007 / D-247-F006 — Vault external entry) | contracts/DegenerusVault.sol:147 | (none — docstring header line in the file's high-level ASCII flow diagram) | (n/a — documentation only) | `grep -rn '\bburnEth\s*(' contracts/ \| grep -v 'function burnEth'` |
+| D-247-X023 | `burnEth` | (none — Vault.burnEth has zero internal callers in `contracts/`; same reasoning as D-247-X021. Selector `burnEth(uint256)` unique in the contract tree.) | (n/a) | (n/a — zero direct callers) | `grep -rn '\bburnEth\s*(' contracts/ \| grep -v 'function burnEth'`; AND no `IDegenerusVault.burnEth` member declared anywhere in the tree |
+| D-247-X024 | `_burnCoinFor` (D-247-C008 / D-247-F007 — DELETED at HEAD) | (none — confirmed via `grep -rn '\b_burnCoinFor\s*(' contracts/` returning empty output at HEAD `acd88512`) | (n/a) | (n/a — DELETED helper, zero callers at HEAD; this is the EXPECTED state since 48554f8f inlined the body into burnCoin and the helper was private to DegenerusVault.sol. NOT a Finding Candidate.) | `grep -rn '\b_burnCoinFor\s*(' contracts/` (returns empty — sanity gate confirms expected zero-callers state per D-247-07 DELETED floor) |
+| D-247-X025 | `_burnEthFor` (D-247-C009 / D-247-F008 — DELETED at HEAD) | (none — confirmed via `grep -rn '\b_burnEthFor\s*(' contracts/` returning empty output at HEAD `acd88512`) | (n/a) | (n/a — DELETED helper, zero callers at HEAD per D-247-07 DELETED floor; same shape as D-247-X024) | `grep -rn '\b_burnEthFor\s*(' contracts/` (returns empty) |
+| D-247-X026 | `_requireApproved` (D-247-C010 / D-247-F009 — DELETED FROM `contracts/DegenerusVault.sol` at HEAD) | (none in DegenerusVault.sol — confirmed via `git show acd88512:contracts/DegenerusVault.sol \| grep -c '^\s*function _requireApproved'` returning 0; the 6 grep hits in `contracts/BurnieCoinflip.sol:1155` / `contracts/modules/DegenerusGameDegeneretteModule.sol:131` / `contracts/DegenerusGame.sol:452` plus their respective callsites are independent same-name helpers in OTHER contracts — same identifier, different functions, different inheritance chains) | (n/a in Vault) | (n/a — DELETED helper in the Vault scope per D-247-07; the same-named helpers in BurnieCoinflip / Degenerette / DegenerusGame are out-of-scope for Section 3 since they are not the function changed by 48554f8f) | `grep -rn '\b_requireApproved\s*(' contracts/` (returns 6 hits across 3 unrelated contracts; collision-disambiguation `grep -n '^\s*function _requireApproved' contracts/DegenerusVault.sol` confirms zero hits in the Vault file — the changed function is gone) |
+| D-247-X027 | `advanceGame` (D-247-C011 / D-247-F010 — AdvanceModule external entry; reached via top-level delegatecall from DegenerusGame.advanceGame) | contracts/DegenerusGame.sol:289 | `advanceGame` (top-level external entry that delegatecalls into AdvanceModule via IDegenerusGameAdvanceModule.advanceGame.selector — this is the canonical dispatch path) | delegatecall (`abi.encodeWithSelector(IDegenerusGameAdvanceModule.advanceGame.selector)`) | `grep -n 'IDegenerusGameAdvanceModule\.advanceGame' contracts/ -r` |
+| D-247-X028 | `advanceGame` (external entry on DegenerusGame, reached from cross-contract callers) | contracts/DegenerusVault.sol:503 | `_advanceGame` (Vault internal helper that wraps the cross-contract call to game's external `advanceGame()` after a redemption) | external (via typed handle `gamePlayer.advanceGame()` where `gamePlayer` is `IDegenerusGamePlayerActions(GAME)`) | `grep -rn '\.advanceGame\b' contracts/ \| grep -v 'function advanceGame'` |
+| D-247-X029 | `advanceGame` (external entry on DegenerusGame, reached from cross-contract callers) | contracts/StakedDegenerusStonk.sol:355 | sDGNRS redemption flow (the redemption helper wraps cross-contract call into game.advanceGame() to flush state before/after redemption) | external (via typed handle `game.advanceGame()`) | `grep -rn '\.advanceGame\b' contracts/ \| grep -v 'function advanceGame'` |
+| D-247-X030 | `rngGate` (D-247-C012 / D-247-F011 — AdvanceModule internal) | contracts/modules/DegenerusGameAdvanceModule.sol:292 | `advanceGame` (CHANGED IN F010 — the only internal caller; the sole entry into the rngGate fresh-word/backfill branch logic) | direct (intra-file internal call) | `grep -rn '\brngGate\s*(' contracts/ \| grep -v 'function rngGate'` |
+
+### 3.1 Per-Universe-Member call-site count card
+
+| Changed Function / Interface Method | Touched-By Commit | Caller Count (contracts/ only, real callers) | Notes |
+|---|---|---|---|
+| `_livenessTriggered` (in GameStorage.sol — internal view) | 8bdeabc2 | 13 | high-density per CONTEXT predictions; gates many purchase paths (4 MintModule + 4 WhaleModule + 1 AdvanceModule + 3 GameStorage redemption paths) plus 1 wrapper exposure via `livenessTriggered` external view. v31 D-243-C026 reconciled: same function, different hunk (productive-pause early-return now layered on top of v31's day-math-first reorder + 14-day VRF-dead grace fallback). |
+| `livenessTriggered` (external view in DegenerusGame.sol — exposes `_livenessTriggered` to cross-contract callers) | 8bdeabc2 (cascade — function body returns `_livenessTriggered()` so the productive-pause is observable externally without separate code change) | 2 | both sDGNRS burn paths (burn at L491 + burnWrapped at L507) gate on `game.livenessTriggered()`. The cascade means 8bdeabc2's productive-pause now also gates external sDGNRS burns during the multi-call window — Phase 252 POST31-02 should verify this composes correctly with 8bdeabc2's productive-pause intent. |
+| `_callTicketPurchase` | 6a63705b | 2 | matches D-247-07 floor expectation — exactly the 2 caller-side arg-list edits at L895 (in `_purchaseCoinFor` F003) + L977 (in `_purchaseFor` F004) |
+| `_purchaseCoinFor` | 6a63705b | 1 | sole caller is `purchaseCoin` external entry (MintModule.sol:870) which is itself the delegatecall target invoked from DegenerusGame.purchaseCoin via `IDegenerusGameMintModule.purchaseCoin.selector` at DegenerusGame.sol:556 |
+| `_purchaseFor` | 6a63705b | 1 | sole intra-MintModule caller is `purchase` external entry (MintModule.sol:850) which is itself the delegatecall target invoked from DegenerusGame.purchase via `IDegenerusGameMintModule.purchase.selector` at DegenerusGame.sol:529. The `_purchaseFor(...)` hit at DegenerusGame.sol:509 is a DIFFERENT same-name function — DegenerusGame's own private dispatcher helper that performs the delegatecall — NOT a caller of MintModule's `_purchaseFor`. |
+| `burnCoin` (Vault external entry, 1-arg) | 48554f8f | 0 | external entry-point invoked directly by users; no internal `contracts/`-tree caller. The 4 `coin.burnCoin(player, amount)` hits (DegenerusGame.sol:1918 / DegeneretteModule.sol:540 / MintModule.sol:1373 / MintModule.sol:1394) target a DIFFERENT 2-arg `burnCoin(address, uint256)` selector on `IDegenerusCoin` (BurnieCoin contract). NOT a Finding Candidate — Vault.burnCoin is a public end-user interface. |
+| `burnEth` (Vault external entry, 1-arg) | 48554f8f | 0 | same shape as Vault.burnCoin — external entry-point with no internal `contracts/`-tree caller. The selector `burnEth(uint256)` is unique in the tree. NOT a Finding Candidate. |
+| `_burnCoinFor` (Vault private helper — DELETED at HEAD) | 48554f8f | 0 (expected — D-247-07 DELETED floor confirms zero callers at HEAD; the sole baseline caller was `burnCoin`'s public-wrapper dispatch which was also removed by 48554f8f) | confirmed by grep returning empty |
+| `_burnEthFor` (Vault private helper — DELETED at HEAD) | 48554f8f | 0 (expected — same shape as `_burnCoinFor`) | confirmed by grep returning empty |
+| `_requireApproved` (Vault private helper — DELETED at HEAD; same-name helpers exist in 3 other unrelated contracts but those are out-of-scope) | 48554f8f | 0 (in Vault scope — expected; the 2 baseline call sites at burnCoin / burnEth public-wrapper dispatch were removed by 48554f8f. The 6 grep hits across BurnieCoinflip / Degenerette / DegenerusGame are different `_requireApproved` helpers in different contracts — collision via shared identifier name, not callers of the Vault's deleted helper.) | confirmed by `grep -n '^\s*function _requireApproved' contracts/DegenerusVault.sol` returning 0 |
+| `advanceGame` (AdvanceModule external entry — internal in module file but the top-level dispatch path is `DegenerusGame.advanceGame() → delegatecall(IDegenerusGameAdvanceModule.advanceGame.selector)`) | acd88512 | 1 delegatecall site (DegenerusGame.sol:289) + 2 cross-contract callers (Vault.sol:503 + StakedDegenerusStonk.sol:355) — totaling 3 paths reaching the changed turbo-guard hunk | the cross-contract callers reach the changed function via `IDegenerusGamePlayerActions(GAME).advanceGame()` (Vault) and `IDegenerusGame(GAME).advanceGame()` (sDGNRS) — both bottoms-out at the same top-level dispatcher delegatecall and so all 3 caller paths exercise the new `&& !rngLockedFlag` turbo guard. Phase 248 BFL-01..06 + Phase 249 PLV-01..06 should walk all 3 reachability paths. |
+| `rngGate` (AdvanceModule internal) | acd88512 | 1 | sole caller is `advanceGame` at L292 — confirms the changed backfill-guard hunk inside `rngGate` is reachable only through `advanceGame`'s flow control. Phase 248 BFL-01..06 inherits this single-caller fact (the `_backfillGapDays` invocation at L1176 is reached strictly via advanceGame → rngGate → backfill branch). |
+
+### 3.2 Self-call / delegatecall enumeration (per D-247-15)
+
+For every Universe member that is invokable via `IDegenerusGame(address(this)).METHOD_NAME` (self-interface call) OR via `IDegenerusGameModules` delegatecall selector, enumerate the indirect call sites:
+
+| Universe Member | Indirect Call Site | Pattern | Grep Command |
+|---|---|---|---|
+| `advanceGame` (D-247-F010) | contracts/DegenerusGame.sol:289 | delegatecall via `IDegenerusGameAdvanceModule.advanceGame.selector` | `grep -n 'IDegenerusGameAdvanceModule\.advanceGame\.selector' contracts/ -r` |
+| `_purchaseFor` (D-247-F004 — reached indirectly via `IDegenerusGameMintModule.purchase`) | contracts/DegenerusGame.sol:529 | delegatecall via `IDegenerusGameMintModule.purchase.selector` (top-level entry that lands inside MintModule.purchase external, which then calls `_purchaseFor` directly) | `grep -n 'IDegenerusGameMintModule\.purchase\.selector' contracts/ -r` |
+| `_purchaseCoinFor` (D-247-F003 — reached indirectly via `IDegenerusGameMintModule.purchaseCoin`) | contracts/DegenerusGame.sol:556 | delegatecall via `IDegenerusGameMintModule.purchaseCoin.selector` (lands inside MintModule.purchaseCoin external, which then calls `_purchaseCoinFor` directly) | `grep -n 'IDegenerusGameMintModule\.purchaseCoin\.selector' contracts/ -r` |
+| `_callTicketPurchase` (D-247-F002 — no direct delegatecall path; reached only as a transitive callee inside MintModule.purchase / MintModule.purchaseCoin via the F003 / F004 callers) | (n/a — no direct selector at top level; reached transitively via the 2 above paths) | n/a | n/a |
+| `_livenessTriggered` (D-247-F001 — internal view, no top-level selector) | (n/a — no `IDegenerusGame(address(this))._livenessTriggered()` self-call in `contracts/`; the wrapper `livenessTriggered` external view at DegenerusGame.sol:2133 IS exposed via the IDegenerusGame interface but every in-tree caller of that wrapper is in StakedDegenerusStonk.sol — both already enumerated as D-247-X014 and D-247-X015. No indirect IDegenerusGame(address(this)) self-call in `contracts/`.) | n/a | `grep -rn 'IDegenerusGame(address(this))\._livenessTriggered\|IDegenerusGame(address(this))\.livenessTriggered' contracts/` returns empty |
+| `burnCoin` / `burnEth` (D-247-F005 / F006 — Vault external entries) | (n/a — Vault is not delegated into; users call burnCoin/burnEth directly on the Vault address) | n/a | n/a |
+| `rngGate` (D-247-F011 — AdvanceModule internal) | (n/a — internal function, not externally exposed; reached only by intra-file `advanceGame` call at AdvanceModule.sol:292 already enumerated as D-247-X030) | n/a | n/a |
+
+Three indirect dispatch paths confirmed (`advanceGame`, `_purchaseFor`, `_purchaseCoinFor`); all three are top-level delegatecall sites in DegenerusGame.sol and form the canonical entry path for the changed module functions. No `IDegenerusGame(address(this)).METHOD_NAME` self-call hits the v32 changed surface.
 
 ## Section 4 — State Variable / Event / Interface / Error / Constant Inventory
 
@@ -637,6 +716,78 @@ diff /tmp/v32-247-baseline-burnEthFor-body.sol /tmp/v32-247-head-burnEth-body.so
 # Expected: empty diff modulo the player→msg.sender normalization (same conclusion as burnCoin).
 ```
 
-### 7.3 Task 3 commands (DELTA-03 call-site catalog) — RESERVED FOR TASK 3
+### 7.3 Task 3 commands (DELTA-03 call-site catalog)
 
-This subsection is appended by Task 3 of this plan during its execution per CONTEXT.md D-247-19 (every call-site row carries the exact `grep` command that found it).
+Per CONTEXT.md D-247-19: every call-site row in Section 3 carries the exact `grep -rn` command that found it. Portable POSIX syntax (no GNU-only `grep -P` / Perl regex). Commands grouped by Universe member.
+
+**Per-Universe-Member grep enumeration:**
+
+```bash
+# F001 — _livenessTriggered callers (high-density: 13 hits across MintModule + WhaleModule + AdvanceModule + GameStorage + DegenerusGame wrapper)
+grep -rn '\b_livenessTriggered\s*(' contracts/ | grep -v 'function _livenessTriggered'
+
+# F001 cascade — livenessTriggered external view (cross-contract callers via IDegenerusGame interface)
+grep -rn '\blivenessTriggered\s*(' contracts/ | grep -v '_livenessTriggered'
+
+# F002 — _callTicketPurchase callers (matches D-247-07 floor: exactly 2 caller-side arg-list edits)
+grep -rn '\b_callTicketPurchase\s*(' contracts/ | grep -v 'function _callTicketPurchase'
+
+# F003 — _purchaseCoinFor callers (single intra-MintModule caller: purchaseCoin external entry)
+grep -rn '\b_purchaseCoinFor\s*(' contracts/ | grep -v 'function _purchaseCoinFor'
+
+# F004 — _purchaseFor callers (single intra-MintModule caller: purchase external entry; the DegenerusGame.sol:509 hit is a different same-name dispatcher helper, NOT a caller of MintModule's _purchaseFor)
+grep -rn '\b_purchaseFor\s*(' contracts/ | grep -v 'function _purchaseFor'
+
+# F005 — Vault.burnCoin callers (zero internal callers; the 4 coin.burnCoin() hits are the BurnieCoin 2-arg selector, NOT the Vault 1-arg selector)
+grep -rn '\bburnCoin\s*(' contracts/ | grep -v 'function burnCoin'
+
+# F005 collision-disambiguation: confirm no IDegenerusVault interface declares burnCoin
+grep -rn '\binterface IDegenerusVault\b' contracts/
+
+# F006 — Vault.burnEth callers (same shape as F005 — zero internal callers)
+grep -rn '\bburnEth\s*(' contracts/ | grep -v 'function burnEth'
+
+# F007 / F008 — DELETED helpers — confirm zero callers at HEAD (D-247-07 DELETED-floor sanity gate)
+grep -rn '\b_burnCoinFor\s*(' contracts/   # expected: empty
+grep -rn '\b_burnEthFor\s*(' contracts/    # expected: empty
+
+# F009 — DELETED Vault._requireApproved helper — collision-disambiguation against same-named helpers in 3 other contracts
+grep -rn '\b_requireApproved\s*(' contracts/   # expected: 6 hits (NONE in DegenerusVault.sol)
+grep -n '^\s*function _requireApproved' contracts/DegenerusVault.sol   # expected: 0 hits — confirms DELETED in Vault scope
+
+# F010 — advanceGame callers (1 delegatecall + 2 cross-contract typed-handle calls)
+grep -rn '\.advanceGame\b' contracts/ | grep -v 'function advanceGame'
+
+# F011 — rngGate callers (1 intra-AdvanceModule caller: advanceGame at L292)
+grep -rn '\brngGate\s*(' contracts/ | grep -v 'function rngGate'
+```
+
+**Self-interface / delegatecall enumeration (Section 3.2 — D-247-15 carve-out):**
+
+```bash
+# advanceGame — top-level delegatecall selector
+grep -n 'IDegenerusGameAdvanceModule\.advanceGame\.selector' contracts/ -r
+
+# _purchaseFor — reached transitively via IDegenerusGameMintModule.purchase delegatecall
+grep -n 'IDegenerusGameMintModule\.purchase\.selector' contracts/ -r
+
+# _purchaseCoinFor — reached transitively via IDegenerusGameMintModule.purchaseCoin delegatecall
+grep -n 'IDegenerusGameMintModule\.purchaseCoin\.selector' contracts/ -r
+
+# IDegenerusGame(address(this)).METHOD_NAME self-interface check for v32 changed surface (expected: empty)
+grep -rn 'IDegenerusGame(address(this))\._livenessTriggered\|IDegenerusGame(address(this))\.livenessTriggered\|IDegenerusGame(address(this))\.advanceGame\|IDegenerusGame(address(this))\.burnCoin\|IDegenerusGame(address(this))\.burnEth' contracts/
+```
+
+**Aggregate counter sanity (DELETED-floor gate):**
+
+```bash
+# Sanity: at HEAD acd88512, the 3 DELETED Vault helpers MUST be absent as function symbols
+git show acd88512:contracts/DegenerusVault.sol | grep -c '^\s*function _burnCoinFor'        # expected: 0
+git show acd88512:contracts/DegenerusVault.sol | grep -c '^\s*function _burnEthFor'         # expected: 0
+git show acd88512:contracts/DegenerusVault.sol | grep -c '^\s*function _requireApproved'    # expected: 0
+
+# At baseline cc68bfc7, all 3 MUST be present
+git show cc68bfc7:contracts/DegenerusVault.sol | grep -c '^\s*function _burnCoinFor'        # expected: 1
+git show cc68bfc7:contracts/DegenerusVault.sol | grep -c '^\s*function _burnEthFor'         # expected: 1
+git show cc68bfc7:contracts/DegenerusVault.sol | grep -c '^\s*function _requireApproved'    # expected: 1
+```
