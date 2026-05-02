@@ -57,12 +57,12 @@
 
 ### PLV — purchaseLevel Correctness Proof (6 REQs)
 
-- [ ] **PLV-01**: Enumerate every read site of `purchaseLevel` in AdvanceModule (~30+ readsites grep-confirmed) and in any module that delegates into AdvanceModule. Tag each readsite with the local invariant it requires (`≥1`, `> level`, `level + 1`, etc.).
-- [ ] **PLV-02**: 4-dimensional state-space sweep across `(lastPurchaseDay ∈ {false, true}) × (rngLockedFlag ∈ {false, true}) × (jackpotPhaseFlag ∈ {false, true}) × (level ∈ {0, 1, 2, …, levelMax})` enumerating every reachable combination. For each, prove `purchaseLevel` evaluates to a well-defined value `≥ 1` at the line where it is bound (AdvanceModule:185).
-- [ ] **PLV-03**: Specifically prove the ternary `(lastPurchase && rngLockedFlag) ? lvl : lvl + 1` cannot return 0 once the new `!rngLockedFlag` turbo guard at L167 is in place. Show the unreachable state is `(lastPurchase = true ∧ rngLockedFlag = true ∧ lvl = 0)` and prove turbo no longer fires there.
-- [ ] **PLV-04**: Underflow audit — every callsite that performs arithmetic on `purchaseLevel` (notably `purchaseLevel - 1` at AdvanceModule:748 `levelPrizePool[uint24(0) - 1]`, plus `+1`, `+4`, `_tqReadKey(purchaseLevel)`, etc.) is checked for underflow / overflow / out-of-bounds at every reachable purchaseLevel value.
-- [ ] **PLV-05**: Verify the `!rngLockedFlag` turbo guard prevents the testnet panic 0x11 at blocks 10759449 + 10761786 — reproduce the trigger sequence symbolically and show the guard short-circuits it before the ternary executes.
-- [ ] **PLV-06**: After the turbo guard, prove the daily-jackpot path (lines 372–404 region) correctly handles target-met detection and unlocks within the same call — i.e. the guard does not strand state in a "target met but never resolves" condition.
+- [x] **PLV-01**: Enumerate every read site of `purchaseLevel` in AdvanceModule (~30+ readsites grep-confirmed) and in any module that delegates into AdvanceModule. Tag each readsite with the local invariant it requires (`≥1`, `> level`, `level + 1`, etc.).
+- [x] **PLV-02**: 4-dimensional state-space sweep across `(lastPurchaseDay ∈ {false, true}) × (rngLockedFlag ∈ {false, true}) × (jackpotPhaseFlag ∈ {false, true}) × (level ∈ {0, 1, 2, …, levelMax})` enumerating every reachable combination. For each, prove `purchaseLevel` evaluates to a well-defined value `≥ 1` at the line where it is bound (AdvanceModule:185).
+- [x] **PLV-03**: Specifically prove the ternary `(lastPurchase && rngLockedFlag) ? lvl : lvl + 1` cannot return 0 once the new `!rngLockedFlag` turbo guard at L167 is in place. Show the unreachable state is `(lastPurchase = true ∧ rngLockedFlag = true ∧ lvl = 0)` and prove turbo no longer fires there.
+- [x] **PLV-04**: Underflow audit — every callsite that performs arithmetic on `purchaseLevel` (notably `purchaseLevel - 1` at AdvanceModule:748 `levelPrizePool[uint24(0) - 1]`, plus `+1`, `+4`, `_tqReadKey(purchaseLevel)`, etc.) is checked for underflow / overflow / out-of-bounds at every reachable purchaseLevel value.
+- [x] **PLV-05**: Verify the `!rngLockedFlag` turbo guard prevents the testnet panic 0x11 at blocks 10759449 + 10761786 — reproduce the trigger sequence symbolically and show the guard short-circuits it before the ternary executes.
+- [x] **PLV-06**: After the turbo guard, prove the daily-jackpot path (lines 372–404 region) correctly handles target-met detection and unlocks within the same call — i.e. the guard does not strand state in a "target met but never resolves" condition.
 
 ### SIB — Sibling-Pattern Sweep (5 REQs)
 
@@ -111,12 +111,12 @@
 | BFL-04 | Phase 248 | COMPLETE (Plan 248-01 / commit 838631a8 — §4 of audit/v32-248-BFL.md; 4 V-rows; D-248-15 grep-reproducibility honored) |
 | BFL-05 | Phase 248 | COMPLETE (Plan 248-01 / commit 3be95bfe — §5 of audit/v32-248-BFL.md; 2 V-rows NON-WIDENING; KI UNCHANGED) |
 | BFL-06 | Phase 248 | COMPLETE (Plan 248-01 / commit 5545b125 — §6 of audit/v32-248-BFL.md; 10 V-rows; conservation algebra closes) |
-| PLV-01 | Phase 249 | Pending |
-| PLV-02 | Phase 249 | Pending |
-| PLV-03 | Phase 249 | Pending |
-| PLV-04 | Phase 249 | Pending |
-| PLV-05 | Phase 249 | Pending |
-| PLV-06 | Phase 249 | Pending |
+| PLV-01 | Phase 249 | Complete |
+| PLV-02 | Phase 249 | Complete |
+| PLV-03 | Phase 249 | Complete |
+| PLV-04 | Phase 249 | Complete |
+| PLV-05 | Phase 249 | Complete |
+| PLV-06 | Phase 249 | Complete |
 | SIB-01 | Phase 250 | Pending |
 | SIB-02 | Phase 250 | Pending |
 | SIB-03 | Phase 250 | Pending |

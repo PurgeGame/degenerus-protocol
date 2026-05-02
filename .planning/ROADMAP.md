@@ -113,7 +113,7 @@
 
 - [x] **Phase 247: Delta Extraction & Classification** — Established the v32.0 audit surface for the 4 post-v31.0 contract-touching commits (8bdeabc2 / 6a63705b / 48554f8f / acd88512). Delivered `audit/v32-247-DELTA-SURFACE.md` FINAL READ-only at HEAD `acd88512` with closure signal `PHASE_247_CATALOG_FINAL_AT_HEAD_acd88512`. 7-section single-deliverable: 16 D-247-C### per-source + state/event/error rows / 11 D-247-F### classification rows (8 MODIFIED_LOGIC + 3 DELETED) / 1 D-247-S### storage-layout UNCHANGED row / 30 D-247-X### call-site rows / 29 D-247-I### Consumer Index rows mapping every Phase 248..253 REQ-ID. 5 atomic per-task commits (e2cacc5c → 9961c91a). Zero `F-32-` IDs (Phase 253 owns). Zero contracts/ or test/ writes per D-247-05.
 - [x] **Phase 248: Backfill Idempotency Proof** — Proved the new `rngWordByDay[idx + 1] == 0` guard makes `_backfillGapDays` execute at most once per VRF lock window across every reachable `advanceGame` re-entry path. Delivered `audit/v32-248-BFL.md` FINAL READ-only at HEAD `acd88512` with closure signal `PHASE_248_BFL_FINAL_AT_HEAD_acd88512`. 7-section single-deliverable: §1 BFL-01 (7 V-rows + 3 multiplier rows; rngGate fresh-word branch reachability under L1174 guard) / §2 BFL-02 (6 V-rows over the WHOLE guarded block L1174-1186 per D-248-09 + sentinel-correctness 4-step proof) / §3 BFL-03 (15 V-rows; testnet blocks 10759449 + 10761786 worked example, pre-fix doubling vs post-fix short-circuit) / §4 BFL-04 (4 V-rows; dailyIdx ↔ rngWordByDay invariant, grep-cited universe per D-248-15) / §5 BFL-05 (2 V-rows dual-carrier; both EXC-02 + EXC-03 NON-WIDENING; KI UNCHANGED) / §6 BFL-06 (10 V-rows + conservation algebra; sDGNRS / DGNRS / BURNIE supplies invariant via grep evidence) + Phase 251 TST-04 hand-off appendix. 5 atomic per-task commits (b79f3eac → 5545b125). Zero `F-32-` IDs (Phase 253 owns). Zero contracts/ or test/ writes per D-248-04 / D-248-05.
-- [ ] **Phase 249: purchaseLevel Correctness Proof** — 4-dimensional state-space sweep over `(lastPurchaseDay, rngLockedFlag, jackpotPhaseFlag, level)` proving `purchaseLevel` cannot be 0 once the `!rngLockedFlag` turbo guard at L167 is in place; underflow audit at every `purchaseLevel`-arithmetic call site.
+- [x] **Phase 249: purchaseLevel Correctness Proof** — 4-dimensional state-space sweep over `(lastPurchaseDay, rngLockedFlag, jackpotPhaseFlag, level)` proving `purchaseLevel` cannot be 0 once the `!rngLockedFlag` turbo guard at L167 is in place; underflow audit at every `purchaseLevel`-arithmetic call site. (completed 2026-05-02)
 - [ ] **Phase 250: Sibling-Pattern Sweep** — Hunt other turbo-class and backfill-class races between `rngLockedFlag` / `lastPurchaseDay` / `jackpotPhaseFlag` / `dailyIdx` / `phaseTransitionActive` across AdvanceModule and every delegating module.
 - [ ] **Phase 251: Reproduction Tests** — Verify `test/edge/LastPurchaseDayRace.test.js` triggers panic 0x11 pre-fix and passes post-fix; verify `LivenessProductivePause` / `LivenessMidJackpot` regressions still pass; add a backfill double-execution reproduction if missing.
 - [ ] **Phase 252: Post-v31.0 Landed-Commit Sanity** — Delta-sanity verify the 4 landed post-v31.0 commits (`8bdeabc2`, `ad41973c`, `6a63705b`, `48554f8f`) against the bug envelopes; RE_VERIFY `8bdeabc2` liveness pause composes with the new turbo guard.
@@ -157,10 +157,10 @@ Plans:
   3. Section 3 names the unreachable state `(lastPurchase = true ∧ rngLockedFlag = true ∧ lvl = 0)` and proves the ternary at AdvanceModule:185 cannot return 0 by showing the `!rngLockedFlag` turbo guard at L167 short-circuits before that combination can bind.
   4. Section 4 lists every `purchaseLevel`-arithmetic call site (notably AdvanceModule:748 `levelPrizePool[uint24(purchaseLevel) - 1]`, plus all `+1`, `+4`, `_tqReadKey(purchaseLevel)` sites) with one verdict row each proving no underflow / overflow / out-of-bounds at any reachable `purchaseLevel` value.
   5. Section 5 symbolically reproduces the testnet panic 0x11 trigger sequence (blocks 10759449 + 10761786) and shows step-by-step that the new turbo guard short-circuits the path before the binding ternary; Section 6 proves the daily-jackpot region (lines 372–404) does not strand state in a "target met but never resolves" condition under the guard.
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 249-01-PLAN.md — PLV-01 + PLV-02 + PLV-03 + PLV-04 + PLV-05 + PLV-06 single-plan multi-task proof at HEAD acd88512 (4 atomic per-task commits per D-247-14 / D-249-CF-07)
+- [x] 249-01-PLAN.md — PLV-01 + PLV-02 + PLV-03 + PLV-04 + PLV-05 + PLV-06 single-plan multi-task proof at HEAD acd88512 (4 atomic per-task commits per D-247-14 / D-249-CF-07)
 
 ### Phase 250: Sibling-Pattern Sweep
 **Goal**: Hunt other turbo-class and backfill-class races across AdvanceModule and every delegating module — every interaction between `rngLockedFlag` / `lastPurchaseDay` / `jackpotPhaseFlag` / `dailyIdx` / `level` / `purchaseStartDay` / `rngWordByDay[*]` / `phaseTransitionActive` is enumerated and classified, so any latent sibling bug surfaces as an explicit F-32-NN candidate before consolidation.
@@ -218,7 +218,7 @@ Phases execute in numeric order: 247 → 248 → 249 → 250 → 251 → 252 →
 |-------|-----------|----------------|--------|-----------|
 | 247. Delta Extraction & Classification | v32.0 | 1/1 | Complete    | 2026-05-01 |
 | 248. Backfill Idempotency Proof | v32.0 | 1/1 | Complete    | 2026-05-02 |
-| 249. purchaseLevel Correctness Proof | v32.0 | 0/1 | Not started | - |
+| 249. purchaseLevel Correctness Proof | v32.0 | 1/1 | Complete    | 2026-05-02 |
 | 250. Sibling-Pattern Sweep | v32.0 | 0/TBD | Not started | - |
 | 251. Reproduction Tests | v32.0 | 0/TBD | Not started | - |
 | 252. Post-v31.0 Landed-Commit Sanity | v32.0 | 0/TBD | Not started | - |
