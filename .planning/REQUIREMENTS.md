@@ -66,18 +66,18 @@
 
 ### SIB — Sibling-Pattern Sweep (5 REQs)
 
-- [ ] **SIB-01**: Enumerate every other location in `DegenerusGameAdvanceModule.sol` where `rngLockedFlag` interacts with another piece of game state (`lastPurchaseDay`, `jackpotPhaseFlag`, `dailyIdx`, `level`, `purchaseStartDay`, `rngWordByDay[*]`, `phaseTransitionActive`, etc.).
-- [ ] **SIB-02**: For each interaction, classify whether it has the same race shape as the two known bugs: (a) "turbo-class" — control flow takes one branch under one flag combination but a sibling branch unexpectedly fires under another; (b) "backfill-class" — write executes idempotently expected once, but actually re-enters because index advance is gated on a different signal.
-- [ ] **SIB-03**: Audit modules that delegate into AdvanceModule (`DegenerusGameMintModule`, `DegenerusGameJackpotModule`, `DegenerusGameWhaleModule`, `DegenerusGameLootboxModule`, `DegenerusGameDegenetteModule`, `DegenerusGameBoonModule`, `DegenerusGameDecimatorModule`, `DegenerusGameGameOverModule`) for the same patterns reading the same state.
-- [ ] **SIB-04**: Cross-check the 4 post-v31.0 landed commits (`8bdeabc2`, `ad41973c`, `6a63705b`, `48554f8f`) for the same patterns — particularly `8bdeabc2` (liveness pause during productive multi-call window) which is conceptually adjacent.
-- [ ] **SIB-05**: Document any new sibling bugs found with reproducible trigger sequences and proposed fixes. Each new bug requires its own F-32-NN finding block, severity classification, and explicit user approval before any contract edit lands.
+- [x] **SIB-01**: Enumerate every other location in `DegenerusGameAdvanceModule.sol` where `rngLockedFlag` interacts with another piece of game state (`lastPurchaseDay`, `jackpotPhaseFlag`, `dailyIdx`, `level`, `purchaseStartDay`, `rngWordByDay[*]`, `phaseTransitionActive`, etc.).
+- [x] **SIB-02**: For each interaction, classify whether it has the same race shape as the two known bugs: (a) "turbo-class" — control flow takes one branch under one flag combination but a sibling branch unexpectedly fires under another; (b) "backfill-class" — write executes idempotently expected once, but actually re-enters because index advance is gated on a different signal.
+- [x] **SIB-03**: Audit modules that delegate into AdvanceModule (`DegenerusGameMintModule`, `DegenerusGameJackpotModule`, `DegenerusGameWhaleModule`, `DegenerusGameLootboxModule`, `DegenerusGameDegenetteModule`, `DegenerusGameBoonModule`, `DegenerusGameDecimatorModule`, `DegenerusGameGameOverModule`) for the same patterns reading the same state.
+- [x] **SIB-04**: Cross-check the 4 post-v31.0 landed commits (`8bdeabc2`, `ad41973c`, `6a63705b`, `48554f8f`) for the same patterns — particularly `8bdeabc2` (liveness pause during productive multi-call window) which is conceptually adjacent.
+- [x] **SIB-05**: Document any new sibling bugs found with reproducible trigger sequences and proposed fixes. Each new bug requires its own F-32-NN finding block, severity classification, and explicit user approval before any contract edit lands.
 
 ### TST — Reproduction Tests (4 REQs)
 
-- [ ] **TST-01**: Verify `test/edge/LastPurchaseDayRace.test.js` (untracked, in WIP) triggers panic 0x11 reliably WITHOUT the `!rngLockedFlag` turbo guard — confirm the test fails on the pre-fix code.
-- [ ] **TST-02**: Verify `test/edge/LastPurchaseDayRace.test.js` PASSES on the post-fix code with both WIP guards applied.
-- [ ] **TST-03**: Verify `test/edge/LivenessProductivePause.test.js` and `test/edge/LivenessMidJackpot.test.js` (committed in `8bdeabc2` / `ad41973c`) still pass against the WIP guards — no regression from the new turbo / backfill guards.
-- [ ] **TST-04**: Add a reproduction test for the backfill double-execution underflow if `LastPurchaseDayRace.test.js` does not already cover it. The test must fail on pre-fix code (no backfill guard) and pass on post-fix code.
+- [x] **TST-01**: Verify `test/edge/LastPurchaseDayRace.test.js` (untracked, in WIP) triggers panic 0x11 reliably WITHOUT the `!rngLockedFlag` turbo guard — confirm the test fails on the pre-fix code.
+- [x] **TST-02**: Verify `test/edge/LastPurchaseDayRace.test.js` PASSES on the post-fix code with both WIP guards applied.
+- [x] **TST-03**: Verify `test/edge/LivenessProductivePause.test.js` and `test/edge/LivenessMidJackpot.test.js` (committed in `8bdeabc2` / `ad41973c`) still pass against the WIP guards — no regression from the new turbo / backfill guards.
+- [x] **TST-04**: Add a reproduction test for the backfill double-execution underflow if `LastPurchaseDayRace.test.js` does not already cover it. The test must fail on pre-fix code (no backfill guard) and pass on post-fix code.
 
 ### POST31 — Post-v31.0 Landed-Commit Sanity (2 REQs)
 
@@ -117,15 +117,15 @@
 | PLV-04 | Phase 249 | Complete |
 | PLV-05 | Phase 249 | Complete |
 | PLV-06 | Phase 249 | Complete |
-| SIB-01 | Phase 250 | Pending |
-| SIB-02 | Phase 250 | Pending |
-| SIB-03 | Phase 250 | Pending |
-| SIB-04 | Phase 250 | Pending |
-| SIB-05 | Phase 250 | Pending |
-| TST-01 | Phase 251 | Pending |
-| TST-02 | Phase 251 | Pending |
-| TST-03 | Phase 251 | Pending |
-| TST-04 | Phase 251 | Pending |
+| SIB-01 | Phase 250 | Complete |
+| SIB-02 | Phase 250 | Complete |
+| SIB-03 | Phase 250 | Complete |
+| SIB-04 | Phase 250 | Complete |
+| SIB-05 | Phase 250 | Complete |
+| TST-01 | Phase 251 | COMPLETE (Plan 251-01 / commit c73c8add — §1 of audit/v32-251-TST.md; 2 V-rows SAFE; pre-fix panic 0x11 reproduced) |
+| TST-02 | Phase 251 | COMPLETE (Plan 251-01 / commit 6bc9c525 — §2 of audit/v32-251-TST.md; 2 V-rows SAFE; PLV-03 empirical confirmation) |
+| TST-03 | Phase 251 | COMPLETE (Plan 251-01 / commit 6bc9c525 — §3 of audit/v32-251-TST.md; 2 V-rows SAFE; SIB-04-V01 carrier integrity) |
+| TST-04 | Phase 251 | COMPLETE (Plan 251-01 / commit 33e7d7c5 — §4 of audit/v32-251-TST.md; 2 V-rows SAFE; BFL §7.1 + BFL-03 empirical confirmation) |
 | POST31-01 | Phase 252 | Pending |
 | POST31-02 | Phase 252 | Pending |
 | FIND-01 | Phase 253 | Pending |

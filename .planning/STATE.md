@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v32.0
 milestone_name: Backfill Idempotency + purchaseLevel Underflow Audit
 status: executing
-last_updated: "2026-05-02T06:23:01.655Z"
-last_activity: 2026-05-02
+last_updated: "2026-05-02T07:05:00.000Z"
+last_activity: 2026-05-02 -- Phase 251 (Reproduction Tests) complete; closure signal PHASE_251_TST_FINAL_AT_HEAD_65b33299
 progress:
   total_phases: 7
-  completed_phases: 4
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  completed_phases: 5
+  total_plans: 6
+  completed_plans: 5
+  percent: 86
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-30 for v32.0 start)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 250 — sibling-pattern-sweep
+**Current focus:** Phase 252 — Post-v31.0 Landed-Commit Sanity (next; Phase 251 complete)
 
 ## Current Position
 
-Phase: 251
-Plan: Not started
-Status: Executing Phase 250
-Last activity: 2026-05-02
-Resume file: .planning/phases/251-reproduction-tests/251-CONTEXT.md
+Phase: 252 (Post-v31.0 Landed-Commit Sanity) — Not started
+Plan: 0 of TBD
+Status: Phase 251 complete; awaiting Phase 252 discuss/plan
+Last activity: 2026-05-02 -- Phase 251 closed at commit 65b33299 (closure signal PHASE_251_TST_FINAL_AT_HEAD_65b33299)
+Resume file: (none — Phase 252 awaits CONTEXT.md authoring)
 
 ## Last Shipped Milestone
 
@@ -63,9 +63,9 @@ Resume file: .planning/phases/251-reproduction-tests/251-CONTEXT.md
 |-------|------|--------------|--------|
 | 247 | Delta Extraction & Classification | DELTA-01..03 (3) | COMPLETE (1/1 plans; 3/3 REQs satisfied; audit/v32-247-DELTA-SURFACE.md FINAL READ-only at HEAD acd88512; closure signal PHASE_247_CATALOG_FINAL_AT_HEAD_acd88512) |
 | 248 | Backfill Idempotency Proof | BFL-01..06 (6) | COMPLETE (1/1 plans; 6/6 REQs satisfied; audit/v32-248-BFL.md FINAL READ-only at HEAD acd88512; closure signal PHASE_248_BFL_FINAL_AT_HEAD_acd88512) |
-| 249 | purchaseLevel Correctness Proof | PLV-01..06 (6) | Not started |
-| 250 | Sibling-Pattern Sweep | SIB-01..05 (5) | Not started |
-| 251 | Reproduction Tests | TST-01..04 (4) | Not started |
+| 249 | purchaseLevel Correctness Proof | PLV-01..06 (6) | COMPLETE (1/1 plans; 6/6 REQs satisfied; audit/v32-249-PLV.md FINAL READ-only at HEAD acd88512) |
+| 250 | Sibling-Pattern Sweep | SIB-01..05 (5) | COMPLETE (1/1 plans; 5/5 REQs satisfied; audit/v32-250-SIB.md FINAL READ-only at HEAD acd88512; closure signal PHASE_250_SIB_FINAL_AT_HEAD_acd88512) |
+| 251 | Reproduction Tests | TST-01..04 (4) | COMPLETE (1/1 plans; 4/4 REQs satisfied; 8 V-rows SAFE; audit/v32-251-TST.md FINAL READ-only at HEAD c790ae45; closure signal PHASE_251_TST_FINAL_AT_HEAD_65b33299; 4 atomic commits c73c8add → 65b33299; awaiting-approval test files: test/edge/LastPurchaseDayRace.test.js + test/edge/BackfillIdempotency.test.js) |
 | 252 | Post-v31.0 Landed-Commit Sanity | POST31-01..02 (2) | Not started |
 | 253 | Findings Consolidation + Lean Regression | FIND-01..04 (4) + REG-01..02 (2) | Not started |
 
@@ -101,6 +101,9 @@ Archived milestone artifacts:
 
 Audit deliverables:
 
+- `audit/v32-251-TST.md` (FINAL READ-only at HEAD `c790ae45`; closure signal `PHASE_251_TST_FINAL_AT_HEAD_65b33299`; 4 sections + §0 reproduction recipe + §5 commit-readiness register + §4.4 awaiting-approval block with full BackfillIdempotency.test.js content; 8 TST-NN-Vmm V-rows all SAFE; 2 hunk-revert patches + 6 hardhat run logs as supporting artifacts; zero FINDING_CANDIDATE rows; both `test/edge/LastPurchaseDayRace.test.js` (existing untracked WIP) and `test/edge/BackfillIdempotency.test.js` (newly authored Task 3) listed at status `awaiting-approval` per `feedback_no_contract_commits.md`)
+- `audit/v32-250-SIB.md` (FINAL READ-only at HEAD `acd88512`; closure signal `PHASE_250_SIB_FINAL_AT_HEAD_acd88512`)
+- `audit/v32-249-PLV.md` (FINAL READ-only at HEAD `acd88512`)
 - `audit/v32-248-BFL.md` (FINAL READ-only at HEAD `acd88512`; closure signal `PHASE_248_BFL_FINAL_AT_HEAD_acd88512`; 6 per-REQ sections + Phase 251 TST-04 hand-off appendix; 44 BFL-NN-VMM V-rows + 3 BFL-01-MNN multiplier rows + 5 BFL-02-XNN out-of-scope rows; zero FINDING_CANDIDATE rows; KNOWN-ISSUES.md UNCHANGED — both BFL-05 EXC-02 + EXC-03 carriers NON-WIDENING)
 - `audit/v32-247-DELTA-SURFACE.md` (FINAL READ-only at HEAD `acd88512`; 7 sections fully populated; closure signal `PHASE_247_CATALOG_FINAL_AT_HEAD_acd88512`; 16 D-247-C### + 11 D-247-F### + 1 D-247-S### + 30 D-247-X### + 29 D-247-I### rows; sole scope input for Phases 248-253 per ROADMAP Phase 247 Success Criterion 4)
 - `audit/FINDINGS-v31.0.md` (403 lines, 9 sections; 0 CRITICAL/HIGH/MEDIUM/LOW/INFO; closure signal `MILESTONE_V31_CLOSED_AT_HEAD_cc68bfc7`)
