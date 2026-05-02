@@ -207,7 +207,10 @@ Plans:
   3. The KI gating section runs the D-09 3-predicate walk (accepted-design + non-exploitable + sticky) per F-32-NN candidate and emits either an updated `KNOWN-ISSUES.md` (with diff cited inline) OR an explicit Non-Promotion Ledger documenting the gating decision per row when no candidate qualifies.
   4. The Lean Regression Appendix (REG-01) spot-checks every prior v29 / v30 / v31 finding directly touched by the WIP guards or the post-v31 commits — at minimum every row referencing `_backfillGapDays`, `purchaseLevel`, `rngLockedFlag`, `lastPurchaseDay`, `dailyIdx`, or the turbo block — with verdict in {PASS, REGRESSED, SUPERSEDED} and a domain-cite per row; REG-02 lists any prior finding superseded by the new guards with structural-closure proof.
   5. Section §Milestone-Closure emits the fix-readiness signal `MILESTONE_V32_AT_HEAD_<sha>` (where `<sha>` is the post-WIP-commit HEAD if any guards / tests landed via approved commits, otherwise the at-audit-close HEAD), and a commit-readiness register names every contract / test path landed during the milestone with its review-and-approval audit trail and the user-approval commit reference.
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 253-01-PLAN.md — FIND-01 + FIND-02 + FIND-03 + FIND-04 + REG-01 + REG-02 single-plan multi-task milestone-closure deliverable at HEAD acd88512 (6 atomic per-task commits per D-253-PLN-01; emits closure signal MILESTONE_V32_AT_HEAD_acd88512)
 
 ## Progress
 
