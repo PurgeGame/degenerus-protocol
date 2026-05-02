@@ -12,7 +12,7 @@
 - ✅ **v29.0 Post-v27 Contract Delta Audit** — Phases 230-236 (shipped 2026-04-18) — see [milestones/v29.0-ROADMAP.md](milestones/v29.0-ROADMAP.md)
 - ✅ **v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit** — Phases 237-242 (shipped 2026-04-20) — see [milestones/v30.0-ROADMAP.md](milestones/v30.0-ROADMAP.md)
 - ✅ **v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit** — Phases 243-246 (shipped 2026-04-24) — see [milestones/v31.0-ROADMAP.md](milestones/v31.0-ROADMAP.md)
-- 🚧 **v32.0 Backfill Idempotency + purchaseLevel Underflow Audit** — Phases 247-253 (in progress, started 2026-04-30)
+- ✅ **v32.0 Backfill Idempotency + purchaseLevel Underflow Audit** — Phases 247-253 (shipped 2026-05-02)
 
 ## Phases
 
@@ -101,7 +101,7 @@
 
 </details>
 
-### 🚧 v32.0 Backfill Idempotency + purchaseLevel Underflow Audit (In Progress)
+### ✅ v32.0 Backfill Idempotency + purchaseLevel Underflow Audit — SHIPPED 2026-05-02
 
 **Milestone Goal:** Prove the two testnet bugs in `DegenerusGameAdvanceModule.sol` are correctly fixed by the WIP guards (backfill double-execution → underflow; turbo-vs-rngLockedFlag race → `purchaseLevel = 0` panic 0x11), and sweep AdvanceModule + delegating modules for sibling-pattern races between `rngLockedFlag` / `lastPurchaseDay` / `jackpotPhaseFlag` / `dailyIdx` that could produce other underflows, double-execution, or skipped updates.
 
@@ -117,7 +117,7 @@
 - [x] **Phase 250: Sibling-Pattern Sweep** — Hunt other turbo-class and backfill-class races between `rngLockedFlag` / `lastPurchaseDay` / `jackpotPhaseFlag` / `dailyIdx` / `phaseTransitionActive` across AdvanceModule and every delegating module. (completed 2026-05-02)
 - [x] **Phase 251: Reproduction Tests** — Empirically validated the v32.0 WIP guards (turbo at AdvanceModule:173 + backfill at AdvanceModule:1174) against three guard-revert states (A: both reverted; C: backfill-only reverted; D: HEAD with both guards). 4 atomic per-task commits (c73c8add → 65b33299). 8 SAFE V-rows total (2 per REQ); zero FINDING_CANDIDATE. State-A run reproduces panic 0x11 in both LPDR `it()` blocks (TST-01-V01 single-day + TST-01-V02 multi-day-drain). State-D run passes deterministically (TST-02 LPDR + TST-03 LivenessProductivePause + TST-03 LivenessMidJackpot). State-C run on newly authored BackfillIdempotency.test.js produces psdDelta=15 (over-bump) + downstream panic 0x11; state-D produces psdDelta=7 (single-bump per gap day) + clean drain to terminal stage 6 — 53% delta reduction empirically isolates L1174 sentinel. Cross-cite PLV-03 + PLV-05 (audit/v32-249-PLV.md), BFL-03 + BFL §7.1 (audit/v32-248-BFL.md), SIB-04-V01 (audit/v32-250-SIB.md). Per `feedback_no_contract_commits.md` + `feedback_never_preapprove_contracts.md`: ZERO `test/edge/*.test.js` files committed across the 4 Phase-251 atomic commits; both `test/edge/LastPurchaseDayRace.test.js` (existing untracked WIP) and `test/edge/BackfillIdempotency.test.js` (newly authored Task 3; sha-256 `03aecc8329a2520e38abeb5f942648a50abf8de1dad23f0efe28dd92eab7ab72`) remain in untracked on-disk state at plan close, listed in §5 commit-readiness register at status `awaiting-approval` for user manual approval. Closure signal `PHASE_251_TST_FINAL_AT_HEAD_65b33299`. Deliverable `audit/v32-251-TST.md` FINAL READ-only at HEAD `c790ae45`. (completed 2026-05-02)
 - [x] **Phase 252: Post-v31.0 Landed-Commit Sanity** — Delta-sanity verified the 4 landed post-v31.0 commits (`8bdeabc2`, `ad41973c`, `6a63705b`, `48554f8f`) NON-WIDENING against both turbo-class and backfill-class envelopes; RE_VERIFIED productive-phase liveness pause × WIP `!rngLockedFlag` turbo guard composes correctly across 3 scenarios (productive multi-call active / death-clock-paused-and-resumed across VRF lock window / documented edge where turbo would previously fire but is now blocked) — all SAFE / NON-INTERFERING. 4 atomic per-task commits (`dd8e0052` → `4e5ce8b5`). 11 SAFE V-rows total: 4 §1 POST31-01-V01..V04 commit rows + 4 §2 POST31-02-V01..V04 enumeration rows + 3 §3 POST31-02-V05..V07 composition proof rows. Zero FINDING_CANDIDATE. Phase 250 SIB-04 reconciliation: zero divergence (4 verdicts agree row-for-row). 33 cross-phase cross-cites embedded across §0..§4. One scope-guard deferral (SG-252-01: PLAN.md `lastPurchaseDay` writer line numbers diverged from runtime HEAD — composition argument substantively unaffected; documentary-only). Per `feedback_no_contract_commits.md` (vacuous this phase): ZERO `contracts/` writes; ZERO `test/` writes; both Phase 251 awaiting-approval test files (`test/edge/LastPurchaseDayRace.test.js`, `test/edge/BackfillIdempotency.test.js`) remain untracked at phase close. Closure signal `PHASE_252_POST31_FINAL_AT_HEAD_4e5ce8b5`. Deliverable `audit/v32-252-POST31.md` FINAL READ-only at HEAD `2ad456fa`. (completed 2026-05-02)
-- [ ] **Phase 253: Findings Consolidation + Lean Regression** — Publish `audit/FINDINGS-v32.0.md` with executive summary, F-32-NN finding blocks, KI gating walk, lean regression appendix, and fix-readiness signal `MILESTONE_V32_AT_HEAD_<sha>`.
+- [x] **Phase 253: Findings Consolidation + Lean Regression** — Published `audit/FINDINGS-v32.0.md` as the v32.0 milestone-closure deliverable: 9-section single file FINAL READ-only at HEAD `acd88512` (status: `FINAL — READ-ONLY`, read_only: true). 6 atomic per-task commits (`3cb38e51` → `a835df4d` → `9389fc4b` → `2e3220b6` → `efd22df6` → Task 6 plan-close). §4 emits exactly 2 F-32-NN HIGH SUPERSEDED-at-HEAD disclosure blocks per D-253-FIND01-04: F-32-01 productive-pause / turbo race → `purchaseLevel` underflow panic 0x11 (closed by L173 turbo guard `!rngLockedFlag` clause); F-32-02 `_backfillGapDays` double-execution underflow panic 0x11 (closed by L1174 sentinel `rngWordByDay[idx + 1] == 0`). §5a REG-01 13 PASS / 0 REGRESSED / 0 SUPERSEDED + §5a Exclusion Log 15 entries; §5b REG-02 zero-row default; §5c Combined Distribution. §6 FIND-03 KI Gating Walk: 0 of 2 KI_ELIGIBLE_PROMOTED (both F-32-NN sticky-FAIL); 4 of 4 envelopes RE_VERIFIED_AT_HEAD acd88512 without widening; KNOWN-ISSUES.md UNMODIFIED per D-253-FIND03-01. §7 Prior-Artifact Cross-Cites 20-row table. §8 Forward-Cite Closure: ZERO_PHASE_247_THROUGH_252_FORWARD_CITES_RESIDUAL + ZERO_PHASE_253_FORWARD_CITES_EMITTED. §9 Milestone Closure Attestation: 6/6 REQs closed (FIND-01..04 + REG-01..02); 6-Point Attestation Items pass; closure signal `MILESTONE_V32_AT_HEAD_acd88512`; §9.NN three-section commit-readiness register (USER-COMMITTED + AGENT-COMMITTED audit artifacts + AWAITING-APPROVAL tests). Per D-253-CF-04 / D-253-FIND04-04: ZERO `contracts/` writes; ZERO `test/` writes by agent; both Phase 251 awaiting-approval test files (`test/edge/LastPurchaseDayRace.test.js` + `test/edge/BackfillIdempotency.test.js`) remain untracked permanently per D-253-FIND04-04. (completed 2026-05-02)
 
 ## Phase Details
 
@@ -207,10 +207,10 @@ Plans:
   3. The KI gating section runs the D-09 3-predicate walk (accepted-design + non-exploitable + sticky) per F-32-NN candidate and emits either an updated `KNOWN-ISSUES.md` (with diff cited inline) OR an explicit Non-Promotion Ledger documenting the gating decision per row when no candidate qualifies.
   4. The Lean Regression Appendix (REG-01) spot-checks every prior v29 / v30 / v31 finding directly touched by the WIP guards or the post-v31 commits — at minimum every row referencing `_backfillGapDays`, `purchaseLevel`, `rngLockedFlag`, `lastPurchaseDay`, `dailyIdx`, or the turbo block — with verdict in {PASS, REGRESSED, SUPERSEDED} and a domain-cite per row; REG-02 lists any prior finding superseded by the new guards with structural-closure proof.
   5. Section §Milestone-Closure emits the fix-readiness signal `MILESTONE_V32_AT_HEAD_<sha>` (where `<sha>` is the post-WIP-commit HEAD if any guards / tests landed via approved commits, otherwise the at-audit-close HEAD), and a commit-readiness register names every contract / test path landed during the milestone with its review-and-approval audit trail and the user-approval commit reference.
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 253-01-PLAN.md — FIND-01 + FIND-02 + FIND-03 + FIND-04 + REG-01 + REG-02 single-plan multi-task milestone-closure deliverable at HEAD acd88512 (6 atomic per-task commits per D-253-PLN-01; emits closure signal MILESTONE_V32_AT_HEAD_acd88512)
+- [x] 253-01 — COMPLETE 2026-05-02 (6 atomic per-task commits `3cb38e51` → `a835df4d` → `9389fc4b` → `2e3220b6` → `efd22df6` → Task 6 plan-close per D-253-PLN-01; 2 F-32-NN HIGH SUPERSEDED-at-HEAD + 13 REG-01 PASS + 0 REG-02 + KNOWN-ISSUES UNMODIFIED; closure signal `MILESTONE_V32_AT_HEAD_acd88512`)
 
 ## Progress
 
@@ -225,4 +225,4 @@ Phases execute in numeric order: 247 → 248 → 249 → 250 → 251 → 252 →
 | 250. Sibling-Pattern Sweep | v32.0 | 1/1 | Complete    | 2026-05-02 |
 | 251. Reproduction Tests | v32.0 | 1/1 | Complete    | 2026-05-02 |
 | 252. Post-v31.0 Landed-Commit Sanity | v32.0 | 1/1 | Complete    | 2026-05-02 |
-| 253. Findings Consolidation + Lean Regression | v32.0 | 0/TBD | Not started | - |
+| 253. Findings Consolidation + Lean Regression | v32.0 | 1/1 | Complete    | 2026-05-02 |

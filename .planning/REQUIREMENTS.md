@@ -86,15 +86,15 @@
 
 ### FIND — Findings Consolidation (4 REQs)
 
-- [ ] **FIND-01**: Publish `audit/FINDINGS-v32.0.md` with executive summary, per-phase sections, F-32-NN finding blocks (v29/v30/v31 shape preserved), lean regression appendix, and HEAD anchor.
-- [ ] **FIND-02**: Every finding classified under the D-08 5-bucket severity rubric (CRITICAL / HIGH / MEDIUM / LOW / INFO).
-- [ ] **FIND-03**: `KNOWN-ISSUES.md` updated if D-09 3-predicate gating passes (accepted-design + non-exploitable + sticky); otherwise UNMODIFIED with Non-Promotion Ledger documenting the gating decision.
-- [ ] **FIND-04**: Emit fix-readiness signal `MILESTONE_V32_AT_HEAD_<sha>` once the WIP guards + reproduction tests are committed and tests pass. The deliverable's commit-readiness section names every contract / test path landed during the milestone with its review-and-approval audit trail.
+- [x] **FIND-01**: Publish `audit/FINDINGS-v32.0.md` with executive summary, per-phase sections, F-32-NN finding blocks (v29/v30/v31 shape preserved), lean regression appendix, and HEAD anchor. — COMPLETE in Phase 253 Plan 253-01 (audit/FINDINGS-v32.0.md §1+§3+§4 — 9-section deliverable FINAL READ-only at HEAD acd88512)
+- [x] **FIND-02**: Every finding classified under the D-08 5-bucket severity rubric (CRITICAL / HIGH / MEDIUM / LOW / INFO). — COMPLETE in Phase 253 Plan 253-01 (audit/FINDINGS-v32.0.md §2+§4 — 2 F-32-NN classified HIGH SUPERSEDED-at-HEAD per D-08 5-bucket rubric)
+- [x] **FIND-03**: `KNOWN-ISSUES.md` updated if D-09 3-predicate gating passes (accepted-design + non-exploitable + sticky); otherwise UNMODIFIED with Non-Promotion Ledger documenting the gating decision. — COMPLETE in Phase 253 Plan 253-01 (audit/FINDINGS-v32.0.md §6 — 0 of 2 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED per D-253-FIND03-01)
+- [x] **FIND-04**: Emit fix-readiness signal `MILESTONE_V32_AT_HEAD_<sha>` once the WIP guards + reproduction tests are committed and tests pass. The deliverable's commit-readiness section names every contract / test path landed during the milestone with its review-and-approval audit trail. — COMPLETE in Phase 253 Plan 253-01 (audit/FINDINGS-v32.0.md §9 — closure signal MILESTONE_V32_AT_HEAD_acd88512 + three-section commit-readiness register per D-253-FIND04-03)
 
 ### REG — Lean Regression Appendix (2 REQs)
 
-- [ ] **REG-01**: Spot-check regression — re-verify any prior finding (v29 / v30 / v31) directly touched by the WIP fixes or the post-v31 commits. Specifically: any F-3X-NN entry that referenced `_backfillGapDays`, `purchaseLevel`, `rngLockedFlag`, `lastPurchaseDay`, `dailyIdx`, or the turbo block. Verdicts: PASS / REGRESSED / SUPERSEDED.
-- [ ] **REG-02**: Document any prior finding superseded by the WIP fixes (e.g. an earlier F-NN-NN that flagged a related pattern and is now structurally closed by the new guards).
+- [x] **REG-01**: Spot-check regression — re-verify any prior finding (v29 / v30 / v31) directly touched by the WIP fixes or the post-v31 commits. Specifically: any F-3X-NN entry that referenced `_backfillGapDays`, `purchaseLevel`, `rngLockedFlag`, `lastPurchaseDay`, `dailyIdx`, or the turbo block. Verdicts: PASS / REGRESSED / SUPERSEDED. — COMPLETE in Phase 253 Plan 253-01 (audit/FINDINGS-v32.0.md §5a — 13 PASS / 0 REGRESSED / 0 SUPERSEDED; 12 prior-finding rows + F-29-04 explicitly NAMED)
+- [x] **REG-02**: Document any prior finding superseded by the WIP fixes (e.g. an earlier F-NN-NN that flagged a related pattern and is now structurally closed by the new guards). — COMPLETE in Phase 253 Plan 253-01 (audit/FINDINGS-v32.0.md §5b — 0-row default per D-253-REG02-01; F-32-NN supersession scope captured in §4 At-HEAD resolution subsections)
 
 ---
 
@@ -128,12 +128,12 @@
 | TST-04 | Phase 251 | COMPLETE (Plan 251-01 / commit 33e7d7c5 — §4 of audit/v32-251-TST.md; 2 V-rows SAFE; BFL §7.1 + BFL-03 empirical confirmation) |
 | POST31-01 | Phase 252 | COMPLETE (Plan 252-01 / commit `dd8e0052` — §1 of audit/v32-252-POST31.md; 4 V-rows SAFE; SIB-04 row-for-row reconciliation in §4 with zero divergence) |
 | POST31-02 | Phase 252 | COMPLETE (Plan 252-01 / commits `5f46b37e` + `2ad456fa` — §2 + §3 of audit/v32-252-POST31.md; 7 V-rows SAFE; productive-pause × WIP turbo guard composition proven NON-INTERFERING across 3 scenarios with Phase 251 TST-03-V01 / TST-04-V02 / TST-01-V02+TST-02-V02 empirical seals) |
-| FIND-01 | Phase 253 | Pending |
-| FIND-02 | Phase 253 | Pending |
-| FIND-03 | Phase 253 | Pending |
-| FIND-04 | Phase 253 | Pending |
-| REG-01 | Phase 253 | Pending |
-| REG-02 | Phase 253 | Pending |
+| FIND-01 | Phase 253 | COMPLETE (Plan 253-01 — §1+§3+§4 of audit/FINDINGS-v32.0.md; 9-section deliverable FINAL READ-only at HEAD acd88512) |
+| FIND-02 | Phase 253 | COMPLETE (Plan 253-01 — §2+§4 of audit/FINDINGS-v32.0.md; 2 F-32-NN classified HIGH SUPERSEDED-at-HEAD per D-08 5-bucket rubric) |
+| FIND-03 | Phase 253 | COMPLETE (Plan 253-01 — §6 of audit/FINDINGS-v32.0.md; 0 of 2 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED per D-253-FIND03-01) |
+| FIND-04 | Phase 253 | COMPLETE (Plan 253-01 — §9 of audit/FINDINGS-v32.0.md; closure signal MILESTONE_V32_AT_HEAD_acd88512 + three-section commit-readiness register per D-253-FIND04-03) |
+| REG-01 | Phase 253 | COMPLETE (Plan 253-01 — §5a of audit/FINDINGS-v32.0.md; 13 PASS / 0 REGRESSED / 0 SUPERSEDED; 12 prior-finding rows + F-29-04 explicitly NAMED) |
+| REG-02 | Phase 253 | COMPLETE (Plan 253-01 — §5b of audit/FINDINGS-v32.0.md; 0-row default per D-253-REG02-01; F-32-NN supersession scope captured in §4 At-HEAD resolution subsections) |
 
 (Phase numbering FINAL — set by v32.0 roadmap 2026-04-30.)
 

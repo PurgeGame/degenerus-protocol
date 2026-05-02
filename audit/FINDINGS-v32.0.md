@@ -10,8 +10,8 @@ requirements: [FIND-01, FIND-02, FIND-03, FIND-04, REG-01, REG-02]
 phase_status: terminal
 write_policy: "READ-only on the contract-and-test surface per D-253-CF-04 + project feedback rules. Zero modifications to upstream audit/v32-247..252-*.md per D-253-CF-07. KNOWN-ISSUES.md UNMODIFIED at HEAD per D-253-FIND03-01 default zero-promotion path. The two awaiting-approval test files from Phase 251 (test/edge/LastPurchaseDayRace.test.js + test/edge/BackfillIdempotency.test.js) remain untracked permanently per D-253-FIND04-04."
 supersedes: none
-status: executing
-read_only: false
+status: FINAL — READ-ONLY
+read_only: true
 head_at_runtime: 35ee9c1c1df820d5c4b48172f211e4a1975eb2c2
 closure_signal: MILESTONE_V32_AT_HEAD_acd88512
 generated_at: 2026-05-02T11:17:33Z
@@ -477,6 +477,72 @@ Phase 247→248→249→250→251→252→253 forward-cite closure: **0/0 Phase 
 
 ---
 
-<!-- §9 Milestone Closure Attestation — filled by Task 6 -->
+## 9. Milestone Closure Attestation
 
-<!-- closure signal trailing line — filled by Task 6: MILESTONE_V32_AT_HEAD_acd88512 -->
+Closure attestation block per D-253-15 step 9 + D-253-FIND04-02. Verifies the 6 Phase 253 requirements (FIND-01, FIND-02, FIND-03, FIND-04, REG-01, REG-02) and emits the milestone-closure signal `MILESTONE_V32_AT_HEAD_acd88512` triggering `/gsd-complete-milestone` for v32.0.
+
+### 9a. Verdict Distribution Summary
+
+| Requirement | Closure Verdict | Evidence |
+| --- | --- | --- |
+| FIND-01 | `CLOSED_AT_HEAD_acd88512` | §3 Per-Phase Sections populated (247 + 248 + 249 + 250 + 251 + 252 condensed summaries) + §4 F-32-NN finding blocks (F-32-01 + F-32-02 multi-section) + §1 frontmatter `status: FINAL — READ-ONLY` |
+| FIND-02 | `2 of 2 F-32-NN classified HIGH; SUPERSEDED at HEAD` | §4 F-32-01 + F-32-02 both severity-at-discovery HIGH per D-253-FIND01-02; both SUPERSEDED-at-HEAD per §4 'At-HEAD resolution' subsections; severity counts in §2 reconcile to §4 block tally line by line per ROADMAP success criterion 2 |
+| FIND-03 | `0 of 2 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED` | §6a Non-Promotion Ledger 2-row table (F-32-01 + F-32-02 both sticky-FAIL → NOT_KI_ELIGIBLE per D-253-FIND03-01); §6b 4-row envelope-non-widening attestation (EXC-01..04); §6c verdict summary literal; KNOWN-ISSUES.md UNMODIFIED per D-253-FIND03-01 default path |
+| FIND-04 | `MILESTONE_V32_AT_HEAD_acd88512 emitted` | §9c Closure Signal verbatim per D-253-FIND04-02 (REQ FIND-04 phrasing); §9.NN three-section commit-readiness register (USER-COMMITTED + AGENT-COMMITTED audit artifacts + AWAITING-APPROVAL tests) per D-253-FIND04-03 |
+| REG-01 | `13 PASS / 0 REGRESSED / 0 SUPERSEDED` | §5a REG-01 6-col table 13 rows (12 prior-finding rows from v29 + v30 + v3.7/v3.8 baseline + 1 explicitly NAMED F-29-04 row); cross-cites Phase 248 BFL-05-V01/V02 dual-carrier (EXC-02 + EXC-03) + Phase 250 SIB-03 NEGATIVE-scope (EXC-01 + EXC-04) |
+| REG-02 | `0 PASS / 0 REGRESSED / 0 SUPERSEDED` | §5b REG-02 zero-row variant 5-col table per D-253-REG02-01; F-32-01 + F-32-02 supersession scope captured in §4 'At-HEAD resolution' subsections, NOT REG-02 entries; defensive grep walk returned zero qualifying candidates |
+
+### 9b. 6-Point Attestation Items (per Claude's Discretion adapted v31 §9b)
+
+1. **HEAD anchor verified** — `git rev-parse HEAD` returns current docs-tree HEAD post-Phase-253 plan-close (recoverable via `git log --oneline -1 --grep='audit(253-01): Task 6'`); contract-tree HEAD remains `acd88512`; `git diff acd88512..HEAD -- contracts/ test/` shows only the SG-250-01 `98e78404` MintModule presale-flag commit (functionally orthogonal per Phase 252 §1 V03 row + Phase 250 SIB-03 + carry-forward from D-253-CF-01). AdvanceModule line ranges L167/L173 + L1167/L1174 + GameStorage L1246-1255 byte-identical between `acd88512` and runtime HEAD throughout Phase 253 (zero contract-surface writes per D-253-CF-04).
+
+2. **Phase 247-252 deliverables FINAL READ-only** — frontmatter `status: FINAL — READ-ONLY` (or `read_only: true`) confirmed on `audit/v32-247-DELTA-SURFACE.md` + `audit/v32-248-BFL.md` + `audit/v32-249-PLV.md` + `audit/v32-250-SIB.md` + `audit/v32-251-TST.md` + `audit/v32-252-POST31.md` per D-253-CF-07 carry-forward; `git diff HEAD -- audit/v32-247-*.md audit/v32-248-*.md audit/v32-249-*.md audit/v32-250-*.md audit/v32-251-*.md audit/v32-252-*.md` empty throughout Phase 253. Working files preserved as READ-only artifacts per each upstream phase's CONTEXT.md.
+
+3. **Zero forward-cites emitted by Phase 247-253** — `grep -rE 'forward-cite|defer-to-Phase-254|TBD-v33' audit/v32-*.md audit/FINDINGS-v32.0.md` returns zero matches. §8a verifies 0/0 Phase 247-252 → Phase 253 residuals; §8b verifies 0/0 Phase 253 → v33.0+ emissions; §8c combined verdict `ZERO_PHASE_247_THROUGH_252_FORWARD_CITES_RESIDUAL` + `ZERO_PHASE_253_FORWARD_CITES_EMITTED`.
+
+4. **KI envelope re-verifications confirmed** — EXC-02 + EXC-03 envelopes RE_VERIFIED_AT_HEAD `acd88512` without widening per D-22 carry: EXC-02 via Phase 248 BFL-05-V01 dual-carrier; EXC-03 via Phase 248 BFL-05-V02 dual-carrier; EXC-01 not delta-touched (affiliate roll path unchanged per Phase 250 SIB-03 NEGATIVE-scope); EXC-04 not delta-touched (LootboxModule entropyStep call sites unchanged per Phase 250 SIB-03 NEGATIVE-scope). KNOWN-ISSUES.md UNMODIFIED at HEAD per D-253-FIND03-01 default path; `git diff HEAD -- KNOWN-ISSUES.md` empty.
+
+5. **Severity distribution attested** — CRITICAL 0 / HIGH 2 / MEDIUM 0 / LOW 0 / INFO 0; total F-32-NN = 2 (F-32-01 productive-pause / turbo race + F-32-02 backfill double-execution; both HIGH severity-at-discovery per D-253-FIND01-02; both SUPERSEDED-at-HEAD by L173 + L1174 guards committed in `acd88512`) per §2 severity counts + §4 F-32-NN block tally. Combined Phase 247-252 = 134 V-rows across 25 REQs all SAFE / NON-WIDENING / NON-INTERFERING with 0 FINDING_CANDIDATE rows surfaced.
+
+6. **Combined milestone closure signal** — `MILESTONE_V32_AT_HEAD_acd88512`. All 6 Phase 253 requirements (FIND-01, FIND-02, FIND-03, FIND-04, REG-01, REG-02) closed per §9a. The 4 KNOWN-ISSUES.md RNG entries (EXC-01/02/03/04) verified unchanged at HEAD per D-253-FIND03-01 default UNMODIFIED path. Milestone closure triggers `/gsd-complete-milestone` for v32.0 per D-253-FIND04-02. v33.0+ boots from this signal with a fresh baseline of `acd88512`.
+
+### 9c. Milestone v32.0 Closure Signal
+
+v32.0 milestone **Backfill Idempotency + purchaseLevel Underflow Audit** is CLOSED at HEAD `acd88512` via this attestation. Phase 253 is the terminal v32.0 phase confirmed (no Phase 254 exists in ROADMAP). Next milestone (v33.0+) boots from this signal with a fresh baseline of `acd88512`.
+
+```
+MILESTONE_V32_AT_HEAD_acd88512
+```
+
+### §9.NN. Commit-Readiness Register (per D-253-FIND04-03 three-section format)
+
+#### §9.NN.i USER-COMMITTED contracts
+
+| Path | Commit SHA | Description | User-Approval Audit Trail |
+|---|---|---|---|
+| `contracts/modules/DegenerusGameAdvanceModule.sol` | `acd88512` | L173 turbo guard `!rngLockedFlag` clause + L1174 backfill sentinel `rngWordByDay[idx + 1] == 0` | Author: Purge / purgegamenft@gmail.com (user's own commit; agent did NOT commit). Commit message: "fix(advance): guard turbo block + make _backfillGapDays idempotent". |
+| `contracts/modules/DegenerusGameMintModule.sol` | `98e78404` | SG-250-01 post-anchor presale-flag commit (functionally orthogonal to turbo/backfill envelopes per Phase 250 SIB-03 + Phase 252 §1 V03) | Author: Purge / purgegamenft@gmail.com (user's own commit; recorded but not within the v32.0 audit-anchor `acd88512`). |
+
+#### §9.NN.ii AGENT-COMMITTED audit artifacts
+
+- Phase 247 plan-close commits: `e2cacc5c` → `8e7e1f7c` → `4cc1f829` → `5162c5e0` → `9961c91a` (5 atomic per-task commits per D-247-14) + `eb143105` plan-close SUMMARY commit.
+- Phase 248 plan-close commits: `b79f3eac` → `838631a8` → `3be95bfe` → `5545b125` (4 atomic per-task commits) + `899bd989` plan-close SUMMARY commit.
+- Phase 249 plan-close commits: `920a2368` → `3ed9a77a` → `6fa97fd5` → `7758db41` (4 atomic per-task commits per D-249-CF-07).
+- Phase 250 plan-close commits: `12d90a27` → `97ef3955` → `decee5d9` → `34a6c660` (4 atomic per-task commits per D-250-CF-06).
+- Phase 251 plan-close commits: `c73c8add` → `6bc9c525` → `33e7d7c5` → `65b33299` (4 atomic per-task commits).
+- Phase 252 plan-close commits: `dd8e0052` → `5f46b37e` → `2ad456fa` → `4e5ce8b5` (4 atomic per-task commits).
+- Phase 253 plan-close commits: `3cb38e51` → `a835df4d` → `9389fc4b` → `2e3220b6` → `efd22df6` → Task 6 plan-close (6 atomic per-task commits per D-253-PLN-01; Task 6 SHA recoverable via `git log --oneline -1 --grep='audit(253-01): Task 6'`).
+- Per `feedback_no_contract_commits.md`: zero `contracts/` writes; zero `test/` writes by agent across all 7 v32.0 phases.
+
+#### §9.NN.iii AWAITING-APPROVAL tests
+
+| Row ID | Path | Origin | Status | Reproduction Vehicle | User-Approval Pathway |
+|---|---|---|---|---|---|
+| TST-FILE-01 | `test/edge/LastPurchaseDayRace.test.js` | existing WIP (untracked at acd88512 + current HEAD) | awaiting-approval | TST-01 (state A panic 0x11) + TST-02 (state D pass) reproduction vehicle | (user reviews diff at milestone close per `feedback_manual_review_before_push.md`; runs `git add test/edge/LastPurchaseDayRace.test.js && git commit` after manual diff review post-Phase-253) |
+| TST-FILE-02 | `test/edge/BackfillIdempotency.test.js` | newly authored Phase 251 Task 3 (sha-256 `03aecc8329a2520e38abeb5f942648a50abf8de1dad23f0efe28dd92eab7ab72`) | awaiting-approval | TST-04 (state C pre-fix fail + state D post-fix pass) reproduction vehicle | (user reviews on-disk file at milestone close; runs `git add test/edge/BackfillIdempotency.test.js && git commit` after manual diff review post-Phase-253) |
+
+Per D-253-FIND04-04 carry-forward: TST-FILE-01 + TST-FILE-02 persist at status `awaiting-approval` permanently as historical record at milestone close. User commits them later via separate post-milestone commits per `feedback_manual_review_before_push.md`; those commits live outside `audit/FINDINGS-v32.0.md` (which is FINAL READ-only after this Task 6 plan-close commit). git log + this commit-readiness register cross-trace gives full audit trail. Mirrors v31 KNOWN-ISSUES.md UNMODIFIED default path. NO 'Pending Test-Commit Addendum' stub subsection. NO forward-cite rollover to v33.0+ (v32 is terminal-phase per D-253-09 + ROADMAP). Closure signal: `MILESTONE_V32_AT_HEAD_acd88512`.
+
+---
+
+*Phase 253 plan-close: per D-253-CF-02 the Task 6 final commit flips this deliverable's frontmatter `status: executing` → `status: FINAL — READ-ONLY` AND `read_only: false` → `read_only: true`. After this commit, `audit/FINDINGS-v32.0.md` is READ-ONLY for the v32.0 milestone lifecycle. Closure signal: `MILESTONE_V32_AT_HEAD_acd88512`.*
