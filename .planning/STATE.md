@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v32.0
 milestone_name: Backfill Idempotency + purchaseLevel Underflow Audit
 status: executing
-last_updated: "2026-05-02T07:05:00.000Z"
-last_activity: 2026-05-02 -- Phase 251 (Reproduction Tests) complete; closure signal PHASE_251_TST_FINAL_AT_HEAD_65b33299
+last_updated: "2026-05-02T08:12:07.233Z"
+last_activity: 2026-05-02 -- Phase 252 planning complete
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 6
   completed_plans: 5
-  percent: 86
+  percent: 83
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-04-30 for v32.0 start)
 
 ## Current Position
 
-Phase: 252 (Post-v31.0 Landed-Commit Sanity) — Not started
-Plan: 0 of TBD
-Status: Phase 251 complete; awaiting Phase 252 discuss/plan
-Last activity: 2026-05-02 -- Phase 251 closed at commit 65b33299 (closure signal PHASE_251_TST_FINAL_AT_HEAD_65b33299)
+Phase: 252
+Plan: Not started
+Status: Ready to execute
+Last activity: 2026-05-02 -- Phase 252 planning complete
 Resume file: (none — Phase 252 awaits CONTEXT.md authoring)
 
 ## Last Shipped Milestone
