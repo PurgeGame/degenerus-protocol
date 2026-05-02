@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v32.0
 milestone_name: Backfill Idempotency + purchaseLevel Underflow Audit
 status: executing
-last_updated: "2026-05-02T04:24:13.581Z"
-last_activity: 2026-05-02 -- Phase 250 planning complete
+last_updated: "2026-05-02T06:23:01.655Z"
+last_activity: 2026-05-02
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 4
-  completed_plans: 3
-  percent: 75
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-30 for v32.0 start)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 249 — purchaseLevel Correctness Proof
+**Current focus:** Phase 250 — sibling-pattern-sweep
 
 ## Current Position
 
-Phase: 250
+Phase: 251
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-02 -- Phase 250 planning complete
-Resume file: .planning/phases/250-sibling-pattern-sweep/250-CONTEXT.md
+Status: Executing Phase 250
+Last activity: 2026-05-02
+Resume file: .planning/phases/251-reproduction-tests/251-CONTEXT.md
 
 ## Last Shipped Milestone
 
