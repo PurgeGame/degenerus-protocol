@@ -86,7 +86,153 @@ See §9 Milestone Closure Attestation for the D-253-15 step 9 6-point attestatio
 
 ---
 
-<!-- §3 Per-Phase Sections — filled by Task 2 -->
+## 3. Per-Phase Sections
+
+Consolidates Phase 247 / 248 / 249 / 250 / 251 / 252 outputs per D-253-09 + D-253-10 into condensed summaries with cross-cites to source artifacts. All cross-cites are READ-only lookups (D-253-CF-08); no fresh derivation. Sources `re-verified at HEAD acd88512`.
+
+### 3a. Phase 247 — Delta Extraction & Classification
+
+**Change-count card:**
+- Plans: 1 (247-01)
+- Commits in scope: 4 landed (`8bdeabc2`, `ad41973c`, `6a63705b`, `48554f8f`) + WIP overlay (turbo guard at AdvanceModule:173 + backfill guard at AdvanceModule:1174 + untracked `test/edge/LastPurchaseDayRace.test.js` + ContractAddresses.sol regen) — all consolidated into anchor `acd88512`
+- Row counts: 16 D-247-C### per-source rows + 11 D-247-F### classification rows (8 MODIFIED_LOGIC + 3 DELETED) + 1 D-247-S### storage-layout UNCHANGED row + 30 D-247-X### call-site rows + 29 D-247-I### Consumer Index rows
+- REQs satisfied: 3/3 (DELTA-01, DELTA-02, DELTA-03)
+- Finding candidates: 0 (catalog-only phase)
+- Atomic commits: 5 (`e2cacc5c` → `8e7e1f7c` → `4cc1f829` → `5162c5e0` → `9961c91a`) per D-247-14
+- Closure signal: `PHASE_247_CATALOG_FINAL_AT_HEAD_acd88512`
+
+**Cross-cite:** `audit/v32-247-DELTA-SURFACE.md` (FINAL READ-only per D-253-CF-07 carry).
+
+**Per-REQ summary:**
+
+| REQ | Verdict | Cross-Cite |
+| --- | --- | --- |
+| DELTA-01 | `COMPLETE_AT_HEAD_acd88512` | §1.4 commit changelog (16 D-247-C rows) |
+| DELTA-02 | `COMPLETE_AT_HEAD_acd88512` | §2 classification (11 D-247-F rows) + §5 storage-layout UNCHANGED |
+| DELTA-03 | `COMPLETE_AT_HEAD_acd88512` | §3 call-site catalog (30 D-247-X rows) + §6 Consumer Index (29 D-247-I rows) |
+
+Phase 247 produced the full delta-surface catalog at HEAD `acd88512` with all 11 changed functions classified + 30 downstream call-sites enumerated + 29-row Consumer Index mapping every Phase 248..253 REQ-ID. The Consumer Index (D-247-I024..I029 specifically) drives REG-01 inclusion-rule mapping per D-253-REG01-01. `re-verified at HEAD acd88512`.
+
+### 3b. Phase 248 — Backfill Idempotency Proof
+
+**Change-count card:**
+- Plans: 1 (248-01)
+- V-rows: 44 (BFL-01 7 + BFL-02 6 + BFL-03 15 + BFL-04 4 + BFL-05 2 + BFL-06 10) + 3 BFL-01-MNN multiplier rows + 5 BFL-02-XNN out-of-scope rows
+- REQs satisfied: 6/6 (BFL-01..06; all SAFE / NON-WIDENING)
+- Finding candidates: 0
+- KI envelope re-verifications: EXC-02 + EXC-03 RE_VERIFIED dual-carrier (BFL-05-V01 EXC-02 / BFL-05-V02 EXC-03; both NON-WIDENING)
+- Atomic commits: 4 (`b79f3eac` → `838631a8` → `3be95bfe` → `5545b125`)
+- Closure signal: `PHASE_248_BFL_FINAL_AT_HEAD_acd88512`
+
+**Cross-cite:** `audit/v32-248-BFL.md` (FINAL READ-only) + Phase 251 TST-04 hand-off appendix.
+
+**Per-REQ summary:**
+
+| REQ | Verdict | Cross-Cite |
+| --- | --- | --- |
+| BFL-01 | `SAFE_AT_HEAD_acd88512` | §1 (7 V-rows + 3 multiplier rows; rngGate fresh-word branch reachability) |
+| BFL-02 | `SAFE_AT_HEAD_acd88512` | §2 (6 V-rows over guarded block L1174-1186 + sentinel-correctness 4-step proof) |
+| BFL-03 | `SAFE_AT_HEAD_acd88512` | §3 (15 V-rows; testnet blocks 10759449 + 10761786 worked example, pre-fix doubling vs post-fix short-circuit) |
+| BFL-04 | `SAFE_AT_HEAD_acd88512` | §4 (4 V-rows; dailyIdx ↔ rngWordByDay invariant table) |
+| BFL-05 | `NON_WIDENING_AT_HEAD_acd88512` | §5 (2 V-rows dual-carrier; EXC-02 + EXC-03) |
+| BFL-06 | `SAFE_AT_HEAD_acd88512` | §6 (10 V-rows + sDGNRS / DGNRS / BURNIE conservation algebra) |
+
+Phase 248 proved the L1174 sentinel `rngWordByDay[idx + 1] == 0` makes `_backfillGapDays` execute at most once per VRF lock window across every reachable `advanceGame` re-entry path. §3 BFL-03 testnet-block worked example (blocks 10759449 + 10761786) demonstrates pre-fix doubling vs post-fix short-circuit. §6 BFL-06 conservation algebra closes (sDGNRS / DGNRS / BURNIE supplies invariant across lock window). §5 BFL-05 dual-carrier attestation drives §6b KI Envelope Re-Verifications (EXC-02 + EXC-03 NON-WIDENING). `re-verified at HEAD acd88512`.
+
+### 3c. Phase 249 — purchaseLevel Correctness Proof
+
+**Change-count card:**
+- Plans: 1 (249-01)
+- V-rows: 75 PLV-NN-VMM rows across §1-§6 (PLV-01 4-dimensional state-space sweep is the bulk; PLV-02/PLV-03 are narrative / proof sections without explicit table rows)
+- REQs satisfied: 6/6 (PLV-01..06; all SAFE)
+- Finding candidates: 0
+- Atomic commits: 4 (`920a2368` → `3ed9a77a` → `6fa97fd5` → `7758db41`) per D-249-CF-07
+- Closure signal: `PHASE_249_PLV_FINAL_AT_HEAD_acd88512`
+
+**Cross-cite:** `audit/v32-249-PLV.md` (FINAL READ-only).
+
+**Per-REQ summary:**
+
+| REQ | Verdict | Cross-Cite |
+| --- | --- | --- |
+| PLV-01 | `SAFE_AT_HEAD_acd88512` | §1 PLV-01 4-dim state-space sweep |
+| PLV-02 | `SAFE_AT_HEAD_acd88512` | §2 PLV-02 turbo-block reachability |
+| PLV-03 | `SAFE_AT_HEAD_acd88512` | §3 PLV-03 ternary unreachable proof (`(cachedJpFlag = T ∧ cachedLevel = 0)` cell unreachable via INV-PLV-B-01 + INV-PLV-C-01 composition) |
+| PLV-04 | `SAFE_AT_HEAD_acd88512` | §4 PLV-04 arithmetic flat table |
+| PLV-05 | `SAFE_AT_HEAD_acd88512` | §5 PLV-05 testnet panic 0x11 reproduction walk |
+| PLV-06 | `SAFE_AT_HEAD_acd88512` | §6 PLV-06 strand-disproof |
+
+Phase 249 proved `purchaseLevel` cannot be 0 at any reachable `(lastPurchaseDay, rngLockedFlag, jackpotPhaseFlag, level)` combination once the L173 turbo guard `!rngLockedFlag` clause is in place. §3 PLV-03 ternary unreachable proof shows `(lastPurchase = T ∧ rngLockedFlag = T ∧ lvl = 0)` is structurally unreachable. §5 PLV-05 reproduces the testnet panic 0x11 trigger sequence symbolically (blocks 10759449 + 10761786). §6 PLV-06 strand-disproof confirms the daily-jackpot region (lines 372-404) does not strand state under the guard. §3 + §5 + §6 are the primary §4 F-32-01 'Reproduction evidence' + 'At-HEAD resolution' cite source. `re-verified at HEAD acd88512`.
+
+### 3d. Phase 250 — Sibling-Pattern Sweep
+
+**Change-count card:**
+- Plans: 1 (250-01)
+- V-rows: 28 SIB-NN-VMM rows (SIB-01 9 + SIB-03 15 + SIB-04 4) + zero-state SIB-05 attestation; SIB-02 is the ORTHOGONAL_PROVEN classifier (taxonomy section, no rows)
+- REQs satisfied: 5/5 (SIB-01..05; all SAFE / ORTHOGONAL_PROVEN)
+- Finding candidates: 0
+- Atomic commits: 4 (`12d90a27` → `97ef3955` → `decee5d9` → `34a6c660`) per D-250-CF-06
+- Closure signal: `PHASE_250_SIB_FINAL_AT_HEAD_acd88512`
+
+**Cross-cite:** `audit/v32-250-SIB.md` (FINAL READ-only).
+
+**Per-REQ summary:**
+
+| REQ | Verdict | Cross-Cite |
+| --- | --- | --- |
+| SIB-01 | `SAFE_AT_HEAD_acd88512` | §1 (9 V-rows; rngLockedFlag co-reads in AdvanceModule) |
+| SIB-02 | `ORTHOGONAL_PROVEN_AT_HEAD_acd88512` | §2 turbo/backfill/orthogonal taxonomy classifier |
+| SIB-03 | `SAFE_AT_HEAD_acd88512` | §3 (15 V-rows; 8-module audit; SIB-03-V03 MintModule:1229 `_callTicketPurchase` flag-vs-flag-vs-counter triple — ORTHOGONAL_PROVEN, surfaced as new sibling pattern observation per D-253-FIND01-04) |
+| SIB-04 | `SAFE_AT_HEAD_acd88512` | §4 (4 V-rows; 8bdeabc2 / ad41973c / 6a63705b / 48554f8f post-v31.0 commit cross-check) |
+| SIB-05 | `ZERO_STATE_AT_HEAD_acd88512` | §5 zero-state attestation (no new sibling bugs found) |
+
+Phase 250 hunted other turbo-class and backfill-class races across AdvanceModule and every delegating module. §1 SIB-01 enumerates every interaction in `DegenerusGameAdvanceModule.sol` where `rngLockedFlag` co-reads with another piece of game state. §2 SIB-02 classifies every interaction under the {turbo-class, backfill-class, ORTHOGONAL_PROVEN} taxonomy. §3 SIB-03 audits 8 delegating modules including the SIB-03-V03 MintModule:1229 triple (SAFE / ORTHOGONAL_PROVEN — sibling-pattern observation only, not a F-NN-NN candidate). §4 SIB-04 cross-checks the 4 post-v31.0 landed commits. §5 SIB-05 emits zero-state attestation. **SG-250-01 (post-anchor `98e78404` MintModule presale-flag commit)** carries forward as a recorded scope-guard item per D-253-CF-07 — functionally orthogonal to AdvanceModule turbo-path AND to GameStorage `_livenessTriggered` per Phase 250 SIB-03 + Phase 252 §1 V03; recorded but not within v32.0 audit-anchor `acd88512`. `re-verified at HEAD acd88512`.
+
+### 3e. Phase 251 — Reproduction Tests
+
+**Change-count card:**
+- Plans: 1 (251-01)
+- V-rows: 8 SAFE (TST-01-V01..V02 + TST-02-V01..V02 + TST-03-V01..V02 + TST-04-V01..V02; rendered as H3 sections per Phase 251 format, not pipe-table rows)
+- REQs satisfied: 4/4 (TST-01..04)
+- Finding candidates: 0
+- Atomic commits: 4 (`c73c8add` → `6bc9c525` → `33e7d7c5` → `65b33299`)
+- Closure signal: `PHASE_251_TST_FINAL_AT_HEAD_65b33299` (resolved `<plan-close-sha>` = `65b33299` = SHA of Task 4 atomic commit `audit(251-01): Task 4 — §5 register + §4.4 awaiting-approval + final assembly + FINAL READ-only flip`)
+
+**Cross-cite:** `audit/v32-251-TST.md` (FINAL READ-only at HEAD `c790ae45`) + §5 commit-readiness register.
+
+**Per-REQ summary:**
+
+| REQ | Verdict | Cross-Cite |
+| --- | --- | --- |
+| TST-01 | `PRE_FIX_FAIL_REPRODUCED_AT_STATE_A` | §1 TST-01-V01 single-day + TST-01-V02 multi-day-drain panic 0x11 reproduction (state A) |
+| TST-02 | `POST_FIX_PASS_AT_STATE_D` | §2 TST-02-V01 + TST-02-V02 LastPurchaseDayRace state D pass |
+| TST-03 | `LIVENESS_REGRESSION_PASS_AT_STATE_D` | §3 TST-03-V01 LivenessProductivePause + TST-03-V02 LivenessMidJackpot |
+| TST-04 | `PRE_FIX_FAIL_STATE_C_POST_FIX_PASS_STATE_D` | §4 TST-04-V01 state-C psdDelta=15 over-bump + TST-04-V02 state-D psdDelta=7 single-bump |
+
+Phase 251 empirically validated the v32.0 WIP guards against three guard-revert states. State-A (both reverted) reproduces panic 0x11 in TST-01-V01 + TST-01-V02 — the empirical reproduction of F-32-01 (turbo race). State-D (HEAD with both guards) passes deterministically (TST-02 + TST-03). State-C (backfill-only reverted) on newly authored BackfillIdempotency test produces psdDelta=15 over-bump + downstream panic 0x11 in TST-04-V01 — the empirical reproduction of F-32-02 (backfill double-execution); state-D produces psdDelta=7 (53% delta reduction empirically isolates L1174 sentinel). §5 commit-readiness register lists **TST-FILE-01** (`test/edge/LastPurchaseDayRace.test.js`) + **TST-FILE-02** (`test/edge/BackfillIdempotency.test.js`, sha-256 `03aecc8329a2520e38abeb5f942648a50abf8de1dad23f0efe28dd92eab7ab72`) at status `awaiting-approval` — inherited verbatim by Phase 253 §9.NN.iii per D-253-FIND04-03. `re-verified at HEAD acd88512`.
+
+### 3f. Phase 252 — Post-v31.0 Landed-Commit Sanity
+
+**Change-count card:**
+- Plans: 1 (252-01)
+- V-rows: 11 SAFE (4 §1 POST31-01-V01..V04 commit rows + 4 §2 POST31-02-V01..V04 enumeration rows + 3 §3 POST31-02-V05..V07 composition proof rows)
+- REQs satisfied: 2/2 (POST31-01..02; all SAFE / NON-WIDENING / NON-INTERFERING)
+- Finding candidates: 0
+- Atomic commits: 4 (`dd8e0052` → `5f46b37e` → `2ad456fa` → `4e5ce8b5`)
+- Closure signal: `PHASE_252_POST31_FINAL_AT_HEAD_4e5ce8b5`
+
+**Cross-cite:** `audit/v32-252-POST31.md` (FINAL READ-only at HEAD `2ad456fa`).
+
+**Per-REQ summary:**
+
+| REQ | Verdict | Cross-Cite |
+| --- | --- | --- |
+| POST31-01 | `NON_WIDENING_AT_HEAD_acd88512` | §1 POST31-01-V01..V04 (4 commit rows: 8bdeabc2 / ad41973c / 6a63705b / 48554f8f) + §4 SIB-04 reconciliation table |
+| POST31-02 | `NON_INTERFERING_AT_HEAD_acd88512` | §2 POST31-02-V01..V04 productive-pause × turbo guard interaction enumeration + §3 POST31-02-V05..V07 composition proofs §3.A / §3.B / §3.C |
+
+Phase 252 delta-sanity verified the 4 landed post-v31.0 commits NON-WIDENING against both turbo-class and backfill-class envelopes. §1 POST31-01-V01..V04 row-by-row attestations with Phase 250 SIB-04 cross-cites + Phase 248 §5 BFL-05 dual-carrier for V04. §2 enumerates productive-pause × WIP turbo guard interactions (1 Tier-A POST31-02-V01 + 3 Tier-B NEGATIVE-scope rows). §3 records 3 composition proof scenarios: §3.A productive multi-call window (TST-03-V01 PRIMARY empirical seal) + §3.B death-clock-paused-and-resumed across VRF lock window (TST-04-V02 PRIMARY) + §3.C documented-edge turbo-blocked (TST-01-V02 + TST-02-V02 cross-cites). §3.A + §3.B are the primary §4 F-32-01 + F-32-02 deep at-HEAD-resolution cite source. §4 SIB-04 reconciliation table confirms zero divergence between Phase 250's first-pass and Phase 252's deeper analysis (4 verdicts agree row-for-row). **SG-252-01 (PLAN.md `lastPurchaseDay` writer line numbers diverged from runtime HEAD)** carries forward as a documentary-only scope-guard item per D-253-CF-07 — composition argument substantively unaffected; recorded but not impacting verdicts. `re-verified at HEAD acd88512`.
+
+---
 
 <!-- §4 F-32-NN Finding Blocks — filled by Task 3 -->
 
