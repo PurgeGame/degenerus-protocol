@@ -276,7 +276,89 @@ Phase 253 emits exactly TWO F-32-NN finding blocks per D-253-FIND01-01 documenti
 
 ---
 
-<!-- §5 Regression Appendix — filled by Task 4 -->
+## 5. Regression Appendix
+
+This appendix is the LEAN spot-check regression deliverable per ROADMAP REG-01 / REG-02 phrasing ("Skip the full v31.0 33-row regression sweep per milestone scope decision"). REG-01 covers 12 prior-finding rows (5 F-30-NNN delta-touched candidates + 7 v3.7/v3.8 rngGate / `_backfillGapDays` baseline rows) whose evidence cites a consumer / path / site / state-var / event / interface method touched by ≥1 of the v32.0 deltas (per D-253-REG01-01 inclusion rule = domain-cite + delta-surface mapping using the Phase 247 §6 Consumer Index as authoritative source) + F-29-04 explicitly NAMED per REG-01 REQ description = 13 rows total. REG-02 is a zero-row default per D-253-REG02-01 (F-32-01 + F-32-02 supersession scope captured in §4 'At-HEAD resolution' subsections, NOT REG-02 entries).
+
+Verdict taxonomy per D-253-REG01-03 closed set: `{PASS / REGRESSED / SUPERSEDED}`. Each row carries an `re-verified at HEAD acd88512` backtick-quoted note + one-line structural-equivalence statement against the originating-milestone source artifact.
+
+### 5a. REG-01 — Delta-Touched F-30-NNN + v3.7/v3.8 rngGate + F-29-04 (13 rows)
+
+REG-01 inclusion rule (D-253-REG01-01): a prior finding is "directly touched by deltas" iff its evidence cites a consumer / path / site / state-var / event / interface method that maps to a D-247-X / D-247-F / D-247-C / D-247-S row in Phase 247 §6 Consumer Index (29 D-247-I### rows total). The 253-01-PLAN.md frontmatter `reg_01_candidates` array lists the 13 candidates included; `reg_01_excluded` documents the 15 prior-finding rows excluded with one-line rationale per row.
+
+| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD acd88512 | Re-Verification Evidence | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| REG-v29.0-F2904 | F-29-04 (Gameover RNG substitution for mid-cycle write-buffer tickets) — explicitly NAMED per REG-01 REQ phrasing because evidence cites `_swapAndFreeze(purchaseLevel)` at AdvanceModule:292 which touches `purchaseLevel` | acd88512 + 8bdeabc2 + 6a63705b + 48554f8f | `_swapAndFreeze(purchaseLevel)` at AdvanceModule:292; `_gameOverEntropy` at :1222-1246; sole `_gameOverEntropy` caller `advanceGame:553` (rngWord sink); buffer-swap primitive boundary unchanged. EXC-03 envelope re-verified non-widening. | Phase 248 BFL-05-V02 RE_VERIFIED_AT_HEAD acd88512 (EXC-03 dual-carrier). EXC-03 tri-gate predicates (terminal-state + no-player-reachable-timing + buffer-scope) all hold per Phase 248 BFL-05 + Phase 250 SIB-03 NEGATIVE-scope. KNOWN-ISSUES.md EXC-03 entry intact at HEAD. | PASS |
+| REG-v30.0-F30001 | F-30-001 prevrandao fallback state-machine check (`AdvanceModule:1322` `_getHistoricalRngFallback`) | acd88512 | Sole prevrandao site remains AdvanceModule:1340-relative `_getHistoricalRngFallback`; no new prevrandao-consumption path introduced by L173 turbo guard or L1174 backfill sentinel; GAMEOVER_RNG_FALLBACK_DELAY = 14 days constant intact at AdvanceModule:109. | Phase 248 BFL-05-V01 RE_VERIFIED_AT_HEAD acd88512 (EXC-02 dual-carrier with EXC-03). EXC-02 envelope NON-WIDENING per Phase 248 BFL-05 + Phase 250 SIB-03 NEGATIVE-scope. KI EXC-02 entry intact at HEAD. | PASS |
+| REG-v30.0-F30004 | F-30-004 mid-day gate off-by-one check (AdvanceModule:204-208 region; original-milestone reformatted by 16597cac per v31 Phase 244 RNG-03) | acd88512 | Mid-day gate region at AdvanceModule:204-208 NOT delta-touched by L173 (line 173) turbo guard or L1174 backfill sentinel; logically separate from turbo block at L167-182. v31 reformat-only verdict carries forward; no new behavioral change. | Phase 247 §1.4 D-247-C### rows confirm zero-touch on AdvanceModule:204-208; Phase 250 SIB-01 9 V-rows enumerate every `rngLockedFlag` interaction in AdvanceModule and AdvanceModule:204-208 is not one. Phase 252 §1 POST31-01 confirms 4 landed commits NON-WIDENING. | PASS |
+| REG-v30.0-F30005 | F-30-005 F-29-04 liveness-proof note (`_swapAndFreeze:292` + `_swapTicketSlot:1082` write-buffer-swap sites) | acd88512 + 8bdeabc2 + 48554f8f | Write-buffer-swap sites at AdvanceModule:292 + :1082 NOT delta-touched. `_handleGameOverPath` reordering carries forward from v31 Phase 244 GOX-06-V02 with no v32 change. EXC-03 tri-gate predicates all hold at HEAD. | Phase 248 BFL-05-V02 RE_VERIFIED_AT_HEAD acd88512 (EXC-03 dual-carrier with EXC-02). Same domain as REG-v29.0-F2904 row above; PRIMARY cite is BFL-05-V02; cross-cites Phase 250 SIB-03 NEGATIVE-scope for EXC-03. | PASS |
+| REG-v30.0-F30015 | F-30-015 prevrandao-mix recursion citation (INV-237-060..062 cluster at AdvanceModule:1301-1325) | acd88512 | Same domain as F-30-001 (prevrandao fallback under EXC-02). INV-237-060..062 cluster at AdvanceModule:1301-1325 NOT delta-touched by L173 turbo guard or L1174 backfill sentinel. | Phase 248 BFL-05-V01 RE_VERIFIED_AT_HEAD acd88512 (EXC-02 dual-carrier). Same PRIMARY cite as REG-v30.0-F30001 above. EXC-02 envelope NON-WIDENING per Phase 248 BFL-05. | PASS |
+| REG-v30.0-F30017 | F-30-017 F-29-04 swap-site liveness recommendation (write-buffer-swap sites pre-VRF-request commitment) | acd88512 + 48554f8f | Same domain as F-30-005 + REG-v29.0-F2904 (write-buffer-swap sites under EXC-03). Distinct F-30-NNN ID per v30 D-07 source-attribution preservation. EXC-03 envelope non-widening. | Phase 248 BFL-05-V02 RE_VERIFIED_AT_HEAD acd88512 (EXC-03 dual-carrier). Cross-cites REG-v30.0-F30005 + REG-v29.0-F2904 for shared subject surface. | PASS |
+| REG-v3.7-005 | v3.7 Phase 65 VRF Stall Edge Cases gap-backfill entropy (INV-237-067 `_backfillGapDays` at AdvanceModule:1738-relative) | acd88512 | `_backfillGapDays` body at AdvanceModule:1700-relative NOT delta-touched by L1174 sentinel (sentinel is at the CALL SITE inside `rngGate` fresh-word branch at L1174, not inside `_backfillGapDays` body). Gap-backfill entropy uniqueness preserved via keccak256(vrfWord, gapDay) per KNOWN-ISSUES.md backfill-cap entry. | Phase 248 BFL-01-V01..V07 + BFL-02-V01..V06 (whole guarded block L1174-1186 sentinel-correctness 4-step proof per D-248-09); Phase 248 §6 BFL-06 conservation algebra closes (sDGNRS / DGNRS / BURNIE supplies invariant across lock window). The L1174 sentinel ENHANCES idempotency without changing the underlying entropy-derivation invariant. | PASS |
+| REG-v3.7-006 | v3.7 Phase 65 VRF Stall gap-backfill coinflip payouts (INV-237-068 `_backfillGapDays` coinflip payouts branch) | acd88512 | Coinflip payouts branch inside `_backfillGapDays` body at AdvanceModule:1700-relative NOT delta-touched. L1174 sentinel guards the CALL SITE; once entered, `_backfillGapDays` body executes the same coinflip-payout logic as v3.7 baseline. | Phase 248 §6 BFL-06 conservation proof closes algebraically: total ETH credited to coinflip pools across the gap range matches expected non-doubled amount. D-248-10 boundary cite for BurnieCoinflip.sol::processCoinflipPayouts. The L1174 sentinel SUPERSEDES the doubling pre-condition (each gap day's coinflip payout fires exactly once per VRF lock window). | PASS |
+| REG-v3.8-001 | v3.8 Phases 68-72 VRF commitment window audit 51/51 SAFE baseline (rngGate; INV-237-046) | acd88512 | rngGate at AdvanceModule:1152 (function header) — D-247-F011 MODIFIED_LOGIC (Phase 247 §2). The L1174 backfill sentinel is INSIDE rngGate's fresh-word branch. Commitment-window invariant preserved: rngLockedFlag set/clear boundary unchanged from v3.8 baseline; sentinel is read-only in the fresh-word branch. | Phase 248 BFL-01 7 V-rows + 3 multiplier rows enumerate every code path reaching `_backfillGapDays` (sole call site inside rngGate fresh-word branch); commitment-window narrowing invariant from v3.8 baseline holds at HEAD per Phase 248 §4 BFL-04 (dailyIdx ↔ rngWordByDay invariant). | PASS |
+| REG-v3.8-002 | v3.8 Phases 68-72 commitment window baseline (rngGate; INV-237-047) | acd88512 | Same rngGate domain as REG-v3.8-001. Commitment-window narrowing invariant preserved at HEAD. | Phase 248 BFL-01 + BFL-04. Same PRIMARY cite as REG-v3.8-001 above. | PASS |
+| REG-v3.8-003 | v3.8 Phases 68-72 commitment window baseline (rngGate _applyDailyRng call; INV-237-048) | acd88512 | _applyDailyRng call inside rngGate. The L1174 backfill sentinel is in the same rngGate fresh-word branch as _applyDailyRng but operates on a DISJOINT state slot (rngWordByDay[idx + 1] vs the daily-RNG buffer). No commitment-window widening. | Phase 248 BFL-01 + BFL-04. Cross-cite Phase 248 §4 BFL-04 dailyIdx ↔ rngWordByDay invariant per D-248-15 grep-cited universe. | PASS |
+| REG-v3.8-004 | v3.8 Phases 68-72 commitment window baseline (rngGate redemption roll; INV-237-049) | acd88512 | Redemption roll inside rngGate fresh-word branch. L1174 sentinel is upstream of redemption roll (gates `_backfillGapDays`); redemption roll proceeds unchanged from v3.8 baseline. | Phase 248 BFL-01 (sole call site at L1176 inside fresh-word branch); Phase 248 §6 BFL-06 conservation algebra (sDGNRS / DGNRS / BURNIE supplies invariant across lock window). | PASS |
+| REG-v3.8-005 | v3.8 Phases 68-72 commitment window baseline (rngGate _finalizeLootboxRng; INV-237-050) | acd88512 | _finalizeLootboxRng call inside rngGate fresh-word branch. L1174 sentinel guards `_backfillGapDays` only; _finalizeLootboxRng path operates on lootbox-index-advance isolation per KI EXC-04 (lootbox roll path NOT delta-touched per Phase 250 SIB-03 NEGATIVE-scope). | Phase 250 SIB-03 NEGATIVE-scope (EXC-04 EntropyLib XOR-shift not delta-touched); Phase 248 BFL-01 + BFL-04 confirm sentinel scope is `_backfillGapDays`-only. | PASS |
+
+**REG-01 distribution at HEAD `acd88512`: 13 PASS / 0 REGRESSED / 0 SUPERSEDED** (12 prior-finding rows from v29 + v30 + v3.7/v3.8 baseline + 1 explicitly NAMED F-29-04 row). Expected per Phase 247-252 zero-finding-candidate input + KI EXC-02 + EXC-03 envelopes RE_VERIFIED_AT_HEAD without widening per Phase 248 BFL-05 + EXC-01 + EXC-04 NEGATIVE-scope per Phase 250 SIB-03. The L173 turbo guard + L1174 backfill sentinel SUPERSEDE the bug surfaces (turbo race + backfill double-execution) WITHOUT regressing any prior finding's acceptance envelope.
+
+#### REG-01 Exclusion Log
+
+15 prior-finding rows from `audit/FINDINGS-v29.0.md` + `audit/FINDINGS-v30.0.md` inspected against the v32.0 deltas and excluded per D-253-REG01-01 inclusion rule (no Phase 247 §6 Consumer Index domain-cite match). Authoritative list lives in `253-01-PLAN.md` frontmatter `reg_01_excluded` array. Summary:
+
+- **F-30-002** (boon-roll entropy XOR-shift; LootboxModule:1059) — lootbox roll path NOT delta-touched per Phase 250 SIB-03 NEGATIVE-scope (EXC-04 envelope). No domain-cite to any D-247-I row.
+- **F-30-003** (deityBoonData view-deterministic-fallback; DegenerusGame.sol:852) — deity-boon view path NOT delta-touched. No domain-cite to any D-247-I row.
+- **F-30-006** (Daily-share 62.3% sanity observation) — meta-observation, not file-line bound; not delta-touchable.
+- **F-30-007** (KI-exception precedence over path-family rules — taxonomy-precedence rule disclosure) — taxonomy-only; the v32 deltas (L173 + L1174 guards) introduce no new path-families requiring re-classification per Phase 250 SIB-02 ORTHOGONAL_PROVEN classifier.
+- **F-30-008** (INV-237-009 view-deterministic-fallback classification edge case; DegenerusGame.sol:852) — duplicate subject of F-30-003; deity-boon view path NOT delta-touched.
+- **F-30-009** (INV-237-066 fulfillment-callback classification ambiguity; rawFulfillRandomWords mid-day branch SSTORE at AdvanceModule:1706-relative) — fulfillment callback NOT delta-touched by L173 turbo guard or L1174 backfill sentinel.
+- **F-30-010** (INV-237-124 sole daily-family EntropyLib caller; JackpotModule:2119 _jackpotTicketRoll) — entropyStep call site NOT delta-touched per Phase 250 SIB-03 NEGATIVE-scope.
+- **F-30-011** (INV-237-129 resolveLootboxDirect library-wrapper; LootboxModule:673) — LootboxModule NOT delta-touched per Phase 250 SIB-03 NEGATIVE-scope.
+- **F-30-012** (INV-237-143/-144 _raritySymbolBatch / _rollRemainder dual-trigger; MintModule:568/652) — Phase 247 D-247-C003/C004/C005 confirm MintModule charge-target swap (`_callTicketPurchase` signature) does NOT touch _raritySymbolBatch / _rollRemainder. Functionally orthogonal per Phase 250 SIB-04-V03 Form-1 isolation.
+- **F-30-013** (INV-237-143/-144 dual-trigger delegatecall boundary; Phase 238 BWD bifurcation recommendation) — duplicate subject of F-30-012; MintModule rarity-symbol path NOT delta-touched.
+- **F-30-014** (INV-237-129 resolveLootboxDirect gameover-caller marker; Phase 238 BWD marker recommendation) — duplicate subject of F-30-011; LootboxModule NOT delta-touched.
+- **F-30-016** (INV-237-124 sole daily-family EntropyLib caller; Phase 241 EXC-04 scope disclosure) — duplicate subject of F-30-010; entropyStep call site NOT delta-touched.
+- **F-29-01** (JackpotEthWin event signature widening uint8→uint16 BAF traitId; JackpotModule:69-77) — event surface NOT delta-touched by L173 turbo guard or L1174 backfill sentinel.
+- **F-29-02** (JackpotTicketWin event signature widening uint8→uint16 BAF traitId; JackpotModule:80-87) — event surface NOT delta-touched.
+- **F-29-03** (QST-01 mint_ETH companion-test-coverage gap; test/fuzz/CoverageGap222.t.sol:1453-1455) — test-tooling observation; not file-line bound to AdvanceModule turbo or rngGate; not delta-touched.
+
+### 5b. REG-02 — SUPERSEDED Sweep (0 rows)
+
+REG-02 scope per D-253-REG02-01 = defensive grep walk over prior FINDINGS for any v29/v30/v31 row whose acceptance rationale relied on a non-guarded turbo/backfill envelope. Default expectation: 0 prior F-NN-NN entries from v29/v30/v31 are STRUCTURALLY CLOSED by L173 + L1174 guards. The fixed bugs (turbo race + backfill double-execution) are v32-discovered, not prior-flagged. Supersession scope is captured by F-32-01 + F-32-02 'At-HEAD resolution' subsections per D-253-FIND01-03 step 6, NOT as REG-02 entries. Defensive grep walk recipe (D-253-REG02-01):
+
+```bash
+grep -nE 'rngLockedFlag|_backfillGapDays|purchaseLevel|lastPurchaseDay|dailyIdx|turbo' \
+  audit/FINDINGS-v29.0.md \
+  audit/FINDINGS-v30.0.md \
+  audit/FINDINGS-v31.0.md \
+  | grep -iE 'accept|design|envelope|HOLDS|carrier'
+# Expected: zero hits qualifying as supersession candidates
+```
+
+Grep walk returned zero hits qualifying as supersession candidates (any hits surfaced are KI envelope re-verifications already covered in §6b, NOT supersession candidates per D-22 carry). REG-02 stays zero-row default per D-253-REG02-01.
+
+| Prior-Finding-ID | Delta SHA | Verdict | Evidence | Citation |
+| --- | --- | --- | --- | --- |
+| _(zero rows — empty REG-02 candidate pool per D-253-REG02-01 default expectation)_ | — | — | — | — |
+
+**REG-02 distribution at HEAD `acd88512`: 0 PASS / 0 REGRESSED / 0 SUPERSEDED.** Expected per D-253-REG02-01 default — F-32-01 + F-32-02 (turbo race + backfill double-execution) are v32-discovered HIGH disclosure blocks per §4, NOT prior F-NN-NN supersession candidates. Their structural-closure proofs are captured in §4 'At-HEAD resolution' subsections (PLV-03 + PLV-05 + PLV-06 strand-disproof + Phase 252 §3.A composition for F-32-01; BFL-01..06 + Phase 252 §3.B composition for F-32-02). No prior-milestone finding's acceptance envelope was conditioned on the absence of turbo or backfill guards; therefore zero supersession rows.
+
+### 5c. Combined REG-01 + REG-02 Distribution at HEAD `acd88512`
+
+Combined distribution table per Claude's Discretion 4-col format (mirror v31 §5c):
+
+| Verdict | REG-01 | REG-02 | Combined |
+| --- | --- | --- | --- |
+| PASS | 13 | 0 | 13 |
+| REGRESSED | 0 | 0 | 0 |
+| SUPERSEDED | 0 | 0 | 0 |
+| **Total** | **13** | **0** | **13** |
+
+`re-verified at HEAD acd88512` — all 13 prior-finding rows accounted for under D-253-REG01-03 verdict taxonomy. Zero regressions detected. Zero supersessions emitted via REG-02 per D-253-REG02-01 default (F-32-NN supersession scope captured in §4 'At-HEAD resolution' subsections, not REG-02). Expected per Phase 247-252 zero-finding-candidate input + KI EXC-02 + EXC-03 envelopes RE_VERIFIED_AT_HEAD non-widening per Phase 248 BFL-05 + EXC-01 + EXC-04 NEGATIVE-scope per Phase 250 SIB-03.
+
+---
 
 <!-- §6 FIND-03 KI Gating Walk — filled by Task 5 -->
 
