@@ -1043,16 +1043,14 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 futureBps = 0;
                 nextBps = 10_000;
                 vaultBps = 0;
+            } else if (presale) {
+                futureBps = LOOTBOX_PRESALE_SPLIT_FUTURE_BPS;
+                nextBps = LOOTBOX_PRESALE_SPLIT_NEXT_BPS;
+                vaultBps = LOOTBOX_PRESALE_SPLIT_VAULT_BPS;
             } else {
-                bool presaleSplit = cachedLevel == 0 &&
-                    _getNextPrizePool() <= 50 ether;
-                futureBps = presaleSplit
-                    ? LOOTBOX_PRESALE_SPLIT_FUTURE_BPS
-                    : LOOTBOX_SPLIT_FUTURE_BPS;
-                nextBps = presaleSplit
-                    ? LOOTBOX_PRESALE_SPLIT_NEXT_BPS
-                    : LOOTBOX_SPLIT_NEXT_BPS;
-                vaultBps = presaleSplit ? LOOTBOX_PRESALE_SPLIT_VAULT_BPS : 0;
+                futureBps = LOOTBOX_SPLIT_FUTURE_BPS;
+                nextBps = LOOTBOX_SPLIT_NEXT_BPS;
+                vaultBps = 0;
             }
 
             uint256 futureShare = (lootBoxAmount * futureBps) / 10_000;
