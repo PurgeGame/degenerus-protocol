@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v32.0
 milestone_name: Backfill Idempotency + purchaseLevel Underflow Audit
 status: executing
-last_updated: "2026-05-02T00:27:21.434Z"
-last_activity: 2026-05-02 -- Phase 248 planning complete
+last_updated: "2026-05-02T00:43:20Z"
+last_activity: 2026-05-02 -- Phase 248 BFL FINAL READ-only at HEAD acd88512 (closure signal PHASE_248_BFL_FINAL_AT_HEAD_acd88512)
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 2
-  completed_plans: 1
-  percent: 50
+  completed_plans: 2
+  percent: 29
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-30 for v32.0 start)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 248 context gathered (2026-05-01); ready for /gsd-plan-phase 248 (Backfill Idempotency Proof, BFL-01..06)
+**Current focus:** Phase 248 COMPLETE (2026-05-02). Ready for /gsd-plan-phase 249 (purchaseLevel Correctness Proof, PLV-01..06).
 
 ## Current Position
 
-Phase: 248
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-02 -- Phase 248 planning complete
-Resume file: .planning/phases/248-backfill-idempotency-proof/248-CONTEXT.md
+Phase: 248 (COMPLETE) → next: Phase 249
+Plan: All 1 plan executed (Plan 248-01 / 5 atomic per-task commits + 1 plan-close commit)
+Status: Phase 248 deliverable FINAL READ-only at HEAD acd88512 (closure signal PHASE_248_BFL_FINAL_AT_HEAD_acd88512)
+Last activity: 2026-05-02 -- Phase 248 BFL FINAL READ-only at HEAD acd88512
+Resume file: .planning/phases/248-backfill-idempotency-proof/248-01-SUMMARY.md
 
 ## Last Shipped Milestone
 
@@ -62,7 +62,7 @@ Resume file: .planning/phases/248-backfill-idempotency-proof/248-CONTEXT.md
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 247 | Delta Extraction & Classification | DELTA-01..03 (3) | COMPLETE (1/1 plans; 3/3 REQs satisfied; audit/v32-247-DELTA-SURFACE.md FINAL READ-only at HEAD acd88512; closure signal PHASE_247_CATALOG_FINAL_AT_HEAD_acd88512) |
-| 248 | Backfill Idempotency Proof | BFL-01..06 (6) | Not started |
+| 248 | Backfill Idempotency Proof | BFL-01..06 (6) | COMPLETE (1/1 plans; 6/6 REQs satisfied; audit/v32-248-BFL.md FINAL READ-only at HEAD acd88512; closure signal PHASE_248_BFL_FINAL_AT_HEAD_acd88512) |
 | 249 | purchaseLevel Correctness Proof | PLV-01..06 (6) | Not started |
 | 250 | Sibling-Pattern Sweep | SIB-01..05 (5) | Not started |
 | 251 | Reproduction Tests | TST-01..04 (4) | Not started |
@@ -101,6 +101,7 @@ Archived milestone artifacts:
 
 Audit deliverables:
 
+- `audit/v32-248-BFL.md` (FINAL READ-only at HEAD `acd88512`; closure signal `PHASE_248_BFL_FINAL_AT_HEAD_acd88512`; 6 per-REQ sections + Phase 251 TST-04 hand-off appendix; 44 BFL-NN-VMM V-rows + 3 BFL-01-MNN multiplier rows + 5 BFL-02-XNN out-of-scope rows; zero FINDING_CANDIDATE rows; KNOWN-ISSUES.md UNCHANGED — both BFL-05 EXC-02 + EXC-03 carriers NON-WIDENING)
 - `audit/v32-247-DELTA-SURFACE.md` (FINAL READ-only at HEAD `acd88512`; 7 sections fully populated; closure signal `PHASE_247_CATALOG_FINAL_AT_HEAD_acd88512`; 16 D-247-C### + 11 D-247-F### + 1 D-247-S### + 30 D-247-X### + 29 D-247-I### rows; sole scope input for Phases 248-253 per ROADMAP Phase 247 Success Criterion 4)
 - `audit/FINDINGS-v31.0.md` (403 lines, 9 sections; 0 CRITICAL/HIGH/MEDIUM/LOW/INFO; closure signal `MILESTONE_V31_CLOSED_AT_HEAD_cc68bfc7`)
 - `audit/FINDINGS-v30.0.md` (729 lines, 10 sections; 17 INFO / 31-row regression PASS / 0 KI promotions)

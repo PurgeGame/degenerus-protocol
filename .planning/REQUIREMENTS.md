@@ -48,12 +48,12 @@
 
 ### BFL — Backfill Idempotency Proof (6 REQs)
 
-- [ ] **BFL-01**: Enumerate every code path that reaches `_backfillGapDays` (sole call site at AdvanceModule:1176 inside `rngGate` fresh-word branch). Prove the new `rngWordByDay[idx + 1] == 0` guard makes the call idempotent across every reachable `advanceGame` re-entry within a single VRF lock window.
-- [ ] **BFL-02**: Enumerate all state writes inside `_backfillGapDays` (`purchaseStartDay`, coinflip pool credits, `rngWordByDay[d]`, daily ticket processing side effects). For each write, prove the guard correctly skips repeated execution and that the `rngWordByDay[idx + 1]` chosen index is the correct sentinel (no off-by-one vs `idx` or `day`).
-- [ ] **BFL-03**: Multi-day VRF stall scenario — adversarially construct the testnet underflow sequence (lock window crosses ≥2 wall-clock days; fresh-word path re-enters before `_unlockRng`). Prove the underflow is impossible with the guard, and produce a worked numeric example.
-- [ ] **BFL-04**: `dailyIdx` ↔ `rngWordByDay[idx]` ↔ `_unlockRng` invariant — prove `dailyIdx` only advances inside `_unlockRng` AND that `rngWordByDay[idx + 1]` correctly identifies "backfill not yet run for this lock window."
-- [ ] **BFL-05**: RE_VERIFY EXC-02 (prevrandao fallback) and EXC-03 (gameover RNG substitution) envelopes against the backfill guard. The guard MUST NOT widen either envelope; if it does, either narrow the guard or update KNOWN-ISSUES.md per D-09 gating.
-- [ ] **BFL-06**: Conservation proof — total ETH credited to coinflip pools across the gap range equals expected non-doubled amount; `purchaseStartDay` increments exactly once per gap day; sDGNRS / DGNRS / BURNIE supplies invariant across the lock window.
+- [x] **BFL-01**: Enumerate every code path that reaches `_backfillGapDays` (sole call site at AdvanceModule:1176 inside `rngGate` fresh-word branch). Prove the new `rngWordByDay[idx + 1] == 0` guard makes the call idempotent across every reachable `advanceGame` re-entry within a single VRF lock window. — COMPLETE in Phase 248 Plan 248-01 (audit/v32-248-BFL.md §1; 7 BFL-01-VNN rows + 3 BFL-01-MNN multiplier rows; commit b79f3eac).
+- [x] **BFL-02**: Enumerate all state writes inside `_backfillGapDays` (`purchaseStartDay`, coinflip pool credits, `rngWordByDay[d]`, daily ticket processing side effects). For each write, prove the guard correctly skips repeated execution and that the `rngWordByDay[idx + 1]` chosen index is the correct sentinel (no off-by-one vs `idx` or `day`). — COMPLETE in Phase 248 Plan 248-01 (audit/v32-248-BFL.md §2; D-248-09 broadens scope to WHOLE guarded block L1174-1186; 6 BFL-02-VNN rows + 5 out-of-scope BFL-02-XNN rows + sentinel-correctness 4-step proof; commit b79f3eac).
+- [x] **BFL-03**: Multi-day VRF stall scenario — adversarially construct the testnet underflow sequence (lock window crosses ≥2 wall-clock days; fresh-word path re-enters before `_unlockRng`). Prove the underflow is impossible with the guard, and produce a worked numeric example. — COMPLETE in Phase 248 Plan 248-01 (audit/v32-248-BFL.md §3; testnet blocks 10759449 + 10761786 seeded; 15 BFL-03-VNN rows split §3.1 pre-fix walk + §3.2 post-fix walk; commit 838631a8).
+- [x] **BFL-04**: `dailyIdx` ↔ `rngWordByDay[idx]` ↔ `_unlockRng` invariant — prove `dailyIdx` only advances inside `_unlockRng` AND that `rngWordByDay[idx + 1]` correctly identifies "backfill not yet run for this lock window." — COMPLETE in Phase 248 Plan 248-01 (audit/v32-248-BFL.md §4; grep-cited universe attestation per D-248-15; 4 BFL-04-VNN rows including DegenerusGame.sol:219 constructor write recorded for completeness; AdvanceModule:1703 confirmed runtime sole writer; commit 838631a8).
+- [x] **BFL-05**: RE_VERIFY EXC-02 (prevrandao fallback) and EXC-03 (gameover RNG substitution) envelopes against the backfill guard. The guard MUST NOT widen either envelope; if it does, either narrow the guard or update KNOWN-ISSUES.md per D-09 gating. — COMPLETE in Phase 248 Plan 248-01 (audit/v32-248-BFL.md §5; 2 BFL-05-VNN dual-carrier attestation rows per D-248-13; both verdicts NON-WIDENING; KNOWN-ISSUES.md UNCHANGED per D-248-04; commit 3be95bfe).
+- [x] **BFL-06**: Conservation proof — total ETH credited to coinflip pools across the gap range equals expected non-doubled amount; `purchaseStartDay` increments exactly once per gap day; sDGNRS / DGNRS / BURNIE supplies invariant across the lock window. — COMPLETE in Phase 248 Plan 248-01 (audit/v32-248-BFL.md §6; conservation algebra block + 10 BFL-06-VNN per-mutation rows; D-248-10 boundary cite for BurnieCoinflip.sol::processCoinflipPayouts; sDGNRS / DGNRS / BURNIE supply invariance verified via grep — 0 _mint/_burn hits in guarded block; commit 5545b125).
 
 ### PLV — purchaseLevel Correctness Proof (6 REQs)
 
@@ -105,12 +105,12 @@
 | DELTA-01 | Phase 247 | COMPLETE (Plan 247-01 / commit e2cacc5c — §1 + §4 + §5 of audit/v32-247-DELTA-SURFACE.md) |
 | DELTA-02 | Phase 247 | COMPLETE (Plan 247-01 / commit 8e7e1f7c — §2 of audit/v32-247-DELTA-SURFACE.md; D-247-07 floors honored) |
 | DELTA-03 | Phase 247 | COMPLETE (Plan 247-01 / commit 4cc1f829 — §3 of audit/v32-247-DELTA-SURFACE.md; D-247-19 grep-reproducibility honored) |
-| BFL-01 | Phase 248 | Pending |
-| BFL-02 | Phase 248 | Pending |
-| BFL-03 | Phase 248 | Pending |
-| BFL-04 | Phase 248 | Pending |
-| BFL-05 | Phase 248 | Pending |
-| BFL-06 | Phase 248 | Pending |
+| BFL-01 | Phase 248 | COMPLETE (Plan 248-01 / commit b79f3eac — §1 of audit/v32-248-BFL.md; 7 V-rows + 3 multiplier rows) |
+| BFL-02 | Phase 248 | COMPLETE (Plan 248-01 / commit b79f3eac — §2 of audit/v32-248-BFL.md; 6 V-rows; sentinel-index correctness verified) |
+| BFL-03 | Phase 248 | COMPLETE (Plan 248-01 / commit 838631a8 — §3 of audit/v32-248-BFL.md; 15 V-rows; testnet blocks 10759449 + 10761786 seeded) |
+| BFL-04 | Phase 248 | COMPLETE (Plan 248-01 / commit 838631a8 — §4 of audit/v32-248-BFL.md; 4 V-rows; D-248-15 grep-reproducibility honored) |
+| BFL-05 | Phase 248 | COMPLETE (Plan 248-01 / commit 3be95bfe — §5 of audit/v32-248-BFL.md; 2 V-rows NON-WIDENING; KI UNCHANGED) |
+| BFL-06 | Phase 248 | COMPLETE (Plan 248-01 / commit 5545b125 — §6 of audit/v32-248-BFL.md; 10 V-rows; conservation algebra closes) |
 | PLV-01 | Phase 249 | Pending |
 | PLV-02 | Phase 249 | Pending |
 | PLV-03 | Phase 249 | Pending |
