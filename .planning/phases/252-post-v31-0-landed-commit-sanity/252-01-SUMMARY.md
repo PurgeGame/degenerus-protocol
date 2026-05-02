@@ -5,7 +5,7 @@ plan: 252-01
 plan_status: COMPLETE
 plan_close_date: 2026-05-02
 plan_close_head: 2ad456fa
-closure_signal: PHASE_252_POST31_FINAL_AT_HEAD_<plan-close-sha>
+closure_signal: PHASE_252_POST31_FINAL_AT_HEAD_4e5ce8b5
 deliverable: audit/v32-252-POST31.md
 deliverable_status: FINAL READ-only
 requirements_satisfied:
@@ -41,9 +41,9 @@ Post-v31.0 landed-commit delta-sanity attestation + productive-pause × WIP turb
 | Task 1 | `audit(252-01): Task 1 — §1 4 POST31-01 commit rows + §4 SIB-04 reconciliation` | `dd8e0052` | audit/v32-252-POST31.md (NEW) |
 | Task 2 | `audit(252-01): Task 2 — §2 productive-pause × turbo guard interaction enumeration` | `5f46b37e` | audit/v32-252-POST31.md (EXTEND §2) |
 | Task 3 | `audit(252-01): Task 3 — §3.A/§3.B/§3.C composition proofs` | `2ad456fa` | audit/v32-252-POST31.md (EXTEND §3) |
-| Task 4 | `audit(252-01): Task 4 — §0 reproduction recipe + frontmatter + SUMMARY + READ-only flip` | `<plan-close-sha>` | audit/v32-252-POST31.md (FINAL §0 + READ-only flip + closure signal) + .planning/phases/252-*/252-01-SUMMARY.md (NEW) + .planning/STATE.md + .planning/ROADMAP.md + .planning/REQUIREMENTS.md (status updates) |
+| Task 4 | `audit(252-01): Task 4 — §0 reproduction recipe + frontmatter + SUMMARY + READ-only flip` | `4e5ce8b5` | audit/v32-252-POST31.md (FINAL §0 + READ-only flip + closure signal) + .planning/phases/252-*/252-01-SUMMARY.md (NEW) + .planning/STATE.md + .planning/ROADMAP.md + .planning/REQUIREMENTS.md (status updates) |
 
-(Task 4 plan-close SHA recoverable post-commit via `git log --oneline -1 --grep='audit(252-01): Task 4'`. Per Phase 247–251 precedent, the closure-signal placeholder `<plan-close-sha>` remains literal in this SUMMARY and the deliverable; Phase 253 reads the actual SHA from `git log` regardless.)
+(Task 4 plan-close SHA `4e5ce8b5` resolved post-commit; recoverable via `git log --oneline -1 --grep='audit(252-01): Task 4'`. Per Phase 251 precedent commit `b3c4dbe8 docs(251-01): record Self-Check PASSED + resolved closure SHA in SUMMARY.md`, this SUMMARY's resolution from placeholder to literal SHA is recorded in a follow-up `docs(252-01)` stamp commit.)
 
 ## V-Row Tally
 
@@ -96,12 +96,35 @@ Other sanity gates passed cleanly:
 
 ## Closure Signal
 
-`PHASE_252_POST31_FINAL_AT_HEAD_<plan-close-sha>` (recoverable from Task 4 commit SHA via `git log --oneline -1 --grep='audit(252-01): Task 4'`).
+`PHASE_252_POST31_FINAL_AT_HEAD_4e5ce8b5` (resolved Task 4 commit SHA `4e5ce8b5`, recoverable via `git log --oneline -1 --grep='audit(252-01): Task 4'`).
 
 ## Hand-Off to Phase 253
 
 Phase 252 §4 reconciliation table is the canonical input for Phase 253 milestone-closure attestation per D-252-14. Phase 253 FIND-04 commit-readiness register inherits §4's row-by-row agreement attestation. With zero divergences observed at Phase 252 close, Phase 253 takes Phase 252 as a clean confirmation input — no F-32-NN IDs emitted from this phase per D-252-CF-03. SG-252-01 (PLAN.md line-number divergence) is documentary-only and does not propagate to Phase 253 unless a downstream rerun surfaces a true line-number-driven divergence.
 
-## Self-Check
+## Self-Check: PASSED
 
-(Filled after final commit verification — see post-commit verification block below.)
+Verified post-Task-4 commit `4e5ce8b5` against the phase-level verification block in PLAN.md:
+
+| Check | Expected | Observed | Status |
+|-------|----------|----------|--------|
+| `grep -c '^## §[0-9]' audit/v32-252-POST31.md` | 5 | 5 (`## §0`, `## §1`, `## §2`, `## §3`, `## §4 — Section 4 — SIB-04 Reconciliation`) | PASS |
+| `grep -c '^\| POST31-01-V0[1-4] ' audit/v32-252-POST31.md` | 4 | 4 | PASS |
+| `grep -c '^\| POST31-02-V0[1-7] ' audit/v32-252-POST31.md` | 7 | 7 (4 §2 enumeration rows + 3 §3 composition proof rows) | PASS |
+| `grep -c '^### §3\.[ABC]' audit/v32-252-POST31.md` | 3 | 3 | PASS |
+| Cross-cite tokens (D-247-C001, D-247-C013, SIB-04-V01, SIB-04-V04, PLV-05, PLV-06, BFL-03, BFL-05, BFL-06, TST-03-V01, TST-04-V02, TST-01-V02, TST-02-V02) | all 13 present | all 13 present | PASS |
+| `grep -q 'PHASE_252_POST31_FINAL_AT_HEAD_' audit/v32-252-POST31.md` | hit | resolved literal `PHASE_252_POST31_FINAL_AT_HEAD_4e5ce8b5` in frontmatter + §4 trailer | PASS |
+| `grep -q 'PHASE_252_POST31_FINAL_AT_HEAD_' .planning/phases/252-post-v31-0-landed-commit-sanity/252-01-SUMMARY.md` | hit | resolved literal `PHASE_252_POST31_FINAL_AT_HEAD_4e5ce8b5` in frontmatter + Closure Signal section | PASS |
+| `grep -q 'read_only: true' audit/v32-252-POST31.md` | hit | hit (frontmatter) | PASS |
+| Pure-proof attestation: `git log acd88512..HEAD --name-only -- contracts/ test/` (excl SG-250-01 mint) | empty | empty | PASS |
+| `git ls-files --error-unmatch test/edge/BackfillIdempotency.test.js` | exit non-zero | exit 1 (untracked) | PASS |
+| `git ls-files --error-unmatch test/edge/LastPurchaseDayRace.test.js` | exit non-zero | exit 1 (untracked) | PASS |
+| `git log --oneline --grep='audit(252-01)' \| wc -l` | 4 | 4 (`dd8e0052`, `5f46b37e`, `2ad456fa`, `4e5ce8b5`) | PASS |
+| `grep -E 'Phase 252.*Complete\|Phase 252.*COMPLETE' .planning/ROADMAP.md` | hit | hit | PASS |
+| `grep -E 'POST31-01.*COMPLETE' .planning/REQUIREMENTS.md` | hit | hit | PASS |
+| `grep -E 'POST31-02.*COMPLETE' .planning/REQUIREMENTS.md` | hit | hit | PASS |
+| `grep -q 'completed_phases: 6' .planning/STATE.md` | hit | hit | PASS |
+
+All 15 phase-level verification checks PASS. Closure SHA `4e5ce8b5` resolved across all 4 files (audit deliverable + SUMMARY + STATE + ROADMAP); no `<plan-close-sha>` placeholder remains except inside the explanatory parenthetical that documents the resolution itself.
+
+Recorded in this stamp commit per Phase 251 precedent (`b3c4dbe8 docs(251-01): record Self-Check PASSED + resolved closure SHA in SUMMARY.md`).
