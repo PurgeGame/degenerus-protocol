@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: v32.0
-milestone_name: Backfill Idempotency + purchaseLevel Underflow Audit
+milestone: between
+milestone_name: v32.0 shipped — awaiting v33.0+ kickoff
 status: shipped
-last_updated: "2026-05-02T11:30:00.000Z"
-last_activity: 2026-05-02 -- v32.0 milestone shipped; Phase 253 plan-close
+last_updated: "2026-05-02T11:49:18.731Z"
+last_activity: 2026-05-02
 progress:
   total_phases: 7
   completed_phases: 7
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-30 for v32.0 start)
 Phase: complete (Phase 253 plan-close landed; v32.0 milestone shipped)
 Plan: 1 of 1 — COMPLETE
 Status: v32.0 milestone shipped; awaiting v33.0+ kickoff
-Last activity: 2026-05-02 -- Phase 253 plan-close + v32.0 milestone closure
+Last activity: 2026-05-02
 Resume file: (none — v32.0 closed; v33.0+ has not yet kicked off)
 
 ## Last Shipped Milestone

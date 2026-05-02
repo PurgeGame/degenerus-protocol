@@ -10,25 +10,20 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-**Last shipped:** v31.0 — Post-v30 Delta Audit + Gameover Edge-Case Re-Audit (2026-04-24, tag `v31.0`)
-**Contract HEAD anchor:** `cc68bfc7` (5 commits + 1 BAF addendum above v30.0 baseline `7ab515fe`)
-**Audit deliverables (cumulative):** `audit/FINDINGS-v25.0.md` + `FINDINGS-v27.0.md` + `FINDINGS-v28.0.md` + `FINDINGS-v29.0.md` + `FINDINGS-v30.0.md` + `FINDINGS-v31.0.md` + 16 v30 supporting `audit/v30-*.md` + 5 v31 supporting `audit/v31-*.md` artifacts; `KNOWN-ISSUES.md` (4 accepted-design RNG entries: EXC-01..04, all RE_VERIFIED non-widening at HEAD `cc68bfc7`)
+**Last shipped:** v32.0 — Backfill Idempotency + purchaseLevel Underflow Audit (2026-05-02, tag `v32.0` pending push)
+**Contract HEAD anchor:** `acd88512` (turbo guard L173 `!rngLockedFlag` clause + L1174 backfill sentinel `rngWordByDay[idx + 1] == 0` committed in single SHA "fix(advance): guard turbo block + make _backfillGapDays idempotent"; +1 SG-250-01 `98e78404` post-anchor MintModule presale-flag commit, functionally orthogonal)
+**Audit deliverables (cumulative):** `audit/FINDINGS-v25.0.md` + `FINDINGS-v27.0.md` + `FINDINGS-v28.0.md` + `FINDINGS-v29.0.md` + `FINDINGS-v30.0.md` + `FINDINGS-v31.0.md` + `FINDINGS-v32.0.md` + 16 v30 supporting `audit/v30-*.md` + 5 v31 supporting `audit/v31-*.md` + 6 v32 supporting `audit/v32-*.md` artifacts; `KNOWN-ISSUES.md` (4 accepted-design RNG entries: EXC-01..04, all RE_VERIFIED non-widening at HEAD `acd88512`)
+**Awaiting user commit:** `test/edge/LastPurchaseDayRace.test.js` + `test/edge/BackfillIdempotency.test.js` (TST-FILE-01 + TST-FILE-02 from Phase 251 §5 commit-readiness register; remain untracked permanently per D-253-FIND04-04 — user reviews diff at milestone close per `feedback_manual_review_before_push.md` and runs `git add` + `git commit` separately)
 
-## Current Milestone: v32.0 Backfill Idempotency + purchaseLevel Underflow Audit
+## Active Milestone
 
-**Goal:** Prove the two testnet bugs (backfill double-execution causing underflow, and `purchaseLevel = 0` panic 0x11) are correctly fixed by the WIP guards in `DegenerusGameAdvanceModule.sol`, and sweep the module for sibling-pattern races between `rngLockedFlag` / `lastPurchaseDay` / `jackpotPhaseFlag` / `dailyIdx` that could produce other underflows, double-execution, or skipped updates.
+v32.0 SHIPPED 2026-05-02. No active milestone — awaiting v33.0+ kickoff via `/gsd-new-milestone`.
 
-**Target features:**
-- Backfill idempotency proof — `rngWordByDay[idx+1]==0` guard makes `_backfillGapDays` callable at most once per lock window across every reachable `advanceGame` path; RE_VERIFY EXC-02/EXC-03 envelopes; sweep all `_backfillGapDays` callers
-- `purchaseLevel` correctness proof — across every `(lastPurchaseDay, rngLockedFlag, jackpotPhaseFlag, level)` combination, prove `purchaseLevel` can never be 0 when it should be ≥1; audit every callsite that reads it
-- Reproduction tests — verify `LastPurchaseDayRace.test.js` triggers panic 0x11 pre-fix and passes post-fix; verify productive-pause test still passes; add a backfill-double-execution reproduction test if missing
-- Sibling-pattern sweep — hunt other `rngLockedFlag`-vs-other-state races in AdvanceModule (and modules that delegate into it) that could produce underflows, double-execution, or skipped updates
+## Completed Milestone: v32.0 Backfill Idempotency + purchaseLevel Underflow Audit
 
-**Audit posture:** READ-only posture lifted (was held continuously v28.0–v31.0). Audit-then-commit. WIP turbo guard + backfill guard + reproduction test land via explicit per-commit user approval (per `feedback_no_contract_commits.md`). New contract/test changes surfaced by the sweep also require explicit approval.
+**Status:** Complete (2026-05-02)
 
-**Baseline:** v31.0 HEAD `cc68bfc7` → current HEAD `48554f8f` (4 post-v31.0 contract-touching commits) + WIP (`ContractAddresses.sol`, `DegenerusGameAdvanceModule.sol`, new `test/edge/LastPurchaseDayRace.test.js`).
-
-**Trigger context:** Testnet panic 0x11 reproduced at blocks 10759449 and 10761786. Underflow trigger: `dailyIdx` only updated by `_unlockRng`, so multi-day VRF stalls re-enter backfill on each new wall-clock day. Panic trigger: turbo block fires while `rngLockedFlag=true` → fresh-word path skips the level pre-increment → `(lastPurchase && rngLockedFlag) ? lvl : lvl + 1` returns `lvl=0` → `purchaseLevel = 0` → revert at `levelPrizePool[uint24(0) - 1]`.
+**Result:** 7 phases (247-253), 7 plans, 32/32 requirements satisfied. v32.0 HEAD anchor `acd88512` containing both WIP guards committed in single SHA (turbo at L173 + backfill sentinel at L1174). Two HIGH SUPERSEDED-at-HEAD F-32-NN disclosure blocks: F-32-01 (productive-pause / turbo race → `purchaseLevel` underflow panic 0x11; closed by L173 conjunction `!inJackpot && !lastPurchaseDay && !rngLockedFlag`); F-32-02 (`_backfillGapDays` double-execution underflow; closed by L1174 sentinel `rngWordByDay[idx + 1] == 0`). Both SUPERSEDED-at-HEAD via PLV-03 ternary unreachable proof + PLV-05 testnet panic 0x11 walk + PLV-06 strand-disproof + Phase 252 §3.A composition for F-32-01; BFL-01..06 conservation + sentinel-correctness 4-step proof + Phase 252 §3.B composition for F-32-02. 134 V-rows across 25 REQs (Phase 247-252) all SAFE / NON-WIDENING / NON-INTERFERING with 0 FINDING_CANDIDATE rows surfaced. LEAN regression: 13 PASS REG-01 (12 prior-finding rows from v29 + v30 + v3.7/v3.8 baseline + 1 explicitly NAMED F-29-04 row) + 15-entry Exclusion Log + zero-row REG-02. KI envelopes EXC-01..04 all RE_VERIFIED non-widening (EXC-02 + EXC-03 dual-carrier via Phase 248 BFL-05; EXC-01 + EXC-04 NEGATIVE-scope via Phase 250 SIB-03). KNOWN-ISSUES.md UNMODIFIED per D-253-FIND03-01 default zero-promotion path (F-32-01 + F-32-02 both fail D-09 sticky predicate — SUPERSEDED at HEAD, not ongoing protocol behavior). Cross-repo READ-only pattern carried forward — zero `contracts/` writes by agent; zero `test/` writes by agent across all 7 v32.0 phases. Phase 251 awaiting-approval test files persist untracked permanently per D-253-FIND04-04. Zero forward-cites emitted (terminal-phase rule). Deliverable: `audit/FINDINGS-v32.0.md` (548 lines, 9 sections, FINAL READ-only at HEAD `acd88512`) emitting closure signal `MILESTONE_V32_AT_HEAD_acd88512`. Phase 253 used Phase 246 single-plan multi-task pattern (1 plan / 6 atomic per-task commits + 1 SUMMARY follow-up + 1 VERIFICATION commit). Note: gsd-executor + gsd-verifier subagents encountered the same Claude Code built-in restriction blocking subagents writing `audit/FINDINGS-*.md` ("Subagents should return findings as text, not write report files"); orchestrator executed all 6 tasks + verification inline in parent session. All phases verified PASSED 12/12 must_haves + 5/5 ROADMAP success criteria.
 
 ## Completed Milestone: v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit
 
@@ -459,4 +454,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-30 — v32.0 Backfill Idempotency + purchaseLevel Underflow Audit started. Contract baseline for the delta: v31.0 HEAD `cc68bfc7` → current HEAD `48554f8f` (4 post-v31 commits) + WIP turbo + backfill guards in `DegenerusGameAdvanceModule.sol`. READ-only posture LIFTED — audit-then-commit with explicit per-commit approval. Awaiting requirements + roadmap.*
+*Last updated: 2026-05-02 — v32.0 Backfill Idempotency + purchaseLevel Underflow Audit SHIPPED. Two HIGH SUPERSEDED-at-HEAD F-32-NN disclosure blocks (turbo race + backfill double-execution; both closed by L173 + L1174 guards committed in `acd88512`). 13 PASS REG-01 + zero-row REG-02. KI envelopes EXC-01..04 all RE_VERIFIED non-widening; KNOWN-ISSUES.md UNMODIFIED. Closure signal `MILESTONE_V32_AT_HEAD_acd88512`. Awaiting v33.0+ kickoff.*
