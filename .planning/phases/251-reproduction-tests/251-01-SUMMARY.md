@@ -120,6 +120,21 @@ Both rows route to Phase 253 FIND-04 commit-readiness register at milestone clos
 
 ## Closure Signal
 
-`PHASE_251_TST_FINAL_AT_HEAD_<plan-close-sha>`
+`PHASE_251_TST_FINAL_AT_HEAD_65b33299`
 
-The `<plan-close-sha>` placeholder reflects this Task 4 plan-close commit's SHA (recorded in the commit message itself; see Task 4 commit log line). Per D-251-PLN-01 closure-recursion artifact handling, the file content uses the placeholder and the commit message carries the canonical resolved SHA.
+(Plan-close commit SHA `65b33299986e1a58faaf74dd5232ef005b040a8c2`; Task 4 final-assembly + FINAL READ-only flip + §5 commit-readiness register.)
+
+## Self-Check: PASSED
+
+All Phase 251 acceptance gates verified at plan close:
+
+- ✓ `audit/v32-251-prefix-revert.patch` exists; `git apply --check -R` passes (sha-256 `dc17c607a475b3dc64fcd8f5b20aae7d6c69b2554405a08cd1256e5043da2e93`).
+- ✓ `audit/v32-251-prefix-revert-backfill-only.patch` exists; `git apply --check -R` passes (sha-256 `8863acce1e28c403e5c046b86209da1f5401c02457dc428c2e8ac8fe68bb7b64`).
+- ✓ `audit/v32-251-TST.md` exists, 668 lines, FINAL READ-only frontmatter, contains all 8 TST-NN-Vmm V-rows + TST-FILE-01/02 + PHASE_251_TST_FINAL_AT_HEAD closure signal.
+- ✓ 6 run-log files under `audit/v32-251-runs/` (lpdr-A single + lpdr-A multi + lpdr-D + lpp-D + lmj-D + bfl-C + bfl-D).
+- ✓ Working tree clean for `contracts/modules/DegenerusGameAdvanceModule.sol`.
+- ✓ `test/edge/LastPurchaseDayRace.test.js` exists on disk, NOT tracked.
+- ✓ `test/edge/BackfillIdempotency.test.js` exists on disk, NOT tracked.
+- ✓ All 5 Phase-251 commits (4 audit + 1 docs) contain ZERO `test/edge/*.test.js` paths.
+- ✓ All 5 Phase-251 commit SHAs verified in `git log`.
+- ✓ `.planning/STATE.md`, `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md` updated with Phase 251 complete status.
