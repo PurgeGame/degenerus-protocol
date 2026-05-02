@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v32.0
 milestone_name: Backfill Idempotency + purchaseLevel Underflow Audit
 status: executing
-last_updated: "2026-05-02T08:12:07.233Z"
-last_activity: 2026-05-02 -- Phase 252 planning complete
+last_updated: "2026-05-02T08:15:57.721Z"
+last_activity: 2026-05-02 -- Phase 252 complete; awaiting Phase 253
 progress:
   total_phases: 7
-  completed_phases: 5
-  total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_phases: 6
+  total_plans: 7
+  completed_plans: 6
+  percent: 86
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-30 for v32.0 start)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 252 — Post-v31.0 Landed-Commit Sanity (next; Phase 251 complete)
+**Current focus:** Phase 253 — findings consolidation + lean regression
 
 ## Current Position
 
-Phase: 252
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-02 -- Phase 252 planning complete
-Resume file: (none — Phase 252 awaits CONTEXT.md authoring)
+Phase: 253 (findings-consolidation-lean-regression) — Not started
+Plan: (Phase 252 complete; awaiting Phase 253 discuss/plan)
+Status: Phase 252 complete; awaiting Phase 253
+Last activity: 2026-05-02 -- Phase 252 complete; awaiting Phase 253
+Resume file: (none — Phase 253 awaits CONTEXT.md authoring)
 
 ## Last Shipped Milestone
 
@@ -66,7 +66,7 @@ Resume file: (none — Phase 252 awaits CONTEXT.md authoring)
 | 249 | purchaseLevel Correctness Proof | PLV-01..06 (6) | COMPLETE (1/1 plans; 6/6 REQs satisfied; audit/v32-249-PLV.md FINAL READ-only at HEAD acd88512) |
 | 250 | Sibling-Pattern Sweep | SIB-01..05 (5) | COMPLETE (1/1 plans; 5/5 REQs satisfied; audit/v32-250-SIB.md FINAL READ-only at HEAD acd88512; closure signal PHASE_250_SIB_FINAL_AT_HEAD_acd88512) |
 | 251 | Reproduction Tests | TST-01..04 (4) | COMPLETE (1/1 plans; 4/4 REQs satisfied; 8 V-rows SAFE; audit/v32-251-TST.md FINAL READ-only at HEAD c790ae45; closure signal PHASE_251_TST_FINAL_AT_HEAD_65b33299; 4 atomic commits c73c8add → 65b33299; awaiting-approval test files: test/edge/LastPurchaseDayRace.test.js + test/edge/BackfillIdempotency.test.js) |
-| 252 | Post-v31.0 Landed-Commit Sanity | POST31-01..02 (2) | Not started |
+| 252 | Post-v31.0 Landed-Commit Sanity | POST31-01..02 (2) | COMPLETE (1/1 plans; 2/2 REQs satisfied; 11 V-rows SAFE; audit/v32-252-POST31.md FINAL READ-only at HEAD `2ad456fa`; closure signal `PHASE_252_POST31_FINAL_AT_HEAD_<plan-close-sha>`; 4 atomic commits dd8e0052 → `<plan-close-sha>`; awaiting-approval test files preserved untracked) |
 | 253 | Findings Consolidation + Lean Regression | FIND-01..04 (4) + REG-01..02 (2) | Not started |
 
 **Dependencies:** Phase 247 must precede every other phase (provides delta surface). Phases 248 / 249 / 250 / 251 / 252 are independent of each other once Phase 247 lands. Phase 253 is terminal (consumes every prior phase artifact).

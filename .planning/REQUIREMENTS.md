@@ -81,8 +81,8 @@
 
 ### POST31 — Post-v31.0 Landed-Commit Sanity (2 REQs)
 
-- [ ] **POST31-01**: Delta-sanity verify the 4 landed post-v31.0 commits (`8bdeabc2`, `ad41973c`, `6a63705b`, `48554f8f`) do not widen the bug envelopes being fixed — i.e. the liveness pause, vault redemption refactor, and mint buyer-charge fix do not introduce new turbo-class or backfill-class races.
-- [ ] **POST31-02**: RE_VERIFY the productive-phase liveness pause behavior (`8bdeabc2`) against the new `!rngLockedFlag` turbo guard — confirm both fixes compose correctly and there is no interaction where the death clock fails to pause OR resumes prematurely.
+- [x] **POST31-01**: Delta-sanity verify the 4 landed post-v31.0 commits (`8bdeabc2`, `ad41973c`, `6a63705b`, `48554f8f`) do not widen the bug envelopes being fixed — i.e. the liveness pause, vault redemption refactor, and mint buyer-charge fix do not introduce new turbo-class or backfill-class races. — COMPLETE in Phase 252 Plan 252-01 (audit/v32-252-POST31.md §1; 4 SAFE V-rows; SIB-04 reconciliation in §4).
+- [x] **POST31-02**: RE_VERIFY the productive-phase liveness pause behavior (`8bdeabc2`) against the new `!rngLockedFlag` turbo guard — confirm both fixes compose correctly and there is no interaction where the death clock fails to pause OR resumes prematurely. — COMPLETE in Phase 252 Plan 252-01 (audit/v32-252-POST31.md §2 + §3; 7 SAFE V-rows; productive-pause × turbo guard composition proven NON-INTERFERING across 3 scenarios).
 
 ### FIND — Findings Consolidation (4 REQs)
 
@@ -126,8 +126,8 @@
 | TST-02 | Phase 251 | COMPLETE (Plan 251-01 / commit 6bc9c525 — §2 of audit/v32-251-TST.md; 2 V-rows SAFE; PLV-03 empirical confirmation) |
 | TST-03 | Phase 251 | COMPLETE (Plan 251-01 / commit 6bc9c525 — §3 of audit/v32-251-TST.md; 2 V-rows SAFE; SIB-04-V01 carrier integrity) |
 | TST-04 | Phase 251 | COMPLETE (Plan 251-01 / commit 33e7d7c5 — §4 of audit/v32-251-TST.md; 2 V-rows SAFE; BFL §7.1 + BFL-03 empirical confirmation) |
-| POST31-01 | Phase 252 | Pending |
-| POST31-02 | Phase 252 | Pending |
+| POST31-01 | Phase 252 | COMPLETE (Plan 252-01 / commit `dd8e0052` — §1 of audit/v32-252-POST31.md; 4 V-rows SAFE; SIB-04 row-for-row reconciliation in §4 with zero divergence) |
+| POST31-02 | Phase 252 | COMPLETE (Plan 252-01 / commits `5f46b37e` + `2ad456fa` — §2 + §3 of audit/v32-252-POST31.md; 7 V-rows SAFE; productive-pause × WIP turbo guard composition proven NON-INTERFERING across 3 scenarios with Phase 251 TST-03-V01 / TST-04-V02 / TST-01-V02+TST-02-V02 empirical seals) |
 | FIND-01 | Phase 253 | Pending |
 | FIND-02 | Phase 253 | Pending |
 | FIND-03 | Phase 253 | Pending |
