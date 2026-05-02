@@ -234,7 +234,47 @@ Phase 252 delta-sanity verified the 4 landed post-v31.0 commits NON-WIDENING aga
 
 ---
 
-<!-- §4 F-32-NN Finding Blocks — filled by Task 3 -->
+## 4. F-32-NN Finding Blocks
+
+Phase 253 emits exactly TWO F-32-NN finding blocks per D-253-FIND01-01 documenting the originally-discovered testnet bugs being fixed by the v32.0 milestone: F-32-01 (productive-pause / turbo race → `purchaseLevel` underflow panic 0x11) + F-32-02 (`_backfillGapDays` double-execution underflow panic 0x11). Both classified HIGH per D-08 5-bucket rubric (player-reachable hard determinism violation; no value extraction); both SUPERSEDED at HEAD by the L173 turbo guard `!rngLockedFlag` clause + L1174 backfill sentinel `rngWordByDay[idx + 1] == 0` committed in `acd88512`. Each block uses the v29-style 8-subsection format per D-253-FIND01-03 (Severity / Source phase + plan / Subject / Description / Reproduction evidence / At-HEAD resolution / Disclosure rationale / Cross-cites). Per D-253-FIND01-04, NO additional F-32-NN blocks are emitted: SG-250-01 (`98e78404` MintModule presale-flag) is cited in §3d + §9 only; SG-252-01 (PLAN.md line-number divergence) is cited in §3f only; MintModule:1229 SIB-03-V03 (new flag-vs-flag-vs-counter triple) is cited in §3d only as a sibling-pattern observation.
+
+### F-32-01 — Productive-pause / turbo race → `purchaseLevel` underflow (panic 0x11)
+
+**Severity:** HIGH (D-08 player-reachable hard determinism violation; SUPERSEDED at HEAD by L173 turbo guard `!rngLockedFlag` clause committed in `acd88512`).
+
+**Source phase + plan:** Phase 251 TST (empirical reproduction) + Phase 249 PLV-03/PLV-05/PLV-06 (structural-closure proofs) + Phase 252 §3.A (composition proof at HEAD).
+
+**Subject:** AdvanceModule:167-185 turbo block; L173 guard `if (!inJackpot && !lastPurchaseDay && !rngLockedFlag) {...}`; L185 ternary `purchaseLevel = (cachedJpFlag && lastPurchase) ? lvl : lvl + 1`.
+
+**Description:** Pre-fix (L173 = `!inJackpot && !lastPurchaseDay`), the turbo block fired in productive multi-call windows where `lastPurchaseDay = T` AND `rngLockedFlag = T`. The L185 ternary then evaluated `(cachedJpFlag = F && lastPurchase = T) ? lvl : lvl + 1` = `lvl + 1` followed by L186 game-over guard `if (!inJackpot && !lastPurchase) {...}` = `(T && F)` = FALSE → game-over path skipped → standard advance flow proceeded with `purchaseLevel = lvl + 1` while `level = lvl - 1` from a stale read. The arithmetic mismatch triggered `purchaseLevel - 1 < 0` panic 0x11 in downstream `_handleGameOverPath` ticket-replay ranges. Reproduced as panic 0x11 in TST-01 state-A (pre-fix; both guards reverted).
+
+**Reproduction evidence:** Phase 251 §1 TST-01-V01 (single-day reproduction; `audit/v32-251-runs/lpdr-A-20260502T030000Z.log`) + TST-01-V02 (multi-day-drain reproduction; same state-A run). Both traces produce panic 0x11 deterministically pre-fix; post-fix state-D run (TST-02-V01..V02) is panic-free.
+
+**At-HEAD resolution:** Structurally closed by L173 conjunction `!inJackpot && !lastPurchaseDay && !rngLockedFlag` committed in `acd88512`. Phase 249 PLV-03 ternary unreachable proof + PLV-05 testnet panic 0x11 walk + PLV-06 strand-disproof prove the L173 guard makes `(cachedJpFlag = T ∧ cachedLevel = 0)` cell UNREACHABLE via INV-PLV-B-01 + INV-PLV-C-01 composition. Phase 252 §3.A composition proof confirms productive-pause × turbo guard is mutex-aligned (turbo block fires only when `lastPurchaseDay = F ∧ jackpotPhaseFlag = F`; productive-pause short-circuit fires only when `lastPurchaseDay = T ∨ jackpotPhaseFlag = T`; disjoint state spaces).
+
+**Disclosure rationale:** F-32-01 is emitted as a HIGH disclosure block despite SUPERSEDED-at-HEAD status because: (a) the bug is the input to v32 (the milestone exists to fix it); (b) milestone-record completeness requires explicit disclosure of the bug's mechanism + reproduction trail + structural-closure proof for any future-reader of the L173 guard's evolution; (c) v32 audit history should match v25/v27/v28/v29 historical pattern of disclosing player-reachable hard determinism violations even when SUPERSEDED.
+
+**Cross-cites:** Phase 247 §1.4 D-247-C001..C013 + §6 Consumer Index; Phase 249 PLV-03-V01..V05 + PLV-05-V01..V06 + PLV-06-V01..V03; Phase 250 SIB-04-V01 (8bdeabc2 productive-pause × turbo guard mutex-equivalent argument); Phase 251 TST-01-V01..V02 + TST-02-V01..V02 + TST-03-V01..V02; Phase 252 §3.A composition proof (POST31-02-V05).
+
+### F-32-02 — `_backfillGapDays` double-execution underflow (panic 0x11)
+
+**Severity:** HIGH (D-08 player-reachable hard determinism violation; SUPERSEDED at HEAD by L1174 sentinel guard `rngWordByDay[idx + 1] == 0` committed in `acd88512`).
+
+**Source phase + plan:** Phase 251 TST-04 (empirical reproduction) + Phase 248 BFL-01..06 (structural-closure proofs) + Phase 252 §3.B (composition proof at HEAD).
+
+**Subject:** AdvanceModule:1167-1186 backfill block inside `rngGate` fresh-word branch; L1174 sentinel `if (rngWordByDay[idx + 1] == 0) { _backfillGapDays(...); }`.
+
+**Description:** Pre-fix (no L1174 sentinel), `_backfillGapDays` re-executed across re-entry of `rngGate`'s fresh-word branch when `advanceGame` was called multiple times within a single VRF lock window. Each re-entry incremented `purchaseStartDay` once per gap day (correct first invocation); subsequent invocations re-incremented the same gap-day range, doubling `purchaseStartDay` increments (psdDelta = 2N for an N-day gap) and double-crediting coinflip pool payouts. Downstream consumers reading `purchaseStartDay` against the stale `level` counter triggered `purchaseStartDay - level - 1 < 0` panic 0x11. Reproduced as state-C psdDelta=15 over-bump (vs expected 7) in TST-04.
+
+**Reproduction evidence:** Phase 251 §4 TST-04-V01 (state-C pre-fix fail; `audit/v32-251-runs/bfi-C-20260502T040000Z.log`) shows psdDelta=15 + downstream panic 0x11. State-D post-fix run (TST-04-V02) shows psdDelta=7 (single-bump per gap day) + clean drain to terminal stage 6 — 53% delta reduction empirically isolates L1174 sentinel.
+
+**At-HEAD resolution:** Structurally closed by L1174 sentinel `if (rngWordByDay[idx + 1] == 0) { _backfillGapDays(...); }` committed in `acd88512`. Phase 248 BFL-01 (7 V-rows + 3 multiplier rows; rngGate fresh-word branch reachability under L1174) + BFL-02 (sentinel-correctness 4-step proof) + BFL-03 (testnet blocks 10759449 + 10761786 multi-day VRF stall worked example showing pre-fix doubling vs post-fix short-circuit) + BFL-04 (dailyIdx ↔ rngWordByDay invariant) + BFL-05 (EXC-02 + EXC-03 NON-WIDENING attestation) + BFL-06 (sDGNRS / DGNRS / BURNIE conservation algebra) collectively prove the L1174 sentinel makes `_backfillGapDays` idempotent across every reachable `advanceGame` re-entry path. Phase 252 §3.B composition proof confirms the multi-day VRF stall × backfill guard interaction is NON-INTERFERING at HEAD.
+
+**Disclosure rationale:** F-32-02 is emitted as a HIGH disclosure block despite SUPERSEDED-at-HEAD status for the same reasons as F-32-01: milestone-record completeness + future-reader trail + v32 audit history matching v25/v27/v28/v29 historical pattern.
+
+**Cross-cites:** Phase 247 §1.4 D-247-C001..C013 + §6 Consumer Index; Phase 248 BFL-01-V01..V07 + BFL-02-V01..V06 + BFL-03-V01..V15 + BFL-04-V01..V04 + BFL-05-V01..V02 + BFL-06-V01..V10; Phase 250 SIB-04-V01; Phase 251 TST-04-V01..V02; Phase 252 §3.B composition proof (POST31-02-V06).
+
+---
 
 <!-- §5 Regression Appendix — filled by Task 4 -->
 
