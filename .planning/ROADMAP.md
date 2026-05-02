@@ -157,7 +157,10 @@ Plans:
   3. Section 3 names the unreachable state `(lastPurchase = true ∧ rngLockedFlag = true ∧ lvl = 0)` and proves the ternary at AdvanceModule:185 cannot return 0 by showing the `!rngLockedFlag` turbo guard at L167 short-circuits before that combination can bind.
   4. Section 4 lists every `purchaseLevel`-arithmetic call site (notably AdvanceModule:748 `levelPrizePool[uint24(purchaseLevel) - 1]`, plus all `+1`, `+4`, `_tqReadKey(purchaseLevel)` sites) with one verdict row each proving no underflow / overflow / out-of-bounds at any reachable `purchaseLevel` value.
   5. Section 5 symbolically reproduces the testnet panic 0x11 trigger sequence (blocks 10759449 + 10761786) and shows step-by-step that the new turbo guard short-circuits the path before the binding ternary; Section 6 proves the daily-jackpot region (lines 372–404) does not strand state in a "target met but never resolves" condition under the guard.
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 249-01-PLAN.md — PLV-01 + PLV-02 + PLV-03 + PLV-04 + PLV-05 + PLV-06 single-plan multi-task proof at HEAD acd88512 (4 atomic per-task commits per D-247-14 / D-249-CF-07)
 
 ### Phase 250: Sibling-Pattern Sweep
 **Goal**: Hunt other turbo-class and backfill-class races across AdvanceModule and every delegating module — every interaction between `rngLockedFlag` / `lastPurchaseDay` / `jackpotPhaseFlag` / `dailyIdx` / `level` / `purchaseStartDay` / `rngWordByDay[*]` / `phaseTransitionActive` is enumerated and classified, so any latent sibling bug surfaces as an explicit F-32-NN candidate before consolidation.
@@ -215,7 +218,7 @@ Phases execute in numeric order: 247 → 248 → 249 → 250 → 251 → 252 →
 |-------|-----------|----------------|--------|-----------|
 | 247. Delta Extraction & Classification | v32.0 | 1/1 | Complete    | 2026-05-01 |
 | 248. Backfill Idempotency Proof | v32.0 | 1/1 | Complete    | 2026-05-02 |
-| 249. purchaseLevel Correctness Proof | v32.0 | 0/TBD | Not started | - |
+| 249. purchaseLevel Correctness Proof | v32.0 | 0/1 | Not started | - |
 | 250. Sibling-Pattern Sweep | v32.0 | 0/TBD | Not started | - |
 | 251. Reproduction Tests | v32.0 | 0/TBD | Not started | - |
 | 252. Post-v31.0 Landed-Commit Sanity | v32.0 | 0/TBD | Not started | - |
