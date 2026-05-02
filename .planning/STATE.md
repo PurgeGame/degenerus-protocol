@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v32.0
 milestone_name: Backfill Idempotency + purchaseLevel Underflow Audit
 status: executing
-last_updated: "2026-05-02T02:56:37.206Z"
+last_updated: "2026-05-02T03:23:12.257Z"
 last_activity: 2026-05-02
 progress:
   total_phases: 7
@@ -28,7 +28,7 @@ Phase: 250
 Plan: Not started
 Status: Executing Phase 249
 Last activity: 2026-05-02
-Resume file: .planning/phases/249-purchaselevel-correctness-proof/249-CONTEXT.md
+Resume file: .planning/phases/250-sibling-pattern-sweep/250-CONTEXT.md
 
 ## Last Shipped Milestone
 
