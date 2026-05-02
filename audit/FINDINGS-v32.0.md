@@ -360,9 +360,80 @@ Combined distribution table per Claude's Discretion 4-col format (mirror v31 §5
 
 ---
 
-<!-- §6 FIND-03 KI Gating Walk — filled by Task 5 -->
+## 6. FIND-03 KI Gating Walk + Non-Promotion Ledger
 
-<!-- §7 Prior-Artifact Cross-Cites — filled by Task 5 -->
+This section walks the F-32-NN finding-block pool against the D-09 3-predicate KI-eligibility test for `KNOWN-ISSUES.md` promotion. Predicates per D-09 (verbatim from v30 D-09 / v31 D-06 carry):
+
+1. **Accepted-design predicate** — behavior is intentional / documented / load-bearing for the protocol's design (not an oversight or accident).
+2. **Non-exploitable predicate** — no player-reachable path produces material value extraction or determinism break (severity ≤ INFO under D-08).
+3. **Sticky predicate** — the item describes ongoing protocol behavior, not a one-time event or transient state.
+
+A candidate qualifies for KI promotion (verdict `KI_ELIGIBLE_PROMOTED`) iff **all three predicates PASS**. ANY false ⇒ Non-Promotion Ledger entry with the failing predicate identified. Default outcome at this milestone per D-253-FIND03-01: `KNOWN-ISSUES.md` UNMODIFIED — F-32-01 + F-32-02 FAIL the **sticky** predicate (the buggy behavior is SUPERSEDED at HEAD by L173 + L1174 guards committed in `acd88512` — it is NOT ongoing protocol behavior).
+
+### 6a. Non-Promotion Ledger (2 rows F-32-01 + F-32-02 sticky-FAIL per D-253-FIND03-02)
+
+F-32-01 + F-32-02 are routed to the Non-Promotion Ledger with sticky-predicate-FAIL verdict per D-253-FIND03-01. The 4 existing accepted-design EXC-01..04 entries cover every promotable-class RNG surface at HEAD `acd88512`; no new KI promotions for v32. KNOWN-ISSUES.md UNMODIFIED at HEAD per D-253-FIND03-01 default zero-promotion path.
+
+| F-32-NN | Source Phase/Plan | Accepted-Design | Non-Exploitable | Sticky | KI Eligibility Verdict |
+| --- | --- | --- | --- | --- | --- |
+| F-32-01 | Phase 251 TST + Phase 249 PLV-03/PLV-05/PLV-06 + Phase 252 §3.A | FAIL — pre-fix L173 lacked `!rngLockedFlag` clause; the gap was an oversight (testnet panic 0x11 reproduced at blocks 10759449 + 10761786), not a documented design decision | FAIL — player-reachable hard determinism violation (panic 0x11 in productive multi-call windows) | FAIL — buggy behavior SUPERSEDED at HEAD by L173 conjunction `!inJackpot && !lastPurchaseDay && !rngLockedFlag` committed in `acd88512`; not ongoing protocol behavior | NOT_KI_ELIGIBLE (sticky-FAIL primary; accepted-design + non-exploitable also FAIL) |
+| F-32-02 | Phase 251 TST-04 + Phase 248 BFL-01..06 + Phase 252 §3.B | FAIL — pre-fix backfill block lacked L1174 sentinel; the gap was an oversight (testnet psdDelta=15 over-bump reproduced via TST-04-V01), not a documented design decision | FAIL — player-reachable hard determinism violation (panic 0x11 from `purchaseStartDay - level - 1 < 0` underflow downstream of psdDelta over-bump) | FAIL — buggy behavior SUPERSEDED at HEAD by L1174 sentinel `if (rngWordByDay[idx + 1] == 0) { _backfillGapDays(...); }` committed in `acd88512`; not ongoing protocol behavior | NOT_KI_ELIGIBLE (sticky-FAIL primary; accepted-design + non-exploitable also FAIL) |
+
+Both F-32-NN finding blocks fail ALL THREE predicates at HEAD `acd88512`: accepted-design FAIL (the bugs were oversights, not load-bearing design choices), non-exploitable FAIL (player-reachable hard determinism violations were demonstrated empirically in TST-01 + TST-04 state-A/C runs pre-fix), sticky FAIL (the buggy behavior is SUPERSEDED at HEAD — it is NOT ongoing protocol behavior). The sticky-FAIL verdict alone is sufficient to route both blocks to NOT_KI_ELIGIBLE per D-09; the accepted-design + non-exploitable FAIL findings reinforce the verdict and are documented for milestone-record completeness.
+
+### 6b. KI Envelope Re-Verifications (Envelope-Non-Widening Attestations — NOT KI Promotions per D-22 carry)
+
+Per D-22 carry, the 4 accepted RNG exceptions in `KNOWN-ISSUES.md` are RE_VERIFIED at HEAD `acd88512` for envelope-non-widening only. Phase 253 cites Phase 248 BFL-05 + Phase 250 SIB-03 RE_VERIFIED_AT_HEAD attestations — does NOT re-derive the envelope checks. **Acceptance is NOT re-litigated.** These are envelope-non-widening attestations, NOT new KI rows.
+
+| KI Entry | Carrier(s) | Source Phase / V-row | Envelope-Widening at acd88512? |
+| --- | --- | --- | --- |
+| EXC-01 (Non-VRF entropy for affiliate winner roll) | n/a (affiliate roll path NOT delta-touched per Phase 250 SIB-03 NEGATIVE-scope) | Phase 250 SIB-03 NEGATIVE-scope (DegenerusAffiliate.sol byte-identical baseline vs HEAD; affiliate roll path NOT touched by acd88512 turbo guard / backfill sentinel; NOT touched by 8bdeabc2 / 6a63705b / 48554f8f either) | NO — affiliate roll path NOT delta-touched |
+| EXC-02 (Gameover prevrandao fallback `_getHistoricalRngFallback`) | BFL-05-V01 (Phase 248 dual-carrier attestation with EXC-03) | Phase 248 §5 BFL-05-V01 RE_VERIFIED_AT_HEAD acd88512 | NO — sole prevrandao site at AdvanceModule:1340-relative inside `_getHistoricalRngFallback`; GAMEOVER_RNG_FALLBACK_DELAY = 14 days constant intact at AdvanceModule:109; no new prevrandao-consumption path introduced by L173 turbo guard or L1174 backfill sentinel |
+| EXC-03 (Gameover RNG substitution / F-29-04 mid-cycle write-buffer tickets) | BFL-05-V02 (Phase 248 dual-carrier attestation with EXC-02) | Phase 248 §5 BFL-05-V02 RE_VERIFIED_AT_HEAD acd88512 | NO — `_swapAndFreeze:292` + `_swapTicketSlot:1082` write-buffer-swap sites unchanged; `_gameOverEntropy:1222-1246` substitution site unchanged; tri-gate predicates (terminal-state + no-player-reachable-timing + buffer-scope) all hold per Phase 248 BFL-05-V02 + Phase 250 SIB-03 NEGATIVE-scope |
+| EXC-04 (EntropyLib XOR-shift PRNG for lootbox outcome rolls) | n/a (lootbox roll path NOT delta-touched per Phase 250 SIB-03 NEGATIVE-scope) | Phase 250 SIB-03 NEGATIVE-scope (LootboxModule entropyStep call sites at LootboxModule:673 + JackpotModule:2119 unchanged) | NO — entropyStep call sites at LootboxModule:673 / JackpotModule:2119 unchanged; KI EXC-04 entry intact at HEAD acd88512 |
+
+`KNOWN-ISSUES.md` UNMODIFIED at HEAD `acd88512` per D-253-FIND03-01 default path. Verified at Task 6 §9 attestation (`git diff HEAD -- KNOWN-ISSUES.md` empty).
+
+### 6c. FIND-03 Verdict Summary
+
+- KI Promotion Count: **0 of 2 `KI_ELIGIBLE_PROMOTED`** (2-row Non-Promotion Ledger per D-253-FIND03-02 — F-32-01 + F-32-02 both sticky-FAIL).
+- KI Envelope Re-Verifications: **4 of 4 envelopes RE_VERIFIED_AT_HEAD acd88512 without widening** per D-22 carry (EXC-01 not delta-touched per Phase 250 SIB-03 NEGATIVE-scope; EXC-02 + EXC-03 dual-carrier RE_VERIFIED via Phase 248 BFL-05-V01/V02; EXC-04 lootbox path not delta-touched per Phase 250 SIB-03 NEGATIVE-scope).
+- KNOWN-ISSUES.md State: **UNMODIFIED** per D-253-FIND03-01 default path.
+- Combined FIND-03 verdict: `0 of 2 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED` (matches §2 Closure Verdict Summary literal string).
+- Per-block sticky-FAIL routing: F-32-01 sticky-FAIL → NOT_KI_ELIGIBLE; F-32-02 sticky-FAIL → NOT_KI_ELIGIBLE; both routed to §6a Non-Promotion Ledger with full predicate-by-predicate FAIL prose.
+
+---
+
+## 7. Prior-Artifact Cross-Cites
+
+Every upstream prior-artifact cross-citation referenced in §§ 1-6 + § 8-9 is enumerated below. Per D-253-CF-08 + D-253-10, all upstream `audit/v32-*.md` artifacts are FINAL READ-only at HEAD `acd88512`. Plus `audit/FINDINGS-v31.0.md` + `audit/FINDINGS-v30.0.md` + `audit/FINDINGS-v29.0.md` + `KNOWN-ISSUES.md` + `audit/STORAGE-WRITE-MAP.md` as prior-milestone + KI-gating + storage-writer-grep references per D-253-15 §7.
+
+| Artifact Path | Phase / Plan | Role in v32.0 Closure | Re-Verified-at-HEAD Note |
+| --- | --- | --- | --- |
+| `audit/v32-247-DELTA-SURFACE.md` | Phase 247 (1 plan) | 16 D-247-C changelog + 11 D-247-F classification + 30 D-247-X call-site + 29 D-247-I Consumer Index + 1 D-247-S storage row; §6 Consumer Index drives REG-01 inclusion-rule mapping per D-253-REG01-01 | `re-verified at HEAD acd88512` — FINAL READ-only per D-247-22 |
+| `audit/v32-248-BFL.md` | Phase 248 (1 plan) | 44 V-rows + 3 multiplier rows + 5 out-of-scope rows across BFL-01..06 all SAFE / NON-WIDENING; KI EXC-02 + EXC-03 RE_VERIFIED_AT_HEAD acd88512 via BFL-05-V01/V02 dual-carrier | `re-verified at HEAD acd88512` — FINAL READ-only per D-248-02 |
+| `audit/v32-249-PLV.md` | Phase 249 (1 plan) | 75 V-rows across PLV-01..06 all SAFE; ternary unreachable proof + testnet panic 0x11 reproduction + strand-disproof; primary §4 F-32-01 'Reproduction evidence' + 'At-HEAD resolution' cite source | `re-verified at HEAD acd88512` — FINAL READ-only per D-249-CF-02 |
+| `audit/v32-250-SIB.md` | Phase 250 (1 plan) | 28 V-rows across SIB-01..04 + zero-state SIB-05 attestation; SIB-04 first-pass classification + SIB-03 NEGATIVE-scope for EXC-01 + EXC-04 + SIB-03-V03 MintModule:1229 sibling-pattern observation | `re-verified at HEAD acd88512` — FINAL READ-only per D-250-CF-02 |
+| `audit/v32-251-TST.md` | Phase 251 (1 plan) | 8 SAFE V-rows across TST-01..04 (state-A/C/D 4 REQs); §1 TST-01 + §4 TST-04 primary §4 F-32-01 + F-32-02 'Reproduction evidence' empirical seal source; §5 commit-readiness register inherited verbatim by §9.NN.iii | `re-verified at HEAD c790ae45` — FINAL READ-only per D-251-CF-02 |
+| `audit/v32-252-POST31.md` | Phase 252 (1 plan) | 11 SAFE V-rows across POST31-01..02 (4 §1 + 4 §2 + 3 §3 composition proofs); §3.A + §3.B primary §4 F-32-01 + F-32-02 deep at-HEAD-resolution cite source; §4 SIB-04 reconciliation zero divergence | `re-verified at HEAD 2ad456fa` — FINAL READ-only per D-252-CF-02 |
+| `.planning/phases/247-delta-extraction-classification/247-01-SUMMARY.md` | Phase 247 closure summary | Atomic-commit chain `e2cacc5c` → `9961c91a`; closure signal `PHASE_247_CATALOG_FINAL_AT_HEAD_acd88512` | `re-verified at HEAD acd88512` |
+| `.planning/phases/248-backfill-idempotency-proof/248-01-SUMMARY.md` | Phase 248 closure summary | Atomic-commit chain `b79f3eac` → `5545b125`; closure signal `PHASE_248_BFL_FINAL_AT_HEAD_acd88512` | `re-verified at HEAD acd88512` |
+| `.planning/phases/249-purchaselevel-correctness-proof/249-01-SUMMARY.md` | Phase 249 closure summary | Atomic-commit chain `920a2368` → `7758db41`; closure signal `PHASE_249_PLV_FINAL_AT_HEAD_acd88512` | `re-verified at HEAD acd88512` |
+| `.planning/phases/250-sibling-pattern-sweep/250-01-SUMMARY.md` | Phase 250 closure summary | SG-250-01 cite source for §3d + §9.NN.i (post-anchor `98e78404` MintModule presale-flag commit functionally orthogonal) | `re-verified at HEAD acd88512` |
+| `.planning/phases/251-reproduction-tests/251-01-SUMMARY.md` | Phase 251 closure summary | TST-FILE-01 + TST-FILE-02 awaiting-approval cite source for §9.NN.iii | `re-verified at HEAD c790ae45` |
+| `.planning/phases/252-post-v31-0-landed-commit-sanity/252-01-SUMMARY.md` | Phase 252 closure summary | SG-252-01 cite source for §3f (PLAN.md `lastPurchaseDay` writer line numbers diverged from runtime HEAD; documentary-only) | `re-verified at HEAD 4e5ce8b5` |
+| `audit/FINDINGS-v31.0.md` | v31.0 milestone report | 403-line 9-section shape template mirrored by Phase 253 per D-253-15; REG-01 prior-finding source for REG-v30.0-F30NNN + REG-v29.0-F2904 row precedent + §9b 6-Point Attestation Items format precedent | `re-verified at HEAD acd88512` — v31.0 deliverable unchanged |
+| `audit/FINDINGS-v30.0.md` | v30.0 milestone report | F-30-NNN source rows (5 delta-touched + 12 excluded per §5a) + REG-v3.7-005/006 + REG-v3.8-001..005 baseline cite source | `re-verified at HEAD acd88512` — v30.0 deliverable unchanged |
+| `audit/FINDINGS-v29.0.md` | v29.0 milestone report | F-29-04 source (Gameover RNG substitution; explicitly NAMED REG-01 row per D-253-REG01-01) + multi-section disclosure block format precedent for D-253-FIND01-03 | `re-verified at HEAD acd88512` — v29.0 deliverable unchanged |
+| `KNOWN-ISSUES.md` | accepted-design (4 entries) | EXC-01 affiliate non-VRF / EXC-02 Gameover prevrandao fallback / EXC-03 Gameover RNG substitution / EXC-04 EntropyLib XOR-shift; cited by §6b 4-row envelope-non-widening table | `re-verified at HEAD acd88512` — UNMODIFIED per D-253-FIND03-01 default path |
+| `audit/STORAGE-WRITE-MAP.md` | storage-writer-grep cross-cite | Writer-grep reference for `purchaseStartDay` / `dailyIdx` / `rngWordByDay` / `lastPurchaseDay` / `jackpotPhaseFlag` write inventory cited by §4 F-32-NN 'At-HEAD resolution' subsections (writer-grep verification) | `re-verified at HEAD acd88512` — UNMODIFIED |
+| `.planning/ROADMAP.md` | roadmap + milestone structure | Phase 247-253 v32.0 phase list + success criteria + plan-list; updated via Task 6 plan-close standard checkbox flips | `re-verified at HEAD acd88512` — Task 6 plan-close commit flips Phase 253 status to COMPLETE |
+| `.planning/REQUIREMENTS.md` | requirement definitions | DELTA-01..03 / BFL-01..06 / PLV-01..06 / SIB-01..05 / TST-01..04 / POST31-01..02 / FIND-01..04 / REG-01..02 (32 REQs total) + traceability table; updated via Task 6 plan-close to flip FIND-01..04 + REG-01..02 to COMPLETE | `re-verified at HEAD acd88512` |
+| `.planning/phases/253-findings-consolidation-lean-regression/253-CONTEXT.md` | Phase 253 context / decisions | 39 decisions D-253-CF-01..09 + D-253-FIND01-01..04 + D-253-REG01-01..04 + D-253-REG02-01..02 + D-253-FIND03-01..02 + D-253-FIND04-01..04 + D-253-09..15 + D-253-PLN-01 locked; user-selected recommended option for each gray area accepted | `re-verified at HEAD acd88512` — decision authority consumed by Phase 253 planner + executor |
+
+**§7 Cross-Cite Count:** 20 artifacts cross-cited, each with `re-verified at HEAD acd88512` (or runtime-HEAD-equivalent) backtick-quoted structural-equivalence note. Cross-cite density (~20 rows for v32 vs v31's 15) reflects the 6-phase scope of v32.0 vs v31's 3-phase scope.
+
+---
 
 ## 8. Forward-Cite Closure (D-253-09 + D-253-15 step 8 Terminal-Phase Rule)
 
