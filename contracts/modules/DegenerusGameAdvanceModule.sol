@@ -139,9 +139,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     bytes32 private constant FUTURE_KEEP_TAG = keccak256("future-keep");
     uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
 
-    /// @dev Presale auto-ends after this much mint-only lootbox ETH (200 ETH, unscaled).
-    uint256 private constant LOOTBOX_PRESALE_ETH_CAP = 200 ether;
-
     /// @notice DGNRS reward for top affiliate: 1% of remaining affiliate pool.
     uint16 private constant AFFILIATE_POOL_REWARD_BPS = 100;
 
@@ -431,12 +428,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     psd
                 );
 
-                if (
-                    _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0 &&
-                    (lvl >= 3 ||
-                        _psRead(PS_MINT_ETH_SHIFT, PS_MINT_ETH_MASK) >=
-                        LOOTBOX_PRESALE_ETH_CAP)
-                ) _psWrite(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK, 0);
+                if (lvl >= 3 && _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0) {
+                    _psWrite(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK, 0);
+                }
 
                 // Transition to jackpot phase
                 jackpotPhaseFlag = true;

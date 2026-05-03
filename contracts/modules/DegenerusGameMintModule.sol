@@ -1029,7 +1029,14 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, _lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK) + _packEthToMilliEth(lootBoxAmount));
 
             if (presale) {
-                _psWrite(PS_MINT_ETH_SHIFT, PS_MINT_ETH_MASK, _psRead(PS_MINT_ETH_SHIFT, PS_MINT_ETH_MASK) + lootBoxAmount);
+                uint256 psPacked = presaleStatePacked;
+                uint256 newMintEth = ((psPacked >> PS_MINT_ETH_SHIFT) & PS_MINT_ETH_MASK) + lootBoxAmount;
+                psPacked = (psPacked & ~(PS_MINT_ETH_MASK << PS_MINT_ETH_SHIFT))
+                         | ((newMintEth & PS_MINT_ETH_MASK) << PS_MINT_ETH_SHIFT);
+                if (newMintEth >= LOOTBOX_PRESALE_ETH_CAP) {
+                    psPacked &= ~uint256(PS_ACTIVE_MASK);
+                }
+                presaleStatePacked = psPacked;
             }
 
             bool distress = _isDistressMode();

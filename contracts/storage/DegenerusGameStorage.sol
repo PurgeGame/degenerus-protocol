@@ -860,6 +860,9 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant PS_MINT_ETH_SHIFT = 8;
     uint256 internal constant PS_MINT_ETH_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;  // 128 bits
 
+    /// @dev Presale auto-ends once cumulative mint-only lootbox ETH crosses this cap.
+    uint256 internal constant LOOTBOX_PRESALE_ETH_CAP = 200 ether;
+
     /// @dev Read a field from the packed presale state.
     function _psRead(uint256 shift, uint256 mask) internal view returns (uint256) {
         return (presaleStatePacked >> shift) & mask;
