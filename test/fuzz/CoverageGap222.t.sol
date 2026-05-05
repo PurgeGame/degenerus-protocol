@@ -1078,13 +1078,6 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o6, ) = address(vault).call(
             abi.encodeWithSignature(
-                "gameSetDecimatorAutoRebuy(bool)",
-                true
-            )
-        );
-        vm.prank(buyer);
-        (bool o7, ) = address(vault).call(
-            abi.encodeWithSignature(
                 "gameSetAfKingMode(bool,uint256,uint256)",
                 true,
                 uint256(1),
@@ -1092,7 +1085,7 @@ contract CoverageGap222 is DeployProtocol {
             )
         );
         vm.prank(buyer);
-        (bool o8, ) = address(vault).call(
+        (bool o7, ) = address(vault).call(
             abi.encodeWithSignature(
                 "gameSetOperatorApproval(address,bool)",
                 buyer,
@@ -1104,9 +1097,8 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(o3, "vault.gameClaimWhalePass rejected non-vaultOwner caller");
         assertFalse(o4, "vault.gameSetAutoRebuy rejected non-vaultOwner caller");
         assertFalse(o5, "vault.gameSetAutoRebuyTakeProfit rejected non-vaultOwner caller");
-        assertFalse(o6, "vault.gameSetDecimatorAutoRebuy rejected non-vaultOwner caller");
-        assertFalse(o7, "vault.gameSetAfKingMode rejected non-vaultOwner caller");
-        assertFalse(o8, "vault.gameSetOperatorApproval rejected non-vaultOwner caller");
+        assertFalse(o6, "vault.gameSetAfKingMode rejected non-vaultOwner caller");
+        assertFalse(o7, "vault.gameSetOperatorApproval rejected non-vaultOwner caller");
     }
 
     function test_gap_vault_game_purchase_guards() public {

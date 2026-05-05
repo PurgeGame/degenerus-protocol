@@ -28,8 +28,6 @@ interface IDegenerusGamePlayerActions {
     function claimWhalePass(address player) external;
     /// @notice Claim decimator jackpot for a specific level.
     function claimDecimatorJackpot(uint24 lvl) external;
-    /// @notice Toggle decimator auto-rebuy for a player.
-    function setDecimatorAutoRebuy(address player, bool enabled) external;
     /// @notice Purchase a BURNIE lootbox.
     function purchaseBurnieLootbox(address buyer, uint256 burnieAmount) external;
     /// @notice Purchase a deity pass with ETH.
@@ -635,13 +633,6 @@ contract DegenerusVault {
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameSetAutoRebuyTakeProfit(uint256 takeProfit) external onlyVaultOwner {
         gamePlayer.setAutoRebuyTakeProfit(address(this), takeProfit);
-    }
-
-    /// @notice Enable or disable auto-rebuy for decimator claims
-    /// @param enabled True to enable, false to disable
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function gameSetDecimatorAutoRebuy(bool enabled) external onlyVaultOwner {
-        gamePlayer.setDecimatorAutoRebuy(address(this), enabled);
     }
 
     /// @notice Configure AFK king mode settings for the vault
