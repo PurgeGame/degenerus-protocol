@@ -422,3 +422,51 @@ Phase 257 emits **ZERO F-33-NN finding blocks** per D-257-FIND-01 default expect
 **8 of 8 surfaces (a)..(h) verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY at HEAD `dcb70941`.** Distribution: `SAFE_BY_STRUCTURAL_CLOSURE = 4` rows (a, b, f, h) + `SAFE_BY_DESIGN = 1` row (c) + `SAFE_BY_TRUST_ASYMMETRY = 3` rows (d, e, g). Zero F-33-NN finding blocks emitted (default expected per D-257-FIND-01); two trust-asymmetry items (e) + (g) emit as §4b + §4c sub-row prose disclosures. Step 2 validation pass (Task 7 — adversarial validation parallel spawn) red-teams this draft for missed vectors / weak grep / premature SAFE conclusions / 9th-surface novel-composition attacks; Step 3 disposition (Task 8) routes any disagreement to user before deliverable READ-only flip.
 
 ---
+
+## 5. Regression Appendix
+
+Regression appendix per ROADMAP success criterion 5. §5a REG-01: single PASS row covering F-32-01 + F-32-02 SUPERSEDED-at-HEAD per D-257-REG01-01 (v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` re-verified non-widening because v33 modifies ONLY `contracts/GNRUS.sol`; AdvanceModule + GameStorage line ranges L173 + L1174 + `_livenessTriggered` body byte-identical between baseline and HEAD). §5b REG-02: zero-row + paragraph per D-257-REG02-02 (defensive grep walk over prior FINDINGS for any v29/v30/v31/v32 row whose acceptance rationale relied on a charity-governance-touching envelope; zero candidates expected). §5c Combined Distribution: 1 PASS / 0 REGRESSED / 0 SUPERSEDED total.
+
+Verdict taxonomy per D-253-REG01-03 closed set: `{PASS / REGRESSED / SUPERSEDED}`. Each row carries an `re-verified at HEAD dcb70941` backtick-quoted note.
+
+### 5a. REG-01 — v32.0 Closure Signal Non-Widening Re-Verification
+
+| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `dcb70941` | Re-Verification Evidence | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| `REG-v32.0-F32NN` | F-32-01 + F-32-02 SUPERSEDED-at-HEAD (v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` carry-forward; both bugs structurally closed by L173 turbo guard `!rngLockedFlag` clause + L1174 backfill sentinel `rngWordByDay[idx + 1] == 0` landed in `acd88512`) | `acd88512..dcb70941` (v33 GNRUS changes + 7 post-anchor non-GNRUS landings — none touch L173 turbo region or L1174 backfill region) | L173 turbo guard `!rngLockedFlag` clause byte-identical at HEAD per `git diff acd88512..HEAD -- contracts/modules/DegenerusGameAdvanceModule.sol` filtered for the turbo region (zero hunks affecting L170-180); L1174 backfill sentinel `rngWordByDay[idx + 1] == 0` byte-identical (zero hunks affecting L1170-1185); GameStorage `_livenessTriggered` body byte-identical (now at L1249-1259 due to constant insertion at `GameStorage:863` for the `LOOTBOX_PRESALE_ETH_CAP` move from `AdvanceModule:139` per `002bde55`, but body bytes char-by-char identical to baseline L1246-1256 region) per `git diff acd88512..HEAD -- contracts/storage/DegenerusGameStorage.sol \| grep "_livenessTriggered"` returning empty. | v33 charity governance does NOT touch AdvanceModule turbo path or rngGate fresh-word backfill region. §3.4 (Non-GNRUS post-anchor landings sanity) classifies all 7 post-anchor non-GNRUS landings as functionally orthogonal to L173 + L1174 surface. KI EXC-02 + EXC-03 envelopes intact at HEAD via §6b NEGATIVE-scope re-verification. | **PASS** |
+
+**§5a distribution at HEAD `dcb70941`: 1 PASS / 0 REGRESSED / 0 SUPERSEDED.** Single PASS row carries the v32.0 closure signal forward as non-widening at HEAD `dcb70941`. The L173 turbo guard + L1174 backfill sentinel + GameStorage `_livenessTriggered` body — the three load-bearing line ranges that fixed F-32-01 + F-32-02 in v32 — are byte-identical between baseline and HEAD, despite the wider contract-tree delta (8 landings) that includes 7 post-anchor non-GNRUS landings. The `002bde55` constant insertion at `GameStorage:863` shifted subsequent line numbers by ~1 but did not modify any `_livenessTriggered` body byte. `re-verified at HEAD dcb70941`.
+
+### 5b. REG-02 — Charity-Governance-Domain Prior-Finding Sweep (zero-row default)
+
+5-column zero-row table per D-257-REG02-02 default expectation:
+
+| Row ID | Source Finding | Delta SHA | Acceptance Rationale Cited | Verdict |
+| --- | --- | --- | --- | --- |
+| _(zero rows — see paragraph below)_ | — | — | — | — |
+
+**Defensive grep walk** per D-257-REG02-02 over `audit/FINDINGS-v29.0.md` + `audit/FINDINGS-v30.0.md` + `audit/FINDINGS-v31.0.md` + `audit/FINDINGS-v32.0.md` for any prior-finding row whose acceptance rationale relied on a charity-governance-touching envelope. Grep recipe:
+
+```bash
+grep -nE 'charity|propose|vote|pickCharity|levelVaultOwner|levelSdgnrsSnapshot' \
+  audit/FINDINGS-v29.0.md audit/FINDINGS-v30.0.md audit/FINDINGS-v31.0.md audit/FINDINGS-v32.0.md \
+  | grep -iE 'accept|design|envelope|HOLDS|carrier'
+# Expected: zero hits
+```
+
+Grep walk returned zero hits qualifying as prior-finding rows whose acceptance rationale relied on a charity-governance-touching envelope. v33 charity governance is functionally orthogonal to RNG / jackpot / backfill / purchaseLevel / lastPurchaseDay mechanics in v29/v30/v31/v32; no prior finding is structurally closed by v33 changes. Mirror Phase 253 D-253-REG02-01 zero-row pattern. **§5b distribution at HEAD `dcb70941`: 0 PASS / 0 REGRESSED / 0 SUPERSEDED** (zero-row default).
+
+### 5c. Combined REG-01 + REG-02 Distribution at HEAD `dcb70941`
+
+Combined distribution table per Claude\'s Discretion 4-col format (mirror v31 / v32 §5c):
+
+| Verdict | REG-01 | REG-02 | Combined |
+| --- | --- | --- | --- |
+| PASS | 1 | 0 | 1 |
+| REGRESSED | 0 | 0 | 0 |
+| SUPERSEDED | 0 | 0 | 0 |
+| **Total** | **1** | **0** | **1** |
+
+`re-verified at HEAD dcb70941` — the single REG-01 PASS row carries the v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` forward as non-widening at HEAD `dcb70941`. Zero regressions detected. Zero supersessions emitted via REG-02 per D-257-REG02-02 default. Expected per zero-finding-candidate input from §4 8-surface row table + KI EXC-01..04 envelopes RE_VERIFIED NEGATIVE-scope at v33 per §6b (charity governance has zero RNG interaction).
+
+---
