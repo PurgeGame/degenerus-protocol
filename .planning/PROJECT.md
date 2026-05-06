@@ -10,6 +10,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
+**Active milestone:** v33.0 — Charity Allowlist Governance (started 2026-05-05)
 **Last shipped:** v32.0 — Backfill Idempotency + purchaseLevel Underflow Audit (2026-05-02, tag `v32.0` pending push)
 **Contract HEAD anchor:** `acd88512` (turbo guard L173 `!rngLockedFlag` clause + L1174 backfill sentinel `rngWordByDay[idx + 1] == 0` committed in single SHA "fix(advance): guard turbo block + make _backfillGapDays idempotent"; +1 SG-250-01 `98e78404` post-anchor MintModule presale-flag commit, functionally orthogonal)
 **Audit deliverables (cumulative):** `audit/FINDINGS-v25.0.md` + `FINDINGS-v27.0.md` + `FINDINGS-v28.0.md` + `FINDINGS-v29.0.md` + `FINDINGS-v30.0.md` + `FINDINGS-v31.0.md` + `FINDINGS-v32.0.md` + 16 v30 supporting `audit/v30-*.md` + 5 v31 supporting `audit/v31-*.md` + 6 v32 supporting `audit/v32-*.md` artifacts; `KNOWN-ISSUES.md` (4 accepted-design RNG entries: EXC-01..04, all RE_VERIFIED non-widening at HEAD `acd88512`)
@@ -17,7 +18,27 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Active Milestone
 
-v32.0 SHIPPED 2026-05-02. No active milestone — awaiting v33.0+ kickoff via `/gsd-new-milestone`.
+## Current Milestone: v33.0 Charity Allowlist Governance
+
+**Goal:** Replace the open `propose(address)` / approve-reject vote flow in `GNRUS.sol` with a vault-owner-curated allowlist that voters select from directly — eliminating the collusion path where any sDGNRS coalition routes the per-level GNRUS distribution to an address they control.
+
+**Target features:**
+- Vault-owner-curated allowlist on `GNRUS.sol` (admin = `vault.isVaultOwner(msg.sender)`); hard cap 20 active slots; address-only entries (no on-chain label); empty at deploy, vault owner populates after deploy
+- Single admin entry point: `setCharity(uint8 slot, address recipient)` — `recipient == address(0)` means remove; covers add, replace, and remove in one function
+- **Locked foundational slots:** slots 0, 1, 2 are permanently immutable once filled (constant `LOCKED_SLOTS = 3`); first fill is irrevocable, even by a future vault owner. Slots 3..19 remain fully mutable. Trust asymmetry must be flagged in FINDINGS-v33.0.md (operational mitigation, not code-level defense)
+- Two write branches: **instant-apply** when `currentSlate[slot] == address(0)` (empty slot has no votes to redirect), **queue** when `currentSlate[slot] != address(0)` (filled slot's address must not change while votes are live)
+- `pickCharity` flushes pending edits → current slate atomically before computing winner; voters within level N see the slate frozen at level-N start (modulo the safe instant-apply additions)
+- Direct slate voting: `propose()` deleted entirely; allowlist *is* the slate; `vote(uint8 slot)` casts the voter's full sDGNRS balance toward that slot (approve-only, no reject); voter can approve multiple slots independently
+- Vault-owner +5%-of-snapshot vote bonus REMOVED; vote weight is purely sDGNRS balance
+- Tie-break: lowest active slot index wins
+- Cleanup: remove now-dead state (`hasProposed`, `creatorProposalCount`, `levelProposalStart`, `levelProposalCount`, `proposals`, `proposalCount`, `levelVaultOwner`, `levelSdgnrsSnapshot`, related events `ProposalCreated`/`Voted`-shape, related errors `ProposalLimitReached`/`InsufficientStake`/`AlreadyProposed`/`InvalidProposal`)
+- Test coverage (Hardhat) for: setCharity instant-apply + queue branches, cap enforcement, vault-owner gating, edit-queue level-boundary semantics, approve-only vote weighting, winner selection, tie-break, level-skip paths, post-gameover inertness
+- Delta audit + `audit/FINDINGS-v33.0.md` deliverable with regression appendix; conservation re-proof of GNRUS unallocated pool flow (still 2% per resolved level)
+
+**Out of scope:**
+- Auditing post-v32.0 commits (`002bde55` presale auto-deactivate, `2713ce61` setDecimatorAutoRebuy removal) — rolls into v34.0+
+- Timelock on add/remove (rejected; edits already queue to level boundary)
+- Migration of in-flight proposals (protocol pre-launch; no migration path needed)
 
 ## Completed Milestone: v32.0 Backfill Idempotency + purchaseLevel Underflow Audit
 
@@ -454,4 +475,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-02 — v32.0 Backfill Idempotency + purchaseLevel Underflow Audit SHIPPED. Two HIGH SUPERSEDED-at-HEAD F-32-NN disclosure blocks (turbo race + backfill double-execution; both closed by L173 + L1174 guards committed in `acd88512`). 13 PASS REG-01 + zero-row REG-02. KI envelopes EXC-01..04 all RE_VERIFIED non-widening; KNOWN-ISSUES.md UNMODIFIED. Closure signal `MILESTONE_V32_AT_HEAD_acd88512`. Awaiting v33.0+ kickoff.*
+*Last updated: 2026-05-05 — v33.0 Charity Allowlist Governance kicked off. Replaces open `propose(address)` / approve-reject flow on `GNRUS.sol` with vault-owner-curated allowlist (≤20 active slots, address-only, empty at deploy); slot edits queue and apply at level boundary; `propose()` deleted, voters call `vote(uint8 slot)` directly with full sDGNRS balance (approve-only); vault-owner +5% vote bonus removed; lowest active slot wins on tie. v32.0 SHIPPED at HEAD `acd88512` remains the audit baseline.*
