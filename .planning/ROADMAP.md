@@ -122,7 +122,7 @@
 
 - [x] Phase 254: GNRUS Allowlist Storage, Admin Op & Storage Repack (0/3 plans) (completed 2026-05-06)
 - [x] Phase 255: Vote Rewrite, Resolve Flush & Event/Error Cleanup (0/3 plans) (completed 2026-05-06)
-- [ ] Phase 256: Charity Allowlist Test Coverage (TBD/TBD plans)
+- [ ] Phase 256: Charity Allowlist Test Coverage (0/4 plans)
 - [ ] Phase 257: Delta Audit & Findings Consolidation (TBD/TBD plans)
 
 **Audit baseline:** v32.0 HEAD `acd88512` (closure signal `MILESTONE_V32_AT_HEAD_acd88512`). Mixed shape — Phases 254-256 modify `contracts/GNRUS.sol` + add tests under `test/governance/`; Phase 257 delta-audits the result and emits closure signal `MILESTONE_V33_AT_HEAD_<sha>`. Per `feedback_no_contract_commits.md`, all `contracts/` + `test/` changes require explicit per-commit user approval. 25/25 v33.0 requirements mapped (ALW + VOTE + RES + CLEAN + TST + AUDIT). Deliverable: `audit/FINDINGS-v33.0.md` with regression appendix verifying v32.0 closure signal still holds, conservation re-proof of GNRUS unallocated pool flow, KI EXC-01..04 RE_VERIFIED NEGATIVE-scope. See [REQUIREMENTS.md](REQUIREMENTS.md) and detail sections below.
@@ -173,7 +173,11 @@
   3. `vote(uint8 slot)` tests pass — single-slot vote applies full sDGNRS weight; multi-slot vote applies full weight independently to each slot; double-vote on same `(level, voter, slot)` reverts; vote on empty slot reverts; vote with zero whole-token sDGNRS reverts. `pickCharity` winner-selection tests pass — single-active-slot wins; multi-vote highest-weight wins; tie → lowest slot index wins (concrete weights wired); zero votes / zero active slots / 2%-rounds-to-zero all emit `LevelSkipped` exactly once.
   4. Conservation tests pass across the level transition — total ETH/stETH/GNRUS balance changes match the expected 2% distribution per resolved level; sDGNRS / DGNRS / BURNIE supplies unchanged; soulbound enforcement intact (transfer / transferFrom / approve still revert).
   5. Post-gameover inertness tests pass — after `burnAtGameOver`, subsequent calls to `setCharity` / `vote` either revert or are inert (chosen behavior documented in test); `pickCharity` not callable post-gameover (verify GNRUS-side consistency with game-side flow).
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 256-01-PLAN.md — Factor `test/helpers/charityFixture.js` shared helper (impersonate / giveSDGNRS / deployGNRUSFixture / runLevelTransitionViaGame); v33 voter sizing (100/100/200) [Wave 1]
+- [ ] 256-02-PLAN.md — Prune `test/unit/DegenerusCharity.test.js` to v33 shape: delete 3 stale Governance describes + 3 stale constants + proposalCount assertion + 3 v32 Edge Cases; rewrite local distributeGNRUS to v33 setCharity+vote+pickCharity; switch in-file helpers to imports (TST-01) [Wave 2, depends on 256-01]
+- [ ] 256-03-PLAN.md — Build NEW `test/governance/CharityAllowlist.test.js` with full v33 governance surface: setCharity (both branches + locked-slot parametric 0/1/2 + cap), vote (all 4 reject reason codes + multi-slot independence), pickCharity (winner + tie-break + 3 LevelSkipped paths via setStorageAt for path C), contract-recipient acceptance, TST-06 post-gameover smoke, D-256-GAS-01 single-assertion gas guardrail (`pickCharity` full-slate < 700_000 gas) (TST-01, TST-02, TST-03, TST-04, TST-06) [Wave 2, depends on 256-01]
+- [ ] 256-04-PLAN.md — Extend `test/integration/CharityGameHooks.test.js` with TST-05 conservation it-block driven via REAL game flow (`charityResolve.pickCharity(lvl - 1)` from `DegenerusGameAdvanceModule:1634`); rewrite stale `LevelSkipped(0) when no proposals exist` to v33 `LevelSkipped(0) when no active slots in slate` (TST-05) [Wave 2, depends on 256-01]
 **Write policy**: `test/governance/CharityAllowlist.test.js` (or similar) additions require explicit per-commit user approval per `feedback_no_contract_commits.md`. Per `feedback_test_rnglock.md`, deploy-blocking tests must run before any deploy; per `feedback_gas_worst_case.md`, any gas analysis derives theoretical worst case FIRST then tests it.
 
 ### Phase 257: Delta Audit & Findings Consolidation
@@ -195,7 +199,7 @@
 |-------|----------------|--------|-----------|
 | 254. GNRUS Allowlist Storage, Admin Op & Storage Repack | 3/3 | Complete    | 2026-05-06 |
 | 255. Vote Rewrite, Resolve Flush & Event/Error Cleanup | 3/3 | Complete    | 2026-05-06 |
-| 256. Charity Allowlist Test Coverage | 0/0 | Not started | - |
+| 256. Charity Allowlist Test Coverage | 0/4 | Not started | - |
 | 257. Delta Audit & Findings Consolidation | 0/0 | Not started | - |
 
 ## Active Milestone
