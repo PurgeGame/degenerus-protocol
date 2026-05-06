@@ -120,7 +120,7 @@
 <details>
 <summary>🚧 v33.0 Charity Allowlist Governance (Phases 254-257) — STARTED 2026-05-05</summary>
 
-- [ ] Phase 254: GNRUS Allowlist Storage, Admin Op & Storage Repack (0/3 plans)
+- [x] Phase 254: GNRUS Allowlist Storage, Admin Op & Storage Repack (0/3 plans) (completed 2026-05-06)
 - [ ] Phase 255: Vote Rewrite, Resolve Flush & Event/Error Cleanup (TBD/TBD plans)
 - [ ] Phase 256: Charity Allowlist Test Coverage (TBD/TBD plans)
 - [ ] Phase 257: Delta Audit & Findings Consolidation (TBD/TBD plans)
@@ -142,9 +142,9 @@
   4. Two-branch write semantics work as designed — instant-apply branch writes directly to current slate when `currentSlate[slot] == address(0)`; queue branch writes to pending when `currentSlate[slot] != address(0)`; pending overwrite for the same slot replaces (no separate cancel API); `CapExceeded` fires when post-flush active count would exceed 20 from either branch.
   5. Dead state is functionally removed (not commented-out) per `feedback_no_history_in_comments.md` — `Proposal` struct, `proposals`, `proposalCount`, `levelProposalStart`, `levelProposalCount`, `hasProposed`, `creatorProposalCount`, `levelVaultOwner`, `levelSdgnrsSnapshot` all deleted; new storage layout documented vs the v32.0 baseline; storage repacked for tightest layout post-removal.
 **Plans**: 3 plans
-- [ ] 254-01-PLAN.md — Demolish v32-shape governance + lay v33.0 storage skeleton (CLEAN-01) [Wave 1]
-- [ ] 254-02-PLAN.md — Implement setCharity admin op + _popcount32 internal helper (ALW-01, ALW-02, ALW-03) [Wave 2, depends on 254-01]
-- [ ] 254-03-PLAN.md — Implement five v33.0 view helpers + _flushedBitmap internal helper (ALW-04) [Wave 3, depends on 254-01 + 254-02]
+- [x] 254-01-PLAN.md — Demolish v32-shape governance + lay v33.0 storage skeleton (CLEAN-01) [Wave 1]
+- [x] 254-02-PLAN.md — Implement setCharity admin op + _popcount32 internal helper (ALW-01, ALW-02, ALW-03) [Wave 2, depends on 254-01]
+- [x] 254-03-PLAN.md — Implement five v33.0 view helpers + _flushedBitmap internal helper (ALW-04) [Wave 3, depends on 254-01 + 254-02]
 **Write policy**: `contracts/GNRUS.sol` modifications require explicit per-commit user approval per `feedback_no_contract_commits.md`. Storage-layout / packing-strategy gas comparison documented in plan output before committing.
 
 ### Phase 255: Vote Rewrite, Resolve Flush & Event/Error Cleanup
@@ -190,7 +190,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 254. GNRUS Allowlist Storage, Admin Op & Storage Repack | 0/3 | Not started | - |
+| 254. GNRUS Allowlist Storage, Admin Op & Storage Repack | 3/3 | Complete    | 2026-05-06 |
 | 255. Vote Rewrite, Resolve Flush & Event/Error Cleanup | 0/0 | Not started | - |
 | 256. Charity Allowlist Test Coverage | 0/0 | Not started | - |
 | 257. Delta Audit & Findings Consolidation | 0/0 | Not started | - |
