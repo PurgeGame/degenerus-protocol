@@ -470,3 +470,45 @@ Combined distribution table per Claude\'s Discretion 4-col format (mirror v31 / 
 `re-verified at HEAD dcb70941` — the single REG-01 PASS row carries the v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` forward as non-widening at HEAD `dcb70941`. Zero regressions detected. Zero supersessions emitted via REG-02 per D-257-REG02-02 default. Expected per zero-finding-candidate input from §4 8-surface row table + KI EXC-01..04 envelopes RE_VERIFIED NEGATIVE-scope at v33 per §6b (charity governance has zero RNG interaction).
 
 ---
+
+## 6. KI Gating Walk + Non-Promotion Ledger
+
+This section walks the F-33-NN finding-block pool against the D-09 3-predicate KI-eligibility test for `KNOWN-ISSUES.md` promotion. Predicates per D-09 (verbatim from v30 D-09 / v31 D-06 / v32 D-09 carry):
+
+1. **Accepted-design predicate** — behavior is intentional / documented / load-bearing for the protocol\'s design (not an oversight or accident).
+2. **Non-exploitable predicate** — no player-reachable path produces material value extraction or determinism break (severity ≤ INFO under D-08).
+3. **Sticky predicate** — the item describes ongoing protocol behavior, not a one-time event or transient state.
+
+A candidate qualifies for KI promotion (verdict `KI_ELIGIBLE_PROMOTED`) iff **all three predicates PASS**. ANY false ⇒ Non-Promotion Ledger entry with the failing predicate identified. **Default outcome at this milestone per D-257-KI-01: `KNOWN-ISSUES.md` UNMODIFIED — zero F-33-NN finding blocks → zero KI promotion candidates.** Any v33-discovered finding-candidate would FAIL the **sticky** predicate (v33 charity surface is freshly-landed not "ongoing protocol behavior" until the next milestone).
+
+### 6a. Non-Promotion Ledger (zero rows by default per D-257-KI-01)
+
+| F-33-NN ID | Severity | Accepted-Design | Non-Exploitable | Sticky | KI_ELIGIBLE? | Disposition |
+| --- | --- | --- | --- | --- | --- | --- |
+| _(zero rows — default path per D-257-FIND-01 + D-257-KI-01)_ | — | — | — | — | — | — |
+
+**No F-33-NN candidates surfaced** from the §4 8-surface row table + §4b/§4c sub-row prose disclosures + Task 7 adversarial validation pass + Task 8 disposition. The Task 7 /zero-day-hunter NEW_SURFACE_CANDIDATE (sDGNRS float gaming via vote-and-sell) was disposed (Task 8 Option B default path) by folding into surface (d) §4a row prose as a related trust-asymmetry vector — NOT promoted to F-33-NN block, NOT promoted to 9th surface row. Per D-257-KI-01 + D-257-FIND-01: zero F-33-NN finding blocks → zero KI promotion candidates → §6a zero-row default.
+
+### 6b. KI Envelope Re-Verifications
+
+Per D-257-KI-01: the 4 accepted RNG exceptions in `KNOWN-ISSUES.md` are RE_VERIFIED at HEAD `dcb70941` for envelope-non-widening only. v33 charity governance does NOT touch any RNG-consuming path; all four envelopes are NEGATIVE-scope at v33. **Acceptance is NOT re-litigated.** These are envelope-non-widening attestations, NOT new KI rows.
+
+| KI ID | Description | Carrier (v33 attestation) | Subject at HEAD `dcb70941` | Verdict | Cross-Cite |
+| --- | --- | --- | --- | --- | --- |
+| **EXC-01** | Non-VRF entropy for affiliate winner roll (deterministic seed; gas optimization) | n/a (charity governance does not consume RNG) | Affiliate roll path NOT touched by any v33 commit; v33 charity surface has zero RNG interaction; `DegenerusAffiliate.sol` byte-identical between baseline and HEAD | **NEGATIVE-scope at v33** | KNOWN-ISSUES.md EXC-01 entry intact at HEAD; v32 §6b EXC-01 NEGATIVE-scope per Phase 250 SIB-03 carries forward |
+| **EXC-02** | Gameover prevrandao fallback (`_getHistoricalRngFallback` at `AdvanceModule:1301`-relative; activates only when in-flight VRF request stays unfulfilled for 14+ days) | n/a (charity governance does not interact with gameover prevrandao path) | AdvanceModule prevrandao site untouched by v33; sole prevrandao consumer remains `_getHistoricalRngFallback`; `burnAtGameOver` (the only GNRUS ↔ gameover wire at GNRUS:340 + GameOverModule:145) does not invoke RNG fallback | **NEGATIVE-scope at v33** | KI EXC-02 entry intact at HEAD; v32 BFL-05-V01 dual-carrier carries forward |
+| **EXC-03** | Gameover RNG substitution for mid-cycle write-buffer tickets (F-29-04 class; `_swapAndFreeze` at `AdvanceModule:292` + `_swapTicketSlot` at `AdvanceModule:1082` + `_gameOverEntropy` at `AdvanceModule:1222-1246`) | n/a (charity governance does not consume RNG) | `_swapAndFreeze` / `_swapTicketSlot` / `_gameOverEntropy` sites untouched; v33 charity governance has zero ticket / RNG-substitution interaction | **NEGATIVE-scope at v33** | KI EXC-03 entry intact at HEAD; v32 BFL-05-V02 dual-carrier carries forward |
+| **EXC-04** | EntropyLib XOR-shift PRNG (lootbox outcome rolls; per-player per-day per-amount keccak256 seed) | n/a (charity governance does not consume RNG) | LootboxModule entropyStep call sites untouched; v33 charity governance has zero lootbox / boon-roll interaction | **NEGATIVE-scope at v33** | KI EXC-04 entry intact at HEAD; v32 SIB-03 NEGATIVE-scope carries forward |
+
+**KNOWN-ISSUES.md UNMODIFIED at HEAD `dcb70941`** per D-257-KI-01 default path. Verified: `git diff acd88512..HEAD -- KNOWN-ISSUES.md` returns empty (zero lines of delta).
+
+### 6c. Verdict Summary
+
+- KI Promotion Count: **0 of 0 `KI_ELIGIBLE_PROMOTED`** (zero-row Non-Promotion Ledger per D-257-KI-01 default path; zero F-33-NN block emissions from §4 + Task 8 disposition).
+- KI Envelope Re-Verifications: **4 of 4 envelopes RE_VERIFIED NEGATIVE-scope at HEAD `dcb70941`** (EXC-01 affiliate / EXC-02 gameover-prevrandao / EXC-03 gameover-RNG-substitution / EXC-04 EntropyLib-XOR-shift; all four NEGATIVE-scope because charity governance has zero RNG interaction).
+- KNOWN-ISSUES.md State: **UNMODIFIED** per D-257-KI-01 default path.
+- **Combined §6 verdict: `0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`** (matches §2 Closure Verdict Summary literal string + §9b 6-Point Attestation Item 3).
+
+`re-verified at HEAD dcb70941`.
+
+---
