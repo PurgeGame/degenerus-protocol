@@ -35,7 +35,7 @@ interface IDegenerusVaultOwner {
  * @notice Soulbound GNRUS token with proportional burn-for-ETH/stETH redemption
  *         and per-level sDGNRS-weighted governance controlling GNRUS distribution.
  * @dev GNRUS is minted entirely to this contract at deploy. Each level, the winning
- *      governance proposal's recipient receives 2% of the remaining unallocated GNRUS.
+ *      charity slot's recipient receives 2% of the remaining unallocated GNRUS.
  *      GNRUS holders can burn tokens to redeem a proportional share of both ETH and stETH
  *      held by this contract. Funding arrives via game distributions (Phase 124 wiring).
  *
@@ -66,35 +66,23 @@ contract GNRUS {
     /// @notice Thrown when burn amount is 0 or below minimum
     error InsufficientBurn();
 
-    /// @notice Thrown when creator exceeds 5 proposals per level
-    error ProposalLimitReached();
-
-    /// @notice Thrown when proposer is below 0.5% sDGNRS threshold
-    error InsufficientStake();
-
-    /// @notice Thrown when proposer has already submitted this level
-    error AlreadyProposed();
-
-    /// @notice Thrown when voter has already voted on this proposal
-    error AlreadyVoted();
-
-    /// @notice Thrown when proposal index is out of range
-    error InvalidProposal();
-
-    /// @notice Thrown when pickCharity is called twice for the same level
-    error LevelAlreadyResolved();
-
-    /// @notice Thrown when voting or proposing for a non-current level
-    error LevelNotActive();
-
-    /// @notice Thrown when recipient is a contract (GNRUS would be stuck)
-    error RecipientIsContract();
-
     /// @notice Thrown when game is not in gameover state
     error GameNotOver();
 
     /// @notice Thrown when burnAtGameOver has already been called
     error AlreadyFinalized();
+
+    /// @notice Thrown when slot index is >= MAX_ACTIVE_SLOTS
+    error InvalidSlot();
+
+    /// @notice Thrown when setCharity is called with recipient=0 on an already-empty slot with no pending edit
+    error SlotAlreadyEmpty();
+
+    /// @notice Thrown when setCharity attempts to replace or remove a filled locked slot (0, 1, or 2)
+    error SlotLocked();
+
+    /// @notice Thrown when post-flush active count would exceed MAX_ACTIVE_SLOTS
+    error CapExceeded();
 
     // =====================================================================
     //                              EVENTS
@@ -121,6 +109,12 @@ contract GNRUS {
     /// @notice Emitted when gameover finalization burns unallocated GNRUS and claims winnings
     event GameOverFinalized(uint256 gnrusBurned, uint256 ethClaimed, uint256 stethClaimed);
 
+    /// @notice Emitted when setCharity writes directly to current slate (instant-apply branch)
+    event CharityApplied(uint8 indexed slot, address indexed recipient);
+
+    /// @notice Emitted when setCharity writes to pending edit queue (queue branch)
+    event CharityQueued(uint8 indexed slot, address indexed recipient);
+
     // =====================================================================
     //                          ERC20 METADATA
     // =====================================================================
@@ -145,55 +139,36 @@ contract GNRUS {
     mapping(address => uint256) public balanceOf;
 
     // =====================================================================
-    //                      GOVERNANCE STRUCTS & STATE
+    //                      GOVERNANCE STATE
     // =====================================================================
 
-    /// @notice A governance proposal for GNRUS distribution
-    struct Proposal {
-        address recipient;       // 20 bytes ┐
-        uint48  approveWeight;   //  6 bytes ├─ slot 0 (32 bytes exact)
-        uint48  rejectWeight;    //  6 bytes ┘
-        address proposer;        // 20 bytes ── slot 1 (12 bytes free)
-    }
-    // Weights stored as whole tokens (/ 1e18). uint48 max ~2.8e14, sDGNRS supply ~1e12 = 281× headroom.
-
-    /// @notice Current governance level (incremented by pickCharity)
+    /// @notice Current governance level
     uint24 public currentLevel;
-
-    /// @notice Total proposals ever created (global counter)
-    uint48 public proposalCount;
 
     /// @notice Whether burnAtGameOver has been called
     bool public finalized;
 
-    // ^ currentLevel (3) + proposalCount (6) + finalized (1) = 10 bytes, one slot
+    /// @notice Bitmap of active slots in the current slate; bit `i` set ⇔ `currentSlate[i] != address(0)`
+    uint32 public currentActiveBitmap;
 
-    /// @notice Proposal storage by global ID
-    mapping(uint48 => Proposal) public proposals;
+    /// @notice Bitmap of slots with a pending edit; bit `i` set ⇔ a pending edit exists for slot `i`
+    uint32 public pendingEditSet;
 
-    /// @notice First proposalId for a given level
-    mapping(uint24 => uint48) public levelProposalStart;
+    // ^ currentLevel (3) + finalized (1) + currentActiveBitmap (4) + pendingEditSet (4) = 12 bytes, one slot, 20 free
 
-    /// @notice Number of proposals for a given level
-    mapping(uint24 => uint8) public levelProposalCount;
-
-    /// @notice Whether pickCharity has been called for a given level
+    /// @notice Whether a given level has been resolved
     mapping(uint24 => bool) public levelResolved;
 
-    /// @notice Whether an address has already proposed for a given level
-    mapping(uint24 => mapping(address => bool)) public hasProposed;
+    /// @notice Whether a voter has already voted for a given (level, voter, slot) tuple
+    mapping(uint24 => mapping(address => mapping(uint8 => bool))) public hasVoted;
 
-    /// @notice Creator proposal count per level (max 5)
-    mapping(uint24 => uint8) public creatorProposalCount;
+    /// @notice Current-level charity slate. Index = uint8 slot id (0..19). Address-only, no metadata.
+    /// @dev `private` — auto-getter would clash with the named `getCharity(uint8)` view.
+    address[20] private currentSlate;
 
-    /// @notice Whether a voter has already voted on a specific proposal in a given level
-    mapping(uint24 => mapping(address => mapping(uint48 => bool))) public hasVoted;
-
-    /// @notice sDGNRS total supply snapshot at level start (set on first proposal)
-    mapping(uint24 => uint48) public levelSdgnrsSnapshot;
-
-    /// @notice Vault owner address snapshot at level start (set on first proposal)
-    mapping(uint24 => address) public levelVaultOwner;
+    /// @notice Pending edit queue. Recipient value at slot index; sentinel via `pendingEditSet` bitmap.
+    /// @dev bit set + value zero  = pending-remove; bit set + value !zero = pending-replace; bit clear = no pending edit.
+    mapping(uint8 => address) private pendingEdit;
 
     // =====================================================================
     //                            CONSTANTS
@@ -211,14 +186,11 @@ contract GNRUS {
     /// @notice BPS denominator
     uint16 private constant BPS_DENOM = 10_000;
 
-    /// @notice Minimum sDGNRS stake to propose: 0.5% of snapshot supply
-    uint16 private constant PROPOSE_THRESHOLD_BPS = 50;
+    /// @notice Number of locked foundational slots — slots 0..2 are immutable once filled
+    uint8 private constant LOCKED_SLOTS = 3;
 
-    /// @notice VAULT standing vote weight: 5% of snapshot supply
-    uint16 private constant VAULT_VOTE_BPS = 500;
-
-    /// @notice Maximum proposals creator can submit per level
-    uint8 private constant MAX_CREATOR_PROPOSALS = 5;
+    /// @notice Maximum number of simultaneously-active charity slots
+    uint8 private constant MAX_ACTIVE_SLOTS = 20;
 
     // =====================================================================
     //                       IMMUTABLE REFERENCES
@@ -352,159 +324,194 @@ contract GNRUS {
     }
 
     // =====================================================================
-    //                      GOVERNANCE -- PROPOSE
+    //                    GOVERNANCE -- ADMIN OPS
     // =====================================================================
 
-    /// @notice Create a proposal for the current governance level
-    /// @dev Any sDGNRS holder with >= 0.5% of snapshot supply can propose once per level.
-    ///      The vault owner (>50.1% DGVE) can submit up to 5 proposals per level.
-    ///      The first proposal of a level snapshots the sDGNRS total supply.
-    /// @param recipient Donation wallet address that will receive GNRUS if this proposal wins
-    /// @return proposalId The global ID of the created proposal
-    function propose(address recipient) external returns (uint48 proposalId) {
-        if (recipient == address(0)) revert ZeroAddress();
-        if (recipient.code.length != 0) revert RecipientIsContract();
-        uint24 level = currentLevel;
+    /// @notice Vault-owner-only single admin entry point covering charity slate add/replace/remove.
+    /// @dev Branches:
+    ///      - Instant-apply (writes directly to current slate) when `currentSlate[slot] == address(0)`.
+    ///      - Queue (writes to pending edit, applied at next pickCharity flush) when `currentSlate[slot] != address(0)`.
+    ///      Pass `recipient == address(0)` to remove a slot. Locked slots (0/1/2) cannot be replaced or
+    ///      removed once filled — first fill is an irrevocable commitment.
+    /// @param slot Slot index in the current slate (0..19)
+    /// @param recipient Charity recipient address; pass address(0) to remove
+    function setCharity(uint8 slot, address recipient) external {
+        // 1. Vault-owner gate
+        if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();
 
-        // Snapshot sDGNRS supply on first proposal of this level
-        if (levelProposalCount[level] == 0) {
-            levelSdgnrsSnapshot[level] = uint48(sdgnrs.votingSupply() / 1e18);
-        }
+        // 2. InvalidSlot
+        if (slot >= MAX_ACTIVE_SLOTS) revert InvalidSlot();
 
-        address proposer = msg.sender;
-        uint48 snapshot = levelSdgnrsSnapshot[level];
+        // 3. Locked-slot guard (BEFORE branch dispatch — slots 0/1/2 cannot be mutated through queue either)
+        address current = currentSlate[slot];
+        if (slot < LOCKED_SLOTS && current != address(0)) revert SlotLocked();
 
-        if (vault.isVaultOwner(proposer)) {
-            // Snapshot vault owner on first vault-owner action
-            if (levelVaultOwner[level] == address(0)) levelVaultOwner[level] = proposer;
-            if (creatorProposalCount[level] >= MAX_CREATOR_PROPOSALS) revert ProposalLimitReached();
-            creatorProposalCount[level]++;
+        uint32 slotMask = uint32(1) << slot;
+
+        // 4. Branch dispatch
+        if (current == address(0)) {
+            // Instant-apply branch (or removal special case if recipient == 0)
+            if (recipient == address(0)) {
+                // Removal special case: empty current + zero recipient.
+                // SlotAlreadyEmpty fires only when no pending edit exists for this slot.
+                // If a pending edit IS set, this call cancels the queued add: clear pendingEdit[slot] and the bitmap bit.
+                if ((pendingEditSet & slotMask) == 0) revert SlotAlreadyEmpty();
+                pendingEdit[slot] = address(0);
+                pendingEditSet &= ~slotMask;
+                emit CharityQueued(slot, address(0));
+                return;
+            }
+            // Cap check (instant-apply branch, recipient != 0)
+            uint32 futureBitmap = _futureBitmapAfter(slot, recipient, slotMask);
+            if (_popcount32(futureBitmap) > MAX_ACTIVE_SLOTS) revert CapExceeded();
+            // Apply
+            currentSlate[slot] = recipient;
+            currentActiveBitmap = currentActiveBitmap | slotMask;
+            emit CharityApplied(slot, recipient);
         } else {
-            // Community: 0.5% sDGNRS threshold, once per level
-            if ((sdgnrs.balanceOf(proposer) / 1e18) * BPS_DENOM < uint256(snapshot) * PROPOSE_THRESHOLD_BPS) revert InsufficientStake();
-            if (hasProposed[level][proposer]) revert AlreadyProposed();
-            hasProposed[level][proposer] = true;
+            // Queue branch (current != 0; locked-slot guard already passed → slot in 3..19)
+            uint32 futureBitmap = _futureBitmapAfter(slot, recipient, slotMask);
+            if (_popcount32(futureBitmap) > MAX_ACTIVE_SLOTS) revert CapExceeded();
+            // Apply (mapping write + bitmap bit set; if bit already set, this is a pending-overwrite — replace value)
+            pendingEdit[slot] = recipient;
+            pendingEditSet = pendingEditSet | slotMask;
+            emit CharityQueued(slot, recipient);
         }
-
-        proposalId = proposalCount++;
-        if (levelProposalCount[level] == 0) {
-            levelProposalStart[level] = proposalId;
-        }
-        levelProposalCount[level]++;
-
-        proposals[proposalId] = Proposal({
-            recipient: recipient,
-            proposer: proposer,
-            approveWeight: 0,
-            rejectWeight: 0
-        });
-
-        emit ProposalCreated(level, proposalId, proposer, recipient);
     }
 
-    // =====================================================================
-    //                        GOVERNANCE -- VOTE
-    // =====================================================================
+    /// @dev Compute the future currentActiveBitmap as if (a) the proposed setCharity write applied,
+    ///      then (b) all pending edits flushed to current slate. Used for cap-check in setCharity.
+    /// @param slot The slot being written
+    /// @param recipient The recipient being written (zero = remove)
+    /// @param slotMask uint32(1) << slot (cached by caller)
+    /// @return future The post-flush currentActiveBitmap if this setCharity call is applied + all pending edits flush
+    function _futureBitmapAfter(
+        uint8  slot,
+        address recipient,
+        uint32 slotMask
+    ) private view returns (uint32 future) {
+        future = currentActiveBitmap;
 
-    /// @notice Cast an approve or reject vote on a proposal for the current level
-    /// @dev Vote weight equals the voter's sDGNRS balance. The vault owner
-    ///      (>50.1% DGVE) receives an additional 5% of the sDGNRS snapshot as bonus weight.
-    ///      Voters can vote on every proposal independently but only once per proposal per level.
-    /// @param proposalId The global proposal ID to vote on
-    /// @param approveVote True to approve, false to reject
-    function vote(uint48 proposalId, bool approveVote) external {
-        uint24 level = currentLevel;
-        uint48 start = levelProposalStart[level];
-        uint8 count = levelProposalCount[level];
-        if (count == 0 || proposalId < start || proposalId >= start + count) revert InvalidProposal();
+        // Treat the proposed write as a pending entry for the slot, then iterate the union of
+        // (pendingEditSet ∪ {slot}) and apply each pending value to the future bitmap.
+        uint32 pSet = pendingEditSet | slotMask;
 
-        address voter = msg.sender;
-        if (hasVoted[level][voter][proposalId]) revert AlreadyVoted();
-        hasVoted[level][voter][proposalId] = true;
-
-        uint48 weight = uint48(sdgnrs.balanceOf(voter) / 1e18);
-        // Vault owner bonus: 5% of snapshot per proposal. Snapshot locks on first vault-owner action.
-        if (voter == levelVaultOwner[level] || (levelVaultOwner[level] == address(0) && vault.isVaultOwner(voter))) {
-            if (levelVaultOwner[level] == address(0)) levelVaultOwner[level] = voter;
-            weight += uint48((uint256(levelSdgnrsSnapshot[level]) * VAULT_VOTE_BPS) / BPS_DENOM);
-        }
-        if (weight == 0) revert InsufficientStake();
-
-        if (approveVote) {
-            proposals[proposalId].approveWeight += weight;
-        } else {
-            proposals[proposalId].rejectWeight += weight;
-        }
-
-        emit Voted(level, proposalId, voter, approveVote, weight);
-    }
-
-    // =====================================================================
-    //                    GOVERNANCE -- RESOLVE LEVEL
-    // =====================================================================
-
-    /// @notice Pick the winning charity for the current level, distributing 2% of unallocated
-    ///         GNRUS to the winning proposal's recipient. Called by the game on level transition.
-    /// @dev Winner is the proposal with the highest positive net weight (approve - reject).
-    ///      Ties broken by first-submitted. If no proposals exist or all are net-negative,
-    ///      the level is skipped.
-    /// @param level The level to resolve (must equal currentLevel)
-    function pickCharity(uint24 level) external onlyGame {
-        if (level != currentLevel) revert LevelNotActive();
-        if (levelResolved[level]) revert LevelAlreadyResolved();
-        levelResolved[level] = true;
-
-        // Advance to next level
-        currentLevel = level + 1;
-
-        uint8 count = levelProposalCount[level];
-
-        // If no proposals, skip
-        if (count == 0) {
-            emit LevelSkipped(level);
-            return;
-        }
-
-        uint48 start = levelProposalStart[level];
-
-        // Find winner: highest net weight (approve - reject), must be positive
-        uint48 bestId = type(uint48).max;
-        int256 bestNet = 0; // must be > 0 to win
-
-        for (uint8 i = 0; i < count;) {
-            Proposal storage p = proposals[start + i];
-            int256 net = int256(uint256(p.approveWeight)) - int256(uint256(p.rejectWeight));
-            if (net > bestNet) {
-                bestNet = net;
-                bestId = start + uint48(i);
+        for (uint8 i; i < MAX_ACTIVE_SLOTS;) {
+            uint32 mask_i = uint32(1) << i;
+            if ((pSet & mask_i) != 0) {
+                address pendingValue;
+                if (i == slot) {
+                    pendingValue = recipient;
+                } else {
+                    pendingValue = pendingEdit[i];
+                }
+                if (pendingValue == address(0)) {
+                    future = future & ~mask_i;
+                } else {
+                    future = future | mask_i;
+                }
             }
             unchecked { ++i; }
         }
+    }
 
-        // All proposals net-negative or zero => skip
-        if (bestId == type(uint48).max) {
-            emit LevelSkipped(level);
-            return;
+    /// @dev Compose the future currentActiveBitmap as if all pending edits flushed.
+    ///      For each set bit in pendingEditSet: pending value zero  → clear bit (pending-remove);
+    ///                                            pending value !zero → set bit (pending-add/replace).
+    /// @return future The post-flush currentActiveBitmap
+    function _flushedBitmap() private view returns (uint32 future) {
+        future = currentActiveBitmap;
+        uint32 pSet = pendingEditSet;
+        for (uint8 i; i < MAX_ACTIVE_SLOTS;) {
+            uint32 mask_i = uint32(1) << i;
+            if ((pSet & mask_i) != 0) {
+                if (pendingEdit[i] == address(0)) {
+                    future = future & ~mask_i;
+                } else {
+                    future = future | mask_i;
+                }
+            }
+            unchecked { ++i; }
         }
+    }
 
-        // Distribute 2% of remaining unallocated GNRUS
-        uint256 unallocated = balanceOf[address(this)];
-        uint256 distribution = (unallocated * DISTRIBUTION_BPS) / BPS_DENOM;
-
-        if (distribution == 0) {
-            emit LevelSkipped(level);
-            return;
+    /// @dev Population count (Hamming weight) of a uint32. Constant-gas via inline-asm.
+    /// @param x The 32-bit value to popcount
+    /// @return count Number of set bits in `x` (0..32)
+    function _popcount32(uint32 x) private pure returns (uint8 count) {
+        // Hamming-weight algorithm (parallel bit-counting).
+        // Reference: https://en.wikipedia.org/wiki/Hamming_weight (popcount_3)
+        assembly {
+            let v := and(x, 0xFFFFFFFF)
+            v := sub(v, and(shr(1, v), 0x55555555))
+            v := add(and(v, 0x33333333), and(shr(2, v), 0x33333333))
+            v := and(add(v, shr(4, v)), 0x0F0F0F0F)
+            v := mul(v, 0x01010101)
+            count := and(shr(24, v), 0xFF)
         }
+    }
 
-        address recipient = proposals[bestId].recipient;
+    // =====================================================================
+    //                          VIEW HELPERS
+    // =====================================================================
 
-        // Transfer from contract's unallocated pool to recipient
-        unchecked {
-            balanceOf[address(this)] = unallocated - distribution;
-            balanceOf[recipient] += distribution;
+    /// @notice Get the recipient at a given current-slate slot
+    /// @param slot The slot index (0..19)
+    /// @return recipient The address at the slot, or address(0) if empty
+    function getCharity(uint8 slot) external view returns (address recipient) {
+        if (slot >= MAX_ACTIVE_SLOTS) revert InvalidSlot();
+        return currentSlate[slot];
+    }
+
+    /// @notice Enumerate all active charity slots as paired arrays
+    /// @return slots The slot indices that hold a non-zero recipient (length = activeCount())
+    /// @return recipients The recipients at those slots (recipients[i] is the recipient at slots[i])
+    function getActiveSlots() external view returns (uint8[] memory slots, address[] memory recipients) {
+        uint32 bitmap = currentActiveBitmap;
+        uint8  len    = _popcount32(bitmap);
+        slots      = new uint8[](len);
+        recipients = new address[](len);
+        uint8 j;
+        for (uint8 i; i < MAX_ACTIVE_SLOTS;) {
+            if ((bitmap & (uint32(1) << i)) != 0) {
+                slots[j]      = i;
+                recipients[j] = currentSlate[i];
+                unchecked { ++j; }
+            }
+            unchecked { ++i; }
         }
-        emit Transfer(address(this), recipient, distribution);
-        emit LevelResolved(level, bestId, recipient, distribution);
+    }
+
+    /// @notice Enumerate all pending charity edits as paired arrays
+    /// @dev recipients[i] == address(0) signals a pending-remove for slots[i] (will clear currentSlate[slot] on flush).
+    /// @return slots The slot indices with a pending edit (length = popcount of pendingEditSet)
+    /// @return recipients The pending recipient values; address(0) means pending-remove
+    function getPendingEdits() external view returns (uint8[] memory slots, address[] memory recipients) {
+        uint32 bitmap = pendingEditSet;
+        uint8  len    = _popcount32(bitmap);
+        slots      = new uint8[](len);
+        recipients = new address[](len);
+        uint8 j;
+        for (uint8 i; i < MAX_ACTIVE_SLOTS;) {
+            if ((bitmap & (uint32(1) << i)) != 0) {
+                slots[j]      = i;
+                recipients[j] = pendingEdit[i];
+                unchecked { ++j; }
+            }
+            unchecked { ++i; }
+        }
+    }
+
+    /// @notice Count of active slots in the current slate
+    /// @return count Number of slots with a non-zero recipient (0..20)
+    function activeCount() external view returns (uint8 count) {
+        return _popcount32(currentActiveBitmap);
+    }
+
+    /// @notice Count of active slots after pending edits flush (current ± all pending edits applied)
+    /// @return count Number of slots with a non-zero recipient post-flush (0..20)
+    function activeCountAfterFlush() external view returns (uint8 count) {
+        return _popcount32(_flushedBitmap());
     }
 
     // =====================================================================
@@ -513,23 +520,6 @@ contract GNRUS {
 
     /// @notice Accept ETH from game claimWinnings and direct deposits
     receive() external payable {}
-
-    // =====================================================================
-    //                          VIEW HELPERS
-    // =====================================================================
-
-    /// @notice Get proposal details by global ID
-    function getProposal(uint48 proposalId) external view returns (
-        address recipient, address proposer, uint48 approveWeight, uint48 rejectWeight
-    ) {
-        Proposal storage p = proposals[proposalId];
-        return (p.recipient, p.proposer, p.approveWeight, p.rejectWeight);
-    }
-
-    /// @notice Get the proposal range for a given level
-    function getLevelProposals(uint24 level) external view returns (uint48 start, uint8 count) {
-        return (levelProposalStart[level], levelProposalCount[level]);
-    }
 
     // =====================================================================
     //                           PRIVATE
