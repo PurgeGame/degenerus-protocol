@@ -84,6 +84,14 @@ contract GNRUS {
     /// @notice Thrown when post-flush active count would exceed MAX_ACTIVE_SLOTS
     error CapExceeded();
 
+    /// @notice Thrown by vote() when the slot fails a state-based pre-condition.
+    /// @dev Reason codes: REJECT_EMPTY_SLOT (0), REJECT_ALREADY_VOTED (1), REJECT_ZERO_WEIGHT (2)
+    error VoteRejected(uint8 reason);
+
+    /// @notice Thrown by pickCharity() when the level argument fails a state-based pre-condition.
+    /// @dev Reason codes: REJECT_LEVEL_NOT_ACTIVE (0), REJECT_LEVEL_ALREADY_RESOLVED (1)
+    error PickCharityRejected(uint8 reason);
+
     // =====================================================================
     //                              EVENTS
     // =====================================================================
@@ -94,14 +102,11 @@ contract GNRUS {
     /// @notice Emitted when GNRUS is burned for proportional ETH + stETH
     event Burn(address indexed burner, uint256 gnrusAmount, uint256 ethOut, uint256 stethOut);
 
-    /// @notice Emitted when a new proposal is created for the current level
-    event ProposalCreated(uint24 indexed level, uint48 indexed proposalId, address indexed proposer, address recipient);
+    /// @notice Emitted when a vote is cast on a charity slot
+    event Voted(uint24 indexed level, uint8 indexed slot, address indexed voter, uint256 weight);
 
-    /// @notice Emitted when a vote is cast on a proposal
-    event Voted(uint24 indexed level, uint48 indexed proposalId, address indexed voter, bool approve, uint256 weight);
-
-    /// @notice Emitted when a level resolves with a winning proposal
-    event LevelResolved(uint24 indexed level, uint48 indexed winningProposalId, address recipient, uint256 gnrusDistributed);
+    /// @notice Emitted when a level resolves with a winning slot
+    event LevelResolved(uint24 indexed level, uint8 indexed slot, address recipient, uint256 gnrusDistributed);
 
     /// @notice Emitted when a level resolves with no eligible winner
     event LevelSkipped(uint24 indexed level);
@@ -114,6 +119,9 @@ contract GNRUS {
 
     /// @notice Emitted when setCharity writes to pending edit queue (queue branch)
     event CharityQueued(uint8 indexed slot, address indexed recipient);
+
+    /// @notice Emitted per applied pending edit during pickCharity flush. recipient == address(0) signals a flush-removed slot.
+    event CharityFlushed(uint8 indexed slot, address indexed recipient);
 
     // =====================================================================
     //                          ERC20 METADATA
@@ -170,6 +178,11 @@ contract GNRUS {
     /// @dev bit set + value zero  = pending-remove; bit set + value !zero = pending-replace; bit clear = no pending edit.
     mapping(uint8 => address) private pendingEdit;
 
+    /// @notice Per-(level, slot) accumulator for approve weight cast via vote(). Old-level entries persist deliberately.
+    /// @dev Wiping 20 cold SSTOREs per level for no functional benefit is wasted gas (per `feedback_no_dead_guards.md`).
+    ///      Indexers gain free historical query as a side-benefit.
+    mapping(uint24 => mapping(uint8 => uint256)) public slotApproveWeight;
+
     // =====================================================================
     //                            CONSTANTS
     // =====================================================================
@@ -191,6 +204,21 @@ contract GNRUS {
 
     /// @notice Maximum number of simultaneously-active charity slots
     uint8 private constant MAX_ACTIVE_SLOTS = 20;
+
+    /// @notice VoteRejected reason: slot is empty in current slate
+    uint8 private constant REJECT_EMPTY_SLOT = 0;
+
+    /// @notice VoteRejected reason: voter has already voted on this (level, slot)
+    uint8 private constant REJECT_ALREADY_VOTED = 1;
+
+    /// @notice VoteRejected reason: voter has zero whole-token sDGNRS balance
+    uint8 private constant REJECT_ZERO_WEIGHT = 2;
+
+    /// @notice PickCharityRejected reason: level argument does not match currentLevel
+    uint8 private constant REJECT_LEVEL_NOT_ACTIVE = 0;
+
+    /// @notice PickCharityRejected reason: level has already been resolved
+    uint8 private constant REJECT_LEVEL_ALREADY_RESOLVED = 1;
 
     // =====================================================================
     //                       IMMUTABLE REFERENCES
