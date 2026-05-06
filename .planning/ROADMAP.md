@@ -13,7 +13,7 @@
 - ✅ **v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit** — Phases 237-242 (shipped 2026-04-20) — see [milestones/v30.0-ROADMAP.md](milestones/v30.0-ROADMAP.md)
 - ✅ **v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit** — Phases 243-246 (shipped 2026-04-24) — see [milestones/v31.0-ROADMAP.md](milestones/v31.0-ROADMAP.md)
 - ✅ **v32.0 Backfill Idempotency + purchaseLevel Underflow Audit** — Phases 247-253 (shipped 2026-05-02)
-- 🚧 **v33.0 Charity Allowlist Governance** — Phases 254-257 (started 2026-05-05)
+- ✅ **v33.0 Charity Allowlist Governance** — Phases 254-257 (shipped 2026-05-06; closure signal `MILESTONE_V33_AT_HEAD_dcb70941`)
 
 ## Phases
 
@@ -118,12 +118,12 @@
 </details>
 
 <details>
-<summary>🚧 v33.0 Charity Allowlist Governance (Phases 254-257) — STARTED 2026-05-05</summary>
+<summary>✅ v33.0 Charity Allowlist Governance (Phases 254-257) — SHIPPED 2026-05-06</summary>
 
-- [x] Phase 254: GNRUS Allowlist Storage, Admin Op & Storage Repack (0/3 plans) (completed 2026-05-06)
-- [x] Phase 255: Vote Rewrite, Resolve Flush & Event/Error Cleanup (0/3 plans) (completed 2026-05-06)
+- [x] Phase 254: GNRUS Allowlist Storage, Admin Op & Storage Repack (3/3 plans) (completed 2026-05-06)
+- [x] Phase 255: Vote Rewrite, Resolve Flush & Event/Error Cleanup (3/3 plans) (completed 2026-05-06)
 - [x] Phase 256: Charity Allowlist Test Coverage (6/6 plans) (completed 2026-05-06)
-- [ ] Phase 257: Delta Audit & Findings Consolidation (TBD/TBD plans)
+- [x] Phase 257: Delta Audit & Findings Consolidation (1/1 plans) (completed 2026-05-06; closure signal `MILESTONE_V33_AT_HEAD_dcb70941`)
 
 **Audit baseline:** v32.0 HEAD `acd88512` (closure signal `MILESTONE_V32_AT_HEAD_acd88512`). Mixed shape — Phases 254-256 modify `contracts/GNRUS.sol` + add tests under `test/governance/`; Phase 257 delta-audits the result and emits closure signal `MILESTONE_V33_AT_HEAD_<sha>`. Per `feedback_no_contract_commits.md`, all `contracts/` + `test/` changes require explicit per-commit user approval. 25/25 v33.0 requirements mapped (ALW + VOTE + RES + CLEAN + TST + AUDIT). Deliverable: `audit/FINDINGS-v33.0.md` with regression appendix verifying v32.0 closure signal still holds, conservation re-proof of GNRUS unallocated pool flow, KI EXC-01..04 RE_VERIFIED NEGATIVE-scope. See [REQUIREMENTS.md](REQUIREMENTS.md) and detail sections below.
 
@@ -203,8 +203,12 @@
 | 254. GNRUS Allowlist Storage, Admin Op & Storage Repack | 3/3 | Complete    | 2026-05-06 |
 | 255. Vote Rewrite, Resolve Flush & Event/Error Cleanup | 3/3 | Complete    | 2026-05-06 |
 | 256. Charity Allowlist Test Coverage | 6/6 | Completed 2026-05-06 | 4 commits (b1f84a8c → 644af631) |
-| 257. Delta Audit & Findings Consolidation | 0/0 | Not started | - |
+| 257. Delta Audit & Findings Consolidation | 1/1 | Completed 2026-05-06 | Closure signal `MILESTONE_V33_AT_HEAD_dcb70941` |
 
 ## Active Milestone
 
-**v33.0 Charity Allowlist Governance** — STARTED 2026-05-05. 4 phases (254-257), 25 requirements mapped (ALW + VOTE + RES + CLEAN + TST + AUDIT). Audit baseline v32.0 HEAD `acd88512`. Mixed shape: Phases 254-256 modify `contracts/GNRUS.sol` + add tests; Phase 257 delta-audits the result. Per `feedback_no_contract_commits.md`, all `contracts/` + `test/` changes require explicit per-commit user approval. Deliverable: `audit/FINDINGS-v33.0.md` emitting closure signal `MILESTONE_V33_AT_HEAD_<sha>`. See [REQUIREMENTS.md](REQUIREMENTS.md) for full v33.0 scope.
+_(none — v33.0 shipped 2026-05-06; ready for next milestone planning)_
+
+## Last Shipped Milestone
+
+**v33.0 Charity Allowlist Governance** — SHIPPED 2026-05-06. 4 phases (254-257), 25 requirements satisfied (ALW + VOTE + RES + CLEAN + TST + AUDIT). Audit baseline v32.0 HEAD `acd88512` → v33.0 contract-tree HEAD `dcb70941`. Mixed shape: Phases 254-256 modified `contracts/GNRUS.sol` + added tests; Phase 257 delta-audited the result. Result: 8 of 8 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY; zero F-33-NN finding blocks; 1 PASS REG-01 + zero-row REG-02; 4 NEGATIVE-scope KI envelope re-verifications; KNOWN-ISSUES.md UNMODIFIED. Deliverable: `audit/FINDINGS-v33.0.md` (FINAL READ-only). Closure signal: `MILESTONE_V33_AT_HEAD_dcb70941`. See [REQUIREMENTS.md](REQUIREMENTS.md) for v33.0 scope.

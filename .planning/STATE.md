@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v33.0
 milestone_name: Charity Allowlist Governance
-status: executing
-last_updated: "2026-05-06T12:53:42.453Z"
-last_activity: 2026-05-06 -- Phase 257 planning complete
+status: completed
+last_updated: "2026-05-06T14:26:02Z"
+last_activity: 2026-05-06 -- Phase 257 complete; v33.0 shipped (closure signal MILESTONE_V33_AT_HEAD_dcb70941)
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 13
-  completed_plans: 12
-  percent: 92
+  completed_plans: 13
+  percent: 100
 ---
 
 # Project State
@@ -20,17 +20,32 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-05 for v33.0 start)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 255 — vote-rewrite-resolve-flush-event-error-cleanup
+**Current focus:** _(none — v33.0 shipped 2026-05-06; ready for next milestone planning)_
 
 ## Current Position
 
-Phase: 256 — COMPLETE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-06 -- Phase 257 planning complete
-Resume file: .planning/phases/257-delta-audit-findings-consolidation/257-CONTEXT.md
+Phase: 257 (delta-audit-findings-consolidation) — COMPLETE
+Plan: 1 of 1 — COMPLETE
+Status: v33.0 milestone shipped
+Last activity: 2026-05-06 -- Phase 257 complete; v33.0 shipped (closure signal MILESTONE_V33_AT_HEAD_dcb70941)
+Resume file: _(no active resume — milestone complete)_
 
 ## Last Shipped Milestone
+
+**v33.0 — Charity Allowlist Governance** (shipped 2026-05-06)
+
+- 4 phases (254-257), 13 plans, 25/25 requirements satisfied (ALW + VOTE + RES + CLEAN + TST + AUDIT)
+- Audit baseline: v32.0 HEAD `acd88512` → v33.0 contract-tree HEAD `dcb70941` (8 contract-touching landings: 4 GNRUS Phase 254/255 + 7 post-anchor non-GNRUS landings classified ORTHOGONAL_PROVEN per §3.4)
+- Result: 8 of 8 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY (a, b, c, d, e, f, g, h); zero F-33-NN finding blocks emitted; trust-asymmetry items (e) instant-apply admin-front-run + (g) locked-slot poisoning routed to §4 sub-row prose disclosures per D-257-FIND-01.
+- LEAN regression: 1 PASS REG-01 (v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` re-verified non-widening; L173 + L1174 + GameStorage `_livenessTriggered` body byte-identical between baseline and HEAD) + zero-row REG-02 (zero v29-v32 prior-finding rows whose acceptance rationale relied on charity-governance-touching envelope)
+- KI envelopes EXC-01..04 all RE_VERIFIED NEGATIVE-scope (charity governance has zero RNG interaction)
+- KNOWN-ISSUES.md UNMODIFIED per D-257-KI-01 default zero-promotion path
+- Deliverable: `audit/FINDINGS-v33.0.md` (FINAL READ-only at HEAD `dcb70941`, ~720 lines, 9 sections)
+- Closure signal: `MILESTONE_V33_AT_HEAD_dcb70941`
+- Process deviations: Task 7 SPAWN_FAILED for /contract-auditor + /zero-day-hunter skills; executor-manual fallback per Task 7 retry-semantics (manual red-team in each skill's scope captured in 257-01-ADVERSARIAL-LOG.md); /zero-day-hunter manual red-team surfaced one NEW_SURFACE_CANDIDATE (sDGNRS float gaming via vote-and-sell) which Task 8 disposition folded into surface (d) prose as a related trust-asymmetry vector. v33.0 closure NOT blocked.
+- See `.planning/MILESTONES.md` for archive
+
+### Prior Shipped Milestone
 
 **v32.0 — Backfill Idempotency + purchaseLevel Underflow Audit** (shipped 2026-05-02)
 
@@ -61,11 +76,7 @@ Resume file: .planning/phases/257-delta-audit-findings-consolidation/257-CONTEXT
 
 ## Active Milestone
 
-**v33.0 Charity Allowlist Governance** — kicked off 2026-05-05; roadmap drafted 2026-05-05.
-
-- Audit baseline: v32.0 HEAD `acd88512` (closure signal `MILESTONE_V32_AT_HEAD_acd88512`)
-- Posture: **mixed shape** — Phases 254-256 modify `contracts/GNRUS.sol` + add tests under `test/governance/`; Phase 257 delta-audits the result. READ-only LIFTED per v32.0 precedent — agents do NOT commit `contracts/` or `test/` changes without explicit user approval per `feedback_no_contract_commits.md`.
-- Deliverable: `audit/FINDINGS-v33.0.md` with regression appendix verifying v32.0 closure signal still holds, conservation re-proof of GNRUS unallocated pool flow, KI EXC-01..04 RE_VERIFIED NEGATIVE-scope.
+_(none — v33.0 shipped 2026-05-06; ready for next milestone kickoff)_
 
 ## Roadmap Overview
 
@@ -73,10 +84,10 @@ Resume file: .planning/phases/257-delta-audit-findings-consolidation/257-CONTEXT
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
-| 254 | GNRUS Allowlist Storage, Admin Op & Storage Repack | ALW-01, ALW-02, ALW-03, ALW-04, CLEAN-01 (5) | Not started |
-| 255 | Vote Rewrite, Resolve Flush & Event/Error Cleanup | VOTE-01, VOTE-02, VOTE-03, VOTE-04, RES-01, RES-02, RES-03, RES-04, CLEAN-02, CLEAN-03 (10) | Not started |
-| 256 | Charity Allowlist Test Coverage | TST-01, TST-02, TST-03, TST-04, TST-05, TST-06 (6) | Not started |
-| 257 | Delta Audit & Findings Consolidation | AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04 (4) | Not started |
+| 254 | GNRUS Allowlist Storage, Admin Op & Storage Repack | ALW-01, ALW-02, ALW-03, ALW-04, CLEAN-01 (5) | Complete |
+| 255 | Vote Rewrite, Resolve Flush & Event/Error Cleanup | VOTE-01, VOTE-02, VOTE-03, VOTE-04, RES-01, RES-02, RES-03, RES-04, CLEAN-02, CLEAN-03 (10) | Complete |
+| 256 | Charity Allowlist Test Coverage | TST-01, TST-02, TST-03, TST-04, TST-05, TST-06 (6) | Complete |
+| 257 | Delta Audit & Findings Consolidation | AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04 (4) | Complete (closure signal `MILESTONE_V33_AT_HEAD_dcb70941`) |
 
 **Dependencies:** Phase 254 must precede Phase 255 (vote rejects empty slots, so the slate storage + setCharity must exist before vote/pickCharity can be rewritten against it). Phase 256 depends on Phases 254 + 255 (tests exercise the full surface). Phase 257 is terminal — depends on 254 + 255 + 256 (audit baseline is the post-test HEAD with all impl + tests landed).
 

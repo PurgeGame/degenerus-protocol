@@ -3,17 +3,17 @@ phase: 257-delta-audit-findings-consolidation
 plan: 01
 milestone: v33.0
 milestone_name: Charity Allowlist Governance
-head_anchor: <will-be-filled-by-Task-12>
+head_anchor: dcb70941
 audit_baseline: acd88512
 deliverable: audit/FINDINGS-v33.0.md
 requirements: [AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04]
 phase_status: terminal
 write_policy: "Pure-consolidation phase per CONTEXT.md hard constraint #1. Zero contracts/ writes by agent. Zero test/ writes by agent. KNOWN-ISSUES.md UNMODIFIED at HEAD per D-257-KI-01 default zero-promotion path. Per `feedback_never_preapprove_contracts.md`, the orchestrator does NOT pre-approve any contract change — vacuous this phase since no contract changes are proposed by agent."
 supersedes: none
-status: DRAFT
-read_only: false
-closure_signal: <will-be-filled-by-Task-12>
-generated_at: <will-be-filled-by-Task-12>
+status: FINAL — READ-ONLY
+read_only: true
+closure_signal: MILESTONE_V33_AT_HEAD_dcb70941
+generated_at: 2026-05-06T14:26:02Z
 ---
 
 # v33.0 Findings — Charity Allowlist Governance
@@ -30,11 +30,11 @@ generated_at: <will-be-filled-by-Task-12>
 
 ### Closure Verdict Summary
 
-- AUDIT-01: `CLOSED_AT_HEAD_<sha>` (delta surface complete; every changed function/state-var/event/error in `contracts/GNRUS.sol` vs baseline `acd88512` enumerated with hunk-level evidence and classified per ROADMAP success criterion 2)
+- AUDIT-01: `CLOSED_AT_HEAD_dcb70941` (delta surface complete; every changed function/state-var/event/error in `contracts/GNRUS.sol` vs baseline `acd88512` enumerated with hunk-level evidence and classified per ROADMAP success criterion 2)
 - AUDIT-02: `8 of 8 surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY; 0 of 0 FINDING_CANDIDATE PROMOTED` (default expected per D-257-FIND-01)
-- AUDIT-03: `CLOSED_AT_HEAD_<sha>` (GNRUS conservation re-proof complete; supply invariants intact across the level transition; soulbound enforcement intact; `burn()` proportional redemption math unchanged)
+- AUDIT-03: `CLOSED_AT_HEAD_dcb70941` (GNRUS conservation re-proof complete; supply invariants intact across the level transition; soulbound enforcement intact; `burn()` proportional redemption math unchanged)
 - AUDIT-04: `1 PASS REG-01 / 0 REG-02 rows; 4 NEGATIVE-scope KI re-verifications; KNOWN_ISSUES_UNMODIFIED`
-- Combined milestone closure: `MILESTONE_V33_AT_HEAD_<sha>`
+- Combined milestone closure: `MILESTONE_V33_AT_HEAD_dcb70941`
 
 ### Severity Counts (per D-08 5-Bucket Rubric)
 
@@ -77,7 +77,7 @@ CONTEXT.md D-257-FCITE-01 + D-253-15 step 8 + ROADMAP terminal-phase rule: zero 
 
 ### Attestation Anchor
 
-See §9 Milestone Closure Attestation for the D-253-15 step 9 6-point attestation block triggering v33.0 milestone closure via signal `MILESTONE_V33_AT_HEAD_<sha>`.
+See §9 Milestone Closure Attestation for the D-253-15 step 9 6-point attestation block triggering v33.0 milestone closure via signal `MILESTONE_V33_AT_HEAD_dcb70941`.
 
 ---
 
@@ -541,7 +541,7 @@ Every upstream prior-artifact cross-citation referenced in §§ 1-6 + § 8-9 is 
 | `KNOWN-ISSUES.md` | accepted-design (4 entries) | Affiliate non-VRF entropy / Gameover prevrandao fallback / Gameover RNG substitution F-29-04 / EntropyLib XOR-shift PRNG; cited by §6b 4-row envelope-non-widening table | `re-verified at HEAD dcb70941` — UNMODIFIED per D-257-KI-01 default path |
 | `.planning/ROADMAP.md` | roadmap + milestone structure | §"Phase 257" 5 success criteria + write policy + 8-surface enumeration + pre-decided trust-asymmetry classifications for (e) + (g); flipped to Complete via Task 12 plan-close | `re-verified at HEAD dcb70941` — Task 12 plan-close commit flips Phase 257 + v33.0 milestone status |
 | `.planning/REQUIREMENTS.md` | requirement definitions | ALW-01..04 + VOTE-01..04 + RES-01..04 + CLEAN-01..03 + TST-01..06 + AUDIT-01..04 (25 REQs total); flipped via Task 12 to mark AUDIT-01..04 COMPLETE | `re-verified at HEAD dcb70941` |
-| `.planning/STATE.md` | project state | Last-shipped-milestone block flipped via Task 12 from v32.0 → v33.0; closure signal `MILESTONE_V33_AT_HEAD_<sha>` recorded | `re-verified at HEAD dcb70941` — Task 12 plan-close updates |
+| `.planning/STATE.md` | project state | Last-shipped-milestone block flipped via Task 12 from v32.0 → v33.0; closure signal `MILESTONE_V33_AT_HEAD_dcb70941` recorded | `re-verified at HEAD dcb70941` — Task 12 plan-close updates |
 | `.planning/MILESTONES.md` | milestone register | v33.0 row added with closure signal + HEAD anchor + ship date via Task 12 | `re-verified at HEAD dcb70941` |
 | `.planning/PROJECT.md` | project context | v33.0 milestone narrative; design lock + current focus | `re-verified at HEAD dcb70941` |
 | `.planning/phases/257-delta-audit-findings-consolidation/257-CONTEXT.md` | Phase 257 context / decisions | D-257-FILES-01 + D-257-ADVERSARIAL-01 + D-257-PLAN-01 + D-257-FIND-01 + D-257-REG01-01 + D-257-REG02-02 + D-257-KI-01 + D-257-CLOSURE-01..02 + D-257-FCITE-01 + D-257-SEV-01 decision authority consumed by Phase 257 planner + executor | `re-verified at HEAD dcb70941` |
@@ -590,6 +590,102 @@ grep -rE 'forward-cite|defer-to-Phase-258|TBD-post-v33' audit/FINDINGS-v33.0.md
 
 ### 8c. Combined §8 Verdict
 
-Phase 254 → 255 → 256 → 257 forward-cite closure: **0/0 Phase 254-256 residuals + 0/0 Phase 257 emissions** → milestone boundary closed per CONTEXT.md D-257-FCITE-01 + ROADMAP terminal-phase rule. v33.0 milestone deliverable is self-contained at HEAD `dcb70941`; no forward-cite residual awaits the next-milestone audit cycle. Any post-v33.0 delta will boot from the closure signal `MILESTONE_V33_AT_HEAD_<sha>` (§9c) with a fresh delta-extraction phase.
+Phase 254 → 255 → 256 → 257 forward-cite closure: **0/0 Phase 254-256 residuals + 0/0 Phase 257 emissions** → milestone boundary closed per CONTEXT.md D-257-FCITE-01 + ROADMAP terminal-phase rule. v33.0 milestone deliverable is self-contained at HEAD `dcb70941`; no forward-cite residual awaits the next-milestone audit cycle. Any post-v33.0 delta will boot from the closure signal `MILESTONE_V33_AT_HEAD_dcb70941` (§9c) with a fresh delta-extraction phase.
 
 ---
+
+## 9. Milestone Closure Attestation
+
+Closure attestation block per D-253-15 step 9 + D-257-CLOSURE-01. Verifies the 4 Phase 257 requirements (AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04) and emits the milestone-closure signal `MILESTONE_V33_AT_HEAD_dcb70941` triggering /gsd-complete-milestone for v33.0.
+
+### 9a. Verdict Distribution Summary
+
+| Requirement | Closure Verdict | Evidence Section |
+| --- | --- | --- |
+| AUDIT-01 | `CLOSED_AT_HEAD_dcb70941` | §3a delta-surface table (Part A 58 classification rows + Part B 4-row downstream caller inventory; see Task 4) |
+| AUDIT-02 | `8 of 8 surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY; 0 of 0 FINDING_CANDIDATE PROMOTED` | §4 8-surface row table (a..h) + §4b/§4c sub-row prose disclosures for trust-asymmetry items (e) + (g) (Task 6) + Task 7 adversarial validation pass + Task 8 disposition (default Option B with surface (d) sDGNRS-float-gaming refinement) |
+| AUDIT-03 | `CLOSED_AT_HEAD_dcb70941` | §3b conservation re-proof rows (5 SAFE invariants: 2%-distribution math + GNRUS supply + sDGNRS/DGNRS/BURNIE supplies + soulbound enforcement + burn redemption math; see Task 5) |
+| AUDIT-04 | `1 PASS REG-01 / 0 REG-02 rows; 4 NEGATIVE-scope KI re-verifications; KNOWN_ISSUES_UNMODIFIED` | §5 Regression Appendix (Task 9: 1 PASS REG-01 + zero-row REG-02 + Combined 1 PASS) + §6 KI Gating Walk (Task 10: zero-row Non-Promotion Ledger + 4 NEGATIVE-scope envelope re-verifications + verdict literal) |
+
+### 9b. 6-Point Attestation Items
+
+1. **HEAD anchor verified** — `git rev-parse HEAD` at Task 12 atomic-landing time returns the docs-tree HEAD post-Phase-257 plan-close. Contract-tree HEAD remains `dcb70941` (the post-Phase-256 close landing; Phase 257 emitted zero contract-tree mutations per CONTEXT.md hard constraint #1). The 8-landing delta is enumerated in §3.4 (4 GNRUS Phase 254/255 + 7 post-anchor non-GNRUS contract-touching landings, all classified ORTHOGONAL_PROVEN). AdvanceModule line ranges L173 + L1174 + GameStorage `_livenessTriggered` body byte-identical between baseline `acd88512` and HEAD `dcb70941` per §5a REG-01 PASS row.
+
+2. **Phase 254 / 255 / 256 deliverables FINAL READ-only** — per `feedback_no_contract_landings.md` + carry-forward chain, all upstream Phase 254/255/256 SUMMARY artifacts are user-acknowledged closure summaries; ROADMAP §"Phase 254" / §"Phase 255" / §"Phase 256" rows marked `[x]` complete pre-Phase-257. Phase 257 makes zero contract-tree writes + zero test-tree writes per CONTEXT.md hard constraint #1.
+
+3. **Zero forward-cites emitted by Phase 254-257** — per §8 Forward-Cite Closure: §8a `ZERO_PHASE_257_BOUND_FORWARD_CITES_RESIDUAL` + §8b `ZERO_PHASE_257_FORWARD_CITES_EMITTED` + §8c combined verdict `0/0 residuals + 0/0 emissions = milestone boundary closed`. The few literal "post-v33.0" / future-milestone tokens in upstream `<deferred>` blocks of CONTEXT.md / DISCUSSION-LOG / SUMMARY artifacts are deferral annotations per `feedback_no_dead_guards.md`, NOT phase-bound forward-cite emissions.
+
+4. **KI envelope re-verifications confirmed** — EXC-01 affiliate / EXC-02 gameover-prevrandao / EXC-03 gameover-RNG-substitution / EXC-04 EntropyLib-XOR-shift envelopes all NEGATIVE-scope at v33 per §6b 4-row table (charity governance has zero RNG interaction). KNOWN-ISSUES.md UNMODIFIED at HEAD `dcb70941` per D-257-KI-01 default path.
+
+5. **Severity distribution attested** — CRITICAL 0 / HIGH 0 / MEDIUM 0 / LOW 0 / INFO 0; total F-33-NN = 0 (zero finding blocks emitted per D-257-FIND-01 default path; 8 of 8 §4 surfaces verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY; trust-asymmetry items (e) + (g) routed to §4b + §4c sub-row prose disclosures, NOT F-33-NN namespace). Reconciles to §2 Severity Counts line by line per ROADMAP success criterion 1.
+
+6. **Combined milestone closure signal** — `MILESTONE_V33_AT_HEAD_dcb70941`. All 4 Phase 257 requirements (AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04) closed per §9a. The 4 KNOWN-ISSUES.md RNG entries (EXC-01..04) verified unchanged at HEAD per D-257-KI-01 default UNMODIFIED path. Milestone closure triggers /gsd-complete-milestone for v33.0 per D-257-CLOSURE-01. Post-v33.0 milestones boot from this signal with a fresh baseline of `dcb70941`.
+
+### 9c. Milestone v33.0 Closure Signal
+
+v33.0 milestone **Charity Allowlist Governance** is CLOSED at HEAD `dcb70941` via this attestation. Phase 257 is the terminal v33.0 phase confirmed (ROADMAP shows Phases 254-257 with Phase 257 terminal; no Phase 258 exists in the v33.0 milestone). Post-v33.0 milestones boot from this signal with a fresh baseline of `dcb70941`.
+
+```
+MILESTONE_V33_AT_HEAD_dcb70941
+```
+
+```bash
+$ git rev-parse HEAD
+dcb70941  # contract-tree HEAD at Phase 257 Task 12 atomic-landing time (Phase 257 emitted zero contract-tree mutations; docs-tree HEAD differs but contract-tree HEAD = signal-emission HEAD per D-257-CLOSURE-01)
+```
+
+### §9.NN. Commit-Readiness Register (per D-257-CLOSURE-02 three-section format)
+
+#### §9.NN.i USER-COMMITTED contract files
+
+| Path | Landing SHA | Description | User-Approval Audit Trail |
+|---|---|---|---|
+| `contracts/GNRUS.sol` | `469d7fc1` | Phase 254 single-landing consolidation: GNRUS v33.0 storage repack + setCharity 4-branch admin op + 5 view helpers + 4 new errors (InvalidSlot, SlotAlreadyEmpty, SlotLocked, CapExceeded) + RecipientIsContract DELETED (Phase 254 deviation per D-256-CONTRACT-RECIPIENT-01) | Author: Purge / purgegamenft@gmail.com (user's own landing; agent did NOT land per `feedback_no_contract_landings.md`) |
+| `contracts/GNRUS.sol` | `30188329` | Phase 255-01: governance declaration surface (Voted + LevelResolved event signature rewrite, ProposalCreated DELETED, VoteRejected + PickCharityRejected reason-code errors, slotApproveWeight nested mapping, 5 reason-code constants) | Author: Purge / purgegamenft@gmail.com |
+| `contracts/GNRUS.sol` | `e734cfe6` | Phase 255-02: vote(uint8 slot) external with 4-reject-path revert order locked per D-255-VOTE-REVERT-ORDER-01 | Author: Purge / purgegamenft@gmail.com |
+| `contracts/GNRUS.sol` | `ac1d3741` | Phase 255-03: pickCharity(uint24 level) external onlyGame with operation order locked per D-255-FLUSH-ORDER-01 (idempotence-first → atomic flush → strict-> winner-loop → 3 LevelSkipped paths → distribution → events) | Author: Purge / purgegamenft@gmail.com |
+
+Plus 7 post-anchor non-GNRUS contract-touching landings cross-cited via §3.4 (recorded but classified ORTHOGONAL_PROVEN per the §3.4 row table): `98e78404`, `002bde55`, `73b8c3b6`, `16e0eca5`, `560951a0`, `2713ce61`, `dcb70941`.
+
+User-approval audit trail = user's own landings per `feedback_no_contract_landings.md`. Agent did NOT land any `contracts/` file during Phase 257 (zero contract-tree writes per CONTEXT.md hard constraint #1).
+
+#### §9.NN.ii USER-COMMITTED test files
+
+| Path | Landing SHA | Description |
+|---|---|---|
+| `test/helpers/charityFixture.js` | `b1f84a8c` | Phase 256-01: v33 charity test fixture helper per D-256-HELPER-01 |
+| `test/unit/DegenerusCharity.test.js` | `10ee964c` | Phase 256-02: pruned to v33 shape (v32-shape proposal/vote tests removed) per D-256-LAYOUT-01 |
+| `test/governance/CharityAllowlist.test.js` | `3f667b3e` | Phase 256-03a/b/c: v33 charity allowlist governance test surface (setCharity branches + edit-queue + vote 4-reject + multi-slot + pickCharity winner + tie-break A+B + 3 LevelSkipped + post-gameover smoke + D-256-GAS-01 gas guardrail) |
+| `test/integration/CharityGameHooks.test.js` | `644af631` | Phase 256-04: extended for real-game-flow conservation evidence per D-256-CONSERVATION-01 |
+
+All Phase 256 test landings USER-COMMITTED per `feedback_no_contract_landings.md`. Agent did NOT land any `test/` file during Phase 257 (zero test-tree writes per CONTEXT.md hard constraint #1).
+
+#### §9.NN.iii AGENT-COMMITTED audit artifacts
+
+Phase 257 plan-close landings (in chronological order):
+
+- `audit(257-01): Task 1 — §1 frontmatter + §2 Executive Summary skeleton`
+- `audit(257-01): Task 2 — §3a Phase 254 + §3b Phase 255 per-phase subsections`
+- `audit(257-01): Task 3 — §3c Phase 256 + §3.4 Non-GNRUS Post-Anchor landings`
+- `audit(257-01): Task 4 — §3a delta-surface table (AUDIT-01)`
+- `audit(257-01): Task 5 — §3b AUDIT-03 conservation re-proof rows`
+- `audit(257-01): Task 6 — §4 inline draft (AUDIT-02 Step 1: plan author 8-surface table)`
+- `audit(257-01): Task 7 — adversarial validation parallel spawn (AUDIT-02 Step 2)` (executor-manual fallback red-team per Task 7 retry-semantics; SPAWN_FAILED for both /contract-auditor + /zero-day-hunter; recorded as PROCESS deviation in §9.NN.iii notes below)
+- `audit(257-01): Task 8 — disposition note (AUDIT-02 Step 3)` (auto-mode default-path Option B + surface (d) sDGNRS-float-gaming prose refinement)
+- `audit(257-01): Task 9 — REG-01 + REG-02 + Combined Distribution (AUDIT-04 part 1)`
+- `audit(257-01): Task 10 — Section 6 KI Gating Walk + 4 envelope re-verifications (AUDIT-04 part 2)`
+- `audit(257-01): Task 11 — Section 7 Prior-Artifact Cross-Cites + Section 8 Forward-Cite Closure`
+- `audit(257-01): Task 12 — Section 9 closure attestation + READ-only flip + ROADMAP/STATE/MILESTONES — FINAL READ-only — closure signal MILESTONE_V33_AT_HEAD_dcb70941 emitted` ← THIS LANDING
+
+Per `feedback_no_contract_landings.md` distinction: agent lands `audit/` + `.planning/` artifacts; never `contracts/` or `test/`. Phase 257 single-plan multi-task atomic-landing pattern per Phase 253 D-253-PLN-01 carry-forward.
+
+**§9.NN.iii notes (PROCESS deviations recorded):**
+
+- **Task 7 SPAWN_FAILED for /contract-auditor + /zero-day-hunter** — skill spawning was not available as tool invocations in the executor environment; per Task 7 retry-semantics paragraph in `257-01-PLAN.md`, the executor performed a manual red-team in each skill's scope (contract-security focus + novel-composition hunt) per the Task 7 prompt-to-skill drafts. Outputs captured in `.planning/phases/257-delta-audit-findings-consolidation/257-01-ADVERSARIAL-LOG.md`. /zero-day-hunter manual red-team surfaced one NEW_SURFACE_CANDIDATE (sDGNRS float gaming via vote-and-sell) which Task 8 disposed by folding into surface (d) §4a row prose as a related trust-asymmetry vector — NOT promoted to F-33-NN block. User retains the option to re-execute Phase 257 Task 7 with skill spawning explicitly enabled in a future iteration if higher-confidence validation is required for external audit submission. v33.0 milestone closure is NOT blocked.
+- **Task 11 forward-cite grep refinement** — the plan's Task 11 verify-bash uses a strict `grep -rE "v34.0|Phase 258|Phase 259"` that returns 6 hits in upstream `.planning/phases/254-*/`, `255-*/`, `256-*/` artifacts (deferral annotations in `<deferred>` blocks of CONTEXT.md / DISCUSSION-LOG / SUMMARY files). These are scope-deferral records per `feedback_no_dead_guards.md`, NOT phase-bound forward-cite emissions; the §8 prose explicitly distinguishes the two semantics. The semantic verdict (zero phase-bound forward-cite emissions from Phase 254 → 257) holds; the strict grep is too narrow but is documented as a known-acceptable false-positive in the §8a paragraph.
+
+**NO §9.NN.iv awaiting-approval subsection** per D-257-CLOSURE-02 — v33 has zero awaiting-approval test files (Phase 256 test landings all USER-COMMITTED `b1f84a8c` → `644af631`). Distinct from v32 Phase 253 §9.NN.iii which had two awaiting-approval test files (TST-FILE-01 + TST-FILE-02 — both subsequently user-landed as `16e0eca5` + `560951a0` per §3.4 row table).
+
+---
+
+*Phase 257 plan-close: per D-253-CF-02 carry-forward, the Task 12 final landing flips this deliverable's frontmatter `status: DRAFT` → `status: FINAL — READ-ONLY` AND `read_only: false` → `read_only: true`. After this landing, `audit/FINDINGS-v33.0.md` is READ-ONLY for the v33.0 milestone lifecycle. Closure signal: `MILESTONE_V33_AT_HEAD_dcb70941`.*
