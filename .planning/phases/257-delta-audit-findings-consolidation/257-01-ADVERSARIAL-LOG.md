@@ -307,3 +307,38 @@ Compositions 1, 3, 4, 5, 6, 7, 8, 9: NEGATIVE — no new vectors.
 The §4a 8-surface table is otherwise comprehensive. No further 9th-surface candidates.
 
 ---
+
+
+---
+
+## Step 3 Disposition Summary (Task 8)
+
+**Auto-mode active** (config.json `workflow.auto_advance: true`); `checkpoint:human-verify` → Auto-approve per checkpoint protocol fallback. Logged: `⚡ Auto-approved: Task 8 disposition — Option B (default path) with one minor §4 prose refinement.`
+
+### Items disposed
+
+**Item 1 — Skill-spawn-unavailable for /contract-auditor + /zero-day-hunter:**
+
+- **Disposition:** Documented in Task 7 log via `STATUS: SPAWN_FAILED` headers + executor-manual red-team fallback per Task 7 retry-semantics paragraph. Per the Task 7 paragraph: "Do NOT block Phase 257 closure on skill spawn failure; the plan author\'s Task 6 inline draft + Task 8 disposition still cover the validation pass."
+- **Auto-mode action:** Recorded as a deviation in 257-01-SUMMARY.md scope-guard deferrals (Task 12). User has the option to re-execute Phase 257 Task 7 with skill spawning explicitly enabled in a future iteration if higher-confidence validation is required for external audit submission. Closure of v33.0 milestone is NOT blocked.
+- **Severity:** PROCESS deviation, not a code-level finding.
+
+**Item 2 — /zero-day-hunter NEW_SURFACE_CANDIDATE: sDGNRS float gaming via vote-and-sell:**
+
+- **Skill claim (executor-as-/zero-day-hunter):** "A voter can: (1) acquire high sDGNRS balance, (2) call vote(slot), (3) sell sDGNRS. The vote weight is locked at the high level even though the voter no longer holds sDGNRS. Functionally equivalent to surface (d) DGVE float gaming with sDGNRS as the float token. Bounded by 2%-of-pool blast radius per level; matches DGVE mitigation pattern."
+- **Plan author counter:** This vector is acknowledged and bounded. The vote-weight model (read sDGNRS at vote-cast time, freeze in `slotApproveWeight`) is documented per D-256-MULTI-VOTE-01. The mitigation matches surface (d) DGVE float gaming: acquisition cost (sDGNRS market slippage) is the deterrent; blast radius is one level\'s 2%-of-pool. The vector does not extract value beyond what surface (d) already discloses (a vault-owner with sufficient float can curate AND vote with high weight; an arbitrary voter with sufficient float can vote with high weight, but cannot curate the slate). The combined vector is the union of surface (d) and surface (e) trust-asymmetry items, not a NEW surface category.
+- **User decision required (auto-mode):** N (refutable via fold-into-surface-(d)-prose).
+- **Disposition:** Auto-approved as Option B (default path) with a 1-line prose refinement to surface (d) §4a row prose noting sDGNRS float gaming as a related trust-asymmetry item. NOT promoted to F-33-NN block. NOT promoted to 9th surface row.
+
+### Verdict
+
+**Default path (Option B with minor refinement):**
+
+- 8 of 8 surfaces (a)..(h) preserve their plan-author verdicts at HEAD `dcb70941`.
+- Zero F-33-NN finding blocks emitted.
+- Surface (d) §4a row prose receives a 1-line refinement noting the related sDGNRS float-gaming vector (skill discovery): documented as functionally equivalent to DGVE float gaming with sDGNRS as float token; same SAFE_BY_TRUST_ASYMMETRY verdict; same 2%-of-pool blast radius bound.
+- Skill-spawn-unavailable noted as PROCESS deviation in 257-01-SUMMARY.md scope-guard deferrals.
+
+**Auto-mode resolution:** `⚡ Auto-approved: Option B default path with surface (d) prose refinement; skill-spawn-unavailable recorded as PROCESS deviation. No F-33-NN block emission. KNOWN-ISSUES.md UNMODIFIED.`
+
+`re-verified at HEAD dcb70941`.
