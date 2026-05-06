@@ -199,3 +199,151 @@ Phase 256 produces the v33.0 test surface with 6 test SUMMARYs covering every be
 **Closing attestation:** All 7 post-anchor non-GNRUS commits classified ORTHOGONAL_PROVEN — none widen the v33 charity surface, none touch the L173 / L1174 / `_livenessTriggered` regression target, none introduce new RNG-consuming paths. REG-01 single PASS row at §5a covers byte-identity proof for the load-bearing line ranges (L170-180 turbo region + L1170-1185 backfill region) across the wider contract-tree delta. `re-verified at HEAD dcb70941`.
 
 ---
+
+### 3a (cont.) AUDIT-01 Delta-Surface Table — `contracts/GNRUS.sol` `acd88512` → `dcb70941`
+
+**Per ROADMAP success criterion 2:** every changed function / state variable / event / error in `contracts/GNRUS.sol` vs baseline `acd88512` is enumerated below with hunk-level evidence and classified as `{NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED, RENAMED}`. Raw delta size: `git diff acd88512..HEAD -- contracts/GNRUS.sol` = 664 lines (4 GNRUS-touching commits: `469d7fc1` Phase 254 + `30188329` / `e734cfe6` / `ac1d3741` Phase 255).
+
+#### Part A: GNRUS.sol Function / State / Event / Error Classification
+
+**Functions — NEW (11 rows):**
+
+| Symbol | Type | Classification | HEAD Cite | 1-Line Description | Cross-Cite |
+| --- | --- | --- | --- | --- | --- |
+| `setCharity(uint8 slot, address recipient)` | function (external) | NEW | `GNRUS.sol:366-408` | Vault-owner-gated admin op with 4 branches (instant-apply / queue / removal / locked-slot revert); cap-check via `_futureBitmapAfter` | Phase 254 D-254-VOTEPICK-01 + 254-02-SUMMARY.md |
+| `_futureBitmapAfter(uint8, address, uint32)` | function (private view) | NEW | `GNRUS.sol:416-444` | Cap-check helper computing post-flush active bitmap; backs `CapExceeded` revert via `_popcount32 > MAX_ACTIVE_SLOTS` | 254-02-SUMMARY.md |
+| `_flushedBitmap()` | function (private view) | NEW | `GNRUS.sol:450-464` | Post-flush bitmap projector; backs `activeCountAfterFlush` view | 254-03-SUMMARY.md |
+| `_popcount32(uint32)` | function (private pure) | NEW | `GNRUS.sol:469-480` | Active-count primitive (Kernighan popcount); the bitmap-as-single-source-of-truth foundation | 254-01-SUMMARY.md D-254-COUNT-01 |
+| `getCharity(uint8)` | function (external view) | NEW | `GNRUS.sol:489-495` | Returns active recipient at slot; enforces `slot < MAX_ACTIVE_SLOTS` revert | 254-03-SUMMARY.md D-254-VIEW-01 |
+| `getActiveSlots()` | function (external view) | NEW | `GNRUS.sol:497-516` | Returns paired `(uint8[] slots, address[] recipients)` arrays for active slots | 254-03-SUMMARY.md |
+| `getPendingEdits()` | function (external view) | NEW | `GNRUS.sol:517-534` | Returns paired arrays for pending-edit queue | 254-03-SUMMARY.md |
+| `activeCount()` | function (external view) | NEW | `GNRUS.sol:535-540` | Returns `_popcount32(currentActiveBitmap)` (current slate count) | 254-03-SUMMARY.md |
+| `activeCountAfterFlush()` | function (external view) | NEW | `GNRUS.sol:541-552` | Returns `_popcount32(_flushedBitmap())` (post-flush count) | 254-03-SUMMARY.md |
+| `vote(uint8 slot)` | function (external) | NEW | `GNRUS.sol:558-581` | Phase 255 boundary re-add per D-254-VOTEPICK-01; signature `(uint8)` not v32 `(uint256 proposalId)`; 4 reject paths | 255-02-SUMMARY.md |
+| `pickCharity(uint24 level)` | function (external onlyGame) | NEW | `GNRUS.sol:601-674` | Phase 255 boundary re-add; signature `(uint24)` exactly preserves v32 `IGNRUSResolve` pin; flush + winner-loop + 3 LevelSkipped paths + distribution + emit | 255-03-SUMMARY.md D-255-FLUSH-ORDER-01 |
+
+**Functions — DELETED (1 row):**
+
+| Symbol | Type | Classification | Baseline Cite | 1-Line Description | Cross-Cite |
+| --- | --- | --- | --- | --- | --- |
+| `propose(address)` | function (external) | DELETED | acd88512 baseline | v32 governance entry point removed; supplanted by vault-owner-curated `setCharity` admin op + `vote(uint8)` slot-based voting | 254-01-SUMMARY.md D-254-VOTEPICK-01 |
+
+**Storage state — NEW (5+ rows):**
+
+| Symbol | Type | Classification | HEAD Cite | 1-Line Description | Cross-Cite |
+| --- | --- | --- | --- | --- | --- |
+| `address[20] private currentSlate` | state (fixed-array) | NEW | `GNRUS.sol:175` | The 20-slot allowlist (active recipients indexed by slot); declared private to avoid auto-getter clash with named `getCharity(uint8)` view | 254-01-SUMMARY.md D-254-SLATE-01 |
+| `mapping(uint8 => address) private pendingEdit` | state (mapping) | NEW | `GNRUS.sol:179` | Sparse pending-edit queue (slot → queued recipient); `address(0)` sentinel for queued-removal | 254-01-SUMMARY.md D-254-PENDING-01 |
+| `uint32 public currentActiveBitmap` | state (uint32) | NEW | `GNRUS.sol:160` | Active-slot bitmap — single source of truth for active count per D-254-COUNT-01 (drift impossible by construction) | 254-01-SUMMARY.md |
+| `uint32 public pendingEditSet` | state (uint32) | NEW | `GNRUS.sol:163` | Pending-edit sentinel bitmap; bit i set ⇔ slot i has a pending edit (real or removal) | 254-01-SUMMARY.md |
+| `mapping(uint24 => bool) public levelResolved` | state (mapping) | NEW | `GNRUS.sol:168` | Per-level idempotence flag for `pickCharity(level)` | 254-01-SUMMARY.md |
+| `mapping(uint24 => mapping(uint8 => uint256)) public slotApproveWeight` | state (nested mapping) | NEW | `GNRUS.sol:184` | Per-level per-slot vote-weight tally accumulated by `vote()` | 255-01-SUMMARY.md D-255-WEIGHT-STORAGE-01 |
+
+**Storage state — MODIFIED_LOGIC (1 row):**
+
+| Symbol | Type | Classification | HEAD Cite | 1-Line Description | Cross-Cite |
+| --- | --- | --- | --- | --- | --- |
+| `mapping(uint24 => mapping(address => mapping(uint8 => bool))) public hasVoted` | state (nested mapping) | MODIFIED_LOGIC | `GNRUS.sol:171` | Inner key changed from `proposalId` (uint48) to `slot` (uint8) per D-254-HASVOTED-01; semantics now "has voter X voted on slot S in level L" | 254-01-SUMMARY.md |
+
+**Storage state — DELETED (8 rows):**
+
+| Symbol | Type | Classification | Baseline Cite | 1-Line Description |
+| --- | --- | --- | --- | --- |
+| `Proposal` struct | type | DELETED | acd88512 baseline | v32 proposal record |
+| `proposals` array | state | DELETED | acd88512 baseline | v32 proposal store |
+| `proposalCount` | state | DELETED | acd88512 baseline | v32 monotone counter |
+| `levelProposalStart` | state (mapping) | DELETED | acd88512 baseline | v32 per-level proposal-range start |
+| `levelProposalCount` | state (mapping) | DELETED | acd88512 baseline | v32 per-level proposal-range count |
+| `hasProposed` | state (mapping) | DELETED | acd88512 baseline | v32 per-level per-creator proposal idempotence |
+| `creatorProposalCount` | state (mapping) | DELETED | acd88512 baseline | v32 per-creator monotone count |
+| `levelVaultOwner` | state (mapping) | DELETED | acd88512 baseline | v32 per-level vault-owner snapshot — DELETED per D-254-VOTEPICK-01 (vault-owner identity now read fresh at call time, removing the float-snapshot surface) |
+| `levelSdgnrsSnapshot` | state (mapping) | DELETED | acd88512 baseline | v32 per-level sDGNRS-supply snapshot — DELETED with the proposal model |
+
+**Events — NEW (3 rows):**
+
+| Symbol | Type | Classification | HEAD Cite | 1-Line Description | Cross-Cite |
+| --- | --- | --- | --- | --- | --- |
+| `CharityApplied(uint8 indexed slot, address indexed recipient)` | event | NEW | `GNRUS.sol:118` | Emitted by `setCharity` instant-apply branch (slot was empty) | 254-01-SUMMARY.md D-254-EVENT-01 |
+| `CharityQueued(uint8 indexed slot, address indexed recipient)` | event | NEW | `GNRUS.sol:121` | Emitted by `setCharity` queue branch (slot was filled — edit deferred until next `pickCharity` flush) | 254-01-SUMMARY.md D-254-EVENT-01 |
+| `CharityFlushed(uint8 indexed slot, address indexed recipient)` | event | NEW | `GNRUS.sol:124` | Emitted per applied edit during `pickCharity` flush phase | 255-01-SUMMARY.md D-255-FLUSH-EVENT-01 |
+
+**Events — RENAMED+SIGRENAMED (2 rows):**
+
+| Symbol | Type | Classification | HEAD Cite | 1-Line Description | Cross-Cite |
+| --- | --- | --- | --- | --- | --- |
+| `Voted(uint24 indexed level, uint8 indexed slot, address indexed voter, uint256 weight)` | event | RENAMED (signature) | `GNRUS.sol:106` | Was `Voted(uint24 indexed level, uint256 indexed proposalId, address indexed voter, uint256 weight)`; second arg type uint256→uint8 + name proposalId→slot | 255-01-SUMMARY.md D-255-EVENT-CLEANUP-01 |
+| `LevelResolved(uint24 indexed level, uint8 indexed slot, address recipient, uint256 gnrusDistributed)` | event | RENAMED (signature) | `GNRUS.sol:109` | Was `LevelResolved(uint24 indexed level, uint256 indexed proposalId, address recipient, uint256 gnrusDistributed)`; second arg type uint256→uint8 + name proposalId→slot | 255-01-SUMMARY.md |
+
+**Events — DELETED (1 row):**
+
+| Symbol | Type | Classification | Baseline Cite | 1-Line Description |
+| --- | --- | --- | --- | --- |
+| `ProposalCreated` | event | DELETED | acd88512 baseline | v32 proposal-creation signal removed with the proposal model |
+
+**Errors — NEW (6 rows):**
+
+| Symbol | Type | Classification | HEAD Cite | 1-Line Description | Cross-Cite |
+| --- | --- | --- | --- | --- | --- |
+| `InvalidSlot()` | error | NEW | `GNRUS.sol:76` | Slot index ≥ `MAX_ACTIVE_SLOTS` (20); fired by `setCharity`, `vote`, `getCharity` | 254-01-SUMMARY.md D-254-ERROR-PRUNE-01 |
+| `SlotAlreadyEmpty()` | error | NEW | `GNRUS.sol:79` | `setCharity(slot, address(0))` on already-empty slot (admin no-op) | 254-01-SUMMARY.md |
+| `SlotLocked()` | error | NEW | `GNRUS.sol:82` | Locked-slot replace/remove attempt (`slot < LOCKED_SLOTS && current != address(0)`) | 254-01-SUMMARY.md |
+| `CapExceeded()` | error | NEW | `GNRUS.sol:85` | Post-flush active count would exceed `MAX_ACTIVE_SLOTS` (20); structurally unreachable from external calls per D-256-CANCEL-QUEUED-01 / `256-03a-PLAN.md` (defensive guard) | 254-01-SUMMARY.md |
+| `VoteRejected(uint8 reason)` | error | NEW | `GNRUS.sol:89` | `vote()` reject paths; reason codes 0/1/2 = `REJECT_EMPTY_SLOT` / `REJECT_ALREADY_VOTED` / `REJECT_ZERO_WEIGHT` per D-255-VOTEREJECT-01 | 255-01-SUMMARY.md |
+| `PickCharityRejected(uint8 reason)` | error | NEW | `GNRUS.sol:93` | `pickCharity()` LevelSkipped variants; reason codes 0/1 = `REJECT_LEVEL_NOT_ACTIVE` / `REJECT_LEVEL_ALREADY_RESOLVED` per D-255-PICKCHARITY-ERROR-01 | 255-01-SUMMARY.md |
+
+**Errors — DELETED (8 rows):**
+
+| Symbol | Type | Classification | Baseline Cite | 1-Line Description |
+| --- | --- | --- | --- | --- |
+| `ProposalLimitReached` | error | DELETED | acd88512 baseline | v32 propose-exclusive |
+| `AlreadyProposed` | error | DELETED | acd88512 baseline | v32 propose-exclusive |
+| `InvalidProposal` | error | DELETED | acd88512 baseline | v32 propose-exclusive |
+| `InsufficientStake` | error | DELETED | acd88512 baseline | v32 vote-time stake check |
+| `AlreadyVoted` | error | DELETED | acd88512 baseline | replaced by `VoteRejected(REJECT_ALREADY_VOTED)` |
+| `LevelAlreadyResolved` | error | DELETED | acd88512 baseline | replaced by `PickCharityRejected(REJECT_LEVEL_ALREADY_RESOLVED)` |
+| `LevelNotActive` | error | DELETED | acd88512 baseline | replaced by `PickCharityRejected(REJECT_LEVEL_NOT_ACTIVE)` |
+| `RecipientIsContract` | error | DELETED | acd88512 baseline | **Phase 254 deviation:** removed per D-256-CONTRACT-RECIPIENT-01 lock — contract recipients now accepted by design (positive contract-recipient acceptance test in Phase 256-03a) |
+
+**Constants — NEW (7 rows):**
+
+| Symbol | Type | Classification | HEAD Cite | 1-Line Description |
+| --- | --- | --- | --- | --- |
+| `LOCKED_SLOTS = 3` | constant (uint8) | NEW | `GNRUS.sol:203` | Slots 0/1/2 locked once filled; first-fill instant-applies, subsequent replace/remove reverts `SlotLocked` |
+| `MAX_ACTIVE_SLOTS = 20` | constant (uint8) | NEW | `GNRUS.sol:206` | The 20-slot allowlist cap |
+| `REJECT_EMPTY_SLOT = 0` | constant (uint8) | NEW | `GNRUS.sol:209` | `VoteRejected` reason code |
+| `REJECT_ALREADY_VOTED = 1` | constant (uint8) | NEW | `GNRUS.sol:212` | `VoteRejected` reason code |
+| `REJECT_ZERO_WEIGHT = 2` | constant (uint8) | NEW | `GNRUS.sol:215` | `VoteRejected` reason code |
+| `REJECT_LEVEL_NOT_ACTIVE = 0` | constant (uint8) | NEW | `GNRUS.sol:218` | `PickCharityRejected` reason code |
+| `REJECT_LEVEL_ALREADY_RESOLVED = 1` | constant (uint8) | NEW | `GNRUS.sol:221` | `PickCharityRejected` reason code |
+
+**Soulbound stubs — REFACTOR_ONLY (3 rows):**
+
+| Symbol | Type | Classification | HEAD Cite | 1-Line Description |
+| --- | --- | --- | --- | --- |
+| `transfer(address, uint256)` | function (external pure) | REFACTOR_ONLY | `GNRUS.sol:263` | Reverts `TransferDisabled()` (preserved from v32; AUDIT-03 invariant 4) |
+| `transferFrom(address, address, uint256)` | function (external pure) | REFACTOR_ONLY | `GNRUS.sol:266` | Reverts `TransferDisabled()` (preserved from v32) |
+| `approve(address, uint256)` | function (external pure) | REFACTOR_ONLY | `GNRUS.sol:269` | Reverts `TransferDisabled()` (preserved from v32) |
+
+**Burn paths — REFACTOR_ONLY (2 rows):**
+
+| Symbol | Type | Classification | HEAD Cite | 1-Line Description |
+| --- | --- | --- | --- | --- |
+| `burn(uint256 amount)` | function (external) | REFACTOR_ONLY | `GNRUS.sol:282` | Proportional ETH+stETH redemption math preserved verbatim from v32 (AUDIT-03 invariant 5); `git diff acd88512..HEAD` shows zero hunks affecting burn body |
+| `burnAtGameOver()` | function (external onlyGame) | REFACTOR_ONLY | `GNRUS.sol:340` | Game-over remainder burn preserved from v32; sole consumer `DegenerusGameGameOverModule.sol:145` UNAFFECTED |
+
+**Total classification distribution:** 11 NEW functions + 1 DELETED function + 5+ NEW state + 1 MODIFIED_LOGIC state + 8 DELETED state + 3 NEW events + 2 RENAMED events + 1 DELETED event + 6 NEW errors + 8 DELETED errors + 7 NEW constants + 3 REFACTOR_ONLY soulbound stubs + 2 REFACTOR_ONLY burn paths = **58 classification rows** spanning every changed function/state/event/error in `contracts/GNRUS.sol` between `acd88512` and `dcb70941`.
+
+#### Part B: Downstream Caller Inventory
+
+**Grep recipe:** `grep -rn "GNRUS\|charityResolve\|charityGameOver" contracts/` produces 4 caller hits in `contracts/modules/` (the cross-module wires consumed by GNRUS — additional hits in `DegenerusStonk.sol:322/329` are stETH/ETH push paths into GNRUS via `ContractAddresses.GNRUS`, not function calls on the GNRUS contract; recorded but not classified as charity-callers).
+
+| Caller File:Line | Caller Function | Called Function | Affected/Unaffected | Justification |
+| --- | --- | --- | --- | --- |
+| `DegenerusGameAdvanceModule.sol:31-34` | interface decl `IGNRUSResolve` | N/A (interface) | UNAFFECTED | Interface signature `pickCharity(uint24 level)` byte-identical to v32 baseline; Phase 255 preserved exactly per D-255-FLUSH-ORDER-01 + carry-forward through `git diff acd88512..HEAD` showing the interface unchanged |
+| `DegenerusGameAdvanceModule.sol:103-104` | constant decl | N/A (constant decl) | UNAFFECTED | `IGNRUSResolve private constant charityResolve = IGNRUSResolve(ContractAddresses.GNRUS)` byte-identical |
+| `DegenerusGameAdvanceModule.sol:1634` | inside `advanceGame` per-level resolve | `pickCharity(uint24)` | AFFECTED but signature unchanged | The `charityResolve.pickCharity(lvl - 1)` wire is the sole consumer of GNRUS pickCharity; Phase 255 re-added the function with the same `(uint24 level)` signature (the v32 function existed at baseline, was deleted in Phase 254 per D-254-VOTEPICK-01, and re-added in Phase 255-03 with byte-identical interface signature). AUDIT-03 conservation re-proof at §3b confirms call-site invariant: 2%-of-pool distribution math survives end-to-end via D-256-CONSERVATION-01 integration test. |
+| `DegenerusGameGameOverModule.sol:145` | inside game-over flow | `burnAtGameOver()` | UNAFFECTED | `charityGameOver.burnAtGameOver()` calls a v32-preserved REFACTOR_ONLY function at `GNRUS.sol:340`; no signature or behavior change. |
+
+**Closing 1-line attestation:** AUDIT-01 §3a delta surface complete: every changed function/state/event/error in `contracts/GNRUS.sol` vs baseline `acd88512` enumerated with hunk-level evidence and classified per ROADMAP success criterion 2; downstream caller inventory shows zero AFFECTED-with-broken-contract — `pickCharity(uint24)` interface preserved per D-255-FLUSH-ORDER-01; `burnAtGameOver()` REFACTOR_ONLY preserved from v32. `re-verified at HEAD dcb70941`.
+
+---
