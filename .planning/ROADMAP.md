@@ -121,7 +121,7 @@
 <summary>🚧 v33.0 Charity Allowlist Governance (Phases 254-257) — STARTED 2026-05-05</summary>
 
 - [x] Phase 254: GNRUS Allowlist Storage, Admin Op & Storage Repack (0/3 plans) (completed 2026-05-06)
-- [ ] Phase 255: Vote Rewrite, Resolve Flush & Event/Error Cleanup (TBD/TBD plans)
+- [ ] Phase 255: Vote Rewrite, Resolve Flush & Event/Error Cleanup (0/3 plans)
 - [ ] Phase 256: Charity Allowlist Test Coverage (TBD/TBD plans)
 - [ ] Phase 257: Delta Audit & Findings Consolidation (TBD/TBD plans)
 
@@ -157,7 +157,10 @@
   3. `pickCharity(uint24 level)` atomically applies every queued edit to the current slate before computing the winner, emits per-edit (or one aggregate) flush events for indexer reconstructability, and the flush itself does not revert on bad pending state (admin-side validation in `setCharity` makes the queue trustable).
   4. Winner selection iterates slots 0 → 19 with strict `>`; ties resolve to lowest active slot index; `LevelSkipped(level)` emits exactly once on each of three paths — (a) zero active slots after flush, (b) zero votes cast, (c) post-flush distribution amount rounds to zero — and consumes the level (`levelResolved[level] = true`, `currentLevel = level + 1`). Distribution semantics unchanged (2% of remaining unallocated GNRUS to winning slot recipient via balance write + `Transfer` event + `LevelResolved(uint24 indexed level, uint8 indexed slot, address recipient, uint256 gnrusDistributed)` event with `slot` replacing the prior `proposalId` indexed arg).
   5. Cleanup is functional removal (not commenting-out) per `feedback_no_history_in_comments.md` — event `ProposalCreated` removed; events `Voted` and `LevelResolved` rewritten to the slot-based signatures; errors `ProposalLimitReached`, `AlreadyProposed`, `InvalidProposal` removed (Phase 254 already removed `InsufficientStake`, `AlreadyVoted`, `LevelAlreadyResolved`, `LevelNotActive`, `RecipientIsContract`); new error `VoteRejected(uint8 reason)` added in Phase 255 covering empty-slot / already-voted / zero-weight vote rejections via reason codes; existing `Unauthorized` reused for vault-owner gating; existing `InvalidSlot` reused for `vote(slot)` bounds check (`slot >= 20`). No orphaned `revert` statements remain per `feedback_no_dead_guards.md`.
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 255-01-PLAN.md — Land Phase 255 declarations: delete ProposalCreated; rewrite Voted + LevelResolved to v33 signatures; add CharityFlushed event; add VoteRejected + PickCharityRejected errors with reason-code constants; add slotApproveWeight storage (CLEAN-02, CLEAN-03) [Wave 1]
+- [ ] 255-02-PLAN.md — Implement vote(uint8 slot) external with locked revert order (InvalidSlot → REJECT_EMPTY_SLOT → REJECT_ALREADY_VOTED → REJECT_ZERO_WEIGHT) and CEI-clean state writes (VOTE-01, VOTE-02, VOTE-03, VOTE-04) [Wave 2, depends on 255-01]
+- [ ] 255-03-PLAN.md — Implement pickCharity(uint24 level) external onlyGame with idempotence-first ordering, inline atomic flush emitting CharityFlushed per-edit, strict-> winner loop, 3 LevelSkipped paths, and v32 distribution math preserved verbatim (RES-01, RES-02, RES-03, RES-04) [Wave 3, depends on 255-01 + 255-02]
 **Write policy**: `contracts/GNRUS.sol` modifications require explicit per-commit user approval per `feedback_no_contract_commits.md`.
 
 ### Phase 256: Charity Allowlist Test Coverage
@@ -191,7 +194,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 254. GNRUS Allowlist Storage, Admin Op & Storage Repack | 3/3 | Complete    | 2026-05-06 |
-| 255. Vote Rewrite, Resolve Flush & Event/Error Cleanup | 0/0 | Not started | - |
+| 255. Vote Rewrite, Resolve Flush & Event/Error Cleanup | 0/3 | Not started | - |
 | 256. Charity Allowlist Test Coverage | 0/0 | Not started | - |
 | 257. Delta Audit & Findings Consolidation | 0/0 | Not started | - |
 
