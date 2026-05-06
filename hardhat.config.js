@@ -10,6 +10,7 @@ const TEST_DIR_ORDER = [
   "access",
   "deploy",
   "unit",
+  "governance",
   "integration",
   "edge",
   "validation",
