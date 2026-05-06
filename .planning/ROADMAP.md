@@ -192,8 +192,9 @@
   3. AUDIT-02 adversarial sweep complete — original collusion attack on v32.0 propose/vote design re-derived; 8 new attack surfaces verdicted SAFE or FINDING_CANDIDATE with evidence: (a) admin front-run at level boundary, (b) edit-queue ordering / overflow, (c) tie-break gaming via slot ordering, (d) DGVE float gaming to flip vault-owner status mid-level, (e) instant-apply branch abuse (admin fills empty slot mid-level after observing votes), (f) active-count accounting drift across both branches, (g) locked-slot poisoning during seeding window (disclosed as trust-asymmetry note — operational mitigation, not code-level defense), (h) locked-slot lock-bypass (no pending-queue path, no flush-time mutation, no constructor/migration backdoor).
   4. AUDIT-03 conservation re-proof complete — GNRUS unallocated pool flow still 2% of remaining per resolved level; supply invariants for GNRUS / sDGNRS / DGNRS / BURNIE intact across the level transition; soulbound enforcement (transfer / transferFrom / approve) intact; `burn()` proportional redemption math unchanged. Each invariant gets a SAFE row with grep-cited proof.
   5. Regression appendix verifies v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` still holds (REG-01 PASS — backfill / purchaseLevel guards intact at HEAD `<sha>`); KI envelopes EXC-01..04 all RE_VERIFIED NEGATIVE-scope (charity governance does not touch any RNG-consuming path); KNOWN-ISSUES.md UNMODIFIED expected unless any new F-33-NN finding passes the D-09 3-predicate KI gating walk.
-**Plans**: TBD
-**Write policy**: `audit/FINDINGS-v33.0.md` + supporting `audit/v33-*.md` working files writeable freely per write policy. READ-only flip on terminal-task commit per v32.0 Phase 253 precedent.
+**Plans**: 1 plan
+- [ ] 257-01-PLAN.md — Author audit/FINDINGS-v33.0.md (9-section deliverable; AUDIT-01..04 + adversarial validation parallel-spawn + closure signal MILESTONE_V33_AT_HEAD_<sha>) [Wave 1]
+**Write policy**: `audit/FINDINGS-v33.0.md` writeable freely per write policy (D-257-FILES-01: single deliverable, no `audit/v33-*.md` working files). READ-only flip on terminal-task atomic commit per v32.0 Phase 253 precedent.
 
 ## Progress
 
