@@ -581,6 +581,99 @@ contract GNRUS {
     }
 
     // =====================================================================
+    //                     GOVERNANCE -- RESOLVE
+    // =====================================================================
+
+    /// @notice Atomically resolve a level: flush pending charity edits, pick winner via approve weight, distribute 2% of unallocated GNRUS.
+    /// @dev Caller must be the game contract (onlyGame). Operation is atomic per call:
+    ///      (1) Argument validation (level matches currentLevel, not already resolved).
+    ///      (2) Idempotence: levelResolved[level] = true; currentLevel = level + 1; SET FIRST so re-entrant
+    ///          guards lock before any further work (defense-in-depth — D-255-CEI-01 confirms zero external
+    ///          calls in the rest of the function, so re-entrancy is impossible by absence of callable surface).
+    ///      (3) Flush pending edits to current slate; emit CharityFlushed per applied edit.
+    ///      (4) Skip-path A: post-flush slate empty → emit LevelSkipped, return.
+    ///      (5) Winner: iterate slots 0..MAX_ACTIVE_SLOTS-1 with strict `>` so ties resolve to lowest slot.
+    ///      (6) Skip-path B: zero approve weight across all active slots → emit LevelSkipped, return.
+    ///      (7) Distribution math: 2% of unallocated GNRUS via BPS.
+    ///      (8) Skip-path C: distribution rounds to zero → emit LevelSkipped, return.
+    ///      (9) Apply: balanceOf write + Transfer event + LevelResolved event.
+    /// @param level The level to resolve (must equal currentLevel and not be levelResolved).
+    function pickCharity(uint24 level) external onlyGame {
+        // 1. Argument validation
+        if (level != currentLevel) revert PickCharityRejected(REJECT_LEVEL_NOT_ACTIVE);
+        if (levelResolved[level]) revert PickCharityRejected(REJECT_LEVEL_ALREADY_RESOLVED);
+
+        // 2. Idempotence guards SET FIRST — locks state before flush/winner/distribution.
+        levelResolved[level] = true;
+        currentLevel = level + 1;
+
+        // 3. Flush phase — apply each pending edit to current slate; emit CharityFlushed per-edit.
+        //    Invariant: flush MUST NOT revert (admin validates in setCharity per Phase 254).
+        uint32 pSet = pendingEditSet;
+        uint32 bitmap = currentActiveBitmap;
+        for (uint8 i; i < MAX_ACTIVE_SLOTS;) {
+            uint32 mask_i = uint32(1) << i;
+            if ((pSet & mask_i) != 0) {
+                address pendingValue = pendingEdit[i];
+                currentSlate[i] = pendingValue;
+                if (pendingValue == address(0)) {
+                    bitmap = bitmap & ~mask_i;
+                } else {
+                    bitmap = bitmap | mask_i;
+                }
+                delete pendingEdit[i];
+                emit CharityFlushed(i, pendingValue);
+            }
+            unchecked { ++i; }
+        }
+        currentActiveBitmap = bitmap;
+        pendingEditSet = 0;
+
+        // 4. Skip-path A: zero active slots after flush.
+        if (bitmap == 0) {
+            emit LevelSkipped(level);
+            return;
+        }
+
+        // 5. Winner phase — strict `>` so ties resolve to lowest slot index (RES-02).
+        uint8 bestSlot = type(uint8).max;
+        uint256 bestWeight = 0;
+        for (uint8 i; i < MAX_ACTIVE_SLOTS;) {
+            if ((bitmap & (uint32(1) << i)) != 0) {
+                uint256 w = slotApproveWeight[level][i];
+                if (w > bestWeight) {
+                    bestWeight = w;
+                    bestSlot = i;
+                }
+            }
+            unchecked { ++i; }
+        }
+
+        // 6. Skip-path B: no slot has any approve weight (zero votes cast or all weights zero).
+        if (bestSlot == type(uint8).max) {
+            emit LevelSkipped(level);
+            return;
+        }
+
+        // 7. Distribution math — 2% of remaining unallocated GNRUS.
+        uint256 unallocated = balanceOf[address(this)];
+        uint256 distribution = (unallocated * DISTRIBUTION_BPS) / BPS_DENOM;
+
+        // 8. Skip-path C: 2% rounds to zero (near-empty unallocated pool, late game).
+        if (distribution == 0) {
+            emit LevelSkipped(level);
+            return;
+        }
+
+        // 9. Apply distribution — balance write + Transfer + LevelResolved.
+        address recipient = currentSlate[bestSlot];
+        unchecked { balanceOf[address(this)] = unallocated - distribution; }
+        balanceOf[recipient] += distribution;
+        emit Transfer(address(this), recipient, distribution);
+        emit LevelResolved(level, bestSlot, recipient, distribution);
+    }
+
+    // =====================================================================
     //                         RECEIVE FUNCTION
     // =====================================================================
 
