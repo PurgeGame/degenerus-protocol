@@ -1,34 +1,34 @@
 ---
 gsd_state_version: 1.0
-milestone: between
-milestone_name: v32.0 shipped — awaiting v33.0+ kickoff
-status: shipped
-last_updated: "2026-05-02T11:49:18.731Z"
-last_activity: 2026-05-02
+milestone: v33.0
+milestone_name: Charity Allowlist Governance
+status: executing
+last_updated: "2026-05-06T05:12:52.119Z"
+last_activity: 2026-05-06 -- Phase 254 planning complete
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 7
-  completed_plans: 7
-  percent: 100
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 3
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-30 for v32.0 start)
+See: .planning/PROJECT.md (updated 2026-05-05 for v33.0 start)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v32.0 milestone shipped 2026-05-02; awaiting v33.0+ kickoff.
+**Current focus:** v33.0 Charity Allowlist Governance — replace open `propose(address)` / approve-reject flow on `GNRUS.sol` with vault-owner-curated allowlist (≤20 active slots, address-only, empty at deploy); slot edits queue and apply at level boundary; `vote(uint8 slot)` direct slate voting (approve-only); vault-owner +5% vote bonus removed; lowest active slot wins on tie. Foundational slots 0/1/2 are permanently immutable once filled.
 
 ## Current Position
 
-Phase: complete (Phase 253 plan-close landed; v32.0 milestone shipped)
-Plan: 1 of 1 — COMPLETE
-Status: v32.0 milestone shipped; awaiting v33.0+ kickoff
-Last activity: 2026-05-02
-Resume file: (none — v32.0 closed; v33.0+ has not yet kicked off)
+Phase: 254 (Context gathered — awaiting plan-phase)
+Plan: —
+Status: Ready to execute
+Last activity: 2026-05-06 -- Phase 254 planning complete
+Resume file: .planning/phases/254-gnrus-allowlist-storage-admin-op-storage-repack/254-CONTEXT.md
 
 ## Last Shipped Milestone
 
@@ -61,40 +61,40 @@ Resume file: (none — v32.0 closed; v33.0+ has not yet kicked off)
 
 ## Active Milestone
 
-**v32.0 SHIPPED 2026-05-02.** No active milestone — awaiting v33.0+ kickoff.
+**v33.0 Charity Allowlist Governance** — kicked off 2026-05-05; roadmap drafted 2026-05-05.
+
+- Audit baseline: v32.0 HEAD `acd88512` (closure signal `MILESTONE_V32_AT_HEAD_acd88512`)
+- Posture: **mixed shape** — Phases 254-256 modify `contracts/GNRUS.sol` + add tests under `test/governance/`; Phase 257 delta-audits the result. READ-only LIFTED per v32.0 precedent — agents do NOT commit `contracts/` or `test/` changes without explicit user approval per `feedback_no_contract_commits.md`.
+- Deliverable: `audit/FINDINGS-v33.0.md` with regression appendix verifying v32.0 closure signal still holds, conservation re-proof of GNRUS unallocated pool flow, KI EXC-01..04 RE_VERIFIED NEGATIVE-scope.
 
 ## Roadmap Overview
 
-7 phases, 32 requirements, 100% coverage:
+4 phases, 25 requirements, 100% coverage:
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
-| 247 | Delta Extraction & Classification | DELTA-01..03 (3) | COMPLETE (1/1 plans; 3/3 REQs satisfied; audit/v32-247-DELTA-SURFACE.md FINAL READ-only at HEAD acd88512; closure signal PHASE_247_CATALOG_FINAL_AT_HEAD_acd88512) |
-| 248 | Backfill Idempotency Proof | BFL-01..06 (6) | COMPLETE (1/1 plans; 6/6 REQs satisfied; audit/v32-248-BFL.md FINAL READ-only at HEAD acd88512; closure signal PHASE_248_BFL_FINAL_AT_HEAD_acd88512) |
-| 249 | purchaseLevel Correctness Proof | PLV-01..06 (6) | COMPLETE (1/1 plans; 6/6 REQs satisfied; audit/v32-249-PLV.md FINAL READ-only at HEAD acd88512) |
-| 250 | Sibling-Pattern Sweep | SIB-01..05 (5) | COMPLETE (1/1 plans; 5/5 REQs satisfied; audit/v32-250-SIB.md FINAL READ-only at HEAD acd88512; closure signal PHASE_250_SIB_FINAL_AT_HEAD_acd88512) |
-| 251 | Reproduction Tests | TST-01..04 (4) | COMPLETE (1/1 plans; 4/4 REQs satisfied; 8 V-rows SAFE; audit/v32-251-TST.md FINAL READ-only at HEAD c790ae45; closure signal PHASE_251_TST_FINAL_AT_HEAD_65b33299; 4 atomic commits c73c8add → 65b33299; awaiting-approval test files: test/edge/LastPurchaseDayRace.test.js + test/edge/BackfillIdempotency.test.js) |
-| 252 | Post-v31.0 Landed-Commit Sanity | POST31-01..02 (2) | COMPLETE (1/1 plans; 2/2 REQs satisfied; 11 V-rows SAFE; audit/v32-252-POST31.md FINAL READ-only at HEAD `2ad456fa`; closure signal `PHASE_252_POST31_FINAL_AT_HEAD_4e5ce8b5`; 4 atomic commits dd8e0052 → `4e5ce8b5`; awaiting-approval test files preserved untracked) |
-| 253 | Findings Consolidation + Lean Regression | FIND-01..04 (4) + REG-01..02 (2) | COMPLETE (1/1 plans; 6/6 REQs satisfied; audit/FINDINGS-v32.0.md FINAL READ-only at HEAD acd88512; closure signal MILESTONE_V32_AT_HEAD_acd88512; 6 atomic per-task commits) |
+| 254 | GNRUS Allowlist Storage, Admin Op & Storage Repack | ALW-01, ALW-02, ALW-03, ALW-04, CLEAN-01 (5) | Not started |
+| 255 | Vote Rewrite, Resolve Flush & Event/Error Cleanup | VOTE-01, VOTE-02, VOTE-03, VOTE-04, RES-01, RES-02, RES-03, RES-04, CLEAN-02, CLEAN-03 (10) | Not started |
+| 256 | Charity Allowlist Test Coverage | TST-01, TST-02, TST-03, TST-04, TST-05, TST-06 (6) | Not started |
+| 257 | Delta Audit & Findings Consolidation | AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04 (4) | Not started |
 
-**Dependencies:** Phase 247 must precede every other phase (provides delta surface). Phases 248 / 249 / 250 / 251 / 252 are independent of each other once Phase 247 lands. Phase 253 is terminal (consumes every prior phase artifact).
+**Dependencies:** Phase 254 must precede Phase 255 (vote rejects empty slots, so the slate storage + setCharity must exist before vote/pickCharity can be rewritten against it). Phase 256 depends on Phases 254 + 255 (tests exercise the full surface). Phase 257 is terminal — depends on 254 + 255 + 256 (audit baseline is the post-test HEAD with all impl + tests landed).
 
-**Committable changes (gated on user approval per `feedback_no_contract_commits.md`):**
+**Committable changes (gated on per-commit user approval per `feedback_no_contract_commits.md`):**
 
-- WIP turbo guard `!rngLockedFlag` at AdvanceModule:167 (proposed)
-- WIP backfill guard `rngWordByDay[idx + 1] == 0` at AdvanceModule:1167 (proposed)
-- New reproduction test `test/edge/LastPurchaseDayRace.test.js` (proposed)
-- `contracts/ContractAddresses.sol` regen (proposed; no logic delta)
-- Any additional contract / test changes surfaced by SIB-05 (proposed; per-finding approval)
+- Phase 254: `contracts/GNRUS.sol` — allowlist storage layout, `setCharity(uint8, address)` admin entry point, view helpers, dead-state removal (proposals/levelVaultOwner/levelSdgnrsSnapshot/etc), storage repack
+- Phase 255: `contracts/GNRUS.sol` — `vote(uint8 slot)` rewrite, `pickCharity(uint24 level)` flush + winner-selection rewrite, `Voted` + `LevelResolved` event signature rewrites, error rename/cleanup
+- Phase 256: `test/governance/CharityAllowlist.test.js` (or similar) — Hardhat coverage for setCharity branches, vote, pickCharity, conservation, post-gameover inertness
+- Phase 257: `audit/FINDINGS-v33.0.md` + supporting `audit/v33-*.md` working files (writeable freely per write policy)
 
 ## Deferred Items
 
-Items acknowledged and deferred at v31.0 milestone close on 2026-04-24 (carry-forward from v30.0 close 2026-04-20):
+Items acknowledged and deferred at v32.0 milestone close on 2026-05-02 (carry-forward from v31.0 close 2026-04-24):
 
 | Category | Item | Status | Notes |
 |----------|------|--------|-------|
-| quick_task | 260327-n7h-run-full-test-suite-and-analyze-results- | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 close. |
-| quick_task | 260327-q8y-test-boon-changes | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 close. |
+| quick_task | 260327-n7h-run-full-test-suite-and-analyze-results- | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 close. |
+| quick_task | 260327-q8y-test-boon-changes | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 close. |
 
 ## Accumulated Context
 
@@ -102,6 +102,7 @@ Decisions and completed milestones logged in `.planning/PROJECT.md`.
 Detailed milestone retrospectives in `.planning/RETROSPECTIVE.md` (v31.0 section most recent).
 Archived milestone artifacts:
 
+- v32.0: `.planning/milestones/v32.0-ROADMAP.md`, `v32.0-REQUIREMENTS.md`, `v32.0-phases/`
 - v31.0: `.planning/milestones/v31.0-ROADMAP.md`, `v31.0-REQUIREMENTS.md`, `v31.0-phases/`
 - v30.0: `.planning/milestones/v30.0-ROADMAP.md`, `v30.0-REQUIREMENTS.md`, `v30.0-phases/`
 - v29.0: `.planning/milestones/v29.0-ROADMAP.md`, `v29.0-REQUIREMENTS.md`, `v29.0-phases/`
@@ -109,11 +110,8 @@ Archived milestone artifacts:
 
 Audit deliverables:
 
-- `audit/v32-251-TST.md` (FINAL READ-only at HEAD `c790ae45`; closure signal `PHASE_251_TST_FINAL_AT_HEAD_65b33299`; 4 sections + §0 reproduction recipe + §5 commit-readiness register + §4.4 awaiting-approval block with full BackfillIdempotency.test.js content; 8 TST-NN-Vmm V-rows all SAFE; 2 hunk-revert patches + 6 hardhat run logs as supporting artifacts; zero FINDING_CANDIDATE rows; both `test/edge/LastPurchaseDayRace.test.js` (existing untracked WIP) and `test/edge/BackfillIdempotency.test.js` (newly authored Task 3) listed at status `awaiting-approval` per `feedback_no_contract_commits.md`)
-- `audit/v32-250-SIB.md` (FINAL READ-only at HEAD `acd88512`; closure signal `PHASE_250_SIB_FINAL_AT_HEAD_acd88512`)
-- `audit/v32-249-PLV.md` (FINAL READ-only at HEAD `acd88512`)
-- `audit/v32-248-BFL.md` (FINAL READ-only at HEAD `acd88512`; closure signal `PHASE_248_BFL_FINAL_AT_HEAD_acd88512`; 6 per-REQ sections + Phase 251 TST-04 hand-off appendix; 44 BFL-NN-VMM V-rows + 3 BFL-01-MNN multiplier rows + 5 BFL-02-XNN out-of-scope rows; zero FINDING_CANDIDATE rows; KNOWN-ISSUES.md UNCHANGED — both BFL-05 EXC-02 + EXC-03 carriers NON-WIDENING)
-- `audit/v32-247-DELTA-SURFACE.md` (FINAL READ-only at HEAD `acd88512`; 7 sections fully populated; closure signal `PHASE_247_CATALOG_FINAL_AT_HEAD_acd88512`; 16 D-247-C### + 11 D-247-F### + 1 D-247-S### + 30 D-247-X### + 29 D-247-I### rows; sole scope input for Phases 248-253 per ROADMAP Phase 247 Success Criterion 4)
+- `audit/FINDINGS-v32.0.md` (548 lines, 9 sections, FINAL READ-only at HEAD `acd88512`; 2 HIGH SUPERSEDED-at-HEAD F-32-NN disclosure blocks; closure signal `MILESTONE_V32_AT_HEAD_acd88512`)
+- `audit/v32-247-DELTA-SURFACE.md` through `audit/v32-252-POST31.md` (FINAL READ-only at HEAD `acd88512`; 6 v32 supporting working-file appendices)
 - `audit/FINDINGS-v31.0.md` (403 lines, 9 sections; 0 CRITICAL/HIGH/MEDIUM/LOW/INFO; closure signal `MILESTONE_V31_CLOSED_AT_HEAD_cc68bfc7`)
 - `audit/FINDINGS-v30.0.md` (729 lines, 10 sections; 17 INFO / 31-row regression PASS / 0 KI promotions)
 - `audit/FINDINGS-v29.0.md`, `audit/FINDINGS-v28.0.md`, `audit/FINDINGS-v27.0.md`, `audit/FINDINGS-v25.0.md` (prior milestones)
@@ -122,6 +120,6 @@ Audit deliverables:
 
 ## Global Project State
 
-- Contract tree at HEAD `48554f8f` (4 post-v31.0 commits above v31.0 baseline `cc68bfc7`) plus WIP working-tree changes targeted by v32.0 audit.
-- READ-only audit pattern carried forward v28.0–v31.0; **READ-only LIFTED for v32.0** — audit-then-commit with per-commit user approval per `feedback_no_contract_commits.md`. No agent commits contracts/ or test/ changes without explicit user review of the diff.
-- KNOWN-ISSUES.md: 4 accepted RNG-determinism exceptions (EXC-01 affiliate roll / EXC-02 prevrandao fallback / EXC-03 F-29-04 mid-cycle substitution / EXC-04 EntropyLib XOR-shift) — all re-verified non-widening at HEAD `cc68bfc7` in v31.0 Phase 245. v32.0 BFL-05 RE_VERIFIES EXC-02 + EXC-03 envelopes against the new backfill guard.
+- Contract tree at HEAD `acd88512` (v32.0 audit anchor) plus working-tree changes targeted by v33.0 charity allowlist work.
+- READ-only audit pattern carried forward v28.0–v31.0; **READ-only LIFTED for v32.0 + v33.0** — audit-then-commit (or impl-then-audit) with per-commit user approval per `feedback_no_contract_commits.md`. No agent commits contracts/ or test/ changes without explicit user review of the diff.
+- KNOWN-ISSUES.md: 4 accepted RNG-determinism exceptions (EXC-01 affiliate roll / EXC-02 prevrandao fallback / EXC-03 F-29-04 mid-cycle substitution / EXC-04 EntropyLib XOR-shift) — all re-verified non-widening at HEAD `acd88512` in v32.0 Phase 248 + Phase 250. v33.0 Phase 257 expects all four NEGATIVE-scope (charity governance does not touch any RNG-consuming path).

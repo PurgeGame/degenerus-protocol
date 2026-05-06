@@ -13,6 +13,7 @@
 - ✅ **v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit** — Phases 237-242 (shipped 2026-04-20) — see [milestones/v30.0-ROADMAP.md](milestones/v30.0-ROADMAP.md)
 - ✅ **v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit** — Phases 243-246 (shipped 2026-04-24) — see [milestones/v31.0-ROADMAP.md](milestones/v31.0-ROADMAP.md)
 - ✅ **v32.0 Backfill Idempotency + purchaseLevel Underflow Audit** — Phases 247-253 (shipped 2026-05-02)
+- 🚧 **v33.0 Charity Allowlist Governance** — Phases 254-257 (started 2026-05-05)
 
 ## Phases
 
@@ -116,7 +117,84 @@
 
 </details>
 
+<details>
+<summary>🚧 v33.0 Charity Allowlist Governance (Phases 254-257) — STARTED 2026-05-05</summary>
+
+- [ ] Phase 254: GNRUS Allowlist Storage, Admin Op & Storage Repack (0/3 plans)
+- [ ] Phase 255: Vote Rewrite, Resolve Flush & Event/Error Cleanup (TBD/TBD plans)
+- [ ] Phase 256: Charity Allowlist Test Coverage (TBD/TBD plans)
+- [ ] Phase 257: Delta Audit & Findings Consolidation (TBD/TBD plans)
+
+**Audit baseline:** v32.0 HEAD `acd88512` (closure signal `MILESTONE_V32_AT_HEAD_acd88512`). Mixed shape — Phases 254-256 modify `contracts/GNRUS.sol` + add tests under `test/governance/`; Phase 257 delta-audits the result and emits closure signal `MILESTONE_V33_AT_HEAD_<sha>`. Per `feedback_no_contract_commits.md`, all `contracts/` + `test/` changes require explicit per-commit user approval. 25/25 v33.0 requirements mapped (ALW + VOTE + RES + CLEAN + TST + AUDIT). Deliverable: `audit/FINDINGS-v33.0.md` with regression appendix verifying v32.0 closure signal still holds, conservation re-proof of GNRUS unallocated pool flow, KI EXC-01..04 RE_VERIFIED NEGATIVE-scope. See [REQUIREMENTS.md](REQUIREMENTS.md) and detail sections below.
+
+</details>
+
+## Phase Details
+
+### Phase 254: GNRUS Allowlist Storage, Admin Op & Storage Repack
+**Goal**: `GNRUS.sol` exposes a single vault-owner-gated `setCharity(uint8 slot, address recipient)` admin entry point backed by a 20-slot current slate + pending edit queue, with all dead proposal-flow state removed and the storage layout repacked for tightest layout post-removal.
+**Depends on**: Nothing (first impl phase; baseline is v32.0 HEAD `acd88512`)
+**Requirements**: ALW-01, ALW-02, ALW-03, ALW-04, CLEAN-01
+**Success Criteria** (what must be TRUE):
+  1. `GNRUS.sol` compiles with the new `setCharity(uint8, address)` admin entry point + view helpers (`getCharity`, `getActiveSlots`, `getPendingEdits`, `activeCount`, `activeCountAfterFlush`); old `propose(address)` function is structurally absent.
+  2. Vault-owner gating is enforced — `setCharity` reverts `Unauthorized` when called by any address that fails `vault.isVaultOwner(msg.sender)`; reverts `InvalidSlot` for `slot >= 20`; reverts `RecipientIsContract` when `recipient.code.length != 0`; reverts `SlotAlreadyEmpty` on the no-op admin remove path.
+  3. Locked-slot rule is enforced — `setCharity(slot, ·)` for `slot ∈ {0, 1, 2}` reverts `SlotLocked` whenever `currentSlate[slot] != address(0)` (including remove attempts), checked before queue/instant-apply branching so locked slots cannot be mutated through the pending queue either; first-fill of an empty locked slot succeeds via the instant-apply branch.
+  4. Two-branch write semantics work as designed — instant-apply branch writes directly to current slate when `currentSlate[slot] == address(0)`; queue branch writes to pending when `currentSlate[slot] != address(0)`; pending overwrite for the same slot replaces (no separate cancel API); `CapExceeded` fires when post-flush active count would exceed 20 from either branch.
+  5. Dead state is functionally removed (not commented-out) per `feedback_no_history_in_comments.md` — `Proposal` struct, `proposals`, `proposalCount`, `levelProposalStart`, `levelProposalCount`, `hasProposed`, `creatorProposalCount`, `levelVaultOwner`, `levelSdgnrsSnapshot` all deleted; new storage layout documented vs the v32.0 baseline; storage repacked for tightest layout post-removal.
+**Plans**: 3 plans
+- [ ] 254-01-PLAN.md — Demolish v32-shape governance + lay v33.0 storage skeleton (CLEAN-01) [Wave 1]
+- [ ] 254-02-PLAN.md — Implement setCharity admin op + _popcount32 internal helper (ALW-01, ALW-02, ALW-03) [Wave 2, depends on 254-01]
+- [ ] 254-03-PLAN.md — Implement five v33.0 view helpers + _flushedBitmap internal helper (ALW-04) [Wave 3, depends on 254-01 + 254-02]
+**Write policy**: `contracts/GNRUS.sol` modifications require explicit per-commit user approval per `feedback_no_contract_commits.md`. Storage-layout / packing-strategy gas comparison documented in plan output before committing.
+
+### Phase 255: Vote Rewrite, Resolve Flush & Event/Error Cleanup
+**Goal**: `vote(uint8 slot)` casts the voter's full sDGNRS balance toward the named slot (approve-only, no bonus weight, no proposal threshold), and `pickCharity(uint24 level)` atomically flushes the pending edit queue → current slate before iterating slots 0 → 19 with strict `>` to pick the lowest-index slot holding the maximum approve weight, while events `Voted` + `LevelResolved` are rewritten to slot-based signatures and dead errors `ProposalLimitReached` / `AlreadyProposed` / `InvalidProposal` are removed.
+**Depends on**: Phase 254 (vote rejects empty slots, so the slate storage + setCharity admin op must exist before vote/pickCharity can be rewritten against it)
+**Requirements**: VOTE-01, VOTE-02, VOTE-03, VOTE-04, RES-01, RES-02, RES-03, RES-04, CLEAN-02, CLEAN-03
+**Success Criteria** (what must be TRUE):
+  1. `vote(uint8 slot)` rejects empty slots (current-slate address-zero), rejects double-voting per `hasVoted[currentLevel][msg.sender][slot]`, computes weight as `sdgnrs.balanceOf(msg.sender) / 1e18`, rejects zero-weight voters, and emits `Voted(uint24 indexed level, uint8 indexed slot, address indexed voter, uint256 weight)`. A voter can vote on multiple slots independently with full weight applied to each.
+  2. NO vault-owner +5%-of-snapshot bonus weight code path exists (verifiable via grep), and NO sDGNRS proposal-threshold check gates `vote()` entry; `levelVaultOwner` and `levelSdgnrsSnapshot` storage absence (from Phase 254) is consistent with the new vote function.
+  3. `pickCharity(uint24 level)` atomically applies every queued edit to the current slate before computing the winner, emits per-edit (or one aggregate) flush events for indexer reconstructability, and the flush itself does not revert on bad pending state (admin-side validation in `setCharity` makes the queue trustable).
+  4. Winner selection iterates slots 0 → 19 with strict `>`; ties resolve to lowest active slot index; `LevelSkipped(level)` emits exactly once on each of three paths — (a) zero active slots after flush, (b) zero votes cast, (c) post-flush distribution amount rounds to zero — and consumes the level (`levelResolved[level] = true`, `currentLevel = level + 1`). Distribution semantics unchanged (2% of remaining unallocated GNRUS to winning slot recipient via balance write + `Transfer` event + `LevelResolved(uint24 indexed level, uint8 indexed slot, address recipient, uint256 gnrusDistributed)` event with `slot` replacing the prior `proposalId` indexed arg).
+  5. Cleanup is functional removal (not commenting-out) per `feedback_no_history_in_comments.md` — event `ProposalCreated` removed; events `Voted` and `LevelResolved` rewritten to the slot-based signatures; errors `ProposalLimitReached`, `AlreadyProposed`, `InvalidProposal` removed; `InsufficientStake` removed or repurposed for empty-balance voter rejection; new errors `InvalidSlot`, `SlotAlreadyEmpty`, `SlotLocked`, `CapExceeded` added; existing `Unauthorized` reused for vault-owner gating; existing `RecipientIsContract` retained. No orphaned `revert` statements remain per `feedback_no_dead_guards.md`.
+**Plans**: TBD
+**Write policy**: `contracts/GNRUS.sol` modifications require explicit per-commit user approval per `feedback_no_contract_commits.md`.
+
+### Phase 256: Charity Allowlist Test Coverage
+**Goal**: A new Hardhat test surface under `test/governance/` (or similar) covers every behaviorally observable v33.0 surface — setCharity branches (instant-apply / queue / overwrite / locked-slot / sad-paths / cap), edit-queue level-boundary semantics, vote weighting / multi-slot / double-vote / empty-slot / zero-weight, pickCharity winner selection / tie-break / three LevelSkipped paths, conservation across the level transition, and post-gameover inertness — with all tests passing against the Phase 254 + 255 contract HEAD.
+**Depends on**: Phase 254, Phase 255 (tests exercise the full new admin-op + vote + resolve surface)
+**Requirements**: TST-01, TST-02, TST-03, TST-04, TST-05, TST-06
+**Success Criteria** (what must be TRUE):
+  1. `setCharity` Hardhat unit tests pass — instant-apply branch (empty slot → directly votable in same level), queue branch (filled slot → old address still votable until flush), removal queueing, pending overwrite (queue A then B → only B applies on flush), locked slots 0/1/2 (first-fill instant-applies; subsequent replace OR remove on filled locked slot reverts `SlotLocked`), and all sad paths (vault-owner gating, `InvalidSlot`, `RecipientIsContract`, `SlotAlreadyEmpty` admin no-op, `CapExceeded` on 21st add via either branch).
+  2. Edit-queue level-boundary semantics tests pass — instant-apply slot is votable in the same level; queued replace / remove keep OLD address votable until flush; after `pickCharity` advances the level, queued edits are visible in current slate and dead pending entries are cleared.
+  3. `vote(uint8 slot)` tests pass — single-slot vote applies full sDGNRS weight; multi-slot vote applies full weight independently to each slot; double-vote on same `(level, voter, slot)` reverts; vote on empty slot reverts; vote with zero whole-token sDGNRS reverts. `pickCharity` winner-selection tests pass — single-active-slot wins; multi-vote highest-weight wins; tie → lowest slot index wins (concrete weights wired); zero votes / zero active slots / 2%-rounds-to-zero all emit `LevelSkipped` exactly once.
+  4. Conservation tests pass across the level transition — total ETH/stETH/GNRUS balance changes match the expected 2% distribution per resolved level; sDGNRS / DGNRS / BURNIE supplies unchanged; soulbound enforcement intact (transfer / transferFrom / approve still revert).
+  5. Post-gameover inertness tests pass — after `burnAtGameOver`, subsequent calls to `setCharity` / `vote` either revert or are inert (chosen behavior documented in test); `pickCharity` not callable post-gameover (verify GNRUS-side consistency with game-side flow).
+**Plans**: TBD
+**Write policy**: `test/governance/CharityAllowlist.test.js` (or similar) additions require explicit per-commit user approval per `feedback_no_contract_commits.md`. Per `feedback_test_rnglock.md`, deploy-blocking tests must run before any deploy; per `feedback_gas_worst_case.md`, any gas analysis derives theoretical worst case FIRST then tests it.
+
+### Phase 257: Delta Audit & Findings Consolidation
+**Goal**: Publish `audit/FINDINGS-v33.0.md` proving the v33.0 charity-allowlist design closes the original collusion attack on the v32.0 propose/vote design, with every changed function / state variable / event / error in `GNRUS.sol` classified, every adversarial surface (admin front-runs, edit-queue ordering, tie-break gaming, DGVE float gaming, instant-apply branch abuse, active-count accounting, locked-slot poisoning, locked-slot lock-bypass) verdicted SAFE or FINDING_CANDIDATE with evidence, the GNRUS unallocated-pool conservation re-proven, the v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` re-verified non-widening, and a new closure signal `MILESTONE_V33_AT_HEAD_<sha>` emitted.
+**Depends on**: Phase 254, Phase 255, Phase 256 (audit baseline is the post-test HEAD with all impl + tests landed)
+**Requirements**: AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04
+**Success Criteria** (what must be TRUE):
+  1. `audit/FINDINGS-v33.0.md` published as FINAL READ-only at HEAD `<sha>` — mirrors v32.0 9-section deliverable shape (executive summary, per-phase sections, F-33-NN finding blocks under D-08 5-bucket severity rubric, regression appendix, KI gating walk, closure attestation), with explicit closure signal `MILESTONE_V33_AT_HEAD_<sha>` emitted in §9.
+  2. AUDIT-01 delta surface complete — every changed function / state variable / event / error in `GNRUS.sol` vs v32.0 baseline `acd88512` enumerated with hunk-level evidence and classified as {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED, RENAMED}; every downstream caller of changed functions inventoried across `contracts/` (grep-reproducible commands documented).
+  3. AUDIT-02 adversarial sweep complete — original collusion attack on v32.0 propose/vote design re-derived; 8 new attack surfaces verdicted SAFE or FINDING_CANDIDATE with evidence: (a) admin front-run at level boundary, (b) edit-queue ordering / overflow, (c) tie-break gaming via slot ordering, (d) DGVE float gaming to flip vault-owner status mid-level, (e) instant-apply branch abuse (admin fills empty slot mid-level after observing votes), (f) active-count accounting drift across both branches, (g) locked-slot poisoning during seeding window (disclosed as trust-asymmetry note — operational mitigation, not code-level defense), (h) locked-slot lock-bypass (no pending-queue path, no flush-time mutation, no constructor/migration backdoor).
+  4. AUDIT-03 conservation re-proof complete — GNRUS unallocated pool flow still 2% of remaining per resolved level; supply invariants for GNRUS / sDGNRS / DGNRS / BURNIE intact across the level transition; soulbound enforcement (transfer / transferFrom / approve) intact; `burn()` proportional redemption math unchanged. Each invariant gets a SAFE row with grep-cited proof.
+  5. Regression appendix verifies v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` still holds (REG-01 PASS — backfill / purchaseLevel guards intact at HEAD `<sha>`); KI envelopes EXC-01..04 all RE_VERIFIED NEGATIVE-scope (charity governance does not touch any RNG-consuming path); KNOWN-ISSUES.md UNMODIFIED expected unless any new F-33-NN finding passes the D-09 3-predicate KI gating walk.
+**Plans**: TBD
+**Write policy**: `audit/FINDINGS-v33.0.md` + supporting `audit/v33-*.md` working files writeable freely per write policy. READ-only flip on terminal-task commit per v32.0 Phase 253 precedent.
+
+## Progress
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 254. GNRUS Allowlist Storage, Admin Op & Storage Repack | 0/3 | Not started | - |
+| 255. Vote Rewrite, Resolve Flush & Event/Error Cleanup | 0/0 | Not started | - |
+| 256. Charity Allowlist Test Coverage | 0/0 | Not started | - |
+| 257. Delta Audit & Findings Consolidation | 0/0 | Not started | - |
 
 ## Active Milestone
 
-**v32.0 SHIPPED 2026-05-02.** No active milestone — awaiting v33.0+ kickoff via `/gsd-new-milestone`.
+**v33.0 Charity Allowlist Governance** — STARTED 2026-05-05. 4 phases (254-257), 25 requirements mapped (ALW + VOTE + RES + CLEAN + TST + AUDIT). Audit baseline v32.0 HEAD `acd88512`. Mixed shape: Phases 254-256 modify `contracts/GNRUS.sol` + add tests; Phase 257 delta-audits the result. Per `feedback_no_contract_commits.md`, all `contracts/` + `test/` changes require explicit per-commit user approval. Deliverable: `audit/FINDINGS-v33.0.md` emitting closure signal `MILESTONE_V33_AT_HEAD_<sha>`. See [REQUIREMENTS.md](REQUIREMENTS.md) for full v33.0 scope.
