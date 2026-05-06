@@ -80,3 +80,76 @@ CONTEXT.md D-257-FCITE-01 + D-253-15 step 8 + ROADMAP terminal-phase rule: zero 
 See §9 Milestone Closure Attestation for the D-253-15 step 9 6-point attestation block triggering v33.0 milestone closure via signal `MILESTONE_V33_AT_HEAD_<sha>`.
 
 ---
+
+## 3. Per-Phase Sections
+
+Consolidates Phase 254 / 255 / 256 outputs per D-253-09 + D-253-10 carry-forward into condensed summaries with cross-cites to source artifacts. All cross-cites are READ-only lookups (D-253-CF-08); no fresh derivation. Sources `re-verified at HEAD dcb70941`. §3.4 covers post-anchor non-GNRUS contract commits per planner-surfaced scope adjustment (CONTEXT.md `<domain>` claimed 4 contract commits since baseline; live `git log acd88512..HEAD -- contracts/` shows 8 — the 4 GNRUS-related Phase 254/255 commits PLUS 7 post-anchor non-GNRUS commits; see §3.4 for ORTHOGONAL_PROVEN classification per commit).
+
+### 3a. Phase 254 — GNRUS Allowlist Storage, Admin Op & Storage Repack
+
+**Change-count card:**
+- Plans: 3 (254-01, 254-02, 254-03)
+- Commit: `469d7fc1` (Phase 254 single-commit consolidation containing all three plans\' on-chain output)
+- Functions added: `setCharity(uint8 slot, address recipient)` external (admin op with 4 branches: instant-apply / queue / removal-special-case / locked-slot revert), `_futureBitmapAfter(uint8, address, uint32)` internal cap-check helper, `_flushedBitmap()` internal post-flush bitmap projector, `_popcount32(uint32)` internal active-count primitive, `getCharity(uint8)` external view, `getActiveSlots()` external view, `getPendingEdits()` external view, `activeCount()` external view, `activeCountAfterFlush()` external view (5 view helpers per D-254-VIEW-01)
+- Functions deleted: `propose(address)` (v32 governance entry point removed per D-254-VOTEPICK-01)
+- Storage added: `address[20] private currentSlate` (the 20-slot allowlist per D-254-SLATE-01), `mapping(uint8 => address) private pendingEdit` (sparse pending-edit queue per D-254-PENDING-01), `uint32 public currentActiveBitmap` (active-slot bitmap — single source of truth per D-254-COUNT-01), `uint32 public pendingEditSet` (pending-edit sentinel bitmap per D-254-PENDING-01), `mapping(uint24 => bool) public levelResolved` (per-level idempotence)
+- Storage repacked: hot-pack slot 2 carries `currentLevel` (3 bytes) + `finalized` (1 byte) + `currentActiveBitmap` (4 bytes) + `pendingEditSet` (4 bytes) = 12 bytes, 20 bytes free for future expansion per D-254-REPACK-01
+- Storage redeclared: `mapping(uint24 => mapping(address => mapping(uint8 => bool))) public hasVoted` — inner key changed from `proposalId` (uint48) to `slot` (uint8) per D-254-HASVOTED-01
+- Storage deleted: `Proposal` struct + `proposals` array + `proposalCount` + `levelProposalStart` + `levelProposalCount` + `hasProposed` + `creatorProposalCount` + `levelVaultOwner` + `levelSdgnrsSnapshot` (the v32 governance state machine demolished per D-254-SLATE-01)
+- Errors added: `InvalidSlot()`, `SlotAlreadyEmpty()`, `SlotLocked()`, `CapExceeded()` (4 new per D-254-ERROR-PRUNE-01)
+- Errors deleted: `InsufficientStake`, `AlreadyVoted`, `LevelAlreadyResolved`, `LevelNotActive`, `RecipientIsContract` — Phase 254 deviation: `RecipientIsContract` removed (cross-cite D-256-CONTRACT-RECIPIENT-01 lock; contract recipients now accepted by design)
+- Events added: `CharityApplied(uint8 indexed slot, address indexed recipient)`, `CharityQueued(uint8 indexed slot, address indexed recipient)` (2 new per D-254-EVENT-01)
+- Constants added: `LOCKED_SLOTS = 3` (`GNRUS.sol:203`), `MAX_ACTIVE_SLOTS = 20` (`GNRUS.sol:206`)
+- REQs satisfied: 5/5 (ALW-01, ALW-02, ALW-03, ALW-04, CLEAN-01)
+- Closure signal: `PHASE_254_FINAL_AT_HEAD_469d7fc1`
+
+**Cross-cite:** `.planning/phases/254-gnrus-allowlist-storage-admin-op-storage-repack/254-01-SUMMARY.md` (storage skeleton + 8 governance state items demolished + 5 errors removed) + `.planning/phases/254-gnrus-allowlist-storage-admin-op-storage-repack/254-02-SUMMARY.md` (`setCharity` revert order + `RecipientIsContract` DELETED Phase 254 deviation) + `.planning/phases/254-gnrus-allowlist-storage-admin-op-storage-repack/254-03-SUMMARY.md` (5 view helpers + `_flushedBitmap` private helper) — cross-cite-only, READ-only on upstream artifacts per D-253-CF-08.
+
+**Per-REQ summary:**
+
+| REQ | Verdict | Cross-Cite |
+| --- | --- | --- |
+| ALW-01 | `COMPLETE_AT_HEAD_dcb70941` | 254-01-SUMMARY.md storage skeleton (`currentSlate[20]` + `pendingEdit` + `currentActiveBitmap` + `pendingEditSet`) + hot-pack slot 2 per D-254-REPACK-01 |
+| ALW-02 | `COMPLETE_AT_HEAD_dcb70941` | 254-02-SUMMARY.md `setCharity` 4-branch admin op (`GNRUS.sol:366-408`) — instant-apply / queue / removal / locked-slot — per D-254-VOTEPICK-01 boundary |
+| ALW-03 | `COMPLETE_AT_HEAD_dcb70941` | 254-02-SUMMARY.md `setCharity` revert order locked: vault-owner gate → `InvalidSlot` → `SlotLocked` → `SlotAlreadyEmpty` → `CapExceeded` (the latter via `_futureBitmapAfter` cap-check) |
+| ALW-04 | `COMPLETE_AT_HEAD_dcb70941` | 254-03-SUMMARY.md 5 view helpers (`getCharity` / `getActiveSlots` / `getPendingEdits` / `activeCount` / `activeCountAfterFlush`) + `_flushedBitmap()` internal helper backing `activeCountAfterFlush` |
+| CLEAN-01 | `COMPLETE_AT_HEAD_dcb70941` | 254-01-SUMMARY.md v32 governance state demolished (8 state items + 5 functions + 7 errors removed) — no commented-out residue per `feedback_no_history_in_comments.md` |
+
+Phase 254 produces the v33.0 storage + admin-op + view-helper foundation at HEAD `dcb70941`. The bitmap-as-single-source-of-truth pattern (D-254-COUNT-01) makes accounting drift impossible by construction (see AUDIT-02 surface (f) verdict at §4). The 4-error addition (`InvalidSlot`, `SlotAlreadyEmpty`, `SlotLocked`, `CapExceeded`) provides the exact reject-shape that Phase 255 `vote()` and `pickCharity()` consume. `re-verified at HEAD dcb70941`.
+
+### 3b. Phase 255 — Vote Rewrite, Resolve Flush & Event/Error Cleanup
+
+**Change-count card:**
+- Plans: 3 (255-01, 255-02, 255-03)
+- Commits: `30188329` (governance declarations: events + errors + `slotApproveWeight` storage) + `e734cfe6` (`vote(uint8 slot)` external) + `ac1d3741` (`pickCharity(uint24 level)` external onlyGame)
+- Functions added: `vote(uint8 slot)` external (Phase 255 boundary re-add per D-254-VOTEPICK-01; signature `(uint8)` not the v32 `(uint256 proposalId)`), `pickCharity(uint24 level)` external onlyGame (signature `(uint24 level)` exactly preserves the v32 `IGNRUSResolve` interface signature pin per D-255-FLUSH-ORDER-01)
+- Events added: `CharityFlushed(uint8 indexed slot, address indexed recipient)` (per D-255-FLUSH-EVENT-01 — emitted per applied edit during `pickCharity` flush)
+- Events rewritten: `Voted(uint24 indexed level, uint8 indexed slot, address indexed voter, uint256 weight)` (was `Voted(uint24 indexed level, uint256 indexed proposalId, address indexed voter, uint256 weight)`); `LevelResolved(uint24 indexed level, uint8 indexed slot, address recipient, uint256 gnrusDistributed)` (was `LevelResolved(uint24 indexed level, uint256 indexed proposalId, address recipient, uint256 gnrusDistributed)`) — both per D-255-EVENT-CLEANUP-01
+- Events deleted: `ProposalCreated` (v32 governance event removed per D-255-EVENT-CLEANUP-01)
+- Errors added: `VoteRejected(uint8 reason)` with reason codes 0/1/2 = `REJECT_EMPTY_SLOT` / `REJECT_ALREADY_VOTED` / `REJECT_ZERO_WEIGHT` per D-255-VOTEREJECT-01; `PickCharityRejected(uint8 reason)` with reason codes 0/1 = `REJECT_LEVEL_NOT_ACTIVE` / `REJECT_LEVEL_ALREADY_RESOLVED` per D-255-PICKCHARITY-ERROR-01
+- Errors deleted: `ProposalLimitReached`, `AlreadyProposed`, `InvalidProposal` (v32 propose-exclusive errors removed)
+- Storage added: `mapping(uint24 => mapping(uint8 => uint256)) public slotApproveWeight` (the per-level per-slot vote-weight tally, nested per D-255-WEIGHT-STORAGE-01)
+- Constants added: `REJECT_EMPTY_SLOT = 0`, `REJECT_ALREADY_VOTED = 1`, `REJECT_ZERO_WEIGHT = 2`, `REJECT_LEVEL_NOT_ACTIVE = 0`, `REJECT_LEVEL_ALREADY_RESOLVED = 1` (the 5 reason-code constants per D-255-VOTEREJECT-01 + D-255-PICKCHARITY-ERROR-01)
+- REQs satisfied: 10/10 (VOTE-01, VOTE-02, VOTE-03, VOTE-04, RES-01, RES-02, RES-03, RES-04, CLEAN-02, CLEAN-03)
+- Closure signal: `PHASE_255_FINAL_AT_HEAD_ac1d3741`
+
+**Cross-cite:** `.planning/phases/255-vote-rewrite-resolve-flush-event-error-cleanup/255-01-SUMMARY.md` (events + errors + `slotApproveWeight` declarations) + `.planning/phases/255-vote-rewrite-resolve-flush-event-error-cleanup/255-02-SUMMARY.md` (`vote()` revert order + state writes + `Voted` emit) + `.planning/phases/255-vote-rewrite-resolve-flush-event-error-cleanup/255-03-SUMMARY.md` (`pickCharity()` flush + winner-loop + 3 LevelSkipped paths + distribution + `LevelResolved` emit).
+
+**Per-REQ summary:**
+
+| REQ | Verdict | Cross-Cite |
+| --- | --- | --- |
+| VOTE-01 | `COMPLETE_AT_HEAD_dcb70941` | 255-02-SUMMARY.md `vote()` external entry at `GNRUS.sol:558-581`; signature `(uint8 slot)` per D-254-VOTEPICK-01 boundary |
+| VOTE-02 | `COMPLETE_AT_HEAD_dcb70941` | 255-02-SUMMARY.md `vote()` 4-path revert order: `InvalidSlot` (slot ≥ 20) → `VoteRejected(REJECT_EMPTY_SLOT)` (slot empty) → `VoteRejected(REJECT_ALREADY_VOTED)` (`hasVoted` set) → `VoteRejected(REJECT_ZERO_WEIGHT)` (sDGNRS balance 0) per D-255-VOTE-REVERT-ORDER-01 |
+| VOTE-03 | `COMPLETE_AT_HEAD_dcb70941` | 255-02-SUMMARY.md `slotApproveWeight[level][slot] += weight` accumulation + `hasVoted[level][voter][slot] = true` write |
+| VOTE-04 | `COMPLETE_AT_HEAD_dcb70941` | 255-02-SUMMARY.md `Voted(level, slot, voter, weight)` event emit at end of state-write sequence (CEI-ordering attestation per D-255-CEI-01) |
+| RES-01 | `COMPLETE_AT_HEAD_dcb70941` | 255-03-SUMMARY.md `pickCharity(uint24 level)` external onlyGame at `GNRUS.sol:601-674`; signature exactly preserves v32 `IGNRUSResolve` interface signature pin |
+| RES-02 | `COMPLETE_AT_HEAD_dcb70941` | 255-03-SUMMARY.md operation order locked per D-255-FLUSH-ORDER-01: (1) level-arg + idempotence checks → (2) atomic flush of pending edits → (3) strict-`>` winner loop 0..19 (lowest-slot wins on tie) → (4) 3 LevelSkipped paths → (5) distribution → (6) `LevelResolved` emit |
+| RES-03 | `COMPLETE_AT_HEAD_dcb70941` | 255-03-SUMMARY.md `CharityFlushed(slot, recipient)` emit per applied edit during flush; `levelResolved[level] = true` write before distribution to enforce idempotence |
+| RES-04 | `COMPLETE_AT_HEAD_dcb70941` | 255-03-SUMMARY.md distribution arithmetic: `distribution = (unallocated * DISTRIBUTION_BPS) / BPS_DENOM` at `GNRUS.sol:660` (2% of remaining unallocated GNRUS to winning recipient) |
+| CLEAN-02 | `COMPLETE_AT_HEAD_dcb70941` | 255-01-SUMMARY.md `Voted` + `LevelResolved` event signatures rewritten (proposalId → slot); `ProposalCreated` event deleted; 3 v32 propose-exclusive errors deleted |
+| CLEAN-03 | `COMPLETE_AT_HEAD_dcb70941` | 255-01-SUMMARY.md `VoteRejected(uint8)` + `PickCharityRejected(uint8)` reason-code errors added with 5 reason-code constants |
+
+Phase 255 wires the v33.0 vote/resolve flow onto the Phase 254 storage skeleton. Critical invariants: (i) `vote()` revert order is locked per D-255-VOTE-REVERT-ORDER-01 (gas-optimal short-circuit + observable failure-mode contract for off-chain consumers); (ii) `pickCharity()` operation order is locked per D-255-FLUSH-ORDER-01 (idempotence-first → atomic flush → strict-`>` winner → distribution); (iii) the `IGNRUSResolve.pickCharity(uint24)` interface signature pin is preserved exactly so `AdvanceModule:1634` `charityResolve.pickCharity(lvl - 1)` continues to compile + execute against the post-Phase-255 ABI. `re-verified at HEAD dcb70941`.
+
+---
