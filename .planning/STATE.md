@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v33.0
 milestone_name: Charity Allowlist Governance
 status: executing
-last_updated: "2026-05-06T06:29:28.051Z"
-last_activity: 2026-05-06
+last_updated: "2026-05-06T07:13:35.309Z"
+last_activity: 2026-05-06 -- Phase 255 execution started
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 3
+  total_plans: 6
   completed_plans: 3
-  percent: 100
+  percent: 50
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-05 for v33.0 start)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v33.0 Charity Allowlist Governance — replace open `propose(address)` / approve-reject flow on `GNRUS.sol` with vault-owner-curated allowlist (≤20 active slots, address-only, empty at deploy); slot edits queue and apply at level boundary; `vote(uint8 slot)` direct slate voting (approve-only); vault-owner +5% vote bonus removed; lowest active slot wins on tie. Foundational slots 0/1/2 are permanently immutable once filled.
+**Current focus:** Phase 255 — vote-rewrite-resolve-flush-event-error-cleanup
 
 ## Current Position
 
-Phase: 255
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-06
+Phase: 255 (vote-rewrite-resolve-flush-event-error-cleanup) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 255
+Last activity: 2026-05-06 -- Phase 255 execution started
 Resume file: .planning/phases/255-vote-rewrite-resolve-flush-event-error-cleanup/255-CONTEXT.md
 
 ## Last Shipped Milestone

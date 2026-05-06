@@ -543,6 +543,44 @@ contract GNRUS {
     }
 
     // =====================================================================
+    //                       GOVERNANCE -- VOTE
+    // =====================================================================
+
+    /// @notice Cast a vote toward a charity slot in the current level.
+    /// @dev Permissionless. Vote weight = `sdgnrs.balanceOf(msg.sender) / 1e18` (no bonus, no threshold).
+    ///      Voter may vote on multiple slots independently per level — each (level, voter, slot) tuple
+    ///      is tracked separately via `hasVoted[level][voter][slot]`.
+    ///      Locked slots (0/1/2) accept votes normally — the locked-slot guard lives exclusively in
+    ///      `setCharity` (Phase 254). Voters CAN vote on locked slots once filled.
+    ///      CEI-clean: the only external interaction (`sdgnrs.balanceOf`) is a STATICCALL view BEFORE
+    ///      state writes; no callback surface (D-255-CEI-01).
+    /// @param slot The current-slate slot index (0..MAX_ACTIVE_SLOTS-1) to vote for
+    function vote(uint8 slot) external {
+        // 1. Slot bounds check (cheapest — calldata read + compare; reuses Phase 254 InvalidSlot)
+        if (slot >= MAX_ACTIVE_SLOTS) revert InvalidSlot();
+
+        // 2. Empty-slot rejection (one cold SLOAD)
+        if (currentSlate[slot] == address(0)) revert VoteRejected(REJECT_EMPTY_SLOT);
+
+        // 3. Already-voted rejection (one cold SLOAD on hasVoted[level][voter][slot])
+        uint24 level = currentLevel;
+        address voter = msg.sender;
+        if (hasVoted[level][voter][slot]) revert VoteRejected(REJECT_ALREADY_VOTED);
+
+        // 4. Zero-weight rejection (cross-contract STATICCALL — fires LAST among rejection checks
+        //    so sad-path callers don't pay for the indirect call)
+        uint256 weight = sdgnrs.balanceOf(voter) / 1e18;
+        if (weight == 0) revert VoteRejected(REJECT_ZERO_WEIGHT);
+
+        // 5. State writes — hasVoted bit set, slotApproveWeight accumulator incremented
+        hasVoted[level][voter][slot] = true;
+        slotApproveWeight[level][slot] += weight;
+
+        // 6. Emit
+        emit Voted(level, slot, voter, weight);
+    }
+
+    // =====================================================================
     //                         RECEIVE FUNCTION
     // =====================================================================
 
