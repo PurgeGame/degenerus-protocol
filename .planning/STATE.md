@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v33.0
 milestone_name: Charity Allowlist Governance
 status: executing
-last_updated: "2026-05-06T06:18:23.512Z"
+last_updated: "2026-05-06T06:29:28.051Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 4
@@ -28,7 +28,7 @@ Phase: 255
 Plan: Not started
 Status: Ready to execute
 Last activity: 2026-05-06
-Resume file: .planning/phases/254-gnrus-allowlist-storage-admin-op-storage-repack/254-CONTEXT.md
+Resume file: .planning/phases/255-vote-rewrite-resolve-flush-event-error-cleanup/255-CONTEXT.md
 
 ## Last Shipped Milestone
 
