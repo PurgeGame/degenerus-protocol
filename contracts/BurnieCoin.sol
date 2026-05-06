@@ -446,15 +446,16 @@ contract BurnieCoin {
 
     function _consumeCoinflipShortfall(address player, uint256 amount) private returns (uint256 consumed) {
         if (amount == 0) return 0;
-        if (degenerusGame.rngLocked()) return 0;
         uint256 balance = balanceOf[player];
         if (balance >= amount) return 0;
+        if (degenerusGame.rngLocked()) revert Insufficient();
         unchecked {
-            return coinflip.consumeCoinflipsForBurn(
+            consumed = coinflip.consumeCoinflipsForBurn(
                 player,
                 amount - balance
             );
         }
+        if (balance + consumed < amount) revert Insufficient();
     }
 
     /*+======================================================================+
