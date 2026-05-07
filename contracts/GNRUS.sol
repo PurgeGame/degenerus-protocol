@@ -92,6 +92,12 @@ contract GNRUS {
     /// @dev Reason codes: REJECT_LEVEL_NOT_ACTIVE (0), REJECT_LEVEL_ALREADY_RESOLVED (1)
     error PickCharityRejected(uint8 reason);
 
+    /// @notice Thrown by vote() when the targeted slot's current recipient equals the previous level's winner.
+    /// @dev Prevents consecutive wins by the same recipient. Storage slot lastWinningRecipient is written
+    ///      by pickCharity() in the distribution-paid path and read here on every vote(). Skipped levels
+    ///      do not advance the block — a skipped level retains the prior level's winner-block state.
+    error PreviousWinnerNotVotable();
+
     // =====================================================================
     //                              EVENTS
     // =====================================================================
@@ -182,6 +188,12 @@ contract GNRUS {
     /// @dev Wiping 20 cold SSTOREs per level for no functional benefit is wasted gas (per `feedback_no_dead_guards.md`).
     ///      Indexers gain free historical query as a side-benefit.
     mapping(uint24 => mapping(uint8 => uint256)) public slotApproveWeight;
+
+    /// @notice Recipient that won the most recent paid level. Used by vote() to block consecutive wins.
+    /// @dev Written by pickCharity() ONLY when the level distributed (paid branch). Skipped levels leave
+    ///      the value unchanged so the previous-winner block survives a skipped level. Initialized to
+    ///      address(0) — no slot is blocked at deploy time.
+    address public lastWinningRecipient;
 
     // =====================================================================
     //                            CONSTANTS
@@ -562,6 +574,11 @@ contract GNRUS {
         // 2. Empty-slot rejection (one cold SLOAD)
         if (currentSlate[slot] == address(0)) revert VoteRejected(REJECT_EMPTY_SLOT);
 
+        // 2b. Previous-winner rejection (one cold SLOAD on lastWinningRecipient; reuses the
+        //     currentSlate[slot] read from step 2 above by recomputing — single SLOAD via mapping
+        //     access; the optimizer collapses the duplicate read at the same source slot).
+        if (currentSlate[slot] == lastWinningRecipient) revert PreviousWinnerNotVotable();
+
         // 3. Already-voted rejection (one cold SLOAD on hasVoted[level][voter][slot])
         uint24 level = currentLevel;
         address voter = msg.sender;
@@ -584,33 +601,67 @@ contract GNRUS {
     //                     GOVERNANCE -- RESOLVE
     // =====================================================================
 
-    /// @notice Atomically resolve a level: flush pending charity edits, pick winner via approve weight, distribute 2% of unallocated GNRUS.
+    /// @notice Atomically resolve a level: pick winner from CURRENT slate, distribute 2% of unallocated GNRUS, then flush queued edits for next level.
     /// @dev Caller must be the game contract (onlyGame). Operation is atomic per call:
     ///      (1) Argument validation (level matches currentLevel, not already resolved).
     ///      (2) Idempotence: levelResolved[level] = true; currentLevel = level + 1; SET FIRST so re-entrant
     ///          guards lock before any further work (defense-in-depth — D-255-CEI-01 confirms zero external
     ///          calls in the rest of the function, so re-entrancy is impossible by absence of callable surface).
-    ///      (3) Flush pending edits to current slate; emit CharityFlushed per applied edit.
-    ///      (4) Skip-path A: post-flush slate empty → emit LevelSkipped, return.
-    ///      (5) Winner: iterate slots 0..MAX_ACTIVE_SLOTS-1 with strict `>` so ties resolve to lowest slot.
-    ///      (6) Skip-path B: zero approve weight across all active slots → emit LevelSkipped, return.
-    ///      (7) Distribution math: 2% of unallocated GNRUS via BPS.
-    ///      (8) Skip-path C: distribution rounds to zero → emit LevelSkipped, return.
-    ///      (9) Apply: balanceOf write + Transfer event + LevelResolved event.
+    ///      (3) Winner phase against CURRENT (pre-flush) slate: iterate slots 0..MAX_ACTIVE_SLOTS-1 with strict `>`
+    ///          so ties resolve to lowest active slot index.
+    ///      (4) Distribution math: 2% of unallocated GNRUS via BPS.
+    ///      (5) Apply distribution iff bitmap non-empty AND some slot has weight AND distribution > 0:
+    ///          balanceOf write + Transfer event + LevelResolved event + lastWinningRecipient updated to the
+    ///          paid recipient. The lastWinningRecipient write is conditional on the paid branch only — a
+    ///          skipped level leaves the prior winner block unchanged.
+    ///      (6) Flush phase — apply each pendingEdit to current slate; emit CharityFlushed per-edit; clear
+    ///          pendingEditSet. Runs AFTER payout so queued edits cast during level L take effect for level
+    ///          L+1, not L. The vault-owner cannot redirect votes already cast for the current level by
+    ///          queueing a recipient swap mid-level.
+    ///      (7) Terminal LevelSkipped emit when the level was not paid (single emission per call).
     /// @param level The level to resolve (must equal currentLevel and not be levelResolved).
     function pickCharity(uint24 level) external onlyGame {
         // 1. Argument validation
         if (level != currentLevel) revert PickCharityRejected(REJECT_LEVEL_NOT_ACTIVE);
         if (levelResolved[level]) revert PickCharityRejected(REJECT_LEVEL_ALREADY_RESOLVED);
 
-        // 2. Idempotence guards SET FIRST — locks state before flush/winner/distribution.
+        // 2. Idempotence guards SET FIRST — locks state before winner/distribution/flush.
         levelResolved[level] = true;
         currentLevel = level + 1;
 
-        // 3. Flush phase — apply each pending edit to current slate; emit CharityFlushed per-edit.
+        // 3. Winner phase against CURRENT (pre-flush) slate — strict `>` so ties resolve to lowest slot.
+        uint32 bitmap = currentActiveBitmap;
+        uint8 bestSlot = type(uint8).max;
+        uint256 bestWeight = 0;
+        for (uint8 i; i < MAX_ACTIVE_SLOTS;) {
+            if ((bitmap & (uint32(1) << i)) != 0) {
+                uint256 w = slotApproveWeight[level][i];
+                if (w > bestWeight) {
+                    bestWeight = w;
+                    bestSlot = i;
+                }
+            }
+            unchecked { ++i; }
+        }
+
+        // 4. Distribution math — 2% of remaining unallocated GNRUS.
+        uint256 unallocated = balanceOf[address(this)];
+        uint256 distribution = (unallocated * DISTRIBUTION_BPS) / BPS_DENOM;
+
+        // 5. Apply distribution iff (current slate non-empty) AND (some slot has weight) AND (distribution > 0).
+        bool paid = (bitmap != 0) && (bestSlot != type(uint8).max) && (distribution != 0);
+        if (paid) {
+            address recipient = currentSlate[bestSlot];
+            unchecked { balanceOf[address(this)] = unallocated - distribution; }
+            balanceOf[recipient] += distribution;
+            lastWinningRecipient = recipient;
+            emit Transfer(address(this), recipient, distribution);
+            emit LevelResolved(level, bestSlot, recipient, distribution);
+        }
+
+        // 6. Flush phase — runs AFTER payout so queued edits during level L apply to L+1, not L.
         //    Invariant: flush MUST NOT revert (admin validates in setCharity per Phase 254).
         uint32 pSet = pendingEditSet;
-        uint32 bitmap = currentActiveBitmap;
         for (uint8 i; i < MAX_ACTIVE_SLOTS;) {
             uint32 mask_i = uint32(1) << i;
             if ((pSet & mask_i) != 0) {
@@ -629,48 +680,10 @@ contract GNRUS {
         currentActiveBitmap = bitmap;
         pendingEditSet = 0;
 
-        // 4. Skip-path A: zero active slots after flush.
-        if (bitmap == 0) {
+        // 7. Terminal event in the not-paid branch (paid branch already emitted LevelResolved at step 5).
+        if (!paid) {
             emit LevelSkipped(level);
-            return;
         }
-
-        // 5. Winner phase — strict `>` so ties resolve to lowest slot index (RES-02).
-        uint8 bestSlot = type(uint8).max;
-        uint256 bestWeight = 0;
-        for (uint8 i; i < MAX_ACTIVE_SLOTS;) {
-            if ((bitmap & (uint32(1) << i)) != 0) {
-                uint256 w = slotApproveWeight[level][i];
-                if (w > bestWeight) {
-                    bestWeight = w;
-                    bestSlot = i;
-                }
-            }
-            unchecked { ++i; }
-        }
-
-        // 6. Skip-path B: no slot has any approve weight (zero votes cast or all weights zero).
-        if (bestSlot == type(uint8).max) {
-            emit LevelSkipped(level);
-            return;
-        }
-
-        // 7. Distribution math — 2% of remaining unallocated GNRUS.
-        uint256 unallocated = balanceOf[address(this)];
-        uint256 distribution = (unallocated * DISTRIBUTION_BPS) / BPS_DENOM;
-
-        // 8. Skip-path C: 2% rounds to zero (near-empty unallocated pool, late game).
-        if (distribution == 0) {
-            emit LevelSkipped(level);
-            return;
-        }
-
-        // 9. Apply distribution — balance write + Transfer + LevelResolved.
-        address recipient = currentSlate[bestSlot];
-        unchecked { balanceOf[address(this)] = unallocated - distribution; }
-        balanceOf[recipient] += distribution;
-        emit Transfer(address(this), recipient, distribution);
-        emit LevelResolved(level, bestSlot, recipient, distribution);
     }
 
     // =====================================================================
