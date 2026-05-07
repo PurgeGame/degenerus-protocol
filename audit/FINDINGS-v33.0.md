@@ -84,7 +84,7 @@ CONTEXT.md D-257-FCITE-01 + D-253-15 step 8 + ROADMAP terminal-phase rule: zero 
 
 ### Attestation Anchor
 
-See §9 Milestone Closure Attestation for the D-253-15 step 9 6-point attestation block triggering v33.0 milestone closure via signal `MILESTONE_V33_AT_HEAD_dcb70941`.
+See §9 Milestone Closure Attestation for the D-253-15 step 9 6-point attestation block triggering v33.0 milestone closure via signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (supersedes the original Phase 257 emission `MILESTONE_V33_AT_HEAD_dcb70941` per §9c — see Re-Opening Attestation in §1).
 
 ---
 
