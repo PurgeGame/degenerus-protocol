@@ -221,8 +221,8 @@ Phase 256 produces the v33.0 test surface with 6 test SUMMARYs covering every be
 | `getPendingEdits()` | function (external view) | NEW | `GNRUS.sol:517-534` | Returns paired arrays for pending-edit queue | 254-03-SUMMARY.md |
 | `activeCount()` | function (external view) | NEW | `GNRUS.sol:535-540` | Returns `_popcount32(currentActiveBitmap)` (current slate count) | 254-03-SUMMARY.md |
 | `activeCountAfterFlush()` | function (external view) | NEW | `GNRUS.sol:541-552` | Returns `_popcount32(_flushedBitmap())` (post-flush count) | 254-03-SUMMARY.md |
-| `vote(uint8 slot)` | function (external) | NEW | `GNRUS.sol:558-581` | Phase 255 boundary re-add per D-254-VOTEPICK-01; signature `(uint8)` not v32 `(uint256 proposalId)`; 4 reject paths | 255-02-SUMMARY.md |
-| `pickCharity(uint24 level)` | function (external onlyGame) | NEW | `GNRUS.sol:601-674` | Phase 255 boundary re-add; signature `(uint24)` exactly preserves v32 `IGNRUSResolve` pin; flush + winner-loop + 3 LevelSkipped paths + distribution + emit | 255-03-SUMMARY.md D-255-FLUSH-ORDER-01 |
+| `vote(uint8 slot)` | function (external) | NEW (with FIX-02 follow-up MODIFIED_LOGIC) | `GNRUS.sol:570-598` | Phase 255 boundary re-add per D-254-VOTEPICK-01; signature `(uint8)` not v32 `(uint256 proposalId)`. **Phase 258-01 FIX-02 follow-up:** new revert path `PreviousWinnerNotVotable` inserted between the empty-slot rejection (step 2) and the already-voted rejection (step 3). The check `currentSlate[slot] == lastWinningRecipient` reuses the cold SLOAD on `currentSlate[slot]` from the empty-slot guard above; no extra cross-contract call. | 255-02-SUMMARY.md + 258-01-SUMMARY.md FIX-02 |
+| `pickCharity(uint24 level)` | function (external onlyGame) | NEW (with FIX-01 follow-up MODIFIED_LOGIC) | `GNRUS.sol:623-687` | Phase 255 boundary re-add; signature `(uint24)` exactly preserves v32 `IGNRUSResolve` pin. **Phase 258-01 FIX-01 follow-up:** body restructured so the pendingEdit flush phase executes AFTER the distribution payout (queued setCharity edits during level L apply to L+1, not L). Skip-paths A/B/C composed into a single `paid` predicate so the flush always runs once at end-of-function. `lastWinningRecipient` written ONLY in the paid branch (skipped levels retain prior block). | 255-03-SUMMARY.md D-255-FLUSH-ORDER-01 + 258-01-SUMMARY.md FIX-01 |
 
 **Functions — DELETED (1 row):**
 
@@ -240,6 +240,7 @@ Phase 256 produces the v33.0 test surface with 6 test SUMMARYs covering every be
 | `uint32 public pendingEditSet` | state (uint32) | NEW | `GNRUS.sol:163` | Pending-edit sentinel bitmap; bit i set ⇔ slot i has a pending edit (real or removal) | 254-01-SUMMARY.md |
 | `mapping(uint24 => bool) public levelResolved` | state (mapping) | NEW | `GNRUS.sol:168` | Per-level idempotence flag for `pickCharity(level)` | 254-01-SUMMARY.md |
 | `mapping(uint24 => mapping(uint8 => uint256)) public slotApproveWeight` | state (nested mapping) | NEW | `GNRUS.sol:184` | Per-level per-slot vote-weight tally accumulated by `vote()` | 255-01-SUMMARY.md D-255-WEIGHT-STORAGE-01 |
+| `address public lastWinningRecipient` | state (address) | NEW | `GNRUS.sol:196` | Tracks the recipient that won the most recent paid level; consumed by `vote()` to block consecutive wins via `PreviousWinnerNotVotable`. Written ONLY in the distribution-paid branch of `pickCharity` so skipped levels retain the prior winner block. | Phase 258-01 FIX-02 + 258-01-SUMMARY.md |
 
 **Storage state — MODIFIED_LOGIC (1 row):**
 
@@ -292,6 +293,7 @@ Phase 256 produces the v33.0 test surface with 6 test SUMMARYs covering every be
 | `CapExceeded()` | error | NEW | `GNRUS.sol:85` | Post-flush active count would exceed `MAX_ACTIVE_SLOTS` (20); structurally unreachable from external calls per D-256-CANCEL-QUEUED-01 / `256-03a-PLAN.md` (defensive guard) | 254-01-SUMMARY.md |
 | `VoteRejected(uint8 reason)` | error | NEW | `GNRUS.sol:89` | `vote()` reject paths; reason codes 0/1/2 = `REJECT_EMPTY_SLOT` / `REJECT_ALREADY_VOTED` / `REJECT_ZERO_WEIGHT` per D-255-VOTEREJECT-01 | 255-01-SUMMARY.md |
 | `PickCharityRejected(uint8 reason)` | error | NEW | `GNRUS.sol:93` | `pickCharity()` LevelSkipped variants; reason codes 0/1 = `REJECT_LEVEL_NOT_ACTIVE` / `REJECT_LEVEL_ALREADY_RESOLVED` per D-255-PICKCHARITY-ERROR-01 | 255-01-SUMMARY.md |
+| `PreviousWinnerNotVotable()` | error | NEW | `GNRUS.sol:99` | `vote()` rejects when targeted slot's current recipient equals the previous level's winner; reuses the cold SLOAD on `currentSlate[slot]` already loaded for the empty-slot check. Skipped levels do not advance the block. | Phase 258-01 FIX-02 + 258-01-SUMMARY.md |
 
 **Errors — DELETED (8 rows):**
 
@@ -333,7 +335,7 @@ Phase 256 produces the v33.0 test surface with 6 test SUMMARYs covering every be
 | `burn(uint256 amount)` | function (external) | REFACTOR_ONLY | `GNRUS.sol:282` | Proportional ETH+stETH redemption math preserved verbatim from v32 (AUDIT-03 invariant 5); `git diff acd88512..HEAD` shows zero hunks affecting burn body |
 | `burnAtGameOver()` | function (external onlyGame) | REFACTOR_ONLY | `GNRUS.sol:340` | Game-over remainder burn preserved from v32; sole consumer `DegenerusGameGameOverModule.sol:145` UNAFFECTED |
 
-**Total classification distribution:** 11 NEW functions + 1 DELETED function + 5+ NEW state + 1 MODIFIED_LOGIC state + 8 DELETED state + 3 NEW events + 2 RENAMED events + 1 DELETED event + 6 NEW errors + 8 DELETED errors + 7 NEW constants + 3 REFACTOR_ONLY soulbound stubs + 2 REFACTOR_ONLY burn paths = **58 classification rows** spanning every changed function/state/event/error in `contracts/GNRUS.sol` between `acd88512` and `dcb70941`.
+**Total classification distribution:** 11 NEW functions (pickCharity + vote each carry a Phase 258-01 follow-up MODIFIED_LOGIC note in the description column) + 1 DELETED function + 6+ NEW state + 1 MODIFIED_LOGIC state + 8 DELETED state + 3 NEW events + 2 RENAMED events + 1 DELETED event + 7 NEW errors + 8 DELETED errors + 7 NEW constants + 3 REFACTOR_ONLY soulbound stubs + 2 REFACTOR_ONLY burn paths = **60 classification rows** spanning every changed function/state/event/error in `contracts/GNRUS.sol` between `acd88512` and HEAD `4ce3703d740d3707c88a1af595618120a8168399`.
 
 #### Part B: Downstream Caller Inventory
 
