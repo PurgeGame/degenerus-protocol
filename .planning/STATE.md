@@ -102,12 +102,21 @@ _(none — v33.0 shipped 2026-05-06; ready for next milestone kickoff)_
 
 ## Deferred Items
 
-Items acknowledged and deferred at v32.0 milestone close on 2026-05-02 (carry-forward from v31.0 close 2026-04-24):
+Items acknowledged and deferred at v33.0 milestone close on 2026-05-07 (carry-forward from v32.0 close 2026-05-02):
 
 | Category | Item | Status | Notes |
 |----------|------|--------|-------|
-| quick_task | 260327-n7h-run-full-test-suite-and-analyze-results- | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 close. |
-| quick_task | 260327-q8y-test-boon-changes | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 close. |
+| quick_task | 260327-n7h-run-full-test-suite-and-analyze-results- | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 → v33.0 close. |
+| quick_task | 260327-q8y-test-boon-changes | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 → v33.0 close. |
+| verification_gap | Phase 257 (257-VERIFICATION.md) | human_needed | Gate resolved by Phase 258 supersedence (HUMAN-UAT marked `resolved`, resolved_by: phase-258), but VERIFICATION.md frontmatter `status: human_needed` field was not flipped to `resolved`. Bookkeeping defect; tracker out of date with reality. See `.planning/v33.0-MILESTONE-AUDIT.md`. |
+| verification_gap | Phase 258 (258-VERIFICATION.md) | human_needed | Gate resolved by Phase 258-03 stale-reference sweep, but VERIFICATION.md frontmatter `status: human_needed` was not flipped to `resolved`. Bookkeeping defect. See `.planning/v33.0-MILESTONE-AUDIT.md`. |
+| process_gap | Phases 254/255/256 missing VERIFICATION.md | not_run | Formal verification gate did not run when those phases closed (pre-session). Phase 257 delta-audit independently re-validated all that work (`audit/FINDINGS-v33.0.md`); functional risk: low. See `.planning/v33.0-MILESTONE-AUDIT.md` for the full per-phase analysis. |
+| schema_drift | Phase 255 SUMMARY frontmatter key | requirements:_not_requirements-completed: | All three Phase 255 SUMMARYs (255-01/02/03) use `requirements:` instead of the canonical `requirements-completed:`. Tooling that parses the canonical key misses 10 Phase 255 reqs. Bookkeeping defect; the work itself is complete. See `.planning/v33.0-MILESTONE-AUDIT.md`. |
+| schema_drift | Phase 256 SUMMARY req-completion fields | provides:_not_requirements-completed: | 256-03b uses `provides: [TST-03]`; 256-03c uses `provides: [TST-04, TST-06, D-256-GAS-01]`. Both should use `requirements-completed:`. Bookkeeping defect; tests for TST-03/04/06 pass and are part of the v33 governance suite. |
+| documentation | ROADMAP.md Phase 257 plan checkbox | unchecked | `- [ ] 257-01-PLAN.md` on line ~196 not ticked despite phase being marked complete. All authoritative completion records (Progress table, MILESTONES.md, STATE.md) confirm completion. Cosmetic. |
+| documentation | MILESTONES.md Phase 257 paragraph | "8 of 8 §4 surfaces" | Reads as if Phase 258 didn't add surface (i). The Phase 258 bullet in MILESTONES.md is correct; two paragraphs within the same document are mutually inconsistent. Cosmetic. |
+| documentation | audit/FINDINGS-v33.0.md §3.4 commit-count | not extended | §3.4 enumerates 7 post-anchor non-GNRUS commits; post-Phase-258 contract tree has 9 (added `636f60ea` GNRUS-only + `4ce3703d` test-only). Phase 258-03 explicitly deferred this as `D-258-03-§34-COMMIT-COUNT-NOT-EXTENDED` since the new commits are covered elsewhere (`636f60ea` in §3a Part A; `4ce3703d` is test-only). Annotated, not extended. |
+| audit_process | Phase 257 Task 7 manual-fallback record | recorded | The original Phase 257 Task 7 adversarial validation fell back to executor-manual when `/contract-auditor` and `/zero-day-hunter` skills failed to spawn. The user-requested independent re-run (this session) used fresh-context Agents loaded with the skill specs and surfaced the queue-branch redirect bug fixed by Phase 258. For external audit submission (e.g., C4A warden contest), one more pass with explicit skill-spawn enabled would harden the independence claim — but the Phase 258 fix already closes the substantive concern that motivated the re-run. |
 
 ## Accumulated Context
 
