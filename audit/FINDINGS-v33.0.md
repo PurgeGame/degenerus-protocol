@@ -32,11 +32,12 @@ generated_at: 2026-05-07T04:32:15Z
 
 ### Closure Verdict Summary
 
-- AUDIT-01: `CLOSED_AT_HEAD_dcb70941` (delta surface complete; every changed function/state-var/event/error in `contracts/GNRUS.sol` vs baseline `acd88512` enumerated with hunk-level evidence and classified per ROADMAP success criterion 2)
-- AUDIT-02: `8 of 8 surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY; 0 of 0 FINDING_CANDIDATE PROMOTED` (default expected per D-257-FIND-01)
-- AUDIT-03: `CLOSED_AT_HEAD_dcb70941` (GNRUS conservation re-proof complete; supply invariants intact across the level transition; soulbound enforcement intact; `burn()` proportional redemption math unchanged)
+- AUDIT-01: `CLOSED_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (delta surface complete; every changed function/state-var/event/error in `contracts/GNRUS.sol` vs baseline `acd88512` enumerated with hunk-level evidence and classified per ROADMAP success criterion 2)
+- AUDIT-02: `9 of 9 surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY; 0 of 0 FINDING_CANDIDATE PROMOTED` (default expected per D-257-FIND-01)
+- AUDIT-03: `CLOSED_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (GNRUS conservation re-proof complete; supply invariants intact across the level transition; soulbound enforcement intact; `burn()` proportional redemption math unchanged)
 - AUDIT-04: `1 PASS REG-01 / 0 REG-02 rows; 4 NEGATIVE-scope KI re-verifications; KNOWN_ISSUES_UNMODIFIED`
-- Combined milestone closure: `MILESTONE_V33_AT_HEAD_dcb70941`
+- Combined milestone closure: `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399`
+- Phase 258-01 + 258-02 supersedence: `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` supersedes `MILESTONE_V33_AT_HEAD_dcb70941` (Phase 258 closes the queue-branch vote-redirect mechanism via FIX-01 + adds the consecutive-recipient capture block via FIX-02; deliverable updated for the new code surface).
 
 ### Severity Counts (per D-08 5-Bucket Rubric)
 
@@ -610,10 +611,11 @@ Closure attestation block per D-253-15 step 9 + D-257-CLOSURE-01. Verifies the 4
 
 | Requirement | Closure Verdict | Evidence Section |
 | --- | --- | --- |
-| AUDIT-01 | `CLOSED_AT_HEAD_dcb70941` | §3a delta-surface table (Part A 58 classification rows + Part B 4-row downstream caller inventory; see Task 4) |
-| AUDIT-02 | `8 of 8 surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY; 0 of 0 FINDING_CANDIDATE PROMOTED` | §4 8-surface row table (a..h) + §4b/§4c sub-row prose disclosures for trust-asymmetry items (e) + (g) (Task 6) + Task 7 adversarial validation pass + Task 8 disposition (default Option B with surface (d) sDGNRS-float-gaming refinement) |
-| AUDIT-03 | `CLOSED_AT_HEAD_dcb70941` | §3b conservation re-proof rows (5 SAFE invariants: 2%-distribution math + GNRUS supply + sDGNRS/DGNRS/BURNIE supplies + soulbound enforcement + burn redemption math; see Task 5) |
-| AUDIT-04 | `1 PASS REG-01 / 0 REG-02 rows; 4 NEGATIVE-scope KI re-verifications; KNOWN_ISSUES_UNMODIFIED` | §5 Regression Appendix (Task 9: 1 PASS REG-01 + zero-row REG-02 + Combined 1 PASS) + §6 KI Gating Walk (Task 10: zero-row Non-Promotion Ledger + 4 NEGATIVE-scope envelope re-verifications + verdict literal) |
+| AUDIT-01 | `CLOSED_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (post-258 delta-surface refresh) | §3a delta-surface table (Part A 60 classification rows including Phase 258 lastWinningRecipient + PreviousWinnerNotVotable rows + Part B 4-row downstream caller inventory; see Task 4 + Phase 258-02 Task 2) |
+| AUDIT-02 | `9 of 9 surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY; 0 of 0 FINDING_CANDIDATE PROMOTED` | §4 9-surface row table (a..i — surface (i) added post-258) + §4b/§4c sub-row prose disclosures for trust-asymmetry items (e) + (g) (Task 6) + Task 7 adversarial validation pass + Task 8 disposition (default Option B with surface (d) sDGNRS-float-gaming refinement) + Phase 258-02 Task 3 §4 update (re-tag (a), §4b queue-branch closure paragraph, new row (i) consecutive-recipient capture closure) |
+| AUDIT-03 | `CLOSED_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (conservation re-proof carries forward; Phase 258 distribution arithmetic preserved verbatim — same `DISTRIBUTION_BPS = 200` constant + same 2%-of-pool semantics) | §3b conservation re-proof rows (5 SAFE invariants: 2%-distribution math + GNRUS supply + sDGNRS/DGNRS/BURNIE supplies + soulbound enforcement + burn redemption math; see Task 5) |
+| AUDIT-04 | `1 PASS REG-01 / 0 REG-02 rows; 4 NEGATIVE-scope KI re-verifications; KNOWN_ISSUES_UNMODIFIED` | §5 Regression Appendix (Task 9: 1 PASS REG-01 + zero-row REG-02 + Combined 1 PASS; Phase 258-02 Task 4 confirms REG-01 carries forward at NEW HEAD) + §6 KI Gating Walk (Task 10: zero-row Non-Promotion Ledger + 4 NEGATIVE-scope envelope re-verifications + verdict literal); KI envelopes remain NEGATIVE-scope; KNOWN-ISSUES.md UNMODIFIED at NEW HEAD per `git diff acd88512..HEAD -- KNOWN-ISSUES.md` returning empty |
+| AUDIT-05 | `CLOSED_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (Phase 258-01 patch: FIX-01 + FIX-02 landed; Phase 258-02 re-audit: §3a + §4 + §5 + §9 updated; closure signal re-emitted with explicit supersedence for dcb70941) | §3a delta-surface (Task 2) + §4 adversarial sweep (Task 3) + §5 regression appendix (Task 4) + §9c closure attestation (this task) |
 
 ### 9b. 6-Point Attestation Items
 
@@ -627,19 +629,21 @@ Closure attestation block per D-253-15 step 9 + D-257-CLOSURE-01. Verifies the 4
 
 5. **Severity distribution attested** — CRITICAL 0 / HIGH 0 / MEDIUM 0 / LOW 0 / INFO 0; total F-33-NN = 0 (zero finding blocks emitted per D-257-FIND-01 default path; 8 of 8 §4 surfaces verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY; trust-asymmetry items (e) + (g) routed to §4b + §4c sub-row prose disclosures, NOT F-33-NN namespace). Reconciles to §2 Severity Counts line by line per ROADMAP success criterion 1.
 
-6. **Combined milestone closure signal** — `MILESTONE_V33_AT_HEAD_dcb70941`. All 4 Phase 257 requirements (AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04) closed per §9a. The 4 KNOWN-ISSUES.md RNG entries (EXC-01..04) verified unchanged at HEAD per D-257-KI-01 default UNMODIFIED path. Milestone closure triggers /gsd-complete-milestone for v33.0 per D-257-CLOSURE-01. Post-v33.0 milestones boot from this signal with a fresh baseline of `dcb70941`.
+6. **Combined milestone closure signal** — `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399`. All 5 Phase 257 + 258 requirements (AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05) closed per §9a. The 4 KNOWN-ISSUES.md RNG entries (EXC-01..04) verified unchanged at HEAD per D-257-KI-01 default UNMODIFIED path. Milestone closure triggers /gsd-complete-milestone for v33.0 per D-257-CLOSURE-01. Post-v33.0 milestones boot from this signal with a fresh baseline of `4ce3703d740d3707c88a1af595618120a8168399`. Supersedes prior closure signal MILESTONE_V33_AT_HEAD_dcb70941 emitted at the original Phase 257 close on 2026-05-06.
 
 ### 9c. Milestone v33.0 Closure Signal
 
-v33.0 milestone **Charity Allowlist Governance** is CLOSED at HEAD `dcb70941` via this attestation. Phase 257 is the terminal v33.0 phase confirmed (ROADMAP shows Phases 254-257 with Phase 257 terminal; no Phase 258 exists in the v33.0 milestone). Post-v33.0 milestones boot from this signal with a fresh baseline of `dcb70941`.
+v33.0 milestone **Charity Allowlist Governance** is CLOSED at HEAD `4ce3703d740d3707c88a1af595618120a8168399` via this attestation. Phase 258 is the post-closure-patch terminal phase confirmed (ROADMAP shows Phases 254-258 with Phase 258 terminal post-supersedence; no Phase 259 exists in the v33.0 milestone). Phase 258-01 landed FIX-01 (pickCharity flush-after-payout reorder) + FIX-02 (lastWinningRecipient + PreviousWinnerNotVotable) under user-approved batched review; Phase 258-02 (this re-audit) refreshed §3a + §4 + §5 + §9 and re-emits the closure signal at NEW HEAD. Post-v33.0 milestones boot from this signal with a fresh baseline of `4ce3703d740d3707c88a1af595618120a8168399`.
 
 ```
-MILESTONE_V33_AT_HEAD_dcb70941
+MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399
 ```
+
+This signal **supersedes `MILESTONE_V33_AT_HEAD_dcb70941`** emitted at the original Phase 257 close on 2026-05-06. The prior closure was technically valid at its emission HEAD but the §4b sub-row prose contained a generalization that did not hold for the queue branch in `dcb70941` (independent adversarial re-run on 2026-05-06 surfaced the gap; logged in `.planning/phases/257-delta-audit-findings-consolidation/257-01-ADVERSARIAL-LOG.md` Independent Re-Run section). Phase 258 supplies the structural fix and re-audits at the patched HEAD. Auditors consuming v33.0 should reference this signal, not `dcb70941`.
 
 ```bash
 $ git rev-parse HEAD
-dcb70941  # contract-tree HEAD at Phase 257 Task 12 atomic-landing time (Phase 257 emitted zero contract-tree mutations; docs-tree HEAD differs but contract-tree HEAD = signal-emission HEAD per D-257-CLOSURE-01)
+4ce3703d740d3707c88a1af595618120a8168399  # contract-tree HEAD at Phase 258-02 Task 6 atomic commit time (Phase 258-01 landed two contract+test commits; Phase 258-02 lands six audit-artifact commits — terminal commit re-flips audit/FINDINGS-v33.0.md to FINAL READ-only).
 ```
 
 ### §9.NN. Commit-Readiness Register (per D-257-CLOSURE-02 three-section format)
@@ -683,9 +687,25 @@ Phase 257 plan-close landings (in chronological order):
 - `audit(257-01): Task 9 — REG-01 + REG-02 + Combined Distribution (AUDIT-04 part 1)`
 - `audit(257-01): Task 10 — Section 6 KI Gating Walk + 4 envelope re-verifications (AUDIT-04 part 2)`
 - `audit(257-01): Task 11 — Section 7 Prior-Artifact Cross-Cites + Section 8 Forward-Cite Closure`
-- `audit(257-01): Task 12 — Section 9 closure attestation + READ-only flip + ROADMAP/STATE/MILESTONES — FINAL READ-only — closure signal MILESTONE_V33_AT_HEAD_dcb70941 emitted` ← THIS LANDING
+- `audit(257-01): Task 12 — Section 9 closure attestation + READ-only flip + ROADMAP/STATE/MILESTONES — FINAL READ-only — closure signal MILESTONE_V33_AT_HEAD_dcb70941 emitted`
 
-Per `feedback_no_contract_landings.md` distinction: agent lands `audit/` + `.planning/` artifacts; never `contracts/` or `test/`. Phase 257 single-plan multi-task atomic-landing pattern per Phase 253 D-253-PLN-01 carry-forward.
+**Phase 258 plan-close landings (post-closure-patch):**
+
+Phase 258-01 (USER-COMMITTED contract + test files — per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md`, batched into one approval gate at end of plan):
+
+- `feat(258-01): pickCharity flush-after-payout reorder + lastWinningRecipient + PreviousWinnerNotVotable` (closes FIX-01 + FIX-02)
+- `test(258-01): flip queued-replace assertion to OLD-recipient-pays-at-L semantic + add prev-winner block coverage`
+
+Phase 258-02 (AGENT-COMMITTED audit artifacts):
+
+- `audit(258-02): Task 1 — lift READ-only flag + record re-opening attestation at HEAD 4ce3703d`
+- `audit(258-02): Task 2 — §3a delta-surface 4-row update for FIX-01 + FIX-02 (lastWinningRecipient + PreviousWinnerNotVotable + pickCharity/vote follow-up notes)`
+- `audit(258-02): Task 3 — §4 adversarial sweep update (re-tag (a), extend §4b queue-branch closure, add row (i) consecutive-recipient capture closure)`
+- `audit(258-02): Task 4 — §5 regression appendix REG-01 row updated to HEAD 4ce3703d (byte-identity proof carries forward; Phase 258 narrows envelope without widening)`
+- `audit(258-02): Task 5 — §2 + §9 closure-signal re-emission with supersedence note for dcb70941 + §9.NN.iii Phase 258 entries appended`
+- `audit(258-02): Task 6 — terminal commit — closure signal MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399 emitted; FINAL READ-only re-applied; ROADMAP/STATE/MILESTONES updated` ← THIS LANDING
+
+Per `feedback_no_contract_landings.md` distinction: agent lands `audit/` + `.planning/` artifacts; never `contracts/` or `test/`. Phase 257 single-plan multi-task atomic-landing pattern per Phase 253 D-253-PLN-01 carry-forward; Phase 258 splits into 258-01 (USER-COMMITTED contract+test, batched approval per `feedback_batch_contract_approval.md`) + 258-02 (AGENT-COMMITTED audit artifacts, six atomic commits per task).
 
 **§9.NN.iii notes (PROCESS deviations recorded):**
 
