@@ -10,14 +10,42 @@ requirements: [AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05]
 phase_status: terminal
 write_policy: "Pure-consolidation phase per CONTEXT.md hard constraint #1. Zero contracts/ writes by agent. Zero test/ writes by agent. KNOWN-ISSUES.md UNMODIFIED at HEAD per D-257-KI-01 default zero-promotion path. Per `feedback_never_preapprove_contracts.md`, the orchestrator does NOT pre-approve any contract change — vacuous this phase since no contract changes are proposed by agent."
 supersedes: MILESTONE_V33_AT_HEAD_dcb70941
-status: DRAFT — Phase 258-03 supersedence sweep in progress
-read_only: false
+status: FINAL — READ-ONLY
+read_only: true
 closure_signal: MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399
 generated_at: 2026-05-07T04:39:08Z
 sweep_history:
   - phase: 258-03
     purpose: "Sweep narrative `dcb70941` references that still describe current state to the post-Phase-258 contract-tree HEAD `4ce3703d740d3707c88a1af595618120a8168399`. Historical references (frontmatter supersedes, Phase 257 emit-history, commit-log entries, §3.4 SHA list) are preserved unchanged."
     started: 2026-05-07T04:39:08Z
+    completed: 2026-05-07T05:30:00Z
+    sections_updated:
+      - "§2 Attestation Anchor (line 87): closure-signal cross-cite → post-258 HEAD"
+      - "§3 lead-in (line 93): sources re-verified anchor → post-258 HEAD with verdict-cell preservation note"
+      - "§3a/§3b/§3c per-phase closing 1-line attestations: anchors → post-258 HEAD with Phase 258 follow-up disclosures"
+      - "§3a Part A heading: 'acd88512 → dcb70941' → 'acd88512 → 4ce3703d'"
+      - "§3.4 closing attestation (line 206): anchor → post-258 HEAD with Phase 258-01 GNRUS-only landings note"
+      - "§4 sub-row references in §5c/§6a: '8-surface' → '9-surface (a..i)'"
+      - "§5 lead-in + §5a Subject-Surface column header + §5a verdict-taxonomy paragraph: anchors → post-258 HEAD"
+      - "§6b lead-in + Subject column header + KNOWN-ISSUES UNMODIFIED + §6c re-verified marker: anchors → post-258 HEAD"
+      - "§7 lead-in + all 28 cross-cite postscripts + Cross-Cite Count summary: anchors → post-258 HEAD; STATE.md/REQUIREMENTS.md/ROADMAP.md row prose updated for post-258 reality"
+      - "§8a + §8b + §8c forward-cite closure: anchors → post-258 HEAD; chain expanded 254→255→256→257→258"
+      - "§9 introduction (line 612): '4 Phase 257 requirements' → '5 Phase 257 + 258 requirements (AUDIT-01..05)'; closure signal → post-258 HEAD"
+      - "§9b Item 1: HEAD-anchor language reframed (Phase 258-02 plan-close HEAD = 4ce3703d; original Phase 257 closure HEAD = dcb70941 historical)"
+      - "§9b Item 4: KNOWN-ISSUES.md UNMODIFIED anchor → post-258 HEAD"
+      - "§9b Item 5: '8 of 8 §4 surfaces' → '9 of 9 §4 surfaces (a)..(i)' at post-258 HEAD"
+    historical_references_preserved:
+      - "Frontmatter supersedes field (line 12)"
+      - "§1 Audit Baseline para (line 25) — Phase 257 plan-start narrative"
+      - "§1 Re-Opening Attestation (line 27) — Phase 258 narrative"
+      - "§2 Closure Verdict Summary supersedence row (line 44)"
+      - "§3a/§3b/§3c per-REQ verdict cells (lines 119-123, 149-158, 181-186) — original deliverable closure verdicts; cross-referenced from updated §3 lead-in"
+      - "§3.4 Scope-adjustment note (line 192) and §3.4 dcb70941 row (line 204) — real SHA in commit-row enumeration"
+      - "§4b Phase 258-01 closure paragraph (line 417) — describes dcb70941-build behavior"
+      - "§5a REG-01 row body (line 449) — embedded dcb70941..4ce3703d byte-identity proof description"
+      - "§9b Item 6 (line 636), §9c supersedence statement (line 646), §9.NN.i SHA row table (line 664)"
+      - "Commit-message historical entries (lines 688, 694, 709)"
+      - "Phase 257 + Phase 258-02 plan-close footnotes (lines 723, 725)"
 ---
 
 # v33.0 Findings — Charity Allowlist Governance
@@ -722,4 +750,6 @@ Per `feedback_no_contract_landings.md` distinction: agent lands `audit/` + `.pla
 
 *Phase 257 plan-close: per D-253-CF-02 carry-forward, the Task 12 final landing flipped this deliverable's frontmatter `status: DRAFT` → `status: FINAL — READ-ONLY` AND `read_only: false` → `read_only: true`, emitting closure signal `MILESTONE_V33_AT_HEAD_dcb70941`.*
 
-*Phase 258-02 plan-close: the Task 6 terminal landing re-applies FINAL READ-only after the Tasks 1-5 update window (re-opening attestation in §1, §3a delta-surface 4-row update for FIX-01 + FIX-02, §4 adversarial sweep update with re-tagged surface (a) + extended §4b queue-branch closure paragraph + new row (i) consecutive-recipient capture closure, §5 REG-01 row updated to NEW HEAD, §9c re-emitted closure signal). After this landing, `audit/FINDINGS-v33.0.md` is READ-ONLY for the remainder of the v33.0 milestone lifecycle. Closure signal: `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (supersedes `MILESTONE_V33_AT_HEAD_dcb70941`).*
+*Phase 258-02 plan-close: the Task 6 terminal landing re-applies FINAL READ-only after the Tasks 1-5 update window (re-opening attestation in §1, §3a delta-surface 4-row update for FIX-01 + FIX-02, §4 adversarial sweep update with re-tagged surface (a) + extended §4b queue-branch closure paragraph + new row (i) consecutive-recipient capture closure, §5 REG-01 row updated to NEW HEAD, §9c re-emitted closure signal). After this landing, `audit/FINDINGS-v33.0.md` was READ-ONLY for an interval covering 2026-05-06 through 2026-05-07 prior to the Phase 258-03 polish sweep. Closure signal: `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (supersedes `MILESTONE_V33_AT_HEAD_dcb70941`).*
+
+*Phase 258-03 plan-close (this landing): the Phase 258-02 verifier identified five stale `dcb70941` narrative references in the FINAL READ-only deliverable (§2 Attestation Anchor, §8c Combined Forward-Cite Closure, §9 introduction, §9b Items 4 + 5). User reviewed the verifier report and authorized a polish sweep. Phase 258-03 lifted READ-only (Task 1), updated the five verifier-flagged lines (Tasks 2-4), swept all remaining narrative-current-state postscripts in §3-§8 to the post-258 HEAD (Task 5 — anchor refresh on 28 §7 cross-cite postscripts + §3/§3a/§3b/§3c/§3.4 closing attestations + §5/§6/§7/§8 lead-ins + §6b table headers + §9b Item 1 HEAD-anchor reframe), confirmed all remaining `dcb70941` references in the file are HISTORICAL (frontmatter supersedes field, §1 narratives, §2 supersedence record, §3a/§3b/§3c per-REQ verdict cells, §3.4 row table, §4b Phase 258-01 closure paragraph, §5a REG-01 byte-identity proof, §9b Item 6 + §9c supersedence statements, §9.NN.i SHA row, commit-log entries, plan-close footnotes), and re-applied FINAL READ-only on the terminal commit (Task 7). The closure signal anchor is **unchanged** by this sweep — `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` still anchors to the same contract-tree HEAD (`4ce3703d`) per D-258-02-CLOSURE-SHA; this sweep modifies docs-tree narrative only. After this landing, `audit/FINDINGS-v33.0.md` is READ-ONLY for the remainder of the v33.0 milestone lifecycle. Closure signal: `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (supersedes `MILESTONE_V33_AT_HEAD_dcb70941`).*
