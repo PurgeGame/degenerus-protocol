@@ -21,21 +21,16 @@ const DISTRIBUTION_BPS = 200n;
 const BPS_DENOM = 10_000n;
 
 // ---------------------------------------------------------------------------
-// Helper: distribute GNRUS to a recipient via v33 setCharity (instant-apply on slot 5) + impersonated pickCharity.
-// Single-active-slot wins by default — no votes needed (skip-path B does NOT fire because
-// we are not voting; the winner-loop tracks bestSlot via strict `>` so a single active slot
-// with bestWeight == 0 is selected as the winner with bestSlot = 5 — verify against
-// contracts/GNRUS.sol pickCharity winner-phase L639-650).
-// NOTE: in v33, a slot with zero approve weight still wins if it is the only active slot
-//       — re-read pickCharity skip-path B at L653: `if (bestSlot == type(uint8).max)`.
-//       bestSlot is initialized to 0xFF and only set when w > bestWeight (i.e. w > 0).
-//       Therefore a single active slot with ZERO votes still hits skip-path B (LevelSkipped).
-//       To force a real distribution this helper MUST cast at least one vote.
+// Helper: distribute GNRUS to a recipient via v33 setCharity (instant-apply) + impersonated pickCharity.
+// `slot` defaults to 5 (any non-locked, non-conflicting slot). Tests that chain multiple distributions
+// in the same fixture instance MUST pass distinct slots and distinct recipients to avoid the FIX-02
+// PreviousWinnerNotVotable guard (`vote()` reverts when currentSlate[slot] == lastWinningRecipient).
+// In v33, a slot with zero approve weight still hits skip-path B because bestSlot is only updated when
+// w > bestWeight (w starts at 0). So this helper MUST cast at least one vote to force a paid resolve.
 // ---------------------------------------------------------------------------
-async function distributeGNRUS(charity, deployer, recipientAddr, gameAddress, voter) {
-  const slot = 5; // any non-locked, non-conflicting slot
+async function distributeGNRUS(charity, deployer, recipientAddr, gameAddress, voter, slot = 5) {
   const level = await charity.currentLevel();
-  // 1. Vault-owner sets recipient into empty slot 5 (instant-apply branch).
+  // 1. Vault-owner sets recipient into empty slot (instant-apply branch).
   await charity.connect(deployer).setCharity(slot, recipientAddr);
   // 2. Voter casts a vote so bestWeight > 0 → distribution path fires (not LevelSkipped).
   await charity.connect(voter).vote(slot);
@@ -374,9 +369,12 @@ describe("GNRUS (GNRUS)", function () {
     it("totalSupply is conserved: unallocated + all holders = totalSupply", async function () {
       const { charity, charityAddress, deployer, voter1, recipient1, recipient2, gameAddress } = await loadFixture(deployCharityFixture);
 
-      // Distribute to two recipients across two levels
-      await distributeGNRUS(charity, deployer, recipient1.address, gameAddress, voter1);
-      await distributeGNRUS(charity, deployer, recipient2.address, gameAddress, voter1);
+      // Distribute to two recipients across two levels. Use distinct slots so the FIX-02
+      // PreviousWinnerNotVotable guard does not block the second vote (slot 5's recipient1
+      // is the level-0 winner → currentSlate[5] == lastWinningRecipient at level 1; voting
+      // slot 6 with recipient2 sidesteps that branch).
+      await distributeGNRUS(charity, deployer, recipient1.address, gameAddress, voter1, 5);
+      await distributeGNRUS(charity, deployer, recipient2.address, gameAddress, voter1, 6);
 
       const unallocated = await charity.balanceOf(charityAddress);
       const r1Bal = await charity.balanceOf(recipient1.address);

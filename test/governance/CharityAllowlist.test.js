@@ -302,16 +302,56 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
   //  Section 5: setCharity -- edit-queue level-boundary semantics (TST-02)
   // -------------------------------------------------------------------
   describe("setCharity -- edit-queue level-boundary semantics", function () {
-    it("queued replace: voter sees OLD address until flush; both voters accumulate against the live slot", async function () {
-      const { charity, deployer, recipient1, recipient2, voter1, voter2 } =
+    it("queued replace: level L pays OLD recipient; new recipient appears in slate only at L+1", async function () {
+      const { charity, charityAddress, deployer, recipient1, recipient2, voter1, voter2, gameAddress } =
         await loadFixture(deployGNRUSFixture);
+
+      // Setup: instant-apply slot 5 → recipient1; queue-replace slot 5 → recipient2.
+      // Slot 5 is still active in current slate during level L.
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
-      // Queue replace → recipient2; slot 5 still in current slate, still votable.
       await setCharityFromVaultOwner(charity, deployer, 5, recipient2.address);
+
+      // Both voters cast for slot 5 — they observe slot 5 as filled (currentSlate[5] = recipient1
+      // until pickCharity flush, which now runs AFTER payout per FIX-01).
       await charity.connect(voter1).vote(5);
       await charity.connect(voter2).vote(5);
+
       const level = await charity.currentLevel();
       expect(await charity.slotApproveWeight(level, 5)).to.equal(200n);
+
+      // Pre-pickCharity: currentSlate[5] still recipient1; pendingEdit[5] = recipient2.
+      expect(await charity.getCharity(5)).to.equal(recipient1.address);
+
+      // Capture the pre-payout unallocated GNRUS balance to compute the expected 2% distribution.
+      const unallocatedBefore = await charity.balanceOf(charityAddress);
+      const expectedDistribution = (unallocatedBefore * DISTRIBUTION_BPS) / BPS_DENOM;
+
+      const recipient1BalBefore = await charity.balanceOf(recipient1.address);
+      const recipient2BalBefore = await charity.balanceOf(recipient2.address);
+
+      const tx = await runLevelTransitionViaGame(charity, gameAddress, level);
+
+      // Payment lands on recipient1 (OLD recipient — slot 5's value at the moment voters chose).
+      expect((await charity.balanceOf(recipient1.address)) - recipient1BalBefore).to.equal(expectedDistribution);
+      expect((await charity.balanceOf(recipient2.address)) - recipient2BalBefore).to.equal(0n);
+
+      // LevelResolved event names recipient1 (OLD).
+      const resolved = await getEvent(tx, charity, "LevelResolved");
+      expect(resolved.args.slot).to.equal(5n);
+      expect(resolved.args.recipient).to.equal(recipient1.address);
+      expect(resolved.args.gnrusDistributed).to.equal(expectedDistribution);
+
+      // Post-flush state: queued recipient2 is now in slot 5; pending bit cleared.
+      expect(await charity.getCharity(5)).to.equal(recipient2.address);
+      expect(await charity.pendingEditSet()).to.equal(0n);
+
+      // CharityFlushed emitted for slot 5 with recipient2.
+      const flushed = await getEvent(tx, charity, "CharityFlushed");
+      expect(flushed.args.slot).to.equal(5n);
+      expect(flushed.args.recipient).to.equal(recipient2.address);
+
+      // lastWinningRecipient updated to recipient1 (FIX-02; written in the paid branch).
+      expect(await charity.lastWinningRecipient()).to.equal(recipient1.address);
     });
 
     it("queued remove: slot still votable until flush", async function () {
@@ -500,6 +540,88 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       await expect(
         charity.connect(voter1).vote(20)
       ).to.be.revertedWithCustomError(charity, "InvalidSlot");
+    });
+  });
+
+  // -------------------------------------------------------------------
+  //  Section NN: vote(uint8 slot) -- previous-winner block (FIX-02)
+  //  Covers PreviousWinnerNotVotable across three semantic cases:
+  //    (a) winner blocked at L+1 via the slot it occupied at L
+  //    (b) queue-replace of the winning slot's recipient unblocks at L+1
+  //    (c) skipped level retains the L-1 winner block
+  // -------------------------------------------------------------------
+  describe("vote(uint8 slot) -- previous-winner block (FIX-02)", function () {
+    it("(a) charity that won level L cannot be voted for at L+1 via the slot it occupied", async function () {
+      const { charity, deployer, recipient1, voter1, voter2, gameAddress } =
+        await loadFixture(deployGNRUSFixture);
+
+      // Setup: slot 5 = recipient1; voter1 casts for slot 5 in level L.
+      await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
+      await charity.connect(voter1).vote(5);
+
+      // Resolve level L — recipient1 wins; lastWinningRecipient = recipient1.
+      const level = await charity.currentLevel();
+      await runLevelTransitionViaGame(charity, gameAddress, level);
+      expect(await charity.lastWinningRecipient()).to.equal(recipient1.address);
+
+      // Slot 5 still holds recipient1 (no queued edit between L and L+1) — vote(5) at L+1 must revert.
+      expect(await charity.getCharity(5)).to.equal(recipient1.address);
+      await expect(
+        charity.connect(voter2).vote(5)
+      ).to.be.revertedWithCustomError(charity, "PreviousWinnerNotVotable");
+    });
+
+    it("(b) queue-replace of winning slot recipient between L payout and L+1 vote unblocks the slot", async function () {
+      const { charity, deployer, recipient1, recipient2, voter1, voter2, gameAddress } =
+        await loadFixture(deployGNRUSFixture);
+
+      // Setup: slot 5 = recipient1; voter1 casts for slot 5 in level L.
+      await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
+      await charity.connect(voter1).vote(5);
+      const levelL = await charity.currentLevel();
+
+      // Resolve level L — recipient1 wins; the queue-replace setCharity(5, recipient2) is staged
+      // BEFORE pickCharity(L) so the post-payout flush flips slot 5 to recipient2.
+      await setCharityFromVaultOwner(charity, deployer, 5, recipient2.address);
+      await runLevelTransitionViaGame(charity, gameAddress, levelL);
+
+      // Post-flush: slot 5 = recipient2; lastWinningRecipient = recipient1 (paid branch).
+      expect(await charity.getCharity(5)).to.equal(recipient2.address);
+      expect(await charity.lastWinningRecipient()).to.equal(recipient1.address);
+
+      // vote(5) at L+1 succeeds because currentSlate[5] = recipient2 != lastWinningRecipient.
+      await expect(charity.connect(voter2).vote(5)).to.not.be.reverted;
+      const levelLp1 = await charity.currentLevel();
+      expect(levelLp1).to.equal(levelL + 1n);
+      expect(await charity.slotApproveWeight(levelLp1, 5)).to.be.gt(0n);
+    });
+
+    it("(c) skipped level retains the prior winner block (lastWinningRecipient unchanged on skip)", async function () {
+      const { charity, deployer, recipient1, voter1, voter2, gameAddress } =
+        await loadFixture(deployGNRUSFixture);
+
+      // Level L-1: setup, vote, resolve — recipient1 wins; lastWinningRecipient = recipient1.
+      await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
+      await charity.connect(voter1).vote(5);
+      const levelLm1 = await charity.currentLevel();
+      await runLevelTransitionViaGame(charity, gameAddress, levelLm1);
+      expect(await charity.lastWinningRecipient()).to.equal(recipient1.address);
+
+      // Level L: NO new votes cast (skip-path B candidate — bestSlot == type(uint8).max).
+      // BUT slot 5 still holds recipient1, so any voter at L would also be blocked by the
+      // PreviousWinnerNotVotable guard. We rely on no votes being cast → bestSlot = 0xFF → skip.
+      // Resolve L — emits LevelSkipped; lastWinningRecipient is NOT touched in skip path.
+      const levelL = await charity.currentLevel();
+      const tx = await runLevelTransitionViaGame(charity, gameAddress, levelL);
+      const skipped = await getEvent(tx, charity, "LevelSkipped");
+      expect(skipped.args.level).to.equal(levelL);
+      expect(await charity.lastWinningRecipient()).to.equal(recipient1.address);
+
+      // Level L+1: slot 5 still holds recipient1 → PreviousWinnerNotVotable still fires.
+      expect(await charity.getCharity(5)).to.equal(recipient1.address);
+      await expect(
+        charity.connect(voter2).vote(5)
+      ).to.be.revertedWithCustomError(charity, "PreviousWinnerNotVotable");
     });
   });
 
