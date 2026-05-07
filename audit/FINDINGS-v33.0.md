@@ -3,22 +3,24 @@ phase: 257-delta-audit-findings-consolidation
 plan: 01
 milestone: v33.0
 milestone_name: Charity Allowlist Governance
-head_anchor: dcb70941
+head_anchor: 4ce3703d740d3707c88a1af595618120a8168399
 audit_baseline: acd88512
 deliverable: audit/FINDINGS-v33.0.md
-requirements: [AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04]
+requirements: [AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05]
 phase_status: terminal
 write_policy: "Pure-consolidation phase per CONTEXT.md hard constraint #1. Zero contracts/ writes by agent. Zero test/ writes by agent. KNOWN-ISSUES.md UNMODIFIED at HEAD per D-257-KI-01 default zero-promotion path. Per `feedback_never_preapprove_contracts.md`, the orchestrator does NOT pre-approve any contract change — vacuous this phase since no contract changes are proposed by agent."
-supersedes: none
-status: FINAL — READ-ONLY
-read_only: true
-closure_signal: MILESTONE_V33_AT_HEAD_dcb70941
-generated_at: 2026-05-06T14:26:02Z
+supersedes: MILESTONE_V33_AT_HEAD_dcb70941
+status: REOPENED — POST-CLOSURE PATCH IN-FLIGHT
+read_only: false
+closure_signal: MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399
+generated_at: 2026-05-07T04:32:15Z
 ---
 
 # v33.0 Findings — Charity Allowlist Governance
 
 **Audit Baseline.** HEAD `dcb70941` is the contract-tree audit subject HEAD for v33.0, taken at Phase 257 plan-start as `git rev-parse HEAD` after Phase 256 close. The audit baseline is v32.0 HEAD `acd88512` (closure signal `MILESTONE_V32_AT_HEAD_acd88512` carry-forward from `audit/FINDINGS-v32.0.md` §9c). Eight contract commits since baseline: four v33-related GNRUS commits (`469d7fc1` Phase 254 single-commit consolidation + `30188329` Phase 255 declarations + `e734cfe6` Phase 255 vote + `ac1d3741` Phase 255 pickCharity), plus seven post-anchor non-GNRUS commits (`98e78404`, `002bde55`, `73b8c3b6`, `16e0eca5`, `560951a0`, `2713ce61`, `dcb70941`) classified ORTHOGONAL_PROVEN per §3.4. Four test-only commits (`b1f84a8c`, `10ee964c`, `3f667b3e`, `644af631`) all USER-COMMITTED Phase 256. The L173 turbo guard (`!rngLockedFlag` clause) + L1174 backfill sentinel (`rngWordByDay[idx + 1] == 0`) + GameStorage `_livenessTriggered` body (now at L1249-1259 after constant insertion at L863, body bytes char-by-char identical to baseline L1246-1256) are byte-identical between baseline `acd88512` and HEAD `dcb70941` (REG-01 PASS — see §5a).
+
+**Re-Opening Attestation (Phase 258).** Phase 257 emitted closure signal `MILESTONE_V33_AT_HEAD_dcb70941` on 2026-05-06. Independent adversarial re-run logged in `.planning/phases/257-delta-audit-findings-consolidation/257-01-ADVERSARIAL-LOG.md` (Independent Re-Run section, 2026-05-06 post-closure-signal) surfaced a queue-branch vote-redirect mechanism in `pickCharity` — disclosed there as a documentation gap in §4b sub-row prose, but on user review elevated to a code-level fix. Phase 258 supplies the fix: a structural reorder of `pickCharity` so the queued-edit flush executes AFTER the distribution payout (FIX-01), plus a `lastWinningRecipient` storage slot + `PreviousWinnerNotVotable()` revert in `vote()` to prevent consecutive wins by the same recipient (FIX-02). Phase 258-01 landed the contract+test diff under user-approved batched review; Phase 258-02 (this re-audit) updates §3a delta-surface, §4 adversarial sweep, and §5 regression appendix to reflect the patched semantics, then re-emits closure as `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` superseding `MILESTONE_V33_AT_HEAD_dcb70941`. The READ-only flag is lifted for the duration of Tasks 1-5 and re-applied on the Task 6 terminal commit.
 
 **Scope.** Single canonical milestone-closure deliverable for v33.0 per D-257-FILES-01 (single deliverable, no per-AUDIT-NN working files) + D-253-15 carry-forward (9-section shape locked). Consolidates Phase 254 / 255 / 256 outputs into 9 sections per D-253-15 carry. Terminal phase per CONTEXT.md D-257-FCITE-01 — zero forward-cites emitted from Phase 257 to any post-v33.0 milestone phases. Mirrors v32 Phase 253 single-plan multi-task atomic-commit pattern adapted for v33's 3-impl-phase + 1-audit-phase scope per D-257-PLAN-01.
 
