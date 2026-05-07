@@ -13,7 +13,7 @@
 - ✅ **v30.0 Full Fresh-Eyes VRF Consumer Determinism Audit** — Phases 237-242 (shipped 2026-04-20) — see [milestones/v30.0-ROADMAP.md](milestones/v30.0-ROADMAP.md)
 - ✅ **v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit** — Phases 243-246 (shipped 2026-04-24) — see [milestones/v31.0-ROADMAP.md](milestones/v31.0-ROADMAP.md)
 - ✅ **v32.0 Backfill Idempotency + purchaseLevel Underflow Audit** — Phases 247-253 (shipped 2026-05-02)
-- ✅ **v33.0 Charity Allowlist Governance** — Phases 254-257 (shipped 2026-05-06; closure signal `MILESTONE_V33_AT_HEAD_dcb70941`)
+- ✅ **v33.0 Charity Allowlist Governance** — Phases 254-258 (shipped 2026-05-06; closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (supersedes prior signal at dcb70941 per Phase 258 patch))
 
 ## Phases
 
@@ -203,7 +203,8 @@
 | 254. GNRUS Allowlist Storage, Admin Op & Storage Repack | 3/3 | Complete    | 2026-05-06 |
 | 255. Vote Rewrite, Resolve Flush & Event/Error Cleanup | 3/3 | Complete    | 2026-05-06 |
 | 256. Charity Allowlist Test Coverage | 6/6 | Completed 2026-05-06 | 4 commits (b1f84a8c → 644af631) |
-| 257. Delta Audit & Findings Consolidation | 1/1 | Completed 2026-05-06 | Closure signal `MILESTONE_V33_AT_HEAD_dcb70941` |
+| 257. Delta Audit & Findings Consolidation | 1/1 | Completed 2026-05-06 | Closure signal `MILESTONE_V33_AT_HEAD_dcb70941` (superseded) |
+| 258. pickCharity Flush-Order Fix + Previous-Winner Vote Block | 2/2 | Completed 2026-05-07 | Closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (supersedes dcb70941) |
 
 ## Active Milestone
 
@@ -211,7 +212,7 @@ _(none — v33.0 shipped 2026-05-06; ready for next milestone planning)_
 
 ## Last Shipped Milestone
 
-**v33.0 Charity Allowlist Governance** — SHIPPED 2026-05-06. 4 phases (254-257), 25 requirements satisfied (ALW + VOTE + RES + CLEAN + TST + AUDIT). Audit baseline v32.0 HEAD `acd88512` → v33.0 contract-tree HEAD `dcb70941`. Mixed shape: Phases 254-256 modified `contracts/GNRUS.sol` + added tests; Phase 257 delta-audited the result. Result: 8 of 8 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY; zero F-33-NN finding blocks; 1 PASS REG-01 + zero-row REG-02; 4 NEGATIVE-scope KI envelope re-verifications; KNOWN-ISSUES.md UNMODIFIED. Deliverable: `audit/FINDINGS-v33.0.md` (FINAL READ-only). Closure signal: `MILESTONE_V33_AT_HEAD_dcb70941`. See [REQUIREMENTS.md](REQUIREMENTS.md) for v33.0 scope.
+**v33.0 Charity Allowlist Governance (post-closure patch)** — SHIPPED 2026-05-06; RE-SHIPPED 2026-05-07 via Phase 258. 5 phases (254-258), 28 requirements satisfied (ALW + VOTE + RES + CLEAN + TST + AUDIT + FIX-01 + FIX-02 + AUDIT-05). Audit baseline v32.0 HEAD `acd88512` → v33.0 contract-tree HEAD `4ce3703d740d3707c88a1af595618120a8168399` (Phase 258-01 added a single contract+test commit pair on top of `dcb70941` to fix the queue-branch redirect mechanism + add the previous-winner vote block). Mixed shape: Phases 254-256 modified `contracts/GNRUS.sol` + added tests; Phase 257 delta-audited the result; Phase 258 patched + re-audited. Result: 9 of 9 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY (surface (i) consecutive-recipient capture added post-258); zero F-33-NN finding blocks; 1 PASS REG-01 + zero-row REG-02; 4 NEGATIVE-scope KI envelope re-verifications; KNOWN-ISSUES.md UNMODIFIED. Deliverable: `audit/FINDINGS-v33.0.md` (FINAL READ-only at HEAD `4ce3703d740d3707c88a1af595618120a8168399`). Closure signal: `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (supersedes `MILESTONE_V33_AT_HEAD_dcb70941`). See [REQUIREMENTS.md](REQUIREMENTS.md) for v33.0 scope.
 
 ### Phase 258: pickCharity Flush-Order Fix + Previous-Winner Vote Block
 
@@ -231,6 +232,9 @@ _(none — v33.0 shipped 2026-05-06; ready for next milestone planning)_
   7. `.planning/MILESTONES.md` v33.0 row updated to point to new closure signal; `dcb70941` recorded as superseded HEAD with rationale (pickCharity ordering bug surfaced post-emission via Phase 257 independent re-run).
 
 **Plans**: 2 plans
-- [ ] 258-01-PLAN.md — pickCharity flush-after-payout reorder + lastWinningRecipient + PreviousWinnerNotVotable contract patch + flipped queued-replace test + 3 new prev-winner-block it-blocks (FIX-01, FIX-02) [Wave 1; checkpoint:human-verify batched approval gate per feedback_batch_contract_approval.md]
-- [ ] 258-02-PLAN.md — Re-audit at patched HEAD: lift READ-only on audit/FINDINGS-v33.0.md, update §3a delta-surface (4 new entries) + §4 adversarial sweep (re-tag (a), extend §4b, add row (i)) + §5 REG-01 (new HEAD) + §9c (re-emit closure signal with explicit supersedence for dcb70941); update ROADMAP/STATE/MILESTONES; re-flip FINAL READ-only on terminal commit (AUDIT-05) [Wave 2, depends on 258-01; autonomous]
+- [x] 258-01-PLAN.md — pickCharity flush-after-payout reorder + lastWinningRecipient + PreviousWinnerNotVotable contract patch + flipped queued-replace test + 3 new prev-winner-block it-blocks (FIX-01, FIX-02) [Wave 1; checkpoint:human-verify batched approval gate per feedback_batch_contract_approval.md] (completed 2026-05-06)
+- [x] 258-02-PLAN.md — Re-audit at patched HEAD: lift READ-only on audit/FINDINGS-v33.0.md, update §3a delta-surface (4 new entries) + §4 adversarial sweep (re-tag (a), extend §4b, add row (i)) + §5 REG-01 (new HEAD) + §9c (re-emit closure signal with explicit supersedence for dcb70941); update ROADMAP/STATE/MILESTONES; re-flip FINAL READ-only on terminal commit (AUDIT-05) [Wave 2, depends on 258-01; autonomous] (completed 2026-05-07)
 **Write policy**: `contracts/GNRUS.sol` + `test/governance/CharityAllowlist.test.js` per-commit explicit user approval per `feedback_no_contract_commits.md`. `audit/FINDINGS-v33.0.md` re-open + re-flip per terminal-task atomic commit. `.planning/` artifacts writeable freely.
+
+**Plans completed:** 258-01 (FIX-01 + FIX-02 contract+test landings under user-approved batched review) + 258-02 (re-audit at patched HEAD; closure signal re-emitted at HEAD `4ce3703d740d3707c88a1af595618120a8168399` with explicit supersedence for `MILESTONE_V33_AT_HEAD_dcb70941`).
+**Closure signal:** `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399`.

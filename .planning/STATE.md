@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
 milestone: v33.0
-milestone_name: Charity Allowlist Governance
-status: completed
-last_updated: "2026-05-06T14:26:02Z"
-last_activity: 2026-05-06 -- Phase 257 complete; v33.0 shipped (closure signal MILESTONE_V33_AT_HEAD_dcb70941)
+milestone_name: milestone
+status: shipped
+last_updated: "2026-05-07T04:39:08Z"
+last_activity: 2026-05-07 -- Phase 258 complete; v33.0 re-shipped (closure signal MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399 supersedes dcb70941)
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 13
-  completed_plans: 13
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 15
+  completed_plans: 15
   percent: 100
 ---
 
@@ -20,29 +20,30 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-05 for v33.0 start)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** _(none — v33.0 shipped 2026-05-06; ready for next milestone planning)_
+**Current focus:** v33.0 SHIPPED (post-closure patch via Phase 258); ready for next milestone planning.
 
 ## Current Position
 
-Phase: 257 (delta-audit-findings-consolidation) — COMPLETE
-Plan: 1 of 1 — COMPLETE
-Status: v33.0 milestone shipped
-Last activity: 2026-05-06 -- Phase 257 complete; v33.0 shipped (closure signal MILESTONE_V33_AT_HEAD_dcb70941)
+Phase: 258 (pickcharity-flush-order-fix-previous-winner-vote-block) — COMPLETE
+Plan: 2 of 2 (complete)
+Status: v33.0 re-shipped 2026-05-07 via Phase 258 post-closure patch
+Last activity: 2026-05-07 -- Phase 258 complete; v33.0 re-shipped (closure signal MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399 supersedes dcb70941)
 Resume file: _(no active resume — milestone complete)_
 
 ## Last Shipped Milestone
 
-**v33.0 — Charity Allowlist Governance** (shipped 2026-05-06)
+**v33.0 — Charity Allowlist Governance (post-closure patch)** (re-shipped 2026-05-06 via Phase 258)
 
-- 4 phases (254-257), 13 plans, 25/25 requirements satisfied (ALW + VOTE + RES + CLEAN + TST + AUDIT)
-- Audit baseline: v32.0 HEAD `acd88512` → v33.0 contract-tree HEAD `dcb70941` (8 contract-touching landings: 4 GNRUS Phase 254/255 + 7 post-anchor non-GNRUS landings classified ORTHOGONAL_PROVEN per §3.4)
-- Result: 8 of 8 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY (a, b, c, d, e, f, g, h); zero F-33-NN finding blocks emitted; trust-asymmetry items (e) instant-apply admin-front-run + (g) locked-slot poisoning routed to §4 sub-row prose disclosures per D-257-FIND-01.
-- LEAN regression: 1 PASS REG-01 (v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` re-verified non-widening; L173 + L1174 + GameStorage `_livenessTriggered` body byte-identical between baseline and HEAD) + zero-row REG-02 (zero v29-v32 prior-finding rows whose acceptance rationale relied on charity-governance-touching envelope)
+- 5 phases (254-258), 15 plans, 28/28 requirements satisfied (ALW + VOTE + RES + CLEAN + TST + AUDIT + FIX-01 + FIX-02 + AUDIT-05)
+- Audit baseline: v32.0 HEAD `acd88512` → v33.0 contract-tree HEAD `4ce3703d740d3707c88a1af595618120a8168399` (Phase 258-01 added a single contract+test commit pair on top of `dcb70941`; closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` supersedes `MILESTONE_V33_AT_HEAD_dcb70941`)
+- Result: 9 of 9 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY (a, b, c, d, e, f, g, h, i — surface (i) consecutive-recipient capture added post-258 with FIX-02 closure; surface (a) re-tagged with post-258 reinforcement note for FIX-01 queue-branch closure); zero F-33-NN finding blocks emitted; trust-asymmetry items (e) + (g) routed to §4 sub-row prose disclosures.
+- LEAN regression: 1 PASS REG-01 (v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` re-verified non-widening; L173 + L1174 + GameStorage `_livenessTriggered` body byte-identical between baseline and HEAD `4ce3703d740d3707c88a1af595618120a8168399`)
 - KI envelopes EXC-01..04 all RE_VERIFIED NEGATIVE-scope (charity governance has zero RNG interaction)
-- KNOWN-ISSUES.md UNMODIFIED per D-257-KI-01 default zero-promotion path
-- Deliverable: `audit/FINDINGS-v33.0.md` (FINAL READ-only at HEAD `dcb70941`, ~720 lines, 9 sections)
-- Closure signal: `MILESTONE_V33_AT_HEAD_dcb70941`
-- Process deviations: Task 7 SPAWN_FAILED for /contract-auditor + /zero-day-hunter skills; executor-manual fallback per Task 7 retry-semantics (manual red-team in each skill's scope captured in 257-01-ADVERSARIAL-LOG.md); /zero-day-hunter manual red-team surfaced one NEW_SURFACE_CANDIDATE (sDGNRS float gaming via vote-and-sell) which Task 8 disposition folded into surface (d) prose as a related trust-asymmetry vector. v33.0 closure NOT blocked.
+- KNOWN-ISSUES.md UNMODIFIED per D-257-KI-01 default zero-promotion path (carries forward through Phase 258)
+- Deliverable: `audit/FINDINGS-v33.0.md` (FINAL READ-only at HEAD `4ce3703d740d3707c88a1af595618120a8168399`, ~750 lines, 9 sections + Phase 258 §3a + §4 + §5 + §9 updates)
+- Closure signal: `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (supersedes `MILESTONE_V33_AT_HEAD_dcb70941`)
+- Process deviations (Phase 257): Task 7 SPAWN_FAILED for /contract-auditor + /zero-day-hunter skills; executor-manual fallback per Task 7 retry-semantics (manual red-team in each skill's scope captured in 257-01-ADVERSARIAL-LOG.md); /zero-day-hunter manual red-team surfaced one NEW_SURFACE_CANDIDATE (sDGNRS float gaming via vote-and-sell) which Task 8 disposition folded into surface (d) prose as a related trust-asymmetry vector. The Phase 257 independent re-run also surfaced the queue-branch vote-redirect gap which Phase 258 subsequently closed structurally via FIX-01.
+- Phase 258 deviation (D-258-01-DEVIATION-01): Third file `test/unit/DegenerusCharity.test.js` added to the batched approval gate (FIX-02 caused conservation-test slot-reuse regression; parameterized `distributeGNRUS(slot)` helper + rotated slots fixes it; user explicitly approved batched landing).
 - See `.planning/MILESTONES.md` for archive
 
 ### Prior Shipped Milestone
@@ -80,14 +81,15 @@ _(none — v33.0 shipped 2026-05-06; ready for next milestone kickoff)_
 
 ## Roadmap Overview
 
-4 phases, 25 requirements, 100% coverage:
+5 phases, 28 requirements, 100% coverage:
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 254 | GNRUS Allowlist Storage, Admin Op & Storage Repack | ALW-01, ALW-02, ALW-03, ALW-04, CLEAN-01 (5) | Complete |
 | 255 | Vote Rewrite, Resolve Flush & Event/Error Cleanup | VOTE-01, VOTE-02, VOTE-03, VOTE-04, RES-01, RES-02, RES-03, RES-04, CLEAN-02, CLEAN-03 (10) | Complete |
 | 256 | Charity Allowlist Test Coverage | TST-01, TST-02, TST-03, TST-04, TST-05, TST-06 (6) | Complete |
-| 257 | Delta Audit & Findings Consolidation | AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04 (4) | Complete (closure signal `MILESTONE_V33_AT_HEAD_dcb70941`) |
+| 257 | Delta Audit & Findings Consolidation | AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04 (4) | Complete (closure signal `MILESTONE_V33_AT_HEAD_dcb70941`, superseded by Phase 258) |
+| 258 | pickCharity Flush-Order Fix + Previous-Winner Vote Block | FIX-01, FIX-02, AUDIT-05 (3) | Complete (closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` supersedes dcb70941) |
 
 **Dependencies:** Phase 254 must precede Phase 255 (vote rejects empty slots, so the slate storage + setCharity must exist before vote/pickCharity can be rewritten against it). Phase 256 depends on Phases 254 + 255 (tests exercise the full surface). Phase 257 is terminal — depends on 254 + 255 + 256 (audit baseline is the post-test HEAD with all impl + tests landed).
 

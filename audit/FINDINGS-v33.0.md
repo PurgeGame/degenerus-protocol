@@ -10,10 +10,10 @@ requirements: [AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05]
 phase_status: terminal
 write_policy: "Pure-consolidation phase per CONTEXT.md hard constraint #1. Zero contracts/ writes by agent. Zero test/ writes by agent. KNOWN-ISSUES.md UNMODIFIED at HEAD per D-257-KI-01 default zero-promotion path. Per `feedback_never_preapprove_contracts.md`, the orchestrator does NOT pre-approve any contract change — vacuous this phase since no contract changes are proposed by agent."
 supersedes: MILESTONE_V33_AT_HEAD_dcb70941
-status: REOPENED — POST-CLOSURE PATCH IN-FLIGHT
-read_only: false
+status: FINAL — READ-ONLY
+read_only: true
 closure_signal: MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399
-generated_at: 2026-05-07T04:32:15Z
+generated_at: 2026-05-07T04:39:08Z
 ---
 
 # v33.0 Findings — Charity Allowlist Governance
@@ -716,4 +716,6 @@ Per `feedback_no_contract_landings.md` distinction: agent lands `audit/` + `.pla
 
 ---
 
-*Phase 257 plan-close: per D-253-CF-02 carry-forward, the Task 12 final landing flips this deliverable's frontmatter `status: DRAFT` → `status: FINAL — READ-ONLY` AND `read_only: false` → `read_only: true`. After this landing, `audit/FINDINGS-v33.0.md` is READ-ONLY for the v33.0 milestone lifecycle. Closure signal: `MILESTONE_V33_AT_HEAD_dcb70941`.*
+*Phase 257 plan-close: per D-253-CF-02 carry-forward, the Task 12 final landing flipped this deliverable's frontmatter `status: DRAFT` → `status: FINAL — READ-ONLY` AND `read_only: false` → `read_only: true`, emitting closure signal `MILESTONE_V33_AT_HEAD_dcb70941`.*
+
+*Phase 258-02 plan-close: the Task 6 terminal landing re-applies FINAL READ-only after the Tasks 1-5 update window (re-opening attestation in §1, §3a delta-surface 4-row update for FIX-01 + FIX-02, §4 adversarial sweep update with re-tagged surface (a) + extended §4b queue-branch closure paragraph + new row (i) consecutive-recipient capture closure, §5 REG-01 row updated to NEW HEAD, §9c re-emitted closure signal). After this landing, `audit/FINDINGS-v33.0.md` is READ-ONLY for the remainder of the v33.0 milestone lifecycle. Closure signal: `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (supersedes `MILESTONE_V33_AT_HEAD_dcb70941`).*
