@@ -342,3 +342,142 @@ The §4a 8-surface table is otherwise comprehensive. No further 9th-surface cand
 **Auto-mode resolution:** `⚡ Auto-approved: Option B default path with surface (d) prose refinement; skill-spawn-unavailable recorded as PROCESS deviation. No F-33-NN block emission. KNOWN-ISSUES.md UNMODIFIED.`
 
 `re-verified at HEAD dcb70941`.
+
+---
+
+# Independent Re-Run (2026-05-06, post-closure-signal)
+
+**Trigger:** User requested re-execution of Task 7 with independent skill-spawned validation after Phase 257 verification flagged the manual-fallback self-audit as a conflict-of-interest concern for external audit submission (C4A warden contest).
+
+**Method:** Two fresh-context `general-purpose` Agents spawned in parallel (single orchestrator message, two Agent calls). Each agent loaded the persona spec from its respective skill file (`~/.claude/skills/contract-auditor/SKILL.md`, `~/.claude/skills/zero-day-hunter/SKILL.md`) and received identical scope: red-team `audit/FINDINGS-v33.0.md` §4 8-surface table and §4b/§4c sub-row prose against `contracts/GNRUS.sol` at HEAD `dcb70941`. Read-only audits — neither agent had write authority over `contracts/`, `test/`, or `audit/FINDINGS-v33.0.md` (FINAL READ-only).
+
+**Outcome:** Both independent agents converged on the **same finding** that the executor's manual-fallback self-audit missed.
+
+---
+
+## /contract-auditor (independent re-run — verbatim)
+
+**Independent re-run on 2026-05-06 (skill spawned as fresh-context general-purpose agent — separate from plan author).**
+
+### Per-Surface Verdicts
+
+| Surface | Verdict | Evidence / Rationale |
+|---------|---------|----------------------|
+| (a) | DISAGREE-WITH-RATIONALE | Grep `if (current == address(0))` → 1 hit at `GNRUS.sol:380` (confirmed); `vault.isVaultOwner` → 1 hit at `:368` (confirmed). Code path verified. However, the SAFE_BY_STRUCTURAL_CLOSURE label is misapplied: the closure relies on accepting that "admin curating slate at level boundary is structurally equivalent to admin curating ahead of vote-cast window" — but this argument requires the same trust boundary as (e). The QUEUE branch at `:399-407` is reachable mid-level and silently redirects already-committed voter weight to the new recipient on flush at `:618` (`currentSlate[i] = pendingValue;`) — voters who voted for slot X expecting recipient A will see their `slotApproveWeight[level][X]` weight fund recipient B after the queue flushes inside `pickCharity`. This is NOT structural closure; it is trust-asymmetric. The verdict should be SAFE_BY_TRUST_ASYMMETRY (same family as (e)), or alternatively (e)'s prose should be expanded to explicitly cover the queue-branch vote-redirect path — currently (e) only addresses the instant-apply branch on empty slots ("for example, after voters cast for slots 0-2, the vault-owner calls setCharity(5, ...) which hits the instant-apply branch"). |
+| (b) | AGREE | Grep `_futureBitmapAfter\|_popcount32\|CapExceeded` → 12 hits including constant-decl at `:85`, instant-apply cap-check at `:393-394`, queue cap-check at `:401-402`, helper bodies at `:416-444` + `:469-480` (matches author's "7 hits" claim within tolerance — author appears to have grep-counted with a different filter; the substantive line cites are all correct). Per-slot mapping `pendingEdit[slot] = recipient` at `:404` confirms overwrite-not-append semantics; queue ordering is irrelevant. The "cancel-queued path structurally unreachable" claim in author's prose is verified: the only way to reach the cancel branch at `:382-391` requires `current == 0 && pendingEditSet & slotMask != 0`, and that combined state is unreachable because (i) setting a pending bit requires entering the queue branch which requires `current != 0`, (ii) clearing a pending bit either via flush (clears the bit) or via the cancel branch itself never produces `current == 0 && pending bit set`. Cap check at `_popcount32(futureBitmap) > 20` is structurally unreachable since slots are bounded `0..19` (20 bits max in the bitmap), but defensive — acceptable. |
+| (c) | AGREE | Grep `for.*MAX_ACTIVE_SLOTS\|w > bestWeight` → 7 hits including the winner loop at `:641` and the strict `>` comparator at `:644` (confirmed). Tie-break gaming reduces to slot-ordering control which IS the admin slate-curation surface. Voters cannot break ties via voting (one weight per voter per (level,slot), strict `>` means equal weights leave bestSlot unchanged → lowest index wins). `getActiveSlots()` at `:497-511` provides full observability. Verdict SAFE_BY_DESIGN holds. |
+| (d) | AGREE | Trust-asymmetry pre-disclosed; flagged caveat applied. The author also folded sDGNRS float-gaming via vote-and-sell into this surface — appropriately bounded since `slotApproveWeight` freezes weight at vote time per `vote()` body at `:558-581` (no per-level-end balance re-read). No code-level vector beyond the trust boundary. |
+| (e) | AGREE (with note from (a) above) | Trust-asymmetry pre-disclosed; flagged caveat applied. Note: the prose at §4b describes only the instant-apply branch (empty slot fill); the queue-branch vote-redirect mechanism is not explicitly enumerated. See (a) above. |
+| (f) | AGREE | Grep `activeCount\|activeCountAfterFlush\|_popcount32\|_flushedBitmap` → 11 hits matching author's table description. Single source of truth verified: `currentActiveBitmap` updated at `:397` (instant-apply) and `:629` (flush); `pendingEditSet` updated at `:388, :405, :630`; both view helpers at `:535-543` derive count via `_popcount32` over the appropriate bitmap. No separate counter. No drift surface. |
+| (g) | AGREE | Trust-asymmetry pre-disclosed; flagged caveat applied. `LOCKED_SLOTS=3` constant decl at `:203` confirmed; deploy-time seeding window is outside the at-HEAD threat model. |
+| (h) | AGREE | Grep `SlotLocked\|slot < LOCKED_SLOTS` → 2 hits: error decl at `:82` + revert site at `:375` (confirmed). Revert at `:375` `if (slot < LOCKED_SLOTS && current != address(0)) revert SlotLocked();` runs BEFORE the branch dispatch at `:380` and the queue branch at `:399-407` — locked slots cannot be mutated through the queue once filled. Constructor at `:254-256` only mints `INITIAL_SUPPLY` to `address(this)` and does not seed `currentSlate` (verified by reading the body). Author's "constructor at `:223`-relative" cite is loose (constructor is at `:254`; `:223` is the IMMUTABLE REFERENCES section header) — minor cite inaccuracy but pointer reaches the right region. No migration / re-init entry exists. Flush at `:614-628` does not validate locked-slot rule, but only setCharity-validated edits enter the queue, so the invariant holds (admin-side validation is sufficient per Phase 255 D-255-FLUSH-ORDER-01). |
+
+### NEW-VECTOR Candidates (if any)
+
+None at the structural level. The closest candidate is the **queue-branch vote-redirect** vector noted under (a), but it does not constitute a NEW SURFACE — it is mechanically a sub-case of the (e) admin-front-run family extended from instant-apply onto the queue branch, and is bounded by the same DGVE >50.1% trust boundary and 2%-of-pool blast radius as (d) / (e) / (g). Recommend §4b sub-row prose be expanded to explicitly cover the queue-branch case (one additional sentence) for documentation completeness; severity Informational, not promotion to F-33-NN.
+
+Composition path for the queue-branch redirect:
+- Admin observes mid-level vote pattern via `slotApproveWeight[level][slot]` (public mapping at `:184`).
+- Admin identifies slot X with high weight currently funding recipient A.
+- Admin calls `setCharity(X, attackerControlledRecipient)` → queue branch at `:399-407` (slot X is non-empty) → `pendingEdit[X] = attackerControlledRecipient`.
+- Game advances → `pickCharity(level)` is called → flush at `:614-628` writes `currentSlate[X] = attackerControlledRecipient` BEFORE winner pick at `:641-650`.
+- Winner pick reads `slotApproveWeight[level][X]` (frozen voter weight) → slot X wins → `recipient = currentSlate[X]` at `:669` = attackerControlledRecipient.
+- 2%-of-pool distribution to attacker.
+
+Severity: Informational (trust-asymmetric, bounded by same operational mitigation as (e)).
+
+### DISAGREE-WITH-RATIONALE (if any)
+
+**Surface (a) — verdict label:** Plan author tags `SAFE_BY_STRUCTURAL_CLOSURE` but the closure argument relies on the same trust-asymmetry rationale as (e). Recommend re-tagging as `SAFE_BY_TRUST_ASYMMETRY` to match the actual structure of the safety argument, OR expanding (e)'s prose to subsume the queue-branch vote-redirect vector. Grep evidence: the queue branch at `GNRUS.sol:399-407` is reachable mid-level and `pickCharity` at `:614-628` flushes before reading `currentSlate[bestSlot]` at `:669`, meaning admin DOES have a code-level mechanism (not just operational) to redirect vote weight. The "structural closure" framing understates this.
+
+This is a **prose / verdict-label gap**, not a code-level missed-exploit. The §4b instant-apply prose covers ~80% of the (e) family but leaves the queue-branch case undisclosed.
+
+### Closing Attestation
+
+The §4 8-surface table holds at HEAD `dcb70941` for code-level safety: zero F-33-NN candidates, zero novel surfaces, zero structural exploits beyond the disclosed trust boundary. One verdict-label / disclosure-prose gap on surface (a) — the SAFE_BY_STRUCTURAL_CLOSURE label is more accurately SAFE_BY_TRUST_ASYMMETRY (same family as (e)) because the queue-branch vote-redirect mechanism is trust-asymmetric, not structurally closed. This is a documentation-precision concern, not a missed vulnerability.
+
+---
+
+## /zero-day-hunter (independent re-run — verbatim)
+
+**Independent re-run on 2026-05-06 (skill spawned as fresh-context general-purpose agent — separate from plan author).**
+
+### NEW-SURFACE Candidates
+
+#### Candidate 1: Vote-Flush-Override — Vault-Owner Silently Redirects Existing Votes via Queue-Branch Replace
+
+- **Composition path:** `GNRUS.vote(slot)` accumulates `slotApproveWeight[level][slot] += weight` keyed by SLOT INDEX, not by recipient identity × `GNRUS.setCharity(slot, newRecipient)` queue branch (line 399-407) writes `pendingEdit[slot] = newRecipient` while `currentSlate[slot]` keeps the OLD recipient × `GNRUS.pickCharity(level)` flush phase (line 614-630) overwrites `currentSlate[slot] = pendingEdit[slot]` BEFORE the winner phase reads `slotApproveWeight[level][slot]` (line 643) and pays `currentSlate[bestSlot]` (line 669). Result: votes cast for slot S during level L are paid to whatever recipient the vault-owner places in slot S at flush time, regardless of who occupied the slot at vote time. Actor sequence: Alice (high sDGNRS) votes for slot S = recipient A → Vault-owner observes Alice's vote, queues `setCharity(S, attackerControlledB)` → game advances → `pickCharity(L)` flushes slot S to B → B receives the 2%-of-pool distribution that Alice's weight earned for "A".
+
+- **Grep recipe:**
+  ```
+  grep -nE "slotApproveWeight|currentSlate\[bestSlot\]|currentSlate\[i\]\s*=\s*pendingValue" contracts/GNRUS.sol
+  grep -nE "queued replace|vote.*queue|queue.*vote" test/governance/CharityAllowlist.test.js
+  ```
+  The test at `test/governance/CharityAllowlist.test.js:305` (`"queued replace: voter sees OLD address until flush; both voters accumulate against the live slot"`) is the smoking gun — the protocol intentionally treats vote weight as slot-anchored, not recipient-anchored, and the queue branch silently swaps the recipient under the votes.
+
+- **File:line cites:** `contracts/GNRUS.sol:399-407` (queue branch, no slot-version bump), `contracts/GNRUS.sol:614-630` (flush phase mutates `currentSlate[i]` before winner read), `contracts/GNRUS.sol:641-650` (winner loop reads `slotApproveWeight[level][slot]` accumulated under OLD recipient identity), `contracts/GNRUS.sol:669` (`recipient = currentSlate[bestSlot]` reads POST-flush slate), `contracts/GNRUS.sol:558-581` (`vote()` provides no `unvote` / `revote` companion — votes are irrevocable), `test/governance/CharityAllowlist.test.js:305-315` (codified behavior).
+
+- **Vector description:** Level L starts with slot S filled with charity A. Alice (high sDGNRS) calls `vote(S)`, depositing `aliceWeight` into `slotApproveWeight[L][S]`. Bob (vault-owner with DGVE > 50.1%) observes Alice's `Voted(L, S, alice, aliceWeight)` event (or simulates her tx in mempool) and calls `setCharity(S, bobControlledRecipient)`. Because `currentSlate[S] != address(0)`, the call hits the queue branch at `:399`, writing `pendingEdit[S] = bobControlled`. The current slate still shows A; subsequent voters see A and may also cast for slot S. At level transition, AdvanceModule calls `pickCharity(L)`. The flush at `:614-630` rewrites `currentSlate[S] = bobControlled`. The winner phase at `:641-650` finds slot S has the highest accumulated weight. Distribution is paid to `currentSlate[S] = bobControlled`. **All voters who cast for "A" silently sponsor Bob's recipient.** Voters have no recourse: `vote()` is one-shot per (level, slot), there is no `unvote`, and `getActiveSlots()` is a view-time read — there is no on-vote attestation that pins the recipient.
+
+- **Blast radius:** Bounded above by 2%-of-remaining-unallocated-GNRUS-pool per resolved level (per AUDIT-03 invariant 1), summed across the lifetime levels Bob exploits. Bob can repeat once per level (each level exposes a fresh 2% slice). Theoretical ceiling = full unallocated pool over many levels (exponential decay; ~63% drained by level 50, ~98% by level 200 at 2%/level). Bob's leverage is fully equivalent to the (e) instant-apply admin-front-run blast radius per level — but extended across MANY pre-existing voted slots, not just empty slots that voters happen to vote on later.
+
+- **Suggested severity:** **INFO** (per D-08 5-bucket rubric; documentation gap rather than novel exploit). Same trust-asymmetry classification as surfaces (d), (e), (g): vault-owner is the explicit trust boundary per CONTEXT.md `<decisions>` 4th item. No code-level fix is appropriate (the design intentionally allows mid-level slate edits); operational mitigation = DGVE >50.1% acquisition cost. **However the §4b sub-row prose for surface (e) currently asserts:** "Voters who already cast their votes do NOT have their votes retroactively reassigned by a fill-empty action; the slate state at vote-cast time is what each voter chose." **This statement is FALSE for the queue branch** — voters' votes ARE retroactively reassigned by a queue-replace action. The statement is true narrowly for the instant-apply branch (which can only fill empty slots and has no retroactive effect on prior votes), but the prose generalizes incorrectly. The Phase 256 `slotApproveWeight` freeze (D-256-MULTI-VOTE-01) prevents the float-gaming sub-vector but does NOT prevent recipient-substitution under unchanged vote weight.
+
+- **Disposition recommendation:** **EXTEND surface (e) prose** in `audit/FINDINGS-v33.0.md:396-406` to add a paragraph disclosing the queue-branch vote-redirect mechanism explicitly — OR promote to a 9th surface row as `(i) Queue-branch vote-redirect via mid-level recipient replacement`. Either path keeps verdict as `SAFE_BY_TRUST_ASYMMETRY` per the pre-decided trust boundary; do NOT promote to F-33-NN namespace per D-257-FIND-01 default. The existing test at `CharityAllowlist.test.js:305-315` already pins this behavior — but as protocol design, not as a disclosed adversarial surface. The audit deliverable should match: this needs to be DISCLOSED to readers, not merely tested.
+
+### Investigations That Returned Nothing
+
+- **Re-entrancy via `pickCharity` flush:** `contracts/GNRUS.sol:601-674` contains zero external calls (D-255-CEI-01 confirmed). Recipient is credited via internal `balanceOf` write at `:671`; no `transfer` / `call` / `delegatecall` fires. Vault-owner has no callback hook during flush. Not a vector.
+- **`burn()` reentrancy via `claimWinnings` callback:** CEI ordering at `:315-316` (state writes before external transfer) makes re-entry harmless — re-entered `burn` would see decremented balance and revert at `:315`. Not a vector.
+- **`setCharity` post-gameover:** Queued edits land in `pendingEdit` and never flush (gameOver blocks pickCharity). Stuck state, no value impact. Not a vector.
+- **`_futureBitmapAfter` cap-check correctness:** Simulator at `:416-444` correctly handles all three cases. `_popcount32` is textbook Hamming weight; constant gas; no overflow. Not a vector.
+- **`currentLevel` divergence from game's `level`:** `pickCharity` revert rolls back the whole tx including `level = lvl` write. No path advances game level past charity level by more than 1. Not a vector.
+- **Empty-level processing:** All three skip-paths (bitmap == 0, zero-weight, zero-distribution) handle cleanly with deterministic `LevelSkipped` event. Not a vector.
+- **`burn()` arithmetic with `claimable - 1` sentinel:** 1 wei dust accumulates; not exploitable. Not a vector.
+- **`burnAtGameOver` / `burn` race:** `handleFinalSweep` is gated by 30 days post-gameover; no in-flight race. Not a vector.
+- **Voting on slot 0/1/2 (locked) with queued-removal pre-fill:** Locked-slot guard at `:375` runs BEFORE branch dispatch. Not a vector.
+- **`pendingEditSet` bitmap manipulation / popcount overflow:** `uint32` with 12 free bits over 20-slot cap. No overflow path. Not a vector.
+- **Block-timestamp / day-boundary windows around setCharity → pickCharity:** GNRUS has zero `block.timestamp` / `block.number` reads. No temporal window. Not a vector.
+- **DGNRS / sDGNRS / DGVE float gaming during queue-vs-flush window:** Vote weight frozen at vote time per D-256-MULTI-VOTE-01. Acknowledged in §4 surface (d). No new composition.
+- **External ETH/stETH inflows from JackpotModule / DegenerusStonk / GameOverModule:** All push-only into GNRUS; affect `burn()` redemption pool by design. Not a vector.
+
+### Closing Attestation
+
+The 8-surface §4 table at `audit/FINDINGS-v33.0.md:367-440` is **structurally complete except for one disclosure gap** in surface (e) sub-row prose at `:396-406`: the prose claims "votes cast at vote-time anchor to the slate state at vote-cast time," which is true for the instant-apply branch but **FALSE for the queue branch**. The vault-owner's queue-branch `setCharity(filled_slot, attackerRecipient)` silently redirects all existing votes for that slot at the next pickCharity flush — the protocol treats vote weight as slot-index-anchored, not recipient-anchored. This is codified in the test at `test/governance/CharityAllowlist.test.js:305` ("queued replace: voter sees OLD address until flush; both voters accumulate against the live slot") as intentional design. The trust boundary still holds (vault-owner is the explicit curator per CONTEXT.md), so the verdict remains `SAFE_BY_TRUST_ASYMMETRY` and severity is **INFO** — but the §4b prose needs a corrective extension (or a 9th surface row) to disclose the queue-branch mechanism honestly. No code-level fix is recommended. No F-33-NN promotion is recommended. **One documentation gap; zero exploitable bugs; v33.0 charity-allowlist surface remains structurally sound at HEAD `dcb70941`.**
+
+---
+
+## Independent Re-Run Disposition Note (Task 8 — re-opened)
+
+**Convergent finding from two independent agents:**
+
+Both `/contract-auditor` and `/zero-day-hunter` independently identified the **queue-branch vote-redirect mechanism** as a disclosure gap in §4b sub-row prose. Specifically:
+
+1. The §4b prose currently states (lines 396-406): *"Voters who already cast their votes do NOT have their votes retroactively reassigned by a fill-empty action; the slate state at vote-cast time is what each voter chose."*
+2. This statement is **true narrowly for the instant-apply branch** (empty slot fill — no retroactive effect on prior votes for that slot, since the slot was empty).
+3. This statement is **factually incorrect for the queue branch** — when a vault-owner calls `setCharity(filledSlot, newRecipient)`, the queue at `GNRUS.sol:399-407` writes `pendingEdit[slot] = newRecipient` while leaving `currentSlate[slot]` unchanged for further voting, and the flush at `:614-628` overwrites `currentSlate[slot]` BEFORE the winner phase at `:641-650` reads `slotApproveWeight[level][slot]` and pays `currentSlate[bestSlot]` at `:669`. Vote weight in the protocol is anchored to **slot index**, not recipient identity. Voters who cast for slot S during level L pay whichever recipient sits in `currentSlate[S]` at pickCharity time.
+4. The behavior is **codified as intentional design** in the test at `test/governance/CharityAllowlist.test.js:305-315` ("queued replace: voter sees OLD address until flush; both voters accumulate against the live slot"). It is the protocol's trust-asymmetric design, not a bug.
+5. The trust boundary (vault-owner curation gated by DGVE >50.1% threshold) is the same as surfaces (d), (e), (g). Verdict family is `SAFE_BY_TRUST_ASYMMETRY`. Severity per D-08 5-bucket rubric: **INFO** (documentation gap, not exploit).
+
+**Both agents recommended Option A or Option A':**
+- **Option A:** Extend §4b sub-row prose for surface (e) to add a paragraph explicitly disclosing the queue-branch vote-redirect mechanism alongside the instant-apply mechanism it already describes.
+- **Option A':** Add a 9th surface row `(i) Queue-branch vote-redirect via mid-level recipient replacement` to the §4 table, with verdict `SAFE_BY_TRUST_ASYMMETRY`.
+- Neither agent recommended F-33-NN promotion. Neither recommended a code-level fix.
+
+**Both agents AGREED on surfaces (b), (c), (d), (f), (g), (h)** and AGREED on (e)'s instant-apply core; the only divergence from the plan author is on (a)'s verdict label (SAFE_BY_STRUCTURAL_CLOSURE vs SAFE_BY_TRUST_ASYMMETRY) and the §4b prose completeness.
+
+**Independence verification:** Two fresh-context agents, identical scope, parallel spawn. Convergence on the same finding without cross-contamination is strong evidence the gap is real. The executor's manual-fallback self-audit missed this — the original `STATUS: SPAWN_FAILED` block above said both manual passes "AGREED on all 8 surfaces" and surfaced only sDGNRS float gaming.
+
+**Pending user disposition:**
+
+| Option | Action | Effect on FINAL READ-only flag | Effect on closure signal |
+|--------|--------|-------------------------------|--------------------------|
+| A | Re-open `audit/FINDINGS-v33.0.md`, extend §4b prose with queue-branch paragraph, re-flip READ-only, re-emit closure signal at new HEAD | Temporarily lifted, then re-applied | New signal `MILESTONE_V33_AT_HEAD_<new_sha>` (current `MILESTONE_V33_AT_HEAD_dcb70941` superseded) |
+| A' | Re-open as in (A), but add row (i) to §4 table instead of extending §4b prose | Same as (A) | Same as (A) |
+| B | Accept independent re-run findings as documented in this log only; leave deliverable unchanged | No change | No change to current `MILESTONE_V33_AT_HEAD_dcb70941` |
+| C | Defer queue-branch disclosure to a future v33.x patch milestone; document deferral here | No change | No change |
+
+**Recommendation (this log writer):** Option A — the §4b prose contains a factually incorrect generalization that an external auditor will catch in a 5-minute read. Extending the prose by one paragraph (~8-12 lines mirroring the instant-apply paragraph structure) gives the deliverable a clean external-submission posture without changing any verdicts or adding F-33-NN blocks. The closure signal re-emission cost is small (one re-flip cycle). Option A' is also acceptable but heavier (modifies the table structure).
+
+`re-verified at HEAD dcb70941`. Task 8 disposition pending user decision.
+
