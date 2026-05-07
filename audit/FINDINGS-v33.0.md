@@ -603,7 +603,7 @@ grep -rE 'forward-cite|defer-to-Phase-258|TBD-post-v33' audit/FINDINGS-v33.0.md
 
 ### 8c. Combined §8 Verdict
 
-Phase 254 → 255 → 256 → 257 forward-cite closure: **0/0 Phase 254-256 residuals + 0/0 Phase 257 emissions** → milestone boundary closed per CONTEXT.md D-257-FCITE-01 + ROADMAP terminal-phase rule. v33.0 milestone deliverable is self-contained at HEAD `dcb70941`; no forward-cite residual awaits the next-milestone audit cycle. Any post-v33.0 delta will boot from the closure signal `MILESTONE_V33_AT_HEAD_dcb70941` (§9c) with a fresh delta-extraction phase.
+Phase 254 → 255 → 256 → 257 → 258 forward-cite closure: **0/0 Phase 254-256 residuals + 0/0 Phase 257 emissions + 0/0 Phase 258 emissions** → milestone boundary closed per CONTEXT.md D-257-FCITE-01 + ROADMAP terminal-phase rule. v33.0 milestone deliverable is self-contained at HEAD `4ce3703d740d3707c88a1af595618120a8168399` post-Phase-258 supersedence (Phase 258 was the post-v33.0 patch that landed FIX-01 + FIX-02 and re-emitted the closure signal; no Phase 259 exists in the v33.0 milestone). Any post-v33.0 delta will boot from the current closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (§9c) with a fresh delta-extraction phase, NOT from the superseded `MILESTONE_V33_AT_HEAD_dcb70941`.
 
 ---
 
