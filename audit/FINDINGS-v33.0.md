@@ -10,10 +10,14 @@ requirements: [AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05]
 phase_status: terminal
 write_policy: "Pure-consolidation phase per CONTEXT.md hard constraint #1. Zero contracts/ writes by agent. Zero test/ writes by agent. KNOWN-ISSUES.md UNMODIFIED at HEAD per D-257-KI-01 default zero-promotion path. Per `feedback_never_preapprove_contracts.md`, the orchestrator does NOT pre-approve any contract change — vacuous this phase since no contract changes are proposed by agent."
 supersedes: MILESTONE_V33_AT_HEAD_dcb70941
-status: FINAL — READ-ONLY
-read_only: true
+status: DRAFT — Phase 258-03 supersedence sweep in progress
+read_only: false
 closure_signal: MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399
 generated_at: 2026-05-07T04:39:08Z
+sweep_history:
+  - phase: 258-03
+    purpose: "Sweep narrative `dcb70941` references that still describe current state to the post-Phase-258 contract-tree HEAD `4ce3703d740d3707c88a1af595618120a8168399`. Historical references (frontmatter supersedes, Phase 257 emit-history, commit-log entries, §3.4 SHA list) are preserved unchanged."
+    started: 2026-05-07T04:39:08Z
 ---
 
 # v33.0 Findings — Charity Allowlist Governance
