@@ -609,7 +609,7 @@ Phase 254 → 255 → 256 → 257 → 258 forward-cite closure: **0/0 Phase 254-
 
 ## 9. Milestone Closure Attestation
 
-Closure attestation block per D-253-15 step 9 + D-257-CLOSURE-01. Verifies the 4 Phase 257 requirements (AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04) and emits the milestone-closure signal `MILESTONE_V33_AT_HEAD_dcb70941` triggering /gsd-complete-milestone for v33.0.
+Closure attestation block per D-253-15 step 9 + D-257-CLOSURE-01 + D-258-02-CLOSURE-SHA. Verifies the 5 Phase 257 + 258 requirements (AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05) and emits the milestone-closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (superseding the original Phase 257 emission `MILESTONE_V33_AT_HEAD_dcb70941` per §9c) triggering /gsd-complete-milestone for v33.0.
 
 ### 9a. Verdict Distribution Summary
 
@@ -629,9 +629,9 @@ Closure attestation block per D-253-15 step 9 + D-257-CLOSURE-01. Verifies the 4
 
 3. **Zero forward-cites emitted by Phase 254-257** — per §8 Forward-Cite Closure: §8a `ZERO_PHASE_257_BOUND_FORWARD_CITES_RESIDUAL` + §8b `ZERO_PHASE_257_FORWARD_CITES_EMITTED` + §8c combined verdict `0/0 residuals + 0/0 emissions = milestone boundary closed`. The few literal "post-v33.0" / future-milestone tokens in upstream `<deferred>` blocks of CONTEXT.md / DISCUSSION-LOG / SUMMARY artifacts are deferral annotations per `feedback_no_dead_guards.md`, NOT phase-bound forward-cite emissions.
 
-4. **KI envelope re-verifications confirmed** — EXC-01 affiliate / EXC-02 gameover-prevrandao / EXC-03 gameover-RNG-substitution / EXC-04 EntropyLib-XOR-shift envelopes all NEGATIVE-scope at v33 per §6b 4-row table (charity governance has zero RNG interaction). KNOWN-ISSUES.md UNMODIFIED at HEAD `dcb70941` per D-257-KI-01 default path.
+4. **KI envelope re-verifications confirmed** — EXC-01 affiliate / EXC-02 gameover-prevrandao / EXC-03 gameover-RNG-substitution / EXC-04 EntropyLib-XOR-shift envelopes all NEGATIVE-scope at v33 per §6b 4-row table (charity governance has zero RNG interaction). KNOWN-ISSUES.md UNMODIFIED at HEAD `4ce3703d740d3707c88a1af595618120a8168399` per D-257-KI-01 default path — `git diff acd88512..HEAD -- KNOWN-ISSUES.md` returns empty across the full v32→post-258 envelope, including the FIX-01 + FIX-02 patch landings which touched only `contracts/GNRUS.sol` + `test/`.
 
-5. **Severity distribution attested** — CRITICAL 0 / HIGH 0 / MEDIUM 0 / LOW 0 / INFO 0; total F-33-NN = 0 (zero finding blocks emitted per D-257-FIND-01 default path; 8 of 8 §4 surfaces verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY; trust-asymmetry items (e) + (g) routed to §4b + §4c sub-row prose disclosures, NOT F-33-NN namespace). Reconciles to §2 Severity Counts line by line per ROADMAP success criterion 1.
+5. **Severity distribution attested** — CRITICAL 0 / HIGH 0 / MEDIUM 0 / LOW 0 / INFO 0; total F-33-NN = 0 (zero finding blocks emitted per D-257-FIND-01 default path; 9 of 9 §4 surfaces (a)..(i) verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY at HEAD `4ce3703d740d3707c88a1af595618120a8168399` — surface (i) added post-258 for the FIX-02 consecutive-recipient capture closure; surface (a) reinforced post-258 by the FIX-01 queue-branch closure; trust-asymmetry items (e) + (g) routed to §4b + §4c sub-row prose disclosures, NOT F-33-NN namespace). Reconciles to §2 Severity Counts line by line per ROADMAP success criterion 1 + matches §4d closing attestation tally.
 
 6. **Combined milestone closure signal** — `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399`. All 5 Phase 257 + 258 requirements (AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05) closed per §9a. The 4 KNOWN-ISSUES.md RNG entries (EXC-01..04) verified unchanged at HEAD per D-257-KI-01 default UNMODIFIED path. Milestone closure triggers /gsd-complete-milestone for v33.0 per D-257-CLOSURE-01. Post-v33.0 milestones boot from this signal with a fresh baseline of `4ce3703d740d3707c88a1af595618120a8168399`. Supersedes prior closure signal MILESTONE_V33_AT_HEAD_dcb70941 emitted at the original Phase 257 close on 2026-05-06.
 
