@@ -284,22 +284,24 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             winningTraitsPacked
         );
+        uint8 soloQuadrant = _pickSoloQuadrant(traitIds, entropy);
+        uint256 effectiveEntropy = (entropy & ~uint256(3)) | uint256((3 - soloQuadrant) & 3);
 
         uint16[4] memory bucketCounts = JackpotBucketLib.bucketCountsForPoolCap(
             poolWei,
-            entropy,
+            effectiveEntropy,
             DAILY_ETH_MAX_WINNERS,
             DAILY_JACKPOT_SCALE_MAX_BPS
         );
         uint16[4] memory shareBps = JackpotBucketLib.shareBpsByBucket(
             FINAL_DAY_SHARES_PACKED,
-            uint8(entropy & 3)
+            uint8(effectiveEntropy & 3)
         );
 
         paidWei = _processDailyEth(
             targetLvl,
             poolWei,
-            entropy,
+            effectiveEntropy,
             traitIds,
             shareBps,
             bucketCounts,
@@ -449,6 +451,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256 entropyDaily = EntropyLib.hash2(randWord, lvl);
             uint8[4] memory traitIdsDaily = JackpotBucketLib
                 .unpackWinningTraits(winningTraitsPacked);
+            uint8 soloQuadrant = _pickSoloQuadrant(traitIdsDaily, entropyDaily);
+            uint256 effectiveEntropy = (entropyDaily & ~uint256(3)) | uint256((3 - soloQuadrant) & 3);
             (uint8 counterStep_, , , ) = _unpackDailyTicketBudgets(
                 dailyTicketBudgetsPacked
             );
@@ -459,7 +463,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 uint16[4] memory bucketCountsDaily = JackpotBucketLib
                     .bucketCountsForPoolCap(
                         dailyEthBudget,
-                        entropyDaily,
+                        effectiveEntropy,
                         DAILY_ETH_MAX_WINNERS,
                         DAILY_JACKPOT_SCALE_MAX_BPS
                     );
@@ -481,12 +485,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     ? FINAL_DAY_SHARES_PACKED
                     : DAILY_JACKPOT_SHARES_PACKED;
                 uint16[4] memory shareBpsDaily = JackpotBucketLib
-                    .shareBpsByBucket(sharesPacked, uint8(entropyDaily & 3));
+                    .shareBpsByBucket(sharesPacked, uint8(effectiveEntropy & 3));
 
                 uint256 paidDailyEth = _processDailyEth(
                     lvl,
                     dailyEthBudget,
-                    entropyDaily,
+                    effectiveEntropy,
                     traitIdsDaily,
                     shareBpsDaily,
                     bucketCountsDaily,
@@ -522,6 +526,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         // Purchase phase path - BURNIE and ETH bonuses at level 1+
         winningTraitsPacked = _rollWinningTraits(randWord, false);
+        uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(winningTraitsPacked);
+        uint256 entropy = EntropyLib.hash2(randWord, lvl);
+        uint8 soloQuadrant = _pickSoloQuadrant(traitIds, entropy);
+        uint256 effectiveEntropy = (entropy & ~uint256(3)) | uint256((3 - soloQuadrant) & 3);
 
         {
             uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
@@ -547,7 +555,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             JackpotParams({
                 lvl: lvl,
                 ethPool: ethPool,
-                entropy: EntropyLib.hash2(randWord, lvl),
+                entropy: effectiveEntropy,
                 winningTraitsPacked: winningTraitsPacked,
                 traitShareBpsPacked: DAILY_JACKPOT_SHARES_PACKED
             })
@@ -1077,6 +1085,30 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Internal Helpers — Jackpot Execution
     // =========================================================================
 
+    /// @dev Picks the solo bucket quadrant for ETH-distribution rotation.
+    ///      When any winning trait has color==7 (gold tier), returns a uniformly-random
+    ///      gold quadrant via bits 4+ of `entropy` (disjoint from the bucket-rotation
+    ///      low 2 bits at `entropy & 3`). Otherwise returns the existing rotation index
+    ///      `uint8((3 - (entropy & 3)) & 3)` matching `JackpotBucketLib.soloBucketIndex`.
+    /// @param traits The 4 winning trait IDs (each [QQ][CCC][SSS] packed: quadrant 2 bits,
+    ///        color 3 bits, symbol 3 bits).
+    /// @param entropy VRF-derived entropy. Bits 0-1 drive bucket rotation; bits 4+ drive
+    ///        gold tie-break (bits 2-3 unused by either path).
+    /// @return Quadrant index 0-3 to receive the solo bucket assignment.
+    function _pickSoloQuadrant(uint8[4] memory traits, uint256 entropy) internal pure returns (uint8) {
+        uint8[4] memory goldQuads;
+        uint8 goldCount;
+        for (uint8 i; i < 4; ++i) {
+            if (((traits[i] >> 3) & 7) == 7) {
+                goldQuads[goldCount++] = i;
+            }
+        }
+        if (goldCount == 0) {
+            return uint8((3 - (entropy & 3)) & 3);
+        }
+        return goldQuads[uint8((entropy >> 4) % goldCount)];
+    }
+
     /// @dev Core jackpot execution: distributes ETH to winners.
     ///      This is the unified entry point for daily and purchase phase jackpots.
     ///      COIN jackpots are handled separately by _executeCoinJackpot.
@@ -1140,17 +1172,20 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      stored state and processes the mid buckets that call 1 skipped.
     function _resumeDailyEth(uint24 lvl, uint256 randWord) private {
         uint256 entropy = EntropyLib.hash2(randWord, lvl);
+        uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(_rollWinningTraits(randWord, false));
+        uint8 soloQuadrant = _pickSoloQuadrant(traitIds, entropy);
+        uint256 effectiveEntropy = (entropy & ~uint256(3)) | uint256((3 - soloQuadrant) & 3);
         (uint8 cs, , , ) = _unpackDailyTicketBudgets(dailyTicketBudgetsPacked);
         bool isFinal = (jackpotCounter + cs >= JACKPOT_LEVEL_CAP);
         uint256 paidEth2 = _processDailyEth(
-            lvl, 0, entropy,
-            JackpotBucketLib.unpackWinningTraits(_rollWinningTraits(randWord, false)),
+            lvl, 0, effectiveEntropy,
+            traitIds,
             JackpotBucketLib.shareBpsByBucket(
                 isFinal ? FINAL_DAY_SHARES_PACKED : DAILY_JACKPOT_SHARES_PACKED,
-                uint8(entropy & 3)
+                uint8(effectiveEntropy & 3)
             ),
             JackpotBucketLib.bucketCountsForPoolCap(
-                uint256(resumeEthPool), entropy,
+                uint256(resumeEthPool), effectiveEntropy,
                 DAILY_ETH_MAX_WINNERS, DAILY_JACKPOT_SCALE_MAX_BPS
             ),
             isFinal, SPLIT_CALL2,
