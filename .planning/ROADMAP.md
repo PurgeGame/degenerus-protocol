@@ -70,7 +70,7 @@
 
 Plans:
 **Wave 1**
-- [ ] 260-01-PLAN.md — Add `_pickSoloQuadrant` helper + inject `effectiveEntropy` at 4 sites (L282/L349/L524/L1147) atomically [SOLO-01..07]; amend REQUIREMENTS.md SOLO-01/SOLO-08(d) wording per D-13/D-14
+- [x] 260-01-PLAN.md — Add `_pickSoloQuadrant` helper + inject `effectiveEntropy` at 4 sites (L282/L349/L524/L1147) atomically [SOLO-01..07]; amend REQUIREMENTS.md SOLO-01/SOLO-08(d) wording per D-13/D-14
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 260-02-PLAN.md — Create `contracts/test/JackpotSoloTester.sol` external-pure passthrough + Hardhat unit tests SOLO-08(a/b/c/d): zero-gold rotation parity, one-gold deterministic return, 2/3/4-gold uniform-distribution chi-squared (p > 0.05) over 100K samples, tie-break bit-disjointness [SOLO-08]
@@ -109,7 +109,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 259. Trait Distribution Split | 3/3 | Complete    | 2026-05-08 |
-| 260. Gold Solo Priority Injection | 0/3 | Planned     | - |
+| 260. Gold Solo Priority Injection | 1/3 | In progress | - |
 | 261. Statistical Validation + Cross-Surface Verification | 0/0 | Not started | - |
 | 262. Delta Audit + Findings Consolidation | 0/0 | Not started | - |
 
