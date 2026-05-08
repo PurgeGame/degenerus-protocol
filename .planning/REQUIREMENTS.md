@@ -123,8 +123,43 @@
 
 ## Traceability
 
-Filled by `/gsd-roadmapper` after roadmap approval. Each REQ-ID mapped to exactly one phase.
+Each REQ-ID mapped to exactly one phase. 36 of 36 v34.0 requirements covered (100%).
 
 | REQ-ID | Phase | Plan |
 |--------|-------|------|
-| (pending roadmap) | | |
+| TRAIT-01 | Phase 259 | TBD |
+| TRAIT-02 | Phase 259 | TBD |
+| TRAIT-03 | Phase 259 | TBD |
+| TRAIT-04 | Phase 259 | TBD |
+| TRAIT-05 | Phase 259 | TBD |
+| TRAIT-06 | Phase 259 | TBD |
+| SOLO-01 | Phase 260 | TBD |
+| SOLO-02 | Phase 260 | TBD |
+| SOLO-03 | Phase 260 | TBD |
+| SOLO-04 | Phase 260 | TBD |
+| SOLO-05 | Phase 260 | TBD |
+| SOLO-06 | Phase 260 | TBD |
+| SOLO-07 | Phase 260 | TBD |
+| SOLO-08 | Phase 260 | TBD |
+| SOLO-09 | Phase 260 | TBD |
+| STAT-01 | Phase 261 | TBD |
+| STAT-02 | Phase 261 | TBD |
+| STAT-03 | Phase 261 | TBD |
+| STAT-04 | Phase 261 | TBD |
+| STAT-05 | Phase 261 | TBD |
+| STAT-06 | Phase 261 | TBD |
+| STAT-07 | Phase 261 | TBD |
+| SURF-01 | Phase 261 | TBD |
+| SURF-02 | Phase 261 | TBD |
+| SURF-03 | Phase 261 | TBD |
+| SURF-04 | Phase 261 | TBD |
+| SURF-05 | Phase 261 | TBD |
+| AUDIT-01 | Phase 262 | TBD |
+| AUDIT-02 | Phase 262 | TBD |
+| AUDIT-03 | Phase 262 | TBD |
+| AUDIT-04 | Phase 262 | TBD |
+| AUDIT-05 | Phase 262 | TBD |
+| REG-01 | Phase 262 | TBD |
+| REG-02 | Phase 262 | TBD |
+| REG-03 | Phase 262 | TBD |
+| REG-04 | Phase 262 | TBD |

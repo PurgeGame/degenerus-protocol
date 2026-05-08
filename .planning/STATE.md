@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v34.0
 milestone_name: Trait Rarity Rework + Gold Solo Priority
 status: planning
-last_updated: "2026-05-08T09:02:47.938Z"
+last_updated: "2026-05-08T09:30:00.000Z"
 last_activity: 2026-05-08
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,17 +17,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-05 for v33.0 start)
+See: .planning/PROJECT.md (updated 2026-05-05 for v33.0 start; v34.0 carries the same core value)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v33.0 SHIPPED (post-closure patch via Phase 258); ready for next milestone planning.
+**Current focus:** v34.0 PLANNING — roadmap drafted; ready to plan Phase 259.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 259 (Trait Distribution Split)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-08 — Milestone v34.0 started
+Status: Planning Phase 259
+Last activity: 2026-05-08 — Roadmap drafted (4 phases, 36 requirements, 100% coverage); REQUIREMENTS.md traceability table filled
 
 ## Last Shipped Milestone
 
@@ -76,28 +76,31 @@ Last activity: 2026-05-08 — Milestone v34.0 started
 
 ## Active Milestone
 
-_(none — v33.0 shipped 2026-05-06; ready for next milestone kickoff)_
+**v34.0 Trait Rarity Rework + Gold Solo Priority** — PLANNING (defined 2026-05-08). 4 phases (259-262), 36 requirements (TRAIT-01..06, SOLO-01..09, STAT-01..07, SURF-01..05, AUDIT-01..05, REG-01..04). Audit baseline v33.0 contract-tree HEAD `4ce3703d740d3707c88a1af595618120a8168399` (closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` supersedes `MILESTONE_V33_AT_HEAD_dcb70941`). Modifies `contracts/DegenerusTraitUtils.sol` + `contracts/modules/DegenerusGameJackpotModule.sol`; adds Hardhat statistical-validation tests under `test/stat/` (or equivalent); produces a 9-section delta-audit deliverable `audit/FINDINGS-v34.0.md`. Closure signal target: `MILESTONE_V34_AT_HEAD_<sha>`.
 
 ## Roadmap Overview
 
-5 phases, 28 requirements, 100% coverage:
+4 phases, 36 requirements, 100% coverage:
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
-| 254 | GNRUS Allowlist Storage, Admin Op & Storage Repack | ALW-01, ALW-02, ALW-03, ALW-04, CLEAN-01 (5) | Complete |
-| 255 | Vote Rewrite, Resolve Flush & Event/Error Cleanup | VOTE-01, VOTE-02, VOTE-03, VOTE-04, RES-01, RES-02, RES-03, RES-04, CLEAN-02, CLEAN-03 (10) | Complete |
-| 256 | Charity Allowlist Test Coverage | TST-01, TST-02, TST-03, TST-04, TST-05, TST-06 (6) | Complete |
-| 257 | Delta Audit & Findings Consolidation | AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04 (4) | Complete (closure signal `MILESTONE_V33_AT_HEAD_dcb70941`, superseded by Phase 258) |
-| 258 | pickCharity Flush-Order Fix + Previous-Winner Vote Block | FIX-01, FIX-02, AUDIT-05 (3) | Complete (closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` supersedes dcb70941) |
+| 259 | Trait Distribution Split | TRAIT-01, TRAIT-02, TRAIT-03, TRAIT-04, TRAIT-05, TRAIT-06 (6) | Not started |
+| 260 | Gold Solo Priority Injection | SOLO-01, SOLO-02, SOLO-03, SOLO-04, SOLO-05, SOLO-06, SOLO-07, SOLO-08, SOLO-09 (9) | Not started |
+| 261 | Statistical Validation + Cross-Surface Verification | STAT-01, STAT-02, STAT-03, STAT-04, STAT-05, STAT-06, STAT-07, SURF-01, SURF-02, SURF-03, SURF-04, SURF-05 (12) | Not started |
+| 262 | Delta Audit + Findings Consolidation | AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05, REG-01, REG-02, REG-03, REG-04 (9) | Not started |
 
-**Dependencies:** Phase 254 must precede Phase 255 (vote rejects empty slots, so the slate storage + setCharity must exist before vote/pickCharity can be rewritten against it). Phase 256 depends on Phases 254 + 255 (tests exercise the full surface). Phase 257 is terminal — depends on 254 + 255 + 256 (audit baseline is the post-test HEAD with all impl + tests landed).
+**Dependencies:** Phase 259 must precede Phase 260 (gold color tier — color==7 — must exist in the distribution before `_pickSoloQuadrant` can ever fire on a non-empty gold set). Phase 261 depends on Phases 259 + 260 (`weightedColorBucket` + `traitFromWord` are the units under empirical test; `_pickSoloQuadrant` is the unit under the gold-solo simulations + the gas-regression call envelope). Phase 262 is terminal — depends on 259 + 260 + 261 (audit baseline is the post-test HEAD with TRAIT + SOLO impl + STAT/SURF tests all landed).
 
-**Committable changes (gated on per-commit user approval per `feedback_no_contract_commits.md`):**
+**Atomicity constraint (Phase 260):** All 4 SOLO injection sites (lines 282, 349, 524, 1147) ship in one phase. Partial injection breaks split-mode coherence between line 349 and line 1147 — both consume identical `(randWord, lvl, EntropyLib.hash2)` inputs and MUST compute identical `effectiveEntropy` or `_resumeDailyEth` SPLIT_CALL2 reads against a stale bucket structure.
 
-- Phase 254: `contracts/GNRUS.sol` — allowlist storage layout, `setCharity(uint8, address)` admin entry point, view helpers, dead-state removal (proposals/levelVaultOwner/levelSdgnrsSnapshot/etc), storage repack
-- Phase 255: `contracts/GNRUS.sol` — `vote(uint8 slot)` rewrite, `pickCharity(uint24 level)` flush + winner-selection rewrite, `Voted` + `LevelResolved` event signature rewrites, error rename/cleanup
-- Phase 256: `test/governance/CharityAllowlist.test.js` (or similar) — Hardhat coverage for setCharity branches, vote, pickCharity, conservation, post-gameover inertness
-- Phase 257: `audit/FINDINGS-v33.0.md` + supporting `audit/v33-*.md` working files (writeable freely per write policy)
+**Committable changes (gated on per-commit user approval per `feedback_no_contract_commits.md`; batched per phase per `feedback_batch_contract_approval.md`):**
+
+- Phase 259: `contracts/DegenerusTraitUtils.sol` — `weightedColorBucket(uint32) → uint8` (8 branches at 256-resolution thresholds), `traitFromWord(uint64) → uint8` rewrite (`(color << 3) | symbol` composition), full removal of `weightedBucket(uint32)`. New test file under `test/unit/` (or equivalent) covering 16 boundary cases + bit-slice composition.
+- Phase 260: `contracts/modules/DegenerusGameJackpotModule.sol` — new private `_pickSoloQuadrant(uint8[4], uint256) → uint8` helper; 4 `effectiveEntropy` substitution sites at lines 282 / 349 / 524 / 1147; documented non-injection at lines 513, 527, 598, 599, 683, 1687, 1713, 1715. New unit + integration test files exercising `_pickSoloQuadrant` zero-gold / one-gold / multi-gold branches and the line-349 → line-1147 split-call determinism.
+- Phase 261: New Hardhat test directory (e.g. `test/stat/`) — 1M-sample empirical frequency / chi-squared independence / pack-feel CIs for `weightedColorBucket` + `traitFromWord`; gold-solo coverage + tie-break uniformity simulations for `_pickSoloQuadrant`; cross-surface preservation tests for hero override, deity-pass virtual entries, Degenerette match payouts, the 8 non-injection bonus-jackpot sites, and gas regression.
+- Phase 262: `audit/FINDINGS-v34.0.md` + supporting `audit/v34-*.md` working files (writeable freely per write policy). FINAL READ-only flip on terminal commit.
+
+**Write policy:** READ-only LIFTED for v34.0 (consistent with v32.0 + v33.0 audit posture). All `contracts/` + `test/` changes require explicit per-commit user approval per `feedback_no_contract_commits.md`. Phases that batch multiple contract edits use the batched approval pattern per `feedback_batch_contract_approval.md`.
 
 ## Deferred Items
 
@@ -123,6 +126,7 @@ Decisions and completed milestones logged in `.planning/PROJECT.md`.
 Detailed milestone retrospectives in `.planning/RETROSPECTIVE.md` (v31.0 section most recent).
 Archived milestone artifacts:
 
+- v33.0: `.planning/milestones/v33.0-ROADMAP.md`, `v33.0-REQUIREMENTS.md`, `v33.0-phases/`
 - v32.0: `.planning/milestones/v32.0-ROADMAP.md`, `v32.0-REQUIREMENTS.md`, `v32.0-phases/`
 - v31.0: `.planning/milestones/v31.0-ROADMAP.md`, `v31.0-REQUIREMENTS.md`, `v31.0-phases/`
 - v30.0: `.planning/milestones/v30.0-ROADMAP.md`, `v30.0-REQUIREMENTS.md`, `v30.0-phases/`
@@ -131,6 +135,7 @@ Archived milestone artifacts:
 
 Audit deliverables:
 
+- `audit/FINDINGS-v33.0.md` (FINAL READ-only at HEAD `4ce3703d740d3707c88a1af595618120a8168399`, ~750 lines, 9 sections + Phase 258 §3a/§4/§5/§9 updates; 9 of 9 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY; zero F-33-NN findings; closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` supersedes `MILESTONE_V33_AT_HEAD_dcb70941`)
 - `audit/FINDINGS-v32.0.md` (548 lines, 9 sections, FINAL READ-only at HEAD `acd88512`; 2 HIGH SUPERSEDED-at-HEAD F-32-NN disclosure blocks; closure signal `MILESTONE_V32_AT_HEAD_acd88512`)
 - `audit/v32-247-DELTA-SURFACE.md` through `audit/v32-252-POST31.md` (FINAL READ-only at HEAD `acd88512`; 6 v32 supporting working-file appendices)
 - `audit/FINDINGS-v31.0.md` (403 lines, 9 sections; 0 CRITICAL/HIGH/MEDIUM/LOW/INFO; closure signal `MILESTONE_V31_CLOSED_AT_HEAD_cc68bfc7`)
@@ -141,6 +146,6 @@ Audit deliverables:
 
 ## Global Project State
 
-- Contract tree at HEAD `acd88512` (v32.0 audit anchor) plus working-tree changes targeted by v33.0 charity allowlist work.
-- READ-only audit pattern carried forward v28.0–v31.0; **READ-only LIFTED for v32.0 + v33.0** — audit-then-commit (or impl-then-audit) with per-commit user approval per `feedback_no_contract_commits.md`. No agent commits contracts/ or test/ changes without explicit user review of the diff.
-- KNOWN-ISSUES.md: 4 accepted RNG-determinism exceptions (EXC-01 affiliate roll / EXC-02 prevrandao fallback / EXC-03 F-29-04 mid-cycle substitution / EXC-04 EntropyLib XOR-shift) — all re-verified non-widening at HEAD `acd88512` in v32.0 Phase 248 + Phase 250. v33.0 Phase 257 expects all four NEGATIVE-scope (charity governance does not touch any RNG-consuming path).
+- Contract tree at v33.0 HEAD `4ce3703d740d3707c88a1af595618120a8168399` (v34.0 audit anchor / baseline) — pre-v34.0 working tree.
+- READ-only audit pattern carried forward v28.0–v31.0; **READ-only LIFTED for v32.0 + v33.0 + v34.0** — audit-then-commit (or impl-then-audit) with per-commit user approval per `feedback_no_contract_commits.md`. No agent commits contracts/ or test/ changes without explicit user review of the diff. v34.0 phases that batch multiple contract edits use the batched approval pattern per `feedback_batch_contract_approval.md`.
+- KNOWN-ISSUES.md: 4 accepted RNG-determinism exceptions (EXC-01 affiliate roll / EXC-02 prevrandao fallback / EXC-03 F-29-04 mid-cycle substitution / EXC-04 EntropyLib XOR-shift) — all re-verified non-widening at HEAD `acd88512` in v32.0 Phase 248 + Phase 250; v33.0 Phase 257 re-verified all four NEGATIVE-scope at HEAD `4ce3703d`. v34.0 Phase 262 expects EXC-01..03 NEGATIVE-scope (no RNG touched besides `_pickSoloQuadrant` and the unchanged `_rollWinningTraits` / `traitFromWord` flow); EXC-04 (EntropyLib XOR-shift) requires extra attention because `_pickSoloQuadrant` tie-break consumes `entropy >> 4` bits which may be XOR-shift-derived in some upstream paths — empirical chi-squared evidence at STAT-05 covers the uniformity claim.
