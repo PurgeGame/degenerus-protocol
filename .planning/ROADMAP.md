@@ -50,7 +50,10 @@
   2. `traitFromWord(uint64)` composes `(color << 3) | symbol` where `color = weightedColorBucket(uint32(rnd))` and `symbol = uint8(rnd >> 32) & 7`; bottom 32 bits and top 32 bits of `rnd` drive disjoint axes (verified by isolated-bit unit tests).
   3. `packedTraitsFromSeed(uint256)` produces byte-identical quadrant flags (`| 64`, `| 128`, `| 192`) under the new color/symbol composition; existing byte-layout tests pass without modification.
   4. Hardhat unit-test surface for `weightedColorBucket` covers all 8 buckets at every threshold (16 boundary cases) and for `traitFromWord` covers the bit-slice composition end-to-end; suite green at the phase-close HEAD.
-**Plans:** TBD
+**Plans:** 3 plans (Wave 1: 259-01 library rewrite + 259-02 test harness in parallel; Wave 2: 259-03 Hardhat unit tests + TRAIT-04 audit gate + Foundry fuzz regression)
+- [x] 259-01-PLAN.md — Rewrite `contracts/DegenerusTraitUtils.sol` (weightedColorBucket + traitFromWord + terminology switch; legacy weightedBucket removed) [TRAIT-01..04] — staged uncommitted (D-10 batched approval)
+- [ ] 259-02-PLAN.md — Create `contracts/test/TraitUtilsTester.sol` external-pure harness exposing all 3 trait-utils functions [TRAIT-05, TRAIT-06]
+- [ ] 259-03-PLAN.md — Author `test/unit/DegenerusTraitUtils.test.js` (16 boundary + 4 composition + 6 byte-layout assertions); run TRAIT-04 grep gate; run unchanged Foundry fuzz regression; phase-end batched diff approval [TRAIT-04, TRAIT-05, TRAIT-06]
 
 ### Phase 260: Gold Solo Priority Injection
 
@@ -97,7 +100,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 259. Trait Distribution Split | 0/0 | Not started | - |
+| 259. Trait Distribution Split | 1/3 | Executing (Plan 01 staged uncommitted per D-10) | - |
 | 260. Gold Solo Priority Injection | 0/0 | Not started | - |
 | 261. Statistical Validation + Cross-Surface Verification | 0/0 | Not started | - |
 | 262. Delta Audit + Findings Consolidation | 0/0 | Not started | - |
