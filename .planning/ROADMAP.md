@@ -34,7 +34,7 @@
 ### v34.0 Trait Rarity Rework + Gold Solo Priority (Phases 259-262) — PLANNING
 
 - [x] **Phase 259: Trait Distribution Split** — Replace flat `weightedBucket` two-call composition with single 8-tier `weightedColorBucket` heavy-tail color distribution + uniform symbol; preserve `[QQ][CCC][SSS]` byte layout. (completed 2026-05-08)
-- [ ] **Phase 260: Gold Solo Priority Injection** — Add `_pickSoloQuadrant` helper to `DegenerusGameJackpotModule.sol` and inject `effectiveEntropy` substitution at all 4 ETH-split sites (lines 282, 349, 524, 1147) atomically.
+- [x] **Phase 260: Gold Solo Priority Injection** — Add `_pickSoloQuadrant` helper to `DegenerusGameJackpotModule.sol` and inject `effectiveEntropy` substitution at all 4 ETH-split sites (lines 282, 349, 524, 1147) atomically. (completed 2026-05-08)
 - [ ] **Phase 261: Statistical Validation + Cross-Surface Verification** — 1M-sample Monte Carlo + chi-squared infrastructure for color/symbol distributions; gold-solo coverage + tie-break uniformity simulations; pack-feel CIs; cross-surface preservation checks (hero override / deity-pass / Degenerette / bonus jackpot non-injection / gas regression).
 - [ ] **Phase 262: Delta Audit + Findings Consolidation** — Author `audit/FINDINGS-v34.0.md` 9-section deliverable (FINAL READ-only at HEAD); adversarial sweep over the trait + solo deltas; v33.0 + v32.0 closure signal regression; KI envelope re-verifications; emit closure signal `MILESTONE_V34_AT_HEAD_<sha>`.
 
@@ -66,7 +66,7 @@
   3. The 8 documented non-injection sites (lines 513, 527, 598, 599, 683, 1687, 1713, 1715) are byte-identical vs v33.0 baseline `4ce3703d` (grep + `git diff` verified) — events emit unchanged signatures and equal-split bucket distributions are unaffected.
   4. `JackpotBucketLib` is byte-identical vs v33.0 baseline; `soloBucketIndex(entropy) = (3 - (entropy & 3)) & 3` formula preserved; `traitBucketCounts` / `shareBpsByBucket` / `rotatedShareBps` rotation logic unchanged.
   5. Hardhat unit tests for `_pickSoloQuadrant` (0 / 1 / 2 / 3 / 4-gold cases plus 100K-entropy uniformity sanity) pass; SOLO-09 integration test exercising the line-349 → line-1147 SPLIT_CALL1 → SPLIT_CALL2 path with at least one gold winning trait passes (both calls land on the same gold quadrant; bucket totals reconstruct correctly across the split).
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -109,7 +109,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 259. Trait Distribution Split | 3/3 | Complete    | 2026-05-08 |
-| 260. Gold Solo Priority Injection | 3/3 | In progress (D-10 batched diff approval pending at phase-end checkpoint) | - |
+| 260. Gold Solo Priority Injection | 3/3 | Complete    | 2026-05-08 |
 | 261. Statistical Validation + Cross-Surface Verification | 0/0 | Not started | - |
 | 262. Delta Audit + Findings Consolidation | 0/0 | Not started | - |
 
