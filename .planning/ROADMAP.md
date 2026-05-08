@@ -66,7 +66,15 @@
   3. The 8 documented non-injection sites (lines 513, 527, 598, 599, 683, 1687, 1713, 1715) are byte-identical vs v33.0 baseline `4ce3703d` (grep + `git diff` verified) — events emit unchanged signatures and equal-split bucket distributions are unaffected.
   4. `JackpotBucketLib` is byte-identical vs v33.0 baseline; `soloBucketIndex(entropy) = (3 - (entropy & 3)) & 3` formula preserved; `traitBucketCounts` / `shareBpsByBucket` / `rotatedShareBps` rotation logic unchanged.
   5. Hardhat unit tests for `_pickSoloQuadrant` (0 / 1 / 2 / 3 / 4-gold cases plus 100K-entropy uniformity sanity) pass; SOLO-09 integration test exercising the line-349 → line-1147 SPLIT_CALL1 → SPLIT_CALL2 path with at least one gold winning trait passes (both calls land on the same gold quadrant; bucket totals reconstruct correctly across the split).
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+**Wave 1**
+- [ ] 260-01-PLAN.md — Add `_pickSoloQuadrant` helper + inject `effectiveEntropy` at 4 sites (L282/L349/L524/L1147) atomically [SOLO-01..07]; amend REQUIREMENTS.md SOLO-01/SOLO-08(d) wording per D-13/D-14
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 260-02-PLAN.md — Create `contracts/test/JackpotSoloTester.sol` external-pure passthrough + Hardhat unit tests SOLO-08(a/b/c/d): zero-gold rotation parity, one-gold deterministic return, 2/3/4-gold uniform-distribution chi-squared (p > 0.05) over 100K samples, tie-break bit-disjointness [SOLO-08]
+- [ ] 260-03-PLAN.md — Author SOLO-09 integration test exercising L349 SPLIT_CALL1 → L1147 SPLIT_CALL2 split-mode coherence with gold winning traits + present FULL phase batched diff for explicit user approval [SOLO-09]
 
 **Atomicity:** All 4 SOLO injection sites ship in one phase. Partial injection breaks split-mode coherence — line 349 (`payDailyJackpot` jackpot-phase) and line 1147 (`_resumeDailyEth` SPLIT_CALL2) MUST compute identical `effectiveEntropy` from identical `(randWord, lvl, EntropyLib.hash2)` inputs or `resumeEthPool` written by call 1 is consumed by call 2 against a stale bucket structure. Verified end-to-end via SOLO-09 integration test.
 
@@ -101,7 +109,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 259. Trait Distribution Split | 3/3 | Complete    | 2026-05-08 |
-| 260. Gold Solo Priority Injection | 0/0 | Not started | - |
+| 260. Gold Solo Priority Injection | 0/3 | Planned     | - |
 | 261. Statistical Validation + Cross-Surface Verification | 0/0 | Not started | - |
 | 262. Delta Audit + Findings Consolidation | 0/0 | Not started | - |
 
