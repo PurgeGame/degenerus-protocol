@@ -61,7 +61,7 @@
 **Depends on:** Phase 259 (gold color tier — color==7 — must exist in the distribution before `_pickSoloQuadrant` can ever fire on a non-empty gold set)
 **Requirements:** SOLO-01, SOLO-02, SOLO-03, SOLO-04, SOLO-05, SOLO-06, SOLO-07, SOLO-08, SOLO-09
 **Success Criteria** (what must be TRUE):
-  1. `_pickSoloQuadrant(uint8[4], uint256) → uint8` private pure helper present in `DegenerusGameJackpotModule.sol`: zero-gold input returns existing rotation index `uint8((3 - (entropy & 3)) & 3)` (matches v33.0 behavior); single-gold input always returns that quadrant index regardless of `entropy >> 4`; multi-gold input distributes uniformly via `goldQuads[uint8((entropy >> 4) & 3) % goldCount]` and uses bits *disjoint* from the bucket-rotation low-2-bits.
+  1. `_pickSoloQuadrant(uint8[4], uint256) → uint8` internal pure helper present in `DegenerusGameJackpotModule.sol`: zero-gold input returns existing rotation index `uint8((3 - (entropy & 3)) & 3)` (matches v33.0 behavior); single-gold input always returns that quadrant index regardless of `entropy >> 4`; multi-gold input distributes uniformly via `goldQuads[uint8((entropy >> 4) % goldCount)]` and uses bits *disjoint* from the bucket-rotation low-2-bits.
   2. All 4 ETH-distribution call sites (lines 282, 349, 524, 1147) substitute `effectiveEntropy` BEFORE every `JackpotBucketLib.shareBpsByBucket` / `bucketCountsForPoolCap` / `_processDailyEth` / `_executeJackpot` read; line-349 and line-1147 produce IDENTICAL `effectiveEntropy` from identical `(randWord, lvl, EntropyLib.hash2)` inputs (split-mode coherence — `resumeEthPool` written by call 1 is consumed by call 2 against the same bucket structure).
   3. The 8 documented non-injection sites (lines 513, 527, 598, 599, 683, 1687, 1713, 1715) are byte-identical vs v33.0 baseline `4ce3703d` (grep + `git diff` verified) — events emit unchanged signatures and equal-split bucket distributions are unaffected.
   4. `JackpotBucketLib` is byte-identical vs v33.0 baseline; `soloBucketIndex(entropy) = (3 - (entropy & 3)) & 3` formula preserved; `traitBucketCounts` / `shareBpsByBucket` / `rotatedShareBps` rotation logic unchanged.
@@ -73,7 +73,7 @@ Plans:
 - [x] 260-01-PLAN.md — Add `_pickSoloQuadrant` helper + inject `effectiveEntropy` at 4 sites (L282/L349/L524/L1147) atomically [SOLO-01..07]; amend REQUIREMENTS.md SOLO-01/SOLO-08(d) wording per D-13/D-14
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 260-02-PLAN.md — Create `contracts/test/JackpotSoloTester.sol` external-pure passthrough + Hardhat unit tests SOLO-08(a/b/c/d): zero-gold rotation parity, one-gold deterministic return, 2/3/4-gold uniform-distribution chi-squared (p > 0.05) over 100K samples, tie-break bit-disjointness [SOLO-08]
+- [x] 260-02-PLAN.md — Create `contracts/test/JackpotSoloTester.sol` external-pure passthrough + Hardhat unit tests SOLO-08(a/b/c/d): zero-gold rotation parity, one-gold deterministic return, 2/3/4-gold uniform-distribution chi-squared (p > 0.05) over 100K samples, tie-break bit-disjointness [SOLO-08] — staged uncommitted (D-10 batched approval); 13 Hardhat assertions passing; replaced LCG with keccak256-based PRNG (Deviation #1) for chi² stability
 - [ ] 260-03-PLAN.md — Author SOLO-09 integration test exercising L349 SPLIT_CALL1 → L1147 SPLIT_CALL2 split-mode coherence with gold winning traits + present FULL phase batched diff for explicit user approval [SOLO-09]
 
 **Atomicity:** All 4 SOLO injection sites ship in one phase. Partial injection breaks split-mode coherence — line 349 (`payDailyJackpot` jackpot-phase) and line 1147 (`_resumeDailyEth` SPLIT_CALL2) MUST compute identical `effectiveEntropy` from identical `(randWord, lvl, EntropyLib.hash2)` inputs or `resumeEthPool` written by call 1 is consumed by call 2 against a stale bucket structure. Verified end-to-end via SOLO-09 integration test.
@@ -109,7 +109,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 259. Trait Distribution Split | 3/3 | Complete    | 2026-05-08 |
-| 260. Gold Solo Priority Injection | 1/3 | In progress | - |
+| 260. Gold Solo Priority Injection | 2/3 | In progress | - |
 | 261. Statistical Validation + Cross-Surface Verification | 0/0 | Not started | - |
 | 262. Delta Audit + Findings Consolidation | 0/0 | Not started | - |
 
