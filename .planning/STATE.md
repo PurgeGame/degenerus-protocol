@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v34.0
 milestone_name: Trait Rarity Rework + Gold Solo Priority
 status: executing
-last_updated: "2026-05-08T16:19:47.873Z"
-last_activity: 2026-05-08
+last_updated: "2026-05-08T17:53:19.812Z"
+last_activity: 2026-05-08 -- Phase 261 planning complete
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 6
+  total_plans: 9
   completed_plans: 6
-  percent: 100
+  percent: 67
 ---
 
 # Project State
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-05-05 for v33.0 start; v34.0 carries the
 
 Phase: 261 of 3 (statistical validation + cross surface verification)
 Plan: Not started
-Status: Executing Phase 260 — phase-end checkpoint pending (Task 2 of Plan 03 — orchestrator-managed `checkpoint:human-verify` gate)
-Last activity: 2026-05-08
+Status: Ready to execute
+Last activity: 2026-05-08 -- Phase 261 planning complete
 
 ## Last Shipped Milestone
 
@@ -101,6 +101,14 @@ Last activity: 2026-05-08
 - Phase 262: `audit/FINDINGS-v34.0.md` + supporting `audit/v34-*.md` working files (writeable freely per write policy). FINAL READ-only flip on terminal commit.
 
 **Write policy:** READ-only LIFTED for v34.0 (consistent with v32.0 + v33.0 audit posture). All `contracts/` + `test/` changes require explicit per-commit user approval per `feedback_no_contract_commits.md`. Phases that batch multiple contract edits use the batched approval pattern per `feedback_batch_contract_approval.md`.
+
+## Next-Milestone Backlog (v35.0)
+
+Seeds captured for promotion via `/gsd-review-backlog` once v34.0 closes. Do NOT pull into v34.0.
+
+| Seed | Subsystem | Target | Notes |
+|------|-----------|--------|-------|
+| [burnie-near-future-per-pull-level-resample](notes/2026-05-08-burnie-near-future-per-pull-level.md) | jackpot-distribution | v35.0 | Per-pull random level for near-future BURNIE coin jackpot. Locked decisions: empty-bucket-skip, flat 50-pull loop with `trait_idx = i % 4`, deity caching, `lvl` in salt. Cross-milestone dep: Phase 261's chi-squared infra (reusable vs one-shot decides whether v35.0 needs new statistical-validation phase). Off-chain indexer flag: `JackpotBurnieWin.lvl` semantic shifts from "shared call level" to "per-pull sampled level". |
 
 ## Deferred Items
 

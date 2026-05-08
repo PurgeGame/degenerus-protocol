@@ -89,7 +89,10 @@ Plans:
   3. Pack-feel CIs over ≥100K 10-ticket packs: ≥1 notable-tier (color≥3) trait in 99.5% of packs; ≥1 rare-tier (color≥4) in 92.3%; ≥1 epic-tier (color≥5) in 71.7%; ≥1 legendary (color==7) in 27.0% — all targets within 99% Monte Carlo CIs.
   4. Cross-surface preservation: hero override (`_applyHeroOverride`) writes `(quadrant << 6) | (color << 3) | symbol` byte-identically (color is RNG-derived 3-bit literal slice — intentionally NOT through `weightedColorBucket`); existing Degenerette test suite passes unchanged; the 8 non-injection bonus-jackpot call sites (513, 527, 598, 599, 683, 1687, 1713, 1715) emit byte-identical events / produce byte-identical bucket distributions vs v33.0 baseline.
   5. Gas regression: `weightedColorBucket(uint32) → uint8` per-call delta within ±100 gas vs prior `weightedBucket(uint32) → uint8`; `_pickSoloQuadrant` per-call < 500 gas under worst-case (4-gold) input (theoretical worst case derived FIRST per `feedback_gas_worst_case.md`, then tested); total delta on `runTerminalJackpot` / `payDailyJackpot` / `_resumeDailyEth` < 2000 gas each.
-**Plans:** TBD
+**Plans:** 3/3 plans authored
+- [ ] 261-01-PLAN.md — TraitDistribution + boundary cross-validation [STAT-01, STAT-02, STAT-03]
+- [ ] 261-02-PLAN.md — GoldSoloCoverage + SoloEvUplift + PackFeel [STAT-04, STAT-05, STAT-06, STAT-07]
+- [ ] 261-03-PLAN.md — SurfaceRegression + Phase261GasRegression + REQUIREMENTS STAT-06 amendment + package.json test:stat [SURF-01, SURF-02, SURF-03, SURF-04, SURF-05]
 
 ### Phase 262: Delta Audit + Findings Consolidation
 
