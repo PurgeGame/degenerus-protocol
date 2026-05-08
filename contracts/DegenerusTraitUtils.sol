@@ -6,7 +6,7 @@ pragma solidity 0.8.34;
   |                      DEGENERUS TRAIT UTILS LIBRARY                           |
   |                                                                              |
   |  Pure utility library for deterministic trait generation from random seeds.  |
-  |  Used by ticket and trait sampling flows to derive deterministic traits.      |
+  |  Used by ticket and trait sampling flows to derive deterministic traits.     |
   |                                                                              |
   +==============================================================================+
   |                           TRAIT SYSTEM OVERVIEW                              |
@@ -15,14 +15,14 @@ pragma solidity 0.8.34;
   |  TRAIT ID STRUCTURE (8 bits per trait):                                      |
   |  +------------------------------------------------------------------------+  |
   |  |  Bits 7-6: Quadrant identifier (0-3)                                   |  |
-  |  |  Bits 5-3: Category bucket (0-7)                                       |  |
-  |  |  Bits 2-0: Sub-bucket (0-7)                                            |  |
+  |  |  Bits 5-3: Color tier (0-7)                                            |  |
+  |  |  Bits 2-0: Symbol (0-7)                                                |  |
   |  |                                                                        |  |
   |  |  Format: [QQ][CCC][SSS] = 8 bits                                       |  |
   |  |                                                                        |  |
-  |  |  • Quadrant: Which of 4 trait slots (A=0, B=1, C=2, D=3)               |  |
-  |  |  • Category: Main trait category (8 options, weighted distribution)    |  |
-  |  |  • Sub-bucket: Variant within category (8 options, weighted)           |  |
+  |  |  - Quadrant: Which of 4 trait slots (A=0, B=1, C=2, D=3)               |  |
+  |  |  - Color: Rarity tier (8 tiers, heavy-tail distribution)               |  |
+  |  |  - Symbol: Variant within color (8 options, uniform distribution)      |  |
   |  +------------------------------------------------------------------------+  |
   |                                                                              |
   |  PACKED TRAITS (32 bits total):                                              |
@@ -32,33 +32,34 @@ pragma solidity 0.8.34;
   |  |  Bits 15-8:  Trait B (quadrant 1)                                      |  |
   |  |  Bits 7-0:   Trait A (quadrant 0)                                      |  |
   |  |                                                                        |  |
-  |  |  [DDDDDDDD][CCCCCCCC][BBBBBBBB][AAAAAAAA] = 32 bits                     |  |
+  |  |  [DDDDDDDD][CCCCCCCC][BBBBBBBB][AAAAAAAA] = 32 bits                    |  |
+  |  |  Each trait byte: [QQ][CCC][SSS] (quadrant, color, symbol)             |  |
   |  +------------------------------------------------------------------------+  |
   |                                                                              |
-  |  WEIGHTED DISTRIBUTION:                                                      |
+  |  WEIGHTED DISTRIBUTION (color tier):                                         |
   |  +------------------------------------------------------------------------+  |
-  |  |  Bucket | Range    | Width | Probability                               |  |
-  |  |  -------+----------+-------+------------                               |  |
-  |  |    0    |  0-9     |  10   |  13.3%                                    |  |
-  |  |    1    | 10-19    |  10   |  13.3%                                    |  |
-  |  |    2    | 20-29    |  10   |  13.3%                                    |  |
-  |  |    3    | 30-39    |  10   |  13.3%                                    |  |
-  |  |    4    | 40-48    |   9   |  12.0%                                    |  |
-  |  |    5    | 49-57    |   9   |  12.0%                                    |  |
-  |  |    6    | 58-66    |   9   |  12.0%                                    |  |
-  |  |    7    | 67-74    |   8   |  10.7%                                    |  |
-  |  |  -------+----------+-------+------------                               |  |
-  |  |  Total: 75 (scaled from uint32 range)                                  |  |
+  |  |  Color | Range        | Width | Probability                            |  |
+  |  |  ------+--------------+-------+------------                            |  |
+  |  |    0   | [0, 64)      |  64   | 25.000%                                |  |
+  |  |    1   | [64, 128)    |  64   | 25.000%                                |  |
+  |  |    2   | [128, 192)   |  64   | 25.000%                                |  |
+  |  |    3   | [192, 224)   |  32   | 12.500%                                |  |
+  |  |    4   | [224, 240)   |  16   |  6.250%                                |  |
+  |  |    5   | [240, 248)   |   8   |  3.125%                                |  |
+  |  |    6   | [248, 254)   |   6   |  2.344%                                |  |
+  |  |    7   | [254, 256)   |   2   |  0.781%   <- gold tier (1-in-128)      |  |
+  |  |  ------+--------------+-------+------------                            |  |
+  |  |  Total: 256 (rarity ratio 32x between color 7 and colors 0/1/2)        |  |
   |  +------------------------------------------------------------------------+  |
   |                                                                              |
   |  RANDOM SEED USAGE:                                                          |
   |  +------------------------------------------------------------------------+  |
-  |  |  256-bit seed divided into 4 × 64-bit words:                           |  |
+  |  |  256-bit seed divided into 4 x 64-bit words:                           |  |
   |  |                                                                        |  |
-  |  |  [bits 255-192] → Trait D (category from low 32, sub from high 32)     |  |
-  |  |  [bits 191-128] → Trait C (category from low 32, sub from high 32)     |  |
-  |  |  [bits 127-64]  → Trait B (category from low 32, sub from high 32)     |  |
-  |  |  [bits 63-0]    → Trait A (category from low 32, sub from high 32)     |  |
+  |  |  [bits 255-192] -> Trait D (color from low 32, symbol from high 32)    |  |
+  |  |  [bits 191-128] -> Trait C (color from low 32, symbol from high 32)    |  |
+  |  |  [bits 127-64]  -> Trait B (color from low 32, symbol from high 32)    |  |
+  |  |  [bits 63-0]    -> Trait A (color from low 32, symbol from high 32)    |  |
   |  +------------------------------------------------------------------------+  |
   |                                                                              |
   +==============================================================================+
@@ -66,18 +67,18 @@ pragma solidity 0.8.34;
   +==============================================================================+
   |                                                                              |
   |  1. PURE FUNCTIONS:                                                          |
-  |     • No state reads/writes - purely computational                           |
-  |     • No external calls - no reentrancy risk                                 |
-  |     • Deterministic outputs from inputs                                      |
+  |     - No state reads/writes - purely computational                           |
+  |     - No external calls - no reentrancy risk                                 |
+  |     - Deterministic outputs from inputs                                      |
   |                                                                              |
   |  2. ARITHMETIC SAFETY:                                                       |
-  |     • Uses unchecked blocks for gas efficiency                               |
-  |     • All operations within safe bounds (no overflow possible)               |
-  |     • Scaling uses uint64 intermediate to prevent truncation                 |
+  |     - Uses unchecked blocks for gas efficiency                               |
+  |     - All operations within safe bounds (no overflow possible)               |
+  |     - Scaling uses uint64 intermediate to prevent truncation                 |
   |                                                                              |
   |  3. DETERMINISM:                                                             |
-  |     • Same tokenId always produces same traits (via keccak256)               |
-  |     • Critical for on-chain trait verification                               |
+  |     - Same tokenId always produces same traits (via keccak256)               |
+  |     - Critical for on-chain trait verification                               |
   |                                                                              |
   +==============================================================================+*/
 
@@ -89,40 +90,38 @@ pragma solidity 0.8.34;
 /// @custom:security-contact burnie@degener.us
 library DegenerusTraitUtils {
     /*+======================================================================+
-      |                      BUCKET DISTRIBUTION                             |
+      |                      COLOR TIER DISTRIBUTION                         |
       +======================================================================+
-      |  Maps random values to 0-7 with weighted probability distribution.   |
-      |  Lower buckets (0-3) have ~13.3% each, higher buckets less common.   |
+      |  Maps a 32-bit random input to a 0-7 color tier with the heavy-tail  |
+      |  distribution: 25% / 25% / 25% / 12.5% / 6.25% / 3.125% / 2.344% /   |
+      |  0.781%. Rarity ratio 32x between color 7 (gold) and colors 0/1/2.   |
       +======================================================================+*/
 
-    /// @notice Maps a 32-bit random input to a 0-7 bucket with weighted distribution
-    /// @dev Scales uint32 (0 to 2^32-1) down to 0-74 range, then maps to bucket.
-    ///      Uses uint64 intermediate to prevent overflow during scaling.
+    /// @notice Maps a 32-bit random input to a color tier 0-7 with heavy-tail probability
+    /// @dev Scales uint32 (0 to 2^32-1) into [0, 256) using uint64 intermediate to avoid overflow,
+    ///      then maps to a color tier via descending-probability thresholds.
     ///
-    ///      Bucket thresholds:
-    ///      - Bucket 0: scaled < 10  (width 10, ~13.3%)
-    ///      - Bucket 1: scaled < 20  (width 10, ~13.3%)
-    ///      - Bucket 2: scaled < 30  (width 10, ~13.3%)
-    ///      - Bucket 3: scaled < 40  (width 10, ~13.3%)
-    ///      - Bucket 4: scaled < 49  (width 9,  ~12.0%)
-    ///      - Bucket 5: scaled < 58  (width 9,  ~12.0%)
-    ///      - Bucket 6: scaled < 67  (width 9,  ~12.0%)
-    ///      - Bucket 7: scaled >= 67 (width 8,  ~10.7%)
+    ///      Color tier thresholds (256-resolution):
+    ///      - Color 0: scaled <  64  (25.000%)
+    ///      - Color 1: scaled < 128  (25.000%)
+    ///      - Color 2: scaled < 192  (25.000%)
+    ///      - Color 3: scaled < 224  (12.500%)
+    ///      - Color 4: scaled < 240  ( 6.250%)
+    ///      - Color 5: scaled < 248  ( 3.125%)
+    ///      - Color 6: scaled < 254  ( 2.344%)
+    ///      - Color 7: scaled >= 254 ( 0.781%, gold tier - 1-in-128)
     /// @param rnd 32-bit random input value
-    /// @return Bucket index 0-7 with weighted distribution
-    function weightedBucket(uint32 rnd) internal pure returns (uint8) {
+    /// @return Color tier 0-7 with heavy-tail distribution
+    function weightedColorBucket(uint32 rnd) internal pure returns (uint8) {
         unchecked {
-            // Scale uint32 to 0-74 range using 64-bit intermediate to prevent overflow
-            uint32 scaled = uint32((uint64(rnd) * 75) >> 32);
-
-            // Piecewise bucket assignment with descending probability for higher buckets
-            if (scaled < 10) return 0;
-            if (scaled < 20) return 1;
-            if (scaled < 30) return 2;
-            if (scaled < 40) return 3;
-            if (scaled < 49) return 4;
-            if (scaled < 58) return 5;
-            if (scaled < 67) return 6;
+            uint32 scaled = uint32((uint64(rnd) * 256) >> 32);
+            if (scaled < 64) return 0;
+            if (scaled < 128) return 1;
+            if (scaled < 192) return 2;
+            if (scaled < 224) return 3;
+            if (scaled < 240) return 4;
+            if (scaled < 248) return 5;
+            if (scaled < 254) return 6;
             return 7;
         }
     }
@@ -130,23 +129,21 @@ library DegenerusTraitUtils {
     /*+======================================================================+
       |                      TRAIT GENERATION                                |
       +======================================================================+
-      |  Derives 6-bit trait from 64-bit random word.                        |
-      |  Combines category (3 bits) and sub-bucket (3 bits).                 |
+      |  Derives a 6-bit trait from a 64-bit random word.                    |
+      |  Combines color tier (3 bits) and symbol (3 bits).                   |
       +======================================================================+*/
 
     /// @notice Produces a 6-bit trait ID from a 64-bit random value
-    /// @dev Uses low 32 bits for category bucket and high 32 bits for sub-bucket.
-    ///      Output format: [CCC][SSS] where C = category (bits 5-3), S = sub-bucket (bits 2-0).
+    /// @dev Color tier comes from the low 32 bits via `weightedColorBucket` (heavy-tail).
+    ///      Symbol comes from the high 32 bits as a uniform 3-bit slice (& 7).
+    ///      Output format: [CCC][SSS] where C = color tier (bits 5-3), S = symbol (bits 2-0).
     ///      Quadrant bits (bits 7-6) are added by the caller.
     /// @param rnd 64-bit random input value
     /// @return 6-bit trait ID (0-63, quadrant bits not included)
     function traitFromWord(uint64 rnd) internal pure returns (uint8) {
-        // Category from low 32 bits
-        uint8 category = weightedBucket(uint32(rnd));
-        // Sub-bucket from high 32 bits
-        uint8 sub = weightedBucket(uint32(rnd >> 32));
-        // Combine: category in bits 5-3, sub in bits 2-0
-        return (category << 3) | sub;
+        uint8 color = weightedColorBucket(uint32(rnd));
+        uint8 symbol = uint8(rnd >> 32) & 7;
+        return (color << 3) | symbol;
     }
 
     /*+======================================================================+
@@ -156,17 +153,17 @@ library DegenerusTraitUtils {
       +======================================================================+*/
 
     /// @notice Packs 4 quadrant traits derived from a 256-bit random seed into 32 bits
-    /// @dev Splits 256-bit seed into 4 × 64-bit words, generates 6-bit trait from each,
+    /// @dev Splits 256-bit seed into 4 x 64-bit words, generates 6-bit trait from each,
     ///      adds quadrant identifier, and packs into 32-bit value.
     ///
     ///      Seed usage:
-    ///      - bits [63:0]    → Trait A (quadrant 0)
-    ///      - bits [127:64]  → Trait B (quadrant 1)
-    ///      - bits [191:128] → Trait C (quadrant 2)
-    ///      - bits [255:192] → Trait D (quadrant 3)
+    ///      - bits [63:0]    -> Trait A (quadrant 0)
+    ///      - bits [127:64]  -> Trait B (quadrant 1)
+    ///      - bits [191:128] -> Trait C (quadrant 2)
+    ///      - bits [255:192] -> Trait D (quadrant 3)
     ///
     ///      Output format: [traitD:8][traitC:8][traitB:8][traitA:8]
-    ///      Each trait byte: [QQ][CCC][SSS] (quadrant, category, sub-bucket)
+    ///      Each trait byte: [QQ][CCC][SSS] (quadrant, color, symbol)
     /// @param rand 256-bit random seed (typically from keccak256)
     /// @return 32-bit packed traits value
     function packedTraitsFromSeed(uint256 rand) internal pure returns (uint32) {
