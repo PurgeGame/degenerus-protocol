@@ -48,12 +48,12 @@
 
 ### TRAIT — Color/Symbol Distribution Split (DegenerusTraitUtils.sol)
 
-- [ ] **TRAIT-01**: `weightedBucket(uint32)` replaced by `weightedColorBucket(uint32 rnd) internal pure returns (uint8)` — 256-resolution thresholds via `uint32 scaled = uint32((uint64(rnd) * 256) >> 32)`, 8 branches matching the color-tier table (`< 64 → 0`, `< 128 → 1`, `< 192 → 2`, `< 224 → 3`, `< 240 → 4`, `< 248 → 5`, `< 254 → 6`, else `7`). Function is deleted, not commented-out, per `feedback_no_history_in_comments.md`.
-- [ ] **TRAIT-02**: `traitFromWord(uint64 rnd) internal pure returns (uint8)` rewritten — `color = weightedColorBucket(uint32(rnd))`, `symbol = uint8(rnd >> 32) & 7`, return `(color << 3) | symbol`. Replaces the previous two-`weightedBucket`-call composition.
-- [ ] **TRAIT-03**: `packedTraitsFromSeed(uint256 rand)` and the `[QQ][CCC][SSS]` byte layout PRESERVED — quadrant tagging (`| 64`, `| 128`, `| 192`) unchanged; quadrant 2 bits, color 3 bits, symbol 3 bits.
-- [ ] **TRAIT-04**: No callers of the removed `weightedBucket` remain anywhere in `contracts/` (grep-reproducible: `grep -rn "weightedBucket" contracts/`). The function is fully removed; if any external caller is discovered (e.g. test file, off-chain script), classify and either refactor to call `weightedColorBucket` or document why preserving the old behavior is correct.
-- [ ] **TRAIT-05**: Unit tests for `weightedColorBucket` — boundary cases at every threshold (`scaled = 0, 63, 64, 127, 128, 191, 192, 223, 224, 239, 240, 247, 248, 253, 254, 255`) return the expected color tier. Covers all 8 buckets.
-- [ ] **TRAIT-06**: Unit tests for `traitFromWord` — verify `[CCC][SSS]` composition: bottom 32 bits drive color via `weightedColorBucket`, top 32 bits drive symbol via `& 7`. Verify byte layout unchanged for `packedTraitsFromSeed` (quadrant flags `0/64/128/192`).
+- [x] **TRAIT-01**: `weightedBucket(uint32)` replaced by `weightedColorBucket(uint32 rnd) internal pure returns (uint8)` — 256-resolution thresholds via `uint32 scaled = uint32((uint64(rnd) * 256) >> 32)`, 8 branches matching the color-tier table (`< 64 → 0`, `< 128 → 1`, `< 192 → 2`, `< 224 → 3`, `< 240 → 4`, `< 248 → 5`, `< 254 → 6`, else `7`). Function is deleted, not commented-out, per `feedback_no_history_in_comments.md`.
+- [x] **TRAIT-02**: `traitFromWord(uint64 rnd) internal pure returns (uint8)` rewritten — `color = weightedColorBucket(uint32(rnd))`, `symbol = uint8(rnd >> 32) & 7`, return `(color << 3) | symbol`. Replaces the previous two-`weightedBucket`-call composition.
+- [x] **TRAIT-03**: `packedTraitsFromSeed(uint256 rand)` and the `[QQ][CCC][SSS]` byte layout PRESERVED — quadrant tagging (`| 64`, `| 128`, `| 192`) unchanged; quadrant 2 bits, color 3 bits, symbol 3 bits.
+- [x] **TRAIT-04**: No callers of the removed `weightedBucket` remain anywhere in `contracts/` (grep-reproducible: `grep -rn "weightedBucket" contracts/`). The function is fully removed; if any external caller is discovered (e.g. test file, off-chain script), classify and either refactor to call `weightedColorBucket` or document why preserving the old behavior is correct.
+- [x] **TRAIT-05**: Unit tests for `weightedColorBucket` — boundary cases at every threshold (`scaled = 0, 63, 64, 127, 128, 191, 192, 223, 224, 239, 240, 247, 248, 253, 254, 255`) return the expected color tier. Covers all 8 buckets.
+- [x] **TRAIT-06**: Unit tests for `traitFromWord` — verify `[CCC][SSS]` composition: bottom 32 bits drive color via `weightedColorBucket`, top 32 bits drive symbol via `& 7`. Verify byte layout unchanged for `packedTraitsFromSeed` (quadrant flags `0/64/128/192`).
 
 ### SOLO — Gold-Solo Priority (DegenerusGameJackpotModule.sol)
 
