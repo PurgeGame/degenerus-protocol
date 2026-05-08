@@ -10,21 +10,42 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-**Active milestone:** _(none — v33.0 shipped 2026-05-07; ready for next milestone planning via `/gsd-new-milestone`)_
+**Active milestone:** v34.0 — Trait Rarity Rework + Gold Solo Priority (kicked off 2026-05-08 via `/gsd-new-milestone`)
 **Last shipped:** v33.0 — Charity Allowlist Governance (2026-05-07, tag `v33.0` pending push; supersedes initial closure at `dcb70941`)
-**Contract HEAD anchor:** `4ce3703d740d3707c88a1af595618120a8168399` (Phase 258-01 patched the original v33.0 closure HEAD `dcb70941` with FIX-01 pickCharity flush-after-payout reorder + FIX-02 `lastWinningRecipient` + `PreviousWinnerNotVotable()` vote-guard, structurally closing the queue-branch vote-redirect mechanism surfaced by the Phase 257 independent re-run)
-**Audit deliverables (cumulative):** `audit/FINDINGS-v25.0.md` + `FINDINGS-v27.0.md` + `FINDINGS-v28.0.md` + `FINDINGS-v29.0.md` + `FINDINGS-v30.0.md` + `FINDINGS-v31.0.md` + `FINDINGS-v32.0.md` + `FINDINGS-v33.0.md` (FINAL READ-only at HEAD `4ce3703d`, 9 sections + Phase 258 §3a/§4/§5/§9 updates) + 16 v30 supporting `audit/v30-*.md` + 5 v31 supporting `audit/v31-*.md` + 6 v32 supporting `audit/v32-*.md` artifacts; `KNOWN-ISSUES.md` (4 accepted-design RNG entries: EXC-01..04, all RE_VERIFIED NEGATIVE-scope at HEAD `4ce3703d` — charity governance has zero RNG interaction)
-**Awaiting user commit:** `test/edge/LastPurchaseDayRace.test.js` + `test/edge/BackfillIdempotency.test.js` (TST-FILE-01 + TST-FILE-02 from v32.0 Phase 251; remain untracked permanently per D-253-FIND04-04 — user reviews diff and runs `git add` + `git commit` separately if/when they choose to track)
+**Contract HEAD anchor:** `4ce3703d740d3707c88a1af595618120a8168399` (v33.0 closure HEAD; v34.0 baseline)
+**Audit deliverables (cumulative):** `audit/FINDINGS-v25.0.md` + `FINDINGS-v27.0.md` + `FINDINGS-v28.0.md` + `FINDINGS-v29.0.md` + `FINDINGS-v30.0.md` + `FINDINGS-v31.0.md` + `FINDINGS-v32.0.md` + `FINDINGS-v33.0.md` (FINAL READ-only at HEAD `4ce3703d`, 9 sections + Phase 258 §3a/§4/§5/§9 updates) + 16 v30 supporting `audit/v30-*.md` + 5 v31 supporting `audit/v31-*.md` + 6 v32 supporting `audit/v32-*.md` artifacts; `KNOWN-ISSUES.md` (4 accepted-design RNG entries: EXC-01..04, all RE_VERIFIED NEGATIVE-scope at HEAD `4ce3703d`)
+**Awaiting user commit:** `test/edge/LastPurchaseDayRace.test.js` + `test/edge/BackfillIdempotency.test.js` (TST-FILE-01 + TST-FILE-02 from v32.0 Phase 251; remain untracked permanently per D-253-FIND04-04)
 
-## Next Milestone Goals
+## Deferred to Future Milestones
 
-_TBD via `/gsd-new-milestone`. v34.0+ scope deferred — likely candidates per v33.0 archive `## Out of Scope` block:_
+_Carried forward from v33.0 archive `## Out of Scope` — not in v34.0 scope:_
 - Auditing post-v32.0 commits (`002bde55` presale auto-deactivate, `2713ce61` setDecimatorAutoRebuy removal)
-- Re-execute Phase 257 Task 7 manual red-team with `/contract-auditor` + `/zero-day-hunter` skill-spawn enabled (procedural open item carried in `.planning/STATE.md ## Deferred Items`; required if v33.0 deliverable is intended for external audit submission like a C4A warden contest)
+- Re-execute Phase 257 Task 7 manual red-team with `/contract-auditor` + `/zero-day-hunter` skill-spawn enabled (procedural open item required if v33.0 deliverable is intended for external audit submission like a C4A warden contest)
 
 ## Active Milestone
 
-_(none)_
+## Current Milestone: v34.0 Trait Rarity Rework + Gold Solo Priority
+
+**Goal:** Convert the trait system from its legacy flat distribution (designed for the original PurgeGame's strategic-trait gameplay) into a heavy-tail rarity system suited to a pure-chance jackpot product, and add a gold-trait priority rule so legendary winning traits always claim the 60% solo bucket at every ETH-distribution site.
+
+**Target features:**
+- **Color/Symbol distribution split** in `contracts/DegenerusTraitUtils.sol`: replace `weightedBucket` with `weightedColorBucket` (256-resolution thresholds, 3 commons at 25% each + geometric tail down to 0.78%, 32× rarity ratio between rarest and most common color) and a flat 12.5% symbol distribution (3-bit slice). Update `traitFromWord` to compose the two. Keep `packedTraitsFromSeed` and the `[QQ][CCC][SSS]` byte layout unchanged.
+- **Gold-solo priority** in `contracts/modules/DegenerusGameJackpotModule.sol`: add `_pickSoloQuadrant(uint8[4] traits, uint256 entropy)` helper that, when any winning trait has color 7 (gold), routes the solo bucket to a uniformly-chosen gold quadrant (option B tie-break — random among golds, preserves quadrant symmetry); falls through to existing rotation when no gold present. Inject at exactly the **4 ETH-distribution `_rollWinningTraits` consumer sites** with a meaningful solo bucket: line 282 (`runTerminalJackpot`), line 349 (`payDailyJackpot` jackpot-phase main), line 524 (`payDailyJackpot` purchase-phase main), and line 1147 (`_resumeDailyEth` call 2 — must produce identical effective entropy as line 349). The other 8 `_rollWinningTraits` sites (events 513/527/1713/1715, equal-split tickets/coin 598/599/1687, flat-bucket lootbox 683) intentionally NOT modified — verified to have no solo bucket structure.
+- **Statistical validation suite**: 1M-sample empirical frequency test for `weightedColorBucket` (within 3-sigma binomial bounds), color/symbol independence chi-squared, gold-solo coverage simulation (100% of draws with any gold land solo on a gold quadrant), uniform tie-break test (chi-squared p > 0.05 over 100K multi-gold draws), pack-feel CIs (≥1 legendary in 27% of 10-packs), ~3.3× solo-EV uplift sim for gold-trait holders.
+- **Cross-surface verification**: hero override (`_applyHeroOverride`) writes color from RNG bits / symbol from `dailyHeroWagers` — color logic preserved, symbol now uniform 12.5%; deity-pass virtual entries (floor(2% of bucket tickets) per symbol) operate cleanly on uniform symbol distribution; Degenerette match payouts unchanged byte layout; bonus-jackpot path (`_rollWinningTraits(_, true)`) unaffected (no solo bucket downstream).
+
+**Key context / constraints:**
+- Audit baseline: v33.0 contract HEAD `4ce3703d740d3707c88a1af595618120a8168399`
+- Trait byte layout `[QQ][CCC][SSS]` UNCHANGED — quadrant 2 bits, color 3 bits, symbol 3 bits
+- `JackpotBucketLib` UNCHANGED — gold-priority works by stuffing the chosen offset into the low 2 bits of `entropy` before passing downstream; existing rotation logic does the work
+- Bucket share BPS UNCHANGED: `[6000, 1333, 1333, 1334]` (final-day) and `[2000, 2000, 2000, 2000]` (daily/purchase) — no constants change
+- Bucket counts UNCHANGED: `[25, 15, 8, 1]` (daily) and `[20, 12, 6, 1]` (purchase) rotated by entropy
+- Tie-break decision: random-among-gold (option B) — preserves quadrant symmetry, no permanent bias toward q0
+- Hero override extension to color: OUT OF SCOPE (color stays RNG-only this milestone)
+- Solo-bucket caps/floors: explicitly OUT OF SCOPE — variance is the product
+- UI/UX rarity treatments, tier names (Common/Notable/Rare/Epic/Legendary), whitepaper updates: deferred to follow-on milestones once on-chain math ships
+- Solvency invariant (`claimablePool ≤ ETH balance + stETH balance`) preserved
+- Zero new external state, zero new admin functions, zero new upgrade hooks introduced
 
 ## Completed Milestone: v33.0 Charity Allowlist Governance (post-closure patch)
 
@@ -467,4 +488,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-07 — v33.0 Charity Allowlist Governance SHIPPED via Phase 258 post-closure patch (closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` supersedes `MILESTONE_V33_AT_HEAD_dcb70941`). 5 phases (254-258), 16 plans, 28/28 requirements satisfied. `audit/FINDINGS-v33.0.md` FINAL READ-only. Project ready for next milestone planning via `/gsd-new-milestone`.*
+*Last updated: 2026-05-08 — v34.0 Trait Rarity Rework + Gold Solo Priority kicked off via `/gsd-new-milestone`. Baseline contract HEAD `4ce3703d740d3707c88a1af595618120a8168399`. Scope: heavy-tail color distribution (32× rarity ratio) + flat symbol distribution in `DegenerusTraitUtils.sol`, gold-solo priority injection at 4 ETH-distribution `_rollWinningTraits` sites in `DegenerusGameJackpotModule.sol` (282, 349, 524, 1147), statistical validation suite, cross-surface verification. Requirements + roadmap pending.*
