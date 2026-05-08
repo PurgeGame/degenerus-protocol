@@ -74,7 +74,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [x] 260-02-PLAN.md — Create `contracts/test/JackpotSoloTester.sol` external-pure passthrough + Hardhat unit tests SOLO-08(a/b/c/d): zero-gold rotation parity, one-gold deterministic return, 2/3/4-gold uniform-distribution chi-squared (p > 0.05) over 100K samples, tie-break bit-disjointness [SOLO-08] — staged uncommitted (D-10 batched approval); 13 Hardhat assertions passing; replaced LCG with keccak256-based PRNG (Deviation #1) for chi² stability
-- [ ] 260-03-PLAN.md — Author SOLO-09 integration test exercising L349 SPLIT_CALL1 → L1147 SPLIT_CALL2 split-mode coherence with gold winning traits + present FULL phase batched diff for explicit user approval [SOLO-09]
+- [x] 260-03-PLAN.md — Author SOLO-09 integration test exercising L349 SPLIT_CALL1 → L1147 SPLIT_CALL2 split-mode coherence with gold winning traits + present FULL phase batched diff for explicit user approval [SOLO-09] — Strategy B (direct integration via Plan-02 JackpotSoloTester + off-chain replication of EntropyLib.hash2 + JackpotBucketLib.getRandomTraits + JackpotBucketLib.soloBucketIndex); 7 Hardhat assertions passing in ~104ms across 6 describe blocks; staged uncommitted (D-10 batched approval pending — phase-end Task 2 `checkpoint:human-verify` gate awaiting "approved — finalize phase 260 batched diff" from user); GOLD_RANDWORD craft re-derived for the v33.0/v34.0 production trait-roll path (Deviation #1 — CONTEXT.md `<interfaces>` described the Phase-259 weighted-color path; the production `_rollWinningTraits(_, false)` actually calls `JackpotBucketLib.getRandomTraits` raw 6-bit-per-quadrant)
 
 **Atomicity:** All 4 SOLO injection sites ship in one phase. Partial injection breaks split-mode coherence — line 349 (`payDailyJackpot` jackpot-phase) and line 1147 (`_resumeDailyEth` SPLIT_CALL2) MUST compute identical `effectiveEntropy` from identical `(randWord, lvl, EntropyLib.hash2)` inputs or `resumeEthPool` written by call 1 is consumed by call 2 against a stale bucket structure. Verified end-to-end via SOLO-09 integration test.
 
@@ -109,7 +109,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 259. Trait Distribution Split | 3/3 | Complete    | 2026-05-08 |
-| 260. Gold Solo Priority Injection | 2/3 | In progress | - |
+| 260. Gold Solo Priority Injection | 3/3 | In progress (D-10 batched diff approval pending at phase-end checkpoint) | - |
 | 261. Statistical Validation + Cross-Surface Verification | 0/0 | Not started | - |
 | 262. Delta Audit + Findings Consolidation | 0/0 | Not started | - |
 
