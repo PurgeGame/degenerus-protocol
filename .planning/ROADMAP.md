@@ -105,7 +105,8 @@ Plans:
   3. §3b conservation re-proof: solvency invariant (`claimablePool ≤ ETH balance + stETH balance`) PRESERVED across the trait/solo changes; pool-balance algebra unchanged because share BPS and bucket counts are unchanged — only the bucket-index assignment rotates.
   4. §5 regression: REG-01 PASS for v33.0 closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` non-widening (charity governance / GNRUS.sol untouched in v34.0 — FIX-01 + FIX-02 invariants preserved); REG-02 PASS for v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` non-widening (L173 + L1174 + GameStorage `_livenessTriggered` body byte-identical); REG-04 spot-check re-verifies every prior finding referencing `weightedBucket` / `traitFromWord` / `packedTraitsFromSeed` / `JackpotBucketLib` / `_rollWinningTraits` / `_executeJackpot` / `_processDailyEth` / `_runJackpotEthFlow` / `runTerminalJackpot` / `payDailyJackpot` / `_resumeDailyEth` with PASS / REGRESSED / SUPERSEDED grep-cited verdicts.
   5. §6 KI gating walk: EXC-01..04 RE_VERIFIED with EXC-04 (EntropyLib XOR-shift) extra-attention attestation cross-citing the STAT-05 chi-squared empirical evidence; KNOWN-ISSUES.md UNMODIFIED unless a new candidate passes the D-09 3-predicate gate (accepted-design + non-exploitable + sticky); §9c emits `MILESTONE_V34_AT_HEAD_<sha>` closure signal.
-**Plans:** TBD
+**Plans:** 1/1 plan authored
+- [ ] 262-01-PLAN.md — Author `audit/FINDINGS-v34.0.md` 9-section deliverable + `/contract-auditor` + `/zero-day-hunter` adversarial pass on §4 + ROADMAP/STATE/MILESTONES flips + closure signal `MILESTONE_V34_AT_HEAD_<sha>` (single-plan multi-task atomic-commit pattern, 13 tasks; mirrors v33 Phase 257 + v32 Phase 253) [AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05, REG-01, REG-02, REG-03, REG-04]
 
 ## Progress
 
