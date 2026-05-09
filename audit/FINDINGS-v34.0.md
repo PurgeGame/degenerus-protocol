@@ -560,3 +560,50 @@ Phase 259 → 260 → 261 → 262 forward-cite closure: **0/0 Phase 259-261 resi
 **Combined §8 forward-cite emission: ZERO.** Forward-cite zero-emission is a terminal-phase invariant per D-262 carry of D-257-FCITE-01. `re-verified at HEAD <sha>`.
 
 ---
+
+## 9. Milestone Closure Attestation
+
+Closure attestation block per D-253-15 step 9 + D-262-CLOSURE-01 + D-262-CLOSURE-02. Verifies the 9 Phase 262 requirements (AUDIT-01..05, REG-01..04) and emits the milestone-closure signal `MILESTONE_V34_AT_HEAD_<sha>` triggering /gsd-complete-milestone for v34.0.
+
+### 9a. Verdict Distribution Summary
+
+| Requirement | Closure Verdict | Evidence Section |
+| --- | --- | --- |
+| AUDIT-01 | `CLOSED_AT_HEAD_<sha>` | §3d delta-surface tables (Part A: TraitUtils + Part B: JackpotModule + Part C: downstream callers) (Task 3) |
+| AUDIT-02 | `6 of 6 surfaces SAFE_*; 0 of 0 FINDING_CANDIDATE PROMOTED` (default per D-262-FIND-01; Surface (f) added per Task 7 disposition with verdict `SAFE_BY_DESIGN`) | §4 6-surface row table + §4b closing attestation (Tasks 5 + 7b) + §6a Non-Promotion Ledger (Task 9) |
+| AUDIT-03 | `CLOSED_AT_HEAD_<sha>` | §3e conservation re-proof rows (Task 4) |
+| AUDIT-04 | `CLOSED_AT_HEAD_<sha>` (zero new public/external mutation entry points; zero new storage slots) | §3d AUDIT-04 sub-section (Task 3) |
+| AUDIT-05 | `MILESTONE_V34_AT_HEAD_<sha>` emitted in §9c | §9c (this section) |
+| REG-01 | `1 PASS row — v33.0 closure signal MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399 NON-WIDENING at v34 HEAD` | §5a (Task 8) |
+| REG-02 | `1 PASS row — v32.0 closure signal MILESTONE_V32_AT_HEAD_acd88512 NON-WIDENING at v34 HEAD` | §5b (Task 8) |
+| REG-03 | `4 KI envelopes RE_VERIFIED: EXC-01..03 NEGATIVE-scope + EXC-04 RE_VERIFIED with STAT-05 cross-cite; KNOWN_ISSUES_UNMODIFIED` | §6b (Task 9) |
+| REG-04 | `4 PASS / 0 REGRESSED / 0 SUPERSEDED prior-finding spot-check rows` | §5c (Task 9) |
+
+### 9b. 6-Point Attestation Items
+
+1. **HEAD anchor verified** — Source-tree HEAD at v34.0 milestone close = `<sha>` (per D-262-CLOSURE-01: source-tree HEAD post-Phase-262 close; Phase 262 emits ZERO source-tree mutations per CONTEXT.md hard constraint #1, so the source-tree HEAD = `6b63f6d4daf346a53a1d463790f637308ea8d555` is stable across Phase 262 docs-only commits). Audit baseline = v33.0 contract-tree HEAD `4ce3703d740d3707c88a1af595618120a8168399` (closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` carry-forward). 5 v34 contract-tree commits since baseline (`301f7fad`, `031a8cbc`, `2fa7fb6e`, `1574d533`, `a6c4f18a`) + 8 v34 test-tree commits (`d67b8ac3`, `2fa7fb6e` combined feat+test, `2eafdde8`, `197c8197`, `2d4152a4`, `4e3e7a5e`, `4e015d2e`, `00de73ed`).
+
+2. **Phase 259 / 260 / 261 deliverables FINAL READ-only** — per `feedback_no_contract_commits.md` + carry-forward chain, all upstream Phase 259/260/261 SUMMARY artifacts are user-acknowledged closure summaries; ROADMAP §"Phase 259" / §"Phase 260" / §"Phase 261" rows marked `[x]` complete pre-Phase-262 (Phase 261 marked complete via `docs(261): verification report` at HEAD `6b63f6d4`). Phase 262 makes zero `contracts/` writes + zero `test/` writes per CONTEXT.md hard constraint #1 — verified by `git log --grep="audit(262-01)" --name-only --pretty=format: | grep -v "^$" | sort -u` returning only `audit/FINDINGS-v34.0.md` + `.planning/...` paths.
+
+3. **Zero forward-cites emitted by Phase 259-262** — per §8 Forward-Cite Closure: §8a `ZERO_PHASE_262_BOUND_FORWARD_CITES_RESIDUAL` + §8b `ZERO_PHASE_262_FORWARD_CITES_EMITTED` + §8c combined verdict `0/0 residuals + 0/0 emissions = milestone boundary closed`. Backlog deferral annotations in `.planning/notes/` (e.g., the burnie-near-future-per-pull-level-resample seed) are deferral annotations per `feedback_no_dead_guards.md`, NOT phase-bound forward-cite emissions.
+
+4. **KI envelope re-verifications confirmed** — EXC-01 affiliate / EXC-02 gameover-prevrandao / EXC-03 gameover-RNG-substitution all NEGATIVE-scope at v34 per §6b 4-row table (v34 trait/solo path has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction). EXC-04 EntropyLib XOR-shift RE_VERIFIED at v34 with STAT-05 chi² empirical cross-cite (`test/stat/GoldSoloCoverage.test.js:159-209`, 100K samples per goldCount ∈ {2,3,4} with critical values {3.841, 5.991, 7.815} at α=0.05). KNOWN-ISSUES.md UNMODIFIED at HEAD `<sha>` per D-262-KI-01 default path — `git diff 4ce3703d740d3707c88a1af595618120a8168399..HEAD -- KNOWN-ISSUES.md` returns empty.
+
+5. **Severity distribution attested** — CRITICAL 0 / HIGH 0 / MEDIUM 0 / LOW 0 / INFO 0; total F-34-NN = 0 (zero finding blocks emitted per D-262-FIND-01 default path; 6 of 6 §4 surfaces (a..f) verdicted SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE at HEAD `<sha>` — Surface (f) added per Task 7 user disposition as the 6th surface, intended skill-expression channel for high-engagement Degenerette wagerers; SAFE_BY_DESIGN). Reconciles to §2 Severity Counts line by line per ROADMAP success criterion 1 + matches §4b closing attestation tally.
+
+6. **Combined milestone closure signal** — `MILESTONE_V34_AT_HEAD_<sha>`. All 9 Phase 262 requirements (AUDIT-01..05, REG-01..04) closed per §9a. The 4 KNOWN-ISSUES.md RNG entries (EXC-01..04) verified unchanged at HEAD per D-262-KI-01 default UNMODIFIED path. Milestone closure triggers /gsd-complete-milestone for v34.0 per D-262-CLOSURE-01. Post-v34.0 milestones boot from this signal with a fresh baseline of `<sha>`.
+
+### 9c. Milestone v34.0 Closure Signal
+
+v34.0 milestone **Trait Rarity Rework + Gold Solo Priority** is CLOSED at HEAD `<sha>` via this attestation. v34.0 = Phases 259-262 (4 phases, 10 plans, 36 requirements). Phase 262 = terminal phase per ROADMAP terminal-phase rule + D-253-15 step 9 + D-262-CLOSURE-01. Per D-262-CLOSURE-01 + D-257-CLOSURE-01 / D-253-FIND04-02 precedent: closure signal SHA references the source-tree-mutation-inclusive HEAD at signal-emission time. Phase 262 emits zero source-tree mutations (pure-consolidation phase per CONTEXT.md hard constraint #1); `<sha>` is the source-tree HEAD at Phase 262 close. v34.0 supersedes none (this is the FIRST emission of `MILESTONE_V34_AT_HEAD_<sha>`).
+
+```
+MILESTONE_V34_AT_HEAD_<sha>
+```
+
+```bash
+$ git rev-parse HEAD
+<sha>  # source-tree HEAD at Phase 262 Task 13 atomic commit creation time (Phase 262 docs-tree commits do not advance the source-tree HEAD per D-262-CLOSURE-01; signal references the source-tree HEAD)
+```
+
+---
