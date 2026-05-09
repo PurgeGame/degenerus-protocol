@@ -387,4 +387,84 @@ git diff acd88512..HEAD -- contracts/storage/DegenerusGameStorage.sol | grep "_l
 
 **REG-01 + REG-02 closing attestation:** REG-01 + REG-02: 2 PASS / 0 REGRESSED / 0 SUPERSEDED. v33.0 closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` re-verified non-widening at v34 HEAD `<sha>`; v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` re-verified non-widening (L173 + L1174 + GameStorage `_livenessTriggered` body byte-identical). `re-verified at HEAD <sha>`.
 
+### 5c. REG-04 — Prior-Finding Spot-Check Sweep
+
+Per D-262-REG04-01: defensive grep walk across `audit/FINDINGS-v25.0.md` through `audit/FINDINGS-v33.0.md` for any prior finding referencing the v34-touched function set: `weightedBucket`, `traitFromWord`, `packedTraitsFromSeed`, `JackpotBucketLib`, `_rollWinningTraits`, `_executeJackpot`, `_processDailyEth`, `_runJackpotEthFlow`, `runTerminalJackpot`, `payDailyJackpot`, `_resumeDailyEth`, or any solo-bucket-adjacent path. Recipe:
+
+```bash
+for f in audit/FINDINGS-v25.0.md audit/FINDINGS-v27.0.md audit/FINDINGS-v28.0.md audit/FINDINGS-v29.0.md audit/FINDINGS-v30.0.md audit/FINDINGS-v31.0.md audit/FINDINGS-v32.0.md audit/FINDINGS-v33.0.md; do
+  grep -nE '(weightedBucket|traitFromWord|packedTraitsFromSeed|JackpotBucketLib|_rollWinningTraits|_executeJackpot|_processDailyEth|_runJackpotEthFlow|runTerminalJackpot|payDailyJackpot|_resumeDailyEth|soloBucket)' "$f"
+done
+```
+
+Default expectation per D-262-REG04-01: ALL rows PASS — no v34 change widens or regresses any prior finding's structural-closure proof. Trait/solo deltas preserve all prior invariants since (a) bucket-share-sum × pool is invariant under bucket-index rotation; (b) JackpotBucketLib is byte-identical at v34 (SOLO-07 carry — see §3e row 2); (c) no new ETH-pool credit/debit path introduced; (d) ticket-mint-time `traitFromWord` is signature-unchanged with byte layout `[QQ][CCC][SSS]` preserved (TRAIT-03 REFACTOR_ONLY — see §3d Part A row 3).
+
+Rows grouped by source-FINDINGS file (one row per file with hits).
+
+| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| `REG-v25.0-PROCESS-DAILY-ETH` | `audit/FINDINGS-v25.0.md:222` — `_processDailyEth` listed in the ETH-distribution function inventory under the Phase 215-02 fresh-eyes RNG audit. | `4ce3703d..<sha>` | `_processDailyEth` body in v34 consumes `effectiveEntropy` after the SOLO-03 substitution at JackpotModule `:454-500`; share-BPS-sum × pool invariant preserved per §3e row 1; v34 changes are confined to the bucket-index assignment (which quadrant gets the solo bucket) — total ETH per call unchanged. | v25.0 source row was a function-inventory cite, not a finding row — `_processDailyEth` was classified SAFE in v25 with no exploit path identified; v34 preserves all v25 invariants because bucket-share-sum × pool is invariant under bucket-index rotation (`JackpotBucketLib.shareBpsByBucket(packed, offset)` reads slot `(packed >> ((3 - ((offset + i) & 3)) * 16)) & 0xFFFF` for `i ∈ {0,1,2,3}` — sum over `i` is invariant under offset rotation modulo 4). §3e row 1 + §3d Part B row 3 (`payDailyJackpot daily-jackpot main path effectiveEntropy substitution`) cross-cite. | **PASS** |
+| `REG-v27.0-DAILY-JACKPOT-DELEGATECALL` | `audit/FINDINGS-v27.0.md:278` — IN-222-01 `payDailyCoinJackpot` direct delegatecall observation noting `payDailyJackpot`, `payDailyCoinJackpot`, `distributeYieldSurplus` lack `OnlyGame()` guards, so direct delegatecall remains correct. | `4ce3703d..<sha>` | `payDailyJackpot` at JackpotModule `:454-500` (daily SPLIT_CALL1) + `:531-558` (purchase-phase) — function still has no `OnlyGame()` modifier; AdvanceModule `payDailyCoinJackpot` direct-delegatecall path unchanged in v34. | v27.0 observation was informational (delegatecall-alignment forward-looking gate), not a finding requiring closure. v34 modifies the BODY of `payDailyJackpot` (4 effectiveEntropy substitutions per SOLO-02..05) but does NOT add an `OnlyGame()` guard or change the delegatecall surface — the v27 observation remains accurate at v34 HEAD. SURF-04 SurfaceRegression test (`test/stat/SurfaceRegression.test.js`) confirms structural byte-identity for the 8 non-injection sites adjacent to the modified entry points. §3d Part B rows 3-5 cross-cite. | **PASS** |
+| `REG-v29.0-JACKPOTBUCKETLIB-PACK` | `audit/FINDINGS-v29.0.md:57` — Phase 233-01 domain-collision sweep cited `JackpotBucketLib.packWinningTraits` + `JackpotBucketLib.unpackWinningTraits` as the only narrowing consumers of `winningTraitsPacked` field. v29.0 also cited `payDailyJackpot` + `payDailyCoinJackpot` + `distributeYieldSurplus` at F-27-15 PASS row (`audit/FINDINGS-v29.0.md:231`) re-confirming the v27 IN-222-01 delegatecall observation. | `4ce3703d..<sha>` | `JackpotBucketLib.packWinningTraits` + `JackpotBucketLib.unpackWinningTraits` byte-identical at v34 per `git diff 4ce3703d740d3707c88a1af595618120a8168399..HEAD -- contracts/libraries/JackpotBucketLib.sol` returns empty (SOLO-07 carry). | v29 F-27-15 + 420-sentinel domain-collision proof both rest on JackpotBucketLib byte-identity; v34 preserves that byte-identity (zero hunks per §3e row 2). The `traitId=420` sentinel injected at `runBafJackpot` is in `runBafJackpot` (NOT touched by v34 — only `runTerminalJackpot` + `payDailyJackpot` + `_resumeDailyEth` are touched). All v29 invariants preserved at v34 HEAD. | **PASS** |
+| `REG-v30.0-JACKPOT-RNG-CLUSTER` | `audit/FINDINGS-v30.0.md:174-216` — INV-237-080 through INV-237-122 cluster of 28 RNG-cluster invariant rows covering `runTerminalJackpot` / `payDailyJackpot` / `_executeJackpot` / `_resumeDailyEth` / `_processDailyEth` / `_rollWinningTraits` / `JackpotBucketLib` consumers; all classified `respects-rngLocked` SAFE. Plus REG-v25.0-004/005/007 rows at `:578-581` (re-verifying v25.0 RNG fresh-eyes invariants). | `4ce3703d..<sha>` (5 v34 contract source commits + 8 v34 test commits — 4 effectiveEntropy substitution sites added to `runTerminalJackpot` + `payDailyJackpot` (×2) + `_resumeDailyEth`) | All 28 INV-237-NN cluster rows + 3 REG-v25.0 cross-cite rows at v34 HEAD: `_pickSoloQuadrant` is `internal pure` (no storage reads, no `block.*` access, no external calls — does not consume or set `rngLockedFlag`); the 4 effectiveEntropy substitutions occur AFTER the upstream RNG word commitment (per Phase 261 SOLO-09 split-call coherence proof); rngLockedFlag state machine unchanged. JackpotBucketLib byte-identical (§3e row 2). | All v30 RNG-cluster invariants preserved at v34: (a) `respects-rngLocked` for all 28 rows because no v34 change reads or writes `rngLockedFlag` outside the existing v30 surface; (b) `_pickSoloQuadrant` (NEW v34) is purely a deterministic function of pre-existing trait + entropy inputs that are themselves committed at draw time per the v30 RNG-LOCK state machine (`audit/v30-RNGLOCK-STATE-MACHINE.md`); (c) effectiveEntropy substitution rotates bucket-index assignment but does not rotate or extend the RNG-commitment window (SOLO-09 cross-cite proves SPLIT_CALL1 ↔ SPLIT_CALL2 produce IDENTICAL effectiveEntropy from identical (randWord, lvl, EntropyLib.hash2) inputs). §3e row 5 (split-mode coherence) + Phase 261 SURF-04 byte-identity carrier. | **PASS** |
+
+**§5c distribution at HEAD `<sha>`: 4 PASS / 0 REGRESSED / 0 SUPERSEDED.** Each row carries `re-verified at HEAD <sha>` per the row evidence cell. v25 + v27 + v29 + v30 prior-finding spot-checks all hold at v34 HEAD because (a) JackpotBucketLib is byte-identical (§3e row 2 / SOLO-07 carry); (b) bucket-share-sum × pool is invariant under bucket-index rotation (§3e row 1); (c) `_pickSoloQuadrant` is `internal pure` and does not interact with the v30 RNG-LOCK state machine; (d) v34 modifies only `DegenerusTraitUtils.sol` + `DegenerusGameJackpotModule.sol` (the two AUDIT-01 subject sources) — out-of-scope contracts (AdvanceModule, GNRUS, MintModule, Degenerette, BurnieCoinflip, etc.) are byte-identical at v34. Files `audit/FINDINGS-v28.0.md`, `audit/FINDINGS-v31.0.md`, `audit/FINDINGS-v32.0.md`, `audit/FINDINGS-v33.0.md` returned zero hits — those milestones target database/API alignment (v28), gameover-edge-case re-audit (v31), backfill idempotency / purchaseLevel underflow (v32), and charity allowlist governance (v33), all functionally orthogonal to the v34 trait/solo path; vacuous PASS for those four files (no rows emitted).
+
+### 5d. Combined REG-01..04 Distribution at HEAD `<sha>`
+
+5-column table per D-262-REG04-01 + D-253-REG01-03 closed-set verdict taxonomy. REG-03 KI envelope re-verifications routed to §6b standalone subsection per planner discretion (CONTEXT.md `<decisions>` Claude's Discretion).
+
+| Verdict | REG-01 | REG-02 | REG-04 | Combined |
+| --- | --- | --- | --- | --- |
+| PASS | 1 | 1 | 4 | 6 |
+| REGRESSED | 0 | 0 | 0 | 0 |
+| SUPERSEDED | 0 | 0 | 0 | 0 |
+| **Total** | **1** | **1** | **4** | **6** |
+
+**Closing §5 attestation:** REG-01 + REG-02 + REG-04 combined: 6 PASS / 0 REGRESSED / 0 SUPERSEDED at HEAD `<sha>`. REG-03 KI envelope re-verifications routed to §6b standalone subsection per planner discretion (4 envelopes EXC-01..04 RE_VERIFIED with EXC-04 STAT-05 chi² cross-cite). `re-verified at HEAD <sha>`.
+
+---
+
+## 6. KI Gating Walk + Non-Promotion Ledger
+
+Per ROADMAP success criterion 5 + REG-03: KI envelopes EXC-01..04 RE_VERIFIED at v34 HEAD. EXC-01..03 NEGATIVE-scope (v34 trait/solo path does not consume affiliate-roll RNG / gameover prevrandao / mid-cycle write-buffer ticket substitution). EXC-04 (EntropyLib XOR-shift PRNG) RE_VERIFIED with extra-attention attestation cross-citing STAT-05 chi² empirical evidence per D-262-KI-01. KNOWN-ISSUES.md UNMODIFIED expected per D-262-FIND-01 default zero-promotion path.
+
+D-09 KI-eligibility 3-predicate test (verbatim from v30 D-09 / v31 D-06 / v32 D-09 / v33 carry):
+
+1. **Accepted-design predicate** — behavior is intentional / documented / load-bearing for the protocol's design (not an oversight or accident).
+2. **Non-exploitable predicate** — no player-reachable path produces material value extraction or determinism break (severity ≤ INFO under D-08).
+3. **Sticky predicate** — the item describes ongoing protocol behavior, not a one-time event or transient state.
+
+A candidate qualifies for KI promotion (verdict `KI_ELIGIBLE_PROMOTED`) iff **all three predicates PASS**. ANY false ⇒ Non-Promotion Ledger entry with the failing predicate identified. Default outcome at this milestone per D-262-KI-01: `KNOWN-ISSUES.md` UNMODIFIED — zero F-34-NN finding blocks → zero KI promotion candidates. Any v34-discovered finding-candidate would FAIL the **sticky** predicate (v34 trait/solo surface is freshly-landed not "ongoing protocol behavior" until the next milestone).
+
+### 6a. Non-Promotion Ledger (zero rows by default per D-262-KI-01)
+
+| F-34-NN ID | Severity | Accepted-Design | Non-Exploitable | Sticky | KI_ELIGIBLE? | Disposition |
+| --- | --- | --- | --- | --- | --- | --- |
+| _(zero rows — default path per D-262-FIND-01 + D-262-KI-01)_ | — | — | — | — | — | — |
+
+**No F-34-NN candidates surfaced** from the §4 6-surface row table (a..f) + Task 6 adversarial validation pass + Task 7 disposition. The Task 7 user-disposed Surface (f) (hero override × gold-priority composition) was added to §4a as a 6th surface verdicted `SAFE_BY_DESIGN` (intended skill-expression channel for high-engagement Degenerette wagerers) — NOT promoted to F-34-NN block. Per D-262-KI-01 + D-262-FIND-01: zero F-34-NN finding blocks → zero KI promotion candidates → §6a zero-row default.
+
+### 6b. KI Envelope Re-Verifications
+
+Per D-262-KI-01: the 4 accepted RNG exceptions in `KNOWN-ISSUES.md` are RE_VERIFIED at HEAD `<sha>` for envelope-non-widening only. v34 trait/solo path has minimal RNG-consuming interaction (only `_pickSoloQuadrant` consumes `entropy >> 4` bits for tie-break, where `entropy` is upstream VRF-derived per Phase 261 SURF-04 + the EntropyLib path). EXC-01..03 are NEGATIVE-scope at v34. EXC-04 is RE_VERIFIED with STAT-05 chi² cross-cite per D-262-KI-01.
+
+| KI ID | Description | Carrier (v33 attestation carry) | Subject at HEAD `<sha>` | Verdict | Cross-Cite |
+| --- | --- | --- | --- | --- | --- |
+| **EXC-01** | Non-VRF entropy for affiliate winner roll (deterministic seed; gas optimization) | n/a (NEGATIVE-scope at v34; trait/solo path does not consume affiliate-roll RNG) | Affiliate roll path in MintModule untouched by any v34 source commit; v34 trait/solo surface has zero affiliate-roll interaction; `DegenerusAffiliate.sol` byte-identical between baseline `4ce3703d` and v34 HEAD `<sha>`. | **NEGATIVE-scope at v34** | KNOWN-ISSUES.md EXC-01 entry intact at HEAD `<sha>`; v33 §6b NEGATIVE-scope carries forward |
+| **EXC-02** | Gameover prevrandao fallback (`_getHistoricalRngFallback` at AdvanceModule:1301; activates only when in-flight VRF request stays unfulfilled for 14+ days) | n/a (NEGATIVE-scope at v34; AdvanceModule untouched) | AdvanceModule prevrandao site untouched by v34; sole prevrandao consumer remains AdvanceModule `_getHistoricalRngFallback`; trait/solo path does not invoke gameover RNG fallback. `git diff 4ce3703d..HEAD -- contracts/modules/DegenerusGameAdvanceModule.sol` returns empty. | **NEGATIVE-scope at v34** | KI EXC-02 entry intact at HEAD `<sha>`; v33 + v32 BFL-05 dual-carrier carries forward |
+| **EXC-03** | Gameover RNG substitution for mid-cycle write-buffer tickets / F-29-04 class (`_swapAndFreeze` at AdvanceModule:292 + `_swapTicketSlot` at AdvanceModule:1082 + `_gameOverEntropy` at AdvanceModule:1222-1246) | n/a (NEGATIVE-scope at v34; AdvanceModule untouched) | `_swapAndFreeze` / `_swapTicketSlot` / `_gameOverEntropy` sites untouched by v34; trait/solo path has zero ticket / RNG-substitution interaction. `git diff 4ce3703d..HEAD -- contracts/modules/DegenerusGameAdvanceModule.sol` returns empty. | **NEGATIVE-scope at v34** | KI EXC-03 entry intact at HEAD `<sha>`; v33 + v32 dual-carrier carries forward |
+| **EXC-04** | EntropyLib XOR-shift PRNG (entropy-quality envelope on `_pickSoloQuadrant` tie-break) | EntropyLib.sol byte-identical at HEAD per `git diff 4ce3703d740d3707c88a1af595618120a8168399..HEAD -- contracts/libraries/EntropyLib.sol` returns empty; passive consumer pattern | `DegenerusGameJackpotModule.sol:1098` `_pickSoloQuadrant` consumes `entropy >> 4` bits which may be XOR-shift-derived in some upstream paths; passive consumer per `feedback_rng_backward_trace.md` backward trace: tie-break consumer → `_pickSoloQuadrant(_, entropy)` → caller's entropy word → upstream `_rollWinningTraits` source (VRF or XOR-shift fallback per EXC-04 envelope). NEW envelope width: ZERO (no new path widens EXC-04). Commitment window unchanged per `feedback_rng_commitment_window.md` (no new player-controllable state changes between VRF request and fulfillment — see §3e row 5 SOLO-09 split-mode coherence). | **RE_VERIFIED at v34** with STAT-05 chi² empirical cross-cite | `test/stat/GoldSoloCoverage.test.js:159-209` STAT-05 chi² uniformity across 100K samples per goldCount ∈ {2,3,4} with critical values {3.841, 5.991, 7.815} at α=0.05 — empirically confirms XOR-shift-derived high bits are sufficiently uniform for 2/3/4-way tie-break. Phase 261-02 SUMMARY closure verdict. |
+
+**KNOWN-ISSUES.md UNMODIFIED at HEAD `<sha>`** per D-262-KI-01 default path. Verified: `git diff 4ce3703d740d3707c88a1af595618120a8168399..HEAD -- KNOWN-ISSUES.md` returns empty (zero lines of delta) across the full v33→v34 envelope.
+
+### 6c. Verdict Summary
+
+- KI Promotion Count: **0 of 0 `KI_ELIGIBLE_PROMOTED`** (zero-row Non-Promotion Ledger per D-262-KI-01 default path; zero F-34-NN block emissions from §4 + Task 7 disposition).
+- KI Envelope Re-Verifications: **4 of 4 envelopes** at v34 (EXC-01..03 NEGATIVE-scope; EXC-04 RE_VERIFIED with STAT-05 chi² cross-cite).
+- KNOWN-ISSUES.md State: **UNMODIFIED** per D-262-KI-01 default path.
+- **Combined §6 verdict: `0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`** (matches §2 Closure Verdict Summary literal string + §9b 6-Point Attestation Item 3).
+
+`re-verified at HEAD <sha>`. REG-03 §6 KI Gating Walk closed: zero F-34-NN candidates → zero KI promotion candidates; 4 KI envelopes RE_VERIFIED at v34 (EXC-01..03 NEGATIVE-scope; EXC-04 RE_VERIFIED with STAT-05 chi² cross-cite); KNOWN-ISSUES.md UNMODIFIED at HEAD `<sha>`. `git diff 4ce3703d740d3707c88a1af595618120a8168399..HEAD -- KNOWN-ISSUES.md` returns empty.
+
 ---
