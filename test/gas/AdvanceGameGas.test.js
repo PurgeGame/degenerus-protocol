@@ -1440,3 +1440,196 @@ describe("AdvanceGame Gas Benchmarks", function () {
     });
   });
 });
+
+// ===========================================================================
+// Phase 264 SURF-05 D-IMPL-06 — HEAD-only advanceGame ceiling margin record.
+//
+// The disclosed REQUIREMENTS.md SURF-05 invariant is `MAX_BLOCK_GAS /
+// WORST_CASE_ADVANCE_GAS ≥ 1.99` at the v35.0 HEAD `cf564816`. This describe
+// block re-runs the section-16 worst-case benchmark (SC-1 daily two-call split
+// at 305 players, max-scale pool — the maximally-loaded advanceGame path
+// across the v35.0 source tree) and records the margin explicitly.
+//
+// The existing section-16 SC-1/2a/2b assertions pin the ceiling at 16M gas
+// (`expect(r.gasUsed).to.be.lt(16_000_000n)`); the analytic worst-case
+// projection (~15.075M expected; 30M / 15.075M ≈ 1.99×) is the basis for the
+// ≥1.99× margin disclosed in REQUIREMENTS.md SURF-05. The per-pull-level
+// resample helper introduces a per-call delta of ~75-110K (Plan 264-02 Task
+// 2), negligible vs the 16M absolute ceiling.
+//
+// This describe block runs the SC-1 fixture, captures the maximum gasUsed
+// across the captured stages, and asserts the margin is ≥ 1.99 at HEAD.
+// ===========================================================================
+
+describe("Phase 264 SURF-05 — advanceGame 1.99× margin preserved at v35.0 HEAD", function () {
+  this.timeout(1_800_000); // 30 min — re-runs the SC-1 305-player setup
+
+  const MAX_BLOCK_GAS = 30_000_000n;
+  const REQUIRED_MARGIN = 1.99;
+
+  // Local copies of the section-16 helpers — re-declared inside this describe
+  // block to keep the existing section-16 byte-identical (no shared-helper
+  // refactor in Phase 264 per D-IMPL-06; section-16 file shape unchanged for
+  // git-blame stability).
+  async function buyOneTicket(game, buyer) {
+    return game.connect(buyer).purchase(
+      ZERO_ADDRESS,
+      400n,
+      0n,
+      ZERO_BYTES32,
+      MintPaymentKind.DirectEth,
+      { value: eth(0.01) },
+    );
+  }
+
+  async function setupPlayers(game, namedSigners, otherSigners, count, enableAutoRebuy) {
+    const players = [...namedSigners, ...otherSigners].slice(0, count);
+    console.log(`      [Phase 264 SURF-05] Setting up ${players.length} players...`);
+
+    const batchSize = 50;
+    for (let start = 0; start < players.length; start += batchSize) {
+      const batch = players.slice(start, start + batchSize);
+      await Promise.all(batch.map(p => buyOneTicket(game, p)));
+    }
+    console.log(`      [Phase 264 SURF-05] ${players.length} tickets purchased`);
+
+    if (enableAutoRebuy) {
+      for (let start = 0; start < players.length; start += batchSize) {
+        const batch = players.slice(start, start + batchSize);
+        await Promise.all(batch.map(p =>
+          game.connect(p).setAutoRebuy(ZERO_ADDRESS, true)
+        ));
+      }
+      console.log(`      [Phase 264 SURF-05] ${players.length} players enabled autorebuy`);
+    }
+
+    return players;
+  }
+
+  async function fundPoolHeavy(game, buyers, bundlesPerBuyer) {
+    const pricePerBundle = eth(2.4);
+    for (const buyer of buyers) {
+      try {
+        await game
+          .connect(buyer)
+          .purchaseWhaleBundle(buyer.address, bundlesPerBuyer, {
+            value: BigInt(bundlesPerBuyer) * pricePerBundle,
+          });
+      } catch {
+        try {
+          await game
+            .connect(buyer)
+            .purchaseWhaleBundle(buyer.address, bundlesPerBuyer, {
+              value: BigInt(bundlesPerBuyer) * eth(4),
+            });
+        } catch {
+          console.log(`      [Phase 264 SURF-05] (Whale bundle failed for ${buyer.address.slice(0, 8)}...)`);
+        }
+      }
+    }
+    const pool = await game.currentPrizePoolView();
+    const nextPool = await game.nextPrizePoolView();
+    console.log(`      [Phase 264 SURF-05] Pool: ${hre.ethers.formatEther(pool)} ETH (current) + ${hre.ethers.formatEther(nextPool)} ETH (next)`);
+  }
+
+  async function getAdvanceEvents(tx, advanceModule) {
+    return getEvents(tx, advanceModule, "Advance");
+  }
+
+  async function runWorstCaseBenchmarkAtHead() {
+    const fixture = await loadFixture(deployFullProtocol);
+    const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } = fixture;
+
+    // SC-1 fixture composition: 305 players + autorebuy + 5 buyers × 20 bundles.
+    const players = await setupPlayers(
+      game, [alice, bob, carol, dan, eve], others.slice(0, 300), 305, true,
+    );
+    await fundPoolHeavy(game, players.slice(0, 5), 20);
+
+    const stageReceipts = new Map();
+
+    // Drive day-by-day across 15 days (matches section-16 SC-1 cap).
+    for (let day = 0; day < 15; day++) {
+      await advanceToNextDay();
+
+      // Pre-VRF drain.
+      for (let i = 0; i < 200; i++) {
+        try {
+          const tx = await game.connect(deployer).advanceGame();
+          const receipt = await tx.wait();
+          const events = await getAdvanceEvents(tx, advanceModule);
+          if (events.length > 0) {
+            const stage = events[0].args.stage;
+            if ([1n, 7n, 11n, 8n, 9n, 10n].includes(stage) && !stageReceipts.has(stage)) {
+              stageReceipts.set(stage, receipt);
+            }
+          }
+        } catch {
+          break;
+        }
+        if (!(await game.rngLocked())) break;
+      }
+
+      // VRF fulfillment.
+      try {
+        const requestId = await getLastVRFRequestId(mockVRF);
+        if (requestId > 0n) {
+          await mockVRF.fulfillRandomWords(requestId, BigInt(day * 1000 + 305305));
+        }
+      } catch {
+        // Already fulfilled or no request pending.
+      }
+
+      // Post-VRF drain.
+      for (let i = 0; i < 200; i++) {
+        try {
+          const tx = await game.connect(deployer).advanceGame();
+          const receipt = await tx.wait();
+          const events = await getAdvanceEvents(tx, advanceModule);
+          if (events.length > 0) {
+            const stage = events[0].args.stage;
+            if ([7n, 11n, 8n, 9n, 10n].includes(stage) && !stageReceipts.has(stage)) {
+              stageReceipts.set(stage, receipt);
+            }
+          }
+        } catch {
+          break;
+        }
+        if (!(await game.rngLocked())) break;
+      }
+
+      if (stageReceipts.has(10n)) {
+        console.log(`      [Phase 264 SURF-05] Jackpot phase ended on day ${day}`);
+        break;
+      }
+    }
+
+    return stageReceipts;
+  }
+
+  it("preserves 1.99× margin at v35.0 HEAD across the worst-case advanceGame path", async function () {
+    const stageReceipts = await runWorstCaseBenchmarkAtHead();
+
+    expect(
+      stageReceipts.size > 0,
+      "Phase 264 SURF-05: worst-case benchmark fixture failed to capture any advanceGame stages — fixture regression",
+    ).to.equal(true);
+
+    let maxGas = 0n;
+    let maxStage = -1;
+    for (const [stage, receipt] of stageReceipts) {
+      if (receipt.gasUsed > maxGas) {
+        maxGas = receipt.gasUsed;
+        maxStage = Number(stage);
+      }
+    }
+
+    const margin = Number(MAX_BLOCK_GAS) / Number(maxGas);
+    console.log(`      [Phase 264 SURF-05] worst-case stage = ${maxStage}, gasUsed = ${maxGas.toLocaleString()}, margin = ${margin.toFixed(3)}× (required ≥ ${REQUIRED_MARGIN})`);
+
+    expect(
+      margin >= REQUIRED_MARGIN,
+      `Phase 264 SURF-05: advanceGame margin ${margin.toFixed(3)} < required ${REQUIRED_MARGIN} (max-gas stage ${maxStage} = ${maxGas.toLocaleString()})`,
+    ).to.equal(true);
+  });
+});
