@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v34.0
-milestone_name: Trait Rarity Rework + Gold Solo Priority
-status: Awaiting next milestone
-last_updated: "2026-05-09T09:55:26.251Z"
-last_activity: 2026-05-09 — Milestone v34.0 completed and archived
+milestone: v35.0
+milestone_name: BURNIE Near-Future Per-Pull Level Resample
+status: executing
+last_updated: "2026-05-09T13:14:03.839Z"
+last_activity: 2026-05-09 -- Phase 264 planning complete
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 10
-  completed_plans: 10
-  percent: 100
+  total_phases: 3
+  completed_phases: 1
+  total_plans: 3
+  completed_plans: 1
+  percent: 33
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09 after v34.0 milestone close)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v34.0 SHIPPED 2026-05-09; next milestone TBD
+**Current focus:** v35.0 BURNIE Near-Future Per-Pull Level Resample (3 phases planned: 263-265)
 
 ## Current Position
 
-Phase: Milestone v34.0 complete
+Phase: Not started (roadmap drafted; ready for `/gsd-plan-phase 263`)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-05-09 — Milestone v34.0 completed and archived
+Status: Ready to execute
+Last activity: 2026-05-09 -- Phase 264 planning complete
 
 ## Last Shipped Milestone
 
@@ -91,28 +91,45 @@ Last activity: 2026-05-09 — Milestone v34.0 completed and archived
 
 ## Active Milestone
 
-_(none — v34.0 SHIPPED 2026-05-09; next milestone TBD)_
+**v35.0 BURNIE Near-Future Per-Pull Level Resample** (started 2026-05-09)
+
+- **Goal:** Convert the near-future BURNIE coin jackpot from one-level-per-call distribution to per-pull-level sampling at both call sites in `DegenerusGameJackpotModule.sol`, validated against Phase 261's reusable chi-squared infrastructure.
+- **Audit baseline:** v34.0 source-tree HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555`
+- **Phases planned:** 3 (263-265)
+- **Requirements:** 27 total (8 PPL + 4 STAT + 5 SURF + 6 AUDIT + 4 REG); coverage 27/27 mapped
+- **READ-only posture:** LIFTED — `contracts/` + `test/` writes via per-commit user approval per `feedback_no_contract_commits.md`; Phase 263 two-callsite refactor uses batched approval pattern per `feedback_batch_contract_approval.md`
+- **Cross-milestone dep resolution:** Phase 261 chi-squared infrastructure default-branched as REUSABLE (decision captured in Phase 264 STAT-04 plan or as a `D-NN-INFRA-01` decision when the plan opens)
+- **Off-chain indexer flag:** `JackpotBurnieWin.lvl` semantic shift (shared-call-level → per-pull-sampled-level) — surfaced in AUDIT-06 and §3 of `audit/FINDINGS-v35.0.md`
+- **Closure signal target:** `MILESTONE_V35_AT_HEAD_<sha>` emitted via `audit/FINDINGS-v35.0.md` §9c
+- **Seed source:** `.planning/notes/2026-05-08-burnie-near-future-per-pull-level.md`
+- See `.planning/ROADMAP.md` for the full phase table + per-phase goals + success criteria.
 
 ## Roadmap Overview
 
-_(none — v34.0 SHIPPED 2026-05-09; next milestone TBD. See `.planning/ROADMAP.md` once `/gsd-new-milestone` runs.)_
+| Phase | Goal | Requirements (count) | Depends on |
+|-------|------|----------------------|------------|
+| 263 — Per-Pull Level Resample Implementation | Refactor `payDailyCoinJackpot` (~L1708) and `payDailyJackpotCoinAndTickets` (~L624) in `DegenerusGameJackpotModule.sol` to a flat 50-pull loop with per-pull `keccak256(randomWord, COIN_LEVEL_TAG, i) % range` level sampling, deterministic `i % 4` trait rotation, per-trait `deityCache`, salt scheme `keccak256(randomWord, trait, lvl, i)`, and empty-bucket silent-skip semantics | PPL-01..08 (8) | Nothing (baseline v34.0 HEAD `6b63f6d4`) |
+| 264 — Statistical Validation + Cross-Surface Preservation | Reuse Phase 261 chi² infrastructure to validate per-pull level uniformity over `[minLevel, maxLevel]` (chi² p > 0.05) + per-trait ~25% share + empty-bucket skip-rate measurement; cross-surface preservation tests for `_randTraitTicket` other callers + far-future BURNIE + ETH daily + ticket-distribution paths; gas regression confirms ~70K–110K extra per call | STAT-01..04 + SURF-01..05 (9) | Phase 263 |
+| 265 — Delta Audit + Findings Consolidation | Author `audit/FINDINGS-v35.0.md` 9-section deliverable (FINAL READ-only at HEAD); adversarial sweep over PPL deltas; conservation re-proof (`coinBudget` + solvency + BURNIE supply); v34.0 + v33.0 closure-signal regression; KI envelope re-verifications (EXC-04 extra-attention); `JackpotBurnieWin.lvl` indexer semantic-shift documentation; emit closure signal `MILESTONE_V35_AT_HEAD_<sha>` | AUDIT-01..06 + REG-01..04 (10) | Phase 263, Phase 264 |
 
-## Next-Milestone Backlog (v35.0)
+**Coverage:** 27/27 v35.0 requirements mapped (8 PPL + 4 STAT + 5 SURF + 6 AUDIT + 4 REG); zero orphan requirements; zero duplicate mappings.
 
-Seeds captured for promotion via `/gsd-review-backlog` once v34.0 closes. Do NOT pull into v34.0.
+## Next-Milestone Backlog (v36+)
+
+Carry-forward seeds from v35.0 close. Do NOT pull into v35.0.
 
 | Seed | Subsystem | Target | Notes |
 |------|-----------|--------|-------|
-| [burnie-near-future-per-pull-level-resample](notes/2026-05-08-burnie-near-future-per-pull-level.md) | jackpot-distribution | v35.0 | Per-pull random level for near-future BURNIE coin jackpot. Locked decisions: empty-bucket-skip, flat 50-pull loop with `trait_idx = i % 4`, deity caching, `lvl` in salt. Cross-milestone dep: Phase 261's chi-squared infra (reusable vs one-shot decides whether v35.0 needs new statistical-validation phase). Off-chain indexer flag: `JackpotBurnieWin.lvl` semantic shifts from "shared call level" to "per-pull sampled level". |
+| Audit of post-v32.0 unaudited commits | mint / decimator | v36+ | `002bde55` presale auto-deactivate + `2713ce61` setDecimatorAutoRebuy removal — deferred from v33.0 → v34.0 → v35.0 close per repeated user disposition. |
 
 ## Deferred Items
 
-Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-forward chain v32.0 → v33.0 → v34.0):
+Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-forward chain v32.0 → v33.0 → v34.0 → v35.0):
 
 | Category | Item | Status | Notes |
 |----------|------|--------|-------|
-| quick_task | 260327-n7h-run-full-test-suite-and-analyze-results- | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 → v33.0 close. |
-| quick_task | 260327-q8y-test-boon-changes | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 → v33.0 close. |
+| quick_task | 260327-n7h-run-full-test-suite-and-analyze-results- | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 → v33.0 → v34.0 close. |
+| quick_task | 260327-q8y-test-boon-changes | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 → v33.0 → v34.0 close. |
 | verification_gap | Phase 257 (257-VERIFICATION.md) | human_needed | Gate resolved by Phase 258 supersedence (HUMAN-UAT marked `resolved`, resolved_by: phase-258), but VERIFICATION.md frontmatter `status: human_needed` field was not flipped to `resolved`. Bookkeeping defect; tracker out of date with reality. See `.planning/v33.0-MILESTONE-AUDIT.md`. |
 | verification_gap | Phase 258 (258-VERIFICATION.md) | human_needed | Gate resolved by Phase 258-03 stale-reference sweep, but VERIFICATION.md frontmatter `status: human_needed` was not flipped to `resolved`. Bookkeeping defect. See `.planning/v33.0-MILESTONE-AUDIT.md`. |
 | process_gap | Phases 254/255/256 missing VERIFICATION.md | not_run | Formal verification gate did not run when those phases closed (pre-session). Phase 257 delta-audit independently re-validated all that work (`audit/FINDINGS-v33.0.md`); functional risk: low. See `.planning/v33.0-MILESTONE-AUDIT.md` for the full per-phase analysis. |
@@ -151,10 +168,10 @@ Audit deliverables:
 
 ## Global Project State
 
-- Contract tree at v33.0 HEAD `4ce3703d740d3707c88a1af595618120a8168399` (v34.0 audit anchor / baseline) — pre-v34.0 working tree.
-- READ-only audit pattern carried forward v28.0–v31.0; **READ-only LIFTED for v32.0 + v33.0 + v34.0** — audit-then-commit (or impl-then-audit) with per-commit user approval per `feedback_no_contract_commits.md`. No agent commits contracts/ or test/ changes without explicit user review of the diff. v34.0 phases that batch multiple contract edits use the batched approval pattern per `feedback_batch_contract_approval.md`.
-- KNOWN-ISSUES.md: 4 accepted RNG-determinism exceptions (EXC-01 affiliate roll / EXC-02 prevrandao fallback / EXC-03 F-29-04 mid-cycle substitution / EXC-04 EntropyLib XOR-shift) — all re-verified non-widening at HEAD `acd88512` in v32.0 Phase 248 + Phase 250; v33.0 Phase 257 re-verified all four NEGATIVE-scope at HEAD `4ce3703d`. v34.0 Phase 262 expects EXC-01..03 NEGATIVE-scope (no RNG touched besides `_pickSoloQuadrant` and the unchanged `_rollWinningTraits` / `traitFromWord` flow); EXC-04 (EntropyLib XOR-shift) requires extra attention because `_pickSoloQuadrant` tie-break consumes `entropy >> 4` bits which may be XOR-shift-derived in some upstream paths — empirical chi-squared evidence at STAT-05 covers the uniformity claim.
+- Contract tree at v34.0 source-tree HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555` (v35.0 audit anchor / baseline) — pre-v35.0 working tree.
+- READ-only audit pattern carried forward v28.0–v31.0; **READ-only LIFTED for v32.0 + v33.0 + v34.0 + v35.0** — audit-then-commit (or impl-then-audit) with per-commit user approval per `feedback_no_contract_commits.md`. No agent commits contracts/ or test/ changes without explicit user review of the diff. v35.0 Phase 263's two-callsite refactor uses the batched approval pattern per `feedback_batch_contract_approval.md`.
+- KNOWN-ISSUES.md: 4 accepted RNG-determinism exceptions (EXC-01 affiliate roll / EXC-02 prevrandao fallback / EXC-03 F-29-04 mid-cycle substitution / EXC-04 EntropyLib XOR-shift) — all re-verified non-widening at HEAD `acd88512` in v32.0 Phase 248 + Phase 250; v33.0 Phase 257 re-verified all four NEGATIVE-scope at HEAD `4ce3703d`; v34.0 Phase 262 re-verified EXC-01..03 NEGATIVE-scope and EXC-04 RE_VERIFIED with STAT-05 chi² cross-cite at HEAD `6b63f6d4`. v35.0 Phase 265 expects EXC-01..03 NEGATIVE-scope (PPL refactor has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction); EXC-04 (EntropyLib XOR-shift) requires extra attention because the per-pull-level keccak `keccak256(randomWord, COIN_LEVEL_TAG, i) % range` consumes high-entropy bits — empirical chi-squared evidence at STAT-01 covers the uniformity claim end-to-end.
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Open Phase 263 with `/gsd-plan-phase 263`
