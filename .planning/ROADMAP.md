@@ -14,7 +14,7 @@
 - ✅ **v31.0 Post-v30 Delta Audit + Gameover Edge-Case Re-Audit** — Phases 243-246 (shipped 2026-04-24) — see [milestones/v31.0-ROADMAP.md](milestones/v31.0-ROADMAP.md)
 - ✅ **v32.0 Backfill Idempotency + purchaseLevel Underflow Audit** — Phases 247-253 (shipped 2026-05-02) — see [milestones/v32.0-ROADMAP.md](milestones/v32.0-ROADMAP.md)
 - ✅ **v33.0 Charity Allowlist Governance** — Phases 254-258 (shipped 2026-05-07; closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` supersedes `MILESTONE_V33_AT_HEAD_dcb70941`) — see [milestones/v33.0-ROADMAP.md](milestones/v33.0-ROADMAP.md)
-- 🚧 **v34.0 Trait Rarity Rework + Gold Solo Priority** — Phases 259-262 (planning)
+- ✅ **v34.0 Trait Rarity Rework + Gold Solo Priority** — Phases 259-262 (shipped 2026-05-09; closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`)
 
 ## Phases
 
@@ -31,12 +31,12 @@
 
 </details>
 
-### v34.0 Trait Rarity Rework + Gold Solo Priority (Phases 259-262) — PLANNING
+### v34.0 Trait Rarity Rework + Gold Solo Priority (Phases 259-262) — SHIPPED 2026-05-09
 
 - [x] **Phase 259: Trait Distribution Split** — Replace flat `weightedBucket` two-call composition with single 8-tier `weightedColorBucket` heavy-tail color distribution + uniform symbol; preserve `[QQ][CCC][SSS]` byte layout. (completed 2026-05-08)
 - [x] **Phase 260: Gold Solo Priority Injection** — Add `_pickSoloQuadrant` helper to `DegenerusGameJackpotModule.sol` and inject `effectiveEntropy` substitution at all 4 ETH-split sites (lines 282, 349, 524, 1147) atomically. (completed 2026-05-08)
-- [ ] **Phase 261: Statistical Validation + Cross-Surface Verification** — 1M-sample Monte Carlo + chi-squared infrastructure for color/symbol distributions; gold-solo coverage + tie-break uniformity simulations; pack-feel CIs; cross-surface preservation checks (hero override / deity-pass / Degenerette / bonus jackpot non-injection / gas regression).
-- [ ] **Phase 262: Delta Audit + Findings Consolidation** — Author `audit/FINDINGS-v34.0.md` 9-section deliverable (FINAL READ-only at HEAD); adversarial sweep over the trait + solo deltas; v33.0 + v32.0 closure signal regression; KI envelope re-verifications; emit closure signal `MILESTONE_V34_AT_HEAD_<sha>`.
+- [x] **Phase 261: Statistical Validation + Cross-Surface Verification** — 1M-sample Monte Carlo + chi-squared infrastructure for color/symbol distributions; gold-solo coverage + tie-break uniformity simulations; pack-feel CIs; cross-surface preservation checks (hero override / deity-pass / Degenerette / bonus jackpot non-injection / gas regression). (completed 2026-05-09)
+- [x] **Phase 262: Delta Audit + Findings Consolidation** — Author `audit/FINDINGS-v34.0.md` 9-section deliverable (FINAL READ-only at HEAD); adversarial sweep over the trait + solo deltas; v33.0 + v32.0 closure signal regression; KI envelope re-verifications; emit closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`. (completed 2026-05-09)
 
 ## Phase Details
 
@@ -89,10 +89,10 @@ Plans:
   3. Pack-feel CIs over ≥100K 10-ticket packs: ≥1 notable-tier (color≥3) trait in 99.5% of packs; ≥1 rare-tier (color≥4) in 92.3%; ≥1 epic-tier (color≥5) in 71.7%; ≥1 legendary (color==7) in 27.0% — all targets within 99% Monte Carlo CIs.
   4. Cross-surface preservation: hero override (`_applyHeroOverride`) writes `(quadrant << 6) | (color << 3) | symbol` byte-identically (color is RNG-derived 3-bit literal slice — intentionally NOT through `weightedColorBucket`); existing Degenerette test suite passes unchanged; the 8 non-injection bonus-jackpot call sites (513, 527, 598, 599, 683, 1687, 1713, 1715) emit byte-identical events / produce byte-identical bucket distributions vs v33.0 baseline.
   5. Gas regression: `weightedColorBucket(uint32) → uint8` per-call delta within ±100 gas vs prior `weightedBucket(uint32) → uint8`; `_pickSoloQuadrant` per-call < 500 gas under worst-case (4-gold) input (theoretical worst case derived FIRST per `feedback_gas_worst_case.md`, then tested); total delta on `runTerminalJackpot` / `payDailyJackpot` / `_resumeDailyEth` < 2000 gas each.
-**Plans:** 3/3 plans authored
-- [ ] 261-01-PLAN.md — TraitDistribution + boundary cross-validation [STAT-01, STAT-02, STAT-03]
-- [ ] 261-02-PLAN.md — GoldSoloCoverage + SoloEvUplift + PackFeel [STAT-04, STAT-05, STAT-06, STAT-07]
-- [ ] 261-03-PLAN.md — SurfaceRegression + Phase261GasRegression + REQUIREMENTS STAT-06 amendment + package.json test:stat [SURF-01, SURF-02, SURF-03, SURF-04, SURF-05]
+**Plans:** 3/3 plans complete
+- [x] 261-01-PLAN.md — TraitDistribution + boundary cross-validation [STAT-01, STAT-02, STAT-03] (completed 2026-05-09)
+- [x] 261-02-PLAN.md — GoldSoloCoverage + SoloEvUplift + PackFeel [STAT-04, STAT-05, STAT-06, STAT-07] (completed 2026-05-09)
+- [x] 261-03-PLAN.md — SurfaceRegression + Phase261GasRegression + REQUIREMENTS STAT-06 amendment + package.json test:stat [SURF-01, SURF-02, SURF-03, SURF-04, SURF-05] (completed 2026-05-09)
 
 ### Phase 262: Delta Audit + Findings Consolidation
 
@@ -105,8 +105,10 @@ Plans:
   3. §3b conservation re-proof: solvency invariant (`claimablePool ≤ ETH balance + stETH balance`) PRESERVED across the trait/solo changes; pool-balance algebra unchanged because share BPS and bucket counts are unchanged — only the bucket-index assignment rotates.
   4. §5 regression: REG-01 PASS for v33.0 closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` non-widening (charity governance / GNRUS.sol untouched in v34.0 — FIX-01 + FIX-02 invariants preserved); REG-02 PASS for v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` non-widening (L173 + L1174 + GameStorage `_livenessTriggered` body byte-identical); REG-04 spot-check re-verifies every prior finding referencing `weightedBucket` / `traitFromWord` / `packedTraitsFromSeed` / `JackpotBucketLib` / `_rollWinningTraits` / `_executeJackpot` / `_processDailyEth` / `_runJackpotEthFlow` / `runTerminalJackpot` / `payDailyJackpot` / `_resumeDailyEth` with PASS / REGRESSED / SUPERSEDED grep-cited verdicts.
   5. §6 KI gating walk: EXC-01..04 RE_VERIFIED with EXC-04 (EntropyLib XOR-shift) extra-attention attestation cross-citing the STAT-05 chi-squared empirical evidence; KNOWN-ISSUES.md UNMODIFIED unless a new candidate passes the D-09 3-predicate gate (accepted-design + non-exploitable + sticky); §9c emits `MILESTONE_V34_AT_HEAD_<sha>` closure signal.
-**Plans:** 1/1 plan authored
-- [ ] 262-01-PLAN.md — Author `audit/FINDINGS-v34.0.md` 9-section deliverable + `/contract-auditor` + `/zero-day-hunter` adversarial pass on §4 + ROADMAP/STATE/MILESTONES flips + closure signal `MILESTONE_V34_AT_HEAD_<sha>` (single-plan multi-task atomic-commit pattern, 13 tasks; mirrors v33 Phase 257 + v32 Phase 253) [AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05, REG-01, REG-02, REG-03, REG-04]
+**Plans:** 1/1 plan complete
+- [x] 262-01-PLAN.md — Author `audit/FINDINGS-v34.0.md` 9-section deliverable + `/contract-auditor` + `/zero-day-hunter` adversarial pass on §4 + ROADMAP/STATE/MILESTONES flips + closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` (single-plan multi-task atomic-commit pattern, 14 tasks including Task 7b prose-amendment commit; mirrors v33 Phase 257 + v32 Phase 253) [AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05, REG-01, REG-02, REG-03, REG-04] (completed 2026-05-09)
+
+✅ All 5 success criteria satisfied at HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555`. See `audit/FINDINGS-v34.0.md` §9 closure attestation.
 
 ## Progress
 
@@ -114,13 +116,17 @@ Plans:
 |-------|----------------|--------|-----------|
 | 259. Trait Distribution Split | 3/3 | Complete    | 2026-05-08 |
 | 260. Gold Solo Priority Injection | 3/3 | Complete    | 2026-05-08 |
-| 261. Statistical Validation + Cross-Surface Verification | 0/0 | Not started | - |
-| 262. Delta Audit + Findings Consolidation | 0/0 | Not started | - |
+| 261. Statistical Validation + Cross-Surface Verification | 3/3 | Complete    | 2026-05-09 |
+| 262. Delta Audit + Findings Consolidation | 1/1 | Complete    | 2026-05-09 |
 
 ## Active Milestone
 
-**v34.0 Trait Rarity Rework + Gold Solo Priority** — PLANNING (defined 2026-05-08). 4 phases (259-262), 36 requirements (TRAIT-01..06, SOLO-01..09, STAT-01..07, SURF-01..05, AUDIT-01..05, REG-01..04). Audit baseline v33.0 contract-tree HEAD `4ce3703d740d3707c88a1af595618120a8168399`. Modifies `contracts/DegenerusTraitUtils.sol` + `contracts/modules/DegenerusGameJackpotModule.sol`; adds Hardhat statistical-validation tests under `test/stat/` (or equivalent); produces a 9-section delta-audit deliverable `audit/FINDINGS-v34.0.md`. **Write policy:** READ-only LIFTED for v34.0 (consistent with v32.0/v33.0 audit posture); all `contracts/` + `test/` changes require explicit per-commit user approval per `feedback_no_contract_commits.md`; phases that batch multiple contract edits use the batched approval pattern per `feedback_batch_contract_approval.md`. Closure signal target: `MILESTONE_V34_AT_HEAD_<sha>`. See [REQUIREMENTS.md](REQUIREMENTS.md) and [STATE.md](STATE.md).
+_(none — v34.0 SHIPPED 2026-05-09; next milestone TBD)_
 
 ## Last Shipped Milestone
+
+**v34.0 Trait Rarity Rework + Gold Solo Priority** — SHIPPED 2026-05-09. 4 phases (259-262), 10 plans, 36 requirements satisfied (TRAIT-01..06 + SOLO-01..09 + STAT-01..07 + SURF-01..05 + AUDIT-01..05 + REG-01..04). Audit baseline v33.0 contract-tree HEAD `4ce3703d740d3707c88a1af595618120a8168399` → v34.0 source-tree HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555`. Closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`. Deliverable: `audit/FINDINGS-v34.0.md` (FINAL READ-only at HEAD `6b63f6d4`, 9 sections, 6 of 6 §4 surfaces SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE; zero F-34-NN finding blocks; 1 PASS REG-01 + 1 PASS REG-02 + 4 PASS REG-04; 4 NEGATIVE-scope/RE_VERIFIED KI envelope re-verifications; KNOWN-ISSUES.md UNMODIFIED).
+
+### Prior Shipped Milestone
 
 **v33.0 Charity Allowlist Governance (post-closure patch)** — SHIPPED 2026-05-06; RE-SHIPPED 2026-05-07 via Phase 258. 5 phases (254-258), 28 requirements satisfied (ALW + VOTE + RES + CLEAN + TST + AUDIT-01..05 + FIX-01 + FIX-02). Audit baseline v32.0 HEAD `acd88512` → v33.0 contract-tree HEAD `4ce3703d740d3707c88a1af595618120a8168399`. Closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (supersedes `MILESTONE_V33_AT_HEAD_dcb70941`). Deliverable: `audit/FINDINGS-v33.0.md` (FINAL READ-only at HEAD `4ce3703d`). See [milestones/v33.0-ROADMAP.md](milestones/v33.0-ROADMAP.md) and [milestones/v33.0-REQUIREMENTS.md](milestones/v33.0-REQUIREMENTS.md).

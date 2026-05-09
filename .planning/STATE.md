@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v34.0
 milestone_name: Trait Rarity Rework + Gold Solo Priority
-status: planned
-last_updated: "2026-05-09T06:46:12.000Z"
-last_activity: 2026-05-09 -- Phase 262 plan complete (1 plan, 13 tasks; ready to execute)
+status: completed
+last_updated: "2026-05-09T08:56:12Z"
+last_activity: 2026-05-09 -- Phase 262 complete; v34.0 shipped (closure signal MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555)
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 10
-  completed_plans: 9
-  percent: 90
+  completed_plans: 10
+  percent: 100
 ---
 
 # Project State
@@ -20,16 +20,33 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-05 for v33.0 start; v34.0 carries the same core value)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 262 — delta-audit-findings-consolidation
+**Current focus:** v34.0 SHIPPED 2026-05-09; next milestone TBD
 
 ## Current Position
 
-Phase: 262 — Ready to execute
-Plan: 1 of 1 (262-01-PLAN.md, 13 tasks, single wave)
-Status: Phase 262 planned (Phase 261 complete)
-Last activity: 2026-05-09 -- Phase 262 plan complete
+Phase: 262 (delta-audit-findings-consolidation) — COMPLETE
+Plan: 1 of 1 — Complete
+Status: Phase 262 complete; v34.0 shipped
+Last activity: 2026-05-09 -- Phase 262 complete; v34.0 shipped (closure signal MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555)
 
 ## Last Shipped Milestone
+
+**v34.0 — Trait Rarity Rework + Gold Solo Priority** (shipped 2026-05-09)
+
+- 4 phases (259-262), 10 plans, 36/36 requirements satisfied (TRAIT-01..06 + SOLO-01..09 + STAT-01..07 + SURF-01..05 + AUDIT-01..05 + REG-01..04)
+- Audit baseline: v33.0 contract-tree HEAD `4ce3703d740d3707c88a1af595618120a8168399` → v34.0 source-tree HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555` (Phase 262 emits zero source-tree mutations per CONTEXT.md hard constraint #1; source-tree HEAD stable across Phase 262's docs-only commits per D-262-CLOSURE-01)
+- 5 source-tree commits since baseline (`301f7fad` rewrite TraitUtils, `031a8cbc` TraitUtilsTester, `2fa7fb6e` gold-solo + tests, `1574d533` noOp companion, `a6c4f18a` perf refactor) + 8 test-tree commits (Phase 259/260/261 test files)
+- Result: 6 of 6 §4 §4 adversarial surfaces SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE (a entropy-bit collision, b split-call coherence, c gold-trait population manipulation, d gas-griefing 4-iter loop, e overflow / signed-vs-unsigned XOR mask, f hero × gold composition added per Task 7 user disposition as intended skill-expression channel for high-engagement Degenerette wagerers); zero F-34-NN finding blocks emitted
+- LEAN regression: 1 PASS REG-01 (v33.0 closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` re-verified non-widening; charity governance / GNRUS.sol byte-identical) + 1 PASS REG-02 (v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` re-verified non-widening; L173 turbo guard + L1174 backfill sentinel + GameStorage `_livenessTriggered` body byte-identical between v32 baseline and v34 HEAD) + 4 PASS REG-04 (v25/v27/v29/v30 prior-finding spot-check rows)
+- KI envelopes EXC-01..03 RE_VERIFIED NEGATIVE-scope at v34 (trait/solo path has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction); EXC-04 RE_VERIFIED with STAT-05 chi² empirical cross-cite (`test/stat/GoldSoloCoverage.test.js:159-209`, 100K samples per goldCount ∈ {2,3,4})
+- KNOWN-ISSUES.md UNMODIFIED per D-262-KI-01 default zero-promotion path
+- Deliverable: `audit/FINDINGS-v34.0.md` (FINAL READ-only at HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555`, 9 sections, ~700 lines)
+- Closure signal: `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`
+- Process notes: Task 7 user disposition Option B default-path approved by user; Surface (a) bits 24-25 doc gap + Surface (c) two-channel tightening + NEW Surface (f) hero × gold composition all surfaced via /contract-auditor + /zero-day-hunter parallel spawn (D-262-ADVERSARIAL-02 sequential-after-draft pattern) + folded into §4 prose via Task 7b atomic-commit prose-amendment per user disposition
+- Phase 261 deferred items (carried forward as INFO-tier): (a) STAT-07 ROADMAP cites informational headline targets vs canonical analytical values (test asserts canonical-within-Wilson-99%-CI-of-measured); (b) ROADMAP Phase 261 success criterion #5 cites `_pickSoloQuadrant per-call < 500 gas` while REQUIREMENTS.md SURF-05 amendment `73d533d8` supersedes with `≤ 1500 gas paired-empty-wrapper delta` — both surfaced INFO-only in §3c per D-262-FIND-01 default path; REQUIREMENTS.md amendment commit `73d533d8` is load-bearing
+- See `.planning/MILESTONES.md` for archive
+
+### Prior Shipped Milestone
 
 **v33.0 — Charity Allowlist Governance (post-closure patch)** (re-shipped 2026-05-06 via Phase 258)
 
@@ -41,8 +58,6 @@ Last activity: 2026-05-09 -- Phase 262 plan complete
 - KNOWN-ISSUES.md UNMODIFIED per D-257-KI-01 default zero-promotion path (carries forward through Phase 258)
 - Deliverable: `audit/FINDINGS-v33.0.md` (FINAL READ-only at HEAD `4ce3703d740d3707c88a1af595618120a8168399`, ~750 lines, 9 sections + Phase 258 §3a + §4 + §5 + §9 updates)
 - Closure signal: `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (supersedes `MILESTONE_V33_AT_HEAD_dcb70941`)
-- Process deviations (Phase 257): Task 7 SPAWN_FAILED for /contract-auditor + /zero-day-hunter skills; executor-manual fallback per Task 7 retry-semantics (manual red-team in each skill's scope captured in 257-01-ADVERSARIAL-LOG.md); /zero-day-hunter manual red-team surfaced one NEW_SURFACE_CANDIDATE (sDGNRS float gaming via vote-and-sell) which Task 8 disposition folded into surface (d) prose as a related trust-asymmetry vector. The Phase 257 independent re-run also surfaced the queue-branch vote-redirect gap which Phase 258 subsequently closed structurally via FIX-01.
-- Phase 258 deviation (D-258-01-DEVIATION-01): Third file `test/unit/DegenerusCharity.test.js` added to the batched approval gate (FIX-02 caused conservation-test slot-reuse regression; parameterized `distributeGNRUS(slot)` helper + rotated slots fixes it; user explicitly approved batched landing).
 - See `.planning/MILESTONES.md` for archive
 
 ### Prior Shipped Milestone
@@ -76,7 +91,7 @@ Last activity: 2026-05-09 -- Phase 262 plan complete
 
 ## Active Milestone
 
-**v34.0 Trait Rarity Rework + Gold Solo Priority** — PLANNING (defined 2026-05-08). 4 phases (259-262), 36 requirements (TRAIT-01..06, SOLO-01..09, STAT-01..07, SURF-01..05, AUDIT-01..05, REG-01..04). Audit baseline v33.0 contract-tree HEAD `4ce3703d740d3707c88a1af595618120a8168399` (closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` supersedes `MILESTONE_V33_AT_HEAD_dcb70941`). Modifies `contracts/DegenerusTraitUtils.sol` + `contracts/modules/DegenerusGameJackpotModule.sol`; adds Hardhat statistical-validation tests under `test/stat/` (or equivalent); produces a 9-section delta-audit deliverable `audit/FINDINGS-v34.0.md`. Closure signal target: `MILESTONE_V34_AT_HEAD_<sha>`.
+_(none — v34.0 SHIPPED 2026-05-09; next milestone TBD)_
 
 ## Roadmap Overview
 
@@ -84,10 +99,10 @@ Last activity: 2026-05-09 -- Phase 262 plan complete
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
-| 259 | Trait Distribution Split | TRAIT-01, TRAIT-02, TRAIT-03, TRAIT-04, TRAIT-05, TRAIT-06 (6) | Not started |
-| 260 | Gold Solo Priority Injection | SOLO-01, SOLO-02, SOLO-03, SOLO-04, SOLO-05, SOLO-06, SOLO-07, SOLO-08, SOLO-09 (9) | Not started |
-| 261 | Statistical Validation + Cross-Surface Verification | STAT-01, STAT-02, STAT-03, STAT-04, STAT-05, STAT-06, STAT-07, SURF-01, SURF-02, SURF-03, SURF-04, SURF-05 (12) | Not started |
-| 262 | Delta Audit + Findings Consolidation | AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05, REG-01, REG-02, REG-03, REG-04 (9) | Not started |
+| 259 | Trait Distribution Split | TRAIT-01, TRAIT-02, TRAIT-03, TRAIT-04, TRAIT-05, TRAIT-06 (6) | Complete (2026-05-08) |
+| 260 | Gold Solo Priority Injection | SOLO-01, SOLO-02, SOLO-03, SOLO-04, SOLO-05, SOLO-06, SOLO-07, SOLO-08, SOLO-09 (9) | Complete (2026-05-08) |
+| 261 | Statistical Validation + Cross-Surface Verification | STAT-01, STAT-02, STAT-03, STAT-04, STAT-05, STAT-06, STAT-07, SURF-01, SURF-02, SURF-03, SURF-04, SURF-05 (12) | Complete (2026-05-09) |
+| 262 | Delta Audit + Findings Consolidation | AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05, REG-01, REG-02, REG-03, REG-04 (9) | Complete (2026-05-09) |
 
 **Dependencies:** Phase 259 must precede Phase 260 (gold color tier — color==7 — must exist in the distribution before `_pickSoloQuadrant` can ever fire on a non-empty gold set). Phase 261 depends on Phases 259 + 260 (`weightedColorBucket` + `traitFromWord` are the units under empirical test; `_pickSoloQuadrant` is the unit under the gold-solo simulations + the gas-regression call envelope). Phase 262 is terminal — depends on 259 + 260 + 261 (audit baseline is the post-test HEAD with TRAIT + SOLO impl + STAT/SURF tests all landed).
 
@@ -143,6 +158,7 @@ Archived milestone artifacts:
 
 Audit deliverables:
 
+- `audit/FINDINGS-v34.0.md` (FINAL READ-only at HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555`, ~700 lines, 9 sections; 6 of 6 §4 adversarial surfaces SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE; zero F-34-NN findings; 1 PASS REG-01 + 1 PASS REG-02 + 4 PASS REG-04; 4 NEGATIVE-scope/RE_VERIFIED KI envelope re-verifications; KNOWN-ISSUES.md UNMODIFIED; closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`)
 - `audit/FINDINGS-v33.0.md` (FINAL READ-only at HEAD `4ce3703d740d3707c88a1af595618120a8168399`, ~750 lines, 9 sections + Phase 258 §3a/§4/§5/§9 updates; 9 of 9 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY; zero F-33-NN findings; closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` supersedes `MILESTONE_V33_AT_HEAD_dcb70941`)
 - `audit/FINDINGS-v32.0.md` (548 lines, 9 sections, FINAL READ-only at HEAD `acd88512`; 2 HIGH SUPERSEDED-at-HEAD F-32-NN disclosure blocks; closure signal `MILESTONE_V32_AT_HEAD_acd88512`)
 - `audit/v32-247-DELTA-SURFACE.md` through `audit/v32-252-POST31.md` (FINAL READ-only at HEAD `acd88512`; 6 v32 supporting working-file appendices)
