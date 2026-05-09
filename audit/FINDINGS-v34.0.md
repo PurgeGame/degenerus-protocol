@@ -606,4 +606,60 @@ $ git rev-parse HEAD
 <sha>  # source-tree HEAD at Phase 262 Task 13 atomic commit creation time (Phase 262 docs-tree commits do not advance the source-tree HEAD per D-262-CLOSURE-01; signal references the source-tree HEAD)
 ```
 
+### §9.NN. Commit-Readiness Register (per D-262-CLOSURE-02 three-section format)
+
+#### §9.NN.i USER-APPROVED source files
+
+5 source-tree commits since baseline `4ce3703d` per `git log --oneline 4ce3703d740d3707c88a1af595618120a8168399..HEAD -- contracts/`. All USER-COMMITTED per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` (orchestrator did NOT pre-approve any of these — vacuous since user committed each batch personally).
+
+| Commit SHA | Subject | Files | Phase | Approval Mode |
+| --- | --- | --- | --- | --- |
+| `301f7fad` | feat(259-01): rewrite DegenerusTraitUtils — heavy-tail color distribution | `contracts/DegenerusTraitUtils.sol` | 259-01 | Per-commit user approval per `feedback_no_contract_commits.md` |
+| `031a8cbc` | feat(259-02): add TraitUtilsTester external-pure test harness | `contracts/test/TraitUtilsTester.sol` | 259-02 | Per-commit user approval |
+| `2fa7fb6e` | feat(260): inject gold-solo-priority + tests [SOLO-01..SOLO-09] | `contracts/modules/DegenerusGameJackpotModule.sol` + `contracts/test/JackpotSoloTester.sol` + `test/unit/JackpotSoloPicker.test.js` + `test/integration/JackpotSoloSplit.test.js` (combined feat+test atomic commit) | 260 | Batched user approval per `feedback_batch_contract_approval.md` |
+| `1574d533` | chore(261-03): add noOp() companion to JackpotSoloTester for paired-empty-wrapper delta | `contracts/test/JackpotSoloTester.sol` | 261-03 | Batched user approval |
+| `a6c4f18a` | perf(261-03): refactor _pickSoloQuadrant to pure-stack uint256 packing | `contracts/modules/DegenerusGameJackpotModule.sol` | 261-03 | Batched user approval |
+
+User-approval audit trail: user's own commits per `feedback_no_contract_commits.md`. Agent did NOT commit any `contracts/` file during Phase 262 (zero contract-tree writes per CONTEXT.md hard constraint #1).
+
+#### §9.NN.ii USER-APPROVED test files
+
+8 test-tree commits since baseline `4ce3703d` per `git log --oneline 4ce3703d740d3707c88a1af595618120a8168399..HEAD -- test/`. `2fa7fb6e` is cross-listed from §9.NN.i because Phase 260 batched the source-side injection + the SOLO-08/SOLO-09 test files in a single user-approved atomic commit.
+
+| Commit SHA | Subject | Path |
+| --- | --- | --- |
+| `d67b8ac3` | test(259-03): add DegenerusTraitUtils Hardhat unit tests | `test/unit/DegenerusTraitUtils.test.js` |
+| `2fa7fb6e` (combined feat+test) | feat(260): inject gold-solo-priority + tests [SOLO-01..SOLO-09] | `test/unit/JackpotSoloPicker.test.js` + `test/integration/JackpotSoloSplit.test.js` (test files in same atomic commit as the source-side change per Phase 260 batched-landing decision) |
+| `2eafdde8` | test(261-01): add STAT-01/02/03 + D-03 boundary harness for trait distribution | `test/stat/TraitDistribution.test.js` |
+| `197c8197` | test(261-02): add STAT-04/05 GoldSoloCoverage | `test/stat/GoldSoloCoverage.test.js` |
+| `2d4152a4` | test(261-02): add STAT-06 SoloEvUplift per-surface MC | `test/stat/SoloEvUplift.test.js` |
+| `4e3e7a5e` | test(261-02): add STAT-07 PackFeel Wilson 99% CIs | `test/stat/PackFeel.test.js` |
+| `4e015d2e` | test(261-03): add SurfaceRegression for SURF-01/02/03/04 | `test/stat/SurfaceRegression.test.js` |
+| `00de73ed` | test(261-03): add Phase261GasRegression for SURF-05 | `test/gas/Phase261GasRegression.test.js` |
+
+User-approval audit trail = user's own commits per `feedback_no_contract_commits.md`. Agent did NOT commit any `test/` file during Phase 262 (zero test-tree writes per CONTEXT.md hard constraint #1).
+
+#### §9.NN.iii AGENT-COMMITTED audit artifacts
+
+Phase 262 plan-close commits (in chronological order — single-plan multi-task atomic-commit pattern per D-262-PLAN-01; mirrors v33 Phase 257 + v32 Phase 253):
+
+- `audit(262-01): Task 1 — §1 frontmatter + §2 Executive Summary skeleton`
+- `audit(262-01): Task 2 — §3a Phase 259 + §3b Phase 260 + §3c Phase 261 per-phase subsections`
+- `audit(262-01): Task 3 — §3d AUDIT-01 delta-surface tables (Part A TraitUtils + Part B JackpotModule + Part C downstream callers) + AUDIT-04 storage-slot scan`
+- `audit(262-01): Task 4 — §3e AUDIT-03 conservation re-proof rows`
+- `audit(262-01): Task 5 — §4 inline draft 5-surface table (AUDIT-02 Step 1: plan author)`
+- `audit(262-01): Task 6 — adversarial validation parallel spawn (AUDIT-02 Step 2)`
+- `audit(262-01): Task 7 — disposition note (AUDIT-02 Step 3)` (Option B default-path approved by user; Surface (a) bits 24-25 doc gap + Surface (c) two-channel tightening + NEW Surface (f) hero × gold composition all surfaced)
+- `audit(262-01): Task 7b — §4 prose amendments per Task 7 disposition (surface (a) bits 24-25, surface (c) tightening, new surface (f) hero × gold composition)`
+- `audit(262-01): Task 8 — §5a REG-01 + §5b REG-02 single-PASS-row regression`
+- `audit(262-01): Task 9 — §5c REG-04 + §5d Combined Distribution + §6 KI Gating Walk + REG-03 envelope re-verifications`
+- `audit(262-01): Task 10 — §7 Prior-Artifact Cross-Cites + §8 Forward-Cite Closure`
+- `audit(262-01): Task 11 — §9 Closure Attestation skeleton (§9a + §9b + §9c placeholders)`
+- `audit(262-01): Task 12 — §9.NN commit-readiness register (USER-APPROVED + AGENT-COMMITTED three-subsection format)`
+- `audit(262-01): Task 13 — §9 SHA resolution + READ-only flip + ROADMAP/STATE/MILESTONES — FINAL READ-only — closure signal MILESTONE_V34_AT_HEAD_<sha> emitted` ← Task 13 terminal commit
+
+Per `feedback_no_contract_commits.md` distinction: agent commits `audit/` + `.planning/` artifacts; never `contracts/` or `test/`. Phase 262 single-plan multi-task atomic-commit pattern per D-262-PLAN-01 (mirrors v33 Phase 257 + v32 Phase 253). Task 7b is the prose-amendment commit for the user-approved disposition outcomes from Task 7 (Surface (a) bits 24-25 prose addition + Surface (c) two-channel tightening + NEW Surface (f) hero × gold composition row).
+
+**NO fourth (awaiting-approval) subsection** per D-262-CLOSURE-02 — v34 has zero awaiting-approval test files (all 5 v34 source commits + 8 v34 test commits USER-COMMITTED batched per `feedback_batch_contract_approval.md` per Phase 259 / 260 / 261 close). Mirrors v33 D-257-CLOSURE-02. Distinct from v32 Phase 253 §9.NN.iii three-subsection (which had an awaiting-approval bucket for TST-FILE-01 + TST-FILE-02).
+
 ---
