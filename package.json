@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "compile": "hardhat compile",
-    "test": "hardhat test test/unit/*.test.js test/integration/*.test.js test/deploy/*.test.js test/access/*.test.js test/edge/*.test.js test/gas/*.test.js test/adversarial/*.test.js",
+    "test": "hardhat test test/unit/*.test.js test/integration/*.test.js test/deploy/*.test.js test/access/*.test.js test/edge/*.test.js test/gas/AdvanceGameGas.test.js test/adversarial/*.test.js",
+    "test:stat": "hardhat test test/gas/Phase261GasRegression.test.js test/stat/TraitDistribution.test.js test/stat/GoldSoloCoverage.test.js test/stat/SoloEvUplift.test.js test/stat/PackFeel.test.js test/stat/SurfaceRegression.test.js",
     "test:unit": "hardhat test test/unit/",
     "test:integration": "hardhat test test/integration/",
     "test:deploy": "hardhat test test/deploy/",
