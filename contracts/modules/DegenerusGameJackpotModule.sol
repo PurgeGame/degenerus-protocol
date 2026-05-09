@@ -1096,17 +1096,22 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///        gold tie-break (bits 2-3 unused by either path).
     /// @return Quadrant index 0-3 to receive the solo bucket assignment.
     function _pickSoloQuadrant(uint8[4] memory traits, uint256 entropy) internal pure returns (uint8) {
-        uint8[4] memory goldQuads;
+        // Pack gold quadrant indices into a uint256 (4 slots × 8 bits each).
+        // Each slot holds a quadrant index 0-3. Pure-stack representation —
+        // no memory allocation per call.
+        uint256 goldQuads;
         uint8 goldCount;
         for (uint8 i; i < 4; ++i) {
             if (((traits[i] >> 3) & 7) == 7) {
-                goldQuads[goldCount++] = i;
+                goldQuads |= uint256(i) << (goldCount * 8);
+                unchecked { ++goldCount; }
             }
         }
         if (goldCount == 0) {
             return uint8((3 - (entropy & 3)) & 3);
         }
-        return goldQuads[uint8((entropy >> 4) % goldCount)];
+        uint8 idx = uint8((entropy >> 4) % goldCount);
+        return uint8((goldQuads >> (idx * 8)) & 0xFF);
     }
 
     /// @dev Core jackpot execution: distributes ETH to winners.
