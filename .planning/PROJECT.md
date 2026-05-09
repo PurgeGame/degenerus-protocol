@@ -10,17 +10,20 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-**Active milestone:** v34.0 — Trait Rarity Rework + Gold Solo Priority (kicked off 2026-05-08 via `/gsd-new-milestone`)
-**Last shipped:** v33.0 — Charity Allowlist Governance (2026-05-07, tag `v33.0` pending push; supersedes initial closure at `dcb70941`)
-**Contract HEAD anchor:** `4ce3703d740d3707c88a1af595618120a8168399` (v33.0 closure HEAD; v34.0 baseline)
-**Audit deliverables (cumulative):** `audit/FINDINGS-v25.0.md` + `FINDINGS-v27.0.md` + `FINDINGS-v28.0.md` + `FINDINGS-v29.0.md` + `FINDINGS-v30.0.md` + `FINDINGS-v31.0.md` + `FINDINGS-v32.0.md` + `FINDINGS-v33.0.md` (FINAL READ-only at HEAD `4ce3703d`, 9 sections + Phase 258 §3a/§4/§5/§9 updates) + 16 v30 supporting `audit/v30-*.md` + 5 v31 supporting `audit/v31-*.md` + 6 v32 supporting `audit/v32-*.md` artifacts; `KNOWN-ISSUES.md` (4 accepted-design RNG entries: EXC-01..04, all RE_VERIFIED NEGATIVE-scope at HEAD `4ce3703d`)
+**Active milestone:** none — v35.0 TBD (post-v34.0 milestone planning pending; run `/gsd-complete-milestone v34.0` to archive Phases 259-262 then `/gsd-new-milestone` to start v35.0)
+**Last shipped:** v34.0 — Trait Rarity Rework + Gold Solo Priority (2026-05-09; closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`; supersedes none — first v34 emission)
+**Prior shipped:** v33.0 — Charity Allowlist Governance (2026-05-07; closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399`)
+**Contract HEAD anchor:** `6b63f6d4daf346a53a1d463790f637308ea8d555` (v34.0 closure HEAD; source-tree HEAD post-Phase-261 close, stable across Phase 262 docs-only commits per D-262-CLOSURE-01)
+**Audit deliverables (cumulative):** `audit/FINDINGS-v25.0.md` + `FINDINGS-v27.0.md` + `FINDINGS-v28.0.md` + `FINDINGS-v29.0.md` + `FINDINGS-v30.0.md` + `FINDINGS-v31.0.md` + `FINDINGS-v32.0.md` + `FINDINGS-v33.0.md` + `FINDINGS-v34.0.md` (FINAL READ-only at HEAD `6b63f6d4`, 9 sections, 665 lines, 6-surface adversarial table all SAFE_*, zero F-34-NN finding blocks); 16 v30 supporting `audit/v30-*.md` + 5 v31 supporting `audit/v31-*.md` + 6 v32 supporting `audit/v32-*.md` artifacts; `KNOWN-ISSUES.md` UNMODIFIED (4 accepted-design RNG entries EXC-01..04 RE_VERIFIED at HEAD: EXC-01..03 NEGATIVE-scope at v34; EXC-04 RE_VERIFIED with STAT-05 chi² cross-cite)
 **Awaiting user commit:** `test/edge/LastPurchaseDayRace.test.js` + `test/edge/BackfillIdempotency.test.js` (TST-FILE-01 + TST-FILE-02 from v32.0 Phase 251; remain untracked permanently per D-253-FIND04-04)
 
 ## Deferred to Future Milestones
 
-_Carried forward from v33.0 archive `## Out of Scope` — not in v34.0 scope:_
+_Carried forward from v34.0 close — not in v34.0 scope:_
 - Auditing post-v32.0 commits (`002bde55` presale auto-deactivate, `2713ce61` setDecimatorAutoRebuy removal)
-- Re-execute Phase 257 Task 7 manual red-team with `/contract-auditor` + `/zero-day-hunter` skill-spawn enabled (procedural open item required if v33.0 deliverable is intended for external audit submission like a C4A warden contest)
+- Re-execute Phase 257 Task 7 manual red-team with `/contract-auditor` + `/zero-day-hunter` skill-spawn enabled (procedural open item required if v33.0 deliverable is intended for external audit submission like a C4A warden contest) — **resolved at v34.0** (Phase 262 Task 6 successfully spawned both skills with real output captured)
+- v35.0 burnie-near-future-per-pull-level resample seed (captured in `.planning/notes/2026-05-08-burnie-near-future-per-pull-level.md`; v35.0 milestone-start will ingest via fresh `/gsd-discuss-phase`)
+- Phase 261 INFO-tier reconciliation drifts (STAT-07 informational headline targets vs canonical analytical values; ROADMAP/REQUIREMENTS SURF-05 reconciliation) — surfaced INFO-only in `audit/FINDINGS-v34.0.md` §3c per D-262-FIND-01; no Phase 262 action required (already-handled-INFO)
 
 ## Active Milestone
 
