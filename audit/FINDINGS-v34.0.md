@@ -348,3 +348,43 @@ Phase 262 emits ZERO F-34-NN finding blocks per D-262-FIND-01 default expectatio
 **6 of 6 surfaces** (a..f) verdicted `SAFE_BY_DESIGN` / `SAFE_BY_STRUCTURAL_CLOSURE` at HEAD `<sha>`. Zero F-34-NN finding blocks emitted (default expected per D-262-FIND-01). No trust-asymmetry items emerged at v34 — gold-priority is a deterministic VRF-driven mechanism with no admin trust boundary, no presale / honeypot / drainable-pool surface. Step 2 validation pass (Task 6) red-teams this draft via `/contract-auditor` + `/zero-day-hunter` parallel spawn for missed vectors / weak grep / premature SAFE conclusions / 6th-surface novel-composition attacks per D-262-ADVERSARIAL-02 sequential-after-draft pattern. NOT spawning `/economic-analyst` or `/degen-skeptic` per D-262-ADVERSARIAL-01.
 
 ---
+
+## 5. Regression Appendix
+
+Regression appendix per ROADMAP success criterion 4 + REG-01..04. §5a REG-01: single PASS row covering v33.0 closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` non-widening at v34 HEAD per D-262-REG01-01 (v34 modifies ONLY `contracts/DegenerusTraitUtils.sol` + `contracts/modules/DegenerusGameJackpotModule.sol`; charity governance / GNRUS.sol byte-identical). §5b REG-02: single PASS row covering v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` non-widening per D-262-REG02-01 (L173 turbo guard `!rngLockedFlag` clause + L1174 backfill sentinel `rngWordByDay[idx + 1] == 0` + GameStorage `_livenessTriggered` body byte-identical). §5c REG-04 per-finding spot-check sweep (added in Task 9). §5d Combined REG-01..04 Distribution (added in Task 9).
+
+Verdict taxonomy per D-253-REG01-03 closed set: `{PASS / REGRESSED / SUPERSEDED}`. Each row carries an `re-verified at HEAD <sha>` backtick-quoted note.
+
+### 5a. REG-01 — v33.0 Closure Signal Non-Widening Re-Verification
+
+**Pre-evidence (RUN-FIRST):**
+
+```
+git diff 4ce3703d740d3707c88a1af595618120a8168399..HEAD -- contracts/GNRUS.sol     # empty (zero hunks; charity governance untouched)
+```
+
+| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| `REG-v33.0-CHARITY` | v33.0 closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (supersedes `MILESTONE_V33_AT_HEAD_dcb70941` per Phase 258 FIX-01 + FIX-02 closure). v33 audit deliverable `audit/FINDINGS-v33.0.md` 9 of 9 §4 surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY at HEAD `4ce3703d`; FIX-01 (pickCharity flush-after-payout reorder) + FIX-02 (lastWinningRecipient + PreviousWinnerNotVotable() vote-guard) structurally closed. | `4ce3703d..<sha>` (5 v34 contract source commits + 8 v34 test commits — none touch contracts/GNRUS.sol or charity-governance surface) | `contracts/GNRUS.sol` byte-identical at HEAD `<sha>` per `git diff 4ce3703d740d3707c88a1af595618120a8168399..HEAD -- contracts/GNRUS.sol` returns empty (zero hunks). FIX-01 `pickCharity:601-674` flush-after-payout reorder + FIX-02 `lastWinningRecipient` slot + `PreviousWinnerNotVotable()` revert at `vote(uint8 slot)` byte-identical. | v34 modifies ONLY `contracts/DegenerusTraitUtils.sol` + `contracts/modules/DegenerusGameJackpotModule.sol` (+ test harnesses `contracts/test/TraitUtilsTester.sol` + `contracts/test/JackpotSoloTester.sol`). Charity governance / GNRUS.sol orthogonal to trait/solo path. v33 §4 9-surface verdicts (a..i) carry forward unchanged at v34 HEAD; FIX-01 + FIX-02 invariants preserved. | **PASS** |
+
+**§5a distribution at HEAD `<sha>`: 1 PASS / 0 REGRESSED / 0 SUPERSEDED.** Single PASS row carries the v33.0 closure signal forward as non-widening at v34 HEAD `<sha>`. The v33 charity-governance surface (GNRUS.sol body + FIX-01 flush-after-payout reorder at `pickCharity:601-674` + FIX-02 `lastWinningRecipient` slot + `PreviousWinnerNotVotable()` revert) is byte-identical between baseline `4ce3703d` and v34 HEAD `<sha>` per `git diff 4ce3703d740d3707c88a1af595618120a8168399..HEAD -- contracts/GNRUS.sol` returning empty. v34 narrows but does not widen the v33.0 closure envelope: the v34 build modifies only `contracts/DegenerusTraitUtils.sol` (TRAIT-01..04 rewrite) + `contracts/modules/DegenerusGameJackpotModule.sol` (SOLO-01..06 + perf refactor) + the two test harnesses; none of those edits intersect the charity-governance surface. `re-verified at HEAD <sha>`.
+
+### 5b. REG-02 — v32.0 Closure Signal Non-Widening Re-Verification
+
+**Pre-evidence (RUN-FIRST):**
+
+```
+git diff acd88512..HEAD -- contracts/modules/DegenerusGameAdvanceModule.sol | grep -c "!rngLockedFlag"               # 0 (turbo guard byte-identical)
+git diff acd88512..HEAD -- contracts/modules/DegenerusGameAdvanceModule.sol | grep -c "rngWordByDay\[idx + 1\] == 0" # 0 (backfill sentinel byte-identical)
+git diff acd88512..HEAD -- contracts/storage/DegenerusGameStorage.sol | grep "_livenessTriggered"                     # empty (livenessTriggered body byte-identical)
+```
+
+| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| `REG-v32.0-F32NN` | v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` carry-forward (F-32-01 productive-pause/turbo race + F-32-02 _backfillGapDays double-execution; both SUPERSEDED-at-HEAD by L173 turbo guard `!rngLockedFlag` clause + L1174 backfill sentinel `rngWordByDay[idx + 1] == 0` committed in `acd88512`; v33 Phase 257 §5a single-PASS-row carry). | `acd88512..<sha>` (v32→v33 GNRUS changes + v33→v34 trait/solo changes; AdvanceModule turbo region L170-180 + backfill region L1170-1185 + GameStorage `_livenessTriggered` body NOT touched by v34) | L173 `!rngLockedFlag` turbo-guard + L1174 `rngWordByDay[idx + 1] == 0` backfill sentinel + GameStorage `_livenessTriggered` body byte-identical between baseline `acd88512` and HEAD `<sha>` per `git diff acd88512..HEAD -- contracts/modules/DegenerusGameAdvanceModule.sol contracts/storage/DegenerusGameStorage.sol` (defensive grep walk confirms zero hits in the three load-bearing line ranges). | v34 audit subject sources (DegenerusTraitUtils.sol + DegenerusGameJackpotModule.sol) are functionally orthogonal to AdvanceModule turbo path / rngGate fresh-word backfill region / GameStorage liveness body. Phase 261 SURF-04 SurfaceRegression test additionally proves v33.0-anchor non-injection-line byte-identity for the 8 documented JackpotModule sites — orthogonal evidence stream confirming v34 is a focused 2-source-file delta. KI EXC-02 + EXC-03 envelopes intact at HEAD via §6b NEGATIVE-scope re-verification (Task 9). | **PASS** |
+
+**§5b distribution at HEAD `<sha>`: 1 PASS / 0 REGRESSED / 0 SUPERSEDED.** Single PASS row carries the v32.0 closure signal forward as non-widening at v34 HEAD `<sha>`. The v32→v33→v34 chain preserves the L173 turbo guard + L1174 backfill sentinel + GameStorage `_livenessTriggered` body byte-for-byte; v33 Phase 257 already proved non-widening across the v32→v33 leg, and v34 adds zero hunks to those three load-bearing line ranges (verified above). `re-verified at HEAD <sha>`.
+
+**REG-01 + REG-02 closing attestation:** REG-01 + REG-02: 2 PASS / 0 REGRESSED / 0 SUPERSEDED. v33.0 closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` re-verified non-widening at v34 HEAD `<sha>`; v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` re-verified non-widening (L173 + L1174 + GameStorage `_livenessTriggered` body byte-identical). `re-verified at HEAD <sha>`.
+
+---
