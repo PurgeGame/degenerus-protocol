@@ -165,6 +165,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Domain separator for coin jackpot entropy derivation.
     bytes32 private constant COIN_JACKPOT_TAG = keccak256("coin-jackpot");
 
+    /// @dev Domain separator for per-pull level sampling in the daily coin jackpot.
+    ///      Distinct from COIN_JACKPOT_TAG so (randomWord, COIN_JACKPOT_TAG, ·) and
+    ///      (randomWord, COIN_LEVEL_TAG, ·) keccaks cannot collide.
+    bytes32 private constant COIN_LEVEL_TAG = keccak256("coin-level");
+
     /// @dev Domain separator for rolling current-pool daily jackpot percentage.
     bytes32 private constant DAILY_CURRENT_BPS_TAG =
         keccak256("daily-current-bps");
@@ -222,9 +227,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Maximum winners for daily coin jackpot (coinflip.creditFlip is 1 external call each).
     uint16 private constant DAILY_COIN_MAX_WINNERS = 50;
-
-    /// @dev Salt base for daily coin jackpot winner selection.
-    uint8 private constant DAILY_COIN_SALT_BASE = 252;
 
     /// @dev Share of daily BURNIE budget awarded to far-future ticket holders (25%).
     uint16 private constant FAR_FUTURE_COIN_BPS = 2500;
@@ -618,18 +620,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
             uint256 nearBudget = coinBudget - farBudget;
             if (nearBudget != 0) {
-                uint256 coinEntropy = uint256(
-                    keccak256(abi.encode(randWord, lvl, COIN_JACKPOT_TAG))
+                _awardDailyCoinToTraitWinners(
+                    lvl + 1,
+                    lvl + 4,
+                    bonusTraitsPacked,
+                    nearBudget,
+                    randWord
                 );
-                uint24 targetLevel = lvl + 1 + uint24(coinEntropy % 4);
-                {
-                    _awardDailyCoinToTraitWinners(
-                        targetLevel,
-                        bonusTraitsPacked,
-                        nearBudget,
-                        coinEntropy
-                    );
-                }
             }
         }
 
@@ -1726,18 +1723,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
 
-        uint256 entropy = uint256(
-            keccak256(abi.encode(randWord, lvl, COIN_JACKPOT_TAG))
-        );
-        uint24 targetLevel = minLevel == maxLevel
-            ? minLevel
-            : minLevel + uint24(entropy % (maxLevel - minLevel + 1));
-
         _awardDailyCoinToTraitWinners(
-            targetLevel,
+            minLevel,
+            maxLevel,
             bonusTraitsPacked,
             nearBudget,
-            entropy
+            randWord
         );
     }
 
@@ -1756,12 +1747,20 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         emit DailyWinningTraits(questDay, mainTraitsPacked, bonusTraitsPacked, bonusTargetLevel);
     }
 
-    /// @dev Awards BURNIE to random winners from the packed winning traits at a target level.
+    /// @dev Awards BURNIE to per-pull random ticket holders across [minLevel, maxLevel].
+    ///      Each pull samples its own random level via keccak256(randomWord, COIN_LEVEL_TAG, i)
+    ///      and rotates trait deterministically via i % 4. Empty (lvl', trait_i) buckets
+    ///      silently skip with no carry-forward and no top-up; the cursor still advances and
+    ///      the corresponding +1 extra slot is structurally lost (accepted underspend).
+    ///      Per-trait deity addresses are cached at loop entry; the holder-index keccak is
+    ///      keccak256(randomWord, trait_i, lvlPrime, i) so two pulls at the same (trait, i)
+    ///      but different sampled levels do not collapse to the same holder index.
     function _awardDailyCoinToTraitWinners(
-        uint24 lvl,
+        uint24 minLevel,
+        uint24 maxLevel,
         uint32 winningTraitsPacked,
         uint256 coinBudget,
-        uint256 entropy
+        uint256 randomWord
     ) private {
         if (coinBudget == 0) return;
         uint16 cap = DAILY_COIN_MAX_WINNERS;
@@ -1770,65 +1769,83 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             winningTraitsPacked
         );
-        (uint16[4] memory counts, uint8 activeCount) = _computeBucketCounts(
-            lvl,
-            traitIds,
-            cap,
-            entropy
-        );
-        if (activeCount == 0) return;
+
+        // Per-trait deity cache: deityBySymbol is level-independent, so one read per trait
+        // serves all 50 pulls of that trait.
+        address[4] memory deityCache;
+        for (uint8 t; t < 4; ) {
+            uint8 trait = traitIds[t];
+            uint8 fullSymId = (trait >> 6) * 8 + (trait & 0x07);
+            if (fullSymId < 32) {
+                deityCache[t] = deityBySymbol[fullSymId];
+            }
+            unchecked { ++t; }
+        }
 
         uint256 baseAmount = coinBudget / cap;
         uint256 extra = coinBudget % cap;
-        uint256 cursor = entropy % cap;
+        uint256 cursor = randomWord % cap;
+        uint24 range = maxLevel - minLevel + 1;
 
-        for (uint8 traitIdx; traitIdx < 4; ) {
-            uint16 count = counts[traitIdx];
-            if (count != 0) {
-                entropy = uint256(
-                    keccak256(abi.encode(entropy, traitIdx, coinBudget))
-                );
+        for (uint256 i; i < cap; ) {
+            uint8 traitIdx = uint8(i % 4);
+            uint8 trait_i = traitIds[traitIdx];
 
-                (
-                    address[] memory bucketWinners,
-                    uint256[] memory bucketTicketIndexes
-                ) = _randTraitTicket(
-                        traitBurnTicket[lvl],
-                        entropy,
-                        traitIds[traitIdx],
-                        uint8(count),
-                        uint8(DAILY_COIN_SALT_BASE + traitIdx)
-                    );
+            uint24 lvlPrime = minLevel + uint24(uint256(keccak256(
+                abi.encode(randomWord, COIN_LEVEL_TAG, i)
+            )) % range);
 
-                uint256 len = bucketWinners.length;
-                for (uint256 i; i < len; ) {
-                    uint256 amount = baseAmount;
-                    if (extra != 0 && cursor < extra) {
-                        amount += 1;
-                    }
-
-                    address winner = bucketWinners[i];
-                    if (winner != address(0) && amount != 0) {
-                        emit JackpotBurnieWin(
-                            winner,
-                            lvl,
-                            traitIds[traitIdx],
-                            amount,
-                            bucketTicketIndexes[i]
-                        );
-                        coinflip.creditFlip(winner, amount);
-                    }
-
-                    unchecked {
-                        ++cursor;
-                        if (cursor == cap) cursor = 0;
-                        ++i;
-                    }
+            address[] storage holders = traitBurnTicket[lvlPrime][trait_i];
+            uint256 len = holders.length;
+            address deity = deityCache[traitIdx];
+            uint256 virtualCount;
+            if (deity != address(0)) {
+                virtualCount = len / 50;
+                if (virtualCount < 2) virtualCount = 2;
+            }
+            uint256 effectiveLen = len + virtualCount;
+            if (effectiveLen == 0) {
+                unchecked {
+                    ++i;
+                    ++cursor;
+                    if (cursor == cap) cursor = 0;
                 }
+                continue;
+            }
+
+            uint256 idx = uint256(keccak256(
+                abi.encode(randomWord, trait_i, lvlPrime, i)
+            )) % effectiveLen;
+            address winner;
+            uint256 ticketIdx;
+            if (idx < len) {
+                winner = holders[idx];
+                ticketIdx = idx;
+            } else {
+                winner = deity;
+                ticketIdx = type(uint256).max;
+            }
+
+            uint256 amount = baseAmount;
+            if (extra != 0 && cursor < extra) {
+                amount += 1;
+            }
+
+            if (winner != address(0) && amount != 0) {
+                emit JackpotBurnieWin(
+                    winner,
+                    lvlPrime,
+                    trait_i,
+                    amount,
+                    ticketIdx
+                );
+                coinflip.creditFlip(winner, amount);
             }
 
             unchecked {
-                ++traitIdx;
+                ++i;
+                ++cursor;
+                if (cursor == cap) cursor = 0;
             }
         }
     }
