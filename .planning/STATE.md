@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v35.0
 milestone_name: BURNIE Near-Future Per-Pull Level Resample
 status: completed
-last_updated: "2026-05-09T15:58:11.631Z"
+last_updated: "2026-05-09T16:27:38.451Z"
 last_activity: 2026-05-09 -- Phase 264 marked complete
 progress:
   total_phases: 3
