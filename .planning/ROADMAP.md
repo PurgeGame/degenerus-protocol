@@ -47,7 +47,7 @@
 ### v35.0 BURNIE Near-Future Per-Pull Level Resample (Phases 263-265) — IN PROGRESS
 
 - [ ] **Phase 263: Per-Pull Level Resample Implementation** — Refactor `payDailyCoinJackpot` (purchase phase, ~L1708) and `payDailyJackpotCoinAndTickets` (jackpot phase, ~L624) in `contracts/modules/DegenerusGameJackpotModule.sol` to a flat 50-pull loop with per-pull level sampling, deterministic trait rotation, per-trait deity caching, salt scheme update (`keccak256(randomWord, trait, lvl, i)`), and empty-bucket silent-skip semantics. Single batched contract diff per `feedback_batch_contract_approval.md` (two call sites are tightly coupled; partial landing breaks the salt scheme).
-- [ ] **Phase 264: Statistical Validation + Cross-Surface Preservation** — Reuse Phase 261 chi-squared infrastructure (or extend it) to validate per-pull level uniformity over `[minLevel, maxLevel]` × 4 traits and ~25% per-trait share; measure empty-bucket skip rate; cross-surface preservation tests for `_randTraitTicket` other callers + far-future BURNIE coin path + ETH daily jackpot v34.0 injection sites + purchase-phase ticket distribution; gas regression confirms ~70K–110K extra per call within accepted budget.
+- [x] **Phase 264: Statistical Validation + Cross-Surface Preservation** — Reuse Phase 261 chi-squared infrastructure (or extend it) to validate per-pull level uniformity over `[minLevel, maxLevel]` × 4 traits and ~25% per-trait share; measure empty-bucket skip rate; cross-surface preservation tests for `_randTraitTicket` other callers + far-future BURNIE coin path + ETH daily jackpot v34.0 injection sites + purchase-phase ticket distribution; gas regression confirms ~70K–110K extra per call within accepted budget. (completed 2026-05-09)
 - [ ] **Phase 265: Delta Audit + Findings Consolidation** — Author `audit/FINDINGS-v35.0.md` 9-section deliverable (FINAL READ-only at HEAD); adversarial sweep over PPL deltas; conservation re-proof (`coinBudget` + solvency + BURNIE supply); v34.0 + v33.0 closure signal regression; KI envelope re-verifications (EXC-04 extra-attention for per-pull-level keccak entropy uniformity claim); off-chain indexer `JackpotBurnieWin.lvl` semantic-shift documentation; emit closure signal `MILESTONE_V35_AT_HEAD_<sha>`.
 
 ## Phase Details
@@ -81,11 +81,11 @@ Plans:
   4. Cross-surface preservation: full callsite sweep of `_randTraitTicket` confirms event-only emission sites (L513/L527/L1713/L1715), equal-split tickets/coin sites (L598/L599/L1687), lootbox flat-bucket (L683), and far-future BURNIE portion (`_awardFarFutureCoinJackpot`) are byte-identical OR proven non-regressing under the new salt scheme (full-sweep matches v34.0 Phase 260 8-non-injection-site discipline). ETH daily jackpot v34.0 `_pickSoloQuadrant` injection sites at L282/L349/L524/L1147 byte-identical; `_distributeTicketJackpot` byte-identical [SURF-01, SURF-02, SURF-03, SURF-04].
   5. Gas regression test asserts per-call delta on `payDailyCoinJackpot` and `payDailyJackpotCoinAndTickets` within the disclosed ~70K–110K extra envelope (50 pulls × ~1.5–2.2K extra/pull) under the realistic warmup profile; no path explosion in `advanceGame` ceiling (≥ 1.99× margin preserved). Theoretical worst case derived FIRST per `feedback_gas_worst_case.md`, then tested [SURF-05].
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 264-01-PLAN.md — STAT-01..04 chi² uniformity + per-trait share + D-IMPL-01 boundary cross-validation harness + STAT-03 empty-bucket skip rate (PerPullLevelDistribution.test.js + PerPullEmptyBucketSkip.test.js; Phase 261 infra reuse confirmed)
-- [ ] 264-02-PLAN.md — SURF-01..05 cross-surface byte-identity grep-proof (SurfaceRegression.test.js v35.0 extension) + entry-point gas regression with theoretical worst-case derivation (Phase264GasRegression.test.js) + 1.99× advanceGame margin re-assertion (AdvanceGameGas.test.js extension) + package.json wiring
+- [x] 264-01-PLAN.md — STAT-01..04 chi² uniformity + per-trait share + D-IMPL-01 boundary cross-validation harness + STAT-03 empty-bucket skip rate (PerPullLevelDistribution.test.js + PerPullEmptyBucketSkip.test.js; Phase 261 infra reuse confirmed)
+- [x] 264-02-PLAN.md — SURF-01..05 cross-surface byte-identity grep-proof (SurfaceRegression.test.js v35.0 extension) + entry-point gas regression with theoretical worst-case derivation (Phase264GasRegression.test.js) + 1.99× advanceGame margin re-assertion (AdvanceGameGas.test.js extension) + package.json wiring
 
 ### Phase 265: Delta Audit + Findings Consolidation
 
@@ -106,7 +106,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 263. Per-Pull Level Resample Implementation | 0/1 | Plan ready | — |
-| 264. Statistical Validation + Cross-Surface Preservation | 0/2 | Plan ready | — |
+| 264. Statistical Validation + Cross-Surface Preservation | 2/2 | Complete   | 2026-05-09 |
 | 265. Delta Audit + Findings Consolidation | 0/0 | Not started | — |
 
 ## Active Milestone

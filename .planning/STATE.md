@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v35.0
 milestone_name: BURNIE Near-Future Per-Pull Level Resample
-status: executing
-last_updated: "2026-05-09T13:14:03.839Z"
-last_activity: 2026-05-09 -- Phase 264 planning complete
+status: completed
+last_updated: "2026-05-09T15:58:11.631Z"
+last_activity: 2026-05-09 -- Phase 264 marked complete
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 3
+  percent: 67
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-09 after v34.0 milestone close)
 
 ## Current Position
 
-Phase: Not started (roadmap drafted; ready for `/gsd-plan-phase 263`)
+Phase: 264 — COMPLETE
 Plan: —
-Status: Ready to execute
-Last activity: 2026-05-09 -- Phase 264 planning complete
+Status: Phase 264 complete
+Last activity: 2026-05-09 -- Phase 264 marked complete
 
 ## Last Shipped Milestone
 
