@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v36.0
-milestone_name: Lootbox-Path Entropy Refactor
-status: shipped
-last_updated: "2026-05-10T09:30:00.000Z"
-last_activity: 2026-05-10 -- v36.0 milestone CLOSED — Phase 266 SHIPPED
+milestone: v37.0
+milestone_name: Degenerette Recalibration + Maintenance Bundle
+status: planning
+last_updated: "2026-05-10T09:48:51.913Z"
+last_activity: 2026-05-10
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
-closure_signal: MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-09 after v35.0 milestone close)
 
 ## Current Position
 
-Phase: 266 (lootbox-entropy-refactor) — COMPLETED
-Plan: 1 of 1 (closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a` emitted in §9c)
-Status: v36.0 milestone SHIPPED
-Last activity: 2026-05-10 -- v36.0 milestone CLOSED — Phase 266 SHIPPED
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-10 — Milestone v37.0 started
 
 ## Last Shipped Milestone
 
