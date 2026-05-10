@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v37.0
 milestone_name: Degenerette Recalibration + Maintenance Bundle
-status: planning
-last_updated: "2026-05-10T12:00:00.000Z"
-last_activity: 2026-05-10
+status: Phase 267 context gathered; ready for `/gsd-plan-phase 267` to draft 267-01-PLAN.md
+last_updated: "2026-05-10T11:30:00.000Z"
+last_activity: "2026-05-10 — Phase 267 CONTEXT.md authored. 4 gray areas resolved (D-267-COUNTGOLD-01 + D-267-PLAN-01 + D-267-CONSTVERIFY-01 + D-267-COMMENTS-01) plus 1 self-check follow-up (D-267-VISIBILITY-01). Carry-forward chain from v33/v34/v35/v36 captured (D-267-FILES-01 / D-267-CLOSURE-01..02 / D-267-FCITE-01 / D-267-SEV-01 / D-267-APPROVAL-01..02). Two doc-vs-impl conflicts surfaced and locked against planning-note implementation: _countGoldQuadrants(uint32 ticket) private pure (not uint8[4]) and packedTraitsDegenerette internal pure (not external pure — library convention). Plan task includes upstream doc fixes for REQUIREMENTS.md DGN-01 + DGN-03 + ROADMAP success criteria 1+2+5 + Phase 271 AUDIT-04 attestation language."
 progress:
   total_phases: 5
   completed_phases: 0
@@ -24,10 +24,11 @@ See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.
 
 ## Current Position
 
-Phase: 267 (next-up; not started)
+Phase: 267 (context gathered; not yet planned)
 Plan: —
-Status: Roadmap drafted; awaiting `/gsd-plan-phase 267` to draft 267-01-PLAN.md
-Last activity: 2026-05-10 — v37.0 ROADMAP.md authored (5-phase shape: 267 Degenerette contracts → 268 stat + cross-surface tests → 269 lootbox dead-branch cleanup + SURF-05 re-pin → 270 post-v32.0 deferred-commit adversarial sub-audit → 271 delta audit + FINDINGS-v37.0.md terminal). Coverage 47/47 v37.0 requirements mapped.
+Status: Phase 267 CONTEXT.md authored; ready for `/gsd-plan-phase 267` to draft 267-01-PLAN.md
+Last activity: 2026-05-10 — Phase 267 CONTEXT.md authored. 4 gray areas + 1 self-check follow-up resolved (D-267-COUNTGOLD-01 / D-267-PLAN-01 / D-267-CONSTVERIFY-01 / D-267-COMMENTS-01 / D-267-VISIBILITY-01). Carry-forward chain captured. Two doc-vs-impl conflicts surfaced and locked against planning-note implementation; plan includes upstream REQUIREMENTS.md/ROADMAP/AUDIT-04 doc-fix chore tasks.
+Resume file: .planning/phases/267-degenerette-producer-5-table-payout-rewrite/267-CONTEXT.md
 
 ## Last Shipped Milestone
 
@@ -173,7 +174,7 @@ Audit deliverables:
 
 ## Operator Next Steps
 
-- v37.0 milestone OPEN. Roadmap drafted (Phases 267-271). Next: `/gsd-plan-phase 267` to draft `267-01-PLAN.md` for Degenerette Producer + 5-Table Payout Rewrite.
+- v37.0 milestone OPEN. Phase 267 CONTEXT.md authored at `.planning/phases/267-degenerette-producer-5-table-payout-rewrite/267-CONTEXT.md`. Next: `/gsd-plan-phase 267` to draft `267-01-PLAN.md` for Degenerette Producer + 5-Table Payout Rewrite (5 locked decisions + carry-forward chain captured; downstream agents read CONTEXT.md before planning per D-267-PLAN-01).
 - Address backlog seeds (see `## Next-Milestone Backlog (v38+)`): (a) BAF jackpot `_jackpotTicketRoll` xorshift refactor (v36.0 ENT-05 carry); (b) `runrewardjackpots` module-misplacement note (stale, not v37.0-tagged); (c) game-over thorough hardening backlog.
 - Confirm closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a` recorded in `audit/FINDINGS-v36.0.md` §9c + `.planning/MILESTONES.md` v36.0 row + `.planning/phases/266-lootbox-entropy-refactor/266-01-SUMMARY.md` frontmatter (verify, then proceed).
 - Optionally rotate `.planning/milestones/v36.0-phases/` archive structure (mirroring v34.0 / v35.0 archive pattern) if not already done.
