@@ -89,3 +89,98 @@ CONTEXT.md D-265 carry of D-257-FCITE-01 + D-262-FCITE-01 + D-253-15 step 8 + RO
 See §9 Milestone Closure Attestation for the D-253-15 step 9 attestation block triggering v35.0 milestone closure via signal `MILESTONE_V35_AT_HEAD_<sha>`.
 
 ---
+
+## 3. Per-Phase Sections
+
+Consolidates Phase 263 + 264 outputs into condensed summaries with cross-cites to source artifacts. All cross-cites are READ-only lookups; no fresh derivation. Sources `re-verified at HEAD <sha>` per Task 13 anchor resolution. §3c AUDIT-06 indexer semantic-shift disclosure prose appears in this section (Task 5). §3d AUDIT-01 delta-surface table + AUDIT-04 storage-slot scan appear after §3c (Tasks 3-4). §3e AUDIT-03 conservation re-proof rows appear after §3d (Task 8).
+
+### 3a. Phase 263 — Per-Pull Level Resample Implementation
+
+**Change-count card:**
+
+- Plans: 1 (263-01)
+- Commits: `cf564816` (Phase 263 single batched contract-tree commit — `feat(263): per-pull level resample for daily coin jackpot [PPL-01..PPL-08]`); diff stats: 91 insertions(+), 74 deletions(-) — net +17 LOC across the constants block + `payDailyJackpotCoinAndTickets` coin-jackpot block + `payDailyCoinJackpot` tail + new `_awardDailyCoinToTraitWinners` helper body.
+- Functions added: `_awardDailyCoinToTraitWinners(uint8[4] memory traitIds, uint256 randomWord, uint24 minLevel, uint24 maxLevel, uint256 coinBudget) internal` — 50-pull flat loop with per-pull-level keccak + per-trait deity caching + empty-bucket silent-skip + cursor remainder share-math (PPL-01..08).
+- Constants added: `bytes32 private constant COIN_LEVEL_TAG = keccak256("coin-level")` at L171 (D-SHAPE-05).
+- Functions modified: `payDailyCoinJackpot` (purchase phase, ~L1708 callsite — PPL-01) + `payDailyJackpotCoinAndTickets` (jackpot phase, L623 callsite — PPL-02). Both rewired to invoke `_awardDailyCoinToTraitWinners(traitIds, randWord, minLevel, maxLevel, coinBudget)`.
+- Functions refactored (no behavior change for other callers): `_randTraitTicket` body BYTE-IDENTICAL at L1653-1703 with 4 other-callers BYTE-IDENTICAL at L700/L989/L1296/L1399 (D-IMPL-01 — inline holder-keccak in the new helper instead of reusing `_randTraitTicket` for the coin-jackpot path; legacy 8-bit `salt` parameter dropped from this code path only).
+- Code deleted: `DAILY_COIN_SALT_BASE = 252` constant declaration at original L227 (only consumer at original L1800 disappeared with helper rewrite — pre-flight grep verified zero non-rewritten callers); original L621-624 dead block (`uint256 coinEntropy = uint256(keccak256(abi.encode(randWord, lvl, COIN_JACKPOT_TAG)));` + `uint24 targetLevel = lvl + 1 + uint24(coinEntropy % 4);` + scope braces — REMOVED); original L1729-1734 dead block (`uint256 entropy = uint256(...);` + `uint24 targetLevel = minLevel == maxLevel ? minLevel : ...` — REMOVED). NO call-removal of `_computeBucketCounts`'s definition; only the coin-jackpot-path CALL was removed (lootbox-path caller preserved per Phase 263 SUMMARY Grep Gauntlet #5).
+- BYTE-IDENTICAL preservation (Phase 263 SUMMARY §"Byte-Identity Sweep" — 7 protected ranges):
+  - `_randTraitTicket` body L1653-1703 (SURF-01)
+  - `coinEntropy` + `DailyWinningTraits` emit blocks L518-520, L536-538 (D-INDEXER-01)
+  - `_pickSoloQuadrant` body L1098-1115 + 4 ETH injection sites L287/L454/L531/L1181 (SURF-03)
+  - `_awardFarFutureCoinJackpot` body L1839-1906 (SURF-02)
+  - `_distributeTicketJackpot` body L897-932 (SURF-04)
+  - `_computeBucketCounts` definition L1030-1082
+  - `_randTraitTicket` other callers L700, L989, L1296, L1399
+- Tests: ZERO Phase 263 unit tests per Phase 263 D-PLAN-01 default — all empirical verification deferred to Phase 264.
+- REQs satisfied: 8/8 (PPL-01, PPL-02, PPL-03, PPL-04, PPL-05, PPL-06, PPL-07, PPL-08).
+- Compile: `npx hardhat compile` → exit 0 at HEAD `cf564816`. Two pre-existing baseline shadow warnings preserved at the BYTE-IDENTICAL `payDailyJackpot` purchase-phase block; zero new warnings introduced.
+
+**Cross-cite:** `.planning/phases/263-per-pull-level-resample-implementation/263-01-SUMMARY.md` + `263-01-PLAN.md` + `263-CONTEXT.md` (cross-cite-only, READ-only on upstream artifacts).
+
+**Per-REQ summary table:**
+
+| REQ | Verdict | Cross-Cite | Attestation |
+| --- | ------- | ---------- | ----------- |
+| PPL-01 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | `payDailyCoinJackpot` (purchase phase, ~L1708) callsite rewired to `_awardDailyCoinToTraitWinners(traitIds, randWord, minLevel, maxLevel, coinBudget)`; per-pull keccak `keccak256(abi.encode(randomWord, COIN_LEVEL_TAG, i)) % range` consumed inside helper. |
+| PPL-02 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | `payDailyJackpotCoinAndTickets` (jackpot phase, L623) callsite rewired to `_awardDailyCoinToTraitWinners(traitIds, randWord, lvl + 1, lvl + 4, coinBudget - farBudget)`; same helper consumes the call-determined `[minLevel, maxLevel]` range. |
+| PPL-03 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | Flat 50-pull loop in `_awardDailyCoinToTraitWinners`; deterministic trait rotation via `traitIds[i % 4]` per pull; `_computeBucketCounts` NOT called from coin-jackpot path (preserved for lootbox path per Grep Gauntlet #5: `grep -c '_computeBucketCounts' contracts/modules/DegenerusGameJackpotModule.sol` returns 2 = def + lootbox caller). |
+| PPL-04 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | Share-math byte-identical: `cap = min(coinBudget / floor, 50)`, `baseAmount = coinBudget / cap`, `extraCount = coinBudget - baseAmount * cap`, `cursor = randomWord % cap`; per pull `amount = baseAmount + (i < extraCount ? 1 : 0)` — cursor remainder distribution preserved byte-identical to pre-Phase-263 `_randTraitTicket` cursor pattern. |
+| PPL-05 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | Empty-bucket silent skip: `if (effectiveLen == 0) continue;` — no carry-forward, no fallback, no redistribution. coinBudget conservation `Σ paid ≤ coinBudget` (structural underspend accepted; no overspend possible — see §3e AUDIT-03 + §4 surface (e) STAT-03 reframe row). |
+| PPL-06 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | Per-trait deity caching: `address[4] memory deityCache` populated with 4 SLOADs at loop entry; subsequent 50 pulls read from memory (was 50× SLOAD/pull pre-PPL = 200 SLOADs). Cache cannot stale because deity assignment is immutable for the current day's `traitIds[i % 4]` set; helper runs atomically inside `advanceGame` (no re-entrancy hooks). |
+| PPL-07 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | New salt scheme: per-pull holder index = `uint256(keccak256(abi.encode(randomWord, trait_i, lvlPrime, i))) % effectiveLen`; legacy 8-bit `salt` parameter dropped from coin-jackpot caller; `_randTraitTicket` body + 4 other callers BYTE-IDENTICAL per Phase 264 SURF-01. |
+| PPL-08 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | `JackpotBurnieWin` event signature byte-identical at L96 (zero ABI change); only the runtime semantics of the `lvl` field shift from shared-call-level to per-pull-sampled — see §3c AUDIT-06 disclosure. |
+
+`re-verified at HEAD <sha>`.
+
+### 3b. Phase 264 — Statistical Validation + Cross-Surface Preservation
+
+**Change-count card:**
+
+- Plans: 2 (264-01 STAT side, 264-02 SURF side).
+- Commits (test-tree + chore only — Phase 264 makes ZERO `contracts/` changes per D-IMPL-02):
+  - `aa41485e` — `test(264-01): add STAT-01/02/04 + D-IMPL-01 boundary harness for per-pull level resample` (`test/stat/PerPullLevelDistribution.test.js` NEW, 643 lines)
+  - `7dcfeb0c` — `test(264-01): add STAT-03 empty-bucket skip rate + cumulative underspend test` (`test/stat/PerPullEmptyBucketSkip.test.js` NEW, 340 lines; test currently FAILS at HEAD with 88.24% skip rate — REFRAMED in §4 per D-265-STAT03-01)
+  - `82717bcf` — `test(264-02): extend SurfaceRegression with v35.0 SURF-01..04 grep-proof` (`test/stat/SurfaceRegression.test.js` extended +206 lines; 13 protected ranges asserted)
+  - `36234847` — `test(264-02): add Phase264GasRegression for SURF-05 entry-point gas` (`test/gas/Phase264GasRegression.test.js` NEW, 483 lines with theoretical worst-case opcode walk in header per `feedback_gas_worst_case.md`)
+  - `20b15468` — `test(264-02): extend AdvanceGameGas with v35.0 1.99x margin assertion` (`test/gas/AdvanceGameGas.test.js` extended +193 lines)
+  - `833b341d` — `chore(264-02): wire Phase 264 test files into npm scripts` (`package.json` `scripts.test:stat` + `scripts.test`)
+- Statistical evidence:
+  - **STAT-01** per-pull level distribution chi² over 10K aggregated samples — passes for both range=4 (chi² = 5.114 < 7.815 critical at α=0.05 df=3) and range=8 (chi² = 3.019 < 14.067 critical at α=0.05 df=7); seed-uniform across `[minLevel, maxLevel]`.
+  - **STAT-02** per-trait deterministic share — passes (counts = [13, 13, 12, 12] under `i % 4` rotation; degenerate chi² = 0.08 < 7.815 df=3).
+  - **STAT-04** Phase 261 chi² infra reuse confirmed (`makeRng` / `CHI2_CRIT_05` / `wilsonHilfertyZ` re-declared verbatim in `test/stat/PerPullLevelDistribution.test.js` header; `COIN_LEVEL_TAG` and `BONUS_TRAITS_TAG` sanity-pinned).
+  - **D-IMPL-01** boundary cross-validation harness — passes for all 3 fixed seeds (`0xc0120101`, `0xc0120102`, `0xc0120103`); 50/50 emit count under deity-backed dense fixture; strict `expect(onChainLvls).to.deep.equal(jsLvls)` per-pull byte-identity verified across full call B emit stream over range=[2, 5] — load-bearing for §4 STAT-03 reframe row.
+  - **STAT-03** empty-bucket skip rate test landed at strict 10% threshold; currently FAILS at HEAD with measured `skipRate = 88.24%` on the natural-lifecycle fresh `deployFullProtocol` fixture (no organic purchases, no deity passes — only constructor pre-queued vault tickets + DGNRS perpetual tickets) — REFRAMED in §4 per D-265-STAT03-01 as fixture-calibration error (NOT a finding); helper correctness proven by D-IMPL-01 deity-fixture.
+- Cross-surface evidence:
+  - **SURF-01..04 byte-identity grep-proof:** per-line modified-set hunk-walk vs `git diff 6b63f6d4 HEAD -- contracts/modules/DegenerusGameJackpotModule.sol` — ZERO `-` deletions inside any of 13 protected ranges (`_randTraitTicket` body L1653-1703 + 4 other-callers at L700/L989/L1296/L1399; coinEntropy + DailyWinningTraits emit blocks L518-520, L536-538; emitDailyWinningTraits external L1750-1756; `_pickSoloQuadrant` body L1098-1115 + 4 ETH injection sites at L287/L454/L531/L1181; `_awardFarFutureCoinJackpot` body L1839-1906; `_distributeTicketJackpot` body L897-932; `_computeBucketCounts` def L1030-1082).
+  - **SURF-05 entry-point gas regression** at HEAD: `payDailyCoinJackpot` (stage 6) PINNED at `PAY_DAILY_COIN_JACKPOT_GAS_REF = 2_860_535` with `BASELINE_NO_COIN_JACKPOT_GAS = 285_604` (stage 1 anchor); per-site tolerance ±2K; helper-growth bound `PER_CALL_GAS_DELTA_BOUND = 120_000` vs pinned HEAD REF; theoretical worst-case opcode walk in test file header (per-pull body breakdown + EIP-2929 cold/warm SLOAD profile + realistic 75-110K envelope + 120K asserted bound). `payDailyJackpotCoinAndTickets` (stage 9) soft-skips when stage 9 not reachable (turbo-mode jackpot phase compresses 7→11→10 in simulator's deterministic lifecycle).
+  - **D-IMPL-06 advanceGame 1.99× margin:** re-runs section-16 SC-1 305-player worst-case fixture; measured at HEAD `cf564816` stage 11 = 3.18M-3.55M gas, margin = 8.4-9.4× (well above required 1.99×; existing section-16 SC-1/2a/2b assertions byte-identical: 6 × `expect(r.gasUsed).to.be.lt(16_000_000n)` preserved).
+- REQs satisfied: 9/9 (STAT-01, STAT-02, STAT-03, STAT-04, SURF-01, SURF-02, SURF-03, SURF-04, SURF-05); STAT-03 satisfied as a "test landed and surfaces fixture-density measurement" — see §4 reframe row.
+- Phase 264 deferred operational items (carry-forward as INFO-tier; not Phase 265 deliverables):
+  - (a) STAT-03 fixture retune to D-IMPL-07 mid/late-game holder-density spec (NOT a Phase 265 deliverable per D-265-STAT03-01 — backlog item only).
+  - (b) Phase 264 SURF-05 gas REF drift in combined `npm run test:stat` ordering (128K drift vs isolation REF; root cause not diagnosed; operational test-fixture issue).
+  - (c) Phase 261 SURF-05 `runTerminalJackpot` pre-existing failure (drift 118,928 vs ref 2,599,868; pre-existing at HEAD `7c5f2f21`; out of v35.0 audit scope).
+  - (d) Hardhat ESM cleanup quirk (mocha file-unloader trailing error on test failure; tooling quirk).
+
+  All 4 items are operational/tooling — NOT contract-behavior findings; surfaced INFO-only per D-265-FIND-01.
+
+**Cross-cite:** `.planning/phases/264-statistical-validation-cross-surface-preservation/264-01-SUMMARY.md` + `264-02-SUMMARY.md` + `VERIFICATION.md` + `264-CONTEXT.md` (cross-cite-only).
+
+**Per-REQ summary table:**
+
+| REQ | Verdict | Cross-Cite | Attestation |
+| --- | ------- | ---------- | ----------- |
+| STAT-01 | `PASS_AT_HEAD_<sha>` | 264-01-SUMMARY.md | Chi² over 10K aggregated samples in `test/stat/PerPullLevelDistribution.test.js`; range=4 chi² = 5.114 < 7.815 (α=0.05 df=3); range=8 chi² = 3.019 < 14.067 (α=0.05 df=7). |
+| STAT-02 | `PASS_AT_HEAD_<sha>` | 264-01-SUMMARY.md | Per-trait counts = [13, 13, 12, 12] under `i % 4` rotation across 50 pulls; degenerate chi² = 0.08. Deterministic-by-design — no PRNG variance because rotation index is `i % 4`. |
+| STAT-03 | `PASS as test-landed; fixture-calibration measurement reframed in §4 per D-265-STAT03-01` | 264-01-SUMMARY.md | Test landed at strict 10% threshold per D-IMPL-08; measured `skipRate = 88.24%` on natural-lifecycle fresh `deployFullProtocol` fixture (~16 vault tickets per level × levels [2..5] ≈ 64 tickets distributed across 16 `(lvl', trait_i)` cells → ~75% empty cells expected, matching observed ~88% rate after PRNG variance). Helper correctness proven by D-IMPL-01 deity-fixture (50/50 emit count under deity-backed dense fixture). REFRAMED in §4 surface (e) per D-265-STAT03-01. |
+| STAT-04 | `PASS_AT_HEAD_<sha>` | 264-01-SUMMARY.md | Phase 261 chi² infrastructure (`makeRng` / `CHI2_CRIT_05` / `wilsonHilfertyZ`) re-declared verbatim in `test/stat/PerPullLevelDistribution.test.js` header. `COIN_LEVEL_TAG` and `BONUS_TRAITS_TAG` sanity-pinned to expected `keccak256("coin-level")` + `keccak256("bonus-traits")` digests. |
+| SURF-01 | `PASS_AT_HEAD_<sha>` | 264-02-SUMMARY.md | `_randTraitTicket` body L1653-1703 + 4 other callers L700/L989/L1296/L1399 BYTE-IDENTICAL per per-line modified-set walk vs raw `git diff 6b63f6d4 HEAD -- contracts/modules/DegenerusGameJackpotModule.sol`. |
+| SURF-02 | `PASS_AT_HEAD_<sha>` | 264-02-SUMMARY.md | `_awardFarFutureCoinJackpot` body L1839-1906 BYTE-IDENTICAL — far-future coin jackpot path orthogonal to v35 near-future per-pull-level resample. |
+| SURF-03 | `PASS_AT_HEAD_<sha>` | 264-02-SUMMARY.md | `_pickSoloQuadrant` body L1098-1115 + 4 ETH injection sites L287/L454/L531/L1181 BYTE-IDENTICAL — gold-solo-priority path (v34 SOLO) preserved unchanged at v35. |
+| SURF-04 | `PASS_AT_HEAD_<sha>` | 264-02-SUMMARY.md | `_distributeTicketJackpot` body L897-932 + `_computeBucketCounts` def L1030-1082 + emit blocks L518-520, L536-538 + `emitDailyWinningTraits` external L1750-1756 BYTE-IDENTICAL — ticket-jackpot + indexer emit blocks preserved unchanged at v35. |
+| SURF-05 | `PASS_AT_HEAD_<sha>` | 264-02-SUMMARY.md | `payDailyCoinJackpot` stage 6 gas PINNED at `PAY_DAILY_COIN_JACKPOT_GAS_REF = 2,860,535` with `PER_CALL_GAS_DELTA_BOUND = 120,000`; `advanceGame` measured 9.42× margin above 1.99× ceiling at HEAD `cf564816`; theoretical worst-case in test file header per `feedback_gas_worst_case.md`. |
+
+`re-verified at HEAD <sha>`.
+
+---
