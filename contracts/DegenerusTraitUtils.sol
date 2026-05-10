@@ -177,4 +177,49 @@ library DegenerusTraitUtils {
         return uint32(traitA) | (uint32(traitB) << 8) | (uint32(traitC) << 16) | (uint32(traitD) << 24);
     }
 
+    /*+======================================================================+
+      |                  DEGENERETTE TRAIT PACKING (NEAR-UNIFORM)            |
+      +======================================================================+
+      |  Sibling helper to packedTraitsFromSeed using a per-quadrant         |
+      |  near-uniform color distribution: 7 commons at 2/15 each (13.333%), |
+      |  gold at 1/15 (6.667%). Symbol uniform 1/8 from the high 32 bits of  |
+      |  each 64-bit lane. Output format mirrors packedTraitsFromSeed:       |
+      |  [QQ][CCC][SSS] per byte, 4 bytes packed into uint32. This producer  |
+      |  feeds the Degenerette quickPlay payout schedule (5 per-N tables);   |
+      |  packedTraitsFromSeed (heavy-tail color) feeds Mint + Jackpot.       |
+      +======================================================================+*/
+
+    /// @notice Packs 4 quadrant traits using the Degenerette near-uniform color
+    ///         distribution: 7 commons at 2/15 each (13.333%), gold at 1/15 (6.667%).
+    /// @dev Per-quadrant: color via base-15 scaling (gold = scaled==14, common =
+    ///      scaled >> 1), symbol uniform 1/8 from the high 32 bits of each lane.
+    ///      Output format mirrors packedTraitsFromSeed: [QQ][CCC][SSS] per byte,
+    ///      4 bytes packed into uint32. The library `internal pure` declaration
+    ///      inlines into the consumer at compile time — no new public-ABI selector.
+    /// @param rand 256-bit random seed (typically from per-spin keccak256)
+    /// @return 32-bit packed traits value with near-uniform color + uniform symbol
+    function packedTraitsDegenerette(uint256 rand) internal pure returns (uint32) {
+        uint8 traitA = _degTrait(uint64(rand));               // Quadrant 0: bits 7-6 = 00
+        uint8 traitB = _degTrait(uint64(rand >> 64))  | 64;   // Quadrant 1: bits 7-6 = 01
+        uint8 traitC = _degTrait(uint64(rand >> 128)) | 128;  // Quadrant 2: bits 7-6 = 10
+        uint8 traitD = _degTrait(uint64(rand >> 192)) | 192;  // Quadrant 3: bits 7-6 = 11
+        return uint32(traitA)
+             | (uint32(traitB) << 8)
+             | (uint32(traitC) << 16)
+             | (uint32(traitD) << 24);
+    }
+
+    /// @dev Per-quadrant Degenerette trait derivation. Color via base-15 scaling
+    ///      with bias < 2.3e-10 per slot; symbol uniform 1/8 from high 32 bits.
+    ///      Color mapping: scaled ∈ [0..14]; scaled == 14 → gold (color 7),
+    ///      otherwise color = scaled >> 1 (yields 0..6, two scaled values per common).
+    /// @param rnd 64-bit per-quadrant random word
+    /// @return 6-bit trait ID [CCC][SSS] (quadrant bits added by caller)
+    function _degTrait(uint64 rnd) private pure returns (uint8) {
+        uint32 scaled = uint32((uint64(uint32(rnd)) * 15) >> 32);
+        uint8 color = scaled == 14 ? 7 : uint8(scaled >> 1);
+        uint8 symbol = uint8(rnd >> 32) & 7;
+        return (color << 3) | symbol;
+    }
+
 }

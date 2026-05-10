@@ -232,40 +232,57 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Salt for quick play ticket generation.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
 
-    /// @dev Base payout multipliers in centi-x (divide by 100 for multiplier).
-    ///      Index = match count. Base payouts at 100% ROI: 0x, 0x, 1.90x, 4.75x, 15x, 42.5x, 195x, 1000x, 100000x
-    ///      Scaled by activity score ROI (90%-99.9%).
-    ///      Packed as 32 bits each: [matches*32 .. matches*32+31]
-    ///      Total EV at 100% ROI: 99.99% (just under 100%)
-    uint256 private constant QUICK_PLAY_BASE_PAYOUTS_PACKED =
-        (uint256(0) << 0) | // 0 matches: 0x
-            (uint256(0) << 32) | // 1 match: 0x
-            (uint256(190) << 64) | // 2 matches: 1.90x base
-            (uint256(475) << 96) | // 3 matches: 4.75x base
-            (uint256(1500) << 128) | // 4 matches: 15x base
-            (uint256(4250) << 160) | // 5 matches: 42.5x base
-            (uint256(19500) << 192) | // 6 matches: 195x base
-            (uint256(100000) << 224); // 7 matches: 1,000x base
-
-    /// @dev Base payout for 8 matches (jackpot). 10,000,000 centi-x = 100,000x at 100% ROI.
-    uint256 private constant QUICK_PLAY_BASE_PAYOUT_8_MATCHES = 10_000_000;
-
     // -------------------------------------------------------------------------
-    // WWXRP Bonus EV Redistribution (Full Ticket)
+    // Per-N Base Payout Tables (Full Ticket — 5 separate per-N tables)
     // -------------------------------------------------------------------------
     //
-    // Bonus EV for WWXRP high-activity bettors is concentrated into unlikely
-    // outcomes by scaling the bonus ROI portion per match bucket:
-    //   - 10% of bonus EV → bucket 5
-    //   - 30% of bonus EV → each of buckets 6, 7, 8
+    // Indexed by N = _countGoldQuadrants(playerTicket) ∈ {0..4}. Each table is
+    // calibrated against THAT N-value's binomial-convolution match-count
+    // distribution P_N(M) so that basePayoutEV = exactly 100 centi-x per N.
+    // EV-equality across picks is enforced by the table calibration; runtime
+    // payout = bet × basePayout_N(M) × roiBps / 1_000_000. Player RTP at activity
+    // tier r equals exactly r/10000 (90.00% min, 99.90% max).
     //
-    // Factors below are derived from uniform-ticket probabilities (all weights=10)
-    // and the payout table (0, 0, 1.90x, 4.75x, 15x, 54x, 248x, 1280x, 100000x).
+    // Bit layout (M=0..7 packed): 32 bits per match index, [M*32 .. M*32+31].
+    // Drift per N: ±0.0003 bps (M=4/M=5/M=6 cascade absorbs rounding residual;
+    // M=8 stays at the natural uniform-scale value, monotonic in N).
+    //
+    // Constants are the Fraction-exact output of
+    // .planning/notes/degenerette-recalibration/derive_5_tables.py — verified
+    // byte-identical at the Phase 267 Task 2 gate (267-01-CONSTANTS-VERIFY.md
+    // PASS_ALL_25 per D-267-CONSTVERIFY-01).
+    uint256 private constant QUICK_PLAY_PAYOUTS_N0_PACKED = 0x0001a42c000051f1000011da00000654000001ff000000cc0000000000000000;
+    uint256 private constant QUICK_PLAY_PAYOUTS_N1_PACKED = 0x0001eb8600005fd7000014e70000075f00000256000000ef0000000000000000;
+    uint256 private constant QUICK_PLAY_PAYOUTS_N2_PACKED = 0x000241d9000070ac00001894000008aa000002bf000001190000000000000000;
+    uint256 private constant QUICK_PLAY_PAYOUTS_N3_PACKED = 0x0002ac130000856900001d1700000a39000003400000014d0000000000000000;
+    uint256 private constant QUICK_PLAY_PAYOUTS_N4_PACKED = 0x0003310c00009f5a000022be00000c4d000003e20000018d0000000000000000;
+
+    /// @dev Per-N M=8 jackpot tier (exceeds 32-bit slot; held as separate uint256).
+    ///      Values stay at uniform-scale and are strictly monotonic in N.
+    uint256 private constant QUICK_PLAY_PAYOUT_N0_M8 = 10_756_411; // 107,564.11x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_N1_M8 = 12_583_037; // 125,830.37x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_N2_M8 = 14_792_939; // 147,929.39x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_N3_M8 = 17_512_324; // 175,123.24x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_N4_M8 = 20_916_435; // 209,164.35x bet
+
+    // -------------------------------------------------------------------------
+    // WWXRP Bonus EV Redistribution (Full Ticket — 5 per-N factor tables)
+    // -------------------------------------------------------------------------
+    //
+    // Per-N factors derived from each N's basePayout schedule + binomial-
+    // convolution P_N(M) + 10/30/30/30 split across buckets 5/6/7/8. Total
+    // ETH bonus EV = exactly 5.000% per N (drift ±0.0000 bps in
+    // 267-01-CONSTANTS-VERIFY.md). The same per-N factors apply to ETH bets
+    // (ETH_ROI_BONUS_BPS = 500) and WWXRP high-roi bets (_wwxrpHighValueRoi).
+    //
+    // Bit layout (B=5..8 packed): 64 bits per bucket index, [B=5 | B=6 | B=7 | B=8],
+    // with B=5 in the low 64 bits. Read via `(packed >> ((bucket - 5) * 64)) & 0xFFFFFFFFFFFFFFFF`.
     uint256 private constant WWXRP_BONUS_FACTOR_SCALE = 1_000_000;
-    uint256 private constant WWXRP_BONUS_FACTOR_BUCKET5 = 1_531_388;
-    uint256 private constant WWXRP_BONUS_FACTOR_BUCKET6 = 13_016_797;
-    uint256 private constant WWXRP_BONUS_FACTOR_BUCKET7 = 57_745_766;
-    uint256 private constant WWXRP_BONUS_FACTOR_BUCKET8 = 30_027_799;
+    uint256 private constant WWXRP_FACTORS_N0_PACKED = 0x0000000002278add0000000003fd603d0000000000ddba9f00000000001923d6;
+    uint256 private constant WWXRP_FACTORS_N1_PACKED = 0x0000000003aef46a0000000005fd43a60000000001285f2400000000001e36c9;
+    uint256 private constant WWXRP_FACTORS_N2_PACKED = 0x0000000006442ce7000000000914e5e4000000000192745c000000000024f43d;
+    uint256 private constant WWXRP_FACTORS_N3_PACKED = 0x000000000a96251f000000000dd6ad96000000000228fcb000000000002de0ce;
+    uint256 private constant WWXRP_FACTORS_N4_PACKED = 0x0000000011ba25db00000000151a90e70000000002fdeaff0000000000399efe;
 
     // -------------------------------------------------------------------------
     // Packed Bet Layout
@@ -284,17 +301,9 @@ contract DegenerusGameDegeneretteModule is
     // [236]      hasCustom (1 bit): must be 1
     // [237..239] hero (3 bits): [0]=enabled, [1..2]=quadrant (0-3)
     //
-    // EXACT EV NORMALIZATION (Per-Outcome Product-of-Ratios):
-    // Full Ticket payouts are adjusted to ensure EXACT equal EV regardless of trait
-    // selection. For each quadrant, the ratio P(uniform outcome) / P(actual outcome)
-    // is computed, and the product of all 4 ratios is the payout multiplier.
-    //
-    // Per quadrant (color weight wC, symbol weight wS, total weight space = 75):
-    //   Both match:  num *= 100,   den *= wC * wS
-    //   One match:   num *= 1300,  den *= 75*(wC+wS) - 2*wC*wS
-    //   No match:    num *= 4225,  den *= (75-wC) * (75-wS)
-    //
-    // This gives mathematically exact equal EV for all possible ticket configurations.
+    /// EV-equality across picks: each pick maps to exactly one of 5 per-N tables;
+    /// basePayoutEV is calibrated to 100 centi-x per table; runtime payout =
+    /// bet × basePayout_N(M) × roiBps / 1_000_000. No per-outcome correction needed.
     //
     // -------------------------------------------------------------------------
 
@@ -311,12 +320,25 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant FT_HAS_CUSTOM_SHIFT = 236;
     uint256 private constant FT_HERO_SHIFT = 237; // 3 bits: [0]=enabled, [1..2]=quadrant
 
-    // Hero quadrant multipliers (EV-neutral per-match-count)
-    // When hero quadrant both-matches: boost. Otherwise: penalty.
-    // Constraint: P(hero|M) * boost(M) + (1-P(hero|M)) * penalty = HERO_SCALE for each M.
-    // Penalty is 5% (9500/10000). Boost varies per M=2..7, packed 16 bits each.
-    // M=2: 23500, M=3: 14166, M=4: 11833, M=5: 10900, M=6: 10433, M=7: 10166
-    uint256 private constant HERO_BOOST_PACKED = 0x27b628c12a942e3937565bcc;
+    // -------------------------------------------------------------------------
+    // Hero Quadrant Multipliers (Per-N, Symbol-Only Match)
+    // -------------------------------------------------------------------------
+    //
+    // Hero match fires on the symbol-axis comparison in the hero quadrant only
+    // (color of hero quadrant ignored). P(hero|M, N) × boost(M, N)
+    // + (1 − P(hero|M, N)) × HERO_PENALTY = HERO_SCALE for each (M, N), so the
+    // boost is EV-neutral per match count per N.
+    //
+    // Bit layout: M=2..7 packed 16 bits each (96 bits total), with M=2 in the
+    // low 16 bits: [M=2 | M=3 | M=4 | M=5 | M=6 | M=7]. Read via
+    // `(packed >> ((matches - 2) * 16)) & 0xFFFF`. P(hero|M, N) = (1/8) ×
+    // P(other-7-axes = M-1 | N) / P_N(M) where the "other 7" comprises 3 sym
+    // + 4 color axes.
+    uint256 private constant HERO_BOOST_N0_PACKED = 0x275a27be2849291a2a762d2e;
+    uint256 private constant HERO_BOOST_N1_PACKED = 0x275027a9282728e52a262ca9;
+    uint256 private constant HERO_BOOST_N2_PACKED = 0x27482797280828b529d92c26;
+    uint256 private constant HERO_BOOST_N3_PACKED = 0x2742278827ed288829902ba6;
+    uint256 private constant HERO_BOOST_N4_PACKED = 0x273d277c27d62860294b2b2a;
     uint16 private constant HERO_PENALTY = 9500;
     uint16 private constant HERO_SCALE = 10_000;
 
@@ -604,7 +626,7 @@ contract DegenerusGameDegeneretteModule is
                         )
                     )
                 );
-            uint32 resultTicket = DegenerusTraitUtils.packedTraitsFromSeed(
+            uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(
                 resultSeed
             );
             if (spinIdx == 0) {
@@ -653,7 +675,7 @@ contract DegenerusGameDegeneretteModule is
                             )
                         )
                     ); // 'L'
-                _distributePayout(player, currency, payout, lootboxWord);
+                _distributePayout(player, currency, amountPerTicket, payout, lootboxWord);
             }
 
             // Award sDGNRS from Reward pool on 6+ match ETH bets
@@ -675,62 +697,96 @@ contract DegenerusGameDegeneretteModule is
         );
     }
 
-    /// @dev Distributes payout to player. ETH payouts: 25% as ETH (capped at 10% of pool),
-    ///      75% + any excess above cap converted to lootbox rewards.
+    /// @dev Distributes payout to player. ETH-currency 3-tier split rule:
+    ///        - payout ≤ 3 × betAmount        → 100% ETH (no lootbox conversion).
+    ///        - 3×bet < payout ≤ 10 × bet     → 2.5 × betAmount ETH (flat floor) + remainder lootbox.
+    ///        - payout > 10 × betAmount       → payout / 4 ETH (25% standard) + remainder lootbox.
+    ///      Implementation expresses the upper two tiers as
+    ///      `ethShare = max(2.5 × betAmount, payout / 4)`; the two bands meet exactly at
+    ///      payout = 10 × bet where `payout / 4 == 2.5 × bet`. Boundary at exactly
+    ///      3 × bet is inclusive (3 × bet pays full ETH); the discontinuity at
+    ///      3.0× → 3.01× drops ETH from 3.0×bet to 2.5×bet (smaller than the
+    ///      naive 25% alternative which would drop to 0.7525×bet).
+    ///
+    ///      Pool cap (ETH_WIN_CAP_BPS = 10% of futurePool) takes PRECEDENCE over
+    ///      all three tiers in the unfrozen branch: if computed ethShare exceeds
+    ///      10% of pool, excess flips to lootbox and the PayoutCapped event is
+    ///      emitted. Frozen-pool branch retains its solvency-check posture
+    ///      (pending future debit with revert-on-insufficient).
+    ///
+    ///      CURRENCY_BURNIE pays directly via the coin mint; CURRENCY_WWXRP pays
+    ///      directly via the wwxrp mint. Neither honors the 3-tier split (which
+    ///      applies only to the lootbox-convertible ETH path).
     /// @param player The player to receive the payout.
-    /// @param currency The currency type (0=ETH, 1=BURNIE, 2=unsupported, 3=WWXRP).
-    /// @param payout The payout amount.
+    /// @param currency The currency type (0=ETH, 1=BURNIE, 3=WWXRP).
+    /// @param betAmount The per-ticket bet amount (uint128) — the tier-threshold reference.
+    /// @param payout The total payout amount (uint256).
     /// @param rngWord The RNG word for lootbox conversion (only used for ETH).
     function _distributePayout(
         address player,
         uint8 currency,
+        uint128 betAmount,
         uint256 payout,
         uint256 rngWord
     ) private {
         if (currency == CURRENCY_ETH) {
-            // Split: 25% as ETH, 75% as lootbox
-            uint256 ethPortion = payout / 4;
-            uint256 lootboxPortion = payout - ethPortion;
-
-            if (prizePoolFrozen) {
-                // During freeze, route ETH payouts through the pending pool side-channel
-                // (matching the bet-placement pattern at L558-561). The live futurePrizePool
-                // snapshot that advanceGame/runRewardJackpots operates on is UNTOUCHED.
-                // Pending future was credited by purchases during freeze; we debit it here.
-                // No percentage cap: unfrozen amounts are never a significant portion
-                // of the total future pool, so the full ethPortion is debited directly.
-                (uint128 pNext, uint128 pFuture) = _getPendingPools();
-
-                // Solvency check: pending accumulator must cover the ETH payout
-                if (uint256(pFuture) < ethPortion) revert E();
-
-                // BAF-SAFE: _setPendingPools write completes before _addClaimableEth (no stale local).
-                // DegeneretteModule._addClaimableEth has no auto-rebuy path (no pool writes).
-                // _resolveLootboxDirect -> LootboxModule has zero pool writes.
-                _setPendingPools(pNext, pFuture - uint128(ethPortion));
-                _addClaimableEth(player, ethPortion);
+            // 3-tier split rule (PAY-SPLIT-01..02)
+            uint256 ethShare;
+            uint256 lootboxShare;
+            uint256 threeBet = uint256(betAmount) * 3;
+            if (payout <= threeBet) {
+                // Tier 1: payout ≤ 3 × bet → 100% ETH.
+                ethShare = payout;
+                lootboxShare = 0;
             } else {
-                // Unfrozen path: debit the live futurePrizePool directly (unchanged from original).
-                uint256 pool = _getFuturePrizePool();
-
-                // Cap ETH portion at 10% of pool, excess goes to lootbox
-                // After capping, ethPortion <= pool*10% < pool, so no solvency check needed
-                uint256 maxEth = (pool * ETH_WIN_CAP_BPS) / 10_000;
-                if (ethPortion > maxEth) {
-                    lootboxPortion += ethPortion - maxEth;
-                    ethPortion = maxEth;
-                    emit PayoutCapped(player, ethPortion, lootboxPortion);
-                }
-                unchecked {
-                    pool -= ethPortion;
-                }
-                _setFuturePrizePool(pool);
-                _addClaimableEth(player, ethPortion);
+                // Tier 2 (3 × bet < payout ≤ 10 × bet) → 2.5 × bet floor.
+                // Tier 3 (payout > 10 × bet) → payout / 4 standard.
+                // The max() resolves cleanly between the two bands.
+                uint256 minEth = (uint256(betAmount) * 5) / 2; // 2.5 × bet
+                uint256 stdEth = payout / 4;                    // 25% of payout
+                ethShare = stdEth > minEth ? stdEth : minEth;
+                lootboxShare = payout - ethShare;
             }
 
-            // Convert 75% (+ any cap excess) to lootbox rewards
-            if (lootboxPortion > 0) {
-                _resolveLootboxDirect(player, lootboxPortion, rngWord);
+            if (prizePoolFrozen) {
+                // Frozen path: route ETH share through the pending pool side-channel
+                // (matching the bet-placement pattern). The live futurePrizePool
+                // snapshot that advanceGame / runRewardJackpots operates on stays
+                // intact; the pending future accumulator (credited by purchases
+                // during freeze) is debited here with a revert-on-insufficient
+                // solvency check.
+                (uint128 pNext, uint128 pFuture) = _getPendingPools();
+
+                // Solvency check: pending accumulator must cover the ETH share.
+                if (uint256(pFuture) < ethShare) revert E();
+
+                // BAF-SAFE: _setPendingPools write completes before _addClaimableEth
+                // (no stale local). DegeneretteModule._addClaimableEth has no
+                // auto-rebuy path (no pool writes). _resolveLootboxDirect →
+                // LootboxModule has zero pool writes.
+                _setPendingPools(pNext, pFuture - uint128(ethShare));
+                _addClaimableEth(player, ethShare);
+            } else {
+                // Unfrozen path: pool cap (ETH_WIN_CAP_BPS) takes PRECEDENCE over
+                // the 3-tier split (PAY-SPLIT-03). After capping,
+                // ethShare ≤ pool × 10% < pool, so no further solvency check.
+                uint256 pool = _getFuturePrizePool();
+                uint256 maxEth = (pool * ETH_WIN_CAP_BPS) / 10_000;
+                if (ethShare > maxEth) {
+                    lootboxShare += ethShare - maxEth;
+                    ethShare = maxEth;
+                    emit PayoutCapped(player, ethShare, lootboxShare);
+                }
+                unchecked {
+                    pool -= ethShare;
+                }
+                _setFuturePrizePool(pool);
+                _addClaimableEth(player, ethShare);
+            }
+
+            // Convert remainder (if any) to lootbox rewards.
+            if (lootboxShare > 0) {
+                _resolveLootboxDirect(player, lootboxShare, rngWord);
             }
         } else if (currency == CURRENCY_BURNIE) {
             coin.mintForGame(player, payout);
@@ -794,58 +850,17 @@ contract DegenerusGameDegeneretteModule is
     // Bet Math + Outcome
     // -------------------------------------------------------------------------
 
-    /// @dev Computes per-outcome EV normalization multiplier as num/den.
-    ///      For each quadrant, computes the ratio of uniform outcome probability
-    ///      to actual outcome probability. The product of 4 ratios normalizes EV.
-    ///
-    ///      This gives EXACT equal EV for all possible ticket configurations,
-    ///      accounting for different trait weights (8, 9, or 10 per bucket).
-    ///
-    /// @param playerTicket The player's ticket (packed traits).
-    /// @param resultTicket The result ticket (packed traits).
-    /// @return num Numerator of the normalization ratio.
-    /// @return den Denominator of the normalization ratio.
-    function _evNormalizationRatio(
-        uint32 playerTicket,
-        uint32 resultTicket
-    ) private pure returns (uint256 num, uint256 den) {
+    /// @dev Counts gold (color == 7) quadrants in a packed ticket.
+    ///      Color tier occupies bits 5-3 of each per-quadrant byte; gold is the
+    ///      strict equality `color == 7` (not `>= 7`). Returns N ∈ {0..4} —
+    ///      the index for per-N payout / hero / WWXRP factor table dispatch.
+    /// @param ticket The packed player ticket (uint32, [QQ][CCC][SSS] per byte).
+    /// @return count Number of gold quadrants (0..4).
+    function _countGoldQuadrants(uint32 ticket) private pure returns (uint8 count) {
         unchecked {
-            num = 1;
-            den = 1;
-
-            for (uint8 q = 0; q < 4; ) {
-                uint256 shift = uint256(q) * 8;
-
-                // Extract player color/symbol bucket indices
-                uint256 pColor = (playerTicket >> (shift + 3)) & 7;
-                uint256 pSymbol = (playerTicket >> shift) & 7;
-                // Extract result color/symbol bucket indices
-                uint256 rColor = (resultTicket >> (shift + 3)) & 7;
-                uint256 rSymbol = (resultTicket >> shift) & 7;
-
-                // Compute weights: bucket 0-3 = 10, 4-6 = 9, 7 = 8
-                uint256 wC = 10 - (pColor > 3 ? 1 : 0) - (pColor > 6 ? 1 : 0);
-                uint256 wS = 10 - (pSymbol > 3 ? 1 : 0) - (pSymbol > 6 ? 1 : 0);
-
-                bool colorMatch = (pColor == rColor);
-                bool symbolMatch = (pSymbol == rSymbol);
-
-                if (colorMatch && symbolMatch) {
-                    // Both match: uniform P = 100/5625, actual P = wC*wS/5625
-                    num *= 100;
-                    den *= wC * wS;
-                } else if (colorMatch || symbolMatch) {
-                    // One match: uniform P = 1300/5625
-                    // actual P = [75*(wC+wS) - 2*wC*wS] / 5625
-                    num *= 1300;
-                    den *= 75 * (wC + wS) - 2 * wC * wS;
-                } else {
-                    // No match: uniform P = 4225/5625, actual P = (75-wC)*(75-wS)/5625
-                    num *= 4225;
-                    den *= (75 - wC) * (75 - wS);
-                }
-
-                ++q;
+            for (uint8 q = 0; q < 4; ++q) {
+                uint8 color = uint8((ticket >> (q * 8 + 3)) & 7);
+                if (color == 7) ++count;
             }
         }
     }
@@ -895,23 +910,29 @@ contract DegenerusGameDegeneretteModule is
         return matches; // 5,6,7,8
     }
 
-    /// @dev Returns bonus ROI (bps) for a bucket given total bonus ROI (bps).
-    function _wwxrpBonusRoiForBucket(
-        uint8 bucket,
-        uint256 bonusRoiBps
-    ) private pure returns (uint256 bonusBps) {
-        uint256 factor;
-        if (bucket == 5) factor = WWXRP_BONUS_FACTOR_BUCKET5;
-        else if (bucket == 6) factor = WWXRP_BONUS_FACTOR_BUCKET6;
-        else if (bucket == 7) factor = WWXRP_BONUS_FACTOR_BUCKET7;
-        else if (bucket == 8) factor = WWXRP_BONUS_FACTOR_BUCKET8;
-        else return 0;
-
-        bonusBps = (bonusRoiBps * factor) / WWXRP_BONUS_FACTOR_SCALE;
+    /// @dev Returns the per-N WWXRP factor for a bucket B ∈ {5, 6, 7, 8}.
+    ///      Buckets outside that range yield zero (no bonus). Per-N factors are
+    ///      derived from each N's basePayout schedule + binomial-convolution
+    ///      P_N(M) + 10/30/30/30 split so total ETH bonus EV = exactly 5.000% per N.
+    /// @param N Gold-quadrant count of the player ticket (0..4).
+    /// @param bucket WWXRP bonus bucket from `_wwxrpBonusBucket(matches)` (5..8 or 0).
+    /// @return factor 64-bit factor; multiply with `bonusRoiBps` and divide by `WWXRP_BONUS_FACTOR_SCALE`.
+    function _wwxrpFactor(uint8 N, uint8 bucket) private pure returns (uint256 factor) {
+        if (bucket < 5 || bucket > 8) return 0;
+        uint256 packed;
+        if (N == 0) packed = WWXRP_FACTORS_N0_PACKED;
+        else if (N == 1) packed = WWXRP_FACTORS_N1_PACKED;
+        else if (N == 2) packed = WWXRP_FACTORS_N2_PACKED;
+        else if (N == 3) packed = WWXRP_FACTORS_N3_PACKED;
+        else packed = WWXRP_FACTORS_N4_PACKED;
+        factor = (packed >> (uint256(bucket - 5) * 64)) & 0xFFFFFFFFFFFFFFFF;
     }
 
     /// @dev Calculates Full Ticket payout based on matches and activity score ROI.
-    ///      Applies per-outcome rarity multiplier to ensure equal EV regardless of trait selection.
+    ///      Dispatches to one of 5 per-N tables indexed by gold-quadrant count of
+    ///      the player's pick (`N = _countGoldQuadrants(playerTicket)`). Each
+    ///      per-N table is calibrated so basePayoutEV = exactly 100 centi-x
+    ///      against P_N(M) — equal EV across picks within rounding (≤ 0.0003 bps).
     /// @param playerTicket The player's ticket (packed traits).
     /// @param resultTicket The result ticket (packed traits).
     /// @param matches Number of attribute matches (0-8).
@@ -919,7 +940,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param betAmount The bet amount per ticket.
     /// @param roiBps The ROI in basis points (from activity score).
     /// @param wwxrpHighRoi The WWXRP high-value ROI (0 if not WWXRP).
-    /// @return payout The payout amount (rarity-adjusted).
+    /// @return payout The payout amount.
     function _fullTicketPayout(
         uint32 playerTicket,
         uint32 resultTicket,
@@ -931,93 +952,107 @@ contract DegenerusGameDegeneretteModule is
         bool heroEnabled,
         uint8 heroQuadrant
     ) private pure returns (uint256 payout) {
-        uint256 basePayoutBps = _getBasePayoutBps(matches);
+        uint8 N = _countGoldQuadrants(playerTicket);
+        uint256 basePayoutBps = _getBasePayoutBps(N, matches);
 
-        // Bonus ROI is redistributed into 5+ match buckets
+        // Bonus ROI is redistributed into 5+ match buckets via per-N factor lookup.
         uint256 effectiveRoi = roiBps;
-        if (currency == CURRENCY_WWXRP && wwxrpHighRoi > roiBps) {
-            uint8 bucket = _wwxrpBonusBucket(matches);
-            if (bucket != 0) {
-                uint256 bonusRoi = wwxrpHighRoi - roiBps;
-                uint256 bonusBucket = _wwxrpBonusRoiForBucket(bucket, bonusRoi);
-                effectiveRoi = roiBps + bonusBucket;
+        uint8 bucket = _wwxrpBonusBucket(matches);
+        if (bucket != 0) {
+            uint256 baseBonus;
+            if (currency == CURRENCY_WWXRP && wwxrpHighRoi > roiBps) {
+                baseBonus = wwxrpHighRoi - roiBps;
+            } else if (currency == CURRENCY_ETH) {
+                baseBonus = ETH_ROI_BONUS_BPS;
             }
-        } else if (currency == CURRENCY_ETH) {
-            uint8 bucket = _wwxrpBonusBucket(matches);
-            if (bucket != 0) {
-                uint256 bonusBucket = _wwxrpBonusRoiForBucket(
-                    bucket,
-                    ETH_ROI_BONUS_BPS
-                );
-                effectiveRoi = roiBps + bonusBucket;
+            if (baseBonus != 0) {
+                uint256 factor = _wwxrpFactor(N, bucket);
+                effectiveRoi = roiBps + (baseBonus * factor) / WWXRP_BONUS_FACTOR_SCALE;
             }
         }
 
-        // Apply ROI scaling: payout = betAmount * basePayout * roiBps / 10000 / 100
-        // basePayout is in "centi-x" (190 = 1.90x), roiBps is in bps (9000 = 90%)
-        // Final: betAmount * basePayout * roiBps / 1_000_000
+        // Apply ROI scaling: payout = betAmount × basePayout × roiBps / 1_000_000
+        // basePayout is in "centi-x" (190 = 1.90x), roiBps is in bps (9000 = 90%).
         payout =
             (uint256(betAmount) * basePayoutBps * effectiveRoi) /
             1_000_000;
 
-        // Apply per-outcome EV normalization to ensure EXACT equal EV
-        // regardless of trait selection. Product of 4 per-quadrant probability ratios.
-        (uint256 evNum, uint256 evDen) = _evNormalizationRatio(
-            playerTicket,
-            resultTicket
-        );
-        payout = (payout * evNum) / evDen;
-
-        // Hero quadrant: boost payout when hero quadrant both-matches, penalize otherwise.
-        // EV-neutral per match count: P(hero|M)*boost(M) + (1-P(hero|M))*penalty = 1.
-        // No adjustment for M<2 (payout=0) or M=8 (hero always matches, can't offset).
+        // Hero quadrant: boost payout when hero quadrant symbol matches; penalize otherwise.
+        // EV-neutral per match count per N: P(hero|M, N) × boost(M, N)
+        // + (1 − P(hero|M, N)) × HERO_PENALTY = HERO_SCALE.
+        // No adjustment for M < 2 (payout = 0) or M = 8 (hero EV-neutrality cannot offset).
         if (heroEnabled && matches >= 2 && matches < 8) {
             payout = _applyHeroMultiplier(
                 payout,
                 playerTicket,
                 resultTicket,
                 matches,
-                heroQuadrant
+                heroQuadrant,
+                N
             );
         }
     }
 
-    /// @dev Applies the hero quadrant boost/penalty to a payout.
-    ///      Checks if the hero quadrant's color AND symbol both match.
-    ///      If yes: multiply by boost(M). If no: multiply by penalty.
+    /// @dev Applies the per-N hero quadrant boost/penalty to a payout.
+    ///      Hero match fires on the symbol-axis comparison in the hero quadrant
+    ///      only (color of hero quadrant ignored). If symbol matches, look up
+    ///      per-M boost from the per-N HERO_BOOST table; otherwise apply HERO_PENALTY.
+    /// @param payout The pre-hero payout (centi-x scaled).
+    /// @param playerTicket The player's ticket (packed traits).
+    /// @param resultTicket The result ticket (packed traits).
+    /// @param matches Number of attribute matches (2..7 in this branch).
+    /// @param heroQuadrant The hero quadrant (0..3).
+    /// @param N Gold-quadrant count of the player ticket (0..4) — selects per-N hero table.
+    /// @return Adjusted payout after the per-N hero multiplier.
     function _applyHeroMultiplier(
         uint256 payout,
         uint32 playerTicket,
         uint32 resultTicket,
         uint8 matches,
-        uint8 heroQuadrant
+        uint8 heroQuadrant,
+        uint8 N
     ) private pure returns (uint256) {
         uint256 shift = uint256(heroQuadrant) * 8;
-        bool colorMatch = ((playerTicket >> (shift + 3)) & 7) ==
-            ((resultTicket >> (shift + 3)) & 7);
         bool symbolMatch = ((playerTicket >> shift) & 7) ==
             ((resultTicket >> shift) & 7);
 
         uint256 multiplier;
-        if (colorMatch && symbolMatch) {
-            // Hero quadrant fully matched — look up per-M boost
-            multiplier =
-                (HERO_BOOST_PACKED >> (uint256(matches - 2) * 16)) &
-                MASK_16;
+        if (symbolMatch) {
+            uint256 packed;
+            if (N == 0) packed = HERO_BOOST_N0_PACKED;
+            else if (N == 1) packed = HERO_BOOST_N1_PACKED;
+            else if (N == 2) packed = HERO_BOOST_N2_PACKED;
+            else if (N == 3) packed = HERO_BOOST_N3_PACKED;
+            else packed = HERO_BOOST_N4_PACKED;
+            multiplier = (packed >> (uint256(matches - 2) * 16)) & MASK_16;
         } else {
             multiplier = HERO_PENALTY;
         }
         return (payout * multiplier) / HERO_SCALE;
     }
 
-    /// @dev Gets the base payout multiplier in centi-x for a match count.
-    /// @param matches Number of matches (0-8).
-    /// @return Base payout in centi-x (190 = 1.90x at 100% ROI).
-    function _getBasePayoutBps(uint8 matches) private pure returns (uint256) {
-        if (matches >= 8) return QUICK_PLAY_BASE_PAYOUT_8_MATCHES;
-        return
-            (QUICK_PLAY_BASE_PAYOUTS_PACKED >> (uint256(matches) * 32)) &
-            0xFFFFFFFF;
+    /// @dev Dispatches to the per-N base payout table for the given match count.
+    ///      M = 0..7 are packed 32 bits each into `QUICK_PLAY_PAYOUTS_N{N}_PACKED`;
+    ///      M = 8 jackpot exceeds the 32-bit slot so each N has a separate
+    ///      `QUICK_PLAY_PAYOUT_N{N}_M8` constant.
+    /// @param N Gold-quadrant count of the player ticket (0..4).
+    /// @param matches Number of attribute matches (0..8).
+    /// @return Base payout in centi-x (e.g. 204 = 2.04x at 100% ROI).
+    function _getBasePayoutBps(uint8 N, uint8 matches) private pure returns (uint256) {
+        if (matches >= 8) {
+            if (N == 0) return QUICK_PLAY_PAYOUT_N0_M8;
+            if (N == 1) return QUICK_PLAY_PAYOUT_N1_M8;
+            if (N == 2) return QUICK_PLAY_PAYOUT_N2_M8;
+            if (N == 3) return QUICK_PLAY_PAYOUT_N3_M8;
+            return QUICK_PLAY_PAYOUT_N4_M8;
+        }
+        uint256 packed;
+        if (N == 0) packed = QUICK_PLAY_PAYOUTS_N0_PACKED;
+        else if (N == 1) packed = QUICK_PLAY_PAYOUTS_N1_PACKED;
+        else if (N == 2) packed = QUICK_PLAY_PAYOUTS_N2_PACKED;
+        else if (N == 3) packed = QUICK_PLAY_PAYOUTS_N3_PACKED;
+        else packed = QUICK_PLAY_PAYOUTS_N4_PACKED;
+        return (packed >> (uint256(matches) * 32)) & 0xFFFFFFFF;
     }
 
     // -------------------------------------------------------------------------
