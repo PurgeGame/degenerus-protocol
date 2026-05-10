@@ -403,3 +403,171 @@ describe("v35.0 SURF-01..04 — protected ranges byte-identical vs v34.0 baselin
     }
   });
 });
+
+// ===========================================================================
+// Phase 266 v36.0-tagged SURF-01..04 grep-proof — extends the v33.0 / v35.0
+// per-line modified-set walk to the v36.0 audit baseline `5db8682b`.
+//
+// The v36.0 SURF preservation gate proves that the Phase 266 lootbox-entropy
+// refactor scopes its source-tree mutation to a SINGLE file:
+//   contracts/modules/DegenerusGameLootboxModule.sol
+//
+// Every other RNG-relevant surface stays byte-identical:
+//   SURF-01: contracts/libraries/EntropyLib.sol            (whole file; ENT-04 stable API)
+//   SURF-02: BAF jackpot _jackpotTicketRoll body L2186-2229  (ENT-05 deferral)
+//   SURF-03: contracts/modules/DegenerusGameMintModule.sol L652  (single callsite)
+//   SURF-04: 9 non-lootbox JackpotModule EntropyLib callsites  (Pitfall 6 inventory)
+//
+// V36.0 BASELINE: 5db8682bd7b811437f0c1cf47e832619d1478ac6 (v35.0 closure HEAD).
+// ===========================================================================
+
+const V35_BASELINE = "5db8682bd7b811437f0c1cf47e832619d1478ac6";
+const ENTROPY_LIB_PATH = "contracts/libraries/EntropyLib.sol";
+const MINT_MODULE_PATH = "contracts/modules/DegenerusGameMintModule.sol";
+
+describe("v36.0 SURF-01..04 — protected ranges byte-identical vs v35.0 baseline 5db8682b", function () {
+  // SURF-01 — EntropyLib.sol body BYTE-IDENTICAL (whole file; ENT-04 stable API).
+  // EntropyLib has 43 lines at the v35.0 baseline; the protected range covers
+  // every line in the file (no exceptions).
+  const SURF_01_PROTECTED_RANGES = [
+    { name: "EntropyLib.sol body L1-43 (SURF-01 — ENT-04 stable API)", lo: 1, hi: 43 },
+  ];
+
+  // SURF-02 — BAF jackpot _jackpotTicketRoll body L2186-2229 (ENT-05 deferral
+  // verification: lootbox-path xorshift removed at v36 BUT BAF jackpot xorshift
+  // explicitly preserved per CONTEXT.md D-266-SCOPE-OUT-01).
+  const SURF_02_PROTECTED_RANGES = [
+    { name: "_jackpotTicketRoll body L2186-2229 (SURF-02 — ENT-05 deferral)", lo: 2186, hi: 2229 },
+  ];
+
+  // SURF-03 — MintModule L652 single-line callsite (EntropyLib.hash2(entropy, rollSalt)).
+  const SURF_03_PROTECTED_RANGES = [
+    { name: "MintModule L652 EntropyLib.hash2(entropy, rollSalt) (SURF-03)", lo: 652, hi: 652 },
+  ];
+
+  // SURF-04 — 9 non-lootbox JackpotModule EntropyLib callsites (verified
+  // inventory at HEAD 5db8682b per Phase 266 RESEARCH.md Pitfall 6 grep).
+  const SURF_04_PROTECTED_RANGES = [
+    { name: "L285 EntropyLib.hash2(rngWord, targetLvl)",            lo: 285,  hi: 285  },
+    { name: "L453 EntropyLib.hash2(randWord, lvl)",                 lo: 453,  hi: 453  },
+    { name: "L532 EntropyLib.hash2(randWord, lvl)",                 lo: 532,  hi: 532  },
+    { name: "L610 EntropyLib.hash2(randWord, lvl)",                 lo: 610,  hi: 610  },
+    { name: "L612 EntropyLib.hash2(randWord, sourceLevel)",         lo: 612,  hi: 612  },
+    { name: "L886 EntropyLib.hash2(randWord, lvl) (arg-pos call)",  lo: 886,  hi: 886  },
+    { name: "L1176 EntropyLib.hash2(randWord, lvl)",                lo: 1176, hi: 1176 },
+    { name: "L1873 entropy = EntropyLib.hash2(entropy, s)",         lo: 1873, hi: 1873 },
+    { name: "L2192 BAF entropy = EntropyLib.entropyStep(entropy)",  lo: 2192, hi: 2192 },
+  ];
+
+  // ---------------------------------------------------------------------------
+  // walkAndAssert(baseline, path, ranges) — per-line modified-set walk against
+  // the named baseline. Re-declared inline (not factored to module scope) so
+  // the existing v35.0 describe block at L249 stays byte-identical (REG-01
+  // carry-forward discipline). Same algorithm as the v35.0 describe block:
+  //   - D-IMPL-11 soft-skip on unreachable baseline.
+  //   - HEAD == BASELINE early-return (trivially preserved).
+  //   - Fail-loud on empty diff with HEAD ≠ baseline.
+  //   - Per-line walk via diff hunk parsing; record OLD-side `-` lines.
+  //   - Assert each protected line NOT in modifiedOldLines.
+  // ---------------------------------------------------------------------------
+  function walkAndAssert(baseline, path, ranges) {
+    let baselineReachable = false;
+    try {
+      execSync(`git rev-parse --verify ${baseline}^{commit}`, { stdio: "pipe" });
+      baselineReachable = true;
+    } catch (_) {
+      console.warn(
+        `[v36.0 SURF] baseline commit ${baseline} not reachable — soft-skipping ` +
+        `protected-range proof on ${path}. CI / fresh-clone hint: \`git fetch --unshallow\` ` +
+        `or \`git fetch origin ${baseline}\`.`,
+      );
+      return { skipped: true };
+    }
+    expect(baselineReachable).to.equal(true);
+
+    const headSha = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+    if (headSha === baseline) {
+      console.log(`[v36.0 SURF] HEAD == V35_BASELINE — protected ranges trivially preserved.`);
+      return { skipped: false, trivial: true };
+    }
+
+    const diff = execSync(
+      `git diff ${baseline} HEAD -- ${path}`,
+      { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
+    );
+
+    if (path === ENTROPY_LIB_PATH || path === MINT_MODULE_PATH ||
+        ranges === SURF_02_PROTECTED_RANGES || ranges === SURF_04_PROTECTED_RANGES) {
+      // Protected files where v36.0 expects ZERO modifications. Empty diff is
+      // the GOOD outcome — proceed; if non-empty, the per-line walk catches it.
+      if (diff.length === 0) {
+        return { skipped: false, trivial: false };
+      }
+    } else {
+      expect(
+        diff.length > 0,
+        `[v36.0 SURF] git diff ${baseline} HEAD returned empty output for ${path} — ` +
+        `baseline-vs-HEAD distinct but no diff produced. D-IMPL-11 fail-loud guard.`,
+      ).to.equal(true);
+    }
+
+    const hunkHeaderRe = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+    const lines = diff.split("\n");
+    const modifiedOldLines = new Set();
+    let oldCursor = -1;
+    let inHunk = false;
+
+    for (const ln of lines) {
+      const headerMatch = hunkHeaderRe.exec(ln);
+      if (headerMatch) {
+        oldCursor = Number(headerMatch[1]);
+        inHunk = true;
+        continue;
+      }
+      if (!inHunk) continue;
+      if (ln.startsWith("\\")) continue;
+      const tag = ln.length > 0 ? ln[0] : " ";
+      if (tag === " ") {
+        oldCursor += 1;
+      } else if (tag === "-") {
+        modifiedOldLines.add(oldCursor);
+        oldCursor += 1;
+      } else if (tag === "+") {
+        // insertion only — OLD cursor does not advance.
+      } else {
+        inHunk = false;
+      }
+    }
+
+    for (const range of ranges) {
+      for (let line = range.lo; line <= range.hi; line++) {
+        expect(
+          modifiedOldLines.has(line),
+          `Baseline line ${line} (inside protected range "${range.name}" [${range.lo}-${range.hi}]) ` +
+          `was modified or removed in ${path} vs v35.0 baseline ${baseline}`,
+        ).to.equal(false);
+      }
+    }
+    return { skipped: false, trivial: false };
+  }
+
+  it("SURF-01 — EntropyLib.sol body byte-identical vs 5db8682b", function () {
+    const result = walkAndAssert(V35_BASELINE, ENTROPY_LIB_PATH, SURF_01_PROTECTED_RANGES);
+    if (result.skipped) this.skip();
+  });
+
+  it("SURF-02 — BAF jackpot _jackpotTicketRoll body L2186-2229 byte-identical vs 5db8682b", function () {
+    const result = walkAndAssert(V35_BASELINE, JACKPOT_MODULE_PATH, SURF_02_PROTECTED_RANGES);
+    if (result.skipped) this.skip();
+  });
+
+  it("SURF-03 — MintModule L652 EntropyLib.hash2 callsite byte-identical vs 5db8682b", function () {
+    const result = walkAndAssert(V35_BASELINE, MINT_MODULE_PATH, SURF_03_PROTECTED_RANGES);
+    if (result.skipped) this.skip();
+  });
+
+  it("SURF-04 — 9 non-lootbox JackpotModule EntropyLib callsites byte-identical vs 5db8682b", function () {
+    const result = walkAndAssert(V35_BASELINE, JACKPOT_MODULE_PATH, SURF_04_PROTECTED_RANGES);
+    if (result.skipped) this.skip();
+  });
+});
