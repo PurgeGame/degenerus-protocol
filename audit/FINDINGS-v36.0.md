@@ -359,7 +359,47 @@ Combined: 13 regression rows (2 + 11 PASS + 0 SUPERSEDED + 0 REGRESSED). Default
 
 
 
-## 6. KI Gating Walk [populated by Task 16]
+## 6. KI Gating Walk
+
+Per D-266-KI carry of D-265-KI-01: §6a Non-Promotion Ledger captures any F-36-NN finding-blocks that did NOT promote to KNOWN-ISSUES.md (default zero rows since zero F-36-NN blocks emit per D-265-FIND-01 carry default path). §6b 4-row KI envelope re-verifications (EXC-01..04) PLUS 1 D-09 NARROWS row for AUDIT-05 EntropyLib XOR-shift entry rephrase. §6c Verdict Summary records the closure verdict string.
+
+### 6a. Non-Promotion Ledger
+
+Per D-265-FIND-01 carry default-path expectation: zero F-36-NN finding blocks emitted in §4 (all 6 rows verdicted SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE — see §4.2 verdict roll-up). Therefore zero KI promotion candidates from §4 → no Non-Promotion Ledger rows.
+
+Task 14 adversarial-pass disposition (`/contract-auditor` + `/zero-day-hunter` parallel pass) emitted zero F-36-NN blocks (zero disagreements logged in `266-01-ADVERSARIAL-LOG.md`). Default empty table holds:
+
+| Candidate | Source | D-09 Predicate Failed | Disposition |
+|---|---|---|---|
+| _(none)_ | _(no F-36-NN blocks emitted; no candidates routed to D-09 gating from §4)_ | _(n/a)_ | _(n/a)_ |
+
+**Methodology note for AUDIT-05 (EntropyLib XOR-shift entry rephrase):** the existing KNOWN-ISSUES.md entry "EntropyLib XOR-shift PRNG for lootbox outcome rolls" is REPHRASED (not promoted; not removed) at v36 close because:
+
+1. The lootbox-path xorshift consumption is REMOVED at v36 (7 callsites deleted per ENT-01..03).
+2. The BAF-jackpot xorshift consumption REMAINS (ENT-05 deferral; SURF-02 byte-identity verified).
+3. The KI entry's scope must NARROW to reflect the actual ongoing-protocol-behavior surface at v36 close.
+
+This rephrase is a SCOPE-NARROWING edit under D-09 Design Decisions, NOT a new D-09 promotion. KNOWN-ISSUES.md is reserved for warden pre-disclosure of ongoing-protocol-behavior items (Lido stETH dependency, deity-boon deterministic fallback, EntropyLib XOR-shift PRNG). The xorshift KI entry stays in KNOWN-ISSUES.md but with narrower BAF-only scope at v36.
+
+### 6b. KI Envelope Re-Verifications + AUDIT-05 NARROWS Row
+
+| Envelope / Surface | Description | Carrier at v36 HEAD `<sha>` | Verdict | Evidence |
+|---|---|---|---|---|
+| EXC-01 | Non-VRF entropy for affiliate winner roll | n/a (NEGATIVE-scope at v36; lootbox-path refactor does not consume affiliate-roll RNG) | NEGATIVE-scope at v36 | v36 modifies LootboxModule entropy-derivation only; affiliate winner roll path in MintModule untouched (zero v36 commits target MintModule per SURF-03 grep-proof). Backward trace per `feedback_rng_backward_trace.md`: LootboxModule helpers consume only `(rngWord, player, day, amount)` keccak — no affiliate-roll keccak path overlap. |
+| EXC-02 | Gameover prevrandao fallback (`_getHistoricalRngFallback` in `DegenerusGameAdvanceModule.sol:1301`) | n/a (NEGATIVE-scope at v36; AdvanceModule untouched) | NEGATIVE-scope at v36 | AdvanceModule prevrandao site untouched at v36; v34/v35 carry-forward holds. No v36 commit modifies `DegenerusGameAdvanceModule.sol`. |
+| EXC-03 | Gameover RNG substitution for mid-cycle write-buffer tickets (F-29-04 class) | n/a (NEGATIVE-scope at v36; AdvanceModule untouched) | NEGATIVE-scope at v36 | `_swapAndFreeze` / `_swapTicketSlot` / `_gameOverEntropy` sites untouched at v36; v36 lootbox-resolution refactor does not interact with mid-cycle write-buffer ticket substitution. Backward trace: lootbox helpers run synchronously inside the entry-point call (no swap-and-freeze interaction). |
+| EXC-04 | EntropyLib XOR-shift PRNG (entropy-quality envelope) | `DegenerusGameJackpotModule.sol:2186-2229 _jackpotTicketRoll` (BAF jackpot path) — SOLE remaining xorshift consumer protocol-wide | **RE_VERIFIED with NARROWS scope at v36 — BAF-jackpot-only after lootbox-path removal** | Backward trace per `feedback_rng_backward_trace.md`: BAF `_jackpotTicketRoll` consumes `EntropyLib.entropyStep(entropy)` at L2192 where `entropy` upstream comes from VRF-derived `keccak256(...)` mix at the `_jackpotTicketRoll` invocation site. Single per-ticket step + modular arithmetic over small ranges (`% 100` + `% 4` / `% 46`) bound non-uniformity per the standard XOR-shift weak-PRNG argument carried from prior milestones. The entropy-quality envelope at v36 NARROWS its scope from "lootbox outcome rolls AND BAF jackpot ticket rolls" (pre-v36) to "BAF jackpot ticket rolls only" (post-v36). Lootbox-path xorshift consumption REMOVED at v36 per ENT-01..03 — empirically verified at STAT-01 chi² (post-refactor uniform distribution over 6 sub-roll buckets at α=0.05). KNOWN-ISSUES.md rephrased per AUDIT-05 (see §6b D-09 NARROWS row below + §3a per-REQ summary). |
+| AUDIT-05 | EntropyLib XOR-shift entry NARROWS scope to BAF-only | KNOWN-ISSUES.md L31 (existing entry text — see §3a per-REQ row "AUDIT-05") | **D-09 NARROWS — REPHRASE under Design Decisions, NOT a new promotion** | The KI entry's 3-predicate test (accepted-design + non-exploitable + sticky) holds for the BAF-only scope (carry-forward of EXC-04). The rephrase NARROWS the entry's scope; it does NOT add a new entry NOR promote a new finding. Pre-v36 entry covered "lootbox outcome rolls" (now-removed consumer); post-v36 entry covers "BAF jackpot ticket rolls" (preserved consumer per ENT-05 deferral). The rephrase is a SCOPE-NARROWING edit under D-09 Design Decisions per `feedback_no_history_in_comments.md` discipline ("describes what IS, not what changed"). The "Lootbox-path consumption was removed at v36.0" forward-disclosure sentence in the rephrased entry is a current-scope clarification + future-phase pointer (BAF refactor candidate), not a code-history annotation. |
+
+**Inline closure note.** Backward-trace methodology per `feedback_rng_backward_trace.md` applied to EXC-04: the BAF `_jackpotTicketRoll` at L2186-2229 traces back to VRF-derived bits at the upstream call boundary (jackpot phase invocation). Single per-ticket entropyStep + modulo-small-ranges is the same security argument carried from prior milestones — the standard XOR-shift weak-PRNG theoretical-weakness vs practical-exploitability gap holds at BAF scope. EXC-04 envelope width at v36 = NARROWED (lootbox consumer REMOVED; BAF consumer PRESERVED).
+
+### 6c. Verdict Summary
+
+Closure verdict: **`0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_REPHRASED (1 entry rephrased to BAF-only scope under Design Decisions per AUDIT-05)`**.
+
+Detail: zero candidates emit from §4 (default zero F-36-NN blocks per D-265-FIND-01 carry); zero new promotions land. AUDIT-05 EntropyLib XOR-shift entry rephrase is a SCOPE-NARROWING edit (REPHRASE under D-09 Design Decisions), NOT a new promotion. EXC-01..03 NEGATIVE-scope at v36 (no lootbox-path interaction with affiliate / prevrandao / gameover-RNG-substitution surfaces). EXC-04 RE_VERIFIED with NARROWS prose: lootbox-path xorshift consumption REMOVED at v36 close per ENT-01..03; BAF-jackpot-path xorshift consumption PRESERVED per ENT-05 deferral. Per `feedback_rng_backward_trace.md` + `feedback_rng_commitment_window.md`, the lootbox-path keccak refactor consumes VRF-derived bits and is post-commit unknown to player — uniformity claim covered end-to-end by STAT-01 empirical chi² evidence.
+
+
 
 ## 7. Prior-Artifact Cross-Cites [populated by Task 18]
 
