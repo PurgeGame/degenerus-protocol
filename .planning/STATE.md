@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v37.0
 milestone_name: Degenerette Recalibration + Maintenance Bundle
 status: planning
-last_updated: "2026-05-10T09:48:51.913Z"
+last_updated: "2026-05-10T12:00:00.000Z"
 last_activity: 2026-05-10
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,17 +17,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-09 after v35.0 milestone close)
+See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.0 open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v36.0 SHIPPED 2026-05-10. Awaiting next milestone scope.
+**Current focus:** v37.0 Degenerette Recalibration + Maintenance Bundle — roadmap drafted (Phases 267-271); ready to plan Phase 267 (Degenerette Producer + 5-Table Payout Rewrite).
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 267 (next-up; not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-10 — Milestone v37.0 started
+Status: Roadmap drafted; awaiting `/gsd-plan-phase 267` to draft 267-01-PLAN.md
+Last activity: 2026-05-10 — v37.0 ROADMAP.md authored (5-phase shape: 267 Degenerette contracts → 268 stat + cross-surface tests → 269 lootbox dead-branch cleanup + SURF-05 re-pin → 270 post-v32.0 deferred-commit adversarial sub-audit → 271 delta audit + FINDINGS-v37.0.md terminal). Coverage 47/47 v37.0 requirements mapped.
 
 ## Last Shipped Milestone
 
@@ -80,90 +80,51 @@ Last activity: 2026-05-10 — Milestone v37.0 started
 - Phase 261 deferred items (carried forward as INFO-tier): (a) STAT-07 ROADMAP cites informational headline targets vs canonical analytical values (test asserts canonical-within-Wilson-99%-CI-of-measured); (b) ROADMAP Phase 261 success criterion #5 cites `_pickSoloQuadrant per-call < 500 gas` while REQUIREMENTS.md SURF-05 amendment `73d533d8` supersedes with `≤ 1500 gas paired-empty-wrapper delta` — both surfaced INFO-only in §3c per D-262-FIND-01 default path; REQUIREMENTS.md amendment commit `73d533d8` is load-bearing
 - See `.planning/MILESTONES.md` for archive
 
-### Prior Shipped Milestone
-
-**v33.0 — Charity Allowlist Governance (post-closure patch)** (re-shipped 2026-05-06 via Phase 258)
-
-- 5 phases (254-258), 15 plans, 28/28 requirements satisfied (ALW + VOTE + RES + CLEAN + TST + AUDIT + FIX-01 + FIX-02 + AUDIT-05)
-- Audit baseline: v32.0 HEAD `acd88512` → v33.0 contract-tree HEAD `4ce3703d740d3707c88a1af595618120a8168399` (Phase 258-01 added a single contract+test commit pair on top of `dcb70941`; closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` supersedes `MILESTONE_V33_AT_HEAD_dcb70941`)
-- Result: 9 of 9 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY (a, b, c, d, e, f, g, h, i — surface (i) consecutive-recipient capture added post-258 with FIX-02 closure; surface (a) re-tagged with post-258 reinforcement note for FIX-01 queue-branch closure); zero F-33-NN finding blocks emitted; trust-asymmetry items (e) + (g) routed to §4 sub-row prose disclosures.
-- LEAN regression: 1 PASS REG-01 (v32.0 closure signal `MILESTONE_V32_AT_HEAD_acd88512` re-verified non-widening; L173 + L1174 + GameStorage `_livenessTriggered` body byte-identical between baseline and HEAD `4ce3703d740d3707c88a1af595618120a8168399`)
-- KI envelopes EXC-01..04 all RE_VERIFIED NEGATIVE-scope (charity governance has zero RNG interaction)
-- KNOWN-ISSUES.md UNMODIFIED per D-257-KI-01 default zero-promotion path (carries forward through Phase 258)
-- Deliverable: `audit/FINDINGS-v33.0.md` (FINAL READ-only at HEAD `4ce3703d740d3707c88a1af595618120a8168399`, ~750 lines, 9 sections + Phase 258 §3a + §4 + §5 + §9 updates)
-- Closure signal: `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` (supersedes `MILESTONE_V33_AT_HEAD_dcb70941`)
-- See `.planning/MILESTONES.md` for archive
-
-### Prior Shipped Milestone
-
-**v32.0 — Backfill Idempotency + purchaseLevel Underflow Audit** (shipped 2026-05-02)
-
-- 7 phases (247-253), 7 plans, 32/32 requirements satisfied
-- Audit baseline: v31.0 HEAD `cc68bfc7` → v32.0 HEAD `acd88512` (5 post-v31.0 contract-touching commits including the WIP-guard fix; SG-250-01 `98e78404` post-anchor MintModule presale-flag commit recorded as functionally orthogonal)
-- Result: Two HIGH SUPERSEDED-at-HEAD F-32-NN disclosure blocks (F-32-01 productive-pause / turbo race + F-32-02 `_backfillGapDays` double-execution; both fixed by L173 turbo guard + L1174 backfill sentinel committed in `acd88512`). 134 V-rows across 25 REQs (Phase 247-252) all SAFE / NON-WIDENING / NON-INTERFERING with 0 FINDING_CANDIDATE rows surfaced.
-- LEAN regression: 13 PASS REG-01 + zero-row REG-02 (F-32-NN supersession scope captured in §4 'At-HEAD resolution' subsections, not REG-02 entries)
-- KI envelopes EXC-01..04 all RE_VERIFIED non-widening at HEAD (EXC-02 + EXC-03 dual-carrier via Phase 248 BFL-05; EXC-01 + EXC-04 NEGATIVE-scope via Phase 250 SIB-03)
-- KNOWN-ISSUES.md UNMODIFIED per D-253-FIND03-01 default path (F-32-01 + F-32-02 fail D-09 sticky predicate — SUPERSEDED at HEAD, not ongoing protocol behavior)
-- Deliverable: `audit/FINDINGS-v32.0.md` (9-section, FINAL READ-only at HEAD `acd88512`)
-- Closure signal: `MILESTONE_V32_AT_HEAD_acd88512`
-- Awaiting-approval test files (TST-FILE-01 + TST-FILE-02): `test/edge/LastPurchaseDayRace.test.js` + `test/edge/BackfillIdempotency.test.js` remain untracked permanently per D-253-FIND04-04; user commits via separate post-milestone commits per `feedback_manual_review_before_push.md`
-- See `.planning/milestones/v32.0-ROADMAP.md` (post-archival) and `.planning/MILESTONES.md` for archive
-
-### Prior Shipped Milestone
-
-**v31.0 — Post-v30 Delta Audit + Gameover Edge-Case Re-Audit** (shipped 2026-04-24, tag `v31.0`)
-
-- 4 phases (243-246), 11 plans, 33/33 requirements satisfied
-- Audit baseline: v30.0 HEAD `7ab515fe` → v31.0 HEAD `cc68bfc7` (5 contract commits, 14 files, +187/-67 lines)
-- Result: Zero on-chain vulnerabilities. Zero F-31-NN findings. 142 V-rows across 33 REQs all SAFE floor severity.
-- LEAN regression: 6 PASS REG-01 + 1 SUPERSEDED REG-02 (orphan-redemption window structurally closed by 771893d1)
-- KI envelopes EXC-01..04 all RE_VERIFIED non-widening at HEAD
-- KNOWN-ISSUES.md UNMODIFIED per CONTEXT.md D-07 default path
-- Deliverable: `audit/FINDINGS-v31.0.md` (403 lines, 9 sections, FINAL READ-only)
-- Closure signal: `MILESTONE_V31_CLOSED_AT_HEAD_cc68bfc7`
-- See `.planning/milestones/v31.0-ROADMAP.md` and `.planning/MILESTONES.md` for archive
-
 ## Active Milestone
 
-**v36.0 Lootbox-Path Entropy Refactor** (started 2026-05-09)
+**v37.0 Degenerette Recalibration + Maintenance Bundle** (started 2026-05-10)
 
-- **Goal:** Replace 7 `EntropyLib.entropyStep` (XOR-shift PRNG) callsites in `DegenerusGameLootboxModule.sol` with inline bit-sliced reads from a single per-resolution keccak-derived seed (`hash2(rngWord, structured-input)`). Removes the EntropyLib XOR-shift weak-PRNG warden surface in the lootbox path.
-- **Audit baseline:** v35.0 audit-subject HEAD `5db8682bd7b811437f0c1cf47e832619d1478ac6` (signal `MILESTONE_V35_AT_HEAD_5db8682b`)
-- **Phases planned:** 1 (266) — single-phase patch shape per user disposition (Path 2 chosen over Path 1 v33→258 re-ship pattern)
-- **Requirements:** 24 total (6 ENT + 3 STAT + 2 GAS + 4 SURF + 5 AUDIT + 4 REG); coverage 24/24 mapped to Phase 266
-- **READ-only posture:** LIFTED — `contracts/` + `test/` writes via per-commit user approval per `feedback_no_contract_commits.md`; Phase 266 lootbox refactor uses batched approval pattern per `feedback_batch_contract_approval.md`
-- **Behavioral change posture:** Acceptable per user disposition — uniform-distribution equivalence required (chi² preserved), specific-outcome replay equivalence NOT required
-- **Out of scope (deferred):** BAF jackpot `_jackpotTicketRoll` (`JackpotModule:2186-2229`) xorshift refactor — same pattern, candidate for future phase (ENT-05)
-- **EntropyLib API posture:** Stable — no helper-function additions; inline shifts only per user disposition (ENT-04)
-- **Closure signal target:** `MILESTONE_V36_AT_HEAD_<sha>` emitted via `audit/FINDINGS-v36.0.md` §9c
-- See `.planning/ROADMAP.md` for the phase entry + `.planning/phases/266-lootbox-entropy-refactor/266-CONTEXT.md` for locked decisions.
+- **Goal:** Reconcile Degenerette payout calibration with the v34.0 heavy-tail trait producer (pre-launch fix), execute deferred maintenance (lootbox dead-branch cleanup + SURF-05 gas-pin re-pinning), and clear the long-deferred adversarial audit of post-v32.0 commits — all closed under a single `audit/FINDINGS-v37.0.md` deliverable.
+- **Audit baseline:** v36.0 audit-subject HEAD `1c0f09132d7439af9881c56fe197f81757f8164a` (signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`)
+- **Phases planned:** 5 (267-271) — 5-phase bundled milestone shape per requirements scope (Degenerette contracts → stat + cross-surface tests → maintenance → post-v32 sub-audit → terminal delta audit)
+- **Requirements:** 47 total (15 DGN + 6 STAT + 6 SURF + 3 LBX + 3 GASPIN + 4 DELTA + 6 AUDIT + 4 REG); coverage 47/47 mapped to Phases 267-271
+- **READ-only posture:** LIFTED — `contracts/` + `test/` writes via per-commit user approval per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md`; Phase 267 Degenerette rewrite uses single batched contract commit; Phase 269 LBX cleanup uses single batched contract commit; Phase 270 audit-only emits zero source-tree mutations
+- **Behavioral change posture:** Acceptable per user disposition — payout-calibration reconciliation IS the intended behavior change; equal-EV invariant satisfied across all 16,384 player-pick configurations within statistical tolerance
+- **Adversarial-pass posture:** SEQUENTIAL after full §4 draft per D-NN-ADVERSARIAL-02 carry; `/contract-auditor` + `/zero-day-hunter` in scope; `/economic-analyst` + `/degen-skeptic` deferred to Phase 271 discuss-phase decision (mechanism-design + skeptic review candidates given the payout-recalibration nature)
+- **Out of scope (deferred):** ETH daily jackpot recalibration; far-future BURNIE portion (already per-pull random level v35.0); purchase-phase ticket distributions; trait-roll logic outside Degenerette path; `EntropyLib` API additions (v36.0 ENT-04 carry); BAF jackpot `_jackpotTicketRoll` xorshift refactor (v36.0 ENT-05 carry); storage layout changes; new admin / upgrade hooks
+- **Closure signal target:** `MILESTONE_V37_AT_HEAD_<sha>` emitted via `audit/FINDINGS-v37.0.md` §9c
+- See `.planning/ROADMAP.md` for the 5-phase entries + `.planning/notes/2026-05-10-degenerette-payout-recalibration.md` for primary workstream seed + `.planning/notes/2026-05-10-resolveLootboxRoll-dead-burnie-conversion-branch.md` for lootbox cleanup seed.
 
 ## Roadmap Overview
 
 | Phase | Goal | Requirements (count) | Depends on |
 |-------|------|----------------------|------------|
-| 263 — Per-Pull Level Resample Implementation | Refactor `payDailyCoinJackpot` (~L1708) and `payDailyJackpotCoinAndTickets` (~L624) in `DegenerusGameJackpotModule.sol` to a flat 50-pull loop with per-pull `keccak256(randomWord, COIN_LEVEL_TAG, i) % range` level sampling, deterministic `i % 4` trait rotation, per-trait `deityCache`, salt scheme `keccak256(randomWord, trait, lvl, i)`, and empty-bucket silent-skip semantics | PPL-01..08 (8) | Nothing (baseline v34.0 HEAD `6b63f6d4`) |
-| 264 — Statistical Validation + Cross-Surface Preservation | Reuse Phase 261 chi² infrastructure to validate per-pull level uniformity over `[minLevel, maxLevel]` (chi² p > 0.05) + per-trait ~25% share + empty-bucket skip-rate measurement; cross-surface preservation tests for `_randTraitTicket` other callers + far-future BURNIE + ETH daily + ticket-distribution paths; gas regression confirms ~70K–110K extra per call | STAT-01..04 + SURF-01..05 (9) | Phase 263 |
-| 265 — Delta Audit + Findings Consolidation | Author `audit/FINDINGS-v35.0.md` 9-section deliverable (FINAL READ-only at HEAD); adversarial sweep over PPL deltas; conservation re-proof (`coinBudget` + solvency + BURNIE supply); v34.0 + v33.0 closure-signal regression; KI envelope re-verifications (EXC-04 extra-attention); `JackpotBurnieWin.lvl` indexer semantic-shift documentation; emit closure signal `MILESTONE_V35_AT_HEAD_<sha>` | AUDIT-01..06 + REG-01..04 (10) | Phase 263, Phase 264 |
+| 267 — Degenerette Producer + 5-Table Payout Rewrite | Add `packedTraitsDegenerette` producer + 5 per-N payout/hero/WWXRP table dispatch in `DegenerusGameDegeneretteModule.sol`; delete `_evNormalizationRatio`; single batched USER-APPROVED contract commit | DGN-01..15 (15) | Nothing (baseline v36.0 closure HEAD `1c0f0913`) |
+| 268 — Degenerette Statistical Validation + Cross-Surface Preservation | 3 new `test/stat/` files (per-N EV exactness + producer chi² + bonus EV) + `SurfaceRegression.test.js` v37.0 extension; reuse Phase 261/264/266 chi² infra | STAT-01..06 + SURF-01..06 (12) | Phase 267 |
+| 269 — Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning | Delete unreachable BURNIE-conversion branch in `_resolveLootboxRoll` L1568-1581; root-cause + fix Phase 261/264 SURF-05 ~120K gas-pin drift under `npm run test:stat` | LBX-01..03 + GASPIN-01..03 (6) | Nothing (mixed maintenance) |
+| 270 — Post-v32.0 Deferred-Commit Adversarial Sub-Audit | Audit-only sweep of commits `002bde55` (presale auto-deactivate) + `2713ce61` (setDecimatorAutoRebuy removal); read-only delta-classification + KI envelope check | DELTA-01..04 (4) | Nothing (audit-only) |
+| 271 — Delta Audit + Findings Consolidation (Terminal) | Single `audit/FINDINGS-v37.0.md` 9-section deliverable; closure signal `MILESTONE_V37_AT_HEAD_<sha>` emitted in §9c; KNOWN-ISSUES.md walkthrough; ROADMAP/STATE/MILESTONES flips | AUDIT-01..06 + REG-01..04 (10) | Phase 267, 268, 269, 270 |
 
-**Coverage:** 27/27 v35.0 requirements mapped (8 PPL + 4 STAT + 5 SURF + 6 AUDIT + 4 REG); zero orphan requirements; zero duplicate mappings.
+**Coverage:** 47/47 v37.0 requirements mapped (15 DGN + 6 STAT + 6 SURF + 3 LBX + 3 GASPIN + 4 DELTA + 6 AUDIT + 4 REG); zero orphan requirements; zero duplicate mappings.
 
-## Next-Milestone Backlog (v36+)
+## Next-Milestone Backlog (v38+)
 
-Carry-forward seeds from v35.0 close. Do NOT pull into v35.0.
+Carry-forward seeds from v36.0 close. Do NOT pull into v37.0.
 
 | Seed | Subsystem | Target | Notes |
 |------|-----------|--------|-------|
-| Audit of post-v32.0 unaudited commits | mint / decimator | v36+ | `002bde55` presale auto-deactivate + `2713ce61` setDecimatorAutoRebuy removal — deferred from v33.0 → v34.0 → v35.0 close per repeated user disposition. |
+| BAF jackpot `_jackpotTicketRoll` xorshift refactor | jackpot entropy | v38+ | v36.0 ENT-05 explicit deferral per user disposition; same xorshift pattern as the v36.0-completed lootbox refactor; out of v37.0 scope |
+| `runrewardjackpots` module-misplacement | architecture | v38+ | Stale 2026-04-02 backlog note; not v37.0-tagged |
+| Game-over thorough hardening | gameover | v38+ | `gameover-thorough-test.md` backlog; out of v37.0 scope; defer to dedicated game-over hardening milestone |
 
 ## Deferred Items
 
-Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-forward chain v32.0 → v33.0 → v34.0 → v35.0):
+Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-forward chain v32.0 → v33.0 → v34.0 → v35.0 → v36.0):
 
 | Category | Item | Status | Notes |
 |----------|------|--------|-------|
-| quick_task | 260327-n7h-run-full-test-suite-and-analyze-results- | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 → v33.0 → v34.0 close. |
-| quick_task | 260327-q8y-test-boon-changes | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 → v33.0 → v34.0 close. |
+| quick_task | 260327-n7h-run-full-test-suite-and-analyze-results- | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 → v33.0 → v34.0 → v35.0 → v36.0 close. |
+| quick_task | 260327-q8y-test-boon-changes | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 → v33.0 → v34.0 → v35.0 → v36.0 close. |
 | verification_gap | Phase 257 (257-VERIFICATION.md) | human_needed | Gate resolved by Phase 258 supersedence (HUMAN-UAT marked `resolved`, resolved_by: phase-258), but VERIFICATION.md frontmatter `status: human_needed` field was not flipped to `resolved`. Bookkeeping defect; tracker out of date with reality. See `.planning/v33.0-MILESTONE-AUDIT.md`. |
 | verification_gap | Phase 258 (258-VERIFICATION.md) | human_needed | Gate resolved by Phase 258-03 stale-reference sweep, but VERIFICATION.md frontmatter `status: human_needed` was not flipped to `resolved`. Bookkeeping defect. See `.planning/v33.0-MILESTONE-AUDIT.md`. |
 | process_gap | Phases 254/255/256 missing VERIFICATION.md | not_run | Formal verification gate did not run when those phases closed (pre-session). Phase 257 delta-audit independently re-validated all that work (`audit/FINDINGS-v33.0.md`); functional risk: low. See `.planning/v33.0-MILESTONE-AUDIT.md` for the full per-phase analysis. |
@@ -177,9 +138,11 @@ Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-fo
 ## Accumulated Context
 
 Decisions and completed milestones logged in `.planning/PROJECT.md`.
-Detailed milestone retrospectives in `.planning/RETROSPECTIVE.md` (v34.0 section most recent).
+Detailed milestone retrospectives in `.planning/RETROSPECTIVE.md` (v36.0 / v35.0 / v34.0 sections most recent).
 Archived milestone artifacts:
 
+- v36.0: `.planning/milestones/v36.0-ROADMAP.md`, `v36.0-REQUIREMENTS.md`, `v36.0-phases/`
+- v35.0: `.planning/milestones/v35.0-ROADMAP.md`, `v35.0-REQUIREMENTS.md`, `v35.0-phases/` (if rotated)
 - v34.0: `.planning/milestones/v34.0-ROADMAP.md`, `v34.0-REQUIREMENTS.md`, `v34.0-phases/`
 - v33.0: `.planning/milestones/v33.0-ROADMAP.md`, `v33.0-REQUIREMENTS.md`, `v33.0-phases/`
 - v32.0: `.planning/milestones/v32.0-ROADMAP.md`, `v32.0-REQUIREMENTS.md`, `v32.0-phases/`
@@ -190,6 +153,8 @@ Archived milestone artifacts:
 
 Audit deliverables:
 
+- `audit/FINDINGS-v36.0.md` (FINAL READ-only at HEAD `1c0f09132d7439af9881c56fe197f81757f8164a`, ~700 lines, 9 sections; 6 of 6 §4 adversarial surfaces SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE; zero F-36-NN findings; 1 PASS REG-01 + 1 PASS REG-02 + 11 PASS REG-04; 4 KI envelope re-verifications (EXC-01..03 NEGATIVE-scope at v36; EXC-04 RE_VERIFIED with NARROWS to BAF-jackpot-only); KNOWN-ISSUES.md modified by 1 entry rephrase EntropyLib XOR-shift NARROWS to BAF-only scope per AUDIT-05; closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`)
+- `audit/FINDINGS-v35.0.md` (FINAL READ-only at HEAD `5db8682bd7b811437f0c1cf47e832619d1478ac6`, ~600 lines, 9 sections; 6 of 6 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE; zero F-35-NN findings; 1 PASS REG-01 + 1 PASS REG-02 + 9 PASS + 1 SUPERSEDED REG-04; 4 NEGATIVE-scope/RE_VERIFIED KI envelope re-verifications; KNOWN-ISSUES.md UNMODIFIED; closure signal `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6`)
 - `audit/FINDINGS-v34.0.md` (FINAL READ-only at HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555`, ~700 lines, 9 sections; 6 of 6 §4 adversarial surfaces SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE; zero F-34-NN findings; 1 PASS REG-01 + 1 PASS REG-02 + 4 PASS REG-04; 4 NEGATIVE-scope/RE_VERIFIED KI envelope re-verifications; KNOWN-ISSUES.md UNMODIFIED; closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`)
 - `audit/FINDINGS-v33.0.md` (FINAL READ-only at HEAD `4ce3703d740d3707c88a1af595618120a8168399`, ~750 lines, 9 sections + Phase 258 §3a/§4/§5/§9 updates; 9 of 9 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY; zero F-33-NN findings; closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` supersedes `MILESTONE_V33_AT_HEAD_dcb70941`)
 - `audit/FINDINGS-v32.0.md` (548 lines, 9 sections, FINAL READ-only at HEAD `acd88512`; 2 HIGH SUPERSEDED-at-HEAD F-32-NN disclosure blocks; closure signal `MILESTONE_V32_AT_HEAD_acd88512`)
@@ -202,13 +167,13 @@ Audit deliverables:
 
 ## Global Project State
 
-- Contract tree at v34.0 source-tree HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555` (v35.0 audit anchor / baseline) — pre-v35.0 working tree.
-- READ-only audit pattern carried forward v28.0–v31.0; **READ-only LIFTED for v32.0 + v33.0 + v34.0 + v35.0** — audit-then-commit (or impl-then-audit) with per-commit user approval per `feedback_no_contract_commits.md`. No agent commits contracts/ or test/ changes without explicit user review of the diff. v35.0 Phase 263's two-callsite refactor uses the batched approval pattern per `feedback_batch_contract_approval.md`.
-- KNOWN-ISSUES.md: 4 accepted RNG-determinism exceptions (EXC-01 affiliate roll / EXC-02 prevrandao fallback / EXC-03 F-29-04 mid-cycle substitution / EXC-04 EntropyLib XOR-shift) — all re-verified non-widening at HEAD `acd88512` in v32.0 Phase 248 + Phase 250; v33.0 Phase 257 re-verified all four NEGATIVE-scope at HEAD `4ce3703d`; v34.0 Phase 262 re-verified EXC-01..03 NEGATIVE-scope and EXC-04 RE_VERIFIED with STAT-05 chi² cross-cite at HEAD `6b63f6d4`. v35.0 Phase 265 expects EXC-01..03 NEGATIVE-scope (PPL refactor has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction); EXC-04 (EntropyLib XOR-shift) requires extra attention because the per-pull-level keccak `keccak256(randomWord, COIN_LEVEL_TAG, i) % range` consumes high-entropy bits — empirical chi-squared evidence at STAT-01 covers the uniformity claim end-to-end.
+- Contract tree at v36.0 audit-subject HEAD `1c0f09132d7439af9881c56fe197f81757f8164a` (v37.0 audit anchor / baseline) — pre-v37.0 working tree.
+- READ-only audit pattern carried forward v28.0–v31.0; **READ-only LIFTED for v32.0 + v33.0 + v34.0 + v35.0 + v36.0 + v37.0** — audit-then-commit (or impl-then-audit) with per-commit user approval per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md`. No agent commits contracts/ or test/ changes without explicit user review of the diff. v37.0 Phase 267's Degenerette rewrite uses the single-batched-commit approval pattern; Phase 269 LBX cleanup uses the same pattern; Phase 270 emits zero source-tree mutations.
+- KNOWN-ISSUES.md: 4 accepted RNG-determinism exceptions (EXC-01 affiliate roll / EXC-02 prevrandao fallback / EXC-03 F-29-04 mid-cycle substitution / EXC-04 EntropyLib XOR-shift) — all re-verified non-widening. v36.0 Phase 266 NARROWED EXC-04 to BAF-jackpot-only scope after lootbox-path xorshift removal. v37.0 Phase 271 expects EXC-01..03 NEGATIVE-scope (Degenerette + lootbox-cleanup + post-v32 commits have zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction); EXC-04 RE_VERIFIED with NARROWS retained from v36.0 (BAF-jackpot-only scope unchanged).
 
 ## Operator Next Steps
 
-- v35.0 milestone CLOSED. Next: define v36.0+ milestone scope and open with `/gsd-new-milestone` (or equivalent intake).
-- Address backlog seeds (see `## Next-Milestone Backlog`): (a) Phase 264 STAT-03 fixture retune to D-IMPL-07 mid/late-game holder-density spec; (b) Phase 264 SURF-05 gas REF drift in combined `npm run test:stat` ordering (128K drift vs isolation REF; root cause not diagnosed); (c) Phase 261 SURF-05 `runTerminalJackpot` pre-existing failure (drift 118,928 vs ref 2,599,868); (d) Hardhat ESM cleanup quirk; (e) Audit of post-v32.0 unaudited commits (`002bde55` + `2713ce61`).
-- Confirm closure signal `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6` recorded in `audit/FINDINGS-v35.0.md` §9c + `.planning/MILESTONES.md` v35.0 row + `.planning/phases/265-delta-audit-findings-consolidation/265-01-SUMMARY.md` frontmatter.
-- Optionally rotate `.planning/milestones/v35.0-ROADMAP.md` + `v35.0-REQUIREMENTS.md` archive structure (mirroring v34.0 archive pattern).
+- v37.0 milestone OPEN. Roadmap drafted (Phases 267-271). Next: `/gsd-plan-phase 267` to draft `267-01-PLAN.md` for Degenerette Producer + 5-Table Payout Rewrite.
+- Address backlog seeds (see `## Next-Milestone Backlog (v38+)`): (a) BAF jackpot `_jackpotTicketRoll` xorshift refactor (v36.0 ENT-05 carry); (b) `runrewardjackpots` module-misplacement note (stale, not v37.0-tagged); (c) game-over thorough hardening backlog.
+- Confirm closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a` recorded in `audit/FINDINGS-v36.0.md` §9c + `.planning/MILESTONES.md` v36.0 row + `.planning/phases/266-lootbox-entropy-refactor/266-01-SUMMARY.md` frontmatter (verify, then proceed).
+- Optionally rotate `.planning/milestones/v36.0-phases/` archive structure (mirroring v34.0 / v35.0 archive pattern) if not already done.

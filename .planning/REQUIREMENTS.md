@@ -158,7 +158,7 @@
 - Unmapped: 0
 - Orphans: 0
 - Duplicates: 0
-- Phase mapping in this draft is provisional; gsd-roadmapper may rebalance during ROADMAP.md creation. Final mapping locked at roadmap-approval commit.
+- Phase mapping LOCKED via .planning/ROADMAP.md authored 2026-05-10 (gsd-roadmapper honored the provisional split exactly; no rebalance applied).
 
 ---
 *Requirements defined: 2026-05-10*
