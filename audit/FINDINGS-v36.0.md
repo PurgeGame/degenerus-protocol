@@ -240,7 +240,74 @@ AUDIT-03 verdict: `CLOSED_AT_HEAD_<sha>` — every conservation invariant establ
 
 
 
-## 4. Adversarial Sweep — 6-Surface Verdict Roll-Up [populated by Tasks 13-14]
+## 4. F-36-NN Finding Blocks
+
+Per D-265-FIND-01 carry default-path expectation: ZERO F-36-NN finding blocks emitted. The Phase 266 lootbox-entropy refactor is mathematically well-bounded — per-resolution keccak `keccak256(abi.encode(rngWord, player, day, amount))` consumes VRF-derived high-entropy bits (player cannot bias post-commit per `feedback_rng_commitment_window.md`); inline bit-slice modulo bias is documented per consumer (max 0.39% for `% 5`; ≤ 0.05% for all other slices); chi² uniformity empirically verified at STAT-01 (Wilson-Hilferty Z < 1.645 for high-df; CHI2_CRIT_05[4] = 9.488 for low-df near-offset); cumulative bit budget 152 bits / 256 available with comfortable headroom; ETH-amount-second branch uses Option A counter-tagged `seed2 = EntropyLib.hash2(seed, 1)` for collision-free chunking; cross-surface byte-identity preserved at SURF-01..04. The 6-surface adversarial sweep below verdicts every identified surface (a..f) — all 6 rows expected SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE.
+
+Severity ceiling for any v36-emitted F-36-NN: HIGH (no value extraction beyond the existing lootbox-prize space; bucket-share-sum × pool invariant under the same ETH/BURNIE/DGNRS/WWXRP distribution mechanics as pre-refactor; modulo bias bounded analytically; per-pull entropy VRF-derived not player-controllable). Most likely severity for any inline-draft finding-candidate: MEDIUM/LOW. Default outcome: §4 emits ZERO F-36-NN finding blocks; deviations escalate to user inline per D-266-ADVERSARIAL-03 (see §4.2 trailer).
+
+### 4.1. Adversarial Sweep — 6-Surface Row Table
+
+**Surface (a) — Bit-slice modulo-bias bound per draw within documented bound.**
+
+- **Verdict:** SAFE_BY_DESIGN
+- **Grep recipe / line cite:** Bit-budget table at §3a; per-consumer slice + bias documented inline (NatSpec) per ENT-06 at `contracts/modules/DegenerusGameLootboxModule.sol` L805-810 (`_rollTargetLevel`) + L835-849 (`_resolveLootboxCommon` unified bit-allocation map) + L1019-1020 (`_rollLootboxBoons`) + L1543-1547 (`_resolveLootboxRoll`) + L1633-1634 (`_lootboxTicketCount`) + L1685-1686 (`_lootboxDgnrsReward`); STAT-01 chi² cross-cite at `test/stat/LootboxEntropyDistribution.test.js` (6 buckets — `% 100` Z<1.645 df=99 N=10K; `% 5` chi²<9.488 df=4 N=5K; `% 46` Z<1.645 df=45 N=10K; `% 20` path Z<1.645 df=19 N=10K; `% 20` variance Z<1.645 df=19 N=5K; `% 10000` Z<1.645 df=9999 N=100K).
+- **Prose justification:** Per D-266-BIT-BUDGET-01: every `% small` slice has documented bias ≤ 1% (max 0.39% at `% 5` from 8 bits = 256 mod 5 / 256; ≤ 0.05% for all other slices including `% 100` from 16 bits = 65536 mod 100 / 65536, `% 46` from 16 bits = 65536 mod 46 / 65536; min 0.0024% at `% 1000` from 24 bits). Backward-trace per `feedback_rng_backward_trace.md`: each consumer ultimately reads VRF-derived bits via the entry-point keccak `keccak256(abi.encode(rngWord, player, day, amount))`; rngWord is post-VRF-fulfillment-unknown to player. Empirical chi² evidence at STAT-01 covers uniformity end-to-end via JS-replica RNG calibrated to the on-chain bit-slice convention (mask + shift + modulo).
+
+**Surface (b) — Seed-reuse cross-correlation across sub-rolls within same resolution.**
+
+- **Verdict:** SAFE_BY_DESIGN
+- **Grep recipe / line cite:** Bit-allocation map at L835-849 enumerates 8 consumers consuming bit ranges [0..15] / [16..23] / [24..39] / [40..55] / [56..79] / [80..95] / [96..119] / [120..151] — DISJOINT bit ranges with no overlap; cumulative consumption 152 bits / 256 available; STAT-01 chi² verifies each consumer slice independently uniform; STAT-02 distribution-shape preservation re-runs 2 consumer slices under the same chi² threshold to confirm cross-consumer independence.
+- **Prose justification:** All 8 lootbox-resolution consumers slice from DISJOINT bit ranges of the same 256-bit `seed` (the primary chunk — counter 0 in the Option A scheme). keccak256 output bits are cryptographically pseudo-independent at the bit-pair level (the keccak-256 sponge construction's diffusion property); slicing disjoint bit ranges yields draws that are independent within Wilson-Hilferty / chi² tolerance per STAT-01 empirical verification. The bit-allocation map is the load-bearing audit invariant: no consumer reads bits outside its allotted range; no two consumers share a bit. Cross-resolution (different player / day / amount) seeds derive from a fresh keccak input so seeds are non-correlated across resolutions by VRF-derived entropy.
+
+**Surface (c) — `hash2(seed, N)` chunk-collision-free across consumers.**
+
+- **Verdict:** SAFE_BY_DESIGN
+- **Grep recipe / line cite:** `grep -nE "EntropyLib\.hash2\(seed, 1\)" contracts/modules/DegenerusGameLootboxModule.sol` returns L936 (single seed2 site in `_resolveLootboxCommon` ETH-amount-second branch); D-266-CONSUMER-LIST-01 enumeration at `.planning/phases/266-lootbox-entropy-refactor/266-CONTEXT.md` documents the 7-callsite consumer inventory with disjoint bit-range allocation; `EntropyLib.hash2(uint256 a, uint256 b) → uint256` is `keccak256(abi.encode(a, b))` per `contracts/libraries/EntropyLib.sol` L36-42 (file BYTE-IDENTICAL at v36 close per ENT-04 / SURF-01).
+- **Prose justification:** Phase 266 uses ONE `hash2` chunk-counter pattern: the ETH-amount-second branch derives `seed2 = EntropyLib.hash2(seed, 1)` per Option A (RESEARCH.md Pitfall 2). This chunk-counter scheme produces collision-free chunks because `hash2(seed, 0)` (the primary chunk — implicit `seed` itself) and `hash2(seed, 1)` (the second-amount chunk) hash to different 256-bit outputs with overwhelmingly high probability (keccak256 collision probability ≈ 2^−256 per AUDIT industry baseline). The counter-tag value `1` is a literal constant; no other consumer in the lootbox path uses `hash2(seed, N)` with a different counter, so no cross-consumer collision risk exists at v36. Future phases that introduce additional counter-tagged chunks must extend the bit-allocation map to enforce the same disjointness invariant.
+
+**Surface (d) — Gas-griefing delta bounded; refactor preserves the v34/v35 1.99× advanceGame margin.**
+
+- **Verdict:** SAFE_BY_DESIGN
+- **Grep recipe / line cite:** `test/gas/LootboxOpenGas.test.js` GAS-01 theoretical-worst-case derivation header (per `feedback_gas_worst_case.md`); `test/gas/AdvanceGameGas.test.js` v36.0 describe block — `ADVANCE_GAME_DECIMATOR_STAGE_REF = 908_320` pinned + GAS-02 ±2K stage tolerance + 1.99× margin invariant carry-forward from Phase 264 SURF-05.
+- **Prose justification:** Per `feedback_gas_worst_case.md`: theoretical worst case derived FIRST in `test/gas/LootboxOpenGas.test.js` header (opcode-by-opcode walk). Per-resolution gas delta:
+  - Saved: 5 entropyStep calls × ~33 g each ≈ 165 g per resolution (3-shift / 3-XOR / branch-overhead arithmetic)
+  - Saved: 1 dead L1585 entropyStep advance × ~33 g = ~33 g (WWXRP path; per RESEARCH.md Open Question 3 + Assumption A3 + `feedback_no_dead_guards.md`)
+  - Added: per-consumer inline shifts (uint8/uint16/uint24 + masks) ~6-12 g each × 7 consumers ≈ 70-90 g per resolution
+  - Added: ETH-amount-second branch keccak `hash2(seed, 1)` ~80 g (Option A counter-tag; only on split-amount path)
+  - Net per-open delta: typical −40 to +101 g (single-amount path); +60 to +180 g (ETH-amount-second branch).
+  GAS-01 envelope ±300 g per-open with 2× headroom. AdvanceGame envelope (GAS-02) ≤ ±2K per stage; 1.99× margin invariant carries forward from Phase 264 SURF-05 evidence. Decimator settlement is the one advanceGame-resident lootbox-resolution caller per CONTEXT.md `<domain>` and ROADMAP success criterion 4. Worst-case lootbox delta contribution to advanceGame: 160 simultaneous Decimator opens × +180 g = ~29K g per advance; bounded inside the existing 16M block-gas absolute ceiling (margin shifts by ≤ 0.001× from 1.99×).
+
+**Surface (e) — BAF jackpot byte-identity (ENT-05 deferral verification).**
+
+- **Verdict:** SAFE_BY_STRUCTURAL_CLOSURE
+- **Grep recipe / line cite:** `test/stat/SurfaceRegression.test.js` v36.0 SURF-02 describe block — `SURF_02_PROTECTED_RANGES = [{name: "_jackpotTicketRoll body L2186-2229 (SURF-02 — ENT-05 deferral)", lo: 2186, hi: 2229}]`; per-line modified-set walk vs `git diff 5db8682b HEAD -- contracts/modules/DegenerusGameJackpotModule.sol` returns ZERO `-` deletions inside the protected range.
+- **Prose justification:** BAF jackpot `_jackpotTicketRoll` (`DegenerusGameJackpotModule.sol:2186-2229`) is the sole remaining `EntropyLib.entropyStep` consumer protocol-wide at v36 close. Per CONTEXT.md D-266-SCOPE-OUT-01 (user disposition: "look at 3 but don't change now"), the BAF refactor is explicitly OUT of scope. SURF-02 byte-identity verification confirms the deferral discipline: `git diff 5db8682b..HEAD -- contracts/modules/DegenerusGameJackpotModule.sol` returns empty (zero changes anywhere in the file, including the BAF range and the 9 non-lootbox EntropyLib callsites at SURF-04). KNOWN-ISSUES.md EntropyLib XOR-shift entry rephrased to BAF-only scope at v36 close (REPHRASE not promotion per AUDIT-05 + D-09). Future-phase candidate: BAF refactor following the same bit-sliced keccak pattern would close the EntropyLib XOR-shift KI entry entirely.
+
+**Surface (f) — Commitment-window check (player cannot bias `rngWord` post-commit).**
+
+- **Verdict:** SAFE_BY_DESIGN
+- **Grep recipe / line cite:** `feedback_rng_commitment_window.md` cited inline; entry-point keccak at `contracts/modules/DegenerusGameLootboxModule.sol` L554 (`openLootBox`) / L628 (`openBurnieLootBox`) / L673 (`resolveLootboxDirect`) / L708 (`resolveRedemptionLootbox`); `lootboxRngWordByIndex[index]` storage write happens in the VRF-callback path BEFORE `openLootBox` is callable (the entry point reverts with `RngNotReady` if `rngWord == 0`).
+- **Prose justification:** Per `feedback_rng_commitment_window.md`: every RNG audit must check what player-controllable state can change between VRF request and fulfillment. For Phase 266 lootbox path: the 4 entry-point seeds are derived from `keccak256(abi.encode(rngWord, player, day, amount))` where `rngWord` is the VRF-fulfilled word stored at `lootboxRngWordByIndex[index]` BEFORE the player can call `openLootBox`. The player cannot replace `rngWord` post-commit (storage slot write-protected by the VRF callback path; `rngWord == 0` reverts the entry point with `RngNotReady`). The other 3 entropy-input components are committed at purchase time: `player` is `msg.sender` (immutable per-tx); `day` is `lootboxDay[index][player]` (set at purchase; checked against `_simulatedDayIndex()` for grace-period boundaries); `amount` is the packed lootbox ETH (set at purchase). NO player-controllable state can change between VRF request and fulfillment that affects the entropy seed. The commitment window is structurally closed.
+
+### 4.2. Verdict Roll-Up + Adversarial-Pass Status
+
+**Verdict roll-up:**
+
+| Surface | Verdict |
+|---------|---------|
+| (a) Bit-slice modulo-bias bound | SAFE_BY_DESIGN |
+| (b) Seed-reuse cross-correlation | SAFE_BY_DESIGN |
+| (c) `hash2(seed, N)` chunk-collision-free | SAFE_BY_DESIGN |
+| (d) Gas-griefing delta bounded | SAFE_BY_DESIGN |
+| (e) BAF byte-identity (ENT-05 verification) | SAFE_BY_STRUCTURAL_CLOSURE |
+| (f) Commitment-window check | SAFE_BY_DESIGN |
+
+**Roll-up:** 6 of 6 surfaces SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE; ZERO FINDING_CANDIDATE rows; ZERO F-36-NN finding blocks emitted at pre-adversarial-pass draft. Adversarial pass at Task 14 (`/contract-auditor` + `/zero-day-hunter` parallel spawn per D-266-ADVERSARIAL-01..02) red-teams the finished §4 draft and validates each row.
+
+**Adversarial-pass status:** Task 13 inline draft complete; Task 14 adversarial-pass log appears at `.planning/phases/266-lootbox-entropy-refactor/266-01-ADVERSARIAL-LOG.md` after parallel skill spawn. Per D-266-ADVERSARIAL-03 / `feedback_wait_for_approval.md`: any disagreement (skill flags a SAFE verdict OR `/zero-day-hunter` surfaces a novel composition) escalates to user inline before READ-only flip on this deliverable. /economic-analyst and /degen-skeptic explicitly NOT spawned per D-266-ADVERSARIAL-01 (carry of D-265-ADVERSARIAL-01).
+
+
 
 ## 5. Regression Appendix [populated by Task 15]
 
