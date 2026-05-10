@@ -183,6 +183,22 @@ Consolidates Phase 263 + 264 outputs into condensed summaries with cross-cites t
 
 `re-verified at HEAD <sha>`.
 
+### 3c. AUDIT-06 — Off-Chain Indexer Semantic-Shift Disclosure
+
+AUDIT-06 surfaces a v35.0-distinctive indexer-observability shift that is the central documentation deliverable of this phase. The on-chain event signature is byte-identical (zero ABI change); only the runtime semantics of one field change. This is observability-only — no on-chain behavior change for player or protocol — and routes through D-09 3-predicate gating into KNOWN-ISSUES.md per D-265-AUDIT06-01 (PASS expected: accepted-design + non-exploitable + sticky).
+
+**`JackpotBurnieWin.lvl` — call-level → per-pull-sampled-level.**
+
+Pre-Phase-263, the `lvl` field on the `JackpotBurnieWin(winner, lvl, traitId, amount, ticketIndex)` event (declared at `contracts/modules/DegenerusGameJackpotModule.sol:96`) was the call-level — a single value constant across all 50 winners produced by one `payDailyCoinJackpot` (purchase phase) or `payDailyJackpotCoinAndTickets` (jackpot phase) invocation. Post-Phase-263, the new helper `_awardDailyCoinToTraitWinners` samples a distinct `lvl` for each of the 50 pulls via `keccak256(abi.encode(randomWord, COIN_LEVEL_TAG, i)) % range`, where `range = maxLevel - minLevel + 1`. Off-chain dashboards and analytics tooling that grouped events by `lvl` field now observe up to 50 distinct `lvl` values per call instead of 1; per-call aggregation by `lvl` no longer produces a single value. Indexer impact is observability-only — no on-chain behavior change. Cross-cite: Phase 263 SUMMARY §"Indexer Awareness" (D-INDEXER-01) + REQUIREMENTS.md AUDIT-06.
+
+**`DailyWinningTraits.bonusTargetLevel` — authoritative single-level anchor → advisory pre-announcement.**
+
+The `DailyWinningTraits` event continues to emit `bonusTargetLevel = lvl + 1 + uint24(coinEntropy % 4)` BYTE-IDENTICALLY at L520 (jackpot phase) and L538 (purchase phase) per Phase 263 D-INDEXER-01. The on-chain emit blocks are byte-identical; only the downstream indexer-side INTERPRETATION shifts from "this is the single level the daily coin-jackpot will pay out" to "this is an advisory pre-announcement; actual coin-jackpot pulls sample per-pull-distinct levels in the surrounding range per Phase 263 PPL-01/PPL-02". The field's legacy use as an authoritative pay-level anchor is no longer accurate; off-chain indexers that derived per-call summary statistics from this single value need to switch to harvesting `JackpotBurnieWin.lvl` events for ground-truth distribution.
+
+**Backward compatibility.** Both event signatures are byte-identical (zero ABI break). No indexer code will fail to decode; the data fields decode as before. The shift is purely in the SEMANTIC INTERPRETATION of the `lvl` and `bonusTargetLevel` fields. **Indexer-team action item:** existing per-call aggregation queries that group by `lvl` should treat each `JackpotBurnieWin` row as carrying its own per-pull sampled level; queries previously assuming `lvl` was call-constant per BURNIE coin-jackpot invocation need refactoring. Per `feedback_no_history_in_comments.md`, this disclosure describes what IS at HEAD `<sha>` (pre-/post- semantics ARE the audit subject of AUDIT-06; this is explicit semantics-disclosure, not a change-history comment in code).
+
+**D-09 gating disposition** (full row in §6b): all 3 predicates PASS. **Accepted-design** = YES (Phase 263 design lock — semantic shift is the GOAL of per-pull-level resample, not a side effect). **Non-exploitable** = YES (semantic shift is observability-only; no on-chain behavior change for player or protocol; cannot be timed, gamed, or extracted). **Sticky** = YES (structural property of the helper; will not go away across future builds unless a future milestone reverts the per-pull-level design). Default disposition: D-09 PASS → AUDIT-06 routes into KNOWN-ISSUES.md under Design Decisions (1 entry added per Task 11). Closure verdict: `1 of 1 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_MODIFIED (1 entry added under Design Decisions)`.
+
 ### 3d. AUDIT-01 Delta-Surface Table — DegenerusGameJackpotModule.sol
 
 Every changed declaration in `contracts/modules/DegenerusGameJackpotModule.sol` between v34.0 baseline `6b63f6d4daf346a53a1d463790f637308ea8d555` and v35.0 HEAD `<sha>`, classified per the {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED, RENAMED} taxonomy. v35.0 is a single-contract delta — no other `contracts/*.sol` file modified per `git log --oneline 6b63f6d4..HEAD -- contracts/` (only `cf564816` in scope).
