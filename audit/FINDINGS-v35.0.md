@@ -217,4 +217,18 @@ Expected output: `_awardDailyCoinToTraitWinners` returns the def + 2 callers (~L
 
 **Live-line discrepancy note.** REQUIREMENTS.md PPL-01/PPL-02 cite pre-rewrite line numbers (`payDailyCoinJackpot` ~L1708; `payDailyJackpotCoinAndTickets` ~L624). Live HEAD line numbers may have drifted by ±5-15 lines due to net +17 LOC; the §3d table cites LIVE HEAD line numbers as the audit truth-source.
 
+#### Part C — AUDIT-04 Zero-New-State Attestation
+
+AUDIT-04 attests zero new state-altering surface introduced by v35.0 between baseline `6b63f6d4daf346a53a1d463790f637308ea8d555` and HEAD `<sha>`. Five orthogonal grep-reproducible checks below:
+
+| Surface | Grep Recipe | Expected | Observed at HEAD | Verdict |
+|---|---|---|---|---|
+| New storage slots in `GameStorage` | `git diff 6b63f6d4daf346a53a1d463790f637308ea8d555..HEAD -- contracts/storage/GameStorage.sol` | empty (zero hunks) | empty (zero diff lines) | PASS — GameStorage.sol UNTOUCHED |
+| New storage slots in JackpotModule | `git diff 6b63f6d4..HEAD --stat -- contracts/modules/DegenerusGameJackpotModule.sol` | only `_awardDailyCoinToTraitWinners` body + 2 callsite hunks + `COIN_LEVEL_TAG` constant + dead-block deletions; ZERO new state variable declarations | per-line walk vs raw delta confirms only the helper body + constants + callsites changed; the only "new" non-stack values are `address[4] memory deityCache` (memory, NOT storage) + `bytes32 private constant COIN_LEVEL_TAG` (constant, NOT storage slot) | PASS — zero new storage slots |
+| New `public` / `external` mutation entry points | `git diff 6b63f6d4..HEAD -- contracts/ \| grep -E '^\+.*function .* (public\|external)'` | zero hits in non-test contract files | zero hits — `_awardDailyCoinToTraitWinners` is `internal` (not public/external) | PASS — zero new public/external mutation entry points |
+| New admin functions / `onlyOwner` modifiers | `git diff 6b63f6d4..HEAD -- contracts/ \| grep -E '^\+.*onlyOwner\|^\+.*onlyAdmin'` | zero hits | zero hits (helper has no admin gating; runs unconditionally inside `advanceGame`) | PASS — zero new admin functions |
+| New upgrade hooks / `modifier` declarations | `git diff 6b63f6d4..HEAD -- contracts/ \| grep -E '^\+.*modifier '` | zero hits | zero hits | PASS — zero new modifiers escalating authority |
+
+**Closure paragraph.** AUDIT-04 satisfied at HEAD `<sha>`. The per-pull-level resample helper is a pure-internal refactor of distribution logic; its only state interactions are READS from existing slots (deity slots via `deityBySymbol[fullSymId]`; holder arrays via `realLen(lvlPrime, trait_i)` + `holderAt(lvlPrime, trait_i, holderIdx)`) and WRITES via the pre-existing `coinflip.creditFlip(winner, amount)` cross-contract path (BURNIE mint via `mintForGame` route — not a new mint site; see §3e AUDIT-03 BURNIE conservation row). No new storage slot is allocated; no new admin function is exposed; no new modifier is declared.
+
 ---
