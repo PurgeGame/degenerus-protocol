@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v36.0
 milestone_name: Lootbox-Path Entropy Refactor
-status: executing
-last_updated: "2026-05-10T06:24:22.598Z"
-last_activity: 2026-05-10 -- Phase 266 planning complete
+status: shipped
+last_updated: "2026-05-10T09:30:00.000Z"
+last_activity: 2026-05-10 -- v36.0 milestone CLOSED — Phase 266 SHIPPED
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 5
-  completed_plans: 4
-  percent: 75
+  completed_plans: 5
+  percent: 100
+closure_signal: MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a
 ---
 
 # Project State
@@ -20,16 +21,33 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09 after v35.0 milestone close)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 266 — lootbox-entropy-refactor (v36.0 milestone, single-phase patch shape).
+**Current focus:** v36.0 SHIPPED 2026-05-10. Awaiting next milestone scope.
 
 ## Current Position
 
-Phase: 266 (lootbox-entropy-refactor) — DEFINED (CONTEXT.md written; awaiting `/gsd-plan-phase 266`)
-Plan: 0 of TBD
-Status: Ready to execute
-Last activity: 2026-05-10 -- Phase 266 planning complete
+Phase: 266 (lootbox-entropy-refactor) — COMPLETED
+Plan: 1 of 1 (closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a` emitted in §9c)
+Status: v36.0 milestone SHIPPED
+Last activity: 2026-05-10 -- v36.0 milestone CLOSED — Phase 266 SHIPPED
 
 ## Last Shipped Milestone
+
+**v36.0 — Lootbox-Path Entropy Refactor** (shipped 2026-05-10)
+
+- 1 phase (266), 1 plan, 24/24 requirements satisfied (ENT-01..06 + STAT-01..03 + GAS-01..02 + SURF-01..04 + AUDIT-01..05 + REG-01..04)
+- Audit baseline: v35.0 audit-subject HEAD `5db8682bd7b811437f0c1cf47e832619d1478ac6` → v36.0 audit-subject HEAD `1c0f09132d7439af9881c56fe197f81757f8164a` (post-Task-19 §9 attestation commit)
+- 1 contract-tree commit since baseline: `df6345cc` (Phase 266 single batched contract-tree commit — `feat(266): lootbox-path entropy refactor [ENT-01..06]`; +75/-61 LOC; 7 EntropyLib.entropyStep callsites removed → bit-sliced reads from per-resolution keccak seed; ETH-amount-second branch uses `seed2 = EntropyLib.hash2(seed, 1)` per Option A counter-tag) + 1 batched test-tree commit (`16ed452b` — chi² + gas + surface preservation tests; +912/-2 LOC across 4 test files + package.json wiring; 2 NEW: `LootboxEntropyDistribution.test.js` + `LootboxOpenGas.test.js`; 2 EXTENDED: `AdvanceGameGas.test.js` v36.0 describe + `SurfaceRegression.test.js` v36.0 SURF-01..04 describe)
+- Result: 6 of 6 §4 adversarial surfaces SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE (a bit-slice modulo-bias bound + b seed-reuse cross-correlation + c hash2 chunk-collision-free + d gas-griefing delta bounded + e BAF byte-identity ENT-05 verification + f commitment-window check); zero F-36-NN finding blocks emitted
+- Adversarial pass via `/contract-auditor` + `/zero-day-hunter` (sequential spawn under inline-execution mode; functionally equivalent to D-266-ADVERSARIAL-02 parallel pattern — both red-teamed the same finished §4 draft) returned ZERO disagreements across 13 + 14 hypothesis investigations; `/economic-analyst` + `/degen-skeptic` explicitly NOT in scope per D-266-ADVERSARIAL-01
+- LEAN regression: 1 PASS REG-01 (v35.0 closure signal `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6` re-verified non-widening; per-pull-level helper UNTOUCHED) + 1 PASS REG-02 (v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` re-verified non-widening; gold-solo-priority + JackpotBucketLib UNCHANGED) + 11 PASS + 0 SUPERSEDED + 0 REGRESSED REG-04 (prior-finding spot-check sweep across audit/FINDINGS-v25..v35)
+- KI envelopes EXC-01..03 RE_VERIFIED NEGATIVE-scope at v36 (lootbox-path refactor has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction); EXC-04 RE_VERIFIED with NARROWS scope — BAF-jackpot-only after lootbox-path xorshift consumption removal; STAT-01 chi² empirical evidence at `test/stat/LootboxEntropyDistribution.test.js` (6 sub-roll buckets, all uniform within Wilson-Hilferty Z<1.645 / CHI2_CRIT_05[4]=9.488 thresholds at α=0.05)
+- KNOWN-ISSUES.md modified by 1 entry rephrase: EntropyLib XOR-shift entry NARROWS to BAF-jackpot-only scope per AUDIT-05 (REPHRASE under D-09 Design Decisions, not new promotion). Closure verdict `0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_REPHRASED (1 entry rephrased to BAF-only scope under Design Decisions per AUDIT-05)`
+- Deliverable: `audit/FINDINGS-v36.0.md` (FINAL READ-only at HEAD `1c0f09132d7439af9881c56fe197f81757f8164a`, 9 sections, ~700 lines)
+- Closure signal: `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`
+- Process notes: Inline-execution mode chosen at execute-phase open per user disposition (mirrors v35.0 Phase 265 close pattern after subagent .md-write guard concerns). All 21 atomic-commit tasks executed inline; adversarial-pass /contract-auditor + /zero-day-hunter spawned via Skill tool sequentially (skills load into orchestrator context for review work — no .md-write guard interference). Wave 2 user-approval gate accepted observed flaky ~120K gas-pin drift in Phase 261/264 SURF-05 tests under `npm run test:stat` ordering (standalone runs at pinned values pass) — re-pinning deferred to v37.0. Pre-existing dead BURNIE-conversion branch in `_resolveLootboxRoll` L1574 surfaced by /contract-auditor Hypothesis (m); routed to v37.0 maintenance scope at `.planning/notes/2026-05-10-resolveLootboxRoll-dead-burnie-conversion-branch.md`
+- See `.planning/MILESTONES.md` for archive
+
+### Prior Shipped Milestone
 
 **v35.0 — BURNIE Near-Future Per-Pull Level Resample** (shipped 2026-05-09)
 
