@@ -3,7 +3,7 @@ phase: 265-delta-audit-findings-consolidation
 plan: 01
 milestone: v35.0
 milestone_name: BURNIE Near-Future Per-Pull Level Resample
-head_anchor: <will-be-filled-by-Task-13>
+head_anchor: 5db8682bd7b811437f0c1cf47e832619d1478ac6
 audit_baseline: 6b63f6d4daf346a53a1d463790f637308ea8d555
 audit_baseline_signal: MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555
 v33_baseline: 4ce3703d740d3707c88a1af595618120a8168399
@@ -13,15 +13,15 @@ requirements: [AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05, AUDIT-06, REG-0
 phase_status: terminal
 write_policy: "Pure-consolidation phase per CONTEXT.md hard constraint #1. Zero contracts/ writes by agent. Zero test/ writes by agent. KNOWN-ISSUES.md modified by 1 entry under Design Decisions per D-265-AUDIT06-01 (AUDIT-06 indexer semantic-shift). Per `feedback_never_preapprove_contracts.md`, the orchestrator does NOT pre-approve any contract change — vacuous this phase since no contract changes are proposed by agent."
 supersedes: none
-status: DRAFT
+status: FINAL — READ-ONLY
 read_only: false
-closure_signal: <will-be-filled-by-Task-13>
-generated_at: <will-be-filled-by-Task-13>
+closure_signal: MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6
+generated_at: 2026-05-09T13:00:00Z
 ---
 
 # v35.0 Findings — BURNIE Near-Future Per-Pull Level Resample
 
-**Audit Baseline.** The audit baseline is v34.0 source-tree HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555` (closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` carry-forward from `audit/FINDINGS-v34.0.md` §9c). HEAD `<will-be-filled-by-Task-13>` (currently `5db8682b` per phase-start, post-Phase-264 close `docs(264): mark phase complete in STATE.md + ROADMAP.md`). One v35 contract-tree commit since baseline: `cf564816` (Phase 263 — `feat(263): per-pull level resample for daily coin jackpot [PPL-01..PPL-08]`); diff stats 91 insertions(+) / 74 deletions(-), net +17 LOC across the constants block + `payDailyJackpotCoinAndTickets` coin-jackpot block + `payDailyCoinJackpot` tail + new `_awardDailyCoinToTraitWinners` helper body. Six v35 test-tree commits since baseline: `aa41485e` (`test(264-01): add STAT-01/02/04 + D-IMPL-01 boundary harness for per-pull level resample`) + `7dcfeb0c` (`test(264-01): add STAT-03 empty-bucket skip rate + cumulative underspend test`) + `82717bcf` (`test(264-02): extend SurfaceRegression with v35.0 SURF-01..04 grep-proof`) + `36234847` (`test(264-02): add Phase264GasRegression for SURF-05 entry-point gas`) + `20b15468` (`test(264-02): extend AdvanceGameGas with v35.0 1.99x margin assertion`) + `833b341d` (`chore(264-02): wire Phase 264 test files into npm scripts`). `contracts/DegenerusTraitUtils.sol` + `contracts/libraries/JackpotBucketLib.sol` + `contracts/libraries/EntropyLib.sol` + `contracts/storage/GameStorage.sol` are byte-identical between v34.0 baseline `6b63f6d4` and v35 HEAD (REG-01 PASS — see §5a). `contracts/GNRUS.sol` is byte-identical between v33.0 baseline `4ce3703d` and v35 HEAD (REG-02 PASS — see §5b).
+**Audit Baseline.** The audit baseline is v34.0 source-tree HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555` (closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` carry-forward from `audit/FINDINGS-v34.0.md` §9c). v35.0 audit subject HEAD `5db8682bd7b811437f0c1cf47e832619d1478ac6` (post-Phase-264 close commit `docs(264): add VERIFICATION.md — phase passes 9/9 must-haves`; identical to milestone-state-frozen anchor since Phase 265 makes ZERO contract-tree mutations per CONTEXT.md hard constraint #1). One v35 contract-tree commit since baseline: `cf564816` (Phase 263 — `feat(263): per-pull level resample for daily coin jackpot [PPL-01..PPL-08]`); diff stats 91 insertions(+) / 74 deletions(-), net +17 LOC across the constants block + `payDailyJackpotCoinAndTickets` coin-jackpot block + `payDailyCoinJackpot` tail + new `_awardDailyCoinToTraitWinners` helper body. Six v35 test-tree commits since baseline: `aa41485e` (`test(264-01): add STAT-01/02/04 + D-IMPL-01 boundary harness for per-pull level resample`) + `7dcfeb0c` (`test(264-01): add STAT-03 empty-bucket skip rate + cumulative underspend test`) + `82717bcf` (`test(264-02): extend SurfaceRegression with v35.0 SURF-01..04 grep-proof`) + `36234847` (`test(264-02): add Phase264GasRegression for SURF-05 entry-point gas`) + `20b15468` (`test(264-02): extend AdvanceGameGas with v35.0 1.99x margin assertion`) + `833b341d` (`chore(264-02): wire Phase 264 test files into npm scripts`). `contracts/DegenerusTraitUtils.sol` + `contracts/libraries/JackpotBucketLib.sol` + `contracts/libraries/EntropyLib.sol` + `contracts/storage/GameStorage.sol` are byte-identical between v34.0 baseline `6b63f6d4` and v35 HEAD (REG-01 PASS — see §5a). `contracts/GNRUS.sol` is byte-identical between v33.0 baseline `4ce3703d` and v35 HEAD (REG-02 PASS — see §5b).
 
 **Scope.** Single canonical milestone-closure deliverable for v35.0 per D-265-FILES-01 (single deliverable, no per-AUDIT-NN working files) + D-253-15 / D-257 / D-262 carry-forward (9-section shape locked). Consolidates Phase 263 + 264 outputs into 9 sections per D-253-15 / D-257 / D-262 carry. Terminal phase per CONTEXT.md D-265 carry of D-257-FCITE-01 / D-262-FCITE-01 — zero forward-cites emitted from Phase 265 to any post-v35.0 milestone phases. Mirrors v33 Phase 257 / v34 Phase 262 single-plan multi-task atomic-commit pattern adapted for v35's 1-impl-phase + 1-test-phase + 1-audit-phase scope per D-265-PLAN-01.
 
@@ -33,17 +33,17 @@ generated_at: <will-be-filled-by-Task-13>
 
 ### Closure Verdict Summary
 
-- AUDIT-01: `CLOSED_AT_HEAD_<sha>` (delta surface complete; every changed function/state-var/event/error in `contracts/modules/DegenerusGameJackpotModule.sol` vs baseline `6b63f6d4` enumerated with hunk-level evidence and classified per ROADMAP success criterion 1)
+- AUDIT-01: `CLOSED_AT_HEAD_5db8682b` (delta surface complete; every changed function/state-var/event/error in `contracts/modules/DegenerusGameJackpotModule.sol` vs baseline `6b63f6d4` enumerated with hunk-level evidence and classified per ROADMAP success criterion 1)
 - AUDIT-02: `6 of 6 surfaces SAFE_*; 0 of 0 FINDING_CANDIDATE PROMOTED` (default expected per D-265-FIND-01)
-- AUDIT-03: `CLOSED_AT_HEAD_<sha>` (coinBudget non-overspend across new loop including empty-bucket skips; solvency invariant `claimablePool ≤ ETH balance + stETH balance` PRESERVED; BURNIE mint-supply conservation — only pre-existing `mintForGame` route exercised; no new mint sites)
+- AUDIT-03: `CLOSED_AT_HEAD_5db8682b` (coinBudget non-overspend across new loop including empty-bucket skips; solvency invariant `claimablePool ≤ ETH balance + stETH balance` PRESERVED; BURNIE mint-supply conservation — only pre-existing `mintForGame` route exercised; no new mint sites)
 - AUDIT-04: `0 new public/external mutation entry points; 0 new storage slots in GameStorage; 0 new admin functions; 0 new upgrade hooks; 0 new modifiers escalating authority`
-- AUDIT-05: `MILESTONE_V35_AT_HEAD_<sha>` emitted in §9c
+- AUDIT-05: `MILESTONE_V35_AT_HEAD_5db8682b` emitted in §9c
 - AUDIT-06: `JackpotBurnieWin.lvl semantic-shift surfaced in §3c prose; D-09 3-predicate PASS routed promotion to KNOWN-ISSUES.md under Design Decisions (1 entry added)`
 - REG-01: `1 PASS row — v34.0 closure signal MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555 NON-WIDENING at v35 HEAD`
 - REG-02: `1 PASS row — v33.0 closure signal MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399 NON-WIDENING at v35 HEAD`
 - REG-03: `4 KI envelope re-verifications: EXC-01..03 NEGATIVE-scope; EXC-04 RE_VERIFIED with Phase 264 STAT-01 chi² cross-cite; KNOWN_ISSUES_MODIFIED (1 entry added under Design Decisions per AUDIT-06)`
 - REG-04: `<N> PASS / 0 REGRESSED / 0 SUPERSEDED prior-finding spot-check rows across audit/FINDINGS-v25.0.md → audit/FINDINGS-v34.0.md`
-- Combined milestone closure: `MILESTONE_V35_AT_HEAD_<sha>`
+- Combined milestone closure: `MILESTONE_V35_AT_HEAD_5db8682b`
 
 ### Severity Counts (per D-08 5-Bucket Rubric)
 
@@ -86,13 +86,13 @@ CONTEXT.md D-265 carry of D-257-FCITE-01 + D-262-FCITE-01 + D-253-15 step 8 + RO
 
 ### Attestation Anchor
 
-See §9 Milestone Closure Attestation for the D-253-15 step 9 attestation block triggering v35.0 milestone closure via signal `MILESTONE_V35_AT_HEAD_<sha>`.
+See §9 Milestone Closure Attestation for the D-253-15 step 9 attestation block triggering v35.0 milestone closure via signal `MILESTONE_V35_AT_HEAD_5db8682b`.
 
 ---
 
 ## 3. Per-Phase Sections
 
-Consolidates Phase 263 + 264 outputs into condensed summaries with cross-cites to source artifacts. All cross-cites are READ-only lookups; no fresh derivation. Sources `re-verified at HEAD <sha>` per Task 13 anchor resolution. §3c AUDIT-06 indexer semantic-shift disclosure prose appears in this section (Task 5). §3d AUDIT-01 delta-surface table + AUDIT-04 storage-slot scan appear after §3c (Tasks 3-4). §3e AUDIT-03 conservation re-proof rows appear after §3d (Task 8).
+Consolidates Phase 263 + 264 outputs into condensed summaries with cross-cites to source artifacts. All cross-cites are READ-only lookups; no fresh derivation. Sources `re-verified at HEAD 5db8682b` per Task 13 anchor resolution. §3c AUDIT-06 indexer semantic-shift disclosure prose appears in this section (Task 5). §3d AUDIT-01 delta-surface table + AUDIT-04 storage-slot scan appear after §3c (Tasks 3-4). §3e AUDIT-03 conservation re-proof rows appear after §3d (Task 8).
 
 ### 3a. Phase 263 — Per-Pull Level Resample Implementation
 
@@ -123,16 +123,16 @@ Consolidates Phase 263 + 264 outputs into condensed summaries with cross-cites t
 
 | REQ | Verdict | Cross-Cite | Attestation |
 | --- | ------- | ---------- | ----------- |
-| PPL-01 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | `payDailyCoinJackpot` (purchase phase, ~L1708) callsite rewired to `_awardDailyCoinToTraitWinners(traitIds, randWord, minLevel, maxLevel, coinBudget)`; per-pull keccak `keccak256(abi.encode(randomWord, COIN_LEVEL_TAG, i)) % range` consumed inside helper. |
-| PPL-02 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | `payDailyJackpotCoinAndTickets` (jackpot phase, L623) callsite rewired to `_awardDailyCoinToTraitWinners(traitIds, randWord, lvl + 1, lvl + 4, coinBudget - farBudget)`; same helper consumes the call-determined `[minLevel, maxLevel]` range. |
-| PPL-03 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | Flat 50-pull loop in `_awardDailyCoinToTraitWinners`; deterministic trait rotation via `traitIds[i % 4]` per pull; `_computeBucketCounts` NOT called from coin-jackpot path (preserved for lootbox path per Grep Gauntlet #5: `grep -c '_computeBucketCounts' contracts/modules/DegenerusGameJackpotModule.sol` returns 2 = def + lootbox caller). |
-| PPL-04 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | Share-math byte-identical: `cap = min(coinBudget / floor, 50)`, `baseAmount = coinBudget / cap`, `extraCount = coinBudget - baseAmount * cap`, `cursor = randomWord % cap`; per pull `amount = baseAmount + (i < extraCount ? 1 : 0)` — cursor remainder distribution preserved byte-identical to pre-Phase-263 `_randTraitTicket` cursor pattern. |
-| PPL-05 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | Empty-bucket silent skip: `if (effectiveLen == 0) continue;` — no carry-forward, no fallback, no redistribution. coinBudget conservation `Σ paid ≤ coinBudget` (structural underspend accepted; no overspend possible — see §3e AUDIT-03 + §4 surface (e) STAT-03 reframe row). |
-| PPL-06 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | Per-trait deity caching: `address[4] memory deityCache` populated with 4 SLOADs at loop entry; subsequent 50 pulls read from memory (was 50× SLOAD/pull pre-PPL = 200 SLOADs). Cache cannot stale because deity assignment is immutable for the current day's `traitIds[i % 4]` set; helper runs atomically inside `advanceGame` (no re-entrancy hooks). |
-| PPL-07 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | New salt scheme: per-pull holder index = `uint256(keccak256(abi.encode(randomWord, trait_i, lvlPrime, i))) % effectiveLen`; legacy 8-bit `salt` parameter dropped from coin-jackpot caller; `_randTraitTicket` body + 4 other callers BYTE-IDENTICAL per Phase 264 SURF-01. |
-| PPL-08 | `COMPLETE_AT_HEAD_<sha>` | 263-01-SUMMARY.md | `JackpotBurnieWin` event signature byte-identical at L96 (zero ABI change); only the runtime semantics of the `lvl` field shift from shared-call-level to per-pull-sampled — see §3c AUDIT-06 disclosure. |
+| PPL-01 | `COMPLETE_AT_HEAD_5db8682b` | 263-01-SUMMARY.md | `payDailyCoinJackpot` (purchase phase, ~L1708) callsite rewired to `_awardDailyCoinToTraitWinners(traitIds, randWord, minLevel, maxLevel, coinBudget)`; per-pull keccak `keccak256(abi.encode(randomWord, COIN_LEVEL_TAG, i)) % range` consumed inside helper. |
+| PPL-02 | `COMPLETE_AT_HEAD_5db8682b` | 263-01-SUMMARY.md | `payDailyJackpotCoinAndTickets` (jackpot phase, L623) callsite rewired to `_awardDailyCoinToTraitWinners(traitIds, randWord, lvl + 1, lvl + 4, coinBudget - farBudget)`; same helper consumes the call-determined `[minLevel, maxLevel]` range. |
+| PPL-03 | `COMPLETE_AT_HEAD_5db8682b` | 263-01-SUMMARY.md | Flat 50-pull loop in `_awardDailyCoinToTraitWinners`; deterministic trait rotation via `traitIds[i % 4]` per pull; `_computeBucketCounts` NOT called from coin-jackpot path (preserved for lootbox path per Grep Gauntlet #5: `grep -c '_computeBucketCounts' contracts/modules/DegenerusGameJackpotModule.sol` returns 2 = def + lootbox caller). |
+| PPL-04 | `COMPLETE_AT_HEAD_5db8682b` | 263-01-SUMMARY.md | Share-math byte-identical: `cap = min(coinBudget / floor, 50)`, `baseAmount = coinBudget / cap`, `extraCount = coinBudget - baseAmount * cap`, `cursor = randomWord % cap`; per pull `amount = baseAmount + (i < extraCount ? 1 : 0)` — cursor remainder distribution preserved byte-identical to pre-Phase-263 `_randTraitTicket` cursor pattern. |
+| PPL-05 | `COMPLETE_AT_HEAD_5db8682b` | 263-01-SUMMARY.md | Empty-bucket silent skip: `if (effectiveLen == 0) continue;` — no carry-forward, no fallback, no redistribution. coinBudget conservation `Σ paid ≤ coinBudget` (structural underspend accepted; no overspend possible — see §3e AUDIT-03 + §4 surface (e) STAT-03 reframe row). |
+| PPL-06 | `COMPLETE_AT_HEAD_5db8682b` | 263-01-SUMMARY.md | Per-trait deity caching: `address[4] memory deityCache` populated with 4 SLOADs at loop entry; subsequent 50 pulls read from memory (was 50× SLOAD/pull pre-PPL = 200 SLOADs). Cache cannot stale because deity assignment is immutable for the current day's `traitIds[i % 4]` set; helper runs atomically inside `advanceGame` (no re-entrancy hooks). |
+| PPL-07 | `COMPLETE_AT_HEAD_5db8682b` | 263-01-SUMMARY.md | New salt scheme: per-pull holder index = `uint256(keccak256(abi.encode(randomWord, trait_i, lvlPrime, i))) % effectiveLen`; legacy 8-bit `salt` parameter dropped from coin-jackpot caller; `_randTraitTicket` body + 4 other callers BYTE-IDENTICAL per Phase 264 SURF-01. |
+| PPL-08 | `COMPLETE_AT_HEAD_5db8682b` | 263-01-SUMMARY.md | `JackpotBurnieWin` event signature byte-identical at L96 (zero ABI change); only the runtime semantics of the `lvl` field shift from shared-call-level to per-pull-sampled — see §3c AUDIT-06 disclosure. |
 
-`re-verified at HEAD <sha>`.
+`re-verified at HEAD 5db8682b`.
 
 ### 3b. Phase 264 — Statistical Validation + Cross-Surface Preservation
 
@@ -171,17 +171,17 @@ Consolidates Phase 263 + 264 outputs into condensed summaries with cross-cites t
 
 | REQ | Verdict | Cross-Cite | Attestation |
 | --- | ------- | ---------- | ----------- |
-| STAT-01 | `PASS_AT_HEAD_<sha>` | 264-01-SUMMARY.md | Chi² over 10K aggregated samples in `test/stat/PerPullLevelDistribution.test.js`; range=4 chi² = 5.114 < 7.815 (α=0.05 df=3); range=8 chi² = 3.019 < 14.067 (α=0.05 df=7). |
-| STAT-02 | `PASS_AT_HEAD_<sha>` | 264-01-SUMMARY.md | Per-trait counts = [13, 13, 12, 12] under `i % 4` rotation across 50 pulls; degenerate chi² = 0.08. Deterministic-by-design — no PRNG variance because rotation index is `i % 4`. |
+| STAT-01 | `PASS_AT_HEAD_5db8682b` | 264-01-SUMMARY.md | Chi² over 10K aggregated samples in `test/stat/PerPullLevelDistribution.test.js`; range=4 chi² = 5.114 < 7.815 (α=0.05 df=3); range=8 chi² = 3.019 < 14.067 (α=0.05 df=7). |
+| STAT-02 | `PASS_AT_HEAD_5db8682b` | 264-01-SUMMARY.md | Per-trait counts = [13, 13, 12, 12] under `i % 4` rotation across 50 pulls; degenerate chi² = 0.08. Deterministic-by-design — no PRNG variance because rotation index is `i % 4`. |
 | STAT-03 | `PASS as test-landed; fixture-calibration measurement reframed in §4 per D-265-STAT03-01` | 264-01-SUMMARY.md | Test landed at strict 10% threshold per D-IMPL-08; measured `skipRate = 88.24%` on natural-lifecycle fresh `deployFullProtocol` fixture (~16 vault tickets per level × levels [2..5] ≈ 64 tickets distributed across 16 `(lvl', trait_i)` cells → ~75% empty cells expected, matching observed ~88% rate after PRNG variance). Helper correctness proven by D-IMPL-01 deity-fixture (50/50 emit count under deity-backed dense fixture). REFRAMED in §4 surface (e) per D-265-STAT03-01. |
-| STAT-04 | `PASS_AT_HEAD_<sha>` | 264-01-SUMMARY.md | Phase 261 chi² infrastructure (`makeRng` / `CHI2_CRIT_05` / `wilsonHilfertyZ`) re-declared verbatim in `test/stat/PerPullLevelDistribution.test.js` header. `COIN_LEVEL_TAG` and `BONUS_TRAITS_TAG` sanity-pinned to expected `keccak256("coin-level")` + `keccak256("bonus-traits")` digests. |
-| SURF-01 | `PASS_AT_HEAD_<sha>` | 264-02-SUMMARY.md | `_randTraitTicket` body L1653-1703 + 4 other callers L700/L989/L1296/L1399 BYTE-IDENTICAL per per-line modified-set walk vs raw `git diff 6b63f6d4 HEAD -- contracts/modules/DegenerusGameJackpotModule.sol`. |
-| SURF-02 | `PASS_AT_HEAD_<sha>` | 264-02-SUMMARY.md | `_awardFarFutureCoinJackpot` body L1839-1906 BYTE-IDENTICAL — far-future coin jackpot path orthogonal to v35 near-future per-pull-level resample. |
-| SURF-03 | `PASS_AT_HEAD_<sha>` | 264-02-SUMMARY.md | `_pickSoloQuadrant` body L1098-1115 + 4 ETH injection sites L287/L454/L531/L1181 BYTE-IDENTICAL — gold-solo-priority path (v34 SOLO) preserved unchanged at v35. |
-| SURF-04 | `PASS_AT_HEAD_<sha>` | 264-02-SUMMARY.md | `_distributeTicketJackpot` body L897-932 + `_computeBucketCounts` def L1030-1082 + emit blocks L518-520, L536-538 + `emitDailyWinningTraits` external L1750-1756 BYTE-IDENTICAL — ticket-jackpot + indexer emit blocks preserved unchanged at v35. |
-| SURF-05 | `PASS_AT_HEAD_<sha>` | 264-02-SUMMARY.md | `payDailyCoinJackpot` stage 6 gas PINNED at `PAY_DAILY_COIN_JACKPOT_GAS_REF = 2,860,535` with `PER_CALL_GAS_DELTA_BOUND = 120,000`; `advanceGame` measured 9.42× margin above 1.99× ceiling at HEAD `cf564816`; theoretical worst-case in test file header per `feedback_gas_worst_case.md`. |
+| STAT-04 | `PASS_AT_HEAD_5db8682b` | 264-01-SUMMARY.md | Phase 261 chi² infrastructure (`makeRng` / `CHI2_CRIT_05` / `wilsonHilfertyZ`) re-declared verbatim in `test/stat/PerPullLevelDistribution.test.js` header. `COIN_LEVEL_TAG` and `BONUS_TRAITS_TAG` sanity-pinned to expected `keccak256("coin-level")` + `keccak256("bonus-traits")` digests. |
+| SURF-01 | `PASS_AT_HEAD_5db8682b` | 264-02-SUMMARY.md | `_randTraitTicket` body L1653-1703 + 4 other callers L700/L989/L1296/L1399 BYTE-IDENTICAL per per-line modified-set walk vs raw `git diff 6b63f6d4 HEAD -- contracts/modules/DegenerusGameJackpotModule.sol`. |
+| SURF-02 | `PASS_AT_HEAD_5db8682b` | 264-02-SUMMARY.md | `_awardFarFutureCoinJackpot` body L1839-1906 BYTE-IDENTICAL — far-future coin jackpot path orthogonal to v35 near-future per-pull-level resample. |
+| SURF-03 | `PASS_AT_HEAD_5db8682b` | 264-02-SUMMARY.md | `_pickSoloQuadrant` body L1098-1115 + 4 ETH injection sites L287/L454/L531/L1181 BYTE-IDENTICAL — gold-solo-priority path (v34 SOLO) preserved unchanged at v35. |
+| SURF-04 | `PASS_AT_HEAD_5db8682b` | 264-02-SUMMARY.md | `_distributeTicketJackpot` body L897-932 + `_computeBucketCounts` def L1030-1082 + emit blocks L518-520, L536-538 + `emitDailyWinningTraits` external L1750-1756 BYTE-IDENTICAL — ticket-jackpot + indexer emit blocks preserved unchanged at v35. |
+| SURF-05 | `PASS_AT_HEAD_5db8682b` | 264-02-SUMMARY.md | `payDailyCoinJackpot` stage 6 gas PINNED at `PAY_DAILY_COIN_JACKPOT_GAS_REF = 2,860,535` with `PER_CALL_GAS_DELTA_BOUND = 120,000`; `advanceGame` measured 9.42× margin above 1.99× ceiling at HEAD `cf564816`; theoretical worst-case in test file header per `feedback_gas_worst_case.md`. |
 
-`re-verified at HEAD <sha>`.
+`re-verified at HEAD 5db8682b`.
 
 ### 3c. AUDIT-06 — Off-Chain Indexer Semantic-Shift Disclosure
 
@@ -195,13 +195,13 @@ Pre-Phase-263, the `lvl` field on the `JackpotBurnieWin(winner, lvl, traitId, am
 
 The `DailyWinningTraits` event continues to emit `bonusTargetLevel = lvl + 1 + uint24(coinEntropy % 4)` BYTE-IDENTICALLY at L520 (jackpot phase) and L538 (purchase phase) per Phase 263 D-INDEXER-01. The on-chain emit blocks are byte-identical; only the downstream indexer-side INTERPRETATION shifts from "this is the single level the daily coin-jackpot will pay out" to "this is an advisory pre-announcement; actual coin-jackpot pulls sample per-pull-distinct levels in the surrounding range per Phase 263 PPL-01/PPL-02". The field's legacy use as an authoritative pay-level anchor is no longer accurate; off-chain indexers that derived per-call summary statistics from this single value need to switch to harvesting `JackpotBurnieWin.lvl` events for ground-truth distribution.
 
-**Backward compatibility.** Both event signatures are byte-identical (zero ABI break). No indexer code will fail to decode; the data fields decode as before. The shift is purely in the SEMANTIC INTERPRETATION of the `lvl` and `bonusTargetLevel` fields. **Indexer-team action item:** existing per-call aggregation queries that group by `lvl` should treat each `JackpotBurnieWin` row as carrying its own per-pull sampled level; queries previously assuming `lvl` was call-constant per BURNIE coin-jackpot invocation need refactoring. Per `feedback_no_history_in_comments.md`, this disclosure describes what IS at HEAD `<sha>` (pre-/post- semantics ARE the audit subject of AUDIT-06; this is explicit semantics-disclosure, not a change-history comment in code).
+**Backward compatibility.** Both event signatures are byte-identical (zero ABI break). No indexer code will fail to decode; the data fields decode as before. The shift is purely in the SEMANTIC INTERPRETATION of the `lvl` and `bonusTargetLevel` fields. **Indexer-team action item:** existing per-call aggregation queries that group by `lvl` should treat each `JackpotBurnieWin` row as carrying its own per-pull sampled level; queries previously assuming `lvl` was call-constant per BURNIE coin-jackpot invocation need refactoring. Per `feedback_no_history_in_comments.md`, this disclosure describes what IS at HEAD `5db8682b` (pre-/post- semantics ARE the audit subject of AUDIT-06; this is explicit semantics-disclosure, not a change-history comment in code).
 
 **D-09 gating disposition** (full row in §6b): all 3 predicates PASS. **Accepted-design** = YES (Phase 263 design lock — semantic shift is the GOAL of per-pull-level resample, not a side effect). **Non-exploitable** = YES (semantic shift is observability-only; no on-chain behavior change for player or protocol; cannot be timed, gamed, or extracted). **Sticky** = YES (structural property of the helper; will not go away across future builds unless a future milestone reverts the per-pull-level design). Default disposition: D-09 PASS → AUDIT-06 routes into KNOWN-ISSUES.md under Design Decisions (1 entry added per Task 11). Closure verdict: `1 of 1 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_MODIFIED (1 entry added under Design Decisions)`.
 
 ### 3d. AUDIT-01 Delta-Surface Table — DegenerusGameJackpotModule.sol
 
-Every changed declaration in `contracts/modules/DegenerusGameJackpotModule.sol` between v34.0 baseline `6b63f6d4daf346a53a1d463790f637308ea8d555` and v35.0 HEAD `<sha>`, classified per the {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED, RENAMED} taxonomy. v35.0 is a single-contract delta — no other `contracts/*.sol` file modified per `git log --oneline 6b63f6d4..HEAD -- contracts/` (only `cf564816` in scope).
+Every changed declaration in `contracts/modules/DegenerusGameJackpotModule.sol` between v34.0 baseline `6b63f6d4daf346a53a1d463790f637308ea8d555` and v35.0 HEAD `5db8682b`, classified per the {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED, RENAMED} taxonomy. v35.0 is a single-contract delta — no other `contracts/*.sol` file modified per `git log --oneline 6b63f6d4..HEAD -- contracts/` (only `cf564816` in scope).
 
 #### Part A — Changed Declarations Table
 
@@ -235,7 +235,7 @@ Expected output: `_awardDailyCoinToTraitWinners` returns the def + 2 callers (~L
 
 #### Part C — AUDIT-04 Zero-New-State Attestation
 
-AUDIT-04 attests zero new state-altering surface introduced by v35.0 between baseline `6b63f6d4daf346a53a1d463790f637308ea8d555` and HEAD `<sha>`. Five orthogonal grep-reproducible checks below:
+AUDIT-04 attests zero new state-altering surface introduced by v35.0 between baseline `6b63f6d4daf346a53a1d463790f637308ea8d555` and HEAD `5db8682b`. Five orthogonal grep-reproducible checks below:
 
 | Surface | Grep Recipe | Expected | Observed at HEAD | Verdict |
 |---|---|---|---|---|
@@ -245,7 +245,7 @@ AUDIT-04 attests zero new state-altering surface introduced by v35.0 between bas
 | New admin functions / `onlyOwner` modifiers | `git diff 6b63f6d4..HEAD -- contracts/ \| grep -E '^\+.*onlyOwner\|^\+.*onlyAdmin'` | zero hits | zero hits (helper has no admin gating; runs unconditionally inside `advanceGame`) | PASS — zero new admin functions |
 | New upgrade hooks / `modifier` declarations | `git diff 6b63f6d4..HEAD -- contracts/ \| grep -E '^\+.*modifier '` | zero hits | zero hits | PASS — zero new modifiers escalating authority |
 
-**Closure paragraph.** AUDIT-04 satisfied at HEAD `<sha>`. The per-pull-level resample helper is a pure-internal refactor of distribution logic; its only state interactions are READS from existing slots (deity slots via `deityBySymbol[fullSymId]`; holder arrays via `realLen(lvlPrime, trait_i)` + `holderAt(lvlPrime, trait_i, holderIdx)`) and WRITES via the pre-existing `coinflip.creditFlip(winner, amount)` cross-contract path (BURNIE mint via `mintForGame` route — not a new mint site; see §3e AUDIT-03 BURNIE conservation row). No new storage slot is allocated; no new admin function is exposed; no new modifier is declared.
+**Closure paragraph.** AUDIT-04 satisfied at HEAD `5db8682b`. The per-pull-level resample helper is a pure-internal refactor of distribution logic; its only state interactions are READS from existing slots (deity slots via `deityBySymbol[fullSymId]`; holder arrays via `realLen(lvlPrime, trait_i)` + `holderAt(lvlPrime, trait_i, holderIdx)`) and WRITES via the pre-existing `coinflip.creditFlip(winner, amount)` cross-contract path (BURNIE mint via `mintForGame` route — not a new mint site; see §3e AUDIT-03 BURNIE conservation row). No new storage slot is allocated; no new admin function is exposed; no new modifier is declared.
 
 ### 3e. AUDIT-03 Conservation Re-Proof
 
@@ -254,10 +254,10 @@ AUDIT-03 re-proves three conservation invariants under the v35.0 per-pull-level 
 | Invariant | Surface | Verdict | Code-Path Evidence | Cross-Cite |
 |---|---|---|---|---|
 | **`coinBudget` non-overspend** (`Σ paid ≤ coinBudget` across new loop INCLUDING empty-bucket skips) | `_awardDailyCoinToTraitWinners` body L1785-1832 — per-pull `amount = baseAmount + (cursor < extra ? 1 : 0)` where `baseAmount = coinBudget / cap`, `extra = coinBudget % cap`, and `cursor` advances monotonically across both pay-pulls and skip-pulls (L1810-1811). Loop iterates `for (uint256 i; i < cap; ++i)` with `continue;` on empty buckets at L1807-1813. | SAFE — structural underspend accepted; no overspend possible | Each pull pays at most `baseAmount + 1 wei` from a pool whose remaining quota only DECREMENTS (no carry-forward, no top-up to remaining winners on skip per PPL-05). Cursor remainder distribution at L1810-1811 + L1830-1832 preserves the v34 share-math byte-identically per Phase 263 PPL-04 (cursor still advances on empty-bucket skip — preserving the `+1 wei` allocation cadence). Maximum total payout = `cap * baseAmount + extra = coinBudget` (when zero pulls skip); actual total = `coinBudget - skippedPaymentSum` ≤ `coinBudget`. | Phase 263 PPL-04 + PPL-05 design lock; Phase 264 D-IMPL-01 deity-fixture empirically confirms 50/50 emit count = full `coinBudget` distribution under dense fixture; STAT-03 reframe row in §4 documents sparse-fixture underspend behavior as fixture-property, not protocol overspend. |
-| **Solvency invariant** (`claimablePool ≤ ETH balance + stETH balance`) PRESERVED | Per-pull-level resample touches BURNIE coin distribution only — no ETH/stETH balance mutations. Helper invokes `coinflip.creditFlip(winner, amount)` at L1842 (BURNIE-credit cross-contract path; no `payable`, no `stETH.transfer*`). | SAFE — solvency algebra unchanged | The `claimablePool` storage slot is untouched by `_awardDailyCoinToTraitWinners`; helper writes flow ONLY through `coinflip.creditFlip` (BURNIE token credit path) — no `payable` transfers, no `stETH.transfer*`, no `claimablePool +=` or `-=` operations. Phase 264 SURF-03 byte-identity grep-proof confirms 4 ETH-distribution injection sites at L287/L454/L531/L1181 (`_pickSoloQuadrant` SOLO injection sites) and `_distributeTicketJackpot` body L897-932 BYTE-IDENTICAL between baseline `6b63f6d4` and HEAD `<sha>`. | Phase 264 SURF-03 + SURF-04 grep-proof; v34.0 §3e AUDIT-03 solvency invariant carry-forward (carries through unchanged at v35). |
+| **Solvency invariant** (`claimablePool ≤ ETH balance + stETH balance`) PRESERVED | Per-pull-level resample touches BURNIE coin distribution only — no ETH/stETH balance mutations. Helper invokes `coinflip.creditFlip(winner, amount)` at L1842 (BURNIE-credit cross-contract path; no `payable`, no `stETH.transfer*`). | SAFE — solvency algebra unchanged | The `claimablePool` storage slot is untouched by `_awardDailyCoinToTraitWinners`; helper writes flow ONLY through `coinflip.creditFlip` (BURNIE token credit path) — no `payable` transfers, no `stETH.transfer*`, no `claimablePool +=` or `-=` operations. Phase 264 SURF-03 byte-identity grep-proof confirms 4 ETH-distribution injection sites at L287/L454/L531/L1181 (`_pickSoloQuadrant` SOLO injection sites) and `_distributeTicketJackpot` body L897-932 BYTE-IDENTICAL between baseline `6b63f6d4` and HEAD `5db8682b`. | Phase 264 SURF-03 + SURF-04 grep-proof; v34.0 §3e AUDIT-03 solvency invariant carry-forward (carries through unchanged at v35). |
 | **BURNIE mint-supply conservation** (only pre-existing `mintForGame` / `creditFlip` route exercised; no new BURNIE mint sites introduced) | Helper invokes `coinflip.creditFlip(winner, amount)` per emitted pull at L1842 — same BURNIE-credit path as pre-Phase-263 (the v34.0 coin-jackpot helper used the identical credit-flip cross-contract route). | SAFE — zero new BURNIE mint sites | Phase 264 SURF-01 grep-proof + AUDIT-04 zero-new-state attestation (Task 4) confirm zero new public/external mutation entry points; helper is `private` (cannot be called externally — see L1764). The `coinflip.creditFlip` invocation is unchanged in semantics; only the per-pull `(winner, amount)` derivation logic moved into the helper. No `BURNIE.mint*` direct call introduced; `BurnieCoinflip` contract's `creditFlip` external function gated by `onlyGame` modifier is the sole BURNIE supply expansion path consumed here, identical to v34. | Phase 263 PPL-08 (event signature byte-identical) + Phase 264 SURF-01 (helper does not introduce new mint paths); KNOWN-ISSUES.md "BURNIE game contract bypasses transferFrom allowance" entry — pre-existing trusted-contract pattern, not modified by v35. |
 
-**Closure paragraph.** AUDIT-03 satisfied at HEAD `<sha>`. The per-pull-level resample preserves all three conservation invariants under the v35.0 design lock. The only new value-flow primitive is the per-pull `coinflip.creditFlip(winner, amount)` invocation chain inside `_awardDailyCoinToTraitWinners` — and this primitive is identical in semantics to the v34.0 coin-jackpot helper's credit-flip invocations (only the `(winner, amount, lvlPrime)` derivation logic changed; the credit-flip primitive is byte-identical at the cross-contract boundary).
+**Closure paragraph.** AUDIT-03 satisfied at HEAD `5db8682b`. The per-pull-level resample preserves all three conservation invariants under the v35.0 design lock. The only new value-flow primitive is the per-pull `coinflip.creditFlip(winner, amount)` invocation chain inside `_awardDailyCoinToTraitWinners` — and this primitive is identical in semantics to the v34.0 coin-jackpot helper's credit-flip invocations (only the `(winner, amount, lvlPrime)` derivation logic changed; the credit-flip primitive is byte-identical at the cross-contract boundary).
 
 ---
 
@@ -325,13 +325,13 @@ Per D-265-REG01-01 + D-265-REG02-01 + D-265-REG04-01: lean-regression discipline
 
 ### 5a. REG-01 — v34.0 Closure-Signal Non-Widening
 
-| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `5db8682b` | Re-Verification Evidence | Verdict |
 |---|---|---|---|---|---|
 | REG-v34.0-TRAIT-SOLO | v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` carry-forward. v34 audit deliverable `audit/FINDINGS-v34.0.md` 6 of 6 §4 surfaces SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE at HEAD `6b63f6d4`; `_pickSoloQuadrant` 4-injection-site rotation, JackpotBucketLib UNCHANGED carry, heavy-tail color distribution all closed. | `6b63f6d4..5db8682b` (1 v35 contract commit `cf564816` + 6 v35 test commits — only `contracts/modules/DegenerusGameJackpotModule.sol` modified; no other contract or library files touched) | Phase 264 SURF-01..04 grep-proof asserts 13 protected ranges byte-identical between baseline `6b63f6d4` and HEAD `5db8682b`: `_randTraitTicket` body L1653-1703 + 4 other-callers at L700/L989/L1296/L1399; coinEntropy + DailyWinningTraits emit blocks L518-520, L536-538; emitDailyWinningTraits external L1750-1756; `_pickSoloQuadrant` body L1098-1115 + 4 ETH injection sites at L287/L454/L531/L1181; `_awardFarFutureCoinJackpot` body L1839-1906; `_distributeTicketJackpot` body L897-932; `_computeBucketCounts` def L1030-1082. Per-line modified-set walk via `git diff 6b63f6d4 HEAD -- contracts/modules/DegenerusGameJackpotModule.sol` returns ZERO `-` deletions inside any protected range. | v35 modifies ONLY `contracts/modules/DegenerusGameJackpotModule.sol` (single contract — `_awardDailyCoinToTraitWinners` helper + 2 callsite rewires + `COIN_LEVEL_TAG` constant + `_computeBucketCounts` dead-code removal for the coin-jackpot path + `DAILY_COIN_SALT_BASE` constant removal). `contracts/DegenerusTraitUtils.sol` (Phase 259-260 surface) + `contracts/libraries/JackpotBucketLib.sol` + `contracts/libraries/EntropyLib.sol` + `contracts/storage/GameStorage.sol` all UNTOUCHED. v34 §4 6-surface verdicts carry forward unchanged at v35 HEAD. | **PASS** |
 
 ### 5b. REG-02 — v33.0 Closure-Signal Non-Widening
 
-| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `5db8682b` | Re-Verification Evidence | Verdict |
 |---|---|---|---|---|---|
 | REG-v33.0-CHARITY | v33.0 closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` carry-forward (FIX-01 pickCharity flush-after-payout reorder + FIX-02 lastWinningRecipient + PreviousWinnerNotVotable() vote-guard). v33 audit deliverable `audit/FINDINGS-v33.0.md` 9 of 9 §4 surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_TRUST_ASYMMETRY at HEAD `4ce3703d`. | `4ce3703d..5db8682b` (5 v34 contract commits + 1 v35 contract commit `cf564816` — none touch `contracts/GNRUS.sol` or charity-governance surface) | `contracts/GNRUS.sol` byte-identical at HEAD `5db8682b` per `git diff 4ce3703d740d3707c88a1af595618120a8168399..HEAD -- contracts/GNRUS.sol` (expected: empty — zero hunks). FIX-01 (pickCharity:601-674 flush-after-payout reorder) + FIX-02 (lastWinningRecipient slot + PreviousWinnerNotVotable() at vote(uint8 slot)) byte-identical. | v35 modifies ONLY `contracts/modules/DegenerusGameJackpotModule.sol`. Charity governance / GNRUS.sol orthogonal to per-pull-level coin-jackpot path. v33 §4 9-surface verdicts carry forward unchanged at v35 HEAD. | **PASS** |
 
@@ -346,7 +346,7 @@ for f in audit/FINDINGS-v25.0.md audit/FINDINGS-v27.0.md audit/FINDINGS-v28.0.md
 done
 ```
 
-| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `5db8682b` | Re-Verification Evidence | Verdict |
 |---|---|---|---|---|---|
 | REG-v25.0-PROCESS-DAILY-ETH | `audit/FINDINGS-v25.0.md:222` — `_processDailyEth` listed in the ETH-distribution function inventory under the Phase 215-02 fresh-eyes RNG audit (function-inventory cite, not a finding row). | `6b63f6d4..5db8682b` | `_processDailyEth` body in v35 BYTE-IDENTICAL — v35 modifies only `_awardDailyCoinToTraitWinners` helper + 2 callsites in the COIN-jackpot path. ETH-distribution path orthogonal. | v25.0 source row was a function-inventory cite, not a finding row — `_processDailyEth` was classified SAFE in v25 with no exploit path identified; v34 carry-forward already PASS-graded this; v35 changes are confined to the BURNIE coin-jackpot helper, not ETH distribution. Phase 264 SURF-03 byte-identity grep-proof confirms 4 ETH-injection sites byte-identical. §3e row 2 (solvency invariant PRESERVED) cross-cite. | **PASS** |
 | REG-v25.0-ADVANCE-BOUNTY-CREDITFLIP | `audit/FINDINGS-v25.0.md:291` — I-01 AdvanceModule advance bounty paid via `coinflip.creditFlip` (L433-437). Same `creditFlip` route v35 helper consumes. | `6b63f6d4..5db8682b` | `coinflip.creditFlip` external function in `BurnieCoinflip` UNCHANGED at v35; helper invocation at L1842 uses identical `(winner, amount)` signature; `onlyGame` modifier unchanged. | I-01 was classified STILL APPLIES in v25 (informational on level-staleness in `ADVANCE_BOUNTY_ETH` calc). v35 does not touch AdvanceModule's bounty path NOR add new `creditFlip` semantics — helper consumes the same `creditFlip` primitive byte-identically. v34 carry-forward already PASS-graded. §3e row 3 (BURNIE mint-supply conservation) cross-cite. | **PASS** |
@@ -384,7 +384,7 @@ Task 7 adversarial-pass disposition emitted zero F-35-NN blocks (zero disagreeme
 
 ### 6b. KI Envelope Re-Verifications + AUDIT-06 D-09 PASS Row
 
-| Envelope / Surface | Description | Carrier at v35 HEAD `<sha>` | Verdict | Evidence |
+| Envelope / Surface | Description | Carrier at v35 HEAD `5db8682b` | Verdict | Evidence |
 |---|---|---|---|---|
 | EXC-01 | Non-VRF entropy for affiliate winner roll | n/a (NEGATIVE-scope at v35; per-pull-level path does not consume affiliate-roll RNG) | NEGATIVE-scope at v35 | v35 modifies coin-jackpot distribution helper only; affiliate winner roll path in MintModule untouched (zero v35 commits target MintModule). Backward trace per `feedback_rng_backward_trace.md`: `_awardDailyCoinToTraitWinners` consumes only `(randomWord, COIN_LEVEL_TAG, i, trait, lvlPrime)` — no affiliate-roll keccak path overlap. |
 | EXC-02 | Gameover prevrandao fallback (`_getHistoricalRngFallback` in `DegenerusGameAdvanceModule.sol:1301`) | n/a (NEGATIVE-scope at v35; AdvanceModule untouched) | NEGATIVE-scope at v35 | AdvanceModule prevrandao site untouched; v34 carry-forward holds. No v35 commit modifies `DegenerusGameAdvanceModule.sol`. |
@@ -419,7 +419,7 @@ Comprehensive enumeration of every cross-cite emitted by §1-§6 of this deliver
 | `KNOWN-ISSUES.md` | §6b + Task 11 modification | EXC-01..04 envelope source + AUDIT-06 promotion target (1 entry added under Design Decisions per Task 11) |
 | `.planning/REQUIREMENTS.md` | §1 + §3 + §4 + AUDIT-NN section anchors | Source of AUDIT-01..06 + REG-01..04 requirement IDs + spot-check function reference set for REG-04 |
 | `.planning/ROADMAP.md` | §1 + §9 | Phase 265 5 success criteria + write policy + closure-signal target string |
-| `contracts/modules/DegenerusGameJackpotModule.sol` (HEAD `<sha>`) | §3a + §3d + §3e + §4 + §6b | Audit subject contract (1 modified contract in v35.0 scope) |
+| `contracts/modules/DegenerusGameJackpotModule.sol` (HEAD `5db8682b`) | §3a + §3d + §3e + §4 + §6b | Audit subject contract (1 modified contract in v35.0 scope) |
 | `test/stat/PerPullLevelDistribution.test.js` | §3b + §4 (a + STAT-03-reframe) + §6b (EXC-04) | STAT-01 chi² evidence + D-IMPL-01 deity-fixture proof |
 | `test/stat/PerPullEmptyBucketSkip.test.js` | §3b + §4 (STAT-03-reframe) | STAT-03 88.24% measurement source + reframe input |
 | `test/stat/SurfaceRegression.test.js` | §3b + §3a + §4 (d) + §5a | SURF-01..04 13-protected-range byte-identity grep-proof |
@@ -443,7 +443,7 @@ grep -rE 'forward-cite|defer-to-Phase-266|TBD-post-milestone' \
 # Expected: zero matches qualifying as Phase-265-bound forward-cites
 ```
 
-`re-verified at HEAD <sha>` — zero Phase-265-bound forward-cite tokens present in any upstream `.planning/phases/263-*/` or `264-*/` artifact. Each upstream phase closed within its own scope; no rollover to Phase 265 beyond the canonical Phase 263 → 264 dependency chain (which is a dependency declaration, NOT a forward-cite per D-253-09).
+`re-verified at HEAD 5db8682b` — zero Phase-265-bound forward-cite tokens present in any upstream `.planning/phases/263-*/` or `264-*/` artifact. Each upstream phase closed within its own scope; no rollover to Phase 265 beyond the canonical Phase 263 → 264 dependency chain (which is a dependency declaration, NOT a forward-cite per D-253-09).
 
 A small number of literal post-milestone deferral annotations may exist in `<deferred>` blocks of upstream CONTEXT.md / DISCUSSION-LOG / SUMMARY artifacts (typical examples: Phase 264 STAT-03 fixture retune; Phase 264 SURF-05 gas REF drift in combined ordering; Phase 261 SURF-05 `runTerminalJackpot` pre-existing failure; Hardhat ESM cleanup quirk). These are **deferral annotations** per `feedback_no_dead_guards.md` (deferred-to-future-milestone scope-guard markers), NOT phase-bound forward-cite emissions. They are functionally informational (documenting items NOT in scope for this milestone), not orphaned cross-cite stubs to non-existent phases. Per D-265-FCITE-01 (the no-orphaned-cross-cite-stubs rule for not-yet-existing future-milestone phases) — these annotations are not orphaned cross-cite stubs; they are scope-deferral records.
 
@@ -460,7 +460,7 @@ grep -rE 'forward-cite|defer-to-Phase-266|TBD-post-milestone' audit/FINDINGS-v35
 # Expected: zero matches qualifying as Phase-265-emitted forward-cites
 ```
 
-`re-verified at HEAD <sha>` — zero Phase-265-emitted forward-cite tokens present in `audit/FINDINGS-v35.0.md`. The §4 6-surface row table (a..f) + STAT-03 reframe row are post-mitigation milestone-record disclosure with all rows verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE at HEAD `<sha>`; §6 Non-Promotion Ledger is zero-row default; no F-35-NN rollover addendum blocks present.
+`re-verified at HEAD 5db8682b` — zero Phase-265-emitted forward-cite tokens present in `audit/FINDINGS-v35.0.md`. The §4 6-surface row table (a..f) + STAT-03 reframe row are post-mitigation milestone-record disclosure with all rows verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE at HEAD `5db8682b`; §6 Non-Promotion Ledger is zero-row default; no F-35-NN rollover addendum blocks present.
 
 The literal "v36.0+" string occurrences in this deliverable's §1 (Scope), §2 (Forward-Cite Closure Summary), and this §8 are **meta-prose discussing the terminal-phase invariant** — not specific cites to any not-yet-existing v36.0+ phase. They are explicitly self-referential to the closure-invariant discipline; the broader-pattern grep `grep -rE 'v36\.0|v37\.0|Phase (266|267|268|269|270)' audit/FINDINGS-v35.0.md` returns hits ONLY in those meta-prose lines. The domain-specific token grep above (`forward-cite|defer-to-Phase-266|TBD-post-milestone`) is the load-bearing audit invariant that would catch actual forward-cites.
 
@@ -468,8 +468,93 @@ The literal "v36.0+" string occurrences in this deliverable's §1 (Scope), §2 (
 
 ### 8c. Combined §8 Verdict
 
-Phase 263 → 264 → 265 forward-cite closure: **0/0 Phase 263-264 residuals + 0/0 Phase 265 emissions** → milestone boundary closed per CONTEXT.md D-265-FCITE-01 + ROADMAP terminal-phase rule. v35.0 milestone deliverable is self-contained at HEAD `<sha>`. Any post-milestone delta will boot from the current closure signal `MILESTONE_V35_AT_HEAD_<sha>` (§9c) with a fresh delta-extraction phase, NOT via forward-cite from this deliverable.
+Phase 263 → 264 → 265 forward-cite closure: **0/0 Phase 263-264 residuals + 0/0 Phase 265 emissions** → milestone boundary closed per CONTEXT.md D-265-FCITE-01 + ROADMAP terminal-phase rule. v35.0 milestone deliverable is self-contained at HEAD `5db8682b`. Any post-milestone delta will boot from the current closure signal `MILESTONE_V35_AT_HEAD_5db8682b` (§9c) with a fresh delta-extraction phase, NOT via forward-cite from this deliverable.
 
-**Combined §8 forward-cite emission: ZERO.** Forward-cite zero-emission is a terminal-phase invariant per D-265-FCITE-01 carry of D-257-FCITE-01 + D-262-FCITE-01. `re-verified at HEAD <sha>`.
+**Combined §8 forward-cite emission: ZERO.** Forward-cite zero-emission is a terminal-phase invariant per D-265-FCITE-01 carry of D-257-FCITE-01 + D-262-FCITE-01. `re-verified at HEAD 5db8682b`.
 
 ---
+
+## 9. Milestone Closure Attestation
+
+Per D-265-CLOSURE-01 + D-265-CLOSURE-02: §9.NN format with §9.NN.i USER-APPROVED contracts + §9.NN.ii USER-APPROVED tests + §9.NN.iii AGENT-COMMITTED audit artifacts; NO §9.NN.iv awaiting-approval subsection. Mirrors v34 D-262-CLOSURE-02 / v33 D-257-CLOSURE-02 (differs from v32 Phase 253 §9.NN.iii three-subsection format which had awaiting-approval test files).
+
+### 9a. Verdict Distribution
+
+| Verdict Bucket | Count | Source |
+|---|---|---|
+| §4 SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE | 7 | 6 surfaces (a-f) + STAT-03 reframe row |
+| §4 FINDING_CANDIDATE → F-35-NN block | 0 | Default per D-265-FIND-01 (zero disagreements at Task 7 adversarial-pass disposition) |
+| §5a REG-01 PASS rows | 1 | v34.0 closure-signal carry-forward |
+| §5b REG-02 PASS rows | 1 | v33.0 closure-signal carry-forward |
+| §5c REG-04 PASS rows | 9 | Prior-finding spot-check sweep across audit/FINDINGS-v25..v34 (per Task 9 enumeration) |
+| §5c REG-04 REGRESSED rows | 0 | Default per D-265-REG04-01 |
+| §5c REG-04 SUPERSEDED rows | 1 | v34 §3d row 11 _awardDailyCoinToTraitWinners non-injection — superseded by Phase 263 cf564816 helper introduction |
+| §6a Non-Promotion Ledger rows | 0 | Default per D-265-FIND-01 (zero F-35-NN blocks → zero non-promotions) |
+| §6b KI envelope re-verifications | 4 | EXC-01..03 NEGATIVE-scope + EXC-04 RE_VERIFIED with Phase 264 STAT-01 chi² cross-cite |
+| §6b D-09 PASS rows | 1 | AUDIT-06 indexer semantic-shift promotion |
+| §6c Verdict Summary | 1 | "1 of 1 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_MODIFIED (1 entry added under Design Decisions)" |
+| §8 Forward-Cite Closure | 0 forward-cites | Terminal-phase invariant per D-265-FCITE-01 |
+
+### 9b. Attestation Block
+
+1. **Audit baseline.** v34.0 source-tree HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555` (closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` carry-forward from `audit/FINDINGS-v34.0.md`).
+2. **Audit subject.** Contract-tree HEAD `5db8682bd7b811437f0c1cf47e832619d1478ac6` (post-Phase-264 close — captured at Task 13 commit time via `git rev-parse 5db8682b`; identical to milestone-state-frozen anchor since Phase 265 makes ZERO contract-tree mutations per CONTEXT.md hard constraint #1).
+3. **Scope.** 1 contract-tree commit (`cf564816` Phase 263 single batched contract-tree commit) + 6 test/chore commits (Phase 264 enumerated below in §9.NN.ii) + Phase 265 plan-close commits (enumerated below in §9.NN.iii).
+4. **Outcome.** 6 of 6 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE + STAT-03 reframe row SAFE_BY_STRUCTURAL_CLOSURE (per D-265-STAT03-01); zero F-35-NN finding blocks; 2 PASS REG-01..02 + 9 PASS + 1 SUPERSEDED REG-04 rows; 4 KI envelope re-verifications (3 NEGATIVE-scope + 1 RE_VERIFIED with STAT-01 cross-cite); KNOWN-ISSUES.md modified by 1 entry under Design Decisions (AUDIT-06 indexer semantic-shift D-09 PASS).
+5. **Posture.** Pure-consolidation phase per CONTEXT.md hard constraint #1 — zero `contracts/*.sol` writes by agent; zero `test/` writes by agent. All Phase 263 + 264 contract-tree and test-tree commits USER-APPROVED batched per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md`. Phase 265 plan-close commits AGENT-COMMITTED per atomic-commit-per-task pattern.
+6. **Closure.** Closure signal `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6` emitted (§9c). Deliverable READ-only on Task 14 commit per D-253-CF-02 carry. Final user-review gate per `feedback_manual_review_before_push.md` (Task 14).
+
+### 9c. Closure Signal
+
+```
+MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6
+```
+
+Single-line emission. Triggers `/gsd-complete-milestone v35.0` handler per D-265-CLOSURE-01 + CONTEXT.md Cross-Phase Context section.
+
+### 9.NN Commit-Readiness Register
+
+Per D-265-CLOSURE-02 TWO-subsection format (USER-APPROVED contracts + USER-APPROVED tests + AGENT-COMMITTED audit artifacts; NO awaiting-approval subsection — zero awaiting-approval test files in v35 since all Phase 263 + 264 contract+test commits already landed under user-approved batched review).
+
+#### 9.NN.i USER-APPROVED contracts (1 commit)
+
+```
+cf564816  feat(263): per-pull level resample for daily coin jackpot [PPL-01..PPL-08]
+```
+
+User-approval audit trail per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md`: Phase 263 single batched contract-tree commit, user explicitly approved diff via AskUserQuestion before commit ran (per Phase 263 SUMMARY §"Approval Discipline").
+
+#### 9.NN.ii USER-APPROVED tests (6 commits — re-enumerated via `git log --oneline 6b63f6d4..HEAD -- test/ package.json`)
+
+```
+833b341d  chore(264-02): wire Phase 264 test files into npm scripts
+20b15468  test(264-02): extend AdvanceGameGas with v35.0 1.99x margin assertion
+36234847  test(264-02): add Phase264GasRegression for SURF-05 entry-point gas
+82717bcf  test(264-02): extend SurfaceRegression with v35.0 SURF-01..04 grep-proof
+7dcfeb0c  test(264-01): add STAT-03 empty-bucket skip rate + cumulative underspend test
+aa41485e  test(264-01): add STAT-01/02/04 + D-IMPL-01 boundary harness for per-pull level resample
+```
+
+User-approval audit trail per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md`: Phase 264 batched at end of phase, user reviewed diff before commits landed (per Phase 264 SUMMARYs § approval gates).
+
+#### 9.NN.iii AGENT-COMMITTED audit artifacts (Phase 265 plan-close commits — 13 commits enumerated at Task 13 commit time via `git log --oneline --grep='audit(265)' --grep='docs(265)' 957b6000..HEAD`)
+
+```
+a4a8816f  audit(265): Task 12 — §7 prior-artifact cross-cites + §8 forward-cite closure
+546815f7  docs(265): Task 11 — KNOWN-ISSUES.md add JackpotBurnieWin.lvl semantic-shift entry under Design Decisions [AUDIT-06]
+e8da4b68  audit(265): Task 10 — §6 KI gating walk + EXC-04 STAT-01 cross-cite + AUDIT-06 D-09 PASS row
+17941d9c  audit(265): Task 9 — §5 regression appendix (REG-01 + REG-02 + REG-04)
+f26ff2cf  audit(265): Task 8 — §3e AUDIT-03 conservation re-proof rows
+993e8177  audit(265): Task 7 — adversarial-pass complete (/contract-auditor + /zero-day-hunter, 0 disagreements)
+666fbc57  docs(265): Task 7 — adversarial-pass log skeleton
+22298d4d  audit(265): Task 6 — §4 inline 6-surface draft (a-f) + STAT-03 reframe row — AUDIT-02 pre-adversarial-pass
+5ef545ce  audit(265): Task 5 — §3c AUDIT-06 indexer semantic-shift disclosure
+f4239988  audit(265): Task 4 — §3d Part C AUDIT-04 zero-new-state attestation
+0140632d  audit(265): Task 3 — §3d AUDIT-01 delta-surface table
+82b81db3  audit(265): Task 2 — §3a Phase 263 + §3b Phase 264 per-phase subsections
+f6b1cb03  audit(265): Task 1 — §1 frontmatter + §2 Executive Summary skeleton
+```
+
+(Task 13's own commit appended retroactively after this task's commit lands; Task 14's close-out commit appended after the final user-review gate. Final 265-01-SUMMARY.md will render the complete chain.)
+
+**No §9.NN.iv awaiting-approval subsection.** Zero awaiting-approval files in v35; mirrors v33/v34 D-262-CLOSURE-02 format.
