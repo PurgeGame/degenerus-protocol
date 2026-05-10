@@ -21,7 +21,7 @@
 
 ## Phases
 
-- [ ] **Phase 267: Degenerette Producer + 5-Table Payout Rewrite** — Add `packedTraitsDegenerette` producer + 5 per-N payout/hero/WWXRP table dispatch in `DegenerusGameDegeneretteModule.sol`; delete `_evNormalizationRatio`; rewrite `_distributePayout` ETH branch with 3-tier split rule (≤3× bet → 100% ETH; 3-10× bet → 2.5× bet ETH floor + remainder lootbox; >10× bet → existing 25/75 split); single batched USER-APPROVED contract commit.
+- [x] **Phase 267: Degenerette Producer + 5-Table Payout Rewrite** — Add `packedTraitsDegenerette` producer + 5 per-N payout/hero/WWXRP table dispatch in `DegenerusGameDegeneretteModule.sol`; delete `_evNormalizationRatio`; rewrite `_distributePayout` ETH branch with 3-tier split rule (≤3× bet → 100% ETH; 3-10× bet → 2.5× bet ETH floor + remainder lootbox; >10× bet → existing 25/75 split); single batched USER-APPROVED contract commit. (completed 2026-05-10)
 - [ ] **Phase 268: Degenerette Statistical Validation + Cross-Surface Preservation** — 3 new `test/stat/` files (per-N EV exactness + producer chi² + bonus EV) + `SurfaceRegression.test.js` v37.0 extension proving Mint/Jackpot/Lootbox/EntropyLib byte-identity.
 - [ ] **Phase 269: Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning** — Delete unreachable BURNIE-conversion branch in `_resolveLootboxRoll` L1568-1581 (caller-clamp invariant); diagnose + fix Phase 261/264 SURF-05 ~120K gas-pin drift under `npm run test:stat`.
 - [ ] **Phase 270: Post-v32.0 Deferred-Commit Adversarial Sub-Audit** — Audit-only adversarial sweep of commits `002bde55` (presale auto-deactivate) + `2713ce61` (setDecimatorAutoRebuy removal); read-only delta-classification + KI envelope check; FINDING_CANDIDATE rows escalate to Phase 271.
@@ -42,10 +42,10 @@
   5. Storage layout byte-identical at v37.0 phase-close HEAD vs v36.0 baseline `1c0f0913` (storage-slot grep proof); zero new public/external mutation entry points; zero new external pure entry points (`packedTraitsDegenerette` is `internal pure` library helper, inlined into consumer — does NOT widen the public ABI); zero new admin functions; zero new modifiers; existing `packedTraitsFromSeed` consumer paths in MintModule + JackpotModule UNCHANGED at the byte level — single batched USER-APPROVED contract commit lands per `feedback_batch_contract_approval.md` + `feedback_no_contract_commits.md` + `feedback_never_preapprove_contracts.md` (DGN-15).
   6. `_distributePayout` ETH-currency branch (`DegenerusGameDegeneretteModule.sol` L684-740) rewritten with 3-tier split rule: (a) `payout <= 3 * betAmount` → 100% ETH, no lootbox conversion (PAY-SPLIT-01); (b) `3 * betAmount < payout <= 10 * betAmount` → `ethShare = 2.5 * betAmount`, `lootboxShare = payout - ethShare` (PAY-SPLIT-02 floor); (c) `payout > 10 * betAmount` → existing `ethShare = payout / 4`, `lootboxShare = payout - ethShare` (PAY-SPLIT-02 standard); (d) pool-cap (`ETH_WIN_CAP_BPS = 1_000`, 10% of futurePool) applied AFTER the split rule and takes precedence: if `ethShare > 10% * pool`, excess flips to lootbox per existing L716-723 logic (PAY-SPLIT-03). `betAmount` (uint128) threaded into `_distributePayout` as a 5th argument from the L656 call site (`amountPerTicket` already in scope). `CURRENCY_BURNIE` + `CURRENCY_WWXRP` branches UNCHANGED. NatSpec on `_distributePayout` documents the 3-tier rule + pool-cap precedence in language of CURRENT design only (per `feedback_no_history_in_comments.md`). Phase 268 STAT-07 empirically verifies the rule across per-N payout distributions; Phase 271 §4 surface (h) audits boundary-gaming + composition correctness (PAY-SPLIT-01, PAY-SPLIT-02, PAY-SPLIT-03).
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 267-01-PLAN.md — Degenerette producer + 5-table payout rewrite + 3-tier ETH split (1 plan, 4 tasks: docs upstream fixes | constants verification | USER-APPROVED contract commit | phase-close summary; covers DGN-01..15 + PAY-SPLIT-01..03)
+- [x] 267-01-PLAN.md — Degenerette producer + 5-table payout rewrite + 3-tier ETH split (1 plan, 4 tasks: docs upstream fixes | constants verification | USER-APPROVED contract commit | phase-close summary; covers DGN-01..15 + PAY-SPLIT-01..03)
 
 ### Phase 268: Degenerette Statistical Validation + Cross-Surface Preservation
 
@@ -107,7 +107,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 267. Degenerette Producer + 5-Table Payout Rewrite | 0/0 | Not started | - |
+| 267. Degenerette Producer + 5-Table Payout Rewrite | 1/1 | Complete   | 2026-05-10 |
 | 268. Degenerette Statistical Validation + Cross-Surface Preservation | 0/0 | Not started | - |
 | 269. Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning | 0/0 | Not started | - |
 | 270. Post-v32.0 Deferred-Commit Adversarial Sub-Audit | 0/0 | Not started | - |
