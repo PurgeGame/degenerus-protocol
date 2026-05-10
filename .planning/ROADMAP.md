@@ -15,7 +15,7 @@
 - ✅ **v32.0 Backfill Idempotency + purchaseLevel Underflow Audit** — Phases 247-253 (shipped 2026-05-02) — see [milestones/v32.0-ROADMAP.md](milestones/v32.0-ROADMAP.md)
 - ✅ **v33.0 Charity Allowlist Governance** — Phases 254-258 (shipped 2026-05-07; closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` supersedes `MILESTONE_V33_AT_HEAD_dcb70941`) — see [milestones/v33.0-ROADMAP.md](milestones/v33.0-ROADMAP.md)
 - ✅ **v34.0 Trait Rarity Rework + Gold Solo Priority** — Phases 259-262 (shipped 2026-05-09; closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`) — see [milestones/v34.0-ROADMAP.md](milestones/v34.0-ROADMAP.md)
-- 🚧 **v35.0 BURNIE Near-Future Per-Pull Level Resample** — Phases 263-265 (started 2026-05-09; baseline HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555`)
+- ✅ **v35.0 BURNIE Near-Future Per-Pull Level Resample** — Phases 263-265 (shipped 2026-05-09; closure signal `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6`)
 
 ## Phases
 
@@ -44,11 +44,16 @@
 
 </details>
 
-### v35.0 BURNIE Near-Future Per-Pull Level Resample (Phases 263-265) — IN PROGRESS
+<details>
+<summary>✅ v35.0 BURNIE Near-Future Per-Pull Level Resample (Phases 263-265) — SHIPPED 2026-05-09</summary>
 
-- [ ] **Phase 263: Per-Pull Level Resample Implementation** — Refactor `payDailyCoinJackpot` (purchase phase, ~L1708) and `payDailyJackpotCoinAndTickets` (jackpot phase, ~L624) in `contracts/modules/DegenerusGameJackpotModule.sol` to a flat 50-pull loop with per-pull level sampling, deterministic trait rotation, per-trait deity caching, salt scheme update (`keccak256(randomWord, trait, lvl, i)`), and empty-bucket silent-skip semantics. Single batched contract diff per `feedback_batch_contract_approval.md` (two call sites are tightly coupled; partial landing breaks the salt scheme).
-- [x] **Phase 264: Statistical Validation + Cross-Surface Preservation** — Reuse Phase 261 chi-squared infrastructure (or extend it) to validate per-pull level uniformity over `[minLevel, maxLevel]` × 4 traits and ~25% per-trait share; measure empty-bucket skip rate; cross-surface preservation tests for `_randTraitTicket` other callers + far-future BURNIE coin path + ETH daily jackpot v34.0 injection sites + purchase-phase ticket distribution; gas regression confirms ~70K–110K extra per call within accepted budget. (completed 2026-05-09)
-- [ ] **Phase 265: Delta Audit + Findings Consolidation** — Author `audit/FINDINGS-v35.0.md` 9-section deliverable (FINAL READ-only at HEAD); adversarial sweep over PPL deltas; conservation re-proof (`coinBudget` + solvency + BURNIE supply); v34.0 + v33.0 closure signal regression; KI envelope re-verifications (EXC-04 extra-attention for per-pull-level keccak entropy uniformity claim); off-chain indexer `JackpotBurnieWin.lvl` semantic-shift documentation; emit closure signal `MILESTONE_V35_AT_HEAD_<sha>`.
+- [x] Phase 263: Per-Pull Level Resample Implementation (1/1 plans) — completed 2026-05-09 (single batched contract commit `cf564816`)
+- [x] Phase 264: Statistical Validation + Cross-Surface Preservation (2/2 plans) — completed 2026-05-09 (6 USER-COMMITTED test/chore commits `aa41485e`, `7dcfeb0c`, `82717bcf`, `36234847`, `20b15468`, `833b341d`)
+- [x] Phase 265: Delta Audit + Findings Consolidation (1/1 plans) — completed 2026-05-09 (closure signal `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6`)
+
+**Audit baseline:** v34.0 source-tree HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555` → v35.0 audit-subject HEAD `5db8682bd7b811437f0c1cf47e832619d1478ac6` (Phase 265 emits zero source-tree mutations per CONTEXT.md hard constraint #1; audit-subject HEAD = post-Phase-264 close commit). Mixed shape — Phase 263 modifies `contracts/modules/DegenerusGameJackpotModule.sol` only (single batched contract commit `cf564816`, +91/-74 LOC, net +17 LOC, NEW `_awardDailyCoinToTraitWinners` helper + 2 callsite rewires + `COIN_LEVEL_TAG` constant + dead-code removal); Phase 264 adds Hardhat statistical-validation suite under `test/stat/` + gas regression under `test/gas/`; Phase 265 publishes `audit/FINDINGS-v35.0.md` as FINAL READ-only milestone-closure deliverable. Per `feedback_no_contract_commits.md`, all `contracts/` + `test/` changes USER-COMMITTED; Phase 263 used the batched approval pattern per `feedback_batch_contract_approval.md` for the two-callsite refactor. 27/27 v35.0 requirements satisfied (PPL-01..08 + STAT-01..04 + SURF-01..05 + AUDIT-01..06 + REG-01..04). Result: 6 of 6 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE (a predictability + b level-salt collision + c deity-cache staleness + d cross-caller _randTraitTicket salt collision + e off-chain indexer semantic-shift + f gas-griefing cold SLOAD); STAT-03 reframe row SAFE_BY_STRUCTURAL_CLOSURE (88.24% empty-bucket skip rate reframed as fixture-calibration error per D-265-STAT03-01, NOT a finding); zero F-35-NN findings; 1 PASS REG-01 + 1 PASS REG-02 + 9 PASS + 1 SUPERSEDED REG-04; 4 KI envelope re-verifications (EXC-01..03 NEGATIVE-scope at v35; EXC-04 RE_VERIFIED with Phase 264 STAT-01 chi² cross-cite — range=4 chi²=5.114 < 7.815, range=8 chi²=3.019 < 14.067); KNOWN-ISSUES.md MODIFIED by 1 entry under Design Decisions (AUDIT-06 `JackpotBurnieWin.lvl` semantic-shift D-09 PASS — accepted-design + non-exploitable + sticky). Adversarial pass via `/contract-auditor` + `/zero-day-hunter` parallel spawn returned ZERO disagreements; `/economic-analyst` + `/degen-skeptic` explicitly NOT in scope per D-265-ADVERSARIAL-01. Deliverable: `audit/FINDINGS-v35.0.md` (FINAL READ-only at HEAD `5db8682bd7b811437f0c1cf47e832619d1478ac6`).
+
+</details>
 
 ## Phase Details
 
@@ -99,21 +104,28 @@ Plans:
   4. §5 regression: REG-01 PASS for v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` non-widening (TraitUtils + `_pickSoloQuadrant` + 4 ETH-distribution injection sites byte-identical or proven non-regressing under PPL changes); REG-02 PASS for v33.0 closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` non-widening (GNRUS.sol charity governance byte-identical); REG-03 KI envelopes EXC-01..04 RE_VERIFIED with EXC-04 (EntropyLib XOR-shift) explicit-attention attestation cross-citing STAT-01 chi-squared empirical evidence (per-pull-level keccak consumes high-entropy bits → uniformity claim covered end-to-end); REG-04 prior-finding spot-check rows for v25/v27/v29/v30/v31/v32 milestones light-touch RE_VERIFIED (carries forward v34.0 LEAN regression pattern) [REG-01..04].
   5. §6 KI gating walk + §3 indexer semantic-shift disclosure: AUDIT-06 surfaces the `JackpotBurnieWin.lvl` semantic shift (shared-call-level → per-pull-sampled-level) explicitly in §3 prose AND routes through D-09 3-predicate gating into KNOWN-ISSUES.md if the gate passes (default INFO unless gated upward); KNOWN-ISSUES.md UNMODIFIED unless a candidate passes the D-09 gate; §9c emits `MILESTONE_V35_AT_HEAD_<sha>` closure signal [AUDIT-05, AUDIT-06].
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+Plans:
+- [x] 265-01-PLAN.md — Single multi-task plan (14 atomic-commit tasks) authoring `audit/FINDINGS-v35.0.md` 9 sections + `265-01-ADVERSARIAL-LOG.md` (zero disagreements) + `KNOWN-ISSUES.md` +1 entry + ROADMAP/STATE/MILESTONES closure flips. Per D-265-PLAN-01 / Phase 257 + 262 single-plan precedent. Closure signal `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6` emitted in §9c.
 
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 263. Per-Pull Level Resample Implementation | 0/1 | Plan ready | — |
-| 264. Statistical Validation + Cross-Surface Preservation | 2/2 | Complete   | 2026-05-09 |
-| 265. Delta Audit + Findings Consolidation | 0/0 | Not started | — |
+| 263. Per-Pull Level Resample Implementation | 1/1 | Complete | 2026-05-09 |
+| 264. Statistical Validation + Cross-Surface Preservation | 2/2 | Complete | 2026-05-09 |
+| 265. Delta Audit + Findings Consolidation | 1/1 | Complete | 2026-05-09 |
 
 ## Active Milestone
 
-**v35.0 BURNIE Near-Future Per-Pull Level Resample** — IN PROGRESS (started 2026-05-09). 3 phases (263-265) planned; 27 requirements (8 PPL + 4 STAT + 5 SURF + 6 AUDIT + 4 REG); audit baseline v34.0 source-tree HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555`. Goal: convert the near-future BURNIE coin jackpot from one-level-per-call distribution to per-pull-level sampling at both call sites in `DegenerusGameJackpotModule.sol`, validated against Phase 261's reusable chi-squared infrastructure, and emit closure signal `MILESTONE_V35_AT_HEAD_<sha>` via `audit/FINDINGS-v35.0.md`. READ-only audit posture LIFTED — `contracts/` + `test/` writes go through per-commit user approval per `feedback_no_contract_commits.md`; Phase 263's two-callsite refactor uses the batched approval pattern per `feedback_batch_contract_approval.md`.
+_(between milestones — awaiting v36.0+ definition)_
 
 ## Last Shipped Milestone
+
+**v35.0 BURNIE Near-Future Per-Pull Level Resample** — SHIPPED 2026-05-09. 3 phases (263-265), 4 plans, 27 requirements satisfied (PPL-01..08 + STAT-01..04 + SURF-01..05 + AUDIT-01..06 + REG-01..04). Audit baseline v34.0 source-tree HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555` → v35.0 audit-subject HEAD `5db8682bd7b811437f0c1cf47e832619d1478ac6`. Closure signal `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6`. Deliverable: `audit/FINDINGS-v35.0.md` (FINAL READ-only at HEAD `5db8682b`, 9 sections, ~600 lines, 6 of 6 §4 surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE + STAT-03 reframe row SAFE_BY_STRUCTURAL_CLOSURE per D-265-STAT03-01; zero F-35-NN finding blocks; 1 PASS REG-01 + 1 PASS REG-02 + 9 PASS + 1 SUPERSEDED REG-04; 4 NEGATIVE-scope/RE_VERIFIED KI envelope re-verifications (EXC-04 RE_VERIFIED with Phase 264 STAT-01 chi² cross-cite); KNOWN-ISSUES.md MODIFIED by 1 entry under Design Decisions for AUDIT-06 `JackpotBurnieWin.lvl` semantic-shift D-09 PASS).
+
+### Prior Shipped Milestone
 
 **v34.0 Trait Rarity Rework + Gold Solo Priority** — SHIPPED 2026-05-09. 4 phases (259-262), 10 plans, 36 requirements satisfied (TRAIT-01..06 + SOLO-01..09 + STAT-01..07 + SURF-01..05 + AUDIT-01..05 + REG-01..04). Audit baseline v33.0 contract-tree HEAD `4ce3703d740d3707c88a1af595618120a8168399` → v34.0 source-tree HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555`. Closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`. Deliverable: `audit/FINDINGS-v34.0.md` (FINAL READ-only at HEAD `6b63f6d4`, 9 sections, 6 of 6 §4 surfaces SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE; zero F-34-NN finding blocks; 1 PASS REG-01 + 1 PASS REG-02 + 4 PASS REG-04; 4 NEGATIVE-scope/RE_VERIFIED KI envelope re-verifications; KNOWN-ISSUES.md UNMODIFIED).
 

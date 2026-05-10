@@ -14,7 +14,7 @@ phase_status: terminal
 write_policy: "Pure-consolidation phase per CONTEXT.md hard constraint #1. Zero contracts/ writes by agent. Zero test/ writes by agent. KNOWN-ISSUES.md modified by 1 entry under Design Decisions per D-265-AUDIT06-01 (AUDIT-06 indexer semantic-shift). Per `feedback_never_preapprove_contracts.md`, the orchestrator does NOT pre-approve any contract change — vacuous this phase since no contract changes are proposed by agent."
 supersedes: none
 status: FINAL — READ-ONLY
-read_only: false
+read_only: true
 closure_signal: MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6
 generated_at: 2026-05-09T13:00:00Z
 ---

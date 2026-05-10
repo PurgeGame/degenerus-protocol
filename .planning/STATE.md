@@ -3,33 +3,50 @@ gsd_state_version: 1.0
 milestone: v35.0
 milestone_name: BURNIE Near-Future Per-Pull Level Resample
 status: completed
-last_updated: "2026-05-09T16:27:38.451Z"
-last_activity: 2026-05-09 -- Phase 264 marked complete
+last_updated: "2026-05-09T13:00:00Z"
+last_activity: 2026-05-09 -- v35.0 milestone CLOSED; closure signal MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6
 progress:
   total_phases: 3
-  completed_phases: 2
-  total_plans: 3
-  completed_plans: 3
-  percent: 67
+  completed_phases: 3
+  total_plans: 4
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-09 after v34.0 milestone close)
+See: .planning/PROJECT.md (updated 2026-05-09 after v35.0 milestone close)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v35.0 BURNIE Near-Future Per-Pull Level Resample (3 phases planned: 263-265)
+**Current focus:** Between milestones — v35.0 CLOSED 2026-05-09; awaiting v36.0+ milestone definition.
 
 ## Current Position
 
-Phase: 264 — COMPLETE
-Plan: —
-Status: Phase 264 complete
-Last activity: 2026-05-09 -- Phase 264 marked complete
+Phase: 265 (delta-audit-findings-consolidation) — COMPLETE
+Plan: 1 of 1 complete
+Status: v35.0 milestone SHIPPED
+Last activity: 2026-05-09 -- v35.0 milestone CLOSED; closure signal MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6
 
 ## Last Shipped Milestone
+
+**v35.0 — BURNIE Near-Future Per-Pull Level Resample** (shipped 2026-05-09)
+
+- 3 phases (263-265), 4 plans, 27/27 requirements satisfied (PPL-01..08 + STAT-01..04 + SURF-01..05 + AUDIT-01..06 + REG-01..04)
+- Audit baseline: v34.0 source-tree HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555` → v35.0 audit-subject HEAD `5db8682bd7b811437f0c1cf47e832619d1478ac6` (Phase 265 emits zero source-tree mutations per CONTEXT.md hard constraint #1; audit-subject HEAD = post-Phase-264 close commit)
+- 1 contract-tree commit since baseline: `cf564816` (Phase 263 single batched contract-tree commit — `feat(263): per-pull level resample for daily coin jackpot [PPL-01..PPL-08]`; +91/-74 LOC, net +17 LOC) + 6 test/chore commits since baseline (Phase 264 — `aa41485e` PerPullLevelDistribution.test.js + `7dcfeb0c` PerPullEmptyBucketSkip.test.js + `82717bcf` SurfaceRegression v35.0 extension + `36234847` Phase264GasRegression.test.js + `20b15468` AdvanceGameGas extension + `833b341d` package.json scripts wiring)
+- Result: 6 of 6 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE (a predictability + b level-salt collision + c deity-cache staleness + d cross-caller _randTraitTicket salt collision + e off-chain indexer semantic-shift + f gas-griefing cold SLOAD); STAT-03 reframe row SAFE_BY_STRUCTURAL_CLOSURE per D-265-STAT03-01 (88.24% empty-bucket skip rate reframed as fixture-calibration error, NOT a finding); zero F-35-NN finding blocks emitted
+- Adversarial pass via `/contract-auditor` + `/zero-day-hunter` parallel spawn returned ZERO disagreements; `/economic-analyst` + `/degen-skeptic` explicitly NOT in scope per D-265-ADVERSARIAL-01
+- LEAN regression: 1 PASS REG-01 (v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` re-verified non-widening; TraitUtils + JackpotBucketLib + EntropyLib + GameStorage byte-identical) + 1 PASS REG-02 (v33.0 closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` re-verified non-widening; GNRUS.sol byte-identical) + 9 PASS + 1 SUPERSEDED REG-04 (prior-finding spot-check sweep across audit/FINDINGS-v25..v34)
+- KI envelopes EXC-01..03 RE_VERIFIED NEGATIVE-scope at v35 (per-pull-level path has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction); EXC-04 RE_VERIFIED with Phase 264 STAT-01 chi² empirical cross-cite (`test/stat/PerPullLevelDistribution.test.js` 10K samples; range=4 chi²=5.114 < 7.815 critical at α=0.05 df=3; range=8 chi²=3.019 < 14.067 df=7); per-pull-level keccak consumes VRF-derived high-entropy bits, NOT XOR-shift output (backward-trace per `feedback_rng_backward_trace.md`)
+- KNOWN-ISSUES.md MODIFIED by 1 entry under Design Decisions per D-265-AUDIT06-01 (AUDIT-06 `JackpotBurnieWin.lvl` semantic-shift — D-09 PASS: accepted-design + non-exploitable + sticky); closure verdict `1 of 1 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_MODIFIED (1 entry added under Design Decisions)`
+- Deliverable: `audit/FINDINGS-v35.0.md` (FINAL READ-only at HEAD `5db8682bd7b811437f0c1cf47e832619d1478ac6`, 9 sections, ~600 lines)
+- Closure signal: `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6`
+- Process notes: Standard `/gsd-execute-phase` subagent delegation blocked by global `.md`-write guard pattern-matching FINDINGS/SUMMARY/ADVERSARIAL-LOG filenames; user opted for orchestrator-inline execution path. All 14 atomic-commit tasks executed inline; adversarial-pass /contract-auditor + /zero-day-hunter spawned via Skill tool in parallel (skills load into orchestrator context for review work — no .md-write guard interference).
+- See `.planning/MILESTONES.md` for archive
+
+### Prior Shipped Milestone
 
 **v34.0 — Trait Rarity Rework + Gold Solo Priority** (shipped 2026-05-09)
 
@@ -91,18 +108,7 @@ Last activity: 2026-05-09 -- Phase 264 marked complete
 
 ## Active Milestone
 
-**v35.0 BURNIE Near-Future Per-Pull Level Resample** (started 2026-05-09)
-
-- **Goal:** Convert the near-future BURNIE coin jackpot from one-level-per-call distribution to per-pull-level sampling at both call sites in `DegenerusGameJackpotModule.sol`, validated against Phase 261's reusable chi-squared infrastructure.
-- **Audit baseline:** v34.0 source-tree HEAD `6b63f6d4daf346a53a1d463790f637308ea8d555`
-- **Phases planned:** 3 (263-265)
-- **Requirements:** 27 total (8 PPL + 4 STAT + 5 SURF + 6 AUDIT + 4 REG); coverage 27/27 mapped
-- **READ-only posture:** LIFTED — `contracts/` + `test/` writes via per-commit user approval per `feedback_no_contract_commits.md`; Phase 263 two-callsite refactor uses batched approval pattern per `feedback_batch_contract_approval.md`
-- **Cross-milestone dep resolution:** Phase 261 chi-squared infrastructure default-branched as REUSABLE (decision captured in Phase 264 STAT-04 plan or as a `D-NN-INFRA-01` decision when the plan opens)
-- **Off-chain indexer flag:** `JackpotBurnieWin.lvl` semantic shift (shared-call-level → per-pull-sampled-level) — surfaced in AUDIT-06 and §3 of `audit/FINDINGS-v35.0.md`
-- **Closure signal target:** `MILESTONE_V35_AT_HEAD_<sha>` emitted via `audit/FINDINGS-v35.0.md` §9c
-- **Seed source:** `.planning/notes/2026-05-08-burnie-near-future-per-pull-level.md`
-- See `.planning/ROADMAP.md` for the full phase table + per-phase goals + success criteria.
+_(between milestones — v35.0 CLOSED 2026-05-09; awaiting v36.0+ milestone definition)_
 
 ## Roadmap Overview
 
@@ -174,4 +180,7 @@ Audit deliverables:
 
 ## Operator Next Steps
 
-- Open Phase 263 with `/gsd-plan-phase 263`
+- v35.0 milestone CLOSED. Next: define v36.0+ milestone scope and open with `/gsd-new-milestone` (or equivalent intake).
+- Address backlog seeds (see `## Next-Milestone Backlog`): (a) Phase 264 STAT-03 fixture retune to D-IMPL-07 mid/late-game holder-density spec; (b) Phase 264 SURF-05 gas REF drift in combined `npm run test:stat` ordering (128K drift vs isolation REF; root cause not diagnosed); (c) Phase 261 SURF-05 `runTerminalJackpot` pre-existing failure (drift 118,928 vs ref 2,599,868); (d) Hardhat ESM cleanup quirk; (e) Audit of post-v32.0 unaudited commits (`002bde55` + `2713ce61`).
+- Confirm closure signal `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6` recorded in `audit/FINDINGS-v35.0.md` §9c + `.planning/MILESTONES.md` v35.0 row + `.planning/phases/265-delta-audit-findings-consolidation/265-01-SUMMARY.md` frontmatter.
+- Optionally rotate `.planning/milestones/v35.0-ROADMAP.md` + `v35.0-REQUIREMENTS.md` archive structure (mirroring v34.0 archive pattern).
