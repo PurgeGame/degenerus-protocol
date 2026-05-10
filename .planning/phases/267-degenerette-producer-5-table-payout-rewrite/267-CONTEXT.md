@@ -6,18 +6,18 @@
 <domain>
 ## Phase Boundary
 
-Replace the broken `_evNormalizationRatio` runtime corrector in `contracts/modules/DegenerusGameDegeneretteModule.sol` with **5 per-N (gold-quadrant-count) precomputed payout/hero/WWXRP tables**, indexed by `_countGoldQuadrants(playerTicket) ∈ {0..4}`. Add a new `packedTraitsDegenerette(uint256) → uint32` producer to `contracts/DegenerusTraitUtils.sol` using per-quadrant near-uniform color distribution `[16,16,16,16,16,16,16,8]/120` (commons 13.33%, gold 6.67%) and uniform 1/8 symbol. Existing `weightedColorBucket` / `traitFromWord` / `packedTraitsFromSeed` bodies stay byte-identical (Mint + Jackpot + v34.0 gold-solo paths UNTOUCHED).
+Replace the broken `_evNormalizationRatio` runtime corrector in `contracts/modules/DegenerusGameDegeneretteModule.sol` with **5 per-N (gold-quadrant-count) precomputed payout/hero/WWXRP tables**, indexed by `_countGoldQuadrants(playerTicket) ∈ {0..4}`. Add a new `packedTraitsDegenerette(uint256) → uint32` producer to `contracts/DegenerusTraitUtils.sol` using per-quadrant near-uniform color distribution `[16,16,16,16,16,16,16,8]/120` (commons 13.33%, gold 6.67%) and uniform 1/8 symbol. Existing `weightedColorBucket` / `traitFromWord` / `packedTraitsFromSeed` bodies stay byte-identical (Mint + Jackpot + v34.0 gold-solo paths UNTOUCHED). Rewrite `_distributePayout` ETH-currency branch with a **3-tier split rule** (PAY-SPLIT-01..03): payouts ≤ 3× bet pay 100% ETH; 3-10× bet payouts pay 2.5× bet ETH floor + remainder lootbox; >10× bet payouts retain the existing 25% ETH / 75% lootbox split; pool-cap takes precedence on top of all three tiers.
 
 **Audit baseline:** v36.0 audit-subject HEAD `1c0f09132d7439af9881c56fe197f81757f8164a` (closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a` carried into v37.0 baseline).
 
 **Phase 267 boundary state at close:**
 
-- 1 batched USER-APPROVED contract commit landing both `contracts/DegenerusTraitUtils.sol` (new `packedTraitsDegenerette` + `_degTrait` helper, additive only — `internal pure` library helpers, inlined into the consumer) and `contracts/modules/DegenerusGameDegeneretteModule.sol` (5-table dispatch rewrite + 25 packed constants + symbol-only hero + producer-callsite swap + 4 stale comment surfaces rewritten + `_evNormalizationRatio` deletion).
-- Net constant count: 11 → 24 (+5 payout packed +5 jackpot M=8 +5 hero packed +5 WWXRP packed −4 single-table −2 normalizer).
+- 1 batched USER-APPROVED contract commit landing both `contracts/DegenerusTraitUtils.sol` (new `packedTraitsDegenerette` + `_degTrait` helper, additive only — `internal pure` library helpers, inlined into the consumer) and `contracts/modules/DegenerusGameDegeneretteModule.sol` (5-table dispatch rewrite + 25 packed constants + symbol-only hero + producer-callsite swap + 4 stale comment surfaces rewritten + `_evNormalizationRatio` deletion + `_distributePayout` ETH-branch 3-tier split rewrite + `betAmount` threading from L656).
+- Net constant count: 11 → 24 (+5 payout packed +5 jackpot M=8 +5 hero packed +5 WWXRP packed −4 single-table −2 normalizer); two threshold/floor multipliers added inline to `_distributePayout` (3× and 2.5× — kept as inline literals per `feedback_no_dead_guards.md`-adjacent simplicity preference; planner may promote to named constants if NatSpec readability demands).
 - Zero new storage slots; zero new public/external mutation entry points; zero new external pure entry points (`packedTraitsDegenerette` is `internal pure` per D-267-VISIBILITY-01, inlined into consumer — does NOT widen the public ABI); zero new admin functions; zero new modifiers.
 - Working file `267-01-CONSTANTS-VERIFY.md` (AGENT-COMMITTED) capturing reproducible re-derivation evidence: `derive_5_tables.py` stdout grep-matched byte-for-byte against the .sol pasted hex.
-- Phase 267 plan also chore-fixes upstream doc wording to match locked signatures: REQUIREMENTS.md DGN-03 (signature) + DGN-01 (visibility) + ROADMAP success criteria 1 + 2 + 5 wording + Phase 271 AUDIT-04 attestation language (drop ALLOWED-NEW-STATELESS-ENTRY — no longer applicable since `packedTraitsDegenerette` is `internal pure`, not a new external entry).
-- 15 DGN-NN requirements (DGN-01..DGN-15) flipped to PASS at phase close; PROGRESS table flipped 0/0 → 1/1 (single multi-task plan).
+- Phase 267 plan also chore-fixes upstream doc wording + new requirement adds to match locked signatures + new payout-split rule: REQUIREMENTS.md DGN-03 (signature) + DGN-01 (visibility) + new PAY-SPLIT-01..03 section + STAT-07 (Phase 268 mapping) + AUDIT-02 surface (h) (Phase 271 mapping) + Coverage line 47→51 + Traceability rows; ROADMAP.md Phase 267 inline goal + success criterion 6 + Phase 268 STAT-07 + Phase 271 AUDIT-02 surface (h); Phase 271 AUDIT-04 attestation language (drop ALLOWED-NEW-STATELESS-ENTRY — no longer applicable since `packedTraitsDegenerette` is `internal pure`, not a new external entry). All upstream-doc edits land in the same plan task 1 chore commit (single agent-commit per `feedback_batch_contract_approval.md`-adjacent batched-doc-edit discipline).
+- 18 requirements (DGN-01..DGN-15 + PAY-SPLIT-01..03) flipped to PASS at phase close; PROGRESS table flipped 0/0 → 1/1 (single multi-task plan).
 - Tests + audit deliverable + closure flips OUT of scope → Phase 268 (stat + cross-surface) + Phase 269 (lootbox cleanup) + Phase 270 (post-v32 sub-audit) + Phase 271 (audit + closure).
 
 </domain>
@@ -54,10 +54,20 @@ Replace the broken `_evNormalizationRatio` runtime corrector in `contracts/modul
 
 - **D-267-VISIBILITY-01 (`packedTraitsDegenerette` visibility = `internal pure`):** Mirrors `packedTraitsFromSeed` (also `internal pure` in `contracts/DegenerusTraitUtils.sol:169`). On a `library` declaration, `internal pure` functions are inlined into the consumer — zero DELEGATECALL overhead, zero new function selector in the public ABI. Phase 267 plan includes chore tasks to correct upstream doc wording: REQUIREMENTS.md DGN-01 (`external pure` → `internal pure`), ROADMAP success criterion 1 + 5 wording, and Phase 271 AUDIT-04 attestation language (DROP "ALLOWED-NEW-STATELESS-ENTRY" entirely — the new helper is no longer a NEW external entry; AUDIT-04 attests zero new external mutation entry points + zero new external pure entry points). The new helper additive-only-on-the-library posture is preserved (Phase 268 SURF-01 byte-identity for existing functions).
 
+- **D-267-PAYSPLIT-01 (3-tier ETH split rule, `payout ≤ 3 × bet` inclusive → 100% ETH):** ETH-currency Degenerette quickPlay payouts at or below 3× the per-ticket bet skip the lootbox conversion path entirely; full payout credited as claimable ETH via `_addClaimableEth(player, payout)`. Threshold inclusive at exactly `payout == 3 * betAmount` (matches user wording "<= 3x"). Implementation: early-return branch at top of `_distributePayout` `CURRENCY_ETH` block. Boundary discontinuity at exactly 3.0× bet (3.0× pays 100% ETH = 3.0× bet ETH; 3.01× pays 2.5× bet ETH per PAY-SPLIT-02 floor) accepted as documented design — the 3.0× → 2.5× ETH drop at 3.01× is much smaller than the alternative 3.0× → 0.7525× drop under naive 25% split.
+
+- **D-267-PAYSPLIT-02 (3-10× band 2.5× ETH floor; >10× existing 25% split):** For payouts above the 3× threshold, ETH share computed as `ethShare = max(2.5 * betAmount, payout / 4)`, capped at `payout`. Lootbox share is `payout - ethShare`. The `max()` resolves cleanly into two bands: (a) `3 * bet < payout ≤ 10 * bet` → ethShare = 2.5 × bet (flat floor), lootbox = payout - 2.5 × bet; (b) `payout > 10 * bet` → ethShare = payout / 4 (existing 25% split), lootbox = 3 × payout / 4. The two bands meet exactly at `payout = 10 * bet` where 0.25 × payout = 2.5 × bet. Single-line Solidity expression: `uint256 ethShare = (2 * betAmount + (betAmount >> 1)); if (payout / 4 > ethShare) { ethShare = payout / 4; }` (or equivalent). Planner picks exact form; integer-division semantics + max-with-cap should be expressed with no overflow (uint256 headroom is ample for `2.5 * bet` since betAmount ≤ MIN_BET_ETH × extreme_count and bet always fits in uint128).
+
+- **D-267-PAYSPLIT-03 (pool-cap precedence on top of split rule):** Existing `ETH_WIN_CAP_BPS = 1_000` (10% of futurePool) cap remains in force AFTER the split rule above. Compute `ethShare` and `lootboxShare` per D-267-PAYSPLIT-01..02; then if `ethShare > pool * ETH_WIN_CAP_BPS / 10_000`, flip excess: `lootboxShare += ethShare - maxEth; ethShare = maxEth; emit PayoutCapped(player, ethShare, lootboxShare);`. Pool cap takes precedence over the all-ETH small-payout passthrough AND the 2.5× floor — i.e., a thin pool can convert a sub-3× bet payout into a partial-ETH-partial-lootbox split if the all-ETH amount would exceed 10% of pool. Documented in `_distributePayout` NatSpec as "pool cap takes precedence over small-payout passthrough and 2.5× floor". Frozen-pool branch (L695-711) keeps its existing solvency-check posture (full ethShare debited from pending future pool with revert-on-insufficient).
+
+- **D-267-PAYSPLIT-04 (scope = ETH-currency Degenerette quickPlay only):** PAY-SPLIT-01..03 apply ONLY to `_distributePayout`'s `CURRENCY_ETH` branch (L690+). `CURRENCY_BURNIE` branch (L735-736: `coin.mintForGame(player, payout)`) UNCHANGED — BURNIE pays directly, no lootbox conversion exists. `CURRENCY_WWXRP` branch (L737-739: `wwxrp.mintPrize(player, payout)`) UNCHANGED. JackpotModule ETH-distribution injection sites (v34.0 SURF-02 surface) UNCHANGED — Phase 268 SURF-02 byte-identity claim preserved. Mint module + lootbox module + entropy lib UNCHANGED.
+
+- **D-267-PAYSPLIT-05 (`betAmount` threading via `_distributePayout` 5th argument):** Current `_distributePayout` signature `(player, currency, payout, rngWord)` extended to `(player, currency, betAmount, payout, rngWord)`. The new `betAmount` is the per-ticket bet (uint128). At the L656 call site within the spin loop, `amountPerTicket` is already in scope (verified via grep at `_awardDegeneretteDgnrs(player, amountPerTicket, matches)` at L661). Argument-ordering insertion of `betAmount` between `currency` and `payout` keeps related parameters adjacent (currency-bet-payout group) and minimizes cognitive load. Planner picks exact arg ordering; ordering decision documented inline in NatSpec.
+
 - **D-267-PLAN-01 (single multi-task plan):** Mirror v33 P257 / v34 P262 / v35 P265 / v36 P266 single-multi-task-atomic-commit-per-task precedent. `267-01-PLAN.md` ordering (planner refines exact decomposition):
-  1. **Chore:** upstream doc wording fixes — REQUIREMENTS.md DGN-03 (`(uint8[4]) internal pure` → `(uint32 ticket) private pure returns (uint8)` per D-267-COUNTGOLD-01) + REQUIREMENTS.md DGN-01 (`external pure` → `internal pure` per D-267-VISIBILITY-01) + ROADMAP success criterion 1 + 5 visibility wording + ROADMAP success criterion 2 signature wording + Phase 271 AUDIT-04 attestation (drop "ALLOWED-NEW-STATELESS-ENTRY" — replace with attestation that ZERO new external pure entries are added).
+  1. **Chore:** upstream doc wording fixes + new requirement adds — (a) REQUIREMENTS.md DGN-03 signature (`(uint8[4]) internal pure` → `(uint32 ticket) private pure returns (uint8)` per D-267-COUNTGOLD-01); (b) REQUIREMENTS.md DGN-01 visibility (`external pure` → `internal pure` per D-267-VISIBILITY-01); (c) ROADMAP success criterion 1 + 5 visibility wording + criterion 2 signature wording + Phase 271 AUDIT-04 attestation drop "ALLOWED-NEW-STATELESS-ENTRY" (replace with attestation that ZERO new external pure entries are added); (d) NEW: REQUIREMENTS.md add PAY-SPLIT-01..03 section (per D-267-PAYSPLIT-01..05) + STAT-07 + AUDIT-02 surface (h) + Coverage line 47→51 + Traceability rows for all 4 new reqs; (e) NEW: ROADMAP.md Phase 267 inline goal + success criterion 6 covering `_distributePayout` rewrite + Phase 268 STAT-07 wording + Phase 271 AUDIT-02 surface (h) wording. All edits in a single agent-commit (this CONTEXT.md update commit batches all upstream-doc edits per D-267-APPROVAL-01 carry).
   2. **Chore:** re-run `python3 .planning/notes/degenerette-recalibration/derive_5_tables.py`, capture stdout into `267-01-CONSTANTS-VERIFY.md`, grep-assert every emitted hex byte-string matches the planning-note's pasted .sol hex byte-for-byte (per D-267-CONSTVERIFY-01).
-  3. **Contract impl + USER-APPROVED batched commit:** TraitUtils additive (`packedTraitsDegenerette` + `_degTrait` private helper) AND DegeneretteModule rewrite (delete `_evNormalizationRatio` + its call site; add `_countGoldQuadrants` + `_wwxrpFactor`; rewrite `_getBasePayoutBps` + `_applyHeroMultiplier` + `_fullTicketPayout` for per-N dispatch; swap producer at L607; rewrite stale comments per D-267-COMMENTS-01; replace 4 single-table + 2 normalizer constants with 25 per-N packed constants). One diff, one approval, one commit.
+  3. **Contract impl + USER-APPROVED batched commit:** TraitUtils additive (`packedTraitsDegenerette` + `_degTrait` private helper) AND DegeneretteModule rewrite — (a) delete `_evNormalizationRatio` + its call site; (b) add `_countGoldQuadrants` + `_wwxrpFactor`; (c) rewrite `_getBasePayoutBps` + `_applyHeroMultiplier` + `_fullTicketPayout` for per-N dispatch; (d) rewrite `_distributePayout` ETH branch with 3-tier split rule per D-267-PAYSPLIT-01..03 + thread `betAmount` (uint128) into the signature per D-267-PAYSPLIT-05 + update L656 call site to pass `amountPerTicket`; (e) swap producer at L607; (f) rewrite stale comments per D-267-COMMENTS-01 + add NatSpec to `_distributePayout` documenting the 3-tier rule + pool-cap precedence; (g) replace 4 single-table + 2 normalizer constants with 25 per-N packed constants. One diff, one approval, one commit.
   4. **Phase-close:** `267-01-SUMMARY.md` + commit-readiness register (i USER-APPROVED contracts: 1 commit; ii USER-APPROVED tests: 0 commits — Phase 268 owns tests; iii AGENT-COMMITTED planning artifacts: PLAN + SUMMARY + CONSTANTS-VERIFY + REQUIREMENTS.md DGN-03 wording fix).
   ~4 atomic commits total. Single-plan-multi-task discipline.
 
@@ -119,6 +129,8 @@ Replace the broken `_evNormalizationRatio` runtime corrector in `contracts/modul
   - L933+: `_fullTicketPayout` body — REWRITTEN for N-threading + per-N table dispatch + symbol-only hero.
   - L965-969: single call site of `_evNormalizationRatio` — DELETED.
   - L239 + L262 + L316: stale comment surfaces — surgically rewritten per D-267-COMMENTS-01.
+  - L656: `_distributePayout(player, currency, payout, lootboxWord)` callsite — ARG INSERT to pass `amountPerTicket` per D-267-PAYSPLIT-05 (new signature `_distributePayout(player, currency, betAmount, payout, lootboxWord)`).
+  - L678-740: `_distributePayout` body + NatSpec — REWRITTEN per D-267-PAYSPLIT-01..04 (3-tier ETH split rule + 2.5× floor + pool-cap precedence). `CURRENCY_BURNIE` (L735-736) + `CURRENCY_WWXRP` (L737-739) branches UNCHANGED.
 - `contracts/modules/DegenerusGameMintModule.sol` — UNTOUCHED; existing `packedTraitsFromSeed` consumer body byte-identical (Phase 268 SURF-04 carry; v34 gold-solo Mint mechanic preserved).
 - `contracts/modules/DegenerusGameJackpotModule.sol` — UNTOUCHED; v34 gold-solo `_pickSoloQuadrant` + 4 ETH-distribution injection sites + `JackpotBucketLib` byte-identical (Phase 268 SURF-02).
 - `contracts/modules/DegenerusGameLootboxModule.sol` — UNTOUCHED at Phase 267 (v36 entropy-refactor surfaces stay byte-identical at Phase 267 close; Phase 269 will delete the dead BURNIE-conversion branch separately).
@@ -284,6 +296,89 @@ function _applyHeroMultiplier(
 ### 25 packed constant byte-values (paste-ready, locked per D-267-CONSTPASTE-01)
 
 See `.planning/notes/2026-05-10-degenerette-payout-recalibration.md` §"Concrete file changes" → "CONSTANT REWRITE" block. All 25 constants pre-rendered. Re-derive via `python3 .planning/notes/degenerette-recalibration/derive_5_tables.py` per D-267-CONSTVERIFY-01 to produce the .sol-ready hex strings, then grep-assert byte-identical match.
+
+### `_distributePayout` ETH-branch rewrite shape (locked per D-267-PAYSPLIT-01..05)
+
+Sketch (planner refines exact form). Surrounding non-ETH branches and frozen-pool branch UNCHANGED:
+
+```solidity
+/// @dev Distributes payout to player. ETH-currency 3-tier split rule:
+///        - payout <= 3 * betAmount → 100% ETH (no lootbox conversion)
+///        - 3 * betAmount < payout <= 10 * betAmount → 2.5 * betAmount ETH + remainder lootbox
+///        - payout > 10 * betAmount → 25% ETH + 75% lootbox
+///      Pool-cap (ETH_WIN_CAP_BPS = 10% of futurePool) takes precedence over all three tiers:
+///      if computed ethShare exceeds 10% of pool, excess flips to lootbox.
+function _distributePayout(
+    address player,
+    uint8 currency,
+    uint128 betAmount,
+    uint256 payout,
+    uint256 rngWord
+) private {
+    if (currency == CURRENCY_ETH) {
+        // 3-tier split rule (PAY-SPLIT-01..02)
+        uint256 ethShare;
+        uint256 lootboxShare;
+        uint256 threeBet = uint256(betAmount) * 3;
+        if (payout <= threeBet) {
+            ethShare = payout;             // tier 1: all ETH
+            lootboxShare = 0;
+        } else {
+            uint256 minEth = (uint256(betAmount) * 5) / 2;       // 2.5 * bet
+            uint256 stdEth = payout / 4;                          // 25%
+            ethShare = stdEth > minEth ? stdEth : minEth;         // tier 2 floor or tier 3 standard
+            lootboxShare = payout - ethShare;
+        }
+
+        if (prizePoolFrozen) {
+            // Frozen-pool branch: pending future debit + claimable ETH credit
+            (uint128 pNext, uint128 pFuture) = _getPendingPools();
+            if (uint256(pFuture) < ethShare) revert E();
+            _setPendingPools(pNext, pFuture - uint128(ethShare));
+            _addClaimableEth(player, ethShare);
+        } else {
+            // Unfrozen path: pool cap precedence (PAY-SPLIT-03)
+            uint256 pool = _getFuturePrizePool();
+            uint256 maxEth = (pool * ETH_WIN_CAP_BPS) / 10_000;
+            if (ethShare > maxEth) {
+                lootboxShare += ethShare - maxEth;
+                ethShare = maxEth;
+                emit PayoutCapped(player, ethShare, lootboxShare);
+            }
+            unchecked { pool -= ethShare; }
+            _setFuturePrizePool(pool);
+            _addClaimableEth(player, ethShare);
+        }
+
+        if (lootboxShare > 0) {
+            _resolveLootboxDirect(player, lootboxShare, rngWord);
+        }
+    } else if (currency == CURRENCY_BURNIE) {
+        coin.mintForGame(player, payout);
+    } else if (currency == CURRENCY_WWXRP) {
+        wwxrp.mintPrize(player, payout);
+    }
+}
+```
+
+Call site at L656 updated:
+
+```solidity
+// Was:  _distributePayout(player, currency, payout, lootboxWord);
+// Now:  _distributePayout(player, currency, amountPerTicket, payout, lootboxWord);
+```
+
+Worked examples (bet = 1.0, no pool-cap interference):
+
+| payout (× bet) | ethShare | lootboxShare | tier |
+|---|---|---|---|
+| 2.0 | 2.0 | 0 | 1 (≤3×) |
+| 3.0 | 3.0 | 0 | 1 (≤3×) |
+| 3.01 | 2.5 | 0.51 | 2 (floor) |
+| 5.0 | 2.5 | 2.5 | 2 (floor) |
+| 10.0 | 2.5 | 7.5 | 2 = 3 boundary |
+| 100.0 | 25.0 | 75.0 | 3 (25% standard) |
+| 209,164 (M=8 N=4) | 52,291 | 156,873 | 3 (25% standard) |
 
 </specifics>
 

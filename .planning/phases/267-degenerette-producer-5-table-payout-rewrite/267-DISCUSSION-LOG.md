@@ -5,7 +5,7 @@
 
 **Date:** 2026-05-10
 **Phase:** 267-degenerette-producer-5-table-payout-rewrite
-**Areas discussed:** `_countGoldQuadrants` signature reconciliation, plan decomposition shape, constant-verification policy, comment-rewrite granularity, `packedTraitsDegenerette` visibility (self-check follow-up)
+**Areas discussed:** `_countGoldQuadrants` signature reconciliation, plan decomposition shape, constant-verification policy, comment-rewrite granularity, `packedTraitsDegenerette` visibility (self-check follow-up), ETH payout 3-tier split rule (mid-discussion scope expansion)
 
 ---
 
@@ -76,6 +76,60 @@ Pre-discussion conflict: REQUIREMENTS.md DGN-01 + ROADMAP success criterion 1 + 
 
 ---
 
+## ETH payout 3-tier split rule (mid-discussion scope expansion)
+
+User-initiated scope addition after the original 5 areas closed. User requested: "payouts of ≤ 3× bet to be all eth and larger than that to be 75% lootbox 25% eth". Pre-discovery surface scan found existing `_distributePayout` at `DegenerusGameDegeneretteModule.sol:678-734` already does unconditional 25% ETH / 75% lootbox split (with a 10%-pool-cap secondary protection for ETH-portion solvency). User's request was therefore narrower than first read: add a small-payout passthrough — skip the 25/75 split when `payout ≤ 3 × bet`, pay 100% ETH instead.
+
+### Q1: Threshold semantics — what happens at exactly 3× bet?
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| `payout <= 3 * bet` inclusive (3.0× pays all ETH) | Verbatim user wording. Discontinuity at 3.0× → 3.01× boundary (3.0× pays 100% ETH = 3× bet; 3.01× pays 0.7525× bet under naive 25%). Document discontinuity as accepted. | |
+| `payout < 3 * bet` strict (3.0× itself splits) | Cleaner "strictly under 3×" framing; same discontinuity issue, just shifted. | |
+| Smooth transition (linear ramp 2-4× bet) | Avoids discontinuity; ~20 extra LOC + new constant. | |
+| **User-typed (Other)**: "can we do a min payment of 2.5x on the lootbox path (with the rest lootbox if 2.5x is more than 25%)" | Min-2.5× ETH guarantee on the lootbox path (`payout > 3 * bet`). Resolved via `ethShare = max(2.5 * bet, payout / 4)`. Eliminates the boundary discontinuity (3.0× → 2.5× drop at 3.01× instead of 3.0× → 0.7525× drop). Three-band rule: ≤3× → all ETH; 3-10× → 2.5× bet ETH floor + remainder lootbox; >10× → existing 25/75 split. | ✓ |
+
+**User's choice:** User-typed min-2.5× ETH guarantee on lootbox path.
+**Notes:** Decisions recorded as D-267-PAYSPLIT-01 (≤3× all-ETH) + D-267-PAYSPLIT-02 (3-10× 2.5× floor + ≥10× 25% standard). Boundary discontinuity at exactly 3.0× bet (3.0× → 2.5× ETH drop at 3.01×) accepted as documented design.
+
+### Q2: Pool-cap interaction — does the 10% pool cap (`ETH_WIN_CAP_BPS`) still apply to the all-ETH small-payout path?
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Pool cap still applies; cap takes precedence | If 3× bet payout > 10% of futurePool, excess flips to lootbox per existing logic. Smallest-diff path; preserves solvency invariant. | ✓ |
+| Skip pool cap for ≤3× payouts (strict 'always all ETH') | Honors all-ETH semantics strictly but introduces unbounded ETH drain risk in thin pools. Would need separate per-bet hard cap. | |
+| Apply 10% pool cap only to amounts above 3× bet (marginal) | Three branches; messiest call-graph; highest §3.A delta-surface row count. | |
+
+**User's choice:** Pool cap still applies; cap takes precedence.
+**Notes:** Decision recorded as D-267-PAYSPLIT-03. NatSpec on `_distributePayout` documents "pool cap takes precedence over small-payout passthrough and 2.5× floor".
+
+### Q3: Scope of the new rule — which currencies / paths does the threshold apply to?
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| ETH-currency Degenerette quickPlay only | Matches "Degenerette payouts for eth" wording. CURRENCY_BURNIE + CURRENCY_WWXRP UNCHANGED. JackpotModule UNTOUCHED. | ✓ |
+| ETH-currency Degenerette + jackpot ETH distribution | Larger blast radius; breaks Phase 268 SURF-02 byte-identity claim for JackpotModule; conflicts with v34 D-262 closure-signal carry. | |
+
+**User's choice:** ETH-currency Degenerette quickPlay only.
+**Notes:** Decision recorded as D-267-PAYSPLIT-04. `_distributePayout` `CURRENCY_ETH` branch is the sole mutation site; `CURRENCY_BURNIE` (line 735-736) + `CURRENCY_WWXRP` (line 737-739) UNCHANGED.
+
+### Apply scope check
+
+User confirmed "Apply all updates now" — REQUIREMENTS.md (PAY-SPLIT-01..03 + STAT-07 + AUDIT-02 surface (h) + Coverage 47→51 + Traceability), ROADMAP.md (Phase 267 inline goal + success criterion 6 + Phase 268 STAT-07 + Phase 271 AUDIT-02 surface (h)), 267-CONTEXT.md (D-267-PAYSPLIT-01..05 + phase boundary + plan task wording), all updated in single agent-commit per D-267-APPROVAL-01 carry.
+
+### Implementation impact summary
+
+- `_distributePayout` signature gains a 5th argument: `uint128 betAmount` (threaded from `amountPerTicket` at L656 call site).
+- `_distributePayout` ETH branch body rewritten with 3-tier split rule.
+- ~15-20 LOC net addition; surrounding non-ETH branches and frozen-pool branch UNCHANGED at body-level.
+- 3 new requirements: PAY-SPLIT-01 + PAY-SPLIT-02 + PAY-SPLIT-03.
+- 1 new ROADMAP success criterion: criterion 6.
+- 1 new STAT requirement (Phase 268): STAT-07.
+- 1 new AUDIT-02 surface (Phase 271): (h) ETH split rule monotonicity + boundary-gaming.
+- v37.0 milestone requirement count: 47 → 51 (+4: PAY-SPLIT-01..03 + STAT-07; AUDIT-02 surface (h) is an existing-req-extension not a new req).
+
+---
+
 ## Claude's Discretion
 
 - Per-N dispatch style (chained if/else if vs assembly switch vs jumptable) — planner picks; default chained-if per planning note.
@@ -83,6 +137,8 @@ Pre-discussion conflict: REQUIREMENTS.md DGN-01 + ROADMAP success criterion 1 + 
 - NatSpec line-budget per function — planner picks; minimum specified in D-267-COMMENTS-01.
 - Naming convention for the new private helper in TraitUtils (`_degTrait` vs `_packDegenQuadrant` vs other) — planner picks; default `_degTrait` per planning note.
 - Plan-task ordering interleaving (e.g., REQUIREMENTS.md fix can land in same agent commit as PLAN.md authoring) — planner picks; per-task atomic-commit discipline preserved.
+- `_distributePayout` PAY-SPLIT exact Solidity form (e.g., `(2 * bet + bet/2)` vs `(5 * bet) / 2` vs named constant `MIN_LOOTBOX_ETH_FLOOR_NUMERATOR=5/2`) — planner picks; D-267-PAYSPLIT-02 specifies the math, not the syntax. Inline literals 3 and 2.5 (as `3`, `5/2`, etc.) are kept inline; planner may promote to named constants if NatSpec readability demands.
+- `betAmount` argument-ordering insertion in `_distributePayout` signature — planner picks; D-267-PAYSPLIT-05 default is between `currency` and `payout` (currency-bet-payout adjacency).
 
 ## Deferred Ideas
 

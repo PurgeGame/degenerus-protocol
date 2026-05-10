@@ -29,6 +29,12 @@
 - [ ] **DGN-14**: `DegenerusTraitUtils` other-function byte-identity preserved — `weightedColorBucket`, `traitFromWord`, `packedTraitsFromSeed` UNCHANGED. New helper additive only.
 - [ ] **DGN-15**: Zero new storage slots; zero new public/external mutation entry points; zero new admin functions; zero new modifiers; existing storage layout byte-identical (no slot shifts).
 
+### PAY-SPLIT — ETH Payout Currency Split (Phase 267)
+
+- [ ] **PAY-SPLIT-01**: ETH-currency Degenerette quickPlay payouts ≤ 3× bet amount pay 100% ETH (skip the existing 25% ETH / 75% lootbox split). Threshold inclusive at exactly 3.0× (`payout <= 3 * betAmount`). Applies in `_distributePayout` (`DegenerusGameDegeneretteModule.sol`) `CURRENCY_ETH` branch only; `CURRENCY_BURNIE` and `CURRENCY_WWXRP` branches UNCHANGED.
+- [ ] **PAY-SPLIT-02**: ETH-currency Degenerette quickPlay payouts > 3× bet enforce a minimum 2.5× bet ETH guarantee on the lootbox path: `ethShare = max(2.5 * betAmount, payout / 4)`, `lootboxShare = payout - ethShare`. The 25% standard split applies whenever it produces an ETH share ≥ 2.5× bet (i.e., for `payout ≥ 10 * betAmount`); below that boundary the 2.5× floor takes over (3-10× bet payouts pay flat 2.5× bet ETH + remainder lootbox).
+- [ ] **PAY-SPLIT-03**: Existing pool-cap (`ETH_WIN_CAP_BPS = 1_000` = 10% of futurePool) takes precedence over the all-ETH and 2.5× floor rules: if computed `ethShare > 10% × futurePool`, excess flips to lootbox per existing line 716-723 logic. Documented in `_distributePayout` NatSpec as "pool cap takes precedence over small-payout passthrough and 2.5× floor".
+
 ### STAT — Statistical Validation + Cross-Surface Preservation (Phase 268)
 
 - [ ] **STAT-01**: Per-N basePayoutEV exactness — for each N ∈ {0..4}, simulate ≥ 1M draws against the N-table dispatch, assert measured payoutEV = 100.00 ± 0.50 centi-x (±0.5%). Equal-EV invariant satisfied across all 16,384 player-pick configurations within statistical tolerance.
@@ -37,6 +43,7 @@
 - [ ] **STAT-04**: WWXRP bonus EV (per-N) — for each N ∈ {0..4}, simulate ≥ 100K draws with WWXRP active, assert measured WWXRP factor EV matches per-N target within ±1%.
 - [ ] **STAT-05**: Match-count distribution per N — for each N ∈ {0..4}, verify the 0..8-match histogram matches the analytical per-N reference within ±0.5% bin frequencies (proves 5-table calibration assumptions).
 - [ ] **STAT-06**: Test suite reuses Phase 261 / Phase 264 / Phase 266 chi² infrastructure (`makeRng` / `CHI2_CRIT_05` / `wilsonHilfertyZ`) — no fresh statistical tooling introduced. New files: `test/stat/DegenerettePerNEvExactness.test.js`, `test/stat/DegeneretteProducerChi2.test.js`, `test/stat/DegeneretteBonusEv.test.js`.
+- [ ] **STAT-07**: ETH payout-split distribution validation — Monte Carlo ≥1M ETH-currency Degenerette quickPlay draws across the per-N payout distributions; assert the 3-tier split holds: payout ≤ 3× bet → 100% ETH (zero lootbox); 3× < payout ≤ 10× bet → exactly 2.5× bet ETH + remainder lootbox (within ±1 wei rounding); payout > 10× bet → 25% ETH + 75% lootbox (within ±1 wei rounding); pool-cap excess flip detected and tested separately under thin-pool fixture. Per-band frequency match against analytical per-N basePayout × roiBps distribution within ±0.5% bin tolerance. Test file: extend `test/stat/DegenerettePerNEvExactness.test.js` with a `describe("ETH payout split rule")` block — reuse Phase 261/264/266 fixture infra; no new statistical tooling.
 
 ### SURF — Cross-Surface Preservation (Phase 268, audit-verified Phase 271)
 
@@ -69,7 +76,7 @@
 ### AUDIT — Adversarial Audit + Findings Consolidation (Phase 271, Terminal)
 
 - [ ] **AUDIT-01**: Delta-surface table covering all source-tree changes v36.0 audit-subject HEAD `1c0f0913` → v37.0 closure HEAD. All Phase 267 (Degenerette contract changes) + Phase 269 (lootbox dead-branch deletion) + Phase 270-discovered carry-forward declarations enumerated with hunk-level evidence and {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED} classification.
-- [ ] **AUDIT-02**: Adversarial sweep verdicts every Degenerette + lootbox-cleanup + post-v32.0-pickup surface SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / FINDING_CANDIDATE with grep-cited evidence. Surfaces minimum: (a) per-N table dispatch correctness vs match-count distribution; (b) symbol-only hero match — preserves uniformity, no color-channel info leak; (c) `_countGoldQuadrants` boundary (color==7 only, not >=7); (d) producer `[16×7, 8]/120` byte-layout consistency with downstream consumers; (e) WWXRP factor table-dispatch composition with hero boost (no double-counting); (f) lootbox dead-branch removal byte-equivalence (caller-clamp invariant); (g) hero × per-N composition skill-expression channel preserved (v34.0 surface (f) carry).
+- [ ] **AUDIT-02**: Adversarial sweep verdicts every Degenerette + lootbox-cleanup + post-v32.0-pickup surface SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / FINDING_CANDIDATE with grep-cited evidence. Surfaces minimum: (a) per-N table dispatch correctness vs match-count distribution; (b) symbol-only hero match — preserves uniformity, no color-channel info leak; (c) `_countGoldQuadrants` boundary (color==7 only, not >=7); (d) producer `[16×7, 8]/120` byte-layout consistency with downstream consumers; (e) WWXRP factor table-dispatch composition with hero boost (no double-counting); (f) lootbox dead-branch removal byte-equivalence (caller-clamp invariant); (g) hero × per-N composition skill-expression channel preserved (v34.0 surface (f) carry); (h) ETH payout split-rule monotonicity + boundary-gaming check — verify 3.0× threshold (PAY-SPLIT-01), 2.5× ETH floor (PAY-SPLIT-02), and 10%-pool-cap precedence (PAY-SPLIT-03) compose correctly across all per-N basePayout × roiBps × hero × WWXRP-bonus combinations; assert no payout-multiple gaming exploits the boundary discontinuity at 3.0× bet; verify thin-pool cap-flip path preserves total payout amount (ethShare + lootboxShare = payout invariant).
 - [ ] **AUDIT-03**: Conservation re-proof — Degenerette payout flow preserves coin/BURNIE conservation invariants; per-N table calibration math algebraically verified to hold basePayoutEV = 100 centi-x ± rounding; no new mint sites; solvency invariant unchanged.
 - [ ] **AUDIT-04**: Zero-new-state scan — zero new storage slots; zero new public/external mutation entry points (NEW: `packedTraitsDegenerette` external pure helper IS a new entry point but pure-function-only with zero state interaction; documented as ALLOWED-NEW-STATELESS-ENTRY); zero new admin functions; zero new modifiers; existing storage layout byte-identical.
 - [ ] **AUDIT-05**: `audit/FINDINGS-v37.0.md` published as milestone deliverable; FINAL READ-only at v37.0 closure HEAD; closure signal `MILESTONE_V37_AT_HEAD_<sha>` emitted in §9c. KNOWN-ISSUES.md walkthrough — assess whether Degenerette payout-recalibration warrants any new KI entries (default zero-promotion path per D-262-KI-01 carry; deviation requires user disposition).
@@ -119,12 +126,16 @@
 | DGN-13 | Phase 267 | Pending |
 | DGN-14 | Phase 267 | Pending |
 | DGN-15 | Phase 267 | Pending |
+| PAY-SPLIT-01 | Phase 267 | Pending |
+| PAY-SPLIT-02 | Phase 267 | Pending |
+| PAY-SPLIT-03 | Phase 267 | Pending |
 | STAT-01 | Phase 268 | Pending |
 | STAT-02 | Phase 268 | Pending |
 | STAT-03 | Phase 268 | Pending |
 | STAT-04 | Phase 268 | Pending |
 | STAT-05 | Phase 268 | Pending |
 | STAT-06 | Phase 268 | Pending |
+| STAT-07 | Phase 268 | Pending |
 | SURF-01 | Phase 268 | Pending |
 | SURF-02 | Phase 268 | Pending |
 | SURF-03 | Phase 268 | Pending |
@@ -153,12 +164,12 @@
 | REG-04 | Phase 271 | Pending |
 
 **Coverage:**
-- v37.0 requirements: 47 total (15 DGN + 6 STAT + 6 SURF + 3 LBX + 3 GASPIN + 4 DELTA + 6 AUDIT + 4 REG)
-- Mapped to phases: 47 (15 → Phase 267, 12 → Phase 268, 6 → Phase 269, 4 → Phase 270, 10 → Phase 271)
+- v37.0 requirements: 51 total (15 DGN + 3 PAY-SPLIT + 7 STAT + 6 SURF + 3 LBX + 3 GASPIN + 4 DELTA + 6 AUDIT + 4 REG)
+- Mapped to phases: 51 (18 → Phase 267, 13 → Phase 268, 6 → Phase 269, 4 → Phase 270, 10 → Phase 271)
 - Unmapped: 0
 - Orphans: 0
 - Duplicates: 0
-- Phase mapping LOCKED via .planning/ROADMAP.md authored 2026-05-10 (gsd-roadmapper honored the provisional split exactly; no rebalance applied).
+- Phase mapping LOCKED via .planning/ROADMAP.md authored 2026-05-10 (gsd-roadmapper honored the provisional split exactly; no rebalance applied). PAY-SPLIT + STAT-07 + AUDIT-02 (h) added 2026-05-10 in Phase 267 discuss-phase per user disposition; mapping additive only (no rebalance of prior reqs).
 
 ---
 *Requirements defined: 2026-05-10*
