@@ -16,6 +16,7 @@
 - ✅ **v33.0 Charity Allowlist Governance** — Phases 254-258 (shipped 2026-05-07; closure signal `MILESTONE_V33_AT_HEAD_4ce3703d740d3707c88a1af595618120a8168399` supersedes `MILESTONE_V33_AT_HEAD_dcb70941`) — see [milestones/v33.0-ROADMAP.md](milestones/v33.0-ROADMAP.md)
 - ✅ **v34.0 Trait Rarity Rework + Gold Solo Priority** — Phases 259-262 (shipped 2026-05-09; closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`) — see [milestones/v34.0-ROADMAP.md](milestones/v34.0-ROADMAP.md)
 - ✅ **v35.0 BURNIE Near-Future Per-Pull Level Resample** — Phases 263-265 (shipped 2026-05-09; closure signal `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6`)
+- 🚧 **v36.0 Lootbox-Path Entropy Refactor** — Phase 266 (started 2026-05-09; baseline HEAD `5db8682bd7b811437f0c1cf47e832619d1478ac6`; single-phase patch shape per user disposition)
 
 ## Phases
 
@@ -119,7 +120,21 @@ Plans:
 
 ## Active Milestone
 
-_(between milestones — awaiting v36.0+ definition)_
+**v36.0 Lootbox-Path Entropy Refactor** — IN PROGRESS (started 2026-05-09). 1 phase (266) planned; 24 requirements (6 ENT + 3 STAT + 2 GAS + 4 SURF + 5 AUDIT + 4 REG); audit baseline v35.0 audit-subject HEAD `5db8682bd7b811437f0c1cf47e832619d1478ac6` (signal `MILESTONE_V35_AT_HEAD_5db8682b`). Goal: replace `EntropyLib.entropyStep` (XOR-shift PRNG) chains in the lootbox-resolution code path with bit-sliced `EntropyLib.hash2` keccak draws — removes the known-weak-PRNG-construction warden surface in the lootbox path; preserves uniformity at slightly-better statistical quality; gas delta within ±300 gas per lootbox open. Single-phase patch shape per user disposition (Path 2: open v36.0 with Phase 266 covering implementation + tests + audit deliverable + closure signal); BAF jackpot `_jackpotTicketRoll` (JackpotModule:2186-2229) is the same xorshift pattern but explicitly OUT of scope this milestone (deferred to a future phase per ENT-05). READ-only audit posture LIFTED; `contracts/` + `test/` writes via per-commit user approval per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md`.
+
+### Phase 266: Lootbox-Path Entropy Refactor
+
+**Goal:** Replace 7 `EntropyLib.entropyStep` (XOR-shift) callsites in `DegenerusGameLootboxModule.sol` (`_rollTargetLevel` L813/L817 + `_resolveLootboxRoll` L1548/L1569/L1585/L1599 + `_lootboxTicketCount` L1635) with inline bit-sliced reads from a single per-resolution keccak-derived seed (`hash2(rngWord, structured-input)`). Removes the EntropyLib XOR-shift weak-PRNG warden surface in the lootbox path; behavioral change is acceptable (uniform-distribution equivalence required, not specific-outcome replay). Light statistical validation (chi² uniformity per sub-roll bucket; 5K-10K samples) + gas regression (±300 g per open) + cross-surface preservation tests. Audit deliverable `audit/FINDINGS-v36.0.md` 9-section published as v36.0 milestone closure with `MILESTONE_V36_AT_HEAD_<sha>` emitted in §9c. KNOWN-ISSUES.md `**EntropyLib XOR-shift PRNG for lootbox outcome rolls.**` entry rephrased to BAF-jackpot-only scope (lootbox path no longer uses xorshift). BAF jackpot `_jackpotTicketRoll` xorshift refactor explicitly OUT of scope (ENT-05 deferral; future-phase candidate).
+**Depends on:** Nothing (single-phase patch; baseline v35.0 closure HEAD `5db8682b`)
+**Requirements:** ENT-01..06, STAT-01..03, GAS-01..02, SURF-01..04, AUDIT-01..05, REG-01..04
+**Success Criteria** (what must be TRUE):
+  1. All 7 `entropyStep` callsites in `DegenerusGameLootboxModule.sol` replaced with inline bit-sliced `hash2` draws; per-consumer bit-budget documented inline; `EntropyLib` API stable (no helper functions added; no behavior change to `entropyStep` or `hash2` bodies) [ENT-01..06].
+  2. BAF jackpot `_jackpotTicketRoll` (`JackpotModule:2186-2229`) byte-identical (ENT-05 deferral discipline verified by SURF-02); MintModule `EntropyLib.hash2` callsite (L652) byte-identical (SURF-03); all non-lootbox JackpotModule `EntropyLib.*` callsites (L285/L453/L532/L610/L612/L886/L1176/L1873/L2192) byte-identical (SURF-04).
+  3. Per-sub-roll uniformity chi² < critical at α=0.05 across 5K-10K samples per bucket for: `_rollTargetLevel` `% 100` + `% 5` + `% 46`; `_resolveLootboxRoll` `% 20` (path-roll) + `% 20` (variance-roll); `_lootboxTicketCount` `% 10000`. Reuse Phase 261/264 chi² infrastructure (no new statistical tooling) [STAT-01..03].
+  4. Per-open gas delta within ±300 gas of pre-refactor baseline for `openLootBox`, `openBurnieLootBox`, `resolveLootboxDirect`; `advanceGame` per-day gas envelope unchanged within ±2K (Decimator settlement is the one advanceGame-resident lootbox-resolution caller); 1.99× margin from v34/v35 SURF-05 baseline preserved [GAS-01..02].
+  5. `audit/FINDINGS-v36.0.md` published FINAL READ-only at v36.0 closure HEAD with 9 sections; closure signal `MILESTONE_V36_AT_HEAD_<sha>` emitted in §9c; AUDIT-01 delta-surface table covers all source-tree changes; AUDIT-02 adversarial sweep verdicts every refactor surface SAFE_*; AUDIT-04 zero-new-state attestation; KNOWN-ISSUES.md EntropyLib XOR-shift entry rephrased to BAF-only scope per AUDIT-05; REG-01 PASS for v35.0 closure-signal non-widening; REG-02 PASS for v34.0 closure-signal non-widening; REG-03 KI envelope re-verifications EXC-04 scope NARROWS to BAF-only; REG-04 prior-finding spot-check sweep all PASS [AUDIT-01..05, REG-01..04].
+
+**Plans:** TBD
 
 ## Last Shipped Milestone
 

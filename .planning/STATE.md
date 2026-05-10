@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v35.0
-milestone_name: BURNIE Near-Future Per-Pull Level Resample
-status: completed
-last_updated: "2026-05-09T13:00:00Z"
-last_activity: 2026-05-09 -- v35.0 milestone CLOSED; closure signal MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6
+milestone: v36.0
+milestone_name: Lootbox-Path Entropy Refactor
+status: defined
+last_updated: "2026-05-09T14:00:00Z"
+last_activity: 2026-05-09 -- v36.0 milestone OPENED; Phase 266 lootbox-entropy-refactor scaffolding written; ready for /gsd-plan-phase 266
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09 after v35.0 milestone close)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Between milestones — v35.0 CLOSED 2026-05-09; awaiting v36.0+ milestone definition.
+**Current focus:** Phase 266 — lootbox-entropy-refactor (v36.0 milestone, single-phase patch shape).
 
 ## Current Position
 
-Phase: 265 (delta-audit-findings-consolidation) — COMPLETE
-Plan: 1 of 1 complete
-Status: v35.0 milestone SHIPPED
-Last activity: 2026-05-09 -- v35.0 milestone CLOSED; closure signal MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6
+Phase: 266 (lootbox-entropy-refactor) — DEFINED (CONTEXT.md written; awaiting `/gsd-plan-phase 266`)
+Plan: 0 of TBD
+Status: v36.0 milestone OPENED
+Last activity: 2026-05-09 -- v36.0 scaffolding written (REQUIREMENTS.md + ROADMAP.md + STATE.md + 266-CONTEXT.md); v35.0 REQUIREMENTS archived to milestones/v35.0-REQUIREMENTS.md
 
 ## Last Shipped Milestone
 
@@ -108,7 +108,18 @@ Last activity: 2026-05-09 -- v35.0 milestone CLOSED; closure signal MILESTONE_V3
 
 ## Active Milestone
 
-_(between milestones — v35.0 CLOSED 2026-05-09; awaiting v36.0+ milestone definition)_
+**v36.0 Lootbox-Path Entropy Refactor** (started 2026-05-09)
+
+- **Goal:** Replace 7 `EntropyLib.entropyStep` (XOR-shift PRNG) callsites in `DegenerusGameLootboxModule.sol` with inline bit-sliced reads from a single per-resolution keccak-derived seed (`hash2(rngWord, structured-input)`). Removes the EntropyLib XOR-shift weak-PRNG warden surface in the lootbox path.
+- **Audit baseline:** v35.0 audit-subject HEAD `5db8682bd7b811437f0c1cf47e832619d1478ac6` (signal `MILESTONE_V35_AT_HEAD_5db8682b`)
+- **Phases planned:** 1 (266) — single-phase patch shape per user disposition (Path 2 chosen over Path 1 v33→258 re-ship pattern)
+- **Requirements:** 24 total (6 ENT + 3 STAT + 2 GAS + 4 SURF + 5 AUDIT + 4 REG); coverage 24/24 mapped to Phase 266
+- **READ-only posture:** LIFTED — `contracts/` + `test/` writes via per-commit user approval per `feedback_no_contract_commits.md`; Phase 266 lootbox refactor uses batched approval pattern per `feedback_batch_contract_approval.md`
+- **Behavioral change posture:** Acceptable per user disposition — uniform-distribution equivalence required (chi² preserved), specific-outcome replay equivalence NOT required
+- **Out of scope (deferred):** BAF jackpot `_jackpotTicketRoll` (`JackpotModule:2186-2229`) xorshift refactor — same pattern, candidate for future phase (ENT-05)
+- **EntropyLib API posture:** Stable — no helper-function additions; inline shifts only per user disposition (ENT-04)
+- **Closure signal target:** `MILESTONE_V36_AT_HEAD_<sha>` emitted via `audit/FINDINGS-v36.0.md` §9c
+- See `.planning/ROADMAP.md` for the phase entry + `.planning/phases/266-lootbox-entropy-refactor/266-CONTEXT.md` for locked decisions.
 
 ## Roadmap Overview
 
