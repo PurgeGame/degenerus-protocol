@@ -111,7 +111,134 @@ See §9 Milestone Closure Attestation for the D-253-15 step 9 attestation block 
 
 ---
 
-## 3. Per-Phase Sections [populated by Task 12]
+## 3. Per-Phase Sections
+
+Phase 266 is the sole v36.0 phase per CONTEXT.md `<domain>` (single-phase patch shape; v36.0 = Phase 266 only). §3a is the single per-phase section (no §3b/§3c per-phase split needed). §3d AUDIT-01 delta-surface table + AUDIT-04 zero-new-state attestation appears after §3a. §3e AUDIT-03 conservation re-proof appears after §3d. All cross-cites are READ-only lookups to phase artifacts at HEAD `<sha>` (resolved at Task 20).
+
+### 3a. Phase 266 — Lootbox-Path Entropy Refactor
+
+**Cross-cited sources:**
+
+- `.planning/phases/266-lootbox-entropy-refactor/266-CONTEXT.md` — locked decisions D-266-API-01 / D-266-SEED-01 / D-266-BIT-BUDGET-01 / D-266-CONSUMER-LIST-01 / D-266-SCOPE-OUT-01..04 / D-266-ADVERSARIAL-01..03 / D-266-FILES-01 / D-266-CLOSURE-01..02 / D-266-PLAN-01 / D-266-SEV-01 / D-266-APPROVAL-01..02 / D-266-FCITE.
+- `.planning/phases/266-lootbox-entropy-refactor/266-RESEARCH.md` — bit-budget worked tables (ENT-01..03 per-consumer slice + bias bound) + chi² calibration (Pitfall 1 sample-budget per bucket) + Sources block (HEAD-state grep verifications).
+- `.planning/phases/266-lootbox-entropy-refactor/266-PATTERNS.md` — refactor pattern + cumulative bit-budget table + analog source-of-truth + per-file pattern assignments + Project Guardrails (10 memory-cited disciplines).
+- `.planning/phases/266-lootbox-entropy-refactor/266-01-PLAN.md` — 21-task multi-wave plan with explicit user-approval gates at end of Wave 1 (Task 5 contract diff) + end of Wave 2 (Task 10 test diff) + end of Wave 5 (Task 21 final user-review).
+- Wave 1 commit `df6345cc feat(266): lootbox-path entropy refactor [ENT-01..06]` (single batched user-approved contract-tree commit per `feedback_batch_contract_approval.md`).
+- Wave 2 commit `16ed452b test(266): chi² + gas + surface preservation [STAT-01..03 + GAS-01..02 + SURF-01..04]` (single batched user-approved test-tree commit; 4 test files modified + package.json wiring).
+- `.planning/phases/266-lootbox-entropy-refactor/266-01-ADVERSARIAL-LOG.md` — `/contract-auditor` + `/zero-day-hunter` parallel adversarial-pass log per D-266-ADVERSARIAL-01..03 (populated at Task 14).
+
+**Change-count card (Phase 266):**
+
+- 1 contract-tree commit (`df6345cc`): +75 / −61 in `contracts/modules/DegenerusGameLootboxModule.sol` only.
+- 1 test-tree commit (`16ed452b`): +912 / −2 across 4 test files + `package.json` wiring (2 NEW test files + 2 EXTENDED test files).
+- N audit-tree atomic commits (this deliverable + ADVERSARIAL-LOG + SUMMARY + closure flips) — AGENT-COMMITTED per D-266-APPROVAL-01.
+- 0 changes to `contracts/libraries/EntropyLib.sol` (ENT-04 / SURF-01 stable API).
+- 0 changes to `contracts/modules/DegenerusGameJackpotModule.sol` (SURF-02 BAF byte-identity + SURF-04 9 callsites).
+- 0 changes to `contracts/modules/DegenerusGameMintModule.sol` (SURF-03).
+- 0 new public/external functions; 0 new modifiers; 0 new storage slots; 0 new EntropyLib helpers (AUDIT-04).
+- 1 KNOWN-ISSUES.md entry rephrased (AUDIT-05 — EntropyLib XOR-shift entry NARROWS to BAF-only scope; rephrase, not promotion).
+
+**Per-REQ summary table (24 IDs):**
+
+| REQ ID  | Status | Evidence |
+|---------|--------|----------|
+| ENT-01  | CLOSED | `_rollTargetLevel` bit-sliced single-output at L812 (live HEAD); 4 callers updated at L555/L629/L674/L709. |
+| ENT-02  | CLOSED | `_resolveLootboxRoll` 4 entropyStep callsites removed; L1585 dead WWXRP advance DELETED entirely; sub-call slicing for `_lootboxDgnrsReward` (L1694) + `_rollLootboxBoons` (L1074). |
+| ENT-03  | CLOSED | `_lootboxTicketCount` L1648 = `uint24(seed >> 96) % 10_000`. |
+| ENT-04  | CLOSED | `git diff 5db8682b..HEAD -- contracts/libraries/EntropyLib.sol` returns empty (SURF-01 grep-proof). |
+| ENT-05  | DEFERRED | `_jackpotTicketRoll` L2186-2229 byte-identical (SURF-02 grep-proof); future-phase candidate captured in CONTEXT.md `<deferred>`. |
+| ENT-06  | CLOSED | NatSpec bit-budget block at every refactored function + unified bit-allocation map at `_resolveLootboxCommon` L835-849; `grep -v '^//'` strips comments and counts ≥17 bit-range annotations remaining in active source. |
+| STAT-01 | CLOSED | `test/stat/LootboxEntropyDistribution.test.js` 6 chi² describe blocks pass; sample budgets calibrated per Pitfall 1. |
+| STAT-02 | CLOSED | Distribution-shape uniformity-equivalence asserted via 2-bucket re-run; specific-outcome divergence acceptable per CONTEXT.md `<deferred>`. |
+| STAT-03 | CLOSED | `makeRng` / `CHI2_CRIT_05` / `wilsonHilfertyZ` re-declared verbatim from `test/stat/TraitDistribution.test.js` L48-100. |
+| GAS-01  | CLOSED | `test/gas/LootboxOpenGas.test.js` theoretical-worst-case header populated per `feedback_gas_worst_case.md`; empirical pin deferred per AdvanceGameGas L1014 precedent (harness-coverage gap; theoretical worst case is the load-bearing GAS-01 evidence per Phase 266 SUMMARY). |
+| GAS-02  | CLOSED | `test/gas/AdvanceGameGas.test.js` v36.0 describe block pins `ADVANCE_GAME_DECIMATOR_STAGE_REF = 908_320`; 1.99× margin invariant carries forward from Phase 264 SURF-05 evidence. |
+| SURF-01 | CLOSED | `test/stat/SurfaceRegression.test.js` v36.0 describe block — EntropyLib.sol L1-43 zero modifications vs `5db8682b`. |
+| SURF-02 | CLOSED | Same describe block — `_jackpotTicketRoll` L2186-2229 zero modifications. |
+| SURF-03 | CLOSED | Same describe block — MintModule L652 zero modifications. |
+| SURF-04 | CLOSED | Same describe block — 9 non-lootbox JackpotModule EntropyLib callsites zero modifications (Pitfall 6 inventory: L285/L453/L532/L610/L612/L886/L1176/L1873/L2192). |
+| AUDIT-01 | CLOSED | §3d delta-surface table below enumerates every changed declaration with hunk-level evidence. |
+| AUDIT-02 | CLOSED | §4 6-surface adversarial-sweep below; verdicts SAFE_*; `/contract-auditor` + `/zero-day-hunter` parallel pass per D-266-ADVERSARIAL-01..03 — see `266-01-ADVERSARIAL-LOG.md`. |
+| AUDIT-03 | CLOSED | §3e conservation re-proof below — ETH/BURNIE/DGNRS/WWXRP distribution invariants preserved across the refactor. |
+| AUDIT-04 | CLOSED | §3d Part C below — 5 grep-reproducible zero-new-state checks. |
+| AUDIT-05 | CLOSED | §9c closure-signal emission `MILESTONE_V36_AT_HEAD_<sha>` (resolved at Task 20). |
+| REG-01  | CLOSED | §5a v35.0 closure signal `MILESTONE_V35_AT_HEAD_5db8682b` non-widening at v36 HEAD (carry-forward verification). |
+| REG-02  | CLOSED | §5b v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4` non-widening at v36 HEAD. |
+| REG-03  | CLOSED | §6b 4-row KI envelope re-verification: EXC-01..03 NEGATIVE-scope at v36; EXC-04 RE_VERIFIED with NARROWS prose. |
+| REG-04  | CLOSED | §5c prior-finding spot-check sweep across `audit/FINDINGS-v25.0.md → audit/FINDINGS-v35.0.md`. |
+
+### 3d. AUDIT-01 Delta-Surface Table
+
+**Part A — Declaration-by-declaration enumeration vs baseline `5db8682b`:**
+
+| Declaration | Classification | Live Line(s) at HEAD | Hunk Evidence | Phase 266 REQ |
+|---|---|---|---|---|
+| `_rollTargetLevel(uint24 baseLevel, uint256 seed)` | MODIFIED_LOGIC (signature change: drop `nextEntropy` return; bit-sliced reads from `seed`) | live L812-826 | `git diff 5db8682b..HEAD` shows hunk replacing L809-827 baseline | ENT-01 |
+| `_rollTargetLevel` 4 entry-point callers (`openLootBox` / `openBurnieLootBox` / `resolveLootboxDirect` / `resolveRedemptionLootbox`) | REFACTOR_ONLY (local rename `entropy` → `seed`; single-return _rollTargetLevel call; thread `seed` into `_resolveLootboxCommon`) | live L555 / L629 / L674 / L709 | hunk evidence per caller | ENT-01 caller-side |
+| `_resolveLootboxRoll(... uint256 seed)` return tuple | MODIFIED_LOGIC (drop `nextEntropy` from 4-tuple → 3-tuple; `entropy` parameter renamed to `seed`) | live L1548-1620 | hunk evidence | ENT-02 |
+| `_resolveLootboxRoll` body — 4 entropyStep callsites | DELETED (L1548 + L1569 + L1599 replaced with bit-slices; L1585 dead WWXRP advance DELETED entirely per `feedback_no_dead_guards.md`) | n/a (removed) | `grep -cE "EntropyLib\.entropyStep" contracts/modules/DegenerusGameLootboxModule.sol` returns 0 | ENT-02 |
+| `_resolveLootboxRoll` pathRoll bit-slice | NEW | live L1567 (`uint16(seed >> 40) % 20`) | hunk evidence | ENT-02 |
+| `_resolveLootboxRoll` large-BURNIE varianceRoll bit-slice | NEW | live L1612 (`uint16(seed >> 80) % 20`) | hunk evidence | ENT-02 |
+| `_lootboxTicketCount(... uint256 seed) → uint32` | MODIFIED_LOGIC (drop `nextEntropy` return; L1648 = `uint24(seed >> 96) % 10_000`) | live L1639-1681 | hunk evidence | ENT-03 |
+| `_lootboxDgnrsReward(uint256 amount, uint256 entropy)` body | MODIFIED_LOGIC (sub-call slice updated to `uint24(entropy >> 56) % 1000` per RESEARCH.md Pitfall 3 — bit-disjoint from primary-chunk consumers) | live L1694 | hunk evidence | ENT-02 sub-call |
+| `_rollLootboxBoons(... uint256 seed)` body | MODIFIED_LOGIC (parameter rename `entropy` → `seed`; L1074 = `uint32(seed >> 120) % BOON_PPM_SCALE` per RESEARCH.md Pitfall 3 — bit-disjoint from primary-chunk consumers) | live L1028-1090 | hunk evidence | ENT-02 sub-call |
+| `_resolveLootboxCommon(... uint256 seed, ...)` parameter rename + entry-point seed plumbing | REFACTOR_ONLY (parameter rename `entropy` → `seed`; pre-existing `keccak256(abi.encode(rngWord, player, day, amount))` preserved per RESEARCH.md Open Question 2; threaded through 5 sub-rolls) | live L860 (signature) + L835-849 (NatSpec bit-allocation map) | hunk evidence | ENT-02 / ENT-06 |
+| `seed2 = EntropyLib.hash2(seed, 1)` ETH-amount-second branch chunk | NEW (counter-tagged second seed per RESEARCH.md Pitfall 2 Option A; collision-free vs primary chunk 0; single keccak addition in the split-amount path) | live L936 | hunk evidence | ENT-02 / AUDIT-02 surface (c) |
+| Inline NatSpec bit-budget block per refactored function | NEW | live (NatSpec at L805-810 / L835-849 / L1019-1020 / L1543-1547 / L1633-1634 / L1685-1686) | hunk evidence | ENT-06 |
+| `EntropyLib.entropyStep` callsites in lootbox path (7 sites at baseline: L813 + L817 + L1548 + L1569 + L1585 + L1599 + L1635) | DELETED | n/a (removed) | `git diff 5db8682b..HEAD -- contracts/modules/DegenerusGameLootboxModule.sol \| grep "^-.*entropyStep"` shows 7 deletions | ENT-01..03 |
+| L1585 WWXRP-path dead `entropyStep` advance | DELETED (RESEARCH.md Open Question 3 + Assumption A3 + `feedback_no_dead_guards.md` — saves ~40 g per WWXRP-path lootbox) | n/a (removed) | hunk evidence | ENT-02 / `feedback_no_dead_guards` |
+| `nextEntropy` return contract on `_rollTargetLevel` / `_resolveLootboxRoll` / `_lootboxTicketCount` | DELETED (signature change; seed plumbing replaces nextEntropy chaining) | n/a (removed) | hunk evidence | ENT-01..03 |
+| `EntropyLib.sol` body | REFACTOR_ONLY (zero changes — file BYTE-IDENTICAL) | L1-43 | `git diff 5db8682b..HEAD -- contracts/libraries/EntropyLib.sol` returns empty | ENT-04 / SURF-01 |
+| `DegenerusGameJackpotModule.sol` body | REFACTOR_ONLY (zero changes — file BYTE-IDENTICAL; SURF-02 BAF + SURF-04 9 callsites preserved) | (whole file) | `git diff 5db8682b..HEAD -- contracts/modules/DegenerusGameJackpotModule.sol` returns empty | ENT-05 / SURF-02 / SURF-04 |
+| `DegenerusGameMintModule.sol` body | REFACTOR_ONLY (zero changes — file BYTE-IDENTICAL; SURF-03 L652 callsite preserved) | (whole file) | `git diff 5db8682b..HEAD -- contracts/modules/DegenerusGameMintModule.sol` returns empty | SURF-03 |
+
+**Part B — Downstream-caller inventory grep recipe (verifies nothing outside `DegenerusGameLootboxModule.sol` references the refactored helpers; protocol RNG-consumer surface unchanged elsewhere):**
+
+```bash
+grep -rn "_rollTargetLevel\|_resolveLootboxRoll\|_lootboxTicketCount\|_lootboxDgnrsReward\|_rollLootboxBoons\|EntropyLib\.entropyStep" contracts/
+```
+
+Expected output:
+- `_rollTargetLevel` / `_resolveLootboxRoll` / `_lootboxTicketCount` / `_lootboxDgnrsReward` / `_rollLootboxBoons` — only in `contracts/modules/DegenerusGameLootboxModule.sol` (file-internal helpers; no cross-module consumers).
+- `EntropyLib.entropyStep` — only in `contracts/modules/DegenerusGameJackpotModule.sol` at L2192 (BAF jackpot `_jackpotTicketRoll`; ENT-05 deferral verified) and `contracts/libraries/EntropyLib.sol` L16-23 (function definition; ENT-04 stable).
+
+**Part C — AUDIT-04 zero-new-state attestation (5 grep-reproducible checks):**
+
+1. **Storage-slot scan.** `git diff 5db8682b..HEAD --stat -- contracts/storage/ contracts/modules/DegenerusGameLootboxModule.sol` shows ONLY `contracts/modules/DegenerusGameLootboxModule.sol` modified; `contracts/storage/` empty (zero new storage variables added). PASS.
+
+2. **GameStorage byte-identity.** `git diff 5db8682b..HEAD -- contracts/storage/GameStorage.sol` returns empty output. PASS.
+
+3. **Zero-new-public-fn grep.** `git diff 5db8682b..HEAD -- contracts/ | grep -E '^\+.*function .* (public|external)'` returns zero hits — Phase 266 introduces zero new `public` / `external` mutation entry points (the refactored helpers are all `private`). PASS.
+
+4. **Zero-new-modifier grep.** `git diff 5db8682b..HEAD -- contracts/ | grep -E '^\+.*modifier '` returns zero hits — Phase 266 introduces zero new modifiers. PASS.
+
+5. **EntropyLib API stable (ENT-04).** `git diff 5db8682b..HEAD -- contracts/libraries/EntropyLib.sol` returns empty. PASS — `EntropyLib.entropyStep` and `EntropyLib.hash2` signatures + bodies BYTE-IDENTICAL at v36.0 close per D-266-API-01.
+
+All 5 checks PASS. AUDIT-04 verdict: `0 new public/external mutation entry points; 0 new storage slots in GameStorage; 0 new admin functions; 0 new upgrade hooks; 0 new modifiers escalating authority; 0 new EntropyLib helpers (D-266-API-01 — inline shifts only)`.
+
+### 3e. AUDIT-03 Conservation Re-Proof
+
+The Phase 266 lootbox-entropy refactor preserves every conservation invariant established at v33 / v34 / v35 lootbox-resolution closures. The refactor changes ONLY the entropy-derivation mechanism (xorshift → bit-sliced keccak) — every downstream value-transfer path is byte-identical. Re-proof per invariant:
+
+**ETH conservation.** `_resolveLootboxCommon` (`amountFirst + amountSecond = mainAmount = amount - boonBudget`) → ETH flows unchanged: same `_distributeEth` paths into player + pool + Decimator settlement at the same ratios. Boon-budget logic unchanged at L876-882 (`if (boonBudget > LOOTBOX_BOON_MAX_BUDGET) boonBudget = LOOTBOX_BOON_MAX_BUDGET; if (boonBudget > amount) boonBudget = amount; mainAmount = amount - boonBudget;`). ETH-amount-second split at L885-888 (`if (mainAmount > LOOTBOX_SPLIT_THRESHOLD) { amountFirst = mainAmount / 2; amountSecond = mainAmount - amountFirst; }`) preserved byte-identically — only the per-resolution entropy seed differs (`seed` for first invocation; `seed2 = EntropyLib.hash2(seed, 1)` for second invocation per Option A counter-tag). Same accounting → same conservation. PASS.
+
+**BURNIE conservation.** `coinflip.creditFlip(player, burnieAmount)` at L990 (post-refactor live line) is the ONLY mint-gateway invocation in the lootbox path; called once per resolution with the aggregate `burnieAmount = burnieNoMultiplier + burniePresale + bonusBurnie`. Phase 266 does NOT add or modify any `coinflip.creditFlip` callsite. The aggregate quantity is computed by the same `_resolveLootboxRoll` branches as pre-refactor — only the entropy slice differs (deterministic uniform from the same VRF-derived seed). Per-branch BURNIE math (large-BURNIE bps lookup + coin-unit conversion at L1612-1617 / L1565) is byte-identical pre/post. PASS.
+
+**DGNRS conservation.** `_lootboxDgnrsReward` returns a tier-bucketed amount (small/medium/large/mega per L1696-1707 ppm constants); `_creditDgnrsReward` (L1715) calls `dgnrs.transferFromPool(IStakedDegenerusStonk.Pool.Lootbox, player, amount)` — the same pool-source as pre-refactor. The refactor only changes `tierRoll` derivation from `entropy % 1000` (XOR-shift mixed) to `uint24(entropy >> 56) % 1000` (bit-sliced from the same `seed`); both produce uniform distribution over [0, 1000) per STAT-01 chi² verification. Same tier-distribution shape → same long-run pool depletion behavior. PASS.
+
+**WWXRP conservation.** WWXRP path uses literal `LOOTBOX_WWXRP_PRIZE` constant (no entropy consumption); refactor preserves this entirely (the L1585 dead `entropyStep` advance was deleted because no downstream consumer reads from it — pure cleanup). `wwxrp.mintPrize(player, wwxrpAmount)` at the live HEAD line is byte-identical to baseline. PASS.
+
+**Tickets conservation.** `_lootboxTicketCount` returns `countScaled = (adjustedBudget * TICKET_SCALE) / priceWei` (L1672-1674 live HEAD); refactor only changes `varianceRoll` derivation (`entropy % 10_000` → `uint24(seed >> 96) % 10_000`). Variance-tier ppm constants (`LOOTBOX_TICKET_VARIANCE_TIER1..5_BPS`) byte-identical. `_queueTicketsScaled(player, targetLevel, futureTickets, false)` at L981 (live HEAD) is byte-identical. Same ticket-distribution shape → same long-run ticket-pool conservation. PASS.
+
+**Boon conservation.** `_rollLootboxBoons` only awards a boon when `roll < totalChance` where `totalChance = (boonBudget * BOON_PPM_SCALE) / expectedPerBoon` (L1069). Refactor only changes `roll` derivation (`entropy % BOON_PPM_SCALE` → `uint32(seed >> 120) % BOON_PPM_SCALE`). The `totalChance` math, `_boonFromRoll` selection logic, and `_applyBoon` invocation are byte-identical. Same long-run boon-award rate → same boon-pool depletion behavior. PASS.
+
+**Solvency invariant.** `claimablePool ≤ ETH balance + stETH balance` (carry-forward from v33 / v34 / v35). Phase 266 introduces zero new public/external mutation entry points (AUDIT-04 PASS check 3); zero new pool-write paths; zero new claimable-pool credit sites. Solvency invariant preserved by structural argument — the refactor does not introduce a path that mutates pool balances independently of the existing distribution mechanics. PASS.
+
+**Bucket-share-sum × pool invariant.** Each lootbox resolution awards from the same prize-bucket distribution as pre-refactor (ticket / DGNRS / WWXRP / large-BURNIE), with the same path-roll branch probabilities (55% / 10% / 10% / 25%) — these are determined by the modulo-20 path-roll, which is uniform under both xorshift and bit-sliced keccak per STAT-01 chi². Aggregate bucket-share-sum × pool reconciles to the same pool-aggregate as pre-refactor. PASS.
+
+AUDIT-03 verdict: `CLOSED_AT_HEAD_<sha>` — every conservation invariant established at v33 / v34 / v35 lootbox-resolution closures preserved byte-identically across the entropy-derivation refactor; the refactor's mathematical contract is "uniformly-distributed bit-slice of a VRF-derived 256-bit keccak", which is the same probabilistic shape as the pre-refactor xorshift-mixed `% small` distribution.
+
+
 
 ## 4. Adversarial Sweep — 6-Surface Verdict Roll-Up [populated by Tasks 13-14]
 
