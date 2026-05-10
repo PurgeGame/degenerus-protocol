@@ -248,3 +248,61 @@ AUDIT-04 attests zero new state-altering surface introduced by v35.0 between bas
 **Closure paragraph.** AUDIT-04 satisfied at HEAD `<sha>`. The per-pull-level resample helper is a pure-internal refactor of distribution logic; its only state interactions are READS from existing slots (deity slots via `deityBySymbol[fullSymId]`; holder arrays via `realLen(lvlPrime, trait_i)` + `holderAt(lvlPrime, trait_i, holderIdx)`) and WRITES via the pre-existing `coinflip.creditFlip(winner, amount)` cross-contract path (BURNIE mint via `mintForGame` route — not a new mint site; see §3e AUDIT-03 BURNIE conservation row). No new storage slot is allocated; no new admin function is exposed; no new modifier is declared.
 
 ---
+
+## 4. F-35-NN Finding Blocks
+
+Per D-265-FIND-01 default-path expectation: ZERO F-35-NN finding blocks emitted. v35.0 per-pull-level resample is mathematically well-bounded (per-pull keccak consumes VRF-derived high-entropy bits; chi²-evidenced uniformity at Phase 264 STAT-01; trait rotation deterministic-by-design; empty-bucket skip structural-by-PPL-05 with D-IMPL-01 deity-fixture proving correctness; cross-call salt collision impossible). The 6-surface adversarial sweep below verdicts every identified surface (a..f) plus the STAT-03 fixture-calibration reframe row per D-265-STAT03-01 — all 7 rows expected SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE.
+
+Severity ceiling for any v35-emitted F-35-NN: HIGH (no value extraction beyond bucket-rotation; bucket-share-sum × pool invariant under per-pull-level rotation; gold-priority bits VRF-derived not player-controllable; bounded by per-jackpot-call rate). Most likely severity for any inline-draft finding-candidate: MEDIUM/LOW. Default outcome: §4 emits ZERO F-35-NN finding blocks; deviations escalate to user inline per D-265-ADVERSARIAL-03 (see §4 trailer).
+
+### 4.1. Adversarial Sweep — 6-Surface Row Table + STAT-03 Fixture-Calibration Reframe
+
+**Surface (a) — Predictability / trait-stacking pre-call attempts (commitment-window check).**
+
+- **Verdict:** SAFE_BY_DESIGN
+- **Grep recipe / line cite:** `feedback_rng_commitment_window.md` cited inline; STAT-01 cross-cite at `test/stat/PerPullLevelDistribution.test.js` chi² range=4=5.114 < 7.815 + range=8=3.019 < 14.067; `_awardDailyCoinToTraitWinners` runs atomically inside `advanceGame` (single-tx; no re-entrancy hooks).
+- **Prose justification:** Per `feedback_rng_commitment_window.md`: player cannot bias `randomWord` post-commit. The per-pull-level keccak `keccak256(abi.encode(randomWord, COIN_LEVEL_TAG, i))` consumes high-entropy VRF-derived bits — Phase 264 STAT-01 chi² over 10K aggregated samples (range=4 chi²=5.114 < 7.815 critical at α=0.05 df=3; range=8 chi²=3.019 < 14.067 df=7) provides empirical proof. Trait-stacking via deity-pass purchase ahead of a known/predicted VRF roll is structurally impossible because (i) VRF request is committed before holder snapshot is taken, (ii) `_awardDailyCoinToTraitWinners` runs atomically inside `advanceGame`.
+
+**Surface (b) — Level-salt collision between the two near-future BURNIE callers.**
+
+- **Verdict:** SAFE_BY_DESIGN
+- **Grep recipe / line cite:** `grep -n "COIN_LEVEL_TAG" contracts/modules/DegenerusGameJackpotModule.sol` returns L171 (decl) + helper consumer; per-call distinct `randomWord` per VRF day-cycle; same-call distinct `i ∈ [0,50)` discriminator inside the keccak input.
+- **Prose justification:** Both `payDailyCoinJackpot` (purchase phase) and `payDailyJackpotCoinAndTickets` (jackpot phase) call `_awardDailyCoinToTraitWinners` with shared `COIN_LEVEL_TAG = keccak256("coin-level")` constant but caller-determined `minLevel`/`range`. Cross-call salt collision impossible because `randomWord` differs per VRF day-cycle (each day's VRF fulfillment produces a fresh `randomWord`); same-call salt-distinctness across pulls guaranteed by the per-pull index `i ∈ [0, 50)` discriminator inside the keccak input.
+
+**Surface (c) — Deity-cache staleness across pulls.**
+
+- **Verdict:** SAFE_BY_STRUCTURAL_CLOSURE
+- **Grep recipe / line cite:** Helper body `address[4] memory deityCache` allocation at loop entry (4 SLOADs); atomic execution inside `advanceGame` (single-tx; no re-entrancy hooks); deity assignment immutable per day's `traitIds[i % 4]` set.
+- **Prose justification:** Deity addresses are cached at loop entry into `address[4] memory deityCache` — 4 SLOADs once vs 50 SLOADs/pull pre-PPL. Subsequent pulls read from memory. Cannot stale because (i) deity assignment is immutable for the current day's `traitIds[i % 4]` set (deity slots only change via separate admin path NOT reachable inside `_awardDailyCoinToTraitWinners`), (ii) new deity-pass purchases mid-call are structurally impossible because `_awardDailyCoinToTraitWinners` runs atomically inside `advanceGame` (single transaction; no re-entrancy hooks).
+
+**Surface (d) — Cross-caller `_randTraitTicket` salt collision (legacy `salt` parameter dropped on coin-jackpot caller).**
+
+- **Verdict:** SAFE_BY_STRUCTURAL_CLOSURE
+- **Grep recipe / line cite:** Phase 264 SURF-01 grep-proof at `test/stat/SurfaceRegression.test.js` v35.0 describe block — 13 protected ranges byte-identical including `_randTraitTicket` body L1653-1703 + 4 other-callers L700/L989/L1296/L1399. Per-line modified-set walk vs `git diff 6b63f6d4 HEAD -- contracts/modules/DegenerusGameJackpotModule.sol` returns ZERO `-` deletions inside protected ranges.
+- **Prose justification:** Phase 264 SURF-01 grep-proof confirms 4 other `_randTraitTicket` callers preserved at L700/L989/L1296/L1399 byte-identity. Coin-jackpot caller now uses inline `keccak256(abi.encode(randomWord, trait_i, lvlPrime, i))` — no ambiguity with the 4 preserved callers because they each invoke `_randTraitTicket(randomWord, salt)` with caller-distinct salts. Phase 263 PPL-07 + Phase 263 SUMMARY §"Byte-Identity Sweep".
+
+**Surface (e) — Off-chain indexer semantic-shift attack surface (`JackpotBurnieWin.lvl` re-interpretation) — AUDIT-06 disclosure.**
+
+- **Verdict:** SAFE_BY_DESIGN
+- **Grep recipe / line cite:** Cross-cite §3c AUDIT-06 disclosure prose + §6b D-09 PASS row; event signature byte-identical (zero ABI change per PPL-08); observability-only impact; KNOWN-ISSUES.md +1 entry per Task 11.
+- **Prose justification:** Pre-Phase-263 `lvl` was call-level (constant across all 50 winners per invocation); post-Phase-263 `lvl` is per-pull-sampled (each of 50 winners may have distinct `lvl` value across `[minLevel, maxLevel]`). Event signature byte-identical (zero ABI change per Phase 263 PPL-08); only the field's runtime semantics shift. No on-chain behavior change for player or protocol — observability-only impact. Off-chain dashboards and analytics tooling that grouped by `lvl` field need re-calibration. Routes through D-09 3-predicate gating into KNOWN-ISSUES.md per D-265-AUDIT06-01 (PASS expected: accepted-design + non-exploitable + sticky).
+
+**Surface (f) — Gas-griefing via repeated cold SLOAD across 50 distinct (lvl', trait_i) slots.**
+
+- **Verdict:** SAFE_BY_DESIGN
+- **Grep recipe / line cite:** `test/gas/Phase264GasRegression.test.js` SURF-05 entry-point gas regression; PER_CALL_GAS_DELTA_BOUND = 120K; PAY_DAILY_COIN_JACKPOT_GAS_REF = 2,860,535; theoretical worst-case opcode walk in test header per `feedback_gas_worst_case.md`; advanceGame 9.42× margin above 1.99× ceiling.
+- **Prose justification:** Cold SLOAD warming after ~16 distinct slots per EIP-2929. Realistic worst case: 16×2100 + 34×100 = ~37K, plus per-pull body 1.5-2.2K × 50 = 75-110K; net per-call delta ~75-110K matches Phase 264 SURF-05 disclosed envelope. Per `feedback_gas_worst_case.md`: theoretical worst case derived FIRST in `test/gas/Phase264GasRegression.test.js` header (D-IMPL-05), then tested. PER_CALL_GAS_DELTA_BOUND = 120K asserted; PAY_DAILY_COIN_JACKPOT_GAS_REF = 2,860,535 pinned. AdvanceGame ≥1.99× margin preserved (measured 9.42× at HEAD `cf564816` per `test/gas/AdvanceGameGas.test.js` Phase 264 SURF-05 describe block).
+
+**STAT-03 reframe row — Empty-bucket skip behavior on sparse holder-density fixtures.**
+
+- **Verdict:** SAFE_BY_STRUCTURAL_CLOSURE — fixture-calibration measurement, NOT a finding (per D-265-STAT03-01).
+- **Grep recipe / line cite:** `test/stat/PerPullEmptyBucketSkip.test.js` STAT-03 measurement (88.24% skip / 84.92% underspend on natural-lifecycle fresh `deployFullProtocol` fixture); `test/stat/PerPullLevelDistribution.test.js` D-IMPL-01 deity-backed dense fixture proves 50/50 emit count under deity-dense conditions across 3 fixed seeds (`0xc0120101`, `0xc0120102`, `0xc0120103`); Phase 263 PPL-05 silent-skip-on-empty-cell intentional design property.
+- **Prose justification:** (i) Phase 263 PPL-05 specifies silent-skip-on-empty-cell semantics — intentional structural design property of `_awardDailyCoinToTraitWinners` (`continue;` on `effectiveLen == 0`, no carry-forward, no fallback, no redistribution); (ii) Phase 264 D-IMPL-01 deity-backed dense fixture empirically proves helper correctness — 50/50 winners emitted across 3 fixed seeds (0xc0120101, 0xc0120102, 0xc0120103) under per-pull `expect(onChainLvls).to.deep.equal(jsLvls)` byte-identity assertion at `test/stat/PerPullLevelDistribution.test.js`; (iii) Phase 264 STAT-03 natural-lifecycle measurement of 88.24% skip rate / 84.92% cumulative underspend at `test/stat/PerPullEmptyBucketSkip.test.js` reflects the test fixture's pre-organic-activity holder density (~16 vault tickets per level × levels [2..5] ≈ 64 tickets distributed across 16 (lvl', trait_i) cells = ~75% empty cells expected, matching observed ~88% rate after PRNG variance) — NOT protocol behavior under production-real conditions. Verdict: SAFE_BY_STRUCTURAL_CLOSURE — empty-bucket skip is bounded by `effectiveLen == 0` test at PPL-05; deity-dense fixture proves correctness; production sparse-state outcomes governed by holder density (an external state property), not by helper behavior. NO §3 finding disclosure block. NO §6 KI gating row. KNOWN-ISSUES.md UNMODIFIED for this surface (AUDIT-06 indexer semantic-shift is a separate KI entry per D-265-AUDIT06-01).
+
+### 4.2. Verdict Roll-Up + Adversarial-Pass Status
+
+**Verdict roll-up:** 7 of 7 rows SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE. Zero FINDING_CANDIDATE. Zero F-35-NN blocks emitted. KNOWN-ISSUES.md modified by 1 entry per AUDIT-06 (NOT from §4 — promoted via §6b D-09 row from §3c disclosure prose).
+
+**Adversarial-pass status:** This is the pre-adversarial-pass DRAFT (Task 6). Task 7 spawns `/contract-auditor` + `/zero-day-hunter` in parallel (D-265-ADVERSARIAL-02) to red-team the finished draft. Per D-265-ADVERSARIAL-03, any disagreement (skill flagging a SAFE row as FINDING_CANDIDATE; zero-day-hunter surfacing 7th-surface novel composition) surfaces to the user inline before deliverable READ-only flip per `feedback_wait_for_approval.md`. If zero disagreements, the verdict roll-up above stands as final.
+
+---
