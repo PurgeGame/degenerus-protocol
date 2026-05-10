@@ -551,8 +551,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 graceLevel = baseLevelPacked == 0 ? currentLevel : baseLevelPacked - 1;
         uint24 baseLevel = withinGracePeriod ? graceLevel : purchaseLevel;
 
-        uint256 entropy = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
-        (uint24 targetLevel, uint256 nextEntropy) = _rollTargetLevel(baseLevel, entropy);
+        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
+        uint24 targetLevel = _rollTargetLevel(baseLevel, seed);
 
         if (targetLevel < currentLevel) {
             targetLevel = currentLevel;
@@ -586,7 +586,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             scaledAmount,
             targetLevel,
             currentLevel,
-            nextEntropy,
+            seed,
             presale,
             true,
             true,
@@ -625,8 +625,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             day = _simulatedDayIndex();
         }
 
-        uint256 entropy = uint256(keccak256(abi.encode(rngWord, player, day, amountEth)));
-        (uint24 targetLevel, uint256 nextEntropy) = _rollTargetLevel(currentLevel, entropy);
+        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amountEth)));
+        uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         // ENF-02: When gameOverPossible, redirect current-level BURNIE lootbox
         // tickets to far-future key space. Near-future rolls land normally.
@@ -640,7 +640,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             amountEth,
             targetLevel,
             currentLevel,
-            nextEntropy,
+            seed,
             false,
             false,
             false,
@@ -670,8 +670,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         uint32 day = _simulatedDayIndex();
         uint24 currentLevel = level + 1;
-        uint256 entropy = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
-        (uint24 targetLevel, uint256 nextEntropy) = _rollTargetLevel(currentLevel, entropy);
+        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
+        uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         uint256 evMultiplierBps = _lootboxEvMultiplierBps(player);
         uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
@@ -682,7 +682,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             scaledAmount,
             targetLevel,
             currentLevel,
-            nextEntropy,
+            seed,
             false,
             true,
             true,
@@ -705,8 +705,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         uint32 day = _simulatedDayIndex();
         uint24 currentLevel = level + 1;
-        uint256 entropy = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
-        (uint24 targetLevel, uint256 nextEntropy) = _rollTargetLevel(currentLevel, entropy);
+        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
+        uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
         uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
@@ -717,7 +717,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             scaledAmount,
             targetLevel,
             currentLevel,
-            nextEntropy,
+            seed,
             false,
             true,
             true,
@@ -802,27 +802,26 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @dev Roll a target level for lootbox resolution.
     ///      90% chance: 0-4 levels above base. 10% chance: 5-50 levels above base.
+    ///      Bit budget (consumed from `seed`):
+    ///        - rangeRoll: bits[0..15]   via uint16(seed)         % 100   (bias 0.05%)
+    ///        - near-level offset: bits[16..23] via uint8(seed >> 16) % 5 (bias 0.39%)
+    ///        - far-level offset:  bits[24..39] via uint16(seed >> 24) % 46 (bias 0.05%)
     /// @param baseLevel The base level to roll from
-    /// @param entropy Starting entropy value
+    /// @param seed Per-resolution 256-bit keccak seed (derived once at _resolveLootboxCommon entry)
     /// @return targetLevel The rolled target level
-    /// @return nextEntropy Updated entropy for subsequent rolls
     function _rollTargetLevel(
         uint24 baseLevel,
-        uint256 entropy
-    ) private pure returns (uint24 targetLevel, uint256 nextEntropy) {
-        uint256 levelEntropy = EntropyLib.entropyStep(entropy);
-        uint256 rangeRoll = levelEntropy % 100;
+        uint256 seed
+    ) private pure returns (uint24 targetLevel) {
+        uint256 rangeRoll = uint16(seed) % 100;
         if (rangeRoll < 10) {
             // 10% chance: far future (5-50 levels ahead)
-            uint256 farEntropy = EntropyLib.entropyStep(levelEntropy);
-            uint256 levelOffset = (farEntropy % 46) + 5;
-            targetLevel = baseLevel + uint24(levelOffset);
-            nextEntropy = farEntropy;
+            uint256 farOffset = uint16(seed >> 24) % 46;
+            targetLevel = baseLevel + uint24(farOffset + 5);
         } else {
             // 90% chance: near future (0-4 levels ahead)
-            uint256 levelOffset = levelEntropy % 5;
-            targetLevel = baseLevel + uint24(levelOffset);
-            nextEntropy = levelEntropy;
+            uint256 nearOffset = uint8(seed >> 16) % 5;
+            targetLevel = baseLevel + uint24(nearOffset);
         }
     }
 
@@ -833,7 +832,21 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param amount ETH-equivalent amount for reward calculations
     /// @param targetLevel Target level for future tickets
     /// @param currentLevel Current game level
-    /// @param entropy Starting entropy value
+    /// @param seed Per-resolution 256-bit keccak seed (single-source-of-entropy threaded through all sub-rolls and bit-sliced per-consumer)
+    /// @dev Single-keccak-per-resolution entropy: caller derives `seed` once at entry
+    ///      via keccak256(abi.encode(rngWord, player, day, amount)); thread through
+    ///      downstream sub-rolls. Bit allocation in primary chunk (`seed`):
+    ///        bits[0..15]    rangeRoll % 100         (_rollTargetLevel)
+    ///        bits[16..23]   near-offset % 5         (_rollTargetLevel)
+    ///        bits[24..39]   far-offset % 46         (_rollTargetLevel)
+    ///        bits[40..55]   pathRoll % 20           (_resolveLootboxRoll)
+    ///        bits[56..79]   tierRoll % 1000         (_lootboxDgnrsReward sub-call)
+    ///        bits[80..95]   varianceRoll % 20       (_resolveLootboxRoll large-BURNIE)
+    ///        bits[96..119]  ticketVariance % 10000  (_lootboxTicketCount)
+    ///        bits[120..151] boon roll % BOON_PPM_SCALE (_rollLootboxBoons)
+    ///      Total primary-chunk consumption: 152 bits / 256 available.
+    ///      ETH-amount-second branch uses seed2 = EntropyLib.hash2(seed, 1)
+    ///      (counter-tagged chunk 1; collision-free vs primary chunk 0).
     /// @param presale Whether this is a presale lootbox (62% bonus BURNIE multiplier)
     /// @param allowWhalePass Whether to roll for whale pass jackpot
     /// @param allowLazyPass Whether to roll for lazy pass award
@@ -850,7 +863,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 amount,
         uint24 targetLevel,
         uint24 currentLevel,
-        uint256 entropy,
+        uint256 seed,
         bool presale,
         bool allowWhalePass,
         bool allowLazyPass,
@@ -893,7 +906,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         (
             uint256 burnieOut,
             uint32 ticketsOut,
-            uint256 nextEntropy,
             bool applyPresaleMultiplier
         ) = _resolveLootboxRoll(
             player,
@@ -903,7 +915,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             targetPrice,
             currentLevel,
             day,
-            entropy
+            seed
         );
 
         if (burnieOut != 0) {
@@ -917,10 +929,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 totalTickets = uint256(futureTickets) + ticketsOut;
             futureTickets = uint32(totalTickets);
         }
-        entropy = nextEntropy;
 
         if (amountSecond != 0) {
-            (burnieOut, ticketsOut, nextEntropy, applyPresaleMultiplier) =
+            // Counter-tagged second chunk for the second invocation: distinct from primary
+            // chunk so bit-slice ranges across both invocations are collision-free.
+            uint256 seed2 = EntropyLib.hash2(seed, 1);
+            (burnieOut, ticketsOut, applyPresaleMultiplier) =
                 _resolveLootboxRoll(
                     player,
                     amountSecond,
@@ -929,7 +943,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     targetPrice,
                     currentLevel,
                     day,
-                    entropy
+                    seed2
                 );
 
             if (burnieOut != 0) {
@@ -942,7 +956,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if (ticketsOut != 0) {
                 futureTickets += uint32(ticketsOut);
             }
-            entropy = nextEntropy;
         }
 
         if (allowBoons) {
@@ -951,7 +964,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 day,
                 amount,
                 boonBudget,
-                entropy,
+                seed,
                 allowWhalePass,
                 allowLazyPass
             );
@@ -1003,11 +1016,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Roll for lootbox boons. Lootbox can award at most one boon.
     ///      If a boon is already active, only refresh or upgrade that same category.
     ///      Uses a single roll with granular ppm-based probability and deity-weighted pool.
+    ///      Bit budget (consumed from `seed`):
+    ///        - boon roll: bits[120..151] via uint32(seed >> 120) % BOON_PPM_SCALE (bias 0.022%; BOON_PPM_SCALE = 1_000_000)
     /// @param player Player address
     /// @param day Current day index
     /// @param originalAmount Amount used for chance calculations
     /// @param boonBudget Amount of lootbox value allocated to boon/pass draw
-    /// @param entropy Entropy for random rolls
+    /// @param seed Per-resolution 256-bit keccak seed (sliced inline; no advance)
     /// @param allowWhalePass Whether whale pass boons are eligible
     /// @param allowLazyPass Whether lazy pass boons are eligible
     function _rollLootboxBoons(
@@ -1015,7 +1030,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint32 day,
         uint256 originalAmount,
         uint256 boonBudget,
-        uint256 entropy,
+        uint256 seed,
         bool allowWhalePass,
         bool allowLazyPass
     ) private {
@@ -1056,7 +1071,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (totalChance > BOON_PPM_SCALE) totalChance = BOON_PPM_SCALE;
         if (totalChance == 0) return;
 
-        uint256 roll = entropy % BOON_PPM_SCALE;
+        uint256 roll = uint32(seed >> 120) % BOON_PPM_SCALE;
         if (roll >= totalChance) return;
 
         uint8 boonType = _boonFromRoll(
@@ -1522,11 +1537,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param targetPrice Price at target level
     /// @param currentLevel Current game level
     /// @param day Current day index
-    /// @param entropy Starting entropy
+    /// @param seed Per-resolution 256-bit keccak seed (sliced inline; first invocation uses primary chunk, ETH-amount-second branch uses seed2 = EntropyLib.hash2(seed, 1))
     /// @return burnieOut BURNIE tokens to award
     /// @return ticketsOut Tickets to queue for future level
-    /// @return nextEntropy Updated entropy
     /// @return applyPresaleMultiplier Whether BURNIE should get presale multiplier
+    /// @dev Bit budget (consumed from `seed`):
+    ///        - pathRoll: bits[40..55]     via uint16(seed >> 40) % 20  (bias 0.02%)
+    ///        - DGNRS tier sub-call slice: bits[56..79] (consumed by _lootboxDgnrsReward)
+    ///        - large-BURNIE varianceRoll: bits[80..95]   via uint16(seed >> 80) % 20  (bias 0.02%)
     function _resolveLootboxRoll(
         address player,
         uint256 amount,
@@ -1535,26 +1553,23 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 targetPrice,
         uint24 currentLevel,
         uint32 day,
-        uint256 entropy
+        uint256 seed
     )
         private
         returns (
             uint256 burnieOut,
             uint32 ticketsOut,
-            uint256 nextEntropy,
             bool applyPresaleMultiplier
         )
     {
-        nextEntropy = EntropyLib.entropyStep(entropy);
-        if (amount == 0) return (0, 0, nextEntropy, false);
+        if (amount == 0) return (0, 0, false);
 
-        uint256 roll = nextEntropy % 20;
+        uint256 roll = uint16(seed >> 40) % 20;
         if (roll < 11) {
             // 55% chance: tickets (returned as scaled × TICKET_SCALE)
             uint256 ticketBudget = (amount * LOOTBOX_TICKET_ROLL_BPS) / 10_000;
-            (uint32 ticketsScaled, uint256 entropyAfter) =
-                _lootboxTicketCount(ticketBudget, targetPrice, nextEntropy);
-            nextEntropy = entropyAfter;
+            uint32 ticketsScaled =
+                _lootboxTicketCount(ticketBudget, targetPrice, seed);
             if (ticketsScaled != 0) {
                 if (targetLevel < currentLevel) {
                     // Convert to BURNIE if target level already passed
@@ -1566,8 +1581,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             applyPresaleMultiplier = false;
         } else if (roll < 13) {
             // 10% chance: DGNRS tokens
-            nextEntropy = EntropyLib.entropyStep(nextEntropy);
-            uint256 dgnrsAmount = _lootboxDgnrsReward(amount, nextEntropy);
+            uint256 dgnrsAmount = _lootboxDgnrsReward(amount, seed);
             if (dgnrsAmount != 0) {
                 uint256 paid = _creditDgnrsReward(player, dgnrsAmount);
                 if (paid != 0) {
@@ -1582,7 +1596,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             applyPresaleMultiplier = false;
         } else if (roll < 15) {
             // 10% chance: WWXRP tokens
-            nextEntropy = EntropyLib.entropyStep(nextEntropy);
             uint256 wwxrpAmount = LOOTBOX_WWXRP_PRIZE;
             if (wwxrpAmount != 0) {
                 wwxrp.mintPrize(player, wwxrpAmount);
@@ -1596,8 +1609,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             applyPresaleMultiplier = false;
         } else {
             // 25% chance: large BURNIE reward with variance
-            nextEntropy = EntropyLib.entropyStep(nextEntropy);
-            uint256 varianceRoll = nextEntropy % 20;
+            uint256 varianceRoll = uint16(seed >> 80) % 20;
             uint256 largeBurnieBps;
             if (varianceRoll < 16) {
                 // Low path (80%): rolls 0-15, 58%-130% of value
@@ -1618,22 +1630,22 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Calculate scaled ticket count from budget with variance tiers.
     ///      Returns count × TICKET_SCALE (100) for fractional ticket support.
     ///      1% get 4.6x, 4% get 2.3x, 20% get 1.1x, 45% get 0.651x, 30% get 0.45x.
+    ///      Bit budget (consumed from `seed`):
+    ///        - varianceRoll: bits[96..119] via uint24(seed >> 96) % 10_000 (bias 0.045%)
     /// @param budgetWei ETH budget for tickets
     /// @param priceWei Price per ticket at target level
-    /// @param entropy Starting entropy
+    /// @param seed Per-resolution 256-bit keccak seed (sliced inline; no advance)
     /// @return countScaled Number of tickets × TICKET_SCALE
-    /// @return nextEntropy Updated entropy
     function _lootboxTicketCount(
         uint256 budgetWei,
         uint256 priceWei,
-        uint256 entropy
-    ) private pure returns (uint32 countScaled, uint256 nextEntropy) {
+        uint256 seed
+    ) private pure returns (uint32 countScaled) {
         if (budgetWei == 0 || priceWei == 0) {
-            return (0, entropy);
+            return 0;
         }
 
-        nextEntropy = EntropyLib.entropyStep(entropy);
-        uint256 varianceRoll = nextEntropy % 10_000;
+        uint256 varianceRoll = uint24(seed >> 96) % 10_000;
         uint256 ticketBps;
 
         if (varianceRoll < LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS) {
@@ -1670,14 +1682,16 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @dev Calculate DGNRS reward amount from the lootbox pool.
     ///      79.5% small tier, 15% medium, 5% large, 0.5% mega.
+    ///      Bit budget (consumed from `entropy` — the threaded per-resolution seed):
+    ///        - tierRoll: bits[56..79] via uint24(entropy >> 56) % 1000 (bias 0.0024%)
     /// @param amount ETH amount for calculation
-    /// @param entropy Entropy for tier selection
+    /// @param entropy Per-resolution 256-bit seed (sliced inline; no advance)
     /// @return dgnrsAmount DGNRS tokens to award
     function _lootboxDgnrsReward(
         uint256 amount,
         uint256 entropy
     ) private view returns (uint256 dgnrsAmount) {
-        uint256 tierRoll = entropy % 1000;
+        uint256 tierRoll = uint24(entropy >> 56) % 1000;
         uint256 ppm;
         if (tierRoll < 795) {
             ppm = LOOTBOX_DGNRS_POOL_SMALL_PPM;
