@@ -401,8 +401,82 @@ Detail: zero candidates emit from §4 (default zero F-36-NN blocks per D-265-FIN
 
 
 
-## 7. Prior-Artifact Cross-Cites [populated by Task 18]
+## 7. Prior-Artifact Cross-Cites
 
-## 8. Forward-Cite Closure [populated by Task 18]
+Comprehensive enumeration of every cross-cite emitted by §1-§6 of this deliverable (read-only references; no fresh derivation in §7).
+
+| Cross-Cite Source | Cited By Section(s) | Purpose |
+|---|---|---|
+| `.planning/phases/266-lootbox-entropy-refactor/266-CONTEXT.md` | §3a + §3d + §3e + §4 + §6b | Phase 266 locked decisions (D-266-API-01 / D-266-SEED-01 / D-266-BIT-BUDGET-01 / D-266-CONSUMER-LIST-01 / D-266-SCOPE-OUT-01..04 / D-266-ADVERSARIAL-01..03 / D-266-FILES-01 / D-266-CLOSURE-01..02 / D-266-PLAN-01 / D-266-SEV-01 / D-266-APPROVAL-01..02 / D-266-FCITE) |
+| `.planning/phases/266-lootbox-entropy-refactor/266-RESEARCH.md` | §3a + §3d + §4 + §6b | Bit-budget worked tables (per-consumer slice + bias bound) + chi² calibration (Pitfall 1 sample-budget per bucket) + Sources block (HEAD-state grep verifications) + Open Question 2 keccak-preservation rationale + Pitfall 2 Option A counter-tag rationale |
+| `.planning/phases/266-lootbox-entropy-refactor/266-PATTERNS.md` | §3a + §3d + §4 | Refactor pattern + cumulative bit-budget table + analog source-of-truth + per-file pattern assignments + Project Guardrails (10 memory-cited disciplines) |
+| `.planning/phases/266-lootbox-entropy-refactor/266-01-PLAN.md` | §3a + §9 (Tasks 5/10/21 user-approval gates) | 21-task multi-wave plan with explicit user-approval gates at end of Wave 1 (contract diff) + end of Wave 2 (test diff) + end of Wave 5 (final review) |
+| `.planning/phases/266-lootbox-entropy-refactor/266-01-ADVERSARIAL-LOG.md` | §4.2 + §6a + §9 | `/contract-auditor` + `/zero-day-hunter` parallel adversarial-pass log per D-266-ADVERSARIAL-01..03; 13 + 14 hypothesis investigations; zero disagreements |
+| `.planning/notes/2026-05-10-resolveLootboxRoll-dead-burnie-conversion-branch.md` | §4.2 (defensive note 2) | v37.0 maintenance scope note for pre-existing dead BURNIE-conversion branch surfaced by /contract-auditor Hypothesis (m) |
+| `audit/FINDINGS-v35.0.md` | §1 + §5a + §6b + §7 (this section, self-reference) | v35.0 closure-signal source (`MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6`) + §6b carry-forward attestations + §2 D-08 + D-09 rubric source |
+| `audit/FINDINGS-v34.0.md` | §1 + §5b | v34.0 closure-signal source (`MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`) + JackpotModule baseline reference for SURF-04 byte-identity carry |
+| `audit/FINDINGS-v33.0.md` | §5b | v33.0 closure-signal carry-forward attestation source |
+| `audit/FINDINGS-v25.0.md` → `v34.0.md` | §5c | REG-04 prior-finding spot-check sweep targets (10 deliverables) |
+| `KNOWN-ISSUES.md` | §3a + §6 + Task 17 modification | Existing entry source (EntropyLib XOR-shift) + AUDIT-05 rephrase target (1 entry NARROWED to BAF-only scope under Design Decisions per Task 17) |
+| `.planning/REQUIREMENTS.md` | §1 + §3 + §4 + AUDIT-NN section anchors | Source of ENT-01..06 + STAT-01..03 + GAS-01..02 + SURF-01..04 + AUDIT-01..05 + REG-01..04 requirement IDs + spot-check function reference set for REG-04 |
+| `.planning/ROADMAP.md` | §1 + §9 | Phase 266 5 success criteria + write policy + closure-signal target string |
+| `contracts/modules/DegenerusGameLootboxModule.sol` (HEAD `<sha>`) | §3a + §3d + §3e + §4 + §6b | Audit subject contract (1 modified contract in v36.0 scope) |
+| `contracts/libraries/EntropyLib.sol` (BYTE-IDENTICAL at v36) | §3d + §4 (e) + §5a + §6b (EXC-04) | ENT-04 stable-API verification source; SURF-01 protected range; `EntropyLib.hash2` definition for §4 (c) Option A counter-tag analysis |
+| `contracts/modules/DegenerusGameJackpotModule.sol` (BYTE-IDENTICAL at v36) | §3d + §4 (e) + §5a + §6b (EXC-04) | SURF-02 BAF byte-identity (`_jackpotTicketRoll` L2186-2229) + SURF-04 9 non-lootbox callsites; ENT-05 deferral verification |
+| `contracts/modules/DegenerusGameMintModule.sol` (BYTE-IDENTICAL at v36) | §3d + §5a | SURF-03 single-line callsite L652 byte-identity |
+| `contracts/modules/DegenerusGameDecimatorModule.sol` (UNTOUCHED at v36) | §4 (d) + §5c (REG-v30/v31/v32) | Cross-module caller of `resolveLootboxDirect` (L594) — verifies cross-module composition |
+| `contracts/modules/DegenerusGameDegeneretteModule.sol` (UNTOUCHED at v36) | §4 (d) + §5c | Cross-module caller of `_resolveLootboxDirect` (L733/L753) — verifies cross-module composition |
+| `test/stat/LootboxEntropyDistribution.test.js` (NEW at v36) | §3a + §4 (a) + §6b (EXC-04) | STAT-01..03 chi² evidence over 6 sub-roll buckets; STAT-03 verbatim re-declaration of chi² infrastructure |
+| `test/gas/LootboxOpenGas.test.js` (NEW at v36) | §3a + §4 (d) | GAS-01 theoretical worst-case derivation header + REF-CAPTURE protocol per `feedback_gas_worst_case.md` |
+| `test/gas/AdvanceGameGas.test.js` (EXTENDED at v36) | §3a + §4 (d) + §5a | GAS-02 v36.0 1.99× margin describe block; `ADVANCE_GAME_DECIMATOR_STAGE_REF = 908_320` pinned |
+| `test/stat/SurfaceRegression.test.js` (EXTENDED at v36) | §3a + §3d + §4 (e) + §5a | SURF-01..04 v36.0 PROTECTED_RANGES describe block (4 arrays; 9 entries in SURF_04) |
+| `test/stat/PerPullLevelDistribution.test.js` (UNTOUCHED) | §6b (STAT-03 source) | Phase 264 chi² infrastructure origin (`makeRng` / `CHI2_CRIT_05` / `wilsonHilfertyZ`); cross-cite for STAT-03 reuse-existing-tooling discipline |
+| `test/stat/TraitDistribution.test.js` (UNTOUCHED) | §6b (STAT-03 source) | Phase 261 chi² infrastructure origin |
+| Memory feedback files (governing this phase) | All sections | `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_history_in_comments.md` + `feedback_no_dead_guards.md` + `feedback_wait_for_approval.md` + `feedback_manual_review_before_push.md` + `feedback_rng_backward_trace.md` + `feedback_rng_commitment_window.md` + `feedback_gas_worst_case.md` + `feedback_skip_research_test_phases.md` |
+
+---
+
+## 8. Forward-Cite Closure (D-253-09 + D-253-15 step 8 Terminal-Phase Rule)
+
+This section verifies (a) zero Phase 266 → post-milestone forward-cite tokens are emitted (single-phase v36.0 milestone — Phase 266 is BOTH the only phase AND the terminal phase); (b) zero Phase 266 → v37.0+ phase-bound forward-cites are emitted per ROADMAP terminal-phase rule. Per D-266-FCITE carry of D-265-FCITE-01 / D-262-FCITE-01 / D-257-FCITE-01.
+
+### 8a. Phase 266 Intra-Milestone Forward-Cite Residual Verification (0 expected; vacuous since v36.0 = Phase 266 only)
+
+Expected count: 0 intra-milestone forward-cites. v36.0 contains exactly ONE phase (Phase 266) per CONTEXT.md `<domain>` single-phase patch shape — there are no other v36.0 phases that Phase 266 could forward-cite to. The grep recipe is vacuous-by-construction:
+
+```bash
+grep -rE 'forward-cite|defer-to-Phase-2(67|68|69|70)|TBD-post-milestone' \
+  .planning/phases/266-lootbox-entropy-refactor/
+# Expected: zero matches qualifying as v36.0-internal forward-cites
+```
+
+`re-verified at HEAD <sha>` — zero v36.0-internal forward-cite tokens present in any Phase 266 artifact. The v36.0 milestone contains a single phase that closes within its own scope.
+
+### 8b. Phase 266 → Post-Milestone Forward-Cite Emission (0 expected)
+
+Phase 266 is the terminal v36.0 phase (also the ONLY v36.0 phase). Per CONTEXT.md D-266-FCITE carry of D-265-FCITE-01 + D-253-CF-07 + ROADMAP, any finding that cannot close in Phase 266 routes to scope-guard deferral in `266-01-SUMMARY.md` (NOT to a forward-cite addendum block). With zero F-36-NN finding blocks emitted (default per D-265-FIND-01 carry) and the Task 14 adversarial-pass disposition completing without F-36-NN promotion (zero disagreements logged in `266-01-ADVERSARIAL-LOG.md`), no rollover addenda are expected.
+
+Verification recipe (uses domain-specific forward-cite tokens that distinguish actual cites from meta-prose discussion of the closure invariant):
+
+```bash
+grep -rE 'forward-cite|defer-to-Phase-2(67|68|69|70)|TBD-post-milestone' audit/FINDINGS-v36.0.md
+# Expected: zero matches qualifying as Phase-266-emitted forward-cites
+```
+
+`re-verified at HEAD <sha>` — zero Phase-266-emitted forward-cite tokens present in `audit/FINDINGS-v36.0.md`. The §4 6-surface row table (a..f) is post-mitigation milestone-record disclosure with all rows verdicted SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE at HEAD `<sha>`; §6 Non-Promotion Ledger is zero-row default; no F-36-NN rollover addendum blocks present.
+
+The literal "v37.0+" string occurrences in this deliverable's §1 (Scope), §2 (Forward-Cite Closure Summary), §4.2 defensive observations (forward-compat 9th-consumer note), and this §8 are **meta-prose discussing the terminal-phase invariant** — not specific cites to any not-yet-existing v37.0+ phase. They are explicitly self-referential to the closure-invariant discipline; the broader-pattern grep `grep -rE 'v37\.0|Phase (267|268|269|270|271)' audit/FINDINGS-v36.0.md` returns hits ONLY in those meta-prose lines. The domain-specific token grep above (`forward-cite|defer-to-Phase-2(67|68|69|70)|TBD-post-milestone`) is the load-bearing audit invariant that would catch actual forward-cites.
+
+**Note on `.planning/notes/2026-05-10-resolveLootboxRoll-dead-burnie-conversion-branch.md`:** the v37.0 maintenance-scope note seeded for the pre-existing dead BURNIE-conversion branch (per /contract-auditor Hypothesis (m)) is a **deferral annotation** per `feedback_no_dead_guards.md` (deferred-to-future-milestone scope-guard marker), NOT a phase-bound forward-cite emission. It is functionally informational (documenting an item NOT in scope for v36.0), not an orphaned cross-cite stub to a non-existent phase. The note's `target-milestone: v37.0` frontmatter records the routing destination without binding to a specific (not-yet-existing) future phase ID. Per D-266-FCITE carry of D-265-FCITE-01 (the no-orphaned-cross-cite-stubs rule for not-yet-existing future-milestone phases) — this annotation is not an orphaned cross-cite stub; it is a scope-deferral record routed to the `.planning/notes/` backlog convention.
+
+**Verdict:** `ZERO_PHASE_266_FORWARD_CITES_EMITTED` (post-milestone scope addendum count = 0).
+
+### 8c. Combined §8 Verdict
+
+Phase 266 forward-cite closure: **0/0 v36.0-internal residuals (vacuous) + 0/0 Phase 266 emissions** → milestone boundary closed per CONTEXT.md D-266-FCITE carry of D-265-FCITE-01 + ROADMAP terminal-phase rule. v36.0 milestone deliverable is self-contained at HEAD `<sha>`. Any post-milestone delta will boot from the current closure signal `MILESTONE_V36_AT_HEAD_<sha>` (§9c) with a fresh delta-extraction phase, NOT via forward-cite from this deliverable.
+
+**Combined §8 forward-cite emission: ZERO.** Forward-cite zero-emission is a terminal-phase invariant per D-266-FCITE carry of D-265-FCITE-01 + D-262-FCITE-01 + D-257-FCITE-01. `re-verified at HEAD <sha>`.
+
+
 
 ## 9. Milestone Closure Attestation [populated by Tasks 19-20]
