@@ -42,7 +42,10 @@
   5. Storage layout byte-identical at v37.0 phase-close HEAD vs v36.0 baseline `1c0f0913` (storage-slot grep proof); zero new public/external mutation entry points; zero new external pure entry points (`packedTraitsDegenerette` is `internal pure` library helper, inlined into consumer — does NOT widen the public ABI); zero new admin functions; zero new modifiers; existing `packedTraitsFromSeed` consumer paths in MintModule + JackpotModule UNCHANGED at the byte level — single batched USER-APPROVED contract commit lands per `feedback_batch_contract_approval.md` + `feedback_no_contract_commits.md` + `feedback_never_preapprove_contracts.md` (DGN-15).
   6. `_distributePayout` ETH-currency branch (`DegenerusGameDegeneretteModule.sol` L684-740) rewritten with 3-tier split rule: (a) `payout <= 3 * betAmount` → 100% ETH, no lootbox conversion (PAY-SPLIT-01); (b) `3 * betAmount < payout <= 10 * betAmount` → `ethShare = 2.5 * betAmount`, `lootboxShare = payout - ethShare` (PAY-SPLIT-02 floor); (c) `payout > 10 * betAmount` → existing `ethShare = payout / 4`, `lootboxShare = payout - ethShare` (PAY-SPLIT-02 standard); (d) pool-cap (`ETH_WIN_CAP_BPS = 1_000`, 10% of futurePool) applied AFTER the split rule and takes precedence: if `ethShare > 10% * pool`, excess flips to lootbox per existing L716-723 logic (PAY-SPLIT-03). `betAmount` (uint128) threaded into `_distributePayout` as a 5th argument from the L656 call site (`amountPerTicket` already in scope). `CURRENCY_BURNIE` + `CURRENCY_WWXRP` branches UNCHANGED. NatSpec on `_distributePayout` documents the 3-tier rule + pool-cap precedence in language of CURRENT design only (per `feedback_no_history_in_comments.md`). Phase 268 STAT-07 empirically verifies the rule across per-N payout distributions; Phase 271 §4 surface (h) audits boundary-gaming + composition correctness (PAY-SPLIT-01, PAY-SPLIT-02, PAY-SPLIT-03).
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 267-01-PLAN.md — Degenerette producer + 5-table payout rewrite + 3-tier ETH split (1 plan, 4 tasks: docs upstream fixes | constants verification | USER-APPROVED contract commit | phase-close summary; covers DGN-01..15 + PAY-SPLIT-01..03)
 
 ### Phase 268: Degenerette Statistical Validation + Cross-Surface Preservation
 
