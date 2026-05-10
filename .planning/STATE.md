@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v37.0
 milestone_name: Degenerette Recalibration + Maintenance Bundle
 status: executing
-last_updated: "2026-05-10T12:00:00.000Z"
-last_activity: 2026-05-10 -- Phase 267 SHIPPED — Degenerette producer + 5-table payout rewrite + 3-tier ETH split [DGN-01..15, PAY-SPLIT-01..03] satisfied (18/18 PASS); 4 atomic commits (1 USER-APPROVED contract `e1136071` + 3 AGENT-COMMITTED chore/planning); Phase 268 (statistical validation + cross-surface preservation) next.
+last_updated: "2026-05-10T12:42:08.059Z"
+last_activity: 2026-05-10 -- Phase 268 CONTEXT.md gathered (D-268-HARNESS-01 hybrid JS-replay + on-chain spot-check; D-268-THINPOOL-01 fresh deployment + small pool seed; D-268-SURF03-01 file-level zero-diff vs v36.0 baseline; D-268-WORSTGAS-01 deterministic VRF override + crafted player pick) — ready for `/gsd-plan-phase 268`
 progress:
   total_phases: 5
   completed_phases: 1
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.
 
 Phase: 268 (degenerette-statistical-validation-cross-surface-preservation) — NEXT
 Plan: — (Phase 268 plan not yet drafted)
-Status: Phase 267 SHIPPED — ready for `/gsd-discuss-phase 268` or `/gsd-plan-phase 268` to draft `268-01-PLAN.md` (Degenerette Statistical Validation + Cross-Surface Preservation)
-Last activity: 2026-05-10 -- Phase 267 SHIPPED (Degenerette producer + 5-table payout rewrite + 3-tier ETH split); 18/18 requirements PASS; 4 atomic commits (1 USER-APPROVED contract `e1136071` + 3 AGENT-COMMITTED chore/planning)
-Resume file: .planning/ROADMAP.md (Phase 268 entry; CONTEXT.md not yet authored)
+Status: Phase 268 CONTEXT.md gathered — ready for `/gsd-plan-phase 268` to draft `268-01-PLAN.md` (Degenerette Statistical Validation + Cross-Surface Preservation)
+Last activity: 2026-05-10 -- Phase 268 CONTEXT.md gathered (D-268-HARNESS-01 + D-268-THINPOOL-01 + D-268-SURF03-01 + D-268-WORSTGAS-01); 1 AGENT-COMMITTED commit (`5b2bd003` 268-CONTEXT.md + 268-DISCUSSION-LOG.md)
+Resume file: .planning/phases/268-degenerette-statistical-validation-cross-surface-preservation/268-CONTEXT.md
 
 ## Last Shipped Milestone
 
