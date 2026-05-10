@@ -134,7 +134,10 @@ Plans:
   4. Per-open gas delta within ±300 gas of pre-refactor baseline for `openLootBox`, `openBurnieLootBox`, `resolveLootboxDirect`; `advanceGame` per-day gas envelope unchanged within ±2K (Decimator settlement is the one advanceGame-resident lootbox-resolution caller); 1.99× margin from v34/v35 SURF-05 baseline preserved [GAS-01..02].
   5. `audit/FINDINGS-v36.0.md` published FINAL READ-only at v36.0 closure HEAD with 9 sections; closure signal `MILESTONE_V36_AT_HEAD_<sha>` emitted in §9c; AUDIT-01 delta-surface table covers all source-tree changes; AUDIT-02 adversarial sweep verdicts every refactor surface SAFE_*; AUDIT-04 zero-new-state attestation; KNOWN-ISSUES.md EntropyLib XOR-shift entry rephrased to BAF-only scope per AUDIT-05; REG-01 PASS for v35.0 closure-signal non-widening; REG-02 PASS for v34.0 closure-signal non-widening; REG-03 KI envelope re-verifications EXC-04 scope NARROWS to BAF-only; REG-04 prior-finding spot-check sweep all PASS [AUDIT-01..05, REG-01..04].
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 266-01-PLAN.md — Single multi-task plan (~21 atomic-commit tasks across 5 sequential waves) covering: Wave 1 LootboxModule contract refactor (7 entropyStep callsites + sub-call slicing, batched USER-APPROVED) + Wave 2 chi² + gas + surface-preservation tests (batched USER-APPROVED) + Wave 3 audit §1-§4 + adversarial pass via /contract-auditor + /zero-day-hunter + Wave 4 audit §5-§8 + KNOWN-ISSUES.md rephrasing + Wave 5 §9 closure attestation + ROADMAP/STATE/MILESTONES flips + final user-review gate. Per D-266-PLAN-01 / Phase 257 + 262 + 265 single-plan precedent. Closure signal `MILESTONE_V36_AT_HEAD_<sha>` emitted in §9c.
 
 ## Last Shipped Milestone
 
