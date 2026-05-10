@@ -367,3 +367,37 @@ REG-04: 9 PASS rows + 1 SUPERSEDED row + 0 REGRESSED rows (spot-check across 9 p
 Combined: 11 regression rows (2 + 9 PASS + 1 SUPERSEDED + 0 REGRESSED). Default expectation zero REGRESSED rows MET.
 
 ---
+
+## 6. KI Gating Walk
+
+Per D-265-KI-01 + D-265-AUDIT06-01. §6a Non-Promotion Ledger captures any F-35-NN finding-blocks that did NOT promote to KNOWN-ISSUES.md (default zero rows since zero F-35-NN blocks emit per D-265-FIND-01). §6b 4-row KI envelope re-verifications (EXC-01..04) PLUS 1 D-09 PASS row for AUDIT-06 indexer semantic-shift promotion. §6c Verdict Summary records the closure verdict string.
+
+### 6a. Non-Promotion Ledger
+
+Per D-265-FIND-01 default-path expectation: zero F-35-NN finding blocks emitted in §4 (all 7 rows verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE — see §4 verdict roll-up). Therefore zero KI promotion candidates from §4 → no Non-Promotion Ledger rows.
+
+Task 7 adversarial-pass disposition emitted zero F-35-NN blocks (zero disagreements logged in `265-01-ADVERSARIAL-LOG.md`). Default empty table holds:
+
+| Candidate | Source | D-09 Predicate Failed | Disposition |
+|---|---|---|---|
+| _(none)_ | _(no F-35-NN blocks emitted; no candidates routed to D-09 gating from §4)_ | _(n/a)_ | _(n/a)_ |
+
+### 6b. KI Envelope Re-Verifications + AUDIT-06 D-09 PASS Row
+
+| Envelope / Surface | Description | Carrier at v35 HEAD `<sha>` | Verdict | Evidence |
+|---|---|---|---|---|
+| EXC-01 | Non-VRF entropy for affiliate winner roll | n/a (NEGATIVE-scope at v35; per-pull-level path does not consume affiliate-roll RNG) | NEGATIVE-scope at v35 | v35 modifies coin-jackpot distribution helper only; affiliate winner roll path in MintModule untouched (zero v35 commits target MintModule). Backward trace per `feedback_rng_backward_trace.md`: `_awardDailyCoinToTraitWinners` consumes only `(randomWord, COIN_LEVEL_TAG, i, trait, lvlPrime)` — no affiliate-roll keccak path overlap. |
+| EXC-02 | Gameover prevrandao fallback (`_getHistoricalRngFallback` in `DegenerusGameAdvanceModule.sol:1301`) | n/a (NEGATIVE-scope at v35; AdvanceModule untouched) | NEGATIVE-scope at v35 | AdvanceModule prevrandao site untouched; v34 carry-forward holds. No v35 commit modifies `DegenerusGameAdvanceModule.sol`. |
+| EXC-03 | Gameover RNG substitution for mid-cycle write-buffer tickets (F-29-04 class) | n/a (NEGATIVE-scope at v35; AdvanceModule untouched) | NEGATIVE-scope at v35 | `_swapAndFreeze` / `_swapTicketSlot` / `_gameOverEntropy` sites untouched; v35 per-pull-level coin-jackpot helper does not interact with mid-cycle write-buffer ticket substitution. Backward trace: helper runs atomically inside `advanceGame` after VRF fulfillment — no swap-and-freeze interaction. |
+| EXC-04 | EntropyLib XOR-shift PRNG (entropy-quality envelope on per-pull-level keccak high-entropy bit consumption) | `DegenerusGameJackpotModule.sol _awardDailyCoinToTraitWinners` helper consumes `keccak256(abi.encode(randomWord, COIN_LEVEL_TAG, i))` per pull where `randomWord` is VRF-derived (not XOR-shift-derived in this path; XOR-shift is the lootbox-outcome path) | RE_VERIFIED with Phase 264 STAT-01 chi² cross-cite | Backward trace per `feedback_rng_backward_trace.md`: per-pull-level consumer `keccak256(abi.encode(randomWord, COIN_LEVEL_TAG, i)) % range` → `randomWord` source = VRF fulfillment word (per Phase 263 SUMMARY §"Byte-Identity Sweep" — `DailyRngApplied` event harvest gives the actual contract-side randomWord). Commitment window unchanged per `feedback_rng_commitment_window.md` — randomWord is post-commit unknown to player. Empirical proof: `test/stat/PerPullLevelDistribution.test.js` STAT-01 (10K aggregated samples) chi² range=4 = 5.114 < 7.815 critical at α=0.05 df=3; chi² range=8 = 3.019 < 14.067 critical at α=0.05 df=7. High-entropy bits are sufficiently uniform for level sampling end-to-end. NEW envelope width = ZERO; passive consumer of VRF-derived bits. |
+| AUDIT-06 | `JackpotBurnieWin.lvl` semantic shift (call-level → per-pull-sampled-level) | `_awardDailyCoinToTraitWinners` helper at `contracts/modules/DegenerusGameJackpotModule.sol`; event L96 byte-identical | **D-09 PASS — promote to KNOWN-ISSUES.md under Design Decisions** | 3-predicate analysis per §3c sub-paragraph 4: **accepted-design** = YES (Phase 263 design lock — semantic shift IS the goal of the per-pull-level resample, not a side effect); **non-exploitable** = YES (semantic shift is observability-only; no on-chain behavior change for player or protocol; cannot be timed, gamed, or extracted); **sticky** = YES (structural property of the helper; will not go away across future builds unless a future milestone reverts the per-pull-level design). All 3 predicates PASS → promote. Promotion target: KNOWN-ISSUES.md `## Design Decisions` subsection (entry text drafted in CONTEXT.md `<specifics>`; appended in Task 11 immediately after the existing `**Lido stETH dependency.**` entry). |
+
+**Inline closure note.** Backward-trace methodology per `feedback_rng_backward_trace.md` applied to EXC-04: per-pull-level consumer `keccak256(abi.encode(randomWord, COIN_LEVEL_TAG, i)) % range` traces back to `randomWord` source = VRF fulfillment word (`DailyRngApplied` event harvest gives the actual contract-side randomWord per Phase 263 SUMMARY §"Byte-Identity Sweep"). Commitment window unchanged per `feedback_rng_commitment_window.md` — randomWord is post-commit unknown to player. EXC-04 envelope width = ZERO new bits (passive consumer of VRF-derived bits).
+
+### 6c. Verdict Summary
+
+Closure verdict: **`1 of 1 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_MODIFIED (1 entry added under Design Decisions)`**.
+
+Detail: 1 D-09-eligible candidate (AUDIT-06 indexer semantic-shift) routed through 3-predicate gating; result PASS (accepted-design + non-exploitable + sticky); promoted to KNOWN-ISSUES.md "Design Decisions" subsection via Task 11. Zero other candidates emit from §4 (default zero F-35-NN blocks per D-265-FIND-01); zero other promotions land. EXC-01..03 NEGATIVE-scope at v35 (no per-pull-level path interaction); EXC-04 RE_VERIFIED with Phase 264 STAT-01 chi² empirical cross-cite (range=4 chi²=5.114 < 7.815; range=8 chi²=3.019 < 14.067). Per `feedback_rng_backward_trace.md` + `feedback_rng_commitment_window.md`, the per-pull-level keccak path consumes VRF-derived bits and is post-commit unknown to player — uniformity claim covered end-to-end.
+
+---
