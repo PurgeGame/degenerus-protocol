@@ -479,4 +479,83 @@ Phase 266 forward-cite closure: **0/0 v36.0-internal residuals (vacuous) + 0/0 P
 
 
 
-## 9. Milestone Closure Attestation [populated by Tasks 19-20]
+## 9. Milestone Closure Attestation
+
+Per D-266-CLOSURE-01 + D-266-CLOSURE-02 (carry of D-265-CLOSURE-02 / D-262-CLOSURE-02): §9.NN format with §9.NN.i USER-APPROVED contracts (1 batched commit) + §9.NN.ii USER-APPROVED tests (1 batched commit) + §9.NN.iii AGENT-COMMITTED audit artifacts; NO §9.NN.iv awaiting-approval subsection.
+
+### 9a. Verdict Distribution
+
+| Verdict Bucket | Count | Source |
+|---|---|---|
+| §4 SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE | 6 | 6 surfaces (a-f) per §4.1 row table |
+| §4 FINDING_CANDIDATE → F-36-NN block | 0 | Default per D-265-FIND-01 carry (zero disagreements at Task 14 adversarial-pass disposition; 13 + 14 hypothesis investigations from /contract-auditor + /zero-day-hunter all returned SAFE) |
+| §5a REG-01 PASS rows | 1 | v35.0 closure-signal carry-forward (per-pull-level helper UNTOUCHED) |
+| §5b REG-02 PASS rows | 1 | v34.0 closure-signal carry-forward (gold-solo-priority + JackpotBucketLib UNCHANGED) |
+| §5c REG-04 PASS rows | 11 | Prior-finding spot-check sweep across audit/FINDINGS-v25..v35 (per Task 15 enumeration) |
+| §5c REG-04 REGRESSED rows | 0 | Default per D-266-REG04-01 carry of D-265-REG04-01 |
+| §5c REG-04 SUPERSEDED rows | 0 | No superseded rows at v36 (lootbox-path is the FIRST mutation since v34 baseline; no prior-finding rows superseded by Phase 266) |
+| §6a Non-Promotion Ledger rows | 0 | Default per D-265-FIND-01 carry (zero F-36-NN blocks → zero non-promotions) |
+| §6b KI envelope re-verifications | 4 | EXC-01..03 NEGATIVE-scope at v36 + EXC-04 RE_VERIFIED with NARROWS scope (BAF-only after lootbox-path xorshift removal) |
+| §6b D-09 NARROWS rows | 1 | AUDIT-05 EntropyLib XOR-shift entry rephrased to BAF-jackpot-only scope (REPHRASE under Design Decisions, not new promotion) |
+| §6c Verdict Summary | 1 | "0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_REPHRASED (1 entry rephrased to BAF-only scope under Design Decisions per AUDIT-05)" |
+| §8 Forward-Cite Closure | 0 forward-cites | Terminal-phase invariant per D-266-FCITE carry of D-265-FCITE-01 |
+
+### 9b. Attestation Block
+
+1. **Audit baseline.** v35.0 audit-subject HEAD `5db8682bd7b811437f0c1cf47e832619d1478ac6` (closure signal `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6` carry-forward from `audit/FINDINGS-v35.0.md`).
+2. **Audit subject.** Contract-tree HEAD `<sha>` (post-Phase-266 close — captured at Task 20 commit time via `git rev-parse HEAD` after the §9c attestation commit lands).
+3. **Scope.** 1 contract-tree commit (`df6345cc` Phase 266 single batched user-approved LootboxModule refactor; +75 / -61 LOC; 7 EntropyLib.entropyStep callsites removed; bit-sliced keccak from per-resolution seed; ETH-amount-second branch uses `seed2 = EntropyLib.hash2(seed, 1)` per Option A counter-tag) + 1 test-tree commit (`16ed452b` Phase 266 single batched user-approved chi² + gas + surface preservation tests; +912 / -2 LOC across 4 test files + package.json wiring) + Phase 266 plan-close commits (enumerated below in §9.NN.iii).
+4. **Outcome.** 6 of 6 §4 adversarial surfaces SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE; zero F-36-NN finding blocks; 2 PASS REG-01..02 + 11 PASS REG-04 rows (zero REGRESSED, zero SUPERSEDED); 4 KI envelope re-verifications (3 NEGATIVE-scope at v36 + 1 RE_VERIFIED with NARROWS scope); KNOWN-ISSUES.md modified by 1 entry rephrase (EntropyLib XOR-shift entry NARROWS to BAF-jackpot-only scope per AUDIT-05; D-09 NARROWS under Design Decisions, not new promotion).
+5. **Posture.** Mixed-shape phase per CONTEXT.md `<domain>` (single-phase patch shape for v36.0). 1 batched contract commit + 1 batched test commit USER-APPROVED at Wave 1 + Wave 2 gates per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md`. Phase 266 plan-close commits AGENT-COMMITTED per atomic-commit-per-task pattern per D-266-APPROVAL-01. Final user-review gate per `feedback_manual_review_before_push.md` (Task 21).
+6. **Closure.** Closure signal `MILESTONE_V36_AT_HEAD_<sha>` emitted (§9c). Deliverable READ-only on Task 21 commit per D-266-APPROVAL-01 + D-265-CF-02 carry. Final user-review gate per `feedback_manual_review_before_push.md` (Task 21).
+
+### 9c. Closure Signal
+
+```
+MILESTONE_V36_AT_HEAD_<sha>
+```
+
+Single-line emission. Triggers `/gsd-complete-milestone v36.0` handler per D-266-CLOSURE-01 + CONTEXT.md Cross-Phase Context section. SHA placeholder `<sha>` resolved at Task 20 atomic-update via `git rev-parse HEAD` AFTER the §9b attestation commit (this commit) lands; Task 20 atomic-updates 5 occurrences across §9c + ROADMAP.md + STATE.md + MILESTONES.md + 266-01-SUMMARY.md.
+
+### 9.NN Commit-Readiness Register
+
+Per D-266-CLOSURE-02 carry of D-265-CLOSURE-02: TWO-subsection format (USER-APPROVED contracts + USER-APPROVED tests + AGENT-COMMITTED audit artifacts; NO awaiting-approval subsection — zero awaiting-approval files in v36 since the Wave 1 + Wave 2 user-approval gates closed before Wave 3 audit-deliverable authoring began).
+
+#### 9.NN.i USER-APPROVED contracts (1 commit)
+
+```
+df6345cc  feat(266): lootbox-path entropy refactor [ENT-01..06]
+```
+
+User-approval audit trail per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md`: Phase 266 single batched contract-tree commit. User explicitly approved diff (typed "approved" in response to the Wave 1 gate at Task 5) before commit ran. Contract-tree changes confined to `contracts/modules/DegenerusGameLootboxModule.sol` only (+75 / -61); EntropyLib + JackpotModule + MintModule BYTE-IDENTICAL per SURF-01..04 grep-proof.
+
+#### 9.NN.ii USER-APPROVED tests (1 commit — re-enumerated via `git log --oneline 5db8682b..HEAD -- test/ package.json`)
+
+```
+16ed452b  test(266): chi² + gas + surface preservation [STAT-01..03 + GAS-01..02 + SURF-01..04]
+```
+
+User-approval audit trail per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md`: Phase 266 single batched test-tree commit. User explicitly approved diff (typed "128k is fine approved" in response to the Wave 2 gate at Task 10, accepting the observed flaky ~120K gas-pin drift in Phase 261/264 SURF-05 tests under `npm run test:stat` ordering — standalone runs at the pinned values pass) before commit ran. 4 test files modified (2 NEW: `LootboxEntropyDistribution.test.js` + `LootboxOpenGas.test.js`; 2 EXTENDED: `AdvanceGameGas.test.js` v36.0 describe block + `SurfaceRegression.test.js` v36.0 SURF-01..04 describe block) + `package.json` wiring (mirrors Phase 264 commit `833b341d` pattern).
+
+#### 9.NN.iii AGENT-COMMITTED audit artifacts (Phase 266 plan-close commits — enumerated at Task 19 commit time via `git log --oneline --grep='audit(266)' --grep='docs(266)' 5db8682b..HEAD`)
+
+```
+fd32da69  audit(266): Task 18 — §7 prior-artifact cross-cites + §8 forward-cite closure
+5d51869f  docs(266): Task 17 — rephrase KNOWN-ISSUES.md EntropyLib XOR-shift entry to BAF-jackpot-only scope
+c16d6fc6  audit(266): Task 16 — §6 KI Gating Walk + EXC-04 NARROWS + AUDIT-05 verdict
+8801a99a  audit(266): Task 15 — §5 regression appendix (REG-01 + REG-02 + REG-04)
+ce8b045f  audit(266): Task 14 — adversarial pass complete (/contract-auditor + /zero-day-hunter, 0 disagreements)
+8a82bc36  docs(266): Task 14 — adversarial-pass log skeleton
+fb9c0cea  audit(266): Task 13 — §4 6-surface inline draft (a-f) — AUDIT-02 pre-adversarial-pass
+a2fb80a5  audit(266): Task 12 — §3a + §3d delta-surface table + §3e conservation re-proof
+d8b97791  audit(266): Task 11 — §1 frontmatter + §2 Executive Summary skeleton
+75a4f73b  docs(v37.0): seed v37 maintenance note — _resolveLootboxRoll dead BURNIE-conversion branch
+60fe1e43  docs(266): create phase plan — single 21-task multi-wave plan + pattern map + STATE/ROADMAP flips
+fe93d8c5  docs(266): research lootbox-path entropy refactor — bit-budget arithmetic + chi² calibration + 5-wave plan
+bcf3214f  docs(v36.0): open milestone — Phase 266 lootbox-entropy-refactor scaffolding
+```
+
+(Task 19's own commit appended retroactively after this task's commit lands; Task 20's atomic-update commit appended next; Task 21's close-out commit appended after the final user-review gate. Final 266-01-SUMMARY.md will render the complete chain.)
+
+**No §9.NN.iv awaiting-approval subsection.** Zero awaiting-approval files in v36; mirrors v33/v34/v35 D-265-CLOSURE-02 / D-262-CLOSURE-02 format.
+
