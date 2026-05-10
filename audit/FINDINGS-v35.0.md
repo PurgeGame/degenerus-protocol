@@ -183,4 +183,38 @@ Consolidates Phase 263 + 264 outputs into condensed summaries with cross-cites t
 
 `re-verified at HEAD <sha>`.
 
+### 3d. AUDIT-01 Delta-Surface Table — DegenerusGameJackpotModule.sol
+
+Every changed declaration in `contracts/modules/DegenerusGameJackpotModule.sol` between v34.0 baseline `6b63f6d4daf346a53a1d463790f637308ea8d555` and v35.0 HEAD `<sha>`, classified per the {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED, RENAMED} taxonomy. v35.0 is a single-contract delta — no other `contracts/*.sol` file modified per `git log --oneline 6b63f6d4..HEAD -- contracts/` (only `cf564816` in scope).
+
+#### Part A — Changed Declarations Table
+
+| Declaration | Classification | Live Line(s) at HEAD | Hunk Evidence | Phase 263 REQ |
+|---|---|---|---|---|
+| `_awardDailyCoinToTraitWinners(uint8[4] memory traitIds, uint256 randomWord, uint24 minLevel, uint24 maxLevel, uint256 coinBudget) internal` | NEW | helper body (post-rewrite location, ~50 lines) | `git diff 6b63f6d4..HEAD -- contracts/modules/DegenerusGameJackpotModule.sol` shows `+function _awardDailyCoinToTraitWinners(...)` block (~79 added lines per Phase 263 SUMMARY Diff Stats). Internal visibility (NOT public/external — confirms AUDIT-04). | PPL-01..08 (helper is the unit of all PPL-NN behavior) |
+| `bytes32 private constant COIN_LEVEL_TAG = keccak256("coin-level")` | NEW | L170-171 | `+bytes32 private constant COIN_LEVEL_TAG = keccak256("coin-level");` — single-hunk addition with explanatory NatSpec at L170. | PPL-01 + D-SHAPE-05 |
+| `payDailyCoinJackpot` (purchase phase, ~L1708 callsite) | MODIFIED_LOGIC | callsite at ~L1708 | Hunk replaces upfront `targetLevel` selection + per-trait bucket-distribution loop with single call `_awardDailyCoinToTraitWinners(traitIds, randWord, minLevel, maxLevel, coinBudget)`. Tail block at original L1729-1734 (dead `entropy`/`targetLevel` derivations) DELETED. | PPL-01 |
+| `payDailyJackpotCoinAndTickets` (jackpot phase, L623 callsite) | MODIFIED_LOGIC | L623 | Hunk replaces upfront `targetLevel` selection block at original L621-624 (`coinEntropy` derivation + `targetLevel = lvl + 1 + uint24(coinEntropy % 4)` + scope braces) with single call `_awardDailyCoinToTraitWinners(traitIds, randWord, lvl + 1, lvl + 4, coinBudget - farBudget)`. | PPL-02 |
+| `_randTraitTicket` body L1653-1703 + 4 other callers L700/L989/L1296/L1399 | REFACTOR_ONLY (in scope of v35) | L1653-1703 (def) + L700/L989/L1296/L1399 (callers) | BYTE-IDENTICAL via Phase 264 SURF-01 grep-proof — per-line modified-set walk vs `git diff 6b63f6d4 HEAD -- contracts/modules/DegenerusGameJackpotModule.sol` returns ZERO `-` deletions inside the body line range NOR any of the 4 caller line ranges. The "refactor" is conceptual — the coin-jackpot caller no longer USES `_randTraitTicket`; instead the new helper inlines `keccak256(abi.encode(randomWord, trait_i, lvlPrime, i))` directly. The legacy 8-bit `salt` parameter is dropped from this code path only (D-IMPL-01). | PPL-07 |
+| `_computeBucketCounts` body at L1030-1082 (coin-jackpot CALLER removed; def preserved for lootbox path) | DELETED (caller usage only — def preserved) | L1030 (def) | Phase 264 SURF-01 grep-proof asserts def body BYTE-IDENTICAL. Phase 263 Grep Gauntlet #5: `grep -c '_computeBucketCounts' contracts/modules/DegenerusGameJackpotModule.sol` returns 2 (lootbox-path caller + def) — confirms zero coin-jackpot-path callers remain. PPL-03 satisfied at the call-site level, NOT the def level. | PPL-03 |
+| `DAILY_COIN_SALT_BASE = 252` constant at original L227 | DELETED | n/a (removed) | `-uint8 private constant DAILY_COIN_SALT_BASE = 252;` — removed because the only consumer (the deleted `_randTraitTicket(... salt: lvl - DAILY_COIN_SALT_BASE)` call inside the original coin-jackpot loop) disappeared with the helper rewrite. Pre-flight grep verified zero non-rewritten callers. | D-SHAPE-06 + D-APPROVAL-04 (no dead constants) |
+| Dead block at original L621-624 (`coinEntropy` + `targetLevel` derivation pre-call site, jackpot phase) | DELETED | n/a (removed) | Removed per D-SHAPE-06 (kill `targetLevel` derivation since per-pull keccak supersedes upfront selection). | D-SHAPE-06 |
+| Dead block at original L1729-1734 (`entropy` + `targetLevel` derivation pre-call site, purchase phase) | DELETED | n/a (removed) | Same as above for the purchase-phase site. | D-SHAPE-06 |
+| Helper-internal locals: `address[4] memory deityCache` at loop entry + `cap` + `baseAmount` + `extraCount` + `cursor` + per-pull `lvlPrime` / `trait_i` / `effectiveLen` / `holderIdx` | NEW (helper-internal — NOT new storage; stack/memory only) | helper body | All locals are stack/memory variables inside `_awardDailyCoinToTraitWinners`. ZERO new storage slots — confirmed by §3d AUDIT-04 addendum below. | PPL-04 + PPL-06 + D-SHAPE-02 + D-SHAPE-03 |
+
+Net structural impact: 91 insertions / 74 deletions = +17 LOC (per Phase 263 SUMMARY Diff Stats); single-contract change scope confirmed via `git log --oneline 6b63f6d4..HEAD -- contracts/` returning only `cf564816`.
+
+#### Part B — Downstream-Caller Inventory Grep Recipe
+
+So future auditors can re-derive the call graph:
+
+```bash
+# Grep recipe — run from repo root:
+grep -rn "_awardDailyCoinToTraitWinners\|COIN_LEVEL_TAG\|_randTraitTicket\|_computeBucketCounts\|JackpotBurnieWin" contracts/
+```
+
+Expected output: `_awardDailyCoinToTraitWinners` returns the def + 2 callers (~L1708 purchase + L623 jackpot). `COIN_LEVEL_TAG` returns 2 (decl L171 + helper consumer). `_randTraitTicket` returns 5 (1 def L1653 + 4 callers L700/L989/L1296/L1399 — all preserved per Phase 264 SURF-01). `_computeBucketCounts` returns 2 (def L1030 + lootbox caller — coin-jackpot caller removed per Phase 263 SUMMARY Grep Gauntlet #5). `JackpotBurnieWin` returns def L96 + emit sites inside the helper.
+
+**Live-line discrepancy note.** REQUIREMENTS.md PPL-01/PPL-02 cite pre-rewrite line numbers (`payDailyCoinJackpot` ~L1708; `payDailyJackpotCoinAndTickets` ~L624). Live HEAD line numbers may have drifted by ±5-15 lines due to net +17 LOC; the §3d table cites LIVE HEAD line numbers as the audit truth-source.
+
 ---
