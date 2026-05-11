@@ -911,9 +911,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             player,
             amountFirst,
             amount,
-            targetLevel,
             targetPrice,
-            currentLevel,
             day,
             seed
         );
@@ -939,9 +937,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     player,
                     amountSecond,
                     amount,
-                    targetLevel,
                     targetPrice,
-                    currentLevel,
                     day,
                     seed2
                 );
@@ -1533,9 +1529,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player Player receiving the reward
     /// @param amount Amount for this roll (may be half of total for split lootboxes)
     /// @param lootboxAmount Total lootbox amount (for events)
-    /// @param targetLevel Target level for tickets
     /// @param targetPrice Price at target level
-    /// @param currentLevel Current game level
     /// @param day Current day index
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; first invocation uses primary chunk, ETH-amount-second branch uses seed2 = EntropyLib.hash2(seed, 1))
     /// @return burnieOut BURNIE tokens to award
@@ -1549,9 +1543,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         address player,
         uint256 amount,
         uint256 lootboxAmount,
-        uint24 targetLevel,
         uint256 targetPrice,
-        uint24 currentLevel,
         uint32 day,
         uint256 seed
     )
@@ -1571,12 +1563,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint32 ticketsScaled =
                 _lootboxTicketCount(ticketBudget, targetPrice, seed);
             if (ticketsScaled != 0) {
-                if (targetLevel < currentLevel) {
-                    // Convert to BURNIE if target level already passed
-                    burnieOut = (uint256(ticketsScaled) * PRICE_COIN_UNIT) / TICKET_SCALE;
-                } else {
-                    ticketsOut = ticketsScaled;
-                }
+                ticketsOut = ticketsScaled;
             }
             applyPresaleMultiplier = false;
         } else if (roll < 13) {
