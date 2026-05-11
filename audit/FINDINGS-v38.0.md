@@ -9,8 +9,8 @@ v37_intermediate_baseline: 2654fcc2
 v37_intermediate_signal: MILESTONE_V37_AT_HEAD_2654fcc2
 v34_baseline: 6b63f6d4daf346a53a1d463790f637308ea8d555
 v34_baseline_signal: MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555
-audit_subject_head: <sha>
-closure_signal: MILESTONE_V38_AT_HEAD_<sha>
+audit_subject_head: 06623edb
+closure_signal: MILESTONE_V38_AT_HEAD_06623edb
 deliverable: audit/FINDINGS-v38.0.md
 requirements: [HERO-01, HERO-02, HERO-03, HERO-04, HERO-05,
                CLEAN-01, CLEAN-02, CLEAN-03, CLEAN-04, CLEAN-05, CLEAN-06,
@@ -37,7 +37,7 @@ generated_at: 2026-05-11T11:36:15Z
 
 # v38.0 Findings — Always-Hero Simplification + Maximal Dead-Code Cleanup (Terminal)
 
-**Audit Baseline.** The audit baseline is v36.0 audit-subject HEAD `1c0f09132d7439af9881c56fe197f81757f8164a` (closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a` carry-forward from `audit/FINDINGS-v36.0.md` §9c). v37.0 closure signal `MILESTONE_V37_AT_HEAD_2654fcc2` is a sub-milestone intermediate baseline carried forward from `audit/FINDINGS-v37.0.md` §9c. v38.0 audit subject HEAD `<sha>` (resolved at Task 4.6 atomic-update per D-272-CLOSURE-01). v38.0 introduces ONE contract-tree commit since the v37.0 intermediate baseline: `feat(272): always-on hero default 0 + degenerette dead-code cleanup [HERO-01..05, CLEAN-01..05]` at commit `527e3adc` (USER-APPROVED Phase 272 Wave 1 batched commit; +18 / −16 LOC in `contracts/modules/DegenerusGameDegeneretteModule.sol`; bytecode delta −57 bytes 8955 → 8898; storage layout byte-identical; public ABI byte-identical). v38.0 introduces ONE test-tree commit since the v37.0 intermediate baseline: `test(272): hero-always-on + dead-code cleanup + v37+ carry bundle [STAT-01..02, SURF-01..03, LBX-02, GASPIN-02..03, STAT-03-v35-carry]` at commit `e3fcb95c` (USER-APPROVED Phase 272 Wave 2 batched commit; +238 / −36 LOC across 6 files in `test/stat/`, `test/gas/`, `package.json`). `contracts/libraries/EntropyLib.sol` is byte-identical between v37.0 intermediate baseline `2654fcc2` and v38 HEAD (`git diff 2654fcc2..HEAD -- contracts/libraries/EntropyLib.sol` returns empty — verified at §3.B). `contracts/modules/DegenerusGameJackpotModule.sol`, `contracts/modules/DegenerusGameMintModule.sol`, `contracts/modules/DegenerusGameLootboxModule.sol`, `contracts/DegenerusTraitUtils.sol`, and `contracts/libraries/JackpotBucketLib.sol` are byte-identical between v37.0 intermediate baseline `2654fcc2` and v38 HEAD (Wave 2 SURF-01/02 grep-proof in `test/stat/SurfaceRegression.test.js`).
+**Audit Baseline.** The audit baseline is v36.0 audit-subject HEAD `1c0f09132d7439af9881c56fe197f81757f8164a` (closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a` carry-forward from `audit/FINDINGS-v36.0.md` §9c). v37.0 closure signal `MILESTONE_V37_AT_HEAD_2654fcc2` is a sub-milestone intermediate baseline carried forward from `audit/FINDINGS-v37.0.md` §9c. v38.0 audit subject HEAD `06623edb` (resolved at Task 4.6 atomic-update per D-272-CLOSURE-01). v38.0 introduces ONE contract-tree commit since the v37.0 intermediate baseline: `feat(272): always-on hero default 0 + degenerette dead-code cleanup [HERO-01..05, CLEAN-01..05]` at commit `527e3adc` (USER-APPROVED Phase 272 Wave 1 batched commit; +18 / −16 LOC in `contracts/modules/DegenerusGameDegeneretteModule.sol`; bytecode delta −57 bytes 8955 → 8898; storage layout byte-identical; public ABI byte-identical). v38.0 introduces ONE test-tree commit since the v37.0 intermediate baseline: `test(272): hero-always-on + dead-code cleanup + v37+ carry bundle [STAT-01..02, SURF-01..03, LBX-02, GASPIN-02..03, STAT-03-v35-carry]` at commit `e3fcb95c` (USER-APPROVED Phase 272 Wave 2 batched commit; +238 / −36 LOC across 6 files in `test/stat/`, `test/gas/`, `package.json`). `contracts/libraries/EntropyLib.sol` is byte-identical between v37.0 intermediate baseline `2654fcc2` and v38 HEAD (`git diff 2654fcc2..HEAD -- contracts/libraries/EntropyLib.sol` returns empty — verified at §3.B). `contracts/modules/DegenerusGameJackpotModule.sol`, `contracts/modules/DegenerusGameMintModule.sol`, `contracts/modules/DegenerusGameLootboxModule.sol`, `contracts/DegenerusTraitUtils.sol`, and `contracts/libraries/JackpotBucketLib.sol` are byte-identical between v37.0 intermediate baseline `2654fcc2` and v38 HEAD (Wave 2 SURF-01/02 grep-proof in `test/stat/SurfaceRegression.test.js`).
 
 **Scope.** Single canonical milestone-closure deliverable for v38.0 per D-272-FILES-01 carry of D-271-FILES-01 / D-266-FILES-01 / D-265-FILES-01 / D-262 / D-257 carry-forward (9-section shape locked). v38.0 = single-phase milestone shape per CONTEXT.md `<domain>`: Phase 272 (Always-Hero Simplification + Maximal Dead-Code Cleanup — terminal). Three-wave structure inside Phase 272: Wave 1 contract commit (HERO-01..05 + CLEAN-01..05 — single USER-APPROVED batched commit per D-272-COMMIT-SHAPE-01), Wave 2 test commit (STAT-01..02 + SURF-01..03 + LBX-02 RE-DEFER + GASPIN-02 (a-alt) + GASPIN-03 + STAT-03-v35-carry — single USER-APPROVED batched commit), Waves 3-4 audit deliverable + adversarial pass + closure flips (AGENT-COMMITTED atomic-per-task). Terminal phase per D-272-FCITE-01 (carry of D-271-FCITE-01 / D-266-FCITE / D-265-FCITE-01 / D-262-FCITE-01 / D-257-FCITE-01 / D-253-15 step 8 + ROADMAP terminal-phase rule) — zero forward-cites emitted from Phase 272 to any post-v38.0 milestone phases. Verified at §8 Forward-Cite Closure block.
 
@@ -53,13 +53,13 @@ generated_at: 2026-05-11T11:36:15Z
 - AUDIT-02: §4 7-surface adversarial sweep (a)..(g) with verdict bucket per row; default zero F-38-NN finding blocks per D-272-FIND-01; `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` PARALLEL adversarial pass per D-272-ADVERSARIAL-01.
 - AUDIT-03: §3.C AUDIT-03 conservation re-proof: per-N basePayoutEV = 100 centi-x exact preserved (per-N tables UNCHANGED at v38); hero EV-neutrality preserved across all (M, N) under always-on hero schedule; total payout invariant `ethShare + lootboxShare = payout` preserved (PAY-SPLIT UNCHANGED at v38).
 - AUDIT-04: §3.B AUDIT-04 zero-new-state grep-proof attestation: zero new storage slots; zero new public/external mutation entry points; zero new external pure entry points; zero new admin functions; zero new modifiers; zero new upgrade hooks.
-- AUDIT-05: §9c emits closure signal `MILESTONE_V38_AT_HEAD_<sha>` verbatim in 5 locations per D-272-CLOSURE-01 (resolved at Task 4.6 atomic-update); KNOWN-ISSUES.md UNMODIFIED per default path.
+- AUDIT-05: §9c emits closure signal `MILESTONE_V38_AT_HEAD_06623edb` verbatim in 5 locations per D-272-CLOSURE-01 (resolved at Task 4.6 atomic-update); KNOWN-ISSUES.md UNMODIFIED per default path.
 - AUDIT-06: `272-01-ADVERSARIAL-LOG.md` populated with 3 H2 sections — `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` — per D-272-ADVERSARIAL-01; NOT `/degen-skeptic` per D-272-ADVERSARIAL-01 OUT-OF-SCOPE.
 - REG-01: §5a — v37.0 intermediate closure signal `MILESTONE_V37_AT_HEAD_2654fcc2` NON-WIDENING at v38 HEAD per REG-01.
 - REG-02: §5b — v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4` NON-WIDENING at v38 HEAD per REG-02.
 - REG-03: §6b 4-row KI envelope re-verifications EXC-01..03 NEGATIVE-scope + EXC-04 RE_VERIFIED with NARROWS retained from v36.0 (BAF-jackpot-only scope; EntropyLib byte-identical at v38 HEAD).
 - REG-04: §5d per-finding 6-col PASS/REGRESSED/SUPERSEDED row table walking `audit/FINDINGS-v25.0.md` → `audit/FINDINGS-v37.0.md` for findings referencing v38-touched function/surface set.
-- Combined milestone closure: `MILESTONE_V38_AT_HEAD_<sha>`.
+- Combined milestone closure: `MILESTONE_V38_AT_HEAD_06623edb`.
 
 ### Severity Counts (per D-08 5-Bucket Rubric)
 
@@ -102,7 +102,7 @@ D-272-FCITE-01 carry of D-271-FCITE-01 / D-266-FCITE / D-265-FCITE-01 / D-262-FC
 
 ### Attestation Anchor
 
-See §9 Milestone Closure Attestation for the D-253-15 step 9 attestation block triggering v38.0 milestone closure via signal `MILESTONE_V38_AT_HEAD_<sha>` (resolved at Wave 4 Task 4.6 atomic-update across 5 verbatim locations per D-272-CLOSURE-01).
+See §9 Milestone Closure Attestation for the D-253-15 step 9 attestation block triggering v38.0 milestone closure via signal `MILESTONE_V38_AT_HEAD_06623edb` (resolved at Wave 4 Task 4.6 atomic-update across 5 verbatim locations per D-272-CLOSURE-01).
 
 ---
 
@@ -401,7 +401,7 @@ This grep-proof establishes that Phase 272 Wave 1 modifies ONLY `contracts/modul
 - zero new modifiers — `git diff 2654fcc2..HEAD -- contracts/ | grep -E "^\+.*modifier "` returns 0.
 - zero new upgrade hooks — `git diff 2654fcc2..HEAD -- contracts/ | grep -E "^\+.*(UUPSUpgradeable|_authorizeUpgrade)"` returns 0.
 
-**Closing attestation:** Storage layout byte-identical at v38.0 closure HEAD `<sha>` vs v37.0 intermediate baseline `2654fcc2` per slot-by-slot grep-proof; zero new public/external mutation entry points; zero new external pure entry points; zero new admin functions; zero new modifiers; zero new upgrade hooks; zero new ERC-20 mint entry points. Cross-module byte-identity preserved for `JackpotModule + MintModule + LootboxModule + TraitUtils + JackpotBucketLib + EntropyLib` (D-272-CLEAN-SCOPE-01 narrowing satisfied — only `DegenerusGameDegeneretteModule.sol` modified).
+**Closing attestation:** Storage layout byte-identical at v38.0 closure HEAD `06623edb` vs v37.0 intermediate baseline `2654fcc2` per slot-by-slot grep-proof; zero new public/external mutation entry points; zero new external pure entry points; zero new admin functions; zero new modifiers; zero new upgrade hooks; zero new ERC-20 mint entry points. Cross-module byte-identity preserved for `JackpotModule + MintModule + LootboxModule + TraitUtils + JackpotBucketLib + EntropyLib` (D-272-CLEAN-SCOPE-01 narrowing satisfied — only `DegenerusGameDegeneretteModule.sol` modified).
 
 ### 3.C AUDIT-03 Conservation Re-Proof
 
@@ -594,13 +594,13 @@ Expected output: 0 hits.
 
 ### 5a. REG-01 — v37.0 Intermediate Closure-Signal Non-Widening
 
-| Row ID | Source | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| Row ID | Source | Delta SHA | Subject Surface at HEAD `06623edb` | Re-Verification Evidence | Verdict |
 | ------ | ------ | --------- | ------------------------------ | ------------------------ | ------- |
 | REG-v37.0-HERO-CLEAN | v37.0 intermediate closure signal `MILESTONE_V37_AT_HEAD_2654fcc2` carry-forward from `audit/FINDINGS-v37.0.md` §9c | `2654fcc2..<v38-close-sha>` (1 Wave 1 contract commit `527e3adc` + 1 Wave 2 test commit `e3fcb95c`) | EntropyLib + JackpotModule + MintModule + TraitUtils + JackpotBucketLib + LootboxModule byte-identical at v38 HEAD per cross-module byte-identity grep proof (`git diff 2654fcc2..HEAD -- <file>` returns 0 lines for each file; see §3.B grep recipe block). Lootbox UNCHANGED at v38 (D-272-CLEAN-SCOPE-01 narrowing — cleanup applies ONLY to `DegenerusGameDegeneretteModule.sol`); SURF-02 v38.0 describe in `test/stat/SurfaceRegression.test.js` cross-cites this byte-identity at the harness level. The only v38 mutation at the contract layer is `contracts/modules/DegenerusGameDegeneretteModule.sol` (Wave 1 commit `527e3adc`; +18 / −16 LOC across the hero-pack/extract block + cleanup-sweep deletions). Per-N HERO_BOOST tables UNCHANGED; per-N payout tables UNCHANGED; PAY-SPLIT 3-tier rule UNCHANGED. | v37 §4 8-surface verdicts (a)..(h) carry forward unchanged at v38 HEAD: surface (a) per-N table dispatch correctness UNCHANGED (per-N tables byte-identical); surface (b) symbol-only hero match UNCHANGED (`_applyHeroMultiplier` body byte-identical at v38); surface (c) `_countGoldQuadrants` boundary UNCHANGED; surface (d) producer byte-layout consistency UNCHANGED; surface (e) WWXRP × hero composition UNCHANGED; surface (f) lootbox dead-branch removal byte-equivalence UNCHANGED (LootboxModule byte-identical at v38); surface (g) hero × per-N composition UNCHANGED; surface (h) PAY-SPLIT 3-tier rule monotonicity UNCHANGED. | PASS |
 
 ### 5b. REG-02 — v34.0 Closure-Signal Non-Widening
 
-| Row ID | Source | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| Row ID | Source | Delta SHA | Subject Surface at HEAD `06623edb` | Re-Verification Evidence | Verdict |
 | ------ | ------ | --------- | ------------------------------ | ------------------------ | ------- |
 | REG-v34.0-TRAIT-SOLO | v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` carry-forward from `audit/FINDINGS-v34.0.md` §9c (via v37.0 REG-02 carry) | `6b63f6d4..<v38-close-sha>` | TraitUtils existing 3 functions (`weightedColorBucket` + `traitFromWord` + `packedTraitsFromSeed`) + `packedTraitsDegenerette` (v37.0 Phase 267 NEW additive helper) byte-identical at v38 HEAD per cross-module byte-identity grep proof. `_pickSoloQuadrant` body + 4 ETH-distribution injection sites + JackpotBucketLib + EntropyLib byte-identical at v38 HEAD (no v38 mutation to gold-solo Mint / non-lootbox Jackpot path). **Surfaces strictly disjoint:** Phase 272 v38 payload mutates only the Degenerette hero-quadrant extraction (orthogonal to v34 trait/solo verdicts). | v34 §4 6-surface trait/solo verdicts are orthogonal to v38 hero-quadrant-extraction payload; carry forward unchanged. No v38 commit touches `contracts/libraries/JackpotBucketLib.sol`, `contracts/DegenerusTraitUtils.sol`, or `contracts/modules/DegenerusGameJackpotModule.sol`. | PASS |
 
@@ -621,7 +621,7 @@ Expected output: 0 hits.
 
 Per-finding 6-col PASS/REGRESSED/SUPERSEDED row table from REG-04 grep sweep across `audit/FINDINGS-v25.0.md` through `audit/FINDINGS-v37.0.md` for findings referencing the v38-touched function/surface set: `_fullTicketPayout`, `_packFullTicketBet`, `_resolveFullTicketBet`, `_applyHeroMultiplier`, `MASK_3`, `FT_HERO_SHIFT`, hero quadrant, hero opt-out.
 
-| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `06623edb` | Re-Verification Evidence | Verdict |
 | ------ | -------------- | --------- | ------------------------------ | ------------------------ | ------- |
 | REG-v37.0-§4-(a) | `audit/FINDINGS-v37.0.md` §4 surface (a) "per-N table dispatch correctness vs match-count distribution P_N(M)" | `2654fcc2..<v38-close-sha>` | Per-N payout tables UNCHANGED at v38 HEAD (Wave 1 commit `527e3adc` does not modify per-N tables; cross-cite §3.A Row 1 Summary). v37.0 §4 (a) SAFE_BY_STRUCTURAL_CLOSURE verdict carries forward unchanged at v38 HEAD. | v37.0 STAT-01 ≥1M draws/N + Wave 2 STAT-01 (`test/stat/DegenerettePerNEvExactness.test.js`) re-pin under always-on hero PASS; basePayoutEV per N within ±0.50 centi-x preserved. | PASS |
 | REG-v37.0-§4-(b) | `audit/FINDINGS-v37.0.md` §4 surface (b) "symbol-only hero match preserves uniformity, no color-channel info leak" | `2654fcc2..<v38-close-sha>` | `_applyHeroMultiplier` body L1009-1034 byte-identical at v38 HEAD vs `2654fcc2` (Wave 1 commit `527e3adc` does NOT modify `_applyHeroMultiplier` body — only the `heroEnabled` guard at the call site). The symbol-only equality comparison `((playerTicket >> heroQuadrant*8) & 7) == ((resultTicket >> heroQuadrant*8) & 7)` UNCHANGED. P(hero match) = 1/8 per quadrant UNCHANGED. | v37.0 §4 (b) SAFE_BY_DESIGN verdict carries forward unchanged at v38. Wave 2 STAT-02 hero EV-neutrality within ±1% preserved under always-on hero. | PASS |
@@ -712,7 +712,7 @@ Cross-cites organized in 4 subsections per the canonical FINDINGS shape: v38.0 p
 - `audit/FINDINGS-v36.0.md`
 - `audit/FINDINGS-v37.0.md`
 
-**Closure-signal chain:** v25 → v27 → v28 → v29 → v30 → v31 → v32 → v33 → v34 (`MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`) → v35 → v36 (`MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`) → v37 (`MILESTONE_V37_AT_HEAD_2654fcc2`) → v38 (`MILESTONE_V38_AT_HEAD_<sha>` — emitted §9c at Task 3.6; SHA resolved at Wave 4 Task 4.6 atomic-update).
+**Closure-signal chain:** v25 → v27 → v28 → v29 → v30 → v31 → v32 → v33 → v34 (`MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`) → v35 → v36 (`MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`) → v37 (`MILESTONE_V37_AT_HEAD_2654fcc2`) → v38 (`MILESTONE_V38_AT_HEAD_06623edb` — emitted §9c at Task 3.6; SHA resolved at Wave 4 Task 4.6 atomic-update).
 
 REG-01 carries v37.0 intermediate closure signal verbatim per §5a (REG-v37.0-HERO-CLEAN PASS).
 REG-02 carries v34.0 closure signal verbatim per §5b (REG-v34.0-TRAIT-SOLO PASS).
@@ -725,7 +725,7 @@ REG-04 walks v25..v37.0 per §5d (7 PASS / 0 REGRESSED / 0 SUPERSEDED).
 ### 7.4. Project-State Cross-Cites
 
 - `.planning/PROJECT.md` "Current Milestone v38.0" block + "Deferred to Future Milestones" subsection (updated at Wave 4 Task 4.3 per D-272-CLOSURE-01 with v39+ carry-forward bullets — LBX-02 RE-DEFER + STAT-03-v35-carry ACCEPTED-DESIGN re-affirmed).
-- `.planning/MILESTONES.md` closure-signal chain v25 → v37 + v38 in-progress row (flipped to SHIPPED at Wave 4 Task 4.6 with closure signal `MILESTONE_V38_AT_HEAD_<sha>` recorded).
+- `.planning/MILESTONES.md` closure-signal chain v25 → v37 + v38 in-progress row (flipped to SHIPPED at Wave 4 Task 4.6 with closure signal `MILESTONE_V38_AT_HEAD_06623edb` recorded).
 - `.planning/ROADMAP.md` v38.0 milestone bullet (flipped to ✅ at Wave 4 Task 4.4).
 - `.planning/REQUIREMENTS.md` 30 v38.0 requirements traceability (flipped to Complete at Wave 4 Task 4.5; LBX-02 traceability flipped to DEFERRED-V39+; STAT-03-v35-carry flipped to ACCEPTED-DESIGN; GASPIN-02 + GASPIN-03 flipped to COMPLETE).
 - `KNOWN-ISSUES.md` EXC-01..04 envelopes (UNMODIFIED at v38 close per default path; `git diff` returns empty).
@@ -795,7 +795,7 @@ Per-section roll-up:
 - **§5** Regression Appendix: REG-01 **1 PASS** (v37.0 intermediate closure signal NON-WIDENING); REG-02 **1 PASS** (v34.0 closure signal NON-WIDENING); REG-03 **4 PASS** (EXC-01..03 NEGATIVE-scope + EXC-04 RE_VERIFIED with NARROWS retained); REG-04 **7 PASS / 0 REGRESSED / 0 SUPERSEDED** (prior-finding spot-check sweep across `audit/FINDINGS-v25.0.md` → `audit/FINDINGS-v37.0.md`). Aggregate: **13 PASS / 0 REGRESSED / 0 SUPERSEDED**.
 - **§6** KI Gating Walk: **`0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`** (default path per D-272-KI-01). EXC-01..03 RE_VERIFIED-NEGATIVE-scope; EXC-04 RE_VERIFIED with NARROWS retained.
 - **AUDIT-06** adversarial-pass: 3 skills (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) PARALLEL spawn per D-272-ADVERSARIAL-01; all concur on the 7 §4 surface verdicts; zero FINDING_CANDIDATE / zero 8th-surface / zero KI promotion candidate per `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-ADVERSARIAL-LOG.md` Disposition section. One docs-vs-behavior drift identified (Hypothesis (i)) at adversarial-pass close with KEEP_AS_NEGATIVE_FINDING disposition — **RESOLVED_AT_V38 via Wave 1.5** commit `4760459f` (defensive boundary validation; appended disposition update in `272-01-ADVERSARIAL-LOG.md`). Does NOT change §4 verdict roll-up.
-- **Combined milestone closure:** `MILESTONE_V38_AT_HEAD_<sha>`.
+- **Combined milestone closure:** `MILESTONE_V38_AT_HEAD_06623edb`.
 
 ### 9b. Attestation Block
 
@@ -803,7 +803,7 @@ D-253-15 step 9 attestation block triggering v38.0 milestone closure. Cite 3-ski
 
 ```
 git rev-parse HEAD
-# v38.0 closure HEAD <sha>   — resolved at Wave 4 Task 4.6 atomic-update per D-272-CLOSURE-01
+# v38.0 closure HEAD 06623edb   — resolved at Wave 4 Task 4.6 atomic-update per D-272-CLOSURE-01
 # v37.0 intermediate baseline — 2654fcc2
 #   signal                   — MILESTONE_V37_AT_HEAD_2654fcc2
 # v36.0 audit baseline        — 1c0f09132d7439af9881c56fe197f81757f8164a
@@ -816,9 +816,9 @@ Phase 272 source-tree HEAD at adversarial-pass close: `e3fcb95c` (Wave 2 test co
 
 ### 9c. Closure Signal
 
-`MILESTONE_V38_AT_HEAD_<sha>`
+`MILESTONE_V38_AT_HEAD_06623edb`
 
-Placeholder `<sha>` resolved at Wave 4 Task 4.6 atomic-update per D-272-CLOSURE-01 across 5 verbatim locations: (1) `audit/FINDINGS-v38.0.md` §1 frontmatter `audit_subject_head:` field; (2) `audit/FINDINGS-v38.0.md` §1 frontmatter `closure_signal:` field; (3) `audit/FINDINGS-v38.0.md` §2 Closure Verdict Summary line `Combined milestone closure: MILESTONE_V38_AT_HEAD_<sha>`; (4) `audit/FINDINGS-v38.0.md` §9c this line; (5) `audit/FINDINGS-v38.0.md` §9b Attestation Block. Plus 3 cross-document propagation locations resolved by Wave 4 Task 4.6: `.planning/MILESTONES.md` v38.0 row, `.planning/ROADMAP.md` v38.0 milestone bullet, and `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-SUMMARY.md` frontmatter.
+Placeholder `06623edb` resolved at Wave 4 Task 4.6 atomic-update per D-272-CLOSURE-01 across 5 verbatim locations: (1) `audit/FINDINGS-v38.0.md` §1 frontmatter `audit_subject_head:` field; (2) `audit/FINDINGS-v38.0.md` §1 frontmatter `closure_signal:` field; (3) `audit/FINDINGS-v38.0.md` §2 Closure Verdict Summary line `Combined milestone closure: MILESTONE_V38_AT_HEAD_06623edb`; (4) `audit/FINDINGS-v38.0.md` §9c this line; (5) `audit/FINDINGS-v38.0.md` §9b Attestation Block. Plus 3 cross-document propagation locations resolved by Wave 4 Task 4.6: `.planning/MILESTONES.md` v38.0 row, `.planning/ROADMAP.md` v38.0 milestone bullet, and `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-SUMMARY.md` frontmatter.
 
 ### 9.NN Commit-Readiness Register
 
