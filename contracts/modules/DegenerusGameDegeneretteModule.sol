@@ -318,7 +318,7 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant FT_INDEX_SHIFT = 172;
     uint256 private constant FT_ACTIVITY_SHIFT = 220;
     uint256 private constant FT_HAS_CUSTOM_SHIFT = 236;
-    uint256 private constant FT_HERO_SHIFT = 237; // 3 bits: [0]=enabled, [1..2]=quadrant
+    uint256 private constant FT_HERO_SHIFT = 237; // 3 bits: [0]=reserved, [1..2]=quadrant (always-on hero)
 
     // -------------------------------------------------------------------------
     // Hero Quadrant Multipliers (Per-N, Symbol-Only Match)
@@ -344,7 +344,6 @@ contract DegenerusGameDegeneretteModule is
 
     // Common masks
     uint256 private constant MASK_2 = 0x3;
-    uint256 private constant MASK_3 = 0x7;
     uint256 private constant MASK_8 = 0xFF;
     uint256 private constant MASK_16 = 0xFFFF;
     uint256 private constant MASK_32 = 0xFFFFFFFF;
@@ -364,7 +363,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param amountPerTicket Bet amount per ticket.
     /// @param ticketCount Number of spins (1..MAX_SPINS_PER_BET).
     /// @param customTicket Custom packed traits. Format: [D:24-31][C:16-23][B:8-15][A:0-7].
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero.
+    /// @param heroQuadrant Hero quadrant (0-3) for payout boost. Inputs >= 4 (including 0xFF) normalize to quadrant 0.
     function placeDegeneretteBet(
         address player,
         uint8 currency,
@@ -589,9 +588,7 @@ contract DegenerusGameDegeneretteModule is
         );
         uint32 index = uint32((packed >> FT_INDEX_SHIFT) & MASK_32);
         uint16 activityScore = uint16((packed >> FT_ACTIVITY_SHIFT) & MASK_16);
-        uint256 heroBits = (packed >> FT_HERO_SHIFT) & MASK_3;
-        bool heroEnabled = (heroBits & 1) != 0;
-        uint8 heroQuadrant = uint8(heroBits >> 1);
+        uint8 heroQuadrant = uint8((packed >> (FT_HERO_SHIFT + 1)) & MASK_2);
 
         uint256 rngWord = lootboxRngWordByIndex[index];
         if (rngWord == 0) revert RngNotReady();
@@ -645,7 +642,6 @@ contract DegenerusGameDegeneretteModule is
                 amountPerTicket,
                 roiBps,
                 wwxrpHighRoi,
-                heroEnabled,
                 heroQuadrant
             );
 
@@ -819,7 +815,11 @@ contract DegenerusGameDegeneretteModule is
     // Packed Bet Helpers
     // -------------------------------------------------------------------------
 
-    /// @dev Packs a Full Ticket bet for storage.
+    /// @dev Packs a Full Ticket bet for storage. Hero quadrant is always-on;
+    ///      inputs with `heroQuadrant >= 4` (including 0xFF) are normalized
+    ///      to quadrant 0 (top-left). The reserved bit at FT_HERO_SHIFT is
+    ///      always set; the 2-bit quadrant field at FT_HERO_SHIFT + 1
+    ///      encodes the selected quadrant.
     function _packFullTicketBet(
         uint32 customTicket,
         uint8 ticketCount,
@@ -829,6 +829,7 @@ contract DegenerusGameDegeneretteModule is
         uint16 activityScore,
         uint8 heroQuadrant
     ) private pure returns (uint256 packed) {
+        uint8 effectiveQuadrant = heroQuadrant < 4 ? heroQuadrant : 0;
         packed =
             uint256(MODE_FULL_TICKET) |
             (uint256(customTicket) << FT_TICKET_SHIFT) |
@@ -838,12 +839,10 @@ contract DegenerusGameDegeneretteModule is
             (uint256(index) << FT_INDEX_SHIFT) |
             (uint256(activityScore) << FT_ACTIVITY_SHIFT) |
             (uint256(1) << FT_HAS_CUSTOM_SHIFT);
-        // Hero quadrant: 3 bits at FT_HERO_SHIFT — [0]=enabled, [1..2]=quadrant
-        if (heroQuadrant < 4) {
-            packed |=
-                (uint256(1) | (uint256(heroQuadrant) << 1)) <<
-                FT_HERO_SHIFT;
-        }
+        // Hero quadrant: 3 bits at FT_HERO_SHIFT — [0]=reserved, [1..2]=quadrant (always-on)
+        packed |=
+            (uint256(1) | (uint256(effectiveQuadrant) << 1)) <<
+            FT_HERO_SHIFT;
     }
 
     // -------------------------------------------------------------------------
@@ -933,6 +932,9 @@ contract DegenerusGameDegeneretteModule is
     ///      the player's pick (`N = _countGoldQuadrants(playerTicket)`). Each
     ///      per-N table is calibrated so basePayoutEV = exactly 100 centi-x
     ///      against P_N(M) — equal EV across picks within rounding (≤ 0.0003 bps).
+    ///      Hero multiplier applies for M ∈ {2..7} under the always-on hero
+    ///      schedule; per-N HERO_BOOST tables are calibrated so hero is
+    ///      EV-neutral across all (M, N).
     /// @param playerTicket The player's ticket (packed traits).
     /// @param resultTicket The result ticket (packed traits).
     /// @param matches Number of attribute matches (0-8).
@@ -940,6 +942,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param betAmount The bet amount per ticket.
     /// @param roiBps The ROI in basis points (from activity score).
     /// @param wwxrpHighRoi The WWXRP high-value ROI (0 if not WWXRP).
+    /// @param heroQuadrant The hero quadrant (0..3) selected by the player.
     /// @return payout The payout amount.
     function _fullTicketPayout(
         uint32 playerTicket,
@@ -949,7 +952,6 @@ contract DegenerusGameDegeneretteModule is
         uint128 betAmount,
         uint256 roiBps,
         uint256 wwxrpHighRoi,
-        bool heroEnabled,
         uint8 heroQuadrant
     ) private pure returns (uint256 payout) {
         uint8 N = _countGoldQuadrants(playerTicket);
@@ -981,7 +983,7 @@ contract DegenerusGameDegeneretteModule is
         // EV-neutral per match count per N: P(hero|M, N) × boost(M, N)
         // + (1 − P(hero|M, N)) × HERO_PENALTY = HERO_SCALE.
         // No adjustment for M < 2 (payout = 0) or M = 8 (hero EV-neutrality cannot offset).
-        if (heroEnabled && matches >= 2 && matches < 8) {
+        if (matches >= 2 && matches < 8) {
             payout = _applyHeroMultiplier(
                 payout,
                 playerTicket,
