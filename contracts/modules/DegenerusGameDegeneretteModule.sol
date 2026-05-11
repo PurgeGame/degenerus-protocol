@@ -299,7 +299,7 @@ contract DegenerusGameDegeneretteModule is
     // [172..219] index (48 bits)
     // [220..235] activityScore (16 bits)
     // [236]      hasCustom (1 bit): must be 1
-    // [237..239] hero (3 bits): [0]=enabled, [1..2]=quadrant (0-3)
+    // [237..239] hero (3 bits): [0]=reserved (always set), [1..2]=quadrant (always-on hero, 0..3)
     //
     /// EV-equality across picks: each pick maps to exactly one of 5 per-N tables;
     /// basePayoutEV is calibrated to 100 centi-x per table; runtime payout =
