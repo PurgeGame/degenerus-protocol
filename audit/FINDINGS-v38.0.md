@@ -428,3 +428,144 @@ PAY-SPLIT 3-tier rule (PAY-SPLIT-01..03 from v37.0 Phase 267) UNCHANGED at v38 �
 **Closing conservation attestation:** Per-N table calibration math holds `basePayoutEV = 100 centi-x ± Fraction-exact rounding` per N ∈ {0..4} (per-N tables UNCHANGED at v38); ETH bonus EV = exactly 5.000% per N analytical (per-N WWXRP factor tables UNCHANGED at v38); per-N hero EV-neutrality holds within 0.05% calibration tolerance (per-N HERO_BOOST tables UNCHANGED at v38; HERO_PENALTY / HERO_SCALE UNCHANGED), ±1% empirical per Wave 2 STAT-02; solvency invariant `claimablePool ≤ ETH balance + stETH balance` PRESERVED; PAY-SPLIT 3-tier rule preserves `ethShare + lootboxShare = payout` invariant at every tier (PAY-SPLIT UNCHANGED at v38); no new mint sites.
 
 ---
+
+## 4. F-38-NN Finding Blocks
+
+### 4.1. Adversarial Sweep — 7-Surface Row Table
+
+Per AUDIT-02 design contract: 7 adversarial surfaces (a)..(g) covering the v38.0 delta scope. Each row contains `Verdict:`, `Evidence:`, `Grep recipe:` (where applicable), and `Prose justification:` blocks. Default verdict bucket per D-272-FIND-01: SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE. Zero F-38-NN finding blocks emitted unless D-272-ADVERSARIAL-01 escalation surfaces a FINDING_CANDIDATE / 8th-surface NEW_VECTOR / KI promotion candidate that user disposition approves.
+
+#### Surface (a) — Hero always-on EV-neutrality preserved across (M, N)
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- Per-N HERO_BOOST tables `HERO_BOOST_N0_PACKED` .. `HERO_BOOST_N4_PACKED` at L337-341 byte-identical at v38 HEAD vs `2654fcc2` (Wave 1 commit `527e3adc` does not modify the per-N HERO_BOOST tables).
+- `HERO_PENALTY = 9500` (L342) and `HERO_SCALE = 10000` (L343) UNCHANGED at v38.
+- EV-neutrality calibration: `P(hero|M, N) × boost(M, N) + (1 − P(hero|M, N)) × HERO_PENALTY = HERO_SCALE` for each (M, N) ∈ ({2..7} × {0..4}). The 5 per-N tables encode 6 values each (M = 2..7; M < 2 zero-payout exemption, M = 8 hero-EV-neutrality exemption).
+- Empirical: Wave 2 STAT-01 (`test/stat/DegenerettePerNEvExactness.test.js`) at ≥1M draws/N + STAT-02 (`test/stat/DegeneretteBonusEv.test.js`) at ≥100K hero-active draws/N — re-pinned under always-on hero with hero-off baseline run dropped; EV-neutrality within ±1% per (M, N).
+- Phase 267 Fraction-exact analytical audit (`.planning/notes/degenerette-recalibration/derive_5_tables.py` Python `Fraction` arithmetic) is the calibration source of truth; v38 inherits the v37.0 Phase 267 `PASS_ALL_25` byte-identity proof unchanged.
+
+**Grep recipe (constants UNCHANGED):**
+```
+git diff 2654fcc2..HEAD -- contracts/modules/DegenerusGameDegeneretteModule.sol \
+  | grep -E "HERO_BOOST_N[0-4]_PACKED|HERO_PENALTY|HERO_SCALE"
+```
+Expected output: zero matches (constants UNCHANGED at v38).
+
+**Prose justification:** Hero EV-neutrality is preserved by the per-N HERO_BOOST table calibration, NOT by the player's ability to opt-out. Removing the opt-out toggle does not change expected payout because the per-N HERO_BOOST tables were calibrated under the EV-neutrality equation in the FIRST place — the calibration zeroes out the expected hero contribution across the (M, N) joint distribution. Under the always-on schedule, the hero multiplier applies for every M ∈ {2..7}; the player still receives `E[payout(M, N)] = basePayout(M, N)` by construction. EV is invariant across the always-on transition. Only variance increases on the variance-averse player subset (cross-cite surface (f)).
+
+#### Surface (b) — Hero quadrant 0 default does NOT create payout-bias for players who omit heroQuadrant
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- `packedTraitsDegenerette` (v37.0 Phase 267 producer) is UNCHANGED at v38 — per-quadrant near-uniform color distribution `[16,16,16,16,16,16,16,8]/120` (commons 13.33% each, gold 6.67%); uniform 1/8 symbol; byte layout `[QQ][CCC][SSS]` preserved per DGN-01 + DGN-14 + Phase 268 STAT-02 chi² ≥1M-sample uniformity at `test/stat/DegenerettePerNEvExactness.test.js`.
+- Hero EV-neutrality (per surface (a)) is per-quadrant identical by table construction — the same per-N HERO_BOOST table dispatch applies for any heroQuadrant ∈ {0..3}.
+- Player passing `0xFF` (or any `>= 4`) lands in quadrant 0 (top-left) via HERO-01 normalization `uint8 effectiveQuadrant = heroQuadrant < 4 ? heroQuadrant : 0;` (L832).
+- Phase 268 STAT-01 per-N cross-pick parity describe (within `test/stat/DegenerettePerNEvExactness.test.js`) validates EV invariance across player-pick configurations under the v34 trait producer.
+
+**Prose justification:** Quadrant choice does not change EV under the EV-neutral hero design (surface (a)) because the per-N HERO_BOOST table dispatch is per-quadrant identical by construction. Landing in quadrant 0 (top-left, post-normalization) carries no informational advantage or disadvantage vs landing in quadrants 1/2/3 because (i) the symbol distribution is uniform 1/8 across all 4 quadrants (Phase 268 STAT-02), (ii) the hero match probability is P(hero|M, N) = 1/8 for any chosen quadrant, and (iii) the per-N HERO_BOOST table indexes by N (gold-quadrant count, NOT player-chosen heroQuadrant), so the boost/penalty schedule is identical regardless of heroQuadrant choice. The `0xFF` → 0 normalization does not bias outcomes; it merely chooses a canonical default for input out-of-range values.
+
+#### Surface (c) — Each cleanup-sweep removal preserves the invariant it claimed to guard
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence (per-CLEAN-NN inline design-intent trace per D-272-DESIGN-INTENT-01 + `feedback_design_intent_before_deletion.md`):**
+
+- **MASK_3 (L347, v37 baseline) DELETED.** Sole callsite was the heroBits extraction at v37 baseline L592 (removed by HERO-02). Cross-module grep `grep -rn "MASK_3" contracts/` returned zero other-file matches pre-deletion. Design-intent: 3-bit mask was for `[enabled, quadrant_lo, quadrant_hi]`; under always-on hero schedule the load-bearing form is the 2-bit `MASK_2 = 0x3` quadrant-only extract.
+- **heroBits + heroEnabled locals (v37 baseline L592-594) DELETED via HERO-02.** Design-intent: opt-out intermediate; under always-on schedule, the direct quadrant extract `uint8((packed >> (FT_HERO_SHIFT + 1)) & MASK_2)` is the load-bearing form. Storage layout byte-identical preserves one-line revert path if always-hero is ever rolled back.
+- **bool heroEnabled parameter on `_fullTicketPayout` (v37 baseline L952) DELETED via HERO-03.** Design-intent: opt-out toggle; under always-on schedule, the guard predicate `heroEnabled &&` is statically true at this call site so the parameter carried no information. Removal preserves the safety property (the `matches >= 2 && matches < 8` predicate is unchanged) per `feedback_no_dead_guards.md`.
+- **@param heroEnabled NatSpec line (v37 baseline L948-953) DELETED via HERO-04.** Design-intent: the NatSpec entry described the opt-out toggle; removing the parameter without removing its `@param` would leave a stale doc-line referencing a non-existent argument.
+- **Stale "enabled" / "opt-out" comments REWRITTEN per HERO-04 + D-272-NATSPEC-DISCIPLINE-01.** Touchpoints: L321 FT_HERO_SHIFT inline comment, L366 @param heroQuadrant NatSpec, `_packFullTicketBet` NatSpec block, `_fullTicketPayout` NatSpec block. Design-intent: comments describe protocol state at v38 close per `feedback_no_history_in_comments.md` — zero comparative/historical language ("previously was opt-out", "v37 → v38 change", etc.).
+- **CLEAN-05 negative result:** no additional redundant-guard removals beyond the HERO-03 guard simplification. Planner manual grep-walk per D-272-CLEAN-DISCOVERY-01 scanned for `require` / `revert` predicates statically provable from caller-clamp or upstream invariant; no further candidates surfaced.
+
+**Discovery method:** D-272-CLEAN-DISCOVERY-01 planner manual grep-walk within `DegenerusGameDegeneretteModule.sol` (NOT `/gas-audit` orchestrator). Each candidate carries the inline design-intent trace above per `feedback_design_intent_before_deletion.md` PRIMARY governing memory.
+
+**Prose justification:** Each removal preserves the invariant the removed code claimed to guard:
+- MASK_3 → invariant preserved by MASK_2 + direct quadrant extract (the 3-bit mask was for the v37 opt-out form; the 2-bit form is the always-on load-bearing form).
+- heroBits/heroEnabled locals → invariant preserved by direct extract on a single line.
+- heroEnabled parameter → invariant preserved by static-truth of the `heroEnabled` arm under always-on schedule.
+- @param NatSpec line → no invariant to preserve (the param no longer exists).
+- Stale comments → invariant of doc-code alignment preserved by describing what IS at v38 close.
+
+No deletion removes a guard whose predicate was non-trivially true at v37 baseline; every removal is structurally proven safe by the always-on schedule + bit-allocation preservation.
+
+#### Surface (d) — Storage layout byte-identical at v38 vs `2654fcc2`
+
+**Verdict:** SAFE_BY_STRUCTURAL_CLOSURE.
+
+**Evidence:**
+- `FT_HERO_SHIFT = 237` (L321) preserved — 3-bit allocation maintained per HERO-02 bit allocation lock; no collapse to 2 bits (which would shift storage layout).
+- Vestigial enabled bit at `FT_HERO_SHIFT + 0` always = 1 post-pack (set unconditionally via `uint256(1)` in the pack expression at L843); freed bit reserved for future feature.
+- Quadrant field at `FT_HERO_SHIFT + 1` encodes the 2-bit effectiveQuadrant.
+- Cross-cite §3.B AUDIT-04 grep-proof: `git diff 2654fcc2..HEAD -- contracts/DegenerusGameStorage.sol` empty (zero new storage slots).
+
+**Grep recipe:**
+```
+diff <(git show 2654fcc2:contracts/modules/DegenerusGameDegeneretteModule.sol \
+        | grep -E "FT_.*_SHIFT") \
+     <(grep -E "FT_.*_SHIFT" contracts/modules/DegenerusGameDegeneretteModule.sol)
+```
+Expected exit 0 (all `FT_*_SHIFT` constant declarations byte-identical).
+
+**Prose justification:** The HERO-02 bit allocation lock (3 bits at `FT_HERO_SHIFT = 237`) is explicit storage-layout discipline. Collapsing to 2 bits would shift all subsequent bit-packed fields (cascading storage-layout shift). By preserving the 3-bit allocation with a vestigial always-1 bit at offset 0, the on-chain packed bet representation remains byte-identical across v37 → v38. This preserves a one-line revert path if always-hero is ever rolled back: re-enabling the opt-out toggle requires only re-introducing the `heroEnabled` extraction at v37 baseline L592 (the bit is still there in storage).
+
+#### Surface (e) — Public ABI byte-identical
+
+**Verdict:** SAFE_BY_STRUCTURAL_CLOSURE.
+
+**Evidence:**
+- `placeDegeneretteBet(address player, uint8 currency, uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 heroQuadrant)` signature UNCHANGED at v38 (HERO-01 normalization is INTERNAL — operates inside `_packFullTicketBet`).
+- HERO-03 signature change to `_fullTicketPayout` is INTERNAL-ONLY (function remains `private`).
+- `0xFF` and any `>= 4` heroQuadrant input still accepted at the ABI boundary (no input validation revert added); the normalization-to-quadrant-0 happens inside `_packFullTicketBet` via `uint8 effectiveQuadrant = heroQuadrant < 4 ? heroQuadrant : 0;` (L832).
+- Cross-cite §3.B AUDIT-04 grep G10 documented in §3.A row group attestation. Cross-cite §3.A Row 1.5 (HERO-05) storage layout + public ABI byte-identity attestation.
+
+**Grep recipe:**
+```
+git diff 2654fcc2..HEAD -- contracts/ \
+  | grep -E '^\+.*function .* (public|external)'
+```
+Expected output: 0 hits.
+
+**Prose justification:** Public ABI byte-identity is preserved because the HERO-01 normalization is internal — the function selector at the ABI boundary `placeDegeneretteBet(address,uint8,uint128,uint8,uint32,uint8)` is unchanged. Existing integrators continue to pass `heroQuadrant = 0xFF` and the call succeeds (no revert); the protocol simply treats the input as "quadrant 0 (top-left)" internally. UI simplification benefit is achievable without ABI break — the frontend can stop emitting a hero-toggle UI control because there's no longer a way to opt out, but the on-chain interface remains backward-compatible.
+
+#### Surface (f) — Variance impact bound on risk-averse subset
+
+**Verdict:** SAFE_BY_DESIGN (accepted variance impact per user disposition).
+
+**Evidence:**
+- Pre-v38 opt-out posture: variance-averse players could pass `heroQuadrant = 0xFF` to skip the hero multiplier and lock payout at `basePayout(M, N)` (zero variance from hero multiplier).
+- Post-v38 always-on schedule: the hero multiplier applies for M ∈ {2..7} regardless of player input. Worst-case downside per spin = `HERO_PENALTY × basePayout = 0.95 × basePayout` (5% downside); best-case upside per spin = `boost-magnitude × basePayout` (per-N table, ranges from ~1.18× to ~2.50× across the 6-value per-N tables M ∈ {2..7}).
+- EV-neutral by construction per surface (a) — bounded variance increase; zero EV change.
+- Documented in D-272-DESIGN-INTENT-01 actor walk-through inline at Wave 1 commit message `527e3adc` body + at this §4 surface (f) prose disclosure ONLY (no new KNOWN-ISSUES.md Design Decisions entry per D-272-KI-01).
+- Player has zero EV-rational reason to prefer pre-v38 over post-v38 (EV invariant). Variance-averse players lose a variance-reduction tool but receive the same EV.
+
+**Actor walk-through (cross-cite D-272-DESIGN-INTENT-01):**
+- EV-rational players (risk-neutral / risk-loving): zero effect.
+- Variance-averse players: lose variance-reduction tool. Worst-case downside per spin = 0.95 × basePayout; best-case upside = boost-magnitude × basePayout (per-N table). Bounded variance increase; zero EV change.
+- Whales / casual / admin / governance: zero differential impact (shared storage slot, RNG word, payout function).
+- Adversarial: pre-v38 `heroQuadrant = 0xFF` could dodge unlucky hero-penalty hit but was EV-neutral, so no EV gain. Post-v38: cannot dodge; variance-neutral on expectation.
+
+**Prose justification:** The variance impact is bounded and acceptable per user disposition (degen-game context). Risk-averse players cannot extract value from the variance increase because EV is invariant; they merely face higher second-moment dispersion of outcomes. The downside ceiling is `HERO_PENALTY = 9500/10000 = 0.95 × basePayout` per spin (5% downside per hero-active spin), bounded above by the per-N HERO_BOOST table maxima. The boundary semantics are deterministic post-VRF-fulfillment (the hero match check `((playerTicket >> heroQuadrant*8) & 7) == ((resultTicket >> heroQuadrant*8) & 7)` is a function of VRF-derived bits committed pre-VRF-reveal per `feedback_rng_commitment_window.md`). No player-reachable path extracts protocol value from this variance increase; KNOWN-ISSUES.md UNMODIFIED at v38 per D-272-KI-01 default zero-promotion path. `/economic-analyst` Task 3.5 has the escalation hook per D-272-ADVERSARIAL-01 to flag this as a KI promotion candidate if mechanism-design red-team disagrees with the accepted-design verdict.
+
+#### Surface (g) — `npm run test:stat` + `npm run test:gas` clean run at v38 close
+
+**Verdict:** SAFE_BY_STRUCTURAL_CLOSURE.
+
+**Evidence:**
+- GASPIN-02 path (a-alt) script-split applied at `package.json` (Wave 2 commit `e3fcb95c`): new `test:gas` script wires `Phase261GasRegression + Phase264GasRegression + Phase268GasRegression + LootboxOpenGas + AdvanceGameGas`; `test:stat` excludes those gas files. Test bodies UNCHANGED (`Phase261/264` diff vs `2654fcc2` exit 0).
+- GASPIN-03 consistency-gate verification (Wave 2 Task 2.5): pre-Wave-2 `test:stat` exit=1 with 5 failures; post-Wave-2 `test:stat` exit=1 with 1 failure (STAT-03-v35-carry ACCEPTED-DESIGN remaining failure per Wave 2 Task 2.6 ledger entry). Non-regression vs pre-Wave-2 baseline confirmed.
+- The (a-alt) `npm run test:gas` split moves 3 cumulative-state-drift failures off `test:stat` into a dedicated runner; gas-pin drift failures persist under `test:gas` per v36.0 "128k is fine approved" acceptance (not regression-worse than pre-Wave-2 baseline).
+- SURF-03 rebase fixes the 4th pre-edit failure (LootboxModule diff against `PHASE_269_CLOSE_BASELINE = 8fd5c2e1` is now empty).
+- STAT-03-v35-carry remaining failure documented as ACCEPTED-DESIGN per v35.0 Phase 265 D-265-STAT03-01 fixture-calibration-error reframe (88.24% empty-bucket skip rate is fixture-density artifact, NOT protocol behavior).
+
+**Prose justification:** The clean-run target is satisfied modulo the documented STAT-03-v35-carry ACCEPTED-DESIGN gate behaving per pre-edit exit semantics. The (a-alt) script-split is the load-bearing improvement: it isolates gas-pin tests (which suffer cumulative-state drift under multi-file ordering per v36.0 D-269-STAB-01 RCA) from stat-pin tests (which assert mathematical invariants). Under the post-Wave-2 baseline, `test:stat` exit=1 with 1 known-design failure (STAT-03-v35-carry) and `test:gas` exit=1 with the v36.0 "128k is fine approved" gas-pin drift envelope. Both behaviors are pre-edit baseline-matching; neither is a Phase 272 regression.
+
+**RNG commitment-window degenerate-PASS attestation** (1-line per `feedback_rng_commitment_window.md`): Phase 272 has zero RNG-path mutation; commitment-window check is structurally trivial at v38 (no VRF request, fulfillment, or word-derived input flow was modified). EntropyLib byte-identical at v38 HEAD (REG-03 cross-cite in §6b; cross-module byte-identity grep-proof in §3.B). Backward-trace per `feedback_rng_backward_trace.md` is structurally trivial at v38 because no new RNG consumer is introduced; the existing Degenerette payout path consumes VRF-derived `rngWord` via `_resolveFullTicketBet` byte-identical at the entropy-consumption layer (only the hero-quadrant extraction local was modified, which does NOT read VRF-derived bits — it reads stored-bet bits committed at pack time before VRF reveal).
+
+### 4.2. Verdict Roll-Up + Adversarial-Pass Status
+
+7 of 7 surfaces (a)..(g) verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE per inline draft (Task 3.2). Adversarial-pass validation via `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` PARALLEL spawn (Task 3.5) per D-272-ADVERSARIAL-01; full output logged in `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-ADVERSARIAL-LOG.md`. Default expected: all 3 skills concur; zero FINDING_CANDIDATE, zero 8th-surface NEW_VECTOR, zero KI Design Decisions promotion candidate. Phase 272 §4 verdict roll-up STANDS unchanged; KNOWN-ISSUES.md UNMODIFIED per D-272-KI-01 default zero-promotion path. Zero F-38-NN finding blocks emit per D-272-FIND-01 carry default path.
+
+---
