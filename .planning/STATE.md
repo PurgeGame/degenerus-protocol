@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v37.0
 milestone_name: Degenerette Recalibration + Maintenance Bundle
-status: executing
-last_updated: "2026-05-11T08:00:00.000Z"
-last_activity: 2026-05-11 -- Phase 269 SHIPPED (partial scope — LBX-01 only; GASPIN-02/03 + LBX-02/03 + SURF-03 deferred to v37+ maintenance per RCA finding)
+status: Ready to discuss
+last_updated: "2026-05-11T06:10:52.889Z"
+last_activity: 2026-05-11 -- Phase 269 SHIPPED (partial scope by user decision after GASPIN-02 RCA showed Hardhat-internal mechanism not eliminable within plan's locked options)
 progress:
   total_phases: 5
   completed_phases: 3
@@ -28,7 +28,7 @@ Phase: 270 (post-v32.0-deferred-commit-adversarial-sub-audit) — NEXT
 Plan: TBD
 Status: Ready to discuss
 Last activity: 2026-05-11 -- Phase 269 SHIPPED (partial scope by user decision after GASPIN-02 RCA showed Hardhat-internal mechanism not eliminable within plan's locked options)
-Resume file: .planning/ROADMAP.md (Phase 270 entry)
+Resume file: .planning/phases/270-post-v32-0-deferred-commit-adversarial-sub-audit/270-CONTEXT.md
 
 ## Last Shipped Milestone
 
