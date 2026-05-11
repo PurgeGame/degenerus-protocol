@@ -58,7 +58,7 @@ contract DegeneretteHandler is Test {
     /// @param amountPerTicket Raw bet amount, bounded to [0.005 ether, 1 ether]
     /// @param ticketCount Raw ticket count, bounded to [1, 10]
     /// @param customTicket Raw custom ticket packed traits
-    /// @param heroQuadrant Raw hero quadrant, bounded to [0, 4] (4 = no hero = 0xFF)
+    /// @param heroQuadrant Raw hero quadrant, bounded to [0, 3] (always-on hero; valid input required)
     function placeEthBet(
         uint256 actorSeed,
         uint128 amountPerTicket,
@@ -75,9 +75,8 @@ contract DegeneretteHandler is Test {
         ticketCount = uint8(bound(uint256(ticketCount), 1, 10));
         // Ensure each quadrant byte has valid color (0-7) and symbol (0-7)
         customTicket = _sanitizeTicket(customTicket);
-        // heroQuadrant: 0-3 for specific quadrant, >= 4 means no hero (0xFF)
-        heroQuadrant = uint8(bound(uint256(heroQuadrant), 0, 4));
-        if (heroQuadrant == 4) heroQuadrant = 0xFF;
+        // heroQuadrant: always-on hero — must be 0-3; the contract reverts on >= 4
+        heroQuadrant = uint8(bound(uint256(heroQuadrant), 0, 3));
 
         uint256 totalBet = uint256(amountPerTicket) * uint256(ticketCount);
         if (totalBet > currentActor.balance) return;

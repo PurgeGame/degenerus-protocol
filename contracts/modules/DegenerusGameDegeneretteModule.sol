@@ -363,7 +363,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param amountPerTicket Bet amount per ticket.
     /// @param ticketCount Number of spins (1..MAX_SPINS_PER_BET).
     /// @param customTicket Custom packed traits. Format: [D:24-31][C:16-23][B:8-15][A:0-7].
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost. Inputs >= 4 (including 0xFF) normalize to quadrant 0.
+    /// @param heroQuadrant Hero quadrant (0-3) for payout boost. Required; inputs >= 4 (including 0xFF) revert with `InvalidBet`.
     function placeDegeneretteBet(
         address player,
         uint8 currency,
@@ -445,6 +445,7 @@ contract DegenerusGameDegeneretteModule is
         if (ticketCount == 0 || ticketCount > MAX_SPINS_PER_BET)
             revert InvalidBet();
         if (amountPerTicket == 0) revert InvalidBet();
+        if (heroQuadrant >= 4) revert InvalidBet();
 
         uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
         if (index == 0) revert E();
@@ -480,8 +481,8 @@ contract DegenerusGameDegeneretteModule is
 
         // Track hero wagers and player ETH stats (ETH bets only)
         if (currency == CURRENCY_ETH) {
-            // 1. Daily hero symbol tracking
-            if (heroQuadrant < 4) {
+            // 1. Daily hero symbol tracking (heroQuadrant validated to {0..3} above)
+            {
                 uint32 day = _simulatedDayIndex();
                 uint8 heroSymbol = uint8(customTicket >> (heroQuadrant * 8)) &
                     7;
@@ -815,11 +816,13 @@ contract DegenerusGameDegeneretteModule is
     // Packed Bet Helpers
     // -------------------------------------------------------------------------
 
-    /// @dev Packs a Full Ticket bet for storage. Hero quadrant is always-on;
-    ///      inputs with `heroQuadrant >= 4` (including 0xFF) are normalized
-    ///      to quadrant 0 (top-left). The reserved bit at FT_HERO_SHIFT is
-    ///      always set; the 2-bit quadrant field at FT_HERO_SHIFT + 1
-    ///      encodes the selected quadrant.
+    /// @dev Packs a Full Ticket bet for storage. Hero quadrant is always-on.
+    ///      Expects `heroQuadrant` in {0..3}; entry-point validation in
+    ///      `_placeDegeneretteBetCore` reverts on `>= 4` with `InvalidBet`,
+    ///      so the packed bet and the dailyHeroWagers ledger share the same
+    ///      validated input. The reserved bit at FT_HERO_SHIFT is always
+    ///      set; the 2-bit quadrant field at FT_HERO_SHIFT + 1 encodes the
+    ///      quadrant.
     function _packFullTicketBet(
         uint32 customTicket,
         uint8 ticketCount,
@@ -829,7 +832,6 @@ contract DegenerusGameDegeneretteModule is
         uint16 activityScore,
         uint8 heroQuadrant
     ) private pure returns (uint256 packed) {
-        uint8 effectiveQuadrant = heroQuadrant < 4 ? heroQuadrant : 0;
         packed =
             uint256(MODE_FULL_TICKET) |
             (uint256(customTicket) << FT_TICKET_SHIFT) |
@@ -841,7 +843,7 @@ contract DegenerusGameDegeneretteModule is
             (uint256(1) << FT_HAS_CUSTOM_SHIFT);
         // Hero quadrant: 3 bits at FT_HERO_SHIFT — [0]=reserved, [1..2]=quadrant (always-on)
         packed |=
-            (uint256(1) | (uint256(effectiveQuadrant) << 1)) <<
+            (uint256(1) | (uint256(heroQuadrant) << 1)) <<
             FT_HERO_SHIFT;
     }
 
