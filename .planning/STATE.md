@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v38.0
 milestone_name: Always-Hero Simplification + Maximal Dead-Code Cleanup
-status: planning
-last_updated: "2026-05-11T10:24:35.327Z"
-last_activity: 2026-05-11
+status: Defining requirements
+last_updated: "2026-05-11T10:51:48.050Z"
+last_activity: 2026-05-11 — Milestone v38.0 started
 progress:
-  total_phases: 0
+  total_phases: 1
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
