@@ -350,3 +350,121 @@ Output: 0 hits in non-test contract files. Degenerette payout flow uses pre-exis
 
 ---
 
+## 4. F-37-NN Finding Blocks
+
+### 4.1. Adversarial Sweep — 8-Surface Row Table
+
+Per AUDIT-02 design contract: 8 adversarial surfaces (a)..(h) covering the v37.0 delta scope. Each row contains `Verdict:`, `Evidence:`, `Grep recipe:` (where applicable), and `Prose justification:` blocks. Default verdict bucket per D-271-FIND-01: SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE. Zero F-37-NN finding blocks emitted unless D-271-ADVERSARIAL-04 escalation surfaces a FINDING_CANDIDATE / 9th-surface NEW_VECTOR / KI promotion candidate that user disposition approves.
+
+#### Surface (a) — per-N table dispatch correctness vs match-count distribution P_N(M)
+
+**Verdict:** SAFE_BY_STRUCTURAL_CLOSURE.
+
+**Evidence:**
+- 5-table per-N payout dispatch calibrated via `.planning/notes/degenerette-recalibration/derive_5_tables.py` Fraction-exact derivation.
+- `basePayoutEV = 100 centi-x` exact per N ∈ {0..4} (analytical).
+- Phase 268 STAT-01 ≥1M draws/N empirically validates `100.00 ± 0.50 centi-x` for each N — `test/stat/DegenerettePerNEvExactness.test.js`.
+- Phase 268 STAT-05 per-N match-count histogram matches analytical binomial-convolution reference within ±0.5% bin tolerance — same file.
+- Phase 267 commit `e1136071` `_getBasePayoutBps` 5-table dispatch + `_countGoldQuadrants` N selector.
+
+**Prose justification:** P_N(M) is the binomial-convolution per-N match-count distribution. The 5-table dispatch indexes the per-N payout schedule by N (output of `_countGoldQuadrants`). Each per-N schedule is Fraction-exact calibrated so that `Σ P_N(M) × payout_N(M) for M ∈ {0..8} = 100 centi-x`. Phase 268 STAT-01 empirically validates the EV calibration; STAT-05 validates the distribution-shape match. Structural closure: the per-N table is the SAME mathematical object as the per-N P_N(M) ⊗ payout_N(M) integral — by construction.
+
+#### Surface (b) — symbol-only hero match preserves uniformity, no color-channel info leak
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- DGN-07 design contract: hero match is symbol-only via `((playerTicket >> heroQuadrant*8) & 7) == ((resultTicket >> heroQuadrant*8) & 7)`.
+- Comparison reads only bits 0-2 (the symbol nibble) of the hero quadrant byte; color bits 3-5 are NOT read.
+- Symbol distribution is uniform 1/8 per producer DGN-01 (`[16,16,16,16,16,16,16,8]/120` color × uniform 1/8 symbol).
+- P(hero match) = 1/8 exactly (analytical).
+- Phase 268 STAT-03 hero EV per N within ±1% — `test/stat/DegeneretteBonusEv.test.js`.
+- Phase 267 commit `e1136071` `_applyHeroMultiplier` symbol-only rewrite.
+
+**Prose justification:** No color-channel info leak because color bits are not inputs to the equality comparison; only the symbol nibble (3 bits) is compared. The uniform 1/8 symbol distribution combined with the bit-mask isolation gives exactly P(hero match) = 1/8 per quadrant. Per-N hero boost dispatch via `HERO_BOOST_N{0..4}_PACKED` preserves EV-neutrality within 0.05% tolerance (HERO_PENALTY 9500 / HERO_SCALE 10000 unchanged); empirical ±1% per Phase 268 STAT-03.
+
+#### Surface (c) — `_countGoldQuadrants` boundary `color == 7` strict (not `>= 7`)
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- DGN-03 design contract: `_countGoldQuadrants(uint32 ticket) private pure returns (uint8)` returns N ∈ {0..4} from strict `color == 7` comparison: `((ticket >> (q*8 + 3)) & 7) == 7` for q ∈ {0..3}.
+- 3-bit color field range {0..7}; with `& 7` mask there is no `>= 7` ambiguity (only 7 itself satisfies).
+- uint8 return + bounded 4-iteration loop + cumulative count ≤ 4 — overflow immune.
+- Phase 268 STAT-01 per-N cross-pick parity describe implicitly validates N-dispatch boundary.
+
+**Prose justification:** Strict equality `== 7` is the only meaningful test for a 3-bit field where 7 is the maximum value. The masking `& 7` is redundant (since the shift `(ticket >> (q*8 + 3))` already isolates 3 bits when combined with the field width), but provides explicit byte-layout discipline. Off-by-one immune because `== 7` is unambiguous. The 4-iteration loop is bounded; cumulative count is naturally bounded ≤ 4 by the loop. uint8 return type is sufficient for {0..4}.
+
+#### Surface (d) — producer `[16,16,16,16,16,16,16,8]/120` byte-layout consistency with downstream consumers
+
+**Verdict:** SAFE_BY_STRUCTURAL_CLOSURE.
+
+**Evidence:**
+- DGN-01 + DGN-14 design contracts: `packedTraitsDegenerette` preserves `[QQ][CCC][SSS]` byte layout (color 3 bits at offset 3-5 of each player-pick byte; symbol 3 bits at offset 0-2).
+- `packedTraitsFromSeed` body byte-identical (Mint + Jackpot UNCHANGED per Phase 268 SURF-01); the only additive change is the new producer helper.
+- Phase 268 STAT-02 chi² ≥1M-sample uniformity verification within Wilson-Hilferty Z<1.645 / `CHI2_CRIT_05[7] = 14.067` at α=0.05.
+- Phase 267 commit `e1136071` packed-traits producer + `_countGoldQuadrants` consumer dispatch share the byte layout.
+
+**Prose justification:** Producer + consumer share the same byte layout — structurally closed. The chi² uniformity test verifies the producer empirically matches the analytical `[16,16,16,16,16,16,16,8]/120` distribution; SURF-01 byte-identity verifies the consumer reads the same byte layout the producer writes. Mint + Jackpot paths consume `packedTraitsFromSeed` (unchanged byte layout); Degenerette consumes `packedTraitsDegenerette` (new producer, SAME byte layout). No layout drift across consumers.
+
+#### Surface (e) — WWXRP factor table-dispatch composition with hero boost — no double-counting
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- DGN-09 + DGN-10 design contracts: per-N WWXRP factor dispatch via `WWXRP_FACTORS_N{0..4}_PACKED`; hero boost via `HERO_BOOST_N{0..4}_PACKED` (independent table).
+- Phase 268 STAT-04 per-N WWXRP factor EV within ±1% at ≥100K WWXRP-active draws/N.
+- Multiplicative composition in `_fullTicketPayout`: hero × WWXRP applied sequentially to base payout, then `_distributePayout` consumes the post-hero-post-WWXRP amount.
+
+**Prose justification:** Hero and WWXRP boosts are independent multiplicative factors applied sequentially. Hero touches the symbol nibble (surface (b)); WWXRP touches a separate per-N factor table indexed by RNG-derived bucket (Phase 268 STAT-04 empirical validation). No shared inputs, no double-counting. The 3-tier ETH split (surface (h)) operates on the FINAL post-hero-post-WWXRP payout amount, so split-rule decisions see the composed value, not the pre-multiplier base.
+
+#### Surface (f) — lootbox dead-branch removal byte-equivalence via caller-clamp invariant
+
+**Verdict:** SAFE_BY_STRUCTURAL_CLOSURE.
+
+**Evidence:**
+- Phase 269 commit `8fd5c2e1` caller-clamp triple-defense (cross-cite §3.A Row Group 2):
+  - **Layer-1** `openLootBox` L557-559 unconditionally clamps `targetLevel = max(targetLevel, currentLevel)`.
+  - **Layer-2** `_resolveLootboxCommon` L882-884 unconditionally clamps `targetLevel = max(targetLevel, currentLevel)`.
+  - **Layer-3** (DELETED) inner `_resolveLootboxRoll` `if (targetLevel < currentLevel) { burnieOut = ... }` branch was structurally dead.
+- Bytecode shrink 177 bytes (18,330 → 18,153) confirms no behavior change.
+- LBX-03 anchor cross-cite §3.A Row Group 2 — 4 hash2/bit-slice callsites in `_resolveLootboxRoll` at HEAD L1559 / L1564 / L1571 / L1599 byte-identical at structural level.
+
+**Prose justification:** Layer-1 and Layer-2 unconditionally enforce `targetLevel ≥ currentLevel` before `_resolveLootboxRoll` is reached. The deleted inner branch tested `targetLevel < currentLevel` — an invariantly-false predicate under the caller-clamp regime. Removing dead code does not change behavior; bytecode shrink empirically confirms via direct artifact inspection. Bit-slice budget UNAFFECTED (same 4 callsites, same bit ranges, same modulo constants).
+
+#### Surface (g) — hero × per-N composition skill-expression channel preserved (v34.0 surface (f) carry-forward)
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- `audit/FINDINGS-v34.0.md` §4 surface (f) predecessor analysis (hero × gold composition prose) — v34.0 carry source.
+- Phase 268 STAT-01 per-N cross-pick parity describe (within `test/stat/DegenerettePerNEvExactness.test.js`).
+- Phase 268 STAT-03 hero EV per N within ±1%.
+- Equal-EV invariant holds across all 16,384 player-pick configurations within statistical tolerance (player has full freedom of pick configuration; EV is config-invariant within ±1%).
+
+**Prose justification:** Hero is a per-quadrant symbol-match boost; per-N is a payout-table dispatch indexed by gold-quadrant count. They compose multiplicatively on the base payout, and their compositions are independent (hero indexes the hero quadrant byte; per-N indexes the gold-color count across all 4 quadrants). Skill-expression channel is preserved: player chooses pick configuration → distribution of N depends on configuration → EV remains within ±1% across configurations (by construction of the per-N tables). v34.0 §4 surface (f) carry-forward applies: hero × gold composition was previously verdicted SAFE_BY_DESIGN under the single-table payout schedule; the 5-table per-N rewrite preserves the same composition property because each per-N table is independently EV-calibrated to 100 centi-x.
+
+#### Surface (h) — ETH payout split-rule monotonicity + boundary-gaming check (v37-NEW)
+
+**Verdict:** SAFE_BY_DESIGN (with `/economic-analyst` escalation hook per D-271-ADVERSARIAL-04).
+
+**Evidence:**
+- **PAY-SPLIT-01** (≤3× bet → 100% ETH): `_distributePayout` branch guards `payout <= 3 * betAmount` strictly inclusive at exactly 3.0×. No off-by-one (≤ vs <) ambiguity per Phase 267 D-PAY-SPLIT-01 design contract.
+- **PAY-SPLIT-02** (3× < payout ≤ 10× → 2.5× bet ETH floor + remainder lootbox): `ethShare = max(2.5 * betAmount, payout / 4)`. Boundary discontinuity at exactly 3.0× bet documented as ACCEPTED-DESIGN: player at payout = 3.0× bet receives 3.0× bet ETH (PAY-SPLIT-01 path); player at payout = 3.01× bet receives 2.5× bet ETH + 0.51× bet lootbox (PAY-SPLIT-02 path); 0.5× bet ETH-share drop at the 3.0× → 3.01× transition. Total payout invariant preserved (`ethShare + lootboxShare = payout`).
+- **PAY-SPLIT-03** (pool-cap precedence): if computed `ethShare > 10% × futurePool`, excess flips to lootbox per existing L716-723 logic. Verified to compose correctly with PAY-SPLIT-01/02 (pool cap takes precedence over small-payout passthrough AND 2.5× floor). NatSpec on `_distributePayout` documents the precedence rule per Phase 267 DGN-13 stale-comments rewrite.
+- **Empirical evidence:** Phase 268 STAT-07 (`test/stat/DegenerettePerNEvExactness.test.js describe("ETH payout split rule")`) validates per-band frequency match within ±0.5% bin tolerance for the 3-tier split across all per-N basePayout × roiBps distributions; pool-cap excess-flip path tested separately under thin-pool fixture (D-268-THINPOOL-01).
+- **Composition with hero × WWXRP:** hero boost + WWXRP factor table dispatch applies BEFORE `_distributePayout` receives the final payout amount; the 3-tier split rule sees the post-hero-post-WWXRP amount; no double-counting (cross-cite surface (e) WWXRP composition + (g) hero × per-N composition).
+
+**Boundary-gaming analysis:**
+- Player CANNOT control the payout amount post-VRF-fulfillment (payout is a deterministic function of (player picks, VRF-derived match count, hero, WWXRP-bonus) — all inputs committed before VRF reveal per `feedback_rng_commitment_window.md` backward-trace per `feedback_rng_backward_trace.md`).
+- Player CAN choose `betAmount` and currency, but the 3-tier split is structurally bounded by the payout-multiple distribution; no actor can precisely target the 3.0× boundary because the player-side parameter is `betAmount`, not payout-multiple.
+- Pool-cap precedence (PAY-SPLIT-03) ensures protocol solvency dominates payout-shape preferences; thin-pool conditions cap-flip excess to lootbox preserving `claimablePool` ceiling.
+
+**Prose justification:** Total payout invariant `ethShare + lootboxShare = payout` is preserved at every tier — the player receives the same total value, just in a different mix. The boundary discontinuity at 3.0× bet (0.5× bet ETH-share drop at 3.0× → 3.01×) is the accepted-design tradeoff between (a) preserving 100% ETH for small wins (≤3× bet — keeps the per-bet break-even clean) and (b) bounding ETH outflow per win to a fixed 2.5× bet floor in the mid-band (3-10× bet) to protect the prize pool. Player cannot game the boundary because `betAmount` is the player-side lever, not payout-multiple, and payout-multiple is a deterministic post-VRF function of inputs committed pre-VRF reveal. Per D-271-PAYSPLIT-01 default disposition: this boundary discontinuity is documented as accepted-design via this §4 surface (h) prose disclosure ONLY; no new KNOWN-ISSUES.md entry under Design Decisions (zero-promotion default). `/economic-analyst` Task 6 has the escalation hook per D-271-ADVERSARIAL-04 to flag this as a KI promotion candidate if mechanism-design red-team disagrees with the accepted-design verdict.
+
+### 4.2. Verdict Roll-Up + Adversarial-Pass Status
+
+8 of 8 surfaces (a)..(h) SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE per inline draft (Task 5). Adversarial-pass validation via `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` PARALLEL spawn (Task 6) per D-271-ADVERSARIAL-01; full output logged in `271-01-ADVERSARIAL-LOG.md`. Default expected zero F-37-NN finding blocks per D-271-FIND-01; deviation routes to D-271-ADVERSARIAL-04 user disposition before READ-only flip.
+
+---
+
