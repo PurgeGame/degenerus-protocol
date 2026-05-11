@@ -218,3 +218,23 @@ The `dailyHeroWagers` ledger drives the daily-hero-winner mechanism in `Degeneru
 *Generated: 2026-05-11*
 *3-skill PARALLEL spawn pattern per D-272-ADVERSARIAL-01.*
 *HEAD at log-authoring time: `079ec007` (post-Task-3.4 §6/§7/§8 commit).*
+
+---
+
+## Wave 1.5 Disposition Update (2026-05-11, post Wave 3 close)
+
+**Hypothesis (i) — `dailyHeroWagers` post-v38 ledger-tracking drift**
+
+**Status:** Pivoted from KEEP_AS_NEGATIVE_FINDING (at this adversarial-pass close) to RESOLVED_AT_V38 (Wave 1.5).
+
+**Resolution:** Commit `4760459f` — defensive boundary validation. `_placeDegeneretteBetCore` entry adds `if (heroQuadrant >= 4) revert InvalidBet();`. The previous silent-normalize path (Hypothesis (i)'s root) no longer exists; invalid inputs are rejected at the public ABI boundary.
+
+**Spec_lock revision:** HERO-05 pivoted from "accept + normalize" to "reject invalid input". Tracked as D-272-INPUT-VALIDATION-01 in `272-CONTEXT.md`. Wave 4 closure flips will propagate the revision to ROADMAP success criterion #2 + REQUIREMENTS.md HERO-05 prose.
+
+**Audit impact:**
+- `audit/FINDINGS-v38.0.md` §3.A: amended (Wave 1.5 row + HERO-05 row revised).
+- §4 surface (b): verdict revised to SAFE_BY_DEFENSIVE_VALIDATION; rationale: the asymmetric "omit heroQuadrant" path no longer exists.
+- §9.NN.iv RE-DEFER Register: Hypothesis (i) row REMOVED (no v39+ pickup).
+- §7 cross-cite: noted RESOLVED_AT_V38.
+
+**Adversarial-pass historical record:** This log section is an APPENDED disposition update; the H2 sections above (the 3 skills' original outputs) remain as the historical record of what the adversarial pass found at Wave 3 close. The pivot reflects user disposition (Wave 1.5 USER-APPROVED commit on 2026-05-11).
