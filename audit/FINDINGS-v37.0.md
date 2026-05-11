@@ -186,5 +186,105 @@ Cross-cite `.planning/notes/degenerette-recalibration/derive_5_tables.py` (Fract
 
 Cross-cite full appendix at `.planning/phases/270-post-v32-0-deferred-commit-adversarial-sub-audit/270-01-DELTA-SURFACE.md`.
 
+### 3.A AUDIT-01 Delta-Surface Table
+
+Every source-tree change from v36.0 baseline `1c0f0913` → v37.0 HEAD enumerated with hunk-level evidence and {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED} classification per row. Row groups: Phase 267 Degenerette contract changes (commit `e1136071`); Phase 269 LootboxModule dead-branch deletion (commit `8fd5c2e1`) with LBX-03 HEAD line-number anchors; Phase 270 carry-forward 2-row commit-summary (sub-audit subjects predating v37.0 baseline; cross-cited to `270-01-DELTA-SURFACE.md`).
+
+#### Row Group 1 — Phase 267 Degenerette Contract Changes (commit `e1136071`)
+
+**Row 1.1** — `contracts/DegenerusTraitUtils.sol` :: `packedTraitsDegenerette(uint256 seed) internal pure returns (uint32)` + private `_degTrait(uint64) private pure returns (uint8)` helper.
+- Class: **NEW** (additive library helper).
+- File / Lines: `contracts/DegenerusTraitUtils.sol` (+45 LOC).
+- Evidence: per-quadrant near-uniform color `[16,16,16,16,16,16,16,8]/120` (commons 13.33%, gold 6.67%); uniform symbol 1/8; byte layout `[QQ][CCC][SSS]` preserved. Library `internal pure` is inlined into consumer at compile time — does NOT widen public ABI per DGN-01 + DGN-15. Phase 268 STAT-02 chi² ≥1M-sample uniformity at `test/stat/DegeneretteProducerChi2.test.js`.
+- Verdict: SAFE.
+
+**Row 1.2** — `contracts/modules/DegenerusGameDegeneretteModule.sol` :: `_evNormalizationRatio` body (v36 L808-851) + single call site (v36 L965-969).
+- Class: **DELETED**.
+- File / Lines: `contracts/modules/DegenerusGameDegeneretteModule.sol` (−1 internal function body + −5-line callsite block).
+- Evidence: per DGN-02. No runtime EV correction; payout schedule fully visible in storage post-rewrite.
+- Verdict: SAFE_BY_DESIGN.
+
+**Row 1.3** — `_countGoldQuadrants(uint32 ticket) private pure returns (uint8)`.
+- Class: **NEW**.
+- Evidence: counts color==7 across 4 player-pick quadrants strictly via `((ticket >> (q*8 + 3)) & 7) == 7` per DGN-03. 3-bit color field bounded {0..7}; uint8 return; 4-iteration loop bounded; cumulative count ≤ 4.
+- Verdict: SAFE_BY_DESIGN.
+
+**Row 1.4** — `_getBasePayoutBps(uint256 matchCount, uint8 N)`.
+- Class: **MODIFIED_LOGIC** (REWRITTEN).
+- Evidence: 5-table per-N dispatch indexed by N from `_countGoldQuadrants`; `basePayoutEV = 100 centi-x` exact per N analytically; Phase 268 STAT-01 ≥1M draws/N empirical evidence within ±0.50 centi-x.
+- Verdict: SAFE.
+
+**Row 1.5** — `_applyHeroMultiplier(...)`.
+- Class: **MODIFIED_LOGIC** (REWRITTEN).
+- Evidence: symbol-only hero match per DGN-07 via `((playerTicket >> heroQuadrant*8) & 7) == ((resultTicket >> heroQuadrant*8) & 7)`; per-N hero boost dispatch via `HERO_BOOST_N{0..4}_PACKED`; HERO_PENALTY 9500 / HERO_SCALE 10000 unchanged.
+- Verdict: SAFE_BY_DESIGN.
+
+**Row 1.6** — `_wwxrpBonusRoiForBucket(...)`.
+- Class: **MODIFIED_LOGIC** (REWRITTEN).
+- Evidence: 5-table per-N WWXRP factor dispatch via `WWXRP_FACTORS_N{0..4}_PACKED` per DGN-09 + DGN-10; Phase 268 STAT-04 per-N WWXRP EV within ±1% empirical.
+- Verdict: SAFE.
+
+**Row 1.7** — `_distributePayout(player, currency, betAmount, payout, rngWord)` (ETH-currency branch).
+- Class: **MODIFIED_LOGIC** (REWRITTEN).
+- Evidence: 5-arg signature with `uint128 betAmount` inserted between `currency` and `payout`; `betAmount` threaded from L656 callsite. 3-tier ETH split rule per PAY-SPLIT-01..03 (≤3× → 100% ETH; 3-10× → 2.5× bet ETH floor + remainder lootbox; pool-cap precedence via L716-723 `ETH_WIN_CAP_BPS = 1_000 = 10% × futurePool`); `CURRENCY_BURNIE` + `CURRENCY_WWXRP` branches UNCHANGED. NatSpec documents 3-tier rule + pool-cap precedence per `feedback_no_history_in_comments.md`.
+- Verdict: SAFE_BY_DESIGN (boundary discontinuity at exactly 3.0× bet is accepted-design per D-271-PAYSPLIT-01 — see §4 surface (h)).
+
+**Row 1.8** — 25 packed constants delta (11 → 24 net).
+- Class: **NEW** (15 add) + **DELETED** (6 drop).
+- Evidence: 5 × `QUICK_PLAY_PAYOUTS_N{0..4}_PACKED` + 5 × `QUICK_PLAY_PAYOUT_N{0..4}_M8` + 5 × `HERO_BOOST_N{0..4}_PACKED` + 5 × `WWXRP_FACTORS_N{0..4}_PACKED` ADDED. `QUICK_PLAY_BASE_PAYOUTS_PACKED` + `QUICK_PLAY_BASE_PAYOUT_8_MATCHES` + `WWXRP_BONUS_FACTOR_BUCKET5..8` block + `HERO_BOOST_PACKED` + 2 normalizer constants DELETED per DGN-05/06/08/10/11. Cross-cite `.planning/notes/degenerette-recalibration/derive_5_tables.py` Fraction-exact derivation (Phase 267 Task 2: `PASS_ALL_25` byte-identity).
+- Verdict: SAFE.
+
+**Row 1.9** — 4 stale comment rewrites at L239 / L262 / L287-298 / L316.
+- Class: **REFACTOR_ONLY** (comment-only).
+- Evidence: per DGN-13; no prose drift between code and comments; per `feedback_no_history_in_comments.md` describes per-N reality at v37.0.
+- Verdict: SAFE.
+
+**Row 1.10** — `packedTraitsFromSeed` callsite at L607 SWAPPED to `packedTraitsDegenerette` (post-rewrite line ~L629).
+- Class: **REFACTOR_ONLY** (producer call site).
+- Evidence: per DGN-12. Mint + Jackpot path UNCHANGED (still consume `packedTraitsFromSeed` per SURF-01 byte-identity grep-proof).
+- Verdict: SAFE_BY_DESIGN.
+
+#### Row Group 2 — Phase 269 LootboxModule Dead-Branch Deletion (commit `8fd5c2e1`)
+
+**Row 2.1** — `contracts/modules/DegenerusGameLootboxModule.sol` :: `_resolveLootboxRoll` inner `if (targetLevel < currentLevel) { burnieOut = ... }` branch + cascade signature parameter cleanup.
+- Class: **DELETED** (inner branch) + **REFACTOR_ONLY** (cascade signature parameter drop).
+- File / Lines: v36.0 baseline L1574-1578 (4-LOC inner branch body) DELETED; cascade signature `_resolveLootboxRoll` `targetLevel` + `currentLevel` params dropped + 2 callsites updated + 2 NatSpec `@param` lines removed.
+- Evidence — **caller-clamp triple-defense invariant at HEAD `<sha>` per D-271-DEFERRED-01:**
+  - **Layer-1** `openLootBox` L557-559 unconditionally clamps `targetLevel = max(targetLevel, currentLevel)` before invocation.
+  - **Layer-2** `_resolveLootboxCommon` L882-884 unconditionally clamps again before reaching `_resolveLootboxRoll`.
+  - **Layer-3** (DELETED) inner `_resolveLootboxRoll` branch was structurally dead.
+  - **Bytecode shrink:** 177 bytes (18,330 → 18,153) measured at Phase 269 Task 4 via direct artifact inspection.
+  - **Per-open runtime savings:** theoretical 20-50 gas on the 55%-tickets-path (~55% of opens); ~0.005% of typical 600K-1M-gas lootbox open. Empirical pin DEFERRED to v38+ maintenance per D-271-DEFERRED-02 (LBX-02 fixture-coverage gap; analytical worst-case load-bearing).
+- Verdict: SAFE_BY_STRUCTURAL_CLOSURE.
+
+**Row 2.1 LBX-03 audit-trail (per D-271-DEFERRED-01):** v36.0 ENT-02 callsite numbering at HEAD anchored as follows. 4 hash2/bit-slice callsites in `_resolveLootboxRoll` (function NatSpec @ L1534; function body opens immediately after) survive byte-identical at the structural level. v36.0 baseline (pre-LBX-01) line numbers L1548 / L1569 / L1585 / L1599; **HEAD (post-LBX-01) line numbers L1559 / L1564 / L1571 / L1599** — measured via `grep -nE "hash2|seed >> |_lootboxTicketCount|_lootboxDgnrsReward" contracts/modules/DegenerusGameLootboxModule.sol` at Phase 271 §3.A authoring time. Concrete callsites at HEAD:
+- **L1559** — `uint16(seed >> 40) % 20` (pathRoll bit-slice; bits[40..55]).
+- **L1564** — call to `_lootboxTicketCount(... seed)` (forwards seed to L1635 inner bit-slice `uint24(seed >> 96) % 10_000`; bits[96..119]).
+- **L1571** — call to `_lootboxDgnrsReward(amount, seed)` (forwards seed to inner DGNRS bit-slice; bits[56..79]).
+- **L1599** — `uint16(seed >> 80) % 20` (varianceRoll large-BURNIE branch bit-slice; bits[80..95]).
+
+Line numbers shift downward by 11 LOC (L1548 → L1559) for the first three callsites after dead-branch removal; the 4th (L1599) is invariant because the deletion was upstream of the shift point in the function body. Bit-slice budget UNAFFECTED — same 4 callsites, same bit ranges, same modulo constants; structural cleanup only.
+
+#### Row Group 3 — Phase 270 Post-v32.0 Carry-Forward 2-Row Commit-Summary
+
+Both commits PREDATE v37.0 baseline `1c0f0913` (Phase 270 sub-audit subjects, not v37-introduced). Rows enumerated here for milestone-completeness per CONTEXT.md `<domain>` AUDIT-01 source-tree-change inventory + Phase 270 D-270-FILES-01 cross-cite discipline. Full appendix: `.planning/phases/270-post-v32-0-deferred-commit-adversarial-sub-audit/270-01-DELTA-SURFACE.md`.
+
+**Row 3.A — Commit `002bde55`** (`feat(presale): auto-deactivate flag on per-mint cap crossing`; 2026-05-02; +14 / −10 LOC across 3 files). 5 declaration rows verbatim from Phase 270 270-01-DELTA-SURFACE.md:
+1. AdvanceModule cap-OR arm — **DELETED**.
+2. AdvanceModule constant — **DELETED**.
+3. GameStorage constant — **NEW**.
+4. MintModule inlined SLOAD/mask/SSTORE — **MODIFIED_LOGIC**.
+5. MintModule per-mint cap-clear predicate — **NEW**.
+- Phase 270 verdict: **SAFE_BY_STRUCTURAL_CLOSURE**.
+
+**Row 3.B — Commit `2713ce61`** (`chore(vault): remove dead setDecimatorAutoRebuy wrapper`; 2026-05-05; +3 / −20 LOC across 2 files). 2 declaration rows verbatim from Phase 270 270-01-DELTA-SURFACE.md:
+1. `DegenerusVault.sol` `setDecimatorAutoRebuy` wrapper — **DELETED**.
+2. Fuzz coverage entry — **DELETED**.
+- Phase 270 verdict: **SAFE_BY_DESIGN** (admin-entry-point-removal blast radius = zero; Phase 146 ABI cleanup `31ec2780` (Apr 9 2026) anchored as Commit B unreachability cause via design-intent trace per `feedback_design_intent_before_deletion.md` PRIMARY governing memory).
+
+#### §3.A Summary
+
+v37.0 source-tree changes since baseline `1c0f0913`: 2 contract-tree commits (`e1136071` Phase 267 Degenerette + `8fd5c2e1` Phase 269 LBX-01) + 1 test-tree commit (`4b277aaf` Phase 268; not enumerated above — test surface, not contract surface). Phase 270 sub-audit subjects (`002bde55` + `2713ce61`) PREDATE the v37.0 baseline and are enumerated for milestone-completeness per Phase 270 working-file appendix cross-cite. All rows verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE per AUDIT-01 + AUDIT-02 + DELTA-03.
+
 ---
 
