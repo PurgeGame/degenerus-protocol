@@ -677,3 +677,45 @@ REG-04 walks v25..v36.0 per §5c (5 PASS / 1 SUPERSEDED).
 
 ---
 
+## 8. Forward-Cite Closure (D-253-09 + D-253-15 step 8 Terminal-Phase Rule)
+
+Terminal-phase zero-emission verification per D-271-FCITE-01 (carry of D-266-FCITE / D-265-FCITE-01 / D-262-FCITE-01 / D-257-FCITE-01 / D-253-15 step 8 + ROADMAP terminal-phase rule). Phase 271 is the SOLE terminal v37.0 phase; v37.0 = 5-phase milestone (Phases 267-271).
+
+### 8a. Phase 271 Intra-Milestone Forward-Cite Residual Verification
+
+**Grep recipe:**
+```
+grep -rnE 'Phase 27[2-9]|Phase 28[0-9]' audit/FINDINGS-v37.0.md \
+  .planning/phases/271-delta-audit-findings-consolidation-terminal/
+```
+
+**Filter:** exclude meta-references that explicitly cite "Phase 272+" only to negate (lines containing `NOT forward-cites`, `fresh delta-extraction`, `Future milestones`, or `zero forward-cites` — these are the rule's self-statement, not forward-cites to specific in-flight work).
+
+**Output:** Zero non-meta matches. Phase 271 is the terminal v37.0 phase; no in-flight Phase 272+ work is forward-cited.
+
+**Verdict:** PASS.
+
+### 8b. Phase 271 → Post-Milestone Forward-Cite Emission
+
+**Grep recipe:**
+```
+grep -nE 'v38\.0|v39\.0|v38\+ phase' audit/FINDINGS-v37.0.md \
+  | grep -v 'v38\+ Carry-Forward\|§9\.NN\.iv\|9\.NN\.iv\|Deferred to Future Milestones\|ingest via fresh'
+```
+
+**Allowlist:** the §9.NN.iv v38+ Carry-Forward subsection is a planned-handoff register, NOT a forward-cite to in-flight v38.0 work. The "Deferred to Future Milestones" subsection in PROJECT.md is the single-source-of-truth lookup per D-271-DEFERRED-03. "ingest via fresh delta-extraction phase" is the rule's self-statement of how future milestones consume v37 artifacts. All three excluded by the allowlist filter.
+
+**Output:** Zero non-allowlist matches.
+
+**Verdict:** PASS.
+
+### 8c. Combined §8 Verdict
+
+Zero forward-cites emitted from Phase 271 to any in-flight v38.0+ phases. The §9.NN.iv v38+ Carry-Forward subsection (Task 12) contains 5 explicit deferred-handoff items per D-271-DEFERRED-02 (LBX-02 + GASPIN-02 + GASPIN-03 + SURF-03 re-baseline + STAT-03 v35.0 carry); these are planner handoff REGISTERS tying into next-milestone pickup via `.planning/PROJECT.md` "Deferred to Future Milestones" single-source-of-truth lookup (D-271-DEFERRED-03), NOT forward-cites to in-flight Phase 272+ work.
+
+Future milestones (v38.0+) ingest via fresh delta-extraction phase, not via forward-cite from v37 artifacts.
+
+**Verdict:** PASS — terminal-phase invariant satisfied per D-271-FCITE-01.
+
+---
+
