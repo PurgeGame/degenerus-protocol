@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
 milestone: v38.0
-milestone_name: Always-Hero Simplification + Maximal Dead-Code Cleanup
-status: shipped
-last_updated: "2026-05-11T12:00:00.000Z"
-last_activity: 2026-05-11 — Milestone v38.0 SHIPPED at MILESTONE_V38_AT_HEAD_06623edb
+milestone_name: milestone
+status: Awaiting next milestone
+last_updated: "2026-05-11T15:05:49.273Z"
+last_activity: 2026-05-11 — Milestone v38.0 completed and archived
 progress:
   total_phases: 1
   completed_phases: 1
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Milestone v38.0 complete
 Plan: —
-Status: Between milestones (v38.0 shipped)
-Last activity: 2026-05-11 — Milestone v38.0 SHIPPED at MILESTONE_V38_AT_HEAD_06623edb
+Status: Awaiting next milestone
+Last activity: 2026-05-11 — Milestone v38.0 completed and archived
 
 ## Last Shipped Milestone
 
@@ -217,7 +217,4 @@ Audit deliverables:
 
 ## Operator Next Steps
 
-- v38.0 milestone SHIPPED. `audit/FINDINGS-v38.0.md` is FINAL READ-only at HEAD `06623edb` after final user-review gate at Task 4.7. User runs `git push` manually per `feedback_manual_review_before_push.md`.
-- Address v39+ backlog seeds (see `## Next-Milestone Backlog (v39+)`): (a) LBX-02 RE-DEFERRED-V39+ fixture-coverage gap; (b) BAF jackpot `_jackpotTicketRoll` xorshift refactor (v36.0 ENT-05 carry); (c) `runrewardjackpots` module-misplacement note (stale, not v38.0-tagged); (d) game-over thorough hardening backlog.
-- Confirm closure signal `MILESTONE_V38_AT_HEAD_06623edb` recorded in `audit/FINDINGS-v38.0.md` §9c (5 verbatim locations) + `.planning/MILESTONES.md` v38.0 row + `.planning/ROADMAP.md` v38.0 milestone bullet + `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-SUMMARY.md` frontmatter (cross-document propagation verified at Wave 4 Task 4.6).
-- Optionally rotate `.planning/milestones/v37.0-phases/` archive structure (mirroring v34.0 / v35.0 / v36.0 archive pattern) if not already done.
+- Start the next milestone with /gsd-new-milestone
