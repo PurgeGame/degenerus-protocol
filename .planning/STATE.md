@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v37.0
 milestone_name: Degenerette Recalibration + Maintenance Bundle
-status: Ready to discuss
-last_updated: "2026-05-11T07:47:36.704Z"
-last_activity: 2026-05-11 -- Phase 270 SHIPPED (post-v32.0 deferred-commit adversarial sub-audit; 4 of 4 DELTA-01..04 PASS; zero source-tree mutations; zero FINDING_CANDIDATE rows; 4 RE_VERIFIED-NEGATIVE-scope KI rows feed Phase 271 §6b)
+status: executing
+last_updated: "2026-05-11T08:31:19.825Z"
+last_activity: 2026-05-11 -- Phase 271 planning complete
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 4
+  total_plans: 5
   completed_plans: 4
   percent: 80
 ---
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.
 
 Phase: 271 (delta-audit-findings-consolidation-terminal) — NEXT
 Plan: TBD
-Status: Ready to discuss
-Last activity: 2026-05-11 -- Phase 270 SHIPPED (post-v32.0 deferred-commit adversarial sub-audit; 4 of 4 DELTA-01..04 PASS; zero source-tree mutations; zero FINDING_CANDIDATE rows; 4 RE_VERIFIED-NEGATIVE-scope KI rows feed Phase 271 §6b)
+Status: Ready to execute
+Last activity: 2026-05-11 -- Phase 271 planning complete
 Resume file: .planning/phases/271-delta-audit-findings-consolidation-terminal/271-CONTEXT.md
 
 ## Last Shipped Milestone
