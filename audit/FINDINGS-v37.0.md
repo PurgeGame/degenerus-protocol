@@ -719,3 +719,79 @@ Future milestones (v38.0+) ingest via fresh delta-extraction phase, not via forw
 
 ---
 
+## 9. Milestone Closure Attestation
+
+### 9a. Verdict Distribution
+
+Per-section roll-up:
+- **§4** F-37-NN finding blocks: **8 of 8** surfaces (a)..(h) verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE; **zero F-37-NN finding blocks emitted** per D-271-FIND-01 default path; **zero 9th-surface NEW_VECTOR** per /zero-day-hunter 5-hypothesis sweep.
+- **§5** Regression Appendix: REG-01 **1 PASS** (v36.0 closure signal NON-WIDENING); REG-02 **1 PASS** (v34.0 closure signal NON-WIDENING); REG-04 **5 PASS / 0 REGRESSED / 1 SUPERSEDED** (per-finding spot-check sweep across audit/FINDINGS-v25..v36.0). Aggregate: **7 PASS / 0 REGRESSED / 1 SUPERSEDED**.
+- **§6** KI Gating Walk: **`0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`** (default path per D-271-PAYSPLIT-01 + D-271-KI-01). EXC-01..03 RE_VERIFIED-NEGATIVE-scope; EXC-04 RE_VERIFIED with NARROWS retained.
+- **AUDIT-06** adversarial-pass: 3 skills (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) PARALLEL spawn per D-271-ADVERSARIAL-01; all concur; zero FINDING_CANDIDATE / zero 9th-surface / zero KI promotion candidate per `271-01-ADVERSARIAL-LOG.md`.
+- **Combined milestone closure:** `MILESTONE_V37_AT_HEAD_<sha>`.
+
+### 9b. Attestation Block
+
+```
+git rev-parse HEAD
+# v37.0 closure HEAD <sha>   — resolved at Task 14 atomic-update
+# v36.0 audit baseline       — 1c0f09132d7439af9881c56fe197f81757f8164a
+#   signal                   — MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a
+# v34.0 second-prior closure — 6b63f6d4daf346a53a1d463790f637308ea8d555 (REG-02 carry)
+#   signal                   — MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555
+```
+
+Docs-tree HEAD captured separately at Task 14 atomic-update per Phase 257 D-257-CLOSURE-01 / Phase 262 D-262-CLOSURE-01 / Phase 265 D-265-CLOSURE-01 / Phase 266 D-266-CLOSURE-01 carry. Phase 271 pre-Task-12 source-tree HEAD: `8fd5c2e1` (Phase 269 LBX-01 close — last contract-tree mutation in v37 milestone scope).
+
+### 9c. Closure Signal
+
+`MILESTONE_V37_AT_HEAD_<sha>`
+
+Placeholder `<sha>` resolved at Task 14 atomic-update per D-271-CLOSURE-01 across 5 verbatim locations: (1) `audit/FINDINGS-v37.0.md` §1 frontmatter `closure_signal:` field; (2) `audit/FINDINGS-v37.0.md` §1 frontmatter `head_anchor:` field; (3) `audit/FINDINGS-v37.0.md` §2 Closure Verdict Summary line `Combined milestone closure: MILESTONE_V37_AT_HEAD_<sha>`; (4) `audit/FINDINGS-v37.0.md` §9c this line; (5) `audit/FINDINGS-v37.0.md` §9b Attestation Block. Plus 3 cross-document propagation locations resolved by Task 14: `.planning/MILESTONES.md` v37.0 row, `.planning/ROADMAP.md` v37.0 milestone bullet, and `.planning/phases/271-delta-audit-findings-consolidation-terminal/271-01-SUMMARY.md` frontmatter.
+
+### 9.NN Commit-Readiness Register
+
+FOUR subsections per D-271-CLOSURE-02 (i USER-APPROVED contracts + ii USER-APPROVED tests + iii AGENT-COMMITTED audit + planning artifacts + iv v38+ Carry-Forward).
+
+#### 9.NN.i USER-APPROVED contracts (Phase 267 + Phase 269)
+
+| Commit SHA | Subject | Files | Phase |
+| ---------- | ------- | ----- | ----- |
+| `e1136071` | `feat(267): degenerette producer + 5-table payout rewrite + 3-tier ETH split [DGN-01..15, PAY-SPLIT-01..03]` | `contracts/DegenerusTraitUtils.sol` (+45 LOC additive) + `contracts/modules/DegenerusGameDegeneretteModule.sol` (+231 / −196 LOC rewrite) | 267 |
+| `8fd5c2e1` | `feat(269): delete unreachable BURNIE-conversion branch in _resolveLootboxRoll [LBX-01]` | `contracts/modules/DegenerusGameLootboxModule.sol` (−14 / +1 LOC; LBX-01 dead-branch deletion + cascade signature parameter cleanup) | 269 |
+
+#### 9.NN.ii USER-APPROVED tests (Phase 268)
+
+| Commit SHA | Subject | Files | Phase |
+| ---------- | ------- | ----- | ----- |
+| `4b277aaf` | `test(268): degenerette stat suite + cross-surface preservation v37.0 + worst-case gas regression [STAT-01..07, SURF-01..06]` | 3 NEW `test/stat/` files (DegenerettePerNEvExactness + DegeneretteProducerChi2 + DegeneretteBonusEv) + 1 EXTENDED `test/stat/SurfaceRegression.test.js` v37.0 SURF-01..04 describe + 1 NEW `test/gas/Phase268GasRegression.test.js` (SURF-05 + SURF-06) + `package.json` test:stat wiring (6 files; +2,277 / −1 LOC) | 268 |
+
+NONE FURTHER expected per pure-consolidation hard constraint #1 per D-271-APPROVAL-02 (`git diff 8fd5c2e1..HEAD -- contracts/ test/` empty at phase close).
+
+#### 9.NN.iii AGENT-COMMITTED audit + planning artifacts
+
+- `audit/FINDINGS-v37.0.md` (this deliverable) — agent-authored across Tasks 1-12; READ-only flip at Task 14 (chmod 444 + frontmatter `status: FINAL — READ-ONLY` + `read_only: true`).
+- `.planning/phases/267-degenerette-producer-5-table-payout-rewrite/*` — Phase 267 artifacts: planning + summary + constants verification appendix.
+- `.planning/phases/268-degenerette-statistical-validation-cross-surface-preservation/*` — Phase 268 artifacts: planning + chore inventory + summary + verification.
+- `.planning/phases/269-lootbox-dead-branch-cleanup-surf-05-gas-pin-re-pinning/*` — Phase 269 artifacts: planning (including the GASPIN-01 RCA inline at AGENT-COMMITTED commit `009cbde3`) + summary.
+- `.planning/phases/270-post-v32-0-deferred-commit-adversarial-sub-audit/*` — Phase 270 artifacts: planning + working-file appendix (`270-01-DELTA-SURFACE.md` AGENT-COMMITTED at `4017b9ec`) + summary + verification (Phase-close commit `5cd4f2bc`).
+- `.planning/phases/271-delta-audit-findings-consolidation-terminal/*` — Phase 271 artifacts: this PLAN.md + CONTEXT.md + DISCUSSION-LOG.md + ADVERSARIAL-LOG.md (Task 6) + SUMMARY.md (Task 14).
+- `.planning/ROADMAP.md` + `.planning/STATE.md` + `.planning/MILESTONES.md` + `.planning/PROJECT.md` + `.planning/REQUIREMENTS.md` — closure flips applied at Tasks 13 + 14.
+- `KNOWN-ISSUES.md` — UNMODIFIED at v37 close per D-271-PAYSPLIT-01 + D-271-KI-01 default zero-promotion path.
+
+**NO AWAITING-APPROVAL subsection per D-271-CLOSURE-02** — all v37 contract + test commits already landed under USER-APPROVED batched review at Phase 267 + 268 + 269 close per `feedback_batch_contract_approval.md` + `feedback_no_contract_commits.md`. Phase 271 itself emits ZERO contract/test mutations per D-271-APPROVAL-02 hard constraint #1.
+
+#### 9.NN.iv v38+ Carry-Forward
+
+5-row register per CONTEXT.md `<specifics>` §9.NN.iv sketch + plan frontmatter `v38_carry_forward` block. Parallel single-source-of-truth lookup with PROJECT.md "Deferred to Future Milestones" (Task 13 update) — PROJECT.md compresses GASPIN-02 + GASPIN-03 into one combined bullet per D-271-DEFERRED-03 verbatim list (4 PROJECT.md bullets); this §9.NN.iv table keeps the 5-row split for FINDINGS-v37.0.md per D-271-DEFERRED-02.
+
+| Item | Source Phase | Rationale | v38+ Pickup Path |
+| ---- | ------------ | --------- | ---------------- |
+| LBX-02 | Phase 269 | Fixture-coverage gap; analytical worst-case in NatSpec is load-bearing per `feedback_gas_worst_case.md` + Phase 266 GAS-01 precedent. Bytecode shrink (177 bytes) confirmed empirically at Phase 269 Task 4 via direct artifact inspection. | Add empirical 55%-tickets-path gas-savings test once fixture provides reliable coverage of openable lootbox path (matches `AdvanceGameGas.test.js` L1014/L1027 precedent). |
+| GASPIN-02 | Phase 269 | RCA at `269-01-PLAN.md` "Root Cause (GASPIN-01)" identifies fixture-loader caching mechanism (Hardhat `loadFixture` + `evm_snapshot`/`evm_revert` semantics under multi-file combined-suite ordering). D-269-STAB-01 option (b) `hardhat_reset` + `loadFixture` attempt FAILED structurally with side-effect regressions; options (a)/(c) violate GASPIN-03 hard ceiling or plan scope. | Re-attempt option (b) with refined `hardhat_reset` sequencing, OR pursue option (d) test-isolation via dedicated mocha config, OR widen tolerance ceiling (last resort). |
+| GASPIN-03 | Phase 269 | Depends on GASPIN-02 (combined + standalone gas pins agree). | Verify clean `npm run test:stat` start-to-finish in CI-equivalent fresh-checkout. |
+| SURF-03 re-baseline | Phase 269 | One-line `test/stat/SurfaceRegression.test.js` edit when v38+ test-tree work resumes; pure-consolidation hard constraint #1 prohibits Phase 271 from doing test-tree edits. | Update SURF-03 baseline to post-LBX-01 HEAD; verify byte-identity at the cascade-cleaned `_resolveLootboxRoll` signature (change `V36_BASELINE` → `PHASE_269_CLOSE_BASELINE = "8fd5c2e1..."` at the SURF-03 it block only; SURF-01/02/04 stay anchored at v36.0). |
+| STAT-03 v35.0 carry | Phase 264 (re-flagged Phase 269) | Phase 265 D-265-STAT03-01 reframed as fixture-calibration error (deity-backed dense fixture proves helper correctness; failing test reflects sparse-fixture pre-organic-activity holder density). v37.0 audit surface zero intersection with per-pull-level coin-jackpot path. | Retune `test/stat/PerPullEmptyBucketSkip.test.js` fixture density per Phase 264 D-IMPL-07 mid/late-game holder-density spec, OR document actual production-floor rate. |
+
+---
+
