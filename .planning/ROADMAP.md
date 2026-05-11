@@ -76,7 +76,10 @@ Plans:
   4. Phase 261/264 SURF-05 gas-pin drift root-caused: investigation report cites which hypothesis path (state pollution, gas-meter snapshot ordering, fixture-loader caching, hardhat node restart timing) was confirmed; decision recorded inline at the test fixture or in the Phase 269 plan (GASPIN-01).
   5. `npm run test:stat` runs cleanly start-to-finish in CI-equivalent fresh-checkout: zero flaky failures across 3 consecutive runs; both standalone and combined-suite gas pins agree at the new pinned values; chosen stabilization path (re-pin / ordering-fix / split-files) is the least-invasive option per the recorded decision; test commits batched USER-APPROVED per `feedback_batch_contract_approval.md` (GASPIN-02, GASPIN-03).
 
-**Plans:** TBD
+**Plans:** 0/1 plans complete
+
+Plans:
+- [ ] 269-01-PLAN.md — Lootbox dead-branch cleanup (LBX-01..03) + SURF-05 gas-pin re-pinning (GASPIN-01..03) — single multi-task plan: Task 1 GASPIN-01 RCA-inline (AGENT-COMMITTED) → Task 2 LBX-01 contract edit → Task 3 LBX-01 USER-APPROVED contract commit gate → Task 4 LBX-02 + GASPIN-02 + SURF-03 test edits → Task 5 USER-APPROVED batched test commit gate → Task 6 phase-close SUMMARY + STATE.md + LBX-03 Phase 271 §3.A anchor recording (AGENT-COMMITTED)
 
 ### Phase 270: Post-v32.0 Deferred-Commit Adversarial Sub-Audit
 
@@ -112,6 +115,6 @@ Plans:
 |-------|----------------|--------|-----------|
 | 267. Degenerette Producer + 5-Table Payout Rewrite | 1/1 | Complete   | 2026-05-10 |
 | 268. Degenerette Statistical Validation + Cross-Surface Preservation | 1/1 | Complete   | 2026-05-11 |
-| 269. Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning | 0/0 | Not started | - |
+| 269. Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning | 0/1 | Planning | - |
 | 270. Post-v32.0 Deferred-Commit Adversarial Sub-Audit | 0/0 | Not started | - |
 | 271. Delta Audit + Findings Consolidation (Terminal) | 0/0 | Not started | - |
