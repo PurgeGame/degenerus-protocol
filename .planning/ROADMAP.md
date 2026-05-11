@@ -22,7 +22,7 @@
 ## Phases
 
 - [x] **Phase 267: Degenerette Producer + 5-Table Payout Rewrite** — Add `packedTraitsDegenerette` producer + 5 per-N payout/hero/WWXRP table dispatch in `DegenerusGameDegeneretteModule.sol`; delete `_evNormalizationRatio`; rewrite `_distributePayout` ETH branch with 3-tier split rule (≤3× bet → 100% ETH; 3-10× bet → 2.5× bet ETH floor + remainder lootbox; >10× bet → existing 25/75 split); single batched USER-APPROVED contract commit. (completed 2026-05-10)
-- [ ] **Phase 268: Degenerette Statistical Validation + Cross-Surface Preservation** — 3 new `test/stat/` files (per-N EV exactness + producer chi² + bonus EV) + `SurfaceRegression.test.js` v37.0 extension proving Mint/Jackpot/Lootbox/EntropyLib byte-identity.
+- [x] **Phase 268: Degenerette Statistical Validation + Cross-Surface Preservation** — 3 new `test/stat/` files (per-N EV exactness + producer chi² + bonus EV) + `SurfaceRegression.test.js` v37.0 extension proving Mint/Jackpot/Lootbox/EntropyLib byte-identity. (completed 2026-05-11)
 - [ ] **Phase 269: Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning** — Delete unreachable BURNIE-conversion branch in `_resolveLootboxRoll` L1568-1581 (caller-clamp invariant); diagnose + fix Phase 261/264 SURF-05 ~120K gas-pin drift under `npm run test:stat`.
 - [ ] **Phase 270: Post-v32.0 Deferred-Commit Adversarial Sub-Audit** — Audit-only adversarial sweep of commits `002bde55` (presale auto-deactivate) + `2713ce61` (setDecimatorAutoRebuy removal); read-only delta-classification + KI envelope check; FINDING_CANDIDATE rows escalate to Phase 271.
 - [ ] **Phase 271: Delta Audit + Findings Consolidation (Terminal)** — Single `audit/FINDINGS-v37.0.md` 9-section deliverable; closure signal `MILESTONE_V37_AT_HEAD_<sha>` emitted in §9c; KNOWN-ISSUES.md walkthrough; ROADMAP/STATE/MILESTONES flips.
@@ -59,10 +59,10 @@ Plans:
   4. `test/stat/SurfaceRegression.test.js` v37.0 describe extension asserts byte-identity of all SURF-01..04 surfaces: (a) `DegenerusTraitUtils.packedTraitsFromSeed` + `weightedColorBucket` + `traitFromWord` bodies UNCHANGED vs v36.0 baseline `1c0f0913` (only additive change: `packedTraitsDegenerette` helper); (b) `DegenerusGameJackpotModule` v34.0 `_pickSoloQuadrant` + 4 ETH-distribution injection sites + `JackpotBucketLib` body UNCHANGED; (c) `DegenerusGameLootboxModule` v36.0 hash2/bit-slice patterns in `_rollTargetLevel`, `_lootboxTicketCount`, `_resolveLootboxRoll` (post-Phase-269 dead-branch cleanup) preserved; (d) `EntropyLib.sol` `hash2` + `entropyStep` bodies byte-identical (carries v36.0 ENT-04). Codehash or selector-enumeration evidence grep-citable (SURF-01, SURF-02, SURF-03, SURF-04, SURF-05).
   5. `advanceGame` per-day gas envelope delta within ±2K vs v36.0 baseline (Degenerette path is OFF the `advanceGame` hot path); `quickPlay` + related Degenerette entry-point per-call gas regression tested with theoretical worst case derived FIRST per `feedback_gas_worst_case.md`; net gas ≈ wash expected (normalizer math removed; gold-counter 4-iter loop + 5-case dispatch added); 1.99× margin from v34/v35/v36 SURF-05 baseline preserved. Test commits batched USER-APPROVED per `feedback_batch_contract_approval.md` (test-tree treated identically to contract-tree under `feedback_no_contract_commits.md` discipline) (SURF-06).
 
-**Plans:** 0/1 plans complete
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 268-01-PLAN.md — Degenerette stat suite + cross-surface preservation v37.0 + worst-case gas regression (1 plan, 3 tasks: chore inventory | USER-APPROVED batched test commit | phase-close summary; covers STAT-01..07 + SURF-01..06)
+- [x] 268-01-PLAN.md — Degenerette stat suite + cross-surface preservation v37.0 + worst-case gas regression (1 plan, 3 tasks: chore inventory | USER-APPROVED batched test commit | phase-close summary; covers STAT-01..07 + SURF-01..06)
 
 ### Phase 269: Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning
 
@@ -111,7 +111,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 267. Degenerette Producer + 5-Table Payout Rewrite | 1/1 | Complete   | 2026-05-10 |
-| 268. Degenerette Statistical Validation + Cross-Surface Preservation | 0/1 | Planned     | - |
+| 268. Degenerette Statistical Validation + Cross-Surface Preservation | 1/1 | Complete   | 2026-05-11 |
 | 269. Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning | 0/0 | Not started | - |
 | 270. Post-v32.0 Deferred-Commit Adversarial Sub-Audit | 0/0 | Not started | - |
 | 271. Delta Audit + Findings Consolidation (Terminal) | 0/0 | Not started | - |

@@ -37,22 +37,22 @@
 
 ### STAT — Statistical Validation + Cross-Surface Preservation (Phase 268)
 
-- [ ] **STAT-01**: Per-N basePayoutEV exactness — for each N ∈ {0..4}, simulate ≥ 1M draws against the N-table dispatch, assert measured payoutEV = 100.00 ± 0.50 centi-x (±0.5%). Equal-EV invariant satisfied across all 16,384 player-pick configurations within statistical tolerance.
-- [ ] **STAT-02**: Producer chi² uniformity — `packedTraitsDegenerette` empirical distribution matches `[16,16,16,16,16,16,16,8]/120` color distribution within Wilson-Hilferty Z<1.645 / `CHI2_CRIT_05[7]=14.067` at α=0.05; symbol distribution chi² < `CHI2_CRIT_05[7]=14.067` at α=0.05. ≥ 1M samples.
-- [ ] **STAT-03**: Hero bonus EV (per-N) — for each N ∈ {0..4}, simulate ≥ 100K draws with hero quadrant active, assert measured hero-boost EV matches per-N target within ±1% (tighter rounding given lower sample count).
-- [ ] **STAT-04**: WWXRP bonus EV (per-N) — for each N ∈ {0..4}, simulate ≥ 100K draws with WWXRP active, assert measured WWXRP factor EV matches per-N target within ±1%.
-- [ ] **STAT-05**: Match-count distribution per N — for each N ∈ {0..4}, verify the 0..8-match histogram matches the analytical per-N reference within ±0.5% bin frequencies (proves 5-table calibration assumptions).
-- [ ] **STAT-06**: Test suite reuses Phase 261 / Phase 264 / Phase 266 chi² infrastructure (`makeRng` / `CHI2_CRIT_05` / `wilsonHilfertyZ`) — no fresh statistical tooling introduced. New files: `test/stat/DegenerettePerNEvExactness.test.js`, `test/stat/DegeneretteProducerChi2.test.js`, `test/stat/DegeneretteBonusEv.test.js`.
-- [ ] **STAT-07**: ETH payout-split distribution validation — Monte Carlo ≥1M ETH-currency Degenerette quickPlay draws across the per-N payout distributions; assert the 3-tier split holds: payout ≤ 3× bet → 100% ETH (zero lootbox); 3× < payout ≤ 10× bet → exactly 2.5× bet ETH + remainder lootbox (within ±1 wei rounding); payout > 10× bet → 25% ETH + 75% lootbox (within ±1 wei rounding); pool-cap excess flip detected and tested separately under thin-pool fixture. Per-band frequency match against analytical per-N basePayout × roiBps distribution within ±0.5% bin tolerance. Test file: extend `test/stat/DegenerettePerNEvExactness.test.js` with a `describe("ETH payout split rule")` block — reuse Phase 261/264/266 fixture infra; no new statistical tooling.
+- [x] **STAT-01**: Per-N basePayoutEV exactness — for each N ∈ {0..4}, simulate ≥ 1M draws against the N-table dispatch, assert measured payoutEV = 100.00 ± 0.50 centi-x (±0.5%). Equal-EV invariant satisfied across all 16,384 player-pick configurations within statistical tolerance.
+- [x] **STAT-02**: Producer chi² uniformity — `packedTraitsDegenerette` empirical distribution matches `[16,16,16,16,16,16,16,8]/120` color distribution within Wilson-Hilferty Z<1.645 / `CHI2_CRIT_05[7]=14.067` at α=0.05; symbol distribution chi² < `CHI2_CRIT_05[7]=14.067` at α=0.05. ≥ 1M samples.
+- [x] **STAT-03**: Hero bonus EV (per-N) — for each N ∈ {0..4}, simulate ≥ 100K draws with hero quadrant active, assert measured hero-boost EV matches per-N target within ±1% (tighter rounding given lower sample count).
+- [x] **STAT-04**: WWXRP bonus EV (per-N) — for each N ∈ {0..4}, simulate ≥ 100K draws with WWXRP active, assert measured WWXRP factor EV matches per-N target within ±1%.
+- [x] **STAT-05**: Match-count distribution per N — for each N ∈ {0..4}, verify the 0..8-match histogram matches the analytical per-N reference within ±0.5% bin frequencies (proves 5-table calibration assumptions).
+- [x] **STAT-06**: Test suite reuses Phase 261 / Phase 264 / Phase 266 chi² infrastructure (`makeRng` / `CHI2_CRIT_05` / `wilsonHilfertyZ`) — no fresh statistical tooling introduced. New files: `test/stat/DegenerettePerNEvExactness.test.js`, `test/stat/DegeneretteProducerChi2.test.js`, `test/stat/DegeneretteBonusEv.test.js`.
+- [x] **STAT-07**: ETH payout-split distribution validation — Monte Carlo ≥1M ETH-currency Degenerette quickPlay draws across the per-N payout distributions; assert the 3-tier split holds: payout ≤ 3× bet → 100% ETH (zero lootbox); 3× < payout ≤ 10× bet → exactly 2.5× bet ETH + remainder lootbox (within ±1 wei rounding); payout > 10× bet → 25% ETH + 75% lootbox (within ±1 wei rounding); pool-cap excess flip detected and tested separately under thin-pool fixture. Per-band frequency match against analytical per-N basePayout × roiBps distribution within ±0.5% bin tolerance. Test file: extend `test/stat/DegenerettePerNEvExactness.test.js` with a `describe("ETH payout split rule")` block — reuse Phase 261/264/266 fixture infra; no new statistical tooling.
 
 ### SURF — Cross-Surface Preservation (Phase 268, audit-verified Phase 271)
 
-- [ ] **SURF-01**: `DegenerusTraitUtils.sol` Mint/Jackpot consumer paths byte-identical — `packedTraitsFromSeed` body + `weightedColorBucket` body + `traitFromWord` body UNCHANGED. Only additive change is `packedTraitsDegenerette` helper.
-- [ ] **SURF-02**: `DegenerusGameJackpotModule.sol` byte-identical — v34.0 gold-solo `_pickSoloQuadrant` + 4 ETH-distribution injection sites + `JackpotBucketLib` UNCHANGED.
-- [ ] **SURF-03**: `DegenerusGameLootboxModule.sol` v36.0 entropy refactor surfaces byte-identical — `_rollTargetLevel`, `_lootboxTicketCount`, `_resolveLootboxRoll` (post-cleanup) hash2/bit-slice patterns preserved.
-- [ ] **SURF-04**: `EntropyLib.sol` byte-identical (`hash2` + `entropyStep` bodies UNCHANGED; ENT-04 v36.0 carry).
-- [ ] **SURF-05**: `SurfaceRegression.test.js` extended with v37.0 describe — assert byte-identity of all SURF-01..04 surfaces via codehash comparison or selector enumeration. Mirrors v34/v35/v36 SURF preservation pattern.
-- [ ] **SURF-06**: `advanceGame` per-day gas envelope unchanged within ±2K vs v36.0 baseline; Degenerette path is OFF the advanceGame hot path (called via separate entry points), so impact bounded to `quickPlay` + related entry-point gas regressions.
+- [x] **SURF-01**: `DegenerusTraitUtils.sol` Mint/Jackpot consumer paths byte-identical — `packedTraitsFromSeed` body + `weightedColorBucket` body + `traitFromWord` body UNCHANGED. Only additive change is `packedTraitsDegenerette` helper.
+- [x] **SURF-02**: `DegenerusGameJackpotModule.sol` byte-identical — v34.0 gold-solo `_pickSoloQuadrant` + 4 ETH-distribution injection sites + `JackpotBucketLib` UNCHANGED.
+- [x] **SURF-03**: `DegenerusGameLootboxModule.sol` v36.0 entropy refactor surfaces byte-identical — `_rollTargetLevel`, `_lootboxTicketCount`, `_resolveLootboxRoll` (post-cleanup) hash2/bit-slice patterns preserved.
+- [x] **SURF-04**: `EntropyLib.sol` byte-identical (`hash2` + `entropyStep` bodies UNCHANGED; ENT-04 v36.0 carry).
+- [x] **SURF-05**: `SurfaceRegression.test.js` extended with v37.0 describe — assert byte-identity of all SURF-01..04 surfaces via codehash comparison or selector enumeration. Mirrors v34/v35/v36 SURF preservation pattern.
+- [x] **SURF-06**: `advanceGame` per-day gas envelope unchanged within ±2K vs v36.0 baseline; Degenerette path is OFF the advanceGame hot path (called via separate entry points), so impact bounded to `quickPlay` + related entry-point gas regressions.
 
 ### LBX — Lootbox Dead BURNIE-Conversion Branch Cleanup (Phase 269)
 
@@ -129,19 +129,19 @@
 | PAY-SPLIT-01 | Phase 267 | Pending |
 | PAY-SPLIT-02 | Phase 267 | Pending |
 | PAY-SPLIT-03 | Phase 267 | Pending |
-| STAT-01 | Phase 268 | Pending |
-| STAT-02 | Phase 268 | Pending |
-| STAT-03 | Phase 268 | Pending |
-| STAT-04 | Phase 268 | Pending |
-| STAT-05 | Phase 268 | Pending |
-| STAT-06 | Phase 268 | Pending |
-| STAT-07 | Phase 268 | Pending |
-| SURF-01 | Phase 268 | Pending |
-| SURF-02 | Phase 268 | Pending |
-| SURF-03 | Phase 268 | Pending |
-| SURF-04 | Phase 268 | Pending |
-| SURF-05 | Phase 268 | Pending |
-| SURF-06 | Phase 268 | Pending |
+| STAT-01 | Phase 268 | Complete |
+| STAT-02 | Phase 268 | Complete |
+| STAT-03 | Phase 268 | Complete |
+| STAT-04 | Phase 268 | Complete |
+| STAT-05 | Phase 268 | Complete |
+| STAT-06 | Phase 268 | Complete |
+| STAT-07 | Phase 268 | Complete |
+| SURF-01 | Phase 268 | Complete |
+| SURF-02 | Phase 268 | Complete |
+| SURF-03 | Phase 268 | Complete |
+| SURF-04 | Phase 268 | Complete |
+| SURF-05 | Phase 268 | Complete |
+| SURF-06 | Phase 268 | Complete |
 | LBX-01 | Phase 269 | Pending |
 | LBX-02 | Phase 269 | Pending |
 | LBX-03 | Phase 269 | Pending |
