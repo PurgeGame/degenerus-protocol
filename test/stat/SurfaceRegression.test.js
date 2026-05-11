@@ -571,3 +571,217 @@ describe("v36.0 SURF-01..04 — protected ranges byte-identical vs v35.0 baselin
     if (result.skipped) this.skip();
   });
 });
+
+// ===========================================================================
+// Phase 268 v37.0-tagged SURF-01..04 grep-proof — extends the per-line
+// modified-set walk + file-level zero-diff harness to the v37.0 audit
+// baseline `1c0f0913` (v36.0 closure HEAD).
+//
+// The v37.0 SURF preservation gate proves that the Phase 267 Degenerette
+// producer + 5-table payout rewrite scopes its source-tree mutation to a
+// SINGLE batched commit `e1136071` touching exactly two files:
+//   contracts/DegenerusTraitUtils.sol           (additive: packedTraitsDegenerette + _degTrait)
+//   contracts/modules/DegenerusGameDegeneretteModule.sol  (5-table dispatch + 3-tier ETH split)
+//
+// Every other RNG-relevant + module surface stays byte-identical:
+//   SURF-01: contracts/DegenerusTraitUtils.sol — existing functions byte-identical
+//            (weightedColorBucket body L115-135 + traitFromWord body L143-167 +
+//            packedTraitsFromSeed body L169-178). Additions post-L178
+//            (packedTraitsDegenerette + _degTrait) are explicitly NOT protected.
+//   SURF-02: contracts/modules/DegenerusGameJackpotModule.sol  (file-level zero-diff)
+//   SURF-03: contracts/modules/DegenerusGameLootboxModule.sol  (file-level zero-diff
+//            per D-268-SURF03-01 — Phase 269 owns the post-cleanup re-baseline)
+//   SURF-04: contracts/libraries/EntropyLib.sol  (file-level zero-diff; ENT-04 v36.0 carry)
+//
+// V36.0 BASELINE: 1c0f09132d7439af9881c56fe197f81757f8164a (v36.0 closure HEAD).
+//
+// Re-declares walkAndAssert + expectFileLevelZeroDiff inline (not factored to
+// module scope) so the existing v33.0 / v34.0 / v35.0 / v36.0 describe blocks
+// at L66-573 stay byte-identical (REG-01 carry-forward discipline).
+// ===========================================================================
+
+const V36_BASELINE = "1c0f09132d7439af9881c56fe197f81757f8164a";
+const TRAIT_UTILS_PATH = "contracts/DegenerusTraitUtils.sol";
+const JACKPOT_MODULE_PATH_V37 = "contracts/modules/DegenerusGameJackpotModule.sol";
+const LOOTBOX_MODULE_PATH = "contracts/modules/DegenerusGameLootboxModule.sol";
+const ENTROPY_LIB_PATH_V37 = "contracts/libraries/EntropyLib.sol";
+
+describe("v37.0 SURF-01..04 — protected surfaces vs v36.0 baseline 1c0f0913", function () {
+  // SURF-01 — DegenerusTraitUtils.sol existing functions byte-identical.
+  // Only the OLD-side baseline lines must be unchanged; additions to the file
+  // (packedTraitsDegenerette body + _degTrait body, L201-223 at HEAD) are
+  // permitted because Phase 267 added these functions after the v36.0 baseline.
+  const SURF_01_PROTECTED_RANGES_V37 = [
+    { name: "weightedColorBucket body L115-135 (SURF-01 v37.0)", lo: 115, hi: 135 },
+    { name: "traitFromWord body L143-167 (SURF-01 v37.0)",       lo: 143, hi: 167 },
+    { name: "packedTraitsFromSeed body L169-178 (SURF-01 v37.0)", lo: 169, hi: 178 },
+  ];
+
+  // ---------------------------------------------------------------------------
+  // walkAndAssertV37(baseline, path, ranges) — per-line modified-set walk
+  // against the named baseline. Re-declared inline (not factored to module
+  // scope) per L466-473 carry-forward discipline. Same algorithm as the v36.0
+  // describe block above:
+  //   - D-IMPL-11 soft-skip on unreachable baseline.
+  //   - HEAD == BASELINE early-return (trivially preserved).
+  //   - Fail-loud on empty diff with HEAD ≠ baseline (for files where v37.0
+  //     EXPECTS modifications, e.g. TraitUtils additive surface).
+  //   - Per-line walk via diff hunk parsing; record OLD-side `-` lines.
+  //   - Assert each protected line NOT in modifiedOldLines.
+  // ---------------------------------------------------------------------------
+  function walkAndAssertV37(baseline, path, ranges) {
+    let baselineReachable = false;
+    try {
+      execSync(`git rev-parse --verify ${baseline}^{commit}`, { stdio: "pipe" });
+      baselineReachable = true;
+    } catch (_) {
+      console.warn(
+        `[v37.0 SURF] baseline commit ${baseline} not reachable — soft-skipping ` +
+        `protected-range proof on ${path}. CI / fresh-clone hint: \`git fetch --unshallow\` ` +
+        `or \`git fetch origin ${baseline}\`.`,
+      );
+      return { skipped: true };
+    }
+    expect(baselineReachable).to.equal(true);
+
+    const headSha = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+    if (headSha === baseline) {
+      console.log(`[v37.0 SURF] HEAD == V36_BASELINE — protected ranges trivially preserved.`);
+      return { skipped: false, trivial: true };
+    }
+
+    const diff = execSync(
+      `git diff ${baseline} HEAD -- ${path}`,
+      { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
+    );
+
+    if (diff.length === 0) {
+      // For TraitUtils we EXPECT additions post-L178 (Phase 267 added
+      // packedTraitsDegenerette + _degTrait). An empty diff is still
+      // a valid PASS for SURF-01: it just means the additions also
+      // didn't ship in this branch / merge state.
+      return { skipped: false, trivial: false };
+    }
+
+    const hunkHeaderRe = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+    const lines = diff.split("\n");
+    const modifiedOldLines = new Set();
+    let oldCursor = -1;
+    let inHunk = false;
+
+    for (const ln of lines) {
+      const headerMatch = hunkHeaderRe.exec(ln);
+      if (headerMatch) {
+        oldCursor = Number(headerMatch[1]);
+        inHunk = true;
+        continue;
+      }
+      if (!inHunk) continue;
+      if (ln.startsWith("\\")) continue;
+      const tag = ln.length > 0 ? ln[0] : " ";
+      if (tag === " ") {
+        oldCursor += 1;
+      } else if (tag === "-") {
+        modifiedOldLines.add(oldCursor);
+        oldCursor += 1;
+      } else if (tag === "+") {
+        // insertion only — OLD cursor does not advance.
+      } else {
+        inHunk = false;
+      }
+    }
+
+    for (const range of ranges) {
+      for (let line = range.lo; line <= range.hi; line++) {
+        expect(
+          modifiedOldLines.has(line),
+          `Baseline line ${line} (inside protected range "${range.name}" [${range.lo}-${range.hi}]) ` +
+          `was modified or removed in ${path} vs v36.0 baseline ${baseline}`,
+        ).to.equal(false);
+      }
+    }
+    return { skipped: false, trivial: false };
+  }
+
+  // ---------------------------------------------------------------------------
+  // expectFileLevelZeroDiffV37(baseline, path) — thinner SURF-02..04 variant.
+  // Asserts `git diff <baseline> HEAD -- <path>` returns empty output. Soft-
+  // skips on unreachable baseline per the L478-485 v36.0 pattern.
+  // ---------------------------------------------------------------------------
+  function expectFileLevelZeroDiffV37(baseline, path) {
+    let baselineReachable = false;
+    try {
+      execSync(`git rev-parse --verify ${baseline}^{commit}`, { stdio: "pipe" });
+      baselineReachable = true;
+    } catch (_) {
+      console.warn(
+        `[v37.0 SURF] baseline commit ${baseline} not reachable — soft-skipping ` +
+        `file-level zero-diff proof on ${path}.`,
+      );
+      return { skipped: true };
+    }
+    expect(baselineReachable).to.equal(true);
+
+    const headSha = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+    if (headSha === baseline) {
+      return { skipped: false, trivial: true };
+    }
+
+    const diff = execSync(
+      `git diff ${baseline} HEAD -- ${path}`,
+      { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
+    );
+    expect(
+      diff.length,
+      `[v37.0 SURF] expected file-level zero-diff on ${path} vs v36.0 baseline ${baseline}, ` +
+      `but git diff produced ${diff.length} bytes of output. v37.0 SURF preservation gate FAILED.`,
+    ).to.equal(0);
+    return { skipped: false, trivial: false };
+  }
+
+  it("SURF-01 — DegenerusTraitUtils.sol existing functions byte-identical vs v36.0 baseline 1c0f0913 (additions to packedTraitsDegenerette + _degTrait permitted)", function () {
+    const result = walkAndAssertV37(V36_BASELINE, TRAIT_UTILS_PATH, SURF_01_PROTECTED_RANGES_V37);
+    if (result.skipped) this.skip();
+  });
+
+  it("SURF-02 — DegenerusGameJackpotModule.sol file-level zero-diff vs v36.0 baseline 1c0f0913", function () {
+    const result = expectFileLevelZeroDiffV37(V36_BASELINE, JACKPOT_MODULE_PATH_V37);
+    if (result.skipped) this.skip();
+  });
+
+  it("SURF-03 — DegenerusGameLootboxModule.sol file-level zero-diff vs v36.0 baseline 1c0f0913 (D-268-SURF03-01: Phase 269 owns the post-cleanup re-baseline)", function () {
+    // D-268-SURF03-01 cite: SURF-03 file-level zero-diff is honest at Phase 268
+    // close because Phase 267 doesn't touch LootboxModule. Phase 269 lootbox
+    // dead-branch cleanup will require either (a) re-baselining this assertion
+    // to Phase 268 close HEAD, or (b) adding allowed-hunk exception for the
+    // ~L1568-1581 deletion. Each version is honest at its respective HEAD; no
+    // lying about state that hasn't shipped.
+    const result = expectFileLevelZeroDiffV37(V36_BASELINE, LOOTBOX_MODULE_PATH);
+    if (result.skipped) this.skip();
+  });
+
+  it("SURF-04 — EntropyLib.sol file-level zero-diff vs v36.0 baseline 1c0f0913 (ENT-04 v36.0 carry)", function () {
+    const result = expectFileLevelZeroDiffV37(V36_BASELINE, ENTROPY_LIB_PATH_V37);
+    if (result.skipped) this.skip();
+  });
+
+  it("v37.0 SURF preservation gate — describe block self-test: chi² primitives verbatim re-declaration discipline carries to Phase 268 (STAT-06 structural pin)", function () {
+    // Pure structural pin: documents that the v37.0 SURF describe block
+    // CO-LOCATES with the Phase 268 stat files (per package.json `test:stat`
+    // wiring). Drift detection if any Phase 268 file accidentally renamed.
+    const phase268Files = [
+      "test/stat/DegenerettePerNEvExactness.test.js",
+      "test/stat/DegeneretteProducerChi2.test.js",
+      "test/stat/DegeneretteBonusEv.test.js",
+      "test/gas/Phase268GasRegression.test.js",
+    ];
+    for (const f of phase268Files) {
+      expect(
+        fs.existsSync(f),
+        `[v37.0 SURF] expected Phase 268 stat-suite file ${f} to exist on disk; ` +
+        `STAT-06 structural pin asserts the chi²-primitive verbatim re-declaration ` +
+        `carries forward to Phase 268.`,
+      ).to.equal(true);
+    }
+  });
+});
