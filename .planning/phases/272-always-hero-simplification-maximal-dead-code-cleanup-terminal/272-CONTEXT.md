@@ -113,6 +113,23 @@ feat(272): always-on hero default 0 + degenerette dead-code cleanup [HERO-01..05
 - `_fullTicketPayout` NatSpec — describes hero applying for `M ∈ {2..7}`.
 - `_applyHeroMultiplier` NatSpec — UNCHANGED at body level (math identical).
 
+### D-272-INPUT-VALIDATION-01 — HERO-05 spec_lock revised; input validation added (Wave 1.5)
+
+**Decision:** Public ABI `placeDegeneretteBet(..., uint8 heroQuadrant)` validates `heroQuadrant < 4` at entry; inputs `>= 4` (including `0xFF`) revert with `InvalidBet`. Reverses the v37+ "0xFF = no hero" sentinel semantic at v38 close.
+
+**Rationale:** Wave 3 3-skill PARALLEL adversarial pass surfaced Hypothesis (i) — a docs-vs-behavior drift where `0xFF` input was pack-normalized to quadrant 0 (HERO-01) but NOT credited to `dailyHeroWagers[day][0]` (L484 gate used raw input). INFO-severity; KEEP_AS_NEGATIVE_FINDING at adversarial-pass; user disposition pivoted to defensive boundary validation as the v38 remediation. Cleaner than the silent-normalize approach: invalid input is rejected rather than coerced.
+
+**Frontend contract:** Frontend MUST send valid 0..3 (default 0 if user does not pick). 0xFF sentinel no longer accepted.
+
+**Supersedes:**
+- `<spec_lock>` "Public ABI byte-identical": amended; signature unchanged but semantics shift from "accept + normalize" to "reject invalid input". Public ABI selector + parameter types byte-identical; only error-condition expansion.
+- ROADMAP success criterion #2 wording "still accepted but normalized to 0 internally" — superseded by D-272-INPUT-VALIDATION-01 (revert on >= 4). Wave 4 closure flip will reflect this revision.
+- REQUIREMENTS.md HERO-05 prose — superseded (Wave 4 closure flip).
+
+**Commit:** `4760459f` (Wave 1.5 USER-APPROVED batched commit covering `contracts/modules/DegenerusGameDegeneretteModule.sol` + `test/fuzz/handlers/DegeneretteHandler.sol`).
+
+**Hypothesis (i) disposition update:** Status pivoted from KEEP_AS_NEGATIVE_FINDING (at Wave 3 adversarial pass, 2026-05-11) to RESOLVED_AT_V38 (post Wave 1.5, 2026-05-11). The v39+ backlog seed candidate at `audit/FINDINGS-v38.0.md` §9.NN.iv is removed (no longer carry-forward).
+
 </decisions>
 
 <deferred_to_planner>
