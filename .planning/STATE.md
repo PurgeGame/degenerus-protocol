@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: between-milestones
-milestone_name: milestone
-status: v37.0 milestone SHIPPED
-last_updated: "2026-05-11T09:34:28.636Z"
+milestone: v38.0
+milestone_name: Always-Hero Simplification + Maximal Dead-Code Cleanup
+status: planning
+last_updated: "2026-05-11T10:24:35.327Z"
 last_activity: 2026-05-11
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,11 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.
 
 ## Current Position
 
-Phase: 271
-Plan: Not started
-Status: v37.0 milestone SHIPPED
-Last activity: 2026-05-11
-Resume file: .planning/MILESTONES.md (v37.0 archive entry) + .planning/PROJECT.md (Last shipped v37.0)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-11 — Milestone v38.0 started
 
 ## Last Shipped Milestone
 

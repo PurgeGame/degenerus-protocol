@@ -10,10 +10,36 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-**Active milestone:** _between-milestones_ — v37.0 closed at HEAD `MILESTONE_V37_AT_HEAD_2654fcc2` (resolved at Task 14 atomic-update); next milestone scope TBD
+**Active milestone:** v38.0 — Always-Hero Simplification + Maximal Dead-Code Cleanup (just opened; Phase 272 single-phase patch shape per v36.0 precedent)
 **Last shipped:** v37.0 — Degenerette Recalibration + Maintenance Bundle (2026-05-11; closure signal `MILESTONE_V37_AT_HEAD_2654fcc2`)
 **Prior shipped:** v36.0 — Lootbox-Path Entropy Refactor (2026-05-10; closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`)
-**Contract HEAD anchor (v37.0 closure):** `2654fcc2` (resolved at Task 14; supersedes v36.0 audit baseline `1c0f09132d7439af9881c56fe197f81757f8164a` as the contract HEAD anchor)
+**Contract HEAD anchor (v38.0 audit baseline):** `2654fcc2` (v37.0 closure HEAD; per .planning/MILESTONES.md v37.0 entry)
+
+## Current Milestone: v38.0 Always-Hero Simplification + Maximal Dead-Code Cleanup
+
+**Goal:** Drop the Degenerette hero opt-out semantics so hero always fires with quadrant 0 as default — adds random competition for any player's winning symbol, simplifies bet API + resolve path. Bundle with a maximal cleanup sweep across `contracts/` for accumulated dead code + unused constants + unreachable branches + stale comments + redundant guards, and land the 4 v37+ carry-forward items (LBX-02 + GASPIN-02/03 + SURF-03 re-baseline + STAT-03 v35.0 carry). Single-phase patch shape (mirrors v36.0 Phase 266 precedent; NOT the multi-phase v34/v35/v37 milestone shape).
+
+**Audit baseline:** v37.0 closure HEAD `MILESTONE_V37_AT_HEAD_2654fcc2`.
+
+**Target features:**
+
+- **Always-on hero** (Degenerette; `contracts/modules/DegenerusGameDegeneretteModule.sol`): `_packFullTicketBet` normalizes `heroQuadrant ≥ 4` → `0` (was: opted out of hero); `_resolveFullTicketBet` extracts quadrant unconditionally (no `heroEnabled` bit read); `_fullTicketPayout` drops `heroEnabled` parameter, always applies hero for `M ∈ {2..7}`. Public API `placeDegeneretteBet(..., uint8 heroQuadrant)` signature UNCHANGED — `0xFF` and any `≥4` value still accepted (normalize to 0 internally). NatSpec rewrites describe what IS at v38 close (per `feedback_no_history_in_comments.md`). Net diff ~5 LOC delete + ~2 LOC add + ~10 LOC NatSpec. Bytecode shrink ~30 bytes + 1 fewer branch (~30 gas saved per spin). EV-neutrality preserved per Fraction-exact analytical audit run post-v37 close.
+- **Maximal dead-code cleanup sweep** (`contracts/`): inventory-driven removal of (a) unused private/internal constants per grep recipe; (b) unreachable branches per `feedback_no_dead_guards.md` (caller-clamp / pre-validated paths in MintModule, JackpotModule, AdvanceModule, LootboxModule); (c) stale comments referencing pre-v37 design per `feedback_no_history_in_comments.md`; (d) redundant safety guards. `/gas-audit` orchestrator (`/gas-scavenger` + `/gas-skeptic`) runs systematic candidate-discovery. Per `feedback_design_intent_before_deletion.md`: each removal candidate traces original design intent + actor game-theory across timing/state combos BEFORE deletion shape is decided. Each accepted removal lands USER-APPROVED.
+- **v37+ Carry-Forward Bundle Pickup**:
+  - **LBX-02**: empirical 55%-tickets-path gas-savings test pin — `test/gas/LootboxOpenGas.test.js` extension once fixture provides reliable openable lootbox path coverage (Phase 266 GAS-01 precedent)
+  - **GASPIN-02 + GASPIN-03**: SURF-05 gas-pin stabilization under combined `npm run test:stat` ordering — D-269-STAB-01 retry with refined `hardhat_reset` sequencing OR option (d) test-isolation via dedicated mocha config OR widened tolerance ceiling (last resort)
+  - **SURF-03 re-baseline**: one-line `test/stat/SurfaceRegression.test.js` edit — `V36_BASELINE` → `PHASE_269_CLOSE_BASELINE = "8fd5c2e1..."` for the SURF-03 it block only; SURF-01/02/04 stay anchored at v36.0
+  - **STAT-03 v35.0 carry**: `test/stat/PerPullEmptyBucketSkip.test.js` fixture density retune per Phase 264 D-IMPL-07 mid/late-game holder-density spec, OR document actual production-floor rate
+- **Delta audit + findings consolidation (terminal)**: single `audit/FINDINGS-v38.0.md` 9-section deliverable; D-08 5-Bucket Severity Rubric carry; `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` PARALLEL adversarial pass per D-271-ADVERSARIAL-01 carry on finished §4 draft (`/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry); LEAN regression REG-01 (v37.0 closure non-widening) + REG-02 (v34.0 closure non-widening) + REG-04 prior-finding spot-checks across audit/FINDINGS-v25..v37.0; KI walkthrough EXC-01..04 RE_VERIFIED; closure signal `MILESTONE_V38_AT_HEAD_<sha>` + ROADMAP/STATE/MILESTONES flips.
+
+**Key context / constraints:**
+- Pre-launch posture preserved — no live volume, no migration concerns
+- Cross-repo READ-only pattern: `contracts/` + `test/` writes via per-commit user approval per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` (carry from v34..v37)
+- Single-file audit deliverable per D-NN-FILES-01 carry
+- Forward-cite zero-emission per D-NN-FCITE-01 carry (terminal phase)
+- Adversarial-pass timing: SEQUENTIAL after full §4 draft; 3-skill PARALLEL spawn red-teams the FINISHED draft per D-271-ADVERSARIAL-01 + D-271-ADVERSARIAL-03 carry
+- Inline-execution mode at execute-phase open per D-271-EXEC-01 default (mirrors v36.0 Phase 266 + v37.0 Phase 270/271 inline-execution carry; subagent `.md`-write guard pattern-matching FINDINGS/SUMMARY/ADVERSARIAL-LOG filenames blocks subagent writes)
+- Single-phase patch shape (Phase 272 only) per v36.0 Phase 266 precedent — multi-wave structure: Wave 1 contract commits (always-hero diff + cleanup), Wave 2 test commits (re-validation + carry-bundle), Wave 3+ audit deliverable + ROADMAP/STATE/MILESTONES flips
 **Audit deliverables (cumulative):** `audit/FINDINGS-v25.0.md` + `FINDINGS-v27.0.md` + `FINDINGS-v28.0.md` + `FINDINGS-v29.0.md` + `FINDINGS-v30.0.md` + `FINDINGS-v31.0.md` + `FINDINGS-v32.0.md` + `FINDINGS-v33.0.md` + `FINDINGS-v34.0.md` + `FINDINGS-v35.0.md` + `FINDINGS-v36.0.md` (FINAL READ-only at HEAD `1c0f0913`, 9 sections, ~700 lines, 6-surface adversarial table all SAFE_*, zero F-36-NN finding blocks); `KNOWN-ISSUES.md` modified by 1 entry rephrase at v36.0 close (EntropyLib XOR-shift entry NARROWS to BAF-jackpot-only scope per AUDIT-05; REPHRASE under D-09 Design Decisions, not new promotion); EXC-01..04 RE_VERIFIED at HEAD (EXC-01..03 NEGATIVE-scope at v36; EXC-04 NARROWS to BAF-jackpot-only)
 **Awaiting user commit:** `test/edge/LastPurchaseDayRace.test.js` + `test/edge/BackfillIdempotency.test.js` (TST-FILE-01 + TST-FILE-02 from v32.0 Phase 251; remain untracked permanently per D-253-FIND04-04)
 
