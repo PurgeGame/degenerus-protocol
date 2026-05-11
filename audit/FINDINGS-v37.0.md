@@ -286,5 +286,67 @@ Both commits PREDATE v37.0 baseline `1c0f0913` (Phase 270 sub-audit subjects, no
 
 v37.0 source-tree changes since baseline `1c0f0913`: 2 contract-tree commits (`e1136071` Phase 267 Degenerette + `8fd5c2e1` Phase 269 LBX-01) + 1 test-tree commit (`4b277aaf` Phase 268; not enumerated above — test surface, not contract surface). Phase 270 sub-audit subjects (`002bde55` + `2713ce61`) PREDATE the v37.0 baseline and are enumerated for milestone-completeness per Phase 270 working-file appendix cross-cite. All rows verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE per AUDIT-01 + AUDIT-02 + DELTA-03.
 
+### 3.B AUDIT-04 Zero-New-State Attestation
+
+Grep-proof attestation: zero new storage slots, zero new public/external mutation entry points, zero new admin functions, zero new modifiers, zero new upgrade hooks, zero new ERC-20 mint entry points since v36.0 baseline `1c0f0913`.
+
+**Storage byte-identity (zero new storage slots):**
+
+Recipe:
+```
+git diff 1c0f09132d7439af9881c56fe197f81757f8164a..HEAD -- contracts/storage/
+```
+
+Output: empty (no `contracts/storage/` subdirectory; storage is consolidated at `contracts/DegenerusGameStorage.sol`). Recipe re-run against the actual storage file:
+```
+git diff 1c0f09132d7439af9881c56fe197f81757f8164a..HEAD -- contracts/DegenerusGameStorage.sol
+```
+
+Output: empty (0 files changed). Phase 268 SURF-01..04 byte-identity grep-proof cross-cites this same invariant at the test-tree harness level. `packedTraitsDegenerette` is a `internal pure` library helper added to `contracts/DegenerusTraitUtils.sol` — no storage slots touched.
+
+**Zero new public/external mutation entry points:**
+
+Recipe:
+```
+git diff 1c0f09132d7439af9881c56fe197f81757f8164a..HEAD -- contracts/ \
+  | grep -E '^\+.*function .* (public|external)'
+```
+
+Output: 0 hits (re-run at §3.B authoring time). The Phase 267 `_distributePayout` signature change (insertion of `uint128 betAmount` between `currency` and `payout`) is internal-only — the function remains `internal`. `packedTraitsDegenerette` is `internal pure` library helper, inlined into `DegenerusGameDegeneretteModule` at compile time. The function selector does NOT appear in the deployed artifact ABI (cross-cite Solidity language semantics for `internal` linkage; Phase 268 SURF-01 v37.0 describe in `test/stat/SurfaceRegression.test.js` selector-enumeration evidence). `_countGoldQuadrants` is `private pure`. `_degTrait` is `private pure`.
+
+**Zero new admin functions / modifiers / upgrade hooks:**
+
+Recipe:
+```
+git diff 1c0f09132d7439af9881c56fe197f81757f8164a..HEAD -- contracts/ \
+  | grep -E "^\+.*(modifier |onlyOwner|onlyAdmin|UUPSUpgradeable|_authorizeUpgrade)"
+```
+
+Output: 0 hits (re-run at §3.B authoring time). No new admin gates introduced; existing admin surface (Phase 270 working-file audit of post-v32.0 commits `002bde55` + `2713ce61` covers admin-surface narrowing — `setDecimatorAutoRebuy` wrapper DELETED is admin-entry-point-removal blast radius = zero per Phase 270 SAFE_BY_DESIGN verdict).
+
+**Zero new ERC-20 mint entry points:**
+
+Recipe:
+```
+git diff 1c0f09132d7439af9881c56fe197f81757f8164a..HEAD -- contracts/ \
+  | grep -E "^\+.*\.(mint|mintFor|_mint)\("
+```
+
+Output: 0 hits in non-test contract files. Degenerette payout flow uses pre-existing `mintForGame` route only; no new mint sites introduced per AUDIT-03 conservation cross-cite (see §3.C below).
+
+**Storage layout slot-by-slot proof:** `contracts/DegenerusGameStorage.sol` is byte-identical at v37.0 HEAD vs v36.0 baseline `1c0f0913` per the storage-file diff recipe above. Slot-by-slot enumeration trivially preserved because the file is unchanged. Phase 268 SURF-01..04 codehash-equality / selector-enumeration assertions cross-cite this invariant at the consumer artifact-tree level (Mint + Jackpot + EntropyLib + non-lootbox JackpotModule UNCHANGED vs baseline). The `_distributePayout` signature change is internal-linkage only — no ABI widening, no storage rearrangement.
+
+**Note on `packedTraitsDegenerette` internal-pure linkage:** `packedTraitsDegenerette(uint256 seed) internal pure returns (uint32)` is a library helper in `contracts/DegenerusTraitUtils.sol`. Per Solidity language semantics, `internal` linkage means the function is inlined into its caller (`DegenerusGameDegeneretteModule`) at compile time — it does NOT appear in the deployed artifact's public ABI; the function selector is NOT in the contract's `function-selectors` set. This is the explicit DGN-01 + DGN-15 design contract. Cross-cite Phase 268 SURF-01 v37.0 describe in `test/stat/SurfaceRegression.test.js` for selector-enumeration evidence at the harness level.
+
+**Five-line zero-attestation roll-up** (one phrase per line for grep-tally clarity):
+
+- zero new storage slots — `git diff 1c0f0913..HEAD -- contracts/DegenerusGameStorage.sol` empty.
+- zero new public/external mutation entry points — `git diff 1c0f0913..HEAD -- contracts/ | grep -E '^\+.*function .* (public|external)'` returns 0.
+- zero new admin functions — `git diff 1c0f0913..HEAD -- contracts/ | grep -E "^\+.*(onlyOwner|onlyAdmin)"` returns 0.
+- zero new modifiers — `git diff 1c0f0913..HEAD -- contracts/ | grep -E "^\+.*modifier "` returns 0.
+- zero new upgrade hooks — `git diff 1c0f0913..HEAD -- contracts/ | grep -E "^\+.*(UUPSUpgradeable|_authorizeUpgrade)"` returns 0.
+
+**Closing attestation:** Storage layout byte-identical at v37.0 closure HEAD `<sha>` vs v36.0 baseline `1c0f0913` per slot-by-slot grep-proof; zero new public/external mutation entry points; zero new external pure entry points (`packedTraitsDegenerette` is internal pure library helper, inlined at compile time, not in deployed ABI); zero new admin functions; zero new modifiers; zero new upgrade hooks; zero new ERC-20 mint entry points per DGN-15 + AUDIT-04 design contract.
+
 ---
 
