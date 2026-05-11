@@ -1,6 +1,7 @@
 ---
 phase: quick
 plan: 260327-n7h
+status: complete
 subsystem: testing
 tags: [hardhat, solidity, test-suite, regression]
 

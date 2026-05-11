@@ -1,6 +1,7 @@
 ---
 phase: quick
 plan: 260327-q8y
+status: complete
 subsystem: game-boons
 tags: [test, boon, multi-category, deity-boon]
 dependency_graph:
