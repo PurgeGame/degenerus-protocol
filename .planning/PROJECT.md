@@ -10,12 +10,13 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-**Active milestone:** v38.0 — Always-Hero Simplification + Maximal Dead-Code Cleanup (just opened; Phase 272 single-phase patch shape per v36.0 precedent)
-**Last shipped:** v37.0 — Degenerette Recalibration + Maintenance Bundle (2026-05-11; closure signal `MILESTONE_V37_AT_HEAD_2654fcc2`)
+**Active milestone:** _None — between-milestones state. v38.0 SHIPPED 2026-05-11._
+**Last shipped:** v38.0 — Always-Hero Simplification + Maximal Dead-Code Cleanup (2026-05-11; closure signal `MILESTONE_V38_AT_HEAD_<sha>`)
+**Prior shipped:** v37.0 — Degenerette Recalibration + Maintenance Bundle (2026-05-11; closure signal `MILESTONE_V37_AT_HEAD_2654fcc2`)
 **Prior shipped:** v36.0 — Lootbox-Path Entropy Refactor (2026-05-10; closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`)
-**Contract HEAD anchor (v38.0 audit baseline):** `2654fcc2` (v37.0 closure HEAD; per .planning/MILESTONES.md v37.0 entry)
+**Contract HEAD anchor (v38.0 closure):** `<sha>` (resolved at Wave 4 Task 4.6 atomic-update per D-272-CLOSURE-01)
 
-## Current Milestone: v38.0 Always-Hero Simplification + Maximal Dead-Code Cleanup
+## Completed Milestone: v38.0 Always-Hero Simplification + Maximal Dead-Code Cleanup
 
 **Goal:** Drop the Degenerette hero opt-out semantics so hero always fires with quadrant 0 as default — adds random competition for any player's winning symbol, simplifies bet API + resolve path. Bundle with a maximal cleanup sweep across `contracts/` for accumulated dead code + unused constants + unreachable branches + stale comments + redundant guards, and land the 4 v37+ carry-forward items (LBX-02 + GASPIN-02/03 + SURF-03 re-baseline + STAT-03 v35.0 carry). Single-phase patch shape (mirrors v36.0 Phase 266 precedent; NOT the multi-phase v34/v35/v37 milestone shape).
 
@@ -43,13 +44,23 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 **Audit deliverables (cumulative):** `audit/FINDINGS-v25.0.md` + `FINDINGS-v27.0.md` + `FINDINGS-v28.0.md` + `FINDINGS-v29.0.md` + `FINDINGS-v30.0.md` + `FINDINGS-v31.0.md` + `FINDINGS-v32.0.md` + `FINDINGS-v33.0.md` + `FINDINGS-v34.0.md` + `FINDINGS-v35.0.md` + `FINDINGS-v36.0.md` (FINAL READ-only at HEAD `1c0f0913`, 9 sections, ~700 lines, 6-surface adversarial table all SAFE_*, zero F-36-NN finding blocks); `KNOWN-ISSUES.md` modified by 1 entry rephrase at v36.0 close (EntropyLib XOR-shift entry NARROWS to BAF-jackpot-only scope per AUDIT-05; REPHRASE under D-09 Design Decisions, not new promotion); EXC-01..04 RE_VERIFIED at HEAD (EXC-01..03 NEGATIVE-scope at v36; EXC-04 NARROWS to BAF-jackpot-only)
 **Awaiting user commit:** `test/edge/LastPurchaseDayRace.test.js` + `test/edge/BackfillIdempotency.test.js` (TST-FILE-01 + TST-FILE-02 from v32.0 Phase 251; remain untracked permanently per D-253-FIND04-04)
 
+**Closure summary (v38.0 SHIPPED 2026-05-11):** Single-phase patch (Phase 272) mirroring v36.0 Phase 266 precedent. Wave 1 USER-APPROVED batched contract commit `527e3adc` ships HERO-01..05 always-on hero (silent-normalize variant) + CLEAN-01..05 dead-code sweep narrowed to `DegenerusGameDegeneretteModule.sol` per D-272-CLEAN-SCOPE-01 (bytecode delta −57 bytes 8955 → 8898; storage byte-identical; public ABI byte-identical). **Wave 1.5 USER-APPROVED contract revision commit `4760459f` adds defensive boundary validation at `placeDegeneretteBet` entry per D-272-INPUT-VALIDATION-01 — `heroQuadrant >= 4` reverts with `InvalidBet` instead of being silently normalized. This Wave-1.5 revision is the v38 remediation for Hypothesis (i) docs-vs-behavior drift surfaced at the Wave 3 3-skill PARALLEL adversarial pass; status pivoted from KEEP_AS_NEGATIVE_FINDING (Wave 3) to RESOLVED_AT_V38 (post Wave 1.5).** Wave 2 USER-APPROVED batched test commit `e3fcb95c` ships STAT-01..02 EV-neutrality re-validation + SURF-01..03 (SURF-03 re-baselined to `PHASE_269_CLOSE_BASELINE`) + LBX-02 path-of-investigation documentation + GASPIN-02 (a-alt) script-split + GASPIN-03 clean-run verification + STAT-03-v35-carry ACCEPTED-DESIGN documentation. Wave 3 audit deliverable `audit/FINDINGS-v38.0.md` (9 sections, ~850 lines, FINAL READ-only at v38 closure HEAD `<sha>`) + 3-skill PARALLEL adversarial-pass at `272-01-ADVERSARIAL-LOG.md` (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` per D-271-ADVERSARIAL-01 carry). Wave 1.5 audit-amendment commits `c63a75a1` + `08706ebd` + `1249a6fd` + `06623edb` propagate Hypothesis (i) RESOLVED_AT_V38 across all scoped audit artifacts. Wave 4 closure-flip commits land REQUIREMENTS + ROADMAP + STATE + MILESTONES + PROJECT updates atomically. **Result:** 7 of 7 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE; zero F-38-NN finding blocks; 1 PASS REG-01 + 1 PASS REG-02 + REG-03 KI envelope re-verifications + REG-04 prior-finding spot-check sweep PASS; KNOWN-ISSUES.md UNMODIFIED. Resolution: 29/30 Complete + 1/30 RE-DEFERRED-V39+ (LBX-02 — fixture-coverage gap persists; path-of-investigation prose at `audit/FINDINGS-v38.0.md` §9.NN.iv). **Decision-anchor IDs:** D-272-CLOSURE-01 + D-272-CLOSURE-02 + D-272-INPUT-VALIDATION-01 + D-272-CLEAN-SCOPE-01 + D-272-FCITE-01 + D-272-KI-01 + D-272-APPROVAL-01 + D-272-ADVERSARIAL-01 + D-272-SEV-01 + D-272-FILES-01 (10 v38-anchors); inherited carry-chains: D-271-ADVERSARIAL-01 (3-skill PARALLEL) + D-271-ADVERSARIAL-02 (`/degen-skeptic` OUT OF SCOPE) + D-271-ADVERSARIAL-03 (`/economic-analyst` added) + D-271-FCITE-01 + D-266-FCITE + D-265-FCITE-01 + D-262-FCITE-01 + D-257-FCITE-01 + D-253-15. Closure signal: `MILESTONE_V38_AT_HEAD_<sha>`.
+
 ## Deferred to Future Milestones
 
-_Carried forward into v38.0+ (in scope future milestone):_
-- Lootbox empirical 55%-tickets-path gas-savings test pin (LBX-02 carry from v37.0 Phase 269) — fixture-coverage gap; analytical worst-case is load-bearing
-- SURF-05 gas-pin stabilization under combined `npm run test:stat` ordering (GASPIN-02/03 carry from v37.0 Phase 269) — Phase 269 RCA at `.planning/phases/269-*/269-01-PLAN.md` "Root Cause (GASPIN-01)" section identifies fixture-loader caching mechanism
-- SURF-03 re-baseline post-LBX-01 (`test/stat/SurfaceRegression.test.js` carry from v37.0 Phase 269) — one-line edit when v38+ test-tree work resumes
-- `PerPullEmptyBucketSkip.test.js` fixture density retune (STAT-03 v35.0 carry from v35.0 Phase 264 / re-flagged v37.0 Phase 269) — deity-backed dense fixture proves helper correctness; failing test reflects sparse-fixture pre-organic-activity holder density per v35.0 Phase 265 D-265-STAT03-01 reframe; retune per Phase 264 D-IMPL-07 spec or document production-floor rate
+_Carried forward into v39.0+ (in scope future milestone):_
+- Lootbox empirical 55%-tickets-path gas-savings test pin (LBX-02 RE-DEFERRED-V39+ at v38.0 close) — fixture-coverage gap persists; analytical worst-case load-bearing per Phase 266 GAS-01 + `feedback_gas_worst_case.md`; path-of-investigation prose at `audit/FINDINGS-v38.0.md` §9.NN.iv
+- BAF jackpot `_jackpotTicketRoll` xorshift refactor (v36.0 ENT-05 explicit deferral per user disposition) — same xorshift pattern as v36.0-completed lootbox refactor; explicitly out of v38.0 scope per `272-CONTEXT.md <out_of_scope>`
+- `runrewardjackpots` module-misplacement note — stale 2026-04-02 backlog note; not v38.0-tagged; carries forward
+- Game-over thorough hardening — deferred to dedicated game-over hardening milestone
+
+_Resolved at v38.0 close (no longer outstanding):_
+- Always-on hero default-0 simplification — RESOLVED v38.0 Phase 272 (Wave 1 commit `527e3adc`; HERO-01..05 silent-normalize variant) + Wave 1.5 commit `4760459f` (D-272-INPUT-VALIDATION-01 defensive boundary validation revision)
+- Maximal dead-code cleanup sweep — RESOLVED v38.0 Phase 272 Wave 1 commit `527e3adc` (CLEAN-01..05; narrowed to `DegenerusGameDegeneretteModule.sol` per D-272-CLEAN-SCOPE-01 — `/gas-audit` candidate-discovery surfaced no high-confidence cross-module removals matching `feedback_design_intent_before_deletion.md` standard)
+- SURF-03 re-baseline post-LBX-01 — RESOLVED v38.0 Phase 272 Wave 2 commit `e3fcb95c` (re-baselined to `PHASE_269_CLOSE_BASELINE = "8fd5c2e1..."` for SURF-03 it block; SURF-01/02/04 retained at v36.0 baseline)
+- SURF-05 gas-pin stabilization (GASPIN-02 + GASPIN-03 carry from v37.0 Phase 269) — RESOLVED v38.0 Phase 272 Wave 2 commit `e3fcb95c` (GASPIN-02 (a-alt) script-split per planner pick: `test:gas` script splits Phase261GasRegression + Phase264GasRegression off `test:stat` via package.json wiring; GASPIN-03 clean-run verification)
+- `PerPullEmptyBucketSkip.test.js` fixture density retune (STAT-03 v35.0 carry) — RESOLVED v38.0 Phase 272 Wave 2 commit `e3fcb95c` via ACCEPTED-DESIGN ledger entry per planner pick option (b): test header documents 88.24% empty-bucket skip rate on sparse-fixture as v35.0 Phase 265 D-265-STAT03-01 fixture-calibration-error reframe; deity-backed dense fixture proves helper correctness empirically
+- Hypothesis (i) docs-vs-behavior drift on `0xFF` input semantics (surfaced at Wave 3 3-skill PARALLEL adversarial pass; KEEP_AS_NEGATIVE_FINDING at Wave 3 2026-05-11) — RESOLVED_AT_V38 via Wave 1.5 commit `4760459f` (D-272-INPUT-VALIDATION-01 input validation; revert with `InvalidBet` on `>= 4` instead of silent normalize) + Wave 1.5 audit-amendment commits `c63a75a1` + `08706ebd` + `1249a6fd` + `06623edb`
 
 _Resolved at v37.0 close (no longer outstanding):_
 - Auditing post-v32.0 commits (`002bde55` presale auto-deactivate, `2713ce61` setDecimatorAutoRebuy removal) — RESOLVED v37.0 Phase 270 (DELTA-01..04 PASS; verdicts SAFE_BY_STRUCTURAL_CLOSURE + SAFE_BY_DESIGN per 270-01-DELTA-SURFACE.md; feeds Phase 271 §3.A Row Group 3 + §6b 4-row KI envelope)
@@ -62,7 +73,7 @@ _Resolved or carried at v36.0 / v35.0 close (no longer outstanding):_
 - Phase 261 INFO-tier reconciliation drifts — addressed by v36.0 §3c handling
 - Phase 257 Task 7 adversarial red-team gap — RESOLVED v34.0 Phase 262 Task 6
 
-## Current Milestone: v37.0 Degenerette Recalibration + Maintenance Bundle
+## Completed Milestone: v37.0 Degenerette Recalibration + Maintenance Bundle
 
 **Goal:** Reconcile Degenerette payout calibration with the v34.0 heavy-tail trait producer (pre-launch fix), execute deferred maintenance (lootbox dead-branch cleanup + SURF-05 gas-pin re-pinning), and clear the long-deferred adversarial audit of post-v32.0 commits — all closed under a single `audit/FINDINGS-v37.0.md` deliverable.
 
@@ -555,4 +566,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-10 — v37.0 milestone opened (Degenerette Recalibration + Maintenance Bundle). Audit baseline `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`. Roadmap to be created at phase 267+ (continues numbering from v36.0=266). Detailed v35.0 + v36.0 milestone records in `.planning/MILESTONES.md` + `.planning/STATE.md` "Last Shipped Milestone" block.*
+*Last updated: 2026-05-11 — v38.0 milestone SHIPPED (Always-Hero Simplification + Maximal Dead-Code Cleanup). Closure signal `MILESTONE_V38_AT_HEAD_<sha>` (resolved at Wave 4 Task 4.6 atomic-update per D-272-CLOSURE-01). Single-phase patch (Phase 272) per v36.0 Phase 266 precedent. Detailed v36.0 + v37.0 + v38.0 milestone records in `.planning/MILESTONES.md` + `.planning/STATE.md` "Last Shipped Milestone" block.*
