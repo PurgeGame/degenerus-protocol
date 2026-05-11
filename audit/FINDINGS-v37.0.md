@@ -600,3 +600,80 @@ KNOWN-ISSUES.md UNMODIFIED at v37 close per `git diff 1c0f09132d7439af9881c56fe1
 
 ---
 
+## 7. Prior-Artifact Cross-Cites
+
+Cross-cites organized in 4 subsections per the canonical FINDINGS shape: v37.0 phase artifacts, prior milestone FINDINGS, notes, and project-state artifacts.
+
+### 7.1. v37.0 Phase Artifacts
+
+- **Phase 267 — Degenerette Producer + 5-Table Payout Rewrite:**
+  - `.planning/phases/267-degenerette-producer-5-table-payout-rewrite/267-CONTEXT.md`
+  - `.planning/phases/267-degenerette-producer-5-table-payout-rewrite/267-01-PLAN.md`
+  - `.planning/phases/267-degenerette-producer-5-table-payout-rewrite/267-01-SUMMARY.md`
+  - `.planning/phases/267-degenerette-producer-5-table-payout-rewrite/267-01-CONSTANTS-VERIFY.md` (25/25 packed-constants byte-identity proof `PASS_ALL_25`)
+  - Contract commit: `e1136071` `feat(267): degenerette producer + 5-table payout rewrite + 3-tier ETH split [DGN-01..15, PAY-SPLIT-01..03]`
+- **Phase 268 — Degenerette Statistical Validation + Cross-Surface Preservation:**
+  - `.planning/phases/268-degenerette-statistical-validation-cross-surface-preservation/268-CONTEXT.md`
+  - `.planning/phases/268-degenerette-statistical-validation-cross-surface-preservation/268-01-PLAN.md`
+  - `.planning/phases/268-degenerette-statistical-validation-cross-surface-preservation/268-01-SUMMARY.md`
+  - `.planning/phases/268-degenerette-statistical-validation-cross-surface-preservation/268-VERIFICATION.md`
+  - `.planning/phases/268-degenerette-statistical-validation-cross-surface-preservation/268-01-CHORE-INVENTORY.md`
+  - Test commit: `4b277aaf` `test(268): degenerette stat suite + cross-surface preservation v37.0 + worst-case gas regression [STAT-01..07, SURF-01..06]`
+- **Phase 269 — Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning (PARTIAL ship):**
+  - `.planning/phases/269-lootbox-dead-branch-cleanup-surf-05-gas-pin-re-pinning/269-CONTEXT.md`
+  - `.planning/phases/269-lootbox-dead-branch-cleanup-surf-05-gas-pin-re-pinning/269-01-PLAN.md` (including the "Root Cause (GASPIN-01)" 80-LOC RCA section inline at commit `009cbde3`)
+  - `.planning/phases/269-lootbox-dead-branch-cleanup-surf-05-gas-pin-re-pinning/269-01-SUMMARY.md`
+  - Contract commit: `8fd5c2e1` `feat(269): delete unreachable BURNIE-conversion branch in _resolveLootboxRoll [LBX-01]`
+  - RCA-inline commit: `009cbde3` `docs(269): GASPIN-01 root-cause inline — fixture-loader caching`
+- **Phase 270 — Post-v32.0 Deferred-Commit Adversarial Sub-Audit (cross-cite):**
+  - `.planning/phases/270-post-v32-0-deferred-commit-adversarial-sub-audit/270-CONTEXT.md`
+  - `.planning/phases/270-post-v32-0-deferred-commit-adversarial-sub-audit/270-01-PLAN.md`
+  - `.planning/phases/270-post-v32-0-deferred-commit-adversarial-sub-audit/270-01-SUMMARY.md`
+  - `.planning/phases/270-post-v32-0-deferred-commit-adversarial-sub-audit/270-01-DELTA-SURFACE.md` (305 LOC canonical Phase-271-§3.A grep-cite anchor per D-270-FILES-01; 8 surface verdicts SAFE_BY_STRUCTURAL_CLOSURE × 6 + SAFE_BY_DESIGN × 2; 4 RE_VERIFIED-NEGATIVE-scope KI envelope rows feeding §6b)
+  - `.planning/phases/270-post-v32-0-deferred-commit-adversarial-sub-audit/270-VERIFICATION.md`
+  - Working-file commit: `4017b9ec` `docs(270): post-v32.0 deferred-commit adversarial sub-audit working file [DELTA-01..04]`
+  - Phase-close commit: `5cd4f2bc` `docs(270): phase 270 summary — post-v32.0 deferred-commit adversarial sub-audit complete [DELTA-01..04 PASS]`
+- **Phase 271 — Delta Audit + Findings Consolidation (Terminal) — self-cite:**
+  - `.planning/phases/271-delta-audit-findings-consolidation-terminal/271-CONTEXT.md`
+  - `.planning/phases/271-delta-audit-findings-consolidation-terminal/271-01-PLAN.md` (this plan)
+  - `.planning/phases/271-delta-audit-findings-consolidation-terminal/271-01-ADVERSARIAL-LOG.md` (Task 6 output — 3 H2 sections + Disposition)
+  - `.planning/phases/271-delta-audit-findings-consolidation-terminal/271-01-SUMMARY.md` (Task 14 output)
+
+### 7.2. Prior Milestone FINDINGS Cross-Cites
+
+11 prior milestone-closure deliverables enumerated for REG-04 spot-check sweep + closure-signal chain context:
+
+- `audit/FINDINGS-v25.0.md`
+- `audit/FINDINGS-v27.0.md`
+- `audit/FINDINGS-v28.0.md`
+- `audit/FINDINGS-v29.0.md`
+- `audit/FINDINGS-v30.0.md`
+- `audit/FINDINGS-v31.0.md`
+- `audit/FINDINGS-v32.0.md`
+- `audit/FINDINGS-v33.0.md`
+- `audit/FINDINGS-v34.0.md`
+- `audit/FINDINGS-v35.0.md`
+- `audit/FINDINGS-v36.0.md`
+
+**Closure-signal chain:** v25 → v27 → v28 → v29 → v30 → v31 → v32 → v33 → v34 (`MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`) → v35 → v36 (`MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`) → v37 (`MILESTONE_V37_AT_HEAD_<sha>` — emitted §9c at Task 12; SHA resolved at Task 14 atomic-update).
+
+REG-01 carries v36.0 closure signal verbatim per §5a (REG-v36.0-LBX-ENT PASS).
+REG-02 carries v34.0 closure signal verbatim per §5b (REG-v34.0-TRAIT-SOLO PASS).
+REG-04 walks v25..v36.0 per §5c (5 PASS / 1 SUPERSEDED).
+
+### 7.3. Notes Cross-Cites
+
+- `.planning/notes/2026-05-10-degenerette-payout-recalibration.md` — primary workstream seed note for v37.0 Degenerette content.
+- `.planning/notes/degenerette-recalibration/derive_5_tables.py` — Fraction-exact derivation script; canonical source of truth for the 25 packed constants (5 × `QUICK_PLAY_PAYOUTS_N{0..4}_PACKED` + 5 × `QUICK_PLAY_PAYOUT_N{0..4}_M8` + 5 × `HERO_BOOST_N{0..4}_PACKED` + 5 × `WWXRP_FACTORS_N{0..4}_PACKED`); Phase 267 Task 2 `PASS_ALL_25` byte-identity proof verifies deployed constants match script stdout.
+- `.planning/notes/2026-05-10-resolveLootboxRoll-dead-burnie-conversion-branch.md` — lootbox cleanup seed note for v37.0 LBX-01 content.
+
+### 7.4. Project-State Cross-Cites
+
+- `.planning/PROJECT.md` "Current Milestone v37.0" block + "Deferred to Future Milestones" subsection (updated at Task 13 per D-271-DEFERRED-03 with 4 v38+ carry-forward bullets — LBX-02 + GASPIN-02/03 combined + SURF-03 re-baseline + STAT-03 v35.0 carry).
+- `.planning/MILESTONES.md` closure-signal chain v25 → v36 + v37 in-progress row (flipped to SHIPPED at Task 14 with closure signal `MILESTONE_V37_AT_HEAD_<sha>` recorded).
+- `.planning/ROADMAP.md` v37.0 milestone bullet (flipped to ✅ at Task 14).
+- `.planning/REQUIREMENTS.md` AUDIT-01..06 + REG-01..04 traceability (flipped to Complete at Task 14); LBX-02 + GASPIN-02 + GASPIN-03 traceability (flipped to DEFERRED-V38+ at Task 14).
+- `KNOWN-ISSUES.md` EXC-01..04 envelopes (UNMODIFIED at v37 close per default path; `git diff` returns empty).
+
+---
+
