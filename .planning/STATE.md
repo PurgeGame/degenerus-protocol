@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v37.0
 milestone_name: Degenerette Recalibration + Maintenance Bundle
 status: executing
-last_updated: "2026-05-10T13:55:00.000Z"
-last_activity: 2026-05-10 -- Phase 268 plan complete (`268-01-PLAN.md`, 1 plan / 3 tasks; chore inventory → USER-APPROVED batched test commit → phase-close summary) verified by gsd-plan-checker after 1 revision iteration (D-268-WORSTGAS-01 carve-out + ticketCount=1 fallback removed; user clarification: hero match INHERENT at M=8) — ready for `/gsd-execute-phase 268`
+last_updated: "2026-05-10T17:30:00.000Z"
+last_activity: 2026-05-10 -- Phase 268 SHIPPED — 3 NEW test/stat files (DegenerettePerNEvExactness + DegeneretteProducerChi2 + DegeneretteBonusEv) + SurfaceRegression.test.js v37.0 SURF-01..04 describe extension + NEW Phase268GasRegression.test.js + package.json test:stat wiring; 1 USER-APPROVED batched test commit (`4b277aaf`) + 2 AGENT-COMMITTED chore/planning commits (`4c5aa68b` Task 1 inventory + this Task 3 SUMMARY/STATE); 13 of 13 STAT-01..07 + SURF-01..06 requirements PASS; ZERO source-tree mutations (`git diff e1136071 HEAD -- contracts/` empty); ready for `/gsd-discuss-phase 269`
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 1
-  completed_plans: 1
-  percent: 20
+  completed_plans: 2
+  percent: 40
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.0 open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 268 PLANNED (1/1 plans drafted; 13/13 requirements covered: STAT-01..07 + SURF-01..06); ready for `/gsd-execute-phase 268`
+**Current focus:** Phase 268 SHIPPED (1/1 plans complete; 13/13 STAT-01..07 + SURF-01..06 requirements PASS; zero source-tree mutations); Phase 269 next — Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning (LBX-01..03 + GASPIN-01..03); ready for `/gsd-discuss-phase 269`
 
 ## Current Position
 
-Phase: 268 (degenerette-statistical-validation-cross-surface-preservation) — PLANNED
-Plan: `268-01-PLAN.md` (single multi-task plan per D-268-PLAN-01: 3 tasks; chore inventory → USER-APPROVED batched test commit → phase-close summary; covers STAT-01..07 + SURF-01..06)
-Status: Phase 268 plan drafted + revised + verified PASSED — ready for `/gsd-execute-phase 268`. SURF-06 worst-case = SINGLE construction at N=3 + M=8 + ETH tier 3 + ticketCount=10 (hero INHERENT at M=8 per user clarification).
-Last activity: 2026-05-10 -- Phase 268 `268-01-PLAN.md` drafted by gsd-planner + targeted revision (D-268-WORSTGAS-01 single-construction + ticketCount=1 fallback removed) + verified PASSED by gsd-plan-checker; 2 AGENT-COMMITTED commits (`5f453877` initial plan; revision pending in this commit)
-Resume file: .planning/phases/268-degenerette-statistical-validation-cross-surface-preservation/268-01-PLAN.md
+Phase: 268 (degenerette-statistical-validation-cross-surface-preservation) — SHIPPED 2026-05-10
+Plan: `268-01-PLAN.md` (1/1 complete; 3 tasks: chore inventory `4c5aa68b` → USER-APPROVED batched test commit `4b277aaf` → phase-close summary _this commit_; covers STAT-01..07 + SURF-01..06)
+Status: Phase 268 SHIPPED — 13 of 13 requirements PASS, zero source-tree mutations, single USER-APPROVED batched test commit + 2 AGENT-COMMITTED planning/chore commits. Phase 269 next.
+Last activity: 2026-05-10 -- Phase 268 closed; SUMMARY authored at `.planning/phases/268-degenerette-statistical-validation-cross-surface-preservation/268-01-SUMMARY.md`; STATE.md flipped from `completed_plans: 1` → `2`, `completed_phases: 1` → `2`, `percent: 20` → `40`. Next: `/gsd-discuss-phase 269` to author CONTEXT.md for Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning (LBX-01..03 + GASPIN-01..03, 6 requirements, mixed-maintenance phase).
+Resume file: .planning/phases/269-lootbox-dead-branch-cleanup-surf05-gas-pin-repinning/269-CONTEXT.md (placeholder until Phase 269 CONTEXT.md authored)
 
 ## Last Shipped Milestone
 
@@ -94,6 +94,8 @@ Resume file: .planning/phases/268-degenerette-statistical-validation-cross-surfa
 - **Adversarial-pass posture:** SEQUENTIAL after full §4 draft per D-NN-ADVERSARIAL-02 carry; `/contract-auditor` + `/zero-day-hunter` in scope; `/economic-analyst` + `/degen-skeptic` deferred to Phase 271 discuss-phase decision (mechanism-design + skeptic review candidates given the payout-recalibration nature)
 - **Out of scope (deferred):** ETH daily jackpot recalibration; far-future BURNIE portion (already per-pull random level v35.0); purchase-phase ticket distributions; trait-roll logic outside Degenerette path; `EntropyLib` API additions (v36.0 ENT-04 carry); BAF jackpot `_jackpotTicketRoll` xorshift refactor (v36.0 ENT-05 carry); storage layout changes; new admin / upgrade hooks
 - **Closure signal target:** `MILESTONE_V37_AT_HEAD_<sha>` emitted via `audit/FINDINGS-v37.0.md` §9c
+- **Phase 267 SHIPPED 2026-05-10:** Degenerette Producer + 5-Table Payout Rewrite. Single batched USER-APPROVED contract commit `e1136071` (`contracts/DegenerusTraitUtils.sol` additive +45 LOC + `contracts/modules/DegenerusGameDegeneretteModule.sol` rewrite +231/-196 LOC); 18 of 18 DGN-01..15 + PAY-SPLIT-01..03 requirements PASS. v37.0 source-tree HEAD = `e1136071`.
+- **Phase 268 SHIPPED 2026-05-10:** Degenerette Statistical Validation + Cross-Surface Preservation. Single batched USER-APPROVED test commit `4b277aaf` (3 NEW `test/stat/` files + 1 EXTENDED `test/stat/SurfaceRegression.test.js` v37.0 SURF-01..04 describe + 1 NEW `test/gas/Phase268GasRegression.test.js` + package.json wiring; +2,277/-1 LOC across 6 files); 13 of 13 STAT-01..07 + SURF-01..06 requirements PASS; ZERO source-tree mutations (`git diff e1136071 HEAD -- contracts/` empty at phase close).
 - See `.planning/ROADMAP.md` for the 5-phase entries + `.planning/notes/2026-05-10-degenerette-payout-recalibration.md` for primary workstream seed + `.planning/notes/2026-05-10-resolveLootboxRoll-dead-burnie-conversion-branch.md` for lootbox cleanup seed.
 
 ## Roadmap Overview
