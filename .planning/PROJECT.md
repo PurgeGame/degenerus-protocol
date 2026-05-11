@@ -10,20 +10,26 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-**Active milestone:** v37.0 — Degenerette Recalibration + Maintenance Bundle (just opened; phases 267-271 to be planned)
-**Last shipped:** v36.0 — Lootbox-Path Entropy Refactor (2026-05-10; closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`)
-**Prior shipped:** v35.0 — BURNIE Near-Future Per-Pull Level Resample (2026-05-09; closure signal `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6`)
-**Contract HEAD anchor (v37.0 audit baseline):** `1c0f09132d7439af9881c56fe197f81757f8164a` (v36.0 closure HEAD; per .planning/STATE.md "Last Shipped Milestone" block + .planning/MILESTONES.md v36.0 entry)
+**Active milestone:** _between-milestones_ — v37.0 closed at HEAD `MILESTONE_V37_AT_HEAD_<sha>` (resolved at Task 14 atomic-update); next milestone scope TBD
+**Last shipped:** v37.0 — Degenerette Recalibration + Maintenance Bundle (2026-05-11; closure signal `MILESTONE_V37_AT_HEAD_<sha>`)
+**Prior shipped:** v36.0 — Lootbox-Path Entropy Refactor (2026-05-10; closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`)
+**Contract HEAD anchor (v37.0 closure):** `<sha>` (resolved at Task 14; supersedes v36.0 audit baseline `1c0f09132d7439af9881c56fe197f81757f8164a` as the contract HEAD anchor)
 **Audit deliverables (cumulative):** `audit/FINDINGS-v25.0.md` + `FINDINGS-v27.0.md` + `FINDINGS-v28.0.md` + `FINDINGS-v29.0.md` + `FINDINGS-v30.0.md` + `FINDINGS-v31.0.md` + `FINDINGS-v32.0.md` + `FINDINGS-v33.0.md` + `FINDINGS-v34.0.md` + `FINDINGS-v35.0.md` + `FINDINGS-v36.0.md` (FINAL READ-only at HEAD `1c0f0913`, 9 sections, ~700 lines, 6-surface adversarial table all SAFE_*, zero F-36-NN finding blocks); `KNOWN-ISSUES.md` modified by 1 entry rephrase at v36.0 close (EntropyLib XOR-shift entry NARROWS to BAF-jackpot-only scope per AUDIT-05; REPHRASE under D-09 Design Decisions, not new promotion); EXC-01..04 RE_VERIFIED at HEAD (EXC-01..03 NEGATIVE-scope at v36; EXC-04 NARROWS to BAF-jackpot-only)
 **Awaiting user commit:** `test/edge/LastPurchaseDayRace.test.js` + `test/edge/BackfillIdempotency.test.js` (TST-FILE-01 + TST-FILE-02 from v32.0 Phase 251; remain untracked permanently per D-253-FIND04-04)
 
 ## Deferred to Future Milestones
 
-_Carried forward into v37.0 (in scope this milestone):_
-- Auditing post-v32.0 commits (`002bde55` presale auto-deactivate, `2713ce61` setDecimatorAutoRebuy removal) — adversarial sub-audit phase planned in v37.0
-- Lootbox `_resolveLootboxRoll` dead BURNIE-conversion branch cleanup (~L1568-1581; pre-existing dead branch surfaced by Phase 266 `/contract-auditor` adversarial pass) — `.planning/notes/2026-05-10-resolveLootboxRoll-dead-burnie-conversion-branch.md`
-- SURF-05 gas-pin re-pinning fix (~120K gas-pin drift in Phase 261/264 SURF-05 tests under `npm run test:stat` ordering; standalone passes) — deferred from v36.0 Wave 2 user-approval gate
-- Degenerette payout recalibration (5-table per-N design) — pre-launch reconciliation of v34.0 heavy-tail color producer with downstream Degenerette payout consumer; `.planning/notes/2026-05-10-degenerette-payout-recalibration.md`
+_Carried forward into v38.0+ (in scope future milestone):_
+- Lootbox empirical 55%-tickets-path gas-savings test pin (LBX-02 carry from v37.0 Phase 269) — fixture-coverage gap; analytical worst-case is load-bearing
+- SURF-05 gas-pin stabilization under combined `npm run test:stat` ordering (GASPIN-02/03 carry from v37.0 Phase 269) — Phase 269 RCA at `.planning/phases/269-*/269-01-PLAN.md` "Root Cause (GASPIN-01)" section identifies fixture-loader caching mechanism
+- SURF-03 re-baseline post-LBX-01 (`test/stat/SurfaceRegression.test.js` carry from v37.0 Phase 269) — one-line edit when v38+ test-tree work resumes
+- `PerPullEmptyBucketSkip.test.js` fixture density retune (STAT-03 v35.0 carry from v35.0 Phase 264 / re-flagged v37.0 Phase 269) — deity-backed dense fixture proves helper correctness; failing test reflects sparse-fixture pre-organic-activity holder density per v35.0 Phase 265 D-265-STAT03-01 reframe; retune per Phase 264 D-IMPL-07 spec or document production-floor rate
+
+_Resolved at v37.0 close (no longer outstanding):_
+- Auditing post-v32.0 commits (`002bde55` presale auto-deactivate, `2713ce61` setDecimatorAutoRebuy removal) — RESOLVED v37.0 Phase 270 (DELTA-01..04 PASS; verdicts SAFE_BY_STRUCTURAL_CLOSURE + SAFE_BY_DESIGN per 270-01-DELTA-SURFACE.md; feeds Phase 271 §3.A Row Group 3 + §6b 4-row KI envelope)
+- Lootbox `_resolveLootboxRoll` dead BURNIE-conversion branch cleanup — RESOLVED v37.0 Phase 269 (LBX-01 commit `8fd5c2e1`; bytecode shrink 177 bytes 18,330 → 18,153; caller-clamp triple-defense proves byte-equivalence)
+- Degenerette payout recalibration (5-table per-N design) — RESOLVED v37.0 Phase 267 (commit `e1136071` `feat(267): degenerette producer + 5-table payout rewrite + 3-tier ETH split [DGN-01..15, PAY-SPLIT-01..03]`) + Phase 268 statistical validation (commit `4b277aaf` `test(268): degenerette stat suite + cross-surface preservation v37.0 + worst-case gas regression [STAT-01..07, SURF-01..06]`)
+- SURF-05 gas-pin re-pinning fix (~120K combined-suite drift) — PARTIAL-RESOLVED v37.0 Phase 269 (GASPIN-01 root-cause inline at commit `009cbde3`; stabilization options (a)/(b)/(c) deferred to v38+ per D-269-STAB-01 attempt-failed analysis; v36.0 acceptance "128k is fine approved" carries forward)
 
 _Resolved or carried at v36.0 / v35.0 close (no longer outstanding):_
 - v35.0 burnie-near-future-per-pull-level resample seed — RESOLVED v35.0 (Phase 263)
