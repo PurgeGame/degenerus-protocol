@@ -623,3 +623,142 @@ Per-finding 6-col PASS/REGRESSED/SUPERSEDED row table from REG-04 grep sweep acr
 Zero REGRESSED rows. Zero SUPERSEDED rows at v38 (the v37.0 SUPERSEDED row REG-v30.0-INV-237-134..137 was already SUPERSEDED by v36.0 ENT-02 + v37.0 LBX-01; no new supersedence at v38). EXC-04 NARROWS-retained per §5c REG-03 (BAF-jackpot-only scope carries forward; EntropyLib byte-identical at v38 HEAD). Surfaces strictly disjoint between v38 Degenerette hero-quadrant-extraction edit and all v34/v36/v37 verdicts.
 
 ---
+
+## 6. KI Gating Walk
+
+### 6a. Non-Promotion Ledger
+
+Zero F-38-NN finding blocks emitted per D-272-FIND-01; zero rows in Non-Promotion Ledger.
+
+Default path: Phase 272 §4 7-surface inline draft (Task 3.2) verdicts 7 of 7 SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE. Task 3.5 adversarial-pass via `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` (3 skills PARALLEL spawn per D-272-ADVERSARIAL-01) concurs with zero disagreement per `272-01-ADVERSARIAL-LOG.md` Disposition note (D-272-ADVERSARIAL-01 escalation path evaluated and does NOT fire by default). Surface (f) variance-impact-on-risk-averse-subset satisfies the D-09 3-predicate KI Gating Rubric (accepted-design + non-exploitable + sticky) in principle but is correctly documented via §4 (f) prose-only attestation per D-272-KI-01 default disposition — `/economic-analyst` assessment concludes KNOWN-ISSUES.md UNMODIFIED is the correct disposition (zero EV change; variance increase bounded; no player-reachable value-extraction path).
+
+### 6b. KI Envelope Re-Verifications
+
+4-row KI envelope table mirroring v37.0 §6b format. Per D-272-KI-01: EXC-01..03 RE_VERIFIED-NEGATIVE-scope; EXC-04 RE_VERIFIED with NARROWS retained from v36.0.
+
+| EXC | Surface | v38.0 Disposition | Evidence |
+| --- | ------- | ---------------- | -------- |
+| EXC-01 | Affiliate roll RNG | `RE_VERIFIED-NEGATIVE-scope` | Phase 272 has zero affiliate-roll interaction. MintModule byte-identical at v38 HEAD vs `2654fcc2` (cross-module byte-identity grep proof in §3.B). No v38 commit touches the affiliate-roll path. Carry-forward from v37.0 §6b EXC-01 + v36.0 Phase 266 KI envelope walk. |
+| EXC-02 | Backfill / prevrandao fallback | `RE_VERIFIED-NEGATIVE-scope` | Phase 272 has zero AdvanceModule interaction. AdvanceModule body byte-identical at v38 HEAD vs `2654fcc2`. No v38 commit touches the gameover-prevrandao-fallback path. Carry-forward from v37.0 §6b EXC-02 + v36.0 Phase 266 KI envelope walk. |
+| EXC-03 | F-29-04 mid-cycle write-buffer substitution | `RE_VERIFIED-NEGATIVE-scope` | Phase 272 has zero gameover-RNG-substitution interaction. AdvanceModule + swap path byte-identical at v38 HEAD. No v38 commit modifies the mid-cycle write-buffer mechanics. Carry-forward from v37.0 §6b EXC-03. |
+| EXC-04 | EntropyLib XOR-shift PRNG (BAF-jackpot-only scope at v36.0) | `RE_VERIFIED with NARROWS retained` | EntropyLib body byte-identical at v38 HEAD vs `2654fcc2` per cross-module byte-identity grep proof in §3.B (`git diff 2654fcc2..HEAD -- contracts/libraries/EntropyLib.sol` returns 0 lines) AND vs v36.0 baseline `1c0f0913` per REG-01 chain. Per-pull-level keccak path UNCHANGED in v38 — Phase 272 Degenerette payload does NOT modify lootbox-path entropy consumption. Lootbox-path consumes high-entropy keccak via `EntropyLib.hash2` + bit-slicing per v36.0 ENT-01..06 + v37.0 LBX-01 carry (4 hash2/bit-slice callsites in `_resolveLootboxRoll` byte-identical at structural level at v38 HEAD — LootboxModule byte-identical at v38). NARROWS scope (BAF-jackpot-only) carried verbatim from v36 AUDIT-05 KI-envelope-narrowing edit through v37 + v38. |
+
+**Backward-trace methodology cite (per `feedback_rng_backward_trace.md`):** Phase 272 Degenerette path consumes VRF-derived high-entropy keccak bits (NOT XOR-shift output) — the hero-quadrant extraction at `_resolveFullTicketBet` L591 reads bits committed at `_packFullTicketBet` time (BEFORE VRF reveal); the match check inside `_applyHeroMultiplier` at L1018 reads VRF-derived `resultTicket` bits (from `lootboxRngWordByIndex[index]` — VRF callback word, unknown at bet commitment time). EntropyLib XOR-shift remains as BAF-jackpot consumer only at v38 HEAD; backward-trace closed (the VRF word is structurally unknown at the player's commitment point). Phase 268 STAT-02 chi² ≥1M-sample uniformity validates the producer's color-symbol distribution (carried forward at v38).
+
+**Commitment-window check cite (per `feedback_rng_commitment_window.md`):** Phase 272 has zero RNG-path mutation; commitment-window check is a structurally trivial degenerate PASS at v38 (no VRF request, fulfillment, or word-derived input flow was modified). Player-controllable state at bet placement: `heroQuadrant ∈ {0..3, 0xFF}`, currency, betAmount, ticketCount, customTicket. None of these can change between VRF request and fulfillment — they are stored in the packed bet at placement time. The HERO-01 normalization (`heroQuadrant >= 4 → 0`) happens INSIDE `_packFullTicketBet` BEFORE the bet is stored, so the normalized value is committed at bet placement. Bot front-run via VRF mempool visibility remains STRUCTURALLY PREVENTED (carry-forward from v36.0 + v37.0 commitment-window verdicts).
+
+### 6c. Verdict Summary
+
+**`0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`**
+
+Surface (f) variance-impact-on-risk-averse-subset is documented as accepted-design via §4 surface (f) prose disclosure ONLY per D-272-KI-01 + `/economic-analyst` mechanism-design assessment (see `272-01-ADVERSARIAL-LOG.md`). NO new KNOWN-ISSUES.md entry under Design Decisions. EV invariant preserved by per-N HERO_BOOST table calibration (per surface (a)); player receives same EV under all (M, N) configurations; bounded variance increase per user disposition (degen-game context); no player-reachable path extracts protocol value from the variance increase.
+
+KNOWN-ISSUES.md UNMODIFIED at v38 close per `git diff 2654fcc2..HEAD -- KNOWN-ISSUES.md` returning empty.
+
+---
+
+## 7. Prior-Artifact Cross-Cites
+
+Cross-cites organized in 4 subsections per the canonical FINDINGS shape: v38.0 phase artifacts, prior milestone FINDINGS, notes, and project-state artifacts.
+
+### 7.1. v38.0 Phase Artifacts
+
+- **Phase 272 — Always-Hero Simplification + Maximal Dead-Code Cleanup (Terminal):**
+  - `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-CONTEXT.md` — phase-gather context with D-272-CLEAN-SCOPE-01 / D-272-CLEAN-DISCOVERY-01 / D-272-COMMIT-SHAPE-01 / D-272-DESIGN-INTENT-01 / D-272-NATSPEC-DISCIPLINE-01 + carry-forward chain D-272-FILES-01 / D-272-CLOSURE-01..02 / D-272-FCITE-01 / D-272-ADVERSARIAL-01 / D-272-KI-01 / D-272-SEV-01 / D-272-APPROVAL-01.
+  - `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-DISCUSSION-LOG.md` — human-readable discussion record.
+  - `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-PLAN.md` — multi-task planner output (4 waves: Wave 1 contract + Wave 2 test + Wave 3 audit deliverable + Wave 4 closure flips).
+  - `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-ADVERSARIAL-LOG.md` — Task 3.5 output: 3 H2 sections (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) + Disposition.
+  - `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-SUMMARY.md` — Wave 4 phase-close summary (post-Task-4.7 atomic commit).
+  - Wave 1 contract commit: `527e3adc` — `feat(272): always-on hero default 0 + degenerette dead-code cleanup [HERO-01..05, CLEAN-01..05]`.
+  - Wave 2 test commit: `e3fcb95c` — `test(272): hero-always-on + dead-code cleanup + v37+ carry bundle [STAT-01..02, SURF-01..03, LBX-02, GASPIN-02..03, STAT-03-v35-carry]`.
+
+### 7.2. Prior Milestone FINDINGS Cross-Cites
+
+12 prior milestone-closure deliverables enumerated for REG-04 spot-check sweep + closure-signal chain context:
+
+- `audit/FINDINGS-v25.0.md`
+- `audit/FINDINGS-v27.0.md`
+- `audit/FINDINGS-v28.0.md`
+- `audit/FINDINGS-v29.0.md`
+- `audit/FINDINGS-v30.0.md`
+- `audit/FINDINGS-v31.0.md`
+- `audit/FINDINGS-v32.0.md`
+- `audit/FINDINGS-v33.0.md`
+- `audit/FINDINGS-v34.0.md`
+- `audit/FINDINGS-v35.0.md`
+- `audit/FINDINGS-v36.0.md`
+- `audit/FINDINGS-v37.0.md`
+
+**Closure-signal chain:** v25 → v27 → v28 → v29 → v30 → v31 → v32 → v33 → v34 (`MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`) → v35 → v36 (`MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`) → v37 (`MILESTONE_V37_AT_HEAD_2654fcc2`) → v38 (`MILESTONE_V38_AT_HEAD_<sha>` — emitted §9c at Task 3.6; SHA resolved at Wave 4 Task 4.6 atomic-update).
+
+REG-01 carries v37.0 intermediate closure signal verbatim per §5a (REG-v37.0-HERO-CLEAN PASS).
+REG-02 carries v34.0 closure signal verbatim per §5b (REG-v34.0-TRAIT-SOLO PASS).
+REG-04 walks v25..v37.0 per §5d (7 PASS / 0 REGRESSED / 0 SUPERSEDED).
+
+### 7.3. Notes Cross-Cites
+
+- `.planning/notes/degenerette-recalibration/derive_5_tables.py` — Fraction-exact derivation script; canonical source of truth for the 25 packed constants. v38 inherits the v37.0 Phase 267 Task 2 `PASS_ALL_25` byte-identity proof unchanged (per-N tables UNCHANGED at v38).
+
+### 7.4. Project-State Cross-Cites
+
+- `.planning/PROJECT.md` "Current Milestone v38.0" block + "Deferred to Future Milestones" subsection (updated at Wave 4 Task 4.3 per D-272-CLOSURE-01 with v39+ carry-forward bullets — LBX-02 RE-DEFER + STAT-03-v35-carry ACCEPTED-DESIGN re-affirmed).
+- `.planning/MILESTONES.md` closure-signal chain v25 → v37 + v38 in-progress row (flipped to SHIPPED at Wave 4 Task 4.6 with closure signal `MILESTONE_V38_AT_HEAD_<sha>` recorded).
+- `.planning/ROADMAP.md` v38.0 milestone bullet (flipped to ✅ at Wave 4 Task 4.4).
+- `.planning/REQUIREMENTS.md` 30 v38.0 requirements traceability (flipped to Complete at Wave 4 Task 4.5; LBX-02 traceability flipped to DEFERRED-V39+; STAT-03-v35-carry flipped to ACCEPTED-DESIGN; GASPIN-02 + GASPIN-03 flipped to COMPLETE).
+- `KNOWN-ISSUES.md` EXC-01..04 envelopes (UNMODIFIED at v38 close per default path; `git diff` returns empty).
+
+---
+
+## 8. Forward-Cite Closure (D-253-09 + D-253-15 step 8 Terminal-Phase Rule)
+
+Terminal-phase zero-emission verification per D-272-FCITE-01 (carry of D-271-FCITE-01 / D-266-FCITE / D-265-FCITE-01 / D-262-FCITE-01 / D-257-FCITE-01 / D-253-15 step 8 + ROADMAP terminal-phase rule). Phase 272 is the SOLE terminal v38.0 phase; v38.0 = single-phase milestone (Phase 272).
+
+### 8a. Phase 272 Intra-Milestone Forward-Cite Residual Verification
+
+**Grep recipe:**
+```
+grep -rnE 'Phase 27[3-9]|Phase 28[0-9]' \
+  audit/FINDINGS-v38.0.md \
+  .planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-CONTEXT.md \
+  .planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-DISCUSSION-LOG.md \
+  .planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-PLAN.md \
+  .planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-SUMMARY.md \
+  .planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-ADVERSARIAL-LOG.md
+```
+
+**Filter:** exclude meta-references that explicitly cite "Phase 273+" only to negate (lines containing `NOT forward-cites`, `fresh delta-extraction`, `Future milestones`, or `zero forward-cites` — these are the rule's self-statement, not forward-cites to specific in-flight work).
+
+**Output:** Zero non-meta matches. Phase 272 is the terminal v38.0 phase; no in-flight Phase 273+ work is forward-cited.
+
+**Verdict:** PASS.
+
+### 8b. Phase 272 → Post-Milestone Forward-Cite Emission
+
+**Grep recipe (scoped to audit + phase artifacts only):**
+```
+! grep -rE "Phase (273|274|275|276)|v39\.0|v40\.0" \
+  audit/FINDINGS-v38.0.md \
+  .planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-CONTEXT.md \
+  .planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-DISCUSSION-LOG.md \
+  .planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-PLAN.md \
+  .planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-SUMMARY.md \
+  .planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-ADVERSARIAL-LOG.md
+```
+
+**Expected:** exit 0 (zero matches when scoping to audit deliverable + phase artifacts; v39+ matches inside FINDINGS-v38.0.md itself are pickup-pointer carve-outs per the rule below).
+
+**Pickup-pointer carve-out:** §9.NN.iv RE-DEFER entries may cite `v39+` as the explicit deferral target. This is a forward-pointer for future-phase pickup (planner-handoff register), NOT a forward-cite to a planned future phase. Terminal-phase invariant remains satisfied. Operational-pickup references inline at test files (e.g., the LBX-02 FORMAL RE-DEFER prose block in `test/gas/LootboxOpenGas.test.js` documenting the v39+ pickup path) are also pickup-pointers, not in-flight forward-cites; they live in the test tree (operational source, not audit deliverable) and are out-of-scope for the §8 invariant.
+
+**Allowlist:** the §9.NN.iv RE-DEFER subsection is a planned-handoff register, NOT a forward-cite to in-flight v39.0 work. The "Deferred to Future Milestones" subsection in PROJECT.md is the single-source-of-truth lookup. "ingest via fresh delta-extraction phase" is the rule's self-statement of how future milestones consume v38 artifacts.
+
+**Verdict:** PASS — pickup-pointer carve-out applies for `v39+` matches inside FINDINGS-v38.0.md §9.NN.iv; zero forward-cites emitted outside the carve-out.
+
+### 8c. Combined §8 Verdict
+
+Zero forward-cites emitted from Phase 272 to any in-flight v39.0+ phases. The §9.NN.iv Carry-Forward RE-DEFER Register (Task 3.6) contains explicit deferred-handoff items (LBX-02 RE-DEFER + STAT-03-v35-carry ACCEPTED-DESIGN); these are planner handoff REGISTERS tying into next-milestone pickup via `.planning/PROJECT.md` "Deferred to Future Milestones" single-source-of-truth lookup, NOT forward-cites to in-flight Phase 273+ work.
+
+Future milestones (v39.0+) ingest via fresh delta-extraction phase, not via forward-cite from v38 artifacts.
+
+**Verdict:** PASS — terminal-phase invariant satisfied per D-272-FCITE-01.
+
+---
