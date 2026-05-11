@@ -24,7 +24,7 @@
 - [x] **Phase 267: Degenerette Producer + 5-Table Payout Rewrite** — Add `packedTraitsDegenerette` producer + 5 per-N payout/hero/WWXRP table dispatch in `DegenerusGameDegeneretteModule.sol`; delete `_evNormalizationRatio`; rewrite `_distributePayout` ETH branch with 3-tier split rule (≤3× bet → 100% ETH; 3-10× bet → 2.5× bet ETH floor + remainder lootbox; >10× bet → existing 25/75 split); single batched USER-APPROVED contract commit. (completed 2026-05-10)
 - [x] **Phase 268: Degenerette Statistical Validation + Cross-Surface Preservation** — 3 new `test/stat/` files (per-N EV exactness + producer chi² + bonus EV) + `SurfaceRegression.test.js` v37.0 extension proving Mint/Jackpot/Lootbox/EntropyLib byte-identity. (completed 2026-05-11)
 - [ ] **Phase 269: Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning** — Delete unreachable BURNIE-conversion branch in `_resolveLootboxRoll` L1568-1581 (caller-clamp invariant); diagnose + fix Phase 261/264 SURF-05 ~120K gas-pin drift under `npm run test:stat`.
-- [ ] **Phase 270: Post-v32.0 Deferred-Commit Adversarial Sub-Audit** — Audit-only adversarial sweep of commits `002bde55` (presale auto-deactivate) + `2713ce61` (setDecimatorAutoRebuy removal); read-only delta-classification + KI envelope check; FINDING_CANDIDATE rows escalate to Phase 271.
+- [x] **Phase 270: Post-v32.0 Deferred-Commit Adversarial Sub-Audit** — Audit-only adversarial sweep of commits `002bde55` (presale auto-deactivate) + `2713ce61` (setDecimatorAutoRebuy removal); read-only delta-classification + KI envelope check; FINDING_CANDIDATE rows escalate to Phase 271. (completed 2026-05-11)
 - [ ] **Phase 271: Delta Audit + Findings Consolidation (Terminal)** — Single `audit/FINDINGS-v37.0.md` 9-section deliverable; closure signal `MILESTONE_V37_AT_HEAD_<sha>` emitted in §9c; KNOWN-ISSUES.md walkthrough; ROADMAP/STATE/MILESTONES flips.
 
 ## Phase Details
@@ -93,7 +93,7 @@ Plans:
   4. KI envelope check: row-level evidence confirms neither `002bde55` nor `2713ce61` widens EXC-01 (affiliate roll), EXC-02 (prevrandao fallback), EXC-03 (F-29-04 mid-cycle substitution), or EXC-04 (EntropyLib XOR-shift; v36.0 NARROWS scope to BAF-only); no new accepted-design entries warranting KI promotion; result feeds the Phase 271 §6 KI gating walk as RE_VERIFIED-NEGATIVE-scope rows (DELTA-04).
   5. Phase 270 emits ZERO source-tree mutations; working-file appendix `.planning/phases/270-post-v32-deferred-commit-adversarial-subaudit/270-01-DELTA-SURFACE.md` (or equivalent canonical filename) AGENT-COMMITTED at phase close; appendix is grep-citable from Phase 271 `audit/FINDINGS-v37.0.md` §3.A (DELTA-03 grep recipe).
 
-**Plans:** TBD
+**Plans:** 1/1 plans complete
 
 ### Phase 271: Delta Audit + Findings Consolidation (Terminal)
 
@@ -116,5 +116,5 @@ Plans:
 | 267. Degenerette Producer + 5-Table Payout Rewrite | 1/1 | Complete   | 2026-05-10 |
 | 268. Degenerette Statistical Validation + Cross-Surface Preservation | 1/1 | Complete   | 2026-05-11 |
 | 269. Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning | 0/1 | Planning | - |
-| 270. Post-v32.0 Deferred-Commit Adversarial Sub-Audit | 0/0 | Not started | - |
+| 270. Post-v32.0 Deferred-Commit Adversarial Sub-Audit | 1/1 | Complete    | 2026-05-11 |
 | 271. Delta Audit + Findings Consolidation (Terminal) | 0/0 | Not started | - |
