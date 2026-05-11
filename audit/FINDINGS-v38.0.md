@@ -762,3 +762,82 @@ Future milestones (v39.0+) ingest via fresh delta-extraction phase, not via forw
 **Verdict:** PASS — terminal-phase invariant satisfied per D-272-FCITE-01.
 
 ---
+
+## 9. Milestone Closure Attestation
+
+### 9a. Verdict Distribution
+
+Per-section roll-up:
+- **§4** F-38-NN finding blocks: **7 of 7** surfaces (a)..(g) verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE; **zero F-38-NN finding blocks emitted** per D-272-FIND-01 default path; **zero 8th-surface NEW_VECTOR** per `/zero-day-hunter` 7-hypothesis sweep (h)..(o) (one INFO-severity docs-vs-behavior drift identified at Hypothesis (i) — `dailyHeroWagers` tracking inconsistency post-v38 — with disposition KEEP_AS_NEGATIVE_FINDING per D-272-KI-01 default zero-promotion path; surfaced as v39+ backlog seed candidate, NOT a §4 finding block).
+- **§5** Regression Appendix: REG-01 **1 PASS** (v37.0 intermediate closure signal NON-WIDENING); REG-02 **1 PASS** (v34.0 closure signal NON-WIDENING); REG-03 **4 PASS** (EXC-01..03 NEGATIVE-scope + EXC-04 RE_VERIFIED with NARROWS retained); REG-04 **7 PASS / 0 REGRESSED / 0 SUPERSEDED** (prior-finding spot-check sweep across `audit/FINDINGS-v25.0.md` → `audit/FINDINGS-v37.0.md`). Aggregate: **13 PASS / 0 REGRESSED / 0 SUPERSEDED**.
+- **§6** KI Gating Walk: **`0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`** (default path per D-272-KI-01). EXC-01..03 RE_VERIFIED-NEGATIVE-scope; EXC-04 RE_VERIFIED with NARROWS retained.
+- **AUDIT-06** adversarial-pass: 3 skills (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) PARALLEL spawn per D-272-ADVERSARIAL-01; all concur on the 7 §4 surface verdicts; zero FINDING_CANDIDATE / zero 8th-surface / zero KI promotion candidate per `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-ADVERSARIAL-LOG.md` Disposition section. One docs-vs-behavior drift identified (Hypothesis (i)) with KEEP_AS_NEGATIVE_FINDING disposition — does NOT change §4 verdict roll-up.
+- **Combined milestone closure:** `MILESTONE_V38_AT_HEAD_<sha>`.
+
+### 9b. Attestation Block
+
+D-253-15 step 9 attestation block triggering v38.0 milestone closure. Cite 3-skill PARALLEL adversarial-pass concurrence (per `272-01-ADVERSARIAL-LOG.md` Disposition section — all 3 skills concurred on §4 verdict roll-up; one docs-vs-behavior drift identified with KEEP_AS_NEGATIVE_FINDING disposition that does NOT change the closure verdict).
+
+```
+git rev-parse HEAD
+# v38.0 closure HEAD <sha>   — resolved at Wave 4 Task 4.6 atomic-update per D-272-CLOSURE-01
+# v37.0 intermediate baseline — 2654fcc2
+#   signal                   — MILESTONE_V37_AT_HEAD_2654fcc2
+# v36.0 audit baseline        — 1c0f09132d7439af9881c56fe197f81757f8164a
+#   signal                   — MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a
+# v34.0 second-prior closure — 6b63f6d4daf346a53a1d463790f637308ea8d555 (REG-02 carry)
+#   signal                   — MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555
+```
+
+Phase 272 source-tree HEAD at adversarial-pass close: `e3fcb95c` (Wave 2 test commit — last source-tree mutation in v38 milestone scope). Docs-tree HEAD captured separately at Wave 4 Task 4.6 atomic-update per Phase 257 D-257-CLOSURE-01 / Phase 262 D-262-CLOSURE-01 / Phase 265 D-265-CLOSURE-01 / Phase 266 D-266-CLOSURE-01 / Phase 271 D-271-CLOSURE-01 carry → D-272-CLOSURE-01.
+
+### 9c. Closure Signal
+
+`MILESTONE_V38_AT_HEAD_<sha>`
+
+Placeholder `<sha>` resolved at Wave 4 Task 4.6 atomic-update per D-272-CLOSURE-01 across 5 verbatim locations: (1) `audit/FINDINGS-v38.0.md` §1 frontmatter `audit_subject_head:` field; (2) `audit/FINDINGS-v38.0.md` §1 frontmatter `closure_signal:` field; (3) `audit/FINDINGS-v38.0.md` §2 Closure Verdict Summary line `Combined milestone closure: MILESTONE_V38_AT_HEAD_<sha>`; (4) `audit/FINDINGS-v38.0.md` §9c this line; (5) `audit/FINDINGS-v38.0.md` §9b Attestation Block. Plus 3 cross-document propagation locations resolved by Wave 4 Task 4.6: `.planning/MILESTONES.md` v38.0 row, `.planning/ROADMAP.md` v38.0 milestone bullet, and `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-SUMMARY.md` frontmatter.
+
+### 9.NN Commit-Readiness Register
+
+TWO-subsection format per D-272-CLOSURE-02 (i USER-APPROVED contracts + ii USER-APPROVED tests + iii AGENT-COMMITTED audit + planning artifacts; the historical "awaiting" / "pending review" closure subsection is OMITTED per D-272-CLOSURE-02 carry of D-271-CLOSURE-02). §9.NN.iv RE-DEFER Register below is a separate subsection from the TWO-subsection commit-readiness register (pickup-pointer carve-out per §8).
+
+#### 9.NN.i USER-APPROVED contracts (Phase 272 Wave 1)
+
+| Commit SHA | Subject | Files | Phase |
+| ---------- | ------- | ----- | ----- |
+| `527e3adc` | `feat(272): always-on hero default 0 + degenerette dead-code cleanup [HERO-01..05, CLEAN-01..05]` | `contracts/modules/DegenerusGameDegeneretteModule.sol` (+18 / −16 LOC; HERO-01..05 hero-pack/extract block + CLEAN-01..05 cleanup-sweep deletions). Bytecode delta −57 bytes (8955 → 8898); storage layout byte-identical vs `2654fcc2`; public ABI byte-identical vs `2654fcc2`. | 272 |
+
+#### 9.NN.ii USER-APPROVED tests (Phase 272 Wave 2)
+
+| Commit SHA | Subject | Files | Phase |
+| ---------- | ------- | ----- | ----- |
+| `e3fcb95c` | `test(272): hero-always-on + dead-code cleanup + v37+ carry bundle [STAT-01..02, SURF-01..03, LBX-02, GASPIN-02..03, STAT-03-v35-carry]` | 6 files: `package.json` (GASPIN-02 (a-alt) `test:gas` script-split) + `test/stat/DegenerettePerNEvExactness.test.js` (STAT-01 re-pin) + `test/stat/DegeneretteBonusEv.test.js` (STAT-02 re-pin) + `test/stat/SurfaceRegression.test.js` (SURF-01..02 v38.0 describe + SURF-03 rebase) + `test/gas/LootboxOpenGas.test.js` (LBX-02 FORMAL RE-DEFER prose block) + `test/stat/PerPullEmptyBucketSkip.test.js` (STAT-03-v35-carry ACCEPTED-DESIGN ledger entry). +238 / −36 LOC. | 272 |
+
+NONE FURTHER expected per pure-consolidation hard constraint per D-272-APPROVAL-01 (`git diff e3fcb95c..HEAD -- contracts/ test/` empty at phase close — all source-tree mutations landed under USER-APPROVED batched gates at Wave 1 + Wave 2).
+
+#### 9.NN.iii AGENT-COMMITTED audit + planning artifacts
+
+- `audit/FINDINGS-v38.0.md` (this deliverable) — agent-authored across Wave 3 Tasks 3.1-3.6; READ-only flip at Wave 4 Task 4.7 (chmod 444 + frontmatter `status: FINAL — READ-ONLY` + `read_only: true`).
+- `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-CONTEXT.md` — phase-gather context (AGENT-COMMITTED at `20c7c544` via `docs(272): capture phase context — always-hero simplification + dead-code cleanup terminal`).
+- `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-DISCUSSION-LOG.md` — human-readable discussion record.
+- `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-PLAN.md` — multi-task planner output (4 waves: Wave 1 contract + Wave 2 test + Wave 3 audit deliverable + Wave 4 closure flips).
+- `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-ADVERSARIAL-LOG.md` — Wave 3 Task 3.5 output: 3 H2 sections (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) + Disposition.
+- `.planning/phases/272-always-hero-simplification-maximal-dead-code-cleanup-terminal/272-01-SUMMARY.md` — Wave 4 phase-close summary (post-Task-4.7 atomic commit).
+- `.planning/ROADMAP.md` + `.planning/STATE.md` + `.planning/MILESTONES.md` + `.planning/PROJECT.md` + `.planning/REQUIREMENTS.md` — closure flips applied at Wave 4 Tasks 4.3 + 4.4 + 4.5 + 4.6.
+- `KNOWN-ISSUES.md` — UNMODIFIED at v38 close per D-272-KI-01 default zero-promotion path.
+
+**No "pending USER-APPROVAL" subsection emitted per D-272-CLOSURE-02** — all v38 contract + test commits already landed under USER-APPROVED batched review at Wave 1 (`527e3adc`) + Wave 2 (`e3fcb95c`) close per `feedback_batch_contract_approval.md` + `feedback_no_contract_commits.md` + `feedback_never_preapprove_contracts.md`. Wave 3 + Wave 4 emit ZERO contract/test mutations per D-272-APPROVAL-01 hard constraint.
+
+#### 9.NN.iv Carry-Forward RE-DEFER Register
+
+Separate subsection from the TWO-subsection commit-readiness register above. Pickup-pointer carve-out per §8 — `v39+` mentions in this register are forward-pointers for future-phase pickup (planner-handoff register), NOT forward-cites to planned future phases. Terminal-phase invariant remains satisfied per D-272-FCITE-01.
+
+| Item | Source Phase | v38 Disposition | Rationale | v39+ Pickup Path |
+| ---- | ------------ | --------------- | --------- | ---------------- |
+| LBX-02 | v37+ carry-forward (v37.0 Phase 269) | **FORMAL RE-DEFER to v39+** | Phase 269 fixture-coverage gap remains structural at v38. Analytical worst-case in NatSpec is load-bearing per `feedback_gas_worst_case.md` + Phase 266 GAS-01 precedent. Empirical pin attempt at v38 would require fixture coverage of openable lootbox path which currently soft-skips in the harness (matches `AdvanceGameGas.test.js` L1014/L1027 precedent). Wave 2 Task 2.4 prose-only "v38 FORMAL RE-DEFER" block prepended to `test/gas/LootboxOpenGas.test.js` documenting path-of-investigation. Closes v37.0 §9.NN.iv LBX-02 carry-forward via formal re-defer. | Add empirical 55%-tickets-path gas-savings test once fixture provides reliable coverage of openable lootbox path; OR re-defer to subsequent milestone if fixture-coverage gap persists. Path-of-investigation prose at `test/gas/LootboxOpenGas.test.js` header is the load-bearing pickup pointer. |
+| STAT-03-v35-carry | v37+ carry-forward (v35.0 Phase 265) | **ACCEPTED-DESIGN ledger entry** (CLOSED at v38) | Per v35.0 Phase 265 D-265-STAT03-01 fixture-calibration-error reframe — the 88.24% empty-bucket skip rate reflects sparse-fixture pre-organic-activity holder density, NOT a protocol-behavior finding. Helper itself was proven correct via deity-backed dense fixture at Phase 265 close. Wave 2 Task 2.6 prepends ACCEPTED-DESIGN ledger-entry prose block to `test/stat/PerPullEmptyBucketSkip.test.js`. Test bodies UNCHANGED; standalone pre/post-edit exit codes match. Closes v37.0 §9.NN.iv STAT-03-v35-carry carry-forward via ACCEPTED-DESIGN ledger entry. | No v39+ pickup required (CLOSED at v38 as ACCEPTED-DESIGN). If a future phase implements Phase 264 D-IMPL-07 mid/late-game holder-density spec, the fixture can be populated to drop the skip rate below 10% threshold — but this is OPTIONAL not REQUIRED. |
+| GASPIN-02 (a-alt) | v37+ carry-forward (v37.0 Phase 269) | **CLOSED at v38** (Verdict: COMPLETE) | Path (a-alt) script-split applied at `package.json` per Wave 2 commit `e3fcb95c`. New `test:gas` script wires `Phase261GasRegression + Phase264GasRegression + Phase268GasRegression + LootboxOpenGas + AdvanceGameGas`; `test:stat` excludes those gas files. Test bodies UNCHANGED. Goal achieved: cumulative-state drift moved off `test:stat`. | Not re-deferred. CLOSED at v38. |
+| GASPIN-03 | v37+ carry-forward (v37.0 Phase 269) | **CLOSED at v38** (Verdict: COMPLETE) | Wave 2 Task 2.5 consistency-gate verification documented non-regression vs pre-Wave-2 baseline. Post-Wave-2 `test:stat` exit=1 with 1 known-design failure (STAT-03-v35-carry); `test:gas` exit=1 with v36.0 "128k is fine approved" gas-pin drift envelope. SURF-03 rebase fixes the 4th pre-edit failure (LootboxModule diff against PHASE_269_CLOSE_BASELINE = `8fd5c2e1` is now empty). | Not re-deferred. CLOSED at v38. |
+| Hypothesis (i) — dailyHeroWagers post-v38 ledger-tracking drift | v38 Phase 272 Task 3.5 adversarial pass (`/zero-day-hunter` + `/economic-analyst` concurrence) | **KEEP_AS_NEGATIVE_FINDING at v38** (INFO severity; v39+ cleanup candidate) | Docs-vs-behavior drift: `if (heroQuadrant < 4)` gate at `DegenerusGameDegeneretteModule.sol` L484 (in `_placeDegeneretteBetCore`) uses raw input, so players passing `0xFF` get hero multiplier on quadrant 0 (HERO-01 normalization) but are NOT credited to `dailyHeroWagers[day][0]`. EV-NEGATIVE for the player who triggers it; no value-extraction; no determinism break; no griefing surface; self-correcting via player rationality. NOT a KI-promotion candidate per D-09 rubric (fails accepted-design predicate — this is drift, not design). | v39+ remediation: change L484 gate to either (a) use `effectiveQuadrant` (computed via same `heroQuadrant < 4 ? heroQuadrant : 0` ternary as HERO-01) so all v38 players get tracked on quadrant 0 when passing `0xFF`; (b) change gate to `currency == CURRENCY_ETH` (always track for ETH bets; the always-on hero schedule means every ETH bet is hero-active on some quadrant). Option (b) is the cleaner v39+ form aligned with always-on hero semantics. Quality-of-implementation improvement, NOT a security fix. |
+
+---
