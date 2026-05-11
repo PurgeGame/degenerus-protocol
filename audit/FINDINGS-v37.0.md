@@ -348,6 +348,64 @@ Output: 0 hits in non-test contract files. Degenerette payout flow uses pre-exis
 
 **Closing attestation:** Storage layout byte-identical at v37.0 closure HEAD `<sha>` vs v36.0 baseline `1c0f0913` per slot-by-slot grep-proof; zero new public/external mutation entry points; zero new external pure entry points (`packedTraitsDegenerette` is internal pure library helper, inlined at compile time, not in deployed ABI); zero new admin functions; zero new modifiers; zero new upgrade hooks; zero new ERC-20 mint entry points per DGN-15 + AUDIT-04 design contract.
 
+### 3.C AUDIT-03 Conservation Re-Proof
+
+Conservation re-proof across 4 domains: per-N table calibration math; ETH bonus EV conservation; solvency invariant + ethShare/lootboxShare sum invariant; no new mint sites. Closes the AUDIT-03 design contract per ROADMAP success criterion + REQUIREMENTS.md.
+
+**(1) Degenerette payout flow conservation — per-N table calibration math:**
+
+For each N ∈ {0..4}, the per-N basePayout EV is exact at 100 centi-x by construction:
+
+`basePayoutEV(N) = Σ P_N(M) × payout_N(M) for M ∈ {0..8} = 100 centi-x (Fraction-exact)`
+
+where `P_N(M)` is the binomial-convolution per-N match-count distribution (4 color indicators with N at Bernoulli(1/15) + (4-N) at Bernoulli(2/15) plus 4 symbol indicators at Bernoulli(1/8)) and `payout_N(M)` is the per-N packed schedule from `QUICK_PLAY_PAYOUTS_N{N}_PACKED` (M = 0..7) + `QUICK_PLAY_PAYOUT_N{N}_M8` (M = 8 jackpot slot, exceeds 32-bit packing range).
+
+Calibration source: `.planning/notes/degenerette-recalibration/derive_5_tables.py` Python `Fraction`-exact arithmetic produces the 25 packed constants. Phase 267 Task 2 byte-identity proof (`PASS_ALL_25`) confirms the deployed constants match the script's Fraction-exact stdout.
+
+Empirical witness: Phase 268 STAT-01 (`test/stat/DegenerettePerNEvExactness.test.js`) ≥ 1M draws per N confirms `basePayoutEV = 100.00 ± 0.50 centi-x` for each N ∈ {0..4}.
+
+**(2) ETH bonus EV conservation per N:**
+
+Analytical: `ETH_ROI_BONUS_BPS = 500 bps = 5.000%` (the protocol's ETH-currency bonus ROI target). The per-N WWXRP factor table redistributes this 5.000% across the 5+ match buckets via `_wwxrpFactor(N, bucket)` lookup. By construction:
+
+`Σ_{M≥5} P_N(M) × factor_N(bucket(M)) × ETH_ROI_BONUS_BPS / WWXRP_BONUS_FACTOR_SCALE = 5.000% per N`
+
+The 10/30/30/30 bucket split (M ∈ {5,6,7,8}) × per-N factor lookup yields exactly 5.000% total ETH bonus EV per N. Empirical witness: Phase 268 STAT-04 per-N WWXRP factor EV within ±1% at ≥ 100K WWXRP-active draws/N.
+
+**Per-N hero EV-neutrality** is preserved by the per-N HERO_BOOST table calibration:
+
+`P(hero|M, N) × boost(M, N) + (1 − P(hero|M, N)) × HERO_PENALTY = HERO_SCALE`
+
+where `HERO_PENALTY = 9500`, `HERO_SCALE = 10000`. The 5 per-N tables (`HERO_BOOST_N{0..4}_PACKED`) encode 6 values each (M = 2..7; M < 2 zero-payout exemption, M = 8 hero-EV-neutrality exemption noted in NatSpec at `_fullTicketPayout`). Empirical witness: Phase 268 STAT-03 per-N hero EV within ±1% at ≥ 100K hero-active draws/N. By exchangeability of the 4 symbol indicators (uniform 1/8 regardless of player symbol choice) and color-match indicator structure (gold vs common), `P(hero|M, N)` depends only on (M, N) — not on the specific player pick configuration. The per-N table is correctly indexed.
+
+**(3) Solvency invariant + ethShare/lootboxShare sum invariant:**
+
+`claimablePool ≤ ETH balance + stETH balance` PRESERVED. The Degenerette payout-recalibration touches per-quadrant payout schedule + payout-distribution mechanics only — no ETH/stETH balance mutations beyond pre-existing `_distributePayout` mechanics.
+
+The PAY-SPLIT 3-tier rule (PAY-SPLIT-01..03) is INTRA-`_distributePayout` redistribution between `ethShare` and `lootboxShare`. Total payout sum invariant:
+
+`ethShare + lootboxShare = payout` ← preserved at every tier
+
+Verified in code:
+- PAY-SPLIT-01 (Tier 1, L737-740): `ethShare = payout; lootboxShare = 0` → sum = `payout`. ✓
+- PAY-SPLIT-02 (Tier 2, L741-748): `ethShare = max(2.5 × bet, payout / 4); lootboxShare = payout − ethShare` → sum = `payout`. ✓
+- PAY-SPLIT-03 (Tier 3 + pool-cap, L774-779): `maxEth = (pool × ETH_WIN_CAP_BPS) / 10_000 = 10% × pool`; if `ethShare > maxEth`, then `lootboxShare += ethShare − maxEth; ethShare = maxEth` → sum = `payout` (additive transfer preserves total). ✓
+
+Pool-cap precedence (PAY-SPLIT-03) ensures `ethShare ≤ 10% × futurePool` per payout event; ETH balance is bounded by the futurePool ceiling at every settlement. Frozen-pool path (L751-768) uses pending-pool side-channel debit with revert-on-insufficient solvency check.
+
+**(4) No new mint sites:**
+
+`coinflip.creditFlip` + lootbox-crediting paths byte-identical at v37.0 HEAD vs v36.0 baseline (Phase 268 SURF-01..04 cross-cite). Degenerette payout path uses pre-existing `mintForGame` route only (`coin.mintForGame(player, payout)` at L792 for CURRENCY_BURNIE branch; `wwxrp.mintPrize(player, payout)` at L794 for CURRENCY_WWXRP branch); no new ERC-20 mint entry points introduced by Phase 267 commit `e1136071`.
+
+Grep recipe re-run at §3.C authoring time:
+```
+git diff 1c0f09132d7439af9881c56fe197f81757f8164a..HEAD -- contracts/ \
+  | grep -E "^\+.*\.(mint|mintFor|_mint)\("
+```
+Output: zero hits in non-test contract files (verified via `§3.B AUDIT-04 Zero-New-State Attestation` grep recipes).
+
+**Closing conservation attestation:** Per-N table calibration math holds `basePayoutEV = 100 centi-x ± Fraction-exact rounding` per N ∈ {0..4} per `.planning/notes/degenerette-recalibration/derive_5_tables.py`; ETH bonus EV = exactly 5.000% per N analytical, ±1% empirical per Phase 268 STAT-04; per-N hero EV-neutrality holds within 0.05% calibration tolerance per design contract DGN-07, ±1% empirical per Phase 268 STAT-03; solvency invariant `claimablePool ≤ ETH balance + stETH balance` PRESERVED; PAY-SPLIT 3-tier rule preserves `ethShare + lootboxShare = payout` invariant at every tier with pool-cap precedence enforcing `ethShare ≤ 10% × futurePool`; no new mint sites.
+
 ---
 
 ## 4. F-37-NN Finding Blocks
