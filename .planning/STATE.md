@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v37.0
 milestone_name: Degenerette Recalibration + Maintenance Bundle
 status: Ready to discuss
-last_updated: "2026-05-11T06:10:52.889Z"
-last_activity: 2026-05-11 -- Phase 269 SHIPPED (partial scope by user decision after GASPIN-02 RCA showed Hardhat-internal mechanism not eliminable within plan's locked options)
+last_updated: "2026-05-11T06:47:22Z"
+last_activity: 2026-05-11 -- Phase 270 SHIPPED (post-v32.0 deferred-commit adversarial sub-audit; 4 of 4 DELTA-01..04 PASS; zero source-tree mutations; zero FINDING_CANDIDATE rows; 4 RE_VERIFIED-NEGATIVE-scope KI rows feed Phase 271 §6b)
 progress:
   total_phases: 5
-  completed_phases: 3
-  total_plans: 3
-  completed_plans: 3
-  percent: 60
+  completed_phases: 4
+  total_plans: 5
+  completed_plans: 4
+  percent: 80
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.0 open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 269 SHIPPED 2026-05-11 (LBX-01 contract commit `8fd5c2e1` + GASPIN-01 RCA inline at `269-01-PLAN.md`; GASPIN-02/03 + LBX-02/03 + SURF-03 DEFERRED to v37+ maintenance per RCA finding that the drift mechanism is hardhat-internal); ready for `/gsd-discuss-phase 270` (Post-v32.0 Deferred-Commit Adversarial Sub-Audit)
+**Current focus:** Phase 270 SHIPPED 2026-05-11 (4 of 4 DELTA-01..04 PASS; AGENT-COMMITTED working-file at `4017b9ec` + AGENT-COMMITTED phase-close batched commit; zero source-tree mutations cumulative; zero FINDING_CANDIDATE rows; 4 RE_VERIFIED-NEGATIVE-scope KI envelope rows feed Phase 271 §6b); ready for `/gsd-discuss-phase 271` (Delta Audit + Findings Consolidation, terminal milestone-closure phase)
 
 ## Current Position
 
-Phase: 270 (post-v32.0-deferred-commit-adversarial-sub-audit) — NEXT
+Phase: 271 (delta-audit-findings-consolidation-terminal) — NEXT
 Plan: TBD
 Status: Ready to discuss
-Last activity: 2026-05-11 -- Phase 269 SHIPPED (partial scope by user decision after GASPIN-02 RCA showed Hardhat-internal mechanism not eliminable within plan's locked options)
-Resume file: .planning/phases/270-post-v32-0-deferred-commit-adversarial-sub-audit/270-CONTEXT.md
+Last activity: 2026-05-11 -- Phase 270 SHIPPED (post-v32.0 deferred-commit adversarial sub-audit; 4 of 4 DELTA-01..04 PASS; zero source-tree mutations; zero FINDING_CANDIDATE rows; 4 RE_VERIFIED-NEGATIVE-scope KI rows feed Phase 271 §6b)
+Resume file: .planning/phases/271-delta-audit-findings-consolidation-terminal/ (to be created via `/gsd-discuss-phase 271`)
 
 ## Last Shipped Milestone
 
@@ -97,6 +97,7 @@ Resume file: .planning/phases/270-post-v32-0-deferred-commit-adversarial-sub-aud
 - **Phase 267 SHIPPED 2026-05-10:** Degenerette Producer + 5-Table Payout Rewrite. Single batched USER-APPROVED contract commit `e1136071` (`contracts/DegenerusTraitUtils.sol` additive +45 LOC + `contracts/modules/DegenerusGameDegeneretteModule.sol` rewrite +231/-196 LOC); 18 of 18 DGN-01..15 + PAY-SPLIT-01..03 requirements PASS. v37.0 source-tree HEAD = `e1136071`.
 - **Phase 268 SHIPPED 2026-05-10:** Degenerette Statistical Validation + Cross-Surface Preservation. Single batched USER-APPROVED test commit `4b277aaf` (3 NEW `test/stat/` files + 1 EXTENDED `test/stat/SurfaceRegression.test.js` v37.0 SURF-01..04 describe + 1 NEW `test/gas/Phase268GasRegression.test.js` + package.json wiring; +2,277/-1 LOC across 6 files); 13 of 13 STAT-01..07 + SURF-01..06 requirements PASS; ZERO source-tree mutations (`git diff e1136071 HEAD -- contracts/` empty at phase close).
 - **Phase 269 SHIPPED 2026-05-11 (deliberate partial scope):** Lootbox Dead-Branch Cleanup. Single USER-APPROVED contract commit `8fd5c2e1` (`feat(269): delete unreachable BURNIE-conversion branch in _resolveLootboxRoll [LBX-01]`; `contracts/modules/DegenerusGameLootboxModule.sol` −14/+1 LOC; pure LBX-01 deletion + user-approved cascade param cleanup dropping unused `targetLevel`/`currentLevel` from signature + 2 callsites + 2 NatSpec @param lines; bytecode shrink 177 bytes 18,330→18,153). Plus AGENT-COMMITTED `009cbde3` (`docs(269): GASPIN-01 root-cause inline — fixture-loader caching`; `269-01-PLAN.md` +80 LOC RCA section). **2 of 6 Phase 269 requirements PASS** (LBX-01 + GASPIN-01); 4 DEFERRED to v37+ maintenance (LBX-02 empirical pin — fixture-coverage gap matches Phase 266 GAS-01 precedent; LBX-03 — Phase 271 author computes anchors at audit-trail-authoring time; GASPIN-02/03 — D-269-STAB-01 option (b) `hardhat_reset`+`loadFixture` attempt FAILED structurally with side-effect regressions, options (a)/(c) violate GASPIN-03 or plan scope; SURF-03 re-baseline — Phase 270/271 plan can include one-line edit if needed). Audit cleanliness was the shipped value — per-open runtime savings ~0.005% (sub-0.01%) of typical 600K-1M-gas open. v36.0 acceptance "128k is fine approved" (MILESTONES.md L19) carries forward verbatim. STAT-03 pre-existing failure (`test/stat/PerPullEmptyBucketSkip.test.js` skip rate 88% > 10% threshold; introduced at Phase 264 commit `7dcfeb0c` and unchanged since; failing at every HEAD through Phase 265-268) flagged for Phase 270 or v37+ maintenance pickup.
+- **Phase 270 SHIPPED 2026-05-11:** Post-v32.0 Deferred-Commit Adversarial Sub-Audit. Single AGENT-COMMITTED working-file commit `4017b9ec` (`docs(270): post-v32.0 deferred-commit adversarial sub-audit working file [DELTA-01..04]`; `270-01-DELTA-SURFACE.md` +305 LOC; canonical Phase-271-§3.A grep-cite anchor per D-270-FILES-01) + AGENT-COMMITTED phase-close batched commit (`docs(270): phase 270 summary — post-v32.0 deferred-commit adversarial sub-audit complete [DELTA-01..04 PASS]`; `270-01-SUMMARY.md` + STATE.md + REQUIREMENTS.md). **4 of 4 DELTA-01..04 requirements PASS.** Zero source-tree mutations (`git diff --stat contracts/ test/` empty cumulative). Zero FINDING_CANDIDATE rows (8 surface verdicts: SAFE_BY_STRUCTURAL_CLOSURE × 6 + SAFE_BY_DESIGN × 2). 4 RE_VERIFIED-NEGATIVE-scope KI envelope rows (EXC-01 affiliate roll / EXC-02 prevrandao fallback / EXC-03 F-29-04 mid-cycle substitution / EXC-04 EntropyLib XOR-shift NARROWED-to-BAF-only) feed Phase 271 §6b. Phase 271 §3.A grep-cite anchor: `.planning/phases/270-post-v32-0-deferred-commit-adversarial-sub-audit/270-01-DELTA-SURFACE.md`. v37.0 source-tree HEAD at Phase 270 close = `8fd5c2e1` UNCHANGED (Phase 270 emits zero source-tree mutations). Pure agent grep-sweep posture per D-270-ADVERSARIAL-01; `/contract-auditor` + `/zero-day-hunter` SEQUENTIAL skill-tool pass deferred to Phase 271 §4 per D-NN-ADVERSARIAL-02 carry. Phase 146 ABI cleanup `31ec2780` (Apr 9 2026) anchored as Commit B `2713ce61` unreachability cause via design-intent trace per `feedback_design_intent_before_deletion.md` (PRIMARY governing memory).
 - See `.planning/ROADMAP.md` for the 5-phase entries + `.planning/notes/2026-05-10-degenerette-payout-recalibration.md` for primary workstream seed + `.planning/notes/2026-05-10-resolveLootboxRoll-dead-burnie-conversion-branch.md` for lootbox cleanup seed.
 
 ## Roadmap Overview

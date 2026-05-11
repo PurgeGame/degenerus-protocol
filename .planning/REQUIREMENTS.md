@@ -68,10 +68,10 @@
 
 ### DELTA — Post-v32.0 Deferred-Commit Adversarial Sub-Audit (Phase 270)
 
-- [ ] **DELTA-01**: Adversarial coverage of commit `002bde55` (presale auto-deactivate) — read full diff, classify per `audit/FINDINGS-v33.0..v36.0.md` delta-surface taxonomy {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED}; sweep adversarial surfaces (state-machine ordering, presale-flag timing, downstream consumer assumptions, MintModule interaction).
-- [ ] **DELTA-02**: Adversarial coverage of commit `2713ce61` (setDecimatorAutoRebuy removal) — read full diff, classify, sweep adversarial surfaces (admin-entry-point-removal blast radius, downstream gating assumptions, Decimator state-machine implications, BURNIE auto-rebuy path closure).
-- [ ] **DELTA-03**: Verdict per surface — SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / FINDING_CANDIDATE with grep-cited evidence. FINDING_CANDIDATE rows escalate to §3.A finding blocks in Phase 271 deliverable.
-- [ ] **DELTA-04**: KI envelope check — confirm `002bde55` + `2713ce61` neither widen EXC-01..04 nor introduce new accepted-design entries warranting KI promotion.
+- [x] **DELTA-01**: Adversarial coverage of commit `002bde55` (presale auto-deactivate) — read full diff, classify per `audit/FINDINGS-v33.0..v36.0.md` delta-surface taxonomy {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED}; sweep adversarial surfaces (state-machine ordering, presale-flag timing, downstream consumer assumptions, MintModule interaction).
+- [x] **DELTA-02**: Adversarial coverage of commit `2713ce61` (setDecimatorAutoRebuy removal) — read full diff, classify, sweep adversarial surfaces (admin-entry-point-removal blast radius, downstream gating assumptions, Decimator state-machine implications, BURNIE auto-rebuy path closure).
+- [x] **DELTA-03**: Verdict per surface — SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / FINDING_CANDIDATE with grep-cited evidence. FINDING_CANDIDATE rows escalate to §3.A finding blocks in Phase 271 deliverable.
+- [x] **DELTA-04**: KI envelope check — confirm `002bde55` + `2713ce61` neither widen EXC-01..04 nor introduce new accepted-design entries warranting KI promotion.
 
 ### AUDIT — Adversarial Audit + Findings Consolidation (Phase 271, Terminal)
 
@@ -148,10 +148,10 @@
 | GASPIN-01 | Phase 269 | Pending |
 | GASPIN-02 | Phase 269 | Pending |
 | GASPIN-03 | Phase 269 | Pending |
-| DELTA-01 | Phase 270 | Pending |
-| DELTA-02 | Phase 270 | Pending |
-| DELTA-03 | Phase 270 | Pending |
-| DELTA-04 | Phase 270 | Pending |
+| DELTA-01 | Phase 270 | Complete |
+| DELTA-02 | Phase 270 | Complete |
+| DELTA-03 | Phase 270 | Complete |
+| DELTA-04 | Phase 270 | Complete |
 | AUDIT-01 | Phase 271 | Pending |
 | AUDIT-02 | Phase 271 | Pending |
 | AUDIT-03 | Phase 271 | Pending |
