@@ -30,8 +30,8 @@ adversarial_pass_pattern: PARALLEL_SINGLE_MESSAGE
 out_of_scope_skills: [degen-skeptic]
 write_policy: "Single-phase patch closure mirroring v36.0 Phase 266 + v37.0 Phase 271 precedent. Two USER-APPROVED batched commits: Wave 1 contracts (`527e3adc` — `feat(272): always-on hero default 0 + degenerette dead-code cleanup [HERO-01..05, CLEAN-01..05]`); Wave 2 tests (`e3fcb95c` — `test(272): hero-always-on + dead-code cleanup + v37+ carry bundle [STAT-01..02, SURF-01..03, LBX-02, GASPIN-02..03, STAT-03-v35-carry]`). All Wave 3 audit deliverable + ADVERSARIAL-LOG + Wave 4 closure flips AGENT-COMMITTED atomic-per-task with `audit(272):` or `docs(272):` prefix. READ-only flip on `audit/FINDINGS-v38.0.md` (chmod 444 + frontmatter `status: FINAL — READ-ONLY` + `read_only: true`) is the terminal commit per `feedback_manual_review_before_push.md` final user-review gate per D-272-APPROVAL-01."
 supersedes: none
-status: DRAFT
-read_only: false
+status: FINAL — READ-ONLY
+read_only: true
 generated_at: 2026-05-11T11:36:15Z
 ---
 
