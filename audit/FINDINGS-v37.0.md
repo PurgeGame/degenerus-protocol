@@ -93,3 +93,98 @@ See §9 Milestone Closure Attestation for the D-253-15 step 9 attestation block 
 
 ## 3. Per-Phase Sections
 
+### 3a. Phase 267 — Degenerette Producer + 5-Table Payout Rewrite
+
+**Commit:** `e1136071` — `feat(267): degenerette producer + 5-table payout rewrite + 3-tier ETH split [DGN-01..15, PAY-SPLIT-01..03]`. USER-APPROVED batched commit per `feedback_batch_contract_approval.md` + `feedback_no_contract_commits.md`. Files: `contracts/DegenerusTraitUtils.sol` (additive +45 LOC) + `contracts/modules/DegenerusGameDegeneretteModule.sol` (+231 / −196 LOC).
+
+**Requirements:** 18 of 18 PASS — DGN-01..15 + PAY-SPLIT-01..03 (Phase 267 SUMMARY.md per-REQ tally).
+
+**What IS at v37.0 close:**
+
+- `contracts/DegenerusTraitUtils.sol` — NEW additive helper `packedTraitsDegenerette(uint256 seed) internal pure returns (uint32)` with private `_degTrait(uint64) private pure returns (uint8)` companion. Per-quadrant near-uniform color distribution `[16,16,16,16,16,16,16,8]/120` (commons 13.33% each, gold 6.67%); uniform 1/8 symbol; byte layout `[QQ][CCC][SSS]` preserved per DGN-01 + DGN-14. The existing 3 TraitUtils functions (`weightedColorBucket`, `traitFromWord`, `packedTraitsFromSeed`) byte-identical at v36.0 baseline `1c0f0913` per Phase 268 SURF-01 grep-proof.
+- `contracts/modules/DegenerusGameDegeneretteModule.sol` — 5 per-N (gold-quadrant-count) payout / hero / WWXRP table dispatch indexed by NEW `_countGoldQuadrants(uint32 ticket) private pure returns (uint8 count)` operating on the packed `uint32` ticket via `((ticket >> (q*8 + 3)) & 7) == 7` for q∈{0..3} per DGN-03 strict-color boundary.
+- `_evNormalizationRatio` body L808-851 at v36.0 baseline + single call site L965-969 DELETED per DGN-02; no runtime EV correction; payout schedule fully visible in storage.
+- `_getBasePayoutBps(uint256 matchCount, uint8 N)` REWRITTEN with 5-table per-N dispatch (`QUICK_PLAY_PAYOUTS_N{0..4}_PACKED` + `QUICK_PLAY_PAYOUT_N{0..4}_M8`); `basePayoutEV = 100 centi-x` exact per N ∈ {0..4} per Fraction-exact derivation.
+- `_applyHeroMultiplier(...)` REWRITTEN symbol-only per DGN-07 via `((playerTicket >> heroQuadrant*8) & 7) == ((resultTicket >> heroQuadrant*8) & 7)` reading only bits 0-2 of the hero quadrant byte; per-N hero boost dispatch via `HERO_BOOST_N{0..4}_PACKED`. P(hero match) = 1/8 exactly. Color bits 3-5 NOT read by equality comparison.
+- `_wwxrpBonusRoiForBucket(...)` REWRITTEN with 5-table per-N WWXRP factor dispatch via `WWXRP_FACTORS_N{0..4}_PACKED` per DGN-09 + DGN-10.
+- `_distributePayout(player, currency, betAmount, payout, rngWord)` REWRITTEN with 5-arg signature (uint128 `betAmount` inserted between `currency` and `payout`) and 3-tier ETH split rule per PAY-SPLIT-01..03:
+  - **PAY-SPLIT-01** (≤3× bet → 100% ETH): strict inclusive at exactly 3.0× bet; no off-by-one ambiguity.
+  - **PAY-SPLIT-02** (3× < payout ≤ 10× bet → 2.5× bet ETH floor + remainder lootbox): `ethShare = max(2.5 * betAmount, payout / 4)`.
+  - **PAY-SPLIT-03** (pool-cap precedence): `ETH_WIN_CAP_BPS = 1_000 = 10% × futurePool`; excess flips to lootbox per existing L716-723 logic.
+  - `CURRENCY_BURNIE` + `CURRENCY_WWXRP` branches UNCHANGED.
+  - NatSpec documents 3-tier rule + pool-cap precedence per `feedback_no_history_in_comments.md` (describes what IS).
+- Packed-constants delta: 11 → 24 net (5 + 5 + 5 + 5 add = 20 NEW per-N constants; 6 v36 constants DELETED per DGN-05/06/08/10/11 — `QUICK_PLAY_BASE_PAYOUTS_PACKED`, `QUICK_PLAY_BASE_PAYOUT_8_MATCHES`, `WWXRP_BONUS_FACTOR_BUCKET5..8` block, `HERO_BOOST_PACKED`, 2 normalizer constants). The 25 packed constants are byte-identical to `.planning/notes/degenerette-recalibration/derive_5_tables.py` Fraction-exact stdout (Phase 267 Task 2 evidence: `PASS_ALL_25`).
+- 4 stale comment rewrites at L239 / L262 / L287-298 / L316 per DGN-13 (per `feedback_no_history_in_comments.md` describes per-N reality at v37.0).
+- Producer call site at L607 (now L629 post-rewrite) SWAPPED from `packedTraitsFromSeed` to `packedTraitsDegenerette` per DGN-12.
+
+Cross-cite `.planning/notes/degenerette-recalibration/derive_5_tables.py` (Fraction-exact derivation source of truth). Mint + Jackpot + Lootbox + EntropyLib + JackpotBucketLib + GameStorage `git diff 1c0f0913..e1136071` empty.
+
+### 3b. Phase 268 — Degenerette Statistical Validation + Cross-Surface Preservation
+
+**Commit:** `4b277aaf` — `test(268): degenerette stat suite + cross-surface preservation v37.0 + worst-case gas regression [STAT-01..07, SURF-01..06]`. USER-APPROVED batched commit per `feedback_batch_contract_approval.md`. 6 files; +2,277 / −1 LOC; 3 NEW `test/stat/` files (`DegenerettePerNEvExactness.test.js`, `DegeneretteProducerChi2.test.js`, `DegeneretteBonusEv.test.js`) + 1 EXTENDED `test/stat/SurfaceRegression.test.js` v37.0 SURF-01..04 describe + 1 NEW `test/gas/Phase268GasRegression.test.js` (SURF-05 + SURF-06) + `package.json` `test:stat` wiring.
+
+**Requirements:** 13 of 13 PASS — STAT-01..07 + SURF-01..06 (Phase 268 SUMMARY.md per-REQ tally).
+
+**Empirical evidence:**
+
+- **STAT-01** (per-N basePayoutEV exactness ≥ 1M draws/N): `basePayoutEV = 100.00 ± 0.50 centi-x` for each N ∈ {0..4}; Fraction-exact 100 centi-x per N is the analytical anchor.
+- **STAT-02** (per-quadrant producer chi² uniformity ≥ 1M samples): color `[16,16,16,16,16,16,16,8]/120` + uniform 1/8 symbol passes within `CHI2_CRIT_05[7] = 14.067` / Wilson-Hilferty Z<1.645 at α=0.05.
+- **STAT-03** (per-N hero-boost EV ±1% at ≥ 100K hero-active draws/N): per-N hero EV within ±1% analytical reference.
+- **STAT-04** (per-N WWXRP factor EV ±1% at ≥ 100K WWXRP-active draws/N): per-N WWXRP factor EV within ±1% analytical reference; 5.000% ETH bonus per N (analytical).
+- **STAT-05** (per-N match-count histogram derived from STAT-01 pool): bin-tolerance ±0.5% vs analytical binomial-convolution reference.
+- **STAT-06** (reuse Phase 261/264/266 chi² infrastructure): `makeRng` / `CHI2_CRIT_05` / `wilsonHilfertyZ` verbatim re-declared in all 3 stat files; no new statistical primitives.
+- **STAT-07** (ETH payout 3-tier split rule distribution + thin-pool cap-flip): per-band frequency match within ±0.5% bin tolerance across all per-N basePayout × roiBps distributions; thin-pool cap-flip sub-case via `loadFixture(deployFullProtocol)` per D-268-THINPOOL-01.
+- **SURF-01..04** (byte-identity grep-proof vs v36.0 baseline `1c0f0913`): `DegenerusTraitUtils.sol` existing 3 functions byte-identical; `DegenerusGameJackpotModule.sol` file-level zero-diff; `DegenerusGameLootboxModule.sol` file-level zero-diff (D-268-SURF03-01: Phase 269 owns post-cleanup re-baseline); `EntropyLib.sol` file-level zero-diff (ENT-04 v36.0 carry).
+- **SURF-05** (worst-case quickPlay gas regression): theoretical worst-case derivation FIRST in NatSpec header (N=3 + M=8 + ETH tier-3 + ticketCount=10 single construction per D-268-WORSTGAS-01) per `feedback_gas_worst_case.md`; deterministic VRF-injection test hitting exactly that state via REF-CAPTURE pin protocol for `WORST_CASE_RNG_WORDS`.
+- **SURF-06** (advanceGame ±2K gas envelope): `ADVANCE_GAME_DECIMATOR_STAGE_REF = 908_320` pinned; v36.0 envelope active.
+
+`git diff e1136071 4b277aaf -- contracts/` returns empty (zero source-tree mutations at Phase 268 close).
+
+### 3c. Phase 269 — Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning (PARTIAL ship)
+
+**Commits:**
+- USER-APPROVED contract commit `8fd5c2e1` — `feat(269): delete unreachable BURNIE-conversion branch in _resolveLootboxRoll [LBX-01]`. 1 file (`contracts/modules/DegenerusGameLootboxModule.sol`); −14 / +1 LOC; LBX-01 dead-branch deletion + user-approved cascade param cleanup.
+- AGENT-COMMITTED RCA commit `009cbde3` — `docs(269): GASPIN-01 root-cause inline — fixture-loader caching`. `269-01-PLAN.md` +80 LOC "Root Cause (GASPIN-01)" section.
+
+**Requirements:** 2 of 6 PASS — LBX-01 + GASPIN-01. 4 DEFERRED to v38+ maintenance per D-271-DEFERRED-02 (cross-cite §9.NN.iv): LBX-02 + LBX-03 (LBX-03 now anchored at §3.A) + GASPIN-02 + GASPIN-03 + SURF-03 re-baseline.
+
+**LBX-01 shipped at v37.0 close:**
+
+- Inner `if (targetLevel < currentLevel) { burnieOut = ... }` branch at `_resolveLootboxRoll` L1574-1578 (v36.0 baseline line numbers) DELETED with its 4-LOC body + matching cascade signature parameter drop (the unused `targetLevel` + `currentLevel` params from the signature + 2 callsites + 2 NatSpec `@param` lines).
+- **Triple-defense caller-clamp invariant** proves byte-equivalence:
+  - **Layer-1** `openLootBox` L557-559 unconditionally clamps `targetLevel = max(targetLevel, currentLevel)` before invocation.
+  - **Layer-2** `_resolveLootboxCommon` L882-884 unconditionally clamps again before reaching `_resolveLootboxRoll`.
+  - **Layer-3** (DELETED) inner `_resolveLootboxRoll` branch was structurally dead.
+- Bytecode shrink: 177 bytes (18,330 → 18,153) measured via direct artifact inspection at Phase 269 Task 4 — confirms no-behavior-change cleanup.
+- Per-open runtime savings: theoretical 20-50 gas on the 55%-tickets-path (~55% of opens); ~0.005% of typical 600K-1M-gas lootbox open. The shipped value is **audit cleanliness** (dead branch removed from auditor's reading path before Phase 271), not gas optimization.
+- Game-theory neutrality: ETH-lootbox `day` snapshot at buy → seed fixed → no timing-grind window per `feedback_rng_commitment_window.md` backward-trace.
+
+**PARTIAL-ship rationale (4 deferred to v38+):**
+
+- **LBX-02** (empirical 55%-tickets-path gas-savings test): fixture-coverage gap; analytical worst-case in NatSpec is load-bearing per `feedback_gas_worst_case.md` + Phase 266 GAS-01 precedent. Empirical pin requires fixture coverage of openable lootbox path which currently soft-skips in the harness (matches `AdvanceGameGas.test.js` L1014/L1027 precedent). Bytecode shrink confirmed empirically at Phase 269 Task 4.
+- **GASPIN-02 + GASPIN-03** (combined-suite gas-pin stabilization): D-269-STAB-01 option (b) `before(hardhat_reset)` + `loadFixture(deployFullProtocol)` attempt FAILED structurally — Hardhat-toolbox error *"There was an error reverting the snapshot of the fixture. This might be caused by using hardhat_reset and loadFixture calls in a testcase"* AND introduced more failures than it resolved (Phase 261 SURF-05 payDailyJackpot regressed PASS drift −33 → FAIL drift −47,833; Phase 264 SURF-05 stage-9 regressed soft-skip → FAIL; Phase 268 SURF-06 fixture deployment broke). Options (a)/(c) violate GASPIN-03 hard ceiling or plan scope. Combined with negligible production-gas impact of LBX-01 (sub-0.01%), GASPIN-02 effort cannot be justified within v37.0 scope. RCA evidence inline at `269-01-PLAN.md` "Root Cause (GASPIN-01)" section (option (c) fixture-loader caching mechanism — Hardhat `loadFixture` + `evm_snapshot`/`evm_revert` semantics under multi-file combined-suite ordering).
+- **v36.0 acceptance carries forward verbatim:** "User accepted the flaky behavior at the Wave 2 gate (`128k is fine approved`); future re-pinning pass deferred to v37.0 maintenance scope" → now deferred further to v38+ maintenance.
+- **SURF-03 re-baseline** (D-269-SURF03-01): one-line `test/stat/SurfaceRegression.test.js` edit when v38+ test-tree work resumes; pure-consolidation hard constraint #1 prohibits Phase 271 from doing test-tree edits.
+
+### 3d. Phase 270 — Post-v32.0 Deferred-Commit Adversarial Sub-Audit (cross-cite)
+
+**Commits:**
+- AGENT-COMMITTED working-file commit `4017b9ec` — `docs(270): post-v32.0 deferred-commit adversarial sub-audit working file [DELTA-01..04]`. `270-01-DELTA-SURFACE.md` NEW (305 LOC); canonical Phase-271-§3.A grep-cite anchor per D-270-FILES-01.
+- AGENT-COMMITTED phase-close commit `5cd4f2bc` — `docs(270): phase 270 summary — post-v32.0 deferred-commit adversarial sub-audit complete [DELTA-01..04 PASS]`.
+
+**Requirements:** 4 of 4 PASS — DELTA-01..04. Zero deferred.
+
+**Scope:** FIRST FULL adversarial coverage of two specific post-v32.0 contract-tree commits whose adversarial coverage was carry-forward-deferred v33.0 → v34.0 → v35.0 → v36.0 close:
+- **Commit A** `002bde55` (`feat(presale): auto-deactivate flag on per-mint cap crossing`, 2026-05-02; +14 / −10 LOC across 3 files) — Phase 270 verdict **SAFE_BY_STRUCTURAL_CLOSURE**.
+- **Commit B** `2713ce61` (`chore(vault): remove dead setDecimatorAutoRebuy wrapper`, 2026-05-05; +3 / −20 LOC across 2 files) — Phase 270 verdict **SAFE_BY_DESIGN** (admin-entry-point-removal blast radius = zero; Phase 146 ABI cleanup `31ec2780` (Apr 9 2026) anchored as Commit B `2713ce61` unreachability cause via design-intent trace per `feedback_design_intent_before_deletion.md` PRIMARY governing memory).
+
+**Verdict distribution across 8 surfaces:** SAFE_BY_STRUCTURAL_CLOSURE × 6 (surfaces i / iii / iv on Commit A side + surfaces v / vii / viii on Commit B side) + SAFE_BY_DESIGN × 2 (surface ii on Commit A buyer-receives-presale-terms-before-deactivation invariant + surface vi on Commit B decimator-vs-BURNIE auto-rebuy orthogonality). ZERO FINDING_CANDIDATE rows.
+
+**4 RE_VERIFIED-NEGATIVE-scope KI envelope rows** (EXC-01 affiliate roll / EXC-02 prevrandao fallback / EXC-03 F-29-04 mid-cycle substitution / EXC-04 EntropyLib XOR-shift narrowed-to-BAF-only) feed Phase 271 §6b directly per D-271-KI-01.
+
+**Cumulative zero source-tree mutations at Phase 270 close:** `git diff --stat -- contracts/ test/` returns EMPTY at both AGENT-COMMITTED commit boundaries. Both Commit A `002bde55` and Commit B `2713ce61` PREDATE v37.0 baseline `1c0f0913` (Phase 270 sub-audit subjects, not v37-introduced); rows enumerated at §3.A for milestone-completeness per CONTEXT.md `<domain>` AUDIT-01 source-tree-change inventory + Phase 270 D-270-FILES-01 cross-cite discipline.
+
+Cross-cite full appendix at `.planning/phases/270-post-v32-0-deferred-commit-adversarial-sub-audit/270-01-DELTA-SURFACE.md`.
+
+---
+
