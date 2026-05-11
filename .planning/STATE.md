@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v37.0
-milestone_name: Degenerette Recalibration + Maintenance Bundle
-status: executing
-last_updated: "2026-05-11T08:31:19.825Z"
-last_activity: 2026-05-11 -- Phase 271 planning complete
+milestone: between-milestones
+milestone_name: v37.0 shipped — Degenerette Recalibration + Maintenance Bundle SHIPPED at MILESTONE_V37_AT_HEAD_2654fcc2
+status: between-milestones
+last_updated: "2026-05-11T08:55:00.000Z"
+last_activity: 2026-05-11 -- v37.0 milestone SHIPPED; closure signal MILESTONE_V37_AT_HEAD_2654fcc2 emitted
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 5
-  completed_plans: 4
-  percent: 80
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.0 open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 270 SHIPPED 2026-05-11 (4 of 4 DELTA-01..04 PASS; AGENT-COMMITTED working-file at `4017b9ec` + AGENT-COMMITTED phase-close batched commit; zero source-tree mutations cumulative; zero FINDING_CANDIDATE rows; 4 RE_VERIFIED-NEGATIVE-scope KI envelope rows feed Phase 271 §6b); ready for `/gsd-discuss-phase 271` (Delta Audit + Findings Consolidation, terminal milestone-closure phase)
+**Current focus:** _between-milestones_ — v37.0 SHIPPED 2026-05-11 at `MILESTONE_V37_AT_HEAD_2654fcc2`; next milestone scope TBD
 
 ## Current Position
 
-Phase: 271 (delta-audit-findings-consolidation-terminal) — NEXT
-Plan: TBD
-Status: Ready to execute
-Last activity: 2026-05-11 -- Phase 271 planning complete
-Resume file: .planning/phases/271-delta-audit-findings-consolidation-terminal/271-CONTEXT.md
+Phase: NONE (between-milestones)
+Plan: NONE
+Status: v37.0 milestone SHIPPED
+Last activity: 2026-05-11 -- v37.0 milestone closure attested; FINDINGS-v37.0.md FINAL READ-only at `MILESTONE_V37_AT_HEAD_2654fcc2`
+Resume file: .planning/MILESTONES.md (v37.0 archive entry) + .planning/PROJECT.md (Last shipped v37.0)
 
 ## Last Shipped Milestone
 
@@ -83,7 +83,11 @@ Resume file: .planning/phases/271-delta-audit-findings-consolidation-terminal/27
 
 ## Active Milestone
 
-**v37.0 Degenerette Recalibration + Maintenance Bundle** (started 2026-05-10)
+_None — between-milestones state. v37.0 SHIPPED 2026-05-11. Next milestone scope TBD._
+
+### Just-Shipped Milestone Reference
+
+**v37.0 Degenerette Recalibration + Maintenance Bundle** (started 2026-05-10; SHIPPED 2026-05-11; closure signal `MILESTONE_V37_AT_HEAD_2654fcc2`)
 
 - **Goal:** Reconcile Degenerette payout calibration with the v34.0 heavy-tail trait producer (pre-launch fix), execute deferred maintenance (lootbox dead-branch cleanup + SURF-05 gas-pin re-pinning), and clear the long-deferred adversarial audit of post-v32.0 commits — all closed under a single `audit/FINDINGS-v37.0.md` deliverable.
 - **Audit baseline:** v36.0 audit-subject HEAD `1c0f09132d7439af9881c56fe197f81757f8164a` (signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`)

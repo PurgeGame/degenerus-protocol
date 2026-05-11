@@ -111,24 +111,24 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DGN-01 | Phase 267 | Pending |
-| DGN-02 | Phase 267 | Pending |
-| DGN-03 | Phase 267 | Pending |
-| DGN-04 | Phase 267 | Pending |
-| DGN-05 | Phase 267 | Pending |
-| DGN-06 | Phase 267 | Pending |
-| DGN-07 | Phase 267 | Pending |
-| DGN-08 | Phase 267 | Pending |
-| DGN-09 | Phase 267 | Pending |
-| DGN-10 | Phase 267 | Pending |
-| DGN-11 | Phase 267 | Pending |
-| DGN-12 | Phase 267 | Pending |
-| DGN-13 | Phase 267 | Pending |
-| DGN-14 | Phase 267 | Pending |
-| DGN-15 | Phase 267 | Pending |
-| PAY-SPLIT-01 | Phase 267 | Pending |
-| PAY-SPLIT-02 | Phase 267 | Pending |
-| PAY-SPLIT-03 | Phase 267 | Pending |
+| DGN-01 | Phase 267 | Complete |
+| DGN-02 | Phase 267 | Complete |
+| DGN-03 | Phase 267 | Complete |
+| DGN-04 | Phase 267 | Complete |
+| DGN-05 | Phase 267 | Complete |
+| DGN-06 | Phase 267 | Complete |
+| DGN-07 | Phase 267 | Complete |
+| DGN-08 | Phase 267 | Complete |
+| DGN-09 | Phase 267 | Complete |
+| DGN-10 | Phase 267 | Complete |
+| DGN-11 | Phase 267 | Complete |
+| DGN-12 | Phase 267 | Complete |
+| DGN-13 | Phase 267 | Complete |
+| DGN-14 | Phase 267 | Complete |
+| DGN-15 | Phase 267 | Complete |
+| PAY-SPLIT-01 | Phase 267 | Complete |
+| PAY-SPLIT-02 | Phase 267 | Complete |
+| PAY-SPLIT-03 | Phase 267 | Complete |
 | STAT-01 | Phase 268 | Complete |
 | STAT-02 | Phase 268 | Complete |
 | STAT-03 | Phase 268 | Complete |
@@ -142,26 +142,26 @@
 | SURF-04 | Phase 268 | Complete |
 | SURF-05 | Phase 268 | Complete |
 | SURF-06 | Phase 268 | Complete |
-| LBX-01 | Phase 269 | Pending |
-| LBX-02 | Phase 269 | Pending |
-| LBX-03 | Phase 269 | Pending |
-| GASPIN-01 | Phase 269 | Pending |
-| GASPIN-02 | Phase 269 | Pending |
-| GASPIN-03 | Phase 269 | Pending |
+| LBX-01 | Phase 269 | Complete |
+| LBX-02 | Phase 269 | DEFERRED-V38+ |
+| LBX-03 | Phase 269 | Complete (anchored at FINDINGS-v37.0.md §3.A Row Group 2) |
+| GASPIN-01 | Phase 269 | Complete (RCA inline at 269-01-PLAN.md) |
+| GASPIN-02 | Phase 269 | DEFERRED-V38+ |
+| GASPIN-03 | Phase 269 | DEFERRED-V38+ |
 | DELTA-01 | Phase 270 | Complete |
 | DELTA-02 | Phase 270 | Complete |
 | DELTA-03 | Phase 270 | Complete |
 | DELTA-04 | Phase 270 | Complete |
-| AUDIT-01 | Phase 271 | Pending |
-| AUDIT-02 | Phase 271 | Pending |
-| AUDIT-03 | Phase 271 | Pending |
-| AUDIT-04 | Phase 271 | Pending |
-| AUDIT-05 | Phase 271 | Pending |
-| AUDIT-06 | Phase 271 | Pending |
-| REG-01 | Phase 271 | Pending |
-| REG-02 | Phase 271 | Pending |
-| REG-03 | Phase 271 | Pending |
-| REG-04 | Phase 271 | Pending |
+| AUDIT-01 | Phase 271 | Complete |
+| AUDIT-02 | Phase 271 | Complete |
+| AUDIT-03 | Phase 271 | Complete |
+| AUDIT-04 | Phase 271 | Complete |
+| AUDIT-05 | Phase 271 | Complete |
+| AUDIT-06 | Phase 271 | Complete |
+| REG-01 | Phase 271 | Complete |
+| REG-02 | Phase 271 | Complete |
+| REG-03 | Phase 271 | Complete |
+| REG-04 | Phase 271 | Complete |
 
 **Coverage:**
 - v37.0 requirements: 51 total (15 DGN + 3 PAY-SPLIT + 7 STAT + 6 SURF + 3 LBX + 3 GASPIN + 4 DELTA + 6 AUDIT + 4 REG)

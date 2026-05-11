@@ -3,7 +3,7 @@ phase: 271-delta-audit-findings-consolidation-terminal
 plan: 01
 milestone: v37.0
 milestone_name: Degenerette Recalibration + Maintenance Bundle
-head_anchor: <sha>
+head_anchor: 2654fcc2
 audit_baseline: 1c0f09132d7439af9881c56fe197f81757f8164a
 audit_baseline_signal: MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a
 v34_baseline: 6b63f6d4daf346a53a1d463790f637308ea8d555
@@ -14,15 +14,15 @@ requirements: [AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05, AUDIT-06,
 phase_status: terminal
 write_policy: "Pure-consolidation phase per D-271-APPROVAL-02 hard constraint #1. ZERO contracts/*.sol writes by agent during Phase 271; ZERO test/ writes by agent during Phase 271. All v37.0 contract + test commits already landed under USER-APPROVED batched review at Phase 267 (e1136071), Phase 268 (4b277aaf), and Phase 269 (8fd5c2e1) close. Audit deliverable + 271-01-ADVERSARIAL-LOG + 271-01-SUMMARY + ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS flips AGENT-COMMITTED atomic-per-task with audit(271): or docs(271): prefix. READ-only flip on audit/FINDINGS-v37.0.md (chmod 444 + frontmatter status FINAL — READ-ONLY + read_only: true) is the terminal commit per feedback_manual_review_before_push.md final user-review gate."
 supersedes: none
-status: DRAFT
-read_only: false
-closure_signal: MILESTONE_V37_AT_HEAD_<sha>
+status: FINAL — READ-ONLY
+read_only: true
+closure_signal: MILESTONE_V37_AT_HEAD_2654fcc2
 generated_at: 2026-05-11T08:42:52Z
 ---
 
 # v37.0 Findings — Degenerette Recalibration + Maintenance Bundle
 
-**Audit Baseline.** The audit baseline is v36.0 audit-subject HEAD `1c0f09132d7439af9881c56fe197f81757f8164a` (closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a` carry-forward from `audit/FINDINGS-v36.0.md` §9c). v37.0 audit subject HEAD `<sha>` (resolved at Task 14 atomic-update per D-271-CLOSURE-01). v37.0 introduces TWO contract-tree commits since the v36.0 baseline: `feat(267): degenerette producer + 5-table payout rewrite + 3-tier ETH split [DGN-01..15, PAY-SPLIT-01..03]` at commit `e1136071` (USER-APPROVED Phase 267 batched commit; +231/-196 LOC across `contracts/DegenerusTraitUtils.sol` and `contracts/modules/DegenerusGameDegeneretteModule.sol`); `feat(269): delete unreachable BURNIE-conversion branch in _resolveLootboxRoll [LBX-01]` at commit `8fd5c2e1` (USER-APPROVED Phase 269 commit; −14/+1 LOC in `contracts/modules/DegenerusGameLootboxModule.sol`; bytecode shrink 177 bytes 18,330 → 18,153). v37.0 introduces ONE test-tree commit since the v36.0 baseline: `test(268): degenerette stat suite + cross-surface preservation v37.0 + worst-case gas regression [STAT-01..07, SURF-01..06]` at commit `4b277aaf` (USER-APPROVED Phase 268 batched commit; +2,277/−1 LOC across 6 files in `test/stat/` + `test/gas/`). `contracts/libraries/EntropyLib.sol` is byte-identical between v36.0 baseline `1c0f0913` and v37 HEAD (Phase 268 SURF-04 grep-proof). `contracts/modules/DegenerusGameJackpotModule.sol` is byte-identical between v36.0 baseline `1c0f0913` and v37 HEAD (Phase 268 SURF-01 + SURF-02 + SURF-04 grep-proof; non-lootbox jackpot path untouched). `contracts/modules/DegenerusGameMintModule.sol` is byte-identical between v36.0 baseline `1c0f0913` and v37 HEAD (Phase 268 SURF-01 grep-proof). `contracts/libraries/JackpotBucketLib.sol` is byte-identical between v34.0 baseline `6b63f6d4` and v37 HEAD (REG-02 carry). `_pickSoloQuadrant` body + 4 ETH-distribution injection sites at L282 / L349 / L524 / L1147 byte-identical between v34.0 baseline `6b63f6d4` and v37 HEAD (Phase 268 SURF-02 grep-proof).
+**Audit Baseline.** The audit baseline is v36.0 audit-subject HEAD `1c0f09132d7439af9881c56fe197f81757f8164a` (closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a` carry-forward from `audit/FINDINGS-v36.0.md` §9c). v37.0 audit subject HEAD `2654fcc2` (resolved at Task 14 atomic-update per D-271-CLOSURE-01). v37.0 introduces TWO contract-tree commits since the v36.0 baseline: `feat(267): degenerette producer + 5-table payout rewrite + 3-tier ETH split [DGN-01..15, PAY-SPLIT-01..03]` at commit `e1136071` (USER-APPROVED Phase 267 batched commit; +231/-196 LOC across `contracts/DegenerusTraitUtils.sol` and `contracts/modules/DegenerusGameDegeneretteModule.sol`); `feat(269): delete unreachable BURNIE-conversion branch in _resolveLootboxRoll [LBX-01]` at commit `8fd5c2e1` (USER-APPROVED Phase 269 commit; −14/+1 LOC in `contracts/modules/DegenerusGameLootboxModule.sol`; bytecode shrink 177 bytes 18,330 → 18,153). v37.0 introduces ONE test-tree commit since the v36.0 baseline: `test(268): degenerette stat suite + cross-surface preservation v37.0 + worst-case gas regression [STAT-01..07, SURF-01..06]` at commit `4b277aaf` (USER-APPROVED Phase 268 batched commit; +2,277/−1 LOC across 6 files in `test/stat/` + `test/gas/`). `contracts/libraries/EntropyLib.sol` is byte-identical between v36.0 baseline `1c0f0913` and v37 HEAD (Phase 268 SURF-04 grep-proof). `contracts/modules/DegenerusGameJackpotModule.sol` is byte-identical between v36.0 baseline `1c0f0913` and v37 HEAD (Phase 268 SURF-01 + SURF-02 + SURF-04 grep-proof; non-lootbox jackpot path untouched). `contracts/modules/DegenerusGameMintModule.sol` is byte-identical between v36.0 baseline `1c0f0913` and v37 HEAD (Phase 268 SURF-01 grep-proof). `contracts/libraries/JackpotBucketLib.sol` is byte-identical between v34.0 baseline `6b63f6d4` and v37 HEAD (REG-02 carry). `_pickSoloQuadrant` body + 4 ETH-distribution injection sites at L282 / L349 / L524 / L1147 byte-identical between v34.0 baseline `6b63f6d4` and v37 HEAD (Phase 268 SURF-02 grep-proof).
 
 **Scope.** Single canonical milestone-closure deliverable for v37.0 per D-271-FILES-01 (single deliverable, no per-AUDIT-NN working files) + D-266-FILES-01 / D-265-FILES-01 / D-262 / D-257 carry-forward (9-section shape locked). v37.0 = 5-phase milestone shape per CONTEXT.md `<domain>`: Phase 267 (Degenerette producer + payout rewrite — contract impl), Phase 268 (statistical validation + cross-surface preservation — test impl), Phase 269 (lootbox dead-branch cleanup + SURF-05 gas-pin re-pinning — PARTIAL ship), Phase 270 (post-v32.0 deferred-commit adversarial sub-audit — zero source-tree mutations), Phase 271 (delta audit + findings consolidation — terminal). Terminal phase per D-271-FCITE-01 (carry of D-266-FCITE / D-265-FCITE-01 / D-262-FCITE-01 / D-257-FCITE-01 / D-253-15 step 8 + ROADMAP terminal-phase rule) — zero forward-cites emitted from Phase 271 to any post-v37.0 milestone phases. Verified at §8 Forward-Cite Closure block.
 
@@ -38,13 +38,13 @@ generated_at: 2026-05-11T08:42:52Z
 - AUDIT-02: TBD-by-Task-5+6 (§4 8-surface adversarial sweep (a)..(h) with verdict bucket per row; default zero F-37-NN finding blocks per D-271-FIND-01; `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` PARALLEL adversarial pass per D-271-ADVERSARIAL-01)
 - AUDIT-03: TBD-by-Task-7 (§3 AUDIT-03 conservation re-proof: per-N table calibration math + ETH bonus EV + per-N hero EV-neutrality + solvency invariant + ethShare/lootboxShare sum invariant)
 - AUDIT-04: TBD-by-Task-4 (§3 AUDIT-04 zero-new-state grep-proof attestation: zero new storage slots; zero new public/external mutation entry points; zero new admin functions; zero new modifiers; zero new upgrade hooks; `packedTraitsDegenerette` internal pure callout per DGN-15)
-- AUDIT-05: TBD-by-Task-12 (§9c emits closure signal `MILESTONE_V37_AT_HEAD_<sha>` verbatim in 5 locations per D-271-CLOSURE-01; KNOWN-ISSUES.md UNMODIFIED per default path)
+- AUDIT-05: TBD-by-Task-12 (§9c emits closure signal `MILESTONE_V37_AT_HEAD_2654fcc2` verbatim in 5 locations per D-271-CLOSURE-01; KNOWN-ISSUES.md UNMODIFIED per default path)
 - AUDIT-06: TBD-by-Task-6 (`271-01-ADVERSARIAL-LOG.md` populated with 3 H2 sections — `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` — per D-271-ADVERSARIAL-01; NOT `/degen-skeptic` per D-271-ADVERSARIAL-02)
 - REG-01: TBD-by-Task-8 (§5a — v36.0 closure signal `MILESTONE_V36_AT_HEAD_1c0f0913` NON-WIDENING at v37 HEAD per D-271-REG01-01)
 - REG-02: TBD-by-Task-8 (§5b — v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4` NON-WIDENING at v37 HEAD per D-271-REG02-01)
 - REG-03: TBD-by-Task-9 (§6b 4-row KI envelope re-verifications EXC-01..03 NEGATIVE-scope + EXC-04 RE_VERIFIED with NARROWS retained from v36.0; Phase 270 contributes 4 rows verbatim per D-271-KI-01)
 - REG-04: TBD-by-Task-8 (§5c per-finding 6-col PASS/REGRESSED/SUPERSEDED row table walking audit/FINDINGS-v25.0.md → audit/FINDINGS-v36.0.md per D-271-REG04-01)
-- Combined milestone closure: `MILESTONE_V37_AT_HEAD_<sha>`
+- Combined milestone closure: `MILESTONE_V37_AT_HEAD_2654fcc2`
 
 ### Severity Counts (per D-08 5-Bucket Rubric)
 
@@ -87,7 +87,7 @@ D-271-FCITE-01 carry of D-266-FCITE / D-265-FCITE-01 / D-262-FCITE-01 / D-257-FC
 
 ### Attestation Anchor
 
-See §9 Milestone Closure Attestation for the D-253-15 step 9 attestation block triggering v37.0 milestone closure via signal `MILESTONE_V37_AT_HEAD_<sha>` (resolved at Task 14 atomic-update across 5 verbatim locations per D-271-CLOSURE-01).
+See §9 Milestone Closure Attestation for the D-253-15 step 9 attestation block triggering v37.0 milestone closure via signal `MILESTONE_V37_AT_HEAD_2654fcc2` (resolved at Task 14 atomic-update across 5 verbatim locations per D-271-CLOSURE-01).
 
 ---
 
@@ -249,7 +249,7 @@ Every source-tree change from v36.0 baseline `1c0f0913` → v37.0 HEAD enumerate
 **Row 2.1** — `contracts/modules/DegenerusGameLootboxModule.sol` :: `_resolveLootboxRoll` inner `if (targetLevel < currentLevel) { burnieOut = ... }` branch + cascade signature parameter cleanup.
 - Class: **DELETED** (inner branch) + **REFACTOR_ONLY** (cascade signature parameter drop).
 - File / Lines: v36.0 baseline L1574-1578 (4-LOC inner branch body) DELETED; cascade signature `_resolveLootboxRoll` `targetLevel` + `currentLevel` params dropped + 2 callsites updated + 2 NatSpec `@param` lines removed.
-- Evidence — **caller-clamp triple-defense invariant at HEAD `<sha>` per D-271-DEFERRED-01:**
+- Evidence — **caller-clamp triple-defense invariant at HEAD `2654fcc2` per D-271-DEFERRED-01:**
   - **Layer-1** `openLootBox` L557-559 unconditionally clamps `targetLevel = max(targetLevel, currentLevel)` before invocation.
   - **Layer-2** `_resolveLootboxCommon` L882-884 unconditionally clamps again before reaching `_resolveLootboxRoll`.
   - **Layer-3** (DELETED) inner `_resolveLootboxRoll` branch was structurally dead.
@@ -346,7 +346,7 @@ Output: 0 hits in non-test contract files. Degenerette payout flow uses pre-exis
 - zero new modifiers — `git diff 1c0f0913..HEAD -- contracts/ | grep -E "^\+.*modifier "` returns 0.
 - zero new upgrade hooks — `git diff 1c0f0913..HEAD -- contracts/ | grep -E "^\+.*(UUPSUpgradeable|_authorizeUpgrade)"` returns 0.
 
-**Closing attestation:** Storage layout byte-identical at v37.0 closure HEAD `<sha>` vs v36.0 baseline `1c0f0913` per slot-by-slot grep-proof; zero new public/external mutation entry points; zero new external pure entry points (`packedTraitsDegenerette` is internal pure library helper, inlined at compile time, not in deployed ABI); zero new admin functions; zero new modifiers; zero new upgrade hooks; zero new ERC-20 mint entry points per DGN-15 + AUDIT-04 design contract.
+**Closing attestation:** Storage layout byte-identical at v37.0 closure HEAD `2654fcc2` vs v36.0 baseline `1c0f0913` per slot-by-slot grep-proof; zero new public/external mutation entry points; zero new external pure entry points (`packedTraitsDegenerette` is internal pure library helper, inlined at compile time, not in deployed ABI); zero new admin functions; zero new modifiers; zero new upgrade hooks; zero new ERC-20 mint entry points per DGN-15 + AUDIT-04 design contract.
 
 ### 3.C AUDIT-03 Conservation Re-Proof
 
@@ -530,13 +530,13 @@ Per AUDIT-02 design contract: 8 adversarial surfaces (a)..(h) covering the v37.0
 
 ### 5a. REG-01 — v36.0 Closure-Signal Non-Widening
 
-| Row ID | Source | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| Row ID | Source | Delta SHA | Subject Surface at HEAD `2654fcc2` | Re-Verification Evidence | Verdict |
 | ------ | ------ | --------- | ------------------------------ | ------------------------ | ------- |
 | REG-v36.0-LBX-ENT | v36.0 closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a` carry-forward | `1c0f0913..<v37-close-sha>` (2 contract commits `e1136071` + `8fd5c2e1`; 1 test commit `4b277aaf`) | EntropyLib body byte-identical at v37 HEAD vs baseline `1c0f0913` (Phase 268 SURF-04 grep-proof). Lootbox v36.0 entropy refactor bodies byte-identical EXCEPT for LBX-01 dead-branch deletion (Phase 269 commit `8fd5c2e1`; bytecode shrink 177 bytes 18,330 → 18,153; caller-clamp triple-defense proves no behavior change). 4 hash2/bit-slice callsites in `_resolveLootboxRoll` survive byte-identical at structural level — line numbers shift downward by 11 LOC (L1548 → L1559 etc.) for the first 3 callsites after dead-branch removal; 4th callsite at L1599 invariant; bit-slice budget UNAFFECTED. LBX-03 anchor cross-cite §3.A Row Group 2. | Phase 268 SURF-03 + SURF-04 v37.0 describe asserts byte-identity vs v36.0 baseline; LBX-01 deletion is no-behavior-change cleanup with caller-clamp triple-defense invariant + structural audit-trail row at §3.A. | PASS |
 
 ### 5b. REG-02 — v34.0 Closure-Signal Non-Widening
 
-| Row ID | Source | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| Row ID | Source | Delta SHA | Subject Surface at HEAD `2654fcc2` | Re-Verification Evidence | Verdict |
 | ------ | ------ | --------- | ------------------------------ | ------------------------ | ------- |
 | REG-v34.0-TRAIT-SOLO | v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` carry-forward | `6b63f6d4..<v37-close-sha>` | TraitUtils existing 3 functions (`weightedColorBucket` body L115-135 + `traitFromWord` body L143-167 + `packedTraitsFromSeed` body L169-178) byte-identical at v37 HEAD per DGN-14 design contract — only additive change is the NEW `packedTraitsDegenerette` helper. `_pickSoloQuadrant` body + 4 ETH-distribution injection sites at L282 / L349 / L524 / L1147 byte-identical between v34.0 baseline `6b63f6d4` and v37 HEAD per Phase 268 SURF-02 grep-proof. JackpotBucketLib + `weightedColorBucket` byte-identical. **Surfaces strictly disjoint:** Degenerette path uses NEW `packedTraitsDegenerette`; gold-solo Mint/Jackpot path uses unchanged `packedTraitsFromSeed`; no widening. | Phase 268 SURF-01 + SURF-02 v37.0 describe codehash-equality / selector-enumeration assertions; no v37 commit touches `contracts/libraries/JackpotBucketLib.sol` or `DegenerusGameJackpotModule.sol`. | PASS |
 
@@ -544,7 +544,7 @@ Per AUDIT-02 design contract: 8 adversarial surfaces (a)..(h) covering the v37.0
 
 Per-finding 6-col PASS/REGRESSED/SUPERSEDED row table from REG-04 grep sweep across `audit/FINDINGS-v25.0.md` through `audit/FINDINGS-v36.0.md` for findings referencing the v37-touched function set (`_evNormalizationRatio`, `_getBasePayoutBps`, `_applyHeroMultiplier`, `_wwxrpBonusRoiForBucket`, `_distributePayout`, `packedTraitsFromSeed`, `_resolveLootboxRoll`, `setDecimatorAutoRebuy`).
 
-| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `2654fcc2` | Re-Verification Evidence | Verdict |
 | ------ | -------------- | --------- | ------------------------------ | ------------------------ | ------- |
 | REG-v25.0-F-25-02 | `audit/FINDINGS-v25.0.md` §F-25-02 "DegeneretteModule._distributePayout Sequential External Calls" | `1c0f0913..<v37-close-sha>` | `_distributePayout` REWRITTEN at Phase 267 commit `e1136071` with 5-arg signature (`betAmount` inserted) + PAY-SPLIT 3-tier rule. Sequential-external-calls posture preserved: CURRENCY_BURNIE → `coin.mintForGame`; CURRENCY_WWXRP → `wwxrp.mintPrize`; ETH branch → `_addClaimableEth` + `_resolveLootboxDirect` (delegatecall to LootboxModule). All post-state-write external calls remain one-way token operations or in-protocol delegatecalls with no caller callback. v37 rewrite does not introduce new external-call vectors. | v29.0 PASS verdict carries forward; Phase 267 rewrite preserves the sequential-external-calls posture; no new untrusted-external-call paths. | PASS |
 | REG-v30.0-INV-237-134..137 | `audit/FINDINGS-v30.0.md` §3 INV-237-134..137 "`_resolveLootboxRoll` entropyStep callsites (KI: EXC-04)" | `1c0f0913..<v37-close-sha>` | v36.0 Phase 266 ENT-02 refactored the 4 entropyStep callsites to inline bit-slices (per `audit/FINDINGS-v36.0.md` ENT-02 closure). Phase 269 LBX-01 commit `8fd5c2e1` deletes the dead BURNIE-conversion inner branch without touching any of the 4 bit-slice callsites. v37.0 HEAD: 4 hash2/bit-slice callsites at L1559 / L1564 / L1571 / L1599 (vs v36.0 baseline L1548 / L1569 / L1585 / L1599; first 3 shifted downward by 11 LOC). EXC-04 KI envelope NARROWS retained (BAF-jackpot-only scope) — see §6b. | v36.0 ENT-02 CLOSED carries forward; Phase 269 LBX-01 caller-clamp triple-defense + bytecode shrink 177 bytes confirm structural byte-equivalence; bit-slice budget UNAFFECTED. | SUPERSEDED (by v36.0 ENT-02 closure + v37.0 Phase 269 LBX-01 dead-branch deletion; INV-237-134..137 EXC-04 envelope retained NARROWS — see §6b EXC-04 row) |
@@ -655,7 +655,7 @@ Cross-cites organized in 4 subsections per the canonical FINDINGS shape: v37.0 p
 - `audit/FINDINGS-v35.0.md`
 - `audit/FINDINGS-v36.0.md`
 
-**Closure-signal chain:** v25 → v27 → v28 → v29 → v30 → v31 → v32 → v33 → v34 (`MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`) → v35 → v36 (`MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`) → v37 (`MILESTONE_V37_AT_HEAD_<sha>` — emitted §9c at Task 12; SHA resolved at Task 14 atomic-update).
+**Closure-signal chain:** v25 → v27 → v28 → v29 → v30 → v31 → v32 → v33 → v34 (`MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`) → v35 → v36 (`MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`) → v37 (`MILESTONE_V37_AT_HEAD_2654fcc2` — emitted §9c at Task 12; SHA resolved at Task 14 atomic-update).
 
 REG-01 carries v36.0 closure signal verbatim per §5a (REG-v36.0-LBX-ENT PASS).
 REG-02 carries v34.0 closure signal verbatim per §5b (REG-v34.0-TRAIT-SOLO PASS).
@@ -670,7 +670,7 @@ REG-04 walks v25..v36.0 per §5c (5 PASS / 1 SUPERSEDED).
 ### 7.4. Project-State Cross-Cites
 
 - `.planning/PROJECT.md` "Current Milestone v37.0" block + "Deferred to Future Milestones" subsection (updated at Task 13 per D-271-DEFERRED-03 with 4 v38+ carry-forward bullets — LBX-02 + GASPIN-02/03 combined + SURF-03 re-baseline + STAT-03 v35.0 carry).
-- `.planning/MILESTONES.md` closure-signal chain v25 → v36 + v37 in-progress row (flipped to SHIPPED at Task 14 with closure signal `MILESTONE_V37_AT_HEAD_<sha>` recorded).
+- `.planning/MILESTONES.md` closure-signal chain v25 → v36 + v37 in-progress row (flipped to SHIPPED at Task 14 with closure signal `MILESTONE_V37_AT_HEAD_2654fcc2` recorded).
 - `.planning/ROADMAP.md` v37.0 milestone bullet (flipped to ✅ at Task 14).
 - `.planning/REQUIREMENTS.md` AUDIT-01..06 + REG-01..04 traceability (flipped to Complete at Task 14); LBX-02 + GASPIN-02 + GASPIN-03 traceability (flipped to DEFERRED-V38+ at Task 14).
 - `KNOWN-ISSUES.md` EXC-01..04 envelopes (UNMODIFIED at v37 close per default path; `git diff` returns empty).
@@ -728,13 +728,13 @@ Per-section roll-up:
 - **§5** Regression Appendix: REG-01 **1 PASS** (v36.0 closure signal NON-WIDENING); REG-02 **1 PASS** (v34.0 closure signal NON-WIDENING); REG-04 **5 PASS / 0 REGRESSED / 1 SUPERSEDED** (per-finding spot-check sweep across audit/FINDINGS-v25..v36.0). Aggregate: **7 PASS / 0 REGRESSED / 1 SUPERSEDED**.
 - **§6** KI Gating Walk: **`0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`** (default path per D-271-PAYSPLIT-01 + D-271-KI-01). EXC-01..03 RE_VERIFIED-NEGATIVE-scope; EXC-04 RE_VERIFIED with NARROWS retained.
 - **AUDIT-06** adversarial-pass: 3 skills (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) PARALLEL spawn per D-271-ADVERSARIAL-01; all concur; zero FINDING_CANDIDATE / zero 9th-surface / zero KI promotion candidate per `271-01-ADVERSARIAL-LOG.md`.
-- **Combined milestone closure:** `MILESTONE_V37_AT_HEAD_<sha>`.
+- **Combined milestone closure:** `MILESTONE_V37_AT_HEAD_2654fcc2`.
 
 ### 9b. Attestation Block
 
 ```
 git rev-parse HEAD
-# v37.0 closure HEAD <sha>   — resolved at Task 14 atomic-update
+# v37.0 closure HEAD 2654fcc2   — resolved at Task 14 atomic-update
 # v36.0 audit baseline       — 1c0f09132d7439af9881c56fe197f81757f8164a
 #   signal                   — MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a
 # v34.0 second-prior closure — 6b63f6d4daf346a53a1d463790f637308ea8d555 (REG-02 carry)
@@ -745,9 +745,9 @@ Docs-tree HEAD captured separately at Task 14 atomic-update per Phase 257 D-257-
 
 ### 9c. Closure Signal
 
-`MILESTONE_V37_AT_HEAD_<sha>`
+`MILESTONE_V37_AT_HEAD_2654fcc2`
 
-Placeholder `<sha>` resolved at Task 14 atomic-update per D-271-CLOSURE-01 across 5 verbatim locations: (1) `audit/FINDINGS-v37.0.md` §1 frontmatter `closure_signal:` field; (2) `audit/FINDINGS-v37.0.md` §1 frontmatter `head_anchor:` field; (3) `audit/FINDINGS-v37.0.md` §2 Closure Verdict Summary line `Combined milestone closure: MILESTONE_V37_AT_HEAD_<sha>`; (4) `audit/FINDINGS-v37.0.md` §9c this line; (5) `audit/FINDINGS-v37.0.md` §9b Attestation Block. Plus 3 cross-document propagation locations resolved by Task 14: `.planning/MILESTONES.md` v37.0 row, `.planning/ROADMAP.md` v37.0 milestone bullet, and `.planning/phases/271-delta-audit-findings-consolidation-terminal/271-01-SUMMARY.md` frontmatter.
+Placeholder `2654fcc2` resolved at Task 14 atomic-update per D-271-CLOSURE-01 across 5 verbatim locations: (1) `audit/FINDINGS-v37.0.md` §1 frontmatter `closure_signal:` field; (2) `audit/FINDINGS-v37.0.md` §1 frontmatter `head_anchor:` field; (3) `audit/FINDINGS-v37.0.md` §2 Closure Verdict Summary line `Combined milestone closure: MILESTONE_V37_AT_HEAD_2654fcc2`; (4) `audit/FINDINGS-v37.0.md` §9c this line; (5) `audit/FINDINGS-v37.0.md` §9b Attestation Block. Plus 3 cross-document propagation locations resolved by Task 14: `.planning/MILESTONES.md` v37.0 row, `.planning/ROADMAP.md` v37.0 milestone bullet, and `.planning/phases/271-delta-audit-findings-consolidation-terminal/271-01-SUMMARY.md` frontmatter.
 
 ### 9.NN Commit-Readiness Register
 

@@ -17,15 +17,15 @@
 - ✅ **v34.0 Trait Rarity Rework + Gold Solo Priority** — Phases 259-262 (shipped 2026-05-09; closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`) — see [milestones/v34.0-ROADMAP.md](milestones/v34.0-ROADMAP.md)
 - ✅ **v35.0 BURNIE Near-Future Per-Pull Level Resample** — Phases 263-265 (shipped 2026-05-09; closure signal `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6`)
 - ✅ **v36.0 Lootbox-Path Entropy Refactor** — Phase 266 (shipped 2026-05-10; closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`) — see [milestones/v36.0-ROADMAP.md](milestones/v36.0-ROADMAP.md)
-- 🚧 **v37.0 Degenerette Recalibration + Maintenance Bundle** — Phases 267-271 (planning; baseline `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`)
+- ✅ **v37.0 Degenerette Recalibration + Maintenance Bundle** — Phases 267-271 (shipped 2026-05-11; closure signal `MILESTONE_V37_AT_HEAD_2654fcc2`)
 
 ## Phases
 
 - [x] **Phase 267: Degenerette Producer + 5-Table Payout Rewrite** — Add `packedTraitsDegenerette` producer + 5 per-N payout/hero/WWXRP table dispatch in `DegenerusGameDegeneretteModule.sol`; delete `_evNormalizationRatio`; rewrite `_distributePayout` ETH branch with 3-tier split rule (≤3× bet → 100% ETH; 3-10× bet → 2.5× bet ETH floor + remainder lootbox; >10× bet → existing 25/75 split); single batched USER-APPROVED contract commit. (completed 2026-05-10)
 - [x] **Phase 268: Degenerette Statistical Validation + Cross-Surface Preservation** — 3 new `test/stat/` files (per-N EV exactness + producer chi² + bonus EV) + `SurfaceRegression.test.js` v37.0 extension proving Mint/Jackpot/Lootbox/EntropyLib byte-identity. (completed 2026-05-11)
-- [ ] **Phase 269: Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning** — Delete unreachable BURNIE-conversion branch in `_resolveLootboxRoll` L1568-1581 (caller-clamp invariant); diagnose + fix Phase 261/264 SURF-05 ~120K gas-pin drift under `npm run test:stat`.
+- [x] **Phase 269: Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning** — Delete unreachable BURNIE-conversion branch in `_resolveLootboxRoll` L1568-1581 (caller-clamp invariant); GASPIN-01 root-cause inline at 269-01-PLAN.md "Root Cause (GASPIN-01)" section. PARTIAL ship: LBX-01 + GASPIN-01 PASS; LBX-02 + GASPIN-02 + GASPIN-03 + SURF-03 re-baseline DEFERRED to v38+. (completed 2026-05-11)
 - [x] **Phase 270: Post-v32.0 Deferred-Commit Adversarial Sub-Audit** — Audit-only adversarial sweep of commits `002bde55` (presale auto-deactivate) + `2713ce61` (setDecimatorAutoRebuy removal); read-only delta-classification + KI envelope check; FINDING_CANDIDATE rows escalate to Phase 271. (completed 2026-05-11)
-- [ ] **Phase 271: Delta Audit + Findings Consolidation (Terminal)** — Single `audit/FINDINGS-v37.0.md` 9-section deliverable; closure signal `MILESTONE_V37_AT_HEAD_<sha>` emitted in §9c; KNOWN-ISSUES.md walkthrough; ROADMAP/STATE/MILESTONES flips.
+- [x] **Phase 271: Delta Audit + Findings Consolidation (Terminal)** — Single `audit/FINDINGS-v37.0.md` 9-section deliverable; closure signal `MILESTONE_V37_AT_HEAD_2654fcc2` emitted in §9c; KNOWN-ISSUES.md UNMODIFIED per D-271-PAYSPLIT-01 + D-271-KI-01 default; ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS flips. (completed 2026-05-11)
 
 ## Phase Details
 
