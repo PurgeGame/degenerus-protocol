@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v37.0
 milestone_name: Degenerette Recalibration + Maintenance Bundle
-status: executing
-last_updated: "2026-05-10T17:30:00.000Z"
-last_activity: 2026-05-10 -- Phase 268 SHIPPED — 3 NEW test/stat files (DegenerettePerNEvExactness + DegeneretteProducerChi2 + DegeneretteBonusEv) + SurfaceRegression.test.js v37.0 SURF-01..04 describe extension + NEW Phase268GasRegression.test.js + package.json test:stat wiring; 1 USER-APPROVED batched test commit (`4b277aaf`) + 2 AGENT-COMMITTED chore/planning commits (`4c5aa68b` Task 1 inventory + this Task 3 SUMMARY/STATE); 13 of 13 STAT-01..07 + SURF-01..06 requirements PASS; ZERO source-tree mutations (`git diff e1136071 HEAD -- contracts/` empty); ready for `/gsd-discuss-phase 269`
+status: planning
+last_updated: "2026-05-11T04:29:41.297Z"
+last_activity: "2026-05-10 -- Phase 269 CONTEXT.md authored at `.planning/phases/269-lootbox-dead-branch-cleanup-surf-05-gas-pin-re-pinning/269-CONTEXT.md` after gray-area discussion. 6 locked decisions (D-269-LBX-SHAPE-01 pure-deletion + D-269-PLAN-01 single-multi-task PLAN + D-269-COMMITS-01 single-batched test commit + D-269-RCA-01 bisect-by-removal first + D-269-STAB-01 RCA-driven stabilization + D-269-SURF03-01 SURF-03 re-baseline) covering both LBX-01..03 + GASPIN-01..03 workstreams. Discussion-time game-theory dive validated the dead-branch deletion (triple-defense caller-clamp invariant + zero player advantage from delay). Next: `/gsd-plan-phase 269` to author 269-01-PLAN.md."
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 1
+  total_plans: 2
   completed_plans: 2
   percent: 40
 ---
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.0 open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 268 SHIPPED (1/1 plans complete; 13/13 STAT-01..07 + SURF-01..06 requirements PASS; zero source-tree mutations); Phase 269 next — Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning (LBX-01..03 + GASPIN-01..03); ready for `/gsd-discuss-phase 269`
+**Current focus:** Phase 269 CONTEXT.md authored — Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning (LBX-01..03 + GASPIN-01..03; 6 requirements; pure-deletion locked); ready for `/gsd-plan-phase 269`
 
 ## Current Position
 
-Phase: 268 (degenerette-statistical-validation-cross-surface-preservation) — SHIPPED 2026-05-10
-Plan: `268-01-PLAN.md` (1/1 complete; 3 tasks: chore inventory `4c5aa68b` → USER-APPROVED batched test commit `4b277aaf` → phase-close summary _this commit_; covers STAT-01..07 + SURF-01..06)
-Status: Phase 268 SHIPPED — 13 of 13 requirements PASS, zero source-tree mutations, single USER-APPROVED batched test commit + 2 AGENT-COMMITTED planning/chore commits. Phase 269 next.
-Last activity: 2026-05-10 -- Phase 268 closed; SUMMARY authored at `.planning/phases/268-degenerette-statistical-validation-cross-surface-preservation/268-01-SUMMARY.md`; STATE.md flipped from `completed_plans: 1` → `2`, `completed_phases: 1` → `2`, `percent: 20` → `40`. Next: `/gsd-discuss-phase 269` to author CONTEXT.md for Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning (LBX-01..03 + GASPIN-01..03, 6 requirements, mixed-maintenance phase).
-Resume file: .planning/phases/269-lootbox-dead-branch-cleanup-surf05-gas-pin-repinning/269-CONTEXT.md (placeholder until Phase 269 CONTEXT.md authored)
+Phase: 269 (lootbox-dead-branch-cleanup-surf-05-gas-pin-re-pinning) — CONTEXT GATHERED 2026-05-10
+Plan: TBD (planner output pending; D-269-PLAN-01 locks single-multi-task PLAN with ~5 atomic tasks: GASPIN RCA → batched USER-APPROVED contract commit (LBX-01) → batched USER-APPROVED test commit (LBX-02 + GASPIN fix + SURF-03 re-baseline + optional package.json) → phase-close SUMMARY)
+Status: Phase 269 CONTEXT.md committed `b59bca02` after gray-area discussion. 6 locked decisions covering both LBX-01..03 (pure-deletion of L1568-1581 dead branch per D-269-LBX-SHAPE-01) + GASPIN-01..03 (bisect-by-removal RCA per D-269-RCA-01; RCA-driven stabilization per D-269-STAB-01). Discussion validated the dead-branch deletion via triple-defense caller-clamp game-theory analysis. Phase 268 SHIPPED 2026-05-10 (prior; 13/13 PASS).
+Last activity: 2026-05-10 -- Phase 269 CONTEXT.md + DISCUSSION-LOG.md committed `b59bca02`. Surfaced new v38+ deferred concern: BURNIE-lootbox `lootboxDay = 0` fallback at `openBurnieLootBox` L623-626 (potentially RNG-grindable IF a BURNIE-lootbox buy path leaves `lootboxDay` unset — orthogonal to Phase 269 scope). Next: `/gsd-plan-phase 269` to author 269-01-PLAN.md.
+Resume file: .planning/phases/269-lootbox-dead-branch-cleanup-surf-05-gas-pin-re-pinning/269-CONTEXT.md
 
 ## Last Shipped Milestone
 
