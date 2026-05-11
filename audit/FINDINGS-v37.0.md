@@ -567,3 +567,36 @@ Zero REGRESSED rows. One SUPERSEDED row (REG-v30.0-INV-237-134..137) — superse
 
 ---
 
+## 6. KI Gating Walk
+
+### 6a. Non-Promotion Ledger
+
+Zero F-37-NN finding blocks emitted per D-271-FIND-01; zero rows in Non-Promotion Ledger.
+
+Default path: Phase 271 §4 8-surface inline draft (Task 5) verdicts 8 of 8 SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE. Task 6 adversarial-pass via `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` (3 skills PARALLEL spawn per D-271-ADVERSARIAL-01) concurs with zero disagreement per `271-01-ADVERSARIAL-LOG.md` Disposition note (D-271-ADVERSARIAL-04 path evaluated and does NOT fire). Surface (h) PAY-SPLIT 3-tier boundary discontinuity at exactly 3.0× bet satisfies the D-09 3-predicate KI Gating Rubric (accepted-design + non-exploitable + sticky) in principle but is correctly documented via §4 (h) prose-only attestation per D-271-PAYSPLIT-01 default disposition — `/economic-analyst` assessment concludes KNOWN-ISSUES.md UNMODIFIED is the correct disposition.
+
+### 6b. KI Envelope Re-Verifications
+
+4-row KI envelope table mirroring Phase 253 / 257 / 262 / 265 / 266 §6b format. Per D-271-KI-01: EXC-01..03 RE_VERIFIED-NEGATIVE-scope (Phase 270 contributes 3 rows verbatim); EXC-04 RE_VERIFIED with NARROWS retained from v36.0 (Phase 270 contributes 1 row verbatim).
+
+| EXC | Surface | v37.0 Disposition | Evidence |
+| --- | ------- | ---------------- | -------- |
+| EXC-01 | Affiliate roll RNG | `RE_VERIFIED-NEGATIVE-scope` | Phase 270 grep recipe verification: neither commit `002bde55` (presale auto-deactivate) nor commit `2713ce61` (`setDecimatorAutoRebuy` removal) touches the affiliate-roll path. Phase 267 Degenerette commit `e1136071` + Phase 269 LBX-01 commit `8fd5c2e1` zero affiliate-roll interaction at v37 HEAD. Cross-cite Phase 270 270-01-DELTA-SURFACE.md KI walk row 1. |
+| EXC-02 | Backfill / prevrandao fallback | `RE_VERIFIED-NEGATIVE-scope` | Phase 270 grep recipe verification: AdvanceModule body untouched in v37 except for Phase 270 sub-audit subject `002bde55` (cap-OR arm DELETED + constant DELETED) which received SAFE_BY_STRUCTURAL_CLOSURE verdict per Phase 270 surface (i) + (iii) + (iv). v37 contract commits do not introduce new prevrandao usage. Cross-cite Phase 270 270-01-DELTA-SURFACE.md KI walk row 2. |
+| EXC-03 | F-29-04 mid-cycle write-buffer substitution | `RE_VERIFIED-NEGATIVE-scope` | Phase 270 grep recipe verification: gameover-RNG-substitution path untouched in v37. No commit modifies the mid-cycle write-buffer mechanics. Cross-cite Phase 270 270-01-DELTA-SURFACE.md KI walk row 3. |
+| EXC-04 | EntropyLib XOR-shift PRNG (BAF-jackpot-only scope at v36.0) | `RE_VERIFIED with NARROWS retained` | EntropyLib body byte-identical at v37.0 HEAD vs v36.0 baseline `1c0f0913` (Phase 268 SURF-04 grep-proof — `git diff` returns empty). Per-pull-level keccak path UNCHANGED in v37 — Phase 267 Degenerette + Phase 269 LBX-01 do NOT modify lootbox-path entropy consumption. Lootbox-path consumes high-entropy keccak via `EntropyLib.hash2` + bit-slicing per v36.0 ENT-01..06 (byte-identical structural surface; 4 callsites at L1559/L1564/L1571/L1599 post-LBX-01 vs v36.0 baseline L1548/L1569/L1585/L1599). NARROWS scope (BAF-jackpot-only) carried verbatim from v36 AUDIT-05 KI-envelope-narrowing edit. Cross-cite Phase 270 270-01-DELTA-SURFACE.md KI walk row 4. |
+
+**Backward-trace methodology cite:** Per `feedback_rng_backward_trace.md` (every RNG audit must trace BACKWARD from each consumer to verify word was unknown at input commitment time): Degenerette path `packedTraitsDegenerette` consumes VRF-derived high-entropy keccak bits (NOT XOR-shift output) — `resultSeed = keccak(rngWord, index, [spinIdx], QUICK_PLAY_SALT)` per `_resolveFullTicketBet` at L615-628; the input bits are bits of a keccak-derived seed, not raw VRF output. EntropyLib XOR-shift remains as BAF-jackpot consumer only at v37 HEAD. Phase 268 STAT-02 chi² ≥1M-sample uniformity validates the producer's color-symbol distribution; the producer's entropy source (post-keccak) inherits VRF entropy via the well-mixed keccak hash function.
+
+**Commitment-window check cite:** Per `feedback_rng_commitment_window.md` (every RNG audit must check what player-controllable state can change between VRF request and fulfillment): Degenerette bet placement (`placeDegeneretteBet`) reads the CURRENT open `LR_INDEX` and stores the bet in `degeneretteBets[player][nonce]`. VRF request increments `LR_INDEX` atomically in the SAME transaction (`DegenerusGameAdvanceModule.sol:1100-1116`), so new bets after the request go to the NEXT index, not the index being resolved. No player-controllable state can change between VRF request and fulfillment that affects the index-I bet's outcome. Bot front-run via VRF mempool visibility is STRUCTURALLY PREVENTED (per `/zero-day-hunter` Hypothesis 4 in `271-01-ADVERSARIAL-LOG.md`).
+
+### 6c. Verdict Summary
+
+**`0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`**
+
+PAY-SPLIT 3-tier rule boundary discontinuity at exactly 3.0× bet is documented as accepted-design via §4 surface (h) prose disclosure ONLY per D-271-PAYSPLIT-01 + `/economic-analyst` mechanism-design assessment (see `271-01-ADVERSARIAL-LOG.md`). NO new KNOWN-ISSUES.md entry under Design Decisions. Total payout invariant preserved (`ethShare + lootboxShare = payout` at every tier); player receives same total value in different mix; Phase 268 STAT-07 empirically validates per-band frequency distribution within ±0.5% bin tolerance. The 2.5× bet floor in Tier 2 is a player-friendly buff (paying MORE ETH than the alternative 25%-standard rule would in the 3-10× band); the boundary cliff at 3.0× → 3.01× is the unavoidable price of the floor concession and is bounded (~5% perceived value loss under typical liquidity-discount models; non-player-targetable because payout-multiple is RNG-determined post-VRF-fulfillment).
+
+KNOWN-ISSUES.md UNMODIFIED at v37 close per `git diff 1c0f09132d7439af9881c56fe197f81757f8164a..HEAD -- KNOWN-ISSUES.md` returning empty.
+
+---
+
