@@ -1,4 +1,37 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+//
+// STAT-03-v35-carry — v38 ACCEPTED-DESIGN ledger entry
+// (carry-forward chain v35.0 -> v36.0 -> v37.0 -> v38.0).
+//
+// Observed: empty-bucket skip rate ~88.24% under the current sparse
+// deity-backed holder fixture.
+//
+// Attribution: fixture-density artifact. The fixture map populates a
+// small subset of (day, level, quadrant) cells; the per-pull skip
+// branch fires when the targeted bucket is empty. With sparse fixture
+// density, most pulls land in empty buckets and skip — this is the
+// fixture configuration, NOT protocol behavior.
+//
+// v35.0 Phase 265 D-265-STAT03-01 reframe established this as a
+// fixture-calibration-error attribution (see audit/FINDINGS-v35.0.md
+// §3c and v35.0 milestone close prose in .planning/STATE.md "Just-
+// Shipped Milestone Reference" -> v35.0 -> "STAT-03 reframe row
+// SAFE_BY_STRUCTURAL_CLOSURE per D-265-STAT03-01").
+//
+// v36.0 + v37.0 carried the attribution forward without re-litigation.
+//
+// v38.0 status: ACCEPTED-DESIGN. The 10% skip-rate threshold in the
+// describe block below intentionally triggers a test FAIL under the
+// sparse fixture — this is the documented gate that flags the
+// fixture-density attribution rather than a protocol issue.
+// Populating a dense deity-backed fixture is out of v38 scope (would
+// require new mechanical workstream outside the v38 always-hero +
+// dead-code cleanup payload).
+//
+// Cross-cited from audit/FINDINGS-v38.0.md §3.A (delta-surface table
+// STAT-03-v35-carry row) + §6 (KI gating walk — Non-Promotion Ledger
+// retains zero rows; STAT-03 is fixture-density, not a finding).
+//
 // Phase 264 STAT-03 — empty-bucket skip rate + cumulative monetary underspend.
 //
 // The Phase 263 helper _awardDailyCoinToTraitWinners (HEAD cf564816) skips a

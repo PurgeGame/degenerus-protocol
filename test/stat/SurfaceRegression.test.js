@@ -601,10 +601,13 @@ describe("v36.0 SURF-01..04 — protected ranges byte-identical vs v35.0 baselin
 // ===========================================================================
 
 const V36_BASELINE = "1c0f09132d7439af9881c56fe197f81757f8164a";
+const V37_BASELINE = "2654fcc2";              // v37.0 closure HEAD; v38.0 SURF anchor
+const PHASE_269_CLOSE_BASELINE = "8fd5c2e1";  // post-LBX-01 HEAD; SURF-03 rebase anchor
 const TRAIT_UTILS_PATH = "contracts/DegenerusTraitUtils.sol";
 const JACKPOT_MODULE_PATH_V37 = "contracts/modules/DegenerusGameJackpotModule.sol";
 const LOOTBOX_MODULE_PATH = "contracts/modules/DegenerusGameLootboxModule.sol";
 const ENTROPY_LIB_PATH_V37 = "contracts/libraries/EntropyLib.sol";
+const MINT_MODULE_PATH_V38 = "contracts/modules/DegenerusGameMintModule.sol";
 
 describe("v37.0 SURF-01..04 — protected surfaces vs v36.0 baseline 1c0f0913", function () {
   // SURF-01 — DegenerusTraitUtils.sol existing functions byte-identical.
@@ -749,14 +752,14 @@ describe("v37.0 SURF-01..04 — protected surfaces vs v36.0 baseline 1c0f0913", 
     if (result.skipped) this.skip();
   });
 
-  it("SURF-03 — DegenerusGameLootboxModule.sol file-level zero-diff vs v36.0 baseline 1c0f0913 (D-268-SURF03-01: Phase 269 owns the post-cleanup re-baseline)", function () {
-    // D-268-SURF03-01 cite: SURF-03 file-level zero-diff is honest at Phase 268
-    // close because Phase 267 doesn't touch LootboxModule. Phase 269 lootbox
-    // dead-branch cleanup will require either (a) re-baselining this assertion
-    // to Phase 268 close HEAD, or (b) adding allowed-hunk exception for the
-    // ~L1568-1581 deletion. Each version is honest at its respective HEAD; no
-    // lying about state that hasn't shipped.
-    const result = expectFileLevelZeroDiffV37(V36_BASELINE, LOOTBOX_MODULE_PATH);
+  it("SURF-03 — DegenerusGameLootboxModule.sol file-level zero-diff vs phase-269-close baseline 8fd5c2e1", function () {
+    // SURF-03 baseline anchor: phase-269-close HEAD `8fd5c2e1` (post-LBX-01
+    // lootbox dead-branch cleanup). LootboxModule is byte-identical at every
+    // HEAD downstream of phase-269-close: phase 270 emits zero source-tree
+    // mutations; phase 271 closes v37.0 with zero LootboxModule edits;
+    // phase 272 cleanup scope is narrowed to DegenerusGameDegeneretteModule
+    // per D-272-CLEAN-SCOPE-01.
+    const result = expectFileLevelZeroDiffV37(PHASE_269_CLOSE_BASELINE, LOOTBOX_MODULE_PATH);
     if (result.skipped) this.skip();
   });
 
@@ -781,6 +784,119 @@ describe("v37.0 SURF-01..04 — protected surfaces vs v36.0 baseline 1c0f0913", 
         `[v37.0 SURF] expected Phase 268 stat-suite file ${f} to exist on disk; ` +
         `STAT-06 structural pin asserts the chi²-primitive verbatim re-declaration ` +
         `carries forward to Phase 268.`,
+      ).to.equal(true);
+    }
+  });
+});
+
+// ===========================================================================
+// v38.0 SURF-01..02 — protected surfaces vs v37.0 baseline 2654fcc2
+// ===========================================================================
+//
+// The v38.0 SURF preservation gate proves that Phase 272 always-hero +
+// dead-code-cleanup scopes its source-tree mutation to a SINGLE batched
+// commit (Wave 1) touching exactly one file:
+//   contracts/modules/DegenerusGameDegeneretteModule.sol  (HERO-01..05 + CLEAN-01..05)
+//
+// Every other RNG-relevant + module surface stays byte-identical:
+//   SURF-01: 4 contracts UNTOUCHED at v38 (file-level zero-diff)
+//            - contracts/libraries/EntropyLib.sol            (ENT-04 v36.0 carry; EXC-04 BAF-only NARROWS retained)
+//            - contracts/DegenerusTraitUtils.sol             (Mint + Jackpot + Degenerette producer paths)
+//            - contracts/modules/DegenerusGameJackpotModule.sol  (gold-solo + BAF jackpot)
+//            - contracts/modules/DegenerusGameMintModule.sol     (no v38 mutations)
+//   SURF-02: contracts/modules/DegenerusGameLootboxModule.sol  (file-level zero-diff)
+//
+// V37.0 BASELINE: 2654fcc2 (v37.0 closure HEAD; signal MILESTONE_V37_AT_HEAD_2654fcc2).
+//
+// Re-declares walkAndAssert + expectFileLevelZeroDiff inline (not factored
+// to module scope) so the existing v33.0 / v34.0 / v35.0 / v36.0 / v37.0
+// describe blocks at L66-789 stay byte-identical (REG-01 carry-forward
+// discipline). Same fail-loud-on-empty-diff + soft-skip-on-unreachable-
+// baseline shape as the v37.0 describe block (D-IMPL-11 carry).
+// ===========================================================================
+
+describe("v38.0 SURF-01..02 — protected surfaces vs v37.0 baseline 2654fcc2", function () {
+  // ---------------------------------------------------------------------------
+  // expectFileLevelZeroDiffV38(baseline, path) — file-level zero-diff helper
+  // for v38.0 SURF preservation gate. Re-declared inline (not factored to
+  // module scope) per REG-01 carry-forward discipline.
+  //   - Soft-skip on unreachable baseline (D-IMPL-11).
+  //   - HEAD == BASELINE early-return (trivially preserved).
+  //   - Fail-loud on non-empty diff (file expected byte-identical at v38).
+  // ---------------------------------------------------------------------------
+  function expectFileLevelZeroDiffV38(baseline, path) {
+    let baselineReachable = false;
+    try {
+      execSync(`git rev-parse --verify ${baseline}^{commit}`, { stdio: "pipe" });
+      baselineReachable = true;
+    } catch (_) {
+      console.warn(
+        `[v38.0 SURF] baseline commit ${baseline} not reachable — soft-skipping ` +
+        `file-level zero-diff proof on ${path}.`,
+      );
+      return { skipped: true };
+    }
+    expect(baselineReachable).to.equal(true);
+
+    const headSha = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+    if (headSha === baseline) {
+      console.log(`[v38.0 SURF] HEAD == V37_BASELINE — file-level zero-diff trivially preserved.`);
+      return { skipped: false, trivial: true };
+    }
+
+    const diff = execSync(
+      `git diff ${baseline} HEAD -- ${path}`,
+      { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
+    );
+    expect(
+      diff.length,
+      `[v38.0 SURF] expected file-level zero-diff on ${path} vs v37.0 baseline ${baseline}, ` +
+      `but git diff produced ${diff.length} bytes of output. v38.0 SURF preservation gate FAILED.`,
+    ).to.equal(0);
+    return { skipped: false, trivial: false };
+  }
+
+  it("SURF-01a — EntropyLib.sol file-level zero-diff vs v37.0 baseline 2654fcc2 (ENT-04 v36.0 carry; EXC-04 BAF-only NARROWS retained)", function () {
+    const result = expectFileLevelZeroDiffV38(V37_BASELINE, ENTROPY_LIB_PATH_V37);
+    if (result.skipped) this.skip();
+  });
+
+  it("SURF-01b — DegenerusTraitUtils.sol file-level zero-diff vs v37.0 baseline 2654fcc2 (Mint + Jackpot + Degenerette producer paths UNTOUCHED at v38)", function () {
+    const result = expectFileLevelZeroDiffV38(V37_BASELINE, TRAIT_UTILS_PATH);
+    if (result.skipped) this.skip();
+  });
+
+  it("SURF-01c — DegenerusGameJackpotModule.sol file-level zero-diff vs v37.0 baseline 2654fcc2 (gold-solo + BAF jackpot UNCHANGED)", function () {
+    const result = expectFileLevelZeroDiffV38(V37_BASELINE, JACKPOT_MODULE_PATH_V37);
+    if (result.skipped) this.skip();
+  });
+
+  it("SURF-01d — DegenerusGameMintModule.sol file-level zero-diff vs v37.0 baseline 2654fcc2 (no v38 mutations)", function () {
+    const result = expectFileLevelZeroDiffV38(V37_BASELINE, MINT_MODULE_PATH_V38);
+    if (result.skipped) this.skip();
+  });
+
+  it("SURF-02 — DegenerusGameLootboxModule.sol file-level zero-diff vs v37.0 baseline 2654fcc2", function () {
+    const result = expectFileLevelZeroDiffV38(V37_BASELINE, LOOTBOX_MODULE_PATH);
+    if (result.skipped) this.skip();
+  });
+
+  it("v38.0 SURF preservation gate — describe block self-test: anchor discipline carries from v37.0 (fail-loud-on-empty-diff + soft-skip-on-unreachable-baseline) per D-IMPL-11", function () {
+    // Pure structural pin: documents that the v38.0 SURF describe block
+    // carries the same anchor-discipline as the v37.0 / v36.0 / v35.0 /
+    // v34.0 / v33.0 blocks above. The Phase 272 audit-tree files
+    // expected on disk at v38 close are cited here so renames trip the
+    // gate (D-IMPL-11 carry-forward).
+    const phase272AuditFiles = [
+      "audit/FINDINGS-v37.0.md",
+      // audit/FINDINGS-v38.0.md is authored at Wave 3 (Task 3.1+); not
+      // asserted here because Wave 2 runs before Wave 3 in CI ordering.
+    ];
+    for (const f of phase272AuditFiles) {
+      expect(
+        fs.existsSync(f),
+        `[v38.0 SURF] expected audit-tree file ${f} to exist on disk; ` +
+        `anchor-discipline drift detection.`,
       ).to.equal(true);
     }
   });

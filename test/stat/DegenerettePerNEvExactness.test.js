@@ -265,12 +265,13 @@ function jsApplyHeroMultiplier(payout, playerTicket, resultTicket, matches, hero
   return (payout * multiplier) / HERO_SCALE;
 }
 
-// Mirror DegenerusGameDegeneretteModule.sol L944-994:
+// Mirror DegenerusGameDegeneretteModule.sol _fullTicketPayout:
 //   _fullTicketPayout(playerTicket, resultTicket, matches, currency, betAmount,
-//                     roiBps, wwxrpHighRoi, heroEnabled, heroQuadrant) returns uint256
+//                     roiBps, wwxrpHighRoi, heroQuadrant) returns uint256
+// Hero is always-on; heroQuadrant >= 4 normalizes to 0 at pack time.
 function jsFullTicketPayout(
   playerTicket, resultTicket, matches, currency, betAmount, roiBps,
-  wwxrpHighRoi, heroEnabled, heroQuadrant,
+  wwxrpHighRoi, heroQuadrant,
 ) {
   const N = jsCountGoldQuadrants(playerTicket);
   const basePayoutBps = jsGetBasePayoutBps(N, matches);
@@ -289,7 +290,7 @@ function jsFullTicketPayout(
     }
   }
   let payout = (betAmount * basePayoutBps * effectiveRoi) / 1_000_000n;
-  if (heroEnabled && matches >= 2 && matches < 8) {
+  if (matches >= 2 && matches < 8) {
     payout = jsApplyHeroMultiplier(payout, playerTicket, resultTicket, matches, heroQuadrant, N);
   }
   return payout;
@@ -427,7 +428,7 @@ describe("STAT-01 — per-N basePayoutEV exactness at N=1M draws", function () {
         const payout = jsFullTicketPayout(
           playerTicket, resultTicket, matches,
           CURRENCY_BURNIE, betAmount, roiBps, 0n,
-          /* heroEnabled */ false, /* heroQuadrant */ 0,
+          /* heroQuadrant */ 0,
         );
         payoutSum += payout;
       }
@@ -637,7 +638,7 @@ describe("STAT-01 — cross-pick parity sweep over 16,384 player-pick configurat
           const matches = jsCountMatches(ticket, resultTicket);
           const payout = jsFullTicketPayout(
             ticket, resultTicket, matches, CURRENCY_BURNIE,
-            betAmount, roiBps, 0n, false, 0,
+            betAmount, roiBps, 0n, 0,
           );
           payoutSum += payout;
         }
@@ -738,7 +739,7 @@ describe("STAT-07 — ETH payout split rule (3-tier)", function () {
       const matches = jsCountMatches(playerTicket, resultTicket);
       const payout = jsFullTicketPayout(
         playerTicket, resultTicket, matches, CURRENCY_ETH,
-        betAmount, roiBps, 0n, false, 0,
+        betAmount, roiBps, 0n, 0,
       );
       const split = jsDistributePayoutEth(betAmount, payout, futurePool);
       const threeBet = betAmount * 3n;

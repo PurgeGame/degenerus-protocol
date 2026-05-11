@@ -19,8 +19,9 @@
 //     HERO_PENALTY = 9500
 //     HERO_SCALE   = 10_000
 //   Empirical assertion: at 100K hero-active draws per (N, hero quadrant)
-//   tuple, the measured ratio mean(hero-on payout) / mean(hero-off payout)
-//   should be within ±0.01 (1% relative) of 1.000 (i.e. EV-neutrality holds).
+//   tuple, the measured ratio mean(post-hero payout) / mean(pre-hero
+//   analytical baseline) should be within ±0.01 (1% relative) of 1.000
+//   (i.e. EV-neutrality holds under always-on hero).
 //
 // STAT-04 (ETH bonus EV):
 //   ETH bonus EV target: 5.000% per N (Fraction-exact derivation in
@@ -217,9 +218,13 @@ function jsApplyHeroMultiplier(payout, playerTicket, resultTicket, matches, hero
   return (payout * multiplier) / HERO_SCALE;
 }
 
-function jsFullTicketPayout(
-  playerTicket, resultTicket, matches, currency, betAmount, roiBps,
-  wwxrpHighRoi, heroEnabled, heroQuadrant,
+// Pre-hero (base × effectiveRoi) payout — load-bearing for STAT-03 hero
+// EV-neutrality ratio test. Under always-on hero, the on-chain path never
+// returns a pre-hero payout; this helper computes the analytical baseline
+// that the post-hero mean payout should match (within ±1%) to satisfy
+// `P(hero|M, N) × boost + (1 − P) × HERO_PENALTY = HERO_SCALE`.
+function jsBasePayoutPreHero(
+  playerTicket, matches, currency, betAmount, roiBps, wwxrpHighRoi,
 ) {
   const N = jsCountGoldQuadrants(playerTicket);
   const basePayoutBps = jsGetBasePayoutBps(N, matches);
@@ -237,8 +242,22 @@ function jsFullTicketPayout(
       effectiveRoi = roiBps + (baseBonus * factor) / WWXRP_BONUS_FACTOR_SCALE;
     }
   }
-  let payout = (betAmount * basePayoutBps * effectiveRoi) / 1_000_000n;
-  if (heroEnabled && matches >= 2 && matches < 8) {
+  return (betAmount * basePayoutBps * effectiveRoi) / 1_000_000n;
+}
+
+// Mirror DegenerusGameDegeneretteModule.sol _fullTicketPayout:
+//   _fullTicketPayout(playerTicket, resultTicket, matches, currency, betAmount,
+//                     roiBps, wwxrpHighRoi, heroQuadrant) returns uint256
+// Hero is always-on; heroQuadrant >= 4 normalizes to 0 at pack time.
+function jsFullTicketPayout(
+  playerTicket, resultTicket, matches, currency, betAmount, roiBps,
+  wwxrpHighRoi, heroQuadrant,
+) {
+  const N = jsCountGoldQuadrants(playerTicket);
+  let payout = jsBasePayoutPreHero(
+    playerTicket, matches, currency, betAmount, roiBps, wwxrpHighRoi,
+  );
+  if (matches >= 2 && matches < 8) {
     payout = jsApplyHeroMultiplier(payout, playerTicket, resultTicket, matches, heroQuadrant, N);
   }
   return payout;
@@ -261,9 +280,10 @@ function makePlayerTicketWithN(N) {
 //
 // EV-neutrality invariant: P(hero|M, N) × boost_N(M) + (1 − P) × HERO_PENALTY
 //                          = HERO_SCALE  per L329-336.
-// Empirical: mean(hero-on payout) / mean(hero-off payout) within ±0.01 of 1.000
-// (1% relative). The hero gate `matches >= 2 && matches < 8` (L984) means the
-// invariant only fires for M ∈ {2..7}; M ∈ {0, 1, 8} are unaffected.
+// Empirical: mean(post-hero payout) / mean(pre-hero analytical baseline)
+// within ±0.01 of 1.000 (1% relative). The hero gate
+// `matches >= 2 && matches < 8` (L984) means the invariant only fires for
+// M ∈ {2..7}; M ∈ {0, 1, 8} are unaffected.
 // ===========================================================================
 
 describe("STAT-03 — per-N hero-boost EV ±1% at N=100K hero-active draws", function () {
@@ -282,24 +302,28 @@ describe("STAT-03 — per-N hero-boost EV ±1% at N=100K hero-active draws", fun
 
       for (let heroQuadrant = 0; heroQuadrant < 4; heroQuadrant++) {
         let payoutSumOn = 0n;
-        let payoutSumOff = 0n;
+        let payoutSumBase = 0n;
         for (let i = 0; i < SAMPLES_PER_QUADRANT; i++) {
           const rand = rng();
           const resultTicket = jsPackedTraitsDegenerette(rand);
           const matches = jsCountMatches(playerTicket, resultTicket);
-          payoutSumOff += jsFullTicketPayout(
-            playerTicket, resultTicket, matches, CURRENCY_BURNIE,
-            betAmount, roiBps, 0n, false, 0,
+          // Hero EV-neutrality assertion: under always-on hero the contract
+          // always returns the post-hero payout; the analytical baseline
+          // (pre-hero) is what the EV-neutrality invariant predicts the
+          // post-hero mean should match within ±1%.
+          payoutSumBase += jsBasePayoutPreHero(
+            playerTicket, matches, CURRENCY_BURNIE,
+            betAmount, roiBps, 0n,
           );
           payoutSumOn += jsFullTicketPayout(
             playerTicket, resultTicket, matches, CURRENCY_BURNIE,
-            betAmount, roiBps, 0n, true, heroQuadrant,
+            betAmount, roiBps, 0n, heroQuadrant,
           );
         }
         const meanOn = Number(payoutSumOn) / SAMPLES_PER_QUADRANT;
-        const meanOff = Number(payoutSumOff) / SAMPLES_PER_QUADRANT;
-        const ratio = meanOn / meanOff;
-        console.log(`[STAT-03 N=${N} hero=${heroQuadrant}] mean(hero-on)=${meanOn.toFixed(4)} mean(hero-off)=${meanOff.toFixed(4)} ratio=${ratio.toFixed(6)} (target 1.000 ± 0.01)`);
+        const meanBase = Number(payoutSumBase) / SAMPLES_PER_QUADRANT;
+        const ratio = meanOn / meanBase;
+        console.log(`[STAT-03 N=${N} hero=${heroQuadrant}] mean(hero-on)=${meanOn.toFixed(4)} mean(pre-hero analytical baseline)=${meanBase.toFixed(4)} ratio=${ratio.toFixed(6)} (target 1.000 ± 0.01)`);
 
         expect(
           Math.abs(ratio - 1.0) <= 0.01,
@@ -407,11 +431,11 @@ describe("STAT-04 — per-N WWXRP/ETH-bonus factor EV ±1% at N=100K WWXRP-activ
         histogram[matches]++;
         payoutSumWith += jsFullTicketPayout(
           playerTicket, resultTicket, matches, CURRENCY_ETH,
-          betAmount, roiBps, 0n, false, 0,
+          betAmount, roiBps, 0n, 0,
         );
         payoutSumWithout += jsFullTicketPayout(
           playerTicket, resultTicket, matches, CURRENCY_BURNIE,
-          betAmount, roiBps, 0n, false, 0,
+          betAmount, roiBps, 0n, 0,
         );
       }
 
