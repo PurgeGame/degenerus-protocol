@@ -18,12 +18,12 @@
 - ✅ **v35.0 BURNIE Near-Future Per-Pull Level Resample** — Phases 263-265 (shipped 2026-05-09; closure signal `MILESTONE_V35_AT_HEAD_5db8682bd7b811437f0c1cf47e832619d1478ac6`)
 - ✅ **v36.0 Lootbox-Path Entropy Refactor** — Phase 266 (shipped 2026-05-10; closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`) — see [milestones/v36.0-ROADMAP.md](milestones/v36.0-ROADMAP.md)
 - ✅ **v37.0 Degenerette Recalibration + Maintenance Bundle** — Phases 267-271 (shipped 2026-05-11; closure signal `MILESTONE_V37_AT_HEAD_2654fcc2`) — see [milestones/v37.0-ROADMAP.md](milestones/v37.0-ROADMAP.md)
-- 🚧 **v38.0 Always-Hero Simplification + Maximal Dead-Code Cleanup** — Phase 272 (single-phase patch shape per v36.0 Phase 266 precedent; baseline `MILESTONE_V37_AT_HEAD_2654fcc2`)
+- ✅ **v38.0 Always-Hero Simplification + Maximal Dead-Code Cleanup** — Phase 272 (shipped 2026-05-11; closure signal `MILESTONE_V38_AT_HEAD_<sha>`)
 
 
 ## Phases
 
-- [ ] **Phase 272: Always-Hero Simplification + Maximal Dead-Code Cleanup (Terminal)** — Drop Degenerette hero opt-out semantics (`_packFullTicketBet` normalizes `heroQuadrant ≥ 4` → `0`; `_resolveFullTicketBet` extracts quadrant unconditionally; `_fullTicketPayout` drops `heroEnabled` parameter; always-on hero for `M ∈ {2..7}`). Bundle with maximal dead-code cleanup sweep across `contracts/` via `/gas-audit` orchestrator (unused constants + unreachable branches + stale comments + redundant guards; each removal traces design intent per `feedback_design_intent_before_deletion.md`). Land v37+ carry bundle: LBX-02 + GASPIN-02 + GASPIN-03 + SURF-03 re-baseline + STAT-03 v35.0 carry. Single `audit/FINDINGS-v38.0.md` terminal deliverable; closure signal `MILESTONE_V38_AT_HEAD_<sha>` emitted in §9c. Multi-wave: Wave 1 contract commits (always-hero + cleanup, single batched USER-APPROVED); Wave 2 test commits (re-validation + carry-bundle, single batched USER-APPROVED); Wave 3+ audit deliverable + ROADMAP/STATE/MILESTONES flips (AGENT-COMMITTED atomic-per-task). 3-skill PARALLEL adversarial pass per D-271-ADVERSARIAL-01 carry (`/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry).
+- [x] **Phase 272: Always-Hero Simplification + Maximal Dead-Code Cleanup (Terminal)** — Drop Degenerette hero opt-out semantics (`_packFullTicketBet` normalizes `heroQuadrant ≥ 4` → `0`; `_resolveFullTicketBet` extracts quadrant unconditionally; `_fullTicketPayout` drops `heroEnabled` parameter; always-on hero for `M ∈ {2..7}`). Bundle with maximal dead-code cleanup sweep across `contracts/` via `/gas-audit` orchestrator (unused constants + unreachable branches + stale comments + redundant guards; each removal traces design intent per `feedback_design_intent_before_deletion.md`). Land v37+ carry bundle: LBX-02 + GASPIN-02 + GASPIN-03 + SURF-03 re-baseline + STAT-03 v35.0 carry. Single `audit/FINDINGS-v38.0.md` terminal deliverable; closure signal `MILESTONE_V38_AT_HEAD_<sha>` emitted in §9c. Multi-wave: Wave 1 contract commits (always-hero + cleanup, single batched USER-APPROVED); Wave 2 test commits (re-validation + carry-bundle, single batched USER-APPROVED); Wave 3+ audit deliverable + ROADMAP/STATE/MILESTONES flips (AGENT-COMMITTED atomic-per-task). 3-skill PARALLEL adversarial pass per D-271-ADVERSARIAL-01 carry (`/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry).
 
 ## Phase Details
 
@@ -34,7 +34,7 @@
 **Requirements:** HERO-01, HERO-02, HERO-03, HERO-04, HERO-05, CLEAN-01, CLEAN-02, CLEAN-03, CLEAN-04, CLEAN-05, CLEAN-06, STAT-01, STAT-02, SURF-01, SURF-02, SURF-03 (v37+ carry), LBX-02 (v37+ carry), GASPIN-02 (v37+ carry), GASPIN-03 (v37+ carry), STAT-03-v35-carry (v37+ carry), AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05, AUDIT-06, REG-01, REG-02, REG-03, REG-04
 **Success Criteria** (what must be TRUE):
   1. `contracts/modules/DegenerusGameDegeneretteModule.sol` `_packFullTicketBet` normalizes `heroQuadrant ≥ 4` to `0`; `_resolveFullTicketBet` extracts heroQuadrant without `heroEnabled` bit check; `_fullTicketPayout` drops `heroEnabled` parameter; `_applyHeroMultiplier` always applies for `M ∈ {2..7}` (HERO-01..04).
-  2. Public API `placeDegeneretteBet(..., uint8 heroQuadrant)` signature UNCHANGED — `0xFF` and any `≥ 4` input still accepted but normalized to 0 internally. Backward-compat at the ABI level (HERO-05).
+  2. Public API `placeDegeneretteBet(..., uint8 heroQuadrant)` signature byte-identical (selector + parameter types unchanged) — semantics shift to defensive boundary validation per D-272-INPUT-VALIDATION-01 (Wave 1.5): `0xFF` and any `≥ 4` input revert with `InvalidBet` at entry instead of being silently normalized. Frontend MUST send valid 0..3 (default 0 if user does not pick). (HERO-05 revised by Wave 1.5 commit `4760459f`.)
   3. Storage layout byte-identical at v38.0 phase-close HEAD vs v37.0 baseline `2654fcc2` (storage-slot grep proof); zero new public/external mutation entry points; zero new admin functions; zero new modifiers (HERO-05 + AUDIT-04).
   4. `/gas-audit` orchestrator runs across all `contracts/` files; produces candidate-removal list with per-item design-intent trace; each accepted removal preserves the safety property via upstream enforcement (CLEAN-01..06).
   5. Single batched USER-APPROVED contract commit lands per `feedback_batch_contract_approval.md` + `feedback_no_contract_commits.md` + `feedback_never_preapprove_contracts.md` (CLEAN-06).
@@ -48,7 +48,7 @@
 **Plans:** 1 plan (single-phase multi-wave, mirrors v36.0 Phase 266)
 
 Plans:
-- [ ] 272-01-PLAN.md — Always-hero default 0 + maximal dead-code cleanup + v37+ carry bundle + delta audit FINDINGS-v38.0.md terminal (multi-wave: Wave 1 contracts USER-APPROVED + Wave 2 tests USER-APPROVED + Wave 3+ audit deliverable AGENT-COMMITTED atomic-per-task)
+- [x] 272-01-PLAN.md — Always-hero default 0 + maximal dead-code cleanup + v37+ carry bundle + delta audit FINDINGS-v38.0.md terminal (multi-wave: Wave 1 contracts USER-APPROVED + Wave 1.5 input-validation revision USER-APPROVED + Wave 2 tests USER-APPROVED + Wave 3+ audit deliverable AGENT-COMMITTED atomic-per-task) — SHIPPED 2026-05-11
 
 
 <details>
