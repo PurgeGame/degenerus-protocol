@@ -10,10 +10,10 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-**Active milestone:** _between-milestones_ — v37.0 closed at HEAD `MILESTONE_V37_AT_HEAD_<sha>` (resolved at Task 14 atomic-update); next milestone scope TBD
-**Last shipped:** v37.0 — Degenerette Recalibration + Maintenance Bundle (2026-05-11; closure signal `MILESTONE_V37_AT_HEAD_<sha>`)
+**Active milestone:** _between-milestones_ — v37.0 closed at HEAD `MILESTONE_V37_AT_HEAD_2654fcc2` (resolved at Task 14 atomic-update); next milestone scope TBD
+**Last shipped:** v37.0 — Degenerette Recalibration + Maintenance Bundle (2026-05-11; closure signal `MILESTONE_V37_AT_HEAD_2654fcc2`)
 **Prior shipped:** v36.0 — Lootbox-Path Entropy Refactor (2026-05-10; closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`)
-**Contract HEAD anchor (v37.0 closure):** `<sha>` (resolved at Task 14; supersedes v36.0 audit baseline `1c0f09132d7439af9881c56fe197f81757f8164a` as the contract HEAD anchor)
+**Contract HEAD anchor (v37.0 closure):** `2654fcc2` (resolved at Task 14; supersedes v36.0 audit baseline `1c0f09132d7439af9881c56fe197f81757f8164a` as the contract HEAD anchor)
 **Audit deliverables (cumulative):** `audit/FINDINGS-v25.0.md` + `FINDINGS-v27.0.md` + `FINDINGS-v28.0.md` + `FINDINGS-v29.0.md` + `FINDINGS-v30.0.md` + `FINDINGS-v31.0.md` + `FINDINGS-v32.0.md` + `FINDINGS-v33.0.md` + `FINDINGS-v34.0.md` + `FINDINGS-v35.0.md` + `FINDINGS-v36.0.md` (FINAL READ-only at HEAD `1c0f0913`, 9 sections, ~700 lines, 6-surface adversarial table all SAFE_*, zero F-36-NN finding blocks); `KNOWN-ISSUES.md` modified by 1 entry rephrase at v36.0 close (EntropyLib XOR-shift entry NARROWS to BAF-jackpot-only scope per AUDIT-05; REPHRASE under D-09 Design Decisions, not new promotion); EXC-01..04 RE_VERIFIED at HEAD (EXC-01..03 NEGATIVE-scope at v36; EXC-04 NARROWS to BAF-jackpot-only)
 **Awaiting user commit:** `test/edge/LastPurchaseDayRace.test.js` + `test/edge/BackfillIdempotency.test.js` (TST-FILE-01 + TST-FILE-02 from v32.0 Phase 251; remain untracked permanently per D-253-FIND04-04)
 
@@ -48,7 +48,7 @@ _Resolved or carried at v36.0 / v35.0 close (no longer outstanding):_
 - **Lootbox dead BURNIE-conversion branch cleanup** in `contracts/modules/DegenerusGameLootboxModule.sol`: remove unreachable `if (targetLevel < currentLevel)` branch in `_resolveLootboxRoll` (~L1568-1581) — caller `_resolveLootboxCommon` already clamps `targetLevel >= currentLevel` at L882-884. ~50g/open savings + bytecode shrink + satisfies `feedback_no_dead_guards.md`.
 - **SURF-05 gas-pin re-pinning fix**: investigate root cause of ~120K gas-pin drift in Phase 261/264 SURF-05 tests under `npm run test:stat` ordering (standalone runs at pinned values pass) and re-pin or fix ordering dependency so combined-suite runs stable.
 - **Post-v32.0 deferred-commit adversarial audit pickup**: adversarial coverage of `002bde55` (presale auto-deactivate) and `2713ce61` (setDecimatorAutoRebuy removal) — long-deferred carry-forward from v34.0 close. Surface as §3.A delta rows in FINDINGS-v37.0.md.
-- **Delta audit + findings consolidation (terminal)**: single `audit/FINDINGS-v37.0.md` deliverable with 5-bucket severity rubric (D-08 carry); adversarial pass `/contract-auditor` + `/zero-day-hunter` SEQUENTIAL after full §4 draft (D-NN-ADVERSARIAL-02 carry); LEAN regression REG-01 (v36.0 closure non-widening) + REG-02 (v34.0 closure non-widening, JackpotBucketLib byte-identity) + REG-04 prior-finding spot-checks across v25..v36; KI walkthrough EXC-01..04 RE_VERIFIED; closure signal `MILESTONE_V37_AT_HEAD_<sha>` + ROADMAP/STATE/MILESTONES flips.
+- **Delta audit + findings consolidation (terminal)**: single `audit/FINDINGS-v37.0.md` deliverable with 5-bucket severity rubric (D-08 carry); adversarial pass `/contract-auditor` + `/zero-day-hunter` SEQUENTIAL after full §4 draft (D-NN-ADVERSARIAL-02 carry); LEAN regression REG-01 (v36.0 closure non-widening) + REG-02 (v34.0 closure non-widening, JackpotBucketLib byte-identity) + REG-04 prior-finding spot-checks across v25..v36; KI walkthrough EXC-01..04 RE_VERIFIED; closure signal `MILESTONE_V37_AT_HEAD_2654fcc2` + ROADMAP/STATE/MILESTONES flips.
 
 **Key context / constraints:**
 - Pre-launch posture preserved — no live volume, no migration concerns

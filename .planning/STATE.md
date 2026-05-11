@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
 milestone: between-milestones
-milestone_name: v37.0 shipped — Degenerette Recalibration + Maintenance Bundle SHIPPED at MILESTONE_V37_AT_HEAD_2654fcc2
-status: between-milestones
-last_updated: "2026-05-11T08:55:00.000Z"
-last_activity: 2026-05-11 -- v37.0 milestone SHIPPED; closure signal MILESTONE_V37_AT_HEAD_2654fcc2 emitted
+milestone_name: milestone
+status: v37.0 milestone SHIPPED
+last_updated: "2026-05-11T09:34:28.636Z"
+last_activity: 2026-05-11
 progress:
   total_phases: 5
   completed_phases: 5
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.
 
 ## Current Position
 
-Phase: NONE (between-milestones)
-Plan: NONE
+Phase: 271
+Plan: Not started
 Status: v37.0 milestone SHIPPED
-Last activity: 2026-05-11 -- v37.0 milestone closure attested; FINDINGS-v37.0.md FINAL READ-only at `MILESTONE_V37_AT_HEAD_2654fcc2`
+Last activity: 2026-05-11
 Resume file: .planning/MILESTONES.md (v37.0 archive entry) + .planning/PROJECT.md (Last shipped v37.0)
 
 ## Last Shipped Milestone
