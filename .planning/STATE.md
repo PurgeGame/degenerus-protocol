@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v37.0
 milestone_name: Degenerette Recalibration + Maintenance Bundle
 status: executing
-last_updated: "2026-05-11T05:06:00.362Z"
-last_activity: 2026-05-11 -- Phase 269 planning complete
+last_updated: "2026-05-11T08:00:00.000Z"
+last_activity: 2026-05-11 -- Phase 269 SHIPPED (partial scope — LBX-01 only; GASPIN-02/03 + LBX-02/03 + SURF-03 deferred to v37+ maintenance per RCA finding)
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 3
-  completed_plans: 2
-  percent: 40
+  completed_plans: 3
+  percent: 60
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.0 open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 269 CONTEXT.md authored — Lootbox Dead-Branch Cleanup + SURF-05 Gas-Pin Re-Pinning (LBX-01..03 + GASPIN-01..03; 6 requirements; pure-deletion locked); ready for `/gsd-plan-phase 269`
+**Current focus:** Phase 269 SHIPPED 2026-05-11 (LBX-01 contract commit `8fd5c2e1` + GASPIN-01 RCA inline at `269-01-PLAN.md`; GASPIN-02/03 + LBX-02/03 + SURF-03 DEFERRED to v37+ maintenance per RCA finding that the drift mechanism is hardhat-internal); ready for `/gsd-discuss-phase 270` (Post-v32.0 Deferred-Commit Adversarial Sub-Audit)
 
 ## Current Position
 
-Phase: 269 (lootbox-dead-branch-cleanup-surf-05-gas-pin-re-pinning) — CONTEXT GATHERED 2026-05-10
-Plan: TBD (planner output pending; D-269-PLAN-01 locks single-multi-task PLAN with ~5 atomic tasks: GASPIN RCA → batched USER-APPROVED contract commit (LBX-01) → batched USER-APPROVED test commit (LBX-02 + GASPIN fix + SURF-03 re-baseline + optional package.json) → phase-close SUMMARY)
-Status: Ready to execute
-Last activity: 2026-05-11 -- Phase 269 planning complete
-Resume file: .planning/phases/269-lootbox-dead-branch-cleanup-surf-05-gas-pin-re-pinning/269-CONTEXT.md
+Phase: 270 (post-v32.0-deferred-commit-adversarial-sub-audit) — NEXT
+Plan: TBD
+Status: Ready to discuss
+Last activity: 2026-05-11 -- Phase 269 SHIPPED (partial scope by user decision after GASPIN-02 RCA showed Hardhat-internal mechanism not eliminable within plan's locked options)
+Resume file: .planning/ROADMAP.md (Phase 270 entry)
 
 ## Last Shipped Milestone
 
@@ -96,6 +96,7 @@ Resume file: .planning/phases/269-lootbox-dead-branch-cleanup-surf-05-gas-pin-re
 - **Closure signal target:** `MILESTONE_V37_AT_HEAD_<sha>` emitted via `audit/FINDINGS-v37.0.md` §9c
 - **Phase 267 SHIPPED 2026-05-10:** Degenerette Producer + 5-Table Payout Rewrite. Single batched USER-APPROVED contract commit `e1136071` (`contracts/DegenerusTraitUtils.sol` additive +45 LOC + `contracts/modules/DegenerusGameDegeneretteModule.sol` rewrite +231/-196 LOC); 18 of 18 DGN-01..15 + PAY-SPLIT-01..03 requirements PASS. v37.0 source-tree HEAD = `e1136071`.
 - **Phase 268 SHIPPED 2026-05-10:** Degenerette Statistical Validation + Cross-Surface Preservation. Single batched USER-APPROVED test commit `4b277aaf` (3 NEW `test/stat/` files + 1 EXTENDED `test/stat/SurfaceRegression.test.js` v37.0 SURF-01..04 describe + 1 NEW `test/gas/Phase268GasRegression.test.js` + package.json wiring; +2,277/-1 LOC across 6 files); 13 of 13 STAT-01..07 + SURF-01..06 requirements PASS; ZERO source-tree mutations (`git diff e1136071 HEAD -- contracts/` empty at phase close).
+- **Phase 269 SHIPPED 2026-05-11 (deliberate partial scope):** Lootbox Dead-Branch Cleanup. Single USER-APPROVED contract commit `8fd5c2e1` (`feat(269): delete unreachable BURNIE-conversion branch in _resolveLootboxRoll [LBX-01]`; `contracts/modules/DegenerusGameLootboxModule.sol` −14/+1 LOC; pure LBX-01 deletion + user-approved cascade param cleanup dropping unused `targetLevel`/`currentLevel` from signature + 2 callsites + 2 NatSpec @param lines; bytecode shrink 177 bytes 18,330→18,153). Plus AGENT-COMMITTED `009cbde3` (`docs(269): GASPIN-01 root-cause inline — fixture-loader caching`; `269-01-PLAN.md` +80 LOC RCA section). **2 of 6 Phase 269 requirements PASS** (LBX-01 + GASPIN-01); 4 DEFERRED to v37+ maintenance (LBX-02 empirical pin — fixture-coverage gap matches Phase 266 GAS-01 precedent; LBX-03 — Phase 271 author computes anchors at audit-trail-authoring time; GASPIN-02/03 — D-269-STAB-01 option (b) `hardhat_reset`+`loadFixture` attempt FAILED structurally with side-effect regressions, options (a)/(c) violate GASPIN-03 or plan scope; SURF-03 re-baseline — Phase 270/271 plan can include one-line edit if needed). Audit cleanliness was the shipped value — per-open runtime savings ~0.005% (sub-0.01%) of typical 600K-1M-gas open. v36.0 acceptance "128k is fine approved" (MILESTONES.md L19) carries forward verbatim. STAT-03 pre-existing failure (`test/stat/PerPullEmptyBucketSkip.test.js` skip rate 88% > 10% threshold; introduced at Phase 264 commit `7dcfeb0c` and unchanged since; failing at every HEAD through Phase 265-268) flagged for Phase 270 or v37+ maintenance pickup.
 - See `.planning/ROADMAP.md` for the 5-phase entries + `.planning/notes/2026-05-10-degenerette-payout-recalibration.md` for primary workstream seed + `.planning/notes/2026-05-10-resolveLootboxRoll-dead-burnie-conversion-branch.md` for lootbox cleanup seed.
 
 ## Roadmap Overview
