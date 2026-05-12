@@ -22,7 +22,9 @@
 
 ## Phases
 
-(Next milestone phases will be listed here. v38.0 phases are archived in the `<details>` block below.)
+- [ ] **Phase 273: BAF Credit Routing Fix (Maintenance)** — Three-point patch to `contracts/BurnieCoinflip.sol` plus `test/edge/BafCreditRouting.test.js` (11 tests). Fixes day-of-resolution orphan (`:525` `>` → `>=`), broken RngLocked guard predicate at x10 boundaries (`:585-598` + `:1041` use storage `level` instead of `_activeTicketLevel()=level+1`, which never matched at x10 after the level pre-bump in `_finalizeRngRequest`), and adds bafLevel override (`:594-598`) routing post-BAF jackpot-phase day-D credit to bracket N+10 instead of orphaning it in the just-resolved bracket. Minimal scaffold per user disposition — no milestone open, no FINDINGS doc, no closure signal. Folds into the next full milestone's delta audit naturally. Baseline `MILESTONE_V38_AT_HEAD_06623edb`. See [phases/273-baf-credit-routing-fix/273-CONTEXT.md](phases/273-baf-credit-routing-fix/273-CONTEXT.md).
+
+(Additional next-milestone phases will be listed here. v38.0 phases are archived in the `<details>` block below.)
 
 <details>
 <summary>✅ v38.0 Always-Hero Simplification + Maximal Dead-Code Cleanup (Phase 272) — SHIPPED 2026-05-11</summary>

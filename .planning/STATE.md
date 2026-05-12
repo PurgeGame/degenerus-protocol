@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v38.0
 milestone_name: milestone
-status: Awaiting next milestone
-last_updated: "2026-05-11T15:05:49.273Z"
-last_activity: 2026-05-11 — Milestone v38.0 completed and archived
+status: Phase 273 maintenance (between milestones)
+last_updated: "2026-05-12T00:00:00.000Z"
+last_activity: 2026-05-12 — Phase 273 BAF credit routing fix in progress (tests passing; awaiting USER batched-commit approval)
 progress:
   total_phases: 1
   completed_phases: 1
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.0 open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** _between-milestones_ — v38.0 SHIPPED 2026-05-11 at `MILESTONE_V38_AT_HEAD_06623edb`; next milestone scope TBD
+**Current focus:** Phase 273 BAF credit routing fix (maintenance between milestones). Three-point patch to `contracts/BurnieCoinflip.sol` + 11-test verification suite at `test/edge/BafCreditRouting.test.js`. Tests passing; awaiting USER batched-commit approval. Baseline `MILESTONE_V38_AT_HEAD_06623edb`; folds into next full milestone's delta audit naturally.
 
 ## Current Position
 
-Phase: Milestone v38.0 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-05-11 — Milestone v38.0 completed and archived
+Phase: 273 (BAF Credit Routing Fix — maintenance)
+Plan: 273-01
+Status: Tests passing; awaiting USER batched-commit approval
+Last activity: 2026-05-12 — Phase 273 scaffolded; contract diff + test file applied to working tree
 
 ## Last Shipped Milestone
 
