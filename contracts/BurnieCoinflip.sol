@@ -522,7 +522,7 @@ contract BurnieCoinflip {
                         bafResolvedDay = jackpots.getLastBafResolvedDay();
                         bafResolvedDayCached = true;
                     }
-                    if (cursor > bafResolvedDay) {
+                    if (cursor >= bafResolvedDay) {
                         winningBafCredit += payout;
                     }
                     if (rebuyActive) {
@@ -587,13 +587,16 @@ contract BurnieCoinflip {
                 !over &&
                 lastPurchaseDay_ &&
                 rngLocked_ &&
-                (purchaseLevel_ % 10 == 0)
+                cachedLevel != 0 &&
+                cachedLevel % 10 == 0
             ) {
                 revert RngLocked();
             }
             uint24 bafLevel = cachedLevel;
             if (!inJackpotPhase && !over) {
                 bafLevel = purchaseLevel_;
+            } else if (inJackpotPhase && cachedLevel != 0 && cachedLevel % 10 == 0) {
+                bafLevel = cachedLevel + 1;
             }
             uint24 bafLvl = _bafBracketLevel(bafLevel);
             jackpots.recordBafFlip(player, bafLvl, winningBafCredit);
@@ -1032,13 +1035,14 @@ contract BurnieCoinflip {
         returns (bool locked)
     {
         (
-            uint24 purchaseLevel_,
+            ,
             bool inJackpotPhase,
             bool lastPurchaseDay_,
             bool rngLocked_,
 
         ) = degenerusGame.purchaseInfo();
-        locked = (!inJackpotPhase) && !degenerusGame.gameOver() && lastPurchaseDay_ && rngLocked_ && (purchaseLevel_ % 10 == 0);
+        uint24 lvl = degenerusGame.level();
+        locked = (!inJackpotPhase) && !degenerusGame.gameOver() && lastPurchaseDay_ && rngLocked_ && lvl != 0 && (lvl % 10 == 0);
     }
 
     /// @dev Calculate recycling bonus for daily flip deposits (0.75% bonus, capped at 1000 BURNIE).
