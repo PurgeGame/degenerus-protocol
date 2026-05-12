@@ -465,24 +465,130 @@ describe("BafCreditRouting", function () {
   });
 
   // =========================================================================
-  // Documented but not implemented:
-  //   - BAF-ROUTE-06 (post-jackpot era-(N+1) purchase claim → bracket N+10 via
-  //     purchaseLevel_=N+1 path) — same logical assertion as 05a, just exercised
-  //     via the !inJackpotPhase branch of bafLevel selection. The 05 cases above
-  //     already prove the override leg; the 06 case is symmetric and would only
-  //     differ in the toggle of jackpotPhaseFlag. Add when you want belt+braces.
-  //
-  //   - BAF-ROUTE-07 (era-N (N%10!=0) jackpot phase, override does NOT fire,
-  //     credit lands in the still-open enclosing bracket) — would require setting
-  //     jackpotPhaseFlag=true with level=7 and asserting bafLvl = 10. Same shape
-  //     as 05b but with level=7 instead of 15.
-  //
-  //   - BAF-ROUTE-08 (markBafSkipped routing equivalence) — markBafSkipped is
-  //     onlyGame, so this requires impersonation of the game address to drive the
-  //     skip directly. The functional assertion is identical to BAF-ROUTE-05a
-  //     (lastBafResolvedDay bumps + same cursor>= behavior), so a routing-only
-  //     test gives no new coverage beyond confirming the markBafSkipped event
-  //     fires. Recommend adding only if you want to lock in the leaderboard-
-  //     preservation invariant (bafTotals[10] left intact post-skip).
+  // BAF-ROUTE-06 — Post-jackpot era-(N+1) purchase claim routes via purchaseLevel_
   // =========================================================================
+  describe("BAF-ROUTE-06 post-jackpot purchase phase routing", function () {
+    it("[06] claim at level=10 + !jackpotPhase + !lastPurchaseDay routes via purchaseLevel_=11 → bracket 20", async function () {
+      const fixture = await loadFixture(deployFullProtocol);
+      const { game, coinflip, jackpots, alice } = fixture;
+
+      await setupAliceWinningFlip(fixture);
+      const gameAddr = await game.getAddress();
+
+      // Simulate era-11 purchase phase after the era-10 BAF resolved + jackpot phase closed:
+      // level storage still = 10 (it bumps next at era-11's RNG request);
+      // jackpotPhaseFlag = false; lastPurchaseDay = false. purchaseLevel_ = level + 1 = 11.
+      // bafLevel = purchaseLevel_ = 11 → _bafBracketLevel(11) = 20.
+      // This proves the !inJackpotPhase branch routes the same day-D credit to bracket 20
+      // as the jackpot-phase override does in BAF-ROUTE-05a — the two paths converge.
+      await setLevel(gameAddr, 10);
+      await setSlot0Bool(gameAddr, 17, false); // jackpotPhaseFlag
+      await setSlot0Bool(gameAddr, 19, false); // lastPurchaseDay
+      await setSlot0Bool(gameAddr, 21, false); // rngLockedFlag
+
+      const tx = await coinflip
+        .connect(alice)
+        .claimCoinflips(alice.address, eth(10000));
+      const events = await getEvents(tx, jackpots, "BafFlipRecorded");
+      const aliceEvents = events.filter(
+        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+      );
+      expect(aliceEvents.length).to.be.gte(1);
+      expect(aliceEvents[0].args.lvl).to.equal(20n);
+    });
+  });
+
+  // =========================================================================
+  // BAF-ROUTE-07 — Mid-bracket jackpot phase, override does NOT fire
+  // =========================================================================
+  describe("BAF-ROUTE-07 non-x10 jackpot-phase routing", function () {
+    it("[07] claim at level=7 + jackpotPhase credits bracket 10 (no override fires)", async function () {
+      const fixture = await loadFixture(deployFullProtocol);
+      const { game, coinflip, jackpots, alice } = fixture;
+
+      await setupAliceWinningFlip(fixture);
+      const gameAddr = await game.getAddress();
+
+      // Era-7 jackpot phase (no BAF resolves at era 7 — only x10 eras have BAF).
+      // cachedLevel = 7, cachedLevel % 10 != 0 → override does NOT fire.
+      // bafLevel = cachedLevel = 7 → _bafBracketLevel(7) = 10 (the still-open bracket).
+      await setLevel(gameAddr, 7);
+      await setSlot0Bool(gameAddr, 17, true);
+      await setSlot0Bool(gameAddr, 19, false);
+      await setSlot0Bool(gameAddr, 21, false);
+
+      const tx = await coinflip
+        .connect(alice)
+        .claimCoinflips(alice.address, eth(10000));
+      const events = await getEvents(tx, jackpots, "BafFlipRecorded");
+      const aliceEvents = events.filter(
+        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+      );
+      expect(aliceEvents.length).to.be.gte(1);
+      expect(aliceEvents[0].args.lvl).to.equal(10n);
+    });
+  });
+
+  // =========================================================================
+  // BAF-ROUTE-08 — markBafSkipped path routes identically to runBafJackpot
+  // =========================================================================
+  describe("BAF-ROUTE-08 markBafSkipped routing equivalence", function () {
+    it("[08] markBafSkipped bumps lastBafResolvedDay; day-D claim routes to bracket 20 like the runBafJackpot path", async function () {
+      const fixture = await loadFixture(deployFullProtocol);
+      const { game, coinflip, jackpots, alice } = fixture;
+
+      const winningDay = await setupAliceWinningFlip(fixture);
+      const gameAddr = await game.getAddress();
+      const jackpotsAddr = await jackpots.getAddress();
+
+      // Impersonate the game contract to call markBafSkipped (onlyGame modifier).
+      await hre.ethers.provider.send("hardhat_setBalance", [
+        gameAddr,
+        "0x1000000000000000000",
+      ]);
+      await hre.ethers.provider.send("hardhat_impersonateAccount", [gameAddr]);
+      const gameSigner = await hre.ethers.getSigner(gameAddr);
+
+      const dayBefore = await jackpots.getLastBafResolvedDay();
+      const skipTx = await jackpots.connect(gameSigner).markBafSkipped(10);
+      const skipReceipt = await skipTx.wait();
+
+      await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [
+        gameAddr,
+      ]);
+
+      // BafSkipped event should have fired for bracket 10.
+      const skipEvents = await getEvents(skipTx, jackpots, "BafSkipped");
+      expect(skipEvents.length).to.equal(1);
+      expect(skipEvents[0].args.lvl).to.equal(10n);
+
+      // lastBafResolvedDay must have advanced to "today" (currentDayView).
+      const dayAfter = await jackpots.getLastBafResolvedDay();
+      expect(dayAfter).to.be.gte(dayBefore);
+      const currentDay = await game.currentDayView();
+      expect(dayAfter).to.equal(currentDay);
+
+      // Now drive a routing scenario equivalent to BAF-ROUTE-05a: day-D claim
+      // during era-10 jackpot phase post-skip. Set lastBafResolvedDay back to
+      // winningDay (the day of alice's win) so cursor == lastBafResolvedDay
+      // passes the >= filter.
+      await setLastBafResolvedDay(jackpotsAddr, Number(winningDay));
+      await setLevel(gameAddr, 10);
+      await setSlot0Bool(gameAddr, 17, true); // jackpotPhaseFlag = true (post-skip phase)
+      await setSlot0Bool(gameAddr, 19, false);
+      await setSlot0Bool(gameAddr, 21, false);
+
+      const tx = await coinflip
+        .connect(alice)
+        .claimCoinflips(alice.address, eth(10000));
+      const events = await getEvents(tx, jackpots, "BafFlipRecorded");
+      const aliceEvents = events.filter(
+        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+      );
+      expect(aliceEvents.length).to.be.gte(1);
+      // Override fires (level=10, jackpot phase) → credit lands in bracket 20
+      // — identical routing to the runBafJackpot path in BAF-ROUTE-05a.
+      expect(aliceEvents[0].args.lvl).to.equal(20n);
+    });
+  });
 });
