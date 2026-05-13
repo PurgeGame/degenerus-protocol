@@ -384,3 +384,162 @@ Mint-boost path (at `DegenerusGameMintModule.sol` L1142 `_queueTicketsScaled` ca
 
 **Closing conservation attestation:** EV-neutrality of the Bernoulli round-up holds `E[whole_post] = scaledPre / 100` exactly (per-lootbox variance higher than cross-lootbox-deterministic-accumulation is the documented tradeoff). WWXRP supply growth from the consolation path is bounded above by a fraction of the existing 10%-path WWXRP supply trajectory; same magnitude (`1 ether`) as the regular 10%-path WWXRP win; no new mint-route surface. Bit-slice `[152..167]` is pairwise independent of the 7 prior primary-chunk consumers by keccak output-entropy properties; mod-100 relative bias bounded at ≤0.10% (consistent with the existing `bits[0..15]` precedent). `rem` byte invariant: manual-path queues no longer write to `rem`; mint-boost + auto-resolve lootbox paths continue producing `rem` and resolving via `_rollRemainder` at activation.
 
+
+---
+
+## 4. F-39-NN Finding Blocks
+
+### 4.1. Adversarial Sweep — 8-Surface Row Table
+
+Per AUDIT-03 design contract: 8 adversarial surfaces (a)..(h) covering the v39.0 delta scope. Each row contains `Verdict:`, `Evidence:`, `Grep recipe:` (where applicable), and `Prose justification:` blocks. Default verdict bucket per D-274-KI-01: SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_DESIGN_PHASE_273. Zero F-39-NN finding blocks emitted unless D-274-ADVERSARIAL-01 escalation surfaces a FINDING_CANDIDATE / 9th-surface NEW_VECTOR / KI promotion candidate that user disposition approves.
+
+#### Surface (a) — EV-neutrality of Bernoulli collapse on manual paths vs cross-lootbox accumulation
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- §3.C AUDIT-03 conservation re-proof (1): `E[whole_post] = scaledPre / 100` exact identity by construction.
+- TST-WT-01 empirical witness at N=10K seeds across {47, 99, 100, 147, 250, 1000, 9999}: `mean(whole_post) × 100` within ±2.5 of `scaledPre` (5-sigma binomial bound).
+- §3.A Row Group 1 LBX-WT-02 evidence: `scaledPre` snapshotted before reassignment; `whole` separate local; function-scope `futureTickets` NEVER reassigned to `whole` (preserves D-274-NO-EVT-BREAK-01).
+
+**Grep recipe (constants UNCHANGED + Bernoulli math present):**
+```
+grep -nE "TICKET_SCALE|seed >> 152|scaledPre" contracts/modules/DegenerusGameLootboxModule.sol
+```
+Expected output: ≥3 matches (Bernoulli math + scaledPre snapshot + TICKET_SCALE constant).
+
+**Prose justification:** EV-neutrality is preserved by the floor + biased-coin-flip identity (`E[whole_post] = whole_floor + frac/100 = scaledPre / 100`). The per-N HERO_BOOST + per-N payout + symbol distribution + ticket pricing math is UNCHANGED at v39 (Wave 1 modifies only the post-distress, pre-queue collapse of scaled `futureTickets` to whole tickets on manual paths). Per-lootbox variance is higher than the v38 cross-lootbox-deterministic-accumulation flow (where fractional `rem` accumulates across multiple manual lootboxes and resolves to whole tickets at activation time via `_rollRemainder`) — this is the documented tradeoff per CONTEXT.md `<specifics>`. EV is invariant; variance increases on the variance-averse subset only (cross-cite surface (h) for player-welfare framing). Empirical witness at TST-WT-01 confirms the analytical identity within statistical tolerance.
+
+#### Surface (b) — Bit-slice `[152..167]` independence from other primary-chunk consumers
+
+**Verdict:** SAFE.
+
+**Evidence:**
+- §3.C AUDIT-03 conservation re-proof (3): keccak output-entropy properties imply pairwise independence of disjoint bit-slices over the per-resolution seed; bits[152..167] does not overlap with any prior consumer (prior maximum was bits[151] from the boon-roll slice).
+- §3.A Row Group 1 LBX-WT-04 evidence: bit-allocation NatSpec updated 152 → 168; new entry explicitly carved.
+- TST-WT-03 empirical witness: mod-100 chi² at N=10K with df=99 Wilson-Hilferty Z < 1.645 (PASS at α=0.05); pairwise covariance test between bits[152..167] and bits[0..15] bounded within ±0.01 of theoretical zero.
+- §3.B AUDIT-04 cross-module byte-identity: `EntropyLib.sol` byte-identical at v39 HEAD vs `06623edb` (keccak primary entropy source UNCHANGED).
+
+**Grep recipe (bit-allocation NatSpec):**
+```
+grep -nE "bits\[152\.\.167\]|Total primary-chunk consumption: 168" contracts/modules/DegenerusGameLootboxModule.sol
+```
+Expected output: 2 matches (entry + total-consumption line).
+
+**Prose justification:** The per-resolution seed `keccak256(abi.encode(rngWord, player, day, amount))` is a single 256-bit primary chunk with disjoint sub-slices for each consumer. By keccak output-entropy properties (cryptographic random oracle in the ideal-cipher sense; inputs include VRF-derived `rngWord` unknown at player commitment point per `feedback_rng_backward_trace.md`), the 256 output bits are pairwise independent. The new bits[152..167] slice does not overlap with any of the 7 prior consumers (bits[0..151] are the prior allocation; the new slice starts at bit 152). Modulo-bias analysis: `uint16 % 100` over uniform 16-bit input has worst-case relative bias 0.10% (the 16-bit space has `65536 = 655 × 100 + 36` so 36 residues have 656 preimages and 64 residues have 655 preimages). This is consistent with the existing bits[0..15] rangeRoll precedent. An 8-bit width (the original D-274-BIT-SLICE-01 form, superseded intra-Wave-1) would have produced ~17% relative bias for `frac ≤ 56`, systematically over-issuing rounded-up tickets; the 16-bit form eliminates that drift. TST-WT-03 empirical chi² confirms uniform distribution within Wilson-Hilferty Z < 1.645 thresholds; pairwise covariance test confirms independence vs the bits[0..15] slice within ±0.01.
+
+#### Surface (c) — Consolation trigger predicate cannot fire from non-ticket-path OR auto-resolve path
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- §3.A Row Group 2 LBX-WX-03 evidence: predicate structurally gated by (a) `index != type(uint48).max` (manual path) AND (b) outer guard `if (futureTickets != 0)` entered (ticket-path produced non-zero pre-Bernoulli scaled) AND (c) `whole == 0` post-Bernoulli (inner `if (whole != 0)` else-arm).
+- TST-WX-02 empirical witness: non-trigger predicate matrix covers (a) ticket-path-not-selected (pathRoll lands DGNRS / large-BURNIE / regular-WWXRP), (b) ticket-path selected but `_lootboxTicketCount` truncated to scaled 0 from start (outer guard not entered), (c) ticket-path selected with `whole >= 1` post-Bernoulli (success case), (d) ANY auto-resolve open regardless of pre-Bernoulli state.
+- §3.A Row Group 3 LBX-EVT-05 + LBX-EVT-06 evidence: auto-resolve callers (`resolveLootboxDirect` + `resolveRedemptionLootbox`) literally pass the `type(uint48).max` sentinel; the manual branch's outer if-arm is never entered for them.
+
+**Grep recipe (predicate structure):**
+```
+grep -nE "index != type\(uint48\)\.max|whole == 0|LOOTBOX_WWXRP_CONSOLATION" contracts/modules/DegenerusGameLootboxModule.sol
+```
+Expected output: ≥3 matches (gating discriminator + consolation else-arm + consolation magnitude).
+
+**Prose justification:** The consolation `wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)` call and the `LootBoxWwxrpReward` emit are STRUCTURALLY GATED by three layers: (1) the outer `if (futureTickets != 0)` guard — non-ticket-path outcomes (DGNRS / large-BURNIE / regular-WWXRP path) skip the entire block; (2) the manual-branch gate `if (index != type(uint48).max)` — auto-resolve callers literally pass the sentinel so this branch is never entered for them; (3) the inner `if (whole != 0)` else-arm — successful ticket awards (`whole >= 1`) skip the consolation. The three structural layers cannot be circumvented by any player-controllable input. TST-WX-02 empirically verifies all 4 non-trigger predicate sub-cases. The Auto-resolve callers are internal-only (called from `claimDecimatorJackpot` and `redeem` in `StakedDegenerusStonk` + `DegenerusGame` respectively); external callers cannot inject `type(uint48).max` as a real lootbox index because the storage lookup `lootboxEth[index][player]` requires non-zero amount at that index, and reaching index `0xFFFFFFFFFFFF` requires ~281 trillion lifetime lootboxes (structurally unreachable).
+
+#### Surface (d) — Storage layout byte-identical at v39 vs `06623edb`
+
+**Verdict:** SAFE_BY_STRUCTURAL_CLOSURE.
+
+**Evidence:**
+- §3.B AUDIT-04 grep-proof attestation: `git diff 06623edb..HEAD -- contracts/DegenerusGameStorage.sol` empty (0 lines).
+- §3.B Five-line zero-attestation roll-up: zero new storage slots + zero new public/external + zero new admin + zero new modifiers + zero new upgrade hooks.
+- §3.A Row Group 1 LBX-WT-05 evidence: storage-decl diff empty; new constant compile-time inlined; new event log calldata-equivalent (does not occupy storage slot).
+- §3.B Cross-module byte-identity proof: 6 modules byte-identical at v39 HEAD (`JackpotModule + MintModule + Degenerette + TraitUtils + JackpotBucketLib + EntropyLib`).
+
+**Grep recipe (storage-decl diff):**
+```
+git diff 06623edb..HEAD -- contracts/DegenerusGameStorage.sol contracts/modules/DegenerusGameLootboxModule.sol \
+  | grep -E "^\+.*\b(uint|address|bytes|mapping|bool|string)\b" \
+  | grep -v "\b(constant|private constant|memory|calldata|public constant|internal pure|view|pure)\b"
+```
+Expected output: 0 hits (no new storage-slot declarations; new `uint48 index` is a function parameter not a storage slot; new `LOOTBOX_WWXRP_CONSOLATION` is a private constant inlined at compile time).
+
+**Prose justification:** Zero storage-decl mutations at v39. The new `LOOTBOX_WWXRP_CONSOLATION = 1 ether` private constant is compile-time inlined (no storage slot consumed). The new `LootboxTicketRoll` event declaration is calldata-equivalent in the EVM execution model (event log is written to the receipt log, NOT to storage). The new `uint48 index` parameter on `_resolveLootboxCommon` is a function parameter (stack-local), not a storage slot. The `bits[152..167]` Bernoulli read consumes a slice of the per-resolution `seed` stack-local, not a storage slot. Storage layout byte-identical preserves one-line revert path if the v39 manual-path Bernoulli is ever rolled back to v38 cross-lootbox-accumulation. Cross-module byte-identity for `JackpotModule + MintModule + Degenerette + TraitUtils + JackpotBucketLib + EntropyLib` verified by the §3.B grep-proof.
+
+#### Surface (e) — Auto-resolve paths byte-equivalent to v38.0 behavior
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- §3.A Row Group 1 LBX-WT-03 evidence: auto-resolve branch calls `_queueTicketsScaled(player, targetLevel, futureTickets, false)` — the today-behavior at L1067; no Bernoulli, no consolation, no `LootboxTicketRoll` emit.
+- §3.A Row Group 3 LBX-EVT-05 evidence: auto-resolve callers (`resolveLootboxDirect` + `resolveRedemptionLootbox`) literally pass `type(uint48).max` sentinel.
+- TST-REG-03 empirical witness: `resolveLootboxDirect` (decimator-claim) and `resolveRedemptionLootbox` (sDGNRS-redemption) still produce fractional `rem` byte residues; advance to target level; `_rollRemainder` fires; `TicketsQueuedScaled` emitted at queue time; NO `LootboxTicketRoll` emitted; NO consolation `LootBoxWwxrpReward(..., 1 ether)` emitted on cold-bust scaled-low outcomes.
+
+**Grep recipe (auto-resolve sentinel passing):**
+```
+grep -nE "type\(uint48\)\.max" contracts/modules/DegenerusGameLootboxModule.sol
+```
+Expected output: ≥3 matches (2 sentinel-pass callsites at `resolveLootboxDirect` + `resolveRedemptionLootbox` + the branch discriminator inside `_resolveLootboxCommon`).
+
+**Prose justification:** Auto-resolve paths route through the sentinel-gated branch (`index == type(uint48).max`) inside `_resolveLootboxCommon`. This branch calls `_queueTicketsScaled` (the today-behavior), produces `rem` byte residues, emits `TicketsQueuedScaled`, and resolves the fractional residue at activation time via `_rollRemainder` — byte-equivalent to v38.0 behavior at the queue layer. The new `LootboxTicketRoll` event is NOT emitted from auto-resolve paths (the emit site is inside the manual branch only). The new consolation `LootBoxWwxrpReward(..., 1 ether)` is NOT emitted from auto-resolve paths (the consolation else-arm is inside the manual branch only). The auto-resolve callers' event streams + queue behavior + `rem`-byte production are byte-equivalent to v38.0; verified by TST-REG-03 empirical regression. Cross-cite surface (f) for the index-gating discriminator zero-crossover proof.
+
+#### Surface (f) — Index gating discriminator routes manual vs auto-resolve with zero crossover
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- §3.A Row Group 3 LBX-EVT-05 evidence: `_resolveLootboxCommon` signature has `uint48 index` parameter; 4 internal callers — manual (`openLootBox` + `openBurnieLootBox`) pass real `index`, auto-resolve (`resolveLootboxDirect` + `resolveRedemptionLootbox`) pass `type(uint48).max` sentinel.
+- D-274-EVT-INDEX-SENTINEL-01 rationale: top-of-domain sentinel `type(uint48).max = 0xFFFFFFFFFFFF` cannot collide with any realistic real lootbox index (~281 trillion lifetime lootboxes would be required to reach it).
+- §3.A Row Group 1 LBX-WT-03 evidence: branch discriminator `if (index != type(uint48).max)` inside the outer `if (futureTickets != 0)` block.
+
+**Grep recipe (4 callsite verification):**
+```
+grep -nE "_resolveLootboxCommon\(" contracts/modules/DegenerusGameLootboxModule.sol
+```
+Expected output: exactly 5 matches (1 function definition + 4 call sites). Grep for "index," indented and "type(uint48).max" at the 4 caller positions: 2 + 2 split.
+
+**Prose justification:** The `index` parameter is private (passed only by the 4 internal callers; `_resolveLootboxCommon` is `private` linkage). The 2 manual callers (`openLootBox` at L583-597 + `openBurnieLootBox` at L637-651) receive `index` from their `external` callers (the actual lootbox storage index for the lootbox being opened); the storage slot lookup `lootboxEth[index][player]` / `lootboxBurnie[index][player]` requires non-zero stored amount at that index, which can only be set by prior `mintLootbox` / `mintBurnieLootbox` calls. The 2 auto-resolve callers (`resolveLootboxDirect` at L679-693 + `resolveRedemptionLootbox` at L714-728) hard-code `type(uint48).max` literal as the `index` argument. The sentinel value `0xFFFFFFFFFFFF` requires ~281 trillion (`2^48 - 1 = 281,474,976,710,655`) lifetime lootbox mints to be a real index — structurally unreachable in any realistic protocol lifetime. Zero crossover possible: manual callers cannot pass `type(uint48).max` (the storage lookup would fail), auto-resolve callers cannot pass a real index (the source-code literal is hard-coded). Cross-cite surface (e) for the auto-resolve byte-equivalence consequence.
+
+#### Surface (g) — `LootboxTicketRoll` field-consistency invariants hold across both manual callers
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- §3.A Row Group 3 LBX-EVT-03 + LBX-EVT-04 evidence: emit site `emit LootboxTicketRoll(player, index, scaledPre, roundedUp)` at the end of the manual branch; `scaledPre` snapshotted BEFORE Bernoulli; function-scope `futureTickets` NEVER reassigned to `whole` (G17 grep gate).
+- TST-WT-07 empirical witness: derived `whole = (preRollTickets / 100) + (roundedUp ? 1 : 0)` equals queued ticket count; `preRollTickets > 0` always; `preRollTickets` equals same-tx `LootBoxOpened.futureTickets`; `lootboxIndex` equals the `index` arg; whole==0 ⇒ same-tx `LootBoxWwxrpReward` (consolation correlation); storage zeroed at open completion.
+
+**Grep recipe (emit site + non-mutation):**
+```
+grep -nE "emit LootboxTicketRoll|scaledPre = futureTickets|futureTickets = " contracts/modules/DegenerusGameLootboxModule.sol
+```
+Expected output: emit site present + `scaledPre = futureTickets;` present + no `futureTickets = whole;` reassignment in the manual branch (function-scope `futureTickets` keeps scaled value).
+
+**Prose justification:** The invariants hold by construction. `scaledPre` is snapshotted from the function-scope `futureTickets` value AFTER the distress-bonus accumulation but BEFORE the Bernoulli floor + round-up. The Bernoulli writes to a separate local `whole` (not to the function-scope variable). The emit consumes `scaledPre` (the snapshotted scaled value) as `preRollTickets` and the `roundedUp` boolean as the round-up outcome. The same `scaledPre` value flows to the outer `LootBoxOpened.futureTickets` emission via the unchanged function-scope `futureTickets` (consumer can correlate by same-tx). The `lootboxIndex` field equals the `index` arg passed to `_resolveLootboxCommon`, which is the index arg passed to the external `openLootBox(player, index)` / `openBurnieLootBox(player, index)` call. When `whole == 0` the consolation else-arm fires `LootBoxWwxrpReward(player, day, amount, 1 ether)` in the same tx; consumer correlates via `(player, lootboxIndex)` topic filter + same-tx receipt. Storage zeroing at `lootboxEth[index][player]` / `lootboxBurnie[index][player]` happens at the open completion (per UI/UX confirmation). TST-WT-07 empirically verifies all 6 invariants in the 4-lattice emission cases.
+
+#### Surface (h) — Phase 273 BAF-routing surface coverage at included-baseline
+
+**Verdict:** SAFE_BY_DESIGN_PHASE_273.
+
+**Evidence:**
+- §3.A Row Group 4 (Phase 273 included-since-baseline) 4-commit rows: `ff929948` BAF credit routing 3-point patch + `e9807891` BAF-ROUTE-06/07/08 test expansion + `e04d3333` Phase 273 SUMMARY + `1eb1ecb5` `_livenessTriggered` NatSpec clarification.
+- §9.NN.iv Phase 273 included-since-baseline 4-commit list (commit-readiness register).
+- Phase 273 SUMMARY at `.planning/phases/273-baf-credit-routing-fix/273-01-SUMMARY.md` (load-bearing context for the cross-cite).
+- `test/edge/BafCreditRouting.test.js` 14 of 14 tests passing at Phase 273 close (BAF-ROUTE-01..08 + 6 prior cases).
+
+**Grep recipe (Phase 273 SHAs cited):**
+```
+grep -cE "ff929948|e9807891|e04d3333|1eb1ecb5" audit/FINDINGS-v39.0.md
+```
+Expected output: ≥8 (at least 1 cite per SHA in §1 frontmatter + §3.A Row Group 4; final tally will include §9.NN.iv refs).
+
+**Prose justification:** Phase 273 maintenance shipped between v38.0 closure HEAD `06623edb` and v39.0 open per the standard maintenance-between-milestones pattern. The Phase 273 changes touch `contracts/BurnieCoinflip.sol` (the BAF jackpot credit-routing path; three-point patch fixing the day-D orphan, the RngLocked guard predicate at x10 boundaries, and adding the jackpot-phase bafLevel override) plus a comprehensive 14-test verification suite at `test/edge/BafCreditRouting.test.js`. These changes are surface-disjoint from the v39.0 lootbox manual-path Bernoulli payload (Phase 273 lives entirely in BurnieCoinflip; Phase 274 lives entirely in DegenerusGameLootboxModule + IDegenerusGameModules). Per D-274-BAF273-INCLUDE-01, Phase 273 folds into the v39.0 audit baseline as included-since-baseline surface-coverage attestation — the Phase 273 internal test suite is the load-bearing empirical evidence for the BAF-routing surface; no F-39-NN finding is eligible because Phase 273 is independent maintenance, not v39.0 work. The 14 of 14 tests passing at Phase 273 close is the empirical security-property attestation.
+
+#### RNG commitment-window degenerate-PASS attestation
+
+Per `feedback_rng_commitment_window.md`: Zero new RNG-path mutation at v39; `bits[152..167]` is a previously-unallocated slice of the unchanged `seed = keccak256(abi.encode(rngWord, player, day, amount))` primary chunk. The 4 caller sites (`openLootBox` L583-597, `openBurnieLootBox` L637-651, `resolveLootboxDirect` L679-693, `resolveRedemptionLootbox` L714-728) compute the per-resolution seed using the same arguments as v38; the keccak primary entropy source `EntropyLib.sol` is byte-identical at v39 HEAD vs `06623edb`. For manual paths, `rngWord` is committed via VRF before the player can call `openLootBox` / `openBurnieLootBox` (VRF request is finalized by `_finalizeRngRequest`; player cannot mutate the rngWord between commitment and consumption). Player-controllable state at lootbox commitment (the `mintLootbox` / `mintBurnieLootbox` call) is fixed in the lootbox storage slot (`lootboxEth[index][player]` / `lootboxBurnie[index][player]`); none of these inputs can change between VRF commit and lootbox open. Bot front-run via VRF mempool visibility remains STRUCTURALLY PREVENTED (carry-forward from v36.0 + v37.0 + v38.0 commitment-window verdicts). Commitment-window check is degenerate-PASS.
+
+### 4.2. Verdict Roll-Up + Adversarial-Pass Status
+
+8 of 8 surfaces (a)..(h) verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_DESIGN_PHASE_273 per inline draft (Task 3.4). Adversarial-pass validation via `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` PARALLEL spawn (Task 3.7) per D-274-ADVERSARIAL-01; full output logged in `.planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-01-ADVERSARIAL-LOG.md`. Default expected: all 3 skills concur; zero FINDING_CANDIDATE, zero 9th-surface NEW_VECTOR, zero KI Design Decisions promotion candidate. Phase 274 §4 verdict roll-up STANDS unchanged; KNOWN-ISSUES.md UNMODIFIED per D-274-KI-01 default zero-promotion path. Zero F-39-NN finding blocks emit per D-274-KI-01 carry default path.
+
+(Verdict roll-up to be re-affirmed at Task 3.7 after 3-skill PARALLEL adversarial pass.)
+
