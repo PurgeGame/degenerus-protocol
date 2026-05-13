@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v39.0
 milestone_name: Lootbox Whole-Ticket Rounding + WWXRP Consolation
-status: executing
+status: shipped
 last_updated: "2026-05-13T13:27:25.386Z"
 last_activity: 2026-05-13 -- Phase 274 execution started
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 1
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 100
 ---
 
 # Project State
@@ -24,12 +24,30 @@ See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.
 
 ## Current Position
 
-Phase: 274 (lootbox-whole-ticket-rounding-wwxrp-consolation-terminal) — EXECUTING
-Plan: 1 of 1
-Status: Executing Phase 274
-Last activity: 2026-05-13 -- Phase 274 execution started
+Phase: 274 (lootbox-whole-ticket-rounding-wwxrp-consolation-terminal) — SHIPPED
+Plan: 1 of 1 complete
+Status: v39.0 milestone SHIPPED; between-milestones state
+Last activity: 2026-05-13 -- v39.0 milestone shipped; closure signal MILESTONE_V39_AT_HEAD_6a7455d1
 
 ## Last Shipped Milestone
+
+**v39.0 — Lootbox Whole-Ticket Rounding + WWXRP Consolation** (shipped 2026-05-13)
+
+- 1 phase (274), 1 plan, 39/39 requirements satisfied (5 LBX-WT + 4 LBX-WX + 6 LBX-EVT + 7 TST-WT + 3 TST-WX + 4 TST-REG + 6 AUDIT + 4 REG)
+- Audit baseline: v38.0 audit-subject HEAD `MILESTONE_V38_AT_HEAD_06623edb` → v39.0 audit-subject HEAD `6a7455d1` (resolved at Wave 3 Task 3.10 atomic-update per D-274-CLOSURE-01)
+- 1 USER-APPROVED Wave 1 contract-side commit `c21f833a` (`feat(274): manual lootbox Bernoulli whole-ticket + WWXRP consolation + LootboxTicketRoll event [LBX-WT-01..05, LBX-WX-01..04, LBX-EVT-01..06]`; `contracts/modules/DegenerusGameLootboxModule.sol` + `contracts/interfaces/IDegenerusGameModules.sol`; storage layout byte-identical; new constant inlined; new event log calldata-equivalent; D-274-BIT-SLICE-01 superseded intra-Wave-1 to 16-bit slice on bias quantification) + 1 USER-APPROVED Wave 2 batched test commit `f8e55cfe` (`test(274): manual lootbox whole-ticket + consolation + auto-resolve regression + LootboxTicketRoll [TST-WT-01..07, TST-WX-01..03, TST-REG-01..04]`; +1,422 LOC across 4 new test files; 74 tests; all 74 passing). Single-phase patch shape per v36.0 Phase 266 + v38.0 Phase 272 precedent.
+- Phase 273 included-since-baseline (pre-shipped maintenance between v38.0 closure and v39.0 open per D-274-BAF273-INCLUDE-01): `ff929948` BAF credit routing 3-point patch + `e9807891` BAF-ROUTE-06/07/08 test expansion + `e04d3333` Phase 273 SUMMARY + `1eb1ecb5` `_livenessTriggered` NatSpec clarification. Folded into v39.0 audit baseline as surface-coverage attestation only (no F-39-NN finding eligible).
+- Result: 8 of 8 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_DESIGN_PHASE_273 (a EV-neutrality of Bernoulli vs cross-lootbox accumulation + b bit-slice [152..167] independence + c consolation predicate gating + d storage layout byte-identical + e auto-resolve byte-equivalent to v38 + f index gating discriminator zero-crossover + g LootboxTicketRoll field-consistency invariants + h Phase 273 BAF-routing surface coverage at included-baseline); zero F-39-NN finding blocks emitted; 12 novel-vector hypotheses (i)..(t) investigated across 3 adversarial skills with 10 NEGATIVE_RESULT_ONLY + 2 ACCEPTED_DESIGN dispositions (variance tradeoff + manual/auto-resolve asymmetry; both documented via §4 (a) prose + D-274-MANUAL-ONLY-01 locked decision; NOT promoted to KNOWN-ISSUES.md)
+- Adversarial pass via 3-skill PARALLEL spawn intent `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` per D-274-ADVERSARIAL-01 carry on finished §4 draft; `/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry. Disposition: zero residual FINDING_CANDIDATE; zero 9th-surface NEW_VECTOR; zero KI promotion candidates per `274-01-ADVERSARIAL-LOG.md` Disposition section
+- LEAN regression: 1 PASS REG-01 (v38.0 closure signal `MILESTONE_V38_AT_HEAD_06623edb` re-verified NON-WIDENING for v38-touched surfaces NOT in v39 manual-lootbox scope; Phase 273 `BurnieCoinflip.sol` carve-out folded as included-since-baseline per D-274-BAF273-INCLUDE-01) + 1 PASS REG-02 (v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` re-verified NON-WIDENING; TraitUtils + `_pickSoloQuadrant` + JackpotBucketLib byte-identical) + REG-03 KI envelope re-verifications + REG-04 prior-finding spot-check sweep PASS across audit/FINDINGS-v25..v38.0
+- KI envelopes EXC-01..03 RE_VERIFIED NEGATIVE-scope at v39 (Phase 274 has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction); EXC-04 RE_VERIFIED with NARROWS retained (BAF-jackpot-only scope; EntropyLib byte-identical at v39 HEAD; the new bits[152..167] Bernoulli reads keccak primary chunk NOT xorshift output per backward-trace cite)
+- KNOWN-ISSUES.md UNMODIFIED per D-274-KI-01 default zero-promotion path. Closure verdict `0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`
+- Deliverable: `audit/FINDINGS-v39.0.md` (FINAL READ-only at HEAD `6a7455d1`, 9 sections; flip at Wave 3 Task 3.11 post-user-approval)
+- Closure signal: `MILESTONE_V39_AT_HEAD_6a7455d1`
+- Process notes: Subagent-spawned execution under `/gsd-execute-phase` Wave decomposition. 2 USER-APPROVED batched contract/test commits (Wave 1 + Wave 2) + N AGENT-COMMITTED audit-deliverable + closure-flip commits per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_manual_review_before_push.md`. Adversarial-pass 3-skill PARALLEL spawn per D-274-ADVERSARIAL-01 carry. v39.0 closure invariant: terminal-phase zero forward-cite emission across scoped artifacts; planner-handoff carry-forward register in §9 §"Deferred to Future Milestones" subsection uses locked-decision IDs (D-274-MINTBOOST-OUT-01 / D-274-AUTORESOLVE-OUT-01 / D-274-JACKPOT-OUT-01) — pickup-pointers per §8 allowlist
+- See `.planning/MILESTONES.md` for archive
+
+### Prior Shipped Milestone
 
 **v38.0 — Always-Hero Simplification + Maximal Dead-Code Cleanup** (shipped 2026-05-11)
 
@@ -102,9 +120,25 @@ Last activity: 2026-05-13 -- Phase 274 execution started
 
 ## Active Milestone
 
-_None — between-milestones state. v38.0 SHIPPED 2026-05-11. Next milestone scope TBD._
+_None — between-milestones state. v39.0 SHIPPED 2026-05-13. Next milestone scope TBD._
 
 ### Just-Shipped Milestone Reference
+
+**v39.0 Lootbox Whole-Ticket Rounding + WWXRP Consolation** (started 2026-05-13; SHIPPED 2026-05-13; closure signal `MILESTONE_V39_AT_HEAD_6a7455d1`)
+
+- **Goal:** On MANUAL lootbox opens (`openLootBox` + `openBurnieLootBox` only), replace fractional-residue accumulation with a single Bernoulli round-up at open time on `bits[152..167]` of the per-resolution seed; queue whole tickets via `_queueTickets`; pay `LOOTBOX_WWXRP_CONSOLATION = 1 ether` WWXRP consolation when `whole == 0` from non-zero `scaledPre`; emit new additive `LootboxTicketRoll` event for remainder visibility. Auto-resolve paths (`resolveLootboxDirect` decimator-claim + `resolveRedemptionLootbox` sDGNRS-redemption) explicitly UNCHANGED per D-274-MANUAL-ONLY-01.
+- **Audit baseline:** v38.0 closure HEAD `MILESTONE_V38_AT_HEAD_06623edb`
+- **Phases completed:** 1 (Phase 274) — single-phase multi-wave shape per v36.0 Phase 266 + v38.0 Phase 272 precedent
+- **Requirements:** 39 total (5 LBX-WT + 4 LBX-WX + 6 LBX-EVT + 7 TST-WT + 3 TST-WX + 4 TST-REG + 6 AUDIT + 4 REG); coverage 39/39 satisfied at v39 close.
+- **READ-only posture:** LIFTED — `contracts/` + `test/` writes via per-commit user approval per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md`. 2 USER-APPROVED batched commits (Wave 1 contracts `c21f833a` + Wave 2 tests `f8e55cfe`).
+- **Behavior change posture:** ACCEPTED — Bernoulli collapse is EV-neutral by construction (`E[whole_post] == scaledPre / 100` exact identity); per-lootbox variance slightly higher than v38 cross-lootbox-deterministic-accumulation but bounded; auto-resolve paths byte-equivalent to v38; new `LootboxTicketRoll` event purely additive (no consumer break for non-adopters); new WWXRP consolation magnitude `1 ether` matches existing 10%-path `LOOTBOX_WWXRP_PRIZE`.
+- **Adversarial-pass posture:** SEQUENTIAL after full §4 draft per D-NN-ADVERSARIAL-02 carry; 3-skill PARALLEL spawn `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` per D-274-ADVERSARIAL-01 carry on finished §4 draft (`/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry). Disposition: zero residual FINDING_CANDIDATE; 12 novel-vector hypotheses (i)..(t) returned 10 NEGATIVE_RESULT_ONLY + 2 ACCEPTED_DESIGN (variance tradeoff + manual/auto-resolve asymmetry; both documented via §4 (a) prose + D-274-MANUAL-ONLY-01 locked decision).
+- **Out of scope (deferred):** Mint-boost fractional retirement (D-274-MINTBOOST-OUT-01); auto-resolve lootbox path retirement (D-274-AUTORESOLVE-OUT-01); jackpot ticket-award sites + BAF Bernoulli + v36.0 ENT-05 xorshift refactor (D-274-JACKPOT-OUT-01); LBX-02 fixture-coverage gap (D-274-LBX02-OUT-01, RE-DEFERRED-V40+).
+- **Closure signal:** `MILESTONE_V39_AT_HEAD_6a7455d1` (resolved at Wave 3 Task 3.10 atomic-update per D-274-CLOSURE-01).
+- **Phase 274 SHIPPED 2026-05-13:** Lootbox Whole-Ticket Rounding + WWXRP Consolation (Terminal). Multi-wave shape: Wave 1 USER-APPROVED batched contract commit `c21f833a` (LBX-WT-01..05 + LBX-WX-01..04 + LBX-EVT-01..06; manual-branch addition + new private constant + new event + index threading + bit-allocation NatSpec update 152 → 168; D-274-BIT-SLICE-01 superseded intra-Wave-1 from 8-bit to 16-bit slice on bias quantification) + Wave 2 USER-APPROVED batched test commit `f8e55cfe` (TST-WT-01..07 + TST-WX-01..03 + TST-REG-01..04; +1,422 LOC across 4 new test files; 74 tests passing) + Wave 3 AGENT-COMMITTED audit deliverable atomic chain `386e797d` → `6a7455d1` + Wave 3 closure-flip commits + Wave 3 final user-review gate at Task 3.11. 39/39 requirements satisfied.
+- See `.planning/ROADMAP.md` for the single-phase Phase 274 entry + `.planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/` for plan + context + adversarial-log + summary artifacts.
+
+### Prior Just-Shipped Milestone Reference (rotated from active position)
 
 **v38.0 Always-Hero Simplification + Maximal Dead-Code Cleanup** (started 2026-05-11; SHIPPED 2026-05-11; closure signal `MILESTONE_V38_AT_HEAD_06623edb`)
 
@@ -211,9 +245,9 @@ Audit deliverables:
 
 ## Global Project State
 
-- Contract tree at v38.0 audit-subject HEAD `06623edb` (resolved at Wave 4 Task 4.6 atomic-update; this STATE.md row updated atomically at the same point).
-- READ-only audit pattern carried forward v28.0–v31.0; **READ-only LIFTED for v32.0 + v33.0 + v34.0 + v35.0 + v36.0 + v37.0 + v38.0** — audit-then-commit (or impl-then-audit) with per-commit user approval per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_manual_review_before_push.md`. No agent commits contracts/ or test/ changes without explicit user review of the diff. v38.0 Phase 272 used 2 USER-APPROVED batched commits (Wave 1 contracts `527e3adc` + Wave 2 tests `e3fcb95c`) + 1 USER-APPROVED Wave 1.5 input-validation revision (commit `4760459f`).
-- KNOWN-ISSUES.md: 4 accepted RNG-determinism exceptions (EXC-01 affiliate roll / EXC-02 prevrandao fallback / EXC-03 F-29-04 mid-cycle substitution / EXC-04 EntropyLib XOR-shift) — all re-verified non-widening at v38 HEAD. EXC-01..03 NEGATIVE-scope at v38 (Phase 272 has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction); EXC-04 RE_VERIFIED with NARROWS retained from v36.0 (BAF-jackpot-only scope unchanged; EntropyLib byte-identical at v38 HEAD).
+- Contract tree at v39.0 audit-subject HEAD `6a7455d1` (resolved at Wave 3 Task 3.10 atomic-update; this STATE.md row updated atomically at the same point).
+- READ-only audit pattern carried forward v28.0–v31.0; **READ-only LIFTED for v32.0 + v33.0 + v34.0 + v35.0 + v36.0 + v37.0 + v38.0 + v39.0** — audit-then-commit (or impl-then-audit) with per-commit user approval per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_manual_review_before_push.md`. No agent commits contracts/ or test/ changes without explicit user review of the diff. v38.0 Phase 272 used 2 USER-APPROVED batched commits (Wave 1 contracts `527e3adc` + Wave 2 tests `e3fcb95c`) + 1 USER-APPROVED Wave 1.5 input-validation revision (commit `4760459f`).
+- KNOWN-ISSUES.md: 4 accepted RNG-determinism exceptions (EXC-01 affiliate roll / EXC-02 prevrandao fallback / EXC-03 F-29-04 mid-cycle substitution / EXC-04 EntropyLib XOR-shift) — all re-verified non-widening at v39 HEAD. EXC-01..03 NEGATIVE-scope at v39 (Phase 274 has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction); EXC-04 RE_VERIFIED with NARROWS retained from v36.0 (BAF-jackpot-only scope unchanged; EntropyLib byte-identical at v39 HEAD; the new bits[152..167] Bernoulli reads keccak primary chunk NOT xorshift output per backward-trace cite).
 
 ## Operator Next Steps
 

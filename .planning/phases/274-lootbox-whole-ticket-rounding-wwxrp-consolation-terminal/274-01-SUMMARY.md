@@ -8,12 +8,12 @@ status: COMPLETE
 completed: 2026-05-13
 duration: ~6h (subagent-spawned `/gsd-execute-phase` Wave decomposition; Wave 1 + Wave 2 + Wave 3 atomic-commit waves)
 deliverable: audit/FINDINGS-v39.0.md
-closure_signal: MILESTONE_V39_AT_HEAD_<sha>
+closure_signal: MILESTONE_V39_AT_HEAD_6a7455d1
 audit_baseline: 06623edb
 audit_baseline_signal: MILESTONE_V38_AT_HEAD_06623edb
 v34_baseline: 6b63f6d4daf346a53a1d463790f637308ea8d555
 v34_baseline_signal: MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555
-audit_subject_head: "<v39-close-sha>"
+audit_subject_head: "6a7455d1"
 requirements-completed: [LBX-WT-01, LBX-WT-02, LBX-WT-03, LBX-WT-04, LBX-WT-05,
                          LBX-WX-01, LBX-WX-02, LBX-WX-03, LBX-WX-04,
                          LBX-EVT-01, LBX-EVT-02, LBX-EVT-03, LBX-EVT-04, LBX-EVT-05, LBX-EVT-06,
@@ -32,7 +32,7 @@ phase_273_included_since_baseline:
 
 ## Outcome
 
-**v39.0 milestone CLOSED.** `audit/FINDINGS-v39.0.md` published as FINAL READ-only at HEAD `<v39-close-sha>` (resolved at Wave 3 Task 3.10 atomic-update per D-274-CLOSURE-01) — single canonical 9-section deliverable covering Phase 274 (lootbox whole-ticket rounding + WWXRP consolation, terminal). 2 USER-APPROVED batched commits per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md`: Wave 1 contract-side change `c21f833a` + Wave 2 test-side change `f8e55cfe`. 8 of 8 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_DESIGN_PHASE_273; zero F-39-NN finding blocks emitted; 12 novel-vector hypotheses (i)..(t) investigated across the 3 adversarial skills with 10 NEGATIVE_RESULT_ONLY + 2 ACCEPTED_DESIGN dispositions (variance tradeoff + manual/auto-resolve asymmetry; both documented via §4 (a) prose + D-274-MANUAL-ONLY-01 locked decision; NOT promoted to KNOWN-ISSUES.md). KNOWN-ISSUES.md UNMODIFIED per D-274-KI-01 default zero-promotion path. Closure verdict `0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`. REG-01 (v38.0 closure NON-WIDENING for v38-touched surfaces NOT in v39 manual-lootbox scope; Phase 273 BurnieCoinflip carve-out folded as included-since-baseline per D-274-BAF273-INCLUDE-01) + REG-02 (v34.0 closure NON-WIDENING) + REG-03 KI envelope re-verifications (EXC-01..03 NEGATIVE-scope at v39; EXC-04 RE_VERIFIED with NARROWS retained — BAF-jackpot-only scope) + REG-04 prior-finding spot-check sweep PASS across audit/FINDINGS-v25..v38.0 for v39-touched function/surface set. Adversarial pass via 3-skill PARALLEL spawn intent `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` per D-274-ADVERSARIAL-01 carry on finished §4 draft (`/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry) returned ZERO disagreements. Closure signal `MILESTONE_V39_AT_HEAD_<sha>` emitted in §9c verbatim in 5 FINDINGS locations + 3 cross-document propagation targets.
+**v39.0 milestone CLOSED.** `audit/FINDINGS-v39.0.md` published as FINAL READ-only at HEAD `6a7455d1` (resolved at Wave 3 Task 3.10 atomic-update per D-274-CLOSURE-01) — single canonical 9-section deliverable covering Phase 274 (lootbox whole-ticket rounding + WWXRP consolation, terminal). 2 USER-APPROVED batched commits per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md`: Wave 1 contract-side change `c21f833a` + Wave 2 test-side change `f8e55cfe`. 8 of 8 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_DESIGN_PHASE_273; zero F-39-NN finding blocks emitted; 12 novel-vector hypotheses (i)..(t) investigated across the 3 adversarial skills with 10 NEGATIVE_RESULT_ONLY + 2 ACCEPTED_DESIGN dispositions (variance tradeoff + manual/auto-resolve asymmetry; both documented via §4 (a) prose + D-274-MANUAL-ONLY-01 locked decision; NOT promoted to KNOWN-ISSUES.md). KNOWN-ISSUES.md UNMODIFIED per D-274-KI-01 default zero-promotion path. Closure verdict `0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`. REG-01 (v38.0 closure NON-WIDENING for v38-touched surfaces NOT in v39 manual-lootbox scope; Phase 273 BurnieCoinflip carve-out folded as included-since-baseline per D-274-BAF273-INCLUDE-01) + REG-02 (v34.0 closure NON-WIDENING) + REG-03 KI envelope re-verifications (EXC-01..03 NEGATIVE-scope at v39; EXC-04 RE_VERIFIED with NARROWS retained — BAF-jackpot-only scope) + REG-04 prior-finding spot-check sweep PASS across audit/FINDINGS-v25..v38.0 for v39-touched function/surface set. Adversarial pass via 3-skill PARALLEL spawn intent `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` per D-274-ADVERSARIAL-01 carry on finished §4 draft (`/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry) returned ZERO disagreements. Closure signal `MILESTONE_V39_AT_HEAD_6a7455d1` emitted in §9c verbatim in 5 FINDINGS locations + 3 cross-document propagation targets.
 
 ## Per-Task Atomic-Commit Log
 
@@ -53,7 +53,7 @@ Plan executed across 3 waves (multi-wave shape per v36.0 Phase 266 + v38.0 Phase
 | 3 | 3.7 | `c3c013c9` | (auto) | `audit(274): 3-skill PARALLEL adversarial pass + §4.2 verdict roll-up + 274-01-ADVERSARIAL-LOG.md` |
 | 3 | 3.8 | `0ed4ee60` | (auto) | `audit(274): §8 forward-cite closure (terminal-phase zero-emission verification)` |
 | 3 | 3.9 | (this commit) | (auto) | `audit(274): §9 closure attestation block + §9.NN commit-readiness register + 274-01-SUMMARY.md` |
-| 3 | 3.10 | (TBD post-Task-3.9) | (auto) | `audit(274): closure-signal SHA resolution + cross-document flips [MILESTONE_V39_AT_HEAD_<sha8>]` (resolves `<sha>` placeholder across 5 FINDINGS locations + flips REQUIREMENTS / ROADMAP / STATE / MILESTONES / PROJECT) |
+| 3 | 3.10 | (TBD post-Task-3.9) | (auto) | `audit(274): closure-signal SHA resolution + cross-document flips [MILESTONE_V39_AT_HEAD_6a7455d1]` (resolves `<sha>` placeholder across 5 FINDINGS locations + flips REQUIREMENTS / ROADMAP / STATE / MILESTONES / PROJECT) |
 | 3 | 3.11 | (TBD post-user-approval) | (checkpoint:human-verify) | Final READ-only flip on `audit/FINDINGS-v39.0.md` (`chmod 444` + frontmatter `status: FINAL — READ-ONLY` + `read_only: true`). User does `git push` manually per `feedback_manual_review_before_push.md`. |
 
 **Phase 273 included-since-baseline (pre-shipped maintenance between v38.0 closure and v39.0 open; folded into v39.0 audit baseline per D-274-BAF273-INCLUDE-01):**
@@ -105,7 +105,7 @@ Plan executed across 3 waves (multi-wave shape per v36.0 Phase 266 + v38.0 Phase
 | AUDIT-03 | §3.C conservation re-proof: EV-neutrality + WWXRP supply + bit-slice independence + rem-byte invariant | Complete (Wave 3 Task 3.3 `f98e3a62`) |
 | AUDIT-04 | §3.B zero-new-state attestation + §4 8-surface adversarial sweep + 3-skill PARALLEL pass | Complete (Wave 3 Tasks 3.3 + 3.4 + 3.7) |
 | AUDIT-05 | §6 KI walkthrough EXC-01..04 RE_VERIFIED; closure verdict UNMODIFIED | Complete (Wave 3 Task 3.6 `8072c53a`) |
-| AUDIT-06 | §9c closure signal `MILESTONE_V39_AT_HEAD_<sha>` emitted; ROADMAP/STATE/MILESTONES flips | Complete (Wave 3 Tasks 3.9 + 3.10) |
+| AUDIT-06 | §9c closure signal `MILESTONE_V39_AT_HEAD_6a7455d1` emitted; ROADMAP/STATE/MILESTONES flips | Complete (Wave 3 Tasks 3.9 + 3.10) |
 | REG-01 | v38.0 closure signal NON-WIDENING at v39 HEAD (with Phase 273 BurnieCoinflip carve-out per D-274-BAF273-INCLUDE-01) | Complete (Wave 3 Task 3.5 `8a669c9a`) |
 | REG-02 | v34.0 closure signal NON-WIDENING at v39 HEAD | Complete (Wave 3 Task 3.5 `8a669c9a`) |
 | REG-03 | KI envelope re-verifications EXC-01..04 (EXC-01..03 NEGATIVE-scope; EXC-04 NARROWS retained) | Complete (Wave 3 Task 3.5 + 3.6) |
@@ -174,7 +174,7 @@ Cross-skill verdict: Phase 274 §4 verdict roll-up STANDS at 8 of 8 SAFE_*. KNOW
 
 All v39.0 / Phase 274 decisions documented in `274-CONTEXT.md <locked_decisions>` block applied:
 
-- **D-274-CLOSURE-01** — Closure signal `MILESTONE_V39_AT_HEAD_<sha>` resolved via atomic substitution across 5 FINDINGS locations + 3 cross-document propagation targets at Wave 3 Task 3.10 (mutation-inclusive HEAD).
+- **D-274-CLOSURE-01** — Closure signal `MILESTONE_V39_AT_HEAD_6a7455d1` resolved via atomic substitution across 5 FINDINGS locations + 3 cross-document propagation targets at Wave 3 Task 3.10 (mutation-inclusive HEAD).
 - **D-274-CLOSURE-02** — §9.NN TWO-subsection commit-readiness register (i USER-APPROVED contracts + ii USER-APPROVED tests + iii AGENT-COMMITTED audit + iv Phase 273 included-since-baseline 4-commit list); no `awaiting-approval` subsection.
 - **D-274-MANUAL-ONLY-01** — Scope narrowed to manual lootbox opens (`openLootBox` + `openBurnieLootBox`); auto-resolve callers (`resolveLootboxDirect` + `resolveRedemptionLootbox`) explicitly UNCHANGED.
 - **D-274-NO-EVT-BREAK-01** — No breaking change to `LootBoxOpened.futureTickets` / `BurnieLootOpen.tickets` / `TicketsQueuedScaled` semantics; whole-ticket information exposed via additive `LootboxTicketRoll` event.
@@ -196,7 +196,7 @@ All v39.0 / Phase 274 decisions documented in `274-CONTEXT.md <locked_decisions>
 
 ## Closure Signal
 
-`MILESTONE_V39_AT_HEAD_<sha>`
+`MILESTONE_V39_AT_HEAD_6a7455d1`
 
 Resolved at Wave 3 Task 3.10 atomic-update per D-274-CLOSURE-01 across:
 
@@ -212,7 +212,7 @@ Resolved at Wave 3 Task 3.10 atomic-update per D-274-CLOSURE-01 across:
 2. `.planning/STATE.md` — Last Shipped Milestone closure-signal references (multiple)
 3. `.planning/MILESTONES.md` — v39.0 entry closure-signal
 
-Verification: `grep -c "MILESTONE_V39_AT_HEAD_<sha8>" audit/FINDINGS-v39.0.md` >= 5; `grep -lE "MILESTONE_V39_AT_HEAD_<sha8>" .planning/ROADMAP.md .planning/STATE.md .planning/MILESTONES.md | wc -l` == 3.
+Verification: `grep -c "MILESTONE_V39_AT_HEAD_6a7455d1" audit/FINDINGS-v39.0.md` >= 5; `grep -lE "MILESTONE_V39_AT_HEAD_6a7455d1" .planning/ROADMAP.md .planning/STATE.md .planning/MILESTONES.md | wc -l` == 3.
 
 ## Self-Check: PASSED (pending Task 3.10 SHA resolution)
 
