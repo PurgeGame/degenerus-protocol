@@ -37,8 +37,8 @@ included_since_baseline:
     subject: "docs: clarify _livenessTriggered VRF-grace branch as stalled-advance bailout"
 write_policy: "Single-phase patch closure mirroring v36.0 Phase 266 + v38.0 Phase 272 precedent. Two USER-APPROVED batched commits: Wave 1 contracts (c21f833a — feat(274): manual lootbox Bernoulli whole-ticket + WWXRP consolation + LootboxTicketRoll event [LBX-WT-01..05, LBX-WX-01..04, LBX-EVT-01..06]); Wave 2 tests (f8e55cfe — test(274): manual lootbox whole-ticket + consolation + auto-resolve regression + LootboxTicketRoll [TST-WT-01..07, TST-WX-01..03, TST-REG-01..04]). All Wave 3 audit deliverable + ADVERSARIAL-LOG + closure flips AGENT-COMMITTED atomic-per-task with audit(274): or docs(274): prefix. READ-only flip on audit/FINDINGS-v39.0.md (chmod 444 + frontmatter status: FINAL — READ-ONLY + read_only: true) is the terminal commit per feedback_manual_review_before_push.md final user-review gate per D-274-APPROVAL-01."
 supersedes: none
-status: "DRAFT — pending final user-review gate"
-read_only: false
+status: "FINAL — READ-ONLY"
+read_only: true
 generated_at: 2026-05-13T00:00:00Z
 ---
 
