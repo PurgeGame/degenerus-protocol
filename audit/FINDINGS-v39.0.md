@@ -539,9 +539,16 @@ Per `feedback_rng_commitment_window.md`: Zero new RNG-path mutation at v39; `bit
 
 ### 4.2. Verdict Roll-Up + Adversarial-Pass Status
 
-8 of 8 surfaces (a)..(h) verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_DESIGN_PHASE_273 per inline draft (Task 3.4). Adversarial-pass validation via `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` PARALLEL spawn (Task 3.7) per D-274-ADVERSARIAL-01; full output logged in `.planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-01-ADVERSARIAL-LOG.md`. Default expected: all 3 skills concur; zero FINDING_CANDIDATE, zero 9th-surface NEW_VECTOR, zero KI Design Decisions promotion candidate. Phase 274 §4 verdict roll-up STANDS unchanged; KNOWN-ISSUES.md UNMODIFIED per D-274-KI-01 default zero-promotion path. Zero F-39-NN finding blocks emit per D-274-KI-01 carry default path.
+**8 of 8 surfaces (a)..(h) SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_DESIGN_PHASE_273; zero F-39-NN finding blocks emitted; zero KI promotion candidates; 3-skill PARALLEL adversarial pass per D-274-ADVERSARIAL-01 disposition: ZERO DISAGREEMENTS.**
 
-(Verdict roll-up to be re-affirmed at Task 3.7 after 3-skill PARALLEL adversarial pass.)
+Adversarial-pass validation via `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` (3 skills PARALLEL spawn per D-274-ADVERSARIAL-01; `/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry) on the finished §4 8-surface inline draft. Full output logged in `.planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-01-ADVERSARIAL-LOG.md`.
+
+**Disposition summary (per `274-01-ADVERSARIAL-LOG.md` Disposition section):**
+- `/contract-auditor`: 8 of 8 surface verdicts AGREE; 5 storage-layout / ABI-byte-identity / RNG-trace edge cases investigated (in-flight migration + sentinel collision + uint48 overflow + bit-boundary collision + unchecked arithmetic + reentrancy); zero FINDING_CANDIDATE; zero 9th-surface NEW_VECTOR.
+- `/zero-day-hunter`: 8 of 8 surface verdicts AGREE; 7 novel-vector hypotheses investigated (i)..(o) (mempool-visible seed front-run + consolation-mint griefing + cross-tx event-ordering manipulation + bits[152..167] xorshift covert channel + index-parameter state exposure + Phase 273 BAF interaction + storage-layout single-bit corruption); all 7 DISPOSITION = NEGATIVE_RESULT_ONLY; zero FINDING_CANDIDATE; zero 9th-surface NEW_VECTOR.
+- `/economic-analyst`: 8 of 8 surface verdicts AGREE; 5 mechanism-design hypotheses investigated (p)..(t) (variance-averse welfare impact + consolation incentive distortion + WWXRP supply governance + indexer semantic-shift + manual/auto-resolve cross-mixing); 3 DISPOSITION = NEGATIVE_RESULT_ONLY + 2 DISPOSITION = ACCEPTED_DESIGN (variance tradeoff + manual/auto-resolve asymmetry); zero KI promotion candidates.
+
+**Combined cross-skill verdict:** Phase 274 §4 verdict roll-up STANDS at 8 of 8 SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_DESIGN_PHASE_273. KNOWN-ISSUES.md UNMODIFIED per D-274-KI-01 default zero-promotion path. Zero F-39-NN finding blocks emit per D-274-KI-01 carry default path. The variance-increase tradeoff at surface (a) and the manual/auto-resolve asymmetry from D-274-MANUAL-ONLY-01 are documented as accepted-design via §4 (a) prose + the locked decision (NOT promoted to KNOWN-ISSUES.md).
 
 
 ---
