@@ -48,7 +48,9 @@
   5. Test coverage: TST-LBX-AR-01 EV-neutrality property (≥10K seeded `claimDecimatorJackpot` + `resolveRedemptionLootbox` invocations across scaled value span 47/99/100/147/250/1000/9999; `mean(whole_post) × TICKET_SCALE` within ±0.5% of pre-Bernoulli scaled value); TST-LBX-AR-02 boundary tests (scaled 0/1/99/100/101/199/200); TST-LBX-AR-03 silent-cold-bust regression (force seed where `whole==0` from non-zero pre; assert zero `TicketsQueued` emit, zero `LootBoxWwxrpReward` emit, zero `wwxrp.mintPrize` invocation, `wwxrp.balanceOf(player)` unchanged); TST-LBX-AR-04 seed-uniqueness chi-square across all 4 upstream callers; TST-LBX-AR-05 `_rollRemainder` zero-invocation regression on auto-resolve queues; TST-LBX-AR-06 mint-boost regression confirming `_rollRemainder` STILL fires for mint-boost queues per D-40N-MINTBOOST-OUT-01.
   6. Wave shape: 1 USER-APPROVED batched contract commit per `feedback_batch_contract_approval.md` + `feedback_no_contract_commits.md` + `feedback_never_preapprove_contracts.md` + `feedback_manual_review_before_push.md` (bytecode delta + gas delta reported in commit message; net gas-NEUTRAL expected after factoring eliminated `_rollRemainder` consumption at trait-assignment time) + 1 USER-APPROVED batched test commit. Both commits land before Phase 277 EVT-UNI begins (Phase 277 depends on this phase for sentinel retirement convergence).
 
-**Plans:** TBD
+**Plans:**
+- [ ] 275-A-PLAN.md — Wave 1: contract edits (Bernoulli hoist + auto-resolve _queueTickets swap + NatSpec update + worst-case gas benchmark + storage-layout proof) [LBX-AR-01..06]
+- [ ] 275-B-PLAN.md — Wave 2: test additions (TST-LBX-AR-01 EV-neutrality + TST-LBX-AR-02 boundaries + TST-LBX-AR-03 silent cold-bust + TST-LBX-AR-04 seed-uniqueness chi-square + TST-LBX-AR-05 _rollRemainder zero-invocation + TST-LBX-AR-06 mint-boost regression) [TST-LBX-AR-01..06]
 
 ### Phase 276: JackpotModule:2216 BAF Bernoulli (JPT-BR)
 
