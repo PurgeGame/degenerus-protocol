@@ -12,7 +12,7 @@
 - 4 callers updated: `openLootBox` (manual), `openBurnieLootBox` (manual), `resolveLootboxDirect` (auto-resolve), `resolveRedemptionLootbox` (auto-resolve)
 - New private constant `LOOTBOX_WWXRP_CONSOLATION = 1 ether`
 - New event `LootboxTicketRoll(address indexed player, uint48 indexed lootboxIndex, uint32 preRollTickets, bool roundedUp)` declared on `IDegenerusGameLootboxModule` interface AND at the LootboxModule contract event block
-- Bit-allocation NatSpec update for `bits[152..159]`
+- Bit-allocation NatSpec update for `bits[152..167]`
 
 **Out of scope (per user disposition 2026-05-13):**
 - Auto-resolve lootbox paths: `resolveLootboxDirect` (decimator-claim) + `resolveRedemptionLootbox` (sDGNRS-redemption) explicitly UNCHANGED — continue `_queueTicketsScaled` queuing, status-quo event emission, `_rollRemainder`-on-activation
@@ -63,13 +63,13 @@ The following decisions are LOCKED — the planner MUST honor them without re-de
 
 **Rationale:** User disposition 2026-05-13. Booby trigger is much rarer than the 10%-path WWXRP win, so 1:1 magnitude is acceptable; no per-magnitude variant ramping needed.
 
-### D-274-BIT-SLICE-01 — Bernoulli entropy bits[152..159]
+### D-274-BIT-SLICE-01 — Bernoulli entropy bits[152..167]
 
-**Decision:** Round-up Bernoulli reads `uint8(seed >> 152) % TICKET_SCALE` and compares against `uint8(frac)`. Consumes `bits[152..159]` of the per-resolution seed.
+**Decision:** Round-up Bernoulli reads `uint16(seed >> 152) % TICKET_SCALE` and compares against `uint16(frac)`. Consumes `bits[152..167]` of the per-resolution seed.
 
-**Rationale:** Previously-unallocated slice (primary chunk consumed 152/256 bits across 8 existing sub-roll consumers per the bit-allocation NatSpec). Bit 152-159 is 8 bits = mod 100 with ~0.39% bias (acceptable, matches the near-offset slice precedent).
+**Rationale:** Previously-unallocated slice (primary chunk consumed 152/256 bits across 8 existing sub-roll consumers per the bit-allocation NatSpec). 16-bit width keeps `% 100` bias at ≤0.10% relative (max preimage count over 100 residues is 656/65536 vs uniform 655.36/65536), consistent with the existing `uint16(seed) % 100` rangeRoll precedent at `bits[0..15]`. An 8-bit width would yield ~17% relative bias for `frac ≤ 56` (256 mod 100 = 56 residues with 3 preimages vs 44 residues with 2 preimages), systematically over-issuing rounded-up tickets; the 16-bit width eliminates that drift.
 
-**Implementation:** Update bit-allocation NatSpec in `_resolveLootboxCommon` (~lines 838-847) to add the new entry; update total-consumption line to 160/256.
+**Implementation:** Update bit-allocation NatSpec in `_resolveLootboxCommon` (~lines 838-847) to add the new entry; update total-consumption line to 168/256.
 
 ### D-274-CLOSURE-01 — Single-phase shape, multi-wave structure
 

@@ -131,6 +131,33 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 wwxrpAmount
     );
 
+    /// @notice Emitted on a manual lootbox open that resolved on the ticket-path with a
+    ///         non-zero pre-Bernoulli scaled ticket count. Exposes the pre-collapse scaled
+    ///         value and whether the Bernoulli round-up incremented the awarded whole-ticket
+    ///         count, enabling off-chain consumers to derive the awarded whole-ticket count
+    ///         as `(preRollTickets / 100) + (roundedUp ? 1 : 0)` and infer the WWXRP
+    ///         consolation case as `whole == 0 && preRollTickets > 0` (corroborated by
+    ///         a same-tx `LootBoxWwxrpReward`).
+    ///
+    ///         Emitted exactly once per manual lootbox open (`openLootBox` or
+    ///         `openBurnieLootBox`) whose ticket-path produced a non-zero scaled count
+    ///         after distress-bonus accumulation. Auto-resolve paths
+    ///         (`resolveLootboxDirect`, `resolveRedemptionLootbox`) never emit this event.
+    /// @param player The player whose lootbox was opened
+    /// @param lootboxIndex The per-player storage index of the opened lootbox
+    /// @param preRollTickets Post-distress, pre-Bernoulli scaled ticket count
+    ///        (× TICKET_SCALE). Matches same-tx `LootBoxOpened.futureTickets` /
+    ///        `BurnieLootOpen.tickets`.
+    /// @param roundedUp True iff the Bernoulli round-up incremented the awarded whole-ticket
+    ///        count by 1; false when `frac == 0` (no roll needed) or `frac != 0` and the
+    ///        Bernoulli sample fell at or above `frac`.
+    event LootboxTicketRoll(
+        address indexed player,
+        uint48 indexed lootboxIndex,
+        uint32 preRollTickets,
+        bool roundedUp
+    );
+
     /// @notice Unified lootbox reward event for boon awards
     /// @param player The player receiving the reward
     /// @param day The day index of the reward
@@ -276,6 +303,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_DGNRS_POOL_MEGA_PPM = 8000;
     /// @dev Fixed WWXRP prize amount (1 token)
     uint256 private constant LOOTBOX_WWXRP_PRIZE = 1 ether;
+    /// @dev Cold-bust consolation magnitude (1 token). Paid on a manual lootbox open
+    ///      whose ticket-path produced non-zero scaled tickets but the Bernoulli
+    ///      round-up failed to award a whole ticket. Magnitude-equal to
+    ///      LOOTBOX_WWXRP_PRIZE — the consolation trigger is much rarer than the
+    ///      10%-path WWXRP win, so 1:1 magnitude is intentional.
+    uint256 private constant LOOTBOX_WWXRP_CONSOLATION = 1 ether;
     /// @dev Base BPS for low BURNIE path (58.1%)
     uint16 private constant LOOTBOX_LARGE_BURNIE_LOW_BASE_BPS = 5_808;
     /// @dev Step increase in BPS for low BURNIE path (4.77% per step)
@@ -583,6 +616,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         _resolveLootboxCommon(
             player,
             day,
+            index,
             scaledAmount,
             targetLevel,
             currentLevel,
@@ -637,6 +671,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         (uint32 tickets, uint256 burnieReward, ) = _resolveLootboxCommon(
             player,
             day,
+            index,
             amountEth,
             targetLevel,
             currentLevel,
@@ -679,6 +714,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         _resolveLootboxCommon(
             player,
             day,
+            type(uint48).max,
             scaledAmount,
             targetLevel,
             currentLevel,
@@ -714,6 +750,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         _resolveLootboxCommon(
             player,
             day,
+            type(uint48).max,
             scaledAmount,
             targetLevel,
             currentLevel,
@@ -829,6 +866,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      Handles whale pass jackpots, lazy pass awards, ticket/BURNIE rolls, and boons.
     /// @param player Player receiving rewards
     /// @param day Day index for events
+    /// @param index Per-player storage index of the lootbox being opened (manual paths).
+    ///        Auto-resolve callers pass `type(uint48).max` as a sentinel; this dual-purpose
+    ///        value (a) gates the behavioral split between manual whole-ticket Bernoulli
+    ///        collapse and auto-resolve scaled queuing inside the `if (futureTickets != 0)`
+    ///        block, and (b) flows through to the `LootboxTicketRoll` event on manual paths
+    ///        as `lootboxIndex`. The sentinel is never an emitted `lootboxIndex` value
+    ///        because auto-resolve paths do not emit `LootboxTicketRoll`.
     /// @param amount ETH-equivalent amount for reward calculations
     /// @param targetLevel Target level for future tickets
     /// @param currentLevel Current game level
@@ -844,7 +888,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        bits[80..95]   varianceRoll % 20       (_resolveLootboxRoll large-BURNIE)
     ///        bits[96..119]  ticketVariance % 10000  (_lootboxTicketCount)
     ///        bits[120..151] boon roll % BOON_PPM_SCALE (_rollLootboxBoons)
-    ///      Total primary-chunk consumption: 152 bits / 256 available.
+    ///        bits[152..167] fracRoundUp % 100      (_resolveLootboxCommon manual-path ticket whole-collapse; auto-resolve paths leave slice unread; bias 0.10%)
+    ///      Total primary-chunk consumption: 168 bits / 256 available (bits[152..167] consumed only on manual paths; auto-resolve paths leave the slice unread).
     ///      ETH-amount-second branch uses seed2 = EntropyLib.hash2(seed, 1)
     ///      (counter-tagged chunk 1; collision-free vs primary chunk 0).
     /// @param presale Whether this is a presale lootbox (62% bonus BURNIE multiplier)
@@ -860,6 +905,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     function _resolveLootboxCommon(
         address player,
         uint32 day,
+        uint48 index,
         uint256 amount,
         uint24 targetLevel,
         uint24 currentLevel,
@@ -981,7 +1027,46 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     futureTickets = uint32(boosted);
                 }
             }
-            _queueTicketsScaled(player, targetLevel, futureTickets, false);
+            // Behavioral split: manual callers (openLootBox / openBurnieLootBox) pass a
+            // real `index`; auto-resolve callers pass `type(uint48).max` as a sentinel.
+            if (index != type(uint48).max) {
+                // Manual path: collapse scaled tickets to whole via a single Bernoulli
+                // round-up on bits[152..167] of the per-resolution seed. Function-scope
+                // `futureTickets` stays at the scaled value (consumed by the
+                // `LootBoxOpened` emit below and returned to `openBurnieLootBox` as
+                // `BurnieLootOpen.tickets`). A separate local `whole` carries the
+                // post-collapse value into `_queueTickets` / the cold-bust consolation.
+                uint32 scaledPre = futureTickets;
+                uint32 whole = futureTickets / uint32(TICKET_SCALE);
+                uint32 frac = futureTickets % uint32(TICKET_SCALE);
+                bool roundedUp = false;
+                if (frac != 0 && (uint16(seed >> 152) % uint16(TICKET_SCALE)) < uint16(frac)) {
+                    unchecked { whole += 1; }
+                    roundedUp = true;
+                }
+                if (whole != 0) {
+                    _queueTickets(player, targetLevel, whole, false);
+                } else {
+                    // Cold-bust consolation: ticket-path produced non-zero scaled but the
+                    // Bernoulli round-up failed to award a whole ticket. Pay
+                    // LOOTBOX_WWXRP_CONSOLATION via the same `mintPrize` interface used
+                    // by the regular 10%-path WWXRP win; reuse the existing
+                    // `LootBoxWwxrpReward` event signature so indexers distinguish a
+                    // consolation from a regular WWXRP win by absence of a same-tx
+                    // ticket-path emission AND presence of `LootboxTicketRoll` with
+                    // derived whole == 0.
+                    wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);
+                    emit LootBoxWwxrpReward(player, day, amount, LOOTBOX_WWXRP_CONSOLATION);
+                }
+                emit LootboxTicketRoll(player, index, scaledPre, roundedUp);
+            } else {
+                // Auto-resolve path (decimator-claim / sDGNRS-redemption). Queues at
+                // scaled granularity so the fractional remainder accumulates in the
+                // `rem` byte of `ticketsOwedPacked` and resolves at activation time
+                // via `_rollRemainder`. No Bernoulli, no consolation, no
+                // `LootboxTicketRoll` emit.
+                _queueTicketsScaled(player, targetLevel, futureTickets, false);
+            }
         }
 
         burnieAmount = burnieNoMultiplier + burniePresale;
