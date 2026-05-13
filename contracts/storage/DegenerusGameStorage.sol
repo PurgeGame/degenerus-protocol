@@ -1240,12 +1240,18 @@ abstract contract DegenerusGameStorage {
     ///      rngRequestTime during _handleGameOverPath) cannot transiently flip
     ///      liveness back to false while the drain is in progress.
     ///
-    ///      VRF-dead override: if day math has not yet been met, a VRF stall of
-    ///      _VRF_GRACE_PERIOD fires liveness so the game-over historical-fallback
-    ///      path in _gameOverEntropy can engage. Below that threshold, liveness
-    ///      stays false — players can propose a coordinator rotation via
-    ///      DegenerusAdmin, and missed days are credited back to purchaseStartDay
-    ///      in AdvanceModule.rngGate on fulfillment.
+    ///      Stalled-advance bailout: if day math has not yet been met, ANY
+    ///      condition that leaves rngRequestTime non-zero for _VRF_GRACE_PERIOD
+    ///      fires liveness. This covers genuine VRF death (callback never lands)
+    ///      and any bug that prevents the advance state machine from reaching
+    ///      _unlockRng — gas exhaustion, unexpected reverts in drain/jackpot
+    ///      paths, or any other failure mode that bricks the cycle after a
+    ///      fulfilled callback. In all cases the historical-fallback path in
+    ///      _gameOverEntropy engages, letting funds drain to players via
+    ///      terminal jackpot rather than remaining trapped. Below that
+    ///      threshold, liveness stays false — players can propose a coordinator
+    ///      rotation via DegenerusAdmin, and missed days are credited back to
+    ///      purchaseStartDay in AdvanceModule.rngGate on fulfillment.
     function _livenessTriggered() internal view returns (bool) {
         if (lastPurchaseDay || jackpotPhaseFlag) return false;
         uint24 lvl = level;
