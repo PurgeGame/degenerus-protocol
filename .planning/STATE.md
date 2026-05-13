@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v39.0
-milestone_name: Lootbox Whole-Ticket Rounding + WWXRP Consolation
-status: shipped
-last_updated: "2026-05-13T13:27:25.386Z"
-last_activity: 2026-05-13 -- Phase 274 execution started
+milestone: v40.0
+milestone_name: Unified Whole-Ticket Award Protocol
+status: planning
+last_updated: "2026-05-13T15:36:51.878Z"
+last_activity: 2026-05-13
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.
 
 ## Current Position
 
-Phase: 274 (lootbox-whole-ticket-rounding-wwxrp-consolation-terminal) — SHIPPED
-Plan: 1 of 1 complete
-Status: v39.0 milestone SHIPPED; between-milestones state
-Last activity: 2026-05-13 -- v39.0 milestone shipped; closure signal MILESTONE_V39_AT_HEAD_6a7455d1
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-13 — Milestone v40.0 started
 
 ## Last Shipped Milestone
 
