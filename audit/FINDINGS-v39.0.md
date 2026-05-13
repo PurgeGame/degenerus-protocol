@@ -597,3 +597,96 @@ Per-finding 6-col PASS/REGRESSED/SUPERSEDED row table from REG-04 grep sweep acr
 
 Zero REGRESSED rows. Zero SUPERSEDED rows at v39. EXC-04 NARROWS-retained per §5c REG-03 (BAF-jackpot-only scope carries forward; EntropyLib byte-identical at v39 HEAD; the v39 manual-path Bernoulli reads keccak primary entropy NOT XOR-shift output per backward-trace cite). Surfaces strictly disjoint between v39 manual-lootbox-Bernoulli payload and all v34/v36/v37/v38 verdicts. The single Phase-273-carve-out at REG-01 (BurnieCoinflip non-identity vs `06623edb`) is folded as included-since-baseline per D-274-BAF273-INCLUDE-01 and does not regress the v38.0 closure-signal posture at any v38-touched surface (Phase 273 lives in the BAF jackpot subsystem which is surface-disjoint from the v38 Degenerette hero-quadrant-extraction payload).
 
+
+---
+
+## 6. KI Gating Walk
+
+### 6a. Non-Promotion Ledger
+
+Zero F-39-NN finding blocks emitted per D-274-KI-01; zero rows in Non-Promotion Ledger.
+
+Default path: Phase 274 §4 8-surface inline draft (Task 3.4) verdicts 8 of 8 SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_DESIGN_PHASE_273. Task 3.7 adversarial-pass via `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` (3 skills PARALLEL spawn per D-274-ADVERSARIAL-01) concurs with zero disagreement per `274-01-ADVERSARIAL-LOG.md` Disposition note (D-274-ADVERSARIAL-01 escalation path evaluated and does NOT fire by default). The variance-impact tradeoff at surface (a) (per-lootbox Bernoulli increases per-open variance vs the v38 cross-lootbox-deterministic-accumulation flow) satisfies the D-09 3-predicate KI Gating Rubric (accepted-design + non-exploitable + sticky) in principle but is correctly documented via §4 (a) prose-only attestation per D-274-KI-01 default disposition — `/economic-analyst` assessment concludes KNOWN-ISSUES.md UNMODIFIED is the correct disposition (zero EV change; variance increase bounded; no player-reachable value-extraction path; the player still receives `E[whole_post] × 100 = scaledPre` in expectation across the long-run distribution).
+
+### 6b. KI Envelope Re-Verifications
+
+4-row KI envelope table mirroring v38.0 §6b format. Per D-274-KI-01: EXC-01..03 RE_VERIFIED-NEGATIVE-scope; EXC-04 RE_VERIFIED with NARROWS retained from v36.0.
+
+| EXC | Surface | v39.0 Disposition | Evidence |
+| --- | ------- | ---------------- | -------- |
+| EXC-01 | Affiliate roll RNG | `RE_VERIFIED-NEGATIVE-scope` | Phase 274 has zero affiliate-roll interaction. MintModule byte-identical at v39 HEAD vs `06623edb` (cross-module byte-identity grep proof in §3.B). No v39 commit touches the affiliate-roll path. Carry-forward from v38.0 §6b EXC-01 + v37.0 + v36.0 Phase 266 KI envelope walk. |
+| EXC-02 | Backfill / prevrandao fallback | `RE_VERIFIED-NEGATIVE-scope` | Phase 274 has zero AdvanceModule interaction. AdvanceModule body byte-identical at v39 HEAD vs `06623edb` (no `contracts/modules/DegenerusGameAdvanceModule.sol` in the v39 diff scope; verified at §3.B cross-module byte-identity). No v39 commit touches the gameover-prevrandao-fallback path. Carry-forward from v38.0 §6b EXC-02 + v37.0 + v36.0 Phase 266 KI envelope walk. |
+| EXC-03 | F-29-04 mid-cycle write-buffer substitution | `RE_VERIFIED-NEGATIVE-scope` | Phase 274 has zero gameover-RNG-substitution interaction. AdvanceModule + swap path byte-identical at v39 HEAD. No v39 commit modifies the mid-cycle write-buffer mechanics. Carry-forward from v38.0 §6b EXC-03. |
+| EXC-04 | EntropyLib XOR-shift PRNG (BAF-jackpot-only scope at v36.0) | `RE_VERIFIED with NARROWS retained` | EntropyLib body byte-identical at v39 HEAD vs `06623edb` per cross-module byte-identity grep proof in §3.B (`git diff 06623edb..HEAD -- contracts/libraries/EntropyLib.sol` returns 0 lines) AND vs v36.0 baseline `1c0f0913` per REG-01 chain (v38.0 SURF-01a + v37.0 SURF-04 grep-proof). Per-resolution keccak seed path UNCHANGED in v39 — Phase 274 manual-path Bernoulli reads `bits[152..167]` of the per-resolution keccak seed (`seed = keccak256(abi.encode(rngWord, player, day, amount))`), NOT XOR-shift output. The XOR-shift PRNG (EntropyLib.entropyStep) remains as BAF-jackpot consumer only at v39 HEAD per v36 ENT-05 carry. NARROWS scope (BAF-jackpot-only) carried verbatim from v36 AUDIT-05 KI-envelope-narrowing edit through v37 + v38 + v39. |
+
+**Backward-trace methodology cite (per `feedback_rng_backward_trace.md`):** Phase 274 lootbox manual-path Bernoulli consumes VRF-derived high-entropy keccak bits (NOT XOR-shift output) — the `bits[152..167]` slice at `_resolveLootboxCommon` L1029-1043 reads from the per-resolution keccak seed which uses `rngWord` (the VRF callback word) as one of its preimage inputs. The VRF word is unknown at the player's lootbox commitment point (`mintLootbox` / `mintBurnieLootbox` time, before VRF request finalization). EntropyLib XOR-shift remains as BAF-jackpot consumer only at v39 HEAD; backward-trace closed (the VRF word is structurally unknown at the player's lootbox commitment point). v36.0 ENT-01..06 + v37.0 LBX-01 + v38.0 SURF-01a empirical witnesses validate the lootbox-path keccak entropy consumer at the SURF / STAT layer; v39 extends the bit-allocation NatSpec from 152 → 168 within the same primary chunk's 256-bit capacity without altering the keccak primary entropy source.
+
+**Commitment-window check cite (per `feedback_rng_commitment_window.md`):** Phase 274 has zero RNG-path mutation at the keccak primary entropy source layer (EntropyLib byte-identical); commitment-window check is a structurally trivial degenerate PASS at v39. The new `bits[152..167]` Bernoulli reads from the unchanged keccak seed; the keccak preimage `(rngWord, player, day, amount)` is fully committed at the time of `_resolveLootboxCommon` invocation (no player-controllable input mutates between VRF commit and lootbox open that affects `bits[152..167]` independently of the other 7 sub-roll consumers). Player-controllable state at lootbox commitment (`lootboxEth[index][player]` / `lootboxBurnie[index][player]` storage slots set by prior `mintLootbox` / `mintBurnieLootbox`) is fixed and cannot change between VRF request and fulfillment. Bot front-run via VRF mempool visibility remains STRUCTURALLY PREVENTED (carry-forward from v36.0 + v37.0 + v38.0 commitment-window verdicts).
+
+### 6c. Verdict Summary
+
+**`0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`**
+
+The variance-impact tradeoff at surface (a) (per-lootbox Bernoulli vs cross-lootbox-deterministic-accumulation) is documented as accepted-design via §4 surface (a) prose disclosure ONLY per D-274-KI-01 + `/economic-analyst` mechanism-design assessment (see `274-01-ADVERSARIAL-LOG.md`). NO new KNOWN-ISSUES.md entry under Design Decisions. EV invariant preserved by the floor + biased-coin-flip identity (per surface (a)); player receives same EV in expectation across the long-run distribution; bounded variance increase per user disposition (degen-game context; the new `LootboxTicketRoll` event surfaces the variance to UI for transparency; the new WWXRP consolation provides a guaranteed payout floor on the cold-bust outcomes); no player-reachable path extracts protocol value from the variance increase.
+
+KNOWN-ISSUES.md UNMODIFIED at v39 close per `git diff 06623edb..HEAD -- KNOWN-ISSUES.md` returning empty.
+
+---
+
+## 7. Prior-Artifact Cross-Cites
+
+Cross-cites organized in 4 subsections per the canonical FINDINGS shape: v39.0 phase artifacts, prior milestone FINDINGS, notes, and project-state artifacts.
+
+### 7.1. v39.0 Phase Artifacts
+
+- **Phase 274 — Lootbox Whole-Ticket Rounding + WWXRP Consolation (Terminal):**
+  - `.planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-CONTEXT.md` — phase-gather context with D-274-MANUAL-ONLY-01 / D-274-NO-EVT-BREAK-01 / D-274-EVT-ROLL-01 / D-274-EVT-INDEX-SENTINEL-01 / D-274-WX-AMOUNT-01 / D-274-BIT-SLICE-01 / D-274-CLOSURE-01 / D-274-APPROVAL-01 / D-274-ADVERSARIAL-01 / D-274-JACKPOT-OUT-01 / D-274-FCITE-01 / D-274-KI-01 / D-274-SEV-01 / D-274-FILES-01 / D-274-MINTBOOST-OUT-01 / D-274-AUTORESOLVE-OUT-01 / D-274-LBX02-OUT-01 / D-274-BAF273-INCLUDE-01 + inherited carry-forward chain.
+  - `.planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-01-PLAN.md` — multi-task planner output (3 waves + final user-review gate: Wave 1 contract change + Wave 2 test change + Wave 3 audit deliverable + Wave 3 final READ-only flip).
+  - `.planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-01-ADVERSARIAL-LOG.md` — Wave 3 Task 3.7 output: 3 H2 sections (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) + Disposition.
+  - `.planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-01-SUMMARY.md` — Wave 3 phase-close summary (post-Task-3.11 atomic chain).
+  - Wave 1 contract-side change: `c21f833a` — `feat(274): manual lootbox Bernoulli whole-ticket + WWXRP consolation + LootboxTicketRoll event [LBX-WT-01..05, LBX-WX-01..04, LBX-EVT-01..06]`.
+  - Wave 2 test-side change: `f8e55cfe` — `test(274): manual lootbox whole-ticket + consolation + auto-resolve regression + LootboxTicketRoll [TST-WT-01..07, TST-WX-01..03, TST-REG-01..04]`.
+
+- **Phase 273 — BAF Credit Routing Fix (Maintenance — pre-v39.0; included-since-baseline per D-274-BAF273-INCLUDE-01):**
+  - `.planning/phases/273-baf-credit-routing-fix/273-CONTEXT.md` — Phase 273 context.
+  - `.planning/phases/273-baf-credit-routing-fix/273-01-PLAN.md` — Phase 273 plan.
+  - `.planning/phases/273-baf-credit-routing-fix/273-01-SUMMARY.md` — Phase 273 close summary.
+  - Phase 273 changes: `ff929948` BAF credit routing 3-point patch + `e9807891` BAF-ROUTE-06/07/08 test expansion + `e04d3333` Phase 273 SUMMARY + `1eb1ecb5` `_livenessTriggered` NatSpec clarification. 14 of 14 tests passing at `test/edge/BafCreditRouting.test.js`.
+
+### 7.2. Prior Milestone FINDINGS Cross-Cites
+
+13 prior milestone-closure deliverables enumerated for REG-04 spot-check sweep + closure-signal chain context:
+
+- `audit/FINDINGS-v25.0.md`
+- `audit/FINDINGS-v27.0.md`
+- `audit/FINDINGS-v28.0.md`
+- `audit/FINDINGS-v29.0.md`
+- `audit/FINDINGS-v30.0.md`
+- `audit/FINDINGS-v31.0.md`
+- `audit/FINDINGS-v32.0.md`
+- `audit/FINDINGS-v33.0.md`
+- `audit/FINDINGS-v34.0.md`
+- `audit/FINDINGS-v35.0.md`
+- `audit/FINDINGS-v36.0.md` (Phase 266 lootbox-path entropy refactor — direct predecessor for v39 lootbox-path additions; new `bits[152..167]` slice extends v36 bit-allocation NatSpec pattern)
+- `audit/FINDINGS-v37.0.md`
+- `audit/FINDINGS-v38.0.md` (immediate baseline)
+
+**Closure-signal chain:** v25 → v27 → v28 → v29 → v30 → v31 → v32 → v33 → v34 (`MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`) → v35 → v36 (`MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`) → v37 (`MILESTONE_V37_AT_HEAD_2654fcc2`) → v38 (`MILESTONE_V38_AT_HEAD_06623edb`) → v39 (`MILESTONE_V39_AT_HEAD_<sha>` — emitted §9c; SHA resolved at Wave 3 Task 3.10 atomic-update).
+
+REG-01 carries v38.0 closure signal verbatim per §5a (REG-v38.0-LBX-MANUAL PASS).
+REG-02 carries v34.0 closure signal verbatim per §5b (REG-v34.0-TRAIT-SOLO PASS).
+REG-04 walks v25..v38.0 per §5d (6 PASS / 0 REGRESSED / 0 SUPERSEDED).
+
+### 7.3. Notes Cross-Cites
+
+- (none expected at v39; Phase 274 is mechanical — the bit-allocation NatSpec extension + manual-path branch + new constant + new event are direct LBX-WT-01..05 + LBX-WX-01..04 + LBX-EVT-01..06 requirement satisfactions with no upstream design-note dependencies)
+
+### 7.4. Project-State Cross-Cites
+
+- `.planning/PROJECT.md` "Current Milestone v39.0" block + "Deferred to Future Milestones" subsection (updated at Wave 3 Task 3.10 per D-274-CLOSURE-01 with future-milestone carry-forward bullets — mint-boost retirement + auto-resolve retirement + jackpot ticket-award sites + BAF Bernoulli + v36.0 ENT-05 xorshift refactor).
+- `.planning/MILESTONES.md` closure-signal chain v25 → v38 + v39 in-progress row (flipped to SHIPPED at Wave 3 Task 3.10 with closure signal `MILESTONE_V39_AT_HEAD_<sha>` recorded).
+- `.planning/ROADMAP.md` v39.0 milestone bullet (flipped to ✅ at Wave 3 Task 3.10).
+- `.planning/REQUIREMENTS.md` 39 v39.0 requirements traceability (flipped to Complete at Wave 3 Task 3.10).
+- `.planning/STATE.md` Last Shipped Milestone updated to v39.0 (flipped at Wave 3 Task 3.10).
+- `KNOWN-ISSUES.md` EXC-01..04 envelopes (UNMODIFIED at v39 close per default path; `git diff 06623edb..HEAD -- KNOWN-ISSUES.md` returns empty).
+
