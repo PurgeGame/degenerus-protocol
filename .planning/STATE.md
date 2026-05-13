@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v40.0
 milestone_name: Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor
-status: executing
-last_updated: "2026-05-13T17:20:04.741Z"
-last_activity: 2026-05-13 -- Phase 275 planning complete
+status: completed
+last_updated: "2026-05-13T18:25:40.994Z"
+last_activity: 2026-05-13 -- Phase 275 marked complete
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 0
-  percent: 0
+  completed_plans: 2
+  percent: 17
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.
 
 ## Current Position
 
-Phase: 275 — Auto-Resolve LootboxModule Bernoulli (LBX-AR) — Not started
+Phase: 275 — COMPLETE
 Plan: —
-Status: Ready to execute
-Last activity: 2026-05-13 -- Phase 275 planning complete
+Status: Phase 275 complete
+Last activity: 2026-05-13 -- Phase 275 marked complete
 
 ## Last Shipped Milestone
 
