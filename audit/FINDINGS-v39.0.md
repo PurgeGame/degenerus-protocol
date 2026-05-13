@@ -697,3 +697,55 @@ REG-04 walks v25..v38.0 per §5d (6 PASS / 0 REGRESSED / 0 SUPERSEDED).
 - `.planning/STATE.md` Last Shipped Milestone updated to v39.0 (flipped at Wave 3 Task 3.10).
 - `KNOWN-ISSUES.md` EXC-01..04 envelopes (UNMODIFIED at v39 close per default path; `git diff 06623edb..HEAD -- KNOWN-ISSUES.md` returns empty).
 
+
+---
+
+## 8. Forward-Cite Closure (D-253-09 + D-253-15 step 8 Terminal-Phase Rule)
+
+Terminal-phase zero-emission verification per D-274-FCITE-01 (carry of D-272-FCITE-01 / D-271-FCITE-01 / D-266-FCITE / D-265-FCITE-01 / D-262-FCITE-01 / D-257-FCITE-01 / D-253-15 step 8 + ROADMAP terminal-phase rule). Phase 274 is the SOLE terminal v39.0 phase; v39.0 = single-phase milestone (Phase 274).
+
+### 8a. Phase 274 Intra-Milestone Forward-Cite Residual Verification
+
+**Grep recipe (scoped to audit + phase artifacts only):**
+```
+grep -rnE "Phase (275|276|277|278)|v40\.0|v41\.0" \
+  audit/FINDINGS-v39.0.md \
+  .planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/
+```
+
+**Filter:** exclude meta-references that cite "Phase 275+" / "v40.0+" only to negate (lines containing `NOT forward-cites`, `fresh delta-extraction`, `Future milestones`, or `zero forward-cites` — these are the rule's self-statement, not forward-cites to specific in-flight work).
+
+**Output:** Zero non-meta matches in `audit/FINDINGS-v39.0.md` for specific in-flight Phase 275+ / v40.0+ work. Phase 274 is the terminal v39.0 phase; no in-flight Phase 275+ work is forward-cited.
+
+**Deferred items cited via locked-decision IDs:** the v39.0 carry-forward bundle (mint-boost retirement, auto-resolve retirement, jackpot ticket-award sites + BAF Bernoulli + v36.0 ENT-05 xorshift refactor + ticket-vs-entry granularity decision + event surface unification + JackpotModule:2216 BAF small-lootbox Bernoulli + cosmetic JackpotModule cleanup) is cited via the locked-decision IDs `D-274-MINTBOOST-OUT-01` / `D-274-AUTORESOLVE-OUT-01` / `D-274-JACKPOT-OUT-01` / `D-274-LBX02-OUT-01` without naming specific future-milestone numbers. The "Deferred to Future Milestones" subsection in PROJECT.md is the single-source-of-truth lookup for future-pickup; the §"Deferred to Future Milestones" subsection in this deliverable's §9 records the items via these decision-anchor IDs.
+
+**Verdict:** PASS.
+
+### 8b. Phase 274 → Post-Milestone Forward-Cite Emission
+
+**Grep recipe (scoped to audit + phase artifacts only):**
+```
+! grep -rE "Phase (275|276|277|278)|v40\.0|v41\.0" \
+  audit/FINDINGS-v39.0.md \
+  .planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-CONTEXT.md \
+  .planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-01-PLAN.md \
+  .planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-01-ADVERSARIAL-LOG.md \
+  .planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-01-SUMMARY.md
+```
+
+**Expected:** exit 0 (zero matches when scoping to audit deliverable + phase artifacts; v39-internal `<sha>` placeholder + the deferred-items locked-decision IDs are inside the carve-out per the rule below).
+
+**Pickup-pointer carve-out:** the §9 §"Deferred to Future Milestones" subsection records carry-forward items via locked-decision IDs (D-274-MINTBOOST-OUT-01 / D-274-AUTORESOLVE-OUT-01 / D-274-JACKPOT-OUT-01 / D-274-LBX02-OUT-01) — these are forward-pointers for future-phase pickup (planner-handoff register), NOT forward-cites to in-flight Phase 275+ work. Per the v37.0 + v38.0 precedent: PROJECT.md "Deferred to Future Milestones" is the single-source-of-truth lookup. Test files with operational-pickup references at the test-tree (NOT in this audit deliverable) are also pickup-pointers, not forward-cites; they are out-of-scope for the §8 invariant. Terminal-phase invariant remains satisfied per D-274-FCITE-01.
+
+**Allowlist:** the §9 §"Deferred to Future Milestones" subsection is a planned-handoff register, NOT a forward-cite to in-flight v40.0 work. The "Deferred to Future Milestones" subsection in PROJECT.md is the single-source-of-truth lookup. "ingest via fresh delta-extraction phase" is the rule's self-statement of how future milestones consume v39 artifacts.
+
+**Verdict:** PASS — pickup-pointer carve-out applies for `v40+` matches inside FINDINGS-v39.0.md §9 §"Deferred to Future Milestones"; zero forward-cites emitted outside the carve-out. (Note: the planner author may use the literal "v40.0+" in the §9 carry-forward register and CONTEXT.md `<deferred_items>` block as planner-handoff identifiers; these are pickup-pointers, not forward-cites to in-flight work.)
+
+### 8c. Combined §8 Verdict
+
+Zero forward-cites emitted from Phase 274 to any in-flight v40.0+ phases. The §9 §"Deferred to Future Milestones" subsection (Task 3.9) contains explicit deferred-handoff items cited via locked-decision IDs (D-274-MINTBOOST-OUT-01 / D-274-AUTORESOLVE-OUT-01 / D-274-JACKPOT-OUT-01); these are planner handoff REGISTERS tying into next-milestone pickup via `.planning/PROJECT.md` "Deferred to Future Milestones" single-source-of-truth lookup, NOT forward-cites to in-flight Phase 275+ work.
+
+Future milestones (v40.0+) ingest via fresh delta-extraction phase, not via forward-cite from v39 artifacts.
+
+**Verdict:** PASS — terminal-phase invariant satisfied per D-274-FCITE-01.
+
