@@ -749,3 +749,115 @@ Future milestones (v40.0+) ingest via fresh delta-extraction phase, not via forw
 
 **Verdict:** PASS — terminal-phase invariant satisfied per D-274-FCITE-01.
 
+
+---
+
+## 9. Milestone Closure Attestation
+
+### 9a. Verdict Distribution
+
+Per-section roll-up:
+- **§4** F-39-NN finding blocks: **8 of 8** surfaces (a)..(h) verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_DESIGN_PHASE_273; **zero F-39-NN finding blocks emitted** per D-274-KI-01 default path; **zero 9th-surface NEW_VECTOR** per the 3-skill PARALLEL adversarial-pass cross-skill review at `274-01-ADVERSARIAL-LOG.md`.
+- **§5** Regression Appendix: REG-01 **1 PASS** (v38.0 closure signal NON-WIDENING for v38-touched surfaces NOT in v39 manual-lootbox scope; Phase 273 BurnieCoinflip carve-out folded as included-since-baseline per D-274-BAF273-INCLUDE-01); REG-02 **1 PASS** (v34.0 closure signal NON-WIDENING); REG-03 **4 PASS** (EXC-01..03 NEGATIVE-scope + EXC-04 RE_VERIFIED with NARROWS retained — BAF-jackpot-only); REG-04 **6 PASS / 0 REGRESSED / 0 SUPERSEDED** (prior-finding spot-check sweep across `audit/FINDINGS-v25.0.md` → `audit/FINDINGS-v38.0.md`). Aggregate: **12 PASS / 0 REGRESSED / 0 SUPERSEDED**.
+- **§6** KI Gating Walk: **`0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`** (default path per D-274-KI-01). EXC-01..03 RE_VERIFIED-NEGATIVE-scope; EXC-04 RE_VERIFIED with NARROWS retained.
+- **AUDIT-04** adversarial-pass: 3 skills (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) PARALLEL spawn per D-274-ADVERSARIAL-01 (`/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry); all concur on the 8 §4 surface verdicts; zero FINDING_CANDIDATE / zero 9th-surface / zero KI promotion candidate per `.planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-01-ADVERSARIAL-LOG.md` Disposition section. 12 novel-vector hypotheses investigated (i)..(t) across the 3 skills; 10 DISPOSITION = NEGATIVE_RESULT_ONLY + 2 DISPOSITION = ACCEPTED_DESIGN (variance tradeoff + manual/auto-resolve asymmetry; both documented via §4 surface (a) prose + D-274-MANUAL-ONLY-01 locked decision; NOT promoted to KNOWN-ISSUES.md). Does NOT change §4 verdict roll-up.
+- **Combined milestone closure:** `MILESTONE_V39_AT_HEAD_<sha>`.
+
+### 9b. Attestation Block
+
+D-253-15 step 9 attestation block triggering v39.0 milestone closure. Cite 3-skill PARALLEL adversarial-pass concurrence (per `274-01-ADVERSARIAL-LOG.md` Disposition section — all 3 skills concurred on §4 verdict roll-up; zero FINDING_CANDIDATE; 12 novel-vector hypotheses (i)..(t) returned NEGATIVE_RESULT_ONLY or ACCEPTED_DESIGN — does NOT change the closure verdict).
+
+```
+git rev-parse HEAD
+# v39.0 closure HEAD <v39-close-sha>   — resolved at Task 3.10 atomic-update per D-274-CLOSURE-01
+# v38.0 baseline                       — 06623edb
+#   signal                            — MILESTONE_V38_AT_HEAD_06623edb
+# v34.0 second-prior closure          — 6b63f6d4daf346a53a1d463790f637308ea8d555 (REG-02 carry)
+#   signal                            — MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555
+# Phase 273 included-since-baseline:
+#   ff929948 fix(273): BAF credit routing
+#   e9807891 test(273): BAF-ROUTE-06/07/08 expansion
+#   e04d3333 chore(273): phase SUMMARY
+#   1eb1ecb5 docs: _livenessTriggered NatSpec clarification
+```
+
+Phase 274 source-tree HEAD at adversarial-pass close: `f8e55cfe` (Wave 2 test-side change — last source-tree mutation in v39 milestone scope; Phase 273 included-since-baseline commits are pre-shipped maintenance NOT v39 work). Docs-tree HEAD captured separately at Wave 3 Task 3.10 atomic-update per Phase 257 D-257-CLOSURE-01 / Phase 262 D-262-CLOSURE-01 / Phase 265 D-265-CLOSURE-01 / Phase 266 D-266-CLOSURE-01 / Phase 271 D-271-CLOSURE-01 / Phase 272 D-272-CLOSURE-01 carry → D-274-CLOSURE-01.
+
+### 9c. Closure Signal
+
+`MILESTONE_V39_AT_HEAD_<sha>`
+
+Placeholder `<sha>` resolved at Task 3.10 atomic-update per D-274-CLOSURE-01 across 5 verbatim FINDINGS locations: (1) `audit/FINDINGS-v39.0.md` §1 frontmatter `audit_subject_head:` field; (2) `audit/FINDINGS-v39.0.md` §1 frontmatter `closure_signal:` field; (3) `audit/FINDINGS-v39.0.md` §2 Closure Verdict Summary line `Combined milestone closure: MILESTONE_V39_AT_HEAD_<sha>`; (4) `audit/FINDINGS-v39.0.md` §9c this line; (5) `audit/FINDINGS-v39.0.md` §9b Attestation Block. Plus 3 cross-document propagation locations resolved by Task 3.10: `.planning/MILESTONES.md` v39.0 row, `.planning/ROADMAP.md` v39.0 milestone bullet, and `.planning/STATE.md` Last Shipped Milestone block.
+
+### 9.NN Commit-Readiness Register
+
+TWO-subsection commit-readiness register per D-274-CLOSURE-02 carry of D-272-CLOSURE-02 (i USER-APPROVED contracts + ii USER-APPROVED tests + iii AGENT-COMMITTED audit + planning artifacts + iv Phase 273 included-since-baseline 4-commit list; the historical "awaiting" / "pending review" closure subsection is OMITTED per D-272-CLOSURE-02 carry). §"Deferred to Future Milestones" subsection below is a separate planner-handoff register from this commit-readiness register (pickup-pointer carve-out per §8).
+
+#### 9.NN.i USER-APPROVED contracts (Phase 274 Wave 1)
+
+| SHA | Subject | Files | Phase |
+| --- | ------- | ----- | ----- |
+| `c21f833a` | `feat(274): manual lootbox Bernoulli whole-ticket + WWXRP consolation + LootboxTicketRoll event [LBX-WT-01..05, LBX-WX-01..04, LBX-EVT-01..06]` | `contracts/modules/DegenerusGameLootboxModule.sol` (manual-branch addition + `LOOTBOX_WWXRP_CONSOLATION` constant + `LootboxTicketRoll` event + `uint48 index` threading + bit-allocation NatSpec update 152 → 168) + `contracts/interfaces/IDegenerusGameModules.sol` (new `LootboxTicketRoll` event declaration on `IDegenerusGameLootboxModule` interface). Storage layout byte-identical vs `06623edb` (zero new storage slots; new constant inlined; new event log calldata-equivalent). D-274-BIT-SLICE-01 superseded intra-Wave-1: bit-slice widened from 8 to 16 bits (bits[152..159] → bits[152..167]) on quantification of the 8-bit form's ~17% relative bias for `frac ≤ 56` vs the 16-bit form's ≤0.10% relative bias. | 274 |
+
+#### 9.NN.ii USER-APPROVED tests (Phase 274 Wave 2)
+
+| SHA | Subject | Files | Phase |
+| --- | ------- | ----- | ----- |
+| `f8e55cfe` | `test(274): manual lootbox whole-ticket + consolation + auto-resolve regression + LootboxTicketRoll [TST-WT-01..07, TST-WX-01..03, TST-REG-01..04]` | 4 new test files: `test/unit/LootboxWholeTicket.test.js` (TST-WT-01..07 manual-path whole-ticket; +712 LOC), `test/unit/LootboxConsolation.test.js` (TST-WX-01..03 consolation predicate matrix + magnitude; +217 LOC), `test/edge/LootboxAutoResolveRegression.test.js` (TST-REG-01..04 auto-resolve byte-equivalence + cross-mixing; +338 LOC), `test/stat/LootboxBernoulliEv.test.js` (EV-neutrality property test; +155 LOC). Total +1,422 LOC; 74 tests; all 74 passing at Wave 2 close. | 274 |
+
+NONE FURTHER expected per pure-consolidation hard constraint per D-274-APPROVAL-01 (`git diff f8e55cfe..HEAD -- contracts/ test/` empty at phase close — all source-tree mutations landed under USER-APPROVED batched gates at Wave 1 + Wave 2).
+
+#### 9.NN.iii AGENT-COMMITTED audit + planning artifacts (Wave 3+ atomic chain)
+
+Wave 3 atomic-per-task chain (audit deliverable + adversarial pass + closure flips):
+
+- Task 3.1: `audit(274): seed FINDINGS-v39.0.md §1 frontmatter + §2 executive summary skeleton`
+- Task 3.2: `audit(274): §3a + §3.A delta-surface table (LBX-WT + LBX-WX + LBX-EVT + Phase 273 included + Wave 1/2 rows)`
+- Task 3.3: `audit(274): §3.B AUDIT-04 zero-new-state + §3.C AUDIT-03 conservation re-proof`
+- Task 3.4: `audit(274): §4 8-surface adversarial-sweep row table (a..h) pre-adversarial-pass draft`
+- Task 3.5: `audit(274): §5 LEAN regression appendix (REG-01..04)`
+- Task 3.6: `audit(274): §6 KI gating walk + §7 prior-artifact cross-cites`
+- Task 3.7: `audit(274): 3-skill PARALLEL adversarial pass + §4.2 verdict roll-up + 274-01-ADVERSARIAL-LOG.md`
+- Task 3.8: `audit(274): §8 forward-cite closure (terminal-phase zero-emission verification)`
+- Task 3.9: `audit(274): §9 closure attestation block + §9.NN commit-readiness register + 274-01-SUMMARY.md` (this commit)
+- Task 3.10: `audit(274): closure-signal SHA resolution + cross-document flips [MILESTONE_V39_AT_HEAD_<sha-8>]` (pending)
+- Task 3.11: `audit(274): finalize audit/FINDINGS-v39.0.md as READ-only at v39 closure HEAD` (pending, post-user-approval)
+
+Wave 3 also includes:
+- `audit/FINDINGS-v39.0.md` (this deliverable) — agent-authored across Wave 3 Tasks 3.1-3.9; READ-only flip at Wave 3 Task 3.11 (chmod 444 + frontmatter `status: FINAL — READ-ONLY` + `read_only: true`).
+- `.planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-CONTEXT.md` — phase-gather context (pre-Wave-3; AGENT-COMMITTED).
+- `.planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-01-PLAN.md` — multi-task planner output (pre-Wave-3; AGENT-COMMITTED).
+- `.planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-01-ADVERSARIAL-LOG.md` — Wave 3 Task 3.7 output: 3 H2 skill sections (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) + Disposition.
+- `.planning/phases/274-lootbox-whole-ticket-rounding-wwxrp-consolation-terminal/274-01-SUMMARY.md` — Wave 3 phase-close summary (Task 3.9; this commit).
+- `.planning/ROADMAP.md` + `.planning/STATE.md` + `.planning/MILESTONES.md` + `.planning/PROJECT.md` + `.planning/REQUIREMENTS.md` — closure flips applied at Wave 3 Task 3.10.
+- `KNOWN-ISSUES.md` — UNMODIFIED at v39 close per D-274-KI-01 default zero-promotion path.
+
+**No "pending USER-APPROVAL" subsection emitted per D-274-CLOSURE-02** — all v39 contract + test mutations already landed under USER-APPROVED batched review at Wave 1 (`c21f833a`) + Wave 2 (`f8e55cfe`) close per `feedback_batch_contract_approval.md` + `feedback_no_contract_commits.md` + `feedback_never_preapprove_contracts.md`. Wave 3 emits ZERO contract/test mutations per D-274-APPROVAL-01 hard constraint.
+
+#### 9.NN.iv Phase 273 included-since-baseline (4-commit list)
+
+Per D-274-BAF273-INCLUDE-01: 4 maintenance changes shipped between v38.0 closure HEAD `06623edb` and v39.0 open. Folded into v39.0 audit baseline as included-since-baseline surface-coverage attestation (no F-39-NN finding eligible).
+
+| SHA | Subject |
+| --- | ------- |
+| `ff929948` | `fix(273): BAF credit routing — day-D orphan + RngLocked predicate + jackpot-phase override + tests` |
+| `e9807891` | `test(273): BAF-ROUTE-06/07/08 expansion — purchase-phase routing, mid-bracket override skip, markBafSkipped equivalence` |
+| `e04d3333` | `chore(273): phase SUMMARY — BAF credit routing complete (14/14 tests, security property attested)` |
+| `1eb1ecb5` | `docs: clarify _livenessTriggered VRF-grace branch as stalled-advance bailout` |
+
+**Footnote:** SHA `1cae7682` `chore(273): scaffold Phase 273 in ROADMAP + STATE` is OUT-OF-AUDIT-SCOPE (planning-only commit between `ff929948` and `e9807891`; touches `.planning/` only; no source-tree mutations). See §3.A Row Group 4 footnote.
+
+### Deferred to Future Milestones
+
+Per D-274-FCITE-01 terminal-phase forward-cite zero-emission rule: the following carry-forward items are recorded via locked-decision IDs (planner-handoff register; not forward-cites to in-flight work). See PROJECT.md "Deferred to Future Milestones" subsection for the single-source-of-truth lookup. Note: the literal "v40.0+" identifier appears in some of the items below as a pickup-pointer — this is a planner-handoff identifier carve-out per §8b allowlist, NOT a forward-cite to in-flight v40.0 work.
+
+1. **Auto-resolve LootboxModule Bernoulli extension** — apply the manual-path Bernoulli (silent: no consolation, no event emit) at `LootboxModule.sol:1068` (currently `_queueTicketsScaled`). Same `seed >> 152` slice; bits[152..167] currently unconsumed on the auto-resolve branch. Net gas-NEUTRAL when factoring in eliminated `_rollRemainder` consumption at trait-assignment time. Seed-uniqueness verified safe on all 4 upstream callers: DecimatorModule:594 (single-shot per `claimDecimatorJackpot(lvl)`, rngWord from per-level storage); DegeneretteModule:786 (single-shot per payout call); StakedDegenerusStonk:672 (single-shot per redemption, entropy = keccak(rngWord, player)); DegenerusGame:1721 redemption-loop wrapper (loops in 5-ETH chunks but EVOLVES rngWord per iteration via `rngWord = keccak256(abi.encode(rngWord))` at L1769, so each chunk's seed is unique). v40.0 supersedes D-274-AUTORESOLVE-OUT-01 + D-274-MANUAL-ONLY-01.
+
+2. **JackpotModule:2216 BAF small-lootbox Bernoulli** — apply Bernoulli at `_jackpotTicketRoll` (L2186) using a fresh bit-slice of the existing `entropy` chain (bits[200..215] suggested — 180+ bits separated from current consumers at bits[0..12]). Net gas-NEGATIVE. Per-roll uniqueness already guaranteed by `EntropyLib.entropyStep` between the 2-roll pattern at `_awardJackpotTickets` L2157/L2166. Replaces `_queueLootboxTickets` wrapper (now unused) with direct `_queueTickets(whole)`. v40.0 supersedes the L2216 portion of D-274-JACKPOT-OUT-01; cosmetic L702/L835/L1005 cleanup + ENT-05 BAF xorshift refactor still deferred.
+
+3. **Event surface unification** — drop the `LootboxTicketRoll` event added at v39 Wave 1; fold `(uint32 preRollTickets, bool roundedUp)` into `LootBoxOpened` / `BurnieLootOpen` directly; add `bool roundedUp` to `JackpotTicketWin`. Saves ~1,350 gas per manual lootbox open (no separate LOG3 emit). Pre-deployment supersession — no live indexer impact. Requires breaking the topic-hash of `LootBoxOpened` / `BurnieLootOpen` / `JackpotTicketWin` — accepted because v40 will require indexer updates anyway. Supersedes D-274-EVT-ROLL-01 + D-274-EVT-INDEX-SENTINEL-01.
+
+4. **Ticket-vs-entry granularity investigation + decision** — the protocol's economic model encodes `1 ticket = 4 entries` (confirmed via `LAZY_PASS_TICKETS_PER_LEVEL = 4` in `WhaleModule:117` and the `priceWei / (4 * TICKET_SCALE)` pricing convention used at MintModule:931, MintModule:1186, MintModule:1250, MintModule:1276). The v39.0 Wave 1 Bernoulli rounds at TICKET granularity, meaning each round-up event jumps 4 entries (0 entries OR 4 entries, never an intermediate value of 1/2/3 entries). EV-neutral but 4× variance vs entry-granularity. v40.0 should formally decide whether to keep ticket-granularity (status quo, simpler storage, higher variance) or move to entry-granularity (4× finer, requires storage re-scaling and downstream consumer audit). This decision blocks #1 + #2 + #3 since the bit-slice width and `_queueTickets` semantics depend on it.
+
+5. **JackpotModule cosmetic ×TICKET_SCALE cleanup (L702/L835/L1005) + ENT-05 BAF xorshift refactor** — already deferred per D-274-JACKPOT-OUT-01; bundle with items #1-#4 as the v40.0 milestone theme: **"Unified ticket-award protocol surface + entry-vs-ticket granularity decision."**
+
