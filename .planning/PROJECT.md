@@ -10,11 +10,35 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-**Active milestone:** _None — between-milestones state. v38.0 SHIPPED 2026-05-11._
+**Active milestone:** v39.0 — Lootbox Whole-Ticket Rounding + WWXRP Consolation (opened 2026-05-13)
 **Last shipped:** v38.0 — Always-Hero Simplification + Maximal Dead-Code Cleanup (2026-05-11; closure signal `MILESTONE_V38_AT_HEAD_06623edb`)
 **Prior shipped:** v37.0 — Degenerette Recalibration + Maintenance Bundle (2026-05-11; closure signal `MILESTONE_V37_AT_HEAD_2654fcc2`)
 **Prior shipped:** v36.0 — Lootbox-Path Entropy Refactor (2026-05-10; closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`)
-**Contract HEAD anchor (v38.0 closure):** `06623edb` (resolved at Wave 4 Task 4.6 atomic-update per D-272-CLOSURE-01)
+**Contract HEAD anchor (v38.0 closure):** `06623edb` (v39.0 audit baseline; intervening Phase 273 BAF-credit-routing-fix commits `ff929948` + `e9807891` + `e04d3333` + `1eb1ecb5` shipped between v38.0 closure and v39.0 open — folded into v39.0 delta audit as included-since-baseline contract/test mutations)
+
+## Current Milestone: v39.0 Lootbox Whole-Ticket Rounding + WWXRP Consolation
+
+**Goal:** Replace the lootbox ticket-path's fractional-residue accumulation with a single Bernoulli round-up at lootbox-open time, so emitted ticket counts are whole numbers and queued ticket counts are exact (no per-player `rem` byte writes from the lootbox path). Add a WWXRP consolation prize for the cold-bust outcome where the ticket-path was selected, produced `< 1` whole ticket, and lost the round-up Bernoulli — so a ticket-path win never resolves to an empty payout. Single-phase patch shape (mirrors v36.0 Phase 266 + v38.0 Phase 272 precedent).
+
+**Audit baseline:** v38.0 closure HEAD `MILESTONE_V38_AT_HEAD_06623edb`. Intervening commits (`ff929948` Phase 273 BAF credit routing contract patch + `e9807891` BAF-ROUTE-06/07/08 test expansion + `e04d3333` Phase 273 SUMMARY + `1eb1ecb5` `_livenessTriggered` NatSpec clarification) sit between baseline and v39.0 audit-subject HEAD; they are pre-shipped Phase 273 maintenance and fold into the v39.0 delta-audit baseline naturally (no requirements line items reopen — surface-coverage attestation only).
+
+**Target features:**
+
+- **Whole-ticket lootbox payouts** (`contracts/modules/DegenerusGameLootboxModule.sol` `_resolveLootboxCommon`): retain scaled-space accumulation across `amountFirst`/`amountSecond` branches and through the distress-mode bonus (preserves precision; small bonuses don't truncate to 0), then collapse to whole tickets at the end via floor + single Bernoulli on the fractional remainder. Bit slice for the round-up Bernoulli: `bits[152..159]` of the per-resolution seed (previously unallocated; primary chunk consumed 152/256 bits). Route the resulting whole count through `_queueTickets` (whole-ticket queue helper) instead of `_queueTicketsScaled` — emits `TicketsQueued(buyer, level, qty)` instead of `TicketsQueuedScaled`. `LootBoxOpened.futureTickets` becomes the actual whole-ticket count (UI / indexer breaking change). Update bit-allocation NatSpec to add `bits[152..159] fracRoundUp % 100` entry; total primary-chunk consumption 160/256.
+- **WWXRP consolation for cold-bust ticket-path outcomes** (same module, same function): when `futureTickets` (scaled) was non-zero pre-Bernoulli but `whole == 0` post-Bernoulli — i.e., ticket-path was selected, produced a sub-1-ticket scaled count, AND the round-up Bernoulli failed — mint `LOOTBOX_WWXRP_CONSOLATION = 1 ether` (same magnitude as the existing 10%-path `LOOTBOX_WWXRP_PRIZE`) via `wwxrp.mintPrize(player, amount)` and emit `LootBoxWwxrpReward(player, day, amount, LOOTBOX_WWXRP_CONSOLATION)` (reuse existing event signature; UI distinguishes consolation from regular WWXRP win via absence of `LootBoxOpened.futureTickets > 0` in the same tx, or via a future dedicated event if downstream consumers ask). Excludes the case where `_lootboxTicketCount` math truncated to 0 from the start (different failure mode; not what the consolation is meant to cover).
+- **Test coverage**: (a) unit tests for the Bernoulli collapse — verify EV-neutrality across many seeds at sub-1, near-1, and high-count scaled inputs; (b) consolation trigger test — force the cold-bust seed path and assert `LootBoxWwxrpReward` emission + `mintPrize` call + zero `TicketsQueued` for that lootbox; (c) regression — confirm `processFutureTicketBatch` no longer enters the `rem != 0` post-Bernoulli branch from lootbox-only queues (mint-boost fractionals continue to use the existing path); (d) event-shape assertion update — any test reading `LootBoxOpened.futureTickets` as scaled must rebase to whole; (e) bit-budget sanity — confirm `bits[152..159]` slice independent of the other 8 sub-roll consumers in the primary chunk.
+- **Delta audit + findings consolidation (terminal)**: single `audit/FINDINGS-v39.0.md` 9-section deliverable; v38.0 5-Bucket Severity Rubric carry; `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` PARALLEL adversarial pass on the finished §4 draft per D-271-ADVERSARIAL-01 carry (`/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry); LEAN regression REG-01 (v38.0 closure non-widening) + REG-02 (v34.0 closure non-widening) + REG-04 prior-finding spot-checks across `audit/FINDINGS-v25..v38.0.md`; KI walkthrough EXC-01..04 RE_VERIFIED; closure signal `MILESTONE_V39_AT_HEAD_<sha>` + ROADMAP/STATE/MILESTONES flips. Phase 273 BAF-credit-routing pre-shipped commits get explicit included-since-baseline §3.A row coverage (no F-39-NN finding eligible; surface-coverage attestation).
+
+**Key context / constraints:**
+- Pre-launch posture preserved — no live volume, no migration concerns
+- Cross-repo READ-only pattern: `contracts/` + `test/` writes via per-commit user approval per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` (carry from v34..v38)
+- Single-file audit deliverable per D-NN-FILES-01 carry
+- Forward-cite zero-emission per D-NN-FCITE-01 carry (terminal phase)
+- Adversarial-pass timing: SEQUENTIAL after full §4 draft; 3-skill PARALLEL spawn red-teams the FINISHED draft per D-271-ADVERSARIAL-01 + D-271-ADVERSARIAL-03 carry
+- Inline-execution mode at execute-phase open per D-271-EXEC-01 default carry
+- Single-phase patch shape (Phase 274 only) per v36.0 Phase 266 + v38.0 Phase 272 precedent — multi-wave structure: Wave 1 contract commit (`_resolveLootboxCommon` rework + `LOOTBOX_WWXRP_CONSOLATION` constant + bit-allocation NatSpec), Wave 2 test commit (unit + consolation + regression + event-shape rebase), Wave 3+ audit deliverable + closure flips
+- `_queueTicketsScaled` + `_rollRemainder` + `rem` byte in `ticketsOwedPacked` STAY — mint-boost fractionals (`DegenerusGameMintModule.sol` line 1142, boost-adjusted `adjustedQty`) continue to use the existing path. This milestone narrowly retires the lootbox-path producer of fractional residues; mint-boost retirement is a future-milestone consideration.
+- Event-shape break is INTENTIONAL: `LootBoxOpened.futureTickets` semantics shift from scaled (×100) to whole. UI / indexer / test consumers must rebase. No backward-compat shim per `feedback_no_dead_guards.md` posture.
 
 ## Completed Milestone: v38.0 Always-Hero Simplification + Maximal Dead-Code Cleanup
 

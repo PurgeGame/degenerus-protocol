@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v38.0
-milestone_name: milestone
-status: Phase 273 maintenance (between milestones)
-last_updated: "2026-05-12T00:00:00.000Z"
-last_activity: 2026-05-12 — Phase 273 BAF credit routing fix in progress (tests passing; awaiting USER batched-commit approval)
+milestone: v39.0
+milestone_name: Lootbox Whole-Ticket Rounding + WWXRP Consolation
+status: planning
+last_updated: "2026-05-13T11:55:33.461Z"
+last_activity: 2026-05-13
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.
 
 ## Current Position
 
-Phase: 273 (BAF Credit Routing Fix — maintenance)
-Plan: 273-01
-Status: Tests passing; awaiting USER batched-commit approval
-Last activity: 2026-05-12 — Phase 273 scaffolded; contract diff + test file applied to working tree
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-13 — Milestone v39.0 started
 
 ## Last Shipped Milestone
 
