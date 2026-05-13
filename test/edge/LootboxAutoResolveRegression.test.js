@@ -14,11 +14,12 @@
 //                 activation time — v39 narrowly retires the MANUAL LOOTBOX
 //                 producer of fractional residues, NOT mint-boost.
 //   - TST-REG-03: auto-resolve paths (`resolveLootboxDirect` +
-//                 `resolveRedemptionLootbox`) are byte-equivalent to v38 —
-//                 still call `_queueTicketsScaled` via the sentinel route,
-//                 still emit `TicketsQueuedScaled`, NEVER emit
+//                 `resolveRedemptionLootbox`) call `_queueTickets(player,
+//                 targetLevel, whole, false)` (the whole-helper) under the
+//                 sentinel gate, emit `TicketsQueued`, NEVER emit
 //                 `LootboxTicketRoll`, NEVER call `wwxrp.mintPrize` with
-//                 `LOOTBOX_WWXRP_CONSOLATION`.
+//                 `LOOTBOX_WWXRP_CONSOLATION`. Bernoulli math is hoisted to
+//                 shared scope above the sentinel gate per D-275-HOIST-01.
 //   - TST-REG-04: cross-mixing variance — manual + auto-resolve opens for
 //                 the same player + level coexist without corruption.
 //                 Manual contributions are per-lootbox-Bernoulli (higher
@@ -200,22 +201,36 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       expect(body.includes("type(uint48).max")).to.equal(true);
     });
 
-    it("[03c] auto-resolve branch in `_resolveLootboxCommon` calls `_queueTicketsScaled` (status quo)", function () {
+    it("[03c] auto-resolve branch in `_resolveLootboxCommon` calls `_queueTickets(player, targetLevel, whole, false)` (Phase 275 LBX-AR-02 — both branches share the whole-helper after Bernoulli hoist)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const autoPattern = /_queueTicketsScaled\(player, targetLevel, futureTickets, false\)/;
+      // Phase 275 hoisted the Bernoulli math to shared scope and swapped the
+      // auto-resolve `_queueTicketsScaled(...)` callsite to `_queueTickets(player,
+      // targetLevel, whole, false)`. Both manual + auto-resolve now call the
+      // same whole-helper; the manual call is first in source order (true-branch
+      // of `if (index != type(uint48).max)`), auto-resolve is second (else arm).
+      const callPattern = /_queueTickets\(player, targetLevel, whole, false\)/g;
+      const calls = (source.match(callPattern) || []).length;
       expect(
-        source.match(autoPattern),
-        "auto-resolve branch must call `_queueTicketsScaled(player, targetLevel, futureTickets, false)`"
-      ).to.not.be.null;
+        calls,
+        "expected ≥2 `_queueTickets(player, targetLevel, whole, false)` callsites (manual + auto-resolve) post-Phase-275"
+      ).to.be.gte(2);
+      // `_queueTicketsScaled` MUST no longer appear in `DegenerusGameLootboxModule.sol`
+      expect(
+        source.includes("_queueTicketsScaled"),
+        "`_queueTicketsScaled` must not appear in LootboxModule post-Phase-275 LBX-AR-02"
+      ).to.equal(false);
     });
 
     it("[03d] auto-resolve branch NEVER emits LootboxTicketRoll or calls wwxrp.mintPrize", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Locate the auto-resolve `_queueTicketsScaled` call.
-      const autoIdx = source.indexOf(
-        "_queueTicketsScaled(player, targetLevel, futureTickets, false)"
-      );
-      expect(autoIdx).to.be.greaterThan(-1);
+      // Auto-resolve branch is the SECOND occurrence of `_queueTickets(player,
+      // targetLevel, whole, false)` — the first is the manual branch inside
+      // `if (index != type(uint48).max)`, the second is the `else` arm.
+      const callLine = "_queueTickets(player, targetLevel, whole, false)";
+      const firstIdx = source.indexOf(callLine);
+      const autoIdx = source.indexOf(callLine, firstIdx + 1);
+      expect(firstIdx).to.be.greaterThan(-1);
+      expect(autoIdx).to.be.greaterThan(firstIdx);
       // The auto-resolve else block ends shortly after this line. Within
       // the next 400 chars, no consolation/emit must appear.
       const tail = source.slice(autoIdx, autoIdx + 400);
@@ -305,25 +320,28 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       ).to.equal(true);
     });
 
-    it("[04d] the `index` discriminator routes manual vs auto-resolve with zero crossover", function () {
+    it("[04d] the `index` discriminator routes manual vs auto-resolve with zero crossover (Phase 275 — both branches share the whole-helper; routing is by source order around the sentinel gate)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // Find the `if (index != type(uint48).max)` gate.
       const manualGate = source.indexOf("if (index != type(uint48).max)");
       expect(manualGate).to.be.greaterThan(-1);
-      // The matching `else` must contain ONLY _queueTicketsScaled (auto-
-      // resolve path). The else block is small.
+      // Phase 275 LBX-AR-02: both branches now call
+      // `_queueTickets(player, targetLevel, whole, false)`. The manual call
+      // (true-branch) appears textually BEFORE the auto-resolve call (else-arm).
       const tail = source.slice(manualGate, manualGate + 3000);
-      // Must contain both branches.
-      expect(tail.includes("_queueTickets(player, targetLevel, whole, false)")).to.equal(true);
-      expect(
-        tail.includes("_queueTicketsScaled(player, targetLevel, futureTickets, false)")
-      ).to.equal(true);
-      // The manual-branch _queueTickets must come first (true-branch).
-      const manualCall = tail.indexOf("_queueTickets(player, targetLevel, whole, false)");
-      const autoCall = tail.indexOf(
-        "_queueTicketsScaled(player, targetLevel, futureTickets, false)"
-      );
-      expect(manualCall).to.be.lessThan(autoCall);
+      const callLine = "_queueTickets(player, targetLevel, whole, false)";
+      // Both branches contain the same callsite shape — must appear at least twice.
+      const callMatches = (tail.match(/_queueTickets\(player, targetLevel, whole, false\)/g) || []).length;
+      expect(callMatches, "manual + auto-resolve _queueTickets calls under sentinel gate").to.be.gte(2);
+      // The else-arm comment anchor confirms the second call is the auto-resolve branch.
+      expect(tail.includes("} else {")).to.equal(true);
+      // The manual-branch call must come first (true-branch of the gate).
+      const firstCallTailIdx = tail.indexOf(callLine);
+      const elseIdx = tail.indexOf("} else {");
+      expect(firstCallTailIdx).to.be.greaterThan(-1);
+      expect(elseIdx).to.be.greaterThan(firstCallTailIdx);
+      const autoCallTailIdx = tail.indexOf(callLine, elseIdx);
+      expect(autoCallTailIdx).to.be.greaterThan(elseIdx);
     });
 
     it("[04e] sentinel `type(uint48).max` cannot collide with any realistic lootbox index", function () {

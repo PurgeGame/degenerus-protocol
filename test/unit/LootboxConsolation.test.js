@@ -132,24 +132,27 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       }
     });
 
-    it("[02b] auto-resolve path never executes Bernoulli — source-level proof that `seed >> 152` is gated by manual branch", function () {
+    it("[02b] auto-resolve else-block contains ONLY the `_queueTickets(whole)` call — no consolation/emit (Phase 275 LBX-AR-02 + LBX-AR-03)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Refer to TST-WT-03 [03-static]: the `seed >> 152` slice is consumed
-      // only inside the manual-branch gate. This test confirms the symmetric
-      // property: the auto-resolve `else` block contains ONLY
-      // `_queueTicketsScaled(...)` and nothing else.
-      const autoResolveStart = source.indexOf(
-        "_queueTicketsScaled(player, targetLevel, futureTickets, false)"
-      );
-      expect(autoResolveStart).to.be.greaterThan(-1);
+      // Phase 275 hoisted the Bernoulli math to shared scope above the
+      // sentinel gate; the auto-resolve branch now calls the same
+      // `_queueTickets(player, targetLevel, whole, false)` helper as the
+      // manual branch. Locate the auto-resolve callsite as the SECOND
+      // occurrence of that line (the first is the manual true-branch).
+      const callLine = "_queueTickets(player, targetLevel, whole, false)";
+      const firstIdx = source.indexOf(callLine);
+      const autoResolveStart = source.indexOf(callLine, firstIdx + 1);
+      expect(firstIdx).to.be.greaterThan(-1);
+      expect(autoResolveStart).to.be.greaterThan(firstIdx);
       // Within the next 300 chars (covering the rest of the else block), there
-      // must be no `mintPrize`, no `LootBoxWwxrpReward`, no `LootboxTicketRoll`,
-      // no `seed >> 152`.
+      // must be no `mintPrize`, no `LootBoxWwxrpReward`, no `LootboxTicketRoll`.
+      // Note: `seed >> 152` IS consumed earlier (in shared scope above the
+      // sentinel gate per D-275-HOIST-01) — the auto-resolve else-arm itself
+      // contains only the queue call.
       const tail = source.slice(autoResolveStart, autoResolveStart + 300);
       expect(tail.includes("mintPrize"), "auto-resolve must not call mintPrize").to.equal(false);
       expect(tail.includes("LootBoxWwxrpReward"), "auto-resolve must not emit LootBoxWwxrpReward").to.equal(false);
       expect(tail.includes("LootboxTicketRoll"), "auto-resolve must not emit LootboxTicketRoll").to.equal(false);
-      expect(tail.includes("seed >> 152"), "auto-resolve must not consume bits[152..167]").to.equal(false);
     });
 
     it("[02c] ticket-path-not-selected case: when `futureTickets == 0` the outer `if (futureTickets != 0)` guard skips the entire Bernoulli/consolation block", function () {

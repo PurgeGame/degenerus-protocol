@@ -142,24 +142,36 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
         "scaledPre snapshot missing"
       ).to.equal(true);
 
-      // The Bernoulli gate must sit INSIDE the manual-only branch (gated by
-      // `index != type(uint48).max`). This is the structural guarantee that
-      // bits[152..167] is consumed ONLY on manual paths per
-      // feedback_rng_backward_trace.md.
-      const sliceLineIdx = source.search(/uint16\(seed >> 152\)/);
-      expect(sliceLineIdx, "Bernoulli slice not found").to.be.greaterThan(-1);
-      const preamble = source.slice(0, sliceLineIdx);
-      // The manual-branch gate `if (index != type(uint48).max)` must be a
-      // textual ancestor of the Bernoulli slice. Walk backward from the slice:
-      // the gate must appear before the slice, and no closing `}` of that
-      // outer block must intervene before the slice. Simpler check: within
-      // the 1500 characters preceding the slice, the gate appears AND no
-      // sibling `} else` for the manual-branch gate appears between them.
-      const window = preamble.slice(-1500);
+      // Phase 275 D-275-HOIST-01: the Bernoulli math is hoisted to shared scope
+      // ABOVE the `if (index != type(uint48).max)` sentinel gate so both manual
+      // and auto-resolve branches consume the same `whole`/`roundedUp` locals.
+      // Structural invariants verified here:
+      //   (a) `seed >> 152` appears exactly once (hoisted; not duplicated).
+      //   (b) The Bernoulli slice sits INSIDE the outer
+      //       `if (futureTickets != 0)` guard (no slice consumption when
+      //       `futureTickets == 0`).
+      //   (c) The slice sits BEFORE the manual-branch gate
+      //       `if (index != type(uint48).max)` — the gate is now downstream
+      //       of the Bernoulli computation, not upstream.
+      const sliceMatches = [...source.matchAll(/uint16\(seed >> 152\)/g)];
       expect(
-        window.includes("if (index != type(uint48).max)"),
-        "Bernoulli slice not gated by `if (index != type(uint48).max)` ancestor (within 1500 chars)"
-      ).to.equal(true);
+        sliceMatches.length,
+        "Bernoulli slice must be hoisted exactly once (no duplication across branches)"
+      ).to.equal(1);
+      const sliceLineIdx = sliceMatches[0].index;
+      const preamble = source.slice(0, sliceLineIdx);
+      // Outer-guard ancestor: `if (futureTickets != 0)` precedes the slice.
+      const outerGuardIdx = preamble.lastIndexOf("if (futureTickets != 0)");
+      expect(
+        outerGuardIdx,
+        "Bernoulli slice not gated by outer `if (futureTickets != 0)` guard"
+      ).to.be.greaterThan(-1);
+      // The manual-branch gate must come AFTER the slice (hoist invariant).
+      const manualGateAfter = source.indexOf("if (index != type(uint48).max)", sliceLineIdx);
+      expect(
+        manualGateAfter,
+        "Phase 275 hoist invariant: `if (index != type(uint48).max)` must appear AFTER the Bernoulli slice"
+      ).to.be.greaterThan(sliceLineIdx);
     });
 
     it("tester contract exposes `bernoulliWhole(uint32,uint256)` returning (uint32 whole, bool roundedUp)", async function () {
@@ -352,37 +364,44 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
     });
   });
 
-  describe("TST-WT-03 — bits[152..167] independence + manual-branch gating", function () {
-    it("[03-static] bits[152..167] is consumed inside the manual-branch gate `if (index != type(uint48).max)`", function () {
+  describe("TST-WT-03 — bits[152..167] independence + hoisted-shared-scope gating", function () {
+    it("[03-static] bits[152..167] is consumed exactly once and sits in the shared scope of the outer `if (futureTickets != 0)` guard (Phase 275 D-275-HOIST-01)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Locate the unique reference to `seed >> 152` and walk upward to confirm
-      // the enclosing manual-branch gate appears as an ancestor.
+      // Locate the unique reference to `seed >> 152` and assert: (a) it appears
+      // exactly once (hoisted; not duplicated), (b) it sits inside the outer
+      // `if (futureTickets != 0)` guard, (c) it sits BEFORE the manual-branch
+      // gate `if (index != type(uint48).max)` (post-hoist invariant).
       const matches = [...source.matchAll(/seed >> 152/g)];
       expect(matches.length, "bits[152..167] should be consumed exactly once").to.equal(1);
       const idx = matches[0].index;
       const preamble = source.slice(0, idx);
-      // Within 1500 chars preceding the slice, the manual-branch gate must
-      // appear (the gate opens the if-block, then the snapshot + Bernoulli
-      // arithmetic sit inside it).
-      const window = preamble.slice(-1500);
+      // Outer guard `if (futureTickets != 0)` must precede the slice.
       expect(
-        window.includes("if (index != type(uint48).max)"),
-        "Bernoulli slice not gated by manual-branch predicate (within 1500 chars)"
-      ).to.equal(true);
+        preamble.lastIndexOf("if (futureTickets != 0)"),
+        "Bernoulli slice not gated by outer `if (futureTickets != 0)` guard"
+      ).to.be.greaterThan(-1);
+      // Manual-branch gate must come AFTER the slice.
+      expect(
+        source.indexOf("if (index != type(uint48).max)", idx),
+        "Phase 275 hoist invariant: manual-branch gate must appear AFTER the Bernoulli slice"
+      ).to.be.greaterThan(idx);
     });
 
-    it("[03-static] auto-resolve branch never references `seed >> 152`", function () {
+    it("[03-static] auto-resolve else-arm body never references `seed >> 152` (the slice is consumed once at shared scope above the gate)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The auto-resolve branch is the `else` block that calls
-      // `_queueTicketsScaled(player, targetLevel, futureTickets, false)`.
-      const autoResolveLine = "_queueTicketsScaled(player, targetLevel, futureTickets, false)";
-      const autoIdx = source.indexOf(autoResolveLine);
-      expect(autoIdx, "auto-resolve `_queueTicketsScaled` callsite not found").to.be.greaterThan(-1);
-      // From autoIdx forward to the closing `}` of the enclosing if(...), there
-      // should be no `seed >> 152` reference. The enclosing `else { ... }` block
-      // is small (one statement), so scan the next ~200 chars.
+      // Phase 275 LBX-AR-02: auto-resolve else-arm now calls
+      // `_queueTickets(player, targetLevel, whole, false)` — the SECOND
+      // occurrence of that line in the file (the first is the manual branch).
+      const callLine = "_queueTickets(player, targetLevel, whole, false)";
+      const firstIdx = source.indexOf(callLine);
+      const autoIdx = source.indexOf(callLine, firstIdx + 1);
+      expect(firstIdx, "manual-branch _queueTickets callsite not found").to.be.greaterThan(-1);
+      expect(autoIdx, "auto-resolve _queueTickets callsite not found").to.be.greaterThan(firstIdx);
+      // From autoIdx forward to the closing `}` of the enclosing else-arm,
+      // there should be no `seed >> 152` reference (the slice was consumed
+      // in shared scope above the sentinel gate).
       const tail = source.slice(autoIdx, autoIdx + 200);
-      expect(tail.includes("seed >> 152"), "auto-resolve branch must not consume bits[152..167]").to.equal(
+      expect(tail.includes("seed >> 152"), "auto-resolve else-arm body must not re-consume bits[152..167]").to.equal(
         false
       );
     });
@@ -468,32 +487,36 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
     });
   });
 
-  describe("TST-WT-04 — `TicketsQueued` (not `TicketsQueuedScaled`) on manual paths", function () {
-    it("manual branch calls `_queueTickets(player, targetLevel, whole, false)` (not `_queueTicketsScaled`) when whole > 0", function () {
+  describe("TST-WT-04 — `TicketsQueued` (not `TicketsQueuedScaled`) on both manual + auto-resolve paths (Phase 275 LBX-AR-02)", function () {
+    it("both manual + auto-resolve branches call `_queueTickets(player, targetLevel, whole, false)` (the whole-helper) — `_queueTicketsScaled` no longer appears in LootboxModule", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The new manual-branch invocation should be `_queueTickets(player, targetLevel, whole, false)`.
-      const manualQueuePattern = /_queueTickets\(player, targetLevel, whole, false\)/;
+      // Phase 275 LBX-AR-02: auto-resolve branch was swapped from
+      // `_queueTicketsScaled(...)` to `_queueTickets(player, targetLevel,
+      // whole, false)`. Both branches now share the same whole-helper.
+      const callPattern = /_queueTickets\(player, targetLevel, whole, false\)/g;
+      const calls = (source.match(callPattern) || []).length;
       expect(
-        source.match(manualQueuePattern),
-        "manual-branch `_queueTickets(player, targetLevel, whole, false)` missing"
-      ).to.not.be.null;
+        calls,
+        "expected ≥2 `_queueTickets(player, targetLevel, whole, false)` callsites (manual + auto-resolve)"
+      ).to.be.gte(2);
 
-      // Auto-resolve branch should still call `_queueTicketsScaled`.
-      const autoQueuePattern =
-        /_queueTicketsScaled\(player, targetLevel, futureTickets, false\)/;
+      // `_queueTicketsScaled` must no longer appear in this module.
       expect(
-        source.match(autoQueuePattern),
-        "auto-resolve `_queueTicketsScaled(player, targetLevel, futureTickets, false)` missing"
-      ).to.not.be.null;
+        source.includes("_queueTicketsScaled"),
+        "`_queueTicketsScaled` must not appear in LootboxModule post-Phase-275"
+      ).to.equal(false);
 
-      // Cross-check structural ordering: the manual `_queueTickets(...)` line
-      // must come BEFORE the auto-resolve `_queueTicketsScaled(...)` line in
-      // the source (per the if/else structure of the v39 manual-branch).
-      const manualIdx = source.search(manualQueuePattern);
-      const autoIdx = source.search(autoQueuePattern);
+      // Structural ordering: the manual call comes first (true-branch of the
+      // sentinel gate), auto-resolve second (else-arm).
+      const callLine = "_queueTickets(player, targetLevel, whole, false)";
+      const manualIdx = source.indexOf(callLine);
+      const autoIdx = source.indexOf(callLine, manualIdx + 1);
       expect(manualIdx).to.be.greaterThan(-1);
-      expect(autoIdx).to.be.greaterThan(-1);
-      expect(manualIdx).to.be.lessThan(autoIdx);
+      expect(autoIdx).to.be.greaterThan(manualIdx);
+      // The else-arm anchor `} else {` sits between them.
+      const elseIdx = source.indexOf("} else {", manualIdx);
+      expect(elseIdx).to.be.greaterThan(manualIdx);
+      expect(elseIdx).to.be.lessThan(autoIdx);
     });
 
     it("DegenerusGameStorage._queueTickets emits `TicketsQueued` (manual-path event)", function () {
@@ -583,11 +606,16 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       // The auto-resolve else clause sits BELOW the emit in source order; the
       // emit must be inside the manual-branch if-block.
       expect(lastManualGate, "emit must be inside manual-branch gate").to.be.greaterThan(-1);
-      // The auto-resolve `_queueTicketsScaled` callsite must be AFTER the emit
-      // (i.e. the emit is inside the if-clause that comes BEFORE the else).
-      const autoIdx = source.indexOf(
-        "_queueTicketsScaled(player, targetLevel, futureTickets, false)"
-      );
+      // Phase 275 LBX-AR-02: the auto-resolve else-arm now calls
+      // `_queueTickets(player, targetLevel, whole, false)` (the SECOND
+      // occurrence of that line — the first is the manual true-branch which
+      // sits BEFORE the LootboxTicketRoll emit on the same path). The emit
+      // must precede the auto-resolve callsite (the emit is inside the
+      // manual if-clause, which comes BEFORE the else).
+      const callLine = "_queueTickets(player, targetLevel, whole, false)";
+      const firstIdx = source.indexOf(callLine);
+      const autoIdx = source.indexOf(callLine, firstIdx + 1);
+      expect(autoIdx).to.be.greaterThan(firstIdx);
       expect(emitIdx).to.be.lessThan(autoIdx);
     });
 
