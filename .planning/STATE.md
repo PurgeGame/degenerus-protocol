@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v40.0
 milestone_name: Unified Whole-Ticket Award Protocol
 status: planning
-last_updated: "2026-05-13T15:36:51.878Z"
+last_updated: "2026-05-13T18:00:00.000Z"
 last_activity: 2026-05-13
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,17 +17,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-10 after v36.0 milestone close + v37.0 open)
+See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.0 open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 274 — lootbox-whole-ticket-rounding-wwxrp-consolation-terminal
+**Current focus:** Phase 275 — auto-resolve-lootbox-bernoulli (LBX-AR; first of 5 v40.0 phases per multi-phase milestone shape D-40N-CLOSURE-01)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 275 — Auto-Resolve LootboxModule Bernoulli (LBX-AR) — Not started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-13 — Milestone v40.0 started
+Status: Roadmap published; phase 275 awaits `/gsd-plan-phase 275` to scaffold contract + test waves
+Last activity: 2026-05-13 — Milestone v40.0 roadmap published (5 phases 275-279; 56 requirements mapped; coverage 56/56)
 
 ## Last Shipped Milestone
 

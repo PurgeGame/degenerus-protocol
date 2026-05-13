@@ -141,6 +141,102 @@ A requirement is **RE-DEFERRED-V41+** when:
 - **D-40N-SEV-01**: 5-Bucket Severity Rubric carry from v38.0 / D-08
 - **D-40N-LBX02-OUT-01**: LBX-02 fixture-coverage gap RE-DEFERRED-V41+ at v40.0 open; carries D-274-LBX02-OUT-01
 
+
 ## Traceability
 
-(To be filled by gsd-roadmapper at step 10. Each requirement maps to exactly one phase.)
+Every v40.0 requirement maps to exactly one phase. Total coverage: 56/56.
+
+| Requirement | Phase | Surface |
+|-------------|-------|---------|
+| LBX-AR-01 | Phase 275 | Auto-resolve LootboxModule Bernoulli (contract) |
+| LBX-AR-02 | Phase 275 | Auto-resolve LootboxModule Bernoulli (contract) |
+| LBX-AR-03 | Phase 275 | Auto-resolve LootboxModule Bernoulli (contract) |
+| LBX-AR-04 | Phase 275 | Auto-resolve LootboxModule Bernoulli (contract) |
+| LBX-AR-05 | Phase 275 | Auto-resolve LootboxModule Bernoulli (contract) |
+| LBX-AR-06 | Phase 275 | Auto-resolve LootboxModule Bernoulli (contract) |
+| TST-LBX-AR-01 | Phase 275 | Auto-resolve LootboxModule Bernoulli (test) |
+| TST-LBX-AR-02 | Phase 275 | Auto-resolve LootboxModule Bernoulli (test) |
+| TST-LBX-AR-03 | Phase 275 | Auto-resolve LootboxModule Bernoulli (test) |
+| TST-LBX-AR-04 | Phase 275 | Auto-resolve LootboxModule Bernoulli (test) |
+| TST-LBX-AR-05 | Phase 275 | Auto-resolve LootboxModule Bernoulli (test) |
+| TST-LBX-AR-06 | Phase 275 | Auto-resolve LootboxModule Bernoulli (test) |
+| JPT-BR-01 | Phase 276 | JackpotModule:2216 BAF Bernoulli (contract) |
+| JPT-BR-02 | Phase 276 | JackpotModule:2216 BAF Bernoulli (contract) |
+| JPT-BR-03 | Phase 276 | JackpotModule:2216 BAF Bernoulli (contract) |
+| JPT-BR-04 | Phase 276 | JackpotModule:2216 BAF Bernoulli (contract) |
+| JPT-BR-05 | Phase 276 | JackpotModule:2216 BAF Bernoulli (contract) |
+| JPT-BR-06 | Phase 276 | JackpotModule:2216 BAF Bernoulli (contract) |
+| TST-JPT-BR-01 | Phase 276 | JackpotModule:2216 BAF Bernoulli (test) |
+| TST-JPT-BR-02 | Phase 276 | JackpotModule:2216 BAF Bernoulli (test) |
+| TST-JPT-BR-03 | Phase 276 | JackpotModule:2216 BAF Bernoulli (test) |
+| TST-JPT-BR-04 | Phase 276 | JackpotModule:2216 BAF Bernoulli (test) |
+| EVT-UNI-01 | Phase 277 | Event surface unification + sentinel retirement (contract) |
+| EVT-UNI-02 | Phase 277 | Event surface unification + sentinel retirement (contract) |
+| EVT-UNI-03 | Phase 277 | Event surface unification + sentinel retirement (contract) |
+| EVT-UNI-04 | Phase 277 | Event surface unification + sentinel retirement (contract) |
+| EVT-UNI-05 | Phase 277 | Event surface unification + sentinel retirement (contract) |
+| EVT-UNI-06 | Phase 277 | Event surface unification + sentinel retirement (contract) |
+| EVT-UNI-07 | Phase 277 | Event surface unification + sentinel retirement (contract) |
+| EVT-UNI-08 | Phase 277 | Event surface unification + sentinel retirement (contract) |
+| TST-EVT-UNI-01 | Phase 277 | Event surface unification + sentinel retirement (test) |
+| TST-EVT-UNI-02 | Phase 277 | Event surface unification + sentinel retirement (test) |
+| TST-EVT-UNI-03 | Phase 277 | Event surface unification + sentinel retirement (test) |
+| TST-EVT-UNI-04 | Phase 277 | Event surface unification + sentinel retirement (test) |
+| TST-EVT-UNI-05 | Phase 277 | Event surface unification + sentinel retirement (test) |
+| TST-EVT-UNI-06 | Phase 277 | Event surface unification + sentinel retirement (test) |
+| JPT-CLEAN-01 | Phase 278 | JackpotModule cleanup + ENT-05 refactor + wrapper retirement (contract) |
+| JPT-CLEAN-02 | Phase 278 | JackpotModule cleanup + ENT-05 refactor + wrapper retirement (contract) |
+| JPT-CLEAN-03 | Phase 278 | JackpotModule cleanup + ENT-05 refactor + wrapper retirement (contract) |
+| JPT-CLEAN-04 | Phase 278 | JackpotModule cleanup + ENT-05 refactor + wrapper retirement (contract) |
+| JPT-CLEAN-05 | Phase 278 | JackpotModule cleanup + ENT-05 refactor + wrapper retirement (contract) |
+| JPT-CLEAN-06 | Phase 278 | JackpotModule cleanup + ENT-05 refactor + wrapper retirement (contract) |
+| TST-CLEAN-01 | Phase 278 | JackpotModule cleanup + ENT-05 refactor + wrapper retirement (test) |
+| TST-CLEAN-02 | Phase 278 | JackpotModule cleanup + ENT-05 refactor + wrapper retirement (test) |
+| TST-CLEAN-03 | Phase 278 | JackpotModule cleanup + ENT-05 refactor + wrapper retirement (test) |
+| TST-CROSS-01 | Phase 278 | Cross-surface mixing regression (test; sequenced last to exercise all 3 RNG-driven surfaces in final state) |
+| AUDIT-01 | Phase 279 | Terminal delta audit + findings consolidation |
+| AUDIT-02 | Phase 279 | Terminal delta audit + findings consolidation |
+| AUDIT-03 | Phase 279 | Terminal delta audit + findings consolidation |
+| AUDIT-04 | Phase 279 | Terminal delta audit + findings consolidation |
+| AUDIT-05 | Phase 279 | Terminal delta audit + findings consolidation |
+| AUDIT-06 | Phase 279 | Terminal delta audit + findings consolidation |
+| REG-01 | Phase 279 | LEAN regression appendix §5 |
+| REG-02 | Phase 279 | LEAN regression appendix §5 |
+| REG-03 | Phase 279 | LEAN regression appendix §5 |
+| REG-04 | Phase 279 | LEAN regression appendix §5 |
+
+### Per-phase requirement counts
+
+| Phase | Contract Reqs | Test Reqs | Audit/Regression Reqs | Total |
+|-------|---------------|-----------|----------------------|-------|
+| 275 — LBX-AR | 6 (LBX-AR-01..06) | 6 (TST-LBX-AR-01..06) | — | 12 |
+| 276 — JPT-BR | 6 (JPT-BR-01..06) | 4 (TST-JPT-BR-01..04) | — | 10 |
+| 277 — EVT-UNI | 8 (EVT-UNI-01..08) | 6 (TST-EVT-UNI-01..06) | — | 14 |
+| 278 — JPT-CLEAN | 6 (JPT-CLEAN-01..06) | 4 (TST-CLEAN-01..03 + TST-CROSS-01) | — | 10 |
+| 279 — Terminal | — | — | 10 (AUDIT-01..06 + REG-01..04) | 10 |
+| **Total** | **26** | **20** | **10** | **56** |
+
+### Phase dependency graph
+
+```
+275 (LBX-AR) ──┐
+               ├──> 277 (EVT-UNI) ──┐
+276 (JPT-BR) ──┤                    ├──> 279 (Terminal)
+               └──> 278 (JPT-CLEAN) ┘
+```
+
+- Phase 275 and Phase 276 are independent surfaces and can be planned/executed in parallel from a content-dependency perspective (per-commit USER-APPROVAL gates per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` discipline sequence wall-clock execution).
+- Phase 277 (EVT-UNI) requires both Phase 275 + Phase 276: sentinel retirement (EVT-UNI-05) needs manual + auto-resolve converged on `_queueTickets(whole)` (LBX-AR-02 lands the auto-resolve convergence); `JackpotTicketWin.roundedUp` field addition (EVT-UNI-04) needs Phase 276 JPT-BR-01 Bernoulli outcome to surface.
+- Phase 278 (JPT-CLEAN) requires Phase 276 for `_queueLootboxTickets` wrapper retirement (JPT-CLEAN-05) since `JackpotModule.sol:2216` is the wrapper's only caller — replacing it with direct `_queueTickets(whole)` is what makes the wrapper dead code. The cross-surface regression TST-CROSS-01 additionally requires Phase 275 + Phase 277 in final state.
+- Phase 279 (Terminal) requires all 4 surface phases landed (audit baseline is the post-Phase-278 HEAD).
+
+### Coverage verification
+
+- ✓ All 56 v40.0 requirements mapped to exactly one phase
+- ✓ Zero orphaned requirements (no requirement unmapped)
+- ✓ Zero duplicate mappings (no requirement appears in multiple phases)
+- ✓ Phase 279 success criteria reference exact REQ-IDs from Phases 275-278 phase commits in §3.A row coverage
+
+### Acceptance status convention
+
+Per `## Acceptance Criteria` above, each requirement is **Complete** when code+test+audit all attest the surface, OR **RE-DEFERRED-V41+** with user disposition + path-of-investigation prose in `audit/FINDINGS-v40.0.md` §9. Statuses populate at v40.0 closure via terminal-phase commit-readiness register §9.NN.
