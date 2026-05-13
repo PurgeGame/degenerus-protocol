@@ -219,3 +219,168 @@ Every source-tree change from v38.0 baseline `06623edb` → v39.0 HEAD enumerate
 #### §3.A Summary
 
 v39.0 source-tree changes since baseline `06623edb`: 1 Wave 1 contract-side change (`c21f833a` — LBX-WT-01..05 + LBX-WX-01..04 + LBX-EVT-01..06; 2 files modified) + 1 Wave 2 test-side change (`f8e55cfe` — TST-WT-01..07 + TST-WX-01..03 + TST-REG-01..04; 4 new test files) + 4 Phase 273 included-since-baseline changes (`ff929948` + `e9807891` + `e04d3333` + `1eb1ecb5`; 1 contract file + 1 test file + 2 docs-only). 15 rows in Row Groups 1-3 (Phase 274 contract-side) + 4 rows in Row Group 4 (Phase 273 included-since-baseline) + 2 rows in Row Group 5 (Phase 274 attestation). All rows verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_DESIGN_PHASE_273 per AUDIT-01. D-274-MANUAL-ONLY-01 narrowing + D-274-BAF273-INCLUDE-01 inclusion method explicitly cited above.
+
+### 3.B AUDIT-04 Zero-New-State Attestation
+
+Grep-proof attestation: zero new storage slots, zero new public/external mutation entry points, zero new external pure entry points, zero new admin functions, zero new modifiers, zero new upgrade hooks, zero new ERC-20 mint entry points since v38.0 baseline `06623edb`.
+
+**Storage byte-identity (zero new storage slots):**
+
+Recipe:
+```
+git diff 06623edb..HEAD -- contracts/DegenerusGameStorage.sol
+```
+
+Output: empty (0 files changed). Phase 274 Wave 1 change `c21f833a` touches only `contracts/modules/DegenerusGameLootboxModule.sol` + `contracts/interfaces/IDegenerusGameModules.sol` — no storage-file changes. The bit allocation preserves all existing `FT_*_SHIFT` constants byte-identical; new `bits[152..167]` entry consumes a previously-unallocated slice of the per-resolution seed (a stack-local, NOT a storage slot). Storage layout byte-identical at v39 HEAD.
+
+**Zero new public/external mutation entry points:**
+
+Recipe:
+```
+git diff 06623edb..HEAD -- contracts/ \
+  | grep -E "^\+.*function .* (public|external)" \
+  | grep -v "view\|pure"
+```
+
+Output: 0 hits. The `_resolveLootboxCommon` signature change (added `uint48 index` parameter) is internal-only — the function remains `private`. The 4 caller entry points (`openLootBox` + `openBurnieLootBox` + `resolveLootboxDirect` + `resolveRedemptionLootbox`) retain byte-identical public-function signatures (their internal call passes the new `index` arg from their existing `index` parameter or the sentinel). No new public/external functions added.
+
+**Zero new external pure entry points:**
+
+Recipe:
+```
+git diff 06623edb..HEAD -- contracts/ \
+  | grep -E "^\+.*function .* (external|public) pure"
+```
+
+Output: 0 hits.
+
+**Zero new admin functions / modifiers / upgrade hooks:**
+
+Recipe:
+```
+git diff 06623edb..HEAD -- contracts/ \
+  | grep -E "^\+.*(modifier |onlyOwner|onlyAdmin|UUPSUpgradeable|_authorizeUpgrade)"
+```
+
+Output: 0 hits. No new admin gates introduced.
+
+**Zero new ERC-20 mint entry points:**
+
+Recipe:
+```
+git diff 06623edb..HEAD -- contracts/ \
+  | grep -E "^\+.*\.(mint|mintFor|_mint)\("
+```
+
+Output: 1 hit at the consolation `wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)` callsite (post-edit L1049 inside `_resolveLootboxCommon` manual branch). This is NOT a new mint entry point — it reuses the existing `IWrappedWrappedXRP.mintPrize` interface that already mints at the regular 10%-path WWXRP win site (L1585-1595 pre-edit; UNCHANGED at v39). Magnitude `1 ether` matches `LOOTBOX_WWXRP_PRIZE = 1 ether` per LBX-WX-01 + D-274-WX-AMOUNT-01. No new mint-route surface; one new callsite that consumes the existing route.
+
+**One new constant; one new event declaration:**
+
+- One new constant: `LOOTBOX_WWXRP_CONSOLATION = 1 ether` (compile-time inlined; not a storage slot).
+- One new event: `LootboxTicketRoll` (events do not occupy storage slots; event log is calldata-equivalent).
+
+**Cross-module byte-identity proof (v39 HEAD vs `06623edb`):**
+
+Recipe (run at §3.B authoring time):
+```
+for f in \
+  contracts/modules/DegenerusGameJackpotModule.sol \
+  contracts/modules/DegenerusGameMintModule.sol \
+  contracts/modules/DegenerusGameDegeneretteModule.sol \
+  contracts/DegenerusTraitUtils.sol \
+  contracts/libraries/JackpotBucketLib.sol \
+  contracts/libraries/EntropyLib.sol \
+  ; do \
+    echo -n "$f: "; git diff 06623edb..HEAD -- "$f" | wc -l; \
+  done
+```
+
+Output (each file emits `0` indicating byte-identical):
+```
+contracts/modules/DegenerusGameJackpotModule.sol: 0
+contracts/modules/DegenerusGameMintModule.sol: 0
+contracts/modules/DegenerusGameDegeneretteModule.sol: 0
+contracts/DegenerusTraitUtils.sol: 0
+contracts/libraries/JackpotBucketLib.sol: 0
+contracts/libraries/EntropyLib.sol: 0
+```
+
+This grep-proof establishes that Phase 274 Wave 1 modifies ONLY `contracts/modules/DegenerusGameLootboxModule.sol` + `contracts/interfaces/IDegenerusGameModules.sol` per D-274-MANUAL-ONLY-01 scope narrowing. `contracts/BurnieCoinflip.sol` is NOT byte-identical at v39 HEAD vs `06623edb` because Phase 273 included-since-baseline changes shipped between v38.0 closure and v39.0 open (`ff929948` + `1eb1ecb5`); the BurnieCoinflip mutation is folded into the v39.0 audit baseline per D-274-BAF273-INCLUDE-01 (surface-coverage attestation only at §3.A Row Group 4; no F-39-NN finding eligible). Cross-cite Wave 2 test files for the same module-isolation invariant at the harness level (the new test files only exercise lootbox-path entry points; do not touch other modules).
+
+**Five-line zero-attestation roll-up** (one phrase per line for grep-tally clarity):
+
+- zero new storage slots — `git diff 06623edb..HEAD -- contracts/DegenerusGameStorage.sol` empty.
+- zero new public/external mutation entry points — `git diff 06623edb..HEAD -- contracts/ | grep -E "^\+.*function .* (public|external)" | grep -v "view|pure"` returns 0.
+- zero new admin functions — `git diff 06623edb..HEAD -- contracts/ | grep -E "^\+.*(onlyOwner|onlyAdmin)"` returns 0.
+- zero new modifiers — `git diff 06623edb..HEAD -- contracts/ | grep -E "^\+.*modifier "` returns 0.
+- zero new upgrade hooks — `git diff 06623edb..HEAD -- contracts/ | grep -E "^\+.*(UUPSUpgradeable|_authorizeUpgrade)"` returns 0.
+
+**Closing attestation:** Storage layout byte-identical at v39.0 closure HEAD vs v38.0 baseline `06623edb` per slot-by-slot grep-proof; zero new public/external mutation entry points; zero new external pure entry points; zero new admin functions; zero new modifiers; zero new upgrade hooks; one new constant (compile-time inlined); one new event declaration (event log is calldata-equivalent, not a storage slot); zero new ERC-20 mint-route surfaces (one new callsite consuming the existing `IWrappedWrappedXRP.mintPrize` route). Cross-module byte-identity preserved for `JackpotModule + MintModule + Degenerette + TraitUtils + JackpotBucketLib + EntropyLib` (D-274-MANUAL-ONLY-01 narrowing satisfied — only `DegenerusGameLootboxModule.sol` + `IDegenerusGameModules.sol` modified at v39). `BurnieCoinflip.sol` carries Phase 273 mutations (included-since-baseline per D-274-BAF273-INCLUDE-01).
+
+### 3.C AUDIT-03 Conservation Re-Proof
+
+Conservation re-proof across 4 domains: EV-neutrality of the Bernoulli round-up on manual paths; WWXRP supply conservation on the consolation path; bit-slice `[152..167]` pairwise independence vs other primary-chunk consumers; `rem`-byte invariant under the manual-path retirement. Closes the AUDIT-03 design contract per ROADMAP success criterion + REQUIREMENTS.md.
+
+**(1) EV-neutrality of Bernoulli round-up on manual paths:**
+
+The Bernoulli round-up on the manual branch implements floor + biased-coin-flip on the fractional remainder. For a pre-collapse scaled value `scaledPre`, with `whole_floor = scaledPre / 100` and `frac = scaledPre % 100`:
+
+`P(roundedUp = true) = frac / 100   (Bernoulli condition: bits[152..167] mod 100 < frac)`
+`P(roundedUp = false) = (100 - frac) / 100`
+
+Expected post-collapse whole value:
+
+`E[whole_post] = whole_floor × P(roundedUp = false) + (whole_floor + 1) × P(roundedUp = true)`
+`             = whole_floor × (100 - frac) / 100 + (whole_floor + 1) × frac / 100`
+`             = whole_floor + frac / 100`
+
+Since `scaledPre = whole_floor × 100 + frac` by construction, we have `whole_floor + frac / 100 = scaledPre / 100`. Therefore:
+
+`E[whole_post] × 100 == scaledPre`     (exact identity)
+`E[whole_post] == scaledPre / 100`     (exact in rationals)
+
+EV-preserving by construction. Per-lootbox variance is higher than the v38 cross-lootbox-deterministic-accumulation flow (where fractional `rem` accumulates across multiple manual lootboxes targeting the same future level and resolves to whole tickets at activation time via `_rollRemainder`). The variance increase is the documented tradeoff per CONTEXT.md `<specifics>`. EV is identical. Empirical witness: TST-WT-01 at N=10K seeds across {47, 99, 100, 147, 250, 1000, 9999} confirms `mean(whole_post) × 100` within ±2.5 of `scaledPre` (5-sigma binomial bound).
+
+**(2) WWXRP supply conservation on the consolation path:**
+
+The cold-bust consolation magnitude `LOOTBOX_WWXRP_CONSOLATION = 1 ether` matches the regular 10%-path WWXRP win magnitude `LOOTBOX_WWXRP_PRIZE = 1 ether` (LBX-WX-01 + D-274-WX-AMOUNT-01). Both call the same `IWrappedWrappedXRP.mintPrize(player, amount)` interface; both emit `LootBoxWwxrpReward(player, day, amount, wwxrpAmount)` with the same event signature (LBX-WX-04). No new WWXRP supply route introduced.
+
+Cold-bust trigger probability bound (worst-case for WWXRP supply growth):
+
+`P(consolation per manual lootbox open) = P(ticket-path selected) × P(scaledPre ∈ (0, 100)) × P(Bernoulli fails | scaledPre ∈ (0, 100))`
+
+The middle factor is bounded above by `P(scaledPre < 100)` which depends on the ETH-amount budget vs the level-priced ticket cost; the worst case is high-price small-budget lootboxes (sub-1-ticket-budget). For such lootboxes, `frac` is uniformly distributed in [1, 99] under the keccak entropy assumption, so `P(Bernoulli fails | scaledPre ∈ (0, 100)) = E[(100 - frac) / 100] = 50/100 = 0.5`. Combined with the existing `LOOTBOX_WWXRP_PRIZE` regular-path probability `P(WWXRP path selected) ≈ 10%` (existing 10%-bracket from the path roll at `_resolveLootboxRoll`), the worst-case consolation contribution to WWXRP supply is bounded above by `0.5 × P(ticket-path selected) × P(sub-1-ticket-budget) × N_open` per unit time — a fraction of the existing WWXRP supply trajectory (the 10%-path mint contribution dominates by an order of magnitude). No supply-shock risk; supply trajectory bounded.
+
+Empirical witness: TST-WX-03 magnitude assertion `LOOTBOX_WWXRP_CONSOLATION == LOOTBOX_WWXRP_PRIZE == 1 ether` (defensive drift catch).
+
+**(3) Bit-slice `[152..167]` pairwise independence vs other primary-chunk consumers:**
+
+The per-resolution `seed = keccak256(abi.encode(rngWord, player, day, amount))` is a single 256-bit primary chunk with the following sub-slice allocation at v39 (post-edit NatSpec L883-893):
+
+```
+bits[0..15]    rangeRoll % 100         (_resolveLootboxRoll path discriminator)
+bits[16..47]   pathRoll                (_resolveLootboxRoll near/far offset)
+bits[48..63]   tierRoll % 1000         (_resolveLootboxRoll tier selection)
+bits[64..79]   nearOffset              (_resolveLootboxRoll near-tier offset)
+bits[80..95]   varianceRoll % 20       (_resolveLootboxRoll large-BURNIE)
+bits[96..119]  ticketVariance % 10000  (_lootboxTicketCount)
+bits[120..151] boon roll % BOON_PPM_SCALE (_rollLootboxBoons)
+bits[152..167] fracRoundUp % 100       (_resolveLootboxCommon manual-path; v39 NEW)
+```
+
+Total primary-chunk consumption: 168 / 256 bits. Bits[168..255] (88 bits) remain unallocated for future use.
+
+By keccak output-entropy properties (the keccak-256 hash function is a cryptographic random oracle in the ideal-cipher sense, and the inputs to the keccak preimage include the VRF-derived `rngWord` which is unknown at the player's commitment point per `feedback_rng_backward_trace.md`), the 256 output bits are pairwise independent. Any disjoint pair of bit-slices is pairwise independent. The new `bits[152..167]` slice does not overlap with any existing slice (the prior maximum was `bits[151]` from the `boon roll` slice). Therefore the new slice is pairwise independent of all 7 prior consumers.
+
+Modulo-bias analysis: `uint16 % 100` over a uniform 16-bit input produces a distribution with worst-case relative bias `656/65536 vs 655.36/65536 = 0.10%` (the 16-bit space has `65536 = 655 × 100 + 36` so 36 residues have 656 preimages and 64 residues have 655 preimages). This is consistent with the existing `bits[0..15]` rangeRoll `uint16 % 100` precedent at L850-851. Per CONTEXT.md `<locked_decisions> D-274-BIT-SLICE-01`: an 8-bit width was rejected because `uint8 % 100` over uniform 8-bit input has worst-case relative bias `3/256 vs 2/256 = 17%` for `frac ≤ 56` (256 mod 100 = 56 residues with 3 preimages; 44 residues with 2 preimages), which would systematically over-issue rounded-up tickets when `frac ≤ 56`. The 16-bit form eliminates that drift.
+
+Empirical witness: TST-WT-03 mod-100 chi² at N=10K with df=99 Wilson-Hilferty Z < 1.645 (PASS at α=0.05); pairwise covariance test between `bits[152..167]` and `bits[0..15]` bounded within ±0.01 of theoretical zero at N=10K.
+
+**(4) `rem`-byte invariant under manual-path retirement:**
+
+Manual-path queues no longer write to the `rem` byte of `ticketsOwedPacked[wk][player]` because the whole-helper `_queueTickets(player, targetLevel, whole, false)` at `contracts/DegenerusGameStorage.sol` L562-589 writes the whole-ticket count directly to the appropriate slot WITHOUT touching the low byte (the `rem` byte is owned by `_queueTicketsScaled` at L596 only). On manual-path opens, the post-Bernoulli `whole` value is queued atomically; no fractional residue persists across activation.
+
+Mint-boost path (at `DegenerusGameMintModule.sol` L1142 `_queueTicketsScaled` callsite) and auto-resolve lootbox paths (at L1067 in `_resolveLootboxCommon`'s auto-resolve branch) continue producing `rem` byte residues; activation-time `_rollRemainder` continues to function unchanged. TST-REG-01 confirms manual-only player+level queues no longer enter `_rollRemainder` at activation; TST-REG-02 confirms mint-boost still produces and resolves `rem`; TST-REG-03 confirms auto-resolve still produces and resolves `rem`; TST-REG-04 confirms cross-mixing variance posture (manual contributions are per-lootbox Bernoulli; auto-resolve contributions still pool deterministically).
+
+**Closing conservation attestation:** EV-neutrality of the Bernoulli round-up holds `E[whole_post] = scaledPre / 100` exactly (per-lootbox variance higher than cross-lootbox-deterministic-accumulation is the documented tradeoff). WWXRP supply growth from the consolation path is bounded above by a fraction of the existing 10%-path WWXRP supply trajectory; same magnitude (`1 ether`) as the regular 10%-path WWXRP win; no new mint-route surface. Bit-slice `[152..167]` is pairwise independent of the 7 prior primary-chunk consumers by keccak output-entropy properties; mod-100 relative bias bounded at ≤0.10% (consistent with the existing `bits[0..15]` precedent). `rem` byte invariant: manual-path queues no longer write to `rem`; mint-boost + auto-resolve lootbox paths continue producing `rem` and resolving via `_rollRemainder` at activation.
+
