@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v40.0
 milestone_name: Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor
-status: verifying
-last_updated: "2026-05-14T11:19:36.454Z"
-last_activity: 2026-05-14
+status: executing
+last_updated: "2026-05-14T11:57:09.787Z"
+last_activity: 2026-05-14 -- Phase 278 Plan 01 complete (contract wave)
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
-  percent: 50
+  total_plans: 8
+  completed_plans: 7
+  percent: 58
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.0 open + BUR scope expansion)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 277 — event-surface-unification-sentinel-retirement-evt-uni
+**Current focus:** Phase 278 — jackpotmodule-cleanup-ent-05-baf-xorshift-refactor-wrapper-retirement-jpt-clean
 
 ## Current Position
 
-Phase: 278
-Plan: Not started
-Status: Phase 277 complete — ready for verification
-Last activity: 2026-05-14
+Phase: 278 (jackpotmodule-cleanup-ent-05-baf-xorshift-refactor-wrapper-retirement-jpt-clean) — EXECUTING
+Plan: 2 of 2 (Plan 01 complete — contract wave landed)
+Status: Executing Phase 278 — Plan 01 done, Plan 02 (test wave) next
+Last activity: 2026-05-14 -- Phase 278 Plan 01 complete (contract wave)
 
 ## Last Shipped Milestone
 
@@ -240,6 +240,16 @@ Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-fo
 - **Verification:** `npx hardhat test` on all 6 affected files — **107 passing, 0 failing**. `contracts/ContractAddresses.sol` + `package-lock.json` (pre-existing unrelated working-tree changes) deliberately NOT staged. No test references a `preRollTickets` field. Harmless trailing mocha file-unloader `MODULE_NOT_FOUND` on per-file CLI runs is a documented repo quirk (Phase 275/276 precedent), does not affect results.
 - **Next:** Phase 277 verification gate, then Phase 276/278/279 surface phases per the v40.0 ROADMAP sequencing.
 
+### Phase 278 Plan 01 — JackpotModule Cleanup + ENT-05 Keccak Refactor + Wrapper Retirement, contract wave (executing 2026-05-14)
+
+- **278-01 COMPLETE** — 1 USER-APPROVED batched contract commit `8a81a87c` (`feat(278): jackpot cleanup + ENT-05 keccak refactor + wrapper retirement [JPT-CLEAN-01..06]`; 4 files +24/−61: `DegenerusGameJackpotModule.sol`, `EntropyLib.sol`, `DegenerusGameStorage.sol`, `DegenerusGameMintModule.sol`). NOT pushed (local-only; future push is a separate user gate per `feedback_manual_review_before_push.md`). 6/6 JPT-CLEAN-01..06 satisfied.
+- **What landed:** `_jackpotTicketRoll` `:2210` swaps `EntropyLib.entropyStep(entropy)` (3-op xorshift) → `EntropyLib.hash2(entropy, entropy)` (keccak self-mix) — the low-bit path/level consumers (`entropy / 100`, `% 4`, `% 46`) and the bits[200..215] Bernoulli slice now read a full-diffusion keccak word. The 2-roll return-and-rethread chaining in `_awardJackpotTickets` is structurally preserved with ZERO body edit (roll 2 input = roll 1 keccak output). `EntropyLib.entropyStep` deleted — library keeps only `hash2`. All 3 `JackpotTicketWin` emit sites unified onto whole-ticket counts (trait-burn `ticketCount`, coin-path `uint32(units)`, BAF `whole`) — event signature/topic-hash UNCHANGED, only emitted values + NatSpec shift. Zero-caller `_queueLootboxTickets` wrapper deleted from `DegenerusGameStorage.sol` (sibling helpers `_queueTickets`/`_queueTicketsScaled`/`_queueTicketRange` untouched). `MintModule:649` `_rollRemainder` comment touched to drop the dead `entropyStep` name (comment-only).
+- **D-278-ENT05-CHAIN-01:** `hash2(entropy, entropy)` self-mix chosen over a fixed-salt constant — zero new constants, smaller audit surface; per-roll uniqueness depends on the FIRST arg differing between rolls (guaranteed by the rethread), not the second. keccak collision-resistance: distinct roll-1 inputs → distinct roll-2 inputs. Bernoulli slice offset stays at bits[200..215] (any slice of a full keccak word is full-entropy).
+- **Semantics note:** the ENT-05 keccak swap intentionally CHANGES BAF roll output for a given seed (not byte-equivalent to v39 — Roadmap SC2 permits this). `JackpotTicketWin` topic-hash unchanged. Converts EXC-04 (BAF-jackpot xorshift KI envelope) from documented `NARROWS` toward a fixed non-issue — candidate for `NARROWS`→`NEGATIVE` demotion at v40 close (Phase 280).
+- **Storage layout byte-identical** to v39 baseline `6a7455d1` (`278-01-STORAGE-LAYOUT-DIFF.md` PASS — `forge inspect storage-layout` diff empty, sha256 cross-check identical). **Bytecode delta −689 bytes deployed** for `DegenerusGameJackpotModule` (`EntropyLib` + `DegenerusGameStorage` 0 deployed delta); gas worst-case derived analytically first per `feedback_gas_worst_case.md`, per-roll runtime ~net-flat to ~+15-25 gas; empirical per-invocation FIXTURE_COVERAGE_GAP_NOTED (`278-01-GAS-WORSTCASE.md`).
+- **Note:** `entropyStep` still has 2 NatSpec hits in `contracts/test/JackpotBernoulliTester.sol` — that is a Wave 2 / plan 278-02 file, correctly out of this plan's scope per CONTEXT.md D-278-ENTROPYSTEP-DELETE-01; 278-02 resolves them. Pre-existing compiler shadow warning at `JackpotModule.sol:535` (`effectiveEntropy`) is unrelated, out of scope; `npx hardhat compile` succeeds.
+- **Next:** Phase 278 Plan 02 (test wave — `278-02-PLAN.md`).
+
 Decisions and completed milestones logged in `.planning/PROJECT.md`.
 Detailed milestone retrospectives in `.planning/RETROSPECTIVE.md` (v37.0 / v36.0 / v35.0 sections most recent).
 Archived milestone artifacts:
@@ -286,8 +296,11 @@ Audit deliverables:
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
 | 277 | 02 | ~1h | 3 | 7 |
+| 278 | 01 | ~50min | 3 | 4 |
 
 ## Decisions
 
 - [Phase 277]: D-277-02-FOLDIN-01: LootboxConsolation + LootboxAutoResolveSilentColdBust folded into 277-02 batched test diff with explicit user approval — 277-01 sentinel retirement invalidated their assertions, expanding scope from 4 to 6 test files + package.json
 - [Phase 277]: D-277-02-WT05-BASELINE-01: TST-WT-05 [05b] baseline-diff (vs v38 06623edb) replaced with a direct structural assertion — v38 baseline three phases stale, diff-count test no longer meaningful
+- [Phase 278]: D-278-ENT05-CHAIN-01: hash2(entropy, entropy) self-mix chosen over a fixed-salt constant for _jackpotTicketRoll entropy evolution — zero new constants, smaller audit surface; per-roll uniqueness depends on the FIRST arg differing between rolls (guaranteed by the _awardJackpotTickets rethread), not the second
+- [Phase 278]: ENT-05 keccak swap intentionally CHANGES BAF roll output semantics for a given seed (not byte-equivalent to v39 — Roadmap SC2 permits this); JackpotTicketWin topic-hash unchanged, only emitted values shift from x100-scaled to whole-ticket counts
