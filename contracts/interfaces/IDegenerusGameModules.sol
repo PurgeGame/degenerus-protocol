@@ -264,22 +264,6 @@ interface IDegenerusGameMintModule {
 /// @title IDegenerusGameLootboxModule
 /// @notice Interface for opening lootboxes and managing boons
 interface IDegenerusGameLootboxModule {
-    /// @notice Emitted on a manual lootbox open whose ticket-path produced non-zero
-    ///         pre-Bernoulli scaled tickets. Off-chain consumers derive the awarded
-    ///         whole-ticket count as `(preRollTickets / 100) + (roundedUp ? 1 : 0)`
-    ///         and infer the WWXRP consolation case as `whole == 0 && preRollTickets > 0`.
-    ///         Auto-resolve paths never emit this event.
-    /// @param player The player whose lootbox was opened
-    /// @param lootboxIndex The per-player storage index of the opened lootbox
-    /// @param preRollTickets Post-distress, pre-Bernoulli scaled ticket count
-    /// @param roundedUp True iff the Bernoulli round-up incremented the whole-ticket count
-    event LootboxTicketRoll(
-        address indexed player,
-        uint48 indexed lootboxIndex,
-        uint32 preRollTickets,
-        bool roundedUp
-    );
-
     /// @notice Opens a standard lootbox for a player
     /// @param player Address of the lootbox owner
     /// @param lootboxIndex Index of the lootbox to open

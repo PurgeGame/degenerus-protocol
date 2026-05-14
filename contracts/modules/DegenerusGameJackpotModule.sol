@@ -84,13 +84,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      time inside _jackpotTicketRoll, so they queue whole tickets and feed
     ///      no fractional remainder into _rollRemainder; ticketCount still
     ///      reports the pre-collapse scaled value for indexer parity.
+    ///      roundedUp is true iff the BAF _jackpotTicketRoll Bernoulli round-up
+    ///      incremented the whole-ticket count; it is false on the trait-matched
+    ///      paths, which have a zero fractional part by construction.
     event JackpotTicketWin(
         address indexed winner,
         uint24 indexed ticketLevel,
         uint16 indexed traitId,
         uint32 ticketCount,
         uint24 sourceLevel,
-        uint256 ticketIndex
+        uint256 ticketIndex,
+        bool roundedUp
     );
 
     /// @dev BURNIE coin win (near-future, trait-matched).
@@ -708,7 +712,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             traitId,
                             ticketCount * uint32(TICKET_SCALE),
                             lvl,
-                            ticketIndexes[i]
+                            ticketIndexes[i],
+                            false
                         );
                     }
                     unchecked {
@@ -1011,7 +1016,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     traitId,
                     uint32(units * TICKET_SCALE),
                     sourceLvl,
-                    ticketIndexes[i]
+                    ticketIndexes[i],
+                    false
                 );
             }
             unchecked {
@@ -2232,10 +2238,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint32 scaledTickets = uint32(quantityScaled);
         uint32 whole = scaledTickets / uint32(TICKET_SCALE);
         uint32 frac = scaledTickets % uint32(TICKET_SCALE);
+        bool roundedUp = false;
         if (frac != 0 && (uint16(entropy >> 200) % uint16(TICKET_SCALE)) < uint16(frac)) {
             unchecked {
                 whole += 1;
             }
+            roundedUp = true;
         }
         _queueTickets(winner, targetLevel, whole, true);
 
@@ -2249,7 +2257,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             BAF_TRAIT_SENTINEL,
             uint32(quantityScaled),
             minTargetLevel,
-            0
+            0,
+            roundedUp
         );
 
         return entropy;
