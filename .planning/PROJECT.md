@@ -10,18 +10,20 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-**Active milestone:** v40.0 — Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor (started 2026-05-13)
-**Last shipped:** v39.0 — Lootbox Whole-Ticket Rounding + WWXRP Consolation (2026-05-13; closure signal `MILESTONE_V39_AT_HEAD_6a7455d1`)
+**Active milestone:** None — between-milestones state. v40.0 SHIPPED 2026-05-14.
+**Last shipped:** v40.0 — Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor (2026-05-14; closure signal `MILESTONE_V40_AT_HEAD_cd549499`)
+**Prior shipped:** v39.0 — Lootbox Whole-Ticket Rounding + WWXRP Consolation (2026-05-13; closure signal `MILESTONE_V39_AT_HEAD_6a7455d1`)
 **Prior shipped:** v38.0 — Always-Hero Simplification + Maximal Dead-Code Cleanup (2026-05-11; closure signal `MILESTONE_V38_AT_HEAD_06623edb`)
 **Prior shipped:** v37.0 — Degenerette Recalibration + Maintenance Bundle (2026-05-11; closure signal `MILESTONE_V37_AT_HEAD_2654fcc2`)
-**Prior shipped:** v36.0 — Lootbox-Path Entropy Refactor (2026-05-10; closure signal `MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`)
-**Contract HEAD anchor (v39.0 closure):** `6a7455d1` (closure signal `MILESTONE_V39_AT_HEAD_6a7455d1`; intervening Phase 273 BAF-credit-routing-fix commits `ff929948` + `e9807891` + `e04d3333` + `1eb1ecb5` folded into v39.0 delta audit as included-since-baseline per D-274-BAF273-INCLUDE-01; surface-coverage attestation only)
+**Contract HEAD anchor (v40.0 closure):** `cd549499` (closure signal `MILESTONE_V40_AT_HEAD_cd549499`; the 12-commit v40.0 audit subject spans Phases 275-279; Phase 280 terminal phase is source-tree frozen)
 
-## Current Milestone: v40.0 Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor
+## Completed Milestone: v40.0 Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor
 
 **Goal:** Retire fractional-residue ticket queuing across all RNG-driven ticket-award surfaces (auto-resolve lootbox paths + jackpot ticket-roll path); land Bernoulli whole-ticket collapse at TICKET granularity (1 ticket = 4 entries — status quo formally settled per D-40N-GRANULARITY-01); unify the event surface by folding remainder visibility into existing per-action events (`LootBoxOpened` / `BurnieLootOpen` / `JackpotTicketWin`) and retiring the v39.0-additive `LootboxTicketRoll` event; retire the v39.0 `index != type(uint48).max` behavior-gating sentinel on `_resolveLootboxCommon` as manual + auto-resolve converge to the same `_queueTickets(whole)` model; bundle cosmetic xTICKET_SCALE cleanup + ENT-05 BAF xorshift refactor + `_queueLootboxTickets` wrapper retirement. **Plus whole-BURNIE-coin floor at 3 RNG-influenced BURNIE-award sites** — lootbox spin BURNIE (`LootboxModule:1080`) + near-future coin jackpot baseAmount (`JackpotModule:1842`) + far-future coin jackpot perWinner (`JackpotModule:1922`) — applying A1 floor-per-winner mechanic per D-40N-BUR-FLOOR-01 (sub-1-BURNIE residues evaporate; budget evaporation on low-pool jackpot days accepted per D-40N-BUR-DUST-01). Mint-boost ticket queuing (`MintModule:1142`) + mint-boost flip-credit (`MintModule:1199`) + daily-coinflip claim (`BurnieCoinflip:409/770/789`) + advance bounty + quest rewards + affiliate DGNRS deity bonus all explicitly EXCLUDED per D-40N-MINTBOOST-OUT-01 + D-40N-BUR-MINTBOOST-OUT-01 — deterministic dust accumulators on user-altered or system-deterministic inputs; not RNG-driven. Multi-phase shape (5 surface-split phases + 1 terminal audit phase = 6 phases per D-40N-CLOSURE-01) per v33/v34/v35/v37 precedent — NOT the v36/v38/v39 single-phase pattern.
 
 **Audit baseline:** v39.0 closure HEAD `MILESTONE_V39_AT_HEAD_6a7455d1`.
+
+**Closure summary (v40.0 SHIPPED 2026-05-14):** 6-phase multi-phase milestone (Phases 275-279 surface phases + Phase 280 terminal audit) per v33/v34/v35/v37 precedent. 12-commit audit subject `6a7455d1..cd549499`: Phase 275 auto-resolve LootboxModule Bernoulli (`b6ed8fce` + `bb1b1abd`), Phase 276 JackpotModule:2216 BAF Bernoulli (`c473867e` + `1568fd5c`), Phase 277 event surface unification + sentinel retirement + CR-01 gap-closure (`02fb7085` + `6fbee850` + `f7a6fccd`), Phase 278 JackpotModule cleanup + ENT-05 keccak refactor + wrapper retirement (`8a81a87c` + `c3baf694` + `a91dac85`), Phase 279 whole-BURNIE floor (`8ef4a010` + `37207743`). 5 USER-APPROVED batched contract commits + 5 USER-APPROVED batched test commits + 2 remediation commits. Phase 280 terminal phase SOURCE-TREE FROZEN. 65/65 requirements satisfied. **Result:** 11 of 11 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE; zero F-40-NN finding blocks; 3-skill PARALLEL adversarial pass (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT OF SCOPE) — 10 novel-vector hypotheses + edge cases all NEGATIVE_RESULT_ONLY / ACCEPTED_DESIGN; zero residual FINDING_CANDIDATE (the CR-01 BLOCKER materialized in Phase 277 Wave 1 and was RESOLVED pre-Phase-280 in `f7a6fccd`). 1 PASS REG-01 (v39.0 closure NON-WIDENING for v39-touched surfaces NOT in v40 scope) + 1 PASS REG-02 (v34.0 closure NON-WIDENING) + REG-03 KI envelope re-verifications + REG-04 prior-finding spot-check sweep PASS; aggregate 12 PASS / 0 REGRESSED. EXC-01..03 RE_VERIFIED-NEGATIVE-scope; EXC-04 STRUCTURALLY ELIMINATED at v40.0 (Phase 278 `8a81a87c` deleted `EntropyLib.entropyStep`). KNOWN-ISSUES.md MODIFIED — EXC-04 line-31 entry REMOVED per D-280-EXC04-01. Closure verdict `4 of 4 KI_ELIGIBLE addressed; KNOWN_ISSUES_MODIFIED`. Deliverable: `audit/FINDINGS-v40.0.md` (FINAL READ-only at HEAD `cd549499`, 9 sections, chmod 444). **Decision-anchor IDs:** D-40N-CLOSURE-01/02 + D-40N-GRANULARITY-01 + D-40N-SILENT-01 + D-40N-EVT-BREAK-01 + D-40N-SENTINEL-RETIRE-01 + D-40N-MINTBOOST-OUT-01 + D-40N-AR-EMIT-01 + D-40N-FILES-01 + D-40N-FCITE-01 + D-40N-KI-01 + D-40N-APPROVAL-01 + D-40N-ADVERSARIAL-01 + D-40N-SEV-01 + D-40N-LBX02-OUT-01 + D-40N-BUR-FLOOR-01 + D-40N-BUR-DUST-01 + D-40N-BUR-SILENT-01 + D-40N-BUR-MINTBOOST-OUT-01 + D-280-EXC04-01 + D-280-PLANSHAPE-01 + D-280-RESEARCH-01 + D-276-RNGBYPASS-01 + D-277-EVT-WIDE-01 + D-277-NO-PREROLL-01 + D-277-AR-SILENT-01 + D-279-BUR01-SITE-01; inherited carry-chains: D-274-* + D-272-* + D-271-* + D-08. Closure signal: `MILESTONE_V40_AT_HEAD_cd549499`.
 
 **Target features:**
 
@@ -118,18 +120,21 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Deferred to Future Milestones
 
-_Absorbed into v40.0 active milestone (no longer deferred — see "Current Milestone: v40.0" above):_
-- Auto-resolve LootboxModule Bernoulli extension (was D-274-AUTORESOLVE-OUT-01) — now v40.0 target feature 1
-- JackpotModule:2216 BAF small-lootbox Bernoulli (was D-274-JACKPOT-OUT-01 L2216 portion) — now v40.0 target feature 2
-- Event surface unification (was D-274-EVT-ROLL-01 + D-274-EVT-INDEX-SENTINEL-01 + D-274-NO-EVT-BREAK-01 non-breaking stance) — now v40.0 target feature 3
-- JackpotModule cosmetic xTICKET_SCALE cleanup (L702/L835/L1005) + ENT-05 BAF xorshift refactor + `_queueLootboxTickets` wrapper retirement — now v40.0 target feature 4
-- Ticket-vs-entry granularity investigation + decision — SETTLED at TICKET granularity per D-40N-GRANULARITY-01 (1 ticket = 4 entries; 4× variance vs entry-granularity accepted; entry-granularity refactor permanently off the roadmap)
-
-_Carried forward into v41.0+ (next-next-milestone candidates):_
-- Lootbox empirical 55%-tickets-path gas-savings test pin (LBX-02 RE-DEFERRED-V41+ at v40.0 open; D-274-LBX02-OUT-01) — fixture-coverage gap persists; analytical worst-case load-bearing per Phase 266 GAS-01 + `feedback_gas_worst_case.md`; path-of-investigation prose at `audit/FINDINGS-v38.0.md` §9.NN.iv (carried unchanged from v38 + v39 close)
-- Mint-boost fractional retirement (D-274-MINTBOOST-OUT-01 → D-40N-MINTBOOST-OUT-01 v40-anchor; future-milestone consideration) — `_queueTicketsScaled` + `_rollRemainder` + `rem` byte stay at `DegenerusGameMintModule.sol:1142` (deterministic dust accumulator, not RNG-driven; out of v40.0 scope per user disposition 2026-05-13)
+_Carried forward into v41.0+ (next-milestone candidates):_
+- Lootbox empirical 55%-tickets-path gas-savings test pin (LBX-02 RE-DEFERRED-V41+ per `D-40N-LBX02-OUT-01`) — fixture-coverage gap persists; analytical worst-case load-bearing per Phase 266 GAS-01 + `feedback_gas_worst_case.md`; path-of-investigation prose at `audit/FINDINGS-v40.0.md` §9 "Deferred to Future Milestones" (carried unchanged from v38 + v39 + v40 close)
+- Superseded-baseline SURF `it.skip` cleanup — 3 pre-existing superseded-baseline SURF failures (v35/v34, v37/v36, v38/v37 byte-identity gates) in `test/stat/SurfaceRegression.test.js`, tripped by the Phase 275-279 contract deltas (per Phase 279 `D-279-02-SURF-SUPERSEDED-01`); v41+ backlog quick-task; recorded in `audit/FINDINGS-v40.0.md` §5e + §9
+- REQUIREMENTS.md / ROADMAP.md JPT-BR-02 text correction — the literal text says `rngBypass = false` (a Phase-275 copy-paste artifact); the correct value is `true` per D-276-RNGBYPASS-01 (the code is correct; `276-VERIFICATION.md` records the load-bearing override). Documentation-cleanup item for a future maintenance pass.
+- Mint-boost fractional retirement (`D-40N-MINTBOOST-OUT-01` v40-anchor, carries D-274-MINTBOOST-OUT-01; future-milestone consideration) — `_queueTicketsScaled` + `_rollRemainder` + `rem` byte stay at `DegenerusGameMintModule.sol:1142` (deterministic dust accumulator, not RNG-driven; out of v40.0 scope per user disposition 2026-05-13)
 - `runrewardjackpots` module-misplacement note — stale 2026-04-02 backlog note; not v40.0-tagged; carries forward
 - Game-over thorough hardening — deferred to dedicated game-over hardening milestone
+
+_Resolved at v40.0 close (no longer outstanding):_
+- Auto-resolve LootboxModule Bernoulli extension — RESOLVED v40.0 Phase 275 (contract commit `b6ed8fce`, test commit `bb1b1abd`)
+- JackpotModule:2216 BAF small-lootbox Bernoulli — RESOLVED v40.0 Phase 276 (contract commit `c473867e`, test commit `1568fd5c`)
+- Event surface unification + index-sentinel retirement (folded `LootboxTicketRoll` into `LootBoxOpened`/`BurnieLootOpen`/`JackpotTicketWin` `roundedUp` fields; retired the `index != type(uint48).max` sentinel) — RESOLVED v40.0 Phase 277 (contract commit `02fb7085` + gap-closure `f7a6fccd`, test commit `6fbee850`)
+- JackpotModule cosmetic xTICKET_SCALE cleanup + ENT-05 BAF xorshift refactor + `_queueLootboxTickets` wrapper retirement — RESOLVED v40.0 Phase 278 (contract commit `8a81a87c`, test commit `c3baf694`); STRUCTURALLY ELIMINATES the v36.0 EXC-04 xorshift known-issue
+- Whole-BURNIE floor at the 3 RNG-influenced BURNIE-award sites — RESOLVED v40.0 Phase 279 (contract commit `8ef4a010`, test commit `37207743`)
+- Ticket-vs-entry granularity investigation + decision — SETTLED at TICKET granularity per D-40N-GRANULARITY-01 (1 ticket = 4 entries; 4× variance vs entry-granularity accepted; entry-granularity refactor permanently off the roadmap)
 
 
 

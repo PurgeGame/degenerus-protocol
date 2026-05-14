@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v40.0
 milestone_name: Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor
-status: executing
-last_updated: "2026-05-14T16:25:41.171Z"
-last_activity: 2026-05-14 -- Phase 280 planning complete
+status: completed
+last_updated: "2026-05-14T16:27:40.808Z"
+last_activity: 2026-05-14 -- v40.0 SHIPPED (Phase 280 terminal closure)
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 11
-  completed_plans: 10
-  percent: 83
+  completed_plans: 11
+  percent: 100
 ---
 
 # Project State
@@ -20,16 +20,32 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.0 open + BUR scope expansion)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 279 — whole-burnie-floor-bur
+**Current focus:** None — v40.0 SHIPPED 2026-05-14. Next milestone scope TBD.
 
 ## Current Position
 
-Phase: 279
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-14 -- Phase 280 planning complete
+Phase: 280 (Delta Audit + Findings Consolidation (Terminal)) — COMPLETE
+Plan: 1 of 1 complete
+Status: v40.0 SHIPPED — all 6 phases complete (275-280); milestone closed
+Last activity: 2026-05-14 -- v40.0 SHIPPED (Phase 280 terminal closure-flip; closure signal MILESTONE_V40_AT_HEAD_cd549499)
 
 ## Last Shipped Milestone
+
+**v40.0 — Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor** (shipped 2026-05-14)
+
+- 6 phases (275-280), 11 plans, 65/65 requirements satisfied (6 LBX-AR + 6 TST-LBX-AR + 6 JPT-BR + 4 TST-JPT-BR + 8 EVT-UNI + 6 TST-EVT-UNI + 6 JPT-CLEAN + 3 TST-CLEAN + 1 TST-CROSS + 5 BUR + 4 TST-BUR + 6 AUDIT + 4 REG)
+- Audit baseline: v39.0 closure HEAD `MILESTONE_V39_AT_HEAD_6a7455d1` -> v40.0 closure HEAD `cd549499` (resolved at the Phase 280 terminal closure-flip task per D-40N-CLOSURE-01). 12-commit audit subject across 5 surface phases: Phase 275 (`b6ed8fce` + `bb1b1abd`) auto-resolve LootboxModule Bernoulli; Phase 276 (`c473867e` + `1568fd5c`) JackpotModule:2216 BAF Bernoulli; Phase 277 (`02fb7085` + `6fbee850` + `f7a6fccd`) event surface unification + sentinel retirement + CR-01 cold-bust gap-closure; Phase 278 (`8a81a87c` + `c3baf694` + `a91dac85`) JackpotModule cleanup + ENT-05 keccak refactor + wrapper retirement; Phase 279 (`8ef4a010` + `37207743`) whole-BURNIE floor. 5 USER-APPROVED batched contract commits + 5 USER-APPROVED batched test commits + 2 remediation commits. Multi-phase 6-phase shape per v33/v34/v35/v37 precedent.
+- Result: 11 of 11 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE (a EV-neutrality of Bernoulli on auto-resolve + b on jackpot ticket-roll + c bit-slice [152..167] auto-resolve reuse via per-resolution seed-distinctness + d bit-slice [200..215] jackpot independence + e silent cold-bust no consolation crossover + f event topic-hash change correctness + g index-sentinel retirement byte-equivalence + h _queueLootboxTickets wrapper retirement + ENT-05 keccak refactor + i mint-boost path byte-equivalent + j lootbox spin BURNIE floor + k JackpotModule near/far-future coin jackpot BURNIE floor); zero F-40-NN finding blocks emitted; 10 novel-vector hypotheses + edge cases investigated across 3 adversarial skills, all NEGATIVE_RESULT_ONLY / ACCEPTED_DESIGN
+- Adversarial pass via 3-skill PARALLEL spawn `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` per D-40N-ADVERSARIAL-01 on the finished §4 11-surface draft; `/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry. Disposition: zero residual FINDING_CANDIDATE; the one threat that materialized in the milestone (CR-01, manual-path consolation mis-gated on emitLootboxEvent) was caught by Phase 277 code review and RESOLVED pre-Phase-280 in user-approved gap-closure commit `f7a6fccd`
+- LEAN regression: 1 PASS REG-01 (v39.0 closure signal `MILESTONE_V39_AT_HEAD_6a7455d1` NON-WIDENING for v39-touched surfaces NOT in v40 scope; LootboxModule:1080 BUR-01 site explicitly excluded as in-scope mutation; bits[152..167] manual/auto-resolve sharing re-verified non-widening via per-resolution seed-uniqueness) + 1 PASS REG-02 (v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` NON-WIDENING; TraitUtils + _pickSoloQuadrant + JackpotBucketLib byte-identical) + REG-03 KI envelope re-verifications + REG-04 prior-finding spot-check sweep PASS across audit/FINDINGS-v25..v39.0. Aggregate 12 PASS / 0 REGRESSED / 0 SUPERSEDED-as-verdict
+- KI envelopes EXC-01..03 RE_VERIFIED-NEGATIVE-scope at v40 (the v40.0 audit subject has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction); EXC-04 STRUCTURALLY ELIMINATED at v40.0 — Phase 278 `8a81a87c` deleted `EntropyLib.entropyStep` and swapped `_jackpotTicketRoll` to `EntropyLib.hash2` keccak self-mix; no xorshift PRNG or consumer exists in contracts/ at v40 HEAD
+- KNOWN-ISSUES.md MODIFIED at v40 close per D-280-EXC04-01 — the line-31 EXC-04 EntropyLib XOR-shift entry REMOVED OUTRIGHT (clean deletion, zero added lines); EXC-01/02/03 entries untouched. Closure verdict `4 of 4 KI_ELIGIBLE addressed; KNOWN_ISSUES_MODIFIED`
+- Deliverable: `audit/FINDINGS-v40.0.md` (FINAL READ-only at HEAD `cd549499`, 9 sections, ~907 lines; chmod 444)
+- Closure signal: `MILESTONE_V40_AT_HEAD_cd549499`
+- Process notes: 6-phase multi-phase shape. 5 USER-APPROVED batched contract commits + 5 USER-APPROVED batched test commits per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_manual_review_before_push.md`. Phase 280 terminal phase is SOURCE-TREE FROZEN — zero contracts/ + zero test/ mutations; audit deliverable + KNOWN-ISSUES.md edit + closure-flip docs AGENT-COMMITTED. Adversarial-pass 3-skill PARALLEL spawn per D-40N-ADVERSARIAL-01. v40.0 closure invariant: terminal-phase zero forward-cite emission; §9 "Deferred to Future Milestones" register uses locked-decision ID D-40N-LBX02-OUT-01 + descriptive v41+ planner-handoff labels
+- See `.planning/MILESTONES.md` for archive
+
+### Prior Shipped Milestone
 
 **v39.0 — Lootbox Whole-Ticket Rounding + WWXRP Consolation** (shipped 2026-05-13)
 
@@ -120,7 +136,7 @@ Last activity: 2026-05-14 -- Phase 280 planning complete
 
 ## Active Milestone
 
-_None — between-milestones state. v39.0 SHIPPED 2026-05-13. Next milestone scope TBD._
+_None — between-milestones state. v40.0 SHIPPED 2026-05-14. Next milestone scope TBD._
 
 ### Just-Shipped Milestone Reference
 
@@ -302,9 +318,9 @@ Audit deliverables:
 
 ## Global Project State
 
-- Contract tree at v39.0 audit-subject HEAD `6a7455d1` (resolved at Wave 3 Task 3.10 atomic-update; this STATE.md row updated atomically at the same point).
-- READ-only audit pattern carried forward v28.0–v31.0; **READ-only LIFTED for v32.0 + v33.0 + v34.0 + v35.0 + v36.0 + v37.0 + v38.0 + v39.0** — audit-then-commit (or impl-then-audit) with per-commit user approval per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_manual_review_before_push.md`. No agent commits contracts/ or test/ changes without explicit user review of the diff. v38.0 Phase 272 used 2 USER-APPROVED batched commits (Wave 1 contracts `527e3adc` + Wave 2 tests `e3fcb95c`) + 1 USER-APPROVED Wave 1.5 input-validation revision (commit `4760459f`).
-- KNOWN-ISSUES.md: 4 accepted RNG-determinism exceptions (EXC-01 affiliate roll / EXC-02 prevrandao fallback / EXC-03 F-29-04 mid-cycle substitution / EXC-04 EntropyLib XOR-shift) — all re-verified non-widening at v39 HEAD. EXC-01..03 NEGATIVE-scope at v39 (Phase 274 has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction); EXC-04 RE_VERIFIED with NARROWS retained from v36.0 (BAF-jackpot-only scope unchanged; EntropyLib byte-identical at v39 HEAD; the new bits[152..167] Bernoulli reads keccak primary chunk NOT xorshift output per backward-trace cite).
+- Contract tree at v40.0 audit-subject HEAD `cd549499` (resolved at the Phase 280 terminal closure-flip task; this STATE.md row updated atomically at the same point). The 12-commit v40.0 audit subject spans Phases 275-279; Phase 280 is source-tree frozen.
+- READ-only audit pattern carried forward v28.0–v31.0; **READ-only LIFTED for v32.0 + v33.0 + v34.0 + v35.0 + v36.0 + v37.0 + v38.0 + v39.0 + v40.0** — audit-then-commit (or impl-then-audit) with per-commit user approval per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_manual_review_before_push.md`. No agent commits contracts/ or test/ changes without explicit user review of the diff. v38.0 Phase 272 used 2 USER-APPROVED batched commits (Wave 1 contracts `527e3adc` + Wave 2 tests `e3fcb95c`) + 1 USER-APPROVED Wave 1.5 input-validation revision (commit `4760459f`).
+- KNOWN-ISSUES.md: 3 accepted RNG-determinism exceptions at v40 HEAD (EXC-01 affiliate roll / EXC-02 prevrandao fallback / EXC-03 F-29-04 mid-cycle substitution) — all RE_VERIFIED-NEGATIVE-scope at v40 (the v40.0 audit subject has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction). EXC-04 (EntropyLib XOR-shift PRNG for BAF jackpot ticket rolls) was STRUCTURALLY ELIMINATED at v40.0 — Phase 278 `8a81a87c` deleted `EntropyLib.entropyStep` and swapped `_jackpotTicketRoll` to `EntropyLib.hash2` keccak self-mix; the KNOWN-ISSUES.md line-31 EXC-04 entry was REMOVED per D-280-EXC04-01.
 
 ## Operator Next Steps
 
@@ -319,6 +335,7 @@ Audit deliverables:
 | 278 | 02 | ~40min | 3 | 10 |
 | 279 | 01 | ~45min | 3 | 4 |
 | 279 | 02 | ~50min | 3 | 6 |
+| 280 | 01 | single session | 6 | 2 |
 
 ## Decisions
 
@@ -332,4 +349,7 @@ Audit deliverables:
 - [Phase 279]: D-279-02-PLACEMENT-01: TST-BUR-01/02/03 placed in test/unit/, TST-BUR-04 in test/stat/ — REQUIREMENTS.md's suggested test/lootbox/ + test/jackpot/ dirs do not exist on disk; the on-disk layout (test/unit/ + test/stat/) is authoritative
 - [Phase 279]: D-279-02-STRUCTURAL-PRIMARY-01: source-structural extractBody proof is the load-bearing test evidence for the 3 fixture-gapped BUR functions (JackpotTicketRollSilentColdBust.test.js precedent); JS boundary math is confirmation only; no on-chain BurnieFloorTester.sol added
 - [Phase 279]: D-279-02-SURF-RECUT-01: SURF_01_PROTECTED_RANGES_V40 re-cut as the exact complement of the OLD-side modified-line set from git diff 6a7455d1 HEAD — single JackpotModule L1014-2177 range split into 7 sub-ranges; walkAndAssertV40 + it bodies byte-identical; the re-cut FIXED the previously-failing v40.0 SURF-01
+- [Phase 280]: D-280-EXC04-01: full removal of the KNOWN-ISSUES.md line-31 EXC-04 EntropyLib XOR-shift entry — Phase 278 8a81a87c structurally eliminated the xorshift mechanism; section 6b closure verdict KNOWN_ISSUES_MODIFIED
+- [Phase 280]: Closure HEAD SHA resolved to cd549499 (the section-9-authoring-commit HEAD, mirroring the v39 P274 audit_subject_head pattern); MILESTONE_V40_AT_HEAD_cd549499 propagated to 5 FINDINGS locations + 3 cross-document targets
+- [Phase 280]: 3-skill adversarial pass performed inline (no .claude/skills directory + no Skill/Agent tools for the sequential executor; v35.0 STATE.md precedent — skills load into orchestrator context for review work); 11/11 section-4 surfaces SAFE-bucket, zero residual FINDING_CANDIDATE
 - [Phase 279]: D-279-02-SURF-SUPERSEDED-01: the 3 pre-existing superseded-baseline SURF failures (v35/v34, v37/v36, v38/v37) tripped by Wave-1 contract commit 8ef4a010 were surfaced rather than silently edited; 279-02 committed as-is per user approval; an it.skip cleanup of those superseded blocks is a recommended separate follow-up
