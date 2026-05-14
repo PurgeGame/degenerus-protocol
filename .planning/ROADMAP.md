@@ -139,7 +139,10 @@ Plans:
   5. Closure signal `MILESTONE_V40_AT_HEAD_<sha>` emitted in §9c with verbatim presence in 5 FINDINGS locations + 3 cross-document propagation targets (ROADMAP + STATE + MILESTONES + PROJECT closure-flips atomic post-§9c attestation per D-40N-CLOSURE-01); §9.NN three-subsection commit-readiness register populated (i USER-APPROVED contracts Phase 275/276/277/278/279 + ii USER-APPROVED tests Phase 275/276/277/278/279 + iii AGENT-COMMITTED audit + planning artifacts); §8 forward-cite zero-emission grep recipe verifies zero `v41.0+` references emitted from this terminal phase per D-40N-FCITE-01 (carries D-NN-FCITE-01) (AUDIT-06).
   6. §5 regression appendix: REG-01 PASS for v39.0 closure signal `MILESTONE_V39_AT_HEAD_6a7455d1` non-widening at v40 HEAD (surface set: manual lootbox path Bernoulli + consolation + LootboxTicketRoll-replaced-by-LootBoxOpened-fields; bits[152..167] manual-path slice shared with auto-resolve in v40 with per-resolution seed-uniqueness proof; byte-identical for surfaces NOT in v40 scope — Degenerette + BURNIE coinflip + mint-boost + WWXRP consolation predicate on manual-path); REG-02 PASS for v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` non-widening (TraitUtils + `_pickSoloQuadrant` + JackpotBucketLib byte-identical); REG-03 KI envelope re-verifications (EXC-01..03 NEGATIVE-scope; EXC-04 disposition per JPT-CLEAN-04 outcome); REG-04 prior-finding spot-check sweep across `audit/FINDINGS-v25.0..v39.0.md` for v40-touched function/surface set — focus: `_resolveLootboxCommon` auto-resolve branch additions + manual-path index-sentinel retirement; `_queueTickets` new auto-resolve + jackpot callsites; `_jackpotTicketRoll` Bernoulli addition; `LootBoxOpened` / `BurnieLootOpen` / `JackpotTicketWin` event signature additions; `_queueLootboxTickets` retirement; `xTICKET_SCALE` cleanup sites; ENT-05 BAF xorshift refactor (REG-01, REG-02, REG-03, REG-04).
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 280-01-PLAN.md — Author audit/FINDINGS-v40.0.md (9-section terminal deliverable) + 3-skill adversarial pass + 280-01-ADVERSARIAL-LOG.md + KNOWN-ISSUES.md EXC-04 removal + atomic v40.0 closure-flip across ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS
 
 
 <details>
