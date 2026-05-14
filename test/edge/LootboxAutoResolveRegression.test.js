@@ -20,8 +20,10 @@
 //                 Post-Phase-277 the `index != type(uint48).max` sentinel is
 //                 retired: there is no `LootboxTicketRoll` event anywhere in
 //                 the module, the manual cold-bust WWXRP consolation is gated
-//                 by `emitLootboxEvent` (manual-only), and both auto-resolve
-//                 callers pass `index = 0` and `emitLootboxEvent = false`.
+//                 by the dedicated `payColdBustConsolation` flag (true for both
+//                 manual callers, false for the auto-resolve callers), and both
+//                 auto-resolve callers pass `index = 0`,
+//                 `emitLootboxEvent = false`, and `payColdBustConsolation = false`.
 //                 Bernoulli math is shared-scope per D-275-HOIST-01.
 //   - TST-REG-04: cross-mixing variance — manual + auto-resolve opens for
 //                 the same player + level coexist without corruption.
@@ -40,8 +42,9 @@
 //       _rollRemainder semantics (TST-REG-03 / TST-REG-04)
 //   TST-REG-03 is updated for the Phase 277 sentinel retirement: the
 //   `index != type(uint48).max` gate is gone, auto-resolve callers pass
-//   `index = 0` + `emitLootboxEvent = false`, the cold-bust consolation is
-//   `emitLootboxEvent`-gated, and `LootboxTicketRoll` is fully removed.
+//   `index = 0` + `emitLootboxEvent = false` + `payColdBustConsolation = false`,
+//   the cold-bust consolation is `payColdBustConsolation`-gated, and
+//   `LootboxTicketRoll` is fully removed.
 //
 // CROSS-CITES:
 //   - D-274-MANUAL-ONLY-01, D-274-AUTORESOLVE-OUT-01, D-274-MINTBOOST-OUT-01
@@ -235,10 +238,10 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       expect(body.includes("type(uint48).max")).to.equal(false);
       const args = extractResolveCommonArgs(body);
       expect(args, "_resolveLootboxCommon call args not parsed").to.not.equal(null);
-      // Positional: 3rd arg = index, 11th arg = emitLootboxEvent.
+      // Positional: 3rd arg = index, 10th arg = emitLootboxEvent.
       expect(args[2], "resolveLootboxDirect must pass index = 0").to.equal("0");
       expect(
-        args[10],
+        args[9],
         "resolveLootboxDirect must pass emitLootboxEvent = false"
       ).to.equal("false");
     });
@@ -254,7 +257,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       expect(args, "_resolveLootboxCommon call args not parsed").to.not.equal(null);
       expect(args[2], "resolveRedemptionLootbox must pass index = 0").to.equal("0");
       expect(
-        args[10],
+        args[9],
         "resolveRedemptionLootbox must pass emitLootboxEvent = false"
       ).to.equal("false");
     });
@@ -277,7 +280,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       ).to.equal(false);
     });
 
-    it("[03d] auto-resolve is silent: LootboxTicketRoll is gone, the cold-bust consolation is `emitLootboxEvent`-gated, and both auto-resolve callers pass `emitLootboxEvent = false`", function () {
+    it("[03d] auto-resolve is silent: LootboxTicketRoll is gone, the cold-bust consolation is `payColdBustConsolation`-gated, and both auto-resolve callers pass `emitLootboxEvent = false` + `payColdBustConsolation = false`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // (1) LootboxTicketRoll is fully retired from the module.
       expect(
@@ -285,13 +288,14 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
         "LootboxTicketRoll must not appear anywhere in DegenerusGameLootboxModule.sol"
       ).to.equal(0);
       // (2) The manual cold-bust WWXRP consolation is gated on
-      //     `emitLootboxEvent && whole == 0` — it cannot fire on the
-      //     auto-resolve (emitLootboxEvent = false) path.
+      //     `payColdBustConsolation && whole == 0` — it cannot fire on the
+      //     auto-resolve (payColdBustConsolation = false) path.
       expect(
-        /if \(emitLootboxEvent && whole == 0\)/.test(source),
-        "the manual cold-bust consolation must be gated on `emitLootboxEvent && whole == 0`"
+        /if \(payColdBustConsolation && whole == 0\)/.test(source),
+        "the manual cold-bust consolation must be gated on `payColdBustConsolation && whole == 0`"
       ).to.equal(true);
-      // (3) Both auto-resolve callers pass emitLootboxEvent = false.
+      // (3) Both auto-resolve callers pass emitLootboxEvent = false (10th
+      //     positional) AND payColdBustConsolation = false (11th positional).
       for (const fnSig of [
         "function resolveLootboxDirect(",
         "function resolveRedemptionLootbox(",
@@ -303,8 +307,12 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
           null
         );
         expect(
-          args[10],
+          args[9],
           `${fnSig} must pass emitLootboxEvent = false`
+        ).to.equal("false");
+        expect(
+          args[10],
+          `${fnSig} must pass payColdBustConsolation = false`
         ).to.equal("false");
       }
     });
@@ -315,31 +323,32 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       expect(emits).to.equal(0);
     });
 
-    it("[03f] the cold-bust WWXRP consolation is single-site and sits under the `emitLootboxEvent` gate (manual-only)", function () {
+    it("[03f] the cold-bust WWXRP consolation is single-site and sits under the `payColdBustConsolation` gate (manual-only)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Both the `wwxrp.mintPrize(..., LOOTBOX_WWXRP_CONSOLATION)` call and the
-      // adjacent `emit LootBoxWwxrpReward(..., LOOTBOX_WWXRP_CONSOLATION)` are
-      // single-site, inside the `emitLootboxEvent && whole == 0` block.
+      // The `wwxrp.mintPrize(..., LOOTBOX_WWXRP_CONSOLATION)` call is single-site,
+      // inside the `payColdBustConsolation && whole == 0` block. The payout is
+      // observable off-chain via the WWXRP ERC-20 `Transfer` event the mint
+      // emits — there is no dedicated lootbox-WWXRP event.
       const mintCount = (source.match(
         /wwxrp\.mintPrize\(player, LOOTBOX_WWXRP_CONSOLATION\)/g
       ) || []).length;
-      const emitCount = (source.match(
-        /emit LootBoxWwxrpReward\(player, day, amount, LOOTBOX_WWXRP_CONSOLATION\)/g
-      ) || []).length;
       expect(mintCount).to.equal(1);
-      expect(emitCount).to.equal(1);
-      // The consolation mint sits textually after the `emitLootboxEvent && whole == 0`
-      // gate that opens its block.
-      const gateIdx = source.indexOf("if (emitLootboxEvent && whole == 0)");
+      expect(
+        source.includes("LootBoxWwxrpReward"),
+        "the retired LootBoxWwxrpReward event must not appear in the module"
+      ).to.equal(false);
+      // The consolation mint sits textually after the
+      // `payColdBustConsolation && whole == 0` gate that opens its block.
+      const gateIdx = source.indexOf("if (payColdBustConsolation && whole == 0)");
       const mintIdx = source.indexOf(
         "wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"
       );
-      expect(gateIdx, "`emitLootboxEvent && whole == 0` gate not found").to.be.greaterThan(
+      expect(gateIdx, "`payColdBustConsolation && whole == 0` gate not found").to.be.greaterThan(
         -1
       );
       expect(
         mintIdx,
-        "the consolation mint must sit inside the `emitLootboxEvent` gate"
+        "the consolation mint must sit inside the `payColdBustConsolation` gate"
       ).to.be.greaterThan(gateIdx);
     });
   });
@@ -403,13 +412,13 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       ).to.equal(true);
     });
 
-    it("[04d] manual vs auto-resolve are discriminated by `emitLootboxEvent`, not by the `index` value — the unified ticket-queue path has zero per-branch crossover", function () {
+    it("[04d] manual vs auto-resolve are discriminated by dedicated flags, not by the `index` value — the unified ticket-queue path has zero per-branch crossover", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // Phase 277 retired the `index != type(uint48).max` sentinel gate. Routing
-      // is now the `emitLootboxEvent` bool: it gates both the `LootBoxOpened`
-      // emit and the manual cold-bust WWXRP consolation, while the
-      // `_queueTickets(player, targetLevel, whole, false)` call is unconditional
-      // and shared by both paths.
+      // is now two dedicated bools: `emitLootboxEvent` gates the `LootBoxOpened`
+      // emit, and `payColdBustConsolation` gates the manual cold-bust WWXRP
+      // consolation. The `_queueTickets(player, targetLevel, whole, false)` call
+      // is unconditional and shared by both paths.
       expect(
         source.includes("if (index != type(uint48).max)"),
         "the `index != type(uint48).max` sentinel gate must be fully retired"
@@ -423,15 +432,15 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
         callMatches,
         "the unified ticket-queue path must call `_queueTickets(player, targetLevel, whole, false)` exactly once"
       ).to.equal(1);
-      // The manual-only behaviors (LootBoxOpened emit + cold-bust consolation)
-      // are both gated by `emitLootboxEvent`.
+      // The `LootBoxOpened` emit is gated by `emitLootboxEvent`; the manual
+      // cold-bust consolation is gated by the dedicated `payColdBustConsolation`.
       expect(
         /if \(emitLootboxEvent\)/.test(source),
         "the `LootBoxOpened` emit must be gated by `emitLootboxEvent`"
       ).to.equal(true);
       expect(
-        /if \(emitLootboxEvent && whole == 0\)/.test(source),
-        "the manual cold-bust consolation must be gated by `emitLootboxEvent`"
+        /if \(payColdBustConsolation && whole == 0\)/.test(source),
+        "the manual cold-bust consolation must be gated by `payColdBustConsolation`"
       ).to.equal(true);
     });
 

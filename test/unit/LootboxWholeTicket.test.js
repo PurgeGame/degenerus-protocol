@@ -11,8 +11,9 @@
 //   3. if the Bernoulli wins → `whole += 1`, `roundedUp = true`
 //   4. queues `whole` tickets via the unified `_queueTickets(player,
 //      targetLevel, whole, false)` call (which early-returns on `whole == 0`)
-//   5. under the `emitLootboxEvent` gate, on `whole == 0` pays the manual
-//      cold-bust WWXRP consolation, and emits `LootBoxOpened`
+//   5. under the `payColdBustConsolation` gate, on `whole == 0` pays the manual
+//      cold-bust WWXRP consolation; under the separate `emitLootboxEvent` gate,
+//      emits `LootBoxOpened`
 //
 // Phase 277 retired the `index != type(uint48).max` sentinel: the ticket-queue
 // path is unified (no per-branch duplication) and the `LootboxTicketRoll` event
@@ -585,8 +586,9 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       // local; the function-scope `futureTickets` MUST NOT be reassigned
       // (G17 grep gate). Post-Phase-277 the emit signature is
       // `(player, index, day, amount, targetLevel, futureTickets,
-      //   burnieAmount, bonusBurnie, roundedUp)` — `index` and `day` are now
-      // separate fields and the trailing `roundedUp` is new.
+      //   burnieAmount, roundedUp)` — `index` and `day` are now separate
+      // fields, the trailing `roundedUp` is new, and the `bonusBurnie`
+      // breakdown field is dropped (folded into `burnieAmount`).
       const lootboxOpenedEmit =
         /emit LootBoxOpened\(\s*player,\s*index,\s*day,\s*amount,\s*targetLevel,\s*futureTickets,/;
       expect(
@@ -630,17 +632,18 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.equal(false);
     });
 
-    it("[05c] `BurnieLootOpen` consumes `_resolveLootboxCommon` first return value as `tickets` (scaled) and the 4th return value as `roundedUp` (D-274-NO-EVT-BREAK-01, EVT-UNI-03)", function () {
+    it("[05c] `BurnieLootOpen` consumes `_resolveLootboxCommon` first return value as `tickets` (scaled) and the 3rd return value as `roundedUp` (D-274-NO-EVT-BREAK-01, EVT-UNI-03)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // openBurnieLootBox destructure pattern — post-Phase-277 the
-      // `_resolveLootboxCommon` return tuple is 4 elements ending in
-      // `bool roundedUp`; openBurnieLootBox destructures the scaled `tickets`,
-      // `burnieReward`, skips `bonusBurnie`, and takes `roundedUp`.
+      // `_resolveLootboxCommon` return tuple is 3 elements ending in
+      // `bool roundedUp` (the `bonusBurnie` return was dropped);
+      // openBurnieLootBox destructures the scaled `tickets`, `burnieReward`,
+      // and `roundedUp`.
       const destructurePattern =
-        /\(uint32 tickets, uint256 burnieReward, , bool roundedUp\)\s*=\s*_resolveLootboxCommon/;
+        /\(uint32 tickets, uint256 burnieReward, bool roundedUp\)\s*=\s*_resolveLootboxCommon/;
       expect(
         source.match(destructurePattern),
-        "openBurnieLootBox destructure pattern (uint32 tickets, uint256 burnieReward, , bool roundedUp) = _resolveLootboxCommon missing"
+        "openBurnieLootBox destructure pattern (uint32 tickets, uint256 burnieReward, bool roundedUp) = _resolveLootboxCommon missing"
       ).to.not.be.null;
 
       // BurnieLootOpen emit consumes `tickets` from the destructure (scaled).
@@ -691,7 +694,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.be.greaterThan(-1);
     });
 
-    it("[06c] the unified `_queueTickets` call + the `emitLootboxEvent`-gated consolation are ALL inside the outer `if (futureTickets != 0)` guard", function () {
+    it("[06c] the unified `_queueTickets` call + the `payColdBustConsolation`-gated consolation are ALL inside the outer `if (futureTickets != 0)` guard", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const outerGuardIdx = source.indexOf("if (futureTickets != 0)");
       expect(outerGuardIdx, "outer `if (futureTickets != 0)` guard not found").to.be.greaterThan(
@@ -701,12 +704,12 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
         "_queueTickets(player, targetLevel, whole, false)"
       );
       const consolationGateIdx = source.indexOf(
-        "if (emitLootboxEvent && whole == 0)"
+        "if (payColdBustConsolation && whole == 0)"
       );
       expect(callIdx).to.be.greaterThan(outerGuardIdx);
       expect(
         consolationGateIdx,
-        "the `emitLootboxEvent && whole == 0` consolation gate not found"
+        "the `payColdBustConsolation && whole == 0` consolation gate not found"
       ).to.be.greaterThan(outerGuardIdx);
     });
 
@@ -778,12 +781,13 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // Post-Phase-277 the emit signature is
       // `(player, index, day, amount, targetLevel, futureTickets,
-      //   burnieAmount, bonusBurnie, roundedUp)`.
+      //   burnieAmount, roundedUp)` — the `bonusBurnie` breakdown field is
+      // dropped (folded into `burnieAmount`).
       expect(
-        /emit LootBoxOpened\(\s*player,\s*index,\s*day,\s*amount,\s*targetLevel,\s*futureTickets,\s*burnieAmount,\s*bonusBurnie,\s*roundedUp\s*\)/.test(
+        /emit LootBoxOpened\(\s*player,\s*index,\s*day,\s*amount,\s*targetLevel,\s*futureTickets,\s*burnieAmount,\s*roundedUp\s*\)/.test(
           source
         ),
-        "LootBoxOpened emit must thread (player, index, day, amount, targetLevel, futureTickets, burnieAmount, bonusBurnie, roundedUp)"
+        "LootBoxOpened emit must thread (player, index, day, amount, targetLevel, futureTickets, burnieAmount, roundedUp)"
       ).to.equal(true);
 
       // Signature contains `uint48 index`.
@@ -794,32 +798,42 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.not.be.null;
     });
 
-    it("[07c] the manual cold-bust consolation emits LootBoxWwxrpReward(player, day, amount, LOOTBOX_WWXRP_CONSOLATION) under the `emitLootboxEvent && whole == 0` gate", function () {
+    it("[07c] the manual cold-bust consolation pays LOOTBOX_WWXRP_CONSOLATION via `wwxrp.mintPrize` under the `payColdBustConsolation && whole == 0` gate", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const gateIdx = source.indexOf("if (emitLootboxEvent && whole == 0)");
-      const consolationEmit = source.indexOf(
-        "emit LootBoxWwxrpReward(player, day, amount, LOOTBOX_WWXRP_CONSOLATION)"
+      const gateIdx = source.indexOf("if (payColdBustConsolation && whole == 0)");
+      const consolationMint = source.indexOf(
+        "wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"
       );
-      expect(gateIdx, "`emitLootboxEvent && whole == 0` gate not found").to.be.greaterThan(
+      expect(gateIdx, "`payColdBustConsolation && whole == 0` gate not found").to.be.greaterThan(
         -1
       );
       expect(
-        consolationEmit,
-        "consolation LootBoxWwxrpReward emit not found"
+        consolationMint,
+        "consolation `wwxrp.mintPrize` call not found"
       ).to.be.greaterThan(gateIdx);
+      // No dedicated lootbox-WWXRP event — the WWXRP ERC-20 `Transfer` the mint
+      // emits is the off-chain correlation surface.
+      expect(
+        source.includes("LootBoxWwxrpReward"),
+        "the retired LootBoxWwxrpReward event must not appear in the module"
+      ).to.equal(false);
     });
 
-    it("[07d] consolation `wwxrp.mintPrize` call precedes the consolation event emission (state mutation before logs)", function () {
+    it("[07d] the consolation `wwxrp.mintPrize` call is the single payout site inside the `payColdBustConsolation` gate", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
+      const mintPrizeCount = (source.match(
+        /wwxrp\.mintPrize\(player, LOOTBOX_WWXRP_CONSOLATION\)/g
+      ) || []).length;
+      expect(
+        mintPrizeCount,
+        "the LOOTBOX_WWXRP_CONSOLATION mint must be single-site"
+      ).to.equal(1);
+      const gateIdx = source.indexOf("if (payColdBustConsolation && whole == 0)");
       const mintPrizeIdx = source.indexOf(
         "wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"
       );
-      const rewardEmit = source.indexOf(
-        "emit LootBoxWwxrpReward(player, day, amount, LOOTBOX_WWXRP_CONSOLATION)"
-      );
-      expect(mintPrizeIdx).to.be.greaterThan(-1);
-      expect(rewardEmit).to.be.greaterThan(-1);
-      expect(mintPrizeIdx).to.be.lessThan(rewardEmit);
+      expect(gateIdx).to.be.greaterThan(-1);
+      expect(mintPrizeIdx).to.be.greaterThan(gateIdx);
     });
   });
 });

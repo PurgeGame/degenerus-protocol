@@ -64,6 +64,37 @@ contract LootboxBernoulliTester {
         slice = uint16(seed >> 152) % uint16(TICKET_SCALE);
     }
 
+    /// @notice Mirror of the ticket-path cold-bust consolation gate in
+    ///         `DegenerusGameLootboxModule._resolveLootboxCommon`: runs the Bernoulli
+    ///         collapse, then applies the `payColdBustConsolation && whole == 0` gate
+    ///         that decides whether the `LOOTBOX_WWXRP_CONSOLATION` payout fires.
+    /// @dev    Instruction-sequence parity with the production gate:
+    ///           _queueTickets(player, targetLevel, whole, false);
+    ///           if (payColdBustConsolation && whole == 0) {
+    ///               wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);
+    ///           }
+    ///         The manual callers (`openLootBox`, `openBurnieLootBox`) pass
+    ///         `payColdBustConsolation = true`; the auto-resolve callers
+    ///         (`resolveLootboxDirect`, `resolveRedemptionLootbox`) pass `false`.
+    /// @param payColdBustConsolation The per-caller flag gating the consolation payout.
+    /// @param scaledPre Pre-Bernoulli scaled ticket count.
+    /// @param seed Per-resolution 256-bit keccak seed.
+    /// @return consolationFires True iff the WWXRP cold-bust consolation would be paid.
+    function coldBustConsolationFires(
+        bool payColdBustConsolation,
+        uint32 scaledPre,
+        uint256 seed
+    ) external pure returns (bool consolationFires) {
+        uint32 whole = scaledPre / uint32(TICKET_SCALE);
+        uint32 frac = scaledPre % uint32(TICKET_SCALE);
+        if (frac != 0 && (uint16(seed >> 152) % uint16(TICKET_SCALE)) < uint16(frac)) {
+            unchecked {
+                whole += 1;
+            }
+        }
+        consolationFires = payColdBustConsolation && whole == 0;
+    }
+
     /// @notice Expose the raw 16-bit pre-mod slice for chi² independence testing.
     /// @return raw16 `uint16(seed >> 152)` — the full 16-bit slice before the mod-100.
     function bernoulliRaw16(uint256 seed) external pure returns (uint16 raw16) {

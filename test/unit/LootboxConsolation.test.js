@@ -7,37 +7,52 @@
 // `contracts/modules/DegenerusGameLootboxModule.sol` (post-Phase-277 surface):
 //
 //   _queueTickets(player, targetLevel, whole, false);
-//   if (emitLootboxEvent && whole == 0) {
+//   if (payColdBustConsolation && whole == 0) {
 //       wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);
-//       emit LootBoxWwxrpReward(player, day, amount, LOOTBOX_WWXRP_CONSOLATION);
 //   }
+//
+// The consolation payout is `wwxrp.mintPrize`, which emits a standard WWXRP
+// ERC-20 `Transfer` event (`0x0` -> player); there is no dedicated
+// lootbox-WWXRP event. Off-chain, a consolation is distinguished from the
+// regular 10%-path WWXRP win by the absence of a same-tx ticket-path emission.
 //
 // `_queueTickets` is called unconditionally; its `if (quantity == 0) return;`
 // early-return absorbs the `whole == 0` cold-bust case silently. The WWXRP
-// consolation is paid only on the manual `openLootBox` path — the single caller
-// passing `emitLootboxEvent = true`. The two auto-resolve callers
-// (`resolveLootboxDirect`, `resolveRedemptionLootbox`) and `openBurnieLootBox`
-// all pass `emitLootboxEvent = false`, so cold-bust is silent for them.
+// consolation is paid on BOTH manual lootbox paths — `openLootBox` AND
+// `openBurnieLootBox` — which each pass `payColdBustConsolation = true`. It is
+// gated by a dedicated `payColdBustConsolation` flag, NOT by `emitLootboxEvent`:
+// `openBurnieLootBox` passes `emitLootboxEvent = false` (it emits its own
+// `BurnieLootOpen` event instead of `LootBoxOpened`) but is still a manual
+// player-initiated open that pays the cold-bust consolation. The two
+// auto-resolve callers (`resolveLootboxDirect`, `resolveRedemptionLootbox`)
+// pass `payColdBustConsolation = false`, so cold-bust is silent for them.
 //
 // TEST STRATEGY:
 //   - TST-WX-01 (cold-bust trigger) + TST-WX-02 (non-trigger predicate matrix) —
 //     mathematical / structural assertions on the trigger predicate
-//     `emitLootboxEvent AND scaledPre > 0 AND whole == 0`. The Bernoulli outcome
-//     is purely a function of (scaledPre, seed); we verify via the
+//     `payColdBustConsolation AND scaledPre > 0 AND whole == 0`. The Bernoulli
+//     outcome is purely a function of (scaledPre, seed); we verify via the
 //     `LootboxBernoulliTester` contract that the math holds at boundary AND under
 //     randomized seed sweep.
 //   - TST-WX-02 (auto-resolve always-skip) — source-level structural assertion
-//     that the consolation `mintPrize` + `LootBoxWwxrpReward` emit sit INSIDE
-//     the `if (emitLootboxEvent && whole == 0)` gate, and that `_queueTickets`
-//     is the single unconditional ticket-award callsite.
+//     that the consolation `mintPrize` call sits INSIDE the
+//     `if (payColdBustConsolation && whole == 0)` gate, and that
+//     `_queueTickets` is the single unconditional ticket-award callsite.
 //   - TST-WX-03 (magnitude assertion) — direct on-chain constant inspection
 //     via the LootboxBernoulliTester mirror constants AND source-grep cross
 //     check.
+//   - TST-WX-04 (behavioral gate coverage) — deployed-contract verification via
+//     the `LootboxBernoulliTester.coldBustConsolationFires` mirror of the
+//     production gate, driven with each of the four callers' actual flag values.
+//     This exercises the `payColdBustConsolation && whole == 0` decision that
+//     CR-01 got wrong — including the `openBurnieLootBox` cold-bust → consolation
+//     case the prior (emitLootboxEvent-gated) surface silently dropped.
 //
 // CROSS-CITES:
 //   - D-274-WX-AMOUNT-01 (magnitude equivalence LOOTBOX_WWXRP_CONSOLATION ==
 //     LOOTBOX_WWXRP_PRIZE)
-//   - D-274-MANUAL-ONLY-01 (consolation only fires on manual path)
+//   - D-274-MANUAL-ONLY-01 (consolation fires on the manual paths only)
+//   - D-277-CONSOLATION-GATE-01 (cold-bust consolation gating)
 //   - LBX-WX-01..04 requirements per .planning/REQUIREMENTS.md
 
 import { expect } from "chai";
@@ -90,39 +105,45 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       }
     });
 
-    it("[01c] source: consolation emit only reachable when `emitLootboxEvent && whole == 0`", function () {
+    it("[01c] source: consolation payout only reachable when `payColdBustConsolation && whole == 0`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Find consolation emit; walk backward to find the enclosing gate.
-      const consolationEmit = source.indexOf(
-        "emit LootBoxWwxrpReward(player, day, amount, LOOTBOX_WWXRP_CONSOLATION)"
+      // The consolation payout is the `wwxrp.mintPrize` call — there is no
+      // dedicated lootbox-WWXRP event. Walk backward to find the enclosing gate.
+      const consolationMint = source.indexOf(
+        "wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"
       );
-      expect(consolationEmit).to.be.greaterThan(-1);
-      // Within 600 chars preceding the emit, the `if (emitLootboxEvent && whole == 0)`
-      // gate must appear — it is the immediate structural ancestor of the
-      // consolation `mintPrize` + emit.
-      const window = source.slice(Math.max(0, consolationEmit - 600), consolationEmit);
+      expect(consolationMint).to.be.greaterThan(-1);
+      // The retired LootBoxWwxrpReward event must not appear anywhere.
       expect(
-        window.includes("if (emitLootboxEvent && whole == 0)"),
-        "missing `if (emitLootboxEvent && whole == 0)` ancestor"
+        source.includes("LootBoxWwxrpReward"),
+        "the retired LootBoxWwxrpReward event must not appear in the module"
+      ).to.equal(false);
+      // Within 600 chars preceding the mint, the
+      // `if (payColdBustConsolation && whole == 0)` gate must appear — it is the
+      // immediate structural ancestor of the consolation `mintPrize` call.
+      const window = source.slice(Math.max(0, consolationMint - 600), consolationMint);
+      expect(
+        window.includes("if (payColdBustConsolation && whole == 0)"),
+        "missing `if (payColdBustConsolation && whole == 0)` ancestor"
       ).to.equal(true);
     });
 
-    it("[01d] consolation `wwxrp.mintPrize` is gated by `emitLootboxEvent && whole == 0` (auto-resolve cannot trigger)", function () {
+    it("[01d] consolation `wwxrp.mintPrize` is gated by `payColdBustConsolation && whole == 0` (auto-resolve cannot trigger)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const mintPrize = source.indexOf(
         "wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"
       );
       expect(mintPrize).to.be.greaterThan(-1);
       // Within 600 chars preceding the mintPrize call, the
-      // `if (emitLootboxEvent && whole == 0)` gate must appear (the NatSpec
+      // `if (payColdBustConsolation && whole == 0)` gate must appear (the NatSpec
       // comment block between the gate and the call widens the gap).
-      // Auto-resolve callers pass `emitLootboxEvent = false`, so they never
-      // reach the consolation; only the manual `openLootBox` path (the single
-      // `emitLootboxEvent = true` caller) can trigger it.
+      // Auto-resolve callers pass `payColdBustConsolation = false`, so they never
+      // reach the consolation; both manual callers (`openLootBox`,
+      // `openBurnieLootBox`) pass `payColdBustConsolation = true` and can trigger it.
       const window = source.slice(Math.max(0, mintPrize - 600), mintPrize);
       expect(
-        window.includes("if (emitLootboxEvent && whole == 0)"),
-        "consolation mintPrize not gated by `emitLootboxEvent && whole == 0`"
+        window.includes("if (payColdBustConsolation && whole == 0)"),
+        "consolation mintPrize not gated by `payColdBustConsolation && whole == 0`"
       ).to.equal(true);
     });
   });
@@ -142,7 +163,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       }
     });
 
-    it("[02b] ticket award is a single unconditional `_queueTickets` call; the consolation is `emitLootboxEvent`-gated below it", function () {
+    it("[02b] ticket award is a single unconditional `_queueTickets` call; the consolation is `payColdBustConsolation`-gated below it", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The sentinel branch is retired: `_queueTickets(player, targetLevel,
       // whole, false)` is called once, unconditionally, for every path
@@ -156,16 +177,17 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
         secondIdx,
         "`_queueTickets(player, targetLevel, whole, false)` must appear exactly once (sentinel-branch duplication retired)"
       ).to.equal(-1);
-      // Immediately after the queue call comes the `if (emitLootboxEvent && whole
-      // == 0)` consolation gate — the consolation `mintPrize` + emit are inside
-      // it, so auto-resolve callers (emitLootboxEvent = false) never reach them.
+      // Immediately after the queue call comes the
+      // `if (payColdBustConsolation && whole == 0)` consolation gate — the
+      // consolation `mintPrize` call is inside it, so auto-resolve callers
+      // (payColdBustConsolation = false) never reach it.
       const tail = source.slice(firstIdx, firstIdx + 600);
       expect(
-        tail.includes("if (emitLootboxEvent && whole == 0)"),
-        "consolation gate `if (emitLootboxEvent && whole == 0)` must follow the queue call"
+        tail.includes("if (payColdBustConsolation && whole == 0)"),
+        "consolation gate `if (payColdBustConsolation && whole == 0)` must follow the queue call"
       ).to.equal(true);
       const mintIdx = tail.indexOf("wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)");
-      const gateIdx = tail.indexOf("if (emitLootboxEvent && whole == 0)");
+      const gateIdx = tail.indexOf("if (payColdBustConsolation && whole == 0)");
       expect(mintIdx, "consolation mintPrize must sit after the gate").to.be.greaterThan(gateIdx);
     });
 
@@ -179,9 +201,9 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       // The unconditional `_queueTickets` callsite is inside the outer guard.
       const queueCall = source.indexOf("_queueTickets(player, targetLevel, whole, false)");
       expect(queueCall).to.be.greaterThan(outerGuard);
-      // The `emitLootboxEvent && whole == 0` consolation gate is inside the
+      // The `payColdBustConsolation && whole == 0` consolation gate is inside the
       // outer guard too (it sits immediately below the queue call).
-      const consolationGate = source.indexOf("if (emitLootboxEvent && whole == 0)");
+      const consolationGate = source.indexOf("if (payColdBustConsolation && whole == 0)");
       expect(consolationGate).to.be.greaterThan(queueCall);
       // Consolation `mintPrize` also inside outer guard.
       const mintPrize = source.indexOf(
@@ -234,6 +256,110 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       expect(consolationIdx).to.be.greaterThan(-1);
       // Within 500 chars of each other (NatSpec for the new constant fits).
       expect(Math.abs(prizeIdx - consolationIdx)).to.be.lessThan(500);
+    });
+  });
+
+  describe("TST-WX-04 — behavioral cold-bust gate coverage (deployed-contract; the gate CR-01 got wrong)", function () {
+    // The `LootboxBernoulliTester.coldBustConsolationFires` mirror runs the
+    // production Bernoulli collapse + the `payColdBustConsolation && whole == 0`
+    // gate exactly as `_resolveLootboxCommon` ships it. Each test drives it with
+    // the literal `payColdBustConsolation` value the corresponding caller passes.
+    //
+    // FIXTURE-COVERAGE NOTE: a pure end-to-end fixture driving the real
+    // `openBurnieLootBox` entry point to a deterministic `whole == 0` ticket-path
+    // cold-bust is infeasible with the current harness — it requires VRF rigging
+    // to force the per-resolution seed's bits[152..167] slice, which the
+    // `reachOpenableLootbox` lifecycle helper (test/gas/LootboxOpenGas.test.js)
+    // does not support (the documented LBX-02 fixture-coverage gap). The closest
+    // behavioral coverage the harness supports is this deployed-contract mirror
+    // of the gating decision, driven with the four callers' real flag values —
+    // it exercises the exact `payColdBustConsolation && whole == 0` branch that
+    // CR-01 mis-gated onto `emitLootboxEvent`.
+    //
+    // The cold-bust seed forces `uint16(seed >> 152) % 100 == 99`, a losing slice
+    // for every `frac < 100` — so `scaledPre ∈ (0, 100)` Bernoulli-collapses to
+    // `whole == 0`.
+    const COLD_BUST_SEED = BigInt(99) << 152n;
+    const WARM_SEED = 0n; // slice == 0 — wins for every frac >= 1
+
+    it("[04a] openBurnieLootBox cold-bust PAYS the consolation — payColdBustConsolation=true ⇒ fires on whole==0", async function () {
+      const tester = await deployTester();
+      // openBurnieLootBox is a manual caller: it passes payColdBustConsolation =
+      // true (even though emitLootboxEvent = false — it emits BurnieLootOpen, not
+      // LootBoxOpened). Pre-fix this case was silently dropped (CR-01).
+      for (const scaledPre of [1, 47, 50, 99]) {
+        const fires = await tester.coldBustConsolationFires(
+          true,
+          scaledPre,
+          COLD_BUST_SEED
+        );
+        expect(
+          fires,
+          `openBurnieLootBox cold-bust at scaledPre=${scaledPre} must PAY the consolation (payColdBustConsolation=true, whole==0)`
+        ).to.equal(true);
+      }
+    });
+
+    it("[04b] openLootBox cold-bust PAYS the consolation — payColdBustConsolation=true ⇒ fires on whole==0", async function () {
+      const tester = await deployTester();
+      for (const scaledPre of [1, 47, 50, 99]) {
+        const fires = await tester.coldBustConsolationFires(
+          true,
+          scaledPre,
+          COLD_BUST_SEED
+        );
+        expect(
+          fires,
+          `openLootBox cold-bust at scaledPre=${scaledPre} must PAY the consolation`
+        ).to.equal(true);
+      }
+    });
+
+    it("[04c] auto-resolve cold-bust stays SILENT — payColdBustConsolation=false ⇒ never fires (D-277-AR-SILENT-01)", async function () {
+      const tester = await deployTester();
+      // resolveLootboxDirect + resolveRedemptionLootbox both pass
+      // payColdBustConsolation = false — cold-bust must stay silent for them.
+      for (const scaledPre of [1, 47, 50, 99]) {
+        const fires = await tester.coldBustConsolationFires(
+          false,
+          scaledPre,
+          COLD_BUST_SEED
+        );
+        expect(
+          fires,
+          `auto-resolve cold-bust at scaledPre=${scaledPre} must stay SILENT (payColdBustConsolation=false)`
+        ).to.equal(false);
+      }
+    });
+
+    it("[04d] a warm roll (whole >= 1) never fires the consolation regardless of payColdBustConsolation", async function () {
+      const tester = await deployTester();
+      for (const payConsolation of [true, false]) {
+        for (const scaledPre of [1, 47, 99, 100, 147, 250]) {
+          const fires = await tester.coldBustConsolationFires(
+            payConsolation,
+            scaledPre,
+            WARM_SEED
+          );
+          expect(
+            fires,
+            `warm roll at scaledPre=${scaledPre}, payColdBustConsolation=${payConsolation} must NOT fire the consolation (whole >= 1)`
+          ).to.equal(false);
+        }
+      }
+    });
+
+    it("[04e] the production gate `payColdBustConsolation && whole == 0` is the tester's mirrored decision (drift detector)", function () {
+      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
+      // The behavioral tests above are only load-bearing if the tester mirrors
+      // the production gate. Assert the production source still gates the
+      // consolation on `payColdBustConsolation && whole == 0` — if it drifts,
+      // this fails and the tester (LootboxBernoulliTester.coldBustConsolationFires)
+      // must be reconciled in lock-step.
+      expect(
+        source.includes("if (payColdBustConsolation && whole == 0)"),
+        "production consolation gate drifted from `payColdBustConsolation && whole == 0` — update LootboxBernoulliTester.coldBustConsolationFires to match"
+      ).to.equal(true);
     });
   });
 });

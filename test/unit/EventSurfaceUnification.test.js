@@ -9,10 +9,12 @@
 //     signatures (the LootBoxOpened index/day mislabel is fixed; all three gain a
 //     trailing non-indexed `bool roundedUp`).
 //   - The `index != type(uint48).max` behavior-gating sentinel in
-//     _resolveLootboxCommon is retired; auto-resolve callers pass index=0 and
-//     emitLootboxEvent=false; the unified ticket-queue path is unconditional.
-//   - The manual cold-bust WWXRP consolation sits under the `emitLootboxEvent`
-//     gate (manual-only); auto-resolve emits no LootBoxOpened.
+//     _resolveLootboxCommon is retired; auto-resolve callers pass index=0,
+//     emitLootboxEvent=false, and payColdBustConsolation=false; the unified
+//     ticket-queue path is unconditional.
+//   - The manual cold-bust WWXRP consolation sits under the dedicated
+//     `payColdBustConsolation` gate (true for both manual callers, false for
+//     the auto-resolve callers); auto-resolve emits no LootBoxOpened.
 //   - JackpotTicketWin.roundedUp mirrors the _jackpotTicketRoll Bernoulli outcome.
 //
 // TEST STRATEGY:
@@ -23,12 +25,12 @@
 //   end-to-end resolution fixture is attempted here.
 //
 // CROSS-CITES:
-//   - D-277-EVT-WIDE-01 (LootBoxOpened amount/burnie/bonusBurnie stay uint256 wei)
+//   - D-277-EVT-WIDE-01 (LootBoxOpened amount/burnie stay uint256 wei)
 //   - D-277-NO-PREROLL-01 (no preRollTickets field; consumers derive whole from
 //     the already-emitted scaled futureTickets/tickets + roundedUp)
 //   - D-277-ROUNDEDUP-01 (roundedUp is the only new field on all 3 events)
 //   - D-277-AR-SILENT-01 (auto-resolve emits nothing)
-//   - D-277-CONSOLATION-GATE-01 (manual cold-bust consolation gated by emitLootboxEvent)
+//   - D-277-CONSOLATION-GATE-01 (manual cold-bust consolation gated by payColdBustConsolation)
 //   - D-277-AR-INDEX-01 (auto-resolve callers pass index=0)
 //   - D-40N-EVT-BREAK-01 (breaking event topic-hashes accepted)
 
@@ -150,7 +152,8 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       expect(frag, "LootBoxOpened event fragment missing from ABI").to.not.equal(
         null
       );
-      // Post-Phase-277 field list: fixed index/day mislabel + trailing roundedUp.
+      // Post-Phase-277 field list: fixed index/day mislabel + trailing roundedUp;
+      // the bonusBurnie breakdown field is dropped (folded into `burnie`).
       const types = frag.inputs.map((i) => `${i.type}${i.indexed ? " indexed" : ""}`);
       expect(types).to.deep.equal([
         "address indexed",
@@ -159,7 +162,6 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         "uint256",
         "uint24",
         "uint32",
-        "uint256",
         "uint256",
         "bool",
       ]);
@@ -172,7 +174,6 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         "futureLevel",
         "futureTickets",
         "burnie",
-        "bonusBurnie",
         "roundedUp",
       ]);
       // Exactly 2 indexed topics (player + lootboxIndex).
@@ -293,12 +294,13 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       ).to.equal(0);
     });
 
-    it("[03c] auto-resolve callers pass index=0 (3rd positional) and emitLootboxEvent=false (11th positional) to _resolveLootboxCommon", function () {
+    it("[03c] auto-resolve callers pass index=0 (3rd positional), emitLootboxEvent=false (10th positional), and payColdBustConsolation=false (11th positional) to _resolveLootboxCommon", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       // The _resolveLootboxCommon positional arg order (per signature):
       //   1 player, 2 day, 3 index, 4 amount, 5 targetLevel, 6 currentLevel,
-      //   7 seed, 8 presale, 9 allowWhalePass, 10 allowLazyPass,
-      //   11 emitLootboxEvent, 12 allowBoons, 13 distressEth, 14 totalPackedEth
+      //   7 seed, 8 presale, 9 allowPasses, 10 emitLootboxEvent,
+      //   11 payColdBustConsolation, 12 allowBoons, 13 distressEth,
+      //   14 totalPackedEth
       for (const fnSig of [
         "function resolveLootboxDirect(",
         "function resolveRedemptionLootbox(",
@@ -325,8 +327,12 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
           `${fnSig} must pass index=0 as the 3rd positional arg (D-277-AR-INDEX-01)`
         ).to.equal("0");
         expect(
+          args[9],
+          `${fnSig} must pass emitLootboxEvent=false as the 10th positional arg (D-277-AR-SILENT-01)`
+        ).to.equal("false");
+        expect(
           args[10],
-          `${fnSig} must pass emitLootboxEvent=false as the 11th positional arg (D-277-AR-SILENT-01)`
+          `${fnSig} must pass payColdBustConsolation=false as the 11th positional arg (D-277-AR-SILENT-01)`
         ).to.equal("false");
         // The retired sentinel value must not appear in the caller body.
         expect(
@@ -409,22 +415,23 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       const emitArgs = splitTopLevelArgs(emitArgList);
       // Positional order matches the event def:
       //   player, lootboxIndex(index), day, amount, futureLevel(targetLevel),
-      //   futureTickets, burnie(burnieAmount), bonusBurnie, roundedUp
-      expect(emitArgs.length).to.equal(9);
+      //   futureTickets, burnie(burnieAmount), roundedUp
+      expect(emitArgs.length).to.equal(8);
       expect(emitArgs[0]).to.equal("player");
       expect(emitArgs[1]).to.equal("index"); // lootboxIndex slot fed the `index` param
       expect(emitArgs[2]).to.equal("day"); // day slot fed the `day` param
       expect(emitArgs[5]).to.equal("futureTickets"); // scaled, un-mutated
-      expect(emitArgs[8]).to.equal("roundedUp");
+      expect(emitArgs[7]).to.equal("roundedUp");
     });
 
     it("[04d] the manual BurnieLootOpen emit threads the scaled `tickets` return value and the `roundedUp` flag from _resolveLootboxCommon", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       const body = extractBody(src, "function openBurnieLootBox(");
       expect(body, "openBurnieLootBox body not found").to.not.equal(null);
-      // openBurnieLootBox destructures (uint32 tickets, uint256 burnieReward, , bool roundedUp).
+      // openBurnieLootBox destructures (uint32 tickets, uint256 burnieReward, bool roundedUp)
+      // — the 3-return shape after the bonusBurnie return was dropped.
       expect(
-        /\(uint32 tickets, uint256 burnieReward, , bool roundedUp\)\s*=\s*_resolveLootboxCommon/.test(
+        /\(uint32 tickets, uint256 burnieReward, bool roundedUp\)\s*=\s*_resolveLootboxCommon/.test(
           body
         ),
         "openBurnieLootBox must destructure the scaled `tickets` and the `roundedUp` flag from _resolveLootboxCommon"
@@ -440,32 +447,34 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       expect(emitArgs[6]).to.equal("roundedUp");
     });
 
-    it("[04e] the WWXRP-consolation case is inferable as `whole == 0 && futureTickets > 0` corroborated by a same-tx LootBoxWwxrpReward", function () {
+    it("[04e] the WWXRP-consolation case is inferable as `whole == 0 && futureTickets > 0` corroborated by a same-tx WWXRP ERC-20 Transfer from mintPrize", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       const body = extractBody(src, "function _resolveLootboxCommon(");
       expect(body, "_resolveLootboxCommon body not found").to.not.equal(null);
-      // The consolation predicate is `emitLootboxEvent && whole == 0` and sits
-      // inside the `if (futureTickets != 0)` guard — i.e. it only fires when the
-      // scaled count was non-zero but the Bernoulli collapse produced whole==0.
+      // The consolation predicate is `payColdBustConsolation && whole == 0` and
+      // sits inside the `if (futureTickets != 0)` guard — i.e. it only fires when
+      // the scaled count was non-zero but the Bernoulli collapse produced whole==0.
       expect(
-        /if \(emitLootboxEvent && whole == 0\)/.test(body),
-        "manual cold-bust consolation must be gated on `emitLootboxEvent && whole == 0`"
+        /if \(payColdBustConsolation && whole == 0\)/.test(body),
+        "manual cold-bust consolation must be gated on `payColdBustConsolation && whole == 0`"
       ).to.equal(true);
-      // It pays LOOTBOX_WWXRP_CONSOLATION and emits LootBoxWwxrpReward in the same tx.
+      // It pays LOOTBOX_WWXRP_CONSOLATION via wwxrp.mintPrize; the payout is
+      // observable off-chain through the WWXRP ERC-20 `Transfer` event the mint
+      // emits (no dedicated lootbox-WWXRP event).
       expect(
         body.includes("wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"),
         "consolation must mint LOOTBOX_WWXRP_CONSOLATION"
       ).to.equal(true);
+      // No dedicated LootBoxWwxrpReward event exists anymore — the ERC-20 Transfer
+      // plus same-tx context is the correlation surface.
       expect(
-        body.includes(
-          "emit LootBoxWwxrpReward(player, day, amount, LOOTBOX_WWXRP_CONSOLATION)"
-        ),
-        "consolation must emit a same-tx LootBoxWwxrpReward for off-chain correlation"
-      ).to.equal(true);
+        body.includes("LootBoxWwxrpReward"),
+        "the consolation path must not reference a retired LootBoxWwxrpReward event"
+      ).to.equal(false);
     });
   });
 
-  describe("TST-EVT-UNI-05 — auto-resolve field-consistency, EVT-UNI-06 resolved form (auto-resolve is SILENT; consolation is emitLootboxEvent-gated)", function () {
+  describe("TST-EVT-UNI-05 — auto-resolve field-consistency, EVT-UNI-06 resolved form (auto-resolve is SILENT; consolation is payColdBustConsolation-gated)", function () {
     it("[05a] the only `emit LootBoxOpened` site in _resolveLootboxCommon is inside the `if (emitLootboxEvent)` gate", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       const body = extractBody(src, "function _resolveLootboxCommon(");
@@ -485,7 +494,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       ).to.be.greaterThan(-1);
     });
 
-    it("[05b] auto-resolve callers pass emitLootboxEvent=false — so resolveLootboxDirect / resolveRedemptionLootbox emit no LootBoxOpened (D-277-AR-SILENT-01)", function () {
+    it("[05b] auto-resolve callers emit no LootBoxOpened — resolveLootboxDirect / resolveRedemptionLootbox pass emitLootboxEvent=false (D-277-AR-SILENT-01)", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       // No `emit LootBoxOpened` appears directly in the auto-resolve caller bodies,
       // and they pass emitLootboxEvent=false (proven structurally in [03c]).
@@ -502,7 +511,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       }
     });
 
-    it("[05c] the manual cold-bust consolation (wwxrp.mintPrize + LootBoxWwxrpReward with LOOTBOX_WWXRP_CONSOLATION) appears exactly once and is inside the `if (emitLootboxEvent)` gate (manual-only)", function () {
+    it("[05c] the manual cold-bust consolation (wwxrp.mintPrize with LOOTBOX_WWXRP_CONSOLATION) appears exactly once and is inside the `if (payColdBustConsolation && whole == 0)` gate (manual-only)", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       // Module-wide single-site.
       expect(
@@ -510,20 +519,20 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
           .length,
         "the LOOTBOX_WWXRP_CONSOLATION mint must be single-site"
       ).to.equal(1);
+      // The dedicated LootBoxWwxrpReward event is removed — the WWXRP ERC-20
+      // Transfer the mint emits is the correlation surface.
       expect(
-        (
-          src.match(
-            /emit LootBoxWwxrpReward\(player, day, amount, LOOTBOX_WWXRP_CONSOLATION\)/g
-          ) || []
-        ).length,
-        "the consolation LootBoxWwxrpReward emit must be single-site"
-      ).to.equal(1);
-      // The consolation predicate explicitly tests emitLootboxEvent — proving it
-      // cannot fire on the auto-resolve (emitLootboxEvent=false) path.
+        src.includes("LootBoxWwxrpReward"),
+        "the retired LootBoxWwxrpReward event must not appear in the module"
+      ).to.equal(false);
+      // The consolation predicate explicitly tests payColdBustConsolation —
+      // proving it cannot fire on the auto-resolve (payColdBustConsolation=false)
+      // path, while both manual callers (openLootBox, openBurnieLootBox) pass
+      // payColdBustConsolation=true and DO pay it.
       const body = extractBody(src, "function _resolveLootboxCommon(");
       expect(
-        /if \(emitLootboxEvent && whole == 0\)\s*\{/.test(body),
-        "the consolation must be gated by `emitLootboxEvent && whole == 0` — manual-only per D-277-CONSOLATION-GATE-01"
+        /if \(payColdBustConsolation && whole == 0\)\s*\{/.test(body),
+        "the consolation must be gated by `payColdBustConsolation && whole == 0` — manual-only per D-277-CONSOLATION-GATE-01"
       ).to.equal(true);
     });
 

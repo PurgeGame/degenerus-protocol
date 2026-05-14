@@ -63,7 +63,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param futureLevel The target level for future tickets
     /// @param futureTickets The pre-Bernoulli scaled (× TICKET_SCALE) future ticket count
     /// @param burnie The total BURNIE tokens awarded (in wei)
-    /// @param bonusBurnie The bonus BURNIE from presale multiplier (in wei)
     /// @param roundedUp True iff the Bernoulli round-up incremented the awarded
     ///        whole-ticket count by 1
     event LootBoxOpened(
@@ -74,7 +73,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 futureLevel,
         uint32 futureTickets,
         uint256 burnie,
-        uint256 bonusBurnie,
         bool roundedUp
     );
 
@@ -125,18 +123,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint32 indexed day,
         uint256 lootboxAmount,
         uint256 dgnrsAmount
-    );
-
-    /// @notice Emitted when a lootbox awards WWXRP tokens
-    /// @param player The player who received the reward
-    /// @param day The day index of the reward
-    /// @param lootboxAmount The ETH amount of the lootbox
-    /// @param wwxrpAmount The amount of WWXRP tokens awarded
-    event LootBoxWwxrpReward(
-        address indexed player,
-        uint32 indexed day,
-        uint256 lootboxAmount,
-        uint256 wwxrpAmount
     );
 
     /// @notice Unified lootbox reward event for boon awards
@@ -649,7 +635,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             targetLevel = currentLevel | TICKET_FAR_FUTURE_BIT;
         }
 
-        (uint32 tickets, uint256 burnieReward, , bool roundedUp) = _resolveLootboxCommon(
+        (uint32 tickets, uint256 burnieReward, bool roundedUp) = _resolveLootboxCommon(
             player,
             day,
             index,
@@ -660,7 +646,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             false,
             false,
             false,
-            false,
+            true,
             true,
             0,
             0
@@ -703,7 +689,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             seed,
             false,
             true,
-            true,
+            false,
             false,
             false,
             0,
@@ -739,7 +725,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             seed,
             false,
             true,
-            true,
+            false,
             false,
             false,
             0,
@@ -952,17 +938,23 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      ETH-amount-second branch uses seed2 = EntropyLib.hash2(seed, 1)
     ///      (counter-tagged chunk 1; collision-free vs primary chunk 0).
     /// @param presale Whether this is a presale lootbox (62% bonus BURNIE multiplier)
-    /// @param allowWhalePass Whether to roll for whale pass jackpot
-    /// @param allowLazyPass Whether to roll for lazy pass award
-    /// @param emitLootboxEvent Whether to emit the `LootBoxOpened` event and pay the
-    ///        manual cold-bust WWXRP consolation; `true` for manual callers, `false` for
-    ///        auto-resolve callers
+    /// @param allowPasses Whether pass-type boons are eligible: the whale-pass jackpot
+    ///        award and the lazy-pass discount awards. `true` for the manual and
+    ///        auto-resolve ETH/BURNIE callers (`openLootBox`, `resolveLootboxDirect`,
+    ///        `resolveRedemptionLootbox`), `false` for `openBurnieLootBox`
+    /// @param emitLootboxEvent Whether to emit the `LootBoxOpened` event; `true` for
+    ///        `openLootBox`, `false` for `openBurnieLootBox` (which emits its own
+    ///        `BurnieLootOpen`) and for both auto-resolve callers
+    /// @param payColdBustConsolation Whether a ticket-path cold-bust (`whole == 0`) pays
+    ///        the `LOOTBOX_WWXRP_CONSOLATION`; `true` for the manual callers
+    ///        (`openLootBox`, `openBurnieLootBox`), `false` for the auto-resolve callers
+    ///        (`resolveLootboxDirect`, `resolveRedemptionLootbox`), which stay silent on
+    ///        cold-bust
     /// @param allowBoons Whether to roll for boons
     /// @param distressEth Portion of lootbox ETH bought during distress mode (pre-EV-scaling basis)
     /// @param totalPackedEth Total packed lootbox ETH (pre-EV-scaling basis, denominator for distress fraction)
     /// @return futureTickets Pre-Bernoulli scaled (× TICKET_SCALE) future ticket count
     /// @return burnieAmount Total BURNIE awarded
-    /// @return bonusBurnie Bonus BURNIE from presale multiplier
     /// @return roundedUp True iff the Bernoulli round-up incremented the awarded
     ///         whole-ticket count by 1
     function _resolveLootboxCommon(
@@ -974,9 +966,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 currentLevel,
         uint256 seed,
         bool presale,
-        bool allowWhalePass,
-        bool allowLazyPass,
+        bool allowPasses,
         bool emitLootboxEvent,
+        bool payColdBustConsolation,
         bool allowBoons,
         uint256 distressEth,
         uint256 totalPackedEth
@@ -985,7 +977,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         returns (
             uint32 futureTickets,
             uint256 burnieAmount,
-            uint256 bonusBurnie,
             bool roundedUp
         )
     {
@@ -1028,8 +1019,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 amount,
                 _lootboxBoonBudget(amount),
                 seed,
-                allowWhalePass,
-                allowLazyPass
+                allowPasses
             );
             // Nested delegatecall to BoonModule for activity boon consumption
             (bool okAct, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
@@ -1061,25 +1051,23 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 roundedUp = true;
             }
             // `_queueTickets` early-returns on `whole == 0`, so the cold-bust case
-            // queues nothing and stays silent on the auto-resolve path. The manual
-            // cold-bust WWXRP consolation is paid under the `emitLootboxEvent` gate
-            // below alongside the `LootBoxOpened` emit.
+            // queues nothing. The manual callers (`openLootBox`, `openBurnieLootBox`)
+            // pass `payColdBustConsolation = true` and pay the WWXRP consolation here;
+            // the auto-resolve callers pass `false` and stay silent on cold-bust.
             _queueTickets(player, targetLevel, whole, false);
-            if (emitLootboxEvent && whole == 0) {
+            if (payColdBustConsolation && whole == 0) {
                 // Manual cold-bust: pay the LOOTBOX_WWXRP_CONSOLATION via the same
-                // `mintPrize` interface used by the regular 10%-path WWXRP win. The
-                // `LootBoxWwxrpReward` event signature is reused; indexers
-                // distinguish a consolation from a regular WWXRP win by absence of a
-                // same-tx ticket-path emission.
+                // `mintPrize` interface used by the regular 10%-path WWXRP win.
+                // Observable off-chain via the WWXRP ERC-20 `Transfer` event
+                // (`0x0` -> player) together with same-tx context: a consolation
+                // carries no same-tx ticket-path emission, unlike a regular win.
                 wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);
-                emit LootBoxWwxrpReward(player, day, amount, LOOTBOX_WWXRP_CONSOLATION);
             }
         }
 
         burnieAmount = burnieNoMultiplier + burniePresale;
-        bonusBurnie = 0;
         if (presale && burniePresale != 0) {
-            bonusBurnie = (burniePresale * LOOTBOX_PRESALE_BURNIE_BONUS_BPS) / 10_000;
+            uint256 bonusBurnie = (burniePresale * LOOTBOX_PRESALE_BURNIE_BONUS_BPS) / 10_000;
             burnieAmount += bonusBurnie;
         }
 
@@ -1096,11 +1084,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 targetLevel,
                 futureTickets,
                 burnieAmount,
-                bonusBurnie,
                 roundedUp
             );
         }
-        return (futureTickets, burnieAmount, bonusBurnie, roundedUp);
+        return (futureTickets, burnieAmount, roundedUp);
     }
 
     /// @dev Roll for lootbox boons. Lootbox can award at most one boon.
@@ -1113,16 +1100,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param originalAmount Amount used for chance calculations
     /// @param boonBudget Amount of lootbox value allocated to boon/pass draw
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; no advance)
-    /// @param allowWhalePass Whether whale pass boons are eligible
-    /// @param allowLazyPass Whether lazy pass boons are eligible
+    /// @param allowPasses Whether pass-type boons are eligible: the whale-pass jackpot
+    ///        award and the lazy-pass discount awards
     function _rollLootboxBoons(
         address player,
         uint32 day,
         uint256 originalAmount,
         uint256 boonBudget,
         uint256 seed,
-        bool allowWhalePass,
-        bool allowLazyPass
+        bool allowPasses
     ) private {
         if (player == address(0) || originalAmount == 0) return;
 
@@ -1136,18 +1122,16 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 currentLevel = level + 1;
 
         uint24 lazyPassLevel = currentLevel == 0 ? 1 : currentLevel + 1;
-        uint256 lazyPassValue = allowLazyPass ? _lazyPassPriceForLevel(lazyPassLevel) : 0;
+        uint256 lazyPassValue = allowPasses ? _lazyPassPriceForLevel(lazyPassLevel) : 0;
 
         bool decimatorAllowed = _isDecimatorWindow();
         bool deityEligible =
             (mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0 && deityPassOwners.length < DEITY_PASS_MAX_TOTAL);
-        bool lazyPassEligible = allowLazyPass && lazyPassValue != 0;
 
         (uint256 totalWeight, uint256 avgMaxValue) = _boonPoolStats(
             decimatorAllowed,
             deityEligible,
-            allowWhalePass,
-            lazyPassEligible,
+            allowPasses,
             lazyPassValue
         );
         if (totalWeight == 0 || avgMaxValue == 0) return;
@@ -1168,8 +1152,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             (roll * totalWeight) / totalChance,
             decimatorAllowed,
             deityEligible,
-            allowWhalePass,
-            lazyPassEligible
+            allowPasses
         );
 
         _applyBoon(player, boonType, day, currentDay, originalAmount, false);
@@ -1211,11 +1194,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Calculate total weight and average max boon value (in ETH) for EV budgeting.
+    ///      `allowPasses` gates both pass-type boons — the whale-pass jackpot and the
+    ///      lazy-pass discount awards.
     function _boonPoolStats(
         bool decimatorAllowed,
         bool deityEligible,
-        bool allowWhalePass,
-        bool allowLazyPass,
+        bool allowPasses,
         uint256 lazyPassValue
     ) private view returns (uint256 totalWeight, uint256 avgMaxValue) {
         uint256 weightedMax = 0;
@@ -1320,11 +1304,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         totalWeight += BOON_WEIGHT_ACTIVITY_50;
 
         // Pass awards (lootbox-only unless enabled)
-        if (allowWhalePass) {
+        if (allowPasses) {
             totalWeight += BOON_WEIGHT_WHALE_PASS;
             weightedMax += BOON_WEIGHT_WHALE_PASS * LOOTBOX_WHALE_PASS_PRICE;
         }
-        if (allowLazyPass && lazyPassValue != 0) {
+        if (allowPasses && lazyPassValue != 0) {
             uint256 lpMax10 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS) / 10_000;
             uint256 lpMax25 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS) / 10_000;
             uint256 lpMax50 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_50_BPS) / 10_000;
@@ -1341,12 +1325,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Convert a weighted roll into a lootbox boon type with eligibility filters.
+    ///      `allowPasses` gates both pass-type boons — the whale-pass jackpot and the
+    ///      lazy-pass discount awards.
     function _boonFromRoll(
         uint256 roll,
         bool decimatorAllowed,
         bool deityEligible,
-        bool allowWhalePass,
-        bool allowLazyPass
+        bool allowPasses
     ) private pure returns (uint8 boonType) {
         uint256 cursor = 0;
         cursor += BOON_WEIGHT_COINFLIP_5;
@@ -1395,11 +1380,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (roll < cursor) return BOON_ACTIVITY_25;
         cursor += BOON_WEIGHT_ACTIVITY_50;
         if (roll < cursor) return BOON_ACTIVITY_50;
-        if (allowWhalePass) {
+        if (allowPasses) {
             cursor += BOON_WEIGHT_WHALE_PASS;
             if (roll < cursor) return BOON_WHALE_PASS;
-        }
-        if (allowLazyPass) {
             cursor += BOON_WEIGHT_LAZY_PASS_10;
             if (roll < cursor) return BOON_LAZY_PASS_10;
             cursor += BOON_WEIGHT_LAZY_PASS_25;
@@ -1676,16 +1659,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             }
             applyPresaleMultiplier = false;
         } else if (roll < 15) {
-            // 10% chance: WWXRP tokens
+            // 10% chance: WWXRP tokens. Payout via `wwxrp.mintPrize`; observable
+            // off-chain through the WWXRP ERC-20 `Transfer` event (`0x0` -> player)
+            // together with the same-tx lootbox context.
             uint256 wwxrpAmount = LOOTBOX_WWXRP_PRIZE;
             if (wwxrpAmount != 0) {
                 wwxrp.mintPrize(player, wwxrpAmount);
-                emit LootBoxWwxrpReward(
-                    player,
-                    day,
-                    lootboxAmount,
-                    wwxrpAmount
-                );
             }
             applyPresaleMultiplier = false;
         } else {
@@ -1851,7 +1830,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             : BOON_WEIGHT_TOTAL_NO_DECIMATOR;
         if (!deityPassAvailable) total -= BOON_WEIGHT_DEITY_PASS_ALL;
         uint256 roll = seed % total;
-        return _boonFromRoll(roll, decimatorAllowed, deityPassAvailable, true, true);
+        return _boonFromRoll(roll, decimatorAllowed, deityPassAvailable, true);
     }
 
 }

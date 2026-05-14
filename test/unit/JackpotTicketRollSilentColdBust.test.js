@@ -9,9 +9,11 @@
 //     - ZERO `TicketsQueued` emit (the `_queueTickets` helper at
 //       `DegenerusGameStorage.sol:568` early-returns on `quantity == 0`,
 //       BEFORE the `emit TicketsQueued` and any SSTORE).
-//     - ZERO consolation: `_jackpotTicketRoll` has NO `wwxrp.mintPrize` call,
-//       NO `LootBoxWwxrpReward` emit, NO `LootboxTicketRoll` emit, NO
-//       consolation branch — D-40N-SILENT-01 (jackpot cold-bust is SILENT).
+//     - ZERO consolation: `_jackpotTicketRoll` has NO `wwxrp.mintPrize` call and
+//       NO consolation branch — D-40N-SILENT-01 (jackpot cold-bust is SILENT).
+//       (The lootbox module carries no dedicated WWXRP event; the manual
+//       lootbox consolation is observable only via the WWXRP ERC-20 `Transfer`
+//       event. The jackpot path emits neither — it is fully silent.)
 //   BUT `JackpotTicketWin` STILL fires unconditionally with the pre-Bernoulli
 //   scaled `ticketCount` (`uint32(quantityScaled)`) — D-276-EVT-STATUSQUO-01.
 //   The silent-cold-bust scope is the QUEUE surface only, NOT the
@@ -193,7 +195,7 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
       ).to.equal(1);
     });
 
-    it("[02b] `_jackpotTicketRoll` body has NO consolation surface — no `wwxrp.mintPrize`, no `LootBoxWwxrpReward` emit, no `LootboxTicketRoll` emit, no `_queueTicketsScaled` (D-40N-SILENT-01)", function () {
+    it("[02b] `_jackpotTicketRoll` body has NO consolation surface — no `wwxrp.mintPrize`, no `LootboxTicketRoll` emit, no `_queueTicketsScaled` (D-40N-SILENT-01)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
         extractBody(source, "function _jackpotTicketRoll(")
@@ -202,10 +204,6 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
       expect(
         body.includes("wwxrp.mintPrize"),
         "_jackpotTicketRoll must not call wwxrp.mintPrize (cold-bust is SILENT — D-40N-SILENT-01)"
-      ).to.equal(false);
-      expect(
-        body.includes("emit LootBoxWwxrpReward"),
-        "_jackpotTicketRoll must not emit LootBoxWwxrpReward (no jackpot consolation)"
       ).to.equal(false);
       expect(
         body.includes("emit LootboxTicketRoll"),
