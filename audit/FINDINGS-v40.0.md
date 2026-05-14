@@ -810,3 +810,98 @@ Future milestones (v41.0+) ingest via a fresh delta-extraction phase, not via fo
 **Verdict:** PASS — terminal-phase invariant satisfied per D-40N-FCITE-01.
 
 ---
+
+## 9. Milestone Closure Attestation
+
+### 9a. Verdict Distribution
+
+Per-section roll-up:
+- **§4** F-40-NN finding blocks: **11 of 11** surfaces (a)..(k) verdicted SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE; **zero F-40-NN finding blocks emitted** per D-40N-KI-01 default path; **zero 12th-surface NEW_VECTOR** per the 3-skill PARALLEL adversarial-pass cross-skill review at `280-01-ADVERSARIAL-LOG.md`.
+- **§5** Regression Appendix: REG-01 **1 PASS** (v39.0 closure signal `MILESTONE_V39_AT_HEAD_6a7455d1` NON-WIDENING for v39-touched surfaces NOT in v40 scope; `LootboxModule:1080` BUR-01 site explicitly excluded as an in-scope mutation; bits[152..167] manual/auto-resolve sharing re-verified non-widening via per-resolution seed-uniqueness); REG-02 **1 PASS** (v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` NON-WIDENING; TraitUtils + `_pickSoloQuadrant` + JackpotBucketLib byte-identical); REG-03 **4 PASS** (EXC-01..03 RE_VERIFIED-NEGATIVE-scope + EXC-04 STRUCTURALLY ELIMINATED at v40.0); REG-04 **6 PASS / 0 REGRESSED / 0 SUPERSEDED-as-verdict** (prior-finding spot-check sweep across `audit/FINDINGS-v25.0.md` → `audit/FINDINGS-v39.0.md`). Aggregate: **12 PASS / 0 REGRESSED / 0 SUPERSEDED-as-verdict**.
+- **§6** KI Gating Walk: **`4 of 4 KI_ELIGIBLE addressed; KNOWN_ISSUES_MODIFIED`**. EXC-01/02/03 RE_VERIFIED-NEGATIVE-scope (entries untouched); EXC-04 STRUCTURALLY ELIMINATED at v40.0 (KNOWN-ISSUES.md line-31 entry REMOVED per D-280-EXC04-01). KNOWN-ISSUES.md MODIFIED at v40 close by a single deletion (no promotion from a new finding).
+- **AUDIT-04** adversarial-pass: 3 skills (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) PARALLEL spawn per D-40N-ADVERSARIAL-01 (`/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry); all 3 concur on the 11 §4 surface verdicts; zero residual FINDING_CANDIDATE / zero 12th-surface NEW_VECTOR / zero KI promotion candidate per `.planning/phases/280-delta-audit-findings-consolidation-terminal/280-01-ADVERSARIAL-LOG.md` Disposition section. 10 novel-vector hypotheses + edge cases investigated across the 3 skills; all NEGATIVE_RESULT_ONLY / ACCEPTED_DESIGN. The one threat that materialized in the milestone (CR-01, the manual-path consolation mis-gated on `emitLootboxEvent`) was caught by Phase 277 code review and RESOLVED pre-Phase-280 in the user-approved gap-closure commit `f7a6fccd` (dedicated `payColdBustConsolation` parameter — grep-confirmed mitigation). Does NOT change the §4 verdict roll-up.
+- **Combined milestone closure:** `MILESTONE_V40_AT_HEAD_<sha>`.
+
+### 9b. Attestation Block
+
+D-253-15 step 9 attestation block triggering v40.0 milestone closure. Cite the 3-skill PARALLEL adversarial-pass concurrence (per `280-01-ADVERSARIAL-LOG.md` Disposition section — all 3 skills concurred on the §4 11-surface verdict roll-up; zero FINDING_CANDIDATE; 10 novel-vector hypotheses + edge cases returned NEGATIVE_RESULT_ONLY or ACCEPTED_DESIGN — does NOT change the closure verdict).
+
+```
+git rev-parse HEAD
+# v40.0 closure HEAD <sha>          — resolved at the Phase 280 terminal closure-flip task per D-40N-CLOSURE-01
+# v39.0 baseline                    — 6a7455d1
+#   signal                          — MILESTONE_V39_AT_HEAD_6a7455d1
+# v34.0 second-prior closure         — 6b63f6d4daf346a53a1d463790f637308ea8d555 (REG-02 carry)
+#   signal                          — MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555
+# v40.0 audit subject — 12 commits across Phases 275-279 (no included-since-baseline maintenance):
+#   b6ed8fce feat(275): auto-resolve lootbox Bernoulli whole-ticket
+#   bb1b1abd test(275): auto-resolve lootbox test wave
+#   c473867e feat(276): jackpot ticket-roll Bernoulli whole-ticket
+#   1568fd5c test(276): jackpot ticket-roll Bernoulli test wave
+#   02fb7085 feat(277): event surface unification + sentinel retirement
+#   6fbee850 test(277): event surface unification test wave
+#   f7a6fccd fix(277): pay cold-bust WWXRP consolation on manual paths + event-surface trims
+#   8a81a87c feat(278): jackpot cleanup + ENT-05 keccak refactor + wrapper retirement
+#   c3baf694 test(278): ENT-05 keccak invariant + cross-surface mixing + wrapper-removal regression
+#   a91dac85 test(278): supersede stale [02a] MintModule byte-identity gate
+#   8ef4a010 feat(279): whole-BURNIE floor at 3 RNG-amount sites + cursor-rotation dead-var removal
+#   37207743 test(279): whole-BURNIE floor regression + invariant sweep + surface-regression re-cut
+```
+
+v40.0 source-tree HEAD at the v40.0 closure HEAD `<sha>` — the audit-subject HEAD is the post-Phase-279 contract/test state (Phase 280 emits zero `contracts/`/`test/` commits per the source-tree-frozen terminal-phase constraint; the closure HEAD is the HEAD at the moment the FINDINGS-v40.0.md + KNOWN-ISSUES.md changes are committed-ready, mirroring the v39 P274 Task 3.10 pattern). Docs-tree HEAD captured at the Phase 280 terminal closure-flip task per the D-274-CLOSURE-01 / D-272-CLOSURE-01 / D-271-CLOSURE-01 carry → D-40N-CLOSURE-01.
+
+### 9c. Closure Signal
+
+`MILESTONE_V40_AT_HEAD_<sha>`
+
+Placeholder `<sha>` resolved at the Phase 280 terminal closure-flip task atomic-update per D-40N-CLOSURE-01 across 5 verbatim FINDINGS locations: (1) `audit/FINDINGS-v40.0.md` §1 frontmatter `audit_subject_head:` field; (2) `audit/FINDINGS-v40.0.md` §1 frontmatter `closure_signal:` field; (3) `audit/FINDINGS-v40.0.md` §2 Closure Verdict Summary line `Combined milestone closure: MILESTONE_V40_AT_HEAD_<sha>`; (4) `audit/FINDINGS-v40.0.md` §9c this line; (5) `audit/FINDINGS-v40.0.md` §9b Attestation Block. Plus 3 cross-document propagation locations resolved by the same atomic task: `.planning/MILESTONES.md` v40.0 row, `.planning/ROADMAP.md` v40.0 milestone bullet, and `.planning/STATE.md` Last Shipped Milestone block.
+
+### 9.NN Commit-Readiness Register
+
+Three-subsection commit-readiness register per D-40N-CLOSURE-02 carry of D-274-CLOSURE-02 (i USER-APPROVED contracts + ii USER-APPROVED tests + iii AGENT-COMMITTED audit + planning artifacts). v40.0 has no included-since-baseline maintenance commits, so there is no included-since-baseline subsection (unlike v39.0's §9.NN.iv). The §"Deferred to Future Milestones" subsection below is a separate planner-handoff register from this commit-readiness register (pickup-pointer carve-out per §8).
+
+#### 9.NN.i USER-APPROVED contracts (Phases 275-279)
+
+| SHA | Subject | Files | Phase |
+| --- | ------- | ----- | ----- |
+| `b6ed8fce` | `feat(275): auto-resolve lootbox Bernoulli whole-ticket [LBX-AR-01..06]` | `contracts/modules/DegenerusGameLootboxModule.sol` (+29/−32; Bernoulli hoist to shared scope + auto-resolve `_queueTickets(whole)` swap + bit-allocation NatSpec). Storage byte-identical vs `6a7455d1`; bytecode −548 bytes. | 275 |
+| `c473867e` | `feat(276): jackpot ticket-roll Bernoulli whole-ticket [JPT-BR-01..06]` | `contracts/modules/DegenerusGameJackpotModule.sol` (+36/−10; inline Bernoulli in `_jackpotTicketRoll` reading `bits[200..215]` + `:2216` `_queueTickets(whole, true)` swap + bit-allocation NatSpec). Storage byte-identical vs `6a7455d1`; bytecode −513 bytes. D-276-RNGBYPASS-01 `rngBypass = true` override (documented in `276-VERIFICATION.md`). | 276 |
+| `02fb7085` | `feat(277): event surface unification + sentinel retirement [EVT-UNI-01..08]` | `contracts/modules/DegenerusGameLootboxModule.sol` + `contracts/modules/DegenerusGameJackpotModule.sol` + `contracts/interfaces/IDegenerusGameModules.sol` (`LootboxTicketRoll` deleted; `LootBoxOpened`/`BurnieLootOpen`/`JackpotTicketWin` gain `roundedUp`; `index != type(uint48).max` sentinel retired; 2 `private` viaIR helpers extracted). Bytecode: LootboxModule −527, JackpotModule +23. | 277 |
+| `f7a6fccd` | `fix(277): pay cold-bust WWXRP consolation on manual paths + event-surface trims` | `contracts/modules/DegenerusGameLootboxModule.sol` (+ related). CR-01 BLOCKER gap-closure: dedicated `bool payColdBustConsolation` parameter (position 11 on `_resolveLootboxCommon`) decoupled from `emitLootboxEvent`; `openBurnieLootBox` cold-bust consolation restored. Event-surface trim: `bonusBurnie` removed from `LootBoxOpened`, `LootBoxWwxrpReward` event deleted. | 277 |
+| `8a81a87c` | `feat(278): jackpot cleanup + ENT-05 keccak refactor + wrapper retirement [JPT-CLEAN-01..06]` | `contracts/modules/DegenerusGameJackpotModule.sol` + `contracts/libraries/EntropyLib.sol` + `contracts/storage/DegenerusGameStorage.sol` + `contracts/modules/DegenerusGameMintModule.sol` (the last comment-only). `_jackpotTicketRoll` swaps xorshift `entropyStep` → `hash2(entropy,entropy)` keccak self-mix; `EntropyLib.entropyStep` + the zero-caller `_queueLootboxTickets` wrapper DELETED; 3 `JackpotTicketWin` emits unified onto whole-ticket counts. Storage byte-identical vs `6a7455d1`; bytecode −689 bytes. STRUCTURALLY ELIMINATES the v36.0 EXC-04 xorshift known-issue. | 278 |
+| `8ef4a010` | `feat(279): whole-BURNIE floor at 3 RNG-amount sites + cursor-rotation dead-var removal [BUR-01..05]` | `contracts/modules/DegenerusGameLootboxModule.sol` + `contracts/modules/DegenerusGameJackpotModule.sol`. Whole-BURNIE integer-division floor at `_resolveLootboxCommon` `burnieAmount` (`:1023`), `_awardDailyCoinToTraitWinners` `baseAmount` (`:1789`, + `extra`/`cursor` dead-var removal), `_awardFarFutureCoinJackpot` `perWinner` (`:1896`). Storage byte-identical vs `6a7455d1` for both modules. Bytecode +114 bytes Phase-279-only NET-POSITIVE (user-accepted override per `279-VERIFICATION.md`; −1,792 bytes cumulative vs `6a7455d1`). | 279 |
+
+#### 9.NN.ii USER-APPROVED tests (Phases 275-279)
+
+| SHA | Subject | Files | Phase |
+| --- | ------- | ----- | ----- |
+| `bb1b1abd` | `test(275): auto-resolve lootbox whole-ticket + silent cold-bust + seed-uniqueness regression + mint-boost regression [TST-LBX-AR-01..06]` | 10 files (+1,236/−104): 6 new test files (`test/stat/`, `test/edge/`, `test/unit/`) + 3 migrated v39-era tests + `package.json`; 49 new `it()` blocks, all passing. | 275 |
+| `1568fd5c` | `test(276): jackpot ticket-roll Bernoulli + silent cold-bust + bit-slice independence + 2-roll uniqueness [TST-JPT-BR-01..04]` | 5 files (+965/−1): new `contracts/test/JackpotBernoulliTester.sol` external-pure tester + 3 test files (`test/stat/`, `test/unit/`) + `package.json`; 29 tests, all passing. | 276 |
+| `6fbee850` | `test(277): event surface unification test wave [TST-EVT-UNI-01..06]` | 7 paths: new `test/unit/EventSurfaceUnification.test.js` + 5 retargeted precedent test files + `package.json`; 107 passing across the 6 affected files. | 277 |
+| `c3baf694` | `test(278): ENT-05 keccak invariant + cross-surface mixing + wrapper-removal + whole-ticket event regression [TST-CLEAN-01..03 + TST-CROSS-01]` | 9 files (2 new test files in `test/stat/` + `test/integration/`, 6 modified, `package.json`) + 1 `contracts/test/` NatSpec-only helper touch. | 278 |
+| `a91dac85` | `test(278): supersede stale [02a] MintModule byte-identity gate` | `test/` (stale `[02a]` MintModule byte-identity test-gate supersede — comment-only / test-gate touch; no `contracts/` mutation). | 278 |
+| `37207743` | `test(279): whole-BURNIE floor regression + invariant sweep + surface-regression re-cut [TST-BUR-01..04]` | 6 files (4 new test files in `test/unit/` + `test/stat/`, 35 new tests + `SurfaceRegression.test.js` SURF_01 re-cut + `package.json`). | 279 |
+
+All Phase 275-279 contract + test commits landed under USER-APPROVED batched gates per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_manual_review_before_push.md`. **Phase 280 emits ZERO `contracts/`/`test/` commits** — the terminal phase is source-tree frozen (`git diff <last-test-commit>..HEAD -- contracts/ test/` is empty; the v40.0 audit subject is fully accounted for by the 12 Phase 275-279 commits above).
+
+#### 9.NN.iii AGENT-COMMITTED audit + planning artifacts (Phase 280 terminal)
+
+Phase 280 atomic-per-task chain (audit deliverable + adversarial pass + closure flips):
+
+- `audit/FINDINGS-v40.0.md` — this 9-section terminal milestone-closure deliverable, agent-authored across the Phase 280 task chain; READ-only flip (chmod 444 + frontmatter `status: FINAL — READ-ONLY` + `read_only: true`) at the terminal closure-flip task.
+- `.planning/phases/280-delta-audit-findings-consolidation-terminal/280-01-ADVERSARIAL-LOG.md` — the 3-skill PARALLEL adversarial validation log (3 H2 skill sections — `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` — + Disposition). Written to disk under `.planning/`, which is git-ignored per project convention (the same pattern as all per-phase SUMMARY/VERIFICATION/STORAGE-LAYOUT-DIFF artifacts).
+- `KNOWN-ISSUES.md` — the line-31 EXC-04 "EntropyLib XOR-shift PRNG for BAF jackpot ticket rolls" entry REMOVED per D-280-EXC04-01 (clean deletion; `git diff` shows a single deletion, no added lines).
+- `.planning/ROADMAP.md` + `.planning/STATE.md` + `.planning/MILESTONES.md` + `.planning/PROJECT.md` + `.planning/REQUIREMENTS.md` — atomic closure-flip applied at the terminal closure-flip task. (`.planning/` is git-ignored per project convention; these flips are written to disk.)
+
+Phase 280 is source-tree frozen — it emits ZERO `contracts/`/`test/` commits. No "pending USER-APPROVAL" subsection is emitted per D-40N-CLOSURE-02 — all v40.0 contract + test mutations already landed under USER-APPROVED batched review at each surface phase's close.
+
+### Deferred to Future Milestones
+
+Per D-40N-FCITE-01 terminal-phase forward-cite zero-emission rule: the following carry-forward items are recorded via the locked-decision ID `D-40N-LBX02-OUT-01` + a descriptive planner-handoff label (planner-handoff register; not forward-cites to in-flight work). See PROJECT.md "Deferred to Future Milestones" subsection for the single-source-of-truth lookup. The literal "v41+" identifier appears below only as a planner-handoff pickup-pointer label — a planner-handoff carve-out per §8b allowlist, NOT a forward-cite to in-flight post-v40.0 work.
+
+1. **LBX-02 fixture-coverage gap** — RE-DEFERRED-V41+ per `D-40N-LBX02-OUT-01` (settled carry from the v39.0 close, which carried it from v38.0 / D-274-LBX02-OUT-01). The Lootbox empirical 55%-tickets-path gas-savings test pin remains a fixture-coverage gap; the analytical worst-case derivation continues to be load-bearing per the Phase 266 GAS-01 precedent + `feedback_gas_worst_case.md`. No v40.0 action beyond this §9 path-of-investigation line. v41+ backlog item.
+
+2. **Superseded-baseline SURF `it.skip` cleanup** — Phase 279's `D-279-02-SURF-SUPERSEDED-01` left 3 pre-existing superseded-baseline SURF failures (v35/v34, v37/v36, v38/v37 byte-identity gates) in `test/stat/SurfaceRegression.test.js` — they assert byte-identity against baselines now superseded by the Phase 275-279 contract deltas. Phase 280 is source-tree frozen, so this is NOT in v40.0 scope (carried as a test-suite-hygiene item; cited in §5e). An `it.skip` cleanup of those 3 superseded SURF blocks is a recommended v41+ backlog quick-task. v41+ backlog item.
+
+3. **REQUIREMENTS.md / ROADMAP.md JPT-BR-02 text correction** — the literal JPT-BR-02 + ROADMAP SC1 text says `rngBypass = false` (a Phase-275 copy-paste artifact); the correct value is `true` per D-276-RNGBYPASS-01 (the code is correct; `276-VERIFICATION.md` records the load-bearing override). A documentation-cleanup item for a future maintenance pass — not a code-correctness issue.
+
