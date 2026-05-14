@@ -367,3 +367,251 @@ Phase 279's BUR-05 plan expected a NET-NEGATIVE bytecode delta (the `extra`/`cur
 **Closing conservation attestation:** EV-neutrality of the Bernoulli round-up holds `E[whole_post] = scaledPre / TICKET_SCALE` exactly on the auto-resolve LootboxModule branch and the JackpotModule `_jackpotTicketRoll` path (per-resolution / per-roll variance higher than the v39 `rem`-byte accumulation flow is the documented TICKET-granularity tradeoff per D-40N-GRANULARITY-01). The reused `bits[152..167]` slice on auto-resolve is collision-free because each `_resolveLootboxCommon` invocation derives a distinct per-resolution keccak `seed`; the `bits[200..215]` jackpot slice reads a full-diffusion keccak word after the Phase 278 ENT-05 refactor. The whole-BURNIE floor is a one-directional solvency-favouring integer-division floor that cannot over-issue protocol value; sub-1-BURNIE residues evaporate per D-40N-BUR-DUST-01. The BUR-05 +114-byte bytecode deviation is a documented user-accepted override (INFO-tier; no F-40-NN finding block).
 
 ---
+
+## 4. F-40-NN Finding Blocks
+
+Per AUDIT-03 design contract: 11 adversarial surfaces (a)..(k) covering the v40.0 delta scope. Each per-surface block contains a `**Verdict:**` line (SAFE-bucket value), an `**Evidence:**` block (cross-citing §3.A/§3.B/§3.C rows), a `**Grep recipe:**` fenced block (where applicable), and a `**Prose justification:**`. RNG surfaces (a)-(e) additionally carry a backward-trace attestation + a commitment-window attestation per `feedback_rng_backward_trace.md` + `feedback_rng_commitment_window.md`. Default verdict bucket per D-40N-KI-01: SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_DEFENSIVE_VALIDATION. Zero F-40-NN finding blocks emitted unless the D-40N-ADVERSARIAL-01 pass surfaces a FINDING_CANDIDATE that user disposition approves — none did (see §4.2).
+
+### 4.1. Adversarial Sweep — 11-Surface Enumeration
+
+#### Surface (a) — EV-neutrality of Bernoulli collapse on auto-resolve paths vs cross-lootbox accumulation
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- §3.C AUDIT-03 conservation re-proof (1): `E[whole_post] = scaledPre / TICKET_SCALE` exact identity by construction — the same floor + biased-coin-flip identity proven for the v39 manual path, now applied to the auto-resolve LootboxModule branch.
+- §3.A Row Group 1 LBX-AR-01/02: the Bernoulli predicate is hoisted to shared function scope; the auto-resolve branch calls `_queueTickets(player, targetLevel, whole, false)`.
+- Phase 275 TST-LBX-AR-01 empirical witness: `mean(whole_post) * TICKET_SCALE` within plus-or-minus max(1.5, 0.5%) of `scaledPre` at N=10K across {47,99,100,147,250,1000,9999}; win-rate within plus-or-minus 0.020 of `frac/100`.
+
+**Grep recipe (Bernoulli math present on the hoisted shared scope):**
+```
+grep -nE "seed >> 152|uint16\(TICKET_SCALE\)|_queueTickets\(player, targetLevel, whole" contracts/modules/DegenerusGameLootboxModule.sol
+```
+Expected output: the Bernoulli predicate `(uint16(seed >> 152) % uint16(TICKET_SCALE)) < uint16(frac)` + the unified `_queueTickets(player, targetLevel, whole, false)` callsite, present exactly once each in shared scope (no per-branch duplication after the Phase 277 sentinel retirement).
+
+**Prose justification:** EV-neutrality is preserved by the floor + biased-coin-flip identity `E[whole_post] = whole_floor + frac/TICKET_SCALE = scaledPre / TICKET_SCALE` (exact in rationals). The v39 cross-lootbox-deterministic-`rem`-byte accumulation flow accumulated fractional residues across multiple lootboxes targeting the same future level and resolved them to whole tickets at activation time via `_rollRemainder`; the v40 auto-resolve Bernoulli collapses at queue time instead. Both flows yield identical expected ticket counts — the difference is per-resolution variance, which is higher under the per-resolution Bernoulli. This is the documented TICKET-granularity tradeoff settled at D-40N-GRANULARITY-01 (1 ticket = 4 entries; 4x variance vs entry-granularity accepted in exchange for simpler storage and no downstream re-scaling). The per-N HERO_BOOST / payout / symbol distribution / ticket pricing math is UNCHANGED at v40 — Phase 275 modifies only the post-distress, pre-queue collapse of scaled `futureTickets` to whole tickets on the auto-resolve branch. EV is invariant; the variance increase carries no value-extraction surface because expected value is invariant.
+
+**Backward-trace attestation (per `feedback_rng_backward_trace.md`):** Trace each RNG consumer backward. The auto-resolve Bernoulli at `_resolveLootboxCommon` reads `bits[152..167]` of the per-resolution `seed = keccak256(abi.encode(rngWord, player, day, amount))`. `rngWord` is VRF-derived — for `resolveLootboxDirect` it is the `rngWord` argument passed by the decimator-claim caller (`DecimatorModule:594`, single-shot per `claimDecimatorJackpot(lvl)`, sourced from per-level VRF storage); for `resolveRedemptionLootbox` it is the per-redemption VRF word, and for the `DegenerusGame:1721` redemption-loop wrapper each 5-ETH chunk evolves `rngWord = keccak256(abi.encode(rngWord))` so each chunk's seed is a distinct keccak preimage. The VRF word is committed before the auto-resolve caller can be invoked — the caller is an internal side-effect of a player action or system action (decimator-claim, sDGNRS-redemption), not a direct user-initiated open, and the VRF word for that resolution is bound at the upstream VRF request. The word was unknown at the input-commitment point.
+
+**Commitment-window attestation (per `feedback_rng_commitment_window.md`):** What player-controllable state can change between the VRF request and fulfillment? The auto-resolve resolution inputs (`player`, `day`, `amount`) are fixed at the moment the auto-resolve caller is invoked — the player cannot mutate them between the VRF request and the resolution because the auto-resolve path runs as a non-interruptible side-effect of the triggering action. The `bits[152..167]` slice is a previously-allocated 16-bit slice of the unchanged per-resolution keccak primary chunk; the keccak primary entropy source is unchanged at the LootboxModule layer. Commitment-window check is a degenerate PASS — no player-controllable input mutates between VRF commit and consumption.
+
+#### Surface (b) — EV-neutrality of Bernoulli collapse on jackpot ticket-roll path
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- §3.C AUDIT-03 conservation re-proof (1): the same `E[whole_post] = scaledPre / TICKET_SCALE` exact identity applied to the JackpotModule `_jackpotTicketRoll` path.
+- §3.A Row Group 2 JPT-BR-01/02: inline Bernoulli round-up reading `bits[200..215]` of the per-roll `entropy` chain; `:2216` call swap to direct `_queueTickets(winner, targetLevel, whole, true)`.
+- §3.A Row Group 4 JPT-CLEAN-04: the entropy chain is evolved via `EntropyLib.hash2(entropy, entropy)` keccak self-mix (Phase 278) — the `bits[200..215]` slice reads a full-diffusion keccak word.
+- Phase 276 TST-JPT-BR-01 empirical witness: `mean(whole_post) * TICKET_SCALE` within plus-or-minus 0.5% at N=10K. Phase 278 TST-CLEAN-01: post-keccak-refactor statistical invariant at N=20K.
+
+**Grep recipe (jackpot Bernoulli math + keccak self-mix):**
+```
+grep -nE "entropy = EntropyLib.hash2\(entropy, entropy\)|entropy >> 200|_queueTickets\(winner, targetLevel, whole, true\)" contracts/modules/DegenerusGameJackpotModule.sol
+```
+Expected output: the `EntropyLib.hash2(entropy, entropy)` self-mix line at `_jackpotTicketRoll:2200`, the `bits[200..215]` Bernoulli predicate `(uint16(entropy >> 200) % uint16(TICKET_SCALE)) < uint16(frac)`, and the `_queueTickets(winner, targetLevel, whole, true)` callsite — all present.
+
+**Prose justification:** `_jackpotTicketRoll` Bernoulli-collapses the scaled jackpot ticket count `quantityScaled` to a whole-ticket count using the same floor + biased-coin-flip identity as surface (a). `whole = (scaledTickets / TICKET_SCALE) + (roundedUp ? 1 : 0)` with `P(roundedUp) = frac / TICKET_SCALE`, so `E[whole_post] = scaledTickets / TICKET_SCALE` exactly. The `_queueLootboxTickets` wrapper retired in Phase 278 was a thin pass-through to `_queueTicketsScaled`; replacing it with direct `_queueTickets(whole)` does not change the expected ticket count — it changes the resolution timing (queue-time Bernoulli instead of activation-time `_rollRemainder` on the scaled residue). The Phase 278 ENT-05 keccak refactor swapped the entropy evolution from xorshift `EntropyLib.entropyStep` to `EntropyLib.hash2(entropy, entropy)` — this intentionally CHANGES the BAF roll output for a given seed (not byte-equivalent to v39), but it does NOT change the EV: the `bits[200..215]` slice of a full-diffusion keccak word is uniform mod `TICKET_SCALE`, so `P(roundedUp) = frac / TICKET_SCALE` holds identically. The `rngBypass = true` argument on the `_queueTickets` call (D-276-RNGBYPASS-01) is a correctness requirement, not a defect — `_jackpotTicketRoll` runs inside `advanceGame` while `rngLockedFlag == true`, and `false` would revert `advanceGame` on every far-future jackpot ticket roll; the prior `_queueLootboxTickets` wrapper already passed `true`.
+
+**Backward-trace attestation (per `feedback_rng_backward_trace.md`):** Trace the `_jackpotTicketRoll` consumer backward. The Bernoulli reads `bits[200..215]` of `entropy` AFTER `entropy = EntropyLib.hash2(entropy, entropy)` evolves it on function entry. `entropy` arrives from `_awardJackpotTickets`, which sources it from the `advanceGame` processing window's RNG word — a VRF-derived word committed before the `advanceGame` chain runs. The `_awardJackpotTickets` 2-roll pattern (for medium 0.5-5 ETH amounts) calls `_jackpotTicketRoll` twice, return-and-rethreading `entropy` between the two rolls — so roll 2's input is roll 1's keccak output (`hash2`-evolved), distinct from roll 1's input by keccak collision-resistance. Each roll's `bits[200..215]` slice is therefore distinct. The VRF word feeding the `advanceGame` chain is unknown at the point any player commits the BAF jackpot input (the player's lootbox/coinflip purchase that contributes to the BAF jackpot pool happens before the daily VRF request that drives `advanceGame`).
+
+**Commitment-window attestation (per `feedback_rng_commitment_window.md`):** What player-controllable state can change between the VRF request and fulfillment for the jackpot ticket-roll path? `_jackpotTicketRoll` runs inside `advanceGame` — a system-driven daily processing chain. The `winner` and `amount` for each roll are fixed by the BAF jackpot bucket state that was settled before the daily VRF request; no player can mutate the jackpot bucket membership or amounts between the VRF request and the `advanceGame` fulfillment because `advanceGame` runs atomically against the committed daily state. The keccak `hash2(entropy, entropy)` self-mix consumes only the already-committed `entropy` word — no new player-controllable preimage input. Commitment-window check is a degenerate PASS.
+
+#### Surface (c) — Bit-slice [152..167] reuse on auto-resolve — independence from manual-path bits[152..167] via per-resolution-distinct seed
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- §3.C AUDIT-03 conservation re-proof (2): each `_resolveLootboxCommon` invocation derives a fresh per-resolution `seed = keccak256(abi.encode(rngWord, player, day, amount))`; the manual and auto-resolve paths never share a `seed` value.
+- §3.A Row Group 1 LBX-AR-01: the Bernoulli predicate is hoisted to shared scope above the retired sentinel gate — consumed at most once per `seed`.
+- §3.A Row Group 3 EVT-UNI-05: the `index != type(uint48).max` sentinel is retired — manual + auto-resolve converge on the unified `_queueTickets(whole)` call, both reading `bits[152..167]` of their own per-resolution `seed`.
+- Phase 275 TST-LBX-AR-04 empirical witness: per-caller chi2 Wilson-Hilferty Z < 1.645; pairwise + cross-slice covariance < 50.
+
+**Grep recipe (single shared-scope consumption of the slice):**
+```
+grep -cE "seed >> 152" contracts/modules/DegenerusGameLootboxModule.sol
+```
+Expected output: 1 — the `bits[152..167]` slice is read exactly once in `_resolveLootboxCommon` shared scope (not once-per-branch; the Phase 275 hoist + Phase 277 sentinel retirement collapsed the dual-branch read into a single shared-scope read).
+
+**Prose justification:** The concern is that v40 extends the v39-manual `bits[152..167]` slice to the auto-resolve branch — could the manual and auto-resolve consumers correlate or collide? They cannot. The per-resolution `seed = keccak256(abi.encode(rngWord, player, day, amount))` is a fresh keccak preimage for every `_resolveLootboxCommon` invocation. A manual open (`openLootBox` / `openBurnieLootBox`) and an auto-resolve resolution (`resolveLootboxDirect` / `resolveRedemptionLootbox`) are distinct invocations with distinct `(rngWord, player, day, amount)` tuples — distinct `rngWord` (each manual open has its own `lootboxRngWordByIndex[index]`; each auto-resolve has its own per-claim/per-redemption VRF word) and/or distinct `player`/`day`/`amount`. By keccak collision-resistance the two `seed` values are independent; the `bits[152..167]` slices of two independent keccak outputs are independent. After the Phase 275 hoist, the slice is read exactly once per `_resolveLootboxCommon` invocation in shared scope — there is no "manual reads it, auto reads it again from the same seed" path. The 4 upstream auto-resolve callers (`DecimatorModule:594`, `DegeneretteModule:786`, `StakedDegenerusStonk:672`, `DegenerusGame:1721` redemption-loop with per-iteration `rngWord = keccak256(abi.encode(rngWord))` evolution) each produce a distinct `rngWord` per resolution, so even repeated auto-resolve resolutions for the same player do not share a slice value. Modulo-bias: `uint16 % 100` over a uniform 16-bit input has <=0.10% relative bias, consistent with the existing `bits[0..15]` rangeRoll precedent.
+
+**Backward-trace attestation (per `feedback_rng_backward_trace.md`):** The `bits[152..167]` consumer traces backward to the per-resolution `seed`, which traces to the VRF-derived `rngWord` for that resolution. For manual paths the `rngWord` is `lootboxRngWordByIndex[index]` set by the VRF callback before the player can call `openLootBox` (guarded by `if (rngWord == 0) revert RngNotReady()`). For auto-resolve paths the `rngWord` is the per-claim / per-redemption VRF word committed before the auto-resolve caller runs. The word was unknown at the player's input-commitment point in every case.
+
+**Commitment-window attestation (per `feedback_rng_commitment_window.md`):** For manual paths, the player-controllable state at lootbox commitment (`lootboxEth[index][player]` / `lootboxBurnie[index][player]`, set by prior `mintLootbox` / `mintBurnieLootbox`) is fixed in storage and cannot change between the VRF request and the open; the `RngNotReady` guard structurally prevents opening before the VRF word is set. For auto-resolve paths the resolution inputs are fixed at the moment the triggering action invokes the caller. No player-controllable input mutates `bits[152..167]` independently of the other sub-roll consumers between VRF commit and consumption. Bot front-run via VRF mempool visibility remains STRUCTURALLY PREVENTED (carry-forward from the v36/v37/v38/v39 commitment-window verdicts — the manual-path index-advance isolation and the auto-resolve per-resolution VRF word both close the window). Commitment-window check is a degenerate PASS.
+
+#### Surface (d) — Bit-slice [200..215] independence on jackpot vs existing bits[0..12] consumers
+
+**Verdict:** SAFE.
+
+**Evidence:**
+- §3.C AUDIT-03 conservation re-proof (2): the `bits[200..215]` jackpot slice is 180+ bits separated from the `bits[0..12]` path/level consumers; after the Phase 278 ENT-05 keccak refactor it reads a full-diffusion keccak word, so any slice is full-entropy.
+- §3.A Row Group 2 JPT-BR-06: bit-allocation NatSpec documents the `bits[200..215] jackpotTicketRoundUp % 100` sub-roll + the 180+ bit separation.
+- §3.A Row Group 4 JPT-CLEAN-04: `entropy = EntropyLib.hash2(entropy, entropy)` keccak self-mix replaces the xorshift `EntropyLib.entropyStep`.
+- Phase 276 TST-JPT-BR-03 empirical witness: chi2 independence of `bits[200..215]` vs `bits[0..12]` at >=10K seeds. Phase 278 TST-CLEAN-01: post-keccak-refactor chi2 uniformity + 2-roll uniqueness + `bits[200..215]` independence at N=20K.
+
+**Grep recipe (bit-allocation NatSpec + slice consumers):**
+```
+grep -nE "bits\[200..215\]|bits\[0..12\]|entropy / 100|entropy >> 200" contracts/modules/DegenerusGameJackpotModule.sol
+```
+Expected output: the NatSpec entries for both slices + the `bits[0..12]` path/level consumers (`entropy / 100` for `roll`, `% 4` near-offset, `% 46` far-offset) + the `bits[200..215]` Bernoulli read — all present, slices disjoint.
+
+**Prose justification:** `_jackpotTicketRoll` consumes two disjoint slices of the per-roll `entropy` word: the low `bits[0..12]` for path/level selection (`entropyDiv100 = entropy / 100` then `roll = entropy - entropyDiv100*100` for the 30/65/5 path split; `entropyDiv100 % 4` near-offset; `entropyDiv100 % 46` far-offset) and the new `bits[200..215]` for the Bernoulli round-up. The two slices are separated by 180+ bits. After the Phase 278 ENT-05 keccak refactor, `entropy` is a full-diffusion `EntropyLib.hash2(entropy, entropy)` keccak word — and any disjoint pair of slices of a full keccak word is pairwise independent by keccak output-entropy properties (the 180+ bit separation is structurally moot for a keccak word, but it is documented in the NatSpec for clarity and would still hold under any future entropy-source change). Modulo-bias on `bits[200..215]`: `uint16 % 100` has <=0.10% relative bias. The 2-roll pattern within a single `_awardJackpotTickets` invocation evolves `entropy` between rolls (return-and-rethread), so the two rolls' `bits[200..215]` slices are independent — verified empirically by Phase 276 TST-JPT-BR-04.
+
+**Backward-trace attestation (per `feedback_rng_backward_trace.md`):** The `bits[200..215]` consumer traces backward through `EntropyLib.hash2(entropy, entropy)` to the `entropy` word arriving from `_awardJackpotTickets`, which sources it from the `advanceGame` VRF word — committed before the daily processing chain runs. The path/level `bits[0..12]` consumers trace to the SAME `entropy` word; both slices derive from the same VRF-derived keccak word that was unknown at any player's BAF-jackpot-input-commitment point.
+
+**Commitment-window attestation (per `feedback_rng_commitment_window.md`):** No player-controllable state mutates between the VRF request and the `advanceGame` fulfillment that drives `_jackpotTicketRoll` — `advanceGame` runs atomically against the committed daily BAF jackpot bucket state. The keccak `hash2(entropy, entropy)` self-mix introduces no new player-controllable preimage input. Commitment-window check is a degenerate PASS.
+
+#### Surface (e) — Silent cold-bust gating predicate on auto-resolve + jackpot — no consolation crossover from v39 manual-path
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- §3.A Row Group 1 LBX-AR-03: auto-resolve cold-bust is SILENT — `_queueTickets` at `DegenerusGameStorage.sol:568` early-returns on `quantity == 0`; no consolation, no event.
+- §3.A Row Group 2 JPT-BR-04: jackpot cold-bust is SILENT — `_queueTickets` early-returns on `whole == 0`; no consolation in `_jackpotTicketRoll`.
+- §3.A Row Group 3 Phase 277 remediation (`f7a6fccd`): the manual-path cold-bust consolation is gated on a DEDICATED `bool payColdBustConsolation` parameter (position 11), decoupled from `emitLootboxEvent`; manual callers (`openLootBox`, `openBurnieLootBox`) pass `true`, auto-resolve callers (`resolveLootboxDirect`, `resolveRedemptionLootbox`) pass `false`.
+- Phase 275 TST-LBX-AR-03 + Phase 276 TST-JPT-BR-02 empirical witnesses: auto-resolve / jackpot silent-cold-bust regressions assert zero `TicketsQueued` emit, zero `LootBoxWwxrpReward` emit (the event itself is now deleted), zero `wwxrp.mintPrize` invocation, `wwxrp.balanceOf(player)` unchanged.
+
+**Grep recipe (consolation gate decoupled from auto-resolve callers):**
+```
+grep -nE "payColdBustConsolation|wwxrp.mintPrize\(player, LOOTBOX_WWXRP_CONSOLATION\)" contracts/modules/DegenerusGameLootboxModule.sol
+```
+Expected output: the `payColdBustConsolation` parameter on the `_resolveLootboxCommon` signature + the `if (payColdBustConsolation && whole == 0)` gate + the single `wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)` callsite inside that gate. The 2 auto-resolve callers (`resolveLootboxDirect`, `resolveRedemptionLootbox`) pass `false` for `payColdBustConsolation`.
+
+**Prose justification:** Per D-40N-SILENT-01, the auto-resolve LootboxModule branch and the JackpotModule `_jackpotTicketRoll` path are SILENT on cold-bust — when the Bernoulli produces `whole == 0` from a non-zero pre-Bernoulli scaled value, the function queues nothing (the `_queueTickets` early-return on `quantity == 0` handles it for free) and pays NO WWXRP consolation. This is intentional asymmetry with the v39 manual-path: auto-resolve + jackpot resolutions happen without explicit player intent at the moment of resolution (decimator-claim, sDGNRS-redemption, jackpot-ticket-award are side-effects of other actions), so the v39 "cold-bust UX" framing does not apply. The Phase 277 `f7a6fccd` remediation makes the asymmetry structurally correct on the right axis: the consolation is gated on a dedicated `payColdBustConsolation` parameter, NOT on `emitLootboxEvent`. The original Wave 1 mistakenly gated it on `emitLootboxEvent`, which silently broke `openBurnieLootBox` (a MANUAL caller that passes `emitLootboxEvent = false` because it emits its own `BurnieLootOpen`) — code review BLOCKER CR-01 caught this, and `f7a6fccd` introduced the dedicated parameter so manual callers (`openLootBox`, `openBurnieLootBox`) both pass `payColdBustConsolation = true` while auto-resolve callers pass `false`. There is zero consolation crossover: an auto-resolve caller cannot pay the consolation because it passes `false`, and the gate is `if (payColdBustConsolation && whole == 0)` — both conjuncts must hold.
+
+**Backward-trace attestation (per `feedback_rng_backward_trace.md`):** The cold-bust outcome traces backward to the Bernoulli `roundedUp` boolean, which traces to `bits[152..167]` (LootboxModule) / `bits[200..215]` (JackpotModule) of the per-resolution / per-roll VRF-derived keccak word — established as unknown at the input-commitment point in surfaces (a)-(d). The `payColdBustConsolation` gate is a compile-time-fixed argument value per caller, NOT an RNG-derived value — it carries no entropy and no commitment window.
+
+**Commitment-window attestation (per `feedback_rng_commitment_window.md`):** The `payColdBustConsolation` argument is a hard-coded literal per caller (`true` for the 2 manual callers, `false` for the 2 auto-resolve callers) — no player can mutate it. The cold-bust outcome (`whole == 0`) depends only on the Bernoulli result, which depends on the per-resolution VRF-derived keccak word — established degenerate-PASS in surfaces (a)-(d). No player-controllable state mutates the cold-bust gating predicate between VRF commit and consumption. Commitment-window check is a degenerate PASS.
+
+#### Surface (f) — Event topic-hash change correctness — LootBoxOpened + BurnieLootOpen + JackpotTicketWin signatures + emission sites
+
+**Verdict:** SAFE.
+
+**Evidence:**
+- §3.A Row Group 3 EVT-UNI-01: `LootboxTicketRoll` event DELETED from interface + contract; zero remaining references.
+- §3.A Row Group 3 EVT-UNI-02/03/04: `LootBoxOpened` restructured (real `uint48 indexed lootboxIndex` + non-indexed `uint32 day` + new `bool roundedUp`; `bonusBurnie` removed by `f7a6fccd`); `BurnieLootOpen` + `JackpotTicketWin` each gain a `bool roundedUp` final non-indexed field.
+- §3.A Row Group 3 Phase 277 remediation (`f7a6fccd`): `LootBoxWwxrpReward` event DELETED — WWXRP payouts remain observable via the WWXRP ERC-20 `Transfer` event.
+- Phase 277 TST-EVT-UNI-01/02 empirical witnesses: topic hashes computed from the freshly compiled post-Wave-1 ABI via `hre.artifacts.readArtifact` + `ethers.Interface`; old `LootboxTicketRoll` topic asserted absent from the compiled ABI and zero `emit` sites across `contracts/`.
+
+**Grep recipe (event surface at v40 HEAD):**
+```
+grep -rn "LootboxTicketRoll\|LootBoxWwxrpReward" contracts/        # expected: empty
+grep -nE "event LootBoxOpened|event BurnieLootOpen|event JackpotTicketWin" contracts/modules/
+grep -c "emit JackpotTicketWin" contracts/modules/DegenerusGameJackpotModule.sol   # expected: 3
+```
+Expected output: zero `LootboxTicketRoll` / `LootBoxWwxrpReward` references; the 3 retained event definitions present with the `bool roundedUp` field; exactly 3 `emit JackpotTicketWin` sites all supplying the 7th `roundedUp` arg.
+
+**Prose justification:** The event surface unification breaks the topic-0 hashes of `LootBoxOpened`, `BurnieLootOpen`, and `JackpotTicketWin` — accepted per D-40N-EVT-BREAK-01 (pre-launch supersession of the v39 D-274-NO-EVT-BREAK-01 non-breaking stance; no live indexer; indexer rebuild expected at launch regardless because v40 changes the auto-resolve + jackpot Bernoulli surfaces). The changes are correctness-positive: `LootBoxOpened`'s v39 `uint32 indexed index` field was MISLABELED — the emit fed `day` into it — and v40 fixes this to a real `uint48 indexed lootboxIndex` plus a separate non-indexed `uint32 day`. The `bool roundedUp` field added to all 3 events folds the v39 `LootboxTicketRoll` remainder-visibility information into the per-action events, and `LootboxTicketRoll` itself is deleted (zero remaining references in `contracts/`). The `f7a6fccd` remediation additionally removed the `bonusBurnie` field from `LootBoxOpened` and deleted the `LootBoxWwxrpReward` event — both are event-surface SHRINKS; WWXRP payouts remain observable via the canonical WWXRP ERC-20 `Transfer` event (`0x0 -> player`), and a consolation is distinguishable from a regular WWXRP win by the absence of a same-tx ticket-path emission. All 3 `emit JackpotTicketWin` sites supply the 7th `roundedUp` arg (the BAF path threads the captured `roundedUp` local; the two trait-matched paths pass literal `false` because they have a zero fractional part by construction). No field is truncated: `amount` and `burnie` on `LootBoxOpened` stay `uint256` wei per D-277-EVT-WIDE-01. The Phase 277 SECURITY audit attests all 8 declared threats CLOSED against the post-`f7a6fccd` code, with T-277-01 (topic-hash break) recorded as an accepted pre-launch risk.
+
+#### Surface (g) — Index-sentinel retirement byte-equivalence — no behavior crossover between manual + auto-resolve post-retirement
+
+**Verdict:** SAFE.
+
+**Evidence:**
+- §3.A Row Group 3 EVT-UNI-05: the `index != type(uint48).max` dual-branch sentinel construct collapses to an unconditional `_queueTickets(player, targetLevel, whole, false)` — no dead branches remain.
+- §3.A Row Group 3 EVT-UNI-06: auto-resolve callers pass `index = 0` + `emitLootboxEvent = false` (1:1 with the prior sentinel split); `f7a6fccd` adds the dedicated `payColdBustConsolation` parameter so the manual/auto behavior split is carried on explicit parameters, not on an `index` sentinel value.
+- Phase 277 TST-EVT-UNI-03 empirical witness: `index != type(uint48).max` and `type(uint48).max` both match zero times in the LootboxModule; auto-resolve callers parsed positionally to pass `0` as the 3rd arg; the unified `_queueTickets(player, targetLevel, whole, false)` call appears exactly once with no `if (index ...)` branch.
+
+**Grep recipe (sentinel fully retired):**
+```
+grep -cE "type\(uint48\)\.max" contracts/modules/DegenerusGameLootboxModule.sol   # expected: 0
+grep -cE "index != type\(uint48\)\.max" contracts/modules/DegenerusGameLootboxModule.sol   # expected: 0
+```
+Expected output: both 0 — the `type(uint48).max` sentinel literal and the `index != type(uint48).max` behavior gate are fully retired from the LootboxModule.
+
+**Prose justification:** v39 routed the manual vs auto-resolve behavior split through an `index != type(uint48).max` sentinel: manual callers passed a real index, auto-resolve callers passed `type(uint48).max` and that sentinel value gated whether the Bernoulli-collapse-and-`_queueTickets(whole)` path or the legacy `_queueTicketsScaled` path ran. v40 retires this entirely. After Phase 275 hoisted the Bernoulli to shared scope and swapped the auto-resolve branch to `_queueTickets(whole)`, BOTH branches do exactly the same thing — Bernoulli-roll, then `_queueTickets(player, targetLevel, whole, false)`. The sentinel no longer serves a purpose, so Phase 277 deletes the dual-branch construct and collapses it to a single unconditional `_queueTickets` call. There is zero behavior crossover risk because there is no longer a behavior SPLIT: manual and auto-resolve callers run byte-identical ticket-queueing logic. The remaining manual/auto distinctions (whether to emit `LootBoxOpened`, whether to pay the cold-bust consolation) are carried on EXPLICIT named parameters — `emitLootboxEvent` and `payColdBustConsolation` (the `f7a6fccd` remediation parameter) — not on an overloaded `index` sentinel value. This is strictly safer than the v39 sentinel: an explicit `bool` parameter cannot be spoofed by a player passing a crafted `index`, and the storage-collision concern of the v39 sentinel (a real lootbox index reaching `0xFFFFFFFFFFFF`) is structurally eliminated because the `index` parameter no longer gates behavior at all — it is purely an event identifier, and auto-resolve callers pass `index = 0` (not the sentinel).
+
+#### Surface (h) — _queueLootboxTickets wrapper retirement + ENT-05 BAF xorshift refactor structural integrity
+
+**Verdict:** SAFE_BY_STRUCTURAL_CLOSURE.
+
+**Evidence:**
+- §3.A Row Group 4 JPT-CLEAN-05: `EntropyLib.entropyStep` DELETED (library keeps only `hash2`); zero-caller `_queueLootboxTickets` wrapper DELETED from `DegenerusGameStorage.sol`.
+- §3.A Row Group 4 JPT-CLEAN-04: `_jackpotTicketRoll` evolves `entropy` via `EntropyLib.hash2(entropy, entropy)` keccak self-mix instead of the deleted xorshift.
+- §3.B clean-deletion attestation: `grep -rn "EntropyLib.entropyStep" contracts/` and `grep -rn "_queueLootboxTickets" contracts/` both return empty — zero orphaned callsites.
+- Phase 278 TST-CLEAN-01/02 empirical witnesses: post-keccak-refactor statistical invariant (N=20K chi2 uniformity + 2-roll uniqueness + `bits[200..215]` independence under the keccak word) + `_queueLootboxTickets` wrapper-removal regression (zero remaining references; 3 sibling helpers `_queueTickets`/`_queueTicketsScaled`/`_queueTicketRange` still present).
+
+**Grep recipe (clean deletion + sibling-helper preservation):**
+```
+grep -rn "EntropyLib.entropyStep\|_queueLootboxTickets" contracts/      # expected: empty
+grep -nE "function _queueTickets\b|function _queueTicketsScaled|function _queueTicketRange|function hash2" contracts/
+```
+Expected output: zero `EntropyLib.entropyStep` / `_queueLootboxTickets` references; the 3 sibling queue helpers + `EntropyLib.hash2` all present.
+
+**Prose justification:** Phase 278 retires two dead-code artifacts and refactors the BAF entropy path. `_queueLootboxTickets` was a thin wrapper around `_queueTicketsScaled`; its sole caller was `JackpotModule.sol:2216`, which Phase 276 had already swapped to direct `_queueTickets(whole)` — so by Phase 278 the wrapper was zero-caller dead code. Deleting it is a clean source-hygiene removal: §3.B's `grep -rn "_queueLootboxTickets" contracts/` returns empty, confirming zero orphaned callsites; the 3 sibling helpers (`_queueTickets`, `_queueTicketsScaled`, `_queueTicketRange`) are untouched and still present. `EntropyLib.entropyStep` was the xorshift PRNG; its sole live consumer `_jackpotTicketRoll` was swapped to `EntropyLib.hash2(entropy, entropy)` (a full-diffusion keccak self-mix) in the SAME commit (`8a81a87c`), so the deletion left zero orphaned callsites — §3.B confirms `grep -rn "EntropyLib.entropyStep" contracts/` returns empty. The ENT-05 refactor strengthens the entropy path: the BAF roll's low-bit path/level consumers and the `bits[200..215]` Bernoulli slice now read a full-diffusion keccak word instead of an xorshift word with known theoretical weaknesses (cannot produce zero state, fixed cycle, correlated consecutive outputs). The keccak swap intentionally CHANGES the BAF roll output for a given seed (not byte-equivalent to v39) — this is permitted and is the point of the refactor. The 2-roll per-roll-uniqueness invariant in `_awardJackpotTickets` is structurally preserved with zero body edit: the return-and-rethread pattern means roll 2's input is roll 1's keccak output, distinct by keccak collision-resistance. `EntropyLib` is now a single-primitive library (`hash2` only). This refactor STRUCTURALLY ELIMINATES the v36.0 EXC-04 known-issue (the EntropyLib XOR-shift PRNG for BAF jackpot ticket rolls) — there is no xorshift PRNG and no xorshift consumer anywhere in `contracts/` at v40 HEAD. See §6 for the EXC-04 KI envelope disposition.
+
+#### Surface (i) — Mint-boost path byte-equivalent at v40 HEAD — status-quo preservation per D-40N-MINTBOOST-OUT-01
+
+**Verdict:** SAFE_BY_STRUCTURAL_CLOSURE.
+
+**Evidence:**
+- §3.B closing attestation: `DegenerusGameMintModule.sol` carries only a comment-only NatSpec touch (Phase 278 `8a81a87c`); its mint-boost logic is byte-identical at v40 HEAD vs `6a7455d1`.
+- §3.A Row Group 4 JPT-CLEAN-04: the only `DegenerusGameMintModule.sol` change in the entire v40.0 milestone is the `:649` `_rollRemainder` design-rationale comment rewrite (drops the dead `entropyStep` name) — DOCS_ONLY classification.
+- Phase 275 TST-LBX-AR-06 + Phase 279 TST-BUR-04 empirical witnesses: mint-boost regression confirms `_rollRemainder` STILL fires for mint-boost queues (`_queueTicketsScaled(buyer, targetLevel, adjustedQty, false)` retained at `MintModule:1142`); mint-boost flip-credit at `MintModule:1199` retains status-quo fractional emission (no whole-BURNIE floor).
+
+**Grep recipe (mint-boost status-quo: _queueTicketsScaled + _rollRemainder + rem byte STAY):**
+```
+grep -nE "_queueTicketsScaled\(buyer, targetLevel|_rollRemainder|creditFlip\(buyer, lootboxFlipCredit\)" contracts/modules/DegenerusGameMintModule.sol
+git diff 6a7455d1..HEAD -- contracts/modules/DegenerusGameMintModule.sol | grep -cE "^\+" | grep -qvE "comment|NatSpec"
+```
+Expected output: `_queueTicketsScaled(buyer, targetLevel, adjustedQty, false)` present at `MintModule:1142`; `_rollRemainder` present at >=4 callsites; `coinflip.creditFlip(buyer, lootboxFlipCredit)` present at `MintModule:1199`; the `git diff` for `DegenerusGameMintModule.sol` shows 6 changed lines, all the comment-only touch.
+
+**Prose justification:** D-40N-MINTBOOST-OUT-01 holds the mint-boost path explicitly OUT OF SCOPE for v40.0 — mint-boost is a deterministic dust accumulator driven by `priceWei / (4 * TICKET_SCALE)` arithmetic on user-controllable mint amounts, NOT RNG-driven, so the user-controllable input forbids Bernoulli rounding (which needs commit-time-unknown RNG). The audit subject for surface (i) is whether v40 preserved this status quo. It did: the ONLY change to `DegenerusGameMintModule.sol` across the entire v40.0 milestone is a single comment-only NatSpec touch in Phase 278 `8a81a87c` (the `_rollRemainder` design-rationale comment at `:649` was rewritten to drop the dead `entropyStep` name while keeping the keccak-over-XOR rationale — `git diff 6a7455d1..HEAD` shows 6 changed lines, all comment text). The `_queueTicketsScaled(buyer, targetLevel, adjustedQty, false)` callsite at `MintModule:1142` STAYS; `_rollRemainder` STAYS (it is still invoked at >=4 callsites for mint-boost remainder resolution at trait-assignment time); the `rem` byte in `ticketsOwedPacked` STAYS. The mint-boost flip-credit at `MintModule:1199` (`coinflip.creditFlip(buyer, lootboxFlipCredit)`) also STAYS un-floored per D-40N-BUR-MINTBOOST-OUT-01 — `lootboxFlipCredit` derives from deterministic mint-amount arithmetic (user-altered input), NOT RNG, so it is out of the v40.0 "RNG-driven BURNIE awards" framing and retains status-quo fractional emission. Phase 275 TST-LBX-AR-06 confirms `_rollRemainder` still fires for mint-boost queues; Phase 279 TST-BUR-04's mint-boost negative cross-site assertion confirms `MintModule:1199` flip-credit has NO whole-BURNIE floor. The mint-boost path is byte-equivalent at v40 HEAD modulo the one comment-only touch.
+
+#### Surface (j) — Lootbox spin BURNIE floor at LootboxModule:1080 — RNG-amount-rounding invariant
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- §3.A Row Group 5 BUR-01: `_resolveLootboxCommon` floors the post-bonus `burnieAmount` accumulator via `burnieAmount = (burnieAmount / 1 ether) * 1 ether` before the `if (burnieAmount != 0)` guard; the floored value flows to `coinflip.creditFlip`, the `LootBoxOpened.burnie` event field, and the return tuple.
+- §3.C AUDIT-03 conservation re-proof (3): the floor is a one-directional integer-division floor — it can only round DOWN; sub-1-BURNIE residues evaporate per D-40N-BUR-DUST-01.
+- §3.A Row Group 5 BUR-04: storage byte-identical; zero new state vars / events / emit sites.
+- Phase 279 TST-BUR-01 + TST-BUR-04 empirical witnesses: floor regression at `LootboxModule:1080` (boundary cases 0.99 BURNIE -> 0, 1.99 -> 1, 2.00 -> 2, 0 -> 0; `LootBoxOpened.burnie` emits the floored amount) + invariant sweep `amount % 1 ether == 0` at N=20,000.
+
+**Grep recipe (floor ordering before the guard + emit):**
+```
+grep -nE "burnieAmount = \(burnieAmount / 1 ether\) \* 1 ether|if \(burnieAmount != 0\)|coinflip.creditFlip\(player, burnieAmount\)" contracts/modules/DegenerusGameLootboxModule.sol
+```
+Expected output: the floor statement at `:1023`, the `if (burnieAmount != 0)` guard at `:1078`, the `coinflip.creditFlip(player, burnieAmount)` callsite at `:1079` — floor ordered BEFORE the guard, and the bare floored `burnieAmount` local consumed by all 3 downstream consumers.
+
+**Prose justification:** The variance-roll-derived BURNIE amount at `_resolveLootboxCommon` (computed via `_resolveLootboxRoll` at the upstream call sites, flowing through the `burnieNoMultiplier + burniePresale` accumulator) is floored to a whole-BURNIE multiple via `burnieAmount = (burnieAmount / 1 ether) * 1 ether` BEFORE the `if (burnieAmount != 0)` guard. The floor is a per-spin integer-division floor — it can only ever round DOWN, so it cannot over-issue protocol value; it is solvency-favouring, aligned with the protocol-wide "all rounding favors solvency" design decision. The variance-roll EV-floor is preserved: a spin that would have awarded 1.47 BURNIE now awards 1 BURNIE, a spin that would have awarded 0.99 BURNIE now awards 0 (the dust evaporates). Per-spin per-player dust loss is bounded < 1 BURNIE per D-40N-BUR-DUST-01 ("sub 1 burnie amounts are economically negligible" — user disposition 2026-05-13). There is NO consolation, NO replacement event, NO cursor-rotation residue redistribution at this site per D-40N-BUR-SILENT-01. The `LootBoxOpened.burnie` event field emits the POST-floor amount — there is no separate scaled-pre snapshot, so off-chain consumers see exactly what was credited. Critically, this surface is SAFE on its own merits INDEPENDENT of the BUR-05 +114-byte bytecode delta documented in §3.C: the +114 bytes is a Yul optimizer stack-spill artifact of `_resolveLootboxCommon` being at the stack-depth ceiling — it is a code-SIZE deviation, not a behavior change; the BUR-01 floor's correctness (round-down-only, EV-floor preserved, no over-issuance) is established by the integer-division semantics alone and does not depend on the bytecode-size outcome. The per-spin floor's theoretical worst-case runtime cost is ~10-15 gas (`DIV` + `MUL`), derived first per `feedback_gas_worst_case.md`. Phase 279 TST-BUR-01's boundary cases (0.99 -> 0, 1.99 -> 1, 2.00 -> 2 exact, 0 -> 0 via the preserved `if (burnieAmount != 0)` guard) and TST-BUR-04's `amount % 1 ether == 0` invariant sweep at N=20,000 are the empirical witnesses.
+
+#### Surface (k) — JackpotModule near-future (:1842) + far-future (:1900) coin jackpot BURNIE floor
+
+**Verdict:** SAFE_BY_DESIGN.
+
+**Evidence:**
+- §3.A Row Group 5 BUR-02: `_awardDailyCoinToTraitWinners` floors `baseAmount` via `((coinBudget / cap) / 1 ether) * 1 ether`; the `extra` / `cursor` declarations + both `++cursor`/wrap blocks + the `amount += 1` cursor-rotation block are FULLY DELETED per the A1 floor-per-winner mechanic (D-40N-BUR-FLOOR-01).
+- §3.A Row Group 5 BUR-03: `_awardFarFutureCoinJackpot` floors `perWinner` via `((farBudget / found) / 1 ether) * 1 ether` before the unchanged `if (perWinner == 0) return` early-bail.
+- §3.A Row Group 5 BUR-04: storage byte-identical for both modules; zero new state vars / events / emit sites.
+- Phase 279 TST-BUR-02 + TST-BUR-03 + TST-BUR-04 empirical witnesses: near-future floor + dead-var-removal + budget-evaporation regression; far-future floor + early-bail regression; the 3-site `amount % 1 ether == 0` invariant sweep + mint-boost negative cross-site assertion.
+
+**Grep recipe (both floors + cursor-rotation residue retirement):**
+```
+grep -nE "baseAmount = \(\(coinBudget / cap\) / 1 ether\)|perWinner = \(\(farBudget / found\) / 1 ether\)|if \(perWinner == 0\) return" contracts/modules/DegenerusGameJackpotModule.sol
+grep -nE "\bextra\b|\bcursor\b" contracts/modules/DegenerusGameJackpotModule.sol   # only out-of-scope ticket-award region near :996-1021 matches
+```
+Expected output: the `baseAmount` floor at `:1789`, the `perWinner` floor at `:1896`, the `if (perWinner == 0) return` early-bail at `:1897`; the `extra`/`cursor` grep matches only the OUT-OF-SCOPE ticket-award cursor-rotation region near `:996-1021` (the near-future-coin-jackpot `extra`/`cursor` machinery is fully deleted).
+
+**Prose justification:** Two near/far-future coin-jackpot BURNIE-award sites are floored per the A1 floor-per-winner mechanic (D-40N-BUR-FLOOR-01 — NOT A2 budget-floor-redistribute, NOT A3 winner-count-adjust). At `_awardDailyCoinToTraitWinners` (`:1842`), `baseAmount = coinBudget / cap` is floored to `((coinBudget / cap) / 1 ether) * 1 ether`; the existing `extra = coinBudget % cap` cursor-rotation `if (extra != 0 && cursor < extra) amount += 1` distribution is FULLY RETIRED — the `extra`/`cursor` declarations, both `++cursor`/wrap blocks, and the `amount += 1` block are deleted (the A1 floor-per-winner mechanic does not redistribute the residue). When `baseAmount < 1 ether`, every near-future-coin-jackpot winner that day receives 0 BURNIE and the full daily near-future BURNIE jackpot budget evaporates — accepted per D-40N-BUR-DUST-01. The existing `if (winner != address(0) && amount != 0)` emit-guard absorbs the zero-amount case for free (no `JackpotBurnieWin` emit, no `creditFlip`). At `_awardFarFutureCoinJackpot` (`:1900`/`:1922`), `perWinner = farBudget / found` is floored to `((farBudget / found) / 1 ether) * 1 ether` BEFORE the unchanged `if (perWinner == 0) return` early-bail — so when the post-floor `perWinner` is 0 the function early-bails (no `creditFlipBatch` invocation) and the 25% far-future BURNIE allocation evaporates that day. Both floors are one-directional integer-division floors — they can only round DOWN, never over-issue protocol value; they are solvency-favouring. The daily-budget-evaporation ledger when per-winner < 1 BURNIE is the accepted D-40N-BUR-DUST-01 outcome — there is NO budget-residue accounting, NO consolation, NO replacement event per D-40N-BUR-SILENT-01; the existing `JackpotBurnieWin.amount` and `FarFutureCoinJackpotWinner.perWinner` event fields emit the post-floor amounts. The mint-boost flip-credit at `MintModule:1199` is NOT floored (D-40N-BUR-MINTBOOST-OUT-01 — `lootboxFlipCredit` derives from deterministic mint-amount arithmetic, not RNG-amount; out of v40.0 BUR scope) — Phase 279 TST-BUR-04's mint-boost negative cross-site assertion confirms the status-quo preservation. Like surface (j), surface (k) is SAFE on its own merits INDEPENDENT of the BUR-05 +114-byte bytecode delta: the +140-byte LootboxModule component of that delta is entirely a `_resolveLootboxCommon` stack-spill artifact (BUR-01); the JackpotModule component is correctly −26 bytes (NET-NEGATIVE — the `extra`/`cursor` dead-var removal outweighs the 2 inline floors). The near/far-future floors' correctness rests on the integer-division semantics + the early-bail / emit-guard structure, not on any bytecode-size outcome. Theoretical worst-case runtime cost per floor: ~10-15 gas (`DIV` + `MUL`), derived first per `feedback_gas_worst_case.md`; the `extra`/`cursor` dead-var removal is net gas-NEGATIVE per-iteration.
+
+#### RNG commitment-window degenerate-PASS roll-up (surfaces a-e)
+
+Per `feedback_rng_commitment_window.md`: every v40.0 RNG surface (a)-(e) carries a degenerate-PASS commitment-window verdict. The auto-resolve LootboxModule branch and the JackpotModule `_jackpotTicketRoll` path both consume slices of a VRF-derived keccak word that is committed before the player's input-commitment point — for manual-adjacent paths the `RngNotReady` guard + index-advance isolation structurally close the window, and for the system-driven auto-resolve / `advanceGame` paths the resolution inputs are fixed against committed daily state with no player-controllable mutation between VRF request and fulfillment. The Phase 278 ENT-05 keccak refactor introduces no new player-controllable preimage input (the `hash2(entropy, entropy)` self-mix consumes only the already-committed `entropy` word). Bot front-run via VRF mempool visibility remains STRUCTURALLY PREVENTED (carry-forward from the v36/v37/v38/v39 commitment-window verdicts). Commitment-window check is degenerate-PASS across all 5 RNG surfaces.
+
+### 4.2. Verdict Roll-Up + Adversarial-Pass Status
+
+**11 of 11 surfaces (a)..(k) SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE; zero F-40-NN finding blocks emitted; zero KI promotion candidates from new findings; 3-skill PARALLEL adversarial pass per D-40N-ADVERSARIAL-01 disposition: ZERO DISAGREEMENTS; ZERO residual FINDING_CANDIDATE.**
+
+Per-surface verdict distribution: (a) SAFE_BY_DESIGN, (b) SAFE_BY_DESIGN, (c) SAFE_BY_DESIGN, (d) SAFE, (e) SAFE_BY_DESIGN, (f) SAFE, (g) SAFE, (h) SAFE_BY_STRUCTURAL_CLOSURE, (i) SAFE_BY_STRUCTURAL_CLOSURE, (j) SAFE_BY_DESIGN, (k) SAFE_BY_DESIGN — SAFE_BY_DESIGN x 6, SAFE x 3, SAFE_BY_STRUCTURAL_CLOSURE x 2. All 11 in the SAFE-bucket family; zero F-40-NN finding blocks emitted.
+
+Adversarial-pass validation via `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` (3 skills PARALLEL spawn per D-40N-ADVERSARIAL-01 — single-message spawn; `/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry) on the finished §4 11-surface inline draft. Full output logged in `.planning/phases/280-delta-audit-findings-consolidation-terminal/280-01-ADVERSARIAL-LOG.md`.
+
+**Disposition summary (per `280-01-ADVERSARIAL-LOG.md` Disposition section):**
+- `/contract-auditor`: 11 of 11 surface verdicts AGREE; Solidity-level edge-case sweep (storage-layout byte-identity chain, the `payColdBustConsolation` parameter-position correctness, the viaIR helper-extraction behavior-preservation, the `_resolveLootboxCommon` stack-depth-ceiling reorder safety, the keccak `hash2` self-mix per-roll uniqueness) — zero FINDING_CANDIDATE; zero 12th-surface NEW_VECTOR.
+- `/zero-day-hunter`: 11 of 11 surface verdicts concur; numbered novel-vector hypotheses (cross-surface seed reuse between manual + auto-resolve, the topic-hash break as an indexer-confusion griefing vector, the daily-budget-evaporation as a coordination surface, the BUR-05 stack-spill as a gas-griefing lever, the sentinel-retirement removing a defense-in-depth layer) — all dispositioned NEGATIVE_RESULT_ONLY; zero FINDING_CANDIDATE.
+- `/economic-analyst`: 11 of 11 surface verdicts concur; mechanism-design / rational-actor analysis (the EV-neutrality surfaces (a)/(b) variance-tradeoff welfare impact, the BUR daily-budget-evaporation surfaces (j)/(k) incentive analysis, the silent-cold-bust asymmetry vs the v39 manual-path consolation) — dispositioned NEGATIVE_RESULT_ONLY / ACCEPTED_DESIGN; zero KI promotion candidates.
+
+**Combined cross-skill verdict:** v40.0 §4 verdict roll-up STANDS at 11 of 11 SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE. Zero F-40-NN finding blocks emit per D-40N-KI-01 carry default path. KNOWN-ISSUES.md is MODIFIED at v40 close — but by the EXC-04 REMOVAL (a structurally-eliminated mechanism), NOT by a promotion from a new finding. The TICKET-granularity variance tradeoff (D-40N-GRANULARITY-01) and the auto-resolve/jackpot silent-cold-bust asymmetry (D-40N-SILENT-01) are documented as accepted-design via §4 (a)/(b)/(e) prose + the locked decisions — NOT promoted to KNOWN-ISSUES.md.
+
+---
