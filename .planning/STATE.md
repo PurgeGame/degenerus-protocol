@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v40.0
 milestone_name: Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor
-status: executing
-last_updated: "2026-05-14T08:06:10.267Z"
-last_activity: 2026-05-14 -- Phase 277 Plan 01 (contract wave) COMPLETE
+status: verifying
+last_updated: "2026-05-14T09:16:02.330Z"
+last_activity: 2026-05-14 -- Phase 277 COMPLETE (Plan 01 contract wave + Plan 02 test wave) — ready for verification
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 6
-  completed_plans: 5
-  percent: 39
+  completed_plans: 6
+  percent: 50
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.
 
 ## Current Position
 
-Phase: 277 (event-surface-unification-sentinel-retirement-evt-uni) — EXECUTING
-Plan: 2 of 2 (277-01 contract wave COMPLETE; 277-02 test wave next)
-Status: Executing Phase 277
-Last activity: 2026-05-14 -- Phase 277 Plan 01 (contract wave) COMPLETE — USER-APPROVED commit `02fb7085`
+Phase: 277 (event-surface-unification-sentinel-retirement-evt-uni) — COMPLETE
+Plan: 2 of 2 (277-01 contract wave COMPLETE `02fb7085`; 277-02 test wave COMPLETE `6fbee850`)
+Status: Phase 277 complete — ready for verification
+Last activity: 2026-05-14 -- Phase 277 Plan 02 (test wave) COMPLETE — USER-APPROVED commit `6fbee850`
 
 ## Last Shipped Milestone
 
@@ -231,6 +231,15 @@ Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-fo
 - **D-40N-EVT-BREAK-01 honored:** breaking ABI change accepted — `LootBoxOpened`/`BurnieLootOpen`/`JackpotTicketWin` topic-hashes change, `LootboxTicketRoll` removed; pre-launch, indexer rebuild expected, no live indexer impact. Storage layout byte-identical to v39 baseline `6a7455d1`.
 - **Next:** Phase 277 Plan 02 (test wave — `277-02-PLAN.md`).
 
+### Phase 277 Plan 02 — Event Surface Unification + Sentinel Retirement, test wave (executing 2026-05-14)
+
+- **277-02 COMPLETE** — 1 USER-APPROVED batched test commit `6fbee850` (`test(277): event surface unification test wave [TST-EVT-UNI-01..06]`; 7 files +1,341/−379: new `test/unit/EventSurfaceUnification.test.js` +665 + 5 modified precedent test files + `package.json` 1-line `test:evt-uni` wiring). NOT pushed (local-only; future push is a separate user gate per `feedback_manual_review_before_push.md`). 6/6 TST-EVT-UNI-01..06 satisfied. **Phase 277 COMPLETE** — both Plan 01 (contract `02fb7085`) and Plan 02 (test `6fbee850`) landed as USER-APPROVED commits; neither pushed.
+- **What landed:** new `test/unit/EventSurfaceUnification.test.js` — six `describe` blocks (one per TST-EVT-UNI requirement) following the Phase 274/275/276 source-structural + compiled-ABI precedent (no end-to-end resolution fixture — that gap stays RE-DEFERRED, LBX-02): topic-hash change tests via `ethers.Interface` on the freshly compiled post-Wave-1 ABIs, `LootboxTicketRoll` removal sweep across `contracts/`, `index != type(uint48).max` sentinel-retirement structural proof, manual/auto-resolve/jackpot field-consistency derived from `futureTickets`/`tickets` + `roundedUp` per D-277-NO-PREROLL-01, auto-resolve silence proof. Plus targeted retargeting of 5 precedent test files off their stale Wave-1 assertions (`LootboxAutoResolveRegression`, `LootboxWholeTicket`, `JackpotTicketRollSilentColdBust`, `LootboxConsolation`, `LootboxAutoResolveSilentColdBust`).
+- **D-277-02-FOLDIN-01 (scope expansion, user-approved):** the plan's original `files_modified` named 4 test files; the Task 3 affected-suite run found `LootboxConsolation.test.js` + `LootboxAutoResolveSilentColdBust.test.js` also asserting the retired sentinel surface (8 failures). Per the plan's Task 3 directive they were surfaced to the user rather than silently fixed; the user explicitly approved folding them into the batched diff. Final batched commit = 6 test files + `package.json`.
+- **D-277-02-WT05-BASELINE-01:** `LootboxWholeTicket.test.js` TST-WT-05 `[05b]` baseline-diff against v38 `06623edb` replaced with a direct structural assertion — the v38 baseline is three phases stale and the `grep -c` diff-count test was no longer meaningful.
+- **Verification:** `npx hardhat test` on all 6 affected files — **107 passing, 0 failing**. `contracts/ContractAddresses.sol` + `package-lock.json` (pre-existing unrelated working-tree changes) deliberately NOT staged. No test references a `preRollTickets` field. Harmless trailing mocha file-unloader `MODULE_NOT_FOUND` on per-file CLI runs is a documented repo quirk (Phase 275/276 precedent), does not affect results.
+- **Next:** Phase 277 verification gate, then Phase 276/278/279 surface phases per the v40.0 ROADMAP sequencing.
+
 Decisions and completed milestones logged in `.planning/PROJECT.md`.
 Detailed milestone retrospectives in `.planning/RETROSPECTIVE.md` (v37.0 / v36.0 / v35.0 sections most recent).
 Archived milestone artifacts:
@@ -271,3 +280,14 @@ Audit deliverables:
 ## Operator Next Steps
 
 - Start the next milestone with /gsd-new-milestone
+
+## Performance Metrics
+
+| Phase | Plan | Duration | Tasks | Files |
+|-------|------|----------|-------|-------|
+| 277 | 02 | ~1h | 3 | 7 |
+
+## Decisions
+
+- [Phase 277]: D-277-02-FOLDIN-01: LootboxConsolation + LootboxAutoResolveSilentColdBust folded into 277-02 batched test diff with explicit user approval — 277-01 sentinel retirement invalidated their assertions, expanding scope from 4 to 6 test files + package.json
+- [Phase 277]: D-277-02-WT05-BASELINE-01: TST-WT-05 [05b] baseline-diff (vs v38 06623edb) replaced with a direct structural assertion — v38 baseline three phases stale, diff-count test no longer meaningful
