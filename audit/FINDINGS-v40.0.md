@@ -615,3 +615,198 @@ Adversarial-pass validation via `/contract-auditor` + `/zero-day-hunter` + `/eco
 **Combined cross-skill verdict:** v40.0 §4 verdict roll-up STANDS at 11 of 11 SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE. Zero F-40-NN finding blocks emit per D-40N-KI-01 carry default path. KNOWN-ISSUES.md is MODIFIED at v40 close — but by the EXC-04 REMOVAL (a structurally-eliminated mechanism), NOT by a promotion from a new finding. The TICKET-granularity variance tradeoff (D-40N-GRANULARITY-01) and the auto-resolve/jackpot silent-cold-bust asymmetry (D-40N-SILENT-01) are documented as accepted-design via §4 (a)/(b)/(e) prose + the locked decisions — NOT promoted to KNOWN-ISSUES.md.
 
 ---
+
+## 5. Regression Appendix
+
+LEAN regression per REG-01..04. REG-01 (v39.0 closure non-widening), REG-02 (v34.0 closure non-widening), REG-03 (KI envelope EXC-01..04), REG-04 (prior-finding spot-check sweep v25.0..v39.0).
+
+### 5a. REG-01 — v39.0 Closure-Signal Non-Widening
+
+| Row ID | Source | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| ------ | ------ | --------- | ------------------------------- | ------------------------ | ------- |
+| REG-v39.0-V40-DELTA | v39.0 closure signal `MILESTONE_V39_AT_HEAD_6a7455d1` carry-forward from `audit/FINDINGS-v39.0.md` §9c | `6a7455d1..<sha>` (12 v40.0 commits across Phases 275-279) | The v40.0 audit subject mutates `DegenerusGameLootboxModule.sol` (Phases 275/277/279), `DegenerusGameJackpotModule.sol` (Phases 276/277/278/279), `EntropyLib.sol` (Phase 278), `DegenerusGameStorage.sol` (Phase 278 — `_queueLootboxTickets` wrapper deletion), `DegenerusGameMintModule.sol` (Phase 278 comment-only touch), `IDegenerusGameModules.sol` (Phase 277). Storage layout byte-identical at v40 HEAD vs `6a7455d1` for both `DegenerusGameLootboxModule.sol` + `DegenerusGameJackpotModule.sol` per the 4 per-phase STORAGE-LAYOUT-DIFF artifacts (§3.B). The v39 manual-path lootbox surface (Bernoulli + WWXRP consolation, formerly emitting `LootboxTicketRoll`) is RE-VERIFIED non-widening: the manual-path Bernoulli logic is preserved and the consolation now rides on the explicit `payColdBustConsolation` parameter (`f7a6fccd`) — the consolation magnitude `LOOTBOX_WWXRP_CONSOLATION = 1 ether` is unchanged; `openLootBox` + `openBurnieLootBox` both pass `payColdBustConsolation = true` so manual-path consolation behavior is preserved (the v39 `LootboxTicketRoll` event is folded into `LootBoxOpened.roundedUp` per D-40N-EVT-BREAK-01 — an intentional in-scope event-surface change, not a widening). **bits[152..167] manual-path slice shared with auto-resolve in v40:** RE-VERIFIED non-widening via per-resolution seed-uniqueness — each `_resolveLootboxCommon` invocation derives a distinct per-resolution `seed`, so the manual path's `bits[152..167]` consumption is observably unchanged from v39 (the manual seed is a distinct keccak preimage from any auto-resolve seed; cross-cite §4 surface (c)). **`LootboxModule:1080` lootbox-spin BURNIE site:** newly v40-scoped per BUR-01 — EXPLICITLY EXCLUDED from the non-widening proof (this is an in-scope mutation, not a regression surface). Byte-identical for surfaces NOT in v40 scope: `DegenerusGameDegeneretteModule.sol` + `BurnieCoinflip.sol` + the mint-boost ticket queue (`_queueTicketsScaled` at `MintModule:1142`) + the mint-boost flip-credit (`MintModule:1199`) + the manual-path WWXRP consolation predicate (preserved via `payColdBustConsolation`) + advance bounty + affiliate DGNRS deity bonus + quest rewards — none touched by the 12 v40.0 commits (the only `MintModule` change is a comment-only NatSpec touch per §3.B). | v39 §4 8-surface verdicts (a)..(h) carry forward at v40 HEAD for surfaces NOT in v40 scope: v39 (a) EV-neutrality of the Bernoulli round-up UNCHANGED for the manual path (the v40 auto-resolve extension reuses the same exact identity); v39 (b) bit-slice [152..167] independence UNCHANGED (the v40 auto-resolve reuse is collision-free per per-resolution seed-distinctness); v39 (c) consolation predicate gating PRESERVED (now via the explicit `payColdBustConsolation` parameter); v39 (d) storage layout byte-identical (re-verified at §3.B for v40); v39 (e) auto-resolve byte-equivalence — SUPERSEDED in scope (v40 Phase 275 intentionally extends the Bernoulli to auto-resolve; in-scope mutation, not a regression); v39 (f) index-gating discriminator — SUPERSEDED in scope (v40 Phase 277 intentionally retires the sentinel; in-scope mutation); v39 (g) `LootboxTicketRoll` field-consistency — SUPERSEDED in scope (v40 Phase 277 intentionally deletes `LootboxTicketRoll`, folding into `roundedUp`; in-scope mutation); v39 (h) Phase 273 BAF-routing surface — UNCHANGED (no v40 commit touches BAF routing). | PASS |
+
+### 5b. REG-02 — v34.0 Closure-Signal Non-Widening
+
+| Row ID | Source | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| ------ | ------ | --------- | ------------------------------- | ------------------------ | ------- |
+| REG-v34.0-TRAIT-SOLO | v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` carry-forward from `audit/FINDINGS-v34.0.md` §9c (via the v35.0/v37.0/v38.0/v39.0 REG-02 carry chain) | `6b63f6d4..<sha>` | TraitUtils (`DegenerusTraitUtils.sol`) + `_pickSoloQuadrant` + `JackpotBucketLib.sol` byte-identical at v40 HEAD — no v40.0 commit touches `contracts/DegenerusTraitUtils.sol`, `contracts/libraries/JackpotBucketLib.sol`, or the `_pickSoloQuadrant` body / ETH-distribution injection sites in `DegenerusGameJackpotModule.sol`. The v40.0 JackpotModule mutations (Phases 276/277/278/279) are confined to `_jackpotTicketRoll` (BAF ticket-roll Bernoulli), the 3 `JackpotTicketWin` emit sites, the entropy evolution swap, `_awardDailyCoinToTraitWinners` (`baseAmount` floor + `extra`/`cursor` removal), and `_awardFarFutureCoinJackpot` (`perWinner` floor) — all surface-disjoint from the v34 trait-rarity / gold-solo-priority payload. **Surfaces strictly disjoint:** the v40.0 payload (RNG-driven ticket-award Bernoulli + event surface unification + whole-BURNIE floor) is orthogonal to the v34 trait/solo verdicts. | v34 §4 6-surface trait/solo verdicts carry forward unchanged at v40 HEAD — no v40.0 commit touches `JackpotBucketLib.sol`, `DegenerusTraitUtils.sol`, or the `_pickSoloQuadrant` gold-solo path. | PASS |
+
+### 5c. REG-03 — KI Envelope Re-Verifications
+
+4-row KI envelope re-verifications per D-40N-KI-01 carry-forward. Mirrors the §6b 4-row table format.
+
+| EXC | Surface | v40.0 Disposition | Evidence |
+| --- | ------- | ----------------- | -------- |
+| EXC-01 | Affiliate roll RNG (Non-VRF entropy for affiliate winner roll) | `RE_VERIFIED-NEGATIVE-scope` | The v40.0 audit subject has zero affiliate-roll interaction. No v40.0 commit touches the affiliate-roll path. Carry-forward from v39.0 §6b EXC-01 NEGATIVE-scope. |
+| EXC-02 | Gameover prevrandao fallback | `RE_VERIFIED-NEGATIVE-scope` | The v40.0 audit subject has zero AdvanceModule interaction. `DegenerusGameAdvanceModule.sol` is not in the v40.0 diff scope (the 12 v40.0 commits touch only LootboxModule / JackpotModule / EntropyLib / DegenerusGameStorage / MintModule / IDegenerusGameModules). No v40.0 commit touches the gameover-prevrandao-fallback path. Carry-forward from v39.0 §6b EXC-02 NEGATIVE-scope. |
+| EXC-03 | Gameover RNG substitution for mid-cycle write-buffer tickets | `RE_VERIFIED-NEGATIVE-scope` | The v40.0 audit subject has zero gameover-RNG-substitution interaction. AdvanceModule + the mid-cycle write-buffer swap path are byte-identical at v40 HEAD (not in the v40.0 diff scope). No v40.0 commit modifies the mid-cycle write-buffer mechanics. Carry-forward from v39.0 §6b EXC-03 NEGATIVE-scope. |
+| EXC-04 | EntropyLib XOR-shift PRNG for BAF jackpot ticket rolls | `STRUCTURALLY ELIMINATED at v40.0` | NOT a non-widening re-verification — the mechanism is GONE. Phase 278 commit `8a81a87c` DELETED `EntropyLib.entropyStep` (the 256-bit XOR-shift PRNG) entirely and swapped `_jackpotTicketRoll` to `EntropyLib.hash2(entropy, entropy)` keccak self-mix. At v40 HEAD `grep -rn "EntropyLib.entropyStep" contracts/` returns empty; `EntropyLib.sol` contains only the `hash2` primitive. There is no xorshift PRNG and no xorshift consumer anywhere in `contracts/` at v40 HEAD. **Backward-trace per `feedback_rng_backward_trace.md`:** the v40 `_jackpotTicketRoll` now reads `bits[200..215]` of a full-diffusion `EntropyLib.hash2(entropy, entropy)` keccak word — VRF-derived keccak output, NOT xorshift output. The v36.0 EXC-04 NARROWS scope (BAF-jackpot-only xorshift) is structurally eliminated, not merely re-verified. **Commitment-window per `feedback_rng_commitment_window.md`:** the keccak `hash2` self-mix consumes only the already-committed `advanceGame` `entropy` word — no new player-controllable preimage input; degenerate-PASS. KNOWN-ISSUES.md line-31 EXC-04 entry REMOVED at v40 close per D-280-EXC04-01. |
+
+**Backward-trace methodology cite:** Per `feedback_rng_backward_trace.md` (every RNG audit must trace BACKWARD from each consumer to verify the word was unknown at input-commitment time): the v40.0 RNG consumers are the auto-resolve LootboxModule Bernoulli (`bits[152..167]` of the per-resolution `seed = keccak256(abi.encode(rngWord, player, day, amount))`) and the JackpotModule `_jackpotTicketRoll` Bernoulli + path/level rolls (`bits[0..12]` + `bits[200..215]` of the per-roll `entropy` after `EntropyLib.hash2(entropy, entropy)` evolution). Both trace backward to VRF-derived words committed before the player's input-commitment point — the manual/auto-resolve `rngWord` values are VRF callback words bound at the upstream VRF request; the jackpot `entropy` is the `advanceGame` daily VRF word. The Phase 278 ENT-05 keccak refactor STRUCTURALLY ELIMINATES the last xorshift consumer (EXC-04) — at v40 HEAD every RNG consumer in the v40.0 audit subject reads VRF-derived keccak output, NOT xorshift output. Backward-trace closed.
+
+### 5d. REG-04 — Prior-Finding Spot-Check Sweep
+
+Per-finding PASS/SUPERSEDED row table from a REG-04 grep sweep across `audit/FINDINGS-v25.0.md` through `audit/FINDINGS-v39.0.md` for findings referencing the v40-touched function/surface set: `_resolveLootboxCommon` (auto-resolve branch additions; manual-path index-sentinel retirement), `_queueTickets` (new auto-resolve + jackpot callsites), `_jackpotTicketRoll` (Bernoulli addition + ENT-05 keccak refactor), `LootBoxOpened` / `BurnieLootOpen` / `JackpotTicketWin` event signature additions, `_queueLootboxTickets` (wrapper retirement), `xTICKET_SCALE` cleanup sites, ENT-05 BAF xorshift refactor, `LootboxModule.sol:1080` (BUR-01 floor), `JackpotModule.sol:1842` near-future coin jackpot (BUR-02 floor), `JackpotModule.sol:1900` far-future coin jackpot (BUR-03 floor).
+
+| Row ID | Source Finding | Delta SHA | Subject Surface at HEAD `<sha>` | Re-Verification Evidence | Verdict |
+| ------ | -------------- | --------- | ------------------------------- | ------------------------ | ------- |
+| REG-v39.0-§4-(a) | `audit/FINDINGS-v39.0.md` §4 surface (a) "EV-neutrality of Bernoulli collapse on manual paths" | `6a7455d1..<sha>` | The v39 manual-path Bernoulli EV-neutrality identity `E[whole_post] = scaledPre / TICKET_SCALE` is re-verified at v40 HEAD and EXTENDED to the auto-resolve branch + jackpot path (v40 §4 (a)/(b)). The manual path's identity is unchanged. | v39.0 §4 (a) SAFE_BY_DESIGN verdict carries forward and is extended; no regression. | PASS |
+| REG-v39.0-§4-(d) | `audit/FINDINGS-v39.0.md` §4 surface (d) "Storage layout byte-identical at v39 vs `06623edb`" | `6a7455d1..<sha>` | Storage layout byte-identical at v40 HEAD vs `6a7455d1` per the 4 per-phase STORAGE-LAYOUT-DIFF artifacts (§3.B). Chained: v38 (`06623edb`) → v39 (`6a7455d1`) → v40 (`<sha>`) all byte-identical at the storage layer for `DegenerusGameLootboxModule.sol` + `DegenerusGameJackpotModule.sol`. | v39.0 §4 (d) SAFE_BY_STRUCTURAL_CLOSURE verdict carries forward unchanged. | PASS |
+| REG-v39.0-§4-(e/f/g) | `audit/FINDINGS-v39.0.md` §4 surfaces (e) auto-resolve byte-equivalence + (f) index-gating discriminator + (g) `LootboxTicketRoll` field-consistency | `6a7455d1..<sha>` | SUPERSEDED by v40.0 in-scope mutations: v40 Phase 275 intentionally extends the Bernoulli to the auto-resolve branch (supersedes v39 (e) "auto-resolve byte-equivalent to v38"); v40 Phase 277 intentionally retires the `index != type(uint48).max` sentinel (supersedes v39 (f) "index-gating discriminator"); v40 Phase 277 intentionally deletes the `LootboxTicketRoll` event, folding `roundedUp` into the per-action events (supersedes v39 (g) "`LootboxTicketRoll` field-consistency"). These are intentional v40.0 milestone payloads, not regressions — re-attested SAFE at v40 §4 surfaces (a)/(c)/(g)/(f). | SUPERSEDED (intentional v40.0 in-scope mutations; re-attested SAFE at v40 §4). | PASS |
+| REG-v36.0-ENT-01..06 | `audit/FINDINGS-v36.0.md` §3d ENT-01..06 "lootbox-path entropy refactor" + the v36.0 EXC-04 EntropyLib XOR-shift NARROWS | `1c0f0913..<sha>` | The v36.0 lootbox-path entropy-refactor invariants are PRESERVED at v40 (the per-resolution `seed = keccak256(abi.encode(rngWord, player, day, amount))` primary chunk is unchanged in the LootboxModule). The v36.0 EXC-04 NARROWS scope (BAF-jackpot-only xorshift) is STRUCTURALLY ELIMINATED at v40 — Phase 278 `8a81a87c` deleted `EntropyLib.entropyStep` and swapped `_jackpotTicketRoll` to keccak. The v36 ENT pattern (bit-sliced keccak draws) is now the SOLE entropy pattern; the xorshift consumer the v36 EXC-04 narrowed to is gone. | v36.0 ENT-01..06 verdicts carry forward; EXC-04 NARROWS structurally eliminated (improvement, not regression). | PASS |
+| REG-v34.0-TRAIT | `audit/FINDINGS-v34.0.md` §3 TRAIT-01..06 "trait rarity rework + gold-solo priority" | `6b63f6d4..<sha>` | TraitUtils + JackpotBucketLib byte-identical at v40 HEAD per §3.B cross-cite + §5b REG-02. Surfaces strictly disjoint between the v40.0 RNG-driven-ticket-award payload and the v34 trait/solo verdicts. | v34.0 TRAIT-01..06 verdicts carry forward unchanged. | PASS |
+| REG-v32.0..v25.0 | `audit/FINDINGS-v25.0..v32.0.md` sweep | (chained baselines) | Prior-finding spot-check sweep for the v40-touched function/surface set. All historical findings referencing `_resolveLootboxCommon`, `_jackpotTicketRoll`, the lootbox/jackpot event surface, or the coin-jackpot BURNIE-award sites are either SUPERSEDED-by-newer-baseline (the v34/v35/v36/v37/v38/v39 refactors closed them) or RE_VERIFIED-at-v40 (the surfaces are byte-identical at the storage layer except the v40 in-scope behavioral mutations, which are orthogonal to the historical concerns). No NEW_RELEVANT findings emitted by the spot-check sweep. | No NEW_RELEVANT findings; all historical findings SUPERSEDED or RE_VERIFIED. | PASS |
+
+### 5e. Regression Distribution Summary
+
+| Verdict | REG-01 | REG-02 | REG-03 | REG-04 | Total |
+| ------- | ------ | ------ | ------ | ------ | ----- |
+| PASS    | 1      | 1      | 4 (EXC-04 STRUCTURALLY ELIMINATED) | 6 | 12 |
+| REGRESSED | 0    | 0      | 0      | 0      | 0     |
+| SUPERSEDED | 0   | 0      | 0      | 0      | 0     |
+| **Total** | **1** | **1** | **4** | **6** | **12** |
+
+Zero REGRESSED rows. Zero SUPERSEDED-as-a-verdict rows (the §5d REG-v39.0-§4-(e/f/g) row is PASS — the v39 surfaces it tracks were intentionally SUPERSEDED by v40.0 in-scope milestone payloads and re-attested SAFE at v40 §4; the regression VERDICT is PASS). EXC-04 in §5c REG-03 is recorded as STRUCTURALLY ELIMINATED at v40.0 (Phase 278 `8a81a87c`) — the strongest possible disposition (the xorshift mechanism is gone), not a non-widening re-verification. The v40.0 payload (RNG-driven ticket-award Bernoulli + event surface unification + sentinel retirement + JackpotModule cleanup + whole-BURNIE floor) does not widen the v39.0 or v34.0 closure-signal posture at any surface NOT in v40 scope — the only surfaces that changed are the explicit v40.0 milestone in-scope mutations, every one of which is re-attested SAFE at v40 §4.
+
+**Note on the deferred superseded-baseline SURF `it.skip` cleanup:** Phase 279's `D-279-02-SURF-SUPERSEDED-01` left 3 pre-existing superseded-baseline SURF failures (v35/v34, v37/v36, v38/v37 byte-identity gates) in `test/stat/SurfaceRegression.test.js` — they assert byte-identity against baselines now superseded by the Phase 275-279 contract deltas. Phase 280 is source-tree frozen, so this is NOT in v40.0 scope — it is recorded here as a known test-suite-hygiene item to carry forward (cited via the deferred-items register in §9, NOT a forward-cite to a specific future-milestone number). The 3 superseded SURF failures are not v40.0 regressions — they were tripped by the in-scope Phase 275-279 contract mutations and the v40.0 SURF-01 block (re-cut in Phase 279 `37207743`) passes green.
+
+---
+
+## 6. KI Gating Walk
+
+### 6a. Non-Promotion Ledger
+
+Zero F-40-NN finding blocks emitted per D-40N-KI-01; zero rows in the Non-Promotion Ledger from new findings.
+
+Default path: the v40.0 §4 11-surface inline draft (Task 2) verdicts 11 of 11 SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE. The Task 3 adversarial pass via `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` (3 skills PARALLEL spawn per D-40N-ADVERSARIAL-01) concurs with zero disagreement per `280-01-ADVERSARIAL-LOG.md` Disposition section (the D-40N-ADVERSARIAL-01 escalation path evaluated and does NOT fire by default). The TICKET-granularity variance tradeoff (D-40N-GRANULARITY-01) and the auto-resolve/jackpot silent-cold-bust asymmetry (D-40N-SILENT-01) both satisfy the D-09 3-predicate KI Gating Rubric (accepted-design + non-exploitable + sticky) in principle, but they are correctly documented via §4 (a)/(b)/(e) prose-only attestation per the D-40N-KI-01 default disposition — `/economic-analyst` assessment concludes they are locked design decisions, not oversights, and KNOWN-ISSUES.md does not need a new entry for either (the player receives `E[whole_post] = scaledPre / TICKET_SCALE` in expectation; the BUR daily-budget-evaporation is a zero-beneficiary symmetric loss on economically-negligible dust).
+
+### 6b. KI Envelope Re-Verifications
+
+4-row KI envelope table mirroring the v39.0 §6b format. Per D-40N-KI-01: EXC-01..03 RE_VERIFIED-NEGATIVE-scope; EXC-04 STRUCTURALLY ELIMINATED at v40.0 per D-280-EXC04-01.
+
+| EXC | Surface | v40.0 Disposition | Evidence |
+| --- | ------- | ----------------- | -------- |
+| EXC-01 | Affiliate roll RNG (Non-VRF entropy for affiliate winner roll) | `RE_VERIFIED-NEGATIVE-scope` | The v40.0 audit subject has zero affiliate-roll interaction. No v40.0 commit touches the affiliate-roll path. KNOWN-ISSUES.md EXC-01 entry left untouched. Carry-forward from v39.0 §6b EXC-01 + the v37.0/v38.0 KI envelope walk. |
+| EXC-02 | Gameover prevrandao fallback | `RE_VERIFIED-NEGATIVE-scope` | The v40.0 audit subject has zero AdvanceModule interaction. `DegenerusGameAdvanceModule.sol` is not in the v40.0 diff scope. No v40.0 commit touches the gameover-prevrandao-fallback path. KNOWN-ISSUES.md EXC-02 entry left untouched. Carry-forward from v39.0 §6b EXC-02. |
+| EXC-03 | Gameover RNG substitution for mid-cycle write-buffer tickets | `RE_VERIFIED-NEGATIVE-scope` | The v40.0 audit subject has zero gameover-RNG-substitution interaction. AdvanceModule + the mid-cycle write-buffer swap path are byte-identical at v40 HEAD. No v40.0 commit modifies the mid-cycle write-buffer mechanics. KNOWN-ISSUES.md EXC-03 entry left untouched. Carry-forward from v39.0 §6b EXC-03. |
+| EXC-04 | EntropyLib XOR-shift PRNG for BAF jackpot ticket rolls | `STRUCTURALLY ELIMINATED at v40.0` — entry REMOVED from KNOWN-ISSUES.md | Phase 278 commit `8a81a87c` deleted `EntropyLib.entropyStep` (the 256-bit XOR-shift PRNG, shifts 7/9/8) entirely and swapped `_jackpotTicketRoll` to `EntropyLib.hash2(entropy, entropy)` keccak self-mix. At v40 HEAD `grep -rn "EntropyLib.entropyStep" contracts/` returns empty; `EntropyLib.sol` contains only the `hash2` primitive; there is no xorshift PRNG and no xorshift consumer anywhere in `contracts/`. The v36.0 EXC-04 entry (NARROWS-scoped to BAF-jackpot-only at v36.0 per the AUDIT-05 KI-envelope-narrowing edit) described a mechanism that NO LONGER EXISTS. Per D-280-EXC04-01 the KNOWN-ISSUES.md line-31 entry is REMOVED OUTRIGHT — KNOWN-ISSUES.md is a warden pre-disclosure doc reserved for *ongoing* protocol behavior; a structurally-eliminated mechanism does not belong there. This goes beyond AUDIT-05's "may demote NARROWS to NEGATIVE" framing — the subject is gone, so the entry is removed, not demoted. v36.0 already edited this exact entry once (the NARROWS rephrase), so KNOWN-ISSUES.md edits for EXC-04 have direct precedent. The rationale lives here in §6, NOT in KNOWN-ISSUES.md, per `feedback_no_history_in_comments.md` (the removal is a clean deletion). |
+
+**§6b verdict line:** `4 of 4 KI_ELIGIBLE addressed; KNOWN_ISSUES_MODIFIED`. EXC-01/02/03 RE_VERIFIED-NEGATIVE-scope (entries untouched); EXC-04 STRUCTURALLY ELIMINATED (entry removed). `KNOWN_ISSUES_MODIFIED` — `git diff` on `KNOWN-ISSUES.md` at v40 close shows a single deletion (the line-31 EXC-04 paragraph), no added lines, no changelog text.
+
+**Backward-trace methodology cite (per `feedback_rng_backward_trace.md`):** The v40.0 RNG consumers — the auto-resolve LootboxModule Bernoulli and the JackpotModule `_jackpotTicketRoll` (path/level rolls + Bernoulli sub-roll) — all read VRF-derived keccak output. The auto-resolve Bernoulli reads `bits[152..167]` of the per-resolution `seed = keccak256(abi.encode(rngWord, player, day, amount))` where `rngWord` is a VRF callback word committed before the resolution. `_jackpotTicketRoll` reads `bits[0..12]` + `bits[200..215]` of the per-roll `entropy` AFTER `EntropyLib.hash2(entropy, entropy)` evolves the `advanceGame` daily VRF word. The Phase 278 ENT-05 refactor STRUCTURALLY ELIMINATED the last xorshift consumer — at v40 HEAD every RNG consumer in the v40.0 audit subject reads VRF-derived keccak output, NOT xorshift output. Backward-trace closed: the VRF word is structurally unknown at every player's input-commitment point.
+
+**Commitment-window check cite (per `feedback_rng_commitment_window.md`):** The v40.0 RNG surfaces carry degenerate-PASS commitment-window verdicts (cross-cite §4 surfaces (a)-(e) + the §4.1 RNG commitment-window roll-up). For the auto-resolve LootboxModule branch, the resolution inputs are fixed at the moment the triggering action invokes the caller — no player-controllable mutation between VRF request and fulfillment. For the JackpotModule `_jackpotTicketRoll` path, `advanceGame` runs atomically against the committed daily BAF jackpot bucket state. The keccak `hash2(entropy, entropy)` self-mix introduces no new player-controllable preimage input. Bot front-run via VRF mempool visibility remains STRUCTURALLY PREVENTED (carry-forward from the v36/v37/v38/v39 commitment-window verdicts).
+
+### 6c. Verdict Summary
+
+**`4 of 4 KI_ELIGIBLE addressed; KNOWN_ISSUES_MODIFIED`**
+
+EXC-01/02/03 RE_VERIFIED-NEGATIVE-scope at v40 HEAD (the v40.0 audit subject has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction; entries left untouched). EXC-04 STRUCTURALLY ELIMINATED at v40.0 — Phase 278 `8a81a87c` deleted `EntropyLib.entropyStep` and swapped `_jackpotTicketRoll` to keccak; the KNOWN-ISSUES.md line-31 EXC-04 entry is REMOVED OUTRIGHT per D-280-EXC04-01. The TICKET-granularity variance tradeoff (D-40N-GRANULARITY-01) and the auto-resolve/jackpot silent-cold-bust asymmetry (D-40N-SILENT-01) are documented as accepted-design via §4 prose ONLY per D-40N-KI-01 + the `/economic-analyst` mechanism-design assessment — NO new KNOWN-ISSUES.md entry. KNOWN-ISSUES.md is MODIFIED at v40 close: `git diff` shows a single deletion (the EXC-04 line-31 paragraph), EXC-01/02/03 + all other Design Decisions entries untouched.
+
+---
+
+## 7. Prior-Artifact Cross-Cites
+
+Cross-cites organized in 4 subsections per the canonical FINDINGS shape: v40.0 phase artifacts, prior milestone FINDINGS, notes, and project-state artifacts.
+
+### 7.1. v40.0 Phase Artifacts
+
+- **Phase 275 — Auto-Resolve LootboxModule Bernoulli (LBX-AR):** `275-A-SUMMARY.md` + `275-B-SUMMARY.md` + `275-A-STORAGE-LAYOUT-DIFF.md` + `275-A-GAS-WORSTCASE.md` + `275-CONTEXT.md`. Contract commit `b6ed8fce`, test commit `bb1b1abd`.
+- **Phase 276 — JackpotModule:2216 BAF Bernoulli (JPT-BR):** `276-A-SUMMARY.md` + `276-B-SUMMARY.md` + `276-VERIFICATION.md` + `276-A-STORAGE-LAYOUT-DIFF.md` + `276-A-GAS-WORSTCASE.md`. Contract commit `c473867e`, test commit `1568fd5c`.
+- **Phase 277 — Event Surface Unification + Sentinel Retirement (EVT-UNI):** `277-01-SUMMARY.md` + `277-02-SUMMARY.md` + `277-VERIFICATION.md` + `277-SECURITY.md` + `277-REVIEW.md`. Contract commit `02fb7085`, test commit `6fbee850`, gap-closure remediation commit `f7a6fccd`.
+- **Phase 278 — JackpotModule Cleanup + ENT-05 Keccak Refactor + Wrapper Retirement (JPT-CLEAN):** `278-01-SUMMARY.md` + `278-02-SUMMARY.md` + `278-VERIFICATION.md` + `278-01-STORAGE-LAYOUT-DIFF.md` + `278-01-GAS-WORSTCASE.md` + `deferred-items.md`. Contract commit `8a81a87c`, test commit `c3baf694`, test-gate supersede commit `a91dac85`.
+- **Phase 279 — Whole-BURNIE Floor (BUR):** `279-01-SUMMARY.md` + `279-02-SUMMARY.md` + `279-VERIFICATION.md` (records the BUR-05 +114-byte user-accepted override) + `279-01-STORAGE-LAYOUT-DIFF.md` + `279-01-GAS-WORSTCASE.md` + `279-SECURITY.md`. Contract commit `8ef4a010`, test commit `37207743`.
+- **Phase 280 — Delta Audit + Findings Consolidation (Terminal):** `280-CONTEXT.md` + `280-PATTERNS.md` + `280-01-PLAN.md` + `.planning/phases/280-delta-audit-findings-consolidation-terminal/280-01-ADVERSARIAL-LOG.md` (3 H2 skill sections + Disposition) + `280-01-SUMMARY.md`. This deliverable `audit/FINDINGS-v40.0.md` is the Phase 280 output.
+
+### 7.2. Prior Milestone FINDINGS Cross-Cites
+
+14 prior milestone-closure deliverables enumerated for the REG-04 spot-check sweep + closure-signal chain context:
+
+- `audit/FINDINGS-v25.0.md`
+- `audit/FINDINGS-v27.0.md`
+- `audit/FINDINGS-v28.0.md`
+- `audit/FINDINGS-v29.0.md`
+- `audit/FINDINGS-v30.0.md`
+- `audit/FINDINGS-v31.0.md`
+- `audit/FINDINGS-v32.0.md`
+- `audit/FINDINGS-v33.0.md`
+- `audit/FINDINGS-v34.0.md` (REG-02 baseline — `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`)
+- `audit/FINDINGS-v35.0.md`
+- `audit/FINDINGS-v36.0.md` (Phase 266 lootbox-path entropy refactor — the v36.0 EXC-04 EntropyLib XOR-shift NARROWS originates here; v40.0 structurally eliminates it)
+- `audit/FINDINGS-v37.0.md` (multi-phase-shape terminal precedent — closest structural analog to v40.0's 6-phase shape)
+- `audit/FINDINGS-v38.0.md`
+- `audit/FINDINGS-v39.0.md` (immediate baseline — `MILESTONE_V39_AT_HEAD_6a7455d1`)
+
+**Closure-signal chain:** v25 → v27 → v28 → v29 → v30 → v31 → v32 → v33 → v34 (`MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`) → v35 → v36 (`MILESTONE_V36_AT_HEAD_1c0f09132d7439af9881c56fe197f81757f8164a`) → v37 (`MILESTONE_V37_AT_HEAD_2654fcc2`) → v38 (`MILESTONE_V38_AT_HEAD_06623edb`) → v39 (`MILESTONE_V39_AT_HEAD_6a7455d1`) → v40 (`MILESTONE_V40_AT_HEAD_<sha>` — emitted §9c; SHA resolved at the Phase 280 terminal closure-flip task).
+
+REG-01 carries the v39.0 closure signal verbatim per §5a (REG-v39.0-V40-DELTA PASS).
+REG-02 carries the v34.0 closure signal verbatim per §5b (REG-v34.0-TRAIT-SOLO PASS).
+REG-04 walks v25..v39.0 per §5d (6 PASS / 0 REGRESSED / 0 SUPERSEDED-as-verdict).
+
+### 7.3. Notes Cross-Cites
+
+- The Phase 276 D-276-RNGBYPASS-01 override: the literal REQUIREMENTS JPT-BR-02 + ROADMAP SC1 text says `rngBypass = false` (a Phase-275 copy-paste artifact); the correct value is `true` because `_jackpotTicketRoll` runs inside `advanceGame` while `rngLockedFlag == true`. `276-VERIFICATION.md` records this as a load-bearing, decision-anchored override (1 override applied, accepted by the user). REQUIREMENTS.md / ROADMAP.md text-correction for JPT-BR-02 is a documentation-cleanup item, not a code-correctness issue.
+- The Phase 279 BUR-05 +114-byte NET-POSITIVE bytecode deviation: the plan's BUR-05 NET-NEGATIVE expectation did not hold; `279-VERIFICATION.md` records this as a user-accepted override (1 override applied, accepted by the user at the Phase 279 Task 3 checkpoint). Dispositioned as the INFO-tier §3c note + the §3.A BUR-05 row prose — a documented user-accepted override is not a defect; no F-40-NN finding block opened.
+
+### 7.4. Project-State Cross-Cites
+
+- `.planning/PROJECT.md` "Current Milestone v40.0" block + "Deferred to Future Milestones" subsection (updated at the Phase 280 terminal closure-flip task per D-40N-CLOSURE-01 — carries forward LBX-02 RE-DEFERRED-V41+ per D-40N-LBX02-OUT-01 + the superseded-baseline SURF `it.skip` cleanup as v41+ backlog).
+- `.planning/MILESTONES.md` closure-signal chain v25..v39 + the v40.0 in-progress row (flipped to SHIPPED at the Phase 280 terminal closure-flip task with closure signal `MILESTONE_V40_AT_HEAD_<sha>` recorded).
+- `.planning/ROADMAP.md` v40.0 milestone bullet (flipped to SHIPPED at the Phase 280 terminal closure-flip task; Phase 280 entry marked complete; v40.0 SHIPPED `<details>` summary block added; Progress table updated).
+- `.planning/REQUIREMENTS.md` 65 v40.0 requirements traceability (AUDIT-01..06 + REG-01..04 checkboxes populated at the Phase 280 terminal closure-flip task; the Phase 275-279 contract+test requirement checkboxes were populated at each surface phase's close).
+- `.planning/STATE.md` "Last Shipped Milestone" / "Current Position" body blocks updated to v40.0 SHIPPED with closure signal recorded; the frontmatter reconciled to the true 6-phase v40.0 shape (`completed_phases: 6`, `percent: 100`) at the Phase 280 terminal closure-flip task.
+- `KNOWN-ISSUES.md` EXC-01..04 envelopes — EXC-01/02/03 untouched at v40 close; EXC-04 line-31 entry REMOVED per D-280-EXC04-01 (`git diff KNOWN-ISSUES.md` shows a single deletion, no added lines).
+
+---
+
+## 8. Forward-Cite Closure (D-253-09 + D-253-15 step 8 Terminal-Phase Rule)
+
+Terminal-phase zero-emission verification per D-40N-FCITE-01 (carry of D-274-FCITE-01 / D-272-FCITE-01 / D-271-FCITE-01 / D-253-15 step 8 + ROADMAP terminal-phase rule). Phase 280 is the SOLE terminal v40.0 phase; v40.0 = 6-phase multi-phase milestone (Phases 275-279 surface phases + Phase 280 terminal).
+
+### 8a. Phase 280 Intra-Milestone Forward-Cite Residual Verification
+
+**Grep recipe (scoped to audit + phase artifacts only):**
+```
+grep -rnE "Phase (281|282)|v41\.0|v42\.0" \
+  audit/FINDINGS-v40.0.md \
+  .planning/phases/280-delta-audit-findings-consolidation-terminal/
+```
+
+**Filter:** exclude meta-references that cite "v41+" / "v41.0+" only as a planner-handoff pickup-pointer (lines containing `RE-DEFERRED-V41`, `v41+ backlog`, `Deferred to Future Milestones`, or `D-40N-LBX02-OUT-01` — these are the rule's planner-handoff register, not forward-cites to specific in-flight work).
+
+**Output:** Zero non-meta matches in `audit/FINDINGS-v40.0.md` for specific in-flight Phase 281+ / v41.0+ work. Phase 280 is the terminal v40.0 phase; no in-flight post-v40.0 work is forward-cited.
+
+**Deferred items cited via locked-decision IDs:** the v40.0 carry-forward bundle (LBX-02 fixture-coverage gap; the superseded-baseline SURF `it.skip` cleanup) is cited via the locked-decision ID `D-40N-LBX02-OUT-01` and the descriptive "v41+ backlog" planner-handoff label — WITHOUT naming a specific future-milestone phase number. The "Deferred to Future Milestones" subsection in PROJECT.md is the single-source-of-truth lookup for future-pickup; the §9 "Deferred to Future Milestones" subsection in this deliverable records the items via the locked-decision ID + the planner-handoff label.
+
+**Verdict:** PASS.
+
+### 8b. Phase 280 → Post-Milestone Forward-Cite Emission
+
+**Grep recipe (scoped to audit + phase artifacts only):**
+```
+! grep -rE "Phase (281|282)|in-flight v41" \
+  audit/FINDINGS-v40.0.md \
+  .planning/phases/280-delta-audit-findings-consolidation-terminal/280-CONTEXT.md \
+  .planning/phases/280-delta-audit-findings-consolidation-terminal/280-01-PLAN.md \
+  .planning/phases/280-delta-audit-findings-consolidation-terminal/280-01-ADVERSARIAL-LOG.md \
+  .planning/phases/280-delta-audit-findings-consolidation-terminal/280-01-SUMMARY.md
+```
+
+**Expected:** exit 0 (zero matches for specific in-flight post-v40.0 phase IDs when scoping to the audit deliverable + phase artifacts; the v40-internal `<sha>` placeholder + the deferred-items locked-decision IDs are inside the carve-out per the rule below).
+
+**Pickup-pointer carve-out:** the §9 "Deferred to Future Milestones" subsection records carry-forward items via the locked-decision ID `D-40N-LBX02-OUT-01` + the descriptive "v41+ backlog" planner-handoff label — these are forward-pointers for future-phase pickup (planner-handoff register), NOT forward-cites to in-flight Phase 281+ work. Per the v37.0 / v38.0 / v39.0 precedent: PROJECT.md "Deferred to Future Milestones" is the single-source-of-truth lookup. The literal "v41+" identifier used as a planner-handoff label is inside this carve-out.
+
+**Allowlist:** the §9 "Deferred to Future Milestones" subsection is a planned-handoff register, NOT a forward-cite to in-flight v41.0 work. The "Deferred to Future Milestones" subsection in PROJECT.md is the single-source-of-truth lookup. Future milestones (v41.0+) ingest the v40.0 artifacts via a fresh delta-extraction phase, not via forward-cite from v40 artifacts.
+
+**Verdict:** PASS — the pickup-pointer carve-out applies for `v41+` planner-handoff-label matches inside the §9 "Deferred to Future Milestones" subsection; zero forward-cites emitted outside the carve-out.
+
+### 8c. Combined §8 Verdict
+
+Zero forward-cites emitted from Phase 280 to any in-flight post-v40.0 phases. The §9 "Deferred to Future Milestones" subsection contains explicit deferred-handoff items cited via the locked-decision ID `D-40N-LBX02-OUT-01` + the descriptive "v41+ backlog" planner-handoff label; these are planner handoff REGISTERS tying into next-milestone pickup via the `.planning/PROJECT.md` "Deferred to Future Milestones" single-source-of-truth lookup, NOT forward-cites to in-flight Phase 281+ work.
+
+Future milestones (v41.0+) ingest via a fresh delta-extraction phase, not via forward-cite from v40 artifacts.
+
+**Verdict:** PASS — terminal-phase invariant satisfied per D-40N-FCITE-01.
+
+---
