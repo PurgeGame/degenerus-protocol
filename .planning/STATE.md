@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v40.0
-milestone_name: Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor
-status: completed
-last_updated: "2026-05-14T13:17:44.009Z"
-last_activity: 2026-05-14
+milestone_name: milestone
+status: executing
+last_updated: "2026-05-14T13:50:27.747Z"
+last_activity: 2026-05-14 -- Phase 279 planning complete
 progress:
-  total_phases: 6
-  completed_phases: 4
-  total_plans: 8
-  completed_plans: 8
-  percent: 67
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 2
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.
 
 Phase: 279
 Plan: Not started
-Status: Phase 278 complete — both waves landed; Phase 279 (Whole-BURNIE Floor) is next
-Last activity: 2026-05-14
+Status: Ready to execute
+Last activity: 2026-05-14 -- Phase 279 planning complete
 
 ## Last Shipped Milestone
 

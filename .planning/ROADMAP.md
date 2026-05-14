@@ -15,5 +15,8 @@
 **Plans:** 2 plans
 
 Plans:
+**Wave 1**
 - [ ] 279-01-PLAN.md — Contract wave: inline whole-BURNIE floor at the 3 RNG-amount sites (BUR-01 burnieAmount, BUR-02 baseAmount + extra/cursor dead-var removal, BUR-03 perWinner) + storage byte-identity proof + gas worst-case; one USER-APPROVED batched contract commit [BUR-01..05]
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 279-02-PLAN.md — Test wave: 3 source-structural floor regression tests (TST-BUR-01/02/03) + whole-BURNIE invariant sweep with mint-boost negative assertion (TST-BUR-04) + SurfaceRegression SURF_01 protected-range re-cut; one USER-APPROVED batched test commit [TST-BUR-01..04]
