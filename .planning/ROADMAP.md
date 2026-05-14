@@ -142,7 +142,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 280-01-PLAN.md — Author audit/FINDINGS-v40.0.md (9-section terminal deliverable) + 3-skill adversarial pass + 280-01-ADVERSARIAL-LOG.md + KNOWN-ISSUES.md EXC-04 removal + atomic v40.0 closure-flip across ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS
+- [x] 280-01-PLAN.md — Author audit/FINDINGS-v40.0.md (9-section terminal deliverable) + 3-skill adversarial pass + 280-01-ADVERSARIAL-LOG.md + KNOWN-ISSUES.md EXC-04 removal + atomic v40.0 closure-flip across ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS
 
 
 <details>
@@ -201,4 +201,4 @@ Plans:
 | 277. Event Surface Unification + Sentinel Retirement (EVT-UNI) | 2/2 | Complete    | 2026-05-14 |
 | 278. JackpotModule Cleanup + ENT-05 BAF Xorshift Refactor + Wrapper Retirement (JPT-CLEAN) | 2/2 | Complete    | 2026-05-14 |
 | 279. Whole-BURNIE Floor (BUR) | 2/2 | Complete    | 2026-05-14 |
-| 280. Delta Audit + Findings Consolidation (Terminal) | 1/1 | Complete    | 2026-05-14 |
+| 280. Delta Audit + Findings Consolidation (Terminal) | 1/1 | Complete   | 2026-05-14 |
