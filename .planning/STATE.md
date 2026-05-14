@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v40.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-05-14T15:30:00.000Z"
-last_activity: 2026-05-14 -- Phase 279 Plan 02 complete (whole-BURNIE floor test wave — TST-BUR-01..04)
+status: completed
+last_updated: "2026-05-14T15:45:16.137Z"
+last_activity: 2026-05-14
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
   completed_plans: 2
   percent: 100
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.
 
 ## Current Position
 
-Phase: 279 (whole-burnie-floor-bur) — ALL PLANS COMPLETE
-Plan: 2 of 2 (Plan 01 + Plan 02 COMPLETE)
+Phase: 279
+Plan: Not started
 Status: Phase 279 plans complete — Plan 01 (contract wave) + Plan 02 (TST-BUR test wave) both shipped via USER-APPROVED batched commits; phase ready for closure/audit
-Last activity: 2026-05-14 -- Phase 279 Plan 02 complete (whole-BURNIE floor test wave — TST-BUR-01..04)
+Last activity: 2026-05-14
 
 ## Last Shipped Milestone
 
