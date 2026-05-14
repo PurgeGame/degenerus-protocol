@@ -646,9 +646,9 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     ) private pure returns (bool win) {
         // Hash via scratch-slot keccak so player address (stored in rollSalt
         // bits 191-32) reaches the low 7 bits of rollEntropy consumed by
-        // `% TICKET_SCALE`. XOR + entropyStep's single-iteration xorshift only
-        // diffuses bits ~40 positions outward, leaving upper player-address
-        // bits invisible to the roll outcome.
+        // `% TICKET_SCALE`. A plain XOR mix only diffuses bits a fixed span
+        // outward, leaving upper player-address bits invisible to the roll
+        // outcome; keccak gives full low-bit diffusion of the high-bit input.
         uint256 rollEntropy = EntropyLib.hash2(entropy, rollSalt);
         return (rollEntropy % TICKET_SCALE) < rem;
     }

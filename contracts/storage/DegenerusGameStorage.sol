@@ -680,25 +680,6 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Queues lootbox tickets with 2-decimal precision (remainder rolled at assignment).
-    /// @param buyer Address to receive tickets.
-    /// @param targetLevel Level for which tickets are queued.
-    /// @param quantityScaled Scaled ticket amount (multiply by 100 for whole tickets).
-    function _queueLootboxTickets(
-        address buyer,
-        uint24 targetLevel,
-        uint256 quantityScaled,
-        bool rngBypass
-    ) internal {
-        if (quantityScaled == 0) return;
-        _queueTicketsScaled(
-            buyer,
-            targetLevel,
-            uint32(quantityScaled),
-            rngBypass
-        );
-    }
-
     // =========================================================================
     // Packed Prize Pool Helpers
     // =========================================================================

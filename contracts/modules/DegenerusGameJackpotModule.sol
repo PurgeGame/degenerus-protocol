@@ -40,7 +40,7 @@ import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
  *
  *      RANDOMNESS:
  *      - All entropy originates from VRF words passed by the parent contract.
- *      - EntropyLib.entropyStep provides deterministic derivation for sub-selections.
+ *      - EntropyLib.hash2 provides full-diffusion keccak derivation for sub-selections.
  *      - Winner selection intentionally allows duplicates (more tickets = more chances).
  */
 contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
@@ -77,16 +77,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     );
 
     /// @dev Ticket jackpot win. See JackpotEthWin for traitId sentinel semantics.
-    ///      ticketCount carries the scaled ×TICKET_SCALE (=100) value for all
-    ///      paths; divide by 100 for whole tickets. Trait-matched paths have a
-    ///      zero fractional part. BAF lootbox rolls (traitId = BAF_TRAIT_SENTINEL)
-    ///      Bernoulli-collapse the scaled count to a whole-ticket count at award
-    ///      time inside _jackpotTicketRoll, so they queue whole tickets and feed
-    ///      no fractional remainder into _rollRemainder; ticketCount still
-    ///      reports the pre-collapse scaled value for indexer parity.
-    ///      roundedUp is true iff the BAF _jackpotTicketRoll Bernoulli round-up
-    ///      incremented the whole-ticket count; it is false on the trait-matched
-    ///      paths, which have a zero fractional part by construction.
+    ///      ticketCount is a whole-ticket count on all 3 paths and matches the
+    ///      quantity queued by the adjacent _queueTickets call. roundedUp is
+    ///      true iff the BAF _jackpotTicketRoll (traitId = BAF_TRAIT_SENTINEL)
+    ///      Bernoulli sub-roll incremented the whole-ticket count; it is false
+    ///      on the two trait-matched paths, which have a zero fractional part
+    ///      by construction.
     event JackpotTicketWin(
         address indexed winner,
         uint24 indexed ticketLevel,
@@ -705,12 +701,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     address winner = winners[i];
                     if (winner != address(0)) {
                         _queueTickets(winner, lvl, ticketCount, true);
-                        // ticketCount emitted scaled ×TICKET_SCALE for UI consistency.
+                        // ticketCount carries the whole ticket count awarded.
                         emit JackpotTicketWin(
                             winner,
                             lvl,
                             traitId,
-                            ticketCount * uint32(TICKET_SCALE),
+                            ticketCount,
                             lvl,
                             ticketIndexes[i],
                             false
@@ -1009,12 +1005,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
             if (winner != address(0) && units != 0) {
                 _queueTickets(winner, queueLvl, uint32(units), true);
-                // ticketCount emitted scaled ×TICKET_SCALE for UI consistency.
+                // ticketCount carries the whole ticket count awarded.
                 emit JackpotTicketWin(
                     winner,
                     queueLvl,
                     traitId,
-                    uint32(units * TICKET_SCALE),
+                    uint32(units),
                     sourceLvl,
                     ticketIndexes[i],
                     false
@@ -2186,7 +2182,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
      *      the scaled ticket count to a whole-ticket count before queueing.
      *      Uses actual game pricing for the selected target level.
      *      Entropy bit allocation in the per-roll keccak word `entropy`
-     *      (evolved via EntropyLib.entropyStep on entry):
+     *      (evolved via EntropyLib.hash2 on entry, so every bit — including
+     *      the low bits read below — is full-diffusion keccak output):
      *        bits[0..12]     path/level selection — `entropy % 100` range roll,
      *                        `(entropy / 100) % 4` near offset,
      *                        `(entropy / 100) % 46` far offset
@@ -2207,7 +2204,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 minTargetLevel,
         uint256 entropy
     ) private returns (uint256) {
-        entropy = EntropyLib.entropyStep(entropy);
+        entropy = EntropyLib.hash2(entropy, entropy);
 
         // Roll for outcome (0-99 for percentage-based probabilities)
         uint256 entropyDiv100 = entropy / 100;
@@ -2247,15 +2244,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
         _queueTickets(winner, targetLevel, whole, true);
 
-        // ticketCount carries the pre-collapse scaled (×TICKET_SCALE) value; the
-        // BAF roll Bernoulli-collapses scaled tickets to whole tickets at award
-        // time via the bits[200..215] sub-roll above, so no fractional remainder
-        // is carried into _rollRemainder.
+        // ticketCount is the whole ticket count queued above; roundedUp is true
+        // iff the bits[200..215] Bernoulli sub-roll incremented that count.
         emit JackpotTicketWin(
             winner,
             targetLevel,
             BAF_TRAIT_SENTINEL,
-            uint32(quantityScaled),
+            whole,
             minTargetLevel,
             0,
             roundedUp

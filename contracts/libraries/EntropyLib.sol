@@ -3,25 +3,12 @@ pragma solidity 0.8.34;
 
 /**
  * @title EntropyLib
- * @notice Shared PRNG utilities for deterministic entropy derivation
- * @dev XOR-shift algorithm seeded from VRF for ultimate security
+ * @notice Shared PRNG utility: keccak scratch-slot mix of two uint256 words
+ * @dev `hash2` is the sole primitive — a full-diffusion keccak256 over the
+ *      EVM scratch space, suited to consumers that read low bits of a word
+ *      derived from structured (high-bit) input.
  */
 library EntropyLib {
-    /**
-     * @notice XOR-shift PRNG step for deterministic entropy derivation.
-     * @dev Xorshift on uint256. Seeded from VRF, so ultimately secure.
-     * @param state Current PRNG state.
-     * @return Next PRNG state.
-     */
-    function entropyStep(uint256 state) internal pure returns (uint256) {
-        unchecked {
-            state ^= state << 7;
-            state ^= state >> 9;
-            state ^= state << 8;
-        }
-        return state;
-    }
-
     /**
      * @notice Keccak mix of two uint256 inputs using EVM scratch slots.
      * @dev Equivalent to `uint256(keccak256(abi.encode(a, b)))` but ~10× cheaper
