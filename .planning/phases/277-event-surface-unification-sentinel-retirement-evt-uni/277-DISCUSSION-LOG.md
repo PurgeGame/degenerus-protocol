@@ -89,3 +89,48 @@
 - Whole-BURNIE floor at lootbox spin + near/far-future coin jackpot — Phase 279 BUR.
 - `BurnieLootOpen` whole-token semantics — considered, left wei this phase per EVT-UNI-03 scope.
 - ROADMAP.md / REQUIREMENTS.md text correction for EVT-UNI-02 (`uint32 burnie` / `uint16 bonus`) + EVT-UNI-06 (lock to option a) — docs-only follow-up, flagged to user at context-close.
+
+---
+
+# Revision — 2026-05-14 (context corrected; plans 277-A/277-B + PATTERNS.md superseded)
+
+The first discussion captured several decisions on a faulty premise. User re-opened with two directives: **"make sure we aren't truncating anything"** and **"make this as gas efficient as we can, especially for advancegame chain components"** (plus: "1 burnie minimum resolution is 100% fine"). Code trace of `DegenerusGameLootboxModule.sol`, `DegenerusGameJackpotModule.sol`, `DegenerusGameDegeneretteModule.sol`, `DegenerusGameAdvanceModule.sol`, and `DegenerusGameStorage.sol` exposed the faulty premise and corrected three decision clusters.
+
+## Faulty premise (root cause)
+
+EVT-UNI-02 assumed narrowing event fields (`uint32 burnie`, `uint16 bonus`) helps "slot packing." **Events have no storage slots** — non-indexed event params are ABI-encoded as full 32-byte words regardless of declared type, so `uint32` and `uint256` cost identical `LOG` gas. Narrowing only introduces truncation risk. Everything downstream of that premise was wrong.
+
+## LootBoxOpened Field Types (REVISED)
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Whole-token counts, uint32/uint32 | Prior decision (D-277-EVT-WHOLE-BURNIE-01 + D-277-BONUS-WIDTH-01). Truncates wei, breaks indexer semantics, adds `/ 1 ether`, whale-overflow risk. | (superseded) |
+| Keep uint256 wei | Fields stay exactly as today. Zero truncation, *identical* `LOG` gas, no divisions, no semantic change. | ✓ |
+
+**User's choice:** Keep `uint256` wei — D-277-EVT-WIDE-01. Kills D-277-EVT-WHOLE-BURNIE-01 + D-277-BONUS-WIDTH-01.
+
+## preRollTickets Field (REVISED)
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Add preRollTickets (EVT-UNI-03) | Prior plan. But `LootBoxOpened.futureTickets` / `BurnieLootOpen.tickets` already emit the scaled pre-Bernoulli count — `preRollTickets` duplicates an existing field. | |
+| Add only roundedUp | Drop the redundant `preRollTickets`; add only the genuinely-new `roundedUp` bool. Saves one data word per emit. | ✓ |
+
+**User's choice:** Add only `roundedUp` — D-277-NO-PREROLL-01 + D-277-ROUNDEDUP-01.
+
+## Auto-Resolve LootBoxOpened Emission (REVISED)
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Emit (prior D-277-AR-EMIT-01) | Auto-resolve emits a full `LootBoxOpened` LOG3 — but `resolveLootboxDirect` is reachable on the advanceGame chain (coinflip payouts), and the ticket award is already observable via `TicketsQueued`. | (superseded) |
+| Stay silent | Auto-resolve emits nothing extra. Removes a heavy LOG from the advanceGame-chain coinflip-payout path; ticket awards still observable via `_queueTickets`' `TicketsQueued`. | ✓ |
+
+**User's choice:** Stay silent — D-277-AR-SILENT-01. Reverts D-277-AR-EMIT-01.
+
+## Consolation Gate (REVISED — simplified)
+
+With auto-resolve silent, `emitLootboxEvent` cleanly gates **both** the `LootBoxOpened` emit and the manual cold-bust consolation, together — no decoupling, no separate emit path. The prior "hard wiring constraint" in D-277-CONSOLATION-GATE-01 / D-277-AR-EMIT-01 is gone. D-277-AR-INDEX-01 becomes moot (the `index` param is never read on the auto-resolve path).
+
+## Consequence
+
+Plans `277-A-PLAN.md` / `277-B-PLAN.md` and `277-PATTERNS.md` were built on the superseded context — **stale**. Re-run `/gsd-plan-phase 277`. ROADMAP/REQUIREMENTS text corrections for EVT-UNI-02 / -03 / -06 are now larger (deferred docs-only follow-up).
