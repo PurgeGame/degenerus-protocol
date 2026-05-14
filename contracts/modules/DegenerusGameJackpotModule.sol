@@ -1752,9 +1752,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Awards BURNIE to per-pull random ticket holders across [minLevel, maxLevel].
     ///      Each pull samples its own random level via keccak256(randomWord, COIN_LEVEL_TAG, i)
-    ///      and rotates trait deterministically via i % 4. Empty (lvl', trait_i) buckets
-    ///      silently skip with no carry-forward and no top-up; the cursor still advances and
-    ///      the corresponding +1 extra slot is structurally lost (accepted underspend).
+    ///      and rotates trait deterministically via i % 4. Each pull awards the floored
+    ///      whole-BURNIE `baseAmount` (1 BURNIE = 1 ether); empty (lvl', trait_i) buckets
+    ///      silently skip. Sub-1-BURNIE residues — the `coinBudget % cap` remainder and any
+    ///      sub-1-ether base — evaporate.
     ///      Per-trait deity addresses are cached at loop entry; the holder-index keccak is
     ///      keccak256(randomWord, trait_i, lvlPrime, i) so two pulls at the same (trait, i)
     ///      but different sampled levels do not collapse to the same holder index.
@@ -1785,9 +1786,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             unchecked { ++t; }
         }
 
-        uint256 baseAmount = coinBudget / cap;
-        uint256 extra = coinBudget % cap;
-        uint256 cursor = randomWord % cap;
+        uint256 baseAmount = ((coinBudget / cap) / 1 ether) * 1 ether;
         uint24 range = maxLevel - minLevel + 1;
 
         for (uint256 i; i < cap; ) {
@@ -1810,8 +1809,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             if (effectiveLen == 0) {
                 unchecked {
                     ++i;
-                    ++cursor;
-                    if (cursor == cap) cursor = 0;
                 }
                 continue;
             }
@@ -1830,9 +1827,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
 
             uint256 amount = baseAmount;
-            if (extra != 0 && cursor < extra) {
-                amount += 1;
-            }
 
             if (winner != address(0) && amount != 0) {
                 emit JackpotBurnieWin(
@@ -1847,8 +1841,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
             unchecked {
                 ++i;
-                ++cursor;
-                if (cursor == cap) cursor = 0;
             }
         }
     }
@@ -1899,8 +1891,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         if (found == 0) return;
 
-        // Distribute evenly among found winners
-        uint256 perWinner = farBudget / found;
+        // Distribute evenly among found winners, floored to whole-BURNIE
+        // (1 BURNIE = 1 ether); sub-1-BURNIE residue evaporates.
+        uint256 perWinner = ((farBudget / found) / 1 ether) * 1 ether;
         if (perWinner == 0) return;
 
         address[] memory batchPlayers = new address[](found);

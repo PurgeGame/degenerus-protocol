@@ -1012,6 +1012,16 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         );
         futureTickets = rolledTickets;
 
+        burnieAmount = burnieNoMultiplier + burniePresale;
+        if (presale && burniePresale != 0) {
+            uint256 bonusBurnie = (burniePresale * LOOTBOX_PRESALE_BURNIE_BONUS_BPS) / 10_000;
+            burnieAmount += bonusBurnie;
+        }
+        // Floored to whole-BURNIE (1 BURNIE = 1 ether); sub-1-BURNIE residue
+        // evaporates. The floored value reaches the `creditFlip` arg, the
+        // `LootBoxOpened.burnie` event field, and the return tuple.
+        burnieAmount = (burnieAmount / 1 ether) * 1 ether;
+
         if (allowBoons) {
             _rollLootboxBoons(
                 player,
@@ -1063,12 +1073,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 // carries no same-tx ticket-path emission, unlike a regular win.
                 wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);
             }
-        }
-
-        burnieAmount = burnieNoMultiplier + burniePresale;
-        if (presale && burniePresale != 0) {
-            uint256 bonusBurnie = (burniePresale * LOOTBOX_PRESALE_BURNIE_BONUS_BPS) / 10_000;
-            burnieAmount += bonusBurnie;
         }
 
         if (burnieAmount != 0) {
