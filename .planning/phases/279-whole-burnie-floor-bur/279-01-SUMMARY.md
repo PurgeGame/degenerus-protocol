@@ -119,6 +119,12 @@ None - no external service configuration required.
 - Plan 279-02 (TST-BUR test wave) is ready — it asserts the floor direction + the `mod(amount, 1 ether) == 0` invariant across a representative sweep at all 3 sites.
 - Storage-layout byte-identity vs `6a7455d1` is proven, so the v40.0 audit baseline can fold Phase 279 as a function-body-only patch.
 
+## Self-Check: PASSED
+
+- `279-01-SUMMARY.md`, `279-01-STORAGE-LAYOUT-DIFF.md`, `279-01-GAS-WORSTCASE.md` — all FOUND on disk.
+- Commits `8ef4a010` (contract), `e38d944f` (docs artifacts), `36584486` (STATE + ROADMAP) — all FOUND in git log.
+- Nothing pushed (no upstream tracking branch).
+
 ---
 *Phase: 279-whole-burnie-floor-bur*
 *Completed: 2026-05-14*
