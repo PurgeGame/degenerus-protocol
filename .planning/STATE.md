@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v40.0
 milestone_name: Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor
 status: executing
-last_updated: "2026-05-14T11:57:09.787Z"
-last_activity: 2026-05-14 -- Phase 278 Plan 01 complete (contract wave)
+last_updated: "2026-05-14T12:15:00.000Z"
+last_activity: 2026-05-14 -- Phase 278 complete (Plan 02 test wave landed as c3baf694)
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 8
-  completed_plans: 7
-  percent: 58
+  completed_plans: 8
+  percent: 67
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.0 open + BUR scope expansion)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 278 — jackpotmodule-cleanup-ent-05-baf-xorshift-refactor-wrapper-retirement-jpt-clean
+**Current focus:** Phase 278 complete — Phase 279 (Whole-BURNIE Floor, BUR) next
 
 ## Current Position
 
-Phase: 278 (jackpotmodule-cleanup-ent-05-baf-xorshift-refactor-wrapper-retirement-jpt-clean) — EXECUTING
-Plan: 2 of 2 (Plan 01 complete — contract wave landed)
-Status: Executing Phase 278 — Plan 01 done, Plan 02 (test wave) next
-Last activity: 2026-05-14 -- Phase 278 Plan 01 complete (contract wave)
+Phase: 278 (jackpotmodule-cleanup-ent-05-baf-xorshift-refactor-wrapper-retirement-jpt-clean) — COMPLETE
+Plan: 2 of 2 complete (Plan 01 contract wave `8a81a87c`; Plan 02 test wave `c3baf694`)
+Status: Phase 278 complete — both waves landed; Phase 279 (Whole-BURNIE Floor) is next
+Last activity: 2026-05-14 -- Phase 278 complete (Plan 02 test wave landed as c3baf694)
 
 ## Last Shipped Milestone
 
@@ -250,6 +250,15 @@ Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-fo
 - **Note:** `entropyStep` still has 2 NatSpec hits in `contracts/test/JackpotBernoulliTester.sol` — that is a Wave 2 / plan 278-02 file, correctly out of this plan's scope per CONTEXT.md D-278-ENTROPYSTEP-DELETE-01; 278-02 resolves them. Pre-existing compiler shadow warning at `JackpotModule.sol:535` (`effectiveEntropy`) is unrelated, out of scope; `npx hardhat compile` succeeds.
 - **Next:** Phase 278 Plan 02 (test wave — `278-02-PLAN.md`).
 
+### Phase 278 Plan 02 — JackpotModule Cleanup Test Wave (complete 2026-05-14)
+
+- **278-02 COMPLETE** — 1 USER-APPROVED batched test commit `c3baf694` (`test(278): ENT-05 keccak invariant + cross-surface mixing + wrapper-removal + whole-ticket event regression [TST-CLEAN-01..03 + TST-CROSS-01]`; 10 files +1,547/−58: 2 new test files + 6 modified test files + `contracts/test/JackpotBernoulliTester.sol` NatSpec-only touch + `package.json`). NOT pushed (local-only; future push is a separate user gate). 4/4 TST-CLEAN-01..03 + TST-CROSS-01 satisfied. **Phase 278 is now complete — both waves landed.**
+- **What landed:** `test/stat/Ent05KeccakRefactorInvariant.test.js` (new, TST-CLEAN-01) asserts the NEW post-keccak-refactor statistical invariant per D-278-ENT05-TEST-01 — chi-square uniformity of the 30/65/5 path roll + near/far offsets, 2-roll per-roll seed-uniqueness via a JS `rollEvolve` keccak replica, bits[200..215] Bernoulli sub-roll independence, all at N=20,000, plus a production drift-gate (10/10 passing). `test/integration/CrossSurfaceTicketMixing.test.js` (new, TST-CROSS-01 + TST-CLEAN-02/03) reads the shared `ticketsOwedPacked` slot live-state + asserts the `_queueLootboxTickets` removal + the 3 whole-ticket `JackpotTicketWin` emits (11 passing / 1 pending). Every `entropyStep` JS/Solidity replica + drift-gate across the test tree re-baselined onto the keccak evolution; `SurfaceRegression.test.js` v40.0 SURF block re-pins the drift gate (8 stale v36/v37/v38 assertions superseded via `it.skip`); `RollRemainderGas.t.sol` `entropyStep`→`hash2` fixes the Wave-1 compile break; `EventSurfaceUnification.test.js` jackpot-event assertions re-targeted to whole-ticket; `JackpotBernoulliTester.sol` NatSpec-only touch (arithmetic byte-unchanged).
+- **D-278-TST-CROSS-PLACEMENT-01:** TST-CROSS-01 placed at `test/integration/CrossSurfaceTicketMixing.test.js` — already directory-globbed by the `test` + `test:integration` scripts, CI-wired with zero `package.json` edit; only the new stat test needed a `test:stat` script-list append.
+- **TST-CROSS-01 FIXTURE_COVERAGE_GAP (user-accepted):** the live-state manual-open leg (CROSS-01b) soft-skips when the integration fixture cannot reach an openable lootbox; the structural cross-check CROSS-01d still covers the rem-byte invariant and CROSS-01a/c exercise live-state on the reachable baseline path. User explicitly accepted as consistent with Phase 274/275/277 soft-skip precedent. Logged in `278-.../deferred-items.md` alongside the pre-existing `TicketLifecycle.t.sol` `setUp()` revert.
+- **Contract-commit guard:** `contracts/test/JackpotBernoulliTester.sol` (test-helper, NatSpec-only) triggered the repo pre-commit guard requiring `CONTRACTS_COMMIT_APPROVED=1`; set after explicit user approval of the batched diff, consistent with plan 278-01's commit `8a81a87c` and `feedback_batch_contract_approval.md`.
+- **Next:** Phase 278 complete. Phase 279 (Whole-BURNIE Floor, BUR) is next per the v40.0 ROADMAP sequencing.
+
 Decisions and completed milestones logged in `.planning/PROJECT.md`.
 Detailed milestone retrospectives in `.planning/RETROSPECTIVE.md` (v37.0 / v36.0 / v35.0 sections most recent).
 Archived milestone artifacts:
@@ -297,6 +306,7 @@ Audit deliverables:
 |-------|------|----------|-------|-------|
 | 277 | 02 | ~1h | 3 | 7 |
 | 278 | 01 | ~50min | 3 | 4 |
+| 278 | 02 | ~40min | 3 | 10 |
 
 ## Decisions
 
@@ -304,3 +314,6 @@ Audit deliverables:
 - [Phase 277]: D-277-02-WT05-BASELINE-01: TST-WT-05 [05b] baseline-diff (vs v38 06623edb) replaced with a direct structural assertion — v38 baseline three phases stale, diff-count test no longer meaningful
 - [Phase 278]: D-278-ENT05-CHAIN-01: hash2(entropy, entropy) self-mix chosen over a fixed-salt constant for _jackpotTicketRoll entropy evolution — zero new constants, smaller audit surface; per-roll uniqueness depends on the FIRST arg differing between rolls (guaranteed by the _awardJackpotTickets rethread), not the second
 - [Phase 278]: ENT-05 keccak swap intentionally CHANGES BAF roll output semantics for a given seed (not byte-equivalent to v39 — Roadmap SC2 permits this); JackpotTicketWin topic-hash unchanged, only emitted values shift from x100-scaled to whole-ticket counts
+- [Phase 278]: D-278-ENT05-TEST-01 honored: TST-CLEAN-01 asserts the NEW post-refactor statistical invariant (uniformity + 2-roll uniqueness + bits[200..215] independence under the keccak word), NOT byte-equivalence to v39
+- [Phase 278]: D-278-TST-CROSS-PLACEMENT-01: TST-CROSS-01 placed at test/integration/CrossSurfaceTicketMixing.test.js — already directory-globbed by the test + test:integration scripts, CI-wired with zero package.json edit
+- [Phase 278]: TST-CROSS-01 FIXTURE_COVERAGE_GAP accepted by user — the live-state manual-open leg (CROSS-01b) soft-skips when the integration fixture cannot reach an openable lootbox; structural cross-check CROSS-01d covers the invariant; consistent with Phase 274/275/277 soft-skip precedent
