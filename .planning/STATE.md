@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v40.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-14T14:11:16.000Z"
-last_activity: 2026-05-14 -- Phase 279 Plan 01 complete (whole-BURNIE floor contract wave)
+last_updated: "2026-05-14T15:30:00.000Z"
+last_activity: 2026-05-14 -- Phase 279 Plan 02 complete (whole-BURNIE floor test wave — TST-BUR-01..04)
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 2
-  completed_plans: 1
-  percent: 50
+  completed_plans: 2
+  percent: 100
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.
 
 ## Current Position
 
-Phase: 279 (whole-burnie-floor-bur) — EXECUTING
-Plan: 2 of 2 (Plan 01 COMPLETE)
-Status: Executing Phase 279 — Plan 01 (contract wave) shipped; Plan 02 (TST-BUR test wave) next
-Last activity: 2026-05-14 -- Phase 279 Plan 01 complete (whole-BURNIE floor contract wave)
+Phase: 279 (whole-burnie-floor-bur) — ALL PLANS COMPLETE
+Plan: 2 of 2 (Plan 01 + Plan 02 COMPLETE)
+Status: Phase 279 plans complete — Plan 01 (contract wave) + Plan 02 (TST-BUR test wave) both shipped via USER-APPROVED batched commits; phase ready for closure/audit
+Last activity: 2026-05-14 -- Phase 279 Plan 02 complete (whole-BURNIE floor test wave — TST-BUR-01..04)
 
 ## Last Shipped Milestone
 
@@ -317,6 +317,8 @@ Audit deliverables:
 | 277 | 02 | ~1h | 3 | 7 |
 | 278 | 01 | ~50min | 3 | 4 |
 | 278 | 02 | ~40min | 3 | 10 |
+| 279 | 01 | ~45min | 3 | 4 |
+| 279 | 02 | ~50min | 3 | 6 |
 
 ## Decisions
 
@@ -327,3 +329,7 @@ Audit deliverables:
 - [Phase 278]: D-278-ENT05-TEST-01 honored: TST-CLEAN-01 asserts the NEW post-refactor statistical invariant (uniformity + 2-roll uniqueness + bits[200..215] independence under the keccak word), NOT byte-equivalence to v39
 - [Phase 278]: D-278-TST-CROSS-PLACEMENT-01: TST-CROSS-01 placed at test/integration/CrossSurfaceTicketMixing.test.js — already directory-globbed by the test + test:integration scripts, CI-wired with zero package.json edit
 - [Phase 278]: TST-CROSS-01 FIXTURE_COVERAGE_GAP accepted by user — the live-state manual-open leg (CROSS-01b) soft-skips when the integration fixture cannot reach an openable lootbox; structural cross-check CROSS-01d covers the invariant; consistent with Phase 274/275/277 soft-skip precedent
+- [Phase 279]: D-279-02-PLACEMENT-01: TST-BUR-01/02/03 placed in test/unit/, TST-BUR-04 in test/stat/ — REQUIREMENTS.md's suggested test/lootbox/ + test/jackpot/ dirs do not exist on disk; the on-disk layout (test/unit/ + test/stat/) is authoritative
+- [Phase 279]: D-279-02-STRUCTURAL-PRIMARY-01: source-structural extractBody proof is the load-bearing test evidence for the 3 fixture-gapped BUR functions (JackpotTicketRollSilentColdBust.test.js precedent); JS boundary math is confirmation only; no on-chain BurnieFloorTester.sol added
+- [Phase 279]: D-279-02-SURF-RECUT-01: SURF_01_PROTECTED_RANGES_V40 re-cut as the exact complement of the OLD-side modified-line set from git diff 6a7455d1 HEAD — single JackpotModule L1014-2177 range split into 7 sub-ranges; walkAndAssertV40 + it bodies byte-identical; the re-cut FIXED the previously-failing v40.0 SURF-01
+- [Phase 279]: D-279-02-SURF-SUPERSEDED-01: the 3 pre-existing superseded-baseline SURF failures (v35/v34, v37/v36, v38/v37) tripped by Wave-1 contract commit 8ef4a010 were surfaced rather than silently edited; 279-02 committed as-is per user approval; an it.skip cleanup of those superseded blocks is a recommended separate follow-up

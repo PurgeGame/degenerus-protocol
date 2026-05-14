@@ -12,11 +12,11 @@
   6. Whole-BURNIE invariant sweep — across N representative budgets/spins on all 3 sites, every observable BURNIE-mint amount via `coinflip.creditFlip(...)` + `coinflip.creditFlipBatch(...)` from these 3 sites is a multiple of 1 ether (`mod(amount, 1 ether) == 0`). Negative cross-site assertion: mint-boost flip-credit at `DegenerusGameMintModule.sol:1199` continues emitting fractional-wei per D-40N-BUR-MINTBOOST-OUT-01 — confirms BUR scope correctly narrows to the 3 RNG-influenced sites (TST-BUR-04).
   7. Wave shape: 1 USER-APPROVED batched contract commit + 1 USER-APPROVED batched test commit per the same approval discipline as Phases 275-278. Both commits land before Phase 280 terminal audit begins.
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 **Wave 1**
 - [x] 279-01-PLAN.md — Contract wave: inline whole-BURNIE floor at the 3 RNG-amount sites (BUR-01 burnieAmount, BUR-02 baseAmount + extra/cursor dead-var removal, BUR-03 perWinner) + storage byte-identity proof + gas worst-case; one USER-APPROVED batched contract commit [BUR-01..05]
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 279-02-PLAN.md — Test wave: 3 source-structural floor regression tests (TST-BUR-01/02/03) + whole-BURNIE invariant sweep with mint-boost negative assertion (TST-BUR-04) + SurfaceRegression SURF_01 protected-range re-cut; one USER-APPROVED batched test commit [TST-BUR-01..04]
+- [x] 279-02-PLAN.md — Test wave: 3 source-structural floor regression tests (TST-BUR-01/02/03) + whole-BURNIE invariant sweep with mint-boost negative assertion (TST-BUR-04) + SurfaceRegression SURF_01 protected-range re-cut; one USER-APPROVED batched test commit [TST-BUR-01..04]
