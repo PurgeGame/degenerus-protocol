@@ -23,22 +23,26 @@
 //   TST-JPT-BR-04 — 2-roll uniqueness:
 //     The medium-amount branch of `_awardJackpotTickets` (0.5-5 ETH) splits
 //     the amount in half and calls `_jackpotTicketRoll` TWICE (L2157 + L2166).
-//     `_jackpotTicketRoll` evolves `entropy` via `EntropyLib.entropyStep` on
-//     entry. So roll 1 consumes `bits[200..215]` of `entropyStep(E)` and roll
-//     2 consumes `bits[200..215]` of `entropyStep(entropyStep(E))`. This test
-//     reproduces the `EntropyLib.entropyStep` xorshift in JS, spot-checks it
-//     against the on-chain `JackpotBernoulliTester` slice helper (drift guard),
-//     and asserts the (roll1-slice, roll2-slice) pairs are statistically
-//     independent across ≥10K distinct base entropy values via chi-square.
+//     `_jackpotTicketRoll` evolves `entropy` via `EntropyLib.hash2(entropy,
+//     entropy)` on entry. So roll 1 consumes `bits[200..215]` of
+//     `rollEvolve(E)` and roll 2 consumes `bits[200..215]` of
+//     `rollEvolve(rollEvolve(E))`. This test reproduces the
+//     `EntropyLib.hash2(entropy, entropy)` keccak self-mix in JS, spot-checks
+//     it against the on-chain `JackpotBernoulliTester` slice helper (drift
+//     guard), and asserts the (roll1-slice, roll2-slice) pairs are
+//     statistically independent across ≥10K distinct base entropy values via
+//     chi-square.
 //
-// NOTE on the xorshift: `EntropyLib.entropyStep` is a uint256 XOR-shift
-// (`state ^= state << 7; state ^= state >> 9; state ^= state << 8;`), NOT a
-// keccak step. This test replicates that exact xorshift in JS and drift-guards
-// it against the chain (the on-chain JackpotBernoulliTester.bernoulliRaw16 of
-// the JS-evolved word must equal the JS-computed slice).
+// NOTE on the evolution: `EntropyLib.hash2(a, b)` is a scratch-slot keccak
+// (`mstore(0x00, a); mstore(0x20, b); keccak256(0x00, 0x40)`). The
+// `_jackpotTicketRoll` entry self-mix `hash2(entropy, entropy)` is equivalent
+// to `solidityPackedKeccak256(["uint256","uint256"], [state, state])`. This
+// test replicates that keccak evolution in JS and drift-guards it against the
+// chain (the on-chain JackpotBernoulliTester.bernoulliRaw16 of the JS-evolved
+// word must equal the JS-computed slice).
 //
 // Per CONTEXT.md `<deferred>` this uses the direct-call approach (the
-// JackpotBernoulliTester slice helpers + the JS xorshift replica). The
+// JackpotBernoulliTester slice helpers + the JS keccak replica). The
 // full-stack 4-caller / 2-roll integration exercise stays deferred — revisit
 // only if the Phase 280 adversarial pass surfaces a concern.
 //
@@ -48,7 +52,7 @@
 // CROSS-CITES:
 //   - D-276-INLINE-01 (Bernoulli inlined in _jackpotTicketRoll; bits[200..215] slice)
 //   - audit/FINDINGS-v39.0.md §4 (b) (disjoint keccak bit-slices are pairwise independent)
-//   - EntropyLib.entropyStep (per-roll xorshift evolution between the L2157/L2166 rolls)
+//   - EntropyLib.hash2 (per-roll keccak self-mix evolution between the L2157/L2166 rolls)
 //   - test/stat/LootboxAutoResolveSeedUniqueness.test.js (Phase 275 chi-square precedent)
 //   - test/stat/TraitDistribution.test.js (chi² + Wilson-Hilferty infrastructure source)
 //   - feedback_rng_backward_trace.md (per-roll entropy unknown at VRF-commitment time)
@@ -86,16 +90,20 @@ function makeRng(seedHex) {
   };
 }
 
-// JS replica of `EntropyLib.entropyStep` — the uint256 XOR-shift evolution
-// applied on entry to every `_jackpotTicketRoll` call:
-//   state ^= state << 7; state ^= state >> 9; state ^= state << 8;
-// All shifts are masked to uint256 (the Solidity `unchecked` block wraps).
-function entropyStep(state) {
-  let s = state & U256_MASK;
-  s = (s ^ ((s << 7n) & U256_MASK)) & U256_MASK;
-  s = (s ^ (s >> 9n)) & U256_MASK;
-  s = (s ^ ((s << 8n) & U256_MASK)) & U256_MASK;
-  return s;
+// JS replica of the `_jackpotTicketRoll` entropy evolution — the
+// `EntropyLib.hash2(entropy, entropy)` scratch-slot keccak self-mix applied on
+// entry to every `_jackpotTicketRoll` call. `hash2(a, b)` is
+// `mstore(0x00, a); mstore(0x20, b); keccak256(0x00, 0x40)`, so the self-mix
+// form is `solidityPackedKeccak256(["uint256","uint256"], [state, state])`.
+function rollEvolve(state) {
+  return (
+    BigInt(
+      hre.ethers.solidityPackedKeccak256(
+        ["uint256", "uint256"],
+        [state & U256_MASK, state & U256_MASK]
+      )
+    ) & U256_MASK
+  );
 }
 
 // bits[200..215] slice == raw 16-bit window; %100 == the Bernoulli compare value.
@@ -217,10 +225,10 @@ describe("JackpotTicketRollSeedUniqueness (stat-suite, heavy-MC) — TST-JPT-BR-
     });
   });
 
-  describe("TST-JPT-BR-04 — 2-roll uniqueness: the two _jackpotTicketRoll calls in the medium-amount branch consume bits[200..215] of DISTINCT entropyStep-evolved words", function () {
+  describe("TST-JPT-BR-04 — 2-roll uniqueness: the two _jackpotTicketRoll calls in the medium-amount branch consume bits[200..215] of DISTINCT hash2-evolved words", function () {
     const N = 10_000;
 
-    it(`EntropyLib.entropyStep JS replica is byte-identical to the chain (drift guard, spot-checked)`, async function () {
+    it(`EntropyLib.hash2(entropy, entropy) JS replica is byte-identical to the chain (drift guard, spot-checked)`, async function () {
       const tester = await deployTester();
       const rng = makeRng(
         "0x" +
@@ -228,23 +236,23 @@ describe("JackpotTicketRollSeedUniqueness (stat-suite, heavy-MC) — TST-JPT-BR-
             .toString(16)
             .padStart(64, "0")
       );
-      // The chain has no entropyStep passthrough; the drift guard instead
-      // confirms that the JS xorshift's bits[200..215] slice, fed through the
+      // The chain has no hash2 passthrough; the drift guard instead confirms
+      // that the JS keccak self-mix's bits[200..215] slice, fed through the
       // on-chain bernoulliRaw16, round-trips identically — i.e. the JS
-      // entropyStep + JS slice extraction agree with the on-chain slice
+      // rollEvolve + JS slice extraction agree with the on-chain slice
       // extraction on the JS-evolved word.
       for (let i = 0; i < 32; i++) {
         const base = rng();
-        const e1 = entropyStep(base);
+        const e1 = rollEvolve(base);
         const chainRaw = await tester.bernoulliRaw16(e1);
         expect(
           BigInt(chainRaw),
-          `js/chain slice drift on entropyStep-evolved word at i=${i}`
+          `js/chain slice drift on hash2-evolved word at i=${i}`
         ).to.equal(rawSlice16(e1));
       }
     });
 
-    it(`2-roll slices (roll1 = entropyStep(E), roll2 = entropyStep(entropyStep(E))) are independent — chi-square Wilson-Hilferty Z < 3.5 at N=${N}`, function () {
+    it(`2-roll slices (roll1 = rollEvolve(E), roll2 = rollEvolve(rollEvolve(E))) are independent — chi-square Wilson-Hilferty Z < 3.5 at N=${N}`, function () {
       const rng = makeRng(
         "0x" +
           BigInt.asUintN(256, BigInt(0xc0276105))
@@ -255,11 +263,11 @@ describe("JackpotTicketRollSeedUniqueness (stat-suite, heavy-MC) — TST-JPT-BR-
       const roll2Samples = [];
       for (let i = 0; i < N; i++) {
         const base = rng();
-        // _jackpotTicketRoll evolves `entropy = EntropyLib.entropyStep(entropy)`
-        // on entry. Roll 1 (L2157) sees entropyStep(E); roll 2 (L2166) sees
-        // entropyStep of roll 1's RETURNED entropy, i.e. entropyStep(entropyStep(E)).
-        const e1 = entropyStep(base);
-        const e2 = entropyStep(e1);
+        // _jackpotTicketRoll evolves `entropy = EntropyLib.hash2(entropy, entropy)`
+        // on entry. Roll 1 (L2157) sees rollEvolve(E); roll 2 (L2166) sees
+        // rollEvolve of roll 1's RETURNED entropy, i.e. rollEvolve(rollEvolve(E)).
+        const e1 = rollEvolve(base);
+        const e2 = rollEvolve(e1);
         roll1Samples.push(Number(modSlice(e1)));
         roll2Samples.push(Number(modSlice(e2)));
       }
@@ -290,8 +298,8 @@ describe("JackpotTicketRollSeedUniqueness (stat-suite, heavy-MC) — TST-JPT-BR-
       let sumProd = 0;
       for (let i = 0; i < N; i++) {
         const base = rng();
-        const e1 = entropyStep(base);
-        const e2 = entropyStep(e1);
+        const e1 = rollEvolve(base);
+        const e2 = rollEvolve(e1);
         const r1 = Number(modSlice(e1));
         const r2 = Number(modSlice(e2));
         sum1 += r1;

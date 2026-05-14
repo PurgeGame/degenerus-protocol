@@ -4,7 +4,7 @@ pragma solidity 0.8.34;
 import "forge-std/Test.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 
-/// @notice Measures per-call gas of keccak vs xorshift entropy-mixing.
+/// @notice Measures per-call gas of the keccak entropy-mixing formulations.
 /// Simulates the exact operation each formulation performs in _rollRemainder.
 contract RollRemainderGas is Test {
     uint256 internal constant TICKET_SCALE = 100;
@@ -15,7 +15,7 @@ contract RollRemainderGas is Test {
         pure
         returns (bool)
     {
-        uint256 rollEntropy = EntropyLib.entropyStep(entropy ^ rollSalt);
+        uint256 rollEntropy = EntropyLib.hash2(entropy, rollSalt);
         return (rollEntropy % TICKET_SCALE) < rem;
     }
 

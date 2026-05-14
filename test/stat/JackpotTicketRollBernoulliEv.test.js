@@ -41,8 +41,8 @@
 //   - FINDINGS-v39.0.md §4 (a) EV-neutrality identity (carries verbatim)
 //   - Phase 275 TST-LBX-AR-01 precedent in test/stat/LootboxAutoResolveBernoulliEv.test.js
 //   - feedback_rng_backward_trace.md (per-roll entropy word evolved via
-//     EntropyLib.entropyStep on _jackpotTicketRoll entry — unknown to the
-//     winner at jackpot-resolution VRF-commitment time)
+//     EntropyLib.hash2(entropy, entropy) on _jackpotTicketRoll entry — unknown
+//     to the winner at jackpot-resolution VRF-commitment time)
 //   - feedback_rng_commitment_window.md (the winner cannot mutate the per-roll
 //     entropy once _jackpotTicketRoll is entered — bits[200..215] is derived
 //     from the already-evolved word)

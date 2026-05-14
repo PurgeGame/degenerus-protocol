@@ -799,9 +799,9 @@ contract TicketLifecycleTest is DeployProtocol {
         _driveAdvanceCycle();
 
         // Inject diverse RNG words for each buyer's lootboxes. Use very different seeds
-        // to maximize entropy diversity through the EntropyLib.entropyStep chain.
+        // so each buyer's lootbox entropy diffuses through a distinct keccak chain.
         uint256[4] memory baseSeed = [
-            uint256(7),      // produces different entropyStep chain
+            uint256(7),      // distinct keccak-derived entropy chain
             uint256(42),
             uint256(0xdead),
             uint256(0xcafe)

@@ -9,8 +9,9 @@ pragma solidity 0.8.34;
 ///           - Boundary cases at scaledTickets ∈ {0, 1, 99, 100, 101, 199, 200}
 ///           - bits[200..215] bit-slice independence from the bits[0..12]
 ///             path/level-selection consumers in the same `entropy` word
-///           - 2-roll uniqueness across the `EntropyLib.entropyStep` evolution
-///             between the L2157/L2166 medium-amount-branch rolls
+///           - 2-roll uniqueness across the `EntropyLib.hash2(entropy, entropy)`
+///             keccak self-mix evolution between the L2157/L2166
+///             medium-amount-branch rolls
 ///         under Phase 276 v40.0 audit scope (D-276-INLINE-01).
 /// @dev    The arithmetic mirrored here is the EXACT instruction sequence that ships
 ///         in `DegenerusGameJackpotModule._jackpotTicketRoll` (the inline Bernoulli
@@ -44,7 +45,8 @@ contract JackpotBernoulliTester {
     /// @param scaledTickets Pre-Bernoulli scaled ticket count (== `uint32(quantityScaled)`
     ///                      at the inline-Bernoulli-block entry).
     /// @param seed Per-roll 256-bit entropy word (the production `entropy` local,
-    ///             already evolved via `EntropyLib.entropyStep` on `_jackpotTicketRoll` entry).
+    ///             already evolved via `EntropyLib.hash2(entropy, entropy)` on
+    ///             `_jackpotTicketRoll` entry).
     /// @return whole Post-collapse whole ticket count.
     /// @return roundedUp True iff the Bernoulli round-up fired (fractional path).
     function bernoulliWhole(uint32 scaledTickets, uint256 seed)

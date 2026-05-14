@@ -611,8 +611,11 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         "JackpotTicketWin emit not found in _jackpotTicketRoll"
       ).to.not.equal(null);
       const emitArgs = splitTopLevelArgs(emitArgList);
-      // winner, targetLevel, BAF_TRAIT_SENTINEL, uint32(quantityScaled), minTargetLevel, 0, roundedUp
+      // winner, targetLevel, BAF_TRAIT_SENTINEL, whole, minTargetLevel, 0, roundedUp
+      // — the 4th arg `whole` is the whole-ticket count queued by the adjacent
+      // _queueTickets call (D-278-EVT-UNIFY-01).
       expect(emitArgs.length).to.equal(7);
+      expect(emitArgs[3]).to.equal("whole");
       expect(emitArgs[6]).to.equal("roundedUp");
     });
 

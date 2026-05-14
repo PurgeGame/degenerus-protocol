@@ -551,12 +551,21 @@ describe("v36.0 SURF-01..04 — protected ranges byte-identical vs v35.0 baselin
     return { skipped: false, trivial: false };
   }
 
-  it("SURF-01 — EntropyLib.sol body byte-identical vs 5db8682b", function () {
+  // SUPERSEDED by the v40.0 SURF block below: Phase 278 Wave 1 rewrites
+  // EntropyLib.sol (entropyStep deletion) so byte-identity vs the v35.0
+  // baseline no longer holds. The v40.0 block re-protects EntropyLib's
+  // surviving surface against the v39.0 baseline 6a7455d1.
+  it.skip("SURF-01 — EntropyLib.sol body byte-identical vs 5db8682b", function () {
     const result = walkAndAssert(V35_BASELINE, ENTROPY_LIB_PATH, SURF_01_PROTECTED_RANGES);
     if (result.skipped) this.skip();
   });
 
-  it("SURF-02 — BAF jackpot _jackpotTicketRoll body L2186-2229 byte-identical vs 5db8682b", function () {
+  // SUPERSEDED by the v40.0 SURF block below: Phase 278 Wave 1 rewrites
+  // _jackpotTicketRoll (entropyStep->hash2 swap + Bernoulli whole-ticket
+  // collapse) so the body is no longer byte-identical vs the v35.0 baseline.
+  // The v40.0 block re-protects the surviving _jackpotTicketRoll surface
+  // against the v39.0 baseline 6a7455d1.
+  it.skip("SURF-02 — BAF jackpot _jackpotTicketRoll body L2186-2229 byte-identical vs 5db8682b", function () {
     const result = walkAndAssert(V35_BASELINE, JACKPOT_MODULE_PATH, SURF_02_PROTECTED_RANGES);
     if (result.skipped) this.skip();
   });
@@ -566,7 +575,14 @@ describe("v36.0 SURF-01..04 — protected ranges byte-identical vs v35.0 baselin
     if (result.skipped) this.skip();
   });
 
-  it("SURF-04 — 9 non-lootbox JackpotModule EntropyLib callsites byte-identical vs 5db8682b", function () {
+  // SUPERSEDED by the v40.0 SURF block below: Phase 278 Wave 1 swaps the
+  // _jackpotTicketRoll evolution line from EntropyLib.entropyStep(entropy)
+  // to EntropyLib.hash2(entropy, entropy), so the L2192 entry in this
+  // callsite inventory is no longer byte-identical vs the v35.0 baseline.
+  // The other 8 callsites in this array are still byte-identical at v40.0
+  // and are re-protected (with v39.0-baseline line numbers) by the v40.0
+  // SURF block below.
+  it.skip("SURF-04 — 9 non-lootbox JackpotModule EntropyLib callsites byte-identical vs 5db8682b", function () {
     const result = walkAndAssert(V35_BASELINE, JACKPOT_MODULE_PATH, SURF_04_PROTECTED_RANGES);
     if (result.skipped) this.skip();
   });
@@ -747,7 +763,14 @@ describe("v37.0 SURF-01..04 — protected surfaces vs v36.0 baseline 1c0f0913", 
     if (result.skipped) this.skip();
   });
 
-  it("SURF-02 — DegenerusGameJackpotModule.sol file-level zero-diff vs v36.0 baseline 1c0f0913", function () {
+  // SUPERSEDED by the v40.0 SURF block below: Phase 278 Wave 1 edits
+  // DegenerusGameJackpotModule.sol (the JackpotTicketWin whole-ticket
+  // unification + the _jackpotTicketRoll keccak swap), so file-level
+  // zero-diff vs the v36.0 baseline no longer holds. The v40.0 block
+  // re-protects every surviving JackpotModule surface against the v39.0
+  // baseline 6a7455d1 with explicit protected ranges around the three
+  // intentional Wave 1 delta sites.
+  it.skip("SURF-02 — DegenerusGameJackpotModule.sol file-level zero-diff vs v36.0 baseline 1c0f0913", function () {
     const result = expectFileLevelZeroDiffV37(V36_BASELINE, JACKPOT_MODULE_PATH_V37);
     if (result.skipped) this.skip();
   });
@@ -763,7 +786,14 @@ describe("v37.0 SURF-01..04 — protected surfaces vs v36.0 baseline 1c0f0913", 
     if (result.skipped) this.skip();
   });
 
-  it("SURF-04 — EntropyLib.sol file-level zero-diff vs v36.0 baseline 1c0f0913 (ENT-04 v36.0 carry)", function () {
+  // SUPERSEDED by the v40.0 SURF block below: Phase 278 Wave 1 deletes
+  // EntropyLib.entropyStep and rewrites the library NatSpec, so file-level
+  // zero-diff vs the v36.0 baseline no longer holds. EntropyLib's only
+  // surviving member is hash2; the v40.0 block documents that the whole
+  // file is an intentional Wave 1 rewrite and therefore carries no
+  // protected range (the hash2 primitive itself is unchanged in behaviour
+  // and is exercised by Ent05KeccakRefactorInvariant.test.js).
+  it.skip("SURF-04 — EntropyLib.sol file-level zero-diff vs v36.0 baseline 1c0f0913 (ENT-04 v36.0 carry)", function () {
     const result = expectFileLevelZeroDiffV37(V36_BASELINE, ENTROPY_LIB_PATH_V37);
     if (result.skipped) this.skip();
   });
@@ -856,7 +886,10 @@ describe("v38.0 SURF-01..02 — protected surfaces vs v37.0 baseline 2654fcc2", 
     return { skipped: false, trivial: false };
   }
 
-  it("SURF-01a — EntropyLib.sol file-level zero-diff vs v37.0 baseline 2654fcc2 (ENT-04 v36.0 carry; EXC-04 BAF-only NARROWS retained)", function () {
+  // SUPERSEDED by the v40.0 SURF block below: Phase 278 Wave 1 deletes
+  // EntropyLib.entropyStep, so file-level zero-diff vs the v37.0 baseline
+  // no longer holds. See the v40.0 block for the EntropyLib disposition.
+  it.skip("SURF-01a — EntropyLib.sol file-level zero-diff vs v37.0 baseline 2654fcc2 (ENT-04 v36.0 carry; EXC-04 BAF-only NARROWS retained)", function () {
     const result = expectFileLevelZeroDiffV38(V37_BASELINE, ENTROPY_LIB_PATH_V37);
     if (result.skipped) this.skip();
   });
@@ -866,12 +899,22 @@ describe("v38.0 SURF-01..02 — protected surfaces vs v37.0 baseline 2654fcc2", 
     if (result.skipped) this.skip();
   });
 
-  it("SURF-01c — DegenerusGameJackpotModule.sol file-level zero-diff vs v37.0 baseline 2654fcc2 (gold-solo + BAF jackpot UNCHANGED)", function () {
+  // SUPERSEDED by the v40.0 SURF block below: Phase 278 Wave 1 edits
+  // DegenerusGameJackpotModule.sol (JackpotTicketWin whole-ticket
+  // unification + _jackpotTicketRoll keccak swap), so file-level zero-diff
+  // vs the v37.0 baseline no longer holds. The v40.0 block re-protects the
+  // surviving JackpotModule surface against the v39.0 baseline 6a7455d1.
+  it.skip("SURF-01c — DegenerusGameJackpotModule.sol file-level zero-diff vs v37.0 baseline 2654fcc2 (gold-solo + BAF jackpot UNCHANGED)", function () {
     const result = expectFileLevelZeroDiffV38(V37_BASELINE, JACKPOT_MODULE_PATH_V37);
     if (result.skipped) this.skip();
   });
 
-  it("SURF-01d — DegenerusGameMintModule.sol file-level zero-diff vs v37.0 baseline 2654fcc2 (no v38 mutations)", function () {
+  // SUPERSEDED by the v40.0 SURF block below: Phase 278 Wave 1 touches the
+  // _rollRemainder NatSpec comment in DegenerusGameMintModule.sol, so
+  // file-level zero-diff vs the v37.0 baseline no longer holds. The v40.0
+  // block re-protects the MintModule body (the _rollRemainder code itself
+  // is unchanged — only the comment moved) against the v39.0 baseline.
+  it.skip("SURF-01d — DegenerusGameMintModule.sol file-level zero-diff vs v37.0 baseline 2654fcc2 (no v38 mutations)", function () {
     const result = expectFileLevelZeroDiffV38(V37_BASELINE, MINT_MODULE_PATH_V38);
     if (result.skipped) this.skip();
   });
@@ -899,5 +942,306 @@ describe("v38.0 SURF-01..02 — protected surfaces vs v37.0 baseline 2654fcc2", 
         `anchor-discipline drift detection.`,
       ).to.equal(true);
     }
+  });
+});
+
+// ===========================================================================
+// v40.0 SURF-01..05 — protected surfaces vs v39.0 baseline 6a7455d1
+// ===========================================================================
+//
+// The v40.0 SURF preservation gate anchors at the v39.0 closure HEAD 6a7455d1
+// (signal MILESTONE_V39_AT_HEAD_6a7455d1) and proves that the cumulative
+// v40.0-milestone source-tree mutation in the three Phase 278 Wave 1 files
+// (JackpotModule, Storage, MintModule) is confined to a small set of
+// localized delta sites — leaving every other line in those files
+// byte-identical vs the v39.0 baseline.
+//
+// For DegenerusGameJackpotModule.sol the net 6a7455d1->HEAD modified-line set
+// coincides exactly with the documented Phase 278 Wave 1 delta sites: the
+// JackpotTicketWin whole-ticket unification + the _jackpotTicketRoll keccak
+// swap. (Phases 276 and 277 also touched JackpotModule on the way to the
+// v40.0 milestone, but their net effect on v39-baseline lines is subsumed by
+// — i.e. identical to — the Wave 1 delta set, so the protected-range
+// complement below is the correct byte-identity gate for the whole v40.0
+// milestone.) For Storage and MintModule the only milestone delta is the
+// Phase 278 Wave 1 edit.
+//
+// The intentional delta sites this block EXPECTS (and therefore excludes
+// from its protected ranges):
+//   SURF-01  contracts/modules/DegenerusGameJackpotModule.sol —
+//            (a) the _jackpotTicketRoll evolution line: entropyStep(entropy)
+//                -> hash2(entropy, entropy) + the Bernoulli whole-ticket
+//                collapse that replaces the _queueLootboxTickets call;
+//            (b) the JackpotTicketWin event def + NatSpec (roundedUp field
+//                added) and the 3 emit sites (4th arg de-scaled to whole,
+//                roundedUp arg appended);
+//            (c) the contract-header NatSpec line naming the entropy helper.
+//            Every other JackpotModule surface — the 8 surviving EntropyLib
+//            callsites, _randTraitTicket, _pickSoloQuadrant, the gold-solo
+//            + BAF jackpot bodies — is byte-identical and IS protected here.
+//   SURF-02  contracts/storage/DegenerusGameStorage.sol — the _queueLootboxTickets
+//            wrapper function is deleted (L683-701 at the v39 baseline). Every
+//            other storage helper — _queueTickets, _queueTicketsScaled,
+//            _queueTicketRange, the packed-pool helpers — is byte-identical
+//            and IS protected here.
+//   SURF-03  contracts/modules/DegenerusGameMintModule.sol — the _rollRemainder
+//            NatSpec comment is reworded (L649-651 at the v39 baseline). The
+//            _rollRemainder code itself (the hash2 call + the Bernoulli
+//            predicate) is byte-identical and IS protected here.
+//   SURF-04  contracts/libraries/EntropyLib.sol — the entire file is an
+//            intentional Phase 278 Wave 1 rewrite (entropyStep deleted,
+//            library NatSpec rewritten). hash2 is the sole surviving member;
+//            its behaviour is unchanged and is exercised by
+//            Ent05KeccakRefactorInvariant.test.js. EntropyLib therefore
+//            carries NO protected range in this block — documented as a
+//            whole-file intentional rewrite.
+//   SURF-05  the v40.0-milestone production-contract change set is exactly
+//            the six documented files (JackpotModule, LootboxModule,
+//            IDegenerusGameModules, EntropyLib, MintModule, Storage) — no
+//            other production-contract file drifted across the milestone.
+//
+// V39.0 BASELINE: 6a7455d1 (v39.0 closure HEAD; signal
+// MILESTONE_V39_AT_HEAD_6a7455d1).
+//
+// Re-declares walkAndAssert inline (not factored to module scope) so the
+// existing v33.0 / v34.0 / v35.0 / v36.0 / v37.0 / v38.0 describe blocks above
+// stay byte-identical (REG-01 carry-forward discipline). Same per-line
+// modified-set walk + D-IMPL-11 soft-skip-on-unreachable-baseline +
+// fail-loud-on-empty-diff shape as the v36.0 walkAndAssert.
+// ===========================================================================
+
+const V39_BASELINE = "6a7455d1"; // v39.0 closure HEAD; v40.0 SURF anchor
+const JACKPOT_MODULE_PATH_V40 = "contracts/modules/DegenerusGameJackpotModule.sol";
+const STORAGE_PATH_V40 = "contracts/storage/DegenerusGameStorage.sol";
+const MINT_MODULE_PATH_V40 = "contracts/modules/DegenerusGameMintModule.sol";
+
+describe("v40.0 SURF-01..05 — protected surfaces vs v39.0 baseline 6a7455d1", function () {
+  // SURF-01 — DegenerusGameJackpotModule.sol surviving surface byte-identical.
+  // The v39.0-baseline file is 2231 lines. The net 6a7455d1->HEAD modified
+  // OLD-side line set is: the contract-header NatSpec line (L43), the
+  // JackpotTicketWin NatSpec + event def (L80-85, L92), the trait-burn emit
+  // site (L703, L708, L710), the coin-path emit site (L1006, L1011, L1013),
+  // and the _jackpotTicketRoll body delta lines (L2178, L2192, L2216,
+  // L2218-2219, L2224, L2226) — all EXCLUDED here as the documented v40.0
+  // delta sites. Every line in the gaps between those delta lines IS
+  // protected: the protected ranges below are the exact complement of the
+  // OLD-side modified-line set produced by
+  // `git diff 6a7455d1 HEAD -- DegenerusGameJackpotModule.sol`.
+  const SURF_01_PROTECTED_RANGES_V40 = [
+    { name: "JackpotModule L1-42 (pre-header-NatSpec surface)",            lo: 1,    hi: 42   },
+    { name: "JackpotModule L44-79 (post-header-NatSpec .. pre-event-doc)", lo: 44,   hi: 79   },
+    { name: "JackpotModule L86-91 (JackpotTicketWin def fields, unchanged)", lo: 86, hi: 91   },
+    { name: "JackpotModule L93-702 (incl. 8 surviving EntropyLib callsites + _randTraitTicket + _pickSoloQuadrant)", lo: 93, hi: 702 },
+    { name: "JackpotModule L704-707 (trait-burn emit args, unchanged)",    lo: 704,  hi: 707  },
+    { name: "JackpotModule L709 (trait-burn emit sourceLevel, unchanged)", lo: 709,  hi: 709  },
+    { name: "JackpotModule L711-1005 (gold-solo + daily-coin bodies)",     lo: 711,  hi: 1005 },
+    { name: "JackpotModule L1007-1010 (coin-path emit args, unchanged)",   lo: 1007, hi: 1010 },
+    { name: "JackpotModule L1012 (coin-path emit sourceLvl, unchanged)",   lo: 1012, hi: 1012 },
+    { name: "JackpotModule L1014-2177 (BAF jackpot + ticket-distribution bodies)", lo: 1014, hi: 2177 },
+    { name: "JackpotModule L2179-2191 (_jackpotTicketRoll signature + NatSpec tail)", lo: 2179, hi: 2191 },
+    { name: "JackpotModule L2193-2215 (_jackpotTicketRoll path/level roll, unchanged)", lo: 2193, hi: 2215 },
+    { name: "JackpotModule L2217 (quantityScaled derivation, unchanged)",  lo: 2217, hi: 2217 },
+    { name: "JackpotModule L2220-2223 (emit winner/targetLevel/sentinel, unchanged)", lo: 2220, hi: 2223 },
+    { name: "JackpotModule L2225 (emit minTargetLevel, unchanged)",        lo: 2225, hi: 2225 },
+    { name: "JackpotModule L2227-2231 (return entropy + closing braces)",  lo: 2227, hi: 2231 },
+  ];
+
+  // SURF-02 — DegenerusGameStorage.sol surviving surface byte-identical.
+  // The v39.0-baseline file is 1789 lines. The only Wave 1 delta is the
+  // deletion of the _queueLootboxTickets wrapper (OLD-side lines L683-701).
+  // Everything before and after that block — _queueTickets, _queueTicketsScaled,
+  // _queueTicketRange, the packed prize-pool helpers — is byte-identical.
+  const SURF_02_PROTECTED_RANGES_V40 = [
+    { name: "Storage L1-682 (incl. _queueTickets + _queueTicketsScaled + _queueTicketRange)", lo: 1, hi: 682 },
+    { name: "Storage L702-1789 (packed prize-pool helpers + remainder of file)", lo: 702, hi: 1789 },
+  ];
+
+  // SURF-03 — DegenerusGameMintModule.sol surviving surface byte-identical.
+  // The v39.0-baseline file is 1494 lines. The only Wave 1 delta is the
+  // _rollRemainder NatSpec comment rewording (OLD-side lines L649-651). The
+  // _rollRemainder code — the EntropyLib.hash2(entropy, rollSalt) call at
+  // L652 and the Bernoulli predicate at L653 — is byte-identical, as is the
+  // entire rest of the file.
+  const SURF_03_PROTECTED_RANGES_V40 = [
+    { name: "MintModule L1-648 (mint paths + _rollRemainder signature)",   lo: 1,   hi: 648  },
+    { name: "MintModule L652-1494 (hash2 callsite + Bernoulli predicate + remainder of file)", lo: 652, hi: 1494 },
+  ];
+
+  // ---------------------------------------------------------------------------
+  // walkAndAssertV40(baseline, path, ranges) — per-line modified-set walk
+  // against the named baseline. Re-declared inline (not factored to module
+  // scope) per the L466-473 / L624-633 carry-forward discipline. Same
+  // algorithm as the v36.0 / v37.0 walkAndAssert:
+  //   - D-IMPL-11 soft-skip on unreachable baseline.
+  //   - HEAD == BASELINE early-return (trivially preserved).
+  //   - Fail-loud on empty diff with HEAD != baseline (these files ALL carry
+  //     intentional Wave 1 deltas, so an empty diff means git misbehaved).
+  //   - Per-line walk via diff hunk parsing; record OLD-side `-` lines.
+  //   - Assert each protected line NOT in modifiedOldLines.
+  // ---------------------------------------------------------------------------
+  function walkAndAssertV40(baseline, path, ranges) {
+    let baselineReachable = false;
+    try {
+      execSync(`git rev-parse --verify ${baseline}^{commit}`, { stdio: "pipe" });
+      baselineReachable = true;
+    } catch (_) {
+      console.warn(
+        `[v40.0 SURF] baseline commit ${baseline} not reachable — soft-skipping ` +
+        `protected-range proof on ${path}. CI / fresh-clone hint: \`git fetch --unshallow\` ` +
+        `or \`git fetch origin ${baseline}\`.`,
+      );
+      return { skipped: true };
+    }
+    expect(baselineReachable).to.equal(true);
+
+    const headSha = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+    if (headSha.startsWith(baseline)) {
+      console.log(`[v40.0 SURF] HEAD == V39_BASELINE — protected ranges trivially preserved.`);
+      return { skipped: false, trivial: true };
+    }
+
+    const diff = execSync(
+      `git diff ${baseline} HEAD -- ${path}`,
+      { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
+    );
+
+    // D-IMPL-11 fail-loud-on-empty-diff guard: all three v40.0 SURF files
+    // carry an intentional Wave 1 delta, so an empty diff with HEAD != baseline
+    // means `git diff` is silently misbehaving — assert failure, not vacuous pass.
+    expect(
+      diff.length > 0,
+      `[v40.0 SURF] git diff ${baseline} HEAD returned empty output for ${path} — ` +
+      `baseline-vs-HEAD distinct and ${path} carries an intentional Wave 1 delta but ` +
+      `no diff produced. D-IMPL-11 fail-loud guard.`,
+    ).to.equal(true);
+
+    const hunkHeaderRe = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+    const lines = diff.split("\n");
+    const modifiedOldLines = new Set();
+    let oldCursor = -1;
+    let inHunk = false;
+
+    for (const ln of lines) {
+      const headerMatch = hunkHeaderRe.exec(ln);
+      if (headerMatch) {
+        oldCursor = Number(headerMatch[1]);
+        inHunk = true;
+        continue;
+      }
+      if (!inHunk) continue;
+      if (ln.startsWith("\\")) continue;
+      const tag = ln.length > 0 ? ln[0] : " ";
+      if (tag === " ") {
+        oldCursor += 1;
+      } else if (tag === "-") {
+        modifiedOldLines.add(oldCursor);
+        oldCursor += 1;
+      } else if (tag === "+") {
+        // insertion only — OLD cursor does not advance.
+      } else {
+        inHunk = false;
+      }
+    }
+
+    for (const range of ranges) {
+      for (let line = range.lo; line <= range.hi; line++) {
+        expect(
+          modifiedOldLines.has(line),
+          `Baseline line ${line} (inside protected range "${range.name}" [${range.lo}-${range.hi}]) ` +
+          `was modified or removed in ${path} vs v39.0 baseline ${baseline}`,
+        ).to.equal(false);
+      }
+    }
+    return { skipped: false, trivial: false };
+  }
+
+  it("SURF-01 — DegenerusGameJackpotModule.sol surviving surface byte-identical vs v39.0 baseline 6a7455d1 (3 intentional Wave 1 delta sites excluded)", function () {
+    const result = walkAndAssertV40(V39_BASELINE, JACKPOT_MODULE_PATH_V40, SURF_01_PROTECTED_RANGES_V40);
+    if (result.skipped) this.skip();
+  });
+
+  it("SURF-02 — DegenerusGameStorage.sol surviving surface byte-identical vs v39.0 baseline 6a7455d1 (_queueLootboxTickets deletion excluded)", function () {
+    const result = walkAndAssertV40(V39_BASELINE, STORAGE_PATH_V40, SURF_02_PROTECTED_RANGES_V40);
+    if (result.skipped) this.skip();
+  });
+
+  it("SURF-03 — DegenerusGameMintModule.sol surviving surface byte-identical vs v39.0 baseline 6a7455d1 (_rollRemainder NatSpec reword excluded)", function () {
+    const result = walkAndAssertV40(V39_BASELINE, MINT_MODULE_PATH_V40, SURF_03_PROTECTED_RANGES_V40);
+    if (result.skipped) this.skip();
+  });
+
+  it("SURF-04 — EntropyLib.sol is a whole-file intentional Wave 1 rewrite (no protected range; hash2 behaviour pinned by Ent05KeccakRefactorInvariant.test.js)", function () {
+    // EntropyLib.sol carries no protected range at v40.0: Phase 278 Wave 1
+    // deletes entropyStep and rewrites the library NatSpec, so the file is an
+    // intentional whole-file rewrite. The surviving primitive hash2 is
+    // behaviourally unchanged — its keccak scratch-slot semantics are pinned
+    // by the drift-gate + chi-square assertions in
+    // test/stat/Ent05KeccakRefactorInvariant.test.js. This `it` documents that
+    // disposition and asserts that file still exists with hash2 as its sole
+    // function (drift detection if a future phase re-adds a second member).
+    const entropyLibPath = "contracts/libraries/EntropyLib.sol";
+    expect(fs.existsSync(entropyLibPath), `${entropyLibPath} must exist`).to.equal(true);
+    const src = fs.readFileSync(entropyLibPath, "utf8");
+    const fnMatches = src.match(/function\s+\w+/g) || [];
+    expect(
+      fnMatches.length,
+      `[v40.0 SURF] EntropyLib.sol must contain exactly one function (hash2); ` +
+      `found ${fnMatches.length}: ${fnMatches.join(", ")}`,
+    ).to.equal(1);
+    expect(src).to.include("function hash2");
+    expect(src).to.not.include("entropyStep");
+  });
+
+  it("SURF-05 — the v40.0 milestone production-contract change set vs v39.0 baseline 6a7455d1 is exactly the six documented files", function () {
+    // The v39.0 baseline 6a7455d1 is the v39.0 CLOSURE HEAD. The v40.0
+    // milestone spans Phases 275-278; the production-contract surface modified
+    // between 6a7455d1 and HEAD is the cumulative v40.0 change set:
+    //   - DegenerusGameJackpotModule.sol  (Phases 276 + 277 + 278)
+    //   - DegenerusGameLootboxModule.sol  (Phases 275 + 277)
+    //   - IDegenerusGameModules.sol       (Phase 277 — LootboxTicketRoll retirement)
+    //   - EntropyLib.sol                  (Phase 278 Wave 1)
+    //   - DegenerusGameMintModule.sol     (Phase 278 Wave 1)
+    //   - DegenerusGameStorage.sol        (Phase 278 Wave 1)
+    // This SURF-05 gate asserts NO production-contract file OUTSIDE that set
+    // drifted across the whole v40.0 milestone. `contracts/test/` is excluded
+    // — those are on-chain test helpers, not audit-subject production surface.
+    let baselineReachable = false;
+    try {
+      execSync(`git rev-parse --verify ${V39_BASELINE}^{commit}`, { stdio: "pipe" });
+      baselineReachable = true;
+    } catch (_) {
+      console.warn(
+        `[v40.0 SURF] baseline commit ${V39_BASELINE} not reachable — soft-skipping ` +
+        `SURF-05 file-set proof.`,
+      );
+      this.skip();
+      return;
+    }
+    expect(baselineReachable).to.equal(true);
+
+    const nameOnly = execSync(
+      `git diff --name-only ${V39_BASELINE} HEAD -- contracts/`,
+      { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
+    )
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+      .filter((s) => !s.startsWith("contracts/test/"));
+
+    const expectedProductionFiles = [
+      "contracts/interfaces/IDegenerusGameModules.sol",
+      "contracts/libraries/EntropyLib.sol",
+      "contracts/modules/DegenerusGameJackpotModule.sol",
+      "contracts/modules/DegenerusGameLootboxModule.sol",
+      "contracts/modules/DegenerusGameMintModule.sol",
+      "contracts/storage/DegenerusGameStorage.sol",
+    ].sort();
+
+    expect(
+      nameOnly.slice().sort(),
+      `[v40.0 SURF] v40.0-milestone production-contract change set vs v39.0 baseline ` +
+      `${V39_BASELINE} must be exactly the 6 documented files (EntropyLib, JackpotModule, ` +
+      `LootboxModule, MintModule, Storage, IDegenerusGameModules). Got: ${nameOnly.join(", ")}`,
+    ).to.deep.equal(expectedProductionFiles);
   });
 });
