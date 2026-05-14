@@ -201,7 +201,14 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
   });
 
   describe("TST-REG-02 — mint-boost fractional path UNCHANGED at v39", function () {
-    it("[02a] DegenerusGameMintModule.sol byte-identical to baseline 06623edb (G23)", function () {
+    // SUPERSEDED by the v40.0 SURF-03 block in test/stat/SurfaceRegression.test.js:
+    // Phase 278 reworded the _rollRemainder NatSpec comment in
+    // DegenerusGameMintModule.sol (the dead `entropyStep` name dropped), so
+    // byte-identity vs the v38 baseline 06623edb no longer holds. The
+    // _rollRemainder code itself is unchanged — only the comment moved — and
+    // the v40.0 SURF-03 gate re-protects the MintModule body against the v39
+    // baseline 6a7455d1 with the comment reword excluded.
+    it.skip("[02a] DegenerusGameMintModule.sol byte-identical to baseline 06623edb (G23)", function () {
       // Mirror G23 from the plan: cmp the file against baseline.
       const result = execSync(
         `cmp <(git show ${V38_BASELINE}:contracts/modules/DegenerusGameMintModule.sol) contracts/modules/DegenerusGameMintModule.sol; echo "exit=$?"`,
