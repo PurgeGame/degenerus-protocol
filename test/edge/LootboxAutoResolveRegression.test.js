@@ -15,11 +15,14 @@
 //                 producer of fractional residues, NOT mint-boost.
 //   - TST-REG-03: auto-resolve paths (`resolveLootboxDirect` +
 //                 `resolveRedemptionLootbox`) call `_queueTickets(player,
-//                 targetLevel, whole, false)` (the whole-helper) under the
-//                 sentinel gate, emit `TicketsQueued`, NEVER emit
-//                 `LootboxTicketRoll`, NEVER call `wwxrp.mintPrize` with
-//                 `LOOTBOX_WWXRP_CONSOLATION`. Bernoulli math is hoisted to
-//                 shared scope above the sentinel gate per D-275-HOIST-01.
+//                 targetLevel, whole, false)` (the whole-helper) on the unified
+//                 ticket-queue path, emit `TicketsQueued`, and stay silent.
+//                 Post-Phase-277 the `index != type(uint48).max` sentinel is
+//                 retired: there is no `LootboxTicketRoll` event anywhere in
+//                 the module, the manual cold-bust WWXRP consolation is gated
+//                 by `emitLootboxEvent` (manual-only), and both auto-resolve
+//                 callers pass `index = 0` and `emitLootboxEvent = false`.
+//                 Bernoulli math is shared-scope per D-275-HOIST-01.
 //   - TST-REG-04: cross-mixing variance — manual + auto-resolve opens for
 //                 the same player + level coexist without corruption.
 //                 Manual contributions are per-lootbox-Bernoulli (higher
@@ -30,15 +33,15 @@
 //   All four are source-level structural and byte-identity proofs. Full
 //   end-to-end integration of `processFutureTicketBatch` + `_rollRemainder`
 //   for these scenarios is covered downstream in `test/edge/BackfillIdempotency`
-//   and the Foundry suite under `test/fuzz/` (pre-v39, status-quo). v39 makes
-//   NO changes to:
-//     - DegenerusGameMintModule.sol (TST-REG-02)
+//   and the Foundry suite under `test/fuzz/` (pre-v39, status-quo). The
+//   following remain unchanged and are asserted as such:
+//     - DegenerusGameMintModule.sol (TST-REG-02) — byte-identical to baseline
 //     - DegenerusGameStorage.sol _queueTickets / _queueTicketsScaled /
-//       _rollRemainder semantics (TST-REG-03)
-//     - The 4 caller-site auto-resolve flow other than threading
-//       `type(uint48).max` sentinel into `_resolveLootboxCommon`
-//   so the status-quo preservation tests are byte-identity assertions
-//   against baseline `06623edb` plus structural source-level proofs.
+//       _rollRemainder semantics (TST-REG-03 / TST-REG-04)
+//   TST-REG-03 is updated for the Phase 277 sentinel retirement: the
+//   `index != type(uint48).max` gate is gone, auto-resolve callers pass
+//   `index = 0` + `emitLootboxEvent = false`, the cold-bust consolation is
+//   `emitLootboxEvent`-gated, and `LootboxTicketRoll` is fully removed.
 //
 // CROSS-CITES:
 //   - D-274-MANUAL-ONLY-01, D-274-AUTORESOLVE-OUT-01, D-274-MINTBOOST-OUT-01
@@ -67,6 +70,45 @@ const STORAGE_PATH = path.resolve(
 
 // v38 closure baseline SHA (per .planning/STATE.md "Last Shipped Milestone").
 const V38_BASELINE = "06623edb";
+
+// Extract the top-level positional args of the first `_resolveLootboxCommon(...)`
+// call within a function-body slice. Paren-depth-aware so `uint32(index)` stays
+// one arg. Returns a string[] of trimmed args, or null if not found.
+function extractResolveCommonArgs(body) {
+  const marker = "_resolveLootboxCommon(";
+  const idx = body.indexOf(marker);
+  if (idx < 0) return null;
+  const open = idx + marker.length - 1; // position of `(`
+  let depth = 0;
+  let close = -1;
+  for (let i = open; i < body.length; i++) {
+    if (body[i] === "(") depth++;
+    else if (body[i] === ")") {
+      depth--;
+      if (depth === 0) {
+        close = i;
+        break;
+      }
+    }
+  }
+  if (close < 0) return null;
+  const inner = body.slice(open + 1, close);
+  const args = [];
+  let argDepth = 0;
+  let cur = "";
+  for (const ch of inner) {
+    if (ch === "(") argDepth++;
+    if (ch === ")") argDepth--;
+    if (ch === "," && argDepth === 0) {
+      args.push(cur.trim());
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur.trim().length > 0) args.push(cur.trim());
+  return args;
+}
 
 describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", function () {
   this.timeout(60_000);
@@ -180,40 +222,54 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
     });
   });
 
-  describe("TST-REG-03 — auto-resolve paths byte-equivalent at v39", function () {
-    it("[03a] resolveLootboxDirect passes `type(uint48).max` sentinel", function () {
+  describe("TST-REG-03 — auto-resolve paths silent + sentinel retired (Phase 277)", function () {
+    it("[03a] resolveLootboxDirect passes `index = 0` and `emitLootboxEvent = false` to _resolveLootboxCommon", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const fnIdx = source.indexOf("function resolveLootboxDirect(");
       expect(fnIdx).to.be.greaterThan(-1);
       // Scan within 2500 chars (full function body) for the call to
-      // _resolveLootboxCommon and for the sentinel value.
+      // _resolveLootboxCommon.
       const body = source.slice(fnIdx, fnIdx + 2500);
       expect(body.includes("_resolveLootboxCommon(")).to.equal(true);
-      expect(body.includes("type(uint48).max")).to.equal(true);
+      // Sentinel value is fully retired — the caller passes `0`, not the sentinel.
+      expect(body.includes("type(uint48).max")).to.equal(false);
+      const args = extractResolveCommonArgs(body);
+      expect(args, "_resolveLootboxCommon call args not parsed").to.not.equal(null);
+      // Positional: 3rd arg = index, 11th arg = emitLootboxEvent.
+      expect(args[2], "resolveLootboxDirect must pass index = 0").to.equal("0");
+      expect(
+        args[10],
+        "resolveLootboxDirect must pass emitLootboxEvent = false"
+      ).to.equal("false");
     });
 
-    it("[03b] resolveRedemptionLootbox passes `type(uint48).max` sentinel", function () {
+    it("[03b] resolveRedemptionLootbox passes `index = 0` and `emitLootboxEvent = false` to _resolveLootboxCommon", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const fnIdx = source.indexOf("function resolveRedemptionLootbox(");
       expect(fnIdx).to.be.greaterThan(-1);
       const body = source.slice(fnIdx, fnIdx + 2500);
       expect(body.includes("_resolveLootboxCommon(")).to.equal(true);
-      expect(body.includes("type(uint48).max")).to.equal(true);
+      expect(body.includes("type(uint48).max")).to.equal(false);
+      const args = extractResolveCommonArgs(body);
+      expect(args, "_resolveLootboxCommon call args not parsed").to.not.equal(null);
+      expect(args[2], "resolveRedemptionLootbox must pass index = 0").to.equal("0");
+      expect(
+        args[10],
+        "resolveRedemptionLootbox must pass emitLootboxEvent = false"
+      ).to.equal("false");
     });
 
-    it("[03c] auto-resolve branch in `_resolveLootboxCommon` calls `_queueTickets(player, targetLevel, whole, false)` (Phase 275 LBX-AR-02 — both branches share the whole-helper after Bernoulli hoist)", function () {
+    it("[03c] the unified ticket-queue path in `_resolveLootboxCommon` calls `_queueTickets(player, targetLevel, whole, false)` exactly once (sentinel retired — no per-branch duplication)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Phase 275 hoisted the Bernoulli math to shared scope and swapped the
-      // auto-resolve `_queueTicketsScaled(...)` callsite to `_queueTickets(player,
-      // targetLevel, whole, false)`. Both manual + auto-resolve now call the
-      // same whole-helper; the manual call is first in source order (true-branch
-      // of `if (index != type(uint48).max)`), auto-resolve is second (else arm).
+      // Phase 277 retired the `index != type(uint48).max` sentinel branch. The
+      // manual and auto-resolve paths now share one unconditional
+      // `_queueTickets(player, targetLevel, whole, false)` call.
       const callPattern = /_queueTickets\(player, targetLevel, whole, false\)/g;
       const calls = (source.match(callPattern) || []).length;
       expect(
         calls,
-        "expected ≥2 `_queueTickets(player, targetLevel, whole, false)` callsites (manual + auto-resolve) post-Phase-275"
-      ).to.be.gte(2);
+        "expected exactly one `_queueTickets(player, targetLevel, whole, false)` callsite (unified path post-Phase-277)"
+      ).to.equal(1);
       // `_queueTicketsScaled` MUST no longer appear in `DegenerusGameLootboxModule.sol`
       expect(
         source.includes("_queueTicketsScaled"),
@@ -221,35 +277,49 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       ).to.equal(false);
     });
 
-    it("[03d] auto-resolve branch NEVER emits LootboxTicketRoll or calls wwxrp.mintPrize", function () {
+    it("[03d] auto-resolve is silent: LootboxTicketRoll is gone, the cold-bust consolation is `emitLootboxEvent`-gated, and both auto-resolve callers pass `emitLootboxEvent = false`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Auto-resolve branch is the SECOND occurrence of `_queueTickets(player,
-      // targetLevel, whole, false)` — the first is the manual branch inside
-      // `if (index != type(uint48).max)`, the second is the `else` arm.
-      const callLine = "_queueTickets(player, targetLevel, whole, false)";
-      const firstIdx = source.indexOf(callLine);
-      const autoIdx = source.indexOf(callLine, firstIdx + 1);
-      expect(firstIdx).to.be.greaterThan(-1);
-      expect(autoIdx).to.be.greaterThan(firstIdx);
-      // The auto-resolve else block ends shortly after this line. Within
-      // the next 400 chars, no consolation/emit must appear.
-      const tail = source.slice(autoIdx, autoIdx + 400);
-      expect(tail.includes("emit LootboxTicketRoll(")).to.equal(false);
-      expect(tail.includes("wwxrp.mintPrize")).to.equal(false);
-      expect(tail.includes("emit LootBoxWwxrpReward(player, day, amount, LOOTBOX_WWXRP_CONSOLATION)")).to.equal(false);
+      // (1) LootboxTicketRoll is fully retired from the module.
+      expect(
+        (source.match(/LootboxTicketRoll/g) || []).length,
+        "LootboxTicketRoll must not appear anywhere in DegenerusGameLootboxModule.sol"
+      ).to.equal(0);
+      // (2) The manual cold-bust WWXRP consolation is gated on
+      //     `emitLootboxEvent && whole == 0` — it cannot fire on the
+      //     auto-resolve (emitLootboxEvent = false) path.
+      expect(
+        /if \(emitLootboxEvent && whole == 0\)/.test(source),
+        "the manual cold-bust consolation must be gated on `emitLootboxEvent && whole == 0`"
+      ).to.equal(true);
+      // (3) Both auto-resolve callers pass emitLootboxEvent = false.
+      for (const fnSig of [
+        "function resolveLootboxDirect(",
+        "function resolveRedemptionLootbox(",
+      ]) {
+        const fnIdx = source.indexOf(fnSig);
+        const body = source.slice(fnIdx, fnIdx + 2500);
+        const args = extractResolveCommonArgs(body);
+        expect(args, `${fnSig} _resolveLootboxCommon call args not parsed`).to.not.equal(
+          null
+        );
+        expect(
+          args[10],
+          `${fnSig} must pass emitLootboxEvent = false`
+        ).to.equal("false");
+      }
     });
 
-    it("[03e] LootboxTicketRoll emit count == 1 in the entire module (single manual-branch site)", function () {
+    it("[03e] LootboxTicketRoll emit count == 0 in the entire module (event retired)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const emits = (source.match(/emit LootboxTicketRoll\(/g) || []).length;
-      expect(emits).to.equal(1);
+      expect(emits).to.equal(0);
     });
 
-    it("[03f] LOOTBOX_WWXRP_CONSOLATION emit count == 1 in the entire module (single manual-branch site)", function () {
+    it("[03f] the cold-bust WWXRP consolation is single-site and sits under the `emitLootboxEvent` gate (manual-only)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // Both the `wwxrp.mintPrize(..., LOOTBOX_WWXRP_CONSOLATION)` call and the
       // adjacent `emit LootBoxWwxrpReward(..., LOOTBOX_WWXRP_CONSOLATION)` are
-      // single-site.
+      // single-site, inside the `emitLootboxEvent && whole == 0` block.
       const mintCount = (source.match(
         /wwxrp\.mintPrize\(player, LOOTBOX_WWXRP_CONSOLATION\)/g
       ) || []).length;
@@ -258,6 +328,19 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       ) || []).length;
       expect(mintCount).to.equal(1);
       expect(emitCount).to.equal(1);
+      // The consolation mint sits textually after the `emitLootboxEvent && whole == 0`
+      // gate that opens its block.
+      const gateIdx = source.indexOf("if (emitLootboxEvent && whole == 0)");
+      const mintIdx = source.indexOf(
+        "wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"
+      );
+      expect(gateIdx, "`emitLootboxEvent && whole == 0` gate not found").to.be.greaterThan(
+        -1
+      );
+      expect(
+        mintIdx,
+        "the consolation mint must sit inside the `emitLootboxEvent` gate"
+      ).to.be.greaterThan(gateIdx);
     });
   });
 
@@ -320,37 +403,56 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       ).to.equal(true);
     });
 
-    it("[04d] the `index` discriminator routes manual vs auto-resolve with zero crossover (Phase 275 — both branches share the whole-helper; routing is by source order around the sentinel gate)", function () {
+    it("[04d] manual vs auto-resolve are discriminated by `emitLootboxEvent`, not by the `index` value — the unified ticket-queue path has zero per-branch crossover", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Find the `if (index != type(uint48).max)` gate.
-      const manualGate = source.indexOf("if (index != type(uint48).max)");
-      expect(manualGate).to.be.greaterThan(-1);
-      // Phase 275 LBX-AR-02: both branches now call
-      // `_queueTickets(player, targetLevel, whole, false)`. The manual call
-      // (true-branch) appears textually BEFORE the auto-resolve call (else-arm).
-      const tail = source.slice(manualGate, manualGate + 3000);
-      const callLine = "_queueTickets(player, targetLevel, whole, false)";
-      // Both branches contain the same callsite shape — must appear at least twice.
-      const callMatches = (tail.match(/_queueTickets\(player, targetLevel, whole, false\)/g) || []).length;
-      expect(callMatches, "manual + auto-resolve _queueTickets calls under sentinel gate").to.be.gte(2);
-      // The else-arm comment anchor confirms the second call is the auto-resolve branch.
-      expect(tail.includes("} else {")).to.equal(true);
-      // The manual-branch call must come first (true-branch of the gate).
-      const firstCallTailIdx = tail.indexOf(callLine);
-      const elseIdx = tail.indexOf("} else {");
-      expect(firstCallTailIdx).to.be.greaterThan(-1);
-      expect(elseIdx).to.be.greaterThan(firstCallTailIdx);
-      const autoCallTailIdx = tail.indexOf(callLine, elseIdx);
-      expect(autoCallTailIdx).to.be.greaterThan(elseIdx);
+      // Phase 277 retired the `index != type(uint48).max` sentinel gate. Routing
+      // is now the `emitLootboxEvent` bool: it gates both the `LootBoxOpened`
+      // emit and the manual cold-bust WWXRP consolation, while the
+      // `_queueTickets(player, targetLevel, whole, false)` call is unconditional
+      // and shared by both paths.
+      expect(
+        source.includes("if (index != type(uint48).max)"),
+        "the `index != type(uint48).max` sentinel gate must be fully retired"
+      ).to.equal(false);
+      // The unified `_queueTickets` call appears exactly once — no per-branch
+      // duplication, so manual and auto-resolve cannot cross over on the queue.
+      const callMatches = (
+        source.match(/_queueTickets\(player, targetLevel, whole, false\)/g) || []
+      ).length;
+      expect(
+        callMatches,
+        "the unified ticket-queue path must call `_queueTickets(player, targetLevel, whole, false)` exactly once"
+      ).to.equal(1);
+      // The manual-only behaviors (LootBoxOpened emit + cold-bust consolation)
+      // are both gated by `emitLootboxEvent`.
+      expect(
+        /if \(emitLootboxEvent\)/.test(source),
+        "the `LootBoxOpened` emit must be gated by `emitLootboxEvent`"
+      ).to.equal(true);
+      expect(
+        /if \(emitLootboxEvent && whole == 0\)/.test(source),
+        "the manual cold-bust consolation must be gated by `emitLootboxEvent`"
+      ).to.equal(true);
     });
 
-    it("[04e] sentinel `type(uint48).max` cannot collide with any realistic lootbox index", function () {
-      const SENTINEL = (1n << 48n) - 1n; // 281,474,976,710,655 (~281 trillion)
-      // The protocol increments `lootboxRngIndex` once per lootbox purchase.
-      // For the sentinel to collide, > 281 trillion lootboxes would need to
-      // exist — a degenerate-impossible upper bound.
-      expect(SENTINEL).to.equal(0xffffffffffffn);
-      expect(SENTINEL > 1n << 47n).to.equal(true);
+    it("[04e] auto-resolve callers pass `index = 0` — the value gates nothing and is emitted nowhere after sentinel retirement", function () {
+      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
+      // Post-Phase-277 the `uint48 index` parameter is purely the event
+      // identifier on the manual `LootBoxOpened` emit. Auto-resolve callers,
+      // which emit nothing, pass the clean `0` default (D-277-AR-INDEX-01).
+      for (const fnSig of [
+        "function resolveLootboxDirect(",
+        "function resolveRedemptionLootbox(",
+      ]) {
+        const fnIdx = source.indexOf(fnSig);
+        expect(fnIdx, `${fnSig} not found`).to.be.greaterThan(-1);
+        const body = source.slice(fnIdx, fnIdx + 2500);
+        const args = extractResolveCommonArgs(body);
+        expect(args, `${fnSig} _resolveLootboxCommon args not parsed`).to.not.equal(
+          null
+        );
+        expect(args[2], `${fnSig} must pass index = 0`).to.equal("0");
+      }
     });
   });
 });

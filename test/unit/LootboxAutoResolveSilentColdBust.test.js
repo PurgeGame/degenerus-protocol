@@ -2,21 +2,24 @@
 //
 // LootboxAutoResolveSilentColdBust.test.js — Phase 275 Wave 2 TST-LBX-AR-03
 //
-// Silent cold-bust regression on the auto-resolve branch:
-//   When the Bernoulli round-up fails (`whole == 0` after the shared-scope
-//   Bernoulli math runs on `scaledPre > 0`), the auto-resolve path produces:
+// Silent cold-bust regression on the auto-resolve path:
+//   When the Bernoulli round-up fails (`whole == 0` after the Bernoulli math
+//   runs on `scaledPre > 0`), an auto-resolve caller produces:
 //     - ZERO `TicketsQueued` emit (the `_queueTickets` helper at
-//       `DegenerusGameStorage.sol:568` early-returns on `quantity == 0`).
-//     - ZERO `LootBoxWwxrpReward` emit on the auto-resolve branch.
-//     - ZERO `LootboxTicketRoll` emit on the auto-resolve branch.
+//       `DegenerusGameStorage.sol` early-returns on `quantity == 0`).
+//     - ZERO `LootBoxWwxrpReward` emit (consolation is `emitLootboxEvent`-gated;
+//       auto-resolve callers pass `emitLootboxEvent = false`).
 //     - ZERO `wwxrp.mintPrize` invocation (no consolation on auto-resolve).
 //
-// Per `feedback_no_dead_guards.md` + the v40 hoist invariant, the silent
-// cold-bust contract is enforced purely by:
-//   (i) the structure of the `_resolveLootboxCommon` else-arm (only one
-//       statement: `_queueTickets(player, targetLevel, whole, false)`), and
+// Phase 277 retired the `index != type(uint48).max` sentinel: `_queueTickets`
+// is now a single unconditional callsite shared by every path, and the WWXRP
+// cold-bust consolation sits under `if (emitLootboxEvent && whole == 0)`. The
+// `LootboxTicketRoll` event is deleted entirely. The silent cold-bust contract
+// is enforced purely by:
+//   (i)  auto-resolve callers passing `emitLootboxEvent = false`, which skips
+//        both the `LootBoxOpened` emit and the consolation gate, and
 //   (ii) the `if (quantity == 0) return;` early-return inside `_queueTickets`
-//       at DegenerusGameStorage.sol:568.
+//        at DegenerusGameStorage.sol, which absorbs the `whole == 0` case.
 //
 // TEST STRATEGY:
 //   No state fixture exists for `resolveLootboxDirect` /
@@ -27,19 +30,21 @@
 //   theoretical worst case FIRST; if no fixture, source-level/tester-direct
 //   evidence is load-bearing"), this test combines:
 //     (a) Direct-call cold-bust math verification on the byte-identical
-//         hoisted Bernoulli (LootboxBernoulliTester).
-//     (b) Source-level structural proofs that the auto-resolve else-arm
-//         contains ONLY the queue call + that the cold-bust gate is the
-//         shared `_queueTickets` early-return at DegenerusGameStorage.sol:568.
-//     (c) Manual-path positive control: same cold-bust seed produces
-//         `LootBoxWwxrpReward` + `wwxrp.mintPrize` (consolation) emit AND
-//         `LootboxTicketRoll` emit per D-275-STATUSQUO-01 — proves the
-//         assertion mechanism functions on the path where emits ARE expected.
+//         Bernoulli (LootboxBernoulliTester).
+//     (b) Source-level structural proofs that the ticket award is a single
+//         unconditional `_queueTickets` call, that auto-resolve callers pass
+//         `emitLootboxEvent = false`, and that the cold-bust gate is the
+//         shared `_queueTickets` early-return at DegenerusGameStorage.sol.
+//     (c) Manual-path positive control: same cold-bust seed reaches the
+//         `emitLootboxEvent && whole == 0` consolation gate, producing
+//         `LootBoxWwxrpReward` + `wwxrp.mintPrize` — proves the assertion
+//         mechanism functions on the path where the consolation IS expected.
 //
 // CROSS-CITES:
-//   - D-275-HOIST-01 (Bernoulli math byte-identical between branches)
+//   - D-275-HOIST-01 (Bernoulli math byte-identical between paths)
 //   - D-40N-SILENT-01 (auto-resolve cold-bust SILENT)
-//   - D-275-STATUSQUO-01 (manual-branch consolation preserved verbatim)
+//   - D-277-CONSOLATION-GATE-01 (manual cold-bust consolation under emitLootboxEvent)
+//   - D-277-AR-SILENT-01 (auto-resolve callers pass emitLootboxEvent = false)
 //   - feedback_rng_backward_trace.md (cold-bust seed selection upstream)
 //   - feedback_rng_commitment_window.md (player cannot mutate seed once
 //     `_resolveLootboxCommon` is entered)
@@ -102,32 +107,83 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
     });
   });
 
-  describe("Source-level proof: auto-resolve else-arm contains ONLY the _queueTickets(whole) call — no emit, no mintPrize", function () {
-    it("[02a] auto-resolve else-arm tail (next 300 chars after the second `_queueTickets` call) contains NO mintPrize/LootBoxWwxrpReward/LootboxTicketRoll", function () {
+  describe("Source-level proof: ticket award is a single unconditional _queueTickets call; auto-resolve callers pass emitLootboxEvent = false", function () {
+    it("[02a] `_queueTickets(player, targetLevel, whole, false)` appears exactly once; the consolation that follows it is `emitLootboxEvent`-gated", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The auto-resolve `_queueTickets(player, targetLevel, whole, false)` is
-      // the SECOND occurrence of that line in the module — the first is the
-      // manual true-branch.
+      // The sentinel branch is retired: the ticket award is a single
+      // unconditional `_queueTickets(player, targetLevel, whole, false)`
+      // callsite shared by every path. The cold-bust case is absorbed by the
+      // helper's `if (quantity == 0) return;` early-return.
       const callLine = "_queueTickets(player, targetLevel, whole, false)";
       const firstIdx = source.indexOf(callLine);
-      const autoIdx = source.indexOf(callLine, firstIdx + 1);
-      expect(firstIdx, "first (manual-branch) _queueTickets callsite not found").to.be.greaterThan(-1);
-      expect(autoIdx, "second (auto-resolve) _queueTickets callsite not found").to.be.greaterThan(firstIdx);
-
-      const tail = source.slice(autoIdx, autoIdx + 300);
-      expect(tail.includes("wwxrp.mintPrize"), "auto-resolve else-arm must not call wwxrp.mintPrize").to.equal(false);
-      expect(tail.includes("emit LootBoxWwxrpReward"), "auto-resolve else-arm must not emit LootBoxWwxrpReward").to.equal(false);
-      expect(tail.includes("emit LootboxTicketRoll"), "auto-resolve else-arm must not emit LootboxTicketRoll").to.equal(false);
+      const secondIdx = source.indexOf(callLine, firstIdx + 1);
+      expect(firstIdx, "`_queueTickets(player, targetLevel, whole, false)` callsite not found").to.be.greaterThan(-1);
+      expect(
+        secondIdx,
+        "`_queueTickets(player, targetLevel, whole, false)` must appear exactly once (sentinel-branch duplication retired)"
+      ).to.equal(-1);
+      // The consolation `mintPrize` + `LootBoxWwxrpReward` emit that follow the
+      // queue call sit inside `if (emitLootboxEvent && whole == 0)` — so an
+      // auto-resolve caller (emitLootboxEvent = false) reaches neither.
+      const tail = source.slice(firstIdx, firstIdx + 600);
+      expect(
+        tail.includes("if (emitLootboxEvent && whole == 0)"),
+        "consolation gate `if (emitLootboxEvent && whole == 0)` must follow the queue call"
+      ).to.equal(true);
+      const gateIdx = tail.indexOf("if (emitLootboxEvent && whole == 0)");
+      expect(
+        tail.indexOf("wwxrp.mintPrize", gateIdx),
+        "consolation mintPrize must sit inside the emitLootboxEvent gate"
+      ).to.be.greaterThan(gateIdx);
+      expect(
+        tail.indexOf("emit LootBoxWwxrpReward", gateIdx),
+        "consolation LootBoxWwxrpReward must sit inside the emitLootboxEvent gate"
+      ).to.be.greaterThan(gateIdx);
     });
 
-    it("[02b] both auto-resolve callers (resolveLootboxDirect + resolveRedemptionLootbox) pass `type(uint48).max` sentinel and `emitLootboxEvent=false`", function () {
+    it("[02b] both auto-resolve callers (resolveLootboxDirect + resolveRedemptionLootbox) pass `index = 0` and `emitLootboxEvent = false`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
+      // `_resolveLootboxCommon` positional args: player(1), day(2), index(3),
+      // amount(4), targetLevel(5), currentLevel(6), seed(7), presale(8),
+      // allowWhalePass(9), allowLazyPass(10), emitLootboxEvent(11),
+      // allowBoons(12), distressEth(13), totalPackedEth(14). Phase 277 retired
+      // the `type(uint48).max` sentinel: auto-resolve callers pass `index = 0`
+      // and `emitLootboxEvent = false`.
       for (const fnName of ["function resolveLootboxDirect(", "function resolveRedemptionLootbox("]) {
         const fnIdx = source.indexOf(fnName);
         expect(fnIdx, `${fnName} not found`).to.be.greaterThan(-1);
         const body = source.slice(fnIdx, fnIdx + 3000);
-        expect(body.includes("_resolveLootboxCommon("), `${fnName} must call _resolveLootboxCommon`).to.equal(true);
-        expect(body.includes("type(uint48).max"), `${fnName} must pass the sentinel`).to.equal(true);
+        const callIdx = body.indexOf("_resolveLootboxCommon(");
+        expect(callIdx, `${fnName} must call _resolveLootboxCommon`).to.be.greaterThan(-1);
+        // Extract the call's arg list by paren-matching.
+        let depth = 0;
+        let argStart = -1;
+        let argEnd = -1;
+        for (let i = callIdx + "_resolveLootboxCommon".length; i < body.length; i++) {
+          if (body[i] === "(") {
+            if (depth === 0) argStart = i + 1;
+            depth++;
+          } else if (body[i] === ")") {
+            depth--;
+            if (depth === 0) {
+              argEnd = i;
+              break;
+            }
+          }
+        }
+        expect(argEnd, `${fnName}: could not paren-match _resolveLootboxCommon call`).to.be.greaterThan(argStart);
+        const args = body
+          .slice(argStart, argEnd)
+          .split(",")
+          .map((a) => a.replace(/\/\/.*$/gm, "").trim())
+          .filter((a) => a.length > 0);
+        expect(args.length, `${fnName}: _resolveLootboxCommon must receive 14 positional args`).to.equal(14);
+        expect(args[2], `${fnName} must pass index = 0 (3rd positional)`).to.equal("0");
+        expect(args[10], `${fnName} must pass emitLootboxEvent = false (11th positional)`).to.equal("false");
+        expect(
+          body.includes("type(uint48).max"),
+          `${fnName} must NOT reference the retired type(uint48).max sentinel`
+        ).to.equal(false);
       }
     });
 
@@ -162,52 +218,55 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
     });
   });
 
-  describe("Manual-path positive control: cold-bust seed on manual branch triggers consolation + emits (per D-275-STATUSQUO-01)", function () {
-    it("[03a] same cold-bust math at scaledPre=1, slice=99 — the manual branch reaches the consolation else-arm because whole==0", async function () {
+  describe("Manual-path positive control: cold-bust seed reaches the emitLootboxEvent-gated consolation (per D-277-CONSOLATION-GATE-01)", function () {
+    it("[03a] same cold-bust math at scaledPre=1, slice=99 — whole==0, so a manual open reaches the `emitLootboxEvent && whole == 0` consolation gate", async function () {
       const tester = await deployTester();
-      // Same seed as the silent cold-bust test above (slice=99). The math is
-      // byte-identical between branches per D-275-HOIST-01 — so both branches
-      // see whole=0. The DIFFERENCE is downstream:
-      //   - Manual branch: pays LOOTBOX_WWXRP_CONSOLATION + emits LootBoxWwxrpReward + emits LootboxTicketRoll(scaledPre, roundedUp=false).
-      //   - Auto-resolve branch: calls _queueTickets(0) → silent early-return.
+      // Same seed as the silent cold-bust test above (slice=99). The Bernoulli
+      // math is shared by every path per D-275-HOIST-01 — so every caller sees
+      // whole=0. The DIFFERENCE is the `emitLootboxEvent` gate downstream:
+      //   - Manual `openLootBox` (emitLootboxEvent = true): the `if
+      //     (emitLootboxEvent && whole == 0)` gate opens — pays
+      //     LOOTBOX_WWXRP_CONSOLATION + emits LootBoxWwxrpReward.
+      //   - Auto-resolve callers (emitLootboxEvent = false): the gate stays
+      //     shut; `_queueTickets(0)` early-returns → fully silent.
       const seedSliceHigh = BigInt(99) << 152n;
       const [whole, roundedUp] = await tester.bernoulliWhole(1, seedSliceHigh);
       expect(whole).to.equal(0n);
       expect(roundedUp).to.equal(false);
-      // The consolation gate is `whole == 0` AFTER the Bernoulli — verified
-      // structurally in LootboxConsolation.test.js [01c] (consolation emit
-      // sits inside the `else` of `if (whole != 0)` on the manual path).
+      // The consolation gate is `emitLootboxEvent && whole == 0` AFTER the
+      // Bernoulli — verified structurally in LootboxConsolation.test.js [01c].
     });
 
-    it("[03b] manual-branch consolation emit + mintPrize ARE present (verified at fixed source locations gated by manual-branch predicate)", function () {
+    it("[03b] consolation emit + mintPrize ARE present and gated by `emitLootboxEvent && whole == 0`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Within the manual branch (the `if (index != type(uint48).max)` true-arm),
-      // both `wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)` and the
+      // Both `wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)` and the
       // `emit LootBoxWwxrpReward(player, day, amount, LOOTBOX_WWXRP_CONSOLATION)`
-      // appear. They are the manual-path consolation per D-275-STATUSQUO-01.
+      // appear inside the `if (emitLootboxEvent && whole == 0)` gate — the
+      // manual-only cold-bust consolation per D-277-CONSOLATION-GATE-01.
       expect(
         source.includes("wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)"),
-        "manual-branch consolation `wwxrp.mintPrize(...)` missing"
+        "consolation `wwxrp.mintPrize(...)` missing"
       ).to.equal(true);
       expect(
         source.includes("emit LootBoxWwxrpReward(player, day, amount, LOOTBOX_WWXRP_CONSOLATION)"),
-        "manual-branch consolation `emit LootBoxWwxrpReward(...)` missing"
+        "consolation `emit LootBoxWwxrpReward(...)` missing"
       ).to.equal(true);
-      // Both must be gated by `if (index != type(uint48).max)` — the gate
+      // Both must be gated by `if (emitLootboxEvent && whole == 0)` — the gate
       // appears before them in source order.
-      const gateIdx = source.indexOf("if (index != type(uint48).max)");
+      const gateIdx = source.indexOf("if (emitLootboxEvent && whole == 0)");
       const mintPrizeIdx = source.indexOf("wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION)");
-      expect(gateIdx).to.be.greaterThan(-1);
+      expect(gateIdx, "consolation gate `if (emitLootboxEvent && whole == 0)` missing").to.be.greaterThan(-1);
       expect(mintPrizeIdx).to.be.greaterThan(gateIdx);
     });
 
-    it("[03c] manual-branch `emit LootboxTicketRoll(...)` is present exactly once and gated by manual-branch predicate", function () {
+    it("[03c] the retired `LootboxTicketRoll` event has zero references in the module (Phase 277 deletion)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const emits = (source.match(/emit LootboxTicketRoll\(/g) || []).length;
-      expect(emits, "LootboxTicketRoll must be emitted exactly once (manual branch only)").to.equal(1);
-      const emitIdx = source.indexOf("emit LootboxTicketRoll(");
-      const gateIdx = source.indexOf("if (index != type(uint48).max)");
-      expect(emitIdx).to.be.greaterThan(gateIdx);
+      // Phase 277 deleted the v39-additive `LootboxTicketRoll` event entirely —
+      // no event def, no emit site. The cold-bust ticket roll is now observable
+      // only via the `LootBoxOpened` event's `futureTickets` + `roundedUp`
+      // fields (manual path) or stays silent (auto-resolve path).
+      const refs = (source.match(/LootboxTicketRoll/g) || []).length;
+      expect(refs, "`LootboxTicketRoll` must have zero references (Phase 277 retired the event)").to.equal(0);
     });
   });
 });

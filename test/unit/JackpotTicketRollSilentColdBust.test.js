@@ -15,8 +15,10 @@
 //   BUT `JackpotTicketWin` STILL fires unconditionally with the pre-Bernoulli
 //   scaled `ticketCount` (`uint32(quantityScaled)`) — D-276-EVT-STATUSQUO-01.
 //   The silent-cold-bust scope is the QUEUE surface only, NOT the
-//   `JackpotTicketWin` event. Phase 277 EVT-UNI-04 adds the `roundedUp` field;
-//   the Phase 277 test wave updates that assertion.
+//   `JackpotTicketWin` event. Phase 277 EVT-UNI-04 added a trailing non-indexed
+//   `bool roundedUp` field to `JackpotTicketWin`; `_jackpotTicketRoll` threads
+//   the captured Bernoulli outcome into that field, so the cold-bust emit
+//   carries `roundedUp = false`. Part (c) asserts that updated signature.
 //
 // DIVERGENCE FROM THE PHASE 275 ANALOG (test/unit/LootboxAutoResolveSilentColdBust.test.js):
 //   The jackpot ticket-roll path has NO `LootboxTicketRoll` analog and NO
@@ -242,8 +244,8 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
     });
   });
 
-  describe("Part (c) — emit-absence: whole == 0 ⇒ zero TicketsQueued; JackpotTicketWin STILL fires the pre-Bernoulli scaled ticketCount (D-276-EVT-STATUSQUO-01)", function () {
-    it("[03a] `_jackpotTicketRoll` emits `JackpotTicketWin` unconditionally with `uint32(quantityScaled)` — the pre-Bernoulli scaled count, NOT `whole` (D-276-EVT-STATUSQUO-01)", function () {
+  describe("Part (c) — emit-absence: whole == 0 ⇒ zero TicketsQueued; JackpotTicketWin STILL fires the pre-Bernoulli scaled ticketCount + the Phase 277 `roundedUp` field (D-276-EVT-STATUSQUO-01, EVT-UNI-04)", function () {
+    it("[03a] `_jackpotTicketRoll` emits `JackpotTicketWin` unconditionally with `uint32(quantityScaled)` and the trailing `roundedUp` field — the pre-Bernoulli scaled count, NOT `whole` (D-276-EVT-STATUSQUO-01, EVT-UNI-04)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
         extractBody(source, "function _jackpotTicketRoll(")
@@ -259,6 +261,35 @@ describe("JackpotTicketRollSilentColdBust — Phase 276 Wave 2 TST-JPT-BR-02", f
         body.includes("uint32(quantityScaled)"),
         "JackpotTicketWin must carry `uint32(quantityScaled)` — the pre-Bernoulli scaled ticketCount per D-276-EVT-STATUSQUO-01"
       ).to.equal(true);
+      // Phase 277 EVT-UNI-04: the emit threads the captured `roundedUp` local as
+      // its trailing (7th) non-indexed field. _jackpotTicketRoll declares
+      // `bool roundedUp = false;` before the Bernoulli predicate and sets it
+      // `true` inside the round-up branch.
+      expect(
+        body.includes("bool roundedUp = false;"),
+        "_jackpotTicketRoll must declare `bool roundedUp = false;` before the Bernoulli predicate"
+      ).to.equal(true);
+      expect(
+        body.includes("roundedUp = true;"),
+        "_jackpotTicketRoll must set `roundedUp = true;` inside the Bernoulli round-up branch"
+      ).to.equal(true);
+      // The JackpotTicketWin emit's last arg is the captured `roundedUp` local.
+      const emitMatch = body.match(/emit JackpotTicketWin\(([\s\S]*?)\);/);
+      expect(emitMatch, "JackpotTicketWin emit arg list not parsed").to.not.equal(
+        null
+      );
+      const emitArgs = emitMatch[1]
+        .split(",")
+        .map((a) => a.trim())
+        .filter((a) => a.length > 0);
+      expect(
+        emitArgs.length,
+        "JackpotTicketWin emit must supply 7 args including the trailing roundedUp"
+      ).to.equal(7);
+      expect(
+        emitArgs[6],
+        "the 7th JackpotTicketWin arg must be the captured `roundedUp` local"
+      ).to.equal("roundedUp");
       // The emit is NOT gated behind a `whole != 0` / `whole > 0` predicate —
       // it sits at the function tail, unconditional. Assert no `if (whole`
       // branch wraps it: the emit must appear AFTER the _queueTickets call and
