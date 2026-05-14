@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v40.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-14T13:50:27.747Z"
-last_activity: 2026-05-14 -- Phase 279 planning complete
+last_updated: "2026-05-14T14:11:16.000Z"
+last_activity: 2026-05-14 -- Phase 279 Plan 01 complete (whole-BURNIE floor contract wave)
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 50
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.0 open + BUR scope expansion)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 278 complete — Phase 279 (Whole-BURNIE Floor, BUR) next
+**Current focus:** Phase 279 — whole-burnie-floor-bur
 
 ## Current Position
 
-Phase: 279
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-14 -- Phase 279 planning complete
+Phase: 279 (whole-burnie-floor-bur) — EXECUTING
+Plan: 2 of 2 (Plan 01 COMPLETE)
+Status: Executing Phase 279 — Plan 01 (contract wave) shipped; Plan 02 (TST-BUR test wave) next
+Last activity: 2026-05-14 -- Phase 279 Plan 01 complete (whole-BURNIE floor contract wave)
 
 ## Last Shipped Milestone
 
@@ -237,6 +237,16 @@ Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-fo
 - **What landed:** new `test/unit/EventSurfaceUnification.test.js` — six `describe` blocks (one per TST-EVT-UNI requirement) following the Phase 274/275/276 source-structural + compiled-ABI precedent (no end-to-end resolution fixture — that gap stays RE-DEFERRED, LBX-02): topic-hash change tests via `ethers.Interface` on the freshly compiled post-Wave-1 ABIs, `LootboxTicketRoll` removal sweep across `contracts/`, `index != type(uint48).max` sentinel-retirement structural proof, manual/auto-resolve/jackpot field-consistency derived from `futureTickets`/`tickets` + `roundedUp` per D-277-NO-PREROLL-01, auto-resolve silence proof. Plus targeted retargeting of 5 precedent test files off their stale Wave-1 assertions (`LootboxAutoResolveRegression`, `LootboxWholeTicket`, `JackpotTicketRollSilentColdBust`, `LootboxConsolation`, `LootboxAutoResolveSilentColdBust`).
 - **D-277-02-FOLDIN-01 (scope expansion, user-approved):** the plan's original `files_modified` named 4 test files; the Task 3 affected-suite run found `LootboxConsolation.test.js` + `LootboxAutoResolveSilentColdBust.test.js` also asserting the retired sentinel surface (8 failures). Per the plan's Task 3 directive they were surfaced to the user rather than silently fixed; the user explicitly approved folding them into the batched diff. Final batched commit = 6 test files + `package.json`.
 - **D-277-02-WT05-BASELINE-01:** `LootboxWholeTicket.test.js` TST-WT-05 `[05b]` baseline-diff against v38 `06623edb` replaced with a direct structural assertion — the v38 baseline is three phases stale and the `grep -c` diff-count test was no longer meaningful.
+
+### Phase 279 Plan 01 — Whole-BURNIE Floor at 3 RNG-Amount Sites, contract wave (executing 2026-05-14)
+
+- **279-01 COMPLETE** — 1 USER-APPROVED batched contract commit `8ef4a010` (`feat(279): whole-BURNIE floor at 3 RNG-amount sites + cursor-rotation dead-var removal [BUR-01..05]`; `DegenerusGameLootboxModule.sol` + `DegenerusGameJackpotModule.sol`, 2 files +18/−21) + AGENT-COMMITTED docs commit `e38d944f` (`docs(279-01): storage-layout + gas-worstcase proofs + plan summary`; SUMMARY + 2 proof artifacts). NOT pushed (local-only; future push is a separate user gate per `feedback_manual_review_before_push.md`). 5/5 BUR-01..05 satisfied.
+- **What landed:** inline `(x / 1 ether) * 1 ether` whole-BURNIE floor at the 3 RNG-amount-driven BURNIE-award sites — BUR-01 `_resolveLootboxCommon`'s `burnieAmount` accumulator (floored once before the `if (burnieAmount != 0)` guard; floored value flows to `creditFlip`, `LootBoxOpened.burnie`, return tuple), BUR-02 `_awardDailyCoinToTraitWinners`'s `baseAmount` via `((coinBudget / cap) / 1 ether) * 1 ether`, BUR-03 `_awardFarFutureCoinJackpot`'s `perWinner` via `((farBudget / found) / 1 ether) * 1 ether` before the unchanged `== 0` early-bail. BUR-02 also fully removes the now-dead `extra`/`cursor` cursor-rotation machinery (both declarations + both `++cursor`/wrap blocks + the `amount += 1` block); `randomWord` + both `++i` increments preserved; NatSpec rewritten. OUT-OF-SCOPE ticket-award cursor-rotation near `:1003` (D-279-DISAMBIG-01) untouched.
+- **D-279-BUR01-REORDER-01 (deviation, Rule 3 blocking):** `_resolveLootboxCommon` is at the Solidity stack-depth ceiling; the BUR-01 floor statement does NOT compile at the CONTEXT.md-specified position (`YulException: Cannot swap … too deep in the stack`). Fix: the `burnieAmount` accumulation block was relocated to immediately after `_accumulateLootboxRolls` returns, shortening the `burniePresale`/`burnieNoMultiplier` stack-local live-range. Within D-279-BUR01-SITE-01 placement discretion; no behavior change; storage byte-identical.
+- **D-279-BYTECODE-DELTA-ACCEPTED-01 (deviation, user-accepted):** measured Phase-279-only bytecode delta is **+114 bytes vs HEAD** (NET-POSITIVE) — deviates from the plan's BUR-05 NET-NEGATIVE expectation. `DegenerusGameJackpotModule` −26 bytes (extra/cursor removal outweighs the 2 floors, as expected); `DegenerusGameLootboxModule` +140 bytes and dominates — the optimizer stack-spill consequence of `_resolveLootboxCommon` being at the stack-depth ceiling (the reorder alone is −96 bytes; reorder + floor is +140; the BUR-01 floor is non-negotiable). Surfaced at the Task 3 `checkpoint:human-verify`; user explicitly approved committing as-is. Delta vs v39 baseline `6a7455d1` (spans Phases 275–279) is −1,792 bytes.
+- **BUR-04 storage:** byte-identical to v39 baseline `6a7455d1` for BOTH modules — `forge inspect storage-layout` diff empty (exit 0), sha256 cross-check identical (`279-01-STORAGE-LAYOUT-DIFF.md` PASS). Phase 279 touches only function bodies + NatSpec.
+- **BUR-05 gas:** theoretical worst-case derived BEFORE benchmarking per `feedback_gas_worst_case.md` — runtime ~+10–15 gas one-time at BUR-01 + BUR-03 each, BUR-02 net gas-NEGATIVE per loop iteration. Empirical per-invocation benchmark FIXTURE_COVERAGE_GAP_NOTED (3 private BUR sites, no deterministic full-state harness — same gap as Phase 278; analytical worst-case load-bearing per Phase 266/275/276/278 precedent). See `279-01-GAS-WORSTCASE.md`.
+- **Next:** Phase 279 Plan 02 (TST-BUR test wave — asserts floor direction + `mod(amount, 1 ether) == 0` invariant across a representative sweep at all 3 sites).
 - **Verification:** `npx hardhat test` on all 6 affected files — **107 passing, 0 failing**. `contracts/ContractAddresses.sol` + `package-lock.json` (pre-existing unrelated working-tree changes) deliberately NOT staged. No test references a `preRollTickets` field. Harmless trailing mocha file-unloader `MODULE_NOT_FOUND` on per-file CLI runs is a documented repo quirk (Phase 275/276 precedent), does not affect results.
 - **Next:** Phase 277 verification gate, then Phase 276/278/279 surface phases per the v40.0 ROADMAP sequencing.
 
