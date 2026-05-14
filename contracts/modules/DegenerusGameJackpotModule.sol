@@ -77,12 +77,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     );
 
     /// @dev Ticket jackpot win. See JackpotEthWin for traitId sentinel semantics.
-    ///      ticketCount is always scaled ×TICKET_SCALE (=100); divide by 100 for
-    ///      whole tickets. Trait-matched paths have zero fractional part; BAF
-    ///      lootbox rolls (traitId = BAF_TRAIT_SENTINEL) may carry a fractional
-    ///      remainder that resolves later either by carry into the next scaled
-    ///      queue at the same (level,buyer) slot or by a probabilistic roll at
-    ///      trait-assignment time (see _rollRemainder in DegenerusGameMintModule).
+    ///      ticketCount carries the scaled ×TICKET_SCALE (=100) value for all
+    ///      paths; divide by 100 for whole tickets. Trait-matched paths have a
+    ///      zero fractional part. BAF lootbox rolls (traitId = BAF_TRAIT_SENTINEL)
+    ///      Bernoulli-collapse the scaled count to a whole-ticket count at award
+    ///      time inside _jackpotTicketRoll, so they queue whole tickets and feed
+    ///      no fractional remainder into _rollRemainder; ticketCount still
+    ///      reports the pre-collapse scaled value for indexer parity.
     event JackpotTicketWin(
         address indexed winner,
         uint24 indexed ticketLevel,
@@ -2175,8 +2176,19 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /**
      * @notice Resolve a single jackpot ticket roll into ticket awards.
-     * @dev Selects target level based on probability, then awards tickets.
+     * @dev Selects target level based on probability, then Bernoulli-collapses
+     *      the scaled ticket count to a whole-ticket count before queueing.
      *      Uses actual game pricing for the selected target level.
+     *      Entropy bit allocation in the per-roll keccak word `entropy`
+     *      (evolved via EntropyLib.entropyStep on entry):
+     *        bits[0..12]     path/level selection — `entropy % 100` range roll,
+     *                        `(entropy / 100) % 4` near offset,
+     *                        `(entropy / 100) % 46` far offset
+     *        bits[200..215]  jackpotTicketRoundUp % 100 — Bernoulli whole-ticket
+     *                        collapse sub-roll (relative bias < 0.10%)
+     *      The two consumption windows are separated by 180+ bits of the same
+     *      256-bit keccak word, so the round-up sub-roll is statistically
+     *      independent of the path/level selection.
      * @param winner Address to receive tickets.
      * @param amount ETH amount for this roll.
      * @param minTargetLevel Minimum target level (usually current level during SETUP phase).
@@ -2213,10 +2225,24 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 targetPrice = PriceLookupLib.priceForLevel(targetLevel);
 
         uint256 quantityScaled = (amount * TICKET_SCALE) / targetPrice;
-        _queueLootboxTickets(winner, targetLevel, quantityScaled, true);
 
-        // ticketCount is scaled (×TICKET_SCALE). Fractional remainder resolves
-        // later via carry or _rollRemainder at assignment time — see event doc.
+        // Bernoulli-collapse the scaled count to a whole-ticket count: the
+        // fractional part rounds up with probability frac/TICKET_SCALE using
+        // bits[200..215] of the per-roll entropy word.
+        uint32 scaledTickets = uint32(quantityScaled);
+        uint32 whole = scaledTickets / uint32(TICKET_SCALE);
+        uint32 frac = scaledTickets % uint32(TICKET_SCALE);
+        if (frac != 0 && (uint16(entropy >> 200) % uint16(TICKET_SCALE)) < uint16(frac)) {
+            unchecked {
+                whole += 1;
+            }
+        }
+        _queueTickets(winner, targetLevel, whole, true);
+
+        // ticketCount carries the pre-collapse scaled (×TICKET_SCALE) value; the
+        // BAF roll Bernoulli-collapses scaled tickets to whole tickets at award
+        // time via the bits[200..215] sub-roll above, so no fractional remainder
+        // is carried into _rollRemainder.
         emit JackpotTicketWin(
             winner,
             targetLevel,
