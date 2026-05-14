@@ -88,13 +88,13 @@
 
 ### TST-CLEAN — JackpotModule Cosmetic + ENT-05 BAF Xorshift Refactor + Wrapper Retirement Tests (test/jackpot/)
 
-- [ ] **TST-CLEAN-01**: ENT-05 BAF xorshift refactor byte-equivalence — pre/post-refactor BAF jackpot outputs match across N seeded `_awardJackpotTickets` invocations. If the refactor changes entropy semantics intentionally, then test asserts the NEW invariant (post-refactor entropy chi-square + seed-uniqueness).
-- [ ] **TST-CLEAN-02**: `_queueLootboxTickets` wrapper removal regression — assert zero remaining `_queueLootboxTickets` invocation sites in the codebase post-v40.0 (static-analysis grep). Wrapper function deleted from `JackpotModule.sol`.
-- [ ] **TST-CLEAN-03**: Cosmetic `xTICKET_SCALE` cleanup byte-equivalence — pre/post-cleanup function bytecode at L702 + L835 + L1005 matches semantically (no behavior change). Storage layout byte-identical.
+- [x] **TST-CLEAN-01**: ENT-05 BAF xorshift refactor byte-equivalence — pre/post-refactor BAF jackpot outputs match across N seeded `_awardJackpotTickets` invocations. If the refactor changes entropy semantics intentionally, then test asserts the NEW invariant (post-refactor entropy chi-square + seed-uniqueness).
+- [x] **TST-CLEAN-02**: `_queueLootboxTickets` wrapper removal regression — assert zero remaining `_queueLootboxTickets` invocation sites in the codebase post-v40.0 (static-analysis grep). Wrapper function deleted from `JackpotModule.sol`.
+- [x] **TST-CLEAN-03**: Cosmetic `xTICKET_SCALE` cleanup byte-equivalence — pre/post-cleanup function bytecode at L702 + L835 + L1005 matches semantically (no behavior change). Storage layout byte-identical.
 
 ### TST-CROSS — Cross-Surface Mixing Test (test/regression/)
 
-- [ ] **TST-CROSS-01**: Same-player cross-surface ticket-award mixing — exercise same player through all RNG-driven ticket-award paths at same target future level: 5 manual lootbox opens (`openLootBox` + `openBurnieLootBox`) + 3 auto-resolve lootbox opens (`resolveLootboxDirect` + `resolveRedemptionLootbox`) + 2 jackpot ticket-roll awards. Assert: all 3 surface families Bernoulli-roll independently (no shared `rem` byte residue accumulation across surfaces; per-resolution whole-ticket commits); mint-boost path mixed in once at the same future level continues to accumulate via `rem` byte per D-40N-MINTBOOST-OUT-01 (only mint-boost contributions go through `_rollRemainder` at activation time).
+- [x] **TST-CROSS-01**: Same-player cross-surface ticket-award mixing — exercise same player through all RNG-driven ticket-award paths at same target future level: 5 manual lootbox opens (`openLootBox` + `openBurnieLootBox`) + 3 auto-resolve lootbox opens (`resolveLootboxDirect` + `resolveRedemptionLootbox`) + 2 jackpot ticket-roll awards. Assert: all 3 surface families Bernoulli-roll independently (no shared `rem` byte residue accumulation across surfaces; per-resolution whole-ticket commits); mint-boost path mixed in once at the same future level continues to accumulate via `rem` byte per D-40N-MINTBOOST-OUT-01 (only mint-boost contributions go through `_rollRemainder` at activation time).
 
 ### BUR — Whole-BURNIE Floor (contracts/modules/DegenerusGameLootboxModule.sol + contracts/modules/DegenerusGameJackpotModule.sol)
 

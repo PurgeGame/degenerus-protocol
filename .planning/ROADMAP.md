@@ -104,7 +104,7 @@ Plans:
   5. Cross-surface mixing regression TST-CROSS-01: exercise same player through all 3 RNG-driven ticket-award surfaces at the same target future level — 5 manual lootbox opens (`openLootBox` + `openBurnieLootBox`) + 3 auto-resolve lootbox opens (`resolveLootboxDirect` + `resolveRedemptionLootbox`) + 2 jackpot ticket-roll awards. Assert: all 3 surface families Bernoulli-roll independently (no shared `rem` byte residue accumulation across surfaces; per-resolution whole-ticket commits). Mix mint-boost in once at the same future level — confirm only mint-boost contributions go through `_rollRemainder` at activation time per D-40N-MINTBOOST-OUT-01 (TST-CROSS-01).
   6. Wave shape: 1 USER-APPROVED batched contract commit + 1 USER-APPROVED batched test commit per the same approval discipline as Phases 275-277. Both commits land before Phase 279 terminal audit begins.
 
-**Plans:** 2 plans (1 contract wave + 1 test wave)
+**Plans:** 2/2 plans complete
 - [x] 278-01-PLAN.md — Wave 1: ENT-05 keccak refactor in `_jackpotTicketRoll` + entropy-chaining preservation + 3 whole-ticket `JackpotTicketWin` emits + `EntropyLib.entropyStep` deletion + `_queueLootboxTickets` wrapper deletion + storage-layout byte-identity proof; one USER-APPROVED batched contract commit (JPT-CLEAN-01..06) — landed as `8a81a87c`
 - [x] 278-02-PLAN.md — Wave 2: TST-CLEAN-01 ENT-05 post-refactor statistical invariant + TST-CROSS-01 full-stack cross-surface `rem`-byte regression + TST-CLEAN-02/03 wrapper-removal & whole-ticket-event regression + `entropyStep`-replica/drift-gate updates; one USER-APPROVED batched test commit (TST-CLEAN-01..03 + TST-CROSS-01) — landed as `c3baf694`
 
