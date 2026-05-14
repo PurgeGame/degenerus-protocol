@@ -86,7 +86,7 @@
 
 Plans:
 **Wave 1**
-- [ ] 277-01-PLAN.md — Contract wave: delete `LootboxTicketRoll` (interface + contract), restructure `LootBoxOpened` (fix the `index`/`day` mislabel → real `lootboxIndex` + `day`, add `roundedUp`, fields stay `uint256` wide per D-277-EVT-WIDE-01 — no narrowing, no `preRollTickets`), add `roundedUp` to `BurnieLootOpen` + `JackpotTicketWin`, retire the `_resolveLootboxCommon` `index != type(uint48).max` sentinel with the manual cold-bust consolation re-gated on `emitLootboxEvent`, auto-resolve callers pass `index=0` + `emitLootboxEvent=false` (stay silent per D-277-AR-SILENT-01); one USER-APPROVED batched contract commit with gas worst-case derivation (EVT-UNI-01..08)
+- [x] 277-01-PLAN.md — Contract wave: delete `LootboxTicketRoll` (interface + contract), restructure `LootBoxOpened` (fix the `index`/`day` mislabel → real `lootboxIndex` + `day`, add `roundedUp`, fields stay `uint256` wide per D-277-EVT-WIDE-01 — no narrowing, no `preRollTickets`), add `roundedUp` to `BurnieLootOpen` + `JackpotTicketWin`, retire the `_resolveLootboxCommon` `index != type(uint48).max` sentinel with the manual cold-bust consolation re-gated on `emitLootboxEvent`, auto-resolve callers pass `index=0` + `emitLootboxEvent=false` (stay silent per D-277-AR-SILENT-01); one USER-APPROVED batched contract commit with gas worst-case derivation (EVT-UNI-01..08)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 277-02-PLAN.md — Test wave: new `test/unit/EventSurfaceUnification.test.js` (topic-hash change tests, `LootboxTicketRoll` removal regression, sentinel-retirement regression, manual + auto-resolve + jackpot field-consistency derived from `futureTickets`/`tickets` + `roundedUp` per D-277-NO-PREROLL-01, auto-resolve silent-cold-bust); updates `LootboxAutoResolveRegression.test.js` + `LootboxWholeTicket.test.js` + `JackpotTicketRollSilentColdBust.test.js` off their stale assertions; one USER-APPROVED batched test commit (TST-EVT-UNI-01..06)
@@ -177,7 +177,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 275. Auto-Resolve LootboxModule Bernoulli (LBX-AR) | 2/2 | Complete   | 2026-05-13 |
 | 276. JackpotModule:2216 BAF Bernoulli (JPT-BR) | 0/0 | Not started | - |
-| 277. Event Surface Unification + Sentinel Retirement (EVT-UNI) | 0/0 | Not started | - |
+| 277. Event Surface Unification + Sentinel Retirement (EVT-UNI) | 1/2 | In Progress|  |
 | 278. JackpotModule Cleanup + ENT-05 BAF Xorshift Refactor + Wrapper Retirement (JPT-CLEAN) | 0/0 | Not started | - |
 | 279. Whole-BURNIE Floor (BUR) | 0/0 | Not started | - |
 | 280. Delta Audit + Findings Consolidation (Terminal) | 0/0 | Not started | - |

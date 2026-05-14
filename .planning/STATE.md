@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v40.0
 milestone_name: Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor
 status: executing
-last_updated: "2026-05-14T08:01:39.220Z"
-last_activity: 2026-05-14 -- Phase 277 planning complete
+last_updated: "2026-05-14T08:06:10.267Z"
+last_activity: 2026-05-14 -- Phase 277 Plan 01 (contract wave) COMPLETE
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 6
-  completed_plans: 4
-  percent: 33
+  completed_plans: 5
+  percent: 39
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.0 open + BUR scope expansion)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 276 complete — next: Phase 277 (event-surface-unification)
+**Current focus:** Phase 277 — event-surface-unification-sentinel-retirement-evt-uni
 
 ## Current Position
 
-Phase: 277
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-14 -- Phase 277 planning complete
+Phase: 277 (event-surface-unification-sentinel-retirement-evt-uni) — EXECUTING
+Plan: 2 of 2 (277-01 contract wave COMPLETE; 277-02 test wave next)
+Status: Executing Phase 277
+Last activity: 2026-05-14 -- Phase 277 Plan 01 (contract wave) COMPLETE — USER-APPROVED commit `02fb7085`
 
 ## Last Shipped Milestone
 
@@ -221,7 +221,15 @@ Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-fo
 - **276-B COMPLETE** — 1 USER-APPROVED batched test commit `1568fd5c` (`test(276): jackpot ticket-roll Bernoulli + silent cold-bust + bit-slice independence + 2-roll uniqueness [TST-JPT-BR-01..04]`; 5 files +965/−1: new `contracts/test/JackpotBernoulliTester.sol` `external pure` tester with slice `>> 200` + 3 new test files + `package.json` `test:stat` wiring). 4/4 TST-JPT-BR-01..04 satisfied. Full new-test set green: 29 passing, 0 failing via the canonical multi-file `test:stat` invocation. NOT pushed (local-only; future push is a separate user gate per `feedback_manual_review_before_push.md`).
 - **Pre-existing repo quirk noted:** per-file `npx hardhat test <file>` produces a trailing Mocha file-unloader `Cannot find module` error + non-zero exit AFTER assertions pass — Phase 275's committed `LootboxAutoResolveBernoulliEv.test.js` exhibits the identical behavior; canonical run shape is the multi-file `test:stat` invocation.
 - **Phase 276 COMPLETE** — both Plan A (contract `c473867e`) and Plan B (test `1568fd5c`) landed as USER-APPROVED commits; neither pushed.
-- **Next:** Phase 277 (event-surface-unification).
+
+### Phase 277 Plan 01 — Event Surface Unification + Sentinel Retirement, contract wave (executing 2026-05-14)
+
+- **277-01 COMPLETE** — 1 USER-APPROVED batched contract commit `02fb7085` (`feat(277): event surface unification + sentinel retirement [EVT-UNI-01..08]`; 3 files +162/−157: `DegenerusGameLootboxModule.sol` +149/−137, `DegenerusGameJackpotModule.sol` +13/−4, `IDegenerusGameModules.sol` 0/−16). NOT pushed (local-only; future push is a separate user gate per `feedback_manual_review_before_push.md`). 8/8 EVT-UNI-01..08 satisfied.
+- **What landed:** `LootboxTicketRoll` event DELETED from both the `IDegenerusGameLootboxModule` interface and the `DegenerusGameLootboxModule` event block (zero remaining references in `contracts/`). `LootBoxOpened` restructured — mislabeled `uint32 indexed index` (emit fed `day` into it) replaced by real `uint48 indexed lootboxIndex` + separate non-indexed `uint32 day`, plus new `bool roundedUp`; `amount`/`burnie`/`bonusBurnie` kept `uint256` wei per D-277-EVT-WIDE-01. `BurnieLootOpen` + `JackpotTicketWin` each gain a `bool roundedUp` (non-indexed). `_resolveLootboxCommon` `index != type(uint48).max` sentinel RETIRED — single unified `_queueTickets(player, targetLevel, whole, false)` flow; manual cold-bust WWXRP consolation re-gated under `if (emitLootboxEvent)`. Auto-resolve callers (`resolveLootboxDirect`, `resolveRedemptionLootbox`) pass `index=0` + `emitLootboxEvent=false` — silent on the advanceGame chain per D-277-AR-SILENT-01.
+- **D-277-VIAIR-HELPERS-01 (deviation, Rule 3 blocking):** adding `bool roundedUp` as a 4th named return to the 14-param `_resolveLootboxCommon` tripped a viaIR stack-too-deep error. Resolved by extracting two behavior-preserving `private` helpers — `_lootboxBoonBudget(uint256) pure` (boon-budget BPS/cap arithmetic) and `_accumulateLootboxRolls(...)` (the 1-or-2 `_resolveLootboxRoll` invocations + BURNIE accumulation + scaled-ticket sum) — plus a `{ }` block scope around the split-amount compute. No behavior change; both helpers are `private`, add no entry points.
+- **Bytecode delta:** `DegenerusGameLootboxModule` −527 bytes (shrinks despite the 2 new helpers — deleted event def + emit + dual-branch sentinel construct); `DegenerusGameJackpotModule` +23 bytes (`roundedUp` capture + 7th emit arg × 3 sites). Gas worst-case derived analytically first per `feedback_gas_worst_case.md`: manual `openLootBox` net gas-NEGATIVE (deleted `LootboxTicketRoll` LOG3 outweighs +1 `roundedUp` data word), advanceGame-chain auto-resolve net gas-NEGATIVE (full `LootBoxOpened` LOG3 removed), `JackpotTicketWin` +256 gas (1 new data word, unavoidable).
+- **D-40N-EVT-BREAK-01 honored:** breaking ABI change accepted — `LootBoxOpened`/`BurnieLootOpen`/`JackpotTicketWin` topic-hashes change, `LootboxTicketRoll` removed; pre-launch, indexer rebuild expected, no live indexer impact. Storage layout byte-identical to v39 baseline `6a7455d1`.
+- **Next:** Phase 277 Plan 02 (test wave — `277-02-PLAN.md`).
 
 Decisions and completed milestones logged in `.planning/PROJECT.md`.
 Detailed milestone retrospectives in `.planning/RETROSPECTIVE.md` (v37.0 / v36.0 / v35.0 sections most recent).
