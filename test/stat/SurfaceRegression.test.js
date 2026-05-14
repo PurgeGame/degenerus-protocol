@@ -976,9 +976,14 @@ describe("v38.0 SURF-01..02 — protected surfaces vs v37.0 baseline 2654fcc2", 
 //                added) and the 3 emit sites (4th arg de-scaled to whole,
 //                roundedUp arg appended);
 //            (c) the contract-header NatSpec line naming the entropy helper.
+//            (d) Phase 279 BUR-02/BUR-03 whole-BURNIE floor: the
+//                _awardDailyCoinToTraitWinners baseAmount floor + the
+//                extra/cursor dead-var removal + the NatSpec rewrite, and the
+//                _awardFarFutureCoinJackpot perWinner floor + its comment.
 //            Every other JackpotModule surface — the 8 surviving EntropyLib
 //            callsites, _randTraitTicket, _pickSoloQuadrant, the gold-solo
-//            + BAF jackpot bodies — is byte-identical and IS protected here.
+//            + BAF jackpot bodies, the unfloored body lines of the two
+//            coin-jackpot functions — is byte-identical and IS protected here.
 //   SURF-02  contracts/storage/DegenerusGameStorage.sol — the _queueLootboxTickets
 //            wrapper function is deleted (L683-701 at the v39 baseline). Every
 //            other storage helper — _queueTickets, _queueTicketsScaled,
@@ -1018,14 +1023,23 @@ const MINT_MODULE_PATH_V40 = "contracts/modules/DegenerusGameMintModule.sol";
 describe("v40.0 SURF-01..05 — protected surfaces vs v39.0 baseline 6a7455d1", function () {
   // SURF-01 — DegenerusGameJackpotModule.sol surviving surface byte-identical.
   // The v39.0-baseline file is 2231 lines. The net 6a7455d1->HEAD modified
-  // OLD-side line set is: the contract-header NatSpec line (L43), the
-  // JackpotTicketWin NatSpec + event def (L80-85, L92), the trait-burn emit
-  // site (L703, L708, L710), the coin-path emit site (L1006, L1011, L1013),
-  // and the _jackpotTicketRoll body delta lines (L2178, L2192, L2216,
-  // L2218-2219, L2224, L2226) — all EXCLUDED here as the documented v40.0
-  // delta sites. Every line in the gaps between those delta lines IS
-  // protected: the protected ranges below are the exact complement of the
-  // OLD-side modified-line set produced by
+  // OLD-side line set is:
+  //   Phase 278 delta sites: the contract-header NatSpec line (L43), the
+  //   JackpotTicketWin NatSpec + event def (L80-85, L92), the trait-burn emit
+  //   site (L703, L708, L710), the coin-path emit site (L1006, L1011, L1013),
+  //   and the _jackpotTicketRoll body delta lines (L2178, L2192, L2216,
+  //   L2218-2219, L2224, L2226).
+  //   Phase 279 BUR-02/BUR-03 delta sites: the _awardDailyCoinToTraitWinners
+  //   NatSpec rewrite (L1752-1754), the baseAmount floor + extra/cursor
+  //   declaration removal (L1785-1787), the empty-bucket cursor-rotation
+  //   removal (L1810-1811), the `extra != 0` amount-top-up block removal
+  //   (L1830-1832), the loop-tail cursor-rotation removal (L1847-1848), and
+  //   the _awardFarFutureCoinJackpot perWinner floor + its comment
+  //   (L1899-1900).
+  // All of the above are EXCLUDED here as the documented v40.0 delta sites.
+  // Every line in the gaps between those delta lines IS protected: the
+  // protected ranges below are the exact complement of the OLD-side
+  // modified-line set produced by
   // `git diff 6a7455d1 HEAD -- DegenerusGameJackpotModule.sol`.
   const SURF_01_PROTECTED_RANGES_V40 = [
     { name: "JackpotModule L1-42 (pre-header-NatSpec surface)",            lo: 1,    hi: 42   },
@@ -1037,7 +1051,13 @@ describe("v40.0 SURF-01..05 — protected surfaces vs v39.0 baseline 6a7455d1", 
     { name: "JackpotModule L711-1005 (gold-solo + daily-coin bodies)",     lo: 711,  hi: 1005 },
     { name: "JackpotModule L1007-1010 (coin-path emit args, unchanged)",   lo: 1007, hi: 1010 },
     { name: "JackpotModule L1012 (coin-path emit sourceLvl, unchanged)",   lo: 1012, hi: 1012 },
-    { name: "JackpotModule L1014-2177 (BAF jackpot + ticket-distribution bodies)", lo: 1014, hi: 2177 },
+    { name: "JackpotModule L1014-1751 (BAF jackpot + ticket-distribution bodies)", lo: 1014, hi: 1751 },
+    { name: "JackpotModule L1755-1784 (_awardDailyCoinToTraitWinners head, unchanged)", lo: 1755, hi: 1784 },
+    { name: "JackpotModule L1788-1809 (range derivation + per-pull loop head, unchanged)", lo: 1788, hi: 1809 },
+    { name: "JackpotModule L1812-1829 (holder-index draw + amount assignment, unchanged)", lo: 1812, hi: 1829 },
+    { name: "JackpotModule L1833-1846 (winner-guard emit + creditFlip + loop tail, unchanged)", lo: 1833, hi: 1846 },
+    { name: "JackpotModule L1849-1898 (_awardFarFutureCoinJackpot head .. perWinner comment, unchanged)", lo: 1849, hi: 1898 },
+    { name: "JackpotModule L1901-2177 (far-future emit loop + remaining ticket-distribution bodies)", lo: 1901, hi: 2177 },
     { name: "JackpotModule L2179-2191 (_jackpotTicketRoll signature + NatSpec tail)", lo: 2179, hi: 2191 },
     { name: "JackpotModule L2193-2215 (_jackpotTicketRoll path/level roll, unchanged)", lo: 2193, hi: 2215 },
     { name: "JackpotModule L2217 (quantityScaled derivation, unchanged)",  lo: 2217, hi: 2217 },
