@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v40.0
 milestone_name: Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor
 status: verifying
-last_updated: "2026-05-14T10:51:25.240Z"
+last_updated: "2026-05-14T11:19:36.454Z"
 last_activity: 2026-05-14
 progress:
   total_phases: 6
