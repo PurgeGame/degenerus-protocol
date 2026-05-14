@@ -18,7 +18,12 @@ findings:
   warning: 4
   info: 2
   total: 7
-status: issues_found
+status: resolved
+resolution:
+  commit: f7a6fccd
+  resolved: [CR-01, WR-01, WR-02]
+  deferred: [WR-03, WR-04]
+  info_only: [IN-01, IN-02]
 ---
 
 # Phase 277: Code Review Report
@@ -220,6 +225,40 @@ topic-0 hash, breaking any existing indexer subscription. The commit message doc
 this under EVT-UNI-08 / D-40N-EVT-BREAK-01 (pre-launch, accepted). No code change
 needed — flagged only so the indexer-rebuild requirement is captured in the review
 trail alongside the `LootBoxOpened` / `BurnieLootOpen` breaks.
+
+---
+
+## Resolution
+
+Addressed in commit `f7a6fccd` (user-approved gap-closure batch).
+
+- **CR-01 — RESOLVED.** Added a dedicated `bool payColdBustConsolation` param to
+  `_resolveLootboxCommon`; the cold-bust consolation is now gated on
+  `payColdBustConsolation && whole == 0`. The manual callers (`openLootBox`,
+  `openBurnieLootBox`) pass `true` — `openBurnieLootBox` pays the consolation again.
+  The auto-resolve callers (`resolveLootboxDirect`, `resolveRedemptionLootbox`) pass
+  `false` and stay silent on cold-bust, per D-277-AR-SILENT-01 (user-confirmed: the
+  consolation fires on the manual paths only, on final `whole == 0`).
+- **WR-01 — RESOLVED.** `LootboxConsolation.test.js` retargeted: it no longer conflates
+  `openBurnieLootBox` with the auto-resolve callers, and now asserts the BURNIE-lootbox
+  cold-bust pays. New `TST-WX-04` behavioral block pins all four callers' outcomes.
+- **WR-02 — ADDRESSED.** Added `LootboxBernoulliTester.coldBustConsolationFires`, a
+  deployed-contract mirror of the production gate decision, driven with each caller's
+  real flag values (`TST-WX-04`, incl. a drift detector tying the tester to the
+  production gate string). A pure end-to-end `openBurnieLootBox` fixture remains
+  infeasible with the current harness (VRF-rigging to force the seed slice) — the
+  documented LBX-02 fixture-coverage gap; the mirror test is the closest the harness
+  supports and exercises exactly the `openBurnieLootBox` cold-bust case CR-01 dropped.
+- **WR-03 — DEFERRED** (user decision): `_lootboxBoonBudget` double-compute left as-is.
+- **WR-04 — DEFERRED** (user decision): `BurnieLootOpen.index` `uint32` truncation left
+  as-is.
+- **IN-01 / IN-02 — info only**, no change required.
+
+Additional user-approved event-surface trims landed in the same commit (out of scope of
+the original review, folded in on user request): `bonusBurnie` removed from
+`LootBoxOpened` + `_resolveLootboxCommon` returns; `LootBoxWwxrpReward` event deleted
+(payouts retained, observable via the WWXRP ERC-20 `Transfer` event); `allowWhalePass` /
+`allowLazyPass` collapsed into a single `allowPasses` param.
 
 ---
 
