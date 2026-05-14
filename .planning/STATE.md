@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v40.0
 milestone_name: Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor
 status: verifying
-last_updated: "2026-05-14T09:16:02.330Z"
-last_activity: 2026-05-14 -- Phase 277 COMPLETE (Plan 01 contract wave + Plan 02 test wave) — ready for verification
+last_updated: "2026-05-14T10:51:25.240Z"
+last_activity: 2026-05-14
 progress:
   total_phases: 6
   completed_phases: 3
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.
 
 ## Current Position
 
-Phase: 277 (event-surface-unification-sentinel-retirement-evt-uni) — COMPLETE
-Plan: 2 of 2 (277-01 contract wave COMPLETE `02fb7085`; 277-02 test wave COMPLETE `6fbee850`)
+Phase: 278
+Plan: Not started
 Status: Phase 277 complete — ready for verification
-Last activity: 2026-05-14 -- Phase 277 Plan 02 (test wave) COMPLETE — USER-APPROVED commit `6fbee850`
+Last activity: 2026-05-14
 
 ## Last Shipped Milestone
 
