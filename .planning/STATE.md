@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v40.0
 milestone_name: Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor
 status: completed
-last_updated: "2026-05-14T05:13:52.201Z"
-last_activity: 2026-05-13 -- Phase 275 marked complete
+last_updated: "2026-05-14T06:46:19.026Z"
+last_activity: 2026-05-14
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 17
+  completed_phases: 2
+  total_plans: 4
+  completed_plans: 4
+  percent: 33
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.0 open + BUR scope expansion)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 275 — auto-resolve-lootbox-bernoulli (LBX-AR; first of 6 v40.0 phases per multi-phase milestone shape D-40N-CLOSURE-01)
+**Current focus:** Phase 276 complete — next: Phase 277 (event-surface-unification)
 
 ## Current Position
 
-Phase: 275 — COMPLETE
-Plan: —
-Status: Phase 275 complete
-Last activity: 2026-05-13 -- Phase 275 marked complete
+Phase: 277
+Plan: Not started
+Status: Phase 276 complete — Plan A contract commit c473867e + Plan B USER-APPROVED test commit 1568fd5c
+Last activity: 2026-05-14
 
 ## Last Shipped Milestone
 
@@ -211,6 +211,17 @@ Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-fo
 | audit_process | Phase 257 Task 7 manual-fallback record | resolved at v34 | The original Phase 257 Task 7 adversarial validation fell back to executor-manual when `/contract-auditor` and `/zero-day-hunter` skills failed to spawn. RESOLVED at v34.0 Phase 262 Task 6 — both skills successfully spawned in parallel with real captured output (see `.planning/milestones/v34.0-phases/262-delta-audit-findings-consolidation/262-01-ADVERSARIAL-LOG.md`). The C4A-warden-contest independence-claim hardening is satisfied at v34 closure HEAD `6b63f6d4`. Concurrent v33.0 close concern (queue-branch redirect bug) was already structurally closed in Phase 258 FIX-01 + FIX-02 prior to the v34 re-run. |
 
 ## Accumulated Context
+
+### Phase 276 Plan A — JackpotModule:2216 BAF Bernoulli (executing 2026-05-14)
+
+- **276-A COMPLETE** — 1 USER-APPROVED batched contract commit `c473867e` (`feat(276): jackpot ticket-roll Bernoulli whole-ticket [JPT-BR-01..06]`; `contracts/modules/DegenerusGameJackpotModule.sol` +36/−10; inline Bernoulli round-up in `_jackpotTicketRoll` on `bits[200..215]` + `:2216` call swap to direct `_queueTickets(winner, targetLevel, whole, true)` + bit-allocation NatSpec + `JackpotTicketWin` event-doc/inline-comment rewrite). NOT pushed (local-only; future push is a separate user gate). 6/6 JPT-BR-01..06 satisfied. Storage byte-identical to v39 baseline `6a7455d1` (`276-A-STORAGE-LAYOUT-DIFF.md` PASS); bytecode −513 bytes; gas NET-NEGATIVE analytical (`276-A-GAS-WORSTCASE.md`; empirical FIXTURE_COVERAGE_GAP_NOTED per `feedback_gas_worst_case.md` + Phase 266 GAS-01 precedent).
+- **D-276-RNGBYPASS-01 (LOAD-BEARING):** the new `_queueTickets` call passes `rngBypass = true` — this DELIBERATELY OVERRIDES the literal ROADMAP §Phase-276 SC1 + REQUIREMENTS JPT-BR-02 text (which both say `false`, a copy-paste artifact from Phase 275 LBX-AR's surface). `_jackpotTicketRoll` runs inside the `advanceGame` window before `_unlockRng(day)`, so `rngLockedFlag == true` is live every invocation; `false` would revert `advanceGame` at `DegenerusGameStorage.sol:575` on every far-future jackpot ticket roll and freeze the game state machine. The existing `_queueLootboxTickets(... true)` wrapper already passed `rngBypass = true` — the swap preserves the bypass posture, does not introduce a new one. Asymmetry rule: advanceGame-chain ticket awards bypass the RNG lock; claimable-on-demand awards must revert during RNG-lock. **FOLLOW-UP:** ROADMAP SC1 + REQUIREMENTS JPT-BR-02 text flagged for separate correction `false` → `true`.
+- **D-276-INLINE-01:** Bernoulli inlined as ~4 function-scope locals, no `_bernoulliWhole` helper, no re-touch of Phase 275's `_resolveLootboxCommon` — change confined to `DegenerusGameJackpotModule.sol`.
+- **D-276-EVT-STATUSQUO-01:** `JackpotTicketWin` surface unchanged — `ticketCount` stays pre-Bernoulli scaled (`uint32(quantityScaled)`); Phase 277 EVT-UNI-04 adds the `roundedUp` field.
+- **276-B COMPLETE** — 1 USER-APPROVED batched test commit `1568fd5c` (`test(276): jackpot ticket-roll Bernoulli + silent cold-bust + bit-slice independence + 2-roll uniqueness [TST-JPT-BR-01..04]`; 5 files +965/−1: new `contracts/test/JackpotBernoulliTester.sol` `external pure` tester with slice `>> 200` + 3 new test files + `package.json` `test:stat` wiring). 4/4 TST-JPT-BR-01..04 satisfied. Full new-test set green: 29 passing, 0 failing via the canonical multi-file `test:stat` invocation. NOT pushed (local-only; future push is a separate user gate per `feedback_manual_review_before_push.md`).
+- **Pre-existing repo quirk noted:** per-file `npx hardhat test <file>` produces a trailing Mocha file-unloader `Cannot find module` error + non-zero exit AFTER assertions pass — Phase 275's committed `LootboxAutoResolveBernoulliEv.test.js` exhibits the identical behavior; canonical run shape is the multi-file `test:stat` invocation.
+- **Phase 276 COMPLETE** — both Plan A (contract `c473867e`) and Plan B (test `1568fd5c`) landed as USER-APPROVED commits; neither pushed.
+- **Next:** Phase 277 (event-surface-unification).
 
 Decisions and completed milestones logged in `.planning/PROJECT.md`.
 Detailed milestone retrospectives in `.planning/RETROSPECTIVE.md` (v37.0 / v36.0 / v35.0 sections most recent).
