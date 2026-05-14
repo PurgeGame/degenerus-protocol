@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v40.0
 milestone_name: Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor
-status: completed
-last_updated: "2026-05-14T06:46:19.026Z"
-last_activity: 2026-05-14
+status: executing
+last_updated: "2026-05-14T07:14:01.246Z"
+last_activity: 2026-05-14 -- Phase 277 planning complete
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 4
+  total_plans: 6
   completed_plans: 4
   percent: 33
 ---
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.
 
 Phase: 277
 Plan: Not started
-Status: Phase 276 complete — Plan A contract commit c473867e + Plan B USER-APPROVED test commit 1568fd5c
-Last activity: 2026-05-14
+Status: Ready to execute
+Last activity: 2026-05-14 -- Phase 277 planning complete
 
 ## Last Shipped Milestone
 

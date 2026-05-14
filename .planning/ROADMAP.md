@@ -65,7 +65,9 @@
   5. Test coverage: TST-JPT-BR-01 EV-neutrality property (≥10K seeded `_awardJackpotTickets` invocations across representative pre-Bernoulli scaled values; `mean(whole_post) × TICKET_SCALE` within ±0.5%); TST-JPT-BR-02 silent-cold-bust regression (force seed where `scaled > 0` and `< TICKET_SCALE` AND Bernoulli loses; assert zero `TicketsQueued` emit, zero `LootBoxWwxrpReward` emit, `wwxrp.balanceOf(player)` unchanged; `JackpotTicketWin` event emits with pre-EVT-UNI fields at this phase, post-EVT-UNI field assertions added in Phase 277); TST-JPT-BR-03 bit-slice independence chi-square (≥10K seeds; verify bits[200..215] uncorrelated with bits[0..12] consumers); TST-JPT-BR-04 2-roll pattern uniqueness within single `_awardJackpotTickets` invocation.
   6. Wave shape: 1 USER-APPROVED batched contract commit + 1 USER-APPROVED batched test commit per the same approval discipline as Phase 275. Both commits land before Phase 278 JPT-CLEAN begins (Phase 278 depends on this phase for wrapper retirement) AND before Phase 277 EVT-UNI begins (Phase 277 EVT-UNI-04 adds `roundedUp` field to `JackpotTicketWin` which is the event surface for this phase's roll outcomes).
 
-**Plans:** TBD
+**Plans:**
+- [ ] 276-A-PLAN.md — Wave 1: contract edits (inline Bernoulli round-up in `_jackpotTicketRoll` on `bits[200..215]` + `:2216` `_queueTickets(winner, targetLevel, whole, true)` swap with `rngBypass=true` per D-276-RNGBYPASS-01 + bit-allocation NatSpec + event-doc/comment rewrite + worst-case gas benchmark + storage-layout proof) [JPT-BR-01..06]
+- [ ] 276-B-PLAN.md — Wave 2: test additions (`JackpotBernoulliTester.sol` helper contract + TST-JPT-BR-01 EV-neutrality + TST-JPT-BR-02 silent cold-bust + TST-JPT-BR-03 bits[200..215] chi-square independence + TST-JPT-BR-04 2-roll uniqueness) [TST-JPT-BR-01..04]
 
 ### Phase 277: Event Surface Unification + Sentinel Retirement (EVT-UNI)
 
@@ -80,7 +82,14 @@
   5. Test coverage: TST-EVT-UNI-01 topic-hash change tests on `LootBoxOpened` + `BurnieLootOpen` + `JackpotTicketWin`; TST-EVT-UNI-02 `LootboxTicketRoll` removal regression (zero remaining emission sites verified via static-analysis grep + dynamic test sweep; interface signature deleted from `IDegenerusGameLootboxModule.sol`); TST-EVT-UNI-03 sentinel-retirement regression (auto-resolve callers pass real `index`, NOT `type(uint48).max`); TST-EVT-UNI-04 manual-path event field-consistency on `LootBoxOpened` (derived `whole = (preRollTickets / 100) + (roundedUp ? 1 : 0)` equals queued ticket count; `preRollTickets` matches scaled-pre value; `lootboxIndex` matches `index` arg; consolation correlation preserved per v39.0 invariants); TST-EVT-UNI-05 auto-resolve event field-consistency (per EVT-UNI-06 decision); TST-EVT-UNI-06 jackpot event field-consistency (`JackpotTicketWin.roundedUp` present and mirrors `_jackpotTicketRoll` Bernoulli outcome).
   6. Wave shape: 1 USER-APPROVED batched contract commit + 1 USER-APPROVED batched test commit per the same approval discipline as Phases 275-276. Both commits land before Phase 279 terminal audit begins. Net per-op gas delta reported in commit message (expected NET-NEGATIVE: ~1,350 gas saved per manual lootbox open from `LogN` topic count + payload-size deltas).
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+Plans:
+**Wave 1**
+- [ ] 277-A-PLAN.md — Contract wave: delete `LootboxTicketRoll`, restructure `LootBoxOpened` (whole-token `burnie`/`bonus`), extend `BurnieLootOpen` + `JackpotTicketWin`, retire the `_resolveLootboxCommon` sentinel with consolation re-gated on `emitLootboxEvent`, wire auto-resolve `LootBoxOpened` emission (EVT-UNI-01..08)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 277-B-PLAN.md — Test wave: topic-hash change tests, `LootboxTicketRoll` removal regression, sentinel-retirement regression, manual + auto-resolve + jackpot field-consistency incl. auto-resolve silent-cold-bust; updates `LootboxWholeTicket.test.js` (TST-EVT-UNI-01..06)
 
 ### Phase 278: JackpotModule Cleanup + ENT-05 BAF Xorshift Refactor + Wrapper Retirement (JPT-CLEAN)
 
