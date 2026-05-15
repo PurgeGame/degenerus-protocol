@@ -27,6 +27,7 @@
 **Closure signal:** `MILESTONE_V40_AT_HEAD_cd549499`
 
 **Known deferred items at close (recorded via locked-decision IDs per D-40N-FCITE-01; pickup-pointers per §8 allowlist):**
+
 - LBX-02 fixture-coverage gap (D-40N-LBX02-OUT-01; RE-DEFERRED-V41+)
 - Superseded-baseline SURF `it.skip` cleanup — 3 pre-existing superseded-baseline SURF failures (v35/v34, v37/v36, v38/v37 byte-identity gates) in `test/stat/SurfaceRegression.test.js` (v41+ backlog quick-task)
 - REQUIREMENTS.md / ROADMAP.md JPT-BR-02 text correction (`rngBypass = false` -> `true` per D-276-RNGBYPASS-01; documentation-cleanup item)
@@ -57,6 +58,7 @@
 **Closure signal:** `MILESTONE_V39_AT_HEAD_6a7455d1`
 
 **Known deferred items at close (recorded via locked-decision IDs per D-274-FCITE-01; pickup-pointers per §8 allowlist):**
+
 - Auto-resolve LootboxModule Bernoulli extension (D-274-AUTORESOLVE-OUT-01; v40.0+ candidate)
 - JackpotModule:2216 BAF small-lootbox Bernoulli (D-274-JACKPOT-OUT-01; v40.0+ candidate)
 - Event surface unification — fold `LootboxTicketRoll` fields into `LootBoxOpened`/`BurnieLootOpen` directly (v40.0+ candidate; supersedes D-274-EVT-ROLL-01 + D-274-EVT-INDEX-SENTINEL-01)

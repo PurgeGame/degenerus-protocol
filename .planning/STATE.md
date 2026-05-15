@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
 milestone: v40.0
-milestone_name: Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor
-status: completed
-last_updated: "2026-05-14T16:27:40.808Z"
-last_activity: 2026-05-14 -- v40.0 SHIPPED (Phase 280 terminal closure)
+milestone_name: milestone
+status: Awaiting next milestone
+last_updated: "2026-05-15T06:52:13.786Z"
+last_activity: 2026-05-15 — Milestone v40.0 completed and archived
 progress:
   total_phases: 6
   completed_phases: 6
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-13 after v39.0 milestone close + v40.
 
 ## Current Position
 
-Phase: 280 (Delta Audit + Findings Consolidation (Terminal)) — COMPLETE
-Plan: 1 of 1 complete
-Status: v40.0 SHIPPED — all 6 phases complete (275-280); milestone closed
-Last activity: 2026-05-14 -- v40.0 SHIPPED (Phase 280 terminal closure-flip; closure signal MILESTONE_V40_AT_HEAD_cd549499)
+Phase: Milestone v40.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-05-15 — Milestone v40.0 completed and archived
 
 ## Last Shipped Milestone
 
@@ -324,7 +324,7 @@ Audit deliverables:
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Start the next milestone with /gsd:new-milestone
 
 ## Performance Metrics
 
