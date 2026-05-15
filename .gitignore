@@ -1,29 +1,26 @@
+# Build artifacts
 node_modules/
 cache/
 artifacts/
-.env
 forge-out/
 foundry.lock
 out/
-runs/
-scripts/*.db
-audit/bot-race/slither-raw.json
-audit/bot-race/slither-stdout.txt
-audit/bot-race/4naly3er-stdout.txt
 coverage/
-*.sol.bak
-.planning/
+lcov.info
 .gas-snapshot
 .gas-snapshot-*
+
+# Local state
+.env
+runs/
+scripts/*.db
+*.sol.bak
 /memory
 .claude/
-audit/unit-*/
-audit/delta-*/
-audit/FINDINGS.md
-audit/FINAL-FINDINGS-REPORT.md
-audit/EXTERNAL-AUDIT-PROMPT.md
-audit/PAYOUT-SPECIFICATION.html
-audit/ACCESS-CONTROL-MATRIX.md
-audit/ETH-FLOW-MAP.md
-audit/STORAGE-WRITE-MAP.md
-audit/v*.mdlcov.info
+
+# Internal planning artifacts
+.planning/
+
+# Internal audit/review docs — keep only the contest readme visible
+audit/*
+!audit/C4A-CONTEST-README.md
