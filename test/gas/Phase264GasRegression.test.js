@@ -100,12 +100,11 @@ const PER_CALL_GAS_DELTA_BOUND        = 120_000;   // D-IMPL-05 absolute upper b
 const ENTRY_POINT_DELTA_TOLERANCE     = 2000;      // ±2000 gas per-site tolerance vs pinned REF (compiler-codegen variance)
 const LITERAL_DELTA_HARD_BOUND        = 8_000_000; // Outer envelope on `measured - baseline` (stage-6/9 vs stage-1 floor) — flags structural regression
 
-// Pinned reference values — captured at HEAD `cf564816` via REF-CAPTURE console
-// output (executor-pinned 2026-05-09). Subsequent runs assert against the
-// pinned literal. Stage-9 surface remains 0 (soft-skip path — see test body
-// for the non-turbo-fixture documentation): re-pin once a non-turbo split-mode
+// Pinned reference values. Subsequent runs assert against the pinned literal.
+// Stage-9 surface remains 0 (soft-skip path — see test body for the
+// non-turbo-fixture documentation): re-pin once a non-turbo split-mode
 // fixture is added AND stage 9 is reachable in the simulator lifecycle.
-const PAY_DAILY_COIN_JACKPOT_GAS_REF             = 2_860_535;
+const PAY_DAILY_COIN_JACKPOT_GAS_REF             = 2_858_030; // post-BUR-02 baseline (JackpotModule cursor-rotation removal, v40.0)
 const PAY_DAILY_JACKPOT_COIN_AND_TICKETS_GAS_REF = 0;
 const BASELINE_NO_COIN_JACKPOT_GAS               = 285_604;
 
