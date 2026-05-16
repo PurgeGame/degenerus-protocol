@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v41.0
 milestone_name: Mint-Batch Cross-Call Determinism Fix
-status: planning
-last_updated: "2026-05-16T17:30:00.000Z"
-last_activity: 2026-05-16 -- Phase 283 context gathered (4 user-locked decisions); ready to plan
-stopped_at: Phase 283 context gathered (4 D-283-NN decisions); ready to plan
-resume_file: .planning/phases/283-cross-surface-batched-loop-sweep-sweep/283-CONTEXT.md
+status: ready_to_plan
+last_updated: "2026-05-16T23:59:00.000Z"
+last_activity: 2026-05-16 -- Phase 283 SWEEP complete (default zero-mutation outcome; 6 surfaces SAFE-BY-STRUCTURE)
+stopped_at: Phase 283 SWEEP complete (6/6 surfaces SAFE-BY-STRUCTURE); ready to plan Phase 284
+resume_file: .planning/phases/283-cross-surface-batched-loop-sweep-sweep/283-01-SUMMARY.md
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
-  percent: 50
+  completed_phases: 3
+  total_plans: 3
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State
@@ -22,13 +22,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-16 after v40.0 milestone archive + v41.0 milestone open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 283 — cross surface batched loop sweep (sweep)
+**Current focus:** Phase 284 — adversarial pass + audit deliverable
 
 ## Current Position
 
-Phase: 283
+Phase: 284
 Plan: Not started
-Status: Ready to plan
+Status: Ready to plan (Phase 283 complete; default zero-mutation outcome)
 Last activity: 2026-05-16
 
 ## Last Shipped Milestone
