@@ -2,16 +2,17 @@
 gsd_state_version: 1.0
 milestone: v41.0
 milestone_name: Mint-Batch Cross-Call Determinism Fix
-status: ready_to_plan
-last_updated: 2026-05-16T15:47:54.586Z
-last_activity: 2026-05-16 -- Phase 282 execution started
+status: planning
+last_updated: "2026-05-16T17:30:00.000Z"
+last_activity: 2026-05-16 -- Phase 283 context gathered (4 user-locked decisions); ready to plan
+stopped_at: Phase 283 context gathered (4 D-283-NN decisions); ready to plan
+resume_file: .planning/phases/283-cross-surface-batched-loop-sweep-sweep/283-CONTEXT.md
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 2
   completed_plans: 2
-  percent: 25
-stopped_at: Phase 282 complete (1/1) — ready to discuss Phase 283
+  percent: 50
 ---
 
 # Project State
