@@ -81,9 +81,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
         uint24 lvl = level;
 
-        uint256 ethBal = address(this).balance;
-        uint256 stBal = steth.balanceOf(address(this));
-        uint256 totalFunds = ethBal + stBal;
+        uint256 totalFunds = address(this).balance + steth.balanceOf(address(this));
 
         // Compute available funds FIRST (before any side effects)
         // Deity pass refunds have not happened yet, so claimablePool is pre-refund.
@@ -176,21 +174,21 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             remaining += decRefund;
         }
 
-        // 90% (+ decimator refund) to next-level ticketholders (Day-5-style bucket distribution)
-        // gameOver=true prevents auto-rebuy inside _addClaimableEth (tickets worthless post-game)
+        // 90% (+ decimator refund) to next-level ticketholders (Day-5-style bucket distribution).
+        // gameOver=true prevents auto-rebuy inside _addClaimableEth (tickets worthless post-game).
+        // Any leftover from empty trait buckets stays in the contract until handleFinalSweep
+        // (30 days later) folds it into the three-way split to vault / sDGNRS / GNRUS.
         if (remaining != 0) {
-            uint256 termPaid = IDegenerusGame(address(this))
-                .runTerminalJackpot(remaining, lvl + 1, rngWord);
-            remaining -= termPaid;
-            if (remaining != 0) {
-                _sendToVault(remaining, stBal);
-            }
+            IDegenerusGame(address(this)).runTerminalJackpot(remaining, lvl + 1, rngWord);
         }
     }
 
     /// @notice Final sweep of all remaining funds after 30 days post-gameover.
-    /// @dev Forfeits all unclaimed winnings and sweeps entire balance.
-    ///      Funds are split 33% sDGNRS / 33% vault / 34% GNRUS.
+    /// @dev Pays each sink (vault, sDGNRS, GNRUS) the claimable balance still
+    ///      owed to it, then splits the remainder ~1/3 each (GNRUS absorbs the
+    ///      rounding wei). All other unclaimed player balances are forfeited.
+    ///      After GO_SWEPT=1, claimWinnings() reverts, so this is the last
+    ///      chance for the three sinks to receive what they earned in-game.
     ///      Also shuts down the VRF subscription and sweeps LINK to vault.
     /// @custom:reverts E When ETH or stETH transfer fails
     function handleFinalSweep() external {
@@ -199,6 +197,13 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return; // Already swept
 
         _goWrite(GO_SWEPT_SHIFT, GO_SWEPT_MASK, 1);
+
+        uint256 owedV  = claimableWinnings[ContractAddresses.VAULT];
+        uint256 owedSD = claimableWinnings[ContractAddresses.SDGNRS];
+        uint256 owedG  = claimableWinnings[ContractAddresses.GNRUS];
+        claimableWinnings[ContractAddresses.VAULT]  = 0;
+        claimableWinnings[ContractAddresses.SDGNRS] = 0;
+        claimableWinnings[ContractAddresses.GNRUS]  = 0;
         claimablePool = 0;
 
         // Shutdown VRF subscription (fire-and-forget; failure must not block sweep)
@@ -212,27 +217,22 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
         if (totalFunds == 0) return;
 
-        _sendToVault(totalFunds, stBal);
-    }
+        // Invariant claimablePool >= sum(claimableWinnings[*]) and balance >=
+        // claimablePool guarantee totalFunds >= owedV+owedSD+owedG; if the
+        // invariant ever fails, _sendStethFirst reverts (hard-revert policy).
+        uint256 remainder  = totalFunds - (owedV + owedSD + owedG);
+        uint256 thirdShare = remainder / 3;
+        uint256 gnrusExtra = remainder - thirdShare - thirdShare;
 
-    /// @dev Send funds to sDGNRS (33%), vault (33%), and GNRUS (34%), stETH-first for all.
-    ///      IMPORTANT: Hard-reverts on stETH/ETH transfer failure. Because game-over
-    ///      sets terminal state flags that roll back on revert, a stuck stETH transfer
-    ///      would block game-over processing until the transfer succeeds.
-    /// @param amount Total amount to send (combined ETH + stETH value).
-    /// @param stethBal Available stETH balance for transfers.
-    /// @custom:reverts E When stETH transfer, approval, or ETH transfer fails
-    function _sendToVault(uint256 amount, uint256 stethBal) private {
-        uint256 thirdShare = amount / 3;                     // 33% each
-        uint256 gnrusAmount = amount - thirdShare - thirdShare; // 34% (remainder to GNRUS)
-
-        // Send stETH-first to each recipient, then ETH for any remainder
-        stethBal = _sendStethFirst(ContractAddresses.SDGNRS, thirdShare, stethBal);
-        stethBal = _sendStethFirst(ContractAddresses.VAULT, thirdShare, stethBal);
-        _sendStethFirst(ContractAddresses.GNRUS, gnrusAmount, stethBal);
+        stBal = _sendStethFirst(ContractAddresses.VAULT,  owedV  + thirdShare, stBal);
+        stBal = _sendStethFirst(ContractAddresses.SDGNRS, owedSD + thirdShare, stBal);
+        _sendStethFirst(ContractAddresses.GNRUS,          owedG  + gnrusExtra, stBal);
     }
 
     /// @dev Send stETH first to a recipient, then ETH for the remainder. Returns updated stETH balance.
+    ///      IMPORTANT: Hard-reverts on stETH/ETH transfer failure. Because game-over
+    ///      sets terminal state flags that roll back on revert, a stuck stETH transfer
+    ///      would block game-over processing until the transfer succeeds.
     /// @param to Recipient address.
     /// @param amount Total amount to send (stETH preferred, ETH as fallback).
     /// @param stethBal Remaining stETH balance available for transfers.
