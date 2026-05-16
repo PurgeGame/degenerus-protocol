@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v41.0
 milestone_name: Mint-Batch Cross-Call Determinism Fix
-status: ready_to_plan
-last_updated: "2026-05-16T23:59:00.000Z"
-last_activity: 2026-05-16 -- Phase 283 SWEEP complete (default zero-mutation outcome; 6 surfaces SAFE-BY-STRUCTURE)
-stopped_at: Phase 283 SWEEP complete (6/6 surfaces SAFE-BY-STRUCTURE); ready to plan Phase 284
-resume_file: .planning/phases/283-cross-surface-batched-loop-sweep-sweep/283-01-SUMMARY.md
+status: in_progress
+last_updated: "2026-05-16T24:00:00.000Z"
+last_activity: 2026-05-16 -- Phase 284 planning complete (CONTEXT + PLAN + ADVERSARIAL-CHARGE + FINDINGS-DRAFT authored); awaiting orchestrator 3-skill PARALLEL adversarial pass + closure flips
+stopped_at: Phase 284 Tasks 1-2 (subagent) complete; orchestrator pickup for Tasks 3-7 (adversarial pass + integrate dispositions + closure flips + audit deliverable finalize)
+resume_file: .planning/phases/284-delta-audit-findings-consolidation-terminal/284-01-PLAN.md
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 3
+  total_plans: 4
   completed_plans: 3
-  percent: 75
+  percent: 87
 ---
 
 # Project State
@@ -22,13 +22,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-16 after v40.0 milestone archive + v41.0 milestone open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 284 — adversarial pass + audit deliverable
+**Current focus:** Phase 284 — orchestrator 3-skill PARALLEL adversarial pass + §4 integration + atomic closure flip
 
 ## Current Position
 
 Phase: 284
-Plan: Not started
-Status: Ready to plan (Phase 283 complete; default zero-mutation outcome)
+Plan: 01 (planning + scaffolding complete; orchestrator finalize pending)
+Status: In progress — Tasks 1-2 (Phase 284 subagent) complete; orchestrator pickup for Tasks 3-7 (adversarial pass dispatch + integrate §4 dispositions + atomic closure flips + audit deliverable finalize + chmod 444)
 Last activity: 2026-05-16
 
 ## Last Shipped Milestone
