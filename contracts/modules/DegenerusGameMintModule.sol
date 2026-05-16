@@ -466,12 +466,12 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             uint32 take = owed > maxT ? maxT : owed;
             if (take == 0) break;
 
-            _raritySymbolBatch(player, baseKey, processed, take, entropy);
+            _raritySymbolBatch(player, baseKey, processed, take, entropy, owed);
             emit TraitsGenerated(
                 player,
                 lvl,
                 uint32(idx),
-                processed,
+                owed,
                 take,
                 entropy
             );
@@ -538,12 +538,16 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     /// @param startIndex Starting position within this player's owed tickets.
     /// @param count Number of ticket entries to process this batch.
     /// @param entropyWord VRF entropy for trait generation.
+    /// @param ownedSalt Owed-ticket count read at the outer-loop iteration entry; mixes into
+    ///                  the per-group keccak seed so multi-call drains produce distinct seeds
+    ///                  across calls on the same player.
     function _raritySymbolBatch(
         address player,
         uint256 baseKey,
         uint32 startIndex,
         uint32 count,
-        uint256 entropyWord
+        uint256 entropyWord,
+        uint32 ownedSalt
     ) private {
         // Memory arrays to track which traits were generated and how many times.
         uint32[256] memory counts;
@@ -565,7 +569,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             // independence, so the category bucket — derived from the low 32
             // bits of s — inherits whatever entropy the seed's low bits carry.
             uint256 seed = uint256(
-                keccak256(abi.encode(baseKey, entropyWord, groupIdx))
+                keccak256(abi.encode(baseKey, entropyWord, groupIdx, ownedSalt))
             );
             uint64 s = uint64(seed) | 1;
             uint8 offset = uint8(i & 15);
@@ -796,12 +800,12 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         uint256 baseKey = (uint256(lvl) << 224) |
             (queueIdx << 192) |
             (uint256(uint160(player)) << 32);
-        _raritySymbolBatch(player, baseKey, processed, take, entropy);
+        _raritySymbolBatch(player, baseKey, processed, take, entropy, owed);
         emit TraitsGenerated(
             player,
             lvl,
             uint32(queueIdx),
-            processed,
+            owed,
             take,
             entropy
         );
