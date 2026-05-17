@@ -1,18 +1,18 @@
 ---
 gsd_state_version: 1.0
 milestone: v41.0
-milestone_name: Mint-Batch Cross-Call Determinism Fix
+milestone_name: Cross-Call Determinism Fix (mint-batch + hero-override)
 status: in_progress
-last_updated: "2026-05-16T24:00:00.000Z"
-last_activity: 2026-05-16 -- Phase 284 planning complete (CONTEXT + PLAN + ADVERSARIAL-CHARGE + FINDINGS-DRAFT authored); awaiting orchestrator 3-skill PARALLEL adversarial pass + closure flips
-stopped_at: Phase 284 Tasks 1-2 (subagent) complete; orchestrator pickup for Tasks 3-7 (adversarial pass + integrate dispositions + closure flips + audit deliverable finalize)
-resume_file: .planning/phases/284-delta-audit-findings-consolidation-terminal/284-01-PLAN.md
+last_updated: "2026-05-17T00:30:00.000Z"
+last_activity: 2026-05-17 -- Phase 284 adversarial pass surfaced F-41-02 hero-override day-index defect (3-skill consensus HIGH severity); milestone re-themed; Phase 285 (HOFIX) + Phase 286 (TST-HOFIX) added before Phase 284 terminal; v41 closure BLOCKED on Phase 285+286 landing
+stopped_at: Phase 285 (HOFIX) ready to discuss — covers F-41-02 hero-override day-index fix + day-index audit sweep
+resume_file: .planning/phases/285-day-index-read-audit-hero-override-fix-hofix/285-CONTEXT.md (not yet created)
 progress:
-  total_phases: 4
+  total_phases: 6
   completed_phases: 3
   total_plans: 4
   completed_plans: 3
-  percent: 87
+  percent: 50
 ---
 
 # Project State
