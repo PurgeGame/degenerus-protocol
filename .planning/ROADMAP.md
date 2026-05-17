@@ -146,7 +146,15 @@ Plans:
   4. Storage layout regression PASS — `ticketsOwedPacked[rk][player]` 40-bit packed form (`rem` low 8 + `owed` next 24 + `processed`-via-owed-salt high 8) byte-identical to v41 close HEAD on a representative drain run; storage-slot grep proof reads same slot bytes pre + post-MINTCLN.
   5. Indexer-migration note recorded in test-file header (TST-MINTCLN-05) per v40 Phase 277 D-40N-EVT-BREAK-01 precedent — documentation-only path-of-investigation comment; no on-chain assertion, no test logic.
 
-**Plans:** TBD
+**Plans:** 2 plans
+Plans:
+**Wave 1**
+
+- [ ] 291-01-PLAN.md — Extend test/helpers/raritySymbolBatchRef.mjs with v42 3-input JS-replay reference (TST-MINTCLN-01 oracle prerequisite); additive only, v41 export preserved for Phase 282 fixture compatibility.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 291-02-PLAN.md — Ship test/edge/MintCleanupRegression.test.js covering TST-MINTCLN-01..05 (multi-call drain multiset replay + 3-field TraitsGenerated decode + Path A/B coverage + ticketsOwedPacked slot read + JSDoc indexer-migration header) under single USER-APPROVED batched commit.
 
 ### Phase 292: Hero-Override Weighted Roll (HRROLL)
 

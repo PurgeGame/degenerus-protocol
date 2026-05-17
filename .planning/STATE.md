@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v42.0
 milestone_name: Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf
-status: planning
-last_updated: "2026-05-17T13:00:00.000Z"
-last_activity: 2026-05-17 -- Phase 291 context gathered (D-291-GAS-01 locked)
+status: executing
+last_updated: "2026-05-17T11:59:12.693Z"
+last_activity: 2026-05-17 -- Phase 291 planning complete
 progress:
   total_phases: 8
   completed_phases: 1
-  total_plans: 2
+  total_plans: 4
   completed_plans: 2
   percent: 13
 ---
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v4
 
 Phase: 291
 Plan: Not started
-Status: Context gathered — ready to plan (D-291-GAS-01 locks empirical-gas skip)
+Status: Ready to execute
 Resume file: .planning/phases/291-mintcln-regression-fixture-tst-mintcln/291-CONTEXT.md
 Progress: 0/8 phases complete (Phases 290 MINTCLN + 291 TST-MINTCLN + 292 HRROLL + 293 TST-HRROLL + 294 DPNERF + 295 TST-DPNERF + 296 SWEEP + 297 TERMINAL)
-Last activity: 2026-05-17
+Last activity: 2026-05-17 -- Phase 291 planning complete
 
 ## Last Shipped Milestone
 
