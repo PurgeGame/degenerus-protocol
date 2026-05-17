@@ -73,6 +73,14 @@
 - [ ] **TST-HOFIX-04**: F-41-02 anchor-replay regression — fixture simulates production attack flow as a 3-tx atomic sequence (advanceGame triggers CALL 1 → attacker EOA places `placeDegeneretteBet(quadrant=Q, symbol=S, amount=MIN_BET_ETH)` → advanceGame triggers CALL 2). Pre-fix branch (git worktree at pre-Phase-285 HEAD, analogous to Phase 282 D-282-PREFIX-BRANCH-01 v40-worktree pattern): produces divergent `call1Bucket` mask between CALL 1 and CALL 2 → asserts disjoint-subset BREAKS (bucket double-pay or skip witnessed). Post-fix branch (current HEAD): produces identical `call1Bucket` mask → asserts disjoint-subset holds. The fixture is the load-bearing pre-deploy detection artifact that Phase 284 §4 F-41-02 finding cites as PRODUCTION_OPEN evidence.
 - [ ] **TST-HOFIX-05**: Per additional FIX-HOFIX-SWEEP-NN surface from Phase 285 HOFIX-AUDIT (count expands at plan-phase; default 0), parallel regression test covering the cross-call read-consistency property at that surface. Placeholder requirement.
 
+### JPSURF — Jackpot-Influence Surface Closure Audit (contracts/)
+
+- [ ] **JPSURF-01**: Build the jackpot READ-SET — every storage slot S read during the jackpot operational call graph from `payDailyJackpot` + `payDailyJackpotCoinAndTickets` (transitively through `_rollWinningTraits`, `_applyHeroOverride`, `_topHeroSymbol`, `_pickSoloQuadrant`, `_processDailyEth`, `_resumeDailyEth`, `_handleSoloBucketWinner`, `_payNormalBucket`, `_runEarlyBirdLootboxJackpot`, `_distributeTicketJackpot`, `_awardJackpotTickets`, `_jackpotTicketRoll`, `_awardDailyCoinToTraitWinners`, `_awardFarFutureCoinJackpot`, `_randTraitTicket`, `JackpotBucketLib` helpers, `EntropyLib.hash2`). Catalog: (slot, read-site line citation, read-context).
+- [ ] **JPSURF-02**: Build the MUTATOR-SET — every `external`/`public` function F across `contracts/` (DegenerusGame + 11 modules + BurnieCoinflip + DegenerusQuests + DegenerusVault + StakedDegenerusStonk + WrappedWrappedXRP + BurnieCoin + GNRUS + DegenerusAffiliate + DegenerusDeityPass + DegenerusStonk + DegenerusTraitUtils + DeityBoonViewer) and for each, the storage slots it mutates. Catalog: (function, file:line, access-control modifier, rngLockedFlag-check verdict, mutated-slots list).
+- [ ] **JPSURF-03**: Cross-reference — for each (S, F) pair where S ∈ READ-SET and F ∈ MUTATOR-SET, classify the pair: (a) SAFE_BY_DESIGN (F gated on `rngLockedFlag = true` revert); (b) SAFE_BY_STRUCTURE (F ungated but writes to structurally-safe slot — e.g., Phase 285 `+1` future-day offset OR Phase 195+ read-write buffer for ticket queues OR access-control modifier preventing arbitrary EOA invocation); (c) VIOLATION (F ungated, writes to jackpot READ-SET slot without structural safety).
+- [ ] **JPSURF-04**: Sub-check — verify `rngLockedFlag = true` is set AT `vrfCoordinator.requestRandomWords()` call at `AdvanceModule:1100` (not after), so no frontrun gap exists between VRF request and rng-lock activation. Document the call sequence + any gap.
+- [ ] **JPSURF-05**: JPSURF-AUDIT.md artifact (planner-local at `.planning/phases/287-*/`) consolidates READ-SET catalog (JPSURF-01) + MUTATOR-SET catalog (JPSURF-02) + per-(S,F)-pair verdict table (JPSURF-03) + frontrun-gap verdict (JPSURF-04) + Sweep methodology summary. AGENT-COMMITTED. FLAG-ONLY POSTURE per user instruction 2026-05-17: any VIOLATIONs cataloged for user review at follow-up; NO contract changes attempted at Phase 287; NO FIX-JPSURF phase auto-spawned. Default expected outcome: 0 VIOLATIONs (Phase 285 closed F-41-02 which was the only known instance; Phase 195+ read-write buffer system pre-emptively closes ticket/mint surfaces). Non-default: each VIOLATION → user-review at follow-up; potential F-41-NN candidate.
+
 ### AUDIT — Findings doc + adversarial pass
 
 - [ ] **AUDIT-01**: `audit/FINDINGS-v41.0.md` §3.A delta-surface table enumerates the v40→v41 audit-subject commits — fix commit(s) + test commit(s) + any sweep-derived patches. Phase-row groups match the final phase split (set at plan-phase).
@@ -126,6 +134,11 @@ REQ-ID → Phase mapping (29/29 v41.0 requirements mapped; 100% coverage; no orp
 | TST-HOFIX-03 | Phase 286 | Pending |
 | TST-HOFIX-04 | Phase 286 | Pending |
 | TST-HOFIX-05 | Phase 286 | Pending (placeholder; count expands at plan-phase per FIX-HOFIX-SWEEP-NN count) |
+| JPSURF-01 | Phase 287 | Pending |
+| JPSURF-02 | Phase 287 | Pending |
+| JPSURF-03 | Phase 287 | Pending |
+| JPSURF-04 | Phase 287 | Pending |
+| JPSURF-05 | Phase 287 | Pending |
 | AUDIT-01 | Phase 284 | Pending |
 | AUDIT-02 | Phase 284 | Pending |
 | AUDIT-03 | Phase 284 | Pending |

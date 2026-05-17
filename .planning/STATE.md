@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v41.0
 milestone_name: Cross-Call Determinism Fix (mint-batch + hero-override)
-status: awaiting_user_approval
-last_updated: "2026-05-17T03:00:00.000Z"
-last_activity: 2026-05-17 -- Phase 286 test file prepared; all 4 active tests PASS; awaiting user approval per feedback_manual_review_before_push.md
-stopped_at: Phase 286 test diff pending user approval — review .planning/phases/286-hero-override-day-index-regression-fixture-tst-hofix/286-01-COMMIT-MESSAGE.md + run `git diff -- test/` (or inspect untracked file test/edge/HeroOverrideDayIndex.test.js) before authorizing commit
-resume_file: .planning/phases/286-hero-override-day-index-regression-fixture-tst-hofix/286-01-SUMMARY.md
+status: in_progress
+last_updated: "2026-05-17T03:30:00.000Z"
+last_activity: 2026-05-17 -- Phase 286 USER-APPROVED test committed (cef9a972); Phase 287 (JPSURF) added — go-nuts commitment-window audit per user-stated canonical invariant ("100% determinism of jackpots must be secure once VRF has been requested"); flag-only posture (no contract changes); covers day-boundary CALL 1/CALL 2 edge case + every external path
+stopped_at: Phase 287 (JPSURF) executing — full coverage audit; flags-only output (no contract changes); user reviews JPSURF-AUDIT.md catalog at completion
+resume_file: .planning/phases/287-jackpot-influence-surface-closure-jpsurf/287-01-JPSURF-AUDIT.md (not yet created)
 progress:
-  total_phases: 6
-  completed_phases: 4
+  total_phases: 7
+  completed_phases: 5
   total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_plans: 6
+  percent: 71
 ---
 
 # Project State
