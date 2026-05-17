@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v42.0
 milestone_name: Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf
-status: executing
-last_updated: "2026-05-17T11:59:12.693Z"
+status: ready_to_plan
+last_updated: 2026-05-17T12:44:51.380Z
 last_activity: 2026-05-17 -- Phase 291 planning complete
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 4
   percent: 13
+stopped_at: Phase 291 complete (2/2) — ready to discuss Phase 292
 ---
 
 # Project State
@@ -20,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v42.0 milestone open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 291 — mintcln regression fixture (tst mintcln)
+**Current focus:** Phase 292 — hero override weighted roll (hrroll)
 
 ## Current Position
 
-Phase: 291
+Phase: 292
 Plan: Not started
-Status: Ready to execute
+Status: Ready to plan
 Resume file: .planning/phases/291-mintcln-regression-fixture-tst-mintcln/291-CONTEXT.md
 Progress: 0/8 phases complete (Phases 290 MINTCLN + 291 TST-MINTCLN + 292 HRROLL + 293 TST-HRROLL + 294 DPNERF + 295 TST-DPNERF + 296 SWEEP + 297 TERMINAL)
-Last activity: 2026-05-17 -- Phase 291 planning complete
+Last activity: 2026-05-17
 
 ## Last Shipped Milestone
 
