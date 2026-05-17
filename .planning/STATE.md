@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 milestone: v41.0
 milestone_name: Cross-Call Determinism Fix (mint-batch + hero-override)
 status: awaiting_user_approval
-last_updated: "2026-05-17T12:00:00.000Z"
-last_activity: 2026-05-17 -- Phase 288 contract patch prepared (D-288-FIX-SHAPE-01 dailyIdx read + Phase 285 supersede); F-41-02 + F-41-03 both RESOLVED at code level (pending diff approval); Phase 289 next (test adjustment)
-stopped_at: Phase 288 contract diff pending user approval — review .planning/phases/288-f-41-03-cross-day-call-1-call-2-determinism-fix-fix-jpsurf/288-01-COMMIT-MESSAGE.md + run `git diff -- contracts/` to inspect changes
-resume_file: .planning/phases/288-f-41-03-cross-day-call-1-call-2-determinism-fix-fix-jpsurf/288-01-SUMMARY.md
+last_updated: "2026-05-17T14:30:00.000Z"
+last_activity: 2026-05-17 -- Phase 289 test diff prepared; 9 tests PASS; adjusts Phase 286 tests to post-Phase-288 semantic + adds F-41-03 cross-day regression coverage (TST-JPSURF-01..04); awaiting user approval
+stopped_at: Phase 289 test diff pending user approval — review .planning/phases/289-hero-override-day-index-snapshot-regression-fixture-tst-jpsurf/289-01-COMMIT-MESSAGE.md + run `git diff -- test/` to inspect changes
+resume_file: .planning/phases/289-hero-override-day-index-snapshot-regression-fixture-tst-jpsurf/289-01-SUMMARY.md
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 8
-  completed_plans: 7
-  percent: 75
+  completed_plans: 8
+  percent: 87
 ---
 
 # Project State
