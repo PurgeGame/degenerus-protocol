@@ -169,9 +169,13 @@ None — no external service configuration required.
 - **REQUIREMENTS.md success criterion #4** + **ROADMAP.md Phase 290 success-criteria #3** still cite `TicketsCredited` (phantom event). Worth correcting before the Phase 297 audit deliverable cite-pass. Out of MINTCLN scope per D-42N-MINTCLN-SCOPE-01.
 - **Phase 290 KNOWN-ISSUES.md** is byte-identical to v41 close — no MINTCLN entry needed (the BREAKING `TraitsGenerated` topic-hash is documented in the commit body + here + 290-01-MEASUREMENT.md §(5), and is already mapped via D-42N-EVT-BREAK-01 → v40 D-40N-EVT-BREAK-01 pre-launch posture).
 
-## Self-Check
+## Self-Check: PASSED
 
-Populated after staging + commit.
+- All 4 staged files present on disk after commit (`contracts/modules/DegenerusGameMintModule.sol`, `contracts/storage/DegenerusGameStorage.sol`, `290-01-MEASUREMENT.md`, `290-02-SUMMARY.md`).
+- Commit `e5665117` present in `git log --oneline --all` with subject `contracts(290-02): apply MINTCLN-01..09 cleanup batch [USER-APPROVED]`.
+- `git diff 315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4..HEAD -- contracts/DegenerusGame.sol KNOWN-ISSUES.md` is EMPTY (external readers + KI UNCHANGED — D-42N-MINTCLN-SCOPE-01 honored).
+- Commit contains exactly 4 files; `.planning/STATE.md` correctly remains UNSTAGED (orchestrator territory).
+- No `git push` issued by the executor.
 
 ---
 *Phase: 290-mint-batch-event-sig-cleanup-mintcln*
