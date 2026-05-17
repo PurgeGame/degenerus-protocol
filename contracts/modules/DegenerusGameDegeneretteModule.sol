@@ -481,9 +481,11 @@ contract DegenerusGameDegeneretteModule is
 
         // Track hero wagers and player ETH stats (ETH bets only)
         if (currency == CURRENCY_ETH) {
-            // 1. Daily hero symbol tracking (heroQuadrant validated to {0..3} above)
+            // 1. Daily hero symbol tracking — bet contributes to NEXT day's
+            //    jackpot per design intent (top symbol on day D wins day D+1's
+            //    hero override). Slot is keyed by jackpot-day, not bet-day.
             {
-                uint32 day = _simulatedDayIndex();
+                uint32 day = _simulatedDayIndex() + 1;
                 uint8 heroSymbol = uint8(customTicket >> (heroQuadrant * 8)) &
                     7;
                 uint256 wagerUnit = totalBet / 1e12;
