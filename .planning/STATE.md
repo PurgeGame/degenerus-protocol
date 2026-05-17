@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v42.0
 milestone_name: Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf
-status: planning
-last_updated: "2026-05-17T16:02:21.883Z"
+status: executing
+last_updated: "2026-05-17T17:29:21.145Z"
 last_activity: 2026-05-17
 progress:
   total_phases: 8
-  completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
-  percent: 38
+  completed_phases: 4
+  total_plans: 8
+  completed_plans: 8
+  percent: 50
 ---
 
 # Project State
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v42.0 milestone open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 293 — hrroll regression fixture (tst hrroll)
+**Current focus:** Phase 293 — hrroll-regression-fixture-tst-hrroll
 
 ## Current Position
 
-Phase: 293
-Plan: Not started
-Status: Ready to plan
-Resume file: .planning/phases/293-hrroll-regression-fixture-tst-hrroll/293-CONTEXT.md
-Progress: [████████░░] 83% (5/6 plans complete)
+Phase: 293 (hrroll-regression-fixture-tst-hrroll) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Resume file: None
+Progress: [██████████] 100%
 Last activity: 2026-05-17
 
 ## Last Shipped Milestone
@@ -356,6 +356,7 @@ Audit deliverables:
 | 279 | 02 | ~50min | 3 | 6 |
 | 280 | 01 | single session | 6 | 2 |
 | 292 | 01 | ~9min | 2 | 2 |
+| Phase 293 P02 | ~50m | 7 tasks | 1 files |
 
 ## Decisions
 
@@ -376,3 +377,5 @@ Audit deliverables:
 - [Phase 292]: D-42N-CACHE-01: LOCKED to flat uint32[32] indexed q*8+s (~+431 gas worst case; lowest among three candidates)
 - [Phase 292]: D-42N-GAS-01: soft +500 / hard +750 gas threshold vs v41 baseline (Phase 293 TST-HRROLL-06 asserts empirically)
 - [Phase 292]: ESCALATION-CHECKPOINT NOT TRIGGERED — Plan 02 may proceed to contract patch
+- [Phase ?]: Phase 293 Plan 02: TST-HRROLL-06 RELAX (option i) — log-only traceability + DailyWinningTraits event-firing positive-path assertion + cite 292-01-MEASUREMENT.md §3.c (mirrors D-291-GAS-01 SKIP-GAS); user 2026-05-17 resolved first-execution BLOCKING_ESCALATION; D-293-INVOKE-01 NOT invoked, contracts/ clean
+- [Phase ?]: Phase 293 Plan 02: Cross-attestation 16/16 production-path replays via DailyWinningTraits.mainTraitsPacked byte-at-winQuadrant decode match JS oracle exactly — D-293-INVOKE-01 ALGORITHM_VERIFIED at production-path level
