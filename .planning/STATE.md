@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v42.0
 milestone_name: Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf
 status: executing
-last_updated: "2026-05-17T13:47:16.224Z"
-last_activity: 2026-05-17 -- Phase 292 planning complete
+last_updated: "2026-05-17T14:38:44.317Z"
+last_activity: 2026-05-17 -- Phase 292 Plan 01 complete (HRROLL design-intent trace + measurement scaffold AGENT-COMMITTED)
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 6
-  completed_plans: 4
-  percent: 25
+  completed_plans: 5
+  percent: 83
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v42.0 milestone open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 292 — hero override weighted roll (hrroll)
+**Current focus:** Phase 292 — hero-override-weighted-roll-hrroll
 
 ## Current Position
 
-Phase: 292
-Plan: Not started
-Status: Ready to execute
-Resume file: .planning/phases/292-hero-override-weighted-roll-hrroll/292-CONTEXT.md
-Progress: 0/8 phases complete (Phases 290 MINTCLN + 291 TST-MINTCLN + 292 HRROLL + 293 TST-HRROLL + 294 DPNERF + 295 TST-DPNERF + 296 SWEEP + 297 TERMINAL)
-Last activity: 2026-05-17 -- Phase 292 planning complete
+Phase: 292 (hero-override-weighted-roll-hrroll) — EXECUTING
+Plan: 2 of 2 (Plan 01 AGENT-COMMITTED; Plan 02 awaits USER-APPROVAL contract-edit gate)
+Status: Plan 02 pre-patch gate SATISFIED — both sidecars exist; ESCALATION-CHECKPOINT NOT TRIGGERED
+Resume file: .planning/phases/292-hero-override-weighted-roll-hrroll/292-02-PLAN.md
+Progress: [████████░░] 83% (5/6 plans complete)
+Last activity: 2026-05-17 -- Phase 292 Plan 01 complete (HRROLL design-intent trace + measurement scaffold)
 
 ## Last Shipped Milestone
 
@@ -355,6 +355,7 @@ Audit deliverables:
 | 279 | 01 | ~45min | 3 | 4 |
 | 279 | 02 | ~50min | 3 | 6 |
 | 280 | 01 | single session | 6 | 2 |
+| 292 | 01 | ~9min | 2 | 2 |
 
 ## Decisions
 
@@ -372,3 +373,6 @@ Audit deliverables:
 - [Phase 280]: Closure HEAD SHA resolved to cd549499 (the section-9-authoring-commit HEAD, mirroring the v39 P274 audit_subject_head pattern); MILESTONE_V40_AT_HEAD_cd549499 propagated to 5 FINDINGS locations + 3 cross-document targets
 - [Phase 280]: 3-skill adversarial pass performed inline (no .claude/skills directory + no Skill/Agent tools for the sequential executor; v35.0 STATE.md precedent — skills load into orchestrator context for review work); 11/11 section-4 surfaces SAFE-bucket, zero residual FINDING_CANDIDATE
 - [Phase 279]: D-279-02-SURF-SUPERSEDED-01: the 3 pre-existing superseded-baseline SURF failures (v35/v34, v37/v36, v38/v37) tripped by Wave-1 contract commit 8ef4a010 were surfaced rather than silently edited; 279-02 committed as-is per user approval; an it.skip cleanup of those superseded blocks is a recommended separate follow-up
+- [Phase 292]: D-42N-CACHE-01: LOCKED to flat uint32[32] indexed q*8+s (~+431 gas worst case; lowest among three candidates)
+- [Phase 292]: D-42N-GAS-01: soft +500 / hard +750 gas threshold vs v41 baseline (Phase 293 TST-HRROLL-06 asserts empirically)
+- [Phase 292]: ESCALATION-CHECKPOINT NOT TRIGGERED — Plan 02 may proceed to contract patch
