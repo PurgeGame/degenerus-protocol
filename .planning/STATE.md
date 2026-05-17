@@ -1,33 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v41.0
-milestone_name: Cross-Call Determinism Fix (mint-batch + hero-override)
-status: Awaiting next milestone
-last_updated: "2026-05-17T08:48:08.536Z"
-last_activity: 2026-05-17 — Milestone v41.0 completed and archived
+milestone: v42.0
+milestone_name: Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf
+status: planning
+last_updated: "2026-05-17T09:17:51.773Z"
+last_activity: 2026-05-17
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-16 after v40.0 milestone archive + v41.0 milestone open)
+See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v42.0 milestone open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v41.0 SHIPPED 2026-05-17. Between-milestones state. Next milestone scope TBD.
+**Current focus:** v42.0 OPENED 2026-05-17. Audit baseline v41.0 closure HEAD `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4`. Three independent surfaces — MINTCLN (mint event/sig cleanup) + HRROLL (hero-override weighted roll) + DPNERF (deity-pass gold nerf). Defining requirements + roadmap.
 
 ## Current Position
 
-Phase: Milestone v41.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-05-17 — Milestone v41.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-05-17 — Milestone v42.0 started
 
 ## Last Shipped Milestone
 
