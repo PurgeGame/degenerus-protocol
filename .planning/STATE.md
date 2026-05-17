@@ -2,11 +2,9 @@
 gsd_state_version: 1.0
 milestone: v41.0
 milestone_name: Cross-Call Determinism Fix (mint-batch + hero-override)
-status: shipped
-last_updated: "2026-05-17T18:00:00.000Z"
-last_activity: 2026-05-17 -- v41.0 SHIPPED — 3 of 3 F-41-NN RESOLVED_AT_V41 (F-41-01 mint-batch + F-41-02 hero-override within-day + F-41-03 hero-override cross-day); closure signal MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4 emitted at Phase 284 terminal closure-flip
-stopped_at: v41.0 SHIPPED; ready for v42.0 milestone scope discussion
-resume_file: audit/FINDINGS-v41.0.md
+status: Awaiting next milestone
+last_updated: "2026-05-17T08:48:08.536Z"
+last_activity: 2026-05-17 — Milestone v41.0 completed and archived
 progress:
   total_phases: 9
   completed_phases: 9
@@ -26,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-16 after v40.0 milestone archive + v4
 
 ## Current Position
 
-Phase: (between milestones)
-Plan: (n/a)
-Status: v41.0 SHIPPED — ready for v42.0 scope discussion
-Last activity: 2026-05-17
+Phase: Milestone v41.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-05-17 — Milestone v41.0 completed and archived
 
 ## Last Shipped Milestone
 
@@ -343,7 +341,7 @@ Audit deliverables:
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd:new-milestone
+- Start the next milestone with /gsd-new-milestone
 
 ## Performance Metrics
 
