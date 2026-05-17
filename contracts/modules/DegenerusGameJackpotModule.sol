@@ -1581,25 +1581,32 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev If a top hero symbol exists for the prior day's settled wager pool,
-    ///      that symbol auto-wins its own quadrant (with random color), replacing
-    ///      only that quadrant. Applied to all jackpot paths (purchase phase +
-    ///      jackpot phase). Reads `dailyHeroWagers[dailyIdx]`: `dailyIdx` is
-    ///      written only at `_unlockRng` (AdvanceModule), so during jackpot
-    ///      processing it is frozen at the previous day's index. Both CALL 1 and
-    ///      CALL 2 of the daily ETH split therefore read the same slot regardless
-    ///      of any physical-day boundary crossed between calls. Bets placed on
-    ///      day D write to `dailyHeroWagers[D]`; day D+1's jackpot reads slot[D]
-    ///      via `dailyIdx == D` (set by day D's `_unlockRng`).
+    /// @dev Replaces the winning quadrant's trait with a hero-symbol override sampled by
+    ///      `_rollHeroSymbol` from the prior day's settled wager pool. Applied to all jackpot
+    ///      paths (purchase phase + jackpot phase). Reads `dailyHeroWagers[dailyIdx]`:
+    ///      `dailyIdx` is written only at `_unlockRng` (AdvanceModule), so during jackpot
+    ///      processing it is frozen at the previous day's index — every consumer in a single
+    ///      jackpot resolution therefore reads the same wager pool. Bets placed on day D
+    ///      write to `dailyHeroWagers[D]`; day D+1's jackpot reads slot[D] via
+    ///      `dailyIdx == D` (set by day D's `_unlockRng`).
+    ///
+    ///      `heroEntropy` is the raw VRF entropy word for the day; the same value flows into
+    ///      every `_applyHeroOverride` invocation within a jackpot resolution, so on days
+    ///      that produce both regular and bonus trait rolls both rolls land on the same hero
+    ///      `(quadrant, symbol)` pair (only the per-quadrant colors differ, sampled from
+    ///      `randomWord`). Symbol entropy and color entropy live in orthogonal domains:
+    ///      colors read bit-slices of `randomWord`; the symbol roll consumes
+    ///      `keccak256(abi.encode(heroEntropy, day))`.
     function _applyHeroOverride(
         uint8[4] memory w,
-        uint256 randomWord
+        uint256 randomWord,
+        uint256 heroEntropy
     ) private view {
         (
             bool hasHeroWinner,
             uint8 heroQuadrant,
             uint8 heroSymbol
-        ) = _topHeroSymbol(dailyIdx);
+        ) = _rollHeroSymbol(dailyIdx, heroEntropy);
         if (!hasHeroWinner) return;
 
         uint8 heroColor;
@@ -1620,26 +1627,43 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
     }
 
-    /// @dev Returns the top hero symbol for a day across all quadrants.
-    ///      Tie-breaker is deterministic first-seen order (q asc, symbol asc).
-    function _topHeroSymbol(
-        uint32 day
+    /// @dev Samples the day's hero `(quadrant, symbol)` via a weighted random roll across
+    ///      the 32 packed slots of `dailyHeroWagers[day]`. Pass 1 SLOADs the 4 packed
+    ///      quadrants once, decodes 32 uint32 amounts, accumulates the total, and tracks
+    ///      the largest-amount slot (first-seen on ties to match the scan order).
+    ///      Pass 2 walks the cached weights with a cumulative cursor against
+    ///      `pick = uint64(uint256(keccak256(abi.encode(entropy, day))) % effectiveTotal)`
+    ///      and applies a `leaderBonus = maxAmount / 2` add at the largest-amount slot —
+    ///      effective ×1.5 weight on the leader, no min-wager floor on any other slot.
+    ///      Returns `(false, 0, 0)` when no slot has any wagers.
+    function _rollHeroSymbol(
+        uint32 day,
+        uint256 entropy
     )
         private
         view
         returns (bool hasWinner, uint8 winQuadrant, uint8 winSymbol)
     {
-        uint32 topAmount;
+        uint32[32] memory weights;
+        uint64 total;
+        uint32 maxAmount;
+        uint8 leaderIdx;
+
         for (uint8 q; q < 4; ) {
             uint256 packed = dailyHeroWagers[day][q];
             for (uint8 s; s < 8; ) {
                 uint32 amount = uint32(
                     (packed >> (uint256(s) * 32)) & 0xFFFFFFFF
                 );
-                if (amount > topAmount) {
-                    topAmount = amount;
-                    winQuadrant = q;
-                    winSymbol = s;
+                uint8 idx;
+                unchecked {
+                    idx = (q << 3) | s;
+                }
+                weights[idx] = amount;
+                total += uint64(amount);
+                if (amount > maxAmount) {
+                    maxAmount = amount;
+                    leaderIdx = idx;
                 }
                 unchecked {
                     ++s;
@@ -1649,7 +1673,30 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 ++q;
             }
         }
-        hasWinner = topAmount != 0;
+
+        if (total == 0) {
+            return (false, 0, 0);
+        }
+
+        uint64 leaderBonus = uint64(maxAmount) / 2;
+        uint64 effectiveTotal = total + leaderBonus;
+        uint64 pick = uint64(
+            uint256(keccak256(abi.encode(entropy, day))) % effectiveTotal
+        );
+
+        uint64 cumulative;
+        for (uint8 idx; idx < 32; ) {
+            cumulative += uint64(weights[idx]);
+            if (idx == leaderIdx) {
+                cumulative += leaderBonus;
+            }
+            if (cumulative > pick) {
+                return (true, uint8(idx >> 3), uint8(idx & 7));
+            }
+            unchecked {
+                ++idx;
+            }
+        }
     }
 
     // =========================================================================
@@ -1938,7 +1985,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             ? uint256(keccak256(abi.encodePacked(randWord, BONUS_TRAITS_TAG)))
             : randWord;
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(r);
-        _applyHeroOverride(traits, r);
+        _applyHeroOverride(traits, r, randWord);
         packed = JackpotBucketLib.packWinningTraits(traits);
     }
 
