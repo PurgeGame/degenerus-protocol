@@ -122,7 +122,10 @@
   3. `TraitsGenerated` event signature is `(address indexed player, uint256 baseKey, uint32 take)` (3 fields) declared in `DegenerusGameStorage.sol:484-491`; both emit sites (mint:469-477 + mint:804-811) updated; topic-hash differs from v41 emission; `rollSalt` collapsed to reuse `baseKey` at `_rollRemainder` callsites; Phase-281 `startIndex` field-name mismatch resolved by the rename.
   4. Storage byte-identical to v41 closure HEAD on `ticketsOwedPacked[rk][player]` 40-bit packed form; zero new storage slots; zero new SSTORE / SLOAD callsites in MINTCLN scope (storage-slot grep proof attached to AUDIT artifacts); public ABI signature byte-identical on `processFutureTicketBatch` + `processTicketBatch` + `_processOneTicketEntry` selectors/types/returns; `TicketsCredited` + `TicketsQueued` event topic hashes preserved; zero new public/external mutation entry points / admin / modifiers / upgrade hooks.
   5. Decision anchors D-42N-MINTCLN-SCOPE-01 + D-42N-EVT-BREAK-01 recorded in the phase plan artifact BEFORE the contract patch lands per `feedback_design_intent_before_deletion.md`; design-intent trace covers (i) original 4-input hash rationale + why `ownedSalt` was separate arg post-Phase-281, (ii) original `TraitsGenerated` field-set rationale + why `startIndex` was named that way, (iii) breaking-topic-hash justification (pre-launch posture); docstring at mint:534-543 rewritten per `feedback_no_history_in_comments.md` (describes what IS; no "previously took ownedSalt" language).
-**Plans:** TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 290-01-PLAN.md — MINTCLN-10 design-intent trace + decision anchors (D-42N-MINTCLN-SCOPE-01 + D-42N-EVT-BREAK-01) + measurement scaffold (AGENT-COMMITTED; pre-patch gate per feedback_design_intent_before_deletion.md)
+- [ ] 290-02-PLAN.md — MINTCLN-01..09 contract patch on DegenerusGameMintModule.sol + DegenerusGameStorage.sol + populated measurement attestations + ONE USER-APPROVED batched commit
 
 ### Phase 291: MINTCLN Regression Fixture (TST-MINTCLN)
 **Goal:** Ship the TST-MINTCLN-01..05 test fixture batch under `test/edge/` (or `test/mint/`) asserting post-MINTCLN event shape, 3-input hash invariant preservation, B2 symmetric callsite path coverage, storage-layout regression, and breaking-topic-hash indexer-migration documentation.
