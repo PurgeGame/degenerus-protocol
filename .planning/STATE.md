@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v42.0
 milestone_name: Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf
-status: executing
-last_updated: "2026-05-17T14:38:44.317Z"
+status: ready_to_plan
+last_updated: 2026-05-17T15:42:28.090Z
 last_activity: 2026-05-17 -- Phase 292 Plan 02 complete (HRROLL contract patch USER-APPROVED commit a0218952; storage + ABI byte-identity attested; ready for phase verification)
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 6
   completed_plans: 6
-  percent: 100
+  percent: 25
+stopped_at: Phase 292 complete (2/2) — ready to discuss Phase 293
 ---
 
 # Project State
@@ -20,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v42.0 milestone open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 292 — hero-override-weighted-roll-hrroll
+**Current focus:** Phase 293 — hrroll regression fixture (tst hrroll)
 
 ## Current Position
 
-Phase: 292 (hero-override-weighted-roll-hrroll) — EXECUTING
-Plan: 2 of 2 (Plan 01 AGENT-COMMITTED; Plan 02 awaits USER-APPROVAL contract-edit gate)
-Status: Plan 02 pre-patch gate SATISFIED — both sidecars exist; ESCALATION-CHECKPOINT NOT TRIGGERED
+Phase: 293
+Plan: Not started
+Status: Ready to plan
 Resume file: .planning/phases/292-hero-override-weighted-roll-hrroll/292-02-PLAN.md
 Progress: [████████░░] 83% (5/6 plans complete)
-Last activity: 2026-05-17 -- Phase 292 Plan 01 complete (HRROLL design-intent trace + measurement scaffold)
+Last activity: 2026-05-17
 
 ## Last Shipped Milestone
 

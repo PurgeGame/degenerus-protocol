@@ -252,7 +252,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 290. Mint-Batch Event/Sig Cleanup (MINTCLN) | 2/2 | Complete    | 2026-05-17 |
 | 291. MINTCLN Regression Fixture (TST-MINTCLN) | 2/2 | Complete    | 2026-05-17 |
-| 292. Hero-Override Weighted Roll (HRROLL) | 2/2 | Complete   | 2026-05-17 |
+| 292. Hero-Override Weighted Roll (HRROLL) | 2/2 | Complete    | 2026-05-17 |
 | 293. HRROLL Regression Fixture (TST-HRROLL) | 0/TBD | Not started | - |
 | 294. Deity-Pass Gold Nerf (DPNERF) | 0/TBD | Not started | - |
 | 295. DPNERF Regression Fixture (TST-DPNERF) | 0/TBD | Not started | - |
