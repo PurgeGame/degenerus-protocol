@@ -480,14 +480,11 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
 
     /// @notice Emitted when traits are generated for a player's ticket batch.
-    ///         Records the exact parameters needed to replay trait generation off-chain.
+    ///         Records the encoded key + count needed to replay trait generation off-chain.
     event TraitsGenerated(
         address indexed player,
-        uint24 indexed level,
-        uint32 queueIdx,
-        uint32 startIndex,
-        uint32 count,
-        uint256 entropy
+        uint256 baseKey,
+        uint32 take
     );
 
     /// @notice Emitted when whole tickets are queued for a buyer at a specific level.

@@ -420,12 +420,13 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
 
         while (idx < total && used < writesBudget) {
             address player = queue[idx];
-            uint256 baseKey = (uint256(lvl) << 224) |
-                (idx << 192) |
-                (uint256(uint160(player)) << 32);
             uint40 packed = ticketsOwedPacked[rk][player];
             uint32 owed = uint32(packed >> 8);
             uint8 rem = uint8(packed);
+            uint256 baseKey = (uint256(lvl) << 224) |
+                (idx << 192) |
+                (uint256(uint160(player)) << 32) |
+                uint256(owed);
             if (owed == 0) {
                 if (rem == 0) {
                     if (packed != 0) {
@@ -466,15 +467,8 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             uint32 take = owed > maxT ? maxT : owed;
             if (take == 0) break;
 
-            _raritySymbolBatch(player, baseKey, processed, take, entropy, owed);
-            emit TraitsGenerated(
-                player,
-                lvl,
-                uint32(idx),
-                owed,
-                take,
-                entropy
-            );
+            _raritySymbolBatch(player, baseKey, processed, take, entropy);
+            emit TraitsGenerated(player, baseKey, take);
 
             // Calculate actual write cost
             uint32 writesThis = (take <= 256) ? (take * 2) : (take + 256);
@@ -534,20 +528,18 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     /// @dev Generates trait tickets in batch for a player's ticket awards using LCG-based PRNG.
     ///      Uses inline assembly for gas-efficient bulk storage writes.
     /// @param player Address receiving the trait tickets.
-    /// @param baseKey Encoded key containing level, index, and player address.
-    /// @param startIndex Starting position within this player's owed tickets.
+    /// @param baseKey Encoded key carrying (lvl, queueIdx, player, owed) packed across 256 bits.
+    ///                The owed value in the low 32 bits mutates per emission, so multi-call
+    ///                drains hash distinct seeds across calls on the same player.
+    /// @param startIndex Starting position within this player's owed tickets for this batch.
     /// @param count Number of ticket entries to process this batch.
     /// @param entropyWord VRF entropy for trait generation.
-    /// @param ownedSalt Owed-ticket count read at the outer-loop iteration entry; mixes into
-    ///                  the per-group keccak seed so multi-call drains produce distinct seeds
-    ///                  across calls on the same player.
     function _raritySymbolBatch(
         address player,
         uint256 baseKey,
         uint32 startIndex,
         uint32 count,
-        uint256 entropyWord,
-        uint32 ownedSalt
+        uint256 entropyWord
     ) private {
         // Memory arrays to track which traits were generated and how many times.
         uint32[256] memory counts;
@@ -569,7 +561,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             // independence, so the category bucket — derived from the low 32
             // bits of s — inherits whatever entropy the seed's low bits carry.
             uint256 seed = uint256(
-                keccak256(abi.encode(baseKey, entropyWord, groupIdx, ownedSalt))
+                keccak256(abi.encode(baseKey, entropyWord, groupIdx))
             );
             uint64 s = uint64(seed) | 1;
             uint8 offset = uint8(i & 15);
@@ -733,7 +725,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         uint24 rk,
         address player,
         uint256 entropy,
-        uint256 rollSalt
+        uint256 baseKey
     ) private returns (uint40 newPacked, bool skip) {
         uint8 rem = uint8(packed);
         if (rem == 0) {
@@ -743,7 +735,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             return (0, true);
         }
 
-        bool win = _rollRemainder(entropy, rollSalt, rem);
+        bool win = _rollRemainder(entropy, baseKey, rem);
         if (!win) {
             ticketsOwedPacked[rk][player] = 0;
             return (0, true);
@@ -768,9 +760,10 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     ) private returns (uint32 writesUsed, bool advance) {
         uint40 packed = ticketsOwedPacked[rk][player];
         uint32 owed = uint32(packed >> 8);
-        uint256 rollSalt = (uint256(lvl) << 224) |
+        uint256 baseKey = (uint256(lvl) << 224) |
             (queueIdx << 192) |
-            (uint256(uint160(player)) << 32);
+            (uint256(uint160(player)) << 32) |
+            uint256(owed);
 
         if (owed == 0) {
             bool skip;
@@ -779,7 +772,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 rk,
                 player,
                 entropy,
-                rollSalt
+                baseKey
             );
             if (skip) return (1, true);
             owed = 1;
@@ -797,18 +790,8 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         }
         if (take == 0) return (0, false);
 
-        uint256 baseKey = (uint256(lvl) << 224) |
-            (queueIdx << 192) |
-            (uint256(uint160(player)) << 32);
-        _raritySymbolBatch(player, baseKey, processed, take, entropy, owed);
-        emit TraitsGenerated(
-            player,
-            lvl,
-            uint32(queueIdx),
-            owed,
-            take,
-            entropy
-        );
+        _raritySymbolBatch(player, baseKey, processed, take, entropy);
+        emit TraitsGenerated(player, baseKey, take);
 
         writesUsed =
             ((take <= 256) ? (take << 1) : (take + 256)) +
@@ -821,7 +804,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             remainingOwed = owed - take;
         }
         if (remainingOwed == 0 && rem != 0) {
-            if (_rollRemainder(entropy, rollSalt, rem)) {
+            if (_rollRemainder(entropy, baseKey, rem)) {
                 remainingOwed = 1;
             }
             rem = 0;
