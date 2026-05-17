@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v41.0
 milestone_name: Cross-Call Determinism Fix (mint-batch + hero-override)
-status: in_progress
-last_updated: "2026-05-17T00:30:00.000Z"
-last_activity: 2026-05-17 -- Phase 284 adversarial pass surfaced F-41-02 hero-override day-index defect (3-skill consensus HIGH severity); milestone re-themed; Phase 285 (HOFIX) + Phase 286 (TST-HOFIX) added before Phase 284 terminal; v41 closure BLOCKED on Phase 285+286 landing
-stopped_at: Phase 285 context gathered (4 D-285-NN decisions); ready to plan
-resume_file: .planning/phases/285-day-index-read-audit-hero-override-fix-hofix/285-CONTEXT.md
+status: awaiting_user_approval
+last_updated: "2026-05-17T02:00:00.000Z"
+last_activity: 2026-05-17 -- Phase 285 contract patch prepared (D-285-FIX-SHAPE-01 Approach B); HOFIX-AUDIT complete with 1 GAP (dailyHeroWagers — expected; 0 SWEEP fixes required); diff ready for user review per feedback_manual_review_before_push.md
+stopped_at: Phase 285 contract diff pending user approval — review .planning/phases/285-day-index-read-audit-hero-override-fix-hofix/285-01-COMMIT-MESSAGE.md + run `git diff -- contracts/` to inspect changes; orchestrator awaits explicit approval before commit
+resume_file: .planning/phases/285-day-index-read-audit-hero-override-fix-hofix/285-01-SUMMARY.md
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 4
-  completed_plans: 3
-  percent: 50
+  total_plans: 5
+  completed_plans: 4
+  percent: 67
 ---
 
 # Project State
