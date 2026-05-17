@@ -184,7 +184,15 @@ Plans:
   4. Edge cases PASS — single-bettor fixture (exactly one non-zero slot) returns that `(q, s)` deterministically with probability 1.0 (confirms HRROLL-03 single-bettor disposition); zero-wager fixture (all-zero slots) returns `(false, 0, 0)` per HRROLL-01 early-bail.
   5. Worst-case gas measured (all 32 slots populated; leader-bonus computation; full cursor walk to last slot) and asserted against D-42N-GAS-01 acceptance threshold per `feedback_gas_worst_case.md` (theoretical worst case derived FIRST; empirical measurement second).
 
-**Plans:** TBD
+**Plans:** 2 plans
+Plans:
+**Wave 1**
+
+- [ ] 293-01-PLAN.md — JS-replay oracle helper: test/helpers/rollHeroSymbolRef.mjs (pure-function bit-mirror of _rollHeroSymbol per D-293-INVOKE-01; ALGORITHM_VERIFIED prerequisite for TST-HRROLL-01..05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 293-02-PLAN.md — test/edge/HeroOverrideWeightedRoll.test.js (TST-HRROLL-01..06 + small-N cross-attestation via DailyWinningTraits event; LOCKED TST-HRROLL-02 seed [500,200,200,100] / 0.60 disposition; [BLOCKING_ESCALATION] checkpoint on D-293-GAS-01 noise floor; single USER-APPROVED batched commit at phase close)
 
 ### Phase 294: Deity-Pass Gold Nerf (DPNERF)
 
