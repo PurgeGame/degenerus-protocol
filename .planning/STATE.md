@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v41.0
 milestone_name: Cross-Call Determinism Fix (mint-batch + hero-override)
-status: awaiting_user_approval
-last_updated: "2026-05-17T14:30:00.000Z"
-last_activity: 2026-05-17 -- Phase 289 test diff prepared; 9 tests PASS; adjusts Phase 286 tests to post-Phase-288 semantic + adds F-41-03 cross-day regression coverage (TST-JPSURF-01..04); awaiting user approval
-stopped_at: Phase 289 test diff pending user approval — review .planning/phases/289-hero-override-day-index-snapshot-regression-fixture-tst-jpsurf/289-01-COMMIT-MESSAGE.md + run `git diff -- test/` to inspect changes
-resume_file: .planning/phases/289-hero-override-day-index-snapshot-regression-fixture-tst-jpsurf/289-01-SUMMARY.md
+status: shipped
+last_updated: "2026-05-17T18:00:00.000Z"
+last_activity: 2026-05-17 -- v41.0 SHIPPED — 3 of 3 F-41-NN RESOLVED_AT_V41 (F-41-01 mint-batch + F-41-02 hero-override within-day + F-41-03 hero-override cross-day); closure signal MILESTONE_V41_AT_HEAD_<sha> emitted at Phase 284 terminal closure-flip
+stopped_at: v41.0 SHIPPED; ready for v42.0 milestone scope discussion
+resume_file: audit/FINDINGS-v41.0.md
 progress:
-  total_phases: 8
-  completed_phases: 7
-  total_plans: 8
-  completed_plans: 8
-  percent: 87
+  total_phases: 9
+  completed_phases: 9
+  total_plans: 9
+  completed_plans: 9
+  percent: 100
 ---
 
 # Project State
@@ -22,16 +22,33 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-16 after v40.0 milestone archive + v41.0 milestone open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 284 — orchestrator 3-skill PARALLEL adversarial pass + §4 integration + atomic closure flip
+**Current focus:** v41.0 SHIPPED 2026-05-17. Between-milestones state. Next milestone scope TBD.
 
 ## Current Position
 
-Phase: 284
-Plan: 01 (planning + scaffolding complete; orchestrator finalize pending)
-Status: In progress — Tasks 1-2 (Phase 284 subagent) complete; orchestrator pickup for Tasks 3-7 (adversarial pass dispatch + integrate §4 dispositions + atomic closure flips + audit deliverable finalize + chmod 444)
-Last activity: 2026-05-16
+Phase: (between milestones)
+Plan: (n/a)
+Status: v41.0 SHIPPED — ready for v42.0 scope discussion
+Last activity: 2026-05-17
 
 ## Last Shipped Milestone
+
+**v41.0 — Cross-Call Determinism Fix (mint-batch + hero-override)** (shipped 2026-05-17)
+
+- 9 phases (281-289 + 284), 9 plans, 43/43 requirements satisfied (5 FIX + 4 TST-FIX [2 reduced-scope per 2026-05-16 user authorization] + 6 SWEEP/TST-SWEEP + 5 HOFIX-AUDIT + 1 FIX-HOFIX + 4 TST-HOFIX + 5 JPSURF + 1 FIX-JPSURF + 4 TST-JPSURF + 12 AUDIT/REG)
+- Audit baseline: v40.0 closure HEAD `MILESTONE_V40_AT_HEAD_cd549499` -> v41.0 closure HEAD resolved at Phase 284 terminal closure-flip per D-284-CLOSURE-01. 6-commit source-tree delta: Phase 281 (`221afcf7`) mint-batch determinism fix via owed-salt 4th keccak input (B2 symmetric); Phase 282 (`a1212b00`) multi-call drain regression fixture (REDUCED SCOPE 4 of 6 TST-FIX requirements); Phase 285 (`c4d62564`) hero-override write-side `+1` (SUPERSEDED-AT-PHASE-288); Phase 286 (`cef9a972`) hero-override regression fixture (REVISED-AT-PHASE-289); Phase 288 (`4837fa5c`) F-41-03 dailyIdx structural fix (supersedes Phase 285; closes F-41-02 + F-41-03 collaterally; net −36 bytes; 0-byte storage delta); Phase 289 (`ab76e990`) cross-day regression fixture + TST-HOFIX adjustments (9 tests PASS). 6 USER-APPROVED batched commits (3 contract + 3 test) + 1 AGENT-COMMITTED closure-flip. 9-phase multi-phase shape per v40 precedent extended with supersede chain.
+- Result: 3 of 3 F-41-NN findings RESOLVED_AT_V41 — F-41-01 (mint-batch determinism HIGH; RESOLVED via Phase 281 owed-salt + Phase 282 ALGORITHM_VERIFIED tests); F-41-02 (hero-override day-index within-day HIGH with CRITICAL elevation note on `isFinalPhysicalDay_`; RESOLVED via Phase 288 dailyIdx structural fix + Phase 289 regression coverage; Phase 285 was a valid intermediate fix structurally superseded by Phase 288); F-41-03 (hero-override day-index cross-day MEDIUM-catastrophy-tier; RESOLVED collaterally via Phase 288 dailyIdx fix + Phase 289 TST-JPSURF-04 anchor-replay regression). All three findings surfaced and closed pre-launch.
+- Adversarial pass: 3-skill PARALLEL `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` run TWICE per D-271-ADVERSARIAL-01 + D-271-ADVERSARIAL-03 carry + new D-284-ADVERSARIAL-RE-PASS-01. Original pass: ran on post-Phase-282 §4 draft; 9 of 10 hypotheses SAFE-variant; Hypothesis (ix) `_applyHeroOverride` cross-day → ELEVATED_TO_FINDING F-41-02 by 3-of-3 consensus. RE-PASS: ran on Phase 288 fix; 0 FINDING_CANDIDATEs across all 3 skills (7 + 14 + 11 hypotheses + 3 beyond-charge); 1 INFO-tier launch-comms note (E3 hero-override mechanic activation EV — INTENDED protocol mechanic, not a bug). `/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry.
+- Phase 287 JPSURF go-nuts commitment-window audit: 27 SLOAD slot READ-SET catalog + complete MUTATOR-SET enumeration + per-(S, F) verdict table; 0 VIOLATIONs; F-41-03 candidate + 2 zero-day-hunter follow-up residuals (N-5 + N-9) flagged → ALL CLOSED collaterally by Phase 288.
+- LEAN regression: 1 PASS REG-01 (v40.0 closure signal `MILESTONE_V40_AT_HEAD_cd549499` NON-WIDENING for v40-touched surfaces NOT in v41 scope) + 1 PASS REG-02 (v34.0 closure NON-WIDENING; TraitUtils + `_pickSoloQuadrant` + JackpotBucketLib byte-identical) + REG-03 KI envelope re-verifications + REG-04 prior-finding spot-check sweep PASS across audit/FINDINGS-v25..v40.0. Aggregate PASS / 0 REGRESSED.
+- KI envelopes EXC-01..03 RE_VERIFIED-NEGATIVE-scope at v41 (v41 audit subject has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction); EXC-04 STRUCTURALLY ELIMINATED preserved.
+- KNOWN-ISSUES.md UNMODIFIED per D-281-KI-01. Closure verdict `3 of 3 F-41-NN RESOLVED_AT_V41; 0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`.
+- Deliverable: `audit/FINDINGS-v41.0.md` (FINAL READ-only at v41.0 closure HEAD, 9 sections; chmod 444). First multi-finding milestone in v25..v41 audit history.
+- Closure signal: `MILESTONE_V41_AT_HEAD_<sha>` (resolved at Phase 284 closure-flip commit).
+- Process notes: 9-phase multi-phase shape (281 FIX + 282 TST-FIX + 283 SWEEP + 285 HOFIX SUPERSEDED + 286 TST-HOFIX REVISED + 287 JPSURF FLAG-ONLY + 288 FIX-JPSURF + 289 TST-JPSURF + 284 TERMINAL). 6 USER-APPROVED batched contract/test commits per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_manual_review_before_push.md`. Phase 284 terminal phase is SOURCE-TREE FROZEN — zero contracts/ + zero test/ mutations. Adversarial-pass 3-skill PARALLEL spawn run TWICE (original + re-pass) per D-284-ADVERSARIAL-RE-PASS-01. v41.0 closure invariant: terminal-phase zero forward-cite emission; §9 "Deferred to Future Milestones" register uses locked-decision IDs (D-281-FIX-SHAPE-01 owed-salt reference pattern; D-288-FIX-SHAPE-01 dailyIdx-anchor reference pattern; D-40N-MINTBOOST-OUT-01 carry; LBX-02 carry; indexer-migration handoff; E3 hero-override launch FAQ; E2-b orphaned-day bets UX disclosure; KI policy review). Supersede pattern demonstrated: Phase 285 (initial fix) → Phase 287 (audit surfaces residual) → Phase 288 (structural restructure closes more at lower bytecode cost).
+- See `.planning/MILESTONES.md` for archive
+
+### Prior Shipped Milestone
 
 **v40.0 — Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor** (shipped 2026-05-14)
 
