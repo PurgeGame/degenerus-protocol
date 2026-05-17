@@ -4,7 +4,7 @@ milestone: v41.0
 milestone_name: Cross-Call Determinism Fix (mint-batch + hero-override)
 status: shipped
 last_updated: "2026-05-17T18:00:00.000Z"
-last_activity: 2026-05-17 -- v41.0 SHIPPED — 3 of 3 F-41-NN RESOLVED_AT_V41 (F-41-01 mint-batch + F-41-02 hero-override within-day + F-41-03 hero-override cross-day); closure signal MILESTONE_V41_AT_HEAD_<sha> emitted at Phase 284 terminal closure-flip
+last_activity: 2026-05-17 -- v41.0 SHIPPED — 3 of 3 F-41-NN RESOLVED_AT_V41 (F-41-01 mint-batch + F-41-02 hero-override within-day + F-41-03 hero-override cross-day); closure signal MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4 emitted at Phase 284 terminal closure-flip
 stopped_at: v41.0 SHIPPED; ready for v42.0 milestone scope discussion
 resume_file: audit/FINDINGS-v41.0.md
 progress:
@@ -44,7 +44,7 @@ Last activity: 2026-05-17
 - KI envelopes EXC-01..03 RE_VERIFIED-NEGATIVE-scope at v41 (v41 audit subject has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction); EXC-04 STRUCTURALLY ELIMINATED preserved.
 - KNOWN-ISSUES.md UNMODIFIED per D-281-KI-01. Closure verdict `3 of 3 F-41-NN RESOLVED_AT_V41; 0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`.
 - Deliverable: `audit/FINDINGS-v41.0.md` (FINAL READ-only at v41.0 closure HEAD, 9 sections; chmod 444). First multi-finding milestone in v25..v41 audit history.
-- Closure signal: `MILESTONE_V41_AT_HEAD_<sha>` (resolved at Phase 284 closure-flip commit).
+- Closure signal: `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` (resolved at Phase 284 closure-flip commit).
 - Process notes: 9-phase multi-phase shape (281 FIX + 282 TST-FIX + 283 SWEEP + 285 HOFIX SUPERSEDED + 286 TST-HOFIX REVISED + 287 JPSURF FLAG-ONLY + 288 FIX-JPSURF + 289 TST-JPSURF + 284 TERMINAL). 6 USER-APPROVED batched contract/test commits per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_manual_review_before_push.md`. Phase 284 terminal phase is SOURCE-TREE FROZEN — zero contracts/ + zero test/ mutations. Adversarial-pass 3-skill PARALLEL spawn run TWICE (original + re-pass) per D-284-ADVERSARIAL-RE-PASS-01. v41.0 closure invariant: terminal-phase zero forward-cite emission; §9 "Deferred to Future Milestones" register uses locked-decision IDs (D-281-FIX-SHAPE-01 owed-salt reference pattern; D-288-FIX-SHAPE-01 dailyIdx-anchor reference pattern; D-40N-MINTBOOST-OUT-01 carry; LBX-02 carry; indexer-migration handoff; E3 hero-override launch FAQ; E2-b orphaned-day bets UX disclosure; KI policy review). Supersede pattern demonstrated: Phase 285 (initial fix) → Phase 287 (audit surfaces residual) → Phase 288 (structural restructure closes more at lower bytecode cost).
 - See `.planning/MILESTONES.md` for archive
 

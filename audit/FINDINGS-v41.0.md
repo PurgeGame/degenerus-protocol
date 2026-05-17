@@ -8,7 +8,7 @@ audit_baseline_signal: MILESTONE_V40_AT_HEAD_cd549499
 v34_baseline: 6b63f6d4daf346a53a1d463790f637308ea8d555
 v34_baseline_signal: MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555
 audit_subject_head: "ab76e990"
-closure_signal: MILESTONE_V41_AT_HEAD_<RESOLVED_AT_§9C_COMMIT_TIME>
+closure_signal: MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4
 deliverable: audit/FINDINGS-v41.0.md
 requirements: [FIX-01, FIX-02, FIX-03, FIX-04, FIX-05,
                TST-FIX-01, TST-FIX-02, TST-FIX-03, TST-FIX-04, TST-FIX-05, TST-FIX-06,
@@ -40,7 +40,7 @@ generated_at: 2026-05-17
 
 # v41.0 Findings — Cross-Call Determinism Fix (mint-batch + hero-override) (Terminal)
 
-**Audit Baseline.** The audit baseline is v40.0 closure HEAD `cd549499` (closure signal `MILESTONE_V40_AT_HEAD_cd549499` carry-forward from `audit/FINDINGS-v40.0.md` §9c). v41.0 audit-subject HEAD is `ab76e990` (post-Phase-289). v41.0 closure HEAD is resolved at the Phase 284 terminal closure-flip task per D-284-CLOSURE-01 — see §9c for the emitted `MILESTONE_V41_AT_HEAD_<sha>` signal. The 9-phase wave shape (Phase 281 FIX mint-batch + Phase 282 TST-FIX mint-batch + Phase 283 SWEEP cross-surface batched-loop + Phase 285 HOFIX SUPERSEDED-AT-PHASE-288 + Phase 286 TST-HOFIX REVISED-AT-PHASE-289 + Phase 287 JPSURF flag-only commitment-window audit + Phase 288 FIX-JPSURF dailyIdx structural fix + Phase 289 TST-JPSURF cross-day regression + Phase 284 TERMINAL audit) is structurally COMPLETE. The v41.0 audit subject is the 6-commit source-tree delta `git log cd549499..ab76e990 -- contracts/ test/`: Phase 281 (`221afcf7`) mint-batch determinism fix via owed-salt seed mix (B2 symmetric scope covering both `_raritySymbolBatch` callsites); Phase 282 (`a1212b00`) multi-call drain regression fixture (REDUCED SCOPE — 4 of 6 original TST-FIX requirements landed per user re-scope authorization 2026-05-16); Phase 285 (`c4d62564`) hero-override write-side `+1` offset (SUPERSEDED-AT-PHASE-288 — see §3a/§4 for supersede narrative; bytecode reverted by Phase 288 + canonical semantic restored); Phase 286 (`cef9a972`) hero-override regression fixture (REVISED-AT-PHASE-289 — Phase 286 tests were authored against the Phase 285 `+1` semantic and adjusted by Phase 289 to the post-Phase-288 canonical semantic); Phase 288 (`4837fa5c`) F-41-03 cross-day determinism fix via `dailyIdx` operational read (supersedes Phase 285); Phase 289 (`ab76e990`) cross-day snapshot regression fixture (TST-JPSURF-01..04 + adjustments to Phase 286 TST-HOFIX tests). Phase 283 contributes zero `contracts/` and zero `test/` commits per default zero-mutation SWEEP outcome. Phase 287 contributes zero `contracts/` + zero `test/` commits per FLAG-ONLY user posture. Phase 284 is SOURCE-TREE FROZEN — zero `contracts/` and zero `test/` mutations; only the audit deliverable + planning artifacts + closure-flip docs are committed.
+**Audit Baseline.** The audit baseline is v40.0 closure HEAD `cd549499` (closure signal `MILESTONE_V40_AT_HEAD_cd549499` carry-forward from `audit/FINDINGS-v40.0.md` §9c). v41.0 audit-subject HEAD is `ab76e990` (post-Phase-289). v41.0 closure HEAD is resolved at the Phase 284 terminal closure-flip task per D-284-CLOSURE-01 — see §9c for the emitted `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` signal. The 9-phase wave shape (Phase 281 FIX mint-batch + Phase 282 TST-FIX mint-batch + Phase 283 SWEEP cross-surface batched-loop + Phase 285 HOFIX SUPERSEDED-AT-PHASE-288 + Phase 286 TST-HOFIX REVISED-AT-PHASE-289 + Phase 287 JPSURF flag-only commitment-window audit + Phase 288 FIX-JPSURF dailyIdx structural fix + Phase 289 TST-JPSURF cross-day regression + Phase 284 TERMINAL audit) is structurally COMPLETE. The v41.0 audit subject is the 6-commit source-tree delta `git log cd549499..ab76e990 -- contracts/ test/`: Phase 281 (`221afcf7`) mint-batch determinism fix via owed-salt seed mix (B2 symmetric scope covering both `_raritySymbolBatch` callsites); Phase 282 (`a1212b00`) multi-call drain regression fixture (REDUCED SCOPE — 4 of 6 original TST-FIX requirements landed per user re-scope authorization 2026-05-16); Phase 285 (`c4d62564`) hero-override write-side `+1` offset (SUPERSEDED-AT-PHASE-288 — see §3a/§4 for supersede narrative; bytecode reverted by Phase 288 + canonical semantic restored); Phase 286 (`cef9a972`) hero-override regression fixture (REVISED-AT-PHASE-289 — Phase 286 tests were authored against the Phase 285 `+1` semantic and adjusted by Phase 289 to the post-Phase-288 canonical semantic); Phase 288 (`4837fa5c`) F-41-03 cross-day determinism fix via `dailyIdx` operational read (supersedes Phase 285); Phase 289 (`ab76e990`) cross-day snapshot regression fixture (TST-JPSURF-01..04 + adjustments to Phase 286 TST-HOFIX tests). Phase 283 contributes zero `contracts/` and zero `test/` commits per default zero-mutation SWEEP outcome. Phase 287 contributes zero `contracts/` + zero `test/` commits per FLAG-ONLY user posture. Phase 284 is SOURCE-TREE FROZEN — zero `contracts/` and zero `test/` mutations; only the audit deliverable + planning artifacts + closure-flip docs are committed.
 
 **Scope.** Single canonical milestone-closure deliverable for v41.0 per D-41N-FILES-01 carry of D-40N-FILES-01 / D-274-FILES-01 chain (9-section shape locked). v41.0 = **9-phase multi-phase milestone shape** per `.planning/REQUIREMENTS.md` — Phase 281 (FIX — mint-batch determinism; COMPLETE), Phase 282 (TST-FIX — mint-batch regression; COMPLETE), Phase 283 (SWEEP — cross-surface batched-loop; default zero-mutation; COMPLETE; hand-forward observation surfaced F-41-02), Phase 285 (HOFIX — hero-override day-index fix via write-side `+1`; **SUPERSEDED-AT-PHASE-288**; structurally restored to canonical at Phase 288), Phase 286 (TST-HOFIX — hero-override regression; **REVISED-AT-PHASE-289**), Phase 287 (JPSURF — commitment-window audit FLAG-ONLY posture; 0 VIOLATIONs + F-41-03 candidate surfaced), Phase 288 (FIX-JPSURF — dailyIdx structural fix; F-41-02 + F-41-03 RESOLVED), Phase 289 (TST-JPSURF — cross-day regression coverage; COMPLETE), Phase 284 (TERMINAL — this deliverable; SOURCE-TREE FROZEN). Each contract+test surface phase ran USER-APPROVED batched commits per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_manual_review_before_push.md`. **First multi-finding milestone in v25..v41 audit history — §4 contains THREE non-zero finding blocks: F-41-01 (mint-batch determinism; HIGH; RESOLVED_AT_V41), F-41-02 (hero-override day-index within-day; HIGH with CRITICAL elevation note on `isFinalPhysicalDay_`; RESOLVED_AT_V41), F-41-03 (hero-override day-index cross-day; MEDIUM-catastrophy-tier; RESOLVED_AT_V41).** Phase 284 is the SOLE terminal phase and is SOURCE-TREE FROZEN — zero `contracts/` and zero `test/` mutations; only `audit/FINDINGS-v41.0.md` + `.planning/phases/284-.../*` + the 5 closure-flip docs (`ROADMAP.md` / `STATE.md` / `MILESTONES.md` / `PROJECT.md` / `REQUIREMENTS.md`) are committed at this phase.
 
@@ -100,7 +100,7 @@ D-41N-FCITE-01 carry of D-40N-FCITE-01 / D-274-FCITE-01 / D-272-FCITE-01 / D-271
 
 ### Attestation Anchor
 
-See Section 9 Milestone Closure Attestation for the D-253-15 step 9 attestation block triggering v41.0 milestone closure via signal `MILESTONE_V41_AT_HEAD_<sha>` (resolved at the Phase 284 terminal closure-flip commit per D-284-CLOSURE-01).
+See Section 9 Milestone Closure Attestation for the D-253-15 step 9 attestation block triggering v41.0 milestone closure via signal `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` (resolved at the Phase 284 terminal closure-flip commit per D-284-CLOSURE-01).
 
 ---
 
@@ -651,7 +651,7 @@ Locked decisions across the v25..v41 audit chain governing v41.0 close.
 - **D-284-KI-01** — KNOWN-ISSUES.md UNMODIFIED (carry from D-281-KI-01).
 - **D-284-ADVERSARIAL-CHARGE-01** — original 10-hypothesis charge.
 - **D-284-ADVERSARIAL-RE-PASS-01** — re-pass on Phase 288 fix.
-- **D-284-CLOSURE-01** — atomic ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS closure flip; signal `MILESTONE_V41_AT_HEAD_<sha>` at §9c.
+- **D-284-CLOSURE-01** — atomic ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS closure flip; signal `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` at §9c.
 - **D-284-FCITE-01** — terminal-phase zero forward-cite emission.
 - **D-284-ADVERSARIAL-SCOPE-01** — 3-skill PARALLEL spawn orchestrator-dispatched.
 
@@ -730,12 +730,12 @@ Per user instruction 2026-05-17, Phase 287 ran in GO-NUTS POSTURE — catastroph
 
 ### 9c. Closure Signal
 
-**Signal:** `MILESTONE_V41_AT_HEAD_<RESOLVED_AT_§9C_COMMIT_TIME>`
+**Signal:** `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4`
 
-The closure signal `MILESTONE_V41_AT_HEAD_<sha>` per D-284-CLOSURE-01 + D-41N-CLOSURE-01 carry of D-40N-CLOSURE-01 / D-274-CLOSURE-01 chain is emitted at the Phase 284 terminal closure-flip commit. The `<sha>` placeholder above resolves to the closure-flip commit SHA at commit-time and is backfilled across 5 verbatim FINDINGS locations + 3 cross-document propagation targets per the standard pattern.
+The closure signal `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` per D-284-CLOSURE-01 + D-41N-CLOSURE-01 carry of D-40N-CLOSURE-01 / D-274-CLOSURE-01 chain is emitted at the Phase 284 terminal closure-flip commit. The `<sha>` placeholder above resolves to the closure-flip commit SHA at commit-time and is backfilled across 5 verbatim FINDINGS locations + 3 cross-document propagation targets per the standard pattern.
 
 **5 FINDINGS verbatim locations:**
-1. Frontmatter `closure_signal: MILESTONE_V41_AT_HEAD_<sha>`
+1. Frontmatter `closure_signal: MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4`
 2. Frontmatter `audit_subject_head: "<sha>"` (this represents the closure-flip commit which is itself the v41 close HEAD)
 3. §1 Audit Subject + Baseline (introductory paragraph)
 4. §9b table closing row ("closure signal emitted §9c")
@@ -790,7 +790,7 @@ Per D-284-FCITE-01 (terminal-phase zero forward-cite emission): the following it
 *Plan: 01*
 *Milestone: v41.0 (FIRST MULTI-FINDING MILESTONE in v25..v41 audit history — 3 of 3 F-41-NN RESOLVED_AT_V41)*
 *Status: FINAL — READ-ONLY (chmod 444) at v41.0 closure HEAD*
-*Closure signal: `MILESTONE_V41_AT_HEAD_<sha>` (resolved at the Phase 284 closure-flip commit per D-284-CLOSURE-01)*
+*Closure signal: `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` (resolved at the Phase 284 closure-flip commit per D-284-CLOSURE-01)*
 *9 phases: 281 FIX + 282 TST-FIX + 283 SWEEP + 285 HOFIX (SUPERSEDED) + 286 TST-HOFIX (REVISED) + 287 JPSURF (FLAG-ONLY) + 288 FIX-JPSURF + 289 TST-JPSURF + 284 TERMINAL*
 *Requirements: 43/43 satisfied (5 FIX + 4 TST-FIX [2 reduced-scope] + 6 SWEEP/TST-SWEEP + 5 HOFIX-AUDIT + 1 FIX-HOFIX + 4 TST-HOFIX + 5 JPSURF + 1 FIX-JPSURF + 4 TST-JPSURF + 12 AUDIT/REG)*
 *Findings: 3 F-41-NN ALL RESOLVED_AT_V41 — F-41-01 (mint-batch HIGH) + F-41-02 (hero-override within-day HIGH with CRITICAL elevation) + F-41-03 (hero-override cross-day MEDIUM-catastrophy-tier)*
