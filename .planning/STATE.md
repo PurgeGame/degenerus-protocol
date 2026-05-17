@@ -5,8 +5,8 @@ milestone_name: Cross-Call Determinism Fix (mint-batch + hero-override)
 status: in_progress
 last_updated: "2026-05-17T00:30:00.000Z"
 last_activity: 2026-05-17 -- Phase 284 adversarial pass surfaced F-41-02 hero-override day-index defect (3-skill consensus HIGH severity); milestone re-themed; Phase 285 (HOFIX) + Phase 286 (TST-HOFIX) added before Phase 284 terminal; v41 closure BLOCKED on Phase 285+286 landing
-stopped_at: Phase 285 (HOFIX) ready to discuss — covers F-41-02 hero-override day-index fix + day-index audit sweep
-resume_file: .planning/phases/285-day-index-read-audit-hero-override-fix-hofix/285-CONTEXT.md (not yet created)
+stopped_at: Phase 285 context gathered (4 D-285-NN decisions); ready to plan
+resume_file: .planning/phases/285-day-index-read-audit-hero-override-fix-hofix/285-CONTEXT.md
 progress:
   total_phases: 6
   completed_phases: 3
