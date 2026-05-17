@@ -2523,10 +2523,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @notice Get daily hero wager for a specific quadrant/symbol on a given day.
-    /// @dev Slot is keyed by JACKPOT-day (the day the wager feeds), not bet-day.
-    ///      A wager placed on day D appears in slot[D+1]. Off-chain consumers
-    ///      rendering "today's hero contest leaderboard" query with day = today.
-    /// @param day Day index (from GameTimeLib) — the jackpot day this wager feeds.
+    /// @param day Day index (from GameTimeLib).
     /// @param quadrant Quadrant (0-3).
     /// @param symbol Symbol index within quadrant (0-7).
     /// @return wagerUnits Amount wagered in 1e12 wei units.
@@ -2541,10 +2538,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Get the winning hero symbol for a given day (most wagered across all quadrants).
-    /// @dev Slot is keyed by JACKPOT-day; returns the winner that will feed
-    ///      day's jackpot hero override (bets placed on day-1 that won the
-    ///      most-wagered tally across all 4 quadrants).
-    /// @param day Day index (from GameTimeLib) — the jackpot day this winner feeds.
+    /// @param day Day index (from GameTimeLib).
     /// @return winQuadrant The winning quadrant.
     /// @return winSymbol The winning symbol within that quadrant.
     /// @return winAmount The wagered units for the winner.

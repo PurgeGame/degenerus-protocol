@@ -1581,9 +1581,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev If a top hero symbol exists for the current day, that symbol auto-wins
-    ///      its own quadrant (with random color), replacing only that quadrant.
-    ///      Applied to all jackpot paths (purchase phase + jackpot phase).
+    /// @dev If a top hero symbol exists for the prior day's settled wager pool,
+    ///      that symbol auto-wins its own quadrant (with random color), replacing
+    ///      only that quadrant. Applied to all jackpot paths (purchase phase +
+    ///      jackpot phase). Reads `dailyHeroWagers[dailyIdx]`: `dailyIdx` is
+    ///      written only at `_unlockRng` (AdvanceModule), so during jackpot
+    ///      processing it is frozen at the previous day's index. Both CALL 1 and
+    ///      CALL 2 of the daily ETH split therefore read the same slot regardless
+    ///      of any physical-day boundary crossed between calls. Bets placed on
+    ///      day D write to `dailyHeroWagers[D]`; day D+1's jackpot reads slot[D]
+    ///      via `dailyIdx == D` (set by day D's `_unlockRng`).
     function _applyHeroOverride(
         uint8[4] memory w,
         uint256 randomWord
@@ -1592,7 +1599,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             bool hasHeroWinner,
             uint8 heroQuadrant,
             uint8 heroSymbol
-        ) = _topHeroSymbol(_simulatedDayIndex());
+        ) = _topHeroSymbol(dailyIdx);
         if (!hasHeroWinner) return;
 
         uint8 heroColor;
