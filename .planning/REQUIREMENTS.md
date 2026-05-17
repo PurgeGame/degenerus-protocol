@@ -138,14 +138,14 @@ _Carried forward into v43.0+ (next-milestone candidates):_
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MINTCLN-01..10 | Phase 290 | Pending |
-| TST-MINTCLN-01..05 | Phase 291 | Pending |
-| HRROLL-01..10 | Phase 292 | Pending |
-| TST-HRROLL-01..06 | Phase 293 | Pending |
-| DPNERF-01..06 | Phase 294 | Pending |
-| TST-DPNERF-01..05 | Phase 295 | Pending |
-| SWEEP-01..05 | Phase 296 | Pending |
-| AUDIT-01..09 | Phase 297 | Pending |
-| REG-01..04 | Phase 297 | Pending |
+| MINTCLN-01..10 | Phase 290 | Pending (Phase 290) |
+| TST-MINTCLN-01..05 | Phase 291 | Pending (Phase 291) |
+| HRROLL-01..10 | Phase 292 | Pending (Phase 292) |
+| TST-HRROLL-01..06 | Phase 293 | Pending (Phase 293) |
+| DPNERF-01..06 | Phase 294 | Pending (Phase 294) |
+| TST-DPNERF-01..05 | Phase 295 | Pending (Phase 295) |
+| SWEEP-01..05 | Phase 296 | Pending (Phase 296) |
+| AUDIT-01..09 | Phase 297 | Pending (Phase 297) |
+| REG-01..04 | Phase 297 | Pending (Phase 297) |
 
-**Total: 51 requirements** across 8 phases.
+**Total: 60 requirements** across 8 phases (MINTCLN-01..10 + TST-MINTCLN-01..05 + HRROLL-01..10 + TST-HRROLL-01..06 + DPNERF-01..06 + TST-DPNERF-01..05 + SWEEP-01..05 + AUDIT-01..09 + REG-01..04).
