@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 milestone: v41.0
 milestone_name: Cross-Call Determinism Fix (mint-batch + hero-override)
 status: in_progress
-last_updated: "2026-05-17T03:30:00.000Z"
-last_activity: 2026-05-17 -- Phase 286 USER-APPROVED test committed (cef9a972); Phase 287 (JPSURF) added — go-nuts commitment-window audit per user-stated canonical invariant ("100% determinism of jackpots must be secure once VRF has been requested"); flag-only posture (no contract changes); covers day-boundary CALL 1/CALL 2 edge case + every external path
-stopped_at: Phase 287 (JPSURF) executing — full coverage audit; flags-only output (no contract changes); user reviews JPSURF-AUDIT.md catalog at completion
-resume_file: .planning/phases/287-jackpot-influence-surface-closure-jpsurf/287-01-JPSURF-AUDIT.md (not yet created)
+last_updated: "2026-05-17T05:00:00.000Z"
+last_activity: 2026-05-17 -- Phase 287 JPSURF audit complete; 0 VIOLATIONs surfaced + 3 residuals flagged (incl. day-boundary CALL 1/CALL 2 cross-day version of F-41-02 → F-41-03 candidate, plus N-5 boundary-race amplification + N-9 NORMAL-mode partial exposure folded into same envelope); 8 of 10 zero-day-hunter N-* hypotheses confirmed CLOSED; awaiting user review per flag-only posture
+stopped_at: Phase 287 JPSURF complete; review JPSURF-AUDIT.md for VIOLATIONs (0) + F-41-03 candidate + zero-day-hunter residuals; user decides per-residual remediation (R1/R2/R3) or KNOWN-OPEN catastrophy-residual acceptance
+resume_file: .planning/phases/287-jackpot-influence-surface-closure-jpsurf/287-01-JPSURF-AUDIT.md
 progress:
   total_phases: 7
-  completed_phases: 5
-  total_plans: 6
-  completed_plans: 6
-  percent: 71
+  completed_phases: 6
+  total_plans: 7
+  completed_plans: 7
+  percent: 86
 ---
 
 # Project State
