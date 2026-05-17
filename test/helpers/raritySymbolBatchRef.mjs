@@ -181,3 +181,93 @@ export function raritySymbolBatchRef({
 
   return out;
 }
+
+/// @notice v42 3-input reference port of `_raritySymbolBatch`
+///         (contracts/modules/DegenerusGameMintModule.sol L537-L588).
+///         The `owed` value (formerly the 4th keccak input as `ownedSalt`) is
+///         carried in `baseKey` low 32 bits per the post-MINTCLN encoding at
+///         mint:426-429 + mint:763-766.
+///
+/// Body trace vs the live contract (line-anchored against post-MINTCLN HEAD):
+///   L551-L554 endIndex = startIndex + count.
+///   L556      i = startIndex.
+///   L559-L588 outer while (i < endIndex):
+///     L560      groupIdx = i >> 4.
+///     L563-L565 seed = uint256(keccak256(abi.encode(baseKey, entropyWord,
+///                       groupIdx)))  (types: u256, u256, u32 — 3 inputs).
+///     L566      s = uint64(seed) | 1.
+///     L567      offset = uint8(i & 15).
+///     L569      s = s * (TICKET_LCG_MULT + uint64(offset)) + uint64(offset)
+///                   (unchecked uint64).
+///     L572-L586 inner for j = offset .. 15 while i < endIndex:
+///       L574    s = s * TICKET_LCG_MULT + 1                     (unchecked uint64).
+///       L577    traitId = traitFromWord(s) + (uint8(i & 3) << 6) (quadrant add).
+///       L580    record traitId (the contract increments counts[] + touchedTraits[];
+///                this oracle returns the sequence directly).
+///       L583    ++i.
+///       L584    ++j.
+///
+/// @param baseKey uint256 BigInt — bits 255..232 lvl, 231..192 queueIdx,
+///                191..32 player, 31..0 owed-at-call-entry
+/// @param entropyWord uint256 BigInt (the daily VRF word)
+/// @param startIndex uint32 number/BigInt (= `processed` per the patched callsites)
+/// @param count uint32 number/BigInt (= `take` per the patched callsites)
+/// @return Uint8Array length `count` of trait IDs
+export function raritySymbolBatchRefV42({
+  baseKey,
+  entropyWord,
+  startIndex,
+  count,
+}) {
+  const baseKeyBn = typeof baseKey === "bigint" ? baseKey : BigInt(baseKey);
+  const entropyBn =
+    typeof entropyWord === "bigint" ? entropyWord : BigInt(entropyWord);
+  const startIndexNum =
+    typeof startIndex === "bigint" ? Number(startIndex) : Number(startIndex);
+  const countNum = typeof count === "bigint" ? Number(count) : Number(count);
+
+  const out = new Uint8Array(countNum);
+  let written = 0;
+
+  const endIndex = startIndexNum + countNum;
+  let i = startIndexNum;
+
+  while (i < endIndex) {
+    const groupIdx = BigInt(i >> 4);
+
+    const encoded = abiCoder.encode(
+      ["uint256", "uint256", "uint32"],
+      [baseKeyBn, entropyBn, groupIdx]
+    );
+    const seed = BigInt(keccak256(getBytes(encoded)));
+
+    let s = (seed & U64_MASK) | 1n;
+    const offset = i & 15;
+    const offsetBn = BigInt(offset);
+
+    s = (s * ((TICKET_LCG_MULT + offsetBn) & U64_MASK) + offsetBn) & U64_MASK;
+
+    for (let j = offset; j < 16 && i < endIndex; ) {
+      s = (s * TICKET_LCG_MULT + 1n) & U64_MASK;
+
+      const quadrant = i & 3;
+      const trait = (traitFromWord(s) + (quadrant << 6)) & 0xff;
+      out[written++] = trait;
+
+      ++i;
+      ++j;
+    }
+  }
+
+  return out;
+}
+
+/// @notice Recover owed-at-call-entry from a post-MINTCLN `baseKey`.
+///         `owed` is carried in bits 31..0 per the v42 encoding at mint:426-429
+///         (Path A future-pool) and mint:763-766 (Path B current-level).
+/// @param baseKey uint256 BigInt or hex/numeric coercible
+/// @return number uint32 owed value
+export function decodeOwedFromBaseKey(baseKey) {
+  const bn = typeof baseKey === "bigint" ? baseKey : BigInt(baseKey);
+  return Number(bn & 0xFFFFFFFFn);
+}
