@@ -169,7 +169,7 @@ Plans:
   4. Storage byte-identical — `dailyHeroWagers[uint32 => uint256[4]]` layout in `DegenerusGameStorage.sol:1478` UNCHANGED; `dailyIdx` UNCHANGED; zero new storage slots / SSTORE / SLOAD callsites (only existing `dailyHeroWagers[day][q]` reads). Public ABI byte-identical — `payDailyJackpot` + `payDailyJackpotCoinAndTickets` + view function signatures unchanged; `_rollHeroSymbol` private; zero new public/external mutation entry points / admin / modifiers / upgrade hooks. Gas regression within D-42N-GAS-01 acceptance threshold (theoretical worst-case derived FIRST per `feedback_gas_worst_case.md`; expected ~+5-8K gas per jackpot call).
   5. Decision anchors D-42N-LEADER-BONUS-01 + D-42N-FLOOR-01 + D-42N-COLOR-ENTROPY-01 + D-42N-DETERMINISM-01 + D-42N-GAS-01 recorded in the phase plan artifact BEFORE the contract patch lands per `feedback_design_intent_before_deletion.md`; design-intent trace covers (i) original deterministic `_topHeroSymbol` single-leader rationale + winner-takes-all design, (ii) leader-bonus magnitude trade-offs (×2 monopolization vs ×1.5 balanced vs no-bonus pure-proportional), (iii) sybil exposure trade-offs (no-floor simplicity vs floor anti-spam), (iv) RNG-window backward-trace verification, (v) gas budget headroom.
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 ### Phase 293: HRROLL Regression Fixture (TST-HRROLL)
 
@@ -252,7 +252,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 290. Mint-Batch Event/Sig Cleanup (MINTCLN) | 2/2 | Complete    | 2026-05-17 |
 | 291. MINTCLN Regression Fixture (TST-MINTCLN) | 2/2 | Complete    | 2026-05-17 |
-| 292. Hero-Override Weighted Roll (HRROLL) | 1/2 | In Progress | - |
+| 292. Hero-Override Weighted Roll (HRROLL) | 2/2 | Complete   | 2026-05-17 |
 | 293. HRROLL Regression Fixture (TST-HRROLL) | 0/TBD | Not started | - |
 | 294. Deity-Pass Gold Nerf (DPNERF) | 0/TBD | Not started | - |
 | 295. DPNERF Regression Fixture (TST-DPNERF) | 0/TBD | Not started | - |

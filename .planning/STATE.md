@@ -4,13 +4,13 @@ milestone: v42.0
 milestone_name: Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf
 status: executing
 last_updated: "2026-05-17T14:38:44.317Z"
-last_activity: 2026-05-17 -- Phase 292 Plan 01 complete (HRROLL design-intent trace + measurement scaffold AGENT-COMMITTED)
+last_activity: 2026-05-17 -- Phase 292 Plan 02 complete (HRROLL contract patch USER-APPROVED commit a0218952; storage + ABI byte-identity attested; ready for phase verification)
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project State
