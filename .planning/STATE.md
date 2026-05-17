@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v42.0
 milestone_name: Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf
-status: planning
-last_updated: "2026-05-17T12:00:00.000Z"
-last_activity: 2026-05-17
+status: executing
+last_updated: "2026-05-17T10:33:14.749Z"
+last_activity: 2026-05-17 -- Phase 290 planning complete
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 0
+  total_plans: 2
   completed_plans: 0
   percent: 0
 ---
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v4
 
 Phase: Not started (ROADMAP authored; awaiting Phase 290 plan-phase kickoff)
 Plan: —
-Status: Planning — ROADMAP.md + REQUIREMENTS.md traceability authored 2026-05-17
+Status: Ready to execute
 Progress: 0/8 phases complete (Phases 290 MINTCLN + 291 TST-MINTCLN + 292 HRROLL + 293 TST-HRROLL + 294 DPNERF + 295 TST-DPNERF + 296 SWEEP + 297 TERMINAL)
-Last activity: 2026-05-17 — v42.0 ROADMAP authored; 8-phase parallel-per-idea shape locked (MINTCLN → HRROLL → DPNERF → SWEEP → TERMINAL); 60 requirements mapped 100% across 8 phases (MINTCLN-01..10 → P290, TST-MINTCLN-01..05 → P291, HRROLL-01..10 → P292, TST-HRROLL-01..06 → P293, DPNERF-01..06 → P294, TST-DPNERF-01..05 → P295, SWEEP-01..05 → P296, AUDIT-01..09 + REG-01..04 → P297)
+Last activity: 2026-05-17 -- Phase 290 planning complete
 
 ## Last Shipped Milestone
 

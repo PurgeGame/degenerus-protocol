@@ -86,7 +86,6 @@
 
 </details>
 
-
 <details>
 <summary>✅ v38.0 Always-Hero Simplification + Maximal Dead-Code Cleanup (Phase 272) — SHIPPED 2026-05-11</summary>
 
@@ -95,7 +94,6 @@
 **Audit baseline:** v37.0 closure HEAD `MILESTONE_V37_AT_HEAD_2654fcc2` → v38.0 audit-subject HEAD `06623edb`. 2 contract-tree commits since baseline (`527e3adc` Phase 272 Wave 1 silent-normalize HERO-01..05 + CLEAN-01..05 + `4760459f` Phase 272 Wave 1.5 input-validation revision per D-272-INPUT-VALIDATION-01; bytecode delta −57 bytes 8955 → 8898; storage layout byte-identical; public ABI signature byte-identical with semantics shift accept+normalize → revert+InvalidBet) + 1 batched test-tree commit (`e3fcb95c` Phase 272 Wave 2; +238/−36 LOC across 6 files in `test/stat/`, `test/gas/`, `package.json` — STAT-01..02 hero-always-on re-validation + SURF-01..03 cross-surface preservation with SURF-03 rebase to `PHASE_269_CLOSE_BASELINE = "8fd5c2e1..."` + LBX-02 path-of-investigation prose + GASPIN-02 (a-alt) `test:gas` script split + STAT-03-v35-carry ACCEPTED-DESIGN documentation). Single-phase milestone shape per v36.0 Phase 266 precedent. 29/30 in-scope requirements satisfied (5 HERO + 6 CLEAN + 2 STAT + 3 SURF + 2 GASPIN + 1 STAT-03-v35-carry + 6 AUDIT + 4 REG) + 1 RE-DEFERRED-V39+ (LBX-02 — fixture-coverage gap persists; analytical worst-case load-bearing per Phase 266 GAS-01 precedent + `feedback_gas_worst_case.md`; path-of-investigation prose at `audit/FINDINGS-v38.0.md` §9.NN.iv). Result: 7 of 7 §4 adversarial surfaces SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE / SAFE_BY_DEFENSIVE_VALIDATION (a EV-neutrality preserved across (M, N) under always-on hero + b quadrant 0 default does NOT create payout-bias under defensive boundary validation + c cleanup-removal invariants preserved per `feedback_no_dead_guards.md` + d storage layout byte-identical + e public ABI byte-identical with semantics shift + f variance-impact bound on risk-averse subset + g clean test:stat at v38 close); zero F-38-NN finding blocks emitted; 1 INFO-severity docs-vs-behavior drift identified at Hypothesis (i) (`dailyHeroWagers` post-v38 ledger-tracking on `0xFF` input) at Wave 3 3-skill PARALLEL adversarial pass — RESOLVED_AT_V38 via Wave 1.5 commit `4760459f` defensive boundary validation per D-272-INPUT-VALIDATION-01 (status pivoted from KEEP_AS_NEGATIVE_FINDING to RESOLVED_AT_V38). LEAN regression: 1 PASS REG-01 (v37.0 closure NON-WIDENING) + 1 PASS REG-02 (v34.0 closure NON-WIDENING) + REG-03 KI envelope re-verifications + REG-04 prior-finding spot-check sweep across audit/FINDINGS-v25..v37.0. KI envelopes EXC-01..03 RE_VERIFIED-NEGATIVE-scope at v38; EXC-04 RE_VERIFIED with NARROWS retained (BAF-jackpot-only scope; EntropyLib byte-identical at v38 HEAD). KNOWN-ISSUES.md UNMODIFIED per D-272-KI-01 default zero-promotion path. Closure verdict `0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`. Adversarial pass via `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` PARALLEL spawn per D-271-ADVERSARIAL-01 carry (`/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry) returned ZERO disagreements; ZERO FINDING_CANDIDATE; ZERO 8th-surface NEW_VECTOR; ZERO KI promotion candidate per `272-01-ADVERSARIAL-LOG.md` Disposition (with Wave 1.5 disposition update appended at commit `1249a6fd`). Deliverable: `audit/FINDINGS-v38.0.md` (FINAL READ-only at HEAD `MILESTONE_V38_AT_HEAD_06623edb`, 9 sections, chmod 444). See [milestones/v38.0-ROADMAP.md](milestones/v38.0-ROADMAP.md) and [milestones/v38.0-REQUIREMENTS.md](milestones/v38.0-REQUIREMENTS.md) and [milestones/v38.0-MILESTONE-AUDIT.md](milestones/v38.0-MILESTONE-AUDIT.md).
 
 </details>
-
 
 <details>
 <summary>✅ v37.0 Degenerette Recalibration + Maintenance Bundle (Phases 267-271) — SHIPPED 2026-05-11</summary>
@@ -113,102 +111,131 @@
 ## Phase Details
 
 ### Phase 290: Mint-Batch Event/Sig Cleanup (MINTCLN)
+
 **Goal:** Land the v41-derivative MINTCLN-01..10 contract cleanup batch on `DegenerusGameMintModule.sol` + `DegenerusGameStorage.sol` — fold `owed` into `baseKey` low 32 bits, drop `ownedSalt` from `_raritySymbolBatch`, restructure the `TraitsGenerated` event to the post-cleanup 3-field shape, collapse `rollSalt` to `baseKey`, fix the Phase-281 `startIndex` field-name mismatch incidentally. Algorithmic invariant from v41 Phase 281 preserved (owed-in-baseKey carry maintains cross-call seed separation); breaking `TraitsGenerated` topic-hash accepted under inherited v40 D-40N-EVT-BREAK-01 indexer-migration posture.
 **Depends on:** Nothing (first v42.0 phase; audit baseline v41.0 closure HEAD `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4`)
 **Requirements:** MINTCLN-01, MINTCLN-02, MINTCLN-03, MINTCLN-04, MINTCLN-05, MINTCLN-06, MINTCLN-07, MINTCLN-08, MINTCLN-09, MINTCLN-10
 **Success Criteria** (what must be TRUE):
+
   1. `_raritySymbolBatch` signature is 3-input (`baseKey`, `entropyWord`, `groupIdx`); `ownedSalt` parameter removed at mint:544-551 and dropped from both callsites (mint:469 + mint:803); body hashes `keccak256(baseKey, entropyWord, groupIdx)` at mint:572; function selector + return type byte-identical.
   2. `baseKey` constructed identically at both B2-symmetric callsites (`processFutureTicketBatch` mint:423-425 + `_processOneTicketEntry` mint:800-802) as `(lvl<<224) | (queueIdx<<192) | (player<<32) | owed`; `owed` carried in low 32 bits at every emission.
   3. `TraitsGenerated` event signature is `(address indexed player, uint256 baseKey, uint32 take)` (3 fields) declared in `DegenerusGameStorage.sol:484-491`; both emit sites (mint:469-477 + mint:804-811) updated; topic-hash differs from v41 emission; `rollSalt` collapsed to reuse `baseKey` at `_rollRemainder` callsites; Phase-281 `startIndex` field-name mismatch resolved by the rename.
   4. Storage byte-identical to v41 closure HEAD on `ticketsOwedPacked[rk][player]` 40-bit packed form; zero new storage slots; zero new SSTORE / SLOAD callsites in MINTCLN scope (storage-slot grep proof attached to AUDIT artifacts); public ABI signature byte-identical on `processFutureTicketBatch` + `processTicketBatch` + `_processOneTicketEntry` selectors/types/returns; `TicketsCredited` + `TicketsQueued` event topic hashes preserved; zero new public/external mutation entry points / admin / modifiers / upgrade hooks.
   5. Decision anchors D-42N-MINTCLN-SCOPE-01 + D-42N-EVT-BREAK-01 recorded in the phase plan artifact BEFORE the contract patch lands per `feedback_design_intent_before_deletion.md`; design-intent trace covers (i) original 4-input hash rationale + why `ownedSalt` was separate arg post-Phase-281, (ii) original `TraitsGenerated` field-set rationale + why `startIndex` was named that way, (iii) breaking-topic-hash justification (pre-launch posture); docstring at mint:534-543 rewritten per `feedback_no_history_in_comments.md` (describes what IS; no "previously took ownedSalt" language).
+
 **Plans:** 2 plans
 Plans:
+**Wave 1**
+
 - [ ] 290-01-PLAN.md — MINTCLN-10 design-intent trace + decision anchors (D-42N-MINTCLN-SCOPE-01 + D-42N-EVT-BREAK-01) + measurement scaffold (AGENT-COMMITTED; pre-patch gate per feedback_design_intent_before_deletion.md)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 290-02-PLAN.md — MINTCLN-01..09 contract patch on DegenerusGameMintModule.sol + DegenerusGameStorage.sol + populated measurement attestations + ONE USER-APPROVED batched commit
 
 ### Phase 291: MINTCLN Regression Fixture (TST-MINTCLN)
+
 **Goal:** Ship the TST-MINTCLN-01..05 test fixture batch under `test/edge/` (or `test/mint/`) asserting post-MINTCLN event shape, 3-input hash invariant preservation, B2 symmetric callsite path coverage, storage-layout regression, and breaking-topic-hash indexer-migration documentation.
 **Depends on:** Phase 290 (test fixture asserts post-MINTCLN event shape + 3-input hash invariant)
 **Requirements:** TST-MINTCLN-01, TST-MINTCLN-02, TST-MINTCLN-03, TST-MINTCLN-04, TST-MINTCLN-05
 **Success Criteria** (what must be TRUE):
+
   1. Multi-call drain trait-multiset equivalence holds — for any `(rk, player)` pair where `owed > writesBudget / 2` (N ≥ 2 calls), the post-MINTCLN trait multiset equals the v41 Phase 281 owed-salt multiset at the same `(level, queueIdx, player, dailyEntropy)`; cross-call seed separation preserved via owed-in-baseKey carry.
   2. `TraitsGenerated` event-shape regression PASS — each emission decodes to the 3-tuple `(player, baseKey, take)`; `baseKey` low 32 bits decodes to expected `owed` value at call entry; upper bits decode to `(lvl, queueIdx, player)` per construction; event topic-hash differs from v41 (breaking-change attestation captured).
   3. Both B2 callsite paths covered — TST-MINTCLN-01 + TST-MINTCLN-02 exercise Path A (`processFutureTicketBatch` whale-bundle at future levels) AND Path B (`_processOneTicketEntry` direct-purchase); both call the new 3-input `_raritySymbolBatch` and emit the new 3-field `TraitsGenerated`.
   4. Storage layout regression PASS — `ticketsOwedPacked[rk][player]` 40-bit packed form (`rem` low 8 + `owed` next 24 + `processed`-via-owed-salt high 8) byte-identical to v41 close HEAD on a representative drain run; storage-slot grep proof reads same slot bytes pre + post-MINTCLN.
   5. Indexer-migration note recorded in test-file header (TST-MINTCLN-05) per v40 Phase 277 D-40N-EVT-BREAK-01 precedent — documentation-only path-of-investigation comment; no on-chain assertion, no test logic.
+
 **Plans:** TBD
 
 ### Phase 292: Hero-Override Weighted Roll (HRROLL)
+
 **Goal:** Replace the deterministic `_topHeroSymbol(uint32 day)` hero-override selector with `_rollHeroSymbol(uint32 day, uint256 entropy)` — weighted random roll across all 32 `(quadrant, symbol)` slots in `dailyHeroWagers[day]` using VRF entropy with ×1.5 leader-weight bonus and no min-wager floor. Ship HRROLL-01..10 on `DegenerusGameJackpotModule.sol:1594-1653` with zero storage / ABI changes; converts hero-override from winner-takes-all auction to community-weighted probability while preserving the v41 Phase 288 `dailyIdx` cross-day determinism anchor.
 **Depends on:** Structurally independent of Phases 290/291 (sequenced after by user ordering preference, not a structural dependency)
 **Requirements:** HRROLL-01, HRROLL-02, HRROLL-03, HRROLL-04, HRROLL-05, HRROLL-06, HRROLL-07, HRROLL-08, HRROLL-09, HRROLL-10
 **Success Criteria** (what must be TRUE):
+
   1. `_topHeroSymbol(uint32 day)` deleted; `_rollHeroSymbol(uint32 day, uint256 entropy) private view returns (bool hasWinner, uint8 winQuadrant, uint8 winSymbol)` implements the two-pass algorithm (pass 1 totals + identifies leader; pass 2 cursor-walks against `pick = keccak256(abi.encode(entropy, day)) % effectiveTotal` in q ascending → s ascending order); returns `(false, 0, 0)` when total == 0; `_applyHeroOverride` (L1594-1621) callsite invokes `_rollHeroSymbol(dailyIdx, randomWord)` instead of `_topHeroSymbol(dailyIdx)`.
   2. ×1.5 leader-weight bonus applied — max-amount `(q, s)` slot gets `weight = amount + (maxAmount / 2)` during pass 2; `effectiveTotal = total + leaderBonus`; tie-break on leader (multiple slots with same max amount) scan-order-first (q ascending → s ascending) matching v41 `_topHeroSymbol` behavior. No min-wager floor — every slot with `amount > 0` participates with proportional probability `amount / effectiveTotal` (or `(amount + leaderBonus) / effectiveTotal` if leader).
   3. RNG commitment-window proof complete per `feedback_rng_commitment_window.md` — backward-trace from `_rollHeroSymbol` invocation back to `placeDegeneretteBet` wager-time write at `DegenerusGameDegeneretteModule.sol:484-501` confirms wager amounts for day D are LOCKED before day D+1's VRF request fires; `randomWord` (symbol-roll entropy) is unknown at wager time; v41 Phase 288 `dailyIdx` structural fix preserved as the single-writer day anchor frozen across the rng-lock window; color-sampling bits `quadrant*3` non-overlap with `keccak256(abi.encode(entropy, day))` symbol-roll bits attested per D-42N-COLOR-ENTROPY-01.
   4. Storage byte-identical — `dailyHeroWagers[uint32 => uint256[4]]` layout in `DegenerusGameStorage.sol:1478` UNCHANGED; `dailyIdx` UNCHANGED; zero new storage slots / SSTORE / SLOAD callsites (only existing `dailyHeroWagers[day][q]` reads). Public ABI byte-identical — `payDailyJackpot` + `payDailyJackpotCoinAndTickets` + view function signatures unchanged; `_rollHeroSymbol` private; zero new public/external mutation entry points / admin / modifiers / upgrade hooks. Gas regression within D-42N-GAS-01 acceptance threshold (theoretical worst-case derived FIRST per `feedback_gas_worst_case.md`; expected ~+5-8K gas per jackpot call).
   5. Decision anchors D-42N-LEADER-BONUS-01 + D-42N-FLOOR-01 + D-42N-COLOR-ENTROPY-01 + D-42N-DETERMINISM-01 + D-42N-GAS-01 recorded in the phase plan artifact BEFORE the contract patch lands per `feedback_design_intent_before_deletion.md`; design-intent trace covers (i) original deterministic `_topHeroSymbol` single-leader rationale + winner-takes-all design, (ii) leader-bonus magnitude trade-offs (×2 monopolization vs ×1.5 balanced vs no-bonus pure-proportional), (iii) sybil exposure trade-offs (no-floor simplicity vs floor anti-spam), (iv) RNG-window backward-trace verification, (v) gas budget headroom.
+
 **Plans:** TBD
 
 ### Phase 293: HRROLL Regression Fixture (TST-HRROLL)
+
 **Goal:** Ship TST-HRROLL-01..06 to `test/edge/` asserting weighted-distribution chi² uniformity, ×1.5 leader-bonus arithmetic, RNG commitment-window invariant at fixture level, single-bettor + zero-wager edge cases, and worst-case gas regression against the D-42N-GAS-01 threshold.
 **Depends on:** Phase 292 (tests assert post-HRROLL behavior)
 **Requirements:** TST-HRROLL-01, TST-HRROLL-02, TST-HRROLL-03, TST-HRROLL-04, TST-HRROLL-05, TST-HRROLL-06
 **Success Criteria** (what must be TRUE):
+
   1. Weighted-distribution chi² test PASSES — fixture seeds `dailyHeroWagers[day]` with a known weight distribution (e.g. weights [400, 300, 200, 100]), runs `_rollHeroSymbol` N = 10,000 iterations with deterministic-but-distinct `(entropy, day)` inputs, empirical pick-rate per slot matches expected proportional rate within chi² p > 0.05 tolerance (matching v34.0 Phase 262 STAT-04 statistical-validation methodology).
   2. ×1.5 leader-bonus sanity PASSES — leader-scenario fixture (weights [500, 100, 100, 100]) shows empirical leader pick-rate at `(500 + 250) / 1250 = 60%` within chi² tolerance; confirms HRROLL-02 leader-bonus arithmetic produces the expected ×1.5 effective weight.
   3. RNG commitment-window proof regression PASSES at fixture level — day-D wagers written; day D+1 jackpot reads LOCKED day-D amounts; `dailyIdx` confirmed as controlling day key (HRROLL-05 invariant; v41 Phase 288 `dailyIdx` structural fix preserved).
   4. Edge cases PASS — single-bettor fixture (exactly one non-zero slot) returns that `(q, s)` deterministically with probability 1.0 (confirms HRROLL-03 single-bettor disposition); zero-wager fixture (all-zero slots) returns `(false, 0, 0)` per HRROLL-01 early-bail.
   5. Worst-case gas measured (all 32 slots populated; leader-bonus computation; full cursor walk to last slot) and asserted against D-42N-GAS-01 acceptance threshold per `feedback_gas_worst_case.md` (theoretical worst case derived FIRST; empirical measurement second).
+
 **Plans:** TBD
 
 ### Phase 294: Deity-Pass Gold Nerf (DPNERF)
+
 **Goal:** Single-function body change in `DegenerusGameJackpotModule.sol:1671-1710` `_randTraitTicket` — when winning trait color is gold (`(trait >> 3) & 7 == 7`) set `virtualCount = 1` (skip the existing `max(len/50, 2)` floor); common-tier path unchanged. Both ETH + BURNIE coin jackpot paths covered via single function change. Intentional EV reduction (no common-tier compensation per D-42N-DEITY-EV-01). Ship DPNERF-01..06 with zero storage / ABI changes.
 **Depends on:** Structurally independent of Phases 290/292 (sequenced after by user ordering preference, not a structural dependency)
 **Requirements:** DPNERF-01, DPNERF-02, DPNERF-03, DPNERF-04, DPNERF-05, DPNERF-06
 **Success Criteria** (what must be TRUE):
+
   1. `_randTraitTicket` body branches on `(trait >> 3) & 7 == 7` before the existing `virtualCount = len / 50` + `if (virtualCount < 2) virtualCount = 2` logic; gold-tier branch sets `virtualCount = 1` and skips the `max(len/50, 2)` floor; non-gold branch (`color ∈ [0..6]`) executes the v41 logic unchanged.
   2. Both ETH + BURNIE coin jackpot paths covered via the single function change per D-42N-PATH-COVERAGE-01 — `_runJackpotEthFlow` (ETH jackpot trait winners) AND `payDailyCoinJackpot` → `_awardDailyCoinToTraitWinners` (BURNIE near-future coin jackpot winners) both reach the new gold-branch; no callsite flag or path-discrimination logic added.
   3. Common-tier path preserved without compensation per D-42N-DEITY-EV-01 — `virtualCount = max(len/50, 2)` unchanged for `color ∈ [0..6]`; deity earns less total EV across all 8 colors (gold contribution reduced from `max(len/50, 2)` to 1; commons unchanged); intentional EV reduction documented as deity-pass holder rebalance, not internal redistribution.
   4. Storage byte-identical — single-function body change; zero new storage slots / SSTORE / SLOAD callsites in DPNERF scope (storage-slot grep proof). Public ABI byte-identical — `_randTraitTicket` private; `_runJackpotEthFlow` + `payDailyCoinJackpot` + `_awardDailyCoinToTraitWinners` external/public selectors / parameter types / return shapes unchanged; zero new public/external mutation entry points / admin / modifiers / upgrade hooks.
   5. Decision anchors D-42N-GOLD-FLOOR-01 + D-42N-DEITY-EV-01 + D-42N-PATH-COVERAGE-01 recorded in the phase plan artifact BEFORE the contract patch lands per `feedback_design_intent_before_deletion.md`; design-intent trace covers (i) original `virtualCount = len / 50; if (virtualCount < 2) virtualCount = 2` rationale (2% with min-2 floor), (ii) gold-tile concentration issue (small bucket × 2% floor disproportionately rewards deity owners), (iii) compensation trade-offs (keep EV constant vs intentional reduction vs intentional rebias), (iv) path-coverage trade-offs (both paths symmetric vs ETH-only).
+
 **Plans:** TBD
 
 ### Phase 295: DPNERF Regression Fixture (TST-DPNERF)
+
 **Goal:** Ship TST-DPNERF-01..05 to `test/edge/` asserting gold-tile virtual-count = 1 on both ETH + BURNIE paths, common-tier path preservation, gold-tile EV regression vs v41 baseline, and non-deity-holder branch preservation.
 **Depends on:** Phase 294 (tests assert post-DPNERF behavior)
 **Requirements:** TST-DPNERF-01, TST-DPNERF-02, TST-DPNERF-03, TST-DPNERF-04, TST-DPNERF-05
 **Success Criteria** (what must be TRUE):
+
   1. Gold-tile virtual-count assertion PASSES — deity-pass holder + gold-tier trait win (`(trait >> 3) & 7 == 7`) via ETH jackpot path yields `virtualCount == 1` (not `max(len/50, 2)`); confirms DPNERF-01 + DPNERF-03.
   2. Common-tier virtual-count preserved PASSES — deity-pass holder + common-color trait win (`color ∈ [0..6]`) yields `virtualCount == max(len/50, 2)` per the unchanged v41 logic; confirms DPNERF-01 doesn't disturb common-tier path.
   3. BURNIE coin jackpot path coverage PASSES per D-42N-PATH-COVERAGE-01 — fixture replicates the gold-tile scenario via `payDailyCoinJackpot` → `_awardDailyCoinToTraitWinners` → `_randTraitTicket`, asserts identical `virtualCount == 1`; confirms DPNERF-02 path-symmetric behavior.
   4. Gold-tile EV regression measured — N = 1,000 gold-tier trait wins across both ETH + BURNIE paths yield empirical deity virtual-entry total equal to N × 1 = N (vs v41 baseline of N × `max(len/50, 2)`); EV reduction matches analytical expectation per D-42N-DEITY-EV-01.
   5. Non-deity holders unaffected PASSES — gold-tier trait win without deity-pass ownership yields unchanged non-deity virtual-count logic (DPNERF-01 only branches when `deity != address(0)` per existing logic); confirms DPNERF doesn't accidentally narrow the function's non-deity behavior.
+
 **Plans:** TBD
 
 ### Phase 296: Cross-Surface Adversarial Sweep (SWEEP)
+
 **Goal:** 3-skill PARALLEL adversarial spawn (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) red-teams ALL 3 v42.0 surfaces (MINTCLN + HRROLL + DPNERF) in a single pass after all surface phases (290-295) complete; `/degen-skeptic` OUT OF SCOPE per D-271-ADVERSARIAL-02 carry. Default outcome: 0 additional F-42-NN findings + 1 AGENT-COMMITTED ADVERSARIAL-LOG.md. Non-default outcome: per-finding contract + test commits per SWEEP-04 (USER APPROVED; no pre-approval per `feedback_never_preapprove_contracts.md`).
 **Depends on:** Phases 290, 291, 292, 293, 294, 295 (3-skill PARALLEL pass red-teams all delivered surfaces)
 **Requirements:** SWEEP-01, SWEEP-02, SWEEP-03, SWEEP-04, SWEEP-05
 **Success Criteria** (what must be TRUE):
+
   1. 3-skill PARALLEL adversarial spawn executed per D-271-ADVERSARIAL-01 + D-271-ADVERSARIAL-03 carry — `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` red-team all 3 v42.0 surfaces; `/degen-skeptic` confirmed OUT OF SCOPE per D-271-ADVERSARIAL-02 carry; pass runs AFTER Phases 290-295 complete (not during).
   2. Required adversarial hypothesis surface complete per SWEEP-02 — (i) MINTCLN hypotheses (3-input hash determinism; owed-in-baseKey griefing on shape collision; breaking-topic-hash parsing-ambiguity for decoding callers); (ii) HRROLL hypotheses (×1.5 leader-bonus whale-coordination / wash-trading MEV; no-floor sybil dilution; new RNG-consumer bit-collision with bits[0..12] / [152..167] / [200..215] / `quadrant*3`; gas regression DOS surface); (iii) DPNERF hypotheses (intentional EV reduction incentive shifts opening secondary attacks; both-paths differential-behavior between ETH and BURNIE).
   3. Adversarial-pass disposition recorded in `.planning/phases/296-*/296-01-ADVERSARIAL-LOG.md` — 3 H2 sections (one per skill) + Disposition section; zero residual FINDING_CANDIDATE OR explicit RESOLVED_AT_V42 with amendment reference; RE-PASS posture per D-284-ADVERSARIAL-RE-PASS-01 honored (if any FINDING_CANDIDATE materializes, re-pass the 3 skills against the candidate fix and append RE-PASS disposition).
   4. Wave shape matches D-42N adversarial discipline — default zero-finding outcome: 0 USER-APPROVED contract commits + 0 USER-APPROVED test commits + 1 AGENT-COMMITTED ADVERSARIAL-LOG.md. Non-default outcome (≥ 1 new finding): per-finding `FIX-SWEEP-NN` + `TST-SWEEP-NN` commit pairs (USER APPROVED per same batched-approval discipline as Phases 290 + 292 + 294 per `feedback_never_preapprove_contracts.md`); SWEEP outcome recorded in `audit/FINDINGS-v42.0.md` §4 (any new F-42-NN finding) and §5 (sweep methodology + negative-result attestations).
   5. SWEEP outcome handoff to Phase 297 — any FINDING_CANDIDATE that materializes is fed forward to Phase 297 §4 + §5; zero-finding default outcome is attested SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE at Phase 297 with citation chain to ADVERSARIAL-LOG.md.
+
 **Plans:** TBD
 
 ### Phase 297: Delta Audit + Findings Consolidation (Terminal)
+
 **Goal:** SOURCE-TREE FROZEN terminal phase ships `audit/FINDINGS-v42.0.md` 9-section FINAL READ-only deliverable (`chmod 444` post-closure-flip) covering all v41→v42 audit-subject commits + Phase 296 SWEEP outcome; LEAN regression appendix REG-01..04; KI walkthrough; closure signal `MILESTONE_V42_AT_HEAD_<sha>` emitted in §9c with verbatim presence in 5 FINDINGS locations + 3 cross-document propagation targets; atomic closure-flip across ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS per D-42N-CLOSURE-01.
 **Depends on:** Phases 290, 291, 292, 293, 294, 295, 296 (terminal audit deliverable consolidates findings + SWEEP outcome; SOURCE-TREE FROZEN)
 **Requirements:** AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05, AUDIT-06, AUDIT-07, AUDIT-08, AUDIT-09, REG-01, REG-02, REG-03, REG-04
 **Success Criteria** (what must be TRUE):
+
   1. `audit/FINDINGS-v42.0.md` published FINAL READ-only at v42.0 closure HEAD (`chmod 444` post-closure-flip) with 9 sections per v40 + v41 precedent: executive summary, per-phase summaries §3a-c, F-42-NN finding blocks under D-08 5-bucket severity rubric if any, §3.A delta-surface table covering all v41→v42 audit-subject commits with hunk-level evidence + {NEW, MODIFIED_LOGIC, REFACTOR_ONLY, DELETED} classification, §3.B zero-new-state grep-proof attestation (MINTCLN + HRROLL + DPNERF each: zero new storage / public-external entry points / admin / modifiers / upgrade hooks; only `TraitsGenerated` event signature changes per MINTCLN-04), §3.C conservation re-proof (MINTCLN 256-bit seed-space invariant + cross-call seed separation preserved via owed-in-baseKey; HRROLL VRF bit-slice non-collision attested; DPNERF deity-payout invariant updated — gold-tile virtualCount = 1, common-tile UNCHANGED), regression appendix §5, KI gating walk §6, prior-artifact cross-cites §7, forward-cite zero-emission proof §8, closure attestation §9 with §9.NN three-subsection commit-readiness register.
   2. §4 adversarial surfaces enumerated and attested SAFE / SAFE_BY_DESIGN / SAFE_BY_STRUCTURAL_CLOSURE or RESOLVED_AT_V42 with citation chain to Phase 296 ADVERSARIAL-LOG.md per SWEEP-03; KI walkthrough complete — EXC-01..03 RE_VERIFIED-NEGATIVE-scope at v42 (v42 audit subject has zero affiliate-roll / AdvanceModule / gameover-RNG-substitution interaction); EXC-04 STRUCTURALLY ELIMINATED preserved (no `EntropyLib.entropyStep` resurrection at v42; static-analysis grep confirms `entropyStep` does not reappear in `contracts/` at v42 close HEAD); KNOWN-ISSUES.md disposition `D-42N-KI-01` locked at plan-phase (default zero promotion UNMODIFIED).
   3. LEAN regression appendix §5 complete — REG-01 PASS (v41.0 closure signal `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` non-widening at v42 close HEAD on v41-touched surfaces NOT in v42 scope: MINTCLN preserves Phase 281 cross-call seed separation via owed-in-baseKey; HRROLL preserves Phase 288 `dailyIdx` structural fix; deity common-tier baseline UNCHANGED post-DPNERF) + REG-02 PASS (v40.0 closure NON-WIDENING; Bernoulli/keccak-self-mix/whole-BURNIE-floor sites byte-identical; only `TraitsGenerated` topic-hash changes per MINTCLN-04) + REG-03 PASS (v34.0 closure NON-WIDENING; TraitUtils + `_pickSoloQuadrant` + JackpotBucketLib byte-identical) + REG-04 PASS (prior-finding spot-check sweep across `audit/FINDINGS-v25..v41.0.md` for v42-touched surface set re-verified RESOLVED or NEGATIVE-scope at v42 close HEAD).
   4. Closure signal `MILESTONE_V42_AT_HEAD_<sha>` emitted in §9c with verbatim presence in 5 FINDINGS locations + 3 cross-document propagation targets per v39 P274 + v41 P284 precedent; §9 closure verdict structure: `0 of 0 F-42-NN RESOLVED_AT_V42` (default; expands if SWEEP surfaces findings) + `0 of 0 KI_ELIGIBLE_PROMOTED` (per AUDIT-07 default) + `KNOWN_ISSUES_<MODIFIED|UNMODIFIED>` (per AUDIT-07 outcome); ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS closure-flips land atomically post-§9c per D-42N-CLOSURE-01; `chmod 444` applied to `audit/FINDINGS-v42.0.md` post-closure-flip.
   5. Forward-cite zero-emission per D-42N-FCITE-01 — no `v43.0+` references emitted from this terminal phase across scoped artifacts; planner-handoff register in §9 "Deferred to Future Milestones" uses locked-decision IDs + descriptive labels (D-42N-MINTCLN-SCOPE-01 helper-extraction handoff; D-42N-EVT-BREAK-01 indexer-migration handoff; D-40N-LBX02-OUT-01 carry; D-40N-MINTBOOST-OUT-01 carry; game-over hardening). SOURCE-TREE FROZEN attestation — zero `contracts/` + zero `test/` mutations during Phase 297; audit deliverable + closure-flip docs AGENT-COMMITTED (no USER-APPROVED commits).
+
 **Plans:** TBD
 
 ## Progress
