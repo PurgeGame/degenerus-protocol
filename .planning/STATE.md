@@ -1,12 +1,12 @@
 ---
 gsd_state_version: 1.0
 milestone: v43.0
-milestone_name: Total rngLock Determinism — Every VRF Input Frozen at Commitment
-status: planning
-last_updated: "2026-05-18T12:01:40.872Z"
-last_activity: 2026-05-18
+milestone_name: Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment
+status: AUDIT-ONLY pivot locked; all 6 phase CONTEXT.md files captured; Phase 298 plan-phase next
+last_updated: "2026-05-18T13:00:00.000Z"
+last_activity: 2026-05-18 — Milestone v43.0 AUDIT-ONLY pivot per D-43N-AUDIT-ONLY-01; 6-phase CONTEXT.md batch captured
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v43.0 Total rngLock Determinism — Every VRF Input Frozen at Commitment (planning; roadmap defined; Phase 298 CATALOG next)
+**Current focus:** v43.0 Total rngLock Determinism Audit — AUDIT-ONLY milestone (`D-43N-AUDIT-ONLY-01`); contract remediations deferred to v44.0 FIX-MILESTONE; all 6 phase CONTEXT.md files captured 2026-05-18; Phase 298 plan-phase next.
 
 ## Current Position
 
-Phase: Phase 298 (VRF Read-Graph Catalog) — next, not started
+Phase: Phase 298 (VRF Read-Graph Catalog) — CONTEXT captured; plan-phase next
 Plan: —
-Status: Roadmap defined; awaiting Phase 298 plan-phase invocation
-Last activity: 2026-05-18 — Milestone v43.0 OPENED; REQUIREMENTS.md + ROADMAP.md committed
+Status: All 6 phase CONTEXT.md files captured (298 CATALOG, 299 FIXREC, 300 ADMA, 301 FUZZ, 302 SWEEP, 303 TERMINAL); milestone-shape pivot to AUDIT-ONLY locked; pre-authorizations recorded for Phase 302 invocation + Phase 303 closure-flip; Phase 301 FUZZ harness `vm.skip` strategy locked
+Last activity: 2026-05-18 — Milestone-shape pivot to AUDIT-ONLY + 6-phase CONTEXT.md batch captured
 
 ## Last Shipped Milestone
 

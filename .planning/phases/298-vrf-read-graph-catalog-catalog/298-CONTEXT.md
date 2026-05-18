@@ -2,6 +2,7 @@
 
 **Gathered:** 2026-05-18
 **Status:** Ready for planning
+**Milestone-shape pivot:** v43.0 reshaped to AUDIT-ONLY per `D-43N-AUDIT-ONLY-01` (user-authorization 2026-05-18). Phase 298 CATALOG remains unchanged structurally. Downstream hand-forwards retarget — "Phase 299 FIX sub-phase planning" → "Phase 299 FIXREC per-VIOLATION analytical entries" (single AGENT-COMMITTED artifact, zero contract changes). Phase 300 ADMA, Phase 301 FUZZ (vm.skip strategy), Phase 302 SWEEP (pre-authorized), Phase 303 TERMINAL (pre-authorized closure-flip) — see revised ROADMAP.md + REQUIREMENTS.md.
 
 <domain>
 ## Phase Boundary
