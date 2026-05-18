@@ -1861,9 +1861,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256 len = holders.length;
             address deity = deityCache[traitIdx];
             uint256 virtualCount;
+            // Virtual deity entries (if a deity exists for this symbol):
+            //   Gold tier (color == 7): flat 1 virtual entry.
+            //   Common tier (color in [0..6]): floor(2% of bucket), minimum 2.
             if (deity != address(0)) {
-                virtualCount = len / 50;
-                if (virtualCount < 2) virtualCount = 2;
+                if (((trait_i >> 3) & 7) == 7) {
+                    virtualCount = 1;
+                } else {
+                    virtualCount = len / 50;
+                    if (virtualCount < 2) virtualCount = 2;
+                }
             }
             uint256 effectiveLen = len + virtualCount;
             if (effectiveLen == 0) {

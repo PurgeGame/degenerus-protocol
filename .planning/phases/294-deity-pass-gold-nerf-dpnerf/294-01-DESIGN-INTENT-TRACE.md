@@ -96,16 +96,34 @@ Per DPNERF-06(iv): enumerate the 3 alternatives considered at user-disposition t
 
 **(b) Both ETH + BURNIE paths symmetric — STRICT SUBSET of (c).** This is the literal roadmap framing — apply the nerf to both jackpot-class paths via the single function-body change. The function-body change does in fact reach both paths by construction (single `_randTraitTicket` body, no callsite flag). Selected as a literal interpretation of the roadmap text, but (c) is the more precise framing of the actual code-reach.
 
-**(c) All-4-callsite uniform — LOCKED per `D-294-CALLER-UNIFORM-01`.** The function-body change in `_randTraitTicket` reaches **all 4 callsites** in the codebase by construction, plus the BURNIE near-future coin jackpot path that ultimately resolves through one of the 4 callsites:
+**(c) All-callsite-uniform across BOTH virtualCount surfaces — LOCKED per `D-294-CALLER-UNIFORM-01` + `D-294-BURNIE-INLINE-01`.** Plan 01 framed this as "single `_randTraitTicket` body change reaches all 4 callsites + the BURNIE path by construction." Plan 02 verification proved the BURNIE clause wrong: `_awardDailyCoinToTraitWinners` (L1822-1906) does NOT call `_randTraitTicket`. It inlines its own `virtualCount = len/50; if (virtualCount < 2) virtualCount = 2;` at L1864-1867. The DPNERF nerf therefore lands on **two virtualCount surfaces**, not one:
+
+**Surface A — `_randTraitTicket` body (4 callsites, ETH paths):**
 - Callsite 1 — `_runEarlyBirdLootboxJackpot` at L698: early-bird lootbox jackpot trait winners (3% of `futurePrizePool` at `lvl+1`; 100 winners across 4 traits = 25/trait).
 - Callsite 2 — `_distributeTicketsToBucket` (helper) at L988: trait-bucket ticket winner selection invoked by `_distributeTicketJackpot` from L637 daily-tickets / L652 carryover-tickets / L883 early-bird-post-purchase-tickets.
 - Callsite 3 — `_processDailyEth` at L1296: daily ETH jackpot trait winners. `_runJackpotEthFlow` L1142 → `_processDailyEth` L1232 → `_randTraitTicket` L1296.
 - Callsite 4 — `_resolveTraitWinners` at L1399: ETH trait-winner resolution sub-flow.
-- BURNIE near-future coin jackpot path: `payDailyCoinJackpot` (L1767, `external`) → `_awardDailyCoinToTraitWinners` (L1816+) → trait-bucket sampling → `_randTraitTicket` (resolves through callsite 2 or 3 depending on the BURNIE distribution sub-shape).
 
-Selected because: (1) it matches REQUIREMENTS.md DPNERF-03 framing "deity earns less total EV across all 8 colors" — the "total EV" measure would not hold if the early-bird lootbox callsite (1) or the ticket-distribution callsite (2) leaked un-nerfed gold EV; (2) it matches the roadmap's explicit "no callsite flag or path-discrimination logic" wording; (3) it produces the minimum-surface contract change (single function-body edit reaches every caller — no per-caller plumbing). The single-function-body discipline matches the established `_pickSoloQuadrant` (L1080-1130) pattern of resolving gold-tier behavior inside the shared callee, not at the call sites.
+**Surface B — `_awardDailyCoinToTraitWinners` inline block (1 callsite, BURNIE path):**
+- BURNIE near-future coin jackpot: `payDailyCoinJackpot` (L1773, `external`) → `_awardDailyCoinToTraitWinners` (L1822, `private`) → inline `virtualCount` block at L1864-1867. The BURNIE flow is a multi-bucket / 1-winner-per-iteration sampler (each iteration picks a random `lvlPrime ∈ [minLevel, maxLevel]`, then samples 1 winner from `traitBurnTicket[lvlPrime][trait_i]`). This shape is architecturally incompatible with `_randTraitTicket`'s signature `(address[][256] storage traitBurnTicket_, uint8 trait, uint8 numWinners, ...)` (single-bucket / N-winner / aggregated-return). The inline duplication of the virtualCount business rule is therefore deliberate, not accidental.
 
-Phase 296 SWEEP coverage extends from the roadmap's "ETH vs BURNIE differential-behavior" hypothesis to "all-4-callsite uniformity attestation + incentive-shift across early-bird lootbox + carryover-ticket-distribution paths" per the `D-294-CALLER-UNIFORM-01` SWEEP-scope expansion. Phase 297 §3.A delta-surface table cites all 4 callsites by line number under the DPNERF row.
+DPNERF applies the **same** gold-tier branch shape at both surfaces:
+```solidity
+if (deity != address(0)) {
+    if (((trait_* >> 3) & 7) == 7) {   // trait at L1732; trait_i at L1865
+        virtualCount = 1;
+    } else {
+        virtualCount = len / 50;
+        if (virtualCount < 2) virtualCount = 2;
+    }
+}
+```
+
+Selected because: (1) it matches REQUIREMENTS.md DPNERF-03 framing "deity earns less total EV across all 8 colors" — the "total EV" measure would not hold if the BURNIE surface (or any of the 4 ETH callsites) leaked un-nerfed gold EV; (2) it matches the roadmap's "no callsite flag or path-discrimination logic" wording — the branch lives at the virtualCount-computing surface, not at the call sites of those surfaces; (3) it preserves the minimum-surface principle within each surface (no callsite plumbing on either side); (4) it acknowledges the architectural reality that BURNIE is its own surface rather than forcing a fictional "by construction" cover-up.
+
+Phase 296 SWEEP coverage extends from the roadmap's "ETH vs BURNIE differential-behavior" hypothesis to "all-5-surface uniformity attestation (4 `_randTraitTicket` callsites + 1 `_awardDailyCoinToTraitWinners` inline) + incentive-shift across early-bird lootbox + carryover-ticket-distribution paths". SWEEP must additionally grep the contract for any OTHER `virtualCount = len / 50` inline duplication that Plan 01 may have missed (verified at Plan 02 close: zero other instances exist in `DegenerusGameJackpotModule.sol`; the only two are the patched surfaces). Phase 297 §3.A delta-surface table cites all 5 surfaces by line number under the DPNERF row.
+
+**Plan 01 vs Plan 02 reconciliation:** the `<canonical_refs>` block earlier in this doc and the `D-294-CALLER-UNIFORM-01` entry above contain the planner-time "by construction" framing. Both are superseded by this section's 5-surface enumeration. They are left as-written for historical traceability — the Plan 02 surface table in `294-01-MEASUREMENT.md` §3 + this §(iv) section are the authoritative shape.
 
 ## Decision Anchors (Full Restatement)
 
@@ -114,8 +132,9 @@ Phase 296 SWEEP coverage extends from the roadmap's "ETH vs BURNIE differential-
 | `D-42N-GOLD-FLOOR-01` | Gold-tier (`color == 7`) `virtualCount = 1` (flat); commons (`color ∈ [0..6]`) `virtualCount = max(len/50, 2)` UNCHANGED | User-locked 2026-05-17 per ROADMAP.md lines 197-210 |
 | `D-42N-DEITY-EV-01` | Intentional total-EV reduction; no common-tier compensation; commons-bump + rebias-toward-commons alternatives REJECTED | User-locked 2026-05-17 per ROADMAP.md lines 197-210 |
 | `D-42N-PATH-COVERAGE-01` | Single function-body change reaches BOTH ETH and BURNIE near-future coin jackpot paths; no callsite flag; no path-discrimination logic; ETH-only alternative REJECTED | User-locked 2026-05-17 per ROADMAP.md lines 197-210 |
-| `D-294-CALLER-UNIFORM-01` | Extension of PATH-COVERAGE: ALL 4 `_randTraitTicket` callsites (L698 + L988 + L1296 + L1399) uniform by construction; Phase 296 SWEEP hypothesis surface extended from "ETH vs BURNIE" to "all-4-callsite uniformity + early-bird-lootbox / carryover-ticket-distribution incentive shifts" | Planner-locked 2026-05-17 per CONTEXT.md `<decisions>` |
-| `D-294-NATSPEC-01` | Locked 5-line two-tier `what IS` comment shape at L1721-1723 (Gold flat 1; Common floor(2%) min 2); ZERO history language; ZERO decision-anchor citations in source comments | Planner-locked 2026-05-17 per CONTEXT.md `<decisions>` + `feedback_no_history_in_comments.md` |
+| `D-294-CALLER-UNIFORM-01` | Extension of PATH-COVERAGE: ALL 4 `_randTraitTicket` callsites (L698 + L988 + L1296 + L1399) uniform by construction; Phase 296 SWEEP hypothesis surface extended from "ETH vs BURNIE" to "all-callsite uniformity + early-bird-lootbox / carryover-ticket-distribution incentive shifts" | Planner-locked 2026-05-17 per CONTEXT.md `<decisions>` |
+| `D-294-NATSPEC-01` | Locked 5-line two-tier `what IS` comment shape at L1721-1723 (Gold flat 1; Common floor(2%) min 2); ZERO history language; ZERO decision-anchor citations in source comments. Same comment shape applied at `_awardDailyCoinToTraitWinners` L1864 ahead of the inline gold-tier branch (added per `D-294-BURNIE-INLINE-01`). | Planner-locked 2026-05-17 per CONTEXT.md `<decisions>` + `feedback_no_history_in_comments.md` |
+| `D-294-BURNIE-INLINE-01` | Gap-closure anchor recorded after Plan 02 verification proved the Plan 01 call-graph claim wrong. `_awardDailyCoinToTraitWinners` (L1822-1906) does NOT call `_randTraitTicket`; it inlines its own `virtualCount = len/50; if (virtualCount < 2) virtualCount = 2;` at L1864-1867 because the BURNIE flow is a multi-bucket / 1-winner-per-iteration sampler architecturally incompatible with `_randTraitTicket`'s single-bucket / N-winner signature. The DPNERF gold-tier nerf is therefore applied as a parallel +4/-2 source delta at L1864-1867 mirroring the `_randTraitTicket:1732-1737` patch. Both surfaces carry the same locked branch shape. The Plan 01 "by construction" reach-claim is retracted; the 5-surface enumeration in §3 of MEASUREMENT supersedes. | Verifier-surfaced 2026-05-18; user-locked 2026-05-18 |
 
 Source-of-truth note: all five anchors are recorded in CONTEXT.md `<decisions>` and re-stated in Plan 01 `must_haves.truths`. The three roadmap-locked anchors (GOLD-FLOOR-01, DEITY-EV-01, PATH-COVERAGE-01) trace back to `.planning/ROADMAP.md` line 41 (Phase 294 entry) and lines 197-210 (Phase 294 detail block). The two planner-locked sub-anchors (CALLER-UNIFORM-01, NATSPEC-01) are recorded at CONTEXT.md and inherited by Plan 02 without re-derivation.
 

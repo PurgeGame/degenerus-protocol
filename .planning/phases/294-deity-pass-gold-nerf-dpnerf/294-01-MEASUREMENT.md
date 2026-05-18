@@ -34,9 +34,11 @@ This section is **FINAL at Plan 01 time** (audit baseline is locked at v41 close
 
 **STATUS:** **PASS**.
 
-## §3 Callsite Enumeration (D-294-CALLER-UNIFORM-01)
+## §3 Surface Enumeration (D-294-CALLER-UNIFORM-01)
 
-This section is **FINAL at Plan 01 time**. The 4 callsites of `_randTraitTicket` + the BURNIE near-future coin jackpot path are fully known from CONTEXT.md `<specifics>` + the live v42.0 HEAD source-tree scout. Verbatim record:
+The DPNERF gold-tier nerf is applied at **two** virtualCount surfaces: `_randTraitTicket` (4 callsites; ETH paths) and `_awardDailyCoinToTraitWinners` (1 callsite; BURNIE path). The Plan 01 enumeration claimed the BURNIE path resolved THROUGH `_randTraitTicket` and would be covered "by construction" — Plan 02 verification proved that wrong: `_awardDailyCoinToTraitWinners` (L1822-1906) is self-contained and inlines its own `virtualCount = len/50; if (virtualCount < 2) virtualCount = 2` block. The corrected enumeration below is FINAL at Plan 02 close.
+
+### 3.A — `_randTraitTicket` callsites (ETH paths)
 
 | # | Pre-patch line | Function | Path | Top-Level Entry |
 |---|---|---|---|---|
@@ -45,18 +47,38 @@ This section is **FINAL at Plan 01 time**. The 4 callsites of `_randTraitTicket`
 | 3 | L1296 | `_processDailyEth` | Daily ETH jackpot trait winners | `_runJackpotEthFlow` (L1142) → `_processDailyEth` (L1232) → `_randTraitTicket` (L1296) |
 | 4 | L1399 | `_resolveTraitWinners` | ETH trait-winner resolution sub-flow | Called from `_processDailyEth` ticket-payout sub-path |
 
-**BURNIE near-future coin jackpot path resolution** (named in the roadmap as the "BURNIE coin jackpot path"):
+All 4 callsites are covered uniformly by the single function-body change at `_randTraitTicket:1732-1737` (no callsite flag, no path-discrimination logic).
 
-`payDailyCoinJackpot` (L1767, `external`) → `_awardDailyCoinToTraitWinners` (L1816+) → trait-bucket sampling → ultimately `_randTraitTicket` (resolves through callsite 2 or 3 depending on the BURNIE distribution sub-shape; the same function-body change applies by construction).
+### 3.B — `_awardDailyCoinToTraitWinners` inline surface (BURNIE path)
 
-**Coverage discipline:** the function-body change at `_randTraitTicket` reaches ALL 4 callsites + the BURNIE path uniformly with no callsite flag and no path-discrimination logic per `D-294-CALLER-UNIFORM-01`. By-construction caller-uniform — no callsite needs a per-call argument; no path needs a discriminator predicate; no sister function needs a duplicate body. The audit story is: single `_randTraitTicket` body change in `contracts/modules/DegenerusGameJackpotModule.sol:1707-1757` → 4 production callsites + 1 BURNIE path reached uniformly.
+| Pre-patch line | Function | Path | Top-Level Entry |
+|---|---|---|---|
+| L1864-1867 (pre-patch) / L1866-1873 (post-patch) | `_awardDailyCoinToTraitWinners` (inline `virtualCount` block) | BURNIE near-future coin jackpot trait-winner selection: each iteration picks a random `lvlPrime ∈ [minLevel, maxLevel]`, then samples 1 winner from `traitBurnTicket[lvlPrime][trait_i]` with deity virtual entries; pays immediately via `coinflip.creditFlip` | `payDailyCoinJackpot(uint24,uint256,uint24,uint24)` (L1773, `external`, selector `0xdbedb1c1`) → `_awardDailyCoinToTraitWinners` (L1822, `private`) |
 
-**Downstream coverage extensions:**
-- **Phase 295 TST-DPNERF-01..05** references the audit-subject commit + this 4-callsite enumeration. TST-DPNERF-01 + TST-DPNERF-02 + TST-DPNERF-03 implicitly cover callsites 3 + 4 + the BURNIE path via natural production-path invocation. TST-DPNERF-05 covers the non-deity branch (path-uniform across all 4 callsites). Callsites 1 (L698 `_runEarlyBirdLootboxJackpot`) + 2 (L988 `_distributeTicketsToBucket`) are NOT explicitly covered by TST-DPNERF-01..05 — Phase 296 SWEEP attests their behavior per `D-294-CALLER-UNIFORM-01` SWEEP-scope expansion.
-- **Phase 296 SWEEP** DPNERF hypothesis surface MUST cover all 4 callsites per `D-294-CALLER-UNIFORM-01`. The SWEEP hypothesis surface expands from the roadmap's "ETH vs BURNIE differential-behavior" framing to "all-4-callsite uniformity + incentive-shift across early-bird lootbox + carryover-ticket-distribution paths."
-- **Phase 297** §3.A delta-surface table cites all 4 callsites by line number under the DPNERF row. Phase 297 §3.B zero-new-state grep-proof attestation covers the function body (the storage-touching surface) by construction. Phase 297 §3.C conservation re-proof for DPNERF: "gold-tile virtualCount = 1; common-tile UNCHANGED at `max(len/50, 2)`; all 4 callsites uniform."
+Architectural note: `_awardDailyCoinToTraitWinners` is a multi-bucket / 1-winner-per-iteration sampler. `_randTraitTicket`'s signature `(address[][256] storage traitBurnTicket_, uint8 trait, uint8 numWinners, ...)` is a single-bucket / N-winner sampler (level pre-resolved by caller, returns aggregated arrays). The two shapes are not refactor-compatible at the surface level — the BURNIE flow needs to resolve `lvlPrime` per loop iteration and pay each winner inline, so the `virtualCount` business rule is deliberately duplicated in inline form. The gold-tier branch is therefore applied as a parallel +4/-2 source delta at L1864-1867, mirroring the `_randTraitTicket` patch.
 
-**STATUS: FINAL — callsite enumeration locked at Plan 01 time per `D-294-CALLER-UNIFORM-01`.**
+### Coverage discipline
+
+The DPNERF gold-tier nerf reaches **5 production surfaces** (4 `_randTraitTicket` callsites + 1 `_awardDailyCoinToTraitWinners` inline block) uniformly. No callsite flag, no path-discrimination logic, no per-call argument. Both surfaces carry the same locked branch shape:
+
+```solidity
+if (deity != address(0)) {
+    if (((trait_*  >> 3) & 7) == 7) {   // trait at L1732; trait_i at L1865
+        virtualCount = 1;
+    } else {
+        virtualCount = len / 50;
+        if (virtualCount < 2) virtualCount = 2;
+    }
+}
+```
+
+### Downstream coverage extensions
+
+- **Phase 295 TST-DPNERF-01..05** references the audit-subject commits (Phase 294 contract `47936e0c` + the BURNIE gap-closure commit). TST-DPNERF-01 + TST-DPNERF-02 + TST-DPNERF-03 implicitly cover the ETH callsites 3 + 4 + the BURNIE inline surface via natural production-path invocation. TST-DPNERF-05 covers the non-deity branch (path-uniform across all 5 surfaces). Callsites 1 (L698 `_runEarlyBirdLootboxJackpot`) + 2 (L988 `_distributeTicketsToBucket`) are NOT explicitly covered by TST-DPNERF-01..05 — Phase 296 SWEEP attests their behavior per the SWEEP-scope expansion below.
+- **Phase 296 SWEEP** DPNERF hypothesis surface MUST cover all 5 production surfaces. The SWEEP hypothesis surface expands from the roadmap's "ETH vs BURNIE differential-behavior" framing to "all-5-surface uniformity + incentive-shift across early-bird lootbox + carryover-ticket-distribution + BURNIE coin paths". The SWEEP must also re-test the call-graph assumption that introduced the Plan 01 gap to ensure no similar inline-duplication surface was missed elsewhere (e.g., `_awardFarFutureCoinJackpot` at L1911+, which CONTEXT.md did not enumerate — confirm via grep that no other `virtualCount = len / 50` block exists in the contract).
+- **Phase 297** §3.A delta-surface table cites all 5 surfaces under the DPNERF row. Phase 297 §3.B zero-new-state grep-proof attestation covers both `_randTraitTicket` body + `_awardDailyCoinToTraitWinners` inline block by construction. Phase 297 §3.C conservation re-proof for DPNERF: "gold-tile virtualCount = 1; common-tile UNCHANGED at `max(len/50, 2)`; all 5 surfaces uniform."
+
+**STATUS: FINAL — surface enumeration locked at Plan 02 close.** Plan 01's claim of "4 callsites + BURNIE downstream" was incorrect; the post-verification 5-surface table above supersedes.
 
 ## §4 Public ABI Byte-Identity Attestation (DPNERF-05)
 
@@ -205,7 +227,18 @@ Strengthens the DPNERF-04 storage byte-identity attestation (§2 above) by attes
 
 **Lock under DPNERF-04 strengthening:** zero new SSTORE / SLOAD callsites at the `_randTraitTicket` function-body level. The only DPNERF-touched storage access remains the existing `deityBySymbol[fullSymId]` SLOAD inside the unchanged-conditional `if (fullSymId < 32)` block — UNCHANGED in count, slot, type by the patch. PASSED.
 
-**STATUS:** **PASS**.
+### §6.b — `_awardDailyCoinToTraitWinners` zero-new-state grep (BURNIE gap-closure)
+
+Same attestation applied to the BURNIE-path inline gold-tier branch at L1864-1867 (pre-patch) → L1866-1873 (post-patch).
+
+- The patched function carries `private` (NOT `view`; it calls `coinflip.creditFlip` so it mutates external state — same as v41 baseline). The DPNERF source delta is a +4/-2 control-flow change inside the existing `if (deity != address(0))` block — zero new state-touching statements.
+- Storage-touching grep `grep -nE "(deityBySymbol|deityCache|traitBurnTicket)\["` against the post-patch body shows the same set as the v41 baseline: `deityBySymbol[fullSymId]` (cache fill at L1844 — UNCHANGED); `deityCache[t]` / `deityCache[traitIdx]` (memory-array, NOT storage — UNCHANGED); `traitBurnTicket[lvlPrime][trait_i]` (the per-iteration bucket read at L1860 — UNCHANGED).
+- SSTORE-equivalent: the v41 body has the existing `coinflip.creditFlip(winner, amount)` external call (storage write happens inside `coinflip`, out of `DegenerusGameJackpotModule`'s storage scope; UNCHANGED). The gold-tier branch introduces ZERO new storage writes in this module — only the local `virtualCount` assignment, identical to v41 in target.
+- SLOAD-equivalent: identical to v41 baseline. The new `if (((trait_i >> 3) & 7) == 7)` predicate consumes only the `trait_i` local (assigned at L1854 from the `traitIds` memory array, itself unpacked once at L1833).
+
+**Lock:** zero new SSTORE / SLOAD callsites at the `_awardDailyCoinToTraitWinners` function-body level. The new comment block + gold-tier branch reuse only locals already in scope (`trait_i`, `deity`, `virtualCount`); no new storage access introduced. PASSED.
+
+**STATUS:** **PASS** (both surfaces).
 
 ## Source-Doc Cross-Cite
 
