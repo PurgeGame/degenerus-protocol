@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** (between milestones)
+**Current focus:** v43.0 Total rngLock Determinism — Every VRF Input Frozen at Commitment (planning; roadmap defined; Phase 298 CATALOG next)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 298 (VRF Read-Graph Catalog) — next, not started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-18 — Milestone v43.0 started
+Status: Roadmap defined; awaiting Phase 298 plan-phase invocation
+Last activity: 2026-05-18 — Milestone v43.0 OPENED; REQUIREMENTS.md + ROADMAP.md committed
 
 ## Last Shipped Milestone
 

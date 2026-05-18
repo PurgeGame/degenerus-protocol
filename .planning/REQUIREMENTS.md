@@ -116,23 +116,23 @@ Explicitly excluded from v43.0; documented to prevent scope creep:
 
 ## Traceability
 
-Empty; populated during ROADMAP creation per workflow Step 10.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CAT-01..06 | Phase [N] | Pending |
-| FIX-01..05 | Phase [N..M] | Pending |
-| ADM-01..04 | Phase [N] | Pending |
-| FUZZ-01..05 | Phase [N] | Pending |
-| SWP-01..05 | Phase [N] | Pending |
-| AUDIT-01..09 | Phase [N] | Pending |
-| REG-01..04 | Phase [N] | Pending |
-| CLS-01..02 | Phase [N] | Pending |
+| CAT-01..06 | Phase 298 | Pending |
+| FIX-01..05 | Phase 299 (envelope; sub-phases inserted after Phase 298 CATALOG output) | Pending |
+| ADM-01..04 | Phase 300 | Pending |
+| FUZZ-01..05 | Phase 301 | Pending |
+| SWP-01..05 | Phase 302 | Pending |
+| AUDIT-01..09 | Phase 303 | Pending |
+| REG-01..04 | Phase 303 | Pending |
+| CLS-01..02 | Phase 303 | Pending |
 
 **Coverage:**
-- v43.0 requirements: 41 total (6 CAT + 5 FIX + 4 ADM + 5 FUZZ + 5 SWP + 9 AUDIT + 4 REG + 2 CLS + 1 implicit no-SAFE_BY_DESIGN gate at SWP-04)
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 41 ⚠️
+- v43.0 requirements: 40 total (6 CAT + 5 FIX + 4 ADM + 5 FUZZ + 5 SWP + 9 AUDIT + 4 REG + 2 CLS) + 1 implicit no-SAFE_BY_DESIGN gate at SWP-04
+- Mapped to phases: 40
+- Unmapped: 0 ✓
+
+**Phase numbering note:** Final phase count may expand if Phase 298 CATALOG identifies multiple surfaces requiring per-surface FIX waves. Phase 299 is an envelope that may expand into sub-phases (299a/299b/... or 299/300/... with downstream phase numbers shifting accordingly). Roadmap revision required after Phase 298 closes if expansion occurs.
 
 ---
 
