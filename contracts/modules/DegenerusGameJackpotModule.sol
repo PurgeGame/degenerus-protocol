@@ -1718,7 +1718,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         address[] storage holders = traitBurnTicket_[trait];
         uint256 len = holders.length;
 
-        // Virtual deity entries: floor(2% of bucket tickets), minimum 2, if a deity exists for this symbol.
+        // Virtual deity entries (if a deity exists for this symbol):
+        //   Gold tier (color == 7): flat 1 virtual entry.
+        //   Common tier (color in [0..6]): floor(2% of bucket), minimum 2.
         // traitId layout: (quadrant << 6) | (color << 3) | symIdx
         // fullSymId = quadrant * 8 + symIdx
         uint8 fullSymId = (trait >> 6) * 8 + (trait & 0x07);
@@ -1727,8 +1729,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (fullSymId < 32) {
             deity = deityBySymbol[fullSymId];
             if (deity != address(0)) {
-                virtualCount = len / 50;
-                if (virtualCount < 2) virtualCount = 2;
+                if (((trait >> 3) & 7) == 7) {
+                    virtualCount = 1;
+                } else {
+                    virtualCount = len / 50;
+                    if (virtualCount < 2) virtualCount = 2;
+                }
             }
         }
 

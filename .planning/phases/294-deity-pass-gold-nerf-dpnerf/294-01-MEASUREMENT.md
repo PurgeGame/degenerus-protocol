@@ -1,6 +1,6 @@
 # Phase 294 DPNERF — Measurement Attestations (DPNERF-04 + DPNERF-05)
 
-> The 6 attestation sections include FINAL content (§1 + §3) at Plan 01 time and `<FILL-IN-Plan-02>` placeholders (§2 + §4 + §5 + §6) that Plan 02 populates post-patch against the v41 baseline.
+> The 6 attestation sections include FINAL content (§1 + §3) at Plan 01 time and post-patch populated content (§2 + §4 + §5 + §6) recorded at Plan 02 execution time against the v41 baseline.
 > This doc is the verbatim copy-forward source for Plan 02's batched commit message body, per `feedback_no_history_in_comments.md` (numerical attestations go in the commit body, NOT into NatSpec).
 > Plan 02 MUST re-validate every populated value against the post-patch tree before the user approves the commit.
 >
@@ -16,9 +16,9 @@ This section is **FINAL at Plan 01 time** (audit baseline is locked at v41 close
 
 ## §2 Storage Byte-Identity Attestation (DPNERF-04)
 
-`forge inspect contracts/modules/DegenerusGameJackpotModule.sol:DegenerusGameJackpotModule storageLayout` diff vs `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` baseline = `<FILL-IN-Plan-02 — EMPTY | recorded-non-empty-value>`.
+`forge inspect contracts/modules/DegenerusGameJackpotModule.sol:DegenerusGameJackpotModule storageLayout` diff vs `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` baseline = **EMPTY** (`diff /tmp/v41-jackpot-storage-294.txt /tmp/v42-jackpot-storage-294.txt` exit code 0; both trees 171 lines byte-identical). Module-level `storageLayout` inherits the canonical layout via `DegenerusGameStorage` mixin; baseline worktree required `forge clean` to clear cached artifact (`Error: storage layout missing from artifact; ... consider running `forge clean``) — once cleared, both trees emit byte-identical 171-line layout dumps. `deityBySymbol` mapping declared in `DegenerusGameStorage` UNCHANGED across the diff.
 
-`forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storageLayout` diff vs `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` baseline = `<FILL-IN-Plan-02 — EMPTY | recorded-non-empty-value>`.
+`forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storageLayout` diff vs `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` baseline = **EMPTY** (`diff /tmp/v41-storage-294-full.txt /tmp/v42-storage-294-full.txt` exit code 0; both trees 171 lines byte-identical).
 
 **Method (executed Plan 02):** Materialize the v41 baseline via `git worktree add /tmp/v41-baseline-294 315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4`. Run `FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storageLayout` against both the post-patch tree (output `/tmp/v42-storage-294.txt`) and the v41 baseline worktree (output `/tmp/v41-storage-294.txt`). Compute `diff /tmp/v41-storage-294.txt /tmp/v42-storage-294.txt`; expect exit code 0 with no output (byte-identical). Repeat for the module-specific path; expect identical exit behavior at both trees (storage layout lives at `DegenerusGameStorage.sol`; module-specific path may return `Error: storage layout missing from artifact` at both trees — that is the **INHERITED** disposition row).
 
@@ -30,9 +30,9 @@ This section is **FINAL at Plan 01 time** (audit baseline is locked at v41 close
 
 **Escalation rule:** If the substantive diff is non-empty, record the exact diff text in this section AND flag `🚨 STORAGE LAYOUT REGRESSION — STOP — escalate to user before Plan 02 contract commit` (mirrors Phase 290 + Phase 292 escalation pattern). DPNERF-04 attestation FAILS until the diff is empty.
 
-**Summary line (for Plan 02 commit body copy-forward):** `<FILL-IN-Plan-02 — storageLayout diff vs MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4 = EMPTY (forge diff exit 0; both trees byte-identical)>`.
+**Summary line (for Plan 02 commit body copy-forward):** `storageLayout diff vs MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4 = EMPTY (forge diff exit 0; both trees 171-line byte-identical for both module + storage targets; deityBySymbol mapping UNCHANGED in slot/type/label)`.
 
-**STATUS:** `<FILL-IN-Plan-02 — PASS | FAIL>`.
+**STATUS:** **PASS**.
 
 ## §3 Callsite Enumeration (D-294-CALLER-UNIFORM-01)
 
@@ -60,7 +60,25 @@ This section is **FINAL at Plan 01 time**. The 4 callsites of `_randTraitTicket`
 
 ## §4 Public ABI Byte-Identity Attestation (DPNERF-05)
 
-`forge inspect contracts/modules/DegenerusGameJackpotModule.sol:DegenerusGameJackpotModule methodIdentifiers` diff vs `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` baseline = `<FILL-IN-Plan-02 — EMPTY | recorded-non-empty-value>`.
+`forge inspect contracts/modules/DegenerusGameJackpotModule.sol:DegenerusGameJackpotModule methodIdentifiers` diff vs `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` baseline = **EMPTY** (`diff /tmp/v41-jackpot-methods-294.txt /tmp/v42-jackpot-methods-294.txt` exit code 0; 10/10 public selectors byte-identical vs v41 close + Phase 292 close).
+
+### §4.a Public-ABI Selector Table (post-patch, 10/10 UNCHANGED vs v41 close)
+
+| Function | Canonical signature | 4-byte selector | Disposition |
+|---|---|---|---|
+| `boonPacked` | `boonPacked(address)` | `0x24a7ad0b` | UNCHANGED vs v41 close |
+| `distributeYieldSurplus` | `distributeYieldSurplus(uint256)` | `0x74307d12` | UNCHANGED vs v41 close |
+| `emitDailyWinningTraits` | `emitDailyWinningTraits(uint24,uint256,uint24)` | `0x1fe49a5a` | UNCHANGED vs v41 close |
+| `gameOver` | `gameOver()` | `0xbdb337d1` | UNCHANGED vs v41 close |
+| `level` | `level()` | `0x6fd5ae15` | UNCHANGED vs v41 close |
+| `payDailyCoinJackpot` | `payDailyCoinJackpot(uint24,uint256,uint24,uint24)` | `0xdbedb1c1` | UNCHANGED vs v41 close (the only `external` entry within 2 hops of `_randTraitTicket`) |
+| `payDailyJackpot` | `payDailyJackpot(bool,uint24,uint256)` | `0x2ef8c646` | UNCHANGED vs v41 close |
+| `payDailyJackpotCoinAndTickets` | `payDailyJackpotCoinAndTickets(uint256)` | `0xb1c9ed2d` | UNCHANGED vs v41 close |
+| `runBafJackpot` | `runBafJackpot(uint256,uint24,uint256)` | `0x4181af8e` | UNCHANGED vs v41 close |
+| `runTerminalJackpot` | `runTerminalJackpot(uint256,uint24,uint256)` | `0xa56efd97` | UNCHANGED vs v41 close |
+| `_randTraitTicket` (private) | `_randTraitTicket(address[][256] storage,uint256,uint8,uint8,uint8)` | n/a (private) | Body changed; signature UNCHANGED |
+
+Method line: `FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge inspect contracts/modules/DegenerusGameJackpotModule.sol:DegenerusGameJackpotModule methodIdentifiers` (foundry 1.6.0-nightly Commit `c07d504b`).
 
 **Method (executed Plan 02):** Run `FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge inspect contracts/modules/DegenerusGameJackpotModule.sol:DegenerusGameJackpotModule methodIdentifiers` against both the post-patch tree (`/tmp/v42-methods-294.txt`) and the v41 baseline worktree (`/tmp/v41-methods-294.txt`). Compute `diff /tmp/v41-methods-294.txt /tmp/v42-methods-294.txt`; expect exit code 0 with no output (byte-identical). Cross-verify selected selectors via `cast sig "<canonical-signature>"` against the v41 baseline values from `292-01-MEASUREMENT.md` §4 (Phase 292 already published the full 10-selector public-ABI table for `DegenerusGameJackpotModule`).
 
@@ -75,13 +93,13 @@ This section is **FINAL at Plan 01 time**. The 4 callsites of `_randTraitTicket`
 
 **Escalation rule:** If any public/external selector changes, record the exact selector delta in this section AND flag `🚨 PUBLIC ABI REGRESSION — STOP — escalate to user before Plan 02 contract commit`. DPNERF-05 attestation FAILS until the public ABI is byte-identical.
 
-**Summary line (for Plan 02 commit body copy-forward):** `<FILL-IN-Plan-02 — methodIdentifiers diff vs MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4 = EMPTY (forge diff exit 0; 10/10 public-ABI selectors UNCHANGED vs v41 close + Phase 292 close)>`.
+**Summary line (for Plan 02 commit body copy-forward):** `methodIdentifiers diff vs MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4 = EMPTY (forge diff exit 0; 10/10 public-ABI selectors UNCHANGED vs v41 close + Phase 292 close); payDailyCoinJackpot(uint24,uint256,uint24,uint24) selector 0xdbedb1c1 UNCHANGED`.
 
-**STATUS:** `<FILL-IN-Plan-02 — PASS | FAIL>`.
+**STATUS:** **PASS**.
 
 ## §5 Theoretical Bytecode-Delta Estimate (per feedback_gas_worst_case.md)
 
-This section's **FRAMEWORK is FINAL at Plan 01 time**; only the actual post-patch byte delta number is `<FILL-IN-Plan-02>`. The theoretical-first analytical derivation lives here per `feedback_gas_worst_case.md`; the empirical confirmation is deferred to Plan 02 post-patch (or NOT taken at all — see §5.b disposition below).
+This section's **FRAMEWORK is FINAL at Plan 01 time**; only the actual post-patch byte delta number is filled at Plan 02. The theoretical-first analytical derivation lives here per `feedback_gas_worst_case.md`; the empirical confirmation is taken at Plan 02 post-patch (recorded below; see §5.b disposition).
 
 ### §5.a Pre-Patch Bytecode Shape
 
@@ -139,9 +157,32 @@ Rationale:
 
 **Plan 02 post-patch byte delta:** Plan 02 records the actual post-patch bytecode delta number via `FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge build` twice — once at v42 HEAD post-patch, once at `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` baseline via `git worktree add /tmp/v41-baseline-294 315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` — and size-compares the deployed bytecode strings emitted in `out/DegenerusGameJackpotModule.sol/DegenerusGameJackpotModule.json` (the `bytecode.object` field). Expected value bounded by the +10-30 byte analytical estimate above.
 
-`<FILL-IN-Plan-02 — actual post-patch byte delta: v41 baseline runtime-bytecode size = N bytes; v42 post-patch runtime-bytecode size = M bytes; delta = (M - N) bytes; within analytical bound +10-30>`.
+**Theoretical estimate:** ~+10-30 bytes (analytical: one EQ + JUMPI + small constant pool + gold-tier MSTORE; else branch byte-identical to v41).
 
-**STATUS:** `<FILL-IN-Plan-02 — PASS (within analytical bound) | FAIL (escalate to user)>`.
+**Empirical measurements** (`forge inspect ... deployedBytecode` runtime-bytecode size after `forge clean && forge build`; foundry 1.6.0-nightly Commit `c07d504b`, solc 0.8.34, via_ir=true, optimizer=on, optimizer_runs=200, evm_version=paris):
+
+| Tree | Commit | Runtime bytecode (bytes) |
+|---|---|---|
+| v41 close baseline | `315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` | 23,933 |
+| Phase 292 close (HRROLL landed) | `a0218952` | 24,417 |
+| v42 post-DPNERF (this patch) | working tree | 24,503 |
+
+**Compound delta vs v41 close** = +570 bytes (`24,503 − 23,933`; includes Phase 290 MINTCLN + Phase 292 HRROLL + Phase 294 DPNERF contributions; recorded for the v41-close-to-v42-DPNERF-close delta-surface table at Phase 297).
+
+**Isolated DPNERF delta vs Phase 292 close** = **+86 bytes** (`24,503 − 24,417`).
+
+🚨 **BYTECODE-DELTA EXCEEDS ANALYTICAL ESTIMATE — investigate before Task 5** 🚨
+
+The empirical isolated DPNERF delta (+86 bytes) exceeds the analytical estimate's +30-byte ceiling AND the §5's +50-byte flag threshold. Investigation evidence:
+- Constructor (init) bytecode also grew +86 bytes (`24,491 → 24,577`), consistent with runtime; the delta is uniform across both deployment artifacts (rules out metadata-CBOR drift).
+- Storage layout EMPTY diff (§2) + methodIdentifiers EMPTY diff (§4); no storage / public-ABI delta could account for the size growth.
+- Build settings inherited from `foundry.toml` UNCHANGED between trees (via_ir=true, optimizer_runs=200, solc_version=0.8.34).
+- Probable cause: with `via_ir=true`, the Yul-IR optimizer pipeline restructures local-variable allocation + jump-table layout for the surrounding `_randTraitTicket` function when a new branch is introduced. The pre-patch `else`-arm logic is preserved verbatim at the source level, but at the bytecode level the IR optimizer may relocate / re-spill it relative to the surrounding `if (deity != address(0))` block, the downstream `effectiveLen = len + virtualCount;` arithmetic at L1735, and the winner-sampling loop at L1740-L1756. Surrounding-code reshuffle under via_ir is the typical mechanism for branch-addition deltas exceeding the per-opcode arithmetic estimate.
+- Runtime gas impact remains negligible — the gold-tier branch is one `SHR(3)` + `AND(7)` + `EQ(7)` + `JUMPI` + `PUSH1 1` + assignment (~20-50 gas per `_randTraitTicket` invocation; below practical measurement noise). The +86 byte cost is a one-time deployment-side cost; per-call runtime cost is dominated by the same arithmetic.
+
+The flag is RAISED for explicit user disposition at Task 5 USER-APPROVAL gate per `feedback_gas_worst_case.md` (theoretical estimate undershot the empirical measurement; surface for explicit acceptance, do not silently auto-approve). No per-call gas-regression test in Phase 295 TST-DPNERF-01..05 scope (TST-DPNERF-04 is an EV regression at N=1000, not gas). Deployment-side +86 bytes is acceptable on the v42.0 milestone bytecode budget (Phase 290 MINTCLN + Phase 292 HRROLL aggregate +484 bytes already absorbed; +86 additional brings the v41→v42 compound to +570 bytes; well under the 24KB EIP-170 deployment ceiling and well under any practical block-cost concern).
+
+**STATUS:** **FAIL (escalate to user)** — empirical isolated DPNERF delta +86 bytes exceeds analytical bound +10-30 and §5 flag threshold +50. Disposition: surface to user at Task 5 USER-APPROVAL gate; user may accept-as-is (the bytecode-budget impact is small and the via_ir reshuffle is structural, not a defect) OR direct an investigation pass.
 
 ## §6 Zero-New-State Grep-Proof (DPNERF-04 Strengthening)
 
@@ -149,22 +190,31 @@ Post-patch grep of `contracts/modules/DegenerusGameJackpotModule.sol` `_randTrai
 
 Post-patch grep for SLOAD-equivalent statements (mapping / storage-array reads) shows ZERO new entries vs v41 close. The only DPNERF-touched storage access remains the existing `deityBySymbol[fullSymId]` SLOAD at pre-patch L1728 (UNCHANGED in count, slot, type by the patch).
 
-`<FILL-IN-Plan-02 — actual grep evidence: post-patch `_randTraitTicket` body line range Lxxxx-Lyyyy; SSTORE-equivalent count = 0; SLOAD-equivalent count = 1 (the existing deityBySymbol[fullSymId] read; unchanged)>`.
+**Actual grep evidence:**
+
+- Post-patch `_randTraitTicket` body line range: **L1706 – L1763** (58 lines; v41 baseline was L1659 – L1710 = 52 lines; +6 source lines from Edit A (+2 net comment lines: 3 → 5) + Edit B (+4 net code lines: 2 → 6) ≈ matches the source-level expectation).
+- Storage-touching grep `grep -nE "(deityBySymbol|traitBurnTicket_)\["` against both bodies:
+  - v41 baseline: **2 matches** (L13 `traitBurnTicket_[trait]` + L23 `deityBySymbol[fullSymId]` within the extracted body).
+  - v42 post-patch: **2 matches** (L13 `traitBurnTicket_[trait]` + L25 `deityBySymbol[fullSymId]` within the extracted body — line offset reflects the +2-line comment expansion above; identical storage-access set).
+- SSTORE-equivalent count (`grep -nE "[a-zA-Z_]+\[[^]]+\][[:space:]]*="`): v41 = **4 matches**; v42 = **4 matches**. ALL 4 matches in both trees are in-memory writes to the locally-allocated `winners` + `ticketIndexes` arrays (`address[] memory` / `uint256[] memory`, declared inline with `new ...(numWinners)`) inside the winner-sampling loop — NOT storage writes. The function carries `private view` (compiler-enforced no-SSTORE).
+- SLOAD-equivalent count (mapping / storage-array READS): v41 = **2 matches** (the 2 mapping/storage-array references enumerated above); v42 = **2 matches** (same set). The new gold-tier branch `if (((trait >> 3) & 7) == 7) { virtualCount = 1; }` consumes only the `trait` function parameter (calldata-equivalent) + the `virtualCount` local — NO new mapping / array / storage-slot read.
 
 **Method (executed Plan 02):** Extract the `_randTraitTicket` function body from both the post-patch tree and the v41 baseline worktree (`git show 315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4:contracts/modules/DegenerusGameJackpotModule.sol | sed -n '1707,1757p'` for v41; same `sed` range adjusted for post-patch line numbers). Diff structurally; confirm zero new lines touching storage. Cross-verify by `grep -nE "(deityBySymbol|traitBurnTicket_)\[" <body>` against both trees and counting matches: v41 baseline = 2 matches (1 × `traitBurnTicket_[trait]` at L1718 + 1 × `deityBySymbol[fullSymId]` at L1728); post-patch expected = 2 matches (same two accesses; gold-tier branch does NOT introduce any new storage access).
 
 Strengthens the DPNERF-04 storage byte-identity attestation (§2 above) by attesting at the **function-body level**, not just at the storage layout level. §2 attests "the storage layout is unchanged"; §6 attests "the function body that owns the patch does not introduce any new storage touch even though the layout would tolerate one." The two attestations together close the storage-correctness surface for DPNERF.
 
-**STATUS:** `<FILL-IN-Plan-02 — PASS | FAIL>`.
+**Lock under DPNERF-04 strengthening:** zero new SSTORE / SLOAD callsites at the `_randTraitTicket` function-body level. The only DPNERF-touched storage access remains the existing `deityBySymbol[fullSymId]` SLOAD inside the unchanged-conditional `if (fullSymId < 32)` block — UNCHANGED in count, slot, type by the patch. PASSED.
+
+**STATUS:** **PASS**.
 
 ## Source-Doc Cross-Cite
 
 - Back-link: `294-01-DESIGN-INTENT-TRACE.md` (DPNERF-06 4-section design-intent trace + 5 decision anchors + out-of-scope register + SWEEP-02(iii) pre-emptive answers).
-- Forward-link: `294-02-PLAN.md` (Plan 02 contract-patch task; reads this scaffold and copies §1 + §3 (FINAL at Plan 01 time) verbatim into the batched contract commit message body; fills in §2 + §4 + §5 + §6 (`<FILL-IN-Plan-02>` placeholders) post-patch; presents the full diff to the user for explicit review per `feedback_manual_review_before_push.md` + `feedback_never_preapprove_contracts.md`).
+- Forward-link: `294-02-PLAN.md` (Plan 02 contract-patch task; reads this scaffold and copies §1 + §3 (FINAL at Plan 01 time) verbatim into the batched contract commit message body; fills in §2 + §4 + §5 + §6 placeholders post-patch; presents the full diff to the user for explicit review per `feedback_manual_review_before_push.md` + `feedback_never_preapprove_contracts.md`).
 
 **Re-validation requirement:** Plan 02 MUST re-validate every populated value in this doc against the post-patch tree before the user approves the contract commit. The doc is the verbatim copy-forward source for the commit body — any drift between this doc and the post-patch tree is a Plan 02 verification failure.
 
-**Plan 01 → Plan 02 hand-off:** Plan 02 may now begin its contract-patch task per the design-intent-before-deletion gate per `feedback_design_intent_before_deletion.md` — both `294-01-DESIGN-INTENT-TRACE.md` and this `294-01-MEASUREMENT.md` are AGENT-COMMITTED at Plan 01 close. §1 (audit baseline) + §3 (callsite enumeration) are FINAL at Plan 01 time. §2 + §4 + §5 + §6 carry `<FILL-IN-Plan-02>` placeholders Plan 02 populates post-patch.
+**Plan 01 → Plan 02 hand-off:** Plan 02 may now begin its contract-patch task per the design-intent-before-deletion gate per `feedback_design_intent_before_deletion.md` — both `294-01-DESIGN-INTENT-TRACE.md` and this `294-01-MEASUREMENT.md` are AGENT-COMMITTED at Plan 01 close. §1 (audit baseline) + §3 (callsite enumeration) are FINAL at Plan 01 time. §2 + §4 + §5 + §6 carry placeholders Plan 02 populates post-patch.
 
 ---
 
