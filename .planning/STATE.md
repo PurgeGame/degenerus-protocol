@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v43.0
 milestone_name: Active Phases
-status: executing
-last_updated: "2026-05-18T21:00:00.000Z"
-last_activity: 2026-05-18 -- Phase 301 COMPLETE (RngLockDeterminism.t.sol harness shipped; 18 fuzz functions; 17 vm.skip; forge test PASS at FOUNDRY_PROFILE=deep 10k runs)
+status: completed
+last_updated: "2026-05-18T21:16:38.461Z"
+last_activity: 2026-05-18 -- Phase 301 marked complete
 progress:
   total_phases: 6
   completed_phases: 4
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 Phase: 301 — COMPLETE
 Plan: 6 of 6
-Status: Ready to execute (next: Phase 302 SWEEP)
-Last activity: 2026-05-18 -- Phase 301 COMPLETE (RngLockDeterminism.t.sol harness shipped)
+Status: Phase 301 complete
+Last activity: 2026-05-18 -- Phase 301 marked complete
 
 ## Last Shipped Milestone
 
