@@ -1,37 +1,53 @@
 ---
 gsd_state_version: 1.0
-milestone: v42.0
-milestone_name: Active Phases
-status: executing
-last_updated: "2026-05-18T10:27:36.848Z"
-last_activity: 2026-05-18 -- Phase 297 planning complete
+milestone: (between-milestones)
+milestone_name: v42.0 SHIPPED
+status: shipped
+last_updated: "2026-05-18T11:00:00.000Z"
+last_activity: 2026-05-18 -- Phase 297 complete; v42.0 milestone SHIPPED
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 8
   total_plans: 13
-  completed_plans: 11
-  percent: 75
+  completed_plans: 13
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v42.0 milestone open)
+See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 297 — delta audit + findings consolidation (terminal)
+**Current focus:** (between milestones)
 
 ## Current Position
 
-Phase: 297
-Plan: Not started
-Status: Ready to execute
-Resume file: .planning/phases/297-delta-audit-findings-consolidation-terminal/297-CONTEXT.md
+Phase: 297 (delta-audit-findings-consolidation-terminal) — COMPLETE
+Plan: 1 of 1 COMPLETE
+Status: v42.0 SHIPPED — between milestones
+Resume file: (none — v42.0 milestone SHIPPED 2026-05-18)
 Progress: [██████████] 100%
-Last activity: 2026-05-18 -- Phase 297 planning complete
+Last activity: 2026-05-18 -- Phase 297 complete; v42.0 milestone SHIPPED
 
 ## Last Shipped Milestone
+
+**v42.0 — Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf + Lootbox RNG Retry** (shipped 2026-05-18)
+
+- 8 phases (290-297), 13 plans, 60/60 requirements satisfied (10 MINTCLN + 5 TST-MINTCLN + 10 HRROLL + 6 TST-HRROLL + 6 DPNERF + 5 TST-DPNERF + 5 SWEEP + 9 AUDIT + 4 REG)
+- Audit baseline: v41.0 closure HEAD `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` → v42.0 closure HEAD `81d7c94bc924edb3429f6dc16ee33280fc11c7c2` (resolved at the Phase 297 Commit 1 per `D-297-CLOSURE-01` 2-commit sequential SHA orchestration). 5 USER-APPROVED contract commits (Phase 290 MINTCLN `e5665117` + Phase 292 HRROLL `a0218952` + Phase 294 DPNERF initial `47936e0c` + Phase 294 DPNERF BURNIE gap-closure amendment `38319463` + Phase 296 retryLootboxRng `123f2dac` mid-sweep) + 4 USER-APPROVED test commits (Phase 291 TST-MINTCLN `a1404efd` + Phase 293 TST-HRROLL `0cd01a9c` + Phase 295 TST-DPNERF `8027b16c` + Phase 296 VRFStallEdgeCases.t.sol slot-drift + retry-coverage folded into `123f2dac`) + 1 AGENT-COMMITTED Phase 296 LOG bundle `f2bf0767` + 2 AGENT-COMMITTED Phase 297 terminal commits (Commit 1 audit deliverable `81d7c94b` + Commit 2 closure flip). 8-phase surface-pair + sweep + terminal shape (290 MINTCLN contract + 291 MINTCLN tests + 292 HRROLL contract + 293 HRROLL tests + 294 DPNERF contract + 295 DPNERF tests + 296 SWEEP + 297 TERMINAL).
+- Result: 0 of 0 F-42-NN findings RESOLVED_AT_V42 (zero F-NN findings at v42 close; clean closure verdict math per `D-297-VERDICT-01`). 1 Tier-1 ACCEPT_AS_DOCUMENTED on Phase 296 hypothesis (xiv) `retryLootboxRng()` entropy-correlation under daily-flow-takeover composition (user disposition 2026-05-18 — "intended design"; no F-42-NN block authored; no FIX-SWEEP-NN commit landed). 4 audit-subject surfaces: MINTCLN + HRROLL + DPNERF + RETRY_LOOTBOX_RNG (the 4th surface added mid-sweep per `D-297-RETRY-INTEGRATION-01` after user committed `123f2dac` at Phase 296).
+- Adversarial pass: 3-skill HYBRID `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` per `D-296-INVOKE-01` (Task 2 SEQUENTIAL_MAIN_CONTEXT for `/contract-auditor`; Tasks 3+4 PARALLEL_SUBAGENT for `/zero-day-hunter` + `/economic-analyst` per user authorization 2026-05-18 for ~3× wall-clock speedup). 14 charged hypotheses + 8 beyond-charge entries (5 `/zero-day-hunter` B1..B5 + 3 `/economic-analyst` (xv)..(xvii)). 13 of 14 CLEAR first-pass first-tier; (xiv) Tier-1 → user ACCEPT_AS_DOCUMENTED. Tier-2 (3-of-3 consensus) did NOT trigger. RE-PASS not triggered per `D-296-REPASS-SCOPE-01`. `/degen-skeptic` OUT OF SCOPE per `D-271-ADVERSARIAL-02` carry.
+- LEAN regression: 1 PASS REG-01 (v41.0 closure signal `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` NON-WIDENING for v41-touched surfaces NOT in v42 scope — MINTCLN preserves Phase 281 cross-call seed separation invariant via owed-in-baseKey carry; HRROLL preserves Phase 288 `dailyIdx` structural fix as single-writer day anchor; deity common-tier baseline `max(len/50, 2)` UNCHANGED post-DPNERF) + 1 PASS REG-02 (v40.0 closure signal `MILESTONE_V40_AT_HEAD_cd549499` NON-WIDENING; Bernoulli/keccak-self-mix/whole-BURNIE-floor sites byte-identical; only `TraitsGenerated` topic-hash changes per MINTCLN-04) + 1 PASS REG-03 (v34.0 closure signal `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555` NON-WIDENING; TraitUtils + `_pickSoloQuadrant` + JackpotBucketLib byte-identical) + 1 PASS REG-04 (prior-finding spot-check sweep across `audit/FINDINGS-v25..v41.0.md` for v42-touched surface set re-verified RESOLVED or NEGATIVE-scope at v42 close HEAD). Aggregate 4 PASS / 0 REGRESSED.
+- KI envelopes EXC-01..03 RE_VERIFIED-NEGATIVE-scope at v42 (the v42 audit subject has zero affiliate-roll / AdvanceModule game-over-RNG-substitution interaction; the AdvanceModule `retryLootboxRng` surface from Phase 296 `123f2dac` is the rng-retry path which is structurally separate from EXC-01..03 affiliate-roll / game-over surfaces per `D-297-KI-01` explicit distinction prose); EXC-04 STRUCTURALLY ELIMINATED preserved (grep proof: `grep -r "entropyStep" contracts/` returns ZERO matches at v42 close HEAD).
+- KNOWN-ISSUES.md UNMODIFIED per `D-297-KI-01`. Closure verdict `0 of 0 F-42-NN RESOLVED_AT_V42; 0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`.
+- Deliverable: `audit/FINDINGS-v42.0.md` (FINAL READ-only at v42.0 closure HEAD, 9 sections; chmod 444).
+- Closure signal: `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2` (resolved at the Phase 297 Commit 1; propagated verbatim to 5 FINDINGS locations + 3 cross-document propagation targets per `D-297-CLOSURE-01`).
+- Process notes: 8-phase surface-pair + sweep + terminal shape. 5 USER-APPROVED batched contract commits + 4 USER-APPROVED batched test commits per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_manual_review_before_push.md`. Phase 297 terminal phase is SOURCE-TREE FROZEN — zero `contracts/` + zero `test/` mutations during Phase 297 (verified via `git diff HEAD~2 HEAD -- contracts/ test/` returning no output). 2-commit AGENT-COMMITTED terminal-phase shape per `D-297-CLOSURE-01` (Commit 1 audit deliverable + planner-private bundle; Commit 2 closure flip + SHA propagation + chmod 444 + atomic 5-doc closure flip across ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS). v42.0 closure invariant: terminal-phase zero forward-cite emission per `D-297-FCITE-01`; §9d "Deferred to Future Milestones" register carries 9 entries per `D-297-DEFER-01` (4 baseline carries: D-42N-MINTCLN-SCOPE-01 + D-42N-EVT-BREAK-01 + D-40N-LBX02-OUT-01 + D-40N-MINTBOOST-OUT-01 + 3 retryLootboxRng-specific NEW: D-42N-RETRY-RNG-DOMAIN-SEP-01 + D-42N-RETRY-RNG-SCOPE-DOC-01 + D-42N-RETRY-RNG-LAUNCH-FAQ-01 + 1 game-over hardening descriptive label + 1 combined v42-baseline SURF/KI policy carry).
+- See `.planning/MILESTONES.md` for archive
+
+### Prior Shipped Milestone
 
 **v41.0 — Cross-Call Determinism Fix (mint-batch + hero-override)** (shipped 2026-05-17)
 

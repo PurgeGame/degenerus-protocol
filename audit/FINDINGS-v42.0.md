@@ -9,8 +9,8 @@ v34_baseline: 6b63f6d4daf346a53a1d463790f637308ea8d555
 v34_baseline_signal: MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555
 v40_baseline: cd549499
 v40_baseline_signal: MILESTONE_V40_AT_HEAD_cd549499
-audit_subject_head: "<RESOLVED_AT_COMMIT_1>"
-closure_signal: MILESTONE_V42_AT_HEAD_<commit-1-sha>
+audit_subject_head: "81d7c94bc924edb3429f6dc16ee33280fc11c7c2"
+closure_signal: MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2
 deliverable: audit/FINDINGS-v42.0.md
 requirements: [MINTCLN-01, MINTCLN-02, MINTCLN-03, MINTCLN-04, MINTCLN-05, MINTCLN-06, MINTCLN-07, MINTCLN-08, MINTCLN-09, MINTCLN-10,
                TST-MINTCLN-01, TST-MINTCLN-02, TST-MINTCLN-03, TST-MINTCLN-04, TST-MINTCLN-05,
@@ -38,14 +38,14 @@ out_of_scope_skills: [degen-skeptic]
 supersedes: none
 status: "FINAL — READ-ONLY"
 read_only: true
-generated_at: <ISO_DATE_AT_COMMIT_1>
+generated_at: 2026-05-18
 ---
 
 # v42.0 Findings — Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf + Lootbox RNG Retry (Terminal)
 
 ## 1. Audit Subject + Baseline
 
-**Audit Baseline.** The audit baseline is v41.0 closure HEAD `315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` (closure signal `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` carry-forward from `audit/FINDINGS-v41.0.md` §9c). v42.0 closure HEAD is `<RESOLVED_AT_COMMIT_1>` (resolved at Phase 297 Commit 1 per `D-297-CLOSURE-01` 2-commit sequential SHA orchestration; see §9c for the emitted `MILESTONE_V42_AT_HEAD_<commit-1-sha>` signal).
+**Audit Baseline.** The audit baseline is v41.0 closure HEAD `315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` (closure signal `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` carry-forward from `audit/FINDINGS-v41.0.md` §9c). v42.0 closure HEAD is `81d7c94bc924edb3429f6dc16ee33280fc11c7c2` (resolved at Phase 297 Commit 1 per `D-297-CLOSURE-01` 2-commit sequential SHA orchestration; see §9c for the emitted `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2` signal).
 
 **8-Phase Wave Shape (surface-pair + sweep + terminal).** Phases 290 (MINTCLN contract) + 291 (TST-MINTCLN tests) + 292 (HRROLL contract) + 293 (TST-HRROLL tests) + 294 (DPNERF contract — two USER-APPROVED commits: initial fix + BURNIE gap-closure amendment) + 295 (TST-DPNERF tests) + 296 (SWEEP — 3-skill PARALLEL adversarial pass + mid-sweep USER-APPROVED `retryLootboxRng` feature commit `123f2dac`) + 297 (TERMINAL — this deliverable; SOURCE-TREE FROZEN). The v42.0 audit subject is the source-tree delta `git log 315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4..HEAD -- contracts/ test/`:
 
@@ -121,7 +121,7 @@ The §6 KI-eligibility 3-predicate test (D-09) — accepted-design + non-exploit
 
 ### Attestation Anchor
 
-`D-297-CLOSURE-01` 2-commit sequential SHA orchestration: Commit 1 writes `audit/FINDINGS-v42.0.md` with `MILESTONE_V42_AT_HEAD_<commit-1-sha>` placeholder; Commit 2 resolves the placeholder to the Commit 1 SHA, propagates verbatim to 5 FINDINGS verbatim locations + 3 cross-document propagation targets, applies `chmod 444`, and ships the atomic closure flip across ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS.
+`D-297-CLOSURE-01` 2-commit sequential SHA orchestration: Commit 1 writes `audit/FINDINGS-v42.0.md` with `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2` placeholder; Commit 2 resolves the placeholder to the Commit 1 SHA, propagates verbatim to 5 FINDINGS verbatim locations + 3 cross-document propagation targets, applies `chmod 444`, and ships the atomic closure flip across ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS.
 
 ---
 
@@ -463,17 +463,17 @@ Zero post-milestone references emitted. The §9d Deferred-to-Future register use
 
 ### 9b. 8-Phase Wave Summary
 
-Phases 290 (MINTCLN contract `e5665117`) + 291 (TST-MINTCLN tests `a1404efd`) + 292 (HRROLL contract `a0218952`) + 293 (TST-HRROLL tests `0cd01a9c`) + 294 (DPNERF contract initial `47936e0c` + BURNIE gap-closure amendment `38319463`) + 295 (TST-DPNERF tests `8027b16c`) + 296 (SWEEP `f2bf0767` AGENT-COMMITTED LOG bundle + mid-sweep `123f2dac` USER-APPROVED `retryLootboxRng` feature commit) + 297 (TERMINAL; SOURCE-TREE FROZEN; 2 AGENT-COMMITTED commits per `D-297-CLOSURE-01`). The 8-phase wave shape (surface-pair + sweep + terminal) is structurally COMPLETE. Closure signal: `MILESTONE_V42_AT_HEAD_<commit-1-sha>`.
+Phases 290 (MINTCLN contract `e5665117`) + 291 (TST-MINTCLN tests `a1404efd`) + 292 (HRROLL contract `a0218952`) + 293 (TST-HRROLL tests `0cd01a9c`) + 294 (DPNERF contract initial `47936e0c` + BURNIE gap-closure amendment `38319463`) + 295 (TST-DPNERF tests `8027b16c`) + 296 (SWEEP `f2bf0767` AGENT-COMMITTED LOG bundle + mid-sweep `123f2dac` USER-APPROVED `retryLootboxRng` feature commit) + 297 (TERMINAL; SOURCE-TREE FROZEN; 2 AGENT-COMMITTED commits per `D-297-CLOSURE-01`). The 8-phase wave shape (surface-pair + sweep + terminal) is structurally COMPLETE. Closure signal: `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`.
 
 ### 9c. Closure Signal
 
-**Closure signal:** `MILESTONE_V42_AT_HEAD_<commit-1-sha>`.
+**Closure signal:** `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`.
 
 **5 FINDINGS verbatim locations (within `audit/FINDINGS-v42.0.md`):**
-1. Frontmatter `closure_signal:` field (carries `MILESTONE_V42_AT_HEAD_<commit-1-sha>`).
+1. Frontmatter `closure_signal:` field (carries `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`).
 2. Frontmatter `audit_subject_head:` field (carries the raw SHA without the `MILESTONE_V42_AT_HEAD_` prefix — the schema-mandated form per `D-297-FINDINGS-FRONTMATTER-01`).
-3. §1 Audit Subject prose ("v42.0 closure HEAD is `<RESOLVED_AT_COMMIT_1>`...the emitted `MILESTONE_V42_AT_HEAD_<commit-1-sha>` signal").
-4. §9b 8-Phase Wave Summary closing line ("Closure signal: `MILESTONE_V42_AT_HEAD_<commit-1-sha>`").
+3. §1 Audit Subject prose ("v42.0 closure HEAD is `81d7c94bc924edb3429f6dc16ee33280fc11c7c2`...the emitted `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2` signal").
+4. §9b 8-Phase Wave Summary closing line ("Closure signal: `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`").
 5. §9c Closure Signal section canonical mention (this line) + propagation register listing.
 
 **3 cross-document propagation targets (atomic 5-doc closure flip at Commit 2 per `D-297-CLOSURE-01`):**
@@ -514,8 +514,8 @@ The conventional bookkeeping pair `.planning/PROJECT.md` + `.planning/REQUIREMEN
 
 **§9.NN.iii AGENT-COMMITTED audit + planning artifacts:**
 - Phase 296 LOG bundle `f2bf0767` — `docs(296): cross-surface adversarial sweep [SWEEP-01..05]` (CHARGE + 3 per-skill MDs + integrated LOG + CONTEXT + PLAN + DISCUSSION-LOG).
-- Phase 297 Commit 1 — audit deliverable + planner-private bundle (this DRAFT + VERIFY + PLAN + CONTEXT + DISCUSSION-LOG + promoted `audit/FINDINGS-v42.0.md` with `<commit-1-sha>` placeholder).
-- Phase 297 Commit 2 — closure flip + SHA propagation + `chmod 444` (resolves `<commit-1-sha>` placeholder + propagates verbatim to 5 FINDINGS locations + 3 cross-document targets + applies `chmod 444` + 5-doc atomic closure flip across ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS).
+- Phase 297 Commit 1 — audit deliverable + planner-private bundle (this DRAFT + VERIFY + PLAN + CONTEXT + DISCUSSION-LOG + promoted `audit/FINDINGS-v42.0.md` with `81d7c94bc924edb3429f6dc16ee33280fc11c7c2` placeholder).
+- Phase 297 Commit 2 — closure flip + SHA propagation + `chmod 444` (resolves `81d7c94bc924edb3429f6dc16ee33280fc11c7c2` placeholder + propagates verbatim to 5 FINDINGS locations + 3 cross-document targets + applies `chmod 444` + 5-doc atomic closure flip across ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS).
 
 **§9.NN.iv `ADVERSARIAL_TIER_1_RESOLVED`** per `D-297-VERDICT-01`:
 
