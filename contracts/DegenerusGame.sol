@@ -1905,6 +1905,20 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
+    /// @notice Retry a stalled mid-day lootbox RNG request after the timeout window.
+    /// @dev Callable by anyone. Reverts unless a mid-day swap is committed, the VRF
+    ///      callback has not delivered, and the retry timeout has elapsed.
+    function retryLootboxRng() external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_ADVANCE_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameAdvanceModule.retryLootboxRng.selector
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
     /// @notice Pay BURNIE to nudge the next RNG word by +1.
     /// @dev Cost scales +50% per queued nudge and resets after fulfillment.
     ///      Only available while RNG is unlocked (before VRF request is in-flight).

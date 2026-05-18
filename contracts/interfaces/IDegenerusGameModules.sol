@@ -12,6 +12,9 @@ interface IDegenerusGameAdvanceModule {
     /// @notice Requests mid-day lootbox RNG when threshold conditions are met.
     function requestLootboxRng() external;
 
+    /// @notice Retries a stalled mid-day lootbox RNG request after the timeout window.
+    function retryLootboxRng() external;
+
     /// @notice Configures the Chainlink VRF coordinator and subscription
     /// @param coordinator_ Address of the VRF coordinator contract
     /// @param subId Chainlink VRF subscription ID

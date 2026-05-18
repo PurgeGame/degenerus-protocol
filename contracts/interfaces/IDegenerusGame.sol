@@ -264,6 +264,10 @@ interface IDegenerusGame {
     ///      Reverts if daily RNG locked, request pending, threshold not met, or VRF fails.
     function requestLootboxRng() external;
 
+    /// @notice Retry a stalled mid-day lootbox RNG request after the timeout window.
+    /// @dev Only callable when mid-day swap is committed and VRF has not delivered.
+    function retryLootboxRng() external;
+
     /// @notice Check if afKing mode is active for a player.
     /// @param player The player to query.
     /// @return active True if afKing mode is active.

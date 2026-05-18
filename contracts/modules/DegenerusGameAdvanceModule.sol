@@ -138,6 +138,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint16 private constant ADDITIVE_RANDOM_BPS = 1000; // 0–10% additive random on bps
     bytes32 private constant FUTURE_KEEP_TAG = keccak256("future-keep");
     uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
+    uint48 private constant MIDDAY_RNG_RETRY_TIMEOUT = 6 hours;
 
     /// @notice DGNRS reward for top affiliate: 1% of remaining affiliate pool.
     uint16 private constant AFFILIATE_POOL_REWARD_BPS = 100;
@@ -1118,6 +1119,38 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         _lrWrite(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK, 0);
         vrfRequestId = id;
         rngWordCurrent = 0;
+        rngRequestTime = uint48(block.timestamp);
+    }
+
+    /// @notice Retry a stalled mid-day lootbox RNG request after MIDDAY_RNG_RETRY_TIMEOUT.
+    /// @dev Permissionless. Only reachable when the original mid-day request committed
+    ///      a buffer swap (LR_MID_DAY = 1) and the VRF callback has not delivered.
+    ///      Re-fires VRF with the same parameters; the stalled requestId is auto-rejected
+    ///      by the requestId match in rawFulfillRandomWords. Buffer state and the
+    ///      pre-advanced lootboxRngIndex are preserved so the new word lands in the
+    ///      same bucket the original was bound to.
+    function retryLootboxRng() external {
+        if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == 0) revert E();
+        if (rngRequestTime == 0) revert E();
+        if (uint48(block.timestamp) < rngRequestTime + MIDDAY_RNG_RETRY_TIMEOUT) revert E();
+
+        (uint96 linkBal, , , , ) = vrfCoordinator.getSubscription(
+            vrfSubscriptionId
+        );
+        if (linkBal < MIN_LINK_FOR_LOOTBOX_RNG) revert E();
+
+        uint256 id = vrfCoordinator.requestRandomWords(
+            VRFRandomWordsRequest({
+                keyHash: vrfKeyHash,
+                subId: vrfSubscriptionId,
+                requestConfirmations: VRF_MIDDAY_CONFIRMATIONS,
+                callbackGasLimit: VRF_CALLBACK_GAS_LIMIT,
+                numWords: 1,
+                extraArgs: hex""
+            })
+        );
+
+        vrfRequestId = id;
         rngRequestTime = uint48(block.timestamp);
     }
 
