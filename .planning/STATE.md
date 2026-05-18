@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v42.0
 milestone_name: Active Phases
-status: ready_to_plan
-last_updated: 2026-05-18T06:59:54.134Z
-last_activity: 2026-05-18 -- Phase 295 execution started
+status: planning
+last_updated: "2026-05-18T07:58:51.761Z"
+last_activity: 2026-05-18
 progress:
   total_phases: 8
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 11
   completed_plans: 11
-  percent: 63
-stopped_at: Phase 295 complete (1/1) — ready to discuss Phase 296
+  percent: 75
 ---
 
 # Project State
@@ -28,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v4
 Phase: 296
 Plan: Not started
 Status: Ready to plan
-Resume file: .planning/phases/295-dpnerf-regression-fixture-tst-dpnerf/295-CONTEXT.md
+Resume file: .planning/phases/296-cross-surface-adversarial-sweep-sweep/296-CONTEXT.md
 Progress: [██████████] 100%
 Last activity: 2026-05-18
 
