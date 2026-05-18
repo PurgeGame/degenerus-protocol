@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v42.0
 milestone_name: Active Phases
-status: planning
-last_updated: "2026-05-18T07:58:51.761Z"
+status: ready_to_plan
+last_updated: "2026-05-18T04:50:00.000Z"
 last_activity: 2026-05-18
 progress:
   total_phases: 8
-  completed_phases: 6
-  total_plans: 11
-  completed_plans: 11
-  percent: 75
+  completed_phases: 7
+  total_plans: 12
+  completed_plans: 12
+  percent: 88
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v42.0 milestone open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 296 — cross surface adversarial sweep (sweep)
+**Current focus:** Phase 297 — delta audit + findings consolidation (terminal)
 
 ## Current Position
 
-Phase: 296
+Phase: 297
 Plan: Not started
 Status: Ready to plan
-Resume file: .planning/phases/296-cross-surface-adversarial-sweep-sweep/296-CONTEXT.md
+Resume file: TBD — Phase 297 directory not yet created (run /gsd-discuss-phase 297 to begin)
 Progress: [██████████] 100%
 Last activity: 2026-05-18
 
@@ -357,6 +357,7 @@ Audit deliverables:
 | 280 | 01 | single session | 6 | 2 |
 | 292 | 01 | ~9min | 2 | 2 |
 | Phase 293 P02 | ~50m | 7 tasks | 1 files |
+| 296 | 01 | ~75min | 7 tasks | 5 artifacts (CHARGE + 3 skill reports + LOG) |
 
 ## Decisions
 
@@ -379,3 +380,7 @@ Audit deliverables:
 - [Phase 292]: ESCALATION-CHECKPOINT NOT TRIGGERED — Plan 02 may proceed to contract patch
 - [Phase ?]: Phase 293 Plan 02: TST-HRROLL-06 RELAX (option i) — log-only traceability + DailyWinningTraits event-firing positive-path assertion + cite 292-01-MEASUREMENT.md §3.c (mirrors D-291-GAS-01 SKIP-GAS); user 2026-05-17 resolved first-execution BLOCKING_ESCALATION; D-293-INVOKE-01 NOT invoked, contracts/ clean
 - [Phase ?]: Phase 293 Plan 02: Cross-attestation 16/16 production-path replays via DailyWinningTraits.mainTraitsPacked byte-at-winQuadrant decode match JS oracle exactly — D-293-INVOKE-01 ALGORITHM_VERIFIED at production-path level
+- [Phase 296]: D-296-CONSENSUS-01 two-tier rule applied; 13 of 14 charged hypothesis rows + all 8 beyond-charge rows CLEAR on first-pass; Hypothesis (xiv) `retryLootboxRng()` triggered Tier 1 (single-skill FINDING_CANDIDATE LOW from /zero-day-hunter — shared-entropy composition between retry path + daily-flow-takeover); user dispositioned ACCEPT_AS_DOCUMENTED 2026-05-18 ("that is the intended design"); 0 FINDING_CANDIDATE elevated; RE-PASS NOT triggered; SWEEP-03 + AUDIT-05 handoff to Phase 297 §4 + §5 ready
+- [Phase 296]: D-296-INVOKE-01 honored for Task 2 (/contract-auditor SEQUENTIAL in main context); Tasks 3+4 (/zero-day-hunter + /economic-analyst) ran PARALLEL via two Agent() calls in one message under user authorization 2026-05-18 — accepted marginal persona-fidelity trade-off for ~3× wall-clock speedup; both returned valid 14-hypothesis dispositions
+- [Phase 296]: Hypothesis (xiv) `retryLootboxRng()` added beyond-charge mid-sweep per user request 2026-05-18 (originally OUT-OF-SCOPE per working-tree note; flipped IN-SCOPE after user committed the function at `123f2dac feat(296): retryLootboxRng — 6h recovery for swap-committed mid-day VRF stalls [USER-APPROVED]`); audit_subject_head advanced from `aa282b87` to `123f2dac` mid-sweep
+- [Phase 296]: Audit-subject head at sweep close: `123f2dacaf0337c60f769851b90b02c1cdc15b07`; KNOWN-ISSUES.md UNMODIFIED at Phase 296 per D-296-KI-01 (Phase 297 D-42N-KI-01 owns final disposition)
