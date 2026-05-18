@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v43.0
 milestone_name: Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment
 status: executing
-last_updated: "2026-05-18T16:28:26.972Z"
+last_updated: "2026-05-18T18:05:33.625Z"
 last_activity: 2026-05-18
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 14
-  completed_plans: 14
-  percent: 17
+  completed_phases: 2
+  total_plans: 25
+  completed_plans: 25
+  percent: 33
 ---
 
 # Project State
@@ -20,12 +20,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 298 — VRF Read-Graph Catalog (CATALOG)
+**Current focus:** Phase 299 — Fix Recommendation Document (FIXREC)
 
 ## Current Position
 
-Phase: 298 (VRF Read-Graph Catalog (CATALOG)) — EXECUTING
-Plan: 2 of 14
+Phase: 299 (Fix Recommendation Document (FIXREC)) — EXECUTING
+Plan: 2 of 11
 Status: Ready to execute
 Last activity: 2026-05-18
 
@@ -372,6 +372,7 @@ Audit deliverables:
 | 292 | 01 | ~9min | 2 | 2 |
 | Phase 293 P02 | ~50m | 7 tasks | 1 files |
 | 296 | 01 | ~75min | 7 tasks | 5 artifacts (CHARGE + 3 skill reports + LOG) |
+| Phase 299 P11 | 3h | 1 tasks | 2 files |
 
 ## Decisions
 
@@ -398,3 +399,4 @@ Audit deliverables:
 - [Phase 296]: D-296-INVOKE-01 honored for Task 2 (/contract-auditor SEQUENTIAL in main context); Tasks 3+4 (/zero-day-hunter + /economic-analyst) ran PARALLEL via two Agent() calls in one message under user authorization 2026-05-18 — accepted marginal persona-fidelity trade-off for ~3× wall-clock speedup; both returned valid 14-hypothesis dispositions
 - [Phase 296]: Hypothesis (xiv) `retryLootboxRng()` added beyond-charge mid-sweep per user request 2026-05-18 (originally OUT-OF-SCOPE per working-tree note; flipped IN-SCOPE after user committed the function at `123f2dac feat(296): retryLootboxRng — 6h recovery for swap-committed mid-day VRF stalls [USER-APPROVED]`); audit_subject_head advanced from `aa282b87` to `123f2dac` mid-sweep
 - [Phase 296]: Audit-subject head at sweep close: `123f2dacaf0337c60f769851b90b02c1cdc15b07`; KNOWN-ISSUES.md UNMODIFIED at Phase 296 per D-296-KI-01 (Phase 297 D-42N-KI-01 owns final disposition)
+- [Phase 299]: Phase 299 FIXREC complete: 11/11 plans complete; canonical .planning/RNGLOCK-FIXREC.md (703KB / 6184 lines / 119 v44.0 handoff anchors / 111 logical sections). EV-tier discipline lens applied — V-184 sole CATASTROPHE-tier finding; V-016/V-017/V-018 STALE-CATALOG-ROW; V-063 lens-reclassified to FALSE-POSITIVE (claimablePool is pull-pattern accumulator, not VRF input); V-047/V-048/V-050 PENDING-VERIFICATION (deferred to Phase 302 SWEEP); governance writers (V-137/V-155/V-157/V-159/V-161) downgraded from cluster-author CATASTROPHE to HIGH at most. Subsumption map: V-184 closes V-186/V-188/V-190/V-191/V-192/V-193 via one fix. Active-fix anchor count ≈ 95 of 119; remaining 24 are catalog-hygiene/verification-only.
