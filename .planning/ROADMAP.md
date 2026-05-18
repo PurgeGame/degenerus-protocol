@@ -90,9 +90,24 @@ Plans:
 
 ### Phase 299: Fix Recommendation Document (FIXREC)
 
-**Goal:** Audit-only repurpose per `D-43N-AUDIT-ONLY-01`. For each VIOLATION tuple in Phase 298 catalog, produce a per-VIOLATION analysis entry covering: design-intent backward-trace (cite the original phase that introduced the slot/writer per `feedback_design_intent_before_deletion.md` discipline); actor game-theory walk (who exploits + how + EV magnitude); recommended remediation tactic (a/b/c/d menu) with full rationale + bytecode / storage-layout / public-ABI impact estimate; v44.0 FIX-MILESTONE handoff anchor (locked decision ID + line-cite). Output `.planning/RNGLOCK-FIXREC.md` + FINDINGS-v43.0.md §3.D entry. Requirements FIXREC-01..05. Wave shape: 1 AGENT-COMMITTED FIXREC artifact bundle. Zero `contracts/` + `test/` mutations. Replaces the pre-pivot Structural Fix Wave; contract changes deferred to v44.0 FIX-MILESTONE.
+**Goal:** Audit-only repurpose per `D-43N-AUDIT-ONLY-01`. For each VIOLATION tuple in Phase 298 catalog, produce a per-VIOLATION analysis entry covering: design-intent backward-trace (cite the original phase that introduced the slot/writer per `feedback_design_intent_before_deletion.md` discipline); actor game-theory walk (who exploits + how + EV magnitude); recommended remediation tactic (a/b/c/d menu) with full rationale + bytecode / storage-layout / public-ABI impact estimate; v44.0 FIX-MILESTONE handoff anchor (locked decision ID + line-cite). Output `.planning/RNGLOCK-FIXREC.md` + FINDINGS-v43.0.md §3.D entry. Requirements FIXREC-01..05. Wave shape: 10 Wave-1 parallel sub-agent cluster contributions (by participating-slot family per D-299-EXEC-SHAPE-01 + slot-locality clustering of RNGLOCK-CATALOG.md §15) + 1 Wave-2 aggregation into RNGLOCK-FIXREC.md per D-299-WAVE-SHAPE-01. Zero `contracts/` + `test/` mutations. Replaces the pre-pivot Structural Fix Wave; contract changes deferred to v44.0 FIX-MILESTONE.
 
 **Depends on:** Phase 298
+
+**Plans:** 11 plans (10 Wave-1 parallel cluster contributions by participating-slot family + 1 Wave-2 aggregation)
+
+Plans:
+- [ ] 299-01-PLAN.md — Wave 1: Cluster A (dailyHeroWagers + autoRebuyState; V-003..V-005, V-009..V-013; H-01..H-08)
+- [ ] 299-02-PLAN.md — Wave 1: Cluster B (traitBurnTicket admin + deityBySymbol whale; V-016..V-019; H-09..H-12)
+- [ ] 299-03-PLAN.md — Wave 1: Cluster C (prizePoolsPacked EOA purchase/payout; V-024..V-027, V-030..V-032; H-13..H-19)
+- [ ] 299-04-PLAN.md — Wave 1: Cluster D (sDGNRS poolBalances Reward + Lootbox cross-contract; V-043, V-045..V-048, V-050, V-051; H-20..H-26)
+- [ ] 299-05-PLAN.md — Wave 1: Cluster E (claimablePool game-over family; V-054, V-055, V-057, V-058, V-063..V-065; H-27..H-33)
+- [ ] 299-06-PLAN.md — Wave 1: Cluster F (pendingRedemptionEthValue + deityPass + ETH/stETH balance; V-066, V-068..V-074, V-080; H-34..H-42)
+- [ ] 299-07-PLAN.md — Wave 1: Cluster G (per-index lootbox commitment slots + lootboxEvBenefitUsedByLevel; V-081, V-082, V-084, V-088..V-104; H-43..H-62)
+- [ ] 299-08-PLAN.md — Wave 1: Cluster H (presale + mintPacked_ + boonPacked + lastPurchaseDay; V-105, V-109..V-114, V-117, V-120..V-125, V-127; H-63..H-77)
+- [ ] 299-09-PLAN.md — Wave 1: Cluster I (rngRequestTime governance + cross-contract affiliate/quest + Degenerette nonce + presale-pending + lootboxRng commitment-side + VRF config; V-137, V-140..V-142, V-147, V-149, V-153, V-155..V-161; H-78..H-91; includes §0-headline-#6 _requestLootboxRng scope-expansion analysis)
+- [ ] 299-10-PLAN.md — Wave 1: Cluster J (ticketQueue + ticketsOwedPacked V-179 fan-out + sStonk redemption family + bountyOwedTo + decBurn; V-168..V-172, V-174..V-177, V-179, V-182, V-184, V-186, V-188, V-190..V-193, V-201, V-202; H-92..H-119; includes §0-headline-#1 V-184 sStonk cross-day re-roll exploit TIER-1)
+- [ ] 299-11-PLAN.md — Wave 2: Aggregate 10 cluster contributions into .planning/RNGLOCK-FIXREC.md; author §0 executive summary + §M consolidated handoff register
 
 ### Phase 300: Admin Path Enumeration Audit (ADMA)
 
