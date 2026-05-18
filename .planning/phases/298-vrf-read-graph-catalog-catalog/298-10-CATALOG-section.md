@@ -148,7 +148,7 @@ For each `Participating? = YES` slot in §B, every external/public function acro
 
 ## CAT-04 (§D) — Verdict Matrix
 
-Per-(slot × writer × callsite) classification. Tokens: `EXEMPT-ADVANCEGAME` | `EXEMPT-VRFCALLBACK` | `EXEMPT-RETRYLOOTBOXRNG` | `VIOLATION`. Per `D-43N-AUDIT-ONLY-01` — NO SAFE_BY_DESIGN class. Per `D-298-EXEMPT-REACH-01` strict + per-callsite. Per `D-298-EXEMPT-CROSSCONTRACT-01` cross-contract EXEMPT preserved when callsite traces to EXEMPT stack.
+Per-(slot × writer × callsite) classification. Tokens: `EXEMPT-ADVANCEGAME` | `EXEMPT-VRFCALLBACK` | `EXEMPT-RETRYLOOTBOXRNG` | `VIOLATION`. Per `D-43N-AUDIT-ONLY-01` — no discretionary-safe class permitted (v43.0 milestone goal explicitly precludes the legacy disposition for participating slots). Per `D-298-EXEMPT-REACH-01` strict + per-callsite. Per `D-298-EXEMPT-CROSSCONTRACT-01` cross-contract EXEMPT preserved when callsite traces to EXEMPT stack.
 
 | # | Slot | Writer fn | Callsite file:line | Reach analysis | Classification |
 |---|------|-----------|--------------------|----------------|---------------|
@@ -195,7 +195,7 @@ Per-(slot × writer × callsite) classification. Tokens: `EXEMPT-ADVANCEGAME` | 
 | 41 | `ticketsOwedPacked[rk][player]` | self-writes inside `processFutureTicketBatch` | `MintModule.sol:433/:445/:455/:490` | EXEMPT-ADVANCEGAME (self-stack) | **EXEMPT-ADVANCEGAME** |
 | 42 | `ticketsOwedPacked[rk][player]` | self-writes inside `processTicketBatch`/`_processOneTicketEntry`/`_resolveZeroOwedRemainder` | `MintModule.sol:733/:740/:746/:814` | EXEMPT-ADVANCEGAME (self-stack) | **EXEMPT-ADVANCEGAME** |
 
-> **All rows carry a concrete EXEMPT/VIOLATION token.** Every callsite × slot × writer tuple in §C carries one of `EXEMPT-ADVANCEGAME` / `EXEMPT-VRFCALLBACK` / `EXEMPT-RETRYLOOTBOXRNG` / `VIOLATION` per `D-43N-AUDIT-ONLY-01` + `D-298-EXEMPT-REACH-01` strict. NO `SAFE_BY_DESIGN` classifications.
+> **All rows carry a concrete EXEMPT/VIOLATION token.** Every callsite × slot × writer tuple in §C carries one of `EXEMPT-ADVANCEGAME` / `EXEMPT-VRFCALLBACK` / `EXEMPT-RETRYLOOTBOXRNG` / `VIOLATION` per `D-43N-AUDIT-ONLY-01` + `D-298-EXEMPT-REACH-01` strict. Zero rows escape the 4-token verdict set.
 
 > **Row-class summary:** Rows classified `VIOLATION`: **17, 18, 19, 20, 21, 23, 24, 25, 26, 31, 32, 33, 34, 35, 37, 38, 39, 40** = **18 rows**. Rows classified `EXEMPT-ADVANCEGAME`: 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 22, 27, 28, 29, 30, 36, 41, 42 = **23 rows**. Rows classified `EXEMPT-VRFCALLBACK`: 4 = **1 row**. Rows classified `EXEMPT-RETRYLOOTBOXRNG`: **0 rows** (not in this consumer's reach set — domain-separated VRF). Total = **42 rows**.
 
@@ -240,4 +240,4 @@ Per `D-298-RECOMMEND-DEPTH-01`: one tactic ∈ `(a)` `rngLockedFlag`-gated rever
 
 ---
 
-**§10 catalog complete.** 7 participating slots enumerated. 42 verdict rows. 18 VIOLATION rows, all dispositioned tactic (a) `rngLockedFlag`-gated revert. NO `SAFE_BY_DESIGN` classifications.
+**§10 catalog complete.** 7 participating slots enumerated. 42 verdict rows. 18 VIOLATION rows, all dispositioned tactic (a) `rngLockedFlag`-gated revert. Every row carries one of the 4 allowed classification tokens (no discretionary-safe escape).
