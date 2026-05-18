@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v42.0
 milestone_name: Active Phases
-status: ready_to_plan
-last_updated: "2026-05-18T04:50:00.000Z"
+status: planning
+last_updated: "2026-05-18T10:09:00.398Z"
 last_activity: 2026-05-18
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 6
   total_plans: 12
-  completed_plans: 12
-  percent: 88
+  completed_plans: 11
+  percent: 75
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v4
 Phase: 297
 Plan: Not started
 Status: Ready to plan
-Resume file: TBD — Phase 297 directory not yet created (run /gsd-discuss-phase 297 to begin)
+Resume file: .planning/phases/297-delta-audit-findings-consolidation-terminal/297-CONTEXT.md
 Progress: [██████████] 100%
 Last activity: 2026-05-18
 
