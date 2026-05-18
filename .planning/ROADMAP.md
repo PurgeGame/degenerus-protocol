@@ -70,6 +70,24 @@
 
 **Depends on:** None
 
+**Plans:** 14 plans (13 Wave-1 per-consumer sub-agent dispatches + 1 Wave-2 aggregation per D-298-EXEC-SHAPE-01)
+
+Plans:
+- [ ] 298-01-PLAN.md — Wave 1: §1 backward-trace from JackpotModule.payDailyJackpot (file:line 339)
+- [ ] 298-02-PLAN.md — Wave 1: §2 backward-trace from JackpotModule.payDailyJackpotCoinAndTickets (file:line 596)
+- [ ] 298-03-PLAN.md — Wave 1: §3 backward-trace from JackpotModule.runTerminalJackpot (file:line 278)
+- [ ] 298-04-PLAN.md — Wave 1: §4 backward-trace from DecimatorModule.runTerminalDecimatorJackpot (file:line 755)
+- [ ] 298-05-PLAN.md — Wave 1: §5 backward-trace from GameOverModule rngWordByDay substitution (file:line 100)
+- [ ] 298-06-PLAN.md — Wave 1: §6 backward-trace from LootboxModule.resolveRedemptionLootbox (file:line 707)
+- [ ] 298-07-PLAN.md — Wave 1: §7 backward-trace from LootboxModule._resolveLootboxCommon / _resolveLootboxRoll (file:line 960 / 1623)
+- [ ] 298-08-PLAN.md — Wave 1: §8 backward-trace from DegeneretteModule._resolveLootboxDirect + inline consumer (file:line 797 / 594)
+- [ ] 298-09-PLAN.md — Wave 1: §9 backward-trace from AdvanceModule.retryLootboxRng failsafe (file:line 1132)
+- [ ] 298-10-PLAN.md — Wave 1: §10 backward-trace from MintModule trait-generation consumer (Phase 290 MINTCLN surface)
+- [ ] 298-11-PLAN.md — Wave 1: §11 backward-trace from BurnieCoinflip._resolveFlip + win-decode (file:line 807 / 837)
+- [ ] 298-12-PLAN.md — Wave 1: §12 backward-trace from StakedDegenerusStonk.resolveRedemptionPeriod + rngWordForDay re-read (file:line 585 / 670)
+- [ ] 298-13-PLAN.md — Wave 1: §13 backward-trace from DecimatorModule._awardDecimatorLootbox cluster + cross-call re-read (file:line 573 / 771)
+- [ ] 298-14-PLAN.md — Wave 2: Aggregate §1..§13 into .planning/RNGLOCK-CATALOG.md; author §0 + §14 unique-slot index + §15 per-slot writer table + §16 verdict matrix + §17 CAT-06 grep-gate attestation
+
 ### Phase 299: Fix Recommendation Document (FIXREC)
 
 **Goal:** Audit-only repurpose per `D-43N-AUDIT-ONLY-01`. For each VIOLATION tuple in Phase 298 catalog, produce a per-VIOLATION analysis entry covering: design-intent backward-trace (cite the original phase that introduced the slot/writer per `feedback_design_intent_before_deletion.md` discipline); actor game-theory walk (who exploits + how + EV magnitude); recommended remediation tactic (a/b/c/d menu) with full rationale + bytecode / storage-layout / public-ABI impact estimate; v44.0 FIX-MILESTONE handoff anchor (locked decision ID + line-cite). Output `.planning/RNGLOCK-FIXREC.md` + FINDINGS-v43.0.md §3.D entry. Requirements FIXREC-01..05. Wave shape: 1 AGENT-COMMITTED FIXREC artifact bundle. Zero `contracts/` + `test/` mutations. Replaces the pre-pivot Structural Fix Wave; contract changes deferred to v44.0 FIX-MILESTONE.
