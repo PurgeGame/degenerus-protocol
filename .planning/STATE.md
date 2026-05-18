@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v42.0
 milestone_name: Active Phases
-status: executing
-last_updated: "2026-05-18T06:09:29.332Z"
-last_activity: 2026-05-18 -- Phase 295 planning complete
+status: ready_to_plan
+last_updated: 2026-05-18T06:59:54.134Z
+last_activity: 2026-05-18 -- Phase 295 execution started
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
   percent: 63
+stopped_at: Phase 295 complete (1/1) — ready to discuss Phase 296
 ---
 
 # Project State
@@ -20,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v42.0 milestone open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 294 — Deity-Pass Gold Nerf (DPNERF)
+**Current focus:** Phase 296 — cross surface adversarial sweep (sweep)
 
 ## Current Position
 
-Phase: 294 — COMPLETE
-Plan: 1 of 2
-Status: Ready to execute
+Phase: 296
+Plan: Not started
+Status: Ready to plan
 Resume file: .planning/phases/295-dpnerf-regression-fixture-tst-dpnerf/295-CONTEXT.md
 Progress: [██████████] 100%
-Last activity: 2026-05-18 -- Phase 295 planning complete
+Last activity: 2026-05-18
 
 ## Last Shipped Milestone
 
