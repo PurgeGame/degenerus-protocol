@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v42.0
 milestone_name: Active Phases
-status: completed
-last_updated: "2026-05-18T05:44:13.283Z"
-last_activity: 2026-05-18 -- Phase 294 marked complete
+status: executing
+last_updated: "2026-05-18T06:09:29.332Z"
+last_activity: 2026-05-18 -- Phase 295 planning complete
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 10
+  total_plans: 11
   completed_plans: 10
   percent: 63
 ---
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v4
 
 Phase: 294 — COMPLETE
 Plan: 1 of 2
-Status: Phase 294 complete
+Status: Ready to execute
 Resume file: .planning/phases/295-dpnerf-regression-fixture-tst-dpnerf/295-CONTEXT.md
 Progress: [██████████] 100%
-Last activity: 2026-05-18 -- Phase 294 marked complete
+Last activity: 2026-05-18 -- Phase 295 planning complete
 
 ## Last Shipped Milestone
 
