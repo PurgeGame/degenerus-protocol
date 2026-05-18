@@ -222,7 +222,10 @@ Plans:
   4. Gold-tile EV regression measured — N = 1,000 gold-tier trait wins across both ETH + BURNIE paths yield empirical deity virtual-entry total equal to N × 1 = N (vs v41 baseline of N × `max(len/50, 2)`); EV reduction matches analytical expectation per D-42N-DEITY-EV-01.
   5. Non-deity holders unaffected PASSES — gold-tier trait win without deity-pass ownership yields unchanged non-deity virtual-count logic (DPNERF-01 only branches when `deity != address(0)` per existing logic); confirms DPNERF doesn't accidentally narrow the function's non-deity behavior.
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 295-01-PLAN.md — TST-DPNERF-01..05 regression fixture (JS helper + test file; production-path payDailyJackpot + payDailyCoinJackpot; hybrid 1000-iter JS-replay + 16-iter cross-attestation; ZERO contracts/ mutations; single batched USER-APPROVED commit at phase close)
 
 ### Phase 296: Cross-Surface Adversarial Sweep (SWEEP)
 
