@@ -73,20 +73,20 @@
 **Plans:** 14 plans (13 Wave-1 per-consumer sub-agent dispatches + 1 Wave-2 aggregation per D-298-EXEC-SHAPE-01)
 
 Plans:
-- [ ] 298-01-PLAN.md — Wave 1: §1 backward-trace from JackpotModule.payDailyJackpot (file:line 339)
-- [ ] 298-02-PLAN.md — Wave 1: §2 backward-trace from JackpotModule.payDailyJackpotCoinAndTickets (file:line 596)
-- [ ] 298-03-PLAN.md — Wave 1: §3 backward-trace from JackpotModule.runTerminalJackpot (file:line 278)
-- [ ] 298-04-PLAN.md — Wave 1: §4 backward-trace from DecimatorModule.runTerminalDecimatorJackpot (file:line 755)
-- [ ] 298-05-PLAN.md — Wave 1: §5 backward-trace from GameOverModule rngWordByDay substitution (file:line 100)
-- [ ] 298-06-PLAN.md — Wave 1: §6 backward-trace from LootboxModule.resolveRedemptionLootbox (file:line 707)
-- [ ] 298-07-PLAN.md — Wave 1: §7 backward-trace from LootboxModule._resolveLootboxCommon / _resolveLootboxRoll (file:line 960 / 1623)
-- [ ] 298-08-PLAN.md — Wave 1: §8 backward-trace from DegeneretteModule._resolveLootboxDirect + inline consumer (file:line 797 / 594)
-- [ ] 298-09-PLAN.md — Wave 1: §9 backward-trace from AdvanceModule.retryLootboxRng failsafe (file:line 1132)
-- [ ] 298-10-PLAN.md — Wave 1: §10 backward-trace from MintModule trait-generation consumer (Phase 290 MINTCLN surface)
-- [ ] 298-11-PLAN.md — Wave 1: §11 backward-trace from BurnieCoinflip._resolveFlip + win-decode (file:line 807 / 837)
-- [ ] 298-12-PLAN.md — Wave 1: §12 backward-trace from StakedDegenerusStonk.resolveRedemptionPeriod + rngWordForDay re-read (file:line 585 / 670)
-- [ ] 298-13-PLAN.md — Wave 1: §13 backward-trace from DecimatorModule._awardDecimatorLootbox cluster + cross-call re-read (file:line 573 / 771)
-- [ ] 298-14-PLAN.md — Wave 2: Aggregate §1..§13 into .planning/RNGLOCK-CATALOG.md; author §0 + §14 unique-slot index + §15 per-slot writer table + §16 verdict matrix + §17 CAT-06 grep-gate attestation
+- [x] 298-01-PLAN.md — Wave 1: §1 backward-trace from JackpotModule.payDailyJackpot (file:line 339)
+- [x] 298-02-PLAN.md — Wave 1: §2 backward-trace from JackpotModule.payDailyJackpotCoinAndTickets (file:line 596)
+- [x] 298-03-PLAN.md — Wave 1: §3 backward-trace from JackpotModule.runTerminalJackpot (file:line 278)
+- [x] 298-04-PLAN.md — Wave 1: §4 backward-trace from DecimatorModule.runTerminalDecimatorJackpot (file:line 755)
+- [x] 298-05-PLAN.md — Wave 1: §5 backward-trace from GameOverModule rngWordByDay substitution (file:line 100)
+- [x] 298-06-PLAN.md — Wave 1: §6 backward-trace from LootboxModule.resolveRedemptionLootbox (file:line 707)
+- [x] 298-07-PLAN.md — Wave 1: §7 backward-trace from LootboxModule._resolveLootboxCommon / _resolveLootboxRoll (file:line 960 / 1623)
+- [x] 298-08-PLAN.md — Wave 1: §8 backward-trace from DegeneretteModule._resolveLootboxDirect + inline consumer (file:line 797 / 594)
+- [x] 298-09-PLAN.md — Wave 1: §9 backward-trace from AdvanceModule.retryLootboxRng failsafe (file:line 1132)
+- [x] 298-10-PLAN.md — Wave 1: §10 backward-trace from MintModule trait-generation consumer (Phase 290 MINTCLN surface)
+- [x] 298-11-PLAN.md — Wave 1: §11 backward-trace from BurnieCoinflip._resolveFlip + win-decode (file:line 807 / 837)
+- [x] 298-12-PLAN.md — Wave 1: §12 backward-trace from StakedDegenerusStonk.resolveRedemptionPeriod + rngWordForDay re-read (file:line 585 / 670)
+- [x] 298-13-PLAN.md — Wave 1: §13 backward-trace from DecimatorModule._awardDecimatorLootbox cluster + cross-call re-read (file:line 573 / 771)
+- [x] 298-14-PLAN.md — Wave 2: Aggregate §1..§13 into .planning/RNGLOCK-CATALOG.md; author §0 + §14 unique-slot index + §15 per-slot writer table + §16 verdict matrix + §17 CAT-06 grep-gate attestation
 
 ### Phase 299: Fix Recommendation Document (FIXREC)
 
