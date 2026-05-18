@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v42.0
 milestone_name: Active Phases
 status: completed
-last_updated: "2026-05-18T05:21:14.513Z"
+last_updated: "2026-05-18T05:44:13.283Z"
 last_activity: 2026-05-18 -- Phase 294 marked complete
 progress:
   total_phases: 8
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v4
 Phase: 294 — COMPLETE
 Plan: 1 of 2
 Status: Phase 294 complete
-Resume file: .planning/phases/294-deity-pass-gold-nerf-dpnerf/294-CONTEXT.md
+Resume file: .planning/phases/295-dpnerf-regression-fixture-tst-dpnerf/295-CONTEXT.md
 Progress: [██████████] 100%
 Last activity: 2026-05-18 -- Phase 294 marked complete
 
