@@ -126,6 +126,16 @@ Plans:
 
 **Depends on:** Phases 298 + 299 + 300
 
+**Plans:** 6 plans across 2 waves — Wave 1 (5 parallel cluster contributions: scaffold + jackpot + lootbox + mixed + edgecase) + Wave 2 (1 aggregator that materializes the canonical single-file harness + adds vm.skip blocks + forge test PASS attestation + AGENT-COMMITTED batched test commit per D-301-WAVE-SHAPE-01)
+
+Plans:
+- [ ] 301-01-PLAN.md — Wave 1: Author scaffold contribution (contract header + shared helpers + 2 reference fuzz functions PayDailyJackpot + RunTerminalJackpot) — locks the 6-phase template for cluster plans 02/03/04
+- [ ] 301-02-PLAN.md — Wave 1: Author jackpot-cluster contribution (PayDailyJackpotCoinAndTickets + RunTerminalDecimatorJackpot)
+- [ ] 301-03-PLAN.md — Wave 1: Author lootbox-cluster contribution (4 functions: ResolveRedemptionLootbox + ResolveLootboxCommon + DegeneretteLootboxDirect + DecimatorAwardLootbox)
+- [ ] 301-04-PLAN.md — Wave 1: Author mixed-cluster contribution (5 functions: MintTraitGeneration + BurnieCoinflipResolve + StakedStonkRedemption + GameOverRngSubstitution + RetryLootboxRng [opposite-direction])
+- [ ] 301-05-PLAN.md — Wave 1: Author edge-case cluster contribution (5 functions per D-301-EDGE-CASES-01: AdminDuringLock + NearEndOfWindow + MultiTxBatch + MultiBlock + RetryLootboxRngDuringLock)
+- [ ] 301-06-PLAN.md — Wave 2: Aggregate Wave-1 contributions into canonical test/fuzz/RngLockDeterminism.t.sol + add vm.skip blocks per D-301-VMSKIP-MECHANISM-01 Option C + forge test PASS (FOUNDRY_PROFILE=deep, 10k runs) + AGENT-COMMITTED batched test commit per D-301-WAVE-SHAPE-01
+
 ### Phase 302: Cross-Surface Adversarial Sweep (SWEEP)
 
 **Goal:** 3-skill HYBRID adversarial pass per Phase 296 `D-296-INVOKE-01` precedent: `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT + `/zero-day-hunter` + `/economic-analyst` PARALLEL_SUBAGENT. Invocation pre-authorized per `D-43N-SWEEP-PREAUTH-01` — Phase 302 fires the 3-skill HYBRID without re-pinging; Tier-1 any-skill FINDING_CANDIDATE still pings per `D-296-CONSENSUS-01` (the milestone goal precludes SAFE_BY_DESIGN, so escalation routes elevation to v44.0 FIXREC-augment commit, not to a Phase 299-style FIX wave). Charged with finding any storage path violating the freeze invariant — composition attacks, cross-module read/write races, ERC-callback-induced state mutations, multi-block window exploits, game-theoretic write-induced effects, multi-tx batched perturbations. `/degen-skeptic` OUT OF SCOPE per `D-271-ADVERSARIAL-02` carry. `/economic-analyst` IN SCOPE per `D-271-ADVERSARIAL-03` carry. Disposition: any FINDING_CANDIDATE → appended FIXREC entry in Phase 299 artifact; any SAFE_BY_DESIGN candidate is REJECTED. Re-pass discipline per `D-284-ADVERSARIAL-RE-PASS-01` if any FIXREC-augment commit lands. Requirements SWP-01..05. Wave shape: 1 AGENT-COMMITTED `.planning/phases/302-*/302-01-ADVERSARIAL-LOG.md` artifact with 3 H2 sections (one per skill) + Disposition section. Zero `contracts/` + `test/` mutations.
