@@ -191,7 +191,7 @@ External entry reaching write: `advanceGame()` only.
 
 ## CAT-04 (§D) — Verdict Matrix
 
-Per-(slot × writer × callsite) classification. Strict per `D-298-EXEMPT-REACH-01` (stack-rooted, per-callsite) + `D-298-EXEMPT-CROSSCONTRACT-01` (EXEMPT propagates through static call-graph descendancy across in-source contracts). 3 EXEMPT classes only: `EXEMPT-ADVANCEGAME` (descendant of `advanceGame()` resolution stack), `EXEMPT-VRFCALLBACK` (descendant of `rawFulfillRandomWords`), `EXEMPT-RETRYLOOTBOXRNG` (descendant of `retryLootboxRng`). Everything else = `VIOLATION`. NO SAFE_BY_DESIGN.
+Per-(slot × writer × callsite) classification. Strict per `D-298-EXEMPT-REACH-01` (stack-rooted, per-callsite) + `D-298-EXEMPT-CROSSCONTRACT-01` (EXEMPT propagates through static call-graph descendancy across in-source contracts). 3 EXEMPT classes only: `EXEMPT-ADVANCEGAME` (descendant of `advanceGame()` resolution stack), `EXEMPT-VRFCALLBACK` (descendant of `rawFulfillRandomWords`), `EXEMPT-RETRYLOOTBOXRNG` (descendant of `retryLootboxRng`). Everything else = `VIOLATION`. Discretionary "safe by design" dispositions are precluded by the v43.0 milestone goal per `D-298-EXEMPT-REACH-01`.
 
 | Slot | Writer function | Callsite (file:line) | Reached from EXEMPT stack? | Classification |
 |------|-----------------|---------------------|----------------------------|----------------|
