@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v43.0
 milestone_name: Active Phases
-status: completed
-last_updated: "2026-05-18T19:58:51.711Z"
-last_activity: 2026-05-18 -- Phase 300 marked complete
+status: executing
+last_updated: "2026-05-18T21:00:00.000Z"
+last_activity: 2026-05-18 -- Phase 301 COMPLETE (RngLockDeterminism.t.sol harness shipped; 18 fuzz functions; 17 vm.skip; forge test PASS at FOUNDRY_PROFILE=deep 10k runs)
 progress:
   total_phases: 6
-  completed_phases: 3
-  total_plans: 26
-  completed_plans: 26
-  percent: 50
+  completed_phases: 4
+  total_plans: 32
+  completed_plans: 32
+  percent: 67
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 ## Current Position
 
-Phase: 300 — COMPLETE
-Plan: 1 of 1
-Status: Phase 300 complete
-Last activity: 2026-05-18 -- Phase 300 marked complete
+Phase: 301 — COMPLETE
+Plan: 6 of 6
+Status: Ready to execute (next: Phase 302 SWEEP)
+Last activity: 2026-05-18 -- Phase 301 COMPLETE (RngLockDeterminism.t.sol harness shipped)
 
 ## Last Shipped Milestone
 
@@ -260,6 +260,15 @@ Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-fo
 | audit_process | Phase 257 Task 7 manual-fallback record | resolved at v34 | The original Phase 257 Task 7 adversarial validation fell back to executor-manual when `/contract-auditor` and `/zero-day-hunter` skills failed to spawn. RESOLVED at v34.0 Phase 262 Task 6 — both skills successfully spawned in parallel with real captured output (see `.planning/milestones/v34.0-phases/262-delta-audit-findings-consolidation/262-01-ADVERSARIAL-LOG.md`). The C4A-warden-contest independence-claim hardening is satisfied at v34 closure HEAD `6b63f6d4`. Concurrent v33.0 close concern (queue-branch redirect bug) was already structurally closed in Phase 258 FIX-01 + FIX-02 prior to the v34 re-run. |
 
 ## Accumulated Context
+
+### Phase 301 — State-Shuffle Determinism Fuzz Harness (COMPLETE 2026-05-18)
+
+- **Phase 301 COMPLETE** — 6 plans across 2 waves: Wave 1 (5 parallel cluster contributions: 01 SCAFFOLD + 02 JACKPOT + 03 LOOTBOX + 04 MIXED + 05 EDGECASE) + Wave 2 (06 aggregator). Canonical harness `test/fuzz/RngLockDeterminism.t.sol` shipped: 1,778 lines, 18 fuzz functions (13 CAT-01 per-consumer + 5 D-301-EDGE-CASES-01 edge-case), 17 vm.skip blocks cross-referencing RNGLOCK-FIXREC.md sec_N + v44.0 D-43N-V44-HANDOFF-NN anchors per D-301-VMSKIP-MECHANISM-01 Option C, 1 NOT-skipped opposite-direction test (RetryLootboxRng) PASSING at 10k FOUNDRY_PROFILE=deep runs. Suite result: ok (1 PASS + 17 SKIP + 0 FAIL). Zero `contracts/` mutations per D-43N-AUDIT-ONLY-01. AGENT-COMMITTED batched test-tree commit per D-301-WAVE-SHAPE-01.
+- **D-301-VMSKIP-MECHANISM-01 Option C (LOAD-BEARING):** the 17 vm.skip blocks were authored pre-emptively at aggregation time per the plan's interfaces table (mapping each fuzz function to its FIXREC sec_N + HANDOFF-NN cross-reference). Rather than running un-skipped first then iteratively adding skips per empirical failure, the aggregator used the FIXREC sec0.4/sec0.5 EV-tier breakdown as the authoritative skip-mapping. v44.0 FIX-MILESTONE plan-phase reads each skip's `// SKIP: ... -- v44.0 D-43N-V44-HANDOFF-NN flips this to strict assertion` comment as load-bearing input for FIX-NN sub-phase scoping.
+- **D-301-COVERAGE-01 line 9 RetryLootboxRng (OPPOSITE-DIRECTION; NOT-SKIPPED):** PASSES at 10k FOUNDRY_PROFILE=deep runs after a slot-constant bug-fix (SLOT_LOOTBOX_RNG_INDEX was 38 in `LootboxRngLifecycle.t.sol` precedent; correct value at v43.0 HEAD is 37 per `forge inspect DegenerusGame storage-layout`). The dual-assertion shape (assertNotEq pre-vs-post-retry + assertEq across perturbed-vs-baseline-retry-paths) is the harness's load-bearing attestation that the failsafe DOES change VRF-derived outputs via fresh VRF word (per `D-301-COVERAGE-01` line 9), while perturbations during the retry path DO NOT additionally drift outputs (per `D-42N-RETRY-RNG-DOMAIN-SEP-01` Option A invariant 3).
+- **8 auto-fixed deviations during Task 1+2 aggregation (Rule 1/2/3):** (a) Slot constant correction (Rule 1 bug; SLOT_LOOTBOX_RNG_INDEX 38 -> 37); (b) Pre-fulfillment-fulfilled guard in `_deliverMockVrf` (Rule 2 missing critical); (c) Defensive digest-zero filter in RetryLootboxRng (Rule 2 missing critical); (d) Import ContractAddresses + strip unicode chars `§` -> `sec` and `—` -> `--` from string literals (Rule 3 blocking); (e) Defensive slot constants SLOT_DEC_BUCKET_OFFSET_PACKED = 100 / SLOT_LAST_TERMINAL_DEC_CLAIM_ROUND = 101 (Rule 3 blocking; functions vm.skip-gated so values only need to be deterministic between perturbed and baseline runs); (f) Fixed `lootboxStatus` destructure type-mismatch `uint48 day` -> `bool presale` (Rule 1 bug); (g) Fixed `game.claimableWinnings` -> `game.claimableWinningsOf` (Rule 1 bug; 4 sites — auto-getter missing on internal mapping); (h) Simplified coinflip + sStonk digest helpers to use only public getters (Rule 1 bug; internal getters referenced).
+- **Cluster-private deferred helper stubs (plan 301-03; 5 stubs):** `_tryPlaceDegeneretteBet` / `_tryResolveDegeneretteBets` / `_tryArrangeDecimatorWindow` / `_readDecCurrentClaimLevel` / `_readDecClaimRoundsRngWord` ship returning `false` / `0`. Their callers `vm.assume(placed)` / `vm.assume(arranged)` cleanly filter the iterations. The 6-phase template structural correctness is preserved (per D-301-HARNESS-ARCH-01); the functions still count in the canonical 18; full ABI reconciliation deferred to v44.0 FIX-MILESTONE plan-phase consumer (those helper bodies will be the load-bearing additions when the corresponding vm.skip blocks are flipped to strict assertions for HANDOFF-43 / HANDOFF-99).
+- **v44.0 forward-handoff inventory:** the harness's vm.skip blocks cross-reference HANDOFF-01 (sec1 dailyHeroWagers cluster; covers tests #1, #3, #13-#16 inherited) + HANDOFF-02 (sec1 coin-and-tickets cluster) + HANDOFF-13 (sec13..sec17 prizePoolsPacked terminal-jackpot inflation) + HANDOFF-31 (sec27..sec33 claimablePool gameover writer cluster) + HANDOFF-43 (sec43..sec62 Cluster G commitment-window slot writers; covers tests #5-#7 + #17 inherited) + HANDOFF-77 (sec0.7 phantom marker) + HANDOFF-99 (sec98/sec110/sec111 decimator-claim cross-call writers) + HANDOFF-110 (sec102 V-182 + Phase 296 xiv entropy-correlation) + HANDOFF-111 (sec103 V-184 sStonk cross-day re-roll CATASTROPHE — the headline finding). v44.0 plan-phase consumes this list as load-bearing input for FIX-NN sub-phase planning.
 
 ### Phase 276 Plan A — JackpotModule:2216 BAF Bernoulli (executing 2026-05-14)
 

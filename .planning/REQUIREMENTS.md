@@ -57,11 +57,11 @@ At `rngLockedFlag = true`, every storage slot that participates in deriving any 
 
 > **AUDIT-ONLY posture:** test-tree only (no `contracts/` mutations). `vm.skip` strategy per `D-43N-FUZZ-VMSKIP-01` keeps CI green at v43.0 close — v44.0 flips skips to assertions as fixes land. **AGENT-COMMITTED** per `D-43N-TEST-COMMITS-AUTO-01` (only mainnet `.sol` files require explicit approval per `feedback_no_contract_commits.md` clarified policy).
 
-- [ ] **FUZZ-01**: Foundry harness `test/fuzz/RngLockDeterminism.t.sol` (or equivalent name) — fuzzes randomized action sequences mid-rngLock window (between VRF request and fulfillment). Runs count: 10k per fuzz case per `D-43N-FUZZ-RUNS-01`.
-- [ ] **FUZZ-02**: Action set includes — bets, mints, claims, ERC20/ERC721 transfers, approvals, affiliate registration, every admin/owner function (ADMA-01 enumeration as input), `retryLootboxRng` invocations.
-- [ ] **FUZZ-03**: For each randomized perturbation sequence, asserts every VRF-derived output (jackpot recipients, jackpot amounts, trait awards, lootbox tickets, hero-override outcome) is byte-identical to the no-perturbation baseline. **`vm.skip` strategy per `D-43N-FUZZ-VMSKIP-01`:** fuzz cases that reproduce a CATALOG VIOLATION at current contract state are `vm.skip`-gated (CI green); v44.0 FIX-MILESTONE flips each `vm.skip` to a strict assertion as the corresponding fix lands per the FIXREC-05 handoff anchors.
-- [ ] **FUZZ-04**: Coverage: every VRF-influenced output surface enumerated in CAT-01 (whole 13-consumer set) is exercised by at least one fuzz case.
-- [ ] **FUZZ-05**: Edge cases — admin-during-lock perturbations, near-end-of-window perturbations (last block before unlock), multi-tx-batch perturbations, multi-block perturbations within the window, retryLootboxRng-during-lock perturbations (failsafe path).
+- [x] **FUZZ-01**: Foundry harness `test/fuzz/RngLockDeterminism.t.sol` (or equivalent name) — fuzzes randomized action sequences mid-rngLock window (between VRF request and fulfillment). Runs count: 10k per fuzz case per `D-43N-FUZZ-RUNS-01`. **SHIPPED Phase 301 plan 06 — FOUNDRY_PROFILE=deep 10k runs PASS on RetryLootboxRng (the 1 non-skipped opposite-direction test); 17 vm.skip blocks at FIXREC sec_N + HANDOFF-NN cross-references.**
+- [x] **FUZZ-02**: Action set includes — bets, mints, claims, ERC20/ERC721 transfers, approvals, affiliate registration, every admin/owner function (ADMA-01 enumeration as input), `retryLootboxRng` invocations. **SHIPPED Phase 301 plan 06 — `_perturb(seed)` covers 9 actions (0-8); `_perturbAdminOnly(seed)` covers ADMA R-01..R-22.**
+- [x] **FUZZ-03**: For each randomized perturbation sequence, asserts every VRF-derived output (jackpot recipients, jackpot amounts, trait awards, lootbox tickets, hero-override outcome) is byte-identical to the no-perturbation baseline. **`vm.skip` strategy per `D-43N-FUZZ-VMSKIP-01`:** fuzz cases that reproduce a CATALOG VIOLATION at current contract state are `vm.skip`-gated (CI green); v44.0 FIX-MILESTONE flips each `vm.skip` to a strict assertion as the corresponding fix lands per the FIXREC-05 handoff anchors. **SHIPPED Phase 301 plan 06 — `_assertVrfOutputByteIdentity(perturbed, baseline, label)` shared assertion site; 17 vm.skip blocks per D-301-VMSKIP-MECHANISM-01 Option C.**
+- [x] **FUZZ-04**: Coverage: every VRF-influenced output surface enumerated in CAT-01 (whole 13-consumer set) is exercised by at least one fuzz case. **SHIPPED Phase 301 plan 06 — all 13 CAT-01 surfaces covered by `testFuzz_RngLockDeterminism_*` functions.**
+- [x] **FUZZ-05**: Edge cases — admin-during-lock perturbations, near-end-of-window perturbations (last block before unlock), multi-tx-batch perturbations, multi-block perturbations within the window, retryLootboxRng-during-lock perturbations (failsafe path). **SHIPPED Phase 301 plan 06 — 5 `testFuzz_EdgeCase_*` functions per D-301-EDGE-CASES-01.**
 
 ### Adversarial Sweep (SWP) — 3-Skill HYBRID Pass
 
@@ -133,7 +133,7 @@ Explicitly excluded from v43.0; documented to prevent scope creep:
 | CAT-01..06 | Phase 298 | Complete |
 | FIXREC-01..05 | Phase 299 (audit-only repurpose per `D-43N-AUDIT-ONLY-01`) | Pending |
 | ADMA-01..04 | Phase 300 (audit-only repurpose per `D-43N-AUDIT-ONLY-01`) | Pending |
-| FUZZ-01..05 | Phase 301 (test-tree only; `vm.skip` strategy) | Pending |
+| FUZZ-01..05 | Phase 301 (test-tree only; `vm.skip` strategy) | **COMPLETE 2026-05-18** (test/fuzz/RngLockDeterminism.t.sol; 18 fuzz functions; 17 vm.skip; forge test PASS at FOUNDRY_PROFILE=deep 10k runs) |
 | SWP-01..05 | Phase 302 (3-skill HYBRID; invocation pre-authorized) | Pending |
 | AUDIT-01..09 | Phase 303 (9-section TERMINAL deliverable) | Pending |
 | REG-01..04 | Phase 303 | Pending |
