@@ -115,6 +115,11 @@ Plans:
 
 **Depends on:** Phase 298
 
+**Plans:** 1 plan (single Wave-1 main-context end-to-end AGENT-COMMITTED ADMA artifact bundle per D-300-WAVE-SHAPE-01 + D-300-EXEC-SHAPE-01 default)
+
+Plans:
+- [ ] 300-01-PLAN.md — Wave 1: Author .planning/ADMIN-AUDIT.md §1 admin enumeration (ADMA-01) + §2 participating-slot cross-reference (ADMA-02) + §3 per-admin-function recommendation (ADMA-03) + §4 v44.0 consolidated handoff register (ADMA-04) + §5 grep-completeness gate + §0 executive summary
+
 ### Phase 301: State-Shuffle Determinism Fuzz Harness (FUZZ)
 
 **Goal:** Foundry harness `test/fuzz/RngLockDeterminism.t.sol` fuzzes randomized action sequences mid-rngLock window. Action set: bets, mints, claims, ERC20/ERC721 transfers, approvals, affiliate registration, every admin/owner function, `retryLootboxRng` invocations. Per perturbation sequence, asserts byte-identical VRF-derived outputs (jackpot recipients, jackpot amounts, trait awards, lootbox tickets, hero-override outcome) vs no-perturbation baseline. Coverage: every CAT-01 consumer surface exercised by ≥1 fuzz case. Edge cases: admin-during-lock, near-end-of-window, multi-tx-batch, multi-block within window, retryLootboxRng-during-lock. 10k runs per fuzz case (CI default per `D-43N-FUZZ-RUNS-01`). `vm.skip` strategy per `D-43N-FUZZ-VMSKIP-01`: cases that demonstrably reproduce a CATALOG VIOLATION at current contract state are `vm.skip`-gated so CI passes green at v43.0 closure; v44.0 FIX-MILESTONE flips skips to assertions as fixes land. Harness ships as regression oracle for v44.0 consumption. Requirements FUZZ-01..05. Wave shape: 1 AGENT-COMMITTED batched test commit (test-tree only; no `contracts/` mutations) per `D-43N-TEST-COMMITS-AUTO-01`.
