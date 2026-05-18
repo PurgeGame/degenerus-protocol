@@ -130,7 +130,7 @@ Explicitly excluded from v43.0; documented to prevent scope creep:
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CAT-01..06 | Phase 298 | Pending |
+| CAT-01..06 | Phase 298 | Complete |
 | FIXREC-01..05 | Phase 299 (audit-only repurpose per `D-43N-AUDIT-ONLY-01`) | Pending |
 | ADMA-01..04 | Phase 300 (audit-only repurpose per `D-43N-AUDIT-ONLY-01`) | Pending |
 | FUZZ-01..05 | Phase 301 (test-tree only; `vm.skip` strategy) | Pending |

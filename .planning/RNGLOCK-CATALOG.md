@@ -23,8 +23,10 @@ This artifact aggregates the 13 per-consumer Wave-1 catalog sections (`298-{01..
 | §16 EXEMPT-ADVANCEGAME rows | 95 |
 | §16 EXEMPT-VRFCALLBACK rows | 9 |
 | §16 EXEMPT-RETRYLOOTBOXRNG rows | 1 |
-| §16 VIOLATION rows | 82 |
-| `D-43N-V44-HANDOFF-NN` anchors emitted (one per VIOLATION) | 82 |
+| §16 VIOLATION rows | 82 (logical) / 110 (per-row including callsite expansions) [^1] |
+| `D-43N-V44-HANDOFF-NN` anchors emitted (one per logical VIOLATION) | 82 |
+
+[^1]: §16's logical-VIOLATION count is 82 (one per unique VIOLATION tuple at the (slot × writer-fn × callsite-group) level). The per-row count is 110 because one entry — V-179 — fans out across 9 distinct callsites that share the same writer fn and slot but each warrant explicit cite; the planner emits 9 V-179.A..V-179.I rows. Phase 299 FIXREC consumes the **82 logical handoff anchors** as its v44.0 entry-budget; Phase 300 ADMA reads §15's per-callsite granularity (the 110 figure) for admin/owner cross-reference. Both counts are correct in their respective contexts.
 | Discretionary fourth-class disposition rows | 0 (prohibited per `D-43N-AUDIT-ONLY-01`) |
 | §17 fresh-sweep grep patterns executed | 5 |
 | §17 cross-coverage verdict | PASS (modulo `D-298-OZ-CARVEOUT-01` carve-out) |
