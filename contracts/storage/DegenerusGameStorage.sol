@@ -746,13 +746,23 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Swap queue buffer AND activate prize pool freeze (daily RNG path only).
-    ///      If not already frozen, zeros pending accumulators.
+    ///      If not already frozen, pre-seeds the pending future-pool buffer with
+    ///      1% of futurePrizePool so Degenerette ETH wins can resolve during
+    ///      freeze without waiting for bet inflow. Unconsumed remainder rolls
+    ///      back to futurePool via _unfreezePool.
     ///      If already frozen (jackpot phase), accumulators keep growing.
     function _swapAndFreeze(uint24 purchaseLevel) internal {
         _swapTicketSlot(purchaseLevel);
         if (!prizePoolFrozen) {
             prizePoolFrozen = true;
-            prizePoolPendingPacked = 0;
+            uint256 futureBal = _getFuturePrizePool();
+            uint256 seed = futureBal / 100;
+            if (seed != 0) {
+                _setFuturePrizePool(futureBal - seed);
+                _setPendingPools(0, uint128(seed));
+            } else {
+                prizePoolPendingPacked = 0;
+            }
         }
     }
 
