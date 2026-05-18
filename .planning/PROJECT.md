@@ -10,7 +10,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-**Active milestone:** (between milestones; v42.0 SHIPPED 2026-05-18)
+**Active milestone:** v43.0 — Total rngLock Determinism — Every VRF Input Frozen at Commitment (OPENED 2026-05-18; planning)
 **Last shipped:** v42.0 — Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf + Lootbox RNG Retry (2026-05-18; closure signal `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`; 0 of 0 F-42-NN; 1 Tier-1 ACCEPT_AS_DOCUMENTED on (xiv) retryLootboxRng; KNOWN_ISSUES_UNMODIFIED)
 **Prior shipped:** v41.0 — Cross-Call Determinism Fix (mint-batch + hero-override) (2026-05-17; closure signal `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4`; 3 of 3 F-41-NN RESOLVED_AT_V41)
 **Prior shipped:** v40.0 — Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor (2026-05-14; closure signal `MILESTONE_V40_AT_HEAD_cd549499`)
@@ -23,7 +23,44 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 **Contract HEAD anchor (v40.0 closure):** `cd549499` (carried forward as deeper audit-baseline NON-WIDENING anchor)
 
-## Current Milestone: v42.0 Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf
+## Current Milestone: v43.0 Total rngLock Determinism — Every VRF Input Frozen at Commitment
+
+**Goal:** At `rngLockedFlag = true`, every storage slot that participates in any VRF-influenced output is frozen until `rngLockedFlag = false`. The only unknowns are the incoming VRF word + its deterministic derivations from that word. No external write — including admin/owner — may mutate any participating slot during the rngLock window, with three explicit exempt entry points.
+
+**Audit baseline:** v42.0 closure HEAD `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`.
+
+**Exempt entry points (only these may write participating slots during the rngLock window):**
+- `advanceGame()` and every function reachable from it (the resolution orchestrator itself)
+- VRF coordinator callback delivering `randomness` (the VRF-word arrival path)
+- `retryLootboxRng()` failsafe (≥6h cooldown; at worst replaces one VRF request with another VRF request; does not manipulate any pre-lock state — disposition preserved from v42 `D-42N-RETRY-RNG-DOMAIN-SEP-01` Option A accepted)
+
+**Target features:**
+- **VRF Read-Graph Catalog** (CATALOG phase): backward-trace from every VRF consumer in the resolution flow; enumerate every reachable SLOAD; identify every external writer of every such slot; produce per-(slot × writer) verdict table. Any non-exempt writer = VIOLATION requiring structural fix. Catalog discipline per `feedback_verify_call_graph_against_source.md` + `feedback_rng_backward_trace.md` + `feedback_rng_commitment_window.md`. Output: `.planning/RNGLOCK-CATALOG.md` + entry in FINDINGS-v43.0.md §3.
+- **Structural fixes per violation** (FIX phases): remediation menu per pair — (a) `rngLockedFlag`-gated revert at writer (revert-with-`RngLocked` custom error if `rngLockedFlag == true`); (b) snapshot/anchor pattern reading from a slot frozen at lock time (Phase 288 `dailyIdx` + Phase 281 owed-salt precedents); (c) re-order to compute pre-lock; (d) make slot immutable. Each fix lands with regression coverage (slot-identity gate + cross-window mutation assertion).
+- **Admin/owner path lockdown**: every admin/owner function that can write a participating slot must revert when `rngLockedFlag = true`. Includes governance, parameter updates, charity allowlist, decimator config, and any future admin surface — comprehensive grep-verified sweep.
+- **State-shuffle determinism fuzz** (Foundry harness): perturb world state mid-rngLock (place bets, mints, transfers, approvals, retries, admin txs) between request and fulfillment; assert every VRF-derived output is byte-identical to the no-perturbation baseline. Empirical backstop on the structural proof.
+- **3-skill HYBRID adversarial pass** (Phase 296 D-296-INVOKE-01 precedent): `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT + `/zero-day-hunter` + `/economic-analyst` PARALLEL_SUBAGENT, charged specifically with finding any storage path violating the freeze invariant.
+- **Delta audit + findings consolidation (terminal)**: single `audit/FINDINGS-v43.0.md` 9-section deliverable; closure attestation = "every VRF-influenced output is fully determined at `rngLockedFlag = true` + incoming VRF word; only the 3 exempt entry points may write participating slots during the window." LEAN regression REG-01 (v42.0 closure non-widening) + REG-02 (v41.0 closure non-widening) + REG-03 (v40.0 closure non-widening) + REG-04 prior-finding spot-checks across v25..v42; KI walkthrough; closure signal `MILESTONE_V43_AT_HEAD_<sha>` + ROADMAP/STATE/MILESTONES atomic flip.
+
+**Key context / constraints:**
+- **Pre-launch posture preserved** — no live volume, no migration concerns. BREAKING storage layout / public ABI / event topic-hash changes acceptable per indexer-migration handoff carry (v40 `D-40N-EVT-BREAK-01` + v42 `D-42N-EVT-BREAK-01`).
+- **Cross-repo READ-only pattern**: zero `contracts/` writes by agent; zero `test/` writes by agent. All contract + test commits USER-COMMITTED per `feedback_no_contract_commits.md` + `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_manual_review_before_push.md`. Audit deliverable + planning docs AGENT-COMMITTED per established Phase 297 / 284 / 280 / 274 / 271 / 264 / 257 terminal pattern.
+- **Catalog-first discipline** — every "by construction" / "single fn reaches all paths" / "writer is gated by X" claim must be grep-verified against source pre-fix per `feedback_verify_call_graph_against_source.md` (Phase 294 BURNIE gap precedent — DPNERF initially shipped only ETH path because call-graph claim wasn't grep-verified).
+- **No SAFE_BY_DESIGN escape hatch** for participating slots — "could possibly affect" = theoretical reachability; eliminate even if economic likelihood is LOW. Game-theoretic analysis NOT a substitute for structural elimination.
+- **Single-file audit deliverable** per D-NN-FILES-01 carry; **forward-cite zero-emission** per D-NN-FCITE-01 carry (FINDINGS-v43.0.md is self-contained at v43 closure HEAD; "Deferred to Future Milestones" subsection uses locked-decision IDs only).
+- **Adversarial-pass timing**: SEQUENTIAL after CATALOG + FIX waves complete and §4 draft assembled, per D-NN-ADVERSARIAL-02 carry. HYBRID invocation per D-296-INVOKE-01 (Task 2 SEQUENTIAL `/contract-auditor`; Tasks 3+4 PARALLEL_SUBAGENT `/zero-day-hunter` + `/economic-analyst` per user authorization).
+- **`/degen-skeptic` OUT OF SCOPE** per D-271-ADVERSARIAL-02 carry; `/economic-analyst` IN SCOPE per D-271-ADVERSARIAL-03 carry.
+- **Phase numbering continues** from Phase 297 → first v43.0 phase is Phase 298. v42.0 archived.
+- **Estimated phase shape (roadmapper finalizes)**: 298 CATALOG → 299..N FIX surfaces (one per slot-group violation; surface-pair pattern contract + test) → N+1 ADMIN-LOCKDOWN → N+2 FUZZ harness → N+3 SWEEP (3-skill HYBRID adversarial) → N+4 TERMINAL (`audit/FINDINGS-v43.0.md` + closure flip). Final phase count depends on CATALOG output (zero violations → minimal shape; many violations → many fix phases).
+- **Out of scope for v43.0** (carry-forward to future milestones via locked-decision IDs):
+  - Mint-boost fractional retirement (`D-40N-MINTBOOST-OUT-01` carry)
+  - LBX-02 fixture-coverage gap (`D-40N-LBX02-OUT-01` carry)
+  - `D-42N-MINTCLN-SCOPE-01` MINTCLN helper-extraction handoff
+  - Superseded-baseline SURF `it.skip` cleanup + launch-posture KI policy carry
+  - Game-over thorough hardening — separate dedicated milestone scope
+  - `D-42N-RETRY-RNG-LAUNCH-FAQ-01` + `D-42N-RETRY-RNG-SCOPE-DOC-01` (launch-comms / docstring items; not in-scope for behavioral milestone)
+
+## Completed Milestone: v42.0 Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf
 
 **Goal:** Three independent surface changes landed under a single milestone — (1) **MINTCLN** cleans up the `TraitsGenerated` event + `_raritySymbolBatch` signature in `DegenerusGameMintModule.sol` by folding `owed` into `baseKey` low 32 bits and dropping the `ownedSalt` arg (post-v41-Phase-281 cleanup with breaking topic-hash on `TraitsGenerated`); (2) **HRROLL** replaces the deterministic `_topHeroSymbol` hero-override selector with a weighted random roll across all 32 (quadrant, symbol) slots using VRF entropy with a ×1.5 leader-weight bonus and no min-wager floor; (3) **DPNERF** nerfs deity-pass virtual entries from `max(len/50, 2)` to a flat 1 on gold-tier (`color == 7`) trait wins across both ETH and BURNIE coin jackpot paths via single-function change in `_randTraitTicket`. Intentional deity EV reduction — no common-tier compensation. Pre-launch posture preserved; v42.0 lands before mainnet activation; indexer migration accepted per inherited D-40N-EVT-BREAK-01 posture.
 
@@ -725,4 +762,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-17 — v42.0 milestone OPENED (Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf). Audit baseline v41.0 closure HEAD `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4`. Three independent surfaces: MINTCLN (mint module event/sig cleanup with breaking `TraitsGenerated` topic-hash; inherits v40 D-40N-EVT-BREAK-01 indexer-migration posture) + HRROLL (jackpot module hero-override weighted random roll with ×1.5 leader bonus, no min-wager floor) + DPNERF (jackpot module deity-pass gold nerf to flat 1 virtual entry, no compensation, both ETH + BURNIE paths). Parallel-per-idea 8-phase shape: 290 MINTCLN contract + 291 MINTCLN tests + 292 HRROLL contract + 293 HRROLL tests + 294 DPNERF contract + 295 DPNERF tests + 296 SWEEP (3-skill PARALLEL adversarial) + 297 TERMINAL (audit/FINDINGS-v42.0.md). Phase numbering continues from Phase 289 → first v42.0 phase is 290. v41.0 archived. Requirements + roadmap definition in progress.*
+*Last updated: 2026-05-18 — v43.0 milestone OPENED (Total rngLock Determinism — Every VRF Input Frozen at Commitment). Audit baseline v42.0 closure HEAD `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`. Goal: at `rngLockedFlag = true`, every storage slot that participates in any VRF-influenced output is frozen until `rngLockedFlag = false`; only the incoming VRF word + its deterministic derivations may be unknown. Exempt entry points: `advanceGame()` + reachable resolution flow, VRF coordinator callback, `retryLootboxRng()` failsafe (`D-42N-RETRY-RNG-DOMAIN-SEP-01` Option A accepted). All other external/public functions (bets, mints, claims, transfers, approvals, affiliate writes, admin/owner parameter updates, governance) must either revert when `rngLockedFlag = true` if they write a participating slot OR be proven to write zero participating slots. Catalog-first shape: 298 CATALOG (VRF read-graph enumeration + per-(slot × writer) verdict table) → 299..N FIX surfaces → N+1 ADMIN-LOCKDOWN → N+2 FUZZ (state-shuffle Foundry harness) → N+3 SWEEP (3-skill HYBRID adversarial: `/contract-auditor` SEQUENTIAL + `/zero-day-hunter` + `/economic-analyst` PARALLEL_SUBAGENT per D-296-INVOKE-01 carry) → N+4 TERMINAL (`audit/FINDINGS-v43.0.md` + closure flip). Phase numbering continues from Phase 297 → first v43.0 phase is 298. v42.0 archived. Requirements + roadmap definition in progress. No SAFE_BY_DESIGN escape hatch — "could possibly affect" = theoretical reachability; eliminate even if economic likelihood is LOW.*

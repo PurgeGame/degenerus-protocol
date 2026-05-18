@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: (between-milestones)
-milestone_name: v42.0 SHIPPED
-status: shipped
-last_updated: "2026-05-18T11:00:00.000Z"
-last_activity: 2026-05-18 -- Phase 297 complete; v42.0 milestone SHIPPED
+milestone: v43.0
+milestone_name: Total rngLock Determinism — Every VRF Input Frozen at Commitment
+status: planning
+last_updated: "2026-05-18T12:01:40.872Z"
+last_activity: 2026-05-18
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 13
-  completed_plans: 13
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,12 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 ## Current Position
 
-Phase: 297 (delta-audit-findings-consolidation-terminal) — COMPLETE
-Plan: 1 of 1 COMPLETE
-Status: v42.0 SHIPPED — between milestones
-Resume file: (none — v42.0 milestone SHIPPED 2026-05-18)
-Progress: [██████████] 100%
-Last activity: 2026-05-18 -- Phase 297 complete; v42.0 milestone SHIPPED
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-18 — Milestone v43.0 started
 
 ## Last Shipped Milestone
 
