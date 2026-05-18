@@ -245,12 +245,12 @@ Carry-forward seeds from v36.0 / v37.0 / v38.0 close. Do NOT pull into v38.0 (al
 
 ## Deferred Items
 
-Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-forward chain v32.0 → v33.0 → v34.0 → v35.0 → v36.0 → v37.0 → v38.0):
+Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-forward chain v32.0 → v33.0 → v34.0 → v35.0 → v36.0 → v37.0 → v38.0 → v39.0 → v40.0 → v41.0 → v42.0):
 
 | Category | Item | Status | Notes |
 |----------|------|--------|-------|
-| quick_task | 260327-n7h-run-full-test-suite-and-analyze-results- | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 → v33.0 → v34.0 → v35.0 → v36.0 → v37.0 → v38.0 close. |
-| quick_task | 260327-q8y-test-boon-changes | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 → v33.0 → v34.0 → v35.0 → v36.0 → v37.0 → v38.0 close. |
+| quick_task | 260327-n7h-run-full-test-suite-and-analyze-results- | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 → v33.0 → v34.0 → v35.0 → v36.0 → v37.0 → v38.0 → v39.0 → v40.0 → v41.0 → v42.0 close. |
+| quick_task | 260327-q8y-test-boon-changes | missing (tracker frontmatter) | Stale pre-v30.0 entry dated 2026-03-27. PLAN.md + SUMMARY.md present on disk; audit tool flags on frontmatter status mismatch only. Carried forward from v29.0 → v30.0 → v31.0 → v32.0 → v33.0 → v34.0 → v35.0 → v36.0 → v37.0 → v38.0 → v39.0 → v40.0 → v41.0 → v42.0 close. |
 | verification_gap | Phase 257 (257-VERIFICATION.md) | human_needed | Gate resolved by Phase 258 supersedence (HUMAN-UAT marked `resolved`, resolved_by: phase-258), but VERIFICATION.md frontmatter `status: human_needed` field was not flipped to `resolved`. Bookkeeping defect; tracker out of date with reality. See `.planning/v33.0-MILESTONE-AUDIT.md`. |
 | verification_gap | Phase 258 (258-VERIFICATION.md) | human_needed | Gate resolved by Phase 258-03 stale-reference sweep, but VERIFICATION.md frontmatter `status: human_needed` was not flipped to `resolved`. Bookkeeping defect. See `.planning/v33.0-MILESTONE-AUDIT.md`. |
 | process_gap | Phases 254/255/256 missing VERIFICATION.md | not_run | Formal verification gate did not run when those phases closed (pre-session). Phase 257 delta-audit independently re-validated all that work (`audit/FINDINGS-v33.0.md`); functional risk: low. See `.planning/v33.0-MILESTONE-AUDIT.md` for the full per-phase analysis. |
