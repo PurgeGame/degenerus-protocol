@@ -64,6 +64,42 @@
 
 </details>
 
+### Phase 298: VRF Read-Graph Catalog (CATALOG)
+
+**Goal:** Backward-trace every VRF consumer site (every code path reading VRF-derived entropy — `randomness` word + every keccak/xorshift chain rooted at the VRF word) per `feedback_rng_backward_trace.md`. For each consumer, walk every reachable SLOAD inside the resolution code path with explicit file:line citation per `feedback_verify_call_graph_against_source.md` (no "by construction" / "covered by single fn" claims). For each unique participating slot, enumerate every external/public function that writes it (game-action writers + ERC20/ERC721 inherited writers + admin/owner writers + affiliate writers + anything reachable from a non-internal entry point). Produce per-(slot × writer × callsite) verdict table classifying each tuple as EXEMPT-ADVANCEGAME / EXEMPT-VRFCALLBACK / EXEMPT-RETRYLOOTBOXRNG / VIOLATION, plus per-VIOLATION remediation-tactic recommendation (gated revert / snapshot anchor / pre-lock reorder / immutable). Catalog completeness gate: main-context fresh-sweep grep of `contracts/` confirms zero participating slot or writer missed. 13 parallel sub-agents per consumer per `D-298-EXEC-SHAPE-01`. Output `.planning/RNGLOCK-CATALOG.md` + FINDINGS-v43.0.md §3.A entry. Requirements CAT-01..06. Wave shape: 1 AGENT-COMMITTED catalog artifact bundle. Zero `contracts/` + `test/` mutations.
+
+**Depends on:** None
+
+### Phase 299: Fix Recommendation Document (FIXREC)
+
+**Goal:** Audit-only repurpose per `D-43N-AUDIT-ONLY-01`. For each VIOLATION tuple in Phase 298 catalog, produce a per-VIOLATION analysis entry covering: design-intent backward-trace (cite the original phase that introduced the slot/writer per `feedback_design_intent_before_deletion.md` discipline); actor game-theory walk (who exploits + how + EV magnitude); recommended remediation tactic (a/b/c/d menu) with full rationale + bytecode / storage-layout / public-ABI impact estimate; v44.0 FIX-MILESTONE handoff anchor (locked decision ID + line-cite). Output `.planning/RNGLOCK-FIXREC.md` + FINDINGS-v43.0.md §3.D entry. Requirements FIXREC-01..05. Wave shape: 1 AGENT-COMMITTED FIXREC artifact bundle. Zero `contracts/` + `test/` mutations. Replaces the pre-pivot Structural Fix Wave; contract changes deferred to v44.0 FIX-MILESTONE.
+
+**Depends on:** Phase 298
+
+### Phase 300: Admin Path Enumeration Audit (ADMA)
+
+**Goal:** Audit-only repurpose per `D-43N-AUDIT-ONLY-01`. Enumerate every `onlyOwner` / `onlyAdmin` / role-gated external function across all modules in `contracts/`. Cross-reference each with the Phase 298 CAT-03 writer table to identify functions that write participating slots. For each admin function writing a participating slot at any non-EXEMPT callsite, produce a per-admin-function recommendation entry covering: which participating slot(s) reached + recommended gating mechanism (`RngLocked` custom error revert preferred per existing `MintModule:1221` / `BurnieCoinflip:730` / `sStonk:492` convention) + governance / parameter-update / charity-allowlist / decimator-config / presale-config classification + v44.0 FIX-MILESTONE handoff anchor. Output `.planning/ADMIN-AUDIT.md` + FINDINGS-v43.0.md §3.E entry. Requirements ADMA-01..04. Wave shape: 1 AGENT-COMMITTED ADMA artifact bundle. Zero `contracts/` + `test/` mutations. Replaces the pre-pivot Admin Lockdown contract-change wave.
+
+**Depends on:** Phase 298
+
+### Phase 301: State-Shuffle Determinism Fuzz Harness (FUZZ)
+
+**Goal:** Foundry harness `test/fuzz/RngLockDeterminism.t.sol` fuzzes randomized action sequences mid-rngLock window. Action set: bets, mints, claims, ERC20/ERC721 transfers, approvals, affiliate registration, every admin/owner function, `retryLootboxRng` invocations. Per perturbation sequence, asserts byte-identical VRF-derived outputs (jackpot recipients, jackpot amounts, trait awards, lootbox tickets, hero-override outcome) vs no-perturbation baseline. Coverage: every CAT-01 consumer surface exercised by ≥1 fuzz case. Edge cases: admin-during-lock, near-end-of-window, multi-tx-batch, multi-block within window, retryLootboxRng-during-lock. 10k runs per fuzz case (CI default per `D-43N-FUZZ-RUNS-01`). `vm.skip` strategy per `D-43N-FUZZ-VMSKIP-01`: cases that demonstrably reproduce a CATALOG VIOLATION at current contract state are `vm.skip`-gated so CI passes green at v43.0 closure; v44.0 FIX-MILESTONE flips skips to assertions as fixes land. Harness ships as regression oracle for v44.0 consumption. Requirements FUZZ-01..05. Wave shape: 1 AGENT-COMMITTED batched test commit (test-tree only; no `contracts/` mutations) per `D-43N-TEST-COMMITS-AUTO-01`.
+
+**Depends on:** Phases 298 + 299 + 300
+
+### Phase 302: Cross-Surface Adversarial Sweep (SWEEP)
+
+**Goal:** 3-skill HYBRID adversarial pass per Phase 296 `D-296-INVOKE-01` precedent: `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT + `/zero-day-hunter` + `/economic-analyst` PARALLEL_SUBAGENT. Invocation pre-authorized per `D-43N-SWEEP-PREAUTH-01` — Phase 302 fires the 3-skill HYBRID without re-pinging; Tier-1 any-skill FINDING_CANDIDATE still pings per `D-296-CONSENSUS-01` (the milestone goal precludes SAFE_BY_DESIGN, so escalation routes elevation to v44.0 FIXREC-augment commit, not to a Phase 299-style FIX wave). Charged with finding any storage path violating the freeze invariant — composition attacks, cross-module read/write races, ERC-callback-induced state mutations, multi-block window exploits, game-theoretic write-induced effects, multi-tx batched perturbations. `/degen-skeptic` OUT OF SCOPE per `D-271-ADVERSARIAL-02` carry. `/economic-analyst` IN SCOPE per `D-271-ADVERSARIAL-03` carry. Disposition: any FINDING_CANDIDATE → appended FIXREC entry in Phase 299 artifact; any SAFE_BY_DESIGN candidate is REJECTED. Re-pass discipline per `D-284-ADVERSARIAL-RE-PASS-01` if any FIXREC-augment commit lands. Requirements SWP-01..05. Wave shape: 1 AGENT-COMMITTED `.planning/phases/302-*/302-01-ADVERSARIAL-LOG.md` artifact with 3 H2 sections (one per skill) + Disposition section. Zero `contracts/` + `test/` mutations.
+
+**Depends on:** Phases 298 + 299 + 300 + 301
+
+### Phase 303: Delta Audit + Findings Consolidation (TERMINAL)
+
+**Goal:** SOURCE-TREE FROZEN — zero `contracts/` + zero `test/` mutations. Single-file deliverable `audit/FINDINGS-v43.0.md` 9-section terminal: §3.A delta-surface table enumerates every USER-APPROVED test commit (Phase 301 FUZZ) + every AGENT-COMMITTED audit/planning commit across v43.0 phases (`contracts/` row count = 0 per audit-only posture); §3.B per-exempt-entry-point attestation matrix (3 exempt entry points × per-participating-slot row); §3.C conservation re-proof for the freeze invariant (every participating slot has a 4-tuple attestation: slot identity / writer-set / freeze gate / consumer-set); §3.D Phase 299 FIXREC summary roll-up; §3.E Phase 300 ADMA summary roll-up; §4 adversarial-pass disposition table; §5 LEAN regression (REG-01 v42.0 + REG-02 v41.0 + REG-03 v40.0 + REG-04 prior-finding spot-check); §6 KI walkthrough (EXC-01..03 RE_VERIFIED-NEGATIVE-scope; EXC-04 STRUCTURALLY ELIMINATED preserved); §7 prior-artifact cross-cites; §8 forward-cite closure (zero post-milestone references; pickup-pointers via locked-decision IDs only per `D-NN-FCITE-01` carry); §9 closure attestation — AUDIT-only verdict + 6-phase wave summary + closure signal + Deferred-to-Future register (v44.0 FIX-MILESTONE entry mandatory). 2-commit sequential SHA orchestration pre-authorized per `D-43N-CLOSURE-PREAUTH-01` + `D-297-CLOSURE-01` + `D-284-CLOSURE-01` precedent: Commit 1 ships audit deliverable with `<commit-1-sha>` placeholder; Commit 2 resolves placeholder + propagates verbatim + chmod 444 on FINDINGS-v43.0.md + atomic 5-doc closure flip (ROADMAP / STATE / MILESTONES / PROJECT / REQUIREMENTS). Closure signal `MILESTONE_V43_AT_HEAD_<sha>` propagated atomically. KNOWN-ISSUES.md UNMODIFIED per `D-43N-KI-01`. Requirements AUDIT-01..09 + REG-01..04 + CLS-01..02. Wave shape: 2 AGENT-COMMITTED commits.
+
+**Depends on:** All prior v43.0 phases (298 + 299 + 300 + 301 + 302)
+
 <details>
 <summary>✅ v42.0 Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf + Lootbox RNG Retry (Phases 290-297) — SHIPPED 2026-05-18</summary>
 
