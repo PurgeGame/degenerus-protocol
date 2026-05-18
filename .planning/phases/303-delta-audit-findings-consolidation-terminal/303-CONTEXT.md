@@ -8,7 +8,7 @@
 ## Phase Boundary
 
 TERMINAL phase shipping `audit/FINDINGS-v43.0.md` 9-section deliverable + closure-flip. Sections per AUDIT-01..09:
-- §3.A delta-surface table (1 USER-APPROVED test commit [Phase 301 FUZZ] + AGENT-COMMITTED audit/planning commits across v43.0 phases; `contracts/` delta row count = 0 per audit-only posture)
+- §3.A delta-surface table (every AGENT-COMMITTED test/audit/planning commit across v43.0 phases incl. Phase 301 FUZZ test commit per `D-43N-TEST-COMMITS-AUTO-01`; `contracts/` delta row count = 0 per audit-only posture)
 - §3.B per-exempt-entry-point attestation matrix (per-participating-slot row × 3 exempt entry points)
 - §3.C conservation re-proof (every participating slot has 4-tuple attestation: slot identity / writer-set / freeze gate / consumer-set)
 - §3.D Phase 299 FIXREC roll-up (per-VIOLATION recommendation summary; cross-references `.planning/RNGLOCK-FIXREC.md`)

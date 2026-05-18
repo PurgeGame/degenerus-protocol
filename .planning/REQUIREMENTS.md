@@ -55,7 +55,7 @@ At `rngLockedFlag = true`, every storage slot that participates in deriving any 
 
 ### Fuzz (FUZZ) — State-Shuffle Determinism Harness
 
-> **AUDIT-ONLY posture:** test-tree only (no `contracts/` mutations). `vm.skip` strategy per `D-43N-FUZZ-VMSKIP-01` keeps CI green at v43.0 close — v44.0 flips skips to assertions as fixes land.
+> **AUDIT-ONLY posture:** test-tree only (no `contracts/` mutations). `vm.skip` strategy per `D-43N-FUZZ-VMSKIP-01` keeps CI green at v43.0 close — v44.0 flips skips to assertions as fixes land. **AGENT-COMMITTED** per `D-43N-TEST-COMMITS-AUTO-01` (only mainnet `.sol` files require explicit approval per `feedback_no_contract_commits.md` clarified policy).
 
 - [ ] **FUZZ-01**: Foundry harness `test/fuzz/RngLockDeterminism.t.sol` (or equivalent name) — fuzzes randomized action sequences mid-rngLock window (between VRF request and fulfillment). Runs count: 10k per fuzz case per `D-43N-FUZZ-RUNS-01`.
 - [ ] **FUZZ-02**: Action set includes — bets, mints, claims, ERC20/ERC721 transfers, approvals, affiliate registration, every admin/owner function (ADMA-01 enumeration as input), `retryLootboxRng` invocations.
@@ -73,7 +73,7 @@ At `rngLockedFlag = true`, every storage slot that participates in deriving any 
 
 ### Audit Deliverable (AUDIT) — FINDINGS-v43.0.md Terminal
 
-- [ ] **AUDIT-01**: `audit/FINDINGS-v43.0.md` 9-section terminal deliverable. §3.A delta-surface table enumerates 1 USER-APPROVED test commit (Phase 301 FUZZ harness) + every AGENT-COMMITTED audit/planning commit across v43.0 phases. `contracts/` delta row count = 0 per audit-only posture per `D-43N-AUDIT-ONLY-01`.
+- [ ] **AUDIT-01**: `audit/FINDINGS-v43.0.md` 9-section terminal deliverable. §3.A delta-surface table enumerates every AGENT-COMMITTED test/audit/planning commit across v43.0 phases (Phase 301 FUZZ test commit AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`). `contracts/` delta row count = 0 per audit-only posture per `D-43N-AUDIT-ONLY-01`.
 - [ ] **AUDIT-02**: §3.B per-exempt-entry-point attestation matrix — for each of the 3 exempt entry points, per-participating-slot row proves the exempt write does not violate downstream invariants.
 - [ ] **AUDIT-03**: §3.C conservation re-proof for the freeze invariant — every participating slot has a 4-tuple attestation (slot identity / writer-set / freeze gate / consumer-set).
 - [ ] **AUDIT-04**: §3.D Phase 299 FIXREC roll-up — per-VIOLATION recommendation table (tactic + impact estimate + v44.0 handoff anchor); cross-references `.planning/RNGLOCK-FIXREC.md`.
