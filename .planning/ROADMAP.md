@@ -207,7 +207,7 @@ Plans:
   4. Storage byte-identical — single-function body change; zero new storage slots / SSTORE / SLOAD callsites in DPNERF scope (storage-slot grep proof). Public ABI byte-identical — `_randTraitTicket` private; `_runJackpotEthFlow` + `payDailyCoinJackpot` + `_awardDailyCoinToTraitWinners` external/public selectors / parameter types / return shapes unchanged; zero new public/external mutation entry points / admin / modifiers / upgrade hooks.
   5. Decision anchors D-42N-GOLD-FLOOR-01 + D-42N-DEITY-EV-01 + D-42N-PATH-COVERAGE-01 recorded in the phase plan artifact BEFORE the contract patch lands per `feedback_design_intent_before_deletion.md`; design-intent trace covers (i) original `virtualCount = len / 50; if (virtualCount < 2) virtualCount = 2` rationale (2% with min-2 floor), (ii) gold-tile concentration issue (small bucket × 2% floor disproportionately rewards deity owners), (iii) compensation trade-offs (keep EV constant vs intentional reduction vs intentional rebias), (iv) path-coverage trade-offs (both paths symmetric vs ETH-only).
 
-**Plans:** TBD
+**Plans:** 2/2 plans complete
 
 ### Phase 295: DPNERF Regression Fixture (TST-DPNERF)
 
@@ -262,7 +262,7 @@ Plans:
 | 291. MINTCLN Regression Fixture (TST-MINTCLN) | 2/2 | Complete    | 2026-05-17 |
 | 292. Hero-Override Weighted Roll (HRROLL) | 2/2 | Complete    | 2026-05-17 |
 | 293. HRROLL Regression Fixture (TST-HRROLL) | 2/2 | Complete    | 2026-05-17 |
-| 294. Deity-Pass Gold Nerf (DPNERF) | 0/TBD | Not started | - |
+| 294. Deity-Pass Gold Nerf (DPNERF) | 2/2 | Complete   | 2026-05-18 |
 | 295. DPNERF Regression Fixture (TST-DPNERF) | 0/TBD | Not started | - |
 | 296. Cross-Surface Adversarial Sweep (SWEEP) | 0/TBD | Not started | - |
 | 297. Delta Audit + Findings Consolidation (Terminal) | 0/TBD | Not started | - |

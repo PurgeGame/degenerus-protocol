@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v42.0
-milestone_name: Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf
-status: executing
-last_updated: "2026-05-17T18:36:32.303Z"
-last_activity: 2026-05-17 -- Phase 294 planning complete
+milestone_name: Active Phases
+status: completed
+last_updated: "2026-05-18T05:21:14.513Z"
+last_activity: 2026-05-18 -- Phase 294 marked complete
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 10
-  completed_plans: 8
-  percent: 50
+  completed_plans: 10
+  percent: 63
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-17 after v41.0 milestone archive + v42.0 milestone open)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 294 — deity pass gold nerf (dpnerf)
+**Current focus:** Phase 294 — Deity-Pass Gold Nerf (DPNERF)
 
 ## Current Position
 
-Phase: 294
-Plan: Not started
-Status: Ready to execute
+Phase: 294 — COMPLETE
+Plan: 1 of 2
+Status: Phase 294 complete
 Resume file: .planning/phases/294-deity-pass-gold-nerf-dpnerf/294-CONTEXT.md
 Progress: [██████████] 100%
-Last activity: 2026-05-17 -- Phase 294 planning complete
+Last activity: 2026-05-18 -- Phase 294 marked complete
 
 ## Last Shipped Milestone
 
