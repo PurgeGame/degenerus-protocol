@@ -118,7 +118,7 @@ Plans:
 **Plans:** 1 plan (single Wave-1 main-context end-to-end AGENT-COMMITTED ADMA artifact bundle per D-300-WAVE-SHAPE-01 + D-300-EXEC-SHAPE-01 default)
 
 Plans:
-- [ ] 300-01-PLAN.md — Wave 1: Author .planning/ADMIN-AUDIT.md §1 admin enumeration (ADMA-01) + §2 participating-slot cross-reference (ADMA-02) + §3 per-admin-function recommendation (ADMA-03) + §4 v44.0 consolidated handoff register (ADMA-04) + §5 grep-completeness gate + §0 executive summary
+- [x] 300-01-PLAN.md — Wave 1: Author .planning/ADMIN-AUDIT.md §1 admin enumeration (ADMA-01) + §2 participating-slot cross-reference (ADMA-02) + §3 per-admin-function recommendation (ADMA-03) + §4 v44.0 consolidated handoff register (ADMA-04) + §5 grep-completeness gate + §0 executive summary
 
 ### Phase 301: State-Shuffle Determinism Fuzz Harness (FUZZ)
 

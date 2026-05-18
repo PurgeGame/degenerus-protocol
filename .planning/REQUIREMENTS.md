@@ -48,10 +48,10 @@ At `rngLockedFlag = true`, every storage slot that participates in deriving any 
 
 > **AUDIT-ONLY repurpose** per `D-43N-AUDIT-ONLY-01`. Pre-pivot ADM-01..04 (contract revert-gating + regression tests) deferred to **v44.0 FIX-MILESTONE**. ADMA-01..04 produce per-admin-function enumeration + recommendation.
 
-- [ ] **ADMA-01**: Enumerate every `onlyOwner` / `onlyAdmin` / role-gated external function across all modules in `contracts/`. Output: complete function list with file:line + role-gate annotation.
-- [ ] **ADMA-02**: For each admin function, identify slot writes (cross-reference with CAT-03 writer table). Mark which functions write participating slots at any non-EXEMPT callsite.
-- [ ] **ADMA-03**: For each admin function reaching a participating slot, recommended gating mechanism = `RngLocked` custom error revert (preferred per existing MintModule:1221 / BurnieCoinflip:730 / sStonk:492 convention). Document per-admin-function rationale + governance / parameter-update / charity-allowlist / decimator-config / presale-config classification.
-- [ ] **ADMA-04**: For each ADMA recommendation, v44.0 FIX-MILESTONE handoff anchor — locked-decision ID `D-43N-V44-ADMA-NN` per admin function + cross-reference to RNGLOCK-CATALOG.md verdict-matrix rows. v44.0 plan-phase consumes these anchors for ADM-NN contract-change sub-phase planning.
+- [x] **ADMA-01**: Enumerate every `onlyOwner` / `onlyAdmin` / role-gated external function across all modules in `contracts/`. Output: complete function list with file:line + role-gate annotation.
+- [x] **ADMA-02**: For each admin function, identify slot writes (cross-reference with CAT-03 writer table). Mark which functions write participating slots at any non-EXEMPT callsite.
+- [x] **ADMA-03**: For each admin function reaching a participating slot, recommended gating mechanism = `RngLocked` custom error revert (preferred per existing MintModule:1221 / BurnieCoinflip:730 / sStonk:492 convention). Document per-admin-function rationale + governance / parameter-update / charity-allowlist / decimator-config / presale-config classification.
+- [x] **ADMA-04**: For each ADMA recommendation, v44.0 FIX-MILESTONE handoff anchor — locked-decision ID `D-43N-V44-ADMA-NN` per admin function + cross-reference to RNGLOCK-CATALOG.md verdict-matrix rows. v44.0 plan-phase consumes these anchors for ADM-NN contract-change sub-phase planning.
 
 ### Fuzz (FUZZ) — State-Shuffle Determinism Harness
 
