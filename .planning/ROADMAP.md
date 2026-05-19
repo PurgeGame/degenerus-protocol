@@ -153,6 +153,11 @@ Plans:
 
 **Depends on:** All prior v43.0 phases (298 + 299 + 300 + 301 + 302)
 
+**Plans:** 1 plan (single Wave-1 main-context end-to-end AGENT-COMMITTED terminal-deliverable + closure-flip bundle; 13 sequential tasks per `D-303-TASK-SPLIT-01`; 2 AGENT-COMMITTED commits per `D-303-CLOSURE-01` 2-commit sequential SHA orchestration pre-authorized per `D-43N-CLOSURE-PREAUTH-01`)
+
+Plans:
+- [ ] 303-01-PLAN.md — Wave 1: Author §1 + §2 + §3 (a-f) + §3.A delta-surface table + §3.B per-exempt-entry-point attestation matrix + §3.C conservation re-proof + §3.D Phase 299 FIXREC roll-up + §3.E Phase 300 ADMA roll-up + §4 Phase 302 adversarial-pass disposition + §5 LEAN regression REG-01..04 + §6 KI walkthrough + §6.4 V-063 FIXREC §0.7 marker amendment + §6.5 totalFlipReversals §14 enumeration amendment + §7 prior-artifact cross-cites + §8 forward-cite closure + §9 closure attestation w/ §9d 142-anchor v44.0 FIX-MILESTONE handoff register per `D-303-V44-HANDOFF-REGISTER-01` (119 D-43N-V44-HANDOFF-NN FIXREC + 22 D-43N-V44-ADMA-NN ADMA + 1 D-43N-V44-ADMA-ERRATUM-01) + VERIFY emission + DRAFT → audit/FINDINGS-v43.0.md promotion + Commit 1 (audit deliverable with `<commit-1-sha>` placeholder) + Commit 2 (SHA resolution + 5-FINDINGS-verbatim-location propagation + chmod 444 + atomic 5-doc closure flip ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS) — AGENT-COMMITTED autonomous per `D-43N-CLOSURE-PREAUTH-01`
+
 <details>
 <summary>✅ v42.0 Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf + Lootbox RNG Retry (Phases 290-297) — SHIPPED 2026-05-18</summary>
 
