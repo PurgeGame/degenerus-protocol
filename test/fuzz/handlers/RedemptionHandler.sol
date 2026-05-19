@@ -113,12 +113,12 @@ contract RedemptionHandler is Test {
         if (game.gameOver()) return;
         if (game.rngLocked()) return;
 
-        // Get actor balance, early return if zero
+        // Get actor balance, early return if zero or below the 1-whole-sDGNRS gambling-burn floor.
         uint256 bal = sdgnrs.balanceOf(currentActor);
-        if (bal == 0) return;
+        if (bal < 1e18) return;
 
-        // Bound amount to [1, bal]
-        amount = bound(amount, 1, bal);
+        // Bound amount to [MIN_BURN_AMOUNT, bal] (MIN_BURN_AMOUNT = 1e18 = 1 whole sDGNRS).
+        amount = bound(amount, 1e18, bal);
 
         // Check 50% cap: read supply snapshot and period burned via vm.load
         uint256 snapshot = uint256(vm.load(address(sdgnrs), bytes32(SLOT_SUPPLY_SNAPSHOT)));
@@ -189,9 +189,13 @@ contract RedemptionHandler is Test {
         uint256 ethBefore = currentActor.balance;
         uint256 burnieBefore = coin.balanceOf(currentActor);
 
+        // Target the most-recently-resolved wall day under SPEC-03 (`dayToResolve = day - 1`).
+        uint32 today = game.currentDayView();
+        uint32 claimDay = today == 0 ? 0 : today - 1;
+
         vm.recordLogs();
         vm.prank(currentActor);
-        try sdgnrs.claimRedemption() {
+        try sdgnrs.claimRedemption(claimDay) {
             ghost_claimCount++;
             ghost_totalEthClaimed += currentActor.balance - ethBefore;
             ghost_totalBurnieClaimed += coin.balanceOf(currentActor) - burnieBefore;
@@ -217,7 +221,7 @@ contract RedemptionHandler is Test {
         // Only flag a double claim if the re-claim actually pays ETH again.
         uint256 ethBeforeReClaim = currentActor.balance;
         vm.prank(currentActor);
-        try sdgnrs.claimRedemption() {
+        try sdgnrs.claimRedemption(claimDay) {
             if (currentActor.balance > ethBeforeReClaim) {
                 ghost_doubleClaim++;
             }

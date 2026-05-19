@@ -1217,17 +1217,21 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             coinflip.processCoinflipPayouts(bonusFlip, currentWord, day);
             quests.rollDailyQuest(day, currentWord);
 
-            // Resolve gambling burn period if pending
+            // Resolve the sentinel-stamped gambling-burn pool if any (INV-13). Reading the
+            // sentinel rather than deriving `day - 1` makes multi-day RNG stalls correct by
+            // construction: the sentinel always names the (at most one) unresolved day, so a
+            // single resolve call after the stall recovers covers the stuck pool exactly.
             {
                 IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(
                     ContractAddresses.SDGNRS
                 );
-                if (sdgnrs.hasPendingRedemptions()) {
+                uint32 toResolve = sdgnrs.pendingResolveDay();
+                if (toResolve != 0) {
                     uint16 redemptionRoll = uint16(
                         ((currentWord >> 8) % 151) + 25
                     );
                     uint32 flipDay = day + 1;
-                    sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay);
+                    sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay, toResolve);
                 }
             }
 
@@ -1280,17 +1284,20 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     day
                 );
             }
-            // Resolve gambling burn period if pending (mirrors rngGate redemption resolution)
+            // Resolve the sentinel-stamped gambling-burn pool if any (INV-13). Same shape as the
+            // rngGate redemption resolution path — sentinel-keyed so multi-day stalls resolve
+            // by construction.
             {
                 IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(
                     ContractAddresses.SDGNRS
                 );
-                if (sdgnrs.hasPendingRedemptions()) {
+                uint32 toResolve = sdgnrs.pendingResolveDay();
+                if (toResolve != 0) {
                     uint16 redemptionRoll = uint16(
                         ((currentWord >> 8) % 151) + 25
                     );
                     uint32 flipDay = day + 1;
-                    sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay);
+                    sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay, toResolve);
                 }
             }
             _finalizeLootboxRng(currentWord);
@@ -1310,17 +1317,20 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         day
                     );
                 }
-                // Resolve gambling burn period if pending (mirrors rngGate redemption resolution)
+                // Resolve the sentinel-stamped gambling-burn pool if any (INV-13). Fallback path
+                // uses fallbackWord for the roll; sentinel still names the stuck day so resolves
+                // are correct even after a 3-day GAMEOVER_RNG_FALLBACK_DELAY stall.
                 {
                     IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(
                         ContractAddresses.SDGNRS
                     );
-                    if (sdgnrs.hasPendingRedemptions()) {
+                    uint32 toResolve = sdgnrs.pendingResolveDay();
+                    if (toResolve != 0) {
                         uint16 redemptionRoll = uint16(
                             ((fallbackWord >> 8) % 151) + 25
                         );
                         uint32 flipDay = day + 1;
-                        sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay);
+                        sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay, toResolve);
                     }
                 }
                 _finalizeLootboxRng(fallbackWord);

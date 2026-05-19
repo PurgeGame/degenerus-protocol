@@ -72,10 +72,10 @@ contract RedemptionGasTest is DeployProtocol {
         vm.prank(player);
         sdgnrs.burn(PLAYER_SDGNRS / 10);
 
-        // Now resolve the period as the game contract
+        // Now resolve the same-wall-day pool as the game contract
         uint32 currentDay = game.currentDayView();
         vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(100, currentDay);
+        sdgnrs.resolveRedemptionPeriod(100, currentDay, currentDay);
     }
 
     // =====================================================================
@@ -88,10 +88,10 @@ contract RedemptionGasTest is DeployProtocol {
         vm.prank(player);
         sdgnrs.burn(PLAYER_SDGNRS / 10);
 
-        // Step 2: Game resolves the period
+        // Step 2: Game resolves the same-wall-day pool
         uint32 currentDay = game.currentDayView();
         vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(100, currentDay);
+        sdgnrs.resolveRedemptionPeriod(100, currentDay, currentDay);
 
         // Step 3: Mock the coinflip day result so claimRedemption doesn't revert
         // getCoinflipDayResult(currentDay) must return (rewardPercent != 0, flipWon)
@@ -108,9 +108,9 @@ contract RedemptionGasTest is DeployProtocol {
             abi.encode(uint256(0))
         );
 
-        // Step 5: Player claims
+        // Step 5: Player claims the day they burned + resolved against
         vm.prank(player);
-        sdgnrs.claimRedemption();
+        sdgnrs.claimRedemption(currentDay);
     }
 
     // =====================================================================
@@ -119,19 +119,20 @@ contract RedemptionGasTest is DeployProtocol {
 
     /// @notice Gas benchmark: hasPendingRedemptions() when redemptions exist
     function test_gas_hasPendingRedemptions_true() external {
+        uint32 currentDay = game.currentDayView();
         // Create a pending redemption
         vm.prank(player);
         sdgnrs.burn(PLAYER_SDGNRS / 10);
 
-        // Now check -- should be true
-        bool pending = sdgnrs.hasPendingRedemptions();
+        // Now check today's pool -- should be true
+        bool pending = sdgnrs.hasPendingRedemptions(currentDay);
         assertTrue(pending, "Expected pending redemptions");
     }
 
     /// @notice Gas benchmark: hasPendingRedemptions() when no redemptions exist
     function test_gas_hasPendingRedemptions_false() external view {
         // No burns submitted -- should be false
-        bool pending = sdgnrs.hasPendingRedemptions();
+        bool pending = sdgnrs.hasPendingRedemptions(game.currentDayView());
         assertFalse(pending, "Expected no pending redemptions");
     }
 

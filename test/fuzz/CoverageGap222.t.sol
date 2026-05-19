@@ -945,14 +945,15 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(sdgnrs).call(
             abi.encodeWithSignature(
-                "resolveRedemptionPeriod(uint16,uint32)",
+                "resolveRedemptionPeriod(uint16,uint32,uint32)",
                 uint16(0),
+                uint32(0),
                 uint32(0)
             )
         );
         vm.prank(buyer);
         (bool o2, ) = address(sdgnrs).call(
-            abi.encodeWithSignature("claimRedemption()")
+            abi.encodeWithSignature("claimRedemption(uint32)", uint32(0))
         );
         vm.prank(buyer);
         (bool o3, ) = address(sdgnrs).call(
@@ -1244,7 +1245,7 @@ contract CoverageGap222 is DeployProtocol {
         );
         vm.prank(buyer);
         (bool o4, ) = address(vault).call(
-            abi.encodeWithSignature("sdgnrsClaimRedemption()")
+            abi.encodeWithSignature("sdgnrsClaimRedemption(uint32)", uint32(0))
         );
         vm.prank(buyer);
         (bool o5, ) = address(vault).call(

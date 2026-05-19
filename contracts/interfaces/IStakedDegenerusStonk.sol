@@ -81,17 +81,25 @@ interface IStakedDegenerusStonk {
     /// @return burnieOut Amount of BURNIE that would be minted
     function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
 
-    /// @notice Check if there are unresolved gambling burn claims for the current period
-    /// @return True if current period has pending base amounts
-    function hasPendingRedemptions() external view returns (bool);
+    /// @notice Check if day `day` has an unresolved gambling-burn pool (SPEC-03).
+    /// @param day Wall-clock day to query.
+    /// @return True if `pendingByDay[day]` has non-zero ETH or BURNIE base.
+    function hasPendingRedemptions(uint32 day) external view returns (bool);
+
+    /// @notice Sentinel for the single-pool invariant (INV-13).
+    /// @return The wall-day of the currently-pending unresolved gambling-burn pool, or 0 if none.
+    ///         Read by AdvanceModule to derive `dayToResolve` under both normal and stall paths.
+    function pendingResolveDay() external view returns (uint32);
 
     /// @notice Total ETH physically held but reserved for in-flight gambling-burn redemptions.
     /// @dev handleGameOverDrain subtracts this so reserved ETH is not swept into terminal payouts.
     function pendingRedemptionEthValue() external view returns (uint256);
 
-    /// @notice Resolve the current gambling burn period with RNG results
-    /// @dev Only callable by game contract during advanceGame
-    /// @param roll The random roll (25-175)
-    /// @param flipDay The coinflip day for BURNIE gamble
-    function resolveRedemptionPeriod(uint16 roll, uint32 flipDay) external;
+    /// @notice Resolve day `dayToResolve`'s gambling-burn pool with RNG results (SPEC-03).
+    /// @dev Only callable by game contract during advanceGame. Writes redemptionPeriods[dayToResolve],
+    ///      emits RedemptionResolved, then deletes pendingByDay[dayToResolve] per SPEC-04 (c).
+    /// @param roll The random roll (25-175).
+    /// @param flipDay The coinflip day for BURNIE gamble.
+    /// @param dayToResolve Wall-clock day whose pool this call resolves.
+    function resolveRedemptionPeriod(uint16 roll, uint32 flipDay, uint32 dayToResolve) external;
 }

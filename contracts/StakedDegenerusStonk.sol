@@ -104,9 +104,6 @@ contract StakedDegenerusStonk {
     ///         reserved ETH is swept by handleGameOverDrain before claimRedemption can run.
     error BurnsBlockedDuringLiveness();
 
-    /// @notice Thrown when a player tries to submit a new claim while one is unresolved
-    error UnresolvedClaim();
-
     /// @notice Thrown when a player tries to claim with no pending redemption
     error NoClaim();
 
@@ -115,6 +112,17 @@ contract StakedDegenerusStonk {
 
     /// @notice Thrown when a gambling burn would exceed 160 ETH daily EV cap per wallet
     error ExceedsDailyRedemptionCap();
+
+    /// @notice Thrown when a gambling burn is attempted while a prior day's pool remains unresolved.
+    /// @dev Enforces the single-pool invariant (INV-13): at most one day's gambling-burn pool
+    ///      can be unresolved at any time. Prevents multi-day pool accumulation during RNG stalls.
+    error PriorDayUnresolved();
+
+    /// @notice Thrown when a gambling burn amount is below the 1-whole-sDGNRS minimum (1e18 raw).
+    /// @dev D-305-DUST-FLOOR-01: required by the 1-slot DayPending packing — `burned` is stored
+    ///      in whole-token units (1e18 divisor), so sub-whole-token burns would either skip
+    ///      cap accounting (INV-10 violation) or accumulate without bound.
+    error BurnTooSmall();
 
 
     // =====================================================================
@@ -209,26 +217,56 @@ contract StakedDegenerusStonk {
     struct PendingRedemption {
         uint96  ethValueOwed;   // base (100%) ETH-equivalent owed (max ~79B ETH)
         uint96  burnieOwed;     // base (100%) BURNIE owed (max ~79B ETH-equiv)
-        uint32  periodIndex;    // which daily period (dailyIdx at submission)
         uint16  activityScore;  // snapshotted activity score + 1 (0 = not yet set)
-    } // 96 + 96 + 32 + 16 = 240 bits (1 slot)
+    } // 96 + 96 + 16 = 208 bits (1 slot); composite outer key (player, day) carries the day reference per SPEC-02
 
     struct RedemptionPeriod {
         uint16  roll;           // 0 = unresolved, 25-175 = resolved
         uint32  flipDay;        // coinflip day for BURNIE gamble
     }
 
-    mapping(address => PendingRedemption) public pendingRedemptions;
+    /// @dev Per-day unresolved gambling-burn pool (SPEC-01, tightened per D-305-STRUCT-TIGHTEN-01
+    ///      to 1 slot via denomination conversion).
+    ///      All four fields packed into a single 256-bit slot:
+    ///        bits 0-63   : ethBase    — gwei units (1e9 wei divisor)
+    ///        bits 64-127 : burnieBase — gwei-equivalent units (1e9 raw BURNIE divisor)
+    ///        bits 128-191: supplySnapshot — whole tokens (1e18 raw divisor)
+    ///        bits 192-255: burned     — whole tokens (1e18 raw divisor)
+    ///      Resolved days clear via `delete pendingByDay[day]` for storage refund.
+    ///
+    ///      Bounds (uint64.max = 1.844e19):
+    ///        - ethBase: realistic per-day pool ≤ 10k wallets × 160 ETH cap = 1.6e15 gwei,
+    ///          ~11500× under uint64.max. ETH dust sub-1-gwei truncated at write — cumulative
+    ///          drift bounded by N×1 gwei per day, within INV-02 dust tolerance.
+    ///        - burnieBase: same denomination, same headroom.
+    ///        - supplySnapshot: INITIAL_SUPPLY = 1e12 whole tokens, 1.84e7× under uint64.max.
+    ///        - burned: ≤ supplySnapshot/2, same headroom.
+    ///
+    ///      Min-burn floor (1 whole sDGNRS, `MIN_BURN_AMOUNT`) enforced via `BurnTooSmall` revert
+    ///      so amount→burned ceiling-conversion always increments by ≥1, preserving INV-10.
+    struct DayPending {
+        uint64 ethBase;
+        uint64 burnieBase;
+        uint64 supplySnapshot;
+        uint64 burned;
+    }
+
+    mapping(address => mapping(uint32 => PendingRedemption)) public pendingRedemptions;
     mapping(uint32 => RedemptionPeriod) public redemptionPeriods;
 
     uint256 public pendingRedemptionEthValue;      // total segregated ETH across all periods
     uint256 internal pendingRedemptionBurnie;       // total reserved BURNIE
-    uint256 internal pendingRedemptionEthBase;      // current unresolved period ETH base
-    uint256 internal pendingRedemptionBurnieBase;   // current unresolved period BURNIE base
+    mapping(uint32 => DayPending) internal pendingByDay;
 
-    uint256 internal redemptionPeriodSupplySnapshot;
-    uint32  internal redemptionPeriodIndex;
-    uint256 internal redemptionPeriodBurned;
+    /// @notice Wall-day of the currently-pending unresolved gambling-burn pool, or 0 if none.
+    /// @dev Enforces INV-13 (single-pool invariant): at most one day's pool may be unresolved at
+    ///      any time. Set by `_submitGamblingClaimFrom` on first burn of a day; cleared by
+    ///      `resolveRedemptionPeriod` when that day's pool is resolved. Read by AdvanceModule to
+    ///      derive `dayToResolve` directly — replaces the brittle `day - 1` derivation under
+    ///      multi-day RNG stalls. Game day 0 is unreachable by construction
+    ///      (`_simulatedDayIndexAt` underflows at day-1 → day 1 is the lowest legitimate value),
+    ///      so 0 unambiguously means "no pool pending".
+    uint32 public pendingResolveDay;
 
     // =====================================================================
     //                          CONSTANTS
@@ -252,6 +290,12 @@ contract StakedDegenerusStonk {
 
     /// @dev Maximum base ethValueOwed a single wallet can accumulate per day via gambling burns
     uint256 private constant MAX_DAILY_REDEMPTION_EV = 160 ether;
+
+    /// @dev Minimum gambling-burn amount (1 whole sDGNRS = 1e18 raw). Required by the 1-slot
+    ///      DayPending packing: `burned` is stored in whole-token units, so sub-whole-token burns
+    ///      would either round to 0 in cap accounting (INV-10 violation) or require ceiling-up
+    ///      semantics. Floor enforced via `BurnTooSmall` revert in `_submitGamblingClaimFrom`.
+    uint256 private constant MIN_BURN_AMOUNT = 1e18;
 
     /// @dev Game contract reference for player actions and claimable queries
     IDegenerusGamePlayer private constant game = IDegenerusGamePlayer(ContractAddresses.GAME);
@@ -572,59 +616,71 @@ contract StakedDegenerusStonk {
     //                       GAMBLING BURN FUNCTIONS
     // =====================================================================
 
-    /// @notice Check whether there are unresolved gambling burn redemptions pending
-    /// @return True if the current period has unresolved ETH or BURNIE base
-    function hasPendingRedemptions() external view returns (bool) {
-        return pendingRedemptionEthBase != 0 || pendingRedemptionBurnieBase != 0;
+    /// @notice Check whether day `day` has an unresolved gambling-burn pool (SPEC-03).
+    /// @param day Wall-clock day to query.
+    /// @return True if `pendingByDay[day]` has non-zero ETH or BURNIE base.
+    function hasPendingRedemptions(uint32 day) external view returns (bool) {
+        return pendingByDay[day].ethBase != 0 || pendingByDay[day].burnieBase != 0;
     }
 
-    /// @notice Called by game contract to resolve the current redemption period with a dice roll
-    /// @dev Adjusts segregated ETH by roll and returns rolled BURNIE amount for event emission.
-    /// @param roll The random roll result (range 25-175, applied as percentage)
-    /// @param flipDay Coinflip day index used for BURNIE gamble resolution
-    function resolveRedemptionPeriod(uint16 roll, uint32 flipDay) external {
+    /// @notice Called by game contract to resolve day `dayToResolve`'s gambling-burn pool with a dice roll (SPEC-03).
+    /// @dev Per SPEC-04 (c): writes `redemptionPeriods[dayToResolve]`, emits `RedemptionResolved`,
+    ///      then deletes `pendingByDay[dayToResolve]` for storage refund. Each day's mapping slot is
+    ///      distinct, so no later resolve can overwrite a resolved day's roll (V-184 closure clause).
+    /// @param roll The random roll result (range 25-175, applied as percentage).
+    /// @param flipDay Coinflip day index used for BURNIE gamble resolution.
+    /// @param dayToResolve Wall-clock day whose pool this call resolves.
+    function resolveRedemptionPeriod(uint16 roll, uint32 flipDay, uint32 dayToResolve) external {
         if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
 
-        uint32 period = redemptionPeriodIndex;
-        if (pendingRedemptionEthBase == 0 && pendingRedemptionBurnieBase == 0) return;
+        DayPending storage pool = pendingByDay[dayToResolve];
+        // Convert pool fields from gwei back to wei for the cumulative-scalar reconciliation.
+        // Drift vs claim-side sums bounded ≤ N gwei per day (INV-02 dust tolerance).
+        uint256 ethBase = uint256(pool.ethBase) * 1e9;
+        uint256 burnieBase = uint256(pool.burnieBase) * 1e9;
+        if (ethBase == 0 && burnieBase == 0) return;
 
-        // Adjust ETH segregation by roll
-        uint256 rolledEth = (pendingRedemptionEthBase * roll) / 100;
-        pendingRedemptionEthValue = pendingRedemptionEthValue - pendingRedemptionEthBase + rolledEth;
-        pendingRedemptionEthBase = 0;
+        // Adjust cumulative ETH segregation by roll for this day's pool
+        uint256 rolledEth = (ethBase * roll) / 100;
+        pendingRedemptionEthValue = pendingRedemptionEthValue - ethBase + rolledEth;
 
         // Compute rolled BURNIE (paid to redeemers via _payBurnie on claim)
-        uint256 burnieToCredit = (pendingRedemptionBurnieBase * roll) / 100;
+        uint256 burnieToCredit = (burnieBase * roll) / 100;
 
-        // Release BURNIE reservation (redeemers claim via _payBurnie which draws balance then coinflip pool)
-        pendingRedemptionBurnie -= pendingRedemptionBurnieBase;
-        pendingRedemptionBurnieBase = 0;
+        // Release cumulative BURNIE reservation for this day's pool
+        pendingRedemptionBurnie -= burnieBase;
 
-        // Store period result
-        redemptionPeriods[period] = RedemptionPeriod({
+        // Store per-day result (write before emit before delete per SPEC-04 (c))
+        redemptionPeriods[dayToResolve] = RedemptionPeriod({
             roll: roll,
             flipDay: flipDay
         });
 
-        emit RedemptionResolved(period, roll, burnieToCredit, flipDay);
+        emit RedemptionResolved(dayToResolve, roll, burnieToCredit, flipDay);
+
+        // Storage refund: 3 slots (ethBase, burnieBase, supplySnapshot+burned) free per SPEC-04 (c).
+        delete pendingByDay[dayToResolve];
+
+        // Clear the single-pool sentinel if this resolve targeted the stamped day (INV-13).
+        if (pendingResolveDay == dayToResolve) pendingResolveDay = 0;
     }
 
-    /// @notice Claim a resolved gambling burn redemption
-    /// @dev Requires period resolved (roll != 0). ETH is always claimable once period resolved.
-    ///      50% of rolled ETH paid direct, 50% routed to Game as lootbox rewards (internal accounting).
-    ///      If game is over, 100% paid as direct ETH (no lootboxes post-gameOver).
-    ///      BURNIE requires coinflip resolution: paid on win, forfeited on loss or if unresolved.
-    ///      If coinflip is unresolved, ETH is paid and BURNIE portion is kept for a second claim.
-    function claimRedemption() external {
+    /// @notice Claim a resolved gambling-burn redemption for day `day` (SPEC-02).
+    /// @dev Requires `redemptionPeriods[day].roll != 0` (period resolved). Reads composite-keyed
+    ///      `pendingRedemptions[msg.sender][day]`; deletes that slot on full-claim path per SPEC-04 (d).
+    ///      Partial-claim branch (coinflip unresolved) preserves the slot with `ethValueOwed = 0` so
+    ///      BURNIE can still be claimed later. 50% of rolled ETH paid direct, 50% routed to Game as
+    ///      lootbox rewards (internal accounting); post-gameOver, 100% paid as direct ETH.
+    /// @param day Wall-clock day whose claim this caller is settling.
+    function claimRedemption(uint32 day) external {
         address player = msg.sender;
-        PendingRedemption storage claim = pendingRedemptions[player];
-        if (claim.periodIndex == 0) revert NoClaim();
+        PendingRedemption storage claim = pendingRedemptions[player][day];
+        if (claim.ethValueOwed == 0 && claim.burnieOwed == 0) revert NoClaim();
 
-        RedemptionPeriod storage period = redemptionPeriods[claim.periodIndex];
+        RedemptionPeriod storage period = redemptionPeriods[day];
         if (period.roll == 0) revert NotResolved();
 
         uint16 roll = period.roll;
-        uint32 claimPeriodIndex = claim.periodIndex;
         uint16 claimActivityScore = claim.activityScore;
 
         // Total rolled ETH. Per-claimant floor division may leave up to (n-1) wei
@@ -657,8 +713,8 @@ contract StakedDegenerusStonk {
         pendingRedemptionEthValue -= totalRolledEth;
 
         if (flipResolved) {
-            // Full claim: clear entirely
-            delete pendingRedemptions[player];
+            // Full claim: clear the (player, day) slot entirely per SPEC-04 (d).
+            delete pendingRedemptions[player][day];
         } else {
             // Partial claim: clear ETH portion, keep BURNIE for later
             claim.ethValueOwed = 0;
@@ -667,7 +723,7 @@ contract StakedDegenerusStonk {
         // Resolve lootboxes (Game debits from sDGNRS's claimable internally — no ETH transfer)
         if (lootboxEth != 0) {
             uint16 actScore = claimActivityScore > 0 ? claimActivityScore - 1 : 0;
-            uint256 rngWord = game.rngWordForDay(claimPeriodIndex);
+            uint256 rngWord = game.rngWordForDay(day);
             uint256 entropy = uint256(keccak256(abi.encode(rngWord, player)));
             game.resolveRedemptionLootbox(player, lootboxEth, entropy, actScore);
         }
@@ -746,22 +802,38 @@ contract StakedDegenerusStonk {
     }
 
     /// @dev Core gambling burn logic. Burns sDGNRS from burnFrom, segregates proportional
-    ///      ETH/BURNIE value for beneficiary, and records into the current period.
-    ///      Enforces 50% supply cap per period and 160 ETH daily EV cap per wallet.
-    ///      Snapshots activity score on first burn of each period for lootbox EV.
+    ///      ETH/BURNIE value for beneficiary into the current wall-day's pool (SPEC-01).
+    ///      Enforces 50% supply cap per day (SPEC-05 lazy-init) and 160 ETH per-(wallet, day) EV cap.
+    ///      Per SPEC-02, writes the per-claim slot at composite key `pendingRedemptions[beneficiary][currentPeriod]`,
+    ///      so a wallet can accumulate distinct claims across multiple unresolved days.
     function _submitGamblingClaimFrom(address beneficiary, address burnFrom, uint256 amount) private {
         uint256 bal = balanceOf[burnFrom];
         if (amount == 0 || amount > bal) revert Insufficient();
+        if (amount < MIN_BURN_AMOUNT) revert BurnTooSmall();
 
-        // 50% supply cap per period
         uint32 currentPeriod = game.currentDayView();
-        if (redemptionPeriodIndex != currentPeriod) {
-            redemptionPeriodSupplySnapshot = totalSupply;
-            redemptionPeriodIndex = currentPeriod;
-            redemptionPeriodBurned = 0;
+
+        // Single-pool invariant (INV-13): if any prior day still holds an unresolved pool,
+        // block this burn. AdvanceModule resolves the stamped day on the next successful advance;
+        // burns are only permitted to land in today's pool or onto an already-active today's pool.
+        uint32 stamp = pendingResolveDay;
+        if (stamp != 0 && stamp != currentPeriod) revert PriorDayUnresolved();
+        if (stamp == 0) pendingResolveDay = currentPeriod;
+
+        DayPending storage pool = pendingByDay[currentPeriod];
+
+        // 50% supply cap per day — lazy-init the snapshot on the first burn of the day (SPEC-05).
+        // supplySnapshot stored in whole tokens (1e18 raw divisor): INITIAL_SUPPLY = 1e30 → 1e12
+        // whole tokens, comfortably under uint64.max (~1.84e19).
+        if (pool.supplySnapshot == 0 && pool.burned == 0) {
+            pool.supplySnapshot = uint64(totalSupply / 1e18);
         }
-        if (redemptionPeriodBurned + amount > redemptionPeriodSupplySnapshot / 2) revert Insufficient();
-        redemptionPeriodBurned += amount;
+        // Ceiling-divide amount→whole tokens so cap accounting is conservative even when amount
+        // isn't an exact multiple of 1e18. INV-10 (per-day supply cap) holds: pool.burned * 1e18
+        // is always ≥ actual cumulative burns for the day.
+        uint256 amountWhole = (amount + 1e18 - 1) / 1e18;
+        if (uint256(pool.burned) + amountWhole > uint256(pool.supplySnapshot) / 2) revert Insufficient();
+        pool.burned += uint64(amountWhole);
 
         uint256 supplyBefore = totalSupply;
 
@@ -778,6 +850,16 @@ contract StakedDegenerusStonk {
         uint256 totalBurnie = burnieBal + claimableBurnie - pendingRedemptionBurnie;
         uint256 burnieOwed = (totalBurnie * amount) / supplyBefore;
 
+        // Snap to gwei at the source (D-305-GWEI-SNAP-01). Eliminates pool↔cumulative-scalar drift
+        // by ensuring every downstream use of ethValueOwed/burnieOwed is a multiple of 1e9 — so
+        // pool.ethBase × 1e9 reconstructs the exact sum-of-claims at resolve. Sub-gwei dust is
+        // truncated per SPEC-04 (b) "zero-rounded ethValueOwed proceeds" semantics, applied
+        // uniformly. Per-claim sub-roll floor-div dust (existing v43 behavior) is unchanged.
+        unchecked {
+            ethValueOwed = (ethValueOwed / 1e9) * 1e9;
+            burnieOwed = (burnieOwed / 1e9) * 1e9;
+        }
+
         // Burn sDGNRS
         unchecked {
             balanceOf[burnFrom] = bal - amount;
@@ -785,27 +867,26 @@ contract StakedDegenerusStonk {
         }
         emit Transfer(burnFrom, address(0), amount);
 
-        // Segregate
+        // Segregate — cumulative globals stay in wei (uint256); per-day pool bases denominated in
+        // gwei (1e9 divisor) to fit uint64. Sub-gwei dust on the pool side bounded ≤ 1 gwei per
+        // claim — drift across the cumulative scalar reconciliation at resolve is bounded by
+        // N×1 gwei and remains within INV-02's dust tolerance (analyzed in 305-01-SUMMARY).
         pendingRedemptionEthValue += ethValueOwed;
-        pendingRedemptionEthBase += ethValueOwed;
+        pool.ethBase += uint64(ethValueOwed / 1e9);
         pendingRedemptionBurnie += burnieOwed;
-        pendingRedemptionBurnieBase += burnieOwed;
+        pool.burnieBase += uint64(burnieOwed / 1e9);
 
-        // Stack into existing claim or start new
-        PendingRedemption storage claim = pendingRedemptions[beneficiary];
-        if (claim.periodIndex != 0 && claim.periodIndex != currentPeriod) {
-            revert UnresolvedClaim();
-        }
+        // Composite-keyed per-claim slot for (beneficiary, currentPeriod) (SPEC-02).
+        PendingRedemption storage claim = pendingRedemptions[beneficiary][currentPeriod];
 
-        // Enforce 160 ETH daily EV cap per wallet
+        // Enforce 160 ETH per-(wallet, day) EV cap (resets naturally on a new day under composite keying).
         if (claim.ethValueOwed + ethValueOwed > MAX_DAILY_REDEMPTION_EV) revert ExceedsDailyRedemptionCap();
 
         claim.ethValueOwed += uint96(ethValueOwed);
         // burnieOwed: uint96 safe — max realistic BURNIE is ~2e24, well below uint96.max (~7.9e28).
         claim.burnieOwed += uint96(burnieOwed);
-        claim.periodIndex = currentPeriod;
 
-        // Snapshot activity score on first burn of period (0 = not yet set, stored as score + 1)
+        // Snapshot activity score on first burn of day (0 = not yet set, stored as score + 1)
         if (claim.activityScore == 0) {
             claim.activityScore = uint16(game.playerActivityScore(beneficiary)) + 1;
         }
