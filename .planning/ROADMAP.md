@@ -74,7 +74,7 @@
 **Plans:** 1 plan
 
 Plans:
-- [ ] 305-01-PLAN.md — Single batched USER-APPROVED contract diff per Phase 304 SPEC (pre-patch grep re-verification + 14 source mutations across 5 files: contracts/StakedDegenerusStonk.sol + contracts/modules/DegenerusGameAdvanceModule.sol + contracts/interfaces/IStakedDegenerusStonk.sol + test/fuzz/RedemptionGas.t.sol + test/fuzz/CoverageGap222.t.sol)
+- [x] 305-01-PLAN.md — Single batched USER-APPROVED contract diff per Phase 304 SPEC (pre-patch grep re-verification + 14 source mutations across 5 files: contracts/StakedDegenerusStonk.sol + contracts/modules/DegenerusGameAdvanceModule.sol + contracts/interfaces/IStakedDegenerusStonk.sol + test/fuzz/RedemptionGas.t.sol + test/fuzz/CoverageGap222.t.sol)
 
 ### Phase 306: Test (TST)
 
