@@ -71,7 +71,10 @@
   4. `resolveRedemptionPeriod(uint16 roll, uint32 flipDay, uint32 dayToResolve)` accepts the day arg + writes `redemptionPeriods[dayToResolve]` + deletes `pendingByDay[dayToResolve]`; `AdvanceModule` call site passes `dayToResolve = currentDayView - 1` (or SPEC-locked equivalent).
   5. `claimRedemption(uint32 day)` reads composite-keyed `pendingRedemptions[msg.sender][day]` + `redemptionPeriods[day]`; `UnresolvedClaim` revert at `:796-797` REMOVED; `delete pendingRedemptions[msg.sender][day]` after payout for storage refund. USER-APPROVED diff committed exactly once per `feedback_batch_contract_approval.md`.
 
-**Plans:** TBD (planned at `/gsd:plan-phase 305` invocation)
+**Plans:** 1 plan
+
+Plans:
+- [ ] 305-01-PLAN.md — Single batched USER-APPROVED contract diff per Phase 304 SPEC (pre-patch grep re-verification + 14 source mutations across 5 files: contracts/StakedDegenerusStonk.sol + contracts/modules/DegenerusGameAdvanceModule.sol + contracts/interfaces/IStakedDegenerusStonk.sol + test/fuzz/RedemptionGas.t.sol + test/fuzz/CoverageGap222.t.sol)
 
 ### Phase 306: Test (TST)
 
