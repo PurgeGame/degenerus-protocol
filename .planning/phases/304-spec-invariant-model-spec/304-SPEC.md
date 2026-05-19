@@ -400,7 +400,278 @@ Plan 04 §4 walks the original design intent + actor game-theory for each of the
 
 ## §3 — Edge Scenario Enumeration (EDGE-01..18)
 
-_To be filled by Plan 03 — see PLAN.md_
+> The 18 EDGE-NN entries below are the v44.0 threat-enumeration locus. Each entry has six labeled sub-fields: a narrative **Scenario**, a **Positive assertion** (correct-behavior outcome), a **Negative assertion** (specific revert OR byte-identity attestation that no exploit is reachable), the **Tests INV-NN** linkage, the **Depends on SPEC-NN** linkage, and the suggested **Foundry function name** for Phase 306 to mechanize. EDGE-07 — the V-184 attack reproduction per `.planning/RNGLOCK-FIXREC.md` §103 (lines 5410-5520) — is the headline negative test for v44.0 closure; HANDOFF-111..117 close STRUCTURALLY by absence of the overwrite primitive (per §2.0 Priority Statement, clause 1). The §1↔§3 cross-link table at the end of this section maps every INV-NN to its EDGE-NN exercisers so Plan 05 can grep-verify completeness.
+
+### EDGE-01: Pre-advance-gap burn on day D
+
+**Scenario:** Wall-clock has just flipped to day `D` (i.e., `game.currentDayView() == D`) and day-`D`'s `advanceGame()` call has not yet fired. Player A calls `burn(amount)` during this gap window. Day-`D-1`'s redemption pool `pendingByDay[D-1]` exists and is populated by burns from the prior wall-clock day; day-`D`'s pool `pendingByDay[D]` is the fresh slot the new burn must land in. Under post-refactor per-day keying (SPEC-01), the burn writes `pendingByDay[currentDay].ethBase += ethValueOwed` where `currentDay = game.currentDayView() == D`, while the still-unresolved `pendingByDay[D-1]` retains its full prior-day base value. The cumulative scalar `pendingRedemptionEthValue` reflects the sum of both pools simultaneously.
+
+**Positive assertion:** the new burn writes its `ethValueOwed` and `burnieOwed` proportional values into `pendingByDay[D]` (the post-refactor lazy-init also fires here: `pendingByDay[D].supplySnapshot` initializes to `totalSupply` AT THE BURN MOMENT and `pendingByDay[D].burned` increments by `amount`); the cumulative `pendingRedemptionEthValue` equals the sum of `pendingByDay[D-1].ethBase` (pre-existing) + the new ETH base contribution from this burn into `pendingByDay[D].ethBase`; the per-claim slot `pendingRedemptions[A][D]` carries the player-side mirror of this base.
+
+**Negative assertion:** `pendingByDay[D-1].ethBase`, `pendingByDay[D-1].burnieBase`, `pendingByDay[D-1].supplySnapshot`, and `pendingByDay[D-1].burned` are each byte-identical before and after the day-`D` burn (captured snapshot pre-burn, re-read post-burn, asserted equal slot-for-slot). The day-`D` burn cannot write to or mutate the day-`D-1` pool; the storage key separation makes this physically unreachable.
+
+**Tests INV-NN:** Tests INV-08 (pre-advance-gap burn safety — burns during the gap land in the current-day pool, never the prior-day pool). Also tests INV-04 (per-day base correctness — the new `pendingByDay[D].ethBase` equals the sum of `pendingRedemptions[A][D].ethValueOwed` from this single-burn case) and INV-05 (cumulative correctness — `pendingRedemptionEthValue` aggregates both pools).
+
+**Depends on SPEC-NN:** Depends on SPEC-01 (per-day-keyed `pendingByDay[uint32]` pool) + SPEC-03 (dayToResolve = `currentDayView() - 1` — the advance never reads or writes `pendingByDay[currentDay]`).
+
+**Foundry function name:** `testFuzz_EDGE_01_PreAdvanceGapBurnLandsInCurrentDayPool`
+
+### EDGE-02: Two pending days simultaneously
+
+**Scenario:** Day `D-1` has unresolved burns (`pendingByDay[D-1].ethBase != 0`) — i.e., the prior wall-clock day's burns are awaiting their day-`D` advance call to resolve. Concurrently, the wall-clock has already flipped to day `D`, and one or more day-`D` burns have already landed in `pendingByDay[D]`. The AdvanceModule now fires day-`D`'s `advanceGame()` call, which invokes `resolveRedemptionPeriod(roll, flipDay, dayToResolve)` with `dayToResolve = currentDayView() - 1 = D-1` (per SPEC-03). The resolver must process `pendingByDay[D-1]` only — it must not read from or write to `pendingByDay[D]`.
+
+**Positive assertion:** after the day-`D` advance fires, `redemptionPeriods[D-1].roll == R_D` (the rolled value derived from day-`D`'s VRF word), `redemptionPeriods[D-1].flipDay` is set to the corresponding coinflip day, the `RedemptionResolved` event emits for period `D-1`, and `pendingByDay[D-1]` is deleted (`pendingByDay[D-1].ethBase == 0 && pendingByDay[D-1].burnieBase == 0 && pendingByDay[D-1].supplySnapshot == 0 && pendingByDay[D-1].burned == 0` per SPEC-04 (c) delete-at-resolve).
+
+**Negative assertion:** `pendingByDay[D].ethBase`, `pendingByDay[D].burnieBase`, `pendingByDay[D].supplySnapshot`, and `pendingByDay[D].burned` are byte-identical before and after the day-`D` advance call (captured snapshot pre-advance, re-read post-advance, asserted equal slot-for-slot); `redemptionPeriods[D].roll == 0` after the advance (the day-`D` period slot has NOT been written — only `redemptionPeriods[D-1]` was written). The advance fundamentally cannot touch the current day's pool because `dayToResolve = D-1` is the explicit arg passed by the AdvanceModule.
+
+**Tests INV-NN:** Tests INV-08 (pre-advance-gap burn safety — confirms the burn into day `D` is preserved unmodified by the day-`D` advance) and INV-09 (skipped-advance recovery — confirms one-day-at-a-time resolution; the next advance for day `D+1` will resolve `pendingByDay[D]` and so on).
+
+**Depends on SPEC-NN:** Depends on SPEC-03 (explicit `dayToResolve` arg; `currentDayView() - 1` derivation) + SPEC-04 (c) (delete-at-resolve produces the day-`D-1` cleared-state post-advance).
+
+**Foundry function name:** `testFuzz_EDGE_02_TwoPendingDaysSimultaneous`
+
+### EDGE-03: Single player burns multiple days, never claims
+
+**Scenario:** Player A burns on day `D`, then again on day `D+1`, then again on day `D+2` — without ever calling `claimRedemption` between burns. Under post-refactor composite-key `pendingRedemptions[player][day]` (SPEC-02), each burn writes to an independent storage slot: `pendingRedemptions[A][D]`, `pendingRedemptions[A][D+1]`, `pendingRedemptions[A][D+2]`. The pre-refactor `UnresolvedClaim` revert (at `:796-797` per source) is REMOVED under SPEC-02, so a multi-day pending pile-up is legitimate. After the day-`D+1`, day-`D+2`, day-`D+3` advances have all fired (resolving days `D`, `D+1`, `D+2` respectively), player A can call `claimRedemption(D)`, `claimRedemption(D+1)`, `claimRedemption(D+2)` in any order.
+
+**Positive assertion:** each of `pendingRedemptions[A][D]`, `pendingRedemptions[A][D+1]`, `pendingRedemptions[A][D+2]` is independently populated with its own `ethValueOwed`, `burnieOwed`, and `activityScore` derived from the contract state at its respective burn moment; each of `redemptionPeriods[D].roll`, `redemptionPeriods[D+1].roll`, `redemptionPeriods[D+2].roll` is independently written by its respective advance; claiming `D+2` first (out-of-order) succeeds and deletes `pendingRedemptions[A][D+2]` per SPEC-04 (d) without touching `pendingRedemptions[A][D]` or `pendingRedemptions[A][D+1]`. The claims for `D` and `D+1` then remain claimable in any order.
+
+**Negative assertion:** claiming day `D+2` does not mutate the claim slots for days `D` or `D+1` — captured `pendingRedemptions[A][D].ethValueOwed`, `.burnieOwed`, `.activityScore` byte-identical before and after the day-`D+2` claim. No `UnresolvedClaim` revert fires at any of the burns (the revert is structurally removed under SPEC-02); no cross-day storage aliasing.
+
+**Tests INV-NN:** Tests INV-04 (per-day base correctness — each day's base correctly accumulates only its own day's burns) and INV-07 (no self-roll manipulation via timing — the day-`D+2` claim does not retroactively mutate the locked-at-burn-time `pendingRedemptions[A][D].ethValueOwed`).
+
+**Depends on SPEC-NN:** Depends on SPEC-02 (composite-key `pendingRedemptions[player][day]`; `UnresolvedClaim` revert removed).
+
+**Foundry function name:** `testFuzz_EDGE_03_SinglePlayerMultiDayClaimsIndependent`
+
+### EDGE-04: Multiple players burn same day, different times relative to advance
+
+**Scenario:** Day `D`. Player A burns at time `T1` (pre-advance, i.e., before day-`D+1`'s `advanceGame` fires). Player B burns at time `T2` (post-advance — but here "post-advance" specifically means after day-`D`'s `advanceGame` call has fired and resolved day `D-1`, AND before wall-clock crosses into day `D+1`). Both burns target the same wall-clock day `D` and therefore both write into `pendingByDay[D]` per SPEC-01. The lazy-init snapshot (SPEC-05) fires on whichever of `T1` or `T2` is the first burn of day `D`. Eventually, day-`D+1`'s `advanceGame` fires and `resolveRedemptionPeriod(roll, flipDay, dayToResolve = D)` is invoked.
+
+**Positive assertion:** at day-`D+1` advance time, `pendingByDay[D].ethBase == pendingRedemptions[A][D].ethValueOwed + pendingRedemptions[B][D].ethValueOwed` (the per-day base equals the sum of player contributions). After the resolve, both `pendingRedemptions[A][D]` and `pendingRedemptions[B][D]` reference the SAME `redemptionPeriods[D].roll == R_{D+1}` — when each player claims, their `totalRolledEth = (claim.ethValueOwed * R_{D+1}) / 100` is computed using the same roll. The sum of `totalRolledEth` paid to A and B equals `(pendingByDay[D].ethBase * R_{D+1}) / 100` modulo per-claimant floor-division dust bounded by 1 wei per claimant.
+
+**Negative assertion:** A's `pendingRedemptions[A][D].ethValueOwed` value is byte-identical before and after B's burn (captured pre-B-burn, re-read post-B-burn, asserted equal); B's `pendingRedemptions[B][D].ethValueOwed` value is byte-identical before and after the resolve (captured pre-resolve, re-read post-resolve). The two players' per-claim slots are independent storage keys and cannot overwrite each other.
+
+**Tests INV-NN:** Tests INV-04 (per-day base correctness — the per-day base correctly aggregates A + B), INV-05 (cumulative correctness — `pendingRedemptionEthValue` tracks the sum), and INV-06 (no cross-player roll manipulation — A's roll is identical to B's roll for day `D`, and neither can manipulate the other's claim).
+
+**Depends on SPEC-NN:** Depends on SPEC-01 (per-day-keyed pool) + SPEC-02 (composite-key player-day claim).
+
+**Foundry function name:** `testFuzz_EDGE_04_MultiplePlayersSameDay`
+
+### EDGE-05: Player claims before advance fires
+
+**Scenario:** Player A burns on day `D`, writing `pendingRedemptions[A][D].ethValueOwed = X` and `redemptionPeriods[D].roll == 0` (unwritten — day-`D+1`'s advance has not yet fired). Before day-`D+1`'s advance fires (i.e., the wall-clock either has not yet flipped to day `D+1` or has but the advance hasn't been called), player A attempts to call `claimRedemption(D)`. The `claimRedemption` function reads `redemptionPeriods[D]` (per SPEC-02), checks `period.roll == 0`, and reverts with `NotResolved` (error at `:114` per `contracts/StakedDegenerusStonk.sol`).
+
+**Positive assertion:** the call to `claimRedemption(D)` reverts with `NotResolved`. The revert fires from the existing `:624` guard (`if (period.roll == 0) revert NotResolved();`) which is preserved verbatim under SPEC-02. After the failed call, the player can wait for the advance and then successfully claim.
+
+**Negative assertion:** no state mutation occurs on the failed claim attempt — `pendingRedemptions[A][D].ethValueOwed`, `.burnieOwed`, `.activityScore` byte-identical before and after the failed call; `pendingRedemptionEthValue` byte-identical; no event emitted. The revert is total (no partial state). No mutation of `redemptionPeriods[D]` either — the slot stays at its zero-initialized state.
+
+**Tests INV-NN:** Tests INV-07 (no self-roll manipulation via timing — the failed claim doesn't alter the locked `ethValueOwed`).
+
+**Depends on SPEC-NN:** Depends on SPEC-02 (composite-key claim with `NotResolved` revert preserved at `:624`).
+
+**Foundry function name:** `testFuzz_EDGE_05_ClaimBeforeResolveReverts`
+
+### EDGE-06: Skipped advance, long stall
+
+**Scenario:** Player A burns on day `D`, writing `pendingRedemptions[A][D]` and `pendingByDay[D]` normally. Day-`D+1`'s `advanceGame` does NOT fire on time — perhaps stalled for 12 hours or longer due to a VRF callback delay, retryLootboxRng invocation, or simple advance-caller absence. Eventually (could be hours, could be a full day later — but always within the protocol's stall-recovery posture), day-`D+1`'s advance does fire, calling `resolveRedemptionPeriod(roll, flipDay, dayToResolve = D)` per SPEC-03. The VRF word feeding `roll` could be either the originally-pending day-`D+1` VRF word (if the stall was VRF-callback delay) OR the retryLootboxRng failsafe word (per `D-42N-RETRY-RNG-DOMAIN-SEP-01` carry — the failsafe path is structurally separate from but produces a valid `roll` value).
+
+**Positive assertion:** after the eventual advance fires, `redemptionPeriods[D].roll != 0` and equals whichever VRF-derived value the advance produced; player A's subsequent `claimRedemption(D)` reads that `roll` and pays `totalRolledEth = (claim.ethValueOwed * roll) / 100` as normal. No stuck claim path; the claim succeeds regardless of how long the stall lasted; the day-`D` pool is fully resolved.
+
+**Negative assertion:** there is no time-based degradation of the claim — `pendingRedemptions[A][D].ethValueOwed` is byte-identical to its post-burn value at the moment of the eventual advance (captured snapshot at burn, re-read at advance, asserted equal). No mutation by the passage of wall-clock time; no mutation by intervening burn/claim/admin actions by other players (per INV-07). Backward-trace per `feedback_rng_backward_trace.md`: the eventual `roll` value is a deterministic function ONLY of the VRF word that fed the eventual advance's `currentWord` derivation (chainlink callback OR retryLootboxRng) AND the per-position bit-slice ops in AdvanceModule — no SLOAD of player-controllable state inside the rng-derivation window aliases into `roll`.
+
+**Tests INV-NN:** Tests INV-09 (skipped-advance recovery — oldest-first ordering; the eventual advance resolves day `D` as the next-oldest unresolved). Also tests INV-07 (no self-roll manipulation via timing — the claim value is locked at burn time independent of stall duration).
+
+**Depends on SPEC-NN:** Depends on SPEC-03 (`dayToResolve = currentDayView() - 1` derivation; oldest-first by construction since AdvanceModule's day-by-day catch-up loop iterates from oldest forward).
+
+**Foundry function name:** `testFuzz_EDGE_06_SkippedAdvanceLongStallEventualResolution`
+
+### EDGE-07: V-184 attack reproduction — same-day post-resolve re-burn → next-advance overwrite (THE HEADLINE NEGATIVE TEST for v44.0 closure)
+
+**Scenario:** This is the verbatim reproduction of the V-184 attack mechanic enumerated in `.planning/RNGLOCK-FIXREC.md` §103.A trace steps 1-5 (lines 5443-5470) and §103.B actor game-theory walk steps 1-7 (lines 5482-5510). Attack sequence: (1) Day `D`, player A burns `amount_A` sDGNRS via `burn(amount_A)` — writing `pendingRedemptions[A][D]` and incrementing `pendingByDay[D].ethBase`. (2) Day-`D+1`'s advance fires, calling `resolveRedemptionPeriod(roll_{D+1}, flipDay, dayToResolve = D)` and writing `redemptionPeriods[D].roll = R_{D+1}` (the roll derived from day-`D+1`'s VRF word; see RNGLOCK-FIXREC §103.A step 2 for the pre-refactor mechanism). Per SPEC-04 (c), `delete pendingByDay[D]` fires inside the resolver after the write. (3) Attacker B (or attacker A) — still on wall-clock day `D` (post-advance, pre-day-boundary, per RNGLOCK-FIXREC §103.B cross-day-boundary subtlety at line 5517) — observes `redemptionPeriods[D].roll = R_{D+1}` via the public auto-getter; if `R_{D+1} < 100` (unfavorable), attacker B calls `burn(1)` to re-burn 1 wei sDGNRS. Under post-refactor SPEC-01 + SPEC-03 + SPEC-04 (c), the re-burn must NOT overwrite `redemptionPeriods[D].roll` at any future advance. The post-refactor behavior is determined by where the 1-wei re-burn lands: (i) if the re-burn happens with `game.currentDayView() == D` (still day `D` wall-clock), it lands in `pendingByDay[D]` — but `pendingByDay[D]` was just deleted at step 2's resolve (SPEC-04 (c)), so the slot is fresh — the re-burn re-creates `pendingByDay[D]` as a NEW entry with `supplySnapshot` lazy-initialized to current `totalSupply` and `burned = 1` and `ethBase = 1-wei-proportional-eth`; (ii) if the wall-clock has crossed to day `D+1`, the re-burn lands in `pendingByDay[D+1]`. Either way, the re-burn writes to `pendingByDay[D]` or `pendingByDay[D+1]` — NEVER directly to `redemptionPeriods[D]`. (4) Day-`D+2`'s advance fires, calling `resolveRedemptionPeriod(roll_{D+2}, flipDay, dayToResolve = D+1)` per SPEC-03 (dayToResolve = `currentDayView() - 1`). The advance writes `redemptionPeriods[D+1].roll = R_{D+2}` — a DISTINCT mapping slot from `redemptionPeriods[D]`. (5) On a further next advance (day `D+3`), `resolveRedemptionPeriod(roll, flipDay, dayToResolve = D+2)` writes `redemptionPeriods[D+2].roll`, and if the re-burn from step 3 landed in `pendingByDay[D]` (case (i) above), the advance that resolves that pool will write `redemptionPeriods[D]` — but wait: this is the V-184 question. Post-refactor: the advance for `pendingByDay[D]` writes to `redemptionPeriods[dayToResolve = D]` — but at that point, `currentDayView() - 1 = D` only if `currentDayView() == D+1`. Since case (i) requires the wall-clock to still be at day `D` for the re-burn AND the next advance (D+2's advance) computes `dayToResolve = currentDayView() - 1 = D+1`, the re-created `pendingByDay[D]` slot is NOT resolved at day-`D+2`'s advance — it's only resolved at the advance whose call passes `dayToResolve = D`. That advance is day-`D+1`'s advance, which already fired at step 2 and is one-shot per day. There is therefore NO future advance call that writes to `redemptionPeriods[D]` (because no future advance will pass `dayToResolve = D` — the AdvanceModule's catch-up loop iterates oldest-first from the oldest unresolved day, and `D` was already resolved at step 2). The re-created `pendingByDay[D]` becomes inert structurally: its value cannot trigger an `redemptionPeriods[D]` overwrite because no resolver receives `dayToResolve = D` again. Per RNGLOCK-FIXREC §103 V-184 mechanic verbatim: the attacker's same-day post-resolve re-burn → next-advance overwrite primitive is closed STRUCTURALLY by the storage shape (every day's resolve writes a distinct mapping slot, and `dayToResolve` is bounded oldest-first by the AdvanceModule per SPEC-03). HANDOFF-111..117 are closed by this entry alone (the 7 catalog rows V-184/V-186/V-188/V-190/V-191/V-192/V-193 collapse into the same structural mechanism per FIXREC §0.6).
+
+**Positive assertion:** at every step of the attack sequence above, the resolver respects `dayToResolve` as the explicit arg passed by the AdvanceModule (SPEC-03); the writes target distinct mapping slots `redemptionPeriods[D]`, `redemptionPeriods[D+1]`, `redemptionPeriods[D+2]`; player A's `claimRedemption(D)` reads `redemptionPeriods[D].roll = R_{D+1}` (its first-write value from step 2) and pays `totalRolledEth = (claim.ethValueOwed * R_{D+1}) / 100` exactly as originally resolved.
+
+**Negative assertion (THE LOAD-BEARING V-184 CLOSURE):** `redemptionPeriods[D].roll` is byte-identical to its first-write value `R_{D+1}` after every subsequent state transition in the attack sequence. Specifically, captured snapshot `R_{D+1} = redemptionPeriods[D].roll` immediately after step 2 (post-day-`D+1`-advance); after step 3 (re-burn) the snapshot is unchanged; after step 4 (day-`D+2` advance) the snapshot is unchanged; after step 5 (day-`D+3` advance and any subsequent advances) the snapshot is unchanged; assertEq enforced at every checkpoint. INV-01 (write-once roll immutability) holds across the entire attack sequence. NO re-roll is achievable by ANY single-wei or multi-wei re-burn sequence on day `D` post-resolve, regardless of wall-clock timing relative to the day boundary. This is the structural closure of the V-184 catastrophe-class vector per RNGLOCK-FIXREC §103 + HANDOFF-111..117.
+
+**Tests INV-NN:** Tests INV-01 (write-once roll immutability — `redemptionPeriods[D].roll` written exactly once at step 2 and immutable thereafter), INV-06 (no cross-player roll manipulation — attacker B's re-burn cannot mutate player A's effective roll), and INV-07 (no self-roll manipulation via timing — even attacker A re-burning their own claim cannot retroactively mutate the day-`D` roll).
+
+**Depends on SPEC-NN:** Depends on SPEC-01 (per-day-keyed `pendingByDay[uint32]` and per-day-keyed `redemptionPeriods[uint32]` — distinct slots per day, no shared index), SPEC-03 (explicit `dayToResolve` arg + `dayToResolve = currentDayView() - 1` + oldest-first AdvanceModule iteration), and SPEC-04 (c) (delete-at-resolve makes `pendingByDay[D]` re-creation by post-resolve burns a fresh-pool event rather than a stale-pool re-arming).
+
+**Cross-reference:** This EDGE-NN is the spec for TST-04 (the standalone V-184 reproduction in Phase 306, per `.planning/REQUIREMENTS.md` line 63 `TST-04`) and TST-05 (the Phase 301 `test/fuzz/RngLockDeterminism.t.sol` `vm.skip(HANDOFF-111..117)` 7-block → strict-assertion flip, per `.planning/REQUIREMENTS.md` line 64 + Phase 301 SCAFFOLD + `D-301-VMSKIP-MECHANISM-01` Option C). The 7 catalog rows closed by this single test: HANDOFF-111 (V-184), HANDOFF-112 (V-186), HANDOFF-113 (V-188), HANDOFF-114 (V-190), HANDOFF-115 (V-191), HANDOFF-116 (V-192), HANDOFF-117 (V-193) — per FIXREC §0.6 subsumption map.
+
+**Foundry function name:** `testFuzz_EDGE_07_V184AttackReproductionStructuralClosure`
+
+### EDGE-08: Burn → gameOver → claim
+
+**Scenario:** Two timing variants probed. **Variant 1 (gameOver fires BEFORE day-`D+1` advance):** Player A burns on day `D` writing `pendingRedemptions[A][D]` and `pendingByDay[D]` normally. Before day-`D+1`'s `advanceGame` fires, `game.gameOver()` latches to true (terminal condition). Per SPEC-04 (a) lock — gracefully-resolve — `pendingByDay[D]` SURVIVES the `gameOver` latching; the eventual day-`D+1` advance call still fires `resolveRedemptionPeriod(roll, flipDay, dayToResolve = D)` and writes `redemptionPeriods[D].roll` normally (the advance loop does not short-circuit redemption resolution on `gameOver`, per the SPEC-04 (a) rationale — minimum-surface-area approach via existing logic at `contracts/StakedDegenerusStonk.sol:638-643`). Player A then calls `claimRedemption(D)`: the `isGameOver = game.gameOver()` check at `:635` selects the `isGameOver` branch at `:638-643` which yields `ethDirect = totalRolledEth` (100% direct, no lootbox routing). **Variant 2 (gameOver fires AFTER resolve but BEFORE claim):** Player A burns day `D`; day-`D+1` advance fires and resolves normally with `redemptionPeriods[D].roll = R_{D+1}`. Then `gameOver` latches. Player A then claims: same `:635` check yields the same 100%-direct outcome as Variant 1 — no special branch needed in `resolveRedemptionPeriod`.
+
+**Positive assertion:** in both variants, player A's claim succeeds (no revert); the payout amount is `totalRolledEth = (claim.ethValueOwed * R_{D+1}) / 100`; in the `isGameOver` branch, the full `totalRolledEth` is paid as direct ETH (`ethDirect = totalRolledEth`, `lootboxEth = 0` per `:638-643`); the `delete pendingRedemptions[A][D]` (SPEC-04 (d)) fires on the full-claim path and the slot is cleared.
+
+**Negative assertion:** no partial state — either the claim succeeds in full or it reverts in full; no double-payment (only one `_payEth` call per claim, gated by the delete-at-claim refund); no stuck funds (`pendingRedemptionEthValue` decrements by exactly `totalRolledEth` per `:657`); no lootbox routing under `isGameOver` (lootboxEth == 0 explicitly).
+
+**Tests INV-NN:** Tests INV-12 (gameOver mid-pending safety — pre-`gameOver` pending resolves and claims correctly under both variants).
+
+**Depends on SPEC-NN:** Depends on SPEC-04 (a) (gracefully-resolve mid-pending gameOver lock).
+
+**Foundry function name:** `testFuzz_EDGE_08_BurnGameOverClaimBothVariants`
+
+### EDGE-09: Concurrent claims from N players same day
+
+**Scenario:** N players (e.g., N ∈ {2, 5, 10, 100} — fuzz range) all burn on day `D`, each contributing `ethValueOwed_i` to `pendingByDay[D].ethBase`. Day-`D+1`'s advance fires and writes `redemptionPeriods[D].roll = R_{D+1}`. All N players then call `claimRedemption(D)` (in arbitrary order — interleaved or sequential — fuzz the ordering). Each claim computes `totalRolledEth_i = (claim_i.ethValueOwed * R_{D+1}) / 100` per `:632` (floor division — per-claimant up to 1 wei dust). Each claim decrements `pendingRedemptionEthValue` by exactly its `totalRolledEth_i` per `:657`.
+
+**Positive assertion:** the sum of all per-claimant `totalRolledEth_i` equals `(pendingByDay[D].ethBase * R_{D+1}) / 100` ± (N-1) wei dust (the per-claimant floor-division can leave up to 1 wei rounding loss per claimant relative to the aggregate — total aggregate dust bounded by N-1 wei since one claimant's full per-claimant value lands exactly). After all N claims, `pendingRedemptionEthValue` decremented by `sum(totalRolledEth_i)`. Each player receives their `ethDirect_i` and `burniePayout_i` per existing `:632-684` semantics.
+
+**Negative assertion:** total payouts in aggregate do NOT exceed `(pendingByDay[D].ethBase * R_{D+1}) / 100` (no over-payment); the post-claim sum of `pendingRedemptionEthValue` decrements is bounded above by the pre-resolve `pendingByDay[D].ethBase * R_{D+1} / 100` value; no double-claim possible — second call to `claimRedemption(D)` by the same player reverts `NoClaim` (error at `:111` per `contracts/StakedDegenerusStonk.sol`) because `delete pendingRedemptions[player][D]` fired at first claim per SPEC-04 (d) and the subsequent read sees `claim.ethValueOwed == 0 && claim.burnieOwed == 0`.
+
+**Tests INV-NN:** Tests INV-02 (ETH conservation with dust bound) and INV-05 (cumulative correctness — `pendingRedemptionEthValue` decrement equals the aggregate `totalRolledEth` paid).
+
+**Depends on SPEC-NN:** Depends on SPEC-02 (composite-key claim) + SPEC-04 (d) (delete-at-full-claim prevents double-claim).
+
+**Foundry function name:** `testFuzz_EDGE_09_NPlayersConcurrentClaimsSumWithDust`
+
+### EDGE-10: Re-entrancy attempt on _payEth
+
+**Scenario:** Malicious recipient contract `MaliciousReceiver` calls `claimRedemption(D)` after burning on day `D` and after day-`D+1`'s advance fires. During the `_payEth` call at `:683` (which is the LAST step of `claimRedemption` per the CEI ordering at `:618-684`), the contract uses raw `.call{value: ethDirect}("")` to transfer ETH. `MaliciousReceiver`'s `receive()` or `fallback()` function attempts to re-enter `claimRedemption(D)` recursively to drain a second payout from the same day's claim slot.
+
+**Positive assertion:** the re-entrant call inside `MaliciousReceiver.receive()` reverts with `NoClaim` (error at `:111` per `contracts/StakedDegenerusStonk.sol`). The reason: per SPEC-04 (d), `delete pendingRedemptions[msg.sender][day]` fires INSIDE `claimRedemption(day)` AFTER `_payBurnie` but BEFORE `_payEth` is invoked at `:683` (the actual CEI ordering: `delete` at the post-`flipResolved` true branch around `:660-661`, then `_payBurnie` at `:677`, then emit at `:680`, then `_payEth` at `:683` — the delete fires before the external ETH `.call`, so by the time re-entry happens the storage slot is cleared). The re-entrant call reads `pendingRedemptions[player][D].ethValueOwed == 0 && .burnieOwed == 0`, and the `NoClaim` revert at the entry guard (current `:621` analog `if (claim.periodIndex == 0) revert NoClaim();` re-keyed under SPEC-02 to a zero-equivalent guard) fires.
+
+**Negative assertion:** no double-payout — `pendingRedemptionEthValue` decrements by exactly `totalRolledEth` (one decrement at `:657`, not two); aggregate ETH transferred to `MaliciousReceiver` equals `ethDirect` (one transfer), not `2 * ethDirect`; the re-entrant call's revert propagates UP and reverts the outer call ONLY IF the outer `_payEth` `.call` checks success (which it does — `:828-829` and `:834-835` revert `TransferFailed` on `!success`). If `MaliciousReceiver` swallows the revert and returns successfully (so outer `.call` reports success), the outer claim succeeds with exactly one payout — no double-claim because the storage is cleared.
+
+**Tests INV-NN:** Tests INV-02 (ETH conservation under re-entrant claim) and INV-07 (no self-roll manipulation via timing — re-entry cannot retroactively re-arm a deleted claim).
+
+**Depends on SPEC-NN:** Depends on SPEC-04 (d) (delete-at-claim happens before the external ETH `.call`, structurally precluding re-entrant double-claim).
+
+**Foundry function name:** `testFuzz_EDGE_10_ReentrancyOnPayEthBlocked`
+
+### EDGE-11: Burn during rngLocked window
+
+**Scenario:** During the VRF callback window — specifically when `game.rngLocked() == true` (the AdvanceModule has fired a VRF request and is awaiting Chainlink callback) — a player calls `burn(amount)`. The existing guard at `contracts/StakedDegenerusStonk.sol:492` (`if (game.rngLocked()) revert BurnsBlockedDuringRng();`) fires immediately. Under SPEC-01 + SPEC-03, this guard is PRESERVED — the per-day refactor does not change this gate. The guard's purpose is exactly to close the rng-commitment window per `feedback_rng_commitment_window.md` (the player must not be able to alter VRF-input-feeding state between VRF request and fulfillment).
+
+**Positive assertion:** the call to `burn(amount)` reverts with `BurnsBlockedDuringRng` (error at `:100` per `contracts/StakedDegenerusStonk.sol`). The revert fires at `:492` before any state mutation. After the revert, the player can wait for `rngLocked` to clear (post-callback) and then burn successfully.
+
+**Negative assertion:** no state mutation — `pendingByDay[currentDay].ethBase`, `.burnieBase`, `.supplySnapshot`, `.burned` byte-identical before and after the failed call; `pendingRedemptions[player][currentDay].ethValueOwed`, `.burnieOwed`, `.activityScore` byte-identical; `pendingRedemptionEthValue`, `pendingRedemptionBurnie` byte-identical; `balanceOf[player]` byte-identical. The revert is total. Backward-trace per `feedback_rng_commitment_window.md`: no SLOAD inside the rng-window of any slot that this burn would have mutated — the guard structurally precludes the SLOAD-during-window vector.
+
+**Tests INV-NN:** Tests INV-06 (no cross-player roll manipulation during the RNG-input commitment window — burns during `rngLocked` cannot mutate the inputs that derive the roll).
+
+**Depends on SPEC-NN:** Depends on SPEC-01 (the per-day refactor preserves the existing `:492` guard verbatim; no change to the rngLocked check).
+
+**Foundry function name:** `testFuzz_EDGE_11_BurnDuringRngLockedReverts`
+
+### EDGE-12: Burn during livenessTriggered window
+
+**Scenario:** During the liveness-triggered-but-not-yet-gameOver window — specifically when `game.livenessTriggered() == true && game.gameOver() == false` — a player calls `burn(amount)`. The existing guard at `contracts/StakedDegenerusStonk.sol:491` (`if (game.livenessTriggered()) revert BurnsBlockedDuringLiveness();`) fires immediately. Note: under `game.gameOver() == true`, the prior branch at `:487-490` handles deterministic burn and returns before reaching the liveness check, so this EDGE is specifically the liveness-on-gameOver-off window.
+
+**Positive assertion:** the call to `burn(amount)` reverts with `BurnsBlockedDuringLiveness` (error at `:105` per `contracts/StakedDegenerusStonk.sol`). The revert fires at `:491` before any state mutation.
+
+**Negative assertion:** no state mutation — `pendingByDay[currentDay].ethBase`, `.burnieBase`, `.supplySnapshot`, `.burned` byte-identical before and after the failed call; player's claim slot byte-identical; cumulative scalars byte-identical; `balanceOf[player]` byte-identical. The revert is total. Burns during the pre-gameOver-latch liveness window cannot land any value into `pendingByDay` slots — this preserves INV-08's "no pending writes during the structurally-uncertain liveness window" property.
+
+**Tests INV-NN:** Tests INV-08 (pre-advance-gap burn safety — no pending writes in the pre-gameOver-latch liveness window).
+
+**Depends on SPEC-NN:** Depends on SPEC-01 (the per-day refactor preserves the existing `:491` guard verbatim; no change to the livenessTriggered check).
+
+**Foundry function name:** `testFuzz_EDGE_12_BurnDuringLivenessReverts`
+
+### EDGE-13: Zero-rounded ethValueOwed from tiny burn
+
+**Scenario:** Player calls `burn(1)` — i.e., 1 wei sDGNRS — at a moment when `totalSupply` is very large relative to `totalMoney`. Per `_submitGamblingClaimFrom`'s computation `ethValueOwed = (totalMoney * amount) / supplyBefore`, the floor-division rounds to 0 (e.g., `totalMoney = 100 ether`, `amount = 1`, `supplyBefore = 1e30` → `ethValueOwed = (100e18 * 1) / 1e30 = 0`). Per SPEC-04 (b) lock — burn proceeds — the existing `amount == 0` revert at `:754` PRESERVED is the only zero-guard; a zero-rounded `ethValueOwed` from a non-zero `amount` does NOT revert. The burn proceeds with `ethValueOwed = 0` written to `pendingRedemptions[player][D].ethValueOwed` (no change from 0-init) and `pendingByDay[D].ethBase += 0` (no change). The same applies to `burnieOwed` if it rounds to 0 independently.
+
+**Positive assertion:** the call to `burn(1)` succeeds (no revert); `pendingRedemptions[player][D].ethValueOwed` is incremented by 0 (effectively unchanged); `pendingByDay[D].ethBase` is incremented by 0 (effectively unchanged); `balanceOf[player]` decremented by 1; `totalSupply` decremented by 1; lazy-init snapshot fires if this is the first burn of day `D`. A subsequent `claimRedemption(D)` after the eventual day-`D+1` advance pays 0 ETH (`totalRolledEth = 0 * R_{D+1} / 100 = 0`), the `_payEth` early-returns at `:818` (`if (amount == 0) return;`), and `delete pendingRedemptions[player][D]` fires per SPEC-04 (d).
+
+**Negative assertion:** no overflow — `pendingRedemptions[player][D].ethValueOwed` does NOT underflow or overflow on the `+= 0` operation; `pendingByDay[D].ethBase` does NOT corrupt; cumulative `pendingRedemptionEthValue` does NOT change as a result of this burn (`+= 0`); no revert from zero-claim mishandling at any downstream step; the 50% supply cap check at `:763` still uses the snapshot correctly even when `burned == 1` and `supplySnapshot / 2 >> 1`.
+
+**Tests INV-NN:** Tests INV-04 (per-day base correctness — zero contributes zero, sums consistently).
+
+**Depends on SPEC-NN:** Depends on SPEC-04 (b) (zero-rounded `ethValueOwed` burn proceeds; existing `amount == 0` revert at `:754` is the only zero-guard).
+
+**Foundry function name:** `testFuzz_EDGE_13_ZeroRoundedEthValueOwedBurnProceeds`
+
+### EDGE-14: 50% supply cap edge
+
+**Scenario:** Three sub-scenarios. **Sub-scenario 1 (exact cap):** First burn of day `D` is `amount = totalSupply / 2` exactly. Per SPEC-05 lazy-init, `pendingByDay[D].supplySnapshot = totalSupply` at burn-entry time. The cap check at `:763` (`pendingByDay[currentDay].burned + amount > pendingByDay[currentDay].supplySnapshot / 2`) evaluates as `0 + (snapshot/2) > snapshot / 2` which is FALSE — burn succeeds. **Sub-scenario 2 (one wei over cap):** First burn of day `D` is `amount = (totalSupply / 2) + 1`. The cap check evaluates as `0 + (snapshot/2 + 1) > snapshot/2` which is TRUE — revert `Insufficient` (error at `:91` per `contracts/StakedDegenerusStonk.sol`). **Sub-scenario 3 (subsequent same-day burn against snapshot):** First burn of day `D` is `amount_1 = totalSupply / 4` (succeeds, lazy-init snapshot to `totalSupply`, `pendingByDay[D].burned = totalSupply / 4`). Subsequent same-day burn (after `totalSupply` has decreased by `amount_1`) attempts `amount_2 = totalSupply' / 4` where `totalSupply' = totalSupply - amount_1`. The cap check uses the LAZY-INIT snapshot (NOT current `totalSupply`): `burned + amount_2 > snapshot / 2` i.e. `(amount_1) + amount_2 > totalSupply / 2`. Per SPEC-05 lock — the snapshot is immutable for the rest of day `D` — even though current `totalSupply` has decreased, the cap check uses the locked snapshot value. The second burn succeeds if and only if `amount_1 + amount_2 <= totalSupply / 2`.
+
+**Positive assertion:** sub-scenario 1 succeeds with no revert; sub-scenario 2 reverts `Insufficient`; sub-scenario 3 second burn succeeds when `amount_1 + amount_2 <= snapshot / 2` (using the LAZY-INIT snapshot, not the current decreasing `totalSupply`). The cap value is frozen at the first-burn snapshot for the duration of day `D`.
+
+**Negative assertion:** the cap does NOT tighten as same-day burns proceed — i.e., the snapshot does not refresh to the new lower `totalSupply` on the second burn; specifically, captured `pendingByDay[D].supplySnapshot` value after burn 1 is byte-identical to the value after burn 2 (assertEq enforced). No silent overflow on the `pendingByDay[D].burned += amount` accumulator (the slot is `uint128` per SPEC-01; `INITIAL_SUPPLY ≈ 1e30 < uint128.max ≈ 3.4e38` so no overflow).
+
+**Tests INV-NN:** Tests INV-10 (per-day supply cap — total burned in day `D` never exceeds `pendingByDay[D].supplySnapshot / 2`; snapshot immutable for the rest of day `D`).
+
+**Depends on SPEC-NN:** Depends on SPEC-05 (lazy-init snapshot on first burn of day; immutable for the rest of day).
+
+**Foundry function name:** `testFuzz_EDGE_14_SupplyCapExactOneWeiOverAndLazyInit`
+
+### EDGE-15: 160 ETH EV cap edge
+
+**Scenario:** Player accumulates `pendingRedemptions[player][D].ethValueOwed` toward 160 ETH (the `MAX_DAILY_REDEMPTION_EV` constant at `contracts/StakedDegenerusStonk.sol` analog of `:254`) via multiple same-day burns. **Sub-scenario 1 (exact cap):** sequence of burns whose computed `ethValueOwed` values sum to exactly 160 ETH on day `D` — the final burn that brings the running total to exactly 160 ETH succeeds, with `claim.ethValueOwed + ethValueOwed == 160 ether` (the cap check at `:801` is `claim.ethValueOwed + ethValueOwed > MAX_DAILY_REDEMPTION_EV` — strictly greater-than, so exact equality succeeds). **Sub-scenario 2 (one wei over):** next burn whose `ethValueOwed >= 1` (i.e., would bring the total to 160 ether + 1 wei or more) — the cap check evaluates as `160e18 + ethValueOwed > 160e18` which is TRUE for any `ethValueOwed >= 1` wei — revert `ExceedsDailyRedemptionCap` (error at `:117` per `contracts/StakedDegenerusStonk.sol`).
+
+**Positive assertion:** sub-scenario 1 succeeds; sub-scenario 2 reverts `ExceedsDailyRedemptionCap`. The cap is enforced per `(player, day)` composite key — `pendingRedemptions[player][D].ethValueOwed <= MAX_DAILY_REDEMPTION_EV` holds at every reachable state.
+
+**Negative assertion:** no silent overflow on the cap-check arithmetic (`claim.ethValueOwed + ethValueOwed` is a `uint96 + uint256` mixed-type operation — actually the lhs is implicitly widened to `uint256` for the comparison; no overflow at 160 ether magnitude); the cap check at `:801` MUST fire BEFORE the `claim.ethValueOwed += uint96(ethValueOwed)` assignment at `:803` — verify ordering at IMPL-time per `feedback_verify_call_graph_against_source.md`.
+
+**Tests INV-NN:** Tests INV-11 (per-`(player, day)` EV cap — 160 ETH max).
+
+**Depends on SPEC-NN:** Depends on SPEC-02 (composite-key `pendingRedemptions[player][day]` makes the per-`(player, day)` cap structurally per-day) + INV-11.
+
+**Foundry function name:** `testFuzz_EDGE_15_EvCapExactOneWeiOver`
+
+### EDGE-16: Cross-day cap reset
+
+**Scenario:** Player burns enough on day `D` to accumulate exactly `pendingRedemptions[player][D].ethValueOwed == 160 ether`. Wall-clock then crosses to day `D+1`. Player then burns again on day `D+1` (after the eventual day-`D+1` advance has fired or before — the cap check is independent of the resolution state). The day-`D+1` burn writes to a DIFFERENT composite-key slot `pendingRedemptions[player][D+1]`, which starts at 0 per SPEC-02 (a fresh storage slot). The cap check at `:801` analog reads `pendingRedemptions[player][D+1].ethValueOwed + ethValueOwed > MAX_DAILY_REDEMPTION_EV` — `0 + ethValueOwed > 160e18` — and succeeds for any `ethValueOwed <= 160 ether`. The player can again accumulate up to 160 ETH on day `D+1`.
+
+**Positive assertion:** both day-`D` and day-`D+1` burns are allowed up to 160 ETH each; `pendingRedemptions[player][D].ethValueOwed` and `pendingRedemptions[player][D+1].ethValueOwed` are independent storage slots; the per-`(player, day)` cap resets at the day boundary structurally (composite-key keying is what makes the reset happen — no explicit reset-block needed).
+
+**Negative assertion:** day-`D` accumulated value does NOT affect the day-`D+1` cap check — captured `pendingRedemptions[player][D].ethValueOwed` byte-identical before and after the day-`D+1` burn (the day-`D+1` burn cannot mutate the day-`D` slot). No cross-day aliasing in the cap check (the cap check reads `pendingRedemptions[player][currentDay]` which under composite keying is the current-day slot, not a global accumulator).
+
+**Tests INV-NN:** Tests INV-11 (per-`(player, day)` EV cap — cap resets per new day).
+
+**Depends on SPEC-NN:** Depends on SPEC-02 (composite-key makes the reset structural — no explicit reset block needed; the cap check naturally reads the current-day composite slot which starts at 0).
+
+**Foundry function name:** `testFuzz_EDGE_16_CrossDayCapResetStructural`
+
+### EDGE-17: Burn after resolve same wall-clock day
+
+**Scenario:** Late-day timing scenario distinct from the V-184 attack (EDGE-07). Wall-clock day `D` is in progress. Day-`D+1`'s `advanceGame` fires at wall-clock 22:58 day `D` (i.e., before the day boundary at ~midnight UTC). The advance resolves `pendingByDay[D]` with `redemptionPeriods[D].roll = R_{D+1}` per SPEC-03 (with `dayToResolve = currentDayView() - 1 = D`, since `currentDayView()` advances at the day boundary to `D+1` — wait, this requires care; under SPEC-03 `dayToResolve = currentDayView() - 1`, so when the advance fires at 22:58 wall-clock D, `currentDayView()` returns `D` (still day D), and `dayToResolve = D - 1`, not `D`. But the EDGE-NN scenario as enumerated in REQUIREMENTS.md targets the legitimate-late-day-burn case where the player burns at 23:30 on the same wall-clock day D as the advance fired. The advance fired at 22:58 with `dayToResolve = D - 1` (resolving the prior day's pool). The player burns at 23:30 — `game.currentDayView()` returns `D` — so the burn lands in `pendingByDay[D]` (the same key the prior day's resolve already addressed... no: the prior day's resolve targeted `pendingByDay[D-1]`, NOT `pendingByDay[D]`; the 23:30 burn lands in `pendingByDay[D]` which is fresh). Eventual day-`D+2`'s advance fires (after wall-clock crosses to `D+1`) and resolves `pendingByDay[D]` with a fresh roll into `redemptionPeriods[D]`. This is the LEGITIMATE late-day burn — distinct from the V-184 ATTACK in EDGE-07 because the burn here does NOT attempt to re-burn into an already-resolved slot. Under post-refactor per-day keying, BOTH outcomes are safe (no overwrite of previously-written rolls): the 23:30 burn → next-next-day-advance resolves `redemptionPeriods[D]` ONCE (not an overwrite); the V-184 attack as described in EDGE-07 produces no overwrite either (because the storage key separation prevents it). The distinguishing assertion in EDGE-17 is that legitimate late-day burns land in the correct (fresh) day-pool and resolve at the correct next advance.
+
+**Positive assertion:** the 23:30 burn writes to `pendingByDay[D]` (fresh slot with lazy-init `supplySnapshot` capturing 23:30 totalSupply and `burned = amount`); the burn does NOT mutate `pendingByDay[D-1]` (which was just resolved at 22:58); the burn does NOT mutate `redemptionPeriods[D-1]` (already written). After wall-clock crosses to `D+1` and day-`D+2`'s advance fires, `dayToResolve = (D+1) - 1 = D`, and the advance writes `redemptionPeriods[D].roll = R_{D+2}` — this is the FIRST-and-ONLY write to `redemptionPeriods[D]`; per SPEC-04 (c) `delete pendingByDay[D]` fires after the write.
+
+**Negative assertion:** `redemptionPeriods[D-1].roll` is byte-identical to its first-write value (`R_{D+1}` from the 22:58 advance) after the 23:30 burn AND after the day-`D+2` advance (which writes `redemptionPeriods[D]`, NOT `redemptionPeriods[D-1]`). NO overwrite of `redemptionPeriods[D-1]` is possible from any later burn or advance — the post-refactor storage shape precludes it. This EDGE-NN explicitly distinguishes the legitimate-late-day-burn from the V-184 ATTACK by demonstrating that under BOTH cases (legitimate AND attack-attempt) the post-refactor storage shape produces the same correct outcome: write-once-per-day-slot, no overwrites.
+
+**Tests INV-NN:** Tests INV-01 (write-once roll immutability — `redemptionPeriods[D-1]` and `redemptionPeriods[D]` each written exactly once), INV-04 (per-day base correctness — `pendingByDay[D].ethBase` correctly accumulates the late-day burn), and INV-08 (pre-advance-gap burn safety — the 23:30 burn lands in the correct current-day pool).
+
+**Depends on SPEC-NN:** Depends on SPEC-01 (per-day-keyed `pendingByDay` + per-day-keyed `redemptionPeriods`) + SPEC-03 (`dayToResolve = currentDayView() - 1` derivation) + SPEC-04 (c) (delete-at-resolve).
+
+**Foundry function name:** `testFuzz_EDGE_17_LateDayBurnPostResolveLegitimate`
+
+### EDGE-18: BURNIE pool insufficient at claim
+
+**Scenario:** Player A burns on day `D`, writing `pendingRedemptions[A][D].burnieOwed > 0` (i.e., the player is owed some BURNIE on resolve). Day-`D+1`'s advance fires and resolves with `R_{D+1}`. Day-`D+1`'s coinflip resolves with `flipResolved == true && flipWon == true && rewardPercent != 0` — so `burniePayout = (claim.burnieOwed * R_{D+1} * (100 + rewardPercent)) / 10000` is non-zero. Player A calls `claimRedemption(D)`. By the time the claim fires, the contract's BURNIE balance `coin.balanceOf(address(this))` is less than `burniePayout` — perhaps because other claims drained the pool, or because the coinflip pool hasn't pushed enough to sStonk yet. The `_payBurnie` helper at `contracts/StakedDegenerusStonk.sol:842-852` handles the shortfall via the existing fallback: transfer the available `payBal = burnieBal` amount; for the `remaining = amount - payBal`, call `coinflip.claimCoinflipsForRedemption(address(this), remaining)` to push the shortfall from the coinflip pool to sStonk; then `coin.transfer(player, remaining)` for the rest.
+
+**Positive assertion:** the call to `claimRedemption(D)` succeeds (no revert); `_payBurnie` pays the player exactly `burniePayout` in total via the two-step fallback (`payBal` from sStonk balance, `remaining` from coinflip-pool-redemption); the player receives the full `burniePayout` amount as BURNIE token transfers; the ETH payout via `_payEth` succeeds as normal.
+
+**Negative assertion:** no revert from BURNIE-pool insufficiency; no stuck claim; the `claimCoinflipsForRedemption` fallback path at `:850` executes correctly under the SPEC-02 + SPEC-04 (d) lock — the existing `_payBurnie` is preserved verbatim per the SPEC-02 "_payEth and _payBurnie flows downstream of the claim are UNCHANGED" lock; the only conceivable revert from `_payBurnie` is `TransferFailed` (error at `:97`) if the `coin.transfer` calls themselves fail at the ERC20 level — but under normal conditions both transfers succeed and the player is paid in full.
+
+**Tests INV-NN:** Tests INV-03 (BURNIE conservation — the `_payBurnie` fallback correctly conserves BURNIE across the sStonk balance + coinflip-pool-claim transitions; no BURNIE leakage; no double-payment).
+
+**Depends on SPEC-NN:** Depends on SPEC-02 (composite-key claim preserves the existing `_payBurnie` flow unchanged; no behavioral change to BURNIE shortfall handling).
+
+**Foundry function name:** `testFuzz_EDGE_18_BurniePoolInsufficientFallback`
+
+### §1↔§3 cross-link coverage table
+
+Every INV-01..12 has at least one EDGE-NN exerciser. Plan 05 grep-verifies the row count and the per-INV-NN coverage. Each row reads "INV-NN ← EDGE-NN [+ EDGE-NN ...]" listing the §3 EDGE-NN entries that test the §1 INV-NN.
+
+- INV-01 ← EDGE-07 + EDGE-17
+- INV-02 ← EDGE-09 + EDGE-10
+- INV-03 ← EDGE-18
+- INV-04 ← EDGE-03 + EDGE-04 + EDGE-13 + EDGE-17
+- INV-05 ← EDGE-01 + EDGE-04 + EDGE-09
+- INV-06 ← EDGE-04 + EDGE-07 + EDGE-11
+- INV-07 ← EDGE-03 + EDGE-05 + EDGE-06 + EDGE-07 + EDGE-10
+- INV-08 ← EDGE-01 + EDGE-02 + EDGE-12 + EDGE-17
+- INV-09 ← EDGE-02 + EDGE-06
+- INV-10 ← EDGE-14
+- INV-11 ← EDGE-15 + EDGE-16
+- INV-12 ← EDGE-08
 
 ## §4 — Design-Intent Backward-Trace + Actor Game-Theory Walk
 
