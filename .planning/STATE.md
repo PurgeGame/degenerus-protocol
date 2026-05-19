@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v44.0
 milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
-status: executing
-last_updated: "2026-05-19T12:00:00.000Z"
+status: ready_to_plan
+last_updated: 2026-05-19T10:28:24.131Z
 last_activity: 2026-05-19 -- Phase 304 Plan 05 complete (§5 source-verified citation manifest with 61 grep-verified citations: 50 sStonk + 11 AdvanceModule; all THREE inline-duplicated sStonk.resolveRedemptionPeriod call sites attested exhaustively at :1230 + :1293 + :1323; 6 forbidden-lexicon claims reframed in §1/§2/§3/§4; Phase 304 SPEC complete and ready for Phase 305 IMPL)
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 5
   completed_plans: 5
-  percent: 100
+  percent: 20
+stopped_at: Phase 304 complete (5/5) — ready to discuss Phase 305
 ---
 
 # Project State
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 304 — spec-invariant-model-spec
+**Current focus:** Phase 305 — implementation (impl)
 
 ## Current Position
 
-Phase: 304 (spec-invariant-model-spec) — COMPLETE
-Plan: 5 of 5 COMPLETE (Plans 01 + 02 + 03 + 04 + 05 all shipped; §0 header + §1 INV-01..12 + §2 SPEC-01..05 + §2.0 priority statement + §3 EDGE-01..18 + §4 7-deletion design-intent walks + §5 source-verified citation manifest at commits `5a5e1034` + `46b16273` + `6edc3967` + `315280b0` + `971688ba` + `20f3d439` + `d3c2aea5` + `20ec70cc`)
-Status: Phase 304 COMPLETE; ready for Phase 305 IMPL
-Last activity: 2026-05-19 -- Phase 304 Plan 05 complete (§5 source-verified citation manifest with 4 sub-sections — §5.1 sStonk manifest with 50 grep-verified rows, §5.2 AdvanceModule manifest with 11 grep-verified rows including all THREE inline-duplicated resolveRedemptionPeriod call sites at :1230 + :1293 + :1323 per feedback_verify_call_graph_against_source.md Phase 294 BURNIE-gap precedent, §5.3 cross-section integrity check with 5 PASSing sub-checks, §5.4 manifest integrity attestation; 6 forbidden-lexicon claims reframed in §1/§2/§3/§4; FOOTER LINE appended; 304-SPEC.md ready for Phase 305 IMPL consumption)
+Phase: 305
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-19
 
 ## Current Milestone Phases
 
