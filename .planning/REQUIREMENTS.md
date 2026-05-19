@@ -153,14 +153,70 @@ Explicitly excluded from v44.0; documented to prevent scope creep:
 
 ## Traceability
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| INV-01..12 | Phase 304 SPEC + Phase 306 TST + Phase 308 §3.F | Pending |
-| SPEC-01..05 | Phase 304 SPEC | Pending |
-| IMPL-01..04 | Phase 305 IMPL | Pending |
-| TST-01..07 | Phase 306 TST | Pending |
-| EDGE-01..18 | Phase 306 TST (one fuzz function per EDGE-NN) | Pending |
-| SWP-01..05 | Phase 307 SWEEP | Pending |
-| AUDIT-01..09 | Phase 308 TERMINAL | Pending |
+> Every v44.0 requirement maps to exactly one primary delivery phase. INV-01..12 + EDGE-01..18 span multiple phases by design (SPEC documents the property/scenario at Phase 304 → TST proves it at Phase 306 → TERMINAL §3.F attests it at Phase 308); the primary delivery phase is the one that ships the load-bearing artifact for closure verdict math. **Coverage: 63/63** (12 INV + 5 SPEC + 4 IMPL + 7 TST + 18 EDGE + 5 SWP + 9 AUDIT + 1 REG + 2 CLS). Zero orphaned requirements; zero duplicate primary mappings.
+
+| Requirement | Primary Delivery Phase | Status |
+|-------------|------------------------|--------|
+| INV-01 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
+| INV-02 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
+| INV-03 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
+| INV-04 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
+| INV-05 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
+| INV-06 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
+| INV-07 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
+| INV-08 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
+| INV-09 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
+| INV-10 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
+| INV-11 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
+| INV-12 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
+| SPEC-01 | Phase 304 SPEC | Pending |
+| SPEC-02 | Phase 304 SPEC | Pending |
+| SPEC-03 | Phase 304 SPEC | Pending |
+| SPEC-04 | Phase 304 SPEC | Pending |
+| SPEC-05 | Phase 304 SPEC | Pending |
+| IMPL-01 | Phase 305 IMPL | Pending |
+| IMPL-02 | Phase 305 IMPL | Pending |
+| IMPL-03 | Phase 305 IMPL | Pending |
+| IMPL-04 | Phase 305 IMPL | Pending |
+| TST-01 | Phase 306 TST | Pending |
+| TST-02 | Phase 306 TST | Pending |
+| TST-03 | Phase 306 TST | Pending |
+| TST-04 | Phase 306 TST | Pending |
+| TST-05 | Phase 306 TST | Pending |
+| TST-06 | Phase 306 TST | Pending |
+| TST-07 | Phase 306 TST | Pending |
+| EDGE-01 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-02 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-03 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-04 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-05 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-06 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-07 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-08 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-09 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-10 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-11 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-12 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-13 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-14 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-15 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-16 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-17 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-18 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| SWP-01 | Phase 307 SWEEP | Pending |
+| SWP-02 | Phase 307 SWEEP | Pending |
+| SWP-03 | Phase 307 SWEEP | Pending |
+| SWP-04 | Phase 307 SWEEP | Pending |
+| SWP-05 | Phase 307 SWEEP | Pending |
+| AUDIT-01 | Phase 308 TERMINAL | Pending |
+| AUDIT-02 | Phase 308 TERMINAL | Pending |
+| AUDIT-03 | Phase 308 TERMINAL | Pending |
+| AUDIT-04 | Phase 308 TERMINAL | Pending |
+| AUDIT-05 | Phase 308 TERMINAL | Pending |
+| AUDIT-06 | Phase 308 TERMINAL | Pending |
+| AUDIT-07 | Phase 308 TERMINAL | Pending |
+| AUDIT-08 | Phase 308 TERMINAL | Pending |
+| AUDIT-09 | Phase 308 TERMINAL | Pending |
 | REG-01 | Phase 308 TERMINAL §5 | Pending |
-| CLS-01..02 | Phase 308 TERMINAL Commit 1 + Commit 2 | Pending |
+| CLS-01 | Phase 308 TERMINAL Commit 1 (audit deliverable + planner-private bundle) | Pending |
+| CLS-02 | Phase 308 TERMINAL Commit 2 (closure-flip + verbatim propagation + chmod 444) | Pending |

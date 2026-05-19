@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v44.0
 milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
 status: planning
-last_updated: "2026-05-19T07:57:20.696Z"
+last_updated: "2026-05-19T08:30:00.000Z"
 last_activity: 2026-05-19
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,30 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** (between-milestones) — v43.0 SHIPPED 2026-05-19; v44.0 FIX-MILESTONE plan-phase awaits invocation (consumes Phase 298 CATALOG + Phase 299 FIXREC + Phase 300 ADMA artifacts via the 142-anchor handoff register in `audit/FINDINGS-v43.0.md` §9d as load-bearing input).
+**Current focus:** v44.0 sStonk Per-Day Redemption Refactor + Accounting Invariant Proof — 5-phase plan locked 2026-05-19 (Phase 304 SPEC → 305 IMPL → 306 TST → 307 SWEEP → 308 TERMINAL). 63/63 requirements mapped to phases (INV-01..12 + SPEC-01..05 + IMPL-01..04 + TST-01..07 + EDGE-01..18 + SWP-01..05 + AUDIT-01..09 + REG-01 + CLS-01..02). v44.0 consumes v43.0 §9d HANDOFF-111..117 + FIXREC §103 V-184 mechanic as load-bearing input; closes 7 of 142 v43 handoff anchors at v44 close; remaining 135 defer to v45.0+.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 304 — SPEC + Invariant Model (SPEC) — Not started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-19 — Milestone v44.0 started
+Status: Roadmap locked; awaiting `/gsd:plan-phase 304` invocation
+Last activity: 2026-05-19 — v44.0 roadmap authored (5 phases 304-308); 63/63 requirements mapped; STATE + REQUIREMENTS traceability updated
+
+## Current Milestone Phases
+
+| Phase | Name | Type | Requirements | Wave Shape | Depends on | Status |
+|-------|------|------|--------------|------------|------------|--------|
+| 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..12 + EDGE-01..18] | 1 AGENT-COMMITTED artifact bundle | nothing | Not started |
+| 305 | Implementation | IMPL | IMPL-01..04 primary (4) | 1 USER-APPROVED contract commit | Phase 304 | Not started |
+| 306 | Test | TST | INV-01..12 + TST-01..07 + EDGE-01..18 primary (37) | 1 AGENT-COMMITTED test commit bundle | Phase 305 | Not started |
+| 307 | Adversarial Sweep | SWEEP | SWP-01..05 primary (5) | 1 AGENT-COMMITTED adversarial-log bundle | Phases 305 + 306 | Not started |
+| 308 | Delta Audit + Findings Consolidation | TERMINAL | AUDIT-01..09 + REG-01 + CLS-01..02 primary (12) [+ §3.F INV attestation] | 2 AGENT-COMMITTED commits (deliverable + closure flip) | All prior | Not started |
+
+**Coverage:** 63/63 v44.0 requirements mapped (12 INV + 5 SPEC + 4 IMPL + 7 TST + 18 EDGE + 5 SWP + 9 AUDIT + 1 REG + 2 CLS = 63). Zero orphaned requirements; INV-01..12 + EDGE-01..18 spanning multiple phases by design (SPEC documents → TST proves → TERMINAL §3.F attests).
+
+**Closure verdict target:** `7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 12 of 12 INVARIANTS PROVEN; 18 of 18 EDGE_CASES TESTED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED` at Phase 308 §9 attestation.
+
+**Pre-authorized closure orchestration:** `D-44N-CLOSURE-PREAUTH-01` (locks at Phase 304 SPEC signoff) — Phase 308 2-commit sequential SHA orchestration fires autonomously without re-pinging at TERMINAL commit-2.
 
 ## Last Shipped Milestone
 
