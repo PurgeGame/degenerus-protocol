@@ -61,7 +61,7 @@ The sStonk gambling-burn redemption flow at `contracts/StakedDegenerusStonk.sol`
 - [ ] **TST-02**: Foundry invariant test harness at `test/invariant/RedemptionAccounting.t.sol` — stateful handler emitting random action sequences from {burn, advance, claim, gameOver, transfer, approve, admin-action}; assert INV-01..12 hold after every action.
 - [x] **TST-03**: Edge-case coverage at `test/fuzz/RedemptionEdgeCases.t.sol` — one fuzz function per EDGE-NN scenario. Positive paths assert correct outcome; negative paths assert revert or no-exploit.
 - [x] **TST-04**: V-184 attack reproduction (EDGE-07) — explicit attack vector: player A burns day D, day-D+1 advance resolves with R_{D+1}, attacker burns 1 wei post-resolve, day-D+2 advance fires; ASSERT `redemptionPeriods[D].roll` byte-identical to first resolution (no overwrite).
-- [ ] **TST-05**: Phase 301 vm.skip flip — modify `test/fuzz/RngLockDeterminism.t.sol` HANDOFF-111..117 `vm.skip(true)` blocks → remove the skip + assert strict byte-identity. All 7 fuzz cases that were previously skipped MUST pass at v44.0 close.
+- [x] **TST-05**: Phase 301 vm.skip flip — modify `test/fuzz/RngLockDeterminism.t.sol` HANDOFF-111..117 `vm.skip(true)` blocks → remove the skip + assert strict byte-identity. All 7 fuzz cases that were previously skipped MUST pass at v44.0 close.
 - [ ] **TST-06**: Gas regression — assert burn-path gas ≤ +5% of v43.0 baseline; claim-path gas ≤ +0% (claim is simpler under per-day keying).
 - [ ] **TST-07**: Build + full test suite — `forge build` PASS; `FOUNDRY_PROFILE=deep forge test --match-path "test/{fuzz,invariant}/**"` PASS at 10k runs per fuzz case + sufficient invariant depth.
 
@@ -112,7 +112,7 @@ The sStonk gambling-burn redemption flow at `contracts/StakedDegenerusStonk.sol`
 
 ### Regression (REG) — Cross-Milestone Non-Widening
 
-- [ ] **REG-01**: v43.0 closure non-widening — every v43.0 audit-subject surface (Phase 298 CATALOG + Phase 299 FIXREC + Phase 300 ADMA + Phase 301 FUZZ + Phase 302 SWEEP outputs) byte-identical at v44.0 close EXCEPT the Phase 301 `vm.skip(HANDOFF-111..117)` lines flipped to strict assertions (intended diff, attested in §3.A).
+- [x] **REG-01**: v43.0 closure non-widening — every v43.0 audit-subject surface (Phase 298 CATALOG + Phase 299 FIXREC + Phase 300 ADMA + Phase 301 FUZZ + Phase 302 SWEEP outputs) byte-identical at v44.0 close EXCEPT the Phase 301 `vm.skip(HANDOFF-111..117)` lines flipped to strict assertions (intended diff, attested in §3.A).
 
 ### Closure (CLS) — 2-Commit Sequential SHA Orchestration
 
@@ -182,7 +182,7 @@ Explicitly excluded from v44.0; documented to prevent scope creep:
 | TST-02 | Phase 306 TST | Pending |
 | TST-03 | Phase 306 TST | Complete |
 | TST-04 | Phase 306 TST | Complete |
-| TST-05 | Phase 306 TST | Pending |
+| TST-05 | Phase 306 TST | Complete |
 | TST-06 | Phase 306 TST | Pending |
 | TST-07 | Phase 306 TST | Pending |
 | EDGE-01 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
@@ -217,6 +217,6 @@ Explicitly excluded from v44.0; documented to prevent scope creep:
 | AUDIT-07 | Phase 308 TERMINAL | Pending |
 | AUDIT-08 | Phase 308 TERMINAL | Pending |
 | AUDIT-09 | Phase 308 TERMINAL | Pending |
-| REG-01 | Phase 308 TERMINAL §5 | Pending |
+| REG-01 | Phase 308 TERMINAL §5 | Complete |
 | CLS-01 | Phase 308 TERMINAL Commit 1 (audit deliverable + planner-private bundle) | Pending |
 | CLS-02 | Phase 308 TERMINAL Commit 2 (closure-flip + verbatim propagation + chmod 444) | Pending |
