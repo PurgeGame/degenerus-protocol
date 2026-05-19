@@ -89,7 +89,14 @@ Plans:
   4. `test/fuzz/RngLockDeterminism.t.sol` HANDOFF-111..117 7 `vm.skip(true)` blocks REMOVED + strict byte-identity assertion in place; all 7 previously-skipped fuzz cases PASS at 10k runs per case under `FOUNDRY_PROFILE=deep` (the v43.0 vm.skip → v44.0 strict-assertion flip is the load-bearing closure assertion for HANDOFF-111..117).
   5. `forge build` PASS + `FOUNDRY_PROFILE=deep forge test --match-path "test/{fuzz,invariant}/**"` PASS + gas regression assertions PASS (burn ≤ +5% v43, claim ≤ +0% v43). AGENT-COMMITTED batched test commit per `D-43N-TEST-COMMITS-AUTO-01`.
 
-**Plans:** TBD (planned at `/gsd:plan-phase 306` invocation)
+**Plans:** 5 plans
+
+Plans:
+- [ ] 306-01-PLAN.md — Foundry invariant harness — RedemptionAccounting (13 invariant_INV_NN_* fns + RedemptionHandler v44 refresh; INV-01..13 + TST-02)
+- [ ] 306-02-PLAN.md — Edge fuzz coverage — RedemptionEdgeCases (20 testFuzz_EDGE_NN_* fns incl V-184 reproduction + multi-day stall + dust floor; TST-03 + TST-04 + EDGE-01..20)
+- [ ] 306-03-PLAN.md — Per-function fuzz — StakedStonkRedemption (6 ROADMAP-canonical + 2 ACL/sentinel testFuzz_* fns; TST-01)
+- [ ] 306-04-PLAN.md — RngLockDeterminism vm.skip flip (HANDOFF-111 strict-assertion + 6 subsumed catalog rows close structurally per FIXREC §0.6; TST-05 + REG-01)
+- [ ] 306-05-PLAN.md — Gas regression bench — RedemptionGas (theoretical worst case first + v43 baseline capture + assertion limits; TST-06)
 
 ### Phase 307: Adversarial Sweep (SWEEP)
 
