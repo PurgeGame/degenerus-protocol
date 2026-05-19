@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v44.0
 milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
 status: executing
-last_updated: "2026-05-19T12:44:44.145Z"
-last_activity: 2026-05-19 -- Phase 305 execution started
+last_updated: "2026-05-19T13:22:33.080Z"
+last_activity: 2026-05-19 -- Phase 306 Plan 01 complete (Foundry invariant harness — 13 INV-NN PROVEN)
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 6
-  completed_plans: 5
-  percent: 20
+  completed_phases: 2
+  total_plans: 11
+  completed_plans: 7
+  percent: 47
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 305 — implementation-impl
+**Current focus:** Phase 306 — test-tst
 
 ## Current Position
 
-Phase: 305 (implementation-impl) — EXECUTING
-Plan: 1 of 1
-Status: Executing Phase 305
-Last activity: 2026-05-19 -- Phase 305 execution started
+Phase: 306 (test-tst) — EXECUTING
+Plan: 2 of 5
+Status: Executing Phase 306 (Plan 01 complete; Plans 02..05 outstanding)
+Last activity: 2026-05-19 -- Phase 306 Plan 01 complete (Foundry invariant harness — 13 INV-NN PROVEN at FOUNDRY_PROFILE=deep)
 
 ## Current Milestone Phases
 
@@ -430,6 +430,7 @@ Audit deliverables:
 | Phase 304 P03 | ~40min | 1 task | 1 file modified (304-SPEC.md §3 EDGE-01..18) + 1 SUMMARY |
 | Phase 304 P04 | ~6min | 2 tasks | 1 file modified (304-SPEC.md §4 design-intent walks for 7 deletions) + 1 SUMMARY |
 | Phase 304 P05 | ~25min | 1 task | 1 file modified (304-SPEC.md §5 citation manifest + 6 forbidden-lexicon reframes in §1-§4) + 1 SUMMARY |
+| Phase 306 P01 | ~1h | 3 tasks | 3 files (test/invariant/RedemptionAccounting.t.sol NEW + test/fuzz/handlers/RedemptionHandler.sol REWRITE + foundry.toml widen) + 1 SUMMARY (13 INV-NN PROVEN at FOUNDRY_PROFILE=deep × 1000 runs × 256 depth = 256000 calls each) |
 
 ## Decisions
 
@@ -471,3 +472,8 @@ Audit deliverables:
 - [Phase 304]: D-304-05-DELETION-7-IMPL-RANGE-01: For the `redemptionPeriodIndex` reset block deletion (Deletion 7), the canonical line range cited in §2.7 item 7 and §4 Deletion 7 is `:757-762` as the verbatim ORIGINAL DESIGN INTENT quotation. However, the IMPL deletion range is bounded at `:758-762` only — the `:757` `uint32 currentPeriod = game.currentDayView();` local-variable declaration is PRESERVED in the IMPL diff because the `currentPeriod` local is consumed downstream at `:796`/`:801`/`:806` for cap checks under SPEC-05's lazy-init predicate `pendingByDay[currentPeriod].supplySnapshot == 0 && pendingByDay[currentPeriod].burned == 0`. Phase 305 IMPL must NOT delete `:757`.
 - [Phase 304]: D-304-05-PHASE-304-COMPLETE-01: Phase 304 SPEC + Invariant Model is COMPLETE. 304-SPEC.md spans 960 lines with §0 header + §1 INV-01..12 + §2 SPEC-01..05 + §3 EDGE-01..18 + §4 7-deletion walks + §5 source-verified citation manifest + closing FOOTER LINE. 5/5 plans shipped. Phase 305 IMPL is the next phase — diff against `contracts/StakedDegenerusStonk.sol` + `contracts/modules/DegenerusGameAdvanceModule.sol` per the SPEC; user-approved batched contract commit per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md`.
 - [Phase 304]: D-304-04-LINE-RANGE-01: §4 line range fixed at 676-829 (154 lines including closing attestation). Plan 05 citation-manifest sweep grep-verifies every `StakedDegenerusStonk.sol:NNN` and `DegenerusGameAdvanceModule.sol:NNN` cite within this range against HEAD `8111cfc5189f628b64b500c881f9995c3edf0ed2`, plus the RNGLOCK-FIXREC.md line numbers cited in V-184 walks (5414, 5445-5449, 5455, 5457-5461, 5472-5474, 5476, 5478, 5494, 5500-5506, 5511, 5567, 5577-5578).
+- [Phase 306]: D-306-01-FOUNDRY-TEST-DIR-01: foundry.toml `test = "test/fuzz"` widened to `test = "test"` so the new `test/invariant/` directory is discovered by forge (Rule 3 blocking-issue auto-fix; the plan's verification command `forge test --match-path 'test/invariant/RedemptionAccounting.t.sol'` requires the file to be inside forge's test-discovery root). No-regression: test/fuzz/* tests continue to be discovered; test/halmos/* files (pre-existing on disk, halmos-only tooling) now also compile under forge but their `check_*` functions are not auto-run by forge's `test_*` matcher — zero behavior change for any existing test suite.
+- [Phase 306]: D-306-01-SLOTS-V44-01: 6 v44 storage-slot indices derived via `forge inspect contracts/StakedDegenerusStonk.sol:StakedDegenerusStonk storage-layout` ONCE and recorded as `public constant` on RedemptionHandler — SLOT_PENDING_REDEMPTIONS=7, SLOT_REDEMPTION_PERIODS=8, SLOT_PENDING_REDEMPTION_ETH_VALUE=9, SLOT_PENDING_REDEMPTION_BURNIE=10, SLOT_PENDING_BY_DAY=11, SLOT_PENDING_RESOLVE_DAY=12. Harness imports them via the handler so a future v45 layout change surfaces as a single inline update at the constant block, not as silent drift.
+- [Phase 306]: D-306-01-EXACT-EQUALITY-01: INV-02..05 in test/invariant/RedemptionAccounting.t.sol use STRICT `assertEq` (no `assertApproxEqAbs` or dust tolerance) per D-305-GWEI-SNAP-01. The 304-SPEC §1 INV-02 "dust-bounded" framing is structurally tightened to byte-identity post-refactor: ethValueOwed is gwei-snapped at source, gcd(1e9, 100) = 100 means every downstream `× roll / 100` divides exactly. PROVEN at FOUNDRY_PROFILE=deep × 1000 runs × 256 depth = 256000 calls per invariant; zero failures across all 13. Phase 308 §3.F attestation matrix can cite EXACT closure verbatim.
+- [Phase 306]: D-306-01-INV-13-PROVEN-01: invariant_INV_13_SinglePoolPending PROVEN at FOUNDRY_PROFILE=deep — at most one pendingByDay[D] non-empty at any reachable state, and if exactly one, that D matches sdgnrs.pendingResolveDay(). action_burnOnPreviousDay handler action drives the PriorDayUnresolved revert path 51000+ times across the deep run with zero ghost-state drift. Load-bearing v44.0 closure assertion alongside INV-01 for V-184 + HANDOFF-111..117 closure citation in Phase 308 §3.D.
+- [Phase 306]: D-306-01-LEGACY-PRESERVE-01: All v43-era `ghost_*` counters preserved verbatim on RedemptionHandler so test/fuzz/invariant/RedemptionInvariants.inv.t.sol (the pre-existing 7-INV harness) continues to compile and pass (verified: 11 tests pass, 0 failed under the refreshed handler). ghost_periodIndexDecreased + ghost_lastPeriodIndex retained but never incremented under v44 (no `redemptionPeriodIndex` slot exists); legacy `invariant_periodIndexMonotonic` asserts `assertEq(0, 0)` trivially — vacuous monotonicity is the correct closure-semantic when there is no index to monotonically increase.
