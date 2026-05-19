@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v44.0
 milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
-status: executing
-last_updated: "2026-05-19T14:41:22.291Z"
+status: verifying
+last_updated: "2026-05-19T15:04:50.742Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
-  completed_plans: 10
-  percent: 40
+  completed_plans: 11
+  percent: 60
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 Phase: 306 (test-tst) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-19
 
 ## Current Milestone Phases
@@ -434,6 +434,7 @@ Audit deliverables:
 | Phase 306-test-tst P306-02 | 1h | 3 tasks | 1 files |
 | Phase 306 P03 | ~30min | 2 tasks | 1 file (test/fuzz/StakedStonkRedemption.t.sol NEW, 713 lines) + 1 SUMMARY (8 testFuzz_* PASS at 10k runs/case; 6 ROADMAP-canonical + 2 ACL/sentinel) |
 | Phase 306 P04 | 10min | 2 tasks | 1 files |
+| Phase 306 P05 | 45min | 3 tasks | 3 files |
 
 ## Decisions
 
@@ -489,3 +490,6 @@ Audit deliverables:
 - [Phase 306-04]: D-306-04-MINBURN-BOUND-01: bound(burnAmountSeed, 1, 1_000) → bound(burnAmountSeed, 1e18, 100e18) — v44 MIN_BURN_AMOUNT compatibility prevents vacuous-pass via BurnTooSmall filter-out
 - [Phase 306-04]: D-306-04-PERTURB-MIN-01: sdgnrs.burn(1) → sdgnrs.burn(1e18) in perturbation branch — minimum legal v44 burn so perturbation actually mutates state mid-rngLock-window
 - [Phase 306-04]: D-306-04-NATSPEC-FLIP-01: line-1277 natspec SKIP → FLIPPED — describes CURRENT state per feedback_no_history_in_comments.md; load-bearing cross-reference anchor for FINDINGS-v44.0.md §3.D V-184 RESOLVED-AT-V44
+- [Phase 306-05]: D-306-05-V43-CAPTURE-01: v43 baseline captured via surgical git-checkout (8 differing files + 3 v44-only test temp-relocations) avoiding git stash per destructive-git-prohibition
+- [Phase 306-05]: D-306-05-BRACKET-SCOPE-01: gasleft() bracket measures regression-asserted call only (sdgnrs.burn for burn path, sdgnrs.claimRedemption for claim path) — conservative against v43 full-lifecycle baseline
+- [Phase 306-05]: D-306-05-THEORY-FIRST-01: theoretical worst-case derivation per-line per-op attribution table written before assertion-limit constants hard-coded (feedback_gas_worst_case.md compliance)

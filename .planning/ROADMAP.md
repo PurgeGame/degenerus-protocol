@@ -96,7 +96,7 @@ Plans:
 - [x] 306-02-PLAN.md — Edge fuzz coverage — RedemptionEdgeCases (20 testFuzz_EDGE_NN_* fns incl V-184 reproduction + multi-day stall + dust floor; TST-03 + TST-04 + EDGE-01..20)
 - [x] 306-03-PLAN.md — Per-function fuzz — StakedStonkRedemption (6 ROADMAP-canonical + 2 ACL/sentinel testFuzz_* fns; TST-01)
 - [x] 306-04-PLAN.md — RngLockDeterminism vm.skip flip (HANDOFF-111 strict-assertion + 6 subsumed catalog rows close structurally per FIXREC §0.6; TST-05 + REG-01)
-- [ ] 306-05-PLAN.md — Gas regression bench — RedemptionGas (theoretical worst case first + v43 baseline capture + assertion limits; TST-06)
+- [x] 306-05-PLAN.md — Gas regression bench — RedemptionGas (theoretical worst case first + v43 baseline capture + assertion limits; TST-06)
 
 ### Phase 307: Adversarial Sweep (SWEEP)
 
