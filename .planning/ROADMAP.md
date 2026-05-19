@@ -126,7 +126,10 @@ Plans:
   4. 2-commit AGENT-COMMITTED sequential SHA orchestration per `D-44N-CLOSURE-01` executed: Commit 1 ships deliverable with `<commit-1-sha>` placeholder; Commit 2 resolves placeholder + propagates verbatim to 5 FINDINGS verbatim locations + 3 cross-doc propagation targets + `chmod 444 audit/FINDINGS-v44.0.md` + atomic 5-doc closure flip.
   5. Closure signal `MILESTONE_V44_AT_HEAD_<commit-1-sha>` propagated atomically across ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS; KNOWN-ISSUES.md UNMODIFIED per `D-44N-KI-01`; SOURCE-TREE FROZEN attestation (zero `contracts/` + zero `test/` mutations during Phase 308) per `git diff HEAD~2 HEAD -- contracts/ test/` returning no output.
 
-**Plans:** TBD (planned at `/gsd:plan-phase 308` invocation)
+**Plans:** 1 plan
+
+Plans:
+- [ ] 308-01-PLAN.md — Ship `audit/FINDINGS-v44.0.md` 9-section TERMINAL deliverable per `D-308-TASK-SPLIT-01` (13 tasks; 2 AGENT-COMMITTED commits per `D-44N-CLOSURE-01`)
 
 <details>
 <summary>✅ v43.0 Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment (Phases 298-303) — SHIPPED 2026-05-19; closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`</summary>
