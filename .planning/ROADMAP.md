@@ -54,7 +54,7 @@
 **Plans:** 5 plans
 - [x] 304-01-PLAN.md — skeleton + §0 header + §1 INV-01..12 formal invariant model (shipped 2026-05-19; commits `5a5e1034` + `46b16273`; SUMMARY `.planning/phases/304-spec-invariant-model-spec/304-01-SUMMARY.md`)
 - [x] 304-02-PLAN.md — §2 SPEC-01..05 locked design decisions (struct shape + composite-key + dayToResolve arg + gameOver/zero-rounded/refund-timing sub-locks + 50% supply cap snapshot timing) (shipped 2026-05-19; commit `6edc3967`; SUMMARY `.planning/phases/304-spec-invariant-model-spec/304-02-SUMMARY.md`)
-- [ ] 304-03-PLAN.md — §3 EDGE-01..18 exhaustive scenario enumeration (positive + negative assertions; EDGE-07 V-184 attack reproduction)
+- [x] 304-03-PLAN.md — §3 EDGE-01..18 exhaustive scenario enumeration (positive + negative assertions; EDGE-07 V-184 attack reproduction with structural-closure byte-identity assertion) (shipped 2026-05-19; commits `315280b0` + `971688ba`; SUMMARY `.planning/phases/304-spec-invariant-model-spec/304-03-SUMMARY.md`)
 - [ ] 304-04-PLAN.md — §4 design-intent backward-trace + actor game-theory walk for 7 deletions (5 storage slots + UnresolvedClaim revert + redemptionPeriodIndex reset block)
 - [ ] 304-05-PLAN.md — §5 source-verified citation manifest (grep-verify every file:line vs StakedDegenerusStonk.sol + DegenerusGameAdvanceModule.sol HEAD; document all 3 sStonk resolve call sites)
 

@@ -185,24 +185,24 @@ Explicitly excluded from v44.0; documented to prevent scope creep:
 | TST-05 | Phase 306 TST | Pending |
 | TST-06 | Phase 306 TST | Pending |
 | TST-07 | Phase 306 TST | Pending |
-| EDGE-01 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-02 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-03 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-04 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-05 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-06 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-07 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-08 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-09 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-10 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-11 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-12 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-13 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-14 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-15 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-16 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-17 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
-| EDGE-18 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending |
+| EDGE-01 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-02 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-03 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-04 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-05 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-06 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-07 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-08 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-09 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-10 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-11 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-12 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-13 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-14 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-15 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-16 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-17 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
+| EDGE-18 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
 | SWP-01 | Phase 307 SWEEP | Pending |
 | SWP-02 | Phase 307 SWEEP | Pending |
 | SWP-03 | Phase 307 SWEEP | Pending |

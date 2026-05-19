@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v44.0
 milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
 status: executing
-last_updated: "2026-05-19T10:00:00.000Z"
-last_activity: 2026-05-19 -- Phase 304 Plan 01 complete (§0 header + §1 INV-01..12 formal invariant model)
+last_updated: "2026-05-19T11:30:00.000Z"
+last_activity: 2026-05-19 -- Phase 304 Plan 03 complete (§3 EDGE-01..18 exhaustive scenario enumeration; EDGE-07 V-184 attack reproduction with structural-closure byte-identity assertion; §1↔§3 cross-link coverage table)
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
-  percent: 20
+  completed_plans: 3
+  percent: 60
 ---
 
 # Project State
@@ -25,15 +25,15 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 ## Current Position
 
 Phase: 304 (spec-invariant-model-spec) — EXECUTING
-Plan: 3 of 5 (Plans 01 + 02 complete; §0 header + §1 INV-01..12 + §2 SPEC-01..05 + §2.0 priority statement shipped at commits `5a5e1034` + `46b16273` + `6edc3967`)
+Plan: 4 of 5 (Plans 01 + 02 + 03 complete; §0 header + §1 INV-01..12 + §2 SPEC-01..05 + §2.0 priority statement + §3 EDGE-01..18 shipped at commits `5a5e1034` + `46b16273` + `6edc3967` + `315280b0` + `971688ba`)
 Status: Executing Phase 304
-Last activity: 2026-05-19 -- Phase 304 Plan 02 complete (§2 SPEC-01..05 locked design decisions + §2.0 priority statement; SPEC-04 (a-d) sub-locks resolved; 7-deletion enumeration prepared for Plan 04)
+Last activity: 2026-05-19 -- Phase 304 Plan 03 complete (§3 EDGE-01..18 narrative scenario enumeration with Positive + Negative + INV/SPEC linkage + Foundry function name; EDGE-07 V-184 attack reproduction with structural-closure byte-identity assertion; §1↔§3 cross-link coverage table covers all 12 INV-NN)
 
 ## Current Milestone Phases
 
 | Phase | Name | Type | Requirements | Wave Shape | Depends on | Status |
 |-------|------|------|--------------|------------|------------|--------|
-| 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..12 + EDGE-01..18] | 1 AGENT-COMMITTED artifact bundle | nothing | Executing (2/5 plans complete) |
+| 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..12 + EDGE-01..18] | 1 AGENT-COMMITTED artifact bundle | nothing | Executing (3/5 plans complete) |
 | 305 | Implementation | IMPL | IMPL-01..04 primary (4) | 1 USER-APPROVED contract commit | Phase 304 | Not started |
 | 306 | Test | TST | INV-01..12 + TST-01..07 + EDGE-01..18 primary (37) | 1 AGENT-COMMITTED test commit bundle | Phase 305 | Not started |
 | 307 | Adversarial Sweep | SWEEP | SWP-01..05 primary (5) | 1 AGENT-COMMITTED adversarial-log bundle | Phases 305 + 306 | Not started |
@@ -427,6 +427,7 @@ Audit deliverables:
 | 296 | 01 | ~75min | 7 tasks | 5 artifacts (CHARGE + 3 skill reports + LOG) |
 | Phase 299 P11 | 3h | 1 tasks | 2 files |
 | Phase 302 P01 | ~3h | 6 tasks (Task 6 SKIPPED) | 5 artifacts (CHARGE + 3 skill reports + LOG) + 1 SUMMARY |
+| Phase 304 P03 | ~40min | 1 task | 1 file modified (304-SPEC.md §3 EDGE-01..18) + 1 SUMMARY |
 
 ## Decisions
 
@@ -455,3 +456,6 @@ Audit deliverables:
 - [Phase 296]: Audit-subject head at sweep close: `123f2dacaf0337c60f769851b90b02c1cdc15b07`; KNOWN-ISSUES.md UNMODIFIED at Phase 296 per D-296-KI-01 (Phase 297 D-42N-KI-01 owns final disposition)
 - [Phase 299]: Phase 299 FIXREC complete: 11/11 plans complete; canonical .planning/RNGLOCK-FIXREC.md (703KB / 6184 lines / 119 v44.0 handoff anchors / 111 logical sections). EV-tier discipline lens applied — V-184 sole CATASTROPHE-tier finding; V-016/V-017/V-018 STALE-CATALOG-ROW; V-063 lens-reclassified to FALSE-POSITIVE (claimablePool is pull-pattern accumulator, not VRF input); V-047/V-048/V-050 PENDING-VERIFICATION (deferred to Phase 302 SWEEP); governance writers (V-137/V-155/V-157/V-159/V-161) downgraded from cluster-author CATASTROPHE to HIGH at most. Subsumption map: V-184 closes V-186/V-188/V-190/V-191/V-192/V-193 via one fix. Active-fix anchor count ≈ 95 of 119; remaining 24 are catalog-hygiene/verification-only.
 - [Phase ?]: Phase 300 ADMA: 22 D-43N-V44-ADMA handoff anchors + ERRATUM-01 catalog-erratum carry forward (S-06 phantom rows)
+- [Phase 304]: D-304-03-V184-CLOSURE-01: EDGE-07 V-184 attack reproduction proven STRUCTURALLY by storage-shape (every day's resolve writes a distinct mapping slot + SPEC-03 `dayToResolve` is oldest-first AdvanceModule-bounded); negative assertion is byte-identity of `redemptionPeriods[D].roll` across all attack-sequence checkpoints. HANDOFF-111..117 (V-184 + V-186 + V-188 + V-190 + V-191 + V-192 + V-193) close via this single EDGE-NN entry — Phase 306 mechanizes it in TST-04 standalone + TST-05 vm.skip → strict-assertion flip.
+- [Phase 304]: D-304-03-EDGE17-DAYNAMING-01: EDGE-17 distinguishes legitimate-late-day-burn from V-184 ATTACK by demonstrating BOTH outcomes are safe under post-refactor (no overwrite reachable in EITHER case). Day-naming convention: 22:58 wall-clock-D advance writes `redemptionPeriods[D-1].roll = R_D`; 23:30 wall-clock-D burn lands in `pendingByDay[D]`; next-day (wall-clock-D+1) advance writes `redemptionPeriods[D].roll = R_{D+1}` for the first time. No overwrite of `redemptionPeriods[D-1]` reachable from any later state transition.
+- [Phase 304]: D-304-03-CROSSLINK-COVERAGE-01: §1↔§3 cross-link coverage table at end of §3 lists all 12 INV-NN with ≥1 EDGE exerciser each (12 rows; Plan 05 grep-verifies via pattern `^- INV-0[1-9] ←|^- INV-1[0-2] ←`). §3 line range: 401-674 (273 lines).
