@@ -1,6 +1,6 @@
 [profile.default]
 src = "contracts"
-test = "test/fuzz"
+test = "test"
 out = "forge-out"
 libs = ["node_modules", "lib"]
 solc_version = "0.8.34"
