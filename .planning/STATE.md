@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v44.0
 milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
-status: verifying
-last_updated: "2026-05-19T16:39:36.231Z"
+status: ready_to_plan
+last_updated: 2026-05-19T16:50:31.266Z
 last_activity: 2026-05-19
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 12
-  completed_plans: 11
+  completed_plans: 12
   percent: 60
+stopped_at: Phase 307 complete (1/1) — ready to discuss Phase 308
 ---
 
 # Project State
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 307 SWEEP complete — Phase 308 TERMINAL next
+**Current focus:** Phase 308 — delta audit + findings consolidation (terminal)
 
 ## Current Position
 
-Phase: 307 (adversarial-sweep-sweep) — COMPLETE
-Plan: 1 of 1 shipped
-Status: Phase 307 SWEEP complete — ready for Phase 308 TERMINAL
-Last activity: 2026-05-19 -- Phase 307 SWEEP unanimous-NEGATIVE (0 FINDING_CANDIDATE; Task 6 gate skipped)
+Phase: 308
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-19
 
 ## Current Milestone Phases
 
