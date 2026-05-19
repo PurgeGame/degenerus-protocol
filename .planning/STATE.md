@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v44.0
 milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
-status: executing
-last_updated: "2026-05-19T16:09:48.457Z"
-last_activity: 2026-05-19 -- Phase 307 planning complete
+status: verifying
+last_updated: "2026-05-19T16:39:36.231Z"
+last_activity: 2026-05-19
 progress:
   total_phases: 5
   completed_phases: 3
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 307 — adversarial sweep (sweep)
+**Current focus:** Phase 307 SWEEP complete — Phase 308 TERMINAL next
 
 ## Current Position
 
-Phase: 307
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-19 -- Phase 307 planning complete
+Phase: 307 (adversarial-sweep-sweep) — COMPLETE
+Plan: 1 of 1 shipped
+Status: Phase 307 SWEEP complete — ready for Phase 308 TERMINAL
+Last activity: 2026-05-19 -- Phase 307 SWEEP unanimous-NEGATIVE (0 FINDING_CANDIDATE; Task 6 gate skipped)
 
 ## Current Milestone Phases
 
@@ -36,7 +36,7 @@ Last activity: 2026-05-19 -- Phase 307 planning complete
 | 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..12 + EDGE-01..18] | 1 AGENT-COMMITTED artifact bundle | nothing | COMPLETE (5/5 plans shipped; 304-SPEC.md ready for Phase 305 IMPL) |
 | 305 | Implementation | IMPL | IMPL-01..04 primary (4) | 1 USER-APPROVED contract commit | Phase 304 | Not started |
 | 306 | Test | TST | INV-01..12 + TST-01..07 + EDGE-01..18 primary (37) | 1 AGENT-COMMITTED test commit bundle | Phase 305 | Not started |
-| 307 | Adversarial Sweep | SWEEP | SWP-01..05 primary (5) | 1 AGENT-COMMITTED adversarial-log bundle | Phases 305 + 306 | Not started |
+| 307 | Adversarial Sweep | SWEEP | SWP-01..05 primary (5) | 1 AGENT-COMMITTED adversarial-log bundle | Phases 305 + 306 | Phase 307 SWEEP complete — unanimous-NEGATIVE (72/72 disposition rows; 0 FINDING_CANDIDATE; 3 SAFE_BY_DESIGN; Task 6 gate skipped); ready for Phase 308 TERMINAL |
 | 308 | Delta Audit + Findings Consolidation | TERMINAL | AUDIT-01..09 + REG-01 + CLS-01..02 primary (12) [+ §3.F INV attestation] | 2 AGENT-COMMITTED commits (deliverable + closure flip) | All prior | Not started |
 
 **Coverage:** 63/63 v44.0 requirements mapped (12 INV + 5 SPEC + 4 IMPL + 7 TST + 18 EDGE + 5 SWP + 9 AUDIT + 1 REG + 2 CLS = 63). Zero orphaned requirements; INV-01..12 + EDGE-01..18 spanning multiple phases by design (SPEC documents → TST proves → TERMINAL §3.F attests).
@@ -435,6 +435,7 @@ Audit deliverables:
 | Phase 306 P03 | ~30min | 2 tasks | 1 file (test/fuzz/StakedStonkRedemption.t.sol NEW, 713 lines) + 1 SUMMARY (8 testFuzz_* PASS at 10k runs/case; 6 ROADMAP-canonical + 2 ACL/sentinel) |
 | Phase 306 P04 | 10min | 2 tasks | 1 files |
 | Phase 306 P05 | 45min | 3 tasks | 3 files |
+| Phase 307 P01 | 0h30m | 7 tasks | 6 files |
 
 ## Decisions
 
@@ -493,3 +494,4 @@ Audit deliverables:
 - [Phase 306-05]: D-306-05-V43-CAPTURE-01: v43 baseline captured via surgical git-checkout (8 differing files + 3 v44-only test temp-relocations) avoiding git stash per destructive-git-prohibition
 - [Phase 306-05]: D-306-05-BRACKET-SCOPE-01: gasleft() bracket measures regression-asserted call only (sdgnrs.burn for burn path, sdgnrs.claimRedemption for claim path) — conservative against v43 full-lifecycle baseline
 - [Phase 306-05]: D-306-05-THEORY-FIRST-01: theoretical worst-case derivation per-line per-op attribution table written before assertion-limit constants hard-coded (feedback_gas_worst_case.md compliance)
+- [Phase 307]: Phase 307 SWEEP unanimous-NEGATIVE — 0 FINDING_CANDIDATE across 3-skill HYBRID — 72/72 disposition rows resolved (22 auditor + 22 hunter + 28 economist). HYBRID-fallback to SEQUENTIAL_MAIN_CONTEXT for hunter+economist per Task tool unavailability (v43 P302 + v42 P296 precedent). Dual-gate skeptic filter D-307-SKEPTIC-FILTER-01 produced 0 discards (no FINDING_CANDIDATE inputs). Task 6 elevation gate SKIPPED per D-307-ELEVATION-ROUTING-01 precondition fail.

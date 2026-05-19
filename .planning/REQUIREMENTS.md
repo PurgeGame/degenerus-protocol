@@ -92,11 +92,11 @@ The sStonk gambling-burn redemption flow at `contracts/StakedDegenerusStonk.sol`
 
 > Per `D-302-INVOKE-01`: `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT + `/zero-day-hunter` + `/economic-analyst` PARALLEL_SUBAGENT. `/degen-skeptic` OUT OF SCOPE per `D-271-ADVERSARIAL-02` carry.
 
-- [ ] **SWP-01**: `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT pass. Charge: find any state transition that violates INV-01..12; any (burn, advance, claim, gameOver) interleaving that produces an exploitable outcome; any storage-collision or packing bug in the new layout.
-- [ ] **SWP-02**: `/zero-day-hunter` PARALLEL_SUBAGENT pass. Charge: novel attack surfaces on the per-day refactor — composition with lootbox/coinflip flows; ERC20 callback-induced re-entry on transfer paths; cross-module read/write races between sStonk and DegenerusGame storage.
-- [ ] **SWP-03**: `/economic-analyst` PARALLEL_SUBAGENT pass. Charge: game-theoretic write-induced effects under the per-day model; coordinated-burn scenarios; timing arbitrage between gap burns vs post-advance burns; MEV surfaces on the new state machine.
-- [ ] **SWP-04**: Two-tier consensus per `D-302-CONSENSUS-01`. Tier 1 any-skill FINDING_CANDIDATE → AskUserQuestion PAUSE. Tier 2 3-of-3 consensus → automatic elevation + RE-PASS per `D-284-ADVERSARIAL-RE-PASS-01` against the FIXREC-augment diff.
-- [ ] **SWP-05**: Disposition table per skill — every charged hypothesis + beyond-charge entries get NEGATIVE-VERIFIED / FINDING_CANDIDATE / SAFE_BY_DESIGN classification. Skeptic-reviewer filter per `feedback_skeptic_pass_before_catastrophe.md` (structural-protection check + 3-condition EV lens) applied BEFORE any user-pause.
+- [x] **SWP-01**: `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT pass. Charge: find any state transition that violates INV-01..12; any (burn, advance, claim, gameOver) interleaving that produces an exploitable outcome; any storage-collision or packing bug in the new layout.
+- [x] **SWP-02**: `/zero-day-hunter` PARALLEL_SUBAGENT pass. Charge: novel attack surfaces on the per-day refactor — composition with lootbox/coinflip flows; ERC20 callback-induced re-entry on transfer paths; cross-module read/write races between sStonk and DegenerusGame storage.
+- [x] **SWP-03**: `/economic-analyst` PARALLEL_SUBAGENT pass. Charge: game-theoretic write-induced effects under the per-day model; coordinated-burn scenarios; timing arbitrage between gap burns vs post-advance burns; MEV surfaces on the new state machine.
+- [x] **SWP-04**: Two-tier consensus per `D-302-CONSENSUS-01`. Tier 1 any-skill FINDING_CANDIDATE → AskUserQuestion PAUSE. Tier 2 3-of-3 consensus → automatic elevation + RE-PASS per `D-284-ADVERSARIAL-RE-PASS-01` against the FIXREC-augment diff.
+- [x] **SWP-05**: Disposition table per skill — every charged hypothesis + beyond-charge entries get NEGATIVE-VERIFIED / FINDING_CANDIDATE / SAFE_BY_DESIGN classification. Skeptic-reviewer filter per `feedback_skeptic_pass_before_catastrophe.md` (structural-protection check + 3-condition EV lens) applied BEFORE any user-pause.
 
 ### Audit (AUDIT) — 9-Section TERMINAL Deliverable
 
@@ -203,11 +203,11 @@ Explicitly excluded from v44.0; documented to prevent scope creep:
 | EDGE-16 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
 | EDGE-17 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
 | EDGE-18 | Phase 306 TST (one fuzz function per EDGE-NN) [enum at 304 SPEC] | Pending (SPEC §3 docs shipped at Plan 03; commits `315280b0` + `971688ba`) |
-| SWP-01 | Phase 307 SWEEP | Pending |
-| SWP-02 | Phase 307 SWEEP | Pending |
-| SWP-03 | Phase 307 SWEEP | Pending |
-| SWP-04 | Phase 307 SWEEP | Pending |
-| SWP-05 | Phase 307 SWEEP | Pending |
+| SWP-01 | Phase 307 SWEEP | Complete |
+| SWP-02 | Phase 307 SWEEP | Complete |
+| SWP-03 | Phase 307 SWEEP | Complete |
+| SWP-04 | Phase 307 SWEEP | Complete |
+| SWP-05 | Phase 307 SWEEP | Complete |
 | AUDIT-01 | Phase 308 TERMINAL | Pending |
 | AUDIT-02 | Phase 308 TERMINAL | Pending |
 | AUDIT-03 | Phase 308 TERMINAL | Pending |
