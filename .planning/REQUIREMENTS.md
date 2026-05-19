@@ -59,8 +59,8 @@ The sStonk gambling-burn redemption flow at `contracts/StakedDegenerusStonk.sol`
 
 - [ ] **TST-01**: Per-function fuzz coverage at `test/fuzz/StakedStonkRedemption.t.sol` — `testFuzz_BurnLandsInCurrentDayPool`, `testFuzz_ResolveWritesCorrectDay`, `testFuzz_ClaimReadsCorrectDay`, `testFuzz_MultipleSameDayBurnsAggregate`, `testFuzz_SupplyCapEnforced`, `testFuzz_EvCapEnforced`. 10k runs per case (FOUNDRY_PROFILE=deep).
 - [ ] **TST-02**: Foundry invariant test harness at `test/invariant/RedemptionAccounting.t.sol` — stateful handler emitting random action sequences from {burn, advance, claim, gameOver, transfer, approve, admin-action}; assert INV-01..12 hold after every action.
-- [ ] **TST-03**: Edge-case coverage at `test/fuzz/RedemptionEdgeCases.t.sol` — one fuzz function per EDGE-NN scenario. Positive paths assert correct outcome; negative paths assert revert or no-exploit.
-- [ ] **TST-04**: V-184 attack reproduction (EDGE-07) — explicit attack vector: player A burns day D, day-D+1 advance resolves with R_{D+1}, attacker burns 1 wei post-resolve, day-D+2 advance fires; ASSERT `redemptionPeriods[D].roll` byte-identical to first resolution (no overwrite).
+- [x] **TST-03**: Edge-case coverage at `test/fuzz/RedemptionEdgeCases.t.sol` — one fuzz function per EDGE-NN scenario. Positive paths assert correct outcome; negative paths assert revert or no-exploit.
+- [x] **TST-04**: V-184 attack reproduction (EDGE-07) — explicit attack vector: player A burns day D, day-D+1 advance resolves with R_{D+1}, attacker burns 1 wei post-resolve, day-D+2 advance fires; ASSERT `redemptionPeriods[D].roll` byte-identical to first resolution (no overwrite).
 - [ ] **TST-05**: Phase 301 vm.skip flip — modify `test/fuzz/RngLockDeterminism.t.sol` HANDOFF-111..117 `vm.skip(true)` blocks → remove the skip + assert strict byte-identity. All 7 fuzz cases that were previously skipped MUST pass at v44.0 close.
 - [ ] **TST-06**: Gas regression — assert burn-path gas ≤ +5% of v43.0 baseline; claim-path gas ≤ +0% (claim is simpler under per-day keying).
 - [ ] **TST-07**: Build + full test suite — `forge build` PASS; `FOUNDRY_PROFILE=deep forge test --match-path "test/{fuzz,invariant}/**"` PASS at 10k runs per fuzz case + sufficient invariant depth.
@@ -69,24 +69,24 @@ The sStonk gambling-burn redemption flow at `contracts/StakedDegenerusStonk.sol`
 
 > Each EDGE-NN is a named fuzz function in `test/fuzz/RedemptionEdgeCases.t.sol` (TST-03) with positive + negative assertions.
 
-- [ ] **EDGE-01**: Pre-advance-gap burn on day D — wall flipped to D, day-D advance not yet fired, player burns. Assert: burn lands in `pendingByDay[D]`, NOT `pendingByDay[D-1]`; cumulative correctly includes both days.
-- [ ] **EDGE-02**: Two pending days simultaneously — D-1 unresolved (yesterday's burns) + D accumulating (today's gap burns). Assert: day-D advance resolves D-1 only; `pendingByDay[D]` untouched.
-- [ ] **EDGE-03**: Single player burns multiple days, never claims — burns on D, D+1, D+2. Assert: each claim independently resolvable; storage grows linearly with day count; player pays own storage cost.
-- [ ] **EDGE-04**: Multiple players burn same day, different times relative to advance — A burns pre-advance, B burns post-advance same wall day D. Assert: both in `pendingByDay[D]`; both resolve at day-D+1's advance with R_{D+1}; each gets correct rolled share.
-- [ ] **EDGE-05**: Player claims before advance fires — burns day D, calls `claimRedemption(D)` before day-D+1's advance. Assert: reverts `NotResolved`.
-- [ ] **EDGE-06**: Skipped advance (long stall) — burns day D, advance for day-D+1 delayed 12h+; eventual advance fires. Assert: resolves day D with day-D+1's eventual VRF word (or retryLootboxRng failsafe word); no stuck claim.
-- [ ] **EDGE-07**: V-184 attack reproduction — see TST-04. Negative assertion.
-- [ ] **EDGE-08**: Burn → gameOver → claim — burn day D, gameOver triggers before day-D+1 advance (or after resolve but before claim). Assert: claim succeeds with stored roll (if resolved) OR reverts cleanly (if pre-resolve gameOver).
-- [ ] **EDGE-09**: Concurrent claims from N players same day — N players all burn day D, all claim after day-D+1 advance. Assert: total payouts sum to `(pendingByDay[D].ethBase * R_{D+1}) / 100` ± dust; no over-payment; `pendingRedemptionEthValue` decrements correctly.
-- [ ] **EDGE-10**: Re-entrancy attempt on `_payEth` — malicious recipient contract calls `claimRedemption(D)` re-entrantly. Assert: existing protections hold (refactor doesn't change ordering); state consistent post-revert or post-completion.
-- [ ] **EDGE-11**: Burn during `rngLocked` window — assert reverts `BurnsBlockedDuringRng`.
-- [ ] **EDGE-12**: Burn during `livenessTriggered` window — assert reverts `BurnsBlockedDuringLiveness`.
-- [ ] **EDGE-13**: Zero-rounded `ethValueOwed` from tiny burn (1 wei sDGNRS) — assert either reverts cleanly or proceeds with `ethValueOwed = 0` (no zero-claim corruption).
-- [ ] **EDGE-14**: 50% supply cap edge — burn exactly cap (succeeds); one wei over (reverts `Insufficient`).
-- [ ] **EDGE-15**: 160 ETH EV cap edge — accumulate exactly 160 ETH (succeeds); one wei over (reverts `ExceedsDailyRedemptionCap`).
-- [ ] **EDGE-16**: Cross-day cap reset — burn 160 ETH on D, burn 160 ETH on D+1. Assert: both allowed; per-(player, day) cap resets.
-- [ ] **EDGE-17**: Burn after resolve same wall-clock day — day-D advance fires at 22:58, player burns at 23:30 same wall day D. Assert: burn lands in `pendingByDay[D]` (current day still D); resolves at day-D+1's advance.
-- [ ] **EDGE-18**: BURNIE pool insufficient at claim — coinflip pool drained; player claims BURNIE owed. Assert: `_payBurnie` falls back correctly per existing logic; no revert, no stuck claim.
+- [x] **EDGE-01**: Pre-advance-gap burn on day D — wall flipped to D, day-D advance not yet fired, player burns. Assert: burn lands in `pendingByDay[D]`, NOT `pendingByDay[D-1]`; cumulative correctly includes both days.
+- [x] **EDGE-02**: Two pending days simultaneously — D-1 unresolved (yesterday's burns) + D accumulating (today's gap burns). Assert: day-D advance resolves D-1 only; `pendingByDay[D]` untouched.
+- [x] **EDGE-03**: Single player burns multiple days, never claims — burns on D, D+1, D+2. Assert: each claim independently resolvable; storage grows linearly with day count; player pays own storage cost.
+- [x] **EDGE-04**: Multiple players burn same day, different times relative to advance — A burns pre-advance, B burns post-advance same wall day D. Assert: both in `pendingByDay[D]`; both resolve at day-D+1's advance with R_{D+1}; each gets correct rolled share.
+- [x] **EDGE-05**: Player claims before advance fires — burns day D, calls `claimRedemption(D)` before day-D+1's advance. Assert: reverts `NotResolved`.
+- [x] **EDGE-06**: Skipped advance (long stall) — burns day D, advance for day-D+1 delayed 12h+; eventual advance fires. Assert: resolves day D with day-D+1's eventual VRF word (or retryLootboxRng failsafe word); no stuck claim.
+- [x] **EDGE-07**: V-184 attack reproduction — see TST-04. Negative assertion.
+- [x] **EDGE-08**: Burn → gameOver → claim — burn day D, gameOver triggers before day-D+1 advance (or after resolve but before claim). Assert: claim succeeds with stored roll (if resolved) OR reverts cleanly (if pre-resolve gameOver).
+- [x] **EDGE-09**: Concurrent claims from N players same day — N players all burn day D, all claim after day-D+1 advance. Assert: total payouts sum to `(pendingByDay[D].ethBase * R_{D+1}) / 100` ± dust; no over-payment; `pendingRedemptionEthValue` decrements correctly.
+- [x] **EDGE-10**: Re-entrancy attempt on `_payEth` — malicious recipient contract calls `claimRedemption(D)` re-entrantly. Assert: existing protections hold (refactor doesn't change ordering); state consistent post-revert or post-completion.
+- [x] **EDGE-11**: Burn during `rngLocked` window — assert reverts `BurnsBlockedDuringRng`.
+- [x] **EDGE-12**: Burn during `livenessTriggered` window — assert reverts `BurnsBlockedDuringLiveness`.
+- [x] **EDGE-13**: Zero-rounded `ethValueOwed` from tiny burn (1 wei sDGNRS) — assert either reverts cleanly or proceeds with `ethValueOwed = 0` (no zero-claim corruption).
+- [x] **EDGE-14**: 50% supply cap edge — burn exactly cap (succeeds); one wei over (reverts `Insufficient`).
+- [x] **EDGE-15**: 160 ETH EV cap edge — accumulate exactly 160 ETH (succeeds); one wei over (reverts `ExceedsDailyRedemptionCap`).
+- [x] **EDGE-16**: Cross-day cap reset — burn 160 ETH on D, burn 160 ETH on D+1. Assert: both allowed; per-(player, day) cap resets.
+- [x] **EDGE-17**: Burn after resolve same wall-clock day — day-D advance fires at 22:58, player burns at 23:30 same wall day D. Assert: burn lands in `pendingByDay[D]` (current day still D); resolves at day-D+1's advance.
+- [x] **EDGE-18**: BURNIE pool insufficient at claim — coinflip pool drained; player claims BURNIE owed. Assert: `_payBurnie` falls back correctly per existing logic; no revert, no stuck claim.
 
 ### Adversarial Sweep (SWP) — 3-Skill HYBRID Pass
 
@@ -180,8 +180,8 @@ Explicitly excluded from v44.0; documented to prevent scope creep:
 | IMPL-04 | Phase 305 IMPL | Pending |
 | TST-01 | Phase 306 TST | Pending |
 | TST-02 | Phase 306 TST | Pending |
-| TST-03 | Phase 306 TST | Pending |
-| TST-04 | Phase 306 TST | Pending |
+| TST-03 | Phase 306 TST | Complete |
+| TST-04 | Phase 306 TST | Complete |
 | TST-05 | Phase 306 TST | Pending |
 | TST-06 | Phase 306 TST | Pending |
 | TST-07 | Phase 306 TST | Pending |

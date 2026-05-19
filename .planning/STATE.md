@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v44.0
 milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
 status: executing
-last_updated: "2026-05-19T13:22:33.080Z"
-last_activity: 2026-05-19 -- Phase 306 Plan 01 complete (Foundry invariant harness — 13 INV-NN PROVEN)
+last_updated: "2026-05-19T14:20:58.969Z"
+last_activity: 2026-05-19
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 11
-  completed_plans: 7
-  percent: 47
+  completed_plans: 8
+  percent: 40
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 ## Current Position
 
 Phase: 306 (test-tst) — EXECUTING
-Plan: 2 of 5
-Status: Executing Phase 306 (Plan 01 complete; Plans 02..05 outstanding)
-Last activity: 2026-05-19 -- Phase 306 Plan 01 complete (Foundry invariant harness — 13 INV-NN PROVEN at FOUNDRY_PROFILE=deep)
+Plan: 3 of 5
+Status: Ready to execute
+Last activity: 2026-05-19
 
 ## Current Milestone Phases
 
@@ -431,6 +431,7 @@ Audit deliverables:
 | Phase 304 P04 | ~6min | 2 tasks | 1 file modified (304-SPEC.md §4 design-intent walks for 7 deletions) + 1 SUMMARY |
 | Phase 304 P05 | ~25min | 1 task | 1 file modified (304-SPEC.md §5 citation manifest + 6 forbidden-lexicon reframes in §1-§4) + 1 SUMMARY |
 | Phase 306 P01 | ~1h | 3 tasks | 3 files (test/invariant/RedemptionAccounting.t.sol NEW + test/fuzz/handlers/RedemptionHandler.sol REWRITE + foundry.toml widen) + 1 SUMMARY (13 INV-NN PROVEN at FOUNDRY_PROFILE=deep × 1000 runs × 256 depth = 256000 calls each) |
+| Phase 306-test-tst P306-02 | 1h | 3 tasks | 1 files |
 
 ## Decisions
 
@@ -477,3 +478,8 @@ Audit deliverables:
 - [Phase 306]: D-306-01-EXACT-EQUALITY-01: INV-02..05 in test/invariant/RedemptionAccounting.t.sol use STRICT `assertEq` (no `assertApproxEqAbs` or dust tolerance) per D-305-GWEI-SNAP-01. The 304-SPEC §1 INV-02 "dust-bounded" framing is structurally tightened to byte-identity post-refactor: ethValueOwed is gwei-snapped at source, gcd(1e9, 100) = 100 means every downstream `× roll / 100` divides exactly. PROVEN at FOUNDRY_PROFILE=deep × 1000 runs × 256 depth = 256000 calls per invariant; zero failures across all 13. Phase 308 §3.F attestation matrix can cite EXACT closure verbatim.
 - [Phase 306]: D-306-01-INV-13-PROVEN-01: invariant_INV_13_SinglePoolPending PROVEN at FOUNDRY_PROFILE=deep — at most one pendingByDay[D] non-empty at any reachable state, and if exactly one, that D matches sdgnrs.pendingResolveDay(). action_burnOnPreviousDay handler action drives the PriorDayUnresolved revert path 51000+ times across the deep run with zero ghost-state drift. Load-bearing v44.0 closure assertion alongside INV-01 for V-184 + HANDOFF-111..117 closure citation in Phase 308 §3.D.
 - [Phase 306]: D-306-01-LEGACY-PRESERVE-01: All v43-era `ghost_*` counters preserved verbatim on RedemptionHandler so test/fuzz/invariant/RedemptionInvariants.inv.t.sol (the pre-existing 7-INV harness) continues to compile and pass (verified: 11 tests pass, 0 failed under the refreshed handler). ghost_periodIndexDecreased + ghost_lastPeriodIndex retained but never incremented under v44 (no `redemptionPeriodIndex` slot exists); legacy `invariant_periodIndexMonotonic` asserts `assertEq(0, 0)` trivially — vacuous monotonicity is the correct closure-semantic when there is no index to monotonically increase.
+- [Phase ?]: D-306-02-FUZZ-MIN-AMOUNT-01: 100-ether floor for EDGE-01..19 fuzz bound (gwei-snap zero-rounds 1-token burns under deploy state)
+- [Phase ?]: D-306-02-DIRECT-RESOLVE-01: edge tests prank address(game) + call resolveRedemptionPeriod directly to pin deterministic rolls
+- [Phase ?]: D-306-02-LOOTBOX-MOCK-01: game.resolveRedemptionLootbox mocked to no-op in setUp; lootbox internals out-of-scope
+- [Phase ?]: D-306-02-MOCK-EDGE-11-12-01: rngLocked + livenessTriggered driven via vm.mockCall to surface burn-guard reverts directly
+- [Phase ?]: D-306-02-VM-STORE-CAP-SEED-01: EDGE-14/15/16/18 use vm.store to seed cap-bounded states (engineering cap-natural amounts infeasible under deploy state)
