@@ -1274,8 +1274,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 perturbSeed,
         uint256 burnAmountSeed
     ) public {
-        // SKIP: RNGLOCK-FIXREC.md sec103 -- V-184 sStonk cross-day re-roll CATASTROPHE -- v44.0 D-43N-V44-HANDOFF-111 flips this to strict assertion
-        vm.skip(true);
+        // FLIPPED at v44.0: RNGLOCK-FIXREC.md sec103 -- V-184 sStonk cross-day re-roll CATASTROPHE -- D-43N-V44-HANDOFF-111 strict-assertion attestation; structural closure via per-day storage keying (304-SPEC §3 EDGE-07)
         vm.assume(vrfWord != 0);
 
         _completeDay(0xDEAD0012);
@@ -1292,7 +1291,8 @@ contract RngLockDeterminism is DeployProtocol {
             vm.assume(false);
         }
 
-        uint256 burnAmount = bound(burnAmountSeed, 1, 1_000);
+        // v44 MIN_BURN_AMOUNT floor: bound legal-burn range to [1e18, 100e18]
+        uint256 burnAmount = bound(burnAmountSeed, 1e18, 100e18);
 
         vm.prank(holder);
         try sdgnrs.burn(burnAmount) returns (uint256, uint256, uint256) {
@@ -1311,7 +1311,8 @@ contract RngLockDeterminism is DeployProtocol {
 
         if (perturbSeed % 7 == 0) {
             vm.prank(holder);
-            try sdgnrs.burn(1) returns (uint256, uint256, uint256) {} catch {}
+            // v44 MIN_BURN_AMOUNT: minimum legal perturbation burn
+            try sdgnrs.burn(1e18) returns (uint256, uint256, uint256) {} catch {}
         }
 
         assertTrue(game.rngLocked(), "StakedStonkRedemption: lock must not lift under perturbation");
