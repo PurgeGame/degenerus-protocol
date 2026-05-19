@@ -51,7 +51,12 @@
   4. §4 design-intent + actor game-theory walk per `feedback_design_intent_before_deletion.md` covers all 5 storage-slot deletions (`redemptionPeriodIndex`, `redemptionPeriodSupplySnapshot`, `redemptionPeriodBurned`, `pendingRedemptionEthBase`, `pendingRedemptionBurnieBase`) + the `UnresolvedClaim` revert deletion + the `redemptionPeriodIndex` reset block deletion.
   5. §5 every cited file:line in `contracts/StakedDegenerusStonk.sol` + `contracts/modules/DegenerusGameAdvanceModule.sol` grep-verified against source HEAD per `feedback_verify_call_graph_against_source.md`; zero "by construction" or "covered by single fn" claims.
 
-**Plans:** TBD (planned at `/gsd:plan-phase 304` invocation)
+**Plans:** 5 plans
+- [ ] 304-01-PLAN.md — skeleton + §0 header + §1 INV-01..12 formal invariant model
+- [ ] 304-02-PLAN.md — §2 SPEC-01..05 locked design decisions (struct shape + composite-key + dayToResolve arg + gameOver/zero-rounded/refund-timing sub-locks + 50% supply cap snapshot timing)
+- [ ] 304-03-PLAN.md — §3 EDGE-01..18 exhaustive scenario enumeration (positive + negative assertions; EDGE-07 V-184 attack reproduction)
+- [ ] 304-04-PLAN.md — §4 design-intent backward-trace + actor game-theory walk for 7 deletions (5 storage slots + UnresolvedClaim revert + redemptionPeriodIndex reset block)
+- [ ] 304-05-PLAN.md — §5 source-verified citation manifest (grep-verify every file:line vs StakedDegenerusStonk.sol + DegenerusGameAdvanceModule.sol HEAD; document all 3 sStonk resolve call sites)
 
 ### Phase 305: Implementation (IMPL)
 
