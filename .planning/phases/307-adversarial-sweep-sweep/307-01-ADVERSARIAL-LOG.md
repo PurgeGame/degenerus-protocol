@@ -220,7 +220,7 @@ The (b)+(c) severity-downgrade arm fires only on surviving `FINDING_CANDIDATE` r
 | --- | --- | --- |
 | Tier-2 (3-of-3 consensus FINDING_CANDIDATE on same hypothesis) | auto-elevate + RE-PASS per D-284-ADVERSARIAL-RE-PASS-01 | **0** |
 | Tier-1 (any-skill FINDING_CANDIDATE after dual-gate filter) | AskUserQuestion user-pause per D-302-CONSENSUS-01 | **0** |
-| unanimous-NEGATIVE (no FINDING_CANDIDATE survives) | no elevation, no user-pause; Task 6 precondition gate fails | **27 / 27 charged hypotheses + augments + beyond-charge** |
+| unanimous-NEGATIVE (no FINDING_CANDIDATE survives) | no elevation, no user-pause; Task 6 precondition gate fails | **72 / 72 disposition rows (22 auditor + 22 hunter + 28 economist)** |
 
 **Verdict:** **unanimous-NEGATIVE**.
 
