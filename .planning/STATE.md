@@ -2,16 +2,17 @@
 gsd_state_version: 1.0
 milestone: v44.0
 milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
-status: ready_to_plan
-last_updated: 2026-05-19T15:30:31.125Z
+status: planning
+last_updated: "2026-05-19T16:30:00.000Z"
 last_activity: 2026-05-19
+stopped_at: Phase 307 context gathered (D-307-* locked); ready to plan
+resume_file: .planning/phases/307-adversarial-sweep-sweep/307-CONTEXT.md
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 11
   completed_plans: 11
   percent: 60
-stopped_at: Phase 306 complete (5/5) — ready to discuss Phase 307
 ---
 
 # Project State
@@ -27,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 Phase: 307
 Plan: Not started
-Status: Ready to plan
+Status: Context captured (307-CONTEXT.md @ commit `e48b324f`); ready to plan
 Last activity: 2026-05-19
 
 ## Current Milestone Phases
