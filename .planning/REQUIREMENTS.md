@@ -57,7 +57,7 @@ The sStonk gambling-burn redemption flow at `contracts/StakedDegenerusStonk.sol`
 
 > Test-tree AGENT-COMMITTED commits per `D-43N-TEST-COMMITS-AUTO-01` lineage.
 
-- [ ] **TST-01**: Per-function fuzz coverage at `test/fuzz/StakedStonkRedemption.t.sol` — `testFuzz_BurnLandsInCurrentDayPool`, `testFuzz_ResolveWritesCorrectDay`, `testFuzz_ClaimReadsCorrectDay`, `testFuzz_MultipleSameDayBurnsAggregate`, `testFuzz_SupplyCapEnforced`, `testFuzz_EvCapEnforced`. 10k runs per case (FOUNDRY_PROFILE=deep).
+- [x] **TST-01**: Per-function fuzz coverage at `test/fuzz/StakedStonkRedemption.t.sol` — `testFuzz_BurnLandsInCurrentDayPool`, `testFuzz_ResolveWritesCorrectDay`, `testFuzz_ClaimReadsCorrectDay`, `testFuzz_MultipleSameDayBurnsAggregate`, `testFuzz_SupplyCapEnforced`, `testFuzz_EvCapEnforced`. 10k runs per case (FOUNDRY_PROFILE=deep).
 - [ ] **TST-02**: Foundry invariant test harness at `test/invariant/RedemptionAccounting.t.sol` — stateful handler emitting random action sequences from {burn, advance, claim, gameOver, transfer, approve, admin-action}; assert INV-01..12 hold after every action.
 - [x] **TST-03**: Edge-case coverage at `test/fuzz/RedemptionEdgeCases.t.sol` — one fuzz function per EDGE-NN scenario. Positive paths assert correct outcome; negative paths assert revert or no-exploit.
 - [x] **TST-04**: V-184 attack reproduction (EDGE-07) — explicit attack vector: player A burns day D, day-D+1 advance resolves with R_{D+1}, attacker burns 1 wei post-resolve, day-D+2 advance fires; ASSERT `redemptionPeriods[D].roll` byte-identical to first resolution (no overwrite).
@@ -178,7 +178,7 @@ Explicitly excluded from v44.0; documented to prevent scope creep:
 | IMPL-02 | Phase 305 IMPL | Pending |
 | IMPL-03 | Phase 305 IMPL | Pending |
 | IMPL-04 | Phase 305 IMPL | Pending |
-| TST-01 | Phase 306 TST | Pending |
+| TST-01 | Phase 306 TST | Complete |
 | TST-02 | Phase 306 TST | Pending |
 | TST-03 | Phase 306 TST | Complete |
 | TST-04 | Phase 306 TST | Complete |

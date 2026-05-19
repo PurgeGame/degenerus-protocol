@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v44.0
 milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
 status: executing
-last_updated: "2026-05-19T14:20:58.969Z"
+last_updated: "2026-05-19T14:33:35.256Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 11
-  completed_plans: 8
-  percent: 40
+  completed_plans: 9
+  percent: 82
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 ## Current Position
 
 Phase: 306 (test-tst) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-05-19
 
@@ -432,6 +432,7 @@ Audit deliverables:
 | Phase 304 P05 | ~25min | 1 task | 1 file modified (304-SPEC.md §5 citation manifest + 6 forbidden-lexicon reframes in §1-§4) + 1 SUMMARY |
 | Phase 306 P01 | ~1h | 3 tasks | 3 files (test/invariant/RedemptionAccounting.t.sol NEW + test/fuzz/handlers/RedemptionHandler.sol REWRITE + foundry.toml widen) + 1 SUMMARY (13 INV-NN PROVEN at FOUNDRY_PROFILE=deep × 1000 runs × 256 depth = 256000 calls each) |
 | Phase 306-test-tst P306-02 | 1h | 3 tasks | 1 files |
+| Phase 306 P03 | ~30min | 2 tasks | 1 file (test/fuzz/StakedStonkRedemption.t.sol NEW, 713 lines) + 1 SUMMARY (8 testFuzz_* PASS at 10k runs/case; 6 ROADMAP-canonical + 2 ACL/sentinel) |
 
 ## Decisions
 
@@ -483,3 +484,4 @@ Audit deliverables:
 - [Phase ?]: D-306-02-LOOTBOX-MOCK-01: game.resolveRedemptionLootbox mocked to no-op in setUp; lootbox internals out-of-scope
 - [Phase ?]: D-306-02-MOCK-EDGE-11-12-01: rngLocked + livenessTriggered driven via vm.mockCall to surface burn-guard reverts directly
 - [Phase ?]: D-306-02-VM-STORE-CAP-SEED-01: EDGE-14/15/16/18 use vm.store to seed cap-bounded states (engineering cap-natural amounts infeasible under deploy state)
+- [Phase 306]: D-306-03-FUZZ-MIN-AMOUNT-01 + D-306-03-VM-STORE-CAP-SEED-01 + D-306-03-NATSPEC-CONFIG-LITERAL-01: Plan 306-03 ships test/fuzz/StakedStonkRedemption.t.sol with 6 ROADMAP-canonical testFuzz_* names verbatim + 2 ACL/sentinel augments; all 8 PASS at FOUNDRY_PROFILE=deep × 10000 runs. testFuzz_MultipleSameDayBurnsAggregate uses STRICT assertEq for the per-day-sum equality per D-305-GWEI-SNAP-01. Zero contracts/*.sol mutations.
