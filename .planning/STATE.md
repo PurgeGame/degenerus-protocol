@@ -25,15 +25,15 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 ## Current Position
 
 Phase: 304 (spec-invariant-model-spec) — EXECUTING
-Plan: 2 of 5 (Plan 01 complete; §0 header + §1 INV-01..12 shipped at commits `5a5e1034` + `46b16273`)
+Plan: 3 of 5 (Plans 01 + 02 complete; §0 header + §1 INV-01..12 + §2 SPEC-01..05 + §2.0 priority statement shipped at commits `5a5e1034` + `46b16273` + `6edc3967`)
 Status: Executing Phase 304
-Last activity: 2026-05-19 -- Phase 304 Plan 01 complete (§0 header + §1 INV-01..12 formal invariant model)
+Last activity: 2026-05-19 -- Phase 304 Plan 02 complete (§2 SPEC-01..05 locked design decisions + §2.0 priority statement; SPEC-04 (a-d) sub-locks resolved; 7-deletion enumeration prepared for Plan 04)
 
 ## Current Milestone Phases
 
 | Phase | Name | Type | Requirements | Wave Shape | Depends on | Status |
 |-------|------|------|--------------|------------|------------|--------|
-| 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..12 + EDGE-01..18] | 1 AGENT-COMMITTED artifact bundle | nothing | Executing (1/5 plans complete) |
+| 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..12 + EDGE-01..18] | 1 AGENT-COMMITTED artifact bundle | nothing | Executing (2/5 plans complete) |
 | 305 | Implementation | IMPL | IMPL-01..04 primary (4) | 1 USER-APPROVED contract commit | Phase 304 | Not started |
 | 306 | Test | TST | INV-01..12 + TST-01..07 + EDGE-01..18 primary (37) | 1 AGENT-COMMITTED test commit bundle | Phase 305 | Not started |
 | 307 | Adversarial Sweep | SWEEP | SWP-01..05 primary (5) | 1 AGENT-COMMITTED adversarial-log bundle | Phases 305 + 306 | Not started |

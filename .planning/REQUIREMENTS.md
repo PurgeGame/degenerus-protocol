@@ -38,11 +38,11 @@ The sStonk gambling-burn redemption flow at `contracts/StakedDegenerusStonk.sol`
 
 ### Spec (SPEC) — Locked Design Decisions
 
-- [ ] **SPEC-01**: `pendingByDay[uint32]` storage struct shape locked: `struct DayPending { uint256 ethBase; uint256 burnieBase; uint128 supplySnapshot; uint128 burned; }`. Three storage slots per active day. Cumulative scalar globals (`pendingRedemptionEthValue` public, `pendingRedemptionBurnie` internal) unchanged.
-- [ ] **SPEC-02**: `claimRedemption(uint32 day)` signature — caller specifies day; no batch helper; immediate-claim UX assumed. `pendingRedemptions[player][day]` composite key. `UnresolvedClaim` revert at `:796-797` removed (per-day keying makes multi-day pending claims safe).
-- [ ] **SPEC-03**: `resolveRedemptionPeriod(uint16 roll, uint32 flipDay, uint32 dayToResolve)` — explicit day arg from `AdvanceModule` caller. `dayToResolve = currentDayView() - 1` (or equivalent — locked at SPEC phase). `hasPendingRedemptions(uint32 day)` query takes day, checks only `pendingByDay[day]`.
-- [ ] **SPEC-04**: Decisions to lock at SPEC phase: (a) gameOver path interaction (does pendingByDay survive gameOver? does resolve fire post-gameOver if pre-gameOver pending exists?); (b) zero-amount / zero-rounded burn handling (existing `amount == 0` revert preserved; what if `ethValueOwed` rounds to 0?); (c) `pendingByDay[D]` storage refund timing (`delete` at resolve vs at last claim of that day); (d) `pendingRedemptions[player][day]` storage refund at claim (`delete`).
-- [ ] **SPEC-05**: 50% supply cap snapshot timing — locked: `pendingByDay[D].supplySnapshot = totalSupply` on first burn of day D (i.e., when `pendingByDay[D].supplySnapshot == 0`); immutable for rest of day D; cap enforced against snapshot, not against `totalSupply` at later burn time within same day.
+- [x] **SPEC-01**: `pendingByDay[uint32]` storage struct shape locked: `struct DayPending { uint256 ethBase; uint256 burnieBase; uint128 supplySnapshot; uint128 burned; }`. Three storage slots per active day. Cumulative scalar globals (`pendingRedemptionEthValue` public, `pendingRedemptionBurnie` internal) unchanged. (LOCKED at Phase 304 Plan 02; SPEC §2 SPEC-01; commit `6edc3967`)
+- [x] **SPEC-02**: `claimRedemption(uint32 day)` signature — caller specifies day; no batch helper; immediate-claim UX assumed. `pendingRedemptions[player][day]` composite key. `UnresolvedClaim` revert at `:796-797` removed (per-day keying makes multi-day pending claims safe). (LOCKED at Phase 304 Plan 02; SPEC §2 SPEC-02; commit `6edc3967`)
+- [x] **SPEC-03**: `resolveRedemptionPeriod(uint16 roll, uint32 flipDay, uint32 dayToResolve)` — explicit day arg from `AdvanceModule` caller. `dayToResolve = currentDayView() - 1` (or equivalent — locked at SPEC phase). `hasPendingRedemptions(uint32 day)` query takes day, checks only `pendingByDay[day]`. (LOCKED at Phase 304 Plan 02; SPEC §2 SPEC-03; dayToResolve = `currentDayView() - 1`; commit `6edc3967`)
+- [x] **SPEC-04**: Decisions to lock at SPEC phase: (a) gameOver path interaction (does pendingByDay survive gameOver? does resolve fire post-gameOver if pre-gameOver pending exists?); (b) zero-amount / zero-rounded burn handling (existing `amount == 0` revert preserved; what if `ethValueOwed` rounds to 0?); (c) `pendingByDay[D]` storage refund timing (`delete` at resolve vs at last claim of that day); (d) `pendingRedemptions[player][day]` storage refund at claim (`delete`). (LOCKED at Phase 304 Plan 02; SPEC §2 SPEC-04 (a–d): (a) gracefully-resolve mid-pending gameOver; (b) zero-rounded burn proceeds with zero claim; (c) delete pendingByDay[D] at resolve; (d) delete pendingRedemptions[player][day] at full-claim path with partial-claim branch preserved; commit `6edc3967`)
+- [x] **SPEC-05**: 50% supply cap snapshot timing — locked: `pendingByDay[D].supplySnapshot = totalSupply` on first burn of day D (i.e., when `pendingByDay[D].supplySnapshot == 0`); immutable for rest of day D; cap enforced against snapshot, not against `totalSupply` at later burn time within same day. (LOCKED at Phase 304 Plan 02; SPEC §2 SPEC-05; lazy-init condition: `supplySnapshot == 0 && burned == 0`; commit `6edc3967`)
 
 ### Implementation (IMPL) — Contract Changes
 
@@ -169,11 +169,11 @@ Explicitly excluded from v44.0; documented to prevent scope creep:
 | INV-10 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
 | INV-11 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
 | INV-12 | Phase 306 TST (invariant harness) [doc at 304 SPEC; attest at 308 §3.F] | Pending |
-| SPEC-01 | Phase 304 SPEC | Pending |
-| SPEC-02 | Phase 304 SPEC | Pending |
-| SPEC-03 | Phase 304 SPEC | Pending |
-| SPEC-04 | Phase 304 SPEC | Pending |
-| SPEC-05 | Phase 304 SPEC | Pending |
+| SPEC-01 | Phase 304 SPEC | Complete (Plan 02; commit `6edc3967`) |
+| SPEC-02 | Phase 304 SPEC | Complete (Plan 02; commit `6edc3967`) |
+| SPEC-03 | Phase 304 SPEC | Complete (Plan 02; commit `6edc3967`) |
+| SPEC-04 | Phase 304 SPEC | Complete (Plan 02; commit `6edc3967`) |
+| SPEC-05 | Phase 304 SPEC | Complete (Plan 02; commit `6edc3967`) |
 | IMPL-01 | Phase 305 IMPL | Pending |
 | IMPL-02 | Phase 305 IMPL | Pending |
 | IMPL-03 | Phase 305 IMPL | Pending |
