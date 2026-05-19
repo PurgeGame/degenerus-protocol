@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v44.0
 milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
 status: executing
-last_updated: "2026-05-19T11:13:20.323Z"
-last_activity: 2026-05-19 -- Phase 305 planning complete
+last_updated: "2026-05-19T11:17:37.773Z"
+last_activity: 2026-05-19 -- Phase 305 execution started
 progress:
   total_phases: 5
   completed_phases: 1
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 305 — implementation (impl)
+**Current focus:** Phase 305 — implementation-impl
 
 ## Current Position
 
-Phase: 305
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-19 -- Phase 305 planning complete
+Phase: 305 (implementation-impl) — EXECUTING
+Plan: 1 of 1
+Status: Executing Phase 305
+Last activity: 2026-05-19 -- Phase 305 execution started
 
 ## Current Milestone Phases
 
