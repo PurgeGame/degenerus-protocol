@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v44.0
 milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
 status: executing
-last_updated: "2026-05-19T08:43:28.557Z"
-last_activity: 2026-05-19 -- Phase 304 planning complete
+last_updated: "2026-05-19T10:00:00.000Z"
+last_activity: 2026-05-19 -- Phase 304 Plan 01 complete (§0 header + §1 INV-01..12 formal invariant model)
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 20
 ---
 
 # Project State
@@ -20,20 +20,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v44.0 sStonk Per-Day Redemption Refactor + Accounting Invariant Proof — 5-phase plan locked 2026-05-19 (Phase 304 SPEC → 305 IMPL → 306 TST → 307 SWEEP → 308 TERMINAL). 63/63 requirements mapped to phases (INV-01..12 + SPEC-01..05 + IMPL-01..04 + TST-01..07 + EDGE-01..18 + SWP-01..05 + AUDIT-01..09 + REG-01 + CLS-01..02). v44.0 consumes v43.0 §9d HANDOFF-111..117 + FIXREC §103 V-184 mechanic as load-bearing input; closes 7 of 142 v43 handoff anchors at v44 close; remaining 135 defer to v45.0+.
+**Current focus:** Phase 304 — spec-invariant-model-spec
 
 ## Current Position
 
-Phase: 304 — SPEC + Invariant Model (SPEC) — Not started
-Plan: —
-Status: Ready to execute
-Last activity: 2026-05-19 -- Phase 304 planning complete
+Phase: 304 (spec-invariant-model-spec) — EXECUTING
+Plan: 2 of 5 (Plan 01 complete; §0 header + §1 INV-01..12 shipped at commits `5a5e1034` + `46b16273`)
+Status: Executing Phase 304
+Last activity: 2026-05-19 -- Phase 304 Plan 01 complete (§0 header + §1 INV-01..12 formal invariant model)
 
 ## Current Milestone Phases
 
 | Phase | Name | Type | Requirements | Wave Shape | Depends on | Status |
 |-------|------|------|--------------|------------|------------|--------|
-| 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..12 + EDGE-01..18] | 1 AGENT-COMMITTED artifact bundle | nothing | Not started |
+| 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..12 + EDGE-01..18] | 1 AGENT-COMMITTED artifact bundle | nothing | Executing (1/5 plans complete) |
 | 305 | Implementation | IMPL | IMPL-01..04 primary (4) | 1 USER-APPROVED contract commit | Phase 304 | Not started |
 | 306 | Test | TST | INV-01..12 + TST-01..07 + EDGE-01..18 primary (37) | 1 AGENT-COMMITTED test commit bundle | Phase 305 | Not started |
 | 307 | Adversarial Sweep | SWEEP | SWP-01..05 primary (5) | 1 AGENT-COMMITTED adversarial-log bundle | Phases 305 + 306 | Not started |
