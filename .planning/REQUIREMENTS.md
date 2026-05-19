@@ -1,9 +1,10 @@
 # Requirements: Degenerus Protocol — Audit Repository
 
 **Defined:** 2026-05-18
-**Milestone:** v43.0 Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment
+**Milestone:** v43.0 Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment — **SHIPPED 2026-05-19**
 **Posture:** AUDIT-ONLY per `D-43N-AUDIT-ONLY-01` (user-authorization 2026-05-18); contract remediations deferred to v44.0 FIX-MILESTONE
 **Audit baseline:** v42.0 closure HEAD `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`
+**Closure signal:** `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
 ---
@@ -73,27 +74,27 @@ At `rngLockedFlag = true`, every storage slot that participates in deriving any 
 
 ### Audit Deliverable (AUDIT) — FINDINGS-v43.0.md Terminal
 
-- [ ] **AUDIT-01**: `audit/FINDINGS-v43.0.md` 9-section terminal deliverable. §3.A delta-surface table enumerates every AGENT-COMMITTED test/audit/planning commit across v43.0 phases (Phase 301 FUZZ test commit AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`). `contracts/` delta row count = 0 per audit-only posture per `D-43N-AUDIT-ONLY-01`.
-- [ ] **AUDIT-02**: §3.B per-exempt-entry-point attestation matrix — for each of the 3 exempt entry points, per-participating-slot row proves the exempt write does not violate downstream invariants.
-- [ ] **AUDIT-03**: §3.C conservation re-proof for the freeze invariant — every participating slot has a 4-tuple attestation (slot identity / writer-set / freeze gate / consumer-set).
-- [ ] **AUDIT-04**: §3.D Phase 299 FIXREC roll-up — per-VIOLATION recommendation table (tactic + impact estimate + v44.0 handoff anchor); cross-references `.planning/RNGLOCK-FIXREC.md`.
-- [ ] **AUDIT-05**: §3.E Phase 300 ADMA roll-up — per-admin-function gating recommendation table; cross-references `.planning/ADMIN-AUDIT.md`.
-- [ ] **AUDIT-06**: §4 adversarial-pass disposition table — every hypothesis (charged + beyond-charge) from SWP-01..03 with verdict.
-- [ ] **AUDIT-07**: §5 LEAN regression — REG-01 (v42.0 non-widening) + REG-02 (v41.0 non-widening) + REG-03 (v40.0 non-widening) + REG-04 (prior-finding spot-check across v25..v42).
-- [ ] **AUDIT-08**: §6 KI walkthrough — EXC-01..03 RE_VERIFIED-NEGATIVE-scope at v43; EXC-04 STRUCTURALLY ELIMINATED preserved. KNOWN-ISSUES.md UNMODIFIED per `D-43N-KI-01` default zero-promotion lineage.
-- [ ] **AUDIT-09**: §9 closure attestation — AUDIT-only verdict + 6-phase wave summary + closure signal + Deferred-to-Future register (v44.0 FIX-MILESTONE entry MANDATORY with consolidated handoff-anchor list).
+- [x] **AUDIT-01**: `audit/FINDINGS-v43.0.md` 9-section terminal deliverable. §3.A delta-surface table enumerates every AGENT-COMMITTED test/audit/planning commit across v43.0 phases (Phase 301 FUZZ test commit AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`). `contracts/` delta row count within Phase 298-303 audit envelope = 0 per audit-only posture per `D-43N-AUDIT-ONLY-01` (1 pre-audit-envelope user-authored commit `2ccd39aa` documented as PRE_AUDIT_BASELINE row for transparency). **COMPLETE 2026-05-19.**
+- [x] **AUDIT-02**: §3.B per-exempt-entry-point attestation matrix — for each of the 3 exempt entry points (EXEMPT-ADVANCEGAME 318 catalog rows + EXEMPT-VRFCALLBACK 101 + EXEMPT-RETRYLOOTBOXRNG 50), per-participating-slot row proves the exempt write does not violate downstream invariants. **COMPLETE 2026-05-19.**
+- [x] **AUDIT-03**: §3.C conservation re-proof for the freeze invariant — every participating slot has a 4-tuple attestation (slot identity / writer-set / freeze gate / consumer-set). 67 §14 rows / 36 unique structural slots after struct-collapse. **COMPLETE 2026-05-19.**
+- [x] **AUDIT-04**: §3.D Phase 299 FIXREC roll-up — 111 §N entries; 119 `D-43N-V44-HANDOFF-NN` anchors; tactic distribution + EV-tier breakdown + 6 headline findings + 11-cluster subsumption map + catalog hygiene markers; cross-references `.planning/RNGLOCK-FIXREC.md`. **COMPLETE 2026-05-19.**
+- [x] **AUDIT-05**: §3.E Phase 300 ADMA roll-up — 37 admin functions + 22 R-NN recommendations + 22 `D-43N-V44-ADMA-NN` anchors + 1 `D-43N-V44-ADMA-ERRATUM-01`; cross-references `.planning/ADMIN-AUDIT.md`. **COMPLETE 2026-05-19.**
+- [x] **AUDIT-06**: §4 adversarial-pass disposition table — 9 charged + 7 beyond-charge hypotheses from Phase 302 SWEEP; HYBRID-fallback to SEQUENTIAL_MAIN_CONTEXT per v42 P296 precedent; ZERO_FINDING_ELEVATION; user fast-path 2026-05-19 5/5 ACCEPT_AS_DOCUMENTED. **COMPLETE 2026-05-19.**
+- [x] **AUDIT-07**: §5 LEAN regression — REG-01 (v42.0 non-widening) + REG-02 (v41.0 non-widening) + REG-03 (v40.0 non-widening) + REG-04 (prior-finding spot-check across v25..v42). All trivially PASS per audit-only posture. **COMPLETE 2026-05-19.**
+- [x] **AUDIT-08**: §6 KI walkthrough — EXC-01..03 RE_VERIFIED-NEGATIVE-scope at v43; EXC-04 STRUCTURALLY ELIMINATED preserved; §6.4 V-063 §0.7 marker amendment + §6.5 totalFlipReversals §14 enumeration amendment per Phase 302 LOG Step (f) routing. KNOWN-ISSUES.md UNMODIFIED per `D-43N-KI-01` default zero-promotion lineage. **COMPLETE 2026-05-19.**
+- [x] **AUDIT-09**: §9 closure attestation — AUDIT-only verdict `111 of 111 CATALOG_VIOLATIONS DEFERRED_TO_V44; 0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED` per `D-303-VERDICT-01` + 6-phase wave summary + closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` + §9d v44.0 FIX-MILESTONE consolidated handoff register (142 anchors: 119 D-43N-V44-HANDOFF-NN + 22 D-43N-V44-ADMA-NN + 1 D-43N-V44-ADMA-ERRATUM-01) per `D-303-V44-HANDOFF-REGISTER-01`. **COMPLETE 2026-05-19.**
 
 ### Regression (REG) — Cross-Milestone Non-Widening Proofs
 
-- [ ] **REG-01**: v42.0 closure non-widening — every v42.0 audit-subject surface (MINTCLN, HRROLL, DPNERF, RETRY_LOOTBOX_RNG) is byte-identical at v43.0 close. **No exceptions per `D-43N-AUDIT-ONLY-01`** (zero `contracts/` mutations across v43.0).
-- [ ] **REG-02**: v41.0 closure non-widening — F-41-01/02/03 fix sites preserved (owed-salt at mint-batch; `dailyIdx` anchor at hero-override; cross-day determinism). Byte-identical.
-- [ ] **REG-03**: v40.0 closure non-widening — whole-ticket Bernoulli sites + ENT-05 keccak refactor + `_queueLootboxTickets` retirement + whole-BURNIE floor preserved. Byte-identical.
-- [ ] **REG-04**: Prior-finding spot-check across `audit/FINDINGS-v25..v42.0.md` for any v43-touched surface set — no regression of prior-milestone fixes. Audit-only posture makes this REG-04 trivially PASS (no contract surface touched).
+- [x] **REG-01**: v42.0 closure non-widening — every v42.0 audit-subject surface (MINTCLN, HRROLL, DPNERF, RETRY_LOOTBOX_RNG) is byte-identical at v43.0 close. Trivially PASS per `D-43N-AUDIT-ONLY-01` (zero `contracts/` mutations within Phase 298-303 audit envelope; pre-audit-envelope `2ccd39aa` change is OUT OF v42-audit-subject scope). **COMPLETE 2026-05-19.**
+- [x] **REG-02**: v41.0 closure non-widening — F-41-01/02/03 fix sites preserved via transitivity through v42 REG-01. **COMPLETE 2026-05-19.**
+- [x] **REG-03**: v40.0 closure non-widening — whole-ticket Bernoulli sites + ENT-05 keccak refactor + `_queueLootboxTickets` retirement + whole-BURNIE floor preserved via transitivity through v42 REG-02. **COMPLETE 2026-05-19.**
+- [x] **REG-04**: Prior-finding spot-check across `audit/FINDINGS-v25..v42.0.md` for any v43-touched surface set — no regression. Trivially PASS per audit-only posture (no v43-touched contract surface set within audit envelope). **COMPLETE 2026-05-19.**
 
 ### Closure (CLS) — Terminal Closure-Flip
 
-- [ ] **CLS-01**: 2-commit sequential SHA orchestration per D-297-CLOSURE-01 + D-284-CLOSURE-01 precedent — Commit 1 ships audit deliverable with `<commit-1-sha>` placeholder; Commit 2 resolves placeholder + propagates verbatim + chmod 444 + atomic 5-doc closure flip (ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS). **Pre-authorized** per `D-43N-CLOSURE-PREAUTH-01`.
-- [ ] **CLS-02**: Closure signal `MILESTONE_V43_AT_HEAD_<sha>` propagated atomically across all 5 docs. `audit/FINDINGS-v43.0.md` chmod 444 (read-only at closure).
+- [x] **CLS-01**: 2-commit sequential SHA orchestration per `D-297-CLOSURE-01` + `D-284-CLOSURE-01` precedent — Commit 1 shipped audit deliverable with `<commit-1-sha>` placeholder at SHA `8111cfc5189f628b64b500c881f9995c3edf0ed2`; Commit 2 resolved placeholder + propagated verbatim + chmod 444 + atomic 5-doc closure flip (ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS). Pre-authorized per `D-43N-CLOSURE-PREAUTH-01`. **COMPLETE 2026-05-19.**
+- [x] **CLS-02**: Closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` propagated atomically across all 5 docs. `audit/FINDINGS-v43.0.md` chmod 444 (read-only at closure). **COMPLETE 2026-05-19.**
 
 ---
 
@@ -135,9 +136,9 @@ Explicitly excluded from v43.0; documented to prevent scope creep:
 | ADMA-01..04 | Phase 300 (audit-only repurpose per `D-43N-AUDIT-ONLY-01`) | Pending |
 | FUZZ-01..05 | Phase 301 (test-tree only; `vm.skip` strategy) | **COMPLETE 2026-05-18** (test/fuzz/RngLockDeterminism.t.sol; 18 fuzz functions; 17 vm.skip; forge test PASS at FOUNDRY_PROFILE=deep 10k runs) |
 | SWP-01..05 | Phase 302 (3-skill HYBRID; invocation pre-authorized) | **COMPLETE 2026-05-19** (ZERO_FINDING_ELEVATION fast-path; 5 artifacts shipped: CHARGE + 3 per-skill MDs + integrated LOG; user disposition 5/5 accept-as-documented; Task 6 SKIPPED; documentation-class items → Phase 303 §6; FUZZ-harness extension → v44.0) |
-| AUDIT-01..09 | Phase 303 (9-section TERMINAL deliverable) | Pending |
-| REG-01..04 | Phase 303 | Pending |
-| CLS-01..02 | Phase 303 (closure-flip pre-authorized) | Pending |
+| AUDIT-01..09 | Phase 303 (9-section TERMINAL deliverable) | **COMPLETE 2026-05-19** |
+| REG-01..04 | Phase 303 | **COMPLETE 2026-05-19** |
+| CLS-01..02 | Phase 303 (closure-flip pre-authorized) | **COMPLETE 2026-05-19** |
 
 **Coverage:**
 - v43.0 requirements: 40 total (6 CAT + 5 FIXREC + 4 ADMA + 5 FUZZ + 5 SWP + 9 AUDIT + 4 REG + 2 CLS) + 1 implicit no-SAFE_BY_DESIGN gate at SWP-04
@@ -149,4 +150,4 @@ Explicitly excluded from v43.0; documented to prevent scope creep:
 ---
 
 *Requirements defined: 2026-05-18*
-*Last updated: 2026-05-18 after v43.0 milestone OPENED*
+*Last updated: 2026-05-19 after v43.0 milestone SHIPPED (closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`)*

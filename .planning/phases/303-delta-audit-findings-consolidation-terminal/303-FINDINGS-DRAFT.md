@@ -11,8 +11,8 @@ v40_baseline: cd549499
 v40_baseline_signal: MILESTONE_V40_AT_HEAD_cd549499
 v34_baseline: 6b63f6d4daf346a53a1d463790f637308ea8d555
 v34_baseline_signal: MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555
-audit_subject_head: "<RESOLVED_AT_COMMIT_1>"
-closure_signal: MILESTONE_V43_AT_HEAD_<commit-1-sha>
+audit_subject_head: "8111cfc5189f628b64b500c881f9995c3edf0ed2"
+closure_signal: MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2
 deliverable: audit/FINDINGS-v43.0.md
 requirements: [CAT-01, CAT-02, CAT-03, CAT-04, CAT-05, CAT-06,
                FIXREC-01, FIXREC-02, FIXREC-03, FIXREC-04, FIXREC-05,
@@ -43,14 +43,14 @@ v44_handoff_register_breakdown: "119 D-43N-V44-HANDOFF-NN (FIXREC §M) + 22 D-43
 supersedes: [v42.0]
 status: "FINAL — READ-ONLY"
 read_only: true
-generated_at: "<ISO_DATE_AT_COMMIT_1>"
+generated_at: "2026-05-19"
 ---
 
 # v43.0 Findings — Total rngLock Determinism Audit (Terminal; AUDIT-ONLY)
 
 ## 1. Audit Subject + Baseline
 
-**Audit Baseline.** The audit baseline is v42.0 closure HEAD `81d7c94bc924edb3429f6dc16ee33280fc11c7c2` (closure signal `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2` carry-forward from `audit/FINDINGS-v42.0.md` §9c). v43.0 closure HEAD is `<RESOLVED_AT_COMMIT_1>` (resolved at Phase 303 Commit 1 per `D-303-CLOSURE-01` 2-commit sequential SHA orchestration; see §9c for the emitted `MILESTONE_V43_AT_HEAD_<commit-1-sha>` signal). v41 chain reference: `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4`. v40 chain reference: `MILESTONE_V40_AT_HEAD_cd549499`. v34 chain reference: `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`.
+**Audit Baseline.** The audit baseline is v42.0 closure HEAD `81d7c94bc924edb3429f6dc16ee33280fc11c7c2` (closure signal `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2` carry-forward from `audit/FINDINGS-v42.0.md` §9c). v43.0 closure HEAD is `8111cfc5189f628b64b500c881f9995c3edf0ed2` (resolved at Phase 303 Commit 1 per `D-303-CLOSURE-01` 2-commit sequential SHA orchestration; see §9c for the emitted `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` signal). v41 chain reference: `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4`. v40 chain reference: `MILESTONE_V40_AT_HEAD_cd549499`. v34 chain reference: `MILESTONE_V34_AT_HEAD_6b63f6d4daf346a53a1d463790f637308ea8d555`.
 
 **6-Phase Wave Shape (AUDIT-ONLY catalog + fixrec + adma + fuzz + sweep + terminal).** Phases 298 (RNGLOCK-CATALOG) + 299 (RNGLOCK-FIXREC) + 300 (ADMIN-AUDIT) + 301 (FUZZ harness) + 302 (3-skill HYBRID adversarial sweep) + 303 (TERMINAL — this deliverable; SOURCE-TREE FROZEN). Per `D-43N-AUDIT-ONLY-01`, the v43.0 milestone is AUDIT-ONLY: zero `contracts/` mutations within the audit envelope, single `test/` AGENT-COMMITTED commit at Phase 301 FUZZ harness (`test/fuzz/RngLockDeterminism.t.sol`, commit `eb858521`) per `D-43N-TEST-COMMITS-AUTO-01` (only mainnet `.sol` files require explicit user approval per `feedback_no_contract_commits.md` clarified policy).
 
@@ -76,7 +76,7 @@ generated_at: "<ISO_DATE_AT_COMMIT_1>"
 - **AUDIT-06:** §4 Phase 302 adversarial-pass disposition — 9 charged hypotheses + 7 beyond-charge entries across 3 skills (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`); HYBRID-fallback to SEQUENTIAL_MAIN_CONTEXT for all 3 skills per v42 P296 precedent; ZERO_FINDING_ELEVATION verdict after skeptic-reviewer filter + user fast-path disposition 2026-05-19 ACCEPT_AS_DOCUMENTED on all 5 Tier-1 items; 2 documentation-class items routed to §6 catalog hygiene; 1 coverage-gap (FUZZ harness 3 missing functions) deferred to v44.0; Task 6 elevation routing SKIPPED per `D-302-AUDIT-ONLY-ROUTING-01` conditional gating; `/degen-skeptic` OUT OF SCOPE per `D-271-ADVERSARIAL-02` carry.
 - **AUDIT-07:** §5 LEAN regression — REG-01..04 all trivially PASS per audit-only posture (zero `contracts/` mutations across the Phase 298-303 envelope). REG-04 spot-check sweep against `audit/FINDINGS-v25..v42.0.md` returns no regression of prior-milestone fixes.
 - **AUDIT-08:** §6 KI walkthrough — EXC-01..03 RE_VERIFIED-NEGATIVE-scope at v43 close (the v43 audit subject is the cross-cutting rngLock freeze invariant, structurally separate from affiliate-roll / game-over-RNG-substitution surfaces beyond catalog enumeration); EXC-04 STRUCTURALLY ELIMINATED preserved (grep proof `grep -r "entropyStep" contracts/` returns ZERO matches at v43 close HEAD); KNOWN-ISSUES.md UNMODIFIED per `D-303-KI-01`. §6.4 V-063 §0.7 marker amendment + §6.5 `totalFlipReversals` §14 enumeration amendment per Phase 302 LOG Step (f) user disposition 2026-05-19.
-- **AUDIT-09:** §9 closure attestation — AUDIT-only verdict per `D-303-VERDICT-01` strict math: `111 of 111 CATALOG_VIOLATIONS DEFERRED_TO_V44; 0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`; 6-phase wave summary; closure signal `MILESTONE_V43_AT_HEAD_<commit-1-sha>` propagated to 5 FINDINGS verbatim locations + 3 cross-document targets; §9d v44.0 FIX-MILESTONE consolidated handoff register per `D-303-V44-HANDOFF-REGISTER-01` (142 anchors: 119 HANDOFF + 22 ADMA + 1 ERRATUM).
+- **AUDIT-09:** §9 closure attestation — AUDIT-only verdict per `D-303-VERDICT-01` strict math: `111 of 111 CATALOG_VIOLATIONS DEFERRED_TO_V44; 0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`; 6-phase wave summary; closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` propagated to 5 FINDINGS verbatim locations + 3 cross-document targets; §9d v44.0 FIX-MILESTONE consolidated handoff register per `D-303-V44-HANDOFF-REGISTER-01` (142 anchors: 119 HANDOFF + 22 ADMA + 1 ERRATUM).
 - **REG-01:** §5a — v42.0 closure signal `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2` NON-WIDENING at v43 close HEAD. Per `D-43N-AUDIT-ONLY-01`, the Phase 298-303 audit envelope contributes zero `contracts/` mutations → v42 audit-subject surfaces (MINTCLN + HRROLL + DPNERF + RETRY_LOOTBOX_RNG) are byte-identical at v43.0 close to v42.0 close MODULO the single pre-audit-envelope user-authored `_swapAndFreeze` change in commit `2ccd39aa` documented at §3.A (which does NOT touch any v42-audit-subject surface — `_swapAndFreeze` is in `DegenerusGameStorage.sol`, an out-of-v42-scope file; v42 audit subjects live in `DegenerusGameMintModule.sol`/`DegenerusGameJackpotModule.sol`/`DegenerusGameAdvanceModule.sol`).
 - **REG-02:** §5b — v41.0 closure signal `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4` NON-WIDENING at v43 close. F-41-01/02/03 fix sites preserved via transitivity through v42 REG-01.
 - **REG-03:** §5c — v40.0 closure signal `MILESTONE_V40_AT_HEAD_cd549499` NON-WIDENING at v43 close. Whole-ticket Bernoulli + ENT-05 keccak + whole-BURNIE floor preserved via transitivity through v42 REG-02.
@@ -130,7 +130,7 @@ The §6 KI-eligibility 3-predicate test (D-09) — accepted-design + non-exploit
 
 ### Attestation Anchor
 
-`D-303-CLOSURE-01` 2-commit sequential SHA orchestration: Commit 1 writes `audit/FINDINGS-v43.0.md` with `MILESTONE_V43_AT_HEAD_<commit-1-sha>` placeholder; Commit 2 resolves the placeholder to the Commit 1 SHA, propagates verbatim to 5 FINDINGS verbatim locations + 3 cross-document propagation targets, applies `chmod 444`, and ships the atomic 5-doc closure flip across ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS. Pre-authorized per `D-43N-CLOSURE-PREAUTH-01`. §9d v44.0 FIX-MILESTONE consolidated handoff register (142 anchors) is load-bearing input for v44.0 plan-phase.
+`D-303-CLOSURE-01` 2-commit sequential SHA orchestration: Commit 1 writes `audit/FINDINGS-v43.0.md` with `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` placeholder; Commit 2 resolves the placeholder to the Commit 1 SHA, propagates verbatim to 5 FINDINGS verbatim locations + 3 cross-document propagation targets, applies `chmod 444`, and ships the atomic 5-doc closure flip across ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS. Pre-authorized per `D-43N-CLOSURE-PREAUTH-01`. §9d v44.0 FIX-MILESTONE consolidated handoff register (142 anchors) is load-bearing input for v44.0 plan-phase.
 
 ---
 
@@ -219,7 +219,7 @@ Row classifications per `{TEST_ONLY, AUDIT_ARTIFACT, PLANNING, ANALYTICAL, SOURC
 | 23 | 302 SWEEP | `411cf838` | `.planning/phases/302-*/302-VERIFICATION.md` | AUDIT_ARTIFACT | Verification log: 20/20 must-haves verified PASS. |
 | 24 | 303 TERMINAL | `11680834` | `.planning/phases/303-delta-audit-findings-consolidation-terminal/303-CONTEXT.md`, `303-01-PLAN.md`, `.planning/ROADMAP.md` | PLANNING | Phase 303 TERMINAL plan: 1 plan, 13 tasks, 2 commits; D-303-CLOSURE-01 + D-303-VERDICT-01 + D-303-V44-HANDOFF-REGISTER-01 + D-303-FCITE-01 + D-303-KI-01 + D-303-DELIVERABLE-LAYOUT-01 decisions authored. |
 | 25 | 303 TERMINAL | `<commit-1-sha>` (this commit) | `audit/FINDINGS-v43.0.md` (new) + `.planning/phases/303-*/303-FINDINGS-DRAFT.md` (new) + `303-FINDINGS-VERIFY.md` (new) + planner-private bundle | SOURCE_TREE_FROZEN | **Phase 303 Commit 1** per `D-303-CLOSURE-01` 2-commit sequential SHA orchestration. SOURCE-TREE FROZEN attestation: zero `contracts/` + zero `test/` mutations during Phase 303. AGENT-COMMITTED per `D-43N-CLOSURE-PREAUTH-01` pre-authorization. Subject: `audit(303): ship FINDINGS-v43.0.md AUDIT-only deliverable [Commit 1 placeholder]`. |
-| 26 | 303 TERMINAL | (Commit 2; lands at T11) | `audit/FINDINGS-v43.0.md` (SHA-resolved + chmod 444) + `303-FINDINGS-DRAFT.md` (SHA-mirror) + `.planning/ROADMAP.md` + `.planning/STATE.md` + `.planning/MILESTONES.md` + `.planning/PROJECT.md` + `.planning/REQUIREMENTS.md` | SOURCE_TREE_FROZEN | **Phase 303 Commit 2** per `D-303-CLOSURE-01`: resolves `<commit-1-sha>` placeholder + propagates verbatim to 5 FINDINGS locations + 3 cross-doc targets + chmod 444 + atomic 5-doc closure flip. SOURCE-TREE FROZEN preserved across both commits. AGENT-COMMITTED. Subject: `docs(303): v43.0 closure flip — propagate MILESTONE_V43_AT_HEAD_<commit-1-sha> + chmod 444 [D-43N-CLOSURE-PREAUTH-01]`. |
+| 26 | 303 TERMINAL | (Commit 2; lands at T11) | `audit/FINDINGS-v43.0.md` (SHA-resolved + chmod 444) + `303-FINDINGS-DRAFT.md` (SHA-mirror) + `.planning/ROADMAP.md` + `.planning/STATE.md` + `.planning/MILESTONES.md` + `.planning/PROJECT.md` + `.planning/REQUIREMENTS.md` | SOURCE_TREE_FROZEN | **Phase 303 Commit 2** per `D-303-CLOSURE-01`: resolves `<commit-1-sha>` placeholder + propagates verbatim to 5 FINDINGS locations + 3 cross-doc targets + chmod 444 + atomic 5-doc closure flip. SOURCE-TREE FROZEN preserved across both commits. AGENT-COMMITTED. Subject: `docs(303): v43.0 closure flip — propagate MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2 + chmod 444 [D-43N-CLOSURE-PREAUTH-01]`. |
 
 **Row count.** 26 rows total = 1 pre-audit-envelope row (PRE_AUDIT_BASELINE; out-of-envelope user-authored) + 6 Phase 298 row groups (PLANNING + 13-cluster AUDIT_ARTIFACT + aggregation + completion + housekeeping) + 4 Phase 299 row groups (PLANNING + 10-cluster AUDIT_ARTIFACT + aggregation + SUMMARY) + 5 Phase 300 rows (PLANNING + iter PLANNING + AUDIT_ARTIFACT bundle + completion + verification) + 4 Phase 301 rows (PLANNING + 5-cluster AUDIT_ARTIFACT + **TEST_ONLY commit `eb858521`** + verification) + 3 Phase 302 rows (PLANNING + ANALYTICAL bundle + verification) + 3 Phase 303 rows (PLANNING + Commit 1 SOURCE_TREE_FROZEN + Commit 2 SOURCE_TREE_FROZEN).
 
@@ -762,17 +762,17 @@ Zero post-milestone phase-number references emitted. The §9d Deferred-to-Future
 
 ### 9b. 6-Phase Wave Summary
 
-Phases 298 (CATALOG — `3896cb8a` open + `56bb1f6b` aggregation + `4ce7f3d2` completion + `c1bd5a5e` housekeeping; output `.planning/RNGLOCK-CATALOG.md`) + 299 (FIXREC — `157a6634` plan + 10 Wave-1 cluster commits + `ee328ae0` aggregation + `77fe7d45` SUMMARY; output `.planning/RNGLOCK-FIXREC.md` with 111 §N entries + 119 HANDOFF anchors) + 300 (ADMA — `7fb6cee3`/`c9f9484e`/`2ec82d05`/`826065a1`/`29656972`; output `.planning/ADMIN-AUDIT.md` with 37 admin functions + 22 R-NN entries + 23 ADMA anchors) + 301 (FUZZ — `d2f5e166`/`42a8a10c`/`eb858521`/`6a93441c`; output `test/fuzz/RngLockDeterminism.t.sol` with 18 fuzz functions + 17 vm.skip; AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`) + 302 (SWEEP — `1ffde010`/`af5e2df2`/`411cf838`; 3-skill HYBRID; ZERO_FINDING_ELEVATION; user fast-path 5/5 ACCEPT_AS_DOCUMENTED 2026-05-19) + 303 (TERMINAL — this deliverable; SOURCE-TREE FROZEN; 2 AGENT-COMMITTED commits per `D-303-CLOSURE-01`). The 6-phase wave shape (audit-only catalog + fixrec + adma + fuzz + sweep + terminal) is structurally COMPLETE. Closure signal: `MILESTONE_V43_AT_HEAD_<commit-1-sha>`.
+Phases 298 (CATALOG — `3896cb8a` open + `56bb1f6b` aggregation + `4ce7f3d2` completion + `c1bd5a5e` housekeeping; output `.planning/RNGLOCK-CATALOG.md`) + 299 (FIXREC — `157a6634` plan + 10 Wave-1 cluster commits + `ee328ae0` aggregation + `77fe7d45` SUMMARY; output `.planning/RNGLOCK-FIXREC.md` with 111 §N entries + 119 HANDOFF anchors) + 300 (ADMA — `7fb6cee3`/`c9f9484e`/`2ec82d05`/`826065a1`/`29656972`; output `.planning/ADMIN-AUDIT.md` with 37 admin functions + 22 R-NN entries + 23 ADMA anchors) + 301 (FUZZ — `d2f5e166`/`42a8a10c`/`eb858521`/`6a93441c`; output `test/fuzz/RngLockDeterminism.t.sol` with 18 fuzz functions + 17 vm.skip; AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`) + 302 (SWEEP — `1ffde010`/`af5e2df2`/`411cf838`; 3-skill HYBRID; ZERO_FINDING_ELEVATION; user fast-path 5/5 ACCEPT_AS_DOCUMENTED 2026-05-19) + 303 (TERMINAL — this deliverable; SOURCE-TREE FROZEN; 2 AGENT-COMMITTED commits per `D-303-CLOSURE-01`). The 6-phase wave shape (audit-only catalog + fixrec + adma + fuzz + sweep + terminal) is structurally COMPLETE. Closure signal: `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`.
 
 ### 9c. Closure Signal
 
-**Closure signal:** `MILESTONE_V43_AT_HEAD_<commit-1-sha>`.
+**Closure signal:** `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`.
 
 **5 FINDINGS verbatim locations (within `audit/FINDINGS-v43.0.md`):**
-1. Frontmatter `closure_signal:` field (carries `MILESTONE_V43_AT_HEAD_<commit-1-sha>`).
+1. Frontmatter `closure_signal:` field (carries `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`).
 2. Frontmatter `audit_subject_head:` field (carries the raw SHA without the `MILESTONE_V43_AT_HEAD_` prefix — the schema-mandated form per `D-297-FINDINGS-FRONTMATTER-01` lineage carry).
-3. §1 Audit Subject prose ("v43.0 closure HEAD is `<RESOLVED_AT_COMMIT_1>`...the emitted `MILESTONE_V43_AT_HEAD_<commit-1-sha>` signal").
-4. §9b 6-Phase Wave Summary closing line ("Closure signal: `MILESTONE_V43_AT_HEAD_<commit-1-sha>`").
+3. §1 Audit Subject prose ("v43.0 closure HEAD is `8111cfc5189f628b64b500c881f9995c3edf0ed2`...the emitted `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` signal").
+4. §9b 6-Phase Wave Summary closing line ("Closure signal: `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`").
 5. §9c Closure Signal section canonical mention (this line) + propagation register listing.
 
 **3 cross-document propagation targets (atomic 5-doc closure flip at Commit 2 per `D-303-CLOSURE-01`):**

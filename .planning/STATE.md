@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v43.0
-milestone_name: Active Phases
+milestone: (between-milestones)
+milestone_name: Between Milestones — v43.0 SHIPPED 2026-05-19; v44.0 FIX-MILESTONE pending
 status: completed
-last_updated: "2026-05-19T05:59:55.951Z"
-last_activity: 2026-05-19 -- Phase 302 marked complete
+last_updated: "2026-05-19T07:00:00.000Z"
+last_activity: 2026-05-19 -- Phase 303 closure-flip complete; v43.0 milestone SHIPPED
 progress:
   total_phases: 6
-  completed_phases: 5
-  total_plans: 33
-  completed_plans: 33
-  percent: 83
+  completed_phases: 6
+  total_plans: 34
+  completed_plans: 34
+  percent: 100
 ---
 
 # Project State
@@ -20,16 +20,34 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 303 — Delta Audit + Findings Consolidation (TERMINAL; 2-commit sequential SHA closure-flip per `D-43N-CLOSURE-PREAUTH-01` + Phase 297 / 284 / 280 / 274 / 271 / 264 / 257 terminal precedent)
+**Current focus:** (between-milestones) — v43.0 SHIPPED 2026-05-19; v44.0 FIX-MILESTONE plan-phase awaits invocation (consumes Phase 298 CATALOG + Phase 299 FIXREC + Phase 300 ADMA artifacts via the 142-anchor handoff register in `audit/FINDINGS-v43.0.md` §9d as load-bearing input).
 
 ## Current Position
 
-Phase: 302 — COMPLETE
-Plan: 1 of 1
-Status: Phase 302 complete
-Last activity: 2026-05-19 -- Phase 302 marked complete
+Phase: 303 — COMPLETE 2026-05-19
+Plan: 1 of 1 — COMPLETE
+Status: v43.0 milestone SHIPPED; (between-milestones)
+Last activity: 2026-05-19 -- Phase 303 closure-flip landed; v43.0 milestone SHIPPED; closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`
 
 ## Last Shipped Milestone
+
+**v43.0 — Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment** (shipped 2026-05-19)
+
+- 6 phases (298-303), 1 plan at Phase 303 (Phase 298 14 plans + Phase 299 11 plans + Phase 300 1 plan + Phase 301 6 plans + Phase 302 1 plan + Phase 303 1 plan = 34 plans total), 40/40 requirements satisfied (6 CAT + 5 FIXREC + 4 ADMA + 5 FUZZ + 5 SWP + 9 AUDIT + 4 REG + 2 CLS).
+- Audit baseline: v42.0 closure HEAD `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2` → v43.0 closure HEAD `8111cfc5189f628b64b500c881f9995c3edf0ed2` (resolved at the Phase 303 Commit 1 per `D-303-CLOSURE-01` 2-commit sequential SHA orchestration; pre-authorized per `D-43N-CLOSURE-PREAUTH-01`).
+- Audit-only posture per `D-43N-AUDIT-ONLY-01`: ZERO `contracts/` mutations within the Phase 298-303 audit envelope; 1 AGENT-COMMITTED `test/` commit at Phase 301 FUZZ harness (`eb858521 test(301-06): aggregate Wave-1 contributions into canonical RngLockDeterminism.t.sol + vm.skip blocks`) per `D-43N-TEST-COMMITS-AUTO-01`. 1 pre-audit-envelope USER-AUTHORED `contracts/` commit (`2ccd39aa feat: pre-seed pending pool with 1% of futurePool on jackpot freeze`) landed BEFORE Phase 298 CATALOG open at `3896cb8a`; captured in `audit/FINDINGS-v43.0.md` §3.A Row 1 as PRE_AUDIT_BASELINE classification (out-of-envelope baseline; Phase 298 CATALOG captured AFTER this commit landed).
+- Result: 0 of 0 F-43-NN findings (audit-only posture — every catalog VIOLATION defers to v44.0 FIX-MILESTONE via the HANDOFF register, not RESOLVED_AT_V43). **111 of 111 CATALOG_VIOLATIONS DEFERRED_TO_V44** per `D-303-VERDICT-01`. 5 Tier-1 ALREADY-DOCUMENTED items resolved ACCEPT_AS_DOCUMENTED via user fast-path 2026-05-19 (V-184 CATASTROPHE + V-063 §0.7 marker + R-06 GNRUS catalog-gap + S-22 Cluster G + Phase 296 (xiv) carry).
+- Adversarial pass: 3-skill HYBRID `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` per `D-302-INVOKE-01` (HYBRID-fallback to SEQUENTIAL_MAIN_CONTEXT for all 3 skills per v42 P296 precedent — executor invocation context lacked Task tool for PARALLEL_SUBAGENT spawn; persona fidelity preserved via dedicated per-skill MD files). 9 charged hypotheses + 7 beyond-charge entries; **ZERO_FINDING_ELEVATION** after skeptic-reviewer filter + user fast-path disposition. Task 6 elevation routing SKIPPED per `D-302-AUDIT-ONLY-ROUTING-01` conditional gating; 2 documentation-class items routed to FINDINGS-v43.0.md §6 catalog hygiene (V-063 §0.7 marker amendment + `totalFlipReversals` §14 enumeration amendment); 1 coverage-gap (FUZZ harness 3 missing edge-case functions) deferred to v44.0. `/degen-skeptic` OUT OF SCOPE per `D-271-ADVERSARIAL-02` carry. `/economic-analyst` IN SCOPE per `D-271-ADVERSARIAL-03` carry.
+- LEAN regression: 4 PASS (REG-01 v42.0 NON-WIDENING + REG-02 v41.0 NON-WIDENING + REG-03 v40.0 NON-WIDENING + REG-04 prior-finding spot-check sweep) / 0 REGRESSED. All trivially PASS per audit-only posture (zero `contracts/` mutations within the Phase 298-303 audit envelope; pre-audit-envelope `2ccd39aa` `_swapAndFreeze` change in `DegenerusGameStorage.sol` is OUT OF v42-audit-subject scope, captured in Phase 298 CATALOG verdict matrix as the new post-`2ccd39aa` baseline; V-147/V-149 frozen-branch VIOLATIONs routed to HANDOFF-82/83).
+- KI envelopes EXC-01..03 RE_VERIFIED-NEGATIVE-scope at v43 (v43 audit subject is the cross-cutting rngLock freeze invariant; zero affiliate-roll / AdvanceModule game-over-RNG-substitution interaction beyond catalog structural enumeration; `retryLootboxRng` surface preserved per `D-42N-RETRY-RNG-DOMAIN-SEP-01` Option A); EXC-04 STRUCTURALLY ELIMINATED preserved (grep proof: `grep -r "entropyStep" contracts/` returns ZERO matches at v43 close HEAD).
+- KNOWN-ISSUES.md UNMODIFIED per `D-303-KI-01`. Closure verdict `111 of 111 CATALOG_VIOLATIONS DEFERRED_TO_V44; 0 of 0 KI_ELIGIBLE_PROMOTED; KNOWN_ISSUES_UNMODIFIED`.
+- Deliverable: `audit/FINDINGS-v43.0.md` (FINAL READ-only at v43.0 closure HEAD, 9 sections; chmod 444; 1042 lines).
+- Closure signal: `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` (resolved at the Phase 303 Commit 1; propagated verbatim to 5 FINDINGS verbatim locations + 3 cross-document propagation targets per `D-303-CLOSURE-01`).
+- v44.0 FIX-MILESTONE consolidated handoff register: **142 anchors** per `D-303-V44-HANDOFF-REGISTER-01` (119 D-43N-V44-HANDOFF-NN from FIXREC §M + 22 D-43N-V44-ADMA-NN from ADMA §4 + 1 D-43N-V44-ADMA-ERRATUM-01). v44.0 plan-phase consumes as load-bearing input; ~25 active sub-phases after FIXREC §0.6 subsumption + STALE/FALSE-POSITIVE/PENDING/RESOLVED markers.
+- Process notes: 6-phase audit-only catalog + fixrec + adma + fuzz + sweep + terminal shape. ZERO `contracts/` mutations within the Phase 298-303 audit envelope + 1 AGENT-COMMITTED test commit `eb858521` per `D-43N-TEST-COMMITS-AUTO-01`. Phase 303 terminal phase is SOURCE-TREE FROZEN — zero `contracts/` + zero `test/` mutations during Phase 303 (verified via `git diff HEAD~2 HEAD -- contracts/ test/` returning no output across both Phase 303 commits). 2-commit AGENT-COMMITTED terminal-phase shape per `D-303-CLOSURE-01` (Commit 1 audit deliverable + planner-private bundle; Commit 2 closure flip + SHA propagation + chmod 444 + atomic 5-doc closure flip across ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS). v43.0 closure invariant: terminal-phase zero forward-cite emission per `D-303-FCITE-01`; §9d v44.0 FIX-MILESTONE handoff register replaces the prior milestones' "Deferred to Future Milestones" non-handoff entries (those carry forward as §9d.5 descriptive labels per `D-297-DEFER-01` lineage).
+- See `.planning/MILESTONES.md` for archive
+
+### Prior Shipped Milestone
 
 **v42.0 — Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf + Lootbox RNG Retry** (shipped 2026-05-18)
 
