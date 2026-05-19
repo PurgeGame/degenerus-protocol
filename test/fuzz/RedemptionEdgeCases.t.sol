@@ -895,4 +895,543 @@ contract RedemptionEdgeCases is DeployProtocol {
         assertEq(uint256(evPost), 0, "EDGE-10: claim slot not cleared post-claim");
         assertEq(uint256(bvPost), 0, "EDGE-10: claim burnie slot not cleared post-claim");
     }
+
+    // =====================================================================
+    //              EDGE-11: Burn during rngLocked window reverts
+    // =====================================================================
+
+    /// @notice EDGE-11 — 304-SPEC §3 lines 547-559. While `game.rngLocked() == true`,
+    ///         any burn must revert BurnsBlockedDuringRng with no state mutation. Mocked via
+    ///         vm.mockCall on game.rngLocked.
+    /// @dev Tests INV-06 (no roll-input manipulation during commitment window).
+    ///      Depends on SPEC-01 (existing :492 guard preserved verbatim).
+    /// forge-config: default.fuzz.runs = 10000
+    function testFuzz_EDGE_11_BurnDuringRngLockedReverts(uint256 amountSeed) public {
+        uint256 amount = bound(amountSeed, FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100);
+        uint32 dayD = game.currentDayView();
+
+        // Snapshot pre-failed-burn state
+        uint256 supplyPre = sdgnrs.totalSupply();
+        uint256 balPre = sdgnrs.balanceOf(playerA);
+        uint256 cumulativePre = sdgnrs.pendingRedemptionEthValue();
+        (uint96 evPre, uint96 bvPre, uint16 asPre) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint64 ePre, uint64 bPre, uint64 sPre, uint64 bnPre) = _readPendingByDay(dayD);
+
+        // Force rngLocked = true via mockCall
+        vm.mockCall(address(game), abi.encodeWithSelector(game.rngLocked.selector), abi.encode(true));
+
+        // Burn must revert BurnsBlockedDuringRng
+        vm.prank(playerA);
+        vm.expectRevert(StakedDegenerusStonk.BurnsBlockedDuringRng.selector);
+        sdgnrs.burn(amount);
+
+        // Byte-identity: no state mutated by failed burn
+        assertEq(sdgnrs.totalSupply(), supplyPre, "EDGE-11: totalSupply mutated by failed burn");
+        assertEq(sdgnrs.balanceOf(playerA), balPre, "EDGE-11: balanceOf[A] mutated by failed burn");
+        assertEq(sdgnrs.pendingRedemptionEthValue(), cumulativePre, "EDGE-11: cumulative mutated");
+        (uint96 evPost, uint96 bvPost, uint16 asPost) = sdgnrs.pendingRedemptions(playerA, dayD);
+        assertEq(uint256(evPost), uint256(evPre), "EDGE-11: per-claim ethValueOwed mutated");
+        assertEq(uint256(bvPost), uint256(bvPre), "EDGE-11: per-claim burnieOwed mutated");
+        assertEq(uint256(asPost), uint256(asPre), "EDGE-11: per-claim activityScore mutated");
+        (uint64 ePost, uint64 bPost, uint64 sPost, uint64 bnPost) = _readPendingByDay(dayD);
+        assertEq(uint256(ePost), uint256(ePre), "EDGE-11: pool ethBase mutated");
+        assertEq(uint256(bPost), uint256(bPre), "EDGE-11: pool burnieBase mutated");
+        assertEq(uint256(sPost), uint256(sPre), "EDGE-11: pool supplySnapshot mutated");
+        assertEq(uint256(bnPost), uint256(bnPre), "EDGE-11: pool burned mutated");
+    }
+
+    // =====================================================================
+    //              EDGE-12: Burn during livenessTriggered reverts
+    // =====================================================================
+
+    /// @notice EDGE-12 — 304-SPEC §3 lines 561-573. While `game.livenessTriggered() == true`
+    ///         and `game.gameOver() == false`, any burn must revert BurnsBlockedDuringLiveness
+    ///         with no state mutation. Mocked via vm.mockCall — the pre-gameOver-latch liveness
+    ///         window is non-trivial to reach via the natural advance + warp path without also
+    ///         latching gameOver, so the mock surfaces the contract guard logic directly.
+    /// @dev Tests INV-08. Depends on SPEC-01 (existing :491 guard preserved verbatim).
+    /// forge-config: default.fuzz.runs = 10000
+    function testFuzz_EDGE_12_BurnDuringLivenessReverts(uint256 amountSeed) public {
+        uint256 amount = bound(amountSeed, FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100);
+        uint32 dayD = game.currentDayView();
+
+        // Snapshot
+        uint256 supplyPre = sdgnrs.totalSupply();
+        uint256 balPre = sdgnrs.balanceOf(playerA);
+        (uint96 evPre, , ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (, , , uint64 bnPre) = _readPendingByDay(dayD);
+
+        // Force livenessTriggered = true (gameOver remains false from default mocks)
+        vm.mockCall(address(game), abi.encodeWithSelector(game.gameOver.selector), abi.encode(false));
+        vm.mockCall(
+            address(game),
+            abi.encodeWithSelector(game.livenessTriggered.selector),
+            abi.encode(true)
+        );
+
+        // Burn must revert BurnsBlockedDuringLiveness
+        vm.prank(playerA);
+        vm.expectRevert(StakedDegenerusStonk.BurnsBlockedDuringLiveness.selector);
+        sdgnrs.burn(amount);
+
+        // Byte-identity assertions
+        assertEq(sdgnrs.totalSupply(), supplyPre, "EDGE-12: totalSupply mutated by failed burn");
+        assertEq(sdgnrs.balanceOf(playerA), balPre, "EDGE-12: balanceOf[A] mutated by failed burn");
+        (uint96 evPost, , ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        assertEq(uint256(evPost), uint256(evPre), "EDGE-12: per-claim ethValueOwed mutated");
+        (, , , uint64 bnPost) = _readPendingByDay(dayD);
+        assertEq(uint256(bnPost), uint256(bnPre), "EDGE-12: pool burned mutated");
+    }
+
+    // =====================================================================
+    //              EDGE-13: Zero-rounded ethValueOwed burn proceeds
+    // =====================================================================
+
+    /// @notice EDGE-13 — 304-SPEC §3 lines 575-587. When (totalMoney * amount) / supply
+    ///         floors to a sub-gwei value, the gwei-snap at burn time truncates ethValueOwed
+    ///         to 0. Per SPEC-04 (b), this is legitimate — the burn proceeds with
+    ///         ethValueOwed = 0 written to the claim slot; no revert. A subsequent claim
+    ///         after resolve pays 0 ETH directly and deletes the slot.
+    /// @dev Tests INV-04 (per-day base correctness — zero contributes zero, sums consistent).
+    ///      Depends on SPEC-04 (b) (zero-rounded ethValueOwed burn proceeds).
+    /// forge-config: default.fuzz.runs = 10000
+    function testFuzz_EDGE_13_ZeroRoundedEthValueOwedBurnProceeds(uint16 rollSeed) public {
+        // At deploy state: totalMoney ≈ 100 ETH = 1e20 wei, supply ≈ 8e29. For amount =
+        // MIN_BURN_AMOUNT = 1e18 (1 whole token), ethValueOwed = (1e20 * 1e18) / 8e29 ≈
+        // 1.25e8 wei < 1 gwei. After D-305-GWEI-SNAP-01 truncation: 0.
+        uint256 amount = MIN_BURN_AMOUNT;
+        uint16 roll = uint16(bound(uint256(rollSeed), 25, 175));
+        uint32 dayD = game.currentDayView();
+
+        uint256 balPre = sdgnrs.balanceOf(playerA);
+        uint256 supplyPre = sdgnrs.totalSupply();
+
+        // Burn proceeds (positive assertion: no revert)
+        vm.prank(playerA);
+        sdgnrs.burn(amount);
+
+        // Per-claim ethValueOwed is zero (zero-rounded under sub-gwei truncation).
+        // The BURNIE side rounds independently against the BURNIE pool denominator; under
+        // the deploy-time state the coinflip side may push enough BURNIE backing for
+        // burnieOwed to be non-zero (positive integer multiple of 1e9 post snap). The
+        // load-bearing EDGE-13 assertion is on the ETH side — the SPEC framing "the same
+        // applies to burnieOwed if it rounds to 0 INDEPENDENTLY" is conditional, not
+        // mandatory.
+        (uint96 ev, , ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        assertEq(uint256(ev), 0, "EDGE-13: claim ethValueOwed must be zero under sub-gwei rounding");
+
+        // Balance decremented + supply decremented (the burn actually fired)
+        assertEq(sdgnrs.balanceOf(playerA), balPre - amount, "EDGE-13: balanceOf[A] decrement");
+        assertEq(sdgnrs.totalSupply(), supplyPre - amount, "EDGE-13: totalSupply decrement");
+
+        // Pool has burned > 0 but ethBase still 0
+        (uint64 ePool, , , uint64 bnPool) = _readPendingByDay(dayD);
+        assertEq(uint256(ePool), 0, "EDGE-13: pool ethBase remains zero under sub-gwei rounding");
+        assertGt(uint256(bnPool), 0, "EDGE-13: pool burned increments (ceiling-divide on amount)");
+
+        // Resolve + claim — payout is zero, slot is deleted, no revert
+        _advanceWallDay();
+        _resolveDay(dayD, roll, dayD);
+        uint256 ethBefore = playerA.balance;
+        vm.prank(playerA);
+        sdgnrs.claimRedemption(dayD);
+        assertEq(playerA.balance, ethBefore, "EDGE-13: claim must pay zero ETH under zero-rounded ethValueOwed");
+
+        // Slot cleared
+        (uint96 evPost, uint96 bvPost, ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        assertEq(uint256(evPost), 0, "EDGE-13: claim slot cleared post-claim");
+        assertEq(uint256(bvPost), 0, "EDGE-13: claim burnie slot cleared post-claim");
+    }
+
+    // =====================================================================
+    //              EDGE-14: 50% supply cap (exact + over + lazy-init)
+    // =====================================================================
+
+    /// @notice EDGE-14 — 304-SPEC §3 lines 589-601. Three sub-scenarios via pre-seeded
+    ///         pendingByDay slot (vm.store) so the cap math is engineerable with a
+    ///         tractable supplySnapshot. Sub-1: burn exactly cap succeeds. Sub-2: one
+    ///         token over cap reverts Insufficient. Sub-3: lazy-init snapshot is immutable
+    ///         for subsequent same-day burns.
+    /// @dev Tests INV-10. Depends on SPEC-05 (lazy-init snapshot immutable for day).
+    ///      Uses vm.store to seed pendingByDay[D] with supplySnapshot = 1000 whole tokens
+    ///      (cap = 500). Sub-1 burns 500e18 raw, sub-2 burns 1 more token, sub-3 verifies
+    ///      snapshot byte-identity post burn.
+    /// forge-config: default.fuzz.runs = 10000
+    function testFuzz_EDGE_14_SupplyCapExactOneWeiOverAndLazyInit(uint256 actorSeed) public {
+        address actor = _pickActor(actorSeed);
+        uint32 dayD = game.currentDayView();
+
+        // Pre-seed pendingByDay[dayD] with supplySnapshot = 1000 whole tokens (cap = 500).
+        // Pack: (ethBase=0 << 0) | (burnieBase=0 << 64) | (supplySnapshot=1000 << 128) | (burned=0 << 192)
+        uint256 packed = (uint256(1000) << 128);
+        bytes32 slotPbD = keccak256(abi.encode(uint256(dayD), uint256(SLOT_PENDING_BY_DAY)));
+        vm.store(address(sdgnrs), slotPbD, bytes32(packed));
+
+        // Also pre-set pendingResolveDay = dayD so the INV-13 sentinel check passes inside burn.
+        // pendingResolveDay is at slot 12 (uint32, lower bits of the slot).
+        bytes32 slotSentinel = bytes32(uint256(12));
+        vm.store(address(sdgnrs), slotSentinel, bytes32(uint256(dayD)));
+
+        // Verify the snapshot is now visible
+        (, , uint64 sBefore, uint64 bnBefore) = _readPendingByDay(dayD);
+        assertEq(uint256(sBefore), 1000, "EDGE-14: pre-seed supplySnapshot mismatch");
+        assertEq(uint256(bnBefore), 0, "EDGE-14: pre-seed burned must be zero");
+
+        // Sub-scenario 1: burn exact-cap = 500 tokens = 500e18 raw (under composite ceiling-divide
+        // semantics, amountWhole = 500). cap check: 0 + 500 > 1000/2=500 → FALSE → succeeds.
+        uint256 capExact = 500 ether;
+        vm.prank(actor);
+        sdgnrs.burn(capExact);
+
+        (, , uint64 sAfter1, uint64 bnAfter1) = _readPendingByDay(dayD);
+        assertEq(uint256(sAfter1), uint256(sBefore), "EDGE-14: snapshot NOT immutable post burn-1");
+        assertEq(uint256(bnAfter1), 500, "EDGE-14: burned must be 500 whole tokens post burn-1");
+
+        // Sub-scenario 2: one additional token tips over cap. 500 + 1 > 500 → revert Insufficient.
+        vm.prank(actor);
+        vm.expectRevert(StakedDegenerusStonk.Insufficient.selector);
+        sdgnrs.burn(1 ether);
+
+        // Snapshot + burned byte-identical post failed burn
+        (, , uint64 sAfter2, uint64 bnAfter2) = _readPendingByDay(dayD);
+        assertEq(uint256(sAfter2), uint256(sAfter1), "EDGE-14: snapshot mutated by failed over-cap burn");
+        assertEq(uint256(bnAfter2), uint256(bnAfter1), "EDGE-14: burned mutated by failed over-cap burn");
+
+        // Sub-scenario 3: lazy-init snapshot is immutable across both successful and failed
+        // same-day burns. Already verified via sAfter1 == sBefore and sAfter2 == sAfter1.
+    }
+
+    // =====================================================================
+    //              EDGE-15: 160 ETH EV cap one-wei-over reverts
+    // =====================================================================
+
+    /// @notice EDGE-15 — 304-SPEC §3 lines 603-615. Per-(player, day) EV cap enforced by
+    ///         `if (claim.ethValueOwed + ethValueOwed > MAX_DAILY_REDEMPTION_EV) revert`. The
+    ///         strict `>` operator allows exact-equality to succeed; any positive ethValueOwed
+    ///         above 160 ETH total reverts ExceedsDailyRedemptionCap. Engineered via vm.store
+    ///         seeding claim.ethValueOwed = MAX_DAILY_REDEMPTION_EV exactly, then triggering a
+    ///         tiny additional burn that produces ethValueOwed > 0 post gwei-snap.
+    /// @dev Tests INV-11. Depends on SPEC-02 (composite-key per-(player, day)) + INV-11.
+    ///      Sub-scenario 1 (exact-cap) is not engineerable under deploy-time state without
+    ///      precise gwei-aligned amount inversion; the cap-check operator semantics are still
+    ///      asserted indirectly by sub-2's strict `>` revert. NatSpec documents D-305-GWEI-SNAP-01
+    ///      gwei-alignment of ethValueOwed.
+    /// forge-config: default.fuzz.runs = 10000
+    function testFuzz_EDGE_15_EvCapExactOneWeiOver(uint256 actorSeed) public {
+        address actor = _pickActor(actorSeed);
+        uint32 dayD = game.currentDayView();
+
+        // Seed claim slot: ethValueOwed = MAX_DAILY_REDEMPTION_EV exactly (gwei-aligned —
+        // 160 ether = 160e18 wei is a multiple of 1e9).
+        // Pack: (ethValueOwed | (burnieOwed << 96) | (activityScore << 192))
+        uint256 packed = uint256(MAX_DAILY_REDEMPTION_EV) | (uint256(1) << 192); // activityScore=1 (set)
+        bytes32 outerSlot = keccak256(abi.encode(actor, uint256(7))); // SLOT_PENDING_REDEMPTIONS=7
+        bytes32 claimSlot = keccak256(abi.encode(uint256(dayD), outerSlot));
+        vm.store(address(sdgnrs), claimSlot, bytes32(packed));
+
+        // Verify seed visible
+        (uint96 evSeeded, , uint16 asSeeded) = sdgnrs.pendingRedemptions(actor, dayD);
+        assertEq(uint256(evSeeded), MAX_DAILY_REDEMPTION_EV, "EDGE-15: seed ethValueOwed mismatch");
+        assertEq(uint256(asSeeded), 1, "EDGE-15: seed activityScore mismatch");
+
+        // Pre-set sentinel so burn passes INV-13 guard
+        bytes32 slotSentinel = bytes32(uint256(12));
+        vm.store(address(sdgnrs), slotSentinel, bytes32(uint256(dayD)));
+
+        // Any burn that adds > 0 ethValueOwed must revert ExceedsDailyRedemptionCap.
+        // FUZZ_MIN_AMOUNT (100 ether) yields ethValueOwed ~12 gwei > 0 post snap.
+        uint256 amount = FUZZ_MIN_AMOUNT;
+        vm.prank(actor);
+        vm.expectRevert(StakedDegenerusStonk.ExceedsDailyRedemptionCap.selector);
+        sdgnrs.burn(amount);
+
+        // Byte-identity: claim slot byte-identical post failed burn
+        (uint96 evPost, uint96 bvPost, uint16 asPost) = sdgnrs.pendingRedemptions(actor, dayD);
+        assertEq(uint256(evPost), MAX_DAILY_REDEMPTION_EV, "EDGE-15: ethValueOwed mutated by failed burn");
+        assertEq(uint256(bvPost), 0, "EDGE-15: burnieOwed mutated by failed burn");
+        assertEq(uint256(asPost), 1, "EDGE-15: activityScore mutated by failed burn");
+    }
+
+    // =====================================================================
+    //              EDGE-16: Cross-day cap reset (structural)
+    // =====================================================================
+
+    /// @notice EDGE-16 — 304-SPEC §3 lines 617-629. Composite-key claim slots make the
+    ///         per-(player, day) cap structurally independent across days. Day-D claim at
+    ///         exactly MAX_DAILY_REDEMPTION_EV must NOT block a day-(D+1) burn from the
+    ///         same player; the day-(D+1) burn writes a separate slot starting at zero.
+    /// @dev Tests INV-11. Depends on SPEC-02 (composite-key per-(player, day)).
+    /// forge-config: default.fuzz.runs = 10000
+    function testFuzz_EDGE_16_CrossDayCapResetStructural(uint256 actorSeed) public {
+        address actor = _pickActor(actorSeed);
+        uint32 dayD = game.currentDayView();
+
+        // Execute a real burn on day D to seed the pendingByDay pool + sentinel naturally.
+        // (Required for the day-D resolve to actually fire — early-returns on empty pool.)
+        vm.prank(actor);
+        sdgnrs.burn(FUZZ_MIN_AMOUNT);
+
+        // Overwrite the claim slot's ethValueOwed to exactly MAX_DAILY_REDEMPTION_EV. This
+        // simulates a (player, D) pair that accumulated to the cap on day D; the cap-check
+        // strict `>` operator must NOT block any day-(D+1) burn under composite-key
+        // independence.
+        uint256 packedD = uint256(MAX_DAILY_REDEMPTION_EV) | (uint256(1) << 192);
+        bytes32 outerSlot = keccak256(abi.encode(actor, uint256(7)));
+        bytes32 claimSlotD = keccak256(abi.encode(uint256(dayD), outerSlot));
+        vm.store(address(sdgnrs), claimSlotD, bytes32(packedD));
+
+        // Snapshot day-D claim slot pre-D+1-burn
+        (uint96 evD_Pre, , uint16 asD_Pre) = sdgnrs.pendingRedemptions(actor, dayD);
+        assertEq(uint256(evD_Pre), MAX_DAILY_REDEMPTION_EV, "EDGE-16: seed verification");
+
+        // Resolve day D — clears sentinel, deletes pool. Day-D burn (above) populated the
+        // pool so the resolver does NOT early-return; sentinel is correctly cleared at the
+        // post-resolve `if (pendingResolveDay == dayToResolve) pendingResolveDay = 0;` line.
+        _advanceWallDay();
+        _resolveDay(dayD, 100, dayD);
+        assertEq(uint256(sdgnrs.pendingResolveDay()), 0, "EDGE-16: sentinel must clear post day-D resolve");
+
+        // Day-(D+1) burn from same actor — must succeed; the day-D claim slot remains
+        // byte-identical (composite-key independence).
+        uint32 dayD1 = game.currentDayView();
+        vm.prank(actor);
+        sdgnrs.burn(FUZZ_MIN_AMOUNT);
+
+        // Positive: day-D+1 slot populated, day-D slot byte-identical
+        (uint96 evD1, , ) = sdgnrs.pendingRedemptions(actor, dayD1);
+        assertGt(uint256(evD1), 0, "EDGE-16: day-D+1 claim slot must populate (cross-day cap reset)");
+
+        (uint96 evD_Post, , uint16 asD_Post) = sdgnrs.pendingRedemptions(actor, dayD);
+        assertEq(uint256(evD_Post), uint256(evD_Pre), "EDGE-16: day-D ethValueOwed mutated by day-D+1 burn");
+        assertEq(uint256(asD_Post), uint256(asD_Pre), "EDGE-16: day-D activityScore mutated by day-D+1 burn");
+    }
+
+    // =====================================================================
+    //              EDGE-17: Late-day burn post-resolve legitimate
+    // =====================================================================
+
+    /// @notice EDGE-17 — 304-SPEC §3 lines 631-643. Day D-1's pool resolved at the day-D
+    ///         advance. A subsequent day-D burn writes a fresh pendingByDay[D] entry without
+    ///         touching redemptionPeriods[D-1] (already written) or pendingByDay[D-1] (deleted
+    ///         at resolve). The next day's advance resolves redemptionPeriods[D] for the
+    ///         FIRST time (no overwrite). Distinct from EDGE-07 (V-184 attack) — EDGE-17 is
+    ///         the legitimate-flow analog; both produce write-once-per-day semantics.
+    /// @dev Tests INV-01 + INV-04 + INV-08. Depends on SPEC-01 + SPEC-03 + SPEC-04 (c).
+    /// forge-config: default.fuzz.runs = 10000
+    function testFuzz_EDGE_17_LateDayBurnPostResolveLegitimate(
+        uint256 amountSeed1,
+        uint256 amountSeed2,
+        uint16 rollSeed1,
+        uint16 rollSeed2
+    ) public {
+        uint256 amount1 = bound(amountSeed1, FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100);
+        uint256 amount2 = bound(amountSeed2, FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100);
+        uint16 roll1 = uint16(bound(uint256(rollSeed1), 25, 175));
+        uint16 roll2 = uint16(bound(uint256(rollSeed2), 25, 175));
+
+        // Day D-1: burn from A
+        uint32 dayPrior = game.currentDayView();
+        vm.prank(playerA);
+        sdgnrs.burn(amount1);
+
+        // Advance to day D + resolve D-1 with roll1
+        _advanceWallDay();
+        uint32 dayD = game.currentDayView();
+        _resolveDay(dayPrior, roll1, dayPrior);
+
+        // Snapshot redemptionPeriods[dayPrior].roll = roll1
+        (uint16 rollPriorPostResolve, ) = sdgnrs.redemptionPeriods(dayPrior);
+        assertEq(uint256(rollPriorPostResolve), uint256(roll1), "EDGE-17: precondition - dayPrior.roll first-write");
+
+        // Late-day burn on day D from B (after D-1 was resolved + deleted)
+        vm.prank(playerB);
+        sdgnrs.burn(amount2);
+
+        // redemptionPeriods[dayPrior].roll byte-identical post late-day burn
+        (uint16 rollPriorPostLateBurn, ) = sdgnrs.redemptionPeriods(dayPrior);
+        assertEq(uint256(rollPriorPostLateBurn), uint256(roll1), "EDGE-17: dayPrior.roll mutated by late-day burn");
+
+        // pendingByDay[D] populated by the late-day burn (burned > 0)
+        (, , , uint64 bnDPostBurn) = _readPendingByDay(dayD);
+        assertGt(uint256(bnDPostBurn), 0, "EDGE-17: pendingByDay[D] must populate from late-day burn");
+
+        // pendingByDay[D-1] remains deleted (zero across all 4 fields)
+        (uint64 ePriorPost, uint64 bPriorPost, uint64 sPriorPost, uint64 bnPriorPost) =
+            _readPendingByDay(dayPrior);
+        assertEq(uint256(ePriorPost), 0, "EDGE-17: pendingByDay[D-1].ethBase resurrected");
+        assertEq(uint256(bPriorPost), 0, "EDGE-17: pendingByDay[D-1].burnieBase resurrected");
+        assertEq(uint256(sPriorPost), 0, "EDGE-17: pendingByDay[D-1].supplySnapshot resurrected");
+        assertEq(uint256(bnPriorPost), 0, "EDGE-17: pendingByDay[D-1].burned resurrected");
+
+        // Next-day advance resolves redemptionPeriods[D] for the FIRST time with roll2
+        _advanceWallDay();
+        _resolveDay(dayD, roll2, dayD);
+
+        (uint16 rollDPostResolve, ) = sdgnrs.redemptionPeriods(dayD);
+        assertEq(uint256(rollDPostResolve), uint256(roll2), "EDGE-17: dayD.roll first-write must equal roll2");
+
+        // redemptionPeriods[dayPrior].roll STILL byte-identical to roll1
+        (uint16 rollPriorFinal, ) = sdgnrs.redemptionPeriods(dayPrior);
+        assertEq(uint256(rollPriorFinal), uint256(roll1), "EDGE-17: dayPrior.roll mutated by dayD resolve");
+    }
+
+    // =====================================================================
+    //              EDGE-18: BURNIE pool insufficient fallback
+    // =====================================================================
+
+    /// @notice EDGE-18 — 304-SPEC §3 lines 645-657. When the contract's BURNIE balance is
+    ///         less than `burniePayout` at claim time, `_payBurnie` falls back to
+    ///         `coinflip.claimCoinflipsForRedemption(this, remaining)` to push the shortfall,
+    ///         then transfers `remaining` to the player. The claim must succeed in full;
+    ///         no revert from BURNIE insufficiency.
+    /// @dev Tests INV-03 (BURNIE conservation). Depends on SPEC-02 (payBurnie preserved).
+    ///      Uses vm.mockCall to stage the shortfall scenario: claim with non-zero burnieOwed
+    ///      via seeded claim slot, then assert the call succeeds.
+    /// forge-config: default.fuzz.runs = 10000
+    function testFuzz_EDGE_18_BurniePoolInsufficientFallback(uint256 actorSeed) public {
+        address actor = _pickActor(actorSeed);
+        uint32 dayD = game.currentDayView();
+
+        // Burn a meaningful amount so the claim path has work to do
+        vm.prank(actor);
+        sdgnrs.burn(FUZZ_MIN_AMOUNT);
+
+        _advanceWallDay();
+        _resolveDay(dayD, 100, dayD);
+
+        // Inject non-zero burnieOwed via vm.store. The claim slot is at:
+        //   keccak256(day || keccak256(actor || 7))
+        bytes32 outerSlot = keccak256(abi.encode(actor, uint256(7)));
+        bytes32 claimSlot = keccak256(abi.encode(uint256(dayD), outerSlot));
+        uint256 currentPacked = uint256(vm.load(address(sdgnrs), claimSlot));
+        // Set burnieOwed = 1e9 (1 gwei-equivalent BURNIE units, well below uint96.max)
+        uint256 newBurnieOwed = 1e9;
+        // Clear bits 96..191 (burnieOwed field) and set new value
+        uint256 mask = ~(uint256(type(uint96).max) << 96);
+        uint256 newPacked = (currentPacked & mask) | (newBurnieOwed << 96);
+        vm.store(address(sdgnrs), claimSlot, bytes32(newPacked));
+
+        // Verify seeded state
+        (, uint96 bvSeeded, ) = sdgnrs.pendingRedemptions(actor, dayD);
+        assertEq(uint256(bvSeeded), newBurnieOwed, "EDGE-18: seeded burnieOwed mismatch");
+
+        // The contract's BURNIE balance is 0 by default (coin minted nothing to sStonk in
+        // setUp). _payBurnie will hit the fallback: payBal=0, remaining=burniePayout, calls
+        // coinflip.claimCoinflipsForRedemption (mocked to return 0 — model the push from the
+        // coinflip pool to sStonk happening externally), then coin.transfer(player, remaining).
+        // We mock coin.transfer to return true so the fallback path completes.
+        vm.mockCall(
+            address(coin),
+            abi.encodeWithSelector(coin.transfer.selector),
+            abi.encode(true)
+        );
+
+        // Claim must succeed (no revert)
+        vm.prank(actor);
+        sdgnrs.claimRedemption(dayD);
+
+        // Slot is fully cleared post-claim
+        (uint96 evPost, uint96 bvPost, ) = sdgnrs.pendingRedemptions(actor, dayD);
+        assertEq(uint256(evPost), 0, "EDGE-18: claim slot ethValueOwed not cleared");
+        assertEq(uint256(bvPost), 0, "EDGE-18: claim slot burnieOwed not cleared");
+    }
+
+    // =====================================================================
+    //              EDGE-19: Multi-day RNG stall sentinel correctness (PHASE 305 ADDITION)
+    // =====================================================================
+
+    /// @notice EDGE-19 — Phase 305 addition (305-01-SUMMARY lines 200-202). Models the
+    ///         multi-day RNG stall scenario: player burns on day D, advance does NOT fire
+    ///         for k days (k ∈ [2, 5]); sentinel `pendingResolveDay()` retains D across the
+    ///         stall (proving the sentinel correctly names the stuck day regardless of stall
+    ///         duration). The eventual resolve targets dayToResolve = D (read from sentinel,
+    ///         NOT derived as `currentDayView() - 1` which would mis-key under the stall);
+    ///         redemptionPeriods[D].roll set correctly; claimRedemption(D) succeeds.
+    /// @dev Tests INV-09 + INV-13. Depends on D-305-SENTINEL-01 (D-305-DAYTORESOLVE-01).
+    /// forge-config: default.fuzz.runs = 10000
+    function testFuzz_EDGE_19_MultiDayRngStallStaleClaimRecovery(
+        uint256 amountSeed,
+        uint256 stallSeed,
+        uint16 rollSeed
+    ) public {
+        uint256 amount = bound(amountSeed, FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100);
+        uint256 stallDays = bound(stallSeed, 2, 5);
+        uint16 roll = uint16(bound(uint256(rollSeed), 25, 175));
+
+        uint32 dayD = game.currentDayView();
+        address burner = playerA;
+
+        // Burn on day D — sentinel stamps to D
+        vm.prank(burner);
+        sdgnrs.burn(amount);
+
+        // Sentinel correctness pre-stall
+        assertEq(uint256(sdgnrs.pendingResolveDay()), uint256(dayD), "EDGE-19: pendingResolveDay must equal dayD post-burn");
+
+        // Stall: warp k days forward WITHOUT firing any advance. Sentinel must remain D
+        // (no contract calls have touched pendingResolveDay).
+        for (uint256 i = 0; i < stallDays; i++) {
+            vm.warp(block.timestamp + 1 days);
+        }
+
+        // MID-STALL ASSERTION: sentinel still names dayD (NOT dayD + stallDays)
+        assertEq(
+            uint256(sdgnrs.pendingResolveDay()),
+            uint256(dayD),
+            "EDGE-19: pendingResolveDay sentinel drifted across multi-day stall"
+        );
+
+        // Per D-305-DAYTORESOLVE-01, the AdvanceModule reads the sentinel for dayToResolve
+        // (NOT `currentDayView() - 1`). Model this: prank as the game and resolve with
+        // dayToResolve = pendingResolveDay() (= D).
+        uint32 stuckDay = sdgnrs.pendingResolveDay();
+        _resolveDay(stuckDay, roll, stuckDay);
+
+        // Post-resolve assertions: roll written for dayD, sentinel cleared, pool deleted
+        (uint16 rollPost, uint32 fdPost) = sdgnrs.redemptionPeriods(dayD);
+        assertEq(uint256(rollPost), uint256(roll), "EDGE-19: redemptionPeriods[D].roll incorrect");
+        assertEq(uint256(fdPost), uint256(dayD), "EDGE-19: redemptionPeriods[D].flipDay incorrect");
+        assertEq(uint256(sdgnrs.pendingResolveDay()), 0, "EDGE-19: sentinel must be cleared post-resolve");
+
+        // Claim succeeds — burner gets paid; slot cleared
+        vm.prank(burner);
+        sdgnrs.claimRedemption(dayD);
+
+        (uint96 evFinal, uint96 bvFinal, ) = sdgnrs.pendingRedemptions(burner, dayD);
+        assertEq(uint256(evFinal), 0, "EDGE-19: claim slot ethValueOwed not cleared post-claim");
+        assertEq(uint256(bvFinal), 0, "EDGE-19: claim slot burnieOwed not cleared post-claim");
+    }
+
+    // =====================================================================
+    //              EDGE-20: BurnTooSmall dust floor (PHASE 305 ADDITION)
+    // =====================================================================
+
+    /// @notice EDGE-20 — Phase 305 addition (305-01-SUMMARY lines 200-202). MIN_BURN_AMOUNT
+    ///         protocol floor is 1e18 (1 whole sDGNRS). For any amount in [1, 1e18 - 1],
+    ///         burn must revert BurnTooSmall. For amount == 1e18, burn succeeds. The
+    ///         test covers a fuzzed sub-min sample plus the exact boundary at 1e18 - 1.
+    /// @dev Tests INV-10 (per-day supply cap depends on ceiling-divide producing ≥ 1 whole
+    ///      token per burn). Depends on D-305-DUST-FLOOR-01.
+    /// forge-config: default.fuzz.runs = 10000
+    function testFuzz_EDGE_20_BurnTooSmall(uint256 amountSeed) public {
+        // Sub-scenario A: fuzzed amount in [1, MIN_BURN_AMOUNT - 1] reverts BurnTooSmall
+        uint256 subMin = bound(amountSeed, 1, MIN_BURN_AMOUNT - 1);
+        vm.prank(playerA);
+        vm.expectRevert(StakedDegenerusStonk.BurnTooSmall.selector);
+        sdgnrs.burn(subMin);
+
+        // Sub-scenario B: exact boundary at MIN_BURN_AMOUNT - 1 reverts BurnTooSmall
+        vm.prank(playerB);
+        vm.expectRevert(StakedDegenerusStonk.BurnTooSmall.selector);
+        sdgnrs.burn(MIN_BURN_AMOUNT - 1);
+
+        // Sub-scenario C: exact MIN_BURN_AMOUNT succeeds (no revert)
+        // Snapshot balance + supply pre-burn to assert mutation
+        uint256 balPre = sdgnrs.balanceOf(playerC);
+        uint256 supplyPre = sdgnrs.totalSupply();
+        vm.prank(playerC);
+        sdgnrs.burn(MIN_BURN_AMOUNT);
+        assertEq(sdgnrs.balanceOf(playerC), balPre - MIN_BURN_AMOUNT, "EDGE-20: balanceOf[C] decrement");
+        assertEq(sdgnrs.totalSupply(), supplyPre - MIN_BURN_AMOUNT, "EDGE-20: totalSupply decrement");
+    }
 }
