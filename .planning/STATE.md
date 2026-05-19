@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: (between-milestones)
-milestone_name: Shipped Phases
-status: Awaiting next milestone
-last_updated: "2026-05-19T07:10:55.663Z"
-last_activity: 2026-05-19 — Milestone v43.0 completed and archived
+milestone: v44.0
+milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
+status: planning
+last_updated: "2026-05-19T07:57:20.696Z"
+last_activity: 2026-05-19
 progress:
-  total_phases: 6
-  completed_phases: 5
-  total_plans: 34
-  completed_plans: 33
-  percent: 83
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 ## Current Position
 
-Phase: Milestone v43.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-05-19 — Milestone v43.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-05-19 — Milestone v44.0 started
 
 ## Last Shipped Milestone
 

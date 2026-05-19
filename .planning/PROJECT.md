@@ -10,7 +10,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-**Active milestone:** (between-milestones) — v43.0 SHIPPED 2026-05-19; v44.0 FIX-MILESTONE plan-phase pending (consumes 142-anchor handoff register from `audit/FINDINGS-v43.0.md` §9d as load-bearing input)
+**Active milestone:** v44.0 — sStonk Per-Day Redemption Refactor + Accounting Invariant Proof (started 2026-05-19; consumes audit/FINDINGS-v43.0.md §9d HANDOFF-111..117 anchors + FIXREC §103 V-184 mechanic as load-bearing input)
 **Last shipped:** v43.0 — Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment (2026-05-19; closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`; 0 of 0 F-43-NN; 111 of 111 CATALOG_VIOLATIONS DEFERRED_TO_V44; 142-anchor v44.0 handoff register; 5 Tier-1 ACCEPT_AS_DOCUMENTED user fast-path 2026-05-19; KNOWN_ISSUES_UNMODIFIED)
 **Prior shipped:** v42.0 — Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf + Lootbox RNG Retry (2026-05-18; closure signal `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`; 0 of 0 F-42-NN; 1 Tier-1 ACCEPT_AS_DOCUMENTED on (xiv) retryLootboxRng; KNOWN_ISSUES_UNMODIFIED)
 **Prior shipped:** v41.0 — Cross-Call Determinism Fix (mint-batch + hero-override) (2026-05-17; closure signal `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4`; 3 of 3 F-41-NN RESOLVED_AT_V41)
@@ -24,7 +24,88 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 **Contract HEAD anchor (v40.0 closure):** `cd549499` (carried forward as deeper audit-baseline NON-WIDENING anchor)
 
-## Current Milestone: v43.0 Total rngLock Determinism — Every VRF Input Frozen at Commitment
+## Current Milestone: v44.0 sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
+
+**Goal:** Eliminate the V-184 sStonk cross-day re-roll exploit + 6 subsumed catalog rows (V-186/V-188/V-190/V-191/V-192/V-193 — FIXREC §0.6 fan-out, HANDOFF-111..117) by structurally redesigning sStonk gambling-burn redemption storage. Replace `redemptionPeriodIndex` + single-pool `pendingRedemptionEthBase` / `pendingRedemptionBurnieBase` with per-day keyed `pendingByDay[uint32]` mapping matching the existing lootbox/coinflip per-id commitment pattern. **Prove via formal invariants + exhaustive edge-case coverage that the resulting contract is 100% non-manipulable by any non-EXEMPT actor under all timing combinations.**
+
+**Audit baseline:** v43.0 closure HEAD `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`.
+
+**Non-negotiable acceptance criteria (every one provable at close):**
+
+1. `redemptionPeriods[D].roll` is written exactly once per day D and never mutated thereafter.
+2. Conservation of ETH at every state transition (modulo per-period integer-division dust).
+3. Conservation of BURNIE at every state transition.
+4. Per-day base correctness — `pendingByDay[D].ethBase == sum of all pendingRedemptions[*][D].ethValueOwed` for any unresolved D.
+5. Per-day cumulative correctness — `pendingRedemptionEthValue == sum over all unresolved days' bases + sum over all resolved-but-unclaimed days' rolled portions`.
+6. No player can affect another player's roll — `redemptionPeriods[D].roll` depends only on day-D+1's VRF word.
+7. No player can affect their own roll via timing — `claim.ethValueOwed` is locked at burn time, never retroactively modified.
+8. Pre-advance-gap burns on a new wall day land in `pendingByDay[currentDayView()]`, resolve at next day's advance with that day's VRF roll, never touch the prior day's slot.
+9. Skipped-advance recovery — chained advances resolve oldest-pending-first; no slot left forever unwritten while burns accumulate elsewhere.
+10. 50% supply cap is per-day, fresh each day (snapshot on first burn of day D, cap enforced against snapshot).
+11. 160 ETH daily EV cap is per-(player, day) — each new day resets the cap per player.
+12. gameOver mid-pending is safe — pre-gameOver pending claims resolve correctly post-gameOver via stored roll.
+
+**Target features:**
+
+- **Per-day storage refactor** — drop `redemptionPeriodIndex` + `redemptionPeriodSupplySnapshot` + `redemptionPeriodBurned` + `pendingRedemptionEthBase` + `pendingRedemptionBurnieBase` (5 slots removed). Add `mapping(uint32 => DayPending) internal pendingByDay` where `struct DayPending { uint256 ethBase; uint256 burnieBase; uint128 supplySnapshot; uint128 burned; }`. Cumulative scalar globals `pendingRedemptionEthValue` + `pendingRedemptionBurnie` STAY as-is (already correctly maintained).
+- **Composite-key claims** — `pendingRedemptions` becomes `mapping(address => mapping(uint32 => PendingRedemption))`. Multiple unclaimed days per player allowed. Drop the `UnresolvedClaim` revert at `:796-797`.
+- **`claimRedemption(uint32 day)`** signature — caller specifies which day to claim. No batch helper (immediate-claim UX assumed).
+- **Explicit `dayToResolve` arg** — `resolveRedemptionPeriod(uint16 roll, uint32 flipDay, uint32 dayToResolve)` from `AdvanceModule`. `hasPendingRedemptions(uint32 day)` query takes day, checks only that day's pool.
+- **Foundry invariant test harness** — `test/invariant/RedemptionAccounting.t.sol` with `invariant_*` functions asserting all 12 INV-NN properties across random action sequences (burn, advance, claim, gameOver) drawn from a stateful handler.
+- **Exhaustive edge-case fuzz** — `test/fuzz/RedemptionEdgeCases.t.sol` covering 18 enumerated EDGE-NN scenarios incl. pre-advance gap burns, two-pending-days simultaneous, skipped-advance recovery, gameOver mid-pending.
+- **Phase 301 vm.skip flip** — `test/fuzz/RngLockDeterminism.t.sol` HANDOFF-111..117 `vm.skip` blocks flipped to strict assertions and PASS.
+- **3-skill HYBRID adversarial sweep** charged specifically with "find any state transition violating INV-01..12, any manipulation surface across EDGE-01..18, any composition attack across burn/advance/claim/gameOver."
+- **9-section `audit/FINDINGS-v44.0.md` TERMINAL deliverable** with §3.F formal invariant attestation matrix (12 invariants × proven-by-test ID); 2-commit sequential SHA closure flip; chmod 444.
+
+**Edge cases that MUST be explicitly tested (EDGE-01..18 enumerated in SPEC.md):**
+
+| ID | Scenario |
+|----|----------|
+| EDGE-01 | Pre-advance-gap burn on day D (wall flip → burn before day-D advance call) |
+| EDGE-02 | Two pending days simultaneously (D-1 unresolved + D accumulating) |
+| EDGE-03 | Single player burns multiple days, never claims |
+| EDGE-04 | Multiple players burn same day at different times relative to advance |
+| EDGE-05 | Player claims before advance fires |
+| EDGE-06 | Skipped advance (12h+ stall via VRF failure) |
+| EDGE-07 | V-184 attack reproduction (burn → observe roll → re-burn 1 wei) |
+| EDGE-08 | Burn → gameOver → claim path |
+| EDGE-09 | Concurrent claims from N players same day |
+| EDGE-10 | Re-entrancy attempt on `_payEth` / `_payBurnie` |
+| EDGE-11 | Burn during `rngLocked` window |
+| EDGE-12 | Burn during `livenessTriggered` window |
+| EDGE-13 | Zero-rounded `ethValueOwed` from tiny burn |
+| EDGE-14 | 50% supply cap edge — exactly cap, one wei over |
+| EDGE-15 | 160 ETH EV cap edge — exactly cap, one wei over |
+| EDGE-16 | Cross-day cap reset — burn cap on D, cap on D+1 |
+| EDGE-17 | Burn after resolve same wall-clock day |
+| EDGE-18 | BURNIE pool insufficient at claim time (coinflip fallback) |
+
+**Key context / constraints:**
+
+- **Narrow scope.** v44.0 closes ONLY the sStonk cluster (7 anchors: HANDOFF-111..117). Remaining 135 v43 FIXREC + ADMA + ERRATUM anchors defer to v45.0+.
+- **USER-APPROVED contract commit posture** per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md` + `feedback_manual_review_before_push.md`. Single batched diff at end of Phase 305 IMPL.
+- **AGENT-COMMITTED test/planning commits** per `D-43N-TEST-COMMITS-AUTO-01` lineage.
+- **Pre-launch posture preserved** — v44.0 redeploy-fresh per `feedback_frozen_contracts_no_future_proofing.md`; no migration concerns; storage layout breaks acceptable.
+- **Re-entrancy out of scope** — existing `_payEth` / `_payBurnie` paths unchanged; refactor introduces no new external-call ordering surface.
+- **No `dailyIdx == currentDayView()` burn gate** — per-day keying makes gap-window burns provably safe (INV-08). Adding the gate would cost ~700-2200 gas per burn without closing any additional surface.
+- **Phase 301 FUZZ harness consumption** — v44.0 consumes Phase 301's `vm.skip(HANDOFF-111..117)` block list; each flip-to-strict-assertion is an acceptance criterion (TST-07).
+- **3-skill HYBRID adversarial pass** — `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT + `/zero-day-hunter` + `/economic-analyst` PARALLEL_SUBAGENT per `D-302-INVOKE-01` precedent. `/degen-skeptic` OUT OF SCOPE per `D-271-ADVERSARIAL-02` carry.
+- **Single-file audit deliverable** per `D-NN-FILES-01` carry → `D-44N-FILES-01`; **forward-cite zero-emission** per `D-NN-FCITE-01` carry → `D-44N-FCITE-01`.
+- **Phase numbering** continues from v43.0's last phase (303) → v44.0 starts at Phase 304.
+- **Estimated phase shape (roadmapper finalizes):** 304 SPEC → 305 IMPL → 306 TST → 307 SWEEP → 308 TERMINAL.
+
+**Out of scope for v44.0** (carry-forward to v45.0+ via locked-decision IDs):
+
+- Remaining 135 v43 FIXREC entries (HANDOFF-01..110, HANDOFF-118..119)
+- All 22 v43 ADMA recommendations (D-43N-V44-ADMA-01..22)
+- D-43N-V44-ADMA-ERRATUM-01 (RNGLOCK-CATALOG.md S-06 phantom-row hygiene)
+- Mint-boost fractional retirement (`D-40N-MINTBOOST-OUT-01` carry)
+- LBX-02 fixture-coverage gap (`D-40N-LBX02-OUT-01` carry)
+- `D-42N-MINTCLN-SCOPE-01` MINTCLN helper-extraction handoff
+- Game-over thorough hardening — separate dedicated milestone scope
+- `D-42N-RETRY-RNG-LAUNCH-FAQ-01` + `D-42N-RETRY-RNG-SCOPE-DOC-01` (launch-comms / docstring items)
+
+## Completed Milestone: v43.0 Total rngLock Determinism — Every VRF Input Frozen at Commitment
 
 **Goal:** At `rngLockedFlag = true`, every storage slot that participates in any VRF-influenced output is frozen until `rngLockedFlag = false`. The only unknowns are the incoming VRF word + its deterministic derivations from that word. No external write — including admin/owner — may mutate any participating slot during the rngLock window, with three explicit exempt entry points.
 
