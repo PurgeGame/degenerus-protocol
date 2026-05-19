@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v44.0
 milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
 status: executing
-last_updated: "2026-05-19T11:30:00.000Z"
-last_activity: 2026-05-19 -- Phase 304 Plan 03 complete (§3 EDGE-01..18 exhaustive scenario enumeration; EDGE-07 V-184 attack reproduction with structural-closure byte-identity assertion; §1↔§3 cross-link coverage table)
+last_updated: "2026-05-19T12:00:00.000Z"
+last_activity: 2026-05-19 -- Phase 304 Plan 04 complete (§4 design-intent backward-trace + actor game-theory walk for all 7 deletions; V-184 structural elimination attested as JOINT product of SPEC-01 + SPEC-03 + SPEC-04 (c) — no single lock suffices alone)
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 3
-  percent: 60
+  completed_plans: 4
+  percent: 80
 ---
 
 # Project State
@@ -25,15 +25,15 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 ## Current Position
 
 Phase: 304 (spec-invariant-model-spec) — EXECUTING
-Plan: 4 of 5 (Plans 01 + 02 + 03 complete; §0 header + §1 INV-01..12 + §2 SPEC-01..05 + §2.0 priority statement + §3 EDGE-01..18 shipped at commits `5a5e1034` + `46b16273` + `6edc3967` + `315280b0` + `971688ba`)
+Plan: 5 of 5 (Plans 01 + 02 + 03 + 04 complete; §0 header + §1 INV-01..12 + §2 SPEC-01..05 + §2.0 priority statement + §3 EDGE-01..18 + §4 7-deletion design-intent walks shipped at commits `5a5e1034` + `46b16273` + `6edc3967` + `315280b0` + `971688ba` + `20f3d439` + `d3c2aea5`)
 Status: Executing Phase 304
-Last activity: 2026-05-19 -- Phase 304 Plan 03 complete (§3 EDGE-01..18 narrative scenario enumeration with Positive + Negative + INV/SPEC linkage + Foundry function name; EDGE-07 V-184 attack reproduction with structural-closure byte-identity assertion; §1↔§3 cross-link coverage table covers all 12 INV-NN)
+Last activity: 2026-05-19 -- Phase 304 Plan 04 complete (§4 design-intent backward-trace + actor game-theory walk for all 7 deletions; each subsection carries ORIGINAL DESIGN INTENT + ACTOR GAME-THEORY WALK + POST-REFACTOR REPLACEMENT + DELETION SAFETY ATTESTATION per `feedback_design_intent_before_deletion.md`; V-184 structural elimination attested as JOINT product of SPEC-01 + SPEC-03 + SPEC-04 (c) — no single lock suffices alone)
 
 ## Current Milestone Phases
 
 | Phase | Name | Type | Requirements | Wave Shape | Depends on | Status |
 |-------|------|------|--------------|------------|------------|--------|
-| 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..12 + EDGE-01..18] | 1 AGENT-COMMITTED artifact bundle | nothing | Executing (3/5 plans complete) |
+| 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..12 + EDGE-01..18] | 1 AGENT-COMMITTED artifact bundle | nothing | Executing (4/5 plans complete) |
 | 305 | Implementation | IMPL | IMPL-01..04 primary (4) | 1 USER-APPROVED contract commit | Phase 304 | Not started |
 | 306 | Test | TST | INV-01..12 + TST-01..07 + EDGE-01..18 primary (37) | 1 AGENT-COMMITTED test commit bundle | Phase 305 | Not started |
 | 307 | Adversarial Sweep | SWEEP | SWP-01..05 primary (5) | 1 AGENT-COMMITTED adversarial-log bundle | Phases 305 + 306 | Not started |
@@ -428,6 +428,7 @@ Audit deliverables:
 | Phase 299 P11 | 3h | 1 tasks | 2 files |
 | Phase 302 P01 | ~3h | 6 tasks (Task 6 SKIPPED) | 5 artifacts (CHARGE + 3 skill reports + LOG) + 1 SUMMARY |
 | Phase 304 P03 | ~40min | 1 task | 1 file modified (304-SPEC.md §3 EDGE-01..18) + 1 SUMMARY |
+| Phase 304 P04 | ~6min | 2 tasks | 1 file modified (304-SPEC.md §4 design-intent walks for 7 deletions) + 1 SUMMARY |
 
 ## Decisions
 
@@ -459,3 +460,8 @@ Audit deliverables:
 - [Phase 304]: D-304-03-V184-CLOSURE-01: EDGE-07 V-184 attack reproduction proven STRUCTURALLY by storage-shape (every day's resolve writes a distinct mapping slot + SPEC-03 `dayToResolve` is oldest-first AdvanceModule-bounded); negative assertion is byte-identity of `redemptionPeriods[D].roll` across all attack-sequence checkpoints. HANDOFF-111..117 (V-184 + V-186 + V-188 + V-190 + V-191 + V-192 + V-193) close via this single EDGE-NN entry — Phase 306 mechanizes it in TST-04 standalone + TST-05 vm.skip → strict-assertion flip.
 - [Phase 304]: D-304-03-EDGE17-DAYNAMING-01: EDGE-17 distinguishes legitimate-late-day-burn from V-184 ATTACK by demonstrating BOTH outcomes are safe under post-refactor (no overwrite reachable in EITHER case). Day-naming convention: 22:58 wall-clock-D advance writes `redemptionPeriods[D-1].roll = R_D`; 23:30 wall-clock-D burn lands in `pendingByDay[D]`; next-day (wall-clock-D+1) advance writes `redemptionPeriods[D].roll = R_{D+1}` for the first time. No overwrite of `redemptionPeriods[D-1]` reachable from any later state transition.
 - [Phase 304]: D-304-03-CROSSLINK-COVERAGE-01: §1↔§3 cross-link coverage table at end of §3 lists all 12 INV-NN with ≥1 EDGE exerciser each (12 rows; Plan 05 grep-verifies via pattern `^- INV-0[1-9] ←|^- INV-1[0-2] ←`). §3 line range: 401-674 (273 lines).
+- [Phase 304]: D-304-04-V184-JOINT-ELIMINATION-01: V-184 structural elimination is the JOINT product of SPEC-01 (per-day keying) + SPEC-03 (`dayToResolve` arg) + SPEC-04 (c) (`delete pendingByDay[D]` at resolve); no single lock suffices alone. Without SPEC-01: indirection slot can still go stale. Without SPEC-03: per-day pool sharing single ETH base re-introduces cross-day conflation. Without SPEC-04 (c): no per-day entry to delete; entry persists post-resolve and is re-armable. EDGE-07 + Deletions 1+4+5+7 in §4 are the canonical closure artifacts; Phase 308 §3.D will cite this as RESOLVED-AT-V44 for HANDOFF-111..117.
+- [Phase 304]: D-304-04-DELETION-7-STRUCTURAL-ENABLER-01: The `redemptionPeriodIndex` reset block at `:757-762` is the STRUCTURAL ENABLER of V-184 — the `:758` predicate (`redemptionPeriodIndex != currentPeriod`) cannot distinguish "first burn of fresh day D" from "post-resolve re-burn on same wall-clock day D" because `redemptionPeriodIndex == currentPeriod == D` in both cases. RNGLOCK-FIXREC §103.C tactic-(c) `redemptionPeriodIndex = period + 1` advance-in-resolver fix regresses via the same `:758` reset (per §103.C lines 5577-5578). Per-day keying is STRICTLY STRONGER: no single index slot to advance, no reset predicate to regress.
+- [Phase 304]: D-304-04-DELETION-6-STRUCTURALLY-UNREACHABLE-01: The `UnresolvedClaim` revert at `:796-797` becomes STRUCTURALLY UNREACHABLE under composite-keyed `pendingRedemptions[player][day]` (SPEC-02) — day-D and day-D+1 claims live in SEPARATE mapping entries with no overwrite collision. SPEC-02 removes dead code; the UX-guardrail role (forced claim-before-cross-day-burn) is rendered obsolete and is replaced by STRICTLY BETTER UX (claiming day-D and burning day-D+1 are independent operations with no ordering constraint).
+- [Phase 304]: D-304-04-SECTION-4-EXCEPTION-ZONE-01: §4 is the EXCEPTION zone for `feedback_no_history_in_comments.md` — pre-refactor narration appears ONLY under explicit `ORIGINAL DESIGN INTENT` labels within §4 deletion subsections. §1/§2/§3/§5 prose remains POST-REFACTOR-state-only per their respective Plan acceptance criteria. Plan 05 acceptance includes a cross-section "what changed" leakage check.
+- [Phase 304]: D-304-04-LINE-RANGE-01: §4 line range fixed at 676-829 (154 lines including closing attestation). Plan 05 citation-manifest sweep grep-verifies every `StakedDegenerusStonk.sol:NNN` and `DegenerusGameAdvanceModule.sol:NNN` cite within this range against HEAD `8111cfc5189f628b64b500c881f9995c3edf0ed2`, plus the RNGLOCK-FIXREC.md line numbers cited in V-184 walks (5414, 5445-5449, 5455, 5457-5461, 5472-5474, 5476, 5478, 5494, 5500-5506, 5511, 5567, 5577-5578).
