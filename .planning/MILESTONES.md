@@ -2,6 +2,40 @@
 
 ## v43.0 Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment (Shipped: 2026-05-19)
 
+**Phases completed:** 6 phases, 34 plans, 32 tasks
+
+**Key accomplishments:**
+
+- One-liner:
+- Tactic (a) — rngLockedFlag-gated revert.
+- None — plan executed exactly as written.
+- None — plan executed exactly as written.
+- §10 backward-trace catalog AGENT-COMMITTED for the MintModule trait-generation consumer (Phase 290 MINTCLN audit-subject surface — 3-input keccak with owed-in-baseKey at `MintModule:563-565`). 7 participating slots enumerated. 42 verdict rows: 18 VIOLATION (all tactic (a) gated-revert), 23 EXEMPT-ADVANCEGAME, 1 EXEMPT-VRFCALLBACK. Zero `contracts/` + `test/` mutations.
+- Backward-trace catalog of BurnieCoinflip.processCoinflipPayouts (consumer §11; rngWord at :807, (rngWord & 1) win-decode at :837) — 20 SLOADs enumerated, 4 participating, 9 writer×callsite tuples classified, 2 VIOLATIONs with remediation tactics (a) rngLockedFlag-gated revert + (b) snapshot/anchor.
+- Tactic (a) — rngLockedFlag-gated revert.
+- Goal:
+- None of Rules 1-3 triggered.
+- Per-VIOLATION FIXREC entries for 7 prizePoolsPacked EOA writer rows (V-024..V-027, V-030..V-032) with design-intent backward-trace, actor game-theory walk, tactic + impact estimate, and D-43N-V44-HANDOFF-13..19 anchors for v44.0 consumption.
+- Per-VIOLATION analytical FIXREC entries for the sDGNRS cross-contract pool-balance race class (S-14 + S-15) — 7 logical VIOLATIONs covered with tactic (b) snapshot-at-commitment-moment across three distinct commitment surfaces (_swapAndFreeze, _finalizeLootboxRng, _submitGamblingClaim) plus a per-callsite split for V-051.
+- Per-VIOLATION analytical FIXREC entries for the claimablePool (S-16) writer-race class during the multi-tx game-over drain window — 7 logical VIOLATIONs covered with tactic (a) gated-revert across 5 new-gate writers + 2 already-gated writers (FUZZ-301 verification-only).
+- One-liner:
+- Per-VIOLATION analytical FIXREC entries for the DEEP cluster per Phase 298 §0 headline #2 — 20 logical VIOLATIONs covering the cross-resolution EV-benefit accumulator (S-22) plus the per-index commitment quad (S-24..S-29: lootboxEth, lootboxDay, lootboxBaseLevelPacked, lootboxEvScorePacked, lootboxDistressEth, lootboxBurnie). Two structurally distinct sub-families (G.1 per-index commitment quad with 17 entries; G.2 S-22 cross-resolution accumulator with 3 entries) resolve via ~8 distinct fix sites: 3 shared gates (MintModule + WhaleModule + MintModule.BURNIE) + 2 shared stack-capture blocks (openLootBox + openBurnieLootBox) + 3 snapshot writes (S-22 allocation-time + redemption-snapshot). Tactic mix: 12 tactic (a) gate + 8 tactic (b) snapshot/stack-capture; EV-tier: 14 HIGH + 6 MEDIUM with 3 CATASTROPHE-tier (S-22 cross-resolution accumulator design break per `feedback_rng_window_storage_read_freshness.md`).
+- Authored 15 per-VIOLATION analytical FIXREC entries covering the presaleStatePacked / mintPacked_ / boonPacked / lastPurchaseDay cross-resolution accumulator family; V-127 classified STALE-PHANTOM by source-attestation; handoff anchors D-43N-V44-HANDOFF-63..77 locked for v44.0 FIX-MILESTONE consumption.
+- Authored 14 per-VIOLATION analytical FIXREC entries covering the governance + cross-contract + commitment-side + VRF-config writer family; V-153 surfaced as the §0 headline #6 scope-expansion candidate with RECLASSIFY tactic recommending a milestone-prose amendment to add EXEMPT-REQUESTLOOTBOXRNG as the 4th EXEMPT class (zero contract change); handoff anchors D-43N-V44-HANDOFF-78..91 locked for v44.0 FIX-MILESTONE consumption.
+- One-liner:
+- Canonical Phase 300 ADMA deliverable .planning/ADMIN-AUDIT.md enumerating 37 admin-gated externals + 21 VIOLATION subset + 22 per-admin-function v44.0 handoff anchors (D-43N-V44-ADMA-01..22) + D-43N-V44-ADMA-ERRATUM-01 catalog-erratum carry forward for RNGLOCK-CATALOG.md S-06 phantom rows.
+- Canonical scaffold contribution for `test/fuzz/RngLockDeterminism.t.sol` — locks the 6-phase per-function template (setup/lock/perturb/resolve/baseline/assert) and authors shared helpers + 2 reference fuzz functions (PayDailyJackpot + RunTerminalJackpot) that cluster plans 02/03/04 replicate verbatim.
+- Authored 2 of the 11 remaining per-consumer fuzz functions (PayDailyJackpotCoinAndTickets §2 + RunTerminalDecimatorJackpot §4) as a Wave-1 paste-source snippet for the v43.0 state-shuffle determinism Foundry harness.
+- Authored 4 per-consumer fuzz functions (catalog §6/§7/§8/§13) as paste-source contribution for Wave 2 aggregator, applying the locked 6-phase template with per-consumer commitment-sentinel pinning to address the W-05 divergence between advance-cycle and per-index/per-level commitment windows.
+- Authored the 5 remaining per-consumer fuzz functions (Mint/Coinflip/Stonk/GameOver/Retry) — completing FUZZ-04 13-consumer coverage with OPPOSITE-DIRECTION retry semantics and V-184 CATASTROPHE-tier flag for Wave-2 vm.skip gating.
+- 5 edge-case fuzz functions (AdminDuringLock + NearEndOfWindow + MultiTxBatch + MultiBlock + RetryLootboxRngDuringLock) + 22-entry admin-only perturbation helper covering ADMA R-01..R-22 + cluster-local _hashLogs digest helper — zero contracts/ and zero test/ mutations per D-43N-AUDIT-ONLY-01.
+- MILESTONE_V43_PHASE_301 — Phase 301 closure deliverable: single-file canonical Foundry harness `test/fuzz/RngLockDeterminism.t.sol` (1,778 lines, 18 fuzz functions) ships as regression oracle for v44.0 FIX-MILESTONE consumption, with 17 vm.skip blocks cross-referencing RNGLOCK-FIXREC.md sec_N + v44.0 D-43N-V44-HANDOFF-NN anchors and 1 opposite-direction PASS test (RetryLootboxRng) attesting the failsafe's fresh-VRF substitution semantics under perturbation.
+- MILESTONE_V43_PHASE_302 — 3-skill HYBRID adversarial pass against the v43.0 audit subject (rngLock freeze invariant + Phases 298-301 artifacts: CATALOG + FIXREC + ADMA + FUZZ) produces ZERO new contract-change VIOLATIONs. 9 charged hypotheses + 7 beyond-charge surfaces probed across `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; skeptic-reviewer filter resolves to 5 ALREADY-DOCUMENTED REAL_EXPLOITs + 2 documentation-fix items + 1 coverage-gap. User fast-path disposition 2026-05-19 ratifies ZERO_FINDING_ELEVATION; Task 6 SKIPS; documentation-class items route to Phase 303 §6 catalog hygiene + v44.0 FIX-MILESTONE.
+
+---
+
+## v43.0 Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment (Shipped: 2026-05-19)
+
 **Phases completed:** 6 phases (298-303), 34 plans across the 6 phases (Phase 298 14 + Phase 299 11 + Phase 300 1 + Phase 301 6 + Phase 302 1 + Phase 303 1), 40/40 requirements satisfied (6 CAT + 5 FIXREC + 4 ADMA + 5 FUZZ + 5 SWP + 9 AUDIT + 4 REG + 2 CLS). 6-phase audit-only catalog + fixrec + adma + fuzz + sweep + terminal shape per `D-43N-AUDIT-ONLY-01`.
 
 **Audit baseline:** v42.0 closure HEAD `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2` → v43.0 closure HEAD `8111cfc5189f628b64b500c881f9995c3edf0ed2` (resolved at Phase 303 Commit 1 per `D-303-CLOSURE-01` 2-commit sequential SHA orchestration; Commit 2 propagates verbatim to 5 FINDINGS verbatim locations + 3 cross-document propagation targets + applies chmod 444 + atomic 5-doc closure flip). 0 USER-APPROVED `contracts/` commits within the Phase 298-303 audit envelope per `D-43N-AUDIT-ONLY-01`; 1 AGENT-COMMITTED `test/` commit at Phase 301 FUZZ harness (`eb858521`) per `D-43N-TEST-COMMITS-AUTO-01`; 1 pre-audit-envelope USER-AUTHORED `contracts/` commit (`2ccd39aa feat: pre-seed pending pool with 1% of futurePool on jackpot freeze`) landed BEFORE Phase 298 CATALOG open at `3896cb8a` (out-of-envelope baseline; Phase 298 CATALOG captured AFTER this commit landed; documented in FINDINGS-v43.0.md §3.A Row 1 as PRE_AUDIT_BASELINE for full transparency).

@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: (between-milestones)
-milestone_name: Between Milestones — v43.0 SHIPPED 2026-05-19; v44.0 FIX-MILESTONE pending
-status: completed
-last_updated: "2026-05-19T07:00:00.000Z"
-last_activity: 2026-05-19 -- Phase 303 closure-flip complete; v43.0 milestone SHIPPED
+milestone_name: Shipped Phases
+status: Awaiting next milestone
+last_updated: "2026-05-19T07:10:55.663Z"
+last_activity: 2026-05-19 — Milestone v43.0 completed and archived
 progress:
   total_phases: 6
-  completed_phases: 6
+  completed_phases: 5
   total_plans: 34
-  completed_plans: 34
-  percent: 100
+  completed_plans: 33
+  percent: 83
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 ## Current Position
 
-Phase: 303 — COMPLETE 2026-05-19
-Plan: 1 of 1 — COMPLETE
-Status: v43.0 milestone SHIPPED; (between-milestones)
-Last activity: 2026-05-19 -- Phase 303 closure-flip landed; v43.0 milestone SHIPPED; closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`
+Phase: Milestone v43.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-05-19 — Milestone v43.0 completed and archived
 
 ## Last Shipped Milestone
 
