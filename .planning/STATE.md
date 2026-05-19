@@ -4,13 +4,13 @@ milestone: v44.0
 milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
 status: executing
 last_updated: "2026-05-19T12:00:00.000Z"
-last_activity: 2026-05-19 -- Phase 304 Plan 04 complete (§4 design-intent backward-trace + actor game-theory walk for all 7 deletions; V-184 structural elimination attested as JOINT product of SPEC-01 + SPEC-03 + SPEC-04 (c) — no single lock suffices alone)
+last_activity: 2026-05-19 -- Phase 304 Plan 05 complete (§5 source-verified citation manifest with 61 grep-verified citations: 50 sStonk + 11 AdvanceModule; all THREE inline-duplicated sStonk.resolveRedemptionPeriod call sites attested exhaustively at :1230 + :1293 + :1323; 6 forbidden-lexicon claims reframed in §1/§2/§3/§4; Phase 304 SPEC complete and ready for Phase 305 IMPL)
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 4
-  percent: 80
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -24,16 +24,16 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 ## Current Position
 
-Phase: 304 (spec-invariant-model-spec) — EXECUTING
-Plan: 5 of 5 (Plans 01 + 02 + 03 + 04 complete; §0 header + §1 INV-01..12 + §2 SPEC-01..05 + §2.0 priority statement + §3 EDGE-01..18 + §4 7-deletion design-intent walks shipped at commits `5a5e1034` + `46b16273` + `6edc3967` + `315280b0` + `971688ba` + `20f3d439` + `d3c2aea5`)
-Status: Executing Phase 304
-Last activity: 2026-05-19 -- Phase 304 Plan 04 complete (§4 design-intent backward-trace + actor game-theory walk for all 7 deletions; each subsection carries ORIGINAL DESIGN INTENT + ACTOR GAME-THEORY WALK + POST-REFACTOR REPLACEMENT + DELETION SAFETY ATTESTATION per `feedback_design_intent_before_deletion.md`; V-184 structural elimination attested as JOINT product of SPEC-01 + SPEC-03 + SPEC-04 (c) — no single lock suffices alone)
+Phase: 304 (spec-invariant-model-spec) — COMPLETE
+Plan: 5 of 5 COMPLETE (Plans 01 + 02 + 03 + 04 + 05 all shipped; §0 header + §1 INV-01..12 + §2 SPEC-01..05 + §2.0 priority statement + §3 EDGE-01..18 + §4 7-deletion design-intent walks + §5 source-verified citation manifest at commits `5a5e1034` + `46b16273` + `6edc3967` + `315280b0` + `971688ba` + `20f3d439` + `d3c2aea5` + `20ec70cc`)
+Status: Phase 304 COMPLETE; ready for Phase 305 IMPL
+Last activity: 2026-05-19 -- Phase 304 Plan 05 complete (§5 source-verified citation manifest with 4 sub-sections — §5.1 sStonk manifest with 50 grep-verified rows, §5.2 AdvanceModule manifest with 11 grep-verified rows including all THREE inline-duplicated resolveRedemptionPeriod call sites at :1230 + :1293 + :1323 per feedback_verify_call_graph_against_source.md Phase 294 BURNIE-gap precedent, §5.3 cross-section integrity check with 5 PASSing sub-checks, §5.4 manifest integrity attestation; 6 forbidden-lexicon claims reframed in §1/§2/§3/§4; FOOTER LINE appended; 304-SPEC.md ready for Phase 305 IMPL consumption)
 
 ## Current Milestone Phases
 
 | Phase | Name | Type | Requirements | Wave Shape | Depends on | Status |
 |-------|------|------|--------------|------------|------------|--------|
-| 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..12 + EDGE-01..18] | 1 AGENT-COMMITTED artifact bundle | nothing | Executing (4/5 plans complete) |
+| 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..12 + EDGE-01..18] | 1 AGENT-COMMITTED artifact bundle | nothing | COMPLETE (5/5 plans shipped; 304-SPEC.md ready for Phase 305 IMPL) |
 | 305 | Implementation | IMPL | IMPL-01..04 primary (4) | 1 USER-APPROVED contract commit | Phase 304 | Not started |
 | 306 | Test | TST | INV-01..12 + TST-01..07 + EDGE-01..18 primary (37) | 1 AGENT-COMMITTED test commit bundle | Phase 305 | Not started |
 | 307 | Adversarial Sweep | SWEEP | SWP-01..05 primary (5) | 1 AGENT-COMMITTED adversarial-log bundle | Phases 305 + 306 | Not started |
@@ -429,6 +429,7 @@ Audit deliverables:
 | Phase 302 P01 | ~3h | 6 tasks (Task 6 SKIPPED) | 5 artifacts (CHARGE + 3 skill reports + LOG) + 1 SUMMARY |
 | Phase 304 P03 | ~40min | 1 task | 1 file modified (304-SPEC.md §3 EDGE-01..18) + 1 SUMMARY |
 | Phase 304 P04 | ~6min | 2 tasks | 1 file modified (304-SPEC.md §4 design-intent walks for 7 deletions) + 1 SUMMARY |
+| Phase 304 P05 | ~25min | 1 task | 1 file modified (304-SPEC.md §5 citation manifest + 6 forbidden-lexicon reframes in §1-§4) + 1 SUMMARY |
 
 ## Decisions
 
@@ -464,4 +465,9 @@ Audit deliverables:
 - [Phase 304]: D-304-04-DELETION-7-STRUCTURAL-ENABLER-01: The `redemptionPeriodIndex` reset block at `:757-762` is the STRUCTURAL ENABLER of V-184 — the `:758` predicate (`redemptionPeriodIndex != currentPeriod`) cannot distinguish "first burn of fresh day D" from "post-resolve re-burn on same wall-clock day D" because `redemptionPeriodIndex == currentPeriod == D` in both cases. RNGLOCK-FIXREC §103.C tactic-(c) `redemptionPeriodIndex = period + 1` advance-in-resolver fix regresses via the same `:758` reset (per §103.C lines 5577-5578). Per-day keying is STRICTLY STRONGER: no single index slot to advance, no reset predicate to regress.
 - [Phase 304]: D-304-04-DELETION-6-STRUCTURALLY-UNREACHABLE-01: The `UnresolvedClaim` revert at `:796-797` becomes STRUCTURALLY UNREACHABLE under composite-keyed `pendingRedemptions[player][day]` (SPEC-02) — day-D and day-D+1 claims live in SEPARATE mapping entries with no overwrite collision. SPEC-02 removes dead code; the UX-guardrail role (forced claim-before-cross-day-burn) is rendered obsolete and is replaced by STRICTLY BETTER UX (claiming day-D and burning day-D+1 are independent operations with no ordering constraint).
 - [Phase 304]: D-304-04-SECTION-4-EXCEPTION-ZONE-01: §4 is the EXCEPTION zone for `feedback_no_history_in_comments.md` — pre-refactor narration appears ONLY under explicit `ORIGINAL DESIGN INTENT` labels within §4 deletion subsections. §1/§2/§3/§5 prose remains POST-REFACTOR-state-only per their respective Plan acceptance criteria. Plan 05 acceptance includes a cross-section "what changed" leakage check.
+- [Phase 304]: D-304-05-MANIFEST-VERIFIED-COUNT-01: §5 citation manifest grep-verified 61 file:line citations against source HEAD `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` — 50 sStonk + 11 AdvanceModule rows; aggregate status 61 VERIFIED, 0 CORRECTED, 0 ABSENT. Every cited line that Phase 305 IMPL's diff will modify, delete, re-key, or add is backed by a §5 manifest row with a VERIFIED status and a verified content snippet.
+- [Phase 304]: D-304-05-ADVANCE-MODULE-3-SITES-01: All THREE inline-duplicated `sdgnrs.resolveRedemptionPeriod` call sites in `contracts/modules/DegenerusGameAdvanceModule.sol` attested exhaustively at `:1230` (primary `rngGate` path, fresh VRF `currentWord`) + `:1293` (secondary mirror path, `currentWord`) + `:1323` (gameover-fallback path, `fallbackWord`) per `feedback_verify_call_graph_against_source.md` Phase 294 BURNIE-gap precedent. The prompt cited only `:1230` — INCOMPLETE; Plan 02 already discovered all three via grep and Plan 05 documents the exhaustive call graph. Symmetric `hasPendingRedemptions()` gates at `:1225` + `:1288` + `:1318`. Phase 305 IMPL diff MUST modify all three sites identically with the SPEC-03 `dayToResolve` arg.
+- [Phase 304]: D-304-05-FORBIDDEN-LEXICON-REFRAME-01: 6 forbidden-lexicon ("by construction" / "trivially safe") claims found at Plan-05 scan-start in §1 INV-01 (line ~84) + §2 SPEC-04 (a) (line ~367) + §2 SPEC-05 (line ~385) + §3 EDGE-06 (line ~485) + §4 Deletion 2 (line ~703) + §4 Deletion 3 (line ~732). Each was reframed in-place per the §5.3 Check 5 table in 304-SPEC.md to cite a grep-verifiable structural argument (SPEC-03 + AdvanceModule catch-up loop; `isGameOver` predicate at `:635`; predicate `supplySnapshot == 0 && burned == 0`; catch-up loop at AdvanceModule `:1200-1213`; `:758` predicate; Solidity mapping default-zero semantics) instead of asserting the property in the forbidden phrasing. Post-correction grep returns zero matches in §1-§4.
+- [Phase 304]: D-304-05-DELETION-7-IMPL-RANGE-01: For the `redemptionPeriodIndex` reset block deletion (Deletion 7), the canonical line range cited in §2.7 item 7 and §4 Deletion 7 is `:757-762` as the verbatim ORIGINAL DESIGN INTENT quotation. However, the IMPL deletion range is bounded at `:758-762` only — the `:757` `uint32 currentPeriod = game.currentDayView();` local-variable declaration is PRESERVED in the IMPL diff because the `currentPeriod` local is consumed downstream at `:796`/`:801`/`:806` for cap checks under SPEC-05's lazy-init predicate `pendingByDay[currentPeriod].supplySnapshot == 0 && pendingByDay[currentPeriod].burned == 0`. Phase 305 IMPL must NOT delete `:757`.
+- [Phase 304]: D-304-05-PHASE-304-COMPLETE-01: Phase 304 SPEC + Invariant Model is COMPLETE. 304-SPEC.md spans 960 lines with §0 header + §1 INV-01..12 + §2 SPEC-01..05 + §3 EDGE-01..18 + §4 7-deletion walks + §5 source-verified citation manifest + closing FOOTER LINE. 5/5 plans shipped. Phase 305 IMPL is the next phase — diff against `contracts/StakedDegenerusStonk.sol` + `contracts/modules/DegenerusGameAdvanceModule.sol` per the SPEC; user-approved batched contract commit per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md`.
 - [Phase 304]: D-304-04-LINE-RANGE-01: §4 line range fixed at 676-829 (154 lines including closing attestation). Plan 05 citation-manifest sweep grep-verifies every `StakedDegenerusStonk.sol:NNN` and `DegenerusGameAdvanceModule.sol:NNN` cite within this range against HEAD `8111cfc5189f628b64b500c881f9995c3edf0ed2`, plus the RNGLOCK-FIXREC.md line numbers cited in V-184 walks (5414, 5445-5449, 5455, 5457-5461, 5472-5474, 5476, 5478, 5494, 5500-5506, 5511, 5567, 5577-5578).
