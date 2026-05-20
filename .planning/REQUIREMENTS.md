@@ -42,7 +42,7 @@ The purchased-lootbox EV-multiplier cap allocation must be **independent of the 
 
 ### Invariants (INV) — Provable Acceptance Criteria
 
-> Each becomes a test assertion (TST). Proven against the post-IMPL source tree.
+> Each becomes a test assertion (TST). Proven against the post-IMPL source tree. INV-01..06 are carried by the Phase 311 TST phase that proves them (INV-01←TST-01; INV-02/03←TST-02; INV-04←TST-03; INV-05←TST-04; INV-06←TST-01/TST-04 demonstrate pre-word allocation, re-attested at Phase 312 SWEEP + Phase 313 §3).
 
 - [ ] **INV-01**: Order-independence — a player with mixed >100%/<100% boxes totalling >10 ETH receives the **same** total payout regardless of the order boxes are opened.
 - [ ] **INV-02**: Penalty non-dodgeable — every sub-100% box applies its penalty on the full `amount` and never consumes the cap, in any open order.
@@ -94,8 +94,32 @@ The purchased-lootbox EV-multiplier cap allocation must be **independent of the 
 
 ## Traceability
 
-> Filled by the roadmapper — maps every requirement above to exactly one phase.
+> Maps every v45.0 requirement to exactly one phase. INV-01..06 are provable acceptance criteria carried by the Phase 311 TST phase that proves them (each mapped to its proving TST below). 22/22 requirements mapped; 0 orphaned.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| _(pending roadmap)_ | — | — |
+| SPEC-01 | Phase 309 (SPEC) | Pending |
+| SPEC-02 | Phase 309 (SPEC) | Pending |
+| SPEC-03 | Phase 309 (SPEC) | Pending |
+| SPEC-04 | Phase 309 (SPEC) | Pending |
+| IMPL-01 | Phase 310 (IMPL) | Pending |
+| IMPL-02 | Phase 310 (IMPL) | Pending |
+| IMPL-03 | Phase 310 (IMPL) | Pending |
+| IMPL-04 | Phase 310 (IMPL) | Pending |
+| IMPL-05 | Phase 310 (IMPL) | Pending |
+| INV-01 | Phase 311 (TST) — proven by TST-01 | Pending |
+| INV-02 | Phase 311 (TST) — proven by TST-02 | Pending |
+| INV-03 | Phase 311 (TST) — proven by TST-02 | Pending |
+| INV-04 | Phase 311 (TST) — proven by TST-03 | Pending |
+| INV-05 | Phase 311 (TST) — proven by TST-04 | Pending |
+| INV-06 | Phase 311 (TST) — proven by TST-01/TST-04; re-attested Phase 312 SWEEP + Phase 313 §3 | Pending |
+| TST-01 | Phase 311 (TST) | Pending |
+| TST-02 | Phase 311 (TST) | Pending |
+| TST-03 | Phase 311 (TST) | Pending |
+| TST-04 | Phase 311 (TST) | Pending |
+| TST-05 | Phase 311 (TST) | Pending |
+| SWP-01 | Phase 312 (SWEEP) | Pending |
+| SWP-02 | Phase 312 (SWEEP) | Pending |
+| AUDIT-01 | Phase 313 (TERMINAL) | Pending |
+| AUDIT-02 | Phase 313 (TERMINAL) | Pending |
+| CLS-01 | Phase 313 (TERMINAL) | Pending |

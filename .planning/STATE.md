@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-05-20T09:56:24.919Z"
 last_activity: 2026-05-20
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,30 +20,30 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** (between milestones) — v44.0 SHIPPED 2026-05-20; v45.0+ plan-phase consumes the 135-anchor §9d handoff register as load-bearing input.
+**Current focus:** v45.0 (planning) — close the lootbox EV-cap open-ordering hole (V-081 / S-22). Bonus-only cap + purchase-time allocation tally make the purchased-lootbox EV-multiplier cap order-independent. Design LOCKED in `.planning/REQUIREMENTS.md` + `.planning/v45-lootbox-evcap-fix-plan.md`; roadmap phases 309-313 execute the existing work (do NOT redesign).
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 309 (SPEC) — not started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-20 — Milestone v45.0 started
+Status: Roadmap drafted; awaiting phase planning
+Last activity: 2026-05-20 — Milestone v45.0 roadmap created (Phases 309-313; SPEC → IMPL → TST → SWEEP → TERMINAL)
 
-## Current Milestone Phases (v44.0 — CLOSED)
+## Current Milestone Phases (v45.0 — PLANNING)
+
+5-phase FIX-MILESTONE: SPEC → IMPL → TST → SWEEP → TERMINAL. Audit baseline `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` (source tree frozen after `67e9ea6f` + `e5928fb8`). Single batched USER-APPROVED contract diff at Phase 310 IMPL per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md`; AGENT-COMMITTED test/planning/audit per `D-43N-TEST-COMMITS-AUTO-01`. Files touched: `DegenerusGameStorage.sol`, `DegenerusGameLootboxModule.sol`, `DegenerusGameMintModule.sol`, `DegenerusGameWhaleModule.sol`.
 
 | Phase | Name | Type | Requirements | Wave Shape | Depends on | Status |
 |-------|------|------|--------------|------------|------------|--------|
-| 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..13 + EDGE-01..20] | 1 AGENT-COMMITTED artifact bundle | nothing | COMPLETE (5/5 plans shipped; 304-SPEC.md) |
-| 305 | Implementation | IMPL | IMPL-01..04 primary (4) | 1 USER-APPROVED contract commit | Phase 304 | COMPLETE (USER-APPROVED contract commit `213f9184`; per-day `pendingByDay` + INV-13 sentinel) |
-| 306 | Test | TST | INV-01..13 + TST-01..07 + EDGE-01..20 primary | 1 AGENT-COMMITTED test commit bundle | Phase 305 | COMPLETE (13 INV + 20 EDGE PROVEN at FOUNDRY_PROFILE=deep; `306-VERIFICATION.md` ALL_PASS) |
-| 307 | Adversarial Sweep | SWEEP | SWP-01..05 primary (5) | 1 AGENT-COMMITTED adversarial-log bundle | Phases 305 + 306 | COMPLETE — unanimous-NEGATIVE (72/72 disposition rows; 0 FINDING_CANDIDATE; 3 SAFE_BY_DESIGN; Task 6 gate skipped) |
-| 308 | Delta Audit + Findings Consolidation | TERMINAL | AUDIT-01..09 + REG-01 + CLS-01..02 primary (12) [+ §3.F INV attestation] | 2 AGENT-COMMITTED commits (deliverable + closure flip) | All prior | COMPLETE — `audit/FINDINGS-v44.0.md` shipped; Commit 1 `6f0ba296` + Commit 2 closure flip; chmod 444 |
+| 309 | SPEC — Locked Layout + Bonus-Only Cap + Shared-Cap Disposition | SPEC | SPEC-01..04 (4) | 1 AGENT-COMMITTED SPEC artifact bundle | nothing | Not started |
+| 310 | Implementation — Single Batched USER-APPROVED Contract Diff | IMPL | IMPL-01..05 (5) | 1 USER-APPROVED batched contract commit | Phase 309 | Not started |
+| 311 | Test — Foundry Coverage | TST | TST-01..05 (5) + INV-01..06 (6, carried) | 1+ AGENT-COMMITTED test commit(s) | Phase 310 | Not started |
+| 312 | Adversarial Sweep | SWEEP | SWP-01..02 (2) | 1 AGENT-COMMITTED adversarial-log bundle | Phases 310 + 311 | Not started |
+| 313 | Delta Audit + Findings Consolidation | TERMINAL | AUDIT-01..02 (2) + CLS-01 (1) | 2 AGENT-COMMITTED commits (deliverable + closure flip) | All prior | Not started |
 
-**Coverage:** 63/63 v44.0 requirements satisfied (13 INV + 5 SPEC + 4 IMPL + 7 TST + 20 EDGE + 5 SWP + 9 AUDIT + 1 REG + 2 CLS = 66 spans; 63 distinct primary IDs per `D-308-INV-COUNT-01` actual coverage of 13 INV + 20 EDGE). INV-01..13 + EDGE-01..20 spanned multiple phases by design (SPEC documented → TST proved → TERMINAL §3.F attested).
+**Coverage:** 22/22 v45.0 requirements mapped (4 SPEC + 5 IMPL + 6 INV + 5 TST + 2 SWP + 2 AUDIT + 1 CLS); 0 orphaned. INV-01..06 are provable acceptance criteria carried by the Phase 311 TST phase that proves them (INV-01←TST-01; INV-02/03←TST-02; INV-04←TST-03; INV-05←TST-04; INV-06←TST-01/TST-04, re-attested Phase 312 SWEEP + Phase 313 §3). Full mapping in `.planning/REQUIREMENTS.md` Traceability table.
 
-**Closure verdict (achieved):** `7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 13 of 13 INVARIANTS PROVEN; 20 of 20 EDGE_CASES TESTED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED` per `D-308-INV-COUNT-01` (override of ROADMAP 12/18 template; emergent INV-13 from `D-305-SENTINEL-01`; EDGE 18→20 from `D-305-DUST-FLOOR-01` + EDGE-19). Emitted at `audit/FINDINGS-v44.0.md` §9a.
-
-**Closure orchestration (fired):** `D-44N-CLOSURE-PREAUTH-01` — Phase 308 2-commit sequential SHA orchestration fired autonomously (Commit 1 SHA `6f0ba2963a10654ba554a8c333c5ee80c54a8349` captured → Commit 2 closure flip + chmod 444; NO user-pause at TERMINAL commit-2).
+**Closure verdict (target):** `V-081 RESOLVED_AT_V45; ORDER_INDEPENDENCE PROVEN; PENALTY_DODGE ELIMINATED; SEED/ROLL UNCHANGED; 0 NEW_FINDINGS; 0 FREEZE_REGRESSIONS; KNOWN_ISSUES_UNMODIFIED`. To be emitted at `audit/FINDINGS-v45.0.md` §9a at Phase 313.
 
 ## Last Shipped Milestone
 
