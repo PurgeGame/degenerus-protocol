@@ -25,9 +25,9 @@ The purchased-lootbox EV-multiplier cap allocation must be **independent of the 
 
 > Locked at the SPEC phase. Every file:line citation in the plan grep-verified against contract HEAD per `feedback_verify_call_graph_against_source.md` before any patch.
 
-- [ ] **SPEC-01**: Packed-slot layout locked. The per-(index, player) score snapshot widens from `uint16` to a single packed `uint256` word holding `score+1` (`uint16`, 0 = unset) plus `adjustedPortion` (the cap-eligible ETH that received the bonus). Field widths chosen for the cap-bounded maxima: `adjustedPortion ≤ 10 ETH` fits `uint64` (2⁶⁴ ≈ 18.44 ETH). Mapping values never cross-pack and the `uint16` already occupied a full slot, so **no new storage slot is introduced**. SPEC evaluates whether any other cap-bounded per-box field can co-pack into the same word and locks the final layout + pack/unpack helper signatures. Optional rename `lootboxEvScorePacked → lootboxEvPacked` (now genuinely packed) decided here.
-- [ ] **SPEC-02**: Bonus-only cap semantics locked. In `_applyEvMultiplierWithCap`, `evMultiplierBps <= LOOTBOX_EV_NEUTRAL_BPS` (penalty or neutral) returns `amount * evMultiplierBps / 10_000` and never consumes the cap; only `evMultiplierBps > NEUTRAL` draws from the cap. Applies to all three callers.
-- [ ] **SPEC-03**: Allocation-time tally + open-time application locked. At each purchased-box deposit, with the box's frozen multiplier from the first-deposit score snapshot: if `mult <= NEUTRAL`, store `score+1` only (no cap draw); if `mult > NEUTRAL`, draw `add = min(depositAmount, remaining)` where `remaining = CAP - lootboxEvBenefitUsedByLevel[player][lvl]`, advance the used-cap accumulator, and accumulate `adjustedPortion`. First deposit writes `score+1`; later deposits accumulate `adjustedPortion` only. `openLootBox` applies `scaled = mult <= NEUTRAL ? amount*mult/1e4 : adj*mult/1e4 + (amount - adj)` with no cap SLOAD/SSTORE, and the zero-at-open write clears the whole packed slot.
+- [x] **SPEC-01**: Packed-slot layout locked. The per-(index, player) score snapshot widens from `uint16` to a single packed `uint256` word holding `score+1` (`uint16`, 0 = unset) plus `adjustedPortion` (the cap-eligible ETH that received the bonus). Field widths chosen for the cap-bounded maxima: `adjustedPortion ≤ 10 ETH` fits `uint64` (2⁶⁴ ≈ 18.44 ETH). Mapping values never cross-pack and the `uint16` already occupied a full slot, so **no new storage slot is introduced**. SPEC evaluates whether any other cap-bounded per-box field can co-pack into the same word and locks the final layout + pack/unpack helper signatures. Optional rename `lootboxEvScorePacked → lootboxEvPacked` (now genuinely packed) decided here.
+- [x] **SPEC-02**: Bonus-only cap semantics locked. In `_applyEvMultiplierWithCap`, `evMultiplierBps <= LOOTBOX_EV_NEUTRAL_BPS` (penalty or neutral) returns `amount * evMultiplierBps / 10_000` and never consumes the cap; only `evMultiplierBps > NEUTRAL` draws from the cap. Applies to all three callers.
+- [x] **SPEC-03**: Allocation-time tally + open-time application locked. At each purchased-box deposit, with the box's frozen multiplier from the first-deposit score snapshot: if `mult <= NEUTRAL`, store `score+1` only (no cap draw); if `mult > NEUTRAL`, draw `add = min(depositAmount, remaining)` where `remaining = CAP - lootboxEvBenefitUsedByLevel[player][lvl]`, advance the used-cap accumulator, and accumulate `adjustedPortion`. First deposit writes `score+1`; later deposits accumulate `adjustedPortion` only. `openLootBox` applies `scaled = mult <= NEUTRAL ? amount*mult/1e4 : adj*mult/1e4 + (amount - adj)` with no cap SLOAD/SSTORE, and the zero-at-open write clears the whole packed slot.
 - [ ] **SPEC-04**: Shared-cap disposition locked. `resolveLootboxDirect` (decimator/degenerette) and `resolveRedemptionLootbox` have no purchase/allocation point and keep consuming the same per-(player, level) cap at resolution via `_applyEvMultiplierWithCap` (now with Change 1). Backward-trace per `feedback_rng_backward_trace.md` confirms the shared accumulator cannot be reordered against a known word (purchased allocation fixed pre-word; on-the-fly scores already frozen — decimator = bucket-at-burn, degenerette = bet-time; both bounded by the cap). Disposition documented (fix-or-accept) in the SPEC.
 
 ### Implementation (IMPL) — Contract Changes
@@ -98,9 +98,9 @@ The purchased-lootbox EV-multiplier cap allocation must be **independent of the 
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SPEC-01 | Phase 309 (SPEC) | Pending |
-| SPEC-02 | Phase 309 (SPEC) | Pending |
-| SPEC-03 | Phase 309 (SPEC) | Pending |
+| SPEC-01 | Phase 309 (SPEC) | Complete |
+| SPEC-02 | Phase 309 (SPEC) | Complete |
+| SPEC-03 | Phase 309 (SPEC) | Complete |
 | SPEC-04 | Phase 309 (SPEC) | Pending |
 | IMPL-01 | Phase 310 (IMPL) | Pending |
 | IMPL-02 | Phase 310 (IMPL) | Pending |

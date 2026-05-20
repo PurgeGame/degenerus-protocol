@@ -51,7 +51,7 @@
   5. Every cited file:line across the 4 touched contracts grep-verified against source HEAD per `feedback_verify_call_graph_against_source.md`; zero "by construction" / "single fn reaches all paths" claims.
 
 **Plans:** 2 plans
-- [ ] 309-01-PLAN.md — §0 grep-verified call-graph evidence + SPEC-01 packed-layout lock + SPEC-02 bonus-only cap + SPEC-03 allocation tally/open-apply
+- [x] 309-01-PLAN.md — §0 grep-verified call-graph evidence + SPEC-01 packed-layout lock + SPEC-02 bonus-only cap + SPEC-03 allocation tally/open-apply
 - [ ] 309-02-PLAN.md — §4 SPEC-04 shared-cap disposition: word-independence backward-trace + full in-window SLOAD enumeration + ACCEPT verdict
 
 ### Phase 310: Implementation — Single Batched USER-APPROVED Contract Diff (IMPL)

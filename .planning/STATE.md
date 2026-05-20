@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: Close the Lootbox EV-Cap Open-Ordering Hole (V-081)
 status: executing
-last_updated: "2026-05-20T10:57:25.654Z"
-last_activity: 2026-05-20 -- Phase 309 planning complete
+last_updated: "2026-05-20T11:08:38.589Z"
+last_activity: 2026-05-20 -- Completed 309-01-PLAN.md (309-SPEC §0-§3)
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 10
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v45.0 (planning) — close the lootbox EV-cap open-ordering hole (V-081 / S-22). Bonus-only cap + purchase-time allocation tally make the purchased-lootbox EV-multiplier cap order-independent. Design LOCKED in `.planning/REQUIREMENTS.md` + `.planning/v45-lootbox-evcap-fix-plan.md`; roadmap phases 309-313 execute the existing work (do NOT redesign).
+**Current focus:** Phase 309 — spec-locked-layout-bonus-only-cap-shared-cap-disposition-spe
 
 ## Current Position
 
-Phase: 309 (SPEC) — context gathered
-Plan: —
-Status: Ready to execute
-Last activity: 2026-05-20 -- Phase 309 planning complete
+Phase: 309 (spec-locked-layout-bonus-only-cap-shared-cap-disposition-spe) — EXECUTING
+Plan: 2 of 2
+Status: Plan 309-01 complete (309-SPEC §0-§3 locked); 309-02 (§4 SPEC-04) remaining
+Last activity: 2026-05-20 -- Completed 309-01-PLAN.md; stopped at: ready for 309-02
 
 ## Current Milestone Phases (v45.0 — PLANNING)
 
@@ -513,3 +513,6 @@ Audit deliverables:
 - [Phase 306-05]: D-306-05-BRACKET-SCOPE-01: gasleft() bracket measures regression-asserted call only (sdgnrs.burn for burn path, sdgnrs.claimRedemption for claim path) — conservative against v43 full-lifecycle baseline
 - [Phase 306-05]: D-306-05-THEORY-FIRST-01: theoretical worst-case derivation per-line per-op attribution table written before assertion-limit constants hard-coded (feedback_gas_worst_case.md compliance)
 - [Phase 307]: Phase 307 SWEEP unanimous-NEGATIVE — 0 FINDING_CANDIDATE across 3-skill HYBRID — 72/72 disposition rows resolved (22 auditor + 22 hunter + 28 economist). HYBRID-fallback to SEQUENTIAL_MAIN_CONTEXT for hunter+economist per Task tool unavailability (v43 P302 + v42 P296 precedent). Dual-gate skeptic filter D-307-SKEPTIC-FILTER-01 produced 0 discards (no FINDING_CANDIDATE inputs). Task 6 elevation gate SKIPPED per D-307-ELEVATION-ROUTING-01 precondition fail.
+- [Phase 309]: D-309-01-WIDTH: SPEC §1 locks adjustedPortion at uint64; v45 fix-plan uint96 SUPERSEDED (10 ETH cap = 1e19 wei, ceil(log2)=64, ~84% headroom)
+- [Phase 309]: D-309-01-COPACK: SPEC §1 co-packs baseLevel into lootboxPurchasePacked (net -1 slot, removes lootboxBaseLevelPacked); lootboxDay co-pack REJECTED — it is a roll-seed input at LootboxModule.sol:545 (freeze hard line)
+- [Phase 309]: D-309-01-621-DISCREPANCY: HEAD LootboxModule.sol:621 seed binds amountEth (BURNIE open path), not amount as the plan claimed; recorded in 309-SPEC §0.F discrepancy box, IMPL-05 must preserve amountEth
