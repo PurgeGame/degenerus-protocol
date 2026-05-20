@@ -25,7 +25,49 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 **Contract HEAD anchor (v40.0 closure):** `cd549499` (carried forward as deeper audit-baseline NON-WIDENING anchor)
 
-## Current Milestone: v44.0 sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
+## Current Milestone: v45.0 Close the Lootbox EV-Cap Open-Ordering Hole (V-081)
+
+**Goal:** Make the purchased-lootbox EV-multiplier cap allocation **independent of open order**, fully closing the last strict-definition self-manipulation freeze violation (V-081 / S-22). Today `_applyEvMultiplierWithCap` consumes the per-(player, level) `LOOTBOX_EV_BENEFIT_CAP = 10 ether` cap **greedily at open** and lets *any* non-neutral box (including sub-100% penalties) draw it down — so a player who has seen the per-index word can open >100% boxes first to both max the bonus AND exhaust the cap before the penalty boxes, dodging sub-100% penalties. Two changes close it: (1) a bonus-only cap so penalties never touch the cap, and (2) move purchased-box cap consumption from open → allocation, packing the per-box bonus allocation so `openLootBox` applies a frozen result.
+
+**Audit baseline:** v44.0 closure HEAD `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`. Source tree otherwise frozen after `67e9ea6f` (EV-score live fallback removed) + `e5928fb8` (decimator/degenerette EV frozen at commitment).
+
+**Non-negotiable acceptance criteria (every one provable at close):**
+
+1. **Order-independence** — a player with mixed >100%/<100% boxes totalling >10 ETH gets the **same** total payout regardless of the order boxes are opened.
+2. **Penalty no longer dodgeable** — sub-100% boxes always apply their penalty on the full amount and never consume the cap.
+3. **Bonus correctness** — for a player with ≤10 ETH of bonus-eligible deposits, every bonus box receives its full multiplier in any order.
+4. **Seed/roll unchanged** — the raw `amount` still feeds `keccak(rngWord, player, day, amount)`; only reward scaling uses the frozen `adjustedPortion`. No change to which index/word a box rolls against.
+5. **All three callers still resolve** — `openLootBox` (purchased), `resolveLootboxDirect` (decimator/degenerette), `resolveRedemptionLootbox` (redemption) all apply correctly; the shared per-(player, level) cap accumulator does not reintroduce a known-word ordering edge.
+6. **No freeze regression** — no new player-discretionary writer of any slot consumed against the live VRF word in `[rng request, unlock]`.
+7. `forge build` clean; gas net-neutral-or-better on the open path (−1 SLOAD / −1 SSTORE at open; +1 SSTORE at allocation into an already-written packed slot).
+
+**Target features:**
+
+- **Change 1 — Bonus-only cap** (`DegenerusGameLootboxModule._applyEvMultiplierWithCap`): replace the `== LOOTBOX_EV_NEUTRAL_BPS` early return with `if (evMultiplierBps <= LOOTBOX_EV_NEUTRAL_BPS) return (amount * evMultiplierBps) / 10_000;` — penalties (and neutral) apply directly and never touch the cap; only >100% boxes consume it. Benefits all three callers immediately.
+- **Change 2 — Purchase-time tally + maximal packing** (purchased-box path): move cap consumption for purchased boxes from open → allocation. Widen the per-(index, player) score snapshot to a single packed slot holding `score+1` plus the per-box `adjustedPortion` (the ETH that received the bonus, cap-bounded ≤10 ETH). At each deposit (`MintModule` + `WhaleModule`), if the box's frozen multiplier is >neutral, draw `add = min(deposit, remaining cap)` from `lootboxEvBenefitUsedByLevel[player][lvl]` and accumulate `adjustedPortion`; first deposit also writes `score+1`. `openLootBox` then applies the frozen allocation with **no cap SLOAD/SSTORE**.
+- **Open-site application** (`openLootBox`): unpack `(score+1, adjustedPortion)`; `scaled = mult <= NEUTRAL ? amount*mult/1e4 : adj*mult/1e4 + (amount - adj)`. Keep the zero-at-open write (now zeroes the whole packed slot).
+- **Order-independence + penalty-dodge regression tests** proving acceptance criteria 1–3 across randomized open orders; resolution tests proving 5; build/gas check proving 7.
+
+**Key context / constraints:**
+
+- **Maximal variable packing (user directive, 2026-05-20).** Be gas-conscious: pack to the tightest practical field widths and reuse the existing slot rather than adding a new one. The cap is 10 ETH (≈ 2⁶³·¹ wei) so `adjustedPortion` fits in `uint64`; `score+1` is `uint16`. The widened snapshot replaces a `uint16` value that already occupied a full slot (mapping values never cross-pack), so no new slot is introduced. IMPL/SPEC should evaluate whether any other cap-bounded per-box field can co-pack into the same word, and choose the smallest widths that hold the cap-bounded maxima. Packing here is gas-positive and weakens no freeze invariant — but never trade an invariant for gas per `feedback_security_over_gas`.
+- **Mainnet contract posture** — touches `DegenerusGameStorage.sol`, `DegenerusGameLootboxModule.sol`, `DegenerusGameMintModule.sol`, `DegenerusGameWhaleModule.sol`. Single batched USER-APPROVED diff per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md` + `feedback_manual_review_before_push.md`. Audit/test/planning artifacts AGENT-COMMITTED.
+- **Pre-launch posture preserved** — redeploy-fresh per `feedback_frozen_contracts_no_future_proofing.md`; storage-layout break acceptable; no migration concerns.
+- **Shared-cap verification required** — `resolveLootboxDirect` + `resolveRedemptionLootbox` keep consuming the same per-(player, level) cap at resolution (no purchase point) and keep calling `_applyEvMultiplierWithCap` (now with Change 1). Backward-trace per `feedback_rng_backward_trace.md` to confirm the shared accumulator does not let a known-word actor reorder allocation: purchased allocation is fixed pre-word; on-the-fly scores are already frozen (decimator = bucket-at-burn, degenerette = bet-time); both bounded by the cap. Document if accepted.
+- **Call-graph claims grep-verified** — the plan's line:file citations (`_applyEvMultiplierWithCap` callers, `lootboxEvScorePacked` declaration, deposit sites in Mint/Whale) verified against contract HEAD at SPEC per `feedback_verify_call_graph_against_source.md` before any patch.
+- **Closes an earlier accept-as-documented stance** — V-081 was previously a candidate to accept as bounded self-MEV; user reverses to close it cleanly, consistent with how decimator/degenerette were closed in `e5928fb8`.
+- **Phase numbering** continues from v44.0's last phase (308) → v45.0 starts at Phase 309.
+- **Estimated phase shape (roadmapper finalizes):** SPEC → IMPL → TST → SWEEP → TERMINAL (`audit/FINDINGS-v45.0.md` + closure flip), or a leaner shape given the narrow single-surface scope.
+
+**Out of scope for v45.0** (deferred):
+
+- VRF-freeze housekeeping — LR_INDEX seed-search rotation confirmation (V-089/090) + re-catalog the v44 redemption storage (`pendingByDay`/`pendingResolveDay`) in RNGLOCK-CATALOG.
+- v44.0 bookkeeping cleanup — flip the 36 stale REQUIREMENTS.md checkboxes, register emergent INV-13/EDGE-19/EDGE-20, backfill the missing Phase 305 VERIFICATION.md.
+- Remaining v43 backlog — 135 FIXREC entries (HANDOFF-01..110, 118..119), 22 ADMA recommendations, ERRATUM-01.
+- Accepted self-MEV races left as documented — sDGNRS pool-balance claim-time race, decimator-claim/degenerette live-score (now closed at commitment), boon/activity timing.
+- Game-over thorough hardening — separate dedicated milestone scope.
+
+## Completed Milestone: v44.0 sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
 
 **Goal:** Eliminate the V-184 sStonk cross-day re-roll exploit + 6 subsumed catalog rows (V-186/V-188/V-190/V-191/V-192/V-193 — FIXREC §0.6 fan-out, HANDOFF-111..117) by structurally redesigning sStonk gambling-burn redemption storage. Replace `redemptionPeriodIndex` + single-pool `pendingRedemptionEthBase` / `pendingRedemptionBurnieBase` with per-day keyed `pendingByDay[uint32]` mapping matching the existing lootbox/coinflip per-id commitment pattern. **Prove via formal invariants + exhaustive edge-case coverage that the resulting contract is 100% non-manipulable by any non-EXEMPT actor under all timing combinations.**
 
@@ -845,6 +887,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+*Last updated: 2026-05-20 — Milestone v45.0 started (Close the Lootbox EV-Cap Open-Ordering Hole / V-081). Single-surface contract change closing the last strict-definition self-manipulation freeze violation: bonus-only cap (penalties never consume the 10-ETH cap) + purchase-time tally with maximal packing so `openLootBox` applies a frozen, order-independent allocation. v44.0 demoted to Completed; its phases (304–308) archived to `.planning/milestones/v44.0-phases/`. Phase numbering continues from 308. Scope is tight per user — VRF-freeze housekeeping + v44 bookkeeping cleanup deferred. Prior footer below.*
+
 *Last updated: 2026-05-19 — Phase 304 COMPLETE (SPEC + Invariant Model). 304-SPEC.md @ 960 lines locks 35 requirements (INV-01..12 + SPEC-01..05 + EDGE-01..18) as the load-bearing input for Phase 305 IMPL. SPEC-04 (a-d) sub-locks (gameOver-mid-pending semantics, BURNIE release timing, pendingByDay delete-at-resolve, pendingRedemptions delete-at-claim) flagged in REQUIREMENTS.md as "to lock at SPEC phase" are locked. §4 captures 7-deletion design-intent walks + actor game-theory + V-184 joint-elimination attestation (SPEC-01 ∧ SPEC-03 ∧ SPEC-04(c)). §5 manifest grep-verifies 61 file:line citations against contract HEAD (50 sStonk + 11 AdvanceModule including all 3 inline-duplicated resolveRedemptionPeriod call sites at :1230 + :1293 + :1323 per Phase 294 BURNIE-gap precedent); 0 CORRECTED / 0 ABSENT; 6 forbidden-lexicon claims ("by construction" / "trivially safe") reframed in §1-§4. Phase 305 IMPL is next: single batched USER-APPROVED contract diff per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md`.*
 
 *Prior: 2026-05-18 — v43.0 milestone OPENED (Total rngLock Determinism — Every VRF Input Frozen at Commitment). Audit baseline v42.0 closure HEAD `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`. Goal: at `rngLockedFlag = true`, every storage slot that participates in any VRF-influenced output is frozen until `rngLockedFlag = false`; only the incoming VRF word + its deterministic derivations may be unknown. Exempt entry points: `advanceGame()` + reachable resolution flow, VRF coordinator callback, `retryLootboxRng()` failsafe (`D-42N-RETRY-RNG-DOMAIN-SEP-01` Option A accepted). All other external/public functions (bets, mints, claims, transfers, approvals, affiliate writes, admin/owner parameter updates, governance) must either revert when `rngLockedFlag = true` if they write a participating slot OR be proven to write zero participating slots. Catalog-first shape: 298 CATALOG (VRF read-graph enumeration + per-(slot × writer) verdict table) → 299..N FIX surfaces → N+1 ADMIN-LOCKDOWN → N+2 FUZZ (state-shuffle Foundry harness) → N+3 SWEEP (3-skill HYBRID adversarial: `/contract-auditor` SEQUENTIAL + `/zero-day-hunter` + `/economic-analyst` PARALLEL_SUBAGENT per D-296-INVOKE-01 carry) → N+4 TERMINAL (`audit/FINDINGS-v43.0.md` + closure flip). Phase numbering continues from Phase 297 → first v43.0 phase is 298. v42.0 archived. Requirements + roadmap definition in progress. No SAFE_BY_DESIGN escape hatch — "could possibly affect" = theoretical reachability; eliminate even if economic likelihood is LOW.*

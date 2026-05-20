@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: (between-milestones)
-milestone_name: (between milestones — v44.0 shipped)
-status: completed
-last_updated: "2026-05-20T06:30:00.000Z"
-last_activity: 2026-05-20 -- v44.0 SHIPPED — Phase 308 TERMINAL closure flip (Commit 1 6f0ba296 + Commit 2)
+milestone: v45.0
+milestone_name: Close the Lootbox EV-Cap Open-Ordering Hole (V-081)
+status: planning
+last_updated: "2026-05-20T09:56:24.919Z"
+last_activity: 2026-05-20
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 13
-  completed_plans: 13
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 ## Current Position
 
-Phase: (between milestones) — v44.0 CLOSED
+Phase: Not started (defining requirements)
 Plan: —
-Status: v44.0 milestone SHIPPED (5/5 phases; 13/13 plans); closure flip landed at Phase 308 Commit 2
-Last activity: 2026-05-20 -- v44.0 SHIPPED — closure signal `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`
+Status: Defining requirements
+Last activity: 2026-05-20 — Milestone v45.0 started
 
 ## Current Milestone Phases (v44.0 — CLOSED)
 
