@@ -10,9 +10,10 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-**Active milestone:** v44.0 — sStonk Per-Day Redemption Refactor + Accounting Invariant Proof (started 2026-05-19; consumes audit/FINDINGS-v43.0.md §9d HANDOFF-111..117 anchors + FIXREC §103 V-184 mechanic as load-bearing input)
-**Last shipped:** v43.0 — Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment (2026-05-19; closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`; 0 of 0 F-43-NN; 111 of 111 CATALOG_VIOLATIONS DEFERRED_TO_V44; 142-anchor v44.0 handoff register; 5 Tier-1 ACCEPT_AS_DOCUMENTED user fast-path 2026-05-19; KNOWN_ISSUES_UNMODIFIED)
-**Prior shipped:** v42.0 — Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf + Lootbox RNG Retry (2026-05-18; closure signal `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`; 0 of 0 F-42-NN; 1 Tier-1 ACCEPT_AS_DOCUMENTED on (xiv) retryLootboxRng; KNOWN_ISSUES_UNMODIFIED)
+**Active milestone:** (between milestones) — v44.0 SHIPPED 2026-05-20; v45.0+ plan-phase consumes the 135-anchor `audit/FINDINGS-v44.0.md` §9d handoff register as load-bearing input.
+**Last shipped:** v44.0 — sStonk Per-Day Redemption Refactor + Accounting Invariant Proof (2026-05-20; closure signal `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`; 7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 13 of 13 INVARIANTS PROVEN; 20 of 20 EDGE_CASES TESTED; 0 NEW_FINDINGS; 135-anchor v45.0+ handoff register; KNOWN_ISSUES_UNMODIFIED)
+**Prior shipped:** v43.0 — Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment (2026-05-19; closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`; 0 of 0 F-43-NN; 111 of 111 CATALOG_VIOLATIONS DEFERRED_TO_V44; 142-anchor v44.0 handoff register; KNOWN_ISSUES_UNMODIFIED)
+**Second-prior shipped:** v42.0 — Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf + Lootbox RNG Retry (2026-05-18; closure signal `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`; 0 of 0 F-42-NN; 1 Tier-1 ACCEPT_AS_DOCUMENTED on (xiv) retryLootboxRng; KNOWN_ISSUES_UNMODIFIED)
 **Prior shipped:** v41.0 — Cross-Call Determinism Fix (mint-batch + hero-override) (2026-05-17; closure signal `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4`; 3 of 3 F-41-NN RESOLVED_AT_V41)
 **Prior shipped:** v40.0 — Unified Whole-Ticket Award Protocol + Whole-BURNIE Floor (2026-05-14; closure signal `MILESTONE_V40_AT_HEAD_cd549499`)
 **Prior shipped:** v39.0 — Lootbox Whole-Ticket Rounding + WWXRP Consolation (2026-05-13; closure signal `MILESTONE_V39_AT_HEAD_6a7455d1`)

@@ -1,7 +1,7 @@
 # Requirements: Degenerus Protocol — Audit Repository
 
 **Defined:** 2026-05-19
-**Milestone:** v44.0 sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
+**Milestone:** v44.0 sStonk Per-Day Redemption Refactor + Accounting Invariant Proof — **SHIPPED 2026-05-20** (closure signal `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`; all AUDIT-01..09 + REG-01 + CLS-01..02 Complete)
 **Posture:** USER-APPROVED contract change per `feedback_batch_contract_approval.md`; AGENT-COMMITTED test/planning per `D-43N-TEST-COMMITS-AUTO-01` lineage
 **Audit baseline:** v43.0 closure HEAD `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`
 **Load-bearing input:** `audit/FINDINGS-v43.0.md` §9d HANDOFF-111..117 + FIXREC §103 V-184 mechanic
@@ -14,6 +14,8 @@
 The sStonk gambling-burn redemption flow at `contracts/StakedDegenerusStonk.sol` must satisfy **12 formal accounting invariants** under **all** burn/advance/claim/gameOver timing combinations. The V-184 catastrophic cross-day re-roll exploit and its 6 subsumed catalog rows (V-186/V-188/V-190/V-191/V-192/V-193) must be **structurally eliminated** — not patched. The fix replaces the single-pool `redemptionPeriodIndex` design with per-day keyed `pendingByDay[uint32]` storage matching the protocol's existing per-id commitment pattern used in lootbox + coinflip flows. Every accounting invariant must be **provable** via Foundry invariant testing across random action sequences. Every enumerated edge case must be tested with both positive (correct behavior under the case) and negative (any manipulation attempt reverts or produces no exploit) assertions.
 
 **Non-negotiable closure verdict at v44.0 TERMINAL:** `7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 12 of 12 INVARIANTS PROVEN; 18 of 18 EDGE_CASES TESTED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`.
+
+> **Verdict override at close (per `D-308-INV-COUNT-01`):** the original ROADMAP/REQUIREMENTS template above reads `12 of 12 / 18 of 18`; the v44.0 deliverable emits Phase 306 actual coverage `13 of 13 INVARIANTS PROVEN; 20 of 20 EDGE_CASES TESTED` (emergent INV-13 single-pool sentinel per `D-305-SENTINEL-01`; EDGE 18→20 from `D-305-DUST-FLOOR-01` + EDGE-19). The original template strings are preserved here per the plan; see `audit/FINDINGS-v44.0.md` §9a for the authoritative closure verdict and §3.C + §3.F for the in-band divergence rationale.
 
 ---
 
@@ -100,15 +102,15 @@ The sStonk gambling-burn redemption flow at `contracts/StakedDegenerusStonk.sol`
 
 ### Audit (AUDIT) — 9-Section TERMINAL Deliverable
 
-- [ ] **AUDIT-01**: `audit/FINDINGS-v44.0.md` 9-section deliverable. §3.A delta-surface table enumerates the USER-APPROVED contract commit (Phase 305) + every AGENT-COMMITTED test/audit/planning commit.
-- [ ] **AUDIT-02**: §3.B per-exempt-entry-point attestation matrix — 3 exempt entry points × per-participating-slot row (sStonk-specific row for `redemptionPeriods[day].roll` exempt writer = `resolveRedemptionPeriod`).
-- [ ] **AUDIT-03**: §3.C conservation re-proof — INV-01..12 each attested as proven by a specific TST-NN / EDGE-NN test ID. Formal invariant attestation matrix.
-- [ ] **AUDIT-04**: §3.D V-184 disposition — explicit RESOLVED-AT-V44 attestation; HANDOFF-111..117 all closed; cross-reference to TST-04 + TST-05 + EDGE-07.
-- [ ] **AUDIT-05**: §3.E remaining v43 backlog reference — 135 anchors deferred to v45.0+ via the v43.0 §9d handoff register; v44.0 does not consume them.
-- [ ] **AUDIT-06**: §4 adversarial-pass disposition — every SWP-01..03 hypothesis (charged + beyond-charge) with verdict; skeptic-reviewer filter results.
-- [ ] **AUDIT-07**: §3.F formal invariant attestation matrix — NEW section specific to v44.0 — `(INV-NN, test_id, status)` rows × 12 invariants. status = PROVEN / WAIVED (with rationale) / FAILING (blocks closure).
-- [ ] **AUDIT-08**: §6 KI walkthrough — EXC-01..04 RE_VERIFIED-NEGATIVE-scope at v44 close (v44 audit subject is sStonk redemption refactor; zero affiliate-roll / AdvanceModule game-over-RNG-substitution interaction beyond sStonk-internal). KNOWN-ISSUES.md UNMODIFIED per `D-44N-KI-01`.
-- [ ] **AUDIT-09**: §9 closure attestation — `7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 12 of 12 INVARIANTS PROVEN; 18 of 18 EDGE_CASES TESTED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED` verdict format. v45.0+ handoff register (135 remaining v43 anchors).
+- [x] **AUDIT-01**: `audit/FINDINGS-v44.0.md` 9-section deliverable. §3.A delta-surface table enumerates the USER-APPROVED contract commit (Phase 305) + every AGENT-COMMITTED test/audit/planning commit. (Complete at Phase 308; §3.A 8 rows; row 2 = `213f9184`)
+- [x] **AUDIT-02**: §3.B per-exempt-entry-point attestation matrix — 3 exempt entry points × per-participating-slot row (sStonk-specific row for `redemptionPeriods[day].roll` exempt writer = `resolveRedemptionPeriod`). (Complete at Phase 308; §3.B.1..4)
+- [x] **AUDIT-03**: §3.C conservation re-proof — INV-01..13 each attested as proven by a specific TST-NN / EDGE-NN test ID. Formal invariant attestation matrix. (Complete at Phase 308; 13 INV per `D-308-INV-COUNT-01`)
+- [x] **AUDIT-04**: §3.D V-184 disposition — explicit RESOLVED-AT-V44 attestation; HANDOFF-111..117 all closed; cross-reference to TST-04 + TST-05 + EDGE-07. (Complete at Phase 308; `7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44`)
+- [x] **AUDIT-05**: §3.E remaining v43 backlog reference — 135 anchors deferred to v45.0+ via the v43.0 §9d handoff register; v44.0 does not consume them. (Complete at Phase 308; 142 - 7 = 135)
+- [x] **AUDIT-06**: §4 adversarial-pass disposition — every SWP-01..03 hypothesis (charged + beyond-charge) with verdict; skeptic-reviewer filter results. (Complete at Phase 308; ~17 condensed rows per `D-308-ADVERSARIAL-DISP-01`)
+- [x] **AUDIT-07**: §3.F formal invariant attestation matrix — NEW section specific to v44.0 — `(INV-NN, test_id, status)` rows × 13 invariants. status = PROVEN / WAIVED (with rationale) / FAILING (blocks closure). (Complete at Phase 308; 13 PROVEN; 0 WAIVED; 0 FAILING per `D-308-INV-COUNT-01`)
+- [x] **AUDIT-08**: §6 KI walkthrough — EXC-01..04 RE_VERIFIED-NEGATIVE-scope at v44 close (v44 audit subject is sStonk redemption refactor; zero affiliate-roll / AdvanceModule game-over-RNG-substitution interaction beyond sStonk-internal). KNOWN-ISSUES.md UNMODIFIED per `D-44N-KI-01`. (Complete at Phase 308; §6.1..6.5)
+- [x] **AUDIT-09**: §9 closure attestation — `7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 13 of 13 INVARIANTS PROVEN; 20 of 20 EDGE_CASES TESTED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED` verdict format. v45.0+ handoff register (135 remaining v43 anchors). (Complete at Phase 308; verdict overridden to 13/20 per `D-308-INV-COUNT-01`; see `audit/FINDINGS-v44.0.md` §9a)
 
 ### Regression (REG) — Cross-Milestone Non-Widening
 
@@ -116,8 +118,8 @@ The sStonk gambling-burn redemption flow at `contracts/StakedDegenerusStonk.sol`
 
 ### Closure (CLS) — 2-Commit Sequential SHA Orchestration
 
-- [ ] **CLS-01**: 2-commit sequential SHA orchestration per `D-303-CLOSURE-01` precedent → `D-44N-CLOSURE-01`. Commit 1 ships `audit/FINDINGS-v44.0.md` with `<commit-1-sha>` placeholder + planner-private bundle. Commit 2 resolves placeholder + propagates verbatim to 5 FINDINGS locations + 3 cross-doc targets + `chmod 444 audit/FINDINGS-v44.0.md` + atomic 5-doc closure flip (ROADMAP / STATE / MILESTONES / PROJECT / REQUIREMENTS).
-- [ ] **CLS-02**: Closure signal `MILESTONE_V44_AT_HEAD_<commit-1-sha>` propagated atomically. KNOWN-ISSUES.md UNMODIFIED per `D-44N-KI-01`. Pre-authorization per `D-44N-CLOSURE-PREAUTH-01` (user grants closure-flip authorization at SPEC phase signoff; eliminates Tier-1 ping at TERMINAL commit-2).
+- [x] **CLS-01**: 2-commit sequential SHA orchestration per `D-303-CLOSURE-01` precedent → `D-44N-CLOSURE-01`. Commit 1 ships `audit/FINDINGS-v44.0.md` with `<commit-1-sha>` placeholder + planner-private bundle. Commit 2 resolves placeholder + propagates verbatim to 5 FINDINGS locations + 3 cross-doc targets + `chmod 444 audit/FINDINGS-v44.0.md` + atomic 5-doc closure flip (ROADMAP / STATE / MILESTONES / PROJECT / REQUIREMENTS). (Complete at Phase 308; Commit 1 `6f0ba296` + Commit 2 closure flip)
+- [x] **CLS-02**: Closure signal `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` propagated atomically. KNOWN-ISSUES.md UNMODIFIED per `D-44N-KI-01`. Pre-authorization per `D-44N-CLOSURE-PREAUTH-01` (user grants closure-flip authorization at SPEC phase signoff; eliminates Tier-1 ping at TERMINAL commit-2). (Complete at Phase 308; propagated to 5 FINDINGS verbatim locations + 3 cross-doc targets)
 
 ---
 
@@ -208,15 +210,15 @@ Explicitly excluded from v44.0; documented to prevent scope creep:
 | SWP-03 | Phase 307 SWEEP | Complete |
 | SWP-04 | Phase 307 SWEEP | Complete |
 | SWP-05 | Phase 307 SWEEP | Complete |
-| AUDIT-01 | Phase 308 TERMINAL | Pending |
-| AUDIT-02 | Phase 308 TERMINAL | Pending |
-| AUDIT-03 | Phase 308 TERMINAL | Pending |
-| AUDIT-04 | Phase 308 TERMINAL | Pending |
-| AUDIT-05 | Phase 308 TERMINAL | Pending |
-| AUDIT-06 | Phase 308 TERMINAL | Pending |
-| AUDIT-07 | Phase 308 TERMINAL | Pending |
-| AUDIT-08 | Phase 308 TERMINAL | Pending |
-| AUDIT-09 | Phase 308 TERMINAL | Pending |
+| AUDIT-01 | Phase 308 TERMINAL | Complete (§3.A 8-row delta-surface; row 2 = `213f9184`) |
+| AUDIT-02 | Phase 308 TERMINAL | Complete (§3.B 3-exempt + sStonk row) |
+| AUDIT-03 | Phase 308 TERMINAL | Complete (§3.C 13-INV conservation re-proof) |
+| AUDIT-04 | Phase 308 TERMINAL | Complete (§3.D V-184 RESOLVED-AT-V44; 7 of 7) |
+| AUDIT-05 | Phase 308 TERMINAL | Complete (§3.E 135-anchor backlog reference) |
+| AUDIT-06 | Phase 308 TERMINAL | Complete (§4 ~17-row condensed disposition) |
+| AUDIT-07 | Phase 308 TERMINAL | Complete (§3.F 13 PROVEN matrix per `D-308-INV-COUNT-01`) |
+| AUDIT-08 | Phase 308 TERMINAL | Complete (§6 KI walkthrough EXC-01..04; KNOWN_ISSUES_UNMODIFIED) |
+| AUDIT-09 | Phase 308 TERMINAL | Complete (§9 closure attestation; verdict overridden to 13/20 per `D-308-INV-COUNT-01`) |
 | REG-01 | Phase 308 TERMINAL §5 | Complete |
-| CLS-01 | Phase 308 TERMINAL Commit 1 (audit deliverable + planner-private bundle) | Pending |
-| CLS-02 | Phase 308 TERMINAL Commit 2 (closure-flip + verbatim propagation + chmod 444) | Pending |
+| CLS-01 | Phase 308 TERMINAL Commit 1 (audit deliverable + planner-private bundle) | Complete (Commit 1 `6f0ba296`) |
+| CLS-02 | Phase 308 TERMINAL Commit 2 (closure-flip + verbatim propagation + chmod 444) | Complete (Commit 2 closure flip; signal propagated) |

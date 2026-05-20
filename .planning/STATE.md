@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v44.0
-milestone_name: sStonk Per-Day Redemption Refactor + Accounting Invariant Proof
-status: planning
-last_updated: "2026-05-19T17:07:45.174Z"
-last_activity: 2026-05-19
+milestone: (between-milestones)
+milestone_name: (between milestones — v44.0 shipped)
+status: completed
+last_updated: "2026-05-20T06:30:00.000Z"
+last_activity: 2026-05-20 -- v44.0 SHIPPED — Phase 308 TERMINAL closure flip (Commit 1 6f0ba296 + Commit 2)
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
-  percent: 80
+  completed_phases: 5
+  total_plans: 13
+  completed_plans: 13
+  percent: 100
 ---
 
 # Project State
@@ -20,32 +20,50 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 308 — delta audit + findings consolidation (terminal)
+**Current focus:** (between milestones) — v44.0 SHIPPED 2026-05-20; v45.0+ plan-phase consumes the 135-anchor §9d handoff register as load-bearing input.
 
 ## Current Position
 
-Phase: 308
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-19
+Phase: (between milestones) — v44.0 CLOSED
+Plan: —
+Status: v44.0 milestone SHIPPED (5/5 phases; 13/13 plans); closure flip landed at Phase 308 Commit 2
+Last activity: 2026-05-20 -- v44.0 SHIPPED — closure signal `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`
 
-## Current Milestone Phases
+## Current Milestone Phases (v44.0 — CLOSED)
 
 | Phase | Name | Type | Requirements | Wave Shape | Depends on | Status |
 |-------|------|------|--------------|------------|------------|--------|
-| 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..12 + EDGE-01..18] | 1 AGENT-COMMITTED artifact bundle | nothing | COMPLETE (5/5 plans shipped; 304-SPEC.md ready for Phase 305 IMPL) |
-| 305 | Implementation | IMPL | IMPL-01..04 primary (4) | 1 USER-APPROVED contract commit | Phase 304 | Not started |
-| 306 | Test | TST | INV-01..12 + TST-01..07 + EDGE-01..18 primary (37) | 1 AGENT-COMMITTED test commit bundle | Phase 305 | Not started |
-| 307 | Adversarial Sweep | SWEEP | SWP-01..05 primary (5) | 1 AGENT-COMMITTED adversarial-log bundle | Phases 305 + 306 | Phase 307 SWEEP complete — unanimous-NEGATIVE (72/72 disposition rows; 0 FINDING_CANDIDATE; 3 SAFE_BY_DESIGN; Task 6 gate skipped); ready for Phase 308 TERMINAL |
-| 308 | Delta Audit + Findings Consolidation | TERMINAL | AUDIT-01..09 + REG-01 + CLS-01..02 primary (12) [+ §3.F INV attestation] | 2 AGENT-COMMITTED commits (deliverable + closure flip) | All prior | Not started |
+| 304 | SPEC + Invariant Model | SPEC | SPEC-01..05 primary (5) [+ docs INV-01..13 + EDGE-01..20] | 1 AGENT-COMMITTED artifact bundle | nothing | COMPLETE (5/5 plans shipped; 304-SPEC.md) |
+| 305 | Implementation | IMPL | IMPL-01..04 primary (4) | 1 USER-APPROVED contract commit | Phase 304 | COMPLETE (USER-APPROVED contract commit `213f9184`; per-day `pendingByDay` + INV-13 sentinel) |
+| 306 | Test | TST | INV-01..13 + TST-01..07 + EDGE-01..20 primary | 1 AGENT-COMMITTED test commit bundle | Phase 305 | COMPLETE (13 INV + 20 EDGE PROVEN at FOUNDRY_PROFILE=deep; `306-VERIFICATION.md` ALL_PASS) |
+| 307 | Adversarial Sweep | SWEEP | SWP-01..05 primary (5) | 1 AGENT-COMMITTED adversarial-log bundle | Phases 305 + 306 | COMPLETE — unanimous-NEGATIVE (72/72 disposition rows; 0 FINDING_CANDIDATE; 3 SAFE_BY_DESIGN; Task 6 gate skipped) |
+| 308 | Delta Audit + Findings Consolidation | TERMINAL | AUDIT-01..09 + REG-01 + CLS-01..02 primary (12) [+ §3.F INV attestation] | 2 AGENT-COMMITTED commits (deliverable + closure flip) | All prior | COMPLETE — `audit/FINDINGS-v44.0.md` shipped; Commit 1 `6f0ba296` + Commit 2 closure flip; chmod 444 |
 
-**Coverage:** 63/63 v44.0 requirements mapped (12 INV + 5 SPEC + 4 IMPL + 7 TST + 18 EDGE + 5 SWP + 9 AUDIT + 1 REG + 2 CLS = 63). Zero orphaned requirements; INV-01..12 + EDGE-01..18 spanning multiple phases by design (SPEC documents → TST proves → TERMINAL §3.F attests).
+**Coverage:** 63/63 v44.0 requirements satisfied (13 INV + 5 SPEC + 4 IMPL + 7 TST + 20 EDGE + 5 SWP + 9 AUDIT + 1 REG + 2 CLS = 66 spans; 63 distinct primary IDs per `D-308-INV-COUNT-01` actual coverage of 13 INV + 20 EDGE). INV-01..13 + EDGE-01..20 spanned multiple phases by design (SPEC documented → TST proved → TERMINAL §3.F attested).
 
-**Closure verdict target:** `7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 12 of 12 INVARIANTS PROVEN; 18 of 18 EDGE_CASES TESTED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED` at Phase 308 §9 attestation.
+**Closure verdict (achieved):** `7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 13 of 13 INVARIANTS PROVEN; 20 of 20 EDGE_CASES TESTED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED` per `D-308-INV-COUNT-01` (override of ROADMAP 12/18 template; emergent INV-13 from `D-305-SENTINEL-01`; EDGE 18→20 from `D-305-DUST-FLOOR-01` + EDGE-19). Emitted at `audit/FINDINGS-v44.0.md` §9a.
 
-**Pre-authorized closure orchestration:** `D-44N-CLOSURE-PREAUTH-01` (locks at Phase 304 SPEC signoff) — Phase 308 2-commit sequential SHA orchestration fires autonomously without re-pinging at TERMINAL commit-2.
+**Closure orchestration (fired):** `D-44N-CLOSURE-PREAUTH-01` — Phase 308 2-commit sequential SHA orchestration fired autonomously (Commit 1 SHA `6f0ba2963a10654ba554a8c333c5ee80c54a8349` captured → Commit 2 closure flip + chmod 444; NO user-pause at TERMINAL commit-2).
 
 ## Last Shipped Milestone
+
+**v44.0 — sStonk Per-Day Redemption Refactor + Accounting Invariant Proof** (shipped 2026-05-20)
+
+- 5 phases (304-308), 13 plans total (304: 5 plans + 305: 1 plan + 306: 5 plans + 307: 1 plan + 308: 1 plan), 63/63 requirements satisfied (13 INV + 5 SPEC + 4 IMPL + 7 TST + 20 EDGE + 5 SWP + 9 AUDIT + 1 REG + 2 CLS).
+- Audit baseline: v43.0 closure HEAD `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` → v44.0 closure HEAD `6f0ba2963a10654ba554a8c333c5ee80c54a8349` (resolved at the Phase 308 Commit 1 per `D-44N-CLOSURE-01` 2-commit sequential SHA orchestration; pre-authorized per `D-44N-CLOSURE-PREAUTH-01`).
+- FIX-MILESTONE: 1 USER-APPROVED `contracts/` commit (`213f9184 feat(305-01): v44.0 sStonk per-day redemption refactor — 1-slot DayPending + INV-13 sentinel`) at Phase 305 per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md`. 6 AGENT-COMMITTED `test/` commits at Phase 306 per `D-43N-TEST-COMMITS-AUTO-01` (`de75f620`/`333c803f`/`3143ea9c`/`d24a2487`/`b102bc0f`/`e0f7d77e`). The only intended `test/` diff vs the v43.0 baseline is the Phase 301 vm.skip flip at `test/fuzz/RngLockDeterminism.t.sol:1277` (`b102bc0f`; vm.skip count 17→16).
+- Result: V-184 sStonk cross-day re-roll CATASTROPHE (HANDOFF-111) + 6 subsumed catalog rows (HANDOFF-112..117 = V-186/V-188/V-190/V-191/V-192/V-193) structurally closed via the per-day-keyed `pendingByDay[uint32]` storage refactor. **7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44.** 13 of 13 INVARIANTS PROVEN at FOUNDRY_PROFILE=deep (256 × 128 × 32768 calls per invariant; INV-13 emergent single-pool sentinel per `D-305-SENTINEL-01`). 20 of 20 EDGE_CASES TESTED at 10k runs each (EDGE-19 multi-day-RNG-stall stale-claim recovery + EDGE-20 burn-too-small dust floor extend the original 18). 0 NEW_FINDINGS.
+- Adversarial pass: Phase 307 3-skill HYBRID `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` per `D-307-INVOKE-01` (HYBRID-fallback to SEQUENTIAL_MAIN_CONTEXT; persona fidelity via dedicated per-skill MDs). **unanimous-NEGATIVE** — 72/72 disposition rows; 69 NEGATIVE-VERIFIED + 3 SAFE_BY_DESIGN; 0 FINDING_CANDIDATE; Task 6 elevation gate SKIPPED per `D-307-AUDIT-ONLY-ROUTING-01`; 0 skeptic-filter discards per `D-307-SKEPTIC-FILTER-01`. `/degen-skeptic` OUT OF SCOPE per `D-271-ADVERSARIAL-02` carry.
+- LEAN regression: REG-01 PASS — v43.0 closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` NON-WIDENING at v44 close HEAD; intended diffs bounded to `213f9184` (contract) + `b102bc0f` (vm.skip flip); all other v43.0 audit-subject surfaces byte-identical.
+- KI envelopes EXC-01..03 RE_VERIFIED-NEGATIVE-scope at v44 (v44 audit subject is the sStonk per-day refactor with zero affiliate-roll / AdvanceModule game-over-RNG-substitution interaction beyond sStonk-internal); EXC-04 STRUCTURALLY ELIMINATED preserved (grep proof: `grep -rn "entropyStep" contracts/` returns ZERO matches at v44 close HEAD).
+- KNOWN-ISSUES.md UNMODIFIED per `D-44N-KI-01` (byte-identical across both Phase 308 commits). Closure verdict `7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 13 of 13 INVARIANTS PROVEN; 20 of 20 EDGE_CASES TESTED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`.
+- Deliverable: `audit/FINDINGS-v44.0.md` (FINAL READ-only at v44.0 closure HEAD, 9 sections incl v44-specific §3.D V-184 disposition + §3.F formal invariant attestation matrix; chmod 444).
+- Closure signal: `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` (resolved at the Phase 308 Commit 1; propagated verbatim to 5 FINDINGS verbatim locations + 3 cross-document propagation targets per `D-44N-CLOSURE-01`).
+- v45.0+ handoff register: **135 anchors** per `D-44N-CLOSURE-01` carry from `D-303-V44-HANDOFF-REGISTER-01` (112 D-43N-V44-HANDOFF-NN excluding HANDOFF-111..117 closed by v44 + 22 D-43N-V44-ADMA-NN + 1 D-43N-V44-ADMA-ERRATUM-01; `119 - 7 + 22 + 1 = 135`; v43.0 §9d shipped 142). v45.0+ plan-phase consumes as load-bearing input; ~24 active sub-phases after FIXREC §0.6 subsumption.
+- Process notes: 5-phase FIX-MILESTONE spec + impl + tst + sweep + terminal shape. Phase 308 TERMINAL is SOURCE-TREE FROZEN — zero `contracts/` + zero `test/` mutations during Phase 308 (verified via `git diff HEAD~2 HEAD -- contracts/ test/` returning no output across both Phase 308 commits). 2-commit AGENT-COMMITTED terminal-phase shape per `D-44N-CLOSURE-01` (Commit 1 audit deliverable + planner-private bundle; Commit 2 closure flip + SHA propagation + chmod 444 + atomic 5-doc closure flip across ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS). Terminal-phase zero forward-cite emission per `D-44N-FCITE-01`. §9 verdict math overrides ROADMAP 12/18 template to Phase 306 actual 13/20 coverage per `D-308-INV-COUNT-01`.
+- See `.planning/MILESTONES.md` for archive
+
+### Prior Shipped Milestone
 
 **v43.0 — Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment** (shipped 2026-05-19)
 

@@ -1,5 +1,36 @@
 # Milestones
 
+## v44.0 sStonk Per-Day Redemption Refactor + Accounting Invariant Proof (Shipped: 2026-05-20)
+
+**Shape:** 5-phase FIX-MILESTONE (304 SPEC + 305 IMPL + 306 TST + 307 SWEEP + 308 TERMINAL); 13 plans; 63 requirements satisfied (13 INV + 5 SPEC + 4 IMPL + 7 TST + 20 EDGE + 5 SWP + 9 AUDIT + 1 REG + 2 CLS).
+
+**Audit baseline:** v43.0 closure HEAD `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` → v44.0 closure HEAD `6f0ba2963a10654ba554a8c333c5ee80c54a8349` (resolved at Phase 308 Commit 1 per `D-44N-CLOSURE-01` 2-commit sequential SHA orchestration; Commit 2 propagates verbatim to 5 FINDINGS verbatim locations + 3 cross-document propagation targets + applies chmod 444 + atomic 5-doc closure flip). 1 USER-APPROVED `contracts/` commit (`213f9184 feat(305-01): v44.0 sStonk per-day redemption refactor — 1-slot DayPending + INV-13 sentinel`) at Phase 305 per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` — THE only contract diff in the milestone. 6 AGENT-COMMITTED `test/` commits at Phase 306 per `D-43N-TEST-COMMITS-AUTO-01`.
+
+**Phases:**
+- **Phase 304 — SPEC** (`6edc3967` + `315280b0` + `971688ba` + supporting plan commits): SPEC + Invariant Model. Formal documentation of the per-day redemption refactor BEFORE any contract change — INV-01..12 formal accounting properties + SPEC-01..05 locked design decisions (`pendingByDay[uint32]` struct shape + composite-key `pendingRedemptions[player][day]` + explicit `dayToResolve` arg + gameOver-mid-pending semantics + supply-snapshot lazy-init + storage-refund `delete` sites) + EDGE-01..18 scenario enumeration + design-intent backward-trace per `feedback_design_intent_before_deletion.md` + grep-verified citation manifest per `feedback_verify_call_graph_against_source.md`. Zero contract/test mutations.
+- **Phase 305 — IMPL** (`213f9184` USER-APPROVED contract + `c6f7045b`/`47ab0b3f` planning bundle): replaces `redemptionPeriodIndex` single-pool counter with per-day-keyed `pendingByDay[uint32]` storage + `pendingResolveDay` sentinel (INV-13 emergent per `D-305-SENTINEL-01`). Touches `StakedDegenerusStonk.sol` + `DegenerusGameAdvanceModule.sol` + `IStakedDegenerusStonk.sol` + `DegenerusVault.sol`. Emergent surfaces: `D-305-SENTINEL-01` + `D-305-STRUCT-TIGHTEN-01` (1-slot DayPending) + `D-305-GWEI-SNAP-01` + `D-305-DUST-FLOOR-01` + `D-305-DAYTORESOLVE-01`.
+- **Phase 306 — TST** (`de75f620`/`333c803f`/`3143ea9c`/`d24a2487`/`b102bc0f`/`e0f7d77e`): 13 INV + 20 EDGE PROVEN at FOUNDRY_PROFILE=deep (256 × 128 × 32768 calls per invariant; 10k runs per EDGE). `test/invariant/RedemptionAccounting.t.sol` (13 `invariant_INV_NN_*`) + `test/fuzz/RedemptionEdgeCases.t.sol` (20 `testFuzz_EDGE_NN_*`) + `test/fuzz/StakedStonkRedemption.t.sol` + `test/fuzz/RedemptionGas.t.sol`. Phase 301 vm.skip(HANDOFF-111..117) flipped to strict byte-identity assertions at `test/fuzz/RngLockDeterminism.t.sol:1277` (`b102bc0f`; vm.skip 17→16). `306-VERIFICATION.md` ALL_PASS.
+- **Phase 307 — SWEEP** (`b3fcee2c`/`a83ebc4c`/`3dc7cafd`/`5448cd5d`/`1352be27`/`e58b03b9`/`c7ef7219`): 3-skill HYBRID adversarial pass (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; HYBRID-fallback to SEQUENTIAL_MAIN_CONTEXT; persona fidelity via dedicated per-skill MDs). **unanimous-NEGATIVE** — 72/72 disposition rows; 69 NEGATIVE-VERIFIED + 3 SAFE_BY_DESIGN; 0 FINDING_CANDIDATE; Task 6 elevation gate SKIPPED per `D-307-AUDIT-ONLY-ROUTING-01`; 0 skeptic-filter discards per `D-307-SKEPTIC-FILTER-01`.
+- **Phase 308 — TERMINAL** (Commit 1 audit deliverable `6f0ba296` + Commit 2 closure flip): Delta Audit + Findings Consolidation. SOURCE-TREE FROZEN — zero `contracts/` + zero `test/` mutations during Phase 308. 9-section deliverable §1 + §2 + §3 (a-f) + §3.A delta-surface table (8 rows) + §3.B per-exempt-entry-point attestation matrix (3 exempt + sStonk row) + §3.C 13-INV conservation re-proof + §3.D V-184 RESOLVED-AT-V44 disposition (v44-NEW) + §3.E v45.0+ backlog reference + §3.F formal invariant attestation matrix (13 PROVEN, v44-NEW) + §4 ~17-row condensed adversarial disposition + §5 LEAN REG-01 + §6 KI walkthrough EXC-01..04 + §7 + §8 + §9 closure attestation w/ §9d 135-anchor v45.0+ handoff register. 2-commit AGENT-COMMITTED sequential SHA orchestration per `D-44N-CLOSURE-01` pre-authorized per `D-44N-CLOSURE-PREAUTH-01`.
+
+**Result:** **V-184 sStonk cross-day re-roll CATASTROPHE (HANDOFF-111) + 6 subsumed catalog rows (HANDOFF-112..117) structurally closed via the per-day-keyed refactor `213f9184`.** Closure verdict `7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 13 of 13 INVARIANTS PROVEN; 20 of 20 EDGE_CASES TESTED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED` per `D-308-INV-COUNT-01` (override of ROADMAP 12/18 template; emergent INV-13 from `D-305-SENTINEL-01`; EDGE 18→20 from `D-305-DUST-FLOOR-01` + EDGE-19).
+
+**Adversarial pass:** Phase 307 3-skill HYBRID; unanimous-NEGATIVE (72/72 disposition rows; 0 FINDING_CANDIDATE; 3 SAFE_BY_DESIGN). RE-PASS not triggered per `D-307-AUDIT-ONLY-ROUTING-01`. `/degen-skeptic` OUT OF SCOPE per `D-271-ADVERSARIAL-02` carry; `/economic-analyst` IN SCOPE per `D-271-ADVERSARIAL-03` carry.
+
+**LEAN regression:** REG-01 PASS — v43.0 closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` NON-WIDENING at v44 close; intended diffs bounded to `213f9184` (contract) + `b102bc0f` (vm.skip flip); all other v43.0 audit-subject surfaces byte-identical.
+
+**KI envelopes:** EXC-01..03 RE_VERIFIED-NEGATIVE-scope at v44 close; EXC-04 STRUCTURALLY ELIMINATED preserved (`grep -rn "entropyStep" contracts/` ZERO matches). KNOWN-ISSUES.md UNMODIFIED per `D-44N-KI-01` (byte-identical across both Phase 308 commits).
+
+**Deliverable:** `audit/FINDINGS-v44.0.md` (FINAL READ-only at v44.0 closure HEAD, 9 sections incl v44-specific §3.D + §3.F; chmod 444).
+
+**Closure signal:** `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` (resolved at Phase 308 Commit 1; propagated verbatim to 5 FINDINGS verbatim locations + 3 cross-document propagation targets per `D-44N-CLOSURE-01`).
+
+**v45.0+ handoff register:** 135 anchors per `D-44N-CLOSURE-01` carry from `D-303-V44-HANDOFF-REGISTER-01` (112 D-43N-V44-HANDOFF-NN excluding HANDOFF-111..117 + 22 D-43N-V44-ADMA-NN + 1 D-43N-V44-ADMA-ERRATUM-01; `119 - 7 + 22 + 1 = 135`; v43.0 §9d shipped 142). v45.0+ plan-phase consumes as load-bearing input.
+
+**Process notes:** FIX-MILESTONE per `D-44N-CLOSURE-01`. Phase 308 terminal phase SOURCE-TREE FROZEN; 2-commit AGENT-COMMITTED sequential SHA orchestration pre-authorized per `D-44N-CLOSURE-PREAUTH-01`. Forward-cite zero-emission per `D-44N-FCITE-01`. §9 verdict math overrides ROADMAP 12/18 template to Phase 306 actual 13/20 coverage per `D-308-INV-COUNT-01` (in-band divergence-rationale at §3.C + §3.F). v44.0 → v45.0+ handoff via 135-anchor consolidated register at FINDINGS-v44.0.md §9d.
+
+---
+
 ## v43.0 Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment (Shipped: 2026-05-19)
 
 **Phases completed:** 6 phases, 34 plans, 32 tasks

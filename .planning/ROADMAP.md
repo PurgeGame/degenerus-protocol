@@ -24,13 +24,16 @@
 - ✅ **v41.0 Cross-Call Determinism Fix (mint-batch + hero-override)** — Phases 281-289 + 284 (shipped 2026-05-17; closure signal `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4`; 3 of 3 F-41-NN RESOLVED_AT_V41) — see [milestones/v41.0-ROADMAP.md](milestones/v41.0-ROADMAP.md)
 - ✅ **v42.0 Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf + Lootbox RNG Retry** — Phases 290-297 (shipped 2026-05-18; closure signal `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`; 0 of 0 F-42-NN; 1 Tier-1 ACCEPT_AS_DOCUMENTED on (xiv) retryLootboxRng; KNOWN_ISSUES_UNMODIFIED) — see [milestones/v42.0-ROADMAP.md](milestones/v42.0-ROADMAP.md)
 - ✅ **v43.0 Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment** — Phases 298-303 (shipped 2026-05-19; closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`; 0 of 0 F-43-NN; 111 of 111 CATALOG_VIOLATIONS DEFERRED_TO_V44; 142-anchor v44.0 handoff register; KNOWN_ISSUES_UNMODIFIED)
-- 🚧 **v44.0 sStonk Per-Day Redemption Refactor + Accounting Invariant Proof** — Phases 304-308 (started 2026-05-19; consumes v43.0 §9d HANDOFF-111..117 + FIXREC §103 V-184 mechanic; 5-phase SPEC → IMPL → TST → SWEEP → TERMINAL shape; USER-APPROVED contract commit at Phase 305 per `feedback_batch_contract_approval.md`; AGENT-COMMITTED test/planning per `D-43N-TEST-COMMITS-AUTO-01`)
+- ✅ **v44.0 sStonk Per-Day Redemption Refactor + Accounting Invariant Proof** — Phases 304-308 (shipped 2026-05-20; closure signal `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`; 7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 13 of 13 INVARIANTS PROVEN; 20 of 20 EDGE_CASES TESTED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED; 135-anchor v45.0+ handoff register) — see `audit/FINDINGS-v44.0.md`
 
 ## Phases
 
-(Prior milestone phases archived in the collapsible blocks below. Active milestone (v44.0) phases listed flat. Phase directories live under `.planning/milestones/v{X.Y}-phases/` for archived milestones and `.planning/phases/` for the active milestone.)
+(Prior milestone phases archived in the collapsible blocks below. No active milestone (between milestones at v44.0 close). Phase directories live under `.planning/milestones/v{X.Y}-phases/` for archived milestones and `.planning/phases/` for the most-recently-shipped milestone.)
 
-### v44.0 Active Phases (started 2026-05-19)
+<details>
+<summary>✅ v44.0 sStonk Per-Day Redemption Refactor + Accounting Invariant Proof (Phases 304-308) — SHIPPED 2026-05-20; closure signal `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`</summary>
+
+### v44.0 Phases (shipped 2026-05-20)
 
 **Goal:** FIX MILESTONE. Eliminate the V-184 sStonk cross-day re-roll exploit + 6 subsumed catalog rows (V-186/V-188/V-190/V-191/V-192/V-193 — FIXREC §0.6 fan-out, HANDOFF-111..117) by structurally redesigning sStonk gambling-burn redemption storage. Replace `redemptionPeriodIndex` + single-pool `pendingRedemptionEthBase` / `pendingRedemptionBurnieBase` with per-day keyed `pendingByDay[uint32]` mapping matching the existing lootbox/coinflip per-id commitment pattern. **Prove via 12 formal accounting invariants + 18 exhaustive edge-case tests that the resulting contract is 100% non-manipulable by any non-EXEMPT actor under all timing combinations.** Non-negotiable closure verdict: `7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 12 of 12 INVARIANTS PROVEN; 18 of 18 EDGE_CASES TESTED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`.
 
@@ -129,7 +132,9 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 308-01-PLAN.md — Ship `audit/FINDINGS-v44.0.md` 9-section TERMINAL deliverable per `D-308-TASK-SPLIT-01` (13 tasks; 2 AGENT-COMMITTED commits per `D-44N-CLOSURE-01`)
+- [x] 308-01-PLAN.md — Ship `audit/FINDINGS-v44.0.md` 9-section TERMINAL deliverable per `D-308-TASK-SPLIT-01` (13 tasks; 2 AGENT-COMMITTED commits per `D-44N-CLOSURE-01`) — SHIPPED 2026-05-20; Commit 1 `6f0ba296` (deliverable) + Commit 2 closure flip; closure signal `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`; verdict 7/7 + 13/13 + 20/20 + 0 NEW + KNOWN_ISSUES_UNMODIFIED per `D-308-INV-COUNT-01`; SOURCE-TREE FROZEN (zero contracts/ + zero test/)
+
+</details>
 
 <details>
 <summary>✅ v43.0 Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment (Phases 298-303) — SHIPPED 2026-05-19; closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`</summary>

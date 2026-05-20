@@ -10,8 +10,8 @@ v42_baseline_signal: MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c
 v41_baseline: 315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4
 v41_baseline_signal: MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4
 user_approved_contract_commit: 213f9184
-audit_subject_head: "<RESOLVED_AT_COMMIT_1>"
-closure_signal: MILESTONE_V44_AT_HEAD_<commit-1-sha>
+audit_subject_head: "6f0ba2963a10654ba554a8c333c5ee80c54a8349"
+closure_signal: MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349
 deliverable: audit/FINDINGS-v44.0.md
 requirements: [AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, AUDIT-05, AUDIT-06, AUDIT-07, AUDIT-08, AUDIT-09,
                REG-01, CLS-01, CLS-02,
@@ -46,14 +46,14 @@ v45_handoff_register_breakdown: "112 D-43N-V44-HANDOFF-NN (HANDOFF-01..110 + HAN
 supersedes: [v43.0]
 status: "FINAL — READ-ONLY"
 read_only: true
-generated_at: "<ISO_DATE_AT_COMMIT_1>"
+generated_at: "2026-05-20T01:27:58-05:00"
 ---
 
 # v44.0 Findings — sStonk Per-Day Redemption Refactor + Accounting Invariant Proof (Terminal; FIX-MILESTONE)
 
 ## 1. Audit Subject + Baseline
 
-**Audit Baseline.** The audit baseline is v43.0 closure HEAD `8111cfc5189f628b64b500c881f9995c3edf0ed2` (closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` carry-forward from `audit/FINDINGS-v43.0.md` §9c). v44.0 closure HEAD is `<RESOLVED_AT_COMMIT_1>` (resolved at Phase 308 Commit 1 per `D-44N-CLOSURE-01` 2-commit sequential SHA orchestration; see §9c for the emitted `MILESTONE_V44_AT_HEAD_<commit-1-sha>` signal). v42 chain reference: `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`. v41 chain reference: `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4`.
+**Audit Baseline.** The audit baseline is v43.0 closure HEAD `8111cfc5189f628b64b500c881f9995c3edf0ed2` (closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` carry-forward from `audit/FINDINGS-v43.0.md` §9c). v44.0 closure HEAD is `6f0ba2963a10654ba554a8c333c5ee80c54a8349` (resolved at Phase 308 Commit 1 per `D-44N-CLOSURE-01` 2-commit sequential SHA orchestration; see §9c for the emitted `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` signal). v42 chain reference: `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`. v41 chain reference: `MILESTONE_V41_AT_HEAD_315978a0c18294e0d7fa5cd4cdfe7f8e5b9a95c4`.
 
 **5-Phase Wave Shape (FIX-MILESTONE spec + impl + tst + sweep + terminal).** Phases 304 (SPEC + Invariant Model) + 305 (IMPL — the v44.0 sStonk per-day redemption refactor) + 306 (TST — Foundry invariant + fuzz coverage) + 307 (SWEEP — 3-skill HYBRID adversarial pass) + 308 (TERMINAL — this deliverable; SOURCE-TREE FROZEN). Per `D-44N-CLOSURE-01`, the v44.0 milestone is a FIX-MILESTONE: ONE USER-APPROVED `contracts/` commit (`213f9184` at Phase 305 IMPL) lands the actual remediation; every other commit across the envelope is AGENT-COMMITTED test/audit/planning per `feedback_no_contract_commits.md` + `D-43N-TEST-COMMITS-AUTO-01` (only mainnet `.sol` files require explicit user approval).
 
@@ -77,7 +77,7 @@ generated_at: "<ISO_DATE_AT_COMMIT_1>"
 - **AUDIT-06:** §4 adversarial-pass disposition — Phase 307 3-skill HYBRID (`/contract-auditor` SEQUENTIAL_MAIN_CONTEXT + `/zero-day-hunter` + `/economic-analyst` HYBRID-fallback) condensed to ~17 hypothesis rows per `D-308-ADVERSARIAL-DISP-01`; full 72-row Disposition cross-referenced to `307-01-ADVERSARIAL-LOG.md`. Outcome: unanimous-NEGATIVE; 72/72 disposition rows; 0 FINDING_CANDIDATE; 3 SAFE_BY_DESIGN; Task 6 elevation gate SKIPPED; 0 skeptic-filter discards.
 - **AUDIT-07:** §3.F formal invariant attestation matrix (NEW for v44.0) — 13 rows `(INV-NN, test_id, status)`; all 13 status=PROVEN; 0 WAIVED; 0 FAILING. In-band divergence-rationale attestation documents the 12→13 / 18→20 override per `D-308-INV-COUNT-01`.
 - **AUDIT-08:** §6 KI walkthrough — EXC-01..03 RE_VERIFIED-NEGATIVE-scope at v44 close (v44 audit subject is the sStonk per-day refactor with zero affiliate-roll / AdvanceModule game-over-RNG-substitution interaction beyond sStonk-internal); EXC-04 STRUCTURALLY ELIMINATED preserved (grep proof `grep -rn "entropyStep" contracts/` returns ZERO matches at v44 close HEAD); KNOWN-ISSUES.md UNMODIFIED per `D-44N-KI-01`.
-- **AUDIT-09:** §9 closure attestation — FIX-milestone verdict per `D-308-INV-COUNT-01` strict math: `7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 13 of 13 INVARIANTS PROVEN; 20 of 20 EDGE_CASES TESTED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`; 5-phase wave summary; closure signal `MILESTONE_V44_AT_HEAD_<commit-1-sha>` propagated to 5 FINDINGS verbatim locations + 3 cross-document targets; §9d v45.0+ handoff register (135 anchors: 112 HANDOFF + 22 ADMA + 1 ERRATUM).
+- **AUDIT-09:** §9 closure attestation — FIX-milestone verdict per `D-308-INV-COUNT-01` strict math: `7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 13 of 13 INVARIANTS PROVEN; 20 of 20 EDGE_CASES TESTED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`; 5-phase wave summary; closure signal `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` propagated to 5 FINDINGS verbatim locations + 3 cross-document targets; §9d v45.0+ handoff register (135 anchors: 112 HANDOFF + 22 ADMA + 1 ERRATUM).
 - **REG-01:** §5 — v43.0 closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2` NON-WIDENING at v44 close HEAD. Every v43.0 audit-subject surface byte-identical at v44.0 close EXCEPT the Phase 301 `vm.skip(HANDOFF-111..117)` lines flipped to strict assertions at `test/fuzz/RngLockDeterminism.t.sol:1277` (intended diff attested in §3.A row 6; Phase 306 Plan 04 `b102bc0f`). The USER-APPROVED contract diff (`213f9184`) is the only intended `contracts/` diff (attested in §3.A row 2).
 
 ### Verdict Math (per D-308-INV-COUNT-01)
@@ -119,7 +119,7 @@ The §6 KI-eligibility 3-predicate test (D-09) — accepted-design + non-exploit
 
 ### Attestation Anchor
 
-`D-44N-CLOSURE-01` 2-commit sequential SHA orchestration: Commit 1 writes `audit/FINDINGS-v44.0.md` with `MILESTONE_V44_AT_HEAD_<commit-1-sha>` placeholder; Commit 2 resolves the placeholder to the Commit 1 SHA, propagates verbatim to 5 FINDINGS verbatim locations + 3 cross-document propagation targets, applies `chmod 444`, and ships the atomic 5-doc closure flip across ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS. Pre-authorized per `D-44N-CLOSURE-PREAUTH-01` (locked at Phase 304 SPEC signoff). §9d v45.0+ handoff register (135 anchors) is load-bearing input for the v45.0+ plan-phase.
+`D-44N-CLOSURE-01` 2-commit sequential SHA orchestration: Commit 1 writes `audit/FINDINGS-v44.0.md` with `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` placeholder; Commit 2 resolves the placeholder to the Commit 1 SHA, propagates verbatim to 5 FINDINGS verbatim locations + 3 cross-document propagation targets, applies `chmod 444`, and ships the atomic 5-doc closure flip across ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS. Pre-authorized per `D-44N-CLOSURE-PREAUTH-01` (locked at Phase 304 SPEC signoff). §9d v45.0+ handoff register (135 anchors) is load-bearing input for the v45.0+ plan-phase.
 
 ---
 
@@ -166,7 +166,7 @@ Row classifications per `{USER-APPROVED-contract, AGENT-COMMITTED-planning, AGEN
 | Row-ID | Phase | Commit-SHA-range | Subject summary | Classification | Delta-class | Cross-reference |
 |--------|-------|------------------|-----------------|----------------|-------------|-----------------|
 | 1 | 304 SPEC | `6edc3967` + `315280b0` + `971688ba` | v44.0 SPEC §1/§2/§3 + EDGE-01..18 enumeration + day-naming consistency | AGENT-COMMITTED-planning | PLANNING | `.planning/phases/304-*/304-SPEC.md` (960 lines; INV-01..12 + SPEC-01..05 + EDGE-01..18); §3.C + §3.F INV/EDGE definitions. |
-| 2 | 305 IMPL | `213f9184` | `feat(305-01): v44.0 sStonk per-day redemption refactor — 1-slot DayPending + INV-13 sentinel`. **THE only contract diff in v44.0.** v44 closure HEAD chains to this contract diff via `MILESTONE_V44_AT_HEAD_<commit-1-sha>`. | USER-APPROVED-contract | CONTRACT | §3b Phase 305; §3.B sStonk-specific exempt-writer row; §3.D.2 V-184 structural closure; touches `StakedDegenerusStonk.sol` + `DegenerusGameAdvanceModule.sol` + `IStakedDegenerusStonk.sol` + `DegenerusVault.sol`. |
+| 2 | 305 IMPL | `213f9184` | `feat(305-01): v44.0 sStonk per-day redemption refactor — 1-slot DayPending + INV-13 sentinel`. **THE only contract diff in v44.0.** v44 closure HEAD chains to this contract diff via `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`. | USER-APPROVED-contract | CONTRACT | §3b Phase 305; §3.B sStonk-specific exempt-writer row; §3.D.2 V-184 structural closure; touches `StakedDegenerusStonk.sol` + `DegenerusGameAdvanceModule.sol` + `IStakedDegenerusStonk.sol` + `DegenerusVault.sol`. |
 | 3 | 305 IMPL | `c6f7045b` + `47ab0b3f` | Phase 305 planning bundle: pre-patch grep-verification manifest + plan-complete summary | AGENT-COMMITTED-planning | PLANNING | `.planning/phases/305-*/305-01-GREP-VERIFICATION.md` + `305-01-SUMMARY.md`. |
 | 4 | 306 TST | `de75f620` | `test(306-01): Foundry invariant harness — 13 INV-NN PROVEN against v44 sStonk per-day source` | AGENT-COMMITTED-test | TEST | `test/invariant/RedemptionAccounting.t.sol` (13 `invariant_INV_NN_*`); §3.C + §3.F test_id source. |
 | 5 | 306 TST | `333c803f` + `3143ea9c` + `d24a2487` | EDGE-01..20 fuzz suite + 8 per-fn fuzz; 10k-runs deep PASS | AGENT-COMMITTED-test | TEST | `test/fuzz/RedemptionEdgeCases.t.sol` (20 `testFuzz_EDGE_NN_*`) + `test/fuzz/StakedStonkRedemption.t.sol` (8 per-fn). |
@@ -561,17 +561,17 @@ Per AUDIT-09 + `D-308-INV-COUNT-01` + `D-44N-CLOSURE-01` + `D-44N-CLOSURE-PREAUT
 
 ### 9b. 5-Phase Wave Summary
 
-Phases 304 (SPEC — `6edc3967` + `315280b0` + `971688ba`; output `.planning/phases/304-*/304-SPEC.md` with INV-01..12 + SPEC-01..05 + EDGE-01..18) + 305 (IMPL — the v44.0 sStonk per-day redemption refactor; USER-APPROVED contract commit `213f9184` + AGENT-COMMITTED planning bundle `c6f7045b`/`47ab0b3f`; output `contracts/StakedDegenerusStonk.sol` per-day-keyed `pendingByDay[uint32]` + `pendingResolveDay` sentinel) + 306 (TST — `de75f620`/`333c803f`/`3143ea9c`/`d24a2487`/`b102bc0f`/`e0f7d77e`; 13 INV + 20 EDGE PROVEN at FOUNDRY_PROFILE=deep; AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`) + 307 (SWEEP — `b3fcee2c`/`a83ebc4c`/`3dc7cafd`/`5448cd5d`/`1352be27`/`e58b03b9`/`c7ef7219`; 3-skill HYBRID; unanimous-NEGATIVE; 72/72 disposition rows; 0 FINDING_CANDIDATE; Task 6 elevation gate SKIPPED per `D-307-AUDIT-ONLY-ROUTING-01`) + 308 (TERMINAL — this deliverable; SOURCE-TREE FROZEN; 2 AGENT-COMMITTED commits per `D-44N-CLOSURE-01`). The 5-phase FIX-MILESTONE wave shape (spec + impl + tst + sweep + terminal) is structurally COMPLETE. Closure signal: `MILESTONE_V44_AT_HEAD_<commit-1-sha>`.
+Phases 304 (SPEC — `6edc3967` + `315280b0` + `971688ba`; output `.planning/phases/304-*/304-SPEC.md` with INV-01..12 + SPEC-01..05 + EDGE-01..18) + 305 (IMPL — the v44.0 sStonk per-day redemption refactor; USER-APPROVED contract commit `213f9184` + AGENT-COMMITTED planning bundle `c6f7045b`/`47ab0b3f`; output `contracts/StakedDegenerusStonk.sol` per-day-keyed `pendingByDay[uint32]` + `pendingResolveDay` sentinel) + 306 (TST — `de75f620`/`333c803f`/`3143ea9c`/`d24a2487`/`b102bc0f`/`e0f7d77e`; 13 INV + 20 EDGE PROVEN at FOUNDRY_PROFILE=deep; AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`) + 307 (SWEEP — `b3fcee2c`/`a83ebc4c`/`3dc7cafd`/`5448cd5d`/`1352be27`/`e58b03b9`/`c7ef7219`; 3-skill HYBRID; unanimous-NEGATIVE; 72/72 disposition rows; 0 FINDING_CANDIDATE; Task 6 elevation gate SKIPPED per `D-307-AUDIT-ONLY-ROUTING-01`) + 308 (TERMINAL — this deliverable; SOURCE-TREE FROZEN; 2 AGENT-COMMITTED commits per `D-44N-CLOSURE-01`). The 5-phase FIX-MILESTONE wave shape (spec + impl + tst + sweep + terminal) is structurally COMPLETE. Closure signal: `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`.
 
 ### 9c. Closure Signal
 
-**Closure signal:** `MILESTONE_V44_AT_HEAD_<commit-1-sha>`.
+**Closure signal:** `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`.
 
 **5 FINDINGS verbatim locations (within `audit/FINDINGS-v44.0.md`):**
-1. Frontmatter `closure_signal:` field (carries `MILESTONE_V44_AT_HEAD_<commit-1-sha>` resolved to the Commit 1 SHA at Commit 2).
-2. §1 Audit Subject prose ("v44.0 closure HEAD is ... the emitted `MILESTONE_V44_AT_HEAD_<commit-1-sha>` signal").
-3. §3.A row 2 sub-text ("v44 closure HEAD chains to this contract diff via `MILESTONE_V44_AT_HEAD_<commit-1-sha>`").
-4. §9b 5-Phase Wave Summary closing line ("Closure signal: `MILESTONE_V44_AT_HEAD_<commit-1-sha>`").
+1. Frontmatter `closure_signal:` field (carries `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` resolved to the Commit 1 SHA at Commit 2).
+2. §1 Audit Subject prose ("v44.0 closure HEAD is ... the emitted `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` signal").
+3. §3.A row 2 sub-text ("v44 closure HEAD chains to this contract diff via `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`").
+4. §9b 5-Phase Wave Summary closing line ("Closure signal: `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`").
 5. §9c Closure Signal section canonical mention (this line) + propagation register listing.
 
 (Frontmatter `audit_subject_head:` carries the raw SHA WITHOUT the `MILESTONE_V44_AT_HEAD_` prefix — the schema-mandated form per `D-297-FINDINGS-FRONTMATTER-01` lineage carry — and is the 6th SHA-bearing location, NOT counted in the 5-FINDINGS-verbatim-location set.)
