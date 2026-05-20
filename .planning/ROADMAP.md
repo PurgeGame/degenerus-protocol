@@ -68,9 +68,9 @@
   5. Raw `amount` still feeds `keccak(rngWord, player, day, amount)` and the rolled index/word is byte-unchanged; `lootboxEth` layout untouched (IMPL-05). USER-APPROVED diff committed exactly once per `feedback_batch_contract_approval.md`.
 
 **Plans:** 3 plans (3 waves; Wave 3 is `autonomous: false` — USER-APPROVAL checkpoint gates the single batched contract commit)
-- [ ] 310-01-PLAN.md — IMPL-02: Storage.sol packed `lootboxPurchasePacked` word + pack/unpack helpers (D-01) + relocated `_lootboxEvMultiplierFromScore` & EV constants (D-02) [shared-base foundation]
-- [ ] 310-02-PLAN.md — IMPL-01 + IMPL-04 + IMPL-05(open): LootboxModule bonus-only `<=` cap + `openLootBox` frozen-apply (no cap SLOAD/SSTORE, whole-word zero) + open-path seed byte-identity
-- [ ] 310-03-PLAN.md — IMPL-03 + IMPL-05(deposit): Mint + Whale purchase-time cap tally (DIV-1/DIV-2 preserved) → `forge build` PASS → USER-APPROVAL gate → single batched 4-file contract commit
+- [x] 310-01-PLAN.md — IMPL-02: Storage.sol packed `lootboxPurchasePacked` word + pack/unpack helpers (D-01) + relocated `_lootboxEvMultiplierFromScore` & EV constants (D-02) [shared-base foundation]
+- [x] 310-02-PLAN.md — IMPL-01 + IMPL-04 + IMPL-05(open): LootboxModule bonus-only `<=` cap + `openLootBox` frozen-apply (no cap SLOAD/SSTORE, whole-word zero) + open-path seed byte-identity
+- [x] 310-03-PLAN.md — IMPL-03 + IMPL-05(deposit): Mint + Whale purchase-time cap tally (DIV-1/DIV-2 preserved) → `forge build` PASS → USER-APPROVAL gate → single batched 4-file contract commit
 
 ### Phase 311: Test — Foundry Coverage (TST)
 
