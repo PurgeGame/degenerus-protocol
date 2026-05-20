@@ -672,7 +672,7 @@ contract DegenerusGameDegeneretteModule is
                             )
                         )
                     ); // 'L'
-                _distributePayout(player, currency, amountPerTicket, payout, lootboxWord);
+                _distributePayout(player, currency, amountPerTicket, payout, lootboxWord, activityScore);
             }
 
             // Award sDGNRS from Reward pool on 6+ match ETH bets
@@ -724,7 +724,8 @@ contract DegenerusGameDegeneretteModule is
         uint8 currency,
         uint128 betAmount,
         uint256 payout,
-        uint256 rngWord
+        uint256 rngWord,
+        uint16 activityScore
     ) private {
         if (currency == CURRENCY_ETH) {
             // 3-tier split rule (PAY-SPLIT-01..02)
@@ -781,9 +782,11 @@ contract DegenerusGameDegeneretteModule is
                 _addClaimableEth(player, ethShare);
             }
 
-            // Convert remainder (if any) to lootbox rewards.
+            // Convert remainder (if any) to lootbox rewards. activityScore is the bet-time
+            // snapshot (decoded in _resolveFullTicketBet), so the lootbox EV multiplier is
+            // frozen at bet commitment — consistent with the spin payout, never live.
             if (lootboxShare > 0) {
-                _resolveLootboxDirect(player, lootboxShare, rngWord);
+                _resolveLootboxDirect(player, lootboxShare, rngWord, activityScore);
             }
         } else if (currency == CURRENCY_BURNIE) {
             coin.mintForGame(player, payout);
@@ -797,7 +800,8 @@ contract DegenerusGameDegeneretteModule is
     function _resolveLootboxDirect(
         address player,
         uint256 amount,
-        uint256 rngWord
+        uint256 rngWord,
+        uint16 activityScore
     ) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
@@ -806,7 +810,8 @@ contract DegenerusGameDegeneretteModule is
                     IDegenerusGameLootboxModule.resolveLootboxDirect.selector,
                     player,
                     amount,
-                    rngWord
+                    rngWord,
+                    activityScore
                 )
             );
         if (!ok) _revertDelegate(data);

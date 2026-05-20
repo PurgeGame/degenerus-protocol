@@ -437,15 +437,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // Lootbox Opening Functions
     // =========================================================================
 
-    /// @dev Calculates EV multiplier based on activity score (ETH lootbox only).
-    ///      Linear scaling: 0% activity → 80% EV, 60% activity → 100% EV, 255%+ activity → 135% EV.
-    /// @param player The player address to calculate EV multiplier for
-    /// @return The EV multiplier in basis points (8000-13500)
-    function _lootboxEvMultiplierBps(address player) private view returns (uint256) {
-        uint256 score = IDegenerusGame(address(this)).playerActivityScore(player);
-        return _lootboxEvMultiplierFromScore(score);
-    }
-
     /// @dev Calculates EV multiplier from a raw activity score.
     ///      Linear interpolation between thresholds.
     /// @param score The activity score in basis points
@@ -669,7 +660,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player Player address to resolve for
     /// @param amount ETH amount for the lootbox resolution
     /// @param rngWord RNG word to use for resolution
-    function resolveLootboxDirect(address player, uint256 amount, uint256 rngWord) external {
+    /// @param activityScore Activity-score bps frozen at commitment by the caller — decimator
+    ///        claims pass the min score of the winning decimator bucket (sealed at burn);
+    ///        degenerette passes the score snapshotted at bet time. Never a live read.
+    function resolveLootboxDirect(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external {
         if (amount == 0) return;
 
         uint32 day = _simulatedDayIndex();
@@ -677,7 +671,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
-        uint256 evMultiplierBps = _lootboxEvMultiplierBps(player);
+        uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
         uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
 
         _resolveLootboxCommon(

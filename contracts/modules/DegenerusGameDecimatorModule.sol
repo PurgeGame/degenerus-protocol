@@ -324,6 +324,10 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         // during freeze would corrupt the live pool that advanceGame operates on.
         if (prizePoolFrozen) revert E();
 
+        // Capture the winning entry's bucket before the claim consumes it; the bucket encodes
+        // the activity score sealed at decimator-burn time (see _minScoreForBucket), freezing
+        // the lootbox EV multiplier instead of reading a live, post-word score at claim.
+        uint8 winBucket = decBurn[lvl][msg.sender].bucket;
         uint256 amountWei = _consumeDecClaim(msg.sender, lvl);
 
         if (gameOver) {
@@ -335,7 +339,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 lootboxPortion = _creditDecJackpotClaimCore(
             msg.sender,
             amountWei,
-            decClaimRounds[lvl].rngWord
+            decClaimRounds[lvl].rngWord,
+            _minScoreForBucket(winBucket, lvl)
         );
         if (lootboxPortion != 0) {
             _setFuturePrizePool(_getFuturePrizePool() + lootboxPortion);
@@ -376,7 +381,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     function _creditDecJackpotClaimCore(
         address account,
         uint256 amount,
-        uint256 rngWord
+        uint256 rngWord,
+        uint16 evScore
     ) private returns (uint256 lootboxPortion) {
         // Split 50/50: half ETH, half lootbox tickets
         uint256 ethPortion = amount >> 1;
@@ -386,7 +392,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
         // Lootbox portion is no longer claimable ETH; remove from reserved pool.
         claimablePool -= uint128(lootboxPortion); // Safe: lootboxPortion is a fraction of claimablePool, fits uint128
-        _awardDecimatorLootbox(account, lootboxPortion, rngWord);
+        _awardDecimatorLootbox(account, lootboxPortion, rngWord, evScore);
     }
 
     /// @dev Apply multiplier until the cap is reached; extra amount is counted at 1x.
@@ -570,7 +576,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     function _awardDecimatorLootbox(
         address winner,
         uint256 amount,
-        uint256 rngWord
+        uint256 rngWord,
+        uint16 evScore
     ) private {
         if (winner == address(0) || amount == 0) return;
         if (amount > LOOTBOX_CLAIM_THRESHOLD) {
@@ -594,10 +601,28 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
                     IDegenerusGameLootboxModule.resolveLootboxDirect.selector,
                     winner,
                     amount,
-                    rngWord
+                    rngWord,
+                    evScore
                 )
             );
         if (!ok) _revertDelegate(data);
+    }
+
+    /// @dev Inverse of BurnieCoin._adjustDecimatorBucket: the minimum activity score (bps)
+    ///      that lands a burn in `bucket`. The decimator-claim lootbox EV multiplier reads
+    ///      this frozen value (sealed when the winning burn was bucketed) rather than a live
+    ///      score. Mirrors BurnieCoin's bucket scale: base 12, floor 5 (or 2 on x100 levels),
+    ///      activity cap 23500.
+    function _minScoreForBucket(uint8 bucket, uint24 lvl) private pure returns (uint16) {
+        if (bucket >= 12) return 0; // base bucket = score ~0 -> 80% EV floor
+        uint256 cap = 23_500;
+        uint256 floorBucket = (lvl % 100 == 0) ? 2 : 5;
+        uint256 reduction = 12 - uint256(bucket);
+        uint256 range = 12 - floorBucket;
+        uint256 numer = reduction * cap - cap / 2; // reduction >= 1 here, so no underflow
+        uint256 s = (numer + range - 1) / range;   // ceil: min score that produces this bucket
+        if (s > cap) s = cap;
+        return uint16(s);
     }
 
     /*+======================================================================+

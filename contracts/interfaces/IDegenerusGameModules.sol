@@ -281,10 +281,12 @@ interface IDegenerusGameLootboxModule {
     /// @param player Address of the lootbox owner
     /// @param amount Amount associated with the lootbox
     /// @param rngWord Random word for lootbox resolution
+    /// @param activityScore Frozen activity-score bps for the EV multiplier (caller-snapshotted)
     function resolveLootboxDirect(
         address player,
         uint256 amount,
-        uint256 rngWord
+        uint256 rngWord,
+        uint16 activityScore
     ) external;
 
     /// @notice Resolves a redemption lootbox with a snapshotted activity score
