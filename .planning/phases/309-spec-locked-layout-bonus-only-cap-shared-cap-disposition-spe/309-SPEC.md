@@ -421,3 +421,107 @@ seed's amount arg is never replaced by `adj`. The `lootboxEth` packed layout
 box hits and the index/word it rolls against are byte-unchanged. (The BURNIE open path seeds with
 `amountEth` at `:621`, §0.F discrepancy box — also preserved unchanged.) This is the INV-04 /
 IMPL-05 seed-byte-identical hard line carried from §0.F.
+
+---
+
+## §4 SPEC-04 — Shared-Cap Disposition (LOCKED: ACCEPT)
+
+**Disposition:** **ACCEPT + DOCUMENT** (D-10). `resolveLootboxDirect` (decimator / degenerette)
+and `resolveRedemptionLootbox` (redemption) have NO purchase/allocation point and keep consuming
+the shared per-`(player, level)` cap accumulator `lootboxEvBenefitUsedByLevel[player][lvl]` at
+resolution via `_applyEvMultiplierWithCap` (with SPEC-02's Change-1 `<=` rewrite only). No fix
+is required.
+
+> **This ACCEPT is a THEOREM, proven below — NOT an assertion.** Per
+> `feedback_rng_backward_trace` + `feedback_rng_window_storage_read_freshness`, the rest of §4
+> discharges the proof obligation: §4.A is a backward-trace from each consumer to its
+> input-commitment time proving word-independence, and §4.B is an exhaustive enumeration of every
+> in-window SLOAD for all three callers. **NO "by construction" / "single fn reaches all paths"
+> claim is made anywhere in §4** — every cited site is grep-verified against HEAD with its matched
+> substring and the `grep -n` line, and every SLOAD is enumerated individually (the §0.K
+> attestation method extended to the resolution window).
+
+### §4.A Word-Independence Backward-Trace
+
+The freeze invariant under test (`v45-vrf-freeze-invariant`): no variable that interacts with a
+VRF word may be player-mutable across `[rng request → unlock]` vs. players. The shared cap
+accumulator IS read+written alongside the live word at resolution (§0.D SLOAD :487 / SSTORE :502,
+reached from the resolver call sites :675 / :711). So the burden is to PROVE the accumulator
+cannot be steered to a different/better outcome by a player who already knows `rngWord`. The
+proof traces BACKWARD from each consumer to the moment its multiplier input was committed, and
+shows the word was uncommitted at that moment and never feeds the multiplier or the cap
+allocation.
+
+**Trace target — the multiplier source is a `pure` function of a FROZEN parameter, not the word.**
+`_lootboxEvMultiplierFromScore` is declared **`private pure`** (`LootboxModule.sol:446` — grep:
+`function _lootboxEvMultiplierFromScore(` at :444, `) private pure returns (uint256) {` at :446).
+A `pure` function performs ZERO storage reads — its only inputs are its `score` argument and
+compile-time constants (`LOOTBOX_EV_MIN/NEUTRAL/MAX_BPS`, `ACTIVITY_SCORE_*`). Therefore the
+multiplier is fully determined by the `score` argument value alone. For both resolvers that
+argument is `uint256(activityScore)`, where `activityScore` is a **function PARAMETER**:
+
+| Consumer | Multiplier site (grep-verified) | Matched substring | Score input | `rngWord` is… |
+|----------|--------------------------------|-------------------|-------------|---------------|
+| `resolveLootboxDirect` | `LootboxModule.sol:674` | `uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));` | `activityScore` (param, frozen) | a separate param (`:666`), feeds only the seed (`:671`) |
+| `resolveRedemptionLootbox` | `LootboxModule.sol:710` | `uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));` | `activityScore` (param, frozen) | a separate param (`:702`), feeds only the seed (`:707`) |
+
+Both `rngWord` and `activityScore` are caller-supplied PARAMETERS on the resolver signatures
+(`:666`: `resolveLootboxDirect(address player, uint256 amount, uint256 rngWord, uint16 activityScore)`;
+`:702`: identical shape). Neither is SLOADed inside the resolver. Backward chain, per consumer:
+
+**Backward chain — point 1 (frozen multiplier, per-caller commitment time).**
+`consumer (resolver) → evMultiplierBps → _lootboxEvMultiplierFromScore(activityScore) [pure] → activityScore param → committed by the CALLER before the resolver runs`:
+- **decimator** (`resolveLootboxDirect`): `activityScore` = the min score of the winning decimator
+  bucket, **sealed at burn** (bucket-at-burn). Confirmed by the resolver's own doc at
+  `LootboxModule.sol:663-665`: *"decimator claims pass the min score of the winning decimator
+  bucket (sealed at burn) … Never a live read."*
+- **degenerette** (`resolveLootboxDirect`): `activityScore` = the score **snapshotted at bet time**
+  (`:665`: *"degenerette passes the score snapshotted at bet time"*).
+- **redemption** (`resolveRedemptionLootbox`): `activityScore` = the raw activity score
+  **snapshotted at burn submission** (`:701`: *"Raw activity score (bps) snapshotted at burn
+  submission"*).
+  At every one of these commitment times the per-index VRF word the resolver later receives was
+  not yet drawn/known to the player, and even if it were, it cannot change `activityScore` (a value
+  already fixed and passed in). The multiplier was fixed BEFORE the resolver sees `rngWord`.
+
+**Backward chain — point 2 (seed uses RAW `amount`; cap allocation never changes a roll).**
+The roll seed is `keccak256(abi.encode(rngWord, player, day, amount))` on the **raw `amount`**:
+`resolveLootboxDirect` at `LootboxModule.sol:671`, `resolveRedemptionLootbox` at `:707` (§0.F
+rows; grep confirms both lines verbatim). The cap draw produces `scaledAmount` used ONLY for
+reward scaling (`:675` / `:711` consume the cap fn's return into `scaledAmount`, passed to
+`_resolveLootboxCommon` — the seed/`targetLevel` are computed at `:671-672` / `:707-708`, BEFORE
+and independent of the cap call). Cap allocation therefore never alters which level/word a box
+rolls against (INV-04 / IMPL-05). The word influences ONLY the seed/roll, never the multiplier or
+the cap.
+
+**Backward chain — point 3 (purchased boxes allocate the cap PRE-WORD).**
+Under SPEC-03 (§3), purchased boxes draw the cap at deposit/allocation time and `openLootBox`
+applies the frozen `adjustedPortion` with NO cap SLOAD/SSTORE (§3.4). So purchased boxes no
+longer participate in the resolution-time accumulator at all — they do NOT compete with the
+on-the-fly resolvers for cap headroom at resolution. This removes the open-path cap draw the
+HEAD greedy design has (§0.D :487/:502 reached from the open call site §0.C :559), which was the
+V-081 surface.
+
+**Backward chain — point 4 (residual freedom is word-INDEPENDENT → accepted self-MEV).**
+After points 1-3, the ONLY residual freedom is resolution-ORDER cap-steering among a player's own
+on-the-fly bonus boxes: a player who controls the order in which their decimator/degenerette/
+redemption resolutions land can steer the scarce 10-ETH cap to whichever box he prefers. PROOF
+this is word-independent: because each box's multiplier is FROZEN at commitment (point 1) and the
+seed/roll is fixed independent of the cap (point 2), the EV-maximising strategy — route the scarce
+cap to the highest-multiplier box — is optimal **regardless of `rngWord`**. Knowing the word in
+advance yields ZERO extra ordering gain, because the word changes neither the multipliers being
+ranked nor the rolls. The reorder is a pure self-interested ordering of the player's OWN frozen
+multipliers against his OWN shared cap — it gives him nothing he could not compute without the
+word. Therefore it is NOT a freeze violation (the word is not an input to the steering decision);
+it is **already-accepted self-MEV** per `REQUIREMENTS.md` → Out of Scope → *"Accepted self-MEV
+races … boon/activity timing (now moot, all lootbox EV paths frozen at commitment). Documented,
+not fixed."*
+
+**INV-06 preservation.** SPEC-04 introduces NO new player-discretionary writer of any slot
+consumed against the live VRF word in `[rng request → unlock]`. The resolvers' only in-window
+write to shared state is the pre-existing cap SSTORE (§0.D :502), whose value `adjustedPortion`
+is a deterministic `min(amount, remainingCap)` (§0.D :498) of two word-independent inputs (raw
+`amount` param, frozen accumulator). No player can write a DIFFERENT value into a word-consumed
+slot by acting after seeing the word — the only discretion (ordering) is the word-independent
+self-MEV proven above. INV-06 holds; INV-05 (all three callers resolve, no known-word ordering
+edge through the shared accumulator) is satisfied by points 1-4 together.
