@@ -34,11 +34,11 @@ The purchased-lootbox EV-multiplier cap allocation must be **independent of the 
 
 > Single batched USER-APPROVED contract diff per `feedback_batch_contract_approval.md`. No partial commits. Touches `DegenerusGameStorage.sol`, `DegenerusGameLootboxModule.sol`, `DegenerusGameMintModule.sol`, `DegenerusGameWhaleModule.sol`.
 
-- [ ] **IMPL-01**: Bonus-only cap in `_applyEvMultiplierWithCap` (`DegenerusGameLootboxModule.sol`) per SPEC-02 — sub-neutral/neutral boxes apply directly and never consume the cap.
-- [ ] **IMPL-02**: Widen the per-(index, player) snapshot to the packed `uint256` layout in `DegenerusGameStorage.sol` per SPEC-01 (+ optional rename); add `uint16`/`uint64` pack/unpack helpers.
-- [ ] **IMPL-03**: Purchase-time cap tally at all purchased-box deposit sites — `DegenerusGameMintModule.sol` (first-deposit + subsequent branches) and `DegenerusGameWhaleModule.sol` — per SPEC-03; advance `lootboxEvBenefitUsedByLevel[player][lvl]` and accumulate `adjustedPortion`.
-- [ ] **IMPL-04**: `openLootBox` (`DegenerusGameLootboxModule.sol`) applies the frozen allocation per SPEC-03 with no cap SLOAD/SSTORE; zero-at-open clears the whole packed slot.
-- [ ] **IMPL-05**: Raw `amount` preserved for the roll seed — `keccak(rngWord, player, day, amount)` and the index/word a box rolls against are unchanged; only reward scaling uses `adjustedPortion`. `lootboxEth` layout untouched.
+- [x] **IMPL-01**: Bonus-only cap in `_applyEvMultiplierWithCap` (`DegenerusGameLootboxModule.sol`) per SPEC-02 — sub-neutral/neutral boxes apply directly and never consume the cap.
+- [x] **IMPL-02**: Widen the per-(index, player) snapshot to the packed `uint256` layout in `DegenerusGameStorage.sol` per SPEC-01 (+ optional rename); add `uint16`/`uint64` pack/unpack helpers.
+- [x] **IMPL-03**: Purchase-time cap tally at all purchased-box deposit sites — `DegenerusGameMintModule.sol` (first-deposit + subsequent branches) and `DegenerusGameWhaleModule.sol` — per SPEC-03; advance `lootboxEvBenefitUsedByLevel[player][lvl]` and accumulate `adjustedPortion`.
+- [x] **IMPL-04**: `openLootBox` (`DegenerusGameLootboxModule.sol`) applies the frozen allocation per SPEC-03 with no cap SLOAD/SSTORE; zero-at-open clears the whole packed slot.
+- [x] **IMPL-05**: Raw `amount` preserved for the roll seed — `keccak(rngWord, player, day, amount)` and the index/word a box rolls against are unchanged; only reward scaling uses `adjustedPortion`. `lootboxEth` layout untouched.
 
 ### Invariants (INV) — Provable Acceptance Criteria
 
@@ -102,11 +102,11 @@ The purchased-lootbox EV-multiplier cap allocation must be **independent of the 
 | SPEC-02 | Phase 309 (SPEC) | Complete |
 | SPEC-03 | Phase 309 (SPEC) | Complete |
 | SPEC-04 | Phase 309 (SPEC) | Complete |
-| IMPL-01 | Phase 310 (IMPL) | Pending |
-| IMPL-02 | Phase 310 (IMPL) | Pending |
-| IMPL-03 | Phase 310 (IMPL) | Pending |
-| IMPL-04 | Phase 310 (IMPL) | Pending |
-| IMPL-05 | Phase 310 (IMPL) | Pending |
+| IMPL-01 | Phase 310 (IMPL) | Complete |
+| IMPL-02 | Phase 310 (IMPL) | Complete |
+| IMPL-03 | Phase 310 (IMPL) | Complete |
+| IMPL-04 | Phase 310 (IMPL) | Complete |
+| IMPL-05 | Phase 310 (IMPL) | Complete |
 | INV-01 | Phase 311 (TST) — proven by TST-01 | Pending |
 | INV-02 | Phase 311 (TST) — proven by TST-02 | Pending |
 | INV-03 | Phase 311 (TST) — proven by TST-02 | Pending |
