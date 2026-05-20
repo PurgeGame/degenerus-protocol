@@ -559,11 +559,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Apply activity score EV multiplier to reward amount (80% to 135%)
-        // EV benefit (above/below 100%) is capped at 10 ETH per account per level
+        // EV benefit (above/below 100%) is capped at 10 ETH per account per level.
+        // evScorePacked is the score+1 snapshot written at first deposit on every
+        // ETH-lootbox allocation path; raw activity score maxes at ~318%, so the
+        // uint16 encoding is always >=1 and the multiplier uses the committed score.
         uint16 evScorePacked = lootboxEvScorePacked[index][player];
-        uint256 evMultiplierBps = evScorePacked == 0
-            ? _lootboxEvMultiplierBps(player)
-            : _lootboxEvMultiplierFromScore(uint256(evScorePacked - 1));
+        uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(evScorePacked - 1));
         uint256 scaledAmount = _applyEvMultiplierWithCap(
             player,
             currentLevel,
