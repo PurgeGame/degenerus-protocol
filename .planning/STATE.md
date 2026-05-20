@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: Close the Lootbox EV-Cap Open-Ordering Hole (V-081)
 status: planning
-last_updated: "2026-05-20T09:56:24.919Z"
-last_activity: 2026-05-20
+last_updated: "2026-05-20T10:38:32.357Z"
+last_activity: 2026-05-20 — Phase 309 context gathered (uint64 width, baseLevel co-pack into lootboxPurchasePacked, SPEC-04 accept+document)
 progress:
   total_phases: 5
   completed_phases: 0
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 ## Current Position
 
-Phase: 309 (SPEC) — not started
+Phase: 309 (SPEC) — context gathered
 Plan: —
-Status: Roadmap drafted; awaiting phase planning
-Last activity: 2026-05-20 — Milestone v45.0 roadmap created (Phases 309-313; SPEC → IMPL → TST → SWEEP → TERMINAL)
+Status: 309-CONTEXT.md locked; ready for /gsd:plan-phase 309
+Last activity: 2026-05-20 — Phase 309 context gathered. Locked: adjustedPortion=uint64 (resolves the REQUIREMENTS-vs-fix-plan width conflict); co-pack baseLevel+1 into the widened word (removes lootboxBaseLevelPacked, net −1 slot; lootboxDay REJECTED — seed input/INV-04); rename lootboxEvScorePacked→lootboxPurchasePacked; SPEC-04 ACCEPT+document via word-independence backward-trace + full in-window SLOAD enumeration.
 
 ## Current Milestone Phases (v45.0 — PLANNING)
 
