@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: Close the Lootbox EV-Cap Open-Ordering Hole (V-081)
-status: executing
-last_updated: "2026-05-20T11:08:38.589Z"
-last_activity: 2026-05-20 -- Completed 309-01-PLAN.md (309-SPEC §0-§3)
+status: verifying
+last_updated: "2026-05-20T11:15:07.248Z"
+last_activity: 2026-05-20
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 10
+  completed_plans: 2
+  percent: 20
 ---
 
 # Project State
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 Phase: 309 (spec-locked-layout-bonus-only-cap-shared-cap-disposition-spe) — EXECUTING
 Plan: 2 of 2
-Status: Plan 309-01 complete (309-SPEC §0-§3 locked); 309-02 (§4 SPEC-04) remaining
-Last activity: 2026-05-20 -- Completed 309-01-PLAN.md; stopped at: ready for 309-02
+Status: Phase complete — ready for verification
+Last activity: 2026-05-20
 
 ## Current Milestone Phases (v45.0 — PLANNING)
 
@@ -35,7 +35,7 @@ Last activity: 2026-05-20 -- Completed 309-01-PLAN.md; stopped at: ready for 309
 
 | Phase | Name | Type | Requirements | Wave Shape | Depends on | Status |
 |-------|------|------|--------------|------------|------------|--------|
-| 309 | SPEC — Locked Layout + Bonus-Only Cap + Shared-Cap Disposition | SPEC | SPEC-01..04 (4) | 1 AGENT-COMMITTED SPEC artifact bundle | nothing | Not started |
+| 309 | SPEC — Locked Layout + Bonus-Only Cap + Shared-Cap Disposition | SPEC | SPEC-01..04 (4) | 1 AGENT-COMMITTED SPEC artifact bundle | nothing | Complete (2/2 plans) — ready for verification |
 | 310 | Implementation — Single Batched USER-APPROVED Contract Diff | IMPL | IMPL-01..05 (5) | 1 USER-APPROVED batched contract commit | Phase 309 | Not started |
 | 311 | Test — Foundry Coverage | TST | TST-01..05 (5) + INV-01..06 (6, carried) | 1+ AGENT-COMMITTED test commit(s) | Phase 310 | Not started |
 | 312 | Adversarial Sweep | SWEEP | SWP-01..02 (2) | 1 AGENT-COMMITTED adversarial-log bundle | Phases 310 + 311 | Not started |
@@ -454,6 +454,7 @@ Audit deliverables:
 | Phase 306 P04 | 10min | 2 tasks | 1 files |
 | Phase 306 P05 | 45min | 3 tasks | 3 files |
 | Phase 307 P01 | 0h30m | 7 tasks | 6 files |
+| Phase 309 P02 | 12 | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -516,3 +517,6 @@ Audit deliverables:
 - [Phase 309]: D-309-01-WIDTH: SPEC §1 locks adjustedPortion at uint64; v45 fix-plan uint96 SUPERSEDED (10 ETH cap = 1e19 wei, ceil(log2)=64, ~84% headroom)
 - [Phase 309]: D-309-01-COPACK: SPEC §1 co-packs baseLevel into lootboxPurchasePacked (net -1 slot, removes lootboxBaseLevelPacked); lootboxDay co-pack REJECTED — it is a roll-seed input at LootboxModule.sol:545 (freeze hard line)
 - [Phase 309]: D-309-01-621-DISCREPANCY: HEAD LootboxModule.sol:621 seed binds amountEth (BURNIE open path), not amount as the plan claimed; recorded in 309-SPEC §0.F discrepancy box, IMPL-05 must preserve amountEth
+- [Phase 309]: D-309-02-SPEC04-ACCEPT: SPEC-04 disposition = ACCEPT + DOCUMENT, proven (not asserted) in 309-SPEC §4. §4.A backward-trace: multiplier is a pure function (_lootboxEvMultiplierFromScore is `private pure`, :446) of the FROZEN activityScore parameter (:674/:710), never rngWord; per-caller commitment = decimator bucket-at-burn / degenerette bet-time / redemption burn-submission; seed uses raw amount (:671/:707) so cap allocation never changes a roll (INV-04); purchased boxes allocate pre-word (SPEC-03). §4.C residual order-steering proven word-INDEPENDENT → already-accepted self-MEV (REQUIREMENTS Out-of-Scope). INV-05 satisfied, INV-06 preserved, ROADMAP SC4 discharged.
+- [Phase 309]: D-309-02-SLOAD-ENUM: 309-SPEC §4.B enumerates ALL in-window SLOADs per caller (openLootBox 11 reads; resolveLootboxDirect/resolveRedemptionLootbox each 3 reads — global day, global level, cap accumulator; rngWord+activityScore are params, no SLOAD). lootboxEvBenefitUsedByLevel[player][currentLevel] confirmed the SOLE shared mutable consumed alongside the word (enumerated, not assumed); F-41-02/03 non-VRF-read bug class confirmed absent. POST-IMPL open path has zero shared-mutable in-window reads (cap moves to allocation).
+- [Phase 309]: D-309-02-CAPLINE-RECONCILE: plan <interfaces> cited cap SLOAD/SSTORE at :485/:503; grep-verified HEAD lines are :487 (SLOAD) / :502 (SSTORE), matching Plan-01 §0.D. §4 cites the grep-verified lines and records the discrepancy in §4.B.4 (not normalized).

@@ -52,7 +52,7 @@
 
 **Plans:** 2 plans
 - [x] 309-01-PLAN.md — §0 grep-verified call-graph evidence + SPEC-01 packed-layout lock + SPEC-02 bonus-only cap + SPEC-03 allocation tally/open-apply
-- [ ] 309-02-PLAN.md — §4 SPEC-04 shared-cap disposition: word-independence backward-trace + full in-window SLOAD enumeration + ACCEPT verdict
+- [x] 309-02-PLAN.md — §4 SPEC-04 shared-cap disposition: word-independence backward-trace + full in-window SLOAD enumeration + ACCEPT verdict
 
 ### Phase 310: Implementation — Single Batched USER-APPROVED Contract Diff (IMPL)
 
