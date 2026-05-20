@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: Close the Lootbox EV-Cap Open-Ordering Hole (V-081)
-status: ready_to_plan
-last_updated: 2026-05-20T11:20:58.734Z
+status: planning
+last_updated: "2026-05-20T11:30:59.190Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 5
@@ -11,7 +11,6 @@ progress:
   total_plans: 2
   completed_plans: 2
   percent: 20
-stopped_at: Phase 309 complete (2/2) — ready to discuss Phase 310
 ---
 
 # Project State
