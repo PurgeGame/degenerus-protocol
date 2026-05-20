@@ -852,9 +852,28 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         if (existingAmount == 0) {
             lootboxDay[index][buyer] = dayIndex;
-            lootboxBaseLevelPacked[index][buyer] = uint24(level + 2);
-            lootboxEvScorePacked[index][buyer] = uint16(
-                IDegenerusGame(address(this)).playerActivityScore(buyer) + 1
+            // Purchase-time EV-cap tally (first deposit). The score is snapshotted
+            // inline (DIV-2) and the multiplier frozen from it; the cap key is
+            // level + 1 (== the resolver's currentLevel = level + 1), distinct from the
+            // level + 2 baseLevel sentinel packed into the word (DIV-1). A bonus box
+            // (mult > NEUTRAL) draws add = min(deposit, CAP - used) from the shared
+            // per-(player, level) accumulator; sub-neutral/neutral boxes draw zero cap.
+            uint256 score = IDegenerusGame(address(this)).playerActivityScore(buyer);
+            uint64 adj;
+            uint256 mult = _lootboxEvMultiplierFromScore(score);
+            if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
+                uint256 used = lootboxEvBenefitUsedByLevel[buyer][level + 1];
+                uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
+                    ? 0
+                    : LOOTBOX_EV_BENEFIT_CAP - used;
+                uint256 add = lootboxAmount < remaining ? lootboxAmount : remaining;
+                lootboxEvBenefitUsedByLevel[buyer][level + 1] = used + add;
+                adj = uint64(add);
+            }
+            lootboxPurchasePacked[index][buyer] = _packLootboxPurchase(
+                uint16(score + 1),
+                adj,
+                uint24(level + 2)
             );
             emit LootBoxIndexAssigned(buyer, uint32(index), dayIndex);
         } else {
@@ -875,6 +894,34 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 newAmount = existingAmount + boostedAmount;
         lootboxEth[index][buyer] = (uint256(purchaseLevel) << 232) | newAmount;
         _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, _lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK) + _packEthToMilliEth(lootboxAmount));
+
+        // Purchase-time EV-cap tally (subsequent deposit). The multiplier is FROZEN
+        // from the first-deposit score snapshot read back from the packed word; the cap
+        // key is level + 1 (== the resolver's currentLevel). A bonus box accumulates
+        // adjustedPortion via RMW; score+1 and baseLevel+1 are preserved.
+        if (existingAmount != 0 && lootboxAmount != 0) {
+            (
+                uint16 scorePlus1,
+                uint64 adj,
+                uint24 baseLevelPlus1
+            ) = _unpackLootboxPurchase(lootboxPurchasePacked[index][buyer]);
+            uint256 mult = _lootboxEvMultiplierFromScore(uint256(scorePlus1 - 1));
+            if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
+                uint256 used = lootboxEvBenefitUsedByLevel[buyer][level + 1];
+                uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
+                    ? 0
+                    : LOOTBOX_EV_BENEFIT_CAP - used;
+                uint256 add = lootboxAmount < remaining ? lootboxAmount : remaining;
+                if (add != 0) {
+                    lootboxEvBenefitUsedByLevel[buyer][level + 1] = used + add;
+                    lootboxPurchasePacked[index][buyer] = _packLootboxPurchase(
+                        scorePlus1,
+                        adj + uint64(add),
+                        baseLevelPlus1
+                    );
+                }
+            }
+        }
 
         // Track distress-mode portion for proportional ticket bonus at open time
         if (_isDistressMode()) {

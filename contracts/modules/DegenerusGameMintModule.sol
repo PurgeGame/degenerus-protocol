@@ -989,10 +989,8 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             if (existingAmount == 0) {
                 lbFirstDeposit = true;
                 lootboxDay[lbIndex][buyer] = lbDay;
-                lootboxBaseLevelPacked[lbIndex][buyer] = uint24(
-                    cachedLevel + 1
-                );
-                // lootboxEvScorePacked written after score computation below
+                // score+1 and baseLevel+1 (cachedLevel + 1, DIV-1) are packed into
+                // lootboxPurchasePacked after score computation below
                 emit LootBoxIdx(buyer, uint32(lbIndex), lbDay);
             } else {
                 if (storedDay != lbDay) revert E();
@@ -1151,8 +1149,53 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                     0
                 );
             }
+            // Purchase-time EV-cap tally. The box's multiplier is frozen from the
+            // first-deposit score snapshot; the cap key is cachedLevel + 1 (the lootbox
+            // open level == the resolver's currentLevel = level + 1). Bonus boxes
+            // (mult > NEUTRAL) draw add = min(deposit, CAP - used) from the shared
+            // per-(player, level) accumulator and accumulate adjustedPortion into the
+            // packed word; sub-neutral/neutral boxes draw zero cap.
             if (lbFirstDeposit) {
-                lootboxEvScorePacked[lbIndex][buyer] = uint16(cachedScore + 1);
+                uint64 adj;
+                uint256 mult = _lootboxEvMultiplierFromScore(cachedScore);
+                if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
+                    uint256 used = lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1];
+                    uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
+                        ? 0
+                        : LOOTBOX_EV_BENEFIT_CAP - used;
+                    uint256 add = lootBoxAmount < remaining ? lootBoxAmount : remaining;
+                    lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1] = used + add;
+                    adj = uint64(add);
+                }
+                lootboxPurchasePacked[lbIndex][buyer] = _packLootboxPurchase(
+                    uint16(cachedScore + 1),
+                    adj,
+                    uint24(cachedLevel + 1)
+                );
+            } else if (lootBoxAmount != 0) {
+                (
+                    uint16 scorePlus1,
+                    uint64 adj,
+                    uint24 baseLevelPlus1
+                ) = _unpackLootboxPurchase(lootboxPurchasePacked[lbIndex][buyer]);
+                uint256 mult = _lootboxEvMultiplierFromScore(
+                    uint256(scorePlus1 - 1)
+                );
+                if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
+                    uint256 used = lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1];
+                    uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
+                        ? 0
+                        : LOOTBOX_EV_BENEFIT_CAP - used;
+                    uint256 add = lootBoxAmount < remaining ? lootBoxAmount : remaining;
+                    if (add != 0) {
+                        lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1] = used + add;
+                        lootboxPurchasePacked[lbIndex][buyer] = _packLootboxPurchase(
+                            scorePlus1,
+                            adj + uint64(add),
+                            baseLevelPlus1
+                        );
+                    }
+                }
             }
         }
 

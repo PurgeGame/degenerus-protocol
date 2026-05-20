@@ -1333,6 +1333,21 @@ abstract contract DegenerusGameStorage {
     /// @dev Scale factor for BURNIE packing (1 token resolution).
     uint256 internal constant LR_BURNIE_SCALE = 1e18;
 
+    // Activity score EV multiplier constants (ETH lootbox only)
+    /// @dev 60% activity score = neutral 100% EV
+    uint16 internal constant LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS = 6_000;
+    /// @dev 255%+ activity score = maximum 135% EV
+    uint16 internal constant LOOTBOX_EV_ACTIVITY_MAX_BPS = 25_500;
+    /// @dev Minimum EV at 0% activity (80%)
+    uint16 internal constant LOOTBOX_EV_MIN_BPS = 8_000;
+    /// @dev Neutral EV at 60% activity (100%)
+    uint16 internal constant LOOTBOX_EV_NEUTRAL_BPS = 10_000;
+    /// @dev Maximum EV at 255%+ activity (135%)
+    uint16 internal constant LOOTBOX_EV_MAX_BPS = 13_500;
+    /// @dev Maximum EV benefit cap per account per level (10 ETH scaled)
+    uint256 internal constant LOOTBOX_EV_BENEFIT_CAP =
+        10 ether;
+
     /// @dev Read a field from the packed lootbox RNG slot.
     function _lrRead(uint256 shift, uint256 mask) internal view returns (uint256) {
         return (lootboxRngPacked >> shift) & mask;
@@ -1363,20 +1378,68 @@ abstract contract DegenerusGameStorage {
         return uint256(whole) * LR_BURNIE_SCALE;
     }
 
+    /// @dev Pack a lootbox purchase snapshot into one uint256 word.
+    ///      Layout: score+1 at [0:16], adjustedPortion at [16:80], baseLevel+1 at [80:104];
+    ///      bits [104:256] are reserved and written as zero.
+    ///      baseLevelPlus1 is already encoded by the caller (per-module sentinel offset);
+    ///      this helper does not normalize it. Each field is masked to its width before
+    ///      shifting so an over-wide argument cannot alias an adjacent field.
+    function _packLootboxPurchase(uint16 scorePlus1, uint64 adj, uint24 baseLevelPlus1)
+        internal pure returns (uint256) {
+        return uint256(scorePlus1) & 0xFFFF
+            | (uint256(adj) & 0xFFFFFFFFFFFFFFFF) << 16
+            | (uint256(baseLevelPlus1) & 0xFFFFFF) << 80;
+    }
+
+    /// @dev Unpack a lootbox purchase snapshot word into its three fields.
+    ///      Reads score+1 from [0:16], adjustedPortion from [16:80], baseLevel+1 from [80:104].
+    function _unpackLootboxPurchase(uint256 word)
+        internal pure returns (uint16 scorePlus1, uint64 adj, uint24 baseLevelPlus1) {
+        scorePlus1 = uint16(word);
+        adj = uint64(word >> 16);
+        baseLevelPlus1 = uint24(word >> 80);
+    }
+
+    /// @dev Calculates EV multiplier from a raw activity score.
+    ///      Linear interpolation between thresholds.
+    /// @param score The activity score in basis points
+    /// @return The EV multiplier in basis points (8000-13500)
+    function _lootboxEvMultiplierFromScore(
+        uint256 score
+    ) internal pure returns (uint256) {
+        if (score <= LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS) {
+            // Linear: 0% → 80% EV, 60% → 100% EV
+            return LOOTBOX_EV_MIN_BPS +
+                (score * (LOOTBOX_EV_NEUTRAL_BPS - LOOTBOX_EV_MIN_BPS)) /
+                LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS;
+        }
+
+        if (score >= LOOTBOX_EV_ACTIVITY_MAX_BPS) {
+            return LOOTBOX_EV_MAX_BPS;
+        }
+
+        // Linear: 60% → 100% EV, 255% → 135% EV
+        uint256 excess = score - LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS;
+        uint256 maxExcess = LOOTBOX_EV_ACTIVITY_MAX_BPS - LOOTBOX_EV_ACTIVITY_NEUTRAL_BPS;
+        return
+            LOOTBOX_EV_NEUTRAL_BPS +
+            (excess * (LOOTBOX_EV_MAX_BPS - LOOTBOX_EV_NEUTRAL_BPS)) /
+            maxExcess;
+    }
+
     /// @dev RNG words keyed by lootbox RNG index.
     mapping(uint48 => uint256) internal lootboxRngWordByIndex;
 
     /// @dev Lootbox purchase day per RNG index and player.
     mapping(uint48 => mapping(address => uint32)) internal lootboxDay;
 
-    /// @dev Lootbox base level at purchase time, packed as (level + 1).
-    ///      0 means no lootbox purchased at this index.
-    mapping(uint48 => mapping(address => uint24))
-        internal lootboxBaseLevelPacked;
-
-    /// @dev Lootbox activity score at purchase time, packed as (score + 1).
-    ///      0 means no activity score recorded.
-    mapping(uint48 => mapping(address => uint16)) internal lootboxEvScorePacked;
+    /// @dev Per-(index, player) lootbox purchase snapshot packed into one uint256 word.
+    ///      Bit layout (LSB -> MSB):
+    ///      - [0:16]    score + 1     (uint16; 0 = unset)
+    ///      - [16:80]   adjustedPortion (uint64; cap-eligible ETH that received the bonus, <= 10 ETH)
+    ///      - [80:104]  baseLevel + 1 (uint24; 0 = unset; per-module sentinel offset)
+    ///      - [104:256] free          (reserved, written as zero)
+    mapping(uint48 => mapping(address => uint256)) internal lootboxPurchasePacked;
 
     // =========================================================================
     // Lootbox Bonus Tracking & BURNIE Lootboxes

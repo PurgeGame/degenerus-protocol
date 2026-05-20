@@ -299,21 +299,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Distress-mode ticket bonus in basis points (25%).
     uint16 private constant DISTRESS_TICKET_BONUS_BPS = 2500;
 
-    // Activity score EV multiplier constants (ETH lootbox only)
-    /// @dev 60% activity score = neutral 100% EV
-    uint16 private constant ACTIVITY_SCORE_NEUTRAL_BPS = 6_000;
-    /// @dev 255%+ activity score = maximum 135% EV
-    uint16 private constant ACTIVITY_SCORE_MAX_BPS = 25_500;
-    /// @dev Minimum EV at 0% activity (80%)
-    uint16 private constant LOOTBOX_EV_MIN_BPS = 8_000;
-    /// @dev Neutral EV at 60% activity (100%)
-    uint16 private constant LOOTBOX_EV_NEUTRAL_BPS = 10_000;
-    /// @dev Maximum EV at 255%+ activity (135%)
-    uint16 private constant LOOTBOX_EV_MAX_BPS = 13_500;
-    /// @dev Maximum EV benefit cap per account per level (10 ETH scaled)
-    uint256 private constant LOOTBOX_EV_BENEFIT_CAP =
-        10 ether;
-
     /// @dev Probability scale for granular boon rolls (ppm = 1e6).
     uint256 private constant BOON_PPM_SCALE = 1_000_000;
 
@@ -437,33 +422,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // Lootbox Opening Functions
     // =========================================================================
 
-    /// @dev Calculates EV multiplier from a raw activity score.
-    ///      Linear interpolation between thresholds.
-    /// @param score The activity score in basis points
-    /// @return The EV multiplier in basis points (8000-13500)
-    function _lootboxEvMultiplierFromScore(
-        uint256 score
-    ) private pure returns (uint256) {
-        if (score <= ACTIVITY_SCORE_NEUTRAL_BPS) {
-            // Linear: 0% → 80% EV, 60% → 100% EV
-            return LOOTBOX_EV_MIN_BPS +
-                (score * (LOOTBOX_EV_NEUTRAL_BPS - LOOTBOX_EV_MIN_BPS)) /
-                ACTIVITY_SCORE_NEUTRAL_BPS;
-        }
-
-        if (score >= ACTIVITY_SCORE_MAX_BPS) {
-            return LOOTBOX_EV_MAX_BPS;
-        }
-
-        // Linear: 60% → 100% EV, 255% → 135% EV
-        uint256 excess = score - ACTIVITY_SCORE_NEUTRAL_BPS;
-        uint256 maxExcess = ACTIVITY_SCORE_MAX_BPS - ACTIVITY_SCORE_NEUTRAL_BPS;
-        return
-            LOOTBOX_EV_NEUTRAL_BPS +
-            (excess * (LOOTBOX_EV_MAX_BPS - LOOTBOX_EV_NEUTRAL_BPS)) /
-            maxExcess;
-    }
-
     /// @dev Apply EV multiplier with per-account per-level cap of 10 ETH.
     ///      Tracks how much benefit has been used and only applies EV adjustment
     ///      to the uncapped portion. Remainder gets 100% EV (neutral).
@@ -478,9 +436,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 amount,
         uint256 evMultiplierBps
     ) private returns (uint256 scaledAmount) {
-        // If EV is exactly 100%, no tracking needed
-        if (evMultiplierBps == LOOTBOX_EV_NEUTRAL_BPS) {
-            return amount;
+        // Bonus-only cap: penalty (< NEUTRAL) and neutral (== NEUTRAL) boxes apply the
+        // multiplier on the full amount and draw nothing from the cap. Only a bonus box
+        // (> NEUTRAL) falls through to the cap-draw branch below.
+        if (evMultiplierBps <= LOOTBOX_EV_NEUTRAL_BPS) {
+            return (amount * evMultiplierBps) / 10_000;
         }
 
         // Check how much EV benefit capacity remains for this level
@@ -538,8 +498,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         uint24 currentLevel = level + 1;
         bool withinGracePeriod = currentDay <= day + 7;
-        uint24 baseLevelPacked = lootboxBaseLevelPacked[index][player];
-        uint24 graceLevel = baseLevelPacked == 0 ? currentLevel : baseLevelPacked - 1;
+        // Single SLOAD of the frozen purchase snapshot: score+1, the cap-eligible
+        // adjustedPortion allocated at deposit time, and baseLevel+1 (the per-module
+        // sentinel offset encoded at first deposit).
+        uint256 purchaseWord = lootboxPurchasePacked[index][player];
+        (uint16 scorePlus1, uint64 adj, uint24 baseLevelPlus1) = _unpackLootboxPurchase(purchaseWord);
+        uint24 graceLevel = baseLevelPlus1 == 0 ? currentLevel : baseLevelPlus1 - 1;
         uint24 baseLevel = withinGracePeriod ? graceLevel : purchaseLevel;
 
         uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
@@ -549,26 +513,24 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             targetLevel = currentLevel;
         }
 
-        // Apply activity score EV multiplier to reward amount (80% to 135%)
-        // EV benefit (above/below 100%) is capped at 10 ETH per account per level.
-        // evScorePacked is the score+1 snapshot written at first deposit on every
+        // Apply the activity score EV multiplier to the reward amount (80% to 135%).
+        // scorePlus1 is the score+1 snapshot written at first deposit on every
         // ETH-lootbox allocation path; raw activity score maxes at ~318%, so the
-        // uint16 encoding is always >=1 and the multiplier uses the committed score.
-        uint16 evScorePacked = lootboxEvScorePacked[index][player];
-        uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(evScorePacked - 1));
-        uint256 scaledAmount = _applyEvMultiplierWithCap(
-            player,
-            currentLevel,
-            amount,
-            evMultiplierBps
-        );
+        // encoding is always >=1 and the multiplier uses the committed score.
+        uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(scorePlus1 - 1));
+        // Frozen application: penalty/neutral boxes scale the full amount; a bonus box
+        // scales only the cap-eligible adjustedPortion (frozen at deposit time) and pays
+        // the remainder at 100%. No cap SLOAD/SSTORE here — the cap was drawn at deposit.
+        uint256 scaledAmount = evMultiplierBps <= LOOTBOX_EV_NEUTRAL_BPS
+            ? (amount * evMultiplierBps) / 10_000
+            : (uint256(adj) * evMultiplierBps) / 10_000 + (amount - uint256(adj));
 
         uint256 distressEth = lootboxDistressEth[index][player];
 
         lootboxEth[index][player] = 0;
         lootboxEthBase[index][player] = 0;
-        lootboxBaseLevelPacked[index][player] = 0;
-        lootboxEvScorePacked[index][player] = 0;
+        // Clear score+1, adjustedPortion, and baseLevel+1 in one SSTORE of the whole word.
+        lootboxPurchasePacked[index][player] = 0;
         if (distressEth != 0) {
             lootboxDistressEth[index][player] = 0;
         }
