@@ -525,3 +525,117 @@ is a deterministic `min(amount, remainingCap)` (§0.D :498) of two word-independ
 slot by acting after seeing the word — the only discretion (ordering) is the word-independent
 self-MEV proven above. INV-06 holds; INV-05 (all three callers resolve, no known-word ordering
 edge through the shared accumulator) is satisfied by points 1-4 together.
+
+### §4.B In-Window SLOAD Enumeration (all three callers)
+
+Per `feedback_rng_window_storage_read_freshness`, the proof is incomplete until EVERY storage
+read inside the `[rng request → unlock]` window is enumerated — not just the VRF-derived seed.
+A non-VRF SLOAD consumed alongside the live word is a distinct bug class (the F-41-02/03
+precedent: a freshly-read non-VRF slot can be steered into the word-consuming computation). The
+tables below enumerate every in-window SLOAD individually from grep-verified HEAD lines; none is
+asserted "by construction". For openLootBox the in-window read set is identified by reading the
+function body `LootboxModule.sol:517-591` (read-verified at HEAD); for the resolvers,
+`:666-693` / `:702-729`. The unlock gate for the open path is `lootboxRngWordByIndex[index]`
+(`:524`, reverts `RngNotReady` if `0`); for the resolvers the word arrives as a parameter, so the
+window opens at entry.
+
+#### §4.B.1 `openLootBox` (`LootboxModule.sol:517-591`)
+
+| # | Slot / mapping | file:line | Matched substring | Key shape | Mutable / Frozen | Shared / Per-box | Why safe |
+|---|----------------|-----------|-------------------|-----------|------------------|------------------|----------|
+| 1 | `lootboxEth[index][player]` | :519 | `uint256 packed = lootboxEth[index][player];` | `(index, player)` | frozen post-purchase | per-box | Written at purchase, pre-word; layout untouched (INV-04). |
+| 2 | `lootboxRngWordByIndex[index]` | :524 | `uint256 rngWord = lootboxRngWordByIndex[index];` | `(index)` | the VRF word itself | per-index | The unlock GATE (`==0` reverts `RngNotReady`); not a steering input. |
+| 3 | `_simulatedDayIndex()` | :527 | `uint32 currentDay = _simulatedDayIndex();` | global day | global | global | Not player-discretionary. |
+| 4 | `lootboxDay[index][player]` | :528 | `uint32 day = lootboxDay[index][player];` | `(index, player)` | **frozen seed input (D-03)** | per-box | Co-pack REJECTED (D-03/§1.4) precisely because it feeds the seed; written at purchase, pre-word. NOT a shared mutable. |
+| 5 | `_psRead(PS_ACTIVE_*)` | :533 | `bool presale = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0;` | packed presale flag | global | global | Global protocol flag, not player-discretionary. |
+| 6 | `lootboxEthBase[index][player]` | :534 | `uint256 baseAmount = lootboxEthBase[index][player];` | `(index, player)` | frozen post-purchase | per-box | Written at purchase, pre-word. |
+| 7 | `level` (global) | :539 | `uint24 currentLevel = level + 1;` | global | global | global | Game level, not player-discretionary. |
+| 8 | `lootboxBaseLevelPacked[index][player]` | :541 | `uint24 baseLevelPacked = lootboxBaseLevelPacked[index][player];` | `(index, player)` | frozen post-purchase | per-box | Written at first deposit, pre-word; merges into the packed word post-IMPL (D-02). |
+| 9 | `lootboxEvScorePacked[index][player]` | :557 | `uint16 evScorePacked = lootboxEvScorePacked[index][player];` | `(index, player)` | **frozen score** | per-box | Score snapshot fixed at first deposit, pre-word; becomes `lootboxPurchasePacked` post-IMPL (D-05). |
+| 10 | `lootboxEvBenefitUsedByLevel[player][currentLevel]` (cap SLOAD inside `_applyEvMultiplierWithCap`, reached from the :559 call) | :487 | `uint256 usedBenefit = lootboxEvBenefitUsedByLevel[player][lvl];` | `(player, level)` | **MUTABLE — shared** | **shared** | The sole shared mutable consumed alongside the word, PRE-IMPL. SSTORE-advanced at :502. |
+| 11 | `lootboxDistressEth[index][player]` | :566 | `uint256 distressEth = lootboxDistressEth[index][player];` | `(index, player)` | frozen post-purchase | per-box | Written at purchase, pre-word. |
+
+> **POST-IMPL note (SPEC-03 / §3.4):** after the fix, `openLootBox` reads the FROZEN packed word
+> (`lootboxPurchasePacked[index][player]`, the renamed/widened slot from D-05) and applies the
+> pre-frozen `adjustedPortion` with **NO cap SLOAD/SSTORE** — row 10 is REMOVED from the open path
+> (the cap moves to allocation/deposit time). So for PURCHASED boxes there is NO shared mutable
+> consumed alongside the word after the fix; every remaining in-window read (rows 1-9, 11) is a
+> global, a frozen seed input (`lootboxDay`, row 4), or a per-`(index, player)` value committed
+> pre-word. This strictly REDUCES the open-path word-adjacent shared-state surface to zero.
+
+#### §4.B.2 `resolveLootboxDirect` (`LootboxModule.sol:666-693`)
+
+| # | Slot / mapping | file:line | Matched substring | Key shape | Mutable / Frozen | Shared / Per-box | Why safe |
+|---|----------------|-----------|-------------------|-----------|------------------|------------------|----------|
+| — | `rngWord` | :666 (param) | `... uint256 rngWord, ...` | n/a | parameter | n/a | NOT SLOADed — caller-supplied; feeds only the seed (:671). |
+| — | `activityScore` | :666 (param) | `... uint16 activityScore) external {` | n/a | parameter (frozen) | n/a | NOT SLOADed — caller-supplied; drives the pure multiplier (:674). |
+| 1 | `_simulatedDayIndex()` | :669 | `uint32 day = _simulatedDayIndex();` | global day | global | global | Not player-discretionary; seed input. |
+| 2 | `level` (global) | :670 | `uint24 currentLevel = level + 1;` | global | global | global | Game level, not player-discretionary. |
+| 3 | `lootboxEvBenefitUsedByLevel[player][currentLevel]` (cap SLOAD inside `_applyEvMultiplierWithCap`, reached from the :675 call) | :487 | `uint256 usedBenefit = lootboxEvBenefitUsedByLevel[player][lvl];` | `(player, level)` | **MUTABLE — shared** | **shared** | The sole shared mutable; SSTORE-advanced at :502. Word-independent steering only (§4.A point 4). |
+
+No purchase/allocation point exists for this caller (REQUIREMENTS Out-of-Scope), so the cap
+remains drawn at resolution (Change-1 only). The seed at :671 is the only word consumer; the
+multiplier (:674) is word-independent (§4.A).
+
+#### §4.B.3 `resolveRedemptionLootbox` (`LootboxModule.sol:702-729`)
+
+| # | Slot / mapping | file:line | Matched substring | Key shape | Mutable / Frozen | Shared / Per-box | Why safe |
+|---|----------------|-----------|-------------------|-----------|------------------|------------------|----------|
+| — | `rngWord` | :702 (param) | `... uint256 rngWord, ...` | n/a | parameter | n/a | NOT SLOADed — caller-supplied; feeds only the seed (:707). |
+| — | `activityScore` | :702 (param) | `... uint16 activityScore) external {` | n/a | parameter (frozen) | n/a | NOT SLOADed — caller-supplied; drives the pure multiplier (:710). |
+| 1 | `_simulatedDayIndex()` | :705 | `uint32 day = _simulatedDayIndex();` | global day | global | global | Not player-discretionary; seed input. |
+| 2 | `level` (global) | :706 | `uint24 currentLevel = level + 1;` | global | global | global | Game level, not player-discretionary. |
+| 3 | `lootboxEvBenefitUsedByLevel[player][currentLevel]` (cap SLOAD inside `_applyEvMultiplierWithCap`, reached from the :711 call) | :487 | `uint256 usedBenefit = lootboxEvBenefitUsedByLevel[player][lvl];` | `(player, level)` | **MUTABLE — shared** | **shared** | The sole shared mutable; SSTORE-advanced at :502. Word-independent steering only (§4.A point 4). |
+
+Identical shape to §4.B.2: only the global day, the global `level`, and the shared cap accumulator
+are read in-window; `rngWord` + `activityScore` are parameters (no SLOAD). The seed at :707 is the
+only word consumer.
+
+#### §4.B.4 LOCKED finding (D-11) — the sole shared mutable, enumerated and verified
+
+Across all three callers, **`lootboxEvBenefitUsedByLevel[player][currentLevel]` is the ONLY shared
+MUTABLE read+written alongside the live word** (SLOAD `LootboxModule.sol:487`, SSTORE `:502`,
+reached via the three `_applyEvMultiplierWithCap` call sites §0.C :559 / :675 / :711). This is
+**enumerated-and-verified, NOT assumed**: every other in-window SLOAD in §4.B.1-3 is one of
+- a **global** (`_simulatedDayIndex()`, `level`, the presale flag) — not player-discretionary; or
+- a **frozen seed input** (`lootboxDay`, row §4.B.1#4) — explicitly kept un-co-packed for exactly
+  this reason (D-03 / §1.4); or
+- a **per-`(index, player)` value committed PRE-WORD** at purchase / first deposit
+  (`lootboxEth`, `lootboxEthBase`, `lootboxBaseLevelPacked`, `lootboxEvScorePacked`,
+  `lootboxDistressEth`).
+
+None of these can be re-written by a player after the word is known to change a word-consumed
+result. Confirms the F-41-02/03 bug class (an unenumerated non-VRF in-window read) is absent here.
+
+> **Cap-fn SLOAD/SSTORE line note (reconciled vs. plan interface):** the plan `<interfaces>`
+> block cited the cap SLOAD/SSTORE as `:485/:503`; the grep-verified HEAD lines are **`:487`
+> (SLOAD) / `:502` (SSTORE)** — matching §0.D, which this enumeration uses. The early-return is
+> `:482`. Recorded, not normalized.
+
+### §4.C ACCEPT Verdict (ties §4.A + §4.B)
+
+**SPEC-04 DISPOSITION = ACCEPT + DOCUMENT. No fix required. INV-05 satisfied; INV-06 preserved.**
+
+The shared `lootboxEvBenefitUsedByLevel` accumulator CANNOT be reordered against a KNOWN word to a
+better outcome, proven by §4.A + §4.B together:
+
+1. **Purchased-box allocation is fixed PRE-WORD** (SPEC-03 / §3.4; §4.A point 3) — purchased boxes
+   no longer draw the cap at resolution, so they cannot be reordered against the word at all
+   (§4.B.1 post-IMPL note: the open path has zero shared-mutable in-window reads after the fix).
+2. **On-the-fly multipliers are FROZEN at commitment** (§4.A point 1; §4.B.2/3 show `activityScore`
+   is a frozen parameter, multiplier is a `pure` function of it) — knowing `rngWord` cannot change
+   any multiplier being ranked for cap allocation.
+3. **The seed/roll is word-bound but cap-independent** (§4.A point 2; §4.B seed at :671/:707) — the
+   cap draw never alters which level/word a box rolls against (INV-04).
+4. **The sole residual freedom — resolution-ORDER cap-steering among a player's own on-the-fly
+   bonus boxes — is WORD-INDEPENDENT** (§4.A point 4; §4.B.4 confirms the accumulator is the only
+   shared mutable in play). Routing the scarce 10-ETH cap to the highest-frozen-multiplier box is
+   optimal regardless of the word; knowing `rngWord` yields no extra gain. It is therefore
+   **already-accepted self-MEV** (`REQUIREMENTS.md` Out of Scope → "Accepted self-MEV races … all
+   lootbox EV paths frozen at commitment").
+
+This discharges ROADMAP SC4 and SPEC-04 / INV-05: the backward-trace (§4.A) plus the complete
+in-window SLOAD enumeration (§4.B) show `resolveLootboxDirect` and `resolveRedemptionLootbox`
+introduce no known-word ordering edge through the shared accumulator. The fix-or-accept verdict is
+**ACCEPT**, proven — not asserted — per `feedback_rng_backward_trace` +
+`feedback_rng_window_storage_read_freshness`.
