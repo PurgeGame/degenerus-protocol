@@ -182,3 +182,108 @@ SLOADs/SSTOREs and the three `_applyEvMultiplierWithCap` call sites are enumerat
 all three `lootboxDay` writers are enumerated exhaustively; both inline-duplication divergences
 are flagged for IMPL preservation. This SPEC describes what IS at HEAD
 `6f0ba2963a10654ba554a8c333c5ee80c54a8349` (`feedback_no_history_in_comments`).
+
+---
+
+## §1 SPEC-01 — Packed-Slot Layout (LOCKED)
+
+Transcribes the LOCKED decisions D-01..D-07 from `309-CONTEXT.md`. No redesign, no
+alternatives. Storage decls cited by their §0.A grep-verified lines.
+
+### §1.1 Final packed `uint256` word layout (D-02)
+
+A single `uint256` value (per `(uint48 index, address player)` mapping entry) holds three
+fields plus free space:
+
+| Bit range | Field | Width | Encoding |
+|-----------|-------|-------|----------|
+| `[0:16]` | `score + 1` | `uint16` | `0` = unset; raw activity score + 1 |
+| `[16:80]` | `adjustedPortion` | `uint64` | cap-eligible ETH that received the bonus; `<= 10 ETH` |
+| `[80:104]` | `baseLevel + 1` | `uint24` | `0` = unset; per-module sentinel offset (see DIV-1) |
+| `[104:256]` | free | 152 bits | reserved, written as zero |
+
+This single word REPLACES BOTH the old `lootboxEvScorePacked` (`Storage.sol:1379`, §0.A) and
+`lootboxBaseLevelPacked` (`Storage.sol:1374-1375`, §0.A).
+
+### §1.2 `adjustedPortion` width = `uint64` (D-01) — fix-plan `uint96` SUPERSEDED
+
+`adjustedPortion` is **`uint64`**, NOT `uint96`. The v45 fix-plan
+(`.planning/v45-lootbox-evcap-fix-plan.md`) specified `uint96`; that width is **SUPERSEDED** by
+this SPEC. `REQUIREMENTS.md` SPEC-01 specifies `uint64`, and this SPEC locks `uint64`.
+
+Width proof:
+- `adjustedPortion <= LOOTBOX_EV_BENEFIT_CAP = 10 ether = 1e19 wei` (constant at `LootboxModule.sol:314-315`, §0.B).
+- `ceil(log2(1e19)) = 64` → 64 bits is the minimum standard width that holds the cap.
+- `uint64` max `= 2^64 - 1 ≈ 1.8447e19 wei ≈ 18.44 ETH` → ~84% headroom above the 10 ETH cap.
+- A single box's accumulated `adjustedPortion` can NEVER exceed the cap: each per-deposit
+  `add = min(deposit, remaining)` advances `lootboxEvBenefitUsedByLevel[player][lvl]` (§0.D
+  SSTORE 502 semantics carried to allocation time), so the running total is bounded by the cap.
+
+Tightest standard width per `feedback_maximal_variable_packing` + the REQUIREMENTS.md "tightest
+field widths" gas directive.
+
+### §1.3 baseLevel co-pack (D-02) — removes a slot, net −1
+
+The packed word folds in the base level, REMOVING the separate `lootboxBaseLevelPacked` mapping
+(`Storage.sol:1374-1375`, §0.A) entirely → **net −1 storage slot per `(index, player)` box**.
+
+Justification (all grep-grounded in §0):
+- Same `(uint48 index => address)` outer/inner key as the score word (§0.A key-shape note).
+- Identical write-once / read+clear lifecycle: written at first deposit (Mint:992-994, Whale:855
+  — §0.G), read at open (Lootbox:541 — §0.G), cleared at open (Lootbox:570 — §0.G).
+- All sites live inside the 4 in-scope files — no scope escape (§0.G).
+- `baseLevel` is NOT a seed input (the seed binds `day`+`amount`, §0.F — not `baseLevel`).
+- The deposit-time `adjustedPortion` accumulation already read-modify-writes the word, so
+  folding `baseLevel` in adds ZERO additional deposit-path SLOAD.
+
+### §1.4 `lootboxDay` co-pack REJECTED (D-03) — freeze hard line
+
+`lootboxDay` (`uint32`, `Storage.sol:1370`, §0.A) shares the `(index, player)` key but is
+**EXCLUDED** from the packed word — evaluated and rejected. Reason: it is read at
+`LootboxModule.sol:528` and `:616` (§0.H reads) and feeds the frozen roll seed
+`keccak256(abi.encode(rngWord, player, day, amount))` at `:545` (§0.F). Co-packing `lootboxDay`
+would perturb a seed-input read path, forbidden by **INV-04 / IMPL-05** (seed/roll
+byte-identical). This is the freeze-invariant hard line per `v45-vrf-freeze-invariant` +
+`feedback_security_over_gas`: packing never trades a freeze invariant. All three `lootboxDay`
+writers (§0.H W1/W2/W3) keep their own `uint32` slot.
+
+### §1.5 No-other-co-pack negative finding (D-04)
+
+Per SPEC-01's literal scope (cap-bounded per-box fields), the only other cap-bounded field is
+`lootboxEvBenefitUsedByLevel` (`Storage.sol:1427-1428`, §0.A), keyed `(address player, uint24
+level)`. That is the WRONG key shape for an `(index, player)` slot — it cannot co-pack. Recorded
+as an explicit negative finding. (`baseLevel` in §1.3 is an opportunistic, non-cap-bounded
+co-pack the user opted into beyond SPEC-01's literal ask.)
+
+### §1.6 Rename (D-05): `lootboxEvScorePacked → lootboxPurchasePacked`
+
+Rename `lootboxEvScorePacked` → **`lootboxPurchasePacked`**, type
+`mapping(uint48 => mapping(address => uint256))`. This single mapping REPLACES BOTH
+`lootboxEvScorePacked` (`Storage.sol:1379`) and `lootboxBaseLevelPacked` (`Storage.sol:1374-1375`).
+Rationale: the word is no longer EV-only (it now also carries `baseLevel`), so a neutral
+"purchase-time packed state" name describes what IS, per `feedback_no_history_in_comments`.
+
+### §1.7 Helper signatures (D-06)
+
+```solidity
+function _packLootboxPurchase(uint16 scorePlus1, uint64 adj, uint24 baseLevelPlus1)
+    returns (uint256);
+function _unpackLootboxPurchase(uint256)
+    returns (uint16 scorePlus1, uint64 adj, uint24 baseLevelPlus1);
+```
+
+The helpers live in `DegenerusGameLootboxModule.sol` alongside the EV constants (§0.B) and
+`_applyEvMultiplierWithCap` (§0.C). The pack helper takes an **already-encoded** `baseLevelPlus1`
+— it does NOT reconcile the DIV-1 sentinel-offset divergence. Phase 310 IMPL MUST preserve each
+call site's existing encoding: Mint passes `cachedLevel + 1` (Mint:992-994, §0.G/§0.I DIV-1),
+Whale passes `level + 2` (Whale:855, §0.G/§0.I DIV-1). The helper never normalizes them.
+
+### §1.8 No-new-slot attestation (D-07)
+
+No NEW storage slot is introduced. Mapping values never cross-pack, and the old `uint16`
+`lootboxEvScorePacked` already occupied a full slot (mappings allocate a full slot per value
+regardless of declared width). Widening that mapping value to `uint256` adds zero slots; the
+`baseLevel` merge (§1.3) REMOVES one slot. **Net change: −1 storage slot per `(index, player)`.**
+Zero-at-open clears all three fields (`score+1`, `adjustedPortion`, `baseLevel+1`) in a single
+SSTORE of the whole word — replacing the two separate clears at `LootboxModule.sol:570` and
+`:571` (§0.G).
