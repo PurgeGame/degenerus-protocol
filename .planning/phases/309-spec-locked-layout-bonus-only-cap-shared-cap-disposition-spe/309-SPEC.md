@@ -287,3 +287,137 @@ regardless of declared width). Widening that mapping value to `uint256` adds zer
 Zero-at-open clears all three fields (`score+1`, `adjustedPortion`, `baseLevel+1`) in a single
 SSTORE of the whole word — replacing the two separate clears at `LootboxModule.sol:570` and
 `:571` (§0.G).
+
+---
+
+## §2 SPEC-02 — Bonus-Only Cap (LOCKED)
+
+Transcribes D-08 verbatim from `REQUIREMENTS.md` SPEC-02 + the fix-plan Change 1.
+
+### §2.1 Rule
+
+In `_applyEvMultiplierWithCap` (`LootboxModule.sol:475`, §0.C definition), REPLACE the existing
+early return:
+
+```solidity
+// HEAD (LootboxModule.sol:482, §0.D):
+if (evMultiplierBps == LOOTBOX_EV_NEUTRAL_BPS) {
+    return amount;
+}
+```
+
+with a `<=` condition that applies the multiplier in full and never consumes the cap:
+
+```solidity
+// LOCKED v45.0 rule:
+if (evMultiplierBps <= LOOTBOX_EV_NEUTRAL_BPS) {
+    return (amount * evMultiplierBps) / 10_000;
+}
+```
+
+- A **penalty** box (`evMultiplierBps < NEUTRAL`, i.e. sub-100%) applies its penalty on the FULL
+  `amount` and draws ZERO from the cap.
+- A **neutral** box (`evMultiplierBps == NEUTRAL`) returns `amount` (since `amount * 10_000 / 10_000
+  = amount`) and draws ZERO from the cap.
+- ONLY a **bonus** box (`evMultiplierBps > NEUTRAL`) falls through to the cap-draw logic
+  (`LootboxModule.sol:487-508`, §0.D) and consumes `lootboxEvBenefitUsedByLevel[player][lvl]`.
+
+This eliminates the V-081 penalty-dodge: a sub-100% box can no longer consume cap headroom that
+should be reserved for bonus boxes.
+
+### §2.2 Applies to ALL THREE callers
+
+`_applyEvMultiplierWithCap` is a single private helper; the `<=` rewrite at its definition
+(475/482) reaches all three grep-verified call sites enumerated in §0.C:
+
+| Caller | Call line (§0.C) | Path |
+|--------|------------------|------|
+| `openLootBox` | **559** | purchased-box open |
+| `resolveLootboxDirect` | **675** | decimator / degenerette on-the-fly |
+| `resolveRedemptionLootbox` | **711** | redemption on-the-fly |
+
+EV constants are at `LootboxModule.sol:308-314` (§0.B): `LOOTBOX_EV_NEUTRAL_BPS = 10_000`
+(line 310). The `/ 10_000` literal divisor matches the existing scaling at `LootboxModule.sol:507`
+(§0.D).
+
+---
+
+## §3 SPEC-03 — Allocation Tally + Open-Apply (LOCKED)
+
+Transcribes D-09 verbatim from `REQUIREMENTS.md` SPEC-03; `adjustedPortion` width now `uint64`
+per D-01 (§1.2). The cap draw MOVES from resolution time (§0.D, the V-081 surface) to
+allocation/deposit time for purchased boxes, so open order can no longer steer cap allocation.
+
+### §3.1 Per-deposit tally rule (frozen multiplier from first-deposit score)
+
+The box's multiplier is frozen from the FIRST-deposit score snapshot. At each deposit:
+
+- **`mult <= NEUTRAL`** (penalty or neutral): store `score + 1` only on first deposit; NO cap
+  draw. `adjustedPortion` stays `0` in the packed word.
+- **`mult > NEUTRAL`** (bonus): draw the cap at allocation time:
+  - `remaining = CAP - lootboxEvBenefitUsedByLevel[player][lvl]` (clamp to `0` if `used >= CAP`).
+  - `add = min(depositAmount, remaining)`.
+  - advance the shared used accumulator: `lootboxEvBenefitUsedByLevel[player][lvl] += add`.
+  - accumulate into the packed word: `adjustedPortion += add` via read-modify-write of
+    `lootboxPurchasePacked[index][player]`.
+
+`CAP = LOOTBOX_EV_BENEFIT_CAP = 10 ether` (§0.B line 314-315). The accumulator is the same
+`lootboxEvBenefitUsedByLevel[player][lvl]` that HEAD draws at resolution (§0.D SLOAD 487 / SSTORE
+502) — keyed `(player, uint24 level)` (§0.A line 1427-1428).
+
+### §3.2 First deposit vs subsequent deposits
+
+- **First deposit:** writes `score + 1` AND `baseLevel + 1` into the packed word (per D-02 §1.1),
+  preserving the per-module sentinel offset (DIV-1, §0.I): Mint contributes `cachedLevel + 1`
+  (Mint:992-994, §0.G), Whale contributes `level + 2` (Whale:855, §0.G).
+- **Subsequent deposits:** accumulate `adjustedPortion` ONLY (score + multiplier already frozen
+  from the first-deposit snapshot); `score+1` and `baseLevel+1` are not rewritten.
+
+### §3.3 Deposit-site citations + structural divergences
+
+Cited deposit sites from §0:
+
+| Module | First-deposit sites | Subsequent | Score write |
+|--------|--------------------|-----------|-------------|
+| Mint | day 991, baseLevel 992-994 | lootboxEth 1013-1015 | 1154-1155 **gated** behind `if (lbFirstDeposit)` (§0.I DIV-2) |
+| Whale | day 854, baseLevel 855, score 856-858 | lootboxEth 876 | 856-858 **inline** in first-deposit branch (§0.I DIV-2) |
+
+The §3.1 tally rule covers BOTH structural shapes (DIV-2, §0.I): Mint computes `cachedScore`
+later (Mint:1106) and writes the score gated; Whale snapshots `playerActivityScore(buyer)` inline
+at first deposit. The rule "first deposit writes `score+1`; bonus boxes accumulate `adjustedPortion`"
+holds for both — the IMPL wires each module's existing structure to the packed word without
+re-ordering its score read. The DIV-1 baseLevel sentinel divergence (Mint `+1` vs Whale `+2`) is
+likewise preserved at each site per §1.7.
+
+### §3.4 openLootBox frozen application — no cap SLOAD/SSTORE
+
+`openLootBox` (`LootboxModule.sol:517`, §0.E) applies the FROZEN allocation read from the packed
+word, with NO cap SLOAD/SSTORE (the cap was already drawn at deposit time per §3.1):
+
+```
+scaled = mult <= NEUTRAL
+       ? amount * mult / 1e4
+       : adj * mult / 1e4 + (amount - adj)
+```
+
+where `mult = _lootboxEvMultiplierFromScore(score)` (frozen from the unpacked `score+1`,
+§0.E read 557 / mult 558) and `adj = adjustedPortion` (unpacked from the word). The bonus branch
+scales only the `adj` portion by `mult` and pays the remainder `(amount - adj)` at 100% — exactly
+the adjusted/neutral split HEAD computes at `LootboxModule.sol:498-508` (§0.D), but with the
+cap-eligible portion pre-frozen instead of drawn live.
+
+The cap-draw SLOAD/SSTORE that HEAD performs inside `_applyEvMultiplierWithCap` at open
+(§0.D lines 487, 502) is REMOVED from the open path — `openLootBox` no longer calls the
+cap-drawing branch; it reads the frozen `adj` from the word. The zero-at-open write clears the
+WHOLE packed slot in a single SSTORE (§1.8), replacing the two separate clears at
+`LootboxModule.sol:570` and `:571` (§0.G).
+
+### §3.5 Seed / roll preservation (IMPL-05 / INV-04)
+
+The raw `amount` STILL feeds the roll seed `keccak256(abi.encode(rngWord, player, day, amount))`
+at `LootboxModule.sol:545` (open path, §0.F) — only reward SCALING uses `adjustedPortion`; the
+seed's amount arg is never replaced by `adj`. The `lootboxEth` packed layout
+(`(level << 232) | amount`) is UNTOUCHED (Mint:1013-1015, Whale:876 — §0.G). The roll target the
+box hits and the index/word it rolls against are byte-unchanged. (The BURNIE open path seeds with
+`amountEth` at `:621`, §0.F discrepancy box — also preserved unchanged.) This is the INV-04 /
+IMPL-05 seed-byte-identical hard line carried from §0.F.
