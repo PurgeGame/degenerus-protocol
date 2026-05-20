@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: Close the Lootbox EV-Cap Open-Ordering Hole (V-081)
-status: verifying
-last_updated: "2026-05-20T11:15:07.248Z"
+status: ready_to_plan
+last_updated: 2026-05-20T11:20:58.734Z
 last_activity: 2026-05-20
 progress:
   total_phases: 5
@@ -11,6 +11,7 @@ progress:
   total_plans: 2
   completed_plans: 2
   percent: 20
+stopped_at: Phase 309 complete (2/2) — ready to discuss Phase 310
 ---
 
 # Project State
@@ -20,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 309 — spec-locked-layout-bonus-only-cap-shared-cap-disposition-spe
+**Current focus:** Phase 310 — implementation — single batched user approved contract diff (impl)
 
 ## Current Position
 
-Phase: 309 (spec-locked-layout-bonus-only-cap-shared-cap-disposition-spe) — EXECUTING
-Plan: 2 of 2
-Status: Phase complete — ready for verification
+Phase: 310
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-05-20
 
 ## Current Milestone Phases (v45.0 — PLANNING)
