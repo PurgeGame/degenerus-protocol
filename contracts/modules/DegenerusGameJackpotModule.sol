@@ -738,6 +738,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             _getFuturePrizePool() +
             yieldAccumulator;
 
+        // Pending buffer is a live liability backed by ETH already in balance:
+        // freeze-window revenue lands in balance but routes to prizePoolPendingPacked
+        // (outside the live pools above) until _unfreezePool folds it back. Without
+        // this, that ETH is misread as yield surplus and over-distributed.
+        // Reads 0 when not frozen.
+        (uint128 pNext, uint128 pFuture) = _getPendingPools();
+        obligations += uint256(pNext) + uint256(pFuture);
+
         if (totalBal <= obligations) return;
 
         uint256 yieldPool = totalBal - obligations;

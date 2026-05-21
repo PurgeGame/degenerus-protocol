@@ -697,8 +697,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Distribute yield surplus via JackpotModule delegatecall.
-    ///      Runs BEFORE pool consolidation — obligations sum is conserved
-    ///      regardless of which pool ETH is in, so ordering is safe.
+    ///      Runs while frozen, before pool consolidation. The obligations sum
+    ///      includes both live pools and the pending buffer, so freeze-window
+    ///      revenue (which routes to pending) is never misread as yield surplus.
     function _distributeYieldSurplus(uint256 rngWord) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
