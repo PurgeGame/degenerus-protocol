@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
-status: ready_to_plan
-last_updated: 2026-05-22T12:30:00.000Z
-last_activity: 2026-05-22 -- v45.0 redefined + roadmap created (phases 311-315); ready to plan Phase 311
+status: planning
+last_updated: "2026-05-22T19:18:40.360Z"
+last_activity: "2026-05-22 -- Phase 311 context gathered (D-01..D-05); ready to plan Phase 311"
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 5
   completed_plans: 5
-  percent: 28
-stopped_at: v45.0 redefined (consolidate-forward) + roadmap created (311-315); ready to discuss/plan Phase 311 (VRF-rotation fix SPEC)
+  percent: 29
 ---
 
 # Project State
@@ -27,7 +26,8 @@ See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 
 Phase: 311
 Plan: Not started
-Status: Ready to plan — Phase 311 (VRF-rotation fix SPEC)
+Status: Ready to plan — Phase 311 (VRF-rotation fix SPEC); context gathered (D-01..D-05)
+Resume: .planning/phases/311-spec-vrf-rotation-liveness-fix-spec/311-CONTEXT.md
 Last activity: 2026-05-22
 
 ## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
