@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
-status: verifying
-last_updated: "2026-05-22T20:05:21.936Z"
+status: ready_to_plan
+last_updated: 2026-05-22T20:20:05.847Z
 last_activity: 2026-05-22
 progress:
   total_phases: 7
@@ -11,6 +11,7 @@ progress:
   total_plans: 7
   completed_plans: 7
   percent: 43
+stopped_at: Phase 311 complete (2/2) — ready to discuss Phase 312
 ---
 
 # Project State
@@ -20,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 311 — SPEC — VRF-Rotation Liveness Fix
+**Current focus:** Phase 312 — impl — vrf rotation fix (single batched user approved diff) (impl)
 
 ## Current Position
 
-Phase: 311 (SPEC — VRF-Rotation Liveness Fix) — COMPLETE (ready for verification)
-Plan: 2 of 2 (both complete)
-Status: Phase complete — ready for verification
+Phase: 312
+Plan: Not started
+Status: Ready to plan
 Resume: .planning/phases/311-spec-vrf-rotation-liveness-fix-spec/ (311-SPEC.md §0–§7 authored; next: Phase 312 IMPL)
-Last activity: 2026-05-22 -- Plan 02 complete: 311-SPEC.md §1–§7 design narrative authored (commits d27e8afd + b2c9ab2c); VRF-01..05 closed
+Last activity: 2026-05-22
 
 ## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
 
