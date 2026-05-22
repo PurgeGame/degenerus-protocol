@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
-status: planning
-last_updated: 2026-05-22T12:00:00.000Z
-last_activity: 2026-05-22 -- v45.0 REDEFINED (consolidate-forward); roadmapper defining Phase 311+
+status: ready_to_plan
+last_updated: 2026-05-22T12:30:00.000Z
+last_activity: 2026-05-22 -- v45.0 redefined + roadmap created (phases 311-315); ready to plan Phase 311
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 5
   completed_plans: 5
   percent: 28
-stopped_at: Phase 310 complete (V-081 groundwork); v45.0 REDEFINED — roadmapper defining Phase 311+ (VRF-rotation fix + delta audit)
+stopped_at: v45.0 redefined (consolidate-forward) + roadmap created (311-315); ready to discuss/plan Phase 311 (VRF-rotation fix SPEC)
 ---
 
 # Project State
@@ -27,12 +27,12 @@ See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 
 Phase: 311
 Plan: Not started
-Status: Planning (roadmapper defining v45.0 phases 311–315)
+Status: Ready to plan — Phase 311 (VRF-rotation fix SPEC)
 Last activity: 2026-05-22
 
 ## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
 
-**v45.0 redefined (consolidate-forward).** The original V-081-only 5-phase shape is superseded: phases 309 (SPEC) + 310 (IMPL `9bcd582d`) are retained as **completed groundwork**, and active work is rescoped to the VRF-rotation liveness fix + degenerette audit + consolidate-forward delta audit. Audit baseline → subject: v44.0 closure HEAD `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` → v45.0 closure HEAD (V-081 `9bcd582d` + jackpot `6e5acd7e` + degenerette `92b110bf` + the VRF fix). VRF fix = single batched USER-APPROVED diff at the IMPL phase per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md`; test/planning/audit AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`. **The table below (311–315) is provisional — the gsd-roadmapper finalises phase boundaries + success criteria.**
+**v45.0 redefined (consolidate-forward).** The original V-081-only 5-phase shape is superseded: phases 309 (SPEC) + 310 (IMPL `9bcd582d`) are retained as **completed groundwork**, and active work is rescoped to the VRF-rotation liveness fix + degenerette audit + consolidate-forward delta audit. Audit baseline → subject: v44.0 closure HEAD `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` → v45.0 closure HEAD (V-081 `9bcd582d` + jackpot `6e5acd7e` + degenerette `92b110bf` + the VRF fix). VRF fix = single batched USER-APPROVED diff at the IMPL phase per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md`; test/planning/audit AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`. Phase boundaries + 5 success criteria per phase are finalised in `.planning/ROADMAP.md`.
 
 | Phase | Name | Type | Requirements | Status |
 |-------|------|------|--------------|--------|
