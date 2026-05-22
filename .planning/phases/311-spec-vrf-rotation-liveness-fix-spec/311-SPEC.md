@@ -253,15 +253,258 @@ VRF-05 in Plan 02 builds its assertion on this trace.)
 
 ## §1 Design-Intent Backward-Trace (Scenario A + Scenario B)
 
-[authored in Plan 02]
+Per `feedback_design_intent_before_deletion`, this section traces the **original design intent** of
+the two VRF admin functions, then walks the orphan defect across both timing/state combinations
+before §2 locks the change to the force-unlock block. Every call-path claim cites a §0 row.
+
+### §1.1 Original design intent of the two admin functions
+
+- **`wireVrf` (§0.A row `wireVrf` `:498`; §0.Y `wireVrf` dispatch table).** Deployment-time wiring.
+  The verified routed reach is a **single** constructor call: `DegenerusAdmin.sol:445` `constructor()`
+  → `:458` `gameAdmin.wireVrf(...)` (§0.Y `wireVrf` Hop 1), fired once after
+  `vrfCoordinator.createSubscription()`. Original intent = "point the game at its VRF coordinator
+  exactly once at launch." It writes the three config slots (`vrfCoordinator`/`vrfSubscriptionId`/
+  `vrfKeyHash`) plus `lastVrfProcessedTimestamp` (§0.A `wireVrf` row confirms the config writes; the
+  function also stamps `lastVrfProcessedTimestamp` immediately after). There is **no init-only lock**
+  at HEAD (§0.A `wireVrf` row: "No init-only lock present (D-03 target)") — the intent was init-only
+  but the guard was never added, so `wireVrf` is a live post-init mutator.
+
+- **`updateVrfCoordinatorAndSub` (§0.A row `updateVrfCoordinatorAndSub` `:1688`; §0.Y
+  `updateVrfCoordinatorAndSub` dispatch table).** The emergency-rotation entry, reached through the
+  governance proposal-execution flow `DegenerusAdmin.sol:859` `_executeSwap` → `:901`
+  `gameAdmin.updateVrfCoordinatorAndSub(...)` (§0.Y `updateVrfCoordinatorAndSub` Hop 1), itself
+  stall-gated (`ADMIN_STALL_THRESHOLD`, proposal create/execute gated on
+  `gameAdmin.lastVrfProcessed()` staleness). Original intent = "when the live coordinator stalls,
+  repoint config to a fresh coordinator and let the game advance again." To deliver that liveness, the
+  function unconditionally clears the RNG lock state — `:1701` `rngLockedFlag = false`, `:1702`
+  `vrfRequestId = 0`, `:1703` `rngRequestTime = 0`, `:1704` `rngWordCurrent = 0` (§0.A
+  `force-unlock + zero resets` row), then `:1709` `LR_MID_DAY = 0` (§0.A `clears LR_MID_DAY = 0` row).
+  The docstring at `:1706-1708` states the intent of the `LR_MID_DAY` clear explicitly: "prevent
+  post-swap deadlock … advanceGame can revert with NotTimeYet if a mid-day requestLootboxRng was
+  in-flight." **The design saw the deadlock and tried to side-step it by dropping the in-flight flag —
+  but dropping the flag without supplying the word the flag was guarding is exactly what orphans the
+  index.** The blanket reset trades a correct-but-stuck state for a live-but-corrupt one.
+
+### §1.2 The in-flight reservation the reset abandons
+
+A mid-day lootbox request reserves an index and swaps the ticket buffer before firing VRF:
+`requestLootboxRng` (§0.A `requestLootboxRng` `:1044`) sets `LR_MID_DAY = 1` (§0.A `sets LR_MID_DAY = 1`
+`:1097`), fires `vrfCoordinator.requestRandomWords` (§0.E call site #1, `:1102`), advances `LR_INDEX`
+so new purchases target the NEXT slot (`:1113-1118`), and stamps `vrfRequestId`/`rngRequestTime`
+(`:1121-1123`). The reserved slot is `lootboxRngWordByIndex[LR_INDEX − 1]` (§0.C `lootboxRngWordByIndex`
+`Storage:1431`) — it stays **zero** until `rawFulfillRandomWords` delivers the word into it through the
+mid-day branch (§0.F mid-day row, `:1772`). The single-in-flight gate (§0.A `LR_MID_DAY single-in-flight
+gate` `:1048`) means at most ONE such reservation is outstanding at a time → at most one orphaned index
+per stall/rotation. When `updateVrfCoordinatorAndSub` fires while this reservation is in flight, `:1709`
+zeroes `LR_MID_DAY` and `:1702-1703` zero `vrfRequestId`/`rngRequestTime` — the reservation is forgotten,
+but slot `[N] = lootboxRngWordByIndex[LR_INDEX − 1]` is **never written**. It is now orphaned at zero.
+
+### §1.3 Scenario A — same-day advance after rotation → entropy-0 traits (HIGH)
+
+Timing/state combo: rotation fires, then a same-day `advanceGame` drains the read slot before any new
+mid-day request re-fills `[N]`. The same-day branch is `:205` `if (day == dailyIdx)`. Because `:1709`
+already cleared `LR_MID_DAY = 0`, the same-day RNG-readiness guard at `:209` (`if (LR_MID_DAY != 0)`) is
+**skipped** — the `:213` `revert RngNotReady()` that would have caught the zero word never runs. Draining
+proceeds into `_runProcessTicketBatch` (`:221`) → `DegenerusGameMintModule` ticket processing, where
+`MintModule.sol:686` (§0.B `entropy = lootboxRngWordByIndex[…-1]` row) reads:
+
+```
+uint256 entropy = lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
+```
+
+with **NO `== 0` guard** before `entropy` flows into `_processOneTicketEntry(…, entropy, idx)` (§0.B row:
+the read flows to `:690-696`). Orphaned `[N] == 0` ⇒ `entropy == 0` ⇒ deterministic, attacker-predictable
+trait derivation. Game-theory: emergency rotation is governance-telegraphed (the §0.Y `:859` `_executeSwap`
+proposal flow is on-chain observable) and the coordinator stall is observable, so an actor can position to
+mint into the zero-entropy window — an EV-positive grind (HIGH). **Actor-class note:** per
+`v45-vrf-freeze-invariant`, admin rotation itself is an EXEMPT-class operation, not a player-discretionary
+write — the harm here is not "a player mutated a frozen slot" but "the admin path left a VRF-consumed slot
+at a predictable value," i.e. a liveness/correctness defect in an exempt operation, not a freeze-invariant
+violation by a player. Per `project_rnglock_audit_disposition`, the §9d governance rows this overlaps
+(§0.X) are a maximalist catalog, not live player vectors; the real defect is this orphan, which §2 closes.
+
+### §1.4 Scenario B — next-day advance → drain-gate revert before backfill → ~120-day freeze
+
+Timing/state combo: no same-day advance reads `[N]`; the next wall-clock day arrives with `[N]` still
+orphaned at zero. Now `day != dailyIdx`, so control reaches the new-day daily-drain gate (§0.A
+`advance-flow drain gate` row). At `:263` `if (!ticketsFullyProcessed)`, with a non-empty read queue
+(`:265`), the gate computes `preIdx = LR_INDEX − 1` (`:266-268`) and tests `:269`
+`if (lootboxRngWordByIndex[preIdx] == 0)`. For the orphaned slot this is **true**, so it falls to `:270`
+`uint256 cw = rngWordCurrent;` and `:271` `if (cw == 0) revert RngNotReady();`. After rotation `:1704`
+zeroed `rngWordCurrent` and no daily word has landed yet (`rngLockedFlag` was forced false at `:1701`, so
+the daily request machinery isn't mid-flight either), so `cw == 0` ⇒ **`:271` reverts**. The advance can
+never get past the drain gate, which means it never reaches the gap-day branch at `:1202`
+(`day > idx + 1 && rngWordByDay[idx + 1] == 0`) that calls `_backfillOrphanedLootboxIndices(currentWord)`
+at `:1208` (§0.A `existing _backfillOrphanedLootboxIndices CALL` row) — and that branch is itself gated on
+`:1193` `currentWord != 0 && rngRequestTime != 0`, both of which the reset zeroed. So the one helper that
+could heal the orphan (§0.A `_backfillOrphanedLootboxIndices DEFINITION` `:1817`) is **unreachable behind
+the revert**. The game is frozen until the ~120-day inactivity timeout forces a premature game-over (funds
+eventually recoverable, but the protocol is bricked for the duration). This is the CONTEXT `<domain>`
+Scenario B, confirmed at the precise revert sites `:213`/`:238`/`:271` recorded in §0.A.
+
+> **Why both scenarios share one root cause.** `:1709` drops the in-flight flag and `:1702-1704` drop the
+> request/word state, but nothing re-supplies the word for slot `[N]`. Scenario A consumes the zero
+> (no guard at `MintModule:686`); Scenario B trips a guard that has no escape (`:271`/`:213`). §2 fixes
+> the single root cause — re-supply the word by re-issuing the request — which closes both.
 
 ## §2 LOCKED Fix Shape — Re-Issue In-Flight (D-01/D-02)
 
-[authored in Plan 02]
+This section locks the fix shape that closes **VRF-01** (orphaned `lootboxRngWordByIndex[N]` resolves to a
+real VRF word) and **VRF-02** (post-rotation liveness — `requestLootboxRng`/`retryLootboxRng`/daily-drain
+stay reachable). It refines the SPEC-discretion mechanics around the locked D-01/D-02 decisions; it does
+NOT reverse them. Every mechanic cites a §0 row.
+
+### §2.1 D-01 — re-issue the in-flight request on the new coordinator
+
+Replace the unconditional blanket reset (§0.A `force-unlock + zero resets` `:1701-1704` + `clears LR_MID_DAY`
+`:1709`) with a **detect-what-is-in-flight, preserve-its-flag, re-fire-on-the-new-coordinator** shape. The
+re-issue mechanic already exists at HEAD and is the canonical pattern to mirror: `retryLootboxRng` (§0.A
+`retryLootboxRng` `:1133`; §0.E call site #2, `:1143`) re-fires `vrfCoordinator.requestRandomWords(VRFRandom
+WordsRequest{ keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: VRF_MIDDAY_CONFIRMATIONS,
+callbackGasLimit: VRF_CALLBACK_GAS_LIMIT, numWords: 1, extraArgs: hex"" })` and sets a **fresh**
+`vrfRequestId`/`rngRequestTime` (`:1154-1155`) while preserving `LR_MID_DAY` and the pre-advanced `LR_INDEX`.
+D-01 generalizes exactly this to the rotation function: after repointing config (`:1696-1698`), if a request
+is in flight, re-fire on the now-current coordinator and stamp a fresh `vrfRequestId = id` +
+`rngRequestTime = block.timestamp` (the discretion note in `311-CONTEXT.md` `<decisions>` fixes
+`rngRequestTime = block.timestamp` so the liveness/timeout machinery — `retryLootboxRng`'s
+`rngRequestTime + MIDDAY_RNG_RETRY_TIMEOUT` check at `:1136` and the `requestLootboxRng` `rngRequestTime != 0`
+guard at `:1058` — restarts cleanly against the new request). The exact `requestRandomWords` call mirrors the
+existing §0.E sites #1–#4 (all four are the identical `VRFRandomWordsRequest{...}` struct call); re-issue
+introduces **no new VRF call shape and no new fulfillment path**.
+
+**Freeze-safety of re-issue (the chosen narrative).** When the new coordinator delivers, `rawFulfillRandomWords`
+(§0.A `rawFulfillRandomWords` `:1756`) matches `requestId` against the fresh `vrfRequestId`. A late callback
+from the **dead** old coordinator carries the OLD `requestId` and is rejected by the guard `:1761`
+`if (requestId != vrfRequestId || rngWordCurrent != 0) return;` (§0.A `requestId / word guard` row; §0.F Guard
+row). So the old word is **abandoned** and only the new, unpredictable word is consumed — re-issue is freeze-safe
+(developed in §3). This is the design the user accepts (`311-CONTEXT.md` `<specifics>`): "old word abandoned,
+new word unpredictable" beats queue+apply's "zero mid-window mutation," because the latter sacrifices the
+recovery liveness that is the entire point of the emergency procedure.
+
+### §2.2 D-02 — surgical preserve+re-issue for BOTH paths (drop the unconditional force-unlock)
+
+`updateVrfCoordinatorAndSub` branches on what is in flight (the discretion note leaves the exact branch
+structure to the SPEC; the locked behavior is three cases):
+
+- **Daily in flight (`rngLockedFlag == true`).** KEEP `rngLockedFlag = true`; re-request the daily word on the
+  new coordinator. The fresh request flows through the `rawFulfillRandomWords` **daily** branch — `:1766`
+  `if (rngLockedFlag) {` → `:1768` `rngWordCurrent = word;` (§0.A `daily branch → rngWordCurrent` row; §0.F
+  Daily row, target `rngWordCurrent` `Storage:373`). `advanceGame` then consumes `rngWordCurrent` normally.
+- **Mid-day in flight (`LR_MID_DAY == 1`).** KEEP `LR_MID_DAY = 1` (do NOT execute the `:1709` clear); re-request
+  for the reserved index. The fresh request flows through the `rawFulfillRandomWords` **mid-day** branch —
+  `:1769` `} else {` → `:1771` `uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;` → `:1772`
+  `lootboxRngWordByIndex[index] = word;` (§0.A `mid-day branch → lootboxRngWordByIndex[index]` row; §0.F Mid-day
+  row, target `lootboxRngWordByIndex` `Storage:1431`). Because `LR_INDEX` is preserved (the reset never touched
+  it; only `requestLootboxRng:1113-1118` advances it), `index` resolves to the SAME orphaned slot `[N]` and the
+  new word lands exactly there. **This is the precise close of VRF-01.**
+- **Nothing in flight (`rngLockedFlag == false && LR_MID_DAY == 0`).** Re-point config only (`:1696-1698`). No
+  re-issue, no flag change — there is no outstanding request to preserve, so the rotation is a pure config
+  repoint.
+
+The CONTEXT `<decisions>` D-02 note records that the **daily** path self-heals even under the *current*
+force-unlock (a daily re-request would re-fire next advance); the uniform preserve+re-issue treatment is the
+chosen design for a single coherent rotation behavior, not because the daily path is independently broken. It
+also eliminates the secondary edge case where a just-delivered-but-unprocessed word would be zeroed by the
+old blanket reset.
+
+### §2.3 How this closes VRF-01 and VRF-02
+
+- **VRF-01 (orphan resolves to a real word).** The mid-day re-issue (§2.2) drives a real VRF word into
+  `lootboxRngWordByIndex[N]` via the unchanged mid-day fulfillment write `:1772` (§0.A / §0.F). The old word is
+  abandoned by the `:1761` `requestId` guard (§0.A). After re-issue, `MintModule:686` (§0.B) always reads a
+  non-zero `entropy` — Scenario A's entropy-0 path is eliminated **structurally** (the slot is filled), not by
+  adding a zero-guard at the consumer.
+- **VRF-02 (post-rotation liveness).** Keeping the in-flight flag + a fresh `rngRequestTime` means the new-day
+  drain gate's `:269`/`:271` no longer trips: in the mid-day case `:1772` fills `[N]` so `:269`
+  `lootboxRngWordByIndex[preIdx] == 0` is false; in the daily case `:1768` fills `rngWordCurrent` so `:271`
+  `cw == 0` is false (the §5 reachability trace develops this). `requestLootboxRng` (`:1044`, gate `:1048`) and
+  `retryLootboxRng` (`:1133`, gate `:1134`) both stay reachable — and `retryLootboxRng` remains the standing
+  **≥`MIDDAY_RNG_RETRY_TIMEOUT`** failsafe (`:1136`) for the case where the *new* coordinator also stalls, with
+  no new code required (§0.A `retryLootboxRng` row; CONTEXT `<code_context>` Reusable Assets).
+
+### §2.4 Rejected alternative — queue+apply (`pendingVrfRotationPacked`)
+
+Recorded in full in §6. Summary rationale for choosing re-issue over it here: queue+apply would repoint config
+into a new packed slot and apply the rotation later, achieving a "zero mid-window mutation" narrative — but the
+**old coordinator is dead**, so the in-flight word never resolves; recovery waits the full timeout before the
+two-step apply can proceed, adding recovery latency and a two-step UX. That sacrifices the very liveness the
+emergency procedure exists to deliver. Re-issue gets a live word from the new coordinator immediately.
+
+### §2.5 `totalFlipReversals` carry-over is PRESERVED (not designed away)
+
+The re-issue design does **not** touch `totalFlipReversals`. The intentional carry-over comment at §0.A
+`totalFlipReversals carry-over comment` (`:1711-1714`, "Intentional: totalFlipReversals is NOT reset here")
+stays exactly as-is — re-issue leaves that block untouched. Nudges purchased with irreversible BURNIE burns
+before/during the stall carry over and apply to the **first post-rotation daily word** via `_applyDailyRng`
+(`:1843` reads `totalFlipReversals`, `:1847` adds it into the finalized word; the daily-drain gate also folds
+it at `:273` `cw += totalFlipReversals`). Resetting it would steal user value, which D-02's preserve posture
+explicitly avoids.
 
 ## §3 Freeze-Invariant Disposition (VRF-03)
 
-[authored in Plan 02]
+This section closes **VRF-03** (and the §9d freeze sub-cluster HANDOFF-78/85/87/89/91 mapped in §0.X) by
+applying the `v45-vrf-freeze-invariant` lens: every variable interacting with a VRF word must be frozen across
+`[rng request → unlock]` **vs PLAYERS**, with admin rotation EXEMPT-class. The disposition is that the §2
+design introduces **no freeze-breaking mutation** and explicitly rejects validator-influenceable entropy.
+
+### §3.1 VRF-participating slots enumerated (cite §0.C)
+
+| Slot | §0 row | Role in the VRF window | §2 treatment |
+|------|--------|------------------------|--------------|
+| `vrfCoordinator` | §0.C `vrfCoordinator` `Storage:1287` | config: which coordinator fulfills | repointed (`:1696`) — config, not a VRF-derived output |
+| `vrfSubscriptionId` | §0.C `vrfSubscriptionId` `Storage:1295` | config: LINK billing | repointed (`:1697`) — config |
+| `vrfKeyHash` | §0.C `vrfKeyHash` `Storage:1291` | config: gas lane | repointed (`:1698`) — config |
+| `rngRequestTime` | §0.C `rngRequestTime` `Storage:244` | liveness/timeout marker | set fresh on re-issue (`block.timestamp`) — restarts the timeout clock, does not feed entropy |
+| `rngWordCurrent` | §0.C `rngWordCurrent` `Storage:373` | daily VRF word slot | daily branch writes the NEW word (`:1768`); never carries an old value into the new cycle |
+| `LR_MID_DAY` | §0.C `LR_MID_DAY` `Storage:1328-1329` | single-in-flight mid-day gate | PRESERVED on re-issue (kept `=1`), not the `:1709` clear |
+| `lootboxRngWordByIndex[N]` | §0.C `lootboxRngWordByIndex` `Storage:1431` | the per-index lootbox word | mid-day branch writes the NEW word into `[N]` (`:1772`) |
+| `LR_INDEX` (`LR_INDEX_SHIFT/MASK`) | used at `:1771`/`:686`/`:269` | reserved-index pointer | untouched by rotation; only `requestLootboxRng:1113-1118` advances it |
+
+### §3.2 No freeze-breaking mid-window mutation under the §2 design
+
+The freeze invariant is about a VRF-derived output **consumed this cycle** being deterministic given
+(frozen state + the incoming VRF word). Under §2:
+
+- The **old** in-flight word is abandoned, never consumed — the `:1761` guard (§0.A `requestId / word guard`)
+  rejects the dead coordinator's callback (`requestId != vrfRequestId`), and `rngWordCurrent != 0` blocks a
+  double-write. So no output consumed this cycle depends on the abandoned word.
+- The **new** word is freshly requested from the new coordinator and is **unpredictable** at re-issue time
+  (it does not exist yet). The slots that feed its consumption — `LR_INDEX` (the reserved index) and the
+  ticket buffer swapped at `requestLootboxRng:1090-1099` — are frozen across the window (rotation does not
+  touch `LR_INDEX`; the buffer swap already happened pre-request). `rngRequestTime` is a liveness marker, not
+  an entropy input; resetting it changes no VRF-derived output.
+- Admin rotation is **EXEMPT-class vs PLAYERS** per `v45-vrf-freeze-invariant` (the lens exempts
+  `advanceGame`/admin paths). The §9d governance rows this overlaps (§0.X HANDOFF-78/85/87/89/91) are a
+  **maximalist catalog**, not live player-discretionary writes, per `project_rnglock_audit_disposition` — the
+  disposition does NOT add player-facing gates on the config slots; it makes the EXEMPT rotation freeze-safe
+  by abandoning the old word and consuming only a fresh unpredictable one.
+
+**Verify consumed-this-cycle, not buffered-for-next** (the lens's explicit check): the re-issued word is the
+word this cycle consumes (daily → `rngWordCurrent` → `advanceGame`; mid-day → `[N]` → `MintModule:686`). It is
+not a value buffered for a later cycle; the abandoned old word is the only buffered-then-discarded value, and
+it is discarded by the `:1761` guard before any consumption. Invariant holds.
+
+### §3.3 Validator-influenceable entropy backfill — EXPLICITLY REJECTED
+
+Per `feedback_security_over_gas`, the design **rejects** any entropy backfill that an actor (validator/
+proposer or a telegraphing admin) could influence — specifically `block.timestamp`, the rotation's
+`newKeyHash`, blockhash, or any caller-supplied value as an entropy source for filling `lootboxRngWordByIndex[N]`
+or any VRF-derived output. These are predictable or grindable and would re-open Scenario A by a different door.
+The **only** sanctioned entropy source is **keccak-of-a-real-VRF-word**, exactly the existing
+`_backfillOrphanedLootboxIndices` pattern: §0.A `_backfillOrphanedLootboxIndices DEFINITION` (`:1817`) derives
+`keccak256(abi.encodePacked(vrfWord, i))` at `:1826`, where `vrfWord` is the **fresh post-gap VRF word** (not
+front-runnable). §2's primary mechanic does not even backfill — it re-issues to get a genuine VRF word into
+`[N]` directly (`:1772`); the keccak-of-VRF-word pattern is only the §5 residual-recovery path, and it too is
+VRF-seeded. No validator-influenceable entropy enters any path.
+
+### §3.4 `MintModule:686` absent zero-guard is mitigated STRUCTURALLY
+
+The Scenario A consumer `MintModule.sol:686` (§0.B) reads `entropy` with no `== 0` guard. The disposition does
+**not** add a guard there. Under §2 the index `[N]` is **always filled** by the mid-day re-issue (`:1772`)
+before any same-day advance can drain the read slot — the structural guarantee replaces the missing runtime
+guard. Adding a zero-guard at `:686` would be defense-in-depth against a state §2 makes unreachable; it is not
+required for VRF-03 closure and is not part of the locked design (it could be revisited only via the §5
+escalation clause if a residual orphan path were found, which §5 confirms it is not).
 
 ## §4 wireVrf One-Shot Lock + _setVrfConfig Dedup + Vault Reach (D-03/D-04/VRF-04/VRF-05)
 
