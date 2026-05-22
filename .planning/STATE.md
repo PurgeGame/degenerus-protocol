@@ -1,50 +1,52 @@
 ---
 gsd_state_version: 1.0
 milestone: v45.0
-milestone_name: Close the Lootbox EV-Cap Open-Ordering Hole (V-081)
-status: ready_to_plan
-last_updated: 2026-05-20T13:01:34.445Z
-last_activity: 2026-05-20 -- Phase 310 execution started
+milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
+status: planning
+last_updated: 2026-05-22T12:00:00.000Z
+last_activity: 2026-05-22 -- v45.0 REDEFINED (consolidate-forward); roadmapper defining Phase 311+
 progress:
-  total_phases: 5
-  completed_phases: 1
+  total_phases: 7
+  completed_phases: 2
   total_plans: 5
   completed_plans: 5
-  percent: 20
-stopped_at: Phase 310 complete (3/3) — ready to discuss Phase 311
+  percent: 28
+stopped_at: Phase 310 complete (V-081 groundwork); v45.0 REDEFINED — roadmapper defining Phase 311+ (VRF-rotation fix + delta audit)
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-18 after v42.0 milestone archive)
+See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 311 — test — foundry coverage (tst)
+**Current focus:** Phase 311 — SPEC — VRF-rotation liveness fix (design-intent trace + grep-verified call-graph)
 
 ## Current Position
 
 Phase: 311
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-20
+Status: Planning (roadmapper defining v45.0 phases 311–315)
+Last activity: 2026-05-22
 
-## Current Milestone Phases (v45.0 — PLANNING)
+## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
 
-5-phase FIX-MILESTONE: SPEC → IMPL → TST → SWEEP → TERMINAL. Audit baseline `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` (source tree frozen after `67e9ea6f` + `e5928fb8`). Single batched USER-APPROVED contract diff at Phase 310 IMPL per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md`; AGENT-COMMITTED test/planning/audit per `D-43N-TEST-COMMITS-AUTO-01`. Files touched: `DegenerusGameStorage.sol`, `DegenerusGameLootboxModule.sol`, `DegenerusGameMintModule.sol`, `DegenerusGameWhaleModule.sol`.
+**v45.0 redefined (consolidate-forward).** The original V-081-only 5-phase shape is superseded: phases 309 (SPEC) + 310 (IMPL `9bcd582d`) are retained as **completed groundwork**, and active work is rescoped to the VRF-rotation liveness fix + degenerette audit + consolidate-forward delta audit. Audit baseline → subject: v44.0 closure HEAD `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` → v45.0 closure HEAD (V-081 `9bcd582d` + jackpot `6e5acd7e` + degenerette `92b110bf` + the VRF fix). VRF fix = single batched USER-APPROVED diff at the IMPL phase per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md`; test/planning/audit AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`. **The table below (311–315) is provisional — the gsd-roadmapper finalises phase boundaries + success criteria.**
 
-| Phase | Name | Type | Requirements | Wave Shape | Depends on | Status |
-|-------|------|------|--------------|------------|------------|--------|
-| 309 | SPEC — Locked Layout + Bonus-Only Cap + Shared-Cap Disposition | SPEC | SPEC-01..04 (4) | 1 AGENT-COMMITTED SPEC artifact bundle | nothing | Complete (2/2 plans) — ready for verification |
-| 310 | Implementation — Single Batched USER-APPROVED Contract Diff | IMPL | IMPL-01..05 (5) | 1 USER-APPROVED batched contract commit | Phase 309 | Not started |
-| 311 | Test — Foundry Coverage | TST | TST-01..05 (5) + INV-01..06 (6, carried) | 1+ AGENT-COMMITTED test commit(s) | Phase 310 | Not started |
-| 312 | Adversarial Sweep | SWEEP | SWP-01..02 (2) | 1 AGENT-COMMITTED adversarial-log bundle | Phases 310 + 311 | Not started |
-| 313 | Delta Audit + Findings Consolidation | TERMINAL | AUDIT-01..02 (2) + CLS-01 (1) | 2 AGENT-COMMITTED commits (deliverable + closure flip) | All prior | Not started |
+| Phase | Name | Type | Requirements | Status |
+|-------|------|------|--------------|--------|
+| 309 | SPEC — V-081 Locked Layout + Bonus-Only Cap + Shared-Cap | SPEC | SPEC-01..04 | Complete (groundwork) |
+| 310 | IMPL — V-081 Single Batched USER-APPROVED Diff (`9bcd582d`) | IMPL | IMPL-01..05 | Complete (groundwork) |
+| 311 | SPEC — VRF-Rotation Liveness Fix (design-intent + call-graph) | SPEC | VRF-01..05 | Pending (roadmapper) |
+| 312 | IMPL — VRF-Rotation Fix (single batched USER-APPROVED diff) | IMPL | VRF-01..05 | Pending (roadmapper) |
+| 313 | TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation | TST | VTST-01..04 | Pending (roadmapper) |
+| 314 | SWEEP — 3-Skill Adversarial (VRF fix + delta surfaces) + Degenerette Audit | SWEEP | SWP-01..02 + DGAUD-01..04 | Pending (roadmapper) |
+| 315 | TERMINAL — Consolidate-Forward Delta Audit + Closure | TERMINAL | DELTA-01..04 + AUDIT-01 + REG-01 + CLS-01 | Pending (roadmapper) |
 
-**Coverage:** 22/22 v45.0 requirements mapped (4 SPEC + 5 IMPL + 6 INV + 5 TST + 2 SWP + 2 AUDIT + 1 CLS); 0 orphaned. INV-01..06 are provable acceptance criteria carried by the Phase 311 TST phase that proves them (INV-01←TST-01; INV-02/03←TST-02; INV-04←TST-03; INV-05←TST-04; INV-06←TST-01/TST-04, re-attested Phase 312 SWEEP + Phase 313 §3). Full mapping in `.planning/REQUIREMENTS.md` Traceability table.
+**Coverage:** 31/31 requirements mapped (9 groundwork complete + 22 active: 5 VRF + 4 DGAUD + 4 DELTA + 4 VTST + 2 SWP + 3 AUDIT/REG/CLS); 0 orphaned. Full mapping in `.planning/REQUIREMENTS.md` Traceability table (roadmapper refreshes).
 
-**Closure verdict (target):** `V-081 RESOLVED_AT_V45; ORDER_INDEPENDENCE PROVEN; PENALTY_DODGE ELIMINATED; SEED/ROLL UNCHANGED; 0 NEW_FINDINGS; 0 FREEZE_REGRESSIONS; KNOWN_ISSUES_UNMODIFIED`. To be emitted at `audit/FINDINGS-v45.0.md` §9a at Phase 313.
+**Closure verdict (target):** `VRF_ROTATION_ORPHAN RESOLVED_AT_V45; ROTATION_LIVENESS PRESERVED; FREEZE_INVARIANT INTACT_UNDER_ROTATION; <N> of <N> VRF_CLUSTER_ANCHORS RESOLVED; CONSOLIDATE_FORWARD_DELTA AUDITED (V-081 + jackpot-pending-pool + degenerette); 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`. To be emitted at `audit/FINDINGS-v45.0.md` §9a at the TERMINAL phase.
 
 ## Last Shipped Milestone
 

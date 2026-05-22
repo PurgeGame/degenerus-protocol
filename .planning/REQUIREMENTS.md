@@ -1,125 +1,152 @@
 # Requirements: Degenerus Protocol — Audit Repository
 
-**Defined:** 2026-05-20
-**Milestone:** v45.0 Close the Lootbox EV-Cap Open-Ordering Hole (V-081)
-**Posture:** USER-APPROVED contract change per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md`; AGENT-COMMITTED test/planning per `D-43N-TEST-COMMITS-AUTO-01` lineage
-**Audit baseline:** v44.0 closure HEAD `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` (source tree frozen after `67e9ea6f` + `e5928fb8`)
-**Load-bearing input:** RNGLOCK catalog V-081 / S-22 + `.planning/v45-lootbox-evcap-fix-plan.md` + memory `v45-vrf-freeze-invariant`
+**Defined:** 2026-05-20 (V-081 groundwork) · **Redefined:** 2026-05-22 (consolidate-forward)
+**Milestone:** v45.0 VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
+**Posture:** VRF-rotation fix is a single batched USER-APPROVED contract change per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md` + `feedback_manual_review_before_push.md`; AGENT-COMMITTED test/planning/audit per `D-43N-TEST-COMMITS-AUTO-01` lineage. Degenerette / jackpot / V-081 contract changes already landed (user-committed).
+**Audit baseline → subject:** v44.0 closure HEAD `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` → v45.0 closure HEAD. Subject = every `contracts/` commit in that delta (V-081 `9bcd582d`, jackpot pending-pool `6e5acd7e`, degenerette `92b110bf`, + the VRF-rotation fix landed this milestone).
+**Load-bearing input:** `audit/FINDINGS-v44.0.md` §9d VRF-governance cluster (HANDOFF-78/85/86/87/88/89/90/91 + ADMA-01/02) + memory `project_vrf_rotation_midday_orphan_index` + `v45-vrf-freeze-invariant`.
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
 ---
 
 ## v45.0 Goal (precise statement)
 
-The purchased-lootbox EV-multiplier cap allocation must be **independent of the order boxes are opened**, closing the last strict-definition self-manipulation freeze violation (V-081 / S-22). Today `_applyEvMultiplierWithCap` in `contracts/modules/DegenerusGameLootboxModule.sol` consumes the per-(player, level) `LOOTBOX_EV_BENEFIT_CAP = 10 ether` **greedily at open**, and *any* non-neutral box — including sub-100% penalty boxes — draws it down. A player who has already seen the per-index VRF word can therefore open >100% boxes first, simultaneously maximising the bonus and exhausting the cap before the penalty boxes resolve, so the sub-100% penalties never bite. The fix has two parts: **(Change 1)** a bonus-only cap so penalties (and neutral) apply in full and never touch the cap, and **(Change 2)** moving purchased-box cap consumption from open → allocation, packing the per-box bonus allocation into the existing per-(index, player) slot so `openLootBox` applies a frozen, order-independent result with no cap SLOAD/SSTORE.
+Close the CATASTROPHE-class VRF-rotation orphan-index liveness defect in `updateVrfCoordinatorAndSub` (and the governance-VRF freeze-violation cluster it overlaps), audit the already-landed degenerette refactor, and consolidate-audit every contract change since the v44.0 baseline into one closure signal at current HEAD.
 
-**Non-negotiable closure verdict at v45.0 TERMINAL:** `V-081 RESOLVED_AT_V45; ORDER_INDEPENDENCE PROVEN; PENALTY_DODGE ELIMINATED; SEED/ROLL UNCHANGED; 0 NEW_FINDINGS; 0 FREEZE_REGRESSIONS; KNOWN_ISSUES_UNMODIFIED`.
+**Root cause (CONFIRMED 2026-05-20):** `updateVrfCoordinatorAndSub` (AdvanceModule ~:1687) clears `rngWordCurrent` + `LR_MID_DAY` but never backfills `lootboxRngWordByIndex[N]` — the index a stalled mid-day `requestLootboxRng` swap was bound to. Scenario A (same-day advance): `processTicketBatch` reads `entropy = lootboxRngWordByIndex[N] = 0` → deterministic/entropy-0 traits (HIGH, EV-positive grind). Scenario B (next-day): daily-drain gate reverts, `requestLootboxRng`/`retryLootboxRng` bricked, orphan-backfill helper unreachable behind the revert → ~120-day freeze until `_livenessTriggered` forces a premature game-over.
 
-**Gas directive (user, 2026-05-20):** pack to the maximal practical extent — tightest field widths for the cap-bounded maxima, reuse the existing slot, introduce no new slot. Packing must never trade away a freeze invariant per `feedback_security_over_gas`.
+**Non-negotiable closure verdict at v45.0 TERMINAL (target):** `VRF_ROTATION_ORPHAN RESOLVED_AT_V45; ROTATION_LIVENESS PRESERVED; FREEZE_INVARIANT INTACT_UNDER_ROTATION; <N> of <N> VRF_CLUSTER_ANCHORS RESOLVED; CONSOLIDATE_FORWARD_DELTA AUDITED (V-081 + jackpot-pending-pool + degenerette); 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`.
+
+**Fix-shape directive:** NOT pre-locked. Decided at SPEC via design-intent backward-trace across timing/state combos per `feedback_design_intent_before_deletion.md`; validator-influenceable entropy backfill is rejected per `feedback_security_over_gas.md`. Recommended candidate (memory): re-issue the in-flight mid-day request on the new coordinator (keep `LR_MID_DAY=1`, set `vrfRequestId`/`rngRequestTime`) so existing retry/callback lands a real word in [N]; alternative is the §9d "queue + apply" `pendingVrfRotationPacked` split. Call-graph citations grep-verified per `feedback_verify_call_graph_against_source.md` before any patch.
 
 ---
 
-## v45.0 Requirements
+## v45.0 Groundwork — V-081 Lootbox EV-Cap (phases 309/310, COMPLETE)
+
+> Retained verbatim from the original v45.0 scope. These shipped at Phase 309 (SPEC) + Phase 310 (IMPL, `9bcd582d`, verified 5/5) and stand as completed groundwork. V-081 is audited as a delta surface at the TERMINAL phase (DELTA-02); its order-independence / penalty-dodge acceptance criteria are attested by construction, not by dedicated regression (see Out of Scope).
 
 ### Spec (SPEC) — Locked Design Decisions
 
-> Locked at the SPEC phase. Every file:line citation in the plan grep-verified against contract HEAD per `feedback_verify_call_graph_against_source.md` before any patch.
+- [x] **SPEC-01**: Packed-slot layout locked — per-(index, player) snapshot widened from `uint16` to a packed `uint256` holding `score+1` (`uint16`) + `adjustedPortion` (`uint64`, cap-bounded ≤10 ETH); no new storage slot introduced.
+- [x] **SPEC-02**: Bonus-only cap semantics locked — `_applyEvMultiplierWithCap` returns `amount * evMultiplierBps / 10_000` for `<= NEUTRAL` (never consumes the cap); only `> NEUTRAL` draws from it.
+- [x] **SPEC-03**: Allocation-time tally + open-time application locked — cap drawn at purchased-box deposit (`add = min(deposit, remaining)`), `openLootBox` applies the frozen allocation with no cap SLOAD/SSTORE.
+- [x] **SPEC-04**: Shared-cap disposition locked — `resolveLootboxDirect` / `resolveRedemptionLootbox` keep consuming the cap at resolution; backward-trace confirms no known-word reorder.
 
-- [x] **SPEC-01**: Packed-slot layout locked. The per-(index, player) score snapshot widens from `uint16` to a single packed `uint256` word holding `score+1` (`uint16`, 0 = unset) plus `adjustedPortion` (the cap-eligible ETH that received the bonus). Field widths chosen for the cap-bounded maxima: `adjustedPortion ≤ 10 ETH` fits `uint64` (2⁶⁴ ≈ 18.44 ETH). Mapping values never cross-pack and the `uint16` already occupied a full slot, so **no new storage slot is introduced**. SPEC evaluates whether any other cap-bounded per-box field can co-pack into the same word and locks the final layout + pack/unpack helper signatures. Optional rename `lootboxEvScorePacked → lootboxEvPacked` (now genuinely packed) decided here.
-- [x] **SPEC-02**: Bonus-only cap semantics locked. In `_applyEvMultiplierWithCap`, `evMultiplierBps <= LOOTBOX_EV_NEUTRAL_BPS` (penalty or neutral) returns `amount * evMultiplierBps / 10_000` and never consumes the cap; only `evMultiplierBps > NEUTRAL` draws from the cap. Applies to all three callers.
-- [x] **SPEC-03**: Allocation-time tally + open-time application locked. At each purchased-box deposit, with the box's frozen multiplier from the first-deposit score snapshot: if `mult <= NEUTRAL`, store `score+1` only (no cap draw); if `mult > NEUTRAL`, draw `add = min(depositAmount, remaining)` where `remaining = CAP - lootboxEvBenefitUsedByLevel[player][lvl]`, advance the used-cap accumulator, and accumulate `adjustedPortion`. First deposit writes `score+1`; later deposits accumulate `adjustedPortion` only. `openLootBox` applies `scaled = mult <= NEUTRAL ? amount*mult/1e4 : adj*mult/1e4 + (amount - adj)` with no cap SLOAD/SSTORE, and the zero-at-open write clears the whole packed slot.
-- [x] **SPEC-04**: Shared-cap disposition locked. `resolveLootboxDirect` (decimator/degenerette) and `resolveRedemptionLootbox` have no purchase/allocation point and keep consuming the same per-(player, level) cap at resolution via `_applyEvMultiplierWithCap` (now with Change 1). Backward-trace per `feedback_rng_backward_trace.md` confirms the shared accumulator cannot be reordered against a known word (purchased allocation fixed pre-word; on-the-fly scores already frozen — decimator = bucket-at-burn, degenerette = bet-time; both bounded by the cap). Disposition documented (fix-or-accept) in the SPEC.
+### Implementation (IMPL) — Contract Changes (landed `9bcd582d`)
 
-### Implementation (IMPL) — Contract Changes
+- [x] **IMPL-01**: Bonus-only cap in `_applyEvMultiplierWithCap`.
+- [x] **IMPL-02**: Packed `uint256` snapshot layout + pack/unpack helpers in `DegenerusGameStorage.sol`.
+- [x] **IMPL-03**: Purchase-time cap tally at the `MintModule` + `WhaleModule` deposit sites.
+- [x] **IMPL-04**: `openLootBox` applies the frozen allocation; zero-at-open clears the whole packed slot.
+- [x] **IMPL-05**: Raw `amount` preserved for the roll seed (`keccak(rngWord, player, day, amount)` and the rolled index/word unchanged).
 
-> Single batched USER-APPROVED contract diff per `feedback_batch_contract_approval.md`. No partial commits. Touches `DegenerusGameStorage.sol`, `DegenerusGameLootboxModule.sol`, `DegenerusGameMintModule.sol`, `DegenerusGameWhaleModule.sol`.
+---
 
-- [x] **IMPL-01**: Bonus-only cap in `_applyEvMultiplierWithCap` (`DegenerusGameLootboxModule.sol`) per SPEC-02 — sub-neutral/neutral boxes apply directly and never consume the cap.
-- [x] **IMPL-02**: Widen the per-(index, player) snapshot to the packed `uint256` layout in `DegenerusGameStorage.sol` per SPEC-01 (+ optional rename); add `uint16`/`uint64` pack/unpack helpers.
-- [x] **IMPL-03**: Purchase-time cap tally at all purchased-box deposit sites — `DegenerusGameMintModule.sol` (first-deposit + subsequent branches) and `DegenerusGameWhaleModule.sol` — per SPEC-03; advance `lootboxEvBenefitUsedByLevel[player][lvl]` and accumulate `adjustedPortion`.
-- [x] **IMPL-04**: `openLootBox` (`DegenerusGameLootboxModule.sol`) applies the frozen allocation per SPEC-03 with no cap SLOAD/SSTORE; zero-at-open clears the whole packed slot.
-- [x] **IMPL-05**: Raw `amount` preserved for the roll seed — `keccak(rngWord, player, day, amount)` and the index/word a box rolls against are unchanged; only reward scaling uses `adjustedPortion`. `lootboxEth` layout untouched.
+## v45.0 Active Requirements
 
-### Invariants (INV) — Provable Acceptance Criteria
+### VRF — VRF-Rotation Liveness Fix (the contract change)
 
-> Each becomes a test assertion (TST). Proven against the post-IMPL source tree. INV-01..06 are carried by the Phase 311 TST phase that proves them (INV-01←TST-01; INV-02/03←TST-02; INV-04←TST-03; INV-05←TST-04; INV-06←TST-01/TST-04 demonstrate pre-word allocation, re-attested at Phase 312 SWEEP + Phase 313 §3).
+> SPEC (311) + IMPL (312). Single batched USER-APPROVED diff touching `DegenerusGameAdvanceModule.sol` (+ any VRF-config storage). Closes the §9d governance-VRF cluster.
 
-- [ ] **INV-01**: Order-independence — a player with mixed >100%/<100% boxes totalling >10 ETH receives the **same** total payout regardless of the order boxes are opened.
-- [ ] **INV-02**: Penalty non-dodgeable — every sub-100% box applies its penalty on the full `amount` and never consumes the cap, in any open order.
-- [ ] **INV-03**: Bonus correctness — for a player with ≤10 ETH of bonus-eligible deposits, every bonus box receives its full multiplier in any open order; cap exhaustion past 10 ETH opens marginal amounts at 100%.
-- [ ] **INV-04**: Seed/roll unchanged — the index/word a box rolls against and `keccak(rngWord, player, day, amount)` are byte-identical to pre-IMPL behaviour for the same deposits.
-- [ ] **INV-05**: All three callers resolve — `openLootBox`, `resolveLootboxDirect`, `resolveRedemptionLootbox` all produce correct payouts; the shared per-(player, level) cap accumulator introduces no known-word ordering edge.
-- [ ] **INV-06**: No freeze regression — no new player-discretionary writer of any slot consumed against the live VRF word in `[rng request, unlock]`; the packing/tally changes only move pre-word allocation, never a live-resolution input.
+- [ ] **VRF-01**: After an emergency coordinator/subscription rotation while a mid-day lootbox RNG request is in flight, the bound index `lootboxRngWordByIndex[N]` resolves to a real (non-zero, VRF-derived) word — no same-day deterministic / entropy-0 traits. (Closes Scenario A.)
+- [ ] **VRF-02**: After such a rotation the protocol stays live — `requestLootboxRng`, `retryLootboxRng`, and the daily-drain advance gate remain reachable; no permanent revert / ~120-day freeze / forced premature game-over. (Closes Scenario B.)
+- [ ] **VRF-03**: Emergency rotation cannot break the rngLock freeze invariant — no VRF-participating slot (`vrfCoordinator`, `vrfSubscriptionId`, `vrfKeyHash`, `rngRequestTime`, `LR_MID_DAY`) is mutated mid-window in a way that changes any in-flight VRF-derived output. (Closes **HANDOFF-78/85/87/89/91** = V-137/V-155/V-157/V-159/V-161.)
+- [ ] **VRF-04**: VRF wiring is one-shot — `wireVrf` seals after init; a second wire reverts. (Closes **HANDOFF-86/88/90 + ADMA-01** = V-156/V-158/V-160.)
+- [ ] **VRF-05**: The rotation + wire protections cover the `DegenerusVault`-routed admin dispatch, verified by backward-trace. (**ADMA-02**.)
 
-### Test (TST) — Foundry Coverage
+### DGAUD — Degenerette Refactor Audit (audit-only, `92b110bf`)
 
-> Test-tree AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`.
+> Audit of an already-landed change; no new fix expected unless the audit surfaces one.
 
-- [ ] **TST-01**: Order-independence test — randomised open orders over a mixed >100%/<100% portfolio >10 ETH assert identical total payout (proves INV-01).
-- [ ] **TST-02**: Penalty-dodge regression — a portfolio crafted to dodge penalties under the old greedy cap now always applies sub-100% penalties (proves INV-02); cap-exhaustion-past-10-ETH bonus correctness (proves INV-03).
-- [ ] **TST-03**: Seed/roll invariance — assert the box's rolled index/word and seed are unchanged by the packing/scaling refactor for identical deposits (proves INV-04).
-- [ ] **TST-04**: Three-caller resolution — `openLootBox` (purchased), `resolveLootboxDirect` (decimator + degenerette), `resolveRedemptionLootbox` (redemption) all resolve correctly with the shared cap (proves INV-05).
-- [ ] **TST-05**: Build + gas — `forge build` PASS; gas check confirms open-path net-neutral-or-better (−1 SLOAD/−1 SSTORE at open; +1 SSTORE at allocation into the already-written packed slot) and no regression on the deposit path beyond the single packed SSTORE.
+- [ ] **DGAUD-01**: The `92b110bf` storage-slot shift (removal of `playerDegeneretteEthWagered` + `topDegeneretteByLevel`) is confirmed safe pre-deploy — full-suite recompile clean; no storage collision with any retained slot.
+- [ ] **DGAUD-02**: `dailyHeroWagers` (the Jackpot RNG hero-override input) write-path is byte-identical after the refactor — removing the per-player/per-level tracking did not alter hero-wager accounting.
+- [ ] **DGAUD-03**: No dangling references to the removed mappings/views remain in `contracts/` or interfaces; off-chain leaderboard reconstruction from `BetPlaced` events is viable (events still emitted with the required fields).
+- [ ] **DGAUD-04**: Backlog rows touching the degenerette surface are re-verified against the refactored module — HANDOFF-01..03 (S-02 `dailyHeroWagers`), HANDOFF-18 (V-031 prizePool degenerette-bet), HANDOFF-81 (V-142 `degeneretteBets`), HANDOFF-82 (V-147 `prizePoolPendingPacked` frozen-branch) — disposition updated.
 
-### Adversarial Sweep (SWP)
+### DELTA — Consolidate-Forward Delta Audit (terminal)
 
-> SEQUENTIAL after IMPL + TST complete, per `D-NN-ADVERSARIAL-02` carry. HYBRID invocation: `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT + `/zero-day-hunter` + `/economic-analyst` PARALLEL_SUBAGENT per `D-302-INVOKE-01`. `/degen-skeptic` OUT OF SCOPE per `D-271-ADVERSARIAL-02`.
+- [ ] **DELTA-01**: Audit subject re-anchored — §3.A delta-surface table enumerates every `contracts/` commit from v44.0 closure HEAD through v45.0 closure HEAD (V-081 `9bcd582d`, jackpot `6e5acd7e`, degenerette `92b110bf`, + the VRF-rotation fix).
+- [ ] **DELTA-02**: V-081 (Phase 310 fix) audited as a delta surface — order-independence / penalty-dodge elimination / seed-invariance attested at source level (by construction, no dedicated regression per the ride-on-delta decision).
+- [ ] **DELTA-03**: Jackpot pending-pool fix `6e5acd7e` + regression `f3e21064` audited — yield-surplus obligations now include `prizePoolPendingPacked`; no over-distribution of pending ETH as yield; no new freeze/solvency surface.
+- [ ] **DELTA-04**: Degenerette refactor `92b110bf` delta covered (cross-refs DGAUD-01..04).
 
-- [ ] **SWP-01**: Red-team the new allocation/packing surface — does purchase-time tally open a new manipulation (deposit-order griefing, cap-accounting drift across incremental deposits, packed-field overflow/aliasing), a new freeze violation, or a composition attack across deposit/open/resolve? Does the shared-cap path between purchased and on-the-fly boxes admit any known-word reorder? RE-PASS per `D-284-ADVERSARIAL-RE-PASS-01` if a candidate materialises.
-- [ ] **SWP-02**: Confirm V-081 is structurally closed (not merely economically bounded) — no open order yields a different total payout; no path consumes the cap on a sub-neutral box.
+### VTST — VRF Regression + Freeze-Invariant Fuzz (Foundry, AGENT-COMMITTED)
 
-### Audit Deliverable + Closure (AUDIT / CLS)
+- [ ] **VTST-01**: Orphan-index reproduction — a pre-fix harness reproduces Scenario A (rotation mid-flight → `lootboxRngWordByIndex[N]==0` → deterministic traits); post-fix asserts a real VRF word lands in [N]. (Proves VRF-01.)
+- [ ] **VTST-02**: Liveness-after-rotation — post-fix, `requestLootboxRng` / `retryLootboxRng` / daily-drain advance all succeed after a rotation; no permanent revert / forced game-over. (Proves VRF-02.)
+- [ ] **VTST-03**: Freeze-invariant fuzz under rotation — perturb a coordinator/sub rotation between VRF request and fulfilment; assert every VRF-derived output is byte-identical to the no-rotation baseline (extends the v43 `RngLockDeterminism.t.sol` harness). (Proves VRF-03.)
+- [ ] **VTST-04**: `wireVrf` one-shot lock — a second wire reverts; the vault-routed wire path reverts. (Proves VRF-04 / VRF-05.)
+
+### SWP — Adversarial Sweep
+
+> SEQUENTIAL after IMPL + VTST complete, per `D-NN-ADVERSARIAL-02` carry. HYBRID invocation: `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT + `/zero-day-hunter` + `/economic-analyst` PARALLEL_SUBAGENT per `D-302-INVOKE-01`. `/degen-skeptic` OUT OF SCOPE per `D-271-ADVERSARIAL-02`. Skeptic filter per `feedback_skeptic_pass_before_catastrophe.md` before any elevation.
+
+- [ ] **SWP-01**: Red-team the VRF-rotation fix — rotation-spam / stuck-pending / double-request griefing, a new liveness-DoS, a new freeze violation, or a `wireVrf`-lock that breaks a legitimate ops path. RE-PASS per `D-284-ADVERSARIAL-RE-PASS-01` if a candidate materialises.
+- [ ] **SWP-02**: Composition pass across the consolidated delta surfaces — V-081 allocation/packing, jackpot pending-pool obligations, degenerette removal — any cross-surface composition attack or differential behaviour an attacker can game.
+
+### Audit Deliverable + Closure (AUDIT / REG / CLS)
 
 > SOURCE-TREE FROZEN during the terminal phase. Single-file deliverable per `D-NN-FILES-01`; forward-cite zero-emission per `D-NN-FCITE-01`.
 
-- [ ] **AUDIT-01**: `audit/FINDINGS-v45.0.md` 9-section deliverable — §3 V-081 mechanic + fix attestation (order-independence proof, penalty-dodge elimination, seed-invariance, shared-cap disposition), §4 adversarial surfaces per SWP, packing/gas note; `chmod 444` at close.
-- [ ] **AUDIT-02**: LEAN regression — v44.0 closure non-widening (`MILESTONE_V44_AT_HEAD_6f0ba296…` surfaces not in v45 scope unaffected) + spot-check that the EV-score/decimator/degenerette closures from `67e9ea6f`/`e5928fb8` remain intact.
+- [ ] **AUDIT-01**: `audit/FINDINGS-v45.0.md` 9-section deliverable — §3 VRF-rotation fix attestation (orphan-index closed, liveness preserved, freeze-invariant intact under rotation, HANDOFF/ADMA rows closed) + §3.A delta-surface table + degenerette-audit disposition + jackpot pending-pool delta; §4 adversarial surfaces per SWP; `chmod 444` at close.
+- [ ] **REG-01**: LEAN regression — v44.0 closure NON-WIDENING (`MILESTONE_V44_AT_HEAD_6f0ba296…` surfaces not in v45 scope byte-identical); the EV-score / decimator / degenerette closures from `67e9ea6f` / `e5928fb8` remain intact; the v43 rngLock determinism harness still PASS.
 - [ ] **CLS-01**: Closure flip — emit `MILESTONE_V45_AT_HEAD_<sha>` in the deliverable + cross-document propagation targets; atomic ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS flip post-§9c per `D-NN-CLOSURE-01` carry.
 
 ---
 
 ## Future Requirements (deferred, not this milestone)
 
-- VRF-freeze housekeeping — LR_INDEX seed-search rotation confirmation (V-089/090) + re-catalog the v44 redemption storage (`pendingByDay`/`pendingResolveDay`) in RNGLOCK-CATALOG.
-- v44.0 bookkeeping cleanup — flip the 36 stale v44 REQUIREMENTS.md checkboxes, register emergent INV-13/EDGE-19/EDGE-20, backfill the missing Phase 305 VERIFICATION.md.
-- Remaining v43 backlog — 135 FIXREC entries (HANDOFF-01..110, 118..119), 22 ADMA recommendations (D-43N-V44-ADMA-01..22), ERRATUM-01.
+- **Remaining ~115 v44 backlog anchors** — everything but the VRF-governance cluster: HANDOFF-01..77 (less the degenerette re-verify rows folded into DGAUD-04), 79..110, 118..119; ADMA-03..22; ADMA-ERRATUM-01. Stay in the `audit/FINDINGS-v44.0.md` §9d register (~24 active-fix sub-phases of work) for a future milestone.
+- **v44.0 bookkeeping cleanup** — register emergent INV-13/EDGE-19/EDGE-20; backfill the missing Phase 305 VERIFICATION.md.
+- **v43 FUZZ harness 3 missing edge-case functions** — cross-EOA Sybil within rngLock window + ERC721 receiver-callback re-entry on deity-pass mint + stETH yield accrual mid-window (v43 P302 DEFER).
 
 ## Out of Scope (explicit exclusions)
 
-- **Re-auditing the VRF fallback + `retryLootboxRng` retry paths** — failsafes with no on-demand attack vector per memory `v45-vrf-freeze-invariant`; not player-summonable, so out of the freeze invariant's scope.
-- **Accepted self-MEV races** — sDGNRS pool-balance claim-time race; boon/activity timing (now moot, all lootbox EV paths frozen at commitment). Documented, not fixed.
-- **`resolveLootboxDirect` / `resolveRedemptionLootbox` purchase-side treatment** — N/A (no purchase/allocation point); they keep consuming the cap at resolution with Change 1 only.
-- **New external entry points, admin surface, or behaviour changes** beyond the EV-cap allocation timing and bonus-only cap.
-- **Game-over hardening** — separate dedicated milestone.
+| Feature | Reason |
+|---------|--------|
+| Dedicated V-081 regression (order-independence / penalty-dodge) + V-081-specific sweep | User decision 2026-05-22 — V-081 rides on the consolidate-forward delta-audit (DELTA-02); criteria attested by construction at source level, not by Foundry regression. Documented coverage gap; the original INV-01..06 / TST-01..05 / SWP-01..02 are recoverable from the 309/310 SPEC. |
+| Jackpot pending-pool new fix/test work | Already fixed (`6e5acd7e`) + regressed (`f3e21064`); delta-audit coverage only (DELTA-03). |
+| VRF fallback / `retryLootboxRng` retry-path re-audit | Failsafes, not player-summonable per memory `v45-vrf-freeze-invariant`; outside the freeze invariant's scope. |
+| Non-VRF v44 backlog anchors (claimablePool, prizePool, sDGNRS pool, activity-score/boon, ticketQueue, decBurn clusters) | Scoped out per the "VRF cluster only" backlog decision; remain in the §9d register. |
+| New external entry points / admin surface beyond the VRF-rotation rework | No behaviour change outside VRF rotation + wiring lock. |
+| Game-over thorough hardening | Separate dedicated milestone scope. |
 
 ## Traceability
 
-> Maps every v45.0 requirement to exactly one phase. INV-01..06 are provable acceptance criteria carried by the Phase 311 TST phase that proves them (each mapped to its proving TST below). 22/22 requirements mapped; 0 orphaned.
+> Maps every v45.0 requirement to a phase. Groundwork (309/310) is COMPLETE. Active-phase assignments (311–315) are the orchestrator's initial mapping; the roadmapper finalises phase boundaries and refreshes this table. VRF-01..05 are provable acceptance criteria carried by the VTST phase that proves them.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SPEC-01 | Phase 309 (SPEC) | Complete |
-| SPEC-02 | Phase 309 (SPEC) | Complete |
-| SPEC-03 | Phase 309 (SPEC) | Complete |
-| SPEC-04 | Phase 309 (SPEC) | Complete |
-| IMPL-01 | Phase 310 (IMPL) | Complete |
-| IMPL-02 | Phase 310 (IMPL) | Complete |
-| IMPL-03 | Phase 310 (IMPL) | Complete |
-| IMPL-04 | Phase 310 (IMPL) | Complete |
-| IMPL-05 | Phase 310 (IMPL) | Complete |
-| INV-01 | Phase 311 (TST) — proven by TST-01 | Pending |
-| INV-02 | Phase 311 (TST) — proven by TST-02 | Pending |
-| INV-03 | Phase 311 (TST) — proven by TST-02 | Pending |
-| INV-04 | Phase 311 (TST) — proven by TST-03 | Pending |
-| INV-05 | Phase 311 (TST) — proven by TST-04 | Pending |
-| INV-06 | Phase 311 (TST) — proven by TST-01/TST-04; re-attested Phase 312 SWEEP + Phase 313 §3 | Pending |
-| TST-01 | Phase 311 (TST) | Pending |
-| TST-02 | Phase 311 (TST) | Pending |
-| TST-03 | Phase 311 (TST) | Pending |
-| TST-04 | Phase 311 (TST) | Pending |
-| TST-05 | Phase 311 (TST) | Pending |
-| SWP-01 | Phase 312 (SWEEP) | Pending |
-| SWP-02 | Phase 312 (SWEEP) | Pending |
-| AUDIT-01 | Phase 313 (TERMINAL) | Pending |
-| AUDIT-02 | Phase 313 (TERMINAL) | Pending |
-| CLS-01 | Phase 313 (TERMINAL) | Pending |
+| SPEC-01..04 | Phase 309 (SPEC) | Complete |
+| IMPL-01..05 | Phase 310 (IMPL) | Complete |
+| VRF-01 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-01 | Pending |
+| VRF-02 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-02 | Pending |
+| VRF-03 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-03 | Pending |
+| VRF-04 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-04 | Pending |
+| VRF-05 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-04 | Pending |
+| DGAUD-01 | Phase 314 (SWEEP) / 315 (TERMINAL) | Pending |
+| DGAUD-02 | Phase 314 (SWEEP) / 315 (TERMINAL) | Pending |
+| DGAUD-03 | Phase 314 (SWEEP) / 315 (TERMINAL) | Pending |
+| DGAUD-04 | Phase 314 (SWEEP) / 315 (TERMINAL) | Pending |
+| DELTA-01 | Phase 315 (TERMINAL) | Pending |
+| DELTA-02 | Phase 315 (TERMINAL) | Pending |
+| DELTA-03 | Phase 315 (TERMINAL) | Pending |
+| DELTA-04 | Phase 315 (TERMINAL) | Pending |
+| VTST-01 | Phase 313 (TST) | Pending |
+| VTST-02 | Phase 313 (TST) | Pending |
+| VTST-03 | Phase 313 (TST) | Pending |
+| VTST-04 | Phase 313 (TST) | Pending |
+| SWP-01 | Phase 314 (SWEEP) | Pending |
+| SWP-02 | Phase 314 (SWEEP) | Pending |
+| AUDIT-01 | Phase 315 (TERMINAL) | Pending |
+| REG-01 | Phase 315 (TERMINAL) | Pending |
+| CLS-01 | Phase 315 (TERMINAL) | Pending |
+
+**Coverage:**
+- v45.0 active requirements: 22 total (5 VRF + 4 DGAUD + 4 DELTA + 4 VTST + 2 SWP + 3 AUDIT/REG/CLS)
+- Groundwork (complete): 9 (4 SPEC + 5 IMPL)
+- Mapped to phases: 31 / 31 ✓ — 0 orphaned
+
+---
+*Requirements defined: 2026-05-20 (V-081) · redefined 2026-05-22 (consolidate-forward)*
+*Last updated: 2026-05-22 after v45.0 redefinition — pre-roadmapper. Phase boundaries 311–315 finalised by the roadmapper.*
