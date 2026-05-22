@@ -156,11 +156,98 @@ downstream §1–§6 design assertion must cite a row here. (`feedback_no_histor
 
 ### §0.X §9d-Anchor → Closing-Change Mapping
 
-[authored in Plan 311-01 Task 2]
+Source rows: `audit/FINDINGS-v44.0.md` §9d.2 (FIXREC handoff anchors, the HANDOFF-NN rows) +
+§9d.4 (ADMA handoff anchors). Each row below cross-references the FINDINGS §9d line it comes from
+and maps the anchor to the v45.0 closing change (decision ID D-01..D-05) + the requirement it
+closes (VRF-01..05 from `REQUIREMENTS.md` / ROADMAP §Phase 311 Success Criteria 1-5). The decision
+shapes are the LOCKED inputs from `311-CONTEXT.md` `<decisions>`; the requirement→change mapping is
+the ROADMAP §Phase 311 goal statement (re-issue-in-flight closes VRF-01/02/03; `wireVrf` one-shot
+lock closes VRF-04; vault reach closes VRF-05).
+
+> **Maximalist-catalog note (`project_rnglock_audit_disposition`):** the §9d HANDOFF/ADMA rows are
+> a **maximalist enumeration catalog**, NOT a list of live player-exploitable vectors. Admin VRF
+> rotation is an EXEMPT-class operation, not a player-discretionary write (`v45-vrf-freeze-invariant`
+> — `advanceGame`/admin exempt). The closing changes target the **real liveness defect** (the
+> orphan-index CATASTROPHE: Scenario A entropy-0 traits + Scenario B ~120-day freeze) and the
+> one-shot-lock hardening — they do NOT over-fix the governance rows beyond that. VRF-03 "freeze
+> disposition" is satisfied by re-issue being freeze-safe (old word abandoned via the `:1761`
+> `requestId` guard, new word unpredictable), not by adding player-facing gates.
+
+| §9d Anchor | V-NN | What it flags (§9d source) | Closing change (decision ID) | Requirement closed | §9d source line |
+|------------|------|----------------------------|------------------------------|--------------------|-----------------|
+| HANDOFF-78 | V-137 | S-38 `rngRequestTime` (governance); the **rejected** `pendingVrfRotationPacked` queue+apply tactic; named closer of 5 governance rows (78/85/87/89/91) | **D-01 + D-02** re-issue-in-flight (rejects queue+apply; preserve+re-issue both daily & mid-day paths) | **VRF-03** (freeze cluster) + VRF-01/VRF-02 (orphan + liveness) | §9d.2 :686 |
+| HANDOFF-85 | V-155 | S-46 `lootboxRngPacked.LR_MID_DAY` (governance); "Subsumed by HANDOFF-78" | **D-01 + D-02** (mid-day branch: keep `LR_MID_DAY=1`, re-request the reserved index) | **VRF-03** | §9d.2 :693 |
+| HANDOFF-86 | V-156 | S-47 `vrfCoordinator` (wireVrf); (d) one-shot lock; named closer of 3 wireVrf rows (86/88/90) | **D-03** `wireVrf` init-only lock (+ **D-04** `_setVrfConfig` dedup) | **VRF-04** (wireVrf one-shot lock) | §9d.2 :694 |
+| HANDOFF-87 | V-157 | S-47 `vrfCoordinator` (governance); "Subsumed by HANDOFF-78" | **D-01 + D-02** (config repoint stays; rotation now safe via re-issue) | **VRF-03** | §9d.2 :695 |
+| HANDOFF-88 | V-158 | S-48 `vrfSubscriptionId` (wireVrf); "Subsumed by HANDOFF-86" | **D-03** (+ **D-04**) | **VRF-04** | §9d.2 :696 |
+| HANDOFF-89 | V-159 | S-48 `vrfSubscriptionId` (governance); "Subsumed by HANDOFF-78" | **D-01 + D-02** | **VRF-03** | §9d.2 :697 |
+| HANDOFF-90 | V-160 | S-49 `vrfKeyHash` (wireVrf); "Subsumed by HANDOFF-86" | **D-03** (+ **D-04**) | **VRF-04** | §9d.2 :698 |
+| HANDOFF-91 | V-161 | S-49 `vrfKeyHash` (governance); "Subsumed by HANDOFF-78" | **D-01 + D-02** | **VRF-03** | §9d.2 :699 |
+| ADMA-01 | V-156 / V-158 / V-160 (cross-ref) | `DegenerusGameAdvanceModule.wireVrf @ AdvanceModule.sol:498`; (d) immutable / seal `wireVrf` post-init via one-shot flag | **D-03** `wireVrf` init-only lock (+ **D-04** dedup) | **VRF-04** (HANDOFF-86/88/90 + ADMA-01) | §9d.4 :746 |
+| ADMA-02 | S-47/48/49/38/46 (cross-ref; ties HANDOFF-78) | `DegenerusGameAdvanceModule.updateVrfCoordinatorAndSub @ AdvanceModule.sol:1677` (§9d-cited line **DRIFTED** — see note); (c) pre-lock reorder / queue mid-stall rotations; **vault-routed** reach | **D-03 + D-01/D-02** (the D-03 lock + D-01/D-02 safe-rotation cover the vault-routed path) | **VRF-05** (vault-routed reach) | §9d.4 :747 |
+
+> **ADMA-02 line drift (recorded, not silently propagated):** §9d.4 :747 cites
+> `updateVrfCoordinatorAndSub @ AdvanceModule.sol:1677`. At HEAD `3153149a` the function definition
+> is at **`DegenerusGameAdvanceModule.sol:1688`** (§0.A row, VERIFIED). Drift **+11 lines** vs the
+> v44 §9d citation (the v44 §9d register was written against the v44 closure HEAD
+> `6f0ba296…`; the +11 drift reflects edits between that baseline and current HEAD). The verified
+> HEAD line `:1688` governs all §1–§6 assertions; `:1677` is the stale §9d-register citation.
+>
+> **Cluster-completeness note:** all 10 cluster anchors named in the plan
+> (`HANDOFF-78/85/86/87/88/89/90/91` + `ADMA-01/02`) have a row above. The CONTEXT/PROJECT prose
+> also references the cluster as "HANDOFF-78/85/87/89/91 (freeze) + 86/88/90 + ADMA-01 (wireVrf
+> lock) + ADMA-02 (vault reach)"; the freeze sub-cluster is `{78,85,87,89,91}` (→ D-01/D-02,
+> VRF-03), the wireVrf sub-cluster is `{86,88,90,ADMA-01}` (→ D-03/D-04, VRF-04), and ADMA-02 is the
+> vault-routed reach (→ VRF-05). The split matches ROADMAP §Phase 311 Success Criteria 3-4.
 
 ### §0.Y Vault/Admin-Routed Reach Trace (ADMA-02 / VRF-05)
 
-[authored in Plan 311-01 Task 2]
+`311-CONTEXT.md` `<code_context>` names a **`DegenerusVault`** dispatch to the admin VRF functions
+(ADMA-02). This sub-section records the **ACTUAL** dispatch sites grep-verified across `contracts/`
+at HEAD `3153149a`, and reconciles the naming drift. This trace is the evidence base for the §4
+VRF-05 design assertion that the D-03 lock + D-01/D-02 safe-rotation cover the routed path.
+
+**Naming-drift reconciliation (CONTEXT "DegenerusVault" vs verified source).** `contracts/DegenerusVault.sol`
+**exists** as a file, but `grep -n "wireVrf\|updateVrfCoordinatorAndSub\|gameAdmin" contracts/DegenerusVault.sol`
+returns **zero matches** — `DegenerusVault.sol` does **NOT** itself dispatch either VRF admin
+function. `DegenerusVault` is the **vault-ownership** contract: it is referenced as the ownership
+oracle (`IDegenerusVaultOwner vault = IDegenerusVaultOwner(ContractAddresses.VAULT)` at
+`DegenerusAdmin.sol:434-435`) whose `vault.isVaultOwner(msg.sender)` gate guards the admin
+entry points (the `onlyOwner` modifier, `DegenerusAdmin.sol:437`). The CONTEXT "DegenerusVault
+dispatch" is therefore a **naming drift**: the real dispatch lives in `DegenerusAdmin.sol`
+(vault-owner-gated wrappers) + `DegenerusGame.sol` (the `delegatecall` selector-routed entry
+points). Recorded, not silently rewritten.
+
+**Verified dispatch — `wireVrf` (one-shot init path, D-03/D-04/VRF-04):**
+
+| Hop | Site (HEAD) | Role |
+|-----|-------------|------|
+| 1 | `DegenerusAdmin.sol:445` `constructor()` → `DegenerusAdmin.sol:458` `gameAdmin.wireVrf(ContractAddresses.VRF_COORDINATOR, subId, ContractAddresses.VRF_KEY_HASH)` | The **one-time** deployment wiring (called from the Admin constructor, after `vrfCoordinator.createSubscription()` at `:446`). Structurally init-only; this is exactly why D-03's one-shot lock is safe — legitimate use is a single constructor call. |
+| 2 | `DegenerusGame.sol:308` `function wireVrf(...)` → `DegenerusGame.sol:312-321` `GAME_ADVANCE_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameAdvanceModule.wireVrf.selector, ...))` | The selector-routed `delegatecall` entry into the AdvanceModule implementation. |
+| 3 | `DegenerusGameAdvanceModule.sol:498` `function wireVrf(...)` (§0.A) — admin-gated at `:503` (`msg.sender != ContractAddresses.ADMIN`); writes `vrfCoordinator`/`vrfSubscriptionId`/`vrfKeyHash` at `:506-508` | The implementation. **No one-shot lock at HEAD** (D-03 target). |
+
+**Verified dispatch — `updateVrfCoordinatorAndSub` (emergency rotation path, D-01/D-02/VRF-05):**
+
+| Hop | Site (HEAD) | Role |
+|-----|-------------|------|
+| 1 | `DegenerusAdmin.sol:859` `_executeSwap(uint256 proposalId)` (internal) → `DegenerusAdmin.sol:901` `gameAdmin.updateVrfCoordinatorAndSub(newCoordinator, newSubId, newKeyHash)` | The governance proposal-execution path. Reached through the stall-gated rotation-proposal flow (`ADMIN_STALL_THRESHOLD = 20 hours`, `DegenerusAdmin.sol:406`; proposal create/execute gated on `gameAdmin.lastVrfProcessed()` staleness at `:666`/`:705`). Adds the new coordinator as consumer (`:894`) + transfers LINK (`:907-912`) around the push. |
+| 2 | `DegenerusGame.sol:1874` `function updateVrfCoordinatorAndSub(...)` → `DegenerusGame.sol:1878-1891` `GAME_ADVANCE_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameAdvanceModule.updateVrfCoordinatorAndSub.selector, ...))` | The selector-routed `delegatecall` entry into the AdvanceModule implementation. |
+| 3 | `DegenerusGameAdvanceModule.sol:1688` `function updateVrfCoordinatorAndSub(...)` (§0.A) — admin-gated at `:1693`; the orphan-causing blanket reset at `:1701-1704`/`:1709` | The implementation (D-01/D-02 rework target). |
+
+**Interface anchor.** Both functions are declared on the `IDegenerusGameAdmin` interface consumed
+by `DegenerusAdmin.sol` (`updateVrfCoordinatorAndSub` decl `DegenerusAdmin.sol:99`; `wireVrf` decl
+`DegenerusAdmin.sol:109`) and on `IDegenerusGameModules.sol` (`wireVrf` `:22`,
+`updateVrfCoordinatorAndSub` `:32`) — these are interface declarations, distinct from the call
+sites (`:458` / `:901`) and the AdvanceModule implementations (`:498` / `:1688`).
+
+**VRF-05 evidence summary.** There is **no `DegenerusVault`-routed path** to either VRF admin
+function — the only routed reach is (a) `DegenerusAdmin` (vault-owner-gated) and (b)
+`DegenerusGame` (selector `delegatecall`), both terminating at the same two AdvanceModule
+implementations (`:498` / `:1688`). Therefore the D-03 one-shot lock (applied at the
+`wireVrf` implementation `:498`) and the D-01/D-02 safe-rotation (applied at the
+`updateVrfCoordinatorAndSub` implementation `:1688`) cover **every** routed entry — the lock/safety
+sits at the delegatecall target, downstream of all wrappers, so no wrapper can bypass it. (§4
+VRF-05 in Plan 02 builds its assertion on this trace.)
 
 ---
 
