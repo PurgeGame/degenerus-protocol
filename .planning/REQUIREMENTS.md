@@ -48,11 +48,11 @@ Close the CATASTROPHE-class VRF-rotation orphan-index liveness defect in `update
 
 > SPEC (311) + IMPL (312). Single batched USER-APPROVED diff touching `DegenerusGameAdvanceModule.sol` (+ any VRF-config storage). Closes the §9d governance-VRF cluster.
 
-- [x] **VRF-01**: After an emergency coordinator/subscription rotation while a mid-day lootbox RNG request is in flight, the bound index `lootboxRngWordByIndex[N]` resolves to a real (non-zero, VRF-derived) word — no same-day deterministic / entropy-0 traits. (Closes Scenario A.)
-- [x] **VRF-02**: After such a rotation the protocol stays live — `requestLootboxRng`, `retryLootboxRng`, and the daily-drain advance gate remain reachable; no permanent revert / ~120-day freeze / forced premature game-over. (Closes Scenario B.)
-- [x] **VRF-03**: Emergency rotation cannot break the rngLock freeze invariant — no VRF-participating slot (`vrfCoordinator`, `vrfSubscriptionId`, `vrfKeyHash`, `rngRequestTime`, `LR_MID_DAY`) is mutated mid-window in a way that changes any in-flight VRF-derived output. (Closes **HANDOFF-78/85/87/89/91** = V-137/V-155/V-157/V-159/V-161.)
-- [x] **VRF-04**: VRF wiring is one-shot — `wireVrf` seals after init; a second wire reverts. (Closes **HANDOFF-86/88/90 + ADMA-01** = V-156/V-158/V-160.)
-- [x] **VRF-05**: The rotation + wire protections cover the `DegenerusVault`-routed admin dispatch, verified by backward-trace. (**ADMA-02**.)
+- [ ] **VRF-01**: After an emergency coordinator/subscription rotation while a mid-day lootbox RNG request is in flight, the bound index `lootboxRngWordByIndex[N]` resolves to a real (non-zero, VRF-derived) word — no same-day deterministic / entropy-0 traits. (Closes Scenario A.)
+- [ ] **VRF-02**: After such a rotation the protocol stays live — `requestLootboxRng`, `retryLootboxRng`, and the daily-drain advance gate remain reachable; no permanent revert / ~120-day freeze / forced premature game-over. (Closes Scenario B.)
+- [ ] **VRF-03**: Emergency rotation cannot break the rngLock freeze invariant — no VRF-participating slot (`vrfCoordinator`, `vrfSubscriptionId`, `vrfKeyHash`, `rngRequestTime`, `LR_MID_DAY`) is mutated mid-window in a way that changes any in-flight VRF-derived output. (Closes **HANDOFF-78/85/87/89/91** = V-137/V-155/V-157/V-159/V-161.)
+- [ ] **VRF-04**: VRF wiring is one-shot — `wireVrf` seals after init; a second wire reverts. (Closes **HANDOFF-86/88/90 + ADMA-01** = V-156/V-158/V-160.)
+- [ ] **VRF-05**: The rotation + wire protections cover the `DegenerusVault`-routed admin dispatch, verified by backward-trace. (**ADMA-02**.)
 
 ### DGAUD — Degenerette Refactor Audit (audit-only, `92b110bf`)
 
@@ -119,11 +119,11 @@ Close the CATASTROPHE-class VRF-rotation orphan-index liveness defect in `update
 |-------------|-------|--------|
 | SPEC-01..04 | Phase 309 (SPEC) | Complete |
 | IMPL-01..05 | Phase 310 (IMPL) | Complete |
-| VRF-01 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-01 | Complete |
-| VRF-02 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-02 | Complete |
-| VRF-03 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-03 | Complete |
-| VRF-04 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-04 | Complete |
-| VRF-05 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-04 | Complete |
+| VRF-01 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-01 | Pending |
+| VRF-02 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-02 | Pending |
+| VRF-03 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-03 | Pending |
+| VRF-04 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-04 | Pending |
+| VRF-05 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-04 | Pending |
 | DGAUD-01 | Phase 314 (SWEEP) / 315 (TERMINAL) | Pending |
 | DGAUD-02 | Phase 314 (SWEEP) / 315 (TERMINAL) | Pending |
 | DGAUD-03 | Phase 314 (SWEEP) / 315 (TERMINAL) | Pending |
