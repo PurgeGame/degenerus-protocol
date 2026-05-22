@@ -508,12 +508,211 @@ escalation clause if a residual orphan path were found, which §5 confirms it is
 
 ## §4 wireVrf One-Shot Lock + _setVrfConfig Dedup + Vault Reach (D-03/D-04/VRF-04/VRF-05)
 
-[authored in Plan 02]
+This section closes **VRF-04** (the §9d wireVrf sub-cluster HANDOFF-86/88/90 + ADMA-01 mapped in §0.X) and
+**VRF-05** (ADMA-02 vault-routed reach). Every assertion cites a §0 row, using the §0.Y reconciled dispatch
+sites (NOT the CONTEXT-named "DegenerusVault").
+
+### §4.1 D-03 — wireVrf init-only lock
+
+After §2 makes `updateVrfCoordinatorAndSub` the safe rotation path, `wireVrf` (§0.A `wireVrf` `:498`) must be
+locked to deployment so it cannot be used as a second, **unsafe** post-init config mutator (it has no
+re-issue/preserve logic — calling it post-init would zero nothing but would repoint config out from under an
+in-flight request with no recovery). D-03 makes `wireVrf` **revert once VRF is wired**, leaving
+`updateVrfCoordinatorAndSub` (`:1688`) the SOLE post-init VRF-config mutator.
+
+**Chosen wired-detection mechanism: the no-new-slot check `address(vrfCoordinator) != address(0)`.** Rationale:
+
+- The §0.Y `wireVrf` dispatch table shows the ONLY routed reach is a single deployment call —
+  `DegenerusAdmin.sol:445` `constructor()` → `:458` `gameAdmin.wireVrf(...)` (Hop 1), fired once after
+  `createSubscription()`. There is **no legitimate re-wire-before-first-request init flow** in the verified
+  call graph — nothing calls `wireVrf` a second time before the first VRF request. So the discretion
+  condition in D-03 ("prefer the no-new-slot check unless it conflicts with a legitimate re-wire-before-first-
+  request init flow") resolves to: use the no-new-slot check.
+- At HEAD `vrfCoordinator` (§0.C `vrfCoordinator` `Storage:1287`) is `address(0)` until `wireVrf` first writes
+  it at `:506`. A guard `if (address(vrfCoordinator) != address(0)) revert E();` at the top of `wireVrf`
+  therefore permits exactly the one constructor call and reverts every subsequent call — no new storage slot,
+  no extra SSTORE, consistent with `feedback_maximal_variable_packing` (avoid a dedicated `vrfWired` bool when
+  an existing slot already encodes the wired/unwired distinction).
+- A dedicated `vrfWired` bool is the alternative; it is rejected here because it adds a slot for a distinction
+  `vrfCoordinator == address(0)` already makes, and no init flow needs to re-wire before the first request.
+
+### §4.2 D-04 — `_setVrfConfig` shared-internal dedup
+
+`wireVrf` and `updateVrfCoordinatorAndSub` each write the same three config slots inline today:
+
+- `wireVrf` writes `vrfCoordinator`/`vrfSubscriptionId`/`vrfKeyHash` at `:506-508` (§0.A `wireVrf` row;
+  §0.C rows `vrfCoordinator` `:1287` / `vrfSubscriptionId` `:1295` / `vrfKeyHash` `:1291` each note the dual
+  writers `AdvanceModule:506-508` and `:1696-1698`).
+- `updateVrfCoordinatorAndSub` writes the identical three slots at `:1696-1698` (§0.A
+  `updateVrfCoordinatorAndSub` row; same §0.C dual-writer rows).
+
+This is the near-duplicate 3-slot write D-04 collapses. **Chosen signature/visibility:** an
+`internal` helper `_setVrfConfig(address coord, uint256 sub, bytes32 key)` that performs the three SSTOREs
+(`vrfCoordinator = IVRFCoordinator(coord); vrfSubscriptionId = sub; vrfKeyHash = key;`), routed by **both**
+functions. Grounding: the Phase 310 D-01/D-02 single-source-of-truth precedent (`310-CONTEXT.md` D-01/D-02 —
+consolidate shared pack/classify logic into one shared location rather than duplicate it inline across
+modules, to avoid "the inline-duplicated-business-logic drift bug class"). `internal` (not `private`) matches
+that precedent's reachability posture and `feedback_verify_call_graph_against_source` (a single grep-verifiable
+write site instead of two inline copies that can drift).
+
+**Precision — what `_setVrfConfig` does NOT absorb.** It collapses ONLY the 3-field config write. `wireVrf`
+additionally stamps `lastVrfProcessedTimestamp = uint48(block.timestamp)` at `:509` (a wireVrf-specific write
+NOT present in `updateVrfCoordinatorAndSub`); that line stays **inline in `wireVrf`**, outside the helper, so
+the dedup does not silently move wireVrf-only behavior into the rotation path. `_setVrfConfig` is recorded as
+**TO-BE-CREATED** in §0.D (grep returns zero matches at HEAD) — no §1–§6 assertion treats it as an existing
+call-graph node; it is introduced at Phase 312 IMPL.
+
+### §4.3 VRF-05 — vault/admin-routed reach disposition
+
+Using the §0.Y trace (the evidence base): there is **no `DegenerusVault`-routed path** to either VRF admin
+function — `contracts/DegenerusVault.sol` contains zero `wireVrf`/`updateVrfCoordinatorAndSub` references
+(§0.Y naming-drift reconciliation); it is the vault-**ownership** oracle gating the admin entry
+(`vault.isVaultOwner` at `DegenerusAdmin.sol:437`). The only routed reach to each function is:
+
+- **`wireVrf`:** `DegenerusAdmin.sol:458` (constructor, vault-owner-gated) → `DegenerusGame.sol:308`
+  selector `delegatecall` → `DegenerusGameAdvanceModule.sol:498` (§0.Y `wireVrf` Hops 1-3).
+- **`updateVrfCoordinatorAndSub`:** `DegenerusAdmin.sol:901` (`_executeSwap`, governance/stall-gated) →
+  `DegenerusGame.sol:1874` selector `delegatecall` → `DegenerusGameAdvanceModule.sol:1688` (§0.Y
+  `updateVrfCoordinatorAndSub` Hops 1-3).
+
+**Disposition:** the D-03 one-shot lock is applied at the `wireVrf` **implementation** (`:498`) and the
+D-01/D-02 safe-rotation is applied at the `updateVrfCoordinatorAndSub` **implementation** (`:1688`). Both
+implementations sit at the `delegatecall` **target**, downstream of every wrapper (the Admin wrappers and the
+Game selector-routers). Therefore **no wrapper can bypass** the lock or the safe-rotation — every routed entry
+terminates at the guarded implementation. VRF-05 is closed: the routed reach is fully covered by guards placed
+at the delegatecall targets, and there is no second (vault or otherwise) dispatch path that reaches the config
+slots around them (§0.Y VRF-05 evidence summary).
 
 ## §5 Orphan-Recovery Breadth (D-05)
 
-[authored in Plan 02]
+This section discharges the **D-05 SPEC obligation**: explicitly trace and CONFIRM that re-issue (§2) restores
+reachability of the EXISTING `_backfillOrphanedLootboxIndices` call (`:1208`) so the helper is not left
+stranded, state the orphan bound, and apply the escalation gate. It supports VRF-01/VRF-02 closure
+completeness. Every step cites a §0 row.
+
+### §5.1 The reachability claim
+
+D-05 is a **narrow** fix: no new backfill wiring. The claim is that re-issue both (a) fills the single
+in-flight index directly via `:1772` and (b) un-blocks the new-day drain gate so the EXISTING `:1208` backfill
+becomes reachable for any residual orphans. Trace:
+
+1. **Re-issue un-blocks the drain gate.** Pre-fix, the new-day gate reverts at `:271` `if (cw == 0) revert
+   RngNotReady();` because the blanket reset zeroed `rngWordCurrent` (`:1704`) — and at `:269`
+   `if (lootboxRngWordByIndex[preIdx] == 0)` for the orphaned slot (§1.4). Post-fix:
+   - Mid-day re-issue lands the new word in `[N]` via `:1772` (§0.A `mid-day branch` row; §0.F Mid-day row), so
+     `:269` `lootboxRngWordByIndex[preIdx] == 0` is **false** → the gate's RNG-finalize sub-block (`:270-275`)
+     is skipped and draining proceeds.
+   - Daily re-issue lands the new word in `rngWordCurrent` via `:1768` (§0.A `daily branch` row; §0.F Daily
+     row), so even if the gate is entered, `:271` `cw == 0` is **false** → no `RngNotReady()` revert.
+   Either way the `:271`/`:213` revert no longer fires (the §0.A `advance-flow drain gate` row records these
+   precise revert lines), so the advance proceeds past the drain gate.
+2. **Past the gate, the existing backfill is reachable.** Once the advance proceeds and a fresh daily word
+   exists, `_finalizeRngRequest`'s readiness branch `:1193` `currentWord != 0 && rngRequestTime != 0` is
+   satisfied (re-issue set both — `rngWordCurrent`/`rngRequestTime` fresh per §2.1), and if a multi-day stall
+   left a gap, `:1202` `day > idx + 1 && rngWordByDay[idx + 1] == 0` enters the gap branch which calls
+   `_backfillOrphanedLootboxIndices(currentWord)` at `:1208` (§0.A `existing _backfillOrphanedLootboxIndices
+   CALL` row). The helper (§0.A `_backfillOrphanedLootboxIndices DEFINITION` `:1817`) backward-scans from
+   `LR_INDEX − 1` (`:1822`) filling any still-zero index with `keccak256(abi.encodePacked(vrfWord, i))`
+   (`:1826`) — VRF-derived, not front-runnable. **So the helper is NOT stranded:** re-issue restores the exact
+   gate→branch→call path that the pre-fix revert severed.
+
+### §5.2 Orphan bound (cite §0.A `:1048`)
+
+The single-in-flight mid-day gate `:1048` `if (LR_MID_DAY != 0) revert E();` in `requestLootboxRng` (§0.A
+`LR_MID_DAY single-in-flight gate` row) guarantees **at most one** mid-day request is outstanding at a time,
+so a rotation orphans **≤ 1 index per rotation**. Repeated rotations re-cover the same single index (each
+rotation re-issues for the current reserved index). The bound is structural, not probabilistic.
+
+### §5.3 Escalation gate + CONCLUSION
+
+**Escalation gate (the ONLY sanctioned reversal of a locked decision).** If this trace had found a residual
+orphan path that re-issue (§2) + the `:1208` backfill do NOT cover, D-05 mandates escalation to the rejected
+belt-and-suspenders option (gate-independent backfill / dedicated recovery entry point) WITH explicit
+rationale.
+
+**Trace result — residual-path search.** Two orphan-producing situations exist and both are covered:
+- The **in-flight** index at rotation time → covered DIRECTLY by re-issue's `:1772` write (the new word lands
+  in `[N]`); does not even need `:1208`.
+- Any **earlier** still-zero index behind the most recent one (e.g. a prior reservation that a previous stall
+  left unfilled) → covered by `:1208`'s backward scan (`:1822-1829`), which re-issue makes reachable per §5.1.
+  The `:1822` `for (i = idx − 1; i >= 1; )` loop with the `:1823` `if (lootboxRngWordByIndex[i] != 0) break;`
+  stop walks every contiguous zero index below the cursor. No reachable orphan sits outside `[1 .. LR_INDEX−1]`
+  (indices ≥ `LR_INDEX` are not yet reserved per `requestLootboxRng:1113-1118`; index 0 is excluded by
+  `:1819` `if (idx <= 1) return;` and is never a live reservation). The `≤1`-per-rotation bound (§5.2) plus
+  the backward scan's full coverage of `[1 .. LR_INDEX−1]` leaves no residual path.
+
+**CONCLUSION: CONFIRMED-COVERED.** Re-issue restores the `:1208` backfill reachability and directly fills the
+in-flight index; the `:1817` backward scan covers any earlier residual zero index; the `:1048` bound caps new
+orphans at one per rotation. **No residual orphan path exists that re-issue + the existing `:1208` backfill do
+not cover. The escalation clause is therefore NOT triggered; D-05 stays NARROW as locked.** (No new backfill
+wiring is added; the belt-and-suspenders option remains deferred per §6.)
 
 ## §6 Rejected Options
 
-[authored in Plan 02]
+Two alternatives were considered and rejected/deferred. Each is recorded with rationale per the SPEC
+convention (and §0.X maps the queue+apply tactic to its §9d origin HANDOFF-78).
+
+### §6.1 Queue+apply rotation via a new `pendingVrfRotationPacked` slot — REJECTED
+
+The §9d HANDOFF-78 tactic (§0.X HANDOFF-78 row, "the rejected `pendingVrfRotationPacked` queue+apply tactic"):
+`updateVrfCoordinatorAndSub` would write the new coordinator/sub/key into a new packed staging slot and apply
+the rotation in a later step, achieving a "zero mid-window config mutation" narrative.
+
+**Rejected because:** the old coordinator is **dead** when emergency rotation fires, so the in-flight VRF word
+**never resolves** — queue+apply would wait the full timeout before the apply step could proceed, ADDING
+recovery latency and a two-step UX, and during that wait the orphan/freeze (§1.3/§1.4) persists. That sacrifices
+the recovery **liveness** that is the entire point of the emergency procedure (`311-CONTEXT.md` `<specifics>`:
+the user accepts re-issue's "old word abandoned, new word unpredictable" freeze story over queue+apply's "zero
+mid-window mutation" precisely because the latter trades away liveness when the old coordinator is dead).
+Re-issue (§2) gets a live word from the NEW coordinator immediately and is freeze-safe via the `:1761`
+`requestId` guard (§3.2). It also avoids a new storage slot (`feedback_maximal_variable_packing` /
+`feedback_frozen_contracts_no_future_proofing`).
+
+### §6.2 Belt-and-suspenders gate-independent orphan backfill / dedicated recovery entry point — DEFERRED
+
+A gate-independent backfill (or a standalone permissionless recovery function that fills orphaned indices
+without depending on the advance drain gate) was considered for Area 4.
+
+**Deferred because:** D-05's narrow fix already restores `:1208` reachability and the `:1048` bound caps
+orphans at one per rotation (§5), so the existing `_backfillOrphanedLootboxIndices` (`:1817`) plus re-issue's
+direct `:1772` fill cover every reachable orphan (§5.3 CONCLUSION: CONFIRMED-COVERED). Adding gate-independent
+wiring would be redundant surface area against a state §2 already prevents. **Revisit ONLY if §5's reachability
+trace had escalated** — it did not. This deferral is the standing fallback the §5 escalation clause would have
+invoked.
+
+---
+
+## §7 SPEC Self-Check
+
+This block discharges the `<phase_critical_reminders>` self-check and the plan's §7 obligation. Each item is
+asserted with its supporting section.
+
+1. **Every cited anchor traces to a §0 row (grep-verified against HEAD; zero "by construction").** ✅ All
+   call-path/line citations in §1–§6 reference a §0.A–§0.Y row (e.g. `:1688`/`:1701-1704`/`:1709`/`:1761`/
+   `:1768`/`:1772`/`:1208`/`:1817`/`:1048`/`:686`/`:498`/`:506-508`/`:1696-1698` and the §0.C `Storage:*` slots,
+   the §0.E `requestRandomWords` sites, the §0.Y dispatch hops). The §0 manifest was grep-verified against HEAD
+   `3153149a75d0dfced1d9496d9cec348f47f6e630` in Plan 01 (§0.H attestation). No new line was asserted without a
+   §0 row; no "by construction" / "single fn reaches all paths" claim appears in §1–§6.
+2. **D-05 reachability explicitly confirmed-or-escalated (§5).** ✅ §5.1 traces re-issue → drain-gate un-block
+   (`:269`/`:271`) → restored `:1208` backfill reachability; §5.2 states the `≤1` orphan bound (`:1048`); §5.3
+   records **CONCLUSION: CONFIRMED-COVERED** — no residual orphan path; escalation NOT triggered; D-05 stays
+   NARROW.
+3. **Validator-influenceable entropy backfill EXPLICITLY REJECTED (§3).** ✅ §3.3 rejects `block.timestamp` /
+   `newKeyHash` / blockhash / caller-supplied entropy per `feedback_security_over_gas`; the only sanctioned
+   source is keccak-of-a-real-VRF-word (`:1817` `keccak256(abi.encodePacked(vrfWord, i))` at `:1826`).
+4. **D-01..D-05 all carried forward without silent reversal.** ✅ D-01 re-issue (§2.1); D-02 preserve+re-issue
+   both paths + nothing-in-flight (§2.2); D-03 wireVrf one-shot lock with chosen `address(vrfCoordinator) !=
+   address(0)` detection (§4.1); D-04 `_setVrfConfig` internal dedup, 3-field write only (§4.2); D-05 narrow +
+   verified reachability, escalation untriggered (§5). The ONLY sanctioned reversal (D-05 escalation) was
+   evaluated and NOT invoked. `totalFlipReversals` carry-over preserved (§2.5, §0.A `:1711-1714`).
+5. **VRF-01..05 each mapped to a closing section.** ✅ VRF-01 (orphan resolves to real word) → §2.2/§2.3 (`:1772`
+   mid-day fill) + §0.G; VRF-02 (post-rotation liveness) → §2.3 + §5.1 (gate un-block) + §0.G; VRF-03 (freeze
+   disposition) → §3 (no consumed-this-cycle change; validator backfill rejected); VRF-04 (wireVrf one-shot
+   lock + dedup) → §4.1/§4.2 (HANDOFF-86/88/90 + ADMA-01 per §0.X); VRF-05 (vault-routed reach) → §4.3 (ADMA-02,
+   guards at the delegatecall targets per §0.Y).
+6. **Zero contracts/ + zero test/ mutations.** ✅ This phase wrote only `311-SPEC.md`; `git diff --quiet --
+   contracts/ test/` is clean (the only file touched is this SPEC document; all contract reads were read-only
+   per `feedback_contract_locations`).
+
+**SPEC COMPLETE.** §1–§7 authored; §0 manifest consumed; all five requirements (VRF-01..05) closed; D-01..D-05
+honored; the design is ready to drive Phase 312 IMPL.
