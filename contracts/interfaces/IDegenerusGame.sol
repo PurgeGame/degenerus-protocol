@@ -415,8 +415,4 @@ interface IDegenerusGame {
     function getDailyHeroWager(uint32 day, uint8 quadrant, uint8 symbol) external view returns (uint256 wagerUnits);
     /// @notice Get the winning hero symbol and amount for a given day.
     function getDailyHeroWinner(uint32 day) external view returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount);
-    /// @notice Get a player's total Degenerette wager for a level.
-    function getPlayerDegeneretteWager(address player, uint24 lvl) external view returns (uint256 weiAmount);
-    /// @notice Get the top Degenerette player for a level.
-    function getTopDegenerette(uint24 lvl) external view returns (address topPlayer, uint256 amountUnits);
 }

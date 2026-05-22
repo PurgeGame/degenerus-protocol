@@ -2576,29 +2576,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @notice Get a player's total ETH wagered on degenerette at a specific level.
-    /// @param player The player address.
-    /// @param lvl The level to query.
-    /// @return weiAmount Total ETH wagered in wei.
-    function getPlayerDegeneretteWager(
-        address player,
-        uint24 lvl
-    ) external view returns (uint256 weiAmount) {
-        weiAmount = playerDegeneretteEthWagered[player][lvl];
-    }
-
-    /// @notice Get the top degenerette player for a given level.
-    /// @param lvl The level to query.
-    /// @return topPlayer The address of the top wagerer.
-    /// @return amountUnits The wagered amount in 1e12 wei units.
-    function getTopDegenerette(
-        uint24 lvl
-    ) external view returns (address topPlayer, uint256 amountUnits) {
-        uint256 packed = topDegeneretteByLevel[lvl];
-        topPlayer = address(uint160(packed));
-        amountUnits = packed >> 160;
-    }
-
     /*+======================================================================+
       |                    TESTING FUNCTIONS                                 |
       +======================================================================+

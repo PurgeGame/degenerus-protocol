@@ -479,39 +479,22 @@ contract DegenerusGameDegeneretteModule is
         degeneretteBets[player][nonce] = packed;
         emit BetPlaced(player, uint32(index), nonce, packed);
 
-        // Track hero wagers and player ETH stats (ETH bets only)
+        // Track daily hero wagers (ETH bets only)
         if (currency == CURRENCY_ETH) {
-            // 1. Daily hero symbol tracking (heroQuadrant validated to {0..3} above)
-            {
-                uint32 day = _simulatedDayIndex();
-                uint8 heroSymbol = uint8(customTicket >> (heroQuadrant * 8)) &
-                    7;
-                uint256 wagerUnit = totalBet / 1e12;
-                if (wagerUnit > 0) {
-                    uint256 wPacked = dailyHeroWagers[day][heroQuadrant];
-                    uint256 shift = uint256(heroSymbol) * 32;
-                    uint256 current = (wPacked >> shift) & 0xFFFFFFFF;
-                    uint256 updated = current + wagerUnit;
-                    if (updated > 0xFFFFFFFF) updated = 0xFFFFFFFF;
-                    wPacked =
-                        (wPacked & ~(uint256(0xFFFFFFFF) << shift)) |
-                        (updated << shift);
-                    dailyHeroWagers[day][heroQuadrant] = wPacked;
-                }
-            }
-
-            // 2. Per-player per-level ETH wagered
-            uint24 lvl = level;
-            uint256 playerTotal = playerDegeneretteEthWagered[player][lvl] +
-                totalBet;
-            playerDegeneretteEthWagered[player][lvl] = playerTotal;
-            uint256 topPacked = topDegeneretteByLevel[lvl];
-            uint256 topAmount = topPacked >> 160;
-            uint256 playerScaled = playerTotal / 1e12;
-            if (playerScaled > topAmount) {
-                topDegeneretteByLevel[lvl] =
-                    (playerScaled << 160) |
-                    uint256(uint160(player));
+            // Daily hero symbol tracking (heroQuadrant validated to {0..3} above)
+            uint32 day = _simulatedDayIndex();
+            uint8 heroSymbol = uint8(customTicket >> (heroQuadrant * 8)) & 7;
+            uint256 wagerUnit = totalBet / 1e12;
+            if (wagerUnit > 0) {
+                uint256 wPacked = dailyHeroWagers[day][heroQuadrant];
+                uint256 shift = uint256(heroSymbol) * 32;
+                uint256 current = (wPacked >> shift) & 0xFFFFFFFF;
+                uint256 updated = current + wagerUnit;
+                if (updated > 0xFFFFFFFF) updated = 0xFFFFFFFF;
+                wPacked =
+                    (wPacked & ~(uint256(0xFFFFFFFF) << shift)) |
+                    (updated << shift);
+                dailyHeroWagers[day][heroQuadrant] = wPacked;
             }
         }
     }

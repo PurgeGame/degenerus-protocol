@@ -1548,18 +1548,6 @@ abstract contract DegenerusGameStorage {
     mapping(uint32 => uint256[4]) internal dailyHeroWagers;
 
     // =========================================================================
-    // Degenerette Per-Player Per-Level ETH Wagered
-    // =========================================================================
-
-    /// @dev Total ETH wagered on degenerette per player per level (in wei).
-    mapping(address => mapping(uint24 => uint256))
-        internal playerDegeneretteEthWagered;
-
-    /// @dev Top degenerette player per level.
-    ///      Packed: [96 bits: amount in 1e12 units] [160 bits: address]
-    mapping(uint24 => uint256) internal topDegeneretteByLevel;
-
-    // =========================================================================
     // Distress-Mode Lootbox Tracking
     // =========================================================================
 
