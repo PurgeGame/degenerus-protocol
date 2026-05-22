@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
 status: executing
-last_updated: "2026-05-22T19:41:38.800Z"
-last_activity: 2026-05-22 -- Phase 311 planning complete
+last_updated: "2026-05-22T19:55:12.694Z"
+last_activity: 2026-05-22 -- Phase 311 Plan 01 complete (SPEC skeleton + §0 grep-verified manifest)
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
   percent: 29
 ---
 
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 311 — SPEC — VRF-rotation liveness fix (design-intent trace + grep-verified call-graph)
+**Current focus:** Phase 311 — SPEC — VRF-Rotation Liveness Fix
 
 ## Current Position
 
-Phase: 311
-Plan: Not started
-Status: Ready to execute
-Resume: .planning/phases/311-spec-vrf-rotation-liveness-fix-spec/311-CONTEXT.md
-Last activity: 2026-05-22 -- Phase 311 planning complete
+Phase: 311 (SPEC — VRF-Rotation Liveness Fix) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute Plan 02 (§1–§6 design narrative)
+Resume: .planning/phases/311-spec-vrf-rotation-liveness-fix-spec/311-02-PLAN.md
+Last activity: 2026-05-22 -- Plan 01 complete: 311-SPEC.md §0 manifest grep-verified vs HEAD 3153149a (commits d43dc8b2 + d2826eb6)
 
 ## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
 
@@ -458,6 +458,7 @@ Audit deliverables:
 | Phase 306 P05 | 45min | 3 tasks | 3 files |
 | Phase 307 P01 | 0h30m | 7 tasks | 6 files |
 | Phase 309 P02 | 12 | 2 tasks | 1 files |
+| Phase 311 P01 | ~18min | 2 tasks | 1 file (311-SPEC.md skeleton + §0 grep-verified manifest + §0.X §9d map + §0.Y vault reach trace) + 1 SUMMARY |
 
 ## Decisions
 
@@ -523,3 +524,8 @@ Audit deliverables:
 - [Phase 309]: D-309-02-SPEC04-ACCEPT: SPEC-04 disposition = ACCEPT + DOCUMENT, proven (not asserted) in 309-SPEC §4. §4.A backward-trace: multiplier is a pure function (_lootboxEvMultiplierFromScore is `private pure`, :446) of the FROZEN activityScore parameter (:674/:710), never rngWord; per-caller commitment = decimator bucket-at-burn / degenerette bet-time / redemption burn-submission; seed uses raw amount (:671/:707) so cap allocation never changes a roll (INV-04); purchased boxes allocate pre-word (SPEC-03). §4.C residual order-steering proven word-INDEPENDENT → already-accepted self-MEV (REQUIREMENTS Out-of-Scope). INV-05 satisfied, INV-06 preserved, ROADMAP SC4 discharged.
 - [Phase 309]: D-309-02-SLOAD-ENUM: 309-SPEC §4.B enumerates ALL in-window SLOADs per caller (openLootBox 11 reads; resolveLootboxDirect/resolveRedemptionLootbox each 3 reads — global day, global level, cap accumulator; rngWord+activityScore are params, no SLOAD). lootboxEvBenefitUsedByLevel[player][currentLevel] confirmed the SOLE shared mutable consumed alongside the word (enumerated, not assumed); F-41-02/03 non-VRF-read bug class confirmed absent. POST-IMPL open path has zero shared-mutable in-window reads (cap moves to allocation).
 - [Phase 309]: D-309-02-CAPLINE-RECONCILE: plan <interfaces> cited cap SLOAD/SSTORE at :485/:503; grep-verified HEAD lines are :487 (SLOAD) / :502 (SSTORE), matching Plan-01 §0.D. §4 cites the grep-verified lines and records the discrepancy in §4.B.4 (not normalized).
+- [Phase 311]: D-311-01-HEAD-VERIFIED: 311-SPEC.md §0 call-graph manifest grep-verified against HEAD `3153149a75d0dfced1d9496d9cec348f47f6e630` (v45.0 working HEAD, downstream of the v44.0 milestone baseline `6f0ba296…`). Every 311-CONTEXT `<canonical_refs>` anchor recorded VERIFIED with matched source text — 23 AdvanceModule sites + MintModule:686 + 7 Storage slots; zero "by construction" claims.
+- [Phase 311]: D-311-01-SETVRFCONFIG-TBC: `_setVrfConfig` (D-04 dedup helper) recorded TO-BE-CREATED — `grep -rn "_setVrfConfig" contracts/` returns zero matches at HEAD; NOT treated as an existing call-graph node. Both `wireVrf` (:506-508) and `updateVrfCoordinatorAndSub` (:1696-1698) currently write the 3 VRF slots inline; D-04 collapses them at Phase 312.
+- [Phase 311]: D-311-01-VAULT-NAMING-DRIFT: CONTEXT "DegenerusVault dispatch" (ADMA-02) reconciled as a naming drift — `contracts/DegenerusVault.sol` exists but dispatches NEITHER VRF admin fn (zero `wireVrf`/`updateVrfCoordinatorAndSub`/`gameAdmin` refs); it is the vault-ownership oracle (`vault.isVaultOwner` gate at DegenerusAdmin.sol:437). Real routed reach: DegenerusAdmin.sol:458 (wireVrf, in constructor) + :901 (updateVrf, in `_executeSwap`), both via DegenerusGame.sol delegatecall selectors (:308/:1874) → AdvanceModule impls (:498/:1688). The D-03 lock + D-01/D-02 safety sit at the delegatecall target, covering every wrapper (VRF-05 evidence).
+- [Phase 311]: D-311-01-ADMA02-LINE-DRIFT: ADMA-02 §9d.4 cites `AdvanceModule.sol:1677`; HEAD `updateVrfCoordinatorAndSub` is at `:1688` (+11 drift). Recorded DRIFTED with delta; verified HEAD line `:1688` governs all §1–§6 assertions. Drain-gate revert anchors also refined: precise reverts are `:213` + `:238` (same-day) and `:271` (new-day) vs CONTEXT `:209-238`/`:269`.
+- [Phase 311]: D-311-01-9D-MAP: §0.X maps all 10 §9d cluster anchors to closing changes — freeze sub-cluster {HANDOFF-78/85/87/89/91} → D-01/D-02 (VRF-03); wireVrf sub-cluster {86/88/90/ADMA-01} → D-03/D-04 (VRF-04); ADMA-02 vault reach → D-03+D-01/D-02 (VRF-05). Maximalist-catalog framing per `project_rnglock_audit_disposition` (rows are a catalog, not live player vectors; admin rotation EXEMPT-class). VRF-01..05 remain Pending in REQUIREMENTS traceability — SPEC designs closure, IMPL(312)+TST(313) prove it.

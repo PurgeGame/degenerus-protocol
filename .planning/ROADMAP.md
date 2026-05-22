@@ -86,7 +86,7 @@
   5. Every cited file:line grep-verified against contract HEAD per `feedback_verify_call_graph_against_source.md`; each §9d VRF-cluster anchor mapped to a closing change; zero "by construction" claims; zero contract/test mutations.
 
 **Plans:** 2 plans
-- [ ] 311-01-PLAN.md — skeleton + §0 grep-verified call-graph manifest (every CONTEXT anchor VERIFIED-or-DRIFTED) + §9d-anchor→closing-change mapping + vault/admin-routed reach trace
+- [x] 311-01-PLAN.md — skeleton + §0 grep-verified call-graph manifest (every CONTEXT anchor VERIFIED-or-DRIFTED) + §9d-anchor→closing-change mapping + vault/admin-routed reach trace
 - [ ] 311-02-PLAN.md — §1 Scenario A/B backward-trace + §2 locked re-issue-in-flight fix shape (VRF-01/02) + §3 freeze-invariant disposition (VRF-03) + §4 wireVrf one-shot lock + _setVrfConfig dedup + vault reach (VRF-04/05) + §5 D-05 reachability/escalation + §6 rejected options + §7 self-check
 
 ### Phase 312: IMPL — VRF-Rotation Fix (Single Batched USER-APPROVED Diff) (IMPL)
