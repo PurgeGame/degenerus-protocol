@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
-status: executing
-last_updated: "2026-05-22T19:55:12.694Z"
-last_activity: 2026-05-22 -- Phase 311 Plan 01 complete (SPEC skeleton + §0 grep-verified manifest)
+status: verifying
+last_updated: "2026-05-22T20:05:21.936Z"
+last_activity: 2026-05-22
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 7
-  completed_plans: 6
-  percent: 29
+  completed_plans: 7
+  percent: 43
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 
 ## Current Position
 
-Phase: 311 (SPEC — VRF-Rotation Liveness Fix) — EXECUTING
-Plan: 2 of 2
-Status: Ready to execute Plan 02 (§1–§6 design narrative)
-Resume: .planning/phases/311-spec-vrf-rotation-liveness-fix-spec/311-02-PLAN.md
-Last activity: 2026-05-22 -- Plan 01 complete: 311-SPEC.md §0 manifest grep-verified vs HEAD 3153149a (commits d43dc8b2 + d2826eb6)
+Phase: 311 (SPEC — VRF-Rotation Liveness Fix) — COMPLETE (ready for verification)
+Plan: 2 of 2 (both complete)
+Status: Phase complete — ready for verification
+Resume: .planning/phases/311-spec-vrf-rotation-liveness-fix-spec/ (311-SPEC.md §0–§7 authored; next: Phase 312 IMPL)
+Last activity: 2026-05-22 -- Plan 02 complete: 311-SPEC.md §1–§7 design narrative authored (commits d27e8afd + b2c9ab2c); VRF-01..05 closed
 
 ## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
 
@@ -38,7 +38,7 @@ Last activity: 2026-05-22 -- Plan 01 complete: 311-SPEC.md §0 manifest grep-ver
 |-------|------|------|--------------|--------|
 | 309 | SPEC — V-081 Locked Layout + Bonus-Only Cap + Shared-Cap | SPEC | SPEC-01..04 | Complete (groundwork) |
 | 310 | IMPL — V-081 Single Batched USER-APPROVED Diff (`9bcd582d`) | IMPL | IMPL-01..05 | Complete (groundwork) |
-| 311 | SPEC — VRF-Rotation Liveness Fix (design-intent + call-graph) | SPEC | VRF-01..05 | Pending (roadmapper) |
+| 311 | SPEC — VRF-Rotation Liveness Fix (design-intent + call-graph) | SPEC | VRF-01..05 | Complete (ready for verification) |
 | 312 | IMPL — VRF-Rotation Fix (single batched USER-APPROVED diff) | IMPL | VRF-01..05 | Pending (roadmapper) |
 | 313 | TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation | TST | VTST-01..04 | Pending (roadmapper) |
 | 314 | SWEEP — 3-Skill Adversarial (VRF fix + delta surfaces) + Degenerette Audit | SWEEP | SWP-01..02 + DGAUD-01..04 | Pending (roadmapper) |
@@ -529,3 +529,4 @@ Audit deliverables:
 - [Phase 311]: D-311-01-VAULT-NAMING-DRIFT: CONTEXT "DegenerusVault dispatch" (ADMA-02) reconciled as a naming drift — `contracts/DegenerusVault.sol` exists but dispatches NEITHER VRF admin fn (zero `wireVrf`/`updateVrfCoordinatorAndSub`/`gameAdmin` refs); it is the vault-ownership oracle (`vault.isVaultOwner` gate at DegenerusAdmin.sol:437). Real routed reach: DegenerusAdmin.sol:458 (wireVrf, in constructor) + :901 (updateVrf, in `_executeSwap`), both via DegenerusGame.sol delegatecall selectors (:308/:1874) → AdvanceModule impls (:498/:1688). The D-03 lock + D-01/D-02 safety sit at the delegatecall target, covering every wrapper (VRF-05 evidence).
 - [Phase 311]: D-311-01-ADMA02-LINE-DRIFT: ADMA-02 §9d.4 cites `AdvanceModule.sol:1677`; HEAD `updateVrfCoordinatorAndSub` is at `:1688` (+11 drift). Recorded DRIFTED with delta; verified HEAD line `:1688` governs all §1–§6 assertions. Drain-gate revert anchors also refined: precise reverts are `:213` + `:238` (same-day) and `:271` (new-day) vs CONTEXT `:209-238`/`:269`.
 - [Phase 311]: D-311-01-9D-MAP: §0.X maps all 10 §9d cluster anchors to closing changes — freeze sub-cluster {HANDOFF-78/85/87/89/91} → D-01/D-02 (VRF-03); wireVrf sub-cluster {86/88/90/ADMA-01} → D-03/D-04 (VRF-04); ADMA-02 vault reach → D-03+D-01/D-02 (VRF-05). Maximalist-catalog framing per `project_rnglock_audit_disposition` (rows are a catalog, not live player vectors; admin rotation EXEMPT-class). VRF-01..05 remain Pending in REQUIREMENTS traceability — SPEC designs closure, IMPL(312)+TST(313) prove it.
+- [Phase ?]: 311-02: D-05 orphan-recovery CONFIRMED-COVERED; D-03 wireVrf lock uses address(vrfCoordinator)!=address(0); D-04 _setVrfConfig collapses only the 3-field config write (:509 stays inline); VRF-01..05 closed by §2/§3/§4/§5
