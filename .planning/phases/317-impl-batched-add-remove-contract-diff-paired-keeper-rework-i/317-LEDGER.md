@@ -308,3 +308,76 @@ The permanent Deity bit makes `hasAnyLazyPass(VAULT/SDGNRS)` return true forever
 4. **Keeper-diff approval discipline (D-02):** the utilities AfKing rework diff is ALSO presented for explicit USER review before commit (same review moment as the protocol diff) — the commit-guard hook does NOT watch the other repo, so this gate is enforced manually by the executor pausing for approval at the Phase-317 contract-boundary wave.
 
 **No `contracts/` file modified by Task 2** (`git diff --stat -- contracts/` empty).
+
+---
+
+## Pre-Deletion Test Baseline
+
+**Built:** 2026-05-23 (Plan 317-01, Task 3). The pre-deletion (current unmodified tree) pass/fail snapshot captured FIRST so the RM-06 / JGAS-02 slot re-derivation delta is attributable and Phase 318 can prove "no NEW failures vs this baseline" (threat T-317-02). ZERO source mutation.
+
+### Baseline run
+
+- **Command:** `FOUNDRY_PROFILE=default forge test --no-match-path "test/**/*.fork.t.sol"` (fast non-deep profile: fuzz `runs=1000`, invariant `runs=256`/`depth=128`; fork tests excluded — they need a live RPC and are not part of the slot-re-derivation surface). Snapshot, NOT a coverage run — Phase 318 owns deep coverage.
+- **Aggregate (authoritative summary line):** `Ran 61 test suites in 76.68s: 446 tests passed, 71 failed, 16 skipped (533 total tests)`.
+- **PRE-DELETION BASELINE = 71 FAILING / 446 passing / 16 skipped (533 total) across 61 Foundry suites.** This is the v45-closure baseline the milestone inherits (MEMORY: the v45 suite "has unrelated pre-existing baseline failures"). NO source has been mutated yet — every one of these 71 is a pre-existing failure, attributable to NONE of the RM/JGAS edits. Phase 318's "no NEW failures" gate is measured against this 71-count.
+
+> **Dual-suite note:** the repo also has a Hardhat JS suite (`npm test`, the `.test.js` files). The RM-06 / JGAS-02 slot re-derivation problem lives ENTIRELY in the Foundry `SLOT_*` `vm.store`/`vm.load` constants, so the baseline that matters for slot-delta attribution is the Foundry run captured here. Two `SLOT_*`-bearing JS files exist (`test/edge/MintCleanupRegression.test.js`, `test/integration/CrossSurfaceTicketMixing.test.js`) but their `SLOT_*` usage is the same vm-storage pattern under Hardhat; flagged for Phase 318 if their slot reads touch the −2 family.
+
+### Named known-baseline failures (selected — full list in `/tmp/317_baseline.txt` capture)
+
+The SPEC-flagged stale-baseline failure is present and confirmed:
+
+| Suite | Failing test | Failure message | Note |
+|-------|-------------|-----------------|------|
+| `test/fuzz/LootboxBoonCoexistence.t.sol` | `test_lootboxBoonAppliedDespiteExistingCoinflipBoon()` | "At least one lootbox should have rolled a non-coinflip boon" | **THE SPEC-flagged stale-baseline failure** — pre-existing, AND its `SLOT_*` constants are +1 stale (see below). Phase 318 must NOT blame the slot re-derivation for this. |
+| `test/fuzz/QueueDoubleBuffer.t.sol` | `testMidDay*` / `testQueue*` / `testWriteReadIsolation` (9) | panic: arithmetic underflow/overflow (0x11) | pre-existing |
+| `test/fuzz/AffiliateDgnrsClaim.t.sol` | `test_orderIndependence` / `test_proportionalDistribution` / `test_revertDoubleClaim` / `test_totalClaims*` (8) | `E()` | pre-existing |
+| `test/fuzz/TicketRouting.t.sol` | `test*RoutesToWriteKey` / `testRngGuard*` (12) | panic 0x11 / `Error != expected error` | pre-existing |
+| `test/fuzz/DegeneretteFreezeResolution.t.sol` | `testDegeneretteFreezeResolution*` / `testDegeneretteUnfrozenPathRegression` (3) | `InvalidBet()` | pre-existing |
+| `test/fuzz/PrizePoolFreeze.t.sol` | `testFreezeUnfreezeRoundTrip` / `testMultiDayAccumulatorPersistence` (2) | assertion / monotonic-growth | pre-existing |
+| `test/fuzz/GameOverPathIsolation.t.sol` | `testGameOverDrainsQueuedTickets` | "Best-effort drain did NOT fire" | pre-existing |
+| `test/fuzz/RngIndexDrainBinding.t.sol` | `testBindingConsistencyDailyDrain` | "no TraitsGenerated emitted during drain" | pre-existing |
+| various `invariant/` suites | counterexample-driven invariant failures (EthSolvency, CoinSupply, VaultShareMath, RngIndexDrainOrdering, GameFSM, VaultShare, VRFPath, MultiLevel, DegeneretteBet, WhaleSybil, Composition, RedemptionInvariants, TicketQueue) | various | pre-existing v45 baseline invariant failures |
+
+(The 71-count is the authoritative summary figure; the inline `[FAIL]` lines in the raw capture number higher because each invariant counterexample prints multiple lines.)
+
+### Slot-≥34 family — current canonical (forge inspect) + post-deletion −2 targets
+
+**`forge inspect contracts/DegenerusGame.sol:DegenerusGame storage-layout` (current, PRE-deletion, authoritative):**
+
+| Var | Current slot (forge) | Post-(RM-02+JGAS) slot | Net | Region |
+|-----|---------------------:|-----------------------:|-----|--------|
+| `autoRebuyState` | 19 | (deleted, RM-02) | — | |
+| `lootboxEthBase` | 20 | 19 | −1 | [20,33) |
+| `resumeEthPool` | 33 | (deleted, JGAS-02) | — | |
+| `vrfCoordinator` | 34 | **32** | **−2** | ≥34 |
+| `lootboxRngPacked` | 37 | **35** | **−2** | ≥34 |
+| `lootboxRngWordByIndex` | 38 | **36** | **−2** | ≥34 |
+| `lootboxDay` | 39 | **37** | **−2** | ≥34 |
+| `degeneretteBets` | 45 | **43** | **−2** | ≥34 |
+| `boonPacked` | 61 | **59** | **−2** | ≥34 |
+
+⚠ **The slot-≥34 family shifts −2, NOT −1** (the JGAS-deepened compounding: `autoRebuyState`@19 deletion = −1 for slot≥20, `resumeEthPool`@33 deletion = an ADDITIONAL −1 for slot≥34). The `vrf*`/`lootboxRng*` family the v45 VRF-freeze + orphan-index work depends on is in the −2 region. A uniform blind −1 would mis-derive the entire ≥34 region by a full slot. The post-deletion column is the PREDICTED target; the RM-06 re-derivation MANDATE is ONE combined `forge inspect` on the POST-(RM-02+JGAS) contract (owned by the downstream RM-06 edit plan), file-by-file `SLOT_*` rewrite — NEVER patch-by-arithmetic, NEVER blind −1.
+
+### Current `SLOT_*` test constants for the −2 family (pre-deletion live values flagged as −2 targets)
+
+| Test file | `SLOT_*` constant | Current value | Maps to var (canonical slot) | −2 target | Stale? |
+|-----------|-------------------|--------------:|------------------------------|----------:|--------|
+| `RngLockDeterminism.t.sol` | `SLOT_LOOTBOX_RNG_INDEX` | 37 | `lootboxRngPacked` (37) | 35 | aligned |
+| `RngLockDeterminism.t.sol` | `SLOT_LOOTBOX_RNG_WORD_BY_INDEX` | 38 | `lootboxRngWordByIndex` (38) | 36 | aligned |
+| `RngLockRotationDeterminism.t.sol` | `SLOT_LOOTBOX_RNG_INDEX` | 37 | `lootboxRngPacked` (37) | 35 | aligned |
+| `RngLockRotationDeterminism.t.sol` | `SLOT_LOOTBOX_RNG_WORD_BY_INDEX` | 38 | `lootboxRngWordByIndex` (38) | 36 | aligned |
+| `VRFStallEdgeCases.t.sol` | `SLOT_LOOTBOX_RNG_PACKED` | 37 | `lootboxRngPacked` (37) | 35 | aligned |
+| `VrfRotationOrphanIndex.t.sol` | `SLOT_LOOTBOX_WORD_MAP` | 38 | `lootboxRngWordByIndex` (38) | 36 | aligned |
+| `VrfRotationLiveness.t.sol` | `SLOT_LOOTBOX_WORD_MAP` | 38 | `lootboxRngWordByIndex` (38) | 36 | aligned |
+| **`LootboxBoonCoexistence.t.sol`** | `SLOT_LOOTBOX_RNG_IDX` | **38** | `lootboxRngPacked` (canonical 37) | should land 35 | **+1 STALE** (declares 38 against live 37) |
+| **`LootboxBoonCoexistence.t.sol`** | `SLOT_LOOTBOX_WORD` | **39** | `lootboxRngWordByIndex` (canonical 38) | should land 36 | **+1 STALE** (declares 39 against live 38) |
+| **`LootboxBoonCoexistence.t.sol`** | `SLOT_LOOTBOX_DAY` | **40** | `lootboxDay` (canonical 39) | should land 37 | **+1 STALE** (declares 40 against live 39) |
+| **`LootboxBoonCoexistence.t.sol`** | `SLOT_BOON_PACKED` | **65** | `boonPacked` (canonical 61) | should land 59 | **+4 STALE** (declares 65 against live 61) |
+
+**Stale-baseline compounding hazard (locked, CONFIRMED):** `LootboxBoonCoexistence.t.sol`'s `SLOT_*` constants are ALREADY off vs the canonical live layout (it declares the rng/word/day family at 38/39/40 against live 37/38/39, and `SLOT_BOON_PACKED=65` against live 61). Combined with the −2 compounding, the re-derivation for these constants is NOT a blind decrement — some are already off in the WRONG direction. AND `test_lootboxBoonAppliedDespiteExistingCoinflipBoon` FAILS at baseline independently. Therefore the downstream RM-06 work MUST: (a) re-derive ALL `SLOT_*` from the single combined `forge inspect` on the post-deletion contract (NOT arithmetic on the stale current values); (b) ensure the post-deletion delta is attributable so the re-derivation is NOT blamed for the pre-existing `LootboxBoonCoexistence` failure (Phase 318 owns "no NEW failures vs this 71-count baseline").
+
+### `SLOT_*`-bearing test files (22 — the re-derivation surface)
+`test/fuzz/`: `AdvanceGameRewrite.t.sol`, `AffiliateDgnrsClaim.t.sol`, `JackpotCombinedPool.t.sol`, `LootboxBoonCoexistence.t.sol`, `LootboxRngLifecycle.t.sol`, `QueueDoubleBuffer.t.sol`, `RedemptionEdgeCases.t.sol`, `RngIndexDrainBinding.t.sol`, `RngLockDeterminism.t.sol`, `RngLockRotationDeterminism.t.sol`, `StakedStonkRedemption.t.sol`, `StorageFoundation.t.sol`, `TicketLifecycle.t.sol`, `VRFCore.t.sol`, `VrfRotationLiveness.t.sol`, `VrfRotationOrphanIndex.t.sol`, `VRFStallEdgeCases.t.sol`; `test/fuzz/handlers/`: `RedemptionHandler.sol`, `RngIndexDrainHandler.sol`; `test/fuzz/invariant/`: `RedemptionInvariants.inv.t.sol`; `test/edge/MintCleanupRegression.test.js`, `test/integration/CrossSurfaceTicketMixing.test.js` (JS — flag for 318).
+
+**No `contracts/` file modified by Task 3** (`git diff --stat -- contracts/` empty).
