@@ -148,7 +148,7 @@ Each requirement maps to exactly one phase (primary verification owner). The ful
 | SAFE-01 | Phase 318 | Pending |
 | SAFE-02 | Phase 318 | Pending |
 | SAFE-03 | Phase 318 | Pending |
-| SAFE-04 | Phase 318 | Pending |
+| SAFE-04 | Phase 318 | In progress — 318-01 satisfied the slot/recompile facet (suite green, no slot drift, RM-06 empirically confirmed); RNG-freeze post-unlock proof pending 318-05 |
 | JGAS-03 | Phase 318 | Pending |
 | GAS-01 | Phase 319 | Pending |
 | GAS-02 | Phase 319 | Pending |

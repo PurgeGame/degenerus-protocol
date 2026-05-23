@@ -142,7 +142,7 @@ Plans:
 Plans:
 **Wave 1** *(the fixture-repair linchpin — dependency-zero; all coverage plans block on it)*
 
-- [ ] 318-01-PLAN.md — Repair the Foundry deploy fixture: deploy a live AfKing keeper at `ContractAddresses.AF_KING` before the SUB-09 self-subscribe runs (add `AF_KING` to `predictAddresses.js` `DEPLOY_ORDER` before VAULT + `DeployProtocol.sol` nonce-matched deploy + re-patch the address constants), un-bricking ~336 tests and empirically validating the 317-08 slot re-derivation (SAFE-04 facet: suite recompiles green, no slot drift).
+- [x] 318-01-PLAN.md — Repair the Foundry deploy fixture: deploy a live AfKing keeper at `ContractAddresses.AF_KING` before the SUB-09 self-subscribe runs (add `AF_KING` to `predictAddresses.js` `DEPLOY_ORDER` before VAULT + `DeployProtocol.sol` nonce-matched deploy + re-patch the address constants), un-bricking ~336 tests and empirically validating the 317-08 slot re-derivation (SAFE-04 facet: suite recompiles green, no slot drift). **DONE 2026-05-23** — setUp no longer reverts; suite 197→532 runnable (472 pass / 44 fail / 16 skip); DeployCanary 2/2 PASS (now asserts AF_KING + downstream +1 shift); 317-08 slots empirically confirmed (10 slot-fixed suites reach bodies, slot reads pass, zero drift); 44 failures all pre-existing families, grep-proven zero AfKing involvement. Commits `c5ec05a4` + `745cd63d`.
 
 **Wave 2** *(parallel — disjoint test-file ownership; each `depends_on: 318-01`)*
 

@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
-status: ready_to_plan
-last_updated: 2026-05-23T21:01:16.904Z
-last_activity: 2026-05-23 -- 317-07 Task 3 batched contract commit + deferred test/docs commits (audit-repo only)
+status: planning
+last_updated: "2026-05-23T21:35:37.481Z"
+last_activity: 2026-05-23
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 12
-  completed_plans: 14
-  percent: 40
-stopped_at: Phase 317 complete (9/7) — ready to discuss Phase 318
+  total_plans: 18
+  completed_plans: 16
+  percent: 44
 ---
 
 # Project State
@@ -26,8 +25,8 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 ## Current Position
 
 Phase: 318
-Plan: Not started
-Status: Ready to plan
+Plan: 01 complete (deploy-fixture repair) — Wave 1 linchpin done; Wave 2 (318-02..06) unblocked
+Status: Executing — 318-01 of 6 complete
 Last activity: 2026-05-23
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
@@ -38,7 +37,7 @@ Last activity: 2026-05-23
 |-------|------|------|------------------------------|--------|
 | 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 · JGAS-01 (locks all 42) | Complete — ready for verification (5/5 plans: 316-01 · 316-02 · 316-05 · 316-03 · 316-04 done) |
 | 317 | IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework | IMPL | PROTO-02..05 · CRANK-01..04 · REW-01..04 · SUB-01..08 · RM-01/02/03/05/06 · JGAS-02 | Not started |
-| 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | Not started |
+| 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | In progress — 318-01 done (fixture repair; SAFE-04 facet; setUp green, suite 197→532) |
 | 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 · JGAS-04 | Not started |
 | 320 | AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure | TERMINAL | (re-attests all 42; owns 0 primarily) | Not started |
 
@@ -478,6 +477,7 @@ Audit deliverables:
 | Phase 316 P01 | 6min | 2 tasks | 1 files |
 | Phase 316 P02 | 12 min | 2 tasks | 1 files |
 | Phase 317 P07 | 1 session | 3 tasks | 27 files |
+| 318 | 01 | ~10min | 3 | 4 files (predictAddresses.js + DeployProtocol.sol + DeployCanary.t.sol + ContractAddresses.sol) + 1 SUMMARY |
 
 ## Decisions
 
@@ -570,3 +570,5 @@ Audit deliverables:
 - [Phase ?]: 317-01: _budgetToTicketUnits NOT orphaned (3 live callers) — KEEP
 - [Phase ?]: 317-01: pre-deletion Foundry baseline = 71 failing / 446 passing / 16 skipped — Phase 318 'no NEW failures' anchor
 - [Phase ?]: 317-01: slot-≥34 family confirmed −2 via forge inspect (vrfCoordinator 34→32, lootboxRngWordByIndex 38→36, boonPacked 61→59); LootboxBoonCoexistence SLOT_* +1/+4 stale
+- [Phase 318]: 318-01: deploy-fixture repaired — AfKing inserted into predictAddresses.js DEPLOY_ORDER at N+18 (before VAULT/SDGNRS) + deployed nonce-matched in DeployProtocol.sol; ContractAddresses.sol RE-PATCHED (AF_KING→0x3Cff..., VAULT/SDGNRS/DGNRS/ADMIN/GNRUS +1 shift) and COMMITTED as deliverable (did NOT restore — HEAD is already the foundry-patched state; the on-disk .bak was a stale Apr-12 wrong-DEPLOY_ORDER snapshot that would corrupt on restore). setUp no longer reverts; suite recovered 197→532 runnable (472 pass / 44 fail / 16 skip). DeployCanary 2/2 PASS (now also asserts AF_KING). 317-08 slot re-derivation EMPIRICALLY CONFIRMED — the 10 slot-fixed suites reach bodies, slot-read tests pass, no slot drift.
+- [Phase 318]: 318-01: the 44 post-repair failures are ALL pre-existing behavioral/protocol families (panic-0x11 ticket-routing, RngLocked-vs-panic guards, InvalidBet, freeze assertions, + 8 invariant solvency/VRF-path counterexamples newly reachable since setUp works) — grep-proven ZERO touch afKing/subscribe/AF_KING (the one AfKing-referencing failing suite's only fail is an unrelated GNRUS test; its afKing test passes). Named set captured in 318-01-SUMMARY.md as the Wave-2+ no-new-failures anchor. NOT chased (out of scope per fixture-repair plan).
