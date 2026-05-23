@@ -114,3 +114,78 @@ The 5 protocol-side additions ship as ONE batched USER-APPROVED contract diff at
 - **PROTO-04 — `DegenerusGame.batchPurchase(players[], amounts[], modes[])`.** Does NOT exist yet — adds it. Keeper-gated (on `AF_KING`); per-player in-context purchase wrapped in try/catch + slice-refund; ONE batch value transfer; batch-level `rngLocked`/game-over pre-checked once at entry; OPEN-C = CEI-proof with the guard-fallback note. **Full shape locked in the `## ADD Design — Do-Work Crank` → `batchPurchase` subsection above** (this entry points to that lock).
 
 - **PROTO-05 — pin `AF_KING` frozen address constant.** ADD `AF_KING` (aligning with any existing afKing address) to `ContractAddresses.sol` (freely modifiable per `feedback_contractaddresses_policy`), and reference it from `BurnieCoin` / `BurnieCoinflip`. `burnForKeeper` / `creditFlip` / `batchPurchase` all gate on **exactly** this constant. `VAULT`/`SDGNRS` (`ContractAddresses.sol:37/:47`) are the precedent pattern; the keeper-rename succession (`STREAK_KEEPER_V2`→`AF_KING`, `onlyStreakKeeper`→`onlyAfKing`) propagates the gate references.
+
+---
+
+## REMOVE Footprint
+
+This is the REMOVE-half design lock authored in Plan **316-02** (appended to the 316-01 ADD-half sections above; those sections are untouched). It locks the PROTO-01/RM-04 KEEP+EXPOSE reconciliation and the RM-01..06 deletion footprint that Phase 317 IMPL deletes verbatim. Every `file:line` below was re-grep-verified against contract HEAD `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` on 2026-05-23 (SC#5); where `316-RESEARCH.md §1` recorded a `✗ DRIFT` vs `PLAN-V47`, the RESEARCH live line is locked and the drift is recorded inline. The dedicated call-graph attestation table is owned by Plan 316-04; this section is the design-binding footprint, not the attestation appendix.
+
+### RM-04 / PROTO-01 reconciliation — KEEP+EXPOSE `_hasAnyLazyPass` (locked verbatim)
+
+**LOCKED, overriding the dead-code-deletion instinct:** RM-04 = **KEEP** the existing `_hasAnyLazyPass` body and **EXPOSE** it (rename `private view` → `external view` as `hasAnyLazyPass`, NO body change); **DELETE the rest of afKing** (RM-01/RM-02). This is the single cross-half reconciliation — RM-01 deletes all the afKing-mode machinery *around* `_hasAnyLazyPass`, but the function itself survives because the subscription keeper needs it as its sole pass gate.
+
+**Dependency-safety proof (verified reader-set, 3 grep matches total — `316-RESEARCH.md §2`, re-verified at HEAD):**
+- decl `DegenerusGame.sol:1610` (`function _hasAnyLazyPass(address player) private view returns (bool)`),
+- reader `DegenerusGame.sol:1580` (inside `_setAfKingMode` — `if (!_hasAnyLazyPass(player)) revert E();`),
+- reader `DegenerusGame.sol:1660` (inside `syncAfKingLazyPassFromCoin` — `if (_hasAnyLazyPass(player)) return true;`).
+
+Both readers (`:1580`, `:1660`) sit inside afKing-**mode** functions slated for RM-01 deletion. After RM-01, the private function would be dead code *except* for the keeper's external need — therefore KEEP+EXPOSE is **required, not optional**. The deletion of the surrounding `:1580`/`:1660` functions does not touch the body (the body reads `mintPacked_[player]` Deity bit 184 + `FROZEN_UNTIL_LEVEL` bits 128-151 via `BitPackingLib` — `316-RESEARCH.md §2`).
+
+**The deletion is dependency-safe IFF PROTO-01 ships in the SAME batched Phase-317 diff.** Keeper-dependency finding (`316-RESEARCH.md §3`, re-verified): `StreakKeeperV2` matches ZERO RM-deleted symbols across the full RM-symbol set; its only game-side coupling is `hasAnyLazyPass(player)` at keeper `:671` (subscribe gate) and `:974` (renewal-sweep gate) — the kept-and-exposed PROTO-01 view, NOT a deleted symbol. So the keeper's gate survives RM-* unchanged provided the rename ships alongside the deletion.
+
+### RM-01 — AFKing mode surface (DegenerusGame.sol — `316-RESEARCH.md §1.1`, all ✓ MATCH at HEAD)
+
+**DELETE the 13 afKing-mode functions, KEEPING only `_hasAnyLazyPass`:**
+
+| Symbol | Line | Action |
+|--------|------|--------|
+| `setAutoRebuy` | 1495 | DELETE (also RM-02) |
+| `setAutoRebuyTakeProfit` | 1504 | DELETE (also RM-02) |
+| `_setAutoRebuy` | 1512 | DELETE (also RM-02) |
+| `_setAutoRebuyTakeProfit` | 1524 | DELETE (also RM-02) |
+| `autoRebuyTakeProfitFor` | 1543 | DELETE (also RM-02) |
+| `setAfKingMode` | 1559 | DELETE |
+| `_setAfKingMode` | 1569 | DELETE (contains the `:1580` `_hasAnyLazyPass` reader) |
+| `_hasAnyLazyPass` | 1610 | **KEEP+EXPOSE** (RM-04 — body unchanged) |
+| `afKingModeFor` | 1624 | DELETE |
+| `afKingActivatedLevelFor` | 1631 | DELETE |
+| `deactivateAfKingFromCoin` | 1641 | DELETE |
+| `syncAfKingLazyPassFromCoin` | 1654 | DELETE (contains the `:1660` `_hasAnyLazyPass` reader) |
+| `_deactivateAfKing` | 1670 | DELETE |
+
+**DELETE 3 events:** `AutoRebuyToggled` (`:1476`), `AutoRebuyTakeProfitSet` (`:1479`), `AfKingModeToggled` (`:1482`). **DELETE error** `AfKingLockActive` (`:92`; used at `:1676` inside `_deactivateAfKing`). **DELETE 3 consts:** `AFKING_KEEP_MIN_ETH` (`:151`; used `:1535`/`:1584`/`:1585`), `AFKING_KEEP_MIN_COIN` (`:154`; used `:1588`/`:1589`), `AFKING_LOCK_LEVELS` (`:157`; used `:1675`). **REMOVE 2 cross-calls:** `coinflip.settleFlipModeChange(player)` at `:1603` (inside `_setAfKingMode`) and `:1678` (inside `_deactivateAfKing`).
+
+### RM-02 — free ETH auto-rebuy (storage + jackpot — `316-RESEARCH.md §1.2/§1.3/§1.4`)
+
+- **storage/DegenerusGameStorage.sol:** DELETE `struct AutoRebuyState` (`:910`, body 910–919) and `mapping(address => AutoRebuyState) internal autoRebuyState` (`:926`). forge-confirmed: `autoRebuyState` = **slot 19** (the RM-06 / storage-slot-shift consequence is locked in `## Storage Slot-Shift Plan` below).
+- **modules/DegenerusGameJackpotModule.sol:** `_addClaimableEth` decl `:788` is the 3-arg form `(beneficiary, weiAmount, entropy)` (sig 788–795, returns `(claimableDelta, rebuyLevel, rebuyTickets)` at `:794`). The auto-rebuy block is at **800–808** (the `AutoRebuyState memory state = autoRebuyState[beneficiary];` cold SLOAD verified at `:801`) — **`✗ DRIFT` +2 vs `PLAN-V47`'s claimed 798–806; the locked range is 800–808.** DELETE `_processAutoRebuy` (`:822`). Verify-orphaned: `_budgetToTicketUnits` (`:861`) — confirm no surviving caller post-cut at IMPL. Post-removal, ETH winnings **always credit to claimable** (`_addClaimableEth` falls straight through to `_creditClaimable`). The 3-arg `_addClaimableEth` is consumed at JackpotModule call sites `:755`/`:760`/`:765` (the internal 3-call helper) and `:1430` (`entropyState`), `:1530` (`entropy`), `:1571`, `:1583`, `:2132`, `:2165` — the `entropy`-param drop + the `JackpotEthWin` event signature change (decl `:69`, fields `rebuyLevel`/`rebuyTickets` at `:75`/`:76`, emitted around `:1430`-1438) are locked in `## VRF-Freeze Obligation Retirement` below (ABI break noted there).
+- **modules/DegenerusGamePayoutUtils.sol:** DELETE `_calcAutoRebuy` (`:51`; the afKing-mode bonus selector `state.afKingMode ? bonusBpsAfKing : bonusBps` at `:83`; the entropy roll `keccak256(abi.encode(entropy, beneficiary, weiAmount)) & 3` at ~`:70`). Verify-orphaned: `struct AutoRebuyCalc` (`:19`) — confirm no surviving caller post-cut at IMPL.
+
+### RM-03 — BURNIE flip recycle collapse to flat 75bps (BurnieCoinflip.sol — `316-RESEARCH.md §1.5`)
+
+**KEEP the core, drop only the afKing/deity tier.** Surgery interiors (verified at HEAD):
+- DELETE `settleFlipModeChange` (`:217`). Collapse the rebet-bonus afKing branch (body 294–308: `afKingModeFor` `:300`, `hasDeityPass` `:302`, `_afKingDeityBonus` `:304`, `_afKingRecyclingBonus` `:305`) to `_recyclingBonus`. In `_claimCoinflipsInternal` (`:416`): drop the `syncAfKingLazyPassFromCoin` sync call (`:422`), the `afKingActive`/`hasDeityPass`/`deityBonusHalfBps` block (434–443), and collapse the recycle branch (540–548) to `_recyclingBonus`. In `_setCoinflipAutoRebuy` (`:722`) / `_setCoinflipAutoRebuyTakeProfit` (`:776`): remove the `deactivateAfKingFromCoin` calls (`:754`/`:766`/`:793`) and the `AFKING_KEEP_MIN_COIN` floor checks (`:753`/`:792`).
+- DELETE helpers `_afKingRecyclingBonus` (`:1062`) and `_afKingDeityBonusHalfBpsWithLevel` (`:1078`). DELETE 5 consts: `AFKING_RECYCLE_BONUS_BPS` (`:130`, **=100** — note: this is the deleted afKing tier, NOT the kept 75bps; `PLAN-V47` §1.5 shorthand "75bps" refers to the *kept* `RECYCLE_BONUS_BPS`, recorded here precisely to avoid a wrong-value deletion), `AFKING_DEITY_BONUS_PER_LEVEL_HALF_BPS` (`:131`), `AFKING_DEITY_BONUS_MAX_HALF_BPS` (`:132`), `DEITY_RECYCLE_CAP` (`:133`), `AFKING_KEEP_MIN_COIN` (`:140`).
+- **KEEP (byte-unmodified):** `RECYCLE_BONUS_BPS` (`:129`, **=75**) — the flat post-collapse recycle rate; `_recyclingBonus` (`:1051`, `bonus = (amount * uint256(RECYCLE_BONUS_BPS)) / uint256(BPS_DENOMINATOR)` at `:1055`); and the BURNIE win/loss RNG path `processCoinflipPayouts` (`:805`) with `bool win = (rngWord & 1) == 1;` (`:837`) — this path **MUST NOT be modified** (RM-06).
+
+### RM-04 — the kept `_hasAnyLazyPass`
+
+See the RM-04/PROTO-01 reconciliation block above. The single KEEP in an otherwise-all-delete afKing surface; exposed as `hasAnyLazyPass` external view (PROTO-01).
+
+### RM-05 — cross-contract cascade (interfaces + Vault + sStonk — `316-RESEARCH.md §1.6/§1.7/§1.8/§1.9`)
+
+- **interfaces/IDegenerusGame.sol:** REMOVE `afKingModeFor` (`:274`), `afKingActivatedLevelFor` (`:279`), `deactivateAfKingFromCoin` (`:283`), `syncAfKingLazyPassFromCoin` (`:288`). **RESOLVED open (`316-RESEARCH.md §1.6`):** `setAutoRebuy`/`setAutoRebuyTakeProfit`/`setAfKingMode` are **NOT declared in `IDegenerusGame`** (the doc's "verify whether present" resolves to MISSING here) — they ARE in `DegenerusVault`'s **local** interface (see below). **KEEP** `hasDeityPass` (`:376`, read by coinflip — not in removal scope).
+- **interfaces/IBurnieCoinflip.sol:** REMOVE `settleFlipModeChange` (`:85`). (`creditFlip` at `:115` + `creditFlipBatch` at `:122` are ADD-side PROTO-03, NOT removed.)
+- **DegenerusVault.sol:** REMOVE the local interface decls `setAutoRebuy` (`:47`), `setAutoRebuyTakeProfit` (`:49`), `setAfKingMode` (`:51`); REMOVE the wrappers `gameSetAutoRebuy` (decl `:627`, body call `:628`), `gameSetAutoRebuyTakeProfit` (decl `:634`, body `:635`), `gameSetAfKingMode` (decl `:643`, body `:648`). **KEEP** `coinSetAutoRebuy` (`:685`) / `coinSetAutoRebuyTakeProfit` (`:692`) — the BURNIE-side wrappers stay.
+- **StakedDegenerusStonk.sol:** REMOVE the local decl `setAfKingMode` (`:13`) and the init call `game.setAfKingMode(address(0), true, 10 ether, 0)` (`:361`, preceded by `game.claimWhalePass(address(0))` at `:360`). The `setAfKingMode` init is **REPLACED by the keeper self-subscribe (SUB-09)** — that init-config design is locked in Plan 316-03; this section locks only the removal of the `setAfKingMode` call. (The second `game.claimWhalePass(address(0))` re-claim entry at `:404` is not in the removal scope.)
+
+### RM-05 / RM-06 verify-before-IMPL orphan + byte-unmodified hygiene
+
+- **Orphan checks (grep post-edit at IMPL):** confirm `AutoRebuyCalc` (`PayoutUtils:19`), `_budgetToTicketUnits` (`JackpotModule:861`), and any `AutoRebuyState` import have ZERO surviving callers after the RM-01/RM-02 cuts before deleting them.
+- **Pitfall 4 — separate overload untouched:** the `DegenerusGameDegeneretteModule._addClaimableEth(address beneficiary, uint256 weiAmount)` **2-arg** overload (`:1117`) is a DISTINCT function from the JackpotModule 3-arg `(beneficiary, weiAmount, entropy)` form. ONLY the JackpotModule 3-arg form carries the auto-rebuy/entropy path; the Degenerette 2-arg overload is **untouched** by RM-02. Do NOT collapse or rename it.
+- **Byte-unmodified (RM-06):** `KNOWN_ISSUES` and the BURNIE win/loss RNG path (`processCoinflipPayouts` `:805`, `(rngWord & 1)` `:837`) MUST stay byte-identical across the whole batched diff.
+
+### JGAS cross-reference (footprint owned by Plan 316-05)
+
+The JGAS daily-ETH two-call-split deletion footprint (the `SPLIT_*` / `resumeEthPool` / `_resumeDailyEth` / `splitMode` / `call1Bucket` / `STAGE_JACKPOT_ETH_RESUME` symbols) is **NOT enumerated here** — it is owned by **Plan 316-05's `## JGAS-01 Decision Gate` section**. The only JGAS interaction this plan carries is that `resumeEthPool`'s storage-slot deletion (forge slot 33) **compounds the RM-06 slot shift to −2 for the slot-≥34 region** — locked in `## Storage Slot-Shift Plan` (Task 2) below.
