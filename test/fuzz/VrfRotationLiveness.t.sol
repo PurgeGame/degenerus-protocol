@@ -451,7 +451,10 @@ contract VrfRotationLiveness is DeployProtocol {
         // ticket-queue entry and fund the new subscription above MIN_LINK_FOR_LOOTBOX_RNG.
         vm.warp(block.timestamp + 1 days);
         uint256 nextDayWord = vrfWord ^ 0xBEEF;
-        if (nextDayWord == 0) nextDayWord = 1;
+        // Map both forbidden words to a safe value: 0 (XOR cancellation when vrfWord==0xBEEF)
+        // and 1 (the rngGate "request new RNG" sentinel at AdvanceModule:298) would stall the
+        // _completeDay drain and leave the game rngLocked().
+        if (nextDayWord <= 1) nextDayWord = 2;
         _completeDay(nextDayWord);
 
         address buyer = makeAddr("postRotationBuyer");

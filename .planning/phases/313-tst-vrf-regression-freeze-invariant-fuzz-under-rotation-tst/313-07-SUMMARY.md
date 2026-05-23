@@ -84,7 +84,7 @@ After the slot fix, VRFCore showed 1 fail (`test_midDayRequest_doesNotBlockDaily
 
 ### Honest full-phase re-verification
 - `forge build` → exit 0 (only pre-existing lint notes; none introduced).
-- The 4 new VTST contracts PASS: VrfRotationOrphanIndex 2/2, RngLockRotationDeterminism 2/2, VrfWireOneShot 4/4, VrfRotationLiveness 6/6 in the full-suite fixed-seed run. (See Deferred Issues for the isolated-run VrfRotationLiveness fuzz-isolation artifact.)
+- The 4 new VTST contracts PASS: VrfRotationOrphanIndex 2/2, RngLockRotationDeterminism 2/2, VrfWireOneShot 4/4, VrfRotationLiveness 6/6 — in BOTH the full-suite fixed-seed run AND isolated `--match-contract` runs, after the post-review fix recorded under "Resolved Post-Review" below.
 - v43 `RngLockDeterminism.t.sol` harness PASSES (2 live + 16 skip) and is byte-identical (`git status --porcelain test/fuzz/RngLockDeterminism.t.sol` empty).
 - VRFStallEdgeCases 18/18 PASS after the comment-only WR-01 edits.
 
@@ -108,8 +108,8 @@ After the slot fix, VRFCore showed 1 fail (`test_midDayRequest_doesNotBlockDaily
 - **Files modified:** test/fuzz/VRFStallEdgeCases.t.sol.
 - **Commit:** `8c4b5fb6`.
 
-## Deferred Issues
-- **VrfRotationLiveness `test_requestLootboxRngReachableAfterRotation` (isolated-run fuzz-isolation artifact).** This test (in `VrfRotationLiveness.t.sol`, NOT in this plan's files_modified and byte-identical to its 313-02 commit `2f438ea2` — I never touched it) PASSES in the full-suite fixed-seed run (it is in NEITHER the HEAD nor the pre-fix full-suite failing set) but FAILS in isolated `--match-contract`/`--match-test` runs at BOTH the pre-fix `41546f16` AND post-fix contracts (different counterexamples per contract). It is therefore a pre-existing fuzz-corpus/isolation artifact independent of this plan's changes, not a NEW failure introduced by the slot/WR fixes. Per the scope guard it is left untouched and unmasked; flagged here for the suite-verifier's awareness. The authoritative SC-5 metric (full-suite fixed-seed failing-function-set subset) shows 0 NEW failures regardless.
+## Resolved Post-Review
+- **VrfRotationLiveness `test_requestLootboxRngReachableAfterRotation` — root-caused as a TEST BUG and fixed (not an isolation artifact).** During the orchestrator's independent post-cleanup smoke run the test failed deterministically on fuzz input `0xBEEF` (48879) with `RngLocked()`. Root cause: the helper line `uint256 nextDayWord = vrfWord ^ 0xBEEF; if (nextDayWord == 0) nextDayWord = 1;` — when `vrfWord == 0xBEEF` the XOR cancels to 0 and the fallback set the next-day word to **1**, which is the `rngGate` "request new RNG" sentinel (`AdvanceModule:298`). `_completeDay(1)` then stalls the drain and leaves the game `rngLocked()`, so the subsequent `requestLootboxRng()` reverts. The full-suite fixed-seed corpus simply never generated `0xBEEF`, masking it. Fix: map both forbidden words to a safe value — `if (nextDayWord <= 1) nextDayWord = 2;`. After the fix `VrfRotationLiveness` is 6/6 at 100 fuzz runs in isolated runs (the cached `0xBEEF` counterexample replays and passes). Test-only edit; zero contracts/ mutation.
 
 ## Build / Scope / Self-Review Attestation
 - `forge build` → exit 0.
