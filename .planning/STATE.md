@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
 status: executing
-last_updated: "2026-05-23T15:59:28.137Z"
+last_updated: "2026-05-23T16:10:07Z"
 last_activity: 2026-05-23
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 ## Current Position
 
 Phase: 316 (spec-crank-subscription-legacy-removal-design-lock-spec) — EXECUTING
-Plan: 4 of 5
-Status: Executing Phase 316 — Plans 316-01 (ADD-half) + 316-02 (REMOVE footprint/slot-shift/VRF-freeze retirement) + 316-05 (JGAS-01 Decision Gate) complete; remaining 316-03 (open-item resolution) + 316-04 (call-graph attestation / final assembly)
-Last activity: 2026-05-23 -- Completed 316-05-PLAN.md (JGAS-01 Decision Gate: design-intent → worst-case-first 305-winner gas ~9-12M vs ~30M → locked "REMOVE pending JGAS-04 empirical confirmation, RETAIN-fallback documented" → two-module deletion footprint grep-verified → freeze-invariant-SAFE verdict; 305 ceiling preserved; zero contracts/test mutation)
+Plan: 5 of 5
+Status: Executing Phase 316 — Plans 316-01 (ADD-half) + 316-02 (REMOVE footprint/slot-shift/VRF-freeze retirement) + 316-05 (JGAS-01 Decision Gate) + 316-03 (open-item resolution) complete; remaining 316-04 (call-graph attestation / final assembly)
+Last activity: 2026-05-23 -- Completed 316-03-PLAN.md (open-item resolution: `## Protocol-Owned Subs (SUB-09)` + `## SPEC-Open Resolutions` appended; Task-2 whale-pass-expiry free-renew USER-RATIFIED = permanent-deity — MATERIAL finding: the Deity bit is ALREADY set on SDGNRS/VAULT in the live DegenerusGame constructor :222/:223, so Phase 317 needs NO new bit-setter, only to preserve that grant; OPEN-B reward→0 via guarded _ethToBurnieValue, OPEN-C CEI-proof lean→contract-auditor@IMPL, 1-price-lootbox denomination + claimable-only confirmed, JackpotEthWin ABI-break delta note; T-316-12 Deity side-effect ratified; economic-analyst@AUDIT re-framed as no-distortion check; zero contracts/test mutation)
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
@@ -35,7 +35,7 @@ Last activity: 2026-05-23 -- Completed 316-05-PLAN.md (JGAS-01 Decision Gate: de
 
 | Phase | Name | Type | Requirements (primary owner) | Status |
 |-------|------|------|------------------------------|--------|
-| 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 · JGAS-01 (locks all 42) | In Progress (3/5 plans: 316-01 · 316-02 · 316-05 done) |
+| 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 · JGAS-01 (locks all 42) | In Progress (4/5 plans: 316-01 · 316-02 · 316-05 · 316-03 done) |
 | 317 | IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework | IMPL | PROTO-02..05 · CRANK-01..04 · REW-01..04 · SUB-01..08 · RM-01/02/03/05/06 · JGAS-02 | Not started |
 | 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | Not started |
 | 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 · JGAS-04 | Not started |

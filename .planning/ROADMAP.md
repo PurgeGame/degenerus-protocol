@@ -71,7 +71,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 316-03-PLAN.md — Resolve the open items: quantity model + funding waterfall + two-tier skip-kill by pinned identity, the SUB-09 protocol-owned subs at init, OPEN-B/OPEN-C/denomination, and the user-ratified whale-pass-expiry renewal funding (SUB-09).
+- [x] 316-03-PLAN.md — Resolve the open items: quantity model + funding waterfall + two-tier skip-kill by pinned identity, the SUB-09 protocol-owned subs at init, OPEN-B/OPEN-C/denomination, and the user-ratified whale-pass-expiry renewal funding (SUB-09). **DONE** — `## Protocol-Owned Subs (SUB-09)` + `## SPEC-Open Resolutions` appended; whale-expiry free-renew USER-RATIFIED = `permanent-deity` (Deity bit ALREADY set on SDGNRS/VAULT in the live `DegenerusGame` ctor `:222`/`:223` → Phase 317 needs no new bit-setter, only to preserve the grant); OPEN-B/OPEN-C/denomination/claimable-only/JackpotEthWin-ABI all resolved with HEAD-verified citations.
 
 **Wave 5** *(blocked on Wave 4 completion)*
 

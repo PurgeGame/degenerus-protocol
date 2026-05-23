@@ -51,7 +51,7 @@ Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`S
 - [ ] **SUB-06**: Two-tier skip-kill — a NORMAL sub is cancelled on a funding skip (`claimable+pool < cost`) via in-sweep swap-pop removal (pool dust stays withdrawable); **`Vault` + `sDGNRS` are EXEMPT** (transient skip, persist), keyed on un-spoofable pinned address identity (NOT a settable flag); renewal-lapse still cancels both.
 - [ ] **SUB-07**: Lapsed/cancelled lifecycle — tombstone-on-cancel (no move), in-sweep swap-pop reclaim, `_subOf` delete-unless-unexpired-paid-window (`windowPaid` bit), transient-skip retry, withdrawable stranded `_poolOf` ETH.
 - [ ] **SUB-08**: Bounty = coinflip credit (gas-pegged, REW); charge = `burnForKeeper` (burn, all-or-nothing).
-- [ ] **SUB-09**: Protocol-owned subs created at the contracts' own init — **sDGNRS** self-subscribes (claimable-only, lootbox mode, flat 1 + 2% reinvest) AND enables BURNIE flip auto-rebuy `takeProfit=0` (full recycle); **Vault** self-subscribes (claimable-only, flat 1, no reinvest, no BURNIE rebuy). Both free-renew via their Whale pass (level-expiring caveat — confirm post-expiry renewal funding at SPEC).
+- [x] **SUB-09**: Protocol-owned subs created at the contracts' own init — **sDGNRS** self-subscribes (claimable-only, lootbox mode, flat 1 + 2% reinvest) AND enables BURNIE flip auto-rebuy `takeProfit=0` (full recycle); **Vault** self-subscribes (claimable-only, flat 1, no reinvest, no BURNIE rebuy). Both free-renew via their Whale pass (level-expiring caveat — confirm post-expiry renewal funding at SPEC). **DESIGN LOCKED at Phase 316 (Plan 316-03 `## Protocol-Owned Subs (SUB-09)`):** init configs locked (sStonk `setAfKingMode`→self-subscribe replacement; Vault self-subscribe); post-expiry renewal funding USER-RATIFIED = `permanent-deity` — the permanent Deity bit is ALREADY set on SDGNRS/VAULT in the live `DegenerusGame` constructor (`:222`/`:223`), so `hasAnyLazyPass` is permanently true (zero per-renewal cost, no BURNIE stream) and Phase 317 needs only to preserve that grant byte-unmodified. IMPL wiring (PROTO/RM-05 self-subscribe) lands at Phase 317.
 
 ### RM — Legacy AFKing-mode + free ETH-auto-rebuy removal (the v47 half, folded in)
 
@@ -116,7 +116,7 @@ Each requirement maps to exactly one phase (primary verification owner). The ful
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PROTO-01 | Phase 316 | Complete |
-| SUB-09 | Phase 316 | Pending |
+| SUB-09 | Phase 316 | Complete (316-03 — design locked; permanent-deity free-renew ratified) |
 | RM-04 | Phase 316 | Complete |
 | JGAS-01 | Phase 316 | Complete |
 | PROTO-02 | Phase 317 | Pending |
