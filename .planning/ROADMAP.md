@@ -119,7 +119,7 @@
 
 **Depends on:** Phase 312 IMPL (tests target the patched VRF-rotation surface)
 
-**Plans:** 6 plans (2 waves; all `autonomous: true` — test-tree only, AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`; ZERO `contracts/` mutation per `D-43N-AUDIT-ONLY-01`)
+**Plans:** 7 plans (3 waves; all `autonomous: true` — test-tree + foundry.toml only, AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`; ZERO `contracts/` mutation per `D-43N-AUDIT-ONLY-01`)
 
 Plans:
 **Wave 1**
@@ -133,6 +133,10 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 313-06-PLAN.md — suite-wide verification (4 new VTST contracts + v43 harness + 17 migrated regressions PASS; no new failures beyond the pre-fix baseline) + AGENT-COMMIT [Wave 2]
+
+**Wave 3** *(review-driven cleanup; blocked on Wave 2 completion)*
+
+- [x] 313-07-PLAN.md — review-driven test-integrity cleanup closing 313-REVIEW.md findings: CR-01/CR-02 (corrected vacuous slot-38/39 reads in VRFCore/VRFPathCoverage to authoritative 37/keccak(index,38); slot-drift failures flipped to PASS, baseline failures empirically reclassified — not masked) + WR-01 (slot-comment fix) + WR-02 (non-tautological VTST-01 pre-fix arm via nonzero sentinel) + WR-03 (fs_permissions read ./contracts so VTST-04 runs the real source grep; catch→fail()). Empirical SC-5 re-check: 0 NEW failing functions vs pre-fix 41546f16 [Wave 3]
 
 **Success Criteria** (what must be TRUE):
 
