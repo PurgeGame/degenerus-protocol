@@ -503,9 +503,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (msg.sender != ContractAddresses.ADMIN) revert E();
 
         address current = address(vrfCoordinator);
-        vrfCoordinator = IVRFCoordinator(coordinator_);
-        vrfSubscriptionId = subId;
-        vrfKeyHash = keyHash_;
+        _setVrfConfig(coordinator_, subId, keyHash_);
         lastVrfProcessedTimestamp = uint48(block.timestamp);
         emit VrfCoordinatorUpdated(current, coordinator_);
     }
@@ -1618,6 +1616,32 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         } catch {}
     }
 
+    /// @dev Submit a single-word VRF request on the current coordinator.
+    /// @param confirmations Block confirmations for this request's gas lane.
+    /// @return id The Chainlink request ID.
+    function _requestVrfWord(uint16 confirmations) private returns (uint256 id) {
+        id = vrfCoordinator.requestRandomWords(
+            VRFRandomWordsRequest({
+                keyHash: vrfKeyHash,
+                subId: vrfSubscriptionId,
+                requestConfirmations: confirmations,
+                callbackGasLimit: VRF_CALLBACK_GAS_LIMIT,
+                numWords: 1,
+                extraArgs: hex""
+            })
+        );
+    }
+
+    /// @dev Write the VRF coordinator, subscription, and key hash together.
+    /// @param coord VRF coordinator address.
+    /// @param sub VRF subscription ID for LINK billing.
+    /// @param key VRF key hash for gas lane selection.
+    function _setVrfConfig(address coord, uint256 sub, bytes32 key) internal {
+        vrfCoordinator = IVRFCoordinator(coord);
+        vrfSubscriptionId = sub;
+        vrfKeyHash = key;
+    }
+
     function _finalizeRngRequest(
         bool isTicketJackpotDay,
         uint24 lvl,
@@ -1693,20 +1717,28 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (msg.sender != ContractAddresses.ADMIN) revert E();
 
         address current = address(vrfCoordinator);
-        vrfCoordinator = IVRFCoordinator(newCoordinator);
-        vrfSubscriptionId = newSubId;
-        vrfKeyHash = newKeyHash;
+        _setVrfConfig(newCoordinator, newSubId, newKeyHash);
 
-        // Reset RNG state to allow immediate advancement
-        rngLockedFlag = false;
-        vrfRequestId = 0;
-        rngRequestTime = 0;
-        rngWordCurrent = 0;
-
-        // Clear mid-day lootbox RNG pending flag to prevent post-swap deadlock.
-        // Without this, advanceGame can revert with NotTimeYet if a mid-day
-        // requestLootboxRng was in-flight when the coordinator stalled.
-        _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
+        // Detect what is in flight and re-issue on the new coordinator (D-01/D-02).
+        // The request is accepted before the new subscription is LINK-funded; DegenerusAdmin
+        // funds it in the same _executeSwap transaction (transferAndCall), and the VRF node
+        // fulfills once funded. retryLootboxRng is the failsafe if the new coordinator stalls.
+        if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) {
+            // Mid-day in flight: KEEP LR_MID_DAY=1; LR_INDEX preserved so the new word lands
+            // in the same reserved slot [N] via the mid-day fulfillment branch (:1772).
+            vrfRequestId = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
+            rngRequestTime = uint48(block.timestamp);
+        } else if (rngLockedFlag) {
+            // Daily in flight: KEEP rngLockedFlag=true.
+            if (rngWordCurrent == 0) {
+                // Daily word not yet delivered: re-request on the new coordinator (-> :1768).
+                vrfRequestId = _requestVrfWord(VRF_REQUEST_CONFIRMATIONS);
+                rngRequestTime = uint48(block.timestamp);
+            }
+            // else: daily word already delivered and valid -> preserve it; no re-issue
+            // (a fresh callback would be rejected by the :1761 rngWordCurrent!=0 guard).
+        }
+        // else: nothing in flight -> config repoint only; no re-issue, no flag change.
 
         // Intentional: totalFlipReversals is NOT reset here. Nudges were purchased
         // with irreversible BURNIE burns before or during the stall. They carry over
