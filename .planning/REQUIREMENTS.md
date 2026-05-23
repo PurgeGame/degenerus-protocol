@@ -1,153 +1,114 @@
 # Requirements: Degenerus Protocol — Audit Repository
 
-**Defined:** 2026-05-20 (V-081 groundwork) · **Redefined:** 2026-05-22 (consolidate-forward)
-**Milestone:** v45.0 VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
-**Posture:** VRF-rotation fix is a single batched USER-APPROVED contract change per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md` + `feedback_manual_review_before_push.md`; AGENT-COMMITTED test/planning/audit per `D-43N-TEST-COMMITS-AUTO-01` lineage. Degenerette / jackpot / V-081 contract changes already landed (user-committed).
-**Audit baseline → subject:** v44.0 closure HEAD `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` → v45.0 closure HEAD. Subject = every `contracts/` commit in that delta (V-081 `9bcd582d`, jackpot pending-pool `6e5acd7e`, degenerette `92b110bf`, + the VRF-rotation fix landed this milestone).
-**Load-bearing input:** `audit/FINDINGS-v44.0.md` §9d VRF-governance cluster (HANDOFF-78/85/86/87/88/89/90/91 + ADMA-01/02) + memory `project_vrf_rotation_midday_orphan_index` + `v45-vrf-freeze-invariant`.
+**Defined:** 2026-05-23
+**Milestone:** v46.0 Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
+**Posture:** Single batched USER-APPROVED contract diff at IMPL per `feedback_batch_contract_approval` + `feedback_never_preapprove_contracts` + `feedback_no_contract_commits` + `feedback_manual_review_before_push`; AGENT-COMMITTED test/planning/docs. Pre-launch redeploy-fresh per `feedback_frozen_contracts_no_future_proofing` (storage-layout break fine, no migration).
+**Audit baseline → subject:** v45.0 closure HEAD `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` → v46.0 closure HEAD. Subject = the batched ADD+REMOVE diff (`DegenerusGame` + modules + `BurnieCoin`/`BurnieCoinflip` + `DegenerusVault` + `StakedDegenerusStonk` + `ContractAddresses` + in-tree `AfKing` keeper; paired `degenerus-utilities` rework).
+**Load-bearing input:** `.planning/PLAN-CRANK-DO-WORK-INCENTIVE.md` (ADD half, §1–§14) + `.planning/PLAN-V47-REMOVE-AFKING-ETH-AUTOREBUY.md` (REMOVE half, grep-verified footprint) + memories `project_free_burnie_crank_button` + `project_v47_remove_afking_eth_autorebuy`.
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
 ---
 
-## v45.0 Goal (precise statement)
+## v46.0 Goal (precise statement)
 
-Close the CATASTROPHE-class VRF-rotation orphan-index liveness defect in `updateVrfCoordinatorAndSub` (and the governance-VRF freeze-violation cluster it overlaps), audit the already-landed degenerette refactor, and consolidate-audit every contract change since the v44.0 baseline into one closure signal at current HEAD.
+Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`StreakKeeperV2` moved in-tree as `AfKing`, wired via PROTO-01..05), and in the SAME batched diff remove the legacy in-game AFKing mode + free ETH auto-rebuy it succeeds — one source-tree change, one test pass, one adversarial audit, one `MILESTONE_V46_AT_HEAD_<sha>` closure. The removal is a prerequisite for the subscription's reinvest mode (old free auto-rebuy intercepts winnings before claimable; the subscription reads from claimable).
 
-**Root cause (CONFIRMED 2026-05-20):** `updateVrfCoordinatorAndSub` (AdvanceModule ~:1687) clears `rngWordCurrent` + `LR_MID_DAY` but never backfills `lootboxRngWordByIndex[N]` — the index a stalled mid-day `requestLootboxRng` swap was bound to. Scenario A (same-day advance): `processTicketBatch` reads `entropy = lootboxRngWordByIndex[N] = 0` → deterministic/entropy-0 traits (HIGH, EV-positive grind). Scenario B (next-day): daily-drain gate reverts, `requestLootboxRng`/`retryLootboxRng` bricked, orphan-backfill helper unreachable behind the revert → ~120-day freeze until `_livenessTriggered` forces a premature game-over.
-
-**Non-negotiable closure verdict at v45.0 TERMINAL (target):** `VRF_ROTATION_ORPHAN RESOLVED_AT_V45; ROTATION_LIVENESS PRESERVED; FREEZE_INVARIANT INTACT_UNDER_ROTATION; <N> of <N> VRF_CLUSTER_ANCHORS RESOLVED; CONSOLIDATE_FORWARD_DELTA AUDITED (V-081 + jackpot-pending-pool + degenerette); 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`.
-
-**Fix-shape directive:** NOT pre-locked. Decided at SPEC via design-intent backward-trace across timing/state combos per `feedback_design_intent_before_deletion.md`; validator-influenceable entropy backfill is rejected per `feedback_security_over_gas.md`. Recommended candidate (memory): re-issue the in-flight mid-day request on the new coordinator (keep `LR_MID_DAY=1`, set `vrfRequestId`/`rngRequestTime`) so existing retry/callback lands a real word in [N]; alternative is the §9d "queue + apply" `pendingVrfRotationPacked` split. Call-graph citations grep-verified per `feedback_verify_call_graph_against_source.md` before any patch.
+**Non-negotiable closure verdict at v46.0 TERMINAL (target):** `CRANK_DO_WORK SHIPPED; AFKING_SUBSCRIPTION SHIPPED; LEGACY_AFKING_MODE + FREE_ETH_AUTOREBUY REMOVED; BURNIE_FLIP_AUTOREBUY KEPT@75BPS; FAUCET_BOUNDED; SWEEP NON-BRICK + CONCURRENT-SAFE; FUNDING_WATERFALL + TWO-TIER_SKIP-KILL CORRECT; RNG_FREEZE_INTACT (+ obligations RETIRED by removal); WWXRP_ZERO_REWARD; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`.
 
 ---
 
-## v45.0 Groundwork — V-081 Lootbox EV-Cap (phases 309/310, COMPLETE)
+## v46.0 Requirements
 
-> Retained verbatim from the original v45.0 scope. These shipped at Phase 309 (SPEC) + Phase 310 (IMPL, `9bcd582d`, verified 5/5) and stand as completed groundwork. V-081 is audited as a delta surface at the TERMINAL phase (DELTA-02); its order-independence / penalty-dodge acceptance criteria are attested by construction, not by dedicated regression (see Out of Scope).
+### PROTO — Protocol-side contract additions (degenerus-audit, one batched diff)
 
-### Spec (SPEC) — Locked Design Decisions
+- [ ] **PROTO-01**: `DegenerusGame.hasAnyLazyPass(address) external view` exposed (the kept private `_hasAnyLazyPass` at `:1610`; returns "any of Deity/Whale/Lazy"). Reconciles with RM-04 — kept, not deleted.
+- [ ] **PROTO-02**: `BurnieCoin.burnForKeeper(address user, uint256 amount) returns (uint256 burned)` — ALL-OR-NOTHING burn of the subscription charge (source `balanceOf` + pending coinflip; if `< amount` burn nothing & return 0); `onlyAfKing` (gated on the pinned keeper address).
+- [ ] **PROTO-03**: AfKing keeper authorized in `BurnieCoinflip.onlyFlipCreditors` so its `creditFlip` bounty works (coinflip credit = deferred mint).
+- [ ] **PROTO-04**: `DegenerusGame.batchPurchase(players[], amounts[], modes[])` keeper-gated entry — per-player in-context purchase wrapped in try/catch + slice-refund (non-brick); one value transfer for the batch; batch-level `rngLocked`/game-over pre-checked once.
+- [ ] **PROTO-05**: `AF_KING` keeper address pinned as a frozen constant in `BurnieCoin` / `BurnieCoinflip` / `ContractAddresses.sol`; `burnForKeeper` / `creditFlip` / `batchPurchase` gate on exactly it.
 
-- [x] **SPEC-01**: Packed-slot layout locked — per-(index, player) snapshot widened from `uint16` to a packed `uint256` holding `score+1` (`uint16`) + `adjustedPortion` (`uint64`, cap-bounded ≤10 ETH); no new storage slot introduced.
-- [x] **SPEC-02**: Bonus-only cap semantics locked — `_applyEvMultiplierWithCap` returns `amount * evMultiplierBps / 10_000` for `<= NEUTRAL` (never consumes the cap); only `> NEUTRAL` draws from it.
-- [x] **SPEC-03**: Allocation-time tally + open-time application locked — cap drawn at purchased-box deposit (`add = min(deposit, remaining)`), `openLootBox` applies the frozen allocation with no cap SLOAD/SSTORE.
-- [x] **SPEC-04**: Shared-cap disposition locked — `resolveLootboxDirect` / `resolveRedemptionLootbox` keep consuming the cap at resolution; backward-trace confirms no known-word reorder.
+### CRANK — In-game do-work crank (Deliverable A)
 
-### Implementation (IMPL) — Contract Changes (landed `9bcd582d`)
+- [ ] **CRANK-01**: Permissionless mass do-work entry(s) taking grouped `(player, ids)` work lists (off-chain-discovered, no on-chain enumeration); per-item isolated via `onlySelf` self-call + try/catch (skip stale/reverting items, reward only successes); batch-accumulated reward → one `creditFlip`/tx.
+- [ ] **CRANK-02**: Degenerette mass resolve via do-work (placement stays gated; resolve relaxed) with a collision short-circuit (`list[0]` already resolved → `BatchAlreadyTaken` revert); per-item try/catch wraps items 1..N.
+- [ ] **CRANK-03**: Lootbox open via do-work (already permissionless; route the reward). Boxes resolved via the parameterless cursor model (collision-free) per OPEN-D.
+- [ ] **CRANK-04**: WWXRP work is resolvable but earns **zero** reward (`currency == 3`).
 
-- [x] **IMPL-01**: Bonus-only cap in `_applyEvMultiplierWithCap`.
-- [x] **IMPL-02**: Packed `uint256` snapshot layout + pack/unpack helpers in `DegenerusGameStorage.sol`.
-- [x] **IMPL-03**: Purchase-time cap tally at the `MintModule` + `WhaleModule` deposit sites.
-- [x] **IMPL-04**: `openLootBox` applies the frozen allocation; zero-at-open clears the whole packed slot.
-- [x] **IMPL-05**: Raw `amount` preserved for the roll seed (`keccak(rngWord, player, day, amount)` and the rolled index/word unchanged).
+### REW — Reward model
 
----
+- [ ] **REW-01**: Reward = `gasUnits(workType) · 0.5 gwei → BURNIE` via `_ethToBurnieValue` at the current level price.
+- [ ] **REW-02**: Paid as coinflip stake credit (deferred mint), batch-accumulated → one `creditFlip` per cranker per tx (never per-item).
+- [ ] **REW-03**: Marginal per-item gas peg (no base-amortization margin in batches); fixed `gasUnits` constants, never `gasleft()`/`tx.gasprice`.
+- [ ] **REW-04**: No caller restriction — reward credited to whoever calls, including a player resolving their own item.
 
-## v45.0 Active Requirements
+### SUB — AfKing auto-rebuy subscription
 
-### VRF — VRF-Rotation Liveness Fix (the contract change)
+- [ ] **SUB-01**: Pass-OR-pay gate; pass = any of Deity/Whale/Lazy via `hasAnyLazyPass`; checked at the monthly renewal branch only (not per sweep). No pass → `burnForKeeper` charges the BURNIE cost (or skip-with-emit if uncoverable).
+- [ ] **SUB-02**: Authorization = the subscription itself; `subscribe(player, …)` self-consent (`player == msg.sender`/0) or operator-approved (`isOperatorApproved`), checked **once at subscribe** (third-party path only) — never at sweep.
+- [ ] **SUB-03**: Cursor sweep — `sweep(maxCount)` + daily `sweepCursor`; concurrent same-block callers self-partition via the advancing cursor; stall-escalating bounty drives daily completeness; per-entry `lastSweptDay` idempotency.
+- [ ] **SUB-04**: Quantity model = flat `dailyQuantity` (uint8, **minimum 1**) + optional `reinvestPct` (uint8); effective daily buy = `max(dailyQuantity, floor(claimable × reinvestPct / price))` — reinvest only triggers when its amount exceeds the flat schedule. Both pack into one flags byte + `reinvestPct` (no new slot).
+- [ ] **SUB-05**: Funding waterfall = claimable-first → pool top-up (Combined) → `InsufficientPool` skip (the existing `drainGameCreditFirst=true` model). "Claimable-only" needs no new flag — an empty `_poolOf` degrades to claimable-or-skip.
+- [ ] **SUB-06**: Two-tier skip-kill — a NORMAL sub is cancelled on a funding skip (`claimable+pool < cost`) via in-sweep swap-pop removal (pool dust stays withdrawable); **`Vault` + `sDGNRS` are EXEMPT** (transient skip, persist), keyed on un-spoofable pinned address identity (NOT a settable flag); renewal-lapse still cancels both.
+- [ ] **SUB-07**: Lapsed/cancelled lifecycle — tombstone-on-cancel (no move), in-sweep swap-pop reclaim, `_subOf` delete-unless-unexpired-paid-window (`windowPaid` bit), transient-skip retry, withdrawable stranded `_poolOf` ETH.
+- [ ] **SUB-08**: Bounty = coinflip credit (gas-pegged, REW); charge = `burnForKeeper` (burn, all-or-nothing).
+- [ ] **SUB-09**: Protocol-owned subs created at the contracts' own init — **sDGNRS** self-subscribes (claimable-only, lootbox mode, flat 1 + 2% reinvest) AND enables BURNIE flip auto-rebuy `takeProfit=0` (full recycle); **Vault** self-subscribes (claimable-only, flat 1, no reinvest, no BURNIE rebuy). Both free-renew via their Whale pass (level-expiring caveat — confirm post-expiry renewal funding at SPEC).
 
-> SPEC (311) + IMPL (312). Single batched USER-APPROVED diff touching `DegenerusGameAdvanceModule.sol` (+ any VRF-config storage). Closes the §9d governance-VRF cluster.
+### RM — Legacy AFKing-mode + free ETH-auto-rebuy removal (the v47 half, folded in)
 
-- [x] **VRF-01**: After an emergency coordinator/subscription rotation while a mid-day lootbox RNG request is in flight, the bound index `lootboxRngWordByIndex[N]` resolves to a real (non-zero, VRF-derived) word — no same-day deterministic / entropy-0 traits. (Closes Scenario A.)
-- [x] **VRF-02**: After such a rotation the protocol stays live — `requestLootboxRng`, `retryLootboxRng`, and the daily-drain advance gate remain reachable; no permanent revert / ~120-day freeze / forced premature game-over. (Closes Scenario B.)
-- [x] **VRF-03**: Emergency rotation cannot break the rngLock freeze invariant — no VRF-participating slot (`vrfCoordinator`, `vrfSubscriptionId`, `vrfKeyHash`, `rngRequestTime`, `LR_MID_DAY`) is mutated mid-window in a way that changes any in-flight VRF-derived output. (Closes **HANDOFF-78/85/87/89/91** = V-137/V-155/V-157/V-159/V-161.)
-- [x] **VRF-04**: VRF wiring is one-shot — `wireVrf` seals after init; a second wire reverts. (Closes **HANDOFF-86/88/90 + ADMA-01** = V-156/V-158/V-160.)
-- [x] **VRF-05**: The rotation + wire protections cover the `DegenerusVault`-routed admin dispatch, verified by backward-trace. (**ADMA-02**.)
+- [ ] **RM-01**: AFKing mode removed entirely — `setAfKingMode`/`_setAfKingMode`/`_deactivateAfKing`/`afKingModeFor`/`afKingActivatedLevelFor`/`deactivateAfKingFromCoin`/`syncAfKingLazyPassFromCoin`, the `afKingMode`/`afKingActivatedLevel` fields, `AFKING_*` constants, `AfKingModeToggled` event, `AfKingLockActive` error all gone. Grep-clean for `afKing`/`AFKING_` (excl. `contracts/test`+`mocks`).
+- [ ] **RM-02**: Free ETH auto-rebuy removed entirely — `setAutoRebuy`/`setAutoRebuyTakeProfit` + privates + `autoRebuyTakeProfitFor` + the `AutoRebuyState` struct/mapping + jackpot `_processAutoRebuy`/`_calcAutoRebuy`. ETH jackpot winnings always credit to claimable; the jackpot credit path no longer consumes a VRF word (entropy param dropped).
+- [ ] **RM-03**: BURNIE flip auto-rebuy KEPT, collapsed to flat 75bps — `_afKingRecyclingBonus`/`_afKingDeityBonusHalfBpsWithLevel` + deity constants (`AFKING_RECYCLE_BONUS_BPS`/`AFKING_DEITY_*`/`DEITY_RECYCLE_CAP`/`AFKING_KEEP_MIN_COIN`) removed; enable/disable/take-profit/carry/claim still work end-to-end; deity tier dropped.
+- [ ] **RM-04**: `_hasAnyLazyPass` KEPT and exposed (PROTO-01) — overrides the standalone-removal dead-code instinct; it is the keeper's pass gate.
+- [ ] **RM-05**: Cross-contract cascade pruned — `DegenerusVault.gameSetAutoRebuy`/`gameSetAutoRebuyTakeProfit`/`gameSetAfKingMode` removed (BURNIE `coinSet*` kept); `StakedDegenerusStonk` init `setAfKingMode` replaced by the keeper self-subscribe (SUB-09); `IDegenerusGame`/`IBurnieCoinflip` decls + `settleFlipModeChange` removed.
+- [ ] **RM-06**: Storage-layout slot constants re-derived after the `AutoRebuyState` deletion; full suite compiles + green; `KNOWN_ISSUES` and the BURNIE win/loss RNG path (`processCoinflipPayouts`, `rngWord & 1`) unmodified.
 
-### DGAUD — Degenerette Refactor Audit (audit-only, `92b110bf`)
+### SAFE — Safety / non-brick / faucet
 
-> Audit of an already-landed change; no new fix expected unless the audit surfaces one.
+- [ ] **SAFE-01**: Faucet bounded by the three caller-independent locks (purchase-gate + gas-peg + coinflip-credit illiquidity); self-crank/Sybil round-trip ≤ 0; WWXRP 0 reward.
+- [ ] **SAFE-02**: Non-brick (BOTH cranks AND `batchPurchase`) — per-item `onlySelf` self-call + try/catch (skip + refund-if-applicable, reward only successes); caller-bounded iteration; cancel un-brickable; no double-buy reentrancy (in-context sub-call rolls back on revert).
+- [ ] **SAFE-03**: Concurrency — same-block sweeps process correctly (cursor self-partition + `lastSweptDay`); no double-buy.
+- [ ] **SAFE-04**: RNG-freeze intact — resolution stays post-unlock (`RngNotReady` guard), placement guard untouched; the ETH-auto-rebuy removal **retires** freeze obligations (one fewer VRF consumer + three fewer player-mutable in-window inputs) rather than weakening any.
 
-- [x] **DGAUD-01**: The `92b110bf` storage-slot shift (removal of `playerDegeneretteEthWagered` + `topDegeneretteByLevel`) is confirmed safe pre-deploy — full-suite recompile clean; no storage collision with any retained slot.
-- [x] **DGAUD-02**: `dailyHeroWagers` (the Jackpot RNG hero-override input) write-path is byte-identical after the refactor — removing the per-player/per-level tracking did not alter hero-wager accounting.
-- [x] **DGAUD-03**: No dangling references to the removed mappings/views remain in `contracts/` or interfaces; off-chain leaderboard reconstruction from `BetPlaced` events is viable (events still emitted with the required fields).
-- [x] **DGAUD-04**: Backlog rows touching the degenerette surface are re-verified against the refactored module — HANDOFF-01..03 (S-02 `dailyHeroWagers`), HANDOFF-18 (V-031 prizePool degenerette-bet), HANDOFF-81 (V-142 `degeneretteBets`), HANDOFF-82 (V-147 `prizePoolPendingPacked` frozen-branch) — disposition updated.
+### GAS — Gas efficiency (worst-case-first per `feedback_gas_worst_case`)
 
-### DELTA — Consolidate-Forward Delta Audit (terminal)
-
-- [x] **DELTA-01**: Audit subject re-anchored — §3.A delta-surface table enumerates every `contracts/` commit from v44.0 closure HEAD through v45.0 closure HEAD (V-081 `9bcd582d`, jackpot `6e5acd7e`, degenerette `92b110bf`, + the VRF-rotation fix).
-- [x] **DELTA-02**: V-081 (Phase 310 fix) audited as a delta surface — order-independence / penalty-dodge elimination / seed-invariance attested at source level (by construction, no dedicated regression per the ride-on-delta decision).
-- [x] **DELTA-03**: Jackpot pending-pool fix `6e5acd7e` + regression `f3e21064` audited — yield-surplus obligations now include `prizePoolPendingPacked`; no over-distribution of pending ETH as yield; no new freeze/solvency surface.
-- [x] **DELTA-04**: Degenerette refactor `92b110bf` delta covered (cross-refs DGAUD-01..04).
-
-### VTST — VRF Regression + Freeze-Invariant Fuzz (Foundry, AGENT-COMMITTED)
-
-- [x] **VTST-01**: Orphan-index reproduction — a pre-fix harness reproduces Scenario A (rotation mid-flight → `lootboxRngWordByIndex[N]==0` → deterministic traits); post-fix asserts a real VRF word lands in [N]. (Proves VRF-01.) — `test/fuzz/VrfRotationOrphanIndex.t.sol` (`f6cc92c9` + `611deb20`)
-- [x] **VTST-02**: Liveness-after-rotation — post-fix, `requestLootboxRng` / `retryLootboxRng` / daily-drain advance all succeed after a rotation; no permanent revert / forced game-over. (Proves VRF-02.)
-- [x] **VTST-03**: Freeze-invariant fuzz under rotation — perturb a coordinator/sub rotation between VRF request and fulfilment; assert every VRF-derived output is byte-identical to the no-rotation baseline (extends the v43 `RngLockDeterminism.t.sol` harness). (Proves VRF-03.)
-- [x] **VTST-04**: `wireVrf` one-shot lock — a second wire reverts; the vault-routed wire path reverts. (Proves VRF-04 / VRF-05.)
-
-### SWP — Adversarial Sweep
-
-> SEQUENTIAL after IMPL + VTST complete, per `D-NN-ADVERSARIAL-02` carry. HYBRID invocation: `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT + `/zero-day-hunter` + `/economic-analyst` PARALLEL_SUBAGENT per `D-302-INVOKE-01`. `/degen-skeptic` OUT OF SCOPE per `D-271-ADVERSARIAL-02`. Skeptic filter per `feedback_skeptic_pass_before_catastrophe.md` before any elevation.
-
-- [x] **SWP-01**: Red-team the VRF-rotation fix — rotation-spam / stuck-pending / double-request griefing, a new liveness-DoS, a new freeze violation, or a `wireVrf`-lock that breaks a legitimate ops path. RE-PASS per `D-284-ADVERSARIAL-RE-PASS-01` if a candidate materialises.
-- [x] **SWP-02**: Composition pass across the consolidated delta surfaces — V-081 allocation/packing, jackpot pending-pool obligations, degenerette removal — any cross-surface composition attack or differential behaviour an attacker can game.
-
-### Audit Deliverable + Closure (AUDIT / REG / CLS)
-
-> SOURCE-TREE FROZEN during the terminal phase. Single-file deliverable per `D-NN-FILES-01`; forward-cite zero-emission per `D-NN-FCITE-01`.
-
-- [ ] **AUDIT-01** — **WAIVED (user-approved minimal close, 2026-05-23)**: the formal `audit/FINDINGS-v45.0.md` 9-section deliverable was NOT produced. The underlying audit substance is complete and lives in the planning artifacts: VRF-rotation fix attestation in `312-01-VERIFICATION.md` + `313-*` VERIFICATION + VTST-01..04; the §3.A delta-surface enumeration in `314-01-SUMMARY.md` + this file's REG-01 attribution; the §4 adversarial disposition in `314-01-ADVERSARIAL-LOG.md` (unanimous-NEGATIVE). Only the consolidated shippable report file is waived.
-- [x] **REG-01**: LEAN regression — v44.0 closure NON-WIDENING (`MILESTONE_V44_AT_HEAD_6f0ba296…` surfaces not in v45 scope byte-identical); the EV-score / decimator / degenerette closures from `67e9ea6f` / `e5928fb8` remain intact; the v43 rngLock determinism harness still PASS.
-- [x] **CLS-01**: Closure flip — emit `MILESTONE_V45_AT_HEAD_<sha>` in the deliverable + cross-document propagation targets; atomic ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS flip post-§9c per `D-NN-CLOSURE-01` carry.
+- [ ] **GAS-01**: Worst-case-first measurement per work-type before optimizing.
+- [ ] **GAS-02**: One `creditFlip`/cranker/tx; one batch value transfer; `level`/`mintPrice` read once/batch.
+- [ ] **GAS-03**: Calldata grouped by player; homogeneous per-work-type fns.
+- [ ] **GAS-04**: Maximal storage packing; no new per-bet/box storage on the hot placement path.
+- [ ] **GAS-05**: Scavenger + Skeptic pass; every removal/packing validated against the security floor.
+- [ ] **GAS-06**: Regression bounds (placement hot-path +0%); measured worst-cases calibrate the 0.5 gwei peg.
 
 ---
 
-## Future Requirements (deferred, not this milestone)
+## Deferred / Future (acknowledged, not in v46.0 roadmap)
 
-- **Remaining ~115 v44 backlog anchors** — everything but the VRF-governance cluster: HANDOFF-01..77 (less the degenerette re-verify rows folded into DGAUD-04), 79..110, 118..119; ADMA-03..22; ADMA-ERRATUM-01. Stay in the `audit/FINDINGS-v44.0.md` §9d register (~24 active-fix sub-phases of work) for a future milestone.
-- **v44.0 bookkeeping cleanup** — register emergent INV-13/EDGE-19/EDGE-20; backfill the missing Phase 305 VERIFICATION.md.
-- **v43 FUZZ harness 3 missing edge-case functions** — cross-EOA Sybil within rngLock window + ERC721 receiver-callback re-entry on deity-pass mint + stETH yield accrual mid-window (v43 P302 DEFER).
+- **OPEN-E — shared funding source for multi-wallet players** (`Sub.fundingSource` + operator-approval to draw a shared `_poolOf`). Optional enhancement; promote at SPEC only if wanted.
+- **OPEN-D bet-cursor** — on-chain per-index bet queue + parameterless `resolveBetsWork()`. Bets stay caller-list (per-bet enqueue tax too steep on the hot path); revisit only if heavy cross-player bet-cranking is expected.
 
-## Out of Scope (explicit exclusions)
+## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Dedicated V-081 regression (order-independence / penalty-dodge) + V-081-specific sweep | User decision 2026-05-22 — V-081 rides on the consolidate-forward delta-audit (DELTA-02); criteria attested by construction at source level, not by Foundry regression. Documented coverage gap; the original INV-01..06 / TST-01..05 / SWP-01..02 are recoverable from the 309/310 SPEC. |
-| Jackpot pending-pool new fix/test work | Already fixed (`6e5acd7e`) + regressed (`f3e21064`); delta-audit coverage only (DELTA-03). |
-| VRF fallback / `retryLootboxRng` retry-path re-audit | Failsafes, not player-summonable per memory `v45-vrf-freeze-invariant`; outside the freeze invariant's scope. |
-| Non-VRF v44 backlog anchors (claimablePool, prizePool, sDGNRS pool, activity-score/boon, ticketQueue, decBurn clusters) | Scoped out per the "VRF cluster only" backlog decision; remain in the §9d register. |
-| New external entry points / admin surface beyond the VRF-rotation rework | No behaviour change outside VRF rotation + wiring lock. |
-| Game-over thorough hardening | Separate dedicated milestone scope. |
+| System-chore cranks (advanceGame / jackpot) | Out of the do-work scope; separate concern |
+| Degenerette payout-EV / placement changes | Not a v46 surface; placement stays gated |
+| Bet/box ledger storage re-key | Hot-path cost; off-chain discovery used instead (OPEN-D deferred) |
+| Liquid-BURNIE rewards | Reward must survive coinflip edge (illiquidity is a faucet lock) |
+| Off-chain indexer / webpage | Separate frontend track |
+| Deity-pass utilities outside the BURNIE recycle bonus | Trait/gold mechanics untouched by RM-03 |
+| Deployed-state migration | None — pre-launch redeploy-fresh |
 
 ## Traceability
 
-> Maps every v45.0 requirement to a phase. Groundwork (309/310) is COMPLETE. Active-phase assignments (311–315) are the orchestrator's initial mapping; the roadmapper finalises phase boundaries and refreshes this table. VRF-01..05 are provable acceptance criteria carried by the VTST phase that proves them.
+Filled by the roadmapper at roadmap creation — each requirement maps to exactly one phase.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SPEC-01..04 | Phase 309 (SPEC) | Complete |
-| IMPL-01..05 | Phase 310 (IMPL) | Complete |
-| VRF-01 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-01 | Complete (fix `a303ae18`; VERIFICATION 312/313) |
-| VRF-02 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-02 | Complete (liveness preserved; VTST-02) |
-| VRF-03 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-03 | Complete (freeze-invariant intact; VTST-03) |
-| VRF-04 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-04 | Complete (wireVrf constructor-only-reachable, re-proven Phase 314) |
-| VRF-05 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-04 | Complete (admin-dispatch reach; VTST-04) |
-| DGAUD-01 | Phase 314 (SWEEP) | Complete (forge build clean + dangling-ref ZERO) |
-| DGAUD-02 | Phase 314 (SWEEP) | Complete (dailyHeroWagers behavioral identity) |
-| DGAUD-03 | Phase 314 (SWEEP) | Complete (no dangling refs; BetPlaced reconstruction viable; index→level accepted convention) |
-| DGAUD-04 | Phase 314 (SWEEP) | Complete (HANDOFF-01/02/03/18/81/82 carry-forward) |
-| DELTA-01 | Phase 314 enumeration + REG-01 attribution | Complete (substance; formal §3.A table waived — minimal close) |
-| DELTA-02 | Phase 309/310 + Phase 314 economist/auditor | Complete (V-081 order-independent by construction) |
-| DELTA-03 | Phase 314 economist (SWP-02.E.5/E.6) | Complete (jackpot pending-pool surplus-neutral) |
-| DELTA-04 | Phase 314 (cross-refs DGAUD-01..04) | Complete (degenerette delta) |
-| VTST-01 | Phase 313 (TST) | Complete (`f6cc92c9` + `611deb20`) |
-| VTST-02 | Phase 313 (TST) | Complete |
-| VTST-03 | Phase 313 (TST) | Complete |
-| VTST-04 | Phase 313 (TST) | Complete |
-| SWP-01 | Phase 314 (SWEEP) | Complete (unanimous-NEGATIVE) |
-| SWP-02 | Phase 314 (SWEEP) | Complete (unanimous-NEGATIVE) |
-| AUDIT-01 | (minimal close) | **WAIVED** — FINDINGS-v45.0.md deliverable skipped per user; disposition in `314-01-ADVERSARIAL-LOG.md` + 312/313 VERIFICATION |
-| REG-01 | Minimal close (2026-05-23) | Complete — PASS (non-widening attested; every contracts/test diff vs `MILESTONE_V44_AT_HEAD` attributable to a v45-scope commit) |
-| CLS-01 | Minimal close (2026-05-23) | Complete — signal `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` emitted; doc flip done (FINDINGS deliverable waived) |
+| (PROTO/CRANK/REW/SUB/RM/SAFE/GAS-*) | TBD | Pending |
 
 **Coverage:**
-- v45.0 active requirements: 22 total (5 VRF + 4 DGAUD + 4 DELTA + 4 VTST + 2 SWP + 3 AUDIT/REG/CLS)
-- Groundwork (complete): 9 (4 SPEC + 5 IMPL)
-- Mapped to phases: 31 / 31 ✓ — 0 orphaned
-- **CLOSE STATUS (2026-05-23, minimal close): 30 / 31 satisfied; 1 WAIVED (AUDIT-01 — formal FINDINGS-v45.0.md deliverable skipped per user). REG-01 PASS (non-widening). CLS-01 signal `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` emitted. Phase 315 TERMINAL not run; its substance (delta audit + adversarial disposition + regression) is discharged via Phases 309–314 + this inline REG-01. 0 NEW_FINDINGS; KNOWN-ISSUES.md UNMODIFIED.**
+- v46.0 requirements: 38 total (PROTO 5 · CRANK 4 · REW 4 · SUB 9 · RM 6 · SAFE 4 · GAS 6)
+- Mapped to phases: filled at roadmap
+- Unmapped: filled at roadmap
 
 ---
-*Requirements defined: 2026-05-20 (V-081) · redefined 2026-05-22 (consolidate-forward)*
-*Last updated: 2026-05-23 — v45.0 CLOSED via user-approved minimal close (REG-01 PASS + closure flip inline; AUDIT-01 FINDINGS deliverable waived).*
+*Requirements defined: 2026-05-23 — milestone v46.0 (combined crank/subscription ADD + legacy AFKing/ETH-auto-rebuy REMOVE).*
