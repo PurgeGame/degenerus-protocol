@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
-status: ready_to_plan
-last_updated: 2026-05-23T16:30:15.177Z
+status: planning
+last_updated: "2026-05-23T16:47:26.467Z"
 last_activity: 2026-05-23
 progress:
   total_phases: 5
@@ -11,7 +11,6 @@ progress:
   total_plans: 5
   completed_plans: 5
   percent: 20
-stopped_at: Phase 316 complete (5/5) — ready to discuss Phase 317
 ---
 
 # Project State
