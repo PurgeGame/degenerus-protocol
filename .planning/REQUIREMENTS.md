@@ -60,7 +60,7 @@ Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`S
 - [ ] **RM-03**: BURNIE flip auto-rebuy KEPT, collapsed to flat 75bps — `_afKingRecyclingBonus`/`_afKingDeityBonusHalfBpsWithLevel` + deity constants (`AFKING_RECYCLE_BONUS_BPS`/`AFKING_DEITY_*`/`DEITY_RECYCLE_CAP`/`AFKING_KEEP_MIN_COIN`) removed; enable/disable/take-profit/carry/claim still work end-to-end; deity tier dropped.
 - [x] **RM-04**: `_hasAnyLazyPass` KEPT and exposed (PROTO-01) — overrides the standalone-removal dead-code instinct; it is the keeper's pass gate.
 - [ ] **RM-05**: Cross-contract cascade pruned — `DegenerusVault.gameSetAutoRebuy`/`gameSetAutoRebuyTakeProfit`/`gameSetAfKingMode` removed (BURNIE `coinSet*` kept); `StakedDegenerusStonk` init `setAfKingMode` replaced by the keeper self-subscribe (SUB-09); `IDegenerusGame`/`IBurnieCoinflip` decls + `settleFlipModeChange` removed.
-- [ ] **RM-06**: Storage-layout slot constants re-derived after the `AutoRebuyState` deletion; full suite compiles + green; `KNOWN_ISSUES` and the BURNIE win/loss RNG path (`processCoinflipPayouts`, `rngWord & 1`) unmodified.
+- [x] **RM-06**: Storage-layout slot constants re-derived after the `AutoRebuyState` deletion; full suite compiles + green; `KNOWN_ISSUES` and the BURNIE win/loss RNG path (`processCoinflipPayouts`, `rngWord & 1`) unmodified.
 
 ### SAFE — Safety / non-brick / faucet
 
@@ -83,7 +83,7 @@ Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`S
 The free ETH auto-rebuy was a per-winner conditional branch on the daily-ETH-jackpot credit path — `_addClaimableEth` (`DegenerusGameJackpotModule.sol:788-811`) did a cold `SLOAD` of `autoRebuyState[beneficiary]` + a possible `_processAutoRebuy` per winner. RM-02 deletes it, flattening + lowering per-winner ETH-credit gas. That freed headroom is localized to the **daily-ETH path** only (coin/lootbox/ticket caps sit on other cost centers and the coin path retains the BURNIE-flip auto-rebuy v46 keeps — so `DAILY_COIN_MAX_WINNERS`/`LOOTBOX_MAX_WINNERS`/`PURCHASE_PHASE_TICKET_MAX_WINNERS` are untouched). Use it purely to delete the two-call split at the **same 305-winner ceiling** — no winner-count / payout-EV change.
 
 - [x] **JGAS-01**: Derive the THEORETICAL worst-case single-call daily-ETH-jackpot gas *after* RM-02 (worst case = max scale `DAILY_JACKPOT_SCALE_MAX_BPS=63_600` → `DAILY_ETH_MAX_WINNERS=305`, buckets 159/95/50/1, all 4 in one call) — worst-case-FIRST per `feedback_gas_worst_case`. Trace the split's design intent + actor game-theory before locking deletion per `feedback_design_intent_before_deletion`. **DECISION GATE:** 305-winner single call fits the block gas limit with margin → lock removal; else **RETAIN + document**. The 305 ceiling is PRESERVED (split removal only). Enumerate + grep-verify the deletion footprint spanning BOTH `DegenerusGameJackpotModule.sol` (`SPLIT_NONE/CALL1/CALL2`, `resumeEthPool` slot, `_resumeDailyEth`, `splitMode`/`call1Bucket` routing, the `JACKPOT_MAX_WINNERS` split-threshold branch `:476-501`, the `:348` resume-check) AND `DegenerusGameAdvanceModule.sol` (`STAGE_JACKPOT_ETH_RESUME=8` `:68-70` + the `:452-455` resume-check + its stage handler).
-- [ ] **JGAS-02**: *If JGAS-01 locks removal* — in the SAME batched USER-APPROVED diff, delete the daily-ETH two-call split across both modules: `SPLIT_*` constants + `splitMode` param + `call1Bucket` mask + `_resumeDailyEth` + the `resumeEthPool` storage slot + the split-threshold branch in the jackpot module, AND `STAGE_JACKPOT_ETH_RESUME` + its resume-check + stage handler in the advance module. Daily ETH jackpot completes in ONE advanceGame stage / one call at the 305 ceiling. Re-derive storage-layout slot constants after the `resumeEthPool` deletion (compounds with RM-02/RM-06's `AutoRebuyState` slot re-derivation). No winner-count / scaling / EV change.
+- [x] **JGAS-02**: *If JGAS-01 locks removal* — in the SAME batched USER-APPROVED diff, delete the daily-ETH two-call split across both modules: `SPLIT_*` constants + `splitMode` param + `call1Bucket` mask + `_resumeDailyEth` + the `resumeEthPool` storage slot + the split-threshold branch in the jackpot module, AND `STAGE_JACKPOT_ETH_RESUME` + its resume-check + stage handler in the advance module. Daily ETH jackpot completes in ONE advanceGame stage / one call at the 305 ceiling. Re-derive storage-layout slot constants after the `resumeEthPool` deletion (compounds with RM-02/RM-06's `AutoRebuyState` slot re-derivation). No winner-count / scaling / EV change.
 - [ ] **JGAS-03**: Prove the daily ETH jackpot pays out correctly at the 305-winner ceiling in ONE call without the split — every bucket (159/95/50/1) paid, exact per-winner amounts, none missed/double-paid, total credited = pool, gas under the block limit; the old split path (`resumeEthPool`, `SPLIT_CALL1/2`, `STAGE_JACKPOT_ETH_RESUME`) grep-clean + behaviorally gone (no resume stage entered). Suite recompiles green with the re-derived slots.
 - [ ] **JGAS-04**: Empirically measure the worst-case single-call 305-winner daily-ETH-jackpot gas on the patched tree; confirm JGAS-01's theoretical derivation + the margin under the block gas limit; attribute the enabling delta to the removed per-winner `autoRebuyState` SLOAD + branch. Folds into the GAS-01 worst-case-first pass.
 
@@ -143,8 +143,8 @@ Each requirement maps to exactly one phase (primary verification owner). The ful
 | RM-02 | Phase 317 | Pending |
 | RM-03 | Phase 317 | Pending |
 | RM-05 | Phase 317 | Pending |
-| RM-06 | Phase 317 | Pending |
-| JGAS-02 | Phase 317 | Pending |
+| RM-06 | Phase 317 | Complete |
+| JGAS-02 | Phase 317 | Complete |
 | SAFE-01 | Phase 318 | Pending |
 | SAFE-02 | Phase 318 | Pending |
 | SAFE-03 | Phase 318 | Pending |

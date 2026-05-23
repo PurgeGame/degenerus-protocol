@@ -101,7 +101,7 @@ Plans:
 Plans:
 **Wave 1** *(pre-patch verification — zero source mutation; the ledger every edit reads first)*
 
-- [ ] 317-01-PLAN.md — Re-grep-verify the full RM/PROTO/crank + JGAS-02 file:line set against LIVE source, re-confirm the keeper transitional-state + D-01b reconciliation, and capture the pre-deletion test baseline-failure ledger (RM-06 attribution). Output `317-LEDGER.md`.
+- [x] 317-01-PLAN.md — Re-grep-verify the full RM/PROTO/crank + JGAS-02 file:line set against LIVE source, re-confirm the keeper transitional-state + D-01b reconciliation, and capture the pre-deletion test baseline-failure ledger (RM-06 attribution). Output `317-LEDGER.md`.
 
 **Wave 2** *(parallel contract edits — zero file overlap; all leave contracts/ dirty)*
 

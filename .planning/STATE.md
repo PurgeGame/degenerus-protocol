@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
 status: executing
-last_updated: "2026-05-23T17:37:25.450Z"
-last_activity: 2026-05-23 -- Phase 317 planning complete
+last_updated: "2026-05-23T18:05:36.393Z"
+last_activity: 2026-05-23 -- Completed 317-01 (pre-patch file:line ledger + baseline snapshot)
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 12
-  completed_plans: 5
-  percent: 20
+  completed_plans: 6
+  percent: 50
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 317 — impl — batched add+remove contract diff + paired keeper rework (impl)
+**Current focus:** Phase 317 — impl-batched-add-remove-contract-diff-paired-keeper-rework-i
 
 ## Current Position
 
-Phase: 317
-Plan: Planned — 7 plans in 5 waves (ready for /gsd-execute-phase)
-Status: Ready to execute
-Last activity: 2026-05-23 -- Phase 317 planning complete
+Phase: 317 (impl-batched-add-remove-contract-diff-paired-keeper-rework-i) — EXECUTING
+Plan: 2 of 7
+Status: Ready to execute — 317-01 ledger complete (single source of truth for downstream edit plans)
+Last activity: 2026-05-23 -- Completed 317-01 (RM+PROTO+crank + JGAS-02 footprint + pre-deletion baseline ledger; zero source mutation)
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
@@ -565,3 +565,6 @@ Audit deliverables:
 - [Phase ?]: 316-05: deletion footprint grep-verified BOTH modules at HEAD — Jackpot SPLIT_* :197/199/201, JACKPOT_MAX_WINNERS=160 :219, resumeEthPool :349/1201/1252-1253/1348, _resumeDailyEth :1186, splitMode :1248, call1Bucket :1270-1276/1287-1288, threshold :476-483; Advance STAGE_JACKPOT_ETH_RESUME=8 :70 + assign :455 + resume-check :453-456; storage resumeEthPool :994; two cosmetic +1 drifts recorded (jackpot 348→349, advance 452-455→453-456); slot −2 consequence cross-referenced to 316-02 (not re-derived)
 - [Phase 316]: 316-04: SC#5 `## Call-Graph Attestation` embeds RESEARCH §1 (RM) + §J1 (JGAS) as substrate; every cited file:line MATCH/DRIFT/MISSING vs HEAD; SPEC carries zero unverified call-graph claim (bare 'by construction' only in the explicit negation). RM drifts (auto-rebuy 800-808, _distributePayout 705/~738, IDegenerusGame setAutoRebuy-NOT-present MISSING) + the two +1 JGAS resume-check drifts recorded; keeper-dependency CLEAN re-run at HEAD (zero-match over BOTH RM-symbol set AND JGAS symbols; only coupling hasAnyLazyPass keeper :671/:974); J5 VRF freeze-SAFE verdict + transitional-state caveat + box-cursor rotation landmine re-stated as attestation
 - [Phase 316]: 316-04: `## Requirement Design Coverage` 42/42 mapped — FOUR SPEC-owned (PROTO-01/SUB-09/RM-04/JGAS-01), 26 at 317, 5 at 318, 7 at 319, 320 re-attests all/owns 0; `## Success Criteria Coverage` 5/5 COVERED (SC#4 → REMOVE+Storage+VRF-Freeze + `## JGAS-01 Decision Gate`); intro RECONCILED — JGAS gate is SPEC-owned in `## JGAS-01 Decision Gate` (was stale-attributed to 316-02); self-consistency pass: all 13 `## ` headers present, SPEC-owned reads FOUR, document one coherent design-lock spec; ZERO contracts/+test/ mutations across the whole phase (commit ed5ea47a)
+- [Phase ?]: 317-01: _budgetToTicketUnits NOT orphaned (3 live callers) — KEEP
+- [Phase ?]: 317-01: pre-deletion Foundry baseline = 71 failing / 446 passing / 16 skipped — Phase 318 'no NEW failures' anchor
+- [Phase ?]: 317-01: slot-≥34 family confirmed −2 via forge inspect (vrfCoordinator 34→32, lootboxRngWordByIndex 38→36, boonPacked 61→59); LootboxBoonCoexistence SLOT_* +1/+4 stale
