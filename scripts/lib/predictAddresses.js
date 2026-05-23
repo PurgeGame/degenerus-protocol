@@ -9,11 +9,14 @@ const JACKPOT_RESET_TIME = 82620n;
  * must appear AFTER their dependencies.
  *
  * Constraints:
- *  - COIN (N+10) before VAULT (N+18): vault reads vaultMintAllowance()
- *  - GAME (N+12) + modules (N+1..9) before SDGNRS (N+19): stonk calls claimWhalePass/setAfKingMode
- *  - SDGNRS (N+19) before DGNRS (N+20): DGNRS reads SDGNRS balance
- *  - GAME (N+12) before ADMIN (N+21): admin calls wireVrf()
- *  - GNRUS (N+22) last: no constructor cross-calls, reads compile-time constants only
+ *  - COIN (N+10) before VAULT (N+19): vault reads vaultMintAllowance()
+ *  - GAME (N+12) + modules (N+1..9) before SDGNRS (N+20): stonk calls claimWhalePass/setAfKingMode
+ *  - AFKING (N+18) before VAULT (N+19) / SDGNRS (N+20): their constructors call afKing.subscribe()
+ *    (AfKing's own constructor makes no cross-contract calls — sets 3 immutables only — so it has
+ *    no upstream dependency; placed right before VAULT to minimize the downstream address shift)
+ *  - SDGNRS (N+20) before DGNRS (N+21): DGNRS reads SDGNRS balance
+ *  - GAME (N+12) before ADMIN (N+22): admin calls wireVrf()
+ *  - GNRUS (N+23) last: no constructor cross-calls, reads compile-time constants only
  */
 export const DEPLOY_ORDER = [
   "ICONS_32",              // N+0:  Icons32Data
@@ -34,11 +37,12 @@ export const DEPLOY_ORDER = [
   "JACKPOTS",              // N+15: DegenerusJackpots
   "QUESTS",                // N+16: DegenerusQuests
   "DEITY_PASS",            // N+17: DegenerusDeityPass
-  "VAULT",                 // N+18: DegenerusVault (calls COIN)
-  "SDGNRS",                // N+19: StakedDegenerusStonk (calls GAME, mints to DGNRS)
-  "DGNRS",                 // N+20: DegenerusStonk (reads SDGNRS balance)
-  "ADMIN",                 // N+21: DegenerusAdmin (calls VRF + GAME)
-  "GNRUS",                 // N+22: GNRUS (self-mint only, no cross-calls)
+  "AF_KING",               // N+18: AfKing (no cross-calls; must precede VAULT/SDGNRS subscribe)
+  "VAULT",                 // N+19: DegenerusVault (calls COIN; calls AF_KING.subscribe)
+  "SDGNRS",                // N+20: StakedDegenerusStonk (calls GAME, AF_KING.subscribe; mints to DGNRS)
+  "DGNRS",                 // N+21: DegenerusStonk (reads SDGNRS balance)
+  "ADMIN",                 // N+22: DegenerusAdmin (calls VRF + GAME)
+  "GNRUS",                 // N+23: GNRUS (self-mint only, no cross-calls)
 ];
 
 /**
@@ -63,6 +67,7 @@ export const KEY_TO_CONTRACT = {
   JACKPOTS: "DegenerusJackpots",
   QUESTS: "DegenerusQuests",
   DEITY_PASS: "DegenerusDeityPass",
+  AF_KING: "AfKing",
   VAULT: "DegenerusVault",
   SDGNRS: "StakedDegenerusStonk",
   DGNRS: "DegenerusStonk",
