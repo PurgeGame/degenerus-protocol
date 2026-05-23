@@ -89,6 +89,15 @@ None — no external service configuration required.
 - Ready for sibling Wave-1 plans (313-02..05) and Wave-2 suite-verify (313-06).
 - Note for Plan 05/06: `LootboxRngLifecycle.t.sol` mid-day-write slot drift (38/39 → 38) is a live failing baseline test to migrate.
 
+## Self-Check: PASSED
+
+- FOUND: `test/fuzz/VrfRotationOrphanIndex.t.sol`
+- FOUND: commit `f6cc92c9` (Task 1 post-fix arm)
+- FOUND: commit `611deb20` (Task 2 pre-fix arm)
+- `forge test --match-contract VrfRotationOrphanIndex`: 2 passed, 0 failed (post-fix 1000 fuzz runs)
+- `forge build`: exit 0
+- `git diff --name-only -- contracts/`: empty (ZERO mainnet contract mutation)
+
 ---
 *Phase: 313-tst-vrf-regression-freeze-invariant-fuzz-under-rotation-tst*
 *Completed: 2026-05-23*
