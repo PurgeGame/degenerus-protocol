@@ -103,7 +103,7 @@
   5. USER-APPROVED diff committed exactly once per `feedback_batch_contract_approval.md`; every cited file:line re-grep-verified pre-patch per `feedback_verify_call_graph_against_source.md`.
 
 **Plans:** 1 plan (1 wave; Wave 1 is `autonomous: false` — the single USER-APPROVAL checkpoint gates the lone batched contract commit)
-- [ ] 312-01-PLAN.md — all 4 RESEARCH section-3 edits in `DegenerusGameAdvanceModule.sol` (the `_requestVrfWord` + `_setVrfConfig` helpers, the `wireVrf` init-only lock, the `updateVrfCoordinatorAndSub` 3-case preserve+re-issue rework) then build-green self-review then USER-APPROVAL gate then single batched contract commit (VRF-01..05)
+- [x] 312-01-PLAN.md — all 4 RESEARCH section-3 edits in `DegenerusGameAdvanceModule.sol` (the `_requestVrfWord` + `_setVrfConfig` helpers, the `wireVrf` init-only lock, the `updateVrfCoordinatorAndSub` 3-case preserve+re-issue rework) then build-green self-review then USER-APPROVAL gate then single batched contract commit (VRF-01..05)
 
 ### Phase 313: TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation (TST)
 
