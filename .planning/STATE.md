@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
 status: executing
-last_updated: "2026-05-23T10:35:39.018Z"
-last_activity: 2026-05-23 -- Phase 313 plan 03 (VTST-03 freeze-invariant fuzz under rotation) complete
+last_updated: "2026-05-23T10:41:33.431Z"
+last_activity: 2026-05-23 -- Phase 313 plan 04 (VTST-04 wireVrf one-shot) complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 14
-  completed_plans: 11
-  percent: 79
+  completed_plans: 12
+  percent: 86
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 ## Current Position
 
 Phase: 313 (TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation) — EXECUTING
-Plan: 4 of 6 (313-01 VTST-01 complete; 313-02 VTST-02 liveness complete — `2f438ea2` VrfRotationLiveness.t.sol, 6 tests PASS; 313-03 VTST-03 freeze-invariant fuzz under rotation complete — `afa1ac22`/`c4d7f627` RngLockRotationDeterminism.t.sol, 2 fuzz tests PASS at 1000 runs each)
+Plan: 5 of 6 (313-01 VTST-01 complete; 313-02 VTST-02 liveness complete — `2f438ea2` VrfRotationLiveness.t.sol, 6 tests PASS; 313-03 VTST-03 freeze-invariant fuzz under rotation complete — `afa1ac22`/`c4d7f627` RngLockRotationDeterminism.t.sol, 2 fuzz tests PASS at 1000 runs each; 313-04 VTST-04 wireVrf one-shot complete — `4d45107d`/`b4a63ac7` VrfWireOneShot.t.sol, 4 tests PASS (access-guard form per the user-approved no-init-lock VRF-04 deviation + structural one-shot attestation), ZERO contracts/ mutation)
 Status: Ready to execute
-Resume: .planning/phases/313-tst-vrf-regression-freeze-invariant-fuzz-under-rotation-tst/313-04-PLAN.md (6 plans: 01 VTST-01 orphan-index DONE, 02 VTST-02 liveness DONE, 03 VTST-03 freeze-invariant fuzz DONE, 04 VTST-04 wireVrf one-shot, 05 regression-migration of the 17 fix-induced test regressions, 06 suite-verify+AGENT-COMMIT; Wave 1 = 01-05 parallel (disjoint files), Wave 2 = 06; all autonomous, test-tree only, ZERO contracts/ mutation per D-43N-AUDIT-ONLY-01; next: /gsd-execute-phase 313)
-Last activity: 2026-05-23 -- Phase 313 plan 03 (VTST-03 freeze-invariant fuzz under rotation) complete — RngLockRotationDeterminism.t.sol 2 fuzz tests PASS (1000 runs each), ZERO contracts/ mutation
+Resume: .planning/phases/313-tst-vrf-regression-freeze-invariant-fuzz-under-rotation-tst/313-05-PLAN.md (6 plans: 01 VTST-01 orphan-index DONE, 02 VTST-02 liveness DONE, 03 VTST-03 freeze-invariant fuzz DONE, 04 VTST-04 wireVrf one-shot DONE, 05 regression-migration of the 17 fix-induced test regressions, 06 suite-verify+AGENT-COMMIT; Wave 1 = 01-05 parallel (disjoint files), Wave 2 = 06; all autonomous, test-tree only, ZERO contracts/ mutation per D-43N-AUDIT-ONLY-01; next: /gsd-execute-phase 313)
+Last activity: 2026-05-23 -- Phase 313 plan 04 (VTST-04 wireVrf one-shot) complete — VrfWireOneShot.t.sol 4 tests PASS, asserts the :503/:1717 ADMIN access-guard revert (NOT a non-existent init-lock) + structural one-shot attestation, ZERO contracts/ mutation
 
 ## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
 
