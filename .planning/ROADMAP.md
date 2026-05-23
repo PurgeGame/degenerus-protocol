@@ -163,7 +163,7 @@ Plans:
 **Plans:** 1 plan (1 wave; `autonomous: false` — Task 5 Tier-1 AskUserQuestion pause on any surviving FINDING_CANDIDATE + Task 6 RE-PASS contract-diff path gated by USER-APPROVAL at the sensitive-contract boundary per `feedback_pause_at_contract_phase_boundaries.md`; expected unanimous-NEGATIVE → Task 6 skipped). DGAUD-01..04 FOLDED into the `/contract-auditor` LOG section per D-05 (supersedes the "+ degenerette-audit-note bundle" phrase above — no separate note file).
 
 Plans:
-- [ ] 314-01-PLAN.md — CHARGE (SWP-01..02 + DGAUD-01..04 folded in, D-04 wireVrf re-proof / D-03 rotation-spam / D-01 LINK-spot-check) → /contract-auditor SEQUENTIAL_MAIN_CONTEXT (+ DGAUD section) → /zero-day-hunter + /economic-analyst (PARALLEL or HYBRID-fallback per D-10) → integrated 314-01-ADVERSARIAL-LOG.md w/ degenerette-audit section + skeptic-filter + two-tier consensus → AGENT-COMMIT
+- [x] 314-01-PLAN.md — CHARGE (SWP-01..02 + DGAUD-01..04 folded in, D-04 wireVrf re-proof / D-03 rotation-spam / D-01 LINK-spot-check) → /contract-auditor SEQUENTIAL_MAIN_CONTEXT (+ DGAUD section) → /zero-day-hunter + /economic-analyst (PARALLEL or HYBRID-fallback per D-10) → integrated 314-01-ADVERSARIAL-LOG.md w/ degenerette-audit section + skeptic-filter + two-tier consensus → AGENT-COMMIT
 
 ### Phase 315: TERMINAL — Consolidate-Forward Delta Audit + Closure (TERMINAL)
 
