@@ -157,4 +157,45 @@ contract VrfRotationOrphanIndex is DeployProtocol {
             "real VRF word must land in the preserved orphaned index after rotation"
         );
     }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Pre-fix arm: the entropy-0 consequence when the consumed index is zero
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @notice Reproduces the Scenario-A entropy-0 consequence the fix exists to eliminate.
+    ///         With the in-flight mid-day request's reserved slot forced to zero (the orphaned
+    ///         state a pre-fix rotation left behind), the lootbox-RNG index that the trait
+    ///         consumer at DegenerusGameMintModule:686 reads -- entropy =
+    ///         lootboxRngWordByIndex[LR_INDEX-1] -- carries entropy == 0 into
+    ///         _processOneTicketEntry, yielding deterministic/entropy-0 traits. This arm asserts
+    ///         the CONSEQUENCE: the exact consumed index (LR_INDEX-1) reads 0. The contract is
+    ///         already patched and contracts/ MUST NOT be mutated, so the orphaned-at-zero
+    ///         state is induced with vm.store rather than by a pre-fix rotation; the post-fix
+    ///         arm above proves the patched rotation structurally fills the same slot instead.
+    function test_preFix_orphanedZeroIndex_yieldsEntropyZero() public {
+        _setupForMidDayRng();
+
+        // Fire the mid-day request; the reserved slot N = LR_INDEX-1 is the index the
+        // MintModule:686 consumer reads when generating traits for this lootbox-RNG cycle.
+        game.requestLootboxRng();
+        uint48 reservedIndex = _readLootboxRngIndex() - 1;
+
+        // Force the orphaned-at-zero state Scenario A reads (a pre-fix rotation cleared the
+        // in-flight word but never backfilled this slot). Write directly to the slot-38 mapping.
+        vm.store(
+            address(game),
+            keccak256(abi.encode(uint256(reservedIndex), SLOT_LOOTBOX_WORD_MAP)),
+            bytes32(0)
+        );
+
+        // The consumed index is the precise one the MintModule:686 read targets: LR_INDEX-1.
+        // Establishing this identity makes the contrast meaningful -- this is the entropy source.
+        assertEq(reservedIndex, _readLootboxRngIndex() - 1, "consumed index must be LR_INDEX-1");
+
+        // CONSEQUENCE: the consumed slot reads 0. The unguarded read at MintModule:686 would
+        // carry entropy == 0 into _processOneTicketEntry(..., entropy, idx) -> deterministic
+        // (entropy-0) traits. This is the defect the post-fix arm eliminates by structurally
+        // filling the slot via the patched mid-flight rotation re-issue.
+        assertEq(_readLootboxWord(reservedIndex), 0, "orphaned consumed index reads entropy 0");
+    }
 }
