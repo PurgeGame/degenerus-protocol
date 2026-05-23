@@ -455,7 +455,9 @@ contract VRFCore is DeployProtocol {
         game.requestLootboxRng();
     }
 
-    /// @notice After updateVrfCoordinatorAndSub, rngLockedFlag is false and VRF state is cleared.
+    /// @notice After updateVrfCoordinatorAndSub with a daily request in flight, rngLockedFlag
+    ///         is preserved and the request is re-issued on the new coordinator; the day
+    ///         completes once the re-issued request is fulfilled.
     function test_coordinatorSwap_clearsRngLocked() public {
         // Complete day 1
         _completeDay(0xDEAD0001);
@@ -467,14 +469,23 @@ contract VRFCore is DeployProtocol {
         assertTrue(_readVrfRequestId() != 0, "vrfRequestId should be set");
         assertTrue(_readRngRequestTime() != 0, "rngRequestTime should be set");
 
-        // Coordinator swap
-        _doCoordinatorSwap();
+        // Coordinator swap (daily in flight, rngWordCurrent==0 -> preserve+re-issue)
+        MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
-        // All RNG state should be cleared
-        assertFalse(game.rngLocked(), "rngLocked should be false after swap");
-        assertEq(_readVrfRequestId(), 0, "vrfRequestId cleared after swap");
-        assertEq(_readRngRequestTime(), 0, "rngRequestTime cleared after swap");
-        assertEq(_readRngWordCurrent(), 0, "rngWordCurrent cleared after swap");
+        // RNG lock preserved; request re-issued on the new coordinator
+        assertTrue(game.rngLocked(), "rngLocked stays true after swap (daily preserved)");
+        assertTrue(_readVrfRequestId() != 0, "vrfRequestId re-issued (fresh) after swap");
+        assertTrue(_readRngRequestTime() != 0, "rngRequestTime refreshed by re-issue");
+        assertEq(_readRngWordCurrent(), 0, "rngWordCurrent still 0 (re-issued word not yet delivered)");
+        assertTrue(newVRF.lastRequestId() != 0, "re-issued request exists on new coordinator");
+
+        // Fulfilling the re-issued request on the new coordinator completes the day
+        newVRF.fulfillRandomWords(newVRF.lastRequestId(), 0xCAFE0002);
+        for (uint256 i = 0; i < 50; i++) {
+            if (!game.rngLocked()) break;
+            game.advanceGame();
+        }
+        assertFalse(game.rngLocked(), "Day completes after re-issued request fulfilled");
     }
 
     // ──────────────────────────────────────────────────────────────────────

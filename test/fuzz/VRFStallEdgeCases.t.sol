@@ -57,10 +57,17 @@ contract VRFStallEdgeCases is DeployProtocol {
         return _doCoordinatorSwap();
     }
 
-    /// @dev Resume after coordinator swap: advanceGame -> fulfill on newVRF -> loop until unlocked.
+    /// @dev Resume after coordinator swap. The swap re-issues the in-flight request on the
+    ///      new coordinator (preserve+re-issue), so a pending request already exists. Fulfil
+    ///      it first so the re-issued word is delivered, then drain via advanceGame.
+    ///      If nothing was in flight (no re-issue), advanceGame fires a fresh request which
+    ///      is then fulfilled.
     function _resumeAfterSwap(MockVRFCoordinator newVRF, uint256 vrfWord) internal {
-        game.advanceGame();
         uint256 reqId = newVRF.lastRequestId();
+        if (reqId == 0) {
+            game.advanceGame();
+            reqId = newVRF.lastRequestId();
+        }
         newVRF.fulfillRandomWords(reqId, vrfWord);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
@@ -214,13 +221,14 @@ contract VRFStallEdgeCases is DeployProtocol {
         game.advanceGame();
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
-        // Stall 3 gap days: warp to day 6, swap coordinator
+        // Stall 3 gap days: warp to day 6, swap coordinator. The daily request in flight
+        // (rngWordCurrent==0) is re-issued on the new coordinator by the swap.
         vm.warp(6 * 86400);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
-        // Now trigger new VRF request on the new coordinator
-        game.advanceGame();
+        // The re-issued request already exists on the new coordinator
         uint256 reqId = newVRF.lastRequestId();
+        assertTrue(reqId != 0, "Re-issued request exists on new coordinator after swap");
 
         // Before fulfillment: rngWordCurrent == 0
         assertEq(_readRngWordCurrent(), 0, "rngWordCurrent 0 before VRF callback");
@@ -339,7 +347,10 @@ contract VRFStallEdgeCases is DeployProtocol {
     /// @dev Storage slot for lootboxRngPacked (midDayTicketRngPending at bits 224-231).
     uint256 constant SLOT_LOOTBOX_RNG_PACKED = 37;
 
-    /// @notice Unit: coordinator swap resets all VRF state and preserves intentionally-kept variables.
+    /// @notice Unit: coordinator swap with a daily request in flight preserves the RNG lock
+    ///         and re-issues the request on the new coordinator; intentionally-kept variables
+    ///         (lootboxRngIndex, historical rngWordByDay) are preserved; the day completes
+    ///         once the re-issued request is fulfilled.
     function test_coordinatorSwapResetsAllVrfState() public {
         // Complete the first post-deploy day normally
         _completeDay(0xDEAD0001);
@@ -350,7 +361,8 @@ contract VRFStallEdgeCases is DeployProtocol {
         vm.warp(3 * 86400);
         game.advanceGame();
         assertTrue(game.rngLocked(), "Day 2 VRF pending");
-        assertTrue(_readVrfRequestId() != 0, "vrfRequestId set");
+        uint256 preSwapVrfRequestId = _readVrfRequestId();
+        assertTrue(preSwapVrfRequestId != 0, "vrfRequestId set");
         assertTrue(_readRngRequestTime() != 0, "rngRequestTime set");
         // rngWordCurrent == 0 (not yet fulfilled)
         assertEq(_readRngWordCurrent(), 0, "rngWordCurrent 0 before fulfillment");
@@ -358,14 +370,16 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Record lootboxRngIndex AFTER VRF request (advanceGame increments it)
         uint48 preSwapLootboxIndex = _lootboxRngIndex();
 
-        // Coordinator swap
-        _doCoordinatorSwap();
+        // Coordinator swap (daily in flight, rngWordCurrent==0 -> preserve+re-issue)
+        MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
-        // Verify RESET variables:
-        assertFalse(game.rngLocked(), "rngLocked cleared by swap");
-        assertEq(_readVrfRequestId(), 0, "vrfRequestId cleared by swap");
-        assertEq(_readRngRequestTime(), 0, "rngRequestTime cleared by swap");
-        assertEq(_readRngWordCurrent(), 0, "rngWordCurrent cleared by swap");
+        // Verify PRESERVE+RE-ISSUE variables:
+        assertTrue(game.rngLocked(), "rngLocked stays true across swap (daily preserved)");
+        assertTrue(_readVrfRequestId() != 0, "vrfRequestId re-issued (fresh) on new coordinator");
+        assertTrue(_readRngRequestTime() != 0, "rngRequestTime refreshed by re-issue");
+        assertEq(_readRngWordCurrent(), 0, "rngWordCurrent still 0 (re-issued word not yet delivered)");
+        // A fresh request exists on the new coordinator
+        assertTrue(newVRF.lastRequestId() != 0, "re-issued request exists on new coordinator");
 
         // Verify PRESERVED variables:
         assertEq(
@@ -378,6 +392,11 @@ contract VRFStallEdgeCases is DeployProtocol {
             preSwapFirstDayWord,
             "Historical rngWordByDay preserved across swap"
         );
+
+        // Liveness: fulfilling the re-issued request on the new coordinator completes the day.
+        _resumeAfterSwap(newVRF, 0xCAFE0003);
+        assertFalse(game.rngLocked(), "Day completes after re-issued request fulfilled");
+        assertTrue(game.rngWordForDay(3) != 0, "Day 3 processed after re-issue resume");
     }
 
     /// @notice Fuzz: totalFlipReversals preserved across coordinator swap.
@@ -425,7 +444,9 @@ contract VRFStallEdgeCases is DeployProtocol {
         );
     }
 
-    /// @notice Unit: midDayTicketRngPending cleared by coordinator swap.
+    /// @notice Unit: midDayTicketRngPending preserved across coordinator swap; the mid-day
+    ///         request is re-issued on the new coordinator for the same reserved index, and
+    ///         fulfilling it lands the genuine word in that index without orphaning it.
     function test_coordinatorSwapClearsMidDayPending() public {
         // Complete the first post-deploy day normally
         _completeDay(0xDEAD0001);
@@ -446,33 +467,49 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Request mid-day lootbox RNG
         game.requestLootboxRng();
 
-        // Verify midDayTicketRngPending is set (bits 224-231 of lootboxRngPacked slot 38)
+        // The reserved index this mid-day request is bound to (LR_INDEX - 1)
+        uint48 reservedIndex = _lootboxRngIndex() - 1;
+
+        // Verify midDayTicketRngPending is set (bits 224-231 of lootboxRngPacked slot 37)
         uint256 lrPacked = uint256(
             vm.load(address(game), bytes32(uint256(SLOT_LOOTBOX_RNG_PACKED)))
         );
         uint256 midDayVal = (lrPacked >> 224) & 0xFF;
         assertTrue(midDayVal != 0, "midDayTicketRngPending should be set after requestLootboxRng");
 
-        // Coordinator swap
-        _doCoordinatorSwap();
+        // Coordinator swap (mid-day in flight -> preserve LR_MID_DAY + re-issue for the same index)
+        MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
-        // Verify midDayTicketRngPending cleared (bits 224-231 of lootboxRngPacked slot 38)
+        // Verify midDayTicketRngPending PRESERVED (bits 224-231 of lootboxRngPacked slot 37)
         lrPacked = uint256(
             vm.load(address(game), bytes32(uint256(SLOT_LOOTBOX_RNG_PACKED)))
         );
         midDayVal = (lrPacked >> 224) & 0xFF;
-        assertEq(midDayVal, 0, "midDayTicketRngPending cleared by swap");
+        assertEq(midDayVal, 1, "midDayTicketRngPending preserved after swap (re-issued)");
 
-        // Verify game can proceed without NotTimeYet after swap
+        // LR_INDEX preserved -> the re-issue targets the same reserved index
+        assertEq(_lootboxRngIndex() - 1, reservedIndex, "reserved lootbox index preserved across swap");
+
+        // A re-issued request exists on the new coordinator
+        uint256 reissued = newVRF.lastRequestId();
+        assertTrue(reissued != 0, "mid-day request re-issued on new coordinator");
+
+        // Fulfil the re-issued mid-day request on the new coordinator -> word lands in [reservedIndex]
+        newVRF.fulfillRandomWords(reissued, 0xDD030001);
+        assertEq(
+            _lootboxRngWord(reservedIndex),
+            0xDD030001,
+            "Re-issued mid-day word lands in the reserved index (not orphaned)"
+        );
+
+        // Mid-day fulfillment clears the in-flight request state (LR_MID_DAY is consumed
+        // later during advanceGame lootbox processing).
+        assertEq(_readVrfRequestId(), 0, "vrfRequestId cleared after mid-day fulfillment");
+        assertEq(_readRngRequestTime(), 0, "rngRequestTime cleared after mid-day fulfillment");
+
+        // Game proceeds without NotTimeYet: advance into the next day
         vm.warp(4 * 86400);
-        MockVRFCoordinator newVRF = new MockVRFCoordinator();
-        uint256 newSubId = newVRF.createSubscription();
-        newVRF.addConsumer(newSubId, address(game));
-        vm.prank(address(admin));
-        game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)));
-
-        // advanceGame should not revert (midDayTicketRngPending cleared)
-        _resumeAfterSwap(newVRF, 0xDD030001);
+        game.advanceGame();
     }
 
     /// @notice Unit: retryLootboxRng reverts before the 6h timeout, succeeds after,
@@ -622,10 +659,10 @@ contract VRFStallEdgeCases is DeployProtocol {
     // STALL-06: Gameover Fallback + V37-001 _tryRequestRng Guard Branches
     // ══════════════════════════════════════════════════════════════════════
 
-    /// @notice Unit: after coordinator swap to a valid coordinator, _tryRequestRng succeeds
-    ///         (VRF request fires). Verify rngLocked() == true after advanceGame.
-    ///         This proves the guard branches (coordinator==0, keyHash==0, subId==0) are
-    ///         bypassed when valid VRF config is present.
+    /// @notice Unit: after coordinator swap with a daily request in flight, the swap
+    ///         re-issues the request on the new valid coordinator and preserves rngLocked.
+    ///         This proves the re-issue path uses the new coordinator's valid VRF config
+    ///         (address, keyHash, subId) — the request is accepted, not orphaned.
     function test_tryRequestRngGuardBranches() public {
         // Complete the first post-deploy day normally
         _completeDay(0xDEAD0001);
@@ -635,22 +672,19 @@ contract VRFStallEdgeCases is DeployProtocol {
         game.advanceGame();
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
-        // Coordinator swap to a valid new coordinator
+        // Coordinator swap to a valid new coordinator (daily in flight -> preserve+re-issue)
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
-        // After swap: rngLocked cleared, new coordinator is valid
-        assertFalse(game.rngLocked(), "rngLocked cleared after swap");
+        // After swap: rngLocked preserved, the request is re-issued on the new coordinator
+        assertTrue(game.rngLocked(), "rngLocked preserved after swap (re-issued)");
 
-        // advanceGame should fire _tryRequestRng (or _requestRng) successfully
-        // because the new coordinator has valid address, keyHash, and subId
-        game.advanceGame();
-
-        // rngLocked should be true (VRF request sent to new coordinator)
-        assertTrue(game.rngLocked(), "VRF request sent via new coordinator (tryRequestRng bypasses guards)");
-
-        // Verify new VRF request was received
+        // The new coordinator received the re-issued VRF request
         uint256 reqId = newVRF.lastRequestId();
-        assertTrue(reqId > 0, "New coordinator received VRF request");
+        assertTrue(reqId > 0, "New coordinator received re-issued VRF request");
+
+        // Fulfilling the re-issued request on the new coordinator drains the day
+        _resumeAfterSwap(newVRF, 0xDD0B0003);
+        assertFalse(game.rngLocked(), "Day completes after re-issued request fulfilled");
     }
 
     /// @notice Unit: after 5 completed days, all historical VRF words are nonzero.
