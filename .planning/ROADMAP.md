@@ -119,7 +119,7 @@ Plans:
 
 **Wave 5** *(the single USER-APPROVAL gate — autonomous: false)*
 
-- [ ] 317-07-PLAN.md — Assemble the D-04 review package (requirement-mapped summary + full git diff + `forge inspect` before/after), the blocking USER-APPROVAL checkpoint gating the ONE batched `contracts/` commit (incl. AfKing.sol) + the paired keeper diff (D-02), then the deferred planning/docs/test commits.
+- [x] 317-07-PLAN.md — Assemble the D-04 review package (requirement-mapped summary + full git diff + `forge inspect` before/after), the blocking USER-APPROVAL checkpoint gating the ONE batched `contracts/` commit (incl. AfKing.sol) + the paired keeper diff (D-02), then the deferred planning/docs/test commits.
 
 ### Phase 318: TST — Subscription + Crank Correctness + Removal Proofs (TST)
 
