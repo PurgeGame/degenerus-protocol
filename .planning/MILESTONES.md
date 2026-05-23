@@ -1,5 +1,27 @@
 # Milestones
 
+## v45.0 VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit (Closed: 2026-05-23 — minimal close)
+
+**Shape:** 7-phase consolidate-forward milestone (309 SPEC + 310 IMPL groundwork; 311 SPEC + 312 IMPL + 313 TST + 314 SWEEP active; 315 TERMINAL **not run** — closed via user-approved minimal close). 30 / 31 requirements satisfied; 1 WAIVED (AUDIT-01 formal FINDINGS-v45.0.md deliverable skipped per user).
+
+**Closure signal:** `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` (audit-subject HEAD — contract tree contains all v45-scope changes).
+
+**Audit baseline → subject:** v44.0 closure HEAD `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` → v45.0 closure HEAD `62fb514b`. Subject = every `contracts/` commit in the delta: V-081 `9bcd582d` (+ EV-freeze `e5928fb8`), jackpot pending-pool `6e5acd7e` + regression `f3e21064`, degenerette `92b110bf`, VRF-rotation fix `a303ae18`.
+
+**Headline:** Closed the CATASTROPHE-class VRF-rotation orphan-index liveness defect in `updateVrfCoordinatorAndSub` — emergency coordinator rotation now detect-preserve-re-issues the in-flight request (`a303ae18`, single batched USER-APPROVED diff to `DegenerusGameAdvanceModule.sol`; VRF-04 init-lock OMITTED user-approved as dead code — `wireVrf` is constructor-only-reachable). Closes the §9d VRF-governance cluster HANDOFF-78/85/86/87/88/89/90/91 + ADMA-01/02 (10 anchors). Plus consolidate-forward delta audit of V-081, jackpot pending-pool, and the degenerette refactor.
+
+**VTST coverage (Phase 313):** 7 plans, AGENT-COMMITTED, zero `contracts/` mutation. VTST-01..04 prove VRF-01..05. SC-5 proven empirically (0 NEW test failures vs the pre-fix contract; suite has unrelated pre-existing baseline failures).
+
+**Adversarial pass (Phase 314):** 3-skill — `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT + `/zero-day-hunter` ‖ `/economic-analyst` GENUINE PARALLEL_SUBAGENT (run inline; the orchestrator held the Task tool). `/degen-skeptic` OUT per `D-271-ADVERSARIAL-02`. **unanimous-NEGATIVE** — 33 disposition rows (26 NEGATIVE-VERIFIED + 7 SAFE_BY_DESIGN); 0 FINDING_CANDIDATE; Task 6 RE-PASS gate SKIPPED; 0 skeptic-filter discards. Disposition in `.planning/phases/314-*/314-01-ADVERSARIAL-LOG.md`.
+
+**Degenerette audit (DGAUD-01..04, folded into Phase 314 per D-05):** `forge build` recompile-clean + dangling-ref grep ZERO (DGAUD-01); `dailyHeroWagers` behavioral identity, de-indent only (DGAUD-02); `BetPlaced` off-chain reconstruction viable, index→level the accepted off-chain convention (DGAUD-03); HANDOFF-01/02/03/18/81/82 carry-forward (DGAUD-04).
+
+**LEAN regression (REG-01):** PASS — every `contracts/` + `test/` diff vs the v44.0 closure HEAD is attributable to a known, intended v45-scope commit (zero out-of-scope changes → NON-WIDENING). The v43 `RngLockDeterminism.t.sol` harness is byte-identical (VTST-03 extended it via a separate file); EV-score/decimator/degenerette closures (`67e9ea6f`/`e5928fb8`) intact.
+
+**Closure verdict:** `VRF_ROTATION_ORPHAN RESOLVED_AT_V45; ROTATION_LIVENESS PRESERVED; FREEZE_INVARIANT INTACT_UNDER_ROTATION; 10 of 10 VRF_CLUSTER_ANCHORS RESOLVED; CONSOLIDATE_FORWARD_DELTA AUDITED (V-081 + jackpot-pending-pool + degenerette); 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED; CLOSED_VIA_MINIMAL_CLOSE (FINDINGS-v45.0.md deliverable WAIVED per user — disposition lives in planning artifacts).`
+
+**Process note:** Phase 315 TERMINAL (the formal `audit/FINDINGS-v45.0.md` 9-section deliverable + `chmod 444`) was intentionally NOT run per user decision (2026-05-23). The audit substance is complete across Phases 309–314 + this inline REG-01; only the consolidated shippable report file is absent. If a publishable findings document is later needed, re-open Phase 315.
+
 ## v44.0 sStonk Per-Day Redemption Refactor + Accounting Invariant Proof (Shipped: 2026-05-20)
 
 **Shape:** 5-phase FIX-MILESTONE (304 SPEC + 305 IMPL + 306 TST + 307 SWEEP + 308 TERMINAL); 13 plans; 63 requirements satisfied (13 INV + 5 SPEC + 4 IMPL + 7 TST + 20 EDGE + 5 SWP + 9 AUDIT + 1 REG + 2 CLS).

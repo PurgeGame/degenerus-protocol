@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
-status: ready_to_plan
+status: shipped
 last_updated: 2026-05-23T13:40:02.230Z
-last_activity: 2026-05-23 -- Phase 314 SWEEP complete (unanimous-NEGATIVE)
+last_activity: 2026-05-23 -- v45.0 CLOSED via user-approved minimal close (REG-01 PASS; AUDIT-01 deliverable waived)
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 7
   total_plans: 16
   completed_plans: 16
-  percent: 71
-stopped_at: Phase 314 complete (1/1) — ready to discuss Phase 315
+  percent: 100
+stopped_at: v45.0 CLOSED (minimal close) — no active phase; Phase 315 TERMINAL deliverable WAIVED per user
 ---
 
 # Project State
@@ -21,17 +21,17 @@ stopped_at: Phase 314 complete (1/1) — ready to discuss Phase 315
 See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 315 — terminal — consolidate forward delta audit + closure (terminal)
+**Current focus:** v45.0 CLOSED (user-approved minimal close, 2026-05-23) — milestone shipped; no active phase.
 
 ## Current Position
 
-Phase: 315
-Plan: Not started
-Status: Ready to plan
-Resume: Phase 314 SWEEP COMPLETE — 3-skill adversarial pass (`/contract-auditor` SEQUENTIAL_MAIN_CONTEXT FIRST + `/zero-day-hunter` ‖ `/economic-analyst` GENUINE PARALLEL_SUBAGENT — executor held the Task tool, no HYBRID-fallback) over the v45.0 VRF-rotation fix (`a303ae18`) + consolidated delta (V-081 `9bcd582d` / jackpot pending-pool `6e5acd7e`+`f3e21064` / degenerette `92b110bf`) + DGAUD-01..04 (D-05 fold). Verdict **unanimous-NEGATIVE**; Task 6 gate SKIPPED (gate failed); zero `contracts/`+`test/` mutations. Artifacts: `314-ADVERSARIAL-CHARGE.md` + 3 per-skill MDs + `314-01-ADVERSARIAL-LOG.md` (§9 carries the Phase 315 §4 / AUDIT-01 forward-cite placeholder) + `314-01-SUMMARY.md`. NEXT: Phase 315 TERMINAL — consolidate-forward delta audit + closure (DELTA-01..04 + AUDIT-01 + REG-01 + CLS-01); §4 consumes this LOG's adversarial disposition. Per `feedback_pause_at_contract_phase_boundaries.md`, confirm direction before advancing past this sensitive-contract phase boundary even with auto_advance ON. Next: /gsd-plan-phase 315 (then /gsd-execute-phase 315).
-Last activity: 2026-05-23
+Phase: — (v45.0 milestone CLOSED)
+Plan: —
+Status: SHIPPED — v45.0 closed via minimal close
+Resume: **v45.0 CLOSED (minimal close, 2026-05-23).** Closure signal `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801`. Phases 309–314 complete; **Phase 315 TERMINAL NOT run** — its substance (delta audit + adversarial disposition + LEAN regression + closure flip) discharged across Phases 309–314 + an inline **REG-01 PASS** (non-widening: every `contracts/`+`test/` diff vs `MILESTONE_V44_AT_HEAD_6f0ba296…` attributable to a v45-scope commit). Verdict: `VRF_ROTATION_ORPHAN RESOLVED_AT_V45; ROTATION_LIVENESS PRESERVED; FREEZE_INVARIANT INTACT_UNDER_ROTATION; 10 of 10 VRF_CLUSTER_ANCHORS RESOLVED; CONSOLIDATE_FORWARD_DELTA AUDITED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED; CLOSED_VIA_MINIMAL_CLOSE`. 30/31 requirements satisfied; **AUDIT-01 WAIVED** (formal `audit/FINDINGS-v45.0.md` 9-section deliverable skipped per user — disposition lives in `314-01-ADVERSARIAL-LOG.md` + 312/313 VERIFICATION). To produce a publishable findings report later, re-open Phase 315. NEXT MILESTONE: v46/v47 (e.g. the `project_v47_remove_afking_eth_autorebuy` draft) via `/gsd-new-milestone`.
+Last activity: 2026-05-23 -- v45.0 CLOSED (minimal)
 
-## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
+## Current Milestone Phases (v45.0 — CLOSED 2026-05-23, user-approved minimal close)
 
 **v45.0 redefined (consolidate-forward).** The original V-081-only 5-phase shape is superseded: phases 309 (SPEC) + 310 (IMPL `9bcd582d`) are retained as **completed groundwork**, and active work is rescoped to the VRF-rotation liveness fix + degenerette audit + consolidate-forward delta audit. Audit baseline → subject: v44.0 closure HEAD `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` → v45.0 closure HEAD (V-081 `9bcd582d` + jackpot `6e5acd7e` + degenerette `92b110bf` + the VRF fix). VRF fix = single batched USER-APPROVED diff at the IMPL phase per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md`; test/planning/audit AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`. Phase boundaries + 5 success criteria per phase are finalised in `.planning/ROADMAP.md`.
 
@@ -43,7 +43,7 @@ Last activity: 2026-05-23
 | 312 | IMPL — VRF-Rotation Fix (single batched USER-APPROVED diff) | IMPL | VRF-01..05 | Complete (contract `a303ae18`) |
 | 313 | TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation | TST | VTST-01..04 | Complete (SC-5: 0 new failures vs pre-fix baseline) |
 | 314 | SWEEP — 3-Skill Adversarial (VRF fix + delta surfaces) + Degenerette Audit | SWEEP | SWP-01..02 + DGAUD-01..04 | Complete (unanimous-NEGATIVE; 33/33 rows; Task 6 skipped) |
-| 315 | TERMINAL — Consolidate-Forward Delta Audit + Closure | TERMINAL | DELTA-01..04 + AUDIT-01 + REG-01 + CLS-01 | Pending (roadmapper) |
+| 315 | TERMINAL — Consolidate-Forward Delta Audit + Closure | TERMINAL | DELTA-01..04 + AUDIT-01 + REG-01 + CLS-01 | **CLOSED via minimal close** — REG-01 PASS + closure flip done inline; AUDIT-01 (FINDINGS-v45.0.md deliverable) WAIVED per user; not run as a full phase |
 
 **Coverage:** 31/31 requirements mapped (9 groundwork complete + 22 active: 5 VRF + 4 DGAUD + 4 DELTA + 4 VTST + 2 SWP + 3 AUDIT/REG/CLS); 0 orphaned. Full mapping in `.planning/REQUIREMENTS.md` Traceability table (roadmapper refreshes).
 

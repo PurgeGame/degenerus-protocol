@@ -48,27 +48,27 @@ Close the CATASTROPHE-class VRF-rotation orphan-index liveness defect in `update
 
 > SPEC (311) + IMPL (312). Single batched USER-APPROVED diff touching `DegenerusGameAdvanceModule.sol` (+ any VRF-config storage). Closes the §9d governance-VRF cluster.
 
-- [ ] **VRF-01**: After an emergency coordinator/subscription rotation while a mid-day lootbox RNG request is in flight, the bound index `lootboxRngWordByIndex[N]` resolves to a real (non-zero, VRF-derived) word — no same-day deterministic / entropy-0 traits. (Closes Scenario A.)
-- [ ] **VRF-02**: After such a rotation the protocol stays live — `requestLootboxRng`, `retryLootboxRng`, and the daily-drain advance gate remain reachable; no permanent revert / ~120-day freeze / forced premature game-over. (Closes Scenario B.)
-- [ ] **VRF-03**: Emergency rotation cannot break the rngLock freeze invariant — no VRF-participating slot (`vrfCoordinator`, `vrfSubscriptionId`, `vrfKeyHash`, `rngRequestTime`, `LR_MID_DAY`) is mutated mid-window in a way that changes any in-flight VRF-derived output. (Closes **HANDOFF-78/85/87/89/91** = V-137/V-155/V-157/V-159/V-161.)
-- [ ] **VRF-04**: VRF wiring is one-shot — `wireVrf` seals after init; a second wire reverts. (Closes **HANDOFF-86/88/90 + ADMA-01** = V-156/V-158/V-160.)
-- [ ] **VRF-05**: The rotation + wire protections cover the `DegenerusVault`-routed admin dispatch, verified by backward-trace. (**ADMA-02**.)
+- [x] **VRF-01**: After an emergency coordinator/subscription rotation while a mid-day lootbox RNG request is in flight, the bound index `lootboxRngWordByIndex[N]` resolves to a real (non-zero, VRF-derived) word — no same-day deterministic / entropy-0 traits. (Closes Scenario A.)
+- [x] **VRF-02**: After such a rotation the protocol stays live — `requestLootboxRng`, `retryLootboxRng`, and the daily-drain advance gate remain reachable; no permanent revert / ~120-day freeze / forced premature game-over. (Closes Scenario B.)
+- [x] **VRF-03**: Emergency rotation cannot break the rngLock freeze invariant — no VRF-participating slot (`vrfCoordinator`, `vrfSubscriptionId`, `vrfKeyHash`, `rngRequestTime`, `LR_MID_DAY`) is mutated mid-window in a way that changes any in-flight VRF-derived output. (Closes **HANDOFF-78/85/87/89/91** = V-137/V-155/V-157/V-159/V-161.)
+- [x] **VRF-04**: VRF wiring is one-shot — `wireVrf` seals after init; a second wire reverts. (Closes **HANDOFF-86/88/90 + ADMA-01** = V-156/V-158/V-160.)
+- [x] **VRF-05**: The rotation + wire protections cover the `DegenerusVault`-routed admin dispatch, verified by backward-trace. (**ADMA-02**.)
 
 ### DGAUD — Degenerette Refactor Audit (audit-only, `92b110bf`)
 
 > Audit of an already-landed change; no new fix expected unless the audit surfaces one.
 
-- [ ] **DGAUD-01**: The `92b110bf` storage-slot shift (removal of `playerDegeneretteEthWagered` + `topDegeneretteByLevel`) is confirmed safe pre-deploy — full-suite recompile clean; no storage collision with any retained slot.
-- [ ] **DGAUD-02**: `dailyHeroWagers` (the Jackpot RNG hero-override input) write-path is byte-identical after the refactor — removing the per-player/per-level tracking did not alter hero-wager accounting.
-- [ ] **DGAUD-03**: No dangling references to the removed mappings/views remain in `contracts/` or interfaces; off-chain leaderboard reconstruction from `BetPlaced` events is viable (events still emitted with the required fields).
-- [ ] **DGAUD-04**: Backlog rows touching the degenerette surface are re-verified against the refactored module — HANDOFF-01..03 (S-02 `dailyHeroWagers`), HANDOFF-18 (V-031 prizePool degenerette-bet), HANDOFF-81 (V-142 `degeneretteBets`), HANDOFF-82 (V-147 `prizePoolPendingPacked` frozen-branch) — disposition updated.
+- [x] **DGAUD-01**: The `92b110bf` storage-slot shift (removal of `playerDegeneretteEthWagered` + `topDegeneretteByLevel`) is confirmed safe pre-deploy — full-suite recompile clean; no storage collision with any retained slot.
+- [x] **DGAUD-02**: `dailyHeroWagers` (the Jackpot RNG hero-override input) write-path is byte-identical after the refactor — removing the per-player/per-level tracking did not alter hero-wager accounting.
+- [x] **DGAUD-03**: No dangling references to the removed mappings/views remain in `contracts/` or interfaces; off-chain leaderboard reconstruction from `BetPlaced` events is viable (events still emitted with the required fields).
+- [x] **DGAUD-04**: Backlog rows touching the degenerette surface are re-verified against the refactored module — HANDOFF-01..03 (S-02 `dailyHeroWagers`), HANDOFF-18 (V-031 prizePool degenerette-bet), HANDOFF-81 (V-142 `degeneretteBets`), HANDOFF-82 (V-147 `prizePoolPendingPacked` frozen-branch) — disposition updated.
 
 ### DELTA — Consolidate-Forward Delta Audit (terminal)
 
-- [ ] **DELTA-01**: Audit subject re-anchored — §3.A delta-surface table enumerates every `contracts/` commit from v44.0 closure HEAD through v45.0 closure HEAD (V-081 `9bcd582d`, jackpot `6e5acd7e`, degenerette `92b110bf`, + the VRF-rotation fix).
-- [ ] **DELTA-02**: V-081 (Phase 310 fix) audited as a delta surface — order-independence / penalty-dodge elimination / seed-invariance attested at source level (by construction, no dedicated regression per the ride-on-delta decision).
-- [ ] **DELTA-03**: Jackpot pending-pool fix `6e5acd7e` + regression `f3e21064` audited — yield-surplus obligations now include `prizePoolPendingPacked`; no over-distribution of pending ETH as yield; no new freeze/solvency surface.
-- [ ] **DELTA-04**: Degenerette refactor `92b110bf` delta covered (cross-refs DGAUD-01..04).
+- [x] **DELTA-01**: Audit subject re-anchored — §3.A delta-surface table enumerates every `contracts/` commit from v44.0 closure HEAD through v45.0 closure HEAD (V-081 `9bcd582d`, jackpot `6e5acd7e`, degenerette `92b110bf`, + the VRF-rotation fix).
+- [x] **DELTA-02**: V-081 (Phase 310 fix) audited as a delta surface — order-independence / penalty-dodge elimination / seed-invariance attested at source level (by construction, no dedicated regression per the ride-on-delta decision).
+- [x] **DELTA-03**: Jackpot pending-pool fix `6e5acd7e` + regression `f3e21064` audited — yield-surplus obligations now include `prizePoolPendingPacked`; no over-distribution of pending ETH as yield; no new freeze/solvency surface.
+- [x] **DELTA-04**: Degenerette refactor `92b110bf` delta covered (cross-refs DGAUD-01..04).
 
 ### VTST — VRF Regression + Freeze-Invariant Fuzz (Foundry, AGENT-COMMITTED)
 
@@ -81,16 +81,16 @@ Close the CATASTROPHE-class VRF-rotation orphan-index liveness defect in `update
 
 > SEQUENTIAL after IMPL + VTST complete, per `D-NN-ADVERSARIAL-02` carry. HYBRID invocation: `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT + `/zero-day-hunter` + `/economic-analyst` PARALLEL_SUBAGENT per `D-302-INVOKE-01`. `/degen-skeptic` OUT OF SCOPE per `D-271-ADVERSARIAL-02`. Skeptic filter per `feedback_skeptic_pass_before_catastrophe.md` before any elevation.
 
-- [ ] **SWP-01**: Red-team the VRF-rotation fix — rotation-spam / stuck-pending / double-request griefing, a new liveness-DoS, a new freeze violation, or a `wireVrf`-lock that breaks a legitimate ops path. RE-PASS per `D-284-ADVERSARIAL-RE-PASS-01` if a candidate materialises.
-- [ ] **SWP-02**: Composition pass across the consolidated delta surfaces — V-081 allocation/packing, jackpot pending-pool obligations, degenerette removal — any cross-surface composition attack or differential behaviour an attacker can game.
+- [x] **SWP-01**: Red-team the VRF-rotation fix — rotation-spam / stuck-pending / double-request griefing, a new liveness-DoS, a new freeze violation, or a `wireVrf`-lock that breaks a legitimate ops path. RE-PASS per `D-284-ADVERSARIAL-RE-PASS-01` if a candidate materialises.
+- [x] **SWP-02**: Composition pass across the consolidated delta surfaces — V-081 allocation/packing, jackpot pending-pool obligations, degenerette removal — any cross-surface composition attack or differential behaviour an attacker can game.
 
 ### Audit Deliverable + Closure (AUDIT / REG / CLS)
 
 > SOURCE-TREE FROZEN during the terminal phase. Single-file deliverable per `D-NN-FILES-01`; forward-cite zero-emission per `D-NN-FCITE-01`.
 
-- [ ] **AUDIT-01**: `audit/FINDINGS-v45.0.md` 9-section deliverable — §3 VRF-rotation fix attestation (orphan-index closed, liveness preserved, freeze-invariant intact under rotation, HANDOFF/ADMA rows closed) + §3.A delta-surface table + degenerette-audit disposition + jackpot pending-pool delta; §4 adversarial surfaces per SWP; `chmod 444` at close.
-- [ ] **REG-01**: LEAN regression — v44.0 closure NON-WIDENING (`MILESTONE_V44_AT_HEAD_6f0ba296…` surfaces not in v45 scope byte-identical); the EV-score / decimator / degenerette closures from `67e9ea6f` / `e5928fb8` remain intact; the v43 rngLock determinism harness still PASS.
-- [ ] **CLS-01**: Closure flip — emit `MILESTONE_V45_AT_HEAD_<sha>` in the deliverable + cross-document propagation targets; atomic ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS flip post-§9c per `D-NN-CLOSURE-01` carry.
+- [ ] **AUDIT-01** — **WAIVED (user-approved minimal close, 2026-05-23)**: the formal `audit/FINDINGS-v45.0.md` 9-section deliverable was NOT produced. The underlying audit substance is complete and lives in the planning artifacts: VRF-rotation fix attestation in `312-01-VERIFICATION.md` + `313-*` VERIFICATION + VTST-01..04; the §3.A delta-surface enumeration in `314-01-SUMMARY.md` + this file's REG-01 attribution; the §4 adversarial disposition in `314-01-ADVERSARIAL-LOG.md` (unanimous-NEGATIVE). Only the consolidated shippable report file is waived.
+- [x] **REG-01**: LEAN regression — v44.0 closure NON-WIDENING (`MILESTONE_V44_AT_HEAD_6f0ba296…` surfaces not in v45 scope byte-identical); the EV-score / decimator / degenerette closures from `67e9ea6f` / `e5928fb8` remain intact; the v43 rngLock determinism harness still PASS.
+- [x] **CLS-01**: Closure flip — emit `MILESTONE_V45_AT_HEAD_<sha>` in the deliverable + cross-document propagation targets; atomic ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS flip post-§9c per `D-NN-CLOSURE-01` carry.
 
 ---
 
@@ -119,34 +119,35 @@ Close the CATASTROPHE-class VRF-rotation orphan-index liveness defect in `update
 |-------------|-------|--------|
 | SPEC-01..04 | Phase 309 (SPEC) | Complete |
 | IMPL-01..05 | Phase 310 (IMPL) | Complete |
-| VRF-01 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-01 | Pending |
-| VRF-02 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-02 | Pending |
-| VRF-03 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-03 | Pending |
-| VRF-04 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-04 | Pending |
-| VRF-05 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-04 | Pending |
-| DGAUD-01 | Phase 314 (SWEEP) / 315 (TERMINAL) | Pending |
-| DGAUD-02 | Phase 314 (SWEEP) / 315 (TERMINAL) | Pending |
-| DGAUD-03 | Phase 314 (SWEEP) / 315 (TERMINAL) | Pending |
-| DGAUD-04 | Phase 314 (SWEEP) / 315 (TERMINAL) | Pending |
-| DELTA-01 | Phase 315 (TERMINAL) | Pending |
-| DELTA-02 | Phase 315 (TERMINAL) | Pending |
-| DELTA-03 | Phase 315 (TERMINAL) | Pending |
-| DELTA-04 | Phase 315 (TERMINAL) | Pending |
+| VRF-01 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-01 | Complete (fix `a303ae18`; VERIFICATION 312/313) |
+| VRF-02 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-02 | Complete (liveness preserved; VTST-02) |
+| VRF-03 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-03 | Complete (freeze-invariant intact; VTST-03) |
+| VRF-04 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-04 | Complete (wireVrf constructor-only-reachable, re-proven Phase 314) |
+| VRF-05 | Phase 311 (SPEC) → 312 (IMPL) — proven by VTST-04 | Complete (admin-dispatch reach; VTST-04) |
+| DGAUD-01 | Phase 314 (SWEEP) | Complete (forge build clean + dangling-ref ZERO) |
+| DGAUD-02 | Phase 314 (SWEEP) | Complete (dailyHeroWagers behavioral identity) |
+| DGAUD-03 | Phase 314 (SWEEP) | Complete (no dangling refs; BetPlaced reconstruction viable; index→level accepted convention) |
+| DGAUD-04 | Phase 314 (SWEEP) | Complete (HANDOFF-01/02/03/18/81/82 carry-forward) |
+| DELTA-01 | Phase 314 enumeration + REG-01 attribution | Complete (substance; formal §3.A table waived — minimal close) |
+| DELTA-02 | Phase 309/310 + Phase 314 economist/auditor | Complete (V-081 order-independent by construction) |
+| DELTA-03 | Phase 314 economist (SWP-02.E.5/E.6) | Complete (jackpot pending-pool surplus-neutral) |
+| DELTA-04 | Phase 314 (cross-refs DGAUD-01..04) | Complete (degenerette delta) |
 | VTST-01 | Phase 313 (TST) | Complete (`f6cc92c9` + `611deb20`) |
 | VTST-02 | Phase 313 (TST) | Complete |
 | VTST-03 | Phase 313 (TST) | Complete |
 | VTST-04 | Phase 313 (TST) | Complete |
-| SWP-01 | Phase 314 (SWEEP) | Pending |
-| SWP-02 | Phase 314 (SWEEP) | Pending |
-| AUDIT-01 | Phase 315 (TERMINAL) | Pending |
-| REG-01 | Phase 315 (TERMINAL) | Pending |
-| CLS-01 | Phase 315 (TERMINAL) | Pending |
+| SWP-01 | Phase 314 (SWEEP) | Complete (unanimous-NEGATIVE) |
+| SWP-02 | Phase 314 (SWEEP) | Complete (unanimous-NEGATIVE) |
+| AUDIT-01 | (minimal close) | **WAIVED** — FINDINGS-v45.0.md deliverable skipped per user; disposition in `314-01-ADVERSARIAL-LOG.md` + 312/313 VERIFICATION |
+| REG-01 | Minimal close (2026-05-23) | Complete — PASS (non-widening attested; every contracts/test diff vs `MILESTONE_V44_AT_HEAD` attributable to a v45-scope commit) |
+| CLS-01 | Minimal close (2026-05-23) | Complete — signal `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` emitted; doc flip done (FINDINGS deliverable waived) |
 
 **Coverage:**
 - v45.0 active requirements: 22 total (5 VRF + 4 DGAUD + 4 DELTA + 4 VTST + 2 SWP + 3 AUDIT/REG/CLS)
 - Groundwork (complete): 9 (4 SPEC + 5 IMPL)
 - Mapped to phases: 31 / 31 ✓ — 0 orphaned
+- **CLOSE STATUS (2026-05-23, minimal close): 30 / 31 satisfied; 1 WAIVED (AUDIT-01 — formal FINDINGS-v45.0.md deliverable skipped per user). REG-01 PASS (non-widening). CLS-01 signal `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` emitted. Phase 315 TERMINAL not run; its substance (delta audit + adversarial disposition + regression) is discharged via Phases 309–314 + this inline REG-01. 0 NEW_FINDINGS; KNOWN-ISSUES.md UNMODIFIED.**
 
 ---
 *Requirements defined: 2026-05-20 (V-081) · redefined 2026-05-22 (consolidate-forward)*
-*Last updated: 2026-05-22 after v45.0 redefinition — pre-roadmapper. Phase boundaries 311–315 finalised by the roadmapper.*
+*Last updated: 2026-05-23 — v45.0 CLOSED via user-approved minimal close (REG-01 PASS + closure flip inline; AUDIT-01 FINDINGS deliverable waived).*
