@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
-status: executing
-last_updated: "2026-05-23T12:14:14.000Z"
+status: ready_to_plan
+last_updated: 2026-05-23T12:23:35.036Z
 last_activity: 2026-05-23 -- Phase 313 plan 07 (review-driven test-integrity cleanup) complete — closed 313-REVIEW.md CR-01/CR-02 + WR-01/02/03; vacuous slot-38/39 reads corrected to authoritative 37/keccak(index,38); non-tautological VTST-01 pre-fix arm; VTST-04 real source grep (fs_permissions + catch->fail()); empirical SC-5 re-verify 0 NEW failures vs 41546f16; ZERO contracts/ mutation
 progress:
   total_phases: 7
@@ -11,6 +11,7 @@ progress:
   total_plans: 15
   completed_plans: 15
   percent: 71
+stopped_at: Phase 313 complete (7/7) — ready to discuss Phase 314
 ---
 
 # Project State
@@ -20,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 313 — TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation
+**Current focus:** Phase 314 — sweep — 3 skill adversarial + degenerette audit (sweep)
 
 ## Current Position
 
-Phase: 313 (TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation) — COMPLETE
-Plan: 7 of 7 COMPLETE (VTST-01..04 proven + suite-wide SC-5 verification + review-driven test-integrity cleanup done). 313-07 closed all five 313-REVIEW.md findings honestly: CR-01/CR-02 corrected the vacuous slot-38/39 reads in VRFCore/VRFPathCoverage to the authoritative slot 37 (LR_INDEX) / keccak(index,38) (lootboxRngWordByIndex) — flipping 3 slot-drift failures to PASS while empirically reclassifying the 2 genuinely pre-existing baseline failures (test_midDayRequest_doesNotBlockDaily, test_gapBackfillWithMidDayPending_fuzz fail at pre-fix 41546f16 too — NOT masked, NOT weakened); WR-01 fixed the misleading slot comment (+ adjacent _readRngWordCurrent slot 4→3); WR-02 rewrote the VTST-01 pre-fix arm to be non-tautological via a nonzero FILLABLE_SENTINEL (assertion would FAIL if a real word were present); WR-03 granted read-only fs_permissions for ./contracts so VTST-04's structural one-shot test runs the real DegenerusAdmin.sol grep (exactly one gameAdmin.wireVrf( call site) with catch→fail(). Empirical SC-5 re-verify (corrected HEAD test tree vs pre-fix 41546f16, restored byte-identically sha256 cd665891, never committed): comm -23 HEAD\\pre-fix = EMPTY → 0 NEW failing functions (HEAD 56 ⊆ pre-fix 65). 4 new VTST contracts PASS; v43 RngLockDeterminism harness PASS + byte-identical. Commits 7febd03d (CR-01/02) + 8c4b5fb6 (WR-01/02/03). ZERO contracts/ mutation across the whole phase (test/** + foundry.toml only).
-Status: Phase 313 complete (incl. review-cleanup 313-07) — ready for Phase 314 (SWEEP — 3-skill adversarial + degenerette audit)
+Phase: 314
+Plan: Not started
+Status: Ready to plan
 Resume: Phase 314 — SWEEP — 3-Skill Adversarial (VRF fix + delta surfaces) + Degenerette Audit (SWP-01..02 + DGAUD-01..04). Depends on Phase 312 IMPL + Phase 313 TST (both complete). Per `feedback_pause_at_contract_phase_boundaries.md`, confirm direction before advancing past this sensitive-contract phase boundary even with auto_advance ON. Next: /gsd-plan-phase 314 (then /gsd-execute-phase 314).
-Last activity: 2026-05-23 -- Phase 313 plan 07 (review-driven test-integrity cleanup) complete — closed 313-REVIEW.md CR-01/CR-02 + WR-01/02/03; vacuous slot-38/39 reads corrected; non-tautological VTST-01 pre-fix arm; VTST-04 real source grep; empirical SC-5 re-verify 0 NEW failures vs `41546f16`; v43 harness byte-identical + PASS; ZERO contracts/ mutation
+Last activity: 2026-05-23
 
 ## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
 
