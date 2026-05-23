@@ -4,14 +4,14 @@ milestone: v45.0
 milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
 status: ready_to_plan
 last_updated: 2026-05-23T08:56:03.886Z
-last_activity: 2026-05-23 -- Phase 312 execution started
+last_activity: 2026-05-23 -- Phase 313 planned
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 8
   completed_plans: 8
   percent: 43
-stopped_at: Phase 312 complete (1/1) — ready to discuss Phase 313
+stopped_at: Phase 313 planned (6 plans, 2 waves) — ready to execute
 ---
 
 # Project State
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 ## Current Position
 
 Phase: 313
-Plan: Not started
-Status: Ready to plan
-Resume: .planning/phases/312-impl-vrf-rotation-fix-single-batched-user-approved-diff-impl/312-CONTEXT.md (context gathered — D-06/07/08 + VER-01..04; carries 311-SPEC.md D-01..D-05; next: /gsd:plan-phase 312)
-Last activity: 2026-05-23
+Plan: Planned (6 plans, 2 waves) — not started
+Status: Ready to execute
+Resume: .planning/phases/313-tst-vrf-regression-freeze-invariant-fuzz-under-rotation-tst/313-01-PLAN.md (6 plans: 01 VTST-01 orphan-index, 02 VTST-02 liveness, 03 VTST-03 freeze-invariant fuzz, 04 VTST-04 wireVrf one-shot, 05 regression-migration of the 17 fix-induced test regressions, 06 suite-verify+AGENT-COMMIT; Wave 1 = 01-05 parallel (disjoint files), Wave 2 = 06; all autonomous, test-tree only, ZERO contracts/ mutation per D-43N-AUDIT-ONLY-01; next: /gsd-execute-phase 313)
+Last activity: 2026-05-23 — Phase 313 planned
 
 ## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
 

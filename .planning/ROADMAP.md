@@ -111,6 +111,16 @@
 
 **Depends on:** Phase 312 IMPL (tests target the patched VRF-rotation surface)
 
+**Plans:** 6 plans (2 waves; all `autonomous: true` — test-tree only, AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`; ZERO `contracts/` mutation per `D-43N-AUDIT-ONLY-01`)
+
+Plans:
+- [ ] 313-01-PLAN.md — VTST-01 orphan-index reproduction (pre-fix entropy-0 consequence arm + post-fix real-VRF-word-in-[N] after a real mid-flight rotation) [Wave 1]
+- [ ] 313-02-PLAN.md — VTST-02 liveness-after-rotation (mid-day + daily branches, rngWordCurrent!=0 short-circuit, nothing-in-flight no-op, retryLootboxRng failsafe) [Wave 1]
+- [ ] 313-03-PLAN.md — VTST-03 freeze-invariant fuzz under rotation (byte-identical VRF output vs no-rotation baseline; extends the v43 RngLockDeterminism harness) [Wave 1]
+- [ ] 313-04-PLAN.md — VTST-04 wireVrf one-shot lock (access-guard form per the user-approved no-init-lock deviation + structural one-shot attestation + routed updateVrf revert) [Wave 1]
+- [ ] 313-05-PLAN.md — regression migration: the 17 fix-induced test regressions migrated to the preserve+re-issue behavior (Class A assertions + Class B swap/resume helpers) [Wave 1]
+- [ ] 313-06-PLAN.md — suite-wide verification (4 new VTST contracts + v43 harness + 17 migrated regressions PASS; no new failures beyond the pre-fix baseline) + AGENT-COMMIT [Wave 2]
+
 **Success Criteria** (what must be TRUE):
   1. Orphan-index reproduction PASSES — pre-fix asserts the entropy-0 defect, post-fix asserts a real VRF word in `lootboxRngWordByIndex[N]` after rotation (VRF-01 by VTST-01).
   2. Liveness-after-rotation PASSES — `requestLootboxRng`/`retryLootboxRng`/daily-drain advance all succeed post-rotation, no permanent revert (VRF-02 by VTST-02).
