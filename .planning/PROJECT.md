@@ -10,7 +10,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-**Active milestone:** none — v45.0 CLOSED 2026-05-23 (user-approved minimal close). Next milestone TBD (e.g. the `project_v47_remove_afking_eth_autorebuy` draft) via `/gsd-new-milestone`.
+**Active milestone:** v46.0 — Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal (started 2026-05-23; phases continue at 316; combined add+remove for one test pass per user decision).
 **Last shipped:** v45.0 — VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit (CLOSED 2026-05-23, minimal close; closure signal `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801`; VRF_ROTATION_ORPHAN RESOLVED_AT_V45 via `a303ae18`; ROTATION_LIVENESS PRESERVED; FREEZE_INVARIANT INTACT_UNDER_ROTATION; 10 of 10 VRF_CLUSTER_ANCHORS RESOLVED; CONSOLIDATE_FORWARD_DELTA AUDITED (V-081 + jackpot-pending-pool + degenerette); Phase 314 3-skill adversarial pass unanimous-NEGATIVE; REG-01 PASS non-widening; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED. AUDIT-01 formal `audit/FINDINGS-v45.0.md` deliverable WAIVED per user — disposition in `314-01-ADVERSARIAL-LOG.md`). Prior: v44.0 — sStonk Per-Day Redemption Refactor (2026-05-20; `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`; 7/7 SSTONK_VIOLATIONS RESOLVED; 13/13 INVARIANTS PROVEN; 0 NEW_FINDINGS).
 **Prior shipped:** v43.0 — Total rngLock Determinism Audit — Every VRF Input Frozen at Commitment (2026-05-19; closure signal `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`; 0 of 0 F-43-NN; 111 of 111 CATALOG_VIOLATIONS DEFERRED_TO_V44; 142-anchor v44.0 handoff register; KNOWN_ISSUES_UNMODIFIED)
 **Second-prior shipped:** v42.0 — Mint-Batch Event/Sig Cleanup + Hero-Override Weighted Roll + Deity-Pass Gold Nerf + Lootbox RNG Retry (2026-05-18; closure signal `MILESTONE_V42_AT_HEAD_81d7c94bc924edb3429f6dc16ee33280fc11c7c2`; 0 of 0 F-42-NN; 1 Tier-1 ACCEPT_AS_DOCUMENTED on (xiv) retryLootboxRng; KNOWN_ISSUES_UNMODIFIED)
@@ -25,7 +25,36 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 **Contract HEAD anchor (v40.0 closure):** `cd549499` (carried forward as deeper audit-baseline NON-WIDENING anchor)
 
-## Current Milestone: v45.0 VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
+## Current Milestone: v46.0 Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
+
+**Goal:** Ship the permissionless "do-work" crank and the AfKing auto-rebuy subscription (`StreakKeeperV2` moved in-tree as `AfKing`, wired in via PROTO-01..05), and in the SAME batched diff remove the legacy in-game AFKing mode + free ETH auto-rebuy it succeeds — one source-tree change, one test pass, one adversarial audit, one `MILESTONE_V46_AT_HEAD_<sha>` closure.
+
+**Audit baseline → subject:** v45.0 closure HEAD `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` → v46.0 closure HEAD. Subject = the batched ADD+REMOVE diff across `DegenerusGame` + modules + `BurnieCoin`/`BurnieCoinflip` + `DegenerusVault` + `StakedDegenerusStonk` + `ContractAddresses` + the in-tree `AfKing` keeper (paired `degenerus-utilities` rework).
+
+**Two interdependent halves** (design locked in `.planning/PLAN-CRANK-DO-WORK-INCENTIVE.md` + `.planning/PLAN-V47-REMOVE-AFKING-ETH-AUTOREBUY.md`):
+
+**ADD — crank + subscription:**
+- **(A) In-game do-work crank** — permissionless resolve of degenerette bets + lootbox opens; gas-pegged coinflip-credit reward (deferred mint); WWXRP zero-reward; per-item `onlySelf`+try/catch isolation; faucet bounded by purchase-gate + gas-peg + coinflip-credit illiquidity.
+- **(B) AfKing auto-rebuy subscription** — `StreakKeeperV2` → `AfKing` (separate contract, audited in-tree); cursor sweep (concurrent self-partition, every-entry-every-day, stall-escalating bounty); pass-OR-pay renewal; **flat (min 1) + reinvest% max-semantics** quantity model; funding waterfall claimable→pool→skip; **two-tier skip-kill** (normal subs cancelled, Vault/sDGNRS exempt by pinned identity).
+- **PROTO-01..05** — expose `hasAnyLazyPass`; `BurnieCoin.burnForKeeper` (all-or-nothing); keeper `creditFlip` authorization; keeper-gated `batchPurchase` (try/catch + slice-refund); pinned keeper address constant.
+- **Protocol-owned subs at init** — sDGNRS (claimable-only, flat 1 lootbox + 2% reinvest + BURNIE auto-rebuy `takeProfit=0`) and Vault (claimable-only, flat 1 lootbox); both free-renewing via their Whale pass.
+
+**REMOVE — legacy succession:**
+- Delete AFKing mode + free ETH auto-rebuy entirely (DegenerusGame surface, `AutoRebuyState` storage, jackpot `_processAutoRebuy`/`_calcAutoRebuy`, Vault `gameSet*` wrappers + sStonk init `setAfKingMode`, interface decls).
+- Collapse BURNIE flip recycle to flat 75bps (drop the deity-scaled afKing tier).
+- **KEEP `_hasAnyLazyPass`, exposed as the keeper's pass gate** — the single cross-half reconciliation (overrides the standalone-removal dead-code instinct).
+
+**Key context / constraints:**
+- Single batched USER-APPROVED contract diff at IMPL per the contract-edit feedback memories; pre-launch redeploy-fresh (storage-layout break fine, no migration); test/planning/docs AGENT-committed.
+- The removal is a **prerequisite** for the subscription's reinvest mode — the old free auto-rebuy intercepts winnings before they reach `claimable`; the subscription reads *from* claimable. Combining avoids a coexistence window where both act on winnings.
+- VRF-freeze angle: removing the free ETH auto-rebuy **retires** freeze obligations (it consumed a VRF word + player-controllable state in the rng window).
+- Phase numbering continues from 314 → v46.0 starts at **Phase 316** (matching the crank plan's 316-320 + the folded-in removal).
+
+**Out of scope for v46.0:**
+- System-chore cranks (advanceGame/jackpot); degenerette payout-EV / placement changes; bet/box ledger storage re-key; liquid-BURNIE rewards; off-chain indexer / webpage (separate frontend track).
+- Deity-pass utilities outside the BURNIE recycle bonus (trait/gold mechanics untouched).
+
+## Completed Milestone: v45.0 VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
 
 **Redefined 2026-05-22.** v45.0 originally scoped only the V-081 lootbox EV-cap fix (phases 309 SPEC + 310 IMPL, both complete). It never shipped — TST/SWEEP/TERMINAL did not run — and three contract changes then landed on `main`: V-081 IMPL `9bcd582d`, the jackpot pending-pool yield-surplus fix `6e5acd7e` (+ regression `f3e21064`), and the degenerette off-chain-leaderboard refactor `92b110bf`. Rather than close the narrow V-081 milestone against a baseline the tree had already moved past, v45.0 is **consolidated forward**: phases 309/310 stand as completed groundwork and the milestone is rescoped to the confirmed VRF-rotation liveness CATASTROPHE plus a single delta-audit of everything since the v44.0 baseline.
 
@@ -881,6 +910,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+*Last updated: 2026-05-23 — Milestone v46.0 started (Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal). Combined the add half (crank/subscription — `PLAN-CRANK-DO-WORK-INCENTIVE.md`) and the remove half (legacy AFKing mode + free ETH auto-rebuy — `PLAN-V47-REMOVE-AFKING-ETH-AUTOREBUY.md`) into ONE batched diff / test pass / audit per user decision ("combine so we only test once"). v45.0 demoted to Completed. Phase numbering continues from 314 → v46.0 starts at Phase 316. Prior footer below.*
+
 *Last updated: 2026-05-22 — Milestone v45.0 REDEFINED (consolidate-forward): VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit. The original V-081-only scope (309 SPEC + 310 IMPL, both complete) never shipped; rescoped to the confirmed VRF-rotation orphan-index liveness CATASTROPHE (`updateVrfCoordinatorAndSub`) + the §9d governance-VRF cluster (HANDOFF-78/85/86/87/88/89/90/91 + ADMA-01/02), the degenerette-refactor audit (`92b110bf`), and a single delta-audit of every contract change since v44.0 (V-081 `9bcd582d` + jackpot pending-pool `6e5acd7e` + degenerette). V-081 rides on the delta-audit (no dedicated regression); ~115 backlog anchors stay deferred. Phases 309/310 retained as groundwork; active work continues at Phase 311. Prior footer below.*
 
 *Last updated: 2026-05-20 — Milestone v45.0 started (Close the Lootbox EV-Cap Open-Ordering Hole / V-081). Single-surface contract change closing the last strict-definition self-manipulation freeze violation: bonus-only cap (penalties never consume the 10-ETH cap) + purchase-time tally with maximal packing so `openLootBox` applies a frozen, order-independent allocation. v44.0 demoted to Completed; its phases (304–308) archived to `.planning/milestones/v44.0-phases/`. Phase numbering continues from 308. Scope is tight per user — VRF-freeze housekeeping + v44 bookkeeping cleanup deferred. Prior footer below.*

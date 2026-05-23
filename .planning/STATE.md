@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v45.0
-milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
-status: shipped
-last_updated: 2026-05-23T13:40:02.230Z
-last_activity: 2026-05-23 -- v45.0 CLOSED via user-approved minimal close (REG-01 PASS; AUDIT-01 deliverable waived)
+milestone: v46.0
+milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
+status: planning
+last_updated: "2026-05-23T14:07:13.239Z"
+last_activity: 2026-05-23
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 16
-  completed_plans: 16
-  percent: 100
-stopped_at: v45.0 CLOSED (minimal close) — no active phase; Phase 315 TERMINAL deliverable WAIVED per user
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,11 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 
 ## Current Position
 
-Phase: — (v45.0 milestone CLOSED)
+Phase: Not started (defining requirements)
 Plan: —
-Status: SHIPPED — v45.0 closed via minimal close
-Resume: **v45.0 CLOSED (minimal close, 2026-05-23).** Closure signal `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801`. Phases 309–314 complete; **Phase 315 TERMINAL NOT run** — its substance (delta audit + adversarial disposition + LEAN regression + closure flip) discharged across Phases 309–314 + an inline **REG-01 PASS** (non-widening: every `contracts/`+`test/` diff vs `MILESTONE_V44_AT_HEAD_6f0ba296…` attributable to a v45-scope commit). Verdict: `VRF_ROTATION_ORPHAN RESOLVED_AT_V45; ROTATION_LIVENESS PRESERVED; FREEZE_INVARIANT INTACT_UNDER_ROTATION; 10 of 10 VRF_CLUSTER_ANCHORS RESOLVED; CONSOLIDATE_FORWARD_DELTA AUDITED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED; CLOSED_VIA_MINIMAL_CLOSE`. 30/31 requirements satisfied; **AUDIT-01 WAIVED** (formal `audit/FINDINGS-v45.0.md` 9-section deliverable skipped per user — disposition lives in `314-01-ADVERSARIAL-LOG.md` + 312/313 VERIFICATION). To produce a publishable findings report later, re-open Phase 315. NEXT MILESTONE: v46/v47 (e.g. the `project_v47_remove_afking_eth_autorebuy` draft) via `/gsd-new-milestone`.
-Last activity: 2026-05-23 -- v45.0 CLOSED (minimal)
+Status: Defining requirements
+Last activity: 2026-05-23 — Milestone v46.0 started
 
 ## Current Milestone Phases (v45.0 — CLOSED 2026-05-23, user-approved minimal close)
 
