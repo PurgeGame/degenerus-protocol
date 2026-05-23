@@ -95,8 +95,31 @@ Plans:
   4. RM-01..06 applied — grep for `afKing`/`AFKING_`/`setAutoRebuy`/`autoRebuyState`/`AutoRebuyState`/`_processAutoRebuy`/`_calcAutoRebuy`/`settleFlipModeChange`/`_afKingRecyclingBonus`/`_afKingDeityBonusHalfBpsWithLevel`/`deactivateAfKingFromCoin`/`syncAfKingLazyPassFromCoin` returns ZERO matches outside `contracts/test`+`mocks`; the jackpot ETH credit path no longer consumes a VRF word (entropy param dropped); BURNIE flip auto-rebuy still works end-to-end at flat 75bps with the deity tier gone; `_hasAnyLazyPass` KEPT + exposed (RM-04); storage-layout slot constants re-derived after the `AutoRebuyState` deletion. **JGAS-02** — if JGAS-01 locked removal, grep for `resumeEthPool`/`SPLIT_CALL1`/`SPLIT_CALL2`/`_resumeDailyEth`/`STAGE_JACKPOT_ETH_RESUME`/`call1Bucket` returns ZERO matches outside `contracts/test`+`mocks`, the daily ETH jackpot distributes all 305 winners in ONE call (no resume stage), and slots are re-derived after the `resumeEthPool` deletion.
   5. USER-APPROVED diff committed exactly once per `feedback_batch_contract_approval.md` (never pre-approved per `feedback_never_preapprove_contracts.md`; not pushed before user review of the diff per `feedback_manual_review_before_push.md`); every cited file:line re-grep-verified pre-patch per `feedback_verify_call_graph_against_source.md`; keeper/planning/docs AGENT-COMMITTED.
 
-**Plans:** TBD
+**Plans:** 7 plans in 5 waves
 **UI hint:** yes
+
+Plans:
+**Wave 1** *(pre-patch verification — zero source mutation; the ledger every edit reads first)*
+
+- [ ] 317-01-PLAN.md — Re-grep-verify the full RM/PROTO/crank + JGAS-02 file:line set against LIVE source, re-confirm the keeper transitional-state + D-01b reconciliation, and capture the pre-deletion test baseline-failure ledger (RM-06 attribution). Output `317-LEDGER.md`.
+
+**Wave 2** *(parallel contract edits — zero file overlap; all leave contracts/ dirty)*
+
+- [ ] 317-02-PLAN.md — BURNIE-side PROTO + RM-03: `burnForKeeper` all-or-nothing `onlyAfKing` (PROTO-02), keeper authorized in `onlyFlipCreditors` (PROTO-03), pinned `AF_KING` (PROTO-05), and the flip-recycle collapse to flat 75bps with the win/loss RNG path byte-unmodified (RM-03).
+- [ ] 317-03-PLAN.md — `DegenerusGame.sol` surface: `hasAnyLazyPass` view (PROTO-01), keeper-gated `batchPurchase` (PROTO-04), the permissionless do-work crank (CRANK-01..04 + REW-01..04, box cursor on the v45 `a303ae18` coupling), RM-01 afKing-mode deletion, the SUB-09 ctor-Deity-grant preservation, and the `IDegenerusGame` interface edits.
+- [ ] 317-04-PLAN.md — `contracts/AfKing.sol` NEW in-tree canonical keeper (D-01): parameterless cursor sweep + `reinvestPct`/`windowPaid` packing + two-tier skip-kill by pinned identity + the `batchPurchase` switch + all-or-nothing `burnForKeeper` charge + the single gas-pegged `creditFlip` bounty (SUB-01..08 + REW + PROTO-04 call site).
+
+**Wave 3** *(blocked on Waves 1-2 — needs the AfKing.subscribe + IDegenerusGame signatures)*
+
+- [ ] 317-05-PLAN.md — RM-02 (free ETH auto-rebuy + entropy drop) + JGAS-01/02 (the daily-ETH two-call split removal across JackpotModule + AdvanceModule at the preserved 305 ceiling) + RM-05 (Vault/sStonk cascade prune) + the SUB-09 self-subscribe init wiring across the six shared modules/storage/Vault/sStonk files.
+
+**Wave 4** *(blocked on all contract edits — forge inspect runs on the final tree)*
+
+- [ ] 317-06-PLAN.md — RM-06 combined −2/−1 slot re-derivation from ONE `forge inspect`, contracts/test+mocks compile-fixes-only (D-03 → `forge build` PASS = SC#1), and the `../degenerus-utilities` single-source reconciliation to the canonical AfKing (D-01b).
+
+**Wave 5** *(the single USER-APPROVAL gate — autonomous: false)*
+
+- [ ] 317-07-PLAN.md — Assemble the D-04 review package (requirement-mapped summary + full git diff + `forge inspect` before/after), the blocking USER-APPROVAL checkpoint gating the ONE batched `contracts/` commit (incl. AfKing.sol) + the paired keeper diff (D-02), then the deferred planning/docs/test commits.
 
 ### Phase 318: TST — Subscription + Crank Correctness + Removal Proofs (TST)
 
