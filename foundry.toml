@@ -15,6 +15,11 @@ evm_version = "paris"
 gas_limit = 30_000_000_000
 block_gas_limit = 30_000_000_000
 
+# Read-only filesystem access scoped to ./contracts so structural attestation tests can
+# vm.readFile the source (e.g. VrfWireOneShot greps DegenerusAdmin.sol for the single
+# gameAdmin.wireVrf( call site). No write access; no path outside ./contracts.
+fs_permissions = [{ access = "read", path = "./contracts" }]
+
 # Remappings for OpenZeppelin and forge-std
 remappings = [
     "@openzeppelin/=node_modules/@openzeppelin/",

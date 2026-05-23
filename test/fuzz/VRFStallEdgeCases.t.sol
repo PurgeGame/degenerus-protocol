@@ -86,12 +86,12 @@ contract VRFStallEdgeCases is DeployProtocol {
         return uint256(vm.load(address(game), slot));
     }
 
-    /// @dev Read rngWordCurrent directly from storage slot 4.
+    /// @dev Read rngWordCurrent directly from storage slot 3.
     function _readRngWordCurrent() internal view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(uint256(SLOT_RNG_WORD_CURRENT))));
     }
 
-    /// @dev Read vrfRequestId directly from storage slot 5.
+    /// @dev Read vrfRequestId directly from storage slot 4.
     function _readVrfRequestId() internal view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(uint256(SLOT_VRF_REQUEST_ID))));
     }

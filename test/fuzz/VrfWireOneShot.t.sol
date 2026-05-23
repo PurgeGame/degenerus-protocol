@@ -100,16 +100,16 @@ contract VrfWireOneShot is DeployProtocol {
     ///      delegatecall `msg.sender`) can fire `wireVrf` exactly once because it lives in the
     ///      constructor and DegenerusAdmin exposes no post-construction forwarder.
     ///
-    ///      Preferred form: read DegenerusAdmin.sol and assert the call site
-    ///      `gameAdmin.wireVrf(` appears exactly once (the constructor at :458). The
-    ///      `interface ... { function wireVrf(...) external; }` declaration is NOT a call
-    ///      site, so the call-site count is the load-bearing one-shot invariant.
+    ///      Form: read DegenerusAdmin.sol and assert the call site `gameAdmin.wireVrf(`
+    ///      appears exactly once (the constructor at :458). The
+    ///      `interface ... { function wireVrf(...) external; }` declaration uses a different
+    ///      receiver and is NOT a `gameAdmin.wireVrf(` call site, so the call-site count is the
+    ///      load-bearing one-shot invariant.
     ///
-    ///      foundry.toml has no `fs_permissions`, so `vm.readFile` reverts in this repo. The
-    ///      try/catch falls back to the documented embedded attestation: the 312-01-SUMMARY
-    ///      call-graph trace establishes the single constructor call site, and
-    ///      `lastVrfProcessed() != 0` confirms that single wire ran. If `fs_permissions` is
-    ///      ever granted, the source-level grep-count assertion runs automatically.
+    ///      foundry.toml grants read `fs_permissions` for ./contracts, so `vm.readFile`
+    ///      succeeds and the source-level grep-count assertion runs. If the read ever reverts
+    ///      (permissions removed), the catch branch calls `fail()` rather than passing on a
+    ///      vacuous fallback -- the structural invariant must be genuinely proven, not assumed.
     function test_structuralOneShot_wireVrfOnlyFromConstructor() public {
         try vm.readFile("contracts/DegenerusAdmin.sol") returns (
             string memory src
@@ -121,13 +121,9 @@ contract VrfWireOneShot is DeployProtocol {
                 "DegenerusAdmin calls wireVrf exactly once (the constructor :458)"
             );
         } catch {
-            // Documented fallback (no fs_permissions): the 312-01-SUMMARY call-graph trace
-            // establishes the single constructor call site; the single wire is observable
-            // on-chain via lastVrfProcessed() != 0.
-            assertTrue(
-                game.lastVrfProcessed() != 0,
-                "one-shot by construction: the single constructor wire ran (lastVrfProcessed != 0)"
-            );
+            // No silent equivalent fallback: a reverting read means the structural invariant
+            // was NOT verified, so the test fails to force fs_permissions to be enabled.
+            fail();
         }
     }
 
