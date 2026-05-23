@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
 status: executing
-last_updated: "2026-05-23T09:59:39.144Z"
-last_activity: 2026-05-23 -- Phase 313 execution started
+last_updated: "2026-05-23T10:28:58.911Z"
+last_activity: 2026-05-23 -- Phase 313 plan 02 (VTST-02 liveness-after-rotation) complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 14
-  completed_plans: 8
-  percent: 57
+  completed_plans: 10
+  percent: 64
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 ## Current Position
 
 Phase: 313 (TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation) — EXECUTING
-Plan: 2 of 6 (313-01 VTST-01 complete — `f6cc92c9` post-fix arm + `611deb20` pre-fix arm)
-Status: Executing Phase 313 (Wave 1 — 313-01 done; 313-02..05 remaining, then Wave 2 = 313-06)
-Resume: .planning/phases/313-tst-vrf-regression-freeze-invariant-fuzz-under-rotation-tst/313-02-PLAN.md (6 plans: 01 VTST-01 orphan-index DONE, 02 VTST-02 liveness, 03 VTST-03 freeze-invariant fuzz, 04 VTST-04 wireVrf one-shot, 05 regression-migration of the 17 fix-induced test regressions, 06 suite-verify+AGENT-COMMIT; Wave 1 = 01-05 parallel (disjoint files), Wave 2 = 06; all autonomous, test-tree only, ZERO contracts/ mutation per D-43N-AUDIT-ONLY-01; next: /gsd-execute-phase 313)
-Last activity: 2026-05-23 -- Phase 313 plan 01 (VTST-01 orphan-index) complete — VrfRotationOrphanIndex.t.sol both arms PASS, ZERO contracts/ mutation
+Plan: 3 of 6 (313-01 VTST-01 complete; 313-02 VTST-02 liveness complete — `2f438ea2` VrfRotationLiveness.t.sol, 6 tests PASS)
+Status: Executing Phase 313 (Wave 1 — 313-01/02 done; 313-03/04/05 remaining, then Wave 2 = 313-06)
+Resume: .planning/phases/313-tst-vrf-regression-freeze-invariant-fuzz-under-rotation-tst/313-03-PLAN.md (6 plans: 01 VTST-01 orphan-index DONE, 02 VTST-02 liveness DONE, 03 VTST-03 freeze-invariant fuzz, 04 VTST-04 wireVrf one-shot, 05 regression-migration of the 17 fix-induced test regressions, 06 suite-verify+AGENT-COMMIT; Wave 1 = 01-05 parallel (disjoint files), Wave 2 = 06; all autonomous, test-tree only, ZERO contracts/ mutation per D-43N-AUDIT-ONLY-01; next: /gsd-execute-phase 313)
+Last activity: 2026-05-23 -- Phase 313 plan 02 (VTST-02 liveness-after-rotation) complete — VrfRotationLiveness.t.sol 6 tests PASS, ZERO contracts/ mutation
 
 ## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
 
@@ -459,6 +459,7 @@ Audit deliverables:
 | Phase 307 P01 | 0h30m | 7 tasks | 6 files |
 | Phase 309 P02 | 12 | 2 tasks | 1 files |
 | Phase 311 P01 | ~18min | 2 tasks | 1 file (311-SPEC.md skeleton + §0 grep-verified manifest + §0.X §9d map + §0.Y vault reach trace) + 1 SUMMARY |
+| Phase 313 P02 | 50 | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -530,3 +531,6 @@ Audit deliverables:
 - [Phase 311]: D-311-01-ADMA02-LINE-DRIFT: ADMA-02 §9d.4 cites `AdvanceModule.sol:1677`; HEAD `updateVrfCoordinatorAndSub` is at `:1688` (+11 drift). Recorded DRIFTED with delta; verified HEAD line `:1688` governs all §1–§6 assertions. Drain-gate revert anchors also refined: precise reverts are `:213` + `:238` (same-day) and `:271` (new-day) vs CONTEXT `:209-238`/`:269`.
 - [Phase 311]: D-311-01-9D-MAP: §0.X maps all 10 §9d cluster anchors to closing changes — freeze sub-cluster {HANDOFF-78/85/87/89/91} → D-01/D-02 (VRF-03); wireVrf sub-cluster {86/88/90/ADMA-01} → D-03/D-04 (VRF-04); ADMA-02 vault reach → D-03+D-01/D-02 (VRF-05). Maximalist-catalog framing per `project_rnglock_audit_disposition` (rows are a catalog, not live player vectors; admin rotation EXEMPT-class). VRF-01..05 remain Pending in REQUIREMENTS traceability — SPEC designs closure, IMPL(312)+TST(313) prove it.
 - [Phase ?]: 311-02: D-05 orphan-recovery CONFIRMED-COVERED; D-03 wireVrf lock uses address(vrfCoordinator)!=address(0); D-04 _setVrfConfig collapses only the 3-field config write (:509 stays inline); VRF-01..05 closed by §2/§3/§4/§5
+- [Phase ?]: 313-02: VTST-02 liveness-after-rotation proven — all 3 updateVrfCoordinatorAndSub branches + retryLootboxRng failsafe drain to rngLocked()==false, no permanent RngNotReady() (VRF-02)
+- [Phase ?]: 313-02: rngWord==1 is the rngGate 'request new RNG' sentinel (AdvanceModule:298) — daily fuzz words must exclude {0,1} or the post-fulfilment drain livelocks
+- [Phase ?]: 313-02: liveness drain helper re-throws RngNotReady() (catches ONLY NotTimeYet) so the OLD-bug permanent-revert mode fails the test naturally — never silently asserted (T-313-02-01)

@@ -125,7 +125,7 @@ Plans:
 **Wave 1**
 
 - [x] 313-01-PLAN.md — VTST-01 orphan-index reproduction (pre-fix entropy-0 consequence arm + post-fix real-VRF-word-in-[N] after a real mid-flight rotation) [Wave 1]
-- [ ] 313-02-PLAN.md — VTST-02 liveness-after-rotation (mid-day + daily branches, rngWordCurrent!=0 short-circuit, nothing-in-flight no-op, retryLootboxRng failsafe) [Wave 1]
+- [x] 313-02-PLAN.md — VTST-02 liveness-after-rotation (mid-day + daily branches, rngWordCurrent!=0 short-circuit, nothing-in-flight no-op, retryLootboxRng failsafe) [Wave 1]
 - [ ] 313-03-PLAN.md — VTST-03 freeze-invariant fuzz under rotation (byte-identical VRF output vs no-rotation baseline; extends the v43 RngLockDeterminism harness) [Wave 1]
 - [ ] 313-04-PLAN.md — VTST-04 wireVrf one-shot lock (access-guard form per the user-approved no-init-lock deviation + structural one-shot attestation + routed updateVrf revert) [Wave 1]
 - [ ] 313-05-PLAN.md — regression migration: the 17 fix-induced test regressions migrated to the preserve+re-issue behavior (Class A assertions + Class B swap/resume helpers) [Wave 1]

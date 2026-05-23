@@ -73,7 +73,7 @@ Close the CATASTROPHE-class VRF-rotation orphan-index liveness defect in `update
 ### VTST — VRF Regression + Freeze-Invariant Fuzz (Foundry, AGENT-COMMITTED)
 
 - [x] **VTST-01**: Orphan-index reproduction — a pre-fix harness reproduces Scenario A (rotation mid-flight → `lootboxRngWordByIndex[N]==0` → deterministic traits); post-fix asserts a real VRF word lands in [N]. (Proves VRF-01.) — `test/fuzz/VrfRotationOrphanIndex.t.sol` (`f6cc92c9` + `611deb20`)
-- [ ] **VTST-02**: Liveness-after-rotation — post-fix, `requestLootboxRng` / `retryLootboxRng` / daily-drain advance all succeed after a rotation; no permanent revert / forced game-over. (Proves VRF-02.)
+- [x] **VTST-02**: Liveness-after-rotation — post-fix, `requestLootboxRng` / `retryLootboxRng` / daily-drain advance all succeed after a rotation; no permanent revert / forced game-over. (Proves VRF-02.)
 - [ ] **VTST-03**: Freeze-invariant fuzz under rotation — perturb a coordinator/sub rotation between VRF request and fulfilment; assert every VRF-derived output is byte-identical to the no-rotation baseline (extends the v43 `RngLockDeterminism.t.sol` harness). (Proves VRF-03.)
 - [ ] **VTST-04**: `wireVrf` one-shot lock — a second wire reverts; the vault-routed wire path reverts. (Proves VRF-04 / VRF-05.)
 
@@ -133,7 +133,7 @@ Close the CATASTROPHE-class VRF-rotation orphan-index liveness defect in `update
 | DELTA-03 | Phase 315 (TERMINAL) | Pending |
 | DELTA-04 | Phase 315 (TERMINAL) | Pending |
 | VTST-01 | Phase 313 (TST) | Complete (`f6cc92c9` + `611deb20`) |
-| VTST-02 | Phase 313 (TST) | Pending |
+| VTST-02 | Phase 313 (TST) | Complete |
 | VTST-03 | Phase 313 (TST) | Pending |
 | VTST-04 | Phase 313 (TST) | Pending |
 | SWP-01 | Phase 314 (SWEEP) | Pending |
