@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
-status: planning
-last_updated: "2026-05-23T21:35:37.481Z"
+status: executing
+last_updated: "2026-05-23T21:50:00.000Z"
 last_activity: 2026-05-23
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 18
-  completed_plans: 16
-  percent: 44
+  completed_plans: 17
+  percent: 42
 ---
 
 # Project State
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 ## Current Position
 
 Phase: 318
-Plan: 01 complete (deploy-fixture repair) — Wave 1 linchpin done; Wave 2 (318-02..06) unblocked
-Status: Executing — 318-01 of 6 complete
+Plan: 02 complete (SAFE-01 crank faucet-resistance) — Wave 2 in progress; 318-03..06 remain
+Status: Executing — 318-02 of 6 complete
 Last activity: 2026-05-23
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
@@ -37,7 +37,7 @@ Last activity: 2026-05-23
 |-------|------|------|------------------------------|--------|
 | 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 · JGAS-01 (locks all 42) | Complete — ready for verification (5/5 plans: 316-01 · 316-02 · 316-05 · 316-03 · 316-04 done) |
 | 317 | IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework | IMPL | PROTO-02..05 · CRANK-01..04 · REW-01..04 · SUB-01..08 · RM-01/02/03/05/06 · JGAS-02 | Not started |
-| 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | In progress — 318-01 done (fixture repair; SAFE-04 facet; setUp green, suite 197→532) |
+| 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | In progress — 318-01 (fixture repair, SAFE-04) + 318-02 (SAFE-01 crank faucet-resistance, CrankFaucetResistance.t.sol 10/10 green) done |
 | 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 · JGAS-04 | Not started |
 | 320 | AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure | TERMINAL | (re-attests all 42; owns 0 primarily) | Not started |
 

@@ -64,7 +64,7 @@ Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`S
 
 ### SAFE — Safety / non-brick / faucet
 
-- [ ] **SAFE-01**: Faucet bounded by the three caller-independent locks (purchase-gate + gas-peg + coinflip-credit illiquidity); self-crank/Sybil round-trip ≤ 0; WWXRP 0 reward.
+- [x] **SAFE-01**: Faucet bounded by the three caller-independent locks (purchase-gate + gas-peg + coinflip-credit illiquidity); self-crank/Sybil round-trip ≤ 0; WWXRP 0 reward.
 - [ ] **SAFE-02**: Non-brick (BOTH cranks AND `batchPurchase`) — per-item `onlySelf` self-call + try/catch (skip + refund-if-applicable, reward only successes); caller-bounded iteration; cancel un-brickable; no double-buy reentrancy (in-context sub-call rolls back on revert).
 - [ ] **SAFE-03**: Concurrency — same-block sweeps process correctly (cursor self-partition + `lastSweptDay`); no double-buy.
 - [ ] **SAFE-04**: RNG-freeze intact — resolution stays post-unlock (`RngNotReady` guard), placement guard untouched; the ETH-auto-rebuy removal **retires** freeze obligations (one fewer VRF consumer + three fewer player-mutable in-window inputs) rather than weakening any.
@@ -145,7 +145,7 @@ Each requirement maps to exactly one phase (primary verification owner). The ful
 | RM-05 | Phase 317 | Complete |
 | RM-06 | Phase 317 | Complete |
 | JGAS-02 | Phase 317 | Complete |
-| SAFE-01 | Phase 318 | Pending |
+| SAFE-01 | Phase 318 | Complete |
 | SAFE-02 | Phase 318 | Pending |
 | SAFE-03 | Phase 318 | Pending |
 | SAFE-04 | Phase 318 | In progress — 318-01 satisfied the slot/recompile facet (suite green, no slot drift, RM-06 empirically confirmed); RNG-freeze post-unlock proof pending 318-05 |

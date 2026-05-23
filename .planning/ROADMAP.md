@@ -146,7 +146,7 @@ Plans:
 
 **Wave 2** *(parallel — disjoint test-file ownership; each `depends_on: 318-01`)*
 
-- [ ] 318-02-PLAN.md — SAFE-01 faucet resistance: self-crank/Sybil round-trip ≤ 0 (sub-gas fixed peg + illiquid coinflip credit), WWXRP `currency==3` zero reward, one-reward-per-item, no pre-RNG-word resolution; + REW one-creditFlip-per-tx acceptance. (`test/fuzz/CrankFaucetResistance.t.sol`)
+- [x] 318-02-PLAN.md — SAFE-01 faucet resistance: self-crank/Sybil round-trip ≤ 0 (sub-gas fixed peg + illiquid coinflip credit), WWXRP `currency==3` zero reward, one-reward-per-item, no pre-RNG-word resolution; + REW one-creditFlip-per-tx acceptance. (`test/fuzz/CrankFaucetResistance.t.sol`)
 - [ ] 318-03-PLAN.md — SAFE-02 non-brick across `crankBets`/`crankBoxes`/`batchPurchase` (skip-and-continue, slice-refund, batch-level pre-check, reentrancy rollback, cancel un-brickable) + SUB/PROTO acceptance (pass-OR-pay, `burnForKeeper` all-or-nothing, gas-pegged bounty). (`CrankNonBrick.t.sol` + `AfKingSubscription.t.sol`)
 - [ ] 318-04-PLAN.md — SAFE-03 concurrency (same-block cursor self-partition, exactly-once, tombstone-on-cancel no-miss, no dead-slot buildup) + funding waterfall + two-tier pinned-identity skip-kill (Vault/sDGNRS exempt, no settable flag). (`AfKingConcurrency.t.sol` + `AfKingFundingWaterfall.t.sol`)
 - [ ] 318-05-PLAN.md — SAFE-04 RNG-freeze intact (post-unlock resolve, placement guard untouched, freeze obligations RETIRED by the ETH-auto-rebuy removal) + REMOVE proofs (grep-clean kill set + behavioral: ETH→claimable, flat 75bps recycle) + `processCoinflipPayouts`/`rngWord & 1`/KNOWN_ISSUES byte-unmodified. (`RngFreezeAndRemovalProofs.t.sol`)
