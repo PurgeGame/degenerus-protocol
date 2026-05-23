@@ -198,3 +198,113 @@ The permanent Deity bit makes `hasAnyLazyPass(VAULT/SDGNRS)` return true forever
 - `AutoRebuyCalc` → orphaned only AFTER `_calcAutoRebuy` deletion (sole consumer JackpotModule `:831` + the `_calcAutoRebuy` return type) → DELETE post-cut, re-grep to confirm.
 
 **No `contracts/` file modified by this task** (`git diff --stat -- contracts/` empty).
+
+---
+
+## JGAS-02 Footprint Ledger
+
+**Built:** 2026-05-23 (Plan 317-01, Task 2). The JGAS daily-ETH two-call-split deletion footprint re-grep-verified across `modules/DegenerusGameJackpotModule.sol` + `modules/DegenerusGameAdvanceModule.sol` + `storage/DegenerusGameStorage.sol`. ZERO source mutation.
+
+### Deletion set — `modules/DegenerusGameJackpotModule.sol`
+
+| Symbol | SPEC line | Live line | Verdict | Action |
+|--------|-----------|-----------|---------|--------|
+| `SPLIT_NONE = 0` | 197 | 197 | MATCH | DELETE split-mode tag |
+| `SPLIT_CALL1 = 1` | 199 | 199 | MATCH | DELETE |
+| `SPLIT_CALL2 = 2` | 201 | 201 | MATCH | DELETE |
+| `JACKPOT_MAX_WINNERS = 160` | 219 | 219 | MATCH | **DELETE — DEAD on removal.** Sole functional use = split-threshold at `:480` (`splitMode = (totalWinners <= JACKPOT_MAX_WINNERS) ? SPLIT_NONE : SPLIT_CALL1`). **It is a split-routing threshold, NOT a winner-count cap.** |
+| `resumeEthPool` jackpot resume-check `if` | 348 (comment) | **349** (`if (resumeEthPool != 0)`) | **DRIFT (+1 cosmetic)** | DELETE — requirement cites the leading comment line `:348`; live `if` guard `:349` |
+| `resumeEthPool` read (inside `_resumeDailyEth`) | 1201 | 1201 (`uint256(resumeEthPool)`) | MATCH | DELETE |
+| `resumeEthPool` read+zero (call 2) | 1252–1253 | 1252 (`ethPool = uint256(resumeEthPool)`) / 1253 (`resumeEthPool = 0`) | MATCH | DELETE |
+| `resumeEthPool` write (call 1) | 1348 (gated 1347) | 1348 (`resumeEthPool = uint128(ethPool)`); gate `if (splitMode == SPLIT_CALL1)` at 1347 | MATCH | DELETE |
+| `_resumeDailyEth` decl | 1186 | 1186 (called at `:350`) | MATCH | DELETE |
+| `splitMode` param (in `_processDailyEth`) | 1248 | 1248 | MATCH | DELETE param |
+| `splitMode` routing | 1251 / 476 / 480 / 501 | 1251 (`if (splitMode == SPLIT_CALL2)`) / 476 (`uint8 splitMode;`) / 480 (threshold) / 501 (call arg) | MATCH | DELETE routing; collapse to single-call. Additional routing reads at `:1271`/`:1287`/`:1288`/`:1347` |
+| `call1Bucket` mask decl | 1270 | 1270 (`bool[4] memory call1Bucket;`) | MATCH | DELETE |
+| `call1Bucket` build | 1272/1274/1276 | 1272 / 1274 / 1276 | MATCH | DELETE |
+| `call1Bucket` skip-routing | 1287–1288 | 1287 (`SPLIT_CALL1 && !call1Bucket[traitIdx]`) / 1288 (`SPLIT_CALL2 && call1Bucket[traitIdx]`) | MATCH | DELETE |
+| split-threshold branch | 476–483 | 476–482 (`splitMode` derivation) | MATCH | collapse to unconditional single-call |
+| `_processDailyEth(... splitMode ...)` call | 493–503 | `splitMode` arg passed at `:501` | MATCH | collapse to single-call |
+
+### Deletion set — `modules/DegenerusGameAdvanceModule.sol`
+
+| Symbol | SPEC line | Live line | Verdict | Action |
+|--------|-----------|-----------|---------|--------|
+| `STAGE_JACKPOT_ETH_RESUME = 8` | 70 | 70 (`uint8 private constant … = 8`) | MATCH (value=8 exact) | DELETE constant |
+| stage assignment `stage = STAGE_JACKPOT_ETH_RESUME;` | 455 | 455 | MATCH | DELETE |
+| whole resume-check block | 452–455 (comment-anchored) | **block 453–457**: comment `:452`, `if (resumeEthPool != 0)` `:453`, `payDailyJackpot(true, lvl, rngWord)` `:454`, `stage = …` `:455`, `break;` `:456`, close `}` `:457` | **DRIFT (+1 cosmetic)** | DELETE the entire `:453-457` block — requirement cites comment `:452`; live `if`-block opens `:453` |
+
+### Deletion set — `storage/DegenerusGameStorage.sol`
+
+| Symbol | SPEC line | Live line | Verdict | Action |
+|--------|-----------|-----------|---------|--------|
+| `uint128 internal resumeEthPool;` | 994 | 994 | MATCH | DELETE (forge slot 33, own slot — the −2 slot-shift consequence is owned by the RM-06 slot-shift work; footprint item only here) |
+
+### PRESERVE set — explicitly NOT in the deletion set
+
+| Symbol | Live line | Verdict | Note |
+|--------|-----------|---------|------|
+| `DAILY_ETH_MAX_WINNERS = 305` | 227 | MATCH — **PRESERVE** | the winner-count ceiling stays; mechanism-only removal at the SAME 305 ceiling |
+| `DAILY_JACKPOT_SCALE_MAX_BPS = 63_600` | 248 | MATCH — **PRESERVE** | the 6.36× max-scale stays |
+| 159 / 95 / 50 / 1 bucket derivation | (sum=305) | **PRESERVE** | zero winner-count / bucket-scaling / payout-EV change |
+
+### Two cosmetic `+1` resume-check DRIFTs — re-confirmed
+- **Jackpot** (`DegenerusGameJackpotModule.sol`): requirement cites `:348` (comment "Resume check: call 2 of two-call daily ETH split."); live `if (resumeEthPool != 0)` guard at `:349`. Cosmetic doc-vs-`if` offset; no symbol drift, no MISSING.
+- **Advance** (`DegenerusGameAdvanceModule.sol`): requirement cites `:452-455`; live block is `:453-456` (close brace `:457`), comment at `:452`. Cosmetic offset; no symbol drift, no MISSING.
+
+### Stage numbers NOT load-bearing (re-confirmed)
+`stage` is a function-local `uint8` inside `advanceGame` (never stored). `STAGE_JACKPOT_ETH_RESUME` is only ASSIGNED (`:455`) and EMITTED via the `Advance` event — ZERO `==` comparisons anywhere. Resume is driven by the `resumeEthPool != 0` STORAGE read (`:453`/`:349`), NOT by any stored stage value. Renumbering 9/10/11 → 8/9/10 is OPTIONAL/cosmetic; deleting constant 8 + its single assignment + the resume-check block is sufficient and behaviorally complete.
+
+### `_unlockRng`-not-in-resume-branch — J5 freeze trace re-confirmed
+`_unlockRng` call sites in `DegenerusGameAdvanceModule.sol` are `:331`, `:402`, `:467` (coin-tickets stage), `:629`, and the decl `:1772`. **NONE fall inside the resume-check block `:453-457`.** The ETH-resume branch holds `rngLockedFlag` SET across the entire split (call 1 → next advanceGame → call 2); the same `randWord` is re-consumed in call 2 (`_resumeDailyEth` re-rolls the winning traits from the identical held word). Single-call collapses two same-word consumptions into ONE; `_unlockRng` placement is UNCHANGED (still `:467`). **VERDICT (re-confirmed): JGAS is freeze-invariant-SAFE** — removes a VRF-word re-consumption point + a cross-tx `resumeEthPool` carry → a VRF-rotation-robustness IMPROVEMENT (no cross-tx state to orphan; strictly less rotation-exposed than the two-call split). Only residual is the gas-fits liveness question (JGAS-04, Phase 319) — NOT a freeze/manipulability concern. AUDIT-320 re-attests under emergency rotation.
+
+---
+
+## Live Keeper Transitional-State Table
+
+**Built:** 2026-05-23 (Plan 317-01, Task 2). Re-grep-verified against `../degenerus-utilities/contracts/StreakKeeperV2.sol` live source (the keeper to be reworked into the canonical in-tree `contracts/AfKing.sol`). Per Pitfall 1 — downstream edits author the INTENDED end-state, NOT this mixed live source.
+
+### Occurrence-count snapshot (live)
+
+| Symbol | Live count | Interpretation |
+|--------|-----------:|----------------|
+| `pullForKeeper` | 19 | still PRESENT — pre-rework; PROTO-02 switches these to `burnForKeeper` |
+| `mintForKeeper` | 5 | still PRESENT — pre-rework |
+| `burnForKeeper` | 5 | PRESENT keeper-SIDE (keeper already calls it) — but the BurnieCoin TARGET is ADD-ABSENT (verified Task 1: no `burnForKeeper` in `contracts/BurnieCoin.sol`). The keeper is partially ahead of the BurnieCoin target — the exact transitional mix. |
+| `creditFlip` | 2 | partial — full `creditFlip` rework genuinely unbuilt |
+| `sweepCursor` | **0** | genuinely UNBUILT — the parameterless daily-reset cursor is a Phase-317 ADD |
+| `reinvestPct` | **0** | genuinely UNBUILT — the reinvest% field (packed into `Sub` free bytes) is a Phase-317 ADD |
+| `windowPaid` | **0** | genuinely UNBUILT — the 1-bit flag is a Phase-317 ADD |
+
+### Live signatures (pre-rework — to be reworked, NOT trusted as end-state)
+
+| Symbol | Live line | Live signature | Rework target |
+|--------|-----------|----------------|---------------|
+| `subscribe` | 632 | `subscribe(bool drainGameCreditFirst, uint8 dailyQuantity)` external payable | ADD `reinvestPct` (SUB-04 quantity model — `effective = max(dailyQuantity, floor(claimable × reinvestPct / price))`) |
+| `sweep` | 931 | `sweep(uint256 startIdx, uint256 count)` external returns (uint256 bountyEarned) | REPLACE with parameterless `sweep(uint256 maxCount)` + internal `sweepCursor` daily-reset (SUB-03) |
+
+### Game-side coupling (the only coupling — re-confirmed CLEAN)
+- `IGame(ContractAddresses.GAME).hasAnyLazyPass(msg.sender)` at keeper `:671` (subscribe gate) and `hasAnyLazyPass(player)` at `:974` (renewal-sweep gate) — both MATCH SPEC. This is the kept-and-exposed PROTO-01 view, NOT a deleted symbol.
+- **Keeper RM-symbol cross-check = 0 matches** across the full RM-deletion set (`syncAfKingLazyPassFromCoin`/`afKingModeFor`/`afKingActivatedLevelFor`/`setAfKingMode`/`deactivateAfKingFromCoin`/`setAutoRebuy`/`autoRebuyState`/`AutoRebuyState`/`_processAutoRebuy`/`_calcAutoRebuy`/`settleFlipModeChange`).
+- **Keeper JGAS-symbol cross-check = 0 matches** (`SPLIT_*`/`resumeEthPool`/`STAGE_JACKPOT_ETH_RESUME`/`_resumeDailyEth`/`call1Bucket`/`splitMode`).
+- **CONCLUSION:** The RM-* + JGAS-02 deletions are dependency-safe w.r.t. the keeper **IFF PROTO-01 (`hasAnyLazyPass` rename) ships in the SAME batched Phase-317 diff.** The keeper's only game-side coupling survives the deletion unchanged.
+
+---
+
+## D-01b Single-Source / Deploy Reconciliation
+
+**Built:** 2026-05-23 (Plan 317-01, Task 2). D-01b is a HOW-item: how `../degenerus-utilities` consumes/deploys the canonical `contracts/AfKing.sol` (the in-tree, audited source per D-01) rather than maintaining a divergent `StreakKeeperV2`, plus the `AF_KING` pinned-address alignment.
+
+### Current cross-repo state (live)
+- **Game-side `contracts/ContractAddresses.sol`:** has NO `AF_KING` / `KEEPER` constant yet (verified — PROTO-05 ADD-ABSENT). Pinning form to mirror: the two-line `address internal constant <NAME> = address(0x…);` block (e.g. `COINFLIP :35`, `VAULT :37`, `SDGNRS :47`), header-commented as "Compile-time constants populated by the deploy script."
+- **Utilities `../degenerus-utilities/contracts/ContractAddresses.sol`:** `address internal constant STREAK_KEEPER_V2 = address(0); // TODO: pin on release/sepolia in Phase 17 — per D13-04` (line 35). The keeper's own pinned slot is still a zero placeholder.
+- **Utilities deploy/wiring assets present:** `script/DeployStreakKeeperV2.s.sol` (the deploy script that produces the keeper address), `script/PatchAddressesForFork.sh` (patches `ContractAddresses.sol` with deploy-predicted addresses), `test/StreakKeeperV2.fork.t.sol` + `test/StreakKeeperV2.unit.t.sol` (the fork/unit harness).
+- **No `AfKing.sol` exists in utilities yet** (only unrelated doc-prose hits in utilities `.planning/`); the keeper file is still named `StreakKeeperV2.sol`.
+
+### Reconciliation path (recorded for downstream IMPL)
+1. **Single source of truth = `degenerus-audit/contracts/AfKing.sol`** (D-01). The utilities repo must NOT keep a divergent `StreakKeeperV2.sol` copy of the reworked logic.
+2. **Consumption mechanism (utilities side):** the utilities `script/DeployStreakKeeperV2.s.sol` (→ to be renamed/repointed for AfKing) deploys the canonical AfKing source. Practical options the IMPL chooses between: (a) import/symlink the canonical `degenerus-audit/contracts/AfKing.sol` into the utilities build via a remapping, or (b) keep the deploy script in utilities but point it at the canonical source path. Either way the LOGIC lives once in `degenerus-audit/contracts/AfKing.sol`.
+3. **`AF_KING` pinned-address alignment (PROTO-05 + SUB-06):** the address PROTO-05 pins into game-side `ContractAddresses.sol` MUST equal the address the utilities deploy predicts/produces for the keeper. The existing utilities `PatchAddressesForFork.sh` + `STREAK_KEEPER_V2` placeholder is the alignment mechanism — the deploy pipeline predicts the keeper address and patches BOTH repos' `ContractAddresses.sol` to the same literal. The keeper gates (PROTO-02 `onlyAfKing`, PROTO-03 `onlyFlipCreditors` extension, PROTO-04 `batchPurchase` gate) all key on the game-side pinned `AF_KING` constant — un-spoofable only if it equals the deploy-predicted keeper address.
+4. **Keeper-diff approval discipline (D-02):** the utilities AfKing rework diff is ALSO presented for explicit USER review before commit (same review moment as the protocol diff) — the commit-guard hook does NOT watch the other repo, so this gate is enforced manually by the executor pausing for approval at the Phase-317 contract-boundary wave.
+
+**No `contracts/` file modified by Task 2** (`git diff --stat -- contracts/` empty).
