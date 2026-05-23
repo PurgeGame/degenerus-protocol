@@ -54,7 +54,13 @@
   4. The REMOVE design + reconciliation is locked — PROTO-01/RM-04 = KEEP+EXPOSE `_hasAnyLazyPass` & delete the rest of afKing (overrides the dead-code instinct); the RM-01..06 deletion footprint enumerated (afKing mode, `AutoRebuyState`, jackpot `_processAutoRebuy`/`_calcAutoRebuy` + entropy-param drop, BURNIE recycle → flat 75bps dropping deity tier, Vault/sStonk cascade + interface decls); storage-layout slot-constant re-derivation plan; VRF-freeze-obligation retirement noted.
   5. Every cited file:line across `DegenerusGame`/modules/`BurnieCoin`/`BurnieCoinflip`/`DegenerusVault`/`StakedDegenerusStonk`/`ContractAddresses` + the `StreakKeeperV2` keeper grep-verified against source HEAD per `feedback_verify_call_graph_against_source.md`; zero "by construction" / "single fn reaches all paths" claims; the SPEC confirms the keeper does NOT depend on anything RM-* deletes (esp. the lazy-pass sync); zero `contracts/` + zero `test/` mutations.
 
-**Plans:** TBD
+**Plans:** 4 plans
+
+Plans:
+- [ ] 316-01-PLAN.md — Lock the ADD-half design: do-work crank entry signatures + work-type encoding, reward/charge model, batchPurchase shape, subscription cursor sweep + authorization + pass-gate, and the 5 PROTO signatures (PROTO-01).
+- [ ] 316-02-PLAN.md — Lock the REMOVE footprint + reconciliation: PROTO-01/RM-04 KEEP+EXPOSE _hasAnyLazyPass, the verified RM-01..06 deletion footprint, the storage slot-shift re-derivation plan, and the VRF-freeze-obligation retirement (RM-04).
+- [ ] 316-03-PLAN.md — Resolve the open items: quantity model + funding waterfall + two-tier skip-kill by pinned identity, the SUB-09 protocol-owned subs at init, OPEN-B/OPEN-C/denomination, and the user-ratified whale-pass-expiry renewal funding (SUB-09).
+- [ ] 316-04-PLAN.md — Author the call-graph attestation table (SC#5) + the 38-requirement design-coverage map and assemble the final 316-SPEC.md (PROTO-01, RM-04).
 
 ### Phase 317: IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework (IMPL)
 
