@@ -137,7 +137,20 @@ Plans:
   4. RNG-freeze intact (SAFE-04) — resolution stays post-unlock behind the `RngNotReady` guard, the placement guard is untouched, and the removal proofs hold: old afKing/ETH-auto-rebuy paths grep-clean + ETH jackpot winnings always credit to claimable, BURNIE recycle = flat 75bps unconditional (no deity scaling, no under/over-credit). **JGAS-03** — the daily ETH jackpot pays all 305 winners correctly in ONE call (every bucket, exact amounts, none missed/double-paid, gas under limit) and the split path is behaviorally gone (no `STAGE_JACKPOT_ETH_RESUME` entered).
   5. `forge build` + the full suite PASS — storage-layout slot constants re-derived with no slot-index drift; `KNOWN_ISSUES` + the BURNIE win/loss RNG path (`processCoinflipPayouts`, `rngWord & 1`) byte-UNMODIFIED; AGENT-COMMITTED test commit(s) per `feedback_no_contract_commits.md`.
 
-**Plans:** TBD
+**Plans:** 6 plans in 2 waves
+
+Plans:
+**Wave 1** *(the fixture-repair linchpin — dependency-zero; all coverage plans block on it)*
+
+- [ ] 318-01-PLAN.md — Repair the Foundry deploy fixture: deploy a live AfKing keeper at `ContractAddresses.AF_KING` before the SUB-09 self-subscribe runs (add `AF_KING` to `predictAddresses.js` `DEPLOY_ORDER` before VAULT + `DeployProtocol.sol` nonce-matched deploy + re-patch the address constants), un-bricking ~336 tests and empirically validating the 317-08 slot re-derivation (SAFE-04 facet: suite recompiles green, no slot drift).
+
+**Wave 2** *(parallel — disjoint test-file ownership; each `depends_on: 318-01`)*
+
+- [ ] 318-02-PLAN.md — SAFE-01 faucet resistance: self-crank/Sybil round-trip ≤ 0 (sub-gas fixed peg + illiquid coinflip credit), WWXRP `currency==3` zero reward, one-reward-per-item, no pre-RNG-word resolution; + REW one-creditFlip-per-tx acceptance. (`test/fuzz/CrankFaucetResistance.t.sol`)
+- [ ] 318-03-PLAN.md — SAFE-02 non-brick across `crankBets`/`crankBoxes`/`batchPurchase` (skip-and-continue, slice-refund, batch-level pre-check, reentrancy rollback, cancel un-brickable) + SUB/PROTO acceptance (pass-OR-pay, `burnForKeeper` all-or-nothing, gas-pegged bounty). (`CrankNonBrick.t.sol` + `AfKingSubscription.t.sol`)
+- [ ] 318-04-PLAN.md — SAFE-03 concurrency (same-block cursor self-partition, exactly-once, tombstone-on-cancel no-miss, no dead-slot buildup) + funding waterfall + two-tier pinned-identity skip-kill (Vault/sDGNRS exempt, no settable flag). (`AfKingConcurrency.t.sol` + `AfKingFundingWaterfall.t.sol`)
+- [ ] 318-05-PLAN.md — SAFE-04 RNG-freeze intact (post-unlock resolve, placement guard untouched, freeze obligations RETIRED by the ETH-auto-rebuy removal) + REMOVE proofs (grep-clean kill set + behavioral: ETH→claimable, flat 75bps recycle) + `processCoinflipPayouts`/`rngWord & 1`/KNOWN_ISSUES byte-unmodified. (`RngFreezeAndRemovalProofs.t.sol`)
+- [ ] 318-06-PLAN.md — JGAS-03 single-call 305-winner jackpot correctness (every bucket 159/95/50/1 paid, exact per-winner amounts, none missed/double-paid, total == pool, single call fits < 30M gas worst-case-first, split behaviorally gone + grep-clean). (`JackpotSingleCallCorrectness.t.sol`)
 
 ### Phase 319: GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration (GAS)
 
