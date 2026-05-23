@@ -992,6 +992,11 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 // score+1 and baseLevel+1 (cachedLevel + 1, DIV-1) are packed into
                 // lootboxPurchasePacked after score computation below
                 emit LootBoxIdx(buyer, uint32(lbIndex), lbDay);
+                // First deposit for this (index, buyer): enqueue the box index for
+                // the permissionless box do-work crank cursor. The consumer-side
+                // walk gates each index on lootboxRngWordByIndex != 0 (VRF
+                // orphan-index protection), so enqueue is producer-only here.
+                IDegenerusGame(address(this)).enqueueBoxForCrank(lbIndex, buyer);
             } else {
                 if (storedDay != lbDay) revert E();
             }

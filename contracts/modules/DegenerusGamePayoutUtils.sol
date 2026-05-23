@@ -2,7 +2,6 @@
 pragma solidity 0.8.34;
 
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
-import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
 /// @dev Shared payout helpers for jackpot-related modules.
 abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
@@ -16,16 +15,6 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
     uint256 internal constant HALF_WHALE_PASS_PRICE =
         2.25 ether;
 
-    struct AutoRebuyCalc {
-        bool toFuture;
-        bool hasTickets;
-        uint24 targetLevel;
-        uint32 ticketCount;
-        uint256 ethSpent;
-        uint256 reserved;
-        uint256 rebuyAmount;
-    }
-
     /// @dev Credit ETH to a player's claimable winnings balance.
     /// @param beneficiary Address to credit.
     /// @param weiAmount Amount in wei to credit.
@@ -35,53 +24,6 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
             claimableWinnings[beneficiary] += weiAmount;
         }
         emit PlayerCredited(beneficiary, beneficiary, weiAmount);
-    }
-
-    /// @dev Calculate auto-rebuy ticket conversion for a jackpot payout.
-    ///      Reserves take-profit multiples, converts remainder to tickets at a
-    ///      probabilistically selected future level (1-4 levels ahead).
-    /// @param beneficiary Player address (mixed into entropy for level selection).
-    /// @param weiAmount Total ETH payout to process.
-    /// @param entropy RNG seed for target level selection.
-    /// @param state Player's auto-rebuy configuration (enabled, take-profit, afKing mode).
-    /// @param currentLevel Current game level for target offset calculation.
-    /// @param bonusBps Standard auto-rebuy ticket bonus in basis points.
-    /// @param bonusBpsAfKing Affiliate-king mode ticket bonus in basis points.
-    /// @return c Calculated rebuy parameters (target level, ticket count, reserved amount).
-    function _calcAutoRebuy(
-        address beneficiary,
-        uint256 weiAmount,
-        uint256 entropy,
-        AutoRebuyState memory state,
-        uint24 currentLevel,
-        uint16 bonusBps,
-        uint16 bonusBpsAfKing
-    ) internal pure returns (AutoRebuyCalc memory c) {
-        if (!state.autoRebuyEnabled) return c;
-
-        if (state.takeProfit != 0) {
-            c.reserved = (weiAmount / state.takeProfit) * state.takeProfit;
-        }
-        c.rebuyAmount = weiAmount - c.reserved;
-
-        uint256 levelOffset = (uint256(
-            keccak256(abi.encode(entropy, beneficiary, weiAmount))
-        ) & 3) + 1; // 1-4 levels ahead
-        c.toFuture = levelOffset > 1; // +1 → next (25%), +2/+3/+4 → future (75%)
-        c.targetLevel = currentLevel + uint24(levelOffset);
-
-        uint256 ticketPrice = PriceLookupLib.priceForLevel(c.targetLevel) >> 2;
-        if (ticketPrice == 0) return c;
-
-        uint256 baseTickets = c.rebuyAmount / ticketPrice;
-        if (baseTickets == 0) return c;
-
-        c.hasTickets = true;
-        c.ethSpent = baseTickets * ticketPrice;
-
-        uint256 bonusTickets = (baseTickets *
-            (state.afKingMode ? bonusBpsAfKing : bonusBps)) / 10_000;
-        c.ticketCount = uint32(bonusTickets);
     }
 
     /// @dev Queue deferred whale pass claims for large payouts.

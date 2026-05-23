@@ -900,31 +900,6 @@ abstract contract DegenerusGameStorage {
     ///      Unified storage for all deferred lootbox rewards (BAF, jackpot, decimator).
     mapping(address => uint256) internal whalePassClaims;
 
-    // =========================================================================
-    // Auto-Rebuy + afKing Mode (Packed)
-    // =========================================================================
-
-    /// @dev Packed auto-rebuy/afKing state per player to reduce SLOADs.
-    ///      takeProfit is in wei for ETH auto-rebuy (0 = rebuy all).
-    ///      Note: coinflip auto-rebuy take profit amounts are stored in BurnieCoinflip.
-    struct AutoRebuyState {
-        /// @dev ETH amount to take profit before auto-rebuy (wei). 0 = rebuy all winnings.
-        uint128 takeProfit;
-        /// @dev Level at which afKing mode was activated. Used for lock period calculation. Reset to 0 when deactivated.
-        uint24 afKingActivatedLevel;
-        /// @dev True if auto-rebuy is enabled for this player.
-        bool autoRebuyEnabled;
-        /// @dev True if afKing mode is active (enhanced auto-rebuy with lock period).
-        bool afKingMode;
-    }
-
-    /// @dev Auto-rebuy toggle and afKing mode state (packed into one slot per player).
-    ///      When auto-rebuy is enabled, the remainder (after reserving take profit)
-    ///      is converted to tickets for next level or next+1 (50/50) during jackpot
-    ///      award flow. ETH goes to next prize pool for next-level tickets or to
-    ///      future prize pool for next+1 tickets, and tickets are queued per level.
-    mapping(address => AutoRebuyState) internal autoRebuyState;
-
     /// @dev Base (pre-boost) lootbox ETH per RNG index per player.
     ///      Tracks unboosted amounts so boosts apply at purchase time, not open time.
     mapping(uint48 => mapping(address => uint256)) internal lootboxEthBase;
@@ -983,15 +958,6 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Total purchase ETH counted toward earlybird emission.
     uint256 internal earlybirdEthIn;
-
-    // =========================================================================
-    // Jackpot ETH Resume State
-    // =========================================================================
-
-    /// @dev Snapshot of ethPool for two-call jackpot ETH distribution.
-    ///      Non-zero means a resume call is pending (largest+solo buckets done,
-    ///      mid buckets remain). Cleared to zero after the resume call completes.
-    uint128 internal resumeEthPool;
 
     // =========================================================================
     // Internal Helpers

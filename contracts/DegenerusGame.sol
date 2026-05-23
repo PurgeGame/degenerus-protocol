@@ -88,11 +88,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     // error RngLocked() — inherited from DegenerusGameStorage
 
-    /// @notice afKing mode cannot be disabled yet (lock period active).
-    error AfKingLockActive();
-
     /// @notice Caller is not approved to act for the requested player.
     error NotApproved();
+
+    /// @notice Caller-supplied work list is already resolved (a competitor got ahead).
+    error BatchAlreadyTaken();
 
     /*+======================================================================+
       |                              EVENTS                                  |
@@ -146,15 +146,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @dev Deploy idle timeout in days (for efficient day-index comparison).
     uint32 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 365; // 1 year
-
-    /// @dev Minimum take profit for afKing ETH auto-rebuy (5 ETH).
-    uint256 private constant AFKING_KEEP_MIN_ETH = 5 ether;
-
-    /// @dev Minimum take profit for afKing coin auto-rebuy (20,000 BURNIE).
-    uint256 private constant AFKING_KEEP_MIN_COIN = 20_000 ether;
-
-    /// @dev Number of levels afKing mode is locked after activation.
-    uint24 private constant AFKING_LOCK_LEVELS = 5;
 
     /// @dev Share of ticket purchases routed to future prize pool (10%).
     uint16 private constant PURCHASE_TO_FUTURE_BPS = 1000;
@@ -1469,145 +1460,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                    AUTO-REBUY TOGGLE                                |
+      |                    LAZY PASS GATE                                  |
       +======================================================================+*/
 
-    /// @notice Emitted when a player toggles auto-rebuy on or off.
-    event AutoRebuyToggled(address indexed player, bool enabled);
-
-    /// @notice Emitted when a player sets the auto-rebuy take profit.
-    event AutoRebuyTakeProfitSet(address indexed player, uint256 takeProfit);
-
-    /// @notice Emitted when a player toggles afKing mode on or off.
-    event AfKingModeToggled(address indexed player, bool enabled);
-
-    /// @notice Enable or disable auto-rebuy for claimable winnings.
-    /// @dev When enabled, the remainder (after reserving take profit) is
-    ///      converted to tickets for next level or next+1 (50/50) during jackpot award flow.
-    ///      ETH goes to nextPrizePool for next-level tickets, or futurePrizePool for next+1.
-    ///
-    ///      BONUS: Applies fixed ticket bonus for auto-rebuy:
-    ///      - 30% default (13000 bps)
-    ///      - 45% when afKing mode is active (14500 bps)
-    ///
-    /// @param player Player address to configure (address(0) = msg.sender).
-    /// @param enabled True to enable auto-rebuy, false to disable.
-    function setAutoRebuy(address player, bool enabled) external {
-        player = _resolvePlayer(player);
-        _setAutoRebuy(player, enabled);
-    }
-
-    /// @notice Set the auto-rebuy take profit (amount reserved for manual claim).
-    /// @dev Complete multiples remain claimable; remainder is eligible for auto-rebuy.
-    /// @param player Player address to configure (address(0) = msg.sender).
-    /// @param takeProfit Amount in wei; 0 means no reservation (rebuy all).
-    function setAutoRebuyTakeProfit(
-        address player,
-        uint256 takeProfit
-    ) external {
-        player = _resolvePlayer(player);
-        _setAutoRebuyTakeProfit(player, takeProfit);
-    }
-
-    function _setAutoRebuy(address player, bool enabled) private {
-        if (rngLockedFlag) revert RngLocked();
-        AutoRebuyState storage state = autoRebuyState[player];
-        if (state.autoRebuyEnabled != enabled) {
-            state.autoRebuyEnabled = enabled;
-        }
-        emit AutoRebuyToggled(player, enabled);
-        if (!enabled) {
-            _deactivateAfKing(player);
-        }
-    }
-
-    function _setAutoRebuyTakeProfit(
-        address player,
-        uint256 takeProfit
-    ) private {
-        if (rngLockedFlag) revert RngLocked();
-        AutoRebuyState storage state = autoRebuyState[player];
-        uint128 takeProfitValue = uint128(takeProfit);
-        if (state.takeProfit != takeProfitValue) {
-            state.takeProfit = takeProfitValue;
-        }
-        emit AutoRebuyTakeProfitSet(player, takeProfit);
-        if (takeProfit != 0 && takeProfit < AFKING_KEEP_MIN_ETH) {
-            _deactivateAfKing(player);
-        }
-    }
-
-    /// @notice Check the auto-rebuy take profit for a player.
+    /// @notice Whether a player holds any active lazy pass (Deity, Whale bundle, or Lazy).
+    /// @dev True if the permanent Deity bit is set, or the whale-bundle/lazy freeze
+    ///      window still covers the current level. Read by the AfKing subscription keeper
+    ///      as its pass-OR-pay gate.
     /// @param player Player address to check.
-    /// @return takeProfit Amount reserved as complete multiples (wei).
-    function autoRebuyTakeProfitFor(
-        address player
-    ) external view returns (uint256 takeProfit) {
-        return autoRebuyState[player].takeProfit;
-    }
-
-    /// @notice Enable or disable afKing mode.
-    /// @dev Enabling afKing forces auto-rebuy on for ETH and coin and clamps take profit
-    ///      to minimums (5 ETH / 20k BURNIE) unless set to 0. Requires a lazy pass.
-    /// @param player Player address to configure (address(0) = msg.sender).
-    /// @param enabled True to enable afKing mode, false to disable.
-    /// @param ethTakeProfit Desired ETH take profit (wei).
-    /// @param coinTakeProfit Desired coin take profit (BURNIE, 18 decimals).
-    /// @custom:reverts RngLocked If RNG is locked.
-    /// @custom:reverts E If enabling without a lazy pass.
-    /// @custom:reverts AfKingLockActive If disabling during lock period.
-    function setAfKingMode(
-        address player,
-        bool enabled,
-        uint256 ethTakeProfit,
-        uint256 coinTakeProfit
-    ) external {
-        player = _resolvePlayer(player);
-        _setAfKingMode(player, enabled, ethTakeProfit, coinTakeProfit);
-    }
-
-    function _setAfKingMode(
-        address player,
-        bool enabled,
-        uint256 ethTakeProfit,
-        uint256 coinTakeProfit
-    ) private {
-        if (rngLockedFlag) revert RngLocked();
-        if (!enabled) {
-            _deactivateAfKing(player);
-            return;
-        }
-        if (!_hasAnyLazyPass(player)) revert E();
-
-        AutoRebuyState storage state = autoRebuyState[player];
-        uint256 adjustedEthKeep = ethTakeProfit;
-        if (adjustedEthKeep != 0 && adjustedEthKeep < AFKING_KEEP_MIN_ETH) {
-            adjustedEthKeep = AFKING_KEEP_MIN_ETH;
-        }
-        uint256 adjustedCoinKeep = coinTakeProfit;
-        if (adjustedCoinKeep != 0 && adjustedCoinKeep < AFKING_KEEP_MIN_COIN) {
-            adjustedCoinKeep = AFKING_KEEP_MIN_COIN;
-        }
-
-        if (!state.autoRebuyEnabled) {
-            state.autoRebuyEnabled = true;
-            emit AutoRebuyToggled(player, true);
-        }
-        if (state.takeProfit != adjustedEthKeep) {
-            state.takeProfit = uint128(adjustedEthKeep);
-            emit AutoRebuyTakeProfitSet(player, adjustedEthKeep);
-        }
-        coinflip.setCoinflipAutoRebuy(player, true, adjustedCoinKeep);
-
-        if (!state.afKingMode) {
-            coinflip.settleFlipModeChange(player);
-            state.afKingMode = true;
-            state.afKingActivatedLevel = level;
-            emit AfKingModeToggled(player, true);
-        }
-    }
-
-    function _hasAnyLazyPass(address player) private view returns (bool) {
+    /// @return True if the player holds any of the three pass types.
+    function hasAnyLazyPass(address player) external view returns (bool) {
         uint256 packed = mintPacked_[player];
         if (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) return true;
 
@@ -1618,67 +1480,272 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return frozenUntilLevel > level;
     }
 
-    /// @notice Check if afKing mode is active for a player.
-    /// @param player Player address to check.
-    /// @return active True if afKing mode is active.
-    function afKingModeFor(address player) external view returns (bool active) {
-        return autoRebuyState[player].afKingMode;
+    /*+======================================================================+
+      |                 DO-WORK CRANK + KEEPER BATCH                        |
+      +======================================================================+
+      |  Permissionless layer letting any caller settle pending game work    |
+      |  on others' behalf for a small gas-pegged BURNIE reward paid as       |
+      |  coinflip stake credit (deferred mint). Resolution writes game        |
+      |  storage directly, so it lives in-game by construction.               |
+      +======================================================================+*/
+
+    /// @dev Reference gas price for the crank reward peg. The cranker is
+    ///      reimbursed its gas at this fixed reference, never measured gas:
+    ///      tx.gasprice / gasleft() are a gameable surface and are never read.
+    uint256 private constant CRANK_GAS_PRICE_REF = 0.5 gwei;
+
+    /// @dev Reserved per-work-type gas-unit constants. The numeric values are
+    ///      placeholders calibrated from measured worst-case marginal gas at the
+    ///      Phase 319 GAS pass; only the names/shape are fixed here. They are
+    ///      FIXED constants (REW-03) — the reward never depends on gasleft().
+    uint256 private constant CRANK_RESOLVE_BET_GAS_UNITS = 120_000;
+    uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 120_000;
+
+    /// @dev Cursor into the box-crank queue for the current lootbox RNG index.
+    ///      Concurrent same-tx callers self-partition via the advancing cursor.
+    ///      Reset to zero when the active index advances (collision-free walk).
+    uint48 internal boxCursor;
+
+    /// @dev Index against which the cursor currently walks (boxCursor day-reset key).
+    uint48 internal boxCursorIndex;
+
+    /// @dev Players with an open box queued per lootbox RNG index, enqueued once at
+    ///      first deposit (the lootboxEthBase == 0 signal). Keyed on the lootbox index,
+    ///      which re-couples to the VRF-rotation orphan-index keyspace — the box-crank
+    ///      walk MUST gate each open on lootboxRngWordByIndex[index] != 0 so an index
+    ///      orphaned mid-day by an emergency coordinator rotation is skipped until the
+    ///      a303ae18 detect-preserve-re-issue path lands the re-issued word.
+    mapping(uint48 => address[]) internal boxPlayers;
+
+    /// @notice Enqueue a player's first box deposit at an index for the box crank.
+    /// @dev Self-call only (invoked from the mint module first-deposit path via
+    ///      IDegenerusGame(address(this))). The first-deposit signal is lootboxEthBase == 0;
+    ///      the open-time zeroing (LootboxModule) is the dequeue. One SSTORE per (index, player).
+    /// @param index Lootbox RNG index the deposit was assigned to.
+    /// @param player Depositing player.
+    function enqueueBoxForCrank(uint48 index, address player) external {
+        if (msg.sender != address(this)) revert E();
+        boxPlayers[index].push(player);
     }
 
-    /// @notice Get the level when afKing mode was activated for a player.
-    /// @param player Player address to check.
-    /// @return activationLevel Level at which afKing mode was enabled (0 if inactive).
-    function afKingActivatedLevelFor(
-        address player
-    ) external view returns (uint24 activationLevel) {
-        return autoRebuyState[player].afKingActivatedLevel;
-    }
+    /// @notice Permissionlessly resolve a caller-supplied list of Degenerette bets.
+    /// @dev CRANK-01/02. Items are parallel arrays: item i = (players[i], betIds[i]),
+    ///      front-to-back. Item 0 is the caller's own probe: if it is already resolved
+    ///      (degeneretteBets[players[0]][betIds[0]] == 0) a competitor got ahead, so the
+    ///      whole list reverts with BatchAlreadyTaken (a loser-gas cap, reusing the SLOAD
+    ///      item 0 needs anyway). Items 1..N are isolated per-item (a stale/reverting item
+    ///      skips), and only successful resolutions earn a reward. WWXRP work (currency == 3)
+    ///      is resolvable but earns zero reward (CRANK-04). The accumulated reward is granted
+    ///      as exactly ONE creditFlip(msg.sender, sum) at the end (REW-02), to whoever calls
+    ///      including a self-resolver (REW-04, no caller restriction).
+    /// @param players Bet owners, grouped/ordered by the caller (item 0 is the probe).
+    /// @param betIds Bet ids, parallel to players.
+    function crankBets(
+        address[] calldata players,
+        uint64[] calldata betIds
+    ) external {
+        uint256 len = players.length;
+        if (len == 0 || betIds.length != len) revert E();
 
-    /// @notice Deactivate afKing mode for a player (coin/coinflip hook).
-    /// @dev Access: COIN or COINFLIP contract only.
-    /// @param player Player to deactivate.
-    /// @custom:reverts E If caller is not COIN or COINFLIP contract.
-    function deactivateAfKingFromCoin(address player) external {
-        if (
-            msg.sender != ContractAddresses.COIN &&
-            msg.sender != ContractAddresses.COINFLIP
-        ) revert E();
-        _deactivateAfKing(player);
-    }
+        // CRANK-02 short-circuit: probe item 0 (the caller's own choice). A resolved
+        // bet is deleted (slot == 0), so a zero slot means a competitor got ahead.
+        if (degeneretteBets[players[0]][betIds[0]] == 0) revert BatchAlreadyTaken();
 
-    /// @notice Sync afKing lazy pass status and revoke if inactive (coinflip-only hook).
-    /// @dev Access: COINFLIP contract only.
-    /// @param player Player to sync.
-    /// @return active True if afKing remains active after sync.
-    /// @custom:reverts E If caller is not COINFLIP contract.
-    function syncAfKingLazyPassFromCoin(
-        address player
-    ) external returns (bool active) {
-        if (msg.sender != ContractAddresses.COINFLIP) revert E();
-        AutoRebuyState storage state = autoRebuyState[player];
-        if (!state.afKingMode) return false;
-        if (_hasAnyLazyPass(player)) return true;
-
-        // Note: settle not called here - it's already being called by the coinflip
-        // operation that triggered this sync (deposit/claim calls _syncAfKingLazyPass)
-        state.afKingMode = false;
-        state.afKingActivatedLevel = 0;
-        emit AfKingModeToggled(player, false);
-        return false;
-    }
-
-    function _deactivateAfKing(address player) private {
-        AutoRebuyState storage state = autoRebuyState[player];
-        if (!state.afKingMode) return;
-        uint24 activationLevel = state.afKingActivatedLevel;
-        if (activationLevel != 0) {
-            uint256 unlockLevel = uint256(activationLevel) + AFKING_LOCK_LEVELS;
-            if (uint256(level) < unlockLevel) revert AfKingLockActive();
+        uint256 reward;
+        uint24 lvl = _activeTicketLevel();
+        for (uint256 i; i < len; ) {
+            uint256 betPacked = degeneretteBets[players[i]][betIds[i]];
+            // currency bits [42..43]: WWXRP is the most +EV currency, so it is excluded
+            // from the bounty to keep the faucet closed (CRANK-04).
+            uint8 currency = uint8((betPacked >> 42) & 0x3);
+            // Per-item isolation: a stale/reverting/not-ready bet skips, never bricks.
+            try this._crankResolveBet(players[i], betIds[i]) {
+                // WWXRP work (currency == 3) is resolvable but earns zero reward.
+                if (currency == 3) {
+                    // zero reward
+                } else {
+                    reward += _ethToBurnieValue(
+                        CRANK_RESOLVE_BET_GAS_UNITS * CRANK_GAS_PRICE_REF,
+                        PriceLookupLib.priceForLevel(lvl)
+                    );
+                }
+            } catch {}
+            unchecked {
+                ++i;
+            }
         }
-        coinflip.settleFlipModeChange(player);
-        state.afKingMode = false;
-        state.afKingActivatedLevel = 0;
-        emit AfKingModeToggled(player, false);
+
+        if (reward != 0) coinflip.creditFlip(msg.sender, reward);
+    }
+
+    /// @notice Permissionlessly open queued lootboxes via the parameterless cursor.
+    /// @dev CRANK-03. Walks boxPlayers[activeIndex] from the self-partitioning boxCursor,
+    ///      opening up to maxCount ready boxes. STRUCTURAL re-issue coupling (the v45
+    ///      orphan-index landmine): each open is gated on lootboxRngWordByIndex[index] != 0,
+    ///      mirroring the LootboxModule RngNotReady guard — an index orphaned mid-day by an
+    ///      emergency VRF rotation is skipped until updateVrfCoordinatorAndSub re-issues the
+    ///      in-flight request (a303ae18 detect-preserve-re-issue) and the word lands. The
+    ///      first-deposit enqueue signal (lootboxEthBase == 0) and the open-time box-zeroing
+    ///      (lootboxEth / lootboxEthBase) are preserved untouched. Each successful open earns
+    ///      a flat reward; the sum is granted as ONE creditFlip(msg.sender, sum) (REW-02/04).
+    /// @param maxCount Maximum number of boxes to open this call (caller-bounded, anti-DoS).
+    function crankBoxes(uint256 maxCount) external {
+        uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+        // Day/index-reset the cursor when the active index advances (collision-free walk).
+        if (boxCursorIndex != index) {
+            boxCursorIndex = index;
+            boxCursor = 0;
+        }
+
+        // The orphan-index re-issue coupling: a box is openable only once its index has a
+        // VRF word. A zero word means the index is not ready OR was orphaned by a mid-day
+        // rotation; either way the walk skips the whole index until the re-issued word lands.
+        if (lootboxRngWordByIndex[index] == 0) return;
+
+        address[] storage queue = boxPlayers[index];
+        uint256 qlen = queue.length;
+        uint256 cursor = boxCursor;
+        uint256 opened;
+        uint256 reward;
+        uint24 lvl = _activeTicketLevel();
+
+        while (cursor < qlen && opened < maxCount) {
+            address player = queue[cursor];
+            unchecked {
+                ++cursor;
+            }
+            // Skip already-emptied boxes (the first-deposit signal is reset on open).
+            if (lootboxEthBase[index][player] == 0) continue;
+            // Per-item isolation: a not-ready/reverting box skips, never bricks the walk.
+            try this._crankOpenBox(index, player) {
+                reward += _ethToBurnieValue(
+                    CRANK_OPEN_BOX_GAS_UNITS * CRANK_GAS_PRICE_REF,
+                    PriceLookupLib.priceForLevel(lvl)
+                );
+                unchecked {
+                    ++opened;
+                }
+            } catch {}
+        }
+
+        boxCursor = uint48(cursor);
+        if (reward != 0) coinflip.creditFlip(msg.sender, reward);
+    }
+
+    /// @notice Self-call wrapper resolving a single Degenerette bet (per-item isolation).
+    /// @dev onlySelf. Reuses the degenerette module's resolveBets machinery with the
+    ///      approval gate relaxed for the resolve path only (placement stays gated).
+    /// @param player Bet owner.
+    /// @param betId Bet id to resolve.
+    function _crankResolveBet(address player, uint64 betId) external {
+        if (msg.sender != address(this)) revert E();
+        uint64[] memory ids = new uint64[](1);
+        ids[0] = betId;
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_DEGENERETTE_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameDegeneretteModule.resolveBets.selector,
+                    player,
+                    ids
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Self-call wrapper opening a single queued lootbox (per-item isolation).
+    /// @dev onlySelf. Reuses the lootbox module openLootBox path, which preserves the
+    ///      RngNotReady guard and the one-reward-per-item box-zeroing untouched.
+    /// @param index Lootbox RNG index.
+    /// @param player Box owner.
+    function _crankOpenBox(uint48 index, address player) external {
+        if (msg.sender != address(this)) revert E();
+        _openLootBoxFor(player, index);
+    }
+
+    /// @notice Keeper-gated batch ticket/lootbox purchase for the subscription keeper.
+    /// @dev PROTO-04. Gated to the pinned AF_KING keeper; does NO per-player approval check
+    ///      (it trusts the keeper, which structurally only acts on its own subscribers).
+    ///      rngLocked / game-over are pre-checked ONCE at entry for a clean whole-batch abort.
+    ///      The keeper sends ONE batch value transfer; per-player slices are forwarded via an
+    ///      onlySelf sub-call wrapped in try/catch + slice-refund, so one reverting player
+    ///      (a level/state-gated guard, liveness, or any per-player revert deep in the
+    ///      mint -> lootbox -> prize-pool -> EV-cap -> quest path) is skipped + refunded
+    ///      rather than bricking the batch. Any unspent value (failed slices + dust) is
+    ///      refunded to the keeper once after the loop, followed by the post-loop day-stamp.
+    ///
+    ///      OPEN-C reentrancy disposition = CEI-proof, no guard. The only external call in the
+    ///      per-player mint -> lootbox path before the day-stamp is the fixed-recipient
+    ///      VAULT value-hop (DegenerusGameMintModule:1066), made AFTER the prize-pool state
+    ///      writes (CEI); its recipient is the pinned VAULT, which cannot pass this AF_KING
+    ///      gate, so no re-entrant double-buy path exists. The per-player slice moves into the
+    ///      sub-call frame on each try, and a failed slice stays in the contract (refunded
+    ///      once), so there is no stored batch-debit a reentrant sweep/cancel could replay.
+    /// @param players Subscribers to purchase for.
+    /// @param amounts Per-player ETH value slice (parallel to players); sum must be <= msg.value.
+    /// @param modes Per-player payment kind (parallel to players).
+    function batchPurchase(
+        address[] calldata players,
+        uint256[] calldata amounts,
+        uint8[] calldata modes
+    ) external payable {
+        if (msg.sender != ContractAddresses.AF_KING) revert E();
+        if (rngLockedFlag) revert RngLocked();
+        if (gameOver) revert E();
+
+        uint256 len = players.length;
+        if (len == 0 || amounts.length != len || modes.length != len) revert E();
+
+        uint256 spent;
+        for (uint256 i; i < len; ) {
+            uint256 slice = amounts[i];
+            // Per-player isolation: forward the slice in-context; on revert the slice is
+            // not consumed (stays in the contract) and the player is skipped.
+            try
+                this._batchPurchaseUnit{value: slice}(
+                    players[i],
+                    MintPaymentKind(modes[i])
+                )
+            {
+                spent += slice;
+            } catch {}
+            unchecked {
+                ++i;
+            }
+        }
+
+        // ONE refund of all unspent value (failed slices + any caller overage) to the keeper.
+        if (msg.value > spent) {
+            (bool ok, ) = payable(msg.sender).call{value: msg.value - spent}("");
+            if (!ok) revert E();
+        }
+    }
+
+    /// @notice Self-call wrapper performing one subscriber purchase (per-player isolation).
+    /// @dev onlySelf. Skips the operator-approval gate (batchPurchase already trusts the
+    ///      pinned keeper); the per-player msg.value slice flows into the mint module here.
+    /// @param player Subscriber to purchase for.
+    /// @param payKind Payment kind for this slice.
+    function _batchPurchaseUnit(
+        address player,
+        MintPaymentKind payKind
+    ) external payable {
+        if (msg.sender != address(this)) revert E();
+        _purchaseFor(player, 0, msg.value, bytes32(0), payKind);
+    }
+
+    /// @dev Convert an ETH wei amount to BURNIE coinflip-credit value at a given price.
+    ///      Zero-guarded (OPEN-B): a zero amount or price yields zero reward and never
+    ///      reverts the settlement. Mirrors the mint module _ethToBurnieValue idiom.
+    /// @param amountWei ETH amount (wei) to convert.
+    /// @param priceWei Reference mint price (wei).
+    /// @return BURNIE-denominated value (18 decimals).
+    function _ethToBurnieValue(
+        uint256 amountWei,
+        uint256 priceWei
+    ) private pure returns (uint256) {
+        if (amountWei == 0 || priceWei == 0) return 0;
+        return (amountWei * PRICE_COIN_UNIT) / priceWei;
     }
 
     /*+======================================================================+

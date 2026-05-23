@@ -43,17 +43,6 @@ interface IDegenerusGamePlayerActions {
     ) external payable;
     /// @notice Resolve degenerette bets for a player.
     function resolveDegeneretteBets(address player, uint64[] calldata betIds) external;
-    /// @notice Toggle auto-rebuy for a player.
-    function setAutoRebuy(address player, bool enabled) external;
-    /// @notice Set auto-rebuy take-profit threshold.
-    function setAutoRebuyTakeProfit(address player, uint256 takeProfit) external;
-    /// @notice Configure afKing mode for a player.
-    function setAfKingMode(
-        address player,
-        bool enabled,
-        uint256 ethTakeProfit,
-        uint256 coinTakeProfit
-    ) external;
     /// @notice Set operator approval for a player.
     function setOperatorApproval(address operator, bool approved) external;
     /// @notice View claimable ETH winnings for a player.
@@ -84,6 +73,18 @@ interface ICoinflipPlayerActions {
 interface ICoinPlayerActions {
     /// @notice Burn BURNIE for decimator jackpot eligibility.
     function decimatorBurn(address player, uint256 amount) external;
+}
+
+/// @notice Interface for the AfKing subscription keeper used by DegenerusVault.
+interface IAfKingSubscribe {
+    /// @notice Start or extend a daily subscription for `player` (self when 0/msg.sender).
+    function subscribe(
+        address player,
+        bool drainGameCreditFirst,
+        bool useTickets,
+        uint8 dailyQuantity,
+        uint8 reinvestPct
+    ) external payable;
 }
 
 /// @notice Interface for sDGNRS player actions used by DegenerusVault.
@@ -401,6 +402,9 @@ contract DegenerusVault {
     /// @dev Coin contract for decimator actions
     ICoinPlayerActions internal constant coinPlayer =
         ICoinPlayerActions(ContractAddresses.COIN);
+    /// @dev AfKing subscription keeper for the vault's protocol-owned self-subscription
+    IAfKingSubscribe internal constant afKing =
+        IAfKingSubscribe(ContractAddresses.AF_KING);
     /// @dev BURNIE token contract for minting and transfers
     IVaultCoin internal constant coinToken = IVaultCoin(ContractAddresses.COIN);
     /// @dev WWXRP token contract for vault minting
@@ -461,6 +465,12 @@ contract DegenerusVault {
         uint256 coinAllowance = coinToken.vaultMintAllowance();
         coinTracked = coinAllowance;
 
+        // SUB-09 protocol-owned self-subscription: claimable-only daily lootbox
+        // buy of flat quantity 1, no reinvest, no BURNIE rebuy. Self-consent —
+        // the vault IS the player (player == msg.sender). The vault holds the
+        // permanent deity pass (granted in the DegenerusGame constructor), so the
+        // keeper's pass-OR-pay gate takes the free 30-day extend at zero cost.
+        afKing.subscribe(address(this), true, false, 1, 0);
     }
 
     // ---------------------------------------------------------------------
@@ -619,33 +629,6 @@ contract DegenerusVault {
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameResolveDegeneretteBets(uint64[] calldata betIds) external onlyVaultOwner {
         gamePlayer.resolveDegeneretteBets(address(this), betIds);
-    }
-
-    /// @notice Enable or disable auto-rebuy for the vault
-    /// @param enabled Whether auto-rebuy should be enabled
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function gameSetAutoRebuy(bool enabled) external onlyVaultOwner {
-        gamePlayer.setAutoRebuy(address(this), enabled);
-    }
-
-    /// @notice Set the auto-rebuy take profit for the vault
-    /// @param takeProfit Amount to take profit before auto-rebuying
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function gameSetAutoRebuyTakeProfit(uint256 takeProfit) external onlyVaultOwner {
-        gamePlayer.setAutoRebuyTakeProfit(address(this), takeProfit);
-    }
-
-    /// @notice Configure AFK king mode settings for the vault
-    /// @param enabled Whether AFK king mode should be enabled
-    /// @param ethTakeProfit ETH take profit threshold
-    /// @param coinTakeProfit Coin take profit threshold
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function gameSetAfKingMode(
-        bool enabled,
-        uint256 ethTakeProfit,
-        uint256 coinTakeProfit
-    ) external onlyVaultOwner {
-        gamePlayer.setAfKingMode(address(this), enabled, ethTakeProfit, coinTakeProfit);
     }
 
     /// @notice Approve or revoke an operator for the vault's game actions

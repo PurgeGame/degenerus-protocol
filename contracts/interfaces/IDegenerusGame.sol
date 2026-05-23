@@ -268,25 +268,6 @@ interface IDegenerusGame {
     /// @dev Only callable when mid-day swap is committed and VRF has not delivered.
     function retryLootboxRng() external;
 
-    /// @notice Check if afKing mode is active for a player.
-    /// @param player The player to query.
-    /// @return active True if afKing mode is active.
-    function afKingModeFor(address player) external view returns (bool active);
-
-    /// @notice Get the level when afKing mode was activated for a player.
-    /// @param player The player to query.
-    /// @return activationLevel Level at which afKing mode was enabled (0 if inactive).
-    function afKingActivatedLevelFor(address player) external view returns (uint24 activationLevel);
-
-    /// @notice Deactivate afKing mode for a player (coin-only hook).
-    /// @param player Player to deactivate.
-    function deactivateAfKingFromCoin(address player) external;
-
-    /// @notice Sync afKing lazy pass status and revoke if inactive (coin-only hook).
-    /// @param player Player to sync.
-    /// @return active True if afKing remains active after sync.
-    function syncAfKingLazyPassFromCoin(address player) external returns (bool active);
-
     /// @notice Get lootbox status for a player on a specific lootbox index.
     /// @param player The player to query.
     /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
@@ -303,6 +284,13 @@ interface IDegenerusGame {
     /// @param player The player address to open for (address(0) = msg.sender).
     /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
     function openLootBox(address player, uint48 lootboxIndex) external;
+
+    /// @notice Enqueue a player's first box deposit at an index for the box crank.
+    /// @dev Self-call only (invoked from the mint module first-deposit path). The
+    ///      first-deposit signal is lootboxEthBase == 0; one enqueue per (index, player).
+    /// @param index Lootbox RNG index the deposit was assigned to.
+    /// @param player Depositing player.
+    function enqueueBoxForCrank(uint48 index, address player) external;
 
     /// @notice Place Full Ticket Degenerette bets (4 traits, match-based payouts).
     /// @param player The betting player (address(0) = msg.sender).
@@ -374,6 +362,12 @@ interface IDegenerusGame {
 
     /// @notice Whether a player holds a deity pass.
     function hasDeityPass(address player) external view returns (bool);
+
+    /// @notice Whether a player holds any active lazy pass (Deity, Whale bundle, or Lazy).
+    /// @dev Read by the AfKing subscription keeper as its pass-OR-pay gate.
+    /// @param player The player to query.
+    /// @return True if the player holds any of the three pass types.
+    function hasAnyLazyPass(address player) external view returns (bool);
 
     /// @notice Get raw bit-packed mint data for a player.
     /// @param player Player address to query.

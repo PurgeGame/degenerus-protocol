@@ -8,9 +8,9 @@ pragma solidity 0.8.34;
  *
  * @dev ARCHITECTURE:
  *      - Extracted from BurnieCoin to reduce contract size
- *      - Manages daily coinflip system with optional afKing mode bonuses
+ *      - Manages the daily coinflip system with a flat recycle bonus
  *      - Integrates with BurnieCoin for burn/mint operations
- *      - Handles auto-rebuy, bounty system, and quest rewards
+ *      - Handles the bounty system and quest rewards
  *
  * @dev INTERACTIONS:
  *      - Burns BURNIE from players on deposit (via BurnieCoin.burnForCoinflip)
@@ -23,6 +23,7 @@ import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
 import {IDegenerusJackpots} from "./interfaces/IDegenerusJackpots.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
+import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 /// @notice Interface for BurnieCoin contract methods used by BurnieCoinflip.
 interface IBurnieCoin {
@@ -127,17 +128,12 @@ contract BurnieCoinflip {
     uint16 private constant COINFLIP_EXTRA_RANGE = 38;
     uint16 private constant BPS_DENOMINATOR = 10_000;
     uint16 private constant RECYCLE_BONUS_BPS = 75;
-    uint16 private constant AFKING_RECYCLE_BONUS_BPS = 100;
-    uint16 private constant AFKING_DEITY_BONUS_PER_LEVEL_HALF_BPS = 2;
-    uint16 private constant AFKING_DEITY_BONUS_MAX_HALF_BPS = 200;
-    uint256 private constant DEITY_RECYCLE_CAP = 1_000_000 ether;
     uint48 private constant JACKPOT_RESET_TIME = 82620;
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
     uint8 private constant COIN_CLAIM_DAYS = 90;
     uint8 private constant COIN_CLAIM_FIRST_DAYS = 30;
     uint16 private constant AUTO_REBUY_OFF_CLAIM_DAYS_MAX = 1095;
     uint24 private constant MAX_BAF_BRACKET = (type(uint24).max / 10) * 10;
-    uint256 private constant AFKING_KEEP_MIN_COIN = 20_000 ether;
     IDegenerusQuests internal constant questModule =
         IDegenerusQuests(ContractAddresses.QUESTS);
 
@@ -190,14 +186,16 @@ contract BurnieCoinflip {
     }
 
     /// @notice Restricts access to authorized flip creditors.
-    /// @dev Allowed callers: GAME (delegatecall modules), QUESTS (level quest rewards), AFFILIATE, ADMIN.
+    /// @dev Allowed callers: GAME (delegatecall modules), QUESTS (level quest rewards), AFFILIATE, ADMIN,
+    ///      AF_KING (keeper sweep bounty, gas-pegged creditFlip).
     modifier onlyFlipCreditors() {
         address sender = msg.sender;
         if (
             sender != ContractAddresses.GAME &&
             sender != ContractAddresses.QUESTS &&
             sender != ContractAddresses.AFFILIATE &&
-            sender != ContractAddresses.ADMIN
+            sender != ContractAddresses.ADMIN &&
+            sender != ContractAddresses.AF_KING
         ) revert OnlyFlipCreditors();
         _;
     }
@@ -210,18 +208,6 @@ contract BurnieCoinflip {
     /*+======================================================================+
       |                    CORE COINFLIP FUNCTIONS                           |
       +======================================================================+*/
-
-    /// @notice Settle coinflip state before afKing mode changes.
-    /// @dev Processes pending claims so mode change doesn't affect in-flight flips.
-    /// @param player The player to settle.
-    function settleFlipModeChange(address player) external onlyDegenerusGameContract {
-        // Process any pending claimable amounts before mode change
-        uint256 mintable = _claimCoinflipsInternal(player, false);
-        if (mintable != 0) {
-            PlayerCoinflipState storage state = playerState[player];
-            state.claimableStored = uint128(uint256(state.claimableStored) + mintable);
-        }
-    }
 
     /// @notice Deposit BURNIE into daily coinflip system.
     /// @param player The depositor (address(0) or msg.sender for self-deposit, otherwise operator-approved).
@@ -286,7 +272,6 @@ contract BurnieCoinflip {
         );
 
         // Principal + quest bonus become the pending flip stake.
-        IDegenerusGame game = degenerusGame;
         uint256 creditedFlip = amount + questReward;
         uint256 rollAmount = state.autoRebuyEnabled
             ? state.autoRebuyCarry
@@ -296,17 +281,7 @@ contract BurnieCoinflip {
             : rollAmount;
         if (rebetAmount != 0) {
             // Recycling bonus applies only to the rebet portion (not fresh money).
-            uint256 bonus;
-            bool isAfKing = game.afKingModeFor(caller);
-            if (isAfKing) {
-                uint16 deityBonusHalfBps = game.hasDeityPass(caller)
-                    ? _afKingDeityBonusHalfBpsWithLevel(caller, game.level())
-                    : 0;
-                bonus = _afKingRecyclingBonus(rebetAmount, deityBonusHalfBps);
-            } else {
-                bonus = _recyclingBonus(rebetAmount);
-            }
-            creditedFlip += bonus;
+            creditedFlip += _recyclingBonus(rebetAmount);
         }
         // Direct deposits can set biggestFlip/bounty; indirect deposits cannot.
         _addDailyFlip(
@@ -419,7 +394,6 @@ contract BurnieCoinflip {
     ) internal returns (uint256 mintable) {
         IDegenerusGame game = degenerusGame;
         PlayerCoinflipState storage state = playerState[player];
-        bool afKingMode = game.syncAfKingLazyPassFromCoin(player);
         uint32 latest = flipsClaimableDay;
         uint32 start = state.lastClaim;
 
@@ -431,16 +405,8 @@ contract BurnieCoinflip {
         uint32 bafResolvedDay;
         bool bafResolvedDayCached;
         uint256 lossCount;
-        bool afKingActive = rebuyActive && afKingMode;
-        bool hasDeityPass = afKingActive && game.hasDeityPass(player);
-        uint16 deityBonusHalfBps;
         bool levelCached;
         uint24 cachedLevel;
-        if (hasDeityPass) {
-            cachedLevel = game.level();
-            levelCached = true;
-            deityBonusHalfBps = _afKingDeityBonusHalfBpsWithLevel(player, cachedLevel);
-        }
 
         uint256 oldCarry = state.autoRebuyCarry;
         if (rebuyActive) {
@@ -537,14 +503,7 @@ contract BurnieCoinflip {
                             carry = payout;
                         }
                         if (carry != 0) {
-                            if (afKingActive) {
-                                carry += _afKingRecyclingBonus(
-                                    carry,
-                                    deityBonusHalfBps
-                                );
-                            } else {
-                                carry += _recyclingBonus(carry);
-                            }
+                            carry += _recyclingBonus(carry);
                         }
                     } else {
                         mintable += payout;
@@ -750,9 +709,6 @@ contract BurnieCoinflip {
                     emit CoinflipAutoRebuyStopSet(player, takeProfit);
                 }
             }
-            if (takeProfit != 0 && takeProfit < AFKING_KEEP_MIN_COIN) {
-                degenerusGame.deactivateAfKingFromCoin(player);
-            }
         } else {
             mintable = _claimCoinflipsInternal(player, true);
             uint256 carry = state.autoRebuyCarry;
@@ -763,7 +719,6 @@ contract BurnieCoinflip {
             state.autoRebuyEnabled = false;
             state.autoRebuyStartDay = 0;
             emit CoinflipAutoRebuyToggled(player, false);
-            degenerusGame.deactivateAfKingFromCoin(player);
         }
 
         if (mintable != 0) {
@@ -787,10 +742,6 @@ contract BurnieCoinflip {
 
         if (mintable != 0) {
             burnie.mintForGame(player, mintable);
-        }
-
-        if (takeProfit != 0 && takeProfit < AFKING_KEEP_MIN_COIN) {
-            degenerusGame.deactivateAfKingFromCoin(player);
         }
     }
 
@@ -1057,43 +1008,12 @@ contract BurnieCoinflip {
         if (bonus > bonusCap) bonus = bonusCap;
     }
 
-    /// @dev Calculate recycling bonus for afKing flip deposits.
-    /// Deity bonus portion is capped at DEITY_RECYCLE_CAP; remainder gets base only.
-    function _afKingRecyclingBonus(
-        uint256 amount,
-        uint16 deityBonusHalfBps
-    ) private pure returns (uint256 bonus) {
-        if (amount == 0) return 0;
-        uint256 baseHalfBps = uint256(AFKING_RECYCLE_BONUS_BPS) * 2;
-        if (deityBonusHalfBps == 0 || amount <= DEITY_RECYCLE_CAP) {
-            uint256 totalHalfBps = baseHalfBps + uint256(deityBonusHalfBps);
-            return (amount * totalHalfBps) / (uint256(BPS_DENOMINATOR) * 2);
-        }
-        uint256 fullHalfBps = baseHalfBps + uint256(deityBonusHalfBps);
-        return (DEITY_RECYCLE_CAP * fullHalfBps + (amount - DEITY_RECYCLE_CAP) * baseHalfBps)
-            / (uint256(BPS_DENOMINATOR) * 2);
-    }
-
-    /// @dev Calculate deity pass bonus in half-bps using a cached level.
-    function _afKingDeityBonusHalfBpsWithLevel(
-        address player,
-        uint24 currentLevel
-    ) private view returns (uint16) {
-        uint24 activationLevel = degenerusGame.afKingActivatedLevelFor(player);
-        if (activationLevel == 0) return 0;
-        if (currentLevel <= activationLevel) return 0;
-
-        uint24 levelsActive = currentLevel - activationLevel;
-        uint24 bonus = levelsActive * uint24(AFKING_DEITY_BONUS_PER_LEVEL_HALF_BPS);
-        if (bonus > AFKING_DEITY_BONUS_MAX_HALF_BPS) {
-            return AFKING_DEITY_BONUS_MAX_HALF_BPS;
-        }
-        return uint16(bonus);
-    }
-
     /// @dev Calculate the target day for new coinflip deposits.
+    ///      Derived locally from GameTimeLib — the same time-only source that
+    ///      DegenerusGame.currentDayView resolves to — so this equals the game's
+    ///      day index without a cross-contract call.
     function _targetFlipDay() internal view returns (uint32) {
-        return degenerusGame.currentDayView() + 1;
+        return GameTimeLib.currentDayIndex() + 1;
     }
 
     /// @dev Helper to process quest rewards and emit event.

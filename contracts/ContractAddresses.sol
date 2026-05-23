@@ -50,6 +50,8 @@ library ContractAddresses {
         address(0x796f2974e3C1af763252512dd6d521E9E984726C);
     address internal constant ADMIN =
         address(0x92a6649Fdcc044DA968d94202465578a9371C7b1);
+    address internal constant AF_KING =
+        address(0x0000000000000000000000000000000000000000);
     address internal constant DEITY_PASS =
         address(0xe8dc788818033232EF9772CB2e6622F1Ec8bc840);
     address internal constant WWXRP =

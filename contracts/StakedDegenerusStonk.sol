@@ -9,13 +9,6 @@ import {IStETH} from "./interfaces/IStETH.sol";
 interface IDegenerusGamePlayer {
     /// @notice Advance the game to the next level/day.
     function advanceGame() external;
-    /// @notice Configure afKing mode for a player.
-    function setAfKingMode(
-        address player,
-        bool enabled,
-        uint256 ethTakeProfit,
-        uint256 coinTakeProfit
-    ) external;
     /// @notice Claim accumulated ETH winnings for a player.
     function claimWinnings(address player) external;
     /// @notice Claim whale pass for a player.
@@ -56,6 +49,20 @@ interface IBurnieCoinflipPlayer {
     function claimCoinflipsForRedemption(address player, uint256 amount) external returns (uint256 claimed);
     /// @notice Get the result of a coinflip day.
     function getCoinflipDayResult(uint32 day) external view returns (uint16 rewardPercent, bool win);
+    /// @notice Configure auto-rebuy mode for coinflips (player == self for sDGNRS).
+    function setCoinflipAutoRebuy(address player, bool enabled, uint256 takeProfit) external;
+}
+
+/// @notice Interface for the AfKing subscription keeper used by sDGNRS.
+interface IAfKingSubscribe {
+    /// @notice Start or extend a daily subscription for `player` (self when 0/msg.sender).
+    function subscribe(
+        address player,
+        bool drainGameCreditFirst,
+        bool useTickets,
+        uint8 dailyQuantity,
+        uint8 reinvestPct
+    ) external payable;
 }
 
 /// @notice Interface for DGNRS wrapper contract used by sDGNRS.
@@ -306,6 +313,10 @@ contract StakedDegenerusStonk {
     IBurnieCoinflipPlayer private constant coinflip =
         IBurnieCoinflipPlayer(ContractAddresses.COINFLIP);
 
+    /// @dev AfKing subscription keeper for sDGNRS's protocol-owned self-subscription
+    IAfKingSubscribe private constant afKing =
+        IAfKingSubscribe(ContractAddresses.AF_KING);
+
     /// @dev DGNRS wrapper contract for burning wrapped DGNRS to receive sDGNRS backing
     IDegenerusStonkWrapper private constant dgnrsWrapper = IDegenerusStonkWrapper(ContractAddresses.DGNRS);
 
@@ -358,12 +369,15 @@ contract StakedDegenerusStonk {
         poolBalances[uint8(Pool.Earlybird)] = earlybirdAmount;
 
         game.claimWhalePass(address(0));
-        game.setAfKingMode(
-            address(0),
-            true,
-            10 ether,
-            0
-        );
+
+        // SUB-09 protocol-owned self-subscription: claimable-only daily lootbox
+        // buy of flat quantity 1 with a 2% claimable reinvest, plus full BURNIE-flip
+        // recycle at the kept flat recycle rate. Self-consent — sDGNRS IS the player
+        // (player == msg.sender). sDGNRS holds the permanent deity pass (granted in
+        // the DegenerusGame constructor), so the keeper's pass-OR-pay gate takes the
+        // free 30-day extend at zero cost.
+        afKing.subscribe(address(this), true, false, 1, 2);
+        coinflip.setCoinflipAutoRebuy(address(this), true, 0);
     }
 
     // =====================================================================

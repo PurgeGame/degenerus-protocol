@@ -77,13 +77,6 @@ interface IBurnieCoinflip {
         uint256 takeProfit
     ) external;
 
-    /// @notice Settle coinflip state before afKing mode changes.
-    /// @dev Processes pending claims and stores them so mode change doesn't affect in-flight flips.
-    ///      Called by DegenerusGame when toggling afKing mode.
-    /// @param player The player to settle.
-    /// @custom:reverts OnlyDegenerusGame If caller is not the DegenerusGame contract.
-    function settleFlipModeChange(address player) external;
-
     /*+======================================================================+
       |                       RNG PROCESSING                                 |
       +======================================================================+*/
