@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
-status: executing
-last_updated: "2026-05-23T16:10:07Z"
+status: verifying
+last_updated: "2026-05-23T16:19:52.168Z"
 last_activity: 2026-05-23
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 4
-  percent: 0
+  completed_plans: 5
+  percent: 20
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 ## Current Position
 
-Phase: 316 (spec-crank-subscription-legacy-removal-design-lock-spec) — EXECUTING
+Phase: 316 (spec-crank-subscription-legacy-removal-design-lock-spec) — COMPLETE (ready for verification)
 Plan: 5 of 5
-Status: Executing Phase 316 — Plans 316-01 (ADD-half) + 316-02 (REMOVE footprint/slot-shift/VRF-freeze retirement) + 316-05 (JGAS-01 Decision Gate) + 316-03 (open-item resolution) complete; remaining 316-04 (call-graph attestation / final assembly)
-Last activity: 2026-05-23 -- Completed 316-03-PLAN.md (open-item resolution: `## Protocol-Owned Subs (SUB-09)` + `## SPEC-Open Resolutions` appended; Task-2 whale-pass-expiry free-renew USER-RATIFIED = permanent-deity — MATERIAL finding: the Deity bit is ALREADY set on SDGNRS/VAULT in the live DegenerusGame constructor :222/:223, so Phase 317 needs NO new bit-setter, only to preserve that grant; OPEN-B reward→0 via guarded _ethToBurnieValue, OPEN-C CEI-proof lean→contract-auditor@IMPL, 1-price-lootbox denomination + claimable-only confirmed, JackpotEthWin ABI-break delta note; T-316-12 Deity side-effect ratified; economic-analyst@AUDIT re-framed as no-distortion check; zero contracts/test mutation)
+Status: Phase 316 complete — all 5 plans done (316-01 ADD + 316-02 REMOVE + 316-05 JGAS-01 gate + 316-03 open-items + 316-04 attestation/coverage/assembly); ready for verification
+Last activity: 2026-05-23 -- Completed 316-04-PLAN.md (call-graph attestation / final assembly): `## Call-Graph Attestation` (SC#5) authored — every cited file:line re-grep-verified vs HEAD across DegenerusGame/modules/BurnieCoin/BurnieCoinflip/DegenerusVault/StakedDegenerusStonk/ContractAddresses + the StreakKeeperV2/AfKing keeper, embedding RESEARCH §1 (RM) + §J1 (JGAS); RM drift items (auto-rebuy block 800-808, _distributePayout 705/~738, IDegenerusGame setAutoRebuy-not-present MISSING) + the two +1 JGAS resume-check drifts (jackpot :348→349, advance :452-455→453-456) recorded; keeper-dependency CLEAN (zero-match over BOTH the RM-symbol set AND the JGAS symbols, only coupling = hasAnyLazyPass keeper :671/:974, dependency-safe IFF PROTO-01 ships same diff; PROTO-side pullForKeeper→burnForKeeper obligation noted); J5 VRF freeze-SAFE verdict (resume branch never calls _unlockRng, single-call removes a cross-tx resumeEthPool carry = rotation-robustness improvement, _unlockRng unmoved :467, only residual = gas-fits gated JGAS-04, AUDIT-320 re-attests under rotation); transitional-state caveat (Pitfall 1) + box-cursor rotation landmine (Pitfall 3) recorded. `## Requirement Design Coverage` (42/42, FOUR SPEC-owned PROTO-01/SUB-09/RM-04/JGAS-01) + `## Success Criteria Coverage` (5/5 COVERED) authored; intro reconciled (JGAS gate SPEC-owned in `## JGAS-01 Decision Gate`, was stale-attributed to 316-02); self-consistency pass — all 13 section headers present, SPEC-owned set reads FOUR; ZERO contracts/ + ZERO test/ mutations across the whole phase. Commit ed5ea47a.
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
@@ -35,7 +35,7 @@ Last activity: 2026-05-23 -- Completed 316-03-PLAN.md (open-item resolution: `##
 
 | Phase | Name | Type | Requirements (primary owner) | Status |
 |-------|------|------|------------------------------|--------|
-| 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 · JGAS-01 (locks all 42) | In Progress (4/5 plans: 316-01 · 316-02 · 316-05 · 316-03 done) |
+| 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 · JGAS-01 (locks all 42) | Complete — ready for verification (5/5 plans: 316-01 · 316-02 · 316-05 · 316-03 · 316-04 done) |
 | 317 | IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework | IMPL | PROTO-02..05 · CRANK-01..04 · REW-01..04 · SUB-01..08 · RM-01/02/03/05/06 · JGAS-02 | Not started |
 | 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | Not started |
 | 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 · JGAS-04 | Not started |
@@ -563,3 +563,5 @@ Audit deliverables:
 - [Phase ?]: 316-05: ordering load-bearing — design-intent (split = pure gas-ceiling workaround, resumeEthPool carries only uint128 pool-remainder, call1=160/call2=145, same randWord re-rolled in call2, NO correctness/EV load) BEFORE worst-case-first gas (~9-12M vs ~30M, ~2.5-3.3× margin, RM-02 frees ~1.3M cold autoRebuyState SLOAD ×305, observational equivalence) BEFORE the locked decision (feedback_design_intent_before_deletion + feedback_gas_worst_case)
 - [Phase ?]: 316-05: JGAS freeze-invariant-SAFE (STATED not assumed) — resume branch (advance :453-456) never calls _unlockRng (lock held across split, _unlockRng only at coin-tickets :467/transitions); single-call collapses two same-word consumptions to one, _unlockRng placement UNCHANGED, no new in-window player-mutable input, stage numbers NOT load-bearing; removes a cross-tx resumeEthPool carry = VRF-rotation-robustness IMPROVEMENT (Phase 312 a303ae18 lineage); residual risk = gas-fits/liveness only; AUDIT-320 re-attests under single-call + rotation via zero-day-hunter
 - [Phase ?]: 316-05: deletion footprint grep-verified BOTH modules at HEAD — Jackpot SPLIT_* :197/199/201, JACKPOT_MAX_WINNERS=160 :219, resumeEthPool :349/1201/1252-1253/1348, _resumeDailyEth :1186, splitMode :1248, call1Bucket :1270-1276/1287-1288, threshold :476-483; Advance STAGE_JACKPOT_ETH_RESUME=8 :70 + assign :455 + resume-check :453-456; storage resumeEthPool :994; two cosmetic +1 drifts recorded (jackpot 348→349, advance 452-455→453-456); slot −2 consequence cross-referenced to 316-02 (not re-derived)
+- [Phase 316]: 316-04: SC#5 `## Call-Graph Attestation` embeds RESEARCH §1 (RM) + §J1 (JGAS) as substrate; every cited file:line MATCH/DRIFT/MISSING vs HEAD; SPEC carries zero unverified call-graph claim (bare 'by construction' only in the explicit negation). RM drifts (auto-rebuy 800-808, _distributePayout 705/~738, IDegenerusGame setAutoRebuy-NOT-present MISSING) + the two +1 JGAS resume-check drifts recorded; keeper-dependency CLEAN re-run at HEAD (zero-match over BOTH RM-symbol set AND JGAS symbols; only coupling hasAnyLazyPass keeper :671/:974); J5 VRF freeze-SAFE verdict + transitional-state caveat + box-cursor rotation landmine re-stated as attestation
+- [Phase 316]: 316-04: `## Requirement Design Coverage` 42/42 mapped — FOUR SPEC-owned (PROTO-01/SUB-09/RM-04/JGAS-01), 26 at 317, 5 at 318, 7 at 319, 320 re-attests all/owns 0; `## Success Criteria Coverage` 5/5 COVERED (SC#4 → REMOVE+Storage+VRF-Freeze + `## JGAS-01 Decision Gate`); intro RECONCILED — JGAS gate is SPEC-owned in `## JGAS-01 Decision Gate` (was stale-attributed to 316-02); self-consistency pass: all 13 `## ` headers present, SPEC-owned reads FOUR, document one coherent design-lock spec; ZERO contracts/+test/ mutations across the whole phase (commit ed5ea47a)

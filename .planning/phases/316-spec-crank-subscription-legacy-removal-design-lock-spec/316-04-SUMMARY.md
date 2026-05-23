@@ -82,3 +82,11 @@ None — this is a markdown design-lock document; no code, no data-wiring stubs.
 - The bare phrase "by construction" / "single fn reaches all paths" appears only inside explicit negation statements (lines 15/82/545) plus one pre-existing 316-03 flag-spoofability sentence (line 457) that is NOT a call-graph attestation claim.
 - **Whole-phase source-tree freeze:** `git diff --name-only -- contracts/ test/` empty at HEAD; `git diff --name-only 9c644f94 HEAD -- contracts/ test/` empty; `git status --porcelain -- contracts/ test/` empty — ZERO `contracts/` and ZERO `test/` mutations across the entire Phase 316.
 - Re-grep freshness pass at HEAD confirmed the §1 + §J1 anchors hold: JGAS (`SPLIT_NONE :197`, `STAGE_JACKPOT_ETH_RESUME=8 :70`, `resumeEthPool :994`, jackpot `:349`, advance `:453-456`), RM (`_hasAnyLazyPass :1610` + readers `:1580/:1660`, `AutoRebuyState :910`/`autoRebuyState :926`, `_processAutoRebuy :822`, `RECYCLE_BONUS_BPS=75 :129`/`AFKING_RECYCLE_BONUS_BPS=100 :130`), and keeper-dependency ZERO-match over both the RM and JGAS symbol sets.
+
+## Self-Check: PASSED
+
+- FOUND: `316-SPEC.md` (619 lines; both new sections + reconciled intro present)
+- FOUND: `316-04-SUMMARY.md`
+- FOUND: commit `ed5ea47a` (`docs(316-04): call-graph attestation (SC#5) + 42-req coverage map + final SPEC assembly`)
+- No files deleted by the commit (the 5 deletions were intro-line replacements, not file removals)
+- Zero `contracts/`/`test/` mutations confirmed at HEAD and across the whole phase
