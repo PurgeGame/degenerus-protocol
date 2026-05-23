@@ -44,6 +44,7 @@
 **Depends on:** Nothing (v44.0 closure artifacts + `.planning/REQUIREMENTS.md` + `.planning/v45-lootbox-evcap-fix-plan.md` are read-only inputs at baseline `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`)
 
 **Success Criteria** (what must be TRUE):
+
   1. `.planning/phases/309-*/309-SPEC.md` exists with the final packed-slot layout LOCKED (field widths for the cap-bounded maxima, pack/unpack helper signatures, co-pack decision, rename decision) per SPEC-01 — and an explicit attestation that no new storage slot is introduced.
   2. Bonus-only cap semantics LOCKED per SPEC-02 — the `<= LOOTBOX_EV_NEUTRAL_BPS` early-return rule stated exactly, with confirmation it applies to all three callers.
   3. Allocation-time tally + open-time application LOCKED per SPEC-03 — per-deposit tally rule (first-deposit + subsequent branches), the `openLootBox` frozen-application formula with no cap SLOAD/SSTORE, and the zero-at-open whole-slot clear.
@@ -51,6 +52,7 @@
   5. Every cited file:line across the 4 touched contracts grep-verified against source HEAD per `feedback_verify_call_graph_against_source.md`; zero "by construction" / "single fn reaches all paths" claims.
 
 **Plans:** 2 plans
+
 - [x] 309-01-PLAN.md — §0 grep-verified call-graph evidence + SPEC-01 packed-layout lock + SPEC-02 bonus-only cap + SPEC-03 allocation tally/open-apply
 - [x] 309-02-PLAN.md — §4 SPEC-04 shared-cap disposition: word-independence backward-trace + full in-window SLOAD enumeration + ACCEPT verdict
 
@@ -61,6 +63,7 @@
 **Depends on:** Phase 309 SPEC (locked layout + semantics + shared-cap disposition are load-bearing)
 
 **Success Criteria** (what must be TRUE):
+
   1. `forge build` PASS against the patched contract tree.
   2. `_applyEvMultiplierWithCap` returns `amount * evMultiplierBps / 10_000` for `evMultiplierBps <= LOOTBOX_EV_NEUTRAL_BPS` and never touches the cap on a sub-neutral/neutral box (IMPL-01); only `> NEUTRAL` draws from the cap.
   3. The per-(index, player) snapshot is the packed `uint256` layout per SPEC-01 with working pack/unpack helpers (IMPL-02); storage-layout diff vs v44.0 baseline shows the widened slot with NO new slot introduced; storage break ACCEPTED per pre-launch posture.
@@ -68,6 +71,7 @@
   5. Raw `amount` still feeds `keccak(rngWord, player, day, amount)` and the rolled index/word is byte-unchanged; `lootboxEth` layout untouched (IMPL-05). USER-APPROVED diff committed exactly once per `feedback_batch_contract_approval.md`.
 
 **Plans:** 3 plans (3 waves; Wave 3 is `autonomous: false` — USER-APPROVAL checkpoint gates the single batched contract commit)
+
 - [x] 310-01-PLAN.md — IMPL-02: Storage.sol packed `lootboxPurchasePacked` word + pack/unpack helpers (D-01) + relocated `_lootboxEvMultiplierFromScore` & EV constants (D-02) [shared-base foundation]
 - [x] 310-02-PLAN.md — IMPL-01 + IMPL-04 + IMPL-05(open): LootboxModule bonus-only `<=` cap + `openLootBox` frozen-apply (no cap SLOAD/SSTORE, whole-word zero) + open-path seed byte-identity
 - [x] 310-03-PLAN.md — IMPL-03 + IMPL-05(deposit): Mint + Whale purchase-time cap tally (DIV-1/DIV-2 preserved) → `forge build` PASS → USER-APPROVAL gate → single batched 4-file contract commit
@@ -79,6 +83,7 @@
 **Depends on:** Nothing new (v44.0 closure artifacts + `audit/FINDINGS-v44.0.md` §9d VRF-cluster + memory `project_vrf_rotation_midday_orphan_index` + current HEAD are read-only inputs)
 
 **Success Criteria** (what must be TRUE):
+
   1. `311-SPEC.md` exists with a design-intent backward-trace of `updateVrfCoordinatorAndSub` + `wireVrf` across Scenario A + Scenario B, and the LOCKED fix shape (re-issue-in-flight vs queue+apply) chosen with rationale.
   2. The design closes the orphan-index defect — VRF-01 (a real VRF word lands in `lootboxRngWordByIndex[N]` after rotation) + VRF-02 (post-rotation liveness — `requestLootboxRng`/`retryLootboxRng`/daily-drain reachable) specified precisely.
   3. The freeze-invariant disposition is locked — no VRF-participating slot mutated mid-window in a way that changes an in-flight VRF-derived output (VRF-03 closing HANDOFF-78/85/87/89/91); validator-influenceable entropy backfill explicitly rejected per `feedback_security_over_gas.md`.
@@ -86,6 +91,7 @@
   5. Every cited file:line grep-verified against contract HEAD per `feedback_verify_call_graph_against_source.md`; each §9d VRF-cluster anchor mapped to a closing change; zero "by construction" claims; zero contract/test mutations.
 
 **Plans:** 2 plans
+
 - [x] 311-01-PLAN.md — skeleton + §0 grep-verified call-graph manifest (every CONTEXT anchor VERIFIED-or-DRIFTED) + §9d-anchor→closing-change mapping + vault/admin-routed reach trace
 - [x] 311-02-PLAN.md — §1 Scenario A/B backward-trace + §2 locked re-issue-in-flight fix shape (VRF-01/02) + §3 freeze-invariant disposition (VRF-03) + §4 wireVrf one-shot lock + _setVrfConfig dedup + vault reach (VRF-04/05) + §5 D-05 reachability/escalation + §6 rejected options + §7 self-check
 
@@ -96,6 +102,7 @@
 **Depends on:** Phase 311 SPEC (locked fix shape + freeze-invariant disposition are load-bearing)
 
 **Success Criteria** (what must be TRUE):
+
   1. `forge build` PASS against the patched contract tree.
   2. After an emergency rotation while a mid-day request is in flight, `lootboxRngWordByIndex[N]` is guaranteed a real VRF-derived word (re-issued/queued per SPEC); no path leaves it at 0 for a same-day advance (VRF-01).
   3. Post-rotation, `requestLootboxRng` / `retryLootboxRng` / the daily-drain advance gate remain reachable; no permanent revert / freeze path (VRF-02).
@@ -103,6 +110,7 @@
   5. USER-APPROVED diff committed exactly once per `feedback_batch_contract_approval.md`; every cited file:line re-grep-verified pre-patch per `feedback_verify_call_graph_against_source.md`.
 
 **Plans:** 1 plan (1 wave; Wave 1 is `autonomous: false` — the single USER-APPROVAL checkpoint gates the lone batched contract commit)
+
 - [x] 312-01-PLAN.md — RESEARCH section-3 edits in `DegenerusGameAdvanceModule.sol` (the `_requestVrfWord` + `_setVrfConfig` helpers, `wireVrf` routed through `_setVrfConfig`, the `updateVrfCoordinatorAndSub` 3-case preserve+re-issue rework) then build-green self-review then USER-APPROVAL gate then single batched contract commit `a303ae18` (VRF-01/02/03/05). VRF-04 `wireVrf` init-only lock OMITTED — user-approved deviation: `wireVrf` is one-shot by construction (reachable only from the DegenerusAdmin constructor); see 312-01-SUMMARY Deviations.
 
 ### Phase 313: TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation (TST)
@@ -114,14 +122,20 @@
 **Plans:** 6 plans (2 waves; all `autonomous: true` — test-tree only, AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`; ZERO `contracts/` mutation per `D-43N-AUDIT-ONLY-01`)
 
 Plans:
+**Wave 1**
+
 - [ ] 313-01-PLAN.md — VTST-01 orphan-index reproduction (pre-fix entropy-0 consequence arm + post-fix real-VRF-word-in-[N] after a real mid-flight rotation) [Wave 1]
 - [ ] 313-02-PLAN.md — VTST-02 liveness-after-rotation (mid-day + daily branches, rngWordCurrent!=0 short-circuit, nothing-in-flight no-op, retryLootboxRng failsafe) [Wave 1]
 - [ ] 313-03-PLAN.md — VTST-03 freeze-invariant fuzz under rotation (byte-identical VRF output vs no-rotation baseline; extends the v43 RngLockDeterminism harness) [Wave 1]
 - [ ] 313-04-PLAN.md — VTST-04 wireVrf one-shot lock (access-guard form per the user-approved no-init-lock deviation + structural one-shot attestation + routed updateVrf revert) [Wave 1]
 - [ ] 313-05-PLAN.md — regression migration: the 17 fix-induced test regressions migrated to the preserve+re-issue behavior (Class A assertions + Class B swap/resume helpers) [Wave 1]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 313-06-PLAN.md — suite-wide verification (4 new VTST contracts + v43 harness + 17 migrated regressions PASS; no new failures beyond the pre-fix baseline) + AGENT-COMMIT [Wave 2]
 
 **Success Criteria** (what must be TRUE):
+
   1. Orphan-index reproduction PASSES — pre-fix asserts the entropy-0 defect, post-fix asserts a real VRF word in `lootboxRngWordByIndex[N]` after rotation (VRF-01 by VTST-01).
   2. Liveness-after-rotation PASSES — `requestLootboxRng`/`retryLootboxRng`/daily-drain advance all succeed post-rotation, no permanent revert (VRF-02 by VTST-02).
   3. Freeze-invariant fuzz under rotation PASSES — every VRF-derived output byte-identical to the no-rotation baseline across perturbed rotations between request and fulfilment (VRF-03 by VTST-03).
@@ -135,6 +149,7 @@ Plans:
 **Depends on:** Phase 312 IMPL + Phase 313 TST (adversaries probe the VRF-rotation fix AND its coverage; the degenerette audit probes the already-landed `92b110bf`)
 
 **Success Criteria** (what must be TRUE):
+
   1. `.planning/phases/314-*/314-ADVERSARIAL-CHARGE.md` authored with SWP-01..02 verbatim charges; `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT disposition table complete against the VRF-rotation fix.
   2. `/zero-day-hunter` + `/economic-analyst` disposition tables complete (PARALLEL_SUBAGENT if executor has Task tool; HYBRID-fallback to SEQUENTIAL_MAIN_CONTEXT per v42 P296 / v43 P302 / v44 P307 precedent acceptable) — rotation griefing, liveness-DoS, freeze re-break, cross-surface composition across V-081/jackpot/degenerette.
   3. Degenerette audit complete — DGAUD-01 (slot-shift safe, recompile clean) + DGAUD-02 (`dailyHeroWagers` byte-identical) + DGAUD-03 (no dangling refs, off-chain reconstruction viable) + DGAUD-04 (HANDOFF-01..03/18/81/82 re-verified) with disposition recorded.
@@ -148,6 +163,7 @@ Plans:
 **Depends on:** All prior v45.0 phases (309 + 310 groundwork + 311 + 312 + 313 + 314)
 
 **Success Criteria** (what must be TRUE):
+
   1. `audit/FINDINGS-v45.0.md` 9-section deliverable shipped — §3 VRF-rotation fix attestation with VRF-01..05 each proven by a VTST-NN; the §9d VRF-cluster anchors (HANDOFF-78/85/86/87/88/89/90/91 + ADMA-01/02) marked closed; §3.A delta-surface table over the full v44→v45 commit set (DELTA-01); §4 adversarial disposition per Phase 314 SWP (AUDIT-01).
   2. Delta surfaces audited — V-081 source-level attestation (DELTA-02), jackpot pending-pool fix + regression (DELTA-03), degenerette refactor (DELTA-04 / DGAUD).
   3. §5 LEAN regression PASS — v44.0 NON-WIDENING + `67e9ea6f`/`e5928fb8` closures intact + v43 determinism harness PASS (REG-01); §6 KI walkthrough complete, KNOWN-ISSUES.md UNMODIFIED.
@@ -174,6 +190,7 @@ Plans:
 **Depends on:** Nothing (v43.0 closure artifacts — FINDINGS-v43.0.md §9d + RNGLOCK-FIXREC.md §103 + ADMIN-AUDIT.md — are read-only inputs at baseline `MILESTONE_V43_AT_HEAD_8111cfc5189f628b64b500c881f9995c3edf0ed2`)
 
 **Success Criteria** (what must be TRUE):
+
   1. `.planning/phases/304-*/304-SPEC.md` exists with §1 INV-01..12 each stated as a precise formal property + storage-variable + state-transition enumeration.
   2. §2 SPEC-01..05 design decisions LOCKED with rationale (struct shape, composite-key mapping, `dayToResolve` arg shape, gameOver semantics, snapshot timing, storage-refund sites).
   3. §3 EDGE-01..18 scenarios each have a positive assertion + a negative (revert-or-no-exploit) assertion stated narratively, ready for Phase 306 to mechanically turn into Foundry fuzz functions.
@@ -181,6 +198,7 @@ Plans:
   5. §5 every cited file:line in `contracts/StakedDegenerusStonk.sol` + `contracts/modules/DegenerusGameAdvanceModule.sol` grep-verified against source HEAD per `feedback_verify_call_graph_against_source.md`; zero "by construction" or "covered by single fn" claims.
 
 **Plans:** 5 plans
+
 - [x] 304-01-PLAN.md — skeleton + §0 header + §1 INV-01..12 formal invariant model (shipped 2026-05-19; commits `5a5e1034` + `46b16273`; SUMMARY `.planning/phases/304-spec-invariant-model-spec/304-01-SUMMARY.md`)
 - [x] 304-02-PLAN.md — §2 SPEC-01..05 locked design decisions (struct shape + composite-key + dayToResolve arg + gameOver/zero-rounded/refund-timing sub-locks + 50% supply cap snapshot timing) (shipped 2026-05-19; commit `6edc3967`; SUMMARY `.planning/phases/304-spec-invariant-model-spec/304-02-SUMMARY.md`)
 - [x] 304-03-PLAN.md — §3 EDGE-01..18 exhaustive scenario enumeration (positive + negative assertions; EDGE-07 V-184 attack reproduction with structural-closure byte-identity assertion) (shipped 2026-05-19; commits `315280b0` + `971688ba`; SUMMARY `.planning/phases/304-spec-invariant-model-spec/304-03-SUMMARY.md`)
@@ -194,6 +212,7 @@ Plans:
 **Depends on:** Phase 304 SPEC (locked design decisions are load-bearing)
 
 **Success Criteria** (what must be TRUE):
+
   1. `forge build` PASS against the patched contract tree.
   2. Storage layout diff vs v43.0 baseline shows the 5 slots removed + `pendingByDay` mapping added + `pendingRedemptions` re-keyed; storage breaks ACCEPTED per pre-launch posture (no migration scaffolding).
   3. `_submitGamblingClaimFrom` writes burns to `pendingByDay[currentDayView()]` (per-day pool); cumulative `pendingRedemptionEthValue` global continues to track the cross-day sum unchanged.
@@ -203,6 +222,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
+
 - [x] 305-01-PLAN.md — Single batched USER-APPROVED contract diff per Phase 304 SPEC (pre-patch grep re-verification + 14 source mutations across 5 files: contracts/StakedDegenerusStonk.sol + contracts/modules/DegenerusGameAdvanceModule.sol + contracts/interfaces/IStakedDegenerusStonk.sol + test/fuzz/RedemptionGas.t.sol + test/fuzz/CoverageGap222.t.sol)
 
 ### Phase 306: Test (TST)
@@ -212,6 +232,7 @@ Plans:
 **Depends on:** Phase 305 IMPL (tests target the refactored contract surface)
 
 **Success Criteria** (what must be TRUE):
+
   1. `test/fuzz/StakedStonkRedemption.t.sol` PASSES at 10k runs per case under `FOUNDRY_PROFILE=deep` (`testFuzz_BurnLandsInCurrentDayPool` + `testFuzz_ResolveWritesCorrectDay` + `testFuzz_ClaimReadsCorrectDay` + `testFuzz_MultipleSameDayBurnsAggregate` + `testFuzz_SupplyCapEnforced` + `testFuzz_EvCapEnforced`).
   2. `test/invariant/RedemptionAccounting.t.sol` PASSES with 12 `invariant_*` functions (one per INV-NN) asserted after every handler call across {burn, advance, claim, gameOver, transfer, approve, admin-action} random action sequences at default invariant depth + runs.
   3. `test/fuzz/RedemptionEdgeCases.t.sol` PASSES with one fuzz function per EDGE-01..18 scenario; positive paths assert correct outcome; negative paths assert revert OR no-exploit. EDGE-07 (V-184 attack reproduction) explicitly asserts `redemptionPeriods[D].roll` byte-identical across post-resolution write attempts.
@@ -221,6 +242,7 @@ Plans:
 **Plans:** 5 plans
 
 Plans:
+
 - [x] 306-01-PLAN.md — Foundry invariant harness — RedemptionAccounting (13 invariant_INV_NN_* fns + RedemptionHandler v44 refresh; INV-01..13 + TST-02 + TST-07) — COMPLETE (commit `de75f620`; PROVEN at FOUNDRY_PROFILE=deep × 1000 runs × 256 depth = 256000 calls per invariant; zero failures)
 - [x] 306-02-PLAN.md — Edge fuzz coverage — RedemptionEdgeCases (20 testFuzz_EDGE_NN_* fns incl V-184 reproduction + multi-day stall + dust floor; TST-03 + TST-04 + EDGE-01..20)
 - [x] 306-03-PLAN.md — Per-function fuzz — StakedStonkRedemption (6 ROADMAP-canonical + 2 ACL/sentinel testFuzz_* fns; TST-01)
@@ -234,6 +256,7 @@ Plans:
 **Depends on:** Phase 305 IMPL + Phase 306 TST (adversaries probe the implementation AND the test coverage simultaneously)
 
 **Success Criteria** (what must be TRUE):
+
   1. `.planning/phases/307-*/307-ADVERSARIAL-CHARGE.md` authored with SWP-01..05 verbatim charges + any augments; `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT executed against the charge with disposition table.
   2. `/zero-day-hunter` disposition table complete (PARALLEL_SUBAGENT spawn if executor has Task tool; HYBRID-fallback to SEQUENTIAL_MAIN_CONTEXT per v42 P296 / v43 P302 precedent acceptable; persona fidelity preserved via dedicated per-skill MD file with verbatim CHARGE).
   3. `/economic-analyst` disposition table complete with charged + beyond-charge hypothesis rows; game-theoretic + MEV surface enumeration documented.
@@ -249,6 +272,7 @@ Plans:
 **Depends on:** All prior v44.0 phases (304 + 305 + 306 + 307)
 
 **Success Criteria** (what must be TRUE):
+
   1. `audit/FINDINGS-v44.0.md` 9-section deliverable shipped with §3.A delta-surface complete + §3.B per-exempt-entry-point attestation complete + §3.C INV-01..12 attested as proven by specific test IDs + §3.D V-184 RESOLVED-AT-V44 disposition explicit + §3.E v43 backlog reference + §3.F formal invariant attestation matrix (12 rows × `(INV-NN, test_id, status)`) all PROVEN.
   2. §4 Phase 307 adversarial-pass disposition table complete (skeptic-filter results documented); §5 REG-01 v43.0 non-widening PASS (Phase 301 vm.skip flip is the only intended diff, attested in §3.A); §6 KI walkthrough complete; EXC-01..04 RE_VERIFIED-NEGATIVE-scope at v44.
   3. §9 closure attestation reads `7 of 7 SSTONK_VIOLATIONS RESOLVED_AT_V44; 12 of 12 INVARIANTS PROVEN; 18 of 18 EDGE_CASES TESTED; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`; v45.0+ handoff register lists the 135 remaining v43 anchors verbatim.
@@ -258,6 +282,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
+
 - [x] 308-01-PLAN.md — Ship `audit/FINDINGS-v44.0.md` 9-section TERMINAL deliverable per `D-308-TASK-SPLIT-01` (13 tasks; 2 AGENT-COMMITTED commits per `D-44N-CLOSURE-01`) — SHIPPED 2026-05-20; Commit 1 `6f0ba296` (deliverable) + Commit 2 closure flip; closure signal `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`; verdict 7/7 + 13/13 + 20/20 + 0 NEW + KNOWN_ISSUES_UNMODIFIED per `D-308-INV-COUNT-01`; SOURCE-TREE FROZEN (zero contracts/ + zero test/)
 
 </details>
