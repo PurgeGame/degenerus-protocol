@@ -63,7 +63,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 316-02-PLAN.md — Lock the REMOVE footprint + reconciliation: PROTO-01/RM-04 KEEP+EXPOSE _hasAnyLazyPass, the verified RM-01..06 deletion footprint, the **COMPOUNDED RM-02+JGAS storage slot-shift re-derivation plan** (`autoRebuyState`@19 + `resumeEthPool`@33 → slot-≥34 region shifts −2; one combined `forge inspect` pass), and the VRF-freeze-obligation retirement (RM-04).
+- [x] 316-02-PLAN.md — Lock the REMOVE footprint + reconciliation: PROTO-01/RM-04 KEEP+EXPOSE _hasAnyLazyPass, the verified RM-01..06 deletion footprint, the **COMPOUNDED RM-02+JGAS storage slot-shift re-derivation plan** (`autoRebuyState`@19 + `resumeEthPool`@33 → slot-≥34 region shifts −2; one combined `forge inspect` pass), and the VRF-freeze-obligation retirement (RM-04).
 
 **Wave 3** *(blocked on Wave 2 completion)*
 

@@ -58,7 +58,7 @@ Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`S
 - [ ] **RM-01**: AFKing mode removed entirely — `setAfKingMode`/`_setAfKingMode`/`_deactivateAfKing`/`afKingModeFor`/`afKingActivatedLevelFor`/`deactivateAfKingFromCoin`/`syncAfKingLazyPassFromCoin`, the `afKingMode`/`afKingActivatedLevel` fields, `AFKING_*` constants, `AfKingModeToggled` event, `AfKingLockActive` error all gone. Grep-clean for `afKing`/`AFKING_` (excl. `contracts/test`+`mocks`).
 - [ ] **RM-02**: Free ETH auto-rebuy removed entirely — `setAutoRebuy`/`setAutoRebuyTakeProfit` + privates + `autoRebuyTakeProfitFor` + the `AutoRebuyState` struct/mapping + jackpot `_processAutoRebuy`/`_calcAutoRebuy`. ETH jackpot winnings always credit to claimable; the jackpot credit path no longer consumes a VRF word (entropy param dropped).
 - [ ] **RM-03**: BURNIE flip auto-rebuy KEPT, collapsed to flat 75bps — `_afKingRecyclingBonus`/`_afKingDeityBonusHalfBpsWithLevel` + deity constants (`AFKING_RECYCLE_BONUS_BPS`/`AFKING_DEITY_*`/`DEITY_RECYCLE_CAP`/`AFKING_KEEP_MIN_COIN`) removed; enable/disable/take-profit/carry/claim still work end-to-end; deity tier dropped.
-- [ ] **RM-04**: `_hasAnyLazyPass` KEPT and exposed (PROTO-01) — overrides the standalone-removal dead-code instinct; it is the keeper's pass gate.
+- [x] **RM-04**: `_hasAnyLazyPass` KEPT and exposed (PROTO-01) — overrides the standalone-removal dead-code instinct; it is the keeper's pass gate.
 - [ ] **RM-05**: Cross-contract cascade pruned — `DegenerusVault.gameSetAutoRebuy`/`gameSetAutoRebuyTakeProfit`/`gameSetAfKingMode` removed (BURNIE `coinSet*` kept); `StakedDegenerusStonk` init `setAfKingMode` replaced by the keeper self-subscribe (SUB-09); `IDegenerusGame`/`IBurnieCoinflip` decls + `settleFlipModeChange` removed.
 - [ ] **RM-06**: Storage-layout slot constants re-derived after the `AutoRebuyState` deletion; full suite compiles + green; `KNOWN_ISSUES` and the BURNIE win/loss RNG path (`processCoinflipPayouts`, `rngWord & 1`) unmodified.
 
@@ -117,7 +117,7 @@ Each requirement maps to exactly one phase (primary verification owner). The ful
 |-------------|-------|--------|
 | PROTO-01 | Phase 316 | Complete |
 | SUB-09 | Phase 316 | Pending |
-| RM-04 | Phase 316 | Pending |
+| RM-04 | Phase 316 | Complete |
 | JGAS-01 | Phase 316 | Pending |
 | PROTO-02 | Phase 317 | Pending |
 | PROTO-03 | Phase 317 | Pending |

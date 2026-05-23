@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
 status: executing
-last_updated: "2026-05-23T15:46:14.898Z"
-last_activity: 2026-05-23
+last_updated: "2026-05-23T15:53:35.833Z"
+last_activity: "2026-05-23 -- Completed 316-02-PLAN.md (REMOVE-half design lock: RM-04 KEEP+EXPOSE reconciliation, RM-01..06 footprint, COMPOUNDED RM-02+JGAS −2 slot-shift mandate, SAFE-04 VRF-freeze retirement; zero contracts/test mutation)"
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 ## Current Position
 
 Phase: 316 (spec-crank-subscription-legacy-removal-design-lock-spec) — EXECUTING
-Plan: 2 of 5
-Status: Executing Phase 316 — Plan 316-01 complete (ADD-half design lock); next 316-02 (REMOVE footprint + JGAS)
-Last activity: 2026-05-23 -- Completed 316-01-PLAN.md (ADD-half design lock; PROTO-01 satisfied)
+Plan: 3 of 5
+Status: Executing Phase 316 — Plans 316-01 (ADD-half) + 316-02 (REMOVE footprint + slot-shift + VRF-freeze retirement) complete; next 316-03 (open-item resolution)
+Last activity: 2026-05-23 -- Completed 316-02-PLAN.md (REMOVE-half design lock: RM-04 KEEP+EXPOSE reconciliation, RM-01..06 footprint, COMPOUNDED RM-02+JGAS −2 slot-shift mandate, SAFE-04 VRF-freeze retirement; zero contracts/test mutation)
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
@@ -475,6 +475,7 @@ Audit deliverables:
 | Phase 311 P01 | ~18min | 2 tasks | 1 file (311-SPEC.md skeleton + §0 grep-verified manifest + §0.X §9d map + §0.Y vault reach trace) + 1 SUMMARY |
 | Phase 313 P02 | 50 | 2 tasks | 1 files |
 | Phase 316 P01 | 6min | 2 tasks | 1 files |
+| Phase 316 P02 | 12 min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -554,3 +555,6 @@ Audit deliverables:
 - [Phase ?]: OPEN-D box resolution = parameterless cursor; MUST follow v45 a303ae18 VRF-rotation orphan-index re-issue path (Pitfall 3 landmine) (Plan 316-01)
 - [Phase ?]: PROTO-01 = rename _hasAnyLazyPass private->external view, NO body change; reader-set verified exactly 3 grep matches (decl :1610 + readers :1580/:1660) (Plan 316-01)
 - [Phase ?]: Keeper transitional-state caveat recorded: SPEC locks INTENDED end-state not live source; PLAN-CRANK §9 'done this session' FALSE vs §1.12 drift (Plan 316-01)
+- [Phase ?]: 316-02: RM-04 = KEEP+EXPOSE _hasAnyLazyPass (decl :1610, readers :1580/:1660); delete rest of afKing — dependency-safe IFF PROTO-01 ships same diff (keeper coupling only hasAnyLazyPass at keeper :671/:974)
+- [Phase ?]: 316-02: storage slot-shift locked COMPOUNDED −2 — autoRebuyState@19 + resumeEthPool@33 own-slot deleted same diff → [20,33)=−1, slot≥34=−2 (vrf*/lootboxRng* family at −2); ONE combined forge inspect on POST-(RM-02+JGAS) contract, never blind −1; LootboxBoonCoexistence already +1 stale + baseline-failing
+- [Phase ?]: 316-02: SAFE-04 VRF-freeze retirement — drop entropy from 3-arg _addClaimableEth, JackpotEthWin ABI break; Degenerette 2-arg :1117 untouched; AFKING_RECYCLE_BONUS_BPS=100 (deleted) vs kept RECYCLE_BONUS_BPS=75; JGAS footprint owned by 316-05
