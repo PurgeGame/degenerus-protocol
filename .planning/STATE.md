@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
 status: executing
-last_updated: "2026-05-23T11:06:00.000Z"
-last_activity: 2026-05-23 -- Phase 313 plan 05 (VRF-rotation regression migration) complete
+last_updated: "2026-05-23T11:25:32.436Z"
+last_activity: 2026-05-23 -- Phase 313 plan 06 (suite-wide verification + AGENT-COMMIT) complete — Phase 313 TST DONE; SC-5 proven empirically (0 NEW failures vs pre-fix baseline 41546f16); ZERO contracts/ mutation
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 14
-  completed_plans: 13
-  percent: 93
+  completed_plans: 14
+  percent: 71
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 
 ## Current Position
 
-Phase: 313 (TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation) — EXECUTING
-Plan: 6 of 6 (313-01..04 VTST complete; 313-05 regression-migration complete — `ced272e7` Class A assertion flips + `6ad8338a` Class B swap+resume helper migration; all enumerated fix-induced regressions PASS across the 4 named files (VRFStallEdgeCases 18/18, StallResilience 3/3, VRFCore migrated test PASS + suite 20/22, VRFPathCoverage 4 fix-induced PASS); baseline classification (pre-fix `41546f16` vs HEAD) surfaced 3 additional under-enumerated VRFPathCoverage fuzz tests as fix-induced (fixed via the shared `_resumeAfterSwap` helper) + corrected a StallResilience lootbox slot-drift (38/39→37/38, authoritative lootboxRngPacked/lootboxRngWordByIndex); pre-existing baseline failures (VRFCore test_retryDetection_fresh/test_midDayRequest_doesNotBlockDaily; VRFPathCoverage test_gapBackfillWithMidDayPending_fuzz/test_indexLifecycleAcrossStall_fuzz; LootboxRngLifecycle slot-drift) left UNTOUCHED + documented for 313-06; ZERO contracts/ mutation, forge build exit 0)
-Status: Ready to execute
-Resume: .planning/phases/313-tst-vrf-regression-freeze-invariant-fuzz-under-rotation-tst/313-06-PLAN.md (Wave 2: suite-wide verification — 4 VTST contracts + v43 harness + the migrated regressions PASS, no NEW failures beyond the documented pre-fix baseline + AGENT-COMMIT; autonomous, test-tree only, ZERO contracts/ mutation per D-43N-AUDIT-ONLY-01; next: /gsd-execute-phase 313)
-Last activity: 2026-05-23 -- Phase 313 plan 05 (VRF-rotation regression migration) complete — Class A assertions flipped to preserve+re-issue + Class B swap+resume helpers migrated to fulfil the re-issued request on the new coordinator before draining; all fix-induced regressions PASS; pre-existing baseline failures documented for 313-06; ZERO contracts/ mutation (`ced272e7`/`6ad8338a`)
+Phase: 313 (TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation) — COMPLETE
+Plan: 6 of 6 COMPLETE (all VTST-01..04 proven + suite-wide SC-5 verification done). 313-06 verification battery: forge build exit 0; the 4 new VTST contracts ALL PASS (VrfRotationOrphanIndex 2/2 @1000 runs, VrfRotationLiveness 6/6 @1000 runs, RngLockRotationDeterminism 2/2 @1000 runs, VrfWireOneShot 4/4); the v43 RngLockDeterminism harness PASSES byte-identically (2 live + 16 skip, unmodified); the 313-05 migrated fix-induced regressions PASS (VRFStallEdgeCases 18/18, StallResilience 3/3, VRFCore migrated test PASS, VRFPathCoverage 4 fix-induced PASS). SC-5 PROVEN EMPIRICALLY: temporarily swapped in the pre-fix `AdvanceModule.sol` (the only file a303ae18 changed) from `41546f16`, ran the full suite (pre-fix 80 distinct failing fns) vs HEAD (65 distinct failing fns), restored byte-identically (sha256 verified, git status contracts/ empty) — `comm -23` HEAD\\pre-fix = EMPTY → 0 NEW failures (HEAD failing set is a STRICT SUBSET of the pre-fix baseline); 15 fns FIXED by the phase. The 4 named baseline fails (VRFCore test_retryDetection_fresh/test_midDayRequest_doesNotBlockDaily; VRFPathCoverage test_gapBackfillWithMidDayPending_fuzz/test_indexLifecycleAcrossStall_fuzz) + test_wordWriteMidDay fail in BOTH runs (genuinely pre-existing). The Phase 313 test bundle (4 VTST + 4 migrated regression files) is AGENT-COMMITTED across 313-01..05 (611deb20/2f438ea2/c4d7f627/b4a63ac7/ced272e7/6ad8338a). ZERO contracts/ mutation across the whole phase (`git diff 08c0f2aa..HEAD -- contracts/` empty).
+Status: Phase 313 complete — ready for Phase 314 (SWEEP — 3-skill adversarial + degenerette audit)
+Resume: Phase 314 — SWEEP — 3-Skill Adversarial (VRF fix + delta surfaces) + Degenerette Audit (SWP-01..02 + DGAUD-01..04). Depends on Phase 312 IMPL + Phase 313 TST (both complete). Per `feedback_pause_at_contract_phase_boundaries.md`, confirm direction before advancing past this sensitive-contract phase boundary even with auto_advance ON. Next: /gsd-plan-phase 314 (then /gsd-execute-phase 314).
+Last activity: 2026-05-23 -- Phase 313 plan 06 (suite-wide verification + AGENT-COMMIT) complete — Phase 313 TST DONE; SC-5 proven empirically (0 NEW failures vs pre-fix baseline `41546f16`); v43 harness byte-identical + PASS; ZERO contracts/ mutation
 
 ## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
 
@@ -39,8 +39,8 @@ Last activity: 2026-05-23 -- Phase 313 plan 05 (VRF-rotation regression migratio
 | 309 | SPEC — V-081 Locked Layout + Bonus-Only Cap + Shared-Cap | SPEC | SPEC-01..04 | Complete (groundwork) |
 | 310 | IMPL — V-081 Single Batched USER-APPROVED Diff (`9bcd582d`) | IMPL | IMPL-01..05 | Complete (groundwork) |
 | 311 | SPEC — VRF-Rotation Liveness Fix (design-intent + call-graph) | SPEC | VRF-01..05 | Complete (ready for verification) |
-| 312 | IMPL — VRF-Rotation Fix (single batched USER-APPROVED diff) | IMPL | VRF-01..05 | Pending (roadmapper) |
-| 313 | TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation | TST | VTST-01..04 | Pending (roadmapper) |
+| 312 | IMPL — VRF-Rotation Fix (single batched USER-APPROVED diff) | IMPL | VRF-01..05 | Complete (contract `a303ae18`) |
+| 313 | TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation | TST | VTST-01..04 | Complete (SC-5: 0 new failures vs pre-fix baseline) |
 | 314 | SWEEP — 3-Skill Adversarial (VRF fix + delta surfaces) + Degenerette Audit | SWEEP | SWP-01..02 + DGAUD-01..04 | Pending (roadmapper) |
 | 315 | TERMINAL — Consolidate-Forward Delta Audit + Closure | TERMINAL | DELTA-01..04 + AUDIT-01 + REG-01 + CLS-01 | Pending (roadmapper) |
 

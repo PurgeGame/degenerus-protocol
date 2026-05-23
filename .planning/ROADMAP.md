@@ -132,7 +132,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 313-06-PLAN.md — suite-wide verification (4 new VTST contracts + v43 harness + 17 migrated regressions PASS; no new failures beyond the pre-fix baseline) + AGENT-COMMIT [Wave 2]
+- [x] 313-06-PLAN.md — suite-wide verification (4 new VTST contracts + v43 harness + 17 migrated regressions PASS; no new failures beyond the pre-fix baseline) + AGENT-COMMIT [Wave 2]
 
 **Success Criteria** (what must be TRUE):
 
