@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
-status: planning
-last_updated: "2026-05-23T14:07:13.239Z"
+status: in_progress
+last_updated: "2026-05-23T00:00:00.000Z"
 last_activity: 2026-05-23
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,37 +17,52 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
+See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v45.0 CLOSED (user-approved minimal close, 2026-05-23) — milestone shipped; no active phase.
+**Current focus:** v46.0 — ship the permissionless do-work crank + the `AfKing` auto-rebuy subscription (`StreakKeeperV2` moved in-tree, wired via PROTO-01..05) and in the SAME batched diff remove the legacy in-game AFKing mode + free ETH auto-rebuy it succeeds (BURNIE flip recycle KEPT at flat 75bps). One source-tree change, one test pass, one adversarial audit, one `MILESTONE_V46_AT_HEAD_<sha>` closure. The removal is a prerequisite for the subscription's reinvest mode (old free auto-rebuy intercepts winnings before claimable; the subscription reads from claimable).
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-05-23 — Milestone v46.0 started
+Phase: 316 — SPEC (Crank + Subscription + Legacy-Removal Design Lock)
+Plan: — (not yet planned)
+Status: Roadmap created; ready to plan Phase 316
+Last activity: 2026-05-23 — Milestone v46.0 roadmap created (phases 316-320; 38/38 requirements mapped)
 
-## Current Milestone Phases (v45.0 — CLOSED 2026-05-23, user-approved minimal close)
+## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
-**v45.0 redefined (consolidate-forward).** The original V-081-only 5-phase shape is superseded: phases 309 (SPEC) + 310 (IMPL `9bcd582d`) are retained as **completed groundwork**, and active work is rescoped to the VRF-rotation liveness fix + degenerette audit + consolidate-forward delta audit. Audit baseline → subject: v44.0 closure HEAD `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` → v45.0 closure HEAD (V-081 `9bcd582d` + jackpot `6e5acd7e` + degenerette `92b110bf` + the VRF fix). VRF fix = single batched USER-APPROVED diff at the IMPL phase per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md`; test/planning/audit AGENT-COMMITTED per `D-43N-TEST-COMMITS-AUTO-01`. Phase boundaries + 5 success criteria per phase are finalised in `.planning/ROADMAP.md`.
+**Combined ADD+REMOVE milestone.** The crank/subscription ADD half (`.planning/PLAN-CRANK-DO-WORK-INCENTIVE.md` §10 phase shape) and the legacy-removal REMOVE half (`.planning/PLAN-V47-REMOVE-AFKING-ETH-AUTOREBUY.md`) are FOLDED into the same 5 phases so the milestone is one batched USER-APPROVED contract diff (IMPL), one test pass (TST), one gas pass (GAS), one adversarial audit (TERMINAL). Audit baseline → subject: v45.0 closure HEAD `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` → v46.0 closure HEAD. Subject = the batched ADD+REMOVE diff across `DegenerusGame` + modules + `BurnieCoin`/`BurnieCoinflip` + `DegenerusVault` + `StakedDegenerusStonk` + `ContractAddresses` + the in-tree `AfKing` keeper (paired `degenerus-utilities` rework). Single batched USER-APPROVED contract diff at IMPL per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md` + `feedback_manual_review_before_push.md` (ContractAddresses.sol freely-modifiable per `feedback_contractaddresses_policy.md`); AGENT-COMMITTED test/planning/docs; pre-launch redeploy-fresh per `feedback_frozen_contracts_no_future_proofing.md` (storage break fine). Phase boundaries + 5 success criteria per phase are finalized in `.planning/ROADMAP.md`.
 
-| Phase | Name | Type | Requirements | Status |
-|-------|------|------|--------------|--------|
-| 309 | SPEC — V-081 Locked Layout + Bonus-Only Cap + Shared-Cap | SPEC | SPEC-01..04 | Complete (groundwork) |
-| 310 | IMPL — V-081 Single Batched USER-APPROVED Diff (`9bcd582d`) | IMPL | IMPL-01..05 | Complete (groundwork) |
-| 311 | SPEC — VRF-Rotation Liveness Fix (design-intent + call-graph) | SPEC | VRF-01..05 | Complete (ready for verification) |
-| 312 | IMPL — VRF-Rotation Fix (single batched USER-APPROVED diff) | IMPL | VRF-01..05 | Complete (contract `a303ae18`) |
-| 313 | TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation | TST | VTST-01..04 | Complete (SC-5: 0 new failures vs pre-fix baseline) |
-| 314 | SWEEP — 3-Skill Adversarial (VRF fix + delta surfaces) + Degenerette Audit | SWEEP | SWP-01..02 + DGAUD-01..04 | Complete (unanimous-NEGATIVE; 33/33 rows; Task 6 skipped) |
-| 315 | TERMINAL — Consolidate-Forward Delta Audit + Closure | TERMINAL | DELTA-01..04 + AUDIT-01 + REG-01 + CLS-01 | **CLOSED via minimal close** — REG-01 PASS + closure flip done inline; AUDIT-01 (FINDINGS-v45.0.md deliverable) WAIVED per user; not run as a full phase |
+| Phase | Name | Type | Requirements (primary owner) | Status |
+|-------|------|------|------------------------------|--------|
+| 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 (locks all 38) | Not started |
+| 317 | IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework | IMPL | PROTO-02..05 · CRANK-01..04 · REW-01..04 · SUB-01..08 · RM-01/02/03/05/06 | Not started |
+| 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 (+ testable acceptance of SUB/CRANK/REW/RM) | Not started |
+| 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 | Not started |
+| 320 | AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure | TERMINAL | (re-attests all 38; owns 0 primarily) | Not started |
 
-**Coverage:** 31/31 requirements mapped (9 groundwork complete + 22 active: 5 VRF + 4 DGAUD + 4 DELTA + 4 VTST + 2 SWP + 3 AUDIT/REG/CLS); 0 orphaned. Full mapping in `.planning/REQUIREMENTS.md` Traceability table (roadmapper refreshes).
+**Coverage:** 38/38 requirements mapped (Phase 316: 3 · Phase 317: 25 · Phase 318: 4 · Phase 319: 6 · Phase 320 TERMINAL: re-attests all 38, owns 0 primarily); 0 orphaned; 0 duplicated. Full mapping in `.planning/REQUIREMENTS.md` Traceability table.
 
-**Closure verdict (target):** `VRF_ROTATION_ORPHAN RESOLVED_AT_V45; ROTATION_LIVENESS PRESERVED; FREEZE_INVARIANT INTACT_UNDER_ROTATION; <N> of <N> VRF_CLUSTER_ANCHORS RESOLVED; CONSOLIDATE_FORWARD_DELTA AUDITED (V-081 + jackpot-pending-pool + degenerette); 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`. To be emitted at `audit/FINDINGS-v45.0.md` §9a at the TERMINAL phase.
+**UI hint:** Phase 317 IMPL carries a `**UI hint**: yes` annotation in ROADMAP.md — the keeper-gated `batchPurchase` + crank entry surface interacts with the protocol's frontend/keeper layer (off-chain-discovered work lists, the "free BURNIE" / "click-a-button" crank UX). The off-chain indexer / webpage itself is OUT OF SCOPE (separate frontend track) per PROJECT.md, but the on-chain entry points are designed for that consumer.
+
+**Closure verdict (target):** `CRANK_DO_WORK SHIPPED; AFKING_SUBSCRIPTION SHIPPED; LEGACY_AFKING_MODE + FREE_ETH_AUTOREBUY REMOVED; BURNIE_FLIP_AUTOREBUY KEPT@75BPS; FAUCET_BOUNDED; SWEEP NON-BRICK + CONCURRENT-SAFE; FUNDING_WATERFALL + TWO-TIER_SKIP-KILL CORRECT; RNG_FREEZE_INTACT (+ obligations RETIRED by removal); WWXRP_ZERO_REWARD; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`. To be emitted at Phase 320 TERMINAL closure.
 
 ## Last Shipped Milestone
+
+**v45.0 — VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit** (shipped 2026-05-23, user-approved minimal close)
+
+- 7-phase consolidate-forward milestone (309 SPEC + 310 IMPL `9bcd582d` retained as completed V-081 lootbox EV-cap groundwork; 311 SPEC + 312 IMPL + 313 TST + 314 SWEEP active; 315 TERMINAL **not run** — closed via user-approved minimal close). 30/31 requirements satisfied; 1 WAIVED (AUDIT-01 formal `audit/FINDINGS-v45.0.md` deliverable skipped per user).
+- Audit baseline → subject: v44.0 closure HEAD `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349` → v45.0 closure HEAD `62fb514bfcc8ad042a45cef960e5ff0ff6fbb801`. Subject = V-081 `9bcd582d` (+ EV-freeze `e5928fb8`), jackpot pending-pool `6e5acd7e` + regression `f3e21064`, degenerette `92b110bf`, VRF-rotation fix `a303ae18`.
+- Headline: closed the CATASTROPHE-class VRF-rotation orphan-index liveness defect in `updateVrfCoordinatorAndSub` — emergency coordinator rotation now detect-preserve-re-issues the in-flight request (`a303ae18`, single batched USER-APPROVED diff to `DegenerusGameAdvanceModule.sol`; VRF-04 init-lock OMITTED user-approved as dead code — `wireVrf` is constructor-only-reachable). Closes the §9d VRF-governance cluster HANDOFF-78/85/86/87/88/89/90/91 + ADMA-01/02 (10 anchors). Plus consolidate-forward delta audit of V-081, jackpot pending-pool, and the degenerette refactor.
+- VTST coverage (Phase 313): 7 plans, AGENT-COMMITTED, zero `contracts/` mutation; VTST-01..04 prove VRF-01..05; SC-5 proven empirically (0 NEW test failures vs the pre-fix contract `41546f16`; suite has unrelated pre-existing baseline failures).
+- Adversarial pass (Phase 314): 3-skill — `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT + `/zero-day-hunter` ‖ `/economic-analyst` GENUINE PARALLEL_SUBAGENT; `/degen-skeptic` OUT per `D-271-ADVERSARIAL-02`. **unanimous-NEGATIVE** — 33 disposition rows (26 NEGATIVE-VERIFIED + 7 SAFE_BY_DESIGN); 0 FINDING_CANDIDATE; Task 6 RE-PASS gate SKIPPED. Degenerette audit (DGAUD-01..04) folded into the LOG per D-05.
+- LEAN regression (REG-01): PASS — every `contracts/`+`test/` diff vs the v44.0 closure HEAD is attributable to a known v45-scope commit (NON-WIDENING).
+- Closure verdict: `VRF_ROTATION_ORPHAN RESOLVED_AT_V45; ROTATION_LIVENESS PRESERVED; FREEZE_INVARIANT INTACT_UNDER_ROTATION; 10 of 10 VRF_CLUSTER_ANCHORS RESOLVED; CONSOLIDATE_FORWARD_DELTA AUDITED (V-081 + jackpot-pending-pool + degenerette); 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED; CLOSED_VIA_MINIMAL_CLOSE`.
+- Process note: Phase 315 TERMINAL (the formal `audit/FINDINGS-v45.0.md` 9-section deliverable + `chmod 444`) was intentionally NOT run per user decision (2026-05-23); the audit substance is complete across Phases 309–314 + the inline REG-01. To produce the publishable findings report later, re-open Phase 315.
+- Closure signal: `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801`.
+- See `.planning/MILESTONES.md` for archive.
+
+### Prior Shipped Milestone
 
 **v44.0 — sStonk Per-Day Redemption Refactor + Accounting Invariant Proof** (shipped 2026-05-20)
 

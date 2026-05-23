@@ -99,16 +99,61 @@ Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`S
 
 ## Traceability
 
-Filled by the roadmapper at roadmap creation — each requirement maps to exactly one phase.
+Each requirement maps to exactly one phase (primary verification owner). The full add+remove design is *locked* at Phase 316 SPEC and *consumed* by every downstream phase; the table below records the single phase that owns each requirement's acceptance. Phase 320 (TERMINAL) re-attests all 38 at the closure verdict and owns no requirement primarily.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (PROTO/CRANK/REW/SUB/RM/SAFE/GAS-*) | TBD | Pending |
+| PROTO-01 | Phase 316 | Pending |
+| SUB-09 | Phase 316 | Pending |
+| RM-04 | Phase 316 | Pending |
+| PROTO-02 | Phase 317 | Pending |
+| PROTO-03 | Phase 317 | Pending |
+| PROTO-04 | Phase 317 | Pending |
+| PROTO-05 | Phase 317 | Pending |
+| CRANK-01 | Phase 317 | Pending |
+| CRANK-02 | Phase 317 | Pending |
+| CRANK-03 | Phase 317 | Pending |
+| CRANK-04 | Phase 317 | Pending |
+| REW-01 | Phase 317 | Pending |
+| REW-02 | Phase 317 | Pending |
+| REW-03 | Phase 317 | Pending |
+| REW-04 | Phase 317 | Pending |
+| SUB-01 | Phase 317 | Pending |
+| SUB-02 | Phase 317 | Pending |
+| SUB-03 | Phase 317 | Pending |
+| SUB-04 | Phase 317 | Pending |
+| SUB-05 | Phase 317 | Pending |
+| SUB-06 | Phase 317 | Pending |
+| SUB-07 | Phase 317 | Pending |
+| SUB-08 | Phase 317 | Pending |
+| RM-01 | Phase 317 | Pending |
+| RM-02 | Phase 317 | Pending |
+| RM-03 | Phase 317 | Pending |
+| RM-05 | Phase 317 | Pending |
+| RM-06 | Phase 317 | Pending |
+| SAFE-01 | Phase 318 | Pending |
+| SAFE-02 | Phase 318 | Pending |
+| SAFE-03 | Phase 318 | Pending |
+| SAFE-04 | Phase 318 | Pending |
+| GAS-01 | Phase 319 | Pending |
+| GAS-02 | Phase 319 | Pending |
+| GAS-03 | Phase 319 | Pending |
+| GAS-04 | Phase 319 | Pending |
+| GAS-05 | Phase 319 | Pending |
+| GAS-06 | Phase 319 | Pending |
 
 **Coverage:**
 - v46.0 requirements: 38 total (PROTO 5 · CRANK 4 · REW 4 · SUB 9 · RM 6 · SAFE 4 · GAS 6)
-- Mapped to phases: filled at roadmap
-- Unmapped: filled at roadmap
+- Mapped to phases: **38 / 38** (Phase 316: 3 · Phase 317: 25 · Phase 318: 4 · Phase 319: 6 · Phase 320 TERMINAL: re-attests all 38, owns 0 primarily)
+- Unmapped / orphaned: **0**
+- No requirement maps to more than one phase (no duplicates).
+
+**Per-phase requirement sets:**
+- **Phase 316 SPEC** (3): PROTO-01, SUB-09, RM-04 — the cross-half reconciliation (KEEP+EXPOSE `_hasAnyLazyPass`) + protocol-owned sub init design + claimable-only/quantity-unit/skip-kill-identity/whale-expiry SPEC-open resolution. (All 38 requirements' designs are locked here; only these 3 have SPEC as primary owner.)
+- **Phase 317 IMPL** (25): PROTO-02..05 + CRANK-01..04 + REW-01..04 + SUB-01..08 + RM-01/02/03/05/06 — the one batched USER-APPROVED contract diff + paired `AfKing` keeper rework.
+- **Phase 318 TST** (4): SAFE-01..04 — faucet-resistance, non-brick, concurrency, RNG-freeze; also carries the testable acceptance of SUB-*/CRANK-*/REW-*/RM-* + the removal proofs.
+- **Phase 319 GAS** (6): GAS-01..06 — worst-case-first pass + 0.5 gwei peg calibration.
+- **Phase 320 TERMINAL** (0 primary): cross-cutting acceptance / closure verdict over all 38 + the add/remove delta-audit + freeze-obligation-retirement attestation.
 
 ---
-*Requirements defined: 2026-05-23 — milestone v46.0 (combined crank/subscription ADD + legacy AFKing/ETH-auto-rebuy REMOVE).*
+*Requirements defined: 2026-05-23 — milestone v46.0 (combined crank/subscription ADD + legacy AFKing/ETH-auto-rebuy REMOVE). Traceability filled by roadmapper 2026-05-23 — 38/38 mapped, 0 orphaned, 0 duplicated.*
