@@ -44,6 +44,10 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - Collapse BURNIE flip recycle to flat 75bps (drop the deity-scaled afKing tier).
 - **KEEP `_hasAnyLazyPass`, exposed as the keeper's pass gate** — the single cross-half reconciliation (overrides the standalone-removal dead-code instinct).
 
+**JGAS — folded-in gas simplification (enabled by the ETH-auto-rebuy removal):**
+- The removed per-winner `autoRebuyState` SLOAD + `_processAutoRebuy` branch (RM-02) frees gas on the daily-ETH-jackpot credit path. Spend it to delete the jackpot two-call ETH split — `SPLIT_*`/`resumeEthPool`/`_resumeDailyEth`/`call1Bucket` in `DegenerusGameJackpotModule` + `STAGE_JACKPOT_ETH_RESUME` in `DegenerusGameAdvanceModule` — so the daily ETH jackpot pays all 305 winners in ONE call / one advanceGame stage.
+- Gated on a worst-case-first gas check at SPEC (JGAS-01); at the SAME 305-winner ceiling — pure mechanism removal, **no winner-count / bucket-scaling / payout-EV change**. JGAS-01..04 (SPEC/IMPL/TST/GAS), delta-audited at TERMINAL.
+
 **Key context / constraints:**
 - Single batched USER-APPROVED contract diff at IMPL per the contract-edit feedback memories; pre-launch redeploy-fresh (storage-layout break fine, no migration); test/planning/docs AGENT-committed.
 - The removal is a **prerequisite** for the subscription's reinvest mode — the old free auto-rebuy intercepts winnings before they reach `claimable`; the subscription reads *from* claimable. Combining avoids a coexistence window where both act on winnings.
@@ -52,6 +56,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 **Out of scope for v46.0:**
 - System-chore cranks (advanceGame/jackpot); degenerette payout-EV / placement changes; bet/box ledger storage re-key; liquid-BURNIE rewards; off-chain indexer / webpage (separate frontend track).
+- Jackpot winner-count / bucket-scaling / payout-EV changes — JGAS removes only the gas-split *mechanism* at the same 305-winner ceiling; raising `DAILY_ETH_MAX_WINNERS` (an EV change) was explicitly declined.
 - Deity-pass utilities outside the BURNIE recycle bonus (trait/gold mechanics untouched).
 
 ## Completed Milestone: v45.0 VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit

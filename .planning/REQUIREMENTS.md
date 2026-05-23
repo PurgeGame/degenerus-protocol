@@ -13,7 +13,7 @@
 
 Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`StreakKeeperV2` moved in-tree as `AfKing`, wired via PROTO-01..05), and in the SAME batched diff remove the legacy in-game AFKing mode + free ETH auto-rebuy it succeeds — one source-tree change, one test pass, one adversarial audit, one `MILESTONE_V46_AT_HEAD_<sha>` closure. The removal is a prerequisite for the subscription's reinvest mode (old free auto-rebuy intercepts winnings before claimable; the subscription reads from claimable).
 
-**Non-negotiable closure verdict at v46.0 TERMINAL (target):** `CRANK_DO_WORK SHIPPED; AFKING_SUBSCRIPTION SHIPPED; LEGACY_AFKING_MODE + FREE_ETH_AUTOREBUY REMOVED; BURNIE_FLIP_AUTOREBUY KEPT@75BPS; FAUCET_BOUNDED; SWEEP NON-BRICK + CONCURRENT-SAFE; FUNDING_WATERFALL + TWO-TIER_SKIP-KILL CORRECT; RNG_FREEZE_INTACT (+ obligations RETIRED by removal); WWXRP_ZERO_REWARD; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`.
+**Non-negotiable closure verdict at v46.0 TERMINAL (target):** `CRANK_DO_WORK SHIPPED; AFKING_SUBSCRIPTION SHIPPED; LEGACY_AFKING_MODE + FREE_ETH_AUTOREBUY REMOVED; BURNIE_FLIP_AUTOREBUY KEPT@75BPS; FAUCET_BOUNDED; SWEEP NON-BRICK + CONCURRENT-SAFE; FUNDING_WATERFALL + TWO-TIER_SKIP-KILL CORRECT; RNG_FREEZE_INTACT (+ obligations RETIRED by removal); JACKPOT_ETH_SPLIT REMOVED (single-call fits @305-ceiling); WWXRP_ZERO_REWARD; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`.
 
 ---
 
@@ -78,6 +78,17 @@ Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`S
 - [ ] **GAS-05**: Scavenger + Skeptic pass; every removal/packing validated against the security floor.
 - [ ] **GAS-06**: Regression bounds (placement hot-path +0%); measured worst-cases calibrate the 0.5 gwei peg.
 
+### JGAS — Jackpot ETH-path gas re-profile + two-call split removal (folded in; *enabled by* RM-02's ETH-auto-rebuy removal)
+
+The free ETH auto-rebuy was a per-winner conditional branch on the daily-ETH-jackpot credit path — `_addClaimableEth` (`DegenerusGameJackpotModule.sol:788-811`) did a cold `SLOAD` of `autoRebuyState[beneficiary]` + a possible `_processAutoRebuy` per winner. RM-02 deletes it, flattening + lowering per-winner ETH-credit gas. That freed headroom is localized to the **daily-ETH path** only (coin/lootbox/ticket caps sit on other cost centers and the coin path retains the BURNIE-flip auto-rebuy v46 keeps — so `DAILY_COIN_MAX_WINNERS`/`LOOTBOX_MAX_WINNERS`/`PURCHASE_PHASE_TICKET_MAX_WINNERS` are untouched). Use it purely to delete the two-call split at the **same 305-winner ceiling** — no winner-count / payout-EV change.
+
+- [ ] **JGAS-01**: Derive the THEORETICAL worst-case single-call daily-ETH-jackpot gas *after* RM-02 (worst case = max scale `DAILY_JACKPOT_SCALE_MAX_BPS=63_600` → `DAILY_ETH_MAX_WINNERS=305`, buckets 159/95/50/1, all 4 in one call) — worst-case-FIRST per `feedback_gas_worst_case`. Trace the split's design intent + actor game-theory before locking deletion per `feedback_design_intent_before_deletion`. **DECISION GATE:** 305-winner single call fits the block gas limit with margin → lock removal; else **RETAIN + document**. The 305 ceiling is PRESERVED (split removal only). Enumerate + grep-verify the deletion footprint spanning BOTH `DegenerusGameJackpotModule.sol` (`SPLIT_NONE/CALL1/CALL2`, `resumeEthPool` slot, `_resumeDailyEth`, `splitMode`/`call1Bucket` routing, the `JACKPOT_MAX_WINNERS` split-threshold branch `:476-501`, the `:348` resume-check) AND `DegenerusGameAdvanceModule.sol` (`STAGE_JACKPOT_ETH_RESUME=8` `:68-70` + the `:452-455` resume-check + its stage handler).
+- [ ] **JGAS-02**: *If JGAS-01 locks removal* — in the SAME batched USER-APPROVED diff, delete the daily-ETH two-call split across both modules: `SPLIT_*` constants + `splitMode` param + `call1Bucket` mask + `_resumeDailyEth` + the `resumeEthPool` storage slot + the split-threshold branch in the jackpot module, AND `STAGE_JACKPOT_ETH_RESUME` + its resume-check + stage handler in the advance module. Daily ETH jackpot completes in ONE advanceGame stage / one call at the 305 ceiling. Re-derive storage-layout slot constants after the `resumeEthPool` deletion (compounds with RM-02/RM-06's `AutoRebuyState` slot re-derivation). No winner-count / scaling / EV change.
+- [ ] **JGAS-03**: Prove the daily ETH jackpot pays out correctly at the 305-winner ceiling in ONE call without the split — every bucket (159/95/50/1) paid, exact per-winner amounts, none missed/double-paid, total credited = pool, gas under the block limit; the old split path (`resumeEthPool`, `SPLIT_CALL1/2`, `STAGE_JACKPOT_ETH_RESUME`) grep-clean + behaviorally gone (no resume stage entered). Suite recompiles green with the re-derived slots.
+- [ ] **JGAS-04**: Empirically measure the worst-case single-call 305-winner daily-ETH-jackpot gas on the patched tree; confirm JGAS-01's theoretical derivation + the margin under the block gas limit; attribute the enabling delta to the removed per-winner `autoRebuyState` SLOAD + branch. Folds into the GAS-01 worst-case-first pass.
+
+(The split-removal delta-audit — composes cleanly with the RM-02 removal, no payout stranded by the dropped `resumeEthPool` carry, no double/under-credit — is folded into Phase 320 TERMINAL's existing cross-cutting delta-audit charge, which owns no requirement primarily and re-attests everything at closure.)
+
 ---
 
 ## Deferred / Future (acknowledged, not in v46.0 roadmap)
@@ -90,6 +101,7 @@ Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`S
 | Feature | Reason |
 |---------|--------|
 | System-chore cranks (advanceGame / jackpot) | Out of the do-work scope; separate concern |
+| Jackpot winner-count / bucket-scaling / payout-EV changes | JGAS removes only the gas-split *mechanism* at the SAME 305-winner ceiling; raising `DAILY_ETH_MAX_WINNERS` (an EV change) was explicitly declined |
 | Degenerette payout-EV / placement changes | Not a v46 surface; placement stays gated |
 | Bet/box ledger storage re-key | Hot-path cost; off-chain discovery used instead (OPEN-D deferred) |
 | Liquid-BURNIE rewards | Reward must survive coinflip edge (illiquidity is a faucet lock) |
@@ -99,13 +111,14 @@ Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`S
 
 ## Traceability
 
-Each requirement maps to exactly one phase (primary verification owner). The full add+remove design is *locked* at Phase 316 SPEC and *consumed* by every downstream phase; the table below records the single phase that owns each requirement's acceptance. Phase 320 (TERMINAL) re-attests all 38 at the closure verdict and owns no requirement primarily.
+Each requirement maps to exactly one phase (primary verification owner). The full add+remove design is *locked* at Phase 316 SPEC and *consumed* by every downstream phase; the table below records the single phase that owns each requirement's acceptance. Phase 320 (TERMINAL) re-attests all 42 at the closure verdict and owns no requirement primarily.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PROTO-01 | Phase 316 | Pending |
 | SUB-09 | Phase 316 | Pending |
 | RM-04 | Phase 316 | Pending |
+| JGAS-01 | Phase 316 | Pending |
 | PROTO-02 | Phase 317 | Pending |
 | PROTO-03 | Phase 317 | Pending |
 | PROTO-04 | Phase 317 | Pending |
@@ -131,29 +144,32 @@ Each requirement maps to exactly one phase (primary verification owner). The ful
 | RM-03 | Phase 317 | Pending |
 | RM-05 | Phase 317 | Pending |
 | RM-06 | Phase 317 | Pending |
+| JGAS-02 | Phase 317 | Pending |
 | SAFE-01 | Phase 318 | Pending |
 | SAFE-02 | Phase 318 | Pending |
 | SAFE-03 | Phase 318 | Pending |
 | SAFE-04 | Phase 318 | Pending |
+| JGAS-03 | Phase 318 | Pending |
 | GAS-01 | Phase 319 | Pending |
 | GAS-02 | Phase 319 | Pending |
 | GAS-03 | Phase 319 | Pending |
 | GAS-04 | Phase 319 | Pending |
 | GAS-05 | Phase 319 | Pending |
 | GAS-06 | Phase 319 | Pending |
+| JGAS-04 | Phase 319 | Pending |
 
 **Coverage:**
-- v46.0 requirements: 38 total (PROTO 5 · CRANK 4 · REW 4 · SUB 9 · RM 6 · SAFE 4 · GAS 6)
-- Mapped to phases: **38 / 38** (Phase 316: 3 · Phase 317: 25 · Phase 318: 4 · Phase 319: 6 · Phase 320 TERMINAL: re-attests all 38, owns 0 primarily)
+- v46.0 requirements: 42 total (PROTO 5 · CRANK 4 · REW 4 · SUB 9 · RM 6 · SAFE 4 · GAS 6 · JGAS 4)
+- Mapped to phases: **42 / 42** (Phase 316: 4 · Phase 317: 26 · Phase 318: 5 · Phase 319: 7 · Phase 320 TERMINAL: re-attests all 42, owns 0 primarily)
 - Unmapped / orphaned: **0**
 - No requirement maps to more than one phase (no duplicates).
 
 **Per-phase requirement sets:**
-- **Phase 316 SPEC** (3): PROTO-01, SUB-09, RM-04 — the cross-half reconciliation (KEEP+EXPOSE `_hasAnyLazyPass`) + protocol-owned sub init design + claimable-only/quantity-unit/skip-kill-identity/whale-expiry SPEC-open resolution. (All 38 requirements' designs are locked here; only these 3 have SPEC as primary owner.)
-- **Phase 317 IMPL** (25): PROTO-02..05 + CRANK-01..04 + REW-01..04 + SUB-01..08 + RM-01/02/03/05/06 — the one batched USER-APPROVED contract diff + paired `AfKing` keeper rework.
-- **Phase 318 TST** (4): SAFE-01..04 — faucet-resistance, non-brick, concurrency, RNG-freeze; also carries the testable acceptance of SUB-*/CRANK-*/REW-*/RM-* + the removal proofs.
-- **Phase 319 GAS** (6): GAS-01..06 — worst-case-first pass + 0.5 gwei peg calibration.
-- **Phase 320 TERMINAL** (0 primary): cross-cutting acceptance / closure verdict over all 38 + the add/remove delta-audit + freeze-obligation-retirement attestation.
+- **Phase 316 SPEC** (4): PROTO-01, SUB-09, RM-04, JGAS-01 — the cross-half reconciliation (KEEP+EXPOSE `_hasAnyLazyPass`) + protocol-owned sub init design + the jackpot-split removal decision gate (worst-case-first gas derivation @305) + claimable-only/quantity-unit/skip-kill-identity/whale-expiry SPEC-open resolution. (All 42 requirements' designs are locked here; only these 4 have SPEC as primary owner.)
+- **Phase 317 IMPL** (26): PROTO-02..05 + CRANK-01..04 + REW-01..04 + SUB-01..08 + RM-01/02/03/05/06 + JGAS-02 — the one batched USER-APPROVED contract diff + paired `AfKing` keeper rework + the daily-ETH two-call split removal (both modules).
+- **Phase 318 TST** (5): SAFE-01..04 + JGAS-03 — faucet-resistance, non-brick, concurrency, RNG-freeze, 305-winner single-call jackpot correctness; also carries the testable acceptance of SUB-*/CRANK-*/REW-*/RM-* + the removal proofs.
+- **Phase 319 GAS** (7): GAS-01..06 + JGAS-04 — worst-case-first pass + 0.5 gwei peg calibration + empirical 305-winner single-call jackpot measurement.
+- **Phase 320 TERMINAL** (0 primary): cross-cutting acceptance / closure verdict over all 42 + the add/remove + jackpot-split-removal delta-audit + freeze-obligation-retirement attestation.
 
 ---
-*Requirements defined: 2026-05-23 — milestone v46.0 (combined crank/subscription ADD + legacy AFKing/ETH-auto-rebuy REMOVE). Traceability filled by roadmapper 2026-05-23 — 38/38 mapped, 0 orphaned, 0 duplicated.*
+*Requirements defined: 2026-05-23 — milestone v46.0 (combined crank/subscription ADD + legacy AFKing/ETH-auto-rebuy REMOVE). Traceability filled by roadmapper 2026-05-23 — 38/38 mapped, 0 orphaned, 0 duplicated. JGAS-01..04 jackpot-split-removal sub-thread folded in 2026-05-23 — 42/42 mapped.*

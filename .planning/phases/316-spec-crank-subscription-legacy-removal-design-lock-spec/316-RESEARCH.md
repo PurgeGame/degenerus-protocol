@@ -474,3 +474,186 @@ The VRF word originates as `rngWord`/`randWord` (VRF-derived) and is mixed via `
 
 **Research date:** 2026-05-23
 **Valid until:** until the next `contracts/`/`test/` mutation lands (this milestone is the next mutation — so valid through Phase 317 IMPL; re-verify the slot map immediately after the batched diff per RM-06).
+
+---
+
+## JGAS — Jackpot ETH-Split Removal (added scope, 2026-05-23)
+
+**Researched:** 2026-05-23 (addendum pass) · **Confidence:** HIGH — every line below grep/`forge inspect`-verified against live HEAD `MILESTONE_V45_AT_HEAD_62fb514b`. Zero `[ASSUMED]` factual claims; the one judgement call (single-call-fits-with-margin) is flagged as a structural estimate the SPEC must lock as "REMOVE pending JGAS-04 empirical confirmation."
+
+This addendum supplies the grep-verified factual substrate for **JGAS-01** (Phase 316 SPEC decision-gate), which the main research pass did not cover. JGAS-01 must (a) trace the two-call split's design intent BEFORE locking deletion (`feedback_design_intent_before_deletion`), (b) derive the theoretical worst-case single-call gas FIRST (`feedback_gas_worst_case`), (c) lock REMOVE-if-fits-with-margin else RETAIN+document, and (d) enumerate + grep-verify the deletion footprint across both modules. The split removal is **enabled by RM-02** (drops the per-winner `autoRebuyState` SLOAD + `_processAutoRebuy` branch from the daily-ETH credit path) and ships in the SAME batched USER-APPROVED diff at Phase 317 (JGAS-02).
+
+### J1. JGAS Deletion-Footprint Verification Table (HEADLINE)
+
+All paths canonical (`/home/zak/Dev/PurgeGame/degenerus-audit/contracts/...`). Verdicts: ✓ = doc line matches live; ✗ DRIFT = present at different line; ✗ MISSING = not found.
+
+#### J1.1 `modules/DegenerusGameJackpotModule.sol`
+
+| # | Symbol | Doc/req claim | Live | Verdict |
+|---|--------|---------------|------|---------|
+| 1 | `SPLIT_NONE` constant (=0) | (req: SPLIT_*) | `uint8 private constant SPLIT_NONE = 0;` **:197** | ✓ |
+| 1 | `SPLIT_CALL1` constant (=1) | (req: SPLIT_*) | `=1` **:199** | ✓ |
+| 1 | `SPLIT_CALL2` constant (=2) | (req: SPLIT_*) | `=2` **:201** | ✓ |
+| 2 | `resumeEthPool` storage decl | (req: slot) | `uint128 internal resumeEthPool;` `storage/DegenerusGameStorage.sol:994` (forge slot **33**) | ✓ |
+| 2 | `resumeEthPool` resume-check (jackpot module) | req `:348` | `if (resumeEthPool != 0)` **:349** | ✗ DRIFT (+1; req says 348, body guard at 349, comment at 348) |
+| 2 | `_resumeDailyEth` function | (req: present) | `function _resumeDailyEth(uint24 lvl, uint256 randWord) private` **:1186** (called from **:350**) | ✓ |
+| 3 | `splitMode` param (in `_processDailyEth`) | (req: splitMode routing) | `uint8 splitMode,` **:1248**; local derived **:476/:480/:501** | ✓ |
+| 3 | `call1Bucket` mask routing | (req: call1Bucket) | `bool[4] memory call1Bucket;` **:1270**; build **:1271-1278**; skip-routing **:1287-1288** | ✓ |
+| 4 | `JACKPOT_MAX_WINNERS` split-threshold branch | req `:476-501` | branch `splitMode = (totalWinners <= JACKPOT_MAX_WINNERS) ? SPLIT_NONE : SPLIT_CALL1;` **:476-483**; `_processDailyEth(... splitMode ...)` call **:493-503** | ✓ (the req's `476-501` brackets the threshold-derivation block + the `_processDailyEth` call at 493-503; matches) |
+| 4 | resume-check (jackpot module) | req `:348` | **:349** (see #2) | ✗ DRIFT (+1) |
+| 5 | `DAILY_JACKPOT_SCALE_MAX_BPS` value | req `=63_600` | `uint32 private constant DAILY_JACKPOT_SCALE_MAX_BPS = 63_600;` **:248** | ✓ (value exact) |
+| 5 | `DAILY_ETH_MAX_WINNERS` value | req `=305` | `uint16 private constant DAILY_ETH_MAX_WINNERS = 305;` **:227** | ✓ (value exact) |
+| 5 | bucket sizes 159/95/50/1 | req 159/95/50/1, sum 305 | doc-comment **:226** `159 + 95 + 50 + 1 = 305`; **:246-247** `call 1 ... 159 + solo 1 = 160 winners, call 2 ... 95 + 50 = 145` | ✓ — **arithmetic confirmed: 159+95+50+1 = 305; call1 = 159+1 = 160; call2 = 95+50 = 145** |
+| — | `JACKPOT_MAX_WINNERS` constant (=160) | (req: threshold) | `uint16 private constant JACKPOT_MAX_WINNERS = 160;` **:219** — used **ONLY** at the split-threshold (**:480**); the **:242** mention is a doc-comment cross-reference, not a use | ✓ — **becomes dead on removal** (sole functional use is the threshold) |
+
+**Note (item 4 line-range nuance):** the req's `:476-501` cite is a *range* spanning the `splitMode` derivation block (`:476-483`) plus the `_processDailyEth(...)` call that consumes it (`:493-503`). Both are present and contiguous in the live source; the range is accurate. The interior resume-check the req pins at `:348` is at **:349** in live source (+1 drift — the doc comment is at 348, the `if` guard at 349). Cosmetic; flag in the SPEC attestation.
+
+#### J1.2 `modules/DegenerusGameAdvanceModule.sol`
+
+| # | Symbol | Doc/req claim | Live | Verdict |
+|---|--------|---------------|------|---------|
+| 6 | `STAGE_JACKPOT_ETH_RESUME` constant (=8) | req `=8`, `:68-70` | `uint8 private constant STAGE_JACKPOT_ETH_RESUME = 8;` **:70** (NatSpec **:68-69**) | ✓ (value=8 exact; decl at 70, doc-comment 68-69 — req's `:68-70` brackets the doc+decl) |
+| 6 | resume-check + stage handler (advance module) | req `:452-455` | `if (resumeEthPool != 0) { payDailyJackpot(true, lvl, rngWord); stage = STAGE_JACKPOT_ETH_RESUME; break; }` **:453-456** | ✗ DRIFT (+1; req `452-455`, live `453-456` — comment at 452, block 453-456) |
+
+**Both module footprints are present and accurately located** (≤ +1 line drift on the two interior resume-checks; all constants exact-match by value). The only DRIFTs are the two `+1` resume-check line offsets — purely the doc citing the leading comment line rather than the `if`. No MISSING symbols.
+
+### J2. Advance-Stage-Machine Map (item 7)
+
+**Full `STAGE_*` enumeration** (`DegenerusGameAdvanceModule.sol:60-73`), all `uint8 private constant`:
+
+| Constant | Value | Set at line(s) | Role |
+|----------|-------|----------------|------|
+| `STAGE_GAMEOVER` | 0 | 545, 563, 630 (returns) | game-over / final-sweep completion |
+| `STAGE_RNG_REQUESTED` | 1 | 300 | VRF requested, awaiting fulfillment |
+| `STAGE_TRANSITION_WORKING` | 2 | 315, 327 | level-transition drain in progress |
+| `STAGE_TRANSITION_DONE` | 3 | 336 | transition complete |
+| `STAGE_FUTURE_TICKETS_WORKING` | 4 | 349, 416 | far-future ticket drain |
+| `STAGE_TICKETS_WORKING` | 5 | 281, 361, 594, 613 | ticket-queue best-effort drain (caller retries) |
+| `STAGE_PURCHASE_DAILY` | 6 | 403 | purchase-phase daily jackpot done |
+| `STAGE_ENTERED_JACKPOT` | 7 | 446 | jackpot phase entered |
+| **`STAGE_JACKPOT_ETH_RESUME`** | **8** | **455** | **call-2 of the two-call ETH split — JGAS DELETION TARGET** |
+| `STAGE_JACKPOT_COIN_TICKETS` | 9 | 468 | coin+ticket distribution done |
+| `STAGE_JACKPOT_PHASE_ENDED` | 10 | 464 | jackpot phase complete |
+| `STAGE_JACKPOT_DAILY_STARTED` | 11 | 474 | fresh daily jackpot kicked off |
+
+**Are stage numbers load-bearing? NO — verified three ways:**
+1. **Not persisted.** `stage` is a **function-local `uint8`** (declared `:260` inside `advanceGame`); it is never written to a storage slot. `grep` for any storage-side `stage`/`goStage`/`stagePacked`/`gameStage` field returns nothing.
+2. **Not compared by value.** The only `STAGE_* ==` comparison anywhere is `goStage == STAGE_TICKETS_WORKING` (**:188**) — and that compares against a *returned local* from `_handleGameOverPath`, not a stored or persisted stage. `STAGE_JACKPOT_ETH_RESUME` is **only ever assigned** (`:455`) and **emitted** — never read or compared. (`grep "== 8"` / `STAGE_JACKPOT_ETH_RESUME` confirms: decl `:70`, single assignment `:455`, zero comparisons.)
+3. **Emit-only sink.** Every stage value flows into `emit Advance(stage, lvl)` (event decl `:52`; emitted `:187/:227/:477`). The `Advance` event is **not consumed on-chain** — the two `gameAdvance()` wrappers (`DegenerusVault.sol:500`, `StakedDegenerusStonk.sol:398`) just *call* advance; they do not read the stage. The event is purely an off-chain/observability payload.
+
+**Consequence for JGAS-02:** removing `STAGE_JACKPOT_ETH_RESUME` requires deleting only the constant (`:70`) and its single assignment site (`:455`, inside the `resumeEthPool != 0` block being deleted). **Renumbering 9/10/11 → 8/9/10 is OPTIONAL and cosmetic** (purely tidies the emitted-event enum). The actual resume *mechanism* is driven by the `resumeEthPool != 0` storage read at `:453`, NOT by any stored stage number — so deleting that storage var + its check is what behaviorally removes the resume path. **No load-bearing renumber hazard.** SPEC recommendation: delete constant 8, leave 9/10/11 as-is OR renumber for tidiness (planner's call; either is behaviorally inert). Document the off-chain `Advance`-event ABI note (stage 8 will never be emitted post-removal) as a benign observability delta.
+
+### J3. Combined Storage-Slot Re-Derivation (RM-06 + JGAS, item 8)
+
+**Authoritative `forge inspect contracts/DegenerusGame.sol:DegenerusGame storage-layout` (read-only, forge 1.6.0-nightly):**
+
+| Var | Width | Live slot | After RM-02 (`autoRebuyState`@19 del) | After RM-02 **+** JGAS (`resumeEthPool`@33 del) |
+|-----|-------|-----------|----------------------------------------|--------------------------------------------------|
+| `autoRebuyState` | mapping (full slot) | **19** | **(deleted)** | (deleted) |
+| `lootboxEthBase` | mapping | 20 | 19 (−1) | 19 (−1) |
+| `deityBySymbol` | mapping | 30 | 29 (−1) | 29 (−1) |
+| `earlybirdDgnrsPoolStart` | uint256 | 31 | 30 (−1) | 30 (−1) |
+| `earlybirdEthIn` | uint256 | 32 | 31 (−1) | 31 (−1) |
+| **`resumeEthPool`** | uint128 (own slot) | **33** | 32 (−1) | **(deleted)** |
+| `vrfCoordinator` | address | 34 | 33 (−1) | **32 (−2 vs live)** |
+| `vrfKeyHash` | bytes32 | 35 | 34 (−1) | **33 (−2)** |
+| `vrfSubscriptionId` | uint256 | 36 | 35 (−1) | **34 (−2)** |
+| `lootboxRngPacked` | uint256 | 37 | 36 (−1) | **35 (−2)** |
+| `lootboxRngWordByIndex` | mapping | 38 | 37 (−1) | **36 (−2)** |
+| `lootboxDay` | mapping | 39 | 38 (−1) | **37 (−2)** |
+| `lootboxPurchasePacked` | mapping | 40 | 39 (−1) | **38 (−2)** |
+| `lootboxBurnie` | mapping | 41 | 40 (−1) | **39 (−2)** |
+| `deityBoonDay` | mapping | 42 | 41 (−1) | **40 (−2)** |
+| `boonPacked` | mapping | 61 | 60 (−1) | **59 (−2)** |
+| (all vars at slot ≥ 34) | — | N | N−1 | **N−2** |
+
+**Key facts:**
+- **`resumeEthPool` occupies its OWN slot 33** (uint128 at offset 0; the next declared var `vrfCoordinator` starts fresh at slot 34, NOT packed into 33's free upper 16 bytes). So its deletion is a clean **−1 shift of every var at slot ≥ 34**, layered on top of RM-02's **−1 shift of every var at slot ≥ 20**.
+- **Combined effect: every storage var at slot ≥ 34 shifts down by −2; vars in [20, 33) shift −1; vars < 19 unchanged.** The `vrf*` block + the entire `lootboxRng*` family (the slots the v45 VRF work depends on — §4 of the main pass and `project_vrf_rotation_midday_orphan_index` reference slot-38 `lootboxRngWordByIndex`) all move **−2**. `lootboxRngWordByIndex` 38 → **36**; `lootboxRngPacked` 37 → **35**.
+- **Contracts hold ZERO numeric slot literals** — re-confirmed this pass: `grep -rnE '\.slot\s*:?=\s*[0-9]+|sload\([0-9]+\)|SLOT_[A-Z_]+\s*=\s*[0-9]+' contracts/ (excl test)` returns only `QUEST_SLOT_COUNT=2` and `TICKET_SLOT_BIT=1<<23` (neither is a storage-slot literal). So **no contract code breaks on either shift** — both RM-06 and JGAS slot work are **entirely test-side**.
+- **Compounds with the §4 stale-baseline hazard.** The main pass found `LootboxBoonCoexistence.t.sol` already declares `SLOT_LOOTBOX_RNG_IDX=38 / SLOT_LOOTBOX_WORD=39` and is *already* +1 stale (and failing at baseline). Adding the JGAS −2 shift means `lootboxRngWordByIndex` lands at **36**, `lootboxRngPacked` at **35** — so the re-derivation **cannot be a blind decrement** (some constants are already off in the wrong direction). **Re-run `forge inspect ... storage-layout` against the POST-(RM-02+JGAS) contract and rewrite every test `SLOT_*` from that authoritative output**, file-by-file, AFTER capturing the pre-deletion baseline-failure ledger. This is the same instruction as RM-06 §4 — JGAS just deepens the shift from −1 to −2 for the slot-≥34 region. **RM-06 and JGAS must be re-derived together in one pass** (deleting both vars in the same batched diff, then one `forge inspect`).
+
+### J4. Design-Intent + Worst-Case Finding (items 9, 10, 11 — the JGAS-01 decision-gate substrate)
+
+#### J4.1 Why the two-call split exists (design intent — `feedback_design_intent_before_deletion`)
+
+The split is a **pure gas-ceiling workaround**, NOT a correctness/fairness mechanism. Traced from source:
+
+- **The ceiling that forced it:** the daily ETH jackpot at max scale (`DAILY_JACKPOT_SCALE_MAX_BPS = 63_600` = 6.36×, pool ≥ 200 ETH) caps at `DAILY_ETH_MAX_WINNERS = 305` winners across 4 trait buckets (159/95/50/1). Each winner costs a per-winner credit (see J4.2). The split threshold is `JACKPOT_MAX_WINNERS = 160` (`:480`): if `totalWinners ≤ 160` → `SPLIT_NONE` (one call); else → `SPLIT_CALL1` (two calls). 305 > 160 → splits.
+- **How the split partitions:** `call1Bucket` mask (`:1270-1278`) assigns **call 1 = largest bucket + solo bucket** (159 + 1 = 160 winners), **call 2 = the two mid buckets** (95 + 50 = 145 winners). Call 1 sets `resumeEthPool = uint128(ethPool)` (`:1347-1348`); call 2 reads it back, zeroes it (`:1251-1253`), and pays the skipped buckets.
+- **What state `resumeEthPool` carries between calls:** *only the total ETH pool amount* (a single `uint128`). The winner set, trait IDs, shares, and entropy are **re-derived deterministically in call 2** (`_resumeDailyEth` `:1186-1214` re-rolls `_rollWinningTraits(randWord)`, `_pickSoloQuadrant`, `bucketCountsForPoolCap` from the SAME `randWord` — see J5). So `resumeEthPool` is the *only* cross-call storage carry; everything else is recomputed from the held VRF word.
+- **How advanceGame pauses + resumes:** call 1 runs inside the fresh-daily-jackpot path (`payDailyJackpot(true,...)` at advance `:473`, stage → `STAGE_JACKPOT_DAILY_STARTED`). The NEXT `advanceGame` invocation sees `resumeEthPool != 0` (advance `:453`), runs call 2 (`payDailyJackpot` → jackpot `:349` → `_resumeDailyEth`), stage → `STAGE_JACKPOT_ETH_RESUME`. So **two separate `advanceGame` transactions** complete one daily ETH jackpot when winners > 160.
+- **Actor game-theory:** `advanceGame` is permissionless, gas-rebated via the escalating `bountyMultiplier` (1/2/4/6× of `ADVANCE_BOUNTY_ETH = 0.005 ether`, advance `:244-256`) credited as a coinflip-stake bounty. Whoever calls each chunk earns the per-chunk bounty. The split means the daily-jackpot completion is **two bountied advance calls** instead of one — collapsing it to one call merges the two bounties into one.
+- **Correctness/fairness property lost on single-call? NONE.** Because call 2 re-derives the SAME winner set from the SAME held `randWord`, single-call and two-call produce **identical payouts** (same winners, same per-winner amounts, same solo-bucket whale-pass treatment). The split is observationally equivalent to a single call modulo gas. **No EV, fairness, or determinism property is carried by the split — it is purely a gas-fits workaround.** This is the clean precondition `feedback_design_intent_before_deletion` requires before locking deletion: the mechanism carries no semantic load beyond gas.
+
+#### J4.2 Theoretical worst-case single-call gas (item 10 — `feedback_gas_worst_case`)
+
+**Per-winner cost structure (post-RM-02), derived from source, NOT measured (JGAS-04/Phase-319 measures):**
+
+The single-call payout iterates 4 buckets (`_processDailyEth:1283`), and within each bucket calls `_randTraitTicket` (winner selection) then either `_payNormalBucket` (`:1517`, the 3 non-solo buckets, 304 winners) or `_handleSoloBucketWinner` (1 winner). Per **normal** winner (the dominant 304 of 305):
+
+- `_addClaimableEth(w, perWinner, entropy)` post-RM-02 → falls straight through to `_creditClaimable` (`PayoutUtils:32`): **one SSTORE to `claimableWinnings[w]`** (cold, ~22.1k gas: 20k cold-zero-init SSTORE + 2.1k cold-account access for the new map slot) + one `PlayerCredited` event (~1.5k).
+- One `JackpotEthWin` event emit per winner (`:1531`, 7 indexed/data fields, ~2-3k gas).
+- The `_randTraitTicket` selection amortizes per bucket (one call per bucket, returns the winner array) — its dominant cost is reading the trait ticket pool; bounded by `MAX_BUCKET_WINNERS = 250` (no single bucket > 159 at worst case, so under the cap).
+- `claimablePool += liabilityDelta` is **batched once per bucket** (`:1342-1343`), not per winner — a warm SSTORE (~5k) ×4 buckets.
+
+**Order-of-magnitude estimate (structural, ±30%):** ~25-30k gas per cold-new winner credit (SSTORE + 2 events) × 305 ≈ **7.6M-9.2M gas** for the winner-credit loop, **plus** fixed overhead (4× `_randTraitTicket` ticket-pool reads, bucket-share math, `bucketCountsForPoolCap`, the solo-bucket whale-pass path, prize-pool accounting SSTOREs) ≈ **1-3M**. **Theoretical worst-case single-call ≈ 9-12M gas.** Against a ~30M block gas limit (Ethereum mainnet), that is a **~2.5-3.3× margin** — comfortably fits in one call with headroom. *Caveat:* `_randTraitTicket` cost scales with the trait ticket-pool population (the selection draws from `traitBurnTicket[lvl]`); if the pool is very large the read cost rises, but it is bounded and was already inside *each* of the two split calls today (call 1 alone already paid 160 winners + its own selection overhead under the block limit). **Today call 1 demonstrably pays 160 winners in one tx under the limit; single-call adds the 145 mid-bucket winners (call 2's load) onto the same tx — i.e. single-call ≈ call1 + call2 gas, which is the SAME total work spread across one tx instead of two.** The question is purely whether `call1_gas + call2_gas < block_limit`.
+
+#### J4.3 What RM-02 frees (item 11 — the enabling headroom)
+
+RM-02 removes, **per daily-ETH winner**, from `_addClaimableEth` (`:800-806`):
+- one **cold SLOAD of `autoRebuyState[beneficiary]`** (`:801`, ~2.1k cold-account + 2.1k cold-slot ≈ 4.2k gas; the struct is one slot) — paid for **every** winner even when auto-rebuy is disabled (the SLOAD happens before the `state.autoRebuyEnabled` branch).
+- the conditional `_processAutoRebuy` branch (`:802-804`) — a no-op for disabled winners, but the SLOAD + branch test is unconditional per winner.
+
+**Freed per-winner ≈ 4.2k gas (the unconditional cold struct SLOAD) × 305 ≈ ~1.3M gas** off the worst-case single-call total. That is the localized daily-ETH-path headroom JGAS spends to fit 305 winners in one call. (Coin/lootbox/ticket caps are unaffected — those paths sit on `creditFlip`/other cost centers and the coin path keeps the v46 BURNIE-flip rebuy, so `DAILY_COIN_MAX_WINNERS=50`/`LOOTBOX_MAX_WINNERS=100`/`PURCHASE_PHASE_TICKET_MAX_WINNERS=120` are untouched — confirmed `:223/:230/:243`.)
+
+#### J4.4 Recommended JGAS-01 decision-gate disposition
+
+**LOCK = "REMOVE pending JGAS-04 empirical confirmation, RETAIN-fallback documented."**
+
+Reasoning: the structural derivation (J4.2) shows single-call worst-case ≈ 9-12M gas vs ~30M limit (~2.5-3.3× margin), AND the strongest evidence is **observational equivalence to today's behavior**: the split already pays 160 winners (call 1) + 145 winners (call 2) in two txs that each fit under the block limit; single-call simply sums that same total work into one tx. Since RM-02 *lowers* per-winner cost, single-call total = (call1 + call2 work) − (305 × freed SLOAD) < the current two-call total work. The margin is real but the absolute total (9-12M) is an estimate, not a measurement — and the project rule `feedback_gas_worst_case` mandates measuring the derived worst case before relying on it. **The SPEC therefore locks REMOVE conditionally**: design the IMPL (JGAS-02) to delete the split, and gate the lock's *finality* on JGAS-04's empirical 305-winner single-call measurement at Phase 319 confirming < block limit with margin. **RETAIN-fallback documented:** if JGAS-04 measures the single-call over (or uncomfortably near) the block limit, the IMPL reverts to keeping the split — but this is judged unlikely given the structural margin + the observational-equivalence argument. The decision is *makeable at SPEC* (REMOVE) with an empirical confirmation gate, NOT blocked-until-measurement.
+
+### J5. VRF / Security-Floor Assessment (item 12 — HEADLINE; gates whether JGAS is safe)
+
+**`DegenerusGameAdvanceModule` is the VRF-rotation-sensitive module** (the Phase 312 `a303ae18` work lived here). A stage-machine edit here is exactly the change class that can perturb the freeze invariant — so this assessment is load-bearing per `feedback_security_over_gas` + the v45 VRF-freeze north-star.
+
+**Does the daily-ETH stage consume/read a VRF word?** YES. The daily ETH jackpot is driven by `randWord` (the VRF-derived daily word from `rngGate`). Both call 1 (`payDailyJackpot(true, lvl, rngWord)`, advance `:473`) and call 2 (`payDailyJackpot(true, lvl, rngWord)` → `_resumeDailyEth(lvl, randWord)`, advance `:454` / jackpot `:350`) consume the **SAME `rngWord`** — call 2 re-derives winners by re-rolling `_rollWinningTraits(randWord)` from the identical held word (jackpot `:1188`).
+
+**Is the rng lock HELD across the split? YES — and this is the critical finding.** Tracing `_unlockRng` placement in the jackpot-phase block (advance `:450-475`):
+- The **ETH-resume branch** (`:453-456`): `if (resumeEthPool != 0) { payDailyJackpot(...); stage = STAGE_JACKPOT_ETH_RESUME; break; }` — **does NOT call `_unlockRng`**. The rng lock (`rngLockedFlag`) stays SET, `rngWordCurrent` stays non-zero, the pool stays frozen (`_unfreezePool` not called).
+- `_unlockRng` is called only at the **coin-tickets stage** (`:467`), the **phase-ended path**, and the non-jackpot transition paths (`:331/:402/:629`).
+- So today, across the *entire* two-call ETH split (call 1 → next advanceGame → call 2), **the VRF word is frozen and the same word is reused** — exactly the freeze invariant the north-star demands (every variable interacting with a VRF word frozen across `[rng request → unlock]` vs players).
+
+**Does removing `STAGE_JACKPOT_ETH_RESUME` / the split touch the freeze invariant? NO — and it STRENGTHENS surface-minimality, consistent with SAFE-04's "retire obligations" framing:**
+1. **Single-call collapses two same-word consumptions into one.** Today the word is consumed twice (call 1 + call 2) while held frozen. Single-call consumes it once. Fewer consumption points = strictly simpler freeze surface, never weaker. The word is still consumed *inside* the locked window (the daily jackpot still runs before `_unlockRng` at the coin-tickets stage).
+2. **`_unlockRng` placement is UNCHANGED by JGAS.** JGAS deletes the `resumeEthPool != 0` early-return branch (`:453-456`). The unlock still happens at the coin-tickets stage (`:467`) — which is the NEXT advanceGame call after the (now single) daily ETH jackpot. The unlock timing relative to VRF consumption does not move. Removing the resume branch just means the daily-jackpot-then-coin-tickets sequence is one fewer advanceGame hop; the lock is still held continuously from request to the coin-tickets `_unlockRng`.
+3. **No new player-mutable in-window input.** Single-call reads the same `traitBurnTicket[lvl]` pools and the same held `randWord` that the split already read. No additional SLOAD of player-controllable state is introduced (RM-02 *removes* the `autoRebuyState` read — the opposite direction). The `dailyHeroWagers[dailyIdx]` read (jackpot `:1592-1600`) is keyed on the frozen `dailyIdx` (written only at `_unlockRng`), unchanged by JGAS.
+4. **No coupling between stage *number* and VRF unlock.** Resume is driven by the `resumeEthPool != 0` storage read, NOT by the emitted stage value (J2). The VRF unlock is sequenced by the *code path* (`_unlockRng` call site), not by any stored stage. So deleting stage-constant 8 cannot perturb VRF sequencing — there is no stored-stage→unlock dependency to break.
+
+**Caller-bounded-iteration / bounty model under single-call (the gas-spike concern):** single-call raises ONE advanceGame stage's gas from ~call1-only (~5-7M) to ~call1+call2 (~9-12M). This is still **one permissionless `advanceGame` tx under the block limit** (J4.2 margin). The cursor/chunk-bounty model (escalating `bountyMultiplier`) is **not coupled to the ETH-jackpot chunking** — the bounty escalation is time-based (`elapsed` thresholds, advance `:255`), not winner-count-based. Merging the two ETH-jackpot chunks into one means one bounty payment instead of two for that work — an economic delta (slightly cheaper to fully advance), NOT a safety regression. The remaining caller-bounded-iteration guards (ticket-queue drain `STAGE_TICKETS_WORKING` retry, `MAX_BUCKET_WINNERS=250` per-bucket cap) are untouched. **Provided JGAS-04 confirms the single-call fits under the block limit (J4.4 gate), there is no advanceGame brick risk** — the iteration is still bounded by `DAILY_ETH_MAX_WINNERS=305` (preserved, not raised).
+
+**SECURITY-FLOOR VERDICT: JGAS is freeze-invariant-SAFE.** It removes a VRF-word *re-consumption* point (two same-word reads → one), does not move `_unlockRng`, introduces no new in-window player-mutable input, and the stage-number deletion cannot perturb VRF sequencing (stage numbers are not load-bearing, J2). The only residual risk is the gas-fits question (J4.4), which is a liveness/brick concern gated on JGAS-04's empirical measurement — NOT a freeze-invariant or RNG-manipulability concern. This is the HEADLINE the SPEC needs: **the stage-machine edit does NOT touch the freeze invariant; JGAS is safe to lock REMOVE (pending the gas-fits empirical gate).** The AUDIT phase (320) must re-attest the freeze invariant holds under the post-removal single-call path AND under emergency VRF rotation (the `project_vrf_rotation_midday_orphan_index` surface) — single-call must not orphan a mid-jackpot index, but since it completes the daily ETH jackpot in one atomic call (no cross-tx `resumeEthPool` carry to orphan), it is **strictly less rotation-exposed** than the two-call split, which carries `resumeEthPool` across a tx boundary where a rotation could intervene. **JGAS removes a cross-tx VRF-state carry — a rotation-robustness improvement, consistent with the Phase 312 detect-preserve-re-issue work.**
+
+### J6. Planning Recommendation
+
+**JGAS-01 SPEC section structure (folds into the existing 4-plan decomposition; revise Plan 316-04 + add a JGAS sub-section to 316-02):**
+
+1. **JGAS-01 decision-gate statement** (new SPEC sub-section, owned by the REMOVE-footprint plan **316-02** since it is a removal): lock **"REMOVE the two-call split pending JGAS-04 empirical confirmation; RETAIN-fallback documented"** (J4.4). State the design-intent trace (J4.1 — pure gas workaround, no correctness/fairness load), the theoretical worst-case derivation (J4.2 — ~9-12M vs ~30M, ~2.5-3.3× margin, observational-equivalence argument), and the RM-02 freed headroom (J4.3 — ~1.3M off the path). **Cite the J1 footprint table** as the deletion-surface attestation.
+2. **JGAS deletion footprint** (into 316-02's removal-footprint table, alongside the RM-01..06 surface): the J1.1/J1.2 verified symbols — `SPLIT_NONE/CALL1/CALL2` (`:197/199/201`), `resumeEthPool` (storage `:994`, slot 33; reads/writes jackpot `:349/1201/1252/1253/1348`, advance `:453`), `_resumeDailyEth` (`:1186`), `splitMode` param (`:1248`) + `call1Bucket` mask (`:1270-1278/1287-1288`), the `JACKPOT_MAX_WINNERS` split-threshold (`:476-483/480`) + `JACKPOT_MAX_WINNERS` constant (`:219`, dead on removal), `STAGE_JACKPOT_ETH_RESUME` (`:70`) + its assignment (`:455`) + the advance resume-check (`:453-456`).
+3. **Combined storage re-derivation** (MERGE into 316-02's RM-06 §4 slot-shift plan — do NOT treat as separate): RM-02+JGAS delete TWO storage vars (`autoRebuyState`@19, `resumeEthPool`@33); the slot-≥34 region shifts **−2** (J3). Lock: contract source = zero slot work; test `SLOT_*` = full `forge inspect` re-derivation against the post-(RM-02+JGAS) contract, file-by-file, after capturing the baseline-failure ledger; deepens the §4 stale-baseline hazard (`lootboxRngWordByIndex` → slot 36).
+4. **VRF/security-floor attestation** (HEADLINE into 316-02 and re-stated in the call-graph attestation 316-04): J5 — the stage removal does NOT touch the freeze invariant; it removes a VRF-word re-consumption point + a cross-tx `resumeEthPool` carry (rotation-robustness improvement); `_unlockRng` unmoved; stage numbers not load-bearing. Flag the AUDIT-320 re-attestation charge (freeze holds under single-call + under VRF rotation).
+5. **Revise Plan 316-04 (call-graph attestation / coverage) to the 42-requirement set + JGAS footprint attestation.** The main pass wrote 316-04 against the **38-req** milestone and the "3 SPEC-owned reqs (PROTO-01/SUB-09/RM-04)." REQUIREMENTS.md now carries **42 reqs** (JGAS-01..04 folded in 2026-05-23) with **4 SPEC-owned** (PROTO-01, SUB-09, RM-04, **JGAS-01**). Plan 316-04 must (a) update the coverage count 38→42, (b) add JGAS-01 to the SPEC-owned set, (c) embed this addendum's J1 table + J5 VRF verdict as the JGAS attestation, (d) record the two `+1` resume-check line drifts (jackpot `:348`→349, advance `:452-455`→453-456) so the SPEC contains zero unverified "by construction" claims. The main pass's §"Phase Requirements" table (3 rows) and its "All 38 requirements" prose must be updated to 4 rows / 42 reqs.
+
+**Downstream owners (do NOT run now — note for the planner):** JGAS-03 (Phase 318 TST) proves 305-winner single-call correctness + the split grep-clean/behaviorally-gone; JGAS-04 (Phase 319 GAS) empirically measures the single-call worst-case via gas-audit/gas-scavenger/gas-skeptic + confirms J4.2's derivation + attributes the delta to the removed `autoRebuyState` SLOAD; Phase 320 TERMINAL delta-audits the split removal (no payout stranded by the dropped `resumeEthPool` carry, no double/under-credit, freeze holds under rotation).
+
+**Scope-fence check (item from the brief):** the entire JGAS footprint (J1) is removable **without touching winner-count/EV**. `DAILY_ETH_MAX_WINNERS=305`, `DAILY_JACKPOT_SCALE_MAX_BPS=63_600`, and the 159/95/50/1 bucket derivation (`bucketCountsForPoolCap`/`capBucketCounts`) are **NOT in the deletion set** — only the `splitMode`/`resumeEthPool`/`STAGE_*` *mechanism* that chunks those same 305 winners across two calls. The split-threshold constant `JACKPOT_MAX_WINNERS=160` becomes dead and is deleted, but it is a *split-routing* threshold, NOT a winner-count cap (the cap is `DAILY_ETH_MAX_WINNERS=305`, preserved). **Confirmed: JGAS removes only the split mechanism at the same 305-winner ceiling — zero winner-count / bucket-scaling / payout-EV change.** No footprint item forces an EV touch.
+
+### JGAS Confidence Breakdown
+
+- J1 footprint verification: **HIGH** — direct grep against live HEAD, every constant value + line confirmed; only 2× +1 resume-check line drifts (cosmetic).
+- J2 stage-machine load-bearing analysis: **HIGH** — `stage` is function-local (not stored), `STAGE_JACKPOT_ETH_RESUME` only assigned+emitted (zero comparisons), `Advance` event not consumed on-chain.
+- J3 combined slot re-derivation: **HIGH** — `forge inspect` authoritative; `resumeEthPool`@33 own-slot confirmed; zero contract slot literals re-confirmed.
+- J4 design-intent + worst-case: **HIGH** for design-intent + footprint (source-traced); **MEDIUM** for the absolute gas figure (structural derivation, ±30%, not measured — hence the JGAS-04 empirical gate in the J4.4 lock).
+- J5 VRF/freeze assessment: **HIGH** — `_unlockRng` placement traced; rng-lock-held-across-split confirmed; stage-number non-load-bearing confirmed; cross-tx-carry-removal reasoning source-grounded.
+
+## RESEARCH COMPLETE

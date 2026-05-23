@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
-status: in_progress
-last_updated: "2026-05-23T00:00:00.000Z"
-last_activity: 2026-05-23
+status: executing
+last_updated: "2026-05-23T15:32:11.867Z"
+last_activity: 2026-05-23 -- Phase 316 planning complete
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 5
   completed_plans: 0
   percent: 0
 ---
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 Phase: 316 — SPEC (Crank + Subscription + Legacy-Removal Design Lock)
 Plan: — (not yet planned)
-Status: Roadmap created; ready to plan Phase 316
-Last activity: 2026-05-23 — Milestone v46.0 roadmap created (phases 316-320; 38/38 requirements mapped)
+Status: Ready to execute
+Last activity: 2026-05-23 -- Phase 316 planning complete
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
@@ -35,17 +35,17 @@ Last activity: 2026-05-23 — Milestone v46.0 roadmap created (phases 316-320; 3
 
 | Phase | Name | Type | Requirements (primary owner) | Status |
 |-------|------|------|------------------------------|--------|
-| 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 (locks all 38) | Not started |
-| 317 | IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework | IMPL | PROTO-02..05 · CRANK-01..04 · REW-01..04 · SUB-01..08 · RM-01/02/03/05/06 | Not started |
-| 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 (+ testable acceptance of SUB/CRANK/REW/RM) | Not started |
-| 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 | Not started |
-| 320 | AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure | TERMINAL | (re-attests all 38; owns 0 primarily) | Not started |
+| 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 · JGAS-01 (locks all 42) | Not started |
+| 317 | IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework | IMPL | PROTO-02..05 · CRANK-01..04 · REW-01..04 · SUB-01..08 · RM-01/02/03/05/06 · JGAS-02 | Not started |
+| 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | Not started |
+| 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 · JGAS-04 | Not started |
+| 320 | AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure | TERMINAL | (re-attests all 42; owns 0 primarily) | Not started |
 
-**Coverage:** 38/38 requirements mapped (Phase 316: 3 · Phase 317: 25 · Phase 318: 4 · Phase 319: 6 · Phase 320 TERMINAL: re-attests all 38, owns 0 primarily); 0 orphaned; 0 duplicated. Full mapping in `.planning/REQUIREMENTS.md` Traceability table.
+**Coverage:** 42/42 requirements mapped (Phase 316: 4 · Phase 317: 26 · Phase 318: 5 · Phase 319: 7 · Phase 320 TERMINAL: re-attests all 42, owns 0 primarily); 0 orphaned; 0 duplicated. Full mapping in `.planning/REQUIREMENTS.md` Traceability table. JGAS-01..04 (jackpot two-call-split removal, enabled by RM-02's ETH-auto-rebuy removal) folded in 2026-05-23.
 
 **UI hint:** Phase 317 IMPL carries a `**UI hint**: yes` annotation in ROADMAP.md — the keeper-gated `batchPurchase` + crank entry surface interacts with the protocol's frontend/keeper layer (off-chain-discovered work lists, the "free BURNIE" / "click-a-button" crank UX). The off-chain indexer / webpage itself is OUT OF SCOPE (separate frontend track) per PROJECT.md, but the on-chain entry points are designed for that consumer.
 
-**Closure verdict (target):** `CRANK_DO_WORK SHIPPED; AFKING_SUBSCRIPTION SHIPPED; LEGACY_AFKING_MODE + FREE_ETH_AUTOREBUY REMOVED; BURNIE_FLIP_AUTOREBUY KEPT@75BPS; FAUCET_BOUNDED; SWEEP NON-BRICK + CONCURRENT-SAFE; FUNDING_WATERFALL + TWO-TIER_SKIP-KILL CORRECT; RNG_FREEZE_INTACT (+ obligations RETIRED by removal); WWXRP_ZERO_REWARD; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`. To be emitted at Phase 320 TERMINAL closure.
+**Closure verdict (target):** `CRANK_DO_WORK SHIPPED; AFKING_SUBSCRIPTION SHIPPED; LEGACY_AFKING_MODE + FREE_ETH_AUTOREBUY REMOVED; BURNIE_FLIP_AUTOREBUY KEPT@75BPS; FAUCET_BOUNDED; SWEEP NON-BRICK + CONCURRENT-SAFE; FUNDING_WATERFALL + TWO-TIER_SKIP-KILL CORRECT; RNG_FREEZE_INTACT (+ obligations RETIRED by removal); JACKPOT_ETH_SPLIT REMOVED (single-call fits @305-ceiling); WWXRP_ZERO_REWARD; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`. To be emitted at Phase 320 TERMINAL closure.
 
 ## Last Shipped Milestone
 
