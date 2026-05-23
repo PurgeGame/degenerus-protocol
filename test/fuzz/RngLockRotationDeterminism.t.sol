@@ -252,6 +252,35 @@ contract RngLockRotationDeterminism is DeployProtocol {
         return keccak256(abi.encode(today, dayWord, rngWordCurrent));
     }
 
+    /// @dev LR_MID_DAY occupies byte 28 of lootboxRngPacked (bit offset 224,
+    ///      mask 0xFF) -- the mid-day-in-flight flag updateVrfCoordinatorAndSub
+    ///      reads at :1726 to take the mid-day re-issue branch.
+    uint256 private constant LR_MID_DAY_BIT = 224;
+
+    function _readMidDayFlag() internal view returns (uint256) {
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(SLOT_LOOTBOX_RNG_INDEX))));
+        return (packed >> LR_MID_DAY_BIT) & 0xFF;
+    }
+
+    /// @dev Drive the game into a mid-day RNG-eligible state where
+    ///      requestLootboxRng() succeeds AND its buffer swap sets LR_MID_DAY=1:
+    ///      complete two days so today's daily RNG is recorded, make a lootbox
+    ///      purchase (pending ETH + a ticket-queue entry), fund the VRF
+    ///      subscription. Mirrors VrfRotationLiveness.t.sol (313-02) +
+    ///      LootboxRngLifecycle.t.sol _setupForMidDayRng.
+    function _setupForMidDayRng() internal {
+        _completeDay(0xDEAD0001);
+        vm.warp(block.timestamp + 1 days);
+        _completeDay(0xDEAD0002);
+
+        address buyer = makeAddr("midDayRotationBuyer");
+        vm.deal(buyer, 100 ether);
+        vm.prank(buyer);
+        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth);
+
+        mockVRF.fundSubscription(1, 100e18);
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     // Task 1: daily-branch rotation byte-identity (VTST-03 / VRF-03)
     // ══════════════════════════════════════════════════════════════════════
@@ -322,6 +351,119 @@ contract RngLockRotationDeterminism is DeployProtocol {
             digestA,
             digestB,
             "Rotation daily byte-identity VTST-03 VRF-03"
+        );
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Task 2: mid-day-branch rotation byte-identity (LR_INDEX frozen)
+    // ══════════════════════════════════════════════════════════════════════
+
+    /// @notice Mid-day branch (LR_MID_DAY==1): a coordinator rotation injected
+    ///         between a mid-day lootbox-RNG request and its fulfilment must not
+    ///         change the VRF-derived per-index output, AND must preserve the
+    ///         reserved index N (LR_INDEX frozen across the window). Run A fires
+    ///         requestLootboxRng, rotates mid-flight, and delivers vrfWord on the
+    ///         NEW coordinator (the re-issued mid-day request lands in the
+    ///         preserved slot N via the :1804 mid-day write); Run B fires
+    ///         requestLootboxRng and delivers the SAME vrfWord on the ORIGINAL
+    ///         coordinator with no rotation. The reserved index N is identical
+    ///         across runs and lootboxRngWordByIndex[N] (== vrfWord) is
+    ///         byte-identical across runs.
+    function testFuzz_RotationFreezeInvariant_MidDay(
+        uint256 vrfWord,
+        uint256 rotSeed
+    ) public {
+        // The contract zero-guards a delivered 0 word to 1 (AdvanceModule:1796):
+        // a delivered 0 would be stored as 1, breaking the exact == vrfWord
+        // equality and the byte-identity of the per-index word. Exclude 0; a real
+        // 256-bit VRF word is 0 only with negligible probability. (1 is a legal
+        // mid-day word here -- the mid-day branch writes the index directly and is
+        // not subject to the daily rngGate==1 sentinel.)
+        vm.assume(vrfWord != 0);
+
+        // Setup runs BEFORE the snapshot so both runs share identical pre-request
+        // state (the mid-day-eligible day-2 state + pending lootbox + funded VRF).
+        _setupForMidDayRng();
+
+        uint256 preLockSnap = _snapshotPreLock();
+
+        // ---- Run A: perturbed (rotation mid-flight) ----
+        // Fire the mid-day request; the buffer swap sets LR_MID_DAY=1 and reserves
+        // slot N = LR_INDEX-1.
+        try game.requestLootboxRng() {} catch {
+            vm.assume(false);
+        }
+        if (_readMidDayFlag() != 1) {
+            // requestLootboxRng did not set the mid-day flag (preconditions not
+            // met for this iteration) -- filter, mirroring the v43 harness filters.
+            vm.assume(false);
+        }
+        uint48 reservedIndexA = _readLootboxRngIndex() - 1;
+        // Reserved slot is orphaned-pending (empty) -- not a pre-satisfied tautology.
+        if (_lootboxRngWord(reservedIndexA) != 0) {
+            vm.assume(false);
+        }
+
+        // Rotate while the mid-day request is in flight: the LR_MID_DAY==1 branch
+        // (:1726) re-issues on the new coordinator and PRESERVES LR_INDEX so the
+        // new word lands in the SAME reserved slot N (:1804).
+        MockVRFCoordinator newVRF = _rotateMidWindow(rotSeed);
+        uint256 reissueReqId = newVRF.lastRequestId();
+        if (reissueReqId == 0) {
+            vm.assume(false);
+        }
+        // LR_INDEX preserved across the rotation: the same slot N is still reserved.
+        assertEq(
+            _readLootboxRngIndex() - 1,
+            reservedIndexA,
+            "rotation must preserve the reserved mid-day index (LR_INDEX frozen)"
+        );
+
+        // Deliver the SAME vrfWord on the NEW coordinator's re-issued request
+        // (NOT the abandoned old request, which the :1793 requestId guard rejects).
+        newVRF.fulfillRandomWords(reissueReqId, vrfWord);
+        // The mid-day branch wrote the word directly into the preserved slot N.
+        assertEq(
+            _lootboxRngWord(reservedIndexA),
+            vrfWord,
+            "re-issued word must land in the preserved reserved index after rotation"
+        );
+        bytes32 digestA = keccak256(abi.encode(reservedIndexA, _lootboxRngWord(reservedIndexA)));
+
+        // ---- Run B: baseline (no rotation) ----
+        _revertToPreLock(preLockSnap);
+
+        try game.requestLootboxRng() {} catch {
+            vm.assume(false);
+        }
+        if (_readMidDayFlag() != 1) {
+            vm.assume(false);
+        }
+        uint48 reservedIndexB = _readLootboxRngIndex() - 1;
+        if (_lootboxRngWord(reservedIndexB) != 0) {
+            vm.assume(false);
+        }
+
+        // Deliver the SAME vrfWord on the ORIGINAL coordinator -- no rotation.
+        uint256 baselineReqId = mockVRF.lastRequestId();
+        mockVRF.fulfillRandomWords(baselineReqId, vrfWord);
+        assertEq(
+            _lootboxRngWord(reservedIndexB),
+            vrfWord,
+            "baseline word must land in the reserved index"
+        );
+        bytes32 digestB = keccak256(abi.encode(reservedIndexB, _lootboxRngWord(reservedIndexB)));
+
+        // The reserved index is identical across runs: rotation froze LR_INDEX.
+        assertEq(
+            reservedIndexA,
+            reservedIndexB,
+            "reserved index identical across rotation-perturbed and baseline runs (LR_INDEX frozen)"
+        );
+        _assertVrfOutputByteIdentity(
+            digestA,
+            digestB,
+            "Rotation mid-day byte-identity VTST-03 VRF-03"
         );
     }
 }
