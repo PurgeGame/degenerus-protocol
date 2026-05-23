@@ -23,6 +23,7 @@ import {DegenerusAffiliate} from "../../../contracts/DegenerusAffiliate.sol";
 import {DegenerusJackpots} from "../../../contracts/DegenerusJackpots.sol";
 import {DegenerusQuests} from "../../../contracts/DegenerusQuests.sol";
 import {DegenerusDeityPass} from "../../../contracts/DegenerusDeityPass.sol";
+import {AfKing} from "../../../contracts/AfKing.sol";
 import {DegenerusVault} from "../../../contracts/DegenerusVault.sol";
 import {StakedDegenerusStonk} from "../../../contracts/StakedDegenerusStonk.sol";
 import {DegenerusStonk} from "../../../contracts/DegenerusStonk.sol";
@@ -66,6 +67,7 @@ abstract contract DeployProtocol is Test {
     DegenerusJackpots public jackpots;
     DegenerusQuests public quests;
     DegenerusDeityPass public deityPass;
+    AfKing public afKing;
     DegenerusVault public vault;
     StakedDegenerusStonk public sdgnrs;
     DegenerusStonk public dgnrs;
@@ -79,7 +81,7 @@ abstract contract DeployProtocol is Test {
         vm.warp(86400);
 
         // --- Deploy 4 mocks (nonces 1-4) ---
-        // Then 23 protocol contracts (nonces 5-27) ---
+        // Then 24 protocol contracts (nonces 5-28) ---
         mockVRF = new MockVRFCoordinator();           // nonce 1
         mockStETH = new MockStETH();                  // nonce 2
         mockLINK = new MockLinkToken();               // nonce 3
@@ -118,20 +120,25 @@ abstract contract DeployProtocol is Test {
         quests = new DegenerusQuests();                // N+16 = nonce 21
         deityPass = new DegenerusDeityPass();          // N+17 = nonce 22
 
-        // Vault constructor calls COIN.vaultMintAllowance()
-        vault = new DegenerusVault();                  // N+18 = nonce 23
+        // AfKing: 3-arg constructor (subCost, bounty, lootboxMin), all non-zero so the
+        // sanity reverts pass; makes NO cross-contract calls. Must precede VAULT/SDGNRS
+        // so their SUB-09 afKing.subscribe() calls hit live code (not address(0)).
+        afKing = new AfKing(5_000_000_000, 885_000_000, 10_000_000_000); // N+18 = nonce 23
+
+        // Vault constructor calls COIN.vaultMintAllowance() + AfKing.subscribe() (SUB-09)
+        vault = new DegenerusVault();                  // N+19 = nonce 24
 
         // Stonk constructor calls GAME.claimWhalePass() + AfKing.subscribe() (SUB-09 self-subscribe)
         // Mints creator's 20% to DGNRS address
-        sdgnrs = new StakedDegenerusStonk();           // N+19 = nonce 24
+        sdgnrs = new StakedDegenerusStonk();           // N+20 = nonce 25
 
         // DGNRS reads its sDGNRS balance and mints DGNRS to CREATOR
-        dgnrs = new DegenerusStonk();                  // N+20 = nonce 25
+        dgnrs = new DegenerusStonk();                  // N+21 = nonce 26
 
         // Admin constructor calls VRF.createSubscription() + GAME.wireVrf()
-        admin = new DegenerusAdmin();                  // N+21 = nonce 26
+        admin = new DegenerusAdmin();                  // N+22 = nonce 27
 
         // GNRUS: self-mints 1T to address(this), no cross-contract constructor calls
-        gnrus = new GNRUS();                            // N+22 = nonce 27
+        gnrus = new GNRUS();                            // N+23 = nonce 28
     }
 }

@@ -35,7 +35,7 @@ library ContractAddresses {
     address internal constant COINFLIP =
         address(0x96d3F6c20EEd2697647F543fE6C08bC2Fbf39758);
     address internal constant VAULT =
-        address(0x3Cff5E7eBecb676c3Cb602D0ef2d46710b88854E);
+        address(0x27cc01A4676C73fe8b6d0933Ac991BfF1D77C4da);
     address internal constant AFFILIATE =
         address(0x3381cD18e2Fb4dB236BF0525938AB6E43Db0440f);
     address internal constant JACKPOTS =
@@ -45,13 +45,13 @@ library ContractAddresses {
     address internal constant GAME =
         address(0x13aa49bAc059d709dd0a18D6bb63290076a702D7);
     address internal constant SDGNRS =
-        address(0x27cc01A4676C73fe8b6d0933Ac991BfF1D77C4da);
-    address internal constant DGNRS =
         address(0x796f2974e3C1af763252512dd6d521E9E984726C);
-    address internal constant ADMIN =
+    address internal constant DGNRS =
         address(0x92a6649Fdcc044DA968d94202465578a9371C7b1);
+    address internal constant ADMIN =
+        address(0xDA5A5ADC64C8013d334A0DA9e711B364Af7A4C2d);
     address internal constant AF_KING =
-        address(0x0000000000000000000000000000000000000000);
+        address(0x3Cff5E7eBecb676c3Cb602D0ef2d46710b88854E);
     address internal constant DEITY_PASS =
         address(0xe8dc788818033232EF9772CB2e6622F1Ec8bc840);
     address internal constant WWXRP =
@@ -61,7 +61,7 @@ library ContractAddresses {
     address internal constant LINK_TOKEN =
         address(0xF62849F9A0B5Bf2913b396098F7c7019b51A820a);
     address internal constant GNRUS =
-        address(0xDA5A5ADC64C8013d334A0DA9e711B364Af7A4C2d);
+        address(0x886D6d1eB8D415b00052828CD6d5B321f072073d);
     address internal constant CREATOR =
         address(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496);
     address internal constant VRF_COORDINATOR =

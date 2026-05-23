@@ -32,6 +32,7 @@ contract DeployCanary is DeployProtocol {
         assertEq(address(jackpots), ContractAddresses.JACKPOTS, "JACKPOTS mismatch");
         assertEq(address(quests), ContractAddresses.QUESTS, "QUESTS mismatch");
         assertEq(address(deityPass), ContractAddresses.DEITY_PASS, "DEITY_PASS mismatch");
+        assertEq(address(afKing), ContractAddresses.AF_KING, "AF_KING mismatch");
         assertEq(address(vault), ContractAddresses.VAULT, "VAULT mismatch");
         assertEq(address(sdgnrs), ContractAddresses.SDGNRS, "SDGNRS mismatch");
         assertEq(address(dgnrs), ContractAddresses.DGNRS, "DGNRS mismatch");
@@ -58,6 +59,7 @@ contract DeployCanary is DeployProtocol {
         assertTrue(address(sdgnrs).code.length > 0, "SDGNRS not deployed");
         assertTrue(address(admin).code.length > 0, "Admin not deployed");
         assertTrue(address(coinflip).code.length > 0, "Coinflip not deployed");
+        assertTrue(address(afKing).code.length > 0, "AfKing not deployed");
         assertTrue(address(gnrus).code.length > 0, "GNRUS not deployed");
     }
 }
