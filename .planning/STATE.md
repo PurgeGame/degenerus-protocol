@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
 status: executing
-last_updated: "2026-05-23T22:35:00.000Z"
+last_updated: "2026-05-23T22:41:15.488Z"
 last_activity: 2026-05-23
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 18
   completed_plans: 20
-  percent: 40
+  percent: 60
 ---
 
 # Project State
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 ## Current Position
 
 Phase: 318
-Plan: 05 complete (SAFE-04 RNG-freeze intact + REMOVE proofs, RngFreezeAndRemovalProofs.t.sol 13/13) — Wave 2 in progress; 318-06 remains
-Status: Executing — 318-05 of 6 complete
+Plan: 06 complete (JGAS-03 single-call 305-winner daily-ETH jackpot correctness + conservation + gas-fits + split-gone, JackpotSingleCallCorrectness.t.sol 8/8) — ALL 6 plans done; Phase 318 TST complete
+Status: Phase 318 complete — 6 of 6 plans done; ready for verification / next direction (319 GAS)
 Last activity: 2026-05-23
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
@@ -37,7 +37,7 @@ Last activity: 2026-05-23
 |-------|------|------|------------------------------|--------|
 | 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 · JGAS-01 (locks all 42) | Complete — ready for verification (5/5 plans: 316-01 · 316-02 · 316-05 · 316-03 · 316-04 done) |
 | 317 | IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework | IMPL | PROTO-02..05 · CRANK-01..04 · REW-01..04 · SUB-01..08 · RM-01/02/03/05/06 · JGAS-02 | Not started |
-| 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | In progress — 318-01 (fixture repair, SAFE-04) + 318-02 (SAFE-01 crank faucet-resistance, CrankFaucetResistance.t.sol 10/10) + 318-03 (SAFE-02 non-brick + SUB/PROTO acceptance, CrankNonBrick.t.sol 12/12 + AfKingSubscription.t.sol 7/7) + 318-04 (SAFE-03 concurrency + funding waterfall + two-tier skip-kill, AfKingConcurrency.t.sol 10/10 + AfKingFundingWaterfall.t.sol 9/9) + 318-05 (SAFE-04 RNG-freeze intact + REMOVE proofs, RngFreezeAndRemovalProofs.t.sol 13/13) done; 318-06 remains |
+| 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | Complete — all 6 plans done: 318-01 (fixture repair, SAFE-04) + 318-02 (SAFE-01 crank faucet-resistance, CrankFaucetResistance.t.sol 10/10) + 318-03 (SAFE-02 non-brick + SUB/PROTO acceptance, CrankNonBrick.t.sol 12/12 + AfKingSubscription.t.sol 7/7) + 318-04 (SAFE-03 concurrency + funding waterfall + two-tier skip-kill, AfKingConcurrency.t.sol 10/10 + AfKingFundingWaterfall.t.sol 9/9) + 318-05 (SAFE-04 RNG-freeze intact + REMOVE proofs, RngFreezeAndRemovalProofs.t.sol 13/13) + 318-06 (JGAS-03 single-call 305-winner daily-ETH correctness, JackpotSingleCallCorrectness.t.sol 8/8 — worst-case 305-winner call 7.5M gas < 30M) done |
 | 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 · JGAS-04 | Not started |
 | 320 | AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure | TERMINAL | (re-attests all 42; owns 0 primarily) | Not started |
 
@@ -479,6 +479,7 @@ Audit deliverables:
 | Phase 317 P07 | 1 session | 3 tasks | 27 files |
 | 318 | 01 | ~10min | 3 | 4 files (predictAddresses.js + DeployProtocol.sol + DeployCanary.t.sol + ContractAddresses.sol) + 1 SUMMARY |
 | 318 | 05 | ~6min | 3 | 1 file (test/fuzz/RngFreezeAndRemovalProofs.t.sol NEW, 869 lines, 13 tests) + 1 SUMMARY (SAFE-04 freeze-intact + REMOVE proofs; 13/13 green; zero contracts/ mutation) |
+| 318 | 06 | ~12min | 2 | 1 file (test/fuzz/JackpotSingleCallCorrectness.t.sol NEW, 561 lines, 8 tests) + 1 SUMMARY (JGAS-03 single-call 305-winner correctness + conservation + gas-fits 7.5M<30M + split-gone; 8/8 green; zero contracts/ mutation) |
 
 ## Decisions
 
