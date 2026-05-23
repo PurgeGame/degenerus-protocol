@@ -67,7 +67,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 316-05-PLAN.md — *(NEW — JGAS fold)* Lock the **JGAS-01 jackpot two-call-split-removal decision gate**: the split's design-intent trace (pure gas-ceiling workaround, no EV/fairness load), the theoretical worst-case single-call 305-winner gas derived FIRST (~9-12M vs ~30M, ~2.5-3.3× margin), the locked decision "REMOVE pending JGAS-04 empirical confirmation, RETAIN-fallback documented" (305 ceiling preserved), the grep-verified deletion footprint across both `DegenerusGameJackpotModule` + `DegenerusGameAdvanceModule`, and the J5 VRF/freeze-SAFE verdict (JGAS-01). Cross-references 316-02 for the −2 slot consequence; depends on 316-02.
+- [x] 316-05-PLAN.md — *(NEW — JGAS fold)* Lock the **JGAS-01 jackpot two-call-split-removal decision gate**: the split's design-intent trace (pure gas-ceiling workaround, no EV/fairness load), the theoretical worst-case single-call 305-winner gas derived FIRST (~9-12M vs ~30M, ~2.5-3.3× margin), the locked decision "REMOVE pending JGAS-04 empirical confirmation, RETAIN-fallback documented" (305 ceiling preserved), the grep-verified deletion footprint across both `DegenerusGameJackpotModule` + `DegenerusGameAdvanceModule`, and the J5 VRF/freeze-SAFE verdict (JGAS-01). Cross-references 316-02 for the −2 slot consequence; depends on 316-02.
 
 **Wave 4** *(blocked on Wave 3 completion)*
 

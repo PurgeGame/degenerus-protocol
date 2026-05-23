@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
 status: executing
-last_updated: "2026-05-23T15:53:35.833Z"
-last_activity: "2026-05-23 -- Completed 316-02-PLAN.md (REMOVE-half design lock: RM-04 KEEP+EXPOSE reconciliation, RM-01..06 footprint, COMPOUNDED RM-02+JGAS −2 slot-shift mandate, SAFE-04 VRF-freeze retirement; zero contracts/test mutation)"
+last_updated: "2026-05-23T15:59:28.137Z"
+last_activity: 2026-05-23
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 ## Current Position
 
 Phase: 316 (spec-crank-subscription-legacy-removal-design-lock-spec) — EXECUTING
-Plan: 3 of 5
-Status: Executing Phase 316 — Plans 316-01 (ADD-half) + 316-02 (REMOVE footprint + slot-shift + VRF-freeze retirement) complete; next 316-03 (open-item resolution)
-Last activity: 2026-05-23 -- Completed 316-02-PLAN.md (REMOVE-half design lock: RM-04 KEEP+EXPOSE reconciliation, RM-01..06 footprint, COMPOUNDED RM-02+JGAS −2 slot-shift mandate, SAFE-04 VRF-freeze retirement; zero contracts/test mutation)
+Plan: 4 of 5
+Status: Executing Phase 316 — Plans 316-01 (ADD-half) + 316-02 (REMOVE footprint/slot-shift/VRF-freeze retirement) + 316-05 (JGAS-01 Decision Gate) complete; remaining 316-03 (open-item resolution) + 316-04 (call-graph attestation / final assembly)
+Last activity: 2026-05-23 -- Completed 316-05-PLAN.md (JGAS-01 Decision Gate: design-intent → worst-case-first 305-winner gas ~9-12M vs ~30M → locked "REMOVE pending JGAS-04 empirical confirmation, RETAIN-fallback documented" → two-module deletion footprint grep-verified → freeze-invariant-SAFE verdict; 305 ceiling preserved; zero contracts/test mutation)
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
@@ -35,7 +35,7 @@ Last activity: 2026-05-23 -- Completed 316-02-PLAN.md (REMOVE-half design lock: 
 
 | Phase | Name | Type | Requirements (primary owner) | Status |
 |-------|------|------|------------------------------|--------|
-| 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 · JGAS-01 (locks all 42) | In Progress (1/5 plans: 316-01 done) |
+| 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 · JGAS-01 (locks all 42) | In Progress (3/5 plans: 316-01 · 316-02 · 316-05 done) |
 | 317 | IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework | IMPL | PROTO-02..05 · CRANK-01..04 · REW-01..04 · SUB-01..08 · RM-01/02/03/05/06 · JGAS-02 | Not started |
 | 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | Not started |
 | 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 · JGAS-04 | Not started |
@@ -558,3 +558,8 @@ Audit deliverables:
 - [Phase ?]: 316-02: RM-04 = KEEP+EXPOSE _hasAnyLazyPass (decl :1610, readers :1580/:1660); delete rest of afKing — dependency-safe IFF PROTO-01 ships same diff (keeper coupling only hasAnyLazyPass at keeper :671/:974)
 - [Phase ?]: 316-02: storage slot-shift locked COMPOUNDED −2 — autoRebuyState@19 + resumeEthPool@33 own-slot deleted same diff → [20,33)=−1, slot≥34=−2 (vrf*/lootboxRng* family at −2); ONE combined forge inspect on POST-(RM-02+JGAS) contract, never blind −1; LootboxBoonCoexistence already +1 stale + baseline-failing
 - [Phase ?]: 316-02: SAFE-04 VRF-freeze retirement — drop entropy from 3-arg _addClaimableEth, JackpotEthWin ABI break; Degenerette 2-arg :1117 untouched; AFKING_RECYCLE_BONUS_BPS=100 (deleted) vs kept RECYCLE_BONUS_BPS=75; JGAS footprint owned by 316-05
+- [Phase ?]: 316-05: JGAS-01 LOCKED VERBATIM "REMOVE pending JGAS-04 empirical confirmation, RETAIN-fallback documented" — REMOVE makeable at SPEC, finality gated on Phase-319 JGAS-04 empirical 305-winner single-call measurement (<block limit with margin), RETAIN-fallback if it measures over/near the limit (judged unlikely)
+- [Phase ?]: 316-05: 305-winner ceiling PRESERVED — mechanism-only removal; DAILY_ETH_MAX_WINNERS=305 (:227) / DAILY_JACKPOT_SCALE_MAX_BPS=63_600 (:248) / 159·95·50·1 bucket derivation NOT in deletion set; zero winner-count/bucket-scaling/payout-EV change; JACKPOT_MAX_WINNERS=160 (:219) is a split-routing threshold (dead on removal), NOT a winner cap
+- [Phase ?]: 316-05: ordering load-bearing — design-intent (split = pure gas-ceiling workaround, resumeEthPool carries only uint128 pool-remainder, call1=160/call2=145, same randWord re-rolled in call2, NO correctness/EV load) BEFORE worst-case-first gas (~9-12M vs ~30M, ~2.5-3.3× margin, RM-02 frees ~1.3M cold autoRebuyState SLOAD ×305, observational equivalence) BEFORE the locked decision (feedback_design_intent_before_deletion + feedback_gas_worst_case)
+- [Phase ?]: 316-05: JGAS freeze-invariant-SAFE (STATED not assumed) — resume branch (advance :453-456) never calls _unlockRng (lock held across split, _unlockRng only at coin-tickets :467/transitions); single-call collapses two same-word consumptions to one, _unlockRng placement UNCHANGED, no new in-window player-mutable input, stage numbers NOT load-bearing; removes a cross-tx resumeEthPool carry = VRF-rotation-robustness IMPROVEMENT (Phase 312 a303ae18 lineage); residual risk = gas-fits/liveness only; AUDIT-320 re-attests under single-call + rotation via zero-day-hunter
+- [Phase ?]: 316-05: deletion footprint grep-verified BOTH modules at HEAD — Jackpot SPLIT_* :197/199/201, JACKPOT_MAX_WINNERS=160 :219, resumeEthPool :349/1201/1252-1253/1348, _resumeDailyEth :1186, splitMode :1248, call1Bucket :1270-1276/1287-1288, threshold :476-483; Advance STAGE_JACKPOT_ETH_RESUME=8 :70 + assign :455 + resume-check :453-456; storage resumeEthPool :994; two cosmetic +1 drifts recorded (jackpot 348→349, advance 452-455→453-456); slot −2 consequence cross-referenced to 316-02 (not re-derived)
