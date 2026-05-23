@@ -202,7 +202,7 @@ const UINT32_MASK = 0xffffffffn;
 // Storage slot for lootboxRngPacked — gates placeDegeneretteBet at
 // DegenerusGameDegeneretteModule.sol:451 (`if (index == 0) revert E()`).
 const LOOTBOX_RNG_PACKED_SLOT =
-  "0x" + (37).toString(16).padStart(64, "0");
+  "0x" + (35).toString(16).padStart(64, "0");
 
 // -----------------------------------------------------------------------------
 // Module-level helpers

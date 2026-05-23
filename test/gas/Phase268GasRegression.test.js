@@ -143,10 +143,10 @@ const WORST_CASE_RNG_WORDS = []; // empty → soft-skip until pinned
 // QUICK_PLAY_SALT per .sol L233.
 const QUICK_PLAY_SALT = "0x51"; // bytes1 = 'Q'
 
-// LOOTBOX_RNG_WORD_SLOT = 39 (per Foundry precedent at
+// LOOTBOX_RNG_WORD_SLOT = 36 (per Foundry precedent at
 // test/fuzz/DegeneretteFreezeResolution.t.sol L37).
-const LOOTBOX_RNG_WORD_SLOT = 39n;
-const LOOTBOX_RNG_PACKED_SLOT = 38n;
+const LOOTBOX_RNG_WORD_SLOT = 36n;
+const LOOTBOX_RNG_PACKED_SLOT = 35n;
 
 // Stage constants (mirror test/gas/Phase264GasRegression.test.js L130-133).
 const STAGE_RNG_REQUESTED = 1n;

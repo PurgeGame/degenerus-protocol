@@ -28,9 +28,9 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///              (:1741): NO re-issue -- delivered word preserved, advance proceeds.
 ///
 /// @dev    Storage slots are authoritative per `forge inspect DegenerusGame storage-layout`:
-///         slot 37 = lootboxRngPacked (LR_INDEX in low bits, LR_MID_DAY at bit 224 mask 0xFF),
-///         slot 38 = lootboxRngWordByIndex mapping (lootboxRngWordByIndex[i] at
-///         keccak256(abi.encode(uint256(i), uint256(38)))),
+///         slot 35 = lootboxRngPacked (LR_INDEX in low bits, LR_MID_DAY at bit 224 mask 0xFF),
+///         slot 36 = lootboxRngWordByIndex mapping (lootboxRngWordByIndex[i] at
+///         keccak256(abi.encode(uint256(i), uint256(36)))),
 ///         slot 3 = rngWordCurrent, slot 0 packed = rngRequestTime at bit offset 64.
 ///         ZERO contracts/ mutation -- audit-only (D-43N-AUDIT-ONLY-01).
 contract VrfRotationLiveness is DeployProtocol {
@@ -59,7 +59,7 @@ contract VrfRotationLiveness is DeployProtocol {
     // Storage-read helpers (slots authoritative per forge inspect)
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @dev Read LR_INDEX (the low bits of lootboxRngPacked at slot 37).
+    /// @dev Read LR_INDEX (the low bits of lootboxRngPacked at slot 35).
     function _readLootboxRngIndex() internal view returns (uint48) {
         return uint48(uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_PACKED))));
     }

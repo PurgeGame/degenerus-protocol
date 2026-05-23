@@ -57,9 +57,9 @@ const MIN_BET_ETH_VALUE = hre.ethers.parseEther("0.005");
 
 // Storage slot for lootboxRngPacked in DegenerusGame. Resolved via the
 // hardhat storage-layout artifact (`getBuildInfo()` → contracts →
-// storageLayout) — slot index 37 at offset 0, type uint256. The low 48 bits
+// storageLayout) — slot index 35 at offset 0, type uint256. The low 48 bits
 // are `lootboxRngIndex` (LR_INDEX_SHIFT=0, LR_INDEX_MASK=0xFFFFFFFFFFFF).
-const LOOTBOX_RNG_PACKED_SLOT = "0x" + (37).toString(16).padStart(64, "0");
+const LOOTBOX_RNG_PACKED_SLOT = "0x" + (35).toString(16).padStart(64, "0");
 
 // Storage slot 0 holds the packed timing/FSM struct per
 // DegenerusGameStorage.sol:44-66. `dailyIdx` (uint32) occupies bytes [4:8],

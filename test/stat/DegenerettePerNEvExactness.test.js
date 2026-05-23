@@ -342,14 +342,14 @@ function makePlayerTicketWithN(N) {
 
 // ---------------------------------------------------------------------------
 // Hardhat-side mirror of test/fuzz/DegeneretteFreezeResolution.t.sol L338-341
-// (`_injectLootboxRngWord`). LOOTBOX_RNG_WORD_SLOT = 39 per Foundry L37.
+// (`_injectLootboxRngWord`). LOOTBOX_RNG_WORD_SLOT = 36 per Foundry L37.
 // ---------------------------------------------------------------------------
 
 async function injectLootboxRngWord(game, index, rngWord) {
   const slot = hre.ethers.keccak256(
     hre.ethers.AbiCoder.defaultAbiCoder().encode(
       ["uint256", "uint256"],
-      [BigInt(index), 39n],
+      [BigInt(index), 36n],
     ),
   );
   await hre.network.provider.send("hardhat_setStorageAt", [

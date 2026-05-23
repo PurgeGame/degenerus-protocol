@@ -41,7 +41,7 @@ contract RngIndexDrainBindingTest is DeployProtocol {
         return uint256(vm.load(address(game), slot));
     }
 
-    /// @dev Read LR_INDEX from storage slot 38 (low 48 bits).
+    /// @dev Read LR_INDEX from storage slot 35 (low 48 bits).
     function _lrIndex() internal view returns (uint48) {
         return uint48(uint256(vm.load(address(game), bytes32(SLOT_LR_INDEX))));
     }

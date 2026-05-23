@@ -75,14 +75,14 @@ contract VRFStallEdgeCases is DeployProtocol {
         }
     }
 
-    /// @dev Read lootboxRngIndex directly from storage slot 37 (lower 48 bits of lootboxRngPacked).
+    /// @dev Read lootboxRngIndex directly from storage slot 35 (lower 48 bits of lootboxRngPacked).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(37)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(35)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 38).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 36).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(38)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(36)));
         return uint256(vm.load(address(game), slot));
     }
 
@@ -470,7 +470,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // The reserved index this mid-day request is bound to (LR_INDEX - 1)
         uint48 reservedIndex = _lootboxRngIndex() - 1;
 
-        // Verify midDayTicketRngPending is set (bits 224-231 of lootboxRngPacked slot 37)
+        // Verify midDayTicketRngPending is set (bits 224-231 of lootboxRngPacked slot 35)
         uint256 lrPacked = uint256(
             vm.load(address(game), bytes32(uint256(SLOT_LOOTBOX_RNG_PACKED)))
         );
@@ -480,7 +480,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Coordinator swap (mid-day in flight -> preserve LR_MID_DAY + re-issue for the same index)
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
-        // Verify midDayTicketRngPending PRESERVED (bits 224-231 of lootboxRngPacked slot 37)
+        // Verify midDayTicketRngPending PRESERVED (bits 224-231 of lootboxRngPacked slot 35)
         lrPacked = uint256(
             vm.load(address(game), bytes32(uint256(SLOT_LOOTBOX_RNG_PACKED)))
         );

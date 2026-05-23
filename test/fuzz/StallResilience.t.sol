@@ -27,14 +27,14 @@ contract StallResilience is DeployProtocol {
         }
     }
 
-    /// @dev Read lootboxRngIndex from lootboxRngPacked (storage slot 37, low bits = LR_INDEX).
+    /// @dev Read lootboxRngIndex from lootboxRngPacked (storage slot 35, low bits = LR_INDEX).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(37)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(35)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 38).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 36).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(38)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(36)));
         return uint256(vm.load(address(game), slot));
     }
 

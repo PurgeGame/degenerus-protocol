@@ -12,9 +12,9 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         asserts a real VRF-derived word lands in lootboxRngWordByIndex[N] after a
 ///         REAL mid-flight emergency rotation. A single forge-test invocation runs both.
 /// @dev    Storage slots are authoritative per `forge inspect DegenerusGame storage-layout`:
-///         slot 37 = lootboxRngPacked (LR_INDEX in low bits, LR_MID_DAY at bit 224 mask 0xFF),
-///         slot 38 = lootboxRngWordByIndex mapping (lootboxRngWordByIndex[i] at
-///         keccak256(abi.encode(uint256(i), uint256(38)))).
+///         slot 35 = lootboxRngPacked (LR_INDEX in low bits, LR_MID_DAY at bit 224 mask 0xFF),
+///         slot 36 = lootboxRngWordByIndex mapping (lootboxRngWordByIndex[i] at
+///         keccak256(abi.encode(uint256(i), uint256(36)))).
 ///         The consumer at DegenerusGameMintModule:686 reads
 ///         entropy = lootboxRngWordByIndex[LR_INDEX - 1] and flows it unguarded into
 ///         _processOneTicketEntry; that index is the slot both arms target.
@@ -39,7 +39,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
     // Storage-read helpers (slots authoritative per forge inspect)
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @dev Read LR_INDEX (the low bits of lootboxRngPacked at slot 37).
+    /// @dev Read LR_INDEX (the low bits of lootboxRngPacked at slot 35).
     function _readLootboxRngIndex() internal view returns (uint48) {
         return uint48(uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_PACKED))));
     }
