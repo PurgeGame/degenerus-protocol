@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
 status: ready_to_plan
-last_updated: 2026-05-22T20:20:05.847Z
-last_activity: 2026-05-22
+last_updated: "2026-05-23T07:40:38.924Z"
+last_activity: 2026-05-23
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 7
   completed_plans: 7
   percent: 43
-stopped_at: Phase 311 complete (2/2) — ready to discuss Phase 312
+stopped_at: Phase 312 context gathered (D-06/07/08 + VER-01..04) — ready to plan
 ---
 
 # Project State
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 Phase: 312
 Plan: Not started
 Status: Ready to plan
-Resume: .planning/phases/311-spec-vrf-rotation-liveness-fix-spec/ (311-SPEC.md §0–§7 authored; next: Phase 312 IMPL)
-Last activity: 2026-05-22
+Resume: .planning/phases/312-impl-vrf-rotation-fix-single-batched-user-approved-diff-impl/312-CONTEXT.md (context gathered — D-06/07/08 + VER-01..04; carries 311-SPEC.md D-01..D-05; next: /gsd:plan-phase 312)
+Last activity: 2026-05-23
 
 ## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
 
