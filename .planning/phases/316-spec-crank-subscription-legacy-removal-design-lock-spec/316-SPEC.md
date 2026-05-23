@@ -188,4 +188,80 @@ See the RM-04/PROTO-01 reconciliation block above. The single KEEP in an otherwi
 
 ### JGAS cross-reference (footprint owned by Plan 316-05)
 
-The JGAS daily-ETH two-call-split deletion footprint (the `SPLIT_*` / `resumeEthPool` / `_resumeDailyEth` / `splitMode` / `call1Bucket` / `STAGE_JACKPOT_ETH_RESUME` symbols) is **NOT enumerated here** — it is owned by **Plan 316-05's `## JGAS-01 Decision Gate` section**. The only JGAS interaction this plan carries is that `resumeEthPool`'s storage-slot deletion (forge slot 33) **compounds the RM-06 slot shift to −2 for the slot-≥34 region** — locked in `## Storage Slot-Shift Plan` (Task 2) below.
+The JGAS daily-ETH two-call-split deletion footprint (the `SPLIT_*` / `resumeEthPool` / `_resumeDailyEth` / `splitMode` / `call1Bucket` / `STAGE_JACKPOT_ETH_RESUME` symbols) is **NOT enumerated here** — it is owned by **Plan 316-05's `## JGAS-01 Decision Gate` section**. The only JGAS interaction this plan carries is that `resumeEthPool`'s storage-slot deletion (forge slot 33) **compounds the RM-06 slot shift to −2 for the slot-≥34 region** — locked in `## Storage Slot-Shift Plan` below.
+
+---
+
+## Storage Slot-Shift Plan
+
+RM-06 + JGAS-02 storage-layout re-derivation, locked as a **COMPOUNDED two-deletion shift** (`316-RESEARCH.md §4` + `§J3`, `forge inspect` authoritative). The SAME batched Phase-317 diff deletes **two** storage vars, so the slot re-derivation is a single combined pass — never two sequential −1 patches.
+
+### The two deleted vars (forge-confirmed at HEAD)
+
+- **`autoRebuyState` = slot 19** (RM-02; full-slot mapping). Its deletion → every var at slot ≥ 20 shifts **−1**.
+- **`resumeEthPool` = slot 33** (JGAS-02; `uint128` at offset 0 occupying its **OWN** slot — the next declared var `vrfCoordinator` starts fresh at slot 34, NOT packed into 33's free upper 16 bytes). Its deletion → an ADDITIONAL **−1** for every var at slot ≥ 34. (The `resumeEthPool` deletion *footprint* — its reads/writes/the split mechanism — is owned by Plan 316-05; here it is only the second deleted var that compounds the shift.)
+
+### The COMBINED shift (locked)
+
+- vars at slot **< 19** — unchanged.
+- vars in **[20, 33)** — shift **−1**.
+- vars at slot **≥ 34** — shift **−2**.
+
+**Key combined shifts (current → post-(RM-02+JGAS)):**
+
+| Var | Current slot | Post-(RM-02+JGAS) slot | Net |
+|-----|--------------|------------------------|-----|
+| `autoRebuyState` | 19 | (deleted) | — |
+| `lootboxEthBase` | 20 | 19 | −1 |
+| `resumeEthPool` | 33 | (deleted) | — |
+| `vrfCoordinator` | 34 | 32 | **−2** |
+| `lootboxRngPacked` | 37 | 35 | **−2** |
+| `lootboxRngWordByIndex` | 38 | 36 | **−2** |
+| `lootboxDay` | 39 | 37 | **−2** |
+| `degeneretteBets` | 45 | 43 | **−2** |
+| `boonPacked` | 61 | 59 | **−2** |
+
+**⚠ The `vrf*` / `lootboxRng*` family the v45 VRF work depends on lands at −2, NOT −1.** This is the JGAS-deepened shift: `lootboxRngWordByIndex` 38 → **36**, `lootboxRngPacked` 37 → **35**, `vrfCoordinator` 34 → **32**. Anyone treating the shift as a uniform −1 would mis-derive the entire slot-≥34 region (the exact slot family `project_vrf_rotation_midday_orphan_index` + the v45 freeze-invariant work reference) by a full slot. The −2 region is the load-bearing distinction this section locks.
+
+### Where the work lives — entirely test-side
+
+**Contract source contains ZERO numeric slot literals** (re-verified at HEAD: `grep -rnE '\.slot\s*:?=\s*[0-9]+|sload\([0-9]+\)|SLOT_[A-Z_]+\s*=\s*[0-9]+' contracts/` excl test returns only `QUEST_SLOT_COUNT=2` and `TICKET_SLOT_BIT=1<<23` — neither is a storage-slot literal). **NO contract code breaks on either shift** — RM-06 (now including the JGAS `resumeEthPool` deletion) is **entirely a test-side problem**: ~28 test-side `SLOT_*` constants across ~15 files: `BafRebuyReconciliation`, `BafFarFutureTickets`, `RngIndexDrainBinding` (+handler), `DegeneretteFreezeResolution`, `AdvanceGameRewrite`, `AffiliateDgnrsClaim`, `QueueDoubleBuffer`, `VRFCore`, `StorageFoundation`, `LootboxBoonCoexistence`, `LootboxRngLifecycle`, `VrfRotationOrphanIndex`, `StakedStonkRedemption`, `RngLockRotationDeterminism`, `RedemptionEdgeCases`, `VrfRotationLiveness`, `JackpotCombinedPool`, `TicketLifecycle`, `RngLockDeterminism`, `VRFStallEdgeCases`, `RedemptionInvariants.inv`, `RedemptionHandler`.
+
+### Re-derivation MANDATE (locked)
+
+Re-run `forge inspect contracts/DegenerusGame.sol:DegenerusGame storage-layout` **ONCE** on the **POST-(RM-02+JGAS)** contract (both `autoRebuyState` AND `resumeEthPool` deleted in the same diff), and rewrite each test `SLOT_*` constant from that authoritative output, **file-by-file**:
+- **NEVER patch-by-arithmetic** (Pitfall 2).
+- **NEVER as a blind −1** — the slot-≥34 region is −2; a uniform decrement would be wrong for the entire `vrf*`/`lootboxRng*` family.
+- RM-06 and JGAS slot work are re-derived **TOGETHER in one combined pass** (one deletion diff, one `forge inspect`).
+
+### Stale-baseline compounding hazard (locked)
+
+`LootboxBoonCoexistence.t.sol`'s `SLOT_*` constants are **ALREADY +1 stale** vs the current layout (it declares `SLOT_LOOTBOX_RNG_IDX=38` / `SLOT_LOOTBOX_WORD=39` against a live `lootboxRngWordByIndex=38` / `lootboxDay=39`) AND `test_lootboxBoonAppliedDespiteExistingCoinflipBoon` **FAILS at baseline** ("At least one lootbox should have rolled a non-coinflip boon"). With the JGAS −2 compounding, `lootboxRngWordByIndex` lands at slot **36** / `lootboxRngPacked` at **35** — so the re-derivation **cannot be a blind decrement** (some constants are already off in the wrong direction). RM-06 + JGAS therefore MUST: (a) **capture the pre-deletion baseline-failure ledger FIRST** (so the delta is attributable); (b) re-derive from the single combined `forge inspect`; (c) ensure the post-deletion delta is attributable so the re-derivation is NOT blamed for the pre-existing `LootboxBoonCoexistence` failure (the Phase 318 TST phase owns "no NEW failures vs baseline").
+
+The JGAS deletion **FOOTPRINT itself** (the symbols being removed) is enumerated in Plan 316-05; this section locks only the slot-derivation consequence (the −2 compounding + the one-combined-pass mandate). No duplicate footprint enumeration here.
+
+---
+
+## VRF-Freeze Obligation Retirement
+
+SAFE-04 + RM-02 — the concrete VRF-freeze-obligation retirement the ETH-auto-rebuy removal delivers (`316-RESEARCH.md §6` entropy cascade, re-verified at HEAD).
+
+### The entropy cascade being retired
+
+The VRF word (`rngWord` / `randWord`, VRF-derived) is mixed via `EntropyLib.hash2` and threaded as `entropy` / `entropyState` through the jackpot resolution loop into the **3-arg** `_addClaimableEth(beneficiary, weiAmount, entropy)` (`DegenerusGameJackpotModule.sol:788`, consumed at call sites `:755`/`:760`/`:765`/`:1430`/`:1530`/`:1571`/`:1583`/`:2132`/`:2165`) → `_processAutoRebuy` (`:822`) → `_calcAutoRebuy` (`DegenerusGamePayoutUtils.sol:51`), where `keccak256(abi.encode(entropy, beneficiary, weiAmount)) & 3` (~`:70`) picks the rebuy target level.
+
+Removing `_processAutoRebuy` / `_calcAutoRebuy` (RM-02) makes `entropy` **UNCONSUMED on the claimable path** → it is **dropped from the 3-arg `_addClaimableEth` signature** (the function reduces to crediting claimable directly via `_creditClaimable`).
+
+### ABI break — `JackpotEthWin` event signature change (delta note)
+
+The `JackpotEthWin` event (`DegenerusGameJackpotModule.sol:69`) carries `rebuyLevel` (`:75`) / `rebuyTickets` (`:76`) — these become dead on RM-02 removal, so the **event signature CHANGES (breaking topic-hash / field-set delta)**. This is a benign ABI break for the off-chain indexer (a separate frontend track per the out-of-scope list, `316-RESEARCH.md §9 Q3`); recorded here as a delta note, not an in-scope fix.
+
+### The SAFE-04 retirement claim, made concrete
+
+This is the literal "one fewer VRF consumer + three fewer player-mutable in-window inputs" retirement SAFE-04 asserts:
+- **−1 VRF consumer:** the daily-ETH claimable path no longer reads the threaded `entropy` (the rebuy-level roll is gone).
+- **−3 player-mutable in-window inputs:** `autoRebuyEnabled` / `takeProfit` / `afKingMode` (the `AutoRebuyState` fields, slot 19) are no longer read inside the rng-locked jackpot resolution window. The removal **retires** freeze obligations rather than weakening any — strictly fewer player-controllable SLOADs participate in the VRF-frozen window (consistent with the v45 freeze-invariant north-star).
+
+### IMPL obligation (locked) + AUDIT routing
+
+Before dropping the `entropy` param, the Phase-317 IMPL MUST **verify no OTHER reader of the threaded `entropyState` survives** (grep the full threading chain at IMPL). The 3-arg `_addClaimableEth` is **JackpotModule-only**; the `DegenerusGameDegeneretteModule._addClaimableEth(beneficiary, weiAmount)` **2-arg overload** (`:1117`) is a separate function and is **untouched** — do NOT conflate the two (Pitfall 4). Route the "does dropping `entropy` change any OTHER consumer?" verification to the **`zero-day-hunter` skill at AUDIT** (Phase 320) — named here only; NOT run in this SPEC phase.
