@@ -72,12 +72,17 @@ contract VRFPathCoverage is DeployProtocol {
         game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)));
     }
 
-    /// @dev Resume after coordinator swap: advanceGame -> fulfill on newVRF -> process.
-    ///      Gap backfill occurs during VRF word processing, so gap days are populated
-    ///      even if the game hasn't fully unlocked yet.
+    /// @dev Resume after coordinator swap. The swap re-issues the in-flight request on the
+    ///      new coordinator (preserve+re-issue), so a pending request already exists. Fulfil
+    ///      it first so the re-issued word is delivered, then drain. Gap backfill occurs during
+    ///      VRF word processing, so gap days are populated even if the game hasn't fully
+    ///      unlocked yet. If nothing was in flight, advanceGame fires a fresh request first.
     function _resumeAfterSwap(MockVRFCoordinator newVRF, uint256 vrfWord) internal {
-        game.advanceGame();
         uint256 reqId = newVRF.lastRequestId();
+        if (reqId == 0) {
+            game.advanceGame();
+            reqId = newVRF.lastRequestId();
+        }
         newVRF.fulfillRandomWords(reqId, vrfWord);
         // Process until unlocked. Uses extended loop for fuzzed words.
         for (uint256 i = 0; i < 500; i++) {

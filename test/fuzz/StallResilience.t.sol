@@ -27,14 +27,14 @@ contract StallResilience is DeployProtocol {
         }
     }
 
-    /// @dev Read lootboxRngIndex directly from storage slot 38.
+    /// @dev Read lootboxRngIndex from lootboxRngPacked (storage slot 37, low bits = LR_INDEX).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(38)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(37)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 39).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 38).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(39)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(38)));
         return uint256(vm.load(address(game), slot));
     }
 
@@ -54,10 +54,17 @@ contract StallResilience is DeployProtocol {
         return _doCoordinatorSwap();
     }
 
-    /// @dev Resume after coordinator swap: advanceGame -> fulfill on newVRF -> loop until unlocked.
+    /// @dev Resume after coordinator swap. The swap re-issues the in-flight request on the
+    ///      new coordinator (preserve+re-issue), so a pending request already exists. Fulfil
+    ///      it first so the re-issued word is delivered, then drain via advanceGame.
+    ///      If nothing was in flight (no re-issue), advanceGame fires a fresh request which
+    ///      is then fulfilled.
     function _resumeAfterSwap(MockVRFCoordinator newVRF, uint256 vrfWord) internal {
-        game.advanceGame();
         uint256 reqId = newVRF.lastRequestId();
+        if (reqId == 0) {
+            game.advanceGame();
+            reqId = newVRF.lastRequestId();
+        }
         newVRF.fulfillRandomWords(reqId, vrfWord);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
