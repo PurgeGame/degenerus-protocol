@@ -67,7 +67,7 @@ Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`S
 - [x] **SAFE-01**: Faucet bounded by the three caller-independent locks (purchase-gate + gas-peg + coinflip-credit illiquidity); self-crank/Sybil round-trip ≤ 0; WWXRP 0 reward.
 - [x] **SAFE-02**: Non-brick (BOTH cranks AND `batchPurchase`) — per-item `onlySelf` self-call + try/catch (skip + refund-if-applicable, reward only successes); caller-bounded iteration; cancel un-brickable; no double-buy reentrancy (in-context sub-call rolls back on revert). **PROVEN 318-03** (CrankNonBrick.t.sol 12/12 + AfKingSubscription.t.sol 7/7).
 - [x] **SAFE-03**: Concurrency — same-block sweeps process correctly (cursor self-partition + `lastSweptDay`); no double-buy. **PROVEN 318-04** (AfKingConcurrency.t.sol 10/10 incl. a 1000-run exactly-once same-block-split fuzz + AfKingFundingWaterfall.t.sol 9/9; same-block self-partition sum==N/max-per==1, tombstone no-miss + no dead-slot buildup, SUB-05 waterfall + SUB-06 two-tier pinned-identity skip-kill, grep-clean no settable exemption flag).
-- [ ] **SAFE-04**: RNG-freeze intact — resolution stays post-unlock (`RngNotReady` guard), placement guard untouched; the ETH-auto-rebuy removal **retires** freeze obligations (one fewer VRF consumer + three fewer player-mutable in-window inputs) rather than weakening any.
+- [x] **SAFE-04**: RNG-freeze intact — resolution stays post-unlock (`RngNotReady` guard), placement guard untouched; the ETH-auto-rebuy removal **retires** freeze obligations (one fewer VRF consumer + three fewer player-mutable in-window inputs) rather than weakening any.
 
 ### GAS — Gas efficiency (worst-case-first per `feedback_gas_worst_case`)
 
@@ -148,7 +148,7 @@ Each requirement maps to exactly one phase (primary verification owner). The ful
 | SAFE-01 | Phase 318 | Complete |
 | SAFE-02 | Phase 318 | Complete |
 | SAFE-03 | Phase 318 | Complete |
-| SAFE-04 | Phase 318 | In progress — 318-01 satisfied the slot/recompile facet (suite green, no slot drift, RM-06 empirically confirmed); RNG-freeze post-unlock proof pending 318-05 |
+| SAFE-04 | Phase 318 | SATISFIED — 318-01 the slot/recompile facet (suite green, no slot drift, RM-06 empirically confirmed); 318-05 the RNG-freeze post-unlock proof (RngFreezeAndRemovalProofs.t.sol 13/13: crank resolve stays behind RngNotReady pre-word, placement guard :452 untouched, word-set-timing fuzz) + freeze-obligation retirement (deterministic no-VRF-word credit) + the REMOVE proofs (grep-clean kill set, ETH→claimable, flat 75bps, win/loss RNG path + KNOWN-ISSUES byte-unmodified). Commit `b9bc5206` |
 | JGAS-03 | Phase 318 | Pending |
 | GAS-01 | Phase 319 | Pending |
 | GAS-02 | Phase 319 | Pending |
