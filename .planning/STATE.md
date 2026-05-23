@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
 status: executing
-last_updated: "2026-05-23T09:57:00.285Z"
-last_activity: 2026-05-23 -- Phase 313 planning complete
+last_updated: "2026-05-23T09:59:39.144Z"
+last_activity: 2026-05-23 -- Phase 313 execution started
 progress:
   total_phases: 7
   completed_phases: 4
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 313 — tst — vrf regression + freeze invariant fuzz under rotation (tst)
+**Current focus:** Phase 313 — TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation
 
 ## Current Position
 
-Phase: 313
-Plan: Planned (6 plans, 2 waves) — not started
-Status: Ready to execute
-Resume: .planning/phases/313-tst-vrf-regression-freeze-invariant-fuzz-under-rotation-tst/313-01-PLAN.md (6 plans: 01 VTST-01 orphan-index, 02 VTST-02 liveness, 03 VTST-03 freeze-invariant fuzz, 04 VTST-04 wireVrf one-shot, 05 regression-migration of the 17 fix-induced test regressions, 06 suite-verify+AGENT-COMMIT; Wave 1 = 01-05 parallel (disjoint files), Wave 2 = 06; all autonomous, test-tree only, ZERO contracts/ mutation per D-43N-AUDIT-ONLY-01; next: /gsd-execute-phase 313)
-Last activity: 2026-05-23 -- Phase 313 planning complete
+Phase: 313 (TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation) — EXECUTING
+Plan: 2 of 6 (313-01 VTST-01 complete — `f6cc92c9` post-fix arm + `611deb20` pre-fix arm)
+Status: Executing Phase 313 (Wave 1 — 313-01 done; 313-02..05 remaining, then Wave 2 = 313-06)
+Resume: .planning/phases/313-tst-vrf-regression-freeze-invariant-fuzz-under-rotation-tst/313-02-PLAN.md (6 plans: 01 VTST-01 orphan-index DONE, 02 VTST-02 liveness, 03 VTST-03 freeze-invariant fuzz, 04 VTST-04 wireVrf one-shot, 05 regression-migration of the 17 fix-induced test regressions, 06 suite-verify+AGENT-COMMIT; Wave 1 = 01-05 parallel (disjoint files), Wave 2 = 06; all autonomous, test-tree only, ZERO contracts/ mutation per D-43N-AUDIT-ONLY-01; next: /gsd-execute-phase 313)
+Last activity: 2026-05-23 -- Phase 313 plan 01 (VTST-01 orphan-index) complete — VrfRotationOrphanIndex.t.sol both arms PASS, ZERO contracts/ mutation
 
 ## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
 
