@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v45.0
 milestone_name: VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit
 status: executing
-last_updated: "2026-05-23T10:41:33.431Z"
-last_activity: 2026-05-23 -- Phase 313 plan 04 (VTST-04 wireVrf one-shot) complete
+last_updated: "2026-05-23T11:06:00.000Z"
+last_activity: 2026-05-23 -- Phase 313 plan 05 (VRF-rotation regression migration) complete
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 14
-  completed_plans: 12
-  percent: 86
+  completed_plans: 13
+  percent: 93
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-22 after v45.0 redefinition)
 ## Current Position
 
 Phase: 313 (TST — VRF Regression + Freeze-Invariant Fuzz Under Rotation) — EXECUTING
-Plan: 5 of 6 (313-01 VTST-01 complete; 313-02 VTST-02 liveness complete — `2f438ea2` VrfRotationLiveness.t.sol, 6 tests PASS; 313-03 VTST-03 freeze-invariant fuzz under rotation complete — `afa1ac22`/`c4d7f627` RngLockRotationDeterminism.t.sol, 2 fuzz tests PASS at 1000 runs each; 313-04 VTST-04 wireVrf one-shot complete — `4d45107d`/`b4a63ac7` VrfWireOneShot.t.sol, 4 tests PASS (access-guard form per the user-approved no-init-lock VRF-04 deviation + structural one-shot attestation), ZERO contracts/ mutation)
+Plan: 6 of 6 (313-01..04 VTST complete; 313-05 regression-migration complete — `ced272e7` Class A assertion flips + `6ad8338a` Class B swap+resume helper migration; all enumerated fix-induced regressions PASS across the 4 named files (VRFStallEdgeCases 18/18, StallResilience 3/3, VRFCore migrated test PASS + suite 20/22, VRFPathCoverage 4 fix-induced PASS); baseline classification (pre-fix `41546f16` vs HEAD) surfaced 3 additional under-enumerated VRFPathCoverage fuzz tests as fix-induced (fixed via the shared `_resumeAfterSwap` helper) + corrected a StallResilience lootbox slot-drift (38/39→37/38, authoritative lootboxRngPacked/lootboxRngWordByIndex); pre-existing baseline failures (VRFCore test_retryDetection_fresh/test_midDayRequest_doesNotBlockDaily; VRFPathCoverage test_gapBackfillWithMidDayPending_fuzz/test_indexLifecycleAcrossStall_fuzz; LootboxRngLifecycle slot-drift) left UNTOUCHED + documented for 313-06; ZERO contracts/ mutation, forge build exit 0)
 Status: Ready to execute
-Resume: .planning/phases/313-tst-vrf-regression-freeze-invariant-fuzz-under-rotation-tst/313-05-PLAN.md (6 plans: 01 VTST-01 orphan-index DONE, 02 VTST-02 liveness DONE, 03 VTST-03 freeze-invariant fuzz DONE, 04 VTST-04 wireVrf one-shot DONE, 05 regression-migration of the 17 fix-induced test regressions, 06 suite-verify+AGENT-COMMIT; Wave 1 = 01-05 parallel (disjoint files), Wave 2 = 06; all autonomous, test-tree only, ZERO contracts/ mutation per D-43N-AUDIT-ONLY-01; next: /gsd-execute-phase 313)
-Last activity: 2026-05-23 -- Phase 313 plan 04 (VTST-04 wireVrf one-shot) complete — VrfWireOneShot.t.sol 4 tests PASS, asserts the :503/:1717 ADMIN access-guard revert (NOT a non-existent init-lock) + structural one-shot attestation, ZERO contracts/ mutation
+Resume: .planning/phases/313-tst-vrf-regression-freeze-invariant-fuzz-under-rotation-tst/313-06-PLAN.md (Wave 2: suite-wide verification — 4 VTST contracts + v43 harness + the migrated regressions PASS, no NEW failures beyond the documented pre-fix baseline + AGENT-COMMIT; autonomous, test-tree only, ZERO contracts/ mutation per D-43N-AUDIT-ONLY-01; next: /gsd-execute-phase 313)
+Last activity: 2026-05-23 -- Phase 313 plan 05 (VRF-rotation regression migration) complete — Class A assertions flipped to preserve+re-issue + Class B swap+resume helpers migrated to fulfil the re-issued request on the new coordinator before draining; all fix-induced regressions PASS; pre-existing baseline failures documented for 313-06; ZERO contracts/ mutation (`ced272e7`/`6ad8338a`)
 
 ## Current Milestone Phases (v45.0 — PLANNING, REDEFINED 2026-05-22)
 

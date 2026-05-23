@@ -128,7 +128,7 @@ Plans:
 - [x] 313-02-PLAN.md — VTST-02 liveness-after-rotation (mid-day + daily branches, rngWordCurrent!=0 short-circuit, nothing-in-flight no-op, retryLootboxRng failsafe) [Wave 1]
 - [x] 313-03-PLAN.md — VTST-03 freeze-invariant fuzz under rotation (byte-identical VRF output vs no-rotation baseline; extends the v43 RngLockDeterminism harness) [Wave 1]
 - [x] 313-04-PLAN.md — VTST-04 wireVrf one-shot lock (access-guard form per the user-approved no-init-lock deviation + structural one-shot attestation + routed updateVrf revert) [Wave 1]
-- [ ] 313-05-PLAN.md — regression migration: the 17 fix-induced test regressions migrated to the preserve+re-issue behavior (Class A assertions + Class B swap/resume helpers) [Wave 1]
+- [x] 313-05-PLAN.md — regression migration: the fix-induced test regressions migrated to the preserve+re-issue behavior (Class A assertions + Class B swap/resume helpers); baseline classification surfaced 3 additional under-enumerated VRFPathCoverage fuzz tests as fix-induced (all fixed via the shared helper) + a StallResilience slot-drift correction; pre-existing baseline failures left untouched [Wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
