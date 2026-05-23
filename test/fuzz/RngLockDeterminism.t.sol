@@ -44,8 +44,8 @@ contract RngLockDeterminism is DeployProtocol {
     uint256 constant SLOT_PACKED_0 = 0;
     uint256 constant SLOT_RNG_WORD_CURRENT = 3;
     uint256 constant SLOT_VRF_REQUEST_ID = 4;
-    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 37;
-    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 38;
+    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 35;
+    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 36;
     // Defensive slot constants for sec4 RunTerminalDecimatorJackpot
     // contribution. Exact values are placeholders; aggregator hash captures
     // post-resolution storage state at these slots for byte-identity
@@ -316,23 +316,15 @@ contract RngLockDeterminism is DeployProtocol {
             return;
         }
         if (action == 12) {
-            bool enabled = (nonce & 1) == 1;
-            vm.prank(vaultOwner);
-            try vault.gameSetAutoRebuy(enabled) {} catch { return; }
+            // auto-rebuy Vault wrapper removed (RM-02/RM-05); action slot is a no-op.
             return;
         }
         if (action == 13) {
-            uint256 tp = bound(nonce, 0, 10 ether);
-            vm.prank(vaultOwner);
-            try vault.gameSetAutoRebuyTakeProfit(tp) {} catch { return; }
+            // auto-rebuy take-profit Vault wrapper removed (RM-02/RM-05); no-op.
             return;
         }
         if (action == 14) {
-            bool enabled = (nonce & 1) == 1;
-            uint256 eth = bound(nonce >> 8, 0, 1 ether);
-            uint256 coinTp = bound(nonce >> 16, 0, 1e18);
-            vm.prank(vaultOwner);
-            try vault.gameSetAfKingMode(enabled, eth, coinTp) {} catch { return; }
+            // afKing-mode Vault wrapper removed (RM-01/RM-05); no-op.
             return;
         }
         if (action == 15) {

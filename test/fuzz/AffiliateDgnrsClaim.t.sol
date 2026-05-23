@@ -23,8 +23,8 @@ contract AffiliateDgnrsClaim is DeployProtocol {
 
     // Storage slots (verified via forge inspect DegenerusGameStorage storage-layout)
     uint256 constant SLOT_LEVEL = 0; // level is at slot 0, offset 14, 3 bytes (uint24)
-    uint256 constant SLOT_LEVEL_DGNRS_ALLOCATION = 25;
-    uint256 constant SLOT_LEVEL_DGNRS_CLAIMED = 26;
+    uint256 constant SLOT_LEVEL_DGNRS_ALLOCATION = 23;
+    uint256 constant SLOT_LEVEL_DGNRS_CLAIMED = 24;
 
     uint256 buyerNonce;
 

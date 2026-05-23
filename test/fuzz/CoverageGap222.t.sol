@@ -116,21 +116,6 @@ contract CoverageGap222 is DeployProtocol {
         } catch {}
     }
 
-    /// @notice Exercise the setAutoRebuy / setAutoRebuyTakeProfit paths.
-    /// @dev Closes gaps: setAutoRebuy, setAutoRebuyTakeProfit,
-    ///      autoRebuyTakeProfitFor (EXEMPT, view). Buyer is the slot owner,
-    ///      so self-setting is the happy path — observable via the view getter.
-    function test_gap_setAutoRebuy_observable() public {
-        uint256 tpBefore = game.autoRebuyTakeProfitFor(buyer);
-        vm.prank(buyer);
-        game.setAutoRebuy(buyer, true);
-        vm.prank(buyer);
-        game.setAutoRebuyTakeProfit(buyer, 1 ether);
-        uint256 tpAfter = game.autoRebuyTakeProfitFor(buyer);
-        assertEq(tpAfter, 1 ether, "take-profit reflects setter write");
-        assertGt(tpAfter, tpBefore, "take-profit increased from prior value");
-    }
-
     /// @notice Exercise claimWinnings when nothing to claim — expect revert or no-op.
     /// @dev Closes gaps: claimWinnings, claimWinningsStethFirst.
     ///      D-14 conditional branch: zero-balance short-circuit path.

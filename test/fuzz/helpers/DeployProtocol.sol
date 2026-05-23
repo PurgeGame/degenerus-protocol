@@ -121,7 +121,7 @@ abstract contract DeployProtocol is Test {
         // Vault constructor calls COIN.vaultMintAllowance()
         vault = new DegenerusVault();                  // N+18 = nonce 23
 
-        // Stonk constructor calls GAME.claimWhalePass() + GAME.setAfKingMode()
+        // Stonk constructor calls GAME.claimWhalePass() + AfKing.subscribe() (SUB-09 self-subscribe)
         // Mints creator's 20% to DGNRS address
         sdgnrs = new StakedDegenerusStonk();           // N+19 = nonce 24
 

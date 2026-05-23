@@ -172,22 +172,14 @@ contract BafRebuyReconciliationTest is DeployProtocol {
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 
-    /// @notice Inject buyer into BAF leaderboard at level and enable auto-rebuy.
-    /// @dev Uses vm.prank(coin) to call recordBafFlip (onlyCoin gate), then enables auto-rebuy.
-    ///      The buyer gets a massive BAF stake so they are guaranteed the #1 position (Slice A: 10%).
+    /// @notice Inject buyer into the BAF leaderboard at level.
+    /// @dev Uses vm.prank(coin) to call recordBafFlip (onlyCoin gate). The buyer gets a
+    ///      massive BAF stake so they are guaranteed the #1 position (Slice A: 10%).
     function _injectBafTopAndAutoRebuy(address who, uint24 lvl) internal {
         // Record a large BAF flip to put the buyer at the top of the leaderboard.
         // 1000 ether stake = score 1000, guaranteed #1 position for Slice A (10% of BAF pool).
         vm.prank(address(coin));
         jackpots.recordBafFlip(who, lvl, 1000 ether);
-
-        // Enable auto-rebuy (take profit = 0 means rebuy ALL winnings).
-        // setAutoRebuy reverts if rngLockedFlag is set, so check first.
-        (, , , bool rngLocked_, ) = game.purchaseInfo();
-        if (!rngLocked_) {
-            vm.prank(who);
-            game.setAutoRebuy(address(0), true);
-        }
     }
 
     /// @notice Buy tickets for the buyer at the current price.
