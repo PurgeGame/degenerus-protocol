@@ -132,6 +132,13 @@ None. Zero contracts/ mutation; no production attack surface introduced (D-43N-A
 ## Next Phase Readiness
 - Plan 313-06 (suite-verify + AGENT-COMMIT) can now assert no NEW failures beyond the pre-fix baseline. The documented pre-existing baseline failures it should expect (allow-list): VRFCore test_retryDetection_fresh + test_midDayRequest_doesNotBlockDaily; VRFPathCoverage test_gapBackfillWithMidDayPending_fuzz + test_indexLifecycleAcrossStall_fuzz; plus the broader suite-wide pre-existing debt (affiliate E(), solvency, arithmetic panics, InvalidBet, etc.) and LootboxRngLifecycle slot-drift failures, all unrelated to the VRF fix.
 
+## Self-Check: PASSED
+- 313-05-SUMMARY.md exists at the plan directory.
+- Task commits present: `ced272e7` (Class A), `6ad8338a` (Class B).
+- Metadata commit present: `afbfbf49` (SUMMARY + STATE + ROADMAP).
+- `git diff HEAD~3 HEAD -- contracts/` empty → ZERO mainnet-contract mutation across the plan.
+- `forge build` exit 0; all enumerated fix-induced regressions PASS.
+
 ---
 *Phase: 313-tst-vrf-regression-freeze-invariant-fuzz-under-rotation-tst*
 *Completed: 2026-05-23*
