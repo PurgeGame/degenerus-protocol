@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
-status: executing
-last_updated: "2026-05-23T18:05:36.393Z"
-last_activity: 2026-05-23 -- Completed 317-01 (pre-patch file:line ledger + baseline snapshot)
+status: verifying
+last_updated: "2026-05-23T19:42:55.659Z"
+last_activity: 2026-05-23 -- 317-07 Task 3 batched contract commit + deferred test/docs commits (audit-repo only)
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 12
-  completed_plans: 6
-  percent: 50
+  completed_plans: 13
+  percent: 40
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 ## Current Position
 
 Phase: 317 (impl-batched-add-remove-contract-diff-paired-keeper-rework-i) — EXECUTING
-Plan: 2 of 7
-Status: Ready to execute — 317-01 ledger complete (single source of truth for downstream edit plans)
-Last activity: 2026-05-23 -- Completed 317-01 (RM+PROTO+crank + JGAS-02 footprint + pre-deletion baseline ledger; zero source mutation)
+Plan: 7 of 7 (Task 3 of 3 — audit-repo commits done; plan 07 NOT marked complete — keeper D-01b + phase verification pending, orchestrator-owned)
+Status: Audit-repo committed — the single batched USER-APPROVED contracts/ commit df4ef365 (14 files: PROTO/CRANK/REW/SUB-01..09/RM-01..06/JGAS-02 + new in-tree AfKing.sol) landed via CONTRACTS_COMMIT_APPROVED=1; deferred test/ slot re-derivation (16b0837f) + docs commits followed; contracts/ tree CLEAN. PENDING: keeper-side D-01b Option A (../degenerus-utilities, separate agent) + Phase 317 verification (orchestrator). Nothing pushed.
+Last activity: 2026-05-23 -- 317-07 Task 3 batched contract commit + deferred test/docs commits (audit-repo only)
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
@@ -476,6 +476,7 @@ Audit deliverables:
 | Phase 313 P02 | 50 | 2 tasks | 1 files |
 | Phase 316 P01 | 6min | 2 tasks | 1 files |
 | Phase 316 P02 | 12 min | 2 tasks | 1 files |
+| Phase 317 P07 | 1 session | 3 tasks | 27 files |
 
 ## Decisions
 

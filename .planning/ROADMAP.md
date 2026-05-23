@@ -105,17 +105,17 @@ Plans:
 
 **Wave 2** *(parallel contract edits — zero file overlap; all leave contracts/ dirty)*
 
-- [ ] 317-02-PLAN.md — BURNIE-side PROTO + RM-03: `burnForKeeper` all-or-nothing `onlyAfKing` (PROTO-02), keeper authorized in `onlyFlipCreditors` (PROTO-03), pinned `AF_KING` (PROTO-05), and the flip-recycle collapse to flat 75bps with the win/loss RNG path byte-unmodified (RM-03).
-- [ ] 317-03-PLAN.md — `DegenerusGame.sol` surface: `hasAnyLazyPass` view (PROTO-01), keeper-gated `batchPurchase` (PROTO-04), the permissionless do-work crank (CRANK-01..04 + REW-01..04, box cursor on the v45 `a303ae18` coupling), RM-01 afKing-mode deletion, the SUB-09 ctor-Deity-grant preservation, and the `IDegenerusGame` interface edits.
-- [ ] 317-04-PLAN.md — `contracts/AfKing.sol` NEW in-tree canonical keeper (D-01): parameterless cursor sweep + `reinvestPct`/`windowPaid` packing + two-tier skip-kill by pinned identity + the `batchPurchase` switch + all-or-nothing `burnForKeeper` charge + the single gas-pegged `creditFlip` bounty (SUB-01..08 + REW + PROTO-04 call site).
+- [x] 317-02-PLAN.md — BURNIE-side PROTO + RM-03: `burnForKeeper` all-or-nothing `onlyAfKing` (PROTO-02), keeper authorized in `onlyFlipCreditors` (PROTO-03), pinned `AF_KING` (PROTO-05), and the flip-recycle collapse to flat 75bps with the win/loss RNG path byte-unmodified (RM-03).
+- [x] 317-03-PLAN.md — `DegenerusGame.sol` surface: `hasAnyLazyPass` view (PROTO-01), keeper-gated `batchPurchase` (PROTO-04), the permissionless do-work crank (CRANK-01..04 + REW-01..04, box cursor on the v45 `a303ae18` coupling), RM-01 afKing-mode deletion, the SUB-09 ctor-Deity-grant preservation, and the `IDegenerusGame` interface edits.
+- [x] 317-04-PLAN.md — `contracts/AfKing.sol` NEW in-tree canonical keeper (D-01): parameterless cursor sweep + `reinvestPct`/`windowPaid` packing + two-tier skip-kill by pinned identity + the `batchPurchase` switch + all-or-nothing `burnForKeeper` charge + the single gas-pegged `creditFlip` bounty (SUB-01..08 + REW + PROTO-04 call site).
 
 **Wave 3** *(blocked on Waves 1-2 — needs the AfKing.subscribe + IDegenerusGame signatures)*
 
-- [ ] 317-05-PLAN.md — RM-02 (free ETH auto-rebuy + entropy drop) + JGAS-01/02 (the daily-ETH two-call split removal across JackpotModule + AdvanceModule at the preserved 305 ceiling) + RM-05 (Vault/sStonk cascade prune) + the SUB-09 self-subscribe init wiring across the six shared modules/storage/Vault/sStonk files.
+- [x] 317-05-PLAN.md — RM-02 (free ETH auto-rebuy + entropy drop) + JGAS-01/02 (the daily-ETH two-call split removal across JackpotModule + AdvanceModule at the preserved 305 ceiling) + RM-05 (Vault/sStonk cascade prune) + the SUB-09 self-subscribe init wiring across the six shared modules/storage/Vault/sStonk files.
 
 **Wave 4** *(blocked on all contract edits — forge inspect runs on the final tree)*
 
-- [ ] 317-06-PLAN.md — RM-06 combined −2/−1 slot re-derivation from ONE `forge inspect`, contracts/test+mocks compile-fixes-only (D-03 → `forge build` PASS = SC#1), and the `../degenerus-utilities` single-source reconciliation to the canonical AfKing (D-01b).
+- [x] 317-06-PLAN.md — RM-06 combined −2/−1 slot re-derivation from ONE `forge inspect`, contracts/test+mocks compile-fixes-only (D-03 → `forge build` PASS = SC#1), and the `../degenerus-utilities` single-source reconciliation to the canonical AfKing (D-01b).
 
 **Wave 5** *(the single USER-APPROVAL gate — autonomous: false)*
 
