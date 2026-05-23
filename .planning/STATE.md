@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
-status: verifying
-last_updated: "2026-05-23T16:19:52.168Z"
+status: ready_to_plan
+last_updated: 2026-05-23T16:30:15.177Z
 last_activity: 2026-05-23
 progress:
   total_phases: 5
@@ -11,6 +11,7 @@ progress:
   total_plans: 5
   completed_plans: 5
   percent: 20
+stopped_at: Phase 316 complete (5/5) — ready to discuss Phase 317
 ---
 
 # Project State
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 316 — spec-crank-subscription-legacy-removal-design-lock-spec
+**Current focus:** Phase 317 — impl — batched add+remove contract diff + paired keeper rework (impl)
 
 ## Current Position
 
-Phase: 316 (spec-crank-subscription-legacy-removal-design-lock-spec) — COMPLETE (ready for verification)
-Plan: 5 of 5
-Status: Phase 316 complete — all 5 plans done (316-01 ADD + 316-02 REMOVE + 316-05 JGAS-01 gate + 316-03 open-items + 316-04 attestation/coverage/assembly); ready for verification
-Last activity: 2026-05-23 -- Completed 316-04-PLAN.md (call-graph attestation / final assembly): `## Call-Graph Attestation` (SC#5) authored — every cited file:line re-grep-verified vs HEAD across DegenerusGame/modules/BurnieCoin/BurnieCoinflip/DegenerusVault/StakedDegenerusStonk/ContractAddresses + the StreakKeeperV2/AfKing keeper, embedding RESEARCH §1 (RM) + §J1 (JGAS); RM drift items (auto-rebuy block 800-808, _distributePayout 705/~738, IDegenerusGame setAutoRebuy-not-present MISSING) + the two +1 JGAS resume-check drifts (jackpot :348→349, advance :452-455→453-456) recorded; keeper-dependency CLEAN (zero-match over BOTH the RM-symbol set AND the JGAS symbols, only coupling = hasAnyLazyPass keeper :671/:974, dependency-safe IFF PROTO-01 ships same diff; PROTO-side pullForKeeper→burnForKeeper obligation noted); J5 VRF freeze-SAFE verdict (resume branch never calls _unlockRng, single-call removes a cross-tx resumeEthPool carry = rotation-robustness improvement, _unlockRng unmoved :467, only residual = gas-fits gated JGAS-04, AUDIT-320 re-attests under rotation); transitional-state caveat (Pitfall 1) + box-cursor rotation landmine (Pitfall 3) recorded. `## Requirement Design Coverage` (42/42, FOUR SPEC-owned PROTO-01/SUB-09/RM-04/JGAS-01) + `## Success Criteria Coverage` (5/5 COVERED) authored; intro reconciled (JGAS gate SPEC-owned in `## JGAS-01 Decision Gate`, was stale-attributed to 316-02); self-consistency pass — all 13 section headers present, SPEC-owned set reads FOUR; ZERO contracts/ + ZERO test/ mutations across the whole phase. Commit ed5ea47a.
+Phase: 317
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-23
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
