@@ -59,7 +59,7 @@
 Plans:
 **Wave 1**
 
-- [ ] 316-01-PLAN.md — Lock the ADD-half design: do-work crank entry signatures + work-type encoding, reward/charge model, batchPurchase shape, subscription cursor sweep + authorization + pass-gate, and the 5 PROTO signatures (PROTO-01).
+- [x] 316-01-PLAN.md — Lock the ADD-half design: do-work crank entry signatures + work-type encoding, reward/charge model, batchPurchase shape, subscription cursor sweep + authorization + pass-gate, and the 5 PROTO signatures (PROTO-01).
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

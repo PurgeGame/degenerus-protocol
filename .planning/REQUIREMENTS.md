@@ -21,7 +21,7 @@ Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`S
 
 ### PROTO — Protocol-side contract additions (degenerus-audit, one batched diff)
 
-- [ ] **PROTO-01**: `DegenerusGame.hasAnyLazyPass(address) external view` exposed (the kept private `_hasAnyLazyPass` at `:1610`; returns "any of Deity/Whale/Lazy"). Reconciles with RM-04 — kept, not deleted.
+- [x] **PROTO-01**: `DegenerusGame.hasAnyLazyPass(address) external view` exposed (the kept private `_hasAnyLazyPass` at `:1610`; returns "any of Deity/Whale/Lazy"). Reconciles with RM-04 — kept, not deleted.
 - [ ] **PROTO-02**: `BurnieCoin.burnForKeeper(address user, uint256 amount) returns (uint256 burned)` — ALL-OR-NOTHING burn of the subscription charge (source `balanceOf` + pending coinflip; if `< amount` burn nothing & return 0); `onlyAfKing` (gated on the pinned keeper address).
 - [ ] **PROTO-03**: AfKing keeper authorized in `BurnieCoinflip.onlyFlipCreditors` so its `creditFlip` bounty works (coinflip credit = deferred mint).
 - [ ] **PROTO-04**: `DegenerusGame.batchPurchase(players[], amounts[], modes[])` keeper-gated entry — per-player in-context purchase wrapped in try/catch + slice-refund (non-brick); one value transfer for the batch; batch-level `rngLocked`/game-over pre-checked once.
@@ -115,7 +115,7 @@ Each requirement maps to exactly one phase (primary verification owner). The ful
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROTO-01 | Phase 316 | Pending |
+| PROTO-01 | Phase 316 | Complete |
 | SUB-09 | Phase 316 | Pending |
 | RM-04 | Phase 316 | Pending |
 | JGAS-01 | Phase 316 | Pending |

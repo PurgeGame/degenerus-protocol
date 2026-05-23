@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
 status: executing
-last_updated: "2026-05-23T15:32:11.867Z"
-last_activity: 2026-05-23 -- Phase 316 planning complete
+last_updated: "2026-05-23T15:46:14.898Z"
+last_activity: 2026-05-23
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v46.0 — ship the permissionless do-work crank + the `AfKing` auto-rebuy subscription (`StreakKeeperV2` moved in-tree, wired via PROTO-01..05) and in the SAME batched diff remove the legacy in-game AFKing mode + free ETH auto-rebuy it succeeds (BURNIE flip recycle KEPT at flat 75bps). One source-tree change, one test pass, one adversarial audit, one `MILESTONE_V46_AT_HEAD_<sha>` closure. The removal is a prerequisite for the subscription's reinvest mode (old free auto-rebuy intercepts winnings before claimable; the subscription reads from claimable).
+**Current focus:** Phase 316 — spec-crank-subscription-legacy-removal-design-lock-spec
 
 ## Current Position
 
-Phase: 316 — SPEC (Crank + Subscription + Legacy-Removal Design Lock)
-Plan: — (not yet planned)
-Status: Ready to execute
-Last activity: 2026-05-23 -- Phase 316 planning complete
+Phase: 316 (spec-crank-subscription-legacy-removal-design-lock-spec) — EXECUTING
+Plan: 2 of 5
+Status: Executing Phase 316 — Plan 316-01 complete (ADD-half design lock); next 316-02 (REMOVE footprint + JGAS)
+Last activity: 2026-05-23 -- Completed 316-01-PLAN.md (ADD-half design lock; PROTO-01 satisfied)
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
@@ -35,7 +35,7 @@ Last activity: 2026-05-23 -- Phase 316 planning complete
 
 | Phase | Name | Type | Requirements (primary owner) | Status |
 |-------|------|------|------------------------------|--------|
-| 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 · JGAS-01 (locks all 42) | Not started |
+| 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 · JGAS-01 (locks all 42) | In Progress (1/5 plans: 316-01 done) |
 | 317 | IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework | IMPL | PROTO-02..05 · CRANK-01..04 · REW-01..04 · SUB-01..08 · RM-01/02/03/05/06 · JGAS-02 | Not started |
 | 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | Not started |
 | 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 · JGAS-04 | Not started |
@@ -474,6 +474,7 @@ Audit deliverables:
 | Phase 309 P02 | 12 | 2 tasks | 1 files |
 | Phase 311 P01 | ~18min | 2 tasks | 1 file (311-SPEC.md skeleton + §0 grep-verified manifest + §0.X §9d map + §0.Y vault reach trace) + 1 SUMMARY |
 | Phase 313 P02 | 50 | 2 tasks | 1 files |
+| Phase 316 P01 | 6min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -548,3 +549,8 @@ Audit deliverables:
 - [Phase ?]: 313-02: VTST-02 liveness-after-rotation proven — all 3 updateVrfCoordinatorAndSub branches + retryLootboxRng failsafe drain to rngLocked()==false, no permanent RngNotReady() (VRF-02)
 - [Phase ?]: 313-02: rngWord==1 is the rngGate 'request new RNG' sentinel (AdvanceModule:298) — daily fuzz words must exclude {0,1} or the post-fulfilment drain livelocks
 - [Phase ?]: 313-02: liveness drain helper re-throws RngNotReady() (catches ONLY NotTimeYet) so the OLD-bug permanent-revert mode fails the test naturally — never silently asserted (T-313-02-01)
+- [Phase ?]: OPEN-B locked = guarded _ethToBurnieValue zero-guard (reward 0, never revert); priceForLevel non-zero invariant as secondary backstop (Plan 316-01)
+- [Phase ?]: OPEN-C locked = CEI-proof (no ReentrancyGuard; CEI at DegenerusGame.sol:1408) WITH guard-fallback note routed to contract-auditor at IMPL (Plan 316-01)
+- [Phase ?]: OPEN-D box resolution = parameterless cursor; MUST follow v45 a303ae18 VRF-rotation orphan-index re-issue path (Pitfall 3 landmine) (Plan 316-01)
+- [Phase ?]: PROTO-01 = rename _hasAnyLazyPass private->external view, NO body change; reader-set verified exactly 3 grep matches (decl :1610 + readers :1580/:1660) (Plan 316-01)
+- [Phase ?]: Keeper transitional-state caveat recorded: SPEC locks INTENDED end-state not live source; PLAN-CRANK §9 'done this session' FALSE vs §1.12 drift (Plan 316-01)
