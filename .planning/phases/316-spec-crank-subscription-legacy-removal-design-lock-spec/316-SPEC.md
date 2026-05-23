@@ -5,13 +5,83 @@
 **Audit baseline → subject:** v45.0 closure HEAD `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` → v46.0 closure HEAD.
 **Load-bearing inputs:** `316-RESEARCH.md` (grep/forge-verified call-graph substrate) + `PLAN-CRANK-DO-WORK-INCENTIVE.md` (ADD half) + `PLAN-V47-REMOVE-AFKING-ETH-AUTOREBUY.md` (REMOVE half) + `REQUIREMENTS.md` (42 v46.0 reqs).
 
-This SPEC is authored across the Phase 316 plans:
-- **316-01 (this plan's sections):** the ADD-half design lock — `## ADD Design — Do-Work Crank`, `## ADD Design — Subscription Sweep & Authorization`, `## PROTO Additions`.
-- **316-02:** REMOVE footprint + reconciliation + the JGAS jackpot-split-removal decision gate.
-- **316-03:** open-item resolution (OPEN-B/OPEN-C/denomination/whale-expiry/skip-kill identity/SUB-09 init configs).
-- **316-04:** call-graph attestation (this RESEARCH.md's §1 verification table; zero unverified "by construction" claims).
+**This SPEC locks the FULL v46.0 add+remove+JGAS design across all 42 requirements** (PROTO-01..05 · CRANK-01..04 · REW-01..04 · SUB-01..09 · RM-01..06 · SAFE-01..04 · GAS-01..06 · JGAS-01..04) and is the **load-bearing input for Phases 317 (IMPL) / 318 (TST) / 319 (GAS) / 320 (TERMINAL)** — every downstream phase consumes these locks. Only **FOUR** requirements have Phase 316 SPEC as their *primary* verification owner: **PROTO-01 · SUB-09 · RM-04 · JGAS-01**; the other 38 have their designs locked here but downstream primary owners (see `## Requirement Design Coverage`). The JGAS-01..04 jackpot-split-removal sub-thread was folded in 2026-05-23 (38→42 reqs).
 
-**Citation discipline (SC#5):** every `file:line` cited in the 316-01 sections below was re-grep-verified against HEAD on 2026-05-23 before authoring. Two short-hand / drift notes carried forward from `316-RESEARCH.md`: (a) the Degenerette module's canonical filename is `contracts/modules/DegenerusGameDegeneretteModule.sol` (research/PLAN short-hand it as `DegeneretteModule.sol`); (b) the `_distributePayout` frozen-pool solvency check is at `~738` inside the body — `PLAN-CRANK §8`'s "742" is an interior offset (decl at `:705`). No design claim below rests on an un-verified anchor.
+This SPEC is authored across the Phase 316 plans:
+- **316-01:** the ADD-half design lock — `## ADD Design — Do-Work Crank`, `## ADD Design — Subscription Sweep & Authorization`, `## PROTO Additions`.
+- **316-02:** REMOVE footprint + reconciliation — `## REMOVE Footprint`, `## Storage Slot-Shift Plan`, `## VRF-Freeze Obligation Retirement`.
+- **316-05:** the JGAS-01 jackpot-split-removal decision gate — `## JGAS-01 Decision Gate` (SPEC-owned; design-intent → worst-case-first gas → locked decision → deletion footprint → J5 VRF/freeze verdict).
+- **316-03:** open-item resolution — `## Quantity & Funding Model`, `## Protocol-Owned Subs (SUB-09)`, `## SPEC-Open Resolutions` (OPEN-B/OPEN-C/denomination/whale-expiry/skip-kill identity/SUB-09 init configs).
+- **316-04 (this plan's sections):** the call-graph attestation + the requirement/success-criteria coverage maps — `## Requirement Design Coverage`, `## Success Criteria Coverage`, `## Call-Graph Attestation` (this RESEARCH.md's §1 + §J1 verification tables; the SPEC carries no unverified "by construction" claim).
+
+**Citation discipline (SC#5):** every `file:line` cited in the design sections below was re-grep-verified against HEAD on 2026-05-23 before authoring (the full attestation is the `## Call-Graph Attestation` section at the end of this document). Two short-hand / drift notes carried forward from `316-RESEARCH.md`: (a) the Degenerette module's canonical filename is `contracts/modules/DegenerusGameDegeneretteModule.sol` (research/PLAN short-hand it as `DegeneretteModule.sol`); (b) the `_distributePayout` frozen-pool solvency check is at `~738` inside the body — `PLAN-CRANK §8`'s "742" is an interior offset (decl at `:705`). No design claim below rests on an un-verified anchor.
+
+---
+
+## Requirement Design Coverage
+
+This section (Plan **316-04**) maps **all 42 v46.0 requirement IDs** to the SPEC section that LOCKS each design + its **primary verification owner phase**. Coverage is **42/42, zero unmapped**. The **FOUR** reqs with Phase 316 SPEC as primary owner are **PROTO-01 · SUB-09 · RM-04 · JGAS-01**; the other 38 have downstream primary owners (317 IMPL · 318 TST · 319 GAS) but their **designs are all locked at this SPEC**. Phase 320 TERMINAL re-attests all 42 and owns 0 primarily. (Source: `REQUIREMENTS.md` Traceability + `316-RESEARCH.md §10`/`§J6`.)
+
+| Req | Design locked in SPEC section | Primary owner |
+|-----|-------------------------------|---------------|
+| **PROTO-01** | `## PROTO Additions` + `## REMOVE Footprint` (RM-04/PROTO-01 reconciliation) + `## Call-Graph Attestation` (4) | **Phase 316 (SPEC-owned)** |
+| PROTO-02 | `## PROTO Additions` (`burnForKeeper`) | Phase 317 |
+| PROTO-03 | `## PROTO Additions` (`onlyFlipCreditors` keeper authz) | Phase 317 |
+| PROTO-04 | `## PROTO Additions` + `## ADD Design — Do-Work Crank` (`batchPurchase` shape) | Phase 317 |
+| PROTO-05 | `## PROTO Additions` (pinned `AF_KING` constant) | Phase 317 |
+| CRANK-01 | `## ADD Design — Do-Work Crank` (do-work entry signatures + work-type encoding) | Phase 317 |
+| CRANK-02 | `## ADD Design — Do-Work Crank` (`BatchAlreadyTaken` short-circuit) | Phase 317 |
+| CRANK-03 | `## ADD Design — Do-Work Crank` (parameterless box cursor, OPEN-D) | Phase 317 |
+| CRANK-04 | `## ADD Design — Do-Work Crank` (WWXRP zero reward) | Phase 317 |
+| REW-01 | `## ADD Design — Do-Work Crank` (reward formula) + `## SPEC-Open Resolutions` (OPEN-B) | Phase 317 |
+| REW-02 | `## ADD Design — Do-Work Crank` (one `creditFlip`/tx deferred mint) | Phase 317 |
+| REW-03 | `## ADD Design — Do-Work Crank` (fixed `gasUnits`, never `gasleft()`) | Phase 317 |
+| REW-04 | `## ADD Design — Do-Work Crank` (no caller restriction) | Phase 317 |
+| SUB-01 | `## ADD Design — Subscription Sweep & Authorization` (pass-OR-pay gate) | Phase 317 |
+| SUB-02 | `## ADD Design — Subscription Sweep & Authorization` (authorization) | Phase 317 |
+| SUB-03 | `## ADD Design — Subscription Sweep & Authorization` (cursor sweep) | Phase 317 |
+| SUB-04 | `## Quantity & Funding Model` (flat + reinvest% max-semantics) | Phase 317 |
+| SUB-05 | `## Quantity & Funding Model` (funding waterfall) | Phase 317 |
+| SUB-06 | `## Quantity & Funding Model` (two-tier skip-kill by pinned identity) | Phase 317 |
+| SUB-07 | `## ADD Design — Subscription Sweep & Authorization` (lapsed/cancelled lifecycle) | Phase 317 |
+| SUB-08 | `## ADD Design — Subscription Sweep & Authorization` (bounty = creditFlip, charge = burnForKeeper) | Phase 317 |
+| **SUB-09** | `## Protocol-Owned Subs (SUB-09)` (init configs + permanent-deity free-renew) | **Phase 316 (SPEC-owned)** |
+| RM-01 | `## REMOVE Footprint` (RM-01 afKing mode surface) | Phase 317 |
+| RM-02 | `## REMOVE Footprint` (RM-02 free ETH auto-rebuy) + `## VRF-Freeze Obligation Retirement` | Phase 317 |
+| RM-03 | `## REMOVE Footprint` (RM-03 BURNIE flip → flat 75bps) | Phase 317 |
+| **RM-04** | `## REMOVE Footprint` (RM-04/PROTO-01 KEEP+EXPOSE) + `## Call-Graph Attestation` (4) | **Phase 316 (SPEC-owned)** |
+| RM-05 | `## REMOVE Footprint` (RM-05 cross-contract cascade) | Phase 317 |
+| RM-06 | `## Storage Slot-Shift Plan` (combined re-derivation) | Phase 317 |
+| SAFE-01 | `## ADD Design — Do-Work Crank` (faucet locks: purchase-gate + gas-peg + coinflip-credit illiquidity; WWXRP 0) | Phase 318 |
+| SAFE-02 | `## ADD Design — Do-Work Crank` (per-item `onlySelf`+try/catch non-brick) | Phase 318 |
+| SAFE-03 | `## ADD Design — Subscription Sweep & Authorization` (cursor self-partition + `lastSweptDay`) | Phase 318 |
+| SAFE-04 | `## VRF-Freeze Obligation Retirement` + `## JGAS-01 Decision Gate` (5) J5 freeze verdict | Phase 318 |
+| GAS-01 | `## ADD Design — Do-Work Crank` (reserved gas-peg constants, worst-case-first) + `## JGAS-01 Decision Gate` (2) | Phase 319 |
+| GAS-02 | `## ADD Design — Do-Work Crank` (one `creditFlip`/tx; one batch value transfer; read-once/batch) | Phase 319 |
+| GAS-03 | `## ADD Design — Do-Work Crank` (calldata grouped by player; homogeneous fns) | Phase 319 |
+| GAS-04 | `## ADD Design — Do-Work Crank` (no new hot-path storage) + `## Storage Slot-Shift Plan` | Phase 319 |
+| GAS-05 | `## ADD Design — Do-Work Crank` (scavenger/skeptic against the security floor) | Phase 319 |
+| GAS-06 | `## ADD Design — Do-Work Crank` (regression bounds; 0.5 gwei peg calibration deferred to Phase 319/OPEN-A) | Phase 319 |
+| **JGAS-01** | `## JGAS-01 Decision Gate` (decision gate + design-intent + worst-case-first + footprint + J5 verdict) | **Phase 316 (SPEC-owned)** |
+| JGAS-02 | `## JGAS-01 Decision Gate` (4) deletion footprint + `## Storage Slot-Shift Plan` (the −2 slot consequence) | Phase 317 |
+| JGAS-03 | `## JGAS-01 Decision Gate` (3) correctness criteria @305-winner single-call | Phase 318 |
+| JGAS-04 | `## JGAS-01 Decision Gate` (2) worst-case derivation (empirical measurement gate) | Phase 319 |
+
+**Coverage:** 42/42 mapped (SPEC-owned: 4 · 317: 26 · 318: 5 · 319: 7 · 320 TERMINAL: re-attests all 42, owns 0). 0 unmapped; 0 duplicated. The **SAFE-* / GAS-*** designs are locked here as the safety/gas *properties* the ADD/REMOVE/JGAS sections must hold (e.g. SAFE-04 freeze maps to BOTH `## VRF-Freeze Obligation Retirement` AND the JGAS J5 verdict; GAS-* numeric calibration of the 0.5 gwei peg is deferred to Phase 319/OPEN-A); their primary verification owners are Phases 318/319.
+
+## Success Criteria Coverage
+
+The 5 ROADMAP Phase-316 success criteria, each mapped to the satisfying SPEC section(s) and marked **COVERED**:
+
+| SC# | ROADMAP success criterion (abridged) | SPEC section(s) satisfying it | Status |
+|-----|--------------------------------------|-------------------------------|--------|
+| SC#1 | ADD design fully locked (do-work entries + work-type encoding, reward + reserved gas-peg + OPEN-B, `batchPurchase` shape + reentrancy, cursor sweep, authorization + pass gate, 5 PROTO sigs on pinned `AF_KING`) | `## ADD Design — Do-Work Crank` + `## ADD Design — Subscription Sweep & Authorization` + `## PROTO Additions` | **COVERED** |
+| SC#2 | Quantity + funding model locked (flat min-1 COEXIST reinvest% via `max(...)`, claimable→pool→`InsufficientPool`-skip waterfall, two-tier skip-kill by un-spoofable pinned identity) | `## Quantity & Funding Model` | **COVERED** |
+| SC#3 | Protocol-owned subs at init specified (SUB-09 sDGNRS + Vault configs; whale-pass-expiry renewal funding confirmed; "1 price lootbox" denomination resolved) | `## Protocol-Owned Subs (SUB-09)` + `## SPEC-Open Resolutions` | **COVERED** |
+| SC#4 | REMOVE design + reconciliation locked (PROTO-01/RM-04 KEEP+EXPOSE, RM-01..06 footprint, slot re-derivation, VRF-freeze retirement) **AND the JGAS-01 jackpot-split-removal decision locked** (worst-case-first gas, gate resolved, footprint grep-verified across both modules, 305 ceiling preserved) | `## REMOVE Footprint` + `## Storage Slot-Shift Plan` + `## VRF-Freeze Obligation Retirement` **+ `## JGAS-01 Decision Gate`** | **COVERED** |
+| SC#5 | Every cited file:line grep-verified against HEAD; zero "by construction" claims; keeper does NOT depend on anything RM-* deletes; zero `contracts/`/`test/` mutations | `## Call-Graph Attestation` | **COVERED** |
+
+All 5 success criteria are COVERED by the assembled SPEC.
 
 ---
 
@@ -465,3 +535,85 @@ This section (Plan **316-03**, appended after the SUB-09 section above; those ar
 ### `JackpotEthWin` event ABI-break note (delta only — OUT OF SCOPE for this milestone)
 
 **RECORDED as a delta note, NOT an in-scope fix.** RM-02's removal of `_processAutoRebuy` / `_calcAutoRebuy` makes the `JackpotEthWin` event's (decl `DegenerusGameJackpotModule.sol:69`) `rebuyLevel` (`:75`) / `rebuyTickets` (`:76`) fields dead, so the event signature CHANGES (a breaking topic-hash / field-set delta). This is a **benign ABI break for the off-chain indexer**, which is a separate frontend track explicitly OUT OF SCOPE for this milestone (RESEARCH §9-Q3). The full ABI-break delta is locked in the `## VRF-Freeze Obligation Retirement` → "ABI break — `JackpotEthWin` event signature change" subsection above (316-02); this entry records that the SPEC-open "what about the event consumers?" item is RESOLVED as out-of-scope (frontend indexer track), pointing back to that delta note.
+
+---
+
+## Call-Graph Attestation
+
+This section (Plan **316-04**, the LAST plan; appended after all the 316-01/02/03/05 design sections above, which are untouched) is the **SC#5 deliverable**: every `file:line` the SPEC's design sections actually cite — across `DegenerusGame` + modules + `BurnieCoin`/`BurnieCoinflip`/`DegenerusVault`/`StakedDegenerusStonk`/`ContractAddresses` + the in-tree `StreakKeeperV2`→`AfKing` keeper, **now including the JGAS two-module footprint** the `## JGAS-01 Decision Gate` section cites — was re-grep-verified against contract HEAD `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` on 2026-05-23, with a **MATCH / DRIFT / MISSING** verdict per row. The verification substrate is `316-RESEARCH.md §1` (the full RM verification table) + `§J1` (the JGAS two-module footprint table) — embedded/referenced here rather than re-tabulated verbatim row-by-row; this section's job is to (a) record the every-row-covered verdict, (b) enumerate the DRIFT/MISSING items explicitly so the SPEC carries no unverified call-graph claim, and (c) re-state the load-bearing keeper-dependency clean result + the J5 VRF/freeze verdict.
+
+> **Attestation statement (SC#5):** Every `file:line` cited by the SPEC's design sections was grep-verified against HEAD; the SPEC asserts no unverified "by construction" / "single fn reaches all paths" claim — the only such phrasing in this document is inside this explicit negation sentence and the quoted `feedback_verify_call_graph_against_source` reference. All citations are either MATCH, or a recorded DRIFT (live line locked, doc offset noted), or a recorded MISSING (resolves an open). This table is what the plan-checker and Phases 317/318/319/320 trust.
+
+### Verdict roll-up — coverage by source file
+
+| Source surface | RESEARCH substrate | Verdict roll-up |
+|----------------|--------------------|-----------------|
+| `DegenerusGame.sol` (RM-01 afKing surface + `_hasAnyLazyPass` reader-set) | §1.1, §2 | all 23 rows ✓ MATCH (13 fn decls + 3 events + 1 error + 3 consts + 2 cross-calls + 2 readers — re-grepped at HEAD: `setAutoRebuy :1495`, `setAfKingMode :1559`, `_setAfKingMode :1569`, `_hasAnyLazyPass :1610`, `afKingModeFor :1624`, `syncAfKingLazyPassFromCoin :1654`, `_deactivateAfKing :1670`, readers `:1580`/`:1660`, ctor Deity grant `:222`/`:223`) |
+| `storage/DegenerusGameStorage.sol` | §1.2, §4, §J3 | ✓ MATCH (`struct AutoRebuyState :910`, `autoRebuyState :926` forge slot 19; `resumeEthPool :994` forge slot 33) |
+| `modules/DegenerusGameJackpotModule.sol` (RM-02 + JGAS) | §1.3, §J1.1 | mostly ✓ MATCH; **2 cosmetic DRIFTs** (auto-rebuy block +2, jackpot resume-check +1 — below) |
+| `modules/DegenerusGamePayoutUtils.sol` (RM-02) | §1.4 | ✓ MATCH (`_calcAutoRebuy :51`, `struct AutoRebuyCalc :19`, selector `:83`, entropy roll `~70`) |
+| `modules/DegenerusGameAdvanceModule.sol` (JGAS + bounty idiom) | §1.10, §J1.2, §J2 | ✓ MATCH on all constants; **1 cosmetic DRIFT** (advance resume-check +1 — below) |
+| `BurnieCoinflip.sol` (RM-03) | §1.5 | ✓ MATCH (incl. the `RECYCLE_BONUS_BPS=75 :129` KEEP vs `AFKING_RECYCLE_BONUS_BPS=100 :130` DELETE value distinction, re-confirmed at HEAD) |
+| `interfaces/IDegenerusGame.sol` (RM-05) | §1.6 | ✓ MATCH on the 4 removed decls; **1 MISSING** (setAutoRebuy/TakeProfit/AfKingMode NOT here — resolves an open, below) |
+| `interfaces/IBurnieCoinflip.sol` (RM-05 + PROTO-03) | §1.7 | ✓ MATCH (`settleFlipModeChange :85` REMOVE; `creditFlip :115` + `creditFlipBatch :122` ALREADY present — PROTO-03 needs no new decl) |
+| `DegenerusVault.sol` (RM-05) | §1.8 | ✓ MATCH (`gameSet* :627/:634/:643` REMOVE; `coinSet* :685/:692` KEEP; self-subscribe site) |
+| `StakedDegenerusStonk.sol` (RM-05 + SUB-09) | §1.9 | ✓ MATCH (`setAfKingMode` decl `:13` + init `:361` REMOVE; re-claim `:404` KEEP) |
+| `ContractAddresses.sol` (PROTO-05 + SUB-06 identity) | §5 | ✓ MATCH (`VAULT :37`, `SDGNRS :47` already pinned; `AF_KING` ADD by PROTO-05) |
+| `libraries/PriceLookupLib.sol` / `BitPackingLib.sol` (OPEN-B + pass-bits + Deity free-renew) | §2, §5 | ✓ MATCH (`priceForLevel :21` pure non-zero; `HAS_DEITY_PASS_SHIFT=184 :71`, `FROZEN_UNTIL_LEVEL_SHIFT=128 :63`) |
+| `modules/DegenerusGameMintModule.sol` (REW-01 OPEN-B) | §1.10 | ✓ MATCH (`_ethToBurnieValue :1412` guarded zero-return) |
+| `StreakKeeperV2.sol`→`AfKing` keeper | §1.12, §2, §3 | dependency CLEAN (below); transitional-state DRIFTs recorded (below); only game coupling = `hasAnyLazyPass :671/:974` |
+
+**Re-verification freshness:** the milestone has not mutated source yet (`git diff --name-only -- contracts/ test/` is empty at HEAD), so the §1 + §J1 tables hold. A representative spread was re-grepped at attestation time: the JGAS anchors (`SPLIT_NONE :197`, `STAGE_JACKPOT_ETH_RESUME=8 :70`, `resumeEthPool` storage `:994`, jackpot resume-check `:349`, advance resume-check `:453-456`), the RM anchors (`_hasAnyLazyPass :1610` + readers `:1580/:1660`, `AutoRebuyState :910`/`autoRebuyState :926`, `_processAutoRebuy :822`, `RECYCLE_BONUS_BPS=75 :129`), and the keeper-dependency grep — all consistent with the embedded tables.
+
+### (1) RM drift items recorded (cosmetic line offsets — live line locked)
+
+- **DRIFT (+2, cosmetic):** JackpotModule `_addClaimableEth` auto-rebuy block — `PLAN-V47` claimed `798–806`; **live = `800–808`** (the `AutoRebuyState memory state = autoRebuyState[beneficiary];` cold SLOAD at `:801`). The locked range is `800–808`. (`316-RESEARCH.md §1.3`.)
+- **DRIFT (interior offset, cosmetic):** DegeneretteModule `_distributePayout` frozen-pool solvency check — decl at `:705`, the revert-on-insufficient-solvency check at **`~738`** (inside the body); `PLAN-CRANK §8`'s "742" is a slightly-off interior offset. The locked anchors are decl `:705` / check `~738`. (`316-RESEARCH.md §1.11`.)
+- **MISSING (resolves an open):** `setAutoRebuy` / `setAutoRebuyTakeProfit` / `setAfKingMode` are **NOT declared in `IDegenerusGame.sol`** — the doc's "verify whether present" resolves to MISSING here. They ARE declared in `DegenerusVault.sol`'s **local** interface (`:47`/`:49`/`:51`), which RM-05 removes. This is the resolution to `PLAN-V47 §5.6`'s open verify. (`316-RESEARCH.md §1.6`.)
+
+### (2) JGAS footprint attestation (embedding `316-RESEARCH.md §J1`)
+
+The JGAS two-call-split deletion surface (cited by the `## JGAS-01 Decision Gate` section) — every constant **exact-match by value** at HEAD:
+
+| Symbol | Live anchor | Verdict | Removal note |
+|--------|-------------|---------|--------------|
+| `SPLIT_NONE` / `SPLIT_CALL1` / `SPLIT_CALL2` | JackpotModule `:197` / `:199` / `:201` | ✓ MATCH | DELETE all three split-mode tags |
+| `JACKPOT_MAX_WINNERS = 160` | JackpotModule `:219` (sole functional use = threshold `:480`) | ✓ MATCH | **DEAD on removal → DELETE** (split-routing threshold, NOT a winner-count cap) |
+| `resumeEthPool` storage | `storage/DegenerusGameStorage.sol:994`, forge **slot 33** (own slot) | ✓ MATCH | DELETE (the −2 slot-shift consequence is owned by `## Storage Slot-Shift Plan`) |
+| `resumeEthPool` reads/writes | jackpot resume-check `:349`, read `:1201`, read+zero `:1252-1253`, write `:1348` (gated `:1347`) | ✓ MATCH (resume-check +1 drift below) | DELETE all |
+| `_resumeDailyEth` | JackpotModule `:1186` (called `:350`) | ✓ MATCH | DELETE |
+| `splitMode` param + routing | JackpotModule `:1248`; derivation locals `:476`/`:480`/`:501`; `:1251` | ✓ MATCH | DELETE param + routing; collapse to single-call |
+| `call1Bucket` mask | JackpotModule decl `:1270`, build `:1272/:1274/:1276`, skip-routing `:1287-1288` | ✓ MATCH | DELETE |
+| split-threshold branch | JackpotModule `:476-483` + `_processDailyEth(...)` call `:493-503` | ✓ MATCH | collapse to unconditional single-call |
+| `STAGE_JACKPOT_ETH_RESUME = 8` | AdvanceModule `:70` | ✓ MATCH (value=8 exact) | DELETE constant |
+| stage assignment + resume-check block | AdvanceModule `:455` (assign) + `:453-456` (whole block) | ✓ MATCH (block +1 drift below) | DELETE the entire block |
+
+- **Two cosmetic `+1` JGAS resume-check DRIFTs recorded:** the jackpot resume-check the requirement cites at `:348` is the `if` guard at **`:349`** (comment at 348); the advance resume-check cited at `:452-455` is the block at **`:453-456`** (comment at 452). Both are the requirement citing the leading comment line, not the `if`/block — cosmetic doc-vs-`if` offsets, **no symbol drift, no MISSING symbol** (`316-RESEARCH.md §J1.2`).
+- **PRESERVED (NOT in the deletion set):** `DAILY_ETH_MAX_WINNERS = 305` (`:227`), `DAILY_JACKPOT_SCALE_MAX_BPS = 63_600` (`:248`), and the 159/95/50/1 bucket derivation. JGAS removes only the split MECHANISM at the same 305-winner ceiling — zero winner-count / bucket-scaling / payout-EV change.
+- **Stage numbers are NOT load-bearing** (`316-RESEARCH.md §J2`): `stage` is a function-local `uint8` (never stored); `STAGE_JACKPOT_ETH_RESUME` is only ASSIGNED (`:455`) and EMITTED via the `Advance` event — zero `==` comparisons; the `Advance` event is not consumed on-chain. Renumbering 9/10/11 → 8/9/10 is OPTIONAL/cosmetic.
+
+### (3) JGAS J5 VRF / freeze-SAFE verdict (HEADLINE — re-stated as attestation)
+
+Re-stated here (full trace in `## JGAS-01 Decision Gate` section (5), substrate `316-RESEARCH.md §J5`) so the attestation carries the security verdict:
+
+- The ETH-resume branch (`:453-456`) **never calls `_unlockRng`** — the rng lock is HELD across the entire split (call 1 → next advanceGame → call 2), and the **same `randWord` is re-consumed in call 2** (`_resumeDailyEth` re-rolls the winning traits from the identical held word).
+- Single-call **collapses two same-word consumptions into one**; `_unlockRng` placement is **UNCHANGED** (still the coin-tickets stage `:467`); **no new in-window player-mutable input** is introduced (RM-02 *removes* the `autoRebuyState` read — opposite direction); the stage-number deletion **cannot perturb VRF sequencing** (resume is driven by the `resumeEthPool != 0` storage read, not by any stored stage value).
+- **VERDICT: JGAS is freeze-invariant-SAFE.** It removes a VRF-word re-consumption point AND a cross-tx `resumeEthPool` carry → a **VRF-rotation-robustness IMPROVEMENT** (single-call completes the daily ETH jackpot in one atomic tx with no cross-tx state to orphan, strictly less rotation-exposed than the two-call split, consistent with the Phase 312 `a303ae18` detect-preserve-re-issue work). **The only residual risk is the gas-fits (liveness) question, gated on JGAS-04** (Phase 319) — NOT a freeze-invariant or RNG-manipulability concern. **AUDIT-320 re-attests** the freeze invariant under the single-call path AND under emergency VRF rotation.
+
+### (4) Keeper-dependency CLEAN result (the load-bearing RM/JGAS deletion-safety attestation)
+
+**Zero-match grep over the full RM-symbol set, re-run at HEAD.** `StreakKeeperV2.sol` matches **ZERO** of the RM-deletion symbols (`syncAfKingLazyPassFromCoin` / `afKingModeFor` / `afKingActivatedLevelFor` / `setAfKingMode` / `deactivateAfKingFromCoin` / `setAutoRebuy` / `setAutoRebuyTakeProfit` / `autoRebuyState` / `AutoRebuyState` / `_processAutoRebuy` / `_calcAutoRebuy` / `settleFlipModeChange` / `_afKingRecyclingBonus` / `_afKingDeityBonus` / `gameSetAutoRebuy` / `gameSetAfKingMode`). The keeper **also matches ZERO** of the JGAS symbols (`SPLIT_*` / `resumeEthPool` / `STAGE_JACKPOT_ETH_RESUME` / `_resumeDailyEth` / `call1Bucket` / `splitMode`) — those are jackpot/advance-module-internal and the keeper never references them.
+
+- **The keeper's ONLY game-side coupling is `hasAnyLazyPass(player)`** — the kept-and-exposed PROTO-01 view — at keeper `:671` (subscribe gate) and `:974` (monthly-renewal sweep gate). The lazy-pass *sync* (`syncAfKingLazyPassFromCoin`) the input doc worried about is a coinflip↔game internal and is NOT used by the keeper.
+- **The deletion is dependency-safe IFF PROTO-01 ships in the SAME batched Phase-317 diff.** With the rename shipping alongside the deletion, the keeper's pass gate survives RM-* unchanged.
+- **PROTO-side keeper interface obligation (recorded):** the keeper still calls `IBurnie.pullForKeeper` / `mintForKeeper` against `BurnieCoin`, which has NEITHER yet (deferred-selector by design); **PROTO-02 adds `burnForKeeper`** and the keeper IMPL (Phase 317, utilities side) switches its calls. This is a PROTO-side interface obligation, NOT an afKing-deletion dependency.
+
+### (5) Keeper transitional-state caveat (Pitfall 1 — record explicitly)
+
+The keeper's CURRENT live source is a **MIXED transitional state** that does NOT match `PLAN-CRANK §9`'s claimed post-rework state. `316-RESEARCH.md §1.12` re-verified live source vs §9: **19× `pullForKeeper`, 5× `mintForKeeper`, only 2× `creditFlip`**, the OLD caller-supplied `sweep(uint256 startIdx, uint256 count)` loop, `subscribe(bool drainGameCreditFirst, uint8 dailyQuantity)` (no `reinvestPct`), and **NO `sweepCursor` / `reinvestPct` / `windowPaid`** anywhere. Therefore `PLAN-CRANK §9` "done this session (compile-verified)" is **FALSE vs live source** — the cursor / reinvestPct / windowPaid / `batchPurchase` switch / `pull→burn` rename / full `creditFlip` are genuinely unbuilt. **This SPEC locks against the INTENDED end-state for Phase 317 IMPL, NOT the current keeper source.** Recorded so the plan-checker does NOT treat §9 "done this session" as ground truth.
+
+### (6) Box-cursor VRF-rotation-orphan-index landmine (Pitfall 3 — the single biggest ADD-side design risk)
+
+The OPEN-D box cursor's enqueue/dequeue is keyed on the lootbox `index`, which re-couples it to the **v45 VRF-rotation orphan-index keyspace** (`project_vrf_rotation_midday_orphan_index`): an emergency VRF coordinator rotation can orphan an in-flight mid-day lootbox index. **The box cursor MUST follow the v45 `a303ae18` detect-preserve-re-issue path** (re-issue an in-flight `lootboxRngWordByIndex[N]` request on the new coordinator rather than orphaning it). This is the milestone's single biggest design landmine; the AUDIT phase (320) re-verifies the freeze invariant holds under emergency rotation WITH the new box cursor present. (Full lock in the `## ADD Design — Do-Work Crank` → OPEN-D subsection above; recorded here so the attestation surfaces it alongside the JGAS rotation note.)
+
+**SC#5 satisfied:** every cited `file:line` is grep-verified against HEAD (incl. the JGAS footprint); the RM + JGAS DRIFT items, the IDegenerusGame MISSING resolution, the keeper-dependency clean result, the J5 VRF verdict, the keeper transitional-state caveat, and the box-cursor rotation landmine are all recorded — the SPEC carries no unverified call-graph claim.
