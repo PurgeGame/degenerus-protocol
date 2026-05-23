@@ -59,3 +59,58 @@ The **only Solidity way to isolate an in-context per-item revert** is an `onlySe
 ### OPEN-D box-cursor ↔ VRF-rotation orphan-index coupling (Pitfall 3 — the milestone's single biggest design landmine)
 
 **LOCKED, stated explicitly:** the box cursor's enqueue/dequeue is keyed on the lootbox `index`, which re-couples it to the VRF-rotation orphan-index keyspace. This is the v45 CATASTROPHE surface (`project_vrf_rotation_midday_orphan_index`): an emergency VRF coordinator rotation can orphan an in-flight mid-day lootbox index. **The box cursor MUST follow the v45 `a303ae18` detect-preserve-re-issue path** — the same emergency-rotation handling that re-issues an in-flight `lootboxRngWordByIndex[N]` request on the new coordinator rather than orphaning it. The AUDIT phase (320) re-verifies the freeze invariant holds under emergency rotation WITH the new box cursor present. This is the single biggest design landmine in the milestone; any box-cursor IMPL that enqueues `boxPlayers[index]` keyed on the raw lootbox index without the `a303ae18` re-issue coupling re-introduces the catastrophe.
+
+---
+
+## ADD Design — Subscription Sweep & Authorization
+
+The AfKing auto-rebuy subscription (Deliverable B) is `StreakKeeperV2` moved in-tree as a **separate contract** named `AfKing` and audited in-tree (the game-brick-immunity rationale is about the contract boundary, not the repo — a separate contract physically cannot corrupt the game's frozen storage). It auto-buys tickets/lootboxes for subscribers, drawing funds via the funding waterfall and recovering its gas via the keeper-gated `batchPurchase` (above). It is owner-less / no-admin / no-upgrade — same frozen posture as the game.
+
+> **Keeper transitional-state caveat (Pitfall 1 — record explicitly).** The keeper's CURRENT live source is a **MIXED transitional state** that does NOT match `PLAN-CRANK §9`'s claimed post-rework state. `316-RESEARCH.md §1.12` re-verified live source against §9 and found: **19× `pullForKeeper`, 5× `mintForKeeper`, only 2× `creditFlip`**, the OLD caller-supplied `sweep(uint256 startIdx, uint256 count)` loop, `subscribe(bool drainGameCreditFirst, uint8 dailyQuantity)` (no `reinvestPct`), and **NO `sweepCursor`, NO `reinvestPct`, NO `windowPaid`** anywhere. Therefore `PLAN-CRANK §9` "done this session (compile-verified)" is **FALSE vs live source** — the cursor / reinvestPct / windowPaid / `batchPurchase` switch / `pull→burn` rename / full `creditFlip` are **genuinely unbuilt**. **This SPEC locks against the INTENDED end-state for Phase 317 IMPL, NOT the current keeper source.** This caveat is cited so the plan-checker does not treat §9 "done this session" as ground truth (cite `316-RESEARCH.md §1.12` drift table). The dependency check itself is clean: the keeper references ZERO RM-deleted symbols (§3) — its only game-side coupling is `hasAnyLazyPass` (the kept-and-exposed PROTO-01 view).
+
+### Cursor sweep (SUB-03)
+
+Mirror **`advanceGame`'s progress-cursor model** (chunk-then-`return`; per-chunk ETH-pegged bounty; escalating `bountyMultiplier` on stall):
+
+- **`sweep(uint256 maxCount)` + internal daily-reset `sweepCursor`.** Each call resumes from the cursor, processes ≤ `maxCount` un-swept active entries, advances the cursor, pays the per-chunk bounty. **No caller-supplied range** (replaces the live OLD `sweep(startIdx, count)`).
+- **Concurrent same-block callers self-partition** via the advancing cursor — Tx2 sees Tx1's advanced cursor and takes the next chunk: no overlap, no off-chain range coordination, no wasted-skip reverts (SUB-03 / SAFE-03). Per-entry `lastSweptDay` (already a field on the keeper, `keeper:31`; skip at `keeper:962` via `if (sub.lastSweptDay >= today)`) is the **idempotency backstop** (same-block correctness already holds via sequential execution + the day-stamp — no double-buy).
+- **Stall-escalating bounty** mirrors advanceGame's 2/4/6× `bountyMultiplier`: if the cursor lags, the per-chunk bounty rises until someone finishes the day's sweep — this drives daily completeness.
+- **Caller-bounded `maxCount`** (no contract-bounded loop) is the anti-gas-DoS property. Liveness ("every entry every day") = contract idempotency + reachability + bounty-incentivized cursor coverage.
+
+### Lapsed / cancelled lifecycle (SUB-07)
+
+- **Tombstone-on-cancel** — external cancel (`setDailyQuantity(0)`) only sets `dailyQuantity = 0` and **moves nothing**, so it can never relocate an unprocessed entry behind the cursor (the one miss case a swap-pop-on-cancel would cause).
+- **In-sweep swap-pop reclaim** — on auto-pause OR on reaching a tombstone, the sweep removes the entry, moves the tail into the slot, and processes it there **WITHOUT `++i`** (the mover came from ahead → already processed; nothing skipped or doubled). Reuse the existing `_removeFromSet` swap-pop (`keeper:707 / 1013`). No separate `compact()` pass; no dead-slot buildup.
+- **`_subOf` storage reclaim** — `delete` (refund) on lapse AND on cancel, **KEEP only to preserve an unexpired _paid_ window** (`paidThroughDay > today` AND the window was paid, not free). "Paid" is determined via a **1-bit `windowPaid` flag** in the `Sub`'s free bytes — **set on `burnForKeeper`, cleared on the free pass-extend** — which avoids a cancel-path STATICCALL. Pass-holder / expired cancels `delete` (their window was free or gone → nothing to preserve; re-subscribe is fresh). `useTickets` settings-loss on delete is acceptable.
+- **Transient skips** (not-approved-funds / insufficient-pool / lootbox-floor) **stay in the set and retry next sweep** (distinct from a kill — see SUB-06, owned by Plan 316-03).
+- **Stranded `_poolOf` ETH** on a cancelled sub stays the owner's withdrawable balance — never auto-swept; `withdraw()` reclaims it.
+
+### Authorization (SUB-02)
+
+**Authorization = the subscription itself** — no separate operator-approval re-check in the sweep:
+
+- `subscribe(address player, …)` uses the game's resolve-gate **once at subscribe, third-party path only**: `player == msg.sender` (or `0`) → self-consent, no check; else `require isOperatorApproved(player, msg.sender)` — third-party subscribe is allowed exactly when the player approved the caller as a game operator (mirrors `_resolvePlayer` / `_requireApproved` at `DegenerusGame.sol:458 / :452` and module `:141 / :131`). **Never checked at sweep.**
+- The sub is the standing authorization; the player controls it directly (`setDailyQuantity` / `setDrainGameCreditFirst` / cancel all key off `_subOf[player]`). Revoking the operator's game-approval later does NOT auto-cancel (it is a separate, broader grant) — the player cancels directly.
+- The game's keeper-purchase entry (`batchPurchase`) is gated to the pinned keeper (`msg.sender == AF_KING`) and does **no per-player approval check** — it trusts the keeper, which structurally only acts on its own `_subscribers`.
+
+### Pass-OR-pay gate (SUB-01 / SUB-08)
+
+- **Pass = any of Deity / Whale / Lazy via `hasAnyLazyPass` (PROTO-01).** All three are packed in the single `mintPacked_[player]` word; `_hasAnyLazyPass` (`DegenerusGame.sol:1610`) already returns `hasDeityPass || frozenUntilLevel > level` = exactly "any of the three" (Deity bit 184 permanent; Whale-bundle + Lazy via `FROZEN_UNTIL_LEVEL` bits 128-151, level-expiring). 1 SLOAD common case, 2 worst, zero external calls.
+- **Checked at the monthly renewal branch ONLY** (`paidThroughDay <= today`) — **never per sweep** (already gas-optimal; the optimistic "fire only inside renewal branch" pattern, keeper renewal-gate at `keeper:974`).
+- **No pass → `burnForKeeper` charges** the BURNIE cost (or **skip-with-emit** if uncoverable — never revert the whole sweep). **Charge = `burnForKeeper`, all-or-nothing burn** (PROTO-02; if the source can't cover the full amount, burn nothing). **Bounty = `creditFlip`, gas-pegged** (SUB-08, the REW reward model above).
+
+---
+
+## PROTO Additions
+
+The 5 protocol-side additions ship as ONE batched USER-APPROVED contract diff at Phase 317 IMPL. All keeper-authority gates resolve to the **pinned `AF_KING` address constant** (PROTO-05). `ContractAddresses.sol` already pins `VAULT` (`:37`) and `SDGNRS` (`:47`); **no `AF_KING` / `STREAK_KEEPER` constant exists yet** — PROTO-05 must ADD it.
+
+- **PROTO-01 — `hasAnyLazyPass(address) external view`.** Rename the existing private `_hasAnyLazyPass` (`DegenerusGame.sol:1610`) to `external view`, **NO body change**. The reader-set is exactly 3 grep matches total (`316-RESEARCH.md §2`): the decl at `:1610` plus the two readers at `:1580` (`_setAfKingMode`) and `:1660` (`syncAfKingLazyPassFromCoin`) — both inside afKing-**mode** machinery being deleted by RM-01, so after the deletion the body survives precisely because the keeper needs it externally (this is the cross-half RM-04 KEEP+EXPOSE reconciliation; the deletion of the surrounding `:1580`/`:1660` functions does not touch the body). PROTO-01's design lock + verified reader-set is the SPEC-owned acceptance for this phase.
+
+- **PROTO-02 — `BurnieCoin.burnForKeeper(address user, uint256 amount) returns (uint256 burned)`.** Does NOT exist yet — adds it. **ALL-OR-NOTHING** burn of the subscription charge: source from the user's `balanceOf` + pending coinflip; if the available total `< amount`, **burn nothing and return 0** (the charge skip-with-emits at the call site, never a partial burn — you cannot refund a burn). Gated `onlyAfKing` (`msg.sender == AF_KING`, the pinned constant).
+
+- **PROTO-03 — authorize the keeper in `BurnieCoinflip.onlyFlipCreditors`.** The `creditFlip(address player, uint256 amount)` interface decl **ALREADY exists** at `IBurnieCoinflip.sol:115` (with `creditFlipBatch` at `:122`), and the implementation lives at `BurnieCoinflip.sol:898` behind the `onlyFlipCreditors` modifier (`:194`). PROTO-03 therefore only **ADDs the `AF_KING` keeper to `onlyFlipCreditors`** so its gas-pegged `creditFlip` bounty works (coinflip credit = deferred mint; replaces the discarded `mintForKeeper`). No new interface decl needed.
+
+- **PROTO-04 — `DegenerusGame.batchPurchase(players[], amounts[], modes[])`.** Does NOT exist yet — adds it. Keeper-gated (on `AF_KING`); per-player in-context purchase wrapped in try/catch + slice-refund; ONE batch value transfer; batch-level `rngLocked`/game-over pre-checked once at entry; OPEN-C = CEI-proof with the guard-fallback note. **Full shape locked in the `## ADD Design — Do-Work Crank` → `batchPurchase` subsection above** (this entry points to that lock).
+
+- **PROTO-05 — pin `AF_KING` frozen address constant.** ADD `AF_KING` (aligning with any existing afKing address) to `ContractAddresses.sol` (freely modifiable per `feedback_contractaddresses_policy`), and reference it from `BurnieCoin` / `BurnieCoinflip`. `burnForKeeper` / `creditFlip` / `batchPurchase` all gate on **exactly** this constant. `VAULT`/`SDGNRS` (`ContractAddresses.sol:37/:47`) are the precedent pattern; the keeper-rename succession (`STREAK_KEEPER_V2`→`AF_KING`, `onlyStreakKeeper`→`onlyAfKing`) propagates the gate references.
