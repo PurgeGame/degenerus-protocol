@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
-status: executing
-last_updated: "2026-05-23T22:41:15.488Z"
+status: ready_to_plan
+last_updated: 2026-05-23T23:03:17.537Z
 last_activity: 2026-05-23
 progress:
   total_phases: 5
@@ -11,6 +11,7 @@ progress:
   total_plans: 18
   completed_plans: 20
   percent: 60
+stopped_at: Phase 318 complete (6/6) — ready to discuss Phase 319
 ---
 
 # Project State
@@ -20,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 318 — tst — subscription + crank correctness + removal proofs (tst)
+**Current focus:** Phase 319 — gas — worst case first gas pass + 0.5 gwei peg calibration (gas)
 
 ## Current Position
 
-Phase: 318
-Plan: 06 complete (JGAS-03 single-call 305-winner daily-ETH jackpot correctness + conservation + gas-fits + split-gone, JackpotSingleCallCorrectness.t.sol 8/8) — ALL 6 plans done; Phase 318 TST complete
-Status: Phase 318 complete — 6 of 6 plans done; ready for verification / next direction (319 GAS)
+Phase: 319
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-05-23
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
