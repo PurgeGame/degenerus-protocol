@@ -168,7 +168,14 @@ Plans:
   4. Scavenger + Skeptic pass complete (GAS-05) — every removal/packing validated against the security floor; the resolve/placement freeze guards, one-reward delete/zero, `batchPurchase` try/catch, `burnForKeeper` all-or-nothing, and keeper/address gating are all preserved (never optimized away per `feedback_security_over_gas.md`); swap-pop/no-`++i` integrity + bounded tombstone overhead verified.
   5. Regression bounds met (GAS-06) — placement hot-path +0%; the measured worst-cases calibrate the `gasUnits`/`*_ETH_TARGET` 0.5 gwei peg constants (OPEN-A closed) and those values land in the contract (folded into the Phase 317 diff or a follow-up USER-APPROVED constant-tune if numbers shifted).
 
-**Plans:** TBD
+**Plans:** 5 plans across 3 waves
+
+Plans:
+- [ ] 319-01-PLAN.md — GAS-01 worst-case derivation doc (paper-first, per work-type) + GAS-06 placement .gas-snapshot baseline
+- [ ] 319-02-PLAN.md — GAS-01 resolve-bet 10-spin + open-box worst-case measurement + per-item marginals; JGAS-04 305-winner re-frame + freed-SLOAD delta attribution
+- [ ] 319-03-PLAN.md — GAS-01 sweep-per-player worst-case measurement + per-player marginal (BOUNTY_ETH_TARGET deploy-param input)
+- [ ] 319-04-PLAN.md — GAS-02/03/04 lever + packing assertions; GAS-05 Scavenger→Skeptic→contract-auditor security-floor pass (G1-G13 intact)
+- [ ] 319-05-PLAN.md — GAS-06 placement +0% + CONDITIONAL peg-constant calibration (the ONE USER-APPROVED contract gate) + test-mirror sync + deploy-param tune
 
 ### Phase 320: AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure (TERMINAL)
 
