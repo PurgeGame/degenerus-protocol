@@ -1,0 +1,281 @@
+diff --git a/test/fuzz/CrankFaucetResistance.t.sol b/test/fuzz/CrankFaucetResistance.t.sol
+index 9fcdb19e..1f61f8b8 100644
+--- a/test/fuzz/CrankFaucetResistance.t.sol
++++ b/test/fuzz/CrankFaucetResistance.t.sol
+@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+ import {Vm} from "forge-std/Vm.sol";
+ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
+ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
++import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+ 
+ /// @title CrankFaucetResistance -- Proves SAFE-01: the permissionless do-work crank
+ ///        (crankBets / crankBoxes) is faucet-bounded by three caller-independent locks:
+@@ -63,6 +64,10 @@ contract CrankFaucetResistance is DeployProtocol {
+     /// @dev WWXRP totalSupply slot.
+     uint256 private constant WWXRP_TOTAL_SUPPLY_SLOT = 0;
+ 
++    /// @dev lootboxEthBase mapping root slot (uint48 index => address => base). First-deposit signal,
++    ///      zeroed on open — used by the WR-01 multi-box self-crank round-trip to enqueue + verify opens.
++    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 19;
++
+     // -------------------------------------------------------------------------
+     // Crank reward peg mirror (the contract's own FIXED constants, REW-03)
+     // -------------------------------------------------------------------------
+@@ -89,6 +94,9 @@ contract CrankFaucetResistance is DeployProtocol {
+     /// @dev A fixed RNG word for deterministic resolution (we craft tickets against its result).
+     uint256 private constant FIXED_WORD = uint256(keccak256("crank_faucet_fixed_word"));
+ 
++    /// @dev A fixed RNG word for the WR-01 multi-box self-crank round-trip (deterministic box opens).
++    uint256 private constant BOX_FIXED_WORD = uint256(keccak256("crank_faucet_box_fixed_word"));
++
+     address private player;   // bet owner
+     address private cranker;  // arbitrary caller of crankBets (self-crank == player)
+     address private sybil;    // a distinct Sybil cranker
+@@ -381,6 +389,112 @@ contract CrankFaucetResistance is DeployProtocol {
+         assertEq(coinflip.coinflipAmount(sybil), preStake, "no reward from a not-ready box index");
+     }
+ 
++    // =========================================================================
++    // WR-01 — multi-box self-crank round-trip <= 0 (the box-path SAFE-01 floor)
++    // =========================================================================
++
++    /// @notice SAFE-01 / WR-01: a self-cranker who opens N OWN boxes in one `crankBoxes(N)` tx earns
++    ///         a FLAT per-box reward summed into ONE creditFlip. Because the per-box reward is flat
++    ///         while the per-tx fixed overhead (cursor SLOAD+SSTORE :1593-1598/:1631, the index gate
++    ///         SLOAD :1603, `_activeTicketLevel()` :1610, the once-per-tx `coinflip.creditFlip` :1632)
++    ///         amortizes toward zero per box as N grows, the box path is exactly where the round-trip
++    ///         can go POSITIVE if the per-box peg over-states the true per-box MARGINAL (CR-01). This
++    ///         test asserts the summed reward valued at the protocol's own peg is <= the REAL gas the
++    ///         self-crank tx burns at the >=1 gwei market floor — the box-path analog of the single-bet
++    ///         `testSelfCrankRoundTripNonPositive`. With a peg ABOVE the per-box marginal this assertion
++    ///         FAILS for large N (the faucet hole); at/below the marginal it holds for ALL N.
++    function testMultiBoxSelfCrankRoundTripNonPositive() public {
++        uint48 index = _activeLootboxIndex();
++        uint256 nBoxes = 24; // past the small-N regime where the fixed overhead dominates per box
++
++        // The self-cranker controls N deposit addresses (a Sybil): each fires the first-deposit enqueue.
++        // The owner-set prefix `wr01h_` produces a cold-bust-leaning batch (low per-box materialization
++        // cost) — the adversarially-cheap self-crank a peg-vs-marginal mismatch (CR-01) most exposes.
++        address[] memory owners = new address[](nBoxes);
++        for (uint256 i; i < nBoxes; ++i) {
++            address o = makeAddr(string(abi.encodePacked("wr01h_", vm.toString(i))));
++            owners[i] = o;
++            vm.deal(o, 100_000 ether);
++            _buyBox(o, 1 ether);
++        }
++        _injectLootboxRngWord(index, BOX_FIXED_WORD);
++
++        uint256 preStake = coinflip.coinflipAmount(cranker);
++
++        // Measure the REAL gas the self-crank tx burns (the cranker's true ETH cost driver).
++        vm.recordLogs();
++        vm.prank(cranker);
++        uint256 gasBefore = gasleft();
++        game.crankBoxes(nBoxes);
++        uint256 gasUsed = gasBefore - gasleft();
++
++        // The cranker (not the box owners) receives the crank reward; isolate its credit by recipient.
++        uint256 stakeDelta = coinflip.coinflipAmount(cranker) - preStake;
++        assertGt(stakeDelta, 0, "self-cranker earns a positive summed box reward");
++
++        // Non-vacuity: every box actually opened (first-deposit signal zeroed), so the reward is for
++        // N real materializations, not a no-op / skipped walk.
++        for (uint256 i; i < nBoxes; ++i) {
++            assertEq(_lootboxEthBase(index, owners[i]), 0, "non-vacuity: each self-crank box opened");
++        }
++
++        // The summed reward valued back at the SAME fixed peg = exactly N * GAS_UNITS * 0.5 gwei.
++        uint256 summedRewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
++        assertEq(
++            summedRewardEthAtPeg,
++            nBoxes * CRANK_OPEN_BOX_GAS_UNITS * CRANK_GAS_PRICE_REF,
++            "summed box reward at peg == N * the flat per-box reserve (REW-03)"
++        );
++
++        // ROUND-TRIP <= 0 at the >=1 gwei realistic market floor: the FIXED-peg summed reward is
++        // strictly below the real gas the self-cranker burns to earn it. A per-box peg ABOVE the
++        // true per-box marginal would let the summed reward exceed gasUsed as the fixed overhead
++        // amortizes (CR-01); at/below the marginal it stays <= 0 for all N.
++        assertLt(
++            summedRewardEthAtPeg,
++            gasUsed * 1 gwei,
++            "WR-01: multi-box self-crank round-trip <= 0 at the 1 gwei market floor (box-path SAFE-01)"
++        );
++    }
++
++    /// @notice WR-01 fuzz: across fuzzed realistic submission prices, the FIXED-peg summed box reward
++    ///         is ALWAYS below the real gas cost of the N-box self-crank — the round-trip cannot be
++    ///         pushed positive by choosing the gas price (REW-03: the reward never reads tx.gasprice).
++    function testFuzz_MultiBoxRoundTripNonPositiveAcrossGasPrices(uint256 gasPriceWei) public {
++        gasPriceWei = bound(gasPriceWei, 1 gwei, 2000 gwei);
++
++        uint48 index = _activeLootboxIndex();
++        uint256 nBoxes = 24;
++        address[] memory owners = new address[](nBoxes);
++        for (uint256 i; i < nBoxes; ++i) {
++            address o = makeAddr(string(abi.encodePacked("wr01h_", vm.toString(i))));
++            owners[i] = o;
++            vm.deal(o, 100_000 ether);
++            _buyBox(o, 1 ether);
++        }
++        _injectLootboxRngWord(index, BOX_FIXED_WORD);
++
++        uint256 preStake = coinflip.coinflipAmount(cranker);
++        vm.prank(cranker);
++        uint256 gasBefore = gasleft();
++        game.crankBoxes(nBoxes);
++        uint256 gasUsed = gasBefore - gasleft();
++        uint256 stakeDelta = coinflip.coinflipAmount(cranker) - preStake;
++
++        uint256 summedRewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
++        // Reward is the FIXED reserve, independent of the chosen gas price.
++        assertEq(
++            summedRewardEthAtPeg,
++            nBoxes * CRANK_OPEN_BOX_GAS_UNITS * CRANK_GAS_PRICE_REF,
++            "summed box reward fixed, price-independent"
++        );
++        assertLt(
++            summedRewardEthAtPeg,
++            gasUsed * gasPriceWei,
++            "WR-01: multi-box round-trip <= 0 at every fuzzed realistic gas price > 0.5 gwei"
++        );
++    }
++
+     // =========================================================================
+     // Task 2 — WWXRP zero reward + one-creditFlip-per-tx + zero-success no-credit
+     // =========================================================================
+@@ -549,6 +663,29 @@ contract CrankFaucetResistance is DeployProtocol {
+         return uint64(uint256(vm.load(address(game), slot)));
+     }
+ 
++    /// @dev Buy a real lootbox-mode deposit via the public mint API. The first deposit for
++    ///      (index, buyer) fires the `lootboxEthBase == 0` signal -> enqueueBoxForCrank (MintModule:999).
++    ///      Mirrors CrankNonBrick/CrankOpenBoxWorstCaseGas._buyBox.
++    function _buyBox(address buyer, uint256 lootboxAmount) internal {
++        vm.prank(buyer);
++        game.purchase{value: lootboxAmount + 0.01 ether}(
++            buyer, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth
++        );
++    }
++
++    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 35).
++    function _activeLootboxIndex() internal view returns (uint48) {
++        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
++        return uint48(packed & 0xFFFFFFFFFFFF);
++    }
++
++    /// @dev Read lootboxEthBase[index][who] (slot 19) — the first-deposit signal, zeroed on open.
++    function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
++        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_ETH_BASE_SLOT)));
++        bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
++        return uint256(vm.load(address(game), leaf));
++    }
++
+     /// @dev The REAL spin-0 result ticket for (index, word), matching _resolveFullTicketBet:
+     ///      packedTraitsDegenerette(keccak256(abi.encodePacked(word, uint32(index), 'Q'))).
+     function _resultTicketFor(uint48 index, uint256 word) internal pure returns (uint32) {
+diff --git a/test/gas/CrankOpenBoxWorstCaseGas.t.sol b/test/gas/CrankOpenBoxWorstCaseGas.t.sol
+index 613c382b..48f6a440 100644
+--- a/test/gas/CrankOpenBoxWorstCaseGas.t.sol
++++ b/test/gas/CrankOpenBoxWorstCaseGas.t.sol
+@@ -53,6 +53,12 @@ contract CrankOpenBoxWorstCaseGas is DeployProtocol {
+     ///      precise number; the structural claim is "single box << 10-spin worst case".
+     uint256 internal constant RESOLVE_BET_10SPIN_WORST_CASE_REF_GAS = 726_944;
+ 
++    /// @dev The single-box `crankBoxes(1)` TOTAL measured by Test A (137,944). Test D asserts the
++    ///      per-box MARGINAL is materially below this — the gap is the per-tx fixed overhead the
++    ///      single-box total mis-attributes to one box (CR-01). The committed CRANK_OPEN_BOX_GAS_UNITS
++    ///      (137_944) is pegged to this single-box total, which is the CR-01 defect.
++    uint256 internal constant SINGLE_BOX_TOTAL_REF_GAS = 137_944;
++
+     uint256 private constant FIXED_WORD = uint256(keccak256("crank_open_box_worst_case_word"));
+     uint256 private constant LOOTBOX_WEI = 1 ether; // >= LOOTBOX_MIN; a real first-deposit box
+ 
+@@ -127,6 +133,87 @@ contract CrankOpenBoxWorstCaseGas is DeployProtocol {
+         emit log_named_uint("mainnet_block_gas_limit", MAINNET_BLOCK_GAS_LIMIT);
+     }
+ 
++    // =========================================================================
++    // Test D — per-box MARGINAL (the CORRECTED CRANK_OPEN_BOX_GAS_UNITS target)
++    // =========================================================================
++
++    /// @notice GAS-06 / CR-01: isolate the per-box MARGINAL gas — the marginal cost of opening one
++    ///         more box in an N-box `crankBoxes(N)` batch. This is the CORRECT calibration target for
++    ///         CRANK_OPEN_BOX_GAS_UNITS, because the box reward is FLAT per box (DegenerusGame.sol:1621)
++    ///         while the per-transaction fixed overhead of `crankBoxes` (the cursor/boxCursorIndex
++    ///         SLOAD+conditional SSTORE :1593-1598, the lootboxRngWordByIndex gate SLOAD :1603, the
++    ///         `_activeTicketLevel()` read :1610, the final `boxCursor` SSTORE :1631, and the once-per-tx
++    ///         `coinflip.creditFlip` :1632) is paid ONLY ONCE per call regardless of N. A self-cranker
++    ///         opening N own boxes earns N rewards but pays that fixed overhead once, so pegging the
++    ///         per-box reward to a single-box TOTAL (which bundles the whole fixed overhead into one box)
++    ///         OVER-reimburses every box after the first and opens the SAFE-01 self-crank faucet on the
++    ///         multi-box path (CR-01).
++    ///
++    ///         Measured by the SAME loop-N-divide idiom CrankResolveBetWorstCaseGas
++    ///         (testPerOneSpinItemMarginalBelowWorstCase, :197-242) uses for the resolve-bet marginal:
++    ///         queue N distinct READY un-opened boxes, `crankBoxes(N)` ONCE, divide the gasleft-delta
++    ///         by N so the per-tx fixed overhead amortizes away. A large N (32) is used so the per-tx
++    ///         fixed overhead (cold cranker `creditFlip` ~20k, cursor SSTOREs) is amortized to a
++    ///         negligible per-box share and the measured marginal converges to the true per-box
++    ///         materialization cost (small N over-states it: N=8 measures ~90k, N>=32 converges ~70k —
++    ///         the CR-01 amortization gradient). Asserts the per-box marginal is materially BELOW the
++    ///         single-box total (the gap is exactly the mis-attributed fixed overhead) and lands in the
++    ///         resolve-bet spin neighborhood (319-GAS-DERIVATION.md §2: one open-box ~= one resolve
++    ///         spin ~= ~66-70k), confirming 137_944 (the single-box TOTAL) ~2x over-states the marginal.
++    function testPerBoxMarginalAmortizesFixedOverhead() public {
++        uint48 index = _activeLootboxIndex();
++        uint256 nBoxes = 32;
++
++        // Queue N distinct READY boxes (distinct owners -> distinct (index,owner) queue entries),
++        // each firing the first-deposit enqueue signal.
++        address[] memory owners = new address[](nBoxes);
++        for (uint256 i; i < nBoxes; ++i) {
++            address o = makeAddr(string(abi.encodePacked("perbox_", vm.toString(i))));
++            owners[i] = o;
++            vm.deal(o, 100_000 ether);
++            _buyBox(o, LOOTBOX_WEI);
++        }
++        _injectLootboxRngWord(index, FIXED_WORD);
++
++        // assert-is-real precondition: every box is queued + un-opened before the crank, so the
++        // marginal measures real materializations (not :1603 skips or :1618 already-opened skips).
++        for (uint256 i; i < nBoxes; ++i) {
++            assertGt(_lootboxEthBase(index, owners[i]), 0, "pre: each box queued + un-opened");
++        }
++
++        // Bracket the whole N-box batch; divide by N for the per-box marginal (fixed overhead paid once).
++        vm.prank(cranker);
++        uint256 gasBefore = gasleft();
++        game.crankBoxes(nBoxes);
++        uint256 totalGas = gasBefore - gasleft();
++        uint256 perBoxMarginal = totalGas / nBoxes;
++
++        // Non-vacuity: every box actually opened (first-deposit signal zeroed on open), so the
++        // marginal is a real per-box materialization cost (not a no-op walk).
++        for (uint256 i; i < nBoxes; ++i) {
++            assertEq(_lootboxEthBase(index, owners[i]), 0, "non-vacuity: each box opened (signal zeroed)");
++        }
++
++        // The per-box marginal is materially BELOW the single-box total (137_944): the gap is the
++        // per-tx fixed overhead that the single-box measurement mis-attributes to one box (CR-01).
++        // This is the CORRECTED CRANK_OPEN_BOX_GAS_UNITS target.
++        assertLt(
++            perBoxMarginal,
++            SINGLE_BOX_TOTAL_REF_GAS,
++            "per-box marginal is materially below the single-box total (the gap is the mis-attributed fixed overhead)"
++        );
++        // The marginal lands in the resolve-bet spin neighborhood (one open-box ~= one resolve spin):
++        // strictly less than ~1.4x the resolve-bet per-spin marginal (66_528), confirming the box peg
++        // should be ~70k, NOT 137_944. (Loose upper bound; the exact value is read from the log.)
++        assertLt(perBoxMarginal, 95_000, "per-box marginal is in the resolve-bet spin neighborhood (~70k), not ~138k");
++        assertLt(perBoxMarginal, MAINNET_BLOCK_GAS_LIMIT, "per-box marginal trivially fits the block limit");
++
++        // The CORRECTED calibration input Plan 05 / the CR-01 fix reads from the test log.
++        emit log_named_uint("per_box_marginal_gas", perBoxMarginal);
++        emit log_named_uint("per_box_batch_total_gas", totalGas);
++        emit log_named_uint("single_box_total_ref_gas", SINGLE_BOX_TOTAL_REF_GAS);
++    }
++
+     // =========================================================================
+     // Internal helpers
+     // =========================================================================
