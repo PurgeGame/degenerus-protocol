@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
-status: verifying
-last_updated: "2026-05-24T09:11:35.030Z"
+status: ready_to_plan
+last_updated: 2026-05-24T10:09:22.259Z
 last_activity: 2026-05-24
 progress:
   total_phases: 6
@@ -11,6 +11,7 @@ progress:
   total_plans: 25
   completed_plans: 25
   percent: 67
+stopped_at: Phase 319 complete (5/5) — ready to discuss Phase 319.1
 ---
 
 # Project State
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 319 — GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration (GAS)
+**Current focus:** Phase 319.1 — impl open e shared funding source burnie and eth pool
 
 ## Current Position
 
-Phase: 319 (GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration (GAS)) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-05-24 -- 319-05 CR-01 correction (USER-approved commit 795e679d): open-box peg 137_944->71_203 (the measured per-box MARGINAL; was mis-pegged to the single-box TOTAL which bundled the per-tx fixed overhead into one box -> SAFE-01 box-faucet OPEN for cold-bust-leaning batches). WR-01 multi-box self-crank round-trip test added (RED@137_944/GREEN@71_203 + 1000-run fuzz); WR-02 JGAS-04 band re-framed to a one-sided sanity sieve (structural autoRebuyState==0 attestation load-bearing). Placement still +0%; resolve 66_528 (:1501) + 0.5 gwei ref (:1495) UNCHANGED; full suite 559 pass / 44 fail = EXACT v45 baseline. (Prior 319-05 OUTCOME-B diff e4014f91 stands for RESOLVE; only the BOX disposition is superseded.)
+Phase: 319.1
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-24
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
