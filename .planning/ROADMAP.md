@@ -228,7 +228,18 @@ Plans:
   4. §9 closure verdict reads `CRANK_DO_WORK SHIPPED; AFKING_SUBSCRIPTION SHIPPED; LEGACY_AFKING_MODE + FREE_ETH_AUTOREBUY REMOVED; BURNIE_FLIP_AUTOREBUY KEPT@75BPS; FAUCET_BOUNDED; SWEEP NON-BRICK + CONCURRENT-SAFE; FUNDING_WATERFALL + TWO-TIER_SKIP-KILL CORRECT; RNG_FREEZE_INTACT (+ obligations RETIRED by removal); JACKPOT_ETH_SPLIT REMOVED (single-call fits @305-ceiling); WWXRP_ZERO_REWARD; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`.
   5. `MILESTONE_V46_AT_HEAD_<sha>` emitted + atomic 5-doc closure flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS); SOURCE-TREE FROZEN attestation (zero `contracts/` + zero `test/` mutations during Phase 320 absent a RE-PASS) verifiable via `git diff` returning no in-phase source-tree change.
 
-**Plans:** TBD
+**Plans:** 4 plans across 2 waves
+
+Plans:
+**Wave 1** *(parallel — the three workstreams; disjoint .planning/ artifact ownership, all read-only over source)*
+
+- [ ] 320-01-PLAN.md — 3-skill adversarial sweep (D-05 adaptive): author the verbatim CHARGE + the three per-skill MDs + the integrated LOG (dual-gate skeptic filter, two-tier consensus, the RE-PASS conditional-source-mutation branch). Dispositions OPEN-E per D-01/D-02/D-02a and proves the four D-03 residual structural charges.
+- [ ] 320-02-PLAN.md — add/remove + OPEN-E + JGAS delta-audit: enumerate the v45→v46 contracts/ subject set + the delta-surface table; prove ADD×REMOVE compose cleanly, the daily ETH jackpot pays all 305 winners in one call with nothing stranded by the dropped resumeEthPool carry, and the OPEN-E default-self path is behavior-identical.
+- [ ] 320-03-PLAN.md — regression + SOURCE-TREE FROZEN: REG-01 NON-WIDENING vs the v45 baseline, RNG-freeze intact + freeze-obligations retired, faucet bounded, the 559/44 suite baseline, KNOWN-ISSUES + the BURNIE RNG path byte-unmodified, and the SOURCE-TREE FROZEN attestation.
+
+**Wave 2** *(blocked on Wave 1 — consumes 320-01/02/03; the gated closure)*
+
+- [ ] 320-04-PLAN.md — assemble the full 9-section audit/FINDINGS-v46.0.md (D-04) consolidating the three workstreams; then the GATED 2-commit closure flip (D-06, autonomous: false) — Commit 1 ships the deliverable with the closure-signal placeholder, a BLOCKING user-approval gate, Commit 2 resolves MILESTONE_V46_AT_HEAD_<sha> + chmod 444 + the atomic 5-doc closure flip.
 
 <details>
 <summary>✅ v45.0 VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit (Phases 309-315) — SHIPPED 2026-05-23 (user-approved minimal close); closure signal `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801`</summary>
