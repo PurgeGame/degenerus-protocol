@@ -154,12 +154,16 @@ contract AfKing {
     event Withdrew(address indexed player, uint256 amount);
     /// @dev Single canonical subscription-state stream — POST-WRITE full state.
     ///      Manual pause (setDailyQuantity(0)) emits with dailyQuantity == 0.
+    ///      `fundingSource` is the stored funding wallet (address(0) = self); indexed
+    ///      so a source can filter the log for every account it funds — the off-chain
+    ///      counterpart to the subscribe-time-only auth + BURNIE blast-radius caveat.
     event SubscriptionUpdated(
         address indexed player,
         uint8 dailyQuantity,
         bool drainGameCreditFirst,
         bool useTickets,
-        uint8 reinvestPct
+        uint8 reinvestPct,
+        address indexed fundingSource
     );
     /// @dev Per-successful-player audit trail inside the sweep loop. `day` is the
     ///      keeper-local day index; `cost` is the ETH-wei slice forwarded to
@@ -422,7 +426,7 @@ contract AfKing {
         s.fundingSource = fundingSource;
 
         _addToSet(subscriber);
-        emit SubscriptionUpdated(subscriber, dailyQuantity, drainGameCreditFirst, useTickets, reinvestPct);
+        emit SubscriptionUpdated(subscriber, dailyQuantity, drainGameCreditFirst, useTickets, reinvestPct, s.fundingSource);
 
         // SUB-01 pass-OR-pay gate (interaction last). Active pass → free extend,
         // clear windowPaid. No pass → all-or-nothing burn, set windowPaid.
@@ -456,15 +460,15 @@ contract AfKing {
             bool preservePaidWindow = (s.flags & FLAG_WINDOW_PAID) != 0 && s.paidThroughDay > _currentDay();
             if (preservePaidWindow) {
                 s.dailyQuantity = 0;
-                emit SubscriptionUpdated(msg.sender, 0, (s.flags & FLAG_DRAIN_FIRST) != 0, (s.flags & FLAG_USE_TICKETS) != 0, s.reinvestPct);
+                emit SubscriptionUpdated(msg.sender, 0, (s.flags & FLAG_DRAIN_FIRST) != 0, (s.flags & FLAG_USE_TICKETS) != 0, s.reinvestPct, s.fundingSource);
             } else {
                 delete _subOf[msg.sender];
-                emit SubscriptionUpdated(msg.sender, 0, false, false, 0);
+                emit SubscriptionUpdated(msg.sender, 0, false, false, 0, address(0));
             }
             return;
         }
         s.dailyQuantity = q;
-        emit SubscriptionUpdated(msg.sender, q, (s.flags & FLAG_DRAIN_FIRST) != 0, (s.flags & FLAG_USE_TICKETS) != 0, s.reinvestPct);
+        emit SubscriptionUpdated(msg.sender, q, (s.flags & FLAG_DRAIN_FIRST) != 0, (s.flags & FLAG_USE_TICKETS) != 0, s.reinvestPct, s.fundingSource);
     }
 
     /// @notice Toggle caller's drain-game-credit-first flag.
@@ -473,7 +477,7 @@ contract AfKing {
         Sub storage s = _subOf[msg.sender];
         if (flag) s.flags |= FLAG_DRAIN_FIRST;
         else s.flags &= ~FLAG_DRAIN_FIRST;
-        emit SubscriptionUpdated(msg.sender, s.dailyQuantity, flag, (s.flags & FLAG_USE_TICKETS) != 0, s.reinvestPct);
+        emit SubscriptionUpdated(msg.sender, s.dailyQuantity, flag, (s.flags & FLAG_USE_TICKETS) != 0, s.reinvestPct, s.fundingSource);
     }
 
     /// @notice Toggle caller's mint mode. true = tickets, false = lootboxes.
@@ -482,7 +486,7 @@ contract AfKing {
         Sub storage s = _subOf[msg.sender];
         if (useTickets) s.flags |= FLAG_USE_TICKETS;
         else s.flags &= ~FLAG_USE_TICKETS;
-        emit SubscriptionUpdated(msg.sender, s.dailyQuantity, (s.flags & FLAG_DRAIN_FIRST) != 0, useTickets, s.reinvestPct);
+        emit SubscriptionUpdated(msg.sender, s.dailyQuantity, (s.flags & FLAG_DRAIN_FIRST) != 0, useTickets, s.reinvestPct, s.fundingSource);
     }
 
     /// @notice Update caller's claimable reinvest percentage (0..100).
@@ -491,7 +495,7 @@ contract AfKing {
         if (reinvestPct > 100) revert InvalidReinvestPct();
         Sub storage s = _subOf[msg.sender];
         s.reinvestPct = reinvestPct;
-        emit SubscriptionUpdated(msg.sender, s.dailyQuantity, (s.flags & FLAG_DRAIN_FIRST) != 0, (s.flags & FLAG_USE_TICKETS) != 0, reinvestPct);
+        emit SubscriptionUpdated(msg.sender, s.dailyQuantity, (s.flags & FLAG_DRAIN_FIRST) != 0, (s.flags & FLAG_USE_TICKETS) != 0, reinvestPct, s.fundingSource);
     }
 
     /*------------------------------------------------------------------
