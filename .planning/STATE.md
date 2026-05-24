@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
-status: executing
-last_updated: "2026-05-24T08:56:18.560Z"
-last_activity: 2026-05-24 -- Phase 319.1 planning complete
+status: verifying
+last_updated: "2026-05-24T09:11:35.030Z"
+last_activity: 2026-05-24
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 25
-  completed_plans: 24
-  percent: 50
+  completed_plans: 25
+  percent: 67
 ---
 
 # Project State
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 Phase: 319 (GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration (GAS)) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
-Last activity: 2026-05-24 -- Phase 319.1 planning complete
+Status: Phase complete — ready for verification
+Last activity: 2026-05-24 -- 319-05 GAS-06 calibration executed (USER-approved OUTCOME-B diff e4014f91; placement +0%; SAFE-01 preserved; phase 319 GAS done)
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
@@ -38,7 +38,7 @@ Last activity: 2026-05-24 -- Phase 319.1 planning complete
 | 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 · JGAS-01 (locks all 42) | Complete — ready for verification (5/5 plans: 316-01 · 316-02 · 316-05 · 316-03 · 316-04 done) |
 | 317 | IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework | IMPL | PROTO-02..05 · CRANK-01..04 · REW-01..04 · SUB-01..08 · RM-01/02/03/05/06 · JGAS-02 | Not started |
 | 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | Complete — all 6 plans done: 318-01 (fixture repair, SAFE-04) + 318-02 (SAFE-01 crank faucet-resistance, CrankFaucetResistance.t.sol 10/10) + 318-03 (SAFE-02 non-brick + SUB/PROTO acceptance, CrankNonBrick.t.sol 12/12 + AfKingSubscription.t.sol 7/7) + 318-04 (SAFE-03 concurrency + funding waterfall + two-tier skip-kill, AfKingConcurrency.t.sol 10/10 + AfKingFundingWaterfall.t.sol 9/9) + 318-05 (SAFE-04 RNG-freeze intact + REMOVE proofs, RngFreezeAndRemovalProofs.t.sol 13/13) + 318-06 (JGAS-03 single-call 305-winner daily-ETH correctness, JackpotSingleCallCorrectness.t.sol 8/8 — worst-case 305-winner call 7.5M gas < 30M) done |
-| 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 · JGAS-04 | Not started |
+| 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 · JGAS-04 | Complete — all 5 plans done (319-01 placement-ref + 319-02 GAS-01 crank worst-cases + JGAS-04 + 319-03 sweep marginal + 319-04 GAS-05 removal-clean + 319-05 GAS-06 OUTCOME-B calibration `e4014f91`: CRANK_RESOLVE_BET_GAS_UNITS 120_000→66_528, CRANK_OPEN_BOX_GAS_UNITS 120_000→137_944, placement +0%, SAFE-01 round-trip≤0 preserved) |
 | 319.1 | IMPL — OPEN-E Shared Funding Source (BURNIE + ETH pool) | IMPL | OPENE-01..04 | Not started (INSERTED 2026-05-24 — runs after 319, before the terminal audit) |
 | 320 | AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure | TERMINAL | (re-attests all 46; owns 0 primarily) | Not started |
 
@@ -488,6 +488,7 @@ Audit deliverables:
 | Phase 319 P01 | ~5min | 2 tasks | 2 files |
 | Phase 319 P02 | 30min | 3 tasks | 3 files |
 | Phase 319 P03 | 25min | 1 tasks | 1 files |
+| 319 | 05 | ~16min | 1 (Task 3; Tasks 1-2 prior agents) | 5 files (DegenerusGame.sol :1501-1502 + 4 test mirrors) + 1 SUMMARY (GAS-06 OUTCOME-B calibration; 66_528/137_944; placement +0%; 556 pass/44 fail = exact v45 baseline; SAFE-01 round-trip<=0 preserved) |
 
 ## Decisions
 
@@ -589,3 +590,6 @@ Audit deliverables:
 - [Phase 319-04]: GAS-05 verdict REMOVAL-CLEAN — G1-G13 security floor intact at HEAD; all 6 Scavenger candidates rejected/held; the 3 touching a G-row (G12 x2, G11) escalated to contract-auditor and REJECTED; reasoned from runs=200 (NOT the SKILL.md stale runs=2), so bytecode-size-only justifications carry low weight and an optimizer-already-hoisted candidate is a no-op
 - [Phase 319-04]: SCAV-319-01 GAS-02 loop-invariant hoist (priceForLevel/_ethToBurnieValue recomputed per crank item, crankBets:1567-70 / crankBoxes:1621-23) SURFACED with an approve-if-real-saving / no-op-if-already-hoisted disposition; touches no guard (pure recomputation); handed to Plan 05 to batch into the ONE USER-APPROVED DegenerusGame.sol diff IFF Plan 02's before/after shows a real runtime saving at runs=200 — NOT edited in Plan 04
 - [Phase 319-04]: crankBoxes one-creditFlip asserted CRANKER-SCOPED (filter CoinflipStakeUpdated by topics[1]==cranker) because a box open also credits BURNIE winnings to the box OWNER (LootboxModule:1036); GAS-04 Sub-1-slot proven by a comment-stripped byte-width SUM (==13 <= 32) since ffi is OFF in foundry.toml (forge inspect via vm.ffi unavailable); the 'a single slot' phrase is comment-only and correctly stripped, so the gate keys on 'struct Sub {' + the width sum
+- [Phase 319-05]: GAS-06 CLOSED via USER-approved OUTCOME-B batched diff e4014f91 — crank reward-peg constants recalibrated to measured per-item marginals: DegenerusGame.sol:1501 CRANK_RESOLVE_BET_GAS_UNITS 120_000->66_528 (down; tightens reference-price faucet floor + REW-03 accuracy), :1502 CRANK_OPEN_BOX_GAS_UNITS 120_000->137_944 (up; REW-03 accuracy, still <= marginal); :1495 CRANK_GAS_PRICE_REF 0.5 gwei UNTOUCHED. Four test mirrors synced same diff (CrankFaucetResistance/CrankNonBrick/CrankLeversAndPacking/RngFreezeAndRemovalProofs). SAFE-01 round-trip<=0 preserved (=0 @ 0.5 gwei ref, <0 @ every >=1 gwei market). Placement +0% (zero snapshot row delta + zero forge-snapshot --check Diff line + .gas-snapshot byte-identical on regen). Full suite 556 pass / 44 fail = EXACT v45 baseline, zero NEW failures.
+- [Phase 319-05]: BOUNTY_ETH_TARGET (DeployProtocol.sol:126 arg2 = 885_000_000 wei) LEFT AS-IS per USER — it is a test fixture, ~177,000x below the sweep faucet floor (under-incentivizes the keeper, NOT a faucet risk). Production keeper deploy lives in the paired degenerus-utilities repo; recommended production round-trip-<=0 ceiling <= 51,501,166,666,666 wei (6x-stall, >=1 gwei-market bound). No DeployProtocol.sol edit here.
+- [Phase 319-05]: GAS-02 hoist (SCAV-319-01) DROPPED as a NO-OP — the viaIR/runs=200 optimizer already does the CSE on the loop-invariant pure recomputation; zero measured runtime saving. Not in the batched diff. The diff is the two *_GAS_UNITS integers + the four test-mirror syncs ONLY.

@@ -183,7 +183,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 319-05-PLAN.md — GAS-06 placement +0% + CONDITIONAL peg-constant calibration (the ONE USER-APPROVED contract gate) + test-mirror sync + deploy-param tune
+- [x] 319-05-PLAN.md — GAS-06 placement +0% + CONDITIONAL peg-constant calibration (the ONE USER-APPROVED contract gate) + test-mirror sync + deploy-param tune
 
 ### Phase 319.1: IMPL — OPEN-E Shared Funding Source (BURNIE + ETH pool) (IMPL · INSERTED 2026-05-24)
 
