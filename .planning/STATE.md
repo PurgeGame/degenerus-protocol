@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
-status: executing
-last_updated: "2026-05-24T10:51:39.088Z"
+status: ready_to_plan
+last_updated: 2026-05-24T11:17:43.939Z
 last_activity: 2026-05-24 -- Phase 319.1 Wave 2 (319.1-02 TST) complete
 progress:
   total_phases: 6
@@ -11,6 +11,7 @@ progress:
   total_plans: 25
   completed_plans: 27
   percent: 83
+stopped_at: Phase 319.1 complete (2/2) — ready to discuss Phase 320
 ---
 
 # Project State
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 319.1 — impl-open-e-shared-funding-source-burnie-and-eth-pool
+**Current focus:** Phase 320 — audit — adversarial sweep + add/remove delta audit + closure (terminal)
 
 ## Current Position
 
-Phase: 319.1 (impl-open-e-shared-funding-source-burnie-and-eth-pool) — COMPLETE (both plans done)
-Plan: 2 of 2
-Status: Phase 319.1 complete — Wave 1 contract diff (42140ceb) + Wave 2 test sync committed; OPENE-01..04 test-proven, attested at Phase 320 TERMINAL. Next = /gsd-execute-phase 320 on user direction.
-Last activity: 2026-05-24 -- Phase 319.1 Wave 2 (319.1-02 TST) complete
+Phase: 320
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-24
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
