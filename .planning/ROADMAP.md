@@ -233,9 +233,9 @@ Plans:
 Plans:
 **Wave 1** *(parallel — the three workstreams; disjoint .planning/ artifact ownership, all read-only over source)*
 
-- [ ] 320-01-PLAN.md — 3-skill adversarial sweep (D-05 adaptive): author the verbatim CHARGE + the three per-skill MDs + the integrated LOG (dual-gate skeptic filter, two-tier consensus, the RE-PASS conditional-source-mutation branch). Dispositions OPEN-E per D-01/D-02/D-02a and proves the four D-03 residual structural charges.
-- [ ] 320-02-PLAN.md — add/remove + OPEN-E + JGAS delta-audit: enumerate the v45→v46 contracts/ subject set + the delta-surface table; prove ADD×REMOVE compose cleanly, the daily ETH jackpot pays all 305 winners in one call with nothing stranded by the dropped resumeEthPool carry, and the OPEN-E default-self path is behavior-identical.
-- [ ] 320-03-PLAN.md — regression + SOURCE-TREE FROZEN: REG-01 NON-WIDENING vs the v45 baseline, RNG-freeze intact + freeze-obligations retired, faucet bounded, the 559/44 suite baseline, KNOWN-ISSUES + the BURNIE RNG path byte-unmodified, and the SOURCE-TREE FROZEN attestation.
+- [x] 320-01-PLAN.md — 3-skill adversarial sweep (D-05 adaptive): author the verbatim CHARGE + the three per-skill MDs + the integrated LOG (dual-gate skeptic filter, two-tier consensus, the RE-PASS conditional-source-mutation branch). Dispositions OPEN-E per D-01/D-02/D-02a and proves the four D-03 residual structural charges.
+- [x] 320-02-PLAN.md — add/remove + OPEN-E + JGAS delta-audit: enumerate the v45→v46 contracts/ subject set + the delta-surface table; prove ADD×REMOVE compose cleanly, the daily ETH jackpot pays all 305 winners in one call with nothing stranded by the dropped resumeEthPool carry, and the OPEN-E default-self path is behavior-identical.
+- [x] 320-03-PLAN.md — regression + SOURCE-TREE FROZEN: REG-01 NON-WIDENING vs the v45 baseline, RNG-freeze intact + freeze-obligations retired, faucet bounded, the 559/44 suite baseline, KNOWN-ISSUES + the BURNIE RNG path byte-unmodified, and the SOURCE-TREE FROZEN attestation.
 
 **Wave 2** *(blocked on Wave 1 — consumes 320-01/02/03; the gated closure)*
 

@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
 status: executing
-last_updated: "2026-05-24T11:54:03.189Z"
-last_activity: 2026-05-24 -- Phase 320 planning complete
+last_updated: "2026-05-24T12:01:03.343Z"
+last_activity: 2026-05-24 -- Phase 320 execution started
 progress:
   total_phases: 6
   completed_phases: 5
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 320 — audit — adversarial sweep + add/remove delta audit + closure (terminal)
+**Current focus:** Phase 320 — audit-adversarial-sweep-add-remove-delta-audit-closure-termi
 
 ## Current Position
 
-Phase: 320
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-24 -- Phase 320 planning complete
+Phase: 320 (audit-adversarial-sweep-add-remove-delta-audit-closure-termi) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 320
+Last activity: 2026-05-24 -- Phase 320 execution started
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 

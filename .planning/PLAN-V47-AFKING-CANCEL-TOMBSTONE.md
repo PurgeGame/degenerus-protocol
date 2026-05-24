@@ -63,6 +63,8 @@ The existing `testCancelSwapPopOccupantStillProcessed` only covers cancel-at-cur
 - **`testReactivateTombstonedSubNoDoubleAdd`** — cancel (tombstone) then `setDailyQuantity(q>0)`; assert single set membership, normal resumption, no double-add.
 - Re-confirm the existing 318-04 guarantees still hold (exactly-once same-block, `lastSweptDay` backstop, no double-buy, no dead-slot buildup, two-tier skip-kill identity).
 
+**Also fix the stale gas test (surfaced by the v46.0 Phase 320 regression pass):** `test/gas/CrankLeversAndPacking.t.sol::testGas04PackingAndNoNewHotPathStorageSourcePresence` asserts the **pre-OPEN-E `Sub` layout** (it looks for standalone `bool drainGameCreditFirst;` / `bool useTickets;` fields and a 7-field/13-byte sum) and panics 0x11 at HEAD because OPENE-01 (319.1) collapsed those bools into `flags` and added `address fundingSource` (HEAD `Sub` = `{uint8 dailyQuantity; uint32 lastSweptDay; uint32 paidThroughDay; uint8 reinvestPct; uint8 flags; address fundingSource;}`, 6 fields, 31 used bytes, one slot). This is a test-only staleness (contract is correct — 320-01 SWP-OPENE NEGATIVE-VERIFIED). Update `testGas04` to the post-OPENE-01 `Sub` shape (drop the two standalone-bool field checks, add the `address fundingSource` field, fix the byte-sum assertion 13→31 and the field-list). It is the 45th of the 565/45 v46.0 HEAD suite count (the documented baseline is 44) — fixing it restores a clean 44-fail baseline for the v47.0 regression gate.
+
 ---
 
 ## 4. Scope / coordination
