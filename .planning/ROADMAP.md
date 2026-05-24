@@ -171,10 +171,18 @@ Plans:
 **Plans:** 5 plans across 3 waves
 
 Plans:
+**Wave 1**
+
 - [ ] 319-01-PLAN.md — GAS-01 worst-case derivation doc (paper-first, per work-type) + GAS-06 placement .gas-snapshot baseline
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 319-02-PLAN.md — GAS-01 resolve-bet 10-spin + open-box worst-case measurement + per-item marginals; JGAS-04 305-winner re-frame + freed-SLOAD delta attribution
 - [ ] 319-03-PLAN.md — GAS-01 sweep-per-player worst-case measurement + per-player marginal (BOUNTY_ETH_TARGET deploy-param input)
 - [ ] 319-04-PLAN.md — GAS-02/03/04 lever + packing assertions; GAS-05 Scavenger→Skeptic→contract-auditor security-floor pass (G1-G13 intact)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 319-05-PLAN.md — GAS-06 placement +0% + CONDITIONAL peg-constant calibration (the ONE USER-APPROVED contract gate) + test-mirror sync + deploy-param tune
 
 ### Phase 320: AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure (TERMINAL)

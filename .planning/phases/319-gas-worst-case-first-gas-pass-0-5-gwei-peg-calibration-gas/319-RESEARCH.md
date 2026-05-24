@@ -348,17 +348,19 @@ No external state-of-the-art shift relevant — this is internal contract gas wo
 
 **All other claims are VERIFIED (source-traced against `contracts/` at HEAD `0d9d321f`) or CITED (316-SPEC / 316-RESEARCH / 318-06-SUMMARY / REQUIREMENTS / ROADMAP).**
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Exact bet-peg calibration target (per-spin vs per-item).**
    - What we know: REW-03 says "bet pegs to per-spin gas." A bet has 1-10 spins; the flat per-item reward under-reimburses multi-spin wins by design.
    - What's unclear: whether `CRANK_RESOLVE_BET_GAS_UNITS` should be the marginal gas of a 1-spin item (the common case) or a per-spin number the planner multiplies — but the contract pays a FLAT per-item reward (`:1567`), so it must be a single per-ITEM number. The most defensible value = marginal gas of one typical (1-spin) resolve, keeping the faucet closed for the common case.
    - Recommendation: calibrate to the 1-spin marginal; verify the 10-spin worst case still under-reimburses (faucet-safe by construction). Confirm with the user at discuss-phase.
+   - **RESOLVED: calibrate to the per-1-spin-item marginal** (NOT the 10-spin worst case). Locked consistently across plans 319-01 / 319-02 (Test B) / 319-05, and re-affirmed by the plan-phase orchestrator's contract-boundary lock — pegging to the 10-spin worst case would over-reimburse and risk opening the faucet (SAFE-01 round-trip ≤ 0). The 10-spin all-match remains the GAS-01 worst-case *measurement*; the peg *target* is the 1-spin marginal.
 
 2. **Whether the GAS-02 loop-invariant hoist + any Scavenger removal ships in this phase.**
    - What we know: any `DegenerusGame.sol`/`AfKing.sol` edit is a USER-APPROVED contract gate; the calibration ALREADY requires opening that gate (the two `*_GAS_UNITS` constants).
    - What's unclear: whether to bundle the hoist (if it measures as a real saving) into the same approved diff.
    - Recommendation: batch any approved Scavenger-validated edit WITH the constant recalibration into ONE USER-APPROVED diff (per `feedback_batch_contract_approval`), presented once at phase end.
+   - **RESOLVED: Plan 319-04 surfaces the hoist with a Skeptic disposition; Plan 319-05 conditionally batches it** into the single USER-APPROVED diff IF Plan 319-02's before/after shows a real saving, else no-op. One diff, presented once at phase end.
 
 ## Environment Availability
 
