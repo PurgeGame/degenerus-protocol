@@ -128,5 +128,21 @@ Per the USER decision, `DeployProtocol.sol:126` arg2 (`_bountyEthTarget = 885_00
 - `DegenerusGame.sol:1501-1502` = `66_528` / `137_944`; `:1495` `CRANK_GAS_PRICE_REF` = `0.5 gwei` (untouched).
 
 ---
+
+## CR-01 ADDENDUM (2026-05-24, commit `795e679d`) — open-box peg corrected `137_944` → `71_203`
+
+The 319-REVIEW code review found **CR-01**: the box disposition above pegged `CRANK_OPEN_BOX_GAS_UNITS` to the single-`crankBoxes(1)` **TOTAL** (137,944 gas), which bundles the entire per-transaction fixed overhead of `crankBoxes` into ONE box. The box reward is FLAT-per-box (`:1621-1624`), so every box after the first earned ~2× its true per-box marginal — opening the SAFE-01 self-crank faucet on the multi-box path for cold-bust-leaning batches (~5/8 random owner-sets at N=24 had per-box gas below the 68,972-gwei reward → round-trip POSITIVE; a Sybil self-cranker retries owner-sets until profitable). This is the resolve-bet correction (which WAS pegged to the per-item marginal 66,528) NOT applied to the box path.
+
+**Corrected (USER-APPROVED):** `:1502` `CRANK_OPEN_BOX_GAS_UNITS` `137_944` → `71_203` — the measured per-box **MARGINAL** (Test D `testPerBoxMarginalAmortizesFixedOverhead`, N=32 loop-N-divide: `per_box_marginal_gas: 71_203`, deterministic; ≈ the resolve-bet spin 66,528 per 319-GAS-DERIVATION §2 "one open-box ≈ one resolve spin"). `:1501` resolve `66_528` and `:1495` `0.5 gwei` UNCHANGED by CR-01.
+
+**Open-box peg is now 71_203.** At 71,203 the box peg has the identical faucet property to resolve-bet: round-trip = 0 at the 0.5 gwei reference for the typical box, strictly < 0 at every market price ≥ 1 gwei, **and < 0 even for the adversarially-cheap cold-bust box** at the ≥1 gwei floor — closing the faucet for ALL outcomes (`feedback_security_over_gas`: the floor must hold for the worst realizable batch, not the average).
+
+**WR-01 coverage hole CLOSED:** `testMultiBoxSelfCrankRoundTripNonPositive` + `testFuzz_MultiBoxRoundTripNonPositiveAcrossGasPrices` (1000 runs) added to `CrankFaucetResistance.t.sol` — the box-path SAFE-01 self-crank round-trip ≤ 0 at the ≥1 gwei market floor (RED@137_944: reward 1,655,328 ≥ cost 1,568,092 gwei; GREEN@71_203). Plus `testPerBoxMarginalAmortizesFixedOverhead` in `CrankOpenBoxWorstCaseGas.t.sol` (the corrected-value measurement). All 4 test mirrors re-synced to 71_203.
+
+**WR-02 re-framed (test/doc, no gate):** `JackpotSingleCallCorrectness.t.sol::testJgas04FreedAutoRebuyStateSloadDeltaAttribution` — the JGAS-04 delta-attribution band was near-vacuous (a 3M tolerance around the ~7.7M lower edge admitted ~[4.7M,10.7M] — almost any measurement passed). The near-vacuous lower-edge `assertGe` was REMOVED; the numeric check is downgraded to a one-sided upper-bound sanity sieve framed "consistent-with, not a proof of" the 1.3M delta. The LOAD-BEARING proof remains the structural `_countOccurrences(jp, "autoRebuyState") == 0` source attestation. The prior "empirically confirmed" framing is corrected to "consistent-with (Assumption A2)".
+
+**Verification (CR-01):** `CrankFaucetResistance` 12/12 GREEN (incl. the new WR-01 multi-box round-trip + fuzz + the existing single-bet round-trip + peg-equality), `CrankOpenBoxWorstCaseGas` 2/2 GREEN (`per_box_marginal_gas: 71203`), `CrankNonBrick` 12/12, `CrankLeversAndPacking` 7/7, `RngFreezeAndRemovalProofs` 13/13, `CrankResolveBetWorstCaseGas` 2/2, `JackpotSingleCallCorrectness` 10/10, `SweepPerPlayerWorstCaseGas` 3/3, AfKing suites 26/26 — all GREEN. Placement +0% (`.gas-snapshot` byte-identical — the box peg is a BURNIE-reward-value constant, not a gas-path branch). Full suite: 559 pass / 44 fail = EXACT v45 baseline, zero NEW failures. `git diff --name-only -- contracts/` post-commit = ONLY `DegenerusGame.sol`; `ContractAddresses.sol` clean. CR-01 batched correction commit `795e679d`.
+
+---
 *Phase: 319-gas-worst-case-first-gas-pass-0-5-gwei-peg-calibration-gas*
 *Completed: 2026-05-24*

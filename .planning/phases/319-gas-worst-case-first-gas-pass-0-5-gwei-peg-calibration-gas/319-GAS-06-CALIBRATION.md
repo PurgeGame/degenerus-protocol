@@ -1,5 +1,13 @@
 # Phase 319 — GAS-06 Calibration Decision Record
 
+> ## ⚠️ CR-01 SUPERSESSION (2026-05-24, commit `795e679d`) — the BOX disposition below is CORRECTED
+>
+> The original BOX disposition in this record (**`OUTCOME B — up; 120_000 → 137_944`**, §3 row + §5 row + §6 row + §7 diff + §8 table) **is SUPERSEDED.** It pegged `CRANK_OPEN_BOX_GAS_UNITS` to the single-`crankBoxes(1)` **TOTAL** (137,944 gas), which bundles the entire **per-transaction fixed overhead** of `crankBoxes` (the cursor/`boxCursorIndex` SLOAD+conditional SSTORE :1593-1598/:1631, the `lootboxRngWordByIndex` gate SLOAD :1603, `_activeTicketLevel()` :1610, and the once-per-tx cold `coinflip.creditFlip` :1632) into ONE box. That overhead does NOT recur per box, yet every box earned the full 137,944-unit FLAT reward — ~2× the true per-box **MARGINAL**.
+>
+> **CORRECTED disposition: `OUTCOME B — DOWN; `137_944` → `71_203` (the measured per-box MARGINAL — CR-01 faucet-floor fix + REW-03 accuracy).`** The per-box marginal was measured via the SAME loop-N-divide idiom resolve-bet uses (`testPerBoxMarginalAmortizesFixedOverhead`, N=32): `per_box_marginal_gas: 71_203` (deterministic; ≈ the resolve-bet spin marginal 66,528 per 319-GAS-DERIVATION §2 "one open-box ≈ one resolve spin"). The corrected box peg now has the IDENTICAL faucet property to resolve-bet's 66,528: round-trip = 0 at the 0.5 gwei reference for the typical box, strictly < 0 at every market price ≥ 1 gwei, **and < 0 even for the adversarially-cheap cold-bust box** (the 137,944 reward 68,972 gwei EXCEEDS the cold-bust-leaning batch cost ~49–66k gas/box at the ≥1 gwei floor → faucet OPEN; the corrected 35,602-gwei reward closes it for ALL outcomes). `CRANK_RESOLVE_BET_GAS_UNITS` (66_528, :1501) and `CRANK_GAS_PRICE_REF` (0.5 gwei, :1495) are UNCHANGED by CR-01.
+>
+> **Proof artifacts:** the per-box marginal measurement + faucet-floor proof are in `319-CR01-FIX.md` (§1 amortization gradient, §2 faucet-floor table, §3 the adversarial cold-bust mechanism). The RED@137_944 / GREEN@71_203 demonstration is `testMultiBoxSelfCrankRoundTripNonPositive` (+ 1000-run fuzz) in `CrankFaucetResistance.t.sol`. All 4 test mirrors synced to 71_203. Placement remains +0% (the box peg is a BURNIE-reward-value constant, not a gas-path branch — no measured `.gas-snapshot` row changed). The RESOLVE disposition (`120_000 → 66_528`) is UNAFFECTED by CR-01 and stands as originally recorded.
+
 **Authored:** 2026-05-24
 **Contract HEAD:** `9ee13013` (`contracts/` clean; every cited `file:line` source-verified this session against `contracts/`)
 **Task:** 319-05 Task 1 — compute the calibration; **NO `contracts/*.sol` edit in this task.** The contract edit (if any) is the USER-APPROVED Task-2 gate.

@@ -183,7 +183,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [x] 319-05-PLAN.md — GAS-06 placement +0% + CONDITIONAL peg-constant calibration (the ONE USER-APPROVED contract gate) + test-mirror sync + deploy-param tune
+- [x] 319-05-PLAN.md — GAS-06 placement +0% + CONDITIONAL peg-constant calibration (the ONE USER-APPROVED contract gate) + test-mirror sync + deploy-param tune. **(CR-01 correction 2026-05-24, commit `795e679d`: the open-box peg `CRANK_OPEN_BOX_GAS_UNITS` was over-stated at the single-box TOTAL `137_944` (bundled the per-tx fixed overhead into one box → SAFE-01 box-faucet OPEN for cold-bust-leaning batches); USER-APPROVED corrected to the measured per-box MARGINAL `71_203` (≈ the resolve-bet spin 66,528 per 319-GAS-DERIVATION §2). 4 mirrors re-synced; WR-01 multi-box round-trip test added (RED@137_944/GREEN@71_203); WR-02 JGAS-04 band re-framed to a one-sided sanity sieve (structural autoRebuyState==0 attestation is load-bearing). Placement still +0%; resolve 66_528 + 0.5 gwei ref UNCHANGED. See `319-CR01-FIX.md` + `319-GAS-06-CALIBRATION.md` CR-01 SUPERSESSION banner.)**
 
 ### Phase 319.1: IMPL — OPEN-E Shared Funding Source (BURNIE + ETH pool) (IMPL · INSERTED 2026-05-24)
 
