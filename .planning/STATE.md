@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
 status: executing
-last_updated: "2026-05-24T07:49:55.746Z"
-last_activity: 2026-05-24 -- Phase 319 planning complete
+last_updated: "2026-05-24T08:01:00.317Z"
+last_activity: 2026-05-24
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 3
   total_plans: 23
-  completed_plans: 20
-  percent: 60
+  completed_plans: 21
+  percent: 50
 ---
 
 # Project State
@@ -20,18 +20,18 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 319 — gas — worst case first gas pass + 0.5 gwei peg calibration (gas)
+**Current focus:** Phase 319 — GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration (GAS)
 
 ## Current Position
 
-Phase: 319
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-24 -- Phase 319 planning complete
+Phase: 319 (GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration (GAS)) — EXECUTING
+Plan: 2 of 5
+Status: Executing Phase 319 — Plan 01 complete (GAS-01 derivation doc + GAS-06 placement baseline)
+Last activity: 2026-05-24 -- 319-01 complete: GAS-01 worst-case-first derivation doc + GAS-06 .gas-snapshot placement baseline; contracts/ clean
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
-**Combined ADD+REMOVE milestone.** The crank/subscription ADD half (`.planning/PLAN-CRANK-DO-WORK-INCENTIVE.md` §10 phase shape) and the legacy-removal REMOVE half (`.planning/PLAN-V47-REMOVE-AFKING-ETH-AUTOREBUY.md`) are FOLDED into the same 5 phases so the milestone is one batched USER-APPROVED contract diff (IMPL), one test pass (TST), one gas pass (GAS), one adversarial audit (TERMINAL). Audit baseline → subject: v45.0 closure HEAD `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` → v46.0 closure HEAD. Subject = the batched ADD+REMOVE diff across `DegenerusGame` + modules + `BurnieCoin`/`BurnieCoinflip` + `DegenerusVault` + `StakedDegenerusStonk` + `ContractAddresses` + the in-tree `AfKing` keeper (paired `degenerus-utilities` rework). Single batched USER-APPROVED contract diff at IMPL per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md` + `feedback_manual_review_before_push.md` (ContractAddresses.sol freely-modifiable per `feedback_contractaddresses_policy.md`); AGENT-COMMITTED test/planning/docs; pre-launch redeploy-fresh per `feedback_frozen_contracts_no_future_proofing.md` (storage break fine). Phase boundaries + 5 success criteria per phase are finalized in `.planning/ROADMAP.md`.
+**Combined ADD+REMOVE milestone.** The crank/subscription ADD half (`.planning/PLAN-CRANK-DO-WORK-INCENTIVE.md` §10 phase shape) and the legacy-removal REMOVE half (`.planning/PLAN-V47-REMOVE-AFKING-ETH-AUTOREBUY.md`) are FOLDED into the same 5 phases so the milestone is one batched USER-APPROVED contract diff (IMPL), one test pass (TST), one gas pass (GAS), one adversarial audit (TERMINAL). Audit baseline → subject: v45.0 closure HEAD `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` → v46.0 closure HEAD. Subject = the batched ADD+REMOVE diff across `DegenerusGame` + modules + `BurnieCoin`/`BurnieCoinflip` + `DegenerusVault` + `StakedDegenerusStonk` + `ContractAddresses` + the in-tree `AfKing` keeper (paired `degenerus-utilities` rework). Single batched USER-APPROVED contract diff at IMPL per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md` + `feedback_manual_review_before_push.md` (ContractAddresses.sol freely-modifiable per `feedback_contractaddresses_policy.md`); AGENT-COMMITTED test/planning/docs; pre-launch redeploy-fresh per `feedback_frozen_contracts_no_future_proofing.md` (storage break fine). Phase boundaries + 5 success criteria per phase are finalized in `.planning/ROADMAP.md`. **(2026-05-24: OPEN-E promotion inserted Phase 319.1 — a SECOND batched USER-APPROVED `AfKing.sol` IMPL diff; the milestone's original "one IMPL diff" posture now spans two approved IMPL phases, 317 + 319.1.)**
 
 | Phase | Name | Type | Requirements (primary owner) | Status |
 |-------|------|------|------------------------------|--------|
@@ -39,9 +39,10 @@ Last activity: 2026-05-24 -- Phase 319 planning complete
 | 317 | IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework | IMPL | PROTO-02..05 · CRANK-01..04 · REW-01..04 · SUB-01..08 · RM-01/02/03/05/06 · JGAS-02 | Not started |
 | 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | Complete — all 6 plans done: 318-01 (fixture repair, SAFE-04) + 318-02 (SAFE-01 crank faucet-resistance, CrankFaucetResistance.t.sol 10/10) + 318-03 (SAFE-02 non-brick + SUB/PROTO acceptance, CrankNonBrick.t.sol 12/12 + AfKingSubscription.t.sol 7/7) + 318-04 (SAFE-03 concurrency + funding waterfall + two-tier skip-kill, AfKingConcurrency.t.sol 10/10 + AfKingFundingWaterfall.t.sol 9/9) + 318-05 (SAFE-04 RNG-freeze intact + REMOVE proofs, RngFreezeAndRemovalProofs.t.sol 13/13) + 318-06 (JGAS-03 single-call 305-winner daily-ETH correctness, JackpotSingleCallCorrectness.t.sol 8/8 — worst-case 305-winner call 7.5M gas < 30M) done |
 | 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 · JGAS-04 | Not started |
-| 320 | AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure | TERMINAL | (re-attests all 42; owns 0 primarily) | Not started |
+| 319.1 | IMPL — OPEN-E Shared Funding Source (BURNIE + ETH pool) | IMPL | OPENE-01..04 | Not started (INSERTED 2026-05-24 — runs after 319, before the terminal audit) |
+| 320 | AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure | TERMINAL | (re-attests all 46; owns 0 primarily) | Not started |
 
-**Coverage:** 42/42 requirements mapped (Phase 316: 4 · Phase 317: 26 · Phase 318: 5 · Phase 319: 7 · Phase 320 TERMINAL: re-attests all 42, owns 0 primarily); 0 orphaned; 0 duplicated. Full mapping in `.planning/REQUIREMENTS.md` Traceability table. JGAS-01..04 (jackpot two-call-split removal, enabled by RM-02's ETH-auto-rebuy removal) folded in 2026-05-23.
+**Coverage:** 46/46 requirements mapped (Phase 316: 4 · Phase 317: 26 · Phase 318: 5 · Phase 319: 7 · Phase 319.1: 4 · Phase 320 TERMINAL: re-attests all 46, owns 0 primarily); 0 orphaned; 0 duplicated. Full mapping in `.planning/REQUIREMENTS.md` Traceability table. JGAS-01..04 (jackpot two-call-split removal, enabled by RM-02's ETH-auto-rebuy removal) folded in 2026-05-23. OPEN-E (OPENE-01..04, shared funding source — full BURNIE + ETH pool) promoted from Deferred into scope 2026-05-24 at inserted Phase 319.1 (a SECOND batched USER-APPROVED `AfKing.sol` IMPL diff on top of the 317 batch; runs after GAS, before the terminal audit).
 
 **UI hint:** Phase 317 IMPL carries a `**UI hint**: yes` annotation in ROADMAP.md — the keeper-gated `batchPurchase` + crank entry surface interacts with the protocol's frontend/keeper layer (off-chain-discovered work lists, the "free BURNIE" / "click-a-button" crank UX). The off-chain indexer / webpage itself is OUT OF SCOPE (separate frontend track) per PROJECT.md, but the on-chain entry points are designed for that consumer.
 
@@ -330,6 +331,10 @@ Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-fo
 
 ## Accumulated Context
 
+### Roadmap Evolution
+
+- Phase 319.1 inserted after Phase 319: OPEN-E shared funding source (full BURNIE + ETH pool) promoted from Deferred into v46.0 scope; routes Sub.fundingSource ETH-pool draw + both burnForKeeper charge sites, operator-approval gated; lands after GAS, before the terminal audit
+
 ### Phase 302 — Cross-Surface Adversarial Sweep (COMPLETE 2026-05-19)
 
 - **Phase 302 COMPLETE** — 1 plan; single Wave-1 main-context end-to-end AGENT-COMMITTED 3-skill HYBRID adversarial-pass artifact bundle per `D-302-ARTIFACT-SET-01` + `D-302-TASK-SPLIT-01`. 5 artifacts shipped: 302-ADVERSARIAL-CHARGE.md (9-hypothesis CHARGE: SWP-01..05 verbatim + 4 augments) + 3 per-skill MDs (302-ADVERSARIAL-CONTRACT-AUDITOR.md + 302-ADVERSARIAL-ZERO-DAY-HUNTER.md + 302-ADVERSARIAL-ECONOMIC-ANALYST.md) + integrated 302-01-ADVERSARIAL-LOG.md. **Result: ZERO_FINDING_ELEVATION** — 9 charged hypotheses + 7 beyond-charge surfaces probed; skeptic-reviewer filter per `feedback_skeptic_pass_before_catastrophe.md` resolved to 5 ALREADY-DOCUMENTED REAL_EXPLOITs (V-184 + V-063 §0.7 marker + R-06 GNRUS setCharity + S-22 Cluster G + Phase 296 (xiv) retryLootboxRng) + 2 documentation-fix items (V-063 §0.7 marker amendment + `totalFlipReversals` §14 enumeration gap) + 1 coverage-gap (FUZZ harness 3 missing edge-case functions). User fast-path disposition 2026-05-19: 5/5 Tier-1 items accept-as-documented (a/b); Task 6 SKIPPED per `D-302-AUDIT-ONLY-ROUTING-01` conditional gating; documentation-class items route to Phase 303 §6 catalog hygiene; FUZZ-harness extension deferred to v44.0 FIX-MILESTONE plan-phase.
@@ -480,6 +485,7 @@ Audit deliverables:
 | 318 | 01 | ~10min | 3 | 4 files (predictAddresses.js + DeployProtocol.sol + DeployCanary.t.sol + ContractAddresses.sol) + 1 SUMMARY |
 | 318 | 05 | ~6min | 3 | 1 file (test/fuzz/RngFreezeAndRemovalProofs.t.sol NEW, 869 lines, 13 tests) + 1 SUMMARY (SAFE-04 freeze-intact + REMOVE proofs; 13/13 green; zero contracts/ mutation) |
 | 318 | 06 | ~12min | 2 | 1 file (test/fuzz/JackpotSingleCallCorrectness.t.sol NEW, 561 lines, 8 tests) + 1 SUMMARY (JGAS-03 single-call 305-winner correctness + conservation + gas-fits 7.5M<30M + split-gone; 8/8 green; zero contracts/ mutation) |
+| Phase 319 P01 | ~5min | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -574,3 +580,5 @@ Audit deliverables:
 - [Phase ?]: 317-01: slot-≥34 family confirmed −2 via forge inspect (vrfCoordinator 34→32, lootboxRngWordByIndex 38→36, boonPacked 61→59); LootboxBoonCoexistence SLOT_* +1/+4 stale
 - [Phase 318]: 318-01: deploy-fixture repaired — AfKing inserted into predictAddresses.js DEPLOY_ORDER at N+18 (before VAULT/SDGNRS) + deployed nonce-matched in DeployProtocol.sol; ContractAddresses.sol RE-PATCHED (AF_KING→0x3Cff..., VAULT/SDGNRS/DGNRS/ADMIN/GNRUS +1 shift) and COMMITTED as deliverable (did NOT restore — HEAD is already the foundry-patched state; the on-disk .bak was a stale Apr-12 wrong-DEPLOY_ORDER snapshot that would corrupt on restore). setUp no longer reverts; suite recovered 197→532 runnable (472 pass / 44 fail / 16 skip). DeployCanary 2/2 PASS (now also asserts AF_KING). 317-08 slot re-derivation EMPIRICALLY CONFIRMED — the 10 slot-fixed suites reach bodies, slot-read tests pass, no slot drift.
 - [Phase 318]: 318-01: the 44 post-repair failures are ALL pre-existing behavioral/protocol families (panic-0x11 ticket-routing, RngLocked-vs-panic guards, InvalidBet, freeze assertions, + 8 invariant solvency/VRF-path counterexamples newly reachable since setUp works) — grep-proven ZERO touch afKing/subscribe/AF_KING (the one AfKing-referencing failing suite's only fail is an unrelated GNRUS test; its afKing test passes). Named set captured in 318-01-SUMMARY.md as the Wave-2+ no-new-failures anchor. NOT chased (out of scope per fixture-repair plan).
+- [Phase ?]: 319-01: CRANK_RESOLVE_BET_GAS_UNITS calibrates to the per-1-spin-item MARGINAL (NOT the 10-spin worst case) per REW-03/A4/SAFE-01 faucet floor; the 10-spin all-match is the GAS-01 MEASUREMENT worst case only
+- [Phase ?]: 319-01: GAS-06 +0% placement reference = the GREEN deterministic snapshot subset (StorageFoundationTest packing/slot/ticket-slot + LockRemovalTest purchase rows); 7 placement-adjacent FAILing baseline rows excluded

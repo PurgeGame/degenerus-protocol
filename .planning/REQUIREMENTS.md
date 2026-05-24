@@ -71,12 +71,12 @@ Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`S
 
 ### GAS — Gas efficiency (worst-case-first per `feedback_gas_worst_case`)
 
-- [ ] **GAS-01**: Worst-case-first measurement per work-type before optimizing.
+- [x] **GAS-01**: Worst-case-first measurement per work-type before optimizing.
 - [ ] **GAS-02**: One `creditFlip`/cranker/tx; one batch value transfer; `level`/`mintPrice` read once/batch.
 - [ ] **GAS-03**: Calldata grouped by player; homogeneous per-work-type fns.
 - [ ] **GAS-04**: Maximal storage packing; no new per-bet/box storage on the hot placement path.
 - [ ] **GAS-05**: Scavenger + Skeptic pass; every removal/packing validated against the security floor.
-- [ ] **GAS-06**: Regression bounds (placement hot-path +0%); measured worst-cases calibrate the 0.5 gwei peg.
+- [x] **GAS-06**: Regression bounds (placement hot-path +0%); measured worst-cases calibrate the 0.5 gwei peg.
 
 ### JGAS — Jackpot ETH-path gas re-profile + two-call split removal (folded in; *enabled by* RM-02's ETH-auto-rebuy removal)
 
@@ -89,11 +89,20 @@ The free ETH auto-rebuy was a per-winner conditional branch on the daily-ETH-jac
 
 (The split-removal delta-audit — composes cleanly with the RM-02 removal, no payout stranded by the dropped `resumeEthPool` carry, no double/under-credit — is folded into Phase 320 TERMINAL's existing cross-cutting delta-audit charge, which owns no requirement primarily and re-attests everything at closure.)
 
+### OPENE — Shared funding source (OPEN-E, promoted into v46.0 at Phase 319.1)
+
+Promoted from Deferred 2026-05-24. One funding wallet covers BOTH the BURNIE subscription charge AND the ETH `_poolOf` auto-buy draw for a player's multiple subscriber addresses. Default `fundingSource == address(0)` = self (behavior-identical to pre-OPEN-E). Pre-launch redeploy-fresh — the `Sub` repack + slot re-derivation is free per `feedback_frozen_contracts_no_future_proofing`. Lands as its own single batched USER-APPROVED `contracts/AfKing.sol` diff at Phase 319.1 (a SECOND IMPL diff on top of the 317 batch).
+
+- [ ] **OPENE-01**: `Sub` gains `address fundingSource` (default `address(0)` = self) set via a caller-scoped mutator (same NotSubscribed gating as the other `Sub` setters). Repack to free room — only 19 of 32 bytes remain vs a 20-byte address — by collapsing the two standalone bools (`drainGameCreditFirst`, `useTickets`) into the existing `flags` byte; storage-layout slot constants re-derived, suite recompiles green with no slot drift.
+- [ ] **OPENE-02**: The sweep ETH auto-buy draw reads/debits `_poolOf[fundingSource]` (resolved to self when `fundingSource == 0`) instead of `_poolOf[player]`; per-draw gas unchanged (same single slot already SLOADed). The two-tier funding-skip-kill keeps the Vault/sDGNRS exemption keyed on the un-spoofable SUBSCRIBER identity, never the source.
+- [ ] **OPENE-03**: Both `burnForKeeper` charge sites route to `fundingSource` instead of the subscriber — the `subscribe()` SUB-01 pass-or-pay gate (`AfKing.sol:396`) and the `sweep()` day-31 auto-extract (`AfKing.sol:587`). All-or-nothing semantics preserved; source-shortfall falls through the existing failure path (subscribe revert / day-31 auto-pause).
+- [ ] **OPENE-04**: Authorization = game operator-approval, money-holder-grants-spender direction — source S calls `setOperatorApproval(M, true)`; keeper requires `isOperatorApproved(S, M)` to honor `fundingSource = S`, checked at subscribe + the day-31 renewal branch ONLY (never per-draw — bounds post-revoke drain to ≤1 renewal window; on revoke the draw reverts to self / auto-pauses). **Caveat documented:** for the BURNIE charge this same approval authorizes burning S's general wallet BURNIE + pending coinflip (sharper than the pre-funded ETH escrow the gate was originally chosen for); a dedicated `allowBurnieFunding[S][M]` opt-in flag is the explicit alternative if the overload is later judged unwanted.
+
 ---
 
 ## Deferred / Future (acknowledged, not in v46.0 roadmap)
 
-- **OPEN-E — shared funding source for multi-wallet players** (`Sub.fundingSource` + operator-approval to draw a shared `_poolOf`). Optional enhancement; promote at SPEC only if wanted.
+- **OPEN-E — shared funding source for multi-wallet players** — PROMOTED into v46.0 on 2026-05-24; now in scope as OPENE-01..04 (Phase 319.1, full BURNIE + ETH pool). See the OPENE requirements section above.
 - **OPEN-D bet-cursor** — on-chain per-index bet queue + parameterless `resolveBetsWork()`. Bets stay caller-list (per-bet enqueue tax too steep on the hot path); revisit only if heavy cross-player bet-cranking is expected.
 
 ## Out of Scope
@@ -111,7 +120,7 @@ The free ETH auto-rebuy was a per-winner conditional branch on the daily-ETH-jac
 
 ## Traceability
 
-Each requirement maps to exactly one phase (primary verification owner). The full add+remove design is *locked* at Phase 316 SPEC and *consumed* by every downstream phase; the table below records the single phase that owns each requirement's acceptance. Phase 320 (TERMINAL) re-attests all 42 at the closure verdict and owns no requirement primarily.
+Each requirement maps to exactly one phase (primary verification owner). The full add+remove design is *locked* at Phase 316 SPEC and *consumed* by every downstream phase; the table below records the single phase that owns each requirement's acceptance. Phase 320 (TERMINAL) re-attests all 46 at the closure verdict and owns no requirement primarily.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -150,17 +159,21 @@ Each requirement maps to exactly one phase (primary verification owner). The ful
 | SAFE-03 | Phase 318 | Complete |
 | SAFE-04 | Phase 318 | SATISFIED — 318-01 the slot/recompile facet (suite green, no slot drift, RM-06 empirically confirmed); 318-05 the RNG-freeze post-unlock proof (RngFreezeAndRemovalProofs.t.sol 13/13: crank resolve stays behind RngNotReady pre-word, placement guard :452 untouched, word-set-timing fuzz) + freeze-obligation retirement (deterministic no-VRF-word credit) + the REMOVE proofs (grep-clean kill set, ETH→claimable, flat 75bps, win/loss RNG path + KNOWN-ISSUES byte-unmodified). Commit `b9bc5206` |
 | JGAS-03 | Phase 318 | Complete (318-06) |
-| GAS-01 | Phase 319 | Pending |
+| GAS-01 | Phase 319 | Complete |
 | GAS-02 | Phase 319 | Pending |
 | GAS-03 | Phase 319 | Pending |
 | GAS-04 | Phase 319 | Pending |
 | GAS-05 | Phase 319 | Pending |
-| GAS-06 | Phase 319 | Pending |
+| GAS-06 | Phase 319 | Complete |
 | JGAS-04 | Phase 319 | Pending |
+| OPENE-01 | Phase 319.1 | Pending |
+| OPENE-02 | Phase 319.1 | Pending |
+| OPENE-03 | Phase 319.1 | Pending |
+| OPENE-04 | Phase 319.1 | Pending |
 
 **Coverage:**
-- v46.0 requirements: 42 total (PROTO 5 · CRANK 4 · REW 4 · SUB 9 · RM 6 · SAFE 4 · GAS 6 · JGAS 4)
-- Mapped to phases: **42 / 42** (Phase 316: 4 · Phase 317: 26 · Phase 318: 5 · Phase 319: 7 · Phase 320 TERMINAL: re-attests all 42, owns 0 primarily)
+- v46.0 requirements: 46 total (PROTO 5 · CRANK 4 · REW 4 · SUB 9 · RM 6 · SAFE 4 · GAS 6 · JGAS 4 · OPENE 4)
+- Mapped to phases: **46 / 46** (Phase 316: 4 · Phase 317: 26 · Phase 318: 5 · Phase 319: 7 · Phase 319.1: 4 · Phase 320 TERMINAL: re-attests all 46, owns 0 primarily)
 - Unmapped / orphaned: **0**
 - No requirement maps to more than one phase (no duplicates).
 
@@ -169,7 +182,8 @@ Each requirement maps to exactly one phase (primary verification owner). The ful
 - **Phase 317 IMPL** (26): PROTO-02..05 + CRANK-01..04 + REW-01..04 + SUB-01..08 + RM-01/02/03/05/06 + JGAS-02 — the one batched USER-APPROVED contract diff + paired `AfKing` keeper rework + the daily-ETH two-call split removal (both modules).
 - **Phase 318 TST** (5): SAFE-01..04 + JGAS-03 — faucet-resistance, non-brick, concurrency, RNG-freeze, 305-winner single-call jackpot correctness; also carries the testable acceptance of SUB-*/CRANK-*/REW-*/RM-* + the removal proofs.
 - **Phase 319 GAS** (7): GAS-01..06 + JGAS-04 — worst-case-first pass + 0.5 gwei peg calibration + empirical 305-winner single-call jackpot measurement.
-- **Phase 320 TERMINAL** (0 primary): cross-cutting acceptance / closure verdict over all 42 + the add/remove + jackpot-split-removal delta-audit + freeze-obligation-retirement attestation.
+- **Phase 319.1 IMPL** (4): OPENE-01..04 — the shared funding-source promotion (`Sub.fundingSource` field + setter, ETH-pool draw routing, BURNIE-charge routing at both `burnForKeeper` sites, operator-approval authorization at subscribe + renewal). Its own single batched USER-APPROVED `contracts/AfKing.sol` diff.
+- **Phase 320 TERMINAL** (0 primary): cross-cutting acceptance / closure verdict over all 46 + the add/remove + jackpot-split-removal + OPEN-E funding-source delta-audit + freeze-obligation-retirement attestation.
 
 ---
-*Requirements defined: 2026-05-23 — milestone v46.0 (combined crank/subscription ADD + legacy AFKing/ETH-auto-rebuy REMOVE). Traceability filled by roadmapper 2026-05-23 — 38/38 mapped, 0 orphaned, 0 duplicated. JGAS-01..04 jackpot-split-removal sub-thread folded in 2026-05-23 — 42/42 mapped.*
+*Requirements defined: 2026-05-23 — milestone v46.0 (combined crank/subscription ADD + legacy AFKing/ETH-auto-rebuy REMOVE). Traceability filled by roadmapper 2026-05-23 — 38/38 mapped, 0 orphaned, 0 duplicated. JGAS-01..04 jackpot-split-removal sub-thread folded in 2026-05-23 — 42/42 mapped. OPEN-E (OPENE-01..04) promoted from Deferred into v46.0 scope 2026-05-24 at inserted Phase 319.1 — 46/46 mapped.*
