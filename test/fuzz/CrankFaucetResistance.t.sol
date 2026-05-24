@@ -71,8 +71,8 @@ contract CrankFaucetResistance is DeployProtocol {
     uint256 private constant CRANK_GAS_PRICE_REF = 0.5 gwei;
 
     /// @dev Reserved per-work-type gas-unit constants (DegenerusGame.sol:1501-1502).
-    uint256 private constant CRANK_RESOLVE_BET_GAS_UNITS = 120_000;
-    uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 120_000;
+    uint256 private constant CRANK_RESOLVE_BET_GAS_UNITS = 66_528;
+    uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 137_944;
 
     /// @dev BURNIE per-ETH conversion unit (DegenerusGameStorage:161 / Coinflip:132).
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
