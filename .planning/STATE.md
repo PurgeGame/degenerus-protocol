@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
 status: executing
-last_updated: "2026-05-24T08:33:04.380Z"
+last_updated: "2026-05-24T08:44:00.050Z"
 last_activity: 2026-05-24
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 25
-  completed_plans: 23
+  completed_plans: 24
   percent: 50
 ---
 
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 ## Current Position
 
 Phase: 319 (GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration (GAS)) — EXECUTING
-Plan: 4 of 5
-Status: Executing Phase 319 — Plans 01-03 complete (GAS-01 derivation + crank worst-case + JGAS-04 + sweep-per-player measured; all Plan 05 calibration inputs now logged)
-Last activity: 2026-05-24 -- 319-03 complete: SweepPerPlayerWorstCaseGas — sweep per-successful-player marginal 309,007 gas (BOUNTY_ETH_TARGET deploy-param calibration input) + whole 6-sub sweep 1,854,045 gas < 30M; per-player cost proven SHAPE-INSENSITIVE (reinvest 295,798 ~= typical 300,123 within 5%) which Rule-1-corrected the 319-GAS-DERIVATION §3 "reinvest is the heavier path" premise (keeper lootbox-buy is slice-flat; the SUB-04 claimableWinningsOf read pre-warms the slot the buy re-reads, netting the reinvest sub marginally cheaper); 3/3 green, 44 failing == exact v45 baseline, contracts/ clean
+Plan: 5 of 5
+Status: Executing Phase 319 — Plans 01-04 complete (GAS-01 derivation + crank/sweep worst-case + JGAS-04 measured + GAS-02/03/04 levers proven + GAS-05 security-floor audit REMOVAL-CLEAN; Plan 05 receives the optional GAS-02 hoist disposition for the ONE USER-APPROVED contract gate)
+Last activity: 2026-05-24 -- 319-04 complete: CrankLeversAndPacking.t.sol 7/7 (GAS-02 one-creditFlip-per-tx proven behaviorally for both cranks, cranker-scoped to isolate box-winnings credits; GAS-03 grouping+homogeneity; GAS-04 Sub-1-slot byte-width-sum + uint48 cursor + no-new-hot-path-storage; G1-G13 guard byte-presence pinned RED-on-regression) + 319-GAS-05-GUARDRAILS.md (Scavenger->Skeptic->contract-auditor pass: G1-G13 reject-set VERIFIED-PRESENT, runs=200-not-runs=2 correction applied, 6 candidates dispositioned, verdict REMOVAL-CLEAN; SCAV-319-01 optional loop-invariant hoist surfaced approve-if-real-saving / no-op-if-already-hoisted -> Plan 05). 2 Rule-1 test-side fixes (cranker-scoped creditFlip count; struct-decl gate replacing a comment-only phrase). Zero contracts/ mutation; 71/71 green across the new suite + all adjacent crank/sweep/jackpot suites
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
@@ -586,3 +586,6 @@ Audit deliverables:
 - [Phase ?]: 319-01: GAS-06 +0% placement reference = the GREEN deterministic snapshot subset (StorageFoundationTest packing/slot/ticket-slot + LockRemovalTest purchase rows); 7 placement-adjacent FAILing baseline rows excluded
 - [Phase ?]: 319-02: GAS-01 crank worst cases MEASURED (resolve-bet 10-spin 726,944 gas / open-box 137,944 gas, both < 30M) + the two Plan 05 calibration marginals isolated (per-1-spin resolve 66,528 / flat per-box 137,944) + JGAS-04 complete (305-winner re-frame 22.5M margin + ~1.3M freed-autoRebuyState-SLOAD delta attributed structurally, no dead code)
 - [Phase 319-03]: sweep per-player marginal 309,007 gas (BOUNTY_ETH_TARGET deploy-param calibration input); whole 6-sub sweep 1.85M < 30M; per-player cost SHAPE-INSENSITIVE (reinvest ~= typical within 5%) — Rule-1-corrected 319-GAS-DERIVATION §3 'reinvest is heavier' premise (keeper lootbox-buy is slice-flat; reinvest read pre-warms the slot the buy re-reads)
+- [Phase 319-04]: GAS-05 verdict REMOVAL-CLEAN — G1-G13 security floor intact at HEAD; all 6 Scavenger candidates rejected/held; the 3 touching a G-row (G12 x2, G11) escalated to contract-auditor and REJECTED; reasoned from runs=200 (NOT the SKILL.md stale runs=2), so bytecode-size-only justifications carry low weight and an optimizer-already-hoisted candidate is a no-op
+- [Phase 319-04]: SCAV-319-01 GAS-02 loop-invariant hoist (priceForLevel/_ethToBurnieValue recomputed per crank item, crankBets:1567-70 / crankBoxes:1621-23) SURFACED with an approve-if-real-saving / no-op-if-already-hoisted disposition; touches no guard (pure recomputation); handed to Plan 05 to batch into the ONE USER-APPROVED DegenerusGame.sol diff IFF Plan 02's before/after shows a real runtime saving at runs=200 — NOT edited in Plan 04
+- [Phase 319-04]: crankBoxes one-creditFlip asserted CRANKER-SCOPED (filter CoinflipStakeUpdated by topics[1]==cranker) because a box open also credits BURNIE winnings to the box OWNER (LootboxModule:1036); GAS-04 Sub-1-slot proven by a comment-stripped byte-width SUM (==13 <= 32) since ffi is OFF in foundry.toml (forge inspect via vm.ffi unavailable); the 'a single slot' phrase is comment-only and correctly stripped, so the gate keys on 'struct Sub {' + the width sum

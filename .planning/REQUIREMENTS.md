@@ -72,10 +72,10 @@ Ship the permissionless do-work crank and the AfKing auto-rebuy subscription (`S
 ### GAS — Gas efficiency (worst-case-first per `feedback_gas_worst_case`)
 
 - [x] **GAS-01**: Worst-case-first measurement per work-type before optimizing.
-- [ ] **GAS-02**: One `creditFlip`/cranker/tx; one batch value transfer; `level`/`mintPrice` read once/batch.
-- [ ] **GAS-03**: Calldata grouped by player; homogeneous per-work-type fns.
-- [ ] **GAS-04**: Maximal storage packing; no new per-bet/box storage on the hot placement path.
-- [ ] **GAS-05**: Scavenger + Skeptic pass; every removal/packing validated against the security floor.
+- [x] **GAS-02**: One `creditFlip`/cranker/tx; one batch value transfer; `level`/`mintPrice` read once/batch.
+- [x] **GAS-03**: Calldata grouped by player; homogeneous per-work-type fns.
+- [x] **GAS-04**: Maximal storage packing; no new per-bet/box storage on the hot placement path.
+- [x] **GAS-05**: Scavenger + Skeptic pass; every removal/packing validated against the security floor.
 - [x] **GAS-06**: Regression bounds (placement hot-path +0%); measured worst-cases calibrate the 0.5 gwei peg.
 
 ### JGAS — Jackpot ETH-path gas re-profile + two-call split removal (folded in; *enabled by* RM-02's ETH-auto-rebuy removal)
@@ -91,12 +91,12 @@ The free ETH auto-rebuy was a per-winner conditional branch on the daily-ETH-jac
 
 ### OPENE — Shared funding source (OPEN-E, promoted into v46.0 at Phase 319.1)
 
-Promoted from Deferred 2026-05-24. One funding wallet covers BOTH the BURNIE subscription charge AND the ETH `_poolOf` auto-buy draw for a player's multiple subscriber addresses. Default `fundingSource == address(0)` = self (behavior-identical to pre-OPEN-E). Pre-launch redeploy-fresh — the `Sub` repack + slot re-derivation is free per `feedback_frozen_contracts_no_future_proofing`. Lands as its own single batched USER-APPROVED `contracts/AfKing.sol` diff at Phase 319.1 (a SECOND IMPL diff on top of the 317 batch).
+Promoted from Deferred 2026-05-24. One funding wallet covers BOTH the BURNIE subscription charge AND the ETH `_poolOf` auto-buy draw for a player's multiple subscriber addresses. Default `fundingSource == address(0)` = self (behavior-identical to pre-OPEN-E). Pre-launch redeploy-fresh — the `Sub` repack + slot re-derivation is free per `feedback_frozen_contracts_no_future_proofing`. Lands as its own single batched USER-APPROVED diff at Phase 319.1 (a SECOND IMPL diff on top of the 317 batch) spanning THREE mainnet contracts — `contracts/AfKing.sol` plus `contracts/DegenerusVault.sol` + `contracts/StakedDegenerusStonk.sol`, whose SUB-09 protocol self-subscribe call sites + `IAfKing` interface decls ripple from the `subscribe()` signature gaining a `fundingSource` param (user-accepted 2026-05-24 — Vault + sDGNRS both call `subscribe`).
 
-- [ ] **OPENE-01**: `Sub` gains `address fundingSource` (default `address(0)` = self) set via a caller-scoped mutator (same NotSubscribed gating as the other `Sub` setters). Repack to free room — only 19 of 32 bytes remain vs a 20-byte address — by collapsing the two standalone bools (`drainGameCreditFirst`, `useTickets`) into the existing `flags` byte; storage-layout slot constants re-derived, suite recompiles green with no slot drift.
+- [ ] **OPENE-01**: `Sub` gains `address fundingSource` (default `address(0)` = self), set ONLY via a new `fundingSource` param on `subscribe()` — there is NO standalone setter (the source is a subscribe-time decision; to change it, re-subscribe, which re-checks approval). Repack to free room — only 19 of 32 bytes remain vs a 20-byte address — by collapsing the two standalone bools (`drainGameCreditFirst`, `useTickets`) into the existing `flags` byte; storage-layout slot constants re-derived, suite recompiles green with no slot drift. The `subscribe()` signature change ripples to the two SUB-09 protocol callers (`DegenerusVault`/`StakedDegenerusStonk` pass `address(0)` = self).
 - [ ] **OPENE-02**: The sweep ETH auto-buy draw reads/debits `_poolOf[fundingSource]` (resolved to self when `fundingSource == 0`) instead of `_poolOf[player]`; per-draw gas unchanged (same single slot already SLOADed). The two-tier funding-skip-kill keeps the Vault/sDGNRS exemption keyed on the un-spoofable SUBSCRIBER identity, never the source.
-- [ ] **OPENE-03**: Both `burnForKeeper` charge sites route to `fundingSource` instead of the subscriber — the `subscribe()` SUB-01 pass-or-pay gate (`AfKing.sol:396`) and the `sweep()` day-31 auto-extract (`AfKing.sol:587`). All-or-nothing semantics preserved; source-shortfall falls through the existing failure path (subscribe revert / day-31 auto-pause).
-- [ ] **OPENE-04**: Authorization = game operator-approval, money-holder-grants-spender direction — source S calls `setOperatorApproval(M, true)`; keeper requires `isOperatorApproved(S, M)` to honor `fundingSource = S`, checked at **`subscribe()` ONLY** (never per-draw, never at the day-31 renewal — once M is subscribed with an approved source the funding relationship is trusted for the life of the sub; `fundingSource` is itself `NotSubscribed`-gated per OPENE-01, so it cannot change mid-sub). Revocation (`setOperatorApproval(M, false)`) does NOT retroactively stop an active funding sub — S stops draws by defunding (`_poolOf` ETH / BURNIE) or M cancels; auth re-verifies only on a fresh `subscribe()`. **Caveat documented:** for the BURNIE charge this same approval authorizes burning S's general wallet BURNIE + pending coinflip (sharper than the pre-funded ETH escrow the gate was originally chosen for); a dedicated `allowBurnieFunding[S][M]` opt-in flag is the explicit alternative if the overload is later judged unwanted. Intended use case is same-owner multi-wallet, so the broad operator grant + trust-the-sub posture is by design.
+- [ ] **OPENE-03**: Both `burnForKeeper` charge sites route to the resolved `fundingSource` instead of the subscriber — the `subscribe()` SUB-01 pass-or-pay gate (`AfKing.sol:396`, which reads the `fundingSource` set earlier in the SAME call so S funds window 1) and the `sweep()` day-31 auto-extract (`AfKing.sol:587`). All-or-nothing semantics preserved; source-shortfall falls through the existing failure path (subscribe revert / day-31 auto-pause).
+- [ ] **OPENE-04**: Authorization = game operator-approval, money-holder-grants-spender direction — source S calls `setOperatorApproval(M, true)`; the keeper requires `isOperatorApproved(S, M)` to honor `fundingSource = S`, checked at `subscribe()` ONLY — its new `fundingSource` param is the SOLE place a source is set (no standalone setter) — never per-draw, never at the day-31 renewal. A non-zero non-self source requires `isOperatorApproved(S, M)` (revert `NotApproved` otherwise); `fundingSource == 0` (self) short-circuits the read. Once subscribed with an approved source the relationship is TRUSTED thereafter: a later `setOperatorApproval(M, false)` revoke does NOT retroactively stop an active sub — S stops draws by defunding (`_poolOf[S]` ETH / spending down BURNIE) or M cancels; to change the source M re-subscribes (which re-checks). **Caveat documented:** for the BURNIE charge this same approval authorizes burning S's general wallet BURNIE + pending coinflip (sharper than the pre-funded ETH escrow the gate was originally chosen for); a dedicated `allowBurnieFunding[S][M]` opt-in flag is the explicit alternative if the overload is later judged unwanted. Intended use case is same-owner multi-wallet, so the broad operator grant + trust-the-sub posture is by design.
 
 ---
 
@@ -160,10 +160,10 @@ Each requirement maps to exactly one phase (primary verification owner). The ful
 | SAFE-04 | Phase 318 | SATISFIED — 318-01 the slot/recompile facet (suite green, no slot drift, RM-06 empirically confirmed); 318-05 the RNG-freeze post-unlock proof (RngFreezeAndRemovalProofs.t.sol 13/13: crank resolve stays behind RngNotReady pre-word, placement guard :452 untouched, word-set-timing fuzz) + freeze-obligation retirement (deterministic no-VRF-word credit) + the REMOVE proofs (grep-clean kill set, ETH→claimable, flat 75bps, win/loss RNG path + KNOWN-ISSUES byte-unmodified). Commit `b9bc5206` |
 | JGAS-03 | Phase 318 | Complete (318-06) |
 | GAS-01 | Phase 319 | Complete |
-| GAS-02 | Phase 319 | Pending |
-| GAS-03 | Phase 319 | Pending |
-| GAS-04 | Phase 319 | Pending |
-| GAS-05 | Phase 319 | Pending |
+| GAS-02 | Phase 319 | Complete |
+| GAS-03 | Phase 319 | Complete |
+| GAS-04 | Phase 319 | Complete |
+| GAS-05 | Phase 319 | Complete |
 | GAS-06 | Phase 319 | Complete |
 | JGAS-04 | Phase 319 | Complete |
 | OPENE-01 | Phase 319.1 | Pending |
