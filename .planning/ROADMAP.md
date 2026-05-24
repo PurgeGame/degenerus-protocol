@@ -206,7 +206,7 @@ Plans:
 Plans:
 **Wave 1** *(the single USER-APPROVAL gate — `autonomous: false`; the one batched `contracts/AfKing.sol` diff)*
 
-- [ ] 319.1-01-PLAN.md — Apply the OPEN-E batched USER-APPROVED diff across `contracts/AfKing.sol` + `contracts/DegenerusVault.sol` + `contracts/StakedDegenerusStonk.sol`: `Sub` bool→`flags` repack + `address fundingSource` field, a new `fundingSource` param on `subscribe()` (sole set point — no standalone setter; Vault/sStonk callers + IAfKing interface decls updated to pass self), the ETH-draw + both `burnForKeeper` sites routed to the resolved source, and the cross-account operator-approval gate at `subscribe()` ONLY — never per-draw, never at renewal (both landmines preserved). [OPENE-01..04]
+- [x] 319.1-01-PLAN.md — Apply the OPEN-E batched USER-APPROVED diff across `contracts/AfKing.sol` + `contracts/DegenerusVault.sol` + `contracts/StakedDegenerusStonk.sol`: `Sub` bool→`flags` repack + `address fundingSource` field, a new `fundingSource` param on `subscribe()` (sole set point — no standalone setter; Vault/sStonk callers + IAfKing interface decls updated to pass self), the ETH-draw + both `burnForKeeper` sites routed to the resolved source, and the cross-account operator-approval gate at `subscribe()` ONLY — never per-draw, never at renewal (both landmines preserved). [OPENE-01..04]
 
 **Wave 2** *(blocked on the approved Wave-1 commit — AGENT-COMMITTED test sync)*
 

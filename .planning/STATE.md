@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
-status: ready_to_plan
-last_updated: 2026-05-24T10:09:22.259Z
-last_activity: 2026-05-24
+status: executing
+last_updated: "2026-05-24T10:14:50.984Z"
+last_activity: 2026-05-24 -- Phase 319.1 execution started
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 25
   completed_plans: 25
   percent: 67
-stopped_at: Phase 319 complete (5/5) — ready to discuss Phase 319.1
 ---
 
 # Project State
@@ -21,14 +20,14 @@ stopped_at: Phase 319 complete (5/5) — ready to discuss Phase 319.1
 See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 319.1 — impl open e shared funding source burnie and eth pool
+**Current focus:** Phase 319.1 — impl-open-e-shared-funding-source-burnie-and-eth-pool
 
 ## Current Position
 
-Phase: 319.1
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-24
+Phase: 319.1 (impl-open-e-shared-funding-source-burnie-and-eth-pool) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 319.1
+Last activity: 2026-05-24 -- Phase 319.1 execution started
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
