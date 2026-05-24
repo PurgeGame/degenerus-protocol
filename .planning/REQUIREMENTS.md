@@ -93,16 +93,63 @@
 
 ## Traceability
 
-Empty — populated by the roadmapper during ROADMAP creation. Each requirement maps to exactly one phase.
+Each requirement maps to exactly one phase. Milestone shape (matching v44/v45/v46): SPEC design-lock → single batched IMPL contract diff → TST proof → TERMINAL delta-audit + closure. Phase numbering continues from 320 → v47.0 starts at Phase 321.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (to be filled by roadmap) | — | Pending |
+| BATCH-01 | Phase 321 (SPEC) | Pending |
+| BATCH-02 | Phase 321 (SPEC) | Pending |
+| PRESALE-01 | Phase 322 (IMPL) | Pending |
+| PRESALE-02 | Phase 322 (IMPL) | Pending |
+| PRESALE-03 | Phase 322 (IMPL) | Pending |
+| PRESALE-04 | Phase 322 (IMPL) | Pending |
+| PRESALE-05 | Phase 322 (IMPL) | Pending |
+| PRESALE-06 | Phase 322 (IMPL) | Pending |
+| PRESALE-07 | Phase 322 (IMPL) | Pending |
+| PRESALE-08 | Phase 322 (IMPL) | Pending |
+| PRESALE-09 | Phase 322 (IMPL) | Pending |
+| PRESALE-10 | Phase 322 (IMPL) | Pending |
+| PRESALE-11 | Phase 322 (IMPL) | Pending |
+| PRESALE-12 | Phase 322 (IMPL) | Pending |
+| PRESALE-13 | Phase 322 (IMPL) | Pending |
+| LOOT-01 | Phase 322 (IMPL) | Pending |
+| LOOT-02 | Phase 322 (IMPL) | Pending |
+| LOOT-03 | Phase 322 (IMPL) | Pending |
+| LOOT-04 | Phase 322 (IMPL) | Pending |
+| LOOT-05 | Phase 322 (IMPL) | Pending |
+| LOOT-06 | Phase 322 (IMPL) | Pending |
+| DGAS-01 | Phase 322 (IMPL) | Pending |
+| DGAS-02 | Phase 322 (IMPL) | Pending |
+| DGAS-03 | Phase 322 (IMPL) | Pending |
+| DGAS-04 | Phase 322 (IMPL) | Pending |
+| CPAY-01 | Phase 322 (IMPL) | Pending |
+| CPAY-02 | Phase 322 (IMPL) | Pending |
+| CPAY-03 | Phase 322 (IMPL) | Pending |
+| REDEEM-01 | Phase 322 (IMPL) | Pending |
+| REDEEM-02 | Phase 322 (IMPL) | Pending |
+| REDEEM-03 | Phase 322 (IMPL) | Pending |
+| REDEEM-04 | Phase 322 (IMPL) | Pending |
+| REDEEM-05 | Phase 322 (IMPL) | Pending |
+| REDEEM-06 | Phase 322 (IMPL) | Pending |
+| REDEEM-07 | Phase 322 (IMPL) | Pending |
+| DSPIN-01 | Phase 322 (IMPL) | Pending |
+| TOMB-01 | Phase 322 (IMPL) | Pending |
+| TOMB-02 | Phase 322 (IMPL) | Pending |
+| TOMB-03 | Phase 322 (IMPL) | Pending |
+| DGAS-05 | Phase 323 (TST) | Pending |
+| DSPIN-02 | Phase 323 (TST) | Pending |
+| REDEEM-08 | Phase 323 (TST) | Pending |
+| TOMB-04 | Phase 323 (TST) | Pending |
+| TOMB-05 | Phase 323 (TST) | Pending |
+| BATCH-03 | Phase 324 (TERMINAL) | Pending |
 
 **Coverage:**
-- v47.0 requirements: 42 total (PRESALE 13 · LOOT 6 · DGAS 5 · CPAY 3 · REDEEM 8 · DSPIN 2 · TOMB 5 · BATCH 3 = 45 IDs; roadmapper validates 100% mapping)
-- Mapped to phases: TBD
-- Unmapped: TBD ⚠️
+- v47.0 requirements: 45 IDs total (PRESALE 13 · LOOT 6 · DGAS 5 · CPAY 3 · REDEEM 8 · DSPIN 2 · TOMB 5 · BATCH 3)
+- Mapped to phases: **45/45** ✓ (Phase 321 SPEC: 2 · Phase 322 IMPL: 37 · Phase 323 TST: 5 · Phase 324 TERMINAL: 1)
+- Orphaned (no phase): **0** ✓
+- Duplicated (multiple phases): **0** ✓
+
+Per-category split: PRESALE 13 (all IMPL) · LOOT 6 (all IMPL) · DGAS 5 (01–04 IMPL + 05 TST) · CPAY 3 (all IMPL) · REDEEM 8 (01–07 IMPL + 08 TST) · DSPIN 2 (01 IMPL + 02 TST) · TOMB 5 (01–03 IMPL + 04/05 TST) · BATCH 3 (01–02 SPEC + 03 TERMINAL). Full phase detail + per-phase success criteria in `.planning/ROADMAP.md`.
 
 ---
 *Requirements defined: 2026-05-24*

@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v47.0
 milestone_name: Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle
 status: planning
-last_updated: "2026-05-24T13:23:08.165Z"
+last_updated: "2026-05-24T14:00:00.000Z"
 last_activity: 2026-05-24
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,36 +17,36 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v46.0 section)
+See: .planning/PROJECT.md (Current Milestone: v47.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v46.0 SHIPPED 2026-05-24 — no active milestone; **v47.0 queued** (`.planning/PLAN-V47-MILESTONE-SCOPE.md`, 7 items)
+**Current focus:** v47.0 ACTIVE — Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle. ROADMAP drafted (4 phases, 321–324; SPEC → single batched IMPL → TST → TERMINAL); 45/45 requirements mapped. Next: plan Phase 321 SPEC (`.planning/PLAN-V47-MILESTONE-SCOPE.md`, 7 items).
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 321 — SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-24 — Milestone v47.0 started
+Status: Not started
+Last activity: 2026-05-24 — v47.0 ROADMAP created (4 phases 321–324; 45/45 requirements mapped, 0 orphaned, 0 duplicated)
 
-## Shipped Milestone Phases (v46.0 — SHIPPED 2026-05-24, 6/6; closure signal `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
+## Current Milestone Phases (v47.0 — ACTIVE; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687` → v47.0 closure HEAD)
 
-**Combined ADD+REMOVE milestone.** The crank/subscription ADD half (`.planning/PLAN-CRANK-DO-WORK-INCENTIVE.md` §10 phase shape) and the legacy-removal REMOVE half (`.planning/PLAN-V47-REMOVE-AFKING-ETH-AUTOREBUY.md`) are FOLDED into the same 5 phases so the milestone is one batched USER-APPROVED contract diff (IMPL), one test pass (TST), one gas pass (GAS), one adversarial audit (TERMINAL). Audit baseline → subject: v45.0 closure HEAD `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` → v46.0 closure HEAD. Subject = the batched ADD+REMOVE diff across `DegenerusGame` + modules + `BurnieCoin`/`BurnieCoinflip` + `DegenerusVault` + `StakedDegenerusStonk` + `ContractAddresses` + the in-tree `AfKing` keeper (paired `degenerus-utilities` rework). Single batched USER-APPROVED contract diff at IMPL per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md` + `feedback_manual_review_before_push.md` (ContractAddresses.sol freely-modifiable per `feedback_contractaddresses_policy.md`); AGENT-COMMITTED test/planning/docs; pre-launch redeploy-fresh per `feedback_frozen_contracts_no_future_proofing.md` (storage break fine). Phase boundaries + 5 success criteria per phase are finalized in `.planning/ROADMAP.md`. **(2026-05-24: OPEN-E promotion inserted Phase 319.1 — a SECOND batched USER-APPROVED `AfKing.sol` IMPL diff; the milestone's original "one IMPL diff" posture now spans two approved IMPL phases, 317 + 319.1.)**
+**Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle.** Seven work items (manifest `.planning/PLAN-V47-MILESTONE-SCOPE.md`) ship as ONE batched USER-APPROVED `contracts/*.sol` diff: plans 1–6 overlap heavily on shared files (manifest §2 — `DegenerusGameLootboxModule`, `DegenerusGame` claimable accounting, BURNIE flows, `DegenerusGameDegeneretteModule`, the `external payable` entry sweep) and item 7 (`AfKing.sol` cancel-tombstone) is isolated but joins the same diff. Most critical reconciliation point: `resolveRedemptionLootbox` is edited by BOTH LOOT-03 (boon flag) and REDEEM-03 (payable + remove unchecked claimable debit) → the SPEC settles its single final signature. All economic numbers + design decisions (D1–D5) LOCKED; no research, no open decisions. Milestone shape matches the established v44/v45/v46 audit pattern — SPEC design-lock → single batched IMPL contract diff → TST proof → TERMINAL delta-audit + closure flip. Single batched USER-APPROVED contract diff at IMPL per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md` + `feedback_manual_review_before_push.md` (ContractAddresses.sol freely-modifiable per `feedback_contractaddresses_policy.md`); AGENT-COMMITTED test/planning/docs; pre-launch redeploy-fresh per `feedback_frozen_contracts_no_future_proofing.md` (storage break fine). Phase boundaries + success criteria are finalized in `.planning/ROADMAP.md`. **Phase numbering continues from 320 → v47.0 starts at Phase 321.**
 
 | Phase | Name | Type | Requirements (primary owner) | Status |
 |-------|------|------|------------------------------|--------|
-| 316 | SPEC — Crank + Subscription + Legacy-Removal Design Lock | SPEC | PROTO-01 · SUB-09 · RM-04 · JGAS-01 (locks all 42) | Complete — ready for verification (5/5 plans: 316-01 · 316-02 · 316-05 · 316-03 · 316-04 done) |
-| 317 | IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework | IMPL | PROTO-02..05 · CRANK-01..04 · REW-01..04 · SUB-01..08 · RM-01/02/03/05/06 · JGAS-02 | Not started |
-| 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | Complete — all 6 plans done: 318-01 (fixture repair, SAFE-04) + 318-02 (SAFE-01 crank faucet-resistance, CrankFaucetResistance.t.sol 10/10) + 318-03 (SAFE-02 non-brick + SUB/PROTO acceptance, CrankNonBrick.t.sol 12/12 + AfKingSubscription.t.sol 7/7) + 318-04 (SAFE-03 concurrency + funding waterfall + two-tier skip-kill, AfKingConcurrency.t.sol 10/10 + AfKingFundingWaterfall.t.sol 9/9) + 318-05 (SAFE-04 RNG-freeze intact + REMOVE proofs, RngFreezeAndRemovalProofs.t.sol 13/13) + 318-06 (JGAS-03 single-call 305-winner daily-ETH correctness, JackpotSingleCallCorrectness.t.sol 8/8 — worst-case 305-winner call 7.5M gas < 30M) done |
-| 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 · JGAS-04 | Complete — all 5 plans done (319-01 placement-ref + 319-02 GAS-01 crank worst-cases + JGAS-04 + 319-03 sweep marginal + 319-04 GAS-05 removal-clean + 319-05 GAS-06 OUTCOME-B calibration `e4014f91`: CRANK_RESOLVE_BET_GAS_UNITS 120_000→66_528, CRANK_OPEN_BOX_GAS_UNITS 120_000→137_944, placement +0%, SAFE-01 round-trip≤0 preserved). **CR-01 correction `795e679d` (2026-05-24): CRANK_OPEN_BOX_GAS_UNITS 137_944→71_203 — the box peg was mis-pegged to the single-box TOTAL (bundling per-tx fixed overhead into one box → SAFE-01 box-faucet OPEN for cold-bust batches); corrected to the measured per-box MARGINAL 71_203 (≈ resolve spin 66,528). WR-01 multi-box round-trip test added; WR-02 JGAS-04 band re-framed; placement still +0%; resolve 66_528 + 0.5 gwei ref UNCHANGED. Suite 559 pass/44 fail = EXACT v45 baseline.** |
-| 319.1 | IMPL — OPEN-E Shared Funding Source (BURNIE + ETH pool) | IMPL | OPENE-01..04 | Complete — 2 plans done: 319.1-01 (Wave 1 USER-approved 3-contract diff `42140ceb`: subscribe() 6th `fundingSource` param + Sub repack bools→flags +20-byte address + ETH/BURNIE routing across AfKing/Vault/sDGNRS) + 319.1-02 (Wave 2 TST `95e96532`+`4654a56e`: test-mirror offset re-derivation + 5-call-site subscribe ripple + 7 OPEN-E behavioral tests — cross-account ETH+BURNIE incl. window-1, LANDMINE-A exemption-spoof refusal, subscribe-only trust-the-sub auth; AfKingFundingWaterfall 14/14 + AfKingSubscription 9/9 + Concurrency 10/10 + CrankNonBrick 12/12 + RngFreeze 13/13, ZERO new failures vs the 318 baseline). OPENE-01..04 test-proven, stay Pending → attested at Phase 320 TERMINAL (VRF-01..05 precedent). Nothing pushed. |
-| 320 | AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure | TERMINAL | (re-attests all 46; owns 0 primarily) | **Complete — v46.0 SHIPPED**: 3-skill genuine-PARALLEL sweep (34 rows; 1 Tier-1 MEDIUM H-CANCEL-SWAP-MISS deferred v47) + delta-audit (RM+JGAS grep-clean) + regression (565/45, 0 contract regressions); 2 terminal commits (Commit 1 `16e9668a` + Commit 2 flip); `audit/FINDINGS-v46.0.md` chmod 444 |
+| 321 | SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | SPEC | BATCH-01 · BATCH-02 | Not started |
+| 322 | IMPL — The ONE Batched Contract Diff (all 7 items) | IMPL | PRESALE-01..13 · LOOT-01..06 · DGAS-01..04 · CPAY-01..03 · REDEEM-01..07 · DSPIN-01 · TOMB-01..03 | Not started |
+| 323 | TST — Repro-First + Same-Results Gas + Behavior/EV + Cancel-Tombstone Proofs | TST | DGAS-05 · DSPIN-02 · REDEEM-08 · TOMB-04 · TOMB-05 | Not started |
+| 324 | TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | TERMINAL | BATCH-03 (re-attests all 45) | Not started |
 
-**Coverage:** 46/46 requirements mapped (Phase 316: 4 · Phase 317: 26 · Phase 318: 5 · Phase 319: 7 · Phase 319.1: 4 · Phase 320 TERMINAL: re-attests all 46, owns 0 primarily); 0 orphaned; 0 duplicated. Full mapping in `.planning/REQUIREMENTS.md` Traceability table. JGAS-01..04 (jackpot two-call-split removal, enabled by RM-02's ETH-auto-rebuy removal) folded in 2026-05-23. OPEN-E (OPENE-01..04, shared funding source — full BURNIE + ETH pool) promoted from Deferred into scope 2026-05-24 at inserted Phase 319.1 (a SECOND batched USER-APPROVED `AfKing.sol` IMPL diff on top of the 317 batch; runs after GAS, before the terminal audit).
+**Coverage:** 45/45 requirements mapped (Phase 321 SPEC: 2 · Phase 322 IMPL: 37 · Phase 323 TST: 5 · Phase 324 TERMINAL: 1, re-attests all 45); 0 orphaned; 0 duplicated. Full mapping in `.planning/REQUIREMENTS.md` Traceability table and `.planning/ROADMAP.md` Coverage section. Per-category split: PRESALE 13 (all IMPL) · LOOT 6 (all IMPL) · DGAS 5 (4 IMPL + 05 TST) · CPAY 3 (all IMPL) · REDEEM 8 (7 IMPL + 08 TST) · DSPIN 2 (01 IMPL + 02 TST) · TOMB 5 (01–03 IMPL + 04/05 TST) · BATCH 3 (01–02 SPEC + 03 TERMINAL).
 
-**UI hint:** Phase 317 IMPL carries a `**UI hint**: yes` annotation in ROADMAP.md — the keeper-gated `batchPurchase` + crank entry surface interacts with the protocol's frontend/keeper layer (off-chain-discovered work lists, the "free BURNIE" / "click-a-button" crank UX). The off-chain indexer / webpage itself is OUT OF SCOPE (separate frontend track) per PROJECT.md, but the on-chain entry points are designed for that consumer.
+**Contract-boundary HARD STOP:** Phase 322 IMPL is the single contract phase — the batched diff is applied to `contracts/` and locally compiled/tested but HELD at the contract-commit boundary, never committed without explicit user hand-review of the diff (`feedback_pause_at_contract_phase_boundaries.md` + `feedback_manual_review_before_push.md`). No `contracts/` edits until Phase 322 (v46.0 frozen-source delta-audit baseline already established at closure).
 
-**Closure verdict (target):** `CRANK_DO_WORK SHIPPED; AFKING_SUBSCRIPTION SHIPPED; LEGACY_AFKING_MODE + FREE_ETH_AUTOREBUY REMOVED; BURNIE_FLIP_AUTOREBUY KEPT@75BPS; FAUCET_BOUNDED; SWEEP NON-BRICK + CONCURRENT-SAFE; FUNDING_WATERFALL + TWO-TIER_SKIP-KILL CORRECT; RNG_FREEZE_INTACT (+ obligations RETIRED by removal); JACKPOT_ETH_SPLIT REMOVED (single-call fits @305-ceiling); WWXRP_ZERO_REWARD; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`. **EMITTED 2026-05-24 with one amendment — `0 NEW_FINDINGS` → `1 MEDIUM FINDING (H-CANCEL-SWAP-MISS) DEFERRED→v47.0 [fix locked; SOURCE-TREE FROZEN held]`; all 11 other clauses hold verbatim (see `audit/FINDINGS-v46.0.md` §9a).**
+**UI hint:** None. v47.0 is a contract-accounting/behavior bundle (rake-free presale economics, lootbox-boon unification, redemption/Degenerette/AfKing internals) — no UI/frontend phase. The off-chain indexer / webpage stays OUT OF SCOPE (separate frontend track) per PROJECT.md.
+
+**Closure verdict (target, Phase 324):** `RAKE_FREE (20%_VAULT_SKIM + 62%_BURNIE_BONUS REMOVED); PRESALE_BOXES REPLACE EARLYBIRD (credit-gated, boon-less, 80/20, 50-ETH clamp-close + sweep + presaleOver latch); BURNIE_LOOTBOX REMOVED (terminal-paradox closed) + BURNIE→TICKETS KEPT; 3_ETH_LOOTBOX_CALLERS UNIFIED (full boons+passes, 10%-haircut fixed); DEGENERETTE_RESOLUTION WRITE-BATCHED SAME-RESULTS @ PER-CURRENCY_CAPS (ETH 25 / BURNIE 15 / WWXRP 5); UNIVERSAL_CLAIMABLE-PAY (claimablePool == Σ claimableWinnings BALANCED); SDGNRS_REDEMPTION_ETH HARD-SEGREGATED (underflow fixed) + BURNIE FLIP-CREDIT-AT-SUBMIT (BURNIE-can't-block-ETH; net mint 0); AFKING_CANCEL_TOMBSTONE RESTORED (H-CANCEL-SWAP-MISS RESOLVED_AT_V47); RNG_FREEZE_INTACT; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`. To be emitted at Phase 324 TERMINAL with the `MILESTONE_V47_AT_HEAD_<sha>` closure signal.
 
 ## Last Shipped Milestone
 
