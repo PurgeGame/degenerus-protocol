@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
 status: executing
-last_updated: "2026-05-24T08:44:00.050Z"
-last_activity: 2026-05-24
+last_updated: "2026-05-24T08:56:18.560Z"
+last_activity: 2026-05-24 -- Phase 319.1 planning complete
 progress:
   total_phases: 6
   completed_phases: 3
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 Phase: 319 (GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration (GAS)) — EXECUTING
 Plan: 5 of 5
-Status: Executing Phase 319 — Plans 01-04 complete (GAS-01 derivation + crank/sweep worst-case + JGAS-04 measured + GAS-02/03/04 levers proven + GAS-05 security-floor audit REMOVAL-CLEAN; Plan 05 receives the optional GAS-02 hoist disposition for the ONE USER-APPROVED contract gate)
-Last activity: 2026-05-24 -- 319-04 complete: CrankLeversAndPacking.t.sol 7/7 (GAS-02 one-creditFlip-per-tx proven behaviorally for both cranks, cranker-scoped to isolate box-winnings credits; GAS-03 grouping+homogeneity; GAS-04 Sub-1-slot byte-width-sum + uint48 cursor + no-new-hot-path-storage; G1-G13 guard byte-presence pinned RED-on-regression) + 319-GAS-05-GUARDRAILS.md (Scavenger->Skeptic->contract-auditor pass: G1-G13 reject-set VERIFIED-PRESENT, runs=200-not-runs=2 correction applied, 6 candidates dispositioned, verdict REMOVAL-CLEAN; SCAV-319-01 optional loop-invariant hoist surfaced approve-if-real-saving / no-op-if-already-hoisted -> Plan 05). 2 Rule-1 test-side fixes (cranker-scoped creditFlip count; struct-decl gate replacing a comment-only phrase). Zero contracts/ mutation; 71/71 green across the new suite + all adjacent crank/sweep/jackpot suites
+Status: Ready to execute
+Last activity: 2026-05-24 -- Phase 319.1 planning complete
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
