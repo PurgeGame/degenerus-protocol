@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
 status: executing
-last_updated: "2026-05-24T08:01:00.317Z"
+last_updated: "2026-05-24T08:18:55.887Z"
 last_activity: 2026-05-24
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 23
-  completed_plans: 21
+  total_plans: 25
+  completed_plans: 22
   percent: 50
 ---
 
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 ## Current Position
 
 Phase: 319 (GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration (GAS)) — EXECUTING
-Plan: 2 of 5
-Status: Executing Phase 319 — Plan 01 complete (GAS-01 derivation doc + GAS-06 placement baseline)
-Last activity: 2026-05-24 -- 319-01 complete: GAS-01 worst-case-first derivation doc + GAS-06 .gas-snapshot placement baseline; contracts/ clean
+Plan: 3 of 5
+Status: Executing Phase 319 — Plans 01-02 complete (GAS-01 derivation + crank worst-case measurement + JGAS-04 done; Plan 05 calibration inputs logged)
+Last activity: 2026-05-24 -- 319-02 complete: GAS-01 resolve-bet 10-spin worst case 726,944 gas + per-1-spin marginal 66,528 + open-box single materialization 137,944 (the two Plan 05 *_GAS_UNITS calibration marginals) + JGAS-04 305-winner re-frame (22.5M margin) + ~1.3M freed-autoRebuyState-SLOAD delta attributed; 13/13 green, 44 failing == exact v45 baseline, contracts/ clean
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
@@ -486,6 +486,7 @@ Audit deliverables:
 | 318 | 05 | ~6min | 3 | 1 file (test/fuzz/RngFreezeAndRemovalProofs.t.sol NEW, 869 lines, 13 tests) + 1 SUMMARY (SAFE-04 freeze-intact + REMOVE proofs; 13/13 green; zero contracts/ mutation) |
 | 318 | 06 | ~12min | 2 | 1 file (test/fuzz/JackpotSingleCallCorrectness.t.sol NEW, 561 lines, 8 tests) + 1 SUMMARY (JGAS-03 single-call 305-winner correctness + conservation + gas-fits 7.5M<30M + split-gone; 8/8 green; zero contracts/ mutation) |
 | Phase 319 P01 | ~5min | 2 tasks | 2 files |
+| Phase 319 P02 | 30min | 3 tasks | 3 files |
 
 ## Decisions
 
@@ -582,3 +583,4 @@ Audit deliverables:
 - [Phase 318]: 318-01: the 44 post-repair failures are ALL pre-existing behavioral/protocol families (panic-0x11 ticket-routing, RngLocked-vs-panic guards, InvalidBet, freeze assertions, + 8 invariant solvency/VRF-path counterexamples newly reachable since setUp works) — grep-proven ZERO touch afKing/subscribe/AF_KING (the one AfKing-referencing failing suite's only fail is an unrelated GNRUS test; its afKing test passes). Named set captured in 318-01-SUMMARY.md as the Wave-2+ no-new-failures anchor. NOT chased (out of scope per fixture-repair plan).
 - [Phase ?]: 319-01: CRANK_RESOLVE_BET_GAS_UNITS calibrates to the per-1-spin-item MARGINAL (NOT the 10-spin worst case) per REW-03/A4/SAFE-01 faucet floor; the 10-spin all-match is the GAS-01 MEASUREMENT worst case only
 - [Phase ?]: 319-01: GAS-06 +0% placement reference = the GREEN deterministic snapshot subset (StorageFoundationTest packing/slot/ticket-slot + LockRemovalTest purchase rows); 7 placement-adjacent FAILing baseline rows excluded
+- [Phase ?]: 319-02: GAS-01 crank worst cases MEASURED (resolve-bet 10-spin 726,944 gas / open-box 137,944 gas, both < 30M) + the two Plan 05 calibration marginals isolated (per-1-spin resolve 66,528 / flat per-box 137,944) + JGAS-04 complete (305-winner re-frame 22.5M margin + ~1.3M freed-autoRebuyState-SLOAD delta attributed structurally, no dead code)

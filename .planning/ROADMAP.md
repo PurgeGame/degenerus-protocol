@@ -177,7 +177,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 319-02-PLAN.md — GAS-01 resolve-bet 10-spin + open-box worst-case measurement + per-item marginals; JGAS-04 305-winner re-frame + freed-SLOAD delta attribution
+- [x] 319-02-PLAN.md — GAS-01 resolve-bet 10-spin + open-box worst-case measurement + per-item marginals; JGAS-04 305-winner re-frame + freed-SLOAD delta attribution
 - [ ] 319-03-PLAN.md — GAS-01 sweep-per-player worst-case measurement + per-player marginal (BOUNTY_ETH_TARGET deploy-param input)
 - [ ] 319-04-PLAN.md — GAS-02/03/04 lever + packing assertions; GAS-05 Scavenger→Skeptic→contract-auditor security-floor pass (G1-G13 intact)
 
