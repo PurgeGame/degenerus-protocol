@@ -67,24 +67,22 @@ interface ICoinflip {
 ///         `subscriptionOf(address) returns (Sub memory)` name the type without
 ///         `AfKing.Sub` namespacing.
 /// @dev Maximal-packing layout (single 32-byte slot):
-///        offset 0  uint8  dailyQuantity        — 0 = paused / never-subscribed (minimum 1 when active)
-///        offset 1  bool   drainGameCreditFirst
-///        offset 2  bool   useTickets           — default false = lootbox mode
-///        offset 3  uint32 lastSweptDay         — keeper-local day index of the last successful buy
-///        offset 7  uint32 paidThroughDay       — 30-day rolling prepay window endpoint
-///        offset 11 uint8  reinvestPct          — claimable reinvest percentage (0..100), 0 = no reinvest
-///        offset 12 uint8  flags                — bit 0 = windowPaid (1 = current window paid via burnForKeeper)
-///      Offsets 13-31 are free padding. Storage slots 0-3 (the four state
+///        offset 0  uint8   dailyQuantity   — 0 = paused / never-subscribed (minimum 1 when active)
+///        offset 1  uint32  lastSweptDay    — keeper-local day index of the last successful buy
+///        offset 5  uint32  paidThroughDay  — 30-day rolling prepay window endpoint
+///        offset 9  uint8   reinvestPct     — claimable reinvest percentage (0..100), 0 = no reinvest
+///        offset 10 uint8   flags           — bit 0 = windowPaid, bit 1 = drainGameCreditFirst, bit 2 = useTickets
+///        offset 11 address fundingSource   — wallet whose _poolOf ETH + BURNIE fund this sub; address(0) = self
+///      Offset 31 is free padding. Storage slots 0-3 (the four state
 ///      mappings/array below) are pinned; this struct occupies a single slot
 ///      reached through `_subOf` at slot 1.
 struct Sub {
     uint8 dailyQuantity;
-    bool drainGameCreditFirst;
-    bool useTickets;
     uint32 lastSweptDay;
     uint32 paidThroughDay;
     uint8 reinvestPct;
     uint8 flags;
+    address fundingSource;
 }
 
 /// @title AfKing
@@ -237,6 +235,14 @@ contract AfKing {
     ///      cancel; a free or expired window is deleted.
     uint8 internal constant FLAG_WINDOW_PAID = 1;
 
+    /// @dev drainGameCreditFirst bit within Sub.flags — when set the sweep spends
+    ///      protocol-side claimable credit before tapping pool ETH.
+    uint8 internal constant FLAG_DRAIN_FIRST = 2;
+
+    /// @dev useTickets bit within Sub.flags — set = ticket mint mode, clear =
+    ///      lootbox mode.
+    uint8 internal constant FLAG_USE_TICKETS = 4;
+
     /*------------------------------------------------------------------
                               Immutables (3 economic targets only)
     ------------------------------------------------------------------*/
@@ -345,12 +351,30 @@ contract AfKing {
     ///        paused sentinel handled by setDailyQuantity(0).
     /// @param reinvestPct Claimable reinvest percentage, 0..100. The effective
     ///        daily buy is max(dailyQuantity, floor(claimable * reinvestPct / price)).
+    /// @param fundingSource Wallet whose `_poolOf` ETH and BURNIE fund this
+    ///        subscription's keeper spends — the first-window SUB-01 burn, the
+    ///        day-31 auto-extract burn, and the per-day ETH draw all resolve to
+    ///        this address. `address(0)` = self. A non-zero, non-self source is
+    ///        honored ONLY when it has operator-approved the subscriber on the
+    ///        game (`IGame.isOperatorApproved(fundingSource, subscriber)`),
+    ///        checked at subscribe() ONLY — never at the day-31 renewal, never
+    ///        per-draw.
+    /// @dev Subscribe-time auth only: a later `setOperatorApproval(subscriber,
+    ///      false)` by the source does NOT stop an active sub — the renewal trusts
+    ///      the stored source and keeps drawing/burning it. The source halts draws
+    ///      by defunding (`withdraw()` its pool / spending down BURNIE); the
+    ///      subscriber halts by cancelling; re-pointing the source means
+    ///      re-subscribing (which re-checks). BURNIE blast-radius caveat: the same
+    ///      approval also authorizes burning the source's general-wallet BURNIE and
+    ///      pending coinflip — sharper than the pre-funded ETH escrow; the named
+    ///      deferred tighter alternative is a dedicated `allowBurnieFunding[S][M]`.
     function subscribe(
         address player,
         bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        uint8 reinvestPct
+        uint8 reinvestPct,
+        address fundingSource
     ) external payable {
         if (dailyQuantity == 0) revert InvalidDailyQuantity();
         if (reinvestPct > 100) revert InvalidReinvestPct();
@@ -361,6 +385,17 @@ contract AfKing {
             if (!IGame(ContractAddresses.GAME).isOperatorApproved(subscriber, msg.sender)) {
                 revert NotApproved();
             }
+        }
+
+        // OPENE-04 — a non-zero, non-self fundingSource must have operator-approved
+        // the subscriber on the game. address(0) (self) short-circuits the read;
+        // checked HERE only — the renewal and per-draw paths never re-check.
+        if (
+            fundingSource != address(0) &&
+            fundingSource != subscriber &&
+            !IGame(ContractAddresses.GAME).isOperatorApproved(fundingSource, subscriber)
+        ) {
+            revert NotApproved();
         }
 
         // msg.value > 0 credits the subscriber's pool. Effects-first CEI; never
@@ -378,10 +413,13 @@ contract AfKing {
         uint32 anchor = s.paidThroughDay > today ? s.paidThroughDay : today;
 
         s.dailyQuantity = dailyQuantity;
-        s.drainGameCreditFirst = drainGameCreditFirst;
-        s.useTickets = useTickets;
+        if (drainGameCreditFirst) s.flags |= FLAG_DRAIN_FIRST;
+        else s.flags &= ~FLAG_DRAIN_FIRST;
+        if (useTickets) s.flags |= FLAG_USE_TICKETS;
+        else s.flags &= ~FLAG_USE_TICKETS;
         s.reinvestPct = reinvestPct;
         s.paidThroughDay = anchor + WINDOW_DAYS;
+        s.fundingSource = fundingSource;
 
         _addToSet(subscriber);
         emit SubscriptionUpdated(subscriber, dailyQuantity, drainGameCreditFirst, useTickets, reinvestPct);
@@ -393,7 +431,10 @@ contract AfKing {
         } else {
             uint256 mp = IGame(ContractAddresses.GAME).mintPrice();
             uint256 cost = (SUB_COST_ETH_TARGET * PRICE_COIN_UNIT) / mp;
-            uint256 burned = IBurnie(ContractAddresses.COIN).burnForKeeper(subscriber, cost);
+            uint256 burned = IBurnie(ContractAddresses.COIN).burnForKeeper(
+                s.fundingSource == address(0) ? subscriber : s.fundingSource,
+                cost
+            );
             if (burned != cost) revert BurnieChargeFailed();
             s.flags |= FLAG_WINDOW_PAID;
         }
@@ -415,7 +456,7 @@ contract AfKing {
             bool preservePaidWindow = (s.flags & FLAG_WINDOW_PAID) != 0 && s.paidThroughDay > _currentDay();
             if (preservePaidWindow) {
                 s.dailyQuantity = 0;
-                emit SubscriptionUpdated(msg.sender, 0, s.drainGameCreditFirst, s.useTickets, s.reinvestPct);
+                emit SubscriptionUpdated(msg.sender, 0, (s.flags & FLAG_DRAIN_FIRST) != 0, (s.flags & FLAG_USE_TICKETS) != 0, s.reinvestPct);
             } else {
                 delete _subOf[msg.sender];
                 emit SubscriptionUpdated(msg.sender, 0, false, false, 0);
@@ -423,23 +464,25 @@ contract AfKing {
             return;
         }
         s.dailyQuantity = q;
-        emit SubscriptionUpdated(msg.sender, q, s.drainGameCreditFirst, s.useTickets, s.reinvestPct);
+        emit SubscriptionUpdated(msg.sender, q, (s.flags & FLAG_DRAIN_FIRST) != 0, (s.flags & FLAG_USE_TICKETS) != 0, s.reinvestPct);
     }
 
     /// @notice Toggle caller's drain-game-credit-first flag.
     function setDrainGameCreditFirst(bool flag) external {
         if (_subscriberIndex[msg.sender] == 0) revert NotSubscribed();
         Sub storage s = _subOf[msg.sender];
-        s.drainGameCreditFirst = flag;
-        emit SubscriptionUpdated(msg.sender, s.dailyQuantity, flag, s.useTickets, s.reinvestPct);
+        if (flag) s.flags |= FLAG_DRAIN_FIRST;
+        else s.flags &= ~FLAG_DRAIN_FIRST;
+        emit SubscriptionUpdated(msg.sender, s.dailyQuantity, flag, (s.flags & FLAG_USE_TICKETS) != 0, s.reinvestPct);
     }
 
     /// @notice Toggle caller's mint mode. true = tickets, false = lootboxes.
     function setMode(bool useTickets) external {
         if (_subscriberIndex[msg.sender] == 0) revert NotSubscribed();
         Sub storage s = _subOf[msg.sender];
-        s.useTickets = useTickets;
-        emit SubscriptionUpdated(msg.sender, s.dailyQuantity, s.drainGameCreditFirst, useTickets, s.reinvestPct);
+        if (useTickets) s.flags |= FLAG_USE_TICKETS;
+        else s.flags &= ~FLAG_USE_TICKETS;
+        emit SubscriptionUpdated(msg.sender, s.dailyQuantity, (s.flags & FLAG_DRAIN_FIRST) != 0, useTickets, s.reinvestPct);
     }
 
     /// @notice Update caller's claimable reinvest percentage (0..100).
@@ -448,7 +491,7 @@ contract AfKing {
         if (reinvestPct > 100) revert InvalidReinvestPct();
         Sub storage s = _subOf[msg.sender];
         s.reinvestPct = reinvestPct;
-        emit SubscriptionUpdated(msg.sender, s.dailyQuantity, s.drainGameCreditFirst, s.useTickets, reinvestPct);
+        emit SubscriptionUpdated(msg.sender, s.dailyQuantity, (s.flags & FLAG_DRAIN_FIRST) != 0, (s.flags & FLAG_USE_TICKETS) != 0, reinvestPct);
     }
 
     /*------------------------------------------------------------------
@@ -584,7 +627,10 @@ contract AfKing {
                     // PAID branch — all-or-nothing burnForKeeper. On shortfall the
                     // burn took nothing, so there is nothing to refund; auto-pause.
                     uint256 extractCost = (SUB_COST_ETH_TARGET * PRICE_COIN_UNIT) / mp;
-                    uint256 burned = IBurnie(ContractAddresses.COIN).burnForKeeper(player, extractCost);
+                    uint256 burned = IBurnie(ContractAddresses.COIN).burnForKeeper(
+                        sub.fundingSource == address(0) ? player : sub.fundingSource,
+                        extractCost
+                    );
                     if (burned != extractCost) {
                         // Auto-pause: sentinel write, swap-pop, emit, continue
                         // WITHOUT advancing the cursor (the swap-pop occupant at
@@ -631,7 +677,7 @@ contract AfKing {
 
             // (5) LootboxFloor transient skip (lootbox mode only) — stays in the
             // set, retries next sweep.
-            if (!sub.useTickets && cost < LOOTBOX_MIN) {
+            if ((sub.flags & FLAG_USE_TICKETS) == 0 && cost < LOOTBOX_MIN) {
                 emit PlayerSkipped(player, 4);
                 unchecked {
                     ++cursor;
@@ -640,10 +686,16 @@ contract AfKing {
                 continue;
             }
 
+            // OPENE-02 — resolve the once-per-iteration funding source. address(0)
+            // = self; the ETH skip-gate read and the CEI debit both key on this
+            // same `src`. The VAULT/SDGNRS exemption below stays keyed on the
+            // un-spoofable `player`, never `src`.
+            address src = sub.fundingSource == address(0) ? player : sub.fundingSource;
+
             // (4) Funding waterfall — preserved byte-faithfully.
             MintPaymentKind payKind;
             uint256 msgValue;
-            if (!sub.drainGameCreditFirst) {
+            if ((sub.flags & FLAG_DRAIN_FIRST) == 0) {
                 payKind = MintPaymentKind.DirectEth;
                 msgValue = cost;
             } else {
@@ -669,7 +721,7 @@ contract AfKing {
             // identity — a funding skip is transient for them (no-op-and-retry,
             // stays in the set). The exemption is the pinned-address branch only;
             // there is no settable exemption flag.
-            if (_poolOf[player] < msgValue) {
+            if (_poolOf[src] < msgValue) {
                 if (player == ContractAddresses.VAULT || player == ContractAddresses.SDGNRS) {
                     emit PlayerSkipped(player, 3);
                     unchecked {
@@ -689,9 +741,9 @@ contract AfKing {
             }
 
             // (7) CEI debit BEFORE the batched external call. Unchecked safe: the
-            // line above guarantees _poolOf[player] >= msgValue.
+            // line above guarantees _poolOf[src] >= msgValue.
             unchecked {
-                _poolOf[player] -= msgValue;
+                _poolOf[src] -= msgValue;
             }
 
             // Accumulate this player's slice for the single batched purchase. The

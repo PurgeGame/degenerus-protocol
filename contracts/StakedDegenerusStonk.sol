@@ -61,7 +61,8 @@ interface IAfKingSubscribe {
         bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        uint8 reinvestPct
+        uint8 reinvestPct,
+        address fundingSource
     ) external payable;
 }
 
@@ -376,7 +377,7 @@ contract StakedDegenerusStonk {
         // (player == msg.sender). sDGNRS holds the permanent deity pass (granted in
         // the DegenerusGame constructor), so the keeper's pass-OR-pay gate takes the
         // free 30-day extend at zero cost.
-        afKing.subscribe(address(this), true, false, 1, 2);
+        afKing.subscribe(address(this), true, false, 1, 2, address(0));
         coinflip.setCoinflipAutoRebuy(address(this), true, 0);
     }
 
