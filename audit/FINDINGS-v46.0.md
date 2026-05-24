@@ -7,8 +7,8 @@ audit_baseline: 62fb514bfcc8ad042a45cef960e5ff0ff6fbb801
 audit_baseline_signal: MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801
 v44_baseline_signal: MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349
 source_tree_frozen_ref: 30b5c89c
-audit_subject_head: "<commit-1-sha>"
-closure_signal: MILESTONE_V46_AT_HEAD_<commit-1-sha>
+audit_subject_head: "16e9668a6de35cc0c809d81ce960aee137950687"
+closure_signal: MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687
 deliverable: audit/FINDINGS-v46.0.md
 new_findings: 1
 new_findings_disposition: H-CANCEL-SWAP-MISS (MEDIUM) DEFERRED→v47.0 [fix locked; SOURCE-TREE FROZEN held]
@@ -18,7 +18,7 @@ new_findings_disposition: H-CANCEL-SWAP-MISS (MEDIUM) DEFERRED→v47.0 [fix lock
 
 ## 1. Audit Subject + Baseline
 
-**Audit Baseline.** v45.0 closure HEAD `62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` (closure signal `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801`, carry-forward from the v45.0 minimal-close). v44 chain reference: `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`. v46.0 closure HEAD is `MILESTONE_V46_AT_HEAD_<commit-1-sha>` (resolved at Phase 320 Commit 1 per the 2-commit sequential-SHA orchestration; see §9c). SOURCE-TREE FROZEN reference for the terminal: `30b5c89c` (contracts/+test/ byte-frozen since; commits after are planning-only).
+**Audit Baseline.** v45.0 closure HEAD `62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` (closure signal `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801`, carry-forward from the v45.0 minimal-close). v44 chain reference: `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`. v46.0 closure HEAD is `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687` (resolved at Phase 320 Commit 1 per the 2-commit sequential-SHA orchestration; see §9c). SOURCE-TREE FROZEN reference for the terminal: `30b5c89c` (contracts/+test/ byte-frozen since; commits after are planning-only).
 
 **Subject.** Every v45→v46 `contracts/` commit (`git log 62fb514b..HEAD -- contracts/`), complete and cross-checked against the STATE.md ledger:
 - `df4ef365` — the batched Phase 317 ADD+REMOVE diff: do-work crank + subscription (new `AfKing.sol` keeper) + legacy AFKing/ETH-auto-rebuy removal (RM) + the JGAS jackpot two-call-split removal. The keeper-reconciliation + slot gap-closure (the "317-08 family") landed INSIDE this commit.
@@ -150,10 +150,10 @@ No intra-milestone forward-cite residual (all Wave-1 placeholders resolved into 
 The deviation from the locked target is the single `0 NEW_FINDINGS` → `1 MEDIUM FINDING … DEFERRED→v47.0` clause, a direct consequence of the USER adjudication. All other 11 clauses hold verbatim.
 
 ### 9b. 6-Phase Wave Summary
-Phase 316 (SPEC design-lock) + 317 (IMPL `df4ef365`) + 318 (TST — fixture repair + SAFE/JGAS proofs) + 319 (GAS `e4014f91`/`795e679d`) + 319.1 (OPEN-E IMPL `42140ceb`/`e1baa978`) + 320 (TERMINAL — this deliverable; SOURCE-TREE FROZEN; 2 AGENT-COMMITTED commits). Closure signal: `MILESTONE_V46_AT_HEAD_<commit-1-sha>`.
+Phase 316 (SPEC design-lock) + 317 (IMPL `df4ef365`) + 318 (TST — fixture repair + SAFE/JGAS proofs) + 319 (GAS `e4014f91`/`795e679d`) + 319.1 (OPEN-E IMPL `42140ceb`/`e1baa978`) + 320 (TERMINAL — this deliverable; SOURCE-TREE FROZEN; 2 AGENT-COMMITTED commits). Closure signal: `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`.
 
 ### 9c. Closure Signal
-**`MILESTONE_V46_AT_HEAD_<commit-1-sha>`** (the `<commit-1-sha>` placeholder resolves to the Phase 320 Commit 1 SHA at Commit 2). Verbatim propagation targets (resolved at Commit 2):
+**`MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`** (the `16e9668a6de35cc0c809d81ce960aee137950687` placeholder resolves to the Phase 320 Commit 1 SHA at Commit 2). Verbatim propagation targets (resolved at Commit 2):
 1. Frontmatter `closure_signal:` + `audit_subject_head:`.
 2. §1 Audit Subject prose.
 3. §3.A / §9b references.

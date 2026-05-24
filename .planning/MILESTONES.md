@@ -1,5 +1,23 @@
 # Milestones
 
+## v46.0 Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal (Closed: 2026-05-24)
+
+**Shape:** 6-phase FEATURE milestone — 316 SPEC (design-lock) + 317 IMPL (batched ADD+REMOVE `df4ef365`) + 318 TST + 319 GAS (`e4014f91`/`795e679d`) + 319.1 OPEN-E IMPL (`42140ceb`/`e1baa978`) + 320 TERMINAL. Two USER-APPROVED contract IMPL phases (317 + the inserted 319.1 OPEN-E diff).
+
+**Closure signal:** `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687` (resolved at the Phase 320 Commit 1 per the 2-commit sequential-SHA orchestration; propagated verbatim to the FINDINGS verbatim locations + ROADMAP + STATE + this entry).
+
+**Audit baseline → subject:** v45.0 closure HEAD `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801` → v46.0 closure HEAD. Subject = `df4ef365` (317 batch — new `AfKing.sol` keeper + RM removal + JGAS split removal + keeper/slot gap-closure) + `e4014f91`/`795e679d` (GAS pegs + CR-01) + `42140ceb`/`e1baa978` (OPEN-E + WR-01) + `745cd63d` (fixture).
+
+**Headline:** Shipped the permissionless do-work crank + the AfKing auto-rebuy subscription (`StreakKeeperV2` moved in-tree as `AfKing.sol`) + the OPEN-E shared funding source (`Sub.fundingSource`, operator-approval-at-subscribe auth across AfKing/Vault/sDGNRS). Removed the legacy in-game AFKing mode + free ETH auto-rebuy (BURNIE flip-autorebuy KEPT @ flat 75bps) and the two-call jackpot-ETH split (single-call @305-winner ceiling). RNG-freeze intact + its obligations RETIRED by the ETH-auto-rebuy removal.
+
+**Adversarial pass (Phase 320):** 3-skill genuine PARALLEL_SUBAGENT — `/contract-auditor` anchor + `/zero-day-hunter` ‖ `/economic-analyst` (orchestrator held the Task tool); `/degen-skeptic` OUT per `D-271-ADVERSARIAL-02`. **34 disposition rows: 29 NEGATIVE-VERIFIED + 4 SAFE_BY_DESIGN + 1 FINDING_CANDIDATE.** The four D-03 OPEN-E residual structural charges PROVEN; the D-02 BURNIE-funding overload + the trust-the-sub temporal bound recorded SAFE_BY_DESIGN. Delta-audit: RM + JGAS kill sets grep-clean (ZERO); OPEN-E default-self byte-identical; JGAS daily-ETH single-call @305 (159/95/50/1), nothing stranded. Regression: NON-WIDENING (zero v46 contract regressions); KNOWN-ISSUES + the BURNIE win/loss RNG path byte-unmodified; suite 565/45 (44 named-baseline + 1 stale testGas04, test-only). SOURCE-TREE FROZEN held (zero contracts/+test/ mutation in Phase 320). Disposition in `.planning/phases/320-*/320-01-ADVERSARIAL-LOG.md`; full deliverable `audit/FINDINGS-v46.0.md` (9-section, chmod 444).
+
+**1 MEDIUM finding deferred to v47.0:** **H-CANCEL-SWAP-MISS** — `setDailyQuantity(0)` (`AfKing.sol:459`) swap-pops on external cancel instead of the LOCKED SUB-07 in-place tombstone (`316-SPEC.md:152`), relocating a pending tail behind a persisted mid-day `_sweepCursor` → that sub misses a day → the per-consecutive-level mint streak resets (up to −50% activity-score multiplier). Tier-1 (single skill `/zero-day-hunter`), USER-adjudicated DEFER-to-v47.0 with the fix locked (restore the in-place tombstone + add the in-sweep reclaim branch). Plus the testGas04 stale gas-test assertion (test-only). Both → `.planning/PLAN-V47-AFKING-CANCEL-TOMBSTONE.md` (v47 manifest item 7).
+
+**Closure verdict:** `CRANK_DO_WORK SHIPPED; AFKING_SUBSCRIPTION SHIPPED; LEGACY_AFKING_MODE + FREE_ETH_AUTOREBUY REMOVED; BURNIE_FLIP_AUTOREBUY KEPT@75BPS; FAUCET_BOUNDED; SWEEP NON-BRICK + CONCURRENT-SAFE [cancel-tombstone miss H-CANCEL-SWAP-MISS → v47.0]; FUNDING_WATERFALL + TWO-TIER_SKIP-KILL CORRECT; RNG_FREEZE_INTACT (+ obligations RETIRED by removal); JACKPOT_ETH_SPLIT REMOVED (single-call fits @305-ceiling); WWXRP_ZERO_REWARD; 1 MEDIUM FINDING (H-CANCEL-SWAP-MISS) DEFERRED→v47.0 [fix locked; SOURCE-TREE FROZEN held]; KNOWN_ISSUES_UNMODIFIED`.
+
+**Result:** 46/46 requirements re-attested at closure (Phase 320 owns 0 primarily; OPENE-01..04 attest here). 2 USER-APPROVED contract commits this milestone (317 `df4ef365` + 319.1 `42140ceb`/`e1baa978`). v47.0 handoff: the 7-item scope manifest (`.planning/PLAN-V47-MILESTONE-SCOPE.md`).
+
 ## v45.0 VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit (Closed: 2026-05-23 — minimal close)
 
 **Shape:** 7-phase consolidate-forward milestone (309 SPEC + 310 IMPL groundwork; 311 SPEC + 312 IMPL + 313 TST + 314 SWEEP active; 315 TERMINAL **not run** — closed via user-approved minimal close). 30 / 31 requirements satisfied; 1 WAIVED (AUDIT-01 formal FINDINGS-v45.0.md deliverable skipped per user).

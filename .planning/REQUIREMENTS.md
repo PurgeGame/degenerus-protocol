@@ -122,6 +122,8 @@ Promoted from Deferred 2026-05-24. One funding wallet covers BOTH the BURNIE sub
 
 Each requirement maps to exactly one phase (primary verification owner). The full add+remove design is *locked* at Phase 316 SPEC and *consumed* by every downstream phase; the table below records the single phase that owns each requirement's acceptance. Phase 320 (TERMINAL) re-attests all 46 at the closure verdict and owns no requirement primarily.
 
+**Phase 320 TERMINAL closure (2026-05-24 — SHIPPED, signal `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`):** all 46 requirements re-attested; OPENE-01..04 attested (319.1 VERIFICATION 13/13 + 320-01 SWP-OPENE NEGATIVE-VERIFIED) → flipped Complete. **One MEDIUM finding on the SUB-07 cancel-tombstone path (H-CANCEL-SWAP-MISS) is DEFERRED to v47.0 with the fix locked** — SUB-07 shipped; the cancel-relocation fix (restore the locked in-place tombstone) lands in v47.0 (`.planning/PLAN-V47-AFKING-CANCEL-TOMBSTONE.md`). SOURCE-TREE FROZEN held (zero contracts/+test/ mutation in Phase 320).
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PROTO-01 | Phase 316 | Complete |
@@ -166,10 +168,10 @@ Each requirement maps to exactly one phase (primary verification owner). The ful
 | GAS-05 | Phase 319 | Complete |
 | GAS-06 | Phase 319 | Complete |
 | JGAS-04 | Phase 319 | Complete |
-| OPENE-01 | Phase 319.1 | Pending |
-| OPENE-02 | Phase 319.1 | Pending |
-| OPENE-03 | Phase 319.1 | Pending |
-| OPENE-04 | Phase 319.1 | Pending |
+| OPENE-01 | Phase 319.1 (attested at Phase 320 TERMINAL) | Complete |
+| OPENE-02 | Phase 319.1 (attested at Phase 320 TERMINAL) | Complete |
+| OPENE-03 | Phase 319.1 (attested at Phase 320 TERMINAL) | Complete |
+| OPENE-04 | Phase 319.1 (attested at Phase 320 TERMINAL) | Complete |
 
 **Coverage:**
 - v46.0 requirements: 46 total (PROTO 5 · CRANK 4 · REW 4 · SUB 9 · RM 6 · SAFE 4 · GAS 6 · JGAS 4 · OPENE 4)
