@@ -201,10 +201,16 @@ Plans:
   4. Cross-account funding requires `isOperatorApproved(S, M)`, checked at subscribe + day-31 renewal only; revoke reverts the draw to self within ≤1 renewal window; the BURNIE blast-radius caveat + dedicated-flag alternative are documented (OPENE-04).
   5. Single batched USER-APPROVED `contracts/AfKing.sol` diff presented once at phase end (nothing pre-approved); zero unrelated `contracts/` / `test/` mutation; the default-self path (`fundingSource == 0`) is behavior-identical to pre-OPEN-E.
 
-**Plans:** not yet planned
+**Plans:** 2 plans in 2 waves
 
 Plans:
-- [ ] (run `/gsd-plan-phase 319.1` to break down)
+**Wave 1** *(the single USER-APPROVAL gate — `autonomous: false`; the one batched `contracts/AfKing.sol` diff)*
+
+- [ ] 319.1-01-PLAN.md — Apply the OPEN-E `contracts/AfKing.sol` diff as ONE batched USER-APPROVED change: `Sub` bool→`flags` repack + `address fundingSource` field + caller-scoped `setFundingSource` setter, the ETH-draw + both `burnForKeeper` sites routed to the resolved source, and the cross-account operator-approval gate at subscribe + day-31 renewal only (both landmines preserved). [OPENE-01..04]
+
+**Wave 2** *(blocked on the approved Wave-1 commit — AGENT-COMMITTED test sync)*
+
+- [ ] 319.1-02-PLAN.md — Re-derive the `Sub` packed-offset test-mirror constants across all three AfKing test files from the post-repack `forge inspect`, add OPEN-E behavioral coverage (default-self equivalence, cross-account ETH+BURNIE funding, the Vault/sDGNRS exemption-spoof refusal, subscribe/renewal auth gating), and prove the full AfKing suite green with no slot drift. [OPENE-01..04]
 
 ### Phase 320: AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure (TERMINAL)
 
