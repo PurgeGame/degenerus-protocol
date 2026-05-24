@@ -210,7 +210,7 @@ Plans:
 
 **Wave 2** *(blocked on the approved Wave-1 commit — AGENT-COMMITTED test sync)*
 
-- [ ] 319.1-02-PLAN.md — Re-derive the `Sub` packed-offset test-mirror constants across the three AfKing test files from the post-repack `forge inspect`, update every `subscribe(...)` test call site to the new `fundingSource` param, add OPEN-E behavioral coverage (default-self equivalence, cross-account ETH+BURNIE funding incl. window-1, the Vault/sDGNRS exemption-spoof refusal, subscribe-ONLY auth gating + revoke-does-not-stop-active-sub), and prove the full AfKing suite green with no slot drift. [OPENE-01..04]
+- [x] 319.1-02-PLAN.md — Re-derive the `Sub` packed-offset test-mirror constants across the three AfKing test files from the post-repack `forge inspect`, update every `subscribe(...)` test call site to the new `fundingSource` param, add OPEN-E behavioral coverage (default-self equivalence, cross-account ETH+BURNIE funding incl. window-1, the Vault/sDGNRS exemption-spoof refusal, subscribe-ONLY auth gating + revoke-does-not-stop-active-sub), and prove the full AfKing suite green with no slot drift. [OPENE-01..04]
 
 ### Phase 320: AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure (TERMINAL)
 

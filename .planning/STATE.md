@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v46.0
 milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
 status: executing
-last_updated: "2026-05-24T10:14:50.984Z"
-last_activity: 2026-05-24 -- Phase 319.1 execution started
+last_updated: "2026-05-24T10:51:39.088Z"
+last_activity: 2026-05-24 -- Phase 319.1 Wave 2 (319.1-02 TST) complete
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 25
-  completed_plans: 25
-  percent: 67
+  completed_plans: 27
+  percent: 83
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 ## Current Position
 
-Phase: 319.1 (impl-open-e-shared-funding-source-burnie-and-eth-pool) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 319.1
-Last activity: 2026-05-24 -- Phase 319.1 execution started
+Phase: 319.1 (impl-open-e-shared-funding-source-burnie-and-eth-pool) — COMPLETE (both plans done)
+Plan: 2 of 2
+Status: Phase 319.1 complete — Wave 1 contract diff (42140ceb) + Wave 2 test sync committed; OPENE-01..04 test-proven, attested at Phase 320 TERMINAL. Next = /gsd-execute-phase 320 on user direction.
+Last activity: 2026-05-24 -- Phase 319.1 Wave 2 (319.1-02 TST) complete
 
 ## Current Milestone Phases (v46.0 — IN PROGRESS, started 2026-05-23)
 
@@ -39,7 +39,7 @@ Last activity: 2026-05-24 -- Phase 319.1 execution started
 | 317 | IMPL — Batched ADD+REMOVE Contract Diff + Paired Keeper Rework | IMPL | PROTO-02..05 · CRANK-01..04 · REW-01..04 · SUB-01..08 · RM-01/02/03/05/06 · JGAS-02 | Not started |
 | 318 | TST — Subscription + Crank Correctness + Removal Proofs | TST | SAFE-01..04 · JGAS-03 (+ testable acceptance of SUB/CRANK/REW/RM) | Complete — all 6 plans done: 318-01 (fixture repair, SAFE-04) + 318-02 (SAFE-01 crank faucet-resistance, CrankFaucetResistance.t.sol 10/10) + 318-03 (SAFE-02 non-brick + SUB/PROTO acceptance, CrankNonBrick.t.sol 12/12 + AfKingSubscription.t.sol 7/7) + 318-04 (SAFE-03 concurrency + funding waterfall + two-tier skip-kill, AfKingConcurrency.t.sol 10/10 + AfKingFundingWaterfall.t.sol 9/9) + 318-05 (SAFE-04 RNG-freeze intact + REMOVE proofs, RngFreezeAndRemovalProofs.t.sol 13/13) + 318-06 (JGAS-03 single-call 305-winner daily-ETH correctness, JackpotSingleCallCorrectness.t.sol 8/8 — worst-case 305-winner call 7.5M gas < 30M) done |
 | 319 | GAS — Worst-Case-First Gas Pass + 0.5 gwei Peg Calibration | GAS | GAS-01..06 · JGAS-04 | Complete — all 5 plans done (319-01 placement-ref + 319-02 GAS-01 crank worst-cases + JGAS-04 + 319-03 sweep marginal + 319-04 GAS-05 removal-clean + 319-05 GAS-06 OUTCOME-B calibration `e4014f91`: CRANK_RESOLVE_BET_GAS_UNITS 120_000→66_528, CRANK_OPEN_BOX_GAS_UNITS 120_000→137_944, placement +0%, SAFE-01 round-trip≤0 preserved). **CR-01 correction `795e679d` (2026-05-24): CRANK_OPEN_BOX_GAS_UNITS 137_944→71_203 — the box peg was mis-pegged to the single-box TOTAL (bundling per-tx fixed overhead into one box → SAFE-01 box-faucet OPEN for cold-bust batches); corrected to the measured per-box MARGINAL 71_203 (≈ resolve spin 66,528). WR-01 multi-box round-trip test added; WR-02 JGAS-04 band re-framed; placement still +0%; resolve 66_528 + 0.5 gwei ref UNCHANGED. Suite 559 pass/44 fail = EXACT v45 baseline.** |
-| 319.1 | IMPL — OPEN-E Shared Funding Source (BURNIE + ETH pool) | IMPL | OPENE-01..04 | Not started (INSERTED 2026-05-24 — runs after 319, before the terminal audit) |
+| 319.1 | IMPL — OPEN-E Shared Funding Source (BURNIE + ETH pool) | IMPL | OPENE-01..04 | Complete — 2 plans done: 319.1-01 (Wave 1 USER-approved 3-contract diff `42140ceb`: subscribe() 6th `fundingSource` param + Sub repack bools→flags +20-byte address + ETH/BURNIE routing across AfKing/Vault/sDGNRS) + 319.1-02 (Wave 2 TST `95e96532`+`4654a56e`: test-mirror offset re-derivation + 5-call-site subscribe ripple + 7 OPEN-E behavioral tests — cross-account ETH+BURNIE incl. window-1, LANDMINE-A exemption-spoof refusal, subscribe-only trust-the-sub auth; AfKingFundingWaterfall 14/14 + AfKingSubscription 9/9 + Concurrency 10/10 + CrankNonBrick 12/12 + RngFreeze 13/13, ZERO new failures vs the 318 baseline). OPENE-01..04 test-proven, stay Pending → attested at Phase 320 TERMINAL (VRF-01..05 precedent). Nothing pushed. |
 | 320 | AUDIT — Adversarial Sweep + Add/Remove Delta Audit + Closure | TERMINAL | (re-attests all 46; owns 0 primarily) | Not started |
 
 **Coverage:** 46/46 requirements mapped (Phase 316: 4 · Phase 317: 26 · Phase 318: 5 · Phase 319: 7 · Phase 319.1: 4 · Phase 320 TERMINAL: re-attests all 46, owns 0 primarily); 0 orphaned; 0 duplicated. Full mapping in `.planning/REQUIREMENTS.md` Traceability table. JGAS-01..04 (jackpot two-call-split removal, enabled by RM-02's ETH-auto-rebuy removal) folded in 2026-05-23. OPEN-E (OPENE-01..04, shared funding source — full BURNIE + ETH pool) promoted from Deferred into scope 2026-05-24 at inserted Phase 319.1 (a SECOND batched USER-APPROVED `AfKing.sol` IMPL diff on top of the 317 batch; runs after GAS, before the terminal audit).
