@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v46.0
-milestone_name: Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal
-status: shipped
-last_updated: "2026-05-24T12:01:03.343Z"
-last_activity: 2026-05-24 -- v46.0 SHIPPED (Phase 320 TERMINAL closed)
-closure_signal: MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687
+milestone: v47.0
+milestone_name: Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle
+status: planning
+last_updated: "2026-05-24T13:23:08.165Z"
+last_activity: 2026-05-24
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 31
-  completed_plans: 31
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (Current Milestone: v46.0 section)
 
 ## Current Position
 
-Phase: 320 (TERMINAL) — COMPLETE; **v46.0 SHIPPED 2026-05-24**
-Plan: 4 of 4 complete
-Status: v46.0 closed — closure signal `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`; 1 MEDIUM finding (H-CANCEL-SWAP-MISS) deferred to v47.0
-Last activity: 2026-05-24 -- v46.0 TERMINAL closure flip (Commit 2)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-24 — Milestone v47.0 started
 
 ## Shipped Milestone Phases (v46.0 — SHIPPED 2026-05-24, 6/6; closure signal `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
 
