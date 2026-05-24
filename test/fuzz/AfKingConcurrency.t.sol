@@ -56,7 +56,7 @@ contract AfKingConcurrency is DeployProtocol {
 
     bytes32 private constant SWEPT_SIG = keccak256("Swept(address,uint32,uint256)");
     bytes32 private constant SUB_UPDATED_SIG =
-        keccak256("SubscriptionUpdated(address,uint8,bool,bool,uint8)");
+        keccak256("SubscriptionUpdated(address,uint8,bool,bool,uint8,address)");
 
     /// @dev Snapshot of Swept(player,...) recipients drained from the recorded logs by _captureSwept().
     ///      vm.getRecordedLogs() CONSUMES the buffer, so we drain ONCE per assertion phase into this
