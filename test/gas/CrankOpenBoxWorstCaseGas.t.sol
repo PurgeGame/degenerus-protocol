@@ -53,6 +53,12 @@ contract CrankOpenBoxWorstCaseGas is DeployProtocol {
     ///      precise number; the structural claim is "single box << 10-spin worst case".
     uint256 internal constant RESOLVE_BET_10SPIN_WORST_CASE_REF_GAS = 726_944;
 
+    /// @dev The single-box `crankBoxes(1)` TOTAL measured by Test A (137,944). Test D asserts the
+    ///      per-box MARGINAL is materially below this — the gap is the per-tx fixed overhead the
+    ///      single-box total mis-attributes to one box (CR-01). The committed CRANK_OPEN_BOX_GAS_UNITS
+    ///      (137_944) is pegged to this single-box total, which is the CR-01 defect.
+    uint256 internal constant SINGLE_BOX_TOTAL_REF_GAS = 137_944;
+
     uint256 private constant FIXED_WORD = uint256(keccak256("crank_open_box_worst_case_word"));
     uint256 private constant LOOTBOX_WEI = 1 ether; // >= LOOTBOX_MIN; a real first-deposit box
 
@@ -125,6 +131,87 @@ contract CrankOpenBoxWorstCaseGas is DeployProtocol {
         emit log_named_uint("worst_case_open_box_single_materialization_gas", gasUsed);
         emit log_named_uint("resolve_bet_10spin_worst_case_ref_gas", RESOLVE_BET_10SPIN_WORST_CASE_REF_GAS);
         emit log_named_uint("mainnet_block_gas_limit", MAINNET_BLOCK_GAS_LIMIT);
+    }
+
+    // =========================================================================
+    // Test D — per-box MARGINAL (the CORRECTED CRANK_OPEN_BOX_GAS_UNITS target)
+    // =========================================================================
+
+    /// @notice GAS-06 / CR-01: isolate the per-box MARGINAL gas — the marginal cost of opening one
+    ///         more box in an N-box `crankBoxes(N)` batch. This is the CORRECT calibration target for
+    ///         CRANK_OPEN_BOX_GAS_UNITS, because the box reward is FLAT per box (DegenerusGame.sol:1621)
+    ///         while the per-transaction fixed overhead of `crankBoxes` (the cursor/boxCursorIndex
+    ///         SLOAD+conditional SSTORE :1593-1598, the lootboxRngWordByIndex gate SLOAD :1603, the
+    ///         `_activeTicketLevel()` read :1610, the final `boxCursor` SSTORE :1631, and the once-per-tx
+    ///         `coinflip.creditFlip` :1632) is paid ONLY ONCE per call regardless of N. A self-cranker
+    ///         opening N own boxes earns N rewards but pays that fixed overhead once, so pegging the
+    ///         per-box reward to a single-box TOTAL (which bundles the whole fixed overhead into one box)
+    ///         OVER-reimburses every box after the first and opens the SAFE-01 self-crank faucet on the
+    ///         multi-box path (CR-01).
+    ///
+    ///         Measured by the SAME loop-N-divide idiom CrankResolveBetWorstCaseGas
+    ///         (testPerOneSpinItemMarginalBelowWorstCase, :197-242) uses for the resolve-bet marginal:
+    ///         queue N distinct READY un-opened boxes, `crankBoxes(N)` ONCE, divide the gasleft-delta
+    ///         by N so the per-tx fixed overhead amortizes away. A large N (32) is used so the per-tx
+    ///         fixed overhead (cold cranker `creditFlip` ~20k, cursor SSTOREs) is amortized to a
+    ///         negligible per-box share and the measured marginal converges to the true per-box
+    ///         materialization cost (small N over-states it: N=8 measures ~90k, N>=32 converges ~70k —
+    ///         the CR-01 amortization gradient). Asserts the per-box marginal is materially BELOW the
+    ///         single-box total (the gap is exactly the mis-attributed fixed overhead) and lands in the
+    ///         resolve-bet spin neighborhood (319-GAS-DERIVATION.md §2: one open-box ~= one resolve
+    ///         spin ~= ~66-70k), confirming 137_944 (the single-box TOTAL) ~2x over-states the marginal.
+    function testPerBoxMarginalAmortizesFixedOverhead() public {
+        uint48 index = _activeLootboxIndex();
+        uint256 nBoxes = 32;
+
+        // Queue N distinct READY boxes (distinct owners -> distinct (index,owner) queue entries),
+        // each firing the first-deposit enqueue signal.
+        address[] memory owners = new address[](nBoxes);
+        for (uint256 i; i < nBoxes; ++i) {
+            address o = makeAddr(string(abi.encodePacked("perbox_", vm.toString(i))));
+            owners[i] = o;
+            vm.deal(o, 100_000 ether);
+            _buyBox(o, LOOTBOX_WEI);
+        }
+        _injectLootboxRngWord(index, FIXED_WORD);
+
+        // assert-is-real precondition: every box is queued + un-opened before the crank, so the
+        // marginal measures real materializations (not :1603 skips or :1618 already-opened skips).
+        for (uint256 i; i < nBoxes; ++i) {
+            assertGt(_lootboxEthBase(index, owners[i]), 0, "pre: each box queued + un-opened");
+        }
+
+        // Bracket the whole N-box batch; divide by N for the per-box marginal (fixed overhead paid once).
+        vm.prank(cranker);
+        uint256 gasBefore = gasleft();
+        game.crankBoxes(nBoxes);
+        uint256 totalGas = gasBefore - gasleft();
+        uint256 perBoxMarginal = totalGas / nBoxes;
+
+        // Non-vacuity: every box actually opened (first-deposit signal zeroed on open), so the
+        // marginal is a real per-box materialization cost (not a no-op walk).
+        for (uint256 i; i < nBoxes; ++i) {
+            assertEq(_lootboxEthBase(index, owners[i]), 0, "non-vacuity: each box opened (signal zeroed)");
+        }
+
+        // The per-box marginal is materially BELOW the single-box total (137_944): the gap is the
+        // per-tx fixed overhead that the single-box measurement mis-attributes to one box (CR-01).
+        // This is the CORRECTED CRANK_OPEN_BOX_GAS_UNITS target.
+        assertLt(
+            perBoxMarginal,
+            SINGLE_BOX_TOTAL_REF_GAS,
+            "per-box marginal is materially below the single-box total (the gap is the mis-attributed fixed overhead)"
+        );
+        // The marginal lands in the resolve-bet spin neighborhood (one open-box ~= one resolve spin):
+        // strictly less than ~1.4x the resolve-bet per-spin marginal (66_528), confirming the box peg
+        // should be ~70k, NOT 137_944. (Loose upper bound; the exact value is read from the log.)
+        assertLt(perBoxMarginal, 95_000, "per-box marginal is in the resolve-bet spin neighborhood (~70k), not ~138k");
+        assertLt(perBoxMarginal, MAINNET_BLOCK_GAS_LIMIT, "per-box marginal trivially fits the block limit");
+
+        // The CORRECTED calibration input Plan 05 / the CR-01 fix reads from the test log.
+        emit log_named_uint("per_box_marginal_gas", perBoxMarginal);
+        emit log_named_uint("per_box_batch_total_gas", totalGas);
+        emit log_named_uint("single_box_total_ref_gas", SINGLE_BOX_TOTAL_REF_GAS);
     }
 
     // =========================================================================

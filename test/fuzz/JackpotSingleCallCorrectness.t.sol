@@ -100,11 +100,18 @@ contract JackpotSingleCallCorrectness is Test {
     ///      `autoRebuyState` over the jackpot module returns ZERO matches).
     uint256 internal constant RM02_FREED_PER_WINNER_GAS = 4_200;
 
-    /// @dev A2 (RESEARCH Assumptions Log): the exact freed figure is "consistent with" not "exactly"
-    ///      1.3M — EIP-2929 cold-access constants are fixed, but the surrounding warm/cold loop state
-    ///      shifts the precise number, and the theory band is itself +/-30%. So the JGAS-04 attribution
-    ///      asserts the measured gas sits in a TOLERANCED band around `theory - freed`, never an exact
-    ///      equality. This tolerance (3M) absorbs the +/-30% structural estimate uncertainty.
+    /// @dev A2 (RESEARCH Assumptions Log) + WR-02 re-frame: the numeric `theory - freed` band is
+    ///      explicitly NOT a proof of the exact 1.3M freed delta. EIP-2929 cold-access constants are
+    ///      fixed, but the surrounding warm/cold loop state shifts the precise number AND the theory
+    ///      band is itself +/-30%, so any tolerance wide enough to absorb that uncertainty is too wide
+    ///      to pin the 1.3M delta numerically (a ~3M tolerance around a ~7.7M lower edge admits roughly
+    ///      [4.7M, 10.7M] — almost any plausible measurement passes; the numeric check is near-vacuous
+    ///      and is retained ONLY as a coarse sanity sieve). The LOAD-BEARING proof that RM-02 freed the
+    ///      per-winner `autoRebuyState` SLOAD is the STRUCTURAL `_countOccurrences(jp, "autoRebuyState")
+    ///      == 0` source attestation below — the freed surface is provably, byte-for-byte absent from
+    ///      the jackpot path. The numeric assertion is downgraded to a one-sided "measured gas sits at
+    ///      or below the (theory - freed) upper edge" sanity bound (the freeing could only LOWER the
+    ///      total), framed as "consistent-with", never "empirically confirmed the exact 1.3M delta".
     uint256 internal constant ATTRIBUTION_TOLERANCE_GAS = 3_000_000;
 
     /// @dev JackpotEthWin topic0 (for vm.recordLogs filtering).
@@ -350,11 +357,18 @@ contract JackpotSingleCallCorrectness is Test {
     ///         winner, the unconditional cold `autoRebuyState[beneficiary]` SLOAD + `_processAutoRebuy`
     ///         branch from `_addClaimableEth`. The post-RM-02 2-arg `_addClaimableEth` (JackpotModule:738)
     ///         falls straight to `_creditClaimable` (source-confirmed: zero `autoRebuyState` reads on
-    ///         the jackpot path). This test computes the freed estimate from the EIP-2929 cold-access
-    ///         constants (~4.2k/winner x 305 ~= 1.28M) and asserts the MEASURED single-call gas sits in
-    ///         a TOLERANCED band consistent with the 316-SPEC §J4.2 theory (9-12M) MINUS that freed
-    ///         delta — "consistent with" not "exactly" per Assumption A2. It does NOT re-introduce the
-    ///         removed SLOAD (option (b) comparison harness is explicitly rejected).
+    ///         the jackpot path).
+    ///
+    ///         WR-02 RE-FRAME: this test does NOT empirically confirm the exact ~1.3M freed delta. The
+    ///         LOAD-BEARING proof is the STRUCTURAL `_countOccurrences(jp, "autoRebuyState") == 0`
+    ///         attestation — the freed surface is provably absent from the jackpot module source. The
+    ///         numeric `theory - freed` figure is a coarse sanity sieve only: it computes the freed
+    ///         estimate from the EIP-2929 cold-access constants (~4.2k/winner x 305 ~= 1.28M) and
+    ///         asserts the MEASURED single-call gas sits at/below the 316-SPEC §J4.2 theory (9-12M)
+    ///         MINUS that freed delta — a one-sided upper-bound that is "consistent with" the freeing
+    ///         having lowered the total, NOT a proof of the 1.3M magnitude (Assumption A2; the band's
+    ///         tolerance is too wide to pin the delta numerically — see ATTRIBUTION_TOLERANCE_GAS). It
+    ///         does NOT re-introduce the removed SLOAD (option (b) comparison harness is rejected).
     function testJgas04FreedAutoRebuyStateSloadDeltaAttribution() public {
         (uint8[4] memory traitIds, ) = _deriveTraits(_word());
         _seedAllBuckets(traitIds);
@@ -371,28 +385,25 @@ contract JackpotSingleCallCorrectness is Test {
         assertGt(freed, 1_000_000, "JGAS-04: the freed autoRebuyState-SLOAD band is ~1.3M (4.2k x 305)");
         assertLt(freed, 1_600_000, "JGAS-04: the freed band stays in the ~1.3M neighborhood");
 
-        // The "theory - freed"-consistent band: the 316-SPEC structural worst case (9-12M) less the
-        // freed ~1.3M => ~7.7-10.7M; with the +/-30%-structural-estimate tolerance the measured 7.5M
-        // sits at/just-below the band's lower edge — consistent (not exact, per A2). We assert the
-        // measured gas is within ATTRIBUTION_TOLERANCE_GAS of the (theory - freed) lower edge.
-        uint256 theoryMinusFreedLo = SPEC_THEORY_WORST_CASE_LO_GAS - freed; // ~7.72M
+        // WR-02 one-sided sanity sieve (NOT a proof of the 1.3M magnitude): the 316-SPEC structural
+        // worst case (9-12M) less the freed ~1.3M => ~7.7-10.7M. The ONLY defensible numeric direction
+        // is the upper bound — the freeing could only LOWER the total, so the measured single-call gas
+        // must sit at/below the (theory - freed) upper edge. The prior lower-edge "within tolerance"
+        // assertion was near-vacuous (a 3M tolerance around the ~7.7M lower edge admits ~[4.7M,10.7M])
+        // and is REMOVED: it claimed to confirm the 1.3M delta but admitted almost any measurement.
+        // The load-bearing proof is the STRUCTURAL autoRebuyState==0 attestation below.
         uint256 theoryMinusFreedHi = SPEC_THEORY_WORST_CASE_HI_GAS - freed; // ~10.72M
 
-        // measured must not exceed the (theory - freed) upper edge (the freeing did lower the total) ...
+        // measured must not exceed the (theory - freed) upper edge (the freeing did lower the total).
         assertLt(
             gasUsed,
             theoryMinusFreedHi,
-            "JGAS-04: measured single-call gas is below the (theory - freed) upper edge"
-        );
-        // ... and must sit within tolerance of the (theory - freed) lower edge (consistent-with, A2).
-        assertGe(
-            gasUsed + ATTRIBUTION_TOLERANCE_GAS,
-            theoryMinusFreedLo,
-            "JGAS-04: measured gas is consistent with the (theory - freed) band within the structural tolerance"
+            "JGAS-04: measured single-call gas is below the (theory - freed) upper edge (consistent-with, not a proof of the exact 1.3M delta - A2/WR-02)"
         );
 
-        // Source attestation: the removed surface is genuinely gone (no dead-code re-introduction).
-        // The 2-arg _addClaimableEth performs ZERO autoRebuyState reads on the jackpot daily-ETH path.
+        // Source attestation (THE LOAD-BEARING PROOF): the removed surface is genuinely gone (no
+        // dead-code re-introduction). The 2-arg _addClaimableEth performs ZERO autoRebuyState reads on
+        // the jackpot daily-ETH path — this structural absence, not the numeric band, proves JGAS-04.
         string memory jp = _stripComments(
             vm.readFile("contracts/modules/DegenerusGameJackpotModule.sol")
         );
@@ -404,7 +415,6 @@ contract JackpotSingleCallCorrectness is Test {
 
         emit log_named_uint("jgas04_measured_single_call_gas", gasUsed);
         emit log_named_uint("jgas04_freed_autoRebuyState_sload_band", freed);
-        emit log_named_uint("jgas04_theory_minus_freed_lo", theoryMinusFreedLo);
         emit log_named_uint("jgas04_theory_minus_freed_hi", theoryMinusFreedHi);
     }
 

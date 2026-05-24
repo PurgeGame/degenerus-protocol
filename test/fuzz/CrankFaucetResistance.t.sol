@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title CrankFaucetResistance -- Proves SAFE-01: the permissionless do-work crank
 ///        (crankBets / crankBoxes) is faucet-bounded by three caller-independent locks:
@@ -63,6 +64,10 @@ contract CrankFaucetResistance is DeployProtocol {
     /// @dev WWXRP totalSupply slot.
     uint256 private constant WWXRP_TOTAL_SUPPLY_SLOT = 0;
 
+    /// @dev lootboxEthBase mapping root slot (uint48 index => address => base). First-deposit signal,
+    ///      zeroed on open — used by the WR-01 multi-box self-crank round-trip to enqueue + verify opens.
+    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 19;
+
     // -------------------------------------------------------------------------
     // Crank reward peg mirror (the contract's own FIXED constants, REW-03)
     // -------------------------------------------------------------------------
@@ -72,7 +77,7 @@ contract CrankFaucetResistance is DeployProtocol {
 
     /// @dev Reserved per-work-type gas-unit constants (DegenerusGame.sol:1501-1502).
     uint256 private constant CRANK_RESOLVE_BET_GAS_UNITS = 66_528;
-    uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 137_944;
+    uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 71_203;
 
     /// @dev BURNIE per-ETH conversion unit (DegenerusGameStorage:161 / Coinflip:132).
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
@@ -88,6 +93,9 @@ contract CrankFaucetResistance is DeployProtocol {
 
     /// @dev A fixed RNG word for deterministic resolution (we craft tickets against its result).
     uint256 private constant FIXED_WORD = uint256(keccak256("crank_faucet_fixed_word"));
+
+    /// @dev A fixed RNG word for the WR-01 multi-box self-crank round-trip (deterministic box opens).
+    uint256 private constant BOX_FIXED_WORD = uint256(keccak256("crank_faucet_box_fixed_word"));
 
     address private player;   // bet owner
     address private cranker;  // arbitrary caller of crankBets (self-crank == player)
@@ -382,6 +390,112 @@ contract CrankFaucetResistance is DeployProtocol {
     }
 
     // =========================================================================
+    // WR-01 — multi-box self-crank round-trip <= 0 (the box-path SAFE-01 floor)
+    // =========================================================================
+
+    /// @notice SAFE-01 / WR-01: a self-cranker who opens N OWN boxes in one `crankBoxes(N)` tx earns
+    ///         a FLAT per-box reward summed into ONE creditFlip. Because the per-box reward is flat
+    ///         while the per-tx fixed overhead (cursor SLOAD+SSTORE :1593-1598/:1631, the index gate
+    ///         SLOAD :1603, `_activeTicketLevel()` :1610, the once-per-tx `coinflip.creditFlip` :1632)
+    ///         amortizes toward zero per box as N grows, the box path is exactly where the round-trip
+    ///         can go POSITIVE if the per-box peg over-states the true per-box MARGINAL (CR-01). This
+    ///         test asserts the summed reward valued at the protocol's own peg is <= the REAL gas the
+    ///         self-crank tx burns at the >=1 gwei market floor — the box-path analog of the single-bet
+    ///         `testSelfCrankRoundTripNonPositive`. With a peg ABOVE the per-box marginal this assertion
+    ///         FAILS for large N (the faucet hole); at/below the marginal it holds for ALL N.
+    function testMultiBoxSelfCrankRoundTripNonPositive() public {
+        uint48 index = _activeLootboxIndex();
+        uint256 nBoxes = 24; // past the small-N regime where the fixed overhead dominates per box
+
+        // The self-cranker controls N deposit addresses (a Sybil): each fires the first-deposit enqueue.
+        // The owner-set prefix `wr01h_` produces a cold-bust-leaning batch (low per-box materialization
+        // cost) — the adversarially-cheap self-crank a peg-vs-marginal mismatch (CR-01) most exposes.
+        address[] memory owners = new address[](nBoxes);
+        for (uint256 i; i < nBoxes; ++i) {
+            address o = makeAddr(string(abi.encodePacked("wr01h_", vm.toString(i))));
+            owners[i] = o;
+            vm.deal(o, 100_000 ether);
+            _buyBox(o, 1 ether);
+        }
+        _injectLootboxRngWord(index, BOX_FIXED_WORD);
+
+        uint256 preStake = coinflip.coinflipAmount(cranker);
+
+        // Measure the REAL gas the self-crank tx burns (the cranker's true ETH cost driver).
+        vm.recordLogs();
+        vm.prank(cranker);
+        uint256 gasBefore = gasleft();
+        game.crankBoxes(nBoxes);
+        uint256 gasUsed = gasBefore - gasleft();
+
+        // The cranker (not the box owners) receives the crank reward; isolate its credit by recipient.
+        uint256 stakeDelta = coinflip.coinflipAmount(cranker) - preStake;
+        assertGt(stakeDelta, 0, "self-cranker earns a positive summed box reward");
+
+        // Non-vacuity: every box actually opened (first-deposit signal zeroed), so the reward is for
+        // N real materializations, not a no-op / skipped walk.
+        for (uint256 i; i < nBoxes; ++i) {
+            assertEq(_lootboxEthBase(index, owners[i]), 0, "non-vacuity: each self-crank box opened");
+        }
+
+        // The summed reward valued back at the SAME fixed peg = exactly N * GAS_UNITS * 0.5 gwei.
+        uint256 summedRewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
+        assertEq(
+            summedRewardEthAtPeg,
+            nBoxes * CRANK_OPEN_BOX_GAS_UNITS * CRANK_GAS_PRICE_REF,
+            "summed box reward at peg == N * the flat per-box reserve (REW-03)"
+        );
+
+        // ROUND-TRIP <= 0 at the >=1 gwei realistic market floor: the FIXED-peg summed reward is
+        // strictly below the real gas the self-cranker burns to earn it. A per-box peg ABOVE the
+        // true per-box marginal would let the summed reward exceed gasUsed as the fixed overhead
+        // amortizes (CR-01); at/below the marginal it stays <= 0 for all N.
+        assertLt(
+            summedRewardEthAtPeg,
+            gasUsed * 1 gwei,
+            "WR-01: multi-box self-crank round-trip <= 0 at the 1 gwei market floor (box-path SAFE-01)"
+        );
+    }
+
+    /// @notice WR-01 fuzz: across fuzzed realistic submission prices, the FIXED-peg summed box reward
+    ///         is ALWAYS below the real gas cost of the N-box self-crank — the round-trip cannot be
+    ///         pushed positive by choosing the gas price (REW-03: the reward never reads tx.gasprice).
+    function testFuzz_MultiBoxRoundTripNonPositiveAcrossGasPrices(uint256 gasPriceWei) public {
+        gasPriceWei = bound(gasPriceWei, 1 gwei, 2000 gwei);
+
+        uint48 index = _activeLootboxIndex();
+        uint256 nBoxes = 24;
+        address[] memory owners = new address[](nBoxes);
+        for (uint256 i; i < nBoxes; ++i) {
+            address o = makeAddr(string(abi.encodePacked("wr01h_", vm.toString(i))));
+            owners[i] = o;
+            vm.deal(o, 100_000 ether);
+            _buyBox(o, 1 ether);
+        }
+        _injectLootboxRngWord(index, BOX_FIXED_WORD);
+
+        uint256 preStake = coinflip.coinflipAmount(cranker);
+        vm.prank(cranker);
+        uint256 gasBefore = gasleft();
+        game.crankBoxes(nBoxes);
+        uint256 gasUsed = gasBefore - gasleft();
+        uint256 stakeDelta = coinflip.coinflipAmount(cranker) - preStake;
+
+        uint256 summedRewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
+        // Reward is the FIXED reserve, independent of the chosen gas price.
+        assertEq(
+            summedRewardEthAtPeg,
+            nBoxes * CRANK_OPEN_BOX_GAS_UNITS * CRANK_GAS_PRICE_REF,
+            "summed box reward fixed, price-independent"
+        );
+        assertLt(
+            summedRewardEthAtPeg,
+            gasUsed * gasPriceWei,
+            "WR-01: multi-box round-trip <= 0 at every fuzzed realistic gas price > 0.5 gwei"
+        );
+    }
+
+    // =========================================================================
     // Task 2 — WWXRP zero reward + one-creditFlip-per-tx + zero-success no-credit
     // =========================================================================
 
@@ -547,6 +661,29 @@ contract CrankFaucetResistance is DeployProtocol {
     function _betNonce(address who) internal view returns (uint64) {
         bytes32 slot = keccak256(abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT)));
         return uint64(uint256(vm.load(address(game), slot)));
+    }
+
+    /// @dev Buy a real lootbox-mode deposit via the public mint API. The first deposit for
+    ///      (index, buyer) fires the `lootboxEthBase == 0` signal -> enqueueBoxForCrank (MintModule:999).
+    ///      Mirrors CrankNonBrick/CrankOpenBoxWorstCaseGas._buyBox.
+    function _buyBox(address buyer, uint256 lootboxAmount) internal {
+        vm.prank(buyer);
+        game.purchase{value: lootboxAmount + 0.01 ether}(
+            buyer, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth
+        );
+    }
+
+    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 35).
+    function _activeLootboxIndex() internal view returns (uint48) {
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
+        return uint48(packed & 0xFFFFFFFFFFFF);
+    }
+
+    /// @dev Read lootboxEthBase[index][who] (slot 19) — the first-deposit signal, zeroed on open.
+    function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
+        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_ETH_BASE_SLOT)));
+        bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
+        return uint256(vm.load(address(game), leaf));
     }
 
     /// @dev The REAL spin-0 result ticket for (index, word), matching _resolveFullTicketBet:

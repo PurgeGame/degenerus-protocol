@@ -67,7 +67,7 @@ contract CrankLeversAndPacking is DeployProtocol {
 
     uint256 private constant CRANK_GAS_PRICE_REF = 0.5 gwei;
     uint256 private constant CRANK_RESOLVE_BET_GAS_UNITS = 66_528;
-    uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 137_944;
+    uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 71_203;
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
 
     /// @dev keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)") — emitted once per

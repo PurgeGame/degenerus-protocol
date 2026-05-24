@@ -1499,7 +1499,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      Phase 319 GAS pass; only the names/shape are fixed here. They are
     ///      FIXED constants (REW-03) — the reward never depends on gasleft().
     uint256 private constant CRANK_RESOLVE_BET_GAS_UNITS = 66_528;
-    uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 137_944;
+    uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 71_203;
 
     /// @dev Cursor into the box-crank queue for the current lootbox RNG index.
     ///      Concurrent same-tx callers self-partition via the advancing cursor.
