@@ -379,7 +379,7 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
         vm.store(address(game), slot, bytes32(amount));
     }
 
-    /// @dev Read `who`'s lastSweptDay (bytes 3..6 of the packed Sub slot).
+    /// @dev Read `who`'s lastSweptDay (bytes 1..4 of the packed Sub slot).
     function _lastSweptDayOf(address who) internal view returns (uint32) {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(afKing), slot));

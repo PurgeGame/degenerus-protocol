@@ -427,7 +427,7 @@ contract AfKingSubscription is DeployProtocol {
     function _forceRenewalDue(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(afKing), slot));
-        // Clear lastSweptDay (bytes 3..6) and paidThroughDay (bytes 7..10).
+        // Clear lastSweptDay (bytes 1..4) and paidThroughDay (bytes 5..8).
         uint256 mask = (uint256(0xFFFFFFFF) << (OFF_LASTSWEPT * 8)) | (uint256(0xFFFFFFFF) << (OFF_PAIDTHROUGH * 8));
         packed &= ~mask;
         // paidThroughDay = today (<= today -> renewal due); lastSweptDay = 0 (< today -> not skipped).

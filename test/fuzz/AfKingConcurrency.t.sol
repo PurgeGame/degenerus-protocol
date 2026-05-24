@@ -439,7 +439,7 @@ contract AfKingConcurrency is DeployProtocol {
         coin.mintForGame(who, amount);
     }
 
-    /// @dev Read `who`'s lastSweptDay (bytes 3..6 of the packed Sub slot).
+    /// @dev Read `who`'s lastSweptDay (bytes 1..4 of the packed Sub slot).
     function _lastSweptDayOf(address who) internal view returns (uint32) {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(afKing), slot));
@@ -452,7 +452,7 @@ contract AfKingConcurrency is DeployProtocol {
         return uint256(vm.load(address(afKing), slot));
     }
 
-    /// @dev Pin `who`'s window: write paidThroughDay (bytes 7..10) and the windowPaid bit (byte 12).
+    /// @dev Pin `who`'s window: write paidThroughDay (bytes 5..8) and the windowPaid bit (byte 10).
     function _setWindow(address who, uint32 paidThroughDay, bool windowPaid) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(afKing), slot));
