@@ -250,6 +250,98 @@ contract AfKingSubscription is DeployProtocol {
     }
 
     // =========================================================================
+    // Task 3d — OPEN-E cross-account subscribe-only auth (OPENE-04)
+    // =========================================================================
+
+    /// @notice OPENE-04 unapproved-source-refused: subscribing with an UNAPPROVED non-zero non-self
+    ///         fundingSource reverts NotApproved at subscribe (the cross-account gate is checked HERE);
+    ///         after the source approves the subscriber, the SAME subscribe is honored. Proves the
+    ///         money-holder-grants-spender direction: S must approve M for M to draw from S.
+    function testUnapprovedFundingSourceRefusedThenHonored() public {
+        address s = makeAddr("auth_s");
+        address m = makeAddr("auth_m");
+        // S funds its own BURNIE for the window-1 burn (so only the AUTH gate, not a shortfall, governs).
+        _fundBurnie(s, _subCost());
+
+        // REFUSED: M has NOT been approved by S -> the non-zero non-self source reverts NotApproved.
+        vm.prank(m);
+        vm.expectRevert(abi.encodeWithSignature("NotApproved()"));
+        afKing.subscribe(address(0), false, true, 1, 0, s);
+
+        // S approves M on the game; now the SAME subscribe is honored (source stored, window-1 burn S).
+        vm.prank(s);
+        game.setOperatorApproval(m, true);
+        uint256 sBefore = coin.balanceOf(s);
+        vm.prank(m);
+        afKing.subscribe(address(0), false, true, 1, 0, s);
+
+        assertEq(afKing.subscriptionOf(m).fundingSource, s, "approved source honored (stored as S)");
+        assertEq(sBefore - coin.balanceOf(s), _subCost(), "window-1 burn debited the approved source S");
+    }
+
+    /// @notice OPENE-04 revoke-does-NOT-stop-an-active-sub (subscribe-only auth): after S approves M
+    ///         and M subscribes with fundingSource = S, S REVOKES (setOperatorApproval(M,false)). The
+    ///         day-31 renewal STILL draws/burns from S — the keeper trusts the stored source and never
+    ///         re-checks approval at renewal or per-draw. The sub is stopped only when S DEFUNDS
+    ///         (spends down BURNIE -> day-31 auto-pause) or M cancels.
+    function testRevokeDoesNotStopActiveSubButDefundDoes() public {
+        address s = makeAddr("revoke_s");
+        address m = makeAddr("revoke_m");
+        // S funds BURNIE for the window-1 burn + the first renewal; M never holds BURNIE.
+        _fundBurnie(s, _subCost() * 2);
+        vm.prank(s);
+        game.setOperatorApproval(m, true);
+        vm.prank(m);
+        afKing.subscribe(address(0), false, true, 1, 0, s); // source = S, window-1 burn from S
+        _approveKeeper(m);
+        _fundPool(s, 1 ether); // S funds the per-day ETH draw too
+        _forceRenewalDue(m);
+
+        // A healthy buying sub so each sweep produces >= 1 buy and never reverts NoSubscribersSwept
+        // (which would mask the renewal/auto-pause behavior of M).
+        address healthy1 = makeAddr("revoke_healthy_1");
+        _setupHealthyBuyingSub(healthy1);
+
+        // S REVOKES M's approval AFTER the sub is active.
+        vm.prank(s);
+        game.setOperatorApproval(m, false);
+        assertFalse(game.isOperatorApproved(s, m), "S has revoked M");
+
+        uint256 sBeforeRenewal = coin.balanceOf(s);
+
+        vm.recordLogs();
+        vm.prank(makeAddr("revoke_sweeper_1"));
+        afKing.sweep(50);
+
+        // SUBSCRIBE-ONLY AUTH: the day-31 renewal STILL burned S despite the revoke (no re-check).
+        assertEq(_countEvent(address(afKing), AUTO_EXTRACTED_SIG), 1, "renewal still charged S after revoke");
+        assertEq(_countEvent(address(afKing), SUB_EXPIRED_SIG), 0, "active sub NOT auto-paused by a revoke");
+        assertEq(sBeforeRenewal - coin.balanceOf(s), _subCost(), "renewal burn STILL debits S (trust-the-sub)");
+        assertGt(_subscriberIndexOf(m), 0, "M's sub stays in the set after S revokes");
+
+        // Now S DEFUNDS (BURNIE drained to zero). Advance one keeper-local day so the sweep cursor
+        // resets to 0 (re-reaching M, which the first sweep's advanced cursor moved past), then force
+        // M renewal-due relative to the NEW today. The all-or-nothing burn takes nothing -> M
+        // auto-pauses. This is the ONLY way the source halts an active sub.
+        _setBurnieBalance(s, 0);
+        vm.warp(block.timestamp + 1 days);
+        _forceRenewalDue(m);
+
+        // A healthy buyer so the defund sweep still produces a buy (it is the new keeper-local day, so
+        // the cursor resets and every sub is re-evaluated).
+        address healthy2 = makeAddr("revoke_healthy_2");
+        _setupHealthyBuyingSub(healthy2);
+
+        vm.recordLogs();
+        vm.prank(makeAddr("revoke_sweeper_2"));
+        afKing.sweep(50);
+
+        assertGe(_countEvent(address(afKing), SUB_EXPIRED_SIG), 1, "defunded source -> day-31 auto-pause");
+        assertEq(afKing.subscriptionOf(m).dailyQuantity, 0, "M's sub auto-paused once S defunds");
+        assertEq(_subscriberIndexOf(m), 0, "M removed from the set on the defund auto-pause");
+    }
+
+    // =========================================================================
     // Internal helpers
     // =========================================================================
 

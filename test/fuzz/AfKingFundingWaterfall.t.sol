@@ -289,8 +289,194 @@ contract AfKingFundingWaterfall is DeployProtocol {
     }
 
     // =========================================================================
+    // Task 3d -- OPEN-E shared funding source (OPENE-02/03 + LANDMINE A)
+    // =========================================================================
+
+    /// @notice OPENE-02/03 default-self equivalence: a sub with fundingSource == address(0) draws ETH
+    ///         from and burns BURNIE against ITS OWN identity exactly as pre-OPEN-E -- the per-day ETH
+    ///         draw debits the subscriber's own pool (Swept cost == cost, own pool zeroed) and the
+    ///         subscribe-time window-1 burn came from the subscriber's own BURNIE. Byte-equivalence
+    ///         baseline against which the cross-account cases below are the only behavioral delta.
+    function testFundingSourceDefaultSelfIsByteEquivalent() public {
+        address m = makeAddr("self_m");
+        uint256 subCost = _subCost();
+        uint256 burnieBefore = subCost + 7 ether; // ample own BURNIE; the window-1 burn debits self
+        _fundBurnie(m, burnieBefore);
+
+        // Self-funded subscribe (fundingSource == 0). hasAnyLazyPass(m) is false -> window-1 PAID burn.
+        vm.prank(m);
+        afKing.subscribe(address(0), false, true, 1, 0, address(0));
+        vm.prank(m);
+        game.setOperatorApproval(address(afKing), true);
+
+        // Window-1 burn debited M's OWN BURNIE (self funding).
+        assertEq(coin.balanceOf(m), burnieBefore - subCost, "default-self: window-1 burn from M's own BURNIE");
+        // fundingSource stored as the self sentinel (address(0)).
+        assertEq(afKing.subscriptionOf(m).fundingSource, address(0), "default-self: fundingSource == address(0)");
+
+        uint256 cost = _cost(1);
+        _fundPool(m, cost); // M funds its OWN pool
+
+        _sweepCapture("self_keeper");
+
+        // Per-day ETH draw debited M's OWN pool (self funding), exactly as pre-OPEN-E.
+        assertEq(_sweptCostFor(m), cost, "default-self: per-day draw debits M's own pool (DirectEth)");
+        assertEq(afKing.poolOf(m), 0, "default-self: M's own pool fully debited");
+    }
+
+    /// @notice OPENE-02 cross-account ETH: a funded source S approves M; M subscribes with
+    ///         fundingSource = S. The per-day ETH draw debits _poolOf[S], NOT _poolOf[M] -- M's own pool
+    ///         is never touched. Exact-balance assertions on both pools isolate the routing.
+    function testCrossAccountEthDrawsSourcePool() public {
+        (address s, address m) = _approvedSourceSub("xeth_s", "xeth_m", /*fundSourceBurnie*/ true);
+        uint256 cost = _cost(1);
+
+        // Fund the SOURCE pool only; leave M's pool empty so a mis-routed draw would funding-skip.
+        _fundPool(s, cost);
+        assertEq(afKing.poolOf(m), 0, "M's own pool starts empty (only S funds)");
+
+        _sweepCapture("xeth_keeper");
+
+        // The draw debited S's pool, not M's. M bought via DirectEth at full cost from S's pool.
+        assertEq(_sweptCostFor(m), cost, "cross-account: M bought (DirectEth, cost forwarded)");
+        assertEq(afKing.poolOf(s), 0, "cross-account ETH: S's pool debited by the full cost");
+        assertEq(afKing.poolOf(m), 0, "cross-account ETH: M's own pool never touched");
+    }
+
+    /// @notice OPENE-03 cross-account BURNIE INCLUDING window-1: S approves M; M subscribes with
+    ///         fundingSource = S and NO active pass, so the FIRST-window SUB-01 burn fires. That
+    ///         window-1 burn debits S's BURNIE (not M's). Then forcing the day-31 renewal-due branch,
+    ///         the auto-extract burn ALSO debits S. M holds zero BURNIE throughout -- proving S funds
+    ///         both burn sites.
+    function testCrossAccountBurnieFundsWindowOneAndRenewal() public {
+        address s = makeAddr("xbur_s");
+        address m = makeAddr("xbur_m");
+        uint256 subCost = _subCost();
+
+        // S holds the BURNIE for BOTH the window-1 and the day-31 renewal burns; M holds zero.
+        _fundBurnie(s, subCost * 2);
+        assertEq(coin.balanceOf(m), 0, "M holds zero BURNIE");
+
+        // S approves M on the game (the OPEN-E cross-account gate honored at subscribe).
+        vm.prank(s);
+        game.setOperatorApproval(m, true);
+
+        uint256 sBurnieBefore = coin.balanceOf(s);
+
+        // M self-subscribes (subscriber == M) with fundingSource = S. No pass -> window-1 PAID burn.
+        vm.prank(m);
+        afKing.subscribe(address(0), false, true, 1, 0, s);
+
+        // WINDOW-1: the first-window SUB-01 burn debited S's BURNIE, not M's.
+        assertEq(coin.balanceOf(s), sBurnieBefore - subCost, "window-1 SUB-01 burn debits S (not M)");
+        assertEq(coin.balanceOf(m), 0, "window-1: M's BURNIE untouched");
+        assertEq(afKing.subscriptionOf(m).fundingSource, s, "fundingSource stored as S");
+
+        // Approve the keeper for M and force the renewal-due branch for the day-31 auto-extract.
+        vm.prank(m);
+        game.setOperatorApproval(address(afKing), true);
+        _fundPool(s, 100 ether); // ample S pool so the post-renewal buy is not a funding skip
+        _forceRenewalDue(m);
+
+        uint256 sBurnieBeforeRenewal = coin.balanceOf(s);
+
+        vm.recordLogs();
+        vm.prank(makeAddr("xbur_keeper"));
+        afKing.sweep(50);
+        _capture();
+
+        // DAY-31 RENEWAL: the auto-extract burn ALSO debited S's BURNIE, not M's.
+        assertEq(coin.balanceOf(s), sBurnieBeforeRenewal - subCost, "day-31 auto-extract burn debits S (not M)");
+        assertEq(coin.balanceOf(m), 0, "day-31: M's BURNIE still untouched");
+    }
+
+    /// @notice OPENE-03 source BURNIE shortfall: with fundingSource = S approved but S holding BELOW
+    ///         the window-1 cost, the all-or-nothing burnForKeeper takes nothing and the subscribe
+    ///         REVERTS BurnieChargeFailed -- the source-shortfall falls through the existing failure
+    ///         path (no half-paid sub).
+    function testCrossAccountBurnieSourceShortfallRevertsSubscribe() public {
+        address s = makeAddr("xshort_s");
+        address m = makeAddr("xshort_m");
+        uint256 subCost = _subCost();
+        vm.assume(subCost > 0);
+
+        _fundBurnie(s, subCost - 1); // strictly below the window-1 cost
+        vm.prank(s);
+        game.setOperatorApproval(m, true);
+
+        vm.prank(m);
+        vm.expectRevert(abi.encodeWithSignature("BurnieChargeFailed()"));
+        afKing.subscribe(address(0), false, true, 1, 0, s);
+    }
+
+    /// @notice LANDMINE A -- exemption-spoof refusal: a NORMAL sub that sets fundingSource = VAULT does
+    ///         NOT inherit the Vault never-cancel exemption. The exemption keys on the un-spoofable
+    ///         SUBSCRIBER identity (player), never on the resolved source. On a funding skip the
+    ///         spoofing sub is STILL cancelled via swap-pop, while the genuine VAULT self-sub stays.
+    function testFundingSourceVaultDoesNotInheritExemption() public {
+        // The spoofing NORMAL sub: VAULT approves the spoofer so fundingSource = VAULT is honored, but
+        // drain-first + sentinel claimable + an EMPTY VAULT pool means the funding skip fires.
+        // Fund VAULT's spendable BURNIE balance directly (the window-1 burn routes to the resolved
+        // source = VAULT) so the subscribe SUCCEEDS and the sub reaches the sweep; the ETH-pool skip
+        // is the surface under test. mintForGame(VAULT, .) routes to the virtual escrow reserve (NOT
+        // balanceOf), so the window-1 burnForKeeper would see a zero spendable balance -- write
+        // balanceOf[VAULT] directly instead. The day-31 path is not exercised here (this test is the
+        // funding-skip surface, not renewal), so totalSupply drift from the direct write is irrelevant.
+        address spoofer = makeAddr("spoof_m");
+        _setBurnieBalance(ContractAddresses.VAULT, _subCost());
+        vm.prank(ContractAddresses.VAULT);
+        game.setOperatorApproval(spoofer, true); // VAULT approves spoofer -> source honored at subscribe
+        vm.prank(spoofer);
+        afKing.subscribe(address(0), /*drainFirst*/ true, true, 1, 0, ContractAddresses.VAULT);
+        vm.prank(spoofer);
+        game.setOperatorApproval(address(afKing), true);
+        _setClaimable(spoofer, 1); // sentinel -> DirectEth msgValue == cost
+        // Deliberately leave _poolOf[VAULT] empty -> the resolved-source pool read funding-skips.
+        assertEq(afKing.poolOf(ContractAddresses.VAULT), 0, "VAULT pool empty -> spoofer's draw funding-skips");
+        assertEq(afKing.subscriptionOf(spoofer).fundingSource, ContractAddresses.VAULT, "spoofer source = VAULT");
+        assertGt(_subscriberIndexOf(spoofer), 0, "spoofer starts in the set");
+
+        // A healthy buyer so the sweep does not revert NoSubscribersSwept.
+        address healthy = _subscribeHealthy("spoof_healthy_", false);
+        _fundPool(healthy, _cost(1));
+
+        vm.recordLogs();
+        vm.prank(makeAddr("spoof_keeper"));
+        afKing.sweep(50);
+        _capture();
+
+        // LANDMINE A: the spoofing NORMAL sub IS cancelled (exemption keys on player, not source).
+        assertEq(_countExpired(spoofer), 1, "fundingSource=VAULT spoofer STILL cancelled (LANDMINE A)");
+        assertEq(_subscriberIndexOf(spoofer), 0, "spoofer swap-popped out of the set");
+        assertEq(afKing.subscriptionOf(spoofer).dailyQuantity, 0, "spoofer dailyQuantity zeroed (auto-pause)");
+
+        // The genuine VAULT self-sub (SUB-09) remains in the set -- only the real pinned identity is exempt.
+        assertGt(_subscriberIndexOf(ContractAddresses.VAULT), 0, "genuine VAULT self-sub stays in the set");
+        assertEq(_countExpired(ContractAddresses.VAULT), 0, "genuine VAULT NOT cancelled");
+    }
+
+    // =========================================================================
     // Internal helpers
     // =========================================================================
+
+    /// @dev Set up a cross-account sub: source S (approves M on the game), subscriber M self-subscribes
+    ///      in ticket mode (qty 1, drain-first FALSE -> DirectEth) with fundingSource = S, then approves
+    ///      the keeper. When `fundSourceBurnie`, S is pre-funded the window-1 BURNIE so the no-pass
+    ///      SUB-01 burn succeeds. M is NEVER given BURNIE -- the window-1 charge must come from S.
+    function _approvedSourceSub(string memory sLabel, string memory mLabel, bool fundSourceBurnie)
+        internal
+        returns (address s, address m)
+    {
+        s = makeAddr(sLabel);
+        m = makeAddr(mLabel);
+        if (fundSourceBurnie) _fundBurnie(s, _subCost());
+        vm.prank(s);
+        game.setOperatorApproval(m, true); // S approves M -> fundingSource = S honored at subscribe
+        vm.prank(m);
+        afKing.subscribe(address(0), false, true, 1, 0, s); // ticket mode, qty 1, source = S
+        vm.prank(m);
+        game.setOperatorApproval(address(afKing), true);
+    }
 
     function _today() internal view returns (uint32) {
         return uint32((block.timestamp - 82620) / 1 days);
