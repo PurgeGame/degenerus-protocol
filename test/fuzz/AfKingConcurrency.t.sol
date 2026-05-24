@@ -41,10 +41,15 @@ contract AfKingConcurrency is DeployProtocol {
     uint256 private constant SUBOF_SLOT = 1;          // _subOf mapping root (address => Sub, one slot)
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 3; // _subscriberIndex mapping root (1-indexed)
 
-    uint256 private constant OFF_DAILY = 0;        // uint8  dailyQuantity (byte 0)
-    uint256 private constant OFF_LASTSWEPT = 3;    // uint32 lastSweptDay  (bytes 3..6)
-    uint256 private constant OFF_PAIDTHROUGH = 7;  // uint32 paidThroughDay (bytes 7..10)
-    uint256 private constant OFF_FLAGS = 12;       // uint8  flags (bit 0 = windowPaid, byte 12)
+    // Sub packed-field byte offsets re-derived from the post-OPEN-E repack (319.1-01 AFTER
+    // layout): the two standalone bools collapsed into `flags` and a 20-byte `fundingSource`
+    // address was appended, shifting lastSweptDay 3->1, paidThroughDay 7->5, flags 12->10.
+    uint256 private constant OFF_DAILY = 0;          // uint8  dailyQuantity  (byte 0)
+    uint256 private constant OFF_LASTSWEPT = 1;      // uint32 lastSweptDay    (bytes 1..4)
+    uint256 private constant OFF_PAIDTHROUGH = 5;    // uint32 paidThroughDay  (bytes 5..8)
+    uint256 private constant OFF_REINVEST = 9;       // uint8  reinvestPct     (byte 9)
+    uint256 private constant OFF_FLAGS = 10;         // uint8  flags (bit 0 = windowPaid, byte 10)
+    uint256 private constant OFF_FUNDING_SOURCE = 11; // address fundingSource (bytes 11..30)
 
     uint256 private constant FLAG_WINDOW_PAID = 1;
     uint32 private constant WINDOW_DAYS = 30;
@@ -408,7 +413,7 @@ contract AfKingConcurrency is DeployProtocol {
             subs[i] = who;
             _fundBurnie(who, _subCost()); // for the (no-pass) subscribe-time all-or-nothing charge
             vm.prank(who);
-            afKing.subscribe(address(0), false, true, 1, 0); // self, drainCredit=false, ticket mode, qty 1
+            afKing.subscribe(address(0), false, true, 1, 0, address(0)); // self, drainCredit=false, ticket mode, qty 1, self-funded
             _approveKeeper(who);
             _fundPool(who, 1 ether);
         }

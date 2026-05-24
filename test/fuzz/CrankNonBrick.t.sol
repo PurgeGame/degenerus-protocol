@@ -461,7 +461,7 @@ contract CrankNonBrick is DeployProtocol {
         uint256 poolEth = 3 ether;
         _fundBurnieForSubscribe(player);
         vm.prank(player);
-        afKing.subscribe{value: poolEth}(address(0), false, true, 1, 0);
+        afKing.subscribe{value: poolEth}(address(0), false, true, 1, 0, address(0));
         assertEq(afKing.poolOf(player), poolEth, "pool credited by subscribe msg.value");
 
         // Cancel: setDailyQuantity(0) tombstones the sub (un-brickable — no downstream call).
@@ -487,7 +487,7 @@ contract CrankNonBrick is DeployProtocol {
 
         _fundBurnieForSubscribe(player);
         vm.prank(player);
-        afKing.subscribe{value: poolEth}(address(0), false, true, 1, 0);
+        afKing.subscribe{value: poolEth}(address(0), false, true, 1, 0, address(0));
 
         vm.prank(player);
         afKing.setDailyQuantity(0); // cancel — un-brickable

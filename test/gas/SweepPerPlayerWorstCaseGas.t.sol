@@ -62,8 +62,10 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
     uint256 private constant SUBOF_SLOT = 1;
     /// @dev _subscriberIndex mapping root (1-indexed; 0 = not in set).
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 3;
-    /// @dev lastSweptDay packed offset (uint32, bytes 3..6 of the Sub slot).
-    uint256 private constant OFF_LASTSWEPT = 3;
+    /// @dev lastSweptDay packed offset (uint32, bytes 1..4 of the Sub slot). Re-derived from
+    ///      the post-OPEN-E repack (319.1-01 AFTER layout): the two standalone bools collapsed
+    ///      into `flags` and a 20-byte `fundingSource` was appended, shifting lastSweptDay 3->1.
+    uint256 private constant OFF_LASTSWEPT = 1;
 
     /// @dev DegenerusGame claimableWinnings mapping root (per AfKingFundingWaterfall.t.sol:53).
     uint256 private constant GAME_CLAIMABLE_SLOT = 7;
@@ -343,7 +345,7 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
             _fundBurnie(who, _subCost()); // the (no-pass) subscribe-time all-or-nothing BURNIE charge
             vm.prank(who);
             // self, drainGameCreditFirst = false (DirectEth), ticket mode, qty 1, reinvestPct.
-            afKing.subscribe(address(0), false, true, 1, reinvestPct);
+            afKing.subscribe(address(0), false, true, 1, reinvestPct, address(0));
             _approveKeeper(who);
             _fundPool(who, poolWei);
             if (claimable > 0) _setClaimable(who, claimable);

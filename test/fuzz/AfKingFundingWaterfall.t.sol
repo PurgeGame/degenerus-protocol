@@ -42,10 +42,18 @@ contract AfKingFundingWaterfall is DeployProtocol {
     uint256 private constant SUBOF_SLOT = 1;
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 3;
 
-    uint256 private constant OFF_LASTSWEPT = 3;   // uint32 lastSweptDay
-    uint256 private constant OFF_PAIDTHROUGH = 7; // uint32 paidThroughDay
-    uint256 private constant OFF_FLAGS = 12;      // uint8 flags (bit 0 = windowPaid)
-    uint256 private constant FLAG_WINDOW_PAID = 1;
+    // Sub packed-field byte offsets re-derived from the post-OPEN-E repack (319.1-01 AFTER
+    // layout): the two standalone bools collapsed into `flags` and a 20-byte `fundingSource`
+    // address was appended, shifting lastSweptDay 3->1, paidThroughDay 7->5, flags 12->10.
+    uint256 private constant OFF_DAILY = 0;          // uint8  dailyQuantity  (byte 0)
+    uint256 private constant OFF_LASTSWEPT = 1;      // uint32 lastSweptDay    (bytes 1..4)
+    uint256 private constant OFF_PAIDTHROUGH = 5;    // uint32 paidThroughDay  (bytes 5..8)
+    uint256 private constant OFF_REINVEST = 9;       // uint8  reinvestPct     (byte 9)
+    uint256 private constant OFF_FLAGS = 10;         // uint8  flags           (byte 10)
+    uint256 private constant OFF_FUNDING_SOURCE = 11; // address fundingSource (bytes 11..30)
+    uint256 private constant FLAG_WINDOW_PAID = 1;   // flags bit 0
+    uint256 private constant FLAG_DRAIN_FIRST = 2;   // flags bit 1
+    uint256 private constant FLAG_USE_TICKETS = 4;   // flags bit 2
     uint32 private constant WINDOW_DAYS = 30;
 
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
@@ -303,7 +311,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
         who = makeAddr(string(abi.encodePacked(prefix, "p")));
         _fundBurnie(who, _subCost());
         vm.prank(who);
-        afKing.subscribe(address(0), drainFirst, true, 1, 0); // self, drainFirst, ticket mode, qty 1
+        afKing.subscribe(address(0), drainFirst, true, 1, 0, address(0)); // self, drainFirst, ticket mode, qty 1, self-funded
         vm.prank(who);
         game.setOperatorApproval(address(afKing), true);
     }

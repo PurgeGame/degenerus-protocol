@@ -35,11 +35,16 @@ contract AfKingSubscription is DeployProtocol {
     /// @dev _subOf mapping root slot (address => Sub packed in one slot).
     uint256 private constant SUBOF_SLOT = 1;
 
-    // Sub packed-field byte offsets within the single Sub slot.
-    uint256 private constant OFF_DAILY = 0;       // uint8 dailyQuantity
-    uint256 private constant OFF_LASTSWEPT = 3;   // uint32 lastSweptDay  (bytes 3..6)
-    uint256 private constant OFF_PAIDTHROUGH = 7; // uint32 paidThroughDay (bytes 7..10)
-    uint256 private constant OFF_FLAGS = 12;      // uint8 flags (bit 0 = windowPaid)
+    // Sub packed-field byte offsets within the single Sub slot, re-derived from the
+    // post-OPEN-E repack (319.1-01 AFTER layout): the two standalone bools collapsed into
+    // `flags` and a 20-byte `fundingSource` address was appended, shifting lastSweptDay
+    // 3->1, paidThroughDay 7->5, flags 12->10.
+    uint256 private constant OFF_DAILY = 0;          // uint8 dailyQuantity   (byte 0)
+    uint256 private constant OFF_LASTSWEPT = 1;      // uint32 lastSweptDay    (bytes 1..4)
+    uint256 private constant OFF_PAIDTHROUGH = 5;    // uint32 paidThroughDay  (bytes 5..8)
+    uint256 private constant OFF_REINVEST = 9;       // uint8 reinvestPct      (byte 9)
+    uint256 private constant OFF_FLAGS = 10;         // uint8 flags (bit 0 = windowPaid)
+    uint256 private constant OFF_FUNDING_SOURCE = 11; // address fundingSource (bytes 11..30)
 
     // -------------------------------------------------------------------------
     // BurnieCoin / mint constants
@@ -274,7 +279,7 @@ contract AfKingSubscription is DeployProtocol {
     function _subscribeTicketMode(address who, uint8 q, bool fundBurnie) internal {
         if (fundBurnie) _fundBurnie(who, _subCost());
         vm.prank(who);
-        afKing.subscribe(address(0), false, true, q, 0); // self-consent, ticket mode, no reinvest
+        afKing.subscribe(address(0), false, true, q, 0, address(0)); // self-consent, ticket mode, no reinvest, self-funded
     }
 
     /// @dev A fully-healthy buying sub: ticket mode, operator-approved, funded pool + BURNIE, and
