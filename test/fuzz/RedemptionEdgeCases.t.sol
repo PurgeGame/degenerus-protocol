@@ -165,23 +165,26 @@ contract RedemptionEdgeCases is DeployProtocol {
     /// @dev Directly resolve a day's pool by pranking the game contract — bypasses the full
     ///      advance + VRF cycle for deterministic roll values. Precedent at
     ///      `test/fuzz/RedemptionGas.t.sol:77-78`.
-    function _resolveDay(uint32 dayToResolve, uint16 roll, uint32 flipDay) internal {
+    function _resolveDay(uint32 dayToResolve, uint16 roll) internal {
         vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(roll, flipDay, dayToResolve);
+        sdgnrs.resolveRedemptionPeriod(roll, dayToResolve);
     }
 
-    /// @dev Read packed `pendingByDay[day]` slot and unpack 4×uint64 fields.
+    /// @dev Read packed `pendingByDay[day]` slot and unpack the 3×uint64 fields.
+    ///      v47: the per-day BURNIE base was removed (BURNIE is settled at submit, not per-day),
+    ///      so `DayPending` is now `{ethBase (bits 0-63), supplySnapshot (bits 64-127),
+    ///      burned (bits 128-191)}` — the former `burnieBase` slot at bits 64-127 is gone and
+    ///      supplySnapshot/burned shifted down one field each.
     function _readPendingByDay(uint32 day)
         internal
         view
-        returns (uint64 ethBase, uint64 burnieBase, uint64 supplySnapshot, uint64 burned)
+        returns (uint64 ethBase, uint64 supplySnapshot, uint64 burned)
     {
         bytes32 slot = keccak256(abi.encode(uint256(day), uint256(SLOT_PENDING_BY_DAY)));
         uint256 raw = uint256(vm.load(address(sdgnrs), slot));
         ethBase = uint64(raw);
-        burnieBase = uint64(raw >> 64);
-        supplySnapshot = uint64(raw >> 128);
-        burned = uint64(raw >> 192);
+        supplySnapshot = uint64(raw >> 64);
+        burned = uint64(raw >> 128);
     }
 
     /// @dev Warp wall clock by 1 day and re-fund the game's ETH backing so subsequent burns
@@ -221,12 +224,11 @@ contract RedemptionEdgeCases is DeployProtocol {
         vm.prank(playerB);
         sdgnrs.burn(amountPrior);
 
-        // Snapshot the prior-day pool state — these 4 fields must be byte-identical post-burn-D.
-        // ePriorPre/bPriorPre/sPriorPre intentionally read but unused individually — the byte-
+        // Snapshot the prior-day pool state — these 3 fields must be byte-identical post-burn-D.
+        // ePriorPre/sPriorPre intentionally read but unused individually — the byte-
         // identity assertion uses the fresh post-resolve snapshot (ePostResolve etc.) as the
         // anchor since the prior-day pool is deleted at resolve before the day-D burn fires.
         (
-            ,
             ,
             ,
             uint64 bnPriorPre
@@ -242,18 +244,17 @@ contract RedemptionEdgeCases is DeployProtocol {
         // (This models the legitimate state where the AdvanceModule fired at the day
         // boundary and resolved the prior pool, leaving currentDayView() == D and sentinel
         // == 0; the test then exercises a day-D burn in this gap-window.)
-        _resolveDay(dayPrior, 100, dayPrior);
+        _resolveDay(dayPrior, 100);
 
         // Re-snapshot post-resolve so post-burn comparison uses the post-delete state.
         // Per SPEC-04 (c) delete-at-resolve, the prior-day slot is now zero.
         (
             uint64 ePostResolve,
-            uint64 bPostResolve,
             uint64 sPostResolve,
             uint64 bnPostResolve
         ) = _readPendingByDay(dayPrior);
         assertEq(uint256(ePostResolve), 0, "EDGE-01: post-resolve ethBase should be zero (delete-at-resolve)");
-        assertEq(uint256(bPostResolve), 0, "EDGE-01: post-resolve burnieBase should be zero");
+        // v47: per-day burnieBase removed (BURNIE settled at submit) — no field to assert.
         assertEq(uint256(sPostResolve), 0, "EDGE-01: post-resolve supplySnapshot should be zero");
         assertEq(uint256(bnPostResolve), 0, "EDGE-01: post-resolve burned should be zero");
 
@@ -270,7 +271,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         // Positive assertion: day-D pool now populated. `burned` is the always-reliable
         // populated-indicator; ethBase may be 0 under sub-gwei proportional rounding (but
         // FUZZ_MIN_AMOUNT guarantees > 1 gwei here).
-        (uint64 eD, , uint64 sD, uint64 bnD) = _readPendingByDay(dayD);
+        (uint64 eD, uint64 sD, uint64 bnD) = _readPendingByDay(dayD);
         assertGt(uint256(sD), 0, "EDGE-01: day-D supplySnapshot must lazy-init on first burn");
         assertGt(uint256(bnD), 0, "EDGE-01: day-D burned must increment");
         assertGt(uint256(eD), 0, "EDGE-01: day-D ethBase must be populated under FUZZ_MIN_AMOUNT lower bound");
@@ -279,12 +280,11 @@ contract RedemptionEdgeCases is DeployProtocol {
         // the day-D burn cannot resurrect or mutate that key).
         (
             uint64 ePriorPost,
-            uint64 bPriorPost,
             uint64 sPriorPost,
             uint64 bnPriorPost
         ) = _readPendingByDay(dayPrior);
         assertEq(uint256(ePriorPost), uint256(ePostResolve), "EDGE-01: prior-day ethBase mutated by day-D burn");
-        assertEq(uint256(bPriorPost), uint256(bPostResolve), "EDGE-01: prior-day burnieBase mutated by day-D burn");
+        // v47: per-day burnieBase removed — no field to assert byte-identity against.
         assertEq(uint256(sPriorPost), uint256(sPostResolve), "EDGE-01: prior-day supplySnapshot mutated by day-D burn");
         assertEq(uint256(bnPriorPost), uint256(bnPostResolve), "EDGE-01: prior-day burned mutated by day-D burn");
     }
@@ -312,7 +312,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Snapshot pendingByDay[dayPrior] populated (use `burned` as the populated-indicator;
         // ethBase may round below 1 gwei).
-        (, , , uint64 bnPriorPre) = _readPendingByDay(dayPrior);
+        (, , uint64 bnPriorPre) = _readPendingByDay(dayPrior);
         assertGt(uint256(bnPriorPre), 0, "EDGE-02: prior-day pool must be populated (burned > 0)");
 
         // Step 2: cross wall day to D
@@ -322,42 +322,37 @@ contract RedemptionEdgeCases is DeployProtocol {
         // Snapshot dayD pool pre-resolve (should be zero — no day-D burn yet)
         (
             uint64 eDPre,
-            uint64 bDPre,
             uint64 sDPre,
             uint64 bnDPre
         ) = _readPendingByDay(dayD);
-        // Pre-resolve assertions can also snapshot `redemptionPeriods[dayD]` (must be zero)
-        (uint16 rollDPre, uint32 fdDPre) = sdgnrs.redemptionPeriods(dayD);
+        // Pre-resolve assertions can also snapshot `redemptionPeriods[dayD]` (must be zero).
+        // v47: RedemptionPeriod.flipDay was removed; only the roll field remains.
+        (uint16 rollDPre) = sdgnrs.redemptionPeriods(dayD);
         assertEq(uint256(rollDPre), 0, "EDGE-02: redemptionPeriods[D] must be unwritten pre-advance");
-        assertEq(uint256(fdDPre), 0, "EDGE-02: redemptionPeriods[D].flipDay must be unwritten pre-advance");
 
         // Step 3: advance fires on day D — resolves dayToResolve = dayPrior per sentinel
-        _resolveDay(dayPrior, roll, dayPrior);
+        _resolveDay(dayPrior, roll);
 
         // Positive assertion: redemptionPeriods[dayPrior].roll == roll
-        (uint16 rollPriorPost, uint32 fdPriorPost) = sdgnrs.redemptionPeriods(dayPrior);
+        (uint16 rollPriorPost) = sdgnrs.redemptionPeriods(dayPrior);
         assertEq(uint256(rollPriorPost), uint256(roll), "EDGE-02: redemptionPeriods[D-1].roll must equal resolve arg");
-        assertEq(uint256(fdPriorPost), uint256(dayPrior), "EDGE-02: redemptionPeriods[D-1].flipDay must equal resolve arg");
 
         // pendingByDay[dayPrior] is zero after delete-at-resolve
-        (uint64 ePriorPost, uint64 bPriorPost, uint64 sPriorPost, uint64 bnPriorPost) =
+        (uint64 ePriorPost, uint64 sPriorPost, uint64 bnPriorPost) =
             _readPendingByDay(dayPrior);
         assertEq(uint256(ePriorPost), 0, "EDGE-02: delete-at-resolve must clear ethBase");
-        assertEq(uint256(bPriorPost), 0, "EDGE-02: delete-at-resolve must clear burnieBase");
         assertEq(uint256(sPriorPost), 0, "EDGE-02: delete-at-resolve must clear supplySnapshot");
         assertEq(uint256(bnPriorPost), 0, "EDGE-02: delete-at-resolve must clear burned");
 
         // Negative assertion: pendingByDay[dayD] byte-identical pre/post resolve (still zero)
-        (uint64 eDPost, uint64 bDPost, uint64 sDPost, uint64 bnDPost) = _readPendingByDay(dayD);
+        (uint64 eDPost, uint64 sDPost, uint64 bnDPost) = _readPendingByDay(dayD);
         assertEq(uint256(eDPost), uint256(eDPre), "EDGE-02: day-D ethBase mutated by D-1 resolve");
-        assertEq(uint256(bDPost), uint256(bDPre), "EDGE-02: day-D burnieBase mutated by D-1 resolve");
         assertEq(uint256(sDPost), uint256(sDPre), "EDGE-02: day-D supplySnapshot mutated by D-1 resolve");
         assertEq(uint256(bnDPost), uint256(bnDPre), "EDGE-02: day-D burned mutated by D-1 resolve");
 
         // redemptionPeriods[dayD] still zero (only redemptionPeriods[dayPrior] was written)
-        (uint16 rollDPost, uint32 fdDPost) = sdgnrs.redemptionPeriods(dayD);
+        (uint16 rollDPost) = sdgnrs.redemptionPeriods(dayD);
         assertEq(uint256(rollDPost), 0, "EDGE-02: redemptionPeriods[D] must remain zero post-D-1-resolve");
-        assertEq(uint256(fdDPost), 0, "EDGE-02: redemptionPeriods[D].flipDay must remain zero post-D-1-resolve");
     }
 
     // =====================================================================
@@ -379,7 +374,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Advance and resolve day D
         _advanceWallDay();
-        _resolveDay(dayD, 100, dayD);
+        _resolveDay(dayD, 100);
 
         // Day D+1 burn
         uint32 dayD1 = game.currentDayView();
@@ -388,7 +383,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Advance and resolve day D+1
         _advanceWallDay();
-        _resolveDay(dayD1, 100, dayD1);
+        _resolveDay(dayD1, 100);
 
         // Day D+2 burn
         uint32 dayD2 = game.currentDayView();
@@ -397,16 +392,16 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Advance and resolve day D+2
         _advanceWallDay();
-        _resolveDay(dayD2, 100, dayD2);
+        _resolveDay(dayD2, 100);
 
         // Capture pre-D+2-claim snapshots for days D and D+1
-        (uint96 evD_Pre, uint96 bvD_Pre, uint16 asD_Pre) = sdgnrs.pendingRedemptions(playerA, dayD);
-        (uint96 evD1_Pre, uint96 bvD1_Pre, uint16 asD1_Pre) = sdgnrs.pendingRedemptions(playerA, dayD1);
+        (uint96 evD_Pre, uint16 asD_Pre) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 evD1_Pre, uint16 asD1_Pre) = sdgnrs.pendingRedemptions(playerA, dayD1);
 
         // All three slots must independently populate (positive assertion)
         assertGt(uint256(evD_Pre), 0, "EDGE-03: day-D claim slot must populate");
         assertGt(uint256(evD1_Pre), 0, "EDGE-03: day-D+1 claim slot must populate");
-        (uint96 evD2_Pre, , ) = sdgnrs.pendingRedemptions(playerA, dayD2);
+        (uint96 evD2_Pre, ) = sdgnrs.pendingRedemptions(playerA, dayD2);
         assertGt(uint256(evD2_Pre), 0, "EDGE-03: day-D+2 claim slot must populate");
 
         // Claim day D+2 first (out-of-order)
@@ -414,18 +409,17 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.claimRedemption(dayD2);
 
         // Day D+2 slot now deleted per SPEC-04 (d)
-        (uint96 evD2_Post, uint96 bvD2_Post, ) = sdgnrs.pendingRedemptions(playerA, dayD2);
+        // v47: PendingRedemption.burnieOwed removed (BURNIE settled at submit); the "burnieOwed
+        // cleared on claim" assertions are now structurally guaranteed (no field).
+        (uint96 evD2_Post, ) = sdgnrs.pendingRedemptions(playerA, dayD2);
         assertEq(uint256(evD2_Post), 0, "EDGE-03: day-D+2 ethValueOwed cleared on full claim");
-        assertEq(uint256(bvD2_Post), 0, "EDGE-03: day-D+2 burnieOwed cleared on full claim");
 
         // Negative assertion: D and D+1 slots byte-identical
-        (uint96 evD_Post, uint96 bvD_Post, uint16 asD_Post) = sdgnrs.pendingRedemptions(playerA, dayD);
-        (uint96 evD1_Post, uint96 bvD1_Post, uint16 asD1_Post) = sdgnrs.pendingRedemptions(playerA, dayD1);
+        (uint96 evD_Post, uint16 asD_Post) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 evD1_Post, uint16 asD1_Post) = sdgnrs.pendingRedemptions(playerA, dayD1);
         assertEq(uint256(evD_Post), uint256(evD_Pre), "EDGE-03: day-D ethValueOwed mutated by day-D+2 claim");
-        assertEq(uint256(bvD_Post), uint256(bvD_Pre), "EDGE-03: day-D burnieOwed mutated by day-D+2 claim");
         assertEq(uint256(asD_Post), uint256(asD_Pre), "EDGE-03: day-D activityScore mutated by day-D+2 claim");
         assertEq(uint256(evD1_Post), uint256(evD1_Pre), "EDGE-03: day-D+1 ethValueOwed mutated by day-D+2 claim");
-        assertEq(uint256(bvD1_Post), uint256(bvD1_Pre), "EDGE-03: day-D+1 burnieOwed mutated by day-D+2 claim");
         assertEq(uint256(asD1_Post), uint256(asD1_Pre), "EDGE-03: day-D+1 activityScore mutated by day-D+2 claim");
 
         // Subsequent in-order D and D+1 claims succeed (no revert)
@@ -435,12 +429,10 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.claimRedemption(dayD1);
 
         // After all claims, all three slots are cleared
-        (uint96 evDFinal, uint96 bvDFinal, ) = sdgnrs.pendingRedemptions(playerA, dayD);
-        (uint96 evD1Final, uint96 bvD1Final, ) = sdgnrs.pendingRedemptions(playerA, dayD1);
+        (uint96 evDFinal, ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 evD1Final, ) = sdgnrs.pendingRedemptions(playerA, dayD1);
         assertEq(uint256(evDFinal), 0, "EDGE-03: day-D fully cleared after final claim");
-        assertEq(uint256(bvDFinal), 0, "EDGE-03: day-D burnie fully cleared after final claim");
         assertEq(uint256(evD1Final), 0, "EDGE-03: day-D+1 fully cleared after final claim");
-        assertEq(uint256(bvD1Final), 0, "EDGE-03: day-D+1 burnie fully cleared after final claim");
     }
 
     // =====================================================================
@@ -466,22 +458,22 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.burn(amountA);
 
         // Snapshot A's claim slot pre-B-burn
-        (uint96 evA_PreB, , ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 evA_PreB, ) = sdgnrs.pendingRedemptions(playerA, dayD);
 
         vm.prank(playerB);
         sdgnrs.burn(amountB);
 
         // Negative assertion: A's slot byte-identical post-B-burn
-        (uint96 evA_PostB, , ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 evA_PostB, ) = sdgnrs.pendingRedemptions(playerA, dayD);
         assertEq(uint256(evA_PostB), uint256(evA_PreB), "EDGE-04: A's ethValueOwed mutated by B's burn");
 
         // Resolve day D with deterministic roll
         _advanceWallDay();
-        _resolveDay(dayD, roll, dayD);
+        _resolveDay(dayD, roll);
 
         // Snapshot per-claim values just before claims
-        (uint96 evA_PreClaim, , ) = sdgnrs.pendingRedemptions(playerA, dayD);
-        (uint96 evB_PreClaim, , ) = sdgnrs.pendingRedemptions(playerB, dayD);
+        (uint96 evA_PreClaim, ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 evB_PreClaim, ) = sdgnrs.pendingRedemptions(playerB, dayD);
 
         // Both claim — capture ETH delta
         uint256 ethABefore = playerA.balance;
@@ -520,7 +512,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.burn(amount);
 
         // Snapshot pre-failed-claim state
-        (uint96 evPre, uint96 bvPre, uint16 asPre) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 evPre, uint16 asPre) = sdgnrs.pendingRedemptions(playerA, dayD);
         uint256 cumulativePre = sdgnrs.pendingRedemptionEthValue();
 
         // Negative assertion: claim reverts NotResolved
@@ -529,16 +521,15 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.claimRedemption(dayD);
 
         // Byte-identity: claim slot + cumulative scalar untouched
-        (uint96 evPost, uint96 bvPost, uint16 asPost) = sdgnrs.pendingRedemptions(playerA, dayD);
+        // v47: PendingRedemption.burnieOwed removed — no field to byte-compare.
+        (uint96 evPost, uint16 asPost) = sdgnrs.pendingRedemptions(playerA, dayD);
         assertEq(uint256(evPost), uint256(evPre), "EDGE-05: ethValueOwed mutated by failed claim");
-        assertEq(uint256(bvPost), uint256(bvPre), "EDGE-05: burnieOwed mutated by failed claim");
         assertEq(uint256(asPost), uint256(asPre), "EDGE-05: activityScore mutated by failed claim");
         assertEq(sdgnrs.pendingRedemptionEthValue(), cumulativePre, "EDGE-05: cumulative ETH mutated by failed claim");
 
-        // redemptionPeriods[dayD] still zero
-        (uint16 rollPost, uint32 fdPost) = sdgnrs.redemptionPeriods(dayD);
+        // redemptionPeriods[dayD] still zero (v47: flipDay field removed)
+        (uint16 rollPost) = sdgnrs.redemptionPeriods(dayD);
         assertEq(uint256(rollPost), 0, "EDGE-05: redemptionPeriods[D].roll mutated by failed claim");
-        assertEq(uint256(fdPost), 0, "EDGE-05: redemptionPeriods[D].flipDay mutated by failed claim");
     }
 
     // =====================================================================
@@ -564,33 +555,32 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.burn(amount);
 
         // Snapshot the locked claim value at burn time
-        (uint96 evAtBurn, uint96 bvAtBurn, uint16 asAtBurn) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 evAtBurn, uint16 asAtBurn) = sdgnrs.pendingRedemptions(playerA, dayD);
 
         // Stall: warp k days forward without firing any advance
         for (uint256 i = 0; i < stallDays; i++) {
             vm.warp(block.timestamp + 1 days);
         }
 
-        // Mid-stall: claim slot still byte-identical (no time-degradation)
-        (uint96 evMid, uint96 bvMid, uint16 asMid) = sdgnrs.pendingRedemptions(playerA, dayD);
+        // Mid-stall: claim slot still byte-identical (no time-degradation).
+        // v47: burnieOwed field removed — only ethValueOwed + activityScore remain.
+        (uint96 evMid, uint16 asMid) = sdgnrs.pendingRedemptions(playerA, dayD);
         assertEq(uint256(evMid), uint256(evAtBurn), "EDGE-06: ethValueOwed time-degraded during stall");
-        assertEq(uint256(bvMid), uint256(bvAtBurn), "EDGE-06: burnieOwed time-degraded during stall");
         assertEq(uint256(asMid), uint256(asAtBurn), "EDGE-06: activityScore time-degraded during stall");
 
         // Eventual resolve fires (in real flow this is the AdvanceModule's catch-up
         // sentinel-driven resolve; we model it as a direct prank).
-        _resolveDay(dayD, roll, dayD);
+        _resolveDay(dayD, roll);
 
-        (uint16 rollPost, ) = sdgnrs.redemptionPeriods(dayD);
+        (uint16 rollPost) = sdgnrs.redemptionPeriods(dayD);
         assertEq(uint256(rollPost), uint256(roll), "EDGE-06: redemptionPeriods[D].roll != resolve arg");
 
         // Player can claim — no revert
         vm.prank(playerA);
         sdgnrs.claimRedemption(dayD);
 
-        (uint96 evFinal, uint96 bvFinal, ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 evFinal, ) = sdgnrs.pendingRedemptions(playerA, dayD);
         assertEq(uint256(evFinal), 0, "EDGE-06: claim slot cleared post-claim");
-        assertEq(uint256(bvFinal), 0, "EDGE-06: claim burnie slot cleared post-claim");
     }
 
     // =====================================================================
@@ -646,15 +636,15 @@ contract RedemptionEdgeCases is DeployProtocol {
         // Step 2: Advance to D+1; resolve D
         _advanceWallDay();
         uint32 dayD1 = game.currentDayView();
-        _resolveDay(dayD, roll1, dayD);
+        _resolveDay(dayD, roll1);
 
         // Capture rollPre: the LOAD-BEARING first-write value of redemptionPeriods[D].roll
-        (uint16 rollPre, uint32 fdPre) = sdgnrs.redemptionPeriods(dayD);
+        (uint16 rollPre) = sdgnrs.redemptionPeriods(dayD);
         assertEq(uint256(rollPre), uint256(roll1), "EDGE-07: precondition - redemptionPeriods[D].roll first-write");
 
         // Confirm sentinel + pendingByDay state post-resolve
         assertEq(uint256(sdgnrs.pendingResolveDay()), 0, "EDGE-07: sentinel must be cleared post-resolve");
-        (uint64 eDPostResolve, , , ) = _readPendingByDay(dayD);
+        (uint64 eDPostResolve, , ) = _readPendingByDay(dayD);
         assertEq(uint256(eDPostResolve), 0, "EDGE-07: pendingByDay[D] deleted post-resolve");
 
         // Step 3: V-184 attack — Attacker B re-burns. Wall day is now D+1; sentinel was just
@@ -664,47 +654,41 @@ contract RedemptionEdgeCases is DeployProtocol {
         vm.prank(playerB);
         sdgnrs.burn(amountB);
 
-        // Mid-attack assertion: redemptionPeriods[D].roll byte-identical after re-burn
-        (uint16 rollMid, uint32 fdMid) = sdgnrs.redemptionPeriods(dayD);
+        // Mid-attack assertion: redemptionPeriods[D].roll byte-identical after re-burn.
+        // v47: flipDay field removed; the roll byte-identity IS the V-184 closure invariant.
+        (uint16 rollMid) = sdgnrs.redemptionPeriods(dayD);
         assertEq(uint256(rollMid), uint256(rollPre), "EDGE-07: redemptionPeriods[D].roll mutated by V-184 re-burn");
-        assertEq(uint256(fdMid), uint256(fdPre), "EDGE-07: redemptionPeriods[D].flipDay mutated by V-184 re-burn");
 
         // Sentinel now stamped to dayD1 (the re-burn's wall day)
         assertEq(uint256(sdgnrs.pendingResolveDay()), uint256(dayD1), "EDGE-07: sentinel must stamp to dayD+1 after re-burn");
 
         // Step 4: Wall day → D+2; next advance fires — resolves dayD1 (sentinel) with roll2
         _advanceWallDay();
-        _resolveDay(dayD1, roll2, dayD1);
+        _resolveDay(dayD1, roll2);
 
         // Post-second-resolve: redemptionPeriods[D+1] now populated with roll2
-        (uint16 rollD1Post, uint32 fdD1Post) = sdgnrs.redemptionPeriods(dayD1);
+        (uint16 rollD1Post) = sdgnrs.redemptionPeriods(dayD1);
         assertEq(uint256(rollD1Post), uint256(roll2), "EDGE-07: redemptionPeriods[D+1].roll != second resolve arg");
-        assertEq(uint256(fdD1Post), uint256(dayD1), "EDGE-07: redemptionPeriods[D+1].flipDay != second resolve arg");
 
         // **LOAD-BEARING V-184 CLOSURE:** redemptionPeriods[D].roll BYTE-IDENTICAL pre/post entire attack
-        (uint16 rollPostAttack, uint32 fdPostAttack) = sdgnrs.redemptionPeriods(dayD);
+        (uint16 rollPostAttack) = sdgnrs.redemptionPeriods(dayD);
         assertEq(
             uint256(rollPostAttack),
             uint256(rollPre),
             "EDGE-07: V-184 CLOSURE FAILED - redemptionPeriods[D].roll diverged across attack sequence"
         );
-        assertEq(
-            uint256(fdPostAttack),
-            uint256(fdPre),
-            "EDGE-07: V-184 CLOSURE FAILED - redemptionPeriods[D].flipDay diverged across attack sequence"
-        );
 
         // Player A's claim slot for day D byte-identical across the attack (no cross-day mutation)
-        (uint96 evA_Post, , ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 evA_Post, ) = sdgnrs.pendingRedemptions(playerA, dayD);
         // We didn't snapshot evA_Pre here — but the burn amounts are deterministic for the
         // first burn of dayD, and the claim slot is preserved across the V-184 vector. The
         // load-bearing assertion above on redemptionPeriods[dayD] is what matters for V-184.
         assertGt(uint256(evA_Post), 0, "EDGE-07: A's day-D claim slot must remain populated through attack");
         // No mutation of B's day-D slot (B never burned on day D, only day D+1)
-        (uint96 evB_dayD, , ) = sdgnrs.pendingRedemptions(playerB, dayD);
+        (uint96 evB_dayD, ) = sdgnrs.pendingRedemptions(playerB, dayD);
         assertEq(uint256(evB_dayD), 0, "EDGE-07: B's day-D slot must remain zero (B never burned on day D)");
         // B's day-D+1 slot populated
-        (uint96 evB_dayD1, , ) = sdgnrs.pendingRedemptions(playerB, dayD1);
+        (uint96 evB_dayD1, ) = sdgnrs.pendingRedemptions(playerB, dayD1);
         assertGt(uint256(evB_dayD1), 0, "EDGE-07: B's day-D+1 claim slot must populate (re-burn lands at D+1)");
     }
 
@@ -730,14 +714,14 @@ contract RedemptionEdgeCases is DeployProtocol {
         vm.mockCall(address(game), abi.encodeWithSelector(game.gameOver.selector), abi.encode(true));
 
         _advanceWallDay();
-        _resolveDay(dayD, 100, dayD);
+        _resolveDay(dayD, 100);
 
-        (uint16 rollV1, ) = sdgnrs.redemptionPeriods(dayD);
+        (uint16 rollV1) = sdgnrs.redemptionPeriods(dayD);
         assertEq(uint256(rollV1), 100, "EDGE-08v1: resolve writes roll under gameOver");
 
         // Claim succeeds under gameOver; 100%-direct payout
         uint256 ethBeforeV1 = playerA.balance;
-        (uint96 evV1Pre, , ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 evV1Pre, ) = sdgnrs.pendingRedemptions(playerA, dayD);
         vm.prank(playerA);
         sdgnrs.claimRedemption(dayD);
         uint256 deltaV1 = playerA.balance - ethBeforeV1;
@@ -770,13 +754,13 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.burn(amount);
 
         _advanceWallDay();
-        _resolveDay(dayD2, 100, dayD2);
+        _resolveDay(dayD2, 100);
 
         // NOW mock gameOver=true (post-resolve, pre-claim)
         vm.mockCall(address(game), abi.encodeWithSelector(game.gameOver.selector), abi.encode(true));
 
         uint256 ethBeforeV2 = playerC.balance;
-        (uint96 evV2Pre, , ) = sdgnrs.pendingRedemptions(playerC, dayD2);
+        (uint96 evV2Pre, ) = sdgnrs.pendingRedemptions(playerC, dayD2);
         vm.prank(playerC);
         sdgnrs.claimRedemption(dayD2);
         uint256 deltaV2 = playerC.balance - ethBeforeV2;
@@ -814,12 +798,12 @@ contract RedemptionEdgeCases is DeployProtocol {
             address actor = _pickActor(i);
             vm.prank(actor);
             sdgnrs.burn(amount);
-            (uint96 ev, , ) = sdgnrs.pendingRedemptions(actor, dayD);
+            (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, dayD);
             evs[i] = ev;
         }
 
         _advanceWallDay();
-        _resolveDay(dayD, roll, dayD);
+        _resolveDay(dayD, roll);
 
         uint256 totalDirect;
         for (uint256 i = 0; i < n; i++) {
@@ -870,11 +854,11 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.burn(amount);
 
         _advanceWallDay();
-        _resolveDay(dayD, 100, dayD);
+        _resolveDay(dayD, 100);
 
         malicious.setTargetDay(dayD);
 
-        (uint96 evPre, , ) = sdgnrs.pendingRedemptions(address(malicious), dayD);
+        (uint96 evPre, ) = sdgnrs.pendingRedemptions(address(malicious), dayD);
         uint256 ethBefore = address(malicious).balance;
 
         // Triggering claim from the malicious contract — the receive() function will attempt
@@ -891,9 +875,8 @@ contract RedemptionEdgeCases is DeployProtocol {
         assertEq(malicious.reentrySuccessCount(), 0, "EDGE-10: re-entrant claim succeeded - double-payout VECTOR REACHABLE");
 
         // Storage slot fully cleared
-        (uint96 evPost, uint96 bvPost, ) = sdgnrs.pendingRedemptions(address(malicious), dayD);
+        (uint96 evPost, ) = sdgnrs.pendingRedemptions(address(malicious), dayD);
         assertEq(uint256(evPost), 0, "EDGE-10: claim slot not cleared post-claim");
-        assertEq(uint256(bvPost), 0, "EDGE-10: claim burnie slot not cleared post-claim");
     }
 
     // =====================================================================
@@ -914,8 +897,8 @@ contract RedemptionEdgeCases is DeployProtocol {
         uint256 supplyPre = sdgnrs.totalSupply();
         uint256 balPre = sdgnrs.balanceOf(playerA);
         uint256 cumulativePre = sdgnrs.pendingRedemptionEthValue();
-        (uint96 evPre, uint96 bvPre, uint16 asPre) = sdgnrs.pendingRedemptions(playerA, dayD);
-        (uint64 ePre, uint64 bPre, uint64 sPre, uint64 bnPre) = _readPendingByDay(dayD);
+        (uint96 evPre, uint16 asPre) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint64 ePre, uint64 sPre, uint64 bnPre) = _readPendingByDay(dayD);
 
         // Force rngLocked = true via mockCall
         vm.mockCall(address(game), abi.encodeWithSelector(game.rngLocked.selector), abi.encode(true));
@@ -929,13 +912,11 @@ contract RedemptionEdgeCases is DeployProtocol {
         assertEq(sdgnrs.totalSupply(), supplyPre, "EDGE-11: totalSupply mutated by failed burn");
         assertEq(sdgnrs.balanceOf(playerA), balPre, "EDGE-11: balanceOf[A] mutated by failed burn");
         assertEq(sdgnrs.pendingRedemptionEthValue(), cumulativePre, "EDGE-11: cumulative mutated");
-        (uint96 evPost, uint96 bvPost, uint16 asPost) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 evPost, uint16 asPost) = sdgnrs.pendingRedemptions(playerA, dayD);
         assertEq(uint256(evPost), uint256(evPre), "EDGE-11: per-claim ethValueOwed mutated");
-        assertEq(uint256(bvPost), uint256(bvPre), "EDGE-11: per-claim burnieOwed mutated");
         assertEq(uint256(asPost), uint256(asPre), "EDGE-11: per-claim activityScore mutated");
-        (uint64 ePost, uint64 bPost, uint64 sPost, uint64 bnPost) = _readPendingByDay(dayD);
+        (uint64 ePost, uint64 sPost, uint64 bnPost) = _readPendingByDay(dayD);
         assertEq(uint256(ePost), uint256(ePre), "EDGE-11: pool ethBase mutated");
-        assertEq(uint256(bPost), uint256(bPre), "EDGE-11: pool burnieBase mutated");
         assertEq(uint256(sPost), uint256(sPre), "EDGE-11: pool supplySnapshot mutated");
         assertEq(uint256(bnPost), uint256(bnPre), "EDGE-11: pool burned mutated");
     }
@@ -958,8 +939,8 @@ contract RedemptionEdgeCases is DeployProtocol {
         // Snapshot
         uint256 supplyPre = sdgnrs.totalSupply();
         uint256 balPre = sdgnrs.balanceOf(playerA);
-        (uint96 evPre, , ) = sdgnrs.pendingRedemptions(playerA, dayD);
-        (, , , uint64 bnPre) = _readPendingByDay(dayD);
+        (uint96 evPre, ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (, , uint64 bnPre) = _readPendingByDay(dayD);
 
         // Force livenessTriggered = true (gameOver remains false from default mocks)
         vm.mockCall(address(game), abi.encodeWithSelector(game.gameOver.selector), abi.encode(false));
@@ -977,9 +958,9 @@ contract RedemptionEdgeCases is DeployProtocol {
         // Byte-identity assertions
         assertEq(sdgnrs.totalSupply(), supplyPre, "EDGE-12: totalSupply mutated by failed burn");
         assertEq(sdgnrs.balanceOf(playerA), balPre, "EDGE-12: balanceOf[A] mutated by failed burn");
-        (uint96 evPost, , ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 evPost, ) = sdgnrs.pendingRedemptions(playerA, dayD);
         assertEq(uint256(evPost), uint256(evPre), "EDGE-12: per-claim ethValueOwed mutated");
-        (, , , uint64 bnPost) = _readPendingByDay(dayD);
+        (, , uint64 bnPost) = _readPendingByDay(dayD);
         assertEq(uint256(bnPost), uint256(bnPre), "EDGE-12: pool burned mutated");
     }
 
@@ -1017,7 +998,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         // load-bearing EDGE-13 assertion is on the ETH side — the SPEC framing "the same
         // applies to burnieOwed if it rounds to 0 INDEPENDENTLY" is conditional, not
         // mandatory.
-        (uint96 ev, , ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 ev, ) = sdgnrs.pendingRedemptions(playerA, dayD);
         assertEq(uint256(ev), 0, "EDGE-13: claim ethValueOwed must be zero under sub-gwei rounding");
 
         // Balance decremented + supply decremented (the burn actually fired)
@@ -1025,22 +1006,21 @@ contract RedemptionEdgeCases is DeployProtocol {
         assertEq(sdgnrs.totalSupply(), supplyPre - amount, "EDGE-13: totalSupply decrement");
 
         // Pool has burned > 0 but ethBase still 0
-        (uint64 ePool, , , uint64 bnPool) = _readPendingByDay(dayD);
+        (uint64 ePool, , uint64 bnPool) = _readPendingByDay(dayD);
         assertEq(uint256(ePool), 0, "EDGE-13: pool ethBase remains zero under sub-gwei rounding");
         assertGt(uint256(bnPool), 0, "EDGE-13: pool burned increments (ceiling-divide on amount)");
 
         // Resolve + claim — payout is zero, slot is deleted, no revert
         _advanceWallDay();
-        _resolveDay(dayD, roll, dayD);
+        _resolveDay(dayD, roll);
         uint256 ethBefore = playerA.balance;
         vm.prank(playerA);
         sdgnrs.claimRedemption(dayD);
         assertEq(playerA.balance, ethBefore, "EDGE-13: claim must pay zero ETH under zero-rounded ethValueOwed");
 
         // Slot cleared
-        (uint96 evPost, uint96 bvPost, ) = sdgnrs.pendingRedemptions(playerA, dayD);
+        (uint96 evPost, ) = sdgnrs.pendingRedemptions(playerA, dayD);
         assertEq(uint256(evPost), 0, "EDGE-13: claim slot cleared post-claim");
-        assertEq(uint256(bvPost), 0, "EDGE-13: claim burnie slot cleared post-claim");
     }
 
     // =====================================================================
@@ -1062,8 +1042,9 @@ contract RedemptionEdgeCases is DeployProtocol {
         uint32 dayD = game.currentDayView();
 
         // Pre-seed pendingByDay[dayD] with supplySnapshot = 1000 whole tokens (cap = 500).
-        // Pack: (ethBase=0 << 0) | (burnieBase=0 << 64) | (supplySnapshot=1000 << 128) | (burned=0 << 192)
-        uint256 packed = (uint256(1000) << 128);
+        // v47 DayPending packing: (ethBase << 0) | (supplySnapshot << 64) | (burned << 128)
+        // — the former per-day burnieBase field was removed, so supplySnapshot moved to bit 64.
+        uint256 packed = (uint256(1000) << 64);
         bytes32 slotPbD = keccak256(abi.encode(uint256(dayD), uint256(SLOT_PENDING_BY_DAY)));
         vm.store(address(sdgnrs), slotPbD, bytes32(packed));
 
@@ -1073,7 +1054,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         vm.store(address(sdgnrs), slotSentinel, bytes32(uint256(dayD)));
 
         // Verify the snapshot is now visible
-        (, , uint64 sBefore, uint64 bnBefore) = _readPendingByDay(dayD);
+        (, uint64 sBefore, uint64 bnBefore) = _readPendingByDay(dayD);
         assertEq(uint256(sBefore), 1000, "EDGE-14: pre-seed supplySnapshot mismatch");
         assertEq(uint256(bnBefore), 0, "EDGE-14: pre-seed burned must be zero");
 
@@ -1083,7 +1064,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         vm.prank(actor);
         sdgnrs.burn(capExact);
 
-        (, , uint64 sAfter1, uint64 bnAfter1) = _readPendingByDay(dayD);
+        (, uint64 sAfter1, uint64 bnAfter1) = _readPendingByDay(dayD);
         assertEq(uint256(sAfter1), uint256(sBefore), "EDGE-14: snapshot NOT immutable post burn-1");
         assertEq(uint256(bnAfter1), 500, "EDGE-14: burned must be 500 whole tokens post burn-1");
 
@@ -1093,7 +1074,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.burn(1 ether);
 
         // Snapshot + burned byte-identical post failed burn
-        (, , uint64 sAfter2, uint64 bnAfter2) = _readPendingByDay(dayD);
+        (, uint64 sAfter2, uint64 bnAfter2) = _readPendingByDay(dayD);
         assertEq(uint256(sAfter2), uint256(sAfter1), "EDGE-14: snapshot mutated by failed over-cap burn");
         assertEq(uint256(bnAfter2), uint256(bnAfter1), "EDGE-14: burned mutated by failed over-cap burn");
 
@@ -1123,14 +1104,16 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Seed claim slot: ethValueOwed = MAX_DAILY_REDEMPTION_EV exactly (gwei-aligned —
         // 160 ether = 160e18 wei is a multiple of 1e9).
-        // Pack: (ethValueOwed | (burnieOwed << 96) | (activityScore << 192))
-        uint256 packed = uint256(MAX_DAILY_REDEMPTION_EV) | (uint256(1) << 192); // activityScore=1 (set)
+        // v47 PendingRedemption packing: (ethValueOwed uint96, bits 0-95) | (activityScore uint16,
+        // bits 96-111). The former burnieOwed field (old bits 96-191) was removed, so activityScore
+        // moved from bit 192 down to bit 96.
+        uint256 packed = uint256(MAX_DAILY_REDEMPTION_EV) | (uint256(1) << 96); // activityScore=1 (set)
         bytes32 outerSlot = keccak256(abi.encode(actor, uint256(7))); // SLOT_PENDING_REDEMPTIONS=7
         bytes32 claimSlot = keccak256(abi.encode(uint256(dayD), outerSlot));
         vm.store(address(sdgnrs), claimSlot, bytes32(packed));
 
         // Verify seed visible
-        (uint96 evSeeded, , uint16 asSeeded) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evSeeded, uint16 asSeeded) = sdgnrs.pendingRedemptions(actor, dayD);
         assertEq(uint256(evSeeded), MAX_DAILY_REDEMPTION_EV, "EDGE-15: seed ethValueOwed mismatch");
         assertEq(uint256(asSeeded), 1, "EDGE-15: seed activityScore mismatch");
 
@@ -1146,9 +1129,9 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.burn(amount);
 
         // Byte-identity: claim slot byte-identical post failed burn
-        (uint96 evPost, uint96 bvPost, uint16 asPost) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evPost, uint16 asPost) = sdgnrs.pendingRedemptions(actor, dayD);
         assertEq(uint256(evPost), MAX_DAILY_REDEMPTION_EV, "EDGE-15: ethValueOwed mutated by failed burn");
-        assertEq(uint256(bvPost), 0, "EDGE-15: burnieOwed mutated by failed burn");
+        // v47: burnieOwed field removed — nothing to byte-compare.
         assertEq(uint256(asPost), 1, "EDGE-15: activityScore mutated by failed burn");
     }
 
@@ -1175,20 +1158,21 @@ contract RedemptionEdgeCases is DeployProtocol {
         // simulates a (player, D) pair that accumulated to the cap on day D; the cap-check
         // strict `>` operator must NOT block any day-(D+1) burn under composite-key
         // independence.
-        uint256 packedD = uint256(MAX_DAILY_REDEMPTION_EV) | (uint256(1) << 192);
+        // v47 packing: activityScore is at bit 96 (burnieOwed field removed).
+        uint256 packedD = uint256(MAX_DAILY_REDEMPTION_EV) | (uint256(1) << 96);
         bytes32 outerSlot = keccak256(abi.encode(actor, uint256(7)));
         bytes32 claimSlotD = keccak256(abi.encode(uint256(dayD), outerSlot));
         vm.store(address(sdgnrs), claimSlotD, bytes32(packedD));
 
         // Snapshot day-D claim slot pre-D+1-burn
-        (uint96 evD_Pre, , uint16 asD_Pre) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evD_Pre, uint16 asD_Pre) = sdgnrs.pendingRedemptions(actor, dayD);
         assertEq(uint256(evD_Pre), MAX_DAILY_REDEMPTION_EV, "EDGE-16: seed verification");
 
         // Resolve day D — clears sentinel, deletes pool. Day-D burn (above) populated the
         // pool so the resolver does NOT early-return; sentinel is correctly cleared at the
         // post-resolve `if (pendingResolveDay == dayToResolve) pendingResolveDay = 0;` line.
         _advanceWallDay();
-        _resolveDay(dayD, 100, dayD);
+        _resolveDay(dayD, 100);
         assertEq(uint256(sdgnrs.pendingResolveDay()), 0, "EDGE-16: sentinel must clear post day-D resolve");
 
         // Day-(D+1) burn from same actor — must succeed; the day-D claim slot remains
@@ -1198,10 +1182,10 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.burn(FUZZ_MIN_AMOUNT);
 
         // Positive: day-D+1 slot populated, day-D slot byte-identical
-        (uint96 evD1, , ) = sdgnrs.pendingRedemptions(actor, dayD1);
+        (uint96 evD1, ) = sdgnrs.pendingRedemptions(actor, dayD1);
         assertGt(uint256(evD1), 0, "EDGE-16: day-D+1 claim slot must populate (cross-day cap reset)");
 
-        (uint96 evD_Post, , uint16 asD_Post) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evD_Post, uint16 asD_Post) = sdgnrs.pendingRedemptions(actor, dayD);
         assertEq(uint256(evD_Post), uint256(evD_Pre), "EDGE-16: day-D ethValueOwed mutated by day-D+1 burn");
         assertEq(uint256(asD_Post), uint256(asD_Pre), "EDGE-16: day-D activityScore mutated by day-D+1 burn");
     }
@@ -1237,10 +1221,10 @@ contract RedemptionEdgeCases is DeployProtocol {
         // Advance to day D + resolve D-1 with roll1
         _advanceWallDay();
         uint32 dayD = game.currentDayView();
-        _resolveDay(dayPrior, roll1, dayPrior);
+        _resolveDay(dayPrior, roll1);
 
         // Snapshot redemptionPeriods[dayPrior].roll = roll1
-        (uint16 rollPriorPostResolve, ) = sdgnrs.redemptionPeriods(dayPrior);
+        (uint16 rollPriorPostResolve) = sdgnrs.redemptionPeriods(dayPrior);
         assertEq(uint256(rollPriorPostResolve), uint256(roll1), "EDGE-17: precondition - dayPrior.roll first-write");
 
         // Late-day burn on day D from B (after D-1 was resolved + deleted)
@@ -1248,47 +1232,47 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.burn(amount2);
 
         // redemptionPeriods[dayPrior].roll byte-identical post late-day burn
-        (uint16 rollPriorPostLateBurn, ) = sdgnrs.redemptionPeriods(dayPrior);
+        (uint16 rollPriorPostLateBurn) = sdgnrs.redemptionPeriods(dayPrior);
         assertEq(uint256(rollPriorPostLateBurn), uint256(roll1), "EDGE-17: dayPrior.roll mutated by late-day burn");
 
         // pendingByDay[D] populated by the late-day burn (burned > 0)
-        (, , , uint64 bnDPostBurn) = _readPendingByDay(dayD);
+        (, , uint64 bnDPostBurn) = _readPendingByDay(dayD);
         assertGt(uint256(bnDPostBurn), 0, "EDGE-17: pendingByDay[D] must populate from late-day burn");
 
-        // pendingByDay[D-1] remains deleted (zero across all 4 fields)
-        (uint64 ePriorPost, uint64 bPriorPost, uint64 sPriorPost, uint64 bnPriorPost) =
+        // pendingByDay[D-1] remains deleted (zero across all 3 v47 fields — burnieBase removed)
+        (uint64 ePriorPost, uint64 sPriorPost, uint64 bnPriorPost) =
             _readPendingByDay(dayPrior);
         assertEq(uint256(ePriorPost), 0, "EDGE-17: pendingByDay[D-1].ethBase resurrected");
-        assertEq(uint256(bPriorPost), 0, "EDGE-17: pendingByDay[D-1].burnieBase resurrected");
         assertEq(uint256(sPriorPost), 0, "EDGE-17: pendingByDay[D-1].supplySnapshot resurrected");
         assertEq(uint256(bnPriorPost), 0, "EDGE-17: pendingByDay[D-1].burned resurrected");
 
         // Next-day advance resolves redemptionPeriods[D] for the FIRST time with roll2
         _advanceWallDay();
-        _resolveDay(dayD, roll2, dayD);
+        _resolveDay(dayD, roll2);
 
-        (uint16 rollDPostResolve, ) = sdgnrs.redemptionPeriods(dayD);
+        (uint16 rollDPostResolve) = sdgnrs.redemptionPeriods(dayD);
         assertEq(uint256(rollDPostResolve), uint256(roll2), "EDGE-17: dayD.roll first-write must equal roll2");
 
         // redemptionPeriods[dayPrior].roll STILL byte-identical to roll1
-        (uint16 rollPriorFinal, ) = sdgnrs.redemptionPeriods(dayPrior);
+        (uint16 rollPriorFinal) = sdgnrs.redemptionPeriods(dayPrior);
         assertEq(uint256(rollPriorFinal), uint256(roll1), "EDGE-17: dayPrior.roll mutated by dayD resolve");
     }
 
     // =====================================================================
-    //              EDGE-18: BURNIE pool insufficient fallback
+    //              EDGE-18: ETH-only claim completes + slot cleared
     // =====================================================================
 
-    /// @notice EDGE-18 — 304-SPEC §3 lines 645-657. When the contract's BURNIE balance is
-    ///         less than `burniePayout` at claim time, `_payBurnie` falls back to
-    ///         `coinflip.claimCoinflipsForRedemption(this, remaining)` to push the shortfall,
-    ///         then transfers `remaining` to the player. The claim must succeed in full;
-    ///         no revert from BURNIE insufficiency.
-    /// @dev Tests INV-03 (BURNIE conservation). Depends on SPEC-02 (payBurnie preserved).
-    ///      Uses vm.mockCall to stage the shortfall scenario: claim with non-zero burnieOwed
-    ///      via seeded claim slot, then assert the call succeeds.
+    /// @notice EDGE-18 — 304-SPEC §3 lines 645-657 (v47-revised). The original test covered the
+    ///         claim-time BURNIE-insufficient fallback (`_payBurnie` → coinflip push → coin.transfer).
+    ///         In v47 the entire claim-time BURNIE apparatus was REMOVED: BURNIE is settled at SUBMIT
+    ///         (redeemBurnieShare → burnForCoinflip), `claimRedemption` is ETH-only, and the
+    ///         PendingRedemption.burnieOwed field no longer exists. The BURNIE-fallback path therefore
+    ///         no longer exists to be exercised. The intent-preserving residue is: a claim of a
+    ///         resolved day succeeds and fully clears the claim slot.
+    /// @dev Reduced to the live ETH-only claim path; the BURNIE-shortfall seeding/mock was deleted
+    ///      because its subject (`_payBurnie`) was removed from the frozen contract.
     /// forge-config: default.fuzz.runs = 10000
-    function testFuzz_EDGE_18_BurniePoolInsufficientFallback(uint256 actorSeed) public {
+    function testFuzz_EDGE_18_EthOnlyClaimCompletesAndClears(uint256 actorSeed) public {
         address actor = _pickActor(actorSeed);
         uint32 dayD = game.currentDayView();
 
@@ -1297,43 +1281,15 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.burn(FUZZ_MIN_AMOUNT);
 
         _advanceWallDay();
-        _resolveDay(dayD, 100, dayD);
+        _resolveDay(dayD, 100);
 
-        // Inject non-zero burnieOwed via vm.store. The claim slot is at:
-        //   keccak256(day || keccak256(actor || 7))
-        bytes32 outerSlot = keccak256(abi.encode(actor, uint256(7)));
-        bytes32 claimSlot = keccak256(abi.encode(uint256(dayD), outerSlot));
-        uint256 currentPacked = uint256(vm.load(address(sdgnrs), claimSlot));
-        // Set burnieOwed = 1e9 (1 gwei-equivalent BURNIE units, well below uint96.max)
-        uint256 newBurnieOwed = 1e9;
-        // Clear bits 96..191 (burnieOwed field) and set new value
-        uint256 mask = ~(uint256(type(uint96).max) << 96);
-        uint256 newPacked = (currentPacked & mask) | (newBurnieOwed << 96);
-        vm.store(address(sdgnrs), claimSlot, bytes32(newPacked));
-
-        // Verify seeded state
-        (, uint96 bvSeeded, ) = sdgnrs.pendingRedemptions(actor, dayD);
-        assertEq(uint256(bvSeeded), newBurnieOwed, "EDGE-18: seeded burnieOwed mismatch");
-
-        // The contract's BURNIE balance is 0 by default (coin minted nothing to sStonk in
-        // setUp). _payBurnie will hit the fallback: payBal=0, remaining=burniePayout, calls
-        // coinflip.claimCoinflipsForRedemption (mocked to return 0 — model the push from the
-        // coinflip pool to sStonk happening externally), then coin.transfer(player, remaining).
-        // We mock coin.transfer to return true so the fallback path completes.
-        vm.mockCall(
-            address(coin),
-            abi.encodeWithSelector(coin.transfer.selector),
-            abi.encode(true)
-        );
-
-        // Claim must succeed (no revert)
+        // Claim must succeed (no revert) — v47 claim is ETH-only.
         vm.prank(actor);
         sdgnrs.claimRedemption(dayD);
 
         // Slot is fully cleared post-claim
-        (uint96 evPost, uint96 bvPost, ) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evPost, ) = sdgnrs.pendingRedemptions(actor, dayD);
         assertEq(uint256(evPost), 0, "EDGE-18: claim slot ethValueOwed not cleared");
-        assertEq(uint256(bvPost), 0, "EDGE-18: claim slot burnieOwed not cleared");
     }
 
     // =====================================================================
@@ -1385,21 +1341,20 @@ contract RedemptionEdgeCases is DeployProtocol {
         // (NOT `currentDayView() - 1`). Model this: prank as the game and resolve with
         // dayToResolve = pendingResolveDay() (= D).
         uint32 stuckDay = sdgnrs.pendingResolveDay();
-        _resolveDay(stuckDay, roll, stuckDay);
+        _resolveDay(stuckDay, roll);
 
-        // Post-resolve assertions: roll written for dayD, sentinel cleared, pool deleted
-        (uint16 rollPost, uint32 fdPost) = sdgnrs.redemptionPeriods(dayD);
+        // Post-resolve assertions: roll written for dayD, sentinel cleared, pool deleted.
+        // v47: RedemptionPeriod.flipDay removed — the sentinel/roll correctness is the live invariant.
+        (uint16 rollPost) = sdgnrs.redemptionPeriods(dayD);
         assertEq(uint256(rollPost), uint256(roll), "EDGE-19: redemptionPeriods[D].roll incorrect");
-        assertEq(uint256(fdPost), uint256(dayD), "EDGE-19: redemptionPeriods[D].flipDay incorrect");
         assertEq(uint256(sdgnrs.pendingResolveDay()), 0, "EDGE-19: sentinel must be cleared post-resolve");
 
         // Claim succeeds — burner gets paid; slot cleared
         vm.prank(burner);
         sdgnrs.claimRedemption(dayD);
 
-        (uint96 evFinal, uint96 bvFinal, ) = sdgnrs.pendingRedemptions(burner, dayD);
+        (uint96 evFinal, ) = sdgnrs.pendingRedemptions(burner, dayD);
         assertEq(uint256(evFinal), 0, "EDGE-19: claim slot ethValueOwed not cleared post-claim");
-        assertEq(uint256(bvFinal), 0, "EDGE-19: claim slot burnieOwed not cleared post-claim");
     }
 
     // =====================================================================

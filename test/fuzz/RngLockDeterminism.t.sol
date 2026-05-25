@@ -283,9 +283,8 @@ contract RngLockDeterminism is DeployProtocol {
             return;
         }
         if (action == 8) {
-            uint256 amt = bound(nonce, 1e18, 100e18);
-            vm.prank(vaultOwner);
-            try vault.gamePurchaseBurnieLootbox(amt) {} catch { return; }
+            // BURNIE-lootbox surface removed in v47 (gamePurchaseBurnieLootbox / openBurnieLootBox
+            // deleted — terminal-paradox: unguardable BURNIE→future-ticket path). No-op slot.
             return;
         }
         if (action == 9) {

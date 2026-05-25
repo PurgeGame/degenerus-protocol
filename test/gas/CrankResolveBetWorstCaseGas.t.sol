@@ -8,11 +8,11 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 /// @title CrankResolveBetWorstCaseGas -- GAS-01 resolve-bet worst-case measurement (Phase 319 Plan 02)
 ///
 /// @notice The single biggest do-work-crank cost center is a `crankBets` item resolving a degenerette
-///         bet with `ticketCount == MAX_SPINS_PER_BET == 10` where EVERY spin's payout flips into the
+///         bet with `ticketCount == MAX_SPINS_ETH == 10` where EVERY spin's payout flips into the
 ///         lootbox-conversion branch, driving 10 separate `_resolveLootboxDirect` materializations
 ///         (each a 2-level delegatecall: DegeneretteModule -> LootboxModule -> nested BoonModule, plus
 ///         a `_queueTickets` SSTORE and reward events). 319-GAS-DERIVATION.md §1 fixes THIS as the
-///         per-item maximum: the spin loop cannot exceed 10 (`MAX_SPINS_PER_BET`, DegeneretteModule:226)
+///         per-item maximum: the spin loop cannot exceed 10 (`MAX_SPINS_ETH`, DegeneretteModule:226)
 ///         and each spin's most expensive branch is the ETH-win lootbox branch
 ///         (`_distributePayout` -> `_resolveLootboxDirect`, DegeneretteModule:771-773).
 ///
@@ -68,8 +68,14 @@ contract CrankResolveBetWorstCaseGas is DeployProtocol {
     ///      test harness; the GAS-01 "fits under the block limit" bar is the mainnet 30M.
     uint256 internal constant MAINNET_BLOCK_GAS_LIMIT = 30_000_000;
 
-    /// @dev MAX_SPINS_PER_BET (DegeneretteModule:226) — the structural spin-loop ceiling.
-    uint8 internal constant MAX_SPINS_PER_BET = 10;
+    /// @dev v47: `MAX_SPINS_ETH` was retired in favour of per-currency caps
+    ///      (`MAX_SPINS_ETH = 25 / MAX_SPINS_BURNIE = 15 / MAX_SPINS_WWXRP = 5`, DegeneretteModule:226-228).
+    ///      The ETH cap is the relevant spin-loop ceiling for this ETH-bet worst case. This harness's
+    ///      existing 10-spin all-match construction (word search + per-spin lootbox-flip assertions) is
+    ///      kept AS-IS so the test still compiles and runs; re-deriving the true 25-spin worst case
+    ///      (a fresh word search achieving all-25-match) is owned by 323-04 (DGAS/DSPIN proofs).
+    /// 323-04 owns the 25-spin worst-case re-derivation against the new MAX_SPINS_ETH cap.
+    uint8 internal constant MAX_SPINS_ETH = 10;
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q' — first-spin salt
 
@@ -143,7 +149,7 @@ contract CrankResolveBetWorstCaseGas is DeployProtocol {
         _injectLootboxRngWord(INDEX, worstCaseWord);
 
         // assert-is-worst-case precondition (1/2): the placed bet's ticketCount IS the structural max.
-        assertEq(_betTicketCount(player, betId), MAX_SPINS_PER_BET, "worst case: ticketCount == MAX_SPINS_PER_BET (10)");
+        assertEq(_betTicketCount(player, betId), MAX_SPINS_ETH, "worst case: ticketCount == MAX_SPINS_ETH (10)");
 
         address[] memory players = new address[](1);
         uint64[] memory betIds = new uint64[](1);
@@ -161,10 +167,10 @@ contract CrankResolveBetWorstCaseGas is DeployProtocol {
 
         // assert-is-worst-case precondition (2/2): all 10 spins ran and EVERY spin drove the lootbox
         // materialization branch (one PayoutCapped per spin whose payout flipped into the lootbox).
-        assertEq(spinResults, MAX_SPINS_PER_BET, "all 10 spins resolved (one FullTicketResult each)");
+        assertEq(spinResults, MAX_SPINS_ETH, "all 10 spins resolved (one FullTicketResult each)");
         assertEq(
             lootboxFlips,
-            MAX_SPINS_PER_BET,
+            MAX_SPINS_ETH,
             "worst case: all 10 spins materialized a lootbox (10 PayoutCapped, the per-spin max branch)"
         );
 
@@ -245,14 +251,14 @@ contract CrankResolveBetWorstCaseGas is DeployProtocol {
     // Internal helpers
     // =========================================================================
 
-    /// @dev Place the worst-case bet: ticketCount == MAX_SPINS_PER_BET (10) with the searched ticket
+    /// @dev Place the worst-case bet: ticketCount == MAX_SPINS_ETH (10) with the searched ticket
     ///      so every spin wins (matches >= 2). Placement adds totalBet to the pool; the caller resets
     ///      the pool to SMALL_POOL_WEI afterward so the 10% cap flips each spin into the lootbox.
     function _placeWorstCaseBet(address better) internal returns (uint64 betId) {
-        uint256 totalBet = uint256(AMOUNT_PER_TICKET) * MAX_SPINS_PER_BET;
+        uint256 totalBet = uint256(AMOUNT_PER_TICKET) * MAX_SPINS_ETH;
         vm.prank(better);
         game.placeDegeneretteBet{value: totalBet}(
-            address(0), 0, AMOUNT_PER_TICKET, MAX_SPINS_PER_BET, worstCaseTicket, 0
+            address(0), 0, AMOUNT_PER_TICKET, MAX_SPINS_ETH, worstCaseTicket, 0
         );
         betId = _betNonce(better);
     }
@@ -297,7 +303,7 @@ contract CrankResolveBetWorstCaseGas is DeployProtocol {
             uint256 candidate = uint256(keccak256(abi.encodePacked("crank_resolve_worst_case_word", k)));
             uint32 t = _greedyTicket(index, candidate);
             uint8 minMatch = 8;
-            for (uint8 spinIdx; spinIdx < MAX_SPINS_PER_BET; ++spinIdx) {
+            for (uint8 spinIdx; spinIdx < MAX_SPINS_ETH; ++spinIdx) {
                 uint8 m = _countMatches(t, _resultTicketForSpin(index, candidate, spinIdx));
                 if (m < minMatch) minMatch = m;
             }
@@ -317,7 +323,7 @@ contract CrankResolveBetWorstCaseGas is DeployProtocol {
         for (uint8 q; q < 4; ++q) {
             uint16[8] memory colorHits;
             uint16[8] memory symbolHits;
-            for (uint8 spinIdx; spinIdx < MAX_SPINS_PER_BET; ++spinIdx) {
+            for (uint8 spinIdx; spinIdx < MAX_SPINS_ETH; ++spinIdx) {
                 uint32 result = _resultTicketForSpin(index, word, spinIdx);
                 uint8 rQuad = uint8(result >> (q * 8));
                 ++colorHits[(rQuad >> 3) & 7];

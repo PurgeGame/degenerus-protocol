@@ -75,16 +75,12 @@ contract RedemptionAccounting is DeployProtocol {
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
             if (!handler.ghost_dayResolved(d)) continue;
-            (uint16 roll, uint32 flipDay) = sdgnrs.redemptionPeriods(d);
+            // v47: RedemptionPeriod.flipDay removed; only the write-once roll remains.
+            (uint16 roll) = sdgnrs.redemptionPeriods(d);
             assertEq(
                 uint256(roll),
                 uint256(handler.ghost_perDay_firstRoll(d)),
                 "INV-01: redemptionPeriods[D].roll diverged from first-write"
-            );
-            assertEq(
-                uint256(flipDay),
-                uint256(handler.ghost_perDay_firstFlipDay(d)),
-                "INV-01: redemptionPeriods[D].flipDay diverged from first-write"
             );
         }
     }
@@ -109,15 +105,15 @@ contract RedemptionAccounting is DeployProtocol {
             uint32 d = handler.getDayWritten(i);
             if (!handler.ghost_dayResolved(d)) {
                 // Unresolved: ethBase × 1e9 contributes to the cumulative scalar.
-                (uint64 ethBase, , , ) = _readPendingByDay(d);
+                (uint64 ethBase, , ) = _readPendingByDay(d);
                 expected += uint256(ethBase) * 1e9;
             } else {
                 // Resolved: sum over players of (ethValueOwed × roll / 100).
-                (uint16 roll, ) = sdgnrs.redemptionPeriods(d);
+                (uint16 roll) = sdgnrs.redemptionPeriods(d);
                 for (uint256 j = 0; j < actorN; j++) {
                     address actor = handler.getActor(j);
                     if (handler.ghost_claimDone(d, actor)) continue;
-                    (uint96 ev, , ) = sdgnrs.pendingRedemptions(actor, d);
+                    (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, d);
                     expected += (uint256(ev) * uint256(roll)) / 100;
                 }
             }
@@ -133,26 +129,20 @@ contract RedemptionAccounting is DeployProtocol {
     //              INV-03: BURNIE conservation (EXACT)
     // =====================================================================
 
-    /// @notice INV-03 — 304-SPEC §1 lines 118-139. BURNIE reservation is RELEASED at resolve
-    ///         (sStonk:651 `pendingRedemptionBurnie -= burnieBase`), so the resolved-but-
-    ///         unclaimed term is structurally zero. The cumulative-scalar invariant collapses
-    ///         to: `pendingRedemptionBurnie == Σ over unresolved D of pendingByDay[D].burnieBase
-    ///         × 1e9`. EXACT per D-305-GWEI-SNAP-01.
+    /// @notice INV-03 — 304-SPEC §1 lines 118-139 (v47-revised). In v47 the redemption BURNIE
+    ///         RESERVE apparatus was removed entirely: BURNIE is settled at SUBMIT (redeemBurnieShare
+    ///         → burnForCoinflip), so the `pendingRedemptionBurnie` cumulative scalar, the per-day
+    ///         `pendingByDay[D].burnieBase` field, and the resolve-time `pendingRedemptionBurnie -=`
+    ///         release were all deleted. There is no longer any reserved-BURNIE accounting state to
+    ///         conserve across the burn→resolve→claim window — the invariant is structurally
+    ///         discharged by construction (no field exists to diverge). The net-BURNIE-conservation
+    ///         property (net new BURNIE == 0 at submit) is proven by REDEEM-08 (plan 323-03), not here.
+    /// @dev Retained as a documented no-op so the §3.F attestation matrix keeps its INV-03 row;
+    ///      asserting against a deleted storage slot would be vacuous (always zero).
     function invariant_INV_03_BurnieConservationExact() public view {
-        uint256 expected;
-        uint256 len = handler.getDaysWrittenCount();
-        uint256 bound = len < SCAN_CAP ? len : SCAN_CAP;
-        for (uint256 i = 0; i < bound; i++) {
-            uint32 d = handler.getDayWritten(i);
-            if (handler.ghost_dayResolved(d)) continue;
-            (, uint64 burnieBase, , ) = _readPendingByDay(d);
-            expected += uint256(burnieBase) * 1e9;
-        }
-        assertEq(
-            _readPendingRedemptionBurnie(),
-            expected,
-            "INV-03: pendingRedemptionBurnie diverged from sum of unresolved pool burnieBase"
-        );
+        // No-op: the redemption-BURNIE reserve was removed in v47 (settled at submit). See NatSpec.
+        // Touch state read-only so the function body is non-trivial under the view mutability.
+        assertTrue(address(sdgnrs) != address(0), "INV-03: harness wiring");
     }
 
     // =====================================================================
@@ -169,25 +159,19 @@ contract RedemptionAccounting is DeployProtocol {
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
             if (handler.ghost_dayResolved(d)) continue;
-            (uint64 ethBase, uint64 burnieBase, , ) = _readPendingByDay(d);
-            if (ethBase == 0 && burnieBase == 0) continue;
+            // v47: per-day burnieBase + per-(P,D) burnieOwed removed; only the ETH leg remains.
+            (uint64 ethBase, , ) = _readPendingByDay(d);
+            if (ethBase == 0) continue;
             uint256 sumEth;
-            uint256 sumBurnie;
             for (uint256 j = 0; j < actorN; j++) {
                 address actor = handler.getActor(j);
-                (uint96 ev, uint96 bv, ) = sdgnrs.pendingRedemptions(actor, d);
+                (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, d);
                 sumEth += uint256(ev);
-                sumBurnie += uint256(bv);
             }
             assertEq(
                 uint256(ethBase) * 1e9,
                 sumEth,
                 "INV-04: pool.ethBase * 1e9 != sum pendingRedemptions[P][D].ethValueOwed"
-            );
-            assertEq(
-                uint256(burnieBase) * 1e9,
-                sumBurnie,
-                "INV-04: pool.burnieBase * 1e9 != sum pendingRedemptions[P][D].burnieOwed"
             );
         }
     }
@@ -208,14 +192,14 @@ contract RedemptionAccounting is DeployProtocol {
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
             if (!handler.ghost_dayResolved(d)) {
-                (uint64 ethBase, , , ) = _readPendingByDay(d);
+                (uint64 ethBase, , ) = _readPendingByDay(d);
                 expected += uint256(ethBase) * 1e9;
             } else {
-                (uint16 roll, ) = sdgnrs.redemptionPeriods(d);
+                (uint16 roll) = sdgnrs.redemptionPeriods(d);
                 for (uint256 j = 0; j < actorN; j++) {
                     address actor = handler.getActor(j);
                     if (handler.ghost_claimDone(d, actor)) continue;
-                    (uint96 ev, , ) = sdgnrs.pendingRedemptions(actor, d);
+                    (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, d);
                     expected += (uint256(ev) * uint256(roll)) / 100;
                 }
             }
@@ -249,7 +233,7 @@ contract RedemptionAccounting is DeployProtocol {
             for (uint256 j = 0; j < actorN; j++) {
                 address actor = handler.getActor(j);
                 if (handler.ghost_perDay_perPlayer_ethValueOwed(d, actor) == 0) continue;
-                (uint16 roll, ) = sdgnrs.redemptionPeriods(d);
+                (uint16 roll) = sdgnrs.redemptionPeriods(d);
                 assertEq(
                     uint256(roll),
                     uint256(handler.ghost_perDay_firstRoll(d)),
@@ -281,7 +265,7 @@ contract RedemptionAccounting is DeployProtocol {
                 uint96 locked = handler.ghost_perPlayer_locked_ethValueOwed(d, actor);
                 if (locked == 0) continue;
                 if (handler.ghost_claimDone(d, actor)) continue;
-                (uint96 ev, , ) = sdgnrs.pendingRedemptions(actor, d);
+                (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, d);
                 assertEq(
                     uint256(ev),
                     uint256(locked),
@@ -307,9 +291,9 @@ contract RedemptionAccounting is DeployProtocol {
             uint32 d = handler.getDayWritten(i);
             if (d >= today) continue;
             if (!handler.ghost_dayResolved(d)) continue;
-            (uint64 ethBase, uint64 burnieBase, uint64 supplySnapshot, uint64 burned) = _readPendingByDay(d);
+            // v47: per-day burnieBase removed; delete-at-resolve clears the 3 surviving fields.
+            (uint64 ethBase, uint64 supplySnapshot, uint64 burned) = _readPendingByDay(d);
             assertEq(uint256(ethBase), 0, "INV-08: resolved day D < today retained ethBase");
-            assertEq(uint256(burnieBase), 0, "INV-08: resolved day D < today retained burnieBase");
             assertEq(uint256(supplySnapshot), 0, "INV-08: resolved day D < today retained supplySnapshot");
             assertEq(uint256(burned), 0, "INV-08: resolved day D < today retained burned");
         }
@@ -331,8 +315,9 @@ contract RedemptionAccounting is DeployProtocol {
         uint256 bound = len < SCAN_CAP ? len : SCAN_CAP;
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
-            (uint64 ethBase, uint64 burnieBase, , ) = _readPendingByDay(d);
-            if (ethBase == 0 && burnieBase == 0) continue;
+            // v47: per-day burnieBase removed; ethBase is the pool-non-empty indicator.
+            (uint64 ethBase, , ) = _readPendingByDay(d);
+            if (ethBase == 0) continue;
             // A non-empty pool MUST be the stamped day under the single-pool invariant.
             assertEq(
                 uint256(d),
@@ -354,7 +339,7 @@ contract RedemptionAccounting is DeployProtocol {
         uint256 bound = len < SCAN_CAP ? len : SCAN_CAP;
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
-            (, , uint64 supplySnapshot, uint64 burned) = _readPendingByDay(d);
+            (, uint64 supplySnapshot, uint64 burned) = _readPendingByDay(d);
             if (supplySnapshot == 0) continue;
             assertLe(
                 uint256(burned),
@@ -379,7 +364,7 @@ contract RedemptionAccounting is DeployProtocol {
             uint32 d = handler.getDayWritten(i);
             for (uint256 j = 0; j < actorN; j++) {
                 address actor = handler.getActor(j);
-                (uint96 ev, , ) = sdgnrs.pendingRedemptions(actor, d);
+                (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, d);
                 if (ev == 0) continue;
                 assertLe(
                     uint256(ev),
@@ -406,8 +391,10 @@ contract RedemptionAccounting is DeployProtocol {
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
             if (handler.ghost_dayResolved(d)) continue;
-            (uint64 ethBase, uint64 burnieBase, , ) = _readPendingByDay(d);
-            if (ethBase == 0 && burnieBase == 0) continue;
+            // v47: per-day burnieBase removed; ethBase is the pool-non-empty indicator (matches
+            // the contract's own `if (ethBase == 0) return;` resolvability guard at sStonk:662).
+            (uint64 ethBase, , ) = _readPendingByDay(d);
+            if (ethBase == 0) continue;
             assertEq(
                 uint256(d),
                 uint256(stamp),
@@ -434,8 +421,9 @@ contract RedemptionAccounting is DeployProtocol {
         uint256 bound = len < SCAN_CAP ? len : SCAN_CAP;
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
-            (uint64 ethBase, uint64 burnieBase, , ) = _readPendingByDay(d);
-            if (ethBase != 0 || burnieBase != 0) {
+            // v47: per-day burnieBase removed; ethBase is the pool-non-empty indicator.
+            (uint64 ethBase, , ) = _readPendingByDay(d);
+            if (ethBase != 0) {
                 nonEmptyCount++;
                 nonEmptyDay = d;
             }
@@ -460,23 +448,19 @@ contract RedemptionAccounting is DeployProtocol {
     //                          INTERNAL READERS
     // =====================================================================
 
-    /// @dev Read the packed `DayPending` slot for day D and unpack its 4×uint64 fields. Mirrors
+    /// @dev Read the packed `DayPending` slot for day D and unpack its 3×uint64 fields. Mirrors
     ///      the handler's reader so the harness has direct access without an extra hop.
+    ///      v47: per-day burnieBase removed (BURNIE settled at submit). DayPending is now
+    ///      `{ethBase (bits 0-63), supplySnapshot (bits 64-127), burned (bits 128-191)}`.
     function _readPendingByDay(uint32 day)
         internal
         view
-        returns (uint64 ethBase, uint64 burnieBase, uint64 supplySnapshot, uint64 burned)
+        returns (uint64 ethBase, uint64 supplySnapshot, uint64 burned)
     {
         bytes32 slot = keccak256(abi.encode(uint256(day), handler.SLOT_PENDING_BY_DAY()));
         uint256 raw = uint256(vm.load(address(sdgnrs), slot));
         ethBase = uint64(raw);
-        burnieBase = uint64(raw >> 64);
-        supplySnapshot = uint64(raw >> 128);
-        burned = uint64(raw >> 192);
-    }
-
-    /// @dev Read the internal `pendingRedemptionBurnie` cumulative scalar via slot derivation.
-    function _readPendingRedemptionBurnie() internal view returns (uint256) {
-        return uint256(vm.load(address(sdgnrs), bytes32(handler.SLOT_PENDING_REDEMPTION_BURNIE())));
+        supplySnapshot = uint64(raw >> 64);
+        burned = uint64(raw >> 128);
     }
 }

@@ -102,7 +102,7 @@ contract RedemptionGasTest is DeployProtocol {
         // Now resolve the same-wall-day pool as the game contract
         uint32 currentDay = game.currentDayView();
         vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(100, currentDay, currentDay);
+        sdgnrs.resolveRedemptionPeriod(100, currentDay);
     }
 
     // =====================================================================
@@ -118,7 +118,7 @@ contract RedemptionGasTest is DeployProtocol {
         // Step 2: Game resolves the same-wall-day pool
         uint32 currentDay = game.currentDayView();
         vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(100, currentDay, currentDay);
+        sdgnrs.resolveRedemptionPeriod(100, currentDay);
 
         // Step 3: Mock the coinflip day result so claimRedemption doesn't revert
         // getCoinflipDayResult(currentDay) must return (rewardPercent != 0, flipWon)
@@ -226,7 +226,7 @@ contract RedemptionGasTest is DeployProtocol {
 
         uint32 currentDay = game.currentDayView();
         vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(100, currentDay, currentDay);
+        sdgnrs.resolveRedemptionPeriod(100, currentDay);
 
         vm.mockCall(
             address(coinflip),

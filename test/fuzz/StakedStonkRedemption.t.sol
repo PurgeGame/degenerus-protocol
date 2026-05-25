@@ -152,38 +152,36 @@ contract StakedStonkRedemption is DeployProtocol {
     /// @dev Resolve a day's pool by pranking the game contract. Bypasses the full advance + VRF
     ///      cycle for deterministic roll values. Precedent at
     ///      `test/fuzz/RedemptionGas.t.sol:77-78`.
-    function _resolveDay(uint32 dayToResolve, uint16 roll, uint32 flipDay) internal {
+    function _resolveDay(uint32 dayToResolve, uint16 roll) internal {
         vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(roll, flipDay, dayToResolve);
+        sdgnrs.resolveRedemptionPeriod(roll, dayToResolve);
     }
 
-    /// @dev Read packed `pendingByDay[day]` slot and unpack 4×uint64 fields per the v44 layout
-    ///      defined in `StakedDegenerusStonk.DayPending`.
+    /// @dev Read packed `pendingByDay[day]` slot and unpack the 3×uint64 fields per the v47 layout
+    ///      defined in `StakedDegenerusStonk.DayPending`. v47: per-day burnieBase removed (BURNIE
+    ///      settled at submit) — `{ethBase (0-63), supplySnapshot (64-127), burned (128-191)}`.
     function _readPendingByDay(uint32 day)
         internal
         view
-        returns (uint64 ethBase, uint64 burnieBase, uint64 supplySnapshot, uint64 burned)
+        returns (uint64 ethBase, uint64 supplySnapshot, uint64 burned)
     {
         bytes32 slot = keccak256(abi.encode(uint256(day), uint256(SLOT_PENDING_BY_DAY)));
         uint256 raw = uint256(vm.load(address(sdgnrs), slot));
         ethBase = uint64(raw);
-        burnieBase = uint64(raw >> 64);
-        supplySnapshot = uint64(raw >> 128);
-        burned = uint64(raw >> 192);
+        supplySnapshot = uint64(raw >> 64);
+        burned = uint64(raw >> 128);
     }
 
-    /// @dev Pack a 4×uint64 DayPending into a single 256-bit word (test-side mirror of the
+    /// @dev Pack a 3×uint64 DayPending into a single 256-bit word (test-side mirror of the v47
     ///      sStonk layout). Used by tests that seed a pool via vm.store.
     function _packPendingByDay(
         uint64 ethBase,
-        uint64 burnieBase,
         uint64 supplySnapshot,
         uint64 burned
     ) internal pure returns (uint256) {
         return uint256(ethBase)
-            | (uint256(burnieBase) << 64)
-            | (uint256(supplySnapshot) << 128)
-            | (uint256(burned) << 192);
+            | (uint256(supplySnapshot) << 64)
+            | (uint256(burned) << 128);
     }
 
     /// @dev Warp the wall clock by 1 day.
@@ -245,7 +243,7 @@ contract StakedStonkRedemption is DeployProtocol {
         // Positive assertion: dayPre slot populated. `burned` is the always-reliable
         // populated-indicator (≥1 whole token via ceiling-divide); `ethBase > 0` under
         // FUZZ_MIN_AMOUNT lower bound; `supplySnapshot > 0` via lazy-init (SPEC-05).
-        (uint64 ePost, , uint64 sPost, uint64 bnPost) = _readPendingByDay(dayPre);
+        (uint64 ePost, uint64 sPost, uint64 bnPost) = _readPendingByDay(dayPre);
         assertGt(uint256(sPost), 0, "burn: supplySnapshot must lazy-init on first burn of day");
         assertGt(uint256(bnPost), 0, "burn: burned must increment (ceiling-divide >= 1 whole token)");
         assertGt(uint256(ePost), 0, "burn: ethBase must be populated under FUZZ_MIN_AMOUNT lower bound");
@@ -269,7 +267,7 @@ contract StakedStonkRedemption is DeployProtocol {
     //         testFuzz_ResolveWritesCorrectDay (ROADMAP-canonical)
     // =====================================================================
 
-    /// @notice resolveRedemptionPeriod(roll, flipDay, dayToResolve) writes exactly to
+    /// @notice resolveRedemptionPeriod(roll, dayToResolve) writes exactly to
     ///         `redemptionPeriods[dayToResolve]` and to no other day; deletes
     ///         `pendingByDay[dayToResolve]`; clears the sentinel when it matches dayToResolve.
     ///         Asserts adjacent days [dayToResolve - 1, dayToResolve + 1] are byte-identical
@@ -283,57 +281,51 @@ contract StakedStonkRedemption is DeployProtocol {
     /// forge-config: default.fuzz.runs = 10000
     function testFuzz_ResolveWritesCorrectDay(
         uint256 amountSeed,
-        uint16 rollSeed,
-        uint32 flipDaySeed
+        uint16 rollSeed
     ) public {
         uint256 amount = bound(amountSeed, FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100);
         uint16 roll = uint16(bound(uint256(rollSeed), 25, 175));
-        // Bound flipDay to a small positive range — flipDay is the coinflip-day index, not the
-        // wall day. Use [1, type(uint32).max / 2] to ensure non-zero and avoid edge-int issues.
-        uint32 flipDay = uint32(bound(uint256(flipDaySeed), 1, type(uint32).max / 2));
+        // v47: resolveRedemptionPeriod is now 2-arg (roll, dayToResolve); the flipDay param and
+        // the RedemptionPeriod.flipDay field were removed.
 
         // Step 1: burn on day D_burn so the resolver has a non-empty pool to act on (otherwise
-        // resolveRedemptionPeriod early-returns at the `if (ethBase == 0 && burnieBase == 0)
-        // return;` guard at sStonk:641 — no state mutation, the per-day write would never fire).
+        // resolveRedemptionPeriod early-returns at the `if (ethBase == 0)` guard — no state
+        // mutation, the per-day write would never fire).
         uint32 dayBurn = game.currentDayView();
         vm.prank(playerA);
         sdgnrs.burn(amount);
 
         // Verify pool populated
-        (, , , uint64 bnPreResolve) = _readPendingByDay(dayBurn);
+        (, , uint64 bnPreResolve) = _readPendingByDay(dayBurn);
         assertGt(uint256(bnPreResolve), 0, "resolve: precondition - pool must be populated");
 
         // Snapshot redemptionPeriods at dayBurn - 1 and dayBurn + 1 (must be byte-identical
         // pre/post since the resolver only writes [dayBurn]).
         uint32 dayLow = dayBurn > 0 ? dayBurn - 1 : 0;
         uint32 dayHigh = dayBurn + 1;
-        (uint16 rollLowPre, uint32 fdLowPre) = sdgnrs.redemptionPeriods(dayLow);
-        (uint16 rollHighPre, uint32 fdHighPre) = sdgnrs.redemptionPeriods(dayHigh);
+        (uint16 rollLowPre) = sdgnrs.redemptionPeriods(dayLow);
+        (uint16 rollHighPre) = sdgnrs.redemptionPeriods(dayHigh);
 
         // Step 2: advance wall day so we're no longer on dayBurn — production semantics
         // (AdvanceModule resolves the prior day after the wall clock has crossed the boundary).
         _advanceWallDay();
 
         // Step 3: resolve dayBurn
-        _resolveDay(dayBurn, roll, flipDay);
+        _resolveDay(dayBurn, roll);
 
-        // Positive assertion: redemptionPeriods[dayBurn] == (roll, flipDay)
-        (uint16 rollPost, uint32 fdPost) = sdgnrs.redemptionPeriods(dayBurn);
+        // Positive assertion: redemptionPeriods[dayBurn].roll == roll
+        (uint16 rollPost) = sdgnrs.redemptionPeriods(dayBurn);
         assertEq(uint256(rollPost), uint256(roll), "resolve: redemptionPeriods[dayBurn].roll mismatch");
-        assertEq(uint256(fdPost), uint256(flipDay), "resolve: redemptionPeriods[dayBurn].flipDay mismatch");
 
         // Negative assertion: adjacent days byte-identical pre/post
-        (uint16 rollLowPost, uint32 fdLowPost) = sdgnrs.redemptionPeriods(dayLow);
-        (uint16 rollHighPost, uint32 fdHighPost) = sdgnrs.redemptionPeriods(dayHigh);
+        (uint16 rollLowPost) = sdgnrs.redemptionPeriods(dayLow);
+        (uint16 rollHighPost) = sdgnrs.redemptionPeriods(dayHigh);
         assertEq(uint256(rollLowPost), uint256(rollLowPre), "resolve: dayBurn-1.roll mutated");
-        assertEq(uint256(fdLowPost), uint256(fdLowPre), "resolve: dayBurn-1.flipDay mutated");
         assertEq(uint256(rollHighPost), uint256(rollHighPre), "resolve: dayBurn+1.roll mutated");
-        assertEq(uint256(fdHighPost), uint256(fdHighPre), "resolve: dayBurn+1.flipDay mutated");
 
         // pendingByDay[dayBurn] fully zeroed per SPEC-04 (c) delete-at-resolve
-        (uint64 ePost, uint64 bPost, uint64 sPost, uint64 bnPost) = _readPendingByDay(dayBurn);
+        (uint64 ePost, uint64 sPost, uint64 bnPost) = _readPendingByDay(dayBurn);
         assertEq(uint256(ePost), 0, "resolve: delete-at-resolve must zero ethBase");
-        assertEq(uint256(bPost), 0, "resolve: delete-at-resolve must zero burnieBase");
         assertEq(uint256(sPost), 0, "resolve: delete-at-resolve must zero supplySnapshot");
         assertEq(uint256(bnPost), 0, "resolve: delete-at-resolve must zero burned");
 
@@ -373,18 +365,18 @@ contract StakedStonkRedemption is DeployProtocol {
 
         // Step 2: advance + resolve dayBurn with the deterministic roll
         _advanceWallDay();
-        _resolveDay(dayBurn, roll, dayBurn);
+        _resolveDay(dayBurn, roll);
 
         // Capture pre-claim state: actor's claim slot at dayBurn + adjacent slots at dayBurn-1
         // and dayBurn+1 (must be byte-identical pre/post since claim only touches [actor][dayBurn]).
         // Only ethValueOwed is needed for the payout-equality assertion; the slot is asserted
         // cleared post-claim via a fresh read.
-        (uint96 evBurnPre, , ) = sdgnrs.pendingRedemptions(actor, dayBurn);
+        (uint96 evBurnPre, ) = sdgnrs.pendingRedemptions(actor, dayBurn);
         uint32 dayLow = dayBurn > 0 ? dayBurn - 1 : 0;
         uint32 dayHigh = dayBurn + 1;
-        (uint96 evLowPre, uint96 bvLowPre, uint16 asLowPre) =
+        (uint96 evLowPre, uint16 asLowPre) =
             sdgnrs.pendingRedemptions(actor, dayLow);
-        (uint96 evHighPre, uint96 bvHighPre, uint16 asHighPre) =
+        (uint96 evHighPre, uint16 asHighPre) =
             sdgnrs.pendingRedemptions(actor, dayHigh);
 
         // Pre-burn slot must be populated for the test to be meaningful.
@@ -405,21 +397,18 @@ contract StakedStonkRedemption is DeployProtocol {
         // Positive: payout matches expected EXACTLY (D-305-GWEI-SNAP-01 zero-drift)
         assertEq(ethDelta, expectedEthDirect, "claim: ETH delivered != expected (ethValueOwed * roll / 100 / 2)");
 
-        // Slot cleared on full-claim path (coinflip mock returns (100, true) so flipResolved=true)
-        (uint96 evBurnPost, uint96 bvBurnPost, ) = sdgnrs.pendingRedemptions(actor, dayBurn);
+        // Slot cleared on claim (v47 claim is ETH-only; burnieOwed field removed).
+        (uint96 evBurnPost, ) = sdgnrs.pendingRedemptions(actor, dayBurn);
         assertEq(uint256(evBurnPost), 0, "claim: full-claim path must delete ethValueOwed");
-        assertEq(uint256(bvBurnPost), 0, "claim: full-claim path must delete burnieOwed");
 
         // Negative assertion: adjacent days' slots byte-identical
-        (uint96 evLowPost, uint96 bvLowPost, uint16 asLowPost) =
+        (uint96 evLowPost, uint16 asLowPost) =
             sdgnrs.pendingRedemptions(actor, dayLow);
-        (uint96 evHighPost, uint96 bvHighPost, uint16 asHighPost) =
+        (uint96 evHighPost, uint16 asHighPost) =
             sdgnrs.pendingRedemptions(actor, dayHigh);
         assertEq(uint256(evLowPost), uint256(evLowPre), "claim: dayBurn-1 ethValueOwed mutated");
-        assertEq(uint256(bvLowPost), uint256(bvLowPre), "claim: dayBurn-1 burnieOwed mutated");
         assertEq(uint256(asLowPost), uint256(asLowPre), "claim: dayBurn-1 activityScore mutated");
         assertEq(uint256(evHighPost), uint256(evHighPre), "claim: dayBurn+1 ethValueOwed mutated");
-        assertEq(uint256(bvHighPost), uint256(bvHighPre), "claim: dayBurn+1 burnieOwed mutated");
         assertEq(uint256(asHighPost), uint256(asHighPre), "claim: dayBurn+1 activityScore mutated");
     }
 
@@ -459,19 +448,19 @@ contract StakedStonkRedemption is DeployProtocol {
         uint96 evPre1 = 0; // claim slot is zero-init pre-burn-1
         vm.prank(actor);
         sdgnrs.burn(a1);
-        (uint96 evPost1, , ) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evPost1, ) = sdgnrs.pendingRedemptions(actor, dayD);
         uint256 delta1 = uint256(evPost1) - uint256(evPre1);
 
         // Burn 2 — capture per-burn delta
         vm.prank(actor);
         sdgnrs.burn(a2);
-        (uint96 evPost2, , ) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evPost2, ) = sdgnrs.pendingRedemptions(actor, dayD);
         uint256 delta2 = uint256(evPost2) - uint256(evPost1);
 
         // Burn 3 — capture per-burn delta
         vm.prank(actor);
         sdgnrs.burn(a3);
-        (uint96 evPost3, , ) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evPost3, ) = sdgnrs.pendingRedemptions(actor, dayD);
         uint256 delta3 = uint256(evPost3) - uint256(evPost2);
 
         // Positive assertion: aggregate equals sum of deltas (strict assertEq — gwei alignment)
@@ -480,7 +469,7 @@ contract StakedStonkRedemption is DeployProtocol {
 
         // Pool↔claim single-burner exact equality (D-305-GWEI-SNAP-01: pool.ethBase × 1e9 ==
         // sum-of-claims). Since this is a single burner, sum-of-claims == claim.ethValueOwed.
-        (uint64 ethBase, , , uint64 burned) = _readPendingByDay(dayD);
+        (uint64 ethBase, , uint64 burned) = _readPendingByDay(dayD);
         assertEq(
             uint256(ethBase) * 1e9,
             uint256(evPost3),
@@ -517,7 +506,8 @@ contract StakedStonkRedemption is DeployProtocol {
         uint32 dayD = game.currentDayView();
 
         // Seed pendingByDay[dayD] with supplySnapshot = 1000 whole tokens (cap = 500).
-        uint256 packed = _packPendingByDay(0, 0, 1000, 0);
+        // v47 DayPending packing: (ethBase, supplySnapshot, burned) — burnieBase field removed.
+        uint256 packed = _packPendingByDay(0, 1000, 0);
         bytes32 slotPbD = keccak256(abi.encode(uint256(dayD), uint256(SLOT_PENDING_BY_DAY)));
         vm.store(address(sdgnrs), slotPbD, bytes32(packed));
 
@@ -527,7 +517,7 @@ contract StakedStonkRedemption is DeployProtocol {
         vm.store(address(sdgnrs), bytes32(uint256(SLOT_PENDING_RESOLVE_DAY)), bytes32(uint256(dayD)));
 
         // Verify seed visible
-        (, , uint64 sBefore, uint64 bnBefore) = _readPendingByDay(dayD);
+        (, uint64 sBefore, uint64 bnBefore) = _readPendingByDay(dayD);
         assertEq(uint256(sBefore), 1000, "supplyCap: pre-seed supplySnapshot mismatch");
         assertEq(uint256(bnBefore), 0, "supplyCap: pre-seed burned must be zero");
 
@@ -540,7 +530,7 @@ contract StakedStonkRedemption is DeployProtocol {
         sdgnrs.burn(capExact);
 
         // Pool state after exact-cap burn
-        (, , uint64 sAfter1, uint64 bnAfter1) = _readPendingByDay(dayD);
+        (, uint64 sAfter1, uint64 bnAfter1) = _readPendingByDay(dayD);
         assertEq(uint256(sAfter1), uint256(sBefore), "supplyCap: supplySnapshot NOT immutable post burn-1 (SPEC-05)");
         assertEq(uint256(bnAfter1), 500, "supplyCap: burned must equal 500 whole tokens post exact-cap burn");
 
@@ -553,7 +543,7 @@ contract StakedStonkRedemption is DeployProtocol {
         sdgnrs.burn(overCap);
 
         // Pool state byte-identical post failed burn
-        (, , uint64 sAfter2, uint64 bnAfter2) = _readPendingByDay(dayD);
+        (, uint64 sAfter2, uint64 bnAfter2) = _readPendingByDay(dayD);
         assertEq(uint256(sAfter2), uint256(sAfter1), "supplyCap: supplySnapshot mutated by failed over-cap burn");
         assertEq(uint256(bnAfter2), uint256(bnAfter1), "supplyCap: burned mutated by failed over-cap burn");
     }
@@ -587,13 +577,15 @@ contract StakedStonkRedemption is DeployProtocol {
         // activityScore. Seed ethValueOwed = MAX_DAILY_REDEMPTION_EV (gwei-aligned since 160e18
         // is a multiple of 1e9); activityScore = 1 (treat as set so the lazy-init branch in
         // _submitGamblingClaimFrom does NOT overwrite it).
-        uint256 packed = uint256(MAX_DAILY_REDEMPTION_EV) | (uint256(1) << 192);
+        // v47 PendingRedemption packing: ethValueOwed (bits 0-95) | activityScore (bits 96-111).
+        // The former burnieOwed field (old bits 96-191) was removed, so activityScore is at bit 96.
+        uint256 packed = uint256(MAX_DAILY_REDEMPTION_EV) | (uint256(1) << 96);
         bytes32 outerSlot = keccak256(abi.encode(actor, uint256(SLOT_PENDING_REDEMPTIONS)));
         bytes32 claimSlot = keccak256(abi.encode(uint256(dayD), outerSlot));
         vm.store(address(sdgnrs), claimSlot, bytes32(packed));
 
         // Verify seed visible
-        (uint96 evSeed, , uint16 asSeed) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evSeed, uint16 asSeed) = sdgnrs.pendingRedemptions(actor, dayD);
         assertEq(uint256(evSeed), MAX_DAILY_REDEMPTION_EV, "evCap: pre-seed ethValueOwed mismatch");
         assertEq(uint256(asSeed), 1, "evCap: pre-seed activityScore mismatch");
 
@@ -609,9 +601,9 @@ contract StakedStonkRedemption is DeployProtocol {
         sdgnrs.burn(amount);
 
         // Negative assertion: claim slot byte-identical post failed burn
-        (uint96 evPost, uint96 bvPost, uint16 asPost) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evPost, uint16 asPost) = sdgnrs.pendingRedemptions(actor, dayD);
         assertEq(uint256(evPost), MAX_DAILY_REDEMPTION_EV, "evCap: ethValueOwed mutated by failed burn");
-        assertEq(uint256(bvPost), 0, "evCap: burnieOwed mutated by failed burn");
+        // v47: burnieOwed field removed — nothing to byte-compare.
         assertEq(uint256(asPost), 1, "evCap: activityScore mutated by failed burn");
     }
 
@@ -632,14 +624,14 @@ contract StakedStonkRedemption is DeployProtocol {
     function testFuzz_ResolveRevertsForNonGame(
         address caller,
         uint16 roll,
-        uint32 flipDay,
         uint32 day
     ) public {
         vm.assume(caller != address(game));
         vm.assume(caller != address(0));
 
         // Pre-state snapshots (must be byte-identical pre/post revert).
-        (uint16 rollPre, uint32 fdPre) = sdgnrs.redemptionPeriods(day);
+        // v47: resolveRedemptionPeriod is 2-arg (roll, dayToResolve); RedemptionPeriod.flipDay removed.
+        (uint16 rollPre) = sdgnrs.redemptionPeriods(day);
         uint256 cumulativeEthPre = sdgnrs.pendingRedemptionEthValue();
         uint32 sentinelPre = sdgnrs.pendingResolveDay();
         // pendingByDay[day] packed slot snapshot
@@ -649,16 +641,15 @@ contract StakedStonkRedemption is DeployProtocol {
         // Reverting call
         vm.prank(caller);
         vm.expectRevert(StakedDegenerusStonk.Unauthorized.selector);
-        sdgnrs.resolveRedemptionPeriod(roll, flipDay, day);
+        sdgnrs.resolveRedemptionPeriod(roll, day);
 
         // Negative assertions: no state change.
-        (uint16 rollPost, uint32 fdPost) = sdgnrs.redemptionPeriods(day);
+        (uint16 rollPost) = sdgnrs.redemptionPeriods(day);
         uint256 cumulativeEthPost = sdgnrs.pendingRedemptionEthValue();
         uint32 sentinelPost = sdgnrs.pendingResolveDay();
         uint256 pbdRawPost = uint256(vm.load(address(sdgnrs), pbdSlot));
 
         assertEq(uint256(rollPost), uint256(rollPre), "resolveACL: redemptionPeriods.roll mutated by reverting call");
-        assertEq(uint256(fdPost), uint256(fdPre), "resolveACL: redemptionPeriods.flipDay mutated by reverting call");
         assertEq(cumulativeEthPost, cumulativeEthPre, "resolveACL: pendingRedemptionEthValue mutated by reverting call");
         assertEq(uint256(sentinelPost), uint256(sentinelPre), "resolveACL: pendingResolveDay mutated by reverting call");
         assertEq(pbdRawPost, pbdRawPre, "resolveACL: pendingByDay[day] mutated by reverting call");
@@ -699,7 +690,7 @@ contract StakedStonkRedemption is DeployProtocol {
         // Advance + resolve dayD — sentinel clears to 0 per the `if (pendingResolveDay ==
         // dayToResolve) pendingResolveDay = 0;` line at sStonk:665.
         _advanceWallDay();
-        _resolveDay(dayD, 100, dayD);
+        _resolveDay(dayD, 100);
         assertEq(uint256(sdgnrs.pendingResolveDay()), 0, "sentinel: post-resolve must clear sentinel to 0");
 
         // First burn of a NEW day (dayD + 1, since we _advanceWallDay'd above) — sentinel

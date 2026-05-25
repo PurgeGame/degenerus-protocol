@@ -236,7 +236,7 @@ contract RedemptionHandler is Test {
 
         // 50% per-day supply-cap clamp (read packed pendingByDay slot for today).
         uint32 today = game.currentDayView();
-        (, , uint64 supplySnapshot, uint64 burnedTokens) = _readPendingByDay(today);
+        (, uint64 supplySnapshot, uint64 burnedTokens) = _readPendingByDay(today);
         if (supplySnapshot != 0) {
             // pool fields are in whole-token units; convert burned + amount to whole tokens
             uint256 amountWhole = (amount + 1e18 - 1) / 1e18;
@@ -255,7 +255,7 @@ contract RedemptionHandler is Test {
 
         // Per-(actor, day) EV cap clamp — read existing pendingRedemptions[actor][today]
         // and skip if already at 160 ETH (a re-burn would revert with ExceedsDailyRedemptionCap).
-        (uint96 existingEth, , ) = sdgnrs.pendingRedemptions(currentActor, today);
+        (uint96 existingEth, ) = sdgnrs.pendingRedemptions(currentActor, today);
         if (uint256(existingEth) >= 160 ether) return;
 
         // Sentinel single-pool guard: if another day's pool is still pending, this burn would
@@ -269,23 +269,20 @@ contract RedemptionHandler is Test {
         try sdgnrs.burn(amount) {
             // Successful burn — update ghosts.
             uint32 burnDay = game.currentDayView(); // re-read defensively (in case advanceGame fires inside burn)
-            (uint96 ethOwed, uint96 burnieOwed, ) = sdgnrs.pendingRedemptions(currentActor, burnDay);
+            // v47: PendingRedemption.burnieOwed removed (BURNIE settled at submit) — only the
+            // ethValueOwed leg is tracked; the legacy BURNIE ghosts are left at zero.
+            (uint96 ethOwed, ) = sdgnrs.pendingRedemptions(currentActor, burnDay);
 
             // Per-burn delta = post - prior tracked. Cumulative because same-day re-burns
             // accumulate additively per claim.ethValueOwed += ethValueOwed semantics.
             uint256 priorEth = ghost_perDay_perPlayer_ethValueOwed[burnDay][currentActor];
-            uint256 priorBurnie = ghost_perDay_perPlayer_burnieOwed[burnDay][currentActor];
             uint256 ethDelta = uint256(ethOwed) - priorEth;
-            uint256 burnieDelta = uint256(burnieOwed) - priorBurnie;
 
             ghost_perDay_ethBase[burnDay] += ethDelta;
-            ghost_perDay_burnieBase[burnDay] += burnieDelta;
             ghost_perDay_perPlayer_ethValueOwed[burnDay][currentActor] = uint256(ethOwed);
-            ghost_perDay_perPlayer_burnieOwed[burnDay][currentActor] = uint256(burnieOwed);
 
             // Re-stamp locked snapshot to LAST same-day burn — anchors INV-07.
             ghost_perPlayer_locked_ethValueOwed[burnDay][currentActor] = ethOwed;
-            ghost_perPlayer_locked_burnieOwed[burnDay][currentActor] = burnieOwed;
 
             if (!ghost_dayWritten[burnDay]) {
                 ghost_dayWritten[burnDay] = true;
@@ -345,8 +342,9 @@ contract RedemptionHandler is Test {
             uint32 candidate = ghost_daysWritten[(startIdx + i) % daysLen];
             if (ghost_dayResolved[candidate] && !ghost_claimDone[candidate][currentActor]) {
                 // Also require the actor actually has a claim slot to settle.
-                (uint96 ev, uint96 bv, ) = sdgnrs.pendingRedemptions(currentActor, candidate);
-                if (ev != 0 || bv != 0) {
+                // v47: only ethValueOwed remains (burnieOwed field removed).
+                (uint96 ev, ) = sdgnrs.pendingRedemptions(currentActor, candidate);
+                if (ev != 0) {
                     claimDay = candidate;
                     break;
                 }
@@ -366,24 +364,28 @@ contract RedemptionHandler is Test {
             ghost_totalBurnieClaimed += coin.balanceOf(currentActor) - burnieBefore;
 
             // Parse RedemptionClaimed event for split tracking (INV-08 in legacy harness).
+            // v47: event reshaped to RedemptionClaimed(address indexed player, uint16 roll,
+            // uint256 ethPayout, uint256 lootboxEth) — dropped flipResolved + burniePayout
+            // (BURNIE settled at submit, claim is ETH-only). With `player` now indexed, only
+            // (roll, ethPayout, lootboxEth) sit in the non-indexed data tuple.
             Vm.Log[] memory logs = vm.getRecordedLogs();
-            bytes32 claimedSig = keccak256("RedemptionClaimed(address,uint16,bool,uint256,uint256,uint256)");
-            bool flipResolved;
+            bytes32 claimedSig = keccak256("RedemptionClaimed(address,uint16,uint256,uint256)");
+            bool claimSettled;
             for (uint256 i = 0; i < logs.length; i++) {
                 if (logs[i].topics[0] == claimedSig) {
-                    (, bool _flipResolved, uint256 ethPayout, , uint256 lootboxEth) =
-                        abi.decode(logs[i].data, (uint16, bool, uint256, uint256, uint256));
+                    (, uint256 ethPayout, uint256 lootboxEth) =
+                        abi.decode(logs[i].data, (uint16, uint256, uint256));
                     ghost_totalEthDirect += ethPayout;
                     ghost_totalLootboxEth += lootboxEth;
                     ghost_totalRolledEth += ethPayout + lootboxEth;
-                    flipResolved = _flipResolved;
+                    claimSettled = true;
                     break;
                 }
             }
 
-            // Mark full-claim done iff the coinflip path resolved (flipResolved == true).
-            // Coinflip mock returns (100, true) so this is the only branch under fuzz.
-            if (flipResolved) {
+            // Mark full-claim done iff a RedemptionClaimed event fired (v47 claim is always the
+            // full ETH-only settlement; the former partial flipResolved branch was removed).
+            if (claimSettled) {
                 ghost_claimDone[claimDay][currentActor] = true;
             }
         } catch {}
@@ -471,8 +473,9 @@ contract RedemptionHandler is Test {
 
     /// @dev Scans `ghost_daysWritten` for newly-resolved days. For each D where
     ///      `redemptionPeriods[D].roll != 0` and `!ghost_dayResolved[D]`, latches the
-    ///      first-write roll + flipDay into the per-day ghost. Defensive bounds check on
+    ///      first-write roll into the per-day ghost. Defensive bounds check on
     ///      roll ∈ [25, 175] increments `ghost_rollOutOfBounds` if violated.
+    ///      v47: RedemptionPeriod.flipDay was removed; only the roll is latched now.
     function _checkResolvedPeriods() private {
         uint256 len = ghost_daysWritten.length;
         // Scan-bound at 100 to avoid OOG in deep invariant runs.
@@ -480,13 +483,12 @@ contract RedemptionHandler is Test {
         for (uint256 i = 0; i < scanBound; i++) {
             uint32 d = ghost_daysWritten[i];
             if (ghost_dayResolved[d]) continue;
-            (uint16 roll, uint32 flipDay) = sdgnrs.redemptionPeriods(d);
+            (uint16 roll) = sdgnrs.redemptionPeriods(d);
             if (roll == 0) continue;
             if (roll < 25 || roll > 175) {
                 ghost_rollOutOfBounds++;
             }
             ghost_perDay_firstRoll[d] = roll;
-            ghost_perDay_firstFlipDay[d] = flipDay;
             ghost_dayResolved[d] = true;
             ghost_periodsResolved++;
         }
@@ -496,23 +498,23 @@ contract RedemptionHandler is Test {
     //                          PACKED SLOT READERS
     // =========================================================================
 
-    /// @notice Read the packed `DayPending` slot for day D and unpack its 4×uint64 fields.
+    /// @notice Read the packed `DayPending` slot for day D and unpack its 3×uint64 fields.
+    /// @dev v47: the per-day BURNIE base was removed (BURNIE is settled at submit). DayPending is
+    ///      now `{ethBase (bits 0-63), supplySnapshot (bits 64-127), burned (bits 128-191)}`.
     /// @param day Wall-clock day to read.
     /// @return ethBase Pool ETH base in GWEI units (1e9 wei divisor).
-    /// @return burnieBase Pool BURNIE base in GWEI-equivalent units (1e9 raw BURNIE divisor).
     /// @return supplySnapshot Snapshot of totalSupply in WHOLE-TOKEN units (1e18 divisor).
     /// @return burned Cumulative burned in WHOLE-TOKEN units.
     function _readPendingByDay(uint32 day)
         internal
         view
-        returns (uint64 ethBase, uint64 burnieBase, uint64 supplySnapshot, uint64 burned)
+        returns (uint64 ethBase, uint64 supplySnapshot, uint64 burned)
     {
         bytes32 slot = keccak256(abi.encode(uint256(day), uint256(SLOT_PENDING_BY_DAY)));
         uint256 raw = uint256(vm.load(address(sdgnrs), slot));
         ethBase = uint64(raw);
-        burnieBase = uint64(raw >> 64);
-        supplySnapshot = uint64(raw >> 128);
-        burned = uint64(raw >> 192);
+        supplySnapshot = uint64(raw >> 64);
+        burned = uint64(raw >> 128);
     }
 
     // =========================================================================

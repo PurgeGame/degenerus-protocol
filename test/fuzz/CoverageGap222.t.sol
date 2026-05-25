@@ -1106,13 +1106,8 @@ contract CoverageGap222 is DeployProtocol {
                 uint256(100)
             )
         );
-        vm.prank(buyer);
-        (bool o3, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "gamePurchaseBurnieLootbox(uint256)",
-                uint256(1)
-            )
-        );
+        // v47: vault.gamePurchaseBurnieLootbox removed (BURNIE-lootbox surface deleted); its
+        // negative-auth probe is dropped — the selector no longer exists to be access-controlled.
         vm.prank(buyer);
         (bool o4, ) = address(vault).call(
             abi.encodeWithSignature(
@@ -1130,7 +1125,6 @@ contract CoverageGap222 is DeployProtocol {
         );
         assertFalse(o1, "vault.gamePurchase rejected non-vaultOwner caller");
         assertFalse(o2, "vault.gamePurchaseTicketsBurnie rejected non-vaultOwner caller");
-        assertFalse(o3, "vault.gamePurchaseBurnieLootbox rejected non-vaultOwner caller");
         assertFalse(o4, "vault.gameOpenLootBox rejected non-vaultOwner caller");
         assertFalse(o5, "vault.gamePurchaseDeityPassFromBoon rejected non-vaultOwner caller");
     }
@@ -1605,16 +1599,9 @@ contract CoverageGap222 is DeployProtocol {
                 uint48(0)
             )
         );
-        vm.prank(buyer);
-        (bool o2, ) = address(game).call(
-            abi.encodeWithSignature(
-                "openBurnieLootBox(address,uint48)",
-                buyer,
-                uint48(0)
-            )
-        );
+        // v47: game.openBurnieLootBox removed (BURNIE-lootbox surface deleted); its negative-auth
+        // probe is dropped — the selector no longer exists to be access-controlled.
         assertFalse(o1, "game.openLootBox rejected non-authorized caller");
-        assertFalse(o2, "game.openBurnieLootBox rejected non-authorized caller");
     }
 
     function test_gap_game_degenerette_paths() public {
@@ -1698,18 +1685,11 @@ contract CoverageGap222 is DeployProtocol {
                 uint8(0)
             )
         );
-        vm.prank(buyer);
-        (bool o4, ) = address(game).call(
-            abi.encodeWithSignature(
-                "purchaseBurnieLootbox(address,uint256)",
-                buyer,
-                uint256(1)
-            )
-        );
+        // v47: game.purchaseBurnieLootbox removed (BURNIE-lootbox surface deleted); its
+        // negative-auth probe is dropped — the selector no longer exists to be access-controlled.
         assertFalse(o1, "game.purchaseWhaleBundle rejected non-authorized caller");
         assertFalse(o2, "game.purchaseLazyPass rejected non-authorized caller");
         assertFalse(o3, "game.purchaseDeityPass rejected non-authorized caller");
-        assertFalse(o4, "game.purchaseBurnieLootbox rejected non-authorized caller");
     }
 
     // ====================================================================

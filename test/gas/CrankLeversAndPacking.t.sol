@@ -295,28 +295,37 @@ contract CrankLeversAndPacking is DeployProtocol {
     // GAS-04 — Sub 1-slot + boxCursor uint48 + no new hot-path storage (SOURCE-PRESENCE)
     // =========================================================================
 
-    /// @notice GAS-04: the `Sub` struct packs to ONE slot (field widths sum to 13 bytes <= 32 with the
-    ///         documented single-slot NatSpec), `boxCursor`/`boxCursorIndex` are uint48, and the crank
-    ///         adds storage ONLY via `enqueueBoxForCrank` from the first-deposit signal (one SSTORE per
-    ///         (index,player)), NOT on the bet/box-placement hot path.
+    /// @notice GAS-04 / TOMB-05: the `Sub` struct packs to ONE slot, `boxCursor`/`boxCursorIndex`
+    ///         are uint48, and the crank adds storage ONLY via `enqueueBoxForCrank` from the
+    ///         first-deposit signal (one SSTORE per (index,player)), NOT on the bet/box-placement
+    ///         hot path.
+    /// @dev    v47 / OPENE-01: the two prior standalone bools (`drainGameCreditFirst` / `useTickets`)
+    ///         were folded into the single `uint8 flags` field, and an `address fundingSource` (20
+    ///         bytes) was added. The post-OPENE-01 `Sub` is six fields summing to 31 used bytes:
+    ///           uint8 dailyQuantity(1) + uint32 lastSweptDay(4) + uint32 paidThroughDay(4)
+    ///           + uint8 reinvestPct(1) + uint8 flags(1) + address fundingSource(20) = 31 bytes.
+    ///         Still <= 32 (one slot); the INTENT — single-slot packing, no NEW hot-path storage —
+    ///         is unchanged, only the shape it proves against.
     function testGas04PackingAndNoNewHotPathStorageSourcePresence() public view {
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
         string memory game_ = _strippedGame();
 
-        // Sub struct: the seven fields at minimum widths sum to 13 bytes (<= 32 = one slot).
-        //   uint8(1) + bool(1) + bool(1) + uint32(4) + uint32(4) + uint8(1) + uint8(1) = 13 bytes.
-        // Assert each field is byte-present at its minimum width (so a widening regression flips RED),
-        // and the documented single-slot NatSpec ("a single slot") is present.
+        // Sub struct: the six v47 fields at their exact widths sum to 31 bytes (<= 32 = one slot).
+        // Assert each field is byte-present at its width (so a widening regression flips RED). The
+        // two standalone bools were removed (folded into `flags`); `fundingSource` (address) added.
         uint256 subBytes =
             _structFieldBytes(afking, "uint8 dailyQuantity;", 1) +
-            _structFieldBytes(afking, "bool drainGameCreditFirst;", 1) +
-            _structFieldBytes(afking, "bool useTickets;", 1) +
             _structFieldBytes(afking, "uint32 lastSweptDay;", 4) +
             _structFieldBytes(afking, "uint32 paidThroughDay;", 4) +
             _structFieldBytes(afking, "uint8 reinvestPct;", 1) +
-            _structFieldBytes(afking, "uint8 flags;", 1);
+            _structFieldBytes(afking, "uint8 flags;", 1) +
+            _structFieldBytes(afking, "address fundingSource;", 20);
         assertLe(subBytes, 32, "GAS-04: Sub struct fields sum to <= 32 bytes (one slot)");
-        assertEq(subBytes, 13, "GAS-04: Sub is 13 used bytes (19 free padding; already maximally packed)");
+        assertEq(subBytes, 31, "GAS-04/TOMB-05: Sub is 31 used bytes (post-OPENE-01: bools folded into flags + address fundingSource)");
+        // The two prior standalone bools must be GONE (folded into `flags`) — a regression that
+        // re-introduces a standalone bool field would push the struct over one slot.
+        assertEq(_countOccurrences(afking, "bool drainGameCreditFirst;"), 0, "GAS-04/TOMB-05: drainGameCreditFirst bool folded into flags (no standalone field)");
+        assertEq(_countOccurrences(afking, "bool useTickets;"), 0, "GAS-04/TOMB-05: useTickets bool folded into flags (no standalone field)");
         // The `struct Sub {` declaration is byte-present (the packed sub record exists at all).
         assertGt(_countOccurrences(afking, "struct Sub {"), 0, "GAS-04: Sub struct present (the packed sub record)");
 
