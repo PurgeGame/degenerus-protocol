@@ -21,10 +21,12 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     bytes32 constant CODE_BOB   = bytes32("BOB");
     bytes32 constant CODE_CAROL = bytes32("CAROL");
 
-    // Storage slots (verified via forge inspect DegenerusGameStorage storage-layout)
+    // Storage slots (verified via forge inspect DegenerusGameStorage storage-layout).
+    // v47: presale-box storage additions shifted levelDgnrsAllocation 23->26 and
+    // levelDgnrsClaimed 24->27 (the levelPrizePool region shifted +3). level @ slot 0 unchanged.
     uint256 constant SLOT_LEVEL = 0; // level is at slot 0, offset 14, 3 bytes (uint24)
-    uint256 constant SLOT_LEVEL_DGNRS_ALLOCATION = 23;
-    uint256 constant SLOT_LEVEL_DGNRS_CLAIMED = 24;
+    uint256 constant SLOT_LEVEL_DGNRS_ALLOCATION = 26;
+    uint256 constant SLOT_LEVEL_DGNRS_CLAIMED = 27;
 
     uint256 buyerNonce;
 
