@@ -1,0 +1,8 @@
+# 324-02 SUMMARY — SC2 Adversarial Sweep
+
+**Done.** Authored `324-02-ADVERSARIAL-LOG.md` (commits `c8127a28` → `320e7d8a` → `f4e6ef4a`). Ran the FIXED 3-skill set (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT) as **GENUINE PARALLEL_SUBAGENT** — 3 concurrent background Task spawns from the orchestrator (run INLINE so the orchestrator held the Task tool). 15 deduplicated disposition rows: 13 NEGATIVE-VERIFIED / SAFE_BY_DESIGN / handoff + **2 FINDING_CANDIDATE (both MEDIUM)**, each surviving the dual-gate skeptic filter (structural-protection + 3-condition EV; 0 discards).
+
+- **F-47-01** (auditor) — presale closing-box sweeps ~60% of the 100B-DGNRS pool to the closing buyer (40% DGNRS branch rate vs a curve calibrated for 100%); contradicts the locked "dust, not a windfall" premise. Economist's SAFE classification was on inflation grounds (doesn't refute concentration). **USER-adjudicated DEFER→v48** (fix locked: denominator 1000→400).
+- **F-47-02** (hunter B1) — gambling-burn submit can brick when the 175% reservation (pulled from `claimable[SDGNRS]` alone, fail-closed) exceeds claimable; USER-corrected to the mid-game ETH-empty case (+ stETH-donation base inflation, verified no exploit). **USER-adjudicated DEFER→v48** (fix locked: pure-ETH/stETH fallback, revert if neither, donation-robust).
+
+Tombstone-griefing probe NEGATIVE-VERIFIED → H-CANCEL-SWAP-MISS cannot be re-triggered. Both fixes captured in v48 plan docs. **Self-check:** `git diff fabe9e94 HEAD -- contracts/` empty ✓ · degen-skeptic OUT recorded ✓ · execution path recorded ✓ · read-only ✓.
