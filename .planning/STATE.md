@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
 status: executing
-last_updated: "2026-05-25T17:08:33.479Z"
-last_activity: 2026-05-25 -- Phase 325 planning complete
+last_updated: "2026-05-25T17:35:40.506Z"
+last_activity: 2026-05-25 -- Phase 325 execution started
 progress:
   total_phases: 4
   completed_phases: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** **v48.0 STARTED 2026-05-25 — defining requirements + roadmap.** sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes (F-47-01 + F-47-02) + Keeper/Pool/Tombstone/Hero bundle — 7 work items, ONE batched USER-APPROVED contract diff → TST → TERMINAL sweep+closure (v44–v47 shape). Audit baseline → subject: v47.0 closure HEAD `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2` → v48.0 closure HEAD; every `file:line` + salvage-swap economics re-attested vs the v47.0-closure HEAD before any patch. Phase numbering continues from 324 → v48.0 starts at Phase 325.
+**Current focus:** Phase 325 — spec-design-lock-call-graph-attestation-shared-surface-recon
 
 ## Current Position
 
-Phase: 325 (SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation) — planned (3 plans / 2 waves), verified, ready to execute
-Plan: 3 plans committed (325-01/02 Wave 1, 325-03 Wave 2) — commit 3744b396
-Status: Ready to execute
-Last activity: 2026-05-25 -- Phase 325 planning complete
+Phase: 325 (spec-design-lock-call-graph-attestation-shared-surface-recon) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 325
+Last activity: 2026-05-25 -- Phase 325 execution started
 Next: `/gsd-execute-phase 325` — run the SPEC design-lock (zero contract mutation). Wave 1 (parallel): grep-attest every cited file:line vs HEAD da5c9d50 (325-01) + re-derive the salvage-swap no-arb floor / pin the jitter source / enumerate the swap-pop (325-02). Wave 2: reconcile the shared signatures across DegenerusGame/StakedDegenerusStonk/DegenerusVault and resolve every SPEC-time open item into 325-SPEC.md (325-03)
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
