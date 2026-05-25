@@ -245,10 +245,11 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       expect(body.includes("type(uint48).max")).to.equal(false);
       const args = extractResolveCommonArgs(body);
       expect(args, "_resolveLootboxCommon call args not parsed").to.not.equal(null);
-      // Positional: 3rd arg = index, 10th arg = emitLootboxEvent.
+      // v47 positional: 3rd arg = index, 8th arg = emitLootboxEvent (the old 5-bool
+      // presale/allowPasses/allowBoons gating params were removed → 2-bool / 11 args).
       expect(args[2], "resolveLootboxDirect must pass index = 0").to.equal("0");
       expect(
-        args[9],
+        args[7],
         "resolveLootboxDirect must pass emitLootboxEvent = false"
       ).to.equal("false");
     });
@@ -264,7 +265,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       expect(args, "_resolveLootboxCommon call args not parsed").to.not.equal(null);
       expect(args[2], "resolveRedemptionLootbox must pass index = 0").to.equal("0");
       expect(
-        args[9],
+        args[7],
         "resolveRedemptionLootbox must pass emitLootboxEvent = false"
       ).to.equal("false");
     });
@@ -301,8 +302,8 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
         /if \(payColdBustConsolation && whole == 0\)/.test(source),
         "the manual cold-bust consolation must be gated on `payColdBustConsolation && whole == 0`"
       ).to.equal(true);
-      // (3) Both auto-resolve callers pass emitLootboxEvent = false (10th
-      //     positional) AND payColdBustConsolation = false (11th positional).
+      // (3) Both auto-resolve callers pass emitLootboxEvent = false (v47 8th
+      //     positional) AND payColdBustConsolation = false (v47 9th positional).
       for (const fnSig of [
         "function resolveLootboxDirect(",
         "function resolveRedemptionLootbox(",
@@ -314,11 +315,11 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
           null
         );
         expect(
-          args[9],
+          args[7],
           `${fnSig} must pass emitLootboxEvent = false`
         ).to.equal("false");
         expect(
-          args[10],
+          args[8],
           `${fnSig} must pass payColdBustConsolation = false`
         ).to.equal("false");
       }
