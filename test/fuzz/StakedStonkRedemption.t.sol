@@ -66,18 +66,18 @@ contract StakedStonkRedemption is DeployProtocol {
     ///      so the per-function assertions on positive ethBase/ethValueOwed are well-formed.
     uint256 internal constant FUZZ_MIN_AMOUNT = 100 ether;
 
-    /// @dev Storage slot of the `pendingByDay` mapping per v44 layout. Derived once via
-    ///      `forge inspect contracts/StakedDegenerusStonk.sol:StakedDegenerusStonk storage-layout`
-    ///      in Phase 305 305-01-SUMMARY (slot 11). Embedded inline so the test file is
-    ///      self-contained.
-    uint256 internal constant SLOT_PENDING_BY_DAY = 11;
+    /// @dev Storage slot of the `pendingByDay` mapping. v47: shifted from 11 to 10 because the
+    ///      `pendingRedemptionBurnie` (internal uint256) at slot 10 was removed (BURNIE settled at
+    ///      submit). Embedded inline so the test file is self-contained.
+    uint256 internal constant SLOT_PENDING_BY_DAY = 10;
 
     /// @dev Storage slot of the outer `pendingRedemptions` mapping (composite key:
     ///      mapping(address => mapping(uint32 => PendingRedemption))). Slot 7 per v44 layout.
     uint256 internal constant SLOT_PENDING_REDEMPTIONS = 7;
 
-    /// @dev Storage slot of the `pendingResolveDay` sentinel (uint32, slot 12 per v44 layout).
-    uint256 internal constant SLOT_PENDING_RESOLVE_DAY = 12;
+    /// @dev Storage slot of the `pendingResolveDay` sentinel (uint32). v47: shifted from 12 -> 11
+    ///      by the `pendingRedemptionBurnie` removal.
+    uint256 internal constant SLOT_PENDING_RESOLVE_DAY = 11;
 
     // =====================================================================
     //                          ACTORS

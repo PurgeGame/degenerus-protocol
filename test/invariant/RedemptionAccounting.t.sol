@@ -25,6 +25,13 @@ contract RedemptionAccounting is DeployProtocol {
     /// @dev Mirrors `StakedDegenerusStonk.MIN_BURN_AMOUNT` (private literal `1e18`).
     uint256 internal constant MIN_BURN_AMOUNT = 1e18;
 
+    /// @dev Mirrors `StakedDegenerusStonk.MAX_ROLL` (private literal `175`). v47: at SUBMIT the
+    ///      contract physically segregates the MAX possible payout (base × MAX_ROLL / 100 = 175%)
+    ///      into `pendingRedemptionEthValue`; at RESOLVE that reservation is lowered from MAX to the
+    ///      rolled amount (base × roll / 100). So an UNRESOLVED day contributes 175% of its base to
+    ///      the cumulative scalar, not 100% (the v46 model). This is the v47 conservation delta.
+    uint256 internal constant MAX_ROLL = 175;
+
     /// @dev Hard cap on cross-day scan loops in invariant fns. Handler emits ≤ 256-call
     ///      sequences under FOUNDRY_PROFILE=deep so the bound is generously above expected.
     uint256 internal constant SCAN_CAP = 100;
@@ -89,13 +96,13 @@ contract RedemptionAccounting is DeployProtocol {
     //                  INV-02: ETH conservation (EXACT)
     // =====================================================================
 
-    /// @notice INV-02 — 304-SPEC §1 lines 90-114. `pendingRedemptionEthValue` equals the
-    ///         sum over unresolved days D of `pendingByDay[D].ethBase * 1e9` PLUS the sum
-    ///         over resolved-but-unclaimed (P, D) of `pendingRedemptions[P][D].ethValueOwed
-    ///         * redemptionPeriods[D].roll / 100`. EXACT equality per D-305-GWEI-SNAP-01:
-    ///         ethValueOwed is gwei-aligned at source, and `gcd(1e9, 100) = 100` means every
-    ///         downstream `× roll / 100` divides exactly. Tightens the SPEC's "dust-bounded"
-    ///         framing to byte-identity post-refactor.
+    /// @notice INV-02 — 304-SPEC §1 lines 90-114 (v47-revised). `pendingRedemptionEthValue` equals
+    ///         the sum over UNRESOLVED days D of `pendingByDay[D].ethBase * 1e9 * MAX_ROLL / 100`
+    ///         (v47: the MAX 175% payout is segregated at submit) PLUS the sum over
+    ///         resolved-but-unclaimed (P, D) of `pendingRedemptions[P][D].ethValueOwed *
+    ///         redemptionPeriods[D].roll / 100` (the reservation lowered to the rolled amount at
+    ///         resolve). EXACT per D-305-GWEI-SNAP-01: ethBase/ethValueOwed are gwei-aligned and
+    ///         `gcd(1e9, 100) = 100` so both `× MAX_ROLL / 100` and `× roll / 100` divide exactly.
     function invariant_INV_02_EthConservationExact() public view {
         uint256 expected;
         uint256 len = handler.getDaysWrittenCount();
@@ -104,9 +111,9 @@ contract RedemptionAccounting is DeployProtocol {
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
             if (!handler.ghost_dayResolved(d)) {
-                // Unresolved: ethBase × 1e9 contributes to the cumulative scalar.
+                // v47 Unresolved: the MAX (175%) payout is segregated at submit.
                 (uint64 ethBase, , ) = _readPendingByDay(d);
-                expected += uint256(ethBase) * 1e9;
+                expected += (uint256(ethBase) * 1e9 * MAX_ROLL) / 100;
             } else {
                 // Resolved: sum over players of (ethValueOwed × roll / 100).
                 (uint16 roll) = sdgnrs.redemptionPeriods(d);
@@ -192,8 +199,9 @@ contract RedemptionAccounting is DeployProtocol {
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
             if (!handler.ghost_dayResolved(d)) {
+                // v47 Unresolved: the MAX (175%) payout is segregated at submit.
                 (uint64 ethBase, , ) = _readPendingByDay(d);
-                expected += uint256(ethBase) * 1e9;
+                expected += (uint256(ethBase) * 1e9 * MAX_ROLL) / 100;
             } else {
                 (uint16 roll) = sdgnrs.redemptionPeriods(d);
                 for (uint256 j = 0; j < actorN; j++) {
@@ -315,9 +323,12 @@ contract RedemptionAccounting is DeployProtocol {
         uint256 bound = len < SCAN_CAP ? len : SCAN_CAP;
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
-            // v47: per-day burnieBase removed; ethBase is the pool-non-empty indicator.
-            (uint64 ethBase, , ) = _readPendingByDay(d);
-            if (ethBase == 0) continue;
+            // v47: per-day burnieBase removed. `supplySnapshot` (lazy-init on the FIRST burn of a
+            // day, independent of sub-gwei ethBase rounding) is the pool-existence indicator — it
+            // matches the sentinel-set condition, whereas ethBase can round to 0 for a tiny burn
+            // while the sentinel is still legitimately stamped to that day.
+            (, uint64 supplySnapshot, ) = _readPendingByDay(d);
+            if (supplySnapshot == 0) continue;
             // A non-empty pool MUST be the stamped day under the single-pool invariant.
             assertEq(
                 uint256(d),
@@ -391,10 +402,11 @@ contract RedemptionAccounting is DeployProtocol {
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
             if (handler.ghost_dayResolved(d)) continue;
-            // v47: per-day burnieBase removed; ethBase is the pool-non-empty indicator (matches
-            // the contract's own `if (ethBase == 0) return;` resolvability guard at sStonk:662).
-            (uint64 ethBase, , ) = _readPendingByDay(d);
-            if (ethBase == 0) continue;
+            // v47: per-day burnieBase removed; `supplySnapshot` (lazy-init on first burn, sentinel-set
+            // condition) is the pool-existence indicator — ethBase can round to 0 for a tiny burn
+            // while the pool legitimately exists and is stamped.
+            (, uint64 supplySnapshot, ) = _readPendingByDay(d);
+            if (supplySnapshot == 0) continue;
             assertEq(
                 uint256(d),
                 uint256(stamp),
@@ -421,9 +433,11 @@ contract RedemptionAccounting is DeployProtocol {
         uint256 bound = len < SCAN_CAP ? len : SCAN_CAP;
         for (uint256 i = 0; i < bound; i++) {
             uint32 d = handler.getDayWritten(i);
-            // v47: per-day burnieBase removed; ethBase is the pool-non-empty indicator.
-            (uint64 ethBase, , ) = _readPendingByDay(d);
-            if (ethBase != 0) {
+            // v47: per-day burnieBase removed; `supplySnapshot` (lazy-init on first burn, the
+            // sentinel-set condition) is the pool-existence indicator. ethBase can round to 0 for a
+            // tiny burn while the pool legitimately exists and the sentinel names it.
+            (, uint64 supplySnapshot, ) = _readPendingByDay(d);
+            if (supplySnapshot != 0) {
                 nonEmptyCount++;
                 nonEmptyDay = d;
             }

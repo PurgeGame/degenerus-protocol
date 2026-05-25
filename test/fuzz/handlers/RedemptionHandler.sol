@@ -47,9 +47,12 @@ contract RedemptionHandler is Test {
     //  pendingRedemptions         | 7    | mapping(address => mapping(uint32 => PendingRedemption))
     //  redemptionPeriods          | 8    | mapping(uint32 => RedemptionPeriod)
     //  pendingRedemptionEthValue  | 9    | uint256 (public)
-    //  pendingRedemptionBurnie    | 10   | uint256 (internal)
-    //  pendingByDay               | 11   | mapping(uint32 => DayPending)
-    //  pendingResolveDay          | 12   | uint32 (public)
+    //  pendingByDay               | 10   | mapping(uint32 => DayPending)   [v47: was 11]
+    //  pendingResolveDay          | 11   | uint32 (public)                 [v47: was 12]
+    //
+    //  v47 SHIFT: the `pendingRedemptionBurnie` (internal uint256) slot @10 was DELETED (BURNIE
+    //  settled at submit, no per-period reserve scalar), so pendingByDay 11->10 and
+    //  pendingResolveDay 12->11. Slots 0-9 are unchanged (all precede the removed slot).
 
     /// @notice Slot index of `pendingRedemptions` mapping (outer key player => inner mapping).
     uint256 public constant SLOT_PENDING_REDEMPTIONS = 7;
@@ -57,12 +60,12 @@ contract RedemptionHandler is Test {
     uint256 public constant SLOT_REDEMPTION_PERIODS = 8;
     /// @notice Slot index of `pendingRedemptionEthValue` (public uint256).
     uint256 public constant SLOT_PENDING_REDEMPTION_ETH_VALUE = 9;
-    /// @notice Slot index of `pendingRedemptionBurnie` (internal uint256).
-    uint256 public constant SLOT_PENDING_REDEMPTION_BURNIE = 10;
-    /// @notice Slot index of `pendingByDay` mapping (key day => DayPending packed 4×uint64).
-    uint256 public constant SLOT_PENDING_BY_DAY = 11;
+    /// @notice Slot index of `pendingByDay` mapping (key day => DayPending packed 3×uint64).
+    ///         v47: shifted from 11 -> 10 by the `pendingRedemptionBurnie` removal.
+    uint256 public constant SLOT_PENDING_BY_DAY = 10;
     /// @notice Slot index of `pendingResolveDay` (public uint32 sentinel).
-    uint256 public constant SLOT_PENDING_RESOLVE_DAY = 12;
+    ///         v47: shifted from 12 -> 11 by the `pendingRedemptionBurnie` removal.
+    uint256 public constant SLOT_PENDING_RESOLVE_DAY = 11;
 
     // =========================================================================
     //                          GHOST VARIABLES (legacy)

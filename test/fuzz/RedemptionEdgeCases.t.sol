@@ -89,9 +89,10 @@ contract RedemptionEdgeCases is DeployProtocol {
     ///      remains the dedicated dust-floor test against MIN_BURN_AMOUNT itself.
     uint256 internal constant FUZZ_MIN_AMOUNT = 100 ether;
 
-    /// @dev Slot index of `pendingByDay` mapping per v44 layout (re-derived inline so the
-    ///      edge-case file is self-contained and does not depend on the handler's constants).
-    uint256 internal constant SLOT_PENDING_BY_DAY = 11;
+    /// @dev Slot index of `pendingByDay` mapping (re-derived inline so the edge-case file is
+    ///      self-contained). v47: shifted from 11 to 10 because the `pendingRedemptionBurnie`
+    ///      (internal uint256) at slot 10 was removed (BURNIE settled at submit).
+    uint256 internal constant SLOT_PENDING_BY_DAY = 10;
 
     // =====================================================================
     //                          ACTORS
@@ -992,12 +993,10 @@ contract RedemptionEdgeCases is DeployProtocol {
         sdgnrs.burn(amount);
 
         // Per-claim ethValueOwed is zero (zero-rounded under sub-gwei truncation).
-        // The BURNIE side rounds independently against the BURNIE pool denominator; under
-        // the deploy-time state the coinflip side may push enough BURNIE backing for
-        // burnieOwed to be non-zero (positive integer multiple of 1e9 post snap). The
-        // load-bearing EDGE-13 assertion is on the ETH side — the SPEC framing "the same
-        // applies to burnieOwed if it rounds to 0 INDEPENDENTLY" is conditional, not
-        // mandatory.
+        // v47: BURNIE is settled at SUBMIT (no per-claim burnieOwed field), and the claim guard is
+        // now `if (claim.ethValueOwed == 0) revert NoClaim()` — the v46 `&& burnieOwed == 0`
+        // disjunct was removed. So a zero-ethValueOwed burn has NOTHING to claim and the claim
+        // reverts NoClaim (in v46 the BURNIE leg let a zero-ETH claim proceed).
         (uint96 ev, ) = sdgnrs.pendingRedemptions(playerA, dayD);
         assertEq(uint256(ev), 0, "EDGE-13: claim ethValueOwed must be zero under sub-gwei rounding");
 
@@ -1010,17 +1009,16 @@ contract RedemptionEdgeCases is DeployProtocol {
         assertEq(uint256(ePool), 0, "EDGE-13: pool ethBase remains zero under sub-gwei rounding");
         assertGt(uint256(bnPool), 0, "EDGE-13: pool burned increments (ceiling-divide on amount)");
 
-        // Resolve + claim — payout is zero, slot is deleted, no revert
+        // Resolve, then claim — v47: a zero-ethValueOwed claim reverts NoClaim (ETH-only guard).
         _advanceWallDay();
         _resolveDay(dayD, roll);
-        uint256 ethBefore = playerA.balance;
         vm.prank(playerA);
+        vm.expectRevert(StakedDegenerusStonk.NoClaim.selector);
         sdgnrs.claimRedemption(dayD);
-        assertEq(playerA.balance, ethBefore, "EDGE-13: claim must pay zero ETH under zero-rounded ethValueOwed");
 
-        // Slot cleared
+        // Slot remains zero-ethValueOwed (nothing was claimable; the reverting claim mutates nothing).
         (uint96 evPost, ) = sdgnrs.pendingRedemptions(playerA, dayD);
-        assertEq(uint256(evPost), 0, "EDGE-13: claim slot cleared post-claim");
+        assertEq(uint256(evPost), 0, "EDGE-13: claim slot ethValueOwed stays zero (no claimable ETH)");
     }
 
     // =====================================================================
@@ -1049,8 +1047,9 @@ contract RedemptionEdgeCases is DeployProtocol {
         vm.store(address(sdgnrs), slotPbD, bytes32(packed));
 
         // Also pre-set pendingResolveDay = dayD so the INV-13 sentinel check passes inside burn.
-        // pendingResolveDay is at slot 12 (uint32, lower bits of the slot).
-        bytes32 slotSentinel = bytes32(uint256(12));
+        // pendingResolveDay is at slot 11 (uint32, lower bits) — v47: shifted from 12 by the
+        // pendingRedemptionBurnie@10 removal.
+        bytes32 slotSentinel = bytes32(uint256(11));
         vm.store(address(sdgnrs), slotSentinel, bytes32(uint256(dayD)));
 
         // Verify the snapshot is now visible
@@ -1117,8 +1116,8 @@ contract RedemptionEdgeCases is DeployProtocol {
         assertEq(uint256(evSeeded), MAX_DAILY_REDEMPTION_EV, "EDGE-15: seed ethValueOwed mismatch");
         assertEq(uint256(asSeeded), 1, "EDGE-15: seed activityScore mismatch");
 
-        // Pre-set sentinel so burn passes INV-13 guard
-        bytes32 slotSentinel = bytes32(uint256(12));
+        // Pre-set sentinel so burn passes INV-13 guard (pendingResolveDay slot 11 — v47 shift from 12)
+        bytes32 slotSentinel = bytes32(uint256(11));
         vm.store(address(sdgnrs), slotSentinel, bytes32(uint256(dayD)));
 
         // Any burn that adds > 0 ethValueOwed must revert ExceedsDailyRedemptionCap.
