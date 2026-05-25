@@ -37,8 +37,8 @@ contract VrfRotationLiveness is DeployProtocol {
     /// @dev Storage slot constants (authoritative storage-layout, not the drifted analog).
     uint256 private constant SLOT_PACKED_0 = 0;
     uint256 private constant SLOT_RNG_WORD_CURRENT = 3;
-    uint256 private constant SLOT_LOOTBOX_PACKED = 35;
-    uint256 private constant SLOT_LOOTBOX_WORD_MAP = 36;
+    uint256 private constant SLOT_LOOTBOX_PACKED = 37;
+    uint256 private constant SLOT_LOOTBOX_WORD_MAP = 38;
     /// @dev LR_MID_DAY occupies byte 28 of lootboxRngPacked (bit offset 224, mask 0xFF).
     uint256 private constant LR_MID_DAY_BIT = 224;
 

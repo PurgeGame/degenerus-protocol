@@ -16,9 +16,9 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 contract RngIndexDrainBindingTest is DeployProtocol {
     /// @dev Storage slot for `lootboxRngWordByIndex` mapping. Verified via
     ///      `forge inspect DegenerusGame storage-layout`.
-    uint256 internal constant SLOT_LOOTBOX_MAPPING = 36;
+    uint256 internal constant SLOT_LOOTBOX_MAPPING = 38;
     /// @dev Storage slot for `lootboxRngPacked` (LR_INDEX at low 48 bits).
-    uint256 internal constant SLOT_LR_INDEX = 35;
+    uint256 internal constant SLOT_LR_INDEX = 37;
 
     /// @dev Keccak topic-0 for TraitsGenerated(address,uint24,uint32,uint32,uint32,uint256)
     bytes32 internal constant TOPIC_TRAITS_GENERATED =

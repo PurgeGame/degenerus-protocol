@@ -44,8 +44,8 @@ contract RngLockDeterminism is DeployProtocol {
     uint256 constant SLOT_PACKED_0 = 0;
     uint256 constant SLOT_RNG_WORD_CURRENT = 3;
     uint256 constant SLOT_VRF_REQUEST_ID = 4;
-    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 35;
-    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 36;
+    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 37;
+    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 38;
     // Defensive slot constants for sec4 RunTerminalDecimatorJackpot
     // contribution. Exact values are placeholders; aggregator hash captures
     // post-resolution storage state at these slots for byte-identity

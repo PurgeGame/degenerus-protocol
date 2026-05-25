@@ -19,13 +19,16 @@ contract LootboxBoonCoexistence is DeployProtocol {
     // Storage slot constants (from `forge inspect DegenerusGame storage-layout`)
     // ──────────────────────────────────────────────────────────────────────
 
-    uint256 constant SLOT_BOON_PACKED     = 59;   // mapping(address => BoonPacked)
+    // v47: presale-box storage additions shifted the DegenerusGame layout. Authoritative slots
+    // from `forge inspect` at fb29ed51: boonPacked 59->61, lootboxRngPacked 35->37,
+    // lootboxRngWordByIndex 36->38, lootboxDay 37->39, lootboxEthBase 19->22 (lootboxEth @15 unchanged).
+    uint256 constant SLOT_BOON_PACKED     = 61;   // mapping(address => BoonPacked)
     uint256 constant SLOT_LOOTBOX_ETH     = 15;   // mapping(uint48 => mapping(address => uint256))
-    uint256 constant SLOT_LOOTBOX_RNG_IDX = 35;   // lootboxRngPacked (low 48 bits = lootboxRngIndex)
-    uint256 constant SLOT_LOOTBOX_WORD    = 36;   // mapping(uint48 => uint256) lootboxRngWordByIndex
-    uint256 constant SLOT_LOOTBOX_DAY     = 37;   // mapping(uint48 => mapping(address => uint48))
-    uint256 constant SLOT_LOOTBOX_BASE    = 19;   // mapping(uint48 => mapping(address => uint256))
-    uint256 constant SLOT_LOOTBOX_EV      = 45;   // mapping(uint48 => mapping(address => uint16))
+    uint256 constant SLOT_LOOTBOX_RNG_IDX = 37;   // lootboxRngPacked (low 48 bits = lootboxRngIndex)
+    uint256 constant SLOT_LOOTBOX_WORD    = 38;   // mapping(uint48 => uint256) lootboxRngWordByIndex
+    uint256 constant SLOT_LOOTBOX_DAY     = 39;   // mapping(uint48 => mapping(address => uint32)) lootboxDay
+    uint256 constant SLOT_LOOTBOX_BASE    = 22;   // mapping(uint48 => mapping(address => uint256)) lootboxEthBase
+    uint256 constant SLOT_LOOTBOX_EV      = 45;   // v47: see _seedLootbox note re EV-score restructure
 
     // BoonPacked bit layout (slot0)
     uint256 constant BP_COINFLIP_DAY_SHIFT  = 0;

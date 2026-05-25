@@ -345,7 +345,7 @@ contract VRFStallEdgeCases is DeployProtocol {
     /// @dev Storage slot for totalFlipReversals (verified via forge inspect).
     uint256 constant SLOT_TOTAL_FLIP_REVERSALS = 5;
     /// @dev Storage slot for lootboxRngPacked (midDayTicketRngPending at bits 224-231).
-    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 35;
+    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 37;
 
     /// @notice Unit: coordinator swap with a daily request in flight preserves the RNG lock
     ///         and re-issues the request on the new coordinator; intentionally-kept variables
