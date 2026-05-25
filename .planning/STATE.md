@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
 status: executing
-last_updated: "2026-05-25T17:46:11.505Z"
+last_updated: "2026-05-25T17:55:51.394Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 ## Current Position
 
 Phase: 325 (spec-design-lock-call-graph-attestation-shared-surface-recon) — EXECUTING
-Plan: 2 of 3
-Status: Executing Phase 325 (Plan 01 done)
-Last activity: 2026-05-25 -- Phase 325 Plan 01 complete (items 1-6 call-graph attestation; 60 anchors, 0 IMPL blockers; KEEP-04/05/POOL-05 resolved)
-Next: `/gsd-execute-phase 325` — continue Wave 1: Plan 02 (325-02) load-bearing SWAP item-7 attestation — re-derive the SWAP-08 no-arb floor at the band ceiling (STOP-if-violated) + pin the SWAP-03 jitter source + enumerate the SWAP-06 swap-pop → 325-ATTEST-SWAP.md. Then Wave 2: Plan 03 (325-03) reconcile the shared signatures across DegenerusGame/StakedDegenerusStonk/DegenerusVault + resolve every SPEC-time open item into 325-SPEC.md (consumes the 325-ATTEST verdicts: 0 blockers, KEEP-04=YES/KEEP-05=EXISTING/POOL-05=VERBATIM-MATCH, KEEP-03 wiring at DegenerusGame.sol:1778)
+Plan: 3 of 3
+Status: Executing Phase 325 (Plans 01 + 02 done; Wave 1 complete)
+Last activity: 2026-05-25 -- Phase 325 Plan 02 complete (load-bearing SWAP item-7 attestation -> 325-ATTEST-SWAP.md; SWAP-08 no-arb floor RE-DERIVED at the band ceiling, HOLDS margin +4.5pp @d6, STOP NOT triggered; SWAP-03 jitter pinned to rngWordByDay[currentDay-1] freeze-safe; SWAP-06 swap-pop H-CANCEL-SWAP-MISS proven ABSENT across 11 ticketQueue consumers; units pinned)
+Next: `/gsd-execute-phase 325` — Wave 2: Plan 03 (325-03) reconcile the shared signatures across DegenerusGame/StakedDegenerusStonk/DegenerusVault + resolve every SPEC-time open item into 325-SPEC.md. Consumes the 325-ATTEST verdicts: items 1-6 = 0 blockers / KEEP-04=YES / KEEP-05=EXISTING / POOL-05=VERBATIM-MATCH / KEEP-03 wiring at DegenerusGame.sol:1778; SWAP (item 7) = no-arb HOLDS (+4.5pp @ band ceiling), jitter=rngWordByDay[currentDay-1], swap-pop safe, units pinned; correct the _runEarlyBirdLootboxJackpot citation (JackpotModule:639) + recompute the plan-doc §12 worked example onto the priceForLevel-per-whole-ticket basis in the SPEC. BATCH-01 stays Pending until 325-SPEC.md lands (Plan 03).
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
 
@@ -523,6 +523,7 @@ Audit deliverables:
 | Phase 319 P03 | 25min | 1 tasks | 1 files |
 | 319 | 05 | ~16min | 1 (Task 3; Tasks 1-2 prior agents) | 5 files (DegenerusGame.sol :1501-1502 + 4 test mirrors) + 1 SUMMARY (GAS-06 OUTCOME-B calibration; 66_528/137_944; placement +0%; 556 pass/44 fail = exact v45 baseline; SAFE-01 round-trip<=0 preserved) |
 | Phase 325 P01 | 10min | 3 tasks | 3 files |
+| Phase 325 P02 | 30 | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -630,3 +631,4 @@ Audit deliverables:
 - [Phase ?]: Phase 325 Plan 01: items 1-6 anchor attestation complete (60 anchors, 58 MATCH / 2 immaterial SHIFTED / 0 ABSENT), 0 IMPL blockers across three 325-ATTEST docs
 - [Phase ?]: KEEP-04=YES (registered owner==VAULT code bytes32 DGNRS exists, no setup); KEEP-05=EXISTING (autoOpen renames crankBoxes); POOL-05=VERBATIM MATCH (withdraw(uint256)/poolOf(address); AfKing unchanged for item 4)
 - [Phase ?]: KEEP-03 wiring-site: affiliate code 0 is at DegenerusGame.sol:1778 not AfKing; BTOMB reuse target BurnieCoin vaultEscrow :557-567; HERO-06 no-leak confirmed
+- [Phase ?]: Phase 325 Plan 02: SWAP-08 no-arb floor RE-DERIVED at the jitter band ceiling from live source (HEAD da5c9d50) — salvage ceiling 16.5% of face @d6 < cheapest acquisition ~21%, margin +4.5pp, HOLDS, STOP rule NOT triggered; SWAP-03 jitter pinned to settled rngWordByDay[currentDay-1] (freeze-safe); SWAP-06 swap-pop H-CANCEL-SWAP-MISS proven ABSENT across 11 ticketQueue consumers; units pinned (owed=entries 4/ticket, oneTicketWei=priceForLevel). Drift: _runEarlyBirdLootboxJackpot at JackpotModule:639 not AdvanceModule:639.

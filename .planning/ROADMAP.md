@@ -39,7 +39,7 @@
   5. The salvage-swap `ticketQueue` swap-pop is proven on paper NOT to reproduce the `H-CANCEL-SWAP-MISS` operation class (SWAP-06 design lock): every `ticketQueue` / `_tqFarFutureKey` consumer is enumerated, the O(1) caller-verified swap-pop (`q[idx]==player`, `queueIndices` used only when a line zeroes a level) is shown to MAINTAIN `membership ⟺ packed != 0` so the far-future jackpot samplers need no change and gain no hot-path read, and the LOCKED OPEN-E operator-trust disposition is confirmed to cover this first value-destructive operator-gated action.
 **Plans**: 3 plans (2 waves)
 - [x] 325-01-PLAN.md — Call-graph attestation for items 1/2/3/4/5/6 -> three 325-ATTEST-*.md grep tables (PFIX-RFALL, KEEP-POOL, BTOMB-HERO) + resolve KEEP-04/KEEP-05/POOL-05 (Wave 1)
-- [ ] 325-02-PLAN.md — Load-bearing SWAP attestation: SWAP-08 no-arb re-derivation at the band ceiling (STOP-if-violated) + SWAP-03 jitter-source pin + SWAP-06 swap-pop enumeration -> 325-ATTEST-SWAP.md (Wave 1)
+- [x] 325-02-PLAN.md — Load-bearing SWAP attestation: SWAP-08 no-arb re-derivation at the band ceiling (HOLDS +4.5pp @d6: salvage ceiling 16.5% < acquisition ~21%; STOP NOT triggered) + SWAP-03 jitter-source pin (rngWordByDay[currentDay-1], freeze-safe) + SWAP-06 swap-pop enumeration (11 ticketQueue consumers; H-CANCEL-SWAP-MISS proven absent) -> 325-ATTEST-SWAP.md (Wave 1) ✅ (`0e09b7d9`)
 - [ ] 325-03-PLAN.md — 325-SPEC.md: shared-signature reconciliation across DegenerusGame/StakedDegenerusStonk/DegenerusVault + open-item resolutions (RFALL-04, KEEP-04/05, POOL-06, BTOMB/HERO packing+shape) + per-item IMPL blueprint + edit-order map (Wave 2)
 **UI hint**: no
 
@@ -89,7 +89,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 1/3 | In Progress|  |
+| 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 2/3 | In Progress|  |
 | 326. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/TBD | Not started | - |
 | 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 0/TBD | Not started | - |
 | 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 0/TBD | Not started | - |
