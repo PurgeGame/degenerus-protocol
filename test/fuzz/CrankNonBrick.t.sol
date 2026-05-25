@@ -78,6 +78,17 @@ contract CrankNonBrick is DeployProtocol {
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
         keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)");
 
+    // -------------------------------------------------------------------------
+    // AfKing pinned slot layout + Sub packed-field offsets (for the TOMB-04 didWork sweep tests)
+    // -------------------------------------------------------------------------
+    uint256 private constant AFK_SUBOF_SLOT = 1;            // _subOf mapping root (address => Sub)
+    uint256 private constant AFK_SUBSCRIBER_INDEX_SLOT = 3; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant AFK_SWEEP_PACKED_SLOT = 4;     // _sweepDay (uint32) + _sweepCursor (uint224)
+    uint256 private constant AFK_OFF_DAILY = 0;             // uint8  dailyQuantity  (byte 0)
+    uint256 private constant AFK_OFF_LASTSWEPT = 1;         // uint32 lastSweptDay    (bytes 1..4)
+    /// @dev SubscriptionExpired(address indexed player, uint8 reason). reason 1 = AutoPause, 2 = CancelReclaim.
+    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
+
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q' — first-spin salt
     uint48 private constant INDEX = 1; // default lootboxRngIndex seeded in setUp
     uint256 private constant FIXED_WORD = uint256(keccak256("crank_nonbrick_fixed_word"));
@@ -503,6 +514,161 @@ contract CrankNonBrick is DeployProtocol {
     }
 
     // =========================================================================
+    // TOMB-04 -- the didWork revert-fix: a reclaim/auto-pause/renewal-only chunk COMMITS
+    // =========================================================================
+    //
+    // v47 added `didWork` (AfKing.sol:594) so the sweep tail reverts NoSubscribersSwept ONLY when the
+    // chunk did NOTHING (`!didWork`, AfKing.sol:806). Pre-fix, a buy-less chunk hit `batchLen == 0 ->
+    // revert`, which rolled back any in-loop set work it had performed (a cancel-tombstone reclaim, an
+    // auto-pause, or a window renewal) -- re-stranding the tombstone for griefing across sweeps. The
+    // fix: a chunk that DID such work (didWork == true) but produced no buy COMMITS the work (0 bounty,
+    // no revert); a genuinely-empty chunk (`!didWork`) still reverts as the anti-spam disincentive.
+
+    /// @notice TOMB-04 didWork revert-fix: a sweep chunk that does ONLY a cancel-tombstone reclaim (no
+    ///         successful buy -> bounty 0) COMMITS the reclaim instead of reverting NoSubscribersSwept.
+    ///         Pre-fix, `batchLen == 0 -> revert` rolled the reclaim back, re-stranding the tombstone.
+    ///         Here: full-sweep the day so every sub is already-swept, cancel one (in-place tombstone),
+    ///         reset the cursor so the next same-day chunk walks [already-swept..., TOMBSTONE,
+    ///         already-swept...] -> reclaim fires (didWork), no buy. Assert it does NOT revert and the
+    ///         tombstone removal PERSISTS after the tx.
+    function testReclaimOnlyChunkCommitsNotReverts() public {
+        uint256 N = 4;
+        address[] memory subs = _setupSweepSubs(N, "rco_");
+
+        // Full sweep today -> every sub (ours + the 2 deploy subs) is stamped lastSweptDay = today.
+        vm.prank(makeAddr("rco_keeperFull"));
+        afKing.sweep(afKing.subscriberCount() + 5);
+
+        // Cancel one sub -> in-place tombstone (stays in set, dailyQuantity 0).
+        address tomb = subs[2];
+        uint256 setLenBefore = afKing.subscriberCount();
+        vm.prank(tomb);
+        afKing.setDailyQuantity(0);
+        assertGt(_afkSubscriberIndexOf(tomb), 0, "tombstone still in set after cancel (in-place)");
+
+        // Reset the cursor to 0 (same day) so the next chunk RE-walks the set: all already-swept skips +
+        // the one tombstone reclaim. No buyable sub -> batchLen == 0, but didWork (the reclaim) == true.
+        _afkResetCursorToZeroForToday();
+
+        vm.recordLogs();
+        vm.prank(makeAddr("rco_keeperReclaim"));
+        // MUST NOT revert despite 0 buys / 0 bounty -- the reclaim did work, so the chunk commits.
+        uint256 bounty = afKing.sweep(afKing.subscriberCount() + 5);
+        assertEq(bounty, 0, "reclaim-only chunk earns 0 bounty (no buy)");
+
+        // The reclaim COMMITTED: the tombstone is removed from the set and the SubscriptionExpired(.,2)
+        // is in the recorded logs -- state persists after the tx (no rollback).
+        assertEq(_afkSubscriberIndexOf(tomb), 0, "reclaim committed: tombstone removed from set");
+        assertEq(afKing.subscriberCount(), setLenBefore - 1, "set shrank by the reclaimed tombstone (committed)");
+        assertEq(_afkCountExpired(tomb, 2), 1, "reclaim emitted SubscriptionExpired(player,2) and persisted");
+    }
+
+    /// @notice TOMB-04 didWork revert-fix: a chunk that does ONLY an auto-pause (a NORMAL sub funding-
+    ///         skip kill -> sentinel write + swap-pop + SubscriptionExpired(.,1), AfKing.sol:753-761)
+    ///         likewise COMMITS -- no buy, 0 bounty, but the auto-pause state change persists with no
+    ///         revert. The two deploy subs in the set are NotApproved-skipped (reason 5, no didWork), so
+    ///         this sweep's ONLY didWork is the auto-pause: pre-fix it would have hit batchLen==0 ->
+    ///         revert and rolled the auto-pause back; the fix commits it. Both the auto-pause and the
+    ///         window-renewal branches set didWork identically, so this also covers the renewal-only case.
+    function testRenewalOrAutoPauseOnlyChunkCommits() public {
+        // A NORMAL sub: approved, ticket mode (no lootbox floor), NOT renewal-due (paidThroughDay >
+        // today so the day-31 branch is skipped), but pool EMPTY so the funding-skip kills it.
+        address[] memory subs = _setupSweepSubs(1, "apo_");
+        address sub = subs[0];
+
+        // Drain the pool so msgValue > _poolOf[src] -> the funding-skip auto-pause fires (NORMAL sub).
+        uint256 pooled = afKing.poolOf(sub);
+        if (pooled > 0) {
+            vm.prank(sub);
+            afKing.withdraw(pooled);
+        }
+        assertEq(afKing.poolOf(sub), 0, "pool drained -> funding-skip auto-pause will fire");
+        assertGt(_afkDailyQtyOf(sub), 0, "sub is an active NORMAL sub before the sweep");
+
+        // This single sweep is an auto-pause-only chunk: the deploy subs NotApproved-skip (no didWork),
+        // our pool-empty NORMAL sub funding-skip auto-pauses (didWork, no buy) -> batchLen == 0 but
+        // didWork == true -> COMMITS (pre-fix this reverted NoSubscribersSwept and rolled the auto-pause
+        // back). MUST NOT revert.
+        vm.recordLogs();
+        vm.prank(makeAddr("apo_keeper"));
+        uint256 bounty = afKing.sweep(afKing.subscriberCount() + 5); // MUST NOT revert
+        assertEq(bounty, 0, "auto-pause-only chunk earns 0 bounty (no buy)");
+
+        // The auto-pause state change PERSISTED (committed, not rolled back): the sub was swap-popped out
+        // of the set and a SubscriptionExpired(sub, 1 = AutoPause) was emitted.
+        assertEq(_afkSubscriberIndexOf(sub), 0, "auto-pause committed: sub removed from set (no rollback)");
+        assertEq(_afkCountExpired(sub, 1), 1, "auto-pause emitted SubscriptionExpired(player,1) and persisted");
+    }
+
+    /// @notice TOMB-04 didWork revert-fix anti-strand: under a spam-cancel griefing scenario -- many
+    ///         subs cancel in succession with chunk boundaries landing on reclaim-only work -- EVERY
+    ///         tombstone is eventually reclaimed over a full day's sweeps (none permanently stranded) and
+    ///         no still-active sub's daily buy is missed. The combination of (a) the in-place tombstone
+    ///         (no relocation) + (b) the didWork commit (reclaim-only chunks persist their removals)
+    ///         closes the tombstone-stranding griefing vector.
+    function testSpamCancelCannotStrandTombstones() public {
+        uint256 N = 8;
+        address[] memory subs = _setupSweepSubs(N, "spam_");
+
+        // Spam-cancel HALF of them in rapid succession (all in-place tombstones, still in the set, all
+        // AHEAD of the cursor since no sweep has run yet today).
+        for (uint256 i; i < N; i += 2) {
+            vm.prank(subs[i]);
+            afKing.setDailyQuantity(0);
+            assertEq(_afkDailyQtyOf(subs[i]), 0, "spam cancel wrote the in-place sentinel");
+            assertGt(_afkSubscriberIndexOf(subs[i]), 0, "tombstone still in set after cancel (in-place)");
+        }
+
+        // Drive a full day's sweeps in moderate chunks. Chunk size 4 always reaches do-work entries past
+        // the two front deploy subs (which are NotApproved-skipped), so every chunk that has unprocessed
+        // tombstones / buyable subs DOES work and COMMITS (the didWork revert-fix); only a final
+        // all-processed chunk legitimately reverts (anti-spam) and is caught. The reclaim branch does not
+        // advance the cursor, so a reclaim-heavy chunk keeps making forward progress within the chunk.
+        vm.recordLogs();
+        for (uint256 round; round < N + 4; round++) {
+            vm.prank(makeAddr(string(abi.encodePacked("spam_keeper_", vm.toString(round)))));
+            try afKing.sweep(4) {} catch {} // a final all-processed chunk may revert (anti-spam); caught
+        }
+
+        // Every spam-cancelled tombstone was reclaimed (removed from the set) -- none permanently
+        // stranded by the spam-cancel + reclaim-only-chunk commit combination.
+        for (uint256 i; i < N; i += 2) {
+            assertEq(_afkSubscriberIndexOf(subs[i]), 0, "spam-cancelled tombstone reclaimed (not stranded)");
+        }
+        // Every still-active sub got its daily buy this day -- the spam-cancel missed no active buy.
+        uint32 today = _afkToday();
+        for (uint256 i = 1; i < N; i += 2) {
+            assertEq(_afkLastSweptDayOf(subs[i]), today, "active sub bought this day (spam-cancel missed no buy)");
+        }
+    }
+
+    /// @notice TOMB-04 didWork revert-fix (anti-spam preserved): a genuinely-empty chunk -- no buy, no
+    ///         reclaim, no auto-pause, no renewal (`!didWork`) -- STILL reverts NoSubscribersSwept. The
+    ///         revert-fix only spares chunks that DID set work; a truly do-nothing sweep still reverts as
+    ///         the gas-cost anti-spam disincentive. Here: full-sweep so all subs are already-swept, then
+    ///         reset the cursor and re-sweep with NO tombstone present -> every entry is an
+    ///         already-swept skip (no didWork) -> revert.
+    function testEmptyChunkStillRevertsNoSubscribersSwept() public {
+        uint256 N = 3;
+        _setupSweepSubs(N, "empty_");
+
+        // Full sweep -> every sub stamped already-swept-today (didWork true here, but it commits buys).
+        vm.prank(makeAddr("empty_keeperFull"));
+        afKing.sweep(afKing.subscriberCount() + 5);
+
+        // Reset the cursor (same day) with NO tombstone in the set -> the re-walk hits only already-
+        // swept skips (our subs) + NotApproved skips (the deploy subs): no buy, no reclaim, no auto-
+        // pause, no renewal -> !didWork -> MUST revert.
+        _afkResetCursorToZeroForToday();
+        // Evaluate maxCount BEFORE arming expectRevert (a view call here would otherwise be the call
+        // the cheatcode intercepts instead of the sweep).
+        uint256 maxCount = afKing.subscriberCount() + 5;
+        vm.prank(makeAddr("empty_keeperRevert"));
+        vm.expectRevert(bytes4(keccak256("NoSubscribersSwept()")));
+        afKing.sweep(maxCount);
+    }
+
+    // =========================================================================
     // Internal helpers
     // =========================================================================
 
@@ -656,6 +822,76 @@ contract CrankNonBrick is DeployProtocol {
             ) count++;
         }
     }
+
+    // -------------------------------------------------------------------------
+    // AfKing sweep helpers (TOMB-04 didWork revert-fix tests)
+    // -------------------------------------------------------------------------
+
+    function _afkToday() internal view returns (uint32) {
+        return uint32((block.timestamp - 82620) / 1 days);
+    }
+
+    /// @dev Subscribe `n` fully-healthy buying subs to AfKing (ticket mode so no lootbox floor skip,
+    ///      operator-approved, pool-funded, NOT renewal-due). Mirrors AfKingConcurrency._setupHealthyBuyingSubs.
+    function _setupSweepSubs(uint256 n, string memory prefix) internal returns (address[] memory subs) {
+        subs = new address[](n);
+        uint256 cost = (afKing.SUB_COST_ETH_TARGET() * PRICE_COIN_UNIT) / game.mintPrice();
+        for (uint256 i; i < n; i++) {
+            address who = makeAddr(string(abi.encodePacked(prefix, vm.toString(i))));
+            subs[i] = who;
+            // Liquid BURNIE for the subscribe-time all-or-nothing charge (no lazy pass).
+            vm.prank(ContractAddresses.GAME);
+            coin.mintForGame(who, cost);
+            vm.prank(who);
+            afKing.subscribe(address(0), false, true, 1, 0, address(0)); // self, ticket mode, qty 1
+            vm.prank(who);
+            game.setOperatorApproval(address(afKing), true);
+            vm.deal(address(this), 1 ether);
+            afKing.depositFor{value: 1 ether}(who);
+        }
+    }
+
+    function _afkSubscriberIndexOf(address who) internal view returns (uint256) {
+        bytes32 slot = keccak256(abi.encode(who, uint256(AFK_SUBSCRIBER_INDEX_SLOT)));
+        return uint256(vm.load(address(afKing), slot));
+    }
+
+    function _afkDailyQtyOf(address who) internal view returns (uint8) {
+        bytes32 slot = keccak256(abi.encode(who, uint256(AFK_SUBOF_SLOT)));
+        uint256 packed = uint256(vm.load(address(afKing), slot));
+        return uint8(packed >> (AFK_OFF_DAILY * 8));
+    }
+
+    function _afkLastSweptDayOf(address who) internal view returns (uint32) {
+        bytes32 slot = keccak256(abi.encode(who, uint256(AFK_SUBOF_SLOT)));
+        uint256 packed = uint256(vm.load(address(afKing), slot));
+        return uint32(packed >> (AFK_OFF_LASTSWEPT * 8));
+    }
+
+    /// @dev Force the AfKing sweep cursor to 0 while keeping _sweepDay == today, so the next sweep
+    ///      re-walks the set from index 0 this same day. Slot 4: _sweepDay (low 4 bytes) + cursor (high).
+    function _afkResetCursorToZeroForToday() internal {
+        uint256 packed = uint256(vm.load(address(afKing), bytes32(uint256(AFK_SWEEP_PACKED_SLOT))));
+        packed &= uint256(0xFFFFFFFF); // keep _sweepDay, zero the cursor
+        packed |= (uint256(_afkToday()) & 0xFFFFFFFF); // ensure the day-stamp is today
+        vm.store(address(afKing), bytes32(uint256(AFK_SWEEP_PACKED_SLOT)), bytes32(packed));
+    }
+
+    /// @dev Count SubscriptionExpired(who, reason) emissions from AfKing in the recorded logs. Consumes
+    ///      the log buffer (call once after the sweep under test).
+    function _afkCountExpired(address who, uint8 reason) internal returns (uint256 count) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; i++) {
+            if (
+                logs[i].emitter == address(afKing) &&
+                logs[i].topics.length >= 2 &&
+                logs[i].topics[0] == SUB_EXPIRED_SIG &&
+                address(uint160(uint256(logs[i].topics[1]))) == who &&
+                uint8(uint256(bytes32(logs[i].data))) == reason
+            ) count++;
+        }
+    }
+
 }
 
 /// @notice A malicious keeper-pool holder whose receive() re-enters AfKing.withdraw, proving the
