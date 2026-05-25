@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v47.0
 milestone_name: Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle
-status: planning
-last_updated: "2026-05-24T14:00:00.000Z"
-last_activity: 2026-05-24
+status: building
+last_updated: "2026-05-25T00:00:00.000Z"
+last_activity: 2026-05-25
 progress:
   total_phases: 4
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 1
+  completed_plans: 1
+  percent: 25
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v47.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v47.0 ACTIVE — Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle. ROADMAP drafted (4 phases, 321–324; SPEC → single batched IMPL → TST → TERMINAL); 45/45 requirements mapped. Next: plan Phase 321 SPEC (`.planning/PLAN-V47-MILESTONE-SCOPE.md`, 7 items).
+**Current focus:** v47.0 ACTIVE — Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle. **Phase 321 SPEC COMPLETE+verified (5/5 success criteria, 0 IMPL blockers, deliverable `779eacc3`; ledger closed 2026-05-25 after a power-outage interrupted closure).** Next: plan Phase 322 IMPL — the ONE batched `contracts/*.sol` diff (321-SPEC §2 blueprint + R1–R7 + C1–C9 are the load-bearing inputs); HARD STOP at the contract-commit boundary.
 
 ## Current Position
 
-Phase: 321 — SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation
+Phase: 322 — IMPL — The ONE Batched Contract Diff (all 7 items)
 Plan: —
-Status: Not started
-Last activity: 2026-05-24 — v47.0 ROADMAP created (4 phases 321–324; 45/45 requirements mapped, 0 orphaned, 0 duplicated)
+Status: Not started (Phase 321 SPEC complete → ready to plan)
+Last activity: 2026-05-25 — Phase 321 SPEC ledger CLOSED: `321-VERIFICATION.md` PASSED (5/5); STATE/ROADMAP flipped; deliverable `779eacc3` (SPEC + 4 ATTEST, 0 ABSENT anchors / 0 blockers, C1–C9 carried). Power-outage-interrupted closure reconciled.
 
 ## Current Milestone Phases (v47.0 — ACTIVE; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687` → v47.0 closure HEAD)
 
@@ -35,7 +35,7 @@ Last activity: 2026-05-24 — v47.0 ROADMAP created (4 phases 321–324; 45/45 r
 
 | Phase | Name | Type | Requirements (primary owner) | Status |
 |-------|------|------|------------------------------|--------|
-| 321 | SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | SPEC | BATCH-01 · BATCH-02 | Not started |
+| 321 | SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | SPEC | BATCH-01 · BATCH-02 | ✅ Complete (`779eacc3`; VERIFICATION 5/5) |
 | 322 | IMPL — The ONE Batched Contract Diff (all 7 items) | IMPL | PRESALE-01..13 · LOOT-01..06 · DGAS-01..04 · CPAY-01..03 · REDEEM-01..07 · DSPIN-01 · TOMB-01..03 | Not started |
 | 323 | TST — Repro-First + Same-Results Gas + Behavior/EV + Cancel-Tombstone Proofs | TST | DGAS-05 · DSPIN-02 · REDEEM-08 · TOMB-04 · TOMB-05 | Not started |
 | 324 | TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | TERMINAL | BATCH-03 (re-attests all 45) | Not started |
