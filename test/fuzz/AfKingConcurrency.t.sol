@@ -7,8 +7,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title AfKingConcurrency -- Proves SAFE-03 sweep concurrency-correctness for the AF_KING keeper:
 ///        two same-block sweep(maxCount) callers self-partition via the advancing `_sweepCursor` plus
-///        the per-entry `lastSweptDay` idempotency backstop, and the tombstone-on-cancel swap-pop
-///        leaves no dead-slot buildup and skips no active subscriber.
+///        the per-entry `lastSweptDay` idempotency backstop, AND (TOMB-04, v47) the in-place
+///        cancel-tombstone + in-sweep deferred reclaim relocates no one (resolving H-CANCEL-SWAP-MISS),
+///        leaves no dead-slot buildup, and skips no active subscriber.
 ///
 /// @notice The sweep is PERMISSIONLESS and CONCURRENT -- multiple keepers/craners can call sweep in
 ///         the SAME block. SAFE-03 is the concurrency floor:
@@ -21,12 +22,16 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///     per-entry lastSweptDay gates the fresh-day buy (one buy per sub per day).
 ///   - lastSweptDay backstop alone: even if a sweep re-visits an index already bought today (cursor
 ///     position notwithstanding), the day-stamp prevents a second buy.
-///   - Tombstone-on-cancel no-miss (Task 2, SUB-07): a cancelled / funding-skip-killed NORMAL sub is
-///     removed via in-sweep swap-pop WITHOUT advancing the cursor, so the occupant swapped into the
-///     freed slot is still processed THIS sweep -- no active sub is skipped by the removal. After a
-///     series of cancels, subscriberCount equals only the active subs (no dead-slot buildup), a
-///     cancelled sub's stranded pool ETH stays withdrawable, and the windowPaid-gated reclaim rule
-///     holds (a paid+unexpired window is preserved on cancel; an unpaid/expired one is reclaimed).
+///   - In-place cancel-tombstone no-miss (TOMB-04 / Task 2, SUB-07): v47 setDailyQuantity(0) is a TRUE
+///     in-place tombstone -- it writes the dailyQuantity=0 sentinel and relocates NO ONE (the entry
+///     stays in the iterable set). The swap-pop + the windowPaid-gated delete-vs-preserve are DEFERRED
+///     to a top-of-loop reclaim branch in sweep() that does NOT advance the cursor, so the swap-pop
+///     occupant is re-read at the freed index THIS sweep -- no active sub is skipped. Because the cancel
+///     moves nothing, it can never push a still-pending tail entry behind the chunked cursor (the v46.0
+///     H-CANCEL-SWAP-MISS missed-day -> mint-streak reset is RESOLVED). After the reclaiming sweep the
+///     set holds only the active subs (no dead-slot buildup -- deferred, net-equal to the old swap-pop),
+///     a cancelled sub's stranded pool ETH stays withdrawable, and the windowPaid-gated reclaim rule
+///     holds at reclaim time (paid+unexpired -> _subOf preserved; unpaid/expired -> deleted).
 ///
 /// @dev Builds on the 318-01-repaired DeployProtocol fixture (AfKing live at AF_KING; the two SUB-09
 ///      self-subscribes VAULT + SDGNRS already in the set). Test subs are driven through the public
@@ -57,12 +62,21 @@ contract AfKingConcurrency is DeployProtocol {
     bytes32 private constant SWEPT_SIG = keccak256("Swept(address,uint32,uint256)");
     bytes32 private constant SUB_UPDATED_SIG =
         keccak256("SubscriptionUpdated(address,uint8,bool,bool,uint8,address)");
+    /// @dev SubscriptionExpired(address indexed player, uint8 reason). reason 2 = CancelReclaim (the
+    ///      in-sweep reclaim of an externally-cancelled tombstone); reason 1 = AutoPause.
+    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
 
     /// @dev Snapshot of Swept(player,...) recipients drained from the recorded logs by _captureSwept().
     ///      vm.getRecordedLogs() CONSUMES the buffer, so we drain ONCE per assertion phase into this
     ///      array and count per-player from the snapshot (a per-player getRecordedLogs would see 0 on
     ///      every call after the first).
     address[] private _sweptSnapshot;
+
+    /// @dev Snapshot of SubscriptionExpired(player, reason) emissions, drained alongside Swept by the
+    ///      single _drainLogs() pass (so a test can count both reclaim-events and buys without the
+    ///      second getRecordedLogs seeing an already-consumed buffer).
+    address[] private _expiredPlayers;
+    uint8[] private _expiredReasons;
 
     function setUp() public {
         _deployProtocol();
@@ -268,58 +282,350 @@ contract AfKingConcurrency is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 2 -- Tombstone-on-cancel no-miss + no dead-slot buildup
+    // TOMB-04 -- v47 in-place cancel-tombstone + in-sweep reclaim (H-CANCEL-SWAP-MISS)
+    // =========================================================================
+    //
+    // v47 changed setDailyQuantity(0) from an IMMEDIATE swap-pop into a TRUE in-place tombstone:
+    // cancel writes the dailyQuantity=0 sentinel and relocates NO ONE (the entry stays in the
+    // iterable set). The delete-vs-preserve + the swap-pop are DEFERRED to a top-of-loop reclaim
+    // branch in sweep() (AfKing.sol:612-624) that does NOT advance the cursor. This is the SUB-07
+    // restoration that resolves the v46.0 Phase 320 MEDIUM finding H-CANCEL-SWAP-MISS: because the
+    // cancel moves nothing, it can never push a still-pending tail entry behind the chunked-sweep
+    // cursor -> no missed day -> no collateral mint-streak reset.
+
+    /// @notice TOMB-04 / H-CANCEL-SWAP-MISS direct repro. The OLD swap-pop-at-cancel relocated the
+    ///         set TAIL into a freed slot; if that freed slot sat BEHIND the chunked-sweep cursor, the
+    ///         relocated tail (still pending today) was pushed behind the cursor and SKIPPED for the
+    ///         day -> a missed buy -> a collateral mint-streak reset. v47's in-place tombstone moves no
+    ///         one, so the still-pending tail is never relocated. Here: begin a chunked sweep so the
+    ///         cursor sits partway (a chunk processed, cursor advanced into the set), then cancel a sub
+    ///         AT/BEFORE the cursor (the freed-slot-behind-cursor case), then finish the day's sweep.
+    ///         Assert EVERY still-active sub got its daily buy exactly once -- the tail the old swap-pop
+    ///         would have stranded still buys this day.
+    function testCancelBehindCursorDoesNotStrandPendingTail() public {
+        // A wide set so the first chunk leaves the cursor partway with a real pending tail behind it.
+        uint256 N = 8;
+        address[] memory subs = _setupHealthyBuyingSubs(N, "strand_");
+
+        // First chunk: advance the cursor partway into OUR subs (the 2 deploy subs precede ours, so a
+        // chunk of 4 stamps the deploy pair + the first couple of ours and leaves the cursor mid-set).
+        vm.recordLogs();
+        vm.prank(makeAddr("strand_keeperA"));
+        afKing.sweep(4);
+        _captureSwept();
+        (, uint256 cursorMid) = afKing.sweepProgress();
+        assertGt(cursorMid, 0, "first chunk advanced the cursor partway");
+        assertLt(cursorMid, afKing.subscriberCount(), "cursor sits mid-set with a pending tail behind it");
+
+        // Identify a still-PENDING tail sub (not yet swept this day) and a swept sub BEHIND the cursor
+        // to cancel. Under the OLD swap-pop, cancelling the behind-cursor sub would have moved the set
+        // tail into that behind-cursor slot, stranding the moved-tail's buy for the day.
+        uint32 today = _today();
+        address pendingTail;
+        for (uint256 i = N; i > 0; i--) {
+            if (_lastSweptDayOf(subs[i - 1]) != today) {
+                pendingTail = subs[i - 1];
+                break;
+            }
+        }
+        assertTrue(pendingTail != address(0), "a still-pending tail sub exists behind the cursor reach");
+
+        address behindCursorSwept;
+        for (uint256 i; i < N; i++) {
+            if (_lastSweptDayOf(subs[i]) == today) {
+                behindCursorSwept = subs[i];
+                break;
+            }
+        }
+        assertTrue(behindCursorSwept != address(0), "a swept sub sits behind the cursor");
+
+        // Cancel the behind-cursor (already-swept) sub. v47: in-place tombstone -- it STAYS in the set,
+        // relocates no one, so the pending tail is NOT pushed behind the cursor.
+        vm.prank(behindCursorSwept);
+        afKing.setDailyQuantity(0);
+        assertEq(_dailyQtyOf(behindCursorSwept), 0, "cancel wrote the in-place sentinel");
+        assertGt(_subscriberIndexOf(behindCursorSwept), 0, "v47: cancel relocates no one -- still in set");
+
+        // Finish the day's sweep (a generous remaining chunk drains the rest).
+        vm.recordLogs();
+        vm.prank(makeAddr("strand_keeperB"));
+        afKing.sweep(afKing.subscriberCount() + 5);
+        _captureSwept();
+
+        // The pending tail STILL buys this day -- the cancel did not strand it behind the cursor.
+        assertEq(_countSweptFor(pendingTail), 1, "H-CANCEL-SWAP-MISS resolved: pending tail still bought");
+        assertEq(_lastSweptDayOf(pendingTail), today, "pending tail's daily buy landed (no missed day)");
+
+        // EVERY still-active sub (all but the one cancelled) got its daily buy exactly once across the
+        // two chunks -- no active sub was skipped because of someone else's cancel.
+        uint256 activeBought;
+        for (uint256 i; i < N; i++) {
+            if (subs[i] == behindCursorSwept) continue; // the cancelled one is not bought
+            assertEq(_lastSweptDayOf(subs[i]), today, "every active sub processed (no miss)");
+            activeBought++;
+        }
+        assertEq(activeBought, N - 1, "all N-1 still-active subs bought this day");
+    }
+
+    /// @notice TOMB-04: a cancelled sub is an in-place tombstone (still in the set) until the next
+    ///         sweep that REACHES its slot reclaims it. Covers BOTH sub-cases:
+    ///         (a) tombstone AHEAD of the cursor -> reclaimed THIS sweep (SubscriptionExpired(p,2), set
+    ///             membership swap-popped, the swap-pop occupant re-processed at the same index);
+    ///         (b) tombstone BEHIND the cursor (cancelled after the cursor passed its slot this day) ->
+    ///             not reached this day, reclaimed on the next-day cursor reset.
+    function testCancelTombstoneReclaimedByNextSweep() public {
+        // ---- Sub-case (a): tombstone AHEAD of the cursor -> reclaimed THIS sweep. ----
+        uint256 N = 6;
+        address[] memory subs = _setupHealthyBuyingSubs(N, "reclaimA_");
+
+        // Cancel a sub BEFORE any sweep today (cursor at 0, so its slot is ahead of the cursor).
+        address ahead = subs[2];
+        uint256 idxBefore = _subscriberIndexOf(ahead);
+        uint256 setLenBefore = afKing.subscriberCount();
+        vm.prank(ahead);
+        afKing.setDailyQuantity(0);
+        // Still in the set immediately after cancel (relocates no one).
+        assertEq(_subscriberIndexOf(ahead), idxBefore, "tombstone still in set after cancel (no relocation)");
+        assertEq(afKing.subscriberCount(), setLenBefore, "set length unchanged by cancel (in-place tombstone)");
+
+        // Sweep reaches the tombstone this day -> reclaim fires.
+        vm.recordLogs();
+        vm.prank(makeAddr("reclaimA_keeper"));
+        afKing.sweep(afKing.subscriberCount() + 5);
+        _captureSwept(); // single drain: feeds both the Expired and Swept counts below
+        // Reclaim emitted SubscriptionExpired(ahead, 2 = CancelReclaim).
+        assertEq(_countExpiredFor(ahead, 2), 1, "reclaim emitted SubscriptionExpired(player,2) this sweep");
+        // Removed from the set by the in-loop swap-pop.
+        assertEq(_subscriberIndexOf(ahead), 0, "tombstone reclaimed: removed from the set this sweep");
+        // The swap-pop occupant re-read at the freed index was still processed (no skip): every OTHER
+        // sub got its daily buy.
+        uint32 today = _today();
+        for (uint256 i; i < N; i++) {
+            if (subs[i] == ahead) {
+                assertEq(_countSweptFor(subs[i]), 0, "the reclaimed tombstone is not bought");
+            } else {
+                assertEq(_lastSweptDayOf(subs[i]), today, "swap-pop occupant re-processed -- no skip");
+            }
+        }
+
+        // ---- Sub-case (b): tombstone BEHIND the cursor -> reclaimed on the next-day reset. ----
+        address[] memory subsB = _setupHealthyBuyingSubs(N, "reclaimB_");
+        // Full sweep today: every B-sub is swept and the cursor walks past all their slots.
+        vm.prank(makeAddr("reclaimB_keeperD1"));
+        afKing.sweep(afKing.subscriberCount() + 5);
+        uint32 day1 = _today();
+        // Cancel a B-sub AFTER the cursor already passed its slot today (cursor is at end-of-set).
+        address behind = subsB[1];
+        vm.prank(behind);
+        afKing.setDailyQuantity(0);
+        // Not reached again this day -> still in the set (the day's cursor is past it).
+        assertGt(_subscriberIndexOf(behind), 0, "behind-cursor tombstone not reclaimed same day (still in set)");
+
+        // Next day: cursor resets to 0, the sweep reaches the tombstone slot and reclaims it.
+        vm.warp(block.timestamp + 1 days);
+        for (uint256 i; i < N; i++) _fundPool(subsB[i], 1 ether); // re-fund so the day-2 active buys land
+        vm.recordLogs();
+        vm.prank(makeAddr("reclaimB_keeperD2"));
+        afKing.sweep(afKing.subscriberCount() + 5);
+        _captureSwept();
+        assertEq(_countExpiredFor(behind, 2), 1, "behind-cursor tombstone reclaimed on the next-day reset");
+        assertEq(_subscriberIndexOf(behind), 0, "behind-cursor tombstone removed from set next day");
+        assertGt(day1, 0, "day1 was a real keeper-local day");
+    }
+
+    /// @notice TOMB-04: a cancel on a PAID + UNEXPIRED window preserves the `_subOf` record THROUGH the
+    ///         deferred reclaim -- the preserve-vs-delete decision is applied at RECLAIM, not at cancel.
+    ///         Contrast: an unpaid/expired window is DELETED at reclaim. (The set membership is swap-
+    ///         popped in both cases; only the record-retention differs.)
+    function testCancelPreservesPaidWindowThroughDeferredReclaim() public {
+        // ---- Paid + unexpired: record PRESERVED through the reclaim. ----
+        address[] memory subs = _setupHealthyBuyingSubs(1, "paiddef_");
+        address paidSub = subs[0];
+        uint32 paidEndpoint = _today() + WINDOW_DAYS;
+        _setWindow(paidSub, paidEndpoint, /*windowPaid*/ true);
+
+        // Cancel: in-place tombstone. The record (incl. the paid window) is fully readable post-cancel.
+        vm.prank(paidSub);
+        afKing.setDailyQuantity(0);
+        assertGt(_subscriberIndexOf(paidSub), 0, "paid tombstone still in set after cancel");
+        assertEq(_paidThroughDayOf(paidSub), paidEndpoint, "paid window readable post-cancel (deferred reclaim)");
+
+        // Reclaiming sweep: preservePaidWindow == true -> _subOf is KEPT (sentinel already 0), set popped.
+        vm.recordLogs();
+        vm.prank(makeAddr("paiddef_keeper"));
+        afKing.sweep(afKing.subscriberCount() + 5);
+        _captureSwept();
+        assertEq(_countExpiredFor(paidSub, 2), 1, "paid sub reclaimed (SubscriptionExpired,2)");
+        assertEq(_subscriberIndexOf(paidSub), 0, "paid sub removed from set at reclaim");
+        // PRESERVED: the paid window survived the cancel -> deferred reclaim sequence.
+        assertEq(_paidThroughDayOf(paidSub), paidEndpoint, "paid window PRESERVED through deferred reclaim");
+        assertEq(
+            afKing.subscriptionOf(paidSub).flags & uint8(FLAG_WINDOW_PAID),
+            1,
+            "windowPaid flag preserved through deferred reclaim"
+        );
+
+        // ---- Unpaid / expired window: record DELETED at reclaim. ----
+        address[] memory subsU = _setupHealthyBuyingSubs(1, "unpaiddef_");
+        address unpaidSub = subsU[0];
+        _setWindow(unpaidSub, _today() + WINDOW_DAYS, /*windowPaid*/ false); // unpaid is the gate
+
+        vm.prank(unpaidSub);
+        afKing.setDailyQuantity(0);
+        assertGt(_subscriberIndexOf(unpaidSub), 0, "unpaid tombstone still in set after cancel");
+
+        vm.recordLogs();
+        vm.prank(makeAddr("unpaiddef_keeper"));
+        afKing.sweep(afKing.subscriberCount() + 5);
+        _captureSwept();
+        assertEq(_countExpiredFor(unpaidSub, 2), 1, "unpaid sub reclaimed (SubscriptionExpired,2)");
+        assertEq(_subscriberIndexOf(unpaidSub), 0, "unpaid sub removed from set at reclaim");
+        // DELETED: every Sub field zeroed at the reclaim (no window to preserve).
+        assertEq(afKing.subscriptionOf(unpaidSub).paidThroughDay, 0, "unpaid window deleted at reclaim");
+        assertEq(afKing.subscriptionOf(unpaidSub).flags, 0, "unpaid window flags deleted at reclaim");
+    }
+
+    /// @notice TOMB-04: reactivating a still-in-set tombstone (before any sweep reclaims it) flips it
+    ///         back to active IN PLACE with NO duplicate set membership. Covers BOTH reactivation paths:
+    ///         (a) setDailyQuantity(q>0) -- no set churn, the deferred reclaim never ran so the record
+    ///             (incl. a paid window) survives the cancel->reactivate round-trip; and
+    ///         (b) subscribe() -- _addToSet is idempotent on a non-zero index, so a re-subscribe of a
+    ///             still-in-set tombstone never double-adds.
+    function testReactivateTombstonedSubNoDoubleAdd() public {
+        // ---- (a) setDailyQuantity(q>0) reactivation, with a paid window round-trip. ----
+        address[] memory subs = _setupHealthyBuyingSubs(1, "reactA_");
+        address sub = subs[0];
+        uint32 paidEndpoint = _today() + WINDOW_DAYS;
+        _setWindow(sub, paidEndpoint, /*windowPaid*/ true);
+
+        uint256 idx = _subscriberIndexOf(sub);
+        uint256 lenBefore = afKing.subscriberCount();
+
+        // Cancel (tombstone, still in set) ...
+        vm.prank(sub);
+        afKing.setDailyQuantity(0);
+        assertEq(_subscriberIndexOf(sub), idx, "tombstone in set, same index");
+        // ... then reactivate BEFORE any sweep reclaims it.
+        vm.prank(sub);
+        afKing.setDailyQuantity(3);
+
+        // Flipped back to active in place: same index, NO duplicate set entry, set length unchanged.
+        assertEq(_dailyQtyOf(sub), 3, "reactivated in place (dailyQuantity restored)");
+        assertEq(_subscriberIndexOf(sub), idx, "reactivation kept the same set slot (no relocation)");
+        assertEq(afKing.subscriberCount(), lenBefore, "no duplicate set membership on reactivation");
+        // The deferred reclaim never ran -> the paid window survived the cancel->reactivate round-trip.
+        assertEq(_paidThroughDayOf(sub), paidEndpoint, "paid window survived the cancel->reactivate round-trip");
+
+        // A sweep now treats it as a normal active sub (not a tombstone) -- it buys, not reclaims.
+        vm.recordLogs();
+        vm.prank(makeAddr("reactA_keeper"));
+        afKing.sweep(afKing.subscriberCount() + 5);
+        _captureSwept();
+        assertEq(_countExpiredFor(sub, 2), 0, "reactivated sub is NOT reclaimed as a tombstone");
+        assertEq(_countSweptFor(sub), 1, "reactivated sub buys as a normal active sub");
+
+        // ---- (b) subscribe() reactivation path: idempotent _addToSet, no double-add. ----
+        address[] memory subsB = _setupHealthyBuyingSubs(1, "reactB_");
+        address subB = subsB[0];
+        uint256 idxB = _subscriberIndexOf(subB);
+        uint256 lenB = afKing.subscriberCount();
+
+        vm.prank(subB);
+        afKing.setDailyQuantity(0); // tombstone, still in set
+
+        // Re-subscribe the still-in-set tombstoned address (fund the all-or-nothing subscribe charge).
+        _fundBurnie(subB, _subCost());
+        vm.prank(subB);
+        afKing.subscribe(address(0), false, true, 2, 0, address(0));
+
+        // _addToSet is a no-op on the non-zero index -> NO duplicate entry, set length unchanged.
+        assertEq(_subscriberIndexOf(subB), idxB, "re-subscribe kept the same set slot (idempotent _addToSet)");
+        assertEq(afKing.subscriberCount(), lenB, "re-subscribe of an in-set tombstone never double-adds");
+        assertEq(_dailyQtyOf(subB), 2, "re-subscribe reactivated the sub (dailyQuantity restored)");
+    }
+
+    // =========================================================================
+    // Task 2 -- Tombstone-on-cancel no-miss + no dead-slot buildup (v47 deferred-reclaim semantics)
     // =========================================================================
 
-    /// @notice SUB-07: cancelling a sub mid-set (setDailyQuantity(0) swap-pop) moves the last sub into
-    ///         the freed slot. A subsequent sweep processes the moved occupant -- it is not skipped by
-    ///         the removal. Here we cancel a sub that sits BEFORE the tail, then sweep and assert the
-    ///         former-tail occupant is still bought this day.
+    /// @notice TOMB-04 (retargeted from the v46 immediate-swap-pop): under v47 the swap-pop now fires at
+    ///         RECLAIM (in-loop, no ++cursor), not at cancel. Cancelling an EARLY sub leaves it in the
+    ///         set as a tombstone; the sweep's reclaim branch swap-pops it (the set tail moves into its
+    ///         slot) and the moved occupant is re-read at THIS index this sweep -- it is not skipped.
+    ///         Intent unchanged from v46: the swap-pop occupant is still processed; only the timing moved
+    ///         from cancel-time to reclaim-time.
     function testCancelSwapPopOccupantStillProcessed() public {
         // Subscribe an ordered batch; the LAST one is the "mover" that will be swapped into a freed slot.
         uint256 N = 5;
         address[] memory subs = _setupHealthyBuyingSubs(N, "swap_");
         address mover = subs[N - 1]; // currently the tail among our subs
 
-        // Cancel an EARLY sub (subs[0]) -> swap-pop moves the global last element into subs[0]'s slot.
-        // (The global tail may be `mover` or a later-added deploy sub; either way the occupant must be
-        // processed.) We assert the `mover` -- still active, funded -- is bought this sweep.
+        // Cancel an EARLY sub (subs[0]). v47: the cancel is an in-place tombstone -- it stays in the set
+        // (relocates no one). The swap-pop is DEFERRED to the sweep's reclaim branch: when the sweep
+        // reaches subs[0]'s slot it swap-pops it (the set tail moves into the freed slot) and re-reads
+        // the moved occupant at THIS index this sweep -- the occupant is not skipped.
         vm.prank(subs[0]);
         afKing.setDailyQuantity(0);
-        assertEq(_subscriberIndexOf(subs[0]), 0, "cancelled sub removed from the iterable set");
+        assertGt(_subscriberIndexOf(subs[0]), 0, "v47: cancel is an in-place tombstone -- still in the set");
+        assertEq(_dailyQtyOf(subs[0]), 0, "cancel wrote the in-place sentinel");
 
         vm.recordLogs();
         vm.prank(makeAddr("swap_keeper"));
         afKing.sweep(50);
         _captureSwept();
 
-        // The mover (still active) was bought -- the swap-pop did not strand it.
-        assertEq(_countSweptFor(mover), 1, "swap-pop occupant still processed this sweep (no miss)");
+        // The reclaim swap-popped the tombstone out of the set THIS sweep.
+        assertEq(_subscriberIndexOf(subs[0]), 0, "tombstone swap-popped at reclaim (removed from set)");
+        assertEq(_countExpiredFor(subs[0], 2), 1, "reclaim emitted SubscriptionExpired(player,2) at the swap-pop");
+        // The mover (still active) was bought -- the reclaim's swap-pop occupant re-read did not strand it.
+        assertEq(_countSweptFor(mover), 1, "reclaim swap-pop occupant still processed this sweep (no miss)");
         // The cancelled sub was NOT bought.
         assertEq(_countSweptFor(subs[0]), 0, "cancelled sub not processed");
     }
 
-    /// @notice SUB-07: after a series of cancels across days, subscriberCount equals the count of
-    ///         still-active subs -- no tombstoned/dead slots accumulate in the iteration set. Removal is
-    ///         a true swap-pop (length shrinks), not a logical-delete that leaves a hole.
+    /// @notice TOMB-04 (retargeted): under v47 a cancel does NOT shrink the set immediately -- the
+    ///         tombstone stays in the iteration set until a sweep REACHES and reclaims it. The
+    ///         no-dead-slot-buildup guarantee is now DEFERRED: across a series of cancels the tombstones
+    ///         persist until the next sweep, which reclaims ALL of them (this day if ahead of the cursor,
+    ///         else the next-day reset). The NET set effect equals the old immediate-swap-pop -- after
+    ///         the reclaiming sweeps the set holds ONLY the still-active subs, no dead slots linger.
     function testNoDeadSlotBuildupAcrossCancels() public {
         uint256 baseline = afKing.subscriberCount(); // the 2 deploy subs (+ any)
         uint256 N = 6;
         address[] memory subs = _setupHealthyBuyingSubs(N, "build_");
         assertEq(afKing.subscriberCount(), baseline + N, "all N added to the set");
 
-        // Cancel half of them, across two days, and assert the count shrinks by exactly the cancels --
-        // no dead slots linger.
+        // Cancel three of them. v47: the set length does NOT shrink at cancel (in-place tombstones).
         vm.prank(subs[0]);
         afKing.setDailyQuantity(0);
         vm.prank(subs[1]);
         afKing.setDailyQuantity(0);
-        assertEq(afKing.subscriberCount(), baseline + N - 2, "count shrank by 2 cancels (no tombstone slot)");
+        assertEq(
+            afKing.subscriberCount(),
+            baseline + N,
+            "v47: cancel does not shrink the set (in-place tombstones stay until reclaimed)"
+        );
 
         vm.warp(block.timestamp + 1 days);
         vm.prank(subs[2]);
         afKing.setDailyQuantity(0);
-        assertEq(afKing.subscriberCount(), baseline + N - 3, "count shrank by a 3rd cancel across a day");
+        assertEq(afKing.subscriberCount(), baseline + N, "3rd cancel also leaves an in-place tombstone");
+
+        // A full sweep reclaims EVERY tombstone (the cursor reset this new day reaches all slots). After
+        // it, the set has shrunk by exactly the 3 cancels -- no dead-slot buildup, just deferred.
+        for (uint256 i = 3; i < N; i++) _fundPool(subs[i], 1 ether); // re-fund the survivors' day-2 buy
+        vm.recordLogs();
+        vm.prank(makeAddr("build_keeper"));
+        afKing.sweep(afKing.subscriberCount() + 5);
+        _captureSwept();
+        assertEq(_countExpiredFor(subs[0], 2), 1, "tombstone 0 reclaimed");
+        assertEq(_countExpiredFor(subs[1], 2), 1, "tombstone 1 reclaimed");
+        assertEq(_countExpiredFor(subs[2], 2), 1, "tombstone 2 reclaimed");
+        assertEq(
+            afKing.subscriberCount(),
+            baseline + N - 3,
+            "after the reclaiming sweep the set shrank by exactly the 3 cancels (no dead slots)"
+        );
 
         // Every remaining index dereferences to a live, in-set address (no dead slot, no OOB hole).
         uint256 count = afKing.subscriberCount();
@@ -330,10 +636,11 @@ contract AfKingConcurrency is DeployProtocol {
         }
     }
 
-    /// @notice SUB-07: a cancelled sub's stranded pool ETH stays withdrawable -- cancel only removes set
-    ///         membership / writes the sentinel; it never confiscates `_poolOf`.
+    /// @notice TOMB-04 (retargeted): a cancelled sub's stranded pool ETH stays withdrawable. v47: the
+    ///         cancel writes the in-place sentinel (the entry stays in the set until reclaimed); it never
+    ///         confiscates `_poolOf`, and the withdraw is unaffected by the in-place tombstone.
     function testCancelledSubPoolEthWithdrawable() public {
-        address[] memory subs = _setupHealthyBuyingSubs(1, "strand_");
+        address[] memory subs = _setupHealthyBuyingSubs(1, "strandpool_");
         address sub = subs[0];
 
         // Top the pool to a known surplus, then cancel.
@@ -343,7 +650,8 @@ contract AfKingConcurrency is DeployProtocol {
 
         vm.prank(sub);
         afKing.setDailyQuantity(0);
-        assertEq(_subscriberIndexOf(sub), 0, "cancelled");
+        assertGt(_subscriberIndexOf(sub), 0, "v47: cancel is an in-place tombstone -- still in the set");
+        assertEq(_dailyQtyOf(sub), 0, "cancel wrote the in-place sentinel");
         // Pool ETH preserved through the cancel.
         assertEq(afKing.poolOf(sub), pooledBefore, "cancel did not confiscate pool ETH");
 
@@ -355,9 +663,11 @@ contract AfKingConcurrency is DeployProtocol {
         assertEq(sub.balance - balBefore, pooledBefore, "stranded pool ETH returned to the cancelled sub");
     }
 
-    /// @notice SUB-07 windowPaid-gated reclaim: a cancel does NOT delete a PAID, UNEXPIRED window
-    ///         (windowPaid set AND paidThroughDay > today preserved -- dailyQuantity zeroed but the rest
-    ///         of the record kept). The set membership is still removed.
+    /// @notice TOMB-04 (retargeted): the windowPaid-gated PRESERVE decision now fires at RECLAIM, not at
+    ///         cancel. A cancel on a PAID + UNEXPIRED window writes the in-place sentinel and leaves the
+    ///         record fully readable; when the reclaiming sweep reaches it, preservePaidWindow == true so
+    ///         `_subOf` is KEPT (windowPaid + the unexpired endpoint survive) and only set membership is
+    ///         swap-popped. Intent unchanged from v46; the observation point moved to after the reclaim.
     function testCancelPreservesPaidUnexpiredWindow() public {
         address[] memory subs = _setupHealthyBuyingSubs(1, "paidwin_");
         address sub = subs[0];
@@ -367,17 +677,27 @@ contract AfKingConcurrency is DeployProtocol {
 
         vm.prank(sub);
         afKing.setDailyQuantity(0);
+        // v47: still in set (deferred reclaim), record readable.
+        assertGt(_subscriberIndexOf(sub), 0, "v47: in-place tombstone still in set at cancel");
 
-        // Set membership removed, dailyQuantity zeroed, BUT the paid window record is preserved.
-        assertEq(_subscriberIndexOf(sub), 0, "removed from set");
-        assertEq(afKing.subscriptionOf(sub).dailyQuantity, 0, "dailyQuantity zeroed on cancel");
-        assertEq(afKing.subscriptionOf(sub).flags & uint8(FLAG_WINDOW_PAID), 1, "paid window flag preserved");
-        assertGt(afKing.subscriptionOf(sub).paidThroughDay, _today(), "unexpired window endpoint preserved");
+        // The reclaiming sweep applies the PRESERVE decision.
+        vm.recordLogs();
+        vm.prank(makeAddr("paidwin_keeper"));
+        afKing.sweep(afKing.subscriberCount() + 5);
+        _captureSwept();
+        assertEq(_countExpiredFor(sub, 2), 1, "paid sub reclaimed at the sweep");
+
+        // Set membership removed at reclaim, dailyQuantity 0, BUT the paid window record is PRESERVED.
+        assertEq(_subscriberIndexOf(sub), 0, "removed from set at reclaim");
+        assertEq(afKing.subscriptionOf(sub).dailyQuantity, 0, "dailyQuantity zeroed (sentinel)");
+        assertEq(afKing.subscriptionOf(sub).flags & uint8(FLAG_WINDOW_PAID), 1, "paid window flag preserved at reclaim");
+        assertGt(afKing.subscriptionOf(sub).paidThroughDay, _today(), "unexpired window endpoint preserved at reclaim");
     }
 
-    /// @notice SUB-07 windowPaid-gated reclaim: a cancel on an UNPAID (free/expired) window DELETES the
-    ///         `_subOf` record -- nothing to preserve (a free or expired window). paidThroughDay and the
-    ///         flags clear to zero.
+    /// @notice TOMB-04 (retargeted): the windowPaid-gated DELETE decision now fires at RECLAIM, not at
+    ///         cancel. A cancel on an UNPAID (free/expired) window writes the in-place sentinel; when the
+    ///         reclaiming sweep reaches it, preservePaidWindow == false so the `_subOf` record is DELETED
+    ///         (every field zeroed). Intent unchanged from v46; observed after the reclaim.
     function testCancelReclaimsUnpaidWindow() public {
         address[] memory subs = _setupHealthyBuyingSubs(1, "freewin_");
         address sub = subs[0];
@@ -388,9 +708,17 @@ contract AfKingConcurrency is DeployProtocol {
 
         vm.prank(sub);
         afKing.setDailyQuantity(0);
+        assertGt(_subscriberIndexOf(sub), 0, "v47: in-place tombstone still in set at cancel");
 
-        // Record deleted: every Sub field zeroed.
-        assertEq(_subscriberIndexOf(sub), 0, "removed from set");
+        // The reclaiming sweep applies the DELETE decision.
+        vm.recordLogs();
+        vm.prank(makeAddr("freewin_keeper"));
+        afKing.sweep(afKing.subscriberCount() + 5);
+        _captureSwept();
+        assertEq(_countExpiredFor(sub, 2), 1, "unpaid sub reclaimed at the sweep");
+
+        // Record deleted at reclaim: every Sub field zeroed.
+        assertEq(_subscriberIndexOf(sub), 0, "removed from set at reclaim");
         assertEq(afKing.subscriptionOf(sub).dailyQuantity, 0, "dailyQuantity zeroed");
         assertEq(afKing.subscriptionOf(sub).paidThroughDay, 0, "unpaid window reclaimed (paidThroughDay deleted)");
         assertEq(afKing.subscriptionOf(sub).flags, 0, "unpaid window reclaimed (flags deleted)");
@@ -452,6 +780,20 @@ contract AfKingConcurrency is DeployProtocol {
         return uint256(vm.load(address(afKing), slot));
     }
 
+    /// @dev Read `who`'s dailyQuantity (byte 0 of the packed Sub slot). 0 == the in-place tombstone sentinel.
+    function _dailyQtyOf(address who) internal view returns (uint8) {
+        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        uint256 packed = uint256(vm.load(address(afKing), slot));
+        return uint8(packed >> (OFF_DAILY * 8));
+    }
+
+    /// @dev Read `who`'s paidThroughDay (bytes 5..8 of the packed Sub slot).
+    function _paidThroughDayOf(address who) internal view returns (uint32) {
+        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        uint256 packed = uint256(vm.load(address(afKing), slot));
+        return uint32(packed >> (OFF_PAIDTHROUGH * 8));
+    }
+
     /// @dev Pin `who`'s window: write paidThroughDay (bytes 5..8) and the windowPaid bit (byte 10).
     function _setWindow(address who, uint32 paidThroughDay, bool windowPaid) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
@@ -474,27 +816,44 @@ contract AfKingConcurrency is DeployProtocol {
         vm.store(address(afKing), bytes32(uint256(4)), bytes32(packed));
     }
 
-    /// @dev Drain the recorded logs ONCE into `_sweptSnapshot` (the indexed Swept recipients emitted by
-    ///      AfKing). Call this immediately after the sweep(s) under test, BEFORE any _countSweptFor.
-    ///      vm.getRecordedLogs() empties the buffer, so a single drain feeds every subsequent count.
-    function _captureSwept() internal {
+    /// @dev Drain the recorded logs ONCE into the AfKing snapshots: Swept(player,...) recipients and
+    ///      SubscriptionExpired(player, reason). vm.getRecordedLogs() empties the buffer, so this single
+    ///      pass feeds every subsequent count helper (a second getRecordedLogs would see 0).
+    function _drainLogs() internal {
         delete _sweptSnapshot;
+        delete _expiredPlayers;
+        delete _expiredReasons;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; i++) {
-            if (
-                logs[i].emitter == address(afKing) &&
-                logs[i].topics.length >= 2 &&
-                logs[i].topics[0] == SWEPT_SIG
-            ) {
+            if (logs[i].emitter != address(afKing) || logs[i].topics.length == 0) continue;
+            if (logs[i].topics[0] == SWEPT_SIG && logs[i].topics.length >= 2) {
                 _sweptSnapshot.push(address(uint160(uint256(logs[i].topics[1]))));
+            } else if (logs[i].topics[0] == SUB_EXPIRED_SIG && logs[i].topics.length >= 2) {
+                _expiredPlayers.push(address(uint160(uint256(logs[i].topics[1]))));
+                // reason is the single non-indexed arg in `data` (abi-encoded uint8).
+                _expiredReasons.push(uint8(uint256(bytes32(logs[i].data))));
             }
         }
+    }
+
+    /// @dev Drain logs and feed the Swept counts. Alias kept for the existing call sites.
+    function _captureSwept() internal {
+        _drainLogs();
     }
 
     /// @dev Count Swept emissions for `who` in the captured snapshot. Pure read of the drained array.
     function _countSweptFor(address who) internal view returns (uint256 count) {
         for (uint256 i; i < _sweptSnapshot.length; i++) {
             if (_sweptSnapshot[i] == who) count++;
+        }
+    }
+
+    /// @dev Count SubscriptionExpired(who, reason) emissions in the captured snapshot. PURE read of the
+    ///      drained array -- call _captureSwept() (the single _drainLogs pass) once after the sweep
+    ///      under test, BEFORE this.
+    function _countExpiredFor(address who, uint8 reason) internal view returns (uint256 count) {
+        for (uint256 i; i < _expiredPlayers.length; i++) {
+            if (_expiredPlayers[i] == who && _expiredReasons[i] == reason) count++;
         }
     }
 
