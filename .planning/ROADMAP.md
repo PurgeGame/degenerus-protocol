@@ -48,7 +48,15 @@
   4. Every ETH-in path accepts `msg.value` + `claimableWinnings` shortfall — `purchaseWhaleBundle` / `purchaseLazyPass` / `purchaseDeityPass` use the established overpay-reverts / strict-1-wei-sentinel pattern, the presale box accepts claimable-pay as a pure ledger move, and all `external payable` entries in `DegenerusGame.sol` are swept for uniform application with `claimablePool == Σ claimableWinnings` staying balanced.
   5. The sDGNRS redemption is airtight — ETH is hard-segregated (MAX 175% pulled into sDGNRS at submit via the new `SDGNRS`-gated checked `pullRedemptionReserve`, fail-closed on shortfall; resolve lowers to rolled accounting-only; claim pays ETH-first from segregated balance; `resolveRedemptionLootbox` payable with the unchecked debit removed; gameOver drops the double-counted `+ pendingRedemptionEthValue`), BURNIE is settled at submit via one atomic `redeemBurnieShare` (creditFlip offset by burn+consume, net new BURNIE = 0) with the whole BURNIE reserve apparatus deleted and `onlyFlipCreditors`/burn authority extended to SDGNRS; the AfKing `setDailyQuantity(0)` becomes a true in-place tombstone with the in-sweep tombstone-reclaim branch added (no external cancel ever relocates an entry → no mid-day miss → mint streaks not collaterally broken).
   6. The diff is reconciled per manifest §2 (the single `resolveRedemptionLootbox` signature, the `DegeneretteModule` DGAS+DSPIN single edit, the `presale`-param removal landing with the presale-bonus removal) and is HELD at the contract-commit boundary — applied to `contracts/` and locally compiling/tested, but NOT committed without explicit user hand-review of the batched diff.
-**Plans**: TBD
+**Plans**: 8 plans (waves 1-8, all serialized — plans 1-6 overlap heavily on shared `.sol` files so no parallel writers; item 7 isolated; final wave is the single autonomous:false USER-APPROVAL gate for the ONE batched diff)
+- [ ] 322-01-PLAN.md — PRESALE foundation: Pool.Earlybird→PresaleBox rename (concrete+iface), delete earlybird subsystem, new presale storage (presaleOver/box counters/credit/queue mirrors) + `_creditBoxProceeds` 80/20 helper [wave 1]
+- [ ] 322-02-PLAN.md — PRESALE rake removal (20% skim→90/10 + 62% BURNIE bonus gone) + credit accrual + credit-gated boon-less box (50/40/10 roll, 80/20 routing, 50-ETH clamp-close+sweep+presaleOver latch, salted-RNG) + entrypoints [wave 2]
+- [ ] 322-03-PLAN.md — LOOT: remove the BURNIE lootbox surface (terminal-paradox closed) + `_resolveLootboxCommon` 5→2 bools + 3-caller unification (full boons+passes, 10% haircut fixed) [wave 3]
+- [ ] 322-04-PLAN.md — REDEEM: sDGNRS ETH hard-segregation (`pullRedemptionReserve`, fail-closed) + `resolveRedemptionLootbox` payable/debit-removed + gameOver double-count drop + BURNIE flip-credit-at-submit (`redeemBurnieShare`) + SDGNRS authority [wave 4]
+- [ ] 322-05-PLAN.md — DGAS+DSPIN (single DegeneretteModule edit, R5): cross-bet write-batching same-results + per-currency spin caps (ETH 25 / BURNIE 15 / WWXRP 5) [wave 5]
+- [ ] 322-06-PLAN.md — CPAY: claimable-pay on the 3 whale purchases + the external-payable entry sweep + the 3 WhaleModule credit-accrual sites + final `_awardEarlybirdDgnrs` body deletion [wave 6]
+- [ ] 322-07-PLAN.md — TOMB (isolated): AfKing in-place cancel-tombstone + in-sweep reclaim (no-++cursor) — fixes H-CANCEL-SWAP-MISS / restores SUB-07 [wave 7]
+- [ ] 322-08-PLAN.md — Verify the full batched diff (forge build + BATCH-01 joint-checks + no-NEW-test-breakage) + the single autonomous:false USER hand-review gate (HELD at the contract-commit boundary) [wave 8]
 **UI hint**: no
 
 ### Phase 323: TST — Repro-First + Same-Results Gas + Behavior/EV + Cancel-Tombstone Proofs
@@ -81,7 +89,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 321. SPEC — Design-Lock + Call-Graph Attestation + Reconciliation | 1/1 | ✅ Complete | 2026-05-25 (`779eacc3`) |
-| 322. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/TBD | Not started | - |
+| 322. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/8 | Not started | - |
 | 323. TST — Repro + Same-Results Gas + Cancel-Tombstone Proofs | 0/TBD | Not started | - |
 | 324. TERMINAL — Delta Audit + Adversarial Sweep + Closure | 0/TBD | Not started | - |
 
