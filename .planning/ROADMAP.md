@@ -86,7 +86,11 @@
   2. The 3-skill adversarial sweep runs (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT per the carried decision) charged with presale snipe / credit double-spend / box-RNG freeze / close-liveness, claimable-invariant breakage, lootbox terminal-paradox closure, redemption two-claimant + BURNIE-blocks-ETH + conservation, and tombstone griefing — with every elevation passed through the skeptic filter (structural-protection + 3-condition EV lens) before being recorded.
   3. The findings deliverable is authored at the v47.0 closure HEAD (mirrors the v44/v46 9-section pattern, chmod 444) with the H-CANCEL-SWAP-MISS finding (deferred from v46.0) recorded as RESOLVED-AT-V47.
   4. The `MILESTONE_V47_AT_HEAD_<sha>` closure signal is emitted and propagated verbatim, and the atomic 5-doc closure flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) is applied with all 45 requirements re-attested at closure.
-**Plans**: TBD
+**Plans**: 4 plans (3 waves — Wave 1 the delta-audit + adversarial-sweep analyses run in parallel; Wave 2 the findings deliverable; Wave 3 the autonomous:false USER closure gate)
+- [ ] 324-01-PLAN.md — SC1 DELTA AUDIT: enumerate all 18 contract surfaces changed vs v46 baseline 16e9668a, attest each NON-WIDENING + the 598/38/16 regression baseline + the VRFLifecycle recalibration / OBS-1 dispositions (read-only) [wave 1]
+- [ ] 324-02-PLAN.md — SC2 ADVERSARIAL SWEEP: the fixed 3-skill pass (/contract-auditor + /zero-day-hunter + /economic-analyst) across the SC2 probe set, every elevation through the skeptic filter, disposition log (read-only) [wave 1]
+- [ ] 324-03-PLAN.md — SC3 FINDINGS DELIVERABLE: author audit/FINDINGS-v47.0.md (9-section, mirrors v46) folding 324-01 + 324-02; H-CANCEL-SWAP-MISS recorded RESOLVED-AT-V47 (doc-only) [wave 2]
+- [ ] 324-04-PLAN.md — SC4 CLOSURE FLIP: USER approval gate (autonomous:false) → resolve + propagate MILESTONE_V47_AT_HEAD_<sha> → atomic 5-doc flip (ROADMAP+STATE+MILESTONES+PROJECT+REQUIREMENTS, all 45 reqs re-attested) → chmod 444 (doc-only) [wave 3]
 
 ---
 
@@ -97,7 +101,7 @@
 | 321. SPEC — Design-Lock + Call-Graph Attestation + Reconciliation | 1/1 | ✅ Complete | 2026-05-25 (`779eacc3`) |
 | 322. IMPL — The ONE Batched Contract Diff (all 7 items) | 8/8 | ✅ Complete | 2026-05-25 (`fb29ed51`) |
 | 323. TST — Repro + Same-Results Gas + Cancel-Tombstone Proofs | 5/5 | Complete   | 2026-05-25 |
-| 324. TERMINAL — Delta Audit + Adversarial Sweep + Closure | 0/TBD | Not started | - |
+| 324. TERMINAL — Delta Audit + Adversarial Sweep + Closure | 0/4 | Not started | - |
 
 ---
 
