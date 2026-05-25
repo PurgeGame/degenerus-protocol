@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
-status: ready_to_plan
-last_updated: 2026-05-25T18:26:22.974Z
-last_activity: 2026-05-25
+status: executing
+last_updated: "2026-05-25T19:00:38.101Z"
+last_activity: 2026-05-25 -- Phase 326 planning complete
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 22
+  total_plans: 11
+  completed_plans: 3
   percent: 25
-stopped_at: Phase 325 complete (3/3) — ready to discuss Phase 326
 ---
 
 # Project State
@@ -27,8 +26,8 @@ See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 
 Phase: 326
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-25
+Status: Ready to execute
+Last activity: 2026-05-25 -- Phase 326 planning complete
 Next: Phase 325 verification, then `/gsd-execute-phase 326` — IMPL (the ONE batched contract diff, all 7 items, HELD at the contract-commit boundary for explicit user hand-review). Plan 03 (325-03) DONE: `325-SPEC.md` authored (commits `b6cc7825` sections 0+1, `09d27524` sections 2+3) — section 0 attestation roll-up (0 blockers, corrections C1-C8, SWAP no-arb HOLDS +4.5pp @d6), section 1 shared signatures R1-R6 (one settled signature + apply-order each so items 2/3/4/7 cannot land as conflicting diffs), section 2 open-item resolutions (RFALL-04 D-06 / KEEP-04 bytes32("DGNRS") / KEEP-05 autoOpen-rename / POOL-06 D-04-accept-as-minor / BTOMB checked-add-cap / HERO-04 D-01/02/03 shape + byte-reproduce-gate handoff / S=8/S=9 separate-uint256 packing), section 3 per-item IMPL blueprint + file/edit-order map + SC1-SC5 checklist. BATCH-01 + RFALL-04 + KEEP-04 + KEEP-05 + POOL-06 all RESOLVED. ZERO contracts/*.sol mutation.
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
