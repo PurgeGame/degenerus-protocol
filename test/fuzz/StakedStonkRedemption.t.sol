@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {SettleClaimableShortfallTester} from "../../contracts/test/SettleClaimableShortfallTester.sol";
 
 /// @notice Local mirror of the coinflip player surface for vm.mockCall selectors. Mirrors the
 ///         interface in RedemptionEdgeCases.t.sol and RedemptionGas.t.sol; redeclared locally
@@ -957,5 +958,199 @@ contract StakedStonkRedemption is DeployProtocol {
         assertLt(sdgnrs.totalSupply(), supplyBefore, "drain: burn did not land after claimable recovered");
         (uint96 ev, ) = sdgnrs.pendingRedemptions(playerA, dayBurn);
         assertGt(uint256(ev), 0, "drain: claim slot not populated after recovery burn");
+    }
+
+    // =====================================================================
+    //   REDEEM-08: BURNIE-can't-block-ETH + R1/R3/R4 refinement coverage
+    // =====================================================================
+
+    /// @dev Seed a generous claimableWinnings[SDGNRS] + claimablePool + game ETH so submit-time
+    ///      MAX(175%) segregation pulls succeed. Reused by the Task-2 full-flow tests.
+    function _seedRedemptionBacking(uint256 amount) internal {
+        bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
+        vm.store(address(game), claimableSlot, bytes32(amount));
+        uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(1))));
+        slot1 = (slot1 & type(uint128).max) | (uint256(uint128(amount)) << 128);
+        vm.store(address(game), bytes32(uint256(1)), bytes32(slot1));
+        vm.deal(address(game), amount);
+    }
+
+    /// @notice REDEEM-08 BURNIE-can't-block-ETH: the ETH leg of claimRedemption pays in full from
+    ///         the segregated balance regardless of the redeemer's BURNIE share. In v47, BURNIE is
+    ///         settled ENTIRELY at submit (redeemBurnieShare → burnForCoinflip), so by claim time
+    ///         there is NO BURNIE leg that could stall ETH (the pre-fix _payBurnie / day+1 lookup is
+    ///         deleted). The claim's ETH delivered equals the rolled segregated amount, period.
+    /// @dev Drives a full submit → resolve → claim with sDGNRS holding a large BURNIE balance (so a
+    ///      pre-fix BURNIE-reserve apparatus would have had a fat BURNIE leg to settle/stall on). The
+    ///      ETH leg is asserted to equal (claim.ethValueOwed * roll / 100) / 2 (the live-game 50%
+    ///      direct split — the 50% lootbox leg is routed via the setUp no-op mock), independent of
+    ///      any BURNIE.
+    function testBurnieCannotBlockEthLeg() public {
+        _seedRedemptionBacking(100 ether);
+
+        uint32 dayBurn = game.currentDayView();
+        uint256 burnAmount = 1000 ether;
+        uint16 roll = 100;
+
+        // sDGNRS holds a large BURNIE balance at deploy (the 2M creator mint observed in the trace),
+        // so the redeemer's proportional BURNIE share is non-trivial — exactly the case a pre-fix
+        // BURNIE-reserve leg could have stalled. Submit settles it all at submit.
+        vm.prank(playerA);
+        sdgnrs.burn(burnAmount);
+
+        (uint96 evOwed, ) = sdgnrs.pendingRedemptions(playerA, dayBurn);
+        assertGt(uint256(evOwed), 0, "burnie-block: claim slot must populate post-burn");
+
+        _advanceWallDay();
+        _resolveDay(dayBurn, roll);
+
+        uint256 expectedTotalRolled = (uint256(evOwed) * uint256(roll)) / 100;
+        uint256 expectedEthDirect = expectedTotalRolled / 2; // live game: 50% direct, 50% lootbox
+
+        uint256 ethBefore = playerA.balance;
+        vm.prank(playerA);
+        sdgnrs.claimRedemption(dayBurn);
+        uint256 ethDelta = playerA.balance - ethBefore;
+
+        // ETH leg pays in full irrespective of BURNIE — there is no BURNIE leg to block it.
+        assertEq(
+            ethDelta,
+            expectedEthDirect,
+            "REDEEM-08: ETH leg did not pay full rolled/2 - BURNIE must not be able to block ETH"
+        );
+        // Claim slot fully cleared (ETH-only full-claim path).
+        (uint96 evAfter, ) = sdgnrs.pendingRedemptions(playerA, dayBurn);
+        assertEq(uint256(evAfter), 0, "REDEEM-08: claim slot not cleared after ETH-only claim");
+    }
+
+    /// @notice REDEEM-08 R1 (burnForCoinflip redemption-burn): NET new BURNIE == 0 across the submit.
+    ///         redeemBurnieShare burns `burnFromHeld` of sDGNRS's held BURNIE via burnForCoinflip
+    ///         (drops totalSupply) and consumes `remainder` from sDGNRS's coinflip stake (drops
+    ///         sDGNRS's pending flip), exactly offsetting the DEFERRED creditFlip of `base` to the
+    ///         redeemer (raises the redeemer's pending flip). The conserved scalar is therefore the
+    ///         "spendable BURNIE universe" = totalSupply() + Σ previewClaimCoinflips over the touched
+    ///         holders — NOT totalSupply() alone (the deferred credit is not yet minted at submit, so
+    ///         totalSupply transiently DROPS by burnFromHeld until the redeemer claims the flip).
+    /// @dev The DEFERRED creditFlip lands as a coinflip STAKE for the next flip day
+    ///      (`_addDailyFlip` → coinflipBalance[targetDay][player], surfaced by `coinflipAmount`), NOT
+    ///      as immediately-minted supply and NOT as `previewClaimCoinflips` (no resolved result yet).
+    ///      So the conserved scalar is the full spendable universe:
+    ///        coin.totalSupply() + coinflipAmount(SDGNRS) + coinflipAmount(redeemer)
+    ///      By the 322-04 net-zero proof: held-burn drops totalSupply by burnFromHeld, stake-consume
+    ///      drops sDGNRS's coinflipAmount by remainder, and the deferred credit raises the redeemer's
+    ///      coinflipAmount by base = burnFromHeld + remainder ⇒ the universe scalar is invariant.
+    function testRedeemBurnieNetMintZero() public {
+        _seedRedemptionBacking(100 ether);
+
+        uint256 burnAmount = 1000 ether;
+        address SDGNRS = ContractAddresses.SDGNRS;
+
+        uint256 universeBefore = coin.totalSupply()
+            + coinflip.coinflipAmount(SDGNRS)
+            + coinflip.coinflipAmount(playerA);
+        uint256 redeemerStakeBefore = coinflip.coinflipAmount(playerA);
+
+        vm.prank(playerA);
+        sdgnrs.burn(burnAmount);
+
+        uint256 universeAfter = coin.totalSupply()
+            + coinflip.coinflipAmount(SDGNRS)
+            + coinflip.coinflipAmount(playerA);
+
+        // Net new BURNIE across the submit (incl. redeemBurnieShare) is EXACTLY zero: the deferred
+        // creditFlip of `base` is offset 1:1 by burning burnFromHeld held + consuming remainder stake.
+        assertEq(
+            universeAfter,
+            universeBefore,
+            "REDEEM-08 R1: spendable BURNIE universe changed across submit (redeemBurnieShare must net-zero)"
+        );
+
+        // Conservation, not no-op: the redeemer received a deferred flip-stake credit (base > 0
+        // since sDGNRS holds a large BURNIE balance, so burnieOwed = backing * amount / supply > 0).
+        uint256 redeemerStakeAfter = coinflip.coinflipAmount(playerA);
+        assertGt(
+            redeemerStakeAfter,
+            redeemerStakeBefore,
+            "REDEEM-08 R1: redeemer flip-stake credit did not increase (settle should credit `base`)"
+        );
+    }
+
+    /// @notice REDEEM-08 R4 (resolveRedemptionPeriod 2-arg): the v47 2-arg signature
+    ///         `(uint16 roll, uint32 dayToResolve)` resolves the period — writes
+    ///         redemptionPeriods[day].roll and lowers pendingRedemptionEthValue MAX→rolled.
+    /// @dev Asserts the AdvanceModule-shaped 2-arg call (the flipDay param + RedemptionPeriod.flipDay
+    ///      field were removed in R4) sets the roll and that pendingRedemptionEthValue drops from the
+    ///      submit-time MAX(175%) reservation to the rolled amount.
+    function testResolveRedemptionPeriod2Arg() public {
+        _seedRedemptionBacking(100 ether);
+
+        uint32 dayBurn = game.currentDayView();
+        uint256 burnAmount = 1000 ether;
+        uint16 roll = 100; // rolled < MAX_ROLL(175) so the MAX→rolled lowering is observable
+
+        vm.prank(playerA);
+        sdgnrs.burn(burnAmount);
+
+        uint256 pendingMaxReserved = sdgnrs.pendingRedemptionEthValue();
+        assertGt(pendingMaxReserved, 0, "R4: submit must reserve the MAX (175%) into pendingRedemptionEthValue");
+
+        _advanceWallDay();
+        // The 2-arg call (roll, dayToResolve) — this is the v47 signature.
+        vm.prank(address(game));
+        sdgnrs.resolveRedemptionPeriod(roll, dayBurn);
+
+        // roll written.
+        (uint16 rollAfter) = sdgnrs.redemptionPeriods(dayBurn);
+        assertEq(uint256(rollAfter), uint256(roll), "R4: 2-arg resolveRedemptionPeriod did not write roll");
+
+        // pendingRedemptionEthValue lowered from MAX(175%) to rolled(100%): rolled < MAX → strictly down.
+        uint256 pendingRolled = sdgnrs.pendingRedemptionEthValue();
+        assertLt(
+            pendingRolled,
+            pendingMaxReserved,
+            "R4: pendingRedemptionEthValue not lowered MAX->rolled on 2-arg resolve"
+        );
+    }
+
+    /// @notice REDEEM-08 R3 (_settleClaimableShortfall invariant): the canonical CPAY shortfall
+    ///         settle (used by 5 whale/mint callers, NOT the redemption path) keeps the global
+    ///         invariant `claimablePool == Σ claimableWinnings` balanced — it debits
+    ///         claimableWinnings[buyer] and claimablePool by the same `shortfall` and preserves the
+    ///         STRICT 1-wei sentinel (`basis <= shortfall` reverts E()).
+    /// @dev Focused refinement check via the SettleClaimableShortfallTester (runs the EXACT
+    ///      production _settleClaimableShortfall body). Single-buyer harness: Σ claimableWinnings ==
+    ///      claimableWinnings[buyer]. Fuzz the basis + shortfall; assert the paired debit keeps the
+    ///      invariant on the success path and the strict sentinel reverts on `basis <= shortfall`.
+    /// forge-config: default.fuzz.runs = 10000
+    function testSettleClaimableShortfallInvariant(uint256 basisSeed, uint256 shortfallSeed) public {
+        SettleClaimableShortfallTester tester = new SettleClaimableShortfallTester();
+        address buyer = playerA;
+
+        // basis in [2, 1e24]; shortfall in [1, basis-1] so the success path is exercised and the
+        // strict 1-wei sentinel (basis > shortfall) holds. Seed pool == claimable (single buyer).
+        uint256 basis = bound(basisSeed, 2, 1e24);
+        uint256 shortfall = bound(shortfallSeed, 1, basis - 1);
+
+        tester.setClaimable(buyer, basis);
+        tester.setClaimablePool(basis); // single buyer ⇒ pool == Σ claimableWinnings == basis
+
+        tester.settle(buyer, basis, shortfall);
+
+        // Paired debit: both dropped by exactly `shortfall`; invariant preserved.
+        assertEq(tester.getClaimable(buyer), basis - shortfall, "R3: claimableWinnings[buyer] != basis - shortfall");
+        assertEq(tester.getClaimablePool(), basis - shortfall, "R3: claimablePool != basis - shortfall");
+        assertEq(
+            tester.getClaimablePool(),
+            tester.getClaimable(buyer),
+            "R3: claimablePool diverged from Sigma claimableWinnings after settle"
+        );
+
+        // Strict 1-wei sentinel: settling a shortfall == basis (would zero claimable, violating the
+        // strict-positive sentinel) reverts E() — `if (basis <= shortfall) revert E();`. The
+        // production error E() is inherited from DegenerusGameStorage; assert the revert selector
+        // matches its 4-byte id (the tester re-exposes it as `sentinelError()` for a tight check).
+        uint256 cur = tester.getClaimable(buyer);
+        vm.expectRevert(tester.sentinelError());
+        tester.settle(buyer, cur, cur); // basis == shortfall → `basis <= shortfall` → revert
     }
 }
