@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @notice Local mirror of the coinflip player surface for vm.mockCall selectors. Mirrors the
 ///         interface in RedemptionEdgeCases.t.sol and RedemptionGas.t.sol; redeclared locally
@@ -10,6 +11,14 @@ import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
 interface IBurnieCoinflipPlayerMock {
     function getCoinflipDayResult(uint32 day) external view returns (uint16 rewardPercent, bool win);
     function claimCoinflipsForRedemption(address player, uint256 amount) external returns (uint256 claimed);
+}
+
+/// @notice Selector mirror for the MODULE-side resolveRedemptionLootbox (the delegatecall target
+///         inside the Game-side resolveRedemptionLootbox 5-ETH-chunk loop). Mocked to a no-op in
+///         the REDEEM-08 repro so the lootbox materialization loop returns without seeded game
+///         state, while the Game-side body (the audited claimable-debit site) runs for real.
+interface IGameLootboxModuleRRL {
+    function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external;
 }
 
 /// @title StakedStonkRedemption — Per-function fuzz suite for v44 sStonk gambling surface
@@ -700,5 +709,253 @@ contract StakedStonkRedemption is DeployProtocol {
         vm.prank(actor);
         sdgnrs.burn(amount);
         assertEq(uint256(sdgnrs.pendingResolveDay()), uint256(dayD1), "sentinel: first burn of new day must re-stamp sentinel to new dayD1");
+    }
+
+    // =====================================================================
+    //   REDEEM-08 REPRO-FIRST: two-claimant same-day ETH underflow
+    // =====================================================================
+    //
+    // PRE-FIX DEFECT (Defect A, fb29ed51^:DegenerusGame.sol:1802-1804): the now-deleted
+    //   uint256 claimable = claimableWinnings[SDGNRS];
+    //   unchecked { claimableWinnings[SDGNRS] = claimable - amount; }
+    //   claimablePool -= uint128(amount);
+    // block lived inside resolveRedemptionLootbox and ran at CLAIM time. A second same-day
+    // claimant (or an AfKing SUB-09 daily drain) whose lootbox `amount` exceeded the remaining
+    // claimableWinnings[SDGNRS] underflowed the UNCHECKED subtraction → claimableWinnings[SDGNRS]
+    // wrapped toward 2^256 (and claimablePool toward 2^128).
+    //
+    // POST-FIX (v47): resolveRedemptionLootbox is `external payable`, the ETH PHYSICALLY arrives as
+    // msg.value, and the function does NO claimableWinnings[SDGNRS] debit at all. The only surviving
+    // claimable[SDGNRS] debit moved to SUBMIT time in the CHECKED pullRedemptionReserve (segregation
+    // of the MAX 175% out of claimable into the sDGNRS balance). Solidity-0.8 reverts fail-closed on
+    // shortfall, so the wrap can never form.
+    //
+    // REPRO MECHANISM (cross-tree): _reproDriveSecondClaimantLootbox() drives the exact wrap site —
+    // resolveRedemptionLootbox called twice (as SDGNRS), the second time with amount > remaining
+    // claimable. Run as-is against the post-fix tree it PASSES (no debit → claimable never wraps);
+    // re-introducing ONLY the deleted unchecked block (the documented fallback mechanism in a scratch
+    // worktree checkout of this same contract) makes the second call wrap and the assertion FAIL.
+    // The 323-03 SUMMARY records the captured pre-fix failure output.
+
+    /// @dev Read claimableWinnings[SDGNRS] (internal mapping @ slot 7) via vm.load. Same slot the
+    ///      setUp seeds. Reading the raw word lets the post-fix invariant assert it never wrapped
+    ///      toward 2^256.
+    function _claimableSdgnrs() internal view returns (uint256) {
+        bytes32 slot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
+        return uint256(vm.load(address(game), slot));
+    }
+
+    /// @dev Drive the exact pre-fix wrap site: call resolveRedemptionLootbox twice as SDGNRS. The
+    ///      first call consumes (pre-fix) all but a sliver of claimable; the second requests MORE
+    ///      ETH than the remaining claimable. Pre-fix that second unchecked `claimable - amount`
+    ///      wraps; post-fix there is no claimable debit (msg.value carries the ETH in), so claimable
+    ///      is untouched by the call and can never wrap.
+    /// @param seedClaimable claimableWinnings[SDGNRS] to seed before the two calls.
+    /// @param firstAmount   ETH the first claimant's lootbox resolves (≈ drains claimable pre-fix).
+    /// @param secondAmount  ETH the second claimant's lootbox resolves (> remaining claimable).
+    function _reproDriveSecondClaimantLootbox(
+        uint256 seedClaimable,
+        uint256 firstAmount,
+        uint256 secondAmount
+    ) internal {
+        // Seed claimableWinnings[SDGNRS] to sDGNRS's (small) slice, but claimablePool to a LARGE
+        // GLOBAL pool. This mirrors the real Defect-A precondition: the global pool still holds OTHER
+        // players' funds (so the pre-fix CHECKED `claimablePool -= amount` does NOT revert) while
+        // sDGNRS's own claimable slice is small (so the pre-fix UNCHECKED `claimableWinnings[SDGNRS]
+        // -= amount` wraps on the second claimant). Decoupling the two is what exposes the wrap —
+        // a single shared value would revert on claimablePool before claimableWinnings could wrap.
+        bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
+        vm.store(address(game), claimableSlot, bytes32(seedClaimable));
+        uint256 globalPool = 1000 ether; // global claimablePool has ample headroom (other players)
+        uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(1))));
+        slot1 = (slot1 & type(uint128).max) | (uint256(uint128(globalPool)) << 128);
+        vm.store(address(game), bytes32(uint256(1)), bytes32(slot1));
+
+        // Give the game enough physical ETH that pre-fix (which keeps ETH in-game and only
+        // reassigns claimable) and post-fix (msg.value carries ETH in) both have liquidity. The
+        // post-fix payable path requires msg.value == amount, so fund sDGNRS to forward it.
+        vm.deal(address(game), 1000 ether);
+        vm.deal(address(sdgnrs), 1000 ether);
+
+        // The setUp mocks the WHOLE game.resolveRedemptionLootbox to a no-op (out-of-scope lootbox
+        // internals); clear it so the REAL Game-side function runs (so the deleted-debit site IS
+        // exercised pre-fix, and proven absent post-fix). Then mock only the MODULE-side
+        // resolveRedemptionLootbox (the delegatecall target) to a no-op so the 5-ETH-chunk lootbox
+        // materialization loop returns cleanly without needing seeded game lootbox state. The Game-
+        // side body (the pre-fix unchecked claimable debit / the post-fix msg.value credit) runs in
+        // full either way — the debit precedes the loop.
+        vm.clearMockedCalls();
+        vm.mockCall(
+            ContractAddresses.GAME_LOOTBOX_MODULE,
+            abi.encodeWithSelector(IGameLootboxModuleRRL.resolveRedemptionLootbox.selector),
+            abi.encode()
+        );
+
+        // Both calls are pranked as SDGNRS (the only authorized caller).
+        vm.prank(address(sdgnrs));
+        game.resolveRedemptionLootbox{value: firstAmount}(playerA, firstAmount, uint256(0xABCD), 1);
+
+        vm.prank(address(sdgnrs));
+        game.resolveRedemptionLootbox{value: secondAmount}(playerB, secondAmount, uint256(0x1234), 1);
+    }
+
+    /// @notice REDEEM-08 repro-first headline: two same-day claimants cannot wrap
+    ///         claimableWinnings[SDGNRS] toward 2^256. PASSES post-fix (no claim-time claimable
+    ///         debit — ETH arrives as msg.value); FAILS pre-fix (the deleted unchecked debit wraps
+    ///         on the second claimant). Evidence of the pre-fix failure is recorded in the SUMMARY.
+    /// @dev seedClaimable = 1 ether; first claimant resolves ~1 ether (drains pre-fix claimable to
+    ///      ~0), second claimant resolves 3 ether (> remaining). Pre-fix: claimable - 3 ether wraps
+    ///      toward 2^256. Post-fix: claimable is NEVER touched by resolveRedemptionLootbox, so it
+    ///      stays at the seeded 1 ether — far below type(uint96).max. The tight post-fix bound
+    ///      (< type(uint96).max ≈ 7.9e28 wei ≈ 7.9e10 ETH) catches any wrap (a wrapped value is
+    ///      ~1.16e77).
+    function testReproTwoClaimantSameDayNoUnderflow() public {
+        uint256 seedClaimable = 1 ether;
+        uint256 firstAmount = 1 ether;   // drains pre-fix claimable to exactly 0
+        uint256 secondAmount = 3 ether;  // > remaining (0) → pre-fix unchecked wrap
+
+        _reproDriveSecondClaimantLootbox(seedClaimable, firstAmount, secondAmount);
+
+        // POST-FIX INVARIANT: resolveRedemptionLootbox does NO claimable debit, so the raw word
+        // is untouched and nowhere near 2^256. Pre-fix this wraps and the assertion trips.
+        uint256 claimableAfter = _claimableSdgnrs();
+        assertLt(
+            claimableAfter,
+            uint256(type(uint96).max),
+            "REDEEM-08: claimableWinnings[SDGNRS] wrapped toward 2^256 (pre-fix unchecked debit underflow)"
+        );
+
+        // claimablePool likewise never wraps toward 2^128 (post-fix: resolveRedemptionLootbox does
+        // not touch claimablePool; it only credits futurePrizePool from msg.value).
+        assertLt(
+            game.claimablePoolView(),
+            uint256(type(uint96).max),
+            "REDEEM-08: claimablePool wrapped toward 2^128 (pre-fix unchecked debit underflow)"
+        );
+
+        // Post-fix concrete equality: the seeded claimable is untouched (no claim-time debit).
+        assertEq(
+            claimableAfter,
+            seedClaimable,
+            "REDEEM-08: post-fix resolveRedemptionLootbox must NOT debit claimableWinnings[SDGNRS]"
+        );
+    }
+
+    /// @notice REDEEM-08 full-flow two-claimant proof: two distinct redeemers submit gambling-burn
+    ///         claims on the SAME day, the day resolves, both claim. The post-fix path segregates
+    ///         each redeemer's MAX(175%) at SUBMIT via the CHECKED pullRedemptionReserve, so the
+    ///         claim-time path holds no unchecked claimable debit — claimableWinnings[SDGNRS] can
+    ///         only ever have decreased by the two CHECKED submit pulls and never wraps.
+    /// @dev claimablePool == claimableWinnings[SDGNRS] stays balanced through both submits. Both
+    ///      submits draw down the shared claimable; the second submit's CHECKED pull reverts
+    ///      fail-closed if claimable is short (proven separately in the drain variant). Here claimable
+    ///      is large enough to cover both, so both submits succeed and claimable never wraps.
+    function testReproTwoClaimantFullFlowNoUnderflow() public {
+        // Seed a generous claimable so both submits' MAX(175%) pulls succeed.
+        uint256 seedClaimable = 100 ether;
+        bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
+        vm.store(address(game), claimableSlot, bytes32(seedClaimable));
+        uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(1))));
+        slot1 = (slot1 & type(uint128).max) | (uint256(uint128(seedClaimable)) << 128);
+        vm.store(address(game), bytes32(uint256(1)), bytes32(slot1));
+        vm.deal(address(game), 100 ether);
+
+        uint32 dayBurn = game.currentDayView();
+        uint256 burnAmount = 1000 ether;
+
+        // Both redeemers submit on the SAME day.
+        vm.prank(playerA);
+        sdgnrs.burn(burnAmount);
+        vm.prank(playerB);
+        sdgnrs.burn(burnAmount);
+
+        // Both submit-time CHECKED pulls succeeded → claimable decreased, never wrapped.
+        uint256 claimableAfterSubmits = _claimableSdgnrs();
+        assertLt(
+            claimableAfterSubmits,
+            uint256(type(uint96).max),
+            "REDEEM-08 full-flow: claimableWinnings[SDGNRS] wrapped during two same-day submits"
+        );
+        // claimablePool == claimableWinnings[SDGNRS] balanced (sole holder is sDGNRS in this harness).
+        assertEq(
+            game.claimablePoolView(),
+            claimableAfterSubmits,
+            "REDEEM-08 full-flow: claimablePool diverged from claimableWinnings[SDGNRS]"
+        );
+
+        // Resolve the shared day, then both claim. Claims must not wrap claimable (no debit at claim).
+        _advanceWallDay();
+        _resolveDay(dayBurn, 100);
+
+        vm.prank(playerA);
+        sdgnrs.claimRedemption(dayBurn);
+        vm.prank(playerB);
+        sdgnrs.claimRedemption(dayBurn);
+
+        uint256 claimableAfterClaims = _claimableSdgnrs();
+        assertEq(
+            claimableAfterClaims,
+            claimableAfterSubmits,
+            "REDEEM-08 full-flow: claim-time path debited claimableWinnings[SDGNRS] (must be no-op)"
+        );
+        assertLt(
+            claimableAfterClaims,
+            uint256(type(uint96).max),
+            "REDEEM-08 full-flow: claimableWinnings[SDGNRS] wrapped during two same-day claims"
+        );
+    }
+
+    /// @notice REDEEM-08 C5 fail-closed drain variant (AfKing SUB-09): if claimableWinnings[SDGNRS]
+    ///         is drained below the MAX(175%) the submit needs, the CHECKED pullRedemptionReserve
+    ///         reverts — fail-closed — rather than leaving a virtual reserve a later drain could
+    ///         underflow. Once claimable recovers, the same burn succeeds.
+    /// @dev The realistic drain: by the time the submit computes its MAX(175%) increment, the
+    ///      AfKing SUB-09 self-sub has already pulled claimableWinnings[SDGNRS] down (between days).
+    ///      The burn's `ethValueOwed` is proportional to `totalMoney = sDGNRS.balance + stETH +
+    ///      claimable - pendingRedemptionEthValue`; to reach a positive `ethValueOwed` (hence a
+    ///      positive `maxIncrement` to segregate) WHILE claimable is short, fund sDGNRS's own ETH
+    ///      balance (drives totalMoney up) but starve claimableWinnings[SDGNRS] (the segregation
+    ///      source). The CHECKED debit in pullRedemptionReserve then underflows → reverts → the whole
+    ///      burn reverts (the redeemer's sDGNRS is NOT burned). After claimable recovers, the burn lands.
+    function testReproSubmitFailClosedOnClaimableShortfall() public {
+        uint32 dayBurn = game.currentDayView();
+        uint256 burnAmount = 1000 ether;
+
+        // Drive totalMoney up via sDGNRS's own ETH balance (so ethValueOwed > 0 → maxIncrement > 0),
+        // but STARVE claimableWinnings[SDGNRS] (the segregation source the CHECKED pull draws from).
+        vm.deal(address(sdgnrs), 100 ether);
+        bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
+        vm.store(address(game), claimableSlot, bytes32(uint256(1)));
+        uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(1))));
+        slot1 = (slot1 & type(uint128).max) | (uint256(1) << 128);
+        vm.store(address(game), bytes32(uint256(1)), bytes32(slot1));
+
+        uint256 supplyBefore = sdgnrs.totalSupply();
+        uint256 balBefore = sdgnrs.balanceOf(playerA);
+
+        // Fail-closed: the burn reverts because the CHECKED pull can't segregate the MAX.
+        vm.prank(playerA);
+        vm.expectRevert();
+        sdgnrs.burn(burnAmount);
+
+        // No sDGNRS was burned (fail-closed: state rolled back), claimable did NOT wrap.
+        assertEq(sdgnrs.totalSupply(), supplyBefore, "drain: supply changed on a fail-closed burn");
+        assertEq(sdgnrs.balanceOf(playerA), balBefore, "drain: balance changed on a fail-closed burn");
+        assertLt(_claimableSdgnrs(), uint256(type(uint96).max), "drain: claimable wrapped on shortfall");
+
+        // Recover claimable (the AfKing drain reverses / the pool refills) → the burn now succeeds.
+        vm.store(address(game), claimableSlot, bytes32(uint256(100 ether)));
+        slot1 = uint256(vm.load(address(game), bytes32(uint256(1))));
+        slot1 = (slot1 & type(uint128).max) | (uint256(100 ether) << 128);
+        vm.store(address(game), bytes32(uint256(1)), bytes32(slot1));
+        vm.deal(address(game), 100 ether);
+
+        vm.prank(playerA);
+        sdgnrs.burn(burnAmount);
+
+        // Burn landed: supply dropped, a claim slot exists for the day.
+        assertLt(sdgnrs.totalSupply(), supplyBefore, "drain: burn did not land after claimable recovered");
+        (uint96 ev, ) = sdgnrs.pendingRedemptions(playerA, dayBurn);
+        assertGt(uint256(ev), 0, "drain: claim slot not populated after recovery burn");
     }
 }
