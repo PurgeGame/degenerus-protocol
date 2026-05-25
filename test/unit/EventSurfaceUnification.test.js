@@ -5,9 +5,10 @@
 // Verifies the Phase 277 event-surface unification + sentinel retirement:
 //   - LootboxTicketRoll is fully removed (event def + emit sites) from both the
 //     LootboxModule contract and the IDegenerusGameModules interface.
-//   - LootBoxOpened / BurnieLootOpen / JackpotTicketWin carry their post-Phase-277
-//     signatures (the LootBoxOpened index/day mislabel is fixed; all three gain a
-//     trailing non-indexed `bool roundedUp`).
+//   - LootBoxOpened / JackpotTicketWin carry their post-Phase-277 signatures (the
+//     LootBoxOpened index/day mislabel is fixed; both gain a trailing non-indexed
+//     `bool roundedUp`). BurnieLootOpen is REMOVED in v47 (BURNIE-lootbox surface
+//     deleted — terminal-paradox closure).
 //   - The `index != type(uint48).max` behavior-gating sentinel in
 //     _resolveLootboxCommon is retired; auto-resolve callers pass index=0,
 //     emitLootboxEvent=false, and payColdBustConsolation=false; the unified
@@ -183,24 +184,16 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       expect(BigInt(frag.topicHash)).to.not.equal(0n);
     });
 
-    it("[01b] BurnieLootOpen resolves to the post-Phase-277 signature ending in non-indexed bool roundedUp", async function () {
+    // [01b] BurnieLootOpen — REMOVED (v47): the BURNIE-lootbox surface is gone by
+    // design (terminal-paradox closure); the `BurnieLootOpen` event no longer exists
+    // in the ABI. The event-fragment assertion for it was removed, not skipped.
+    it("[01b] the v47 ABI no longer declares BurnieLootOpen (removed-by-design)", async function () {
       const abi = await loadAbi("DegenerusGameLootboxModule");
-      const iface = new hre.ethers.Interface(abi);
-      const frag = iface.getEvent("BurnieLootOpen");
-      expect(frag, "BurnieLootOpen event fragment missing from ABI").to.not.equal(
-        null
-      );
-      const last = frag.inputs[frag.inputs.length - 1];
-      expect(last.type).to.equal("bool");
-      expect(last.name).to.equal("roundedUp");
-      expect(last.indexed).to.equal(false);
-      // amount/burnieReward stay uint256 wei (D-277-EVT-WIDE-01).
-      const burnieAmount = frag.inputs.find((i) => i.name === "burnieAmount");
-      const burnieReward = frag.inputs.find((i) => i.name === "burnieReward");
-      expect(burnieAmount.type).to.equal("uint256");
-      expect(burnieReward.type).to.equal("uint256");
-      expect(frag.topicHash).to.match(/^0x[0-9a-f]{64}$/);
-      expect(BigInt(frag.topicHash)).to.not.equal(0n);
+      const names = abi.filter((x) => x.type === "event").map((x) => x.name);
+      expect(
+        names,
+        "BurnieLootOpen must be fully removed from the v47 ABI (BURNIE-lootbox surface deleted)"
+      ).to.not.include("BurnieLootOpen");
     });
 
     it("[01c] JackpotTicketWin resolves to the post-Phase-277 signature: trailing non-indexed bool roundedUp, exactly 3 indexed params", async function () {
@@ -294,13 +287,14 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       ).to.equal(0);
     });
 
-    it("[03c] auto-resolve callers pass index=0 (3rd positional), emitLootboxEvent=false (10th positional), and payColdBustConsolation=false (11th positional) to _resolveLootboxCommon", function () {
+    it("[03c] auto-resolve callers pass index=0 (3rd positional), emitLootboxEvent=false (8th positional), and payColdBustConsolation=false (9th positional) to _resolveLootboxCommon", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      // The _resolveLootboxCommon positional arg order (per signature):
+      // v47 _resolveLootboxCommon positional arg order (now 2-bool / 11 args; the
+      // old 5-bool presale/allowPasses/allowBoons gating params were removed — the
+      // 3 ETH callers now always roll full boons+passes):
       //   1 player, 2 day, 3 index, 4 amount, 5 targetLevel, 6 currentLevel,
-      //   7 seed, 8 presale, 9 allowPasses, 10 emitLootboxEvent,
-      //   11 payColdBustConsolation, 12 allowBoons, 13 distressEth,
-      //   14 totalPackedEth
+      //   7 seed, 8 emitLootboxEvent, 9 payColdBustConsolation,
+      //   10 distressEth, 11 totalPackedEth
       for (const fnSig of [
         "function resolveLootboxDirect(",
         "function resolveRedemptionLootbox(",
@@ -320,19 +314,19 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         const args = splitTopLevelArgs(callArgs);
         expect(
           args.length,
-          `${fnSig} _resolveLootboxCommon must receive 14 positional args`
-        ).to.equal(14);
+          `${fnSig} _resolveLootboxCommon must receive 11 positional args (v47 2-bool shape)`
+        ).to.equal(11);
         expect(
           args[2],
           `${fnSig} must pass index=0 as the 3rd positional arg (D-277-AR-INDEX-01)`
         ).to.equal("0");
         expect(
-          args[9],
-          `${fnSig} must pass emitLootboxEvent=false as the 10th positional arg (D-277-AR-SILENT-01)`
+          args[7],
+          `${fnSig} must pass emitLootboxEvent=false as the 8th positional arg (D-277-AR-SILENT-01)`
         ).to.equal("false");
         expect(
-          args[10],
-          `${fnSig} must pass payColdBustConsolation=false as the 11th positional arg (D-277-AR-SILENT-01)`
+          args[8],
+          `${fnSig} must pass payColdBustConsolation=false as the 9th positional arg (D-277-AR-SILENT-01)`
         ).to.equal("false");
         // The retired sentinel value must not appear in the caller body.
         expect(
@@ -361,7 +355,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
     });
   });
 
-  describe("TST-EVT-UNI-04 — manual-path LootBoxOpened / BurnieLootOpen field-consistency (whole derived from scaled futureTickets/tickets + roundedUp; no preRollTickets)", function () {
+  describe("TST-EVT-UNI-04 — manual-path LootBoxOpened field-consistency (whole derived from scaled futureTickets + roundedUp; no preRollTickets; BurnieLootOpen removed in v47)", function () {
     it("[04a] no contract source declares a preRollTickets event field (D-277-NO-PREROLL-01)", function () {
       for (const file of collectSolFiles(CONTRACTS_DIR)) {
         const src = fs.readFileSync(file, "utf8");
@@ -424,27 +418,21 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       expect(emitArgs[7]).to.equal("roundedUp");
     });
 
-    it("[04d] the manual BurnieLootOpen emit threads the scaled `tickets` return value and the `roundedUp` flag from _resolveLootboxCommon", function () {
+    // [04d] BurnieLootOpen manual-emit field-consistency — REMOVED (v47): the
+    // BURNIE-lootbox manual caller `openBurnieLootBox` and its `BurnieLootOpen`
+    // emit are gone by design (terminal-paradox closure). This block tested a
+    // removed source surface and is deleted, not skipped. Confirm the source no
+    // longer declares the removed symbols.
+    it("[04d] the v47 LootboxModule source no longer references openBurnieLootBox / BurnieLootOpen (removed-by-design)", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      const body = extractBody(src, "function openBurnieLootBox(");
-      expect(body, "openBurnieLootBox body not found").to.not.equal(null);
-      // openBurnieLootBox destructures (uint32 tickets, uint256 burnieReward, bool roundedUp)
-      // — the 3-return shape after the bonusBurnie return was dropped.
       expect(
-        /\(uint32 tickets, uint256 burnieReward, bool roundedUp\)\s*=\s*_resolveLootboxCommon/.test(
-          body
-        ),
-        "openBurnieLootBox must destructure the scaled `tickets` and the `roundedUp` flag from _resolveLootboxCommon"
-      ).to.equal(true);
-      const emitArgList = extractCallArgs(body, "emit BurnieLootOpen(");
-      expect(emitArgList, "BurnieLootOpen emit not found").to.not.equal(null);
-      const emitArgs = splitTopLevelArgs(emitArgList);
-      // player, index, burnieAmount, ticketLevel(targetLevel), tickets, burnieReward, roundedUp
-      expect(emitArgs.length).to.equal(7);
-      expect(emitArgs[0]).to.equal("player");
-      expect(emitArgs[1]).to.equal("uint32(index)");
-      expect(emitArgs[4]).to.equal("tickets"); // scaled pre-Bernoulli
-      expect(emitArgs[6]).to.equal("roundedUp");
+        src.includes("openBurnieLootBox"),
+        "openBurnieLootBox must be fully removed from DegenerusGameLootboxModule.sol"
+      ).to.equal(false);
+      expect(
+        src.includes("BurnieLootOpen"),
+        "BurnieLootOpen must be fully removed from DegenerusGameLootboxModule.sol"
+      ).to.equal(false);
     });
 
     it("[04e] the WWXRP-consolation case is inferable as `whole == 0 && futureTickets > 0` corroborated by a same-tx WWXRP ERC-20 Transfer from mintPrize", function () {
@@ -527,8 +515,9 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       ).to.equal(false);
       // The consolation predicate explicitly tests payColdBustConsolation —
       // proving it cannot fire on the auto-resolve (payColdBustConsolation=false)
-      // path, while both manual callers (openLootBox, openBurnieLootBox) pass
-      // payColdBustConsolation=true and DO pay it.
+      // path, while the surviving manual caller (openLootBox) passes
+      // payColdBustConsolation=true and DOES pay it. (The BURNIE-lootbox manual
+      // caller openBurnieLootBox was removed in v47.)
       const body = extractBody(src, "function _resolveLootboxCommon(");
       expect(
         /if \(payColdBustConsolation && whole == 0\)\s*\{/.test(body),

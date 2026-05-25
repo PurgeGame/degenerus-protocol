@@ -167,5 +167,12 @@ function getConstructorArgs(key, predicted) {
   if (key === "AFFILIATE") {
     return [[], [], [], [], []];
   }
+  if (key === "AF_KING") {
+    // AfKing has a 3-arg constructor (subCostEthTarget, bountyEthTarget,
+    // lootboxMin), all non-zero (each reverts on 0). Mirrors the foundry helper
+    // test/fuzz/helpers/DeployProtocol.sol:126. The args set immutables only and
+    // make no cross-contract calls, so they do not affect the predicted address.
+    return [5_000_000_000n, 885_000_000n, 10_000_000_000n];
+  }
   return [];
 }

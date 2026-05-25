@@ -40,8 +40,9 @@
 //
 // CROSS-CITES:
 //   - D-274-BIT-SLICE-01 (post-c21f833a supersession: uint16 / bits[152..167])
-//   - D-274-NO-EVT-BREAK-01 (LootBoxOpened.futureTickets + BurnieLootOpen.tickets
-//     + TicketsQueuedScaled semantics UNCHANGED)
+//   - D-274-NO-EVT-BREAK-01 (LootBoxOpened.futureTickets + TicketsQueuedScaled
+//     semantics UNCHANGED; BurnieLootOpen removed in v47 — BURNIE-lootbox surface
+//     deleted, terminal-paradox closure)
 //   - feedback_rng_backward_trace.md (slice consumed only on manual paths;
 //     auto-resolve never reads bits[152..167])
 //   - feedback_rng_commitment_window.md (no player-controllable input mutates
@@ -578,7 +579,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
     });
   });
 
-  describe("TST-WT-05 — `LootBoxOpened.futureTickets` + `BurnieLootOpen.tickets` scaled-preservation (D-274-NO-EVT-BREAK-01)", function () {
+  describe("TST-WT-05 — `LootBoxOpened.futureTickets` scaled-preservation (D-274-NO-EVT-BREAK-01; BurnieLootOpen removed in v47)", function () {
     it("[05a] `_resolveLootboxCommon` returns function-scope `futureTickets` (scaled) and `LootBoxOpened` emit consumes the same scaled value", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The `LootBoxOpened` emit must reference `futureTickets` (the function-
@@ -632,33 +633,22 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.equal(false);
     });
 
-    it("[05c] `BurnieLootOpen` consumes `_resolveLootboxCommon` first return value as `tickets` (scaled) and the 3rd return value as `roundedUp` (D-274-NO-EVT-BREAK-01, EVT-UNI-03)", function () {
+    // [05c] BurnieLootOpen scaled-tickets preservation — REMOVED (v47): the
+    // BURNIE-lootbox manual caller `openBurnieLootBox` and its `BurnieLootOpen`
+    // emit were removed (terminal-paradox closure). The scaled-futureTickets
+    // preservation invariant for the surviving LootBoxOpened emit is covered by
+    // [05a]/[05b] above. Removed-by-design, not skipped — assert the symbols are
+    // gone from the source.
+    it("[05c] the v47 LootboxModule source no longer references openBurnieLootBox / BurnieLootOpen (removed-by-design)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // openBurnieLootBox destructure pattern — post-Phase-277 the
-      // `_resolveLootboxCommon` return tuple is 3 elements ending in
-      // `bool roundedUp` (the `bonusBurnie` return was dropped);
-      // openBurnieLootBox destructures the scaled `tickets`, `burnieReward`,
-      // and `roundedUp`.
-      const destructurePattern =
-        /\(uint32 tickets, uint256 burnieReward, bool roundedUp\)\s*=\s*_resolveLootboxCommon/;
       expect(
-        source.match(destructurePattern),
-        "openBurnieLootBox destructure pattern (uint32 tickets, uint256 burnieReward, bool roundedUp) = _resolveLootboxCommon missing"
-      ).to.not.be.null;
-
-      // BurnieLootOpen emit consumes `tickets` from the destructure (scaled).
-      // The emit spans multiple lines — use the `s` flag for dotall semantics.
-      const burnieEmit = /emit BurnieLootOpen\([\s\S]*?tickets/;
+        source.includes("openBurnieLootBox"),
+        "openBurnieLootBox must be fully removed from DegenerusGameLootboxModule.sol"
+      ).to.equal(false);
       expect(
-        source.match(burnieEmit),
-        "BurnieLootOpen emit must reference `tickets` (the destructured scaled return value)"
-      ).to.not.be.null;
-      // And the emit threads the destructured `roundedUp` as its trailing field.
-      const burnieEmitRoundedUp = /emit BurnieLootOpen\([\s\S]*?roundedUp\s*\)/;
-      expect(
-        source.match(burnieEmitRoundedUp),
-        "BurnieLootOpen emit must thread the destructured `roundedUp` flag"
-      ).to.not.be.null;
+        source.includes("BurnieLootOpen"),
+        "BurnieLootOpen must be fully removed from DegenerusGameLootboxModule.sol"
+      ).to.equal(false);
     });
   });
 

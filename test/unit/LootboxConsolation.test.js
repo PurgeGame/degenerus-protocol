@@ -18,14 +18,14 @@
 //
 // `_queueTickets` is called unconditionally; its `if (quantity == 0) return;`
 // early-return absorbs the `whole == 0` cold-bust case silently. The WWXRP
-// consolation is paid on BOTH manual lootbox paths — `openLootBox` AND
-// `openBurnieLootBox` — which each pass `payColdBustConsolation = true`. It is
-// gated by a dedicated `payColdBustConsolation` flag, NOT by `emitLootboxEvent`:
-// `openBurnieLootBox` passes `emitLootboxEvent = false` (it emits its own
-// `BurnieLootOpen` event instead of `LootBoxOpened`) but is still a manual
-// player-initiated open that pays the cold-bust consolation. The two
+// consolation is paid on the surviving manual lootbox path — `openLootBox` —
+// which passes `payColdBustConsolation = true`. It is gated by a dedicated
+// `payColdBustConsolation` flag, NOT by `emitLootboxEvent`. The two
 // auto-resolve callers (`resolveLootboxDirect`, `resolveRedemptionLootbox`)
 // pass `payColdBustConsolation = false`, so cold-bust is silent for them.
+// (v47: the BURNIE-lootbox manual caller `openBurnieLootBox` — which also passed
+// `payColdBustConsolation = true` while emitting `BurnieLootOpen` — was removed,
+// terminal-paradox closure.)
 //
 // TEST STRATEGY:
 //   - TST-WX-01 (cold-bust trigger) + TST-WX-02 (non-trigger predicate matrix) —
@@ -45,8 +45,9 @@
 //     the `LootboxBernoulliTester.coldBustConsolationFires` mirror of the
 //     production gate, driven with each of the four callers' actual flag values.
 //     This exercises the `payColdBustConsolation && whole == 0` decision that
-//     CR-01 got wrong — including the `openBurnieLootBox` cold-bust → consolation
-//     case the prior (emitLootboxEvent-gated) surface silently dropped.
+//     CR-01 got wrong. (The `openBurnieLootBox` cold-bust case the prior
+//     emitLootboxEvent-gated surface silently dropped is moot in v47 — that
+//     BURNIE-lootbox caller was removed.)
 //
 // CROSS-CITES:
 //   - D-274-WX-AMOUNT-01 (magnitude equivalence LOOTBOX_WWXRP_CONSOLATION ==
@@ -138,8 +139,9 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       // `if (payColdBustConsolation && whole == 0)` gate must appear (the NatSpec
       // comment block between the gate and the call widens the gap).
       // Auto-resolve callers pass `payColdBustConsolation = false`, so they never
-      // reach the consolation; both manual callers (`openLootBox`,
-      // `openBurnieLootBox`) pass `payColdBustConsolation = true` and can trigger it.
+      // reach the consolation; the surviving manual caller (`openLootBox`) passes
+      // `payColdBustConsolation = true` and can trigger it. (v47: the BURNIE-lootbox
+      // manual caller `openBurnieLootBox` was removed.)
       const window = source.slice(Math.max(0, mintPrize - 600), mintPrize);
       expect(
         window.includes("if (payColdBustConsolation && whole == 0)"),
@@ -167,7 +169,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The sentinel branch is retired: `_queueTickets(player, targetLevel,
       // whole, false)` is called once, unconditionally, for every path
-      // (manual + both auto-resolve callers + openBurnieLootBox). Its
+      // (manual openLootBox + both auto-resolve callers). Its
       // `if (quantity == 0) return;` early-return absorbs the cold-bust case.
       const callLine = "_queueTickets(player, targetLevel, whole, false)";
       const firstIdx = source.indexOf(callLine);
@@ -282,23 +284,12 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
     const COLD_BUST_SEED = BigInt(99) << 152n;
     const WARM_SEED = 0n; // slice == 0 — wins for every frac >= 1
 
-    it("[04a] openBurnieLootBox cold-bust PAYS the consolation — payColdBustConsolation=true ⇒ fires on whole==0", async function () {
-      const tester = await deployTester();
-      // openBurnieLootBox is a manual caller: it passes payColdBustConsolation =
-      // true (even though emitLootboxEvent = false — it emits BurnieLootOpen, not
-      // LootBoxOpened). Pre-fix this case was silently dropped (CR-01).
-      for (const scaledPre of [1, 47, 50, 99]) {
-        const fires = await tester.coldBustConsolationFires(
-          true,
-          scaledPre,
-          COLD_BUST_SEED
-        );
-        expect(
-          fires,
-          `openBurnieLootBox cold-bust at scaledPre=${scaledPre} must PAY the consolation (payColdBustConsolation=true, whole==0)`
-        ).to.equal(true);
-      }
-    });
+    // [04a] openBurnieLootBox cold-bust — REMOVED (v47): the BURNIE-lootbox manual
+    // caller `openBurnieLootBox` was removed (terminal-paradox closure). This case
+    // exercised the gate decision with payColdBustConsolation=true on behalf of that
+    // removed caller; the identical gate decision for the surviving manual caller
+    // (openLootBox, also payColdBustConsolation=true) is covered by [04b], so no
+    // coverage is lost. Removed-by-design, not skipped.
 
     it("[04b] openLootBox cold-bust PAYS the consolation — payColdBustConsolation=true ⇒ fires on whole==0", async function () {
       const tester = await deployTester();

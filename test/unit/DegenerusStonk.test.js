@@ -14,7 +14,9 @@ import {
 } from "../helpers/testUtils.js";
 
 // Pool enum mapping (from DegenerusStonk.sol)
-const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, Earlybird: 4 };
+// v47: the 4-ordinal pool was renamed Earlybird -> PresaleBox (the earlybird
+// subsystem was removed; the pool itself survives, renamed, still seeded at deploy).
+const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, PresaleBox: 4 };
 
 // Distribution constants from contract
 const INITIAL_SUPPLY = 1_000_000_000_000n * eth("1"); // 1 trillion
@@ -23,7 +25,7 @@ const WHALE_POOL_BPS = 1000n;
 const AFFILIATE_POOL_BPS = 3500n;
 const LOOTBOX_POOL_BPS = 2000n;
 const REWARD_POOL_BPS = 500n;
-const EARLYBIRD_POOL_BPS = 1000n;
+const PRESALE_BOX_POOL_BPS = 1000n; // v47: was EARLYBIRD_POOL_BPS; pool renamed, BPS unchanged
 const BPS_DENOM = 10_000n;
 
 // Helper: give a player sDGNRS from the Reward pool via game impersonation
@@ -34,6 +36,43 @@ async function giveSDGNRS(sdgnrs, game, recipient, amount) {
   const gameSigner = await hre.ethers.getSigner(gameAddr);
   await sdgnrs.connect(gameSigner).transferFromPool(Pool.Reward, recipient, amount);
   await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [gameAddr] });
+}
+
+// Helper: credit `amount` (wei) to sDGNRS's claimableWinnings entry in the Game
+// contract and bump claimablePool to match. v47: the gambling-burn path physically
+// segregates the MAX (175%) payout out of `claimableWinnings[SDGNRS]` via the new
+// CHECKED `pullRedemptionReserve` (R3, fail-closed). A burn with proportional ETH
+// backing therefore requires this segregation source to be funded — otherwise the
+// checked debit reverts (panic 0x11) by design. Mirrors the foundry repair in
+// test/fuzz/StakedStonkRedemption.t.sol:97-105 (slot 7 = claimableWinnings mapping,
+// slot 1 upper-128 = claimablePool — authoritative v47 slots per Phase 323-01).
+async function fundGameClaimableForSdgnrs(gameAddr, sdgnrsAddr, amount) {
+  const CLAIMABLE_WINNINGS_SLOT = 7n;
+  const CLAIMABLE_POOL_SLOT = 1n;
+  // claimableWinnings[SDGNRS] = keccak256(abi.encode(sdgnrsAddr, slot 7))
+  const key = hre.ethers.keccak256(
+    hre.ethers.AbiCoder.defaultAbiCoder().encode(
+      ["address", "uint256"],
+      [sdgnrsAddr, CLAIMABLE_WINNINGS_SLOT]
+    )
+  );
+  await hre.network.provider.send("hardhat_setStorageAt", [
+    gameAddr,
+    key,
+    hre.ethers.toBeHex(amount, 32),
+  ]);
+  // claimablePool occupies the upper 128 bits of slot 1; preserve the lower 128.
+  const slot1Hex = hre.ethers.toBeHex(CLAIMABLE_POOL_SLOT, 32);
+  const cur = BigInt(
+    await hre.network.provider.send("eth_getStorageAt", [gameAddr, slot1Hex, "latest"])
+  );
+  const lower128 = cur & ((1n << 128n) - 1n);
+  const packed = lower128 | (BigInt(amount) << 128n);
+  await hre.network.provider.send("hardhat_setStorageAt", [
+    gameAddr,
+    slot1Hex,
+    hre.ethers.toBeHex(packed, 32),
+  ]);
 }
 
 describe("DegenerusStonk", function () {
@@ -119,11 +158,15 @@ describe("DegenerusStonk", function () {
       expect(rewardPool).to.be.closeTo(expected, eth("100"));
     });
 
-    it("Earlybird pool balance is correct (~11.43%)", async function () {
+    it("PresaleBox pool balance is correct (seeded at deploy)", async function () {
+      // v47: the 4-ordinal pool (was Earlybird, now PresaleBox) is still seeded at
+      // deploy from PRESALE_BOX_POOL_BPS. The earlybird ACCRUAL mechanics
+      // (_awardEarlybirdDgnrs / _finalizeEarlybird) were removed in v47, but the
+      // pool seeding survives unchanged.
       const { sdgnrs } = await loadFixture(deployFullProtocol);
-      const earlybirdPool = await sdgnrs.poolBalance(Pool.Earlybird);
-      const expected = (INITIAL_SUPPLY * EARLYBIRD_POOL_BPS) / BPS_DENOM;
-      expect(earlybirdPool).to.be.closeTo(expected, eth("100"));
+      const presaleBoxPool = await sdgnrs.poolBalance(Pool.PresaleBox);
+      const expected = (INITIAL_SUPPLY * PRESALE_BOX_POOL_BPS) / BPS_DENOM;
+      expect(presaleBoxPool).to.be.closeTo(expected, eth("100"));
     });
 
   });
@@ -263,7 +306,7 @@ describe("DegenerusStonk", function () {
       await expect(
         sdgnrs
           .connect(alice)
-          .transferBetweenPools(Pool.Earlybird, Pool.Reward, eth("100"))
+          .transferBetweenPools(Pool.PresaleBox, Pool.Reward, eth("100"))
       ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
 
@@ -280,20 +323,20 @@ describe("DegenerusStonk", function () {
       ]);
       const gameSigner = await hre.ethers.getSigner(gameAddr);
 
-      const earlybirdBefore = await sdgnrs.poolBalance(Pool.Earlybird);
+      const presaleBoxBefore = await sdgnrs.poolBalance(Pool.PresaleBox);
       const rewardBefore = await sdgnrs.poolBalance(Pool.Reward);
       const amount = eth("1000");
 
       const tx = await sdgnrs
         .connect(gameSigner)
-        .transferBetweenPools(Pool.Earlybird, Pool.Reward, amount);
+        .transferBetweenPools(Pool.PresaleBox, Pool.Reward, amount);
       const ev = await getEvent(tx, sdgnrs, "PoolRebalance");
-      expect(ev.args.from).to.equal(BigInt(Pool.Earlybird));
+      expect(ev.args.from).to.equal(BigInt(Pool.PresaleBox));
       expect(ev.args.to).to.equal(BigInt(Pool.Reward));
       expect(ev.args.amount).to.equal(amount);
 
-      expect(await sdgnrs.poolBalance(Pool.Earlybird)).to.equal(
-        earlybirdBefore - amount
+      expect(await sdgnrs.poolBalance(Pool.PresaleBox)).to.equal(
+        presaleBoxBefore - amount
       );
       expect(await sdgnrs.poolBalance(Pool.Reward)).to.equal(
         rewardBefore + amount
@@ -321,7 +364,7 @@ describe("DegenerusStonk", function () {
       const supplyBefore = await sdgnrs.totalSupply();
       await sdgnrs
         .connect(gameSigner)
-        .transferBetweenPools(Pool.Earlybird, Pool.Reward, eth("1000"));
+        .transferBetweenPools(Pool.PresaleBox, Pool.Reward, eth("1000"));
       expect(await sdgnrs.totalSupply()).to.equal(supplyBefore);
 
       await hre.network.provider.request({
@@ -544,6 +587,12 @@ describe("DegenerusStonk", function () {
         params: [gameAddr],
       });
 
+      // v47: fund the segregation source. The gambling-burn path pulls the MAX
+      // (175%) payout out of claimableWinnings[SDGNRS] via the CHECKED
+      // pullRedemptionReserve (R3, fail-closed) — unfunded, that checked debit
+      // reverts by design. Credit 100 ETH so the proportional segregation succeeds.
+      await fundGameClaimableForSdgnrs(gameAddr, sdgnrsAddr, eth("100"));
+
       // Preview before burn
       const [ethOut, stethOut, burnieOut] = await sdgnrs.previewBurn(sdgnrsAmount);
 
@@ -606,9 +655,20 @@ describe("DegenerusStonk", function () {
         params: [gameAddr],
       });
 
-      // Preview should show stETH output
+      // previewBurn's ETH/stETH split is byte-identical to v46: when ETH-available
+      // (ethBal + claimableEth - pendingRedemptionEthValue) is below the owed value,
+      // the remainder spills to stETH. Take the preview here, with claimableEth
+      // still unfunded, to assert the (unchanged) stETH-allocation behavior.
       const [, stethPreview] = await sdgnrs.previewBurn(sdgnrsAmount);
       expect(stethPreview).to.be.gt(0n);
+
+      // v47: now fund the segregation source (claimableWinnings[SDGNRS]) so the
+      // CHECKED pullRedemptionReserve in the gambling-burn path succeeds. See the
+      // ETH-backing test above for the full rationale (R3 fail-closed segregation).
+      // (The gambling burn defers payout — RedemptionSubmitted, no immediate
+      // transfer — so funding claimable here does not retroactively change the
+      // preview taken above.)
+      await fundGameClaimableForSdgnrs(gameAddr, sdgnrsAddr, eth("100"));
 
       // Burn — during active game this enters the gambling path (RedemptionSubmitted).
       // stETH is counted in ethValueOwed (combined ETH+stETH backing) and held pending RNG

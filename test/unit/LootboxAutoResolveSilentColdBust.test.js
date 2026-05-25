@@ -149,11 +149,12 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
 
     it("[02b] both auto-resolve callers (resolveLootboxDirect + resolveRedemptionLootbox) pass `index = 0`, `emitLootboxEvent = false`, and `payColdBustConsolation = false`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // `_resolveLootboxCommon` positional args: player(1), day(2), index(3),
-      // amount(4), targetLevel(5), currentLevel(6), seed(7), presale(8),
-      // allowPasses(9), emitLootboxEvent(10), payColdBustConsolation(11),
-      // allowBoons(12), distressEth(13), totalPackedEth(14). The auto-resolve
-      // callers pass `index = 0`, `emitLootboxEvent = false`, and
+      // v47 `_resolveLootboxCommon` positional args (now 2-bool / 11 args — the old
+      // 5-bool presale/allowPasses/allowBoons gating params were removed; the 3 ETH
+      // callers always roll full boons+passes): player(1), day(2), index(3),
+      // amount(4), targetLevel(5), currentLevel(6), seed(7), emitLootboxEvent(8),
+      // payColdBustConsolation(9), distressEth(10), totalPackedEth(11). The
+      // auto-resolve callers pass `index = 0`, `emitLootboxEvent = false`, and
       // `payColdBustConsolation = false` (silent on cold-bust).
       for (const fnName of ["function resolveLootboxDirect(", "function resolveRedemptionLootbox("]) {
         const fnIdx = source.indexOf(fnName);
@@ -183,10 +184,10 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
           .split(",")
           .map((a) => a.replace(/\/\/.*$/gm, "").trim())
           .filter((a) => a.length > 0);
-        expect(args.length, `${fnName}: _resolveLootboxCommon must receive 14 positional args`).to.equal(14);
+        expect(args.length, `${fnName}: _resolveLootboxCommon must receive 11 positional args (v47 2-bool shape)`).to.equal(11);
         expect(args[2], `${fnName} must pass index = 0 (3rd positional)`).to.equal("0");
-        expect(args[9], `${fnName} must pass emitLootboxEvent = false (10th positional)`).to.equal("false");
-        expect(args[10], `${fnName} must pass payColdBustConsolation = false (11th positional)`).to.equal("false");
+        expect(args[7], `${fnName} must pass emitLootboxEvent = false (8th positional)`).to.equal("false");
+        expect(args[8], `${fnName} must pass payColdBustConsolation = false (9th positional)`).to.equal("false");
         expect(
           body.includes("type(uint48).max"),
           `${fnName} must NOT reference the retired type(uint48).max sentinel`
@@ -231,10 +232,12 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       // Same seed as the silent cold-bust test above (slice=99). The Bernoulli
       // math is shared by every path per D-275-HOIST-01 — so every caller sees
       // whole=0. The DIFFERENCE is the `payColdBustConsolation` gate downstream:
-      //   - Manual callers `openLootBox` + `openBurnieLootBox`
-      //     (payColdBustConsolation = true): the `if (payColdBustConsolation &&
-      //     whole == 0)` gate opens — pays LOOTBOX_WWXRP_CONSOLATION via
-      //     wwxrp.mintPrize (observable via the WWXRP ERC-20 `Transfer` event).
+      //   - Manual caller `openLootBox` (payColdBustConsolation = true): the
+      //     `if (payColdBustConsolation && whole == 0)` gate opens — pays
+      //     LOOTBOX_WWXRP_CONSOLATION via wwxrp.mintPrize (observable via the WWXRP
+      //     ERC-20 `Transfer` event). (v47: the BURNIE-lootbox manual caller
+      //     openBurnieLootBox, which also passed payColdBustConsolation=true, was
+      //     removed — terminal-paradox closure.)
       //   - Auto-resolve callers (payColdBustConsolation = false): the gate
       //     stays shut; `_queueTickets(0)` early-returns → fully silent.
       const seedSliceHigh = BigInt(99) << 152n;

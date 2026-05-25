@@ -445,12 +445,10 @@ describe("DegenerusVault", function () {
       ).to.be.revertedWithCustomError(vault, "Insufficient");
     });
 
-    it("gamePurchaseBurnieLootbox reverts when burnieAmount is zero", async function () {
-      const { vault, deployer } = await loadFixture(deployFullProtocol);
-      await expect(
-        vault.connect(deployer).gamePurchaseBurnieLootbox(0n)
-      ).to.be.revertedWithCustomError(vault, "Insufficient");
-    });
+    // gamePurchaseBurnieLootbox revert-on-zero — REMOVED (v47): the vault's
+    // BURNIE-lootbox wrapper was removed (terminal-paradox closure). The
+    // BURNIE->tickets wrapper (gamePurchaseTicketsBurnie) is KEPT and still tested
+    // above. Removed-by-design, not skipped.
 
     it("gameSetAutoRebuyTakeProfit accessible by vault owner", async function () {
       const { vault, deployer } = await loadFixture(deployFullProtocol);

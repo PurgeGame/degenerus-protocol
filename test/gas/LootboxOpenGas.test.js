@@ -80,7 +80,6 @@
 //
 // On first run, the test prints (per reachable entry point):
 //   [REF-CAPTURE] OPEN_LOOTBOX_GAS_REF             = <gasNumber>
-//   [REF-CAPTURE] OPEN_BURNIE_LOOTBOX_GAS_REF      = <gasNumber>
 //   [REF-CAPTURE] RESOLVE_LOOTBOX_DIRECT_GAS_REF   = <gasNumber>
 // The executor pins each captured value into the matching literal constant
 // (replacing 0 with the captured integer). Subsequent runs assert
@@ -93,7 +92,7 @@
 const PER_OPEN_GAS_DELTA_BOUND       = 300;       // GAS-01 ±300 gas per-open
 const ENTRY_POINT_DELTA_TOLERANCE    = 2000;      // ±2000 gas per-site tolerance vs pinned REF (codegen variance)
 const OPEN_LOOTBOX_GAS_REF             = 0;       // executor-pinned post REF-CAPTURE first run
-const OPEN_BURNIE_LOOTBOX_GAS_REF      = 0;       // executor-pinned post REF-CAPTURE first run
+// OPEN_BURNIE_LOOTBOX_GAS_REF removed (v47): openBurnieLootBox surface deleted.
 const RESOLVE_LOOTBOX_DIRECT_GAS_REF   = 0;       // executor-pinned post REF-CAPTURE first run
 
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -251,68 +250,11 @@ describe("Phase 266 GAS-01 — lootbox-open entry-point gas regression at v36.0 
     });
   });
 
-  describe("openBurnieLootBox (BURNIE lootbox) — per-open gas envelope ±300 gas", function () {
-    it(`gasUsed within ENTRY_POINT_DELTA_TOLERANCE of pinned REF; per-open delta <= ${PER_OPEN_GAS_DELTA_BOUND}`, async function () {
-      const fixture = await loadFixture(deployFullProtocol);
-      const { game, alice } = fixture;
-
-      const probe = await reachOpenableLootbox(fixture);
-      if (probe.reason !== null) {
-        console.warn(`[GAS-01 openBurnieLootBox] soft-skip — ${probe.reason} (matches AdvanceGameGas L1014/L1027 precedent)`);
-        this.skip();
-        return;
-      }
-
-      // BURNIE lootboxes accumulate via separate paths (boon awards / coinflip
-      // rewards / activity). The simulator may not have populated lootboxBurnie
-      // for alice in the harness state; soft-skip if the path is unreachable
-      // — the openLootBox path above exercises the same _resolveLootboxCommon
-      // body and provides the primary GAS-01 measurement.
-      let foundIndex = null;
-      for (let i = 0; i < 64; i++) {
-        let amount;
-        try {
-          amount = await game.lootboxBurnie(i, alice.address);
-        } catch (_) { break; }
-        if (amount === undefined || amount === null) continue;
-        if (BigInt(amount) === 0n) continue;
-        let rngWord;
-        try {
-          rngWord = await game.lootboxRngWordByIndex(i);
-        } catch (_) { continue; }
-        if (BigInt(rngWord) === 0n) continue;
-        foundIndex = i;
-        break;
-      }
-      if (foundIndex === null) {
-        console.warn(`[GAS-01 openBurnieLootBox] soft-skip — no BURNIE lootbox accrued in current harness state (matches AdvanceGameGas L1014/L1027 precedent)`);
-        this.skip();
-        return;
-      }
-
-      const tx = await game.connect(alice).openBurnieLootBox(alice.address, foundIndex);
-      const receipt = await tx.wait();
-      const measured = Number(receipt.gasUsed);
-
-      console.log(`[REF-CAPTURE] OPEN_BURNIE_LOOTBOX_GAS_REF      = ${measured}`);
-
-      if (OPEN_BURNIE_LOOTBOX_GAS_REF > 0) {
-        const drift = Math.abs(measured - OPEN_BURNIE_LOOTBOX_GAS_REF);
-        expect(
-          drift <= ENTRY_POINT_DELTA_TOLERANCE,
-          `openBurnieLootBox drift ${drift} > tolerance ${ENTRY_POINT_DELTA_TOLERANCE}; measured ${measured} vs REF ${OPEN_BURNIE_LOOTBOX_GAS_REF}`,
-        ).to.equal(true);
-
-        const perOpenDelta = measured - OPEN_BURNIE_LOOTBOX_GAS_REF;
-        expect(
-          perOpenDelta <= PER_OPEN_GAS_DELTA_BOUND,
-          `openBurnieLootBox per-open delta ${perOpenDelta} > ${PER_OPEN_GAS_DELTA_BOUND} (re-derive worst case before re-pinning)`,
-        ).to.equal(true);
-      } else {
-        console.log(`[GAS-01 openBurnieLootBox] REF placeholder is 0 — pin ${measured} into OPEN_BURNIE_LOOTBOX_GAS_REF and re-run.`);
-      }
-    });
-  });
+  // openBurnieLootBox (BURNIE lootbox) per-open gas envelope — REMOVED (v47): the
+  // BURNIE-lootbox surface (openBurnieLootBox + the game.lootboxBurnie view) was
+  // removed (terminal-paradox closure). The openLootBox describe above exercises the
+  // same _resolveLootboxCommon body and provides the primary GAS-01 measurement.
+  // Removed-by-design, not skipped.
 
   describe("resolveLootboxDirect (decimator/claim path) — per-open gas envelope ±300 gas", function () {
     it(`gasUsed within ENTRY_POINT_DELTA_TOLERANCE of pinned REF; per-open delta <= ${PER_OPEN_GAS_DELTA_BOUND}`, async function () {
