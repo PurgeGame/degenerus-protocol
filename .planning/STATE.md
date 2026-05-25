@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v47.0
 milestone_name: Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle
-status: building
-last_updated: "2026-05-25T00:00:00.000Z"
-last_activity: 2026-05-25
+status: executing
+last_updated: "2026-05-25T18:00:00.000Z"
+last_activity: "2026-05-25 — **Phase 323-03 REDEEM-08 repro-first COMPLETE** (`5467de69`/`269ce788`/`60254bab`, test-only, zero mainnet contracts/*.sol edits): proved the sDGNRS redemption-accounting fix EMPIRICALLY repro-first. The two-claimant same-day claimableWinnings[SDGNRS] underflow FAILS pre-fix (re-introduced the deleted unchecked debit in-place → wrap = 2^256−3eth) and PASSES on the frozen post-fix tree; restored contracts/DegenerusGame.sol to the frozen blob 54af4272 (== fb29ed51). Also: BURNIE-can't-block-ETH (claim ETH leg pays full rolled/2 regardless of BURNIE); R1 net-BURNIE-mint == 0 across submit (conserved universe = totalSupply + Σ coinflipAmount); R3 _settleClaimableShortfall paired-debit + strict-1-wei sentinel (new contracts/test/SettleClaimableShortfallTester.sol harness); R4 resolveRedemptionPeriod 2-arg resolve + MAX(175%)→rolled; 3 conservation invariants (balance ≥ pendingRedemptionEthValue / claimablePool ≥ claimable[SDGNRS] / no-wrap) over the randomized handler sequence. StakedStonkRedemption 15/15 + RedemptionAccounting 16/16 (256×128 calls, 0 reverts); 0 defects surfaced. REDEEM-08 stays Pending → attested at Phase 324 TERMINAL (v45 VRF precedent). Wave-2 next: 323-04 DGAS-DSPIN, 323-05 TOMB-04."
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 17
-  completed_plans: 11
-  percent: 65
+  total_plans: 14
+  completed_plans: 13
+  percent: 54
 ---
 
 # Project State
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (Current Milestone: v47.0 section)
 ## Current Position
 
 Phase: 323 — TST — Repro-First + Same-Results Gas + Behavior/EV + Cancel-Tombstone Proofs
-Plan: Wave 1 repair COMPLETE (323-01 FOUNDRY + 323-02 HARDHAT); Wave 2 proof plans (323-03 REDEEM-08 / 323-04 DGAS-DSPIN / 323-05 TOMB-04) NEXT
-Status: In progress — both test frameworks now compile + run against the frozen v47 subject (`fb29ed51`); classified non-widening baselines recorded
+Plan: Wave 1 repair COMPLETE (323-01 FOUNDRY + 323-02 HARDHAT); Wave 2 — **323-03 REDEEM-08 repro-first COMPLETE**; 323-04 DGAS-DSPIN + 323-05 TOMB-04 NEXT
+Status: In progress — REDEEM-08 proven repro-first (FAILS pre-fix wrap=2^256−3eth, PASSES post-fix; contracts frozen at `fb29ed51` blob 54af4272); StakedStonkRedemption 15/15 + RedemptionAccounting 16/16
 Last activity: 2026-05-25 — **Phase 323-02 HARDHAT repair COMPLETE** (`55dc8ed4`/`d88fc87f`/`6f2a08b5`, test-only, zero contracts/*.sol edits): removed the BURNIE-lootbox test surface (removed-by-design, BURNIE->tickets KEPT), retargeted Pool.PresaleBox + 2-bool/11-arg `_resolveLootboxCommon` arity + per-currency spin caps (25/15/5) + lootboxRng slot shift 35/36->37/38; funded `claimableWinnings[SDGNRS]` for the v47 175% redemption segregation (CHECKED pullRedemptionReserve = intended R3 fail-closed, NOT a defect); un-bricked the shared AfKing fixture (pre-existing v46 break). v47 hardhat baseline 199/3/5 over the in-scope files + DegenerettePerNEv 9/0/5; the 3 residual fails are ALL pre-existing-v46 (verified at `16e9668a`); EV same-results preserved; 0 defects surfaced. (323-01 FOUNDRY repair + TOMB-05 landed earlier: 559/51/16, 12 new-vs-v46 owned by Wave-2.)
 Last activity: 2026-05-25 — Phase 322 IMPL CLOSED: batched diff USER-APPROVED + committed `fb29ed51`; 322-VERIFICATION PASSED (6/6 SC, build clean); 4 USER-directed refinements folded in (burnForRedemption removal, AfKing didWork revert-fix, _settleClaimableShortfall helper, flipDay param removal). Audit subject frozen at `fb29ed51` for the Phase 324 delta-audit.
 Last activity: 2026-05-25 — Phase 322 PLANNED: 8 serialized plans (`a5e1dbf4`) + CONTEXT (`1c9d6e08`); plan-checker PASSED (37/37 reqs exactly-once, R1–R7 reconciliation ownership verified, commit-guard ordering OK, no pre-approval language); 322-01 Task-2 deletion-ordering prose tightened per the checker's lone warning.
