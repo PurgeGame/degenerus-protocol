@@ -459,8 +459,78 @@ contract RedemptionAccounting is DeployProtocol {
     }
 
     // =====================================================================
+    //   REDEEM-08: ETH-segregation conservation (v47 physical-segregation model)
+    // =====================================================================
+
+    /// @dev Storage slot of DegenerusGame.claimableWinnings (internal mapping). Slot 7 per the
+    ///      v44 layout the redemption harness uses (RedemptionGas / StakedStonkRedemption seed it
+    ///      at this slot). Read raw so the no-wrap invariant can observe a hypothetical underflow.
+    uint256 internal constant GAME_CLAIMABLE_SLOT = 7;
+
+    /// @notice REDEEM-08 conservation: the segregated redemption ETH PHYSICALLY lives in the sDGNRS
+    ///         contract, so `address(sdgnrs).balance >= pendingRedemptionEthValue` at ALL times.
+    /// @dev v47 model: submit pulls the MAX(175%) out of claimable into sDGNRS's balance via the
+    ///      CHECKED pullRedemptionReserve (real ETH transfer); resolve lowers the obligation
+    ///      MAX→rolled (the over-pull stays as free backing); claim/gameOver release exactly the
+    ///      rolled amount out. The balance therefore always covers the obligation (telescoping = zero
+    ///      drift). This is the property the pre-fix virtual-reserve model could violate (a 2nd
+    ///      claimant or AfKing drain could leave the obligation un-backed).
+    function invariant_balanceCoversPendingRedemptionEth() public view {
+        assertGe(
+            address(sdgnrs).balance,
+            sdgnrs.pendingRedemptionEthValue(),
+            "REDEEM-08: address(sdgnrs).balance < pendingRedemptionEthValue (segregated ETH under-backed)"
+        );
+    }
+
+    /// @notice REDEEM-08 conservation: `claimablePool >= claimableWinnings[SDGNRS]` stays balanced
+    ///         through every redemption action. pullRedemptionReserve decrements BOTH by the same
+    ///         amount (CHECKED) and moves real ETH out; resolveRedemptionLootbox touches NEITHER (it
+    ///         credits futurePrizePool from msg.value). The global pool always covers sDGNRS's slice.
+    /// @dev The redemption path is the only writer of claimableWinnings[SDGNRS] in this harness
+    ///      (the handler funds only sDGNRS), so claimablePool (global) >= claimableWinnings[SDGNRS]
+    ///      (sDGNRS's slice) must always hold — a wrap of either toward 2^N would break it.
+    function invariant_claimablePoolEqualsSumClaimable() public view {
+        uint256 poolVal = game.claimablePoolView();
+        uint256 sdgnrsClaimable = _claimableSdgnrs();
+        assertGe(
+            poolVal,
+            sdgnrsClaimable,
+            "REDEEM-08: claimablePool < claimableWinnings[SDGNRS] (paired debit drifted / wrapped)"
+        );
+    }
+
+    /// @notice REDEEM-08 structural/behavioral: NO unchecked claimable subtraction survives in the
+    ///         redemption path. The only claimableWinnings[SDGNRS] debit is the CHECKED
+    ///         pullRedemptionReserve; a pre-fix UNCHECKED debit would wrap claimableWinnings[SDGNRS]
+    ///         toward 2^256 (and claimablePool toward 2^128) under a randomized submit/resolve/claim/
+    ///         gameOver sequence that drains claimable below an obligation. Behavioral form: across the
+    ///         whole action history, neither raw value is ever anywhere near its wrap ceiling.
+    /// @dev type(uint96).max (~7.9e28 wei ≈ 7.9e10 ETH) dwarfs any legitimate residual yet is ~1e48×
+    ///      below a wrapped value (~1.16e77 / ~3.4e38), so it tightly catches a wrap of either scalar.
+    function invariant_noUncheckedClaimableDebitInRedemptionPath() public view {
+        assertLt(
+            _claimableSdgnrs(),
+            uint256(type(uint96).max),
+            "REDEEM-08: claimableWinnings[SDGNRS] wrapped toward 2^256 (unchecked debit survived)"
+        );
+        assertLt(
+            game.claimablePoolView(),
+            uint256(type(uint96).max),
+            "REDEEM-08: claimablePool wrapped toward 2^128 (unchecked debit survived)"
+        );
+    }
+
+    // =====================================================================
     //                          INTERNAL READERS
     // =====================================================================
+
+    /// @dev Read DegenerusGame.claimableWinnings[SDGNRS] (internal mapping @ slot 7) raw, so a
+    ///      hypothetical pre-fix unchecked-debit wrap toward 2^256 is observable.
+    function _claimableSdgnrs() internal view returns (uint256) {
+        bytes32 slot = keccak256(abi.encode(ContractAddresses.SDGNRS, GAME_CLAIMABLE_SLOT));
+        return uint256(vm.load(address(game), slot));
+    }
 
     /// @dev Read the packed `DayPending` slot for day D and unpack its 3×uint64 fields. Mirrors
     ///      the handler's reader so the harness has direct access without an extra hop.
