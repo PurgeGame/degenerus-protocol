@@ -71,7 +71,7 @@
 - [ ] **TOMB-01**: `setDailyQuantity(0)` becomes a true in-place tombstone (`AfKing.sol:455-468`) — do NOT call `_removeFromSet` (relocate no one); set `s.dailyQuantity = 0` in place; defer the `_subOf` delete-vs-preserve decision to the in-sweep reclaim; preserve the existing `SubscriptionUpdated(…,0,…)` event shape. Stranded `_poolOf` ETH stays withdrawable. Re-activation via `setDailyQuantity(q>0)` with no set churn / no double-add.
 - [ ] **TOMB-02**: Add the in-sweep tombstone-reclaim branch to the sweep loop (`~:609-745`) — at loop-top on `sub.dailyQuantity == 0`, apply the deferred `_subOf` delete-vs-preserve (paid-unexpired-window → keep; else delete), `_removeFromSet(player)`, emit the appropriate event, and do NOT advance the cursor (process the swap-pop occupant at this same index this sweep; mirror the `:644` no-`++i` pattern). Order the tombstone check vs the `lastSweptDay >= today` skip so a dead tombstone is always reclaimed, never left as a permanent dead slot.
 - [ ] **TOMB-03**: Invariant — external cancel never relocates an entry → the only swap-pops are in-loop (auto-pause, funding-kill, tombstone-reclaim), all no-cursor-advance → no subscriber is ever skipped for the day because of someone else's cancel → mint streaks are not collaterally broken (H-CANCEL-SWAP-MISS fixed; SUB-07 restored).
-- [ ] **TOMB-04** (test): `test/fuzz/AfKingConcurrency.t.sol` — add `testCancelBehindCursorDoesNotStrandPendingTail`, `testCancelTombstoneReclaimedByNextSweep`, `testCancelPreservesPaidWindowThroughDeferredReclaim`, `testReactivateTombstonedSubNoDoubleAdd`; re-confirm the existing 318-04 guarantees (exactly-once same-block, `lastSweptDay` backstop, no double-buy, no dead-slot buildup, two-tier skip-kill identity).
+- [x] **TOMB-04** (test): `test/fuzz/AfKingConcurrency.t.sol` — add `testCancelBehindCursorDoesNotStrandPendingTail`, `testCancelTombstoneReclaimedByNextSweep`, `testCancelPreservesPaidWindowThroughDeferredReclaim`, `testReactivateTombstonedSubNoDoubleAdd`; re-confirm the existing 318-04 guarantees (exactly-once same-block, `lastSweptDay` backstop, no double-buy, no dead-slot buildup, two-tier skip-kill identity).
 - [ ] **TOMB-05** (stale test fix): update `test/gas/CrankLeversAndPacking.t.sol::testGas04PackingAndNoNewHotPathStorageSourcePresence` to the post-OPENE-01 `Sub` shape (drop the two standalone-bool field checks, add `address fundingSource`, fix the byte-sum 13→31 + field list) — restores a clean 44-fail v47.0 regression baseline (currently the 45th fail).
 
 ### BATCH — Cross-Plan Reconciliation, Call-Graph Attestation & Terminal Audit
@@ -139,7 +139,7 @@ Each requirement maps to exactly one phase. Milestone shape (matching v44/v45/v4
 | DGAS-05 | Phase 323 (TST) | Complete (323-04) |
 | DSPIN-02 | Phase 323 (TST) | Complete (323-04) |
 | REDEEM-08 | Phase 323 (TST) | Pending |
-| TOMB-04 | Phase 323 (TST) | Pending |
+| TOMB-04 | Phase 323 (TST) | Complete |
 | TOMB-05 | Phase 323 (TST) | Pending |
 | BATCH-03 | Phase 324 (TERMINAL) | Pending |
 

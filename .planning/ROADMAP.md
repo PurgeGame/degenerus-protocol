@@ -18,7 +18,7 @@
 
 - [x] **Phase 321: SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation** - Settle every shared-surface signature (final `resolveRedemptionLootbox` form), grep-attest every cited file:line vs HEAD, and lock the claimable-invariant joint-check + presale-box RNG freeze re-verification before any patch.
 - [x] **Phase 322: IMPL — The ONE Batched Contract Diff (all 7 items)** - Apply all seven work items' contract edits as a single reconciled diff per manifest §2; HARD STOP at the contract-commit boundary (applied + tested, never committed without explicit user hand-review).
-- [ ] **Phase 323: TST — Repro-First + Same-Results Gas + Behavior/EV + Cancel-Tombstone Proofs** - Prove the redemption fix (REDEEM-08 repro must fail pre-fix), the same-results gas + worst-case absorption (DGAS-05 / DSPIN-02), and the AfKing cancel-tombstone correctness (TOMB-04) + the stale-test baseline repair (TOMB-05).
+- [x] **Phase 323: TST — Repro-First + Same-Results Gas + Behavior/EV + Cancel-Tombstone Proofs** - Prove the redemption fix (REDEEM-08 repro must fail pre-fix), the same-results gas + worst-case absorption (DGAS-05 / DSPIN-02), and the AfKing cancel-tombstone correctness (TOMB-04) + the stale-test baseline repair (TOMB-05). (completed 2026-05-25)
 - [ ] **Phase 324: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure** - Delta-audit vs the v46.0 baseline, run the 3-skill adversarial sweep, author the findings deliverable, and flip the `MILESTONE_V47_AT_HEAD_<sha>` closure signal.
 
 ---
@@ -74,7 +74,7 @@
 - [x] 323-02-PLAN.md — HARDHAT repair: retarget the removed BURNIE-lootbox surface + `Pool.Earlybird`→`PresaleBox` + per-currency spin-cap literals across the 10 `*.test.js` files + the v47 hardhat regression baseline [wave 1] ✅ 199/3/5 in-scope (+ DegenerettePerNEv 9/0/5); 3 residual fails ALL pre-existing-v46; 0 defects; test-only, zero contracts/ edits
 - [x] 323-03-PLAN.md — REDEEM-08 (repro-first): two-claimant same-day ETH underflow (fail pre-fix, pass post-fix) + BURNIE-can't-block-ETH + conservation invariants + the R1/R3/R4 refinement coverage (`burnForCoinflip` net-0 / `_settleClaimableShortfall` / 2-arg `resolveRedemptionPeriod`) [wave 2] ✅ repro FAILS pre-fix (wrap = 2^256−3eth) + PASSES post-fix; StakedStonkRedemption 15/15 + RedemptionAccounting 16/16; contracts frozen at `fb29ed51` (blob 54af4272); commits `5467de69`/`269ce788`/`60254bab`
 - [x] 323-04-PLAN.md — DGAS-05 + DSPIN-02: same-results equivalence (Tier-1 additive + Tier-2 running-pool-local cap byte-identical + per-betId lootbox + per-spin DGNRS) + the 25-spin ETH worst case derived-then-measured + absorbed under the block gas limit [wave 2]
-- [ ] 323-05-PLAN.md — TOMB-04: the 4 named cancel-tombstone correctness tests + the new `didWork` revert-fix cases (reclaim/renewal-only chunk commits; spam-cancel no-strand) + the 318-04 guarantee re-confirmation [wave 2]
+- [x] 323-05-PLAN.md — TOMB-04: the 4 named cancel-tombstone correctness tests + the new `didWork` revert-fix cases (reclaim/renewal-only chunk commits; spam-cancel no-strand) + the 318-04 guarantee re-confirmation [wave 2] ✅ H-CANCEL-SWAP-MISS empirically resolved (in-place tombstone relocates no one → pending tail still buys → no missed day); didWork reclaim/auto-pause-only chunks COMMIT (no re-strand) + spam-cancel no-strand + truly-empty still reverts; 5 stale cancel tests retargeted v46-swap-pop→v47-deferred-reclaim (non-widening); 318-04 unchanged; AfKingConcurrency 14/14 + CrankNonBrick 16/16; commits `b47fc3e7`/`9b46403e`; AfKing.sol byte-identical to `fb29ed51`; 0 defects
 **UI hint**: no
 
 ### Phase 324: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure
@@ -96,7 +96,7 @@
 |-------|----------------|--------|-----------|
 | 321. SPEC — Design-Lock + Call-Graph Attestation + Reconciliation | 1/1 | ✅ Complete | 2026-05-25 (`779eacc3`) |
 | 322. IMPL — The ONE Batched Contract Diff (all 7 items) | 8/8 | ✅ Complete | 2026-05-25 (`fb29ed51`) |
-| 323. TST — Repro + Same-Results Gas + Cancel-Tombstone Proofs | 4/5 | In progress (Wave 1 repair done; 323-03 REDEEM-08 ✅; 323-04 DGAS-05/DSPIN-02 ✅; TOMB-05 ✅; 323-05 TOMB-04 next) | - |
+| 323. TST — Repro + Same-Results Gas + Cancel-Tombstone Proofs | 5/5 | Complete   | 2026-05-25 |
 | 324. TERMINAL — Delta Audit + Adversarial Sweep + Closure | 0/TBD | Not started | - |
 
 ---
