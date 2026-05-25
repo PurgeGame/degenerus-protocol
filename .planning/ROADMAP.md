@@ -73,7 +73,7 @@
 - [x] 323-01-PLAN.md — FOUNDRY repair: iterate `forge build`→fix→build until exit 0 (REDEEM struct/event arity, removed-identifier cleanup, stale BURNIE-lootbox negative-auth probes) + TOMB-05 `testGas04` repair to the post-OPENE-01 `Sub` shape (byte-sum 13→31, fundingSource) + the v47 foundry regression baseline [wave 1] ✅ 559/51/16, TOMB-05 landed, 12 new-vs-v46 owned by Wave-2
 - [x] 323-02-PLAN.md — HARDHAT repair: retarget the removed BURNIE-lootbox surface + `Pool.Earlybird`→`PresaleBox` + per-currency spin-cap literals across the 10 `*.test.js` files + the v47 hardhat regression baseline [wave 1] ✅ 199/3/5 in-scope (+ DegenerettePerNEv 9/0/5); 3 residual fails ALL pre-existing-v46; 0 defects; test-only, zero contracts/ edits
 - [x] 323-03-PLAN.md — REDEEM-08 (repro-first): two-claimant same-day ETH underflow (fail pre-fix, pass post-fix) + BURNIE-can't-block-ETH + conservation invariants + the R1/R3/R4 refinement coverage (`burnForCoinflip` net-0 / `_settleClaimableShortfall` / 2-arg `resolveRedemptionPeriod`) [wave 2] ✅ repro FAILS pre-fix (wrap = 2^256−3eth) + PASSES post-fix; StakedStonkRedemption 15/15 + RedemptionAccounting 16/16; contracts frozen at `fb29ed51` (blob 54af4272); commits `5467de69`/`269ce788`/`60254bab`
-- [ ] 323-04-PLAN.md — DGAS-05 + DSPIN-02: same-results equivalence (Tier-1 additive + Tier-2 running-pool-local cap byte-identical + per-betId lootbox + per-spin DGNRS) + the 25-spin ETH worst case derived-then-measured + absorbed under the block gas limit [wave 2]
+- [x] 323-04-PLAN.md — DGAS-05 + DSPIN-02: same-results equivalence (Tier-1 additive + Tier-2 running-pool-local cap byte-identical + per-betId lootbox + per-spin DGNRS) + the 25-spin ETH worst case derived-then-measured + absorbed under the block gas limit [wave 2]
 - [ ] 323-05-PLAN.md — TOMB-04: the 4 named cancel-tombstone correctness tests + the new `didWork` revert-fix cases (reclaim/renewal-only chunk commits; spam-cancel no-strand) + the 318-04 guarantee re-confirmation [wave 2]
 **UI hint**: no
 
@@ -96,7 +96,7 @@
 |-------|----------------|--------|-----------|
 | 321. SPEC — Design-Lock + Call-Graph Attestation + Reconciliation | 1/1 | ✅ Complete | 2026-05-25 (`779eacc3`) |
 | 322. IMPL — The ONE Batched Contract Diff (all 7 items) | 8/8 | ✅ Complete | 2026-05-25 (`fb29ed51`) |
-| 323. TST — Repro + Same-Results Gas + Cancel-Tombstone Proofs | 3/5 | In progress (Wave 1 repair done: 323-01 FOUNDRY + 323-02 HARDHAT; 323-03 REDEEM-08 repro-first ✅; TOMB-05 ✅) | - |
+| 323. TST — Repro + Same-Results Gas + Cancel-Tombstone Proofs | 4/5 | In progress (Wave 1 repair done; 323-03 REDEEM-08 ✅; 323-04 DGAS-05/DSPIN-02 ✅; TOMB-05 ✅; 323-05 TOMB-04 next) | - |
 | 324. TERMINAL — Delta Audit + Adversarial Sweep + Closure | 0/TBD | Not started | - |
 
 ---

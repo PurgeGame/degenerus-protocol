@@ -41,3 +41,32 @@ arguments to constructor") at BOTH v46 and v47 — a pre-existing v46 break. Bec
 the entire in-scope hardhat suite from running, 323-02 applied the one-line fix (supply the
 same 3 args the foundry helper `test/fuzz/helpers/DeployProtocol.sol:126` uses). This is a
 test-helper-only repair; no contract change.
+
+## 323-04 OWNERSHIP RE-CLASSIFICATION — 7 failures 323-01 tagged "DGAS/DSPIN (323-04)"
+
+323-01's failure table speculatively assigned 7 new-vs-v46 failures to "DGAS/DSPIN (323-04)".
+On inspection during 323-04, the root cause of these is the v47 **rake-removal / presale-box
+prize-pool economics** (and one is **redemption**), NOT the Degenerette `resolveBets`
+write-batching (R5). They are OUTSIDE 323-04's `files_modified`
+(`DegeneretteFreezeResolution.t.sol` + `CrankResolveBetWorstCaseGas.t.sol`) and outside R5's
+domain. Per the SCOPE BOUNDARY rule (only auto-fix issues directly caused by the current
+task's changes), 323-04 does NOT touch them. Grep-verified re-classification:
+
+| Failure | Degenerette refs | Real root cause | Re-assigned owner |
+|---------|------------------|-----------------|-------------------|
+| `EthSolvency.inv.t.sol` (solvency inv) | **0** | rake-removal/presale prize-pool obligations vs balance (driver = `GameHandler.advanceGame` + purchase) | PRESALE economics re-verify |
+| `MultiLevel.inv.t.sol` (solvency inv) | **0** | same (rake/presale economic drift) | PRESALE economics re-verify |
+| `VaultShareMath.inv.t.sol` (solvency inv) | **0** | same | PRESALE economics re-verify |
+| `WhaleSybil.inv.t.sol` (solvency inv) | **0** | same | PRESALE economics re-verify |
+| `DegeneretteBet.inv.t.sol::invariant_solvencyUnderDegenerette` | targets Degenerette, but fail driver is `GameHandler::advanceGame` (rake economics under Degenerette pressure) — `balance < obligations` after advanceGame, NOT a payout-batching divergence | rake/presale prize-pool economics | PRESALE economics re-verify |
+| `RngLockDeterminism.t.sol::testFuzz_RngLockDeterminism_StakedStonkRedemption` | **0** | sDGNRS-redemption interaction narrows the `vm.assume` window (the `sdgnrs.burn` path) | **REDEEM-08 / 323-03** |
+| `VRFLifecycle.t.sol::test_vrfLifecycle_levelAdvancement` | **0** (7 presale/prizePool refs) | "Game should advance past level 0" — presale lootbox-split prize-pool accumulation (rake economics) | PRESALE economics re-verify |
+
+Evidence: `grep -c "Degenerette\|resolveBets\|placeDegenerette"` returns 0 for all six non-
+DegeneretteBet files; `VRFLifecycle` returns 7 presale/prizePool/bootstrap refs. The DGAS-05
+same-results proof (323-04) is byte-identical, so the Degenerette write-batching itself does
+NOT change any payout — these solvency/economic failures cannot stem from it. They require
+re-deriving the v47 rake-free / presale-box prize-pool model (PRESALE family) or the redemption
+assume window (323-03), neither of which is 323-04's charter. None is a contract defect (322's
+diff behaves as the v47 SPEC intends). Logged here for the Phase 324 TERMINAL economic
+re-verification sweep + the PRESALE/REDEEM owners to pick up.

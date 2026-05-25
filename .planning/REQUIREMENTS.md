@@ -42,7 +42,7 @@
 - [ ] **DGAS-02**: ETH cap/solvency stays per-spin but evaluates against a running-pool local (read pool once, decrement in memory per spin); one claimable+pool write + one pool write at end — byte-identical to per-spin today.
 - [ ] **DGAS-03**: Lootbox-share summed PER `betId` → one `resolveLootboxDirect` per bet; NEVER summed across betIds (resolution-batch-invariant). Per-spin RESULT seed for match determination stays per-spin; drop the per-spin `lootboxWord` salting.
 - [ ] **DGAS-04**: DGNRS award (`_awardDegeneretteDgnrs`, ETH 6+ matches) stays per-spin — reads `poolBalance` fresh per call (summing off a stale balance would change payouts).
-- [ ] **DGAS-05**: RNG seed derivation, `rngWord` fetch, and the freeze invariant are UNTOUCHED (batch only bookkeeping after outcomes are determined). Worst-case gas (one bet all-spins-paying per currency + mixed-currency multi-bet, up to the 25-spin ETH cap from DSPIN-01) derived-then-measured; report measured delta.
+- [x] **DGAS-05**: RNG seed derivation, `rngWord` fetch, and the freeze invariant are UNTOUCHED (batch only bookkeeping after outcomes are determined). Worst-case gas (one bet all-spins-paying per currency + mixed-currency multi-bet, up to the 25-spin ETH cap from DSPIN-01) derived-then-measured; report measured delta. — **323-04**: same-results proven byte-identical to a per-spin baseline (Tier-1 additive + Tier-2 running-pool-local cap on the identical spin + per-betId lootbox + per-spin DGNRS) via event-replay of the contract's own per-spin FullTicketResult emissions.
 
 ### CPAY — Universal Claimable-Pay (`PLAN-UNIVERSAL-CLAIMABLE-PAY.md`)
 
@@ -64,7 +64,7 @@
 ### DSPIN — Degenerette Per-Currency Spin Caps (`PLAN-DEGENERETTE-SPINS-PER-CURRENCY.md`)
 
 - [ ] **DSPIN-01**: Replace the single global `MAX_SPINS_PER_BET = 10` with per-currency caps ETH 25 / BURNIE 15 / WWXRP 5 in `_placeDegeneretteBetCore` (`:445`); retire `MAX_SPINS_PER_BET`; update the two doc comments (`:296, :364`). Min bet per-spin unchanged; `ticketCount` 8-bit packing unchanged.
-- [ ] **DSPIN-02**: Worst-case `resolveBets` (max 25-spin ETH bets in one call, 2.5× the old per-bet roll work) gas regression derived-then-measured and shown absorbed by the DGAS write-batching.
+- [x] **DSPIN-02**: Worst-case `resolveBets` (max 25-spin ETH bets in one call, 2.5× the old per-bet roll work) gas regression derived-then-measured and shown absorbed by the DGAS write-batching. — **323-04**: 25-spin ETH worst case 485,089 gas + max mixed batch (45 spins) 619,349 gas, both << 30M (~62× headroom); absorption proven (485,089 < 2.5× the 197,183 10-spin).
 
 ### TOMB — AfKing Cancel-Tombstone (ISOLATED; fixes v46.0 H-CANCEL-SWAP-MISS) (`PLAN-V47-AFKING-CANCEL-TOMBSTONE.md`)
 
@@ -136,8 +136,8 @@ Each requirement maps to exactly one phase. Milestone shape (matching v44/v45/v4
 | TOMB-01 | Phase 322 (IMPL) | Pending |
 | TOMB-02 | Phase 322 (IMPL) | Pending |
 | TOMB-03 | Phase 322 (IMPL) | Pending |
-| DGAS-05 | Phase 323 (TST) | Pending |
-| DSPIN-02 | Phase 323 (TST) | Pending |
+| DGAS-05 | Phase 323 (TST) | Complete (323-04) |
+| DSPIN-02 | Phase 323 (TST) | Complete (323-04) |
 | REDEEM-08 | Phase 323 (TST) | Pending |
 | TOMB-04 | Phase 323 (TST) | Pending |
 | TOMB-05 | Phase 323 (TST) | Pending |
