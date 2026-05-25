@@ -17,7 +17,7 @@
 ## Phases
 
 - [x] **Phase 321: SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation** - Settle every shared-surface signature (final `resolveRedemptionLootbox` form), grep-attest every cited file:line vs HEAD, and lock the claimable-invariant joint-check + presale-box RNG freeze re-verification before any patch.
-- [ ] **Phase 322: IMPL — The ONE Batched Contract Diff (all 7 items)** - Apply all seven work items' contract edits as a single reconciled diff per manifest §2; HARD STOP at the contract-commit boundary (applied + tested, never committed without explicit user hand-review).
+- [x] **Phase 322: IMPL — The ONE Batched Contract Diff (all 7 items)** - Apply all seven work items' contract edits as a single reconciled diff per manifest §2; HARD STOP at the contract-commit boundary (applied + tested, never committed without explicit user hand-review).
 - [ ] **Phase 323: TST — Repro-First + Same-Results Gas + Behavior/EV + Cancel-Tombstone Proofs** - Prove the redemption fix (REDEEM-08 repro must fail pre-fix), the same-results gas + worst-case absorption (DGAS-05 / DSPIN-02), and the AfKing cancel-tombstone correctness (TOMB-04) + the stale-test baseline repair (TOMB-05).
 - [ ] **Phase 324: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure** - Delta-audit vs the v46.0 baseline, run the 3-skill adversarial sweep, author the findings deliverable, and flip the `MILESTONE_V47_AT_HEAD_<sha>` closure signal.
 
@@ -89,7 +89,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 321. SPEC — Design-Lock + Call-Graph Attestation + Reconciliation | 1/1 | ✅ Complete | 2026-05-25 (`779eacc3`) |
-| 322. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/8 | Planned (checker PASSED) | - |
+| 322. IMPL — The ONE Batched Contract Diff (all 7 items) | 8/8 | ✅ Complete | 2026-05-25 (`fb29ed51`) |
 | 323. TST — Repro + Same-Results Gas + Cancel-Tombstone Proofs | 0/TBD | Not started | - |
 | 324. TERMINAL — Delta Audit + Adversarial Sweep + Closure | 0/TBD | Not started | - |
 
