@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 
 /// @title WhaleSybilHandler -- Concurrent whale + Sybil pressure handler for invariant tests
 /// @notice Simultaneously exercises whale bundle purchases AND mass Sybil ticket buying.
@@ -204,10 +205,11 @@ contract WhaleSybilHandler is Test {
             ghost_maxGameBalance = gameBalance;
         }
 
-        uint256 obligations = game.currentPrizePoolView()
-            + game.nextPrizePoolView()
-            + game.claimablePoolView()
-            + game.futurePrizePoolView();
+        // Canonical obligation set (freeze-window pending buffer included; dead post-GO live
+        // pools excluded) -- SolvencyObligations. _trackBalance only runs right after a successful
+        // purchase (gameOver is false there), but using the shared helper keeps the ratio honest
+        // through any freeze window the purchase may have just opened.
+        uint256 obligations = SolvencyObligations.obligations(game);
 
         if (obligations > 0) {
             uint256 ratio = (gameBalance * 10_000) / obligations;

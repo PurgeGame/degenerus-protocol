@@ -7,6 +7,7 @@ import {VaultHandler} from "../handlers/VaultHandler.sol";
 import {GameHandler} from "../handlers/GameHandler.sol";
 import {DegenerusVault} from "../../../contracts/DegenerusVault.sol";
 import {BurnieCoin} from "../../../contracts/BurnieCoin.sol";
+import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 
 /// @title VaultShareMathInvariant -- Proves vault share math consistency under deposit/withdraw
 /// @notice NEVER PREVIOUSLY FUZZED for deposit/withdraw operations. The existing VaultShare
@@ -87,10 +88,8 @@ contract VaultShareMathInvariant is DeployProtocol {
     /// @dev The game contract must remain solvent even while vault is burning shares
     function invariant_gameSolvencyUnderVaultOps() public view {
         uint256 gameBalance = address(game).balance;
-        uint256 obligations = game.currentPrizePoolView()
-            + game.nextPrizePoolView()
-            + game.claimablePoolView()
-            + game.futurePrizePoolView();
+        // Canonical obligation set (pending buffer in, dead post-GO pools out) -- SolvencyObligations.
+        uint256 obligations = SolvencyObligations.obligations(game);
 
         assertGe(
             gameBalance,

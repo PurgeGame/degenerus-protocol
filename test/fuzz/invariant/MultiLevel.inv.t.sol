@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {MultiLevelHandler} from "../handlers/MultiLevelHandler.sol";
+import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 
 /// @title MultiLevelInvariant -- Proves solvency and pool consistency across deep level transitions
 /// @notice Previous fuzzing was limited to levels 0-2. This harness targets level 10+ with
@@ -30,10 +31,8 @@ contract MultiLevelInvariant is DeployProtocol {
     /// @notice ETH solvency at every level
     function invariant_solvencyAcrossLevels() public view {
         uint256 gameBalance = address(game).balance;
-        uint256 obligations = game.currentPrizePoolView()
-            + game.nextPrizePoolView()
-            + game.claimablePoolView()
-            + game.futurePrizePoolView();
+        // Canonical obligation set (pending buffer in, dead post-GO pools out) -- SolvencyObligations.
+        uint256 obligations = SolvencyObligations.obligations(game);
 
         assertGe(
             gameBalance,

@@ -5,6 +5,7 @@ import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {DegeneretteHandler} from "../handlers/DegeneretteHandler.sol";
 import {GameHandler} from "../handlers/GameHandler.sol";
+import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 
 /// @title DegeneretteBetInvariant -- Proves Degenerette ETH bet accounting invariant
 /// @notice NEVER PREVIOUSLY FUZZED. Targets the Degenerette slot machine (placeDegeneretteBet /
@@ -37,10 +38,12 @@ contract DegeneretteBetInvariant is DeployProtocol {
     ///      This is the same invariant as EthSolvency but under Degenerette pressure.
     function invariant_solvencyUnderDegenerette() public view {
         uint256 gameBalance = address(game).balance;
-        uint256 obligations = game.currentPrizePoolView()
-            + game.nextPrizePoolView()
-            + game.claimablePoolView()
-            + game.futurePrizePoolView();
+        // Canonical obligation set: pending freeze buffer included, dead post-GO live pools
+        // excluded (only claimablePool survives game-over). This keeps claimablePool in the
+        // post-GO set, so the now-guarded Degenerette resolveBets path is still caught if the
+        // contract guard ever regresses (it pushed claimablePool itself above balance). See
+        // SolvencyObligations + 323-SOLVENCY-FINDING.md §1/§3.
+        uint256 obligations = SolvencyObligations.obligations(game);
 
         assertGe(
             gameBalance,

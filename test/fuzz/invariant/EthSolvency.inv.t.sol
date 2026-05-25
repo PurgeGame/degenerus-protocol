@@ -5,6 +5,7 @@ import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {GameHandler} from "../handlers/GameHandler.sol";
 import {WhaleHandler} from "../handlers/WhaleHandler.sol";
+import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 
 /// @title EthSolvencyInvariant -- Proves ETH solvency holds across randomized call sequences
 /// @notice The primary invariant: the game contract always holds enough ETH to cover all pool
@@ -34,11 +35,9 @@ contract EthSolvencyInvariant is DeployProtocol {
     ///      If this fails, the protocol is insolvent -- players cannot claim their winnings.
     function invariant_ethSolvency() public view {
         uint256 gameBalance = address(game).balance;
-        uint256 obligations = game.currentPrizePoolView()
-            + game.nextPrizePoolView()
-            + game.claimablePoolView()
-            + game.futurePrizePoolView()
-            + game.yieldAccumulatorView();
+        // Canonical obligation set (freeze-window pending buffer included; dead post-game-over
+        // live pools excluded) -- see SolvencyObligations. Still a real `balance < obligations` test.
+        uint256 obligations = SolvencyObligations.obligations(game);
 
         assertGe(
             gameBalance,

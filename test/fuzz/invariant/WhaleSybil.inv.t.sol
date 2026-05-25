@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {WhaleSybilHandler} from "../handlers/WhaleSybilHandler.sol";
+import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 
 /// @title WhaleSybilInvariant -- Proves solvency under concurrent whale + Sybil pressure
 /// @notice NEVER PREVIOUSLY FUZZED in combination. Previous tests exercised whale operations
@@ -31,10 +32,8 @@ contract WhaleSybilInvariant is DeployProtocol {
     /// @notice ETH solvency under concurrent whale + sybil pressure
     function invariant_solvencyUnderPressure() public view {
         uint256 gameBalance = address(game).balance;
-        uint256 obligations = game.currentPrizePoolView()
-            + game.nextPrizePoolView()
-            + game.claimablePoolView()
-            + game.futurePrizePoolView();
+        // Canonical obligation set (pending buffer in, dead post-GO pools out) -- SolvencyObligations.
+        uint256 obligations = SolvencyObligations.obligations(game);
 
         assertGe(
             gameBalance,
