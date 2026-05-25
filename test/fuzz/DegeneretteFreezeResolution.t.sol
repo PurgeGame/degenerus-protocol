@@ -687,6 +687,99 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     // =========================================================================
+    // 323 Task 2: post-game-over resolveBets liveness guard (insolvency repro closed)
+    // =========================================================================
+
+    /// @notice Prove the v47 liveness guard on resolveBets (DegeneretteModule:421,
+    ///         `if (_livenessTriggered()) revert E();`) CLOSES the §1 post-game-over
+    ///         unbacked-credit path documented in 323-SOLVENCY-FINDING.md.
+    ///
+    ///         The §1 insolvency: a Degenerette ETH bet placed (and RNG-committed)
+    ///         BEFORE game-over could be resolved AFTER the game-over drain, crediting
+    ///         claimableWinnings out of the already-distributed futurePrizePool residual
+    ///         and pushing claimablePool strictly above the ETH balance — an unbacked
+    ///         obligation that the last claimant(s) cannot all withdraw.
+    ///
+    ///         This test reproduces the EXACT sequence:
+    ///           1. place a winning ETH Degenerette bet pre-game-over, commit its RNG word
+    ///           2. SNAPSHOT, then prove the bet IS otherwise fully resolvable pre-GO
+    ///              (it credits claimable) — so the ONLY post-GO blocker is the guard,
+    ///              not RNG-readiness;
+    ///           3. revert to the snapshot, drive the game into the terminal liveness
+    ///              state (level-0 deploy-idle timeout > 365 days) so gameOver() == true;
+    ///           4. assert resolveDegeneretteBets now REVERTS with E() — the unbacked
+    ///              post-drain credit can no longer happen.
+    function testResolveBetsRevertsPostGameOver_InsolvencyReproClosed() public {
+        // --- Phase 1: place a winning ETH bet pre-game-over, commit its RNG word ---
+        // Large unfrozen pool so the win resolves to a real ETH credit pre-GO.
+        _seedFuturePrizePool(1_000 ether);
+
+        uint48 index = 1;
+        uint256 word = uint256(keccak256("post_gameover_repro_word"));
+        uint32 ticket = _winningTicketFor(index, word); // 8/8 self-match: guaranteed ETH win
+
+        assertFalse(game.gameOver(), "precondition: game is live at bet placement");
+        assertFalse(game.livenessTriggered(), "precondition: liveness not triggered");
+
+        uint128 perTicket = 0.05 ether; // >= MIN_BET_ETH
+        uint64 betId = _placeBet(CURRENCY_ETH, perTicket, 1, ticket);
+        _injectLootboxRngWord(index, word); // RNG committed -> bet is resolvable
+
+        uint64[] memory betIds = new uint64[](1);
+        betIds[0] = betId;
+
+        // --- Phase 2: prove the bet IS otherwise resolvable pre-game-over ---
+        // (the §1 path: pre-fix, this same call after game-over would have credited
+        // claimable out of the drained residual). The snapshot lets the SAME placed,
+        // RNG-committed bet be re-used for the post-game-over revert assertion, so the
+        // only difference between the two runs is the game-over state the guard checks.
+        uint256 snap = vm.snapshotState();
+
+        uint256 preClaimable = game.claimableWinningsOf(player);
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), betIds);
+        uint256 ethCreditedPreGo = game.claimableWinningsOf(player) - preClaimable;
+        assertGt(
+            ethCreditedPreGo,
+            0,
+            "control: the bet resolves and credits claimable while the game is live"
+        );
+
+        // --- Phase 3: revert and drive into the terminal liveness state ---
+        vm.revertToState(snap);
+
+        // The guard at DegeneretteModule:421 checks `_livenessTriggered()` (the live
+        // terminal CONDITION), not the stored `gameOver` flag (which the advanceGame
+        // drain latches afterward). _livenessTriggered() is true at level 0 once
+        // currentDay - purchaseStartDay > _DEPLOY_IDLE_TIMEOUT_DAYS (365), with
+        // lastPurchaseDay/jackpotPhaseFlag false (fresh-deploy default). Warp well past it.
+        // This is the exact predicate the guard gates on, so the warp reproduces the
+        // post-game-over state for the §1 path without needing to drive the VRF-entropy
+        // advanceGame drain that flips the stored flag.
+        vm.warp(block.timestamp + 366 days);
+        assertEq(game.level(), 0, "repro precondition: still at level 0 (deploy-idle path)");
+        assertTrue(
+            game.livenessTriggered(),
+            "game-over liveness must now be triggered (the predicate the guard checks)"
+        );
+
+        // --- Phase 4: the guard must now REVERT the resolve (unbacked path closed) ---
+        // Without the guard at DegeneretteModule:421, this call would proceed to credit
+        // claimableWinnings (RNG is committed, the bet is otherwise resolvable per Phase 2),
+        // pushing claimablePool above the ETH balance. The guard reverts first.
+        vm.prank(player);
+        vm.expectRevert(bytes4(0x92bbf6e8)); // E()
+        game.resolveDegeneretteBets(address(0), betIds);
+
+        // Belt-and-suspenders: the resolve credited nothing post-game-over.
+        assertEq(
+            game.claimableWinningsOf(player),
+            0,
+            "post-game-over resolve must credit zero claimable (guard reverted before any credit)"
+        );
+    }
+
+    // =========================================================================
     // DGAS-05 Internal Helpers
     // =========================================================================
 
