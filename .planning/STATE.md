@@ -8,7 +8,7 @@ last_activity: 2026-05-25
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 1
+  total_plans: 9
   completed_plans: 1
   percent: 25
 ---
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v47.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v47.0 ACTIVE — Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle. **Phase 321 SPEC COMPLETE+verified (5/5 success criteria, 0 IMPL blockers, deliverable `779eacc3`; ledger closed 2026-05-25 after a power-outage interrupted closure).** Next: plan Phase 322 IMPL — the ONE batched `contracts/*.sol` diff (321-SPEC §2 blueprint + R1–R7 + C1–C9 are the load-bearing inputs); HARD STOP at the contract-commit boundary.
+**Current focus:** v47.0 ACTIVE — Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle. **Phase 321 SPEC COMPLETE+verified; Phase 322 IMPL PLANNED+checked (8 serialized plans, plan-checker PASSED 0 blockers / 37-of-37 reqs / R1–R7 ownership verified vs live source / single `autonomous:false` approval gate).** Next: EXECUTE Phase 322 — apply the ONE batched `contracts/*.sol` diff, HARD STOP at the contract-commit boundary for explicit user hand-review (no contract commit without it). **AUTONOMY BOUNDARY: planning is done; the next step edits `contracts/*.sol` and must be user-directed/reviewed.**
 
 ## Current Position
 
 Phase: 322 — IMPL — The ONE Batched Contract Diff (all 7 items)
-Plan: —
-Status: Not started (Phase 321 SPEC complete → ready to plan)
-Last activity: 2026-05-25 — Phase 321 SPEC ledger CLOSED: `321-VERIFICATION.md` PASSED (5/5); STATE/ROADMAP flipped; deliverable `779eacc3` (SPEC + 4 ATTEST, 0 ABSENT anchors / 0 blockers, C1–C9 carried). Power-outage-interrupted closure reconciled.
+Plan: 8 plans (322-01..322-08); waves 1–7 = the 7 work items (autonomous edits, serialized — no parallel writers to any `.sol`), wave 8 = single `autonomous:false` USER hand-review gate at the commit boundary
+Status: Planned (plan-checker PASSED — 0 blockers, 1 fixed prose-clarity warning; ready to execute on user direction)
+Last activity: 2026-05-25 — Phase 322 PLANNED: 8 serialized plans (`a5e1dbf4`) + CONTEXT (`1c9d6e08`); plan-checker PASSED (37/37 reqs exactly-once, R1–R7 reconciliation ownership verified, commit-guard ordering OK, no pre-approval language); 322-01 Task-2 deletion-ordering prose tightened per the checker's lone warning.
 
 ## Current Milestone Phases (v47.0 — ACTIVE; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687` → v47.0 closure HEAD)
 
@@ -36,7 +36,7 @@ Last activity: 2026-05-25 — Phase 321 SPEC ledger CLOSED: `321-VERIFICATION.md
 | Phase | Name | Type | Requirements (primary owner) | Status |
 |-------|------|------|------------------------------|--------|
 | 321 | SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | SPEC | BATCH-01 · BATCH-02 | ✅ Complete (`779eacc3`; VERIFICATION 5/5) |
-| 322 | IMPL — The ONE Batched Contract Diff (all 7 items) | IMPL | PRESALE-01..13 · LOOT-01..06 · DGAS-01..04 · CPAY-01..03 · REDEEM-01..07 · DSPIN-01 · TOMB-01..03 | Not started |
+| 322 | IMPL — The ONE Batched Contract Diff (all 7 items) | IMPL | PRESALE-01..13 · LOOT-01..06 · DGAS-01..04 · CPAY-01..03 · REDEEM-01..07 · DSPIN-01 · TOMB-01..03 | Planned (8 plans; checker PASSED — ready to execute, HARD STOP at commit boundary) |
 | 323 | TST — Repro-First + Same-Results Gas + Behavior/EV + Cancel-Tombstone Proofs | TST | DGAS-05 · DSPIN-02 · REDEEM-08 · TOMB-04 · TOMB-05 | Not started |
 | 324 | TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | TERMINAL | BATCH-03 (re-attests all 45) | Not started |
 

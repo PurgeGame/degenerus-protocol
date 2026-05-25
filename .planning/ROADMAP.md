@@ -89,7 +89,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 321. SPEC — Design-Lock + Call-Graph Attestation + Reconciliation | 1/1 | ✅ Complete | 2026-05-25 (`779eacc3`) |
-| 322. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/8 | Not started | - |
+| 322. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/8 | Planned (checker PASSED) | - |
 | 323. TST — Repro + Same-Results Gas + Cancel-Tombstone Proofs | 0/TBD | Not started | - |
 | 324. TERMINAL — Delta Audit + Adversarial Sweep + Closure | 0/TBD | Not started | - |
 
