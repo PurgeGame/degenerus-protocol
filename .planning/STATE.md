@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (Current Milestone: v47.0 section)
 
 Phase: 322 — IMPL — The ONE Batched Contract Diff (all 7 items)
 Plan: 8 plans (322-01..322-08); waves 1–7 = the 7 work items (autonomous edits, serialized — no parallel writers to any `.sol`), wave 8 = single `autonomous:false` USER hand-review gate at the commit boundary
-Status: Planned (plan-checker PASSED — 0 blockers, 1 fixed prose-clarity warning; ready to execute on user direction)
+Status: EXECUTING (started 2026-05-25, user-directed "apply now, halt at review") — applying the batched diff waves 1–7 to `contracts/*.sol`, will HARD STOP at wave 8 (`autonomous:false`) for user hand-review. **contracts/ NOT committed during execution (commit-guard active; no `CONTRACTS_COMMIT_APPROVED=1`).** If a power cut interrupts: the partial .sol diff is on disk (uncommitted); re-run `/gsd-execute-phase 322` to resume, and `forge build` will catch any half-written file.
 Last activity: 2026-05-25 — Phase 322 PLANNED: 8 serialized plans (`a5e1dbf4`) + CONTEXT (`1c9d6e08`); plan-checker PASSED (37/37 reqs exactly-once, R1–R7 reconciliation ownership verified, commit-guard ordering OK, no pre-approval language); 322-01 Task-2 deletion-ordering prose tightened per the checker's lone warning.
 
 ## Current Milestone Phases (v47.0 — ACTIVE; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687` → v47.0 closure HEAD)
