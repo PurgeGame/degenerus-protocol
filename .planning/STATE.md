@@ -9,8 +9,8 @@ progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 17
-  completed_plans: 9
-  percent: 50
+  completed_plans: 11
+  percent: 65
 ---
 
 # Project State
@@ -25,8 +25,9 @@ See: .planning/PROJECT.md (Current Milestone: v47.0 section)
 ## Current Position
 
 Phase: 323 — TST — Repro-First + Same-Results Gas + Behavior/EV + Cancel-Tombstone Proofs
-Plan: — (not yet planned)
-Status: Not started (Phase 322 IMPL complete + committed `fb29ed51` → ready to plan TST)
+Plan: Wave 1 repair COMPLETE (323-01 FOUNDRY + 323-02 HARDHAT); Wave 2 proof plans (323-03 REDEEM-08 / 323-04 DGAS-DSPIN / 323-05 TOMB-04) NEXT
+Status: In progress — both test frameworks now compile + run against the frozen v47 subject (`fb29ed51`); classified non-widening baselines recorded
+Last activity: 2026-05-25 — **Phase 323-02 HARDHAT repair COMPLETE** (`55dc8ed4`/`d88fc87f`/`6f2a08b5`, test-only, zero contracts/*.sol edits): removed the BURNIE-lootbox test surface (removed-by-design, BURNIE->tickets KEPT), retargeted Pool.PresaleBox + 2-bool/11-arg `_resolveLootboxCommon` arity + per-currency spin caps (25/15/5) + lootboxRng slot shift 35/36->37/38; funded `claimableWinnings[SDGNRS]` for the v47 175% redemption segregation (CHECKED pullRedemptionReserve = intended R3 fail-closed, NOT a defect); un-bricked the shared AfKing fixture (pre-existing v46 break). v47 hardhat baseline 199/3/5 over the in-scope files + DegenerettePerNEv 9/0/5; the 3 residual fails are ALL pre-existing-v46 (verified at `16e9668a`); EV same-results preserved; 0 defects surfaced. (323-01 FOUNDRY repair + TOMB-05 landed earlier: 559/51/16, 12 new-vs-v46 owned by Wave-2.)
 Last activity: 2026-05-25 — Phase 322 IMPL CLOSED: batched diff USER-APPROVED + committed `fb29ed51`; 322-VERIFICATION PASSED (6/6 SC, build clean); 4 USER-directed refinements folded in (burnForRedemption removal, AfKing didWork revert-fix, _settleClaimableShortfall helper, flipDay param removal). Audit subject frozen at `fb29ed51` for the Phase 324 delta-audit.
 Last activity: 2026-05-25 — Phase 322 PLANNED: 8 serialized plans (`a5e1dbf4`) + CONTEXT (`1c9d6e08`); plan-checker PASSED (37/37 reqs exactly-once, R1–R7 reconciliation ownership verified, commit-guard ordering OK, no pre-approval language); 322-01 Task-2 deletion-ordering prose tightened per the checker's lone warning.
 
