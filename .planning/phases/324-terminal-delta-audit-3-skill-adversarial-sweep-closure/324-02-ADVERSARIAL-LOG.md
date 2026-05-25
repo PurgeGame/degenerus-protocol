@@ -190,6 +190,16 @@ simple); **revert if neither alone can cover** the 175% (the "neither covers" ca
 so fail-closed there is fine). Contract fix → a v47 fix phase (subject frozen at `fabe9e94`; new USER-approved
 diff). Add a test that funds sDGNRS ETH-poor / stETH-only.
 
+**Donation-robustness requirement (USER question 2026-05-25):** the redemption base reads raw
+`address(this).balance + steth.balanceOf(this) + claimable[SDGNRS] − pending` (sStonk:844-847). ETH `receive()`
+is `onlyGame` (`:433`) so casual ETH donations revert (only `selfdestruct` force-feed bypasses it), but **stETH is
+freely transferable in** (ERC-20, no hook). A donation inflates the base → inflates the 175% reservation. Verified
+this is NOT a profit/inflation/underflow exploit (donation is -EV to the donor; `depositSteth` mints no shares so no
+ERC-4626 inflation attack; genesis-minted supply never near 0; checked subtraction), BUT a stETH donation under the
+current claimable-ETH-only pull can brick a submit (the F-47-02 mechanism). The fix MUST check coverage against the
+**same asset basis it inflates** (so a stETH-inflated base is covered by the pure-stETH leg) — do NOT reintroduce a
+claimable-ETH-only chokepoint. Add a test: donate stETH, then submit, assert the stETH leg covers (no brick).
+
 ---
 
 ## §5. Skeptic-Reviewer Filter Attestation
