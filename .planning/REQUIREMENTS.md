@@ -88,17 +88,57 @@
 
 ## Traceability
 
-Which phases cover which requirements. Populated during roadmap creation.
+Which phases cover which requirements. Phase numbering continues from v47.0 (ended Phase 324) → v48.0 phases are 325–328. SPEC/IMPL/TST/TERMINAL shape.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (to be filled by roadmapper) | | |
+| BATCH-01 | Phase 325 (SPEC) | Pending |
+| RFALL-04 | Phase 325 (SPEC) | Pending |
+| KEEP-04 | Phase 325 (SPEC) | Pending |
+| KEEP-05 | Phase 325 (SPEC) | Pending |
+| POOL-06 | Phase 325 (SPEC) | Pending |
+| PFIX-01 | Phase 326 (IMPL) | Pending |
+| RFALL-01 | Phase 326 (IMPL) | Pending |
+| RFALL-02 | Phase 326 (IMPL) | Pending |
+| RFALL-03 | Phase 326 (IMPL) | Pending |
+| KEEP-01 | Phase 326 (IMPL) | Pending |
+| KEEP-02 | Phase 326 (IMPL) | Pending |
+| KEEP-03 | Phase 326 (IMPL) | Pending |
+| POOL-01 | Phase 326 (IMPL) | Pending |
+| POOL-02 | Phase 326 (IMPL) | Pending |
+| POOL-03 | Phase 326 (IMPL) | Pending |
+| POOL-05 | Phase 326 (IMPL) | Pending |
+| BTOMB-01 | Phase 326 (IMPL) | Pending |
+| BTOMB-02 | Phase 326 (IMPL) | Pending |
+| HERO-01 | Phase 326 (IMPL) | Pending |
+| HERO-02 | Phase 326 (IMPL) | Pending |
+| HERO-03 | Phase 326 (IMPL) | Pending |
+| HERO-05 | Phase 326 (IMPL) | Pending |
+| SWAP-01 | Phase 326 (IMPL) | Pending |
+| SWAP-02 | Phase 326 (IMPL) | Pending |
+| SWAP-03 | Phase 326 (IMPL) | Pending |
+| SWAP-04 | Phase 326 (IMPL) | Pending |
+| SWAP-05 | Phase 326 (IMPL) | Pending |
+| SWAP-06 | Phase 326 (IMPL) | Pending |
+| SWAP-07 | Phase 326 (IMPL) | Pending |
+| BATCH-02 | Phase 326 (IMPL) | Pending |
+| PFIX-02 | Phase 327 (TST) | Pending |
+| PFIX-03 | Phase 327 (TST) | Pending |
+| RFALL-05 | Phase 327 (TST) | Pending |
+| POOL-04 | Phase 327 (TST) | Pending |
+| BTOMB-03 | Phase 327 (TST) | Pending |
+| HERO-04 | Phase 327 (TST) | Pending |
+| HERO-06 | Phase 327 (TST) | Pending |
+| SWAP-08 | Phase 327 (TST) | Pending |
+| SWAP-09 | Phase 327 (TST) | Pending |
+| BATCH-03 | Phase 328 (TERMINAL) | Pending |
 
 **Coverage:**
 - v48.0 requirements: **40 total** — PFIX 3 · RFALL 5 · KEEP 5 · POOL 6 · BTOMB 3 · HERO 6 · SWAP 9 · BATCH 3.
-- Mapped to phases: 0 (pre-roadmap)
-- Unmapped: 40 ⚠️ (resolved at roadmap creation)
+- Mapped to phases: **40/40 ✓** (Phase 325 SPEC: 5 · Phase 326 IMPL: 25 · Phase 327 TST: 9 · Phase 328 TERMINAL: 1).
+- Unmapped: **0** — every requirement maps to exactly one phase; 0 orphaned, 0 duplicated.
+- Center-of-gravity split: design-decision items → SPEC (RFALL-04, KEEP-04/05, POOL-06, BATCH-01); code-change items → IMPL; empirical-proof items → TST (incl. HERO-04 byte-reproduce gate + SWAP-08 no-arb proof); delta-audit/sweep/closure → TERMINAL.
 
 ---
 *Requirements defined: 2026-05-25*
-*Last updated: 2026-05-25 after milestone v48.0 requirement definition*
+*Last updated: 2026-05-25 — Traceability table filled to 100% coverage at roadmap creation (Phases 325–328)*

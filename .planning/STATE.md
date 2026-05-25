@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-05-25T16:12:06.757Z"
 last_activity: 2026-05-25
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -24,10 +24,11 @@ See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 325 (SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation) — ready to plan
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-25 — Milestone v48.0 started
+Status: Roadmap created (4 phases 325–328; SPEC → IMPL → TST → TERMINAL); 40/40 requirements mapped
+Last activity: 2026-05-25 — v48.0 ROADMAP.md authored; REQUIREMENTS.md Traceability filled to 100% coverage
+Next: `/gsd-plan-phase 325` — SPEC design-lock (zero contract mutation; settle shared signatures across DegenerusGame/StakedDegenerusStonk/DegenerusVault + re-confirm the salvage-swap no-arb floor + resolve every SPEC-time open item before any patch)
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
 
@@ -251,7 +252,24 @@ Last activity: 2026-05-25 — Milestone v48.0 started
 
 ## Active Milestone
 
-_None — between-milestones state. v40.0 SHIPPED 2026-05-14. Next milestone scope TBD._
+**v48.0 — sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle** (STARTED 2026-05-25)
+
+Seven work items ship as ONE batched USER-APPROVED `contracts/*.sol` diff: F-47-01 presale-box DGNRS drain fix (item 1, ISOLATED `DegenerusGameLootboxModule`) · F-47-02 redemption ETH-empty stETH fallback (item 2) · keeper rename + VAULT affiliate code (item 3) · AfKing pool recovery (item 4) · gameover BURNIE tombstone (item 5, `BurnieCoin`/`GameOverModule`) · Degenerette hero 2-pt rescale (item 6, `DegeneretteModule`) · sDGNRS far-future salvage swap (item 7, the load-bearing security item). Shared surfaces — `DegenerusGame.sol` (items 2/3/7), `StakedDegenerusStonk.sol` (items 2/4), `DegenerusVault.sol` (items 3/4/7) — CANNOT be independent diffs; the SPEC reconciles the final shared signatures before IMPL. All 7 designs LOCKED; open items are SPEC-time attestations/calibrations only (no research). Milestone shape matches the established v44/v45/v46/v47 audit pattern — SPEC design-lock → single batched IMPL contract diff → TST proof → TERMINAL delta-audit + closure flip. Single batched USER-APPROVED contract diff at IMPL per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md` + `feedback_manual_review_before_push.md` (`ContractAddresses.sol` freely-modifiable per `feedback_contractaddresses_policy.md`); AGENT-COMMITTED test/planning/docs; pre-launch redeploy-fresh per `feedback_frozen_contracts_no_future_proofing.md` (storage break fine). Audit baseline → subject: v47.0 closure HEAD `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2` → v48.0 closure HEAD; every `file:line` + the salvage-swap economics re-attested vs the v47.0-closure HEAD before any patch. **Phase numbering continues from 324 → v48.0 starts at Phase 325.**
+
+| Phase | Name | Type | Requirements (primary owner) | Status |
+|-------|------|------|------------------------------|--------|
+| 325 | SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | SPEC | BATCH-01 · RFALL-04 · KEEP-04 · KEEP-05 · POOL-06 | Not started |
+| 326 | IMPL — The ONE Batched Contract Diff (all 7 items) | IMPL | PFIX-01 · RFALL-01/02/03 · KEEP-01/02/03 · POOL-01/02/03/05 · BTOMB-01/02 · HERO-01/02/03/05 · SWAP-01..07 · BATCH-02 | Not started |
+| 327 | TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | TST | PFIX-02/03 · RFALL-05 · POOL-04 · BTOMB-03 · HERO-04/06 · SWAP-08/09 | Not started |
+| 328 | TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | TERMINAL | BATCH-03 (re-attests all 40) | Not started |
+
+**Coverage:** 40/40 requirements mapped to exactly one phase (Phase 325 SPEC: 5 · Phase 326 IMPL: 25 · Phase 327 TST: 9 · Phase 328 TERMINAL: 1, re-attests all 40); 0 orphaned; 0 duplicated. Full mapping in `.planning/REQUIREMENTS.md` Traceability table and `.planning/ROADMAP.md` Coverage section. Per-category split: PFIX 3 (1 IMPL + 2 TST) · RFALL 5 (1 SPEC + 3 IMPL + 1 TST) · KEEP 5 (2 SPEC + 3 IMPL) · POOL 6 (1 SPEC + 4 IMPL + 1 TST) · BTOMB 3 (2 IMPL + 1 TST) · HERO 6 (4 IMPL + 2 TST) · SWAP 9 (7 IMPL + 2 TST) · BATCH 3 (1 SPEC + 1 IMPL + 1 TERMINAL).
+
+**Contract-boundary HARD STOP:** Phase 326 IMPL is the single contract phase — the batched diff is applied to `contracts/` and locally compiled/tested but HELD at the contract-commit boundary, never committed without explicit user hand-review of the diff (`feedback_pause_at_contract_phase_boundaries.md` + `feedback_manual_review_before_push.md`). No `contracts/` edits until Phase 326 (the v47.0 closure HEAD `da5c9d50` is the frozen audit baseline; Phase 325 SPEC emits zero contract mutation).
+
+**Load-bearing security item = the salvage swap (item 7).** The no-arb proof must hold at the jitter band CEILING a grinder/waiter captures (max full payout `110% × fractionBps(6) = 16.5% of face` @d6) vs the cheapest far-entry acquisition (~21%, lootbox tier-1, re-confirmed at SPEC; margin ~4.5pp). Redemption desk protected STRUCTURALLY (≥1 ETH `claimableWinnings[SDGNRS]` floor, fail-closed; NO `pendingRedemptionEthValue` term). Swap-pop must NOT reproduce the `H-CANCEL-SWAP-MISS` operation class — every `ticketQueue` consumer enumerated at SPEC.
+
+**UI hint:** None. v48.0 is a contract-accounting/behavior bundle. The off-chain indexer / webpage stays OUT OF SCOPE (separate frontend track) per PROJECT.md — incl. the Degenerette `matches` 0-8→0-9 widening and the salvage-swap -EV labeling UI (flag, don't build here).
 
 ### Just-Shipped Milestone Reference
 
@@ -308,9 +326,12 @@ _None — between-milestones state. v40.0 SHIPPED 2026-05-14. Next milestone sco
 
 | Phase | Goal | Requirements (count) | Depends on |
 |-------|------|----------------------|------------|
-| 272 — Always-Hero Simplification + Maximal Dead-Code Cleanup (Terminal) — SHIPPED | Drop Degenerette hero opt-out semantics (`_packFullTicketBet` normalizes `heroQuadrant ≥ 4` → `0`; `_resolveFullTicketBet` extracts quadrant unconditionally; `_fullTicketPayout` drops `heroEnabled` parameter); maximal dead-code cleanup sweep narrowed to `DegenerusGameDegeneretteModule.sol` per D-272-CLEAN-SCOPE-01; land v37+ carry bundle (4 COMPLETE + 1 RE-DEFERRED-V39+: LBX-02); single `audit/FINDINGS-v38.0.md` terminal deliverable; closure signal `MILESTONE_V38_AT_HEAD_06623edb` emitted in §9c. Wave 1.5 D-272-INPUT-VALIDATION-01 revision adds input validation at `placeDegeneretteBet` entry (revert with `InvalidBet` on `>= 4`). | HERO-01..05 + CLEAN-01..06 + STAT-01..02 + SURF-01..03 + LBX-02 + GASPIN-02..03 + STAT-03-v35-carry + AUDIT-01..06 + REG-01..04 (30) | Nothing (baseline v37.0 closure HEAD `MILESTONE_V37_AT_HEAD_2654fcc2`) |
+| 325 — SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | Settle the final shared signatures across `DegenerusGame`/`StakedDegenerusStonk`/`DegenerusVault`, grep-attest every cited file:line vs the v47.0-closure HEAD (no "by construction"), re-confirm the salvage-swap no-arb floor at the band ceiling, and resolve every SPEC-time open item (RFALL-04 / KEEP-04/05 / POOL-06 / BTOMB packing / HERO-04 shape+packing / SWAP-03 jitter source). Zero contract mutation. | BATCH-01 · RFALL-04 · KEEP-04 · KEEP-05 · POOL-06 (5) | Nothing (baseline v47.0 closure HEAD `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`) |
+| 326 — IMPL — The ONE Batched Contract Diff (all 7 items) | Apply all seven work items' contract edits as a single reconciled diff (presale-drain fix, redemption stETH-fallback, keeper rename + VAULT-code, AfKing pool recovery, gameover BURNIE tombstone, Degenerette hero rescale, sDGNRS far-future salvage swap); HARD STOP at the contract-commit boundary (applied + locally compiled/tested, never committed without explicit user hand-review). | PFIX-01 · RFALL-01/02/03 · KEEP-01/02/03 · POOL-01/02/03/05 · BTOMB-01/02 · HERO-01/02/03/05 · SWAP-01..07 · BATCH-02 (25) | Phase 325 |
+| 327 — TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | Prove the presale-drain dust bound, the redemption-fallback regression + sDGNRS `receive()` accounting-safety, the BURNIE-tombstone non-circulating signal, the byte-identical Degenerette recalibration, and the load-bearing salvage-swap no-arb at the jitter band CEILING + solvency. | PFIX-02/03 · RFALL-05 · POOL-04 · BTOMB-03 · HERO-04/06 · SWAP-08/09 (9) | Phase 326 |
+| 328 — TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | NON-WIDENING delta-audit vs the v47.0 baseline, 3-skill genuine-PARALLEL adversarial sweep over the 7 surfaces + composition (skeptic-filtered), author `audit/FINDINGS-v48.0.md` (9-section, chmod 444), emit `MILESTONE_V48_AT_HEAD_<sha>` + atomic 5-doc closure flip; re-attest all 40 requirements; F-47-01/F-47-02 recorded RESOLVED-AT-V48. | BATCH-03 (1) | Phase 327 |
 
-**Coverage:** 30/30 v38.0 requirements mapped (5 HERO + 6 CLEAN + 2 STAT + 3 SURF + 1 LBX + 2 GASPIN + 1 PPL + 6 AUDIT + 4 REG); zero orphan requirements; zero duplicate mappings. Resolution at v38 close: 29 Complete + 1 RE-DEFERRED-V39+ (LBX-02).
+**Coverage:** 40/40 v48.0 requirements mapped (PFIX 3 + RFALL 5 + KEEP 5 + POOL 6 + BTOMB 3 + HERO 6 + SWAP 9 + BATCH 3); zero orphan requirements; zero duplicate mappings.
 
 ## Next-Milestone Backlog (v39+)
 

@@ -1,96 +1,84 @@
-# Roadmap: v47.0 — Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle
+# Roadmap: v48.0 — sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
 
-**Milestone:** v47.0 — ✅ **SHIPPED 2026-05-25** (closure signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; 2 MEDIUM findings F-47-01 + F-47-02 DEFERRED→v48.0, fix designs locked)
-**Defined:** 2026-05-24
+**Milestone:** v48.0 — 🚧 **IN PROGRESS** (started 2026-05-25)
+**Defined:** 2026-05-25
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Audit baseline → subject:** v46.0 closure HEAD `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687` → v47.0 closure HEAD. Subject = the single batched USER-APPROVED contract diff reconciling the seven work items (manifest `.planning/PLAN-V47-MILESTONE-SCOPE.md`).
-**Scope source:** `.planning/REQUIREMENTS.md` (45 v47.0 REQ-IDs across 8 categories) + the 7 plan docs. All economic numbers + design decisions (D1–D5, manifest §4) LOCKED; **no research, no open decisions.**
+**Audit baseline → subject:** v47.0 closure HEAD `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2` → v48.0 closure HEAD. Subject = the single batched USER-APPROVED contract diff reconciling the seven work items (scope source: the 7 plan docs — `PLAN-V48-PRESALE-BOX-DRAIN-FIX.md` · `PLAN-V48-REDEMPTION-ETH-STETH-FALLBACK.md` · `PLAN-V48-KEEPER-RENAME-AND-VAULT-CODE.md` · `PLAN-V48-AFKING-POOL-RECOVERY.md` · `PLAN-V48-GAMEOVER-BURNIE-TOMBSTONE.md` · `PLAN-V48-DEGENERETTE-HERO-2PT-RESCALE.md` · `PLAN-SDGNRS-FAR-FUTURE-SALVAGE-SWAP.md`).
+**Scope source:** `.planning/REQUIREMENTS.md` (40 v48.0 REQ-IDs across 8 categories) + the 7 plan docs. All 7 designs LOCKED; **open items are SPEC-time attestations/calibrations only — no research.**
 
-> **Posture:** pre-launch redeploy-fresh (storage-layout breaks fine, no migration); security floor over gas. **ONE batched USER-APPROVED `contracts/*.sol` diff** for the whole milestone — plans 1–6 overlap heavily on shared files (manifest §2) and item 7 (`AfKing.sol`) is isolated but joins the same diff, so the milestone has a single contract IMPL phase with a HARD STOP at the contract-commit boundary (the diff is applied + tested but never committed without explicit user hand-review). Tests + planning AGENT-committable. `ContractAddresses.sol` freely modifiable.
+> **Cross-cutting rule (every requirement):** every cited `file:line` + the salvage-swap economics MUST be re-attested against the **v47.0-closure HEAD** before any patch (no "by construction" survives un-checked; the `DegenerusGame` mint/jackpot inline-duplication precedent). Security floor over gas. RNG/VRF-freeze invariant untouched. Pre-launch redeploy-fresh (storage-layout break fine, no migration).
 
-> **Phase numbering** continues from the previous milestone — v46.0 ended at Phase 320, so **v47.0 starts at Phase 321.** Not reset to 1.
+> **Posture:** **ONE batched USER-APPROVED `contracts/*.sol` diff** for the whole milestone — the shared surfaces `DegenerusGame.sol` (items 2/3/7), `StakedDegenerusStonk.sol` (items 2/4), and `DegenerusVault.sol` (items 3/4/7) are each touched by multiple items, so they CANNOT be independent diffs; the milestone has a single contract IMPL phase with a HARD STOP at the contract-commit boundary (the diff is applied + locally compiled/tested but never committed without explicit user hand-review). Items 1 (`LootboxModule`), 5 (`BurnieCoin`/`GameOverModule`), 6 (`DegeneretteModule`) are comparatively isolated; the keeper rename (item 3) is a wide mechanical diff that crosses the in-game crank entrypoints. Tests + planning + docs AGENT-committable. `ContractAddresses.sol` freely modifiable.
 
-> **Milestone shape** matches the established v44/v45/v46 audit-milestone pattern: **SPEC design-lock → single batched IMPL contract diff → TST proof → TERMINAL delta-audit + closure flip.**
+> **Phase numbering** continues from the previous milestone — v47.0 ended at Phase 324, so **v48.0 starts at Phase 325.** Not reset to 1.
+
+> **Milestone shape** matches the established v44/v45/v46/v47 audit-milestone pattern: **SPEC design-lock → single batched IMPL contract diff → TST proof → TERMINAL delta-audit + closure flip.**
 
 ---
 
 ## Phases
 
-- [x] **Phase 321: SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation** - Settle every shared-surface signature (final `resolveRedemptionLootbox` form), grep-attest every cited file:line vs HEAD, and lock the claimable-invariant joint-check + presale-box RNG freeze re-verification before any patch.
-- [x] **Phase 322: IMPL — The ONE Batched Contract Diff (all 7 items)** - Apply all seven work items' contract edits as a single reconciled diff per manifest §2; HARD STOP at the contract-commit boundary (applied + tested, never committed without explicit user hand-review).
-- [x] **Phase 323: TST — Repro-First + Same-Results Gas + Behavior/EV + Cancel-Tombstone Proofs** - Prove the redemption fix (REDEEM-08 repro must fail pre-fix), the same-results gas + worst-case absorption (DGAS-05 / DSPIN-02), and the AfKing cancel-tombstone correctness (TOMB-04) + the stale-test baseline repair (TOMB-05). (completed 2026-05-25)
-- [x] **Phase 324: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure** - Delta-audit vs the v46.0 baseline, run the 3-skill adversarial sweep, author the findings deliverable, and flip the closure signal. (completed 2026-05-25; sweep surfaced 2 MEDIUM findings → DEFERRED→v48.0)
+- [ ] **Phase 325: SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation** - Settle the final shared signatures across `DegenerusGame`/`StakedDegenerusStonk`/`DegenerusVault`, grep-attest every cited file:line vs the v47.0-closure HEAD, and resolve every SPEC-time open item (RFALL-04 accounting shape, KEEP-04/05 VAULT-code + autoOpen scope, POOL-06 re-stranding, BTOMB packing, HERO-04 shape+packing, SWAP-03 jitter source, SWAP-08 acquisition-floor re-confirm) before any patch.
+- [ ] **Phase 326: IMPL — The ONE Batched Contract Diff (all 7 items)** - Apply all seven work items' contract edits as a single reconciled diff; HARD STOP at the contract-commit boundary (applied + locally compiled/tested, never committed without explicit user hand-review).
+- [ ] **Phase 327: TST — Repro/Same-Results + No-Arb + EV + Regression Proofs** - Prove the presale-drain dust bound (PFIX-02/03), the redemption-fallback regression (RFALL-05), the sDGNRS `receive()` accounting-safety (POOL-04), the BURNIE tombstone non-circulating signal (BTOMB-03), the byte-identical Degenerette recalibration (HERO-04/06), and the salvage-swap no-arb at the jitter band CEILING + solvency (SWAP-08/09).
+- [ ] **Phase 328: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure** - NON-WIDENING delta-audit vs the v47.0 baseline, run the 3-skill genuine-PARALLEL adversarial sweep, author `audit/FINDINGS-v48.0.md`, and flip the closure signal `MILESTONE_V48_AT_HEAD_<sha>`.
 
 ---
 
 ## Phase Details
 
-### Phase 321: SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation
-**Goal**: Every shared contract surface has a single settled signature, every cited `file:line` is grep-verified against the v47.0 plan-time HEAD, and the cross-plan invariants (claimable balance, presale-box RNG freeze) are re-proven on paper — so the IMPL phase applies a fully reconciled diff with zero "by construction" assumptions.
-**Depends on**: Nothing (first v47.0 phase; consumes the v46.0 closure HEAD as the frozen audit baseline)
-**Requirements**: BATCH-01, BATCH-02
+### Phase 325: SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation
+**Goal**: Every shared contract surface has a single settled signature, every cited `file:line` is grep-verified against the v47.0-closure HEAD, and every SPEC-time open item is resolved on paper — so the IMPL phase applies a fully reconciled diff with zero "by construction" assumptions, and the load-bearing salvage-swap economics (no-arb margin) are confirmed before any code is written.
+**Depends on**: Nothing (first v48.0 phase; consumes the v47.0 closure HEAD `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2` as the frozen audit baseline)
+**Requirements**: BATCH-01, RFALL-04, KEEP-04, KEEP-05, POOL-06
 **Success Criteria** (what must be TRUE):
-  1. The FINAL `resolveRedemptionLootbox` signature is settled in writing — it carries BOTH the LOOT-03 boon-flag flip (`allowBoons` false→true) AND the REDEEM-03 changes (`payable` + the unchecked `claimableWinnings[SDGNRS] -= amount` debit removed + `futurePrizePool` credited from the arriving `msg.value`) on one signature, with the apply-order (payable/debit-removal first, then boon-flag) recorded.
-  2. The `claimablePool == Σ claimableWinnings` invariant has a documented joint-check spanning PRESALE-06 (80/20 box-ETH ledger move), CPAY-01/02/03 (msg.value+shortfall debits across the whale-module purchases + presale box + the full `external payable` entry sweep), and REDEEM-01/03 (the new `SDGNRS`-gated checked `pullRedemptionReserve` + removal of the unchecked debit) — proving the three plans keep it balanced together.
-  3. Every cited `file:line` across all 7 plans is grep-verified against the current `contracts/` HEAD and any drift is corrected in the SPEC (no "by construction" / "single fn reaches all paths" claims survive un-checked; inline-duplicated logic in `DegenerusGame` jackpot/mint paths re-checked per the Phase 294 precedent).
-  4. The presale-box RNG model is re-verified freeze-safe — the box payout reuses the committed index/day RNG word with a domain-separated salt (`keccak256(rngWord,"PRESALE_BOX")`), the entropy is unknown at buy-commit and frozen across the request→unlock window, and the combined lootbox+box share-one-index / two-domain-separated-draws design introduces no new manipulation vector.
-  5. The earlybird-subsystem removal scope (the `_awardEarlybirdDgnrs` + 4 sites, `_finalizeEarlybird` + `EARLYBIRD_*` triggers/state, and the candidate dead `presaleStatePacked` / level-3 clear / 200-ETH auto-end) is grep-confirmed to have no surviving consumer before deletion, and the `Pool.Earlybird` → `Pool.PresaleBox` enum-slot rename targets are pinned.
+  1. The final shared signatures are settled in writing for every multi-item file — `DegenerusGame.sol` (item 2 `pullRedemptionReserve` coverage branch + item 3 renamed crank entrypoints + item 7 `sellFarFutureTickets` + inline `claimableWinnings[SDGNRS]` debit), `StakedDegenerusStonk.sol` (item 2 `_submitGamblingClaimFrom` `maxIncrement` pull + item 4 `receive()` relaxation + `burnAtGameOver` pool-recovery + the `IAfKing` `withdraw`/`poolOf` interface adds), and `DegenerusVault.sol` (item 3 `affiliateCode` pass-through + item 4 `recoverAfKingPool()` + item 7 `gameSellFarFutureTickets onlyVaultOwner`) — so none of items 2/3/4/7 can land as an independent diff that breaks another.
+  2. Every cited `file:line` across all 7 plan docs is grep-verified against the v47.0-closure HEAD and any drift is corrected in the SPEC (no "by construction" / "single fn reaches all paths" claim survives un-checked; the `DegenerusGame` mint/jackpot inline-duplication precedent re-checked; `POOL-05` confirms the `IAfKing`/`IAfKingSubscribe` `withdraw(uint256)` + `poolOf(address)` interface adds match `AfKing.sol`'s signatures verbatim and that `AfKing.sol` itself stays UNCHANGED).
+  3. The load-bearing salvage-swap no-arb floor is RE-CONFIRMED at the v47.0-closure HEAD (SWAP-08 attestation): the cheapest far-future-entry acquisition cost (~21%, lootbox tier-1) is re-derived from current source, the jitter band CEILING max full payout (`110% × fractionBps(6) = 16.5% of face` @d6) is confirmed below it (margin ~4.5pp), BURNIE is confirmed unable to mint a far-future entry (`purchaseCoin` has no level arg; v47 removed the BURNIE-lootbox→future path), and the SWAP-03 jitter source is pinned to an already-SETTLED past VRF word (freeze-safe per `v45-vrf-freeze-invariant`) — so the swap is provably -EV at the band a grinder/waiter captures, not just at the mean.
+  4. Every SPEC-time open item is resolved and recorded: RFALL-04 (`pendingRedemptionEthValue` single-value vs split ETH/stETH reservation shape, applied consistently across submit/claim/gameOver); KEEP-04 (VAULT confirmed to hold a registered affiliate code with `owner == VAULT` distinct from its address-derived default, or a setup step to register one); KEEP-05 (whether `autoOpen` is an existing keeper capability or new, scoped accordingly); POOL-06 (post-gameOver `depositFor(SDGNRS)` re-stranding — second sweep in `handleFinalSweep` vs accept-as-minor); the BTOMB `vaultAllowance` checked-add/cap + one-shot packing; the HERO-04 payout SHAPE over `S∈{0..9}` + the S=8/S=9 (>32-bit) packing scheme.
+  5. The salvage-swap `ticketQueue` swap-pop is proven on paper NOT to reproduce the `H-CANCEL-SWAP-MISS` operation class (SWAP-06 design lock): every `ticketQueue` / `_tqFarFutureKey` consumer is enumerated, the O(1) caller-verified swap-pop (`q[idx]==player`, `queueIndices` used only when a line zeroes a level) is shown to MAINTAIN `membership ⟺ packed != 0` so the far-future jackpot samplers need no change and gain no hot-path read, and the LOCKED OPEN-E operator-trust disposition is confirmed to cover this first value-destructive operator-gated action.
 **Plans**: TBD
-
-### Phase 322: IMPL — The ONE Batched Contract Diff (all 7 items)
-**Goal**: All seven work items land as a single reconciled `contracts/*.sol` diff — the game is truly rake-free (no presale skim, no BURNIE bonus), BURNIE lootboxes are gone, the 3 ETH lootbox callers are unified, Degenerette resolution is write-batched at the new per-currency spin caps, every ETH-in path accepts claimable-pay, the sDGNRS redemption ETH is hard-segregated + BURNIE settled at submit, and the AfKing cancel-tombstone is restored — applied + locally tested, then HELD at the contract-commit boundary for explicit user hand-review.
-**Depends on**: Phase 321 (the SPEC must settle the shared-surface signatures first)
-**Requirements**: PRESALE-01, PRESALE-02, PRESALE-03, PRESALE-04, PRESALE-05, PRESALE-06, PRESALE-07, PRESALE-08, PRESALE-09, PRESALE-10, PRESALE-11, PRESALE-12, PRESALE-13, LOOT-01, LOOT-02, LOOT-03, LOOT-04, LOOT-05, LOOT-06, DGAS-01, DGAS-02, DGAS-03, DGAS-04, CPAY-01, CPAY-02, CPAY-03, REDEEM-01, REDEEM-02, REDEEM-03, REDEEM-04, REDEEM-05, REDEEM-06, REDEEM-07, DSPIN-01, TOMB-01, TOMB-02, TOMB-03
-**Success Criteria** (what must be TRUE):
-  1. The game is rake-free — the 20% presale vault skim is gone (presale lootbox ETH routes 100% to prize pools, split collapsed to normal 90/10) and the +62% presale BURNIE bonus block is removed; presale boxes REPLACE the earlybird subsystem (`Pool.Earlybird`→`Pool.PresaleBox` rename, `_awardEarlybirdDgnrs` + `_finalizeEarlybird` + `EARLYBIRD_*` removed) with credit-gated boon-less boxes (25% credit accrual on non-Degenerette ETH buys, 50/40/10 BURNIE/DGNRS/WWXRP roll, 80/20 ETH routing, 50-ETH clamp-close + last-buyer DGNRS sweep + `presaleOver` slot-0 latch).
-  2. The BURNIE lootbox surface is removed entirely (`openBurnieLootBox` / `purchaseBurnieLootbox` / `_purchaseBurnieLootboxFor` / the `purchaseCoin` lootbox branch / `BurnieLootOpen` / the vault wrapper) closing the terminal-paradox hole, while BURNIE→tickets is KEPT; the 3 remaining ETH lootbox callers (`openLootBox` / `resolveLootboxDirect` / `resolveRedemptionLootbox`) all roll full boons+passes with the 10% haircut fixed and the now-dead `allowBoons` / `allowPasses` / `presale` params removed.
-  3. The Degenerette resolution is write-batched same-results — ETH/BURNIE/WWXRP payouts accumulate cross-bet and flush once per currency (one `mintForGame`/`mintPrize`, one `claimableWinnings`+`claimablePool` write), the ETH cap stays per-spin against a running-pool local, lootbox-share sums PER `betId` (one box per bet, never across), DGNRS award stays per-spin, RNG seed derivation and the freeze invariant are untouched — at the new per-currency spin caps ETH 25 / BURNIE 15 / WWXRP 5.
-  4. Every ETH-in path accepts `msg.value` + `claimableWinnings` shortfall — `purchaseWhaleBundle` / `purchaseLazyPass` / `purchaseDeityPass` use the established overpay-reverts / strict-1-wei-sentinel pattern, the presale box accepts claimable-pay as a pure ledger move, and all `external payable` entries in `DegenerusGame.sol` are swept for uniform application with `claimablePool == Σ claimableWinnings` staying balanced.
-  5. The sDGNRS redemption is airtight — ETH is hard-segregated (MAX 175% pulled into sDGNRS at submit via the new `SDGNRS`-gated checked `pullRedemptionReserve`, fail-closed on shortfall; resolve lowers to rolled accounting-only; claim pays ETH-first from segregated balance; `resolveRedemptionLootbox` payable with the unchecked debit removed; gameOver drops the double-counted `+ pendingRedemptionEthValue`), BURNIE is settled at submit via one atomic `redeemBurnieShare` (creditFlip offset by burn+consume, net new BURNIE = 0) with the whole BURNIE reserve apparatus deleted and `onlyFlipCreditors`/burn authority extended to SDGNRS; the AfKing `setDailyQuantity(0)` becomes a true in-place tombstone with the in-sweep tombstone-reclaim branch added (no external cancel ever relocates an entry → no mid-day miss → mint streaks not collaterally broken).
-  6. The diff is reconciled per manifest §2 (the single `resolveRedemptionLootbox` signature, the `DegeneretteModule` DGAS+DSPIN single edit, the `presale`-param removal landing with the presale-bonus removal) and is HELD at the contract-commit boundary — applied to `contracts/` and locally compiling/tested, but NOT committed without explicit user hand-review of the batched diff.
-**Plans**: 8 plans (waves 1-8, all serialized — plans 1-6 overlap heavily on shared `.sol` files so no parallel writers; item 7 isolated; final wave is the single autonomous:false USER-APPROVAL gate for the ONE batched diff)
-- [ ] 322-01-PLAN.md — PRESALE foundation: Pool.Earlybird→PresaleBox rename (concrete+iface), delete earlybird subsystem, new presale storage (presaleOver/box counters/credit/queue mirrors) + `_creditBoxProceeds` 80/20 helper [wave 1]
-- [ ] 322-02-PLAN.md — PRESALE rake removal (20% skim→90/10 + 62% BURNIE bonus gone) + credit accrual + credit-gated boon-less box (50/40/10 roll, 80/20 routing, 50-ETH clamp-close+sweep+presaleOver latch, salted-RNG) + entrypoints [wave 2]
-- [ ] 322-03-PLAN.md — LOOT: remove the BURNIE lootbox surface (terminal-paradox closed) + `_resolveLootboxCommon` 5→2 bools + 3-caller unification (full boons+passes, 10% haircut fixed) [wave 3]
-- [ ] 322-04-PLAN.md — REDEEM: sDGNRS ETH hard-segregation (`pullRedemptionReserve`, fail-closed) + `resolveRedemptionLootbox` payable/debit-removed + gameOver double-count drop + BURNIE flip-credit-at-submit (`redeemBurnieShare`) + SDGNRS authority [wave 4]
-- [ ] 322-05-PLAN.md — DGAS+DSPIN (single DegeneretteModule edit, R5): cross-bet write-batching same-results + per-currency spin caps (ETH 25 / BURNIE 15 / WWXRP 5) [wave 5]
-- [ ] 322-06-PLAN.md — CPAY: claimable-pay on the 3 whale purchases + the external-payable entry sweep + the 3 WhaleModule credit-accrual sites + final `_awardEarlybirdDgnrs` body deletion [wave 6]
-- [ ] 322-07-PLAN.md — TOMB (isolated): AfKing in-place cancel-tombstone + in-sweep reclaim (no-++cursor) — fixes H-CANCEL-SWAP-MISS / restores SUB-07 [wave 7]
-- [ ] 322-08-PLAN.md — Verify the full batched diff (forge build + BATCH-01 joint-checks + no-NEW-test-breakage) + the single autonomous:false USER hand-review gate (HELD at the contract-commit boundary) [wave 8]
 **UI hint**: no
 
-### Phase 323: TST — Repro-First + Same-Results Gas + Behavior/EV + Cancel-Tombstone Proofs
-**Goal**: The IMPL diff is proven correct empirically — the redemption-accounting defects are reproduced (fail pre-fix, pass post-fix), the gas refactor is shown byte-identical and the raised spin caps' worst case is shown absorbed, and the AfKing cancel-tombstone correctness + the stale-test baseline repair restore a clean v47.0 regression baseline.
-**Depends on**: Phase 322 (tests run against the applied contract diff)
-**Requirements**: DGAS-05, DSPIN-02, REDEEM-08, TOMB-04, TOMB-05
+### Phase 326: IMPL — The ONE Batched Contract Diff (all 7 items)
+**Goal**: All seven work items land as a single reconciled `contracts/*.sol` diff — the presale-box DGNRS drain is fixed (divisor 1_000→400), the redemption ETH-empty stETH fallback is segregated fail-closed + donation-robust, the keeper functions are renamed (autoBuy/autoOpen/autoResolve) and pass VAULT's registered affiliate code, the AfKing prepaid pools are recoverable, the gameover BURNIE tombstone floods the virtual VAULT allowance one-shot, the Degenerette hero becomes a 2-point scoring element with the standalone multiplier removed, and the sDGNRS far-future salvage swap ships -EV-by-design — applied + locally compiled/tested, then HELD at the contract-commit boundary for explicit user hand-review.
+**Depends on**: Phase 325 (the SPEC must settle the shared-surface signatures + resolve every open item first)
+**Requirements**: PFIX-01, RFALL-01, RFALL-02, RFALL-03, KEEP-01, KEEP-02, KEEP-03, POOL-01, POOL-02, POOL-03, POOL-05, BTOMB-01, BTOMB-02, HERO-01, HERO-02, HERO-03, HERO-05, SWAP-01, SWAP-02, SWAP-03, SWAP-04, SWAP-05, SWAP-06, SWAP-07, BATCH-02
 **Success Criteria** (what must be TRUE):
-  1. The REDEEM-08 repro tests are written FIRST and fail against the pre-fix contract, then pass post-fix — two-claimant same-day ETH underflow (`claimableWinnings[SDGNRS]` not wrapped near 2²⁵⁶), BURNIE-can't-block-ETH (the ETH leg still pays when the BURNIE payout exceeds held+stake), and conservation across submit/resolve/claim/gameOver (BURNIE net mint == 0; `address(this).balance ≥ pendingRedemptionEthValue` at all times; no `unchecked` claimable subtraction in the redemption path).
-  2. The DGAS-05 same-results gas proof shows the Degenerette write-batching is payout-identical (Tier-1 additive equivalence proven; Tier-2 per-spin cap against the running-pool local proven byte-identical), and the worst case (one bet all-spins-paying per currency + mixed-currency multi-bet up to the 25-spin ETH cap) is derived-then-measured with the measured gas delta reported.
-  3. The DSPIN-02 worst-case `resolveBets` (max 25-spin ETH bets in one call, 2.5× the old per-bet roll work) gas regression is derived-then-measured and shown absorbed by the DGAS write-batching.
-  4. The TOMB-04 cancel-tombstone tests pass — `testCancelBehindCursorDoesNotStrandPendingTail`, `testCancelTombstoneReclaimedByNextSweep`, `testCancelPreservesPaidWindowThroughDeferredReclaim`, `testReactivateTombstonedSubNoDoubleAdd` — and the existing 318-04 guarantees (exactly-once same-block, `lastSweptDay` backstop, no double-buy, no dead-slot buildup, two-tier skip-kill identity) are re-confirmed.
-  5. The TOMB-05 stale gas-test repair lands — `testGas04PackingAndNoNewHotPathStorageSourcePresence` is updated to the post-OPENE-01 `Sub` shape (drop the two standalone-bool checks, add `address fundingSource`, fix the byte-sum 13→31 + field list) — restoring a clean 44-fail v47.0 regression baseline (clearing the 45th stale failure).
-**Plans**: 5 plans (2 waves — Wave 1 repair runs both frameworks in parallel; Wave 2 proofs run after the suite compiles)
-- [x] 323-01-PLAN.md — FOUNDRY repair: iterate `forge build`→fix→build until exit 0 (REDEEM struct/event arity, removed-identifier cleanup, stale BURNIE-lootbox negative-auth probes) + TOMB-05 `testGas04` repair to the post-OPENE-01 `Sub` shape (byte-sum 13→31, fundingSource) + the v47 foundry regression baseline [wave 1] ✅ 559/51/16, TOMB-05 landed, 12 new-vs-v46 owned by Wave-2
-- [x] 323-02-PLAN.md — HARDHAT repair: retarget the removed BURNIE-lootbox surface + `Pool.Earlybird`→`PresaleBox` + per-currency spin-cap literals across the 10 `*.test.js` files + the v47 hardhat regression baseline [wave 1] ✅ 199/3/5 in-scope (+ DegenerettePerNEv 9/0/5); 3 residual fails ALL pre-existing-v46; 0 defects; test-only, zero contracts/ edits
-- [x] 323-03-PLAN.md — REDEEM-08 (repro-first): two-claimant same-day ETH underflow (fail pre-fix, pass post-fix) + BURNIE-can't-block-ETH + conservation invariants + the R1/R3/R4 refinement coverage (`burnForCoinflip` net-0 / `_settleClaimableShortfall` / 2-arg `resolveRedemptionPeriod`) [wave 2] ✅ repro FAILS pre-fix (wrap = 2^256−3eth) + PASSES post-fix; StakedStonkRedemption 15/15 + RedemptionAccounting 16/16; contracts frozen at `fb29ed51` (blob 54af4272); commits `5467de69`/`269ce788`/`60254bab`
-- [x] 323-04-PLAN.md — DGAS-05 + DSPIN-02: same-results equivalence (Tier-1 additive + Tier-2 running-pool-local cap byte-identical + per-betId lootbox + per-spin DGNRS) + the 25-spin ETH worst case derived-then-measured + absorbed under the block gas limit [wave 2]
-- [x] 323-05-PLAN.md — TOMB-04: the 4 named cancel-tombstone correctness tests + the new `didWork` revert-fix cases (reclaim/renewal-only chunk commits; spam-cancel no-strand) + the 318-04 guarantee re-confirmation [wave 2] ✅ H-CANCEL-SWAP-MISS empirically resolved (in-place tombstone relocates no one → pending tail still buys → no missed day); didWork reclaim/auto-pause-only chunks COMMIT (no re-strand) + spam-cancel no-strand + truly-empty still reverts; 5 stale cancel tests retargeted v46-swap-pop→v47-deferred-reclaim (non-widening); 318-04 unchanged; AfKingConcurrency 14/14 + CrankNonBrick 16/16; commits `b47fc3e7`/`9b46403e`; AfKing.sol byte-identical to `fb29ed51`; 0 defects
+  1. F-47-01 is fixed (PFIX-01) — `_presaleBoxDgnrsReward`'s divisor moves `1_000 → 400` (base `poolStart/100 → poolStart/40`) in `DegenerusGameLootboxModule.sol` with the inline `base` derivation comment updated, the tier shape preserved (tier-1 still 3× tier-5 DGNRS-per-ETH; only absolute scale moves), and the `transferFromPool` clamp held — an ISOLATED edit touching no other item's surface.
+  2. F-47-02 is fixed (RFALL-01/02/03) — the 175% redemption reservation segregates from pure-ETH OR pure-stETH (no mix), falls back to pure-stETH when ETH can't cover, and REVERTS fail-closed if neither pure leg covers (`StakedDegenerusStonk.sol` `_submitGamblingClaimFrom` `maxIncrement` pull + `DegenerusGame.sol` `pullRedemptionReserve` coverage branch); coverage is checked against the SAME asset basis the base is inflated by (donation-robust — a stETH donation / `selfdestruct` force-feed cannot brick submit); claim-time payout asset selection matches the reserved asset (stETH-reserved → stETH-paid), extending the v47 game-over ETH→stETH fallback (REDEEM-04) to the mid-game ETH-depletion case.
+  3. The keeper surface is renamed + affiliate-wired (KEEP-01/02/03) — `AfKing.sol`'s `sweep` + the in-game mass-resolve/open crank entrypoints become `autoBuy` / `autoOpen` / `autoResolve` ("crank"/"do-work"/"sweep" purged from code AND comments), the v46 `creditFlip` minted-flip-credit bounty is KEPT (gas-pegged `BOUNTY_ETH_TARGET`, no funding-pool overlay), and AfKing passes VAULT's registered (immutable) affiliate code into `game.purchase(...)` on every tx (was `0`) so unreferred AfKing-joiners are permanently captured by VAULT (foreclosure intended) while players holding a real human affiliate keep it.
+  4. The AfKing prepaid pools are recoverable (POOL-01/02/03/05) — VAULT gets a permissionless `recoverAfKingPool()` → `afKing.withdraw(afKing.poolOf(address(this)))` (recovered ETH to VAULT reserves via its open `receive()`, no gameOver gate); sDGNRS `receive()` is relaxed to accept `AF_KING` in addition to `GAME`; sDGNRS auto-recovers its pool inside `burnAtGameOver()` placed BEFORE the `balanceOf(this)==0` early-return (no standalone sDGNRS withdraw); `AfKing.sol` itself stays UNCHANGED with the `IAfKing`/`IAfKingSubscribe` `withdraw(uint256)`/`poolOf(address)` interface adds matching its signatures verbatim.
+  5. The gameover BURNIE tombstone + the Degenerette hero rescale land (BTOMB-01/02, HERO-01/02/03/05) — `gameOver()` one-shot bumps BURNIE's virtual VAULT mint allowance (`_supply.vaultAllowance`) by 1e36 wei via the existing GAME-gated escrow/allowance path with a checked add/cap (no `uint128` overflow, strictly one-shot); Degenerette scoring becomes `S = A + 2·H` (max 9, pay floor `S ≥ 2`) with `_countMatches` → `_score(...) ∈ {0..9}`, the standalone EV-neutral hero multiplier removed (`_applyHeroMultiplier` / `HERO_BOOST_*` / `HERO_PENALTY` / `HERO_SCALE` + the `M<2`/`M=8` carve-out deleted; `heroQuadrant >= 4` revert + `FT_HERO_SHIFT` decode kept), per-N tables recalibrated to `basePayoutEV = 100 centi-x` across 10 buckets (RTP unchanged), and the jackpot preserved exactly (`S=9 ≡ old M=8` relabel; `_awardDegeneretteDgnrs` thresholds re-mapped).
+  6. The sDGNRS far-future salvage swap ships (SWAP-01/02/03/04/05/06/07) — the new `sellFarFutureTickets(...)` game entrypoint (`_resolvePlayer` operator-honor, `rngLocked`-gated, mass-sell → ONE aggregated current-level ticket mint + ONE cash credit) values each line by `d = L - currentLevel` (require `6 ≤ d ≤ 100`) at `priceForLevel(targetLevel)` with the two-line `fractionBps(d)` curve (15%@d6→5%@d100) and the daily per-player jitter (fraction ×∈[70%,110%], cash share ∈[20%,60%]) seeded from the SETTLED past VRF word; ticket floor first (always ≥1 whole current-level ticket, revert if `totalBudget < oneTicketWei`); funded fail-closed from `claimableWinnings[SDGNRS]` down to a ≥1 ETH floor (NO `pendingRedemptionEthValue` term, NO daily cap, debited INLINE); the fully-liquidated seller removed from `ticketQueue` via the O(1) caller-verified swap-pop maintaining `membership ⟺ packed != 0`; and the VAULT `gameSellFarFutureTickets onlyVaultOwner` wrapper added (drone reaches via existing operator-approval; satellite `DroneManager` v47-interface re-sync folded in).
+  7. The diff is reconciled per the SPEC's settled shared signatures and is HELD at the contract-commit boundary (BATCH-02) — applied to `contracts/` and locally compiling/tested (`ContractAddresses.sol` freely modifiable), but NOT committed without explicit user hand-review of the single batched diff (`feedback_batch_contract_approval` + `feedback_never_preapprove_contracts` + `feedback_manual_review_before_push` + `feedback_no_contract_commits`).
+**Plans**: TBD (single contract IMPL phase; plans serialize on the shared `.sol` files — items 2/3/7 on `DegenerusGame`, 2/4 on `StakedDegenerusStonk`, 3/4/7 on `DegenerusVault` — with items 1/5/6 comparatively isolated; the final wave is the single autonomous:false USER-APPROVAL gate for the ONE batched diff)
 **UI hint**: no
 
-### Phase 324: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure
-**Goal**: The v47.0 audit subject (the single batched diff) is delta-audited against the v46.0 baseline, swept by the 3-skill adversarial pass for new findings, consolidated into the findings deliverable, and the milestone is closed with the `MILESTONE_V47_AT_HEAD_<sha>` signal and the atomic ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS flip.
-**Depends on**: Phase 323 (the audit subject must be implemented + test-proven before the terminal delta-audit + sweep)
+### Phase 327: TST — Repro/Same-Results + No-Arb + EV + Regression Proofs
+**Goal**: The IMPL diff is proven correct empirically — the presale-box drain now mops up only variance dust (not ~60% of the pool), the redemption fallback preserves the v47 REDEEM-08 invariants under stETH coverage, the sDGNRS `receive()` relaxation is accounting-safe, the BURNIE tombstone signals only in uncirculated supply, the Degenerette recalibration is byte-identical from `derive_5_tables.py`, and the load-bearing salvage-swap no-arb holds at the jitter band CEILING with solvency preserved — restoring a clean v48.0 regression baseline.
+**Depends on**: Phase 326 (tests run against the applied contract diff)
+**Requirements**: PFIX-02, PFIX-03, RFALL-05, POOL-04, BTOMB-03, HERO-04, HERO-06, SWAP-08, SWAP-09
+**Success Criteria** (what must be TRUE):
+  1. The presale-drain dust bound is proven (PFIX-02/03) — over a realistic 50-ETH presale (random 50/40/10 outcomes across many boxes) the closing-box sweep transfers only variance dust (≤ a small bound, NOT ~60% of the pool) and the pool ends ~empty; the tier shape is preserved (tier-1 still 3× tier-5 DGNRS-per-ETH); and a run of early DGNRS hits empties the pool before close via the `transferFromPool` clamp → closing sweep ≈ 0, no revert / no over-draw.
+  2. The redemption-fallback regression holds (RFALL-05) + the sDGNRS `receive()` relaxation is accounting-safe (POOL-04) — the v47 REDEEM-08 invariants still hold under the stETH fallback (two same-period claimants, BURNIE-can't-block-ETH, value conservation, `balance ≥ pending`); and reserves are read by `address(this).balance` (not a running counter incremented in `receive()`), so an `AF_KING`-sourced credit is not mis-attributed / double-counted / bypassed.
+  3. The BURNIE tombstone signal is proven non-circulating (BTOMB-03) — the 1e36-wei flood does NOT touch `totalSupply()`, lands only in `vaultMintAllowance()` / `supplyIncUncirculated()` / `balanceOf(VAULT)`, and the DGVB pro-rata BURNIE-claim math does not overflow when claiming a share of a 1e36 allowance.
+  4. The Degenerette recalibration is byte-identical (HERO-04 byte-reproduce gate + HERO-06) — every per-N payout constant across the 10 buckets `S=0..9` is reproduced byte-identical from `derive_5_tables.py` (Phase-267-style PASS_ALL gate, NOT hand-typed), the chosen payout SHAPE + WWXRP-bonus/sDGNRS/"high tier" thresholds re-map onto the 10-point scale, the S=8/S=9 (>32-bit) packing is verified, the recalibration stays write-batch byte-identical to v47's `resolveBets` (DGAS), and the `dailyHeroWagers`/`_rollHeroSymbol` daily-hero-symbol jackpot is verified unaffected (no `matches`-range leakage).
+  5. The load-bearing salvage-swap no-arb + solvency hold (SWAP-08/09) — the no-arb inequality is PROVEN at the jitter band CEILING (max full payout `110% × fractionBps(6) = 16.5% of face` @d6 < cheapest far-entry acquisition ~21%, margin ~4.5pp; base `fractionBps` keeps ≥~10% margin below the far ticket's present EV so a 110%-day pawn doesn't overpay sDGNRS); BURNIE-can't-mint-a-far-entry is confirmed; and solvency is safe (`claimablePool ≤ ETH + stETH` never violated — ticket leg adds pool slack, cash leg is a claimant-to-claimant relabel; array length bounded ≤32).
+**Plans**: TBD
+**UI hint**: no
+
+### Phase 328: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure
+**Goal**: The v48.0 audit subject (the single batched diff) is delta-audited NON-WIDENING against the v47.0 baseline, swept by the 3-skill genuine-PARALLEL adversarial pass for new findings, consolidated into `audit/FINDINGS-v48.0.md`, and the milestone is closed with the `MILESTONE_V48_AT_HEAD_<sha>` signal and the atomic ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS flip — re-attesting all 40 requirements.
+**Depends on**: Phase 327 (the audit subject must be implemented + test-proven before the terminal delta-audit + sweep)
 **Requirements**: BATCH-03
 **Success Criteria** (what must be TRUE):
-  1. The delta audit covers every contract surface changed vs the v46.0 baseline — rake-removal + presale-box (credit accounting, RNG freeze, close-liveness), lootbox-boon unification (terminal-paradox closure, no BURNIE-funded passes), Degenerette gas (same-results) + per-currency caps, universal claimable-pay (`claimablePool == Σ claimableWinnings` balanced), sDGNRS redemption (two-claimant + BURNIE-can't-block-ETH + conservation), and the AfKing cancel-tombstone (no relocation, no miss) — with each surface attested NON-WIDENING relative to the baseline.
-  2. The 3-skill adversarial sweep runs (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT per the carried decision) charged with presale snipe / credit double-spend / box-RNG freeze / close-liveness, claimable-invariant breakage, lootbox terminal-paradox closure, redemption two-claimant + BURNIE-blocks-ETH + conservation, and tombstone griefing — with every elevation passed through the skeptic filter (structural-protection + 3-condition EV lens) before being recorded.
-  3. The findings deliverable is authored at the v47.0 closure HEAD (mirrors the v44/v46 9-section pattern, chmod 444) with the H-CANCEL-SWAP-MISS finding (deferred from v46.0) recorded as RESOLVED-AT-V47.
-  4. The `MILESTONE_V47_AT_HEAD_<sha>` closure signal is emitted and propagated verbatim, and the atomic 5-doc closure flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) is applied with all 45 requirements re-attested at closure.
-**Plans**: 4 plans (3 waves — Wave 1 the delta-audit + adversarial-sweep analyses run in parallel; Wave 2 the findings deliverable; Wave 3 the autonomous:false USER closure gate)
-- [x] 324-01-PLAN.md — SC1 DELTA AUDIT: all 18 contract surfaces NON-WIDENING vs v46 16e9668a + 598/38/16 regression NON-WIDENING + VRFLifecycle/OBS-1 dispositions (`16e103f4`) [wave 1]
-- [x] 324-02-PLAN.md — SC2 ADVERSARIAL SWEEP: 3-skill GENUINE PARALLEL pass; 13 NEGATIVE/SAFE + 2 MEDIUM FINDING_CANDIDATE (F-47-01 + F-47-02), both DEFERRED→v48 via skeptic filter (`f4e6ef4a`) [wave 1]
-- [x] 324-03-PLAN.md — SC3 FINDINGS DELIVERABLE: audit/FINDINGS-v47.0.md (9-section); 2 findings DEFERRED→v48; H-CANCEL-SWAP-MISS RESOLVED-AT-V47 (`da5c9d50`) [wave 2]
-- [x] 324-04-PLAN.md — SC4 CLOSURE FLIP: USER-approved → MILESTONE_V47_AT_HEAD_da5c9d50… propagated → atomic 5-doc flip (all 45 reqs attested) → chmod 444 [wave 3]
+  1. The delta audit is NON-WIDENING — every `contracts`/`test` diff vs the v47.0-closure baseline `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2` is attributable to a v48-scope item across all 7 surfaces (presale-drain fix, redemption stETH-fallback, keeper rename + VAULT-code, AfKing pool recovery, gameover BURNIE tombstone, Degenerette hero rescale, sDGNRS far-future salvage swap), with each surface attested non-widening relative to the baseline and the two v47-deferred findings (F-47-01, F-47-02) recorded RESOLVED-AT-V48.
+  2. The 3-skill genuine-PARALLEL adversarial sweep runs (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT per the carried decision) charged against the 7 surfaces + composition — the salvage-swap no-arb at the band ceiling / grinder-waiter timing / swap-pop H-CANCEL-SWAP-MISS regression / redemption-desk structural protection, the redemption stETH-fallback donation-robustness, the presale-drain dust bound, the keeper foreclosure + minted-credit faucet, the AfKing pool-recovery accounting, the BURNIE-tombstone overflow, and the Degenerette byte-identical RTP — with every elevation passed through the skeptic filter (structural-protection + 3-condition EV lens) before being recorded.
+  3. `audit/FINDINGS-v48.0.md` is authored at the v48.0 closure HEAD (mirrors the v44/v46/v47 9-section pattern, chmod 444) folding in the F-47-01 + F-47-02 resolution dispositions and any newly-surfaced findings (adjudicated or deferred per user direction).
+  4. The `MILESTONE_V48_AT_HEAD_<sha>` closure signal is emitted and propagated verbatim, and the atomic 5-doc closure flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) is applied with all 40 requirements re-attested at closure.
+**Plans**: TBD
+**UI hint**: no
 
 ---
 
@@ -98,44 +86,50 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 321. SPEC — Design-Lock + Call-Graph Attestation + Reconciliation | 1/1 | ✅ Complete | 2026-05-25 (`779eacc3`) |
-| 322. IMPL — The ONE Batched Contract Diff (all 7 items) | 8/8 | ✅ Complete | 2026-05-25 (`fb29ed51`) |
-| 323. TST — Repro + Same-Results Gas + Cancel-Tombstone Proofs | 5/5 | Complete   | 2026-05-25 |
-| 324. TERMINAL — Delta Audit + Adversarial Sweep + Closure | 4/4 | ✅ Complete | 2026-05-25 (`da5c9d50`) |
-
-**v47.0 SHIPPED 2026-05-25** — closure signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`. Amended verdict: rake-free + presale-boxes + lootbox-boon-unification + Degenerette gas/caps + universal-claimable-pay + sDGNRS-redemption + AfKing-cancel-tombstone (H-CANCEL-SWAP-MISS RESOLVED_AT_V47); RNG_FREEZE_INTACT; **2 MEDIUM FINDINGS (F-47-01 presale closing-box windfall + F-47-02 redemption ETH-empty stETH-fallback) DEFERRED→v48.0** [fix designs locked]; KNOWN_ISSUES_UNMODIFIED. See `audit/FINDINGS-v47.0.md`.
+| 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 0/TBD | Not started | - |
+| 326. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/TBD | Not started | - |
+| 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 0/TBD | Not started | - |
+| 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 0/TBD | Not started | - |
 
 ---
 
 ## Coverage
 
-**45/45 v47.0 requirements mapped to exactly one phase — 0 orphaned, 0 duplicated.**
+**40/40 v48.0 requirements mapped to exactly one phase — 0 orphaned, 0 duplicated.**
 
 | Phase | Requirements | Count |
 |-------|--------------|-------|
-| 321 SPEC | BATCH-01, BATCH-02 | 2 |
-| 322 IMPL | PRESALE-01..13, LOOT-01..06, DGAS-01..04, CPAY-01..03, REDEEM-01..07, DSPIN-01, TOMB-01..03 | 37 |
-| 323 TST | DGAS-05, DSPIN-02, REDEEM-08, TOMB-04, TOMB-05 | 5 |
-| 324 TERMINAL | BATCH-03 | 1 |
-| **Total** | | **45** |
+| 325 SPEC | BATCH-01, RFALL-04, KEEP-04, KEEP-05, POOL-06 | 5 |
+| 326 IMPL | PFIX-01, RFALL-01/02/03, KEEP-01/02/03, POOL-01/02/03/05, BTOMB-01/02, HERO-01/02/03/05, SWAP-01/02/03/04/05/06/07, BATCH-02 | 25 |
+| 327 TST | PFIX-02/03, RFALL-05, POOL-04, BTOMB-03, HERO-04/06, SWAP-08/09 | 9 |
+| 328 TERMINAL | BATCH-03 | 1 |
+| **Total** | | **40** |
 
 **Per-category split (verification):**
 
 | Category | Total | SPEC | IMPL | TST | TERMINAL |
 |----------|-------|------|------|-----|----------|
-| PRESALE | 13 | — | 13 (01–13) | — | — |
-| LOOT | 6 | — | 6 (01–06) | — | — |
-| DGAS | 5 | — | 4 (01–04) | 1 (05) | — |
-| CPAY | 3 | — | 3 (01–03) | — | — |
-| REDEEM | 8 | — | 7 (01–07) | 1 (08) | — |
-| DSPIN | 2 | — | 1 (01) | 1 (02) | — |
-| TOMB | 5 | — | 3 (01–03) | 2 (04–05) | — |
-| BATCH | 3 | 2 (01–02) | — | — | 1 (03) |
-| **Total** | **45** | **2** | **37** | **5** | **1** |
+| PFIX | 3 | — | 1 (01) | 2 (02–03) | — |
+| RFALL | 5 | 1 (04) | 3 (01–03) | 1 (05) | — |
+| KEEP | 5 | 2 (04–05) | 3 (01–03) | — | — |
+| POOL | 6 | 1 (06) | 4 (01,02,03,05) | 1 (04) | — |
+| BTOMB | 3 | — | 2 (01–02) | 1 (03) | — |
+| HERO | 6 | — | 4 (01,02,03,05) | 2 (04,06) | — |
+| SWAP | 9 | — | 7 (01–07) | 2 (08–09) | — |
+| BATCH | 3 | 1 (01) | 1 (02) | — | 1 (03) |
+| **Total** | **40** | **5** | **25** | **9** | **1** |
 
-✓ All 45 v47.0 requirements mapped
+**Center-of-gravity rationale (where a requirement spans design+impl+test):**
+- **RFALL-04** (accounting-shape decision) → SPEC; the implementation lands under RFALL-01/02/03 (IMPL).
+- **KEEP-04** (VAULT registered-code prerequisite) + **KEEP-05** (autoOpen-capability scoping) → SPEC; the rename/affiliate-wiring code lands under KEEP-01/02/03 (IMPL).
+- **POOL-06** (post-gameOver re-stranding decision) → SPEC; the recovery code lands under POOL-01/02/03/05 (IMPL); the `receive()` accounting-safety proof is POOL-04 (TST).
+- **HERO-04** owns the byte-reproduce gate (empirical `derive_5_tables.py` PASS_ALL) → TST; the SPEC-time shape+packing choice is folded into BATCH-01's open-item resolution; the table values land under HERO-03 (IMPL).
+- **SWAP-08** owns the no-arb proof at the band ceiling → TST; the floor RE-CONFIRMATION attestation is folded into BATCH-01 (SPEC) and the swap economics land under SWAP-02/03 (IMPL).
+- **BATCH-01** (the single SPEC design-lock) absorbs the remaining SPEC-time open-item resolutions (BTOMB packing, HERO-04 shape+packing, SWAP-03 jitter source + SWAP-08 acquisition-floor re-confirm) without duplicating the requirements those decisions feed.
+
+✓ All 40 v48.0 requirements mapped
 ✓ No orphaned requirements
 ✓ No duplicated requirements
 
 ---
-*Roadmap created: 2026-05-24*
+*Roadmap created: 2026-05-25*
