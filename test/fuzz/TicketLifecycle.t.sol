@@ -2090,7 +2090,7 @@ contract TicketLifecycleTest is DeployProtocol {
     // ==================== Lootbox Helpers ====================
 
     /// @dev Storage slot for lootboxRngWordByIndex mapping (confirmed via forge inspect)
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 38;
 
     /// @notice Purchase tickets with a lootbox ETH allocation. Returns the lootbox RNG index.
     /// @param who Buyer address

@@ -49,14 +49,14 @@ contract CrankResolveBetWorstCaseGas is DeployProtocol {
     // Storage-slot constants (DegenerusGame; confirmed via `forge inspect storage`)
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 35; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;
+    /// @dev lootboxRngPacked at slot 37 (v47: +2 from presale-box storage additions); lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 37;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 38;
     /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 43;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 45;
     /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 44;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 46;
     /// @dev prizePoolsPacked at slot 2 ((future << 128) | next).
     uint256 private constant PRIZE_POOLS_SLOT = 2;
 

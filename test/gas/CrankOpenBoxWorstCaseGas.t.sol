@@ -31,12 +31,12 @@ contract CrankOpenBoxWorstCaseGas is DeployProtocol {
     // Storage-slot constants (DegenerusGame; confirmed via `forge inspect storage`)
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 35; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;
+    /// @dev lootboxRngPacked at slot 37 (v47: +2 from presale-box storage additions); lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 37;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 38;
     /// @dev lootboxEthBase mapping root slot (uint48 index => address => base). First-deposit signal.
-    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 19;
+    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 22;
 
     // -------------------------------------------------------------------------
     // Worst-case / measurement constants
@@ -228,7 +228,7 @@ contract CrankOpenBoxWorstCaseGas is DeployProtocol {
         );
     }
 
-    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 35).
+    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 37 (v47: +2 from presale-box storage additions)).
     function _activeLootboxIndex() internal view returns (uint48) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
         return uint48(packed & 0xFFFFFFFFFFFF);

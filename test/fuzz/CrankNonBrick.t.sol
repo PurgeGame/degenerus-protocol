@@ -50,14 +50,14 @@ contract CrankNonBrick is DeployProtocol {
     // Storage slot constants (DegenerusGame; confirmed via `forge inspect storage`)
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 35; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;
+    /// @dev lootboxRngPacked at slot 37 (v47: +2 from presale-box storage additions); lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 37;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 38;
     /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 43;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 45;
     /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 44;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 46;
     /// @dev lootboxEth mapping root slot (uint48 index => address => packed).
     uint256 private constant LOOTBOX_ETH_SLOT = 15;
     /// @dev rngLockedFlag is bool at slot 0 offset 21 bytes = bit 168.
@@ -516,7 +516,7 @@ contract CrankNonBrick is DeployProtocol {
         return PriceLookupLib.priceForLevel(lvl);
     }
 
-    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 35).
+    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 37 (v47: +2 from presale-box storage additions)).
     function _activeLootboxIndex() internal view returns (uint48) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
         return uint48(packed & 0xFFFFFFFFFFFF);
