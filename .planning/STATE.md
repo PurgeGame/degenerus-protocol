@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v47.0
 milestone_name: Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle
 status: executing
-last_updated: "2026-05-25T15:40:00.000Z"
-last_activity: "2026-05-25 — **Phase 323-05 TOMB-04 COMPLETE** (`b47fc3e7` + `9b46403e`, test-only, zero contracts/*.sol edits; AfKing.sol byte-identical to frozen `fb29ed51`). H-CANCEL-SWAP-MISS EMPIRICALLY RESOLVED: the 4 named cancel-tombstone tests prove the v47 in-place tombstone relocates no one → no pending tail behind the chunked-sweep cursor → no missed day → mint streaks preserved (testCancelBehindCursorDoesNotStrandPendingTail is the direct repro; + reclaim-by-next-sweep ahead/behind cursor, paid-window preserved through deferred reclaim, reactivation no-double-add). The 4 NEW didWork revert-fix cases prove a reclaim-only / auto-pause-only chunk COMMITS (no NoSubscribersSwept rollback → no tombstone re-strand), spam-cancel strands NO tombstone over a full day + misses no active buy, and a genuinely-empty (!didWork) chunk STILL reverts (anti-spam preserved). The 5 stale AfKingConcurrency cancel tests RETARGETED v46-immediate-swap-pop → v47-deferred-reclaim (non-widening, same intent); the 318-04 guarantees (exactly-once same-block, lastSweptDay backstop, per-day reset one-buy, no double-buy, two-tier skip-kill) re-confirmed UNCHANGED. AfKingConcurrency 14/14 + CrankNonBrick 16/16 (37/37 across all AfKing fuzz suites). Auto-fixed one test-harness bug (expectRevert call-target ordering). 0 contract defects. Phase 323 TST — all 5 plans COMPLETE; NEXT = Phase 324 TERMINAL."
+last_updated: "2026-05-25T15:13:05.431Z"
+last_activity: 2026-05-25 -- Phase 324 planning complete
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 14
-  completed_plans: 14
+  total_plans: 18
+  completed_plans: 15
   percent: 75
 ---
 
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (Current Milestone: v47.0 section)
 
 Phase: 323 — TST — Repro-First + Same-Results Gas + Behavior/EV + Cancel-Tombstone Proofs
 Plan: Wave 1 repair COMPLETE (323-01 FOUNDRY + 323-02 HARDHAT); Wave 2 — **323-03 REDEEM-08 + 323-04 DGAS-05/DSPIN-02 + 323-05 TOMB-04 COMPLETE** — Phase 323 ALL 5 PLANS DONE
-Status: Phase 323 COMPLETE+verified (323-VERIFICATION PASSED 5/5). Hard-testing surfaced + the audit FIXED a real MEDIUM insolvency (Degenerette resolveBets post-game-over unbacked-credit) — USER-approved guard `fabe9e94` (subject advanced from `fb29ed51`); proven closed (`testResolveBetsRevertsPostGameOver_InsolvencyReproClosed`), bug-class swept 0 siblings, 5 stale-harness solvency invariants re-greened (principled obligation-formula fix). Baseline non-widening (598/38/16). **Audit subject now `fabe9e94`.** NEXT = Phase 324 TERMINAL (delta-audit vs v46 + 3-skill sweep + closure). 324 handoff: VRFLifecycle calibration + OBS-1.
-Last activity: 2026-05-25 — **Phase 323-05 TOMB-04 COMPLETE** (`b47fc3e7` + `9b46403e`, test-only, zero contracts/*.sol edits; AfKing.sol byte-identical to frozen `fb29ed51`). H-CANCEL-SWAP-MISS EMPIRICALLY RESOLVED: 4 named cancel-tombstone tests (testCancelBehindCursorDoesNotStrandPendingTail = the direct repro: in-place tombstone relocates no one → pending tail still buys → no missed day; + reclaim-by-next-sweep ahead/behind cursor; paid-window preserved through deferred reclaim; reactivation no-double-add). 4 NEW didWork revert-fix cases: reclaim-only + auto-pause-only chunks COMMIT (no NoSubscribersSwept rollback → no re-strand), spam-cancel strands NO tombstone over a full day + misses no active buy, a genuinely-empty (!didWork) chunk STILL reverts. 5 stale AfKingConcurrency cancel tests RETARGETED v46-swap-pop → v47-deferred-reclaim (non-widening). 318-04 guarantees re-confirmed UNCHANGED. AfKingConcurrency 14/14 + CrankNonBrick 16/16 (37/37 all AfKing fuzz suites). Auto-fixed one test-harness bug (expectRevert call-target ordering). 0 contract defects.
+Status: Ready to execute
+Last activity: 2026-05-25 -- Phase 324 planning complete
 Last activity: 2026-05-25 — **Phase 323-04 DGAS-05 + DSPIN-02 COMPLETE** (`39807240` + `b74ff527`, test-only, zero contracts/*.sol edits). DGAS-05: the Degenerette `resolveBets` write-batching is payout BYTE-IDENTICAL to a per-spin baseline; DSPIN-02 25-spin ETH worst case 485,089 gas + max mixed batch 619,349 gas, both absorbed under 30M. 8/8 freeze-resolution + 4/4 gas PASS. 0 contract defects.
 Last activity: 2026-05-25 — Phase 322 IMPL CLOSED: batched diff USER-APPROVED + committed `fb29ed51`; 322-VERIFICATION PASSED (6/6 SC, build clean); 4 USER-directed refinements folded in (burnForRedemption removal, AfKing didWork revert-fix, _settleClaimableShortfall helper, flipDay param removal). Audit subject frozen at `fb29ed51` for the Phase 324 delta-audit.
 Last activity: 2026-05-25 — Phase 322 PLANNED: 8 serialized plans (`a5e1dbf4`) + CONTEXT (`1c9d6e08`); plan-checker PASSED (37/37 reqs exactly-once, R1–R7 reconciliation ownership verified, commit-guard ordering OK, no pre-approval language); 322-01 Task-2 deletion-ordering prose tightened per the checker's lone warning.
