@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
-status: planning
-last_updated: "2026-05-25T16:37:18.345Z"
-last_activity: 2026-05-25
+status: executing
+last_updated: "2026-05-25T17:08:33.479Z"
+last_activity: 2026-05-25 -- Phase 325 planning complete
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
+  total_plans: 3
   completed_plans: 0
   percent: 0
 ---
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 
 Phase: 325 (SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation) — context gathered, ready to plan
 Plan: —
-Status: Phase 325 context gathered (`325-CONTEXT.md`, commit `8fdc3728`) — HERO-04 payout shape (Continuity curve; S=2 partial-refund consolation; bonus thresholds preserve-rarity S≥7) + POOL-06 re-stranding (accept-as-minor) resolved with user; SWAP-08 margin + RFALL-04 accounting-shape locked to plan-doc leans; pure attestations (KEEP-04/05, BTOMB/S8-S9 packing, SWAP-03 jitter source, SWAP-06 swap-pop) flagged for SPEC-author source work
-Last activity: 2026-05-25 — `/gsd-discuss-phase 325` → `325-CONTEXT.md` + `325-DISCUSSION-LOG.md` committed
+Status: Ready to execute
+Last activity: 2026-05-25 -- Phase 325 planning complete
 Next: `/gsd-plan-phase 325` — SPEC design-lock (zero contract mutation; settle shared signatures across DegenerusGame/StakedDegenerusStonk/DegenerusVault + re-confirm the salvage-swap no-arb floor + resolve every SPEC-time open item before any patch)
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
