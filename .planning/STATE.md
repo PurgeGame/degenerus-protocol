@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
 status: executing
-last_updated: "2026-05-25T17:35:40.506Z"
-last_activity: 2026-05-25 -- Phase 325 execution started
+last_updated: "2026-05-25T17:46:11.505Z"
+last_activity: 2026-05-25
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 33
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 ## Current Position
 
 Phase: 325 (spec-design-lock-call-graph-attestation-shared-surface-recon) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 325
-Last activity: 2026-05-25 -- Phase 325 execution started
-Next: `/gsd-execute-phase 325` — run the SPEC design-lock (zero contract mutation). Wave 1 (parallel): grep-attest every cited file:line vs HEAD da5c9d50 (325-01) + re-derive the salvage-swap no-arb floor / pin the jitter source / enumerate the swap-pop (325-02). Wave 2: reconcile the shared signatures across DegenerusGame/StakedDegenerusStonk/DegenerusVault and resolve every SPEC-time open item into 325-SPEC.md (325-03)
+Plan: 2 of 3
+Status: Executing Phase 325 (Plan 01 done)
+Last activity: 2026-05-25 -- Phase 325 Plan 01 complete (items 1-6 call-graph attestation; 60 anchors, 0 IMPL blockers; KEEP-04/05/POOL-05 resolved)
+Next: `/gsd-execute-phase 325` — continue Wave 1: Plan 02 (325-02) load-bearing SWAP item-7 attestation — re-derive the SWAP-08 no-arb floor at the band ceiling (STOP-if-violated) + pin the SWAP-03 jitter source + enumerate the SWAP-06 swap-pop → 325-ATTEST-SWAP.md. Then Wave 2: Plan 03 (325-03) reconcile the shared signatures across DegenerusGame/StakedDegenerusStonk/DegenerusVault + resolve every SPEC-time open item into 325-SPEC.md (consumes the 325-ATTEST verdicts: 0 blockers, KEEP-04=YES/KEEP-05=EXISTING/POOL-05=VERBATIM-MATCH, KEEP-03 wiring at DegenerusGame.sol:1778)
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
 
@@ -522,6 +522,7 @@ Audit deliverables:
 | Phase 319 P02 | 30min | 3 tasks | 3 files |
 | Phase 319 P03 | 25min | 1 tasks | 1 files |
 | 319 | 05 | ~16min | 1 (Task 3; Tasks 1-2 prior agents) | 5 files (DegenerusGame.sol :1501-1502 + 4 test mirrors) + 1 SUMMARY (GAS-06 OUTCOME-B calibration; 66_528/137_944; placement +0%; 556 pass/44 fail = exact v45 baseline; SAFE-01 round-trip<=0 preserved) |
+| Phase 325 P01 | 10min | 3 tasks | 3 files |
 
 ## Decisions
 
@@ -626,3 +627,6 @@ Audit deliverables:
 - [Phase 319-05]: GAS-06 CLOSED via USER-approved OUTCOME-B batched diff e4014f91 — crank reward-peg constants recalibrated to measured per-item marginals: DegenerusGame.sol:1501 CRANK_RESOLVE_BET_GAS_UNITS 120_000->66_528 (down; tightens reference-price faucet floor + REW-03 accuracy), :1502 CRANK_OPEN_BOX_GAS_UNITS 120_000->137_944 (up; REW-03 accuracy, still <= marginal); :1495 CRANK_GAS_PRICE_REF 0.5 gwei UNTOUCHED. Four test mirrors synced same diff (CrankFaucetResistance/CrankNonBrick/CrankLeversAndPacking/RngFreezeAndRemovalProofs). SAFE-01 round-trip<=0 preserved (=0 @ 0.5 gwei ref, <0 @ every >=1 gwei market). Placement +0% (zero snapshot row delta + zero forge-snapshot --check Diff line + .gas-snapshot byte-identical on regen). Full suite 556 pass / 44 fail = EXACT v45 baseline, zero NEW failures.
 - [Phase 319-05]: BOUNTY_ETH_TARGET (DeployProtocol.sol:126 arg2 = 885_000_000 wei) LEFT AS-IS per USER — it is a test fixture, ~177,000x below the sweep faucet floor (under-incentivizes the keeper, NOT a faucet risk). Production keeper deploy lives in the paired degenerus-utilities repo; recommended production round-trip-<=0 ceiling <= 51,501,166,666,666 wei (6x-stall, >=1 gwei-market bound). No DeployProtocol.sol edit here.
 - [Phase 319-05]: GAS-02 hoist (SCAV-319-01) DROPPED as a NO-OP — the viaIR/runs=200 optimizer already does the CSE on the loop-invariant pure recomputation; zero measured runtime saving. Not in the batched diff. The diff is the two *_GAS_UNITS integers + the four test-mirror syncs ONLY.
+- [Phase ?]: Phase 325 Plan 01: items 1-6 anchor attestation complete (60 anchors, 58 MATCH / 2 immaterial SHIFTED / 0 ABSENT), 0 IMPL blockers across three 325-ATTEST docs
+- [Phase ?]: KEEP-04=YES (registered owner==VAULT code bytes32 DGNRS exists, no setup); KEEP-05=EXISTING (autoOpen renames crankBoxes); POOL-05=VERBATIM MATCH (withdraw(uint256)/poolOf(address); AfKing unchanged for item 4)
+- [Phase ?]: KEEP-03 wiring-site: affiliate code 0 is at DegenerusGame.sol:1778 not AfKing; BTOMB reuse target BurnieCoin vaultEscrow :557-567; HERO-06 no-leak confirmed
