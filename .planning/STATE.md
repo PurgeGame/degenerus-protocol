@@ -1,36 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v47.0
-milestone_name: Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle
-status: shipped
-last_updated: "2026-05-25T16:30:00.000Z"
-last_activity: 2026-05-25 -- v47.0 SHIPPED (Phase 324 TERMINAL closed; 2 MEDIUM findings DEFERRED→v48.0)
+milestone: v48.0
+milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
+status: planning
+last_updated: "2026-05-25T16:12:06.757Z"
+last_activity: 2026-05-25
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 18
-  completed_plans: 18
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v47.0 section)
+See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** **v47.0 SHIPPED 2026-05-25.** No active milestone — v48.0 next (queued: F-47-01 + F-47-02 fixes, keeper-rename/VAULT-code, gameover-burnie-tombstone, sDGNRS far-future salvage swap). Phase 324 TERMINAL closed: SC1 delta-audit NON-WIDENING + SC2 3-skill sweep (2 MEDIUM findings, both DEFERRED→v48.0) + SC3 `audit/FINDINGS-v47.0.md` (chmod 444) + SC4 closure flip. Closure signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; subject frozen `fabe9e94`.
+**Current focus:** **v48.0 STARTED 2026-05-25 — defining requirements + roadmap.** sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes (F-47-01 + F-47-02) + Keeper/Pool/Tombstone/Hero bundle — 7 work items, ONE batched USER-APPROVED contract diff → TST → TERMINAL sweep+closure (v44–v47 shape). Audit baseline → subject: v47.0 closure HEAD `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2` → v48.0 closure HEAD; every `file:line` + salvage-swap economics re-attested vs the v47.0-closure HEAD before any patch. Phase numbering continues from 324 → v48.0 starts at Phase 325.
 
 ## Current Position
 
-Phase: 324 (terminal-delta-audit-3-skill-adversarial-sweep-closure) — ✅ COMPLETE (v47.0 milestone SHIPPED)
-Plan: 4 of 4 (SC1 16e103f4 · SC2 f4e6ef4a · SC3 da5c9d50 · SC4 closure flip)
-Status: v47.0 closed; awaiting v48.0 start
-Last activity: 2026-05-25 -- v47.0 SHIPPED; 2 MEDIUM findings (F-47-01 presale-closing-box windfall + F-47-02 redemption ETH-empty stETH-fallback) DEFERRED→v48.0 with fix designs locked
-Last activity: 2026-05-25 — **Phase 323-04 DGAS-05 + DSPIN-02 COMPLETE** (`39807240` + `b74ff527`, test-only, zero contracts/*.sol edits). DGAS-05: the Degenerette `resolveBets` write-batching is payout BYTE-IDENTICAL to a per-spin baseline; DSPIN-02 25-spin ETH worst case 485,089 gas + max mixed batch 619,349 gas, both absorbed under 30M. 8/8 freeze-resolution + 4/4 gas PASS. 0 contract defects.
-Last activity: 2026-05-25 — Phase 322 IMPL CLOSED: batched diff USER-APPROVED + committed `fb29ed51`; 322-VERIFICATION PASSED (6/6 SC, build clean); 4 USER-directed refinements folded in (burnForRedemption removal, AfKing didWork revert-fix, _settleClaimableShortfall helper, flipDay param removal). Audit subject frozen at `fb29ed51` for the Phase 324 delta-audit.
-Last activity: 2026-05-25 — Phase 322 PLANNED: 8 serialized plans (`a5e1dbf4`) + CONTEXT (`1c9d6e08`); plan-checker PASSED (37/37 reqs exactly-once, R1–R7 reconciliation ownership verified, commit-guard ordering OK, no pre-approval language); 322-01 Task-2 deletion-ordering prose tightened per the checker's lone warning.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-25 — Milestone v48.0 started
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
 
