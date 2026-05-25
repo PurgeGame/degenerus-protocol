@@ -29,13 +29,15 @@
 //                      than to fall through with a no-op multiplier), NOT
 //                      a semantic carve-out. Therefore the worst-case is a
 //                      SINGLE construction at N=3 + M=8 + ETH tier 3 +
-//                      ticketCount = MAX_SPINS_PER_BET = 10. No separate
-//                      M=7 sub-case is needed.
+//                      ticketCount = MAX_SPINS_ETH = 25 (v47 raised the ETH
+//                      per-currency cap from the retired single cap of 10). No
+//                      separate M=7 sub-case is needed.
 //   ETH tier 3       — payout > 10 * betAmount; lootbox-conversion path via
 //                      _resolveLootboxDirect (~50K extra gas per ticket).
 //                      At N=3 M=8: payout = 175,123.24× bet >> 10× bet,
 //                      tier 3 triggers at any betAmount.
-//   ticketCount = 10 — MAX_SPINS_PER_BET per L226. Per-spin gas multiplies.
+//   ticketCount = 25 — MAX_SPINS_ETH per L226 (v47 per-currency ETH cap).
+//                      Per-spin gas multiplies.
 //
 // Per-spin opcode walk (M=8 jackpot path):
 //   - keccak256(abi.encodePacked(rngWord, index, [spinIdx,] QUICK_PLAY_SALT)) ~ 100 gas
@@ -145,15 +147,24 @@ const QUICK_PLAY_SALT = "0x51"; // bytes1 = 'Q'
 
 // LOOTBOX_RNG_WORD_SLOT = 36 (per Foundry precedent at
 // test/fuzz/DegeneretteFreezeResolution.t.sol L37).
-const LOOTBOX_RNG_WORD_SLOT = 36n;
-const LOOTBOX_RNG_PACKED_SLOT = 35n;
+// v47 storage-layout shift (forge inspect, frozen at fb29ed51): the presale-box
+// additions minus the earlybird removals shifted these mapping/packed slots down by
+// 2 (lootboxRngPacked 35->37, lootboxRngWordByIndex 36->38). Mirrors the Phase
+// 323-01 foundry slot-shift repair.
+const LOOTBOX_RNG_WORD_SLOT = 38n;
+const LOOTBOX_RNG_PACKED_SLOT = 37n;
 
 // Stage constants (mirror test/gas/Phase264GasRegression.test.js L130-133).
 const STAGE_RNG_REQUESTED = 1n;
 const STAGE_PURCHASE_DAILY = 6n;
 
-// MAX_SPINS_PER_BET per .sol L226.
-const MAX_SPINS_PER_BET = 10;
+// v47: the retired single per-bet spin cap (=10) was replaced by per-currency caps
+// (MAX_SPINS_ETH=25 / MAX_SPINS_BURNIE=15 / MAX_SPINS_WWXRP=5) at
+// DegenerusGameDegeneretteModule.sol L226-228. This regression benches the ETH
+// tier-3 worst case (see the worst-case derivation above), so it uses the ETH cap.
+// The worst-case spin count rises 10 -> 25, so the absolute worst-case gas number
+// is a v47-delta (more per-spin iterations at the raised cap), not a regression.
+const MAX_SPINS_ETH = 25;
 
 // MIN_BET_ETH per .sol L217.
 const MIN_BET_ETH = eth(0.005);
@@ -288,9 +299,9 @@ describe("v37.0 SURF-06 — worst-case quickPlay gas envelope", function () {
     // empty, attempt brute-force search up to per-spin budget; on failure or
     // budget exhaustion, soft-skip with diagnostic output.
     let rngWords;
-    if (WORST_CASE_RNG_WORDS.length === MAX_SPINS_PER_BET) {
+    if (WORST_CASE_RNG_WORDS.length === MAX_SPINS_ETH) {
       rngWords = WORST_CASE_RNG_WORDS.map((w) => BigInt(w));
-      console.log(`[SURF-06] using ${MAX_SPINS_PER_BET} pinned WORST_CASE_RNG_WORDS literals`);
+      console.log(`[SURF-06] using ${MAX_SPINS_ETH} pinned WORST_CASE_RNG_WORDS literals`);
     } else {
       console.log(`[SURF-06] WORST_CASE_RNG_WORDS not pinned — attempting brute-force search (per-spin budget 64K candidates; soft-skip on miss)`);
       // Search budget capped at 64K candidates per spin (≈ 1-3s per spin).
@@ -304,7 +315,7 @@ describe("v37.0 SURF-06 — worst-case quickPlay gas envelope", function () {
       const startSearch = Date.now();
       const index = 1; // matches the lootboxRngIndex seeded below
       const found = [];
-      for (let spinIdx = 0; spinIdx < MAX_SPINS_PER_BET; spinIdx++) {
+      for (let spinIdx = 0; spinIdx < MAX_SPINS_ETH; spinIdx++) {
         const rngWord = searchRngWordForMatch8(playerTicket, index, spinIdx, searchBudget);
         if (rngWord === null) {
           const elapsed = ((Date.now() - startSearch) / 1000).toFixed(1);

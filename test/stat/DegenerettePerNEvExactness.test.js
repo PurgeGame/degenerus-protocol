@@ -166,7 +166,14 @@ const CURRENCY_BURNIE = 1;
 const CURRENCY_WWXRP = 3;
 
 // Other constants.
-const MAX_SPINS_PER_BET = 10;
+// v47: the retired single per-bet spin cap (=10) was replaced by per-currency caps
+// (DegenerusGameDegeneretteModule.sol L226-228). This STAT suite proves per-N EV
+// exactness for N ∈ {0..4} — well under every per-currency cap — so the cap value
+// is not load-bearing here; the rename only widens the reachable N range, the per-N
+// EV is UNCHANGED (same-results by design). Kept for documentary parity.
+const MAX_SPINS_ETH = 25;
+const MAX_SPINS_BURNIE = 15;
+const MAX_SPINS_WWXRP = 5;
 const MIN_BET_ETH = 5n * 10n ** 15n; // 0.005 ETH
 
 // ---------------------------------------------------------------------------
@@ -342,14 +349,15 @@ function makePlayerTicketWithN(N) {
 
 // ---------------------------------------------------------------------------
 // Hardhat-side mirror of test/fuzz/DegeneretteFreezeResolution.t.sol L338-341
-// (`_injectLootboxRngWord`). LOOTBOX_RNG_WORD_SLOT = 36 per Foundry L37.
+// (`_injectLootboxRngWord`). v47: lootboxRngWordByIndex shifted slot 36 -> 38
+// (forge inspect at fb29ed51; presale-box additions minus earlybird removals).
 // ---------------------------------------------------------------------------
 
 async function injectLootboxRngWord(game, index, rngWord) {
   const slot = hre.ethers.keccak256(
     hre.ethers.AbiCoder.defaultAbiCoder().encode(
       ["uint256", "uint256"],
-      [BigInt(index), 36n],
+      [BigInt(index), 38n],
     ),
   );
   await hre.network.provider.send("hardhat_setStorageAt", [
