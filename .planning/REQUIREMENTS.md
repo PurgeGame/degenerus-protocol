@@ -97,51 +97,51 @@ Each requirement maps to exactly one phase. Milestone shape (matching v44/v45/v4
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BATCH-01 | Phase 321 (SPEC) | Pending |
-| BATCH-02 | Phase 321 (SPEC) | Pending |
-| PRESALE-01 | Phase 322 (IMPL) | Pending |
-| PRESALE-02 | Phase 322 (IMPL) | Pending |
-| PRESALE-03 | Phase 322 (IMPL) | Pending |
-| PRESALE-04 | Phase 322 (IMPL) | Pending |
-| PRESALE-05 | Phase 322 (IMPL) | Pending |
-| PRESALE-06 | Phase 322 (IMPL) | Pending |
-| PRESALE-07 | Phase 322 (IMPL) | Pending |
-| PRESALE-08 | Phase 322 (IMPL) | Pending |
-| PRESALE-09 | Phase 322 (IMPL) | Pending |
-| PRESALE-10 | Phase 322 (IMPL) | Pending |
-| PRESALE-11 | Phase 322 (IMPL) | Pending |
-| PRESALE-12 | Phase 322 (IMPL) | Pending |
-| PRESALE-13 | Phase 322 (IMPL) | Pending |
-| LOOT-01 | Phase 322 (IMPL) | Pending |
-| LOOT-02 | Phase 322 (IMPL) | Pending |
-| LOOT-03 | Phase 322 (IMPL) | Pending |
-| LOOT-04 | Phase 322 (IMPL) | Pending |
-| LOOT-05 | Phase 322 (IMPL) | Pending |
-| LOOT-06 | Phase 322 (IMPL) | Pending |
-| DGAS-01 | Phase 322 (IMPL) | Pending |
-| DGAS-02 | Phase 322 (IMPL) | Pending |
-| DGAS-03 | Phase 322 (IMPL) | Pending |
-| DGAS-04 | Phase 322 (IMPL) | Pending |
-| CPAY-01 | Phase 322 (IMPL) | Pending |
-| CPAY-02 | Phase 322 (IMPL) | Pending |
-| CPAY-03 | Phase 322 (IMPL) | Pending |
-| REDEEM-01 | Phase 322 (IMPL) | Pending |
-| REDEEM-02 | Phase 322 (IMPL) | Pending |
-| REDEEM-03 | Phase 322 (IMPL) | Pending |
-| REDEEM-04 | Phase 322 (IMPL) | Pending |
-| REDEEM-05 | Phase 322 (IMPL) | Pending |
-| REDEEM-06 | Phase 322 (IMPL) | Pending |
-| REDEEM-07 | Phase 322 (IMPL) | Pending |
-| DSPIN-01 | Phase 322 (IMPL) | Pending |
-| TOMB-01 | Phase 322 (IMPL) | Pending |
-| TOMB-02 | Phase 322 (IMPL) | Pending |
-| TOMB-03 | Phase 322 (IMPL) | Pending |
+| BATCH-01 | Phase 321 (SPEC) | ✅ Complete |
+| BATCH-02 | Phase 321 (SPEC) | ✅ Complete |
+| PRESALE-01 | Phase 322 (IMPL) | ✅ Complete |
+| PRESALE-02 | Phase 322 (IMPL) | ✅ Complete |
+| PRESALE-03 | Phase 322 (IMPL) | ✅ Complete |
+| PRESALE-04 | Phase 322 (IMPL) | ✅ Complete |
+| PRESALE-05 | Phase 322 (IMPL) | ✅ Complete |
+| PRESALE-06 | Phase 322 (IMPL) | ✅ Complete |
+| PRESALE-07 | Phase 322 (IMPL) | ✅ Complete |
+| PRESALE-08 | Phase 322 (IMPL) | ✅ Complete |
+| PRESALE-09 | Phase 322 (IMPL) | ✅ Complete |
+| PRESALE-10 | Phase 322 (IMPL) | ✅ Complete |
+| PRESALE-11 | Phase 322 (IMPL) | ✅ Complete |
+| PRESALE-12 | Phase 322 (IMPL) | ✅ Complete |
+| PRESALE-13 | Phase 322 (IMPL) | ✅ Complete |
+| LOOT-01 | Phase 322 (IMPL) | ✅ Complete |
+| LOOT-02 | Phase 322 (IMPL) | ✅ Complete |
+| LOOT-03 | Phase 322 (IMPL) | ✅ Complete |
+| LOOT-04 | Phase 322 (IMPL) | ✅ Complete |
+| LOOT-05 | Phase 322 (IMPL) | ✅ Complete |
+| LOOT-06 | Phase 322 (IMPL) | ✅ Complete |
+| DGAS-01 | Phase 322 (IMPL) | ✅ Complete |
+| DGAS-02 | Phase 322 (IMPL) | ✅ Complete |
+| DGAS-03 | Phase 322 (IMPL) | ✅ Complete |
+| DGAS-04 | Phase 322 (IMPL) | ✅ Complete |
+| CPAY-01 | Phase 322 (IMPL) | ✅ Complete |
+| CPAY-02 | Phase 322 (IMPL) | ✅ Complete |
+| CPAY-03 | Phase 322 (IMPL) | ✅ Complete |
+| REDEEM-01 | Phase 322 (IMPL) | ✅ Complete |
+| REDEEM-02 | Phase 322 (IMPL) | ✅ Complete |
+| REDEEM-03 | Phase 322 (IMPL) | ✅ Complete |
+| REDEEM-04 | Phase 322 (IMPL) | ✅ Complete |
+| REDEEM-05 | Phase 322 (IMPL) | ✅ Complete |
+| REDEEM-06 | Phase 322 (IMPL) | ✅ Complete |
+| REDEEM-07 | Phase 322 (IMPL) | ✅ Complete |
+| DSPIN-01 | Phase 322 (IMPL) | ✅ Complete |
+| TOMB-01 | Phase 322 (IMPL) | ✅ Complete |
+| TOMB-02 | Phase 322 (IMPL) | ✅ Complete |
+| TOMB-03 | Phase 322 (IMPL) | ✅ Complete |
 | DGAS-05 | Phase 323 (TST) | Complete (323-04) |
 | DSPIN-02 | Phase 323 (TST) | Complete (323-04) |
-| REDEEM-08 | Phase 323 (TST) | Pending |
+| REDEEM-08 | Phase 323 (TST) | ✅ Complete |
 | TOMB-04 | Phase 323 (TST) | Complete |
-| TOMB-05 | Phase 323 (TST) | Pending |
-| BATCH-03 | Phase 324 (TERMINAL) | Pending |
+| TOMB-05 | Phase 323 (TST) | ✅ Complete |
+| BATCH-03 | Phase 324 (TERMINAL) | ✅ Complete |
 
 **Coverage:**
 - v47.0 requirements: 45 IDs total (PRESALE 13 · LOOT 6 · DGAS 5 · CPAY 3 · REDEEM 8 · DSPIN 2 · TOMB 5 · BATCH 3)
@@ -152,5 +152,14 @@ Each requirement maps to exactly one phase. Milestone shape (matching v44/v45/v4
 Per-category split: PRESALE 13 (all IMPL) · LOOT 6 (all IMPL) · DGAS 5 (01–04 IMPL + 05 TST) · CPAY 3 (all IMPL) · REDEEM 8 (01–07 IMPL + 08 TST) · DSPIN 2 (01 IMPL + 02 TST) · TOMB 5 (01–03 IMPL + 04/05 TST) · BATCH 3 (01–02 SPEC + 03 TERMINAL). Full phase detail + per-phase success criteria in `.planning/ROADMAP.md`.
 
 ---
+
+## v47.0 Closure Attestation (2026-05-25)
+
+All **45/45** v47.0 requirements attested at closure (signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; subject frozen `fabe9e94`). SPEC (BATCH-01/02) + IMPL (37) + TST (5: DGAS-05/DSPIN-02/TOMB-04 + REDEEM-08/TOMB-05) + TERMINAL (BATCH-03) all Complete. SC1 delta-audit: every surface NON-WIDENING. SC2 sweep: 2 MEDIUM findings, both DEFERRED→v48.0:
+- **F-47-01** (presale closing-box DGNRS windfall) attaches to **PRESALE-05/PRESALE-09** — IMPL-as-specced; the DGNRS draw-rate vs the closing sweep carries a v48 fix (`.planning/PLAN-V48-PRESALE-BOX-DRAIN-FIX.md`, mechanism locked: denominator 1000→400).
+- **F-47-02** (redemption submit ETH-empty stETH-fallback gap) attaches to **REDEEM-01/REDEEM-03** — IMPL-as-specced (fail-closed per REDEEM-01); a mid-game ETH→stETH fallback carries a v48 fix (`.planning/PLAN-V48-REDEMPTION-ETH-STETH-FALLBACK.md`, pure-ETH/stETH, donation-robust).
+
+H-CANCEL-SWAP-MISS (v46.0-deferred) RESOLVED-AT-V47 (TOMB-01/02/03). Full report: `audit/FINDINGS-v47.0.md`.
+
 *Requirements defined: 2026-05-24*
-*Last updated: 2026-05-24 after v47.0 milestone definition*
+*Last updated: 2026-05-25 — v47.0 closure (all 45 attested; 2 MEDIUM findings deferred→v48.0)*

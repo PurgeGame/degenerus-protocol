@@ -1,6 +1,6 @@
 # Roadmap: v47.0 — Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle
 
-**Milestone:** v47.0
+**Milestone:** v47.0 — ✅ **SHIPPED 2026-05-25** (closure signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; 2 MEDIUM findings F-47-01 + F-47-02 DEFERRED→v48.0, fix designs locked)
 **Defined:** 2026-05-24
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 **Audit baseline → subject:** v46.0 closure HEAD `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687` → v47.0 closure HEAD. Subject = the single batched USER-APPROVED contract diff reconciling the seven work items (manifest `.planning/PLAN-V47-MILESTONE-SCOPE.md`).
@@ -19,7 +19,7 @@
 - [x] **Phase 321: SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation** - Settle every shared-surface signature (final `resolveRedemptionLootbox` form), grep-attest every cited file:line vs HEAD, and lock the claimable-invariant joint-check + presale-box RNG freeze re-verification before any patch.
 - [x] **Phase 322: IMPL — The ONE Batched Contract Diff (all 7 items)** - Apply all seven work items' contract edits as a single reconciled diff per manifest §2; HARD STOP at the contract-commit boundary (applied + tested, never committed without explicit user hand-review).
 - [x] **Phase 323: TST — Repro-First + Same-Results Gas + Behavior/EV + Cancel-Tombstone Proofs** - Prove the redemption fix (REDEEM-08 repro must fail pre-fix), the same-results gas + worst-case absorption (DGAS-05 / DSPIN-02), and the AfKing cancel-tombstone correctness (TOMB-04) + the stale-test baseline repair (TOMB-05). (completed 2026-05-25)
-- [ ] **Phase 324: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure** - Delta-audit vs the v46.0 baseline, run the 3-skill adversarial sweep, author the findings deliverable, and flip the `MILESTONE_V47_AT_HEAD_<sha>` closure signal.
+- [x] **Phase 324: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure** - Delta-audit vs the v46.0 baseline, run the 3-skill adversarial sweep, author the findings deliverable, and flip the closure signal. (completed 2026-05-25; sweep surfaced 2 MEDIUM findings → DEFERRED→v48.0)
 
 ---
 
@@ -87,10 +87,10 @@
   3. The findings deliverable is authored at the v47.0 closure HEAD (mirrors the v44/v46 9-section pattern, chmod 444) with the H-CANCEL-SWAP-MISS finding (deferred from v46.0) recorded as RESOLVED-AT-V47.
   4. The `MILESTONE_V47_AT_HEAD_<sha>` closure signal is emitted and propagated verbatim, and the atomic 5-doc closure flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) is applied with all 45 requirements re-attested at closure.
 **Plans**: 4 plans (3 waves — Wave 1 the delta-audit + adversarial-sweep analyses run in parallel; Wave 2 the findings deliverable; Wave 3 the autonomous:false USER closure gate)
-- [ ] 324-01-PLAN.md — SC1 DELTA AUDIT: enumerate all 18 contract surfaces changed vs v46 baseline 16e9668a, attest each NON-WIDENING + the 598/38/16 regression baseline + the VRFLifecycle recalibration / OBS-1 dispositions (read-only) [wave 1]
-- [ ] 324-02-PLAN.md — SC2 ADVERSARIAL SWEEP: the fixed 3-skill pass (/contract-auditor + /zero-day-hunter + /economic-analyst) across the SC2 probe set, every elevation through the skeptic filter, disposition log (read-only) [wave 1]
-- [ ] 324-03-PLAN.md — SC3 FINDINGS DELIVERABLE: author audit/FINDINGS-v47.0.md (9-section, mirrors v46) folding 324-01 + 324-02; H-CANCEL-SWAP-MISS recorded RESOLVED-AT-V47 (doc-only) [wave 2]
-- [ ] 324-04-PLAN.md — SC4 CLOSURE FLIP: USER approval gate (autonomous:false) → resolve + propagate MILESTONE_V47_AT_HEAD_<sha> → atomic 5-doc flip (ROADMAP+STATE+MILESTONES+PROJECT+REQUIREMENTS, all 45 reqs re-attested) → chmod 444 (doc-only) [wave 3]
+- [x] 324-01-PLAN.md — SC1 DELTA AUDIT: all 18 contract surfaces NON-WIDENING vs v46 16e9668a + 598/38/16 regression NON-WIDENING + VRFLifecycle/OBS-1 dispositions (`16e103f4`) [wave 1]
+- [x] 324-02-PLAN.md — SC2 ADVERSARIAL SWEEP: 3-skill GENUINE PARALLEL pass; 13 NEGATIVE/SAFE + 2 MEDIUM FINDING_CANDIDATE (F-47-01 + F-47-02), both DEFERRED→v48 via skeptic filter (`f4e6ef4a`) [wave 1]
+- [x] 324-03-PLAN.md — SC3 FINDINGS DELIVERABLE: audit/FINDINGS-v47.0.md (9-section); 2 findings DEFERRED→v48; H-CANCEL-SWAP-MISS RESOLVED-AT-V47 (`da5c9d50`) [wave 2]
+- [x] 324-04-PLAN.md — SC4 CLOSURE FLIP: USER-approved → MILESTONE_V47_AT_HEAD_da5c9d50… propagated → atomic 5-doc flip (all 45 reqs attested) → chmod 444 [wave 3]
 
 ---
 
@@ -101,7 +101,9 @@
 | 321. SPEC — Design-Lock + Call-Graph Attestation + Reconciliation | 1/1 | ✅ Complete | 2026-05-25 (`779eacc3`) |
 | 322. IMPL — The ONE Batched Contract Diff (all 7 items) | 8/8 | ✅ Complete | 2026-05-25 (`fb29ed51`) |
 | 323. TST — Repro + Same-Results Gas + Cancel-Tombstone Proofs | 5/5 | Complete   | 2026-05-25 |
-| 324. TERMINAL — Delta Audit + Adversarial Sweep + Closure | 0/4 | Not started | - |
+| 324. TERMINAL — Delta Audit + Adversarial Sweep + Closure | 4/4 | ✅ Complete | 2026-05-25 (`da5c9d50`) |
+
+**v47.0 SHIPPED 2026-05-25** — closure signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`. Amended verdict: rake-free + presale-boxes + lootbox-boon-unification + Degenerette gas/caps + universal-claimable-pay + sDGNRS-redemption + AfKing-cancel-tombstone (H-CANCEL-SWAP-MISS RESOLVED_AT_V47); RNG_FREEZE_INTACT; **2 MEDIUM FINDINGS (F-47-01 presale closing-box windfall + F-47-02 redemption ETH-empty stETH-fallback) DEFERRED→v48.0** [fix designs locked]; KNOWN_ISSUES_UNMODIFIED. See `audit/FINDINGS-v47.0.md`.
 
 ---
 

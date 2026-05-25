@@ -7,8 +7,8 @@ audit_baseline: 16e9668a6de35cc0c809d81ce960aee137950687
 audit_baseline_signal: MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687
 v45_baseline_signal: MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801
 source_tree_frozen_ref: fabe9e94
-audit_subject_head: "MILESTONE_V47_AT_HEAD_<sha>"
-closure_signal: MILESTONE_V47_AT_HEAD_<sha>
+audit_subject_head: "MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2"
+closure_signal: MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2
 deliverable: audit/FINDINGS-v47.0.md
 new_findings: 2
 new_findings_disposition: F-47-01 (presale closing-box DGNRS windfall, MEDIUM) + F-47-02 (redemption ETH-empty stETH-fallback gap, MEDIUM) — BOTH DEFERRED→v48.0 [fix designs locked; SOURCE-TREE FROZEN held at fabe9e94]
@@ -21,7 +21,7 @@ new_findings_disposition: F-47-01 (presale closing-box DGNRS windfall, MEDIUM) +
 **Audit Baseline.** v46.0 closure HEAD `16e9668a6de35cc0c809d81ce960aee137950687` (signal
 `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`). v45 chain reference:
 `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801`. v47.0 closure HEAD is
-`MILESTONE_V47_AT_HEAD_<sha>` (resolved at the Phase 324 closure commit per the 2-commit sequential-SHA
+`MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2` (resolved at the Phase 324 closure commit per the 2-commit sequential-SHA
 orchestration; see §9c). SOURCE-TREE FROZEN reference for the terminal: `fabe9e94` (contracts/ byte-frozen;
 `git diff fabe9e94 HEAD -- contracts/` empty throughout Phase 324).
 
@@ -247,11 +247,11 @@ The deviation from the locked target is the single `0 NEW_FINDINGS` → `2 MEDIU
 Phase 321 (SPEC design-lock `779eacc3`) + 322 (IMPL `fb29ed51`, USER-APPROVED batched diff + 4 refinements) +
 323 (TST — 5 plans + the `fabe9e94` liveness-guard mid-phase fix) + 324 (TERMINAL — this deliverable; SOURCE-TREE
 FROZEN; SC1 delta-audit + SC2 3-skill sweep + regression + gated closure flip). Closure signal:
-`MILESTONE_V47_AT_HEAD_<sha>`.
+`MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`.
 
 ### 9c. Closure Signal
-**`MILESTONE_V47_AT_HEAD_<sha>`** (the `<sha>` placeholder resolves to the Phase 324 closure commit SHA at the
-closure flip). Verbatim propagation targets (resolved in 324-04):
+**`MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`** (resolved to the Phase 324 audit-deliverable
+commit `da5c9d50` — the closure HEAD; contracts byte-identical to the frozen subject `fabe9e94`). Verbatim propagation targets (resolved at closure):
 1. Frontmatter `closure_signal:` + `audit_subject_head:`.
 2. §1 Audit Subject prose.
 3. §9b / §9c references.
