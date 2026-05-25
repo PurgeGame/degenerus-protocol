@@ -29,11 +29,19 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 /// @notice Interface for BurnieCoinflip contract methods used by BurnieCoin.
 interface IBurnieCoinflip {
     /// @notice Preview claimable coinflip winnings for a player.
-    function previewClaimCoinflips(address player) external view returns (uint256 mintable);
+    function previewClaimCoinflips(
+        address player
+    ) external view returns (uint256 mintable);
     /// @notice Claim coinflip winnings via BurnieCoin to cover token transfers/burns.
-    function claimCoinflipsFromBurnie(address player, uint256 amount) external returns (uint256 claimed);
+    function claimCoinflipsFromBurnie(
+        address player,
+        uint256 amount
+    ) external returns (uint256 claimed);
     /// @notice Consume coinflip winnings via BurnieCoin for burns (no mint).
-    function consumeCoinflipsForBurn(address player, uint256 amount) external returns (uint256 consumed);
+    function consumeCoinflipsForBurn(
+        address player,
+        uint256 amount
+    ) external returns (uint256 consumed);
     /// @notice Credit flip stake to a player (used for quest rewards).
     function creditFlip(address player, uint256 amount) external;
 }
@@ -69,18 +77,12 @@ contract BurnieCoin {
     );
 
     /// @notice Emitted on a terminal decimator (death bet) burn.
-    event TerminalDecimatorBurn(
-        address indexed player,
-        uint256 amountBurned
-    );
+    event TerminalDecimatorBurn(address indexed player, uint256 amountBurned);
 
     /// @notice Emitted when the AF_KING keeper burns a player's subscription charge.
     /// @param user The player whose BURNIE was burned for the keeper charge.
     /// @param amountBurned The amount burned (18 decimals); all-or-nothing, equals the requested amount.
-    event KeeperBurn(
-        address indexed user,
-        uint256 amountBurned
-    );
+    event KeeperBurn(address indexed user, uint256 amountBurned);
 
     /// @notice Emitted when virtual coin is escrowed to the vault reserve.
     /// @param sender The contract that escrowed the funds (VAULT or GAME).
@@ -174,7 +176,8 @@ contract BurnieCoin {
 
     /// @notice Total circulating supply (excludes ContractAddresses.VAULT's virtual allowance).
     /// @dev Increases on mint, decreases on burn. Always equals sum of all balanceOf entries.
-    Supply private _supply = Supply({totalSupply: 0, vaultAllowance: uint128(2_000_000 ether)});
+    Supply private _supply =
+        Supply({totalSupply: 0, vaultAllowance: uint128(2_000_000 ether)});
 
     /// @notice Token balance for each address.
     /// @dev Standard ERC20 balance mapping.
@@ -237,7 +240,9 @@ contract BurnieCoin {
     ///      transient and acceptable for UI purposes.
     /// @param player The address to query.
     /// @return spendable Total spendable amount right now.
-    function balanceOfWithClaimable(address player) external view returns (uint256 spendable) {
+    function balanceOfWithClaimable(
+        address player
+    ) external view returns (uint256 spendable) {
         spendable = balanceOf[player];
         if (player == ContractAddresses.VAULT) {
             spendable += uint256(_supply.vaultAllowance);
@@ -437,7 +442,10 @@ contract BurnieCoin {
     /// @param to The player's address to mint to.
     /// @param amount The amount of BURNIE to mint (18 decimals).
     function mintForGame(address to, uint256 amount) external {
-        if (msg.sender != ContractAddresses.COINFLIP && msg.sender != ContractAddresses.GAME) revert OnlyGame();
+        if (
+            msg.sender != ContractAddresses.COINFLIP &&
+            msg.sender != ContractAddresses.GAME
+        ) revert OnlyGame();
         if (amount == 0) return;
         _mint(to, amount);
     }
@@ -477,14 +485,14 @@ contract BurnieCoin {
         uint256 balance = balanceOf[player];
         if (balance >= amount) return;
         unchecked {
-            coinflip.claimCoinflipsFromBurnie(
-                player,
-                amount - balance
-            );
+            coinflip.claimCoinflipsFromBurnie(player, amount - balance);
         }
     }
 
-    function _consumeCoinflipShortfall(address player, uint256 amount) private returns (uint256 consumed) {
+    function _consumeCoinflipShortfall(
+        address player,
+        uint256 amount
+    ) private returns (uint256 consumed) {
         if (amount == 0) return 0;
         uint256 balance = balanceOf[player];
         if (balance >= amount) return 0;
@@ -583,10 +591,7 @@ contract BurnieCoin {
     ///      Reverts on zero address or insufficient balance.
     /// @param target The address to burn from.
     /// @param amount The amount to burn (18 decimals).
-    function burnCoin(
-        address target,
-        uint256 amount
-    ) external onlyGame {
+    function burnCoin(address target, uint256 amount) external onlyGame {
         uint256 consumed = _consumeCoinflipShortfall(target, amount);
         _burn(target, amount - consumed);
     }
@@ -627,7 +632,10 @@ contract BurnieCoin {
         _burn(caller, amount - consumed);
 
         // Quest processing (reward creditFlipped internally; bonus boosts decimator weight)
-        (uint256 questReward,,, bool completed) = questModule.handleDecimator(caller, amount);
+        (uint256 questReward, , , bool completed) = questModule.handleDecimator(
+            caller,
+            amount
+        );
         uint256 baseAmount = amount + (completed ? questReward : 0);
 
         // Activity score bonus (raw bps), capped for decimator scaling.
@@ -640,10 +648,7 @@ contract BurnieCoin {
         uint8 minBucket = (lvl % 100 == 0)
             ? DECIMATOR_MIN_BUCKET_100
             : DECIMATOR_MIN_BUCKET_NORMAL;
-        uint8 bucket = _adjustDecimatorBucket(
-            bonusBps,
-            minBucket
-        );
+        uint8 bucket = _adjustDecimatorBucket(bonusBps, minBucket);
 
         // Decimator boon: percent boost on base amount (capped to 50k BURNIE).
         uint16 boonBps = degenerusGame.consumeDecimatorBoon(caller);
@@ -698,11 +703,7 @@ contract BurnieCoin {
         uint256 consumed = _consumeCoinflipShortfall(caller, amount);
         _burn(caller, amount - consumed);
 
-        degenerusGame.recordTerminalDecBurn(
-            caller,
-            lvl,
-            amount
-        );
+        degenerusGame.recordTerminalDecBurn(caller, lvl, amount);
 
         emit TerminalDecimatorBurn(caller, amount);
     }
@@ -725,16 +726,19 @@ contract BurnieCoin {
         }
 
         uint256 range = uint256(DECIMATOR_BUCKET_BASE) - uint256(minBucket);
-        uint256 reduction = (range * bonusBps + (DECIMATOR_ACTIVITY_CAP_BPS / 2)) / DECIMATOR_ACTIVITY_CAP_BPS;
+        uint256 reduction = (range *
+            bonusBps +
+            (DECIMATOR_ACTIVITY_CAP_BPS / 2)) / DECIMATOR_ACTIVITY_CAP_BPS;
         uint256 bucket = uint256(DECIMATOR_BUCKET_BASE) - reduction;
         if (bucket < minBucket) bucket = minBucket;
         adjustedBucket = uint8(bucket);
     }
 
     /// @dev Decimator burn multiplier: 1x base plus one-third of activity bonus.
-    function _decimatorBurnMultiplier(uint256 bonusBps) private pure returns (uint256 decMultBps) {
+    function _decimatorBurnMultiplier(
+        uint256 bonusBps
+    ) private pure returns (uint256 decMultBps) {
         if (bonusBps == 0) return BPS_DENOMINATOR;
         return BPS_DENOMINATOR + (bonusBps / 3);
     }
-
 }

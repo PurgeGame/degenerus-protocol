@@ -183,8 +183,9 @@ contract AfKing {
     event BurnieAutoExtracted(address indexed player, uint32 day, uint256 burnieAmount);
     /// @dev Day-31 FREE active-pass auto-extend — emitted after paidThroughDay is reset.
     event SubscriptionExtendedFree(address indexed player, uint32 day);
-    /// @dev Subscription forced into the paused state. `reason`:
+    /// @dev Subscription removed from the iterable set. `reason`:
     ///        1 = AutoPause (day-31 burnForKeeper shortfall OR funding-skip kill of a NORMAL sub)
+    ///        2 = CancelReclaim (in-sweep reclaim of an externally-cancelled `dailyQuantity == 0` tombstone)
     event SubscriptionExpired(address indexed player, uint8 reason);
 
     /*------------------------------------------------------------------
@@ -444,27 +445,24 @@ contract AfKing {
         }
     }
 
-    /// @notice Update caller's daily buy units. q == 0 is the tombstone cancel
-    ///         (removes from the iterable set + writes 0); q > 0 updates in place.
-    /// @dev SUB-07 tombstone-on-cancel: the swap-pop removes the set membership and
-    ///      writes the sentinel, but the `_subOf` record is preserved when the
-    ///      window is paid and unexpired (windowPaid set AND paidThroughDay > today)
-    ///      — the player keeps the service window they paid for. A free or expired
-    ///      window is deleted (nothing to preserve; re-subscribe is fresh). Stranded
+    /// @notice Update caller's daily buy units. q == 0 is the in-place tombstone
+    ///         cancel (writes the sentinel, relocates no one); q > 0 reactivates
+    ///         in place.
+    /// @dev SUB-07 tombstone-on-cancel: cancel only writes `dailyQuantity = 0` (the
+    ///      "paused" sentinel) and leaves the entry in the iterable set — it moves
+    ///      nothing, so it can never relocate an unprocessed entry behind the chunked
+    ///      sweep cursor. The `_subOf` record stays readable; the delete-vs-preserve
+    ///      decision (keep the paid window iff windowPaid set AND paidThroughDay >
+    ///      today, else delete) is applied by the in-sweep reclaim when the sweep
+    ///      reaches the tombstone. Reactivation (q > 0) flips the sentinel back in
+    ///      place with no set churn (the entry never left the set). Stranded
     ///      `_poolOf` ETH always stays withdrawable.
     function setDailyQuantity(uint8 q) external {
         if (_subscriberIndex[msg.sender] == 0) revert NotSubscribed();
         Sub storage s = _subOf[msg.sender];
         if (q == 0) {
-            _removeFromSet(msg.sender);
-            bool preservePaidWindow = (s.flags & FLAG_WINDOW_PAID) != 0 && s.paidThroughDay > _currentDay();
-            if (preservePaidWindow) {
-                s.dailyQuantity = 0;
-                emit SubscriptionUpdated(msg.sender, 0, (s.flags & FLAG_DRAIN_FIRST) != 0, (s.flags & FLAG_USE_TICKETS) != 0, s.reinvestPct, s.fundingSource);
-            } else {
-                delete _subOf[msg.sender];
-                emit SubscriptionUpdated(msg.sender, 0, false, false, 0, address(0));
-            }
+            s.dailyQuantity = 0;
+            emit SubscriptionUpdated(msg.sender, 0, (s.flags & FLAG_DRAIN_FIRST) != 0, (s.flags & FLAG_USE_TICKETS) != 0, s.reinvestPct, s.fundingSource);
             return;
         }
         s.dailyQuantity = q;
@@ -581,21 +579,6 @@ contract AfKing {
             _sweepDay = today;
         }
 
-        // SUB-03 stall-escalating multiplier from elapsed time since day-start.
-        // Day-start mirrors _currentDay()'s 82620-second offset: today * 1 days + 82620.
-        uint256 bountyMultiplier = 1;
-        {
-            uint256 dayStart = uint256(today) * 1 days + 82_620;
-            uint256 elapsed = block.timestamp > dayStart ? block.timestamp - dayStart : 0;
-            if (elapsed >= 2 hours) {
-                bountyMultiplier = 6;
-            } else if (elapsed >= 1 hours) {
-                bountyMultiplier = 4;
-            } else if (elapsed >= 20 minutes) {
-                bountyMultiplier = 2;
-            }
-        }
-
         // Per-chunk accumulation buffers. The batched purchase fires once, after the
         // per-player accounting loop, with one slice per successful player.
         uint256 cap = maxCount;
@@ -604,11 +587,41 @@ contract AfKing {
         uint8[] memory modes = new uint8[](cap);
         uint256 batchLen;
         uint256 totalValue;
+        // True once the chunk commits real set work (cancel-tombstone reclaim,
+        // auto-pause, or window renewal). Gates the tail so a buy-less chunk that
+        // did such work commits it instead of hitting the no-buy revert and rolling
+        // the removal back (which would strand the tombstone for re-griefing).
+        bool didWork;
 
         uint256 processed;
         while (processed < maxCount && cursor < _subscribers.length) {
             address player = _subscribers[cursor];
             Sub storage sub = _subOf[player];
+
+            // (0) Cancel-tombstone reclaim. An externally-cancelled sub
+            // (setDailyQuantity(0)) is an in-set `dailyQuantity == 0` tombstone:
+            // it relocated no one on cancel, so it cannot have pushed a pending
+            // entry behind the cursor. The reclaim applies the deferred
+            // delete-vs-preserve (keep `_subOf` with the sentinel iff the window is
+            // paid and unexpired, else delete), swap-pops it out of the set, and
+            // continues WITHOUT advancing the cursor — the swap-pop occupant (a
+            // mover from ahead, hence still pending) is processed at this slot this
+            // sweep. Ordered ahead of the AlreadySweptToday skip so a tombstone is
+            // ALWAYS reclaimed (never left as a permanent dead slot), independent of
+            // its `lastSweptDay`.
+            if (sub.dailyQuantity == 0) {
+                bool preservePaidWindow = (sub.flags & FLAG_WINDOW_PAID) != 0 && sub.paidThroughDay > today;
+                if (!preservePaidWindow) {
+                    delete _subOf[player];
+                }
+                _removeFromSet(player);
+                emit SubscriptionExpired(player, 2);
+                didWork = true;
+                unchecked {
+                    ++processed;
+                }
+                continue;
+            }
 
             // (1) AlreadySweptToday — cheapest SLOAD-only skip.
             if (sub.lastSweptDay >= today) {
@@ -627,6 +640,7 @@ contract AfKing {
                     sub.paidThroughDay = today + WINDOW_DAYS;
                     sub.flags &= ~FLAG_WINDOW_PAID;
                     emit SubscriptionExtendedFree(player, today);
+                    didWork = true;
                 } else {
                     // PAID branch — all-or-nothing burnForKeeper. On shortfall the
                     // burn took nothing, so there is nothing to refund; auto-pause.
@@ -643,6 +657,7 @@ contract AfKing {
                         sub.flags &= ~FLAG_WINDOW_PAID;
                         _removeFromSet(player);
                         emit SubscriptionExpired(player, 1);
+                        didWork = true;
                         unchecked {
                             ++processed;
                         }
@@ -652,6 +667,7 @@ contract AfKing {
                     sub.paidThroughDay = today + WINDOW_DAYS;
                     sub.flags |= FLAG_WINDOW_PAID;
                     emit BurnieAutoExtracted(player, today, extractCost);
+                    didWork = true;
                 }
             }
 
@@ -738,6 +754,7 @@ contract AfKing {
                 sub.flags &= ~FLAG_WINDOW_PAID;
                 _removeFromSet(player);
                 emit SubscriptionExpired(player, 1);
+                didWork = true;
                 unchecked {
                     ++processed;
                 }
@@ -779,7 +796,17 @@ contract AfKing {
         // Tail revert before the bounty payout — atomic no-op for a caller whose
         // chunk produced no buys. The caller pays gas for the failed tx (the
         // structural disincentive against sweeping nothing).
-        if (batchLen == 0) revert NoSubscribersSwept();
+        if (batchLen == 0) {
+            // The no-buy revert is the anti-spam disincentive — it fires ONLY for a
+            // do-nothing chunk (all already-swept / transient skips). When the chunk
+            // committed real set work (a cancel-tombstone reclaim, an auto-pause, or a
+            // window renewal), that state MUST persist: reverting would roll the
+            // removal back and strand the tombstone for re-griefing across sweeps.
+            // No buys means no purchase and no bounty, but the committed work stays.
+            if (!didWork) revert NoSubscribersSwept();
+            emit SweepCompleted(msg.sender, 0, 0);
+            return 0;
+        }
 
         // Single batched purchase. Trim the buffers to the exact batch length so
         // the game's length-equality guard (players.length == amounts.length ==
@@ -792,6 +819,23 @@ contract AfKing {
             }
         }
         IGame(ContractAddresses.GAME).batchPurchase{value: totalValue}(players, amounts, modes);
+
+        // SUB-03 stall-escalating multiplier from elapsed time since day-start.
+        // Day-start mirrors _currentDay()'s 82620-second offset: today * 1 days + 82620.
+        // Computed here, after the loop, so it does not occupy a stack slot through
+        // the accumulation loop + the array-trim assembly block (stack-depth budget).
+        uint256 bountyMultiplier = 1;
+        {
+            uint256 dayStart = uint256(today) * 1 days + 82_620;
+            uint256 elapsed = block.timestamp > dayStart ? block.timestamp - dayStart : 0;
+            if (elapsed >= 2 hours) {
+                bountyMultiplier = 6;
+            } else if (elapsed >= 1 hours) {
+                bountyMultiplier = 4;
+            } else if (elapsed >= 20 minutes) {
+                bountyMultiplier = 2;
+            }
+        }
 
         // Bounty payout — ONE gas-pegged creditFlip per tx (never per-item). The
         // ETH-pegged target holds a constant ETH-equivalent bounty as the game

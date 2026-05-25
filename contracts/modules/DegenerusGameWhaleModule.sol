@@ -259,8 +259,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             totalPrice = unitPrice * quantity;
         }
 
-        if (msg.value != totalPrice) revert E();
-        _awardEarlybirdDgnrs(buyer, totalPrice);
+        // Claimable-pay: msg.value first, claimableWinnings covers the rest.
+        if (msg.value > totalPrice) revert E();
+        _settleClaimableShortfall(buyer, claimableWinnings[buyer], totalPrice - msg.value);
+        // Coin-presale-box credit accrual: 25% of the committed ETH while presale open.
+        if (!presaleOver) {
+            presaleBoxCredit[buyer] += totalPrice / 4;
+        }
 
         uint24 newLevelCount = levelCount + levelsToAdd;
 
@@ -434,7 +439,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // Levels 0-2: flat 0.24 ETH worth of benefits, balance → bonus tickets
         // Boon at 0-2: same benefits, discounted payment
         // Levels 3+: baseCost, boon applies discount to baseCost
-        // benefitValue = undiscounted value used for earlybird/lootbox/pool splits
+        // benefitValue = undiscounted value used for presale-box credit/lootbox/pool splits
         uint256 totalPrice;
         uint256 benefitValue;
         uint32 bonusTickets;
@@ -471,9 +476,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             s1 = bpLazy.slot1;
             bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
         }
-        if (msg.value != totalPrice) revert E();
-
-        _awardEarlybirdDgnrs(buyer, benefitValue);
+        // Claimable-pay: msg.value first, claimableWinnings covers the rest.
+        if (msg.value > totalPrice) revert E();
+        _settleClaimableShortfall(buyer, claimableWinnings[buyer], totalPrice - msg.value);
+        // Coin-presale-box credit accrual: 25% of the benefit value while presale open.
+        if (!presaleOver) {
+            presaleBoxCredit[buyer] += benefitValue / 4;
+        }
 
         _activate10LevelPass(buyer, startLevel, LAZY_PASS_TICKETS_PER_LEVEL);
 
@@ -578,13 +587,18 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             // Consume boon regardless of expiry — clear deity pass fields
             bpDeity.slot1 = s1Deity & BP_DEITY_PASS_CLEAR;
         }
-        if (msg.value != totalPrice) revert E();
+        // Claimable-pay: msg.value first, claimableWinnings covers the rest.
+        if (msg.value > totalPrice) revert E();
+        _settleClaimableShortfall(buyer, claimableWinnings[buyer], totalPrice - msg.value);
 
         uint24 passLevel = level + 1;
 
         // Issue the pass with symbol
         deityPassPaidTotal[buyer] += totalPrice;
-        _awardEarlybirdDgnrs(buyer, totalPrice);
+        // Coin-presale-box credit accrual: 25% of the committed ETH while presale open.
+        if (!presaleOver) {
+            presaleBoxCredit[buyer] += totalPrice / 4;
+        }
 
         mintPacked_[buyer] = BitPackingLib.setPacked(
             mintPacked_[buyer],

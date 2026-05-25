@@ -528,16 +528,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Purchase tickets and/or loot boxes with BURNIE.
-    /// @dev Main entry point for all BURNIE purchases. Mirrors purchase() but for BURNIE payments.
+    /// @notice Purchase tickets with BURNIE.
+    /// @dev Main entry point for BURNIE ticket purchases. Mirrors purchase() but for BURNIE payments.
     ///      SECURITY: Blocked when RNG is locked.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
     /// @param ticketQuantity Number of tickets to purchase (2 decimals, scaled by 100; 0 to skip).
-    /// @param lootBoxBurnieAmount BURNIE amount for loot box (0 to skip).
     function purchaseCoin(
         address buyer,
-        uint256 ticketQuantity,
-        uint256 lootBoxBurnieAmount
+        uint256 ticketQuantity
     ) external {
         buyer = _resolvePlayer(buyer);
         (bool ok, bytes memory data) = ContractAddresses
@@ -546,28 +544,98 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 abi.encodeWithSelector(
                     IDegenerusGameMintModule.purchaseCoin.selector,
                     buyer,
-                    ticketQuantity,
-                    lootBoxBurnieAmount
+                    ticketQuantity
                 )
             );
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Purchase a low-EV loot box using BURNIE.
-    /// @param buyer Player address to receive the loot box (address(0) = msg.sender).
-    /// @param burnieAmount BURNIE amount to burn (18 decimals).
-    function purchaseBurnieLootbox(
+    /// @notice Buy a credit-gated coin-presale box with ETH and/or claimable (CPAY-02).
+    /// @dev Box is gated by presaleBoxCredit (earned 25% on prior ETH buys), consumes
+    ///      credit 1:1, caps cumulatively at 50 ETH, and queues for later resolution.
+    /// @param buyer Player to receive the box (address(0) = msg.sender).
+    /// @param boxAmount Requested box ETH (>= 0.01 ETH; excess refunded if clamped).
+    function buyPresaleBox(
         address buyer,
-        uint256 burnieAmount
-    ) external {
+        uint256 boxAmount
+    ) external payable {
         buyer = _resolvePlayer(buyer);
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_MINT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameMintModule.purchaseBurnieLootbox.selector,
+                    IDegenerusGameMintModule.buyPresaleBox.selector,
                     buyer,
-                    burnieAmount
+                    boxAmount
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Buy tickets/lootbox AND a presale box in one tx, sharing one RNG index.
+    /// @dev The mint leg (msg.value) earns 25% presale-box credit; the box leg is then
+    ///      gated by that credit and paid from the caller's claimable (CPAY-02 ledger
+    ///      move). Both queue at one index for co-resolution.
+    /// @param buyer Player to receive both legs (address(0) = msg.sender).
+    /// @param ticketQuantity Tickets to buy (0 to skip).
+    /// @param lootBoxAmount ETH lootbox spend (0 to skip).
+    /// @param affiliateCode Affiliate/referral code for the mint leg.
+    /// @param payKind Payment method for the mint leg.
+    /// @param boxAmount Requested presale-box ETH (claimable-funded).
+    function buyLootboxAndPresaleBox(
+        address buyer,
+        uint256 ticketQuantity,
+        uint256 lootBoxAmount,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind,
+        uint256 boxAmount
+    ) external payable {
+        buyer = _resolvePlayer(buyer);
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_MINT_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameMintModule.buyLootboxAndPresaleBox.selector,
+                    buyer,
+                    ticketQuantity,
+                    lootBoxAmount,
+                    affiliateCode,
+                    payKind,
+                    boxAmount
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Open a coin-presale box once RNG for its index is available.
+    /// @param player Player that owns the box (address(0) = msg.sender).
+    /// @param index The RNG index the box queued at.
+    function openPresaleBox(address player, uint48 index) external {
+        player = _resolvePlayer(player);
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_LOOTBOX_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameLootboxModule.openPresaleBox.selector,
+                    player,
+                    index
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Open a co-queued lootbox + presale box in one tx (two domain-separated draws).
+    /// @param player Player that owns the index (address(0) = msg.sender).
+    /// @param index The shared RNG index.
+    function openLootboxAndPresaleBox(address player, uint48 index) external {
+        player = _resolvePlayer(player);
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_LOOTBOX_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameLootboxModule.openLootboxAndPresaleBox.selector,
+                    player,
+                    index
                 )
             );
         if (!ok) _revertDelegate(data);
@@ -658,36 +726,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         _openLootBoxFor(player, lootboxIndex);
     }
 
-    /// @notice Open a BURNIE loot box once RNG for its lootbox index is available.
-    /// @param player Player address that owns the loot box (address(0) = msg.sender).
-    /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
-    function openBurnieLootBox(address player, uint48 lootboxIndex) external {
-        player = _resolvePlayer(player);
-        _openBurnieLootBoxFor(player, lootboxIndex);
-    }
-
     function _openLootBoxFor(address player, uint48 lootboxIndex) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameLootboxModule.openLootBox.selector,
-                    player,
-                    lootboxIndex
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
-    function _openBurnieLootBoxFor(
-        address player,
-        uint48 lootboxIndex
-    ) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_LOOTBOX_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameLootboxModule.openBurnieLootBox.selector,
                     player,
                     lootboxIndex
                 )
@@ -1778,11 +1822,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
-    /// @dev Called by sDGNRS during claimRedemption. Reclassifies ETH from sDGNRS's
-    ///      claimableWinnings into futurePrizePool (no ETH transfer — internal accounting only).
+    /// @dev Called by sDGNRS during claimRedemption. The owed ETH physically arrives as
+    ///      msg.value (sDGNRS forwards the segregated lootbox share); it is credited to
+    ///      futurePrizePool. No claimableWinnings[SDGNRS] debit occurs — the ETH was already
+    ///      pulled out of claimable at submit via pullRedemptionReserve, so reclassifying
+    ///      claimable here would double-spend it.
     ///      Splits into 5 ETH boxes and resolves each via lootbox module delegatecall.
     /// @param player Player receiving lootbox rewards
-    /// @param amount Total lootbox ETH amount to resolve
+    /// @param amount Total lootbox ETH amount to resolve (must equal msg.value)
     /// @param rngWord RNG entropy for lootbox resolution
     /// @param activityScore Snapshotted activity score (bps) from burn submission
     function resolveRedemptionLootbox(
@@ -1790,22 +1837,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 amount,
         uint256 rngWord,
         uint16 activityScore
-    ) external {
+    ) external payable {
         if (msg.sender != ContractAddresses.SDGNRS) revert E();
+        if (msg.value != amount) revert E();
         if (amount == 0) return;
 
-        // Debit from sDGNRS's claimable (ETH stays in Game's balance).
-        // SAFETY: unchecked is safe because the only path that drains claimableWinnings[SDGNRS]
-        // is _deterministicBurnFrom → game.claimWinnings(), which only fires at gameOver.
-        // This function is only called during active game (lootboxEth = 0 when gameOver).
-        // The two paths are mutually exclusive, so claimable >= amount always holds here.
-        uint256 claimable = claimableWinnings[ContractAddresses.SDGNRS];
-        unchecked {
-            claimableWinnings[ContractAddresses.SDGNRS] = claimable - amount;
-        }
-        claimablePool -= uint128(amount);
-
-        // Credit to future prize pool (respects freeze state)
+        // Credit the just-arrived ETH (msg.value) to the future prize pool (respects freeze
+        // state). The ETH was segregated out of claimableWinnings[SDGNRS] at submit, so there
+        // is no claimable debit here — only a real-ETH-in credit.
         if (prizePoolFrozen) {
             (uint128 pNext, uint128 pFuture) = _getPendingPools();
             _setPendingPools(pNext, pFuture + uint128(amount));
@@ -1835,6 +1874,28 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             remaining -= box;
             rngWord = uint256(keccak256(abi.encode(rngWord)));
         }
+    }
+
+    /// @notice Physically segregate sDGNRS redemption ETH out of claimable into sDGNRS balance.
+    /// @dev Called by sDGNRS at gambling-burn submit to pull the MAX (175%) owed ETH out of
+    ///      claimableWinnings[SDGNRS] and transfer it to the sDGNRS contract, so the owed ETH
+    ///      can never be re-spent by a concurrent claimable drain (AfKing self-sub, claimWinnings,
+    ///      a second same-day claimant). This is the ONLY remaining claimableWinnings[SDGNRS]
+    ///      debit and it is CHECKED — Solidity 0.8 reverts the burn if claimable is insufficient
+    ///      (fail-closed). CEI: state is decremented before the external ETH transfer.
+    /// @param amount ETH amount to segregate (the MAX 175% payout for this burn).
+    /// @custom:reverts E If caller is not sDGNRS, or claimable/pool underflows, or the transfer fails.
+    function pullRedemptionReserve(uint256 amount) external {
+        if (msg.sender != ContractAddresses.SDGNRS) revert E();
+        if (amount == 0) return;
+
+        // CHECKED debit (no unchecked): reverts fail-closed if claimable < amount.
+        claimableWinnings[ContractAddresses.SDGNRS] -= amount;
+        claimablePool -= uint128(amount);
+
+        // CEI: move the real ETH out to sDGNRS after the state decrement.
+        (bool ok, ) = payable(ContractAddresses.SDGNRS).call{value: amount}("");
+        if (!ok) revert E();
     }
 
     /*+===============================================================================================+
@@ -2182,6 +2243,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return active True if presale is active.
     function lootboxPresaleActiveFlag() external view returns (bool active) {
         return _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0;
+    }
+
+    /// @notice Spendable coin-presale-box credit accrued by a player.
+    /// @param player Player to query.
+    /// @return credit Remaining credit (consumed 1:1 when buying a box).
+    function presaleBoxCreditOf(address player) external view returns (uint256 credit) {
+        return presaleBoxCredit[player];
+    }
+
+    /// @notice Remaining coin-presale-box ETH capacity before the 50-ETH close.
+    /// @return remaining ETH still buyable in boxes (0 once presaleOver / sold out).
+    function presaleBoxEthRemaining() external view returns (uint256 remaining) {
+        if (presaleOver) return 0;
+        uint256 sold = presaleBoxEthSold;
+        return sold >= PRESALE_BOX_ETH_CAP ? 0 : PRESALE_BOX_ETH_CAP - sold;
     }
 
     /// @notice Get the current prize pool (jackpots are paid from this).

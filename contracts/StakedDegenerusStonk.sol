@@ -27,8 +27,10 @@ interface IDegenerusGamePlayer {
     function rngWordForDay(uint32 day) external view returns (uint256);
     /// @notice Get player's activity score.
     function playerActivityScore(address player) external view returns (uint256);
-    /// @notice Resolve a redemption lootbox for a player.
-    function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external;
+    /// @notice Resolve a redemption lootbox for a player (sDGNRS forwards lootboxEth as msg.value).
+    function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external payable;
+    /// @notice Segregate redemption ETH out of claimableWinnings[SDGNRS] into the sDGNRS balance.
+    function pullRedemptionReserve(uint256 amount) external;
 }
 
 /// @notice Interface for BURNIE coin contract player-facing functions used by sDGNRS.
@@ -45,10 +47,8 @@ interface IBurnieCoinflipPlayer {
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
     /// @notice Preview claimable coinflip winnings for a player.
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
-    /// @notice Claim coinflip winnings for sDGNRS redemption (skips RNG lock).
-    function claimCoinflipsForRedemption(address player, uint256 amount) external returns (uint256 claimed);
-    /// @notice Get the result of a coinflip day.
-    function getCoinflipDayResult(uint32 day) external view returns (uint16 rewardPercent, bool win);
+    /// @notice Settle a redemption's BURNIE share at submit: burn+consume sDGNRS backing, credit redeemer.
+    function redeemBurnieShare(address redeemer, uint256 base) external;
     /// @notice Configure auto-rebuy mode for coinflips (player == self for sDGNRS).
     function setCoinflipAutoRebuy(address player, bool enabled, uint256 takeProfit) external;
 }
@@ -171,13 +171,14 @@ contract StakedDegenerusStonk {
     event PoolRebalance(Pool indexed from, Pool indexed to, uint256 amount);
 
     /// @notice Emitted when a player submits a gambling burn redemption
-    event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 burnieOwed, uint32 periodIndex);
+    /// @param burnieSettled BURNIE backing settled at submit (burned/consumed and credited as a flip)
+    event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 burnieSettled, uint32 periodIndex);
 
     /// @notice Emitted when a redemption period is resolved with a roll
-    event RedemptionResolved(uint32 indexed periodIndex, uint16 roll, uint256 rolledBurnie, uint32 flipDay);
+    event RedemptionResolved(uint32 indexed periodIndex, uint16 roll);
 
-    /// @notice Emitted when a player claims their resolved redemption
-    event RedemptionClaimed(address indexed player, uint16 roll, bool flipResolved, uint256 ethPayout, uint256 burniePayout, uint256 lootboxEth);
+    /// @notice Emitted when a player claims their resolved redemption (ETH-only; BURNIE settled at submit)
+    event RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout, uint256 lootboxEth);
 
     // =====================================================================
     //                          ERC20 METADATA
@@ -212,7 +213,7 @@ contract StakedDegenerusStonk {
         Affiliate,
         Lootbox,
         Reward,
-        Earlybird
+        PresaleBox
     }
 
     /// @notice Balances for each reward pool
@@ -224,29 +225,27 @@ contract StakedDegenerusStonk {
 
     struct PendingRedemption {
         uint96  ethValueOwed;   // base (100%) ETH-equivalent owed (max ~79B ETH)
-        uint96  burnieOwed;     // base (100%) BURNIE owed (max ~79B ETH-equiv)
         uint16  activityScore;  // snapshotted activity score + 1 (0 = not yet set)
-    } // 96 + 96 + 16 = 208 bits (1 slot); composite outer key (player, day) carries the day reference per SPEC-02
+    } // 96 + 16 = 112 bits (1 slot); composite outer key (player, day) carries the day reference per SPEC-02.
+      // BURNIE is settled entirely at submit (redeemBurnieShare) — nothing BURNIE-related is recorded per claim.
 
     struct RedemptionPeriod {
         uint16  roll;           // 0 = unresolved, 25-175 = resolved
-        uint32  flipDay;        // coinflip day for BURNIE gamble
     }
 
     /// @dev Per-day unresolved gambling-burn pool (SPEC-01, tightened per D-305-STRUCT-TIGHTEN-01
     ///      to 1 slot via denomination conversion).
-    ///      All four fields packed into a single 256-bit slot:
+    ///      Three fields packed into a single 256-bit slot (BURNIE is settled at submit, so no
+    ///      per-day BURNIE base is tracked):
     ///        bits 0-63   : ethBase    — gwei units (1e9 wei divisor)
-    ///        bits 64-127 : burnieBase — gwei-equivalent units (1e9 raw BURNIE divisor)
-    ///        bits 128-191: supplySnapshot — whole tokens (1e18 raw divisor)
-    ///        bits 192-255: burned     — whole tokens (1e18 raw divisor)
+    ///        bits 64-127 : supplySnapshot — whole tokens (1e18 raw divisor)
+    ///        bits 128-191: burned     — whole tokens (1e18 raw divisor)
     ///      Resolved days clear via `delete pendingByDay[day]` for storage refund.
     ///
     ///      Bounds (uint64.max = 1.844e19):
     ///        - ethBase: realistic per-day pool ≤ 10k wallets × 160 ETH cap = 1.6e15 gwei,
     ///          ~11500× under uint64.max. ETH dust sub-1-gwei truncated at write — cumulative
     ///          drift bounded by N×1 gwei per day, within INV-02 dust tolerance.
-    ///        - burnieBase: same denomination, same headroom.
     ///        - supplySnapshot: INITIAL_SUPPLY = 1e12 whole tokens, 1.84e7× under uint64.max.
     ///        - burned: ≤ supplySnapshot/2, same headroom.
     ///
@@ -254,7 +253,6 @@ contract StakedDegenerusStonk {
     ///      so amount→burned ceiling-conversion always increments by ≥1, preserving INV-10.
     struct DayPending {
         uint64 ethBase;
-        uint64 burnieBase;
         uint64 supplySnapshot;
         uint64 burned;
     }
@@ -262,8 +260,7 @@ contract StakedDegenerusStonk {
     mapping(address => mapping(uint32 => PendingRedemption)) public pendingRedemptions;
     mapping(uint32 => RedemptionPeriod) public redemptionPeriods;
 
-    uint256 public pendingRedemptionEthValue;      // total segregated ETH across all periods
-    uint256 internal pendingRedemptionBurnie;       // total reserved BURNIE
+    uint256 public pendingRedemptionEthValue;      // total physically-segregated ETH across all periods
     mapping(uint32 => DayPending) internal pendingByDay;
 
     /// @notice Wall-day of the currently-pending unresolved gambling-burn pool, or 0 if none.
@@ -294,10 +291,17 @@ contract StakedDegenerusStonk {
     uint16 private constant AFFILIATE_POOL_BPS = 3500;
     uint16 private constant LOOTBOX_POOL_BPS = 2000;
     uint16 private constant REWARD_POOL_BPS = 500;
-    uint16 private constant EARLYBIRD_POOL_BPS = 1000;
+    uint16 private constant PRESALE_BOX_POOL_BPS = 1000;
 
     /// @dev Maximum base ethValueOwed a single wallet can accumulate per day via gambling burns
     uint256 private constant MAX_DAILY_REDEMPTION_EV = 160 ether;
+
+    /// @dev Maximum redemption roll (percent). The resolve roll is in [25, 175]; at submit the
+    ///      MAX possible payout (base × MAX_ROLL / 100) is physically segregated out of
+    ///      claimableWinnings[SDGNRS] into this contract so no concurrent claimable drain can
+    ///      under-fund a later claim. Resolve lowers the reservation from MAX down to the rolled
+    ///      amount (accounting only — the over-pull stays as free backing).
+    uint256 private constant MAX_ROLL = 175;
 
     /// @dev Minimum gambling-burn amount (1 whole sDGNRS = 1e18 raw). Required by the 1-slot
     ///      DayPending packing: `burned` is stored in whole-token units, so sub-whole-token burns
@@ -345,11 +349,11 @@ contract StakedDegenerusStonk {
     constructor() {
         uint256 creatorAmount = (INITIAL_SUPPLY * CREATOR_BPS) / BPS_DENOM;
         uint256 whaleAmount = (INITIAL_SUPPLY * WHALE_POOL_BPS) / BPS_DENOM;
-        uint256 earlybirdAmount = (INITIAL_SUPPLY * EARLYBIRD_POOL_BPS) / BPS_DENOM;
+        uint256 presaleBoxAmount = (INITIAL_SUPPLY * PRESALE_BOX_POOL_BPS) / BPS_DENOM;
         uint256 affiliateAmount = (INITIAL_SUPPLY * AFFILIATE_POOL_BPS) / BPS_DENOM;
         uint256 lootboxAmount = (INITIAL_SUPPLY * LOOTBOX_POOL_BPS) / BPS_DENOM;
         uint256 rewardAmount = (INITIAL_SUPPLY * REWARD_POOL_BPS) / BPS_DENOM;
-        uint256 totalAllocated = creatorAmount + whaleAmount + earlybirdAmount + affiliateAmount + lootboxAmount + rewardAmount;
+        uint256 totalAllocated = creatorAmount + whaleAmount + presaleBoxAmount + affiliateAmount + lootboxAmount + rewardAmount;
         if (totalAllocated < INITIAL_SUPPLY) {
             uint256 dust;
             unchecked {
@@ -358,7 +362,7 @@ contract StakedDegenerusStonk {
             lootboxAmount += dust;
         }
         uint256 poolTotal =
-            whaleAmount + earlybirdAmount + affiliateAmount + lootboxAmount + rewardAmount;
+            whaleAmount + presaleBoxAmount + affiliateAmount + lootboxAmount + rewardAmount;
 
         _mint(ContractAddresses.DGNRS, creatorAmount);
         _mint(address(this), poolTotal);
@@ -367,7 +371,7 @@ contract StakedDegenerusStonk {
         poolBalances[uint8(Pool.Affiliate)] = affiliateAmount;
         poolBalances[uint8(Pool.Lootbox)] = lootboxAmount;
         poolBalances[uint8(Pool.Reward)] = rewardAmount;
-        poolBalances[uint8(Pool.Earlybird)] = earlybirdAmount;
+        poolBalances[uint8(Pool.PresaleBox)] = presaleBoxAmount;
 
         game.claimWhalePass(address(0));
 
@@ -633,47 +637,44 @@ contract StakedDegenerusStonk {
 
     /// @notice Check whether day `day` has an unresolved gambling-burn pool (SPEC-03).
     /// @param day Wall-clock day to query.
-    /// @return True if `pendingByDay[day]` has non-zero ETH or BURNIE base.
+    /// @return True if `pendingByDay[day]` has a non-zero ETH base.
     function hasPendingRedemptions(uint32 day) external view returns (bool) {
-        return pendingByDay[day].ethBase != 0 || pendingByDay[day].burnieBase != 0;
+        return pendingByDay[day].ethBase != 0;
     }
 
     /// @notice Called by game contract to resolve day `dayToResolve`'s gambling-burn pool with a dice roll (SPEC-03).
     /// @dev Per SPEC-04 (c): writes `redemptionPeriods[dayToResolve]`, emits `RedemptionResolved`,
     ///      then deletes `pendingByDay[dayToResolve]` for storage refund. Each day's mapping slot is
     ///      distinct, so no later resolve can overwrite a resolved day's roll (V-184 closure clause).
+    ///      ETH-only: at submit the MAX (175%) payout was physically segregated and tracked in
+    ///      pendingRedemptionEthValue; here that reservation is lowered from MAX to the rolled
+    ///      amount (accounting only — the over-pull stays in this contract as free backing, no
+    ///      transfer back to claimable). BURNIE is already fully settled at submit (no roll).
     /// @param roll The random roll result (range 25-175, applied as percentage).
-    /// @param flipDay Coinflip day index used for BURNIE gamble resolution.
     /// @param dayToResolve Wall-clock day whose pool this call resolves.
-    function resolveRedemptionPeriod(uint16 roll, uint32 flipDay, uint32 dayToResolve) external {
+    function resolveRedemptionPeriod(uint16 roll, uint32 dayToResolve) external {
         if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
 
         DayPending storage pool = pendingByDay[dayToResolve];
-        // Convert pool fields from gwei back to wei for the cumulative-scalar reconciliation.
+        // Convert ethBase from gwei back to wei for the cumulative-scalar reconciliation.
         // Drift vs claim-side sums bounded ≤ N gwei per day (INV-02 dust tolerance).
         uint256 ethBase = uint256(pool.ethBase) * 1e9;
-        uint256 burnieBase = uint256(pool.burnieBase) * 1e9;
-        if (ethBase == 0 && burnieBase == 0) return;
+        if (ethBase == 0) return;
 
-        // Adjust cumulative ETH segregation by roll for this day's pool
+        // Lower the cumulative segregation from the MAX (175%) pulled at submit down to the rolled
+        // amount. The MAX − rolled difference is over-pulled ETH that stays as free backing.
+        uint256 segregatedMax = (ethBase * MAX_ROLL) / 100;
         uint256 rolledEth = (ethBase * roll) / 100;
-        pendingRedemptionEthValue = pendingRedemptionEthValue - ethBase + rolledEth;
-
-        // Compute rolled BURNIE (paid to redeemers via _payBurnie on claim)
-        uint256 burnieToCredit = (burnieBase * roll) / 100;
-
-        // Release cumulative BURNIE reservation for this day's pool
-        pendingRedemptionBurnie -= burnieBase;
+        pendingRedemptionEthValue = pendingRedemptionEthValue - segregatedMax + rolledEth;
 
         // Store per-day result (write before emit before delete per SPEC-04 (c))
         redemptionPeriods[dayToResolve] = RedemptionPeriod({
-            roll: roll,
-            flipDay: flipDay
+            roll: roll
         });
 
-        emit RedemptionResolved(dayToResolve, roll, burnieToCredit, flipDay);
+        emit RedemptionResolved(dayToResolve, roll);
 
-        // Storage refund: 3 slots (ethBase, burnieBase, supplySnapshot+burned) free per SPEC-04 (c).
+        // Storage refund: free the day's pool slot per SPEC-04 (c).
         delete pendingByDay[dayToResolve];
 
         // Clear the single-pool sentinel if this resolve targeted the stamped day (INV-13).
@@ -682,15 +683,15 @@ contract StakedDegenerusStonk {
 
     /// @notice Claim a resolved gambling-burn redemption for day `day` (SPEC-02).
     /// @dev Requires `redemptionPeriods[day].roll != 0` (period resolved). Reads composite-keyed
-    ///      `pendingRedemptions[msg.sender][day]`; deletes that slot on full-claim path per SPEC-04 (d).
-    ///      Partial-claim branch (coinflip unresolved) preserves the slot with `ethValueOwed = 0` so
-    ///      BURNIE can still be claimed later. 50% of rolled ETH paid direct, 50% routed to Game as
-    ///      lootbox rewards (internal accounting); post-gameOver, 100% paid as direct ETH.
+    ///      `pendingRedemptions[msg.sender][day]`; deletes that slot per SPEC-04 (d).
+    ///      ETH-only: BURNIE is fully settled at submit (no claim-time BURNIE leg). 50% of rolled
+    ///      ETH is paid direct from this contract's segregated balance, 50% is forwarded to the
+    ///      Game as real ETH (msg.value) for lootbox rewards; post-gameOver, 100% paid direct.
     /// @param day Wall-clock day whose claim this caller is settling.
     function claimRedemption(uint32 day) external {
         address player = msg.sender;
         PendingRedemption storage claim = pendingRedemptions[player][day];
-        if (claim.ethValueOwed == 0 && claim.burnieOwed == 0) revert NoClaim();
+        if (claim.ethValueOwed == 0) revert NoClaim();
 
         RedemptionPeriod storage period = redemptionPeriods[day];
         if (period.roll == 0) revert NotResolved();
@@ -713,45 +714,26 @@ contract StakedDegenerusStonk {
             lootboxEth = totalRolledEth - ethDirect;
         }
 
-        // BURNIE payout: depends on coinflip resolution
-        uint256 burniePayout;
-        bool flipResolved;
-        {
-            (uint16 rewardPercent, bool flipWon) = coinflip.getCoinflipDayResult(period.flipDay);
-            flipResolved = (rewardPercent != 0 || flipWon);
-            if (flipResolved && flipWon) {
-                burniePayout = (claim.burnieOwed * roll * (100 + rewardPercent)) / 10000;
-            }
-        }
-
-        // Release full ETH segregation (both direct and lootbox portions leave sDGNRS)
+        // Release the rolled ETH segregation (both direct and lootbox portions leave sDGNRS).
+        // The MAX − rolled over-pull (segregated at submit) stays in this contract as free backing.
         pendingRedemptionEthValue -= totalRolledEth;
 
-        if (flipResolved) {
-            // Full claim: clear the (player, day) slot entirely per SPEC-04 (d).
-            delete pendingRedemptions[player][day];
-        } else {
-            // Partial claim: clear ETH portion, keep BURNIE for later
-            claim.ethValueOwed = 0;
-        }
+        // Full claim: clear the (player, day) slot entirely per SPEC-04 (d).
+        delete pendingRedemptions[player][day];
 
-        // Resolve lootboxes (Game debits from sDGNRS's claimable internally — no ETH transfer)
+        emit RedemptionClaimed(player, roll, ethDirect, lootboxEth);
+
+        // Pay direct ETH first from this contract's segregated balance (raw .call to untrusted address).
+        _payEth(player, ethDirect);
+
+        // Forward the lootbox share to the Game as real ETH (msg.value). The Game credits it to
+        // futurePrizePool — no claimable debit (the ETH was already pulled out at submit).
         if (lootboxEth != 0) {
             uint16 actScore = claimActivityScore > 0 ? claimActivityScore - 1 : 0;
             uint256 rngWord = game.rngWordForDay(day);
             uint256 entropy = uint256(keccak256(abi.encode(rngWord, player)));
-            game.resolveRedemptionLootbox(player, lootboxEth, entropy, actScore);
+            game.resolveRedemptionLootbox{value: lootboxEth}(player, lootboxEth, entropy, actScore);
         }
-
-        // Pay BURNIE first (token transfer, not raw ETH)
-        if (burniePayout != 0) {
-            _payBurnie(player, burniePayout);
-        }
-
-        emit RedemptionClaimed(player, roll, flipResolved, ethDirect, burniePayout, lootboxEth);
-
-        // Pay direct ETH last (raw .call to untrusted address)
-        _payEth(player, ethDirect);
     }
 
     // =====================================================================
@@ -760,8 +742,8 @@ contract StakedDegenerusStonk {
 
     /// @notice Preview ETH, stETH, and BURNIE output for burning sDGNRS
     /// @dev Reflects ETH-preferential payout logic using current balances and claimables.
-    ///      Deducts pendingRedemptionEthValue and pendingRedemptionBurnie to exclude reserved
-    ///      gambling burn amounts (CP-08). GameOver burns pay no BURNIE (pure ETH/stETH).
+    ///      Deducts pendingRedemptionEthValue to exclude the ETH physically segregated for
+    ///      gambling-burn claimants (CP-08). GameOver burns pay no BURNIE (pure ETH/stETH).
     /// @param amount Amount of sDGNRS to burn
     /// @return ethOut ETH that would be received
     /// @return stethOut stETH that would be received
@@ -789,22 +771,24 @@ contract StakedDegenerusStonk {
             stethOut = totalValueOwed - ethOut;
         }
 
-        // GameOver burns pay no BURNIE
+        // GameOver burns pay no BURNIE. No reserve term: BURNIE is settled atomically at submit
+        // (redeemBurnieShare), so backing is never reserved for an unclaimed period.
         if (!game.gameOver()) {
             uint256 burnieBal = coin.balanceOf(address(this));
             uint256 claimableBurnie = coinflip.previewClaimCoinflips(address(this));
-            uint256 totalBurnie = burnieBal + claimableBurnie - pendingRedemptionBurnie;
+            uint256 totalBurnie = burnieBal + claimableBurnie;
             burnieOut = (totalBurnie * amount) / supply;
         }
     }
 
 
-    /// @notice Get BURNIE backing available for new burns (balance + claimable coinflips minus reserved)
-    /// @return BURNIE backing value net of pending redemption reserves
+    /// @notice Get BURNIE backing available for new burns (balance + claimable coinflips).
+    /// @dev No reserve subtraction: BURNIE is settled at submit, never reserved across a period.
+    /// @return BURNIE backing value (balance + claimable coinflips).
     function burnieReserve() external view returns (uint256) {
         uint256 burnieBal = coin.balanceOf(address(this));
         uint256 claimableBurnie = coinflip.previewClaimCoinflips(address(this));
-        return burnieBal + claimableBurnie - pendingRedemptionBurnie;
+        return burnieBal + claimableBurnie;
     }
 
     // =====================================================================
@@ -816,8 +800,10 @@ contract StakedDegenerusStonk {
         _submitGamblingClaimFrom(player, player, amount);
     }
 
-    /// @dev Core gambling burn logic. Burns sDGNRS from burnFrom, segregates proportional
-    ///      ETH/BURNIE value for beneficiary into the current wall-day's pool (SPEC-01).
+    /// @dev Core gambling burn logic. Burns sDGNRS from burnFrom, physically segregates the MAX
+    ///      (175%) proportional ETH payout out of claimableWinnings[SDGNRS] into this contract's
+    ///      balance (fail-closed if it cannot), and settles the proportional BURNIE share entirely
+    ///      at submit as a conserved coinflip flip-credit (no reserve, no roll, no claim-time BURNIE).
     ///      Enforces 50% supply cap per day (SPEC-05 lazy-init) and 160 ETH per-(wallet, day) EV cap.
     ///      Per SPEC-02, writes the per-claim slot at composite key `pendingRedemptions[beneficiary][currentPeriod]`,
     ///      so a wallet can accumulate distinct claims across multiple unresolved days.
@@ -852,27 +838,26 @@ contract StakedDegenerusStonk {
 
         uint256 supplyBefore = totalSupply;
 
-        // Compute proportional ETH value (subtract already-segregated)
+        // Compute proportional ETH base. pendingRedemptionEthValue is subtracted because that ETH
+        // (already segregated into this contract's balance for prior gambling-burn claimants) is
+        // owed and must not back a new claim.
         uint256 ethBal = address(this).balance;
         uint256 stethBal = steth.balanceOf(address(this));
         uint256 claimableEth = _claimableWinnings();
         uint256 totalMoney = ethBal + stethBal + claimableEth - pendingRedemptionEthValue;
         uint256 ethValueOwed = (totalMoney * amount) / supplyBefore;
 
-        // Compute proportional BURNIE (subtract already-reserved)
+        // Compute proportional BURNIE base from sDGNRS's full BURNIE backing (held + coinflip stake).
+        // No reserve subtraction: prior BURNIE shares were already settled (burned/consumed) at their
+        // own submit, so the backing reads here already exclude them.
         uint256 burnieBal = coin.balanceOf(address(this));
         uint256 claimableBurnie = coinflip.previewClaimCoinflips(address(this));
-        uint256 totalBurnie = burnieBal + claimableBurnie - pendingRedemptionBurnie;
-        uint256 burnieOwed = (totalBurnie * amount) / supplyBefore;
+        uint256 burnieOwed = ((burnieBal + claimableBurnie) * amount) / supplyBefore;
 
-        // Snap to gwei at the source (D-305-GWEI-SNAP-01). Eliminates pool↔cumulative-scalar drift
-        // by ensuring every downstream use of ethValueOwed/burnieOwed is a multiple of 1e9 — so
-        // pool.ethBase × 1e9 reconstructs the exact sum-of-claims at resolve. Sub-gwei dust is
-        // truncated per SPEC-04 (b) "zero-rounded ethValueOwed proceeds" semantics, applied
-        // uniformly. Per-claim sub-roll floor-div dust (existing v43 behavior) is unchanged.
+        // Snap ETH base to gwei at the source (D-305-GWEI-SNAP-01). Eliminates pool↔cumulative-scalar
+        // drift by ensuring pool.ethBase × 1e9 reconstructs the exact sum-of-claims at resolve.
         unchecked {
             ethValueOwed = (ethValueOwed / 1e9) * 1e9;
-            burnieOwed = (burnieOwed / 1e9) * 1e9;
         }
 
         // Burn sDGNRS
@@ -882,24 +867,41 @@ contract StakedDegenerusStonk {
         }
         emit Transfer(burnFrom, address(0), amount);
 
-        // Segregate — cumulative globals stay in wei (uint256); per-day pool bases denominated in
-        // gwei (1e9 divisor) to fit uint64. Sub-gwei dust on the pool side bounded ≤ 1 gwei per
-        // claim — drift across the cumulative scalar reconciliation at resolve is bounded by
-        // N×1 gwei and remains within INV-02's dust tolerance (analyzed in 305-01-SUMMARY).
-        pendingRedemptionEthValue += ethValueOwed;
+        // === ETH: physically segregate the MAX (175%) payout out of claimableWinnings[SDGNRS] ===
+        // Pull the MAX so no concurrent claimable drain (AfKing SUB-09 self-sub, a 2nd same-day
+        // claimant, claimWinnings) can under-fund a later claim. pullRedemptionReserve does a CHECKED
+        // claimable debit and reverts (fail-closed, LOCKED) if the full MAX cannot segregate.
+        //
+        // The per-day pool tracks the BASE (100%) in gwei; resolve reconstructs the segregated MAX
+        // as floor(poolBaseWei × MAX_ROLL / 100). To make the cumulative increment here reconcile
+        // EXACTLY with that resolve-time subtraction (no rounding drift, no underflow), the per-claim
+        // increment is the telescoping delta of floor(cumulativeBaseWei × MAX_ROLL / 100) before vs
+        // after adding this claim's base. Summed over the day it equals the resolve value exactly.
+        uint256 prevBaseWei = uint256(pool.ethBase) * 1e9;
         pool.ethBase += uint64(ethValueOwed / 1e9);
-        pendingRedemptionBurnie += burnieOwed;
-        pool.burnieBase += uint64(burnieOwed / 1e9);
+        uint256 newBaseWei = uint256(pool.ethBase) * 1e9;
+        uint256 maxIncrement = (newBaseWei * MAX_ROLL) / 100 - (prevBaseWei * MAX_ROLL) / 100;
+        if (maxIncrement != 0) {
+            game.pullRedemptionReserve(maxIncrement);
+        }
+        pendingRedemptionEthValue += maxIncrement;
 
-        // Composite-keyed per-claim slot for (beneficiary, currentPeriod) (SPEC-02).
+        // === BURNIE: settle the whole share at submit (conserved, no reserve, no roll) ===
+        // redeemBurnieShare burns/consumes `burnieOwed` of sDGNRS's own BURNIE backing and credits
+        // an equal flip stake to the beneficiary → net new BURNIE = 0. The beneficiary gambles the
+        // credit via the normal coinflip (BURNIE already double-gambles), so there is no ETH-style roll.
+        if (burnieOwed != 0) {
+            coinflip.redeemBurnieShare(beneficiary, burnieOwed);
+        }
+
+        // Composite-keyed per-claim slot for (beneficiary, currentPeriod) (SPEC-02). ETH-only: the
+        // BURNIE share is fully settled above, so nothing BURNIE-related is recorded per claim.
         PendingRedemption storage claim = pendingRedemptions[beneficiary][currentPeriod];
 
-        // Enforce 160 ETH per-(wallet, day) EV cap (resets naturally on a new day under composite keying).
+        // Enforce 160 ETH per-(wallet, day) EV cap on the BASE (resets naturally on a new day under composite keying).
         if (claim.ethValueOwed + ethValueOwed > MAX_DAILY_REDEMPTION_EV) revert ExceedsDailyRedemptionCap();
 
         claim.ethValueOwed += uint96(ethValueOwed);
-        // burnieOwed: uint96 safe — max realistic BURNIE is ~2e24, well below uint96.max (~7.9e28).
-        claim.burnieOwed += uint96(burnieOwed);
 
         // Snapshot activity score on first burn of day (0 = not yet set, stored as score + 1)
         if (claim.activityScore == 0) {
@@ -909,16 +911,13 @@ contract StakedDegenerusStonk {
         emit RedemptionSubmitted(beneficiary, amount, ethValueOwed, burnieOwed, currentPeriod);
     }
 
-    /// @dev Pay ETH to player, falling back to stETH if ETH balance is insufficient.
+    /// @dev Pay ETH to player from this contract's segregated balance, falling back to stETH if
+    ///      the ETH balance is insufficient. No game.claimWinnings pull: the redemption ETH was
+    ///      already physically pulled out of claimableWinnings[SDGNRS] at submit
+    ///      (pullRedemptionReserve), so it is sitting in this contract's balance.
     function _payEth(address player, uint256 amount) private {
         if (amount == 0) return;
         uint256 ethBal = address(this).balance;
-        uint256 claimableEth = _claimableWinnings();
-
-        if (amount > ethBal && claimableEth != 0) {
-            game.claimWinnings(address(0));
-            ethBal = address(this).balance;
-        }
 
         if (amount <= ethBal) {
             (bool success, ) = player.call{value: amount}("");
@@ -931,20 +930,6 @@ contract StakedDegenerusStonk {
                 if (!success) revert TransferFailed();
             }
             if (!steth.transfer(player, stethOut)) revert TransferFailed();
-        }
-    }
-
-    /// @dev Pay BURNIE to player, drawing from balance then coinflip claimables.
-    function _payBurnie(address player, uint256 amount) private {
-        uint256 burnieBal = coin.balanceOf(address(this));
-        uint256 payBal = amount <= burnieBal ? amount : burnieBal;
-        uint256 remaining = amount - payBal;
-        if (payBal != 0) {
-            if (!coin.transfer(player, payBal)) revert TransferFailed();
-        }
-        if (remaining != 0) {
-            coinflip.claimCoinflipsForRedemption(address(this), remaining);
-            if (!coin.transfer(player, remaining)) revert TransferFailed();
         }
     }
 

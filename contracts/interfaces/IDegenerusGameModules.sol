@@ -231,20 +231,34 @@ interface IDegenerusGameMintModule {
         MintPaymentKind payKind
     ) external payable;
 
-    /// @notice Processes a BURNIE purchase of tickets and optional lootboxes
+    /// @notice Processes a BURNIE purchase of tickets
     /// @param buyer Address of the buyer
     /// @param ticketQuantity Number of tickets to purchase
-    /// @param lootBoxBurnieAmount Amount of BURNIE to burn for lootboxes
     function purchaseCoin(
         address buyer,
-        uint256 ticketQuantity,
-        uint256 lootBoxBurnieAmount
+        uint256 ticketQuantity
     ) external;
 
-    /// @notice Purchases Burnie-specific lootboxes
-    /// @param buyer Address of the buyer
-    /// @param burnieAmount Amount of Burnie lootboxes to purchase
-    function purchaseBurnieLootbox(address buyer, uint256 burnieAmount) external;
+    /// @notice Buys a credit-gated coin-presale box (ETH + claimable shortfall)
+    /// @param buyer Player receiving the box
+    /// @param boxAmount Requested box ETH (>= 0.01 ETH, pre-clamp)
+    function buyPresaleBox(address buyer, uint256 boxAmount) external;
+
+    /// @notice Buys a mint leg AND a presale box in one tx sharing one RNG index
+    /// @param buyer Player receiving both legs
+    /// @param ticketQuantity Tickets to buy
+    /// @param lootBoxAmount ETH lootbox spend
+    /// @param affiliateCode Affiliate code for the mint leg
+    /// @param payKind Payment method for the mint leg
+    /// @param boxAmount Requested presale-box ETH (claimable-funded)
+    function buyLootboxAndPresaleBox(
+        address buyer,
+        uint256 ticketQuantity,
+        uint256 lootBoxAmount,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind,
+        uint256 boxAmount
+    ) external;
 
     /// @notice Processes a batch of future ticket claims
     /// @param lvl The level to process tickets for
@@ -272,10 +286,15 @@ interface IDegenerusGameLootboxModule {
     /// @param lootboxIndex Index of the lootbox to open
     function openLootBox(address player, uint48 lootboxIndex) external;
 
-    /// @notice Opens a Burnie lootbox for a player
-    /// @param player Address of the lootbox owner
-    /// @param lootboxIndex Index of the Burnie lootbox to open
-    function openBurnieLootBox(address player, uint48 lootboxIndex) external;
+    /// @notice Opens a coin-presale box for a player
+    /// @param player Address of the box owner
+    /// @param index RNG index the box queued at
+    function openPresaleBox(address player, uint48 index) external;
+
+    /// @notice Opens a co-queued lootbox + presale box in one tx
+    /// @param player Address of the index owner
+    /// @param index Shared RNG index
+    function openLootboxAndPresaleBox(address player, uint48 index) external;
 
     /// @notice Resolves a lootbox directly with provided randomness
     /// @param player Address of the lootbox owner

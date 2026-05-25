@@ -28,8 +28,6 @@ interface IDegenerusGamePlayerActions {
     function claimWhalePass(address player) external;
     /// @notice Claim decimator jackpot for a specific level.
     function claimDecimatorJackpot(uint24 lvl) external;
-    /// @notice Purchase a BURNIE lootbox.
-    function purchaseBurnieLootbox(address buyer, uint256 burnieAmount) external;
     /// @notice Purchase a deity pass with ETH.
     function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
     /// @notice Place full-ticket bets on degenerette.
@@ -50,8 +48,7 @@ interface IDegenerusGamePlayerActions {
     /// @notice Purchase tickets using BURNIE.
     function purchaseCoin(
         address buyer,
-        uint256 ticketQuantity,
-        uint256 lootBoxBurnieAmount
+        uint256 ticketQuantity
     ) external;
 }
 
@@ -544,16 +541,7 @@ contract DegenerusVault {
     /// @custom:reverts Insufficient If ticketQuantity is zero
     function gamePurchaseTicketsBurnie(uint256 ticketQuantity) external onlyVaultOwner {
         if (ticketQuantity == 0) revert Insufficient();
-        gamePlayer.purchaseCoin(address(this), ticketQuantity, 0);
-    }
-
-    /// @notice Purchase a BURNIE lootbox for the vault
-    /// @param burnieAmount Amount of BURNIE to burn
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    /// @custom:reverts Insufficient If burnieAmount is zero
-    function gamePurchaseBurnieLootbox(uint256 burnieAmount) external onlyVaultOwner {
-        if (burnieAmount == 0) revert Insufficient();
-        gamePlayer.purchaseBurnieLootbox(address(this), burnieAmount);
+        gamePlayer.purchaseCoin(address(this), ticketQuantity);
     }
 
     /// @notice Open a lootbox owned by the vault

@@ -2,7 +2,6 @@
 pragma solidity 0.8.34;
 
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
-import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
@@ -85,11 +84,10 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
         // Compute available funds FIRST (before any side effects)
         // Deity pass refunds have not happened yet, so claimablePool is pre-refund.
-        // pendingRedemptionEthValue is ETH physically held on-chain but reserved for
-        // sDGNRS gambling-burn claimants; excluding it prevents double-spend when
-        // claimRedemption runs after the drain.
-        uint256 reserved = uint256(claimablePool) +
-            IStakedDegenerusStonk(ContractAddresses.SDGNRS).pendingRedemptionEthValue();
+        // sDGNRS redemption ETH is segregated out of the game at submit (pullRedemptionReserve
+        // transfers it to the sDGNRS contract), so it is no longer part of totalFunds here —
+        // subtracting pendingRedemptionEthValue would double-count it.
+        uint256 reserved = uint256(claimablePool);
         uint256 preRefundAvailable = totalFunds > reserved ? totalFunds - reserved : 0;
 
         // RNG gate: when distributable funds exist, require RNG word.
@@ -150,9 +148,9 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         yieldAccumulator = 0;
 
         // Recalculate available after refunds (claimablePool may have grown).
-        // Pending sDGNRS redemption ETH remains reserved for claimRedemption payouts.
-        uint256 postRefundReserved = uint256(claimablePool) +
-            IStakedDegenerusStonk(ContractAddresses.SDGNRS).pendingRedemptionEthValue();
+        // sDGNRS redemption ETH was already segregated out of the game at submit, so it is not
+        // part of totalFunds here — only claimablePool is reserved.
+        uint256 postRefundReserved = uint256(claimablePool);
         uint256 available = totalFunds > postRefundReserved ? totalFunds - postRefundReserved : 0;
 
         if (available == 0) return;

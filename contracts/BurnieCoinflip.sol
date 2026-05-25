@@ -31,6 +31,8 @@ interface IBurnieCoin {
     function burnForCoinflip(address from, uint256 amount) external;
     /// @notice Mint BURNIE to a player (coinflip claims, degenerette wins).
     function mintForGame(address to, uint256 amount) external;
+    /// @notice Get the BURNIE balance of an address.
+    function balanceOf(address account) external view returns (uint256);
 }
 
 /// @notice Interface for WWXRP contract methods used by BurnieCoinflip.
@@ -187,7 +189,8 @@ contract BurnieCoinflip {
 
     /// @notice Restricts access to authorized flip creditors.
     /// @dev Allowed callers: GAME (delegatecall modules), QUESTS (level quest rewards), AFFILIATE, ADMIN,
-    ///      AF_KING (keeper sweep bounty, gas-pegged creditFlip).
+    ///      AF_KING (keeper sweep bounty, gas-pegged creditFlip), SDGNRS (redemption flip-credit at
+    ///      submit via redeemBurnieShare — net BURNIE neutral, offset by burn+consume).
     modifier onlyFlipCreditors() {
         address sender = msg.sender;
         if (
@@ -195,13 +198,20 @@ contract BurnieCoinflip {
             sender != ContractAddresses.QUESTS &&
             sender != ContractAddresses.AFFILIATE &&
             sender != ContractAddresses.ADMIN &&
-            sender != ContractAddresses.AF_KING
+            sender != ContractAddresses.AF_KING &&
+            sender != ContractAddresses.SDGNRS
         ) revert OnlyFlipCreditors();
         _;
     }
 
+    /// @dev Restricts access to the burn-consume callers: BurnieCoin (shortfall consume for burns)
+    ///      and SDGNRS (consume its own coinflip stake during redemption settle).
     modifier onlyBurnieCoin() {
-        if (msg.sender != ContractAddresses.COIN) revert OnlyBurnieCoin();
+        address sender = msg.sender;
+        if (
+            sender != ContractAddresses.COIN &&
+            sender != ContractAddresses.SDGNRS
+        ) revert OnlyBurnieCoin();
         _;
     }
 
@@ -872,6 +882,41 @@ contract BurnieCoinflip {
                 ++i;
             }
         }
+    }
+
+    /// @notice Settle a redemption's BURNIE share entirely at submit (sDGNRS only).
+    /// @dev Atomic, BURNIE-conserving: destroys `base` of sDGNRS's own BURNIE backing (held
+    ///      balance first, then its coinflip stake), then credits an equal flip stake to the
+    ///      redeemer. The deferred creditFlip mint of `base` is exactly offset by the burn+consume,
+    ///      so net new BURNIE across the call == 0.
+    ///      Airtight by construction: sDGNRS computes base = (held + stake) * amount / supply at
+    ///      submit, so base <= held + stake and the burn→consume waterfall always covers base.
+    /// @param redeemer The player receiving the flip credit.
+    /// @param base The proportional BURNIE backing to settle (no roll — BURNIE gambles via the flip).
+    function redeemBurnieShare(address redeemer, uint256 base) external {
+        if (msg.sender != ContractAddresses.SDGNRS) revert OnlyStakedDegenerusStonk();
+        if (base == 0) return;
+
+        // Burn from sDGNRS's held wallet balance first via the COINFLIP-gated burn
+        // (this contract IS COINFLIP; burnForCoinflip is BurnieCoin's generic _burn entry).
+        uint256 held = burnie.balanceOf(ContractAddresses.SDGNRS);
+        uint256 burnFromHeld = base <= held ? base : held;
+        if (burnFromHeld != 0) {
+            burnie.burnForCoinflip(ContractAddresses.SDGNRS, burnFromHeld);
+        }
+
+        // Consume the remainder from sDGNRS's own coinflip stake (no token mint — this removes a
+        // future mint of `remainder`, the conservation analogue of the held-balance burn above).
+        uint256 remainder = base - burnFromHeld;
+        if (remainder != 0) {
+            uint256 consumed = _claimCoinflipsAmount(ContractAddresses.SDGNRS, remainder, false);
+            // Defense-in-depth: airtight by construction (remainder <= claimable stake), but
+            // fail-closed rather than over-credit if the stake somehow falls short.
+            if (consumed < remainder) revert Insufficient();
+        }
+
+        // Deferred mint of `base` to the redeemer, offset 1:1 by the burn+consume ⇒ conserved.
+        _addDailyFlip(redeemer, base, 0, false, false);
     }
 
     /*+======================================================================+

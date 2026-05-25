@@ -12,7 +12,7 @@ interface IStakedDegenerusStonk {
         Affiliate,
         Lootbox,
         Reward,
-        Earlybird
+        PresaleBox
     }
 
     /// @notice Deposit stETH to sDGNRS reserves
@@ -99,7 +99,6 @@ interface IStakedDegenerusStonk {
     /// @dev Only callable by game contract during advanceGame. Writes redemptionPeriods[dayToResolve],
     ///      emits RedemptionResolved, then deletes pendingByDay[dayToResolve] per SPEC-04 (c).
     /// @param roll The random roll (25-175).
-    /// @param flipDay The coinflip day for BURNIE gamble.
     /// @param dayToResolve Wall-clock day whose pool this call resolves.
-    function resolveRedemptionPeriod(uint16 roll, uint32 flipDay, uint32 dayToResolve) external;
+    function resolveRedemptionPeriod(uint16 roll, uint32 dayToResolve) external;
 }

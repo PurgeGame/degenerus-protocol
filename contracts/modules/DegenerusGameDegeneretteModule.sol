@@ -222,8 +222,10 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Minimum bet amount for WWXRP (1 token with 18 decimals).
     uint256 private constant MIN_BET_WWXRP = 1 ether;
 
-    /// @dev Maximum spins per bet (encoded as ticketCount in packed bet).
-    uint8 private constant MAX_SPINS_PER_BET = 10;
+    /// @dev Maximum spins per bet, per currency (encoded as ticketCount in the packed bet).
+    uint8 private constant MAX_SPINS_ETH = 25;
+    uint8 private constant MAX_SPINS_BURNIE = 15;
+    uint8 private constant MAX_SPINS_WWXRP = 5;
 
     // -------------------------------------------------------------------------
     // Quick Play Constants
@@ -293,7 +295,7 @@ contract DegenerusGameDegeneretteModule is
     // [0]        mode (1 bit): 1=full ticket
     // [1]        isRandom (1 bit): must be 0 (no random tickets)
     // [2..33]    customTicket (32 bits): packed traits (required)
-    // [34..41]   ticketCount (8 bits): spin count (1..MAX_SPINS_PER_BET)
+    // [34..41]   ticketCount (8 bits): spin count (per-currency cap: ETH 25 / BURNIE 15 / WWXRP 5)
     // [42..43]   currency (2 bits)
     // [44..171]  amountPerTicket (128 bits)
     // [172..219] index (48 bits)
@@ -361,7 +363,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param player The player address (use zero address for msg.sender).
     /// @param currency Currency type (0=ETH, 1=BURNIE, 2=unsupported, 3=WWXRP).
     /// @param amountPerTicket Bet amount per ticket.
-    /// @param ticketCount Number of spins (1..MAX_SPINS_PER_BET).
+    /// @param ticketCount Number of spins (per-currency cap: ETH 25 / BURNIE 15 / WWXRP 5).
     /// @param customTicket Custom packed traits. Format: [D:24-31][C:16-23][B:8-15][A:0-7].
     /// @param heroQuadrant Hero quadrant (0-3) for payout boost. Required; inputs >= 4 (including 0xFF) revert with `InvalidBet`.
     function placeDegeneretteBet(
@@ -382,17 +384,58 @@ contract DegenerusGameDegeneretteModule is
         );
     }
 
+    /// @dev Cross-bet payout accumulator threaded through resolveBets → _resolveBet
+    ///      → _resolveFullTicketBet → _distributePayout. Per-currency payouts are
+    ///      summed across the whole resolveBets call and flushed ONCE (additive, so
+    ///      byte-identical to the per-spin writes). The prize-pool decrement runs
+    ///      against a running local that mirrors the live storage value spin-by-spin:
+    ///      read once at first ETH win, decremented in memory per spin (so each
+    ///      spin's ETH_WIN_CAP_BPS cap sees the same shrinking pool it would have
+    ///      read from storage today), written back once at flush. Lootbox-share is
+    ///      NOT accumulated here — it is summed PER betId and resolved once per bet
+    ///      inside _resolveFullTicketBet (resolution-batch-invariant).
+    struct ResolveAcc {
+        uint256 ethClaimable; // summed ETH claimable across all bets
+        uint256 burnieMint; // summed BURNIE mint across all bets
+        uint256 wwxrpMint; // summed WWXRP mint across all bets
+        bool poolFrozen; // prizePoolFrozen snapshot (stable across the call)
+        bool poolLoaded; // running pool locals initialized?
+        uint256 runningFuture; // unfrozen: running futurePrizePool
+        uint128 pendingNext; // frozen: running pending next pool
+        uint128 pendingFuture; // frozen: running pending future pool
+    }
+
     /// @notice Resolves one or more pending bets for a player.
     /// @dev Requires RNG word to be available. Processes wins by minting tokens or crediting ETH.
+    ///      ETH/BURNIE/WWXRP payouts are accumulated across the whole call and flushed
+    ///      once per currency (one mint per currency, one claimable + claimablePool write,
+    ///      one prize-pool write); lootbox-share is summed per betId and resolved per bet.
     /// @param player The player address (use zero address for msg.sender).
     /// @param betIds Array of bet IDs to resolve.
     function resolveBets(address player, uint64[] calldata betIds) external {
         player = _resolvePlayer(player);
+        ResolveAcc memory acc;
+        acc.poolFrozen = prizePoolFrozen;
         uint256 len = betIds.length;
         for (uint256 i; i < len; ) {
-            _resolveBet(player, betIds[i]);
+            _resolveBet(player, betIds[i], acc);
             unchecked {
                 ++i;
+            }
+        }
+
+        // Single per-currency flush (additive → byte-identical to the per-spin writes).
+        if (acc.burnieMint != 0) coin.mintForGame(player, acc.burnieMint);
+        if (acc.wwxrpMint != 0) wwxrp.mintPrize(player, acc.wwxrpMint);
+        if (acc.ethClaimable != 0) _addClaimableEth(player, acc.ethClaimable);
+
+        // Single prize-pool write reflecting the running decrement (only if any ETH
+        // win touched it — poolLoaded guards against a pointless rewrite otherwise).
+        if (acc.poolLoaded) {
+            if (acc.poolFrozen) {
+                _setPendingPools(acc.pendingNext, acc.pendingFuture);
+            } else {
+                _setFuturePrizePool(acc.runningFuture);
             }
         }
     }
@@ -442,8 +485,14 @@ contract DegenerusGameDegeneretteModule is
         uint32 customTicket,
         uint8 heroQuadrant
     ) private returns (uint256 totalBet) {
-        if (ticketCount == 0 || ticketCount > MAX_SPINS_PER_BET)
-            revert InvalidBet();
+        // Per-currency spin cap (currency is validated to ETH/BURNIE/WWXRP by
+        // _validateMinBet below; the WWXRP arm — CURRENCY_WWXRP — is the default).
+        uint8 maxSpins = currency == CURRENCY_ETH
+            ? MAX_SPINS_ETH
+            : currency == CURRENCY_BURNIE
+                ? MAX_SPINS_BURNIE
+                : MAX_SPINS_WWXRP;
+        if (ticketCount == 0 || ticketCount > maxSpins) revert InvalidBet();
         if (amountPerTicket == 0) revert InvalidBet();
         if (heroQuadrant >= 4) revert InvalidBet();
 
@@ -550,18 +599,25 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @dev Resolves a bet (determines mode from packed data).
-    function _resolveBet(address player, uint64 betId) private {
+    function _resolveBet(
+        address player,
+        uint64 betId,
+        ResolveAcc memory acc
+    ) private {
         uint256 packed = degeneretteBets[player][betId];
         if (packed == 0) revert InvalidBet();
 
-        _resolveFullTicketBet(player, betId, packed);
+        _resolveFullTicketBet(player, betId, packed, acc);
     }
 
-    /// @dev Resolves a Full Ticket bet.
+    /// @dev Resolves a Full Ticket bet. Per-currency payouts accumulate into `acc`
+    ///      (flushed once cross-bet by resolveBets); lootbox-share is summed across
+    ///      this bet's spins and resolved ONCE here (one box per betId).
     function _resolveFullTicketBet(
         address player,
         uint64 betId,
-        uint256 packed
+        uint256 packed,
+        ResolveAcc memory acc
     ) private {
         // Decode packed bet
         uint32 customTicket = uint32((packed >> FT_TICKET_SHIFT) & MASK_32);
@@ -589,6 +645,8 @@ contract DegenerusGameDegeneretteModule is
 
         uint256 totalPayout;
         uint32 firstResultTicket;
+        // Lootbox-share summed across THIS bet's spins → one box per betId.
+        uint256 betLootboxShare;
 
         for (uint8 spinIdx; spinIdx < ticketCount; ) {
             // Spin results are derived deterministically from the lootbox RNG word + index.
@@ -641,24 +699,21 @@ contract DegenerusGameDegeneretteModule is
             if (payout != 0) {
                 totalPayout += payout;
 
-                // Ensure each ETH win resolves into an independent lootbox outcome
-                // (avoid identical lootbox results when multiple spins share the same payout amount).
-                uint256 lootboxWord = spinIdx == 0
-                    ? rngWord
-                    : uint256(
-                        keccak256(
-                            abi.encodePacked(
-                                rngWord,
-                                index,
-                                spinIdx,
-                                bytes1(0x4c)
-                            )
-                        )
-                    ); // 'L'
-                _distributePayout(player, currency, amountPerTicket, payout, lootboxWord, activityScore);
+                // Accumulate this spin's payout. ETH credits + the running-pool
+                // decrement / cap land in `acc` (flushed cross-bet); the spin's
+                // lootbox-share is returned and summed into this bet's box.
+                betLootboxShare += _distributePayout(
+                    player,
+                    currency,
+                    amountPerTicket,
+                    payout,
+                    acc
+                );
             }
 
-            // Award sDGNRS from Reward pool on 6+ match ETH bets
+            // Award sDGNRS from Reward pool on 6+ match ETH bets. Stays per-spin:
+            // _awardDegeneretteDgnrs reads poolBalance fresh per call, so summing
+            // off a stale balance would change the payout.
             if (currency == CURRENCY_ETH && matches >= 6) {
                 _awardDegeneretteDgnrs(player, amountPerTicket, matches);
             }
@@ -666,6 +721,13 @@ contract DegenerusGameDegeneretteModule is
             unchecked {
                 ++spinIdx;
             }
+        }
+
+        // One lootbox per betId, on the summed lootbox-share, using this bet's
+        // rngWord (the per-spin lootboxWord salt is dropped — the box now rolls
+        // once per bet). Never summed across betIds (resolution-batch-invariant).
+        if (betLootboxShare > 0) {
+            _resolveLootboxDirect(player, betLootboxShare, rngWord, activityScore);
         }
 
         emit FullTicketResolved(
@@ -701,19 +763,21 @@ contract DegenerusGameDegeneretteModule is
     /// @param currency The currency type (0=ETH, 1=BURNIE, 3=WWXRP).
     /// @param betAmount The per-ticket bet amount (uint128) — the tier-threshold reference.
     /// @param payout The total payout amount (uint256).
-    /// @param rngWord The RNG word for lootbox conversion (only used for ETH).
+    /// @param acc Cross-bet accumulator: ETH claimable + the running prize-pool
+    ///        local accumulate here (flushed once by resolveBets); BURNIE/WWXRP
+    ///        mint totals accumulate here too.
+    /// @return lootboxShare The ETH lootbox-share for this spin (0 for BURNIE/WWXRP),
+    ///         summed by the caller into the per-bet box.
     function _distributePayout(
         address player,
         uint8 currency,
         uint128 betAmount,
         uint256 payout,
-        uint256 rngWord,
-        uint16 activityScore
-    ) private {
+        ResolveAcc memory acc
+    ) private returns (uint256 lootboxShare) {
         if (currency == CURRENCY_ETH) {
             // 3-tier split rule (PAY-SPLIT-01..02)
             uint256 ethShare;
-            uint256 lootboxShare;
             uint256 threeBet = uint256(betAmount) * 3;
             if (payout <= threeBet) {
                 // Tier 1: payout ≤ 3 × bet → 100% ETH.
@@ -729,29 +793,34 @@ contract DegenerusGameDegeneretteModule is
                 lootboxShare = payout - ethShare;
             }
 
-            if (prizePoolFrozen) {
+            // Load the running prize-pool local on the first ETH win. The first
+            // read mirrors the live storage value the per-spin path would have
+            // read; subsequent spins decrement the running local in memory, so
+            // each spin's cap/solvency sees the same shrinking pool storage would
+            // have held — byte-identical to per-spin. Flushed once by resolveBets.
+            if (!acc.poolLoaded) {
+                acc.poolLoaded = true;
+                if (acc.poolFrozen) {
+                    (acc.pendingNext, acc.pendingFuture) = _getPendingPools();
+                } else {
+                    acc.runningFuture = _getFuturePrizePool();
+                }
+            }
+
+            if (acc.poolFrozen) {
                 // Frozen path: route ETH share through the pending pool side-channel
                 // (matching the bet-placement pattern). The live futurePrizePool
                 // snapshot that advanceGame / runRewardJackpots operates on stays
                 // intact; the pending future accumulator (credited by purchases
                 // during freeze) is debited here with a revert-on-insufficient
-                // solvency check.
-                (uint128 pNext, uint128 pFuture) = _getPendingPools();
-
-                // Solvency check: pending accumulator must cover the ETH share.
-                if (uint256(pFuture) < ethShare) revert E();
-
-                // BAF-SAFE: _setPendingPools write completes before _addClaimableEth
-                // (no stale local). DegeneretteModule._addClaimableEth has no
-                // auto-rebuy path (no pool writes). _resolveLootboxDirect →
-                // LootboxModule has zero pool writes.
-                _setPendingPools(pNext, pFuture - uint128(ethShare));
-                _addClaimableEth(player, ethShare);
+                // solvency check, against the running local.
+                if (uint256(acc.pendingFuture) < ethShare) revert E();
+                acc.pendingFuture -= uint128(ethShare);
             } else {
                 // Unfrozen path: pool cap (ETH_WIN_CAP_BPS) takes PRECEDENCE over
                 // the 3-tier split (PAY-SPLIT-03). After capping,
                 // ethShare ≤ pool × 10% < pool, so no further solvency check.
-                uint256 pool = _getFuturePrizePool();
+                uint256 pool = acc.runningFuture;
                 uint256 maxEth = (pool * ETH_WIN_CAP_BPS) / 10_000;
                 if (ethShare > maxEth) {
                     lootboxShare += ethShare - maxEth;
@@ -761,20 +830,16 @@ contract DegenerusGameDegeneretteModule is
                 unchecked {
                     pool -= ethShare;
                 }
-                _setFuturePrizePool(pool);
-                _addClaimableEth(player, ethShare);
+                acc.runningFuture = pool;
             }
 
-            // Convert remainder (if any) to lootbox rewards. activityScore is the bet-time
-            // snapshot (decoded in _resolveFullTicketBet), so the lootbox EV multiplier is
-            // frozen at bet commitment — consistent with the spin payout, never live.
-            if (lootboxShare > 0) {
-                _resolveLootboxDirect(player, lootboxShare, rngWord, activityScore);
-            }
+            // Accumulate ETH claimable cross-bet (flushed once). The lootbox-share
+            // is returned to the caller, summed per betId, and resolved once per bet.
+            acc.ethClaimable += ethShare;
         } else if (currency == CURRENCY_BURNIE) {
-            coin.mintForGame(player, payout);
+            acc.burnieMint += payout;
         } else if (currency == CURRENCY_WWXRP) {
-            wwxrp.mintPrize(player, payout);
+            acc.wwxrpMint += payout;
         }
     }
 

@@ -31,7 +31,7 @@ interface IWrappedWrappedXRP {
  *
  * ## Functions
  *
- * - Lootbox opening (openLootBox, openBurnieLootBox, resolveLootboxDirect, resolveRedemptionLootbox)
+ * - Lootbox opening (openLootBox, resolveLootboxDirect, resolveRedemptionLootbox)
  * - Deity boon system (deityBoonSlots, issueDeityBoon)
  */
 contract DegenerusGameLootboxModule is DegenerusGameStorage {
@@ -76,25 +76,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         bool roundedUp
     );
 
-    /// @notice Emitted when a BURNIE lootbox is successfully opened
-    /// @param player The player who opened the lootbox
-    /// @param index The RNG index of the lootbox
-    /// @param burnieAmount The BURNIE amount used to open the lootbox
-    /// @param ticketLevel The target level for tickets
-    /// @param tickets The pre-Bernoulli scaled (× TICKET_SCALE) ticket count
-    /// @param burnieReward The BURNIE reward amount
-    /// @param roundedUp True iff the Bernoulli round-up incremented the awarded
-    ///        whole-ticket count by 1
-    event BurnieLootOpen(
-        address indexed player,
-        uint32 indexed index,
-        uint256 burnieAmount,
-        uint24 ticketLevel,
-        uint32 tickets,
-        uint256 burnieReward,
-        bool roundedUp
-    );
-
     /// @notice Emitted when a lootbox awards a whale pass jackpot
     /// @param player The player who won the jackpot
     /// @param day The day index of the jackpot
@@ -123,6 +104,24 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint32 indexed day,
         uint256 lootboxAmount,
         uint256 dgnrsAmount
+    );
+
+    /// @notice Emitted when a coin-presale box is resolved.
+    /// @param player The box owner.
+    /// @param index The box's RNG index.
+    /// @param amount The box ETH resolved.
+    /// @param burnie BURNIE credited (0 if not a BURNIE roll).
+    /// @param dgnrs DGNRS paid (roll award + any closing-box sweep).
+    /// @param wwxrp WWXRP minted (0 unless the 10% dud roll).
+    /// @param closing True iff this was the 50-ETH-crossing closing box.
+    event PresaleBoxOpened(
+        address indexed player,
+        uint48 indexed index,
+        uint256 amount,
+        uint256 burnie,
+        uint256 dgnrs,
+        uint256 wwxrp,
+        bool closing
     );
 
     /// @notice Unified lootbox reward event for boon awards
@@ -284,8 +283,31 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_LARGE_BURNIE_HIGH_BASE_BPS = 30_705;
     /// @dev Step increase in BPS for high BURNIE path (94.3% per step)
     uint16 private constant LOOTBOX_LARGE_BURNIE_HIGH_STEP_BPS = 9_430;
-    /// @dev Presale BURNIE bonus in BPS (62% bonus, reduced to keep presale total stable)
-    uint16 private constant LOOTBOX_PRESALE_BURNIE_BONUS_BPS = 6_200;
+
+    // ---- Coin-presale-box BURNIE band (lootbox band recentered on a 400% branch mean) ----
+    // E[largeBurnieBps] = 0.8*lowMean + 0.2*highMean = 40000 (400% of box ETH on the
+    // BURNIE branch -> 200% all-boxes average since BURNIE rolls 50%).
+    /// @dev Base BPS for low presale-box BURNIE path (rolls 0-15, p=80%).
+    uint32 private constant PRESALE_BOX_BURNIE_LOW_BASE_BPS = 14_098;
+    /// @dev Step BPS per roll for low presale-box BURNIE path.
+    uint32 private constant PRESALE_BOX_BURNIE_LOW_STEP_BPS = 1_158;
+    /// @dev Base BPS for high presale-box BURNIE path (rolls 16-19, p=20%).
+    uint32 private constant PRESALE_BOX_BURNIE_HIGH_BASE_BPS = 74_534;
+    /// @dev Step BPS per roll for high presale-box BURNIE path.
+    uint32 private constant PRESALE_BOX_BURNIE_HIGH_STEP_BPS = 22_890;
+
+    // ---- Coin-presale-box DGNRS curve (5 tiers x 10 ETH cumulative box volume) ----
+    // Relative DGNRS-per-ETH rates [3.0, 2.5, 2.0, 1.5, 1.0] x base, base = poolStart/100.
+    // Over 50 ETH the deterministic draw sums to 100*base = poolStart (drains the pool).
+    /// @dev DGNRS tier multipliers in tenths (3.0x .. 1.0x), by cumulative box volume.
+    uint16 private constant PRESALE_BOX_DGNRS_TIER1_TENTHS = 30;
+    uint16 private constant PRESALE_BOX_DGNRS_TIER2_TENTHS = 25;
+    uint16 private constant PRESALE_BOX_DGNRS_TIER3_TENTHS = 20;
+    uint16 private constant PRESALE_BOX_DGNRS_TIER4_TENTHS = 15;
+    uint16 private constant PRESALE_BOX_DGNRS_TIER5_TENTHS = 10;
+    /// @dev Cumulative box-ETH width of each DGNRS tier (10 ETH).
+    uint256 private constant PRESALE_BOX_DGNRS_TIER_WIDTH = 10 ether;
+
     /// @dev Whale pass price (200 tickets over levels 10-109)
     uint256 private constant LOOTBOX_WHALE_PASS_PRICE =
         4.50 ether;
@@ -490,7 +512,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             day = currentDay;
         }
 
-        bool presale = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0;
         uint256 baseAmount = lootboxEthBase[index][player];
         if (baseAmount == 0) {
             baseAmount = amount;
@@ -542,9 +563,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             targetLevel,
             currentLevel,
             seed,
-            presale,
-            true,
-            true,
             true,
             true,
             distressEth,
@@ -552,73 +570,186 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         );
     }
 
-    /// @notice Open a BURNIE lootbox once RNG is available
-    /// @dev Converts BURNIE to ETH-equivalent value at 80% rate for resolution.
-    /// @param player Player address to open lootbox for
-    /// @param index The RNG index of the lootbox
-    /// @custom:reverts E When lootbox amount is zero or price is zero
-    /// @custom:reverts RngNotReady When RNG word has not been set for this index
-    function openBurnieLootBox(address player, uint48 index) external {
-
-        uint256 burnieAmount = lootboxBurnie[index][player];
-        if (burnieAmount == 0) revert E();
-
+    /// @notice Open a coin-presale box once RNG for its index is available.
+    /// @dev Boon-less, own resolution (NOT a _resolveLootboxCommon caller): a
+    ///      credit-funded box can never mint a whale pass. 50/40/10 BURNIE/DGNRS/WWXRP.
+    /// @param player Player that owns the box (resolved by the entrypoint).
+    /// @param index The lootbox RNG index the box queued at.
+    /// @custom:reverts E When no box is queued at this index for the player.
+    /// @custom:reverts RngNotReady When the committed RNG word is not yet set.
+    function openPresaleBox(address player, uint48 index) external {
+        uint256 stored = presaleBoxEth[index][player];
+        if (stored == 0) revert E();
         uint256 rngWord = lootboxRngWordByIndex[index];
         if (rngWord == 0) revert RngNotReady();
+        presaleBoxEth[index][player] = 0; // dequeue
+        _resolvePresaleBox(player, index, stored, rngWord);
+    }
 
-        lootboxBurnie[index][player] = 0;
-
-        // Resolve using ETH-equivalent value at 80% rate without whale/presale bonuses
-        uint256 priceWei = PriceLookupLib.priceForLevel(level);
-        if (priceWei == 0) revert E();
-        uint256 amountEth = (burnieAmount * priceWei * 80) / (PRICE_COIN_UNIT * 100);
-        if (amountEth == 0) revert E();
-
-        uint24 currentLevel = level + 1;
-        uint32 day = lootboxDay[index][player];
-        if (day == 0) {
-            day = _simulatedDayIndex();
+    /// @notice Open a co-queued lootbox + presale box in one tx (one committed word,
+    ///         two domain-separated draws). Robust to either leg being empty.
+    /// @param player Player that owns the index (resolved by the entrypoint).
+    /// @param index The shared RNG index.
+    function openLootboxAndPresaleBox(address player, uint48 index) external {
+        // Lootbox leg: resolve only if one is queued (its own existing seed derivation).
+        // Nested delegatecall into this module's own openLootBox with the ALREADY-resolved
+        // player (bypasses the game's _resolvePlayer wrapper, which would re-gate on the
+        // game contract as msg.sender). Runs in the game's storage context.
+        if ((lootboxEth[index][player] & ((1 << 232) - 1)) != 0) {
+            (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE
+                .delegatecall(
+                    abi.encodeWithSelector(this.openLootBox.selector, player, index)
+                );
+            if (!ok) {
+                assembly {
+                    revert(add(data, 0x20), mload(data))
+                }
+            }
         }
-
-        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amountEth)));
-        uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
-
-        // ENF-02: When gameOverPossible, redirect current-level BURNIE lootbox
-        // tickets to far-future key space. Near-future rolls land normally.
-        if (gameOverPossible && targetLevel == currentLevel) {
-            targetLevel = currentLevel | TICKET_FAR_FUTURE_BIT;
+        // Presale-box leg: resolve only if one is queued (the salted derivation).
+        uint256 stored = presaleBoxEth[index][player];
+        if (stored != 0) {
+            uint256 rngWord = lootboxRngWordByIndex[index];
+            if (rngWord == 0) revert RngNotReady();
+            presaleBoxEth[index][player] = 0;
+            _resolvePresaleBox(player, index, stored, rngWord);
         }
+    }
 
-        (uint32 tickets, uint256 burnieReward, bool roundedUp) = _resolveLootboxCommon(
-            player,
-            day,
-            index,
-            amountEth,
-            targetLevel,
-            currentLevel,
-            seed,
-            false,
-            false,
-            false,
-            true,
-            true,
-            0,
-            0
+    /// @dev Resolve a presale box: 50% BURNIE / 40% DGNRS / 10% WWXRP off the salted
+    ///      committed word. The closing box also sweeps the Pool.PresaleBox remainder.
+    /// @param player Box owner.
+    /// @param index The box's RNG index (event tag).
+    /// @param stored Packed record: [bit255 closing][96:191 soldBefore][0:95 amount].
+    /// @param rngWord The committed daily word for this index (frozen at buy).
+    function _resolvePresaleBox(
+        address player,
+        uint48 index,
+        uint256 stored,
+        uint256 rngWord
+    ) private {
+        uint256 amount = stored & PRESALE_BOX_AMOUNT_MASK;
+        if (amount == 0) return;
+        uint256 soldBefore = (stored >> PRESALE_BOX_SOLD_SHIFT) & PRESALE_BOX_AMOUNT_MASK;
+        bool closing = (stored & PRESALE_BOX_CLOSING_FLAG) != 0;
+
+        // Domain-separated draw off the committed word + the box's immutable buy data
+        // (player + amount). No new mutable SLOAD enters the roll (RNG freeze, R4).
+        uint256 seed = uint256(
+            keccak256(
+                abi.encodePacked(rngWord, keccak256("PRESALE_BOX"), player, amount)
+            )
         );
 
-        emit BurnieLootOpen(
+        uint256 outcome = uint16(seed) % 100;
+        uint256 burnieOut;
+        uint256 dgnrsOut;
+        uint256 wwxrpOut;
+        if (outcome < 50) {
+            // 50% BURNIE: variance band recentered on a 400% branch mean.
+            uint256 varianceRoll = uint16(seed >> 80) % 20;
+            uint256 burnieBps;
+            if (varianceRoll < 16) {
+                burnieBps = PRESALE_BOX_BURNIE_LOW_BASE_BPS +
+                    varianceRoll * PRESALE_BOX_BURNIE_LOW_STEP_BPS;
+            } else {
+                burnieBps = PRESALE_BOX_BURNIE_HIGH_BASE_BPS +
+                    (varianceRoll - 16) * PRESALE_BOX_BURNIE_HIGH_STEP_BPS;
+            }
+            uint256 priceWei = PriceLookupLib.priceForLevel(level + 1);
+            if (priceWei != 0) {
+                uint256 burnieBudget = (amount * burnieBps) / 10_000;
+                burnieOut = (burnieBudget * PRICE_COIN_UNIT) / priceWei;
+                // Floor to whole BURNIE (1 BURNIE = 1 ether), mirroring the lootbox.
+                burnieOut = (burnieOut / 1 ether) * 1 ether;
+                if (burnieOut != 0) {
+                    coinflip.creditFlip(player, burnieOut);
+                }
+            }
+        } else if (outcome < 90) {
+            // 40% DGNRS: 5-tier %-of-pool curve keyed on the FROZEN buy-time cumulative.
+            dgnrsOut = _presaleBoxDgnrsReward(player, amount, soldBefore);
+        } else {
+            // 10% WWXRP: 1 token flavor "dud".
+            wwxrpOut = LOOTBOX_WWXRP_PRIZE;
+            wwxrp.mintPrize(player, wwxrpOut);
+        }
+
+        // Closing box: sweep ALL remaining Pool.PresaleBox DGNRS to this buyer, ON TOP
+        // of the roll, regardless of outcome — zeroes the pool for a clean wrap-up.
+        uint256 swept;
+        if (closing) {
+            uint256 remaining = dgnrs.poolBalance(
+                IStakedDegenerusStonk.Pool.PresaleBox
+            );
+            if (remaining != 0) {
+                swept = dgnrs.transferFromPool(
+                    IStakedDegenerusStonk.Pool.PresaleBox,
+                    player,
+                    remaining
+                );
+                dgnrsOut += swept;
+            }
+        }
+
+        emit PresaleBoxOpened(player, index, amount, burnieOut, dgnrsOut, wwxrpOut, closing);
+    }
+
+    /// @dev Presale-box DGNRS award: tierMultiplier x base x boxEth, base = poolStart/100,
+    ///      tier by the FROZEN buy-time cumulative box volume (5 tiers x 10 ETH).
+    ///      Snapshots Pool.PresaleBox into presaleBoxDgnrsPoolStart on first resolution.
+    /// @param player Box owner to credit.
+    /// @param amount Box ETH for this resolution.
+    /// @param soldBefore Cumulative box ETH before this box's buy (tier selector).
+    /// @return paid Actual DGNRS transferred from the pool.
+    function _presaleBoxDgnrsReward(
+        address player,
+        uint256 amount,
+        uint256 soldBefore
+    ) private returns (uint256 paid) {
+        uint256 poolStart = presaleBoxDgnrsPoolStart;
+        if (poolStart == 0) {
+            poolStart = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.PresaleBox);
+            if (poolStart == 0) return 0;
+            presaleBoxDgnrsPoolStart = poolStart;
+        }
+        // base = poolStart / 100 DGNRS per ETH; tier multiplier in tenths.
+        uint256 tierTenths = _presaleBoxDgnrsTierTenths(soldBefore);
+        // amount (wei) * (poolStart/100) per ETH * tier/10:
+        //   = poolStart * tierTenths * amount / (100 * 10 * 1 ether)
+        uint256 dgnrsAmount = (poolStart * tierTenths * amount) / (1_000 * 1 ether);
+        if (dgnrsAmount == 0) return 0;
+        paid = dgnrs.transferFromPool(
+            IStakedDegenerusStonk.Pool.PresaleBox,
             player,
-            uint32(index),
-            burnieAmount,
-            targetLevel,
-            tickets,
-            burnieReward,
-            roundedUp
+            dgnrsAmount
         );
     }
 
-    /// @notice Resolve a lootbox directly for decimator claims (no RNG wait needed)
-    /// @dev Jackpot/claim lootboxes do not award boons (allowBoons=false).
+    /// @dev DGNRS tier multiplier (tenths) by buy-time cumulative box volume.
+    ///      [0,10) -> 3.0x, [10,20) -> 2.5x, [20,30) -> 2.0x, [30,40) -> 1.5x, >=40 -> 1.0x.
+    /// @param soldBefore Cumulative box ETH before the buy.
+    /// @return tenths Tier multiplier x10.
+    function _presaleBoxDgnrsTierTenths(
+        uint256 soldBefore
+    ) private pure returns (uint256 tenths) {
+        if (soldBefore < PRESALE_BOX_DGNRS_TIER_WIDTH) {
+            tenths = PRESALE_BOX_DGNRS_TIER1_TENTHS;
+        } else if (soldBefore < 2 * PRESALE_BOX_DGNRS_TIER_WIDTH) {
+            tenths = PRESALE_BOX_DGNRS_TIER2_TENTHS;
+        } else if (soldBefore < 3 * PRESALE_BOX_DGNRS_TIER_WIDTH) {
+            tenths = PRESALE_BOX_DGNRS_TIER3_TENTHS;
+        } else if (soldBefore < 4 * PRESALE_BOX_DGNRS_TIER_WIDTH) {
+            tenths = PRESALE_BOX_DGNRS_TIER4_TENTHS;
+        } else {
+            tenths = PRESALE_BOX_DGNRS_TIER5_TENTHS;
+        }
+    }
+
+    /// @notice Resolve a lootbox directly for decimator/degenerette wins (no RNG wait needed)
+    /// @dev Rolls full boons + passes via the common resolver (passes still gated by real
+    ///      game-state: lazyPassValue != 0 / deity eligibility). No event emit and no
+    ///      cold-bust consolation on this auto-resolve path.
     /// @param player Player address to resolve for
     /// @param amount ETH amount for the lootbox resolution
     /// @param rngWord RNG word to use for resolution
@@ -644,9 +775,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             targetLevel,
             currentLevel,
             seed,
-            false,
-            true,
-            false,
             false,
             false,
             0,
@@ -680,9 +808,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             targetLevel,
             currentLevel,
             seed,
-            false,
-            true,
-            false,
             false,
             false,
             0,
@@ -894,20 +1019,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      Total primary-chunk consumption: 168 bits / 256 available (bits[152..167] consumed on both manual + auto-resolve paths).
     ///      ETH-amount-second branch uses seed2 = EntropyLib.hash2(seed, 1)
     ///      (counter-tagged chunk 1; collision-free vs primary chunk 0).
-    /// @param presale Whether this is a presale lootbox (62% bonus BURNIE multiplier)
-    /// @param allowPasses Whether pass-type boons are eligible: the whale-pass jackpot
-    ///        award and the lazy-pass discount awards. `true` for the manual and
-    ///        auto-resolve ETH/BURNIE callers (`openLootBox`, `resolveLootboxDirect`,
-    ///        `resolveRedemptionLootbox`), `false` for `openBurnieLootBox`
     /// @param emitLootboxEvent Whether to emit the `LootBoxOpened` event; `true` for
-    ///        `openLootBox`, `false` for `openBurnieLootBox` (which emits its own
-    ///        `BurnieLootOpen`) and for both auto-resolve callers
+    ///        `openLootBox`, `false` for both auto-resolve callers
     /// @param payColdBustConsolation Whether a ticket-path cold-bust (`whole == 0`) pays
-    ///        the `LOOTBOX_WWXRP_CONSOLATION`; `true` for the manual callers
-    ///        (`openLootBox`, `openBurnieLootBox`), `false` for the auto-resolve callers
-    ///        (`resolveLootboxDirect`, `resolveRedemptionLootbox`), which stay silent on
-    ///        cold-bust
-    /// @param allowBoons Whether to roll for boons
+    ///        the `LOOTBOX_WWXRP_CONSOLATION`; `true` for the manual caller `openLootBox`,
+    ///        `false` for the auto-resolve callers (`resolveLootboxDirect`,
+    ///        `resolveRedemptionLootbox`), which stay silent on cold-bust
     /// @param distressEth Portion of lootbox ETH bought during distress mode (pre-EV-scaling basis)
     /// @param totalPackedEth Total packed lootbox ETH (pre-EV-scaling basis, denominator for distress fraction)
     /// @return futureTickets Pre-Bernoulli scaled (× TICKET_SCALE) future ticket count
@@ -922,11 +1039,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 targetLevel,
         uint24 currentLevel,
         uint256 seed,
-        bool presale,
-        bool allowPasses,
         bool emitLootboxEvent,
         bool payColdBustConsolation,
-        bool allowBoons,
         uint256 distressEth,
         uint256 totalPackedEth
     )
@@ -970,30 +1084,27 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         futureTickets = rolledTickets;
 
         burnieAmount = burnieNoMultiplier + burniePresale;
-        if (presale && burniePresale != 0) {
-            uint256 bonusBurnie = (burniePresale * LOOTBOX_PRESALE_BURNIE_BONUS_BPS) / 10_000;
-            burnieAmount += bonusBurnie;
-        }
         // Floored to whole-BURNIE (1 BURNIE = 1 ether); sub-1-BURNIE residue
         // evaporates. The floored value reaches the `creditFlip` arg, the
         // `LootBoxOpened.burnie` event field, and the return tuple.
         burnieAmount = (burnieAmount / 1 ether) * 1 ether;
 
-        if (allowBoons) {
-            _rollLootboxBoons(
-                player,
-                day,
-                amount,
-                _lootboxBoonBudget(amount),
-                seed,
-                allowPasses
-            );
-            // Nested delegatecall to BoonModule for activity boon consumption
-            (bool okAct, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
-                abi.encodeWithSelector(IDegenerusGameBoonModule.consumeActivityBoon.selector, player)
-            );
-            if (!okAct) revert E();
-        }
+        // Boons always roll on every ETH lootbox path (the haircut
+        // `amount - _lootboxBoonBudget(amount)` above always pairs with a spent
+        // boon budget). Pass-type boons stay gated by real game-state inside the
+        // roll (lazyPassValue != 0 / deity eligibility).
+        _rollLootboxBoons(
+            player,
+            day,
+            amount,
+            _lootboxBoonBudget(amount),
+            seed
+        );
+        // Nested delegatecall to BoonModule for activity boon consumption
+        (bool okAct, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameBoonModule.consumeActivityBoon.selector, player)
+        );
+        if (!okAct) revert E();
 
         if (futureTickets != 0) {
             // Distress-mode ticket bonus: 25% extra on the fraction bought during distress
@@ -1008,9 +1119,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // Collapse scaled tickets to whole via a single Bernoulli round-up on
             // bits[152..167] of the per-resolution seed. Function-scope
             // `futureTickets` stays at the scaled value (consumed by the
-            // `LootBoxOpened` emit below and returned to `openBurnieLootBox` as
-            // `BurnieLootOpen.tickets`). The local `whole` carries the post-collapse
-            // value into `_queueTickets`.
+            // `LootBoxOpened` emit below and returned in the result tuple). The
+            // local `whole` carries the post-collapse value into `_queueTickets`.
             uint32 whole = futureTickets / uint32(TICKET_SCALE);
             uint32 frac = futureTickets % uint32(TICKET_SCALE);
             if (frac != 0 && (uint16(seed >> 152) % uint16(TICKET_SCALE)) < uint16(frac)) {
@@ -1018,8 +1128,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 roundedUp = true;
             }
             // `_queueTickets` early-returns on `whole == 0`, so the cold-bust case
-            // queues nothing. The manual callers (`openLootBox`, `openBurnieLootBox`)
-            // pass `payColdBustConsolation = true` and pay the WWXRP consolation here;
+            // queues nothing. The manual caller (`openLootBox`) passes
+            // `payColdBustConsolation = true` and pays the WWXRP consolation here;
             // the auto-resolve callers pass `false` and stay silent on cold-bust.
             _queueTickets(player, targetLevel, whole, false);
             if (payColdBustConsolation && whole == 0) {
@@ -1061,15 +1171,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param originalAmount Amount used for chance calculations
     /// @param boonBudget Amount of lootbox value allocated to boon/pass draw
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; no advance)
-    /// @param allowPasses Whether pass-type boons are eligible: the whale-pass jackpot
-    ///        award and the lazy-pass discount awards
     function _rollLootboxBoons(
         address player,
         uint32 day,
         uint256 originalAmount,
         uint256 boonBudget,
-        uint256 seed,
-        bool allowPasses
+        uint256 seed
     ) private {
         if (player == address(0) || originalAmount == 0) return;
 
@@ -1083,7 +1190,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 currentLevel = level + 1;
 
         uint24 lazyPassLevel = currentLevel == 0 ? 1 : currentLevel + 1;
-        uint256 lazyPassValue = allowPasses ? _lazyPassPriceForLevel(lazyPassLevel) : 0;
+        uint256 lazyPassValue = _lazyPassPriceForLevel(lazyPassLevel);
 
         bool decimatorAllowed = _isDecimatorWindow();
         bool deityEligible =
@@ -1092,7 +1199,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         (uint256 totalWeight, uint256 avgMaxValue) = _boonPoolStats(
             decimatorAllowed,
             deityEligible,
-            allowPasses,
             lazyPassValue
         );
         if (totalWeight == 0 || avgMaxValue == 0) return;
@@ -1112,8 +1218,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint8 boonType = _boonFromRoll(
             (roll * totalWeight) / totalChance,
             decimatorAllowed,
-            deityEligible,
-            allowPasses
+            deityEligible
         );
 
         _applyBoon(player, boonType, day, currentDay, originalAmount, false);
@@ -1155,12 +1260,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Calculate total weight and average max boon value (in ETH) for EV budgeting.
-    ///      `allowPasses` gates both pass-type boons — the whale-pass jackpot and the
-    ///      lazy-pass discount awards.
+    ///      The two pass-type boons (the whale-pass jackpot and the lazy-pass discount
+    ///      awards) are always included; the lazy-pass weights are gated by a non-zero
+    ///      `lazyPassValue` (real game-state).
     function _boonPoolStats(
         bool decimatorAllowed,
         bool deityEligible,
-        bool allowPasses,
         uint256 lazyPassValue
     ) private view returns (uint256 totalWeight, uint256 avgMaxValue) {
         uint256 weightedMax = 0;
@@ -1264,12 +1369,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         totalWeight += BOON_WEIGHT_ACTIVITY_25;
         totalWeight += BOON_WEIGHT_ACTIVITY_50;
 
-        // Pass awards (lootbox-only unless enabled)
-        if (allowPasses) {
-            totalWeight += BOON_WEIGHT_WHALE_PASS;
-            weightedMax += BOON_WEIGHT_WHALE_PASS * LOOTBOX_WHALE_PASS_PRICE;
-        }
-        if (allowPasses && lazyPassValue != 0) {
+        // Pass awards (now eligible on every ETH lootbox path)
+        totalWeight += BOON_WEIGHT_WHALE_PASS;
+        weightedMax += BOON_WEIGHT_WHALE_PASS * LOOTBOX_WHALE_PASS_PRICE;
+        if (lazyPassValue != 0) {
             uint256 lpMax10 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS) / 10_000;
             uint256 lpMax25 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS) / 10_000;
             uint256 lpMax50 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_50_BPS) / 10_000;
@@ -1286,13 +1389,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Convert a weighted roll into a lootbox boon type with eligibility filters.
-    ///      `allowPasses` gates both pass-type boons — the whale-pass jackpot and the
-    ///      lazy-pass discount awards.
+    ///      The two pass-type boons (the whale-pass jackpot and the lazy-pass discount
+    ///      awards) are always reachable; weight inclusion is handled in `_boonPoolStats`.
     function _boonFromRoll(
         uint256 roll,
         bool decimatorAllowed,
-        bool deityEligible,
-        bool allowPasses
+        bool deityEligible
     ) private pure returns (uint8 boonType) {
         uint256 cursor = 0;
         cursor += BOON_WEIGHT_COINFLIP_5;
@@ -1341,16 +1443,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (roll < cursor) return BOON_ACTIVITY_25;
         cursor += BOON_WEIGHT_ACTIVITY_50;
         if (roll < cursor) return BOON_ACTIVITY_50;
-        if (allowPasses) {
-            cursor += BOON_WEIGHT_WHALE_PASS;
-            if (roll < cursor) return BOON_WHALE_PASS;
-            cursor += BOON_WEIGHT_LAZY_PASS_10;
-            if (roll < cursor) return BOON_LAZY_PASS_10;
-            cursor += BOON_WEIGHT_LAZY_PASS_25;
-            if (roll < cursor) return BOON_LAZY_PASS_25;
-            cursor += BOON_WEIGHT_LAZY_PASS_50;
-            if (roll < cursor) return BOON_LAZY_PASS_50;
-        }
+        cursor += BOON_WEIGHT_WHALE_PASS;
+        if (roll < cursor) return BOON_WHALE_PASS;
+        cursor += BOON_WEIGHT_LAZY_PASS_10;
+        if (roll < cursor) return BOON_LAZY_PASS_10;
+        cursor += BOON_WEIGHT_LAZY_PASS_25;
+        if (roll < cursor) return BOON_LAZY_PASS_25;
+        cursor += BOON_WEIGHT_LAZY_PASS_50;
+        if (roll < cursor) return BOON_LAZY_PASS_50;
     }
 
     /// @dev Apply a boon to a player. Handles both lootbox-sourced and deity-sourced boons.
@@ -1791,7 +1891,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             : BOON_WEIGHT_TOTAL_NO_DECIMATOR;
         if (!deityPassAvailable) total -= BOON_WEIGHT_DEITY_PASS_ALL;
         uint256 roll = seed % total;
-        return _boonFromRoll(roll, decimatorAllowed, deityPassAvailable, true);
+        return _boonFromRoll(roll, decimatorAllowed, deityPassAvailable);
     }
 
 }

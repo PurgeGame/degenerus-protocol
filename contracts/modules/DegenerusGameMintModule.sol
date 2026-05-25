@@ -12,6 +12,7 @@ import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
+import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
@@ -68,7 +69,10 @@ import {EntropyLib} from "../libraries/EntropyLib.sol";
  * - Uses 8×8 weighted grid for non-uniform distribution
  * - Higher-numbered sub-traits within each category are slightly rarer
  */
-contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
+contract DegenerusGameMintModule is
+    DegenerusGamePayoutUtils,
+    DegenerusGameMintStreakUtils
+{
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -97,8 +101,10 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
 
     /// @dev Loot box minimum purchase amount (0.01 ETH).
     uint256 private constant LOOTBOX_MIN = 0.01 ether;
-    /// @dev BURNIE loot box minimum purchase amount.
-    uint256 private constant BURNIE_LOOTBOX_MIN = 1000 ether;
+    /// @dev Coin-presale-box minimum purchase amount (0.01 ETH). Checked on the
+    ///      REQUESTED amount BEFORE the exactly-50-ETH clamp, so a sub-floor gap to
+    ///      the 50-ETH cap can never lock the presale close.
+    uint256 private constant PRESALE_BOX_MIN = 0.01 ether;
     /// @dev Absolute minimum ticket buy-in (ETH equivalent).
     uint256 private constant TICKET_MIN_BUYIN_WEI = 0.0025 ether;
 
@@ -112,11 +118,6 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     /// @dev Loot box pool split: 90% future, 10% next.
     uint16 private constant LOOTBOX_SPLIT_FUTURE_BPS = 9000;
     uint16 private constant LOOTBOX_SPLIT_NEXT_BPS = 1000;
-
-    /// @dev Loot box presale pool split: 50% future, 30% next, 20% vault.
-    uint16 private constant LOOTBOX_PRESALE_SPLIT_FUTURE_BPS = 5000;
-    uint16 private constant LOOTBOX_PRESALE_SPLIT_NEXT_BPS = 3000;
-    uint16 private constant LOOTBOX_PRESALE_SPLIT_VAULT_BPS = 2000;
 
     /// @dev Number of daily jackpots per level (must match AdvanceModule).
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
@@ -137,10 +138,17 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         uint32 indexed index,
         uint32 indexed day
     );
-    event BurnieLootBuy(
+    /// @notice Emitted when a coin-presale box is bought and queued for resolution.
+    /// @param buyer The player who bought the box.
+    /// @param index The shared lootbox RNG index the box queued at.
+    /// @param amount The applied box ETH (post-clamp).
+    /// @param closing True iff this buy crossed the 50-ETH cap (latches presaleOver;
+    ///        sweeps the Pool.PresaleBox remainder at this box's open).
+    event PresaleBoxBuy(
         address indexed buyer,
-        uint32 indexed index,
-        uint256 burnieAmount
+        uint48 indexed index,
+        uint256 amount,
+        bool closing
     );
     event BoostUsed(
         address indexed player,
@@ -843,36 +851,20 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         );
     }
 
-    /// @notice Purchase tickets and optional BURNIE loot boxes.
+    /// @notice Purchase tickets with BURNIE.
     /// @dev BURNIE ticket purchases require RNG unlocked and gameOverPossible=false.
-    ///      BURNIE loot boxes require RNG unlocked only.
-    /// @param buyer Recipient of the purchased items.
+    /// @param buyer Recipient of the purchased tickets.
     /// @param ticketQuantity Number of tickets to purchase (2 decimals, scaled by 100).
-    /// @param lootBoxBurnieAmount BURNIE amount to burn for loot boxes.
     function purchaseCoin(
         address buyer,
-        uint256 ticketQuantity,
-        uint256 lootBoxBurnieAmount
+        uint256 ticketQuantity
     ) external {
-        _purchaseCoinFor(buyer, ticketQuantity, lootBoxBurnieAmount);
-    }
-
-    /// @notice Purchase a low-EV loot box with BURNIE.
-    /// @dev Uses the current lootbox RNG index; rewards are tickets + small BURNIE only.
-    /// @param buyer Recipient of the loot box rewards.
-    /// @param burnieAmount BURNIE amount to burn for the loot box.
-    function purchaseBurnieLootbox(
-        address buyer,
-        uint256 burnieAmount
-    ) external {
-        if (buyer == address(0)) revert E();
-        _purchaseBurnieLootboxFor(buyer, burnieAmount);
+        _purchaseCoinFor(buyer, ticketQuantity);
     }
 
     function _purchaseCoinFor(
         address buyer,
-        uint256 ticketQuantity,
-        uint256 lootBoxBurnieAmount
+        uint256 ticketQuantity
     ) private {
         if (_livenessTriggered()) revert E();
 
@@ -889,10 +881,6 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 level,
                 jackpotPhaseFlag
             );
-        }
-
-        if (lootBoxBurnieAmount != 0) {
-            _purchaseBurnieLootboxFor(buyer, lootBoxBurnieAmount);
         }
     }
 
@@ -940,13 +928,10 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 uint256 shortfall = lootBoxAmount - remainingEth;
                 remainingEth = 0;
 
-                uint256 claimable = initialClaimable;
-                // Preserve 1 wei sentinel (same as mint payments).
-                if (claimable <= shortfall) revert E();
-                unchecked {
-                    claimableWinnings[buyer] = claimable - shortfall;
-                }
-                claimablePool -= uint128(shortfall);
+                // Snapshot basis: the lootbox shortfall draws against the claimable
+                // captured at function entry (the mint leg's claimable use is tracked
+                // separately via initialClaimable/finalClaimable).
+                _settleClaimableShortfall(buyer, initialClaimable, shortfall);
                 lootboxClaimableUsed = shortfall;
             }
         }
@@ -1033,26 +1018,20 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             if (distress) {
                 lootboxDistressEth[lbIndex][buyer] += boostedAmount;
             }
+            // Rake-free: ALL lootbox ETH (presale and after) routes 100% to the
+            // prize pools. Distress routes 100% next; otherwise 90% future / 10% next.
             uint256 futureBps;
             uint256 nextBps;
-            uint256 vaultBps;
             if (distress) {
                 futureBps = 0;
                 nextBps = 10_000;
-                vaultBps = 0;
-            } else if (presale) {
-                futureBps = LOOTBOX_PRESALE_SPLIT_FUTURE_BPS;
-                nextBps = LOOTBOX_PRESALE_SPLIT_NEXT_BPS;
-                vaultBps = LOOTBOX_PRESALE_SPLIT_VAULT_BPS;
             } else {
                 futureBps = LOOTBOX_SPLIT_FUTURE_BPS;
                 nextBps = LOOTBOX_SPLIT_NEXT_BPS;
-                vaultBps = 0;
             }
 
             uint256 futureShare = (lootBoxAmount * futureBps) / 10_000;
             uint256 nextShare = (lootBoxAmount * nextBps) / 10_000;
-            uint256 vaultShare = (lootBoxAmount * vaultBps) / 10_000;
 
             if (prizePoolFrozen) {
                 (uint128 pNext, uint128 pFuture) = _getPendingPools();
@@ -1066,12 +1045,6 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                     next + uint128(nextShare),
                     future + uint128(futureShare)
                 );
-            }
-            if (vaultShare != 0) {
-                (bool ok, ) = payable(ContractAddresses.VAULT).call{
-                    value: vaultShare
-                }("");
-                if (!ok) revert E();
             }
 
             emit LootBoxBuy(buyer, lbDay, lootBoxAmount, presale, cachedLevel);
@@ -1204,10 +1177,12 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             }
         }
 
-        // Unified earlybird award: one call per purchase covering the full ticket +
-        // lootbox spend (fresh + recycled). Quadratic curve telescopes, so one call
-        // is mathematically equivalent to two.
-        _awardEarlybirdDgnrs(buyer, ticketCost + lootBoxAmount);
+        // Coin-presale-box credit accrual: while the box presale is open, every ETH
+        // ticket + lootbox spend (fresh + recycled) earns 25% spendable box credit.
+        // Covers batchPurchase, which routes through this path.
+        if (!presaleOver) {
+            presaleBoxCredit[buyer] += (ticketCost + lootBoxAmount) / 4;
+        }
 
         uint256 finalClaimable = payKind == MintPaymentKind.DirectEth
             ? initialClaimable
@@ -1232,6 +1207,125 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
 
         if (lootboxFlipCredit != 0) {
             coinflip.creditFlip(buyer, lootboxFlipCredit);
+        }
+    }
+
+    /// @notice Buy a credit-gated coin-presale box (standalone), funded by msg.value
+    ///         plus an optional claimable shortfall (CPAY-02).
+    /// @dev The box queues at the current lootbox RNG index and resolves off the
+    ///      committed word later (RNG-freeze discipline). Reverts once presaleOver.
+    /// @param buyer Player receiving the box (already operator-resolved by the entrypoint).
+    /// @param boxAmount Requested box ETH (>= PRESALE_BOX_MIN, checked pre-clamp).
+    function buyPresaleBox(address buyer, uint256 boxAmount) external payable {
+        _buyPresaleBoxFor(buyer, boxAmount, msg.value);
+    }
+
+    /// @notice Buy tickets/lootbox (earning 25% presale-box credit) AND a presale box
+    ///         in one call, sharing one RNG index. The mint leg is funded by msg.value;
+    ///         the box leg is funded from the caller's claimable (CPAY-02 ledger move,
+    ///         covered by the just-earned + banked credit gate).
+    /// @param buyer Player receiving both legs (already operator-resolved by the entrypoint).
+    /// @param ticketQuantity Tickets to buy (0 to skip).
+    /// @param lootBoxAmount ETH lootbox spend (0 to skip).
+    /// @param affiliateCode Affiliate/referral code for the mint leg.
+    /// @param payKind Payment method for the mint leg.
+    /// @param boxAmount Requested presale-box ETH (>= PRESALE_BOX_MIN, claimable-funded).
+    function buyLootboxAndPresaleBox(
+        address buyer,
+        uint256 ticketQuantity,
+        uint256 lootBoxAmount,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind,
+        uint256 boxAmount
+    ) external {
+        // Mint leg first: consumes msg.value and accrues presaleBoxCredit, so the
+        // just-earned credit is available to gate the box bought below.
+        _purchaseFor(buyer, ticketQuantity, lootBoxAmount, affiliateCode, payKind);
+        // Box leg pays purely from claimable (no fresh ETH passed); the mint already
+        // consumed msg.value. The box queues at the SAME current LR_INDEX as the mint
+        // leg's lootbox (LR_INDEX does not advance mid-tx), so both share one index.
+        _buyPresaleBoxFor(buyer, boxAmount, 0);
+    }
+
+    /// @dev Core credit-gated presale-box buy: clamp-to-50 close, 1:1 credit consume,
+    ///      msg.value + claimable-shortfall payment (CPAY-02), 80/20 ETH routing via
+    ///      _creditBoxProceeds, queue-at-index, last-buyer latch.
+    /// @param buyer Player receiving the box.
+    /// @param boxAmount Requested box ETH (the MIN floor + no-overpay checks key on this).
+    /// @param valueForBox The fresh-ETH (msg.value) portion available to fund the box.
+    function _buyPresaleBoxFor(
+        address buyer,
+        uint256 boxAmount,
+        uint256 valueForBox
+    ) private {
+        if (presaleOver) revert E();
+        if (_livenessTriggered()) revert E();
+        // MIN floor on the REQUESTED amount, BEFORE the exactly-50 clamp, so a
+        // sub-floor gap to the 50-ETH cap can never lock the close.
+        if (boxAmount < PRESALE_BOX_MIN) revert E();
+        // No overpay vs the requested amount (CPAY: msg.value > cost reverts).
+        if (valueForBox > boxAmount) revert E();
+
+        uint256 sold = presaleBoxEthSold;
+        uint256 remaining = PRESALE_BOX_ETH_CAP - sold; // sold <= cap by construction
+        if (remaining == 0) revert E(); // sold out
+
+        // Clamp the crossing box to land cumulative box-ETH at exactly 50.
+        uint256 applied = boxAmount > remaining ? remaining : boxAmount;
+        bool closing = applied == remaining;
+
+        // Credit gate: consume spendable presale-box credit 1:1 (no clamp-to-credit;
+        // an over-credit request reverts — the caller sizes the box to their credit).
+        if (applied > presaleBoxCredit[buyer]) revert E();
+        unchecked {
+            presaleBoxCredit[buyer] -= applied;
+        }
+
+        // Payment: msg.value first (capped at the applied amount; clamp excess refunded),
+        // claimable shortfall for the rest (STRICT 1-wei sentinel preserved).
+        uint256 freshUsed = valueForBox > applied ? applied : valueForBox;
+        uint256 refund = valueForBox - freshUsed;
+        uint256 shortfall = applied - freshUsed;
+        _settleClaimableShortfall(buyer, claimableWinnings[buyer], shortfall);
+
+        // 80/20 routing: claimablePool += applied; VAULT 80% + SDGNRS 20% claimable.
+        // The claimable-funded portion (shortfall) nets pool delta 0 (debited above,
+        // re-credited here); the fresh-ETH portion bumps the pool by that ETH.
+        _creditBoxProceeds(applied);
+
+        // Queue at the current lootbox RNG index (shared with a same-tx mint lootbox).
+        // The word for the current index is uncommitted until the index advances, so
+        // the box is always queued pre-entropy (RNG freeze).
+        uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+        if (index == 0) revert E();
+        if (lootboxRngWordByIndex[index] != 0) revert E();
+        // One box per (index, player): the buy-time cumulative position (sold) is
+        // frozen into the record for the DGNRS-tier roll, so accumulation would make
+        // that snapshot ambiguous. Open this box (or wait for the next index) first.
+        if (presaleBoxEth[index][buyer] != 0) revert E();
+
+        // Pack: [bit 255: closing][bits 96:191: soldBefore][bits 0:95: applied].
+        // soldBefore (cumulative box ETH before this buy) freezes the 5-tier DGNRS
+        // curve input so the resolution reads no mutable SLOAD (RNG freeze, R4).
+        presaleBoxEth[index][buyer] =
+            uint256(uint96(applied)) |
+            (uint256(uint96(sold)) << PRESALE_BOX_SOLD_SHIFT) |
+            (closing ? PRESALE_BOX_CLOSING_FLAG : 0);
+        // First box deposit at this index: enqueue for the permissionless crank.
+        IDegenerusGame(address(this)).enqueueBoxForCrank(index, buyer);
+
+        presaleBoxEthSold = uint96(sold + applied);
+        if (closing) {
+            // Latch the terminal in the crossing buy (stops further credit accrual
+            // and box buys). The swept pool remainder is paid at this box's open.
+            presaleOver = true;
+        }
+
+        emit PresaleBoxBuy(buyer, index, applied, closing);
+
+        if (refund != 0) {
+            (bool ok, ) = payable(msg.sender).call{value: refund}("");
+            if (!ok) revert E();
         }
     }
 
@@ -1420,43 +1514,6 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     ) private pure returns (uint256) {
         if (amountWei == 0 || priceWei == 0) return 0;
         return (amountWei * PRICE_COIN_UNIT) / priceWei;
-    }
-
-    function _purchaseBurnieLootboxFor(
-        address buyer,
-        uint256 burnieAmount
-    ) private {
-        if (_livenessTriggered()) revert E();
-        if (burnieAmount < BURNIE_LOOTBOX_MIN) revert E();
-        uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
-        if (index == 0) revert E();
-
-        coin.burnCoin(buyer, burnieAmount);
-
-        {
-            uint256 questUnitsRaw = burnieAmount / PRICE_COIN_UNIT;
-            if (questUnitsRaw != 0) {
-                _questMint(buyer, uint32(questUnitsRaw), false, 0);
-            }
-        }
-
-        uint256 existingAmount = lootboxBurnie[index][buyer];
-        if (lootboxDay[index][buyer] == 0) {
-            lootboxDay[index][buyer] = _simulatedDayIndex();
-        }
-        lootboxBurnie[index][buyer] = existingAmount + burnieAmount;
-
-        _lrWrite(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK, _lrRead(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK) + _packBurnieToWhole(burnieAmount));
-
-        uint256 priceWei = PriceLookupLib.priceForLevel(level + 1);
-        if (priceWei != 0) {
-            uint256 virtualEth = (burnieAmount * priceWei) / PRICE_COIN_UNIT;
-            if (virtualEth != 0) {
-                _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, _lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK) + _packEthToMilliEth(virtualEth));
-            }
-        }
-
-        emit BurnieLootBuy(buyer, uint32(index), burnieAmount);
     }
 
     /// @dev Calculate boost amount given base amount and bonus bps

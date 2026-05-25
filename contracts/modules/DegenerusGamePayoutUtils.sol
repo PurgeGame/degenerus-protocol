@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
+import {ContractAddresses} from "../ContractAddresses.sol";
 
 /// @dev Shared payout helpers for jackpot-related modules.
 abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
@@ -24,6 +25,20 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
             claimableWinnings[beneficiary] += weiAmount;
         }
         emit PlayerCredited(beneficiary, beneficiary, weiAmount);
+    }
+
+    /// @dev Route coin-presale-box ETH proceeds: 80% to the vault, 20% to sDGNRS,
+    ///      both as claimable credits, while bumping claimablePool by the full
+    ///      boxEth so the claimablePool == Σ claimableWinnings invariant holds.
+    ///      The integer-division remainder lands on the VAULT (80%) side, so the
+    ///      two credits sum to exactly boxEth.
+    /// @param boxEth Box proceeds in wei to route.
+    function _creditBoxProceeds(uint256 boxEth) internal {
+        if (boxEth == 0) return;
+        uint256 sdgnrsShare = (boxEth * 20) / 100;
+        claimablePool += uint128(boxEth);
+        _creditClaimable(ContractAddresses.VAULT, boxEth - sdgnrsShare);
+        _creditClaimable(ContractAddresses.SDGNRS, sdgnrsShare);
     }
 
     /// @dev Queue deferred whale pass claims for large payouts.

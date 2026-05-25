@@ -245,6 +245,12 @@ interface IDegenerusGame {
     /// @param player The player who completed the quest.
     function recordMintQuestStreak(address player) external;
 
+    /// @notice Physically segregate sDGNRS redemption ETH out of claimable into sDGNRS balance.
+    /// @dev Access: sDGNRS only. CHECKED debit of claimableWinnings[SDGNRS] + claimablePool, then
+    ///      a real ETH transfer to sDGNRS. Called at gambling-burn submit (fail-closed on shortfall).
+    /// @param amount ETH amount to segregate (the MAX 175% payout for the burn).
+    function pullRedemptionReserve(uint256 amount) external;
+
     /// @notice Pay DGNRS bounty for biggest flip record holder.
     /// @dev Called by COIN contract when bounty is paid.
     /// @param player Player receiving the bounty payout.
@@ -284,6 +290,46 @@ interface IDegenerusGame {
     /// @param player The player address to open for (address(0) = msg.sender).
     /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
     function openLootBox(address player, uint48 lootboxIndex) external;
+
+    /// @notice Buy a credit-gated coin-presale box (ETH + claimable shortfall).
+    /// @param buyer Player to receive the box (address(0) = msg.sender).
+    /// @param boxAmount Requested box ETH (>= 0.01 ETH; excess refunded if clamped).
+    function buyPresaleBox(address buyer, uint256 boxAmount) external payable;
+
+    /// @notice Buy tickets/lootbox AND a presale box in one tx, sharing one RNG index.
+    /// @param buyer Player to receive both legs (address(0) = msg.sender).
+    /// @param ticketQuantity Tickets to buy (0 to skip).
+    /// @param lootBoxAmount ETH lootbox spend (0 to skip).
+    /// @param affiliateCode Affiliate/referral code for the mint leg.
+    /// @param payKind Payment method for the mint leg.
+    /// @param boxAmount Requested presale-box ETH (claimable-funded).
+    function buyLootboxAndPresaleBox(
+        address buyer,
+        uint256 ticketQuantity,
+        uint256 lootBoxAmount,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind,
+        uint256 boxAmount
+    ) external payable;
+
+    /// @notice Open a coin-presale box once RNG for its index is available.
+    /// @param player Player that owns the box (address(0) = msg.sender).
+    /// @param index The RNG index the box queued at.
+    function openPresaleBox(address player, uint48 index) external;
+
+    /// @notice Open a co-queued lootbox + presale box in one tx.
+    /// @param player Player that owns the index (address(0) = msg.sender).
+    /// @param index The shared RNG index.
+    function openLootboxAndPresaleBox(address player, uint48 index) external;
+
+    /// @notice Spendable coin-presale-box credit accrued by a player.
+    /// @param player Player to query.
+    /// @return credit Remaining credit (consumed 1:1 when buying a box).
+    function presaleBoxCreditOf(address player) external view returns (uint256 credit);
+
+    /// @notice Remaining coin-presale-box ETH capacity before the 50-ETH close.
+    /// @return remaining ETH still buyable in boxes (0 once presaleOver / sold out).
+    function presaleBoxEthRemaining() external view returns (uint256 remaining);
 
     /// @notice Enqueue a player's first box deposit at an index for the box crank.
     /// @dev Self-call only (invoked from the mint module first-deposit path). The
@@ -390,15 +436,13 @@ interface IDegenerusGame {
         MintPaymentKind payKind
     ) external payable;
 
-    /// @notice Purchase tickets and loot boxes with BURNIE.
-    /// @dev Entry point for all BURNIE purchases (tickets and loot boxes).
+    /// @notice Purchase tickets with BURNIE.
+    /// @dev Entry point for BURNIE ticket purchases.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
     /// @param ticketQuantity Number of tickets to purchase (0 to skip).
-    /// @param lootBoxBurnieAmount BURNIE amount for loot boxes (0 to skip).
     function purchaseCoin(
         address buyer,
-        uint256 ticketQuantity,
-        uint256 lootBoxBurnieAmount
+        uint256 ticketQuantity
     ) external;
 
     // -------------------------------------------------------------------------

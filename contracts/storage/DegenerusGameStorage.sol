@@ -61,9 +61,10 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | [27:28] gameOverPossible         bool     Drip projection endgame flag       |
  * | [28:29] ticketWriteSlot          bool     Double-buffer write toggle         |
  * | [29:30] prizePoolFrozen          bool     Prize pool freeze active flag      |
- * | [30:32] <padding>                         2 bytes unused                     |
+ * | [30:31] presaleOver              bool     Coin-presale-box terminal latch    |
+ * | [31:32] <padding>                         1 byte unused                      |
  * +-----------------------------------------------------------------------------+
- *   Total: 30 bytes used (2 bytes padding)
+ *   Total: 31 bytes used (1 byte padding)
  *
  * +-----------------------------------------------------------------------------+
  * | EVM SLOT 1 (32 bytes) -- Prize Pools                                        |
@@ -171,12 +172,6 @@ abstract contract DegenerusGameStorage {
     ///      levelPrizePool[0] is initialized to this value conceptually.
     uint256 internal constant BOOTSTRAP_PRIZE_POOL = 50 ether;
 
-    /// @dev Level at which earlybird DGNRS rewards end (exclusive).
-    uint24 internal constant EARLYBIRD_END_LEVEL = 3;
-
-    /// @dev Total ETH target for earlybird DGNRS emission curve.
-    uint256 internal constant EARLYBIRD_TARGET_ETH = 1_000 ether;
-
     /// @dev Current-pool daily jackpot percentage is rolled in JackpotModule.
     ///      Days 1-4 use a random 6%-14% slice of remaining currentPrizePool.
     ///      Day 5 pays 100% of the remaining currentPrizePool.
@@ -217,7 +212,7 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     // These variables pack into a single 32-byte storage slot for gas efficiency.
     // Order matters: EVM packs from low to high within a slot.
-    // 30/32 bytes used (2 bytes padding).
+    // 31/32 bytes used (1 byte padding).
 
     /// @dev Game day index when the purchase phase (or deploy) began.
     ///      Initialized to GameTimeLib.currentDayIndex() in the constructor.
@@ -330,6 +325,12 @@ abstract contract DegenerusGameStorage {
     ///      SECURITY: Persists across jackpot phase days. All 5 jackpot payouts
     ///      use pre-freeze pool values. _unfreezePool is the single control point.
     bool internal prizePoolFrozen;
+
+    /// @dev Latching terminal for the coin-presale-box window. Set once, in the
+    ///      box purchase that crosses the 50-ETH cumulative box cap. While false,
+    ///      ETH buys accrue presaleBoxCredit; once true, no further box buys or
+    ///      credit accrual occur. Occupies slot-0 padding byte [30:31].
+    bool internal presaleOver;
 
     // =========================================================================
     // EVM SLOT 1: Prize Pools
@@ -822,6 +823,23 @@ abstract contract DegenerusGameStorage {
         currentPrizePool = uint128(val);
     }
 
+    /// @dev Canonical CPAY claimable-shortfall settle (SPEC R3). Consumes `shortfall`
+    ///      wei from `basis` (the caller's chosen claimable balance — a fresh
+    ///      `claimableWinnings[buyer]` read or a same-call snapshot), preserving the
+    ///      STRICT 1-wei sentinel, and pairs the claimable debit with an equal
+    ///      `claimablePool` debit so the invariant `claimablePool == Σ claimableWinnings`
+    ///      holds. Single definition so the sentinel + paired debit cannot drift
+    ///      across the ETH-in paths that accept claimable shortfall.
+    function _settleClaimableShortfall(address buyer, uint256 basis, uint256 shortfall) internal {
+        if (shortfall != 0) {
+            if (basis <= shortfall) revert E();
+            unchecked {
+                claimableWinnings[buyer] = basis - shortfall;
+            }
+            claimablePool -= uint128(shortfall);
+        }
+    }
+
     // =========================================================================
     // Loot Box State & Presale Toggle
     // =========================================================================
@@ -830,6 +848,38 @@ abstract contract DegenerusGameStorage {
     ///      Packed: [232 bits: amount] [24 bits: purchase level]
     ///      Purchase level locked at buy time - if you open late, you lose it.
     mapping(uint48 => mapping(address => uint256)) internal lootboxEth;
+
+    // =========================================================================
+    // Coin-Presale-Box State
+    // =========================================================================
+
+    /// @dev Cumulative ETH spent on coin-presale boxes. Read+written per box buy
+    ///      during the presale to enforce the 50-ETH cap and detect the crossing
+    ///      (last-buyer DGNRS sweep + presaleOver latch). Never read after the
+    ///      latch, so its cold-slot cost is confined to the presale window.
+    uint96 internal presaleBoxEthSold;
+
+    /// @dev Spendable presale-box credit accrued per player from ETH buys while
+    ///      the presale is open (presaleBoxCredit += 0.25 * purchaseEth). Consumed
+    ///      1:1 when a box is bought.
+    mapping(address => uint256) internal presaleBoxCredit;
+
+    /// @dev Presale-box record per RNG index per player. One box per (index, player).
+    ///      A box always queues at the current lootbox RNG index and resolves off the
+    ///      SAME committed word lootboxRngWordByIndex[index], domain-separated by the
+    ///      "PRESALE_BOX" salt. A combined lootbox+box buy shares that one index.
+    ///      Packed: [bit 255: closing][bits 96:191: soldBefore][bits 0:95: applied ETH].
+    ///      soldBefore (cumulative box ETH before this buy) freezes the DGNRS-tier
+    ///      curve input. Bit 255 (PRESALE_BOX_CLOSING_FLAG) marks the 50-ETH-crossing
+    ///      box, whose resolution sweeps the Pool.PresaleBox remainder to that buyer.
+    mapping(uint48 => mapping(address => uint256)) internal presaleBoxEth;
+
+    /// @dev Sentinel OR'd into presaleBoxEth marking the 50-ETH-crossing box.
+    uint256 internal constant PRESALE_BOX_CLOSING_FLAG = 1 << 255;
+    /// @dev Bit offset of the soldBefore (buy-time cumulative box ETH) field.
+    uint256 internal constant PRESALE_BOX_SOLD_SHIFT = 96;
+    /// @dev Mask for the 96-bit applied-ETH / soldBefore fields in presaleBoxEth.
+    uint256 internal constant PRESALE_BOX_AMOUNT_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFF; // 96 bits
 
     // =========================================================================
     // Presale State (packed: 2 variables in 136/256 bits)
@@ -850,6 +900,10 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Presale auto-ends once cumulative mint-only lootbox ETH crosses this cap.
     uint256 internal constant LOOTBOX_PRESALE_ETH_CAP = 200 ether;
+
+    /// @dev Cumulative coin-presale-box ETH cap. The box buy crossing this latches
+    ///      presaleOver. Distinct from the 200-ETH mint-only LOOTBOX_PRESALE_ETH_CAP.
+    uint256 internal constant PRESALE_BOX_ETH_CAP = 50 ether;
 
     /// @dev Read a field from the packed presale state.
     function _psRead(uint256 shift, uint256 mask) internal view returns (uint256) {
@@ -950,68 +1004,18 @@ abstract contract DegenerusGameStorage {
     mapping(uint8 => address) internal deityBySymbol;
 
     // =========================================================================
-    // DGNRS Earlybird Rewards
+    // Coin-Presale-Box DGNRS Curve
     // =========================================================================
 
-    /// @dev Initial earlybird pool balance snapshot (set on first payout).
-    uint256 internal earlybirdDgnrsPoolStart;
-
-    /// @dev Total purchase ETH counted toward earlybird emission.
-    uint256 internal earlybirdEthIn;
+    /// @dev Pool.PresaleBox DGNRS balance snapshot, set on the first box resolution.
+    ///      The per-box DGNRS award uses base = presaleBoxDgnrsPoolStart / 100 and the
+    ///      5-tier cumulative-volume multiplier curve [3.0, 2.5, 2.0, 1.5, 1.0].
+    uint256 internal presaleBoxDgnrsPoolStart;
 
     // =========================================================================
     // Internal Helpers
     // =========================================================================
 
-    /// @dev Awards earlybird DGNRS tokens via a quadratic emission curve.
-    ///      No-op after _finalizeEarlybird runs (sentinel check).
-    ///      No-op if buyer is zero address, purchaseWei is 0, or earlybird target is reached.
-    /// @param buyer Address to receive DGNRS tokens.
-    /// @param purchaseWei ETH amount spent on this purchase.
-    function _awardEarlybirdDgnrs(
-        address buyer,
-        uint256 purchaseWei
-    ) internal {
-        if (purchaseWei == 0) return;
-        if (buyer == address(0)) return;
-
-        uint256 poolStart = earlybirdDgnrsPoolStart;
-        // uint256.max is the finalization sentinel set by _finalizeEarlybird.
-        // Primary gate: earlybird is over once the level transition fires the finalize hook.
-        if (poolStart == type(uint256).max) return;
-        if (poolStart == 0) {
-            uint256 poolBalance = dgnrs.poolBalance(
-                IStakedDegenerusStonk.Pool.Earlybird
-            );
-            if (poolBalance == 0) return;
-            poolStart = poolBalance;
-            earlybirdDgnrsPoolStart = poolBalance;
-        }
-
-        uint256 totalEth = EARLYBIRD_TARGET_ETH;
-        uint256 ethIn = earlybirdEthIn;
-        if (ethIn >= totalEth) return;
-
-        uint256 remaining = totalEth - ethIn;
-        uint256 delta = purchaseWei > remaining ? remaining : purchaseWei;
-        if (delta == 0) return;
-
-        uint256 nextEthIn = ethIn + delta;
-        uint256 denom = totalEth * totalEth;
-        uint256 totalEth2 = totalEth * 2;
-        uint256 d1 = (ethIn * totalEth2) - (ethIn * ethIn);
-        uint256 d2 = (nextEthIn * totalEth2) - (nextEthIn * nextEthIn);
-        uint256 payout = (poolStart * (d2 - d1)) / denom;
-
-        earlybirdEthIn = nextEthIn;
-        if (payout == 0) return;
-
-        dgnrs.transferFromPool(
-            IStakedDegenerusStonk.Pool.Earlybird,
-            buyer,
-            payout
-        );
-    }
 
     /// @dev Activates a 10-level pass for a player. Shared logic for lazy pass purchases and awards.
     ///      Updates mintPacked_ (levelCount +10, frozenUntilLevel, bundleType, lastLevel, day)
