@@ -37,7 +37,10 @@
   3. The load-bearing salvage-swap no-arb floor is RE-CONFIRMED at the v47.0-closure HEAD (SWAP-08 attestation): the cheapest far-future-entry acquisition cost (~21%, lootbox tier-1) is re-derived from current source, the jitter band CEILING max full payout (`110% × fractionBps(6) = 16.5% of face` @d6) is confirmed below it (margin ~4.5pp), BURNIE is confirmed unable to mint a far-future entry (`purchaseCoin` has no level arg; v47 removed the BURNIE-lootbox→future path), and the SWAP-03 jitter source is pinned to an already-SETTLED past VRF word (freeze-safe per `v45-vrf-freeze-invariant`) — so the swap is provably -EV at the band a grinder/waiter captures, not just at the mean.
   4. Every SPEC-time open item is resolved and recorded: RFALL-04 (`pendingRedemptionEthValue` single-value vs split ETH/stETH reservation shape, applied consistently across submit/claim/gameOver); KEEP-04 (VAULT confirmed to hold a registered affiliate code with `owner == VAULT` distinct from its address-derived default, or a setup step to register one); KEEP-05 (whether `autoOpen` is an existing keeper capability or new, scoped accordingly); POOL-06 (post-gameOver `depositFor(SDGNRS)` re-stranding — second sweep in `handleFinalSweep` vs accept-as-minor); the BTOMB `vaultAllowance` checked-add/cap + one-shot packing; the HERO-04 payout SHAPE over `S∈{0..9}` + the S=8/S=9 (>32-bit) packing scheme.
   5. The salvage-swap `ticketQueue` swap-pop is proven on paper NOT to reproduce the `H-CANCEL-SWAP-MISS` operation class (SWAP-06 design lock): every `ticketQueue` / `_tqFarFutureKey` consumer is enumerated, the O(1) caller-verified swap-pop (`q[idx]==player`, `queueIndices` used only when a line zeroes a level) is shown to MAINTAIN `membership ⟺ packed != 0` so the far-future jackpot samplers need no change and gain no hot-path read, and the LOCKED OPEN-E operator-trust disposition is confirmed to cover this first value-destructive operator-gated action.
-**Plans**: TBD
+**Plans**: 3 plans (2 waves)
+- [ ] 325-01-PLAN.md — Call-graph attestation for items 1/2/3/4/5/6 -> three 325-ATTEST-*.md grep tables (PFIX-RFALL, KEEP-POOL, BTOMB-HERO) + resolve KEEP-04/KEEP-05/POOL-05 (Wave 1)
+- [ ] 325-02-PLAN.md — Load-bearing SWAP attestation: SWAP-08 no-arb re-derivation at the band ceiling (STOP-if-violated) + SWAP-03 jitter-source pin + SWAP-06 swap-pop enumeration -> 325-ATTEST-SWAP.md (Wave 1)
+- [ ] 325-03-PLAN.md — 325-SPEC.md: shared-signature reconciliation across DegenerusGame/StakedDegenerusStonk/DegenerusVault + open-item resolutions (RFALL-04, KEEP-04/05, POOL-06, BTOMB/HERO packing+shape) + per-item IMPL blueprint + edit-order map (Wave 2)
 **UI hint**: no
 
 ### Phase 326: IMPL — The ONE Batched Contract Diff (all 7 items)
@@ -86,7 +89,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 0/TBD | Not started | - |
+| 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 0/3 | Not started | - |
 | 326. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/TBD | Not started | - |
 | 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 0/TBD | Not started | - |
 | 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 0/TBD | Not started | - |
