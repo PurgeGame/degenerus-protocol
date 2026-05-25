@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
-status: executing
-last_updated: "2026-05-25T17:55:51.394Z"
+status: verifying
+last_updated: "2026-05-25T18:05:06.747Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 67
+  completed_plans: 3
+  percent: 25
 ---
 
 # Project State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 
 ## Current Position
 
-Phase: 325 (spec-design-lock-call-graph-attestation-shared-surface-recon) — EXECUTING
-Plan: 3 of 3
-Status: Executing Phase 325 (Plans 01 + 02 done; Wave 1 complete)
-Last activity: 2026-05-25 -- Phase 325 Plan 02 complete (load-bearing SWAP item-7 attestation -> 325-ATTEST-SWAP.md; SWAP-08 no-arb floor RE-DERIVED at the band ceiling, HOLDS margin +4.5pp @d6, STOP NOT triggered; SWAP-03 jitter pinned to rngWordByDay[currentDay-1] freeze-safe; SWAP-06 swap-pop H-CANCEL-SWAP-MISS proven ABSENT across 11 ticketQueue consumers; units pinned)
-Next: `/gsd-execute-phase 325` — Wave 2: Plan 03 (325-03) reconcile the shared signatures across DegenerusGame/StakedDegenerusStonk/DegenerusVault + resolve every SPEC-time open item into 325-SPEC.md. Consumes the 325-ATTEST verdicts: items 1-6 = 0 blockers / KEEP-04=YES / KEEP-05=EXISTING / POOL-05=VERBATIM-MATCH / KEEP-03 wiring at DegenerusGame.sol:1778; SWAP (item 7) = no-arb HOLDS (+4.5pp @ band ceiling), jitter=rngWordByDay[currentDay-1], swap-pop safe, units pinned; correct the _runEarlyBirdLootboxJackpot citation (JackpotModule:639) + recompute the plan-doc §12 worked example onto the priceForLevel-per-whole-ticket basis in the SPEC. BATCH-01 stays Pending until 325-SPEC.md lands (Plan 03).
+Phase: 325 (spec-design-lock-call-graph-attestation-shared-surface-recon) — ALL PLANS COMPLETE
+Plan: 3 of 3 — COMPLETE
+Status: Phase complete — ready for verification
+Last activity: 2026-05-25
+Next: Phase 325 verification, then `/gsd-execute-phase 326` — IMPL (the ONE batched contract diff, all 7 items, HELD at the contract-commit boundary for explicit user hand-review). Plan 03 (325-03) DONE: `325-SPEC.md` authored (commits `b6cc7825` sections 0+1, `09d27524` sections 2+3) — section 0 attestation roll-up (0 blockers, corrections C1-C8, SWAP no-arb HOLDS +4.5pp @d6), section 1 shared signatures R1-R6 (one settled signature + apply-order each so items 2/3/4/7 cannot land as conflicting diffs), section 2 open-item resolutions (RFALL-04 D-06 / KEEP-04 bytes32("DGNRS") / KEEP-05 autoOpen-rename / POOL-06 D-04-accept-as-minor / BTOMB checked-add-cap / HERO-04 D-01/02/03 shape + byte-reproduce-gate handoff / S=8/S=9 separate-uint256 packing), section 3 per-item IMPL blueprint + file/edit-order map + SC1-SC5 checklist. BATCH-01 + RFALL-04 + KEEP-04 + KEEP-05 + POOL-06 all RESOLVED. ZERO contracts/*.sol mutation.
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
 
@@ -524,6 +524,7 @@ Audit deliverables:
 | 319 | 05 | ~16min | 1 (Task 3; Tasks 1-2 prior agents) | 5 files (DegenerusGame.sol :1501-1502 + 4 test mirrors) + 1 SUMMARY (GAS-06 OUTCOME-B calibration; 66_528/137_944; placement +0%; 556 pass/44 fail = exact v45 baseline; SAFE-01 round-trip<=0 preserved) |
 | Phase 325 P01 | 10min | 3 tasks | 3 files |
 | Phase 325 P02 | 30 | 2 tasks | 1 files |
+| Phase 325 P03 | ~5min | 2 tasks | 1 file (325-SPEC.md sections 0-3) + 1 SUMMARY |
 
 ## Decisions
 
@@ -632,3 +633,6 @@ Audit deliverables:
 - [Phase ?]: KEEP-04=YES (registered owner==VAULT code bytes32 DGNRS exists, no setup); KEEP-05=EXISTING (autoOpen renames crankBoxes); POOL-05=VERBATIM MATCH (withdraw(uint256)/poolOf(address); AfKing unchanged for item 4)
 - [Phase ?]: KEEP-03 wiring-site: affiliate code 0 is at DegenerusGame.sol:1778 not AfKing; BTOMB reuse target BurnieCoin vaultEscrow :557-567; HERO-06 no-leak confirmed
 - [Phase ?]: Phase 325 Plan 02: SWAP-08 no-arb floor RE-DERIVED at the jitter band ceiling from live source (HEAD da5c9d50) — salvage ceiling 16.5% of face @d6 < cheapest acquisition ~21%, margin +4.5pp, HOLDS, STOP rule NOT triggered; SWAP-03 jitter pinned to settled rngWordByDay[currentDay-1] (freeze-safe); SWAP-06 swap-pop H-CANCEL-SWAP-MISS proven ABSENT across 11 ticketQueue consumers; units pinned (owed=entries 4/ticket, oneTicketWei=priceForLevel). Drift: _runEarlyBirdLootboxJackpot at JackpotModule:639 not AdvanceModule:639.
+- [Phase 325]: Plan 03 — 325-SPEC R1-R5 settle ONE signature + apply-order per shared construct (DegenerusGame R1 pullRedemptionReserve coverage -> R2 crank rename + bytes32("DGNRS") @:1778 -> R3 sellFarFutureTickets + inline claimableWinnings[SDGNRS] debit; sStonk R4 receive() AF_KING relax + burnAtGameOver pool-recover-before-early-return + _submitGamblingClaimFrom segregation + interface adds; Vault R5 recoverAfKingPool + gameSellFarFutureTickets onlyVaultOwner wrapper + interface entry) so items 2/3/4/7 cannot land as conflicting independent diffs
+- [Phase 325]: Plan 03 open-item resolutions — RFALL-04=D-06 single pendingRedemptionEthValue (pure-ETH OR pure-stETH, no separate stETH slot, donation-robust, fail-closed revert-if-neither); KEEP-04=wire bytes32("DGNRS") @ DegenerusGame.sol:1778 (cross-naming disambiguated, NOT bytes32("VAULT") which is owner SDGNRS); KEEP-05=autoOpen is a RENAME of crankBoxes/_crankOpenBox; POOL-06=D-04 accept-as-minor, NO second sweep in handleFinalSweep (donor-only post-gameOver residual documented, VAULT unaffected via anytime recoverAfKingPool)
+- [Phase 325]: Plan 03 — BTOMB reuse vaultEscrow (BurnieCoin:557-567) with explicit checked-add/cap (its += is unchecked), one-shot from gameover-drain, 1e36 « uint128 max; HERO-04 SHAPE locked (D-01 continuity S=3..9 track old M=2..8 + D-02 S=2 ~40-60% partial refund + D-03 bonus thresholds S>=7), byte-exact 10-bucket per-N constants handed to derive_5_tables.py PASS_ALL gate at Phase 327, S=8/S=9 held as separate per-N uint256; the 0-8->0-9 FullTicketResult.matches widening FLAGGED frontend/indexer out-of-scope (flag not fix)

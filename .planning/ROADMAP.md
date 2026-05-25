@@ -18,7 +18,7 @@
 
 ## Phases
 
-- [ ] **Phase 325: SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation** - Settle the final shared signatures across `DegenerusGame`/`StakedDegenerusStonk`/`DegenerusVault`, grep-attest every cited file:line vs the v47.0-closure HEAD, and resolve every SPEC-time open item (RFALL-04 accounting shape, KEEP-04/05 VAULT-code + autoOpen scope, POOL-06 re-stranding, BTOMB packing, HERO-04 shape+packing, SWAP-03 jitter source, SWAP-08 acquisition-floor re-confirm) before any patch.
+- [x] **Phase 325: SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation** - Settle the final shared signatures across `DegenerusGame`/`StakedDegenerusStonk`/`DegenerusVault`, grep-attest every cited file:line vs the v47.0-closure HEAD, and resolve every SPEC-time open item (RFALL-04 accounting shape, KEEP-04/05 VAULT-code + autoOpen scope, POOL-06 re-stranding, BTOMB packing, HERO-04 shape+packing, SWAP-03 jitter source, SWAP-08 acquisition-floor re-confirm) before any patch. (completed 2026-05-25)
 - [ ] **Phase 326: IMPL — The ONE Batched Contract Diff (all 7 items)** - Apply all seven work items' contract edits as a single reconciled diff; HARD STOP at the contract-commit boundary (applied + locally compiled/tested, never committed without explicit user hand-review).
 - [ ] **Phase 327: TST — Repro/Same-Results + No-Arb + EV + Regression Proofs** - Prove the presale-drain dust bound (PFIX-02/03), the redemption-fallback regression (RFALL-05), the sDGNRS `receive()` accounting-safety (POOL-04), the BURNIE tombstone non-circulating signal (BTOMB-03), the byte-identical Degenerette recalibration (HERO-04/06), and the salvage-swap no-arb at the jitter band CEILING + solvency (SWAP-08/09).
 - [ ] **Phase 328: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure** - NON-WIDENING delta-audit vs the v47.0 baseline, run the 3-skill genuine-PARALLEL adversarial sweep, author `audit/FINDINGS-v48.0.md`, and flip the closure signal `MILESTONE_V48_AT_HEAD_<sha>`.
@@ -40,7 +40,7 @@
 **Plans**: 3 plans (2 waves)
 - [x] 325-01-PLAN.md — Call-graph attestation for items 1/2/3/4/5/6 -> three 325-ATTEST-*.md grep tables (PFIX-RFALL, KEEP-POOL, BTOMB-HERO) + resolve KEEP-04/KEEP-05/POOL-05 (Wave 1)
 - [x] 325-02-PLAN.md — Load-bearing SWAP attestation: SWAP-08 no-arb re-derivation at the band ceiling (HOLDS +4.5pp @d6: salvage ceiling 16.5% < acquisition ~21%; STOP NOT triggered) + SWAP-03 jitter-source pin (rngWordByDay[currentDay-1], freeze-safe) + SWAP-06 swap-pop enumeration (11 ticketQueue consumers; H-CANCEL-SWAP-MISS proven absent) -> 325-ATTEST-SWAP.md (Wave 1) ✅ (`0e09b7d9`)
-- [ ] 325-03-PLAN.md — 325-SPEC.md: shared-signature reconciliation across DegenerusGame/StakedDegenerusStonk/DegenerusVault + open-item resolutions (RFALL-04, KEEP-04/05, POOL-06, BTOMB/HERO packing+shape) + per-item IMPL blueprint + edit-order map (Wave 2)
+- [x] 325-03-PLAN.md — 325-SPEC.md: shared-signature reconciliation across DegenerusGame/StakedDegenerusStonk/DegenerusVault + open-item resolutions (RFALL-04, KEEP-04/05, POOL-06, BTOMB/HERO packing+shape) + per-item IMPL blueprint + edit-order map (Wave 2)
 **UI hint**: no
 
 ### Phase 326: IMPL — The ONE Batched Contract Diff (all 7 items)
@@ -89,7 +89,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 2/3 | In Progress|  |
+| 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 3/3 | Complete   | 2026-05-25 |
 | 326. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/TBD | Not started | - |
 | 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 0/TBD | Not started | - |
 | 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 0/TBD | Not started | - |

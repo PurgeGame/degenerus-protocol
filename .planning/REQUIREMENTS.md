@@ -21,7 +21,7 @@
 - [ ] **RFALL-01**: The 175% redemption reservation segregates from **pure-ETH OR pure-stETH** (no mix); if ETH cannot cover, fall back to pure-stETH; if **neither** pure leg covers, **revert** (fail-closed). `StakedDegenerusStonk.sol` `_submitGamblingClaimFrom` `maxIncrement` pull + `DegenerusGame.sol` `pullRedemptionReserve` coverage branch.
 - [ ] **RFALL-02**: Donation-robust — coverage is checked against the **same asset basis the base is inflated by**, so a stETH-inflated `totalMoney` is coverable by the pure-stETH leg; no claimable-ETH-only chokepoint is reintroduced (stETH donation / `selfdestruct` force-feed cannot brick submit).
 - [ ] **RFALL-03**: Claim-time payout asset selection matches the reserved asset (stETH-reserved → stETH-paid via the existing stETH-transfer paths); extends the v47 game-over deterministic ETH→stETH fallback (REDEEM-04) to the mid-game ETH-depletion case.
-- [ ] **RFALL-04**: `pendingRedemptionEthValue` accounting shape (single tracked value vs split ETH/stETH reservation) decided at SPEC and applied consistently across submit/claim/gameOver.
+- [x] **RFALL-04**: `pendingRedemptionEthValue` accounting shape (single tracked value vs split ETH/stETH reservation) decided at SPEC and applied consistently across submit/claim/gameOver.
 - [ ] **RFALL-05**: v47 REDEEM-08 invariants still hold under the fallback — two same-period claimants, BURNIE-can't-block-ETH, value conservation, and `balance ≥ pending`.
 
 ### Keeper Rename + VAULT Affiliate Code (`PLAN-V48-KEEPER-RENAME-AND-VAULT-CODE.md`)
@@ -29,8 +29,8 @@
 - [ ] **KEEP-01**: Full function rename — `AfKing.sol`'s `sweep` + the in-game mass-resolve/open crank entrypoints → **autoBuy / autoOpen / autoResolve**; purge "crank" / "do-work" / "sweep" from contract code AND comments. Wide mechanical diff spanning `AfKing.sol` + the in-game crank entrypoints in `DegenerusGame`/modules.
 - [ ] **KEEP-02**: Bounty stays MINTED as flip credit — keep the existing v46 `creditFlip` keeper bounty (gas-pegged `BOUNTY_ETH_TARGET`, coinflip-credit illiquidity faucet-lock); the affiliate-revenue funding-pool overlay is DROPPED (no such pool).
 - [ ] **KEEP-03**: AfKing passes VAULT's **registered (immutable) affiliate code** into `game.purchase(...)` on every tx it makes (was `0`); unreferred AfKing-joiners are permanently captured by VAULT (foreclosure INTENDED); players already holding a real human affiliate keep it (code ignored).
-- [ ] **KEEP-04**: SPEC prerequisite — confirm VAULT holds a **registered** affiliate code (`owner == VAULT`, distinct from its address-derived default); register one as a setup step if absent.
-- [ ] **KEEP-05**: Confirm whether `autoOpen` (open subscribers' lootboxes) is an existing keeper capability or a new one to add; scope accordingly.
+- [x] **KEEP-04**: SPEC prerequisite — confirm VAULT holds a **registered** affiliate code (`owner == VAULT`, distinct from its address-derived default); register one as a setup step if absent.
+- [x] **KEEP-05**: Confirm whether `autoOpen` (open subscribers' lootboxes) is an existing keeper capability or a new one to add; scope accordingly.
 
 ### AfKing Pool Recovery (`PLAN-V48-AFKING-POOL-RECOVERY.md`)
 
@@ -39,7 +39,7 @@
 - [ ] **POOL-03**: sDGNRS auto-recovers its AfKing pool by folding `afKing.withdraw(afKing.poolOf(address(this)))` into `burnAtGameOver()` (`onlyGame`), placed **before** the `balanceOf(this)==0` early-return so a zero-pool-token sDGNRS still recovers; NO standalone sDGNRS withdraw function.
 - [ ] **POOL-04**: sDGNRS `receive()` relaxation proven accounting-safe — reserves are read by `address(this).balance` (not a running counter incremented in `receive()`), so an `AF_KING`-sourced credit isn't mis-attributed / double-counted / bypassed.
 - [ ] **POOL-05**: `AfKing.sol` itself UNCHANGED; the `IAfKing`/`IAfKingSubscribe` interface additions (`withdraw(uint256)`, `poolOf(address) returns (uint256)`) match `AfKing.sol` signatures verbatim.
-- [ ] **POOL-06**: Post-gameOver re-stranding (a `depositFor(SDGNRS)` after `burnAtGameOver`) handling decided at SPEC — second sweep in `handleFinalSweep` (fires +30d) vs accept-as-minor; VAULT unaffected (anytime recovery).
+- [x] **POOL-06**: Post-gameOver re-stranding (a `depositFor(SDGNRS)` after `burnAtGameOver`) handling decided at SPEC — second sweep in `handleFinalSweep` (fires +30d) vs accept-as-minor; VAULT unaffected (anytime recovery).
 
 ### Gameover BURNIE Tombstone (`PLAN-V48-GAMEOVER-BURNIE-TOMBSTONE.md`)
 
@@ -70,7 +70,7 @@
 
 ### Cross-Cutting — SPEC Reconciliation + TERMINAL Audit (BATCH)
 
-- [ ] **BATCH-01** *(SPEC)*: Single SPEC design-lock across all 7 items — every cited `file:line` re-attested vs the v47.0-closure HEAD (no "by construction" claims); shared-surface final signatures reconciled where multiple items touch the same file (`DegenerusGame.sol` items 2/3/7, `StakedDegenerusStonk.sol` items 2/4, `DegenerusVault.sol` items 3/4/7); all SPEC-time open items resolved (RFALL-04, KEEP-04/05, POOL-06, BTOMB packing, HERO-04 shape + packing, SWAP-03 jitter source + SWAP-08 acquisition floor).
+- [x] **BATCH-01** *(SPEC)*: Single SPEC design-lock across all 7 items — every cited `file:line` re-attested vs the v47.0-closure HEAD (no "by construction" claims); shared-surface final signatures reconciled where multiple items touch the same file (`DegenerusGame.sol` items 2/3/7, `StakedDegenerusStonk.sol` items 2/4, `DegenerusVault.sol` items 3/4/7); all SPEC-time open items resolved (RFALL-04, KEEP-04/05, POOL-06, BTOMB packing, HERO-04 shape + packing, SWAP-03 jitter source + SWAP-08 acquisition floor).
 - [ ] **BATCH-02** *(IMPL)*: The ONE batched USER-APPROVED `contracts/*.sol` diff (all 7 items) applied + locally compiled/tested, **HELD at the contract-commit boundary** — never committed without explicit user hand-review of the diff (`feedback_batch_contract_approval` + `feedback_never_preapprove_contracts` + `feedback_manual_review_before_push` + `feedback_no_contract_commits`; `ContractAddresses.sol` freely-modifiable).
 - [ ] **BATCH-03** *(TERMINAL)*: v47→v48 delta-audit (NON-WIDENING — every `contracts`/`test` diff attributable to a v48-scope item) + 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) charged against the 7 surfaces + composition, skeptic-filtered before any elevation; `audit/FINDINGS-v48.0.md` (9-section, chmod 444); closure flip emitting `MILESTONE_V48_AT_HEAD_<sha>`; re-attests every v48.0 requirement.
 
@@ -92,11 +92,11 @@ Which phases cover which requirements. Phase numbering continues from v47.0 (end
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BATCH-01 | Phase 325 (SPEC) | Pending |
-| RFALL-04 | Phase 325 (SPEC) | Pending |
-| KEEP-04 | Phase 325 (SPEC) | Pending |
-| KEEP-05 | Phase 325 (SPEC) | Pending |
-| POOL-06 | Phase 325 (SPEC) | Pending |
+| BATCH-01 | Phase 325 (SPEC) | Complete |
+| RFALL-04 | Phase 325 (SPEC) | Complete |
+| KEEP-04 | Phase 325 (SPEC) | Complete |
+| KEEP-05 | Phase 325 (SPEC) | Complete |
+| POOL-06 | Phase 325 (SPEC) | Complete |
 | PFIX-01 | Phase 326 (IMPL) | Pending |
 | RFALL-01 | Phase 326 (IMPL) | Pending |
 | RFALL-02 | Phase 326 (IMPL) | Pending |
