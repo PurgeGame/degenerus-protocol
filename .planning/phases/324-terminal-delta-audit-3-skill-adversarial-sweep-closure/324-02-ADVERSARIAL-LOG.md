@@ -7,7 +7,7 @@ skills: [contract-auditor, zero-day-hunter, economic-analyst]
 degen_skeptic: OUT (D-271-ADVERSARIAL-02)
 execution_path: GENUINE PARALLEL_SUBAGENT (3 background Task spawns from the orchestrator)
 deliverable: 324-02-ADVERSARIAL-LOG.md
-outcome: 2 FINDING_CANDIDATE (both MEDIUM, both USER-adjudicated FIX) + skeptic-filtered NEGATIVE/SAFE — closure HALTS, v47 fix phase required
+outcome: 2 FINDING_CANDIDATE (both MEDIUM, both USER-adjudicated DEFER→v48, fix designs locked) + skeptic-filtered NEGATIVE/SAFE — v47.0 CLOSES with deferrals
 ---
 
 # v47.0 SC2 Adversarial Sweep — Disposition Log
@@ -139,13 +139,15 @@ the grounds that no DGNRS is minted/over-drained (the pool is finite + `transfer
 That defeats an *inflation/insolvency* framing but NOT the *concentration/fairness* framing: the bulk of a
 fair-launch emission concentrating to one address while the design assumed even front-loaded distribution.
 
-**USER adjudication (2026-05-25): FIX.** *"the dgnrs should be mostly paid out at the end, not a big windfall
-to the closer."* → the DGNRS pool must drain ~fully across box buyers by the close, leaving only dust to sweep.
-Closure HALTS pending a v47 contract fix phase (subject frozen at `fabe9e94`; any contract fix is a new
-USER-approved diff). Fix DIRECTION (to be locked in the fix-phase SPEC, NOT here): scale the per-box DGNRS
-draw to compensate for the realized branch rate (e.g. `base = poolStart/40` so the 40% realized draw rate
-× the scaled curve drains the pool over 50 ETH), or make the draw a %-of-LIVE-remaining-pool (self-correcting),
-leaving only rounding dust for the closing sweep.
+**USER adjudication (2026-05-25): DEFER → v48.0** (the v46→v47 H-CANCEL-SWAP-MISS DEFER precedent).
+*"the dgnrs should be mostly paid out at the end, not a big windfall to the closer."* The DGNRS pool must
+drain ~fully across box buyers by the close, leaving only dust to sweep. **Fix mechanism LOCKED (USER 2026-05-25)
+= (a) scale the per-box draw by the branch rate:** change `_presaleBoxDgnrsReward`'s denominator from
+`(1_000 * 1 ether)` to `(400 * 1 ether)` — i.e. `base = poolStart/40` instead of `/100`, so each DGNRS draw is
+2.5× larger and the realized ~40% DGNRS branch rate drains the full pool over 50 ETH in expectation; the closing
+sweep then mops up only variance dust (`transferFromPool` already clamps to live balance, so a run of early
+DGNRS hits can't over-draw). The fix is a v48.0 contract change (subject frozen at `fabe9e94`; v47.0 closes now
+with this DEFERRED, carried into v48.0's plans).
 
 ### §4.2 F-47-02 — Gambling-burn redemption submit can brick under stETH-dominant sDGNRS backing
 **Severity:** MEDIUM (liveness / availability; NO funds at risk — fail-closed protects solvency).
@@ -181,14 +183,14 @@ the game's ETH runs out while it is still live, the ETH-side reservation/payout 
 bricks. Net: F-47-02 is re-scoped from "steady-state brick" to "ETH-empty fallback gap" — still a real, bounded
 liveness gap worth fixing.
 
-**USER adjudication (2026-05-25): FIX.** *"if the game ran out of eth we need to consider that situation … we
-need a fallback case where we are using stETH for all that stuff if eth was empty."* → add a deterministic
-ETH→stETH fallback for the redemption reservation/payout when the game's ETH is empty mid-game (extending the
-existing game-over ETH→stETH fallback, REDEEM-04, to the mid-game ETH-depletion case). **Fix shape LOCKED
-(USER 2026-05-25):** the reservation/payout uses **either pure ETH OR pure stETH** (no mix — keeps the math
-simple); **revert if neither alone can cover** the 175% (the "neither covers" case is not a realistic scenario,
-so fail-closed there is fine). Contract fix → a v47 fix phase (subject frozen at `fabe9e94`; new USER-approved
-diff). Add a test that funds sDGNRS ETH-poor / stETH-only.
+**USER adjudication (2026-05-25): DEFER → v48.0.** *"if the game ran out of eth we need to consider that
+situation … we need a fallback case where we are using stETH for all that stuff if eth was empty."* → add a
+deterministic ETH→stETH fallback for the redemption reservation/payout when the game's ETH is empty mid-game
+(extending the existing game-over ETH→stETH fallback, REDEEM-04, to the mid-game ETH-depletion case). **Fix
+shape LOCKED (USER 2026-05-25):** the reservation/payout uses **either pure ETH OR pure stETH** (no mix — keeps
+the math simple); **revert if neither alone can cover** the 175% (the "neither covers" case is not realistic,
+fail-closed there is fine). The v48 fix is a contract change (subject frozen at `fabe9e94`; v47.0 closes now
+with this DEFERRED, carried into v48.0's plans). Add a test that funds sDGNRS ETH-poor / stETH-only.
 
 **Donation-robustness requirement (USER question 2026-05-25):** the redemption base reads raw
 `address(this).balance + steth.balanceOf(this) + claimable[SDGNRS] − pending` (sStonk:844-847). ETH `receive()`
@@ -219,13 +221,14 @@ remained OUT per D-271-ADVERSARIAL-02.
 ## §6. Routing
 
 Both FINDING_CANDIDATEs are recorded WITHOUT a contract fix in this phase (subject FROZEN at `fabe9e94`).
-**Both are USER-adjudicated FIX (2026-05-25):**
-- **F-47-01 (presale closing-box windfall):** FIX — the DGNRS pool must drain ~fully across box buyers, dust to the closer.
-- **F-47-02 (redemption ETH-empty fallback):** FIX — pure-ETH-or-pure-stETH reservation/payout with a mid-game ETH→stETH fallback; revert if neither covers.
+**Both are USER-adjudicated DEFER → v48.0 (2026-05-25), with fix designs LOCKED:**
+- **F-47-01 (presale closing-box windfall):** DEFER→v48; fix = (a) scale the per-box DGNRS draw by the branch rate (`_presaleBoxDgnrsReward` denominator `1_000`→`400`, i.e. `base=poolStart/40`) so the realized ~40% DGNRS rate drains the pool, dust to the closer.
+- **F-47-02 (redemption ETH-empty fallback):** DEFER→v48; fix = pure-ETH-OR-pure-stETH reservation/payout, mid-game ETH→stETH fallback, revert if neither covers, donation-robust (coverage matches inflated asset basis).
 
-Consequence: the **v47.0 milestone does NOT close in this phase.** Phase 324 SC1 (delta-audit) + SC2 (this sweep)
-are complete; SC4 closure HALTS. A **v47 contract fix phase** is required (SPEC → ONE batched USER-approved
-contract diff → TST → re-run terminal sweep + closure). `git diff fabe9e94 HEAD -- contracts/` is empty
-(read-only sweep throughout; the subject stays frozen at `fabe9e94` until the fix phase opens).
+Consequence: **v47.0 CLOSES now** with both findings DEFERRED→v48 (the v46→v47 H-CANCEL-SWAP-MISS DEFER precedent;
+the §9a "0 NEW_FINDINGS" verdict clause is amended to "2 MEDIUM FINDINGS DEFERRED→v48 [fix designs locked]").
+Phase 324 SC1 (delta-audit) + SC2 (this sweep) complete; SC3 findings + SC4 closure proceed. The two fixes are
+carried into v48.0's plans (`.planning/PLAN-V48-PRESALE-BOX-DRAIN-FIX.md` + `.planning/PLAN-V48-REDEMPTION-ETH-STETH-FALLBACK.md`).
+`git diff fabe9e94 HEAD -- contracts/` is empty (read-only sweep throughout; subject stays frozen at `fabe9e94`).
 
 *SC2 adversarial sweep authored 2026-05-25. GENUINE PARALLEL_SUBAGENT (3 background Task spawns). Read-only; subject frozen at `fabe9e94`.*
