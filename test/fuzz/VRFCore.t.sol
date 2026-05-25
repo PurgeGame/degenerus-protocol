@@ -51,7 +51,7 @@ contract VRFCore is DeployProtocol {
 
     /// @dev Read lootboxRngIndex from lootboxRngPacked (storage slot 35, low 48 bits = LR_INDEX).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(35)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(37)))));
     }
 
     /// @dev Read vrfRequestId directly from storage slot 4.

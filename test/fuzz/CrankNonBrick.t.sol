@@ -587,7 +587,7 @@ contract CrankNonBrick is DeployProtocol {
     }
 
     function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(19))); // lootboxEthBase slot 19
+        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(22))); // lootboxEthBase slot 22 (v47: +3)
         bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
         return uint256(vm.load(address(game), leaf));
     }

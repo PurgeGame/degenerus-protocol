@@ -30,7 +30,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @dev    Storage slots are authoritative per `forge inspect DegenerusGame storage-layout`:
 ///         slot 35 = lootboxRngPacked (LR_INDEX in low bits, LR_MID_DAY at bit 224 mask 0xFF),
 ///         slot 36 = lootboxRngWordByIndex mapping (lootboxRngWordByIndex[i] at
-///         keccak256(abi.encode(uint256(i), uint256(36)))),
+///         keccak256(abi.encode(uint256(i), uint256(38)))),
 ///         slot 3 = rngWordCurrent, slot 0 packed = rngRequestTime at bit offset 64.
 ///         ZERO contracts/ mutation -- audit-only (D-43N-AUDIT-ONLY-01).
 contract VrfRotationLiveness is DeployProtocol {
