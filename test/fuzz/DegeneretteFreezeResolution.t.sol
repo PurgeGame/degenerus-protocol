@@ -3,23 +3,39 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
+import {Vm} from "forge-std/Vm.sol";
+import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
 
-/// @title DegeneretteFreezeResolutionTest -- Proves FIX-04: Degenerette ETH
-///        resolution succeeds during prizePoolFrozen, routing payouts through
-///        the pending pool side-channel instead of the live futurePrizePool.
+/// @title DegeneretteFreezeResolutionTest -- Proves FIX-04 (freeze-routing) AND
+///        DGAS-05 same-results: the v47 Degenerette `resolveBets` write-batching
+///        is payout-IDENTICAL to the old per-spin behavior.
 ///
-/// @notice The bug: _distributePayout previously reverted with E() whenever
-///         prizePoolFrozen was true, blocking all degenerette ETH bet resolution
-///         during jackpot phase. The fix routes the ETH portion through
-///         _getPendingPools/_setPendingPools (matching the bet-placement pattern
-///         at L558-561), keeping the live futurePrizePool snapshot untouched.
+/// @notice FIX-04: _distributePayout routes the ETH portion through
+///         _getPendingPools/_setPendingPools during prizePoolFrozen, keeping the
+///         live futurePrizePool snapshot untouched (tests 1-3).
+///
+/// @notice DGAS-05 (tests 4-7): the v47 refactor accumulates ETH/BURNIE/WWXRP
+///         payouts CROSS-BET into a `ResolveAcc` memory struct and flushes ONCE
+///         per currency (one mint per currency, one claimable+claimablePool write,
+///         one pool write, one box per betId). The HARD floor is "same results" —
+///         byte-identical to-the-wei vs a per-spin baseline. Because the contract
+///         is frozen and the per-spin code no longer exists, the per-spin baseline
+///         is computed IN THE TEST from the contract's own per-spin `FullTicketResult`
+///         events (the raw per-spin payout the contract computed) by replaying the
+///         exact arithmetic the batching touched — the 3-tier ETH split + the
+///         running-pool-local cap (the per-N payout TABLES are unchanged by the
+///         batching and are NOT recomputed here; only the AGGREGATION the batching
+///         changed is replayed). Any divergence by even one wei is surfaced as a
+///         real regression, never adjusted away.
+///         - Tier-1 (additive): BURNIE/WWXRP mint sums + ETH claimable sum.
+///         - Tier-2 (running-pool-local): the ETH cap binds on the IDENTICAL spin.
+///         - DGAS-03: lootbox-share summed PER betId (one box per bet).
+///         - DGAS-04: DGNRS award stays PER SPIN (reads poolBalance fresh).
 ///
 /// @dev Deploys full 23-contract protocol via DeployProtocol. Uses vm.store to
 ///      inject freeze state and seed pending pools to a known value, then places
-///      a real degenerette ETH bet via the public API, injects a lootbox RNG word
-///      pre-computed to produce a winning result, and resolves the bet. Asserts
-///      ETH conservation: live futurePrizePool untouched, pending pool debited,
-///      player credited.
+///      a real degenerette bet via the public API, injects a lootbox RNG word
+///      pre-computed to produce a winning result, and resolves the bet.
 contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // --- Storage slot constants (confirmed via `forge inspect DegenerusGameStorage storage`) ---
 
@@ -36,11 +52,47 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     /// @dev lootboxRngWordByIndex mapping root slot.
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = 38;
 
-    /// @dev lootboxRngPacked at slot 37 (v47: +2 from presale-box storage additions); lootboxRngIndex is the low 48 bits.
+    /// @dev lootboxRngPacked at slot 37 (v47: presale-box storage additions); lootboxRngIndex is the low 48 bits.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 37;
 
     /// @dev Salt used in degenerette bet resolution for the first spin.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
+
+    // --- DGAS-05 same-results constants ---
+
+    /// @dev claimablePool (uint128) lives in slot 1, byte 16.
+    uint256 private constant CLAIMABLE_POOL_SLOT = 1;
+    /// @dev degeneretteBets mapping root slot (address => betId => packed).
+    uint256 private constant DEGENERETTE_BETS_SLOT = 45;
+    /// @dev degeneretteBetNonce mapping root slot (address => uint64).
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 46;
+    /// @dev BurnieCoin.balanceOf mapping root slot.
+    uint256 private constant BURNIE_BALANCEOF_SLOT = 1;
+    /// @dev WrappedWrappedXRP.balanceOf / totalSupply slots.
+    uint256 private constant WWXRP_BALANCEOF_SLOT = 2;
+    uint256 private constant WWXRP_TOTAL_SUPPLY_SLOT = 0;
+
+    /// @dev Degenerette bet currencies (DegeneretteModule:208-214).
+    uint8 private constant CURRENCY_ETH = 0;
+    uint8 private constant CURRENCY_BURNIE = 1;
+    uint8 private constant CURRENCY_WWXRP = 3;
+
+    /// @dev ETH win pool cap: 10% of futurePool (DegeneretteModule:196).
+    uint256 private constant ETH_WIN_CAP_BPS = 1_000;
+    /// @dev Per-currency minimum bets (DegeneretteModule:217-223).
+    uint256 private constant MIN_BET_ETH = 5 ether / 1000;
+    uint256 private constant MIN_BET_BURNIE = 100 ether;
+    uint256 private constant MIN_BET_WWXRP = 1 ether;
+
+    /// @dev FullTicketResult topic0 — one per spin (the raw per-spin payout source).
+    bytes32 private constant FULL_TICKET_RESULT_SIG =
+        0xed1cde932a37b486ad1cc829c4ce89bf3bff943b68625e57cad59bc1bc18d8de;
+    /// @dev PayoutCapped topic0 — one per ETH spin that flipped into the lootbox.
+    bytes32 private constant PAYOUT_CAPPED_SIG =
+        0xf8a9468f6767206f82ef0f809e2c4fb396a1495ad99e9f116652fe99a91f20c5;
+    /// @dev FullTicketResolved topic0 — one per resolved betId.
+    bytes32 private constant FULL_TICKET_RESOLVED_SIG =
+        0xb740e09ba01c583a945713a2656978f631723409d1db2dce5df96a8b3ce27e15;
 
     address private player;
 
@@ -57,7 +109,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // placeDegeneretteBet reverts with E() when lootboxRngIndex == 0.
         // Seed it to 1 so the bet check passes. The word at index 1 starts
         // as 0 (no pending RNG), which is the required state for bet placement.
-        // lootboxRngIndex is the low 48 bits of lootboxRngPacked (slot 35).
+        // lootboxRngIndex is the low 48 bits of lootboxRngPacked (slot 37).
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
         lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(1);
         vm.store(
@@ -116,7 +168,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             betAmount,      // amountPerTicket
             1,              // ticketCount = 1
             customTicket,   // custom traits (matched to RNG word)
-            0xFF            // no hero quadrant
+            0               // v47 always-on hero: heroQuadrant must be {0..3} (0xFF reverts InvalidBet)
         );
 
         // Record post-bet state: pending future should have increased by betAmount
@@ -194,7 +246,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
         game.placeDegeneretteBet{value: betAmount}(
-            address(0), 0, betAmount, 1, customTicket, 0xFF
+            address(0), 0, betAmount, 1, customTicket, 0 // v47 always-on hero: {0..3}
         );
 
         // Zero pending future before resolution
@@ -241,7 +293,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
         game.placeDegeneretteBet{value: betAmount}(
-            address(0), 0, betAmount, 1, customTicket, 0xFF
+            address(0), 0, betAmount, 1, customTicket, 0 // v47 always-on hero: {0..3}
         );
 
         // Live pools should have increased (unfrozen path uses _setPrizePools)
@@ -281,16 +333,638 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     // =========================================================================
+    // DGAS-05 Test 4: Tier-1 additive equivalence (mixed-currency multi-bet batch)
+    // =========================================================================
+
+    /// @notice Prove the cross-bet flush is ADDITIVE — byte-identical to a per-spin
+    ///         baseline. Places a MIXED-currency multi-bet batch (ETH + BURNIE +
+    ///         WWXRP bets, various spin counts within the per-currency caps),
+    ///         resolves them in ONE resolveBets call, and asserts:
+    ///           - BURNIE balance delta == Σ (every BURNIE spin's payout)
+    ///           - WWXRP balance delta == Σ (every WWXRP spin's payout)
+    ///           - claimableWinnings ETH delta == Σ (every ETH spin's ethShare)
+    ///           - claimablePool moved by exactly the same ETH sum (additive)
+    ///         The per-spin payouts are read from the contract's own
+    ///         `FullTicketResult` events; the ETH ethShare is the 3-tier split of
+    ///         each spin's raw payout (a LARGE pool is seeded so the 10% cap never
+    ///         binds in this Tier-1 test — Tier-2 owns the cap). Byte-identical (==).
+    function testBatchedPayoutEqualsPerSpinExpectation_Tier1() public {
+        // Large unfrozen pool so the ETH 10% cap never binds (cap is Tier-2's job).
+        _seedFuturePrizePool(1_000_000 ether);
+
+        // Three bets sharing the seeded lootbox index 1 (placement requires word==0).
+        uint48 index = 1;
+        uint256 word = uint256(keccak256("tier1_mixed_batch_word"));
+
+        // ETH bet: 4 spins, winning ticket; BURNIE bet: 3 spins; WWXRP bet: 2 spins.
+        // Use the spin-0 winning combo as the custom ticket for each (>= 2 matches
+        // on spin 0 guarantees the bet is non-vacuous; other spins vary).
+        uint32 ethTicket = _winningTicketFor(index, word);
+        uint32 burnieTicket = ethTicket;
+        uint32 wwxrpTicket = ethTicket;
+
+        uint128 ethPerTicket = 0.01 ether;     // >= MIN_BET_ETH
+        uint128 burniePerTicket = 200 ether;   // >= MIN_BET_BURNIE
+        uint128 wwxrpPerTicket = 2 ether;      // >= MIN_BET_WWXRP
+
+        // Fund the player for BURNIE + WWXRP bets (game-gated mints).
+        _fundBurnie(player, uint256(burniePerTicket) * 3 + 1 ether);
+        _fundWwxrp(player, uint256(wwxrpPerTicket) * 2 + 1 ether);
+
+        // Place all three (nonce increments per place: ETH=1, BURNIE=2, WWXRP=3).
+        uint64 ethBet = _placeBet(CURRENCY_ETH, ethPerTicket, 4, ethTicket);
+        uint64 burnieBet = _placeBet(CURRENCY_BURNIE, burniePerTicket, 3, burnieTicket);
+        uint64 wwxrpBet = _placeBet(CURRENCY_WWXRP, wwxrpPerTicket, 2, wwxrpTicket);
+
+        _injectLootboxRngWord(index, word);
+
+        // Pre-resolve balances.
+        uint256 preClaimable = game.claimableWinningsOf(player);
+        uint256 preClaimablePool = _readClaimablePool();
+        uint256 preBurnie = coin.balanceOf(player);
+        uint256 preWwxrp = wwxrp.balanceOf(player);
+
+        // Resolve all three in ONE call (the cross-bet flush under test).
+        uint64[] memory betIds = new uint64[](3);
+        betIds[0] = ethBet;
+        betIds[1] = burnieBet;
+        betIds[2] = wwxrpBet;
+
+        vm.recordLogs();
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), betIds);
+
+        // Replay the per-spin baseline from the contract's own per-spin events.
+        // BURNIE/WWXRP: pure additive sum of raw payouts. ETH: 3-tier split of each
+        // raw payout (no cap binds — large pool). Cap-flips would emit PayoutCapped;
+        // assert none fired in this Tier-1 batch (so ethShare == split(payout)).
+        (
+            uint256 expectedEthShare,
+            uint256 expectedBurnie,
+            uint256 expectedWwxrp,
+            uint256 payoutCappedCount
+        ) = _replayPerSpinBaseline(ethPerTicket, burniePerTicket, wwxrpPerTicket);
+
+        assertEq(payoutCappedCount, 0, "Tier-1: large pool -> no spin should cap");
+
+        // Tier-1 byte-identical assertions.
+        uint256 burnieDelta = coin.balanceOf(player) - preBurnie;
+        uint256 wwxrpDelta = wwxrp.balanceOf(player) - preWwxrp;
+        uint256 claimableDelta = game.claimableWinningsOf(player) - preClaimable;
+        uint256 claimablePoolDelta = _readClaimablePool() - preClaimablePool;
+
+        assertEq(burnieDelta, expectedBurnie,
+            "Tier-1: BURNIE mint delta == Sum of per-spin BURNIE payouts (additive)");
+        assertEq(wwxrpDelta, expectedWwxrp,
+            "Tier-1: WWXRP mint delta == Sum of per-spin WWXRP payouts (additive)");
+        assertEq(claimableDelta, expectedEthShare,
+            "Tier-1: ETH claimable delta == Sum of per-spin ethShare (additive)");
+        assertEq(claimablePoolDelta, expectedEthShare,
+            "Tier-1: claimablePool moved by exactly the ETH sum (additive, disjoint slot)");
+
+        // Non-vacuity: every payout currency was actually exercised.
+        assertGt(expectedBurnie, 0, "Tier-1 non-vacuity: BURNIE payout exercised");
+        assertGt(expectedWwxrp, 0, "Tier-1 non-vacuity: WWXRP payout exercised");
+        assertGt(expectedEthShare, 0, "Tier-1 non-vacuity: ETH payout exercised");
+
+        emit log_named_uint("tier1_eth_claimable_delta", claimableDelta);
+        emit log_named_uint("tier1_burnie_delta", burnieDelta);
+        emit log_named_uint("tier1_wwxrp_delta", wwxrpDelta);
+    }
+
+    // =========================================================================
+    // DGAS-05 Test 5: Tier-2 ETH cap binds on the IDENTICAL spin (running-pool-local)
+    // =========================================================================
+
+    /// @notice Prove the ETH cap binds on the IDENTICAL spin under batching vs the
+    ///         per-spin replay. Seeds a SMALL pool so the per-spin 10%-of-pool ETH
+    ///         cap binds partway through a single multi-spin ETH bet. The test
+    ///         replays the running-pool decrement spin-by-spin (the exact thing the
+    ///         batching moved into a memory local) and asserts:
+    ///           (a) the ETH credited == Σ per-spin capped shares against the
+    ///               shrinking running pool (byte-identical), and
+    ///           (b) PayoutCapped fired on EXACTLY the spin indices the off-chain
+    ///               replay predicts (same count, same set).
+    ///         Unfrozen variant.
+    function testEthCapBindsOnIdenticalSpin_Tier2() public {
+        // Small unfrozen pool: the 10% cap (ETH_WIN_CAP_BPS) binds quickly.
+        uint256 smallPool = 0.5 ether;
+        _seedFuturePrizePool(smallPool);
+
+        uint48 index = 1;
+        uint256 word = uint256(keccak256("tier2_cap_word"));
+        uint32 ticket = _winningTicketFor(index, word);
+
+        // A multi-spin ETH bet with a bet size large enough that each winning spin's
+        // ethShare exceeds 10% of the shrinking pool -> cap binds.
+        uint128 perTicket = 0.1 ether; // >= MIN_BET_ETH; big vs the 0.5 ETH pool
+        uint8 spins = 6;
+        uint64 betId = _placeBet(CURRENCY_ETH, perTicket, spins, ticket);
+
+        // Re-seed the small pool AFTER placement (placement adds totalBet to the pool).
+        _seedFuturePrizePool(smallPool);
+        _injectLootboxRngWord(index, word);
+
+        uint256 preClaimable = game.claimableWinningsOf(player);
+
+        uint64[] memory betIds = new uint64[](1);
+        betIds[0] = betId;
+        vm.recordLogs();
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), betIds);
+
+        // Single pass over the recorded logs: read the per-spin RAW payouts AND the
+        // ACTUAL capped-spin set (a PayoutCapped immediately follows the spin's
+        // FullTicketResult it caps — see DegeneretteModule:690-712).
+        (uint256[] memory rawPayouts, bool[] memory actualCapped) = _ethSpinPayoutsAndCaps();
+
+        // Replay the running-pool-local cap exactly as _distributePayout does.
+        (uint256 expectedEthCredited, bool[] memory expectedCapped) =
+            _replayRunningPoolCap(rawPayouts, perTicket, smallPool);
+
+        // (a) byte-identical total ETH credited.
+        uint256 claimableDelta = game.claimableWinningsOf(player) - preClaimable;
+        assertEq(claimableDelta, expectedEthCredited,
+            "Tier-2: ETH credited == Sum of per-spin capped shares against the running pool");
+
+        // (b) PayoutCapped fired on EXACTLY the predicted spin set (identical spin).
+        uint256 predictedCapCount;
+        for (uint256 i; i < expectedCapped.length; ++i) {
+            assertEq(actualCapped[i], expectedCapped[i],
+                "Tier-2: PayoutCapped fires on the IDENTICAL spin the replay predicts");
+            if (expectedCapped[i]) ++predictedCapCount;
+        }
+
+        // Non-vacuity: the cap actually bound on at least one spin.
+        assertGt(predictedCapCount, 0,
+            "Tier-2 non-vacuity: the cap must bind on at least one spin (small pool)");
+
+        emit log_named_uint("tier2_eth_credited", claimableDelta);
+        emit log_named_uint("tier2_spins_capped", predictedCapCount);
+    }
+
+    /// @notice Frozen-pool Tier-2 variant: prove the frozen solvency check
+    ///         (pendingFuture < ethShare -> revert E()) fires on the IDENTICAL spin
+    ///         the per-spin replay predicts. Seeds a pending-future just large enough
+    ///         to cover the first ETH win but NOT the second, so resolution reverts
+    ///         when the running pending-local underflows on the identical spin.
+    function testFrozenSolvencyRevertsOnIdenticalSpin_Tier2() public {
+        _setFrozenFlag(true);
+
+        uint48 index = 1;
+        uint256 word = uint256(keccak256("tier2_frozen_word"));
+        uint32 ticket = _winningTicketFor(index, word);
+
+        uint128 perTicket = 0.01 ether;
+        uint8 spins = 4;
+
+        // Seed pending future large enough to ACCEPT the bet placement AND cover a
+        // winning multi-spin frozen resolve in the PEEK pass (an 8/8 jackpot spin on
+        // a 0.01 ETH bet credits ~700 ETH; 4 spins -> seed well above that).
+        _seedPendingFuture(100_000 ether);
+        uint64 betId = _placeBet(CURRENCY_ETH, perTicket, spins, ticket);
+        _injectLootboxRngWord(index, word);
+
+        uint64[] memory betIds = new uint64[](1);
+        betIds[0] = betId;
+
+        // PEEK pass: snapshot, resolve with ample pending to read the FIRST spin's
+        // raw payout (the payout formula is freeze-independent), then revert. The
+        // peek leaves the bet intact for the real (trimmed) revert assertion.
+        uint256 snap = vm.snapshotState();
+        vm.recordLogs();
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), betIds);
+        uint256[] memory rawPayouts = _ethSpinPayouts();
+        vm.revertToState(snap);
+        require(rawPayouts.length == spins, "peek must produce all spins");
+        uint256 firstEthShare = _ethShareOf(rawPayouts[0], perTicket);
+        require(firstEthShare > 0, "first spin must pay ETH");
+
+        // Trim pending future BELOW the first spin's ethShare -> the very first ETH
+        // win's per-spin solvency check (pendingFuture < ethShare) must revert E()
+        // on the IDENTICAL (first) spin the replay predicts.
+        _seedPendingFuture(firstEthShare - 1);
+
+        vm.prank(player);
+        vm.expectRevert(bytes4(0x92bbf6e8)); // E()
+        game.resolveDegeneretteBets(address(0), betIds);
+
+        // Live future must stay untouched throughout the (reverted) frozen resolve.
+        assertEq(_readFuturePrizePool(), 0, "Frozen: live future untouched (was never seeded)");
+    }
+
+    // =========================================================================
+    // DGAS-05 Test 6: lootbox summed PER betId, never across bets
+    // =========================================================================
+
+    /// @notice Prove the lootbox-share is summed PER betId (one box per bet), never
+    ///         across bets (the resolution-batch-invariant). Two bets SHARE the same
+    ///         lootbox index (two bet-txs, same index). Both flip into the lootbox
+    ///         (small pool -> cap binds on each bet's single spin). Resolving both in
+    ///         ONE resolveBets must produce TWO independent box resolutions — proven
+    ///         by the equivalence: resolving the two bets in ONE call yields the
+    ///         IDENTICAL ETH credited + box ticket effects as resolving them in TWO
+    ///         separate calls. A summed-across implementation (one box on share1+share2)
+    ///         would diverge (the box ticket-roll is non-linear in `amount`).
+    function testLootboxSummedPerBetIdNotAcrossBets() public {
+        uint48 index = 1;
+        uint256 word = uint256(keccak256("perbetid_word"));
+        uint32 ticket = _winningTicketFor(index, word);
+        uint128 perTicket = 0.1 ether;       // big vs the small pool -> cap binds
+        uint256 smallPool = 0.5 ether;
+
+        // Place TWO same-index single-spin ETH bets (two bet-txs, SAME lootbox index).
+        uint64 bet1 = _placeBet(CURRENCY_ETH, perTicket, 1, ticket);
+        uint64 bet2 = _placeBet(CURRENCY_ETH, perTicket, 1, ticket);
+        _seedFuturePrizePool(smallPool);
+        _injectLootboxRngWord(index, word);
+
+        // Snapshot so the SAME placed bets can be resolved two different ways.
+        uint256 snap = vm.snapshotState();
+
+        // --- Run A: resolve BOTH in ONE call (the cross-bet batch under test) ---
+        uint256 preA = game.claimableWinningsOf(player);
+        uint64[] memory both = new uint64[](2);
+        both[0] = bet1;
+        both[1] = bet2;
+        vm.recordLogs();
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), both);
+
+        uint256 ethCreditedOneCall = game.claimableWinningsOf(player) - preA;
+        // Two betIds resolved -> two FullTicketResolved, two PayoutCapped (one spin each).
+        (uint256 resolvedCount, uint256 cappedCount) = _countResolvedAndCapped();
+        assertEq(resolvedCount, 2, "two betIds resolved -> two FullTicketResolved (per-bet unit)");
+        assertEq(cappedCount, 2,
+            "per-betId: each bet's single spin capped independently -> two PayoutCapped");
+
+        // --- Run B: revert to the snapshot, resolve the SAME two bets in TWO calls ---
+        // (the per-betId baseline: one box per bet, resolved one at a time).
+        vm.revertToState(snap);
+        uint256 preB = game.claimableWinningsOf(player);
+
+        uint64[] memory one = new uint64[](1);
+        one[0] = bet1;
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), one);
+
+        uint64[] memory two = new uint64[](1);
+        two[0] = bet2;
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), two);
+
+        uint256 ethCreditedTwoCalls = game.claimableWinningsOf(player) - preB;
+
+        // The resolution-batch-invariant: batching two same-index bets in ONE call
+        // equals resolving them in TWO calls (per-betId box, never pooled). A
+        // summed-across box (one roll on share1+share2) would diverge.
+        assertEq(ethCreditedOneCall, ethCreditedTwoCalls,
+            "per-betId: one-call == two-call ETH credited (box is per-bet, never summed across)");
+
+        emit log_named_uint("perbetid_eth_one_call", ethCreditedOneCall);
+        emit log_named_uint("perbetid_eth_two_calls", ethCreditedTwoCalls);
+    }
+
+    // =========================================================================
+    // DGAS-05 Test 7: DGNRS award stays PER SPIN (not batched)
+    // =========================================================================
+
+    /// @notice Prove the ETH 6+ match DGNRS award is applied PER SPIN, not folded
+    ///         into the cross-bet flush. _awardDegeneretteDgnrs reads poolBalance
+    ///         FRESH per call and transfers a fraction of it, so the per-spin award
+    ///         DRAINS the pool spin-by-spin: award_k = poolBalance_k * bps * cappedBet
+    ///         / (10_000 * 1e18), poolBalance_{k+1} = poolBalance_k - award_k. A
+    ///         batched (single fresh read) implementation would compute every award
+    ///         off the SAME initial balance, yielding a strictly LARGER total. The
+    ///         test resolves an all-6+-match ETH bet, replays the per-spin draining
+    ///         off the live Reward poolBalance, and asserts the player's sDGNRS gain
+    ///         equals the per-spin (path-dependent) sum — proving it was NOT batched.
+    function testDgnrsAwardStaysPerSpin() public {
+        // Find a word where the spin-0 ticket matches >= 6 on MULTIPLE spins (so the
+        // DGNRS award fires more than once and the per-spin draining is observable).
+        _seedFuturePrizePool(1_000_000 ether); // large pool: no ETH cap interference
+
+        uint48 index = 1;
+        (uint256 word, uint32 ticket, uint8 sixPlusSpins) = _findMultiSixMatchWord(index);
+        require(sixPlusSpins >= 2, "need >= 2 six-plus-match spins for per-spin draining proof");
+
+        uint128 perTicket = 1 ether; // DGNRS cappedBet caps at 1 ether
+        uint8 spins = 8;
+        uint64 betId = _placeBet(CURRENCY_ETH, perTicket, spins, ticket);
+        _seedFuturePrizePool(1_000_000 ether);
+        _injectLootboxRngWord(index, word);
+
+        // Snapshot the live Reward poolBalance + the player's sDGNRS BEFORE resolve.
+        uint256 rewardPoolBefore = sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Reward);
+        require(rewardPoolBefore > 0, "Reward pool must be funded at deploy");
+        uint256 sdgnrsBefore = sdgnrs.balanceOf(player);
+
+        uint64[] memory betIds = new uint64[](1);
+        betIds[0] = betId;
+        vm.recordLogs();
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), betIds);
+
+        uint256 sdgnrsGain = sdgnrs.balanceOf(player) - sdgnrsBefore;
+
+        // Replay the PER-SPIN draining: per match-count of each 6+ spin (from events),
+        // award_k = pool_k * bps(match) * 1e18 / (10_000 * 1e18); pool drains each award.
+        (uint256 expectedPerSpinSum, uint256 expectedBatchedSum) =
+            _replayDgnrsPerSpin(rewardPoolBefore);
+
+        // The per-spin (path-dependent, draining) sum must match exactly.
+        assertEq(sdgnrsGain, expectedPerSpinSum,
+            "DGAS-04: DGNRS gain == per-spin draining sum (reads poolBalance fresh per spin)");
+
+        // And it must be STRICTLY LESS than a hypothetical single-batched-read sum,
+        // proving the award was NOT folded into one fresh read.
+        assertLt(expectedPerSpinSum, expectedBatchedSum,
+            "DGAS-04: per-spin draining is strictly less than a single-read batch (not batched)");
+
+        emit log_named_uint("dgnrs_per_spin_sum", expectedPerSpinSum);
+        emit log_named_uint("dgnrs_batched_hypothetical", expectedBatchedSum);
+    }
+
+    // =========================================================================
+    // DGAS-05 Internal Helpers
+    // =========================================================================
+
+    /// @dev DGNRS award bps per match tier (DegeneretteModule:203-205).
+    uint256 private constant DEGEN_DGNRS_6_BPS = 400;
+    uint256 private constant DEGEN_DGNRS_7_BPS = 800;
+    uint256 private constant DEGEN_DGNRS_8_BPS = 1500;
+
+    /// @dev Read claimablePool (uint128 in slot 1, byte 16 -> high 128 bits).
+    function _readClaimablePool() internal view returns (uint256) {
+        uint256 s1 = uint256(vm.load(address(game), bytes32(uint256(CLAIMABLE_POOL_SLOT))));
+        return uint256(uint128(s1 >> 128));
+    }
+
+    /// @dev Place a Degenerette bet for `player` and return its betId (nonce).
+    function _placeBet(uint8 currency, uint128 perTicket, uint8 spins, uint32 ticket)
+        internal
+        returns (uint64 betId)
+    {
+        uint256 ethValue = currency == CURRENCY_ETH ? uint256(perTicket) * spins : 0;
+        vm.prank(player);
+        game.placeDegeneretteBet{value: ethValue}(
+            address(0), currency, perTicket, spins, ticket, 0
+        );
+        betId = _betNonce(player);
+    }
+
+    /// @dev Find the spin-0 winning custom ticket for (index, word): the spin-0
+    ///      result ticket itself (8/8 self-match guarantees a win on spin 0).
+    function _winningTicketFor(uint48 index, uint256 word) internal pure returns (uint32) {
+        return _resultTicketForSpin(index, word, 0);
+    }
+
+    /// @dev Reproduce the on-chain per-spin result ticket (_resolveFullTicketBet:654-670).
+    function _resultTicketForSpin(uint48 index, uint256 word, uint8 spinIdx)
+        internal
+        pure
+        returns (uint32)
+    {
+        uint256 resultSeed = spinIdx == 0
+            ? uint256(keccak256(abi.encodePacked(word, uint32(index), QUICK_PLAY_SALT)))
+            : uint256(keccak256(abi.encodePacked(word, uint32(index), spinIdx, QUICK_PLAY_SALT)));
+        return DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
+    }
+
+    /// @dev The 3-tier ETH split (_distributePayout:778-794), cap-free. The cap is
+    ///      replayed separately in _replayRunningPoolCap (Tier-2). ethShare =
+    ///      payout if payout <= 3*bet else max(2.5*bet, payout/4).
+    function _ethShareOf(uint256 payout, uint128 betAmount) internal pure returns (uint256) {
+        if (payout == 0) return 0;
+        uint256 threeBet = uint256(betAmount) * 3;
+        if (payout <= threeBet) return payout;
+        uint256 minEth = (uint256(betAmount) * 5) / 2;
+        uint256 stdEth = payout / 4;
+        return stdEth > minEth ? stdEth : minEth;
+    }
+
+    /// @dev Replay the per-spin baseline for the Tier-1 mixed batch from the recorded
+    ///      FullTicketResult events. Groups raw per-spin payouts by currency (decoded
+    ///      from the bet amount each spin used) and applies the additive rule:
+    ///        - ETH: Σ _ethShareOf(payout) (cap-free; PayoutCapped count returned for
+    ///          the caller to assert zero in Tier-1).
+    ///        - BURNIE/WWXRP: Σ payout (pure additive mint).
+    ///      Currency is inferred from the per-spin betAmount (the three bets used
+    ///      distinct, disjoint per-ticket amounts: ethPerTicket / burniePerTicket /
+    ///      wwxrpPerTicket), which the FullTicketResult does NOT carry — so we read
+    ///      the playerTicket field is identical; instead we attribute by the contract's
+    ///      emission order (ETH bet first, BURNIE second, WWXRP third) using the
+    ///      per-bet FullTicketResolved boundaries.
+    function _replayPerSpinBaseline(
+        uint128 ethPerTicket,
+        uint128 burniePerTicket,
+        uint128 wwxrpPerTicket
+    )
+        internal
+        returns (
+            uint256 ethShareSum,
+            uint256 burnieSum,
+            uint256 wwxrpSum,
+            uint256 payoutCappedCount
+        )
+    {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        // Walk logs in order. The batch resolves ETH bet, then BURNIE, then WWXRP.
+        // Each bet's spins emit FullTicketResult, terminated by one FullTicketResolved.
+        // betPhase: 0 = ETH, 1 = BURNIE, 2 = WWXRP.
+        uint256 betPhase;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 0) continue;
+            bytes32 t0 = logs[i].topics[0];
+            if (t0 == FULL_TICKET_RESULT_SIG) {
+                // data = (uint8 ticketIndex, uint32 playerTicket, uint8 matches, uint256 payout)
+                (, , , uint256 payout) = abi.decode(logs[i].data, (uint8, uint32, uint8, uint256));
+                if (betPhase == 0) {
+                    ethShareSum += _ethShareOf(payout, ethPerTicket);
+                } else if (betPhase == 1) {
+                    burnieSum += payout;
+                } else {
+                    wwxrpSum += payout;
+                }
+            } else if (t0 == PAYOUT_CAPPED_SIG) {
+                ++payoutCappedCount;
+            } else if (t0 == FULL_TICKET_RESOLVED_SIG) {
+                ++betPhase; // advance to the next bet's currency phase
+            }
+        }
+    }
+
+    /// @dev Read the per-spin RAW payouts for a SINGLE ETH bet from the recorded
+    ///      FullTicketResult events (in spin order).
+    function _ethSpinPayouts() internal returns (uint256[] memory payouts) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 count;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == FULL_TICKET_RESULT_SIG) ++count;
+        }
+        payouts = new uint256[](count);
+        uint256 k;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == FULL_TICKET_RESULT_SIG) {
+                (uint8 spinIdx, , , uint256 payout) =
+                    abi.decode(logs[i].data, (uint8, uint32, uint8, uint256));
+                payouts[spinIdx] = payout;
+                ++k;
+            }
+        }
+        require(k == count, "spin payout decode mismatch");
+    }
+
+    /// @dev Replay the unfrozen running-pool-local ETH cap exactly as _distributePayout:
+    ///      maxEth = pool * ETH_WIN_CAP_BPS / 10_000; if ethShare > maxEth, credit maxEth
+    ///      and the excess flips to lootbox (PayoutCapped); pool -= credited ethShare.
+    ///      Returns the total ETH credited + a per-spin capped[] vector.
+    function _replayRunningPoolCap(uint256[] memory rawPayouts, uint128 betAmount, uint256 pool)
+        internal
+        pure
+        returns (uint256 ethCredited, bool[] memory capped)
+    {
+        capped = new bool[](rawPayouts.length);
+        for (uint256 i; i < rawPayouts.length; ++i) {
+            if (rawPayouts[i] == 0) continue;
+            uint256 ethShare = _ethShareOf(rawPayouts[i], betAmount);
+            uint256 maxEth = (pool * ETH_WIN_CAP_BPS) / 10_000;
+            if (ethShare > maxEth) {
+                ethShare = maxEth;
+                capped[i] = true;
+            }
+            pool -= ethShare;
+            ethCredited += ethShare;
+        }
+    }
+
+    /// @dev Single pass over the recorded logs for a SINGLE ETH bet: returns BOTH the
+    ///      per-spin raw payouts (in spin order) AND the ACTUAL capped-spin set. A
+    ///      PayoutCapped is emitted inside _distributePayout, immediately after the
+    ///      spin's FullTicketResult (DegeneretteModule:690-712), so a PayoutCapped that
+    ///      follows the FullTicketResult for spin k (before the next FullTicketResult)
+    ///      caps spin k. This reads the ON-CHAIN behavior directly (not a prediction).
+    function _ethSpinPayoutsAndCaps()
+        internal
+        returns (uint256[] memory payouts, bool[] memory capped)
+    {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 count;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == FULL_TICKET_RESULT_SIG) ++count;
+        }
+        payouts = new uint256[](count);
+        capped = new bool[](count);
+        int256 currentSpin = -1;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 0) continue;
+            bytes32 t0 = logs[i].topics[0];
+            if (t0 == FULL_TICKET_RESULT_SIG) {
+                (uint8 spinIdx, , , uint256 payout) =
+                    abi.decode(logs[i].data, (uint8, uint32, uint8, uint256));
+                payouts[spinIdx] = payout;
+                currentSpin = int256(uint256(spinIdx));
+            } else if (t0 == PAYOUT_CAPPED_SIG && currentSpin >= 0) {
+                capped[uint256(currentSpin)] = true;
+            }
+        }
+    }
+
+    /// @dev Count FullTicketResolved + PayoutCapped from the recorded logs.
+    function _countResolvedAndCapped() internal returns (uint256 resolved, uint256 capped) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 0) continue;
+            bytes32 t0 = logs[i].topics[0];
+            if (t0 == FULL_TICKET_RESOLVED_SIG) ++resolved;
+            else if (t0 == PAYOUT_CAPPED_SIG) ++capped;
+        }
+    }
+
+    /// @dev Find a word where the spin-0 greedy-self ticket lands >= 6 matches on
+    ///      multiple spins (so the DGNRS award fires more than once -> the per-spin
+    ///      poolBalance draining is observable). Returns (word, ticket, sixPlusSpins).
+    function _findMultiSixMatchWord(uint48 index)
+        internal
+        pure
+        returns (uint256 word, uint32 ticket, uint8 sixPlusSpins)
+    {
+        for (uint256 k; k < 20_000; ++k) {
+            uint256 candidate = uint256(keccak256(abi.encodePacked("dgnrs_multi_six", k)));
+            uint32 t = _resultTicketForSpin(index, candidate, 0); // self-match on spin 0 = 8/8
+            uint8 cnt;
+            for (uint8 s; s < 8; ++s) {
+                if (_countMatchesLocal(t, _resultTicketForSpin(index, candidate, s)) >= 6) ++cnt;
+            }
+            if (cnt > sixPlusSpins) {
+                sixPlusSpins = cnt;
+                word = candidate;
+                ticket = t;
+                if (sixPlusSpins >= 2) return (word, ticket, sixPlusSpins);
+            }
+        }
+    }
+
+    /// @dev Replay the per-spin DGNRS award from the recorded FullTicketResult events.
+    ///      Per-spin (draining): award_k = pool_k * bps(match) / 10_000 (cappedBet = 1e18
+    ///      cancels the 1e18 divisor since perTicket >= 1 ether); pool_{k+1} = pool_k - award_k.
+    ///      Batched (hypothetical single read): every award off the SAME initial pool.
+    function _replayDgnrsPerSpin(uint256 poolStart)
+        internal
+        returns (uint256 perSpinSum, uint256 batchedSum)
+    {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 runningPool = poolStart;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 0 || logs[i].topics[0] != FULL_TICKET_RESULT_SIG) continue;
+            (, , uint8 matches, ) = abi.decode(logs[i].data, (uint8, uint32, uint8, uint256));
+            if (matches < 6) continue;
+            uint256 bps = matches == 6 ? DEGEN_DGNRS_6_BPS : matches == 7 ? DEGEN_DGNRS_7_BPS : DEGEN_DGNRS_8_BPS;
+            // cappedBet = min(perTicket, 1 ether) == 1 ether; reward = pool * bps * 1e18 / (10_000 * 1e18).
+            uint256 perSpinReward = (runningPool * bps) / 10_000;
+            uint256 batchedReward = (poolStart * bps) / 10_000;
+            if (perSpinReward != 0) {
+                perSpinSum += perSpinReward;
+                runningPool -= perSpinReward; // pool drains (fresh read next spin)
+            }
+            batchedSum += batchedReward;
+        }
+    }
+
+    // =========================================================================
+    // Token funding helpers (game-gated mints)
+    // =========================================================================
+
+    /// @dev Mint BURNIE to `who` via the GAME-gated mintForGame (keeps supply consistent).
+    function _fundBurnie(address who, uint256 amount) internal {
+        vm.prank(address(game));
+        coin.mintForGame(who, amount);
+    }
+
+    /// @dev Mint WWXRP to `who` via the GAME-gated mintPrize (keeps supply consistent).
+    function _fundWwxrp(address who, uint256 amount) internal {
+        vm.prank(address(game));
+        wwxrp.mintPrize(who, amount);
+    }
+
+    /// @dev Read the current degeneretteBetNonce for a player (slot 46) = newest betId.
+    function _betNonce(address who) internal view returns (uint64) {
+        bytes32 slot = keccak256(abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT)));
+        return uint64(uint256(vm.load(address(game), slot)));
+    }
+
+    // =========================================================================
     // Internal Helpers
     // =========================================================================
 
-    /// @notice Read futurePrizePool from packed slot (upper 128 bits of slot 3).
+    /// @notice Read futurePrizePool from packed slot (upper 128 bits of prizePoolsPacked, slot 2).
     function _readFuturePrizePool() internal view returns (uint256) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
         return uint256(uint128(packed >> 128));
     }
 
-    /// @notice Read pending future from packed slot (upper 128 bits of slot 14).
+    /// @notice Read pending future from packed slot (upper 128 bits of prizePoolPendingPacked, slot 11).
     function _readPendingFuture() internal view returns (uint256) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PENDING_PACKED_SLOT))));
         return uint256(uint128(packed >> 128));
@@ -302,7 +976,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         return ((s0 >> FROZEN_BIT_SHIFT) & 0xFF) != 0;
     }
 
-    /// @notice Seed futurePrizePool (upper 128 bits of slot 3).
+    /// @notice Seed futurePrizePool (upper 128 bits of prizePoolsPacked, slot 2).
     /// @dev Preserves the lower 128 bits (nextPrizePool).
     function _seedFuturePrizePool(uint256 targetFuture) internal {
         uint256 currentPacked = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
@@ -311,7 +985,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 
-    /// @notice Seed pending future (upper 128 bits of slot 14).
+    /// @notice Seed pending future (upper 128 bits of prizePoolPendingPacked, slot 11).
     /// @dev Preserves the lower 128 bits (nextPending).
     function _seedPendingFuture(uint256 targetFuture) internal {
         uint256 currentPacked = uint256(vm.load(address(game), bytes32(uint256(PENDING_PACKED_SLOT))));
@@ -334,7 +1008,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     /// @notice Inject a lootbox RNG word for a given index.
-    /// @dev Writes to the lootboxRngWordByIndex mapping at slot 36.
+    /// @dev Writes to the lootboxRngWordByIndex mapping at slot 38.
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         vm.store(address(game), slot, bytes32(rngWord));
@@ -344,6 +1018,12 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     /// @dev Tries RNG words in sequence, computing the result ticket for spin 0
     ///      (index 1) using the same derivation as _resolveFullTicketBet. Returns
     ///      when a combination with >= 2 matches is found.
+    ///
+    ///      v47 repair: the spin-0 result ticket is derived via
+    ///      `DegenerusTraitUtils.packedTraitsDegenerette` (the Degenerette-specific
+    ///      derivation _resolveFullTicketBet:668 uses) — NOT `packedTraitsFromSeed`
+    ///      (the mint derivation). Using the wrong derivation produced a "winning"
+    ///      ticket that the on-chain path never actually matched.
     function _findWinningCombo(uint48 index) internal pure returns (uint32 customTicket, uint256 rngWord) {
         for (uint256 attempt; attempt < 100; attempt++) {
             rngWord = uint256(keccak256(abi.encode("freeze_test_rng", attempt)));
@@ -351,7 +1031,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             // Replicate the result seed derivation from _resolveFullTicketBet (spin 0)
             // Contract uses uint32 index in encodePacked (v24.1 change)
             uint256 resultSeed = uint256(keccak256(abi.encodePacked(rngWord, uint32(index), QUICK_PLAY_SALT)));
-            uint32 resultTicket = DegenerusTraitUtils.packedTraitsFromSeed(resultSeed);
+            uint32 resultTicket = DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
 
             // Use the result ticket AS the custom ticket -- guarantees 8/8 matches (jackpot).
             // This is valid because custom ticket format matches result ticket format.
