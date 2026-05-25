@@ -413,6 +413,12 @@ contract DegenerusGameDegeneretteModule is
     /// @param player The player address (use zero address for msg.sender).
     /// @param betIds Array of bet IDs to resolve.
     function resolveBets(address player, uint64[] calldata betIds) external {
+        // Once game-over liveness has drained the balance into claimable, resolving a
+        // pending bet would credit ETH claimable out of the already-distributed
+        // futurePrizePool residual, pushing claimablePool above the ETH balance
+        // (unbacked obligation). Same guard as claimWhalePass: pending bets are settled
+        // by the game-over drain, never resolved into claimable after it.
+        if (_livenessTriggered()) revert E();
         player = _resolvePlayer(player);
         ResolveAcc memory acc;
         acc.poolFrozen = prizePoolFrozen;
