@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
 status: executing
-last_updated: "2026-05-26T11:19:40.971Z"
-last_activity: 2026-05-26 -- Phase 328 planning complete
+last_updated: "2026-05-26T11:35:38.615Z"
+last_activity: 2026-05-26 -- Phase 328 plan 01 (SC1 delta-audit) complete
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 21
-  completed_plans: 17
+  completed_plans: 18
   percent: 75
 ---
 
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 328 — terminal — delta audit + 3 skill adversarial sweep + closure
+**Current focus:** Phase 328 — terminal-delta-audit-3-skill-adversarial-sweep-closure
 
 ## Current Position
 
-Phase: 328
-Plan: Not started
+Phase: 328 (terminal-delta-audit-3-skill-adversarial-sweep-closure) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-05-26 -- Phase 328 planning complete
-Next: Phase 328 TERMINAL (delta-audit + 3-skill adversarial sweep + closure). The 42-failure baseline carries forward (bucket A VRF/RNG 8 + bucket B stale-harness/v48-behavioral 34); re-syncing the stale fixtures is owned by TERMINAL / a future fixture-repair plan. ⚠ HERO-04 contract-constant landing STILL PENDING USER DECISION (out of the no-contract TST phase): the 15 ready-to-apply finals are in 327-04-SUMMARY; landing them under the hand-review CONTRACTS_COMMIT_APPROVED=1 gate flips the Hardhat PASS_ALL stat gate 1->0 failing (forge count unchanged at 42 — the byte-reproduce red is Hardhat-only), per the conditional delta in test/REGRESSION-BASELINE-v48.md §3.
+Last activity: 2026-05-26 -- 328-01 SC1 delta-audit complete (NON-WIDENING; F-47-01/F-47-02 RESOLVED-AT-V48)
+Next: Phase 328 plan 2 of 4 — 328-02 SC2 ADVERSARIAL SWEEP (3-skill genuine-PARALLEL /contract-auditor + /zero-day-hunter + /economic-analyst; /degen-skeptic OUT) charged against the 7 surfaces + composition, skeptic-filtered before any elevation → 328-02-ADVERSARIAL-LOG.md. (Per the project memory steer: /clear first and run 328-02 INLINE for genuine-parallel sweep.) Then 328-03 FINDINGS-v48.0 deliverable (W2) + 328-04 closure flip (W3, autonomous:false USER gate). HERO-04 byte-reproduced finals ALREADY LANDED at the frozen subject 1575f4a9 (the audit subject IS the post-landing state; Hardhat PASS_ALL is 0-diff GREEN, forge stays 632/42). The 42-failure baseline carries forward (bucket A VRF/RNG 8 + bucket B stale-harness/v48-behavioral 34); re-syncing the stale fixtures is owned by a future fixture-repair plan.
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
 
@@ -647,3 +647,5 @@ Audit deliverables:
 - [Phase ?]: 327-05 (SWAP-08/09): no-arb proven EMPIRICALLY at the 110% jitter CEILING via previewSellFarFutureTickets, swept all d in [6,100]; d6 binding at 1650 bps (16.50% of face), margin +4.50pp; ceiling proven seed-reachable; BURNIE-can't-mint-far proven BEHAVIORALLY (ffi disabled); solvency claimablePool <= balance+stETH holds across the swap; ticket/ETH floors + len<=32 + swap-pop membership all green; 9/9 PASS commit 1a19fdbf; zero contracts/*.sol edits
 - [Phase 327]: 327-06: v48.0 clean regression baseline PROVEN — full forge tree 632 passed / 42 failed vs 326-08 594/42 + 38 NEW_PASSING; net new regression from the 5 wave-1 test files == 0; ledger test/REGRESSION-BASELINE-v48.md (208859e8)
 - [Phase 327]: 327-06: HERO byte-reproduce gate is Hardhat-only (15 passing / 1 failing PASS_ALL, 15/20 placeholders diverge); FOUNDRY HERO-deferred count = 0, so the constant landing flips the Hardhat stat gate 1->0 failing but leaves the forge count at 42; documented as the conditional post-landing delta, no contracts/*.sol edit applied
+- [Phase 328]: 328-01 SC1 delta-audit COMPLETE (commits ddc18b3a + d7d90064): all 12 v48 delta files (git diff da5c9d50..1575f4a9 -- contracts/, +611/-324) enumerated + all 7 surfaces (PFIX/RFALL/KEEP/POOL/BTOMB/HERO/SWAP) attested NON-WIDENING with re-grepped anchors @ 1575f4a9; keeper kill-set (crank/sweep/do-work) grep-ZERO in AfKing.sol + DegenerusGame.sol; hero-multiplier kill-set grep-ZERO in DegeneretteModule; composition matrix proves no orphan hunks; 632/42 regression NON-WIDENING (+38 NEW_PASSING/+0 net-new; HERO byte-reproduce Hardhat gate 15/20-diverge-RED -> 0-diff-GREEN at 1575f4a9); F-47-01 + F-47-02 RESOLVED-AT-V48 (skeptic-filtered); contracts/ byte-frozen
+- [Phase 328]: 328-01 reconciliation — AfKing.sol IS in the v48 delta (item-3 KEEP rename sweep->autoBuy/crankBets->autoResolve/crankBoxes->autoOpen + bytes32("DGNRS") affiliate wiring); the SPEC text "AfKing.sol UNCHANGED" is scoped to item-4 POOL ONLY (the withdraw/poolOf recovery-interface adds live in the consumer contracts sStonk + Vault, not AfKing's own logic)
