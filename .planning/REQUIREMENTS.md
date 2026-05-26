@@ -65,8 +65,8 @@
 - [ ] **SWAP-05**: Funding fail-closed from `claimableWinnings[SDGNRS]` leaving a **≥ 1 ETH floor** (`require(totalBudget <= claimableWinnings[SDGNRS] - 1 ether)`); NO `pendingRedemptionEthValue` term (claimable is already net of redemption backing — redemption desk protected STRUCTURALLY); NO daily cap; `claimableWinnings[SDGNRS]` debited **inline** (ledger lives on the game contract, no sDGNRS-side `fundFarFutureSwap` call).
 - [ ] **SWAP-06**: A fully-liquidated seller is removed from `ticketQueue[_tqFarFutureKey(level)]` via an O(1) caller-verified swap-pop (`q[idx]==player`, `queueIndices` only used when a line zeroes a level), MAINTAINING `membership ⟺ packed != 0` so the far-future jackpot samplers need NO change and gain NO hot-path read; **proven NOT to reproduce the `H-CANCEL-SWAP-MISS` operation class** and every `ticketQueue` consumer enumerated safe under swap-pop.
 - [ ] **SWAP-07**: VAULT self-call wrapper `gameSellFarFutureTickets onlyVaultOwner` added (`DegenerusVault.sol`); drone reaches the entrypoint via existing operator-approval (no `DegenerusDrone` change); satellite `DroneManager` (+1 typed `onlyChainOwner` pass-through) folded into its pending v47-interface re-sync (it still references v47-deleted `purchaseBurnieLootbox`/`openBurnieLootBox`); LOCKED OPEN-E operator-trust disposition confirmed to cover this first value-destructive operator-gated action.
-- [ ] **SWAP-08** *(load-bearing security attestation)*: No-arb proven at the jitter band **CEILING** — max full payout `110% × fractionBps(6) = 16.5% of face` @d6 < the cheapest far-entry acquisition (~21%, lootbox tier-1, **re-confirmed at the v47.0-closure HEAD**; margin ~4.5pp); BURNIE cannot mint a far-future entry (`purchaseCoin` has no level arg; mint always targets `cachedLevel`/`+1`; v47 removed the BURNIE-lootbox→future path); base `fractionBps` keeps ≥~10% margin below the far ticket's present EV so a 110%-day pawn doesn't overpay sDGNRS.
-- [ ] **SWAP-09**: Solvency-safe — `claimablePool ≤ ETH + stETH` never violated (ticket leg routes ETH into pools = gains slack; cash leg is a claimant-to-claimant relabel = neutral); array length bounded (≤ 32); a UI that labels the -EV trade (face value vs tickets + ETH received) ships with the feature (frontend track — flag, don't build here).
+- [x] **SWAP-08** *(load-bearing security attestation)*: No-arb proven at the jitter band **CEILING** — max full payout `110% × fractionBps(6) = 16.5% of face` @d6 < the cheapest far-entry acquisition (~21%, lootbox tier-1, **re-confirmed at the v47.0-closure HEAD**; margin ~4.5pp); BURNIE cannot mint a far-future entry (`purchaseCoin` has no level arg; mint always targets `cachedLevel`/`+1`; v47 removed the BURNIE-lootbox→future path); base `fractionBps` keeps ≥~10% margin below the far ticket's present EV so a 110%-day pawn doesn't overpay sDGNRS.
+- [x] **SWAP-09**: Solvency-safe — `claimablePool ≤ ETH + stETH` never violated (ticket leg routes ETH into pools = gains slack; cash leg is a claimant-to-claimant relabel = neutral); array length bounded (≤ 32); a UI that labels the -EV trade (face value vs tickets + ETH received) ships with the feature (frontend track — flag, don't build here).
 
 ### Cross-Cutting — SPEC Reconciliation + TERMINAL Audit (BATCH)
 
@@ -129,8 +129,8 @@ Which phases cover which requirements. Phase numbering continues from v47.0 (end
 | BTOMB-03 | Phase 327 (TST) | Complete |
 | HERO-04 | Phase 327 (TST) | Complete |
 | HERO-06 | Phase 327 (TST) | Complete |
-| SWAP-08 | Phase 327 (TST) | Pending |
-| SWAP-09 | Phase 327 (TST) | Pending |
+| SWAP-08 | Phase 327 (TST) | Complete |
+| SWAP-09 | Phase 327 (TST) | Complete |
 | BATCH-03 | Phase 328 (TERMINAL) | Pending |
 
 **Coverage:**

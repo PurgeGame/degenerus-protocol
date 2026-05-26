@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
 status: executing
-last_updated: "2026-05-26T09:33:49.423Z"
+last_updated: "2026-05-26T09:44:05.943Z"
 last_activity: 2026-05-26
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
   percent: 50
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 ## Current Position
 
 Phase: 327 (tst-repro-same-results-no-arb-ev-regression-proofs) — EXECUTING
-Plan: 5 of 6
-Status: Executing Phase 327 — 327-04 COMPLETE (HERO-04 + HERO-06 proven: canonical 10-bucket S∈{0..9} generator [derive_5_tables.py, S=A+2H, S=9==M=8 relabel pin, WWXRP B=6..9, per-N EV drift <0.0003 centi-x, bonus EV=5.000%] + PASS_ALL byte-reproduce gate [DegenerettePerNEvExactness.test.js: spawnSync regenerate, diff vs contract, RED-with-diff against the Phase-326 placeholders = EXPECTED in-scope no-contract outcome, 15/20 diverge + 5 S9 match] + DegeneretteBonusEv re-bucketed + DegeneretteHeroScore.t.sol 6 Foundry tests green [S=A+2H, S9 relabel, S8/S9 packing dispatch, DGNRS S>=7 thresholds, write-batch DGAS byte-identical, dailyHeroWagers/_rollHeroSymbol no-leak]; commits 39a706ca+c8e1fcf5+d4ec2e62; zero contracts/*.sol mutation. ⚠ HERO-04 contract-constant landing OPEN — ready-to-apply finals in 327-04-SUMMARY ## STOP)
-Last activity: 2026-05-26 -- 327-04 executed (HERO byte-reproduce gate RED-with-diff EXPECTED + DGAS/no-leak green; STOP handoff recorded; 3 commits, zero contracts/*.sol)
-Next: 327-05 SWAP remains in Wave 1, then Wave 2 327-06 full-suite regression gate (owns the cross-phase closure of the RED HERO-04 byte-reproduce gate + documents the expected post-landing failure-count delta). ⚠ HERO-04 STOP/handoff PENDING USER DECISION: the byte-reproduced Degenerette finals (15/20 constants: 5 packed + 5 _S8 + 5 WWXRP) must land in DegeneretteModule.sol = a contract edit forbidden in TST; ready-to-apply finals + placeholder→final diff in 327-04-SUMMARY.md.
+Plan: 6 of 6
+Status: Executing Phase 327 — Wave 1 COMPLETE (327-01..05). 327-05 SWAP executed: SWAP-08 + SWAP-09 proven EMPIRICALLY (test/fuzz/FarFutureSalvageSwap.t.sol, 9/9 PASS, commit 1a19fdbf, zero contracts/*.sol). No-arb HOLDS at the 110% jitter CEILING for ALL d in [6,100] — d6 binding at 1650 bps (16.50% of face), margin +4.50pp (no ## STOP); ceiling proven seed-reachable; BURNIE-can't-mint-far proven BEHAVIORALLY (ffi disabled); solvency claimablePool <= balance+stETH holds across the swap; ticket/ETH floors + len<=32 + swap-pop membership all green. The 325-ATTEST-SWAP paper proof is now EMPIRICAL.
+Last activity: 2026-05-26 -- 327-05 executed (SWAP-08/09 empirical no-arb-at-ceiling + solvency proofs; 1 commit, zero contracts/*.sol)
+Next: Wave 2 327-06 full-suite regression gate (the only remaining plan; owns the cross-phase closure of the RED HERO-04 byte-reproduce gate + documents the expected post-landing failure-count delta). ⚠ HERO-04 STOP/handoff PENDING USER DECISION: the byte-reproduced Degenerette finals (15/20 constants: 5 packed + 5 _S8 + 5 WWXRP) must land in DegeneretteModule.sol = a contract edit forbidden in TST; ready-to-apply finals + placeholder→final diff in 327-04-SUMMARY.md.
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
 
@@ -527,6 +527,7 @@ Audit deliverables:
 | Phase 325 P03 | ~5min | 2 tasks | 1 file (325-SPEC.md sections 0-3) + 1 SUMMARY |
 | Phase 327 P01 | 10min | 2 tasks | 1 files |
 | Phase 327 P03 | 22min | 2 tasks | 1 files |
+| Phase 327 P05 | 22min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -642,3 +643,4 @@ Audit deliverables:
 - [Phase 327]: 327-01: PFIX-03 tier shape preserved EXACTLY (tier-1 DGNRS-per-ETH == 3x tier-5) + transferFromPool clamp holds when a 5-ETH early-DGNRS run empties the pool before the closing box (closing open no-revert, sweep <=1 wei, no over-draw); hybrid harness = real game.buyPresaleBox->openPresaleBox with credit/VRF-word/small-pool seeded via vm.store
 - [Phase 327]: 327-04: payout SHAPE over S in {2..8}=[190,475,1500,4250,19500,100000,5_000_000]; S=9 PINNED to the M=8 relabel; S=8+S=9 separate uint256s; WWXRP B=6..9 (B=6 low 64-bit); per-N basePayoutEV drift <0.0003 centi-x; ETH bonus EV=5.000% per N
 - [Phase 327]: 327-04: PASS_ALL byte-reproduce gate regenerates from derive_5_tables.py (spawnSync status-checked, never hand-typed), diffs vs contract source; RED-with-diff against Phase-326 placeholders (15/20 diverge, 5 S9 match) is the EXPECTED in-scope no-contract-phase outcome; HERO-04 contract-constant landing (ready-to-apply finals in 327-04-SUMMARY ## STOP) needs hand-review CONTRACTS_COMMIT_APPROVED; cross-phase closure owned by 327-06
+- [Phase ?]: 327-05 (SWAP-08/09): no-arb proven EMPIRICALLY at the 110% jitter CEILING via previewSellFarFutureTickets, swept all d in [6,100]; d6 binding at 1650 bps (16.50% of face), margin +4.50pp; ceiling proven seed-reachable; BURNIE-can't-mint-far proven BEHAVIORALLY (ffi disabled); solvency claimablePool <= balance+stETH holds across the swap; ticket/ETH floors + len<=32 + swap-pop membership all green; 9/9 PASS commit 1a19fdbf; zero contracts/*.sol edits
