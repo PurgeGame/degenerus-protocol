@@ -51,7 +51,10 @@
   2. The shared signatures are settled in writing so no downstream file ships an intermediate broken state: the `advanceGame` return shape (design 1 — `advanceGame` returns `(uint8 mult, bool rewardable)` so the stall math stays single-source-of-truth in `AdvanceModule` and the router never recomputes it, covering BOTH the new-day advance AND the mid-day partial-drain site `AdvanceModule.sol:225` per ADV-05), the `doWork(maxCount)` signature + its no-work signal (ROUTER-06, consistent with the existing no-buy anti-spam revert; exact form decided here), and the O(1) discovery views (`advanceDue()` covering both new-day `currentDayView() != dailyIdx` AND partial-drain `day == dailyIdx but tickets-not-fully-processed`, `boxesPending()`, buys-pending via AfKing-local cursor reads — no unbounded scans, ROUTER-04).
   3. The ROUTER-07 reentrancy disposition is decided and recorded (OPEN-C): a `nonReentrant` guard on `doWork` (the default per the security floor — cheap insurance against the new multi-boundary router→game→`creditFlip` composition surface) OR a proven composed-CEI argument; the v48 KEEP-04 VAULT registered-affiliate-code wiring is confirmed valid at v49 HEAD so the `autoBuy` affiliate-code passthrough survives the `_autoBuy` internal refactor (ROUTER-05).
   4. Every cited `file:line` across the SUMMARY + the milestone scope is grep-verified against the v48.0-closure HEAD `0cc5d10f` and any drift is corrected in the SPEC (no "by construction" survives un-checked) — including the 3 advance-bounty `creditFlip` sites `AdvanceModule.sol:189/225/468` to be deleted (ADV-01), `ADVANCE_BOUNTY_ETH = 0.005 ether` `:147`, the stall ladder `:238-255`, `AfKing.sol` `BOUNTY_ETH_TARGET` + `creditFlip` `:846` + cursor + the CEI invariant `:99-106`, and the `DegenerusGame.sol` `advanceGame` wrapper `:275` + the gas-peg constants `:1539-1546` — confirming the producer-before-consumer edit-order map for IMPL.
-**Plans**: TBD
+**Plans**: 3 plans (2 waves)
+- [ ] 329-01-PLAN.md — ATTEST the router + advance surface (AfKing CEI/cursor/bounty/epoch + AdvanceModule 3 creditFlip sites/stall/totalFlipReversals/30-min-bypass/death-clock + DegenerusGame wrapper/views + GASOPT-01/02) incl. the per-leg no-untrusted-ETH-send (D-01a/ROUTER-07), the dual-epoch (D-03/GAS-03), the totalFlipReversals freeze (ADV-04), and the invariant-(c) fallback callers (D-04) → `329-ATTEST-ROUTER-ADVANCE.md` [Wave 1]
+- [ ] 329-02-PLAN.md — ATTEST the D-05 `autoResolve`→`degeneretteResolve` rename + flat ~1-BURNIE re-peg: rename surface (D-05a), the D-05f losing-bet-liveness grep-verification (load-bearing), the D-05c real-gas exploitability basis, the D-05b flat-shape/≥3-gate feasibility, and the architectural router-non-foldability → `329-ATTEST-DEGENERETTE-RESOLVE.md` [Wave 1]
+- [ ] 329-03-PLAN.md — Reconcile into `329-SPEC.md`: §0 attestation roll-up / §1 settled shared signatures (advanceGame return / doWork+NoWork / O(1) discovery views) / §2 the 4 structural invariants + the ROUTER-07/GAS-03 dispositions + the D-05 design-lock / §3 per-item IMPL blueprint + producer-before-consumer edit-order map [Wave 2, depends on 329-01 + 329-02]
 **UI hint**: no
 
 ### Phase 330: IMPL — The ONE Batched Contract Diff (router + advance-rework + micro-opts)
@@ -94,7 +97,7 @@
 **UI hint**: no
 
 ### Phase 333: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure
-**Goal**: The v49.0 audit subject (the single batched diff — the router + advance-rework + the GAS-calibrated peg + the micro-opts, FROZEN at the IMPL/GAS HEAD) is delta-audited NON-WIDENING against the v48.0 baseline `0cc5d10f`, swept by the 3-skill genuine-PARALLEL adversarial pass charged against the highest-risk advance-timing MEV + composed-reentrancy + faucet-drain surfaces, consolidated into `audit/FINDINGS-v49.0.md`, and the milestone is closed with the `MILESTONE_V49_AT_HEAD_<sha>` signal and the atomic ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS flip — re-attesting all 29 v49.0 requirements.
+**Goal**: The v49.0 audit subject (the single batched diff — the router + advance-rework + the GAS-calibrated peg + the micro-opts, FROZEN at the IMPL/GAS HEAD) is delta-audited NON-WIDENING against the v48.0 baseline `0cc5d10f`, swept by the 3-skill genuine-PARALLEL adversarial pass charged against the highest-risk advance-timing MEV + composed-reentrancy + faucet-drain surfaces, consolidated into `audit/FINDINGS-v49.0.md`, and the milestone is closed with the `MILESTONE_V49_AT_HEAD_<sha>` signal and the atomic ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS flip — re-attesting all 31 v49.0 requirements.
 **Depends on**: Phase 332 (the audit subject must be implemented + GAS-calibrated + test-proven before the terminal delta-audit + sweep)
 **Requirements**: SWEEP-01, SWEEP-02, SWEEP-03, BATCH-03
 **Success Criteria** (what must be TRUE):
@@ -113,7 +116,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 329. SPEC — Design-Lock + 4 Structural Invariants | v49.0 | 0/TBD | Not started | - |
+| 329. SPEC — Design-Lock + 4 Structural Invariants | v49.0 | 0/3 | Planned | - |
 | 330. IMPL — The ONE Batched Contract Diff | v49.0 | 0/TBD | Not started | - |
 | 331. GAS — Worst-Case Marginal + Break-Even Peg | v49.0 | 0/TBD | Not started | - |
 | 332. TST — Freeze Fuzz + One-Category + Regression | v49.0 | 0/TBD | Not started | - |
@@ -195,3 +198,5 @@ Full per-phase detail for v44.0 (304-308), v45.0 (309-314), v46.0 (316-320), and
 ---
 *Roadmap created: 2026-05-25 (v48.0)*
 *v49.0 milestone added: 2026-05-26 (5 phases 329-333, SPEC→IMPL→GAS→TST→TERMINAL; 29 reqs / 7 categories; GAS-06 + TST-05 added at the Phase 329 discussion for the `autoResolve`→`degeneretteResolve` rename + flat ~1-BURNIE "lose" re-peg → 31 reqs)*
+*Phase 329 planned: 2026-05-26 (3 plans / 2 waves — W1 329-01 ATTEST router+advance ∥ 329-02 ATTEST degeneretteResolve, W2 329-03 reconcile → 329-SPEC.md; all doc-only, zero contracts/*.sol)*
+</content>
