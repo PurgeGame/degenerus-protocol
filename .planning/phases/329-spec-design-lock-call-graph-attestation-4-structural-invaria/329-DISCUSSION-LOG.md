@@ -5,7 +5,7 @@
 
 **Date:** 2026-05-26
 **Phase:** 329-spec-design-lock-call-graph-attestation-4-structural-invaria
-**Areas discussed:** ROUTER-07 reentrancy, ROUTER-06 no-work signal, GAS-03 day-start epoch, Invariant-(c) free-fallback caller, NEW autoResolve sub-gas re-peg
+**Areas discussed:** ROUTER-07 reentrancy, ROUTER-06 no-work signal, GAS-03 day-start epoch, Invariant-(c) free-fallback caller, NEW autoResolve→degeneretteResolve rename + flat ~1-BURNIE re-peg
 
 ---
 
@@ -61,7 +61,7 @@
 
 ---
 
-## NEW — autoResolve sub-gas "lose" re-peg (mid-discussion user request)
+## NEW — autoResolve → degeneretteResolve rename + flat ~1-BURNIE "lose" re-peg (mid-discussion user request)
 
 > User asked to "make the degenerette resolver pay 1 burnie per tx flat if you resolve 5+ rolls
 > (or something like that)… a 'lose'… swap into the same button as the main auto-work button…
@@ -73,8 +73,16 @@
 | Re-peg autoResolve to a sub-gas "lose" — keep it separate | Recalibrate the bounty to a sub-gas flat-per-tx lose; no router change; "one button" via frontend. | ✓ |
 | Fold into doWork on-chain — extend the signature | doWork(maxCount, players[], betIds[]); reverses ROUTER-05; expands all 5 phases. | |
 
-**User's choice:** Re-peg autoResolve to a sub-gas "lose" — keep it separate.
-**Notes:** Surfaced two obstacles to the on-chain "same button": (1) autoResolve needs caller-supplied `(players[], betIds[])` — no O(1) discovery, can't join doWork without an unbounded scan (ROUTER-04 violation) — almost certainly why it was excluded; (2) a literal "1 BURNIE" drifts, so peg ETH-equivalent. Anti-exploit proof: flat reward pegged STRICTLY below the gas to resolve the ≥5 gate-minimum → every qualifying tx net-negative, splitting only multiplies the loss → no positive EV anywhere. WWXRP stays excluded (gate counts non-WWXRP). Registered as GAS-06 (Phase 331) + TST-05 (Phase 332); code rides BATCH-02 (Phase 330); ROUTER-05 reworded. SPEC (D-05d) must verify no invariant requires losing-bet resolution before dropping the break-even incentive. (D-05.)
+**User's choice:** Re-peg — keep it separate. **Then refined across 3 follow-ups** → rename + literal ~1 BURNIE + ≥3 gate (final).
+**Notes:** Surfaced two obstacles to the on-chain "same button": (1) it needs caller-supplied `(players[], betIds[])` — no O(1) discovery, can't join doWork without an unbounded scan (ROUTER-04 violation) — almost certainly why it was excluded; (2) the unified button is a frontend concern.
+
+**Follow-up 1 — rename:** USER asked to rename `autoResolve`→`degeneretteResolve` (+ `_degeneretteResolveBet`, interfaces, tests) and "pay 1 burnie in flip credit no matter how much work (or revert on no work)." Adopted the rename + flat-per-tx + revert-on-no-work shape.
+
+**Follow-up 2 — Claude's gas-claim error + USER correction:** Claude initially claimed a literal 1 BURNIE becomes a profitable single-bet farm from ~level 10 (mintPrice ≥ 0.04 ETH). USER: *"I'm highly skeptical of these gas claims for a real tx"* + *"there's gas for the first tx too."* USER was RIGHT — Claude had compared 1 BURNIE against the 0.5-gwei *pegging reference* (`AUTO_GAS_PRICE_REF`, a deliberately below-market accounting figure), not the REAL gas a keeper pays. Corrected basis: keeper pays REAL tx gas (typically 5–50+ gwei) every call while ~1 BURNIE illiquid flip-credit is ≤ `mintPrice/1000` ETH (≤0.00024 ETH) → far below real cost → a genuine "lose," not farmable at any realistic gas price.
+
+**Follow-up 3 — ≥3 gate:** USER: *"make it do at least 3 resolutions to pay the burnie?"* Adopted — pay 1 BURNIE iff ≥3 non-WWXRP resolved (revert on 0; 1–2 resolved → unpaid, lean=do-not-revert to avoid stranding a tail), widening the loss margin further.
+
+**FINAL (D-05):** rename `autoResolve`→`degeneretteResolve`; flat literal ~1 BURNIE flip-credit per tx (count-independent) gated at ≥3 non-WWXRP resolutions; revert `NoWork()` on zero; WWXRP excluded from the count; AUTO-02 probe + per-item isolation + self-resolve preserved; KEPT SEPARATE (router-fold OUT). Registered GAS-06 (Phase 331, incl. a non-blocking real-gas sanity check on the constant) + TST-05 (Phase 332); rename + bounty code rides BATCH-02 (Phase 330); ROUTER-05 reworded. SPEC (D-05f) must verify no invariant requires losing-bet resolution before dropping the break-even incentive.
 
 ---
 

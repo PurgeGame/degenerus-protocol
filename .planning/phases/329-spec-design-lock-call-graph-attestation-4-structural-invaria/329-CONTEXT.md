@@ -103,46 +103,65 @@ shared-signature reconciliation only. Security / RNG-freeze floor over gas
   - **TERTIARY (failsafe):** the ~120-day death-clock (`AdvanceModule.sol:109` L1+ 120-day; extends
     by stall duration `:1198`) latches gameOver if the game is truly abandoned.
 
-### NEW — autoResolve sub-gas "lose" re-peg (DISCUSSED — user 2026-05-26; scope addition)
-- **D-05: Re-peg `autoResolve`'s bounty from per-item break-even to a deliberately sub-gas,
-  flat-per-tx "lose" — KEEP it a separate call (NOT folded into the router).** `autoResolve`
-  (`DegenerusGame.sol:1587`) already is a permissionless, faucet-safe keeper bounty (per-item
-  break-even `_ethToBurnieValue(AUTO_RESOLVE_BET_GAS_UNITS * AUTO_GAS_PRICE_REF, …)`, WWXRP
-  excluded AUTO-04, self-resolve allowed REW-04, AUTO-02 probe, per-item try/catch). It is NOT
-  foldable into `doWork` on-chain: pending bets live in `degeneretteBets[player][betId]` with NO
-  O(1) enumeration — `autoResolve` requires caller-supplied `(players[], betIds[])` from off-chain
-  indexing; enumerating on-chain = unbounded scan = violates ROUTER-04. The unified "one button"
-  is therefore a FRONTEND concern (the keeper UI, separate track, already indexes the arrays and
-  can fire `doWork()` + `autoResolve(...)` together) — NO router/signature change.
-- **D-05a (the anti-exploit calibration invariant — the "never remotely exploitable" proof):** the
-  flat-per-tx reward MUST be pegged strictly **below the gas cost to resolve the gate-minimum**
-  (≥5 resolutions). Then EVERY qualifying tx is net-negative for the keeper → no positive EV at
-  any batch size, and SPLITTING into many small qualifying txs only multiplies the loss (more gas,
-  same sub-gas per-tx reward) → no farming vector. Pegged as an ETH-equivalent via the existing
-  `_ethToBurnieValue` so it stays sub-gas AND level-invariant (NOT a literal token count, which
-  would drift into exploitable-or-dust). This is the CR-01-class rule inverted: peg below the
-  loop-minimum gas, not at a per-item total.
-- **D-05b (preserve the existing invariants):** WWXRP (currency==3) stays excluded — the ≥5 gate
-  counts only NON-WWXRP resolutions (and WWXRP still earns zero), so a WWXRP-only batch can't trip
-  the gate (AUTO-04 intent preserved). AUTO-02 probe, per-item try/catch isolation, and
-  self-resolve-allowed (REW-04 — even safer now that it's sub-gas) all unchanged.
-- **D-05c (exact constants are TO-CALIBRATE — "or something like that"):** the flat amount + the
-  gate threshold (5 vs other) are NOT locked here; they are SPEC/GAS placeholders calibrated at
-  Phase 331 against the measured `AUTO_RESOLVE_BET_GAS_UNITS` worst case (the break-even-peg
-  treatment, but targeting strictly sub-gas).
-- **D-05d (liveness nuance the SPEC author MUST verify):** dropping the keeper incentive from
-  break-even to sub-gas removes the rational-keeper incentive to resolve LOSING bets (winning bets
-  are still self-resolved by owners claiming winnings; the resolver bounty + winnings both apply).
-  Before locking this, the SPEC author MUST grep-verify whether the protocol REQUIRES losing
-  Degenerette bets to be resolved for ANY invariant/accounting/RNG-slot/cleanup reason. If losing
-  bets are purely inert cruft → sub-gas is safe. If unresolved losing bets create a backlog or
-  break an invariant → surface to USER before proceeding (do NOT silently starve a needed path).
-- **D-05e (scope):** this is a NEW v49.0 item — registered as **GAS-06** (re-peg calibration,
-  Phase 331) + **TST-05** (prove flat-not-per-item / ≥5-gate / sub-gas-no-positive-EV-at-any-N /
-  WWXRP-excluded / same resolution results, Phase 332); the `autoResolve` bounty-logic code change
-  rides the ONE batched diff (BATCH-02, Phase 330). ROUTER-05's "keeps its own in-game bounty
-  unchanged" is amended to "…RE-PEGGED per GAS-06 (still a separate call)." `autoResolve` stays
-  out of the router.
+### autoResolve → degeneretteResolve rename + flat ~1-BURNIE "lose" re-peg (DISCUSSED — user 2026-05-26; scope addition)
+- **D-05: Rename `autoResolve` → `degeneretteResolve` and re-peg its bounty from per-item
+  break-even to a flat literal ~1 BURNIE flip-credit per tx (regardless of how many bets resolve),
+  gated at ≥3 successfully-resolved NON-WWXRP bets — KEEP it a separate call (NOT folded into the
+  router).** `autoResolve` (`DegenerusGame.sol:1587`) already is a permissionless, faucet-safe
+  keeper bounty (per-item break-even `_ethToBurnieValue(AUTO_RESOLVE_BET_GAS_UNITS *
+  AUTO_GAS_PRICE_REF, …)`, WWXRP excluded AUTO-04, self-resolve allowed REW-04, AUTO-02 probe,
+  per-item try/catch). It is NOT foldable into `doWork` on-chain: pending bets live in
+  `degeneretteBets[player][betId]` with NO O(1) enumeration — it requires caller-supplied
+  `(players[], betIds[])` from off-chain indexing; enumerating on-chain = unbounded scan = violates
+  ROUTER-04. The unified "one button" is therefore a FRONTEND concern (the keeper UI, separate
+  track, already indexes the arrays and can fire `doWork()` + `degeneretteResolve(...)` together) —
+  NO router/signature change.
+- **D-05a (rename surface):** rename the external `autoResolve` → `degeneretteResolve` + the
+  `onlySelf` internal wrapper `_autoResolveBet` (`:1684`) → `_degeneretteResolveBet`, plus the
+  `IDegenerusGame`/`IDegenerusGameModules` signatures and any callers/tests. It deliberately leaves
+  the `auto*` family — it is no longer a gas-pegged router/keeper action; it is a distinct
+  flat-"lose" Degenerette-resolution helper. (Mechanical rename rides BATCH-02.)
+- **D-05b (payment shape + gate):** pay a flat literal ~1 BURNIE (1e18) flip-credit ONCE per tx
+  (NOT per-item, count-independent) IFF ≥3 NON-WWXRP bets resolve successfully in the call; revert
+  `NoWork()` when ZERO bets resolve (the user's revert-on-no-work). **Lean for the 1–2-resolved
+  case: still resolve them, pay 0 (below the ≥3 pay-gate) — do NOT revert below 3, so a legit
+  trailing 1–2-bet tail is never stranded/un-resolved (revert would roll back the resolutions).**
+  The revert-vs-unpaid boundary at 1–2 is a SPEC/IMPL detail to confirm (lean = resolve-always,
+  pay-at-≥3, revert-only-at-0).
+- **D-05c (the "never remotely exploitable" basis — CORRECTED):** an earlier draft wrongly compared
+  1 BURNIE against the 0.5-gwei *pegging reference* (`AUTO_GAS_PRICE_REF`, a deliberately
+  below-market accounting figure) as if it were real gas — USER correctly pushed back. The real
+  basis: the keeper pays REAL tx gas (base 21k + ≥3 resolutions + overhead) on every call at the
+  PREVAILING gas price (typically 5–50+ gwei), while 1 BURNIE flip-credit is worth at most
+  `mintPrice/1000` ETH by the protocol's own (generous) peg (≤ 0.00024 ETH even at the 0.24-ETH
+  milestone price) AND is illiquid (locked in coinflip → real extractable value is a fraction). So
+  1 BURNIE sits far below the real cost of even the 3-resolution minimum → every qualifying tx is a
+  net loss → no positive-EV farm. The ≥3 gate only widens the margin. The only theoretical
+  positive corner — {late game (mintPrice 0.24) ∧ gas < ~3.6 gwei ∧ flip-credit fully extractable
+  at the peg} — is gated by an almost-certainly-false illiquidity assumption.
+- **D-05d (WWXRP + existing invariants preserved):** WWXRP (currency==3) stays excluded — the ≥3
+  count is NON-WWXRP only (WWXRP still earns zero and does NOT count toward the gate), so a
+  WWXRP-only batch can't trip it (AUTO-04 intent). AUTO-02 probe (item-0 already-resolved →
+  `BatchAlreadyTaken`), per-item try/catch isolation, and self-resolve-allowed (REW-04 — even safer
+  now that the reward is a flat "lose") all unchanged.
+- **D-05e (GAS-06 sanity check — NOT a blocker):** at Phase 331, confirm the literal ~1 BURNIE
+  stays below the REAL gas of a 3-resolution tx across the plausible gas-band — specifically the
+  low-gas/high-mintPrice corner — factoring flip-credit illiquidity; only lower the constant or add
+  a scaled gate if a *realistic* corner actually flips positive-EV. (The exact constant is soft —
+  "1 burnie or something like that" — confirmed-sub-real-gas at GAS.)
+- **D-05f (liveness nuance the SPEC author MUST verify):** a flat "lose" removes the rational-keeper
+  incentive to resolve LOSING bets (winning bets are still self-resolved by owners claiming
+  winnings). The SPEC author MUST grep-verify whether the protocol REQUIRES losing Degenerette bets
+  to be resolved for ANY invariant/accounting/RNG-slot/cleanup reason. If inert cruft → safe; if a
+  backlog/invariant risk → surface to USER (do NOT silently starve a needed path). NOTE: a flat
+  count-independent reward actually NUDGES clearing the whole backlog in one tx (max work per paid
+  tx), which helps backlog liveness.
+- **D-05g (scope):** NEW v49.0 item — registered as **GAS-06** (rename + flat-~1-BURNIE re-peg +
+  ≥3 gate + the real-gas sanity check, Phase 331) + **TST-05** (prove rename + flat-not-per-item +
+  ≥3 pay-gate + revert-on-no-work + WWXRP-excluded-from-count + same resolution results, Phase
+  332); the bounty-logic + rename code change rides the ONE batched diff (BATCH-02, Phase 330).
+  ROUTER-05's "keeps its own in-game bounty unchanged" is amended to "…RENAMED + RE-PEGGED per
+  GAS-06 (still a separate call)." `degeneretteResolve` stays out of the router.
 
 ### Claude's Discretion — pure attestations resolved by reading source (NOT user decisions)
 The SPEC author resolves these from the live `contracts/` + grep against `0cc5d10f`; they were

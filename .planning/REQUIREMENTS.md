@@ -14,7 +14,7 @@
 - [ ] **ROUTER-02**: `doWork` routes by priority — advance-leg (new-day advance OR mid-day partial-drain ticket processing) → `autoOpen` → `autoBuy`.
 - [ ] **ROUTER-03**: The one-rewarded-category-per-call rule is enforced as a STRUCTURAL early-return (advance/open/buy bounties can never stack in one tx).
 - [ ] **ROUTER-04**: `doWork` uses O(1) on-chain work-discovery predicates (advance-due incl. mid-day partial-drain / boxes-pending / buys-pending) — no unbounded scans.
-- [ ] **ROUTER-05**: `autoBuy` is refactored to an internal `_autoBuy` call (no new cross-contract money edge); `autoResolve` is excluded from the router and stays a SEPARATE call — its own in-game bounty is RE-PEGGED per GAS-06 (the router-fold itself is architecturally blocked by `autoResolve`'s caller-supplied `(players[], betIds[])` requirement, which has no O(1) on-chain discovery).
+- [ ] **ROUTER-05**: `autoBuy` is refactored to an internal `_autoBuy` call (no new cross-contract money edge); `autoResolve` is excluded from the router and stays a SEPARATE call — it is RENAMED to `degeneretteResolve` + its bounty RE-PEGGED per GAS-06 (the router-fold itself is architecturally blocked by the caller-supplied `(players[], betIds[])` requirement, which has no O(1) on-chain discovery).
 - [ ] **ROUTER-06**: `doWork` signals "no work done" cleanly (consistent with the existing no-buy anti-spam revert; exact form decided at SPEC), and never pays a bounty for no work.
 - [ ] **ROUTER-07**: The router's reentrancy disposition is decided at SPEC (guard vs proven composed-CEI), defaulting to a guard per the security floor.
 
@@ -31,7 +31,7 @@
 - [ ] **GAS-03**: The stall multiplier uses a single unified day-start epoch (collapsing the differing `AfKing` `today*1days+82620` vs `AdvanceModule` `(day-1+DEPLOY_DAY_BOUNDARY)*1days+82620` epochs).
 - [ ] **GAS-04**: The stall multiplier (1/2/4/6) is kept; any ceiling extension for extreme stalls is added ABOVE the 2h tier (never lowering existing thresholds) and is capped against the finite faucet pool.
 - [ ] **GAS-05**: A WR-01-style round-trip guard proves no positive-EV self-crank loop under the unified router (faucet bound holds; self-exclude + ETH-work-gate intact).
-- [ ] **GAS-06**: `autoResolve`'s bounty is re-pegged from per-item break-even to a deliberately SUB-GAS, flat-per-tx "lose" — gated at ≥5 successfully-resolved NON-WWXRP bets, paid as ONE `creditFlip`, pegged ETH-equivalent (level-invariant) STRICTLY BELOW the gas to resolve the gate-minimum so every qualifying tx is net-negative (no positive EV at any batch size or under tx-splitting — the "never remotely exploitable" proof). WWXRP stays excluded (AUTO-04 — the ≥5 gate counts only non-WWXRP); AUTO-02 probe + per-item try/catch isolation + self-resolve-allowed (REW-04) preserved; `autoResolve` kept a SEPARATE call (NOT in the router). Exact flat amount + gate threshold are TO-CALIBRATE here against the measured `AUTO_RESOLVE_BET_GAS_UNITS` worst case. (SPEC D-05d: verify losing-bet resolution is not required by any invariant before dropping the break-even incentive.)
+- [ ] **GAS-06**: `autoResolve` is RENAMED to `degeneretteResolve` (+ internal `_autoResolveBet`→`_degeneretteResolveBet`, interfaces, tests) and its bounty re-pegged from per-item break-even to a flat literal ~1 BURNIE flip-credit per tx (count-independent), gated at ≥3 successfully-resolved NON-WWXRP bets (revert `NoWork()` on zero work; the 1–2-resolved case → resolved but UNPAID, lean = do-not-revert so a trailing tail is never stranded — SPEC/IMPL confirms). Anti-exploit basis (corrected — NOT the 0.5-gwei peg ref): the keeper pays REAL tx gas (base + ≥3 resolutions + overhead) every call while ~1 BURNIE illiquid flip-credit is worth ≤ `mintPrice/1000` ETH (≤0.00024 ETH even at the 0.24-ETH milestone price) → every qualifying tx is a net loss at any realistic gas price → no positive-EV farm; the ≥3 gate widens the margin. WWXRP stays excluded (AUTO-04 — the ≥3 count is non-WWXRP only); AUTO-02 probe + per-item isolation + self-resolve (REW-04) preserved; kept a SEPARATE call (NOT in the router). GAS sanity check (NOT a blocker): confirm ~1 BURNIE stays below real 3-resolution gas across the low-gas/high-mintPrice corner factoring flip-credit illiquidity; only lower the constant or add a scaled gate if a realistic corner flips positive. (SPEC D-05f: verify losing-bet resolution is not required by any invariant before dropping the break-even incentive.)
 
 ### No-Cost Gas Micro-Optimizations (GASOPT)
 - [ ] **GASOPT-01**: `DegenerusGameMintModule.sol` hoists `mapping(address=>uint40) storage owedMap = ticketsOwedPacked[rk]` in both `processTicketBatch` (`:671`) and the resolve/future loop (`:398`) — `rk` is loop-invariant; behavior-identical.
@@ -42,7 +42,7 @@
 - [ ] **TST-02**: A one-rewarded-category-per-tx assertion (no bounty-stacking) + a router→game→`creditFlip` reentrancy double-pay regression.
 - [ ] **TST-03**: `advanceGame` is unrewarded standalone but rewarded via the router; the GASOPT micro-opts are proven same-results (gas-only).
 - [ ] **TST-04**: Full-suite regression is NON-WIDENING vs the v48.0 baseline (net-zero new regression; enumerated-red-set guard).
-- [ ] **TST-05**: The `autoResolve` re-peg (GAS-06) is proven — flat-per-tx (NOT per-item), the ≥5-resolution gate, sub-gas no-positive-EV at any N and under tx-splitting, WWXRP still excluded from both the gate and the reward, and byte-identical resolution RESULTS vs the per-item path (bounty-shape change only, no payout/RNG change).
+- [ ] **TST-05**: The `degeneretteResolve` rename + re-peg (GAS-06) is proven — flat literal ~1 BURNIE per tx (NOT per-item), the ≥3-resolution pay-gate, revert-on-no-work (zero resolved), WWXRP excluded from BOTH the gate count and the reward, and byte-identical resolution RESULTS vs the per-item path (rename + bounty-shape change only, no payout/RNG change).
 
 ### Gas + Adversarial Security Sweep (SWEEP)
 - [ ] **SWEEP-01**: A 3-skill adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) is run against the frozen v49 subject, charged with: advance-timing MEV / same-tx bundling of advance-consume + buy/open, composed reentrancy (router→game→creditFlip), faucet-drain re-attestation on the unified surface, bounty-stacking, stall-multiplier abuse, and the unrewarded-advance liveness backstop. Every elevation passes the skeptic dual-gate.
@@ -58,7 +58,7 @@
 
 ## Out of Scope (v49.0)
 
-- **`autoResolve` FOLDED INTO the on-chain router** — the router-fold is out (architecturally blocked: `autoResolve` needs caller-supplied `(players[], betIds[])`, no O(1) discovery; router = buy/open/advance only; the unified "one button" is a frontend concern). NOTE: `autoResolve`'s bounty RE-PEG to a sub-gas "lose" IS in scope (GAS-06 + TST-05) — only the router-fold is excluded.
+- **`autoResolve`/`degeneretteResolve` FOLDED INTO the on-chain router** — the router-fold is out (architecturally blocked: it needs caller-supplied `(players[], betIds[])`, no O(1) discovery; router = buy/open/advance only; the unified "one button" is a frontend concern). NOTE: the rename `autoResolve`→`degeneretteResolve` + the flat ~1-BURNIE "lose" re-peg (≥3-gate) ARE in scope (GAS-06 + TST-05) — only the router-fold is excluded.
 - **Gas opts that trade an invariant** — the `Sub` memory-snapshot/write-back-at-end pattern (breaks the guard-less CEI + loses early-`continue` writes + collides with swap-pop), and the `batchPurchase` "trusted-batch" try/catch bypass (the per-slice try/catch IS the keeper isolation invariant). REJECTED in the 2026-05-26 scavenger review.
 - **`1 ether - decayN` unchecked** — DEFERRED pending a `_wadPow ≤ WAD including rounding` proof (catastrophic underflow if it can round above WAD); revisit only if proven free.
 - **SWAP cash-share ≤40% tighten** — the v48 advisory; USER accepted ≤60% as canonical. Revisit only if explicitly requested.
@@ -78,7 +78,7 @@
 
 ## Traceability
 
-**31/31 v49.0 requirements mapped to exactly one phase across 329–333 — 0 orphaned, 0 duplicated.** Phases: 329 SPEC · 330 IMPL · 331 GAS · 332 TST · 333 TERMINAL. Center-of-gravity assignment (design-at-SPEC / build-at-IMPL / calibrate-at-GAS / prove-at-TST / sweep+attest-at-TERMINAL); the TERMINAL closure (BATCH-03 + SWEEP-01/02/03) re-attests the full set. (29 at roadmap creation + GAS-06/TST-05 added 2026-05-26 for the `autoResolve` sub-gas re-peg.)
+**31/31 v49.0 requirements mapped to exactly one phase across 329–333 — 0 orphaned, 0 duplicated.** Phases: 329 SPEC · 330 IMPL · 331 GAS · 332 TST · 333 TERMINAL. Center-of-gravity assignment (design-at-SPEC / build-at-IMPL / calibrate-at-GAS / prove-at-TST / sweep+attest-at-TERMINAL); the TERMINAL closure (BATCH-03 + SWEEP-01/02/03) re-attests the full set. (29 at roadmap creation + GAS-06/TST-05 added 2026-05-26 for the `autoResolve`→`degeneretteResolve` rename + flat ~1-BURNIE re-peg.)
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -118,4 +118,4 @@
 
 **Note:** milestone-wide "uncovered" warnings (§13e-style) are EXPECTED false alarms — each phase owns only its slice; SWEEP-01/02/03 + BATCH-03 re-attest the full 31-requirement set at TERMINAL (same class as the v47/v48 roadmaps).
 
-*Last updated: 2026-05-26 — v49.0 traceability filled at roadmap creation (29 reqs / 7 categories: ROUTER 7 · ADV 5 · GAS 5 · GASOPT 2 · TST 4 · SWEEP 3 · BATCH 3 → phases 329–333), then GAS-06 + TST-05 added (Phase 329 discussion, 2026-05-26) for the `autoResolve` sub-gas-"lose" bounty re-peg → 31 reqs (GAS 6 · TST 5). Statuses flip to Complete as phases close; all 31 re-attested at the Phase 333 closure.*
+*Last updated: 2026-05-26 — v49.0 traceability filled at roadmap creation (29 reqs / 7 categories: ROUTER 7 · ADV 5 · GAS 5 · GASOPT 2 · TST 4 · SWEEP 3 · BATCH 3 → phases 329–333), then GAS-06 + TST-05 added (Phase 329 discussion, 2026-05-26) for the `autoResolve`→`degeneretteResolve` rename + flat ~1-BURNIE "lose" bounty re-peg (≥3-gate) → 31 reqs (GAS 6 · TST 5). Statuses flip to Complete as phases close; all 31 re-attested at the Phase 333 closure.*
