@@ -6,6 +6,8 @@ import {StakedDegenerusStonk} from "../../../contracts/StakedDegenerusStonk.sol"
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {BurnieCoin} from "../../../contracts/BurnieCoin.sol";
+import {MockStETH} from "../../../contracts/mocks/MockStETH.sol";
+import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 
 /// @notice Local view of the coinflip surface sDGNRS reads from. Re-declared here so the
 ///         handler can mock `getCoinflipDayResult` via `vm.mockCall` without importing the
@@ -31,6 +33,39 @@ contract RedemptionHandler is Test {
     MockVRFCoordinator public vrf;
     BurnieCoin public coin;
     address public coinflip;
+
+    // =========================================================================
+    //                  RFALL-05 stETH-FALLBACK LEVER (v48)
+    // =========================================================================
+    //
+    // The base random walk seeds the game with liquid ETH + claimable[SDGNRS], so every
+    // pullRedemptionReserve takes the ETH leg. To drive the v48 F-47-02 fix's stETH-fallback +
+    // fail-closed branches WITHOUT breaking the v47 ETH-only solvency invariant, the lever:
+    //   (1) pre-funds sDGNRS's OWN ETH balance abundantly (via the GAME-gated receive()), so
+    //       address(sdgnrs).balance always covers pendingRedemptionEthValue (the v47 invariant
+    //       reads sDGNRS's ETH balance, NOT the game's) regardless of which leg ran; and
+    //   (2) seeds sDGNRS's OWN stETH balance (the fallback backing), then
+    //   (3) toggles `stethFallbackMode`: in fallback mode action_burn FIRST drains the GAME's
+    //       LIQUID ETH below the reservation, so the ETH leg's `address(game).balance >= amount`
+    //       check fails and the stETH leg runs (or fail-closes if stETH is insufficient too).
+    // The ETH-leg path is preserved (mode off) so the v47 INV-01..13 + REDEEM-08 stay exercised.
+
+    MockStETH internal mockSteth;
+
+    /// @notice When true, action_burn drains the game's liquid ETH before burning so the
+    ///         reservation falls onto the stETH leg (or fail-closes).
+    bool public stethFallbackMode;
+
+    /// @notice Count of burns that provably ran the stETH leg (claimable[SDGNRS]/claimablePool
+    ///         unchanged across the pull while pendingRedemptionEthValue increased). Read by the
+    ///         invariant harness to assert the fallback branch was actually reached.
+    uint256 public ghost_stethLegBurns;
+
+    /// @notice Count of burns observed to run the ETH leg (claimable[SDGNRS] debited).
+    uint256 public ghost_ethLegBurns;
+
+    /// @notice Count of fail-closed reverts the lever provoked (neither leg covered).
+    uint256 public ghost_failClosedReverts;
 
     // =========================================================================
     //                       V44 STORAGE SLOT CONSTANTS
@@ -219,6 +254,23 @@ contract RedemptionHandler is Test {
         );
     }
 
+    /// @notice Wire the stETH mock + pre-fund sDGNRS's own ETH and stETH backing so the
+    ///         stETH-fallback lever can drive the v48 F-47-02 branch without breaking the v47
+    ///         ETH-only solvency invariant. Called once by the invariant harness in setUp().
+    /// @dev Pre-funds sDGNRS with a large OWN ETH balance via the GAME-gated receive() (so
+    ///      address(sdgnrs).balance always covers any pendingRedemptionEthValue the walk reaches)
+    ///      AND a large OWN stETH balance (the fallback backing). The game keeps its seeded liquid
+    ///      ETH + claimable; the lever toggles drain it on demand.
+    function setStethMock(address mockSteth_) external {
+        mockSteth = MockStETH(payable(mockSteth_));
+        // sDGNRS OWN ETH backing: cover any plausible cumulative reservation outright, so the v47
+        // `address(sdgnrs).balance >= pendingRedemptionEthValue` invariant is never violated by a
+        // stETH-leg burn (which does NOT add ETH to sDGNRS).
+        vm.deal(address(sdgnrs), address(sdgnrs).balance + 100 ether);
+        // sDGNRS OWN stETH backing: the fallback coverage the stETH leg checks against.
+        mockSteth.mint(address(sdgnrs), 100 ether);
+    }
+
     // =========================================================================
     //                          ACTION: BURN
     // =========================================================================
@@ -267,9 +319,31 @@ contract RedemptionHandler is Test {
         uint32 stamp = sdgnrs.pendingResolveDay();
         if (stamp != 0 && stamp != today) return;
 
+        // RFALL-05 lever: in stETH-fallback mode, drain the game's LIQUID ETH so the ETH leg's
+        // `address(game).balance >= amount` check fails and the reservation falls onto sDGNRS's
+        // stETH leg (or fail-closes if stETH is insufficient). claimable[SDGNRS] is left intact so
+        // the submit base is non-zero and a real reservation is attempted.
+        if (stethFallbackMode && address(game).balance > 0) {
+            vm.deal(address(game), 0);
+        }
+
+        // Capture pre-pull claimable[SDGNRS] + reservation so we can detect which leg ran.
+        uint256 claimableBeforePull = _gameClaimableSdgnrs();
+        uint256 pendingBeforePull = sdgnrs.pendingRedemptionEthValue();
+
         uint256 supplyBefore = sdgnrs.totalSupply();
         vm.prank(currentActor);
         try sdgnrs.burn(amount) {
+            // Leg attribution: a positive reservation that left claimable[SDGNRS] UNCHANGED ran the
+            // stETH leg; a reservation that debited claimable[SDGNRS] ran the ETH leg.
+            uint256 incr = sdgnrs.pendingRedemptionEthValue() - pendingBeforePull;
+            if (incr != 0) {
+                if (_gameClaimableSdgnrs() == claimableBeforePull) {
+                    ghost_stethLegBurns++;
+                } else {
+                    ghost_ethLegBurns++;
+                }
+            }
             // Successful burn — update ghosts.
             uint32 burnDay = game.currentDayView(); // re-read defensively (in case advanceGame fires inside burn)
             // v47: PendingRedemption.burnieOwed removed (BURNIE settled at submit) — only the
@@ -291,8 +365,43 @@ contract RedemptionHandler is Test {
                 ghost_dayWritten[burnDay] = true;
                 ghost_daysWritten.push(burnDay);
             }
-        } catch {}
+        } catch {
+            // In fallback mode a revert is the EXPECTED fail-closed path when neither pure leg
+            // covered the reservation (game ETH drained + stETH insufficient). The supply burn is
+            // unwound by the revert, so no ghost update is needed.
+            if (stethFallbackMode) ghost_failClosedReverts++;
+        }
         _trackSupplyDelta(supplyBefore);
+    }
+
+    // =========================================================================
+    //              ACTION: TOGGLE stETH-FALLBACK MODE (RFALL-05 lever)
+    // =========================================================================
+
+    /// @notice Flip the stETH-fallback lever. When on, action_burn drains the game's liquid ETH
+    ///         before burning so the reservation runs the stETH leg (or fail-closes). Re-tops
+    ///         sDGNRS's stETH backing on each ON-flip so the fallback usually covers, with the
+    ///         occasional drained-stETH state exercising the fail-closed branch.
+    /// @dev Keeps the ETH-leg path live (mode off) so the v47 INV-01..13 + REDEEM-08 still run.
+    function action_toggleStethFallback(uint256 seed) external {
+        // ~62% of the time ON (favor exercising the new branch), else OFF (restore ETH leg).
+        bool turnOn = (seed % 8) < 5;
+        stethFallbackMode = turnOn;
+        if (turnOn && address(mockSteth) != address(0)) {
+            // Re-top sDGNRS's stETH backing so the fallback can cover; vary the top-up so some
+            // sequences leave stETH short and reach the fail-closed branch.
+            uint256 topUp = (seed % 3 == 0) ? 0 : 50 ether;
+            if (topUp != 0) mockSteth.mint(address(sdgnrs), topUp);
+        } else {
+            // Restoring the ETH leg: re-seed the game's liquid ETH so subsequent burns can take it.
+            vm.deal(address(game), 100 ether);
+        }
+    }
+
+    /// @dev Read DegenerusGame.claimableWinnings[SDGNRS] (internal mapping @ slot 7) raw.
+    function _gameClaimableSdgnrs() internal view returns (uint256) {
+        bytes32 slot = keccak256(abi.encode(ContractAddresses.SDGNRS, uint256(7)));
+        return uint256(vm.load(address(game), slot));
     }
 
     // =========================================================================

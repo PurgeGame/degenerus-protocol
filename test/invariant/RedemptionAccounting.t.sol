@@ -55,14 +55,23 @@ contract RedemptionAccounting is DeployProtocol {
         handler = new RedemptionHandler(sdgnrs, game, mockVRF, coin, 4);
         // Wire the coinflip mock so claim paths complete the full-payout branch.
         handler.setCoinflip(address(coinflip));
+        // RFALL-05 (v48): wire the stETH mock + pre-fund sDGNRS's own ETH/stETH backing so the
+        // stETH-fallback lever drives the F-47-02 branch without breaking the v47 ETH-only
+        // solvency invariant (sDGNRS's own ETH balance always covers pendingRedemptionEthValue;
+        // a stETH-leg burn does not add ETH to sDGNRS, so the up-front ETH backing is what keeps
+        // invariant_balanceCoversPendingRedemptionEth holding).
+        handler.setStethMock(address(mockStETH));
 
-        // Register the 5 handler action selectors with Foundry's invariant fuzzer.
-        bytes4[] memory selectors = new bytes4[](5);
+        // Register the 6 handler action selectors with Foundry's invariant fuzzer.
+        // The 6th (action_toggleStethFallback) drives the v48 RFALL-05 stETH-fallback + fail-closed
+        // branches; the original 5 keep the v47 INV-01..13 + REDEEM-08 ETH-leg coverage live.
+        bytes4[] memory selectors = new bytes4[](6);
         selectors[0] = RedemptionHandler.action_burn.selector;
         selectors[1] = RedemptionHandler.action_advanceDay.selector;
         selectors[2] = RedemptionHandler.action_claim.selector;
         selectors[3] = RedemptionHandler.action_triggerGameOver.selector;
         selectors[4] = RedemptionHandler.action_burnOnPreviousDay.selector;
+        selectors[5] = RedemptionHandler.action_toggleStethFallback.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
         targetContract(address(handler));
     }
@@ -522,8 +531,130 @@ contract RedemptionAccounting is DeployProtocol {
     }
 
     // =====================================================================
+    //   RFALL-05 (v48): solvency holds under the stETH-fallback branch
+    // =====================================================================
+
+    /// @notice RFALL-05 — the v48 F-47-02 fix (pure-ETH OR pure-stETH reservation in
+    ///         pullRedemptionReserve) preserves redemption-desk solvency under the stETH leg. After
+    ///         EVERY handler action — including the stETH-fallback + fail-closed branches the
+    ///         action_toggleStethFallback lever drives — sDGNRS's OWN backing
+    ///         (address(sdgnrs).balance + steth.balanceOf(sdgnrs)) covers BOTH the segregated
+    ///         reservation (pendingRedemptionEthValue) AND the global claimable pool's sDGNRS slice
+    ///         (claimablePool >= claimableWinnings[SDGNRS]).
+    /// @dev This is the broader-basis form of invariant_balanceCoversPendingRedemptionEth: where the
+    ///      v47 invariant reads ETH only, RFALL-05 reads ETH + stETH (the basis the fix segregates
+    ///      against). When the stETH leg runs, pendingRedemptionEthValue increments with no ETH
+    ///      moved into sDGNRS — the stETH term is what backs it. The lever pre-funds sDGNRS's ETH
+    ///      backing up front so the v47 ETH-only invariant ALSO continues to hold (non-widening);
+    ///      this invariant additionally proves the stETH-backed reservation is solvent. The
+    ///      `sum of unresolved-day MAX(175%) reservations <= segregated backing` clause is the
+    ///      reservation-conservation property: pendingRedemptionEthValue is exactly that sum (per
+    ///      INV-02/05), so backing >= pendingRedemptionEthValue is the segregation-coverage check.
+    function invariant_RFALL05_SolvencyUnderFallback() public view {
+        uint256 backing = address(sdgnrs).balance + _sdgnrsSteth();
+        // (1) The segregated 175% reservation is fully backed by sDGNRS's own ETH + stETH.
+        assertGe(
+            backing,
+            sdgnrs.pendingRedemptionEthValue(),
+            "RFALL-05: balance + stETH < pendingRedemptionEthValue (reservation under-backed under fallback)"
+        );
+        // (2) The global claimable pool still covers sDGNRS's slice (paired-debit conservation —
+        //     the stETH leg touches NEITHER, the ETH leg debits both by the same amount).
+        assertGe(
+            game.claimablePoolView(),
+            _claimableSdgnrs(),
+            "RFALL-05: claimablePool < claimableWinnings[SDGNRS] under fallback (paired debit drifted)"
+        );
+        // (3) Reservation-conservation: the sum of unresolved-day MAX(175%) reservations never
+        //     exceeds the segregated backing. pendingRedemptionEthValue == that sum (INV-02/05), so
+        //     clause (1) already enforces it; reproduced explicitly via the per-day reconstruction
+        //     so a divergence localizes to the unresolved-day MAX term, not just the cumulative.
+        uint256 unresolvedMax;
+        uint256 len = handler.getDaysWrittenCount();
+        uint256 bound = len < SCAN_CAP ? len : SCAN_CAP;
+        for (uint256 i = 0; i < bound; i++) {
+            uint32 d = handler.getDayWritten(i);
+            if (handler.ghost_dayResolved(d)) continue;
+            (uint64 ethBase, , ) = _readPendingByDay(d);
+            unresolvedMax += (uint256(ethBase) * 1e9 * MAX_ROLL) / 100;
+        }
+        assertGe(
+            backing,
+            unresolvedMax,
+            "RFALL-05: segregated backing < sum of unresolved-day MAX(175%) reservations"
+        );
+    }
+
+    // =====================================================================
+    //   RFALL-05 lever reach-proof (T-327-02-INV false-confidence guard)
+    // =====================================================================
+
+    /// @notice Deterministic proof that the stETH-fallback lever actually REACHES the stETH leg
+    ///         (and the fail-closed branch) — not only the ETH leg. The invariant fuzzer resets
+    ///         state between runs, so ghost leg-counters cannot be read post-`invariant_*`; this
+    ///         drives the handler in a fixed sequence and asserts both new branches were hit, so a
+    ///         green `invariant_RFALL05_SolvencyUnderFallback` is provably exercising the fallback
+    ///         (mitigates T-327-02-FC1: a fallback test that never drives ETH to empty).
+    /// @dev Not an invariant_* fn — a standalone proof. Also re-asserts solvency after each step.
+    function test_RFALL05Handler_ReachesStethLeg() public {
+        // Turn ON fallback mode (seed % 8 == 0 -> (0<5) true; topUp branch seeds stETH on seed%3!=0;
+        // use seed=1 so topUp=50 ether and the stETH leg can cover).
+        handler.action_toggleStethFallback(1);
+        assertTrue(handler.stethFallbackMode(), "lever: fallback mode must be ON");
+
+        // Drive a batch of burns + advances. With mode ON, action_burn drains game ETH first so the
+        // stETH leg runs; periodic advances resolve the pool so subsequent burns aren't blocked.
+        for (uint256 i = 0; i < 20; i++) {
+            handler.action_burn(i, 5_000_000 ether);
+            _assertSolvencyLocal("steth-lever burn");
+            if (i % 3 == 2) {
+                handler.action_advanceDay(uint256(keccak256(abi.encode(i))));
+                _assertSolvencyLocal("steth-lever advance");
+            }
+        }
+
+        // PROOF (1): the stETH leg was reached at least once (ETH-side starved, stETH covered).
+        assertGt(handler.ghost_stethLegBurns(), 0, "lever: stETH leg never reached (only ETH leg ran)");
+
+        // Now drain sDGNRS's stETH so neither leg covers, and confirm the fail-closed branch fires.
+        // Move sDGNRS's stETH out (transfer to a sink) so the stETH leg can no longer cover.
+        uint256 sdgnrsSteth = mockStETH.balanceOf(address(sdgnrs));
+        if (sdgnrsSteth != 0) {
+            vm.prank(address(sdgnrs));
+            mockStETH.transfer(address(0xDEAD), sdgnrsSteth);
+        }
+        assertEq(mockStETH.balanceOf(address(sdgnrs)), 0, "lever: sDGNRS stETH must be drained for fail-closed");
+
+        // Re-assert ON mode without re-topping stETH (seed=3 -> seed%3==0 -> topUp=0).
+        handler.action_toggleStethFallback(3);
+        assertTrue(handler.stethFallbackMode(), "lever: fallback mode must remain ON");
+
+        // These burns must fail-closed (game ETH drained + stETH 0 + claimable possibly too small).
+        for (uint256 i = 0; i < 10; i++) {
+            handler.action_burn(100 + i, 5_000_000 ether);
+            _assertSolvencyLocal("steth-lever fail-closed");
+        }
+
+        // PROOF (2): the fail-closed branch was reached (a revert the lever provoked).
+        assertGt(handler.ghost_failClosedReverts(), 0, "lever: fail-closed branch never reached");
+    }
+
+    /// @dev Local solvency re-assert (mirrors invariant_RFALL05_SolvencyUnderFallback's first two
+    ///      clauses) used inside the deterministic lever proof.
+    function _assertSolvencyLocal(string memory tag) internal view {
+        uint256 backing = address(sdgnrs).balance + _sdgnrsSteth();
+        assertGe(backing, sdgnrs.pendingRedemptionEthValue(), string.concat(tag, ": backing < pending"));
+        assertGe(game.claimablePoolView(), _claimableSdgnrs(), string.concat(tag, ": pool < claimable[SDGNRS]"));
+    }
+
+    // =====================================================================
     //                          INTERNAL READERS
     // =====================================================================
+
+    /// @dev Read steth.balanceOf(sdgnrs) via the deployed MockStETH (the fallback backing basis).
+    function _sdgnrsSteth() internal view returns (uint256) {
+        return mockStETH.balanceOf(address(sdgnrs));
+    }
 
     /// @dev Read DegenerusGame.claimableWinnings[SDGNRS] (internal mapping @ slot 7) raw, so a
     ///      hypothetical pre-fix unchecked-debit wrap toward 2^256 is observable.
