@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
-status: ready_to_plan
-last_updated: 2026-05-26T10:18:46.193Z
-last_activity: 2026-05-26
+status: executing
+last_updated: "2026-05-26T11:19:40.971Z"
+last_activity: 2026-05-26 -- Phase 328 planning complete
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 17
-  completed_plans: 36
+  total_plans: 21
+  completed_plans: 17
   percent: 75
-stopped_at: Phase 327 complete (6/6) — ready to discuss Phase 328
 ---
 
 # Project State
@@ -27,8 +26,8 @@ See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 
 Phase: 328
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-26
+Status: Ready to execute
+Last activity: 2026-05-26 -- Phase 328 planning complete
 Next: Phase 328 TERMINAL (delta-audit + 3-skill adversarial sweep + closure). The 42-failure baseline carries forward (bucket A VRF/RNG 8 + bucket B stale-harness/v48-behavioral 34); re-syncing the stale fixtures is owned by TERMINAL / a future fixture-repair plan. ⚠ HERO-04 contract-constant landing STILL PENDING USER DECISION (out of the no-contract TST phase): the 15 ready-to-apply finals are in 327-04-SUMMARY; landing them under the hand-review CONTRACTS_COMMIT_APPROVED=1 gate flips the Hardhat PASS_ALL stat gate 1->0 failing (forge count unchanged at 42 — the byte-reproduce red is Hardhat-only), per the conditional delta in test/REGRESSION-BASELINE-v48.md §3.
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
