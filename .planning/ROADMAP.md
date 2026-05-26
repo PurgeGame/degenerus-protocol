@@ -54,7 +54,7 @@
 **Plans**: 3 plans (2 waves)
 - [x] 329-01-PLAN.md — ATTEST the router + advance surface (AfKing CEI/cursor/bounty/epoch + AdvanceModule 3 creditFlip sites/stall/totalFlipReversals/30-min-bypass/death-clock + DegenerusGame wrapper/views + GASOPT-01/02) incl. the per-leg no-untrusted-ETH-send (D-01a/ROUTER-07), the dual-epoch (D-03/GAS-03), the totalFlipReversals freeze (ADV-04), and the invariant-(c) fallback callers (D-04) → `329-ATTEST-ROUTER-ADVANCE.md` [Wave 1]
 - [x] 329-02-PLAN.md — ATTEST the D-05 `autoResolve`→`degeneretteResolve` rename + flat ~1-BURNIE re-peg: rename surface (D-05a), the D-05f losing-bet-liveness grep-verification (load-bearing), the D-05c real-gas exploitability basis, the D-05b flat-shape/≥3-gate feasibility, and the architectural router-non-foldability → `329-ATTEST-DEGENERETTE-RESOLVE.md` [Wave 1]
-- [ ] 329-03-PLAN.md — Reconcile into `329-SPEC.md`: §0 attestation roll-up / §1 settled shared signatures (advanceGame return / doWork+NoWork / O(1) discovery views) / §2 the 4 structural invariants + the ROUTER-07/GAS-03 dispositions + the D-05 design-lock / §3 per-item IMPL blueprint + producer-before-consumer edit-order map [Wave 2, depends on 329-01 + 329-02]
+- [x] 329-03-PLAN.md — Reconcile into `329-SPEC.md`: §0 attestation roll-up / §1 settled shared signatures (advanceGame return / doWork+NoWork / O(1) discovery views) / §2 the 4 structural invariants + the ROUTER-07/GAS-03 dispositions + the D-05 design-lock / §3 per-item IMPL blueprint + producer-before-consumer edit-order map [Wave 2, depends on 329-01 + 329-02]
 **UI hint**: no
 
 ### Phase 330: IMPL — The ONE Batched Contract Diff (router + advance-rework + micro-opts)
@@ -116,7 +116,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 329. SPEC — Design-Lock + 4 Structural Invariants | v49.0 | 2/3 | In Progress|  |
+| 329. SPEC — Design-Lock + 4 Structural Invariants | v49.0 | 3/3 | Complete   | 2026-05-26 |
 | 330. IMPL — The ONE Batched Contract Diff | v49.0 | 0/TBD | Not started | - |
 | 331. GAS — Worst-Case Marginal + Break-Even Peg | v49.0 | 0/TBD | Not started | - |
 | 332. TST — Freeze Fuzz + One-Category + Regression | v49.0 | 0/TBD | Not started | - |
