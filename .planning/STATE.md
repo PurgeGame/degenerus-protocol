@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
-status: executing
-last_updated: "2026-05-26T12:08:23.782Z"
+status: shipped
+last_updated: "2026-05-26T18:30:00.000Z"
 last_activity: 2026-05-26
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 21
-  completed_plans: 20
-  percent: 75
+  completed_plans: 21
+  percent: 100
 ---
 
 # Project State
@@ -24,13 +24,25 @@ See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 
 ## Current Position
 
-Phase: 328 (terminal-delta-audit-3-skill-adversarial-sweep-closure) — EXECUTING
-Plan: 3 of 4
-Status: 328-03 complete — Ready for 328-04 (USER closure gate)
-Last activity: 2026-05-26 -- 328-03 SC3 findings deliverable complete (audit/FINDINGS-v48.0.md authored, 9 sections, 0 NEW findings; F-47-01/F-47-02 RESOLVED-AT-V48; MILESTONE_V48_AT_HEAD_<sha> placeholder pending)
-Next: Phase 328 plan 4 of 4 — 328-04 SC4 CLOSURE FLIP (Wave 3, autonomous:false USER gate). Blocking USER closure-verdict + signal-format approval, then resolve the closure SHA, apply the atomic 5-doc flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) re-attesting all 40 reqs, propagate MILESTONE_V48_AT_HEAD_<sha> verbatim into FINDINGS-v48.0 (frontmatter + §1 + §9b/§9c) + the 5 docs, and chmod 444 the findings. NOTE for 328-04: surface the SWAP cash-share ADVISORY (code <=60% vs design <=40%; no-arb holds; doc-drift NOT a finding — §4.4/§9d of FINDINGS-v48.0) to the USER at the closure gate. SUBJECT FROZEN at 1575f4a9 (git diff 1575f4a9 HEAD -- contracts/ empty). audit/FINDINGS-v48.0.md is force-tracked (audit/* gitignored at .gitignore:25); NOT yet chmod 444.
+Phase: 328 (terminal-delta-audit-3-skill-adversarial-sweep-closure) — COMPLETE
+Plan: 4 of 4
+Status: v48.0 SHIPPED 2026-05-26 — Phase 328 TERMINAL complete; the atomic 5-doc closure flip is applied (USER-approved at the 328-04 gate). Closure signal MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029.
+Last activity: 2026-05-26 -- 328-04 SC4 closure flip applied (signal resolved + propagated verbatim; 40/40 reqs re-attested; audit/FINDINGS-v48.0.md chmod 444). SUBJECT FROZEN at 1575f4a9 (git diff 1575f4a9 HEAD -- contracts/ empty).
+Next: v48.0 is closed — no active phase. Start the next milestone with /gsd-new-milestone when ready. Carried advisory (NON-finding, FINDINGS §9d): the SWAP withdrawable-cash ceiling is 60% in code vs ≤40% in the v48 design memo — USER accepted ≤60% as canonical at the closure gate (no-arb HOLDS; doc-drift, not a vulnerability).
 
-## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
+## Last Shipped Milestone (v48.0 — SHIPPED 2026-05-26; signal `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`; baseline `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`)
+
+**sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes (F-47-01 + F-47-02) + Keeper/Pool/Tombstone/Hero Bundle.** 4-phase audit-milestone (SPEC→IMPL→TST→TERMINAL): 325 SPEC design-lock (`f7ad4ee2`, VERIFICATION 5/5) + 326 IMPL (the ONE batched USER-APPROVED `contracts/*.sol` diff `f50cc634`, all 7 work items, VERIFICATION 6/6 + 3 USER steers) + 327 TST (6 plans + the `1575f4a9` HERO-04 byte-reproduced Degenerette finals landing, USER-approved hand-review) + 328 TERMINAL. ONE USER-APPROVED contract IMPL phase (326) + the 327 HERO-04 constant-only finals landing. Subject FROZEN at `1575f4a9`.
+
+**Closure verdict (EMITTED, Phase 328):** all 7 surfaces shipped — `PRESALE_BOX_DRAIN_FIXED` (F-47-01 RESOLVED_AT_V48: divisor 1_000→400, closing sweep = variance dust mean 7.3% vs old 60%); `REDEMPTION_ETH_EMPTY_STETH_FALLBACK_FIXED` (F-47-02 RESOLVED_AT_V48: pure-ETH-OR-pure-stETH, mid-game ETH→stETH fallback, fail-closed if neither, donation-robust); `KEEPER_RENAMED` autoBuy/autoOpen/autoResolve (crank/sweep/do-work PURGED) + VAULT-CODE two-tier 75/20/5 affiliate (`bytes32("DGNRS")`); `AFKING_POOL_RECOVERABLE` (VAULT permissionless recoverAfKingPool + sDGNRS receive() AF_KING relax + burnAtGameOver auto-recover); `GAMEOVER_BURNIE_TOMBSTONE` (1e36-wei vaultAllowance flood, checked add/cap, one-shot, totalSupply UNTOUCHED); `DEGENERETTE_HERO_2PT_RESCALE` (S=A+2H, standalone multiplier net-deleted, basePayoutEV=100 centi-x byte-reproduced, S=9≡old M=8 relabel, RTP unchanged); `SDGNRS_FAR_FUTURE_SALVAGE_SWAP` (sellFarFutureTickets -EV-by-design, no-arb HOLDS at band ceiling [max withdrawable cash 9.9% of face], ≥1 ETH claimable floor, swap-pop membership-preserving; withdrawable-cash ceiling ≤60% [code] vs ≤40% [design memo] → ADVISORY doc-drift, USER-accepted ≤60% as canonical, NOT a finding); `RNG_FREEZE_INTACT`; `0 NEW_FINDINGS`; `KNOWN_ISSUES_UNMODIFIED`. Closure signal `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`. Full report: `audit/FINDINGS-v48.0.md` (chmod 444).
+
+**Adversarial pass (Phase 328):** 3-skill GENUINE PARALLEL_SUBAGENT — `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` run as 3 concurrent background Task spawns (run INLINE; orchestrator held the Task tool); `/degen-skeptic` OUT per `D-271-ADVERSARIAL-02`. **16 disposition rows: 10 NEGATIVE-VERIFIED + 6 SAFE_BY_DESIGN + 0 FINDING_CANDIDATE.** PRIMARY SWAP-pop H-CANCEL-SWAP-MISS regression NEGATIVE-VERIFIED (disjoint keyspaces: far-future `d≥6` vs near-future `level+1..+5` cursor band; `membership ⟺ packed != 0` maintained). SC1 delta-audit: all 7 surfaces NON-WIDENING; regression 632/42 net-zero + Hardhat PASS_ALL 15/20-diverge-RED → 0-diff-GREEN. 40/40 v48.0 requirements re-attested at closure.
+
+**v49.0 handoff:** 0 findings deferred (both v47-deferred MEDIUMs F-47-01 + F-47-02 RESOLVED_AT_V48); one informational SWAP cash-share doc-drift advisory (USER-accepted ≤60% as canonical); the v44 §9d 135-anchor maximalist register carries forward unchanged (NOT live vectors).
+
+### Prior Shipped Milestone
+
+**v47.0 — Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle** (shipped 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
 
 **Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle.** Seven work items (manifest `.planning/PLAN-V47-MILESTONE-SCOPE.md`) ship as ONE batched USER-APPROVED `contracts/*.sol` diff: plans 1–6 overlap heavily on shared files (manifest §2 — `DegenerusGameLootboxModule`, `DegenerusGame` claimable accounting, BURNIE flows, `DegenerusGameDegeneretteModule`, the `external payable` entry sweep) and item 7 (`AfKing.sol` cancel-tombstone) is isolated but joins the same diff. Most critical reconciliation point: `resolveRedemptionLootbox` is edited by BOTH LOOT-03 (boon flag) and REDEEM-03 (payable + remove unchecked claimable debit) → the SPEC settles its single final signature. All economic numbers + design decisions (D1–D5) LOCKED; no research, no open decisions. Milestone shape matches the established v44/v45/v46 audit pattern — SPEC design-lock → single batched IMPL contract diff → TST proof → TERMINAL delta-audit + closure flip. Single batched USER-APPROVED contract diff at IMPL per `feedback_batch_contract_approval.md` + `feedback_never_preapprove_contracts.md` + `feedback_no_contract_commits.md` + `feedback_manual_review_before_push.md` (ContractAddresses.sol freely-modifiable per `feedback_contractaddresses_policy.md`); AGENT-COMMITTED test/planning/docs; pre-launch redeploy-fresh per `feedback_frozen_contracts_no_future_proofing.md` (storage break fine). Phase boundaries + success criteria are finalized in `.planning/ROADMAP.md`. **Phase numbering continues from 320 → v47.0 starts at Phase 321.**
 

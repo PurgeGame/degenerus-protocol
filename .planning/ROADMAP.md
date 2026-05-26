@@ -1,6 +1,6 @@
 # Roadmap: v48.0 — sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
 
-**Milestone:** v48.0 — 🚧 **IN PROGRESS** (started 2026-05-25)
+**Milestone:** v48.0 — ✅ **SHIPPED** (closed 2026-05-26; closure signal `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`; 0 NEW findings; F-47-01 + F-47-02 RESOLVED_AT_V48; subject frozen `1575f4a9`)
 **Defined:** 2026-05-25
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 **Audit baseline → subject:** v47.0 closure HEAD `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2` → v48.0 closure HEAD. Subject = the single batched USER-APPROVED contract diff reconciling the seven work items (scope source: the 7 plan docs — `PLAN-V48-PRESALE-BOX-DRAIN-FIX.md` · `PLAN-V48-REDEMPTION-ETH-STETH-FALLBACK.md` · `PLAN-V48-KEEPER-RENAME-AND-VAULT-CODE.md` · `PLAN-V48-AFKING-POOL-RECOVERY.md` · `PLAN-V48-GAMEOVER-BURNIE-TOMBSTONE.md` · `PLAN-V48-DEGENERETTE-HERO-2PT-RESCALE.md` · `PLAN-SDGNRS-FAR-FUTURE-SALVAGE-SWAP.md`).
@@ -19,9 +19,9 @@
 ## Phases
 
 - [x] **Phase 325: SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation** - Settle the final shared signatures across `DegenerusGame`/`StakedDegenerusStonk`/`DegenerusVault`, grep-attest every cited file:line vs the v47.0-closure HEAD, and resolve every SPEC-time open item (RFALL-04 accounting shape, KEEP-04/05 VAULT-code + autoOpen scope, POOL-06 re-stranding, BTOMB packing, HERO-04 shape+packing, SWAP-03 jitter source, SWAP-08 acquisition-floor re-confirm) before any patch. (completed 2026-05-25)
-- [ ] **Phase 326: IMPL — The ONE Batched Contract Diff (all 7 items)** - Apply all seven work items' contract edits as a single reconciled diff; HARD STOP at the contract-commit boundary (applied + locally compiled/tested, never committed without explicit user hand-review).
+- [x] **Phase 326: IMPL — The ONE Batched Contract Diff (all 7 items)** - Apply all seven work items' contract edits as a single reconciled diff; HARD STOP at the contract-commit boundary (applied + locally compiled/tested, never committed without explicit user hand-review).
 - [x] **Phase 327: TST — Repro/Same-Results + No-Arb + EV + Regression Proofs** - Prove the presale-drain dust bound (PFIX-02/03), the redemption-fallback regression (RFALL-05), the sDGNRS `receive()` accounting-safety (POOL-04), the BURNIE tombstone non-circulating signal (BTOMB-03), the byte-identical Degenerette recalibration (HERO-04/06), and the salvage-swap no-arb at the jitter band CEILING + solvency (SWAP-08/09). (completed 2026-05-26)
-- [ ] **Phase 328: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure** - NON-WIDENING delta-audit vs the v47.0 baseline, run the 3-skill genuine-PARALLEL adversarial sweep, author `audit/FINDINGS-v48.0.md`, and flip the closure signal `MILESTONE_V48_AT_HEAD_<sha>`.
+- [x] **Phase 328: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure** - NON-WIDENING delta-audit vs the v47.0 baseline, run the 3-skill genuine-PARALLEL adversarial sweep, author `audit/FINDINGS-v48.0.md`, and flip the closure signal `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`. _(completed 2026-05-26)_
 
 ---
 
@@ -108,9 +108,9 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 3/3 | Complete    | 2026-05-25 |
-| 326. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/8 | Not started | - |
+| 326. IMPL — The ONE Batched Contract Diff (all 7 items) | 8/8 | Complete    | 2026-05-25 |
 | 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 6/6 | Complete    | 2026-05-26 |
-| 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 3/4 | In Progress|  |
+| 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 4/4 | Complete    | 2026-05-26 |
 
 ---
 

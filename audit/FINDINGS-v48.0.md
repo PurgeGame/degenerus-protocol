@@ -7,8 +7,8 @@ audit_baseline: da5c9d50989707c8964a9411e68c51ca1b1a25f2
 audit_baseline_signal: MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2
 v46_baseline_signal: MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687
 source_tree_frozen_ref: 1575f4a9
-audit_subject_head: "MILESTONE_V48_AT_HEAD_<sha>"
-closure_signal: MILESTONE_V48_AT_HEAD_<sha>
+audit_subject_head: "MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029"
+closure_signal: MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029
 deliverable: audit/FINDINGS-v48.0.md
 new_findings: 0
 new_findings_disposition: 0 NEW_FINDINGS — both v47-deferred MEDIUM findings (F-47-01 presale closing-box DGNRS over-distribution + F-47-02 redemption submit ETH-empty stETH-fallback gap) RESOLVED-AT-V48; one informational ADVISORY (SWAP cash-share ceiling 60% code vs <=40% design memo — no-arb holds, doc-drift for USER reconciliation, NOT a finding)
@@ -21,7 +21,7 @@ new_findings_disposition: 0 NEW_FINDINGS — both v47-deferred MEDIUM findings (
 **Audit Baseline.** v47.0 closure HEAD `da5c9d50989707c8964a9411e68c51ca1b1a25f2` (signal
 `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`). v46 chain reference:
 `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`. v48.0 closure HEAD is
-`MILESTONE_V48_AT_HEAD_<sha>` (resolved at the Phase 328 closure commit per the single-commit
+`MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029` (resolved at the Phase 328 closure commit per the single-commit
 sequential-SHA closure orchestration; see §9c). SOURCE-TREE FROZEN reference for the terminal:
 `1575f4a9` (contracts/ byte-frozen; `git diff 1575f4a9 HEAD -- contracts/` empty throughout Phase 328).
 
@@ -405,10 +405,10 @@ Phase 325 (SPEC design-lock `f7ad4ee2`, 3 plans, VERIFICATION 5/5) + 326 (IMPL `
 batched diff, VERIFICATION 6/6 + 3 USER steers) + 327 (TST — 6 plans + the `1575f4a9` HERO-04 byte-reproduced
 finals landing) + 328 (TERMINAL — this deliverable; SOURCE-TREE FROZEN at `1575f4a9`; SC1 delta-audit + SC2
 3-skill genuine-PARALLEL sweep + regression + gated closure flip). Closure signal:
-`MILESTONE_V48_AT_HEAD_<sha>`.
+`MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`.
 
 ### 9c. Closure Signal
-**`MILESTONE_V48_AT_HEAD_<sha>`** (resolved to the Phase 328 audit-deliverable / closure commit in 328-04;
+**`MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`** (resolved to the Phase 328 audit-deliverable / closure commit in 328-04;
 contracts byte-identical to the frozen subject `1575f4a9`). Verbatim propagation targets (resolved at the
 328-04 closure gate by the single sed-style SHA substitution):
 1. Frontmatter `closure_signal:` + `audit_subject_head:`.
@@ -435,4 +435,4 @@ contracts byte-identical to the frozen subject `1575f4a9`). Verbatim propagation
 *v48.0 TERMINAL findings authored 2026-05-26. Source-tree frozen throughout (`git diff 1575f4a9 HEAD --
 contracts/` empty). 0 NEW findings (both v47-deferred MEDIUMs F-47-01 + F-47-02 RESOLVED-AT-V48); one
 informational SWAP cash-share doc-drift advisory recorded for USER reconciliation. Closure signal
-`MILESTONE_V48_AT_HEAD_<sha>` resolves at the Phase 328 closure commit (328-04).*
+`MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029` resolves at the Phase 328 closure commit (328-04).*

@@ -97,31 +97,31 @@ Which phases cover which requirements. Phase numbering continues from v47.0 (end
 | KEEP-04 | Phase 325 (SPEC) | Complete |
 | KEEP-05 | Phase 325 (SPEC) | Complete |
 | POOL-06 | Phase 325 (SPEC) | Complete |
-| PFIX-01 | Phase 326 (IMPL) | Pending |
-| RFALL-01 | Phase 326 (IMPL) | Pending |
-| RFALL-02 | Phase 326 (IMPL) | Pending |
-| RFALL-03 | Phase 326 (IMPL) | Pending |
-| KEEP-01 | Phase 326 (IMPL) | Pending |
-| KEEP-02 | Phase 326 (IMPL) | Pending |
-| KEEP-03 | Phase 326 (IMPL) | Pending |
-| POOL-01 | Phase 326 (IMPL) | Pending |
-| POOL-02 | Phase 326 (IMPL) | Pending |
-| POOL-03 | Phase 326 (IMPL) | Pending |
-| POOL-05 | Phase 326 (IMPL) | Pending |
-| BTOMB-01 | Phase 326 (IMPL) | Pending |
-| BTOMB-02 | Phase 326 (IMPL) | Pending |
-| HERO-01 | Phase 326 (IMPL) | Pending |
-| HERO-02 | Phase 326 (IMPL) | Pending |
-| HERO-03 | Phase 326 (IMPL) | Pending |
-| HERO-05 | Phase 326 (IMPL) | Pending |
-| SWAP-01 | Phase 326 (IMPL) | Pending |
-| SWAP-02 | Phase 326 (IMPL) | Pending |
-| SWAP-03 | Phase 326 (IMPL) | Pending |
-| SWAP-04 | Phase 326 (IMPL) | Pending |
-| SWAP-05 | Phase 326 (IMPL) | Pending |
-| SWAP-06 | Phase 326 (IMPL) | Pending |
-| SWAP-07 | Phase 326 (IMPL) | Pending |
-| BATCH-02 | Phase 326 (IMPL) | Pending |
+| PFIX-01 | Phase 326 (IMPL) | Complete |
+| RFALL-01 | Phase 326 (IMPL) | Complete |
+| RFALL-02 | Phase 326 (IMPL) | Complete |
+| RFALL-03 | Phase 326 (IMPL) | Complete |
+| KEEP-01 | Phase 326 (IMPL) | Complete |
+| KEEP-02 | Phase 326 (IMPL) | Complete |
+| KEEP-03 | Phase 326 (IMPL) | Complete |
+| POOL-01 | Phase 326 (IMPL) | Complete |
+| POOL-02 | Phase 326 (IMPL) | Complete |
+| POOL-03 | Phase 326 (IMPL) | Complete |
+| POOL-05 | Phase 326 (IMPL) | Complete |
+| BTOMB-01 | Phase 326 (IMPL) | Complete |
+| BTOMB-02 | Phase 326 (IMPL) | Complete |
+| HERO-01 | Phase 326 (IMPL) | Complete |
+| HERO-02 | Phase 326 (IMPL) | Complete |
+| HERO-03 | Phase 326 (IMPL) | Complete |
+| HERO-05 | Phase 326 (IMPL) | Complete |
+| SWAP-01 | Phase 326 (IMPL) | Complete |
+| SWAP-02 | Phase 326 (IMPL) | Complete |
+| SWAP-03 | Phase 326 (IMPL) | Complete |
+| SWAP-04 | Phase 326 (IMPL) | Complete |
+| SWAP-05 | Phase 326 (IMPL) | Complete |
+| SWAP-06 | Phase 326 (IMPL) | Complete |
+| SWAP-07 | Phase 326 (IMPL) | Complete |
+| BATCH-02 | Phase 326 (IMPL) | Complete |
 | PFIX-02 | Phase 327 (TST) | Complete |
 | PFIX-03 | Phase 327 (TST) | Complete |
 | RFALL-05 | Phase 327 (TST) | Complete |
@@ -131,7 +131,7 @@ Which phases cover which requirements. Phase numbering continues from v47.0 (end
 | HERO-06 | Phase 327 (TST) | Complete |
 | SWAP-08 | Phase 327 (TST) | Complete |
 | SWAP-09 | Phase 327 (TST) | Complete |
-| BATCH-03 | Phase 328 (TERMINAL) | Pending |
+| BATCH-03 | Phase 328 (TERMINAL) | Complete |
 
 **Coverage:**
 - v48.0 requirements: **40 total** — PFIX 3 · RFALL 5 · KEEP 5 · POOL 6 · BTOMB 3 · HERO 6 · SWAP 9 · BATCH 3.
@@ -141,4 +141,4 @@ Which phases cover which requirements. Phase numbering continues from v47.0 (end
 
 ---
 *Requirements defined: 2026-05-25*
-*Last updated: 2026-05-25 — Traceability table filled to 100% coverage at roadmap creation (Phases 325–328)*
+*Last updated: 2026-05-26 — all 40 v48.0 requirements re-attested Complete at the v48.0 TERMINAL closure (signal MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029).*
