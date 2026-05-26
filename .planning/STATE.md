@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v49.0
 milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
 status: executing
-last_updated: "2026-05-26T14:48:05.415Z"
-last_activity: 2026-05-26 -- Phase 329 planning complete
+last_updated: "2026-05-26T14:54:05.681Z"
+last_activity: 2026-05-26 -- Phase 329 execution started
 progress:
   total_phases: 5
   completed_phases: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v49.0 section) + .planning/ROADMAP.md (v49.0 — phases 329-333)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 329 — SPEC design-lock (4 structural invariants + shared-signature reconciliation + call-graph attestation vs the v48.0 HEAD `0cc5d10f`)
+**Current focus:** Phase 329 — spec-design-lock-call-graph-attestation-4-structural-invaria
 
 ## Current Position
 
-Phase: 329 of 5 v49.0 phases (SPEC — Design-Lock + 4 Structural Invariants)
-Plan: — (Phase 329 not yet planned)
-Status: Ready to execute
-Last activity: 2026-05-26 -- Phase 329 planning complete
+Phase: 329 (spec-design-lock-call-graph-attestation-4-structural-invaria) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 329
+Last activity: 2026-05-26 -- Phase 329 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
