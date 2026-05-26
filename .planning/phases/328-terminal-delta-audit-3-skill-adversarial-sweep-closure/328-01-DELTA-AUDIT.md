@@ -166,8 +166,160 @@ work-item surfaces.
 
 ---
 
-## 4. Regression-Baseline Attestation + F-47-01/F-47-02 dispositions
+## 4. Regression-Baseline Attestation (mirrors v47 §5)
 
-*Authored in Task 2 (appended to this same artifact) — see the Regression-Baseline Attestation (632/42
-NON-WIDENING), the F-47-01 + F-47-02 RESOLVED-AT-V48 dispositions, and the self-check below once Task 2
-lands.*
+### 4.1 Foundry baseline — 632 pass / 42 fail of 674, NON-WIDENING vs the 326-08 594/42 baseline
+
+Per the 327-06 ledger `test/REGRESSION-BASELINE-v48.md` (the Wave-2 full-suite regression gate; FULL
+`forge test` tree, NOT `--match-path`):
+
+| Quantity | 326-08 baseline | Wave-1 delta | v48 baseline (327-06) |
+|----------|-----------------|--------------|------------------------|
+| `forge test` passed | 594 | **+38 NEW_PASSING** | **632** |
+| `forge test` failed | 42 | **+0 net-new** | **42** |
+| total | 636 | +38 | 674 |
+
+`632 == 594 + 38` ✓ ; `42 == 42 + 0` ✓.
+
+**NEW_PASSING = 38**, fully attributed to the 5 wave-1 test files + the redemption invariant extension
+(all PASSING-only, zero red): `PresaleBoxDrain` 3 + `RedemptionStethFallback` 10 + `RedemptionAccounting`
+invariant extension +2 (16→18) + `BurnieTombstone` 8 + `DegeneretteHeroScore` 6 + `FarFutureSalvageSwap`
+9 = **38**.
+
+**The 42 reds classify into named buckets (each red in exactly one bucket):**
+- **Bucket A = 8** VRF/RNG pre-existing reds (out of v48 scope — v48 touched no VRF/Advance code):
+  `VRFPathInvariants` ×3 (gap-day / coordinator-swap / stall-recovery) + `VRFCore` ×1 + `VRFLifecycle`
+  ×1 + `VRFPathCoverage` ×1 + `RngLockDeterminism` ×1 (`vm.assume` over-rejection) + `RngIndexDrainBinding`
+  ×1.
+- **Bucket B = 34** stale-harness / v48-behavioral baseline reds (fixtures not yet re-synced to the v48
+  contract; present at the 326-08 HEAD; re-sync owned by a future fixture-repair plan, NOT this terminal):
+  `TicketRouting` 12 + `QueueDoubleBuffer` 9 + `TicketEdgeCases` 2 + `PrizePoolFreeze` 2 + `TicketLifecycle`
+  1 + `GameOverPathIsolation` 1 + `LootboxBoonCoexistence` 2 + `AfKingSubscription` 1 +
+  `AfKingFundingWaterfall` 1 + `CoverageGap222` 1 + `DegeneretteBet.inv` 1 + `DegeneretteFreezeResolution`
+  1 (B13).
+- **Bucket C = 0** HERO-deferred FOUNDRY-side reds. The HERO byte-reproduce red lived ENTIRELY in the
+  Hardhat stat tree (§4.2); the only Foundry file asserting payout-magnitude (`DegeneretteHeroScore.t.sol`)
+  is GREEN (6/6) because it asserts scoring SHAPE/dispatch off `FullTicketResult.matches`.
+
+A(8) + B(34) + C(0) = **42** ✓. **Membership proof (327-06 §4):** NONE of the 18 failing suites was last
+touched by a 327-01..05 wave-1 commit — every failing suite's last-touching commit is at or before
+`f50cc634` (the v48 contract diff) or earlier (323/211/210/pre-v48). The 5 new wave-1 test files added
+only PASSING tests. **Net new regression from the wave-1 work = 0.** No `## STOP — NEW REGRESSION OUTSIDE
+BASELINE` block; the actual red NAME-set is a strict subset of the enumerated baseline union.
+
+### 4.2 The conditional HERO byte-reproduce delta — RESOLVED at `1575f4a9`
+
+The HERO-04 PASS_ALL byte-reproduce gate runs in the **Hardhat stat tree** (`DegenerettePerNEvExactness`
++ `DegeneretteBonusEv`), NOT `forge test`. The 327-06 ledger §3 recorded the **CONDITIONAL** delta:
+
+| Runner | Pre-landing (327-06 run, subject `f50cc634`) | Post-landing (subject `1575f4a9`) | Delta |
+|--------|-----------------------------------------------|-----------------------------------|-------|
+| Hardhat stat gate | 15 passing / **1 failing** (PASS_ALL RED: 15/20 constants diverge from the canonical generator) | **16 passing / 0 failing** (PASS_ALL 0-diff GREEN; per-N EV == 100; ETH bonus == 5.000%) | **PASS_ALL flips GREEN** |
+| `forge test` whole tree | 632 / **42** | 632 / **42** (forge-side HERO-deferred count = 0; the gate is Hardhat-only) | **0** on the forge failure count |
+
+The audit subject `1575f4a9` IS the post-landing state (the USER-approved constant-only HERO-04 finals
+landing). The byte-reproduce red was **Hardhat-only** and is now resolved (0-diff GREEN); the **forge
+42-count is unchanged** (the HERO byte-reproduce red was never a forge red). The Memory-noted "Hardhat
+PASS_ALL stat gate 1→0" flip is therefore realized at the frozen subject. One follow-on test-only edit
+(`DegeneretteHeroScore.t.sol`'s `test_HERO_S8S9PackingDecodable` placeholder-0 → nonzero expectation) is
+a test concern, GREEN today, and does not affect the forge count.
+
+### 4.3 REG-01-equivalent NON-WIDENING attestation
+
+`git diff da5c9d50989707c8964a9411e68c51ca1b1a25f2..1575f4a9 -- contracts/ test/`: **every hunk is
+attributable to a known v48-scope commit** —
+- the batched IMPL diff `f50cc634` (the 12-file contract surface across PFIX/RFALL/KEEP/POOL/BTOMB/HERO/SWAP),
+- the HERO-04 finals landing `1575f4a9` (constant-only into `DegeneretteModule.sol`),
+- the AGENT-committed wave-1 test files (the 5 new `test/fuzz/*` + the `RedemptionAccounting`/`RedemptionHandler`
+  invariant extension under Phase 327).
+
+`git diff 1575f4a9 HEAD -- contracts/` is **empty** (zero contract mutation in this terminal phase; subject
+byte-frozen). **NON-WIDENING confirmed.**
+
+---
+
+## 5. v47-Deferred Findings — RESOLVED-AT-V48 (mirrors v47 §4.2 dispositions)
+
+The two MEDIUM findings v47.0 surfaced and USER-DEFERRED→v48.0 (`audit/FINDINGS-v47.0.md` §4.2 / §9d) are
+closed by this milestone. Each disposition is run through the **economic skeptic-filter** (structural-protection
+check → 3-condition EV lens) before being recorded RESOLVED.
+
+### F-47-01 — Presale closing-box DGNRS over-distribution (MEDIUM) → RESOLVED-AT-V48
+
+**v47 finding.** The per-box DGNRS draw `(poolStart × tierTenths × amount) / (1_000 × 1e18)` with base
+`poolStart/100` drained the 100B-DGNRS `Pool.PresaleBox` over 50 ETH **only if every box drew DGNRS** —
+but the resolution branch is 50% BURNIE / **40% DGNRS** / 10% WWXRP and the draw did not scale for the
+~40% branch rate, so ~60% (~6% of supply) was swept to the single closing buyer (a tokenomics
+concentration windfall, NOT fund-loss/drain/inflation — the DGNRS is pre-minted + pool-bounded).
+
+**v48 fix LANDED (PFIX-01 IMPL anchor @ `1575f4a9`).** `_presaleBoxDgnrsReward` divisor `1_000 → 400`,
+base `poolStart/100 → poolStart/40` (`LootboxModule:719`, comment `:299-302`/`:709`/`:717`). The 2.5×-larger
+per-box draw × the ~40% realized DGNRS branch rate drains the full pool in expectation, so the closing-box
+sweep mops up only **variance dust**. PFIX-02/03 empirical dust-bound proof: `test/fuzz/PresaleBoxDrain.t.sol`
+(327-01, 3/3 GREEN — dust bound ≤ small bound over a realistic 50-ETH run, NOT ~60%; tier shape preserved
+3×; a run of early DGNRS hits empties the pool before close via the `transferFromPool` clamp → closing sweep
+≈ 0, no revert / no over-draw).
+
+**Skeptic-filter (structural-protection + 3-condition EV).** The fix does NOT re-open an over-drain or
+inflation axis: `transferFromPool(Pool.PresaleBox,…)` still clamps to the live pool balance (structural
+protection: cannot draw below zero, cannot mint), so the worst case is the pool empties *early* → closing
+sweep = 0 (no revert, no over-draw). The 3-condition EV lens (attacker control of timing × exploitable
+edge × net-positive EV) returns NEGATIVE: the draw is keyed off the FROZEN buy-time cumulative box volume
+(no timing edge), the curve is deterministic, and the 2.5× rescale REDUCES (not inflates) the closing
+windfall to dust. **Concentration concern CLOSED without re-opening over-drain/inflation. RESOLVED-AT-V48.**
+
+### F-47-02 — Redemption submit ETH-empty stETH-fallback gap (MEDIUM) → RESOLVED-AT-V48
+
+**v47 finding.** `_submitGamblingClaimFrom` computed the ETH base against sDGNRS's FULL backing
+(`ethBal + stethBal + claimable − pending`), but `pullRedemptionReserve` segregated the MAX-175%
+reservation from `claimableWinnings[SDGNRS]` ALONE, fail-closed, with NO fallback to sDGNRS's stETH/ETH
+balance. The genuine residual case = **mid-game ETH depletion** (and a freely-transferable stETH donation
+inflating the base) → a fail-closed revert could brick submit (liveness/availability; no funds at risk).
+
+**v48 fix LANDED (RFALL-01/02/03 IMPL anchor @ `1575f4a9`).** `pullRedemptionReserve` now reserves the
+MAX as **pure-ETH OR pure-stETH (no mix)**, with a **mid-game ETH→stETH fallback** and **revert-if-neither**,
+donation-robust (`DegenerusGame.sol:1896-1921`): ETH leg requires both `claimableWinnings[SDGNRS]` and the
+game's liquid ETH cover `amount` (CHECKED debit + CEI move-out); else the stETH leg covers against
+`steth.balanceOf(SDGNRS) >= amount` (sDGNRS's own stETH already in safe custody, no game-side move, recorded
+via `pendingRedemptionEthValue`, paid stETH at claim — `_payEth` ETH-then-stETH `:930-938`); revert
+`E()` only if NEITHER pure leg covers. Coverage is checked against the **same asset basis the base is
+inflated by** (a stETH donation inflating `totalMoney` ⇒ coverable by the pure-stETH leg). Extends the v47
+game-over deterministic ETH→stETH fallback (REDEEM-04) to the mid-game case. RFALL-05 regression proof:
+`test/fuzz/RedemptionStethFallback.t.sol` (327-02, 10/10) + `invariant_RFALL05_SolvencyUnderFallback`
+(`RedemptionAccounting.t.sol`) + POOL-04 `address(this).balance` accounting-safety.
+
+**Skeptic-filter (structural-protection + 3-condition EV).** The fix RESTORES liveness while PRESERVING
+the v47 REDEEM-08 solvency invariants (proven 327-02): two same-period claimants both reserve, BURNIE-can't-block-ETH,
+value conservation, `balance ≥ pending`. The fail-closed `revert` is RETAINED as the structural solvency
+guard for the (now-unreachable-in-practice) "neither pure leg covers" state — the fix adds a *liveness*
+leg, it does not weaken the *safety* guard. The 3-condition EV lens returns NEGATIVE: a stETH donation /
+`selfdestruct` force-feed is verified NOT a profit/inflation/underflow exploit (coverage matches the
+inflated asset basis; no claimable-ETH-only chokepoint reintroduced). **Liveness restored, solvency
+preserved. RESOLVED-AT-V48.**
+
+---
+
+## 6. Self-Check + Frozen-Subject Attestation
+
+- `git diff 1575f4a9 HEAD -- contracts/` = **empty** (zero contract mutation; subject byte-frozen).
+- All anchors above are re-grepped against `1575f4a9` (read-only `git show`/`git diff`/`git grep`).
+- Keeper kill-set (`crank`/`sweep`/`do-work`) = **0** in `AfKing.sol` AND `DegenerusGame.sol` (the in-game
+  crank entrypoints). The only surviving `sweep` hits tree-wide are the unrelated word-sense
+  (`handleFinalSweep` gameover fund-sweep — a pre-existing function NOT the keeper; and the PFIX
+  presale "closing-box sweep" dust-mop language); `crank`/`do-work` = 0 everywhere. Doc-comment
+  survivors of the unrelated word-sense are explicitly called out here.
+- Standalone-hero-multiplier kill-set (`_applyHeroMultiplier`/`HERO_BOOST_*`/`HERO_PENALTY`/`HERO_SCALE`)
+  = **0** in `DegeneretteModule.sol`.
+
+**SC1 satisfied:** every contract surface changed vs the v47.0 baseline `da5c9d50` is enumerated and
+attested NON-WIDENING with each delta hunk mapped to exactly one of the 7 v48 surfaces; the 632/42
+foundry regression baseline is attested NON-WIDENING (594/42 + 38 NEW_PASSING + 0 net-new) with the
+HERO byte-reproduce Hardhat gate flipped 15/20-diverge-RED → 0-diff-GREEN at `1575f4a9`; F-47-01 +
+F-47-02 are recorded RESOLVED-AT-V48 (both passing the economic skeptic-filter); `contracts/` is
+byte-identical to `1575f4a9`.
+
+---
+
+*v48.0 Phase 328 SC1 delta-audit authored 2026-05-26. Source-tree frozen throughout
+(`git diff 1575f4a9 HEAD -- contracts/` empty). Folds into `audit/FINDINGS-v48.0.md` §3 (delta-surface +
+composition) / §5 (regression) / §4 (F-47-01 + F-47-02 RESOLVED-AT-V48) at 328-03.*
