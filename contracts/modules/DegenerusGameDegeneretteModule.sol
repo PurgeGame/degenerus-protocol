@@ -251,17 +251,16 @@ contract DegenerusGameDegeneretteModule is
     // S=8 and S=9 exceed the packed jackpot range and are held as separate per-N
     // uint256 constants below (S=9 is the jackpot relabel of the old M=8 event).
     //
-    // PLACEHOLDER VALUES (TST handoff): the byte-exact S∈{0..9} constants are
-    // recalibrated by .planning/notes/degenerette-recalibration/derive_5_tables.py
-    // and byte-reproduced under the Phase-267-style PASS_ALL gate at Phase 327 (TST).
-    // The S=0..7 packed values + the S=8 constants below are pre-rescale placeholders
-    // (the packed slots still hold the old M-indexed values) — NOT the final
-    // S-distribution constants. Only the S=9 constants are final (the M=8 relabel).
-    uint256 private constant QUICK_PLAY_PAYOUTS_N0_PACKED = 0x0001a42c000051f1000011da00000654000001ff000000cc0000000000000000;
-    uint256 private constant QUICK_PLAY_PAYOUTS_N1_PACKED = 0x0001eb8600005fd7000014e70000075f00000256000000ef0000000000000000;
-    uint256 private constant QUICK_PLAY_PAYOUTS_N2_PACKED = 0x000241d9000070ac00001894000008aa000002bf000001190000000000000000;
-    uint256 private constant QUICK_PLAY_PAYOUTS_N3_PACKED = 0x0002ac130000856900001d1700000a39000003400000014d0000000000000000;
-    uint256 private constant QUICK_PLAY_PAYOUTS_N4_PACKED = 0x0003310c00009f5a000022be00000c4d000003e20000018d0000000000000000;
+    // The S∈{0..9} payout constants are recalibrated by
+    // .planning/notes/degenerette-recalibration/derive_5_tables.py to basePayoutEV =
+    // 100 centi-x per N and byte-reproduced under the Phase-267-style PASS_ALL gate.
+    // The S=0..7 values are packed below; S=8 and S=9 are held as separate per-N
+    // uint256 constants (S=9 is the jackpot relabel of the old M=8 event).
+    uint256 private constant QUICK_PLAY_PAYOUTS_N0_PACKED = 0x0000ccf1000027f8000008b700000311000000f9000000640000000000000000;
+    uint256 private constant QUICK_PLAY_PAYOUTS_N1_PACKED = 0x0000f45d00002fa800000a61000003aa00000129000000770000000000000000;
+    uint256 private constant QUICK_PLAY_PAYOUTS_N2_PACKED = 0x000120850000384600000c44000004560000015f0000008c0000000000000000;
+    uint256 private constant QUICK_PLAY_PAYOUTS_N3_PACKED = 0x0001523e000041f500000e5d000005100000019b000000a50000000000000000;
+    uint256 private constant QUICK_PLAY_PAYOUTS_N4_PACKED = 0x00018aa100004cf0000010c8000005ea000001e0000000c00000000000000000;
 
     /// @dev Per-N S=9 jackpot tier (exceeds 32-bit slot; held as separate uint256).
     ///      S=9 ≡ old M=8 (identical event + odds) — a relabel; values unchanged,
@@ -272,13 +271,13 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant QUICK_PLAY_PAYOUT_N3_S9 = 17_512_324; // 175,123.24x bet
     uint256 private constant QUICK_PLAY_PAYOUT_N4_S9 = 20_916_435; // 209,164.35x bet
 
-    /// @dev Per-N S=8 tier (separate uint256, exceeds 32-bit slot). PLACEHOLDER (0)
-    ///      pending the Phase 327 derive_5_tables.py byte-reproduce — NOT a final value.
-    uint256 private constant QUICK_PLAY_PAYOUT_N0_S8 = 0; // TST-derived placeholder
-    uint256 private constant QUICK_PLAY_PAYOUT_N1_S8 = 0; // TST-derived placeholder
-    uint256 private constant QUICK_PLAY_PAYOUT_N2_S8 = 0; // TST-derived placeholder
-    uint256 private constant QUICK_PLAY_PAYOUT_N3_S8 = 0; // TST-derived placeholder
-    uint256 private constant QUICK_PLAY_PAYOUT_N4_S8 = 0; // TST-derived placeholder
+    /// @dev Per-N S=8 tier (separate uint256, exceeds 32-bit slot). Recalibrated to
+    ///      basePayoutEV = 100 centi-x per N by derive_5_tables.py.
+    uint256 private constant QUICK_PLAY_PAYOUT_N0_S8 = 2_623_243; // 26,232.43x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_N1_S8 = 3_127_840; // 31,278.40x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_N2_S8 = 3_693_049; // 36,930.49x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_N3_S8 = 4_329_524; // 43,295.24x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_N4_S8 = 5_051_269; // 50,512.69x bet
 
     // -------------------------------------------------------------------------
     // WWXRP Bonus EV Redistribution (Full Ticket — 5 per-N factor tables)
@@ -292,15 +291,14 @@ contract DegenerusGameDegeneretteModule is
     // Bit layout (B=6..9 packed): 64 bits per bucket index, [B=6 | B=7 | B=8 | B=9],
     // with B=6 in the low 64 bits. Read via `(packed >> ((bucket - 6) * 64)) & 0xFFFFFFFFFFFFFFFF`.
     //
-    // PLACEHOLDER VALUES (TST handoff): the factor constants below are recalibrated for
-    // the S∈{0..9} distribution by derive_5_tables.py and byte-reproduced under the
-    // PASS_ALL gate at Phase 327 (TST) — the values below are pre-rescale placeholders.
+    // The factor constants below are calibrated for the S∈{0..9} distribution by
+    // derive_5_tables.py; total ETH bonus EV = exactly 5.000% per N.
     uint256 private constant WWXRP_BONUS_FACTOR_SCALE = 1_000_000;
-    uint256 private constant WWXRP_FACTORS_N0_PACKED = 0x0000000002278add0000000003fd603d0000000000ddba9f00000000001923d6;
-    uint256 private constant WWXRP_FACTORS_N1_PACKED = 0x0000000003aef46a0000000005fd43a60000000001285f2400000000001e36c9;
-    uint256 private constant WWXRP_FACTORS_N2_PACKED = 0x0000000006442ce7000000000914e5e4000000000192745c000000000024f43d;
-    uint256 private constant WWXRP_FACTORS_N3_PACKED = 0x000000000a96251f000000000dd6ad96000000000228fcb000000000002de0ce;
-    uint256 private constant WWXRP_FACTORS_N4_PACKED = 0x0000000011ba25db00000000151a90e70000000002fdeaff0000000000399efe;
+    uint256 private constant WWXRP_FACTORS_N0_PACKED = 0x0000000002278add0000000000301e470000000000769797000000000011b488;
+    uint256 private constant WWXRP_FACTORS_N1_PACKED = 0x0000000003aef46a0000000000459aab000000000096dc93000000000014250d;
+    uint256 private constant WWXRP_FACTORS_N2_PACKED = 0x0000000006442ce7000000000067a3f90000000000c6a960000000000017af89;
+    uint256 private constant WWXRP_FACTORS_N3_PACKED = 0x000000000a96251f00000000009dba9b00000000010d8a6d00000000001cbc40;
+    uint256 private constant WWXRP_FACTORS_N4_PACKED = 0x0000000011ba25db0000000000f40c44000000000176ef73000000000023de94;
 
     // -------------------------------------------------------------------------
     // Packed Bet Layout

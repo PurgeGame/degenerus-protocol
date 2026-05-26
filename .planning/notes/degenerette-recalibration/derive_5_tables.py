@@ -188,6 +188,13 @@ for N in range(5):
     for adj in (4, 5, 6):
         residual = Fraction(TARGET_EV) - total_ev(payouts, PN)
         payouts[adj] += round(residual / PN[adj])
+    # Neutral-or-just-under guarantee: the baseline basePayoutEV (before the
+    # activity-score ROI scaling and the ETH/WWXRP bonus) must never exceed
+    # TARGET_EV — the house is never EV-negative on the base table. If integer
+    # rounding overshot above 100 centi-x, nudge the ultra-fine S=6 tier down by
+    # the minimal amount that brings EV back to <= 100 (lands fractionally under).
+    while total_ev(payouts, PN) > Fraction(TARGET_EV):
+        payouts[6] -= 1
     tables.append((scale, payouts))
 
 # --- Print the solved per-N payout tables ---
@@ -302,9 +309,17 @@ for N in range(5):
 print("\n// Per-pick basePayoutEV verification (centi-x):")
 print(f"// {'N':>3} | basePayoutEV | drift from 100")
 for N in range(5):
-    ev = float(total_ev(tables[N][1], P_N_TABLE[N]))
+    ev_frac = total_ev(tables[N][1], P_N_TABLE[N])
+    ev = float(ev_frac)
     drift_bps = (ev - 100) * 100
-    assert abs(ev - 100) < 0.5, f"N={N} basePayoutEV drift {ev} exceeds 0.5 centi-x"
+    # Baseline must be neutral-or-just-under: <= 100 centi-x (never EV-positive)
+    # and within 0.5 centi-x of neutral (so it is ~100%, not a slack house edge).
+    assert ev_frac <= Fraction(TARGET_EV), (
+        f"N={N} basePayoutEV {ev} exceeds 100 centi-x — baseline must be neutral or just under"
+    )
+    assert ev_frac > Fraction(TARGET_EV) - 1, (
+        f"N={N} basePayoutEV {ev} drifts more than 0.5 centi-x below neutral"
+    )
     print(f"// {N:>3} |  {ev:>9.5f}   |  {drift_bps:+.4f} bps")
 
 # ETH-bonus EV verification

@@ -13,12 +13,11 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 ///        Phase-326 diff (FROZEN subject).
 ///
 /// @notice These proofs assert SCORING SHAPE / DISPATCH / BEHAVIOR and the
-///         AGGREGATION the write-batch touched — they do NOT depend on the final
-///         per-N payout table VALUES, so they pass GREEN even while the Phase-326
-///         intentional placeholders (QUICK_PLAY_PAYOUTS packed = old M-indexed,
-///         _S8 = 0, WWXRP = old) are still in the contract. The byte-reproduce of
-///         the final VALUES is the separate stat-gate (DegenerettePerNEvExactness),
-///         whose RED-with-diff is the expected no-contract-phase outcome.
+///         AGGREGATION the write-batch touched. The byte-reproduced final per-N
+///         payout VALUES are verified separately by the DegenerettePerNEvExactness
+///         stat gate (PASS_ALL byte-reproduce + neutral-or-just-under baseline EV);
+///         this suite anchors the dispatch shape (S=0..7 packed, S=8/S=9 separate
+///         uint256s) and the scoring/aggregation behavior.
 ///
 /// @dev Reaches the FROZEN `_score` (private) through the public resolve path and
 ///      reads the contract's score off the `FullTicketResult.matches` field (which
@@ -198,10 +197,9 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
             assertGt(payout, 0, "S=9 dispatches to the separate, nonzero S9 constant");
         }
 
-        // S=8: separate slot. In this phase the S8 constant is the placeholder 0,
-        // so a true S=8 spin pays 0 — proving the dispatch routes S=8 to the
-        // SEPARATE slot (NOT the packed S0..7 path, which would be nonzero). This
-        // is the placeholder showing through the FINAL dispatch shape.
+        // S=8: separate slot holding the FINAL nonzero S8 constant → a true S=8
+        // spin pays > 0 via the SEPARATE-slot dispatch (NOT the packed S0..7 path).
+        // Proves the >32-bit S8 slot is decoded end-to-end.
         {
             uint8 heroQuadrant = 2;
             uint256 word = uint256(keccak256("packing_s8"));
@@ -215,10 +213,10 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
                 heroQuadrant
             );
             assertEq(s, 8, "engineered A=6 + hero => S=8");
-            assertEq(
+            assertGt(
                 payout,
                 0,
-                "S=8 routes to the SEPARATE S8 slot (placeholder 0 in this phase) - dispatch shape is final"
+                "S=8 routes to the SEPARATE, now-final nonzero S8 slot - dispatch shape is final"
             );
         }
 

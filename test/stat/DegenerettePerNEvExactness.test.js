@@ -155,6 +155,28 @@ function analyticalPScore(N) {
   return dist; // dist[S] = P_N(S), S ∈ {0..9}
 }
 
+// Exact rational P_N(S) as integer numerators over a common denominator (mirrors
+// the derive_5_tables.py Fraction math). denom = 15^4 * 8^4 = 207_360_000 — the
+// 4 color axes (each /15) and 4 symbol axes (3 non-hero + 1 hero, each /8). Using
+// exact BigInt integers means NO floating-point slack can mask an EV-positive
+// baseline at the boundary.
+function exactPScoreNumerators(N) {
+  function convolve(a, b) {
+    const out = new Array(a.length + b.length - 1).fill(0n);
+    for (let i = 0; i < a.length; i++) {
+      for (let j = 0; j < b.length; j++) out[i + j] += a[i] * b[j];
+    }
+    return out;
+  }
+  let nums = [1n];
+  for (let q = 0; q < N; q++) nums = convolve(nums, [14n, 1n]); // gold color /15
+  for (let q = 0; q < 4 - N; q++) nums = convolve(nums, [13n, 2n]); // common color /15
+  for (let q = 0; q < 3; q++) nums = convolve(nums, [7n, 1n]); // non-hero symbol /8
+  nums = convolve(nums, [7n, 0n, 1n]); // hero symbol /8 (+2 on match)
+  while (nums.length < 10) nums.push(0n);
+  return { nums, denom: 15n ** 4n * 8n ** 4n }; // 207_360_000
+}
+
 // JS-replica dispatch on the 10-bucket S-scale (mirror
 // DegenerusGameDegeneretteModule.sol _getBasePayoutBps L1038-1060): S=8/S=9 are
 // separate uint256s, S=0..7 from the packed slot.
@@ -264,7 +286,7 @@ describe("HERO-04 — PASS_ALL byte-reproduce gate (10-bucket S ∈ {0..9})", fu
 // Per-N basePayoutEV exactness on the REGENERATED 10-bucket tables
 // ===========================================================================
 
-describe("HERO-04 — per-N basePayoutEV == 100 ± 0.5 centi-x (regenerated tables)", function () {
+describe("HERO-04 — per-N basePayoutEV neutral-or-just-under (regenerated tables)", function () {
   this.timeout(120_000);
 
   let generated;
@@ -274,7 +296,7 @@ describe("HERO-04 — per-N basePayoutEV == 100 ± 0.5 centi-x (regenerated tabl
   });
 
   for (let N = 0; N < 5; N++) {
-    it(`N=${N}: analytical-P_N(S) × regenerated tables yields basePayoutEV = 100 ± 0.5 centi-x`, function () {
+    it(`N=${N}: analytical-P_N(S) × regenerated tables yields basePayoutEV <= 100 and ~100 centi-x`, function () {
       const pS = analyticalPScore(N);
       // sum_S P_N(S) == 1 (within fp).
       const total = pS.reduce((a, b) => a + b, 0);
@@ -286,11 +308,17 @@ describe("HERO-04 — per-N basePayoutEV == 100 ± 0.5 centi-x (regenerated tabl
         ev += pS[s] * basePayout;
       }
       console.log(
-        `[HERO-04 EV N=${N}] basePayoutEV = ${ev.toFixed(6)} centi-x (target 100.00 ± 0.50)`,
+        `[HERO-04 EV N=${N}] basePayoutEV = ${ev.toFixed(6)} centi-x (must be <= 100, ~100)`,
       );
+      // Neutral-or-just-under: never EV-positive (<= 100, allowing only fp noise)
+      // and within 0.5 centi-x of neutral (no slack house edge on the base table).
       expect(
-        Math.abs(ev - 100.0) <= 0.5,
-        `HERO-04 N=${N}: basePayoutEV ${ev.toFixed(6)} centi-x outside ±0.50 of 100`,
+        ev <= 100.0 + 1e-6,
+        `HERO-04 N=${N}: basePayoutEV ${ev.toFixed(6)} centi-x is EV-POSITIVE (> 100)`,
+      ).to.equal(true);
+      expect(
+        ev >= 99.5,
+        `HERO-04 N=${N}: basePayoutEV ${ev.toFixed(6)} centi-x is too far below 100 (< 99.5)`,
       ).to.equal(true);
     });
   }
@@ -309,4 +337,61 @@ describe("HERO-04 — per-N basePayoutEV == 100 ± 0.5 centi-x (regenerated tabl
       ).to.equal(true);
     }
   });
+});
+
+// ===========================================================================
+// HARD baseline neutrality — exact, every-scenario, never EV-positive.
+//
+// The "baseline" is the player's expected return on the BASE payout table
+// alone: BEFORE the activity-score ROI scaling (roiBps <= 9990 = 99.9%) and
+// BEFORE the ETH/WWXRP lootbox bonus (both applied on top, out of scope here).
+// It MUST be neutral-or-just-under — basePayoutEV <= 100 centi-x for EVERY
+// player pick (gold-quadrant count N ∈ {0..4}), integrated EXACTLY over the
+// full score distribution P_N(S), S ∈ {0..9}. This reads the CONTRACT's landed
+// constants and uses exact integer (BigInt) arithmetic so no floating-point
+// rounding can hide an EV-positive baseline at the boundary.
+// ===========================================================================
+
+describe("HERO-04 — baseline basePayoutEV neutral-or-just-under (exact contract constants, never EV-positive)", function () {
+  this.timeout(120_000);
+
+  let contractConsts;
+
+  before(function () {
+    contractConsts = parseContractConstants();
+  });
+
+  for (let N = 0; N < 5; N++) {
+    it(`N=${N}: exact basePayoutEV over P_N(S) is <= 100 centi-x (never positive) and ~100 (>= 99.5)`, function () {
+      const { nums, denom } = exactPScoreNumerators(N);
+      // sum_S P_N(S) == 1 exactly.
+      const sumNums = nums.reduce((a, b) => a + b, 0n);
+      expect(
+        sumNums === denom,
+        `N=${N}: P_N(S) numerators sum ${sumNums} != denom ${denom}`,
+      ).to.equal(true);
+
+      // evNum / denom = basePayoutEV (centi-x), from the CONTRACT's landed table.
+      let evNum = 0n;
+      for (let s = 0; s <= 9; s++) {
+        evNum += jsGetBasePayoutBps(contractConsts, N, s) * nums[s];
+      }
+      const evCentiX = Number(evNum) / Number(denom);
+      console.log(
+        `[HERO-04 baseline N=${N}] exact basePayoutEV = ${evCentiX.toFixed(6)} centi-x (must be <= 100, ~100)`,
+      );
+
+      // Exact integer comparisons — no floating-point slack.
+      // Never EV-positive: evNum/denom <= 100  ⟺  evNum <= 100*denom.
+      expect(
+        evNum <= 100n * denom,
+        `HERO-04 N=${N}: baseline basePayoutEV ${evCentiX.toFixed(6)} centi-x is EV-POSITIVE (> 100) — the base table must be neutral or just under`,
+      ).to.equal(true);
+      // ~100 (no slack edge): evNum/denom >= 99.5  ⟺  10*evNum >= 995*denom.
+      expect(
+        10n * evNum >= 995n * denom,
+        `HERO-04 N=${N}: baseline basePayoutEV ${evCentiX.toFixed(6)} centi-x is too far below 100 (< 99.5)`,
+      ).to.equal(true);
+    });
+  }
 });
