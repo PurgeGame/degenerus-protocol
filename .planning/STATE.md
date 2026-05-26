@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v48.0
-milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
-status: shipped
-last_updated: "2026-05-26T18:30:00.000Z"
+milestone: v49.0
+milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
+status: planning
+last_updated: "2026-05-26T12:50:49.791Z"
 last_activity: 2026-05-26
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 21
-  completed_plans: 21
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,11 +24,10 @@ See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 
 ## Current Position
 
-Phase: 328 (terminal-delta-audit-3-skill-adversarial-sweep-closure) — COMPLETE
-Plan: 4 of 4
-Status: v48.0 SHIPPED 2026-05-26 — Phase 328 TERMINAL complete; the atomic 5-doc closure flip is applied (USER-approved at the 328-04 gate). Closure signal MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029.
-Last activity: 2026-05-26 -- 328-04 SC4 closure flip applied (signal resolved + propagated verbatim; 40/40 reqs re-attested; audit/FINDINGS-v48.0.md chmod 444). SUBJECT FROZEN at 1575f4a9 (git diff 1575f4a9 HEAD -- contracts/ empty).
-Next: v48.0 is closed — no active phase. Start the next milestone with /gsd-new-milestone when ready. Carried advisory (NON-finding, FINDINGS §9d): the SWAP withdrawable-cash ceiling is 60% in code vs ≤40% in the v48 design memo — USER accepted ≤60% as canonical at the closure gate (no-arb HOLDS; doc-drift, not a vulnerability).
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-26 — Milestone v49.0 started
 
 ## Last Shipped Milestone (v48.0 — SHIPPED 2026-05-26; signal `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`; baseline `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`)
 
