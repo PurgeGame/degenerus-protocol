@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v49.0
 milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
 status: planning
-last_updated: "2026-05-26T13:30:00.000Z"
-last_activity: 2026-05-26
+last_updated: "2026-05-26T13:55:04.550Z"
+last_activity: 2026-05-26 — v49.0 ROADMAP created (phases 329-333; REQUIREMENTS traceability filled for all 29 REQ-IDs)
 progress:
   total_phases: 5
   completed_phases: 0
