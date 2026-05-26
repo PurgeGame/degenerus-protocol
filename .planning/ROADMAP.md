@@ -20,7 +20,7 @@
 
 - [x] **Phase 325: SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation** - Settle the final shared signatures across `DegenerusGame`/`StakedDegenerusStonk`/`DegenerusVault`, grep-attest every cited file:line vs the v47.0-closure HEAD, and resolve every SPEC-time open item (RFALL-04 accounting shape, KEEP-04/05 VAULT-code + autoOpen scope, POOL-06 re-stranding, BTOMB packing, HERO-04 shape+packing, SWAP-03 jitter source, SWAP-08 acquisition-floor re-confirm) before any patch. (completed 2026-05-25)
 - [ ] **Phase 326: IMPL — The ONE Batched Contract Diff (all 7 items)** - Apply all seven work items' contract edits as a single reconciled diff; HARD STOP at the contract-commit boundary (applied + locally compiled/tested, never committed without explicit user hand-review).
-- [ ] **Phase 327: TST — Repro/Same-Results + No-Arb + EV + Regression Proofs** - Prove the presale-drain dust bound (PFIX-02/03), the redemption-fallback regression (RFALL-05), the sDGNRS `receive()` accounting-safety (POOL-04), the BURNIE tombstone non-circulating signal (BTOMB-03), the byte-identical Degenerette recalibration (HERO-04/06), and the salvage-swap no-arb at the jitter band CEILING + solvency (SWAP-08/09).
+- [x] **Phase 327: TST — Repro/Same-Results + No-Arb + EV + Regression Proofs** - Prove the presale-drain dust bound (PFIX-02/03), the redemption-fallback regression (RFALL-05), the sDGNRS `receive()` accounting-safety (POOL-04), the BURNIE tombstone non-circulating signal (BTOMB-03), the byte-identical Degenerette recalibration (HERO-04/06), and the salvage-swap no-arb at the jitter band CEILING + solvency (SWAP-08/09). (completed 2026-05-26)
 - [ ] **Phase 328: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure** - NON-WIDENING delta-audit vs the v47.0 baseline, run the 3-skill genuine-PARALLEL adversarial sweep, author `audit/FINDINGS-v48.0.md`, and flip the closure signal `MILESTONE_V48_AT_HEAD_<sha>`.
 
 ---
@@ -82,7 +82,7 @@
 - [x] 327-03-PLAN.md — BTOMB-03: 1e36 tombstone non-circulating (`totalSupply()` untouched, +1e36 only in uncirculated leg) + one-shot + checked-add + DGVB pro-rata claim overflow-safe (Foundry `test/fuzz/BurnieTombstone.t.sol`)
 - [x] 327-04-PLAN.md — HERO-04/06: extend `derive_5_tables.py` to the 10-bucket S=0..9 design + PASS_ALL byte-reproduce gate (regenerate, not hand-typed) + S=A+2H scoring + write-batch DGAS equivalence + daily-hero no-leak (Hardhat `test/stat/*` + Foundry `test/fuzz/DegeneretteHeroScore.t.sol`) — byte-reproduced constants must land in the frozen contract (hand-review gate); see milestone blocker
 - [x] 327-05-PLAN.md — SWAP-08/09 (load-bearing): no-arb at the 110% jitter CEILING across all d in [6,100] (margin ~4.5pp @d6) + BURNIE-can't-mint-far (behavioral probe, ffi disabled) + solvency `claimablePool <= ETH+stETH` + ticket/ETH floors + swap-pop membership (Foundry `test/fuzz/FarFutureSalvageSwap.t.sol`)
-- [ ] 327-06-PLAN.md — Clean v48.0 regression-baseline gate (Wave 2): run the FULL `forge test` tree (NOT --match-path), assert NET-ZERO new regression vs the 326-08 594/42 baseline (every red named in the VRF/baseline + KNOWN-TST-DEFERRED HERO union), and document the conditional post-landing HERO byte-reproduce delta — no `contracts/*.sol` edit (ledger `test/REGRESSION-BASELINE-v48.md`)
+- [x] 327-06-PLAN.md — Clean v48.0 regression-baseline gate (Wave 2): run the FULL `forge test` tree (NOT --match-path), assert NET-ZERO new regression vs the 326-08 594/42 baseline (every red named in the VRF/baseline + KNOWN-TST-DEFERRED HERO union), and document the conditional post-landing HERO byte-reproduce delta — no `contracts/*.sol` edit (ledger `test/REGRESSION-BASELINE-v48.md`)
 **UI hint**: no
 
 ### Phase 328: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure
@@ -105,7 +105,7 @@
 |-------|----------------|--------|-----------|
 | 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 3/3 | Complete    | 2026-05-25 |
 | 326. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/8 | Not started | - |
-| 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 5/6 | In Progress|  |
+| 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 6/6 | Complete   | 2026-05-26 |
 | 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 0/TBD | Not started | - |
 
 ---
