@@ -45,7 +45,7 @@
 
 - [ ] **BTOMB-01**: At `gameOver()`, one-shot bump BURNIE's virtual VAULT mint allowance (`_supply.vaultAllowance`) by **1e36 wei (1 quintillion BURNIE)** via the existing GAME-gated escrow/allowance-increase path, called once from the gameover-drain. `BurnieCoin.sol` + `DegenerusGameGameOverModule`.
 - [ ] **BTOMB-02**: Checked add / cap so `existing vaultAllowance + flood` can't overflow `uint128` (constant kept well below 1e38 wei, ~340× headroom); strictly one-shot (cannot be re-triggered to re-flood).
-- [ ] **BTOMB-03**: Does NOT touch circulating `totalSupply()`; signal lands only in `vaultMintAllowance()` / `supplyIncUncirculated()` / `balanceOf(VAULT)`; DGVB pro-rata BURNIE-claim math does not overflow when claiming a share of a 1e36 allowance.
+- [x] **BTOMB-03**: Does NOT touch circulating `totalSupply()`; signal lands only in `vaultMintAllowance()` / `supplyIncUncirculated()` / `balanceOf(VAULT)`; DGVB pro-rata BURNIE-claim math does not overflow when claiming a share of a 1e36 allowance.
 
 ### Degenerette Hero 2-Point Rescale (`PLAN-V48-DEGENERETTE-HERO-2PT-RESCALE.md`)
 
@@ -126,7 +126,7 @@ Which phases cover which requirements. Phase numbering continues from v47.0 (end
 | PFIX-03 | Phase 327 (TST) | Complete |
 | RFALL-05 | Phase 327 (TST) | Complete |
 | POOL-04 | Phase 327 (TST) | Complete |
-| BTOMB-03 | Phase 327 (TST) | Pending |
+| BTOMB-03 | Phase 327 (TST) | Complete |
 | HERO-04 | Phase 327 (TST) | Pending |
 | HERO-06 | Phase 327 (TST) | Pending |
 | SWAP-08 | Phase 327 (TST) | Pending |
