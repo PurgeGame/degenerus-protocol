@@ -96,7 +96,7 @@
   4. The `MILESTONE_V48_AT_HEAD_<sha>` closure signal is emitted and propagated verbatim, and the atomic 5-doc closure flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) is applied with all 40 requirements re-attested at closure.
 **Plans**: 4 plans (3 waves; mirrors the v47.0 Phase 324 TERMINAL shape — SC1 delta-audit ‖ SC2 adversarial sweep → SC3 findings deliverable → SC4 gated closure flip)
 - [x] 328-01-PLAN.md — SC1 DELTA-AUDIT: enumerate the 12-file delta surface (`git diff da5c9d50..1575f4a9 -- contracts/`, 611+/324−) mapped to the 7 v48 surfaces (PFIX/RFALL/KEEP/POOL/BTOMB/HERO/SWAP), each NON-WIDENING; regression baseline 632/42 net-zero + Hardhat PASS_ALL GREEN; F-47-01 + F-47-02 RESOLVED-AT-V48 → `328-01-DELTA-AUDIT.md` (Wave 1, autonomous)
-- [ ] 328-02-PLAN.md — SC2 ADVERSARIAL SWEEP: fixed 3-skill set (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT) charged against the 7 surfaces + composition (salvage-swap no-arb-at-ceiling / grinder-waiter / swap-pop H-CANCEL-SWAP-MISS regression / redemption-desk; RFALL donation-robustness; PFIX dust bound; KEEP foreclosure + faucet; POOL accounting; BTOMB overflow; HERO byte-identical RTP), skeptic-filtered before any elevation → `328-02-ADVERSARIAL-LOG.md` (Wave 1, autonomous)
+- [x] 328-02-PLAN.md — SC2 ADVERSARIAL SWEEP: fixed 3-skill set (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT) charged against the 7 surfaces + composition (salvage-swap no-arb-at-ceiling / grinder-waiter / swap-pop H-CANCEL-SWAP-MISS regression / redemption-desk; RFALL donation-robustness; PFIX dust bound; KEEP foreclosure + faucet; POOL accounting; BTOMB overflow; HERO byte-identical RTP), skeptic-filtered before any elevation → `328-02-ADVERSARIAL-LOG.md` (Wave 1, autonomous)
 - [ ] 328-03-PLAN.md — SC3 FINDINGS DELIVERABLE: `audit/FINDINGS-v48.0.md` (9-section, mirrors v47), folding the 328-01 delta-audit (§3/§5) + 328-02 sweep (§4), recording F-47-01 + F-47-02 RESOLVED-AT-V48, re-attesting all 40 reqs in §3.C, `MILESTONE_V48_AT_HEAD_<sha>` placeholder (Wave 2, depends_on 328-01+328-02, autonomous)
 - [ ] 328-04-PLAN.md — SC4 CLOSURE FLIP: single blocking USER closure-verdict + signal-format approval gate, then resolve the SHA, apply the atomic 5-doc flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) re-attesting all 40 reqs, chmod 444 the findings (Wave 3, depends_on 328-03, autonomous:false)
 **UI hint**: no
@@ -110,7 +110,7 @@
 | 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 3/3 | Complete    | 2026-05-25 |
 | 326. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/8 | Not started | - |
 | 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 6/6 | Complete    | 2026-05-26 |
-| 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 1/4 | In Progress|  |
+| 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 2/4 | In Progress|  |
 
 ---
 
