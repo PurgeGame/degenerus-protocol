@@ -1,7 +1,16 @@
 # Phase 330: IMPL — The ONE Batched Contract Diff (router + advance-rework + micro-opts) - Context
 
-**Gathered:** 2026-05-26
-**Status:** Ready for planning
+> ⚠️ **STALE — PRE-REDESIGN (do NOT plan from the body below as-is).** This context was gathered
+> `2026-05-26 10:43` BEFORE the keeper-router redesign pivot (the 330-07 hand-review). The body still
+> describes the OLD design (`advance→open→buy`, `doWork(maxCount)`, dual-epoch single-source,
+> legs-keep-their-own-bounty, GASOPT-01/02, 13 reqs).
+>
+> **Authoritative design for the 330 re-plan = `../329-spec-design-lock-call-graph-attestation-4-structural-invaria/329-SPEC.md` (§1 redesigned signatures, §2 invariants + dispositions, §3 producer-before-consumer IMPL edit-order map) + `330-ROUTER-REDESIGN-INTENT.md` (the locked RD-1..RD-5 + D-07 + D-08 changes, traced).** The redesign: `autoBuy→advance→autoOpen`, parameterless `doWork()` + `NoWork()` + unrewarded standalone escapes, dropped rngLock guards (RD-2), block-autoOpen-during-rngLock + drop try/catch + entry-gate (RD-3/RD-5), unified single `creditFlip` in `doWork` (RD-4), D-07 flat-per-tx bounty, GAS-03 satisfied-by-deletion. Owned reqs are now **ROUTER-01/02/03/04/05/06/08/09/10, ADV-01/02/03/05, GASOPT-01/03/04/05, BATCH-02 (18, GASOPT-02 SUBSUMED into GASOPT-03)** — see ROADMAP/REQUIREMENTS (36-req set).
+>
+> **Before re-planning:** the 7 PLAN.md files + their SUMMARYs in this dir are the SUPERSEDED pre-redesign plans (their execution produced the held-330 working-tree diff). Re-plan with `/gsd-plan-phase 330 --force`. And decide whether to discard the held-330 diff (6 contracts/*.sol + 7 test/* files, still dirty) before the redesigned diff is applied — it's the old design.
+
+**Gathered:** 2026-05-26 (pre-redesign — see staleness banner above)
+**Status:** STALE pre-redesign — needs re-plan against 329-SPEC + 330-ROUTER-REDESIGN-INTENT
 
 <domain>
 ## Phase Boundary
