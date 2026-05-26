@@ -10,7 +10,7 @@
 ## v49.0 Requirements
 
 ### Unified Keeper "Do-Work" Router (ROUTER)
-- [ ] **ROUTER-01**: A keeper can call a single `doWork(maxCount)` entrypoint on `AfKing.sol` that performs exactly ONE keeper category of work per call and pays one gas-pegged bounty.
+- [ ] **ROUTER-01**: A keeper can call a single `doWork(maxCount)` entrypoint on `AfKing.sol` that performs exactly ONE keeper category of work per call and pays one gas-pegged bounty. `maxCount == 0` is a sentinel resolving to a FIXED per-leg default count (≈ a ~10M-gas budget ÷ avg-marginal-per-item; the count-bounded `autoOpen`/`_autoBuy` legs only — advance is self-bounded), so a naive keeper can call `doWork(0)` for a sensible budget of work without computing pending counts; worst-case OOG is a clean state-reverting revert + manual smaller-`maxCount` retry (SPEC decision D-06).
 - [ ] **ROUTER-02**: `doWork` routes by priority — advance-leg (new-day advance OR mid-day partial-drain ticket processing) → `autoOpen` → `autoBuy`.
 - [ ] **ROUTER-03**: The one-rewarded-category-per-call rule is enforced as a STRUCTURAL early-return (advance/open/buy bounties can never stack in one tx).
 - [ ] **ROUTER-04**: `doWork` uses O(1) on-chain work-discovery predicates (advance-due incl. mid-day partial-drain / boxes-pending / buys-pending) — no unbounded scans.
@@ -26,7 +26,7 @@
 - [ ] **ADV-05**: Mid-day partial-drain ticket processing (`day == dailyIdx` but tickets not fully processed) is router-rewardable advance-leg work.
 
 ### Bounty Recalibration + Worst-Case Gas Sweep (GAS)
-- [ ] **GAS-01**: Worst-case-first marginal gas is derived per keeper category (`autoBuy`/`autoOpen`/`autoResolve`) + the router overhead (theoretical worst case before measurement).
+- [ ] **GAS-01**: Worst-case-first marginal gas is derived per keeper category (`autoBuy`/`autoOpen`/`autoResolve`) + the router overhead (theoretical worst case before measurement). This derivation ALSO sizes the D-06 `maxCount==0` default: the AVG marginal-per-item fixes each per-leg `DEFAULT_*_COUNT = floor(~10M ÷ avg)`, and the worst-case marginal fixes the headroom margin (≈3× vs the ~30M block limit).
 - [ ] **GAS-02**: All keeper bounties are re-pegged to break-even at 0.5 gwei (BURNIE-denominated) using the per-item MARGINAL, never a per-call total (the CR-01 self-crank-faucet rule).
 - [ ] **GAS-03**: The stall multiplier uses a single unified day-start epoch (collapsing the differing `AfKing` `today*1days+82620` vs `AdvanceModule` `(day-1+DEPLOY_DAY_BOUNDARY)*1days+82620` epochs).
 - [ ] **GAS-04**: The stall multiplier (1/2/4/6) is kept; any ceiling extension for extreme stalls is added ABOVE the 2h tier (never lowering existing thresholds) and is capped against the finite faucet pool.
@@ -39,7 +39,7 @@
 
 ### Test Proofs (TST)
 - [ ] **TST-01**: Freeze-invariant fuzz (extending the v43 `RngLockDeterminism` harness) proves the router advance-consume reads only frozen state mid-tx (the `totalFlipReversals` class).
-- [ ] **TST-02**: A one-rewarded-category-per-tx assertion (no bounty-stacking) + a router→game→`creditFlip` reentrancy double-pay regression.
+- [ ] **TST-02**: A one-rewarded-category-per-tx assertion (no bounty-stacking) + a router→game→`creditFlip` reentrancy double-pay regression. Plus the D-06 `doWork(0)` default-count proof: the fixed default does a budget of work and does NOT OOG in the common case (a backlog larger than one budget leaves a remainder for the next call; `autoBuy(0)`/`autoOpen(0)` no longer revert/no-op under the default path), with the manual smaller-`maxCount` fallback exercised.
 - [ ] **TST-03**: `advanceGame` is unrewarded standalone but rewarded via the router; the GASOPT micro-opts are proven same-results (gas-only).
 - [ ] **TST-04**: Full-suite regression is NON-WIDENING vs the v48.0 baseline (net-zero new regression; enumerated-red-set guard).
 - [ ] **TST-05**: The `degeneretteResolve` rename + re-peg (GAS-06) is proven — flat literal ~1 BURNIE per tx (NOT per-item), the ≥3-resolution pay-gate, revert-on-no-work (zero resolved), WWXRP excluded from BOTH the gate count and the reward, and byte-identical resolution RESULTS vs the per-item path (rename + bounty-shape change only, no payout/RNG change).
@@ -118,4 +118,4 @@
 
 **Note:** milestone-wide "uncovered" warnings (§13e-style) are EXPECTED false alarms — each phase owns only its slice; SWEEP-01/02/03 + BATCH-03 re-attest the full 31-requirement set at TERMINAL (same class as the v47/v48 roadmaps).
 
-*Last updated: 2026-05-26 — v49.0 traceability filled at roadmap creation (29 reqs / 7 categories: ROUTER 7 · ADV 5 · GAS 5 · GASOPT 2 · TST 4 · SWEEP 3 · BATCH 3 → phases 329–333), then GAS-06 + TST-05 added (Phase 329 discussion, 2026-05-26) for the `autoResolve`→`degeneretteResolve` rename + flat ~1-BURNIE "lose" bounty re-peg (≥3-gate) → 31 reqs (GAS 6 · TST 5). Statuses flip to Complete as phases close; all 31 re-attested at the Phase 333 closure.*
+*Last updated: 2026-05-26 — v49.0 traceability filled at roadmap creation (29 reqs / 7 categories: ROUTER 7 · ADV 5 · GAS 5 · GASOPT 2 · TST 4 · SWEEP 3 · BATCH 3 → phases 329–333), then GAS-06 + TST-05 added (Phase 329 discussion, 2026-05-26) for the `autoResolve`→`degeneretteResolve` rename + flat ~1-BURNIE "lose" bounty re-peg (≥3-gate) → 31 reqs (GAS 6 · TST 5). Statuses flip to Complete as phases close; all 31 re-attested at the Phase 333 closure. Then SPEC decision D-06 (the `doWork(maxCount==0)` fixed gas-budget-sized default count; user 2026-05-26) was folded as a REFINEMENT of the existing ROUTER-01 (IMPL) + GAS-01 (calibration) + TST-02 (proof) — NO new REQ-IDs minted (count stays 31), since it refines the already-in-scope `doWork(maxCount)` signature rather than adding a separate function.*

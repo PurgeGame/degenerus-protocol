@@ -163,6 +163,56 @@ shared-signature reconciliation only. Security / RNG-freeze floor over gas
   ROUTER-05's "keeps its own in-game bounty unchanged" is amended to "…RENAMED + RE-PEGGED per
   GAS-06 (still a separate call)." `degeneretteResolve` stays out of the router.
 
+### doWork(maxCount=0) — fixed gas-budget-sized default count, "do max work, never OOG (common case)" (DISCUSSED — user 2026-05-26; scope addition)
+- **D-06: `maxCount == 0` is a SENTINEL resolving to a FIXED per-leg default count, calibrated as
+  `≈ GAS_BUDGET / avg_marginal_cost_per_atomic_op` (GAS_BUDGET ~10M gas — PLACEHOLDER), applied to the
+  count-bounded legs (`autoOpen`, `_autoBuy`).** A plain `while (processed < DEFAULT_COUNT && cursor <
+  len)` — NOT a per-iteration `gasleft()`-bounded loop, NOT a gas-unrelated item count, NOT an unbounded
+  process-all. Today at `0cc5d10f` `doWork(0)` would be a footgun (`autoBuy(0)` reverts `EmptyAutoBuy`
+  `AfKing.sol:569`; `autoOpen(0)` no-ops — the `:1656` loop `while (cursor < qlen && opened < maxCount)`
+  never enters); D-06 makes `0` a friendly "do a sensible budget of work" default.
+- **D-06a (why fixed-count, not `gasleft()`):** `gasleft()` is NOT the cost concern — the `GAS` opcode is
+  2 gas, negligible. The reason to prefer a fixed default count is SIMPLICITY: no per-iteration branch and
+  no fragile per-iteration **reserve-floor** constant (a `gasleft` loop only "never OOGs" if its reserve
+  floor is ≥ the true worst-case single iteration + finalization — the same worst-case-estimation problem,
+  just relocated). The trade: the fixed-count never-OOG is STATISTICAL, not ABSOLUTE (see D-06d).
+- **D-06b (sizing + headroom):** per-leg `DEFAULT_AUTO_OPEN_COUNT` / `DEFAULT_AUTO_BUY_COUNT` constants
+  `= floor(~10M / avg-marginal-per-item)`. Sizing the default to a ~10M budget while a keeper can supply
+  up to the block gas limit (~30M on mainnet) leaves generous headroom (≈3×) — a batch whose items
+  average well above the mean (the user's ~67% overcost figure and beyond) still completes under the
+  supplied limit. Exact budget + per-leg counts calibrated at GAS (331).
+- **D-06c (advance leg unaffected):** `advanceGame()` takes NO count arg and already does its own
+  internally-bounded ticket batch (incl. the mid-day partial-drain `AdvanceModule.sol:225`) — D-06 applies
+  ONLY to the `autoOpen` + `_autoBuy` legs; `maxCount` does not map to advance.
+- **D-06d (worst-case OOG is non-catastrophic + manually fixable — ACCEPTED):** if a pathological
+  worst-case-clustered batch exceeds the supplied gas, the tx reverts OUT-OF-GAS — which rolls back ALL
+  state cleanly (no fund loss, no invariant break, no partial corruption); the keeper retries with a
+  smaller EXPLICIT `maxCount` (the manual escape hatch). never-OOG here is keeper-UX/liveness, NOT a
+  security invariant, so the statistical (not absolute) guarantee is acceptable under the security floor.
+  Advance liveness has its own independent fallbacks (D-04), unaffected. (Minor accepted trade vs
+  `gasleft`: a fixed count is calibrated at deploy and does not auto-adapt to a post-deploy gas-schedule
+  repricing; rare, still manually fixable — `feedback_frozen_contracts_no_future_proofing`.)
+- **D-06e (EmptyAutoBuy reconciliation):** under `count==0`-means-default, the router's `_autoBuy(0)`
+  path MUST NOT revert `EmptyAutoBuy` — it processes the default-count batch. SPEC author settles whether
+  the standalone external `autoBuy(uint256)` also adopts `0`=default (dropping/repurposing `EmptyAutoBuy`)
+  or keeps its revert with only `_autoBuy`/`doWork` applying the default. Lean: the default lives in the
+  shared internal `_autoBuy`, so `0`=default everywhere and `EmptyAutoBuy` is removed/repurposed — confirm
+  at SPEC, verify at TST.
+- **D-06f (faucet-safety — NOT a new faucet):** the autoBuy/autoOpen bounties are per-item break-even
+  (GAS-02 per-item MARGINAL; `AfKing.sol:845` `bountyEarned = batchLen * peg`). A larger default batch
+  pays proportionally more bounty AND costs proportionally more gas → still per-item break-even, NO
+  positive-EV from batching; the GAS-05 WR-01 round-trip guard must hold at the MAX default-count batch.
+  The one-category early-return (invariant a) is preserved: `doWork(0)` does ONE category's default batch,
+  one `creditFlip` per tx.
+- **D-06g (placeholders + handoffs + traceability):** GAS_BUDGET (~10M) + the per-leg DEFAULT_*_COUNT
+  constants are SPEC PLACEHOLDERS — calibrated at GAS (331) from GAS-01's avg + worst-case marginal
+  per-item gas (avg sizes the count; worst-case sizes the headroom margin; the v46 Phase 319 CR-01
+  "peg to the marginal, never a single total" discipline applies to the avg estimate). The
+  never-OOG-in-the-common-case + manual-smaller-count fallback proof is a TST (332) item. D-06 **REFINES**
+  the in-scope ROUTER-01 (`doWork(maxCount)` signature — IMPL 330) + GAS-01 (marginal/avg gas calibration
+  — 331) + TST-02 (router behavior proof — 332); **NO new REQ-IDs minted** (refines the existing
+  `doWork(maxCount)` signature, unlike D-05's separate `degeneretteResolve` function).
+
 ### Claude's Discretion — pure attestations resolved by reading source (NOT user decisions)
 The SPEC author resolves these from the live `contracts/` + grep against `0cc5d10f`; they were
 intentionally NOT put to the user (grep/derive/fact-check work, not design choices):
@@ -182,7 +232,11 @@ intentionally NOT put to the user (grep/derive/fact-check work, not design choic
   whether advance/boxes views live on `DegenerusGame` and buys on `AfKing`-local — all O(1), no
   unbounded scans.
 - **`maxCount` semantics across legs:** how `doWork(maxCount)` maps `maxCount` onto each routed leg
-  (advance / `autoOpen(maxCount)` / `_autoBuy(maxCount)`).
+  (advance / `autoOpen(maxCount)` / `_autoBuy(maxCount)`). The `maxCount == 0` default is now the LOCKED
+  decision **D-06** (fixed gas-budget-sized default count); this Discretion item is the grep-attestation
+  of the CURRENT count-handling sites D-06 builds on — `autoBuy(0)` revert `AfKing.sol:569`, `autoOpen(0)`
+  no-op loop `DegenerusGame.sol:1656`, `advanceGame` no-count — and confirming no existing fixed-default /
+  gas-bounded-loop pattern exists (so D-06 is a NEW IMPL behavior at 330).
 - **v48 KEEP-04 affiliate-code passthrough survival:** confirm the VAULT registered-affiliate-code
   wiring (`bytes32("DGNRS")` two-tier 75/20/5) is valid at v49 HEAD so the `autoBuy` affiliate-code
   passthrough survives the `_autoBuy` internal refactor (ROUTER-05 pre-condition).
