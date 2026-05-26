@@ -105,7 +105,7 @@
 |-------|----------------|--------|-----------|
 | 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 3/3 | Complete    | 2026-05-25 |
 | 326. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/8 | Not started | - |
-| 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 6/6 | Complete   | 2026-05-26 |
+| 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 6/6 | Complete    | 2026-05-26 |
 | 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 0/TBD | Not started | - |
 
 ---

@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
-status: verifying
-last_updated: "2026-05-26T09:58:59.623Z"
+status: ready_to_plan
+last_updated: 2026-05-26T10:18:46.193Z
 last_activity: 2026-05-26
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 17
-  completed_plans: 17
+  completed_plans: 36
   percent: 75
+stopped_at: Phase 327 complete (6/6) — ready to discuss Phase 328
 ---
 
 # Project State
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 327 — tst-repro-same-results-no-arb-ev-regression-proofs
+**Current focus:** Phase 328 — terminal — delta audit + 3 skill adversarial sweep + closure
 
 ## Current Position
 
-Phase: 327 (tst-repro-same-results-no-arb-ev-regression-proofs) — COMPLETE (ready for verification)
-Plan: 6 of 6
-Status: Phase 327 COMPLETE — all 6 plans done (Wave 1: 327-01..05; Wave 2: 327-06 regression gate). Ready for verification. 327-06 executed: v48.0 clean regression baseline PROVEN — full forge tree 632 passed / 42 failed vs the 326-08 594/42 baseline + 38 NEW_PASSING from the 5 wave-1 test files; NET new regression from those files == 0 (every red named in the VRF/RNG + stale-harness + HERO-deferred union; all 18 failing suites last-touched <= f50cc634, none by a wave-1 commit; no ## STOP). Ledger test/REGRESSION-BASELINE-v48.md (commit 208859e8); zero contracts/*.sol edits.
-Last activity: 2026-05-26 -- 327-06 executed (full-suite regression gate; net-zero new regression + HERO conditional post-landing delta; 1 commit, zero contracts/*.sol)
+Phase: 328
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-26
 Next: Phase 328 TERMINAL (delta-audit + 3-skill adversarial sweep + closure). The 42-failure baseline carries forward (bucket A VRF/RNG 8 + bucket B stale-harness/v48-behavioral 34); re-syncing the stale fixtures is owned by TERMINAL / a future fixture-repair plan. ⚠ HERO-04 contract-constant landing STILL PENDING USER DECISION (out of the no-contract TST phase): the 15 ready-to-apply finals are in 327-04-SUMMARY; landing them under the hand-review CONTRACTS_COMMIT_APPROVED=1 gate flips the Hardhat PASS_ALL stat gate 1->0 failing (forge count unchanged at 42 — the byte-reproduce red is Hardhat-only), per the conditional delta in test/REGRESSION-BASELINE-v48.md §3.
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
