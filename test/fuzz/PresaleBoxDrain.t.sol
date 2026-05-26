@@ -280,4 +280,117 @@ contract PresaleBoxDrain is DeployProtocol {
         assertLe(closingDraw, 1, "closing draw (roll + sweep) <= 1 wei dust");
         assertLe(poolAfterClose, 1, "pool ~0 after the closing box");
     }
+
+    // ──────────────────────────────────────────────────────────────────────
+    //  Task 2 -- PFIX-02 realistic 50-ETH run: closing sweep is variance DUST
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @dev Brute-force a rngWord (>0) so (player, amount) lands a chosen outcome BAND.
+    ///      band: 0 = BURNIE [0,50), 1 = DGNRS [50,90), 2 = WWXRP [90,100).
+    function _wordForBand(address player, uint256 amount, uint8 band) internal pure returns (uint256 w) {
+        for (w = 1; w < 20000; ++w) {
+            uint256 o = _outcome(w, player, amount);
+            if (band == 0 && o < 50) return w;
+            if (band == 1 && o >= 50 && o < 90) return w;
+            if (band == 2 && o >= 90) return w;
+        }
+        revert("no word for band");
+    }
+
+    /// @notice Realistic ~50-ETH presale run across MANY boxes with a realized ~50/40/10
+    ///         BURNIE/DGNRS/WWXRP branch mix (PRNG-driven, asserted ~40% DGNRS within a
+    ///         tolerance band so a degenerate all-BURNIE run FAILS, never silently passes).
+    ///         Proves the closing-box sweep is variance DUST (<= poolStart/100), the residual
+    ///         pool ends ~empty, and the cumulative per-box DGNRS draw is the dominant share of
+    ///         poolStart (>= 90%) -- the curve-exercised guard that the OLD /1_000 curve fails.
+    function test_PFIX02_RealisticRun_ClosingSweepIsDust() public {
+        uint48 index = _lrIndex();
+
+        // ~50 ETH run: 250 boxes x 0.2 ETH = exactly the 50-ETH cap. The crossing (final) box
+        // latches closing == true. Many boxes -> the tier ladder walks 3.0x..1.0x naturally as
+        // cumulative soldBefore advances 0 -> 50 ETH, exercising the full FIXED curve.
+        uint256 boxAmount = 0.2 ether;
+        uint256 nBoxes = uint256(PRESALE_BOX_ETH_CAP) / boxAmount; // 250
+        assertEq(nBoxes * boxAmount, PRESALE_BOX_ETH_CAP, "run sums to exactly the 50-ETH cap");
+
+        // Deterministic seeded PRNG so the realized branch mix is ~50/40/10. Each box's band is
+        // drawn from keccak(seed, i) % 100, mirroring the contract's 50/40/10 split exactly.
+        uint256 prngSeed = uint256(keccak256("PFIX02_REALISTIC_RUN"));
+
+        // Snapshot the pool start (frozen on the first open). Read the live default pool here.
+        uint256 poolStart = _poolBal();
+        assertGt(poolStart, 0, "presale-box pool funded at deploy");
+
+        address[] memory buyers = new address[](nBoxes);
+        uint8[] memory bands = new uint8[](nBoxes);
+        uint256 dgnrsBranchCount;
+
+        // --- Buy all boxes (queue at the shared index), assigning each a target band. ---
+        for (uint256 i = 0; i < nBoxes; ++i) {
+            address buyer = makeAddr(string(abi.encodePacked("runBuyer", vm.toString(i))));
+            buyers[i] = buyer;
+
+            uint256 draw = uint256(keccak256(abi.encodePacked(prngSeed, i))) % 100;
+            uint8 band = draw < 50 ? 0 : (draw < 90 ? 1 : 2); // 50% BURNIE / 40% DGNRS / 10% WWXRP
+            bands[i] = band;
+            if (band == 1) dgnrsBranchCount++;
+
+            _buyBox(buyer, boxAmount);
+        }
+
+        // The final box (i == nBoxes-1) crossed the cap -> closing latched.
+        address closer = buyers[nBoxes - 1];
+        assertTrue((_boxRecord(index, closer) >> 255) & 1 == 1, "final box is the closing box");
+
+        // --- Resolve every box, forcing each to its assigned branch via the per-index word. ---
+        // Track the cumulative per-box DGNRS draw (pool delta on the non-closing opens) so the
+        // closing sweep can be isolated from the closer's own roll.
+        uint256 cumulativeBoxDraw;
+        for (uint256 i = 0; i < nBoxes - 1; ++i) {
+            if (_poolBal() == 0) {
+                // Pool already empty: remaining DGNRS-branch opens draw 0 (clamp). Still open
+                // them so the run is complete and the closer is reached.
+                _setRngWord(index, _wordForBand(buyers[i], boxAmount, bands[i]));
+                vm.prank(buyers[i]);
+                game.openPresaleBox(buyers[i], index);
+                continue;
+            }
+            _setRngWord(index, _wordForBand(buyers[i], boxAmount, bands[i]));
+            uint256 poolBefore = _poolBal();
+            vm.prank(buyers[i]);
+            game.openPresaleBox(buyers[i], index);
+            cumulativeBoxDraw += poolBefore - _poolBal();
+        }
+
+        // Realized-mix guard (T-327-01-FC1): the run must genuinely be the ~40% DGNRS
+        // distribution that exposed F-47-01. A degenerate all-BURNIE run FAILS here.
+        // Tolerance band: 30%..50% of boxes hit the DGNRS branch.
+        assertGe(dgnrsBranchCount * 100, nBoxes * 30, "realized DGNRS branch rate >= 30%");
+        assertLe(dgnrsBranchCount * 100, nBoxes * 50, "realized DGNRS branch rate <= 50%");
+
+        // --- The closing box: its sweep mops up only the residual remainder. ---
+        // Force the closer's own roll to WWXRP (1-token dud, draws NOTHING from the pool) so the
+        // measured pool delta across the closing open is the closing SWEEP alone.
+        _setRngWord(index, _wordForBand(closer, boxAmount, 2));
+        uint256 poolBeforeClose = _poolBal();
+        vm.prank(closer);
+        game.openPresaleBox(closer, index);
+        uint256 swept = poolBeforeClose - _poolBal();
+
+        // Dust bound (T-327-01-FC2): <= poolStart/100 (1%). The v47 /1_000 curve left the
+        // per-box draw ~2.5x smaller, so ~60% of poolStart survived to the closer -- which would
+        // blow past this 1% bound by ~60x. Choosing 1% makes the OLD behavior fail by a wide
+        // margin while comfortably covering the FIXED curve's integer-division variance dust.
+        uint256 POOL_DUST_BOUND = poolStart / 100;
+        assertLe(swept, POOL_DUST_BOUND, "closing sweep <= poolStart/100 (NOT the ~60% windfall)");
+
+        // Residual pool ends ~empty (same dust bound).
+        assertLe(_poolBal(), POOL_DUST_BOUND, "residual pool <= poolStart/100 after the close");
+
+        // Curve-exercised guard (T-327-01-FC2, regression direction): the per-box rewards are
+        // the dominant share of poolStart -- the pool is drained THROUGH the boxes, not parked
+        // for the closer. The OLD /1_000 curve (per-box draw ~2.5x smaller) FAILS this >= 90%
+        // bound, proving the test exercises the FIXED curve and not a false-confidence stub.
+        assertGe(cumulativeBoxDraw * 100, poolStart * 90, "per-box cumulative DGNRS draw >= 90% of poolStart");
+    }
 }
