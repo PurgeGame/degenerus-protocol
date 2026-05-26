@@ -38,10 +38,22 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 4. **Gas sweep** (AUDIT) — worst-case-first gas per keeper action (`autoBuy`/`autoOpen`/`autoResolve`) + the new router; calibrate the break-even peg; confirm the faucet bound + no self-crank loop.
 5. **Adversarial security sweep** (AUDIT) — focused 3-skill pass (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) on the AfKing subs + funding source + auto-resolve + the new router + the advance-timing surface (RNG/VRF-freeze intact; no advance-timing manipulation).
 
+6. **Keeper-subsystem gas micro-optimizations** (GAS — behavior-identical / no-cost) — apply the validated zero-risk, results-identical gas wins surfaced in the 2026-05-26 scavenger review, and let the GAS sweep surface any FURTHER behavior-identical no-cost wins in the keeper/advance blast radius. Each is gas-only (same results, no invariant trade) and rides the single batched IMPL diff, proven same-results in TST:
+   - **MintModule nested-mapping storage pointer** — hoist `mapping(address=>uint40) storage owedMap = ticketsOwedPacked[rk]` in both `processTicketBatch` (`DegenerusGameMintModule.sol:671`) and the resolve/future loop (`:398`); `rk` is loop-invariant → drops the outer keccak per ticket.
+   - **AfKing `autoBuy` claimable hoist** — call `IGame.claimableWinningsOf(player)` once per iteration (today it fires at `AfKing.sol:691` AND `:722`, both in one iteration when `reinvestPct>0 && FLAG_DRAIN_FIRST`); keep the existing laziness (only when `reinvestPct>0 || DRAIN_FIRST`).
+
+**REJECTED gas opts (do NOT re-litigate at SPEC — they trade an invariant or aren't real):**
+- `Sub` memory-snapshot + single write-back-at-end — breaks the DELIBERATE guard-less CEI (`AfKing.sol:100`), loses the early-`continue` state writes (auto-pause `dailyQuantity=0`/flags at `:656`/`:753`), and collides with the `_removeFromSet` swap-pop (cursor-not-advanced) semantics. REJECTED (correctness + security floor).
+- `batchPurchase` "trusted-batch" try/catch bypass — the per-slice try/catch IS the keeper per-player isolation invariant (`DegenerusGame.sol:1715/1749`; one reverting player must not brick the batch). REJECTED.
+- `1 ether - decayN` unchecked — DEFERRED pending a `_wadPow ≤ WAD including rounding` proof (catastrophic underflow if it can round above WAD); not a free win.
+- `_subscriberIndex`-in-loop (not read in `autoBuy`), `purchaseLevel` cache (already a single stack local @ `AdvanceModule.sol:180`), IGame-interface cache (`ContractAddresses.GAME` is a constant — no SLOAD): not real / already done.
+
 **Locked design decisions (from milestone discussion 2026-05-26):**
 - Router routes to ONE category per call (not all-work-in-one); priority advance → open → buy; `autoResolve` excluded from the router.
 - advanceGame's existing bounty (`ADVANCE_BOUNTY_ETH = 0.005 ether`, stall mult 1/2/4/6 @ `AdvanceModule.sol:147/238-253/470`) is re-homed into the router; standalone advanceGame = unrewarded fallback.
 - Bounty target = break-even @0.5 gwei in BURNIE; keep the stall multiplier (possibly extend for extreme stalls).
+- The router's top-priority "advance/process" leg INCLUDES **mid-day ticket processing** — not just a new-day advance, but also the mid-day partial-drain case (`day == dailyIdx` but tickets not fully processed; rewarded today at `AdvanceModule.sol:225`). Both count as router-rewardable advance-leg work (USER 2026-05-26).
+- Folding in the validated **no-cost gas micro-opts** (work item 6): the MintModule nested-mapping pointer (`:671`/`:398`) + the AfKing `autoBuy` claimable-hoist (`:691`/`:722`); behavior-identical, gas-only, proven same-results in TST (USER 2026-05-26).
 
 **Posture:** ONE batched USER-APPROVED `contracts/*.sol` diff for the contract changes (router + advance-rework + peg); HARD STOP at the contract-commit boundary (applied + locally compiled/tested, never committed without explicit user hand-review). Tests + planning + docs AGENT-committable; `ContractAddresses.sol` freely modifiable. RNG/VRF-freeze invariant untouched. Pre-launch redeploy-fresh (storage break fine). **Phase numbering continues from 328 → v49.0 starts at Phase 329.** Milestone shape matches v46 (which had a dedicated GAS phase): SPEC → IMPL → GAS → TST → TERMINAL.
 
