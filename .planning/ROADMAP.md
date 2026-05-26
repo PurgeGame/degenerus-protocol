@@ -104,7 +104,7 @@
 **UI hint**: no
 
 ### Phase 333: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure
-**Goal**: The v49.0 audit subject (the single batched diff — the router + advance-rework + the GAS-calibrated peg + the micro-opts, FROZEN at the IMPL/GAS HEAD) is delta-audited NON-WIDENING against the v48.0 baseline `0cc5d10f`, swept by the 3-skill genuine-PARALLEL adversarial pass charged against the highest-risk advance-timing MEV + composed-reentrancy + faucet-drain surfaces, consolidated into `audit/FINDINGS-v49.0.md`, and the milestone is closed with the `MILESTONE_V49_AT_HEAD_<sha>` signal and the atomic ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS flip — re-attesting all 31 v49.0 requirements.
+**Goal**: The v49.0 audit subject (the single batched diff — the router + advance-rework + the GAS-calibrated peg + the micro-opts, FROZEN at the IMPL/GAS HEAD) is delta-audited NON-WIDENING against the v48.0 baseline `0cc5d10f`, swept by the 3-skill genuine-PARALLEL adversarial pass charged against the highest-risk advance-timing MEV + composed-reentrancy + faucet-drain surfaces, consolidated into `audit/FINDINGS-v49.0.md`, and the milestone is closed with the `MILESTONE_V49_AT_HEAD_<sha>` signal and the atomic ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS flip — re-attesting all 36 v49.0 requirements.
 **Depends on**: Phase 332 (the audit subject must be implemented + GAS-calibrated + test-proven before the terminal delta-audit + sweep)
 **Requirements**: SWEEP-01, SWEEP-02, SWEEP-03, BATCH-03
 **Success Criteria** (what must be TRUE):
