@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
 status: executing
-last_updated: "2026-05-26T08:25:20.886Z"
-last_activity: 2026-05-26 -- Phase 327 planning complete
+last_updated: "2026-05-26T08:40:31.874Z"
+last_activity: 2026-05-26
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 17
-  completed_plans: 11
+  completed_plans: 12
   percent: 50
 ---
 
@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 326 — impl-the-one-batched-contract-diff-all-7-items
+**Current focus:** Phase 327 — tst-repro-same-results-no-arb-ev-regression-proofs
 
 ## Current Position
 
-Phase: 326 (impl-the-one-batched-contract-diff-all-7-items) — EXECUTING
-Plan: 1 of 8
-Status: Ready to execute
-Last activity: 2026-05-26 -- Phase 327 planning complete
-Next: Phase 325 verification, then `/gsd-execute-phase 326` — IMPL (the ONE batched contract diff, all 7 items, HELD at the contract-commit boundary for explicit user hand-review). Plan 03 (325-03) DONE: `325-SPEC.md` authored (commits `b6cc7825` sections 0+1, `09d27524` sections 2+3) — section 0 attestation roll-up (0 blockers, corrections C1-C8, SWAP no-arb HOLDS +4.5pp @d6), section 1 shared signatures R1-R6 (one settled signature + apply-order each so items 2/3/4/7 cannot land as conflicting diffs), section 2 open-item resolutions (RFALL-04 D-06 / KEEP-04 bytes32("DGNRS") / KEEP-05 autoOpen-rename / POOL-06 D-04-accept-as-minor / BTOMB checked-add-cap / HERO-04 D-01/02/03 shape + byte-reproduce-gate handoff / S=8/S=9 separate-uint256 packing), section 3 per-item IMPL blueprint + file/edit-order map + SC1-SC5 checklist. BATCH-01 + RFALL-04 + KEEP-04 + KEEP-05 + POOL-06 all RESOLVED. ZERO contracts/*.sol mutation.
+Phase: 327 (tst-repro-same-results-no-arb-ev-regression-proofs) — EXECUTING
+Plan: 2 of 6
+Status: Executing Phase 327 — 327-01 COMPLETE (PFIX-02 + PFIX-03 proven, 3 Foundry tests green)
+Last activity: 2026-05-26 -- 327-01 executed (test/fuzz/PresaleBoxDrain.t.sol, commits d59790c3 + 837890a4)
+Next: Continue Wave 1 of Phase 327 (327-02 RFALL ∥ 327-03 POOL ∥ 327-04 BTOMB/HERO ∥ 327-05 SWAP), then Wave 2 327-06 full-suite regression gate. Earlier context — Plan 03 (325-03) DONE: `325-SPEC.md` authored (commits `b6cc7825` sections 0+1, `09d27524` sections 2+3) — section 0 attestation roll-up (0 blockers, corrections C1-C8, SWAP no-arb HOLDS +4.5pp @d6), section 1 shared signatures R1-R6 (one settled signature + apply-order each so items 2/3/4/7 cannot land as conflicting diffs), section 2 open-item resolutions (RFALL-04 D-06 / KEEP-04 bytes32("DGNRS") / KEEP-05 autoOpen-rename / POOL-06 D-04-accept-as-minor / BTOMB checked-add-cap / HERO-04 D-01/02/03 shape + byte-reproduce-gate handoff / S=8/S=9 separate-uint256 packing), section 3 per-item IMPL blueprint + file/edit-order map + SC1-SC5 checklist. BATCH-01 + RFALL-04 + KEEP-04 + KEEP-05 + POOL-06 all RESOLVED. ZERO contracts/*.sol mutation.
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
 
@@ -525,6 +525,7 @@ Audit deliverables:
 | Phase 325 P01 | 10min | 3 tasks | 3 files |
 | Phase 325 P02 | 30 | 2 tasks | 1 files |
 | Phase 325 P03 | ~5min | 2 tasks | 1 file (325-SPEC.md sections 0-3) + 1 SUMMARY |
+| Phase 327 P01 | 10min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -636,3 +637,5 @@ Audit deliverables:
 - [Phase 325]: Plan 03 — 325-SPEC R1-R5 settle ONE signature + apply-order per shared construct (DegenerusGame R1 pullRedemptionReserve coverage -> R2 crank rename + bytes32("DGNRS") @:1778 -> R3 sellFarFutureTickets + inline claimableWinnings[SDGNRS] debit; sStonk R4 receive() AF_KING relax + burnAtGameOver pool-recover-before-early-return + _submitGamblingClaimFrom segregation + interface adds; Vault R5 recoverAfKingPool + gameSellFarFutureTickets onlyVaultOwner wrapper + interface entry) so items 2/3/4/7 cannot land as conflicting independent diffs
 - [Phase 325]: Plan 03 open-item resolutions — RFALL-04=D-06 single pendingRedemptionEthValue (pure-ETH OR pure-stETH, no separate stETH slot, donation-robust, fail-closed revert-if-neither); KEEP-04=wire bytes32("DGNRS") @ DegenerusGame.sol:1778 (cross-naming disambiguated, NOT bytes32("VAULT") which is owner SDGNRS); KEEP-05=autoOpen is a RENAME of crankBoxes/_crankOpenBox; POOL-06=D-04 accept-as-minor, NO second sweep in handleFinalSweep (donor-only post-gameOver residual documented, VAULT unaffected via anytime recoverAfKingPool)
 - [Phase 325]: Plan 03 — BTOMB reuse vaultEscrow (BurnieCoin:557-567) with explicit checked-add/cap (its += is unchecked), one-shot from gameover-drain, 1e36 « uint128 max; HERO-04 SHAPE locked (D-01 continuity S=3..9 track old M=2..8 + D-02 S=2 ~40-60% partial refund + D-03 bonus thresholds S>=7), byte-exact 10-bucket per-N constants handed to derive_5_tables.py PASS_ALL gate at Phase 327, S=8/S=9 held as separate per-N uint256; the 0-8->0-9 FullTicketResult.matches widening FLAGGED frontend/indexer out-of-scope (flag not fix)
+- [Phase 327]: 327-01: F-47-01 closing-box sweep proven 0 wei over a realistic 50-ETH run (43.2% DGNRS branch, pool fully drained through boxes — cumulative per-box draw == 100% of poolStart); dust bound poolStart/100, curve guard >=90% poolStart (old /1_000 curve fails both directions); 3 Foundry tests green in test/fuzz/PresaleBoxDrain.t.sol, ZERO contracts/*.sol edits
+- [Phase 327]: 327-01: PFIX-03 tier shape preserved EXACTLY (tier-1 DGNRS-per-ETH == 3x tier-5) + transferFromPool clamp holds when a 5-ETH early-DGNRS run empties the pool before the closing box (closing open no-revert, sweep <=1 wei, no over-draw); hybrid harness = real game.buyPresaleBox->openPresaleBox with credit/VRF-word/small-pool seeded via vm.store

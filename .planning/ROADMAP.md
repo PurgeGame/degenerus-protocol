@@ -77,7 +77,7 @@
   4. The Degenerette recalibration is byte-identical (HERO-04 byte-reproduce gate + HERO-06) — every per-N payout constant across the 10 buckets `S=0..9` is reproduced byte-identical from `derive_5_tables.py` (Phase-267-style PASS_ALL gate, NOT hand-typed), the chosen payout SHAPE + WWXRP-bonus/sDGNRS/"high tier" thresholds re-map onto the 10-point scale, the S=8/S=9 (>32-bit) packing is verified, the recalibration stays write-batch byte-identical to v47's `resolveBets` (DGAS), and the `dailyHeroWagers`/`_rollHeroSymbol` daily-hero-symbol jackpot is verified unaffected (no `matches`-range leakage).
   5. The load-bearing salvage-swap no-arb + solvency hold (SWAP-08/09) — the no-arb inequality is PROVEN at the jitter band CEILING (max full payout `110% × fractionBps(6) = 16.5% of face` @d6 < cheapest far-entry acquisition ~21%, margin ~4.5pp; base `fractionBps` keeps ≥~10% margin below the far ticket's present EV so a 110%-day pawn doesn't overpay sDGNRS); BURNIE-can't-mint-a-far-entry is confirmed; and solvency is safe (`claimablePool ≤ ETH + stETH` never violated — ticket leg adds pool slack, cash leg is a claimant-to-claimant relabel; array length bounded ≤32).
 **Plans**: 6 plans (2 waves — wave 1: five independent test-authoring plans, no `files_modified` overlap; wave 2: the full-suite regression-baseline gate, depends on all five)
-- [ ] 327-01-PLAN.md — PFIX-02/03: presale closing-box dust bound (≤ poolStart/100 over a realistic 50-ETH run, NOT ~60%) + tier shape (3×) + clamp/empty-before-close (Foundry `test/fuzz/PresaleBoxDrain.t.sol`)
+- [x] 327-01-PLAN.md — PFIX-02/03: presale closing-box dust bound (≤ poolStart/100 over a realistic 50-ETH run, NOT ~60%) + tier shape (3×) + clamp/empty-before-close (Foundry `test/fuzz/PresaleBoxDrain.t.sol`)
 - [ ] 327-02-PLAN.md — RFALL-05 + POOL-04: stETH-fallback preserves REDEEM-08 (two claimants, BURNIE-can't-block, solvency) under mid-game ETH depletion + donation; sDGNRS `receive()` AF_KING relaxation accounting-safe (Foundry `test/fuzz/RedemptionStethFallback.t.sol` + invariant extension)
 - [ ] 327-03-PLAN.md — BTOMB-03: 1e36 tombstone non-circulating (`totalSupply()` untouched, +1e36 only in uncirculated leg) + one-shot + checked-add + DGVB pro-rata claim overflow-safe (Foundry `test/fuzz/BurnieTombstone.t.sol`)
 - [ ] 327-04-PLAN.md — HERO-04/06: extend `derive_5_tables.py` to the 10-bucket S=0..9 design + PASS_ALL byte-reproduce gate (regenerate, not hand-typed) + S=A+2H scoring + write-batch DGAS equivalence + daily-hero no-leak (Hardhat `test/stat/*` + Foundry `test/fuzz/DegeneretteHeroScore.t.sol`) — byte-reproduced constants must land in the frozen contract (hand-review gate); see milestone blocker
@@ -105,7 +105,7 @@
 |-------|----------------|--------|-----------|
 | 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 3/3 | Complete    | 2026-05-25 |
 | 326. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/8 | Not started | - |
-| 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 0/5 | Not started | - |
+| 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 1/6 | In Progress|  |
 | 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 0/TBD | Not started | - |
 
 ---

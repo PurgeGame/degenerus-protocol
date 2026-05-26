@@ -13,8 +13,8 @@
 ### Presale-Box DGNRS Drain Fix — F-47-01 (`PLAN-V48-PRESALE-BOX-DRAIN-FIX.md`)
 
 - [ ] **PFIX-01**: `_presaleBoxDgnrsReward` divisor changed `1_000 → 400` (base `poolStart/100 → poolStart/40`) in `DegenerusGameLootboxModule.sol`, with the inline `base` derivation comment updated to match. ISOLATED — touches no other item's surface.
-- [ ] **PFIX-02**: Over a realistic 50-ETH presale (random 50/40/10 outcomes across many boxes), the closing-box sweep transfers only variance dust (≤ a small bound, NOT ~60% of the pool) and the pool ends ~empty — the ~40% realized DGNRS branch rate × the 2.5×-larger curve drains the full pool in expectation.
-- [ ] **PFIX-03**: Tier shape preserved (tier-1 buyer still gets 3× the DGNRS-per-ETH of tier-5; only absolute scale moves); `transferFromPool` clamp holds so a run of early DGNRS hits empties the pool before close → closing sweep ≈ 0, no revert / no over-draw.
+- [x] **PFIX-02**: Over a realistic 50-ETH presale (random 50/40/10 outcomes across many boxes), the closing-box sweep transfers only variance dust (≤ a small bound, NOT ~60% of the pool) and the pool ends ~empty — the ~40% realized DGNRS branch rate × the 2.5×-larger curve drains the full pool in expectation.
+- [x] **PFIX-03**: Tier shape preserved (tier-1 buyer still gets 3× the DGNRS-per-ETH of tier-5; only absolute scale moves); `transferFromPool` clamp holds so a run of early DGNRS hits empties the pool before close → closing sweep ≈ 0, no revert / no over-draw.
 
 ### Redemption ETH-Empty stETH Fallback — F-47-02 (`PLAN-V48-REDEMPTION-ETH-STETH-FALLBACK.md`)
 
@@ -122,8 +122,8 @@ Which phases cover which requirements. Phase numbering continues from v47.0 (end
 | SWAP-06 | Phase 326 (IMPL) | Pending |
 | SWAP-07 | Phase 326 (IMPL) | Pending |
 | BATCH-02 | Phase 326 (IMPL) | Pending |
-| PFIX-02 | Phase 327 (TST) | Pending |
-| PFIX-03 | Phase 327 (TST) | Pending |
+| PFIX-02 | Phase 327 (TST) | Complete |
+| PFIX-03 | Phase 327 (TST) | Complete |
 | RFALL-05 | Phase 327 (TST) | Pending |
 | POOL-04 | Phase 327 (TST) | Pending |
 | BTOMB-03 | Phase 327 (TST) | Pending |
