@@ -200,4 +200,163 @@ discovery need. `degeneretteResolve` is unique in requiring caller-supplied arra
 > indexes the arrays) — NO router/signature change. ROUTER-05's "keeps its own in-game bounty unchanged"
 > is amended to "…RENAMED + RE-PEGGED per GAS-06 (still a separate call)" (D-05g).
 
-<!-- Sections C, D, and the Roll-up are appended in Task 2 below. -->
+---
+
+## Section C — D-05c CORRECTED REAL-GAS EXPLOITABILITY BASIS
+
+The "~1 BURNIE never remotely exploitable" claim MUST rest on REAL prevailing tx gas, NOT the 0.5-gwei
+`AUTO_GAS_PRICE_REF` pegging constant. An earlier draft wrongly compared 1 BURNIE against the peg ref
+(a deliberately below-market accounting figure) as if it were real gas — the USER corrected this twice
+(`feedback_bounty_exploit_uses_real_gas_not_peg_ref`). This section records the CORRECTED basis.
+
+### C.1 What 1 BURNIE is worth (the peg, inverted from source)
+
+The BURNIE↔ETH conversion is `_ethToBurnieValue(amountWei, priceWei) = amountWei * PRICE_COIN_UNIT / priceWei`
+(`DegenerusGame.sol:1790-1796`) with `PRICE_COIN_UNIT = 1000 ether` (`DegenerusAdmin.sol:393`). Inverting
+for the ETH-value of 1 BURNIE (1e18):
+
+```
+ETH-value(1 BURNIE) = 1e18 * priceWei / PRICE_COIN_UNIT = 1e18 * priceWei / 1000e18 = priceWei / 1000 = mintPrice/1000
+```
+
+`mintPrice() = priceForLevel(_activeTicketLevel())` (`DegenerusGame.sol:2398`), and `priceForLevel`
+cycles 0.04 / 0.08 / 0.12 / 0.16 / 0.24 ETH (`PriceLookupLib.sol:21-44`), peaking at the **0.24 ETH**
+milestone tier. So:
+
+> **ETH-value(1 BURNIE) ≤ mintPrice/1000 ≤ 0.24/1000 = 0.00024 ETH** — even at the most generous
+> (highest-mintPrice) corner the protocol ever reaches. At the launch 0.04-ETH tier it is `0.00004 ETH`.
+
+### C.2 It is ILLIQUID — real extractable value is a FRACTION of the peg
+
+The reward is paid as `coinflip.creditFlip(msg.sender, reward)` (`DegenerusGame.sol:1622`) — a FLIP-CREDIT
+ledger entry on the coinflip contract, NOT a transferable ERC-20 balance and NOT an ETH send. To realize
+it the keeper must wager it through the coinflip and beat the house edge. So 0.00024 ETH is an UPPER
+bound on the peg; the real extractable value after the house edge + illiquidity is a fraction of that.
+(This is why the keeper-never-a-payee invariant holds — no ETH leaves to `msg.sender`; §A.4 / ROUTER-07 D-01.)
+
+### C.3 What the keeper PAYS — REAL prevailing gas (NOT the 0.5-gwei peg)
+
+The keeper pays REAL tx gas on every call: base 21,000 + the ≥3 minimum resolutions (each
+`_autoResolveBet` is a full `resolveBets` delegatecall through the DegeneretteModule, easily tens of
+thousands of gas per bet — the AUTO_RESOLVE_BET_GAS_UNITS = 66_528 placeholder is the calibrated
+worst-case marginal) + the array calldata + the AUTO-02 probe + the post-loop creditFlip — call it
+`G_total` gas. At the PREVAILING mainnet gas price `p` (typically 5–50+ gwei, NOT 0.5 gwei):
+
+```
+real cost = G_total * p
+```
+
+With a ≥3-resolution minimum, `G_total ≥ 21_000 + 3 * ~66_528 + overhead ≈ 220k+ gas`. Even at a LOW
+5 gwei:  `220_000 * 5e-9 ETH = 0.0011 ETH` — already **~4.6× the 0.00024 ETH peg-ceiling** of the flat 1
+BURNIE, before the illiquidity haircut. At 30 gwei it is ~0.0066 ETH (~27× the peg). At 50 gwei, ~0.011
+ETH (~46×).
+
+### C.4 The verdict — net loss at any realistic gas, no positive-EV farm
+
+> **The flat ~1 BURNIE (≤ 0.00024 ETH at the peg, illiquid) sits FAR BELOW the real cost of even the
+> 3-resolution minimum at any realistic prevailing gas price → every qualifying tx is a NET LOSS → no
+> positive-EV farm.** The ≥3 gate only WIDENS the margin (it raises the minimum gas cost the flat
+> reward must clear, while the reward stays flat). The basis is REAL PREVAILING GAS (5–50+ gwei), NOT
+> the 0.5-gwei `AUTO_GAS_PRICE_REF` peg constant (:1539, the deliberately-below-market accounting figure
+> the earlier draft wrongly used).
+
+The ONLY theoretical positive corner — **{ late game (mintPrice 0.24) ∧ gas < ~3.6 gwei ∧ flip-credit
+fully extractable at the peg }** — requires all three to coincide: a sub-3.6-gwei gas price computed as
+`peg-ceiling(0.00024) / G_total(~67k for a single marginal item) ≈ 0.00024/0.000067... ` collapses once
+the ≥3 minimum's 220k+ gas is used (pushing the break-even gas below ~1.1 gwei) AND is gated by an
+almost-certainly-FALSE assumption (flip-credit fully extractable at the peg — §C.2 shows it is not,
+it is illiquid behind the coinflip house edge). This corner is not realistically reachable.
+
+### C.5 GAS-06 handoff (D-05e — NOT a blocker here)
+
+At Phase 331, confirm the literal ~1 BURNIE stays below the REAL gas of a 3-resolution tx across the
+plausible gas-band — specifically the low-gas / high-mintPrice corner — factoring flip-credit
+illiquidity. Only lower the constant or add a scaled gate if a *realistic* corner actually flips
+positive-EV. The exact constant is SOFT ("1 burnie or something like that"); confirmed-sub-real-gas at
+GAS, not pinned at SPEC. **NOT a SPEC blocker** — the basis above already shows a comfortable net-loss
+margin at every realistic gas price.
+
+---
+
+## Section D — D-05f LOSING-BET-LIVENESS GREP-VERIFICATION (the load-bearing deliverable)
+
+**The question (D-05f):** a flat "lose" removes the rational-keeper incentive to resolve LOSING bets
+(winning bets are still self-resolved by owners claiming winnings; under a flat ≥3-gate even a keeper
+clearing losers does so only when ≥3 resolve, and earns nothing per-loser). Does the protocol REQUIRE
+losing Degenerette bets to be RESOLVED (their `delete degeneretteBets[…]` at DegeneretteModule:634 to
+fire) for ANY invariant / accounting / RNG-slot / cleanup reason? If inert cruft → safe to drop the
+per-item incentive; if a backlog/invariant risk → SURFACE-TO-USER (do not silently starve a needed path).
+
+### D.1 The COMPLETE `degeneretteBets` consumer set (every grep hit at `0cc5d10f`)
+
+`grep -rn "degeneretteBets" contracts/ | grep -v contracts/test/` returns exactly these 8 sites (+ the
+storage decl). There are NO others — no counter, no index, no sweep, no gameOver iteration.
+
+| # | Path | Site | Access | Requires a LOSING bet's `delete` (:634) to fire for correctness? |
+|---|------|------|--------|------------------------------------------------------------------|
+| 1 | Storage decl | `DegenerusGameStorage.sol:1449` | `mapping(address => mapping(uint64 => uint256))` declaration | **NO** — a nested mapping; an unresolved (losing) slot is simply a nonzero entry that is never read again. No `.length`, no enumeration, nothing iterates it. Leftover entries are inert storage. |
+| 2 | SUBMISSION (write) | `DegenerusGameDegeneretteModule.sol:526` | `degeneretteBets[player][nonce] = packed` — bet placement (the prepay/purchase-gate creates a resolvable item) | **NO** — placement is independent of whether a PRIOR bet resolved; `nonce`/`betId` is fresh per bet (monotonic), so an unresolved old slot never collides with or blocks a new placement. |
+| 3 | resolution read | `DegenerusGameDegeneretteModule.sol:605` (`_resolveBet`: `packed = degeneretteBets[player][betId]`; `if (packed == 0) revert InvalidBet()` :606) | per-bet read, double-resolve guard | **NO** — this is the resolution path itself; the `packed == 0` revert is the LOCAL double-resolve guard, not a dependency on OTHER losing bets being resolved. |
+| 4 | resolution CLEANUP (delete) | `DegenerusGameDegeneretteModule.sol:634` (`delete degeneretteBets[player][betId]`, inside `_resolveFullTicketBet`, after the `RngNotReady` guard :632) | the cleanup itself | **NO (the anchor) — its ONLY purpose is local idempotency.** The delete zeroes the slot so (a) `_resolveBet`'s `packed == 0` revert (:606) prevents a second resolution of the SAME bet, and (b) `autoResolve`'s AUTO-02 probe (`DegenerusGame.sol:1596`) and per-item read (:1601) see a zero slot for an already-resolved bet. Nothing CONSUMES the fact that the delete happened — no counter decrements on it, no accounting reconciles against the set's emptiness, no liveness path requires the set to be empty. |
+| 5 | autoResolve AUTO-02 probe | `DegenerusGame.sol:1596` (`if (degeneretteBets[players[0]][betIds[0]] == 0) revert BatchAlreadyTaken()`) | item-0 read | **NO** — reads a SINGLE bet to detect a competitor; does not require any OTHER (losing) bet resolved. |
+| 6 | autoResolve per-item read | `DegenerusGame.sol:1601` (`betPacked = degeneretteBets[players[i]][betIds[i]]`) | per-item read in the resolve loop | **NO** — the resolve loop itself; reads each supplied bet, does not depend on the global set being drained. |
+| 7 | public view getter | `DegenerusGame.sol:2319` (`return degeneretteBets[player][betId]`) | a single-bet view | **NO** — a UI/read convenience; returns 0 for a resolved/absent bet. A lingering losing bet just reads back its (now-meaningless) packed data; no invariant keys off it. |
+
+### D.2 The candidate-dependency modules — grep-NEGATIVE (no backlog/invariant/RNG-slot/sweep dependency)
+
+The plan flagged GameOverModule / JackpotModule / AdvanceModule as candidate D-05f dependencies. All three
+are **grep-CLEAN** of `degeneretteBets`:
+
+| Candidate path | `grep -c degeneretteBets` @ `0cc5d10f` | Finding |
+|----------------|----------------------------------------|---------|
+| `contracts/modules/DegenerusGameGameOverModule.sol` | **0** | gameOver / final-sweep does NOT iterate or require-empty `degeneretteBets` — a lingering losing bet at gameOver is irrelevant (also confirmed: zero `degenerette`/`Degenerette` refs of any kind in the module). |
+| `contracts/modules/DegenerusGameJackpotModule.sol` | **0** | no jackpot / daily-hero path reads `degeneretteBets` state — an unresolved losing bet cannot corrupt any jackpot accounting (the `dailyHeroWagers` hero-override input is written at bet PLACEMENT, not resolution, and is a SEPARATE slot — out of the D-05f surface). |
+| `contracts/modules/DegenerusGameAdvanceModule.sol` | **0** | the advance / daily-drain path does NOT read or require-empty `degeneretteBets` — no per-day bet tally, no RNG-slot reuse keyed on it. |
+
+Additionally: `grep "pendingDegenerette\|outstandingBet\|degeneretteCount\|...\|pendingBet" contracts/`
+→ **ZERO matches**: there is NO outstanding-bet counter, no per-day bet tally, and no
+"requires-empty" / iterate-`degeneretteBets` site anywhere in the tree. The RNG slot a bet reads
+(`lootboxRngWordByIndex[index]`, DegeneretteModule:631) is keyed on the BET's recorded index and is a
+READ — it is never freed/reused by the bet's `delete`; an unresolved losing bet does not pin or corrupt
+any RNG slot.
+
+### D.3 THE FINDING
+
+> **FINDING: inert — safe to drop the per-item break-even incentive.** Every one of the 8
+> `degeneretteBets` consumers (storage decl + submission + resolution read + delete + AUTO-02 probe +
+> per-item read + view) treats an unresolved (losing) bet as INERT storage cruft: a nonzero nested-mapping
+> slot that is never iterated, never counted, never reconciled against, and never required-empty by any
+> invariant / accounting / RNG-slot / gameOver / sweep / cleanup path. The `delete` at
+> DegeneretteModule:634 exists ONLY for LOCAL double-resolve idempotency (the `packed == 0` revert :606
+> and the AUTO-02 probe :1596), not to satisfy any downstream consumer. GameOverModule / JackpotModule /
+> AdvanceModule are all grep-CLEAN of `degeneretteBets` (0 hits each); there is no outstanding-bet counter
+> or per-day tally anywhere. Winning bets are self-resolved by owners claiming winnings; losing bets left
+> unresolved cost nothing and break nothing. **No path REQUIRES losing Degenerette bets to be resolved.**
+
+> Moreover — as D-05f notes — a FLAT count-independent reward actually NUDGES clearing the WHOLE backlog
+> in one tx (max work per paid tx, since the keeper pays the same flat ~1 BURNIE whether it resolves 3 or
+> 300), which is strictly BETTER for backlog liveness than the old per-item peg (which paid per item and
+> so had no marginal incentive to over-batch). The flat re-peg does not starve liveness; it mildly
+> improves it.
+
+> **SURFACE-TO-USER: NONE.** No losing-bet-liveness dependency exists. (Had any of the 8 consumers or the
+> three candidate modules required the `delete` to fire — e.g. a counter that only decrements on delete,
+> a gameOver that requires-empty, an RNG slot freed only on resolution — this section would instead emit a
+> `## SURFACE-TO-USER — LOSING-BET LIVENESS DEPENDENCY` block naming the path + line + risk. It does not,
+> because none exists at `0cc5d10f`.)
+
+---
+
+## Roll-up
+
+| Item | Verdict |
+|------|---------|
+| **IMPL-blocker count** | **0.** No blocker surfaced. (Two recorded NON-blocking corrections/handoffs: §A.2 the interface-file rename rows are ABSENT/no-op — SHRINKS the surface; §B.2 `AUTO_RESOLVE_BET_GAS_UNITS` :1545 likely goes dead after the re-peg — IMPL housekeeping.) |
+| **D-05f losing-bet liveness (D)** | **INERT — SAFE.** All 8 `degeneretteBets` consumers treat an unresolved losing bet as inert cruft; the `delete` :634 is local-idempotency-only; GameOver/Jackpot/Advance grep-CLEAN (0 hits each); no counter/tally/require-empty anywhere. No path requires losing bets resolved. **SURFACE-TO-USER: NONE.** Flat reward mildly IMPROVES backlog liveness. |
+| **D-05c real-gas exploitability (C)** | **NET LOSS / no positive-EV farm.** 1 BURNIE ≤ mintPrice/1000 ≤ 0.00024 ETH (PRICE_COIN_UNIT=1000e18 inverted) AND illiquid (coinflip-locked flip-credit). Keeper pays REAL prevailing gas (≥220k for the ≥3 min × 5–50+ gwei = 0.0011–0.011+ ETH = ~4.6–46× the peg), NOT the 0.5-gwei `AUTO_GAS_PRICE_REF`. The ≥3 gate widens the margin. Only-positive corner gated by a false illiquidity assumption. GAS-06 sanity-check handed to Phase 331 (D-05e, not a blocker). |
+| **D-05b payment-shape feasibility (B)** | **FEASIBLE.** Flat ~1 BURNIE (1e18) ONCE per tx / ≥3-NON-WWXRP success gate / revert `NoWork()` at 0 / resolve-always-pay-at-≥3-revert-only-at-0 lean are all expressible on the current `:1587-1622` per-item loop (per-item-accumulate → count-and-flat-pay-at-≥3). Edit targets pinned (:1611-1614 remove peg, :1622 swap to flat+gate+revert). Exact literal deferred to GAS (D-05e). |
+| **D-05a rename surface (A)** | **ENUMERATED.** 2 contract targets (`autoResolve` :1587, `_autoResolveBet` :1684) + the self-call site :1606; interface files ABSENT (corrects plan); 5 test files / 57 refs incl. CrankLeversAndPacking literal source-string assertions (:277/:290/:381/:415) that BREAK without atomic update. AUTO-02 / try-catch / WWXRP-exclusion / self-resolve / one-creditFlip-CEI-last all PRESERVED (D-05d). |
+| **ROUTER-05 non-foldability (E)** | **CONFIRMED.** `degeneretteBets` is a nested mapping (Storage:1449) with no O(1) enumeration + no pending-count sidecar → on-chain discovery impossible-or-unbounded (ROUTER-04 violation). `degeneretteResolve` stays a SEPARATE caller-supplied-arrays call; the unified one-button is a frontend concern. Router-fold OUT. |
+
+**No `contracts/*.sol` modified** — paper-only attestation; the live tree is byte-identical to
+`0cc5d10f` (`git diff --name-only 0cc5d10f HEAD -- 'contracts/*.sol'` EMPTY).
