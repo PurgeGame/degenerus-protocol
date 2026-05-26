@@ -138,3 +138,14 @@ this plan; only the `.planning/` ATTEST doc was written and committed (with expl
 
 - `84fbb073` docs(329-01): attest AfKing router surface vs 0cc5d10f (sections A/B/C)
 - `79086b3b` docs(329-01): attest advance/autoOpen redesign vs 0cc5d10f (sections D/E/F/G + Roll-up)
+- `09baeb71` docs(329-01): complete REDESIGNED router/advance attestation plan (SUMMARY)
+
+## Self-Check: PASSED
+
+- FOUND: `329-ATTEST-ROUTER-ADVANCE.md` (regenerated, 7 sections + Roll-up)
+- FOUND: `329-01-SUMMARY.md`
+- FOUND commits: `84fbb073`, `79086b3b`, `09baeb71`
+- VERIFIED: STATE.md, ROADMAP.md, REQUIREMENTS.md, and every `contracts/`/`test/` file are NOT in
+  any of this plan's commits and were NOT staged. The pre-existing held-330 diff (6 `.sol` + 7 test
+  files) and the orchestrator-owned `STATE.md` working change + the stale 329-02/03-SUMMARY deletions
+  are all untouched by this plan (confirmed not in commits `84fbb073`/`79086b3b`/`09baeb71`).
