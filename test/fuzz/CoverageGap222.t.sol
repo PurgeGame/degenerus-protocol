@@ -856,7 +856,7 @@ contract CoverageGap222 is DeployProtocol {
         );
         vm.prank(buyer);
         (bool o4, ) = address(dgnrs).call(
-            abi.encodeWithSignature("yearSweep()")
+            abi.encodeWithSignature("yearAutoBuy()")
         );
         vm.prank(buyer);
         (bool o5, ) = address(dgnrs).call(
@@ -869,7 +869,7 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(o1, "stonk.unwrapTo rejected caller without balance");
         assertFalse(o2, "stonk.claimVested rejected caller without vest");
         assertFalse(o3, "stonk.burn rejected caller without balance");
-        assertFalse(o4, "stonk.yearSweep rejected caller before sweep window");
+        assertFalse(o4, "stonk.yearAutoBuy rejected caller before autoBuy window");
         assertFalse(o5, "stonk.burnForSdgnrs rejected non-sdgnrs caller");
     }
 

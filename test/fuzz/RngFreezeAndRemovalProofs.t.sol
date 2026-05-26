@@ -144,7 +144,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
         // The crank must NOT revert (per-item isolation) and must NOT resolve the not-ready bet.
         vm.prank(cranker);
-        game.crankBets(players, betIds);
+        game.autoResolve(players, betIds);
         assertGt(
             _readBetPacked(player, betId),
             0,
@@ -154,7 +154,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // POST-WORD: land the word, then the SAME crank resolves the bet (slot deleted).
         _injectLootboxRngWord(INDEX, FIXED_WORD);
         vm.prank(cranker);
-        game.crankBets(players, betIds);
+        game.autoResolve(players, betIds);
         assertEq(
             _readBetPacked(player, betId),
             0,
@@ -163,7 +163,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     }
 
     /// @notice SAFE-04 (boxes): a crank-driven box open BEFORE the word lands is skipped at the
-    ///         crankBoxes cursor orphan gate (`lootboxRngWordByIndex[index] == 0 -> return`,
+    ///         autoOpen cursor orphan gate (`lootboxRngWordByIndex[index] == 0 -> return`,
     ///         DegenerusGame:1603) AND the LootboxModule:485 openLootBox RngNotReady guard — no
     ///         pre-word open. After the word lands the SAME crank opens the box (signal cleared).
     function testCrankBoxOpenStaysPostUnlock() public {
@@ -176,14 +176,14 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             "box enqueued (first-deposit signal set)"
         );
 
-        // PRE-WORD: word at idx is 0 -> crankBoxes returns at the cursor orphan gate. No open.
+        // PRE-WORD: word at idx is 0 -> autoOpen returns at the cursor orphan gate. No open.
         assertEq(
             _injectedWord(idx),
             0,
             "pre-condition: box index word not yet landed (frozen window)"
         );
         vm.prank(cranker);
-        game.crankBoxes(100);
+        game.autoOpen(100);
         assertGt(
             _lootboxEthBase(idx, boxOwner),
             0,
@@ -193,7 +193,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // POST-WORD: land the word -> the SAME crank opens the box (signal cleared on open).
         _injectLootboxRngWord(idx, FIXED_WORD);
         vm.prank(cranker);
-        game.crankBoxes(100);
+        game.autoOpen(100);
         assertEq(
             _lootboxEthBase(idx, boxOwner),
             0,
@@ -240,7 +240,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             // Word lands BEFORE the crank: the crank resolves (slot deleted).
             _injectLootboxRngWord(INDEX, FIXED_WORD);
             vm.prank(cranker);
-            game.crankBets(players, betIds);
+            game.autoResolve(players, betIds);
             assertEq(
                 _readBetPacked(player, betId),
                 0,
@@ -249,7 +249,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         } else {
             // Crank BEFORE the word: the not-ready bet is skipped (slot intact), then resolves.
             vm.prank(cranker);
-            game.crankBets(players, betIds);
+            game.autoResolve(players, betIds);
             assertGt(
                 _readBetPacked(player, betId),
                 0,
@@ -257,7 +257,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             );
             _injectLootboxRngWord(INDEX, FIXED_WORD);
             vm.prank(cranker);
-            game.crankBets(players, betIds);
+            game.autoResolve(players, betIds);
             assertEq(
                 _readBetPacked(player, betId),
                 0,
@@ -305,7 +305,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         players[0] = player;
         betIds[0] = betId;
         vm.prank(cranker);
-        game.crankBets(players, betIds);
+        game.autoResolve(players, betIds);
 
         // The bet resolved (slot deleted) and the winnings landed wholly in claimable.
         assertEq(_readBetPacked(player, betId), 0, "winning bet resolved");
@@ -693,7 +693,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         players[0] = who;
         betIds[0] = betId;
         vm.prank(cranker);
-        game.crankBets(players, betIds);
+        game.autoResolve(players, betIds);
         creditDelta = game.claimableWinningsOf(who) - pre;
     }
 

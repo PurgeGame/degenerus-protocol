@@ -168,6 +168,11 @@ contract BurnieCoin {
     /// @dev Basis points denominator (10000 = 1x).
     uint16 private constant BPS_DENOMINATOR = 10_000;
 
+    /// @dev Gameover tombstone flood: 1e36 wei (1 quintillion BURNIE) added one-shot to the
+    ///      VAULT mint allowance as a worthless-token overhang signal. ~340x headroom under
+    ///      uint128 max (~3.4e38), so the checked add never realistically reverts.
+    uint256 private constant BURNIE_TOMBSTONE_WEI = 1e36;
+
     /// @dev Packed supply state to keep total/vault allowance in a single slot.
     struct Supply {
         uint128 totalSupply;
@@ -178,6 +183,9 @@ contract BurnieCoin {
     /// @dev Increases on mint, decreases on burn. Always equals sum of all balanceOf entries.
     Supply private _supply =
         Supply({totalSupply: 0, vaultAllowance: uint128(2_000_000 ether)});
+
+    /// @notice One-shot latch for the gameover BURNIE tombstone flood (set on first flood).
+    bool private _tombstoneFlooded;
 
     /// @notice Token balance for each address.
     /// @dev Standard ERC20 balance mapping.
@@ -565,6 +573,21 @@ contract BurnieCoin {
             _supply.vaultAllowance += amount128;
         }
         emit VaultEscrowRecorded(sender, amount);
+    }
+
+    /// @notice One-shot gameover tombstone: floods the VAULT mint allowance by 1e36 wei as a
+    ///         worthless-token overhang signal. The signal lands only in supplyIncUncirculated(),
+    ///         vaultMintAllowance(), and balanceOf(VAULT) — circulating totalSupply() is untouched.
+    /// @dev GAME-only (the gameover-drain caller); fires exactly once (the _tombstoneFlooded latch
+    ///      no-ops any re-entry); the add is CHECKED via _toUint128 (reverts on uint128 overflow).
+    function tombstoneAtGameOver() external {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+        if (_tombstoneFlooded) return;
+        _tombstoneFlooded = true;
+        _supply.vaultAllowance = _toUint128(
+            uint256(_supply.vaultAllowance) + BURNIE_TOMBSTONE_WEI
+        );
+        emit VaultEscrowRecorded(msg.sender, BURNIE_TOMBSTONE_WEI);
     }
 
     /// @notice Mint tokens to recipient from vault's allowance.

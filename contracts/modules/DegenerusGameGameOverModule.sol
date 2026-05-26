@@ -27,6 +27,10 @@ interface IGNRUSGameOver {
     function burnAtGameOver() external;
 }
 
+interface IBurnieTombstone {
+    function tombstoneAtGameOver() external;
+}
+
 /**
  * @title DegenerusGameGameOverModule
  * @notice Handles game over logic including jackpot distribution and final sweeps.
@@ -43,6 +47,10 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     /// @notice GNRUS contract for gameover cleanup
     IGNRUSGameOver private constant charityGameOver =
         IGNRUSGameOver(ContractAddresses.GNRUS);
+
+    /// @notice BURNIE coin contract for the gameover worthless-token tombstone flood
+    IBurnieTombstone private constant burnie =
+        IBurnieTombstone(ContractAddresses.COIN);
 
     /// @notice Fixed refund amount per deity pass for early game over (levels 0-9)
     uint256 private constant DEITY_PASS_EARLY_GAMEOVER_REFUND =
@@ -140,6 +148,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         // Burn unallocated tokens
         charityGameOver.burnAtGameOver();
         dgnrs.burnAtGameOver();
+        // Flood BURNIE's VAULT mint allowance as a one-shot worthless-token tombstone
+        burnie.tombstoneAtGameOver();
 
         _goWrite(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK, 1);
         _setNextPrizePool(0);

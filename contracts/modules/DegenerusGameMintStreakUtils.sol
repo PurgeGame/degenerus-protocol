@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
+import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
 /// @dev Shared mint streak and activity score utilities. Contains _playerActivityScore
 ///      (5-component scoring: mint streak, mint count, quest streak, affiliate bonus, deity/whale pass)
@@ -71,6 +72,73 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ///      During purchase phase, direct tickets target the next level.
     function _activeTicketLevel() internal view returns (uint24) {
         return jackpotPhaseFlag ? level : level + 1;
+    }
+
+    /// @dev Far-future salvage discount curve (bps of face): two lines, 15% @ d6 -> 10% @ d20 ->
+    ///      5% @ d100. Caller guarantees 6 <= d <= 100. Integer truncation is sub-bps, acceptable.
+    function _farFutureFractionBps(uint256 d) internal pure returns (uint256) {
+        if (d <= 20) return 1500 - ((d - 6) * 500) / 14; // 15% -> 10%
+        return 1000 - ((d - 20) * 500) / 80; // 10% -> 5%
+    }
+
+    /// @dev Shared far-future salvage QUOTE (read-only valuation) used by BOTH the executing
+    ///      entrypoint (MintModule.sellFarFutureTickets) and the preview view
+    ///      (DegenerusGame.previewSellFarFutureTickets), so the offer shown can never drift from the
+    ///      offer executed. Values each line at priceForLevel(L) with the two-line fractionBps(d)
+    ///      curve + the daily per-player jitter seeded from the SETTLED prior-day VRF word
+    ///      (freeze-safe). Reverts on an ineligible distance or zero quantity; does NOT check
+    ///      ownership (the executing path checks holdings at debit). The split clamps the ticket leg
+    ///      to <= totalBudget so the preview is safe for a too-small bundle (the executing path
+    ///      separately requires totalBudget >= one whole current ticket).
+    /// @return totalFaceWei Sum of priceForLevel(L) * n over all lines.
+    /// @return totalBudget Sum of jittered, distance-scaled budgets (ETH sDGNRS would pay).
+    /// @return ticketWei Current-level ticket leg (jittered share, floored at 1 whole ticket).
+    /// @return cashWei Withdrawable cash residual (totalBudget - ticketWei).
+    function _quoteFarFutureSwap(
+        address player,
+        uint32[] calldata levels,
+        uint256[] calldata quantities
+    )
+        internal
+        view
+        returns (
+            uint256 totalFaceWei,
+            uint256 totalBudget,
+            uint256 ticketWei,
+            uint256 cashWei
+        )
+    {
+        uint24 cl = _activeTicketLevel();
+        uint256 seed = uint256(
+            keccak256(
+                abi.encodePacked(player, rngWordByDay[_simulatedDayIndex() - 1])
+            )
+        );
+        uint256 jitterMult = 7000 + (seed % 4001); // fraction multiplier [70%, 110%]
+        uint256 ticketShareBps = 4000 + ((seed >> 128) % 4001); // ticket share [40%,80%] (cash [20%,60%])
+
+        uint256 len = levels.length;
+        for (uint256 i; i < len; ) {
+            uint24 L = uint24(levels[i]);
+            uint256 d = uint256(L) - uint256(cl); // reverts if L < cl
+            if (d < 6 || d > 100) revert E();
+            uint256 n = quantities[i];
+            if (n == 0) revert E();
+            uint256 faceWei = PriceLookupLib.priceForLevel(L) * n;
+            totalFaceWei += faceWei;
+            totalBudget +=
+                (faceWei * _farFutureFractionBps(d) * jitterMult) /
+                (10_000 * 10_000);
+            unchecked {
+                ++i;
+            }
+        }
+
+        uint256 oneTicketWei = PriceLookupLib.priceForLevel(cl);
+        ticketWei = (totalBudget * ticketShareBps) / 10_000;
+        if (ticketWei < oneTicketWei) ticketWei = oneTicketWei;
+        if (ticketWei > totalBudget) ticketWei = totalBudget; // preview-safety clamp (too-small bundle)
+        cashWei = totalBudget - ticketWei;
     }
 
     /// @dev Shared activity score computation with explicit quest streak and streak base level.

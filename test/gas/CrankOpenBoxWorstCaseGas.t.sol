@@ -7,8 +7,8 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title CrankOpenBoxWorstCaseGas -- GAS-01 open-box worst-case measurement (Phase 319 Plan 02)
 ///
-/// @notice `crankBoxes(maxCount)` (DegenerusGame.sol:1592) walks `boxPlayers[index]` from the
-///         self-partitioning cursor and opens each ready box via `try this._crankOpenBox` ->
+/// @notice `autoOpen(maxCount)` (DegenerusGame.sol:1592) walks `boxPlayers[index]` from the
+///         self-partitioning cursor and opens each ready box via `try this._autoOpenBox` ->
 ///         `_openLootBoxFor` -> the SAME `_resolveLootboxCommon` body as the bet path. The per-box
 ///         reward is FLAT (`CRANK_OPEN_BOX_GAS_UNITS * 0.5 gwei`), so there is no multi-spin
 ///         amplification inside one box: a single READY, un-opened box that materializes is the
@@ -24,7 +24,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 /// @dev Live `DeployProtocol` fixture (the crank writes Game storage). Clones the `CrankNonBrick`
 ///      box-enqueue helper (a real lootbox-mode `game.purchase{value:..}(...DirectEth)` deposit fires
-///      the first-deposit `lootboxEthBase == 0` signal -> `enqueueBoxForCrank`, MintModule:999) and the
+///      the first-deposit `lootboxEthBase == 0` signal -> `enqueueBoxForAutoOpen`, MintModule:999) and the
 ///      `CrankFaucetResistance` RNG-word inject helper. Test-only: no contracts/*.sol mutated.
 contract CrankOpenBoxWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
@@ -53,7 +53,7 @@ contract CrankOpenBoxWorstCaseGas is DeployProtocol {
     ///      precise number; the structural claim is "single box << 10-spin worst case".
     uint256 internal constant RESOLVE_BET_10SPIN_WORST_CASE_REF_GAS = 726_944;
 
-    /// @dev The single-box `crankBoxes(1)` TOTAL measured by Test A (137,944). Test D asserts the
+    /// @dev The single-box `autoOpen(1)` TOTAL measured by Test A (137,944). Test D asserts the
     ///      per-box MARGINAL is materially below this — the gap is the per-tx fixed overhead the
     ///      single-box total mis-attributes to one box (CR-01). The committed CRANK_OPEN_BOX_GAS_UNITS
     ///      (137_944) is pegged to this single-box total, which is the CR-01 defect.
@@ -81,12 +81,12 @@ contract CrankOpenBoxWorstCaseGas is DeployProtocol {
     // =========================================================================
 
     /// @notice GAS-01 / GAS-06: with exactly one box queued (a real lootbox-mode deposit firing the
-    ///         first-deposit enqueue) and the RNG word present at the index, measure `crankBoxes(1)`
+    ///         first-deposit enqueue) and the RNG word present at the index, measure `autoOpen(1)`
     ///         gas -> the per-box marginal that calibrates CRANK_OPEN_BOX_GAS_UNITS. Asserts the box
     ///         is queued, RNG-ready, and un-opened (the worst-case preconditions) BEFORE the
     ///         measurement is trusted; asserts the measured gas < 30M mainnet; asserts (non-vacuity)
     ///         the box actually opened. Tests A/B/C are folded into this one test to share the
-    ///         single enqueue + the single bracketed `crankBoxes(1)` measurement.
+    ///         single enqueue + the single bracketed `autoOpen(1)` measurement.
     function testWorstCaseOpenBoxSingleMaterializationFitsBlockGasLimit() public {
         uint48 index = _activeLootboxIndex();
 
@@ -104,7 +104,7 @@ contract CrankOpenBoxWorstCaseGas is DeployProtocol {
         vm.recordLogs();
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.crankBoxes(1);
+        game.autoOpen(1);
         uint256 gasUsed = gasBefore - gasleft();
 
         // Non-vacuity (Test B): the box actually opened — its first-deposit signal is zeroed on open,
@@ -138,9 +138,9 @@ contract CrankOpenBoxWorstCaseGas is DeployProtocol {
     // =========================================================================
 
     /// @notice GAS-06 / CR-01: isolate the per-box MARGINAL gas — the marginal cost of opening one
-    ///         more box in an N-box `crankBoxes(N)` batch. This is the CORRECT calibration target for
+    ///         more box in an N-box `autoOpen(N)` batch. This is the CORRECT calibration target for
     ///         CRANK_OPEN_BOX_GAS_UNITS, because the box reward is FLAT per box (DegenerusGame.sol:1621)
-    ///         while the per-transaction fixed overhead of `crankBoxes` (the cursor/boxCursorIndex
+    ///         while the per-transaction fixed overhead of `autoOpen` (the cursor/boxCursorIndex
     ///         SLOAD+conditional SSTORE :1593-1598, the lootboxRngWordByIndex gate SLOAD :1603, the
     ///         `_activeTicketLevel()` read :1610, the final `boxCursor` SSTORE :1631, and the once-per-tx
     ///         `coinflip.creditFlip` :1632) is paid ONLY ONCE per call regardless of N. A self-cranker
@@ -151,7 +151,7 @@ contract CrankOpenBoxWorstCaseGas is DeployProtocol {
     ///
     ///         Measured by the SAME loop-N-divide idiom CrankResolveBetWorstCaseGas
     ///         (testPerOneSpinItemMarginalBelowWorstCase, :197-242) uses for the resolve-bet marginal:
-    ///         queue N distinct READY un-opened boxes, `crankBoxes(N)` ONCE, divide the gasleft-delta
+    ///         queue N distinct READY un-opened boxes, `autoOpen(N)` ONCE, divide the gasleft-delta
     ///         by N so the per-tx fixed overhead amortizes away. A large N (32) is used so the per-tx
     ///         fixed overhead (cold cranker `creditFlip` ~20k, cursor SSTOREs) is amortized to a
     ///         negligible per-box share and the measured marginal converges to the true per-box
@@ -184,7 +184,7 @@ contract CrankOpenBoxWorstCaseGas is DeployProtocol {
         // Bracket the whole N-box batch; divide by N for the per-box marginal (fixed overhead paid once).
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.crankBoxes(nBoxes);
+        game.autoOpen(nBoxes);
         uint256 totalGas = gasBefore - gasleft();
         uint256 perBoxMarginal = totalGas / nBoxes;
 
@@ -219,7 +219,7 @@ contract CrankOpenBoxWorstCaseGas is DeployProtocol {
     // =========================================================================
 
     /// @dev Buy a real lootbox-mode deposit via the public mint API. The first deposit for
-    ///      (index, buyer) fires the `lootboxEthBase == 0` signal -> enqueueBoxForCrank (MintModule:999).
+    ///      (index, buyer) fires the `lootboxEthBase == 0` signal -> enqueueBoxForAutoOpen (MintModule:999).
     ///      Mirrors CrankNonBrick._buyBox: tickets + a >= LOOTBOX_MIN DirectEth lootbox slice.
     function _buyBox(address buyer, uint256 lootboxAmount) internal {
         vm.prank(buyer);

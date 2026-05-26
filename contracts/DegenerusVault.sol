@@ -50,6 +50,13 @@ interface IDegenerusGamePlayerActions {
         address buyer,
         uint256 ticketQuantity
     ) external;
+    /// @notice Sell far-future ticket entries to sDGNRS for current-level tickets + cash.
+    function sellFarFutureTickets(
+        address player,
+        uint32[] calldata levels,
+        uint256[] calldata quantities,
+        uint256[] calldata queueIndices
+    ) external;
 }
 
 /// @notice Interface for coinflip player actions used by DegenerusVault.
@@ -83,6 +90,10 @@ interface IAfKingSubscribe {
         uint8 reinvestPct,
         address fundingSource
     ) external payable;
+    /// @notice Withdraw `amount` of the caller's prepaid pool (sends to the caller).
+    function withdraw(uint256 amount) external;
+    /// @notice The `player`'s remaining prepaid pool balance.
+    function poolOf(address player) external view returns (uint256);
 }
 
 /// @notice Interface for sDGNRS player actions used by DegenerusVault.
@@ -498,6 +509,14 @@ contract DegenerusVault {
         emit Deposit(msg.sender, msg.value, 0, 0);
     }
 
+    /// @notice Recover the vault's stranded AfKing prepaid-pool ETH back into vault reserves.
+    /// @dev Permissionless (no owner gate, no gameOver gate): AfKing.withdraw sends to the CALLER
+    ///      (this vault), so the recovered ETH only ever lands in the vault's own receive() — an
+    ///      external trigger cannot redirect it. withdraw(0) is a no-op when the pool is empty.
+    function recoverAfKingPool() external {
+        afKing.withdraw(afKing.poolOf(address(this)));
+    }
+
     // ---------------------------------------------------------------------
     // GAMEPLAY (Vault Owner)
     // ---------------------------------------------------------------------
@@ -618,6 +637,16 @@ contract DegenerusVault {
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameResolveDegeneretteBets(uint64[] calldata betIds) external onlyVaultOwner {
         gamePlayer.resolveDegeneretteBets(address(this), betIds);
+    }
+
+    /// @notice Salvage the vault's far-future tickets to sDGNRS (current tickets + cash) — vault owner.
+    /// @dev The >50.1% DGVE holder can trim VAULT's far inventory. VAULT self-calls (no operator).
+    function gameSellFarFutureTickets(
+        uint32[] calldata levels,
+        uint256[] calldata quantities,
+        uint256[] calldata queueIndices
+    ) external onlyVaultOwner {
+        gamePlayer.sellFarFutureTickets(address(this), levels, quantities, queueIndices);
     }
 
     /// @notice Approve or revoke an operator for the vault's game actions

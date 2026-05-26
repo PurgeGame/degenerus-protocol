@@ -1525,7 +1525,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                 DO-WORK CRANK + KEEPER BATCH                        |
+      |                 AUTO-WORK + KEEPER BATCH                        |
       +======================================================================+
       |  Permissionless layer letting any caller settle pending game work    |
       |  on others' behalf for a small gas-pegged BURNIE reward paid as       |
@@ -1533,19 +1533,19 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  storage directly, so it lives in-game by construction.               |
       +======================================================================+*/
 
-    /// @dev Reference gas price for the crank reward peg. The cranker is
+    /// @dev Reference gas price for the auto-work reward peg. The caller is
     ///      reimbursed its gas at this fixed reference, never measured gas:
     ///      tx.gasprice / gasleft() are a gameable surface and are never read.
-    uint256 private constant CRANK_GAS_PRICE_REF = 0.5 gwei;
+    uint256 private constant AUTO_GAS_PRICE_REF = 0.5 gwei;
 
     /// @dev Reserved per-work-type gas-unit constants. The numeric values are
     ///      placeholders calibrated from measured worst-case marginal gas at the
     ///      Phase 319 GAS pass; only the names/shape are fixed here. They are
     ///      FIXED constants (REW-03) — the reward never depends on gasleft().
-    uint256 private constant CRANK_RESOLVE_BET_GAS_UNITS = 66_528;
-    uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 71_203;
+    uint256 private constant AUTO_RESOLVE_BET_GAS_UNITS = 66_528;
+    uint256 private constant AUTO_OPEN_BOX_GAS_UNITS = 71_203;
 
-    /// @dev Cursor into the box-crank queue for the current lootbox RNG index.
+    /// @dev Cursor into the box auto-open queue for the current lootbox RNG index.
     ///      Concurrent same-tx callers self-partition via the advancing cursor.
     ///      Reset to zero when the active index advances (collision-free walk).
     uint48 internal boxCursor;
@@ -1555,43 +1555,43 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @dev Players with an open box queued per lootbox RNG index, enqueued once at
     ///      first deposit (the lootboxEthBase == 0 signal). Keyed on the lootbox index,
-    ///      which re-couples to the VRF-rotation orphan-index keyspace — the box-crank
+    ///      which re-couples to the VRF-rotation orphan-index keyspace — the box auto-open
     ///      walk MUST gate each open on lootboxRngWordByIndex[index] != 0 so an index
     ///      orphaned mid-day by an emergency coordinator rotation is skipped until the
     ///      a303ae18 detect-preserve-re-issue path lands the re-issued word.
     mapping(uint48 => address[]) internal boxPlayers;
 
-    /// @notice Enqueue a player's first box deposit at an index for the box crank.
+    /// @notice Enqueue a player's first box deposit at an index for the box auto-open.
     /// @dev Self-call only (invoked from the mint module first-deposit path via
     ///      IDegenerusGame(address(this))). The first-deposit signal is lootboxEthBase == 0;
     ///      the open-time zeroing (LootboxModule) is the dequeue. One SSTORE per (index, player).
     /// @param index Lootbox RNG index the deposit was assigned to.
     /// @param player Depositing player.
-    function enqueueBoxForCrank(uint48 index, address player) external {
+    function enqueueBoxForAutoOpen(uint48 index, address player) external {
         if (msg.sender != address(this)) revert E();
         boxPlayers[index].push(player);
     }
 
     /// @notice Permissionlessly resolve a caller-supplied list of Degenerette bets.
-    /// @dev CRANK-01/02. Items are parallel arrays: item i = (players[i], betIds[i]),
+    /// @dev AUTO-01/02. Items are parallel arrays: item i = (players[i], betIds[i]),
     ///      front-to-back. Item 0 is the caller's own probe: if it is already resolved
     ///      (degeneretteBets[players[0]][betIds[0]] == 0) a competitor got ahead, so the
     ///      whole list reverts with BatchAlreadyTaken (a loser-gas cap, reusing the SLOAD
     ///      item 0 needs anyway). Items 1..N are isolated per-item (a stale/reverting item
     ///      skips), and only successful resolutions earn a reward. WWXRP work (currency == 3)
-    ///      is resolvable but earns zero reward (CRANK-04). The accumulated reward is granted
+    ///      is resolvable but earns zero reward (AUTO-04). The accumulated reward is granted
     ///      as exactly ONE creditFlip(msg.sender, sum) at the end (REW-02), to whoever calls
     ///      including a self-resolver (REW-04, no caller restriction).
     /// @param players Bet owners, grouped/ordered by the caller (item 0 is the probe).
     /// @param betIds Bet ids, parallel to players.
-    function crankBets(
+    function autoResolve(
         address[] calldata players,
         uint64[] calldata betIds
     ) external {
         uint256 len = players.length;
         if (len == 0 || betIds.length != len) revert E();
 
-        // CRANK-02 short-circuit: probe item 0 (the caller's own choice). A resolved
+        // AUTO-02 short-circuit: probe item 0 (the caller's own choice). A resolved
         // bet is deleted (slot == 0), so a zero slot means a competitor got ahead.
         if (degeneretteBets[players[0]][betIds[0]] == 0) revert BatchAlreadyTaken();
 
@@ -1600,16 +1600,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         for (uint256 i; i < len; ) {
             uint256 betPacked = degeneretteBets[players[i]][betIds[i]];
             // currency bits [42..43]: WWXRP is the most +EV currency, so it is excluded
-            // from the bounty to keep the faucet closed (CRANK-04).
+            // from the bounty to keep the faucet closed (AUTO-04).
             uint8 currency = uint8((betPacked >> 42) & 0x3);
             // Per-item isolation: a stale/reverting/not-ready bet skips, never bricks.
-            try this._crankResolveBet(players[i], betIds[i]) {
+            try this._autoResolveBet(players[i], betIds[i]) {
                 // WWXRP work (currency == 3) is resolvable but earns zero reward.
                 if (currency == 3) {
                     // zero reward
                 } else {
                     reward += _ethToBurnieValue(
-                        CRANK_RESOLVE_BET_GAS_UNITS * CRANK_GAS_PRICE_REF,
+                        AUTO_RESOLVE_BET_GAS_UNITS * AUTO_GAS_PRICE_REF,
                         PriceLookupLib.priceForLevel(lvl)
                     );
                 }
@@ -1623,7 +1623,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Permissionlessly open queued lootboxes via the parameterless cursor.
-    /// @dev CRANK-03. Walks boxPlayers[activeIndex] from the self-partitioning boxCursor,
+    /// @dev AUTO-03. Walks boxPlayers[activeIndex] from the self-partitioning boxCursor,
     ///      opening up to maxCount ready boxes. STRUCTURAL re-issue coupling (the v45
     ///      orphan-index landmine): each open is gated on lootboxRngWordByIndex[index] != 0,
     ///      mirroring the LootboxModule RngNotReady guard — an index orphaned mid-day by an
@@ -1633,7 +1633,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      (lootboxEth / lootboxEthBase) are preserved untouched. Each successful open earns
     ///      a flat reward; the sum is granted as ONE creditFlip(msg.sender, sum) (REW-02/04).
     /// @param maxCount Maximum number of boxes to open this call (caller-bounded, anti-DoS).
-    function crankBoxes(uint256 maxCount) external {
+    function autoOpen(uint256 maxCount) external {
         uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
         // Day/index-reset the cursor when the active index advances (collision-free walk).
         if (boxCursorIndex != index) {
@@ -1661,9 +1661,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             // Skip already-emptied boxes (the first-deposit signal is reset on open).
             if (lootboxEthBase[index][player] == 0) continue;
             // Per-item isolation: a not-ready/reverting box skips, never bricks the walk.
-            try this._crankOpenBox(index, player) {
+            try this._autoOpenBox(index, player) {
                 reward += _ethToBurnieValue(
-                    CRANK_OPEN_BOX_GAS_UNITS * CRANK_GAS_PRICE_REF,
+                    AUTO_OPEN_BOX_GAS_UNITS * AUTO_GAS_PRICE_REF,
                     PriceLookupLib.priceForLevel(lvl)
                 );
                 unchecked {
@@ -1681,7 +1681,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      approval gate relaxed for the resolve path only (placement stays gated).
     /// @param player Bet owner.
     /// @param betId Bet id to resolve.
-    function _crankResolveBet(address player, uint64 betId) external {
+    function _autoResolveBet(address player, uint64 betId) external {
         if (msg.sender != address(this)) revert E();
         uint64[] memory ids = new uint64[](1);
         ids[0] = betId;
@@ -1702,7 +1702,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      RngNotReady guard and the one-reward-per-item box-zeroing untouched.
     /// @param index Lootbox RNG index.
     /// @param player Box owner.
-    function _crankOpenBox(uint48 index, address player) external {
+    function _autoOpenBox(uint48 index, address player) external {
         if (msg.sender != address(this)) revert E();
         _openLootBoxFor(player, index);
     }
@@ -1724,7 +1724,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      writes (CEI); its recipient is the pinned VAULT, which cannot pass this AF_KING
     ///      gate, so no re-entrant double-buy path exists. The per-player slice moves into the
     ///      sub-call frame on each try, and a failed slice stays in the contract (refunded
-    ///      once), so there is no stored batch-debit a reentrant sweep/cancel could replay.
+    ///      once), so there is no stored batch-debit a reentrant auto-work/cancel could replay.
     /// @param players Subscribers to purchase for.
     /// @param amounts Per-player ETH value slice (parallel to players); sum must be <= msg.value.
     /// @param modes Per-player payment kind (parallel to players).
@@ -1775,7 +1775,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         MintPaymentKind payKind
     ) external payable {
         if (msg.sender != address(this)) revert E();
-        _purchaseFor(player, 0, msg.value, bytes32(0), payKind);
+        // Capture unreferred AfKing-joiners into the protocol-owned registered code:
+        // primary 75% -> SDGNRS, secondary 20% -> VAULT (two-tier cross-referral). A player
+        // already holding a real human affiliate keeps it (the affiliate's !infoSet fall-through).
+        _purchaseFor(player, 0, msg.value, bytes32("DGNRS"), payKind);
     }
 
     /// @dev Convert an ETH wei amount to BURNIE coinflip-credit value at a given price.
@@ -1876,26 +1879,103 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @notice Physically segregate sDGNRS redemption ETH out of claimable into sDGNRS balance.
-    /// @dev Called by sDGNRS at gambling-burn submit to pull the MAX (175%) owed ETH out of
-    ///      claimableWinnings[SDGNRS] and transfer it to the sDGNRS contract, so the owed ETH
-    ///      can never be re-spent by a concurrent claimable drain (AfKing self-sub, claimWinnings,
-    ///      a second same-day claimant). This is the ONLY remaining claimableWinnings[SDGNRS]
-    ///      debit and it is CHECKED — Solidity 0.8 reverts the burn if claimable is insufficient
-    ///      (fail-closed). CEI: state is decremented before the external ETH transfer.
-    /// @param amount ETH amount to segregate (the MAX 175% payout for this burn).
-    /// @custom:reverts E If caller is not sDGNRS, or claimable/pool underflows, or the transfer fails.
+    /// @notice Physically segregate the sDGNRS redemption reservation as pure ETH or pure stETH.
+    /// @dev Called by sDGNRS at gambling-burn submit to reserve the MAX (175%) owed for this burn so
+    ///      it can never be re-spent by a concurrent claimable drain (AfKing self-sub, claimWinnings,
+    ///      a second same-day claimant). Pure-ETH OR pure-stETH (no mix), fail-closed, donation-robust:
+    ///      - ETH leg: if claimableWinnings[SDGNRS] AND the game's liquid ETH both cover `amount`,
+    ///        physically move the at-risk ETH out to sDGNRS (CHECKED debit, CEI).
+    ///      - stETH leg: otherwise (mid-game ETH depletion, or a stETH donation inflating the submit
+    ///        base beyond claimable), sDGNRS's own stETH already backs the reservation in safe custody,
+    ///        so no game-side move or ledger debit is needed — the caller's pendingRedemptionEthValue
+    ///        records it and the claim pays stETH. Coverage is checked against sDGNRS's stETH balance.
+    ///      - Neither pure leg covers => revert (fail-closed; not a realistic state).
+    /// @param amount The MAX 175% reservation for this burn.
+    /// @custom:reverts E If caller is not sDGNRS, neither pure leg covers `amount`, or the ETH transfer fails.
     function pullRedemptionReserve(uint256 amount) external {
         if (msg.sender != ContractAddresses.SDGNRS) revert E();
         if (amount == 0) return;
 
-        // CHECKED debit (no unchecked): reverts fail-closed if claimable < amount.
-        claimableWinnings[ContractAddresses.SDGNRS] -= amount;
-        claimablePool -= uint128(amount);
+        // ETH leg (as today): the claimable[SDGNRS] ledger AND the game's liquid ETH both cover
+        // `amount` — segregate the at-risk ETH out to sDGNRS. CHECKED debit (no unchecked); CEI.
+        if (
+            claimableWinnings[ContractAddresses.SDGNRS] >= amount &&
+            address(this).balance >= amount
+        ) {
+            claimableWinnings[ContractAddresses.SDGNRS] -= amount;
+            claimablePool -= uint128(amount);
+            (bool ok, ) = payable(ContractAddresses.SDGNRS).call{value: amount}("");
+            if (!ok) revert E();
+            return;
+        }
 
-        // CEI: move the real ETH out to sDGNRS after the state decrement.
-        (bool ok, ) = payable(ContractAddresses.SDGNRS).call{value: amount}("");
-        if (!ok) revert E();
+        // stETH leg (fallback): the ETH side cannot cover (mid-game ETH depletion, or a stETH
+        // donation inflated the submit base beyond claimable[SDGNRS]). sDGNRS already holds its own
+        // stETH backing in safe custody, so NO game-side move or ledger debit is needed — the
+        // reservation is recorded by the caller's pendingRedemptionEthValue and paid in stETH at
+        // claim. Coverage is checked against sDGNRS's stETH balance (the basis a donation inflates).
+        if (steth.balanceOf(ContractAddresses.SDGNRS) >= amount) {
+            return;
+        }
+
+        // Neither pure leg covers => fail-closed.
+        revert E();
+    }
+
+    /// @notice Sell far-future ticket entries to sDGNRS for current-level tickets + cash (-EV exit).
+    /// @dev Resolves the seller (operator-honor) then delegatecalls the mint module, which holds the
+    ///      far-future salvage logic (kept off this contract for EIP-170 headroom). Quote without
+    ///      executing via previewSellFarFutureTickets.
+    /// @param player Owner of the far entries / recipient (resolved via _resolvePlayer).
+    /// @param levels Target levels to sell from (each 6 <= level - currentLevel <= 100).
+    /// @param quantities Whole far tickets to sell at each level.
+    /// @param queueIndices Caller-supplied ticketQueue position of the resolved player at each level.
+    function sellFarFutureTickets(
+        address player,
+        uint32[] calldata levels,
+        uint256[] calldata quantities,
+        uint256[] calldata queueIndices
+    ) external {
+        player = _resolvePlayer(player);
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_MINT_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameMintModule.sellFarFutureTickets.selector,
+                    player,
+                    levels,
+                    quantities,
+                    queueIndices
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Quote a far-future salvage swap WITHOUT executing (the UI offer; -EV by design).
+    /// @dev Read-only; shares the exact valuation (curve + daily per-player jitter + split) the
+    ///      executing path uses, so the displayed offer matches what would be paid. Reverts on an
+    ///      ineligible distance / zero quantity; does NOT check ownership (a quote for the given
+    ///      bundle). For a bundle too small to fund one whole current ticket, ticketWei == totalBudget
+    ///      and cashWei == 0 (the executing path reverts on that bundle).
+    /// @return totalFaceWei Sum of priceForLevel(L) * n over all lines (the bundle's face value).
+    /// @return totalBudget Total ETH sDGNRS would pay (the -EV offer).
+    /// @return ticketWei Portion delivered as current-level tickets.
+    /// @return cashWei Portion delivered as withdrawable claimable.
+    function previewSellFarFutureTickets(
+        address player,
+        uint32[] calldata levels,
+        uint256[] calldata quantities
+    )
+        external
+        view
+        returns (
+            uint256 totalFaceWei,
+            uint256 totalBudget,
+            uint256 ticketWei,
+            uint256 cashWei
+        )
+    {
+        return _quoteFarFutureSwap(player, levels, quantities);
     }
 
     /*+===============================================================================================+
@@ -2273,7 +2353,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return claimablePool;
     }
 
-    /// @notice Check if the final sweep has executed (all funds forfeited).
+    /// @notice Check if the final fund forfeiture has executed (all funds forfeited).
     function isFinalSwept() external view returns (bool) {
         return _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0;
     }

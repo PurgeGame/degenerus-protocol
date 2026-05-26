@@ -884,6 +884,114 @@ contract DegenerusGameMintModule is
         }
     }
 
+    /// @notice Emitted on a far-future salvage swap (sellFarFutureTickets).
+    event FarFutureSwap(
+        address indexed player,
+        uint256 lineCount,
+        uint256 totalBudgetWei,
+        uint256 ticketWei,
+        uint256 cashWei
+    );
+
+    /// @notice Sell far-future ticket entries to sDGNRS (current-level tickets + cash; -EV exit).
+    /// @dev Delegatecalled from DegenerusGame.sellFarFutureTickets with an already-resolved `player`
+    ///      (so no _resolvePlayer here). Mass-sells WHOLE far-future tickets (6 <= d = L - currentLevel
+    ///      <= 100) for ONE aggregated current-level mint (a normal recycled Claimable mint) + a cash
+    ///      residual, funded fail-closed from claimableWinnings[SDGNRS] to a >=1 ETH floor (no
+    ///      pendingRedemptionEthValue term, no daily cap). Valuation + daily jitter are shared with the
+    ///      preview via _quoteFarFutureSwap. The fully-liquidated seller is swap-popped from ticketQueue
+    ///      (membership <=> packed != 0 maintained; far-future jackpot samplers unchanged).
+    /// @custom:reverts E On bad input/distance/holdings, too-small budget, insufficient sDGNRS
+    ///                   claimable (>=1 ETH floor), gameOver/liveness, or a stale queue index.
+    /// @custom:reverts RngLocked While the RNG window is locked (freeze invariant).
+    function sellFarFutureTickets(
+        address player,
+        uint32[] calldata levels,
+        uint256[] calldata quantities,
+        uint256[] calldata queueIndices
+    ) external {
+        if (rngLockedFlag) revert RngLocked();
+        if (gameOver) revert E();
+        if (_livenessTriggered()) revert E();
+        uint256 len = levels.length;
+        if (
+            len == 0 ||
+            len > 32 ||
+            quantities.length != len ||
+            queueIndices.length != len
+        ) revert E();
+
+        uint256 oneTicketWei = PriceLookupLib.priceForLevel(_activeTicketLevel());
+        (
+            ,
+            uint256 totalBudget,
+            uint256 ticketWei,
+
+        ) = _quoteFarFutureSwap(player, levels, quantities);
+        if (totalBudget < oneTicketWei) revert E(); // too small to deliver even 1 whole ticket
+
+        // Fund fail-closed from sDGNRS's OWN claimable, leaving a >=1 ETH floor. The gambling-burn
+        // redemption desk is protected STRUCTURALLY (its ETH is segregated out of claimable at submit),
+        // so NO pendingRedemptionEthValue term is needed; NO daily cap.
+        if (claimableWinnings[ContractAddresses.SDGNRS] < totalBudget + 1 ether)
+            revert E();
+
+        // Debit the seller's far entries (owed is in entries, 4 per whole ticket; swap-pop on full
+        // sell-out) and credit sDGNRS the same entries. Distances were validated by _quoteFarFutureSwap;
+        // sequential processing handles duplicate levels (a later same-level line reads the decremented
+        // balance and reverts if it over-sells; only the line that zeroes the packed slot pops).
+        for (uint256 i; i < len; ) {
+            uint24 L = uint24(levels[i]);
+            uint32 entries = uint32(quantities[i]) * 4;
+            _removeFarFutureTickets(player, L, entries, queueIndices[i]);
+            _queueTickets(ContractAddresses.SDGNRS, L, entries, false);
+            unchecked {
+                ++i;
+            }
+        }
+
+        // Move the whole budget sDGNRS -> player as claimable (relabel; claimablePool unchanged).
+        claimableWinnings[ContractAddresses.SDGNRS] -= totalBudget;
+        claimableWinnings[player] += totalBudget;
+
+        // Ticket leg = NORMAL recycled mint of `ticketWei` of current-level tickets from the player's
+        // claimable (routes 90% next / 10% future + queues current tickets). Leftover (~cashWei) is the
+        // player's withdrawable cash. qty in purchase units (4 * TICKET_SCALE = 400 = one whole ticket).
+        uint256 qty = (ticketWei * 4 * TICKET_SCALE) / oneTicketWei;
+        _purchaseFor(player, qty, 0, bytes32(0), MintPaymentKind.Claimable);
+
+        emit FarFutureSwap(player, len, totalBudget, ticketWei, totalBudget - ticketWei);
+    }
+
+    /// @dev Debit `entries` (owed is in entries, 4 per whole ticket) of the player's far-future tickets
+    ///      at level L. On full sell-out (packed == 0) verify the caller-supplied queue index and O(1)
+    ///      swap-pop the seller out of ticketQueue[ffk], MAINTAINING `membership <=> packed != 0`
+    ///      (so the far-future jackpot samplers need no change and gain no hot-path read). Partial sells
+    ///      and sells that leave `rem` do not pop.
+    function _removeFarFutureTickets(
+        address player,
+        uint24 L,
+        uint32 entries,
+        uint256 idx
+    ) internal {
+        uint24 ffk = _tqFarFutureKey(L);
+        uint40 packed = ticketsOwedPacked[ffk][player];
+        uint32 owed = uint32(packed >> 8);
+        if (owed < entries) revert E(); // ownership / over-sell guard
+        uint8 rem = uint8(packed);
+        uint32 newOwed = owed - entries;
+        if (newOwed == 0 && rem == 0) {
+            address[] storage q = ticketQueue[ffk];
+            if (q[idx] != player) revert E(); // verify the caller-supplied index
+            uint256 lastPos = q.length - 1;
+            if (idx != lastPos) q[idx] = q[lastPos];
+            q.pop();
+            ticketsOwedPacked[ffk][player] = 0;
+        } else {
+            ticketsOwedPacked[ffk][player] = (uint40(newOwed) << 8) | uint40(rem);
+        }
+    }
+
     function _purchaseFor(
         address buyer,
         uint256 ticketQuantity,
@@ -978,10 +1086,10 @@ contract DegenerusGameMintModule is
                 // lootboxPurchasePacked after score computation below
                 emit LootBoxIdx(buyer, uint32(lbIndex), lbDay);
                 // First deposit for this (index, buyer): enqueue the box index for
-                // the permissionless box do-work crank cursor. The consumer-side
+                // the permissionless box auto-open cursor. The consumer-side
                 // walk gates each index on lootboxRngWordByIndex != 0 (VRF
                 // orphan-index protection), so enqueue is producer-only here.
-                IDegenerusGame(address(this)).enqueueBoxForCrank(lbIndex, buyer);
+                IDegenerusGame(address(this)).enqueueBoxForAutoOpen(lbIndex, buyer);
             } else {
                 if (storedDay != lbDay) revert E();
             }
@@ -1311,8 +1419,8 @@ contract DegenerusGameMintModule is
             uint256(uint96(applied)) |
             (uint256(uint96(sold)) << PRESALE_BOX_SOLD_SHIFT) |
             (closing ? PRESALE_BOX_CLOSING_FLAG : 0);
-        // First box deposit at this index: enqueue for the permissionless crank.
-        IDegenerusGame(address(this)).enqueueBoxForCrank(index, buyer);
+        // First box deposit at this index: enqueue for the permissionless auto-open.
+        IDegenerusGame(address(this)).enqueueBoxForAutoOpen(index, buyer);
 
         presaleBoxEthSold = uint96(sold + applied);
         if (closing) {

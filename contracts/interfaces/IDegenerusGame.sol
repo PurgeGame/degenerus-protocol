@@ -29,7 +29,7 @@ interface IDegenerusGame {
     ///      or whenever VRF has been stalled ≥ 14 days. False during sub-grace VRF stalls.
     function livenessTriggered() external view returns (bool);
 
-    /// @notice Check if the final sweep has executed (all funds forfeited).
+    /// @notice Check if the final fund forfeiture has executed (all funds forfeited).
     function isFinalSwept() external view returns (bool);
 
     /// @notice Get the current mint price in wei.
@@ -331,12 +331,12 @@ interface IDegenerusGame {
     /// @return remaining ETH still buyable in boxes (0 once presaleOver / sold out).
     function presaleBoxEthRemaining() external view returns (uint256 remaining);
 
-    /// @notice Enqueue a player's first box deposit at an index for the box crank.
+    /// @notice Enqueue a player's first box deposit at an index for the box auto-open.
     /// @dev Self-call only (invoked from the mint module first-deposit path). The
     ///      first-deposit signal is lootboxEthBase == 0; one enqueue per (index, player).
     /// @param index Lootbox RNG index the deposit was assigned to.
     /// @param player Depositing player.
-    function enqueueBoxForCrank(uint48 index, address player) external;
+    function enqueueBoxForAutoOpen(uint48 index, address player) external;
 
     /// @notice Place Full Ticket Degenerette bets (4 traits, match-based payouts).
     /// @param player The betting player (address(0) = msg.sender).

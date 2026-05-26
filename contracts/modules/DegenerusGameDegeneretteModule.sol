@@ -92,7 +92,8 @@ contract DegenerusGameDegeneretteModule is
     /// @param betId The bet ID.
     /// @param ticketIndex Index of this ticket (0 to count-1).
     /// @param playerTicket The player's ticket traits.
-    /// @param matches Number of attribute matches (0-8).
+    /// @param matches Composite score S = A + 2*H (0-9). Field name retained for the
+    ///        off-chain indexer (range widening 0-8 → 0-9 is a separate out-of-scope track).
     /// @param payout Payout for this ticket.
     event FullTicketResult(
         address indexed player,
@@ -186,7 +187,7 @@ contract DegenerusGameDegeneretteModule is
 
     /// @dev WWXRP high-value ROI base in basis points (90%).
     ///      Used as the target ROI for full-ticket bonus redistribution
-    ///      (matches 5-8 + jackpot).
+    ///      (top score tiers S=6-9).
     uint16 private constant WWXRP_HIGH_ROI_BASE_BPS = 9_000;
 
     /// @dev WWXRP high-value ROI max in basis points (109.9%).
@@ -199,10 +200,11 @@ contract DegenerusGameDegeneretteModule is
     IStakedDegenerusStonk private constant sdgnrs =
         IStakedDegenerusStonk(ContractAddresses.SDGNRS);
 
-    /// @dev Degenerette DGNRS reward BPS (per ETH wagered, % of remaining Reward pool)
-    uint16 private constant DEGEN_DGNRS_6_BPS = 400; // 4% per ETH
-    uint16 private constant DEGEN_DGNRS_7_BPS = 800; // 8% per ETH
-    uint16 private constant DEGEN_DGNRS_8_BPS = 1500; // 15% per ETH
+    /// @dev Degenerette DGNRS reward BPS (per ETH wagered, % of remaining Reward pool),
+    ///      keyed on the top-3 score tiers S=7/8/9 (rarity preserved; shift-by-one from M=6/7/8).
+    uint16 private constant DEGEN_DGNRS_7_BPS = 400; // S=7: 4% per ETH
+    uint16 private constant DEGEN_DGNRS_8_BPS = 800; // S=8: 8% per ETH
+    uint16 private constant DEGEN_DGNRS_9_BPS = 1500; // S=9: 15% per ETH
 
     /// @dev Currency type identifier for ETH.
     uint8 private constant CURRENCY_ETH = 0;
@@ -239,46 +241,60 @@ contract DegenerusGameDegeneretteModule is
     // -------------------------------------------------------------------------
     //
     // Indexed by N = _countGoldQuadrants(playerTicket) ∈ {0..4}. Each table is
-    // calibrated against THAT N-value's binomial-convolution match-count
-    // distribution P_N(M) so that basePayoutEV = exactly 100 centi-x per N.
-    // EV-equality across picks is enforced by the table calibration; runtime
-    // payout = bet × basePayout_N(M) × roiBps / 1_000_000. Player RTP at activity
-    // tier r equals exactly r/10000 (90.00% min, 99.90% max).
+    // calibrated against THAT N-value's binomial-convolution score
+    // distribution P_N(S) (S = A + 2*H ∈ {0..9}) so that basePayoutEV = exactly
+    // 100 centi-x per N. EV-equality across picks is enforced by the table
+    // calibration; runtime payout = bet × basePayout_N(S) × roiBps / 1_000_000.
+    // Player RTP at activity tier r equals exactly r/10000 (90.00% min, 99.90% max).
     //
-    // Bit layout (M=0..7 packed): 32 bits per match index, [M*32 .. M*32+31].
-    // Drift per N: ±0.0003 bps (M=4/M=5/M=6 cascade absorbs rounding residual;
-    // M=8 stays at the natural uniform-scale value, monotonic in N).
+    // Bit layout (S=0..7 packed): 32 bits per score index, [S*32 .. S*32+31].
+    // S=8 and S=9 exceed the packed jackpot range and are held as separate per-N
+    // uint256 constants below (S=9 is the jackpot relabel of the old M=8 event).
     //
-    // Constants are the Fraction-exact output of
-    // .planning/notes/degenerette-recalibration/derive_5_tables.py — verified
-    // byte-identical at the Phase 267 Task 2 gate (267-01-CONSTANTS-VERIFY.md
-    // PASS_ALL_25 per D-267-CONSTVERIFY-01).
+    // PLACEHOLDER VALUES (TST handoff): the byte-exact S∈{0..9} constants are
+    // recalibrated by .planning/notes/degenerette-recalibration/derive_5_tables.py
+    // and byte-reproduced under the Phase-267-style PASS_ALL gate at Phase 327 (TST).
+    // The S=0..7 packed values + the S=8 constants below are pre-rescale placeholders
+    // (the packed slots still hold the old M-indexed values) — NOT the final
+    // S-distribution constants. Only the S=9 constants are final (the M=8 relabel).
     uint256 private constant QUICK_PLAY_PAYOUTS_N0_PACKED = 0x0001a42c000051f1000011da00000654000001ff000000cc0000000000000000;
     uint256 private constant QUICK_PLAY_PAYOUTS_N1_PACKED = 0x0001eb8600005fd7000014e70000075f00000256000000ef0000000000000000;
     uint256 private constant QUICK_PLAY_PAYOUTS_N2_PACKED = 0x000241d9000070ac00001894000008aa000002bf000001190000000000000000;
     uint256 private constant QUICK_PLAY_PAYOUTS_N3_PACKED = 0x0002ac130000856900001d1700000a39000003400000014d0000000000000000;
     uint256 private constant QUICK_PLAY_PAYOUTS_N4_PACKED = 0x0003310c00009f5a000022be00000c4d000003e20000018d0000000000000000;
 
-    /// @dev Per-N M=8 jackpot tier (exceeds 32-bit slot; held as separate uint256).
-    ///      Values stay at uniform-scale and are strictly monotonic in N.
-    uint256 private constant QUICK_PLAY_PAYOUT_N0_M8 = 10_756_411; // 107,564.11x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N1_M8 = 12_583_037; // 125,830.37x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N2_M8 = 14_792_939; // 147,929.39x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N3_M8 = 17_512_324; // 175,123.24x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N4_M8 = 20_916_435; // 209,164.35x bet
+    /// @dev Per-N S=9 jackpot tier (exceeds 32-bit slot; held as separate uint256).
+    ///      S=9 ≡ old M=8 (identical event + odds) — a relabel; values unchanged,
+    ///      strictly monotonic in N. FINAL (not a placeholder).
+    uint256 private constant QUICK_PLAY_PAYOUT_N0_S9 = 10_756_411; // 107,564.11x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_N1_S9 = 12_583_037; // 125,830.37x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_N2_S9 = 14_792_939; // 147,929.39x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_N3_S9 = 17_512_324; // 175,123.24x bet
+    uint256 private constant QUICK_PLAY_PAYOUT_N4_S9 = 20_916_435; // 209,164.35x bet
+
+    /// @dev Per-N S=8 tier (separate uint256, exceeds 32-bit slot). PLACEHOLDER (0)
+    ///      pending the Phase 327 derive_5_tables.py byte-reproduce — NOT a final value.
+    uint256 private constant QUICK_PLAY_PAYOUT_N0_S8 = 0; // TST-derived placeholder
+    uint256 private constant QUICK_PLAY_PAYOUT_N1_S8 = 0; // TST-derived placeholder
+    uint256 private constant QUICK_PLAY_PAYOUT_N2_S8 = 0; // TST-derived placeholder
+    uint256 private constant QUICK_PLAY_PAYOUT_N3_S8 = 0; // TST-derived placeholder
+    uint256 private constant QUICK_PLAY_PAYOUT_N4_S8 = 0; // TST-derived placeholder
 
     // -------------------------------------------------------------------------
     // WWXRP Bonus EV Redistribution (Full Ticket — 5 per-N factor tables)
     // -------------------------------------------------------------------------
     //
     // Per-N factors derived from each N's basePayout schedule + binomial-
-    // convolution P_N(M) + 10/30/30/30 split across buckets 5/6/7/8. Total
-    // ETH bonus EV = exactly 5.000% per N (drift ±0.0000 bps in
-    // 267-01-CONSTANTS-VERIFY.md). The same per-N factors apply to ETH bets
+    // convolution P_N(S) + 10/30/30/30 split across the top buckets S=6/7/8/9. Total
+    // ETH bonus EV = exactly 5.000% per N. The same per-N factors apply to ETH bets
     // (ETH_ROI_BONUS_BPS = 500) and WWXRP high-roi bets (_wwxrpHighValueRoi).
     //
-    // Bit layout (B=5..8 packed): 64 bits per bucket index, [B=5 | B=6 | B=7 | B=8],
-    // with B=5 in the low 64 bits. Read via `(packed >> ((bucket - 5) * 64)) & 0xFFFFFFFFFFFFFFFF`.
+    // Bit layout (B=6..9 packed): 64 bits per bucket index, [B=6 | B=7 | B=8 | B=9],
+    // with B=6 in the low 64 bits. Read via `(packed >> ((bucket - 6) * 64)) & 0xFFFFFFFFFFFFFFFF`.
+    //
+    // PLACEHOLDER VALUES (TST handoff): the factor constants below are recalibrated for
+    // the S∈{0..9} distribution by derive_5_tables.py and byte-reproduced under the
+    // PASS_ALL gate at Phase 327 (TST) — the values below are pre-rescale placeholders.
     uint256 private constant WWXRP_BONUS_FACTOR_SCALE = 1_000_000;
     uint256 private constant WWXRP_FACTORS_N0_PACKED = 0x0000000002278add0000000003fd603d0000000000ddba9f00000000001923d6;
     uint256 private constant WWXRP_FACTORS_N1_PACKED = 0x0000000003aef46a0000000005fd43a60000000001285f2400000000001e36c9;
@@ -321,28 +337,6 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant FT_ACTIVITY_SHIFT = 220;
     uint256 private constant FT_HAS_CUSTOM_SHIFT = 236;
     uint256 private constant FT_HERO_SHIFT = 237; // 3 bits: [0]=reserved, [1..2]=quadrant (always-on hero)
-
-    // -------------------------------------------------------------------------
-    // Hero Quadrant Multipliers (Per-N, Symbol-Only Match)
-    // -------------------------------------------------------------------------
-    //
-    // Hero match fires on the symbol-axis comparison in the hero quadrant only
-    // (color of hero quadrant ignored). P(hero|M, N) × boost(M, N)
-    // + (1 − P(hero|M, N)) × HERO_PENALTY = HERO_SCALE for each (M, N), so the
-    // boost is EV-neutral per match count per N.
-    //
-    // Bit layout: M=2..7 packed 16 bits each (96 bits total), with M=2 in the
-    // low 16 bits: [M=2 | M=3 | M=4 | M=5 | M=6 | M=7]. Read via
-    // `(packed >> ((matches - 2) * 16)) & 0xFFFF`. P(hero|M, N) = (1/8) ×
-    // P(other-7-axes = M-1 | N) / P_N(M) where the "other 7" comprises 3 sym
-    // + 4 color axes.
-    uint256 private constant HERO_BOOST_N0_PACKED = 0x275a27be2849291a2a762d2e;
-    uint256 private constant HERO_BOOST_N1_PACKED = 0x275027a9282728e52a262ca9;
-    uint256 private constant HERO_BOOST_N2_PACKED = 0x27482797280828b529d92c26;
-    uint256 private constant HERO_BOOST_N3_PACKED = 0x2742278827ed288829902ba6;
-    uint256 private constant HERO_BOOST_N4_PACKED = 0x273d277c27d62860294b2b2a;
-    uint16 private constant HERO_PENALTY = 9500;
-    uint16 private constant HERO_SCALE = 10_000;
 
     // Common masks
     uint256 private constant MASK_2 = 0x3;
@@ -678,19 +672,17 @@ contract DegenerusGameDegeneretteModule is
                 firstResultTicket = resultTicket;
             }
 
-            // Count matches
-            uint8 matches = _countMatches(playerTicket, resultTicket);
+            // Score this spin: S = A + 2*H (hero symbol worth 2), S ∈ {0..9}
+            uint8 s = _score(playerTicket, resultTicket, heroQuadrant);
 
-            // Calculate payout (includes per-outcome rarity adjustment for equal EV)
+            // Calculate payout (dispatches on the per-N score table)
             uint256 payout = _fullTicketPayout(
                 playerTicket,
-                resultTicket,
-                matches,
+                s,
                 currency,
                 amountPerTicket,
                 roiBps,
-                wwxrpHighRoi,
-                heroQuadrant
+                wwxrpHighRoi
             );
 
             emit FullTicketResult(
@@ -698,7 +690,7 @@ contract DegenerusGameDegeneretteModule is
                 betId,
                 spinIdx,
                 playerTicket,
-                matches,
+                s,
                 payout
             );
 
@@ -717,11 +709,11 @@ contract DegenerusGameDegeneretteModule is
                 );
             }
 
-            // Award sDGNRS from Reward pool on 6+ match ETH bets. Stays per-spin:
+            // Award sDGNRS from Reward pool on S>=7 ETH bets. Stays per-spin:
             // _awardDegeneretteDgnrs reads poolBalance fresh per call, so summing
             // off a stale balance would change the payout.
-            if (currency == CURRENCY_ETH && matches >= 6) {
-                _awardDegeneretteDgnrs(player, amountPerTicket, matches);
+            if (currency == CURRENCY_ETH && s >= 7) {
+                _awardDegeneretteDgnrs(player, amountPerTicket, s);
             }
 
             unchecked {
@@ -925,33 +917,34 @@ contract DegenerusGameDegeneretteModule is
         }
     }
 
-    /// @dev Counts matching attributes between player and result tickets.
+    /// @dev Scores a player ticket against a result ticket: S = A + 2*H, where A is the
+    ///      ordinary-axis match count (4 color axes + 3 non-hero symbol axes, 0..7) and H is
+    ///      1 if the hero quadrant's SYMBOL matches. The hero quadrant's color stays an
+    ///      ordinary axis. S ∈ {0..9}; the hero symbol scores 2 (hero-alone match ⇒ S=2 win).
     /// @param playerTicket The player's ticket (packed traits).
     /// @param resultTicket The result ticket (packed traits).
-    /// @return matches Number of matching attributes (0-8).
-    function _countMatches(
+    /// @param heroQuadrant The always-on hero quadrant (0..3) whose symbol axis scores double.
+    /// @return s Composite score (0-9).
+    function _score(
         uint32 playerTicket,
-        uint32 resultTicket
-    ) private pure returns (uint8 matches) {
+        uint32 resultTicket,
+        uint8 heroQuadrant
+    ) private pure returns (uint8 s) {
         for (uint8 q = 0; q < 4; ) {
             uint8 pQuad = uint8(playerTicket >> (q * 8));
             uint8 rQuad = uint8(resultTicket >> (q * 8));
 
-            // Color = bits 5-3 (category bucket, ignoring quadrant bits 7-6)
-            uint8 pColor = (pQuad >> 3) & 7;
-            uint8 rColor = (rQuad >> 3) & 7;
-            if (pColor == rColor) {
+            // Color = bits 5-3 (ordinary axis for all 4 quadrants)
+            if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) {
                 unchecked {
-                    ++matches;
+                    ++s;
                 }
             }
 
-            // Symbol = bits 2-0 (sub-bucket)
-            uint8 pSymbol = pQuad & 7;
-            uint8 rSymbol = rQuad & 7;
-            if (pSymbol == rSymbol) {
+            // Symbol = bits 2-0. The hero quadrant's symbol scores 2; the other 3 score 1.
+            if ((pQuad & 7) == (rQuad & 7)) {
                 unchecked {
-                    ++matches;
+                    s += (q == heroQuadrant) ? 2 : 1;
                 }
             }
 
@@ -961,66 +954,60 @@ contract DegenerusGameDegeneretteModule is
         }
     }
 
-    /// @dev Maps match count to a WWXRP bonus bucket.
-    /// @return bucket 0=none, 5/6/7/8 for matches.
+    /// @dev Maps a score S to a WWXRP bonus bucket (shift-by-one from the old M scale).
+    /// @return bucket 0=none, 6/7/8/9 for the top score tiers.
     function _wwxrpBonusBucket(
-        uint8 matches
+        uint8 s
     ) private pure returns (uint8 bucket) {
-        if (matches < 5) return 0;
-        return matches; // 5,6,7,8
+        if (s < 6) return 0;
+        return s; // 6,7,8,9
     }
 
-    /// @dev Returns the per-N WWXRP factor for a bucket B ∈ {5, 6, 7, 8}.
+    /// @dev Returns the per-N WWXRP factor for a bucket B ∈ {6, 7, 8, 9}.
     ///      Buckets outside that range yield zero (no bonus). Per-N factors are
     ///      derived from each N's basePayout schedule + binomial-convolution
-    ///      P_N(M) + 10/30/30/30 split so total ETH bonus EV = exactly 5.000% per N.
+    ///      P_N(S) + 10/30/30/30 split so total ETH bonus EV = exactly 5.000% per N.
     /// @param N Gold-quadrant count of the player ticket (0..4).
-    /// @param bucket WWXRP bonus bucket from `_wwxrpBonusBucket(matches)` (5..8 or 0).
+    /// @param bucket WWXRP bonus bucket from `_wwxrpBonusBucket(s)` (6..9 or 0).
     /// @return factor 64-bit factor; multiply with `bonusRoiBps` and divide by `WWXRP_BONUS_FACTOR_SCALE`.
     function _wwxrpFactor(uint8 N, uint8 bucket) private pure returns (uint256 factor) {
-        if (bucket < 5 || bucket > 8) return 0;
+        if (bucket < 6 || bucket > 9) return 0;
         uint256 packed;
         if (N == 0) packed = WWXRP_FACTORS_N0_PACKED;
         else if (N == 1) packed = WWXRP_FACTORS_N1_PACKED;
         else if (N == 2) packed = WWXRP_FACTORS_N2_PACKED;
         else if (N == 3) packed = WWXRP_FACTORS_N3_PACKED;
         else packed = WWXRP_FACTORS_N4_PACKED;
-        factor = (packed >> (uint256(bucket - 5) * 64)) & 0xFFFFFFFFFFFFFFFF;
+        factor = (packed >> (uint256(bucket - 6) * 64)) & 0xFFFFFFFFFFFFFFFF;
     }
 
-    /// @dev Calculates Full Ticket payout based on matches and activity score ROI.
+    /// @dev Calculates Full Ticket payout based on the score S and activity score ROI.
     ///      Dispatches to one of 5 per-N tables indexed by gold-quadrant count of
     ///      the player's pick (`N = _countGoldQuadrants(playerTicket)`). Each
     ///      per-N table is calibrated so basePayoutEV = exactly 100 centi-x
-    ///      against P_N(M) — equal EV across picks within rounding (≤ 0.0003 bps).
-    ///      Hero multiplier applies for M ∈ {2..7} under the always-on hero
-    ///      schedule; per-N HERO_BOOST tables are calibrated so hero is
-    ///      EV-neutral across all (M, N).
+    ///      against P_N(S) — equal EV across picks within rounding. The hero is
+    ///      scored into S (S = A + 2*H), so there is no separate hero multiplier.
     /// @param playerTicket The player's ticket (packed traits).
-    /// @param resultTicket The result ticket (packed traits).
-    /// @param matches Number of attribute matches (0-8).
+    /// @param s The composite score (0-9).
     /// @param currency Currency type (0=ETH, 1=BURNIE, 3=WWXRP).
     /// @param betAmount The bet amount per ticket.
     /// @param roiBps The ROI in basis points (from activity score).
     /// @param wwxrpHighRoi The WWXRP high-value ROI (0 if not WWXRP).
-    /// @param heroQuadrant The hero quadrant (0..3) selected by the player.
     /// @return payout The payout amount.
     function _fullTicketPayout(
         uint32 playerTicket,
-        uint32 resultTicket,
-        uint8 matches,
+        uint8 s,
         uint8 currency,
         uint128 betAmount,
         uint256 roiBps,
-        uint256 wwxrpHighRoi,
-        uint8 heroQuadrant
+        uint256 wwxrpHighRoi
     ) private pure returns (uint256 payout) {
         uint8 N = _countGoldQuadrants(playerTicket);
-        uint256 basePayoutBps = _getBasePayoutBps(N, matches);
+        uint256 basePayoutBps = _getBasePayoutBps(N, s);
 
-        // Bonus ROI is redistributed into 5+ match buckets via per-N factor lookup.
+        // Bonus ROI is redistributed into the top score buckets via per-N factor lookup.
         uint256 effectiveRoi = roiBps;
-        uint8 bucket = _wwxrpBonusBucket(matches);
+        uint8 bucket = _wwxrpBonusBucket(s);
         if (bucket != 0) {
             uint256 baseBonus;
             if (currency == CURRENCY_WWXRP && wwxrpHighRoi > roiBps) {
@@ -1039,75 +1026,29 @@ contract DegenerusGameDegeneretteModule is
         payout =
             (uint256(betAmount) * basePayoutBps * effectiveRoi) /
             1_000_000;
-
-        // Hero quadrant: boost payout when hero quadrant symbol matches; penalize otherwise.
-        // EV-neutral per match count per N: P(hero|M, N) × boost(M, N)
-        // + (1 − P(hero|M, N)) × HERO_PENALTY = HERO_SCALE.
-        // No adjustment for M < 2 (payout = 0) or M = 8 (hero EV-neutrality cannot offset).
-        if (matches >= 2 && matches < 8) {
-            payout = _applyHeroMultiplier(
-                payout,
-                playerTicket,
-                resultTicket,
-                matches,
-                heroQuadrant,
-                N
-            );
-        }
     }
 
-    /// @dev Applies the per-N hero quadrant boost/penalty to a payout.
-    ///      Hero match fires on the symbol-axis comparison in the hero quadrant
-    ///      only (color of hero quadrant ignored). If symbol matches, look up
-    ///      per-M boost from the per-N HERO_BOOST table; otherwise apply HERO_PENALTY.
-    /// @param payout The pre-hero payout (centi-x scaled).
-    /// @param playerTicket The player's ticket (packed traits).
-    /// @param resultTicket The result ticket (packed traits).
-    /// @param matches Number of attribute matches (2..7 in this branch).
-    /// @param heroQuadrant The hero quadrant (0..3).
-    /// @param N Gold-quadrant count of the player ticket (0..4) — selects per-N hero table.
-    /// @return Adjusted payout after the per-N hero multiplier.
-    function _applyHeroMultiplier(
-        uint256 payout,
-        uint32 playerTicket,
-        uint32 resultTicket,
-        uint8 matches,
-        uint8 heroQuadrant,
-        uint8 N
-    ) private pure returns (uint256) {
-        uint256 shift = uint256(heroQuadrant) * 8;
-        bool symbolMatch = ((playerTicket >> shift) & 7) ==
-            ((resultTicket >> shift) & 7);
-
-        uint256 multiplier;
-        if (symbolMatch) {
-            uint256 packed;
-            if (N == 0) packed = HERO_BOOST_N0_PACKED;
-            else if (N == 1) packed = HERO_BOOST_N1_PACKED;
-            else if (N == 2) packed = HERO_BOOST_N2_PACKED;
-            else if (N == 3) packed = HERO_BOOST_N3_PACKED;
-            else packed = HERO_BOOST_N4_PACKED;
-            multiplier = (packed >> (uint256(matches - 2) * 16)) & MASK_16;
-        } else {
-            multiplier = HERO_PENALTY;
-        }
-        return (payout * multiplier) / HERO_SCALE;
-    }
-
-    /// @dev Dispatches to the per-N base payout table for the given match count.
-    ///      M = 0..7 are packed 32 bits each into `QUICK_PLAY_PAYOUTS_N{N}_PACKED`;
-    ///      M = 8 jackpot exceeds the 32-bit slot so each N has a separate
-    ///      `QUICK_PLAY_PAYOUT_N{N}_M8` constant.
+    /// @dev Dispatches to the per-N base payout table for the given score S.
+    ///      S = 0..7 are packed 32 bits each into `QUICK_PLAY_PAYOUTS_N{N}_PACKED`;
+    ///      S = 8 and S = 9 each exceed the 32-bit slot so each N has separate
+    ///      `QUICK_PLAY_PAYOUT_N{N}_S8` / `_S9` constants (S=9 is the M=8 jackpot relabel).
     /// @param N Gold-quadrant count of the player ticket (0..4).
-    /// @param matches Number of attribute matches (0..8).
+    /// @param s Composite score (0..9).
     /// @return Base payout in centi-x (e.g. 204 = 2.04x at 100% ROI).
-    function _getBasePayoutBps(uint8 N, uint8 matches) private pure returns (uint256) {
-        if (matches >= 8) {
-            if (N == 0) return QUICK_PLAY_PAYOUT_N0_M8;
-            if (N == 1) return QUICK_PLAY_PAYOUT_N1_M8;
-            if (N == 2) return QUICK_PLAY_PAYOUT_N2_M8;
-            if (N == 3) return QUICK_PLAY_PAYOUT_N3_M8;
-            return QUICK_PLAY_PAYOUT_N4_M8;
+    function _getBasePayoutBps(uint8 N, uint8 s) private pure returns (uint256) {
+        if (s >= 9) {
+            if (N == 0) return QUICK_PLAY_PAYOUT_N0_S9;
+            if (N == 1) return QUICK_PLAY_PAYOUT_N1_S9;
+            if (N == 2) return QUICK_PLAY_PAYOUT_N2_S9;
+            if (N == 3) return QUICK_PLAY_PAYOUT_N3_S9;
+            return QUICK_PLAY_PAYOUT_N4_S9;
+        }
+        if (s == 8) {
+            if (N == 0) return QUICK_PLAY_PAYOUT_N0_S8;
+            if (N == 1) return QUICK_PLAY_PAYOUT_N1_S8;
+            if (N == 2) return QUICK_PLAY_PAYOUT_N2_S8;
+            if (N == 3) return QUICK_PLAY_PAYOUT_N3_S8;
+            return QUICK_PLAY_PAYOUT_N4_S8;
         }
         uint256 packed;
         if (N == 0) packed = QUICK_PLAY_PAYOUTS_N0_PACKED;
@@ -1115,7 +1056,7 @@ contract DegenerusGameDegeneretteModule is
         else if (N == 2) packed = QUICK_PLAY_PAYOUTS_N2_PACKED;
         else if (N == 3) packed = QUICK_PLAY_PAYOUTS_N3_PACKED;
         else packed = QUICK_PLAY_PAYOUTS_N4_PACKED;
-        return (packed >> (uint256(matches) * 32)) & 0xFFFFFFFF;
+        return (packed >> (uint256(s) * 32)) & 0xFFFFFFFF;
     }
 
     // -------------------------------------------------------------------------
@@ -1191,17 +1132,17 @@ contract DegenerusGameDegeneretteModule is
         _creditClaimable(beneficiary, weiAmount);
     }
 
-    /// @dev Award sDGNRS from Reward pool on 6+ match Degenerette ETH bets.
-    ///      Reward scales by bet size (capped at 1 ETH) and match tier.
+    /// @dev Award sDGNRS from Reward pool on the top-3 score tiers (S>=7) Degenerette ETH bets.
+    ///      Reward scales by bet size (capped at 1 ETH) and score tier.
     function _awardDegeneretteDgnrs(
         address player,
         uint256 betWei,
-        uint8 matchCount
+        uint8 s
     ) private {
         uint256 bps;
-        if (matchCount == 6) bps = DEGEN_DGNRS_6_BPS;
-        else if (matchCount == 7) bps = DEGEN_DGNRS_7_BPS;
-        else bps = DEGEN_DGNRS_8_BPS;
+        if (s == 7) bps = DEGEN_DGNRS_7_BPS;
+        else if (s == 8) bps = DEGEN_DGNRS_8_BPS;
+        else bps = DEGEN_DGNRS_9_BPS;
 
         uint256 poolBalance = sdgnrs.poolBalance(
             IStakedDegenerusStonk.Pool.Reward

@@ -8,7 +8,7 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title CrankFaucetResistance -- Proves SAFE-01: the permissionless do-work crank
-///        (crankBets / crankBoxes) is faucet-bounded by three caller-independent locks:
+///        (autoResolve / autoOpen) is faucet-bounded by three caller-independent locks:
 ///        (1) the purchase-gate (an item must already be a real, purchased, RNG-ready bet/box),
 ///        (2) the FIXED gas-peg reward (CRANK_*_GAS_UNITS * 0.5 gwei, never measured gas), and
 ///        (3) the coinflip-credit illiquidity (creditFlip = pending stake, not liquid BURNIE).
@@ -98,7 +98,7 @@ contract CrankFaucetResistance is DeployProtocol {
     uint256 private constant BOX_FIXED_WORD = uint256(keccak256("crank_faucet_box_fixed_word"));
 
     address private player;   // bet owner
-    address private cranker;  // arbitrary caller of crankBets (self-crank == player)
+    address private cranker;  // arbitrary caller of autoResolve (self-crank == player)
     address private sybil;    // a distinct Sybil cranker
 
     function setUp() public {
@@ -163,7 +163,7 @@ contract CrankFaucetResistance is DeployProtocol {
         // Measure the real gas the crank tx consumes (the cranker's true ETH cost driver).
         vm.prank(player);
         uint256 gasBefore = gasleft();
-        game.crankBets(players, betIds);
+        game.autoResolve(players, betIds);
         uint256 gasUsed = gasBefore - gasleft();
 
         uint256 postLiquidBurnie = coin.balanceOf(player);
@@ -238,7 +238,7 @@ contract CrankFaucetResistance is DeployProtocol {
         uint256 preStake = coinflip.coinflipAmount(actualCranker);
         vm.prank(actualCranker);
         uint256 gasBefore = gasleft();
-        game.crankBets(players, betIds);
+        game.autoResolve(players, betIds);
         uint256 gasUsed = gasBefore - gasleft();
         uint256 stakeDelta = coinflip.coinflipAmount(actualCranker) - preStake;
 
@@ -275,7 +275,7 @@ contract CrankFaucetResistance is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(player);
-        game.crankBets(players, betIds);
+        game.autoResolve(players, betIds);
 
         // The bet was resolved (work done): its slot is deleted.
         assertEq(_readBetPacked(player, betId), 0, "winning bet resolved (slot deleted)");
@@ -301,7 +301,7 @@ contract CrankFaucetResistance is DeployProtocol {
 
         // First crank resolves and rewards.
         vm.prank(player);
-        game.crankBets(players, betIds);
+        game.autoResolve(players, betIds);
 
         // The bet slot is now deleted (one-reward state). degeneretteBets[player][betId] == 0.
         assertEq(_readBetPacked(player, betId), 0, "resolved bet slot is zeroed (one-reward lock)");
@@ -312,7 +312,7 @@ contract CrankFaucetResistance is DeployProtocol {
         // reverts (the loser-gas cap). No second creditFlip.
         vm.prank(sybil);
         vm.expectRevert(bytes4(keccak256("BatchAlreadyTaken()")));
-        game.crankBets(players, betIds);
+        game.autoResolve(players, betIds);
 
         assertEq(
             coinflip.coinflipAmount(sybil),
@@ -337,7 +337,7 @@ contract CrankFaucetResistance is DeployProtocol {
 
         uint256 preStake = coinflip.coinflipAmount(player);
         vm.prank(player);
-        game.crankBets(players, betIds);
+        game.autoResolve(players, betIds);
         uint256 stakeDelta = coinflip.coinflipAmount(player) - preStake;
 
         uint256 oneItemPeg = CRANK_RESOLVE_BET_GAS_UNITS * CRANK_GAS_PRICE_REF;
@@ -366,7 +366,7 @@ contract CrankFaucetResistance is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(player);
-        game.crankBets(players, betIds);
+        game.autoResolve(players, betIds);
 
         // No creditFlip emitted (reward == 0 guard).
         assertEq(_countCoinflipStakeUpdated(), 0, "no creditFlip when RNG word has not landed");
@@ -376,16 +376,16 @@ contract CrankFaucetResistance is DeployProtocol {
         assertEq(coinflip.coinflipAmount(player), preStake, "no reward for a not-ready crank");
     }
 
-    /// @notice Pre-RNG-word block (boxes / orphan-index gate): crankBoxes on an index whose
+    /// @notice Pre-RNG-word block (boxes / orphan-index gate): autoOpen on an index whose
     ///         word is zero returns early without rewarding (the orphan-index re-issue coupling).
     function testCrankBoxesBeforeRngWordEmitsNoReward() public {
-        // INDEX word is zero (we never inject it here). crankBoxes must early-return at the
+        // INDEX word is zero (we never inject it here). autoOpen must early-return at the
         // lootboxRngWordByIndex[index] == 0 guard, emitting no creditFlip.
         uint256 preStake = coinflip.coinflipAmount(sybil);
         vm.recordLogs();
         vm.prank(sybil);
-        game.crankBoxes(100);
-        assertEq(_countCoinflipStakeUpdated(), 0, "crankBoxes on a wordless index emits no creditFlip");
+        game.autoOpen(100);
+        assertEq(_countCoinflipStakeUpdated(), 0, "autoOpen on a wordless index emits no creditFlip");
         assertEq(coinflip.coinflipAmount(sybil), preStake, "no reward from a not-ready box index");
     }
 
@@ -393,7 +393,7 @@ contract CrankFaucetResistance is DeployProtocol {
     // WR-01 — multi-box self-crank round-trip <= 0 (the box-path SAFE-01 floor)
     // =========================================================================
 
-    /// @notice SAFE-01 / WR-01: a self-cranker who opens N OWN boxes in one `crankBoxes(N)` tx earns
+    /// @notice SAFE-01 / WR-01: a self-cranker who opens N OWN boxes in one `autoOpen(N)` tx earns
     ///         a FLAT per-box reward summed into ONE creditFlip. Because the per-box reward is flat
     ///         while the per-tx fixed overhead (cursor SLOAD+SSTORE :1593-1598/:1631, the index gate
     ///         SLOAD :1603, `_activeTicketLevel()` :1610, the once-per-tx `coinflip.creditFlip` :1632)
@@ -425,7 +425,7 @@ contract CrankFaucetResistance is DeployProtocol {
         vm.recordLogs();
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.crankBoxes(nBoxes);
+        game.autoOpen(nBoxes);
         uint256 gasUsed = gasBefore - gasleft();
 
         // The cranker (not the box owners) receives the crank reward; isolate its credit by recipient.
@@ -477,7 +477,7 @@ contract CrankFaucetResistance is DeployProtocol {
         uint256 preStake = coinflip.coinflipAmount(cranker);
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.crankBoxes(nBoxes);
+        game.autoOpen(nBoxes);
         uint256 gasUsed = gasBefore - gasleft();
         uint256 stakeDelta = coinflip.coinflipAmount(cranker) - preStake;
 
@@ -516,7 +516,7 @@ contract CrankFaucetResistance is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(player);
-        game.crankBets(players, betIds);
+        game.autoResolve(players, betIds);
 
         // The WWXRP bet WAS resolved (its slot is now deleted) ...
         assertEq(_readBetPacked(player, betId), 0, "WWXRP bet is resolved (work done)");
@@ -525,7 +525,7 @@ contract CrankFaucetResistance is DeployProtocol {
         assertEq(coinflip.coinflipAmount(player), preStake, "WWXRP reward is exactly zero");
     }
 
-    /// @notice REW-02: a crankBets over N>1 successful items emits exactly ONE crank-reward
+    /// @notice REW-02: a autoResolve over N>1 successful items emits exactly ONE crank-reward
     ///         creditFlip with the summed amount, never N separate credits. Uses LOSING bets so
     ///         the only creditFlip is the single post-loop crank reward.
     function testBatchEmitsExactlyOneCreditFlipWithSum() public {
@@ -545,7 +545,7 @@ contract CrankFaucetResistance is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(player);
-        game.crankBets(players, betIds);
+        game.autoResolve(players, betIds);
 
         // Exactly ONE creditFlip for the batch (not 3) — losing bets pay no winnings, so the
         // single emission is the post-loop crank reward.
@@ -577,7 +577,7 @@ contract CrankFaucetResistance is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(player);
-        game.crankBets(players, betIds);
+        game.autoResolve(players, betIds);
 
         assertEq(_countCoinflipStakeUpdated(), 0, "zero-success batch emits no creditFlip (:1578 guard)");
     }
@@ -664,7 +664,7 @@ contract CrankFaucetResistance is DeployProtocol {
     }
 
     /// @dev Buy a real lootbox-mode deposit via the public mint API. The first deposit for
-    ///      (index, buyer) fires the `lootboxEthBase == 0` signal -> enqueueBoxForCrank (MintModule:999).
+    ///      (index, buyer) fires the `lootboxEthBase == 0` signal -> enqueueBoxForAutoOpen (MintModule:999).
     ///      Mirrors CrankNonBrick/CrankOpenBoxWorstCaseGas._buyBox.
     function _buyBox(address buyer, uint256 lootboxAmount) internal {
         vm.prank(buyer);

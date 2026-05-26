@@ -276,16 +276,16 @@ contract LootboxBoonCoexistence is DeployProtocol {
         assertTrue(_readPurchaseTier(player) >= 1, "Purchase tier preserved after lootbox open");
     }
 
-    /// @notice Parametric sweep: open 100 lootboxes with incrementing seeds while holding
+    /// @notice Parametric autoBuy: open 100 lootboxes with incrementing seeds while holding
     ///         a coinflip boon. Count how many produce boons in other categories.
     ///         At least 1 must land in a non-coinflip category to prove the exclusivity
     ///         gate is actually removed (not just untested).
-    function test_parametricSweep_crossCategoryBoonFromLootbox() public {
+    function test_parametricAutoBuy_crossCategoryBoonFromLootbox() public {
         _completeDay(0xBEEF0001);
         vm.warp(block.timestamp + 1 days);
         _completeDay(0xBEEF0002);
 
-        address player = makeAddr("sweepPlayer");
+        address player = makeAddr("autoBuyPlayer");
         vm.deal(player, 10000 ether);
 
         uint48 currentDay = uint48((block.timestamp - 86400) / 1 days);
@@ -296,7 +296,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
             // Re-inject coinflip boon fresh each iteration (lootbox open may modify it)
             _injectCoinflipBoon(player, currentDay);
 
-            uint256 vrfWord = uint256(keccak256(abi.encode("sweep", i)));
+            uint256 vrfWord = uint256(keccak256(abi.encode("autoBuy", i)));
             uint48 index = uint48(2000 + i);
 
             _setupLootbox(player, index, 10 ether, 1, currentDay, vrfWord);

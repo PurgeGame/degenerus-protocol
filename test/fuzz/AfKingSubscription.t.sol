@@ -7,7 +7,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title AfKingSubscription -- Proves the testable acceptance of subscription correctness for the
 ///        AF_KING keeper: the pass-OR-pay renewal gate (SUB-01), the all-or-nothing burnForKeeper
-///        charge (PROTO-02 / SUB-08), and the gas-pegged single-creditFlip sweep bounty (REW-02).
+///        charge (PROTO-02 / SUB-08), and the gas-pegged single-creditFlip autoBuy bounty (REW-02).
 ///
 /// @notice Specifically:
 ///   - Pass-OR-pay (SUB-01): at the day-31 renewal branch a subscriber WITH an active lazy pass
@@ -16,11 +16,11 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///     the all-or-nothing burnForKeeper (BurnieAutoExtracted, windowPaid set).
 ///   - burnForKeeper all-or-nothing (PROTO-02 / SUB-08): a player with spendable BURNIE >= cost is
 ///     charged exactly `cost` and renews (windowPaid set, paidThroughDay reset); a player with
-///     spendable < cost has NOTHING burned, burnForKeeper returns 0, and the sweep AUTO-PAUSES that
-///     sub (dailyQuantity 0, removed from set, SubscriptionExpired) WITHOUT reverting the sweep.
-///   - Bounty (REW-02): a sweep that processes >= 1 buying subscriber emits exactly ONE creditFlip
-///     to the sweeper (msg.sender), gas-pegged (BOUNTY_ETH_TARGET-derived, never per-item); a sweep
-///     that processes zero buys reverts NoSubscribersSwept.
+///     spendable < cost has NOTHING burned, burnForKeeper returns 0, and the autoBuy AUTO-PAUSES that
+///     sub (dailyQuantity 0, removed from set, SubscriptionExpired) WITHOUT reverting the autoBuy.
+///   - Bounty (REW-02): a autoBuy that processes >= 1 buying subscriber emits exactly ONE creditFlip
+///     to the autoBuyer (msg.sender), gas-pegged (BOUNTY_ETH_TARGET-derived, never per-item); a autoBuy
+///     that processes zero buys reverts NoSubscribersAutoBought.
 ///
 /// @dev Builds on the 318-01-repaired DeployProtocol fixture (AfKing live at AF_KING, with the two
 ///      SUB-09 self-subscribes — VAULT + SDGNRS — already present). Test subscribers are driven
@@ -37,10 +37,10 @@ contract AfKingSubscription is DeployProtocol {
 
     // Sub packed-field byte offsets within the single Sub slot, re-derived from the
     // post-OPEN-E repack (319.1-01 AFTER layout): the two standalone bools collapsed into
-    // `flags` and a 20-byte `fundingSource` address was appended, shifting lastSweptDay
+    // `flags` and a 20-byte `fundingSource` address was appended, shifting lastAutoBoughtDay
     // 3->1, paidThroughDay 7->5, flags 12->10.
     uint256 private constant OFF_DAILY = 0;          // uint8 dailyQuantity   (byte 0)
-    uint256 private constant OFF_LASTSWEPT = 1;      // uint32 lastSweptDay    (bytes 1..4)
+    uint256 private constant OFF_LASTSWEPT = 1;      // uint32 lastAutoBoughtDay    (bytes 1..4)
     uint256 private constant OFF_PAIDTHROUGH = 5;    // uint32 paidThroughDay  (bytes 5..8)
     uint256 private constant OFF_REINVEST = 9;       // uint8 reinvestPct      (byte 9)
     uint256 private constant OFF_FLAGS = 10;         // uint8 flags (bit 0 = windowPaid)
@@ -85,8 +85,8 @@ contract AfKingSubscription is DeployProtocol {
         uint256 burnieBefore = coin.balanceOf(pass);
 
         vm.recordLogs();
-        vm.prank(makeAddr("sweeper_pass"));
-        afKing.sweep(50);
+        vm.prank(makeAddr("autoBuyer_pass"));
+        afKing.autoBuy(50);
 
         // FREE extend taken: SubscriptionExtendedFree emitted; NO BurnieAutoExtracted; balance intact.
         assertEq(_countEvent(address(afKing), EXTENDED_FREE_SIG), 1, "pass-holder free-extended");
@@ -113,8 +113,8 @@ contract AfKingSubscription is DeployProtocol {
         uint256 burnieBefore = coin.balanceOf(nopass);
 
         vm.recordLogs();
-        vm.prank(makeAddr("sweeper_nopass"));
-        afKing.sweep(50);
+        vm.prank(makeAddr("autoBuyer_nopass"));
+        afKing.autoBuy(50);
 
         // PAID extend taken: BurnieAutoExtracted emitted; NO free extend; exactly `cost` burned.
         assertEq(_countEvent(address(afKing), AUTO_EXTRACTED_SIG), 1, "no-pass charged via burnForKeeper");
@@ -131,12 +131,12 @@ contract AfKingSubscription is DeployProtocol {
     // =========================================================================
 
     /// @notice PROTO-02 / SUB-08: a no-pass subscriber whose spendable BURNIE is BELOW the renewal
-    ///         cost has NOTHING burned (all-or-nothing), burnForKeeper returns 0, and the sweep
+    ///         cost has NOTHING burned (all-or-nothing), burnForKeeper returns 0, and the autoBuy
     ///         AUTO-PAUSES that sub (dailyQuantity 0, removed from the set, SubscriptionExpired)
-    ///         WITHOUT reverting the whole sweep — a shortfall cannot strand a half-paid sub.
+    ///         WITHOUT reverting the whole autoBuy — a shortfall cannot strand a half-paid sub.
     function testRenewalShortfallBurnsNothingAndAutoPauses() public {
-        // A HEALTHY paying sub so the sweep produces at least one buy and does not revert
-        // NoSubscribersSwept (which would mask the auto-pause behavior of the shortfall sub).
+        // A HEALTHY paying sub so the autoBuy produces at least one buy and does not revert
+        // NoSubscribersAutoBought (which would mask the auto-pause behavior of the shortfall sub).
         address healthy = makeAddr("healthy_payer");
         uint256 cost = _subCost();
         _subscribeTicketMode(healthy, 1, true);
@@ -156,8 +156,8 @@ contract AfKingSubscription is DeployProtocol {
         uint256 shortfallBurnieBefore = coin.balanceOf(shortfall);
 
         vm.recordLogs();
-        vm.prank(makeAddr("sweeper_shortfall"));
-        afKing.sweep(50); // MUST NOT revert despite the shortfall sub
+        vm.prank(makeAddr("autoBuyer_shortfall"));
+        afKing.autoBuy(50); // MUST NOT revert despite the shortfall sub
 
         // All-or-nothing: NOTHING burned from the shortfall player.
         assertEq(coin.balanceOf(shortfall), shortfallBurnieBefore, "shortfall: nothing burned (all-or-nothing)");
@@ -167,8 +167,8 @@ contract AfKingSubscription is DeployProtocol {
         assertEq(afKing.subscriptionOf(shortfall).dailyQuantity, 0, "shortfall sub dailyQuantity zeroed");
         assertEq(_subscriberIndexOf(shortfall), 0, "shortfall sub removed from the iterable set");
 
-        // The healthy sub still renewed (the shortfall did not brick the sweep).
-        assertEq(afKing.subscriptionOf(healthy).flags & 1, 1, "healthy sub still renewed (sweep not bricked)");
+        // The healthy sub still renewed (the shortfall did not brick the autoBuy).
+        assertEq(afKing.subscriptionOf(healthy).flags & 1, 1, "healthy sub still renewed (autoBuy not bricked)");
     }
 
     /// @notice PROTO-02 boundary: a no-pass subscriber funded EXACTLY at cost renews (windowPaid set,
@@ -184,8 +184,8 @@ contract AfKingSubscription is DeployProtocol {
         _forceRenewalDue(atCost);
 
         vm.recordLogs();
-        vm.prank(makeAddr("sweeper_atcost"));
-        afKing.sweep(50);
+        vm.prank(makeAddr("autoBuyer_atcost"));
+        afKing.autoBuy(50);
 
         assertEq(_countEvent(address(afKing), AUTO_EXTRACTED_SIG), 1, "at-cost renews (full burn)");
         assertEq(coin.balanceOf(atCost), 0, "exactly cost burned, balance to zero");
@@ -193,32 +193,32 @@ contract AfKingSubscription is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 3c — Gas-pegged single-creditFlip sweep bounty (REW-02)
+    // Task 3c — Gas-pegged single-creditFlip autoBuy bounty (REW-02)
     // =========================================================================
 
-    /// @notice REW-02: a sweep that processes >= 1 buying subscriber emits EXACTLY ONE creditFlip to
-    ///         the sweeper (never per-item), gas-pegged off BOUNTY_ETH_TARGET. Drives two healthy
+    /// @notice REW-02: a autoBuy that processes >= 1 buying subscriber emits EXACTLY ONE creditFlip to
+    ///         the autoBuyer (never per-item), gas-pegged off BOUNTY_ETH_TARGET. Drives two healthy
     ///         buying subs and asserts a single creditFlip to msg.sender of the expected amount.
-    function testSweepEmitsExactlyOneGasPeggedBounty() public {
+    function testAutoBuyEmitsExactlyOneGasPeggedBounty() public {
         address s1 = makeAddr("buy_s1");
         address s2 = makeAddr("buy_s2");
         _setupHealthyBuyingSub(s1);
         _setupHealthyBuyingSub(s2);
 
-        address sweeper = makeAddr("bounty_sweeper");
+        address autoBuyer = makeAddr("bounty_autoBuyer");
         uint256 mp = game.mintPrice();
         // Gas-pegged per-player bounty, scaled by the live stall multiplier; batchLen == 2 buys.
         uint256 mult = _stallMultiplier();
         uint256 expectedBounty = 2 * ((afKing.BOUNTY_ETH_TARGET() * PRICE_COIN_UNIT * mult) / mp);
 
         vm.recordLogs();
-        vm.prank(sweeper);
-        uint256 returned = afKing.sweep(50);
+        vm.prank(autoBuyer);
+        uint256 returned = afKing.autoBuy(50);
 
-        // EXACTLY ONE creditFlip emission for the whole sweep (the bounty), to the sweeper.
-        assertEq(_countCreditFlipTo(sweeper), 1, "exactly one bounty creditFlip per sweep tx (REW-02)");
+        // EXACTLY ONE creditFlip emission for the whole autoBuy (the bounty), to the autoBuyer.
+        assertEq(_countCreditFlipTo(autoBuyer), 1, "exactly one bounty creditFlip per autoBuy tx (REW-02)");
         assertEq(returned, expectedBounty, "bounty == batchLen * gas-pegged per-player target (stall-scaled)");
-        assertGt(returned, 0, "non-empty sweep pays a positive bounty");
+        assertGt(returned, 0, "non-empty autoBuy pays a positive bounty");
         // Gas-pegged, NOT per-item: the single bounty is a flat batchLen * per-player target, so it
         // is independent of the per-player cost / mode (no measured-gas / per-item escalation).
         assertEq(
@@ -228,25 +228,25 @@ contract AfKingSubscription is DeployProtocol {
         );
     }
 
-    /// @notice REW-02 tail: a sweep that processes ZERO buying subscribers reverts NoSubscribersSwept
-    ///         (an atomic no-op for the caller — the structural disincentive against sweeping nothing).
-    ///         Here every active sub is forced AlreadySweptToday so the loop produces no buys.
-    function testZeroBuySweepRevertsNoSubscribersSwept() public {
-        // Mark the two SUB-09 deploy subs (VAULT, SDGNRS) already-swept-today so they are skipped,
-        // and add no buying sub — the sweep produces batchLen == 0.
-        _markSweptToday(ContractAddresses.VAULT);
-        _markSweptToday(ContractAddresses.SDGNRS);
+    /// @notice REW-02 tail: a autoBuy that processes ZERO buying subscribers reverts NoSubscribersAutoBought
+    ///         (an atomic no-op for the caller — the structural disincentive against autoBuying nothing).
+    ///         Here every active sub is forced AlreadyAutoBoughtToday so the loop produces no buys.
+    function testZeroBuyAutoBuyRevertsNoSubscribersAutoBought() public {
+        // Mark the two SUB-09 deploy subs (VAULT, SDGNRS) already-autoBought-today so they are skipped,
+        // and add no buying sub — the autoBuy produces batchLen == 0.
+        _markAutoBoughtToday(ContractAddresses.VAULT);
+        _markAutoBoughtToday(ContractAddresses.SDGNRS);
 
-        vm.prank(makeAddr("empty_sweeper"));
-        vm.expectRevert(abi.encodeWithSignature("NoSubscribersSwept()"));
-        afKing.sweep(50);
+        vm.prank(makeAddr("empty_autoBuyer"));
+        vm.expectRevert(abi.encodeWithSignature("NoSubscribersAutoBought()"));
+        afKing.autoBuy(50);
     }
 
-    /// @notice Pre-loop guard: maxCount == 0 reverts EmptySweep (caller-bounded anti-gas-DoS floor).
-    function testSweepZeroMaxCountRevertsEmptySweep() public {
-        vm.prank(makeAddr("zero_sweeper"));
-        vm.expectRevert(abi.encodeWithSignature("EmptySweep()"));
-        afKing.sweep(0);
+    /// @notice Pre-loop guard: maxCount == 0 reverts EmptyAutoBuy (caller-bounded anti-gas-DoS floor).
+    function testAutoBuyZeroMaxCountRevertsEmptyAutoBuy() public {
+        vm.prank(makeAddr("zero_autoBuyer"));
+        vm.expectRevert(abi.encodeWithSignature("EmptyAutoBuy()"));
+        afKing.autoBuy(0);
     }
 
     // =========================================================================
@@ -297,7 +297,7 @@ contract AfKingSubscription is DeployProtocol {
         _fundPool(s, 1 ether); // S funds the per-day ETH draw too
         _forceRenewalDue(m);
 
-        // A healthy buying sub so each sweep produces >= 1 buy and never reverts NoSubscribersSwept
+        // A healthy buying sub so each autoBuy produces >= 1 buy and never reverts NoSubscribersAutoBought
         // (which would mask the renewal/auto-pause behavior of M).
         address healthy1 = makeAddr("revoke_healthy_1");
         _setupHealthyBuyingSub(healthy1);
@@ -310,8 +310,8 @@ contract AfKingSubscription is DeployProtocol {
         uint256 sBeforeRenewal = coin.balanceOf(s);
 
         vm.recordLogs();
-        vm.prank(makeAddr("revoke_sweeper_1"));
-        afKing.sweep(50);
+        vm.prank(makeAddr("revoke_autoBuyer_1"));
+        afKing.autoBuy(50);
 
         // SUBSCRIBE-ONLY AUTH: the day-31 renewal STILL burned S despite the revoke (no re-check).
         assertEq(_countEvent(address(afKing), AUTO_EXTRACTED_SIG), 1, "renewal still charged S after revoke");
@@ -319,22 +319,22 @@ contract AfKingSubscription is DeployProtocol {
         assertEq(sBeforeRenewal - coin.balanceOf(s), _subCost(), "renewal burn STILL debits S (trust-the-sub)");
         assertGt(_subscriberIndexOf(m), 0, "M's sub stays in the set after S revokes");
 
-        // Now S DEFUNDS (BURNIE drained to zero). Advance one keeper-local day so the sweep cursor
-        // resets to 0 (re-reaching M, which the first sweep's advanced cursor moved past), then force
+        // Now S DEFUNDS (BURNIE drained to zero). Advance one keeper-local day so the autoBuy cursor
+        // resets to 0 (re-reaching M, which the first autoBuy's advanced cursor moved past), then force
         // M renewal-due relative to the NEW today. The all-or-nothing burn takes nothing -> M
         // auto-pauses. This is the ONLY way the source halts an active sub.
         _setBurnieBalance(s, 0);
         vm.warp(block.timestamp + 1 days);
         _forceRenewalDue(m);
 
-        // A healthy buyer so the defund sweep still produces a buy (it is the new keeper-local day, so
+        // A healthy buyer so the defund autoBuy still produces a buy (it is the new keeper-local day, so
         // the cursor resets and every sub is re-evaluated).
         address healthy2 = makeAddr("revoke_healthy_2");
         _setupHealthyBuyingSub(healthy2);
 
         vm.recordLogs();
-        vm.prank(makeAddr("revoke_sweeper_2"));
-        afKing.sweep(50);
+        vm.prank(makeAddr("revoke_autoBuyer_2"));
+        afKing.autoBuy(50);
 
         assertGe(_countEvent(address(afKing), SUB_EXPIRED_SIG), 1, "defunded source -> day-31 auto-pause");
         assertEq(afKing.subscriptionOf(m).dailyQuantity, 0, "M's sub auto-paused once S defunds");
@@ -354,7 +354,7 @@ contract AfKingSubscription is DeployProtocol {
         return (afKing.SUB_COST_ETH_TARGET() * PRICE_COIN_UNIT) / game.mintPrice();
     }
 
-    /// @dev Mirror of the sweep's SUB-03 stall-escalating multiplier (AfKing.sol:539-550): 1x base,
+    /// @dev Mirror of the autoBuy's SUB-03 stall-escalating multiplier (AfKing.sol:539-550): 1x base,
     ///      2x after 20 min, 4x after 1 hour, 6x after 2 hours, measured from day-start
     ///      (today * 1 days + 82620).
     function _stallMultiplier() internal view returns (uint256) {
@@ -382,7 +382,7 @@ contract AfKingSubscription is DeployProtocol {
         _fundPool(who, 1 ether);
     }
 
-    /// @dev Approve AfKing as `who`'s game operator (the sweep's SUB-02 isOperatorApproved gate).
+    /// @dev Approve AfKing as `who`'s game operator (the autoBuy's SUB-02 isOperatorApproved gate).
     function _approveKeeper(address who) internal {
         vm.prank(who);
         game.setOperatorApproval(address(afKing), true);
@@ -423,20 +423,20 @@ contract AfKingSubscription is DeployProtocol {
 
     /// @dev Force `who`'s sub into the day-31 renewal branch: write paidThroughDay <= today (set to
     ///      `today`, which is `<= today` so `sub.paidThroughDay <= today` is true) and clear
-    ///      lastSweptDay so the AlreadySweptToday skip does not fire first.
+    ///      lastAutoBoughtDay so the AlreadyAutoBoughtToday skip does not fire first.
     function _forceRenewalDue(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(afKing), slot));
-        // Clear lastSweptDay (bytes 1..4) and paidThroughDay (bytes 5..8).
+        // Clear lastAutoBoughtDay (bytes 1..4) and paidThroughDay (bytes 5..8).
         uint256 mask = (uint256(0xFFFFFFFF) << (OFF_LASTSWEPT * 8)) | (uint256(0xFFFFFFFF) << (OFF_PAIDTHROUGH * 8));
         packed &= ~mask;
-        // paidThroughDay = today (<= today -> renewal due); lastSweptDay = 0 (< today -> not skipped).
+        // paidThroughDay = today (<= today -> renewal due); lastAutoBoughtDay = 0 (< today -> not skipped).
         packed |= (uint256(_today()) << (OFF_PAIDTHROUGH * 8));
         vm.store(address(afKing), slot, bytes32(packed));
     }
 
-    /// @dev Force `who`'s lastSweptDay = today so the AlreadySweptToday skip (reason 2) fires.
-    function _markSweptToday(address who) internal {
+    /// @dev Force `who`'s lastAutoBoughtDay = today so the AlreadyAutoBoughtToday skip (reason 2) fires.
+    function _markAutoBoughtToday(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(afKing), slot));
         packed &= ~(uint256(0xFFFFFFFF) << (OFF_LASTSWEPT * 8));

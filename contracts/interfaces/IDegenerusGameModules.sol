@@ -239,6 +239,18 @@ interface IDegenerusGameMintModule {
         uint256 ticketQuantity
     ) external;
 
+    /// @notice Sells far-future ticket entries to sDGNRS for current-level tickets + cash (-EV).
+    /// @param player Resolved seller / recipient
+    /// @param levels Target levels to sell from
+    /// @param quantities Whole far tickets to sell at each level
+    /// @param queueIndices Caller-supplied ticketQueue positions (verified; for swap-pop on sell-out)
+    function sellFarFutureTickets(
+        address player,
+        uint32[] calldata levels,
+        uint256[] calldata quantities,
+        uint256[] calldata queueIndices
+    ) external;
+
     /// @notice Buys a credit-gated coin-presale box (ETH + claimable shortfall)
     /// @param buyer Player receiving the box
     /// @param boxAmount Requested box ETH (>= 0.01 ETH, pre-clamp)

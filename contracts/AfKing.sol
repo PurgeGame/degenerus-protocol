@@ -17,7 +17,7 @@ enum MintPaymentKind {
 /// @dev Signatures match `contracts/DegenerusGame.sol` verbatim: `batchPurchase`
 ///      is the AF_KING-gated batched mint (the keeper is the sole authorized
 ///      caller); `hasAnyLazyPass` is the exposed lazy-pass view; the rest are the
-///      operator-approval / pricing / claimable views the sweep reads. The keeper
+///      operator-approval / pricing / claimable views the autoBuy reads. The keeper
 ///      holds NO immutable IGame field — every call site is inline
 ///      `IGame(ContractAddresses.GAME).foo()`.
 interface IGame {
@@ -51,9 +51,9 @@ interface IBurnie {
 }
 
 /// @title ICoinflip
-/// @notice Minimal call surface into BurnieCoinflip for the sweep bounty.
+/// @notice Minimal call surface into BurnieCoinflip for the autoBuy bounty.
 /// @dev `creditFlip(player, amount)` matches `contracts/BurnieCoinflip.sol`
-///      verbatim. The keeper earns its per-sweep bounty as deferred coinflip-stake
+///      verbatim. The keeper earns its per-autoBuy bounty as deferred coinflip-stake
 ///      credit (a deferred mint — liquid BURNIE only mints when the caller later
 ///      claims), so no liquid BURNIE leaves the keeper and the bounty needs no
 ///      payment pool. BurnieCoinflip gates `creditFlip` to authorized flip
@@ -68,7 +68,7 @@ interface ICoinflip {
 ///         `AfKing.Sub` namespacing.
 /// @dev Maximal-packing layout (single 32-byte slot):
 ///        offset 0  uint8   dailyQuantity   — 0 = paused / never-subscribed (minimum 1 when active)
-///        offset 1  uint32  lastSweptDay    — keeper-local day index of the last successful buy
+///        offset 1  uint32  lastAutoBoughtDay    — keeper-local day index of the last successful buy
 ///        offset 5  uint32  paidThroughDay  — 30-day rolling prepay window endpoint
 ///        offset 9  uint8   reinvestPct     — claimable reinvest percentage (0..100), 0 = no reinvest
 ///        offset 10 uint8   flags           — bit 0 = windowPaid, bit 1 = drainGameCreditFirst, bit 2 = useTickets
@@ -78,7 +78,7 @@ interface ICoinflip {
 ///      reached through `_subOf` at slot 1.
 struct Sub {
     uint8 dailyQuantity;
-    uint32 lastSweptDay;
+    uint32 lastAutoBoughtDay;
     uint32 paidThroughDay;
     uint8 reinvestPct;
     uint8 flags;
@@ -88,7 +88,7 @@ struct Sub {
 /// @title AfKing
 /// @notice Permissionless, owner-less daily subscription keeper. Players (or
 ///         operator-approved third parties) subscribe to a daily ticket/lootbox
-///         buy; anyone calls `sweep(maxCount)` to process the next chunk of
+///         buy; anyone calls `autoBuy(maxCount)` to process the next chunk of
 ///         active subscribers and earns a gas-pegged bounty per successful player.
 /// @dev No admin. No upgrade. No owner. No fallback. No multicall. `receive()` is
 ///      the only untyped entrypoint and credits msg.sender's pool. The keeper
@@ -137,13 +137,13 @@ contract AfKing {
     error BurnieChargeFailed();
     /// @dev IndexOutOfBounds: subscriberAt(idx) with idx >= _subscribers.length.
     error IndexOutOfBounds();
-    /// @dev SweepAborted: pre-loop revert from the rngLocked guard. Reason 1 = RngLocked.
-    error SweepAborted(address caller, uint8 reason);
-    /// @dev EmptySweep: pre-loop revert from sweep(0) (maxCount == 0).
-    error EmptySweep();
-    /// @dev NoSubscribersSwept: tail revert when successfulPlayers == 0 at the end
-    ///      of the sweep loop (before the bounty payout). Atomic no-op for the caller.
-    error NoSubscribersSwept();
+    /// @dev AutoBuyAborted: pre-loop revert from the rngLocked guard. Reason 1 = RngLocked.
+    error AutoBuyAborted(address caller, uint8 reason);
+    /// @dev EmptyAutoBuy: pre-loop revert from autoBuy(0) (maxCount == 0).
+    error EmptyAutoBuy();
+    /// @dev NoSubscribersAutoBought: tail revert when successfulPlayers == 0 at the end
+    ///      of the autoBuy loop (before the bounty payout). Atomic no-op for the caller.
+    error NoSubscribersAutoBought();
 
     /*------------------------------------------------------------------
                               Events
@@ -165,19 +165,19 @@ contract AfKing {
         uint8 reinvestPct,
         address indexed fundingSource
     );
-    /// @dev Per-successful-player audit trail inside the sweep loop. `day` is the
+    /// @dev Per-successful-player audit trail inside the autoBuy loop. `day` is the
     ///      keeper-local day index; `cost` is the ETH-wei slice forwarded to
     ///      batchPurchase for this player (0 in the Claimable case).
-    event Swept(address indexed player, uint32 day, uint256 cost);
-    /// @dev Per-player pre-check skip inside the sweep loop. `reason`:
-    ///        2 = AlreadySweptToday (sub.lastSweptDay >= today)
+    event AutoBought(address indexed player, uint32 day, uint256 cost);
+    /// @dev Per-player pre-check skip inside the autoBuy loop. `reason`:
+    ///        2 = AlreadyAutoBoughtToday (sub.lastAutoBoughtDay >= today)
     ///        3 = InsufficientPool  (_poolOf[player] < msgValue) — funding skip
     ///        4 = LootboxFloor      (!useTickets && cost < LOOTBOX_MIN) — transient
     ///        5 = NotApproved       (operator-approval revoked or never granted)
-    ///      lastSweptDay is UNCHANGED on a skip.
+    ///      lastAutoBoughtDay is UNCHANGED on a skip.
     event PlayerSkipped(address indexed player, uint8 reason);
-    /// @dev Emitted once at the end of each successful sweep, after the bounty payout.
-    event SweepCompleted(address indexed caller, uint256 successfulPlayers, uint256 bountyEarned);
+    /// @dev Emitted once at the end of each successful autoBuy, after the bounty payout.
+    event AutoBuyCompleted(address indexed caller, uint256 successfulPlayers, uint256 bountyEarned);
     /// @dev Day-31 PAID auto-extract — emitted after `burnForKeeper` succeeds and
     ///      paidThroughDay is written.
     event BurnieAutoExtracted(address indexed player, uint32 day, uint256 burnieAmount);
@@ -185,7 +185,7 @@ contract AfKing {
     event SubscriptionExtendedFree(address indexed player, uint32 day);
     /// @dev Subscription removed from the iterable set. `reason`:
     ///        1 = AutoPause (day-31 burnForKeeper shortfall OR funding-skip kill of a NORMAL sub)
-    ///        2 = CancelReclaim (in-sweep reclaim of an externally-cancelled `dailyQuantity == 0` tombstone)
+    ///        2 = CancelReclaim (in-autoBuy reclaim of an externally-cancelled `dailyQuantity == 0` tombstone)
     event SubscriptionExpired(address indexed player, uint8 reason);
 
     /*------------------------------------------------------------------
@@ -205,15 +205,15 @@ contract AfKing {
     ///      EnumerableSet pattern.
     mapping(address => uint256) private _subscriberIndex; // slot 3
 
-    /// @dev Sweep progress cursor + the keeper-local day it belongs to, packed in
-    ///      a single slot. `_sweepDay` stamps which day `_sweepCursor` indexes;
-    ///      on the first sweep of a new day the cursor resets to 0. The cursor
+    /// @dev AutoBuy progress cursor + the keeper-local day it belongs to, packed in
+    ///      a single slot. `_autoBuyDay` stamps which day `_autoBuyCursor` indexes;
+    ///      on the first autoBuy of a new day the cursor resets to 0. The cursor
     ///      advances monotonically within a day so concurrent same-block callers
     ///      self-partition (a later tx reads the earlier tx's advanced cursor and
-    ///      takes the next chunk). The per-entry `lastSweptDay` day-stamp is the
+    ///      takes the next chunk). The per-entry `lastAutoBoughtDay` day-stamp is the
     ///      idempotency backstop against any double-buy.
-    uint32 private _sweepDay; // slot 4 (offset 0)
-    uint224 private _sweepCursor; // slot 4 (offset 4)
+    uint32 private _autoBuyDay; // slot 4 (offset 0)
+    uint224 private _autoBuyCursor; // slot 4 (offset 4)
 
     /*------------------------------------------------------------------
                               Constants
@@ -240,7 +240,7 @@ contract AfKing {
     ///      cancel; a free or expired window is deleted.
     uint8 internal constant FLAG_WINDOW_PAID = 1;
 
-    /// @dev drainGameCreditFirst bit within Sub.flags — when set the sweep spends
+    /// @dev drainGameCreditFirst bit within Sub.flags — when set the autoBuy spends
     ///      protocol-side claimable credit before tapping pool ETH.
     uint8 internal constant FLAG_DRAIN_FIRST = 2;
 
@@ -256,7 +256,7 @@ contract AfKing {
     ///         `(SUB_COST_ETH_TARGET * PRICE_COIN_UNIT) / mintPrice()`.
     uint256 public immutable SUB_COST_ETH_TARGET;
 
-    /// @notice ETH-equivalent sweep-bounty target per successful player processed
+    /// @notice ETH-equivalent autoBuy-bounty target per successful player processed
     ///         (in ETH wei). Set once at deploy; the per-player bounty is
     ///         `(BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / mp`, scaled by the stall
     ///         multiplier and successful-player count, paid as one creditFlip.
@@ -269,7 +269,7 @@ contract AfKing {
                               Constructor (3-arg + 3-revert sanity)
     ------------------------------------------------------------------*/
     /// @param _subCostEthTarget ETH-equivalent subscription-cost target, in ETH wei.
-    /// @param _bountyEthTarget ETH-equivalent sweep-bounty target, in ETH wei.
+    /// @param _bountyEthTarget ETH-equivalent autoBuy-bounty target, in ETH wei.
     /// @param _lootboxMin Lootbox-mode minimum-cost floor, in ETH wei.
     constructor(uint256 _subCostEthTarget, uint256 _bountyEthTarget, uint256 _lootboxMin) {
         if (_subCostEthTarget == 0) revert InvalidSubCostTarget();
@@ -338,7 +338,7 @@ contract AfKing {
     ///      `player == address(0)` or `player == msg.sender` is self-consent (no
     ///      check); otherwise the caller must be a game operator the player
     ///      approved (`IGame.isOperatorApproved(player, msg.sender)`). Authorization
-    ///      is NEVER re-checked at sweep.
+    ///      is NEVER re-checked at autoBuy.
     /// @dev SUB-01 pass-OR-pay gate fires LAST (CEI: effects first, interaction
     ///      last). Active lazy pass (`IGame.hasAnyLazyPass(player)`) → free 30-day
     ///      extend-from-endpoint with no charge, and windowPaid is CLEARED (the
@@ -349,7 +349,7 @@ contract AfKing {
     ///      canonical Deposited event before the pass gate; msg.value never
     ///      participates in the BURNIE cost.
     /// @param player Subscriber to act for (0 or msg.sender = self).
-    /// @param drainGameCreditFirst When true, the sweep spends protocol-side
+    /// @param drainGameCreditFirst When true, the autoBuy spends protocol-side
     ///        claimable credit before tapping pool ETH.
     /// @param useTickets Mint mode — true = tickets, false = lootboxes.
     /// @param dailyQuantity Daily buy units, 1..255. MUST be non-zero; zero is the
@@ -451,9 +451,9 @@ contract AfKing {
     /// @dev SUB-07 tombstone-on-cancel: cancel only writes `dailyQuantity = 0` (the
     ///      "paused" sentinel) and leaves the entry in the iterable set — it moves
     ///      nothing, so it can never relocate an unprocessed entry behind the chunked
-    ///      sweep cursor. The `_subOf` record stays readable; the delete-vs-preserve
+    ///      autoBuy cursor. The `_subOf` record stays readable; the delete-vs-preserve
     ///      decision (keep the paid window iff windowPaid set AND paidThroughDay >
-    ///      today, else delete) is applied by the in-sweep reclaim when the sweep
+    ///      today, else delete) is applied by the in-autoBuy reclaim when the autoBuy
     ///      reaches the tombstone. Reactivation (q > 0) flips the sentinel back in
     ///      place with no set churn (the entry never left the set). Stranded
     ///      `_poolOf` ETH always stays withdrawable.
@@ -521,34 +521,34 @@ contract AfKing {
         return _subscribers[idx];
     }
 
-    /// @notice Current sweep cursor and the keeper-local day it indexes.
-    /// @dev On the first sweep of a new day the cursor resets to 0; reads return
+    /// @notice Current autoBuy cursor and the keeper-local day it indexes.
+    /// @dev On the first autoBuy of a new day the cursor resets to 0; reads return
     ///      the live (possibly stale-day) packed values for off-chain planning.
-    function sweepProgress() external view returns (uint32 day, uint256 cursor) {
-        return (_sweepDay, _sweepCursor);
+    function autoBuyProgress() external view returns (uint32 day, uint256 cursor) {
+        return (_autoBuyDay, _autoBuyCursor);
     }
 
     /*------------------------------------------------------------------
-                          Cursor sweep
+                          Cursor autoBuy
     ------------------------------------------------------------------*/
-    /// @notice Permissionless sweep of the next `maxCount` un-swept active
+    /// @notice Permissionless autoBuy of the next `maxCount` un-autoBought active
     ///         subscribers starting from the internal daily-reset cursor. Per
     ///         successful player the caller earns the dynamic per-player bounty
     ///         `(BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / mp`, scaled by the stall
     ///         multiplier, paid as ONE `creditFlip` at tx end.
     /// @dev SUB-03 — No caller-supplied range. The cursor resumes from where the
-    ///      previous sweep left off and advances as entries are processed.
+    ///      previous autoBuy left off and advances as entries are processed.
     ///      Concurrent same-block callers self-partition via the advancing cursor;
-    ///      the per-entry `lastSweptDay` day-stamp is the idempotency backstop
-    ///      (an already-swept entry is skipped with reason 2). On the first sweep
+    ///      the per-entry `lastAutoBoughtDay` day-stamp is the idempotency backstop
+    ///      (an already-autoBought entry is skipped with reason 2). On the first autoBuy
     ///      of a new keeper-local day the cursor resets to 0.
     /// @dev SUB-03 stall-escalating bounty: the per-player bounty multiplier rises
     ///      with the time elapsed since day-start (1x base, 2x after 20 min, 4x
     ///      after 1 hour, 6x after 2 hours) so a lagging cursor draws richer
-    ///      bounties until the day's sweep completes — mirrors advanceGame.
-    /// @dev Pre-loop guards: `rngLocked` → revert SweepAborted(caller, 1); maxCount
-    ///      == 0 → revert EmptySweep.
-    /// @dev Per-player ladder: (1) AlreadySweptToday skip; (2) day-31 auto-extract
+    ///      bounties until the day's autoBuy completes — mirrors advanceGame.
+    /// @dev Pre-loop guards: `rngLocked` → revert AutoBuyAborted(caller, 1); maxCount
+    ///      == 0 → revert EmptyAutoBuy.
+    /// @dev Per-player ladder: (1) AlreadyAutoBoughtToday skip; (2) day-31 auto-extract
     ///      (free pass-extend OR all-or-nothing burnForKeeper, auto-pause on
     ///      shortfall); (3) NotApproved skip; (4) cost + mode + payKind funding
     ///      waterfall; (5) LootboxFloor transient skip; (6) InsufficientPool —
@@ -560,23 +560,23 @@ contract AfKing {
     /// @dev No try/catch and no `nonReentrant` guard. Per-player batch isolation
     ///      lives in the game's `batchPurchase` (per-slice try/catch + slice
     ///      refund); the keeper preserves strict CEI.
-    /// @param maxCount Maximum number of un-swept active entries to process this
-    ///        call. MUST be > 0 (EmptySweep). Caller-bounded (no contract-bounded
+    /// @param maxCount Maximum number of un-autoBought active entries to process this
+    ///        call. MUST be > 0 (EmptyAutoBuy). Caller-bounded (no contract-bounded
     ///        loop) — the anti-gas-DoS property.
     /// @return bountyEarned BURNIE wei credited to msg.sender via creditFlip.
-    function sweep(uint256 maxCount) external returns (uint256 bountyEarned) {
-        if (IGame(ContractAddresses.GAME).rngLocked()) revert SweepAborted(msg.sender, 1);
-        if (maxCount == 0) revert EmptySweep();
+    function autoBuy(uint256 maxCount) external returns (uint256 bountyEarned) {
+        if (IGame(ContractAddresses.GAME).rngLocked()) revert AutoBuyAborted(msg.sender, 1);
+        if (maxCount == 0) revert EmptyAutoBuy();
 
         uint32 today = _currentDay();
         uint256 mp = IGame(ContractAddresses.GAME).mintPrice();
 
-        // Daily cursor reset: the first sweep of a new keeper-local day restarts
+        // Daily cursor reset: the first autoBuy of a new keeper-local day restarts
         // the cursor at 0. Within a day the cursor advances monotonically so
         // concurrent callers self-partition.
-        uint256 cursor = _sweepDay == today ? uint256(_sweepCursor) : 0;
-        if (_sweepDay != today) {
-            _sweepDay = today;
+        uint256 cursor = _autoBuyDay == today ? uint256(_autoBuyCursor) : 0;
+        if (_autoBuyDay != today) {
+            _autoBuyDay = today;
         }
 
         // Per-chunk accumulation buffers. The batched purchase fires once, after the
@@ -606,9 +606,9 @@ contract AfKing {
             // paid and unexpired, else delete), swap-pops it out of the set, and
             // continues WITHOUT advancing the cursor — the swap-pop occupant (a
             // mover from ahead, hence still pending) is processed at this slot this
-            // sweep. Ordered ahead of the AlreadySweptToday skip so a tombstone is
+            // autoBuy. Ordered ahead of the AlreadyAutoBoughtToday skip so a tombstone is
             // ALWAYS reclaimed (never left as a permanent dead slot), independent of
-            // its `lastSweptDay`.
+            // its `lastAutoBoughtDay`.
             if (sub.dailyQuantity == 0) {
                 bool preservePaidWindow = (sub.flags & FLAG_WINDOW_PAID) != 0 && sub.paidThroughDay > today;
                 if (!preservePaidWindow) {
@@ -623,8 +623,8 @@ contract AfKing {
                 continue;
             }
 
-            // (1) AlreadySweptToday — cheapest SLOAD-only skip.
-            if (sub.lastSweptDay >= today) {
+            // (1) AlreadyAutoBoughtToday — cheapest SLOAD-only skip.
+            if (sub.lastAutoBoughtDay >= today) {
                 emit PlayerSkipped(player, 2);
                 unchecked {
                     ++cursor;
@@ -652,7 +652,7 @@ contract AfKing {
                     if (burned != extractCost) {
                         // Auto-pause: sentinel write, swap-pop, emit, continue
                         // WITHOUT advancing the cursor (the swap-pop occupant at
-                        // this slot must be processed this sweep). windowPaid clears.
+                        // this slot must be processed this autoBuy). windowPaid clears.
                         sub.dailyQuantity = 0;
                         sub.flags &= ~FLAG_WINDOW_PAID;
                         _removeFromSet(player);
@@ -696,7 +696,7 @@ contract AfKing {
             uint256 cost = mp * effectiveQty;
 
             // (5) LootboxFloor transient skip (lootbox mode only) — stays in the
-            // set, retries next sweep.
+            // set, retries next autoBuy.
             if ((sub.flags & FLAG_USE_TICKETS) == 0 && cost < LOOTBOX_MIN) {
                 emit PlayerSkipped(player, 4);
                 unchecked {
@@ -736,7 +736,7 @@ contract AfKing {
 
             // (6) InsufficientPool funding skip → two-tier skip-kill. A NORMAL sub
             // is CANCELLED via swap-pop (auto-pause WITHOUT advancing the cursor —
-            // the mover at this slot is processed this sweep). Vault + sDGNRS are
+            // the mover at this slot is processed this autoBuy). Vault + sDGNRS are
             // EXEMPT by the un-spoofable pinned ContractAddresses.VAULT / SDGNRS
             // identity — a funding skip is transient for them (no-op-and-retry,
             // stays in the set). The exemption is the pinned-address branch only;
@@ -781,8 +781,8 @@ contract AfKing {
             // Day-stamp after accounting (CEI). The single batched purchase fires
             // after the loop; per-player isolation lives in batchPurchase's
             // per-slice try/catch.
-            sub.lastSweptDay = today;
-            emit Swept(player, today, msgValue);
+            sub.lastAutoBoughtDay = today;
+            emit AutoBought(player, today, msgValue);
 
             unchecked {
                 ++cursor;
@@ -791,20 +791,20 @@ contract AfKing {
         }
 
         // Persist the advanced cursor for the next (possibly concurrent) caller.
-        _sweepCursor = uint224(cursor);
+        _autoBuyCursor = uint224(cursor);
 
         // Tail revert before the bounty payout — atomic no-op for a caller whose
         // chunk produced no buys. The caller pays gas for the failed tx (the
-        // structural disincentive against sweeping nothing).
+        // structural disincentive against autoBuying nothing).
         if (batchLen == 0) {
             // The no-buy revert is the anti-spam disincentive — it fires ONLY for a
-            // do-nothing chunk (all already-swept / transient skips). When the chunk
+            // do-nothing chunk (all already-autoBought / transient skips). When the chunk
             // committed real set work (a cancel-tombstone reclaim, an auto-pause, or a
             // window renewal), that state MUST persist: reverting would roll the
-            // removal back and strand the tombstone for re-griefing across sweeps.
+            // removal back and strand the tombstone for re-griefing across autoBuys.
             // No buys means no purchase and no bounty, but the committed work stays.
-            if (!didWork) revert NoSubscribersSwept();
-            emit SweepCompleted(msg.sender, 0, 0);
+            if (!didWork) revert NoSubscribersAutoBought();
+            emit AutoBuyCompleted(msg.sender, 0, 0);
             return 0;
         }
 
@@ -844,7 +844,7 @@ contract AfKing {
         // leaves the keeper.
         bountyEarned = batchLen * ((BOUNTY_ETH_TARGET * PRICE_COIN_UNIT * bountyMultiplier) / mp);
         ICoinflip(ContractAddresses.COINFLIP).creditFlip(msg.sender, bountyEarned);
-        emit SweepCompleted(msg.sender, batchLen, bountyEarned);
+        emit AutoBuyCompleted(msg.sender, batchLen, bountyEarned);
         return bountyEarned;
     }
 
@@ -863,7 +863,7 @@ contract AfKing {
 
     /// @dev Iterable set remove via swap-and-pop. Idempotent on not-in-set.
     ///      1-indexed: move the last element into the vacated slot (and update its
-    ///      index), pop the tail, clear the removed player's index. The sweep's
+    ///      index), pop the tail, clear the removed player's index. The autoBuy's
     ///      "no cursor-advance after swap-pop" pattern enforces iteration safety;
     ///      this helper is itself iteration-safe.
     function _removeFromSet(address player) internal {

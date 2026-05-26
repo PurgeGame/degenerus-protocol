@@ -8,7 +8,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @title AfKingFundingWaterfall -- Proves the AF_KING keeper's per-player funding waterfall (SUB-05)
 ///        and the two-tier pinned-identity funding-skip kill (SUB-06).
 ///
-/// @notice Funding waterfall (SUB-05), inside the sweep per player:
+/// @notice Funding waterfall (SUB-05), inside the autoBuy per player:
 ///   - drainGameCreditFirst == false -> DirectEth, msgValue = cost (pays pool ETH only).
 ///   - drainGameCreditFirst == true:
 ///       * claimable cred > cost          -> Claimable, msgValue = 0 (pays from claimable only).
@@ -44,9 +44,9 @@ contract AfKingFundingWaterfall is DeployProtocol {
 
     // Sub packed-field byte offsets re-derived from the post-OPEN-E repack (319.1-01 AFTER
     // layout): the two standalone bools collapsed into `flags` and a 20-byte `fundingSource`
-    // address was appended, shifting lastSweptDay 3->1, paidThroughDay 7->5, flags 12->10.
+    // address was appended, shifting lastAutoBoughtDay 3->1, paidThroughDay 7->5, flags 12->10.
     uint256 private constant OFF_DAILY = 0;          // uint8  dailyQuantity  (byte 0)
-    uint256 private constant OFF_LASTSWEPT = 1;      // uint32 lastSweptDay    (bytes 1..4)
+    uint256 private constant OFF_LASTSWEPT = 1;      // uint32 lastAutoBoughtDay    (bytes 1..4)
     uint256 private constant OFF_PAIDTHROUGH = 5;    // uint32 paidThroughDay  (bytes 5..8)
     uint256 private constant OFF_REINVEST = 9;       // uint8  reinvestPct     (byte 9)
     uint256 private constant OFF_FLAGS = 10;         // uint8  flags           (byte 10)
@@ -60,14 +60,14 @@ contract AfKingFundingWaterfall is DeployProtocol {
     uint256 private constant BURNIE_BALANCE_SLOT = 1;     // BurnieCoin balanceOf mapping root
     uint256 private constant GAME_CLAIMABLE_SLOT = 7;     // DegenerusGame claimableWinnings mapping root
 
-    bytes32 private constant SWEPT_SIG = keccak256("Swept(address,uint32,uint256)");
+    bytes32 private constant SWEPT_SIG = keccak256("AutoBought(address,uint32,uint256)");
     bytes32 private constant SKIPPED_SIG = keccak256("PlayerSkipped(address,uint8)");
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
 
-    /// @dev Captured Swept stream: parallel arrays of player + the per-player cost (msgValue) slice, so
+    /// @dev Captured AutoBought stream: parallel arrays of player + the per-player cost (msgValue) slice, so
     ///      a single drain feeds both "which mode was chosen" (via msgValue) and "was it bought" assertions.
-    address[] private _sweptPlayer;
-    uint256[] private _sweptCost;
+    address[] private _autoBoughtPlayer;
+    uint256[] private _autoBoughtCost;
 
     function setUp() public {
         _deployProtocol();
@@ -86,10 +86,10 @@ contract AfKingFundingWaterfall is DeployProtocol {
         _setClaimable(p, cost * 5); // ample claimable -- IGNORED because drainFirst is false
         _fundPool(p, cost); // exactly the DirectEth msgValue
 
-        _sweepCapture("direct_keeper");
+        _autoBuyCapture("direct_keeper");
 
-        // Bought via DirectEth: Swept cost == full cost (msgValue == cost), pool fully debited.
-        assertEq(_sweptCostFor(p), cost, "DirectEth: msgValue == cost (full pool spend)");
+        // Bought via DirectEth: AutoBought cost == full cost (msgValue == cost), pool fully debited.
+        assertEq(_autoBoughtCostFor(p), cost, "DirectEth: msgValue == cost (full pool spend)");
         assertEq(afKing.poolOf(p), 0, "pool debited by the full cost");
     }
 
@@ -102,10 +102,10 @@ contract AfKingFundingWaterfall is DeployProtocol {
         // Deliberately leave the pool EMPTY: the claimable-only path needs no pool funding.
         assertEq(afKing.poolOf(p), 0, "pool empty for the claimable-only path");
 
-        _sweepCapture("claim_keeper");
+        _autoBuyCapture("claim_keeper");
 
-        // Bought via Claimable: Swept cost == 0 (msgValue 0); pool stayed empty (never touched).
-        assertEq(_sweptCostFor(p), 0, "Claimable: msgValue == 0 (no pool spend)");
+        // Bought via Claimable: AutoBought cost == 0 (msgValue 0); pool stayed empty (never touched).
+        assertEq(_autoBoughtCostFor(p), 0, "Claimable: msgValue == 0 (no pool spend)");
         assertEq(afKing.poolOf(p), 0, "claimable-only path left the pool untouched (no new flag needed)");
     }
 
@@ -121,10 +121,10 @@ contract AfKingFundingWaterfall is DeployProtocol {
         uint256 expectedMsgValue = cost - (cred - 1);
         _fundPool(p, expectedMsgValue); // exactly the Combined top-up
 
-        _sweepCapture("combo_keeper");
+        _autoBuyCapture("combo_keeper");
 
-        // Bought via Combined: Swept cost == cost - (cred - 1); pool debited exactly that.
-        assertEq(_sweptCostFor(p), expectedMsgValue, "Combined: msgValue == cost - (cred - 1)");
+        // Bought via Combined: AutoBought cost == cost - (cred - 1); pool debited exactly that.
+        assertEq(_autoBoughtCostFor(p), expectedMsgValue, "Combined: msgValue == cost - (cred - 1)");
         assertEq(afKing.poolOf(p), 0, "pool debited by exactly the Combined top-up");
     }
 
@@ -137,9 +137,9 @@ contract AfKingFundingWaterfall is DeployProtocol {
         _setClaimable(p, 1); // exactly the sentinel -> cred <= 1 -> DirectEth
         _fundPool(p, cost);
 
-        _sweepCapture("sentinel_keeper");
+        _autoBuyCapture("sentinel_keeper");
 
-        assertEq(_sweptCostFor(p), cost, "sentinel claimable (cred<=1) degrades to DirectEth msgValue==cost");
+        assertEq(_autoBoughtCostFor(p), cost, "sentinel claimable (cred<=1) degrades to DirectEth msgValue==cost");
         assertEq(afKing.poolOf(p), 0, "pool fully debited on the sentinel->DirectEth degrade");
     }
 
@@ -152,15 +152,15 @@ contract AfKingFundingWaterfall is DeployProtocol {
         _setClaimable(p, 1); // sentinel -> DirectEth -> msgValue == cost
         _fundPool(p, cost - 1); // strictly below cost -> InsufficientPool
 
-        // A second HEALTHY sub so the sweep produces >= 1 buy and does not revert NoSubscribersSwept.
+        // A second HEALTHY sub so the autoBuy produces >= 1 buy and does not revert NoSubscribersAutoBought.
         address healthy = _subscribeHealthy("insuf_healthy_", false);
         _fundPool(healthy, _cost(1));
 
-        _sweepCapture("insuf_keeper");
+        _autoBuyCapture("insuf_keeper");
 
         // The under-funded sub was NOT bought (funding skip); the healthy one was.
-        assertEq(_sweptCostFor(p), type(uint256).max, "under-funded sub NOT bought (InsufficientPool skip)");
-        assertEq(_sweptCostFor(healthy), _cost(1), "the healthy sub still bought (sweep not bricked)");
+        assertEq(_autoBoughtCostFor(p), type(uint256).max, "under-funded sub NOT bought (InsufficientPool skip)");
+        assertEq(_autoBoughtCostFor(healthy), _cost(1), "the healthy sub still bought (autoBuy not bricked)");
     }
 
     // =========================================================================
@@ -172,7 +172,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     ///         WITHOUT advancing the cursor so a later occupant is still processed (proven elsewhere);
     ///         here we assert the cancel itself.
     function testNormalSubFundingSkipCancelsViaSwapPop() public {
-        // A healthy sub guarantees the sweep produces a buy (avoids NoSubscribersSwept masking).
+        // A healthy sub guarantees the autoBuy produces a buy (avoids NoSubscribersAutoBought masking).
         address healthy = _subscribeHealthy("kill_healthy_", false);
         _fundPool(healthy, _cost(1));
 
@@ -185,7 +185,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(makeAddr("kill_keeper"));
-        afKing.sweep(50);
+        afKing.autoBuy(50);
         _capture();
 
         // CANCELLED: SubscriptionExpired(victim,1), removed from set, dailyQuantity zeroed.
@@ -212,7 +212,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
         _setClaimable(normal, 1);
         _fundPool(normal, _cost(1) - 1);
 
-        // A healthy buyer so the sweep does not revert NoSubscribersSwept.
+        // A healthy buyer so the autoBuy does not revert NoSubscribersAutoBought.
         address healthy = _subscribeHealthy("exempt_healthy_", false);
         _fundPool(healthy, _cost(1));
 
@@ -220,7 +220,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(makeAddr("exempt_keeper"));
-        afKing.sweep(50);
+        afKing.autoBuy(50);
         _capture();
 
         // EXEMPT: VAULT + SDGNRS persist -- PlayerSkipped(.,3), still in the set, NOT expired.
@@ -254,13 +254,13 @@ contract AfKingFundingWaterfall is DeployProtocol {
         _forceRenewalDue(ContractAddresses.VAULT);
         _setBurnieBalance(ContractAddresses.VAULT, 0); // all-or-nothing burn takes nothing -> lapse
 
-        // A healthy buyer so the sweep does not revert NoSubscribersSwept.
+        // A healthy buyer so the autoBuy does not revert NoSubscribersAutoBought.
         address healthy = _subscribeHealthy("lapse_healthy_", false);
         _fundPool(healthy, _cost(1));
 
         vm.recordLogs();
         vm.prank(makeAddr("lapse_keeper"));
-        afKing.sweep(50);
+        afKing.autoBuy(50);
         _capture();
 
         // The renewal LAPSE cancels VAULT despite the pinned-identity exemption (that exemption is
@@ -294,7 +294,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
 
     /// @notice OPENE-02/03 default-self equivalence: a sub with fundingSource == address(0) draws ETH
     ///         from and burns BURNIE against ITS OWN identity exactly as pre-OPEN-E -- the per-day ETH
-    ///         draw debits the subscriber's own pool (Swept cost == cost, own pool zeroed) and the
+    ///         draw debits the subscriber's own pool (AutoBought cost == cost, own pool zeroed) and the
     ///         subscribe-time window-1 burn came from the subscriber's own BURNIE. Byte-equivalence
     ///         baseline against which the cross-account cases below are the only behavioral delta.
     function testFundingSourceDefaultSelfIsByteEquivalent() public {
@@ -317,10 +317,10 @@ contract AfKingFundingWaterfall is DeployProtocol {
         uint256 cost = _cost(1);
         _fundPool(m, cost); // M funds its OWN pool
 
-        _sweepCapture("self_keeper");
+        _autoBuyCapture("self_keeper");
 
         // Per-day ETH draw debited M's OWN pool (self funding), exactly as pre-OPEN-E.
-        assertEq(_sweptCostFor(m), cost, "default-self: per-day draw debits M's own pool (DirectEth)");
+        assertEq(_autoBoughtCostFor(m), cost, "default-self: per-day draw debits M's own pool (DirectEth)");
         assertEq(afKing.poolOf(m), 0, "default-self: M's own pool fully debited");
     }
 
@@ -335,10 +335,10 @@ contract AfKingFundingWaterfall is DeployProtocol {
         _fundPool(s, cost);
         assertEq(afKing.poolOf(m), 0, "M's own pool starts empty (only S funds)");
 
-        _sweepCapture("xeth_keeper");
+        _autoBuyCapture("xeth_keeper");
 
         // The draw debited S's pool, not M's. M bought via DirectEth at full cost from S's pool.
-        assertEq(_sweptCostFor(m), cost, "cross-account: M bought (DirectEth, cost forwarded)");
+        assertEq(_autoBoughtCostFor(m), cost, "cross-account: M bought (DirectEth, cost forwarded)");
         assertEq(afKing.poolOf(s), 0, "cross-account ETH: S's pool debited by the full cost");
         assertEq(afKing.poolOf(m), 0, "cross-account ETH: M's own pool never touched");
     }
@@ -382,7 +382,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(makeAddr("xbur_keeper"));
-        afKing.sweep(50);
+        afKing.autoBuy(50);
         _capture();
 
         // DAY-31 RENEWAL: the auto-extract burn ALSO debited S's BURNIE, not M's.
@@ -417,7 +417,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
         // The spoofing NORMAL sub: VAULT approves the spoofer so fundingSource = VAULT is honored, but
         // drain-first + sentinel claimable + an EMPTY VAULT pool means the funding skip fires.
         // Fund VAULT's spendable BURNIE balance directly (the window-1 burn routes to the resolved
-        // source = VAULT) so the subscribe SUCCEEDS and the sub reaches the sweep; the ETH-pool skip
+        // source = VAULT) so the subscribe SUCCEEDS and the sub reaches the autoBuy; the ETH-pool skip
         // is the surface under test. mintForGame(VAULT, .) routes to the virtual escrow reserve (NOT
         // balanceOf), so the window-1 burnForKeeper would see a zero spendable balance -- write
         // balanceOf[VAULT] directly instead. The day-31 path is not exercised here (this test is the
@@ -436,13 +436,13 @@ contract AfKingFundingWaterfall is DeployProtocol {
         assertEq(afKing.subscriptionOf(spoofer).fundingSource, ContractAddresses.VAULT, "spoofer source = VAULT");
         assertGt(_subscriberIndexOf(spoofer), 0, "spoofer starts in the set");
 
-        // A healthy buyer so the sweep does not revert NoSubscribersSwept.
+        // A healthy buyer so the autoBuy does not revert NoSubscribersAutoBought.
         address healthy = _subscribeHealthy("spoof_healthy_", false);
         _fundPool(healthy, _cost(1));
 
         vm.recordLogs();
         vm.prank(makeAddr("spoof_keeper"));
-        afKing.sweep(50);
+        afKing.autoBuy(50);
         _capture();
 
         // LANDMINE A: the spoofing NORMAL sub IS cancelled (exemption keys on player, not source).
@@ -541,7 +541,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
         vm.store(address(coin), slot, bytes32(bal));
     }
 
-    /// @dev Force `who` into the day-31 renewal branch: paidThroughDay <= today, lastSweptDay cleared.
+    /// @dev Force `who` into the day-31 renewal branch: paidThroughDay <= today, lastAutoBoughtDay cleared.
     function _forceRenewalDue(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(afKing), slot));
@@ -566,19 +566,19 @@ contract AfKingFundingWaterfall is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Sweep as a fresh keeper and drain the Swept stream into the parallel snapshot arrays.
-    function _sweepCapture(string memory keeperLabel) internal {
+    /// @dev AutoBuy as a fresh keeper and drain the AutoBought stream into the parallel snapshot arrays.
+    function _autoBuyCapture(string memory keeperLabel) internal {
         vm.recordLogs();
         vm.prank(makeAddr(keeperLabel));
-        afKing.sweep(50);
+        afKing.autoBuy(50);
         _capture();
     }
 
-    /// @dev Drain the recorded logs ONCE into the parallel Swept(player,cost) snapshot. getRecordedLogs
+    /// @dev Drain the recorded logs ONCE into the parallel AutoBought(player,cost) snapshot. getRecordedLogs
     ///      empties the buffer, so a single drain feeds every count.
     function _capture() internal {
-        delete _sweptPlayer;
-        delete _sweptCost;
+        delete _autoBoughtPlayer;
+        delete _autoBoughtCost;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         _capturedLogs = logs;
         for (uint256 i; i < logs.length; i++) {
@@ -587,10 +587,10 @@ contract AfKingFundingWaterfall is DeployProtocol {
                 logs[i].topics.length >= 2 &&
                 logs[i].topics[0] == SWEPT_SIG
             ) {
-                _sweptPlayer.push(address(uint160(uint256(logs[i].topics[1]))));
-                // Swept(address indexed player, uint32 day, uint256 cost): non-indexed (day, cost) in data.
+                _autoBoughtPlayer.push(address(uint160(uint256(logs[i].topics[1]))));
+                // AutoBought(address indexed player, uint32 day, uint256 cost): non-indexed (day, cost) in data.
                 (, uint256 cost) = abi.decode(logs[i].data, (uint32, uint256));
-                _sweptCost.push(cost);
+                _autoBoughtCost.push(cost);
             }
         }
     }
@@ -598,10 +598,10 @@ contract AfKingFundingWaterfall is DeployProtocol {
     /// @dev The full drained log set (for PlayerSkipped / SubscriptionExpired counts in the same drain).
     Vm.Log[] private _capturedLogs;
 
-    /// @dev Swept cost (msgValue) for `who`, or type(uint256).max if `who` was NOT bought this sweep.
-    function _sweptCostFor(address who) internal view returns (uint256) {
-        for (uint256 i; i < _sweptPlayer.length; i++) {
-            if (_sweptPlayer[i] == who) return _sweptCost[i];
+    /// @dev AutoBought cost (msgValue) for `who`, or type(uint256).max if `who` was NOT bought this autoBuy.
+    function _autoBoughtCostFor(address who) internal view returns (uint256) {
+        for (uint256 i; i < _autoBoughtPlayer.length; i++) {
+            if (_autoBoughtPlayer[i] == who) return _autoBoughtCost[i];
         }
         return type(uint256).max;
     }

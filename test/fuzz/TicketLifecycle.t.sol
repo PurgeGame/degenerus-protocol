@@ -55,9 +55,9 @@ contract TLKeyComputer is DegenerusGameStorage {
 ///      - EDGE-07: testPrepareFutureTicketsRange (_prepareFutureTickets reads +1..+4 only, not FF)
 ///      - EDGE-08: testFullLevelCycleAllQueuesDrained (all read-slot queues empty after full cycle)
 ///      - EDGE-09: testWriteSlotSurvivesSwapAndFreeze (write-slot tickets survive swap, appear in read)
-///      - ZSA-01: testZeroStrandingSweepAfterTransitions (read-key sweep across all processed levels)
-///      - ZSA-02: testZeroStrandingSweepAfterTransitions (FF-key sweep across all levels in drain range)
-///      - ZSA-03: testMultiSourceZeroStrandingSweep (4 transitions with multi-source buying, zero stranding)
+///      - ZSA-01: testZeroStrandingAutoBuyAfterTransitions (read-key autoBuy across all processed levels)
+///      - ZSA-02: testZeroStrandingAutoBuyAfterTransitions (FF-key autoBuy across all levels in drain range)
+///      - ZSA-03: testMultiSourceZeroStrandingAutoBuy (4 transitions with multi-source buying, zero stranding)
 ///      - RNG-03: testRngLockedBlocksFFPurchase, testRngLockedBlocksFFLootbox
 ///      - RNG-04: testWriteSlotIsolationDuringRngLocked, testWriteSlotIsolationAcrossBufferStates
 contract TicketLifecycleTest is DeployProtocol {
@@ -1118,23 +1118,23 @@ contract TicketLifecycleTest is DeployProtocol {
     // timing-fragile to trigger organically.
 
     // =========================================================================
-    // Test 19 [ZSA-01, ZSA-02]: Systematic zero-stranding sweep after multiple
+    // Test 19 [ZSA-01, ZSA-02]: Systematic zero-stranding autoBuy after multiple
     //         level transitions. Read keys and FF keys for all processed levels
     //         must be empty.
     // =========================================================================
 
-    /// @notice Drive through 5+ level transitions, then systematically sweep all
+    /// @notice Drive through 5+ level transitions, then systematically autoBuy all
     ///         processed levels to verify zero stranding across read and FF key spaces.
     /// @dev ZSA-01: After transitions, readKey.length == 0 for processed levels.
     ///      ZSA-02: ffKey.length == 0 for levels in drain range.
-    function testZeroStrandingSweepAfterTransitions() public {
+    function testZeroStrandingAutoBuyAfterTransitions() public {
         // Drive to level 6 to complete several level transitions
         _driveToLevel(6);
         _flushAdvance();
         uint256 reached = game.level();
         assertGe(reached, 5, "Must complete at least 5 level transitions");
 
-        // ZSA-01 sweep: both key spaces should have at most 2 constructor-seeded entries.
+        // ZSA-01 autoBuy: both key spaces should have at most 2 constructor-seeded entries.
         // Constructor pre-queues sDGNRS + VAULT per level. These may remain in the write-key
         // space due to swap timing during phase transitions. This is not stranding.
         for (uint24 lvl = 1; lvl <= uint24(reached) - 1; lvl++) {
@@ -1146,7 +1146,7 @@ contract TicketLifecycleTest is DeployProtocol {
             );
         }
 
-        // ZSA-02 sweep: FF-key queue must be empty for all levels in drain range.
+        // ZSA-02 autoBuy: FF-key queue must be empty for all levels in drain range.
         // Transition at level L drains FF at L+5. So after transitions at levels
         // 1 through reached-2, FF levels 6 through (reached-2)+5 = reached+3 are drained.
         for (uint24 lvl = 6; lvl <= uint24(reached) + 3; lvl++) {
@@ -1166,7 +1166,7 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 20 [ZSA-03]: Comprehensive multi-source zero-stranding sweep with
+    // Test 20 [ZSA-03]: Comprehensive multi-source zero-stranding autoBuy with
     //         4 consecutive level transitions using direct purchase + whale
     //         bundle + lootbox ticket sources.
     // =========================================================================
@@ -1176,7 +1176,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         zero stranding across all key spaces for all processed levels.
     /// @dev ZSA-03: 3+ consecutive transitions with multi-source buying yield zero
     ///      stranding across all key spaces.
-    function testMultiSourceZeroStrandingSweep() public {
+    function testMultiSourceZeroStrandingAutoBuy() public {
         uint48[] memory lboxIndices = new uint48[](25); // up to ~5 per level x 4+ levels
         uint256 lboxCount = 0;
 
@@ -1214,10 +1214,10 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 reached = game.level();
         assertGe(reached, 4, "Must complete at least 4 level transitions");
 
-        // ZSA-01 + ZSA-02: sweep all processed levels using the reusable helper
+        // ZSA-01 + ZSA-02: autoBuy all processed levels using the reusable helper
         _assertZeroStranding(1, uint24(reached) - 1);
 
-        // ZSA-02 extended: FF drain range beyond the helper's sweep
+        // ZSA-02 extended: FF drain range beyond the helper's autoBuy
         for (uint24 lvl = uint24(reached); lvl <= uint24(reached) + 4; lvl++) {
             assertEq(_ffQueueLength(lvl), 0,
                 string.concat("ZSA-02: FF not drained at level ", _uint2str(lvl)));
@@ -2038,9 +2038,9 @@ contract TicketLifecycleTest is DeployProtocol {
 
     // ==================== Internal Helpers ====================
 
-    /// @notice Sweep levels fromLevel..toLevel and assert all read-slot and FF queues are zero.
-    /// @dev Covers ZSA-01 (read key sweep) and ZSA-02 (FF key sweep) requirements.
-    ///      Checks the current read key for the queue sweep. The write side may have
+    /// @notice AutoBuy levels fromLevel..toLevel and assert all read-slot and FF queues are zero.
+    /// @dev Covers ZSA-01 (read key autoBuy) and ZSA-02 (FF key autoBuy) requirements.
+    ///      Checks the current read key for the queue autoBuy. The write side may have
     ///      nonzero entries from later transitions (vault perpetual writes to past levels).
     ///      The read key being zero proves the level was fully processed during its lifecycle.
     /// @dev Read lootboxRngIndex directly from storage slot 35 (low 48 bits of lootboxRngPacked).

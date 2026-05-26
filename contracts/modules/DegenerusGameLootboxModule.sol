@@ -297,8 +297,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint32 private constant PRESALE_BOX_BURNIE_HIGH_STEP_BPS = 22_890;
 
     // ---- Coin-presale-box DGNRS curve (5 tiers x 10 ETH cumulative box volume) ----
-    // Relative DGNRS-per-ETH rates [3.0, 2.5, 2.0, 1.5, 1.0] x base, base = poolStart/100.
-    // Over 50 ETH the deterministic draw sums to 100*base = poolStart (drains the pool).
+    // Relative DGNRS-per-ETH rates [3.0, 2.5, 2.0, 1.5, 1.0] x base, base = poolStart/40.
+    // Over 50 ETH the full deterministic draw sums to 100*base = 2.5*poolStart; with the
+    // ~40% DGNRS branch rate the pool drains through the boxes (closing sweep clamps to dust).
     /// @dev DGNRS tier multipliers in tenths (3.0x .. 1.0x), by cumulative box volume.
     uint16 private constant PRESALE_BOX_DGNRS_TIER1_TENTHS = 30;
     uint16 private constant PRESALE_BOX_DGNRS_TIER2_TENTHS = 25;
@@ -695,7 +696,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         emit PresaleBoxOpened(player, index, amount, burnieOut, dgnrsOut, wwxrpOut, closing);
     }
 
-    /// @dev Presale-box DGNRS award: tierMultiplier x base x boxEth, base = poolStart/100,
+    /// @dev Presale-box DGNRS award: tierMultiplier x base x boxEth, base = poolStart/40,
     ///      tier by the FROZEN buy-time cumulative box volume (5 tiers x 10 ETH).
     ///      Snapshots Pool.PresaleBox into presaleBoxDgnrsPoolStart on first resolution.
     /// @param player Box owner to credit.
@@ -713,11 +714,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if (poolStart == 0) return 0;
             presaleBoxDgnrsPoolStart = poolStart;
         }
-        // base = poolStart / 100 DGNRS per ETH; tier multiplier in tenths.
+        // base = poolStart / 40 DGNRS per ETH; tier multiplier in tenths.
         uint256 tierTenths = _presaleBoxDgnrsTierTenths(soldBefore);
-        // amount (wei) * (poolStart/100) per ETH * tier/10:
-        //   = poolStart * tierTenths * amount / (100 * 10 * 1 ether)
-        uint256 dgnrsAmount = (poolStart * tierTenths * amount) / (1_000 * 1 ether);
+        // amount (wei) * (poolStart/40) per ETH * tier/10:
+        //   = poolStart * tierTenths * amount / (40 * 10 * 1 ether)
+        uint256 dgnrsAmount = (poolStart * tierTenths * amount) / (400 * 1 ether);
         if (dgnrsAmount == 0) return 0;
         paid = dgnrs.transferFromPool(
             IStakedDegenerusStonk.Pool.PresaleBox,

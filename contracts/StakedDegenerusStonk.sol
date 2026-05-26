@@ -64,6 +64,10 @@ interface IAfKingSubscribe {
         uint8 reinvestPct,
         address fundingSource
     ) external payable;
+    /// @notice Withdraw `amount` of the caller's prepaid pool (sends to the caller).
+    function withdraw(uint256 amount) external;
+    /// @notice The caller-or-`player`'s remaining prepaid pool balance.
+    function poolOf(address player) external view returns (uint256);
 }
 
 /// @notice Interface for DGNRS wrapper contract used by sDGNRS.
@@ -427,10 +431,16 @@ contract StakedDegenerusStonk {
     //                          DEPOSITS (Game Only)
     // =====================================================================
 
-    /// @notice Receive ETH deposit from game contract
-    /// @dev Only callable by game contract. Adds ETH to reserve without minting new tokens.
-    /// @custom:reverts Unauthorized If caller is not game contract
-    receive() external payable onlyGame {
+    /// @notice Receive ETH deposit from the game contract or the AfKing keeper.
+    /// @dev GAME deposits reserve ETH; AF_KING sends back recovered prepaid-pool ETH (its withdraw
+    ///      sends to the caller). Accounting-safe: reserves are read live via address(this).balance
+    ///      everywhere, so no running counter is kept here and an AF_KING credit is never mis-attributed.
+    /// @custom:reverts Unauthorized If caller is neither the game contract nor the AfKing keeper.
+    receive() external payable {
+        if (
+            msg.sender != ContractAddresses.GAME &&
+            msg.sender != ContractAddresses.AF_KING
+        ) revert Unauthorized();
         emit Deposit(msg.sender, msg.value, 0, 0);
     }
 
@@ -523,6 +533,10 @@ contract StakedDegenerusStonk {
     /// @notice Burn all undistributed pool tokens at game over
     /// @dev Only callable by game contract. Burns this contract's own balance.
     function burnAtGameOver() external onlyGame {
+        // Recover this contract's stranded AfKing prepaid pool BEFORE the zero-balance early-return,
+        // so a sDGNRS holding no pool TOKEN still recovers its ETH pool (lands in receive()). withdraw(0)
+        // is a no-op when poolOf == 0, so the common empty-pool case cannot brick gameOver.
+        afKing.withdraw(afKing.poolOf(address(this)));
         uint256 bal = balanceOf[address(this)];
         if (bal == 0) return;
         unchecked {
@@ -867,10 +881,12 @@ contract StakedDegenerusStonk {
         }
         emit Transfer(burnFrom, address(0), amount);
 
-        // === ETH: physically segregate the MAX (175%) payout out of claimableWinnings[SDGNRS] ===
+        // === Reserve the MAX (175%) payout for this burn (pure ETH OR pure stETH) ===
         // Pull the MAX so no concurrent claimable drain (AfKing SUB-09 self-sub, a 2nd same-day
-        // claimant, claimWinnings) can under-fund a later claim. pullRedemptionReserve does a CHECKED
-        // claimable debit and reverts (fail-closed, LOCKED) if the full MAX cannot segregate.
+        // claimant, claimWinnings) can under-fund a later claim. pullRedemptionReserve segregates the
+        // reservation as pure ETH (moved out of claimableWinnings[SDGNRS]) when the ETH side covers it,
+        // else pure stETH backed by sDGNRS's own balance (no game-side move); it reverts fail-closed
+        // only if NEITHER pure leg covers. pendingRedemptionEthValue below records the segregated MAX.
         //
         // The per-day pool tracks the BASE (100%) in gwei; resolve reconstructs the segregated MAX
         // as floor(poolBaseWei × MAX_ROLL / 100). To make the cumulative increment here reconcile
@@ -911,10 +927,11 @@ contract StakedDegenerusStonk {
         emit RedemptionSubmitted(beneficiary, amount, ethValueOwed, burnieOwed, currentPeriod);
     }
 
-    /// @dev Pay ETH to player from this contract's segregated balance, falling back to stETH if
-    ///      the ETH balance is insufficient. No game.claimWinnings pull: the redemption ETH was
-    ///      already physically pulled out of claimableWinnings[SDGNRS] at submit
-    ///      (pullRedemptionReserve), so it is sitting in this contract's balance.
+    /// @dev Pay the redemption from this contract's balance: ETH first, falling back to stETH if the
+    ///      ETH balance is insufficient. No game.claimWinnings pull — at submit, pullRedemptionReserve
+    ///      either physically moved the ETH out of claimableWinnings[SDGNRS] into this contract (ETH
+    ///      leg) or left sDGNRS's own stETH backing the reservation (stETH leg); either way the
+    ///      backing is already in this contract's balance.
     function _payEth(address player, uint256 amount) private {
         if (amount == 0) return;
         uint256 ethBal = address(this).balance;
