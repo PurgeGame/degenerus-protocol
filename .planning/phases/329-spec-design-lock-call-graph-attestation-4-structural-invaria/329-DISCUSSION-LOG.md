@@ -1,102 +1,96 @@
-# Phase 329: SPEC — Design-Lock + Call-Graph Attestation + 4 Structural Invariants - Discussion Log
+# Phase 329: SPEC — Design-Lock + Call-Graph Attestation - Discussion Log
 
 > **Audit trail only.** Do not use as input to planning, research, or execution agents.
 > Decisions are captured in CONTEXT.md — this log preserves the alternatives considered.
 
-**Date:** 2026-05-26
+**Date:** 2026-05-26 (RE-SPEC after the v49.0 keeper-router pivot)
 **Phase:** 329-spec-design-lock-call-graph-attestation-4-structural-invaria
-**Areas discussed:** ROUTER-07 reentrancy, ROUTER-06 no-work signal, GAS-03 day-start epoch, Invariant-(c) free-fallback caller, NEW autoResolve→degeneretteResolve rename + flat ~1-BURNIE re-peg
+**Areas discussed:** autoBuy-first vs advance liveness, Unified bounty + ROUTER-07 (→ flat-per-tx redesign), New keeper-gas DOs scope
+
+> Context handling: **Update in place** (the prior CONTEXT/SPEC/ATTEST docs reflect the superseded
+> original router design). The 5 redesign changes (RD-1..RD-5) were carried forward from
+> `330-ROUTER-REDESIGN-INTENT.md` as already-locked and were NOT re-asked.
 
 ---
 
-## ROUTER-07 — router reentrancy disposition
+## autoBuy-first vs advance liveness
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| nonReentrant guard on doWork | Guard on doWork only; security floor; one-function deviation from AfKing's CEI-everywhere ethos. The roadmap default. | |
-| Composed-CEI proof, no guard | Preserve AfKing's no-guard invariant; prove CEI-clean + keeper-never-a-payee blocks double-pay. | |
-| Guard + keep CEI proof | Belt-and-suspenders. | |
+| Accept invariant (c), no carve-out | Re-attest (c) under the new order; no advance-preemption (would conflict with same-cycle-reveal); buys bounded so advance only briefly delayed; 30-min permissionless fallback + wrappers + 120d death-clock cover the worst case | ✓ |
+| Add advance-overdue preemption | Advance jumps ahead of autoBuy once stale past a threshold; more robust but conflicts with same-cycle-reveal + adds a frozen-contract constant | |
 
-**User's choice:** Free-text — *"dowork is never going to send eth to the caller and all contracts it touches are trusted so I dont see how it matters"* → **NO guard** (the composed-CEI / no-untrusted-send disposition).
-**Notes:** Reflected back: doWork pays bounty as `creditFlip` flip-credit (keeper never a payee) and sends ETH only to pinned `ContractAddresses.*`, never to an untrusted address (pull-pattern `claimableWinnings`). The user confirmed: "this will not send eth to any address that is untrusted." SPEC author must grep-attest the no-untrusted-send claim per leg vs `0cc5d10f`; TST-02 double-pay regression stays as empirical backstop regardless. (D-01/01a/01b.)
+**User's choice:** Accept invariant (c), no carve-out.
+**Notes:** Consequence recorded — D-04 amended: under autoBuy-first, first-30-min advance during a buy
+backlog relies on the participant/pass/DGVE-majority bypass tiers + (at 30 min) the permissionless
+fallback, NOT the router bounty. Worst-case advance delay is bounded and accepted.
 
 ---
 
-## ROUTER-06 — doWork no-work signal
+## Unified bounty + ROUTER-07 (→ simplified flat-per-tx redesign)
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Revert (NoWork error) | Dedicated error when no leg has work — consistent with EmptyAutoBuy/NoSubscribersAutoBought. | ✓ |
-| Return bool/sentinel | Keeper-friendly multicall-bundling; breaks the established revert idiom. | |
-| Revert, views are the real probe | Revert + treat discovery views as the canonical pre-call check. | |
+| Leg returns final BURNIE-wei | Legs return computed reward; doWork does one creditFlip; advance returns (mult, rewardable) | (superseded) |
+| Leg returns raw work-count | Legs return counts; doWork centralizes all peg math | (folded into the simplification) |
 
-**User's choice:** Revert (NoWork error).
-**Notes:** Fires only when all three O(1) predicates are empty; a routed leg only enters when its predicate has work, so the leg's own revert never trips. (D-02.)
+**User's choice:** "can we simplify the bounty system a little?" → then "make doWork parameterless …
+flat per tx. maybe 1x for open 1.5x for buy and 2x for advance (scaled with the multiplier for
+advance) … 1x is an average max-laden tx at .5 gwei worth of burnie flip" → then "also no multi for
+mid day ticket batches."
+
+**Resolved model (D-07):** `doWork()` parameterless (D-06 sentinel superseded); standalone
+`autoOpen(count)`/`autoBuy(count)` parametered + unrewarded (emergency). Flat per-tx: advance `2×·mult`
+(stall NEW-DAY only; mid-day partial-drain `mult=1`), buy `1.5×`, open `1×` pro-rated below ~5 boxes.
+One base unit, `×PRICE_COIN_UNIT/mp`, one creditFlip, one-category early-return. GAS-03/D-03 dissolved
+(advance is the sole stall epoch; delete AfKing autoBuy stall ladder + epoch + the open-leg gas-units
+machinery). Per-leg faucet doctrine: advance/buy no gate (real-work-bounded + once/day/sub + protocol
+auto-subs); open pro-rated (frequent small mid-day opens).
+
+**Follow-up locks:**
+| Question | Options | Selected |
+|---|---|---|
+| 1×/1.5×/2× ratios | GAS-331 starting estimates / Lock now | GAS-331 starting estimates |
+| Open knee | ~5 calibrate at GAS-331 / Lock literal 5 | ~5, calibrate at GAS-331 |
+
+Confirmed: "those numbers are fine to start with."
+
+**ROUTER-07:** NO guard (D-01 carries forward, stronger under the unified single-creditFlip).
 
 ---
 
-## GAS-03 — day-start epoch
+## New keeper-gas DOs scope
 
-| Option | Description | Selected |
+| Option (multiSelect) | Description | Selected |
 |--------|-------------|----------|
-| Design-1 satisfies it | Advance multiplier single-sourced in AdvanceModule + returned; router never recomputes; AfKing autoBuy epoch left as-is (different category). | ✓ |
-| Physically unify both formulas | One shared epoch helper; risks shifting AfKing's tested autoBuy timing; conflates two semantics. | |
-| Unify only the shared constant | Factor out the 82620/DEPLOY_DAY_BOUNDARY constants without changing elapsed semantics. | |
+| Batched keeper read | NEW batchPurchaseForKeeper/keeperSnapshot; collapses claimableWinningsOf STATICCALLs; subsumes GASOPT-02 | ✓ |
+| Remove :838 isOperatorApproved | Drop per-iteration check (~2.8k/player); SUB is the consent unit; keep :443; gated on 333 SWEEP OPEN-E re-attestation | ✓ |
+| Drop AutoBought event | ~1.5k/player; BUT tests heavily key on it — requires storage/balance-oracle test migration | ✓ |
 
-**User's choice:** Design-1 satisfies it (recommended).
-**Notes:** The two formulas measure different things (AfKing autoBuy = elapsed since current absolute day, resets at midnight; AdvanceModule advance = elapsed since the lagging game-day, grows across a multi-day stall) — both correct, not a duplicated computation. SPEC author grep-attests both vs `0cc5d10f` and records why they differ. (D-03/03a.)
+| Phasing | Options | Selected |
+|---|---|---|
+| Register | New GASOPT-03+ in 330 IMPL / Handle in 331 GAS / Defer | New GASOPT-03+ in 330 IMPL |
 
----
-
-## Invariant (c) — guaranteed free-fallback advanceGame() caller
-
-| Option | Description | Selected |
-|--------|-------------|----------|
-| Rely on existing paths, no new code | 30-min universal bypass makes standalone advance permissionless to all; router bounty covers first 30 min; VAULT/sDGNRS wrappers; 120d death-clock. | ✓ |
-| Designate VAULT/sDGNRS as explicit backstop | Name them THE backstop + wire a recurring trigger. More mechanism. | |
-| Add a new always-callable unrewarded fallback | New code path; unnecessary given the 30-min universal bypass. | |
-
-**User's choice:** Rely on existing paths, no new code (recommended).
-**Notes:** PRIMARY = router advance leg (rewarded/stall-escalating, re-homed) — primary incentive preserved, just moved. SECONDARY = `advanceGame()` permissionless to anyone 30+ min after the boundary (`_enforceDailyMintGate` tier-2 `~:1008`) + `DegenerusVault.gameAdvance()`/`StakedDegenerusStonk.gameAdvance()`; first-30-min window covered by the router bounty + participants/VAULT (no gap). TERTIARY = 120d death-clock. (D-04.)
-
----
-
-## NEW — autoResolve → degeneretteResolve rename + flat ~1-BURNIE "lose" re-peg (mid-discussion user request)
-
-> User asked to "make the degenerette resolver pay 1 burnie per tx flat if you resolve 5+ rolls
-> (or something like that)… a 'lose'… swap into the same button as the main auto-work button…
-> but not in a way that could ever be remotely exploitable."
-
-| Option | Description | Selected |
-|--------|-------------|----------|
-| Defer — it already works; unify at frontend | autoResolve already safe (break-even, WWXRP-excluded, self-resolve-neutral); the "one button" is a frontend concern. | |
-| Re-peg autoResolve to a sub-gas "lose" — keep it separate | Recalibrate the bounty to a sub-gas flat-per-tx lose; no router change; "one button" via frontend. | ✓ |
-| Fold into doWork on-chain — extend the signature | doWork(maxCount, players[], betIds[]); reverses ROUTER-05; expands all 5 phases. | |
-
-**User's choice:** Re-peg — keep it separate. **Then refined across 3 follow-ups** → rename + literal ~1 BURNIE + ≥3 gate (final).
-**Notes:** Surfaced two obstacles to the on-chain "same button": (1) it needs caller-supplied `(players[], betIds[])` — no O(1) discovery, can't join doWork without an unbounded scan (ROUTER-04 violation) — almost certainly why it was excluded; (2) the unified button is a frontend concern.
-
-**Follow-up 1 — rename:** USER asked to rename `autoResolve`→`degeneretteResolve` (+ `_degeneretteResolveBet`, interfaces, tests) and "pay 1 burnie in flip credit no matter how much work (or revert on no work)." Adopted the rename + flat-per-tx + revert-on-no-work shape.
-
-**Follow-up 2 — Claude's gas-claim error + USER correction:** Claude initially claimed a literal 1 BURNIE becomes a profitable single-bet farm from ~level 10 (mintPrice ≥ 0.04 ETH). USER: *"I'm highly skeptical of these gas claims for a real tx"* + *"there's gas for the first tx too."* USER was RIGHT — Claude had compared 1 BURNIE against the 0.5-gwei *pegging reference* (`AUTO_GAS_PRICE_REF`, a deliberately below-market accounting figure), not the REAL gas a keeper pays. Corrected basis: keeper pays REAL tx gas (typically 5–50+ gwei) every call while ~1 BURNIE illiquid flip-credit is ≤ `mintPrice/1000` ETH (≤0.00024 ETH) → far below real cost → a genuine "lose," not farmable at any realistic gas price.
-
-**Follow-up 3 — ≥3 gate:** USER: *"make it do at least 3 resolutions to pay the burnie?"* Adopted — pay 1 BURNIE iff ≥3 non-WWXRP resolved (revert on 0; 1–2 resolved → unpaid, lean=do-not-revert to avoid stranding a tail), widening the loss margin further.
-
-**FINAL (D-05):** rename `autoResolve`→`degeneretteResolve`; flat literal ~1 BURNIE flip-credit per tx (count-independent) gated at ≥3 non-WWXRP resolutions; revert `NoWork()` on zero; WWXRP excluded from the count; AUTO-02 probe + per-item isolation + self-resolve preserved; KEPT SEPARATE (router-fold OUT). Registered GAS-06 (Phase 331, incl. a non-blocking real-gas sanity check on the constant) + TST-05 (Phase 332); rename + bounty code rides BATCH-02 (Phase 330); ROUTER-05 reworded. SPEC (D-05f) must verify no invariant requires losing-bet resolution before dropping the break-even incentive.
+**User's choice:** all 3 in scope as GASOPT-03/04/05 in Phase 330 IMPL.
+**Notes:** GASOPT-04 (drop AutoBought) — the event-removal + test-oracle migration land together in 330
+(suite breaks immediately); the no-double-buy invariant must be re-expressed in `lastAutoBoughtDay`
+storage + pool/balance deltas without weakening SAFE-03. GASOPT-05 (:838) carries a blocking 333-SWEEP
+OPEN-E re-attestation. GASOPT-02 folds into GASOPT-03.
 
 ---
 
 ## Claude's Discretion
 
-The remainder of phase 329 is grep-attestation resolved from source vs `0cc5d10f` (NOT user
-decisions): the `advanceGame` `(uint8 mult, bool rewardable)` encoding + whether `rewardable`
-covers all three `:189/:225/:468` sites; the discovery-view signatures + location; the `maxCount`
-semantics across legs; the v48 KEEP-04 affiliate-code passthrough survival; the AfKing CEI/cursor
-anchors; the producer-before-consumer edit-order map; and the plan/wave decomposition. (See
-329-CONTEXT.md § Claude's Discretion.)
+- Attestation baseline + held-diff disposition (user delegated): attest against frozen `0cc5d10f`
+  (line-drift noted vs the held tree); 330 re-IMPL keeps the survivors (advance re-home tuple,
+  `degeneretteResolve` rename, GASOPT-01, interfaces) and reworks the now-superseded bounty
+  implementation.
+- All `file:line` grep-attestations; advanceGame return encoding; the 3 creditFlip site classification;
+  discovery-view forms; the D-07/D-03 deletion surface; KEEP-04 passthrough survival; CEI anchors; the
+  SPEC section structure + survivors-vs-reworked edit-order map + plan/wave decomposition.
 
 ## Deferred Ideas
 
-- **`autoResolve` FOLDED INTO the on-chain router** — deferred (architecturally blocked by the
-  caller-supplied-arrays requirement); the unified "one button" lives at the frontend. NOTE: the
-  autoResolve *bounty re-peg* is NOT deferred — it is the in-scope GAS-06/TST-05 addition.
+- `degeneretteResolve` folded into the on-chain router (architecturally blocked; frontend "one button").
+- Keeper off-chain indexer / webpage (separate frontend track).
+- Milestone-level out-of-scope items (see REQUIREMENTS.md § Out of Scope).
