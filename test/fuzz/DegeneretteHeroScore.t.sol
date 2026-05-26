@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
 /// @title DegeneretteHeroScoreTest — Proves the v48 Degenerette hero 2-point
 ///        rescale (HERO-04 scoring SHAPE / packing / thresholds + HERO-06 DGAS
@@ -290,6 +291,258 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
             assertEq(s, 9, "self-match => S=9");
             assertEq(gain, (poolBefore * DEGEN_DGNRS_9_BPS) / 10_000, "S=9 award == 15% of Reward pool");
         }
+    }
+
+    // =========================================================================
+    // Task 3 (a): HERO-06 DGAS write-batch byte-identical to per-bet resolve.
+    // =========================================================================
+
+    /// @notice Resolve a set of N bets in ONE resolveBets call, then resolve the
+    ///         SAME N bets one-at-a-time (fresh state via snapshot, identical VRF
+    ///         words + tickets), and assert the cumulative claimable, claimablePool,
+    ///         BURNIE/WWXRP mint deltas, and the per-bet FullTicketResult events are
+    ///         byte-identical between the batched and per-bet paths. The cross-bet
+    ///         `acc` flush must be same-results (the HERO-06 DGAS constraint — the
+    ///         rescale changed payout SHAPE only, never the aggregation).
+    function test_HERO06_WriteBatchByteIdentical_DGAS() public {
+        // Large unfrozen pool so the ETH cap never binds (cap-path is DGAS-05's job;
+        // HERO-06 asserts the rescaled payout SHAPE keeps the batch == per-bet).
+        _seedFuturePrizePool(10_000_000 ether);
+
+        uint48 index = 1;
+        uint256 word = uint256(keccak256("hero06_dgas_word"));
+        uint32 ticket = _resultTicketForSpin(index, word, 0); // 8/8 self-match on spin 0
+
+        // Mixed-currency batch: ETH(4 spins) + BURNIE(3) + WWXRP(2), same ticket.
+        uint128 ethPerTicket = 0.01 ether;
+        uint128 burniePerTicket = 200 ether;
+        uint128 wwxrpPerTicket = 2 ether;
+        _fundBurnie(player, uint256(burniePerTicket) * 3 + 1 ether);
+        _fundWwxrp(player, uint256(wwxrpPerTicket) * 2 + 1 ether);
+
+        uint64 ethBet = _placeBet(CURRENCY_ETH, ethPerTicket, 4, ticket, 0);
+        uint64 burnieBet = _placeBet(CURRENCY_BURNIE, burniePerTicket, 3, ticket, 1);
+        uint64 wwxrpBet = _placeBet(CURRENCY_WWXRP, wwxrpPerTicket, 2, ticket, 2);
+        _injectLootboxRngWord(index, word);
+
+        uint256 snap = vm.snapshotState();
+
+        // --- Run A: ONE resolveBets call (the cross-bet batch) ---
+        uint256 preClaimableA = game.claimableWinningsOf(player);
+        uint256 preClaimablePoolA = _readClaimablePool();
+        uint256 preBurnieA = coin.balanceOf(player);
+        uint256 preWwxrpA = wwxrp.balanceOf(player);
+
+        uint64[] memory all = new uint64[](3);
+        all[0] = ethBet;
+        all[1] = burnieBet;
+        all[2] = wwxrpBet;
+        vm.recordLogs();
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), all);
+        bytes32 eventsDigestA = _fullTicketResultDigest();
+
+        uint256 claimableDeltaA = game.claimableWinningsOf(player) - preClaimableA;
+        uint256 claimablePoolDeltaA = _readClaimablePool() - preClaimablePoolA;
+        uint256 burnieDeltaA = coin.balanceOf(player) - preBurnieA;
+        uint256 wwxrpDeltaA = wwxrp.balanceOf(player) - preWwxrpA;
+
+        // --- Run B: revert, resolve the SAME bets one-at-a-time ---
+        vm.revertToState(snap);
+        uint256 preClaimableB = game.claimableWinningsOf(player);
+        uint256 preClaimablePoolB = _readClaimablePool();
+        uint256 preBurnieB = coin.balanceOf(player);
+        uint256 preWwxrpB = wwxrp.balanceOf(player);
+
+        vm.recordLogs();
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), _one(ethBet));
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), _one(burnieBet));
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), _one(wwxrpBet));
+        bytes32 eventsDigestB = _fullTicketResultDigest();
+
+        uint256 claimableDeltaB = game.claimableWinningsOf(player) - preClaimableB;
+        uint256 claimablePoolDeltaB = _readClaimablePool() - preClaimablePoolB;
+        uint256 burnieDeltaB = coin.balanceOf(player) - preBurnieB;
+        uint256 wwxrpDeltaB = wwxrp.balanceOf(player) - preWwxrpB;
+
+        // Byte-identical assertions (HERO-06 DGAS same-results).
+        assertEq(claimableDeltaA, claimableDeltaB, "DGAS: batched ETH claimable == per-bet");
+        assertEq(claimablePoolDeltaA, claimablePoolDeltaB, "DGAS: batched claimablePool == per-bet");
+        assertEq(burnieDeltaA, burnieDeltaB, "DGAS: batched BURNIE mint == per-bet");
+        assertEq(wwxrpDeltaA, wwxrpDeltaB, "DGAS: batched WWXRP mint == per-bet");
+        assertEq(eventsDigestA, eventsDigestB, "DGAS: per-spin FullTicketResult stream byte-identical");
+
+        // Non-vacuity: the rescaled payouts actually exercised each currency.
+        assertGt(claimableDeltaA, 0, "non-vacuity: ETH payout exercised");
+        assertGt(burnieDeltaA, 0, "non-vacuity: BURNIE payout exercised");
+        assertGt(wwxrpDeltaA, 0, "non-vacuity: WWXRP payout exercised");
+    }
+
+    // =========================================================================
+    // Task 3 (b): HERO-06 dailyHeroWagers / hero-jackpot no-leak.
+    // =========================================================================
+
+    /// @notice Prove the daily-hero-symbol jackpot reads ONLY the player's WAGERED
+    ///         hero symbol, never the per-bet resolution score. Two runs with
+    ///         IDENTICAL wagers but DIFFERENT resolution scores S must produce the
+    ///         IDENTICAL dailyHeroWagers ledger (all 32 slots via getDailyHeroWager)
+    ///         and the IDENTICAL hero winner (getDailyHeroWinner). The 0-8 -> 0-9
+    ///         matches-range change cannot leak into the wager ledger / hero roll.
+    function test_HERO06_DailyHeroJackpotUnaffected_NoLeak() public {
+        _seedFuturePrizePool(10_000_000 ether);
+        uint48 index = 1;
+        uint32 day = GameTimeLib.currentDayIndex();
+
+        // Two RNG words producing DIFFERENT resolution scores for the SAME tickets.
+        // The wagers (chosen hero symbols) are identical across both runs.
+        uint256 wordLow = uint256(keccak256("noleak_low_score"));
+        uint256 wordHigh = uint256(keccak256("noleak_high_score"));
+
+        // Build a small wager set: 3 ETH bets with chosen hero symbols/quadrants.
+        // The chosen heroSymbol is decoded from customTicket >> (heroQuadrant*8) & 7.
+        uint128 perTicket = 0.01 ether;
+
+        uint256 snap = vm.snapshotState();
+
+        // --- Run LOW: place wagers, resolve under wordLow ---
+        _placeNoLeakWagers(perTicket);
+        uint256[32] memory ledgerLow = _readHeroLedger(day);
+        // Resolve every placed bet (nonce 1..3) under wordLow.
+        _injectLootboxRngWord(index, wordLow);
+        _resolveAllNoLeak();
+        (uint8 wqLow, uint8 wsLow, uint256 waLow) = game.getDailyHeroWinner(day);
+        uint256[32] memory ledgerLowPost = _readHeroLedger(day);
+
+        // --- Run HIGH: revert, place the SAME wagers, resolve under wordHigh ---
+        vm.revertToState(snap);
+        _placeNoLeakWagers(perTicket);
+        uint256[32] memory ledgerHigh = _readHeroLedger(day);
+        _injectLootboxRngWord(index, wordHigh);
+        _resolveAllNoLeak();
+        (uint8 wqHigh, uint8 wsHigh, uint256 waHigh) = game.getDailyHeroWinner(day);
+        uint256[32] memory ledgerHighPost = _readHeroLedger(day);
+
+        // (1) The wager ledger is identical across the two runs (wagers identical).
+        for (uint256 i; i < 32; ++i) {
+            assertEq(ledgerLow[i], ledgerHigh[i], "no-leak: pre-resolve wager ledger identical across runs");
+            // (2) Resolution does NOT mutate the wager ledger at all (it is wager-only,
+            //     written at placement; resolution reads scores, never wagers).
+            assertEq(ledgerLow[i], ledgerLowPost[i], "no-leak: resolution does not touch the wager ledger (low run)");
+            assertEq(ledgerHigh[i], ledgerHighPost[i], "no-leak: resolution does not touch the wager ledger (high run)");
+            // (3) Post-resolve ledgers identical across runs (different scores, same wagers).
+            assertEq(ledgerLowPost[i], ledgerHighPost[i], "no-leak: post-resolve ledger identical despite different scores");
+        }
+
+        // (4) The hero winner (jackpot roll input) is identical across the two runs.
+        assertEq(wqLow, wqHigh, "no-leak: hero winner quadrant identical (depends only on wagers)");
+        assertEq(wsLow, wsHigh, "no-leak: hero winner symbol identical (depends only on wagers)");
+        assertEq(waLow, waHigh, "no-leak: hero winner amount identical (depends only on wagers)");
+
+        // Non-vacuity: the differential is meaningful only if the two runs DID score
+        // differently. Assert the resolution scores diverged between the runs.
+        uint8 sLow = _scoreOfTicketUnder(index, wordLow);
+        uint8 sHigh = _scoreOfTicketUnder(index, wordHigh);
+        assertTrue(sLow != sHigh, "non-vacuity: the two runs must produce different resolution scores");
+        // And the wager ledger is non-empty (the hero winner is a real wager).
+        assertGt(waLow, 0, "non-vacuity: the hero wager ledger is non-empty");
+    }
+
+    // ---- Task 3 helpers ------------------------------------------------------
+
+    /// @dev Place a fixed set of ETH wagers with chosen hero symbols/quadrants.
+    ///      heroSymbol = customTicket >> (heroQuadrant*8) & 7. We choose distinct
+    ///      (quadrant, symbol) wagers so the ledger has a clear leader.
+    function _placeNoLeakWagers(uint128 perTicket) internal {
+        // Wager 1: heroQuadrant 0, symbol 5, multiple spins -> larger wager.
+        _placeEthBet(perTicket, 5, _ticketWithHero(0, 5), 0);
+        // Wager 2: heroQuadrant 1, symbol 2.
+        _placeEthBet(perTicket, 2, _ticketWithHero(1, 2), 1);
+        // Wager 3: heroQuadrant 0, symbol 5 again (reinforces the leader).
+        _placeEthBet(perTicket, 3, _ticketWithHero(0, 5), 0);
+    }
+
+    /// @dev Resolve nonces 1..3 individually (the 3 wagers placed above).
+    function _resolveAllNoLeak() internal {
+        for (uint64 n = 1; n <= 3; ++n) {
+            vm.prank(player);
+            game.resolveDegeneretteBets(address(0), _one(n));
+        }
+    }
+
+    /// @dev Read all 32 dailyHeroWagers slots for `day` via the public getter.
+    function _readHeroLedger(uint32 day) internal view returns (uint256[32] memory ledger) {
+        for (uint8 q; q < 4; ++q) {
+            for (uint8 s; s < 8; ++s) {
+                ledger[(q << 3) | s] = game.getDailyHeroWager(day, q, s);
+            }
+        }
+    }
+
+    /// @dev Build a ticket with a given hero symbol at the hero quadrant. The hero
+    ///      symbol is the only field the wager-ledger write reads; other traits are
+    ///      set to 0 (irrelevant to the wager path).
+    function _ticketWithHero(uint8 heroQuadrant, uint8 heroSymbol) internal pure returns (uint32 t) {
+        for (uint8 q; q < 4; ++q) {
+            uint8 sym = q == heroQuadrant ? (heroSymbol & 7) : 0;
+            uint8 byteVal = (q << 6) | (0 << 3) | sym;
+            t |= uint32(byteVal) << (q * 8);
+        }
+    }
+
+    /// @dev Compute the resolution score the spin-0 ticket would get under `word`
+    ///      (the wager-1 ticket: hero quadrant 0, symbol 5). Used for non-vacuity:
+    ///      the two runs must produce different scores for the differential to bite.
+    function _scoreOfTicketUnder(uint48 index, uint256 word) internal pure returns (uint8 s) {
+        uint32 playerTicket = _ticketWithHero(0, 5);
+        uint32 resultTicket = _resultTicketForSpin(index, word, 0);
+        uint8 heroQuadrant = 0;
+        // Mirror _score: S = A + 2*H.
+        for (uint8 q; q < 4; ++q) {
+            uint8 pQuad = uint8(playerTicket >> (q * 8));
+            uint8 rQuad = uint8(resultTicket >> (q * 8));
+            if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) ++s; // color
+            if ((pQuad & 7) == (rQuad & 7)) {
+                s += (q == heroQuadrant) ? 2 : 1;
+            }
+        }
+        if (s > 9) s = 9;
+    }
+
+    /// @dev keccak digest of the ordered (spinIdx, playerTicket, matches, payout)
+    ///      FullTicketResult stream — a byte-identity fingerprint for the per-spin
+    ///      result events (DGAS same-results).
+    function _fullTicketResultDigest() internal returns (bytes32 digest) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == FULL_TICKET_RESULT_SIG) {
+                digest = keccak256(abi.encodePacked(digest, logs[i].data));
+            }
+        }
+    }
+
+    /// @dev Mint WWXRP to `who` via the GAME-gated mintPrize.
+    function _fundWwxrp(address who, uint256 amount) internal {
+        vm.prank(address(game));
+        wwxrp.mintPrize(who, amount);
+    }
+
+    /// @dev Place a Degenerette bet of the given currency, return its betId.
+    function _placeBet(
+        uint8 currency,
+        uint128 perTicket,
+        uint8 spins,
+        uint32 ticket,
+        uint8 heroQuadrant
+    ) internal returns (uint64 betId) {
+        uint256 ethValue = currency == CURRENCY_ETH ? uint256(perTicket) * spins : 0;
+        vm.prank(player);
+        game.placeDegeneretteBet{value: ethValue}(
+            address(0), currency, perTicket, spins, ticket, heroQuadrant
+        );
+        betId = _betNonce(player);
     }
 
     // =========================================================================
