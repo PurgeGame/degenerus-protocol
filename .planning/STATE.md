@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
 status: executing
-last_updated: "2026-05-26T08:40:31.874Z"
+last_updated: "2026-05-26T08:57:20.519Z"
 last_activity: 2026-05-26
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 17
-  completed_plans: 12
+  completed_plans: 13
   percent: 50
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 ## Current Position
 
 Phase: 327 (tst-repro-same-results-no-arb-ev-regression-proofs) — EXECUTING
-Plan: 2 of 6
-Status: Executing Phase 327 — 327-01 COMPLETE (PFIX-02 + PFIX-03 proven, 3 Foundry tests green)
-Last activity: 2026-05-26 -- 327-01 executed (test/fuzz/PresaleBoxDrain.t.sol, commits d59790c3 + 837890a4)
-Next: Continue Wave 1 of Phase 327 (327-02 RFALL ∥ 327-03 POOL ∥ 327-04 BTOMB/HERO ∥ 327-05 SWAP), then Wave 2 327-06 full-suite regression gate. Earlier context — Plan 03 (325-03) DONE: `325-SPEC.md` authored (commits `b6cc7825` sections 0+1, `09d27524` sections 2+3) — section 0 attestation roll-up (0 blockers, corrections C1-C8, SWAP no-arb HOLDS +4.5pp @d6), section 1 shared signatures R1-R6 (one settled signature + apply-order each so items 2/3/4/7 cannot land as conflicting diffs), section 2 open-item resolutions (RFALL-04 D-06 / KEEP-04 bytes32("DGNRS") / KEEP-05 autoOpen-rename / POOL-06 D-04-accept-as-minor / BTOMB checked-add-cap / HERO-04 D-01/02/03 shape + byte-reproduce-gate handoff / S=8/S=9 separate-uint256 packing), section 3 per-item IMPL blueprint + file/edit-order map + SC1-SC5 checklist. BATCH-01 + RFALL-04 + KEEP-04 + KEEP-05 + POOL-06 all RESOLVED. ZERO contracts/*.sol mutation.
+Plan: 3 of 6
+Status: Executing Phase 327 — 327-01 COMPLETE (PFIX) + 327-02 COMPLETE (RFALL-05 + POOL-04 proven: 10 deterministic tests in test/fuzz/RedemptionStethFallback.t.sol all green — ETH leg / stETH fallback / donation-robust / fail-closed / two-same-period-claimants / BURNIE-cant-block-ETH + 4 POOL-04; new invariant_RFALL05_SolvencyUnderFallback + stETH-fallback lever + reach-proof, deep 18/18, INV-01..13 + 3 REDEEM-08 preserved non-widening; commits 141244c3 + a83b5ca4; zero contracts/*.sol mutation)
+Last activity: 2026-05-26 -- 327-02 executed (RFALL-05 RedemptionStethFallback.t.sol + POOL-04 receive() safety + RedemptionAccounting stETH-fallback invariant; commits 141244c3 + a83b5ca4)
+Next: Continue Wave 1 of Phase 327 (327-03 POOL ∥ 327-04 BTOMB/HERO ∥ 327-05 SWAP), then Wave 2 327-06 full-suite regression gate. Earlier context — Plan 03 (325-03) DONE: `325-SPEC.md` authored (commits `b6cc7825` sections 0+1, `09d27524` sections 2+3) — section 0 attestation roll-up (0 blockers, corrections C1-C8, SWAP no-arb HOLDS +4.5pp @d6), section 1 shared signatures R1-R6 (one settled signature + apply-order each so items 2/3/4/7 cannot land as conflicting diffs), section 2 open-item resolutions (RFALL-04 D-06 / KEEP-04 bytes32("DGNRS") / KEEP-05 autoOpen-rename / POOL-06 D-04-accept-as-minor / BTOMB checked-add-cap / HERO-04 D-01/02/03 shape + byte-reproduce-gate handoff / S=8/S=9 separate-uint256 packing), section 3 per-item IMPL blueprint + file/edit-order map + SC1-SC5 checklist. BATCH-01 + RFALL-04 + KEEP-04 + KEEP-05 + POOL-06 all RESOLVED. ZERO contracts/*.sol mutation.
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
 

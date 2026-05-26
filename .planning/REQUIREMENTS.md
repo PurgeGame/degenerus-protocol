@@ -22,7 +22,7 @@
 - [ ] **RFALL-02**: Donation-robust — coverage is checked against the **same asset basis the base is inflated by**, so a stETH-inflated `totalMoney` is coverable by the pure-stETH leg; no claimable-ETH-only chokepoint is reintroduced (stETH donation / `selfdestruct` force-feed cannot brick submit).
 - [ ] **RFALL-03**: Claim-time payout asset selection matches the reserved asset (stETH-reserved → stETH-paid via the existing stETH-transfer paths); extends the v47 game-over deterministic ETH→stETH fallback (REDEEM-04) to the mid-game ETH-depletion case.
 - [x] **RFALL-04**: `pendingRedemptionEthValue` accounting shape (single tracked value vs split ETH/stETH reservation) decided at SPEC and applied consistently across submit/claim/gameOver.
-- [ ] **RFALL-05**: v47 REDEEM-08 invariants still hold under the fallback — two same-period claimants, BURNIE-can't-block-ETH, value conservation, and `balance ≥ pending`.
+- [x] **RFALL-05**: v47 REDEEM-08 invariants still hold under the fallback — two same-period claimants, BURNIE-can't-block-ETH, value conservation, and `balance ≥ pending`.
 
 ### Keeper Rename + VAULT Affiliate Code (`PLAN-V48-KEEPER-RENAME-AND-VAULT-CODE.md`)
 
@@ -37,7 +37,7 @@
 - [ ] **POOL-01**: VAULT gets a **permissionless** `recoverAfKingPool()` → `afKing.withdraw(afKing.poolOf(address(this)))`; recovered ETH lands in VAULT reserves via its open `receive()`; no gameOver gate (only moves donated keeper-pool ETH back to where it belongs).
 - [ ] **POOL-02**: sDGNRS `receive()` relaxed to accept `AF_KING` in addition to `GAME` (`if (msg.sender != GAME && msg.sender != AF_KING) revert Unauthorized();`) — without this the AfKing send-back reverts (`EthSendFailed`).
 - [ ] **POOL-03**: sDGNRS auto-recovers its AfKing pool by folding `afKing.withdraw(afKing.poolOf(address(this)))` into `burnAtGameOver()` (`onlyGame`), placed **before** the `balanceOf(this)==0` early-return so a zero-pool-token sDGNRS still recovers; NO standalone sDGNRS withdraw function.
-- [ ] **POOL-04**: sDGNRS `receive()` relaxation proven accounting-safe — reserves are read by `address(this).balance` (not a running counter incremented in `receive()`), so an `AF_KING`-sourced credit isn't mis-attributed / double-counted / bypassed.
+- [x] **POOL-04**: sDGNRS `receive()` relaxation proven accounting-safe — reserves are read by `address(this).balance` (not a running counter incremented in `receive()`), so an `AF_KING`-sourced credit isn't mis-attributed / double-counted / bypassed.
 - [ ] **POOL-05**: `AfKing.sol` itself UNCHANGED; the `IAfKing`/`IAfKingSubscribe` interface additions (`withdraw(uint256)`, `poolOf(address) returns (uint256)`) match `AfKing.sol` signatures verbatim.
 - [x] **POOL-06**: Post-gameOver re-stranding (a `depositFor(SDGNRS)` after `burnAtGameOver`) handling decided at SPEC — second sweep in `handleFinalSweep` (fires +30d) vs accept-as-minor; VAULT unaffected (anytime recovery).
 
@@ -124,8 +124,8 @@ Which phases cover which requirements. Phase numbering continues from v47.0 (end
 | BATCH-02 | Phase 326 (IMPL) | Pending |
 | PFIX-02 | Phase 327 (TST) | Complete |
 | PFIX-03 | Phase 327 (TST) | Complete |
-| RFALL-05 | Phase 327 (TST) | Pending |
-| POOL-04 | Phase 327 (TST) | Pending |
+| RFALL-05 | Phase 327 (TST) | Complete |
+| POOL-04 | Phase 327 (TST) | Complete |
 | BTOMB-03 | Phase 327 (TST) | Pending |
 | HERO-04 | Phase 327 (TST) | Pending |
 | HERO-06 | Phase 327 (TST) | Pending |
