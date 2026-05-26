@@ -86,7 +86,7 @@
 **UI hint**: no
 
 ### Phase 328: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure
-**Goal**: The v48.0 audit subject (the single batched diff) is delta-audited NON-WIDENING against the v47.0 baseline, swept by the 3-skill genuine-PARALLEL adversarial pass for new findings, consolidated into `audit/FINDINGS-v48.0.md`, and the milestone is closed with the `MILESTONE_V48_AT_HEAD_<sha>` signal and the atomic ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS flip — re-attesting all 40 requirements.
+**Goal**: The v48.0 audit subject (the single batched diff, FROZEN at HEAD `1575f4a9` = the Phase 326 IMPL diff `f50cc634` + the Phase 327 HERO-04 byte-reproduced Degenerette finals landing) is delta-audited NON-WIDENING against the v47.0 baseline `da5c9d50`, swept by the 3-skill genuine-PARALLEL adversarial pass for new findings, consolidated into `audit/FINDINGS-v48.0.md`, and the milestone is closed with the `MILESTONE_V48_AT_HEAD_<sha>` signal and the atomic ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS flip — re-attesting all 40 requirements.
 **Depends on**: Phase 327 (the audit subject must be implemented + test-proven before the terminal delta-audit + sweep)
 **Requirements**: BATCH-03
 **Success Criteria** (what must be TRUE):
@@ -94,7 +94,11 @@
   2. The 3-skill genuine-PARALLEL adversarial sweep runs (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT per the carried decision) charged against the 7 surfaces + composition — the salvage-swap no-arb at the band ceiling / grinder-waiter timing / swap-pop H-CANCEL-SWAP-MISS regression / redemption-desk structural protection, the redemption stETH-fallback donation-robustness, the presale-drain dust bound, the keeper foreclosure + minted-credit faucet, the AfKing pool-recovery accounting, the BURNIE-tombstone overflow, and the Degenerette byte-identical RTP — with every elevation passed through the skeptic filter (structural-protection + 3-condition EV lens) before being recorded.
   3. `audit/FINDINGS-v48.0.md` is authored at the v48.0 closure HEAD (mirrors the v44/v46/v47 9-section pattern, chmod 444) folding in the F-47-01 + F-47-02 resolution dispositions and any newly-surfaced findings (adjudicated or deferred per user direction).
   4. The `MILESTONE_V48_AT_HEAD_<sha>` closure signal is emitted and propagated verbatim, and the atomic 5-doc closure flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) is applied with all 40 requirements re-attested at closure.
-**Plans**: TBD
+**Plans**: 4 plans (3 waves; mirrors the v47.0 Phase 324 TERMINAL shape — SC1 delta-audit ‖ SC2 adversarial sweep → SC3 findings deliverable → SC4 gated closure flip)
+- [ ] 328-01-PLAN.md — SC1 DELTA-AUDIT: enumerate the 12-file delta surface (`git diff da5c9d50..1575f4a9 -- contracts/`, 611+/324−) mapped to the 7 v48 surfaces (PFIX/RFALL/KEEP/POOL/BTOMB/HERO/SWAP), each NON-WIDENING; regression baseline 632/42 net-zero + Hardhat PASS_ALL GREEN; F-47-01 + F-47-02 RESOLVED-AT-V48 → `328-01-DELTA-AUDIT.md` (Wave 1, autonomous)
+- [ ] 328-02-PLAN.md — SC2 ADVERSARIAL SWEEP: fixed 3-skill set (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT) charged against the 7 surfaces + composition (salvage-swap no-arb-at-ceiling / grinder-waiter / swap-pop H-CANCEL-SWAP-MISS regression / redemption-desk; RFALL donation-robustness; PFIX dust bound; KEEP foreclosure + faucet; POOL accounting; BTOMB overflow; HERO byte-identical RTP), skeptic-filtered before any elevation → `328-02-ADVERSARIAL-LOG.md` (Wave 1, autonomous)
+- [ ] 328-03-PLAN.md — SC3 FINDINGS DELIVERABLE: `audit/FINDINGS-v48.0.md` (9-section, mirrors v47), folding the 328-01 delta-audit (§3/§5) + 328-02 sweep (§4), recording F-47-01 + F-47-02 RESOLVED-AT-V48, re-attesting all 40 reqs in §3.C, `MILESTONE_V48_AT_HEAD_<sha>` placeholder (Wave 2, depends_on 328-01+328-02, autonomous)
+- [ ] 328-04-PLAN.md — SC4 CLOSURE FLIP: single blocking USER closure-verdict + signal-format approval gate, then resolve the SHA, apply the atomic 5-doc flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) re-attesting all 40 reqs, chmod 444 the findings (Wave 3, depends_on 328-03, autonomous:false)
 **UI hint**: no
 
 ---
@@ -106,7 +110,7 @@
 | 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 3/3 | Complete    | 2026-05-25 |
 | 326. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/8 | Not started | - |
 | 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 6/6 | Complete    | 2026-05-26 |
-| 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 0/TBD | Not started | - |
+| 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 0/4 | Not started | - |
 
 ---
 
@@ -143,6 +147,7 @@
 - **HERO-04** owns the byte-reproduce gate (empirical `derive_5_tables.py` PASS_ALL) → TST; the SPEC-time shape+packing choice is folded into BATCH-01's open-item resolution; the table values land under HERO-03 (IMPL).
 - **SWAP-08** owns the no-arb proof at the band ceiling → TST; the floor RE-CONFIRMATION attestation is folded into BATCH-01 (SPEC) and the swap economics land under SWAP-02/03 (IMPL).
 - **BATCH-01** (the single SPEC design-lock) absorbs the remaining SPEC-time open-item resolutions (BTOMB packing, HERO-04 shape+packing, SWAP-03 jitter source + SWAP-08 acquisition-floor re-confirm) without duplicating the requirements those decisions feed.
+- **BATCH-03** (the TERMINAL delta-audit + sweep + closure) re-attests all 40 v48.0 requirements at closure — distributed across the 4 Phase 328 plans (328-01 delta-audit, 328-02 adversarial sweep, 328-03 findings deliverable, 328-04 closure flip).
 
 ✓ All 40 v48.0 requirements mapped
 ✓ No orphaned requirements
@@ -150,3 +155,4 @@
 
 ---
 *Roadmap created: 2026-05-25*
+*Phase 328 plans finalized: 2026-05-26 (4 plans / 3 waves)*
