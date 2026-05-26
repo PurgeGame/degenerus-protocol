@@ -311,3 +311,128 @@ extension under Phase 327). `git diff 1575f4a9 HEAD -- contracts/` is **empty** 
 this terminal phase; subject byte-frozen). **NON-WIDENING confirmed.**
 
 ---
+
+## 6. KI Gating Walk + KNOWN-ISSUES.md Re-Verification
+- **KNOWN-ISSUES.md byte-unmodified** vs v47 (`git diff da5c9d50..1575f4a9 -- KNOWN-ISSUES.md` empty). No KI
+  promotion/demotion; the SC2 sweep surfaced no KI-eligible item (0 FINDING_CANDIDATE).
+- **RNG-freeze intact** — the SWAP jitter is seeded from an already-SETTLED past VRF word
+  (`rngWordByDay[currentDay-1]`, pinned at SPEC per `325-ATTEST-SWAP.md`, freeze-safe per
+  `v45-vrf-freeze-invariant`; backward-trace: the word is unknowable at the swap's commitment time, not
+  buffered-for-next, not pre-commitment-mutable) and the entrypoint is `rngLocked`-gated; the
+  Degenerette write-batch is bookkeeping-only post-outcome and byte-identical to v47 (per HERO-06 — the
+  per-spin score `S` is computed from the already-resolved result ticket, the recalibrated tables are
+  constants); no new in-window VRF consumer is introduced by any of the 7 items.
+- **Obligations conserved** — `claimablePool == Sum claimableWinnings` holds: the SWAP cash leg is a
+  claimant-to-claimant relabel (`claimablePool` unchanged) and the ticket leg routes ETH into the prize
+  pools (solvency slack gained, never lost); the RFALL ETH leg debits ledger + pool in lockstep while the
+  stETH leg moves nothing (records via `pendingRedemptionEthValue`), and the RFALL fail-closed pull is the
+  intended solvency guard PRESERVED (the v48 fix adds a liveness leg, it does not weaken the safety guard);
+  the BTOMB 1e36 flood lands only in the virtual uncirculated `vaultAllowance` (circulating `totalSupply()`
+  untouched); the POOL recovery only moves donated AfKing-pool ETH back via `address(this).balance` (no
+  claimable entry created/destroyed). SWAP-09 proves `claimablePool <= ETH + stETH` never violated (327-05).
+
+---
+
+## 7. Prior-Artifact Cross-Cites
+- **v48.0 phase artifacts:** Phase 325 SPEC (`f7ad4ee2`, 3 plans, VERIFICATION 5/5) + the 4 ATTEST docs
+  (325-ATTEST-PFIX-RFALL / 325-ATTEST-KEEP-POOL / 325-ATTEST-BTOMB-HERO / 325-ATTEST-SWAP) + `325-SPEC.md`;
+  Phase 326 IMPL (`f50cc634`, USER-APPROVED batched diff, VERIFICATION 6/6, 3 USER steers); Phase 327 TST
+  SUMMARYs (327-01..06) + the `1575f4a9` HERO-04 byte-reproduced finals landing + the regression ledger
+  `test/REGRESSION-BASELINE-v48.md`; Phase 328 logs (328-01-DELTA-AUDIT, 328-02-ADVERSARIAL-LOG + the 3
+  per-skill sweep outputs).
+- **Prior milestone FINDINGS:** `audit/FINDINGS-v47.0.md` (9-section template + the F-47-01 + F-47-02
+  forward-cite this milestone resolves); `audit/FINDINGS-v46.0.md` (9-section template + the
+  H-CANCEL-SWAP-MISS lineage v47 resolved); `audit/FINDINGS-v44.0.md` (9-section template + the §9d
+  maximalist handoff register).
+- **Carry-forward anchors:** v47 closure signal `MILESTONE_V47_AT_HEAD_da5c9d50...`; v46 closure signal
+  `MILESTONE_V46_AT_HEAD_16e9668a...`; the v44 §9d maximalist handoff register (135 anchors — NOT live
+  vectors), carried forward unchanged (§9d).
+
+---
+
+## 8. Forward-Cite Closure
+- **F-47-01 (presale closing-box DGNRS over-distribution, MEDIUM) -> RESOLVED-AT-V48.** v47.0 surfaced and
+  USER-DEFERRED this MEDIUM (`audit/FINDINGS-v47.0.md` §4.2 / §9d): the per-box DGNRS draw did not scale for
+  the ~40% DGNRS branch rate, so ~60% (~6% of supply) was swept to the single closing buyer (a tokenomics
+  concentration windfall, NOT fund-loss/drain/inflation). v48 FIXED it via **PFIX-01** (`_presaleBoxDgnrsReward`
+  divisor `1_000 -> 400`, base `poolStart/100 -> poolStart/40`, `LootboxModule:719`) — the 2.5x-larger per-box
+  draw x the ~40% realized branch rate drains the full pool in expectation, so the closing-box sweep mops up
+  only **variance dust**. Empirical proof: **PFIX-02/03** `test/fuzz/PresaleBoxDrain.t.sol` (327-01, 3/3 GREEN
+  — Monte-Carlo closing-buyer leftover capture mean 7.3% vs the old systematic 60%; tier shape preserved 3x;
+  `transferFromPool` clamp -> closing sweep ~0, no revert / no over-draw). The economic skeptic-filter confirms
+  the fix does NOT re-open an over-drain or inflation axis (the clamp still bounds total DGNRS out <= poolStart).
+- **F-47-02 (redemption submit ETH-empty stETH-fallback gap, MEDIUM) -> RESOLVED-AT-V48.** v47.0 surfaced and
+  USER-DEFERRED this MEDIUM (`audit/FINDINGS-v47.0.md` §4.2 / §9d): `pullRedemptionReserve` segregated the
+  MAX-175% reservation from `claimableWinnings[SDGNRS]` ALONE, fail-closed, with no fallback to sDGNRS's
+  stETH/ETH balance — the genuine residual case being mid-game ETH depletion (and a stETH donation inflating
+  the base) bricking submit (liveness/availability; no funds at risk). v48 FIXED it via **RFALL-01/02/03**
+  (`pullRedemptionReserve` reserves pure-ETH OR pure-stETH, no mix, with a mid-game ETH->stETH fallback,
+  revert-if-neither, donation-robust; `DegenerusGame.sol:1896-1921`). Empirical proof: **RFALL-05** +
+  `invariant_RFALL05_SolvencyUnderFallback` `test/fuzz/RedemptionStethFallback.t.sol` (327-02, 10/10) +
+  **POOL-04** `address(this).balance` accounting-safety (327-02). The economic skeptic-filter confirms the
+  fix RESTORES liveness while PRESERVING the v47 REDEEM-08 solvency invariants (the fail-closed revert is
+  retained as the structural solvency guard for the now-unreachable "neither pure leg covers" state).
+- **Newly-surfaced 328-02 finding:** NONE. The sweep produced 0 FINDING_CANDIDATE; the SWAP cash-share
+  ceiling discrepancy is an informational ADVISORY / doc-drift (NOT a finding — §4.4 / §9d), recorded for
+  USER reconciliation at the 328-04 closure gate.
+- **Prior-milestone v48 descriptive seeds now SHIPPED (no longer forward-seeds):** keeper-rename + VAULT-code
+  (`PLAN-V48-KEEPER-RENAME-AND-VAULT-CODE.md` -> KEEP-01..05); gameover-burnie-tombstone
+  (`PLAN-V48-GAMEOVER-BURNIE-TOMBSTONE.md` -> BTOMB-01..03); sDGNRS far-future salvage swap
+  (`PLAN-SDGNRS-FAR-FUTURE-SALVAGE-SWAP.md` -> SWAP-01..09). Plus AfKing pool recovery (POOL-01..06) and the
+  Degenerette hero 2-pt rescale (HERO-01..06).
+- **Carry-forward (NOT live vectors):** the v44 §9d maximalist handoff register (135 anchors) carries forward
+  unchanged.
+
+---
+
+## 9. Milestone Closure Attestation
+
+### 9a. Closure Verdict
+
+**Locked target (ROADMAP Phase 328 goal + the v48 surface set, for the record):**
+`PRESALE_BOX_DRAIN_FIXED (F-47-01 RESOLVED_AT_V48: divisor 1_000->400, closing sweep = variance dust); REDEMPTION_ETH_EMPTY_STETH_FALLBACK_FIXED (F-47-02 RESOLVED_AT_V48: pure-ETH-OR-pure-stETH, mid-game ETH->stETH fallback, fail-closed if neither, donation-robust); KEEPER_RENAMED autoBuy/autoOpen/autoResolve (crank/sweep/do-work PURGED) + VAULT-CODE two-tier 75/20/5 affiliate (bytes32("DGNRS"), foreclosure intended); AFKING_POOL_RECOVERABLE (VAULT permissionless recoverAfKingPool + sDGNRS receive() AF_KING relax + burnAtGameOver auto-recover; AfKing recovery-logic UNCHANGED); GAMEOVER_BURNIE_TOMBSTONE (1e36-wei vaultAllowance flood, checked add/cap, one-shot, totalSupply UNTOUCHED); DEGENERETTE_HERO_2PT_RESCALE (S=A+2H, standalone multiplier net-deleted, basePayoutEV=100 centi-x byte-reproduced, S=9==old M=8 relabel, RTP unchanged); SDGNRS_FAR_FUTURE_SALVAGE_SWAP (sellFarFutureTickets -EV-by-design, no-arb at band ceiling margin ~4.5pp @d6, >=1 ETH claimable floor, swap-pop membership-preserving); RNG_FREEZE_INTACT; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`
+
+**Actual verdict (the sweep surfaced 0 FINDING_CANDIDATE -> the `0 NEW_FINDINGS` clause HOLDS; the SWAP clause is authored with the ACTUAL `<=60% withdrawable cash` ceiling per the §4.4 advisory, and the cash-share doc-drift is recorded as informational):**
+`PRESALE_BOX_DRAIN_FIXED (F-47-01 RESOLVED_AT_V48: divisor 1_000->400, closing sweep = variance dust [mean 7.3% vs old 60%]); REDEMPTION_ETH_EMPTY_STETH_FALLBACK_FIXED (F-47-02 RESOLVED_AT_V48: pure-ETH-OR-pure-stETH, mid-game ETH->stETH fallback, fail-closed if neither, donation-robust); KEEPER_RENAMED autoBuy/autoOpen/autoResolve (crank/sweep/do-work PURGED) + VAULT-CODE two-tier 75/20/5 affiliate (bytes32("DGNRS"), foreclosure intended); AFKING_POOL_RECOVERABLE (VAULT permissionless recoverAfKingPool + sDGNRS receive() AF_KING relax + burnAtGameOver auto-recover; AfKing recovery-logic UNCHANGED); GAMEOVER_BURNIE_TOMBSTONE (1e36-wei vaultAllowance flood, checked add/cap, one-shot, totalSupply UNTOUCHED); DEGENERETTE_HERO_2PT_RESCALE (S=A+2H, standalone multiplier net-deleted, basePayoutEV=100 centi-x byte-reproduced, S=9==old M=8 relabel, RTP unchanged); SDGNRS_FAR_FUTURE_SALVAGE_SWAP (sellFarFutureTickets -EV-by-design, no-arb HOLDS at band ceiling [max withdrawable cash 9.9% of face], >=1 ETH claimable floor, swap-pop membership-preserving; withdrawable-cash ceiling <=60% [code] vs <=40% [design memo] -> ADVISORY doc-drift, NOT a finding); RNG_FREEZE_INTACT; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`
+
+The deviation from the locked target is the SWAP clause's `<=40%` -> `<=60% withdrawable cash` correction (the
+frozen code's `ticketShareBps = 4000 + ((seed>>128) % 4001)` permits a cash ceiling of 60%) recorded as an
+informational ADVISORY / doc-drift for USER reconciliation at the 328-04 gate — no-arb HOLDS at the actual
+60% ceiling and `0 NEW_FINDINGS` is unaffected. All other clauses hold verbatim.
+
+### 9b. 4-Phase Wave Summary
+Phase 325 (SPEC design-lock `f7ad4ee2`, 3 plans, VERIFICATION 5/5) + 326 (IMPL `f50cc634`, USER-APPROVED
+batched diff, VERIFICATION 6/6 + 3 USER steers) + 327 (TST — 6 plans + the `1575f4a9` HERO-04 byte-reproduced
+finals landing) + 328 (TERMINAL — this deliverable; SOURCE-TREE FROZEN at `1575f4a9`; SC1 delta-audit + SC2
+3-skill genuine-PARALLEL sweep + regression + gated closure flip). Closure signal:
+`MILESTONE_V48_AT_HEAD_<sha>`.
+
+### 9c. Closure Signal
+**`MILESTONE_V48_AT_HEAD_<sha>`** (resolved to the Phase 328 audit-deliverable / closure commit in 328-04;
+contracts byte-identical to the frozen subject `1575f4a9`). Verbatim propagation targets (resolved at the
+328-04 closure gate by the single sed-style SHA substitution):
+1. Frontmatter `closure_signal:` + `audit_subject_head:`.
+2. §1 Audit Subject prose.
+3. §9b / §9c references.
+4. ROADMAP.md (v48.0 milestone flip).
+5. STATE.md (Last Shipped Milestone) + MILESTONES.md (archive entry) + PROJECT.md.
+6. REQUIREMENTS.md (all 40 v48.0 requirement row-flips re-attested at closure).
+
+### 9d. Deferred to v49.0+ — Handoff Register
+- **0 NEW findings deferred.** The SC2 sweep produced 0 FINDING_CANDIDATE; both v47-deferred MEDIUM findings
+  (F-47-01 + F-47-02) are **RESOLVED-AT-V48** (§8), not carried forward.
+- **Informational ADVISORY (NOT a finding) — SWAP withdrawable-cash ceiling 60% (code) vs <=40% (design memo).**
+  Recorded for USER reconciliation at the 328-04 closure gate: reconcile the design memo / verdict text to the
+  implemented `<=60%` cash ceiling, OR confirm 60% was the intended IMPL calibration. No-arb HOLDS at the 60%
+  ceiling (max withdrawable cash 9.9% of face); no positive-EV path; no solvency impact. `0 NEW_FINDINGS`
+  unaffected.
+- **Prior v48 descriptive seeds now SHIPPED** (no longer forward-seeds): keeper-rename + VAULT-code,
+  gameover-burnie-tombstone, sDGNRS far-future salvage swap, AfKing pool recovery, Degenerette hero 2-pt rescale.
+- The v44 §9d maximalist handoff register (135 anchors) carries forward unchanged (NOT live vectors).
+
+---
+
+*v48.0 TERMINAL findings authored 2026-05-26. Source-tree frozen throughout (`git diff 1575f4a9 HEAD --
+contracts/` empty). 0 NEW findings (both v47-deferred MEDIUMs F-47-01 + F-47-02 RESOLVED-AT-V48); one
+informational SWAP cash-share doc-drift advisory recorded for USER reconciliation. Closure signal
+`MILESTONE_V48_AT_HEAD_<sha>` resolves at the Phase 328 closure commit (328-04).*
