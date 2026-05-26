@@ -52,9 +52,9 @@
 - [ ] **HERO-01**: Scoring becomes `S = A + 2·H` (`A` = matches among the 7 ordinary axes = 4 colors + 3 non-hero symbols; `H = 1` iff hero-quadrant **symbol** matches; hero quadrant's color stays ordinary); max `S = 9`; pay floor `S ≥ 2` so hero-symbol-alone is a guaranteed win. `_countMatches` → `_score(playerTicket, resultTicket, heroQuadrant) ∈ {0..9}`.
 - [ ] **HERO-02**: REMOVE the standalone EV-neutral hero multiplier — delete `_applyHeroMultiplier`, `HERO_BOOST_N0..N4_PACKED`, `HERO_PENALTY`, `HERO_SCALE`, and the `M<2`/`M=8` carve-out in `_fullTicketPayout`; hero quadrant stays mandatory (`heroQuadrant >= 4` revert) and `FT_HERO_SHIFT` decode is kept (still needed for scoring) — no new storage, no bet-layout change.
 - [ ] **HERO-03**: Per-N payout tables recalibrated to `basePayoutEV = 100 centi-x` across **10 buckets S=0..9**; player RTP unchanged (90.00%–99.90% by activity score; ETH +5% bonus / WWXRP high-roi redistribution preserved); `_roiBpsFromScore` activity-score curve untouched.
-- [ ] **HERO-04**: Payout SHAPE over `S∈{0..9}` (frequent-small vs juicy-top) chosen at SPEC; WWXRP-bonus / sDGNRS / "high tier" thresholds re-mapped onto the 10-point scale; the S=8/S=9 packing scheme (both > 32-bit) settled; all constants reproduced **byte-identical** from `derive_5_tables.py` (Phase-267-style PASS_ALL gate, not hand-typed).
+- [x] **HERO-04**: Payout SHAPE over `S∈{0..9}` (frequent-small vs juicy-top) chosen at SPEC; WWXRP-bonus / sDGNRS / "high tier" thresholds re-mapped onto the 10-point scale; the S=8/S=9 packing scheme (both > 32-bit) settled; all constants reproduced **byte-identical** from `derive_5_tables.py` (Phase-267-style PASS_ALL gate, not hand-typed).
 - [ ] **HERO-05**: Jackpot preserved exactly — `S=9` (all 7 ordinary + hero symbol) is the identical physical event as today's `M=8` (same odds, a relabel); `_awardDegeneretteDgnrs` thresholds (`DEGEN_DGNRS_6/7/8_BPS`) re-mapped to the new scale; `FullTicketResult.matches` doc/range widened `(0-8) → (0-9)`.
-- [ ] **HERO-06**: Recalibration stays write-batch **byte-identical** to v47's `resolveBets` write-batching (DGAS); the `dailyHeroWagers` / `_rollHeroSymbol` daily-hero-symbol jackpot is unaffected (reads wagers, not per-bet scores) — verify the `matches`-range change does not leak in.
+- [x] **HERO-06**: Recalibration stays write-batch **byte-identical** to v47's `resolveBets` write-batching (DGAS); the `dailyHeroWagers` / `_rollHeroSymbol` daily-hero-symbol jackpot is unaffected (reads wagers, not per-bet scores) — verify the `matches`-range change does not leak in.
 
 ### sDGNRS Far-Future Salvage Swap (`PLAN-SDGNRS-FAR-FUTURE-SALVAGE-SWAP.md`)
 
@@ -127,8 +127,8 @@ Which phases cover which requirements. Phase numbering continues from v47.0 (end
 | RFALL-05 | Phase 327 (TST) | Complete |
 | POOL-04 | Phase 327 (TST) | Complete |
 | BTOMB-03 | Phase 327 (TST) | Complete |
-| HERO-04 | Phase 327 (TST) | Pending |
-| HERO-06 | Phase 327 (TST) | Pending |
+| HERO-04 | Phase 327 (TST) | Complete |
+| HERO-06 | Phase 327 (TST) | Complete |
 | SWAP-08 | Phase 327 (TST) | Pending |
 | SWAP-09 | Phase 327 (TST) | Pending |
 | BATCH-03 | Phase 328 (TERMINAL) | Pending |

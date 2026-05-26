@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
 status: executing
-last_updated: "2026-05-26T09:05:08.748Z"
+last_updated: "2026-05-26T09:33:49.423Z"
 last_activity: 2026-05-26
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 17
-  completed_plans: 14
+  completed_plans: 15
   percent: 50
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 ## Current Position
 
 Phase: 327 (tst-repro-same-results-no-arb-ev-regression-proofs) — EXECUTING
-Plan: 4 of 6
-Status: Executing Phase 327 — 327-01 COMPLETE (PFIX) + 327-02 COMPLETE (RFALL-05 + POOL-04) + 327-03 COMPLETE (BTOMB-03 proven: 8 deterministic tests in test/fuzz/BurnieTombstone.t.sol all green — gameover BURNIE tombstone is non-circulating [totalSupply() untouched] + signal-localized [vaultMintAllowance() and supplyIncUncirculated() each += EXACTLY 1e36] + one-shot [early-return _tombstoneFlooded latch, total += 1e36 not 2e36, no revert] + GAME-gated [non-GAME + CREATOR revert OnlyGame] + checked-add overflow-safe [holds at U128_MAX-1e36 boundary, live SupplyOverflow cap negative control 1 wei past] + DGVB-claim-safe [DegenerusVault.burnCoin pro-rata claim against the 1e36-inflated reserve: no overflow, coinOut == reserve*shares/supply correct-magnitude, allowance debited exactly, uncirculated conserved]; commit f0c98063; zero contracts/*.sol mutation)
-Last activity: 2026-05-26 -- 327-03 executed (BTOMB-03 BurnieTombstone.t.sol — 8 tests proving non-circulating + signal-localized + one-shot + GAME-gated + checked-add-safe + DGVB-claim-safe; commit f0c98063)
-Next: Continue Wave 1 of Phase 327 (327-04 BTOMB/HERO ∥ 327-05 SWAP remain), then Wave 2 327-06 full-suite regression gate. NOTE: HERO-04 in 327-04 emits a STOP/handoff — the byte-reproduced Degenerette finals must land in DegeneretteModule.sol (a contract edit forbidden in TST), pending USER decision.
+Plan: 5 of 6
+Status: Executing Phase 327 — 327-04 COMPLETE (HERO-04 + HERO-06 proven: canonical 10-bucket S∈{0..9} generator [derive_5_tables.py, S=A+2H, S=9==M=8 relabel pin, WWXRP B=6..9, per-N EV drift <0.0003 centi-x, bonus EV=5.000%] + PASS_ALL byte-reproduce gate [DegenerettePerNEvExactness.test.js: spawnSync regenerate, diff vs contract, RED-with-diff against the Phase-326 placeholders = EXPECTED in-scope no-contract outcome, 15/20 diverge + 5 S9 match] + DegeneretteBonusEv re-bucketed + DegeneretteHeroScore.t.sol 6 Foundry tests green [S=A+2H, S9 relabel, S8/S9 packing dispatch, DGNRS S>=7 thresholds, write-batch DGAS byte-identical, dailyHeroWagers/_rollHeroSymbol no-leak]; commits 39a706ca+c8e1fcf5+d4ec2e62; zero contracts/*.sol mutation. ⚠ HERO-04 contract-constant landing OPEN — ready-to-apply finals in 327-04-SUMMARY ## STOP)
+Last activity: 2026-05-26 -- 327-04 executed (HERO byte-reproduce gate RED-with-diff EXPECTED + DGAS/no-leak green; STOP handoff recorded; 3 commits, zero contracts/*.sol)
+Next: 327-05 SWAP remains in Wave 1, then Wave 2 327-06 full-suite regression gate (owns the cross-phase closure of the RED HERO-04 byte-reproduce gate + documents the expected post-landing failure-count delta). ⚠ HERO-04 STOP/handoff PENDING USER DECISION: the byte-reproduced Degenerette finals (15/20 constants: 5 packed + 5 _S8 + 5 WWXRP) must land in DegeneretteModule.sol = a contract edit forbidden in TST; ready-to-apply finals + placeholder→final diff in 327-04-SUMMARY.md.
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
 
@@ -640,3 +640,5 @@ Audit deliverables:
 - [Phase 325]: Plan 03 — BTOMB reuse vaultEscrow (BurnieCoin:557-567) with explicit checked-add/cap (its += is unchecked), one-shot from gameover-drain, 1e36 « uint128 max; HERO-04 SHAPE locked (D-01 continuity S=3..9 track old M=2..8 + D-02 S=2 ~40-60% partial refund + D-03 bonus thresholds S>=7), byte-exact 10-bucket per-N constants handed to derive_5_tables.py PASS_ALL gate at Phase 327, S=8/S=9 held as separate per-N uint256; the 0-8->0-9 FullTicketResult.matches widening FLAGGED frontend/indexer out-of-scope (flag not fix)
 - [Phase 327]: 327-01: F-47-01 closing-box sweep proven 0 wei over a realistic 50-ETH run (43.2% DGNRS branch, pool fully drained through boxes — cumulative per-box draw == 100% of poolStart); dust bound poolStart/100, curve guard >=90% poolStart (old /1_000 curve fails both directions); 3 Foundry tests green in test/fuzz/PresaleBoxDrain.t.sol, ZERO contracts/*.sol edits
 - [Phase 327]: 327-01: PFIX-03 tier shape preserved EXACTLY (tier-1 DGNRS-per-ETH == 3x tier-5) + transferFromPool clamp holds when a 5-ETH early-DGNRS run empties the pool before the closing box (closing open no-revert, sweep <=1 wei, no over-draw); hybrid harness = real game.buyPresaleBox->openPresaleBox with credit/VRF-word/small-pool seeded via vm.store
+- [Phase 327]: 327-04: payout SHAPE over S in {2..8}=[190,475,1500,4250,19500,100000,5_000_000]; S=9 PINNED to the M=8 relabel; S=8+S=9 separate uint256s; WWXRP B=6..9 (B=6 low 64-bit); per-N basePayoutEV drift <0.0003 centi-x; ETH bonus EV=5.000% per N
+- [Phase 327]: 327-04: PASS_ALL byte-reproduce gate regenerates from derive_5_tables.py (spawnSync status-checked, never hand-typed), diffs vs contract source; RED-with-diff against Phase-326 placeholders (15/20 diverge, 5 S9 match) is the EXPECTED in-scope no-contract-phase outcome; HERO-04 contract-constant landing (ready-to-apply finals in 327-04-SUMMARY ## STOP) needs hand-review CONTRACTS_COMMIT_APPROVED; cross-phase closure owned by 327-06

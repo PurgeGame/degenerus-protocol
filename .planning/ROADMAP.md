@@ -80,7 +80,7 @@
 - [x] 327-01-PLAN.md — PFIX-02/03: presale closing-box dust bound (≤ poolStart/100 over a realistic 50-ETH run, NOT ~60%) + tier shape (3×) + clamp/empty-before-close (Foundry `test/fuzz/PresaleBoxDrain.t.sol`)
 - [x] 327-02-PLAN.md — RFALL-05 + POOL-04: stETH-fallback preserves REDEEM-08 (two claimants, BURNIE-can't-block, solvency) under mid-game ETH depletion + donation; sDGNRS `receive()` AF_KING relaxation accounting-safe (Foundry `test/fuzz/RedemptionStethFallback.t.sol` + invariant extension)
 - [x] 327-03-PLAN.md — BTOMB-03: 1e36 tombstone non-circulating (`totalSupply()` untouched, +1e36 only in uncirculated leg) + one-shot + checked-add + DGVB pro-rata claim overflow-safe (Foundry `test/fuzz/BurnieTombstone.t.sol`)
-- [ ] 327-04-PLAN.md — HERO-04/06: extend `derive_5_tables.py` to the 10-bucket S=0..9 design + PASS_ALL byte-reproduce gate (regenerate, not hand-typed) + S=A+2H scoring + write-batch DGAS equivalence + daily-hero no-leak (Hardhat `test/stat/*` + Foundry `test/fuzz/DegeneretteHeroScore.t.sol`) — byte-reproduced constants must land in the frozen contract (hand-review gate); see milestone blocker
+- [x] 327-04-PLAN.md — HERO-04/06: extend `derive_5_tables.py` to the 10-bucket S=0..9 design + PASS_ALL byte-reproduce gate (regenerate, not hand-typed) + S=A+2H scoring + write-batch DGAS equivalence + daily-hero no-leak (Hardhat `test/stat/*` + Foundry `test/fuzz/DegeneretteHeroScore.t.sol`) — byte-reproduced constants must land in the frozen contract (hand-review gate); see milestone blocker
 - [ ] 327-05-PLAN.md — SWAP-08/09 (load-bearing): no-arb at the 110% jitter CEILING across all d in [6,100] (margin ~4.5pp @d6) + BURNIE-can't-mint-far (behavioral probe, ffi disabled) + solvency `claimablePool <= ETH+stETH` + ticket/ETH floors + swap-pop membership (Foundry `test/fuzz/FarFutureSalvageSwap.t.sol`)
 - [ ] 327-06-PLAN.md — Clean v48.0 regression-baseline gate (Wave 2): run the FULL `forge test` tree (NOT --match-path), assert NET-ZERO new regression vs the 326-08 594/42 baseline (every red named in the VRF/baseline + KNOWN-TST-DEFERRED HERO union), and document the conditional post-landing HERO byte-reproduce delta — no `contracts/*.sol` edit (ledger `test/REGRESSION-BASELINE-v48.md`)
 **UI hint**: no
@@ -105,7 +105,7 @@
 |-------|----------------|--------|-----------|
 | 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 3/3 | Complete    | 2026-05-25 |
 | 326. IMPL — The ONE Batched Contract Diff (all 7 items) | 0/8 | Not started | - |
-| 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 3/6 | In Progress|  |
+| 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 4/6 | In Progress|  |
 | 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 0/TBD | Not started | - |
 
 ---
