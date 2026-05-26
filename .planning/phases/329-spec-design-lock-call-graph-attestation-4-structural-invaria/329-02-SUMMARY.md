@@ -109,6 +109,15 @@ None - paper-only attestation, no external service configuration.
 - **For Plan 331 (GAS GAS-06):** the D-05e sanity-check is handed off — confirm the literal ~1 BURNIE stays sub-real-gas across the gas-band; NOT a blocker.
 - **No blockers. No SURFACE-TO-USER dependency.**
 
+## Self-Check: PASSED
+
+- FOUND: `329-ATTEST-DEGENERETTE-RESOLVE.md`
+- FOUND: `329-02-SUMMARY.md`
+- FOUND commit `d10dbd87` (Task 1 A/B/E)
+- FOUND commit `5c473bf6` (Task 2 C/D + Roll-up)
+- FOUND commit `e5284e67` (SUMMARY)
+- `git diff --name-only 0cc5d10f HEAD -- 'contracts/*.sol'` → EMPTY (zero contracts mutation)
+
 ---
 *Phase: 329-spec-design-lock-call-graph-attestation-4-structural-invaria*
 *Completed: 2026-05-26*
