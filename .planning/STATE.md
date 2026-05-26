@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v49.0
 milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
 status: planning
-last_updated: "2026-05-26T12:50:49.791Z"
+last_updated: "2026-05-26T13:30:00.000Z"
 last_activity: 2026-05-26
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,17 +17,35 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v48.0 section)
+See: .planning/PROJECT.md (Current Milestone: v49.0 section) + .planning/ROADMAP.md (v49.0 — phases 329-333)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 328 — terminal-delta-audit-3-skill-adversarial-sweep-closure
+**Current focus:** Phase 329 — SPEC design-lock (4 structural invariants + shared-signature reconciliation + call-graph attestation vs the v48.0 HEAD `0cc5d10f`)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-05-26 — Milestone v49.0 started
+Phase: 329 of 5 v49.0 phases (SPEC — Design-Lock + 4 Structural Invariants)
+Plan: — (Phase 329 not yet planned)
+Status: Ready to plan (v49.0 ROADMAP created — 5 phases 329-333, SPEC→IMPL→GAS→TST→TERMINAL; 29 reqs / 7 categories mapped, 100% coverage)
+Last activity: 2026-05-26 — v49.0 ROADMAP created (phases 329-333; REQUIREMENTS traceability filled for all 29 REQ-IDs)
+
+Progress: [░░░░░░░░░░] 0%
+
+**v49.0 phase shape (ROADMAP created 2026-05-26):** matches the v46.0 FEATURE-with-GAS pattern (the dedicated GAS phase 331 exists because the break-even bounty re-peg is load-bearing — the v46 Phase 319 CR-01 precedent). Audit baseline → subject: v48.0 closure HEAD `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029` → v49.0 closure HEAD. ONE batched USER-APPROVED `contracts/*.sol` diff (the `doWork` router + advance-bounty rework + break-even re-peg + the 2 folded no-cost micro-opts); HARD STOP at the contract-commit boundary; the peg constants land under a SECOND USER-approved gate at GAS. Bounty stays minted FLIP CREDIT. RNG/VRF-freeze floor over gas.
+
+| Phase | Name | Type | Requirements (primary owner) | Status |
+|-------|------|------|------------------------------|--------|
+| 329 | SPEC — Design-Lock + Call-Graph Attestation + 4 Structural Invariants | SPEC | BATCH-01 · ROUTER-07 · ADV-04 · GAS-03 | Ready to plan |
+| 330 | IMPL — The ONE Batched Contract Diff (router + advance-rework + micro-opts) | IMPL | ROUTER-01..06 · ADV-01/02/03/05 · GASOPT-01/02 · BATCH-02 | Not started |
+| 331 | GAS — Worst-Case Marginal + Break-Even @0.5gwei Peg Calibration | GAS | GAS-01/02/04/05 | Not started |
+| 332 | TST — Freeze Fuzz + One-Category + Reward-Routing + Non-Widening Regression | TST | TST-01..04 | Not started |
+| 333 | TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | TERMINAL | SWEEP-01/02/03 · BATCH-03 (re-attests all 29) | Not started |
+
+**Coverage:** 29/29 v49.0 requirements mapped to exactly one phase (329 SPEC: 4 · 330 IMPL: 13 · 331 GAS: 4 · 332 TST: 4 · 333 TERMINAL: 4, re-attests all 29); 0 orphaned; 0 duplicated. Per-category: ROUTER 7 (1 SPEC + 6 IMPL) · ADV 5 (1 SPEC + 4 IMPL) · GAS 5 (1 SPEC + 4 GAS) · GASOPT 2 (IMPL) · TST 4 (TST) · SWEEP 3 (TERMINAL) · BATCH 3 (1 SPEC + 1 IMPL + 1 TERMINAL). Full mapping in `.planning/ROADMAP.md` Coverage section + `.planning/REQUIREMENTS.md` Traceability table. §13e-style "uncovered" warnings are EXPECTED milestone-wide false alarms (each phase owns only its slice; SWEEP/BATCH-03 re-attest at TERMINAL).
+
+**Contract-boundary HARD STOP:** Phase 330 IMPL is the single contract phase — the batched diff (AfKing router/`_autoBuy`/re-peg-placeholders/micro-opts + AdvanceModule bounty-removal + return + Game wrapper/views + interface updates + MintModule pointer) is applied + locally compiled/tested but HELD at the contract-commit boundary, never committed without explicit user hand-review (`feedback_batch_contract_approval` + `feedback_never_preapprove_contracts` + `feedback_manual_review_before_push` + `feedback_no_contract_commits`; `ContractAddresses.sol` freely modifiable). The break-even peg constants land under a SECOND USER-approved gate at Phase 331 GAS (the v46 Phase 319 precedent). Phase 333 TERMINAL closure is autonomous:false (auto-advance HELD at the closure boundary per `feedback_pause_at_contract_phase_boundaries`).
+
+**UI hint:** None across all 5 v49.0 phases — this is a keeper-subsystem contract/gas/audit milestone (router routing, bounty economics, AfKing internals, adversarial sweep), no UI/frontend phase. The off-chain keeper indexer / webpage stays OUT OF SCOPE (separate frontend track) per PROJECT.md.
 
 ## Last Shipped Milestone (v48.0 — SHIPPED 2026-05-26; signal `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`; baseline `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`)
 

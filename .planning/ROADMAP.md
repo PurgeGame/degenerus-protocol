@@ -1,158 +1,194 @@
-# Roadmap: v48.0 — sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
+# Roadmap: Degenerus Protocol — Audit Repository
 
-**Milestone:** v48.0 — ✅ **SHIPPED** (closed 2026-05-26; closure signal `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`; 0 NEW findings; F-47-01 + F-47-02 RESOLVED_AT_V48; subject frozen `1575f4a9`)
-**Defined:** 2026-05-25
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Audit baseline → subject:** v47.0 closure HEAD `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2` → v48.0 closure HEAD. Subject = the single batched USER-APPROVED contract diff reconciling the seven work items (scope source: the 7 plan docs — `PLAN-V48-PRESALE-BOX-DRAIN-FIX.md` · `PLAN-V48-REDEMPTION-ETH-STETH-FALLBACK.md` · `PLAN-V48-KEEPER-RENAME-AND-VAULT-CODE.md` · `PLAN-V48-AFKING-POOL-RECOVERY.md` · `PLAN-V48-GAMEOVER-BURNIE-TOMBSTONE.md` · `PLAN-V48-DEGENERETTE-HERO-2PT-RESCALE.md` · `PLAN-SDGNRS-FAR-FUTURE-SALVAGE-SWAP.md`).
-**Scope source:** `.planning/REQUIREMENTS.md` (40 v48.0 REQ-IDs across 8 categories) + the 7 plan docs. All 7 designs LOCKED; **open items are SPEC-time attestations/calibrations only — no research.**
 
-> **Cross-cutting rule (every requirement):** every cited `file:line` + the salvage-swap economics MUST be re-attested against the **v47.0-closure HEAD** before any patch (no "by construction" survives un-checked; the `DegenerusGame` mint/jackpot inline-duplication precedent). Security floor over gas. RNG/VRF-freeze invariant untouched. Pre-launch redeploy-fresh (storage-layout break fine, no migration).
+## Milestones
 
-> **Posture:** **ONE batched USER-APPROVED `contracts/*.sol` diff** for the whole milestone — the shared surfaces `DegenerusGame.sol` (items 2/3/7), `StakedDegenerusStonk.sol` (items 2/4), and `DegenerusVault.sol` (items 3/4/7) are each touched by multiple items, so they CANNOT be independent diffs; the milestone has a single contract IMPL phase with a HARD STOP at the contract-commit boundary (the diff is applied + locally compiled/tested but never committed without explicit user hand-review). Items 1 (`LootboxModule`), 5 (`BurnieCoin`/`GameOverModule`), 6 (`DegeneretteModule`) are comparatively isolated; the keeper rename (item 3) is a wide mechanical diff that crosses the in-game crank entrypoints. Tests + planning + docs AGENT-committable. `ContractAddresses.sol` freely modifiable.
-
-> **Phase numbering** continues from the previous milestone — v47.0 ended at Phase 324, so **v48.0 starts at Phase 325.** Not reset to 1.
-
-> **Milestone shape** matches the established v44/v45/v46/v47 audit-milestone pattern: **SPEC design-lock → single batched IMPL contract diff → TST proof → TERMINAL delta-audit + closure flip.**
+- ✅ **v44.0 sStonk Per-Day Redemption Refactor** — Phases 304-308 (shipped 2026-05-20)
+- ✅ **v45.0 VRF-Rotation Liveness Fix** — Phases 309-314 (shipped 2026-05-23, minimal close)
+- ✅ **v46.0 Do-Work Crank + AfKing Subscription** — Phases 316-320 (shipped 2026-05-24)
+- ✅ **v47.0 Rake-Free Presale + Lootbox-Boon Unification** — Phases 321-324 (shipped 2026-05-25)
+- ✅ **v48.0 sDGNRS Salvage Swap + v47 Deferred Fixes + Keeper/Pool/Tombstone/Hero** — Phases 325-328 (shipped 2026-05-26)
+- 🚧 **v49.0 Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep** — Phases 329-333 (in progress)
 
 ---
 
-## Phases
+## 🚧 v49.0 Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep (In Progress)
 
-- [x] **Phase 325: SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation** - Settle the final shared signatures across `DegenerusGame`/`StakedDegenerusStonk`/`DegenerusVault`, grep-attest every cited file:line vs the v47.0-closure HEAD, and resolve every SPEC-time open item (RFALL-04 accounting shape, KEEP-04/05 VAULT-code + autoOpen scope, POOL-06 re-stranding, BTOMB packing, HERO-04 shape+packing, SWAP-03 jitter source, SWAP-08 acquisition-floor re-confirm) before any patch. (completed 2026-05-25)
-- [x] **Phase 326: IMPL — The ONE Batched Contract Diff (all 7 items)** - Apply all seven work items' contract edits as a single reconciled diff; HARD STOP at the contract-commit boundary (applied + locally compiled/tested, never committed without explicit user hand-review).
-- [x] **Phase 327: TST — Repro/Same-Results + No-Arb + EV + Regression Proofs** - Prove the presale-drain dust bound (PFIX-02/03), the redemption-fallback regression (RFALL-05), the sDGNRS `receive()` accounting-safety (POOL-04), the BURNIE tombstone non-circulating signal (BTOMB-03), the byte-identical Degenerette recalibration (HERO-04/06), and the salvage-swap no-arb at the jitter band CEILING + solvency (SWAP-08/09). (completed 2026-05-26)
-- [x] **Phase 328: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure** - NON-WIDENING delta-audit vs the v47.0 baseline, run the 3-skill genuine-PARALLEL adversarial sweep, author `audit/FINDINGS-v48.0.md`, and flip the closure signal `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`. _(completed 2026-05-26)_
+**Milestone:** v49.0 (started 2026-05-26)
+**Defined:** 2026-05-26
+**Audit baseline → subject:** v48.0 closure HEAD `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029` → v49.0 closure HEAD. Subject = the single batched USER-APPROVED `contracts/*.sol` diff (the `doWork` router + the `advanceGame`-bounty rework + the break-even bounty re-peg + the folded no-cost micro-opts).
+**Scope source:** `.planning/REQUIREMENTS.md` (29 v49.0 REQ-IDs across 7 categories: ROUTER 7 · ADV 5 · GAS 5 · GASOPT 2 · TST 4 · SWEEP 3 · BATCH 3) + `.planning/research/SUMMARY.md` (HIGH confidence; phase shape + the 4 structural invariants validated) + the milestone discussion (2026-05-26). All decisions LOCKED; **no phase needs a research sub-phase** (attestation + design-finalization + established-methodology only).
+
+> **Cross-cutting rule (every requirement):** every cited `file:line` + the bounty/gas math MUST be re-attested against the **v48.0-closure HEAD `0cc5d10f`** before any patch (no "by construction" / "single fn reaches all paths" claim survives un-checked — the `DegenerusGame` mint/jackpot inline-duplication precedent; `feedback_verify_call_graph_against_source`). Security / RNG-freeze floor over gas (`feedback_security_over_gas` + `v45-vrf-freeze-invariant`). Pre-launch redeploy-fresh (storage-layout break fine, no migration; `feedback_frozen_contracts_no_future_proofing`).
+
+> **Posture:** **ONE batched USER-APPROVED `contracts/*.sol` diff** for the whole milestone's contract surface — the router (`AfKing.sol`), the advance-bounty rework (`DegenerusGameAdvanceModule.sol`), the Game wrapper + discovery views (`DegenerusGame.sol`), the interface updates (`IDegenerusGame.sol` + `IDegenerusGameModules.sol`), the break-even re-peg, and the two folded no-cost micro-opts all land in a single reconciled diff at IMPL with a **HARD STOP at the contract-commit boundary** (applied + locally compiled/tested, never committed without explicit user hand-review — `feedback_batch_contract_approval` + `feedback_never_preapprove_contracts` + `feedback_manual_review_before_push` + `feedback_no_contract_commits`; `ContractAddresses.sol` freely modifiable per `feedback_contractaddresses_policy`). The break-even peg constants land under a SECOND USER-approved gate at the GAS phase (the v46 Phase 319 CR-01 precedent — peg derived from worst-case MARGINAL gas, never a single-item total). Tests + planning + docs AGENT-committable.
+
+> **Phase numbering** continues from the previous milestone — v48.0 ended at Phase 328, so **v49.0 starts at Phase 329.** Not reset to 1.
+
+> **Milestone shape** matches the established v46.0 FEATURE-with-GAS pattern (the dedicated GAS phase between IMPL and TST exists because the break-even bounty re-peg is load-bearing — peg constants are a function of measured worst-case marginal gas and cannot be a guess): **SPEC design-lock → single batched IMPL contract diff → GAS calibration → TST proof → TERMINAL delta-audit + 3-skill adversarial sweep + closure flip.**
+
+> **Bounty stays minted FLIP CREDIT** from the finite-pool / self-exclude / ETH-work-gate pattern (LOCKED; the liquid-BURNIE / affiliate-revenue funding overlay is OUT, dropped at v48). The stall multiplier (1/2/4/6) is kept as the sole liveness lever; the base bounty is calibrated below gas at normal prices so only the stall-escalated reward pulls in keepers for lagging work.
+
+### Phases
+
+- [ ] **Phase 329: SPEC — Design-Lock + Call-Graph Attestation + 4 Structural Invariants** - Lock the 4 structural invariants, settle the shared signatures (`advanceGame` return shape, `doWork` signature, the O(1) discovery views), decide ROUTER-07 reentrancy disposition + GAS-03 single day-start epoch, and grep-attest every cited `file:line` vs the v48.0 HEAD `0cc5d10f` — paper-only, zero `contracts/*.sol`.
+- [ ] **Phase 330: IMPL — The ONE Batched Contract Diff (router + advance-rework + micro-opts)** - Apply the single reconciled diff in producer-before-consumer order (AdvanceModule bounty-removal + return → Game wrapper/views → interfaces → AfKing router/`_autoBuy`/micro-opts); HARD STOP at the contract-commit boundary for explicit user hand-review.
+- [ ] **Phase 331: GAS — Worst-Case Marginal Derivation + Break-Even @0.5gwei Peg Calibration** - Derive the worst-case-first per-category marginal gas + router overhead, calibrate the break-even peg constants (per-item marginal, never a per-call total — the CR-01 rule), size the stall ceiling, prove the WR-01-style no-self-crank round-trip — peg constants land under a USER-approved gate.
+- [ ] **Phase 332: TST — Freeze Fuzz + One-Category + Reward-Routing + Non-Widening Regression** - Prove the router advance-consume reads only frozen state mid-tx, the one-rewarded-category-per-tx invariant (no bounty-stacking) + reentrancy double-pay regression, the advance unrewarded-standalone/rewarded-via-router behavior + GASOPT same-results, and a NON-WIDENING full-suite regression vs the v48.0 baseline.
+- [ ] **Phase 333: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure** - NON-WIDENING delta-audit vs the v48.0 baseline `0cc5d10f`, run the 3-skill genuine-PARALLEL adversarial sweep on the unified keeper surface, author `audit/FINDINGS-v49.0.md`, and flip the closure signal `MILESTONE_V49_AT_HEAD_<sha>`.
 
 ---
 
 ## Phase Details
 
-### Phase 325: SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation
-**Goal**: Every shared contract surface has a single settled signature, every cited `file:line` is grep-verified against the v47.0-closure HEAD, and every SPEC-time open item is resolved on paper — so the IMPL phase applies a fully reconciled diff with zero "by construction" assumptions, and the load-bearing salvage-swap economics (no-arb margin) are confirmed before any code is written.
-**Depends on**: Nothing (first v48.0 phase; consumes the v47.0 closure HEAD `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2` as the frozen audit baseline)
-**Requirements**: BATCH-01, RFALL-04, KEEP-04, KEEP-05, POOL-06
+### Phase 329: SPEC — Design-Lock + Call-Graph Attestation + 4 Structural Invariants
+**Goal**: The 4 load-bearing structural invariants are locked in writing, every shared signature (the `advanceGame` return shape, the `doWork(maxCount)` signature, the O(1) discovery views) is settled, the ROUTER-07 reentrancy disposition (GAS-03 single day-start epoch + the OPEN-C guard-vs-CEI decision) is resolved, and every cited `file:line` + the bounty/gas math is grep-verified against the v48.0-closure HEAD `0cc5d10f` — so the IMPL phase authors a fully reconciled diff with zero "by construction" assumptions and the VRF-freeze invariant is proven to survive the new router composition on paper before any code is written.
+**Depends on**: Nothing (first v49.0 phase; consumes the v48.0 closure HEAD `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029` as the frozen audit baseline)
+**Requirements**: BATCH-01, ROUTER-07, ADV-04, GAS-03
 **Success Criteria** (what must be TRUE):
-  1. The final shared signatures are settled in writing for every multi-item file — `DegenerusGame.sol` (item 2 `pullRedemptionReserve` coverage branch + item 3 renamed crank entrypoints + item 7 `sellFarFutureTickets` + inline `claimableWinnings[SDGNRS]` debit), `StakedDegenerusStonk.sol` (item 2 `_submitGamblingClaimFrom` `maxIncrement` pull + item 4 `receive()` relaxation + `burnAtGameOver` pool-recovery + the `IAfKing` `withdraw`/`poolOf` interface adds), and `DegenerusVault.sol` (item 3 `affiliateCode` pass-through + item 4 `recoverAfKingPool()` + item 7 `gameSellFarFutureTickets onlyVaultOwner`) — so none of items 2/3/4/7 can land as an independent diff that breaks another.
-  2. Every cited `file:line` across all 7 plan docs is grep-verified against the v47.0-closure HEAD and any drift is corrected in the SPEC (no "by construction" / "single fn reaches all paths" claim survives un-checked; the `DegenerusGame` mint/jackpot inline-duplication precedent re-checked; `POOL-05` confirms the `IAfKing`/`IAfKingSubscribe` `withdraw(uint256)` + `poolOf(address)` interface adds match `AfKing.sol`'s signatures verbatim and that `AfKing.sol` itself stays UNCHANGED).
-  3. The load-bearing salvage-swap no-arb floor is RE-CONFIRMED at the v47.0-closure HEAD (SWAP-08 attestation): the cheapest far-future-entry acquisition cost (~21%, lootbox tier-1) is re-derived from current source, the jitter band CEILING max full payout (`110% × fractionBps(6) = 16.5% of face` @d6) is confirmed below it (margin ~4.5pp), BURNIE is confirmed unable to mint a far-future entry (`purchaseCoin` has no level arg; v47 removed the BURNIE-lootbox→future path), and the SWAP-03 jitter source is pinned to an already-SETTLED past VRF word (freeze-safe per `v45-vrf-freeze-invariant`) — so the swap is provably -EV at the band a grinder/waiter captures, not just at the mean.
-  4. Every SPEC-time open item is resolved and recorded: RFALL-04 (`pendingRedemptionEthValue` single-value vs split ETH/stETH reservation shape, applied consistently across submit/claim/gameOver); KEEP-04 (VAULT confirmed to hold a registered affiliate code with `owner == VAULT` distinct from its address-derived default, or a setup step to register one); KEEP-05 (whether `autoOpen` is an existing keeper capability or new, scoped accordingly); POOL-06 (post-gameOver `depositFor(SDGNRS)` re-stranding — second sweep in `handleFinalSweep` vs accept-as-minor); the BTOMB `vaultAllowance` checked-add/cap + one-shot packing; the HERO-04 payout SHAPE over `S∈{0..9}` + the S=8/S=9 (>32-bit) packing scheme.
-  5. The salvage-swap `ticketQueue` swap-pop is proven on paper NOT to reproduce the `H-CANCEL-SWAP-MISS` operation class (SWAP-06 design lock): every `ticketQueue` / `_tqFarFutureKey` consumer is enumerated, the O(1) caller-verified swap-pop (`q[idx]==player`, `queueIndices` used only when a line zeroes a level) is shown to MAINTAIN `membership ⟺ packed != 0` so the far-future jackpot samplers need no change and gain no hot-path read, and the LOCKED OPEN-E operator-trust disposition is confirmed to cover this first value-destructive operator-gated action.
-**Plans**: 3 plans (2 waves)
-- [x] 325-01-PLAN.md — Call-graph attestation for items 1/2/3/4/5/6 -> three 325-ATTEST-*.md grep tables (PFIX-RFALL, KEEP-POOL, BTOMB-HERO) + resolve KEEP-04/KEEP-05/POOL-05 (Wave 1)
-- [x] 325-02-PLAN.md — Load-bearing SWAP attestation: SWAP-08 no-arb re-derivation at the band ceiling (HOLDS +4.5pp @d6: salvage ceiling 16.5% < acquisition ~21%; STOP NOT triggered) + SWAP-03 jitter-source pin (rngWordByDay[currentDay-1], freeze-safe) + SWAP-06 swap-pop enumeration (11 ticketQueue consumers; H-CANCEL-SWAP-MISS proven absent) -> 325-ATTEST-SWAP.md (Wave 1) ✅ (`0e09b7d9`)
-- [x] 325-03-PLAN.md — 325-SPEC.md: shared-signature reconciliation across DegenerusGame/StakedDegenerusStonk/DegenerusVault + open-item resolutions (RFALL-04, KEEP-04/05, POOL-06, BTOMB/HERO packing+shape) + per-item IMPL blueprint + edit-order map (Wave 2)
+  1. The 4 structural invariants are locked in writing (BATCH-01): (a) **one-category structural early-return** — `doWork` early-returns after the first rewarded category so advance/open/buy bounties can never stack in one tx (a code invariant, not a comment); (b) **frozen advance-consume** — the router's advance-consume reads only FROZEN VRF-window state even when fired in the same tx as `autoOpen`/`autoBuy`, with the player-controllable `totalFlipReversals` nudge (`AdvanceModule.sol` ~`:1838-1844`) proven frozen between rng-request and unlock (ADV-04; `v45-vrf-freeze-invariant` re-attested); (c) **guaranteed free-fallback caller** — at least one structurally-guaranteed unrewarded `advanceGame()` caller path is identified (protocol-owned VAULT/sDGNRS subs, any player with a pending jackpot) so re-homing the bounty does not create a single-point liveness risk; (d) **single day-start epoch** (GAS-03) — the differing `AfKing` `_currentDay()` `(ts-82620)/1days` vs `AdvanceModule` `(day-1+DEPLOY_DAY_BOUNDARY)*1days+82620` conventions are collapsed to one unified day-start epoch so the stall multiplier is never recomputed in a money path.
+  2. The shared signatures are settled in writing so no downstream file ships an intermediate broken state: the `advanceGame` return shape (design 1 — `advanceGame` returns `(uint8 mult, bool rewardable)` so the stall math stays single-source-of-truth in `AdvanceModule` and the router never recomputes it, covering BOTH the new-day advance AND the mid-day partial-drain site `AdvanceModule.sol:225` per ADV-05), the `doWork(maxCount)` signature + its no-work signal (ROUTER-06, consistent with the existing no-buy anti-spam revert; exact form decided here), and the O(1) discovery views (`advanceDue()` covering both new-day `currentDayView() != dailyIdx` AND partial-drain `day == dailyIdx but tickets-not-fully-processed`, `boxesPending()`, buys-pending via AfKing-local cursor reads — no unbounded scans, ROUTER-04).
+  3. The ROUTER-07 reentrancy disposition is decided and recorded (OPEN-C): a `nonReentrant` guard on `doWork` (the default per the security floor — cheap insurance against the new multi-boundary router→game→`creditFlip` composition surface) OR a proven composed-CEI argument; the v48 KEEP-04 VAULT registered-affiliate-code wiring is confirmed valid at v49 HEAD so the `autoBuy` affiliate-code passthrough survives the `_autoBuy` internal refactor (ROUTER-05).
+  4. Every cited `file:line` across the SUMMARY + the milestone scope is grep-verified against the v48.0-closure HEAD `0cc5d10f` and any drift is corrected in the SPEC (no "by construction" survives un-checked) — including the 3 advance-bounty `creditFlip` sites `AdvanceModule.sol:189/225/468` to be deleted (ADV-01), `ADVANCE_BOUNTY_ETH = 0.005 ether` `:147`, the stall ladder `:238-255`, `AfKing.sol` `BOUNTY_ETH_TARGET` + `creditFlip` `:846` + cursor + the CEI invariant `:99-106`, and the `DegenerusGame.sol` `advanceGame` wrapper `:275` + the gas-peg constants `:1539-1546` — confirming the producer-before-consumer edit-order map for IMPL.
+**Plans**: TBD
 **UI hint**: no
 
-### Phase 326: IMPL — The ONE Batched Contract Diff (all 7 items)
-**Goal**: All seven work items land as a single reconciled `contracts/*.sol` diff — the presale-box DGNRS drain is fixed (divisor 1_000→400), the redemption ETH-empty stETH fallback is segregated fail-closed + donation-robust, the keeper functions are renamed (autoBuy/autoOpen/autoResolve) and pass VAULT's registered affiliate code, the AfKing prepaid pools are recoverable, the gameover BURNIE tombstone floods the virtual VAULT allowance one-shot, the Degenerette hero becomes a 2-point scoring element with the standalone multiplier removed, and the sDGNRS far-future salvage swap ships -EV-by-design — applied + locally compiled/tested, then HELD at the contract-commit boundary for explicit user hand-review.
-**Depends on**: Phase 325 (the SPEC must settle the shared-surface signatures + resolve every open item first)
-**Requirements**: PFIX-01, RFALL-01, RFALL-02, RFALL-03, KEEP-01, KEEP-02, KEEP-03, POOL-01, POOL-02, POOL-03, POOL-05, BTOMB-01, BTOMB-02, HERO-01, HERO-02, HERO-03, HERO-05, SWAP-01, SWAP-02, SWAP-03, SWAP-04, SWAP-05, SWAP-06, SWAP-07, BATCH-02
+### Phase 330: IMPL — The ONE Batched Contract Diff (router + advance-rework + micro-opts)
+**Goal**: The unified keeper router lands as a single reconciled `contracts/*.sol` diff — `AfKing.doWork(maxCount)` routes to exactly ONE category per call (advance-leg → `autoOpen` → `autoBuy`) with a structural early-return, `autoBuy` is refactored to internal `_autoBuy`, the 3 `advanceGame` bounty `creditFlip` sites are deleted and `advanceGame` returns `(uint8 mult, bool rewardable)`, standalone `advanceGame()` stays an unrewarded liveness fallback, the break-even peg targets are wired as SPEC placeholders (calibrated at GAS), and the two no-cost micro-opts (MintModule nested-mapping pointer + AfKing claimable-hoist) ride in the same diff — applied + locally compiled/tested, then HELD at the contract-commit boundary for explicit user hand-review.
+**Depends on**: Phase 329 (the SPEC must lock the 4 invariants + settle the shared signatures + decide the reentrancy + single-epoch disposition first)
+**Requirements**: ROUTER-01, ROUTER-02, ROUTER-03, ROUTER-04, ROUTER-05, ROUTER-06, ADV-01, ADV-02, ADV-03, ADV-05, GASOPT-01, GASOPT-02, BATCH-02
 **Success Criteria** (what must be TRUE):
-  1. F-47-01 is fixed (PFIX-01) — `_presaleBoxDgnrsReward`'s divisor moves `1_000 → 400` (base `poolStart/100 → poolStart/40`) in `DegenerusGameLootboxModule.sol` with the inline `base` derivation comment updated, the tier shape preserved (tier-1 still 3× tier-5 DGNRS-per-ETH; only absolute scale moves), and the `transferFromPool` clamp held — an ISOLATED edit touching no other item's surface.
-  2. F-47-02 is fixed (RFALL-01/02/03) — the 175% redemption reservation segregates from pure-ETH OR pure-stETH (no mix), falls back to pure-stETH when ETH can't cover, and REVERTS fail-closed if neither pure leg covers (`StakedDegenerusStonk.sol` `_submitGamblingClaimFrom` `maxIncrement` pull + `DegenerusGame.sol` `pullRedemptionReserve` coverage branch); coverage is checked against the SAME asset basis the base is inflated by (donation-robust — a stETH donation / `selfdestruct` force-feed cannot brick submit); claim-time payout asset selection matches the reserved asset (stETH-reserved → stETH-paid), extending the v47 game-over ETH→stETH fallback (REDEEM-04) to the mid-game ETH-depletion case.
-  3. The keeper surface is renamed + affiliate-wired (KEEP-01/02/03) — `AfKing.sol`'s `sweep` + the in-game mass-resolve/open crank entrypoints become `autoBuy` / `autoOpen` / `autoResolve` ("crank"/"do-work"/"sweep" purged from code AND comments), the v46 `creditFlip` minted-flip-credit bounty is KEPT (gas-pegged `BOUNTY_ETH_TARGET`, no funding-pool overlay), and AfKing passes VAULT's registered (immutable) affiliate code into `game.purchase(...)` on every tx (was `0`) so unreferred AfKing-joiners are permanently captured by VAULT (foreclosure intended) while players holding a real human affiliate keep it.
-  4. The AfKing prepaid pools are recoverable (POOL-01/02/03/05) — VAULT gets a permissionless `recoverAfKingPool()` → `afKing.withdraw(afKing.poolOf(address(this)))` (recovered ETH to VAULT reserves via its open `receive()`, no gameOver gate); sDGNRS `receive()` is relaxed to accept `AF_KING` in addition to `GAME`; sDGNRS auto-recovers its pool inside `burnAtGameOver()` placed BEFORE the `balanceOf(this)==0` early-return (no standalone sDGNRS withdraw); `AfKing.sol` itself stays UNCHANGED with the `IAfKing`/`IAfKingSubscribe` `withdraw(uint256)`/`poolOf(address)` interface adds matching its signatures verbatim.
-  5. The gameover BURNIE tombstone + the Degenerette hero rescale land (BTOMB-01/02, HERO-01/02/03/05) — `gameOver()` one-shot bumps BURNIE's virtual VAULT mint allowance (`_supply.vaultAllowance`) by 1e36 wei via the existing GAME-gated escrow/allowance path with a checked add/cap (no `uint128` overflow, strictly one-shot); Degenerette scoring becomes `S = A + 2·H` (max 9, pay floor `S ≥ 2`) with `_countMatches` → `_score(...) ∈ {0..9}`, the standalone EV-neutral hero multiplier removed (`_applyHeroMultiplier` / `HERO_BOOST_*` / `HERO_PENALTY` / `HERO_SCALE` + the `M<2`/`M=8` carve-out deleted; `heroQuadrant >= 4` revert + `FT_HERO_SHIFT` decode kept), per-N tables recalibrated to `basePayoutEV = 100 centi-x` across 10 buckets (RTP unchanged), and the jackpot preserved exactly (`S=9 ≡ old M=8` relabel; `_awardDegeneretteDgnrs` thresholds re-mapped).
-  6. The sDGNRS far-future salvage swap ships (SWAP-01/02/03/04/05/06/07) — the new `sellFarFutureTickets(...)` game entrypoint (`_resolvePlayer` operator-honor, `rngLocked`-gated, mass-sell → ONE aggregated current-level ticket mint + ONE cash credit) values each line by `d = L - currentLevel` (require `6 ≤ d ≤ 100`) at `priceForLevel(targetLevel)` with the two-line `fractionBps(d)` curve (15%@d6→5%@d100) and the daily per-player jitter (fraction ×∈[70%,110%], cash share ∈[20%,60%]) seeded from the SETTLED past VRF word; ticket floor first (always ≥1 whole current-level ticket, revert if `totalBudget < oneTicketWei`); funded fail-closed from `claimableWinnings[SDGNRS]` down to a ≥1 ETH floor (NO `pendingRedemptionEthValue` term, NO daily cap, debited INLINE); the fully-liquidated seller removed from `ticketQueue` via the O(1) caller-verified swap-pop maintaining `membership ⟺ packed != 0`; and the VAULT `gameSellFarFutureTickets onlyVaultOwner` wrapper added (drone reaches via existing operator-approval; satellite `DroneManager` v47-interface re-sync folded in).
-  7. The diff is reconciled per the SPEC's settled shared signatures and is HELD at the contract-commit boundary (BATCH-02) — applied to `contracts/` and locally compiling/tested (`ContractAddresses.sol` freely modifiable), but NOT committed without explicit user hand-review of the single batched diff (`feedback_batch_contract_approval` + `feedback_never_preapprove_contracts` + `feedback_manual_review_before_push` + `feedback_no_contract_commits`).
-**Plans**: 8 plans (6 waves; one plan per work item + the final USER-APPROVAL gate, serialized on the shared `.sol` files so no two same-wave plans share a file)
-- [ ] 326-01-PLAN.md — Item 1 PFIX: `_presaleBoxDgnrsReward` divisor `1_000→400` (`base=poolStart/40`); tier shape + sweep clamp held — ISOLATED (Wave 1)
-- [ ] 326-02-PLAN.md — Item 5 BTOMB: `gameOver()` one-shot 1e36-wei `vaultAllowance` flood (GAME-gated, checked add/cap, one-shot latch); `totalSupply()` untouched (Wave 1)
-- [ ] 326-03-PLAN.md — Item 6 HERO: `_countMatches→_score(...)∈{0..9}` (`S=A+2·H`); standalone multiplier net-deleted; S=8/S=9 separate packing; thresholds→S≥7 (table values = TST byte-reproduce handoff) (Wave 1)
-- [ ] 326-04-PLAN.md — Item 2 RFALL: `pullRedemptionReserve` pure-ETH-OR-pure-stETH coverage branch (R1) + `_submitGamblingClaimFrom` segregation (R4 item-2); fail-closed, donation-robust (Wave 2; opens DegenerusGame + sStonk)
-- [ ] 326-05-PLAN.md — Item 4 POOL: VAULT permissionless `recoverAfKingPool()` + sDGNRS `receive()` AF_KING relax + `burnAtGameOver` pool-recover + verbatim interface adds; AfKing.sol unchanged (Wave 3; sStonk + Vault)
-- [ ] 326-06-PLAN.md — Item 3 KEEP: `sweep→autoBuy` / `crankBets→autoResolve` / `crankBoxes→autoOpen` + helpers; crank/sweep/do-work purged; `bytes32("DGNRS")` affiliate wiring; `creditFlip`/`BOUNTY_ETH_TARGET` kept (Wave 4; AfKing + DegenerusGame)
-- [ ] 326-07-PLAN.md — Item 7 SWAP: `sellFarFutureTickets(...)` + `_removeFarFutureTickets` (operator-honor, rngLocked-gated, d-curve + settled-word jitter, ticket floor, inline fail-closed claimable debit, swap-pop) + VAULT `gameSellFarFutureTickets` wrapper (Wave 5; DegenerusGame + Vault)
-- [ ] 326-08-PLAN.md — BATCH-02 gate: compile + cross-item reconciliation joint-checks + no-NEW-breakage vs v47.0 baseline, then HOLD the ONE batched diff at the contract-commit boundary for explicit USER hand-review (autonomous:false; Wave 6)
+  1. The unified `doWork(maxCount)` router ships on `AfKing.sol` (ROUTER-01/02/03/04/06) — a single entrypoint performing exactly ONE keeper category per call, routing by priority advance-leg (new-day advance OR mid-day partial-drain ticket processing) → `autoOpen` → `autoBuy`, with the one-rewarded-category rule enforced as a STRUCTURAL early-return (advance/open/buy bounties can never stack in one tx), O(1) on-chain work-discovery predicates (advance-due incl. mid-day partial-drain / boxes-pending / buys-pending — no unbounded scans), and a clean "no work done" signal consistent with the existing no-buy anti-spam revert (never pays a bounty for no work).
+  2. `autoBuy` is refactored to internal `_autoBuy` + `autoResolve` is excluded (ROUTER-05) — `autoBuy` becomes an internal `_autoBuy(maxCount)` call with a thin behavior-identical external wrapper so the money-moving path stays internal (no new cross-contract money edge); `autoResolve` is excluded from the router and keeps its own in-game bounty unchanged; the v48 KEEP-04 VAULT registered-affiliate-code passthrough survives the refactor.
+  3. The advanceGame bounty is re-homed (ADV-01/02/03/05) — the 3 advance-bounty `creditFlip(caller,…)` sites in `DegenerusGameAdvanceModule.sol` (`:189`/`:225`/`:468`) are removed so standalone `advanceGame()` pays no bounty; `advanceGame` returns the stall multiplier + a rewardable flag (design 1) so the router pays the re-homed bounty from the multiplier's canonical day-epoch home (no recompute in a money path); standalone `advanceGame()` stays fully functional as an unrewarded liveness fallback with the SPEC-identified guaranteed free-fallback caller path intact; and mid-day partial-drain ticket processing (`day == dailyIdx` but tickets not fully processed) is router-rewardable advance-leg work covered by the rewardable flag.
+  4. The two no-cost gas micro-opts ride in the same diff (GASOPT-01/02) — `DegenerusGameMintModule.sol` hoists `mapping(address=>uint40) storage owedMap = ticketsOwedPacked[rk]` in both `processTicketBatch` (`:671`) and the resolve/future loop (`:398`) (`rk` loop-invariant, behavior-identical), and `AfKing.autoBuy` hoists `IGame.claimableWinningsOf(player)` to one call per iteration (today `:691` + `:722`), preserving the existing laziness (only when `reinvestPct>0 || FLAG_DRAIN_FIRST`, behavior-identical) — both gas-only, same-results (proven at TST).
+  5. The diff is reconciled per the SPEC's settled shared signatures and is HELD at the contract-commit boundary (BATCH-02) — authored in producer-before-consumer order (AdvanceModule bounty-removal + return → Game wrapper/views → interfaces → AfKing router/`_autoBuy`/re-peg-placeholders/micro-opts) so no intermediate state ever ships where advancing is unrewarded, applied to `contracts/` and locally compiling/tested (`ContractAddresses.sol` freely modifiable), but NOT committed without explicit user hand-review of the single batched diff; CEI on every leg (`creditFlip` last) and no multiplier duplication.
+**Plans**: TBD
 **UI hint**: no
 
-### Phase 327: TST — Repro/Same-Results + No-Arb + EV + Regression Proofs
-**Goal**: The IMPL diff is proven correct empirically — the presale-box drain now mops up only variance dust (not ~60% of the pool), the redemption fallback preserves the v47 REDEEM-08 invariants under stETH coverage, the sDGNRS `receive()` relaxation is accounting-safe, the BURNIE tombstone signals only in uncirculated supply, the Degenerette recalibration is byte-identical from `derive_5_tables.py`, and the load-bearing salvage-swap no-arb holds at the jitter band CEILING with solvency preserved — restoring a clean v48.0 regression baseline.
-**Depends on**: Phase 326 (tests run against the applied contract diff)
-**Requirements**: PFIX-02, PFIX-03, RFALL-05, POOL-04, BTOMB-03, HERO-04, HERO-06, SWAP-08, SWAP-09
+### Phase 331: GAS — Worst-Case Marginal Derivation + Break-Even @0.5gwei Peg Calibration
+**Goal**: The break-even bounty peg is calibrated from measured worst-case marginal gas (not a guess) — the worst-case-first per-category marginal gas (`autoBuy`/`autoOpen`/`autoResolve`) + the router overhead is derived theoretically then measured, the keeper bounties are re-pegged to break-even at 0.5 gwei in BURNIE using the per-item MARGINAL (never a per-call total — the CR-01 self-crank-faucet rule), the stall multiplier (1/2/4/6) is kept with any ceiling extension added ABOVE the 2h tier and capped against the finite faucet pool, and a WR-01-style round-trip guard proves no positive-EV self-crank loop under the unified router — the landed peg constants under a USER-approved gate (the v46 Phase 319 precedent).
+**Depends on**: Phase 330 (the peg cannot be set before worst-case marginal gas is measured against the applied diff; tests must exercise calibrated constants, not placeholders)
+**Requirements**: GAS-01, GAS-02, GAS-04, GAS-05
 **Success Criteria** (what must be TRUE):
-  1. The presale-drain dust bound is proven (PFIX-02/03) — over a realistic 50-ETH presale (random 50/40/10 outcomes across many boxes) the closing-box sweep transfers only variance dust (≤ a small bound, NOT ~60% of the pool) and the pool ends ~empty; the tier shape is preserved (tier-1 still 3× tier-5 DGNRS-per-ETH); and a run of early DGNRS hits empties the pool before close via the `transferFromPool` clamp → closing sweep ≈ 0, no revert / no over-draw.
-  2. The redemption-fallback regression holds (RFALL-05) + the sDGNRS `receive()` relaxation is accounting-safe (POOL-04) — the v47 REDEEM-08 invariants still hold under the stETH fallback (two same-period claimants, BURNIE-can't-block-ETH, value conservation, `balance ≥ pending`); and reserves are read by `address(this).balance` (not a running counter incremented in `receive()`), so an `AF_KING`-sourced credit is not mis-attributed / double-counted / bypassed.
-  3. The BURNIE tombstone signal is proven non-circulating (BTOMB-03) — the 1e36-wei flood does NOT touch `totalSupply()`, lands only in `vaultMintAllowance()` / `supplyIncUncirculated()` / `balanceOf(VAULT)`, and the DGVB pro-rata BURNIE-claim math does not overflow when claiming a share of a 1e36 allowance.
-  4. The Degenerette recalibration is byte-identical (HERO-04 byte-reproduce gate + HERO-06) — every per-N payout constant across the 10 buckets `S=0..9` is reproduced byte-identical from `derive_5_tables.py` (Phase-267-style PASS_ALL gate, NOT hand-typed), the chosen payout SHAPE + WWXRP-bonus/sDGNRS/"high tier" thresholds re-map onto the 10-point scale, the S=8/S=9 (>32-bit) packing is verified, the recalibration stays write-batch byte-identical to v47's `resolveBets` (DGAS), and the `dailyHeroWagers`/`_rollHeroSymbol` daily-hero-symbol jackpot is verified unaffected (no `matches`-range leakage).
-  5. The load-bearing salvage-swap no-arb + solvency hold (SWAP-08/09) — the no-arb inequality is PROVEN at the jitter band CEILING (max full payout `110% × fractionBps(6) = 16.5% of face` @d6 < cheapest far-entry acquisition ~21%, margin ~4.5pp; base `fractionBps` keeps ≥~10% margin below the far ticket's present EV so a 110%-day pawn doesn't overpay sDGNRS); BURNIE-can't-mint-a-far-entry is confirmed; and solvency is safe (`claimablePool ≤ ETH + stETH` never violated — ticket leg adds pool slack, cash leg is a claimant-to-claimant relabel; array length bounded ≤32).
-**Plans**: 6 plans (2 waves — wave 1: five independent test-authoring plans, no `files_modified` overlap; wave 2: the full-suite regression-baseline gate, depends on all five)
-- [x] 327-01-PLAN.md — PFIX-02/03: presale closing-box dust bound (≤ poolStart/100 over a realistic 50-ETH run, NOT ~60%) + tier shape (3×) + clamp/empty-before-close (Foundry `test/fuzz/PresaleBoxDrain.t.sol`)
-- [x] 327-02-PLAN.md — RFALL-05 + POOL-04: stETH-fallback preserves REDEEM-08 (two claimants, BURNIE-can't-block, solvency) under mid-game ETH depletion + donation; sDGNRS `receive()` AF_KING relaxation accounting-safe (Foundry `test/fuzz/RedemptionStethFallback.t.sol` + invariant extension)
-- [x] 327-03-PLAN.md — BTOMB-03: 1e36 tombstone non-circulating (`totalSupply()` untouched, +1e36 only in uncirculated leg) + one-shot + checked-add + DGVB pro-rata claim overflow-safe (Foundry `test/fuzz/BurnieTombstone.t.sol`)
-- [x] 327-04-PLAN.md — HERO-04/06: extend `derive_5_tables.py` to the 10-bucket S=0..9 design + PASS_ALL byte-reproduce gate (regenerate, not hand-typed) + S=A+2H scoring + write-batch DGAS equivalence + daily-hero no-leak (Hardhat `test/stat/*` + Foundry `test/fuzz/DegeneretteHeroScore.t.sol`) — byte-reproduced constants must land in the frozen contract (hand-review gate); see milestone blocker
-- [x] 327-05-PLAN.md — SWAP-08/09 (load-bearing): no-arb at the 110% jitter CEILING across all d in [6,100] (margin ~4.5pp @d6) + BURNIE-can't-mint-far (behavioral probe, ffi disabled) + solvency `claimablePool <= ETH+stETH` + ticket/ETH floors + swap-pop membership (Foundry `test/fuzz/FarFutureSalvageSwap.t.sol`)
-- [x] 327-06-PLAN.md — Clean v48.0 regression-baseline gate (Wave 2): run the FULL `forge test` tree (NOT --match-path), assert NET-ZERO new regression vs the 326-08 594/42 baseline (every red named in the VRF/baseline + KNOWN-TST-DEFERRED HERO union), and document the conditional post-landing HERO byte-reproduce delta — no `contracts/*.sol` edit (ledger `test/REGRESSION-BASELINE-v48.md`)
+  1. The worst-case-first marginal gas is derived per keeper category + router overhead (GAS-01) — the theoretical worst case is derived FIRST (per `feedback_gas_worst_case`), then measured via the established `test/gas/*WorstCaseGas.t.sol` harness idiom (a new `RouterWorstCaseGas.t.sol`, Foundry `--isolate` for `vm.snapshotGas` section snapshots), amortized per-item over N≥32 items (NOT a single-item total, NOT `forge test --gas-report` numbers as the peg).
+  2. All keeper bounties are re-pegged to break-even at 0.5 gwei BURNIE-denominated using the per-item MARGINAL (GAS-02) — the CR-01 self-crank-faucet rule holds (the box peg is the per-box marginal, never a single-box/single-call total), conversion math is confirmed level-invariant, and the constants land under a USER-approved gate (the v46 Phase 319 `e4014f91`/`795e679d` precedent).
+  3. The stall multiplier (1/2/4/6) is kept + any ceiling extension is faucet-bounded (GAS-04) — the existing thresholds are never lowered, any extreme-stall ceiling extension is added ABOVE the 2h tier, the extension value (if any) is decided from the GAS data (whether 6× covers stressed mainnet gas at a plausible deep stall) and is capped against the finite faucet pool.
+  4. A WR-01-style round-trip guard proves no positive-EV self-crank loop under the unified router (GAS-05) — the faucet bound holds, the self-exclude + ETH-work-gate are intact, and a Sybil/self-crank round-trip is proven ≤ 0 EV under the new router composition (the box-peg multi-box round-trip regression-guard precedent extended to the router).
+**Plans**: TBD
 **UI hint**: no
 
-### Phase 328: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure
-**Goal**: The v48.0 audit subject (the single batched diff, FROZEN at HEAD `1575f4a9` = the Phase 326 IMPL diff `f50cc634` + the Phase 327 HERO-04 byte-reproduced Degenerette finals landing) is delta-audited NON-WIDENING against the v47.0 baseline `da5c9d50`, swept by the 3-skill genuine-PARALLEL adversarial pass for new findings, consolidated into `audit/FINDINGS-v48.0.md`, and the milestone is closed with the `MILESTONE_V48_AT_HEAD_<sha>` signal and the atomic ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS flip — re-attesting all 40 requirements.
-**Depends on**: Phase 327 (the audit subject must be implemented + test-proven before the terminal delta-audit + sweep)
-**Requirements**: BATCH-03
+### Phase 332: TST — Freeze Fuzz + One-Category + Reward-Routing + Non-Widening Regression
+**Goal**: The new router composition is proven behaviorally correct empirically — the router advance-consume reads only frozen state mid-tx (the `totalFlipReversals` class), no single tx earns more than one category's bounty + the router→game→`creditFlip` path cannot double-pay via reentrancy, `advanceGame` is unrewarded standalone but rewarded via `doWork` with the multiplier honored + the GASOPT micro-opts produce byte-identical results, and the full suite is NON-WIDENING vs the v48.0 baseline — restoring a clean v49.0 regression baseline against the GAS-calibrated constants.
+**Depends on**: Phase 331 (tests exercise the GAS-calibrated peg constants, not the IMPL placeholders)
+**Requirements**: TST-01, TST-02, TST-03, TST-04
 **Success Criteria** (what must be TRUE):
-  1. The delta audit is NON-WIDENING — every `contracts`/`test` diff vs the v47.0-closure baseline `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2` is attributable to a v48-scope item across all 7 surfaces (presale-drain fix, redemption stETH-fallback, keeper rename + VAULT-code, AfKing pool recovery, gameover BURNIE tombstone, Degenerette hero rescale, sDGNRS far-future salvage swap), with each surface attested non-widening relative to the baseline and the two v47-deferred findings (F-47-01, F-47-02) recorded RESOLVED-AT-V48.
-  2. The 3-skill genuine-PARALLEL adversarial sweep runs (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT per the carried decision) charged against the 7 surfaces + composition — the salvage-swap no-arb at the band ceiling / grinder-waiter timing / swap-pop H-CANCEL-SWAP-MISS regression / redemption-desk structural protection, the redemption stETH-fallback donation-robustness, the presale-drain dust bound, the keeper foreclosure + minted-credit faucet, the AfKing pool-recovery accounting, the BURNIE-tombstone overflow, and the Degenerette byte-identical RTP — with every elevation passed through the skeptic filter (structural-protection + 3-condition EV lens) before being recorded.
-  3. `audit/FINDINGS-v48.0.md` is authored at the v48.0 closure HEAD (mirrors the v44/v46/v47 9-section pattern, chmod 444) folding in the F-47-01 + F-47-02 resolution dispositions and any newly-surfaced findings (adjudicated or deferred per user direction).
-  4. The `MILESTONE_V48_AT_HEAD_<sha>` closure signal is emitted and propagated verbatim, and the atomic 5-doc closure flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) is applied with all 40 requirements re-attested at closure.
-**Plans**: 4 plans (3 waves; mirrors the v47.0 Phase 324 TERMINAL shape — SC1 delta-audit ‖ SC2 adversarial sweep → SC3 findings deliverable → SC4 gated closure flip)
-- [x] 328-01-PLAN.md — SC1 DELTA-AUDIT: enumerate the 12-file delta surface (`git diff da5c9d50..1575f4a9 -- contracts/`, 611+/324−) mapped to the 7 v48 surfaces (PFIX/RFALL/KEEP/POOL/BTOMB/HERO/SWAP), each NON-WIDENING; regression baseline 632/42 net-zero + Hardhat PASS_ALL GREEN; F-47-01 + F-47-02 RESOLVED-AT-V48 → `328-01-DELTA-AUDIT.md` (Wave 1, autonomous)
-- [x] 328-02-PLAN.md — SC2 ADVERSARIAL SWEEP: fixed 3-skill set (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT) charged against the 7 surfaces + composition (salvage-swap no-arb-at-ceiling / grinder-waiter / swap-pop H-CANCEL-SWAP-MISS regression / redemption-desk; RFALL donation-robustness; PFIX dust bound; KEEP foreclosure + faucet; POOL accounting; BTOMB overflow; HERO byte-identical RTP), skeptic-filtered before any elevation → `328-02-ADVERSARIAL-LOG.md` (Wave 1, autonomous)
-- [x] 328-03-PLAN.md — SC3 FINDINGS DELIVERABLE: `audit/FINDINGS-v48.0.md` (9-section, mirrors v47), folding the 328-01 delta-audit (§3/§5) + 328-02 sweep (§4), recording F-47-01 + F-47-02 RESOLVED-AT-V48, re-attesting all 40 reqs in §3.C, `MILESTONE_V48_AT_HEAD_<sha>` placeholder (Wave 2, depends_on 328-01+328-02, autonomous)
-- [ ] 328-04-PLAN.md — SC4 CLOSURE FLIP: single blocking USER closure-verdict + signal-format approval gate, then resolve the SHA, apply the atomic 5-doc flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) re-attesting all 40 reqs, chmod 444 the findings (Wave 3, depends_on 328-03, autonomous:false)
+  1. The freeze-invariant fuzz holds (TST-01) — extending the v43 `RngLockDeterminism` harness, the router advance-consume is proven to read only frozen state mid-tx (perturb `totalFlipReversals` + every in-window SLOAD between rng-request and unlock, assert byte-identical consumed VRF-derived output) even when fired in the same tx as `autoBuy`/`autoOpen` — the `v45-vrf-freeze-invariant` is preserved under the new router composition.
+  2. The one-category invariant + reentrancy regression hold (TST-02) — a one-rewarded-category-per-tx assertion proves no single tx earns more than one category's bounty (no advance+open+buy bounty-stacking), and a router→game→`creditFlip` reentrancy double-pay regression confirms the disposition decided at SPEC (guard or composed-CEI) blocks any double-pay.
+  3. The reward-routing + GASOPT same-results hold (TST-03) — `advanceGame` is proven UNREWARDED when called standalone via `game.advanceGame()` and REWARDED when driven via `doWork` (the multiplier honored, the mid-day partial-drain leg rewarded), and the two GASOPT micro-opts (MintModule pointer + AfKing claimable-hoist) are proven same-results (gas-only, byte-identical behavior).
+  4. The full-suite regression is NON-WIDENING vs the v48.0 baseline (TST-04) — net-zero new regression (every red named in the VRF/baseline + any enumerated-deferred set), the standalone `advanceGame` still drives the full daily tick (death-clock latches as the tertiary backstop), and a clean v49.0 regression baseline ledger is recorded.
+**Plans**: TBD
+**UI hint**: no
+
+### Phase 333: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure
+**Goal**: The v49.0 audit subject (the single batched diff — the router + advance-rework + the GAS-calibrated peg + the micro-opts, FROZEN at the IMPL/GAS HEAD) is delta-audited NON-WIDENING against the v48.0 baseline `0cc5d10f`, swept by the 3-skill genuine-PARALLEL adversarial pass charged against the highest-risk advance-timing MEV + composed-reentrancy + faucet-drain surfaces, consolidated into `audit/FINDINGS-v49.0.md`, and the milestone is closed with the `MILESTONE_V49_AT_HEAD_<sha>` signal and the atomic ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS flip — re-attesting all 29 v49.0 requirements.
+**Depends on**: Phase 332 (the audit subject must be implemented + GAS-calibrated + test-proven before the terminal delta-audit + sweep)
+**Requirements**: SWEEP-01, SWEEP-02, SWEEP-03, BATCH-03
+**Success Criteria** (what must be TRUE):
+  1. The 3-skill genuine-PARALLEL adversarial sweep runs (SWEEP-01) — `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` (`/degen-skeptic` OUT per `D-271-ADVERSARIAL-02`) against the frozen v49 subject, charged with: advance-timing MEV / same-tx bundling of advance-consume + buy/open, composed reentrancy (router→game→`creditFlip`), faucet-drain re-attestation on the unified surface, bounty-stacking, stall-multiplier abuse, and the unrewarded-advance liveness backstop — with `/zero-day-hunter` explicitly charged against same-tx-bundling of advance-consume + buy/open (Pitfall 3) and composed reentrancy (Pitfall 6), and every elevation passed through the skeptic dual-gate (structural-protection + 3-condition EV lens) before being recorded.
+  2. The delta-audit attests NON-WIDENING vs the v48.0 baseline `0cc5d10f` (SWEEP-02) — every `contracts/`+`test/` diff is attributable to a v49 work item across the blast radius (AfKing router/`_autoBuy`/re-peg/micro-opt, AdvanceModule bounty-removal + return, Game wrapper + discovery views + MintModule pointer, the interface updates), each surface attested non-widening relative to the baseline, and the v48 SWAP cash-share advisory recorded carried-forward-unmodified.
+  3. `audit/FINDINGS-v49.0.md` is authored at the v49.0 closure HEAD (SWEEP-03) — 9-section, mirroring the v44/v46/v47/v48 pattern, chmod 444, folding in the delta-audit (§3/§5) + the sweep disposition (§4), with any findings adjudicated or deferred per USER direction.
+  4. The closure flip is applied (BATCH-03) — all v49.0 requirements re-attested at closure, the `MILESTONE_V49_AT_HEAD_<sha>` closure signal emitted and propagated verbatim, and the atomic 5-doc closure flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) applied; the closure plan is a single blocking USER closure-verdict + signal-format approval gate (autonomous:false) — the auto-advance is HELD at the closure boundary per `feedback_pause_at_contract_phase_boundaries`.
+**Plans**: TBD
 **UI hint**: no
 
 ---
 
 ## Progress
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 3/3 | Complete    | 2026-05-25 |
-| 326. IMPL — The ONE Batched Contract Diff (all 7 items) | 8/8 | Complete    | 2026-05-25 |
-| 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 6/6 | Complete    | 2026-05-26 |
-| 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 4/4 | Complete    | 2026-05-26 |
+**Execution Order:** Phases execute in numeric order: 329 → 330 → 331 → 332 → 333
+
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 329. SPEC — Design-Lock + 4 Structural Invariants | v49.0 | 0/TBD | Not started | - |
+| 330. IMPL — The ONE Batched Contract Diff | v49.0 | 0/TBD | Not started | - |
+| 331. GAS — Worst-Case Marginal + Break-Even Peg | v49.0 | 0/TBD | Not started | - |
+| 332. TST — Freeze Fuzz + One-Category + Regression | v49.0 | 0/TBD | Not started | - |
+| 333. TERMINAL — Delta Audit + Sweep + Closure | v49.0 | 0/TBD | Not started | - |
 
 ---
 
-## Coverage
+## Coverage (v49.0)
 
-**40/40 v48.0 requirements mapped to exactly one phase — 0 orphaned, 0 duplicated.**
+**29/29 v49.0 requirements mapped to exactly one phase — 0 orphaned, 0 duplicated.**
 
 | Phase | Requirements | Count |
 |-------|--------------|-------|
-| 325 SPEC | BATCH-01, RFALL-04, KEEP-04, KEEP-05, POOL-06 | 5 |
-| 326 IMPL | PFIX-01, RFALL-01/02/03, KEEP-01/02/03, POOL-01/02/03/05, BTOMB-01/02, HERO-01/02/03/05, SWAP-01/02/03/04/05/06/07, BATCH-02 | 25 |
-| 327 TST | PFIX-02/03, RFALL-05, POOL-04, BTOMB-03, HERO-04/06, SWAP-08/09 | 9 |
-| 328 TERMINAL | BATCH-03 | 1 |
-| **Total** | | **40** |
+| 329 SPEC | BATCH-01, ROUTER-07, ADV-04, GAS-03 | 4 |
+| 330 IMPL | ROUTER-01, ROUTER-02, ROUTER-03, ROUTER-04, ROUTER-05, ROUTER-06, ADV-01, ADV-02, ADV-03, ADV-05, GASOPT-01, GASOPT-02, BATCH-02 | 13 |
+| 331 GAS | GAS-01, GAS-02, GAS-04, GAS-05 | 4 |
+| 332 TST | TST-01, TST-02, TST-03, TST-04 | 4 |
+| 333 TERMINAL | SWEEP-01, SWEEP-02, SWEEP-03, BATCH-03 | 4 |
+| **Total** | | **29** |
 
 **Per-category split (verification):**
 
-| Category | Total | SPEC | IMPL | TST | TERMINAL |
-|----------|-------|------|------|-----|----------|
-| PFIX | 3 | — | 1 (01) | 2 (02–03) | — |
-| RFALL | 5 | 1 (04) | 3 (01–03) | 1 (05) | — |
-| KEEP | 5 | 2 (04–05) | 3 (01–03) | — | — |
-| POOL | 6 | 1 (06) | 4 (01,02,03,05) | 1 (04) | — |
-| BTOMB | 3 | — | 2 (01–02) | 1 (03) | — |
-| HERO | 6 | — | 4 (01,02,03,05) | 2 (04,06) | — |
-| SWAP | 9 | — | 7 (01–07) | 2 (08–09) | — |
-| BATCH | 3 | 1 (01) | 1 (02) | — | 1 (03) |
-| **Total** | **40** | **5** | **25** | **9** | **1** |
+| Category | Total | SPEC | IMPL | GAS | TST | TERMINAL |
+|----------|-------|------|------|-----|-----|----------|
+| ROUTER | 7 | 1 (07) | 6 (01–06) | — | — | — |
+| ADV | 5 | 1 (04) | 4 (01,02,03,05) | — | — | — |
+| GAS | 5 | 1 (03) | — | 4 (01,02,04,05) | — | — |
+| GASOPT | 2 | — | 2 (01–02) | — | — | — |
+| TST | 4 | — | — | — | 4 (01–04) | — |
+| SWEEP | 3 | — | — | — | — | 3 (01–03) |
+| BATCH | 3 | 1 (01) | 1 (02) | — | — | 1 (03) |
+| **Total** | **29** | **4** | **13** | **4** | **4** | **4** |
 
-**Center-of-gravity rationale (where a requirement spans design+impl+test):**
-- **RFALL-04** (accounting-shape decision) → SPEC; the implementation lands under RFALL-01/02/03 (IMPL).
-- **KEEP-04** (VAULT registered-code prerequisite) + **KEEP-05** (autoOpen-capability scoping) → SPEC; the rename/affiliate-wiring code lands under KEEP-01/02/03 (IMPL).
-- **POOL-06** (post-gameOver re-stranding decision) → SPEC; the recovery code lands under POOL-01/02/03/05 (IMPL); the `receive()` accounting-safety proof is POOL-04 (TST).
-- **HERO-04** owns the byte-reproduce gate (empirical `derive_5_tables.py` PASS_ALL) → TST; the SPEC-time shape+packing choice is folded into BATCH-01's open-item resolution; the table values land under HERO-03 (IMPL).
-- **SWAP-08** owns the no-arb proof at the band ceiling → TST; the floor RE-CONFIRMATION attestation is folded into BATCH-01 (SPEC) and the swap economics land under SWAP-02/03 (IMPL).
-- **BATCH-01** (the single SPEC design-lock) absorbs the remaining SPEC-time open-item resolutions (BTOMB packing, HERO-04 shape+packing, SWAP-03 jitter source + SWAP-08 acquisition-floor re-confirm) without duplicating the requirements those decisions feed.
-- **BATCH-03** (the TERMINAL delta-audit + sweep + closure) re-attests all 40 v48.0 requirements at closure — distributed across the 4 Phase 328 plans (328-01 delta-audit, 328-02 adversarial sweep, 328-03 findings deliverable, 328-04 closure flip).
+**Center-of-gravity rationale (where a requirement spans design + impl + test):**
+- **ROUTER-07** (reentrancy disposition decision: guard vs composed-CEI) → SPEC; the guard/CEI code lands under ROUTER-01..06 (IMPL).
+- **ADV-04** (the frozen-advance-consume VRF-freeze invariant decision) → SPEC, where it is locked as structural invariant (b); the freeze-invariant fuzz that PROVES it empirically is TST-01 (TST); the ordering that preserves it lands under ADV-01..05 (IMPL).
+- **GAS-03** (the single unified day-start epoch decision — collapsing the AfKing vs AdvanceModule conventions) → SPEC (it is a design-lock that feeds the `advanceGame` return-shape signature); the calibration GAS reqs (GAS-01/02/04/05) are the GAS phase's empirical work.
+- **BATCH-01** (the single SPEC design-lock) absorbs the 4 structural invariants + the shared-signature reconciliation + the grep-attestation; it does not duplicate the ROUTER/ADV requirements those decisions feed.
+- **BATCH-02** (the single batched contract diff + the contract-commit HARD STOP) → IMPL; the diff is authored producer-before-consumer with the GAS peg as a placeholder calibrated at Phase 331.
+- **BATCH-03** (the TERMINAL closure flip) re-attests all 29 v49.0 requirements at closure — alongside SWEEP-01/02/03 in Phase 333.
 
-✓ All 40 v48.0 requirements mapped
+✓ All 29 v49.0 requirements mapped
 ✓ No orphaned requirements
 ✓ No duplicated requirements
 
+**Note on §13e-style "uncovered" warnings:** as in the v47/v48 roadmaps, milestone-wide "uncovered" warnings are EXPECTED false alarms — each phase owns only its slice; SWEEP-01/02/03 + BATCH-03 re-attest the full 29-requirement set at TERMINAL. The TST/TERMINAL phases do not "uncover" the IMPL reqs — they re-prove and re-attest them.
+
 ---
-*Roadmap created: 2026-05-25*
-*Phase 328 plans finalized: 2026-05-26 (4 plans / 3 waves)*
+
+<details>
+<summary>✅ v48.0 sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle (Phases 325-328) — SHIPPED 2026-05-26</summary>
+
+**Closure signal:** `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029` (subject frozen `1575f4a9`; 0 NEW findings; F-47-01 + F-47-02 RESOLVED_AT_V48). Audit baseline → subject: v47.0 closure HEAD `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2` → v48.0 closure HEAD. ONE batched USER-APPROVED diff `f50cc634` + the 327 HERO-04 constant-only finals landing `1575f4a9`. Shape: SPEC → IMPL → TST → TERMINAL.
+
+| Phase | Plans | Status | Completed |
+|-------|-------|--------|-----------|
+| 325. SPEC — Design-Lock + Call-Graph Attestation + Shared-Surface Reconciliation | 3/3 | Complete | 2026-05-25 |
+| 326. IMPL — The ONE Batched Contract Diff (all 7 items) | 8/8 | Complete | 2026-05-25 |
+| 327. TST — Repro/Same-Results + No-Arb + EV + Regression Proofs | 6/6 | Complete | 2026-05-26 |
+| 328. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | 4/4 | Complete | 2026-05-26 |
+
+**Coverage:** 40/40 requirements mapped (325 SPEC: 5 · 326 IMPL: 25 · 327 TST: 9 · 328 TERMINAL: 1, re-attests all 40); 0 orphaned, 0 duplicated. Per-category: PFIX 3 · RFALL 5 · KEEP 5 · POOL 6 · BTOMB 3 · HERO 6 · SWAP 9 · BATCH 3. Closure verdict: all 7 surfaces shipped (presale-drain fix, redemption stETH-fallback, keeper rename + VAULT-code 75/20/5, AfKing pool recovery, gameover BURNIE tombstone, Degenerette hero 2-pt rescale, sDGNRS far-future salvage swap); RNG_FREEZE_INTACT; 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED. One informational SWAP cash-share doc-drift advisory (USER-accepted ≤60% as canonical, NOT a finding). Full detail in `.planning/MILESTONES.md` + `audit/FINDINGS-v48.0.md` (chmod 444).
+
+</details>
+
+<details>
+<summary>✅ v44.0–v47.0 (Phases 304-324) — SHIPPED</summary>
+
+Full per-phase detail for v44.0 (304-308), v45.0 (309-314), v46.0 (316-320), and v47.0 (321-324) lives in `.planning/MILESTONES.md`. Summary:
+
+- **v47.0** Rake-Free Presale + Lootbox-Boon Unification + Redemption/Degenerette/Cancel-Tombstone Bundle (321-324, shipped 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`). 4-phase SPEC→IMPL→TST→TERMINAL; 45/45 reqs. 2 MEDIUM findings (F-47-01 + F-47-02) DEFERRED→v48.0 (both RESOLVED_AT_V48). H-CANCEL-SWAP-MISS RESOLVED_AT_V47.
+- **v46.0** Do-Work Crank + AfKing Auto-Rebuy Subscription + Legacy AFKing/ETH-Auto-Rebuy Removal (316-320, shipped 2026-05-24; signal `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`). 6-phase FEATURE milestone with the dedicated GAS phase 319 (the break-even peg precedent v49.0 mirrors); the in-tree `AfKing` keeper shipped here. 1 MEDIUM finding H-CANCEL-SWAP-MISS DEFERRED→v47.0 (RESOLVED_AT_V47).
+- **v45.0** VRF-Rotation Liveness Fix + Consolidate-Forward Delta Audit (309-314, shipped 2026-05-23, minimal close; signal `MILESTONE_V45_AT_HEAD_62fb514bfcc8ad042a45cef960e5ff0ff6fbb801`). The CATASTROPHE-class VRF-rotation orphan-index liveness fix; the `v45-vrf-freeze-invariant` north-star established here.
+- **v44.0** sStonk Per-Day Redemption Refactor + Accounting Invariant Proof (304-308, shipped 2026-05-20; signal `MILESTONE_V44_AT_HEAD_6f0ba2963a10654ba554a8c333c5ee80c54a8349`). V-184 CATASTROPHE structurally closed; 13/13 invariants proven.
+
+</details>
+
+---
+*Roadmap created: 2026-05-25 (v48.0)*
+*v49.0 milestone added: 2026-05-26 (5 phases 329-333, SPEC→IMPL→GAS→TST→TERMINAL; 29 reqs / 7 categories)*

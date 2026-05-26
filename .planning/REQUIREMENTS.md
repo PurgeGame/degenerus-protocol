@@ -76,8 +76,42 @@
 
 ## Traceability
 
+**29/29 v49.0 requirements mapped to exactly one phase across 329–333 — 0 orphaned, 0 duplicated.** Phases: 329 SPEC · 330 IMPL · 331 GAS · 332 TST · 333 TERMINAL. Center-of-gravity assignment (design-at-SPEC / build-at-IMPL / calibrate-at-GAS / prove-at-TST / sweep+attest-at-TERMINAL); the TERMINAL closure (BATCH-03 + SWEEP-01/02/03) re-attests the full set.
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| _(filled by the roadmapper at ROADMAP creation — each of the 29 v49.0 REQ-IDs maps to exactly one phase across 329–333)_ | | |
+| ROUTER-01 | Phase 330 (IMPL) | Pending |
+| ROUTER-02 | Phase 330 (IMPL) | Pending |
+| ROUTER-03 | Phase 330 (IMPL) | Pending |
+| ROUTER-04 | Phase 330 (IMPL) | Pending |
+| ROUTER-05 | Phase 330 (IMPL) | Pending |
+| ROUTER-06 | Phase 330 (IMPL) | Pending |
+| ROUTER-07 | Phase 329 (SPEC) | Pending |
+| ADV-01 | Phase 330 (IMPL) | Pending |
+| ADV-02 | Phase 330 (IMPL) | Pending |
+| ADV-03 | Phase 330 (IMPL) | Pending |
+| ADV-04 | Phase 329 (SPEC) | Pending |
+| ADV-05 | Phase 330 (IMPL) | Pending |
+| GAS-01 | Phase 331 (GAS) | Pending |
+| GAS-02 | Phase 331 (GAS) | Pending |
+| GAS-03 | Phase 329 (SPEC) | Pending |
+| GAS-04 | Phase 331 (GAS) | Pending |
+| GAS-05 | Phase 331 (GAS) | Pending |
+| GASOPT-01 | Phase 330 (IMPL) | Pending |
+| GASOPT-02 | Phase 330 (IMPL) | Pending |
+| TST-01 | Phase 332 (TST) | Pending |
+| TST-02 | Phase 332 (TST) | Pending |
+| TST-03 | Phase 332 (TST) | Pending |
+| TST-04 | Phase 332 (TST) | Pending |
+| SWEEP-01 | Phase 333 (TERMINAL) | Pending |
+| SWEEP-02 | Phase 333 (TERMINAL) | Pending |
+| SWEEP-03 | Phase 333 (TERMINAL) | Pending |
+| BATCH-01 | Phase 329 (SPEC) | Pending |
+| BATCH-02 | Phase 330 (IMPL) | Pending |
+| BATCH-03 | Phase 333 (TERMINAL) | Pending |
 
-*Last updated: 2026-05-26 — v49.0 requirements defined (29 reqs / 7 categories: ROUTER 7 · ADV 5 · GAS 5 · GASOPT 2 · TST 4 · SWEEP 3 · BATCH 3). Traceability filled at roadmap creation.*
+**Per-phase count:** 329 SPEC: 4 (BATCH-01, ROUTER-07, ADV-04, GAS-03) · 330 IMPL: 13 (ROUTER-01..06, ADV-01/02/03/05, GASOPT-01/02, BATCH-02) · 331 GAS: 4 (GAS-01/02/04/05) · 332 TST: 4 (TST-01..04) · 333 TERMINAL: 4 (SWEEP-01/02/03, BATCH-03). **Total = 29.**
+
+**Note:** milestone-wide "uncovered" warnings (§13e-style) are EXPECTED false alarms — each phase owns only its slice; SWEEP-01/02/03 + BATCH-03 re-attest the full 29-requirement set at TERMINAL (same class as the v47/v48 roadmaps).
+
+*Last updated: 2026-05-26 — v49.0 traceability filled at roadmap creation (29 reqs / 7 categories: ROUTER 7 · ADV 5 · GAS 5 · GASOPT 2 · TST 4 · SWEEP 3 · BATCH 3 → phases 329–333). Statuses flip to Complete as phases close; all 29 re-attested at the Phase 333 closure.*
