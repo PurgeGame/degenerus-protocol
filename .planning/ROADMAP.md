@@ -67,7 +67,14 @@
   3. The advanceGame bounty is re-homed (ADV-01/02/03/05) — the 3 advance-bounty `creditFlip(caller,…)` sites in `DegenerusGameAdvanceModule.sol` (`:189`/`:225`/`:468`) are removed so standalone `advanceGame()` pays no bounty; `advanceGame` returns the stall multiplier + a rewardable flag (design 1) so the router pays the re-homed bounty from the multiplier's canonical day-epoch home (no recompute in a money path); standalone `advanceGame()` stays fully functional as an unrewarded liveness fallback with the SPEC-identified guaranteed free-fallback caller path intact; and mid-day partial-drain ticket processing (`day == dailyIdx` but tickets not fully processed) is router-rewardable advance-leg work covered by the rewardable flag.
   4. The two no-cost gas micro-opts ride in the same diff (GASOPT-01/02) — `DegenerusGameMintModule.sol` hoists `mapping(address=>uint40) storage owedMap = ticketsOwedPacked[rk]` in both `processTicketBatch` (`:671`) and the resolve/future loop (`:398`) (`rk` loop-invariant, behavior-identical), and `AfKing.autoBuy` hoists `IGame.claimableWinningsOf(player)` to one call per iteration (today `:691` + `:722`), preserving the existing laziness (only when `reinvestPct>0 || FLAG_DRAIN_FIRST`, behavior-identical) — both gas-only, same-results (proven at TST).
   5. The diff is reconciled per the SPEC's settled shared signatures and is HELD at the contract-commit boundary (BATCH-02) — authored in producer-before-consumer order (AdvanceModule bounty-removal + return → Game wrapper/views → interfaces → AfKing router/`_autoBuy`/re-peg-placeholders/micro-opts) so no intermediate state ever ships where advancing is unrewarded, applied to `contracts/` and locally compiling/tested (`ContractAddresses.sol` freely modifiable), but NOT committed without explicit user hand-review of the single batched diff; CEI on every leg (`creditFlip` last) and no multiplier duplication.
-**Plans**: TBD
+**Plans**: 7 plans (5 waves)
+- [ ] 330-01-PLAN.md — AdvanceModule PRODUCER: delete the 3 caller-reward creditFlip sites (ADV-01) + add the (uint8 mult, bool rewardable) return to advanceGame() (ADV-02/03/05) [Wave 1]
+- [ ] 330-02-PLAN.md — DegenerusGame: wrapper tuple decode (ADV-02) + advanceDue()/boxesPending() O(1) views (ROUTER-04) + autoResolve→degeneretteResolve rename + flat ≥3-gate re-peg + RESOLVE_FLAT_BURNIE/D-01b marker (ROUTER-05/BATCH-02) [Wave 2]
+- [ ] 330-03-PLAN.md — Interfaces: IDegenerusGameAdvanceModule.advanceGame() tuple sig + IDegenerusGame advanceDue()/boxesPending() (ADV-02/ROUTER-04); no degeneretteResolve row (C6) [Wave 3]
+- [ ] 330-04-PLAN.md — AfKing CONSUMER: doWork(maxCount) one-category router + NoWork() + autoBuy→_autoBuy refactor + D-06 default-count + GASOPT-02 hoist + D-01b marker (ROUTER-01/02/03/04/05/06, GASOPT-02; no nonReentrant guard) [Wave 4]
+- [ ] 330-05-PLAN.md — MintModule GASOPT-01: hoist ticketsOwedPacked[rk] storage pointer in processFutureTicketBatch + processTicketBatch (gas-only) [Wave 1]
+- [ ] 330-06-PLAN.md — Test rename-fixes (D-02): 5 test files / 57 refs autoResolve→degeneretteResolve incl. the CrankLeversAndPacking literal source-string assertions (BATCH-02; parity-only) [Wave 4]
+- [ ] 330-07-PLAN.md — BATCH-02 hand-review/commit gate (autonomous:false): compile + net-zero regression + cross-item reconciliation joint-checks + HOLD the ONE batched diff for explicit USER hand-review [Wave 5]
 **UI hint**: no
 
 ### Phase 331: GAS — Worst-Case Marginal Derivation + Break-Even @0.5gwei Peg Calibration
@@ -117,7 +124,7 @@
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 329. SPEC — Design-Lock + 4 Structural Invariants | v49.0 | 3/3 | Complete    | 2026-05-26 |
-| 330. IMPL — The ONE Batched Contract Diff | v49.0 | 0/TBD | Not started | - |
+| 330. IMPL — The ONE Batched Contract Diff | v49.0 | 0/7 | Not started | - |
 | 331. GAS — Worst-Case Marginal + Break-Even Peg | v49.0 | 0/TBD | Not started | - |
 | 332. TST — Freeze Fuzz + One-Category + Regression | v49.0 | 0/TBD | Not started | - |
 | 333. TERMINAL — Delta Audit + Sweep + Closure | v49.0 | 0/TBD | Not started | - |
