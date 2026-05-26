@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v48.0
 milestone_name: sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes + Keeper/Pool/Tombstone/Hero Bundle
 status: executing
-last_updated: "2026-05-26T11:35:38.615Z"
-last_activity: 2026-05-26 -- Phase 328 plan 01 (SC1 delta-audit) complete
+last_updated: "2026-05-26T12:08:23.782Z"
+last_activity: 2026-05-26
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 21
-  completed_plans: 18
+  completed_plans: 20
   percent: 75
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (Current Milestone: v48.0 section)
 ## Current Position
 
 Phase: 328 (terminal-delta-audit-3-skill-adversarial-sweep-closure) — EXECUTING
-Plan: 2 of 4
-Status: Ready to execute
-Last activity: 2026-05-26 -- 328-01 SC1 delta-audit complete (NON-WIDENING; F-47-01/F-47-02 RESOLVED-AT-V48)
-Next: Phase 328 plan 2 of 4 — 328-02 SC2 ADVERSARIAL SWEEP (3-skill genuine-PARALLEL /contract-auditor + /zero-day-hunter + /economic-analyst; /degen-skeptic OUT) charged against the 7 surfaces + composition, skeptic-filtered before any elevation → 328-02-ADVERSARIAL-LOG.md. (Per the project memory steer: /clear first and run 328-02 INLINE for genuine-parallel sweep.) Then 328-03 FINDINGS-v48.0 deliverable (W2) + 328-04 closure flip (W3, autonomous:false USER gate). HERO-04 byte-reproduced finals ALREADY LANDED at the frozen subject 1575f4a9 (the audit subject IS the post-landing state; Hardhat PASS_ALL is 0-diff GREEN, forge stays 632/42). The 42-failure baseline carries forward (bucket A VRF/RNG 8 + bucket B stale-harness/v48-behavioral 34); re-syncing the stale fixtures is owned by a future fixture-repair plan.
+Plan: 3 of 4
+Status: 328-03 complete — Ready for 328-04 (USER closure gate)
+Last activity: 2026-05-26 -- 328-03 SC3 findings deliverable complete (audit/FINDINGS-v48.0.md authored, 9 sections, 0 NEW findings; F-47-01/F-47-02 RESOLVED-AT-V48; MILESTONE_V48_AT_HEAD_<sha> placeholder pending)
+Next: Phase 328 plan 4 of 4 — 328-04 SC4 CLOSURE FLIP (Wave 3, autonomous:false USER gate). Blocking USER closure-verdict + signal-format approval, then resolve the closure SHA, apply the atomic 5-doc flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) re-attesting all 40 reqs, propagate MILESTONE_V48_AT_HEAD_<sha> verbatim into FINDINGS-v48.0 (frontmatter + §1 + §9b/§9c) + the 5 docs, and chmod 444 the findings. NOTE for 328-04: surface the SWAP cash-share ADVISORY (code <=60% vs design <=40%; no-arb holds; doc-drift NOT a finding — §4.4/§9d of FINDINGS-v48.0) to the USER at the closure gate. SUBJECT FROZEN at 1575f4a9 (git diff 1575f4a9 HEAD -- contracts/ empty). audit/FINDINGS-v48.0.md is force-tracked (audit/* gitignored at .gitignore:25); NOT yet chmod 444.
 
 ## Last Shipped Milestone (v47.0 — SHIPPED 2026-05-25; signal `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`; baseline `MILESTONE_V46_AT_HEAD_16e9668a6de35cc0c809d81ce960aee137950687`)
 
