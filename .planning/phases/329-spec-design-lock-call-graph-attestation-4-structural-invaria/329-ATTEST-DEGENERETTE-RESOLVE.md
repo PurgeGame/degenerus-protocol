@@ -348,3 +348,103 @@ concern (the keeper UI already indexes the arrays) — NO router/signature chang
 > violation). It stays a SEPARATE permissionless call taking caller-supplied `(players[], betIds[])`. RD-1..RD-5
 > do not touch the path. ROUTER-05's "keeps its own in-game bounty unchanged" is amended to "…RENAMED +
 > RE-PEGGED per GAS-06 (still a separate call)" (D-05).
+
+---
+
+## Section E — D-05f LOSING-BET-LIVENESS GREP-FINDING (the load-bearing deliverable)
+
+**The question (D-05f):** a flat "lose" removes the rational-keeper incentive to resolve LOSING bets
+(winning bets are still self-resolved by owners claiming winnings; under a flat ≥3-gate even a keeper
+clearing losers earns nothing per-loser and only pays at ≥3). Does the protocol REQUIRE losing
+Degenerette bets to be RESOLVED — i.e. their `delete degeneretteBets[…]` at `DegeneretteModule:634` to
+fire — for ANY invariant / accounting balance / RNG-slot reuse / jackpot / gameOver / sweep / cleanup
+reason? If inert cruft → safe to drop the per-item break-even incentive; if a backlog/invariant risk →
+flag it **SURFACE-TO-USER** with the exact path + consequence, NOT softened (the SPEC carries it verbatim
+as a USER-decision gate for 330). **The prior 329 run found this INERT-SAFE; this is the re-attestation.**
+
+### E.1 The COMPLETE `degeneretteBets` consumer set (every grep hit across ALL modules @ `0cc5d10f`)
+
+Enumerated across EVERY `git show 0cc5d10f:contracts/*.sol` file (not just the two obvious ones — to defeat
+the inline-duplication false-negative, `feedback_verify_call_graph_against_source`). `degeneretteBets` appears
+in exactly **3 files** (DegenerusGame.sol = 4 hits incl. one comment, DegeneretteModule = 3 hits, Storage decl
+= 1 hit) = **8 consumer sites** (excluding the comment at :1578). There are NO others — no counter, no index,
+no sweep, no gameOver iteration, no jackpot read, no advance tally.
+
+| # | Path | Site @ `0cc5d10f` | Access | Requires a LOSING bet's `delete` (:634) to fire for correctness? |
+|---|------|-------------------|--------|------------------------------------------------------------------|
+| 1 | Storage decl | `DegenerusGameStorage.sol:1449` | `mapping(address => mapping(uint64 => uint256))` declaration | **NO** — a nested mapping; an unresolved (losing) slot is simply a nonzero entry that is never read again. No `.length`, no enumeration, nothing iterates it. Leftover entries are inert storage. |
+| 2 | SUBMISSION (write) | `DegeneretteModule:526` | `degeneretteBets[player][nonce] = packed` — bet placement | **NO** — placement is independent of whether a PRIOR bet resolved; `nonce`/`betId` is fresh per bet (monotonic), so an unresolved old slot never collides with or blocks a new placement. |
+| 3 | resolution READ | `DegeneretteModule:605-606` (`packed = degeneretteBets[player][betId]`; `if (packed == 0) revert InvalidBet()`) | per-bet read, double-resolve guard | **NO** — this is the resolution path itself; the `packed == 0` revert is the LOCAL double-resolve guard, not a dependency on OTHER losing bets being resolved. |
+| 4 | resolution CLEANUP (delete) | `DegeneretteModule:634` (`delete degeneretteBets[player][betId]`, inside `_resolveFullTicketBet`, after the `if (rngWord == 0) revert RngNotReady()` guard :632) | the cleanup itself | **NO (the anchor) — its ONLY purpose is LOCAL idempotency.** The delete zeroes the slot so (a) `_resolveBet`'s `packed == 0` revert (:606) prevents a second resolution of the SAME bet, and (b) `autoResolve`'s AUTO-02 probe (`DegenerusGame.sol:1596`) + per-item read (:1601) see a zero slot for an already-resolved bet. Nothing CONSUMES the fact that the delete happened — no counter decrements on it, no accounting reconciles against the set's emptiness, no liveness path requires the set empty. |
+| 5 | autoResolve AUTO-02 probe | `DegenerusGame.sol:1596` (`if (degeneretteBets[players[0]][betIds[0]] == 0) revert BatchAlreadyTaken()`) | item-0 read | **NO** — reads a SINGLE bet to detect a competitor; does not require any OTHER (losing) bet resolved. |
+| 6 | autoResolve per-item read | `DegenerusGame.sol:1601` (`betPacked = degeneretteBets[players[i]][betIds[i]]`) | per-item read in the resolve loop | **NO** — the resolve loop itself; reads each supplied bet, does not depend on the global set being drained. |
+| 7 | public view getter | `DegenerusGame.sol:2319` (`return degeneretteBets[player][betId]`) | a single-bet view | **NO** — a UI/read convenience; returns 0 for a resolved/absent bet. A lingering losing bet just reads back its (now-meaningless) packed data; no invariant keys off it. |
+
+(The 8th `degeneretteBets` textual hit in DegenerusGame.sol is the doc-comment at :1578 describing the AUTO-02
+probe — not a code consumer.)
+
+### E.2 The candidate-dependency modules — grep-NEGATIVE (no backlog/invariant/RNG-slot/sweep/jackpot dependency)
+
+The plan flagged GameOverModule / JackpotModule / AdvanceModule as candidate D-05f dependencies. ALL of them
+— and every other module — are **grep-CLEAN** of `degeneretteBets` at `0cc5d10f`:
+
+| Module @ `0cc5d10f` | `grep -c degeneretteBets` | Finding |
+|---------------------|---------------------------|---------|
+| `DegenerusGameGameOverModule.sol` | **0** | gameOver / final-sweep does NOT iterate or require-empty `degeneretteBets` — a lingering losing bet at gameOver is irrelevant. |
+| `DegenerusGameJackpotModule.sol` | **0** | no jackpot / daily-hero path reads `degeneretteBets` state — an unresolved losing bet cannot corrupt any jackpot accounting (the hero-override input is written at bet PLACEMENT in a SEPARATE slot, not at resolution — out of the D-05f surface). |
+| `DegenerusGameAdvanceModule.sol` | **0** | the advance / daily-drain path does NOT read or require-empty `degeneretteBets` — no per-day bet tally, no RNG-slot reuse keyed on it. |
+| `DegenerusGameBoonModule.sol` | **0** | clean |
+| `DegenerusGameDecimatorModule.sol` | **0** | clean |
+| `DegenerusGameLootboxModule.sol` | **0** | clean |
+| `DegenerusGameMintModule.sol` | **0** | clean |
+| `DegenerusGameWhaleModule.sol` | **0** | clean |
+| `DegenerusGameMintStreakUtils.sol` / `PayoutUtils.sol` | **0** / **0** | clean |
+
+Additionally: `grep "pendingDegenerette\|outstandingBet\|degeneretteCount\|pendingBet\|betCount\|openBets"` across
+all `git show 0cc5d10f:contracts/*.sol` → **ZERO matches**: there is NO outstanding-bet counter, no per-day bet
+tally, and no "requires-empty" / iterate-`degeneretteBets` site anywhere in the tree. The RNG slot a bet reads
+(`lootboxRngWordByIndex[index]`, the `RngNotReady` guard at `DegeneretteModule:632`/:499) is keyed on the BET's
+recorded index and is a READ — it is never freed/reused by the bet's `delete`; an unresolved losing bet does not
+pin or corrupt any RNG slot.
+
+### E.3 THE FINDING
+
+> **FINDING (re-confirmed): INERT — SAFE to drop the per-item break-even incentive.** Every one of the 8
+> `degeneretteBets` consumers (storage decl + submission + resolution read + delete + AUTO-02 probe + per-item
+> read + view) treats an unresolved (losing) bet as INERT storage cruft: a nonzero nested-mapping slot that is
+> never iterated, never counted, never reconciled against, and never required-empty by any invariant /
+> accounting / RNG-slot / gameOver / sweep / jackpot / cleanup path. The `delete` at `DegeneretteModule:634`
+> exists ONLY for LOCAL double-resolve idempotency (the `packed == 0` revert :606 and the AUTO-02 probe :1596),
+> not to satisfy any downstream consumer. GameOver / Jackpot / Advance — and every other module — are grep-CLEAN
+> of `degeneretteBets` (0 hits each); there is no outstanding-bet counter or per-day tally anywhere. Winning
+> bets are self-resolved by owners claiming winnings; losing bets left unresolved cost nothing and break
+> nothing. **No path REQUIRES losing Degenerette bets to be resolved.** This re-attestation RE-CONFIRMS the
+> prior 329 run's INERT-SAFE finding against the frozen baseline `0cc5d10f` — no new dependency surfaced.
+
+> Moreover — as D-05f notes — a FLAT count-independent reward actually NUDGES clearing the WHOLE backlog in
+> one tx (max work per paid tx, since the keeper pays the same flat ~1 BURNIE whether it resolves 3 or 300),
+> which is strictly BETTER for backlog liveness than the old per-item peg (which had no marginal incentive to
+> over-batch). The flat re-peg does not starve liveness; it mildly IMPROVES it.
+
+> **SURFACE-TO-USER: NONE.** No losing-bet-liveness dependency exists at `0cc5d10f`. (Had any of the 8
+> consumers or the candidate modules required the `delete` to fire — e.g. a counter that only decrements on
+> delete, a gameOver that requires-empty, an RNG slot freed only on resolution — this section would instead
+> emit a `## SURFACE-TO-USER — LOSING-BET LIVENESS DEPENDENCY` block naming the path + line + risk, carried
+> VERBATIM into the SPEC as a USER-decision gate, NOT softened. It does not, because none exists.)
+
+---
+
+## Roll-up
+
+| Item | Verdict |
+|------|---------|
+| **IMPL-blocker count** | **0.** No blocker surfaced. (Two recorded NON-blocking corrections/handoffs: §A.2 the interface-file rename rows are ABSENT/no-op — SHRINKS the surface; §B.2 `AUTO_RESOLVE_BET_GAS_UNITS` :1545 likely goes dead after the re-peg — IMPL housekeeping.) |
+| **D-05f losing-bet liveness (§E) — the load-bearing deliverable** | **INERT — SAFE (re-confirmed).** All 8 `degeneretteBets` consumers (3 files) treat an unresolved losing bet as inert cruft; the `delete` :634 is local-idempotency-only; GameOver/Jackpot/Advance + all other 8 modules grep-CLEAN (0 hits each); no counter/tally/require-empty anywhere; RNG slot is a read, never freed-on-delete. No path requires losing bets resolved. **SURFACE-TO-USER: NONE.** Flat reward mildly IMPROVES backlog liveness. |
+| **D-05c real-gas exploitability (§C)** | **NET LOSS / no positive-EV farm.** 1 BURNIE ≤ mintPrice/1000 ≤ 0.00024 ETH (PRICE_COIN_UNIT=1000e18 inverted, DegenerusAdmin:393) AND illiquid (coinflip-locked flip-credit). Keeper pays REAL prevailing gas (≥220k for the ≥3 min × 5–50+ gwei = 0.0011–0.011+ ETH = ~4.6–46× the peg), NOT the 0.5-gwei `AUTO_GAS_PRICE_REF` (:1539). The ≥3 gate widens the margin. Only-positive corner (sub-1.1-gwei ∧ peak mintPrice) gated by a false full-extractability assumption. GAS-06 sanity-check handed to Phase 331 (D-05e, not a blocker). |
+| **D-05b payment-shape feasibility (§B)** | **FEASIBLE.** Flat ~1 BURNIE (1e18) ONCE per tx / ≥3-NON-WWXRP success gate / revert `NoWork()` at 0 / resolve-always-pay-at-≥3-revert-only-at-0 lean all expressible on the current `:1587-1622` per-item loop (per-item-accumulate → count-and-flat-pay-at-≥3). Edit targets pinned (:1611-1614 remove peg, :1622 swap to flat+gate+revert). Exact literal deferred to GAS (D-05e). |
+| **D-05a rename surface (§A)** | **ENUMERATED.** 2 contract targets (`autoResolve` :1587, `_autoResolveBet` :1684) + the self-call site :1606; interface files ABSENT (corrects plan, no-op); 5 test files / 57 refs (baseline-verified, NOT held-tree-only) incl. CrankLeversAndPacking literal source-string assertions (:277/:278/:279/:290) that BREAK without atomic update. AUTO-02 / try-catch / WWXRP-exclusion / self-resolve / one-creditFlip-CEI-last all PRESERVED (D-05d). GASOPT-04 collision set = `CrankNonBrick.t.sol` + `CrankLeversAndPacking.t.sol` (the two files carrying BOTH the rename AND the `AutoBought` oracle → both edits land together in BATCH-02). |
+| **ROUTER-05 non-foldability (§D)** | **CONFIRMED — unchanged by the redesign.** `degeneretteBets` is a nested mapping (Storage:1449) with no O(1) enumeration + no pending-count sidecar → on-chain discovery impossible-or-unbounded (ROUTER-04 violation). `degeneretteResolve` stays a SEPARATE caller-supplied-arrays call; the unified one-button is a frontend concern. RD-1..RD-5 do not touch the path; D-05 survives the keeper-router redesign VERBATIM. |
+
+**No `contracts/*.sol` modified** — paper-only attestation; the COMMITTED HEAD tree is byte-identical to
+`0cc5d10f` (`git diff --name-only 0cc5d10f HEAD -- 'contracts/*.sol'` EMPTY) and every grep was run against the
+frozen blob via `git show 0cc5d10f:` (NOT the dirty held-330 working tree).
