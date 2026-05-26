@@ -16,19 +16,19 @@
 - [ ] **ROUTER-04**: `doWork` uses O(1) on-chain work-discovery predicates (advance-due incl. mid-day partial-drain / boxes-pending / buys-pending) — no unbounded scans.
 - [ ] **ROUTER-05**: `autoBuy` is refactored to an internal `_autoBuy` call (no new cross-contract money edge); `autoResolve` is excluded from the router and stays a SEPARATE call — it is RENAMED to `degeneretteResolve` + its bounty RE-PEGGED per GAS-06 (the router-fold itself is architecturally blocked by the caller-supplied `(players[], betIds[])` requirement, which has no O(1) on-chain discovery).
 - [ ] **ROUTER-06**: `doWork` signals "no work done" cleanly (consistent with the existing no-buy anti-spam revert; exact form decided at SPEC), and never pays a bounty for no work.
-- [ ] **ROUTER-07**: The router's reentrancy disposition is decided at SPEC (guard vs proven composed-CEI), defaulting to a guard per the security floor.
+- [x] **ROUTER-07**: The router's reentrancy disposition is decided at SPEC (guard vs proven composed-CEI), defaulting to a guard per the security floor.
 
 ### advanceGame Bounty Rework (ADV)
 - [ ] **ADV-01**: The 3 advance-bounty `creditFlip(caller,…)` sites in `DegenerusGameAdvanceModule.sol` (`:189`/`:225`/`:468`) are removed; standalone `advanceGame()` pays no bounty.
 - [ ] **ADV-02**: `advanceGame` returns the stall multiplier + a rewardable flag so the router pays the re-homed bounty from the multiplier's canonical day-epoch home (no recompute in a money path).
 - [ ] **ADV-03**: Standalone `advanceGame()` stays fully functional as an unrewarded liveness fallback; a guaranteed free-fallback caller path is identified so re-homing does not create a single-point liveness risk.
-- [ ] **ADV-04**: The router's advance-consume reads only FROZEN VRF-window state even when fired in the same tx as `autoOpen`/`autoBuy` — the player-controllable `totalFlipReversals` nudge stays frozen (v45 freeze invariant preserved).
+- [x] **ADV-04**: The router's advance-consume reads only FROZEN VRF-window state even when fired in the same tx as `autoOpen`/`autoBuy` — the player-controllable `totalFlipReversals` nudge stays frozen (v45 freeze invariant preserved).
 - [ ] **ADV-05**: Mid-day partial-drain ticket processing (`day == dailyIdx` but tickets not fully processed) is router-rewardable advance-leg work.
 
 ### Bounty Recalibration + Worst-Case Gas Sweep (GAS)
 - [ ] **GAS-01**: Worst-case-first marginal gas is derived per keeper category (`autoBuy`/`autoOpen`/`autoResolve`) + the router overhead (theoretical worst case before measurement). This derivation ALSO sizes the D-06 `maxCount==0` default: the AVG marginal-per-item fixes each per-leg `DEFAULT_*_COUNT = floor(~10M ÷ avg)`, and the worst-case marginal fixes the headroom margin (≈3× vs the ~30M block limit).
 - [ ] **GAS-02**: All keeper bounties are re-pegged to break-even at 0.5 gwei (BURNIE-denominated) using the per-item MARGINAL, never a per-call total (the CR-01 self-crank-faucet rule).
-- [ ] **GAS-03**: The stall multiplier uses a single unified day-start epoch (collapsing the differing `AfKing` `today*1days+82620` vs `AdvanceModule` `(day-1+DEPLOY_DAY_BOUNDARY)*1days+82620` epochs).
+- [x] **GAS-03**: The stall multiplier uses a single unified day-start epoch (collapsing the differing `AfKing` `today*1days+82620` vs `AdvanceModule` `(day-1+DEPLOY_DAY_BOUNDARY)*1days+82620` epochs).
 - [ ] **GAS-04**: The stall multiplier (1/2/4/6) is kept; any ceiling extension for extreme stalls is added ABOVE the 2h tier (never lowering existing thresholds) and is capped against the finite faucet pool.
 - [ ] **GAS-05**: A WR-01-style round-trip guard proves no positive-EV self-crank loop under the unified router (faucet bound holds; self-exclude + ETH-work-gate intact).
 - [ ] **GAS-06**: `autoResolve` is RENAMED to `degeneretteResolve` (+ internal `_autoResolveBet`→`_degeneretteResolveBet`, interfaces, tests) and its bounty re-pegged from per-item break-even to a flat literal ~1 BURNIE flip-credit per tx (count-independent), gated at ≥3 successfully-resolved NON-WWXRP bets (revert `NoWork()` on zero work; the 1–2-resolved case → resolved but UNPAID, lean = do-not-revert so a trailing tail is never stranded — SPEC/IMPL confirms). Anti-exploit basis (corrected — NOT the 0.5-gwei peg ref): the keeper pays REAL tx gas (base + ≥3 resolutions + overhead) every call while ~1 BURNIE illiquid flip-credit is worth ≤ `mintPrice/1000` ETH (≤0.00024 ETH even at the 0.24-ETH milestone price) → every qualifying tx is a net loss at any realistic gas price → no positive-EV farm; the ≥3 gate widens the margin. WWXRP stays excluded (AUTO-04 — the ≥3 count is non-WWXRP only); AUTO-02 probe + per-item isolation + self-resolve (REW-04) preserved; kept a SEPARATE call (NOT in the router). GAS sanity check (NOT a blocker): confirm ~1 BURNIE stays below real 3-resolution gas across the low-gas/high-mintPrice corner factoring flip-credit illiquidity; only lower the constant or add a scaled gate if a realistic corner flips positive. (SPEC D-05f: verify losing-bet resolution is not required by any invariant before dropping the break-even incentive.)
@@ -50,7 +50,7 @@
 - [ ] **SWEEP-03**: `audit/FINDINGS-v49.0.md` is authored (9-section, mirroring v44/v46/v47/v48), with any findings adjudicated or deferred per USER direction.
 
 ### Cross-Cutting — SPEC Reconciliation + IMPL + TERMINAL (BATCH)
-- [ ] **BATCH-01**: SPEC design-lock — lock the 4 structural invariants (one-category structural early-return / frozen advance-consume / guaranteed free fallback caller / single day-start epoch), settle the shared signatures (`advanceGame` return shape, `doWork` signature, the discovery views), and grep-attest every cited `file:line` vs the v48.0 HEAD before any patch.
+- [x] **BATCH-01**: SPEC design-lock — lock the 4 structural invariants (one-category structural early-return / frozen advance-consume / guaranteed free fallback caller / single day-start epoch), settle the shared signatures (`advanceGame` return shape, `doWork` signature, the discovery views), and grep-attest every cited `file:line` vs the v48.0 HEAD before any patch.
 - [ ] **BATCH-02**: The ONE batched USER-APPROVED `contracts/*.sol` diff is applied in producer-before-consumer order (AdvanceModule bounty-removal + return → Game wrapper/views → interfaces → AfKing router/`_autoBuy`/re-peg/micro-opts); HARD STOP at the commit boundary (locally compiled/tested, never committed without explicit user hand-review).
 - [ ] **BATCH-03**: TERMINAL closure — re-attest all v49.0 requirements at closure and apply the closure flip (`MILESTONE_V49_AT_HEAD_<sha>` + the atomic ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS flip + chmod 444 the findings).
 
@@ -88,15 +88,15 @@
 | ROUTER-04 | Phase 330 (IMPL) | Pending |
 | ROUTER-05 | Phase 330 (IMPL) | Pending |
 | ROUTER-06 | Phase 330 (IMPL) | Pending |
-| ROUTER-07 | Phase 329 (SPEC) | Pending |
+| ROUTER-07 | Phase 329 (SPEC) | Complete |
 | ADV-01 | Phase 330 (IMPL) | Pending |
 | ADV-02 | Phase 330 (IMPL) | Pending |
 | ADV-03 | Phase 330 (IMPL) | Pending |
-| ADV-04 | Phase 329 (SPEC) | Pending |
+| ADV-04 | Phase 329 (SPEC) | Complete |
 | ADV-05 | Phase 330 (IMPL) | Pending |
 | GAS-01 | Phase 331 (GAS) | Pending |
 | GAS-02 | Phase 331 (GAS) | Pending |
-| GAS-03 | Phase 329 (SPEC) | Pending |
+| GAS-03 | Phase 329 (SPEC) | Complete |
 | GAS-04 | Phase 331 (GAS) | Pending |
 | GAS-05 | Phase 331 (GAS) | Pending |
 | GAS-06 | Phase 331 (GAS) | Pending |
@@ -110,7 +110,7 @@
 | SWEEP-01 | Phase 333 (TERMINAL) | Pending |
 | SWEEP-02 | Phase 333 (TERMINAL) | Pending |
 | SWEEP-03 | Phase 333 (TERMINAL) | Pending |
-| BATCH-01 | Phase 329 (SPEC) | Pending |
+| BATCH-01 | Phase 329 (SPEC) | Complete |
 | BATCH-02 | Phase 330 (IMPL) | Pending |
 | BATCH-03 | Phase 333 (TERMINAL) | Pending |
 
