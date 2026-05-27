@@ -112,7 +112,7 @@
 - [x] 332-02-PLAN.md - TST-02 one-category/no-stacking: NEW `KeeperRouterOneCategory.t.sol` - exactly-one `creditFlip`/tx across all 3 branches + zero on the `bountyEarned==0` skip + `NoWork()` (D-02 count oracle) + structural reentrancy grep-attest (D-01, no attacker harness) + parameterless default-batch/remainder + unrewarded escapes (D-03) [Wave 1]
 - [x] 332-03-PLAN.md - TST-03 reward-routing + GASOPT same-results: NEW `KeeperRewardRoutingSameResults.t.sol` - advance UNREWARDED standalone vs REWARDED via `doWork` (mult honored, mid-day rewarded, gameover unrewarded) + GASOPT-01 (owedMap hoist) + GASOPT-03 (`keeperSnapshot` batched == individual; GASOPT-02 SUBSUMED) behavioral-equality [Wave 1]
 - [x] 332-04-PLAN.md - TST-05 `degeneretteResolve` re-peg: NEW `DegeneretteResolveRepeg.t.sol` - flat ~1 BURNIE (1e18)/tx (never the sum) at >=3 non-WWXRP, 1-2 unpaid-no-strand, 0->`NoWork()`, WWXRP excluded from gate+reward, RESULTS value-invariance (delegatecall unchanged) + Hardhat stat re-confirm [Wave 1]
-- [ ] 332-05-PLAN.md - TST-04 part A: re-confirm the live red-set, DELETE the 17 enumerated premise-retired reds (re-authored fresh at 02/03/04), `git mv` the 5 `Crank*`->`Keeper*` files + internal symbol renames; failing set restored to exactly the 42 v48 union by NAME (SAFE-03 / H-CANCEL-SWAP preserved) [Wave 2, depends 02/03/04]
+- [x] 332-05-PLAN.md - TST-04 part A: re-confirm the live red-set, DELETE the 17 enumerated premise-retired reds (re-authored fresh at 02/03/04), `git mv` the 5 `Crank*`->`Keeper*` files + internal symbol renames; failing set restored to exactly the 42 v48 union by NAME (SAFE-03 / H-CANCEL-SWAP preserved) [Wave 2, depends 02/03/04]
 - [ ] 332-06-PLAN.md - TST-04 part B: author `test/REGRESSION-BASELINE-v49.md` (mirror the v48 ledger §1-§6) - 42-union by NAME + the 17 deletions w/ re-homing + the 5 renames + the new green proof files + the net-zero membership proof [Wave 3, depends all]
 **UI hint**: no
 
@@ -139,7 +139,7 @@
 | 329. SPEC — Design-Lock + 4 Structural Invariants | v49.0 | 3/3 | Complete    | 2026-05-26 |
 | 330. IMPL — The ONE Batched Contract Diff | v49.0 | 9/9 | Complete   | 2026-05-27 |
 | 331. GAS — Worst-Case Marginal + Break-Even Peg | v49.0 | 6/5 | Complete    | 2026-05-27 |
-| 332. TST — Freeze Fuzz + One-Category + Regression | v49.0 | 4/6 | In Progress|  |
+| 332. TST — Freeze Fuzz + One-Category + Regression | v49.0 | 5/6 | In Progress|  |
 | 333. TERMINAL — Delta Audit + Sweep + Closure | v49.0 | 0/TBD | Not started | - |
 
 ---

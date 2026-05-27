@@ -47,7 +47,7 @@
 - [x] **TST-01**: Freeze-invariant fuzz (extending the v43 `RngLockDeterminism` harness) proves the router advance-consume reads only frozen state mid-tx (the `totalFlipReversals` class). ADDS (the redesign, Q4): autoBuy-during-rngLock SAFE; autoOpen-blocked-during-rngLock + NO marooned boxes (RD-3/RD-5); unified-bounty one-category + no-double-pay (the single `creditFlip` in `doWork`).
 - [x] **TST-02**: A one-rewarded-category-per-tx assertion (no bounty-stacking) + a router→game→`creditFlip` reentrancy double-pay regression (the D-01b backstop proving the ROUTER-07 no-guard disposition — legs structurally cannot credit, only `doWork` credits once after the early-return). Plus the parameterless-`doWork()` default-batch proof (D-07): `doWork()` does its fixed per-leg default batch and does NOT OOG in the common case (a backlog larger than one batch leaves a remainder for the next call), with the standalone parametered + UNREWARDED `autoOpen(count)`/`autoBuy(count)` emergency escapes exercised.
 - [x] **TST-03**: `advanceGame` is unrewarded standalone but rewarded via the router; the GASOPT micro-opts are proven same-results (gas-only).
-- [ ] **TST-04**: Full-suite regression is NON-WIDENING vs the v48.0 baseline (net-zero new regression; enumerated-red-set guard). INCLUDES the GASOPT-04 test-oracle migration (`AutoBought` event → `lastAutoBoughtDay` storage / pool-balance-delta) keeping the suite net-zero vs the v48 baseline — the no-double-buy invariant re-expressed in storage terms WITHOUT weakening SAFE-03 / H-CANCEL-SWAP.
+- [x] **TST-04**: Full-suite regression is NON-WIDENING vs the v48.0 baseline (net-zero new regression; enumerated-red-set guard). INCLUDES the GASOPT-04 test-oracle migration (`AutoBought` event → `lastAutoBoughtDay` storage / pool-balance-delta) keeping the suite net-zero vs the v48 baseline — the no-double-buy invariant re-expressed in storage terms WITHOUT weakening SAFE-03 / H-CANCEL-SWAP.
 - [x] **TST-05**: The `degeneretteResolve` rename + re-peg (GAS-06) is proven — flat literal ~1 BURNIE per tx (NOT per-item), the ≥3-resolution pay-gate, revert-on-no-work (zero resolved), WWXRP excluded from BOTH the gate count and the reward, and byte-identical resolution RESULTS vs the per-item path (rename + bounty-shape change only, no payout/RNG change).
 
 ### Gas + Adversarial Security Sweep (SWEEP)
@@ -117,7 +117,7 @@
 | TST-01 | Phase 332 (TST) | Complete |
 | TST-02 | Phase 332 (TST) | Complete |
 | TST-03 | Phase 332 (TST) | Complete |
-| TST-04 | Phase 332 (TST) | Pending |
+| TST-04 | Phase 332 (TST) | Complete |
 | TST-05 | Phase 332 (TST) | Complete |
 | SWEEP-01 | Phase 333 (TERMINAL) | Pending |
 | SWEEP-02 | Phase 333 (TERMINAL) | Pending |
