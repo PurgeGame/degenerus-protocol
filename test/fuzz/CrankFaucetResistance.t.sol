@@ -569,10 +569,12 @@ contract CrankFaucetResistance is DeployProtocol {
             assertGt(rewardEthAtPeg, 0, "open-leg reward is positive for k>=1");
 
             // Measure the REAL gas of the identical box-opening work (autoOpen body == doWork open leg).
+            // autoOpen's maxCount is a GAS-WEIGHTED budget; grant ample weighted units (k * 64, above the
+            // ~60-unit whale-pass weight) so all k queued boxes open and the gas is for exactly k boxes.
             address opener = makeAddr(string(abi.encodePacked("openRT_", vm.toString(j))));
             vm.prank(opener);
             uint256 gasBefore = gasleft();
-            afKing.autoOpen(k);
+            afKing.autoOpen(k * 64);
             uint256 gasUsed = gasBefore - gasleft();
 
             // Non-vacuity: each box actually opened (first-deposit signal zeroed) — the gas is for k real
@@ -609,10 +611,12 @@ contract CrankFaucetResistance is DeployProtocol {
         (uint48 index, address[] memory owners) = _queueKBoxesAtActiveIndex(k, 0);
         uint256 rewardEthAtPeg = _openLegRewardEthAtPeg(k);
 
+        // autoOpen's maxCount is a GAS-WEIGHTED budget; grant ample weighted units (k * 64) so all k
+        // queued boxes open and the measured gas covers exactly k boxes.
         address opener = makeAddr("openRT_fuzz");
         vm.prank(opener);
         uint256 gasBefore = gasleft();
-        afKing.autoOpen(k);
+        afKing.autoOpen(k * 64);
         uint256 gasUsed = gasBefore - gasleft();
 
         for (uint256 i; i < k; ++i) {

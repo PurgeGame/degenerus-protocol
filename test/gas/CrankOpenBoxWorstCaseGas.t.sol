@@ -182,9 +182,11 @@ contract CrankOpenBoxWorstCaseGas is DeployProtocol {
         }
 
         // Bracket the whole N-box batch; divide by N for the per-box marginal (fixed overhead paid once).
+        // autoOpen's maxCount is a GAS-WEIGHTED budget (a typical box = 1 unit, a heavier boon box ≈ 2);
+        // grant ample weighted units (nBoxes * 64) so all N queued boxes open and the marginal is N-real.
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.autoOpen(nBoxes);
+        game.autoOpen(nBoxes * 64);
         uint256 totalGas = gasBefore - gasleft();
         uint256 perBoxMarginal = totalGas / nBoxes;
 

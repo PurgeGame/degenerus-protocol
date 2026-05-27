@@ -243,7 +243,7 @@ contract AfKingSubscription is DeployProtocol {
         );
     }
 
-    /// @notice autoBuy(0) uses the default batch (DOWORK_BATCH) — 0 = default; it does NOT
+    /// @notice autoBuy(0) uses the default batch (BUY_BATCH) — 0 = default; it does NOT
     ///         revert, running a default-size unrewarded manual clear.
     function testAutoBuyZeroMaxCountUsesDefaultBatch() public {
         vm.prank(makeAddr("zero_autoBuyer"));

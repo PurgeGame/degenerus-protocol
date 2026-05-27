@@ -555,11 +555,11 @@ contract AfKing {
     ///      lives in the game's `batchPurchase` (per-slice try/catch + slice
     ///      refund); the keeper preserves strict CEI.
     /// @param maxCount Maximum number of un-autoBought active entries to process this
-    ///        call. 0 = use the default batch (DOWORK_BATCH). Caller-bounded (no
+    ///        call. 0 = use the default batch (BUY_BATCH). Caller-bounded (no
     ///        contract-bounded loop) — the anti-gas-DoS property.
     /// @return boughtCount Number of successful per-player buys this chunk.
     function _autoBuy(uint256 maxCount) internal returns (uint256 boughtCount) {
-        if (maxCount == 0) maxCount = DOWORK_BATCH;
+        if (maxCount == 0) maxCount = BUY_BATCH;
 
         uint32 today = _currentDay();
         uint256 mp = IGame(ContractAddresses.GAME).mintPrice();
@@ -842,15 +842,30 @@ contract AfKing {
     /*------------------------------------------------------------------
                           Unified keeper router (doWork)
     ------------------------------------------------------------------*/
-    /// @dev GAS-331 PLACEHOLDER — fixed per-leg default batch (the prior caller-bounded
-    ///      default). Calibrated under the USER-gated GAS phase (331), NOT locked here.
-    uint256 internal constant DOWORK_BATCH = 100;
-    /// @dev GAS-331 PLACEHOLDER — advance reward ratio (2x * mult). Calibrated at GAS (331).
+    /// @dev Buy-leg default batch. A landed keeper buy is ~262k gas (the per-subscriber
+    ///      worst-case marginal at the 0.5 gwei reference; buys cannot roll boons, so the
+    ///      per-item cost is uniform), so 50 buys ≈ 13.1M stays under the 16.7M HARD per-tx
+    ///      ceiling. Buys must NEVER exceed 16.7M (a reverting batch would brick the daily
+    ///      buy leg), so the per-call buy count is HARD-bounded here.
+    uint256 internal constant BUY_BATCH = 50;
+    /// @dev Open-leg default batch. A typical box open is ~89k gas, so 100 opens ≈ 9M (the
+    ///      ~9M average target). The open leg's `maxCount` is a GAS-WEIGHTED budget
+    ///      (DegenerusGame.autoOpen): a typical box costs 1 weighted unit, a whale-pass box
+    ///      ≈ 60, so the weighted budget bounds the leg at ≤ (OPEN_BATCH−1)×~90k + one
+    ///      whale-pass overshoot ≈ 14.3M < 16.7M for ANY whale-pass mix.
+    uint256 internal constant OPEN_BATCH = 100;
+    /// @dev Advance reward ratio (2x * mult), pegged to the advance base marginal. The
+    ///      1/2/4/6 stall ladder (advance-only) is the escalation lever; the ladder peak
+    ///      (6x) is faucet-bounded and one-shot per day-advance.
     uint256 internal constant ADVANCE_RATIO_NUM = 2;
-    /// @dev GAS-331 PLACEHOLDER — buy reward ratio (flat 1.5x per tx = NUM/DEN). At GAS (331).
+    /// @dev Buy reward ratio (flat 1.5x per tx = NUM/DEN), the frozen 329-SPEC D-07 ratio.
+    ///      The buy is the most expensive per-item leg yet carries this flat 1.5x; it stays
+    ///      round-trip ≤ 0 against the buy marginal at the deploy-param BOUNTY_ETH_TARGET.
     uint256 internal constant BUY_RATIO_NUM = 3;
     uint256 internal constant BUY_RATIO_DEN = 2;
-    /// @dev GAS-331 PLACEHOLDER — open reward pro-rate knee (1x at/above, pro-rated below).
+    /// @dev Open reward pro-rate knee (1x at/above, pro-rated below): a mid-day open of
+    ///      k < 5 boxes earns unit·k/5, so a single-box open earns 0.2x — below a one-box
+    ///      tx's gas. This closes the small-batch self-crank corner (−EV below the knee).
     uint256 internal constant OPEN_KNEE = 5;
 
     /// @notice Unified permissionless keeper router: do ONE category of pending work this
@@ -873,7 +888,7 @@ contract AfKing {
         // (1) autoBuy — highest priority (RD-1): subscriber buys queue at day-open,
         // pre-entropy, before advance requests the day's RNG. TRUE even during rngLock (RD-2).
         if (_autoBuyDay != _currentDay() || _autoBuyCursor < _subscribers.length) {
-            uint256 bought = _autoBuy(DOWORK_BATCH);
+            uint256 bought = _autoBuy(BUY_BATCH);
             // Flat per-tx buy bounty (D-07) — NOT scaled by count (bounded once/day/sub).
             if (bought > 0) bountyEarned = (unit * BUY_RATIO_NUM) / BUY_RATIO_DEN;
         }
@@ -885,7 +900,7 @@ contract AfKing {
         }
         // (3) autoOpen — FALSE during rngLock (RD-3); opens mid-day-resolved boxes.
         else if (IGame(ContractAddresses.GAME).boxesPending()) {
-            uint256 opened = IGame(ContractAddresses.GAME).autoOpen(DOWORK_BATCH);
+            uint256 opened = IGame(ContractAddresses.GAME).autoOpen(OPEN_BATCH);
             // 1x pro-rated below the knee, flat 1x at/above — kills the small-batch corner.
             uint256 k = opened < OPEN_KNEE ? opened : OPEN_KNEE;
             bountyEarned = (unit * k) / OPEN_KNEE;
