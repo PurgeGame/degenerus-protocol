@@ -128,7 +128,7 @@
 **Plans**: 4 plans (3 waves) — RE-PLANNED 2026-05-27 (the 4-plan TERMINAL shape mirroring the v44/v46/v47/v48 precedent). DOC-ONLY; ZERO `contracts/*.sol`; sequential-on-main, NO worktrees (332 precedent); the audit subject is FROZEN at `4c9f9d9b`; nothing pushed.
 - [x] 333-01-PLAN.md — SWEEP-02 delta-audit: the 5-file blast-radius NON-WIDENING attribution (AfKing/DegenerusGame/AdvanceModule/MintModule/IDegenerusGameModules) + the 4 structural invariants + the OPEN-E 4-protection BLOCKING re-attest (GASOPT-05) + VRF-freeze + the 666/42/17 ledger by-NAME → `333-01-DELTA-AUDIT.md` [Wave 1, autonomous]
 - [x] 333-02-PLAN.md — SWEEP-01 3-skill GENUINE-PARALLEL adversarial sweep (run INLINE; `/degen-skeptic` OUT; TIER-A advance-timing MEV + bounty economics, TIER-B re-attest reentrancy + liveness backstop; every elevation through the skeptic dual-gate) → `333-02-ADVERSARIAL-LOG.md` (§A/§B/§C/§D) [Wave 1, autonomous]
-- [ ] 333-03-PLAN.md — SWEEP-03 author `audit/FINDINGS-v49.0.md` (9-section, mirror v48; folds 01 §3/§5 + 02 §4; the 36-req §3.C re-attestation; the closure-signal placeholder) [Wave 2, depends 01+02]
+- [x] 333-03-PLAN.md — SWEEP-03 author `audit/FINDINGS-v49.0.md` (9-section, mirror v48; folds 01 §3/§5 + 02 §4; the 36-req §3.C re-attestation; the closure-signal placeholder) [Wave 2, depends 01+02]
 - [ ] 333-04-PLAN.md — BATCH-03 closure flip (autonomous:false): the single blocking USER gate → resolve `MILESTONE_V49_AT_HEAD_<sha>` → atomic 5-doc flip + 36-req re-attest + chmod 444 + grep-zero-placeholders; nothing pushed [Wave 3, depends 03]
 **UI hint**: no
 
@@ -144,7 +144,7 @@
 | 330. IMPL — The ONE Batched Contract Diff | v49.0 | 9/9 | Complete   | 2026-05-27 |
 | 331. GAS — Worst-Case Marginal + Break-Even Peg | v49.0 | 6/5 | Complete    | 2026-05-27 |
 | 332. TST — Freeze Fuzz + One-Category + Regression | v49.0 | 6/6 | Complete    | 2026-05-27 |
-| 333. TERMINAL — Delta Audit + Sweep + Closure | v49.0 | 2/4 | In Progress|  |
+| 333. TERMINAL — Delta Audit + Sweep + Closure | v49.0 | 3/4 | In Progress|  |
 
 ---
 
