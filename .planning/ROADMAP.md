@@ -125,7 +125,11 @@
   2. The delta-audit attests NON-WIDENING vs the v48.0 baseline `0cc5d10f` (SWEEP-02) — every `contracts/`+`test/` diff is attributable to a v49 work item across the blast radius (AfKing router/`_autoBuy`/re-peg/micro-opt, AdvanceModule bounty-removal + return, Game wrapper + discovery views + MintModule pointer, the interface updates), each surface attested non-widening relative to the baseline, and the v48 SWAP cash-share advisory recorded carried-forward-unmodified.
   3. `audit/FINDINGS-v49.0.md` is authored at the v49.0 closure HEAD (SWEEP-03) — 9-section, mirroring the v44/v46/v47/v48 pattern, chmod 444, folding in the delta-audit (§3/§5) + the sweep disposition (§4), with any findings adjudicated or deferred per USER direction.
   4. The closure flip is applied (BATCH-03) — all v49.0 requirements re-attested at closure, the `MILESTONE_V49_AT_HEAD_<sha>` closure signal emitted and propagated verbatim, and the atomic 5-doc closure flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) applied; the closure plan is a single blocking USER closure-verdict + signal-format approval gate (autonomous:false) — the auto-advance is HELD at the closure boundary per `feedback_pause_at_contract_phase_boundaries`.
-**Plans**: TBD
+**Plans**: 4 plans (3 waves) — RE-PLANNED 2026-05-27 (the 4-plan TERMINAL shape mirroring the v44/v46/v47/v48 precedent). DOC-ONLY; ZERO `contracts/*.sol`; sequential-on-main, NO worktrees (332 precedent); the audit subject is FROZEN at `4c9f9d9b`; nothing pushed.
+- [ ] 333-01-PLAN.md — SWEEP-02 delta-audit: the 5-file blast-radius NON-WIDENING attribution (AfKing/DegenerusGame/AdvanceModule/MintModule/IDegenerusGameModules) + the 4 structural invariants + the OPEN-E 4-protection BLOCKING re-attest (GASOPT-05) + VRF-freeze + the 666/42/17 ledger by-NAME → `333-01-DELTA-AUDIT.md` [Wave 1, autonomous]
+- [ ] 333-02-PLAN.md — SWEEP-01 3-skill GENUINE-PARALLEL adversarial sweep (run INLINE; `/degen-skeptic` OUT; TIER-A advance-timing MEV + bounty economics, TIER-B re-attest reentrancy + liveness backstop; every elevation through the skeptic dual-gate) → `333-02-ADVERSARIAL-LOG.md` (§A/§B/§C/§D) [Wave 1, autonomous]
+- [ ] 333-03-PLAN.md — SWEEP-03 author `audit/FINDINGS-v49.0.md` (9-section, mirror v48; folds 01 §3/§5 + 02 §4; the 36-req §3.C re-attestation; the closure-signal placeholder) [Wave 2, depends 01+02]
+- [ ] 333-04-PLAN.md — BATCH-03 closure flip (autonomous:false): the single blocking USER gate → resolve `MILESTONE_V49_AT_HEAD_<sha>` → atomic 5-doc flip + 36-req re-attest + chmod 444 + grep-zero-placeholders; nothing pushed [Wave 3, depends 03]
 **UI hint**: no
 
 ---
@@ -140,7 +144,7 @@
 | 330. IMPL — The ONE Batched Contract Diff | v49.0 | 9/9 | Complete   | 2026-05-27 |
 | 331. GAS — Worst-Case Marginal + Break-Even Peg | v49.0 | 6/5 | Complete    | 2026-05-27 |
 | 332. TST — Freeze Fuzz + One-Category + Regression | v49.0 | 6/6 | Complete    | 2026-05-27 |
-| 333. TERMINAL — Delta Audit + Sweep + Closure | v49.0 | 0/TBD | Not started | - |
+| 333. TERMINAL — Delta Audit + Sweep + Closure | v49.0 | 0/4 | Not started | - |
 
 ---
 
