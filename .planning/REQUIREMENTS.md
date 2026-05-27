@@ -44,7 +44,7 @@
 - [ ] **GASOPT-05**: REMOVE the per-iteration `isOperatorApproved(player, AfKing)` check (`:676`, ~2.8k/player) — the SUB is the consent unit (revoke = `setDailyQuantity(0)` → tombstone-skip; OPEN-E "consent-gate-at-subscribe + trust-the-sub"); KEEP the subscribe-time `isOperatorApproved(fundingSource, subscriber)` gate (`:401`). **BLOCKING CONDITION:** the Phase 333 SWEEP must re-attest the 4 OPEN-E protections hold WITHOUT `:676` BEFORE closure; if it fails, this removal is REVERTED before the milestone ships.
 
 ### Test Proofs (TST)
-- [ ] **TST-01**: Freeze-invariant fuzz (extending the v43 `RngLockDeterminism` harness) proves the router advance-consume reads only frozen state mid-tx (the `totalFlipReversals` class). ADDS (the redesign, Q4): autoBuy-during-rngLock SAFE; autoOpen-blocked-during-rngLock + NO marooned boxes (RD-3/RD-5); unified-bounty one-category + no-double-pay (the single `creditFlip` in `doWork`).
+- [x] **TST-01**: Freeze-invariant fuzz (extending the v43 `RngLockDeterminism` harness) proves the router advance-consume reads only frozen state mid-tx (the `totalFlipReversals` class). ADDS (the redesign, Q4): autoBuy-during-rngLock SAFE; autoOpen-blocked-during-rngLock + NO marooned boxes (RD-3/RD-5); unified-bounty one-category + no-double-pay (the single `creditFlip` in `doWork`).
 - [ ] **TST-02**: A one-rewarded-category-per-tx assertion (no bounty-stacking) + a router→game→`creditFlip` reentrancy double-pay regression (the D-01b backstop proving the ROUTER-07 no-guard disposition — legs structurally cannot credit, only `doWork` credits once after the early-return). Plus the parameterless-`doWork()` default-batch proof (D-07): `doWork()` does its fixed per-leg default batch and does NOT OOG in the common case (a backlog larger than one batch leaves a remainder for the next call), with the standalone parametered + UNREWARDED `autoOpen(count)`/`autoBuy(count)` emergency escapes exercised.
 - [ ] **TST-03**: `advanceGame` is unrewarded standalone but rewarded via the router; the GASOPT micro-opts are proven same-results (gas-only).
 - [ ] **TST-04**: Full-suite regression is NON-WIDENING vs the v48.0 baseline (net-zero new regression; enumerated-red-set guard). INCLUDES the GASOPT-04 test-oracle migration (`AutoBought` event → `lastAutoBoughtDay` storage / pool-balance-delta) keeping the suite net-zero vs the v48 baseline — the no-double-buy invariant re-expressed in storage terms WITHOUT weakening SAFE-03 / H-CANCEL-SWAP.
@@ -114,7 +114,7 @@
 | GASOPT-03 | Phase 330 (IMPL) | Pending |
 | GASOPT-04 | Phase 330 (IMPL) | Pending |
 | GASOPT-05 | Phase 330 (IMPL) | Pending |
-| TST-01 | Phase 332 (TST) | Pending |
+| TST-01 | Phase 332 (TST) | Complete |
 | TST-02 | Phase 332 (TST) | Pending |
 | TST-03 | Phase 332 (TST) | Pending |
 | TST-04 | Phase 332 (TST) | Pending |
