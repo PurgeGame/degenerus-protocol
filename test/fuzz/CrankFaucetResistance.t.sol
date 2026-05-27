@@ -6,6 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title CrankFaucetResistance -- Proves SAFE-01: the permissionless do-work crank
 ///        (degeneretteResolve / autoOpen) is faucet-bounded by three caller-independent locks:
@@ -96,6 +97,43 @@ contract CrankFaucetResistance is DeployProtocol {
 
     /// @dev A fixed RNG word for the WR-01 multi-box self-crank round-trip (deterministic box opens).
     uint256 private constant BOX_FIXED_WORD = uint256(keccak256("crank_faucet_box_fixed_word"));
+
+    // -------------------------------------------------------------------------
+    // v49 flat-per-tx router reward mirror (the GAS-05 round-trip guard target)
+    //
+    // The 330 keeper-router redesign (commit 63bc16ca) re-homed the buy/open/advance bounty
+    // from the per-item gas-units model into AfKing.doWork() as a flat-per-tx model. doWork()
+    // computes a level-invariant break-even unit then applies a per-category ratio:
+    //   unit     = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / mintPrice()          (AfKing.sol:870)
+    //   buy leg  = (unit * BUY_RATIO_NUM) / BUY_RATIO_DEN                         (AfKing.sol:878)
+    //   open leg = (unit * min(opened, OPEN_KNEE)) / OPEN_KNEE                    (AfKing.sol:890-891)
+    // BOUNTY_ETH_TARGET is read LIVE off the deployed AfKing immutable (afKing.BOUNTY_ETH_TARGET()),
+    // so the guards below stay correct for whatever value 331-04 lands; PRICE_COIN_UNIT is the same
+    // 1000-ether BURNIE-per-ETH unit already mirrored above. The ratio/knee constants are AfKing
+    // `internal constant`s with no on-chain getter, so they are mirrored here — TEST-MIRROR SYNC: if
+    // 331-04 changes BUY_RATIO_NUM/DEN or OPEN_KNEE in AfKing.sol, re-sync these. The buy-leg guard
+    // CROSS-VALIDATES the live buy reward (observed via doWork()) against unit*NUM/DEN, so a ratio
+    // drift in the contract trips testRouterBuyRewardMatchesLiveUnitRatio rather than silently passing.
+    // -------------------------------------------------------------------------
+
+    /// @dev AfKing.sol:851-852 — flat 1.5x per-tx buy reward (NUM/DEN).
+    uint256 private constant BUY_RATIO_NUM = 3;
+    uint256 private constant BUY_RATIO_DEN = 2;
+
+    /// @dev AfKing.sol:854 — open reward pro-rate knee (1x at/above the knee, pro-rated below).
+    uint256 private constant OPEN_KNEE = 5;
+
+    // -------------------------------------------------------------------------
+    // AfKing storage-slot constants (re-confirmed via `forge inspect AfKing storage`
+    // against the 63bc16ca layout; mirrors RouterWorstCaseGas.t.sol).
+    // -------------------------------------------------------------------------
+
+    /// @dev _subOf mapping root (one packed Sub slot per subscriber).
+    uint256 private constant SUBOF_SLOT = 1;
+    /// @dev _autoBuyDay (bytes 0..3) | _autoBuyCursor (bytes 4..) packed at slot 4.
+    uint256 private constant AFKING_CURSOR_SLOT = 4;
+    /// @dev DegenerusGame claimableWinnings mapping root (for seeding a reinvest-branch sub).
+    uint256 private constant GAME_CLAIMABLE_SLOT = 7;
 
     address private player;   // bet owner
     address private cranker;  // arbitrary caller of degeneretteResolve (self-crank == player)
@@ -496,6 +534,184 @@ contract CrankFaucetResistance is DeployProtocol {
     }
 
     // =========================================================================
+    // 331-02 Task 1 — GAS-05 flat-per-tx ROUTER round-trip guards (the doWork()
+    //                  open small-batch hot corner + the flat 1.5x buy leg).
+    //
+    // The v49 keeper-router (AfKing.doWork(), commit 63bc16ca) moved the buy/open bounty into a
+    // flat-per-tx model. The structural faucet risk is the OPEN small-batch corner: below the
+    // OPEN_KNEE the per-box reward is pro-rated (unit * k / KNEE), so a self-cranker opening a
+    // tiny mid-day batch earns a fraction of `unit` — which the OPEN_KNEE pro-rate exists to keep
+    // strictly below the real one-box tx gas. These guards prove the reward valued at the 0.5-gwei
+    // peg is below the REAL gas of the identical work at every realistic market price (>=1 gwei),
+    // judged against REAL prevailing gas + flip-credit illiquidity (NOT the 0.5-gwei peg ref;
+    // feedback_bounty_exploit_uses_real_gas_not_peg_ref). `unit` is read LIVE so the guards hold
+    // for whatever 331-04 lands; the reward is illiquid coinflip flip-credit (creditFlip), never a
+    // liquid/withdrawable balance, so even a hypothetical par-recovery still cannot clear the gas.
+    // =========================================================================
+
+    /// @notice GAS-05 / WR-01 (open hot corner): a self-cranker opens k OWN boxes; the doWork() open-leg
+    ///         reward `unit * min(k, OPEN_KNEE) / OPEN_KNEE` valued back at the 0.5-gwei peg is STRICTLY
+    ///         below the REAL gas the identical box-opening work burns at the >=1 gwei market floor — for
+    ///         k in {1,2,3,4,5,>5}, spanning the below-knee pro-rated corner and the at/above-knee flat
+    ///         regime. The work gas is measured via the unrewarded `afKing.autoOpen(k)` passthrough, whose
+    ///         body IS the doWork() open leg's box-opening work; the reward is the value doWork() would
+    ///         credit (computed from the LIVE break-even unit). Round-trip <= 0 at every realistic price.
+    function testRouterOpenSelfCrankRoundTripNonPositive() public {
+        uint256[6] memory ks = [uint256(1), 2, 3, 4, 5, 12];
+        for (uint256 j; j < ks.length; ++j) {
+            uint256 k = ks[j];
+
+            // Fresh fixture per k (re-deploy via setUp's state is per-test; emulate by a fresh index).
+            (uint48 index, address[] memory owners) = _queueKBoxesAtActiveIndex(k, j);
+
+            // The open-leg reward doWork() would pay for opening k boxes (LIVE unit; pro-rated below knee).
+            uint256 rewardEthAtPeg = _openLegRewardEthAtPeg(k);
+            assertGt(rewardEthAtPeg, 0, "open-leg reward is positive for k>=1");
+
+            // Measure the REAL gas of the identical box-opening work (autoOpen body == doWork open leg).
+            address opener = makeAddr(string(abi.encodePacked("openRT_", vm.toString(j))));
+            vm.prank(opener);
+            uint256 gasBefore = gasleft();
+            afKing.autoOpen(k);
+            uint256 gasUsed = gasBefore - gasleft();
+
+            // Non-vacuity: each box actually opened (first-deposit signal zeroed) — the gas is for k real
+            // materializations, not a no-op walk, so the round-trip comparison is against true work cost.
+            for (uint256 i; i < k; ++i) {
+                assertEq(_lootboxEthBase(index, owners[i]), 0, "open non-vacuity: each self-crank box opened");
+            }
+
+            // ROUND-TRIP <= 0 at the >=1 gwei realistic market floor: the FIXED-peg reward (valued at the
+            // 0.5-gwei reference) is strictly below the real gas the self-cranker burns. The small-batch
+            // (k < OPEN_KNEE) corner is the hottest — its pro-rated reward must still lose to a one-box tx.
+            assertLt(
+                rewardEthAtPeg,
+                gasUsed * 1 gwei,
+                "WR-01 open hot corner: flat-per-tx reward-at-peg < real open gas at the 1 gwei floor"
+            );
+            // Spot a mainnet-typical 20 gwei price (gap an order of magnitude).
+            assertLt(
+                rewardEthAtPeg,
+                gasUsed * 20 gwei,
+                "WR-01 open: round-trip strictly negative at a realistic 20 gwei submission price"
+            );
+        }
+    }
+
+    /// @notice GAS-05 open-corner fuzz: across fuzzed realistic submission prices and fuzzed small batch
+    ///         sizes (1..2*OPEN_KNEE, spanning below + at/above the knee), the flat-per-tx open reward at
+    ///         the 0.5-gwei peg is ALWAYS below the real open gas — the round-trip cannot be pushed
+    ///         positive by choosing the batch size or the gas price (the reward never reads tx.gasprice).
+    function testFuzz_RouterOpenRoundTripNonPositiveAcrossGasPrices(uint256 gasPriceWei, uint8 kSel) public {
+        gasPriceWei = bound(gasPriceWei, 1 gwei, 2000 gwei);
+        uint256 k = (uint256(kSel) % (2 * OPEN_KNEE)) + 1; // 1 .. 2*KNEE
+
+        (uint48 index, address[] memory owners) = _queueKBoxesAtActiveIndex(k, 0);
+        uint256 rewardEthAtPeg = _openLegRewardEthAtPeg(k);
+
+        address opener = makeAddr("openRT_fuzz");
+        vm.prank(opener);
+        uint256 gasBefore = gasleft();
+        afKing.autoOpen(k);
+        uint256 gasUsed = gasBefore - gasleft();
+
+        for (uint256 i; i < k; ++i) {
+            assertEq(_lootboxEthBase(index, owners[i]), 0, "open fuzz non-vacuity: each box opened");
+        }
+        assertLt(
+            rewardEthAtPeg,
+            gasUsed * gasPriceWei,
+            "WR-01 open: round-trip <= 0 at every fuzzed realistic gas price > 0.5 gwei"
+        );
+    }
+
+    /// @notice GAS-05 (buy leg): the flat 1.5x doWork() buy reward valued at the 0.5-gwei peg is strictly
+    ///         below the REAL gas the doWork() buy-leg tx burns at the >=1 gwei floor. A farmer must fund
+    ///         real subscription buys (each bounded once/day/sub) far in excess of the bounty. The reward
+    ///         here is OBSERVED directly off the doWork() credit delta (buy is the top-priority routed leg
+    ///         on a fresh day with healthy subs), so this also proves the live buy ratio end to end.
+    function testRouterBuySelfCrankRoundTripNonPositive() public {
+        address[] memory subs = _setupHealthyBuyingSubs(3, "buyRT_");
+
+        address keeper = makeAddr("buyRT_keeper");
+        uint256 pre = coinflip.coinflipAmount(keeper);
+
+        vm.prank(keeper);
+        uint256 gasBefore = gasleft();
+        afKing.doWork();
+        uint256 gasUsed = gasBefore - gasleft();
+
+        uint256 stakeDelta = coinflip.coinflipAmount(keeper) - pre;
+        assertGt(stakeDelta, 0, "doWork buy leg pays a positive flat bounty");
+
+        // Non-vacuity: at least one of our subs actually bought this day (the buy leg ran real work).
+        uint32 today = _today();
+        bool anyBought;
+        for (uint256 i; i < subs.length; ++i) {
+            if (_lastAutoBoughtDayOf(subs[i]) == today) { anyBought = true; break; }
+        }
+        assertTrue(anyBought, "buy non-vacuity: doWork ran the buy leg (a sub bought)");
+
+        uint256 rewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
+
+        // ROUND-TRIP <= 0 at the >=1 gwei market floor + a 20 gwei spot.
+        assertLt(
+            rewardEthAtPeg,
+            gasUsed * 1 gwei,
+            "WR-01 buy leg: flat 1.5x reward-at-peg < real autoBuy gas at the 1 gwei floor"
+        );
+        assertLt(
+            rewardEthAtPeg,
+            gasUsed * 20 gwei,
+            "WR-01 buy leg: round-trip strictly negative at a realistic 20 gwei price"
+        );
+    }
+
+    /// @notice GAS-05 buy-leg fuzz: across fuzzed realistic submission prices the observed flat buy reward
+    ///         at the 0.5-gwei peg is always below the real doWork() buy-leg gas — price-independent reward.
+    function testFuzz_RouterBuyRoundTripNonPositiveAcrossGasPrices(uint256 gasPriceWei) public {
+        gasPriceWei = bound(gasPriceWei, 1 gwei, 2000 gwei);
+
+        _setupHealthyBuyingSubs(3, "buyRTf_");
+        address keeper = makeAddr("buyRTf_keeper");
+        uint256 pre = coinflip.coinflipAmount(keeper);
+        vm.prank(keeper);
+        uint256 gasBefore = gasleft();
+        afKing.doWork();
+        uint256 gasUsed = gasBefore - gasleft();
+        uint256 stakeDelta = coinflip.coinflipAmount(keeper) - pre;
+        assertGt(stakeDelta, 0, "doWork buy leg pays a positive flat bounty");
+
+        uint256 rewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
+        assertLt(
+            rewardEthAtPeg,
+            gasUsed * gasPriceWei,
+            "WR-01 buy leg: round-trip <= 0 at every fuzzed realistic gas price > 0.5 gwei"
+        );
+    }
+
+    /// @notice GUARD-the-guard / test-mirror sync: the buy reward doWork() actually credits equals the
+    ///         LIVE break-even unit times the mirrored buy ratio. This binds the mirrored BUY_RATIO_NUM/DEN
+    ///         (and the `unit` formula the open guard reuses) to the deployed contract: if 331-04 re-pegs
+    ///         BOUNTY_ETH_TARGET (handled — read live) OR changes BUY_RATIO in AfKing.sol without re-syncing
+    ///         this mirror, this assertion trips RED rather than the round-trip guards silently mis-pricing.
+    function testRouterBuyRewardMatchesLiveUnitRatio() public {
+        _setupHealthyBuyingSubs(3, "buyMatch_");
+        address keeper = makeAddr("buyMatch_keeper");
+        uint256 pre = coinflip.coinflipAmount(keeper);
+        vm.prank(keeper);
+        afKing.doWork();
+        uint256 stakeDelta = coinflip.coinflipAmount(keeper) - pre;
+
+        uint256 unit = _liveUnit();
+        assertEq(
+            stakeDelta,
+            (unit * BUY_RATIO_NUM) / BUY_RATIO_DEN,
+            "doWork buy reward == live unit * BUY_RATIO_NUM/DEN (mirror in sync with AfKing)"
+        );
+    }
+
+    // =========================================================================
     // Task 2 — WWXRP zero reward + one-creditFlip-per-tx + zero-success no-credit
     // =========================================================================
 
@@ -751,5 +967,102 @@ contract CrankFaucetResistance is DeployProtocol {
             entry.emitter == address(coinflip) &&
             entry.topics.length > 0 &&
             entry.topics[0] == COINFLIP_STAKE_UPDATED_SIG;
+    }
+
+    // -------------------------------------------------------------------------
+    // 331-02 router round-trip helpers (mirror RouterWorstCaseGas.t.sol)
+    // -------------------------------------------------------------------------
+
+    /// @dev The LIVE break-even unit doWork() computes: (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / mintPrice.
+    ///      Read off the deployed AfKing immutable + the game's current mintPrice so the guards track
+    ///      whatever 331-04 lands as BOUNTY_ETH_TARGET (a deploy-param, not a frozen constant).
+    function _liveUnit() internal view returns (uint256) {
+        return (afKing.BOUNTY_ETH_TARGET() * PRICE_COIN_UNIT) / game.mintPrice();
+    }
+
+    /// @dev The open-leg reward doWork() pays for opening `k` boxes, valued back at the 0.5-gwei peg.
+    ///      doWork credits `unit * min(k, OPEN_KNEE) / OPEN_KNEE` BURNIE flip-credit (AfKing.sol:890-891);
+    ///      valuing that credit at the level price recovers exactly the reserved ETH-at-peg
+    ///      (creditBurnie * price / PRICE_COIN_UNIT), the cranker-cost comparison basis.
+    function _openLegRewardEthAtPeg(uint256 k) internal view returns (uint256) {
+        uint256 unit = _liveUnit();
+        uint256 kClamped = k < OPEN_KNEE ? k : OPEN_KNEE;
+        uint256 rewardBurnie = (unit * kClamped) / OPEN_KNEE;
+        return (rewardBurnie * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
+    }
+
+    /// @dev Queue `k` real first-deposit boxes against the CURRENT active lootbox index and land the RNG
+    ///      word so the boxes are openable. Returns the index + the owner addresses (keyed by a per-call
+    ///      salt so repeated calls in one test use disjoint addresses). Boxes stay at the active index
+    ///      because we queue BEFORE any advance (advanceDue may be TRUE, but autoOpen opens the queued
+    ///      boxes directly — the unrewarded passthrough body is the same box-opening work as doWork's leg).
+    function _queueKBoxesAtActiveIndex(uint256 k, uint256 salt)
+        internal
+        returns (uint48 index, address[] memory owners)
+    {
+        index = _activeLootboxIndex();
+        owners = new address[](k);
+        for (uint256 i; i < k; ++i) {
+            address o = makeAddr(string(abi.encodePacked("rtbox_", vm.toString(salt), "_", vm.toString(i))));
+            owners[i] = o;
+            vm.deal(o, 100_000 ether);
+            _buyBox(o, 1 ether);
+        }
+        _injectLootboxRngWord(index, BOX_FIXED_WORD);
+        for (uint256 i; i < k; ++i) {
+            assertGt(_lootboxEthBase(index, owners[i]), 0, "queue precondition: each box queued + un-opened");
+        }
+    }
+
+    /// @dev Subscribe `n` fresh players as fully-healthy WORST-CASE buying subs (reinvest + drain-first,
+    ///      ticket mode, operator-approved, pool-funded) so the doWork() buy leg processes real buys and
+    ///      pays its flat bounty. Mirrors RouterWorstCaseGas._setupHealthyBuyingSubs.
+    function _setupHealthyBuyingSubs(uint256 n, string memory prefix) internal returns (address[] memory subs) {
+        subs = new address[](n);
+        uint256 mp = game.mintPrice();
+        uint256 claimable = mp / 2;
+        uint256 poolWei = mp + 1 ether;
+        for (uint256 i; i < n; ++i) {
+            address who = makeAddr(string(abi.encodePacked(prefix, vm.toString(i))));
+            subs[i] = who;
+            _fundBurnie(who, _subCostBurnie());
+            vm.prank(who);
+            afKing.subscribe(address(0), true, true, 1, 100, address(0));
+            vm.prank(who);
+            game.setOperatorApproval(address(afKing), true);
+            vm.deal(address(this), poolWei);
+            afKing.depositFor{value: poolWei}(who);
+            _setGameClaimable(who, claimable);
+        }
+    }
+
+    /// @dev The subscribe-time all-or-nothing BURNIE charge: (SUB_COST_ETH_TARGET * PRICE_COIN_UNIT)/mintPrice.
+    function _subCostBurnie() internal view returns (uint256) {
+        return (afKing.SUB_COST_ETH_TARGET() * PRICE_COIN_UNIT) / game.mintPrice();
+    }
+
+    /// @dev Mint BURNIE to `who` via the GAME-gated mint path.
+    function _fundBurnie(address who, uint256 amount) internal {
+        if (amount == 0) return;
+        vm.prank(ContractAddresses.GAME);
+        coin.mintForGame(who, amount);
+    }
+
+    /// @dev Seed a player's DegenerusGame claimableWinnings (slot 7) so the SUB-04 reinvest branch runs.
+    function _setGameClaimable(address who, uint256 amount) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(GAME_CLAIMABLE_SLOT)));
+        vm.store(address(game), slot, bytes32(amount));
+    }
+
+    /// @dev Keeper-local day index (mirrors AfKing._currentDay() 82620-second offset).
+    function _today() internal view returns (uint32) {
+        return uint32((block.timestamp - 82620) / 1 days);
+    }
+
+    /// @dev Read `who`'s lastAutoBoughtDay (bytes 1..4 of the packed Sub slot) — the buy non-vacuity oracle.
+    function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
+        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        uint256 packed = uint256(vm.load(address(afKing), slot));
+        return uint32(packed >> 8); // OFF_LASTSWEPT = 1 byte
     }
 }
