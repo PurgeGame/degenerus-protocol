@@ -94,7 +94,7 @@
 - [x] 331-02-PLAN.md — GAS-05 + GAS-06 WR-01 round-trip guards (open small-batch knee corner / buy / degeneretteResolve flat ~1-BURNIE) extending CrankFaucetResistance.t.sol [Wave 1, autonomous]
 - [x] 331-03-PLAN.md — Seed 1+2 design (revert-source enumeration + coalescible-SSTORE table + path shape) + money-path delta-audit + no-brick liveness test scaffolds [Wave 2, autonomous]
 - [x] 331-04-PLAN.md — GAS-02 + GAS-04 calibration record: exact proposed constants from the marginals (per-item MARGINAL, at/below) + level-invariance + ADVANCE-ONLY stall-ceiling decision [Wave 2, autonomous]
-- [ ] 331-05-PLAN.md — BATCH contract gate (autonomous:false): land the calibrated AfKing constants + RESOLVE_FLAT_BURNIE re-peg + Seed 1/2 keeper-batch money-path code as ONE diff; HARD STOP for USER hand-review (GAS-02/04/06) [Wave 3, autonomous:false]
+- [x] 331-05-PLAN.md — BATCH contract gate (autonomous:false): land the calibrated AfKing constants + RESOLVE_FLAT_BURNIE re-peg + Seed 1/2 keeper-batch money-path code as ONE diff; HARD STOP for USER hand-review (GAS-02/04/06) [Wave 3, autonomous:false]
 **UI hint**: no
 
 ### Phase 332: TST — Freeze Fuzz + One-Category + Reward-Routing + Non-Widening Regression
@@ -132,7 +132,7 @@
 |-------|-----------|----------------|--------|-----------|
 | 329. SPEC — Design-Lock + 4 Structural Invariants | v49.0 | 3/3 | Complete    | 2026-05-26 |
 | 330. IMPL — The ONE Batched Contract Diff | v49.0 | 9/9 | Complete   | 2026-05-27 |
-| 331. GAS — Worst-Case Marginal + Break-Even Peg | v49.0 | 4/5 | In Progress|  |
+| 331. GAS — Worst-Case Marginal + Break-Even Peg | v49.0 | 6/5 | Complete    | 2026-05-27 |
 | 332. TST — Freeze Fuzz + One-Category + Regression | v49.0 | 0/TBD | Not started | - |
 | 333. TERMINAL — Delta Audit + Sweep + Closure | v49.0 | 0/TBD | Not started | - |
 

@@ -104,7 +104,7 @@
 | ADV-04 | Phase 329 (SPEC) | Complete |
 | ADV-05 | Phase 330 (IMPL) | Pending |
 | GAS-01 | Phase 331 (GAS) | Complete |
-| GAS-02 | Phase 331 (GAS) | In Progress |
+| GAS-02 | Phase 331 (GAS) | Complete |
 | GAS-03 | Phase 329 (SPEC) | Complete |
 | GAS-04 | Phase 331 (GAS) | Complete |
 | GAS-05 | Phase 331 (GAS) | Complete |
