@@ -6,8 +6,10 @@ import {MintPaymentKind} from "./IDegenerusGame.sol";
 /// @title IDegenerusGameAdvanceModule
 /// @notice Interface for the game advancement module handling VRF and game progression
 interface IDegenerusGameAdvanceModule {
-    /// @notice Advances the game state by processing pending operations
-    function advanceGame() external;
+    /// @notice Advances the game state by processing pending operations.
+    /// @return mult Day-epoch stall multiplier (new-day stall ladder 1/2/4/6; 1 mid-day;
+    ///         0 on the gameover path = no bounty). The router pays 2x * mult when mult > 0.
+    function advanceGame() external returns (uint8 mult);
 
     /// @notice Requests mid-day lootbox RNG when threshold conditions are met.
     function requestLootboxRng() external;

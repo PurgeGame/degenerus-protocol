@@ -396,6 +396,7 @@ contract DegenerusGameMintModule is
     ) external returns (bool worked, bool finished, uint32 writesUsed) {
         bool inFarFuture = (ticketLevel == (lvl | TICKET_FAR_FUTURE_BIT));
         uint24 rk = inFarFuture ? _tqFarFutureKey(lvl) : _tqReadKey(lvl);
+        mapping(address => uint40) storage owedMap = ticketsOwedPacked[rk];
         address[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
         if (total == 0) {
@@ -428,7 +429,7 @@ contract DegenerusGameMintModule is
 
         while (idx < total && used < writesBudget) {
             address player = queue[idx];
-            uint40 packed = ticketsOwedPacked[rk][player];
+            uint40 packed = owedMap[player];
             uint32 owed = uint32(packed >> 8);
             uint8 rem = uint8(packed);
             uint256 baseKey = (uint256(lvl) << 224) |
@@ -438,7 +439,7 @@ contract DegenerusGameMintModule is
             if (owed == 0) {
                 if (rem == 0) {
                     if (packed != 0) {
-                        ticketsOwedPacked[rk][player] = 0;
+                        owedMap[player] = 0;
                     }
                     // Charge one budget unit for skip/cleanup progress so sparse
                     // queues cannot consume unbounded work in one call.
@@ -450,7 +451,7 @@ contract DegenerusGameMintModule is
                     continue;
                 }
                 if (!_rollRemainder(entropy, baseKey, rem)) {
-                    ticketsOwedPacked[rk][player] = 0;
+                    owedMap[player] = 0;
                     unchecked {
                         ++idx;
                         ++used;
@@ -460,7 +461,7 @@ contract DegenerusGameMintModule is
                 }
                 uint40 rolledPacked = uint40(1) << 8;
                 if (rolledPacked != packed) {
-                    ticketsOwedPacked[rk][player] = rolledPacked;
+                    owedMap[player] = rolledPacked;
                 }
                 packed = rolledPacked;
                 owed = 1;
@@ -495,7 +496,7 @@ contract DegenerusGameMintModule is
             }
             uint40 newPacked = (uint40(remainingOwed) << 8) | uint40(rem);
             if (newPacked != packed) {
-                ticketsOwedPacked[rk][player] = newPacked;
+                owedMap[player] = newPacked;
             }
             unchecked {
                 processed += take;
@@ -669,6 +670,7 @@ contract DegenerusGameMintModule is
     /// @return finished True if all tickets for this level have been fully processed.
     function processTicketBatch(uint24 lvl) external returns (bool finished) {
         uint24 rk = _tqReadKey(lvl);
+        mapping(address => uint40) storage owedMap = ticketsOwedPacked[rk];
         address[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
 
@@ -698,7 +700,7 @@ contract DegenerusGameMintModule is
             (uint32 writesUsed, bool advance) = _processOneTicketEntry(
                 queue[idx],
                 lvl,
-                rk,
+                owedMap,
                 writesBudget - used,
                 processed,
                 entropy,
@@ -730,7 +732,7 @@ contract DegenerusGameMintModule is
     /// @dev Resolves the zero-owed remainder case for ticket processing.
     function _resolveZeroOwedRemainder(
         uint40 packed,
-        uint24 rk,
+        mapping(address => uint40) storage owedMap,
         address player,
         uint256 entropy,
         uint256 baseKey
@@ -738,20 +740,20 @@ contract DegenerusGameMintModule is
         uint8 rem = uint8(packed);
         if (rem == 0) {
             if (packed != 0) {
-                ticketsOwedPacked[rk][player] = 0;
+                owedMap[player] = 0;
             }
             return (0, true);
         }
 
         bool win = _rollRemainder(entropy, baseKey, rem);
         if (!win) {
-            ticketsOwedPacked[rk][player] = 0;
+            owedMap[player] = 0;
             return (0, true);
         }
 
         newPacked = uint40(1) << 8;
         if (newPacked != packed) {
-            ticketsOwedPacked[rk][player] = newPacked;
+            owedMap[player] = newPacked;
         }
         return (newPacked, false);
     }
@@ -760,13 +762,13 @@ contract DegenerusGameMintModule is
     function _processOneTicketEntry(
         address player,
         uint24 lvl,
-        uint24 rk,
+        mapping(address => uint40) storage owedMap,
         uint32 room,
         uint32 processed,
         uint256 entropy,
         uint256 queueIdx
     ) private returns (uint32 writesUsed, bool advance) {
-        uint40 packed = ticketsOwedPacked[rk][player];
+        uint40 packed = owedMap[player];
         uint32 owed = uint32(packed >> 8);
         uint256 baseKey = (uint256(lvl) << 224) |
             (queueIdx << 192) |
@@ -777,7 +779,7 @@ contract DegenerusGameMintModule is
             bool skip;
             (packed, skip) = _resolveZeroOwedRemainder(
                 packed,
-                rk,
+                owedMap,
                 player,
                 entropy,
                 baseKey
@@ -819,7 +821,7 @@ contract DegenerusGameMintModule is
         }
         uint40 newPacked = (uint40(remainingOwed) << 8) | uint40(rem);
         if (newPacked != packed) {
-            ticketsOwedPacked[rk][player] = newPacked;
+            owedMap[player] = newPacked;
         }
         advance = remainingOwed == 0;
     }

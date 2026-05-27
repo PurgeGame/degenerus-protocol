@@ -33,6 +33,13 @@ interface IGame {
     function mintPrice() external view returns (uint256);
     function claimableWinningsOf(address player) external view returns (uint256);
     function hasAnyLazyPass(address player) external view returns (bool);
+
+    // Router-surface rows the doWork router calls on GAME (match DegenerusGame).
+    function advanceGame() external returns (uint8 mult);
+    function autoOpen(uint256 maxCount) external returns (uint256 opened);
+    function advanceDue() external view returns (bool);
+    function boxesPending() external view returns (bool);
+    function keeperSnapshot(address[] calldata players) external view returns (uint256 mintPriceWei, bool rngLocked_, uint256[] memory claimables);
 }
 
 /// @title IBurnie
@@ -137,13 +144,8 @@ contract AfKing {
     error BurnieChargeFailed();
     /// @dev IndexOutOfBounds: subscriberAt(idx) with idx >= _subscribers.length.
     error IndexOutOfBounds();
-    /// @dev AutoBuyAborted: pre-loop revert from the rngLocked guard. Reason 1 = RngLocked.
-    error AutoBuyAborted(address caller, uint8 reason);
-    /// @dev EmptyAutoBuy: pre-loop revert from autoBuy(0) (maxCount == 0).
-    error EmptyAutoBuy();
-    /// @dev NoSubscribersAutoBought: tail revert when successfulPlayers == 0 at the end
-    ///      of the autoBuy loop (before the bounty payout). Atomic no-op for the caller.
-    error NoSubscribersAutoBought();
+    /// @dev NoWork: doWork() found no pending work in any category (all 3 O(1) predicates empty).
+    error NoWork();
 
     /*------------------------------------------------------------------
                               Events
@@ -165,10 +167,6 @@ contract AfKing {
         uint8 reinvestPct,
         address indexed fundingSource
     );
-    /// @dev Per-successful-player audit trail inside the autoBuy loop. `day` is the
-    ///      keeper-local day index; `cost` is the ETH-wei slice forwarded to
-    ///      batchPurchase for this player (0 in the Claimable case).
-    event AutoBought(address indexed player, uint32 day, uint256 cost);
     /// @dev Per-player pre-check skip inside the autoBuy loop. `reason`:
     ///        2 = AlreadyAutoBoughtToday (sub.lastAutoBoughtDay >= today)
     ///        3 = InsufficientPool  (_poolOf[player] < msgValue) — funding skip
@@ -531,42 +529,37 @@ contract AfKing {
     /*------------------------------------------------------------------
                           Cursor autoBuy
     ------------------------------------------------------------------*/
-    /// @notice Permissionless autoBuy of the next `maxCount` un-autoBought active
-    ///         subscribers starting from the internal daily-reset cursor. Per
-    ///         successful player the caller earns the dynamic per-player bounty
-    ///         `(BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / mp`, scaled by the stall
-    ///         multiplier, paid as ONE `creditFlip` at tx end.
+    /// @notice Internal buy leg: autoBuy the next `maxCount` un-autoBought active
+    ///         subscribers from the internal daily-reset cursor and return the raw
+    ///         count of successful buys. The re-homed buy bounty is paid by the
+    ///         unified router (`doWork`); this leg NEVER self-credits (RD-4).
     /// @dev SUB-03 — No caller-supplied range. The cursor resumes from where the
     ///      previous autoBuy left off and advances as entries are processed.
     ///      Concurrent same-block callers self-partition via the advancing cursor;
     ///      the per-entry `lastAutoBoughtDay` day-stamp is the idempotency backstop
     ///      (an already-autoBought entry is skipped with reason 2). On the first autoBuy
     ///      of a new keeper-local day the cursor resets to 0.
-    /// @dev SUB-03 stall-escalating bounty: the per-player bounty multiplier rises
-    ///      with the time elapsed since day-start (1x base, 2x after 20 min, 4x
-    ///      after 1 hour, 6x after 2 hours) so a lagging cursor draws richer
-    ///      bounties until the day's autoBuy completes — mirrors advanceGame.
-    /// @dev Pre-loop guards: `rngLocked` → revert AutoBuyAborted(caller, 1); maxCount
-    ///      == 0 → revert EmptyAutoBuy.
+    /// @dev RD-2 — the buy path carries NO rngLock guard (buys are freeze-safe by
+    ///      construction; a box queues at the current LR_INDEX, pre-entropy, and the
+    ///      orphan hazard is defended on the resolution side via the autoOpen word-gate).
     /// @dev Per-player ladder: (1) AlreadyAutoBoughtToday skip; (2) day-31 auto-extract
     ///      (free pass-extend OR all-or-nothing burnForKeeper, auto-pause on
-    ///      shortfall); (3) NotApproved skip; (4) cost + mode + payKind funding
-    ///      waterfall; (5) LootboxFloor transient skip; (6) InsufficientPool —
-    ///      NORMAL sub is CANCELLED via swap-pop (two-tier kill), Vault/sDGNRS are
-    ///      EXEMPT (no-op-and-retry) by pinned identity; (7) CEI debit + day-stamp.
-    ///      The batched `IGame.batchPurchase` call carries one slice per successful
-    ///      player and fires once after the per-player accounting loop; CEI debit
-    ///      happens before the batched call, day-stamp after.
+    ///      shortfall); (3) cost + mode + payKind funding waterfall (claimable read once
+    ///      via keeperSnapshot, GASOPT-03); (4) LootboxFloor transient skip; (5)
+    ///      InsufficientPool — NORMAL sub is CANCELLED via swap-pop (two-tier kill),
+    ///      Vault/sDGNRS are EXEMPT (no-op-and-retry) by pinned identity; (6) CEI debit +
+    ///      day-stamp. The batched `IGame.batchPurchase` call carries one slice per
+    ///      successful player and fires once after the per-player accounting loop; CEI
+    ///      debit happens before the batched call, day-stamp after.
     /// @dev No try/catch and no `nonReentrant` guard. Per-player batch isolation
     ///      lives in the game's `batchPurchase` (per-slice try/catch + slice
     ///      refund); the keeper preserves strict CEI.
     /// @param maxCount Maximum number of un-autoBought active entries to process this
-    ///        call. MUST be > 0 (EmptyAutoBuy). Caller-bounded (no contract-bounded
-    ///        loop) — the anti-gas-DoS property.
-    /// @return bountyEarned BURNIE wei credited to msg.sender via creditFlip.
-    function autoBuy(uint256 maxCount) external returns (uint256 bountyEarned) {
-        if (IGame(ContractAddresses.GAME).rngLocked()) revert AutoBuyAborted(msg.sender, 1);
-        if (maxCount == 0) revert EmptyAutoBuy();
+    ///        call. 0 = use the default batch (DOWORK_BATCH). Caller-bounded (no
+    ///        contract-bounded loop) — the anti-gas-DoS property.
+    /// @return boughtCount Number of successful per-player buys this chunk.
+    function _autoBuy(uint256 maxCount) internal returns (uint256 boughtCount) {
+        if (maxCount == 0) maxCount = DOWORK_BATCH;
 
         uint32 today = _currentDay();
         uint256 mp = IGame(ContractAddresses.GAME).mintPrice();
@@ -671,33 +664,22 @@ contract AfKing {
                 }
             }
 
-            // (3) NotApproved (after auto-extract — an expired-but-renewed sub keeps
-            // a healthy window even when currently unapproved).
-            if (!IGame(ContractAddresses.GAME).isOperatorApproved(player, address(this))) {
-                emit PlayerSkipped(player, 5);
-                unchecked {
-                    ++cursor;
-                    ++processed;
-                }
-                continue;
-            }
+            // (GASOPT-05) The per-iteration isOperatorApproved(player, this) check is
+            // removed — the SUB is the consent unit (revoke = setDailyQuantity(0) →
+            // tombstone-skip); the retained funding-consent boundary is the
+            // subscribe-time isOperatorApproved(fundingSource, subscriber) gate.
 
-            // (4) SUB-04 effective quantity = max(dailyQuantity, floor(claimable *
-            // reinvestPct / price)). dailyQuantity >= 1 is the floor so the
-            // effective buy is never 0; the reinvest term only raises it on a
-            // high-claimable day. price = mp (one dailyQuantity unit == one mp).
-            uint256 effectiveQty = sub.dailyQuantity;
-            if (sub.reinvestPct > 0) {
-                uint256 claimable = IGame(ContractAddresses.GAME).claimableWinningsOf(player);
-                uint256 reinvestQty = (claimable * sub.reinvestPct) / 100 / mp;
-                if (reinvestQty > effectiveQty) effectiveQty = reinvestQty;
-            }
+            // SUB-04 funding resolution (cost + payment mode + msg.value slice). Extracted
+            // to _resolveBuy so its temporaries (claimable / effectiveQty / cred + the
+            // keeperSnapshot scratch) live in that frame, not this loop's — the loop is at
+            // the stack-depth limit. GASOPT-03: ONE keeperSnapshot read per player.
+            (
+                MintPaymentKind payKind,
+                uint256 msgValue,
+                bool lootboxSkip
+            ) = _resolveBuy(sub, player, mp);
 
-            uint256 cost = mp * effectiveQty;
-
-            // (5) LootboxFloor transient skip (lootbox mode only) — stays in the
-            // set, retries next autoBuy.
-            if ((sub.flags & FLAG_USE_TICKETS) == 0 && cost < LOOTBOX_MIN) {
+            if (lootboxSkip) {
                 emit PlayerSkipped(player, 4);
                 unchecked {
                     ++cursor;
@@ -711,28 +693,6 @@ contract AfKing {
             // same `src`. The VAULT/SDGNRS exemption below stays keyed on the
             // un-spoofable `player`, never `src`.
             address src = sub.fundingSource == address(0) ? player : sub.fundingSource;
-
-            // (4) Funding waterfall — preserved byte-faithfully.
-            MintPaymentKind payKind;
-            uint256 msgValue;
-            if ((sub.flags & FLAG_DRAIN_FIRST) == 0) {
-                payKind = MintPaymentKind.DirectEth;
-                msgValue = cost;
-            } else {
-                uint256 cred = IGame(ContractAddresses.GAME).claimableWinningsOf(player);
-                if (cred > cost) {
-                    payKind = MintPaymentKind.Claimable;
-                    msgValue = 0;
-                } else if (cred > 1) {
-                    payKind = MintPaymentKind.Combined;
-                    unchecked {
-                        msgValue = cost - (cred - 1);
-                    }
-                } else {
-                    payKind = MintPaymentKind.DirectEth;
-                    msgValue = cost;
-                }
-            }
 
             // (6) InsufficientPool funding skip → two-tier skip-kill. A NORMAL sub
             // is CANCELLED via swap-pop (auto-pause WITHOUT advancing the cursor —
@@ -782,7 +742,6 @@ contract AfKing {
             // after the loop; per-player isolation lives in batchPurchase's
             // per-slice try/catch.
             sub.lastAutoBoughtDay = today;
-            emit AutoBought(player, today, msgValue);
 
             unchecked {
                 ++cursor;
@@ -793,17 +752,11 @@ contract AfKing {
         // Persist the advanced cursor for the next (possibly concurrent) caller.
         _autoBuyCursor = uint224(cursor);
 
-        // Tail revert before the bounty payout — atomic no-op for a caller whose
-        // chunk produced no buys. The caller pays gas for the failed tx (the
-        // structural disincentive against autoBuying nothing).
+        // No buys: any committed set work (cancel-tombstone reclaim, auto-pause, window
+        // renewal — `didWork`) persists; reverting would roll the removal back and strand
+        // the tombstone for re-griefing. No buys means no purchase and no bounty — return
+        // 0 (the router pays nothing, and doWork's NoWork() covers all-categories-empty).
         if (batchLen == 0) {
-            // The no-buy revert is the anti-spam disincentive — it fires ONLY for a
-            // do-nothing chunk (all already-autoBought / transient skips). When the chunk
-            // committed real set work (a cancel-tombstone reclaim, an auto-pause, or a
-            // window renewal), that state MUST persist: reverting would roll the
-            // removal back and strand the tombstone for re-griefing across autoBuys.
-            // No buys means no purchase and no bounty, but the committed work stays.
-            if (!didWork) revert NoSubscribersAutoBought();
             emit AutoBuyCompleted(msg.sender, 0, 0);
             return 0;
         }
@@ -820,32 +773,146 @@ contract AfKing {
         }
         IGame(ContractAddresses.GAME).batchPurchase{value: totalValue}(players, amounts, modes);
 
-        // SUB-03 stall-escalating multiplier from elapsed time since day-start.
-        // Day-start mirrors _currentDay()'s 82620-second offset: today * 1 days + 82620.
-        // Computed here, after the loop, so it does not occupy a stack slot through
-        // the accumulation loop + the array-trim assembly block (stack-depth budget).
-        uint256 bountyMultiplier = 1;
-        {
-            uint256 dayStart = uint256(today) * 1 days + 82_620;
-            uint256 elapsed = block.timestamp > dayStart ? block.timestamp - dayStart : 0;
-            if (elapsed >= 2 hours) {
-                bountyMultiplier = 6;
-            } else if (elapsed >= 1 hours) {
-                bountyMultiplier = 4;
-            } else if (elapsed >= 20 minutes) {
-                bountyMultiplier = 2;
+        // Return the raw successful-buy count; the unified router (doWork) pays the flat
+        // per-tx buy bounty (RD-4/D-07). This leg NEVER self-credits. Advance is the sole
+        // stall epoch (invariant d) — the autoBuy stall ladder/absolute-day epoch is gone.
+        emit AutoBuyCompleted(msg.sender, batchLen, 0);
+        return batchLen;
+    }
+
+    /// @dev Per-player funding resolution for the _autoBuy loop: SUB-04 effective quantity
+    ///      (max of dailyQuantity and the reinvest term) -> cost -> payment mode + msg.value
+    ///      slice. GASOPT-03: reads the player's claimable ONCE via keeperSnapshot (per-player
+    ///      fallback — the swap-pop walk makes a pre-loop chunk batch unsafe), reused by the
+    ///      reinvest term AND the drain-first waterfall (identical value, one STATICCALL
+    ///      instead of up to two). Extracted as a helper so its temporaries live in this frame
+    ///      (the _autoBuy loop is at the stack-depth limit). View — no state writes.
+    /// @return payKind Payment mode for the batched purchase slice.
+    /// @return msgValue ETH-wei slice forwarded for this player (0 in the Claimable case).
+    /// @return lootboxSkip True when a lootbox-mode sub is below LOOTBOX_MIN (transient skip).
+    function _resolveBuy(
+        Sub storage sub,
+        address player,
+        uint256 mp
+    )
+        internal
+        view
+        returns (MintPaymentKind payKind, uint256 msgValue, bool lootboxSkip)
+    {
+        bool drainFirst = (sub.flags & FLAG_DRAIN_FIRST) != 0;
+        uint256 claimable;
+        if (sub.reinvestPct > 0 || drainFirst) {
+            address[] memory snap = new address[](1);
+            snap[0] = player;
+            (, , uint256[] memory cl) = IGame(ContractAddresses.GAME).keeperSnapshot(snap);
+            claimable = cl[0];
+        }
+        uint256 effectiveQty = sub.dailyQuantity;
+        if (sub.reinvestPct > 0) {
+            uint256 reinvestQty = (claimable * sub.reinvestPct) / 100 / mp;
+            if (reinvestQty > effectiveQty) effectiveQty = reinvestQty;
+        }
+        uint256 cost = mp * effectiveQty;
+
+        // LootboxFloor transient skip (lootbox mode only) — stays in the set, retries next
+        // autoBuy. Signalled out; the waterfall is skipped for it.
+        if ((sub.flags & FLAG_USE_TICKETS) == 0 && cost < LOOTBOX_MIN) {
+            lootboxSkip = true;
+        } else if (!drainFirst) {
+            payKind = MintPaymentKind.DirectEth;
+            msgValue = cost;
+        } else {
+            // Drain-first funding waterfall — preserved byte-faithfully.
+            uint256 cred = claimable;
+            if (cred > cost) {
+                payKind = MintPaymentKind.Claimable;
+                msgValue = 0;
+            } else if (cred > 1) {
+                payKind = MintPaymentKind.Combined;
+                unchecked {
+                    msgValue = cost - (cred - 1);
+                }
+            } else {
+                payKind = MintPaymentKind.DirectEth;
+                msgValue = cost;
             }
         }
+    }
 
-        // Bounty payout — ONE gas-pegged creditFlip per tx (never per-item). The
-        // ETH-pegged target holds a constant ETH-equivalent bounty as the game
-        // level (and mintPrice) advances; the stall multiplier tracks daily
-        // completeness. Paid as deferred coinflip-stake credit — no liquid BURNIE
-        // leaves the keeper.
-        bountyEarned = batchLen * ((BOUNTY_ETH_TARGET * PRICE_COIN_UNIT * bountyMultiplier) / mp);
-        ICoinflip(ContractAddresses.COINFLIP).creditFlip(msg.sender, bountyEarned);
-        emit AutoBuyCompleted(msg.sender, batchLen, bountyEarned);
-        return bountyEarned;
+    /*------------------------------------------------------------------
+                          Unified keeper router (doWork)
+    ------------------------------------------------------------------*/
+    /// @dev GAS-331 PLACEHOLDER — fixed per-leg default batch (the prior caller-bounded
+    ///      default). Calibrated under the USER-gated GAS phase (331), NOT locked here.
+    uint256 internal constant DOWORK_BATCH = 100;
+    /// @dev GAS-331 PLACEHOLDER — advance reward ratio (2x * mult). Calibrated at GAS (331).
+    uint256 internal constant ADVANCE_RATIO_NUM = 2;
+    /// @dev GAS-331 PLACEHOLDER — buy reward ratio (flat 1.5x per tx = NUM/DEN). At GAS (331).
+    uint256 internal constant BUY_RATIO_NUM = 3;
+    uint256 internal constant BUY_RATIO_DEN = 2;
+    /// @dev GAS-331 PLACEHOLDER — open reward pro-rate knee (1x at/above, pro-rated below).
+    uint256 internal constant OPEN_KNEE = 5;
+
+    /// @notice Unified permissionless keeper router: do ONE category of pending work this
+    ///         call (priority autoBuy -> advance -> autoOpen) and pay ONE flat-per-tx bounty.
+    /// @dev ROUTER-01..06 — parameterless (each leg uses a fixed internal default batch).
+    ///      RD-1 one-category STRUCTURAL early-return (invariant a): the rngLock-aware O(1)
+    ///      predicates pick the first category with work; advance/buy/open bounties can never
+    ///      stack in one tx. ROUTER-07: NO nonReentrant guard — keeper-never-a-payee, every
+    ///      external call is to a pinned ContractAddresses.* (GAME/COINFLIP), player value
+    ///      flows through the game's claimable pull ledger, and the bounty is minted
+    ///      flip-credit (never an ETH push the keeper receives). The legs return raw
+    ///      counts/mult and NEVER self-credit; only doWork credits, ONCE, CEI-last after the
+    ///      one-category early-return. TST-02 (Phase 332) is the router->game->creditFlip
+    ///      double-pay backstop proving this no-guard disposition.
+    function doWork() external {
+        uint256 mp = IGame(ContractAddresses.GAME).mintPrice();
+        uint256 unit = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / mp;
+        uint256 bountyEarned;
+
+        // (1) autoBuy — highest priority (RD-1): subscriber buys queue at day-open,
+        // pre-entropy, before advance requests the day's RNG. TRUE even during rngLock (RD-2).
+        if (_autoBuyDay != _currentDay() || _autoBuyCursor < _subscribers.length) {
+            uint256 bought = _autoBuy(DOWORK_BATCH);
+            // Flat per-tx buy bounty (D-07) — NOT scaled by count (bounded once/day/sub).
+            if (bought > 0) bountyEarned = (unit * BUY_RATIO_NUM) / BUY_RATIO_DEN;
+        }
+        // (2) advance — TRUE regardless of rngLock (liveness-critical).
+        else if (IGame(ContractAddresses.GAME).advanceDue()) {
+            uint8 mult = IGame(ContractAddresses.GAME).advanceGame();
+            // Advance earns 2x * mult; mult == 0 (the gameover path) pays no bounty.
+            if (mult > 0) bountyEarned = unit * ADVANCE_RATIO_NUM * mult;
+        }
+        // (3) autoOpen — FALSE during rngLock (RD-3); opens mid-day-resolved boxes.
+        else if (IGame(ContractAddresses.GAME).boxesPending()) {
+            uint256 opened = IGame(ContractAddresses.GAME).autoOpen(DOWORK_BATCH);
+            // 1x pro-rated below the knee, flat 1x at/above — kills the small-batch corner.
+            uint256 k = opened < OPEN_KNEE ? opened : OPEN_KNEE;
+            bountyEarned = (unit * k) / OPEN_KNEE;
+        }
+        // (4) ROUTER-06 — all 3 O(1) predicates empty: the clean no-work signal.
+        else {
+            revert NoWork();
+        }
+
+        // R4 — the single unified bounty: ONE creditFlip, CEI-LAST, after the one-category
+        // early-return. Skipped at 0 (e.g. a buy chunk that walked only already-bought subs);
+        // the category still ran, so we return rather than reverting NoWork().
+        if (bountyEarned > 0) {
+            ICoinflip(ContractAddresses.COINFLIP).creditFlip(msg.sender, bountyEarned);
+        }
+    }
+
+    /// @notice Standalone UNREWARDED manual/emergency buy clear — only doWork() credits.
+    /// @param count Max subscribers to process this call (0 = the default batch).
+    function autoBuy(uint256 count) external {
+        _autoBuy(count);
+    }
+
+    /// @notice Standalone UNREWARDED manual/emergency open clear — only doWork() credits.
+    /// @param count Max boxes to open this call.
+    function autoOpen(uint256 count) external {
+        IGame(ContractAddresses.GAME).autoOpen(count);
     }
 
     /*------------------------------------------------------------------

@@ -8,7 +8,7 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 /// @title CrankResolveBetWorstCaseGas -- GAS-01 (Phase 319) + DSPIN-02 (Phase 323-04) resolve-bet
 ///        worst-case measurement.
 ///
-/// @notice The biggest do-work-crank cost center is a `autoResolve` item resolving a degenerette bet
+/// @notice The biggest do-work-crank cost center is a `degeneretteResolve` item resolving a degenerette bet
 ///         where the spin loop runs to the per-currency cap and the winning spins each flip into the
 ///         lootbox-conversion branch. The v47 per-currency caps raise the ETH spin ceiling from 10
 ///         (old MAX_SPINS_PER_BET) to MAX_SPINS_ETH = 25 (DegeneretteModule:226) — 2.5x the roll work.
@@ -147,7 +147,7 @@ contract CrankResolveBetWorstCaseGas is DeployProtocol {
     // Test A — 10-spin all-match worst case (the GAS-01 fit-check)
     // =========================================================================
 
-    /// @notice GAS-01 worst-case-FIRST: a single `autoResolve` item resolving a `ticketCount == 10`
+    /// @notice GAS-01 worst-case-FIRST: a single `degeneretteResolve` item resolving a `ticketCount == 10`
     ///         bet where every spin wins ETH and flips into the lootbox branch (10 materializations).
     ///         Asserts the scenario IS the maximum (ticketCount == 10 AND all 10 spins materialized a
     ///         lootbox) BEFORE the measurement is trusted, and asserts the measured gas < 30M mainnet.
@@ -169,7 +169,7 @@ contract CrankResolveBetWorstCaseGas is DeployProtocol {
         vm.recordLogs();
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.autoResolve(players, betIds);
+        game.degeneretteResolve(players, betIds);
         uint256 gasUsed = gasBefore - gasleft();
 
         (uint256 spinResults, uint256 lootboxFlips) = _countResolveEffects();
@@ -203,7 +203,7 @@ contract CrankResolveBetWorstCaseGas is DeployProtocol {
     // =========================================================================
 
     /// @notice GAS-01 / GAS-06: isolate the per-1-spin-item MARGINAL gas — the marginal cost of
-    ///         adding one typical (1-spin) resolve item to `autoResolve`. This is the calibration
+    ///         adding one typical (1-spin) resolve item to `degeneretteResolve`. This is the calibration
     ///         target for CRANK_RESOLVE_BET_GAS_UNITS (the contract pays a FLAT per-item reward, so
     ///         the peg is a single per-item number). Measured by the loop-N-divide micro-bench idiom:
     ///         crank N independent 1-spin items in one batch and divide the delta by N. Asserts the
@@ -228,7 +228,7 @@ contract CrankResolveBetWorstCaseGas is DeployProtocol {
         // Bracket the whole N-item batch; divide by N for the per-1-spin-item marginal.
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.autoResolve(players, betIds);
+        game.degeneretteResolve(players, betIds);
         uint256 totalGas = gasBefore - gasleft();
         uint256 perItemMarginal = totalGas / nItems;
 
@@ -301,7 +301,7 @@ contract CrankResolveBetWorstCaseGas is DeployProtocol {
         vm.recordLogs();
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.autoResolve(players, betIds);
+        game.degeneretteResolve(players, betIds);
         uint256 gasUsed = gasBefore - gasleft();
 
         (uint256 spinResults, uint256 lootboxFlips) = _countResolveEffects();
@@ -358,7 +358,7 @@ contract CrankResolveBetWorstCaseGas is DeployProtocol {
     ///         BURNIE mint sum + WWXRP mint sum, three single flushes). DERIVE: the worst mixed batch
     ///         is one bet per currency at its cap, all spins winning; MEASURE: assert it fits the 30M
     ///         block limit. (Resolved directly via resolveDegeneretteBets — the full batch path — since
-    ///         autoResolve resolves one item at a time; this test measures the resolveBets flush itself.)
+    ///         degeneretteResolve resolves one item at a time; this test measures the resolveBets flush itself.)
     function testWorstCaseMixedCurrencyBatchGas() public {
         // All three bets share index 1 (one committed word = worstCaseWord25). BURNIE spins are
         // spins 0..14 and WWXRP spins are spins 0..4 — both SUBSETS of the 25 ETH spins that
@@ -490,7 +490,7 @@ contract CrankResolveBetWorstCaseGas is DeployProtocol {
 
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.autoResolve(players, betIds);
+        game.degeneretteResolve(players, betIds);
         gasUsed = gasBefore - gasleft();
     }
 

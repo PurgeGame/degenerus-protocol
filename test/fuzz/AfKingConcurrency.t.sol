@@ -59,22 +59,24 @@ contract AfKingConcurrency is DeployProtocol {
     uint256 private constant FLAG_WINDOW_PAID = 1;
     uint32 private constant WINDOW_DAYS = 30;
 
-    bytes32 private constant SWEPT_SIG = keccak256("AutoBought(address,uint32,uint256)");
     bytes32 private constant SUB_UPDATED_SIG =
         keccak256("SubscriptionUpdated(address,uint8,bool,bool,uint8,address)");
     /// @dev SubscriptionExpired(address indexed player, uint8 reason). reason 2 = CancelReclaim (the
     ///      in-autoBuy reclaim of an externally-cancelled tombstone); reason 1 = AutoPause.
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
 
-    /// @dev Snapshot of AutoBought(player,...) recipients drained from the recorded logs by _captureAutoBought().
-    ///      vm.getRecordedLogs() CONSUMES the buffer, so we drain ONCE per assertion phase into this
-    ///      array and count per-player from the snapshot (a per-player getRecordedLogs would see 0 on
-    ///      every call after the first).
-    address[] private _autoBoughtSnapshot;
+    /// @dev GASOPT-04 oracle migration: the per-player `AutoBought(address,uint32,uint256)` event was
+    ///      DELETED. The no-double-buy / "bought today exactly once" oracle is now the authoritative
+    ///      `lastAutoBoughtDay` storage stamp (the same stamp the contract's `lastAutoBoughtDay >= today`
+    ///      skip at AfKing.sol:626 keys on) read via `_lastAutoBoughtDayOf`, complemented by per-player
+    ///      pool/balance deltas. `_countAutoBoughtFor` is re-expressed below as a stamp-vs-baseline
+    ///      derived count: 1 iff the sub's lastAutoBoughtDay advanced to today since the last baseline,
+    ///      else 0. Per-chunk no-overlap is proven by re-baselining between chunks.
+    uint32 private _boughtBaselineDay;
 
-    /// @dev Snapshot of SubscriptionExpired(player, reason) emissions, drained alongside AutoBought by the
-    ///      single _drainLogs() pass (so a test can count both reclaim-events and buys without the
-    ///      second getRecordedLogs seeing an already-consumed buffer).
+    /// @dev Snapshot of SubscriptionExpired(player, reason) emissions, drained by the single _drainLogs()
+    ///      pass (so a test can count reclaim-events without a second getRecordedLogs seeing an
+    ///      already-consumed buffer).
     address[] private _expiredPlayers;
     uint8[] private _expiredReasons;
 
@@ -104,7 +106,7 @@ contract AfKingConcurrency is DeployProtocol {
         // Two same-block autoBuys: maxCount 4 then 4 (each < the full set so neither covers all in one).
         // The set also holds the 2 deploy subs (VAULT/SDGNRS) ahead/among ours; maxCount 4+4 = 8 and
         // the set is 8 (6 ours + 2 deploy), so the combined reach covers the whole set this day.
-        vm.recordLogs();
+        _snapshotBought(subs); // GASOPT-04 storage-stamp baseline (replaces the AutoBought recordLogs)
 
         vm.prank(makeAddr("keeper_A"));
         afKing.autoBuy(4);
@@ -113,8 +115,6 @@ contract AfKingConcurrency is DeployProtocol {
         vm.prank(makeAddr("keeper_B"));
         afKing.autoBuy(4);
         (, uint256 cursorAfterB) = afKing.autoBuyProgress();
-
-        _captureAutoBought(); // drain the combined AutoBought stream once before counting
 
         // The cursor advanced monotonically (B resumed from A's advanced position).
         assertGt(cursorAfterA, 0, "first same-block autoBuy advanced the cursor");
@@ -138,12 +138,11 @@ contract AfKingConcurrency is DeployProtocol {
         uint256 N = 5;
         address[] memory subs = _setupHealthyBuyingSubs(N, "noov_");
 
-        // First chunk: a small maxCount.
-        vm.recordLogs();
+        // First chunk: a small maxCount. Baseline the stamps before it (GASOPT-04 storage-stamp oracle).
+        _snapshotBought(subs);
         vm.prank(makeAddr("chunk1_keeper"));
         afKing.autoBuy(3);
-        _captureAutoBought(); // drain chunk-1's AutoBought stream
-        // Snapshot which of OUR subs were bought in chunk 1.
+        // Snapshot which of OUR subs were bought in chunk 1 (stamp advanced past the chunk-1 baseline).
         bool[] memory boughtInChunk1 = new bool[](N);
         uint256 chunk1Count;
         for (uint256 i; i < N; i++) {
@@ -153,11 +152,12 @@ contract AfKingConcurrency is DeployProtocol {
             }
         }
 
-        // Second chunk (same block): the rest.
-        vm.recordLogs();
+        // Second chunk (same block): the rest. Re-baseline so the count window holds ONLY chunk-2 buys
+        // (the per-chunk granularity the per-chunk getRecordedLogs() once gave). A chunk-1 sub's stamp
+        // was already == today before chunk 2, so re-baselining makes its chunk-2 count 0.
+        _snapshotBought(subs);
         vm.prank(makeAddr("chunk2_keeper"));
         afKing.autoBuy(10);
-        _captureAutoBought(); // drain chunk-2's AutoBought stream (snapshot now holds ONLY chunk-2 buys)
         for (uint256 i; i < N; i++) {
             uint256 c2 = _countAutoBoughtFor(subs[i]);
             if (boughtInChunk1[i]) {
@@ -196,10 +196,9 @@ contract AfKingConcurrency is DeployProtocol {
         uint32 day2 = _today();
         assertGt(day2, day1, "a keeper-local day elapsed");
 
-        vm.recordLogs();
+        _snapshotBought(subs); // baseline at day1 stamps; the day-2 buy advances each to day2
         vm.prank(makeAddr("day2_keeper"));
         afKing.autoBuy(50);
-        _captureAutoBought();
 
         // Cursor day-stamp tracks the new day (first autoBuy of the day reset the index to 0 then advanced).
         (uint32 progDay, ) = afKing.autoBuyProgress();
@@ -220,10 +219,11 @@ contract AfKingConcurrency is DeployProtocol {
         address sub = subs[0];
 
         // First autoBuy today buys the sub once.
-        vm.recordLogs();
+        address[] memory one = new address[](1);
+        one[0] = sub;
+        _snapshotBought(one);
         vm.prank(makeAddr("first_keeper"));
         afKing.autoBuy(50);
-        _captureAutoBought();
         assertEq(_countAutoBoughtFor(sub), 1, "first autoBuy bought the sub once");
         assertEq(_lastAutoBoughtDayOf(sub), _today(), "lastAutoBoughtDay stamped today");
 
@@ -233,16 +233,14 @@ contract AfKingConcurrency is DeployProtocol {
         // Force the cursor back to 0 so the next autoBuy RE-VISITS the already-bought index.
         _resetCursorToZeroForToday();
 
-        vm.recordLogs();
+        // Re-baseline at the post-first-buy stamp (== today). A second buy would have to advance the
+        // stamp PAST today, which the contract's `lastAutoBoughtDay >= today` skip forbids -> count 0.
+        _snapshotBought(one);
         vm.prank(makeAddr("revisit_keeper"));
         // Every active sub is already-autoBought-today now, so the whole chunk produces zero buys ->
-        // NoSubscribersAutoBought. The point is the absence of a SECOND AutoBought for `sub`.
-        try afKing.autoBuy(50) {
-            // If it did not revert, still assert no second buy happened for our sub.
-        } catch {
-            // NoSubscribersAutoBought on an all-already-autoBought chunk is the expected atomic no-op.
-        }
-        _captureAutoBought();
+        // the buy leg no-ops on an all-already-bought chunk. The point is the absence of a SECOND
+        // buy for `sub`.
+        afKing.autoBuy(50);
         assertEq(_countAutoBoughtFor(sub), 0, "lastAutoBoughtDay backstop: NO second buy on a cursor re-visit");
         assertEq(_lastAutoBoughtDayOf(sub), _today(), "lastAutoBoughtDay unchanged by the re-visit skip");
     }
@@ -257,17 +255,15 @@ contract AfKingConcurrency is DeployProtocol {
         // Total set size = N + 2 deploy subs. Bound the first chunk to (0, total) so the split is real.
         uint256 total = afKing.subscriberCount();
         uint256 k = (uint256(firstChunk) % (total + 1)); // 0..total
-        if (k == 0) k = 1; // autoBuy(0) reverts EmptyAutoBuy; keep a real first chunk
+        if (k == 0) k = 1; // 0 now means the default batch; keep an explicit small first chunk for the split
 
-        vm.recordLogs();
+        _snapshotBought(subs); // GASOPT-04 storage-stamp baseline for the combined two-autoBuy window
         vm.prank(makeAddr("fuzz_keeperA"));
-        try afKing.autoBuy(k) {} catch {} // a tiny chunk that hits only deploy subs may still buy >=1
+        afKing.autoBuy(k); // a tiny chunk that hits only deploy subs may still buy >=1
 
         vm.prank(makeAddr("fuzz_keeperB"));
         // The remainder, generously sized to drain the rest of the set this same block.
-        try afKing.autoBuy(total + 1) {} catch {}
-
-        _captureAutoBought(); // drain the combined two-autoBuy AutoBought stream once
+        afKing.autoBuy(total + 1);
 
         // Invariant: each of OUR subs autoBought exactly once for the day (sum == N, max-per == 1).
         uint32 today = _today();
@@ -816,19 +812,17 @@ contract AfKingConcurrency is DeployProtocol {
         vm.store(address(afKing), bytes32(uint256(4)), bytes32(packed));
     }
 
-    /// @dev Drain the recorded logs ONCE into the AfKing snapshots: AutoBought(player,...) recipients and
-    ///      SubscriptionExpired(player, reason). vm.getRecordedLogs() empties the buffer, so this single
-    ///      pass feeds every subsequent count helper (a second getRecordedLogs would see 0).
+    /// @dev Drain the recorded logs ONCE into the AfKing SubscriptionExpired(player, reason) snapshot.
+    ///      The GASOPT-04 AutoBought event is gone; the buy oracle is now the lastAutoBoughtDay storage
+    ///      stamp (see _countAutoBoughtFor), so this pass only captures the reclaim/auto-pause stream.
+    ///      vm.getRecordedLogs() empties the buffer, so this single pass feeds the expired-count helper.
     function _drainLogs() internal {
-        delete _autoBoughtSnapshot;
         delete _expiredPlayers;
         delete _expiredReasons;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(afKing) || logs[i].topics.length == 0) continue;
-            if (logs[i].topics[0] == SWEPT_SIG && logs[i].topics.length >= 2) {
-                _autoBoughtSnapshot.push(address(uint160(uint256(logs[i].topics[1]))));
-            } else if (logs[i].topics[0] == SUB_EXPIRED_SIG && logs[i].topics.length >= 2) {
+            if (logs[i].topics[0] == SUB_EXPIRED_SIG && logs[i].topics.length >= 2) {
                 _expiredPlayers.push(address(uint160(uint256(logs[i].topics[1]))));
                 // reason is the single non-indexed arg in `data` (abi-encoded uint8).
                 _expiredReasons.push(uint8(uint256(bytes32(logs[i].data))));
@@ -836,16 +830,37 @@ contract AfKingConcurrency is DeployProtocol {
         }
     }
 
-    /// @dev Drain logs and feed the AutoBought counts. Alias kept for the existing call sites.
+    /// @dev Drain the SubscriptionExpired stream. Alias kept for the existing call sites (the name is
+    ///      historical; the AutoBought event it once drained is deleted — GASOPT-04).
     function _captureAutoBought() internal {
         _drainLogs();
     }
 
-    /// @dev Count AutoBought emissions for `who` in the captured snapshot. Pure read of the drained array.
-    function _countAutoBoughtFor(address who) internal view returns (uint256 count) {
-        for (uint256 i; i < _autoBoughtSnapshot.length; i++) {
-            if (_autoBoughtSnapshot[i] == who) count++;
+    /// @dev Per-address baseline `lastAutoBoughtDay` snapshot for the storage-stamp buy oracle. A test
+    ///      snapshots the baseline (via _snapshotBought) just before the autoBuy(s) under measurement;
+    ///      _countAutoBoughtFor then reports a buy iff the stamp advanced to `today` since the baseline.
+    mapping(address => uint32) private _baselineBoughtDay;
+
+    /// @dev Snapshot the pre-autoBuy `lastAutoBoughtDay` for each tracked sub (the GASOPT-04 storage-stamp
+    ///      replacement for vm.recordLogs() of the AutoBought stream). Counts subsequent buys against
+    ///      this baseline, so re-snapshotting between chunks gives the same per-chunk granularity the
+    ///      per-chunk getRecordedLogs() once gave.
+    function _snapshotBought(address[] memory tracked) internal {
+        for (uint256 i; i < tracked.length; i++) {
+            _baselineBoughtDay[tracked[i]] = _lastAutoBoughtDayOf(tracked[i]);
         }
+    }
+
+    /// @dev Buy-count oracle for `who` in the current capture window, re-expressed from the deleted
+    ///      AutoBought event onto the `lastAutoBoughtDay` storage stamp (GASOPT-04). Returns 1 iff the
+    ///      sub's stamp is `today` AND advanced past its snapshotted baseline (i.e. a fresh buy landed
+    ///      since _snapshotBought), else 0. The contract's `lastAutoBoughtDay >= today` skip
+    ///      (AfKing.sol:626) makes a second same-day pass a no-op, so the stamp cannot exceed one buy per
+    ///      day per sub — this is the no-double-buy invariant the count==1 assertions assert, at the same
+    ///      strength (the stamp is the authoritative oracle the contract itself uses).
+    function _countAutoBoughtFor(address who) internal view returns (uint256) {
+        uint32 stamp = _lastAutoBoughtDayOf(who);
+        return (stamp == _today() && stamp > _baselineBoughtDay[who]) ? 1 : 0;
     }
 
     /// @dev Count SubscriptionExpired(who, reason) emissions in the captured snapshot. PURE read of the

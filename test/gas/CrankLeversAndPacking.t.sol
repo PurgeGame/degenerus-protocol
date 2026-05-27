@@ -14,18 +14,18 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         suite proves it with CHECKABLE assertions so a future regression flips RED:
 ///
 ///         GAS-02 (one creditFlip/batch, read-once, one batch transfer/refund):
-///           - BEHAVIORAL: a multi-item autoResolve / autoOpen over N>1 successful items emits
+///           - BEHAVIORAL: a multi-item degeneretteResolve / autoOpen over N>1 successful items emits
 ///             EXACTLY ONE crank-reward creditFlip with the summed amount (mirrors REW-02 in
 ///             CrankFaucetResistance:417). Losing bets / freshly-opened boxes pay no winnings, so
 ///             the single CoinflipStakeUpdated is the post-loop crank reward alone.
 ///           - SOURCE-PRESENCE (comment-stripped vm.readFile grep, idiom JackpotSingleCallCorrectness
-///             :461-493 / RngFreezeAndRemovalProofs): autoResolve/autoOpen read `_activeTicketLevel()`
+///             :461-493 / RngFreezeAndRemovalProofs): degeneretteResolve/autoOpen read `_activeTicketLevel()`
 ///             ONCE before the loop; the per-tx creditFlip sits AFTER the loop; AfKing reads
 ///             `mintPrice()` once and does ONE batchPurchase value transfer; batchPurchase does ONE
 ///             refund of unspent value.
 ///
 ///         GAS-03 (calldata grouped by player; homogeneous per-work-type fns): SOURCE-PRESENCE the
-///           parallel-array signatures `autoResolve(address[],uint64[])` /
+///           parallel-array signatures `degeneretteResolve(address[],uint64[])` /
 ///           `batchPurchase(address[],uint256[],uint8[])` and that the three crank/purchase fns are
 ///           homogeneous per work-type (no mixed-work dispatcher).
 ///
@@ -121,7 +121,7 @@ contract CrankLeversAndPacking is DeployProtocol {
     // GAS-02 — one creditFlip per batch (BEHAVIORAL)
     // =========================================================================
 
-    /// @notice GAS-02 (autoResolve): a autoResolve over N>1 successful items emits EXACTLY ONE
+    /// @notice GAS-02 (degeneretteResolve): a degeneretteResolve over N>1 successful items emits EXACTLY ONE
     ///         crank-reward creditFlip with the summed amount (never N separate credits). Losing
     ///         bets pay no winnings, so the single CoinflipStakeUpdated IS the post-loop crank reward.
     function testCrankBetsEmitsExactlyOneCreditFlipForManyItems() public {
@@ -140,10 +140,10 @@ contract CrankLeversAndPacking is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(player);
-        game.autoResolve(players, betIds);
+        game.degeneretteResolve(players, betIds);
 
         // EXACTLY ONE creditFlip for N=3 successful items (GAS-02 one-per-tx, REW-02).
-        assertEq(_countCoinflipStakeUpdated(), 1, "GAS-02: exactly one autoResolve creditFlip for N>1 items");
+        assertEq(_countCoinflipStakeUpdated(), 1, "GAS-02: exactly one degeneretteResolve creditFlip for N>1 items");
 
         // The single creditFlip amount equals the SUMMED per-item reward (3x the single-item peg).
         uint256 stakeDelta = coinflip.coinflipAmount(player) - preStake;
@@ -213,28 +213,32 @@ contract CrankLeversAndPacking is DeployProtocol {
     // GAS-02 — read-once / one-transfer / one-refund (SOURCE-PRESENCE)
     // =========================================================================
 
-    /// @notice GAS-02 read-once: autoResolve and autoOpen each read `_activeTicketLevel()` exactly
+    /// @notice GAS-02 read-once: degeneretteResolve and autoOpen each read `_activeTicketLevel()` exactly
     ///         ONCE (the `uint24 lvl = _activeTicketLevel();` hoist before the loop), and each
     ///         creditFlip sits AFTER the loop (one per tx). AfKing reads `mintPrice()` once.
     function testGas02ReadOnceAndOneTransferSourcePresence() public view {
         string memory game_ = _strippedGame();
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
 
-        // autoResolve / autoOpen each hoist the level read once before their loop: the
-        // `uint24 lvl = _activeTicketLevel();` statement appears exactly twice across the file
-        // (once per crank fn) — never re-read per item.
+        // 330-03 flat-≥3 re-peg: degeneretteResolve's reward is now a FLAT level-INDEPENDENT
+        // RESOLVE_FLAT_BURNIE constant, so the prior per-item `uint24 lvl = _activeTicketLevel();`
+        // hoist is gone (the lever is now "no per-item level read at all", strictly stronger). autoOpen's
+        // crank reward was re-homed to AfKing.doWork() (D-07), so the game crank fns hold exactly ONE
+        // post-loop creditFlip: degeneretteResolve's single flat-≥3 grant.
         assertEq(
             _countOccurrences(game_, "uint24 lvl = _activeTicketLevel();"),
-            2,
-            "GAS-02: level read-once hoist present once each in autoResolve + autoOpen"
+            0,
+            "GAS-02 (330-03): no per-item level read - degeneretteResolve reward is a flat level-independent constant"
         );
 
-        // The per-tx crank reward creditFlip is byte-present (one guarded emission per crank fn).
+        // The per-tx crank reward creditFlip is byte-present exactly ONCE (degeneretteResolve's flat-≥3
+        // grant; autoOpen's reward moved to doWork). One guarded post-loop emission per tx (REW-02).
         assertEq(
-            _countOccurrences(game_, "if (reward != 0) coinflip.creditFlip(msg.sender, reward);"),
-            2,
-            "GAS-02: one guarded post-loop creditFlip per crank fn (bets + boxes)"
+            _countOccurrences(game_, "coinflip.creditFlip(msg.sender, RESOLVE_FLAT_BURNIE);"),
+            1,
+            "GAS-02: one guarded post-loop creditFlip in degeneretteResolve (flat->=3 re-peg, one-per-tx)"
         );
+        // Phase 332: re-prove the autoOpen/advance bounty one-per-tx VALUE under the doWork router.
 
         // AfKing reads mintPrice() once into a local before its loop (read-once lever).
         assertGt(
@@ -268,15 +272,15 @@ contract CrankLeversAndPacking is DeployProtocol {
     // =========================================================================
 
     /// @notice GAS-03: the work fns take parallel arrays grouped by player (item i = (players[i], …))
-    ///         and are homogeneous per work-type — autoResolve resolves bets only, autoOpen opens
+    ///         and are homogeneous per work-type — degeneretteResolve resolves bets only, autoOpen opens
     ///         boxes only (parameterless cursor), batchPurchase purchases only. No mixed-work dispatcher.
     function testGas03GroupingAndHomogeneitySourcePresence() public view {
         string memory game_ = _strippedGame();
 
-        // autoResolve: parallel arrays (players[] + betIds[]) grouped by player.
-        assertGt(_countOccurrences(game_, "function autoResolve("), 0, "GAS-03: autoResolve present");
-        assertGt(_countOccurrences(game_, "address[] calldata players"), 0, "GAS-03: autoResolve players[] grouping");
-        assertGt(_countOccurrences(game_, "uint64[] calldata betIds"), 0, "GAS-03: autoResolve betIds[] grouping");
+        // degeneretteResolve: parallel arrays (players[] + betIds[]) grouped by player.
+        assertGt(_countOccurrences(game_, "function degeneretteResolve("), 0, "GAS-03: degeneretteResolve present");
+        assertGt(_countOccurrences(game_, "address[] calldata players"), 0, "GAS-03: degeneretteResolve players[] grouping");
+        assertGt(_countOccurrences(game_, "uint64[] calldata betIds"), 0, "GAS-03: degeneretteResolve betIds[] grouping");
 
         // autoOpen: homogeneous box-only work with a parameterless cursor walk (uint256 maxCount).
         assertGt(_countOccurrences(game_, "function autoOpen(uint256 maxCount)"), 0, "GAS-03: autoOpen(maxCount) homogeneous box cursor");
@@ -286,8 +290,8 @@ contract CrankLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(game_, "uint256[] calldata amounts"), 0, "GAS-03: batchPurchase amounts[] grouping");
         assertGt(_countOccurrences(game_, "uint8[] calldata modes"), 0, "GAS-03: batchPurchase modes[] grouping");
 
-        // Homogeneity: there is exactly ONE autoResolve and ONE autoOpen definition (no fused dispatcher).
-        assertEq(_countOccurrences(game_, "function autoResolve("), 1, "GAS-03: single autoResolve (no mixed-work dispatcher)");
+        // Homogeneity: there is exactly ONE degeneretteResolve and ONE autoOpen definition (no fused dispatcher).
+        assertEq(_countOccurrences(game_, "function degeneretteResolve("), 1, "GAS-03: single degeneretteResolve (no mixed-work dispatcher)");
         assertEq(_countOccurrences(game_, "function autoOpen(uint256 maxCount)"), 1, "GAS-03: single autoOpen (homogeneous)");
     }
 
@@ -334,7 +338,7 @@ contract CrankLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(game_, "uint48 internal boxCursorIndex;"), 0, "GAS-04: boxCursorIndex is uint48");
 
         // No new hot-path storage: enqueueBoxForAutoOpen is the ONLY crank-added storage write, and it is
-        // an onlySelf external fn fired from the first-deposit signal — NOT inside autoResolve/autoOpen
+        // an onlySelf external fn fired from the first-deposit signal — NOT inside degeneretteResolve/autoOpen
         // and NOT on the bet-placement path.
         assertEq(_countOccurrences(game_, "function enqueueBoxForAutoOpen("), 1, "GAS-04: single enqueueBoxForAutoOpen (first-deposit enqueue)");
         // enqueueBoxForAutoOpen is onlySelf (msg.sender == address(this)) — keeps the enqueue authority-gated.
@@ -359,8 +363,9 @@ contract CrankLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(degenerette, "revert RngNotReady()"), 0, "G1: RngNotReady resolve/placement guard byte-present");
         assertGt(_countOccurrences(degenerette, "if (rngWord == 0) revert RngNotReady();"), 0, "G1: bet resolve RngNotReady freeze guard");
 
-        // G2 — RngNotReady open-box guard / orphan-index skip (autoOpen:1603 + LootboxModule open).
-        assertGt(_countOccurrences(game_, "if (lootboxRngWordByIndex[index] == 0) return;"), 0, "G2: autoOpen orphan-index / RngNotReady skip");
+        // G2 — RngNotReady open-box guard / orphan-index skip. RD-3: the reworked autoOpen returns a
+        // count, so the orphan-index skip is now `return 0;` (was bare `return;`).
+        assertGt(_countOccurrences(game_, "if (lootboxRngWordByIndex[index] == 0) return 0;"), 0, "G2: autoOpen orphan-index / RngNotReady skip (return 0)");
         assertGt(_countOccurrences(lootbox, "revert RngNotReady()"), 0, "G2: LootboxModule open RngNotReady guard byte-present");
 
         // G3 — one-reward-per-item: bet delete (DegeneretteModule:580).
@@ -370,15 +375,15 @@ contract CrankLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(lootbox, "lootboxEthBase[index][player] = 0;"), 0, "G4: box base zeroing one-reward guard");
         assertGt(_countOccurrences(game_, "if (lootboxEthBase[index][player] == 0) continue;"), 0, "G4: autoOpen already-opened skip");
 
-        // G5 — double-crank short-circuit BatchAlreadyTaken (autoResolve:1552).
+        // G5 — double-crank short-circuit BatchAlreadyTaken (degeneretteResolve:1552).
         assertGt(_countOccurrences(game_, "revert BatchAlreadyTaken();"), 0, "G5: double-crank short-circuit BatchAlreadyTaken");
         assertGt(_countOccurrences(game_, "if (degeneretteBets[players[0]][betIds[0]] == 0) revert BatchAlreadyTaken();"), 0, "G5: item-0 probe short-circuit");
 
         // G6 — batchPurchase per-player try/catch + slice-refund (Game:1705-1721).
         assertGt(_countOccurrences(game_, "this._batchPurchaseUnit{value: slice}"), 0, "G6: batchPurchase per-player slice try");
 
-        // G7 — crank per-item onlySelf isolation (autoResolve:1641 / autoOpen:1662 onlySelf guards).
-        assertGt(_countOccurrences(game_, "function _autoResolveBet("), 0, "G7: _autoResolveBet onlySelf wrapper");
+        // G7 — crank per-item onlySelf isolation (degeneretteResolve:1641 / autoOpen:1662 onlySelf guards).
+        assertGt(_countOccurrences(game_, "function _degeneretteResolveBet("), 0, "G7: _degeneretteResolveBet onlySelf wrapper");
         assertGt(_countOccurrences(game_, "function _autoOpenBox("), 0, "G7: _autoOpenBox onlySelf wrapper");
         assertGt(_countOccurrences(game_, "if (msg.sender != address(this)) revert E();"), 0, "G7: onlySelf (msg.sender == self) guard byte-present");
 
@@ -396,13 +401,19 @@ contract CrankLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(afking, "_autoBuyDay == today"), 0, "G11: cursor self-partition byte-present");
         assertGt(_countOccurrences(afking, "lastAutoBoughtDay"), 0, "G11: per-entry lastAutoBoughtDay day-stamp byte-present");
 
-        // G12 — WWXRP zero reward (autoResolve:1564 currency == 3 fork).
-        assertGt(_countOccurrences(game_, "if (currency == 3) {"), 0, "G12: WWXRP currency==3 zero-reward fork");
+        // G12 — WWXRP excluded from the reward gate (330-03 flat-≥3 re-peg): currency == 3 (WWXRP) does
+        // NOT count toward the >=3 non-WWXRP reward gate, keeping the faucet closed (AUTO-04). The fork
+        // is now the `if (currency != 3) ++successCount;` reward-gate increment.
+        assertGt(_countOccurrences(game_, "if (currency != 3) ++successCount;"), 0, "G12: WWXRP (currency==3) excluded from the >=3 reward gate");
 
-        // G13 — rngLocked / gameOver batch pre-check (Game:1693-1694 + AfKing autoBuy:523).
+        // G13 — rngLocked / gameOver freeze guards. batchPurchase pre-checks both at entry; the open
+        // path no-ops during the freeze (RD-3). RD-2 REMOVED the AfKing autoBuy rngLock abort (buys are
+        // freeze-safe by construction — a box queues at the current LR_INDEX pre-entropy and the orphan
+        // hazard is defended on the open side), so the freeze guard is now the GAME-side autoOpen no-op,
+        // not an AfKing autoBuy abort.
         assertGt(_countOccurrences(game_, "if (rngLockedFlag) revert RngLocked();"), 0, "G13: batchPurchase rngLocked pre-check");
         assertGt(_countOccurrences(game_, "if (gameOver) revert E();"), 0, "G13: batchPurchase gameOver pre-check");
-        assertGt(_countOccurrences(afking, "rngLocked()) revert AutoBuyAborted"), 0, "G13: AfKing autoBuy rngLocked abort");
+        assertGt(_countOccurrences(game_, "if (rngLockedFlag || _livenessTriggered()) return 0;"), 0, "G13 (RD-3): autoOpen rngLock/liveness freeze no-op");
     }
 
     /// @notice Anti-vacuity backstop for the G1-G13 grep gates: the comment-stripped sources are
@@ -412,7 +423,7 @@ contract CrankLeversAndPacking is DeployProtocol {
         string memory game_ = _strippedGame();
         assertGt(bytes(game_).length, 1000, "stripped Game source is non-empty");
         // A code identifier that unquestionably exists post-strip.
-        assertGt(_countOccurrences(game_, "function autoResolve("), 0, "harness live: a known code symbol is found");
+        assertGt(_countOccurrences(game_, "function degeneretteResolve("), 0, "harness live: a known code symbol is found");
         // A comment-only sentinel must be STRIPPED (proves comments are actually removed, so a
         // guard mentioned only in NatSpec could not self-satisfy a gate).
         assertEq(

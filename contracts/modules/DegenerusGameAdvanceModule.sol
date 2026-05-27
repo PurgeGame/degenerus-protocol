@@ -143,17 +143,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @notice Max share of affiliate DGNRS pool segregated per level for claims (5%).
     uint16 private constant AFFILIATE_DGNRS_LEVEL_BPS = 500;
 
-    /// @dev ETH-equivalent target for advanceGame bounty (~0.005 ETH worth of BURNIE).
-    uint256 private constant ADVANCE_BOUNTY_ETH = 0.005 ether;
-
     /// @dev Vault contract for DGVE ownership check (advanceGame mint-gate bypass).
     IDegenerusVaultOwner private constant vault =
         IDegenerusVaultOwner(ContractAddresses.VAULT);
 
     /// @notice Advance game state. Called daily to process jackpots, mints, and phase transitions.
-    ///         Caller receives ~0.005 ETH worth of BURNIE as flip credit.
-    function advanceGame() external {
+    ///         Returns mult: the day-epoch stall multiplier (1 base / 2 / 4 / 6 by stall; 0 on
+    ///         the gameover path = no bounty). Standalone callers earn nothing — the unified
+    ///         keeper router pays the re-homed bounty (2x * mult) only when mult > 0.
+    function advanceGame() external returns (uint8 mult) {
         address caller = msg.sender;
+        mult = 1;
         uint48 ts = uint48(block.timestamp);
         uint32 day = _simulatedDayIndexAt(ts);
         bool inJackpot = jackpotPhaseFlag;
@@ -181,18 +181,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!inJackpot && !lastPurchase) {
             (bool goReturn, uint8 goStage) = _handleGameOverPath(day, lvl, psd);
             if (goReturn) {
+                // Gameover path: advance ran but earns NO router bounty (the flip-credit
+                // coin is worthless at gameover) — return mult = 0 so doWork pays nothing.
                 emit Advance(goStage, lvl);
-                if (goStage == STAGE_TICKETS_WORKING) {
-                    // Game-over path surfaced a partial drain: pay caller the
-                    // advance bounty so they are incentivised to retry until
-                    // the queue is drained and terminal jackpot can run.
-                    coinflip.creditFlip(
-                        caller,
-                        (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) /
-                            PriceLookupLib.priceForLevel(lvl)
-                    );
-                }
-                return;
+                return 0;
             }
         }
 
@@ -222,12 +214,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                             _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
                         }
                         emit Advance(STAGE_TICKETS_WORKING, lvl);
-                        coinflip.creditFlip(
-                            caller,
-                            (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) /
-                                PriceLookupLib.priceForLevel(lvl)
-                        );
-                        return;
+                        // Mid-day partial-drain: mult = 1 (ADV-05/D-07 — no escalation).
+                        return mult;
                     }
                 }
             }
@@ -235,10 +223,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             revert NotTimeYet();
         }
 
-        // Escalate bounty multiplier if daily processing is stalled (new-day path only).
-        // 2x after 20 min, 4x after 1 hour, 6x after 2 hours.
-        // Absolute targets: 0.005 base, 0.01 @20m, 0.02 @1h, 0.03 @2h ETH-equivalent.
-        uint256 bountyMultiplier = 1;
+        // Day-epoch stall multiplier (new-day path only), written straight into the `mult`
+        // return so the router scales the re-homed advance bounty: 2x after 20 min, 4x after
+        // 1 hour, 6x after 2 hours. `mult` defaults to 1 (set at function entry).
         {
             uint256 dayStart = (uint256(day - 1) +
                 ContractAddresses.DEPLOY_DAY_BOUNDARY) *
@@ -246,11 +233,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 82_620;
             uint256 elapsed = ts - dayStart;
             if (elapsed >= 2 hours) {
-                bountyMultiplier = 6;
+                mult = 6;
             } else if (elapsed >= 1 hours) {
-                bountyMultiplier = 4;
+                mult = 4;
             } else if (elapsed >= 20 minutes) {
-                bountyMultiplier = 2;
+                mult = 2;
             }
         }
 
@@ -464,12 +451,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             stage = STAGE_JACKPOT_DAILY_STARTED;
         } while (false);
 
+        // New-day advance leg: `mult` already holds the day-epoch stall ladder (1/2/4/6)
+        // the router scales the re-homed bounty by.
         emit Advance(stage, lvl);
-        coinflip.creditFlip(
-            caller,
-            (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) /
-                PriceLookupLib.priceForLevel(lvl)
-        );
     }
 
     /*+========================================================================================+

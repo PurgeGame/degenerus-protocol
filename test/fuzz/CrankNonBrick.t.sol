@@ -9,7 +9,7 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title CrankNonBrick -- Proves SAFE-02: the permissionless do-work cranks
-///        (autoResolve / autoOpen) and the keeper-gated batchPurchase are NON-BRICK.
+///        (degeneretteResolve / autoOpen) and the keeper-gated batchPurchase are NON-BRICK.
 ///
 /// @notice One reverting / stale / not-ready item is isolated via the onlySelf +
 ///         try/catch shell and SKIPPED — the batch completes, rewarding / buying only
@@ -17,9 +17,9 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         the rest. Concretely this suite asserts:
 ///
 ///   Task 1 — skip-and-continue + slice-refund + batch-level pre-check:
-///     - autoResolve over a list whose middle item is poisoned (not-ready, RNG word absent)
+///     - degeneretteResolve over a list whose middle item is poisoned (not-ready, RNG word absent)
 ///       still resolves the healthy items; the poisoned item is caught by
-///       `try this._autoResolveBet catch {}` and the reward sums over SUCCESSES only.
+///       `try this._degeneretteResolveBet catch {}` and the reward sums over SUCCESSES only.
 ///     - autoOpen whose cursor walk hits a poisoned entry (lootboxEthBase != 0 so it is
 ///       NOT the `continue`-skip, but lootboxEth == 0 so the module open reverts E()) skips
 ///       that entry via the per-item try/catch and opens the rest, rewarding successes only.
@@ -122,10 +122,10 @@ contract CrankNonBrick is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 1 — autoResolve skip-and-continue (poisoned middle item)
+    // Task 1 — degeneretteResolve skip-and-continue (poisoned middle item)
     // =========================================================================
 
-    /// @notice SAFE-02 / T-318-03-01 (bets): autoResolve over [healthy, POISONED, healthy] resolves
+    /// @notice SAFE-02 / T-318-03-01 (bets): degeneretteResolve over [healthy, POISONED, healthy] resolves
     ///         the two healthy bets and SKIPS the poisoned middle one (its RNG word never landed →
     ///         the onlySelf resolve hits RngNotReady, caught by try/catch). The batch does NOT
     ///         revert, and the reward sums over the SUCCESSES only (exactly 2 item-pegs), proving
@@ -155,7 +155,7 @@ contract CrankNonBrick is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(cranker);
-        game.autoResolve(players, betIds); // MUST NOT revert
+        game.degeneretteResolve(players, betIds); // MUST NOT revert
 
         // The two healthy bets resolved (slots deleted = work done) ...
         assertEq(_readBetPacked(player, healthyA), 0, "healthy A resolved");
@@ -201,7 +201,7 @@ contract CrankNonBrick is DeployProtocol {
 
         uint256 preStake = coinflip.coinflipAmount(cranker);
         vm.prank(cranker);
-        game.autoResolve(players, betIds); // MUST NOT revert at any poison position
+        game.degeneretteResolve(players, betIds); // MUST NOT revert at any poison position
 
         assertGt(_readBetPacked(player, poisoned), 0, "poison skipped regardless of position");
         uint256 rewardEthAtPeg =
@@ -514,19 +514,18 @@ contract CrankNonBrick is DeployProtocol {
     }
 
     // =========================================================================
-    // TOMB-04 -- the didWork revert-fix: a reclaim/auto-pause/renewal-only chunk COMMITS
+    // TOMB-04 -- a reclaim/auto-pause/renewal-only chunk COMMITS (didWork)
     // =========================================================================
     //
-    // v47 added `didWork` (AfKing.sol:594) so the autoBuy tail reverts NoSubscribersAutoBought ONLY when the
-    // chunk did NOTHING (`!didWork`, AfKing.sol:806). Pre-fix, a buy-less chunk hit `batchLen == 0 ->
-    // revert`, which rolled back any in-loop set work it had performed (a cancel-tombstone reclaim, an
-    // auto-pause, or a window renewal) -- re-stranding the tombstone for griefing across autoBuys. The
-    // fix: a chunk that DID such work (didWork == true) but produced no buy COMMITS the work (0 bounty,
-    // no revert); a genuinely-empty chunk (`!didWork`) still reverts as the anti-spam disincentive.
+    // `didWork` (AfKing.sol) tracks whether a buy-less chunk performed in-loop set work (a
+    // cancel-tombstone reclaim, an auto-pause, or a window renewal). A chunk that did such work but
+    // produced no buy COMMITS the work (0 bounty, no revert) -- reverting would roll the set work back
+    // and re-strand the tombstone for griefing across autoBuys. A buy-less chunk returns 0 and never
+    // reverts either way, so the unified doWork router can make progress.
 
-    /// @notice TOMB-04 didWork revert-fix: a autoBuy chunk that does ONLY a cancel-tombstone reclaim (no
-    ///         successful buy -> bounty 0) COMMITS the reclaim instead of reverting NoSubscribersAutoBought.
-    ///         Pre-fix, `batchLen == 0 -> revert` rolled the reclaim back, re-stranding the tombstone.
+    /// @notice TOMB-04 (didWork): an autoBuy chunk that does ONLY a cancel-tombstone reclaim (no
+    ///         successful buy -> bounty 0) COMMITS the reclaim and returns 0 without reverting (reverting
+    ///         would roll the reclaim back and re-strand the tombstone).
     ///         Here: full-autoBuy the day so every sub is already-autoBought, cancel one (in-place tombstone),
     ///         reset the cursor so the next same-day chunk walks [already-autoBought..., TOMBSTONE,
     ///         already-autoBought...] -> reclaim fires (didWork), no buy. Assert it does NOT revert and the
@@ -552,9 +551,10 @@ contract CrankNonBrick is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(makeAddr("rco_keeperReclaim"));
-        // MUST NOT revert despite 0 buys / 0 bounty -- the reclaim did work, so the chunk commits.
-        uint256 bounty = afKing.autoBuy(afKing.subscriberCount() + 5);
-        assertEq(bounty, 0, "reclaim-only chunk earns 0 bounty (no buy)");
+        // MUST NOT revert despite 0 buys -- the reclaim's in-loop set work commits (the buy-less chunk
+        // no longer reverts; GASOPT-04 / RD-2). The standalone autoBuy is UNREWARDED (no return / no
+        // creditFlip — only doWork credits), so there is no bounty to assert here.
+        afKing.autoBuy(afKing.subscriberCount() + 5);
 
         // The reclaim COMMITTED: the tombstone is removed from the set and the SubscriptionExpired(.,2)
         // is in the recorded logs -- state persists after the tx (no rollback).
@@ -585,14 +585,14 @@ contract CrankNonBrick is DeployProtocol {
         assertEq(afKing.poolOf(sub), 0, "pool drained -> funding-skip auto-pause will fire");
         assertGt(_afkDailyQtyOf(sub), 0, "sub is an active NORMAL sub before the autoBuy");
 
-        // This single autoBuy is an auto-pause-only chunk: the deploy subs NotApproved-skip (no didWork),
-        // our pool-empty NORMAL sub funding-skip auto-pauses (didWork, no buy) -> batchLen == 0 but
-        // didWork == true -> COMMITS (pre-fix this reverted NoSubscribersAutoBought and rolled the auto-pause
-        // back). MUST NOT revert.
+        // This single autoBuy is an auto-pause-only chunk: our pool-empty NORMAL sub funding-skip
+        // auto-pauses (didWork, no buy) -> batchLen == 0 but didWork == true -> COMMITS the auto-pause
+        // and returns 0 without reverting (reverting would roll the auto-pause back). MUST NOT revert.
         vm.recordLogs();
         vm.prank(makeAddr("apo_keeper"));
-        uint256 bounty = afKing.autoBuy(afKing.subscriberCount() + 5); // MUST NOT revert
-        assertEq(bounty, 0, "auto-pause-only chunk earns 0 bounty (no buy)");
+        // MUST NOT revert -- the auto-pause set work commits (the buy-less chunk no longer reverts;
+        // GASOPT-04 / RD-2). The standalone autoBuy is UNREWARDED (no return / no creditFlip).
+        afKing.autoBuy(afKing.subscriberCount() + 5);
 
         // The auto-pause state change PERSISTED (committed, not rolled back): the sub was swap-popped out
         // of the set and a SubscriptionExpired(sub, 1 = AutoPause) was emitted.
@@ -642,30 +642,34 @@ contract CrankNonBrick is DeployProtocol {
         }
     }
 
-    /// @notice TOMB-04 didWork revert-fix (anti-spam preserved): a genuinely-empty chunk -- no buy, no
-    ///         reclaim, no auto-pause, no renewal (`!didWork`) -- STILL reverts NoSubscribersAutoBought. The
-    ///         revert-fix only spares chunks that DID set work; a truly do-nothing autoBuy still reverts as
-    ///         the gas-cost anti-spam disincentive. Here: full-autoBuy so all subs are already-autoBought, then
-    ///         reset the cursor and re-autoBuy with NO tombstone present -> every entry is an
-    ///         already-autoBought skip (no didWork) -> revert.
-    function testEmptyChunkStillRevertsNoSubscribersAutoBought() public {
+    /// @notice empty-chunk no-op: a genuinely-empty chunk -- no buy, no reclaim, no auto-pause, no
+    ///         renewal -- is a NO-OP (a no-buy chunk returns 0, never reverts) so the unified doWork
+    ///         router can make progress through an all-already-bought buy leg. Here: full-autoBuy
+    ///         so all subs are already-autoBought, then reset the cursor and re-autoBuy with NO tombstone
+    ///         present -> every entry is an already-autoBought skip -> the autoBuy succeeds as
+    ///         a no-op and stamps NO fresh buy (no double-buy).
+    /// @dev    Phase 332: re-prove the no-double-buy / router-progress disposition under doWork.
+    function testEmptyChunkIsNoOp() public {
         uint256 N = 3;
-        _setupAutoBuySubs(N, "empty_");
+        address[] memory subs = _setupAutoBuySubs(N, "empty_");
 
-        // Full autoBuy -> every sub stamped already-autoBought-today (didWork true here, but it commits buys).
+        // Full autoBuy -> every sub stamped already-autoBought-today.
         vm.prank(makeAddr("empty_keeperFull"));
         afKing.autoBuy(afKing.subscriberCount() + 5);
+        uint32 today = _afkToday();
+        for (uint256 i; i < N; i++) {
+            assertEq(_afkLastAutoBoughtDayOf(subs[i]), today, "all subs stamped already-autoBought-today");
+        }
 
         // Reset the cursor (same day) with NO tombstone in the set -> the re-walk hits only already-
         // autoBought skips (our subs) + NotApproved skips (the deploy subs): no buy, no reclaim, no auto-
-        // pause, no renewal -> !didWork -> MUST revert.
+        // pause, no renewal. The buy-less chunk is a NO-OP (it no longer reverts) and stamps no fresh buy.
         _afkResetCursorToZeroForToday();
-        // Evaluate maxCount BEFORE arming expectRevert (a view call here would otherwise be the call
-        // the cheatcode intercepts instead of the autoBuy).
-        uint256 maxCount = afKing.subscriberCount() + 5;
-        vm.prank(makeAddr("empty_keeperRevert"));
-        vm.expectRevert(bytes4(keccak256("NoSubscribersAutoBought()")));
-        afKing.autoBuy(maxCount);
+        vm.prank(makeAddr("empty_keeperNoOp"));
+        afKing.autoBuy(afKing.subscriberCount() + 5); // MUST NOT revert (empty-chunk no-op)
+        for (uint256 i; i < N; i++) {
+            assertEq(_afkLastAutoBoughtDayOf(subs[i]), today, "no fresh buy on the empty re-walk (no-op, no double-buy)");
+        }
     }
 
     // =========================================================================

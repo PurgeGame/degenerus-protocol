@@ -94,6 +94,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Caller-supplied work list is already resolved (a competitor got ahead).
     error BatchAlreadyTaken();
 
+    /// @notice No resolvable work in the supplied batch (degeneretteResolve at zero resolutions).
+    error NoWork();
+
     /*+======================================================================+
       |                              EVENTS                                  |
       +======================================================================+
@@ -272,7 +275,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      - RNG gating ensures fairness (no manipulation during VRF window)
     ///      - Batched processing prevents DoS from large queues
     ///
-    function advanceGame() external {
+    function advanceGame() external returns (uint8 mult) {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_ADVANCE_MODULE
             .delegatecall(
@@ -281,6 +284,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 )
             );
         if (!ok) _revertDelegate(data);
+        mult = abi.decode(data, (uint8));
     }
 
     /*+========================================================================================+
@@ -1533,17 +1537,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  storage directly, so it lives in-game by construction.               |
       +======================================================================+*/
 
-    /// @dev Reference gas price for the auto-work reward peg. The caller is
-    ///      reimbursed its gas at this fixed reference, never measured gas:
-    ///      tx.gasprice / gasleft() are a gameable surface and are never read.
-    uint256 private constant AUTO_GAS_PRICE_REF = 0.5 gwei;
-
-    /// @dev Reserved per-work-type gas-unit constants. The numeric values are
-    ///      placeholders calibrated from measured worst-case marginal gas at the
-    ///      Phase 319 GAS pass; only the names/shape are fixed here. They are
-    ///      FIXED constants (REW-03) — the reward never depends on gasleft().
-    uint256 private constant AUTO_RESOLVE_BET_GAS_UNITS = 66_528;
-    uint256 private constant AUTO_OPEN_BOX_GAS_UNITS = 71_203;
+    /// @dev Flat ~1-BURNIE "lose" reward for the Degenerette resolve helper, paid ONCE per tx
+    ///      at >=3 non-WWXRP resolutions (D-05b). GAS-331 PLACEHOLDER — the exact value is
+    ///      calibrated under the USER-gated GAS phase (331), NOT locked here.
+    uint256 private constant RESOLVE_FLAT_BURNIE = 1e18;
 
     /// @dev Cursor into the box auto-open queue for the current lootbox RNG index.
     ///      Concurrent same-tx callers self-partition via the advancing cursor.
@@ -1578,13 +1575,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      (degeneretteBets[players[0]][betIds[0]] == 0) a competitor got ahead, so the
     ///      whole list reverts with BatchAlreadyTaken (a loser-gas cap, reusing the SLOAD
     ///      item 0 needs anyway). Items 1..N are isolated per-item (a stale/reverting item
-    ///      skips), and only successful resolutions earn a reward. WWXRP work (currency == 3)
-    ///      is resolvable but earns zero reward (AUTO-04). The accumulated reward is granted
-    ///      as exactly ONE creditFlip(msg.sender, sum) at the end (REW-02), to whoever calls
-    ///      including a self-resolver (REW-04, no caller restriction).
+    ///      skips). The reward is a FLAT ~1-BURNIE creditFlip granted ONCE (REW-02) at >=3
+    ///      successfully-resolved NON-WWXRP bets (D-05b); WWXRP (currency == 3) resolves but
+    ///      never counts toward the gate (AUTO-04). Zero resolutions revert NoWork(); 1-2
+    ///      resolved commit UNPAID (never strand the trailing tail). Any caller including a
+    ///      self-resolver (REW-04, no caller restriction).
     /// @param players Bet owners, grouped/ordered by the caller (item 0 is the probe).
     /// @param betIds Bet ids, parallel to players.
-    function autoResolve(
+    function degeneretteResolve(
         address[] calldata players,
         uint64[] calldata betIds
     ) external {
@@ -1595,23 +1593,20 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // bet is deleted (slot == 0), so a zero slot means a competitor got ahead.
         if (degeneretteBets[players[0]][betIds[0]] == 0) revert BatchAlreadyTaken();
 
-        uint256 reward;
-        uint24 lvl = _activeTicketLevel();
+        uint256 successCount;
+        uint256 totalResolved;
         for (uint256 i; i < len; ) {
             uint256 betPacked = degeneretteBets[players[i]][betIds[i]];
             // currency bits [42..43]: WWXRP is the most +EV currency, so it is excluded
-            // from the bounty to keep the faucet closed (AUTO-04).
+            // from the >=3 reward gate to keep the faucet closed (AUTO-04).
             uint8 currency = uint8((betPacked >> 42) & 0x3);
             // Per-item isolation: a stale/reverting/not-ready bet skips, never bricks.
-            try this._autoResolveBet(players[i], betIds[i]) {
-                // WWXRP work (currency == 3) is resolvable but earns zero reward.
-                if (currency == 3) {
-                    // zero reward
-                } else {
-                    reward += _ethToBurnieValue(
-                        AUTO_RESOLVE_BET_GAS_UNITS * AUTO_GAS_PRICE_REF,
-                        PriceLookupLib.priceForLevel(lvl)
-                    );
+            try this._degeneretteResolveBet(players[i], betIds[i]) {
+                // Any resolution counts toward the no-work gate; only non-WWXRP
+                // resolutions count toward the >=3 flat-reward gate (AUTO-04).
+                unchecked {
+                    ++totalResolved;
+                    if (currency != 3) ++successCount;
                 }
             } catch {}
             unchecked {
@@ -1619,7 +1614,40 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             }
         }
 
-        if (reward != 0) coinflip.creditFlip(msg.sender, reward);
+        // Flat ~1-BURNIE "lose" (D-05b): pay ONCE at >=3 non-WWXRP resolutions; revert
+        // NoWork() if nothing resolved; 1-2 resolved commit UNPAID (never strand the tail).
+        if (totalResolved == 0) revert NoWork();
+        if (successCount >= 3) coinflip.creditFlip(msg.sender, RESOLVE_FLAT_BURNIE);
+    }
+
+    /// @notice O(1) discovery: does advanceGame() have pending work?
+    /// @dev TRUE for a new-day advance (regardless of rngLock — advance is liveness-critical)
+    ///      OR a mid-day partial-drain whose read slot still holds queued tickets. No
+    ///      unbounded scan (ROUTER-04).
+    function advanceDue() external view returns (bool) {
+        if (_simulatedDayIndex() != dailyIdx) return true;
+        if (!ticketsFullyProcessed) {
+            uint24 lvl = level;
+            uint24 purchaseLevel = (!jackpotPhaseFlag &&
+                lastPurchaseDay &&
+                rngLockedFlag)
+                ? lvl
+                : lvl + 1;
+            if (ticketQueue[_tqReadKey(purchaseLevel)].length > 0) return true;
+        }
+        return false;
+    }
+
+    /// @notice O(1) discovery: are there openable boxes for the active lootbox index?
+    /// @dev rngLock-aware (RD-3): FALSE during rngLock so the open leg no-ops in the freeze;
+    ///      TRUE for a mid-day-resolved round whose VRF word landed and we are not locked.
+    ///      No unbounded scan (ROUTER-04).
+    function boxesPending() external view returns (bool) {
+        if (rngLockedFlag) return false;
+        uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+        if (lootboxRngWordByIndex[index] == 0) return false;
+        uint256 effectiveCursor = boxCursorIndex == index ? boxCursor : 0;
+        return boxPlayers[index].length > effectiveCursor;
     }
 
     /// @notice Permissionlessly open queued lootboxes via the parameterless cursor.
@@ -1630,10 +1658,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      emergency VRF rotation is skipped until updateVrfCoordinatorAndSub re-issues the
     ///      in-flight request (a303ae18 detect-preserve-re-issue) and the word lands. The
     ///      first-deposit enqueue signal (lootboxEthBase == 0) and the open-time box-zeroing
-    ///      (lootboxEth / lootboxEthBase) are preserved untouched. Each successful open earns
-    ///      a flat reward; the sum is granted as ONE creditFlip(msg.sender, sum) (REW-02/04).
+    ///      (lootboxEth / lootboxEthBase) are preserved untouched. Returns the raw count of
+    ///      boxes opened; the re-homed bounty is paid by the unified router (AfKing.doWork),
+    ///      never in-callee (RD-4) — UNREWARDED when called directly (ROUTER-10).
     /// @param maxCount Maximum number of boxes to open this call (caller-bounded, anti-DoS).
-    function autoOpen(uint256 maxCount) external {
+    /// @return opened The number of boxes opened this call.
+    function autoOpen(uint256 maxCount) external returns (uint256 opened) {
+        // Entry-gate (RD-5): the open path has exactly two revert sources — rngLock and the
+        // terminal-jackpot liveness control. Excluding both pre-loop makes the loop body
+        // guaranteed-non-reverting, so dropping the per-item try/catch cannot maroon a tail.
+        // rngLock-block (RD-3): the open leg no-ops during the freeze.
+        if (rngLockedFlag || _livenessTriggered()) return 0;
+
         uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
         // Day/index-reset the cursor when the active index advances (collision-free walk).
         if (boxCursorIndex != index) {
@@ -1644,14 +1680,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // The orphan-index re-issue coupling: a box is openable only once its index has a
         // VRF word. A zero word means the index is not ready OR was orphaned by a mid-day
         // rotation; either way the walk skips the whole index until the re-issued word lands.
-        if (lootboxRngWordByIndex[index] == 0) return;
+        if (lootboxRngWordByIndex[index] == 0) return 0;
 
         address[] storage queue = boxPlayers[index];
         uint256 qlen = queue.length;
         uint256 cursor = boxCursor;
-        uint256 opened;
-        uint256 reward;
-        uint24 lvl = _activeTicketLevel();
 
         while (cursor < qlen && opened < maxCount) {
             address player = queue[cursor];
@@ -1660,20 +1693,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             }
             // Skip already-emptied boxes (the first-deposit signal is reset on open).
             if (lootboxEthBase[index][player] == 0) continue;
-            // Per-item isolation: a not-ready/reverting box skips, never bricks the walk.
-            try this._autoOpenBox(index, player) {
-                reward += _ethToBurnieValue(
-                    AUTO_OPEN_BOX_GAS_UNITS * AUTO_GAS_PRICE_REF,
-                    PriceLookupLib.priceForLevel(lvl)
-                );
-                unchecked {
-                    ++opened;
-                }
-            } catch {}
+            // Guaranteed-non-reverting under the entry-gate: open directly (no try/catch).
+            _autoOpenBox(index, player);
+            unchecked {
+                ++opened;
+            }
         }
 
         boxCursor = uint48(cursor);
-        if (reward != 0) coinflip.creditFlip(msg.sender, reward);
     }
 
     /// @notice Self-call wrapper resolving a single Degenerette bet (per-item isolation).
@@ -1681,7 +1708,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      approval gate relaxed for the resolve path only (placement stays gated).
     /// @param player Bet owner.
     /// @param betId Bet id to resolve.
-    function _autoResolveBet(address player, uint64 betId) external {
+    function _degeneretteResolveBet(address player, uint64 betId) external {
         if (msg.sender != address(this)) revert E();
         uint64[] memory ids = new uint64[](1);
         ids[0] = betId;
@@ -1697,13 +1724,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Self-call wrapper opening a single queued lootbox (per-item isolation).
-    /// @dev onlySelf. Reuses the lootbox module openLootBox path, which preserves the
-    ///      RngNotReady guard and the one-reward-per-item box-zeroing untouched.
+    /// @notice Open a single queued lootbox (internal helper for autoOpen).
+    /// @dev Reuses the lootbox module openLootBox path, which preserves the RngNotReady
+    ///      guard and the one-reward-per-item box-zeroing untouched.
     /// @param index Lootbox RNG index.
     /// @param player Box owner.
-    function _autoOpenBox(uint48 index, address player) external {
-        if (msg.sender != address(this)) revert E();
+    function _autoOpenBox(uint48 index, address player) internal {
         _openLootBoxFor(player, index);
     }
 
@@ -1734,7 +1760,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint8[] calldata modes
     ) external payable {
         if (msg.sender != ContractAddresses.AF_KING) revert E();
-        if (rngLockedFlag) revert RngLocked();
         if (gameOver) revert E();
 
         uint256 len = players.length;
@@ -2557,6 +2582,28 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ) external view returns (uint256) {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return 0;
         return claimableWinnings[player];
+    }
+
+    /// @notice Batched keeper read — mintPrice + rngLock + per-player claimable in ONE call.
+    /// @dev GASOPT-03 (SUBSUMES GASOPT-02): collapses the keeper's per-player
+    ///      claimableWinningsOf STATICCALLs into one batched call. Values are byte-identical
+    ///      to the single-value accessors (same priceForLevel / rngLockedFlag / swept-gate).
+    /// @param players The chunk of players to snapshot.
+    /// @return mintPriceWei Current mint price (== mintPrice()).
+    /// @return rngLocked_ Whether RNG is currently locked (== rngLocked()).
+    /// @return claimables Per-player claimable winnings (== claimableWinningsOf(players[i])).
+    function keeperSnapshot(address[] calldata players) external view returns (uint256 mintPriceWei, bool rngLocked_, uint256[] memory claimables) {
+        mintPriceWei = PriceLookupLib.priceForLevel(_activeTicketLevel());
+        rngLocked_ = rngLockedFlag;
+        bool swept = _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0;
+        uint256 n = players.length;
+        claimables = new uint256[](n);
+        for (uint256 i; i < n; ) {
+            claimables[i] = swept ? 0 : claimableWinnings[players[i]];
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     /// @notice Get pending whale pass claim amount for a player.

@@ -144,7 +144,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
         // The crank must NOT revert (per-item isolation) and must NOT resolve the not-ready bet.
         vm.prank(cranker);
-        game.autoResolve(players, betIds);
+        game.degeneretteResolve(players, betIds);
         assertGt(
             _readBetPacked(player, betId),
             0,
@@ -154,7 +154,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // POST-WORD: land the word, then the SAME crank resolves the bet (slot deleted).
         _injectLootboxRngWord(INDEX, FIXED_WORD);
         vm.prank(cranker);
-        game.autoResolve(players, betIds);
+        game.degeneretteResolve(players, betIds);
         assertEq(
             _readBetPacked(player, betId),
             0,
@@ -240,7 +240,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             // Word lands BEFORE the crank: the crank resolves (slot deleted).
             _injectLootboxRngWord(INDEX, FIXED_WORD);
             vm.prank(cranker);
-            game.autoResolve(players, betIds);
+            game.degeneretteResolve(players, betIds);
             assertEq(
                 _readBetPacked(player, betId),
                 0,
@@ -249,7 +249,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         } else {
             // Crank BEFORE the word: the not-ready bet is skipped (slot intact), then resolves.
             vm.prank(cranker);
-            game.autoResolve(players, betIds);
+            game.degeneretteResolve(players, betIds);
             assertGt(
                 _readBetPacked(player, betId),
                 0,
@@ -257,7 +257,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             );
             _injectLootboxRngWord(INDEX, FIXED_WORD);
             vm.prank(cranker);
-            game.autoResolve(players, betIds);
+            game.degeneretteResolve(players, betIds);
             assertEq(
                 _readBetPacked(player, betId),
                 0,
@@ -305,7 +305,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         players[0] = player;
         betIds[0] = betId;
         vm.prank(cranker);
-        game.autoResolve(players, betIds);
+        game.degeneretteResolve(players, betIds);
 
         // The bet resolved (slot deleted) and the winnings landed wholly in claimable.
         assertEq(_readBetPacked(player, betId), 0, "winning bet resolved");
@@ -693,7 +693,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         players[0] = who;
         betIds[0] = betId;
         vm.prank(cranker);
-        game.autoResolve(players, betIds);
+        game.degeneretteResolve(players, betIds);
         creditDelta = game.claimableWinningsOf(who) - pre;
     }
 

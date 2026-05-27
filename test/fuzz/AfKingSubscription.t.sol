@@ -18,9 +18,11 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///     charged exactly `cost` and renews (windowPaid set, paidThroughDay reset); a player with
 ///     spendable < cost has NOTHING burned, burnForKeeper returns 0, and the autoBuy AUTO-PAUSES that
 ///     sub (dailyQuantity 0, removed from set, SubscriptionExpired) WITHOUT reverting the autoBuy.
-///   - Bounty (REW-02): a autoBuy that processes >= 1 buying subscriber emits exactly ONE creditFlip
-///     to the autoBuyer (msg.sender), gas-pegged (BOUNTY_ETH_TARGET-derived, never per-item); a autoBuy
-///     that processes zero buys reverts NoSubscribersAutoBought.
+///   - Bounty (REW-02 / D-07): the REWARDED keeper entrypoint is the parameterless doWork() router; a
+///     doWork() whose autoBuy leg processes >= 1 buying subscriber emits exactly ONE creditFlip to the
+///     caller (msg.sender), never per-item. The standalone autoBuy(count) is UNREWARDED; a zero-buy
+///     chunk is a NO-OP — it commits any set-work and returns 0 without reverting, so the router can
+///     make progress.
 ///
 /// @dev Builds on the 318-01-repaired DeployProtocol fixture (AfKing live at AF_KING, with the two
 ///      SUB-09 self-subscribes — VAULT + SDGNRS — already present). Test subscribers are driven
@@ -135,8 +137,8 @@ contract AfKingSubscription is DeployProtocol {
     ///         AUTO-PAUSES that sub (dailyQuantity 0, removed from the set, SubscriptionExpired)
     ///         WITHOUT reverting the whole autoBuy — a shortfall cannot strand a half-paid sub.
     function testRenewalShortfallBurnsNothingAndAutoPauses() public {
-        // A HEALTHY paying sub so the autoBuy produces at least one buy and does not revert
-        // NoSubscribersAutoBought (which would mask the auto-pause behavior of the shortfall sub).
+        // A HEALTHY paying sub so the autoBuy produces at least one buy and is not a zero-buy
+        // no-op (which would mask the auto-pause behavior of the shortfall sub).
         address healthy = makeAddr("healthy_payer");
         uint256 cost = _subCost();
         _subscribeTicketMode(healthy, 1, true);
@@ -196,57 +198,56 @@ contract AfKingSubscription is DeployProtocol {
     // Task 3c — Gas-pegged single-creditFlip autoBuy bounty (REW-02)
     // =========================================================================
 
-    /// @notice REW-02: a autoBuy that processes >= 1 buying subscriber emits EXACTLY ONE creditFlip to
-    ///         the autoBuyer (never per-item), gas-pegged off BOUNTY_ETH_TARGET. Drives two healthy
-    ///         buying subs and asserts a single creditFlip to msg.sender of the expected amount.
-    function testAutoBuyEmitsExactlyOneGasPeggedBounty() public {
+    /// @notice REW-02 (D-07 re-homed to doWork): the REWARDED keeper entrypoint is now the parameterless
+    ///         `doWork()` router (the standalone `autoBuy(count)` is UNREWARDED, 330-07). A doWork() call
+    ///         whose autoBuy leg processes >= 1 buying subscriber emits EXACTLY ONE creditFlip to the
+    ///         caller (never per-item) — the REW-02 one-bounty-per-tx property. The specific flat-per-tx
+    ///         bounty VALUE (the new BUY_RATIO peg) is a deep router proof deferred to Phase 332; here we
+    ///         pin the one-credit-per-tx shape + a positive bounty.
+    function testDoWorkEmitsExactlyOneBuyBounty() public {
         address s1 = makeAddr("buy_s1");
         address s2 = makeAddr("buy_s2");
         _setupHealthyBuyingSub(s1);
         _setupHealthyBuyingSub(s2);
 
-        address autoBuyer = makeAddr("bounty_autoBuyer");
-        uint256 mp = game.mintPrice();
-        // Gas-pegged per-player bounty, scaled by the live stall multiplier; batchLen == 2 buys.
-        uint256 mult = _stallMultiplier();
-        uint256 expectedBounty = 2 * ((afKing.BOUNTY_ETH_TARGET() * PRICE_COIN_UNIT * mult) / mp);
+        address keeper = makeAddr("bounty_keeper");
 
         vm.recordLogs();
-        vm.prank(autoBuyer);
-        uint256 returned = afKing.autoBuy(50);
+        vm.prank(keeper);
+        afKing.doWork(); // the rewarded router; autoBuy is the highest-priority leg (RD-1)
 
-        // EXACTLY ONE creditFlip emission for the whole autoBuy (the bounty), to the autoBuyer.
-        assertEq(_countCreditFlipTo(autoBuyer), 1, "exactly one bounty creditFlip per autoBuy tx (REW-02)");
-        assertEq(returned, expectedBounty, "bounty == batchLen * gas-pegged per-player target (stall-scaled)");
-        assertGt(returned, 0, "non-empty autoBuy pays a positive bounty");
-        // Gas-pegged, NOT per-item: the single bounty is a flat batchLen * per-player target, so it
-        // is independent of the per-player cost / mode (no measured-gas / per-item escalation).
-        assertEq(
-            returned / 2,
-            (afKing.BOUNTY_ETH_TARGET() * PRICE_COIN_UNIT * mult) / mp,
-            "per-player bounty is the flat gas-pegged target (never per-item measured gas)"
-        );
+        // EXACTLY ONE creditFlip emission for the whole tx (the single unified bounty), to the caller.
+        assertEq(_countCreditFlipTo(keeper), 1, "exactly one bounty creditFlip per doWork tx (REW-02)");
+        // The unrewarded standalone clear still buys but pays NOTHING (only doWork credits).
+        // Phase 332: re-prove the flat-per-tx BUY_RATIO bounty VALUE under doWork.
     }
 
-    /// @notice REW-02 tail: a autoBuy that processes ZERO buying subscribers reverts NoSubscribersAutoBought
-    ///         (an atomic no-op for the caller — the structural disincentive against autoBuying nothing).
-    ///         Here every active sub is forced AlreadyAutoBoughtToday so the loop produces no buys.
-    function testZeroBuyAutoBuyRevertsNoSubscribersAutoBought() public {
+    /// @notice REW-02 tail: a standalone `autoBuy` that processes ZERO buying subscribers is a
+    ///         NO-OP (a no-buy chunk returns 0 so the doWork router can make progress). Every active sub is forced
+    ///         AlreadyAutoBoughtToday so the loop produces no buys; assert the call succeeds and stamps
+    ///         no fresh buy (no double-buy), instead of the deleted revert.
+    function testZeroBuyAutoBuyIsNoOp() public {
         // Mark the two SUB-09 deploy subs (VAULT, SDGNRS) already-autoBought-today so they are skipped,
         // and add no buying sub — the autoBuy produces batchLen == 0.
         _markAutoBoughtToday(ContractAddresses.VAULT);
         _markAutoBoughtToday(ContractAddresses.SDGNRS);
+        uint32 vaultStampBefore = _lastAutoBoughtDayOf(ContractAddresses.VAULT);
 
+        // No revert (the no-buy chunk no-ops). And no fresh buy lands (the stamp is unchanged).
         vm.prank(makeAddr("empty_autoBuyer"));
-        vm.expectRevert(abi.encodeWithSignature("NoSubscribersAutoBought()"));
         afKing.autoBuy(50);
+        assertEq(
+            _lastAutoBoughtDayOf(ContractAddresses.VAULT),
+            vaultStampBefore,
+            "no-buy chunk is a no-op: no fresh buy stamped (no double-buy)"
+        );
     }
 
-    /// @notice Pre-loop guard: maxCount == 0 reverts EmptyAutoBuy (caller-bounded anti-gas-DoS floor).
-    function testAutoBuyZeroMaxCountRevertsEmptyAutoBuy() public {
+    /// @notice autoBuy(0) uses the default batch (DOWORK_BATCH) — 0 = default; it does NOT
+    ///         revert, running a default-size unrewarded manual clear.
+    function testAutoBuyZeroMaxCountUsesDefaultBatch() public {
         vm.prank(makeAddr("zero_autoBuyer"));
-        vm.expectRevert(abi.encodeWithSignature("EmptyAutoBuy()"));
-        afKing.autoBuy(0);
+        afKing.autoBuy(0); // no revert — processes the default batch
     }
 
     // =========================================================================
@@ -297,7 +298,7 @@ contract AfKingSubscription is DeployProtocol {
         _fundPool(s, 1 ether); // S funds the per-day ETH draw too
         _forceRenewalDue(m);
 
-        // A healthy buying sub so each autoBuy produces >= 1 buy and never reverts NoSubscribersAutoBought
+        // A healthy buying sub so each autoBuy produces >= 1 buy and is not a zero-buy no-op
         // (which would mask the renewal/auto-pause behavior of M).
         address healthy1 = makeAddr("revoke_healthy_1");
         _setupHealthyBuyingSub(healthy1);
@@ -433,6 +434,13 @@ contract AfKingSubscription is DeployProtocol {
         // paidThroughDay = today (<= today -> renewal due); lastAutoBoughtDay = 0 (< today -> not skipped).
         packed |= (uint256(_today()) << (OFF_PAIDTHROUGH * 8));
         vm.store(address(afKing), slot, bytes32(packed));
+    }
+
+    /// @dev Read `who`'s lastAutoBoughtDay (bytes 1..4 of the packed Sub slot) — the GASOPT-04 buy oracle.
+    function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
+        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        uint256 packed = uint256(vm.load(address(afKing), slot));
+        return uint32(packed >> (OFF_LASTSWEPT * 8));
     }
 
     /// @dev Force `who`'s lastAutoBoughtDay = today so the AlreadyAutoBoughtToday skip (reason 2) fires.

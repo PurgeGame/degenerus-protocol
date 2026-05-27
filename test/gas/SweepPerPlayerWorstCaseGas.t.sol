@@ -70,8 +70,6 @@ contract AutoBuyPerPlayerWorstCaseGas is DeployProtocol {
     /// @dev DegenerusGame claimableWinnings mapping root (per AfKingFundingWaterfall.t.sol:53).
     uint256 private constant GAME_CLAIMABLE_SLOT = 7;
 
-    bytes32 private constant SWEPT_SIG = keccak256("AutoBought(address,uint32,uint256)");
-
     // -------------------------------------------------------------------------
     // Worst-case / measurement constants
     // -------------------------------------------------------------------------
@@ -80,10 +78,10 @@ contract AutoBuyPerPlayerWorstCaseGas is DeployProtocol {
     ///      test harness; the GAS-01 "fits under the block limit" bar is the mainnet 30M.
     uint256 internal constant MAINNET_BLOCK_GAS_LIMIT = 30_000_000;
 
-    /// @dev Snapshot of AutoBought(player,...) recipients drained from the recorded logs (vm.getRecordedLogs
-    ///      CONSUMES the buffer, so we drain ONCE per assertion phase and count from the snapshot).
-    address[] private _autoBoughtSnapshot;
-
+    /// @dev GASOPT-04 oracle migration: the per-player `AutoBought` event is DELETED. The "bought this
+    ///      autoBuy" oracle is now the `lastAutoBoughtDay` storage stamp read via _lastAutoBoughtDayOf. A
+    ///      fresh test sub starts stamp 0; a successful buy stamps it `today`, so `_countAutoBoughtFor`
+    ///      reports 1 iff the stamp == today (each measured sub is fresh, so the baseline is 0).
     function setUp() public {
         _deployProtocol();
         // Advance one keeper-local day off the deploy boundary so _currentDay() is a clean, stable
@@ -116,12 +114,10 @@ contract AutoBuyPerPlayerWorstCaseGas is DeployProtocol {
         // get a per-test-player marginal that is, if anything, an OVER-estimate (it folds in the 2
         // deploy subs' work), keeping the calibration conservative. The whole-autoBuy fit assertion uses
         // the full measured gas.
-        vm.recordLogs();
         vm.prank(makeAddr("swpA_keeper"));
         uint256 gasBefore = gasleft();
         afKing.autoBuy(total);
         uint256 wholeAutoBuyGas = gasBefore - gasleft();
-        _captureAutoBought();
 
         // Non-vacuity (Test C, inline): every one of OUR N subs was actually bought this autoBuy.
         uint32 today = _today();
@@ -249,10 +245,8 @@ contract AutoBuyPerPlayerWorstCaseGas is DeployProtocol {
         address[] memory subs = _setupHealthyBuyingSubs(N, "swpC_", /*reinvestPct*/ 0, /*claimable*/ 0);
         uint256 total = afKing.subscriberCount();
 
-        vm.recordLogs();
         vm.prank(makeAddr("swpC_keeper"));
         afKing.autoBuy(total);
-        _captureAutoBought();
 
         // Cursor advanced to (at least) cover every test sub for today.
         (uint32 progDay, uint256 cursorAfter) = afKing.autoBuyProgress();
@@ -292,7 +286,7 @@ contract AutoBuyPerPlayerWorstCaseGas is DeployProtocol {
         uint256 pre = afKing.subscriberCount();
         if (pre > 0) {
             vm.prank(makeAddr(string(abi.encodePacked(prefix, "preautoBuy_keeper"))));
-            try afKing.autoBuy(pre) {} catch {} // a no-buy chunk (all already-autoBought) reverts NoSubscribersAutoBought; fine
+            afKing.autoBuy(pre); // a no-buy chunk (all already-autoBought) is a no-op (GASOPT-04 / RD-2: no revert)
         }
 
         // Add ONE fresh sub at the tail.
@@ -309,12 +303,10 @@ contract AutoBuyPerPlayerWorstCaseGas is DeployProtocol {
 
         // Bracket a maxCount-1 autoBuy: it processes exactly the fresh sub (the only un-autoBought entry at
         // the cursor) and stops.
-        vm.recordLogs();
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "marginal_keeper"))));
         uint256 gasBefore = gasleft();
         afKing.autoBuy(1);
         gasUsed = gasBefore - gasleft();
-        _captureAutoBought();
 
         // Non-vacuity: the fresh sub was actually bought (a real buy, not a skip).
         assertEq(_countAutoBoughtFor(sub), 1, "marginal measured over a REAL buy (non-vacuity)");
@@ -400,27 +392,12 @@ contract AutoBuyPerPlayerWorstCaseGas is DeployProtocol {
         vm.store(address(afKing), bytes32(uint256(4)), bytes32(packed));
     }
 
-    /// @dev Drain the recorded logs ONCE into `_autoBoughtSnapshot` (the indexed AutoBought recipients emitted by
-    ///      AfKing). Call immediately after the autoBuy(s) under test, BEFORE any _countAutoBoughtFor.
-    function _captureAutoBought() internal {
-        delete _autoBoughtSnapshot;
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; ++i) {
-            if (
-                logs[i].emitter == address(afKing) &&
-                logs[i].topics.length >= 2 &&
-                logs[i].topics[0] == SWEPT_SIG
-            ) {
-                _autoBoughtSnapshot.push(address(uint160(uint256(logs[i].topics[1]))));
-            }
-        }
-    }
-
-    /// @dev Count AutoBought emissions for `who` in the captured snapshot. Pure read of the drained array.
-    function _countAutoBoughtFor(address who) internal view returns (uint256 count) {
-        for (uint256 i; i < _autoBoughtSnapshot.length; ++i) {
-            if (_autoBoughtSnapshot[i] == who) count++;
-        }
+    /// @dev GASOPT-04 buy oracle: 1 iff `who`'s `lastAutoBoughtDay` stamp == today (a fresh test sub
+    ///      starts at 0; a successful buy stamps it today). Replaces the deleted AutoBought-event count.
+    ///      The contract's `lastAutoBoughtDay >= today` skip makes the stamp at most one buy/day/sub, so
+    ///      a stamped sub == exactly one buy this autoBuy — the same property the old per-log count held.
+    function _countAutoBoughtFor(address who) internal view returns (uint256) {
+        return _lastAutoBoughtDayOf(who) == _today() ? 1 : 0;
     }
 
     /// @dev Minimal uint -> decimal string for makeAddr label uniqueness.

@@ -60,14 +60,17 @@ contract AfKingFundingWaterfall is DeployProtocol {
     uint256 private constant BURNIE_BALANCE_SLOT = 1;     // BurnieCoin balanceOf mapping root
     uint256 private constant GAME_CLAIMABLE_SLOT = 7;     // DegenerusGame claimableWinnings mapping root
 
-    bytes32 private constant SWEPT_SIG = keccak256("AutoBought(address,uint32,uint256)");
     bytes32 private constant SKIPPED_SIG = keccak256("PlayerSkipped(address,uint8)");
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
 
-    /// @dev Captured AutoBought stream: parallel arrays of player + the per-player cost (msgValue) slice, so
-    ///      a single drain feeds both "which mode was chosen" (via msgValue) and "was it bought" assertions.
-    address[] private _autoBoughtPlayer;
-    uint256[] private _autoBoughtCost;
+    /// @dev GASOPT-04 oracle migration: the per-player `AutoBought(address,uint32,uint256)` event (whose
+    ///      `cost` field carried the funding waterfall msgValue) is DELETED. The waterfall outcome is now
+    ///      re-derived from STORAGE: "was it bought" = `lastAutoBoughtDay == today`; the charged ETH slice
+    ///      = the funding-SOURCE pool delta across the autoBuy (the CEI debit at AfKing.sol:733 moves
+    ///      exactly `msgValue` out of `_poolOf[src]`). `_capture()` snapshots every in-set sub's funding-
+    ///      source pool before draining, so `_autoBoughtCostFor` reports the same msgValue the event once
+    ///      carried (0 for the Claimable case, cost for DirectEth, cost-(cred-1) for Combined).
+    mapping(address => uint256) private _srcPoolBefore;
 
     function setUp() public {
         _deployProtocol();
@@ -152,7 +155,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
         _setClaimable(p, 1); // sentinel -> DirectEth -> msgValue == cost
         _fundPool(p, cost - 1); // strictly below cost -> InsufficientPool
 
-        // A second HEALTHY sub so the autoBuy produces >= 1 buy and does not revert NoSubscribersAutoBought.
+        // A second HEALTHY sub so the autoBuy produces >= 1 buy and is not a zero-buy no-op.
         address healthy = _subscribeHealthy("insuf_healthy_", false);
         _fundPool(healthy, _cost(1));
 
@@ -172,7 +175,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     ///         WITHOUT advancing the cursor so a later occupant is still processed (proven elsewhere);
     ///         here we assert the cancel itself.
     function testNormalSubFundingSkipCancelsViaSwapPop() public {
-        // A healthy sub guarantees the autoBuy produces a buy (avoids NoSubscribersAutoBought masking).
+        // A healthy sub guarantees the autoBuy produces a buy (avoids a zero-buy no-op masking).
         address healthy = _subscribeHealthy("kill_healthy_", false);
         _fundPool(healthy, _cost(1));
 
@@ -212,7 +215,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
         _setClaimable(normal, 1);
         _fundPool(normal, _cost(1) - 1);
 
-        // A healthy buyer so the autoBuy does not revert NoSubscribersAutoBought.
+        // A healthy buyer so the autoBuy is not a zero-buy no-op.
         address healthy = _subscribeHealthy("exempt_healthy_", false);
         _fundPool(healthy, _cost(1));
 
@@ -254,7 +257,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
         _forceRenewalDue(ContractAddresses.VAULT);
         _setBurnieBalance(ContractAddresses.VAULT, 0); // all-or-nothing burn takes nothing -> lapse
 
-        // A healthy buyer so the autoBuy does not revert NoSubscribersAutoBought.
+        // A healthy buyer so the autoBuy is not a zero-buy no-op.
         address healthy = _subscribeHealthy("lapse_healthy_", false);
         _fundPool(healthy, _cost(1));
 
@@ -436,7 +439,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
         assertEq(afKing.subscriptionOf(spoofer).fundingSource, ContractAddresses.VAULT, "spoofer source = VAULT");
         assertGt(_subscriberIndexOf(spoofer), 0, "spoofer starts in the set");
 
-        // A healthy buyer so the autoBuy does not revert NoSubscribersAutoBought.
+        // A healthy buyer so the autoBuy is not a zero-buy no-op.
         address healthy = _subscribeHealthy("spoof_healthy_", false);
         _fundPool(healthy, _cost(1));
 
@@ -566,44 +569,57 @@ contract AfKingFundingWaterfall is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev AutoBuy as a fresh keeper and drain the AutoBought stream into the parallel snapshot arrays.
+    /// @dev AutoBuy as a fresh keeper: snapshot every in-set sub's funding-source pool BEFORE the autoBuy
+    ///      (the GASOPT-04 msgValue oracle — the source pool delta IS the charged slice), record logs,
+    ///      run the autoBuy, then drain the PlayerSkipped/SubscriptionExpired stream.
     function _autoBuyCapture(string memory keeperLabel) internal {
+        _snapshotSourcePools();
         vm.recordLogs();
         vm.prank(makeAddr(keeperLabel));
         afKing.autoBuy(50);
         _capture();
     }
 
-    /// @dev Drain the recorded logs ONCE into the parallel AutoBought(player,cost) snapshot. getRecordedLogs
-    ///      empties the buffer, so a single drain feeds every count.
-    function _capture() internal {
-        delete _autoBoughtPlayer;
-        delete _autoBoughtCost;
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        _capturedLogs = logs;
-        for (uint256 i; i < logs.length; i++) {
-            if (
-                logs[i].emitter == address(afKing) &&
-                logs[i].topics.length >= 2 &&
-                logs[i].topics[0] == SWEPT_SIG
-            ) {
-                _autoBoughtPlayer.push(address(uint160(uint256(logs[i].topics[1]))));
-                // AutoBought(address indexed player, uint32 day, uint256 cost): non-indexed (day, cost) in data.
-                (, uint256 cost) = abi.decode(logs[i].data, (uint32, uint256));
-                _autoBoughtCost.push(cost);
-            }
+    /// @dev Snapshot `_poolOf[src]` for the funding source of every in-set sub (src == self when
+    ///      fundingSource is address(0)). The waterfall CEI debit moves exactly msgValue out of this pool,
+    ///      so the pre/post delta reconstructs the per-player charged slice the deleted AutoBought.cost
+    ///      field once carried.
+    function _snapshotSourcePools() internal {
+        uint256 n = afKing.subscriberCount();
+        for (uint256 i; i < n; i++) {
+            address p = afKing.subscriberAt(i);
+            address src = afKing.subscriptionOf(p).fundingSource;
+            if (src == address(0)) src = p;
+            _srcPoolBefore[p] = afKing.poolOf(src);
         }
+    }
+
+    /// @dev Drain the recorded logs ONCE into `_capturedLogs` (for PlayerSkipped / SubscriptionExpired
+    ///      counts). The AutoBought event is gone; the buy/cost oracle is storage-based (see
+    ///      _autoBoughtCostFor / _snapshotSourcePools).
+    function _capture() internal {
+        _capturedLogs = vm.getRecordedLogs();
     }
 
     /// @dev The full drained log set (for PlayerSkipped / SubscriptionExpired counts in the same drain).
     Vm.Log[] private _capturedLogs;
 
-    /// @dev AutoBought cost (msgValue) for `who`, or type(uint256).max if `who` was NOT bought this autoBuy.
+    /// @dev The msgValue charged for `who` this autoBuy, re-expressed from the funding-SOURCE pool delta
+    ///      (GASOPT-04). Returns type(uint256).max if `who` was NOT bought this autoBuy (stamp not today)
+    ///      — the same "not bought" sentinel the event-absence once gave. A bought Claimable-mode sub
+    ///      returns 0 (no pool spend), DirectEth returns cost, Combined returns cost-(cred-1).
     function _autoBoughtCostFor(address who) internal view returns (uint256) {
-        for (uint256 i; i < _autoBoughtPlayer.length; i++) {
-            if (_autoBoughtPlayer[i] == who) return _autoBoughtCost[i];
-        }
-        return type(uint256).max;
+        if (_lastAutoBoughtDayOf(who) != _today()) return type(uint256).max;
+        address src = afKing.subscriptionOf(who).fundingSource;
+        if (src == address(0)) src = who;
+        return _srcPoolBefore[who] - afKing.poolOf(src);
+    }
+
+    /// @dev Read `who`'s lastAutoBoughtDay (bytes 1..4 of the packed Sub slot) — the buy oracle.
+    function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
+        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        uint256 packed = uint256(vm.load(address(afKing), slot));
+        return uint32(packed >> (OFF_LASTSWEPT * 8));
     }
 
     /// @dev Count PlayerSkipped(who, reason) emissions in the captured drain.
