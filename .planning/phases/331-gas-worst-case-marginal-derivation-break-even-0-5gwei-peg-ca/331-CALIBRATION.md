@@ -387,3 +387,24 @@ no change.**
 | Stall-ceiling (GAS-04) | **1/2/4/6 ADVANCE-ONLY confirmed; NO EXTENSION** — 6x is a one-shot, real-gas safe; any future tier faucet-pool-capped and never lowers existing thresholds |
 | Exploitability lens | **REAL prevailing gas (5–50+ gwei) + flip-credit illiquidity**, NOT the 0.5 gwei reference (`feedback_bounty_exploit_uses_real_gas_not_peg_ref`) |
 | Contract approval | **REQUIRED at 331-05 — nothing pre-approved.** This plan touches NO `contracts/*.sol`; the diff above is comment-only (values byte-identical) or a clean NO-OP |
+
+---
+
+## 10. Task-2 attestation — level-invariance + stall-ceiling (GAS-04)
+
+The GAS-04 deliverables are recorded in this document:
+
+- **Level-invariance (§6):** PROVEN arithmetically — `mp` cancels in `ratio * unit * mp /
+  PRICE_COIN_UNIT = ratio * BOUNTY_ETH_TARGET`, so the ETH-equivalent reward is invariant across the
+  full `priceForLevel` ladder (worked at 3 levels: 0.01 / 0.08 / 0.24 ETH, all recover `B`). The
+  empirical on-chain assertion (the `SweepPerPlayerWorstCaseGas.t.sol:188-211` shape-insensitivity
+  idiom) is deferred to TST Phase 332 (TST-04); this record proves the arithmetic.
+- **Stall ceiling (§4):** the 1/2/4/6 ladder is CONFIRMED ADVANCE-ONLY (the autoBuy stall ladder was
+  deleted per D-07 — advance is the sole stall epoch, invariant (d) satisfied-by-deletion); existing
+  thresholds (20 min / 1 h / 2 h) are NEVER lowered. The GAS-data-derived decision is **NO
+  EXTENSION above the 2-hour tier**: the 6x peak is a ONE-SHOT (one rewardable advance per day-move,
+  un-fakeable on demand, real-gas safe at ≥1 gwei), so a higher tier adds no liveness benefit and
+  would only widen the reference-price over-reimbursement. Any future extension must be capped against
+  the finite flip-credit faucet pool and may only ADD tiers above 2h.
+- **Exploitability lens:** judged against REAL prevailing gas (5–50+ gwei) + flip-credit illiquidity,
+  NOT the 0.5 gwei reference (`feedback_bounty_exploit_uses_real_gas_not_peg_ref`).
