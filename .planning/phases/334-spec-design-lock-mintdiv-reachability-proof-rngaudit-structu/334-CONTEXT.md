@@ -119,7 +119,20 @@ None — no pending todos matched Phase 334.
 
 </deferred>
 
+<research_reconciliation>
+## Post-Research Reconciliation (334-RESEARCH.md, 2026-05-27)
+
+Research (`334-RESEARCH.md`, HIGH confidence) materially reshaped two items and surfaced one new decision (now locked). These ADD to / refine the decisions above:
+
+- **D-20 — WHALE is a CONVERGENCE refactor onto EXISTING deployed machinery (not greenfield).** `claimWhalePass(address player)` already exists and is deployed (`DegenerusGameWhaleModule.sol:1018`), already permissionless-with-beneficiary-arg (D-01), already claim-time-anchored to `level+1` (D-03), already backed by a `whalePassClaims[player]` count (D-02), already applies `_applyWhalePassStats` at claim (D-04) — fed today by the jackpot/payout path (`DegenerusGamePayoutUtils.sol:45` `_queueWhalePassClaimCore`, `DegenerusGameJackpotModule.sol:1410`). **WHALE-01's job is to route the box-open boon (`_activateWhalePass:1240` inline 100-loop) onto this SAME machinery** — an O(1) `whalePassClaims[beneficiary] += grant` mirroring `PayoutUtils:45`. **D-02's `pendingWhalePasses` is a RELABEL of the existing `whalePassClaims` — do NOT build a parallel map/claim** (the "Pitfall 1" anti-pattern). This makes the WHALE-04 freeze proof largely a re-attestation of existing gates.
+- **D-21 — Q1 RESOLVED: box-open whale pass CONVERGES to the existing FLAT grant shape.** Routing box-open onto the existing claim, the box-open whale pass adopts the existing flat per-level half-pass shape — **the early-game ≤level-10 `40/lvl` bonus band is DROPPED** and the per-level rate aligns to the existing claim. This is a **deliberate economic reduction** of the box-open whale-pass reward (single counter, simplest IMPL — no grant-shape param, no second counter). The value delta is routed to the **338 SWEEP economic-analyst** to sign off (per D-06). USER decision 2026-05-27.
+- **D-22 — MINTDIV-01 is PROVEN REACHABLE (verdict, not open).** `processed += writesUsed >> 1` (`:716`) diverges from the correct `+= take` (`:502`) by arithmetic fact (−17 warm against the real `WRITES_BUDGET_SAFE = 550`); the `take < owed` not-finished branch is LIVE on two confirmed callers — `AdvanceModule:561` (gameover terminal-drain) and `:1496` (advance drain); a single player can accumulate `owed > maxT (~292 warm)`. Concrete scenario the SPEC records: `owed = 300` at level L, warm budget 550 → `maxT = 292`, `take = 292 < 300` → `processed += 275` (should be 292) → `_raritySymbolBatch` resumes at `startIndex = 275` → overlapped/skipped LCG indices → **divergent per-ticket traits**. → **MINTDIV-02 SHIPS the D-15 one-liner** (`>>1` → `+= take`) at IMPL 335; the not-reachable NEGATIVE branch (D-16) does NOT apply.
+- **D-23 — gameOver-forfeit (Q2, record-only).** Unclaimed `whalePassClaims` at `gameOver` are **forfeit** (no future levels to materialize) — SPEC records this as one sentence; consistent with the existing claim machinery and "claim whenever is fine."
+- **Anchor corrections vs `b0511ca2`** (working tree is byte-identical to the frozen baseline — `git diff` empty): `_livenessTriggered` *definition* is `DegenerusGameStorage.sol:1213` (the `:571` in Canonical References is a call-site, not the def); the AfKing `Sub` struct is `:86-93`; `processFutureTicketBatch` is `:393`. The grep-attestation table in `334-RESEARCH.md` is complete and authoritative.
+
+</research_reconciliation>
+
 ---
 
 *Phase: 334-spec-design-lock-mintdiv-reachability-proof-rngaudit-structu*
-*Context gathered: 2026-05-27*
+*Context gathered: 2026-05-27 (research reconciliation appended same day)*
