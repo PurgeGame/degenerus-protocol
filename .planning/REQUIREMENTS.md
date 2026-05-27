@@ -13,7 +13,7 @@
 - [ ] **WHALE-01**: The box-open whale-pass mint stops looping. The inline ~100-iteration `_queueTickets` whale-pass mint at box-open (`DegenerusGameLootboxModule.sol:~1250-1260`) is replaced by an O(1) record of a pending whale-pass claim (beneficiary + amount/level), so opening a box is uniform cost regardless of whale-pass status.
 - [ ] **WHALE-02**: A player-paid `claimWhalePass()` entrypoint materializes the queued whale-pass tickets (the deferred `_queueTickets` mint), with the gas borne by the beneficiary at claim time rather than the box-opener at open time. SPEC locks the exact signature (caller-is-beneficiary vs permissionless-with-beneficiary-arg) and the pending-claim storage shape.
 - [ ] **WHALE-03**: Box opens become uniform O(1) → the 331 whale-pass-weighted `autoOpen` gas budget carve-out is retired and `OPEN_BATCH` returns to a flat per-box sizing. The new flat `OPEN_BATCH` is re-confirmed to stay under the autoOpen tx-gas ceiling at the worst-case uniform open.
-- [ ] **WHALE-04**: RNG-freeze safety is PROVEN (not assumed) for the split: the queued whale-pass tickets target a FUTURE level (verify against the `_queueTickets` level math); neither the O(1) record at box-open nor `claimWhalePass()` writes any slot that participates in the CURRENT RNG window during `rngLock` (or reverts if it would); the `rngLock` liveness gate and the `_applyWhalePassStats` timing/semantics are preserved (stats applied at the same logical point, not advanced/delayed in a way that perturbs a frozen input).
+- [x] **WHALE-04**: RNG-freeze safety is PROVEN (not assumed) for the split: the queued whale-pass tickets target a FUTURE level (verify against the `_queueTickets` level math); neither the O(1) record at box-open nor `claimWhalePass()` writes any slot that participates in the CURRENT RNG window during `rngLock` (or reverts if it would); the `rngLock` liveness gate and the `_applyWhalePassStats` timing/semantics are preserved (stats applied at the same logical point, not advanced/delayed in a way that perturbs a frozen input).
 
 ### AfKing Pass-Gated Subscriptions (AFSUB)
 - [ ] **AFSUB-01**: The BURNIE-purchased subscription window is REMOVED — `burnForKeeper` and the `paidThroughDay` time-funding accounting are deleted; a subscription's lifetime is no longer extended by burning BURNIE. (`AfKing.sol`; the BURNIE `burnForKeeper` sink + its DegenerusGame/BurnieCoin counterpart are removed or repurposed per SPEC.)
@@ -23,7 +23,7 @@
 - [ ] **AFSUB-05**: The cancel/eviction path preserves the locked SUB-07 in-place cancel-tombstone semantics and the v49 swap-pop membership invariant (membership ⟺ packed != 0); pass-eviction must NOT reproduce the H-CANCEL-SWAP-MISS missed-day class (`afking-cancel-tombstone-streak-finding`).
 
 ### MintModule Advance-Divergence — Confirm-Then-Fix (MINTDIV)
-- [ ] **MINTDIV-01**: SPEC establishes, with evidence, whether `processTicketBatch`'s within-player `startIndex` advance (`writesUsed>>1`, `DegenerusGameMintModule.sol:~671`) can diverge from `processFutureTicketBatch`'s `+= take` (`:~398`) — i.e., whether a single player's owed can split across budget slices AND that split yields divergent per-ticket trait indices. Reachability + the divergence mechanism are PROVEN or REFUTED (not asserted).
+- [x] **MINTDIV-01**: SPEC establishes, with evidence, whether `processTicketBatch`'s within-player `startIndex` advance (`writesUsed>>1`, `DegenerusGameMintModule.sol:~671`) can diverge from `processFutureTicketBatch`'s `+= take` (`:~398`) — i.e., whether a single player's owed can split across budget slices AND that split yields divergent per-ticket trait indices. Reachability + the divergence mechanism are PROVEN or REFUTED (not asserted).
 - [ ] **MINTDIV-02**: If reachable → the within-player index advance is aligned across the two loops so per-ticket trait indices are identical whether or not a player's owed splits across budget slices, with NO change to the frozen-word trait derivation for any non-split case. If NOT reachable → documented NEGATIVE with the proof and no contract change (the seed candidate is closed either way).
 
 ### External-LLM RNG-Audit Protocol — Deliverable, Package-Only (RNGAUDIT)
@@ -44,7 +44,7 @@
 - [ ] **SWEEP-03**: `audit/FINDINGS-v50.0.md` is authored (9-section, mirroring v44/v46/v47/v48/v49), with any findings adjudicated or deferred per USER direction; `chmod 444` at closure.
 
 ### Cross-Cutting — SPEC Reconciliation + IMPL + TERMINAL (BATCH)
-- [ ] **BATCH-01**: SPEC design-lock — settle the shared signatures (the whale-pass pending-claim storage + `claimWhalePass()` signature, the AfKing `validThroughLevel` field + refresh-or-evict control flow, the MintModule index alignment), PROVE/REFUTE MINTDIV-01 reachability, fix the RNGAUDIT protocol structure, and grep-attest every cited `file:line` vs the v49.0 HEAD before any patch.
+- [x] **BATCH-01**: SPEC design-lock — settle the shared signatures (the whale-pass pending-claim storage + `claimWhalePass()` signature, the AfKing `validThroughLevel` field + refresh-or-evict control flow, the MintModule index alignment), PROVE/REFUTE MINTDIV-01 reachability, fix the RNGAUDIT protocol structure, and grep-attest every cited `file:line` vs the v49.0 HEAD before any patch.
 - [ ] **BATCH-02**: The ONE batched USER-APPROVED `contracts/*.sol` diff (WHALE + AFSUB + MINTDIV-if-real) is applied in producer-before-consumer order; HARD STOP at the commit boundary (locally compiled/tested, never committed without explicit user hand-review).
 - [ ] **BATCH-03**: TERMINAL closure — re-attest all v50.0 requirements at closure and apply the atomic 5-doc closure flip (`MILESTONE_V50_AT_HEAD_<sha>` + ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS + chmod 444 the findings).
 
@@ -77,13 +77,13 @@
 | WHALE-01 | Phase 335 (IMPL) | Pending |
 | WHALE-02 | Phase 335 (IMPL) | Pending |
 | WHALE-03 | Phase 335 (IMPL) | Pending |
-| WHALE-04 | Phase 334 (SPEC) | Pending |
+| WHALE-04 | Phase 334 (SPEC) | Complete |
 | AFSUB-01 | Phase 335 (IMPL) | Pending |
 | AFSUB-02 | Phase 335 (IMPL) | Pending |
 | AFSUB-03 | Phase 335 (IMPL) | Pending |
 | AFSUB-04 | Phase 335 (IMPL) | Pending |
 | AFSUB-05 | Phase 335 (IMPL) | Pending |
-| MINTDIV-01 | Phase 334 (SPEC) | Pending |
+| MINTDIV-01 | Phase 334 (SPEC) | Complete |
 | MINTDIV-02 | Phase 335 (IMPL) | Pending |
 | RNGAUDIT-01 | Phase 337 (AUDIT-PROTOCOL) | Pending |
 | RNGAUDIT-02 | Phase 337 (AUDIT-PROTOCOL) | Pending |
@@ -96,7 +96,7 @@
 | SWEEP-01 | Phase 338 (TERMINAL) | Pending |
 | SWEEP-02 | Phase 338 (TERMINAL) | Pending |
 | SWEEP-03 | Phase 338 (TERMINAL) | Pending |
-| BATCH-01 | Phase 334 (SPEC) | Pending |
+| BATCH-01 | Phase 334 (SPEC) | Complete |
 | BATCH-02 | Phase 335 (IMPL) | Pending |
 | BATCH-03 | Phase 338 (TERMINAL) | Pending |
 
