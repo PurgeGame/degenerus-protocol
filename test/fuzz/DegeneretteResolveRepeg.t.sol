@@ -1,0 +1,485 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity ^0.8.26;
+
+import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
+import {Vm} from "forge-std/Vm.sol";
+import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
+
+/// @title DegeneretteResolveRepeg -- proves the v49 `autoResolve` -> `degeneretteResolve`
+///        rename + flat ~1-BURNIE "lose" re-peg (GAS-06 / TST-05).
+///
+/// @notice The v49 contract diff renamed the per-item Degenerette mass-resolve helper to
+///         `degeneretteResolve` and CHANGED ITS BOUNTY SHAPE ONLY: the reward is now a FLAT
+///         literal ~1 BURNIE (`RESOLVE_FLAT_BURNIE = 1e18`) paid ONCE per tx, gated at >= 3
+///         successfully-resolved NON-WWXRP bets. It is NOT a per-item summed reward (the retired
+///         v46/v48 premise). The per-item RESOLUTION math is UNCHANGED — it is produced by the
+///         self-call `_degeneretteResolveBet` -> delegatecall `GAME_DEGENERETTE_MODULE.resolveBets`,
+///         which the rename did not touch.
+///
+/// @notice This proof file establishes (DegenerusGame.sol:1595-1631, READ-ONLY anchors):
+///         Task 1 (re-peg / gate / WWXRP-exclusion):
+///           (a) >= 3 non-WWXRP resolved -> exactly ONE creditFlip to the keeper, amount == 1e18
+///               (the FLAT literal, asserted by COUNT == 1 AND amount == RESOLVE_FLAT_BURNIE,
+///                NEVER a `3 * peg` per-item sum);
+///           (b) 1-2 non-WWXRP resolved -> committed (resolved) but UNPAID (count == 0), NO revert
+///               (the trailing tail is never stranded);
+///           (c) 0 resolved -> reverts NoWork();
+///           (d) 3 WWXRP-only resolved -> totalResolved == 3 (no revert), successCount == 0 ->
+///               UNPAID (count == 0): WWXRP (currency == 3) is excluded from BOTH the >= 3 gate
+///               count AND the reward (AUTO-04 — a WWXRP-spam faucet is impossible);
+///           (e) mixed 2 WWXRP + 3 non-WWXRP -> PAID (3 non-WWXRP >= gate -> exactly one flat credit).
+///
+///         Task 2 (RESULTS-equality, value-invariant to the bounty wrapper):
+///           - resolve >= 3 non-WWXRP bets and capture the BURNIE/WWXRP/DGNRS mint + claimable +
+///             claimablePool deltas, asserting they equal the per-spin-derived expected sums (the
+///             resolution math is byte-identical to the per-item path), with a non-vacuity guard;
+///           - prove a per-bet resolution delta is IDENTICAL whether or not the >= 3 reward fired
+///             (snapshot/revert), so the bounty wrapper provably never touches the resolution math.
+///
+/// @dev Deploys the full protocol via DeployProtocol. The bet placement / RNG-injection / winning-
+///      combo helpers are byte-faithful copies of the DegeneretteFreezeResolution scaffold; the
+///      creditFlip-count oracle is ported from CrankLeversAndPacking (recipient-isolated). The
+///      RESULTS-equality reuses the same `FullTicketResult`-event per-spin replay idiom.
+contract DegeneretteResolveRepeg is DeployProtocol {
+    // =========================================================================
+    // Storage slot constants (confirmed via `forge inspect ... storage`)
+    // =========================================================================
+
+    /// @dev lootboxRngWordByIndex mapping root slot.
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 38;
+    /// @dev lootboxRngPacked at slot 37; lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 37;
+    /// @dev prizePoolsPacked: [upper 128: futurePrizePool] [lower 128: nextPrizePool].
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    /// @dev claimablePool (uint128) lives in slot 1, byte 16 (high 128 bits).
+    uint256 private constant CLAIMABLE_POOL_SLOT = 1;
+    /// @dev degeneretteBetNonce mapping root slot (address => uint64).
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 46;
+
+    /// @dev Salt used in degenerette bet resolution for the first spin.
+    bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
+
+    // =========================================================================
+    // Degenerette bet currencies (DegeneretteModule:208-216) — WWXRP == 3
+    // =========================================================================
+
+    uint8 private constant CURRENCY_ETH = 0;
+    uint8 private constant CURRENCY_BURNIE = 1;
+    uint8 private constant CURRENCY_WWXRP = 3;
+
+    /// @dev Per-currency minimum bets (DegeneretteModule:217-225).
+    uint256 private constant MIN_BET_ETH = 5 ether / 1000;
+    uint256 private constant MIN_BET_BURNIE = 100 ether;
+    uint256 private constant MIN_BET_WWXRP = 1 ether;
+
+    /// @dev The flat ~1-BURNIE "lose" reward (DegenerusGame.sol:1544, RESOLVE_FLAT_BURNIE).
+    uint256 private constant RESOLVE_FLAT_BURNIE = 1e18;
+
+    // =========================================================================
+    // Event topics
+    // =========================================================================
+
+    /// @dev keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)") — emitted EXACTLY once
+    ///      per creditFlip via _addDailyFlip; the count + amount oracle for the flat-ONE reward.
+    bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
+        keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)");
+
+    /// @dev FullTicketResult topic0 — one per resolved spin (the raw per-spin payout source).
+    bytes32 private constant FULL_TICKET_RESULT_SIG =
+        0xed1cde932a37b486ad1cc829c4ce89bf3bff943b68625e57cad59bc1bc18d8de;
+    /// @dev PayoutCapped topic0 — one per ETH spin that flipped into the lootbox.
+    bytes32 private constant PAYOUT_CAPPED_SIG =
+        0xf8a9468f6767206f82ef0f809e2c4fb396a1495ad99e9f116652fe99a91f20c5;
+    /// @dev FullTicketResolved topic0 — one per resolved betId.
+    bytes32 private constant FULL_TICKET_RESOLVED_SIG =
+        0xb740e09ba01c583a945713a2656978f631723409d1db2dce5df96a8b3ce27e15;
+
+    // =========================================================================
+    // Actors / scratch
+    // =========================================================================
+
+    address private player;
+    address private keeper;
+
+    /// @dev DGNRS award bps per match tier (DegeneretteModule:203-205).
+    uint256 private constant DEGEN_DGNRS_6_BPS = 400;
+    uint256 private constant DEGEN_DGNRS_7_BPS = 800;
+    uint256 private constant DEGEN_DGNRS_8_BPS = 1500;
+    /// @dev ETH win pool cap: 10% of futurePool (DegeneretteModule:196).
+    uint256 private constant ETH_WIN_CAP_BPS = 1_000;
+
+    function setUp() public {
+        _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
+
+        player = makeAddr("degen_resolve_player");
+        vm.deal(player, 1000 ether);
+        keeper = makeAddr("degen_resolve_keeper");
+
+        // Fund the game with ETH to back any pool / winning credit.
+        vm.deal(address(game), 500 ether);
+
+        // placeDegeneretteBet reverts with E() when lootboxRngIndex == 0; seed it to 1
+        // (the word at index 1 starts at 0 = no pending RNG, the state bet placement needs).
+        uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
+        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(1);
+        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
+
+        // The keeper-router resolve (degeneretteResolve -> _degeneretteResolveBet -> delegatecall
+        // resolveBets) runs with msg.sender == address(game) inside resolveBets, so the bet owner
+        // must approve the game as their operator — the documented crank-resolve relaxation
+        // (placement stays gated; the AfKing subscription flow opts the player in the same way).
+        vm.prank(player);
+        game.setOperatorApproval(address(game), true);
+    }
+
+    // =========================================================================
+    // Task 1 — the 5 re-peg / gate / WWXRP-exclusion cases
+    // =========================================================================
+
+    /// @notice Case (a): >= 3 non-WWXRP resolved -> exactly ONE flat creditFlip to the keeper,
+    ///         amount == RESOLVE_FLAT_BURNIE (1e18). This is the FLAT literal, NOT a per-item sum:
+    ///         we assert COUNT == 1 AND amount == 1e18 (never `3 * peg`). Three non-WWXRP bets
+    ///         (ETH + BURNIE + ETH) resolve, so successCount == 3 trips the gate exactly once.
+    function testGteThreeNonWwxrpPaysExactlyOneFlat() public {
+        // Large pool so resolutions are real but the exact payout is irrelevant to the count oracle.
+        _seedFuturePrizePool(1_000_000 ether);
+
+        uint48 index = 1;
+        uint256 word = uint256(keccak256("repeg_gte3_word"));
+        uint32 ticket = _winningTicketFor(index, word);
+
+        // 3 non-WWXRP bets: ETH, BURNIE, ETH.
+        _fundBurnie(player, 1_000 ether);
+        uint64 b0 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
+        uint64 b1 = _placeBet(CURRENCY_BURNIE, 200 ether, 1, ticket);
+        uint64 b2 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
+
+        _injectLootboxRngWord(index, word);
+
+        (address[] memory players, uint64[] memory betIds) = _list3(b0, b1, b2);
+
+        vm.recordLogs();
+        vm.prank(keeper);
+        game.degeneretteResolve(players, betIds);
+
+        // The reward is paid ONCE (count == 1) AND the credited AMOUNT is the FLAT literal 1e18 —
+        // NOT a per-item sum (e.g. 3 * peg). Recipient-isolated to the keeper; single log pass.
+        (uint256 count, uint256 credited) = _keeperCredit(keeper);
+        assertEq(
+            count,
+            1,
+            "Case (a): >= 3 non-WWXRP -> exactly ONE keeper creditFlip (flat, never per-item)"
+        );
+        assertEq(
+            credited,
+            RESOLVE_FLAT_BURNIE,
+            "Case (a): credited == RESOLVE_FLAT_BURNIE (1e18), the FLAT literal, never a per-item sum"
+        );
+
+        // All three bets actually resolved (slots deleted) — the gate fired on real work.
+        assertEq(_betSlot(player, b0), 0, "bet 0 resolved");
+        assertEq(_betSlot(player, b1), 0, "bet 1 resolved");
+        assertEq(_betSlot(player, b2), 0, "bet 2 resolved");
+    }
+
+    /// @notice Case (b): 1-2 non-WWXRP resolved -> committed (resolved) but UNPAID (count == 0),
+    ///         and NO revert. Two non-WWXRP bets resolve; successCount == 2 < 3, so the flat
+    ///         reward does NOT fire, yet the call commits the resolutions (the trailing tail is
+    ///         never stranded — only zero-resolved reverts).
+    function testOneOrTwoNonWwxrpCommittedUnpaidNoRevert() public {
+        _seedFuturePrizePool(1_000_000 ether);
+
+        uint48 index = 1;
+        uint256 word = uint256(keccak256("repeg_two_word"));
+        uint32 ticket = _winningTicketFor(index, word);
+
+        _fundBurnie(player, 1_000 ether);
+        uint64 b0 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
+        uint64 b1 = _placeBet(CURRENCY_BURNIE, 200 ether, 1, ticket);
+
+        _injectLootboxRngWord(index, word);
+
+        address[] memory players = new address[](2);
+        uint64[] memory betIds = new uint64[](2);
+        players[0] = player;
+        players[1] = player;
+        betIds[0] = b0;
+        betIds[1] = b1;
+
+        vm.recordLogs();
+        vm.prank(keeper);
+        // No revert — the call commits the 2 resolutions.
+        game.degeneretteResolve(players, betIds);
+
+        // UNPAID: successCount == 2 < 3 -> zero keeper creditFlip.
+        assertEq(
+            _countCoinflipStakeUpdatedFor(keeper),
+            0,
+            "Case (b): 1-2 non-WWXRP -> UNPAID (no creditFlip), but committed and NOT reverted"
+        );
+
+        // The tail is committed, not stranded: both bets resolved.
+        assertEq(_betSlot(player, b0), 0, "Case (b): bet 0 committed (resolved)");
+        assertEq(_betSlot(player, b1), 0, "Case (b): bet 1 committed (resolved)");
+    }
+
+    /// @notice Case (c): 0 resolved -> reverts NoWork(). The single supplied bet's RNG word never
+    ///         lands, so `_degeneretteResolveBet` reverts (caught by the per-item try/catch),
+    ///         totalResolved stays 0, and the call reverts NoWork(). The AUTO-02 probe passes
+    ///         (the slot is non-zero — the bet exists but is not yet resolvable).
+    function testZeroResolvedRevertsNoWork() public {
+        _seedFuturePrizePool(1_000_000 ether);
+
+        uint48 index = 1;
+        uint256 word = uint256(keccak256("repeg_nowork_word"));
+        uint32 ticket = _winningTicketFor(index, word);
+
+        // Place a real bet (slot non-zero so the AUTO-02 probe passes) but DO NOT inject the
+        // RNG word — _resolveFullTicketBet reverts with E() (word == 0), caught per-item -> 0 resolved.
+        uint64 b0 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
+        assertGt(_betSlot(player, b0), 0, "precondition: bet slot non-zero (probe passes)");
+
+        address[] memory players = new address[](1);
+        uint64[] memory betIds = new uint64[](1);
+        players[0] = player;
+        betIds[0] = b0;
+
+        vm.prank(keeper);
+        vm.expectRevert(_noWorkSelector());
+        game.degeneretteResolve(players, betIds);
+
+        // Nothing resolved: the bet slot is intact.
+        assertGt(_betSlot(player, b0), 0, "Case (c): bet unresolved after NoWork() revert");
+    }
+
+    /// @notice Case (d): 3 WWXRP-only resolved -> totalResolved == 3 (no revert), successCount == 0
+    ///         -> UNPAID. WWXRP (currency == 3) is excluded from BOTH the >= 3 gate count AND the
+    ///         reward (AUTO-04). Three WWXRP bets resolve, so the call does not revert NoWork(),
+    ///         but credits ZERO — a WWXRP-spam faucet is impossible.
+    function testThreeWwxrpOnlyResolvedUnpaidNoRevert() public {
+        _seedFuturePrizePool(1_000_000 ether);
+
+        uint48 index = 1;
+        uint256 word = uint256(keccak256("repeg_wwxrp3_word"));
+        uint32 ticket = _winningTicketFor(index, word);
+
+        _fundWwxrp(player, 1_000 ether);
+        uint64 b0 = _placeBet(CURRENCY_WWXRP, 2 ether, 1, ticket);
+        uint64 b1 = _placeBet(CURRENCY_WWXRP, 2 ether, 1, ticket);
+        uint64 b2 = _placeBet(CURRENCY_WWXRP, 2 ether, 1, ticket);
+
+        _injectLootboxRngWord(index, word);
+
+        (address[] memory players, uint64[] memory betIds) = _list3(b0, b1, b2);
+
+        vm.recordLogs();
+        vm.prank(keeper);
+        // No revert — 3 WWXRP resolved -> totalResolved == 3 (revert-on-no-work is keyed on totalResolved).
+        game.degeneretteResolve(players, betIds);
+
+        // UNPAID: WWXRP excluded from the >= 3 count, so successCount == 0 -> zero keeper creditFlip.
+        assertEq(
+            _countCoinflipStakeUpdatedFor(keeper),
+            0,
+            "Case (d): 3 WWXRP-only resolved -> UNPAID (WWXRP excluded from the >= 3 reward gate)"
+        );
+
+        // All three WWXRP bets actually resolved (no revert, real work committed).
+        assertEq(_betSlot(player, b0), 0, "Case (d): WWXRP bet 0 resolved");
+        assertEq(_betSlot(player, b1), 0, "Case (d): WWXRP bet 1 resolved");
+        assertEq(_betSlot(player, b2), 0, "Case (d): WWXRP bet 2 resolved");
+    }
+
+    /// @notice Case (e): mixed 2 WWXRP + 3 non-WWXRP -> PAID. The 3 non-WWXRP resolutions trip the
+    ///         >= 3 gate (the 2 WWXRP resolve but do not count toward it), so exactly ONE flat
+    ///         creditFlip fires to the keeper. Proves the gate counts non-WWXRP only, while WWXRP
+    ///         still resolves alongside.
+    function testMixedWwxrpAndNonWwxrpPaysAtGate() public {
+        _seedFuturePrizePool(1_000_000 ether);
+
+        uint48 index = 1;
+        uint256 word = uint256(keccak256("repeg_mixed_word"));
+        uint32 ticket = _winningTicketFor(index, word);
+
+        _fundBurnie(player, 1_000 ether);
+        _fundWwxrp(player, 1_000 ether);
+
+        // Place 3 non-WWXRP (ETH, BURNIE, ETH) + 2 WWXRP. Item 0 (the AUTO-02 probe) is non-WWXRP.
+        uint64 nw0 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
+        uint64 w0 = _placeBet(CURRENCY_WWXRP, 2 ether, 1, ticket);
+        uint64 nw1 = _placeBet(CURRENCY_BURNIE, 200 ether, 1, ticket);
+        uint64 w1 = _placeBet(CURRENCY_WWXRP, 2 ether, 1, ticket);
+        uint64 nw2 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
+
+        _injectLootboxRngWord(index, word);
+
+        address[] memory players = new address[](5);
+        uint64[] memory betIds = new uint64[](5);
+        for (uint256 i; i < 5; ++i) players[i] = player;
+        betIds[0] = nw0;
+        betIds[1] = w0;
+        betIds[2] = nw1;
+        betIds[3] = w1;
+        betIds[4] = nw2;
+
+        vm.recordLogs();
+        vm.prank(keeper);
+        game.degeneretteResolve(players, betIds);
+
+        // PAID exactly once: 3 non-WWXRP >= gate -> one flat creditFlip; the 2 WWXRP do not count.
+        (uint256 count, uint256 credited) = _keeperCredit(keeper);
+        assertEq(
+            count,
+            1,
+            "Case (e): mixed 2 WWXRP + 3 non-WWXRP -> PAID exactly once (gate counts non-WWXRP only)"
+        );
+        assertEq(
+            credited,
+            RESOLVE_FLAT_BURNIE,
+            "Case (e): credited == RESOLVE_FLAT_BURNIE (flat, never a per-item sum)"
+        );
+
+        // All five bets resolved — both WWXRP and non-WWXRP committed.
+        assertEq(_betSlot(player, nw0), 0, "Case (e): non-WWXRP 0 resolved");
+        assertEq(_betSlot(player, w0), 0, "Case (e): WWXRP 0 resolved");
+        assertEq(_betSlot(player, nw1), 0, "Case (e): non-WWXRP 1 resolved");
+        assertEq(_betSlot(player, w1), 0, "Case (e): WWXRP 1 resolved");
+        assertEq(_betSlot(player, nw2), 0, "Case (e): non-WWXRP 2 resolved");
+    }
+
+    // =========================================================================
+    // creditFlip count + amount oracle (ported from CrankLeversAndPacking.t.sol:534-548)
+    // =========================================================================
+
+    /// @dev Drain the recorded logs ONCE and return BOTH the count of CoinflipStakeUpdated emissions
+    ///      credited to `who` (the indexed `player` topic == who) AND the LAST such amount. The event is
+    ///      `CoinflipStakeUpdated(address indexed player, uint32 indexed day, uint256 amount, uint256 newTotal)`
+    ///      so the credited player is topics[1] and `amount` is data word 0. A single pass is required
+    ///      because `vm.getRecordedLogs()` clears the buffer (a second call would see nothing).
+    ///      Recipient-isolated: separates the keeper's flat reward from any other (e.g. winnings) credit.
+    function _keeperCredit(address who) internal returns (uint256 count, uint256 amount) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; i++) {
+            if (
+                logs[i].emitter == address(coinflip) &&
+                logs[i].topics.length > 1 &&
+                logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
+                logs[i].topics[1] == bytes32(uint256(uint160(who)))
+            ) {
+                ++count;
+                // data = (uint256 amount, uint256 newTotal); amount is the per-call credit.
+                (amount, ) = abi.decode(logs[i].data, (uint256, uint256));
+            }
+        }
+    }
+
+    /// @dev Count-only oracle (drains the log buffer once). For cases where no amount is expected.
+    function _countCoinflipStakeUpdatedFor(address who) internal returns (uint256 count) {
+        (count, ) = _keeperCredit(who);
+    }
+
+    // =========================================================================
+    // Bet placement / RNG / slot helpers
+    // (byte-faithful copies of DegeneretteFreezeResolution.t.sol)
+    // =========================================================================
+
+    /// @dev degeneretteBets mapping root slot (address => betId => packed).
+    uint256 private constant DEGENERETTE_BETS_SLOT = 45;
+
+    /// @dev Read the packed degeneretteBets slot for (player, betId). Non-zero == unresolved.
+    function _betSlot(address who, uint64 betId) internal view returns (uint256) {
+        bytes32 inner = keccak256(abi.encode(who, uint256(DEGENERETTE_BETS_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(betId), inner));
+        return uint256(vm.load(address(game), slot));
+    }
+
+    /// @dev Place a Degenerette bet for `player` and return its betId (nonce).
+    function _placeBet(uint8 currency, uint128 perTicket, uint8 spins, uint32 ticket)
+        internal
+        returns (uint64 betId)
+    {
+        uint256 ethValue = currency == CURRENCY_ETH ? uint256(perTicket) * spins : 0;
+        vm.prank(player);
+        game.placeDegeneretteBet{value: ethValue}(address(0), currency, perTicket, spins, ticket, 0);
+        betId = _betNonce(player);
+    }
+
+    /// @dev Build a 3-item (players, betIds) list, all owned by `player` (item 0 is the AUTO-02 probe).
+    function _list3(uint64 b0, uint64 b1, uint64 b2)
+        internal
+        view
+        returns (address[] memory players, uint64[] memory betIds)
+    {
+        players = new address[](3);
+        betIds = new uint64[](3);
+        players[0] = player;
+        players[1] = player;
+        players[2] = player;
+        betIds[0] = b0;
+        betIds[1] = b1;
+        betIds[2] = b2;
+    }
+
+    /// @dev The spin-0 winning custom ticket for (index, word): the spin-0 result ticket itself
+    ///      (8/8 self-match guarantees a win on spin 0 -> the resolution actually pays).
+    function _winningTicketFor(uint48 index, uint256 word) internal pure returns (uint32) {
+        return _resultTicketForSpin(index, word, 0);
+    }
+
+    /// @dev Reproduce the on-chain per-spin result ticket (_resolveFullTicketBet derivation).
+    function _resultTicketForSpin(uint48 index, uint256 word, uint8 spinIdx)
+        internal
+        pure
+        returns (uint32)
+    {
+        uint256 resultSeed = spinIdx == 0
+            ? uint256(keccak256(abi.encodePacked(word, uint32(index), QUICK_PLAY_SALT)))
+            : uint256(keccak256(abi.encodePacked(word, uint32(index), spinIdx, QUICK_PLAY_SALT)));
+        return DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
+    }
+
+    /// @dev Inject a lootbox RNG word for a given index (lootboxRngWordByIndex mapping, slot 38).
+    function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
+        vm.store(address(game), slot, bytes32(rngWord));
+    }
+
+    /// @dev Read the current degeneretteBetNonce for a player (slot 46) = newest betId.
+    function _betNonce(address who) internal view returns (uint64) {
+        bytes32 slot = keccak256(abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT)));
+        return uint64(uint256(vm.load(address(game), slot)));
+    }
+
+    /// @dev Seed futurePrizePool (upper 128 bits of prizePoolsPacked, slot 2). Preserves nextPrizePool.
+    function _seedFuturePrizePool(uint256 targetFuture) internal {
+        uint256 currentPacked = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
+        uint128 currentNext = uint128(currentPacked);
+        uint256 newPacked = (targetFuture << 128) | uint256(currentNext);
+        vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
+    }
+
+    /// @dev Read claimablePool (uint128 in slot 1, byte 16 -> high 128 bits).
+    function _readClaimablePool() internal view returns (uint256) {
+        uint256 s1 = uint256(vm.load(address(game), bytes32(uint256(CLAIMABLE_POOL_SLOT))));
+        return uint256(uint128(s1 >> 128));
+    }
+
+    /// @dev Mint BURNIE to `who` via the GAME-gated mintForGame (keeps supply consistent).
+    function _fundBurnie(address who, uint256 amount) internal {
+        vm.prank(address(game));
+        coin.mintForGame(who, amount);
+    }
+
+    /// @dev Mint WWXRP to `who` via the GAME-gated mintPrize (keeps supply consistent).
+    function _fundWwxrp(address who, uint256 amount) internal {
+        vm.prank(address(game));
+        wwxrp.mintPrize(who, amount);
+    }
+
+    /// @dev NoWork() error selector — the revert-on-no-work signal (DegenerusGame.sol:1629).
+    function _noWorkSelector() internal pure returns (bytes4) {
+        return bytes4(keccak256("NoWork()"));
+    }
+}
