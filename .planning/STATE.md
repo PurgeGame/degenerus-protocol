@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v49.0
 milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
 status: executing
-last_updated: "2026-05-27T17:00:13.926Z"
+last_updated: "2026-05-27T17:12:16.292Z"
 last_activity: 2026-05-27
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 23
-  completed_plans: 19
+  completed_plans: 20
   percent: 60
 ---
 
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (Current Milestone: v49.0 section) + .planning/ROADMAP
 ## Current Position
 
 Phase: 332 (tst-freeze-fuzz-one-category-reward-routing-non-widening-reg) — EXECUTING
-Plan: 2 of 6
-Status: Executing Phase 332 — 332-01 (TST-01 freeze-fuzz) COMPLETE
-Last activity: 2026-05-27 -- 332-01 TST-01 freeze-fuzz executed (router same-tx freeze + autoBuy-safe + autoOpen-no-maroon, green default+deep, A7 red carried forward)
+Plan: 3 of 6
+Status: Executing Phase 332 — 332-01 (TST-01) + 332-02 (TST-02) COMPLETE
+Last activity: 2026-05-27 -- 332-02 TST-02 executed (one-category creditFlip-COUNT==1 across buy/advance/open + 0-on-skip + NoWork revert; structural reentrancy grep-attest over the doWork() body, NO attacker harness; default-batch/remainder + unrewarded escapes; 9 GREEN, zero contracts mutation; commit c7c57376)
 
-Progress: [████████░░] 83%
+Progress: [█████████░] 87%
 
 > **⚠️ v49.0 PROGRESS (sessions 2026-05-26 → 2026-05-27; "keep going, no contract commits"):**
 > - **Phase 329 SPEC RE-EXECUTED + COMPLETE** under the keeper-router redesign — 36 reqs, VERIFICATION **8/8 passed**, completion `0eae9c28`. `329-SPEC.md` is the authoritative design contract.
@@ -570,6 +570,7 @@ Audit deliverables:
 | Phase 331 P03 | ~50min | 3 tasks | 4 files |
 | Phase 331 P04 | ~30min | 2 tasks | 1 files |
 | Phase 332 P01 | 16min | 2 tasks | 1 files |
+| Phase 332 P02 | 22min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -700,3 +701,4 @@ Audit deliverables:
 - [Phase ?]: 331-04 GAS-04: stall ceiling NO EXTENSION — 6x is a one-shot (one rewardable advance/day-move, un-fakeable, round-trip<=0 @>=1gwei market); 1/2/4/6 confirmed ADVANCE-ONLY, thresholds never lowered
 - [Phase ?]: 331-04: RESOLVE_FLAT_BURNIE anti-exploit = the bet-stake gate (self-resolver must place >=3 losing bets to harvest 1 BURNIE); milestone+sub-2gwei reference corner structurally dominated + WWXRP gate-excluded (AUTO-04)
 - [Phase ?]: TST-01 freeze-fuzz: router same-tx doWork/autoBuy advance-consume reads only frozen totalFlipReversals (ADV-04), NON-VACUOUS via zero-reversals differential control; autoBuy-during-rngLock SAFE; autoOpen-blocked NO-OP + no-marooned-boxes; green default + deep; A7 red carried forward
+- [Phase ?]: TST-02 (332-02): one-category no-bounty-stacking proven by recipient-isolated creditFlip COUNT (1 across buy/advance/open, 0 on bountyEarned==0 skip, 0+NoWork revert); structural reentrancy attested by grep over the doWork() body (single CEI-last creditFlip, pinned GAME/COINFLIP, no ETH-push), NO attacker harness; 9 GREEN, zero contracts mutation
