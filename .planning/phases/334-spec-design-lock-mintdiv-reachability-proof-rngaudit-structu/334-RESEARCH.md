@@ -456,17 +456,13 @@ The single batched diff (BATCH-02) must avoid any intermediate broken state. Rec
 
 **These are the only `[ASSUMED]` claims. A1 and A2 are the two the SPEC-authoring tasks should surface as explicit SPEC decisions / TST-03 targets — not silent.**
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Whale-pass grant-shape reconciliation (the one real SPEC decision).**
-   - What we know: the box-open boon grants 2/lvl + 40/lvl (≤level-10 bonus band) over 100 levels (`_activateWhalePass:1250-1256`); the existing `claimWhalePass` grants a flat `N tickets/level × 100` (N = `whalePassClaims` count). The `_applyWhalePassStats` is identical for both.
-   - What's unclear: whether routing box-open into the existing claim preserves the bonus band, or whether it's a deliberate convergence to the flat shape.
-   - Recommendation: the SPEC makes this an EXPLICIT decision task. Cheapest path: box-open records into `whalePassClaims` AND the bonus-band difference is reconciled by either (a) keeping a box-open-specific grant shape (a claim variant), or (b) accepting the flat shape as an economic change routed to the 338 economic-analyst per D-06. **The planner should write a SPEC task that DECIDES this and records the rationale** — it is the only genuinely open design choice (everything else is locked or proven).
+Both questions below were RESOLVED by the USER at plan-phase time (2026-05-27) and locked in CONTEXT.md's Post-Research Reconciliation block. They are no longer open; the plans implement the resolutions.
 
-2. **gameOver-forfeit rule for unclaimed whale passes (deferred, but SPEC must record).**
-   - What we know: per the Deferred Ideas, unclaimed pending claims at `gameOver` almost certainly forfeit (no future levels to materialize). `claimWhalePass:1019` already reverts under `_livenessTriggered`.
-   - What's unclear: the explicit rule (forfeit vs auto-claim-at-gameOver).
-   - Recommendation: the SPEC records "forfeit" as the explicit rule when documenting the claim path (consistent with "claim whenever is fine" + the existing liveness revert). Low-stakes; one sentence in the design-lock doc.
+1. **Whale-pass grant-shape reconciliation — RESOLVED (D-21).** USER chose **(b) converge to the existing flat shape**: routing box-open into the existing `claimWhalePass`/`whalePassClaims` machinery, the box-open whale pass adopts the existing flat per-level shape — the ≤level-10 `40/lvl` bonus band is DROPPED and the per-level rate aligns to the existing claim. This is a deliberate economic reduction; the value delta is routed to the 338 SWEEP economic-analyst per D-06. Single counter, simplest IMPL (no grant-shape param, no second counter). *(Original framing: box-open grants 2/lvl + 40/lvl(≤10) over 100 levels at `_activateWhalePass:1250-1256`; the existing `claimWhalePass` grants a flat `N/lvl × 100`; `_applyWhalePassStats` identical for both.)*
+
+2. **gameOver-forfeit rule — RESOLVED (D-23).** Unclaimed `whalePassClaims` at `gameOver` are **forfeit** (no future levels to materialize); consistent with "claim whenever is fine" + the existing `_livenessTriggered` revert at `claimWhalePass:1019`. The SPEC records this as one sentence in the design-lock doc; no auto-claim-at-gameOver.
 
 ## Environment Availability
 
