@@ -7,6 +7,25 @@
 **Methodology floor (HARD):** `feedback_security_over_gas` (the self-crank round-trip ≤ 0 faucet floor is a hard invariant) + the CR-01 rule (peg the per-item MARGINAL, never a single-item total) + `feedback_bounty_exploit_uses_real_gas_not_peg_ref` (exploitability judged at REAL prevailing gas, not the 0.5 gwei reference).
 **Analog:** `.planning/milestones/v46.0-phases/319-.../319-GAS-06-CALIBRATION.md` + `319-CR01-FIX.md` — this is the same derive→peg pass one phase up for the v49 keeper router.
 
+> ### ⚠️ CORRECTION PASS (2026-05-27) — the BUY marginal that fed §2/§3 was WRONG
+> The 331-01 marginals this record consumed had a load-bearing error (see `331-GAS-DERIVATION.md` §0
+> banner): the BUY per-player marginal was measured on the REVERT-CATCH path (`40,224`), not a real
+> landing buy. The CORRECTED buy marginal is **~261,809** (clean N32 ~255,614) — an order of magnitude
+> higher. Consequences re-worked below:
+> - **§2 relative-marginal analysis:** buy is now the MOST expensive per-item leg (~262k > advance
+>   210k > open 89k), INVERTING the original "buy cheapest → richest 1.5x" justification. Re-examined
+>   in §2 + the new §2.1.
+> - **§3 faucet-floor table:** the buy-leg `BOUNTY_ETH_TARGET` ceiling RISES with the higher marginal
+>   (a more expensive leg can be reimbursed more before round-trip flips positive), so the buy leg is
+>   now LESS binding. The advance-6x ceiling (`8.78e12 wei`) REMAINS the overall binding faucet floor
+>   — confirmed in the corrected §3.
+> - **The ratio VALUES (1.5/1.0/2.0, knee=5) are FROZEN and out of scope** — this pass re-verifies they
+>   still avoid a faucet at the current `BOUNTY_ETH_TARGET` (they do) and FLAGS the buy
+>   under-reimbursement implication; it does NOT re-propose them.
+> - **The single `DOWORK_BATCH=100` is recommended SPLIT into `BUY_BATCH=50` + `OPEN_BATCH=100`**
+>   (sizing in `331-GAS-DERIVATION.md` §5.1). This changes the §8 diff from comment-only to a real
+>   (still gated) edit. The §8 table is updated accordingly.
+
 ---
 
 ## 0. Scope, the conversion, and the CR-01 rule (load-bearing)
@@ -27,20 +46,21 @@ with `PRICE_COIN_UNIT = 1000 ether` (`AfKing.sol:233`) and `BOUNTY_ETH_TARGET` t
 (`AfKing.sol:261`, set `:277`). `mp = IGame(GAME).mintPrice()` (`DegenerusGame.sol:2423-2425` →
 `PriceLookupLib.priceForLevel(_activeTicketLevel())`).
 
-**The measured marginals (331-GAS-DERIVATION.md §5, N≥32 converged column):**
+**The CORRECTED measured marginals (331-GAS-DERIVATION.md §5, N≥32 converged column):**
 
 | Calibration input | Measured gas | N | Source |
 |-------------------|--------------|---|--------|
-| `router_dowork_buy_per_player_marginal_gas`  | **40,224** (clean N32 37,986) | 32 | 331-GAS-DERIVATION §1/§5 |
-| `router_dowork_open_per_box_marginal_gas`    | **89,287** (clean N32 85,967) | 32 | 331-GAS-DERIVATION §2/§5 |
+| `router_dowork_buy_per_player_marginal_gas`  | **261,809** (clean N32 255,614) | 32 | 331-GAS-DERIVATION §1/§5 |
+| `router_dowork_open_per_box_marginal_gas` (TYPICAL) | **89,288** (clean N32 85,967) | 32 | 331-GAS-DERIVATION §2/§5 |
+| `router_dowork_open_whale_pass_box_marginal_gas` (RARE WORST CASE) | **5,396,350** | 1 | 331-GAS-DERIVATION §2/§5 |
 | `router_dowork_advance_marginal_gas`         | **210,689** (base, mult=1; single step) | 1 | 331-GAS-DERIVATION §3/§5 |
-| `router_dowork_dispatch_overhead_gas`        | **228,084** (conservative ceiling) | 1 | 331-GAS-DERIVATION §4/§5 |
+| `router_dowork_dispatch_overhead_gas`        | **568,870** (conservative ceiling, REAL landing buy) | 1 | 331-GAS-DERIVATION §4/§5 |
 
 **CR-01 rule (the load-bearing lesson from 319):** the per-item flat reward MUST be pegged to the
 per-item MARGINAL at N≥32 — never a single-item TOTAL. At 319 the box reward was over-pegged ~2x by
 using the single-box total (137,944) instead of the per-box marginal (~71,203), opening a Sybil
-self-crank faucet on the multi-box path. 331-01 re-confirmed the gradient empirically (buy
-N1=116,437→N32=37,986 ~3.06x; open N1=180,221→N32=85,967 ~2.10x). **Every value below is derived
+self-crank faucet on the multi-box path. The CORRECTED gradient (every buy LANDS): buy
+N1=484,194→N32=255,614 ~1.89x; open N1=180,221→N32=85,967 ~2.10x. **Every value below is derived
 from the N≥32 converged marginal.**
 
 **Anti-exploit basis is REAL prevailing gas, NOT the 0.5 gwei reference** (`feedback_bounty_exploit_uses_real_gas_not_peg_ref`,
@@ -54,13 +74,17 @@ reward valued at the 0.5 gwei peg. Both framings are stated for every constant b
 
 | Symbol | File:line (verified `63bc16ca`) | Kind | Calibration disposition |
 |--------|----------------------------------|------|--------------------------|
-| `DOWORK_BATCH`      | `AfKing.sol:847` | frozen `internal constant` | **GATED** — confirm `100` |
+| `DOWORK_BATCH`      | `AfKing.sol:847` | frozen `internal constant` | **GATED — CHANGE (correction):** SPLIT into `BUY_BATCH = 50` + `OPEN_BATCH = 100` (331-GAS-DERIVATION §5.1); buy at 100 = ~26M > the 16.7M HARD ceiling |
 | `ADVANCE_RATIO_NUM` | `AfKing.sol:849` | frozen `internal constant` | **GATED** — confirm `2` |
-| `BUY_RATIO_NUM`     | `AfKing.sol:851` | frozen `internal constant` | **GATED** — confirm `3` |
+| `BUY_RATIO_NUM`     | `AfKing.sol:851` | frozen `internal constant` | **GATED** — confirm `3` (frozen ratio; buy is now the most expensive leg but the value is out of scope — §2.1) |
 | `BUY_RATIO_DEN`     | `AfKing.sol:852` | frozen `internal constant` | **GATED** — confirm `2` |
 | `OPEN_KNEE`         | `AfKing.sol:854` | frozen `internal constant` | **GATED** — confirm `5` |
 | `RESOLVE_FLAT_BURNIE` | `DegenerusGame.sol:1543` | frozen `private constant` | **GATED** — confirm `1e18` |
-| `BOUNTY_ETH_TARGET` | `AfKing.sol:261` (immutable, set `:277` from ctor arg `_bountyEthTarget`; fixture `DeployProtocol.sol:126` = `885_000_000`) | **deploy-param immutable** | **SURFACED-NOT-GATED** — recommend a ceiling; the production value is a USER economic choice in the paired `degenerus-utilities` deploy script |
+| `BOUNTY_ETH_TARGET` | `AfKing.sol:261` (immutable, set `:277` from ctor arg `_bountyEthTarget`; fixture `DeployProtocol.sol:126` = `885_000_000`) | **deploy-param immutable** | **SURFACED-NOT-GATED** — recommend a faucet ceiling + flag the buy-incentive-vs-faucet tension (§5); the production value is a USER economic choice in the paired `degenerus-utilities` deploy script |
+
+> **Correction note:** the original record had `DOWORK_BATCH` as **CONFIRM `100`**. The corrected buy
+> marginal (~262k) makes a 100-deep buy batch ~26M, over the 16.7M HARD ceiling, so the single batch
+> constant is split (buy 50 / open 100). This is a BEHAVIORAL change behind the same 331-05 gate.
 
 The five `AfKing.sol` `internal constant`s + `RESOLVE_FLAT_BURNIE` are frozen `contracts/*.sol`
 literals → they are behind the USER-APPROVED 331-05 gate. `BOUNTY_ETH_TARGET` is a constructor
@@ -69,30 +93,60 @@ USER exactly as 319 did with the same parameter.
 
 ---
 
-## 2. The ratio constants encode the RELATIVE per-category marginals (a single shared `unit`)
+## 2. The ratio constants encode the RELATIVE per-category marginals (a single shared `unit`) — CORRECTED
 
 A flat-per-tx model with ONE shared `unit` and per-category ratios can reimburse exactly ONE leg at
-break-even; the other legs are deliberately UNDER-reimbursed (the anti-faucet margin). The ratio a
-leg deserves is proportional to `marginal_gas(leg) / unit_gas` — so the relative marginals dictate
-the relative ratios. The measured relative marginals (normalized to buy = 1.0):
+break-even; the other legs are deliberately UNDER-reimbursed (the anti-faucet margin). The CORRECTED
+measured relative marginals (normalized to open = 1.0, since buy is no longer the smallest):
 
-| Leg | Marginal gas | Relative to buy | Current reward ratio (x `unit`) |
-|-----|--------------|-----------------|----------------------------------|
-| buy           | 40,224  | 1.00  | **1.5x** (`3/2`) |
-| open at knee  | 89,287  | 2.22  | **1.0x** (`5/5`) |
-| advance base  | 210,689 | 5.24  | **2.0x** (`2 * mult`, base mult=1) |
+| Leg | Marginal gas | Relative to open | Current reward ratio (x `unit`) |
+|-----|--------------|------------------|----------------------------------|
+| open at knee (typical) | 89,288  | 1.00  | **1.0x** (`5/5`) |
+| advance base  | 210,689 | 2.36  | **2.0x** (`2 * mult`, base mult=1) |
+| buy (LANDING) | 261,809 | 2.93  | **1.5x** (`3/2`) |
 
-The ratios are NOT a 1:1 mirror of the relative marginals, and that is correct by design — the model
-is a SINGLE shared `unit` (not three independent pegs). The relevant invariant is the per-leg
-break-even: **each leg's reward, valued at the peg, must be AT or BELOW that leg's real marginal at
-the 0.5 gwei reference (round-trip ≤ 0).** Section 3 proves a single shared `BOUNTY_ETH_TARGET` keeps
-all legs simultaneously at/below their marginal.
+**CORRECTION — the original "buy cheapest → richest 1.5x" justification is INVERTED.** With the buy
+marginal corrected from ~40k to ~262k, BUY is now the MOST expensive per-item leg (above even advance
+base), yet it carries only a 1.5x ratio. So the model does NOT pay the most expensive leg the richest
+ratio — buy is now the most UNDER-reimbursed leg relative to its gas. This is examined in §2.1.
 
-The ratios were chosen so that the CHEAPEST-gas leg (buy, the highest-priority liveness leg the
-keeper runs first every day) gets the RICHEST ratio (1.5x), and the most expensive leg (advance) is
-NOT given a proportionally huge base ratio (only 2x) because the stall multiplier `mult` rides on top
-(1/2/4/6) — the advance ladder is the escalation lever, not the base ratio. **Confirm 1.5 / 1.0 /
-2.0 / knee=5 — the measured relative marginals support them (proof in §3); no ratio re-proposal.**
+The ratios are NOT a 1:1 mirror of the relative marginals, and (post-correction) that is even more
+deliberately the case — the model is a SINGLE shared `unit` (not three independent pegs). The relevant
+invariant remains the per-leg break-even: **each leg's reward, valued at the peg, must be AT or BELOW
+that leg's real marginal at the 0.5 gwei reference (round-trip ≤ 0).** §3 proves a single shared
+`BOUNTY_ETH_TARGET` keeps all legs simultaneously at/below their marginal — and the correction makes
+the buy leg MORE comfortably under-reimbursed, not less.
+
+**The ratio VALUES are FROZEN (329 SPEC D-07; out of scope for calibration).** This pass does NOT
+re-propose them. It re-verifies (§3) they still avoid a faucet at the current `BOUNTY_ETH_TARGET` —
+they do — and FLAGS the buy under-reimbursement (§2.1).
+
+---
+
+## 2.1 BUY UNDER-REIMBURSEMENT — the corrected keeper-incentive implication (FLAG, not a change)
+
+With buy the most expensive leg (~262k) and the cheapest reward ratio relative to gas (1.5x vs the
+2.36x its gas would proportionally warrant against open's 1.0x), the buy leg is the leg a keeper is
+LEAST compensated for, per unit gas. At the current fixture `BOUNTY_ETH_TARGET = 885,000,000` wei the
+buy reward ETH-equiv is `1.5 * 885e6 = 1.33e9` wei, against a real buy cost of `261,809 * price`:
+
+| Price | buy reward ETH-equiv | buy real cost | keeper net on the buy leg |
+|-------|----------------------|---------------|---------------------------|
+| 0.5 gwei (ref) | 1.33e9 | 130.9e12 | −130.9e12 (deeply −) |
+| 1 gwei | 1.33e9 | 261.8e12 | −261.8e12 |
+| 5 gwei | 1.33e9 | 1,309e12 | −1,309e12 |
+
+**Implication (FLAGGED for the USER, not auto-changed):** at the current fixture `BOUNTY_ETH_TARGET`,
+the buy leg — the highest-priority daily-liveness leg — reimburses ~0.001% of the keeper's real gas.
+This is consistent with the §5 finding that the fixture B is ~14,000x below the faucet ceiling and
+broadly UNDER-incentivizes the keeper; the buy leg is simply the most under-incentivized of the three.
+If the USER tunes the production `BOUNTY_ETH_TARGET` upward toward keeper-incentive viability (the
+deploy-param economic choice, §5), the BUY leg is the binding incentive consideration (it must clear
+~262k×market-gas to make a keeper run the daily buy), while the advance-6x peak remains the binding
+FAUCET ceiling (§3). The two pull in opposite directions — the USER's production B should sit in the
+band that incentivizes the ~262k buy at the realistic market floor while keeping the 6x advance peak
+round-trip ≤ 0 at the 0.5 gwei reference. **The ratio constants are not the lever here; `BOUNTY_ETH_TARGET`
+is (and it is surfaced, not gated).**
 
 ---
 
@@ -103,44 +157,56 @@ cancels — §6). The keeper's REAL cost is `marginal_gas * (real gas price)`. R
 `ratio * BOUNTY_ETH_TARGET ≤ marginal_gas * (price)`. Rearranged, the per-leg ceiling on the shared
 deploy-param at the 0.5 gwei reference is `BOUNTY_ETH_TARGET ≤ marginal_gas * 0.5gwei / ratio`:
 
-| Leg | marginal_gas | ratio | `marginal/ratio` (gas-equiv) | Ceiling on `BOUNTY_ETH_TARGET` @0.5gwei ref (wei) |
-|-----|--------------|-------|------------------------------|---------------------------------------------------|
-| buy (clean N32) | 37,986  | 1.5  | **25,324** | **12,662,000,000,000** |
-| buy (conservative) | 40,224 | 1.5 | 26,816 | 13,408,000,000,000 |
-| open at knee | 89,287 | 1.0 | 89,287 | 44,643,500,000,000 |
+| Leg | marginal_gas (CORRECTED) | ratio | `marginal/ratio` (gas-equiv) | Ceiling on `BOUNTY_ETH_TARGET` @0.5gwei ref (wei) |
+|-----|--------------------------|-------|------------------------------|---------------------------------------------------|
+| open at knee | 89,288 | 1.0 | **89,288** | **44,644,000,000,000** |
+| buy (clean N32) | 255,614  | 1.5  | 170,409 | 85,204,666,666,666 |
+| buy (conservative N32) | 261,809 | 1.5 | 174,539 | 87,269,666,666,666 |
 | advance 1x | 210,689 | 2.0 | 105,344 | 52,672,250,000,000 |
 | advance 2x | 210,689 | 4.0 | 52,672 | 26,336,125,000,000 |
 | advance 4x | 210,689 | 8.0 | 26,336 | 13,168,062,500,000 |
 | advance 6x | 210,689 | 12.0 | **17,557** | **8,778,708,333,333** |
 
-**The binding (lowest) ceiling is the advance leg at the 6x stall peak: `BOUNTY_ETH_TARGET ≤
-8,778,708,333,333 wei` to keep round-trip ≤ 0 on EVERY leg at the 0.5 gwei reference.** (The buy
-leg's 12.66e12 ceiling binds among the non-escalated legs; the 6x advance is tighter only because the
-12x multiplier stacks on the advance ratio — see §4 for why a one-shot 6x is not a self-crank faucet.)
+**The binding (lowest) ceiling is STILL the advance leg at the 6x stall peak: `BOUNTY_ETH_TARGET ≤
+8,778,708,333,333 wei` to keep round-trip ≤ 0 on EVERY leg at the 0.5 gwei reference.** CORRECTION
+EFFECT: the buy-leg ceiling ROSE from ~12.66e12 (at the wrong 37,986 marginal) to ~85.2e12 (at the
+corrected 255,614) — a more expensive leg can absorb a larger `BOUNTY_ETH_TARGET` before its
+round-trip flips positive, so the buy leg is now FAR from binding. The NON-escalated binding ceiling
+is now the OPEN leg (~44.64e12, the cheapest per-item leg at a 1.0x ratio). The advance-6x peak
+(8.78e12) remains the overall faucet floor because the 12x multiplier stacks on the advance ratio —
+see §4 for why a one-shot 6x is not a self-crank faucet. **The buy correction makes the buy faucet
+ceiling LESS binding, exactly as predicted; the overall bind is unchanged.**
 
 **Current fixture `BOUNTY_ETH_TARGET = 885,000,000` wei is ~14,000x BELOW even the tightest (6x)
 ceiling.** At the current value, EVERY leg is round-trip ≤ 0 at the 0.5 gwei reference AND deeply
 negative at any market price (proof, reward ETH-equiv vs cost):
 
-| Price | buy (1.5xB=1.33e9) vs cost | open (1.0xB=885e6) vs cost | advance 6x (12xB=10.62e9) vs cost |
-|-------|----------------------------|----------------------------|-----------------------------------|
-| 0.5 gwei (ref) | 1.33e9 < 20.11e12 ✓ | 885e6 < 44.64e12 ✓ | 10.62e9 < 105.34e12 ✓ |
-| 1 gwei | 1.33e9 < 40.22e12 ✓ | 885e6 < 89.29e12 ✓ | 10.62e9 < 210.69e12 ✓ |
-| 5 gwei | 1.33e9 < 201.12e12 ✓ | 885e6 < 446.44e12 ✓ | 10.62e9 < 1,053.4e12 ✓ |
-| 50 gwei | 1.33e9 < 2,011.2e12 ✓ | 885e6 < 4,464.4e12 ✓ | 10.62e9 < 10,534.5e12 ✓ |
+| Price | buy (1.5xB=1.33e9) vs cost (261,809×p) | open (1.0xB=885e6) vs cost (89,288×p) | advance 6x (12xB=10.62e9) vs cost (210,689×p) |
+|-------|-----------------------------------------|----------------------------------------|-----------------------------------------------|
+| 0.5 gwei (ref) | 1.33e9 < 130.9e12 ✓ | 885e6 < 44.64e12 ✓ | 10.62e9 < 105.34e12 ✓ |
+| 1 gwei | 1.33e9 < 261.8e12 ✓ | 885e6 < 89.29e12 ✓ | 10.62e9 < 210.69e12 ✓ |
+| 5 gwei | 1.33e9 < 1,309e12 ✓ | 885e6 < 446.44e12 ✓ | 10.62e9 < 1,053.4e12 ✓ |
+| 50 gwei | 1.33e9 < 13,090e12 ✓ | 885e6 < 4,464.4e12 ✓ | 10.62e9 < 10,534.5e12 ✓ |
 
-So the fixture value is NOT a faucet risk; like 319, it is ~14,000x below the keeper's actual gas
-cost and therefore *under*-incentivizes the keeper. The fix is an economic deploy choice, NOT a
-frozen-constant edit (§5).
+So the fixture value is NOT a faucet risk on ANY leg (the corrected, higher buy cost only WIDENS the
+buy leg's negative round-trip). Like 319, the fixture B is ~14,000x below the keeper's actual gas cost
+and therefore *under*-incentivizes the keeper (the buy leg most of all — §2.1). The fix is an economic
+deploy choice, NOT a frozen-constant edit (§5).
 
 ---
 
 ## 4. The 6x-stall over-reimbursement is a ONE-SHOT, not a self-crank faucet (T-331-10)
 
-If `BOUNTY_ETH_TARGET` were pegged so the BUY leg breaks even exactly at the 0.5 gwei reference
-(`B = 13,408,000,000,000` wei), the advance leg at the 6x peak would over-reimburse by ~1.53x AT THE
-0.5 gwei REFERENCE (reward 160.9e12 vs cost 105.3e12). That looks like a faucet — but it is not a
-repeatable one, for three structural reasons:
+CORRECTION: with the corrected buy marginal, pegging B to the BUY break-even at the 0.5 gwei reference
+gives `B = 87,269,666,666,666` wei (buy conservative N32) — but that B would put the advance-6x leg
+WILDLY over the faucet ceiling (advance-6x ceiling is 8.78e12, ~10x below). So a buy-pegged B is NOT a
+candidate; the binding ceiling is and remains the advance-6x. The one-shot analysis below is
+therefore framed at the BINDING advance-6x-pegged B. If `BOUNTY_ETH_TARGET` were pegged so the advance
+leg breaks even exactly at the 6x peak at the 0.5 gwei reference (`B = 8,778,708,333,333` wei), the 6x
+advance reward equals its cost AT THE REFERENCE by construction (round-trip = 0, not positive). The
+historical "1.53x over-reimbursement" framing assumed a buy-pegged B that the correction has shown to
+be infeasible; the relevant fact is simpler — the 6x peak is round-trip ≤ 0 at the binding-pegged B,
+and even a slight over-peg of the 6x is not a repeatable faucet, for three structural reasons:
 
 1. **Advance is ONE rewardable call per day-advance.** Once `advanceGame()` moves the day,
    `advanceDue()` returns false (`DegenerusGame.sol:1623-1639`), so the leg cannot be re-cranked. The
@@ -156,8 +222,9 @@ repeatable one, for three structural reasons:
    210.7e12 cost). The flip-credit is illiquid coinflip stake, not liquid ETH.
 
 **Stall-ceiling decision (GAS-04): KEEP the 1/2/4/6 ladder ADVANCE-ONLY; NO ceiling extension above
-the 2-hour tier.** Rationale derived from the GAS data:
-- 6x (12x `unit`) over-reimburses the advance marginal by 1.53x at the 0.5 gwei *reference* and is a
+the 2-hour tier.** Rationale derived from the GAS data (UNCHANGED by the buy correction — advance is
+the binding ceiling and the advance marginal did not change):
+- 6x (12x `unit`) at a binding-pegged B is round-trip ≤ 0 at the 0.5 gwei *reference* and is a
   ONE-SHOT (not loopable). At the realistic ≥1 gwei market floor it is already round-trip ≤ 0.
 - A ceiling extension (e.g. an 8x/10x tier above 2h) would only be justified if 6x failed to cover
   the advance gas at stressed mainnet gas — it does not need to: even at 50 gwei the advance 6x at the
@@ -190,9 +257,10 @@ mintPrice level (mp cancels — §6).
 
 | Lens | Ceiling on `BOUNTY_ETH_TARGET` |
 |------|--------------------------------|
-| Round-trip ≤ 0 at the 0.5 gwei REFERENCE on EVERY leg incl. the 6x advance peak | `≤ 8,778,708,333,333 wei` (the advance-6x bind, §3) |
-| Round-trip ≤ 0 at the 0.5 gwei REFERENCE on the buy leg (the binding non-escalated leg) | `≤ 12,662,000,000,000 wei` (buy clean N32) |
-| Round-trip ≤ 0 at the ≥1 gwei MARKET floor (the realistic SAFE standard, 2x cushion) on the buy leg | `≤ 25,324,000,000,000 wei` (buy clean N32, 1 gwei) |
+| Round-trip ≤ 0 at the 0.5 gwei REFERENCE on EVERY leg incl. the 6x advance peak (the overall FAUCET floor) | `≤ 8,778,708,333,333 wei` (the advance-6x bind, §3) |
+| Round-trip ≤ 0 at the 0.5 gwei REFERENCE on the OPEN leg (the binding NON-escalated leg, post-correction) | `≤ 44,644,000,000,000 wei` (open at knee) |
+| Round-trip ≤ 0 at the 0.5 gwei REFERENCE on the BUY leg (now FAR from binding — corrected marginal) | `≤ 85,204,666,666,666 wei` (buy clean N32) |
+| BUY keeper-incentive FLOOR at the ≥1 gwei MARKET floor (the leg a keeper is least paid for, §2.1) | `≳` a B that makes `1.5 × B ≈ 255,614 × 1 gwei` ⟹ `B ≈ 170,409,333,333 wei` for buy break-even at 1 gwei |
 
 **Decision: NO autonomous deploy-param change; SURFACE for the USER (Task-gate item).** Rationale
 (identical to the 319 disposition):
@@ -205,11 +273,22 @@ mintPrice level (mp cancels — §6).
    `degenerus-utilities` repo, so the fixture arg is not the mainnet value. Changing the fixture
    would only affect test economics.
 3. The recommended hard CEILING is **`BOUNTY_ETH_TARGET ≤ 8,778,708,333,333 wei`** (the advance-6x,
-   0.5 gwei-reference, round-trip ≤ 0 bound — the strictest of the three lenses). A production value
-   that under-shoots this (e.g. anywhere in the ~`5e12`–`8.7e12` band) reimburses a meaningful
-   fraction of the keeper's ≥1 gwei market gas on the base leg while keeping the 6x peak round-trip ≤
-   0 at the reference. The current fixture `885,000,000` is ~14,000x below this — safe but
-   under-incentivizing.
+   0.5 gwei-reference, round-trip ≤ 0 bound — the strictest faucet lens). A production value that
+   under-shoots this (e.g. anywhere in the ~`5e12`–`8.7e12` band) reimburses a fraction of the keeper's
+   ≥1 gwei market gas on the base legs while keeping the 6x peak round-trip ≤ 0 at the reference. The
+   current fixture `885,000,000` is ~14,000x below this — safe but under-incentivizing.
+
+> **CORRECTED tension the USER must weigh (FLAG):** the corrected buy marginal (~256k) means the BUY
+> keeper-incentive FLOOR (~`170e12` wei to break the buy leg even at 1 gwei market) sits ABOVE the
+> advance-6x FAUCET ceiling (~`8.78e12` wei) by ~20x. The two CANNOT both be satisfied with a single
+> shared `BOUNTY_ETH_TARGET`: a B large enough to incentivize the daily buy at market gas would make
+> the one-shot 6x advance reference-price round-trip positive (an over-reimbursement, though §4 shows
+> it is NOT a loopable faucet). This is the INHERENT cost of the single-shared-`unit` flat-per-tx
+> model with frozen ratios. The faucet floor (`≤ 8.78e12`) is the HARD ceiling for self-crank safety
+> at the 0.5 gwei reference; a USER who wants the buy leg actually incentivized at market gas is
+> choosing to accept a reference-price 6x over-reimbursement (bounded as a one-shot, real-gas safe at
+> ≥1 gwei — §4) in exchange for keeper liveness. **This trade-off is the USER's economic call; the GAS
+> deliverable is the faucet ceiling + the surfaced tension, NOT a chosen B.**
 
 **No `DeployProtocol.sol` edit is proposed here.** If the USER wants the production target tuned, that
 is a separate AGENT-editable deploy-param change in the `degenerus-utilities` repo (not part of the
@@ -300,46 +379,59 @@ confirmed (no change)** for three reasons:
 
 ## 8. Per-constant decision summary (the exact 331-05 diff)
 
-| Constant | File:line (`63bc16ca`) | Measured input | Current | **Proposed** | Decision | Faucet floor |
-|----------|------------------------|----------------|---------|--------------|----------|--------------|
-| `DOWORK_BATCH`      | `AfKing.sol:847` | whole-leg worst case << 30M at N=100 (buy 1.29M / open 2.86M, 331-GAS-DERIVATION §5) | `100` | **`100` (UNCHANGED)** | CONFIRM — per-leg default batch; worst-case per-tx at N=100 is far under 30M | n/a (anti-DoS cap, not a reward) |
-| `ADVANCE_RATIO_NUM` | `AfKing.sol:849` | advance base 210,689 gas (5.24x buy); 2x base + 1/2/4/6 ladder | `2` | **`2` (UNCHANGED)** | CONFIRM — base ratio; the stall ladder is the escalation lever (§4) | 6x peak round-trip ≤ 0 at fixture B; one-shot (§4) |
-| `BUY_RATIO_NUM` / `BUY_RATIO_DEN` | `AfKing.sol:851-852` | buy 40,224 gas (cheapest, highest-priority leg) | `3` / `2` | **`3` / `2` (UNCHANGED)** | CONFIRM — flat 1.5x; richest ratio for the cheapest, liveness-critical leg | binding non-escalated ceiling 12.66e12 wei (§3) |
-| `OPEN_KNEE`         | `AfKing.sol:854` | open 89,287 gas; the small-batch corner closer | `5` | **`5` (UNCHANGED)** | CONFIRM — `1x * min(opened,5)/5`; a 1-box open earns 0.2x → −EV (§3) | open at knee round-trip ≤ 0; k<5 deeply −EV |
+| Constant | File:line (`63bc16ca`) | Measured input (CORRECTED) | Current | **Proposed** | Decision | Faucet floor |
+|----------|------------------------|----------------------------|---------|--------------|----------|--------------|
+| `DOWORK_BATCH` → `BUY_BATCH` + `OPEN_BATCH` | `AfKing.sol:847` (+ call sites `:876`/`:888`) | buy ~262k/item ⟹ 100×262k=26M > 16.7M; open ~89k/item ⟹ 100×89k=9M | `100` (single) | **SPLIT `BUY_BATCH = 50` / `OPEN_BATCH = 100`** | **CHANGE** — buy 50×262k≈13.1M < 16.7M (HARD); open 100×89k≈9M (target avg) | buy HARD ≤ 16.7M; open avg ~9M (all-whale-pass corner USER-accepted) |
+| `ADVANCE_RATIO_NUM` | `AfKing.sol:849` | advance base 210,689 gas (2.36x open); 2x base + 1/2/4/6 ladder | `2` | **`2` (UNCHANGED)** | CONFIRM — base ratio; the stall ladder is the escalation lever (§4) | 6x peak round-trip ≤ 0 at fixture B; one-shot (§4) |
+| `BUY_RATIO_NUM` / `BUY_RATIO_DEN` | `AfKing.sol:851-852` | buy ~261,809 gas (now the MOST expensive leg — §2.1) | `3` / `2` | **`3` / `2` (UNCHANGED — frozen ratio)** | CONFIRM-as-frozen — value out of scope; the buy is now the most UNDER-reimbursed leg, FLAGGED (§2.1) | far-from-binding ceiling 85.2e12 wei (§3) |
+| `OPEN_KNEE`         | `AfKing.sol:854` | open 89,288 gas; the small-batch corner closer | `5` | **`5` (UNCHANGED)** | CONFIRM — `1x * min(opened,5)/5`; a 1-box open earns 0.2x → −EV (§3) | open at knee round-trip ≤ 0; k<5 deeply −EV |
 | `RESOLVE_FLAT_BURNIE` | `DegenerusGame.sol:1543` | flat ~1-BURNIE; bet-stake gate dominates (§7) | `1e18` | **`1e18` (UNCHANGED)** | CONFIRM — count-independent "lose" reward; bet-stake gate makes every farm net-negative | sub-real-gas at ≥2 gwei; bet-stake gate the binding floor (§7) |
-| `BOUNTY_ETH_TARGET` | `AfKing.sol:261` (deploy-param) | binding ceiling 8,778,708,333,333 wei (advance-6x @ref) | `885_000_000` (fixture) | **SURFACED — no autonomous change** | SURFACE — recommend production `≤ 8.78e12` wei; current ~14,000x below (under-incentivizes, not a faucet) | n/a (economic choice; ceiling in §5) |
+| `BOUNTY_ETH_TARGET` | `AfKing.sol:261` (deploy-param) | faucet ceiling 8,778,708,333,333 wei (advance-6x @ref); buy-incentive floor ~170e12 (§5 tension) | `885_000_000` (fixture) | **SURFACED — no autonomous change** | SURFACE — recommend faucet ceiling `≤ 8.78e12` wei + flag the buy-incentive-vs-faucet tension (§5); current ~14,000x below | n/a (economic choice; ceiling + tension in §5) |
 
-**Disposition: the five frozen `AfKing.sol` constants + `RESOLVE_FLAT_BURNIE` are all CONFIRMED at
-their current placeholder values** — the measured marginals support `100 / 2 / 3,2 / 5` and the
-bet-stake gate supports `1e18`. The 331-05 frozen-contract diff is therefore **EMPTY of value changes
-to the gated constants** (the placeholders were chosen correctly by the 330 IMPL); 331-05's only
-gated action is to STRIKE the `GAS-331 PLACEHOLDER` comment markers (the values are now calibrated and
-final). `BOUNTY_ETH_TARGET` is surfaced for the USER as a deploy-param economic choice.
+**Disposition (CORRECTED): the four reward-shape constants (`ADVANCE_RATIO_NUM` / `BUY_RATIO` /
+`OPEN_KNEE`) + `RESOLVE_FLAT_BURNIE` keep their literal values; `DOWORK_BATCH` is SPLIT into
+`BUY_BATCH = 50` + `OPEN_BATCH = 100`** so the buy leg cannot exceed the 16.7M HARD ceiling. The
+331-05 frozen-contract diff is therefore a REAL (still gated) edit — the batch split is behavioral —
+plus the `GAS-331 PLACEHOLDER` comment strikes. `BOUNTY_ETH_TARGET` is surfaced as a deploy-param
+economic choice with the buy-incentive-vs-faucet tension flagged.
 
-### The exact 331-05 diff (for the USER-APPROVED gate — NOT applied here)
+### The exact 331-05 diff (for the USER-APPROVED gate — NOT applied here; line offsets approximate)
 
 ```diff
 --- a/contracts/AfKing.sol
 +++ b/contracts/AfKing.sol
-@@ -845,11 +845,12 @@
+@@ -845,11 +845,14 @@
 -    /// @dev GAS-331 PLACEHOLDER — fixed per-leg default batch (the prior caller-bounded
 -    ///      default). Calibrated under the USER-gated GAS phase (331), NOT locked here.
-+    /// @dev Fixed per-leg default batch. Calibrated GAS-331: worst-case per-tx at N=100
-+    ///      (buy 1.29M / open 2.86M gas) is far under the 30M mainnet block bar.
-     uint256 internal constant DOWORK_BATCH = 100;
--    /// @dev GAS-331 PLACEHOLDER — advance reward ratio (2x * mult). Calibrated at GAS (331).
+-    uint256 internal constant DOWORK_BATCH = 100;
++    /// @dev Buy-leg default batch. Calibrated GAS-331 (correction pass): a LANDED keeper buy is
++    ///      ~262k gas, so 50 buys ≈ 13.1M stays under the 16.7M HARD per-tx ceiling (100 would
++    ///      be ~26M, over the ceiling). Buys must NEVER exceed 16.7M.
++    uint256 internal constant BUY_BATCH = 50;
++    /// @dev Open-leg default batch. Calibrated GAS-331: a typical box open is ~89k gas, so 100
++    ///      opens ≈ 9M (the ~9M average target). The rare all-whale-pass corner (100×~5.4M)
++    ///      exceeds 16.7M and is USER-accepted (statistically unreachable by boon rarity).
++    uint256 internal constant OPEN_BATCH = 100;
+     /// @dev GAS-331 PLACEHOLDER — advance reward ratio (2x * mult). Calibrated at GAS (331).
 +    /// @dev Advance reward ratio (2x * mult). Calibrated GAS-331 to the advance base marginal;
 +    ///      the 1/2/4/6 stall ladder is the escalation lever, faucet-bounded (advance-only).
      uint256 internal constant ADVANCE_RATIO_NUM = 2;
 -    /// @dev GAS-331 PLACEHOLDER — buy reward ratio (flat 1.5x per tx = NUM/DEN). At GAS (331).
-+    /// @dev Buy reward ratio (flat 1.5x per tx = NUM/DEN). Calibrated GAS-331 — the richest
-+    ///      ratio for the cheapest-gas, highest-priority liveness leg.
++    /// @dev Buy reward ratio (flat 1.5x per tx = NUM/DEN). Frozen 329-SPEC D-07 ratio; GAS-331
++    ///      confirms it stays round-trip ≤ 0 at the fixture B (buy is the most expensive leg).
      uint256 internal constant BUY_RATIO_NUM = 3;
      uint256 internal constant BUY_RATIO_DEN = 2;
 -    /// @dev GAS-331 PLACEHOLDER — open reward pro-rate knee (1x at/above, pro-rated below).
 +    /// @dev Open reward pro-rate knee (1x at/above, pro-rated below). Calibrated GAS-331 —
 +    ///      a 1-box mid-day open earns 0.2x, below a one-box tx's gas (small-batch −EV).
      uint256 internal constant OPEN_KNEE = 5;
+
+@@ -876 (doWork buy leg) @@
+-            uint256 bought = _autoBuy(DOWORK_BATCH);
++            uint256 bought = _autoBuy(BUY_BATCH);
+@@ -888 (doWork open leg) @@
+-            uint256 opened = IGame(ContractAddresses.GAME).autoOpen(DOWORK_BATCH);
++            uint256 opened = IGame(ContractAddresses.GAME).autoOpen(OPEN_BATCH);
 ```
 
 ```diff
@@ -355,38 +447,59 @@ final). `BOUNTY_ETH_TARGET` is surfaced for the USER as a deploy-param economic 
      uint256 private constant RESOLVE_FLAT_BURNIE = 1e18;
 ```
 
-**No `DeployProtocol.sol` change is proposed** (`BOUNTY_ETH_TARGET` is surfaced for the USER as a
-deploy-param economic choice, not autonomously tuned — §5). The comment-only edits keep the values
-byte-identical, so the 331-05 diff carries ZERO behavioral change to the gated constants — it only
-strikes the now-resolved `GAS-331 PLACEHOLDER` markers. **The values themselves are CONFIRMED and need
-no change.**
+**Additional 331-05 docstring fix (correction #6 — STALE `batchPurchase` rngLock claim):** the
+`batchPurchase` docstring at `DegenerusGame.sol:1739` reads "rngLocked / game-over are pre-checked
+ONCE at entry for a clean whole-batch abort." That is STALE: the live `batchPurchase` (`:1757-1791`)
+has only `msg.sender != AF_KING` (`:1762`) and `gameOver` (`:1763`) entry guards — there is NO
+rngLock entry-check (RD-2: keeper BUYS are freeze-safe by construction; a lootbox queues at the
+current index pre-entropy, and the orphan hazard is defended on the OPEN side via the autoOpen
+word-gate). The docstring should be corrected to drop the "rngLocked … pre-checked" claim. This is a
+COMMENT-ONLY contracts edit that folds into the gated 331-05.
 
-> **331-05 gate note:** because the five frozen constants + `RESOLVE_FLAT_BURNIE` keep their exact
-> literal values, the only frozen-contract mutation is the comment update. If the USER prefers to
-> leave the `GAS-331 PLACEHOLDER` markers in place (treating this record as the calibration
-> attestation), 331-05 may be a NO-OP on `contracts/*.sol` entirely — the calibration is fully
-> recorded here either way. Test mirrors that reference these constants
-> (`AfKingSubscription.t.sol`, `SweepPerPlayerWorstCaseGas.t.sol`, `CrankLeversAndPacking.t.sol`,
-> `CrankFaucetResistance.t.sol`) stay GREEN because no literal value changes (no mirror sync needed,
-> unlike the 319 OUTCOME-B value edits).
+```diff
+--- a/contracts/DegenerusGame.sol
++++ b/contracts/DegenerusGame.sol
+@@ ~1739 (batchPurchase docstring) @@
+-    ///      rngLocked / game-over are pre-checked ONCE at entry for a clean whole-batch abort.
++    ///      game-over is pre-checked ONCE at entry for a clean whole-batch abort. There is NO
++    ///      rngLock entry-check: keeper buys are freeze-safe by construction (RD-2) — a lootbox
++    ///      queues at the current index pre-entropy; the orphan hazard is defended on the OPEN
++    ///      side via the autoOpen word-gate, not by blocking the buy.
+```
+
+**No `DeployProtocol.sol` change is proposed** (`BOUNTY_ETH_TARGET` is surfaced for the USER as a
+deploy-param economic choice, not autonomously tuned — §5). The 331-05 diff now carries a REAL
+behavioral change (the `DOWORK_BATCH` → `BUY_BATCH`/`OPEN_BATCH` split) plus the comment strikes — it
+is NO LONGER a comment-only / NO-OP. The reward-shape ratio values + `RESOLVE_FLAT_BURNIE` are
+unchanged.
+
+> **331-05 gate note (CORRECTED):** the 331-05 diff is NO LONGER comment-only — the
+> `DOWORK_BATCH` → `BUY_BATCH=50`/`OPEN_BATCH=100` split is a BEHAVIORAL change (buy batches shrink
+> 100→50). Test mirrors that reference `DOWORK_BATCH` MUST be synced when 331-05 lands: grep for
+> `DOWORK_BATCH` in `test/` and re-point to the split constants (e.g. `CrankLeversAndPacking.t.sol`,
+> any harness asserting the batch literal). The reward-shape ratio values + `RESOLVE_FLAT_BURNIE` are
+> unchanged, so their mirrors stay green. The `batchPurchase` rngLock-docstring fix (correction #6) is
+> comment-only.
 
 ---
 
 ## 9. Summary for the 331-05 gate
 
-| Item | Decision |
+| Item | Decision (CORRECTED) |
 |------|----------|
-| `DOWORK_BATCH` (`AfKing.sol:847`) | **CONFIRM `100`** — worst-case per-tx at N=100 far under 30M |
+| `DOWORK_BATCH` (`AfKing.sol:847`) | **SPLIT → `BUY_BATCH = 50` / `OPEN_BATCH = 100`** — buy at the corrected ~262k/item would be ~26M at 100 (> the 16.7M HARD ceiling); 50 ≈ 13.1M. Open at ~89k/item ≈ 9M at 100 (the avg target). Behavioral change behind the 331-05 gate |
 | `ADVANCE_RATIO_NUM` (`AfKing.sol:849`) | **CONFIRM `2`** — base ratio; 1/2/4/6 ladder is the escalation lever (one-shot, advance-only) |
-| `BUY_RATIO_NUM` / `BUY_RATIO_DEN` (`AfKing.sol:851-852`) | **CONFIRM `3` / `2`** — flat 1.5x; binding non-escalated ceiling 12.66e12 wei |
+| `BUY_RATIO_NUM` / `BUY_RATIO_DEN` (`AfKing.sol:851-852`) | **CONFIRM `3` / `2` (frozen ratio)** — flat 1.5x; buy is now the MOST expensive leg (the most UNDER-reimbursed, §2.1) — value is out of scope, FLAGGED; far-from-binding ceiling 85.2e12 wei |
 | `OPEN_KNEE` (`AfKing.sol:854`) | **CONFIRM `5`** — 1-box open = 0.2x, small-batch −EV |
-| `RESOLVE_FLAT_BURNIE` (`DegenerusGame.sol:1543`) | **CONFIRM `1e18`** — bet-stake gate dominates; sub-real-gas at ≥2 gwei |
-| `BOUNTY_ETH_TARGET` deploy-param | **SURFACED — no autonomous change**; recommended production ceiling `≤ 8,778,708,333,333 wei` (advance-6x @0.5gwei ref); current fixture `885,000,000` is ~14,000x below (under-incentivizes, not a faucet) |
+| `RESOLVE_FLAT_BURNIE` (`DegenerusGame.sol:1543`) | **CONFIRM `1e18`** — bet-stake gate dominates; sub-real-gas at ≥2 gwei (unchanged by the buy correction) |
+| `BOUNTY_ETH_TARGET` deploy-param | **SURFACED — no autonomous change**; recommended FAUCET ceiling `≤ 8,778,708,333,333 wei` (advance-6x @0.5gwei ref) + FLAG the buy-incentive (~170e12) vs faucet (~8.78e12) tension (§5); current fixture `885,000,000` ~14,000x below (under-incentivizes, not a faucet) |
+| Reward-ratio re-analysis (correction) | **buy is the most expensive leg, inverting the original "buy cheapest" rationale; ratios STILL faucet-safe at the fixture B; advance-6x STILL the binding ceiling; buy under-reimbursement FLAGGED** (§2/§2.1/§3) |
+| `batchPurchase` rngLock docstring (`DegenerusGame.sol:1739`) | **STALE — fix at 331-05 (comment-only):** claims an rngLock entry pre-check; the live `batchPurchase` has NONE (RD-2, freeze-safe buys). Test `testBatchPurchaseRngLockedRejectsWholeBatchAtEntry` (`CrankNonBrick.t.sol:360`) asserts the unwanted rngLock-abort and FAILS against the live contract — FLAGGED for correction (not fixed here; it asserts behavior the contract correctly does NOT have) |
 | CR-01 (per-item MARGINAL, never a single-item total) | **HELD** — every value derived from the N≥32 converged marginal; round-trip ≤ 0 on every leg at the 0.5 gwei reference |
 | Level-invariance (GAS-04) | **PROVEN arithmetically** (mp cancels; ETH-equiv = ratio × `BOUNTY_ETH_TARGET` at every level); empirical assert at TST 332 |
 | Stall-ceiling (GAS-04) | **1/2/4/6 ADVANCE-ONLY confirmed; NO EXTENSION** — 6x is a one-shot, real-gas safe; any future tier faucet-pool-capped and never lowers existing thresholds |
 | Exploitability lens | **REAL prevailing gas (5–50+ gwei) + flip-credit illiquidity**, NOT the 0.5 gwei reference (`feedback_bounty_exploit_uses_real_gas_not_peg_ref`) |
-| Contract approval | **REQUIRED at 331-05 — nothing pre-approved.** This plan touches NO `contracts/*.sol`; the diff above is comment-only (values byte-identical) or a clean NO-OP |
+| Contract approval | **REQUIRED at 331-05 — nothing pre-approved.** This correction pass touches NO `contracts/*.sol`; the 331-05 diff is now a REAL (gated) batch-split + comment strikes |
 
 ---
 
@@ -408,3 +521,50 @@ The GAS-04 deliverables are recorded in this document:
   the finite flip-credit faucet pool and may only ADD tiers above 2h.
 - **Exploitability lens:** judged against REAL prevailing gas (5–50+ gwei) + flip-credit illiquidity,
   NOT the 0.5 gwei reference (`feedback_bounty_exploit_uses_real_gas_not_peg_ref`).
+
+---
+
+## 11. CORRECTION-PASS disposition summary (2026-05-27)
+
+The six corrections from the correction-pass directive, as resolved in this record + the harness
+(commit `322fd972`):
+
+1. **BUY harness fixed.** The buy non-vacuity oracle is now `lootboxEthBase[index][player] > 0` (the
+   buy LANDED), not the `lastAutoBoughtDay` stamp (which survives a try/catch-reverted slice). The
+   keeper buy is forced-lootbox (ticketQuantity=0) so a slice < `LOOTBOX_MIN (0.01 ether)` reverted
+   inside `batchPurchase`'s per-player try/catch while the day-stamp falsely passed → the old `40,224`
+   was the revert-catch path. **Corrected LANDING buy marginal ~261,809** (clean N32 ~255,614); buys
+   verified to land with DirectEth funding (msgValue == slice == mp == 0.01 ETH == LOOTBOX_MIN).
+
+2. **OPEN whale-pass branch found + measured.** The whale-pass BOON (type 28) reachable from a box
+   open runs `_activateWhalePass` (100-iter ticket-queue loop) — **~5,396,350 gas/box**, ~60x the
+   typical ~89k. The >5 ETH `LOOTBOX_CLAIM_THRESHOLD` "defer to claim" branch is the JACKPOT/DECIMATOR
+   payout path (cheap, NOT the per-box open path). The whale-pass box is the true open worst case
+   (rare). Typical box marginal unchanged (~89,288).
+
+3. **30M → 16.7M.** All ceiling references corrected to the 16.7M effective gas-target; the DEFAULT
+   box buy/open leg targets a ~9M average.
+
+4. **Split caps sized.** `BUY_BATCH = 50` (HARD: 50×262k ≈ 13.1M < 16.7M; buys NEVER exceed 16.7M) /
+   `OPEN_BATCH = 100` (typical 100×89k ≈ 9M avg). The all-whale-pass open corner (100×~5.4M) exceeds
+   16.7M and is USER-ACCEPTED (statistically unreachable by whale-pass-boon rarity).
+
+5. **Reward-ratio re-analysis.** Buy (~262k) is now the MOST expensive per-item leg, inverting the
+   "buy cheapest → richest 1.5x" rationale. (a) The frozen ratios (1.5/1.0/2.0, knee=5) STILL avoid a
+   faucet at the current `BOUNTY_ETH_TARGET` — every leg round-trip ≤ 0 at 0.5 gwei + at all market
+   prices (§3). (b) Advance-6x is STILL the binding faucet ceiling (8.78e12 wei); the buy faucet
+   ceiling ROSE to ~85e12 (less binding, as predicted). The buy UNDER-reimbursement keeper-incentive
+   implication is FLAGGED (§2.1, §5) — the buy leg is the binding INCENTIVE consideration if the USER
+   tunes B upward, pulling against the faucet ceiling. Ratio values unchanged (frozen, out of scope).
+
+6. **rngLock disposition (USER-resolved).** BUYING lootboxes during rngLock is FINE (commit-before-
+   reveal; `batchPurchase` intentionally has NO rngLock guard — only `AF_KING` + `gameOver` at
+   `:1762-1763`). OPENING is blocked (autoOpen `:1671` no-ops, openLootBox `:2162` reverts, the
+   `:1683` word-gate). Two stale artifacts FLAGGED for 331-05:
+   - the `batchPurchase` docstring `:1739` falsely claims an rngLock entry pre-check (comment-only fix,
+     §8 diff);
+   - `testBatchPurchaseRngLockedRejectsWholeBatchAtEntry` (`CrankNonBrick.t.sol:360`) asserts the
+     unwanted rngLock whole-batch abort and FAILS against the live contract (it expects `RngLocked()`;
+     the live `batchPurchase` correctly does not revert). This is one of the known baseline failures —
+     it asserts behavior the contract correctly does NOT have. NOT fixed in this pass (test correction
+     belongs with the 331-05 docstring fix or a dedicated test pass).

@@ -151,7 +151,53 @@ Out of scope (do NOT touch):
 
 </scope_fence>
 
+<corrections>
+## CORRECTION PASS (2026-05-27) — load-bearing fixes to the committed 331-01/331-04 conclusions
+
+A correction pass re-measured the BUY + OPEN legs and re-derived the calibration. The committed
+`331-GAS-DERIVATION.md` + `331-CALIBRATION.md` carry inline correction banners; this CONTEXT note
+records the corrections for downstream agents (TST 332 / the gated 331-05). Harness commit `322fd972`.
+
+1. **BUY marginal was measured on the REVERT-CATCH path (~40,224 WRONG → ~261,809 / clean N32 ~255,614
+   CORRECT).** The old harness asserted "the buy landed" via AfKing's `lastAutoBoughtDay` day-stamp
+   (`AfKing.sol:744`), which is set BEFORE the batched `IGame.batchPurchase` fires. The keeper buy is
+   forced-lootbox (`_purchaseFor(player, 0, slice, "DGNRS", payKind)`, ticketQuantity=0,
+   `DegenerusGame.sol:1806`), so a slice < `LOOTBOX_MIN (0.01 ether)` (`DegenerusGameMintModule.sol:1011`)
+   REVERTED inside `batchPurchase`'s per-player try/catch (`:1773-1780`) while the day-stamp falsely
+   passed. Corrected harness verifies the buy LANDED via `lootboxEthBase[index][player] > 0` and funds
+   DirectEth slice == mp == LOOTBOX_MIN. **BUY is the MOST expensive per-item leg (~262k), not the
+   cheapest** — inverting the 331-04 "buy cheapest → richest 1.5x" rationale.
+
+2. **OPEN worst case omitted the whale-pass branch (the GAP).** A box-open whose boon roll selects the
+   whale-pass boon (type 28, `BOON_WHALE_PASS`) runs `_activateWhalePass` (`DegenerusGameLootboxModule.sol:1240-1261`),
+   a 100-iter `_queueTickets` loop — **~5,396,350 gas/box** (~60x the typical ~89k). RARE (boon weight
+   8; needs a sizeable box / the >5 ETH `LOOTBOX_CLAIM_THRESHOLD` raises the budget). The >5 ETH "defer
+   to claim" branches (`DegenerusGameJackpotModule.sol:1966/2029`, `DegenerusGameDecimatorModule.sol:583`)
+   are the JACKPOT/DECIMATOR payout paths, NOT the per-box open path. Typical box marginal unchanged.
+
+3. **Ceiling is 16.7M, not 30M.** Target ~9M average for the default box buy/open leg.
+
+4. **`DOWORK_BATCH=100` SPLIT → `BUY_BATCH=50` + `OPEN_BATCH=100`** (331-GAS-DERIVATION §5.1). Buy at
+   100 = ~26M > the 16.7M HARD ceiling; 50 ≈ 13.1M. Open at 100 ≈ 9M (target). The all-whale-pass
+   corner (100×5.4M) exceeds 16.7M and is USER-ACCEPTED (boon rarity). The 331-05 diff is NO LONGER
+   comment-only — the split is behavioral (gated).
+
+5. **Reward-ratio re-analysis:** ratios STILL faucet-safe at the fixture B; advance-6x STILL the
+   binding faucet ceiling (8.78e12 wei); the buy faucet ceiling ROSE (less binding). Buy
+   under-reimbursement keeper-incentive implication FLAGGED (the buy leg is the binding INCENTIVE
+   consideration if B is tuned upward — pulls against the faucet ceiling). Ratio values frozen (out of scope).
+
+6. **rngLock disposition (USER-resolved):** BUYING lootboxes during rngLock is FINE (commit-before-
+   reveal; `batchPurchase` has NO rngLock guard by design — RD-2). OPENING is blocked (autoOpen `:1671`
+   no-op, openLootBox `:2162` revert, `:1683` word-gate). Two stale artifacts FLAGGED for 331-05: the
+   `batchPurchase` docstring `:1739` falsely claims an rngLock entry-check (comment-only fix); and
+   `testBatchPurchaseRngLockedRejectsWholeBatchAtEntry` (`CrankNonBrick.t.sol:360`) asserts the
+   unwanted abort + FAILS against the live contract (a known baseline failure — asserts behavior the
+   contract correctly does NOT have; NOT fixed in this pass).
+</corrections>
+
 ---
 
 *Phase: 331-gas-worst-case-marginal-derivation-break-even-0-5gwei-peg-ca*
 *Context synthesized: 2026-05-27 (plan-directly path — 329 SPEC complete, design locked; USER included both batch-purchase gas seeds)*
+*Correction pass appended: 2026-05-27 (BUY revert-catch fix + whale-pass open branch + 16.7M ceiling + split caps + reward-ratio re-analysis + rngLock disposition)*

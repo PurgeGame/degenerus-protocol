@@ -6,6 +6,36 @@
 **Method:** theory-FIRST (this document), then measure (`test/gas/RouterWorstCaseGas.t.sol`) per `feedback_gas_worst_case`.
 **Analog:** v46 Phase 319 `319-GAS-DERIVATION.md` — this is the same derive-then-measure pass repeated one phase up for the v49 router.
 
+> ### ⚠️ CORRECTION PASS (2026-05-27) — superseding the original §1/§2/§5 BUY + OPEN conclusions
+> The originally-committed 331-01 derivation had TWO load-bearing errors, fixed in this pass
+> (test harness commit `322fd972`):
+> 1. **BUY marginal was measured on the REVERT-CATCH path, not a real buy (~40,224 wrong → ~256,000 correct).**
+>    The buy harness asserted "the buy landed" via AfKing's `lastAutoBoughtDay` day-stamp. That stamp
+>    is set in `_autoBuy`'s accounting loop (`AfKing.sol:744`) BEFORE the batched `IGame.batchPurchase`
+>    fires, and `batchPurchase` wraps each per-player slice in
+>    `try this._batchPurchaseUnit{value: slice}() catch {}` (`DegenerusGame.sol:1773-1780`). The keeper
+>    buy is lootbox-only (`_purchaseFor(player, 0, slice, "DGNRS", payKind)`, ticketQuantity=0,
+>    `DegenerusGame.sol:1806`), so the mint module's `lootBoxAmount < LOOTBOX_MIN (0.01 ether)` guard
+>    (`DegenerusGameMintModule.sol:1011`) REVERTED every slice below 0.01 ether inside the try/catch —
+>    a reverted (skipped+refunded) buy that LEFT THE DAY-STAMP SET. The original `40,224` was the cost
+>    of that revert-catch path. The corrected harness verifies the buy actually LANDED via
+>    `lootboxEthBase[index][player] > 0` (the same correct first-deposit signal the OPEN test uses) and
+>    funds DirectEth with a slice == mp == 0.01 ether == LOOTBOX_MIN. **A correctly-verified DirectEth
+>    first-deposit buy marginal is ~261,809 (whole-set N=32) / ~255,614 (clean N=32); whole 32-leg
+>    ~8.38M.** BUY is therefore the MOST EXPENSIVE per-item leg, not the cheapest.
+> 2. **OPEN worst case omitted the whale-pass branch (the GAP).** §2 originally asserted the per-box
+>    cost is FLAT (~89,287) with "no heavier per-box branch." WRONG: a box-open whose probabilistic
+>    boon roll selects the whale-pass boon (type 28, `BOON_WHALE_PASS`) runs `_activateWhalePass`
+>    (`DegenerusGameLootboxModule.sol:1240-1261`), a **100-iteration `_queueTickets` loop** — measured
+>    at **~5,396,350 gas for a single box**, ~60x the typical ~89k marginal. This is the true open
+>    per-box worst case; it is RARE (boon weight 8; needs a sizeable box for boon budget; the
+>    `LOOTBOX_CLAIM_THRESHOLD = 5 ether` corner raises it).
+> 3. **The block-fit ceiling is 16.7M, not 30M.** Every "30M" reference below is corrected to the
+>    16.7M effective gas-target ceiling; the DEFAULT box buy/open leg targets a ~9M average.
+> 4. **The single `DOWORK_BATCH=100` should be SPLIT into `BUY_BATCH` + `OPEN_BATCH`** (sized in §5.1).
+>
+> The advance (`210,689`) and typical-open (`89,287`) marginals are UNCHANGED and remain correct.
+
 ---
 
 ## 0. Scope, peg target, and the CR-01 rule (load-bearing)
@@ -67,32 +97,44 @@ The heaviest per-subscriber path that ends in a real buy (the only path that ear
 ### 1(c) The cap and WHY it is the maximum
 
 - Per-subscriber work is bounded: there is no inner unbounded loop over a subscriber. The `_autoBuy`
-  loop runs at most `maxCount = DOWORK_BATCH = 100` subscribers per call (`:562`), and each subscriber
-  contributes one slice. So the worst per-subscriber marginal is the heaviest single iteration, NOT a
-  loop-amplified quantity.
+  loop runs at most `maxCount` subscribers per call (`:562`; today `DOWORK_BATCH = 100`, recommended
+  split to `BUY_BATCH = 50` in §5.1 so the whole buy leg stays under the 16.7M ceiling), and each
+  subscriber contributes one slice. So the worst per-subscriber marginal is the heaviest single
+  iteration, NOT a loop-amplified quantity.
 - The reinvest+drain-first shape is the structural maximum because it is the ONLY shape that runs the
   extra `keeperSnapshot` read AND the richest `Combined` payment mode. A renewal-not-due / cheap-skip /
   tombstoned / lootbox-floor-skipped subscriber costs strictly less (each is an early `continue`).
 
-### 1(d) EMPIRICAL CORRECTION carried from 319 (Rule 1 — measured mechanism vs paper claim)
+### 1(d) THE LANDING-vs-REVERT distinction (the CORRECTION-PASS lesson — supersedes the prior 1(d))
 
-`SweepPerPlayerWorstCaseGas.t.sol` (319) empirically FALSIFIED the paper claim that the reinvest path
-is "strictly heavier": the keeper's lootbox-mode buy is gas-FLAT in the slice (materialization is at
-crank-OPEN time, a separate leg), and the SUB-04 `claimableWinningsOf`/`keeperSnapshot` read pre-WARMS
-the `claimableWinnings[player]` slot the buy re-reads, making the reinvest sub marginally CHEAPER. The
-faithful claim is therefore that the per-player buy marginal is **shape-insensitive** (reinvest within
-~5% of typical). The buy harness here re-confirms this and uses the (over-estimating, conservative)
-whole-set average divided by the test-sub count, so the calibration floor is never under-stated.
+The keeper buy is **forced lootbox** (`_batchPurchaseUnit -> _purchaseFor(player, 0, msg.value,
+"DGNRS", payKind)`, ticketQuantity=0, `DegenerusGame.sol:1806`). The mint module floors a lootbox buy
+at `LOOTBOX_MIN = 0.01 ether` (`DegenerusGameMintModule.sol:1011`: `if (lootBoxAmount != 0 &&
+lootBoxAmount < LOOTBOX_MIN) revert E();`). A slice below 0.01 ether REVERTS — and because
+`batchPurchase` isolates each player in `try this._batchPurchaseUnit{value: slice}() catch {}`
+(`DegenerusGame.sol:1773-1780`), a reverting slice is silently skipped+refunded while AfKing's
+`lastAutoBoughtDay` day-stamp (set at `:744`, BEFORE the batch fires) stays set. **A "landing" buy is
+therefore one whose slice is >= 0.01 ether AND whose `lootboxEthBase[index][player]` first-deposit
+signal becomes non-zero.** The original harness's funding shape (drain-first reinvest, claimable mp/2)
+produced a `Combined`-mode slice of ~mp/2 ≈ 0.005 ETH < LOOTBOX_MIN → every buy reverted in the
+try/catch, and the `40,224` figure was the revert-catch cost, NOT a real buy.
 
-### 1(e) Worst-case-first prediction
+The corrected worst-case landing shape is a DirectEth, ticket-mode, qty-1 sub: cost = mp = 0.01 ether
+== LOOTBOX_MIN (the guard is strict `<`, so exactly 0.01 lands), msgValue == slice == cost, first
+deposit fires `enqueueBoxForAutoOpen`. The 319 shape-insensitivity finding still holds (reinvest
+pre-warms the claimable slot, within ~5% of the DirectEth landing path), so DirectEth is the clean,
+conservative LANDING marginal.
 
-The per-successful-player buy marginal lands in the ticket/lootbox mint-path neighborhood — a single
-mint slice through `_purchaseFor` with its affiliate-write chain. Predicted O(150k-300k) gas per player
-(an order above a bare resolve spin because it crosses the full mint->affiliate->prize-pool path), and
-the WHOLE `_autoBuy(N)` of N healthy subs is far below the 30M mainnet block bar at any realizable N
-the keeper would batch.
+### 1(e) Worst-case-first prediction — CORRECTED
 
-**FILLED BY Task 2:** [see §5 measured table]
+A LANDED keeper buy crosses the full mint -> affiliate (KEEP-04 DGNRS two-tier) -> lootbox-enqueue ->
+prize-pool -> EV-cap -> quest write chain, plus the first-deposit `lootboxEthBase`/`lootboxPurchasePacked`
+SSTOREs. Predicted O(240k-260k) gas per landed player — materially heavier than the typical box OPEN
+marginal (~89k) because the buy WRITES the box that open later resolves. **BUY is the most expensive
+per-item leg.** The WHOLE `_autoBuy(N)` of N landing subs at the recommended `BUY_BATCH` is the binding
+batch-size constraint against the 16.7M ceiling (§5.1).
+
+**FILLED BY CORRECTION PASS:** [see §5 measured table — buy ~261,809 whole-set / ~255,614 clean N=32]
 
 ---
 
@@ -107,20 +149,37 @@ per-tx fixed overhead (the `boxCursorIndex`/`boxCursor` SLOAD + conditional SSTO
 `lootboxRngWordByIndex[index]` gate SLOAD `:1683`, the final `boxCursor` SSTORE `:1703`) is paid ONCE
 per call regardless of N. Plus the once-per-tx `creditFlip` in `doWork` itself (the dispatch leg).
 
-### 2(b) The max-laden per-box branch
+### 2(b) The max-laden per-box branch — CORRECTED (the whale-pass gap)
 
-The per-box reward is FLAT (one box per queue entry), so there is no multi-spin amplification inside a
-single box. The per-box maximum is a single READY, un-opened box that actually MATERIALIZES (the
-first-deposit signal `lootboxEthBase[index][player] != 0` present so the `:1695` cheap-skip does NOT
-fire, the index RNG-ready so the `:1683` whole-index early-return does NOT fire). A box the
-`RngNotReady` (`:1683`) or already-opened (`:1695`) guards skip costs only a cheap SLOAD, strictly less
-than a real open.
+The *reward* is one box per queue entry, but the *gas* is NOT flat across boxes. Every box-open runs
+`_resolveLootboxCommon` → `_rollLootboxBoons` (`DegenerusGameLootboxModule.sol:1097-1103`), a
+probabilistic boon roll whose chance scales with the box's `boonBudget` (∝ box amount, capped). One of
+the rollable boons is the **whale pass (type 28, `BOON_WHALE_PASS`)**, which in `_applyBoon`
+(`:1635-1641`) calls `_activateWhalePass` (`:1240-1261`) — a **100-iteration `_queueTickets` loop**
+(40 tickets/lvl for the bonus band, 2 tickets/lvl thereafter). That loop is the heavy per-box branch
+the original derivation wrongly excluded. There are TWO open-gas regimes:
+
+1. **TYPICAL box** (no whale-pass boon, the overwhelmingly common case): the single-roll/double-roll
+   `_resolveLootboxCommon` body — the ~89k N≥32 marginal (matches the prior measurement, unchanged).
+2. **WHALE-PASS box** (the rare worst case): the 100-iter `_activateWhalePass` loop dominates —
+   **~5,396,350 gas for a single box** (~60x the typical marginal). A box win above the
+   `LOOTBOX_CLAIM_THRESHOLD = 5 ether` (`DegenerusGameStorage.sol:169`) raises the boon budget and
+   thus the whale-pass roll chance; a 6-ETH box reliably reaches it under a forced seed.
+
+> NOTE on the >5 ETH deferred path: the >`LOOTBOX_CLAIM_THRESHOLD` "defer to claim" branches at
+> `DegenerusGameJackpotModule.sol:1966/2029` and `DegenerusGameDecimatorModule.sol:583` are the
+> JACKPOT and DECIMATOR payout paths — they queue a deferred whale-pass claim and are CHEAP. They are
+> NOT the per-box `autoOpen` path. The heavy branch reachable from a keeper box-open is the INLINE
+> whale-pass BOON (type 28 → `_activateWhalePass` 100-iter loop), which materializes at open time.
 
 ### 2(c) The cap and WHY it is the maximum
 
-- `autoOpen` opens at most `maxCount = DOWORK_BATCH = 100` boxes per call (caller-bounded, anti-DoS).
-- A single materialization is the per-box maximum by construction: there is no heavier per-box branch
-  (the box reward is flat; the lootbox-conversion body is the same regardless of which box).
+- `autoOpen` opens at most `maxCount = OPEN_BATCH` boxes per call (caller-bounded, anti-DoS).
+- The whale-pass box (§2(b).2) is the per-box maximum; the typical box (§2(b).1) is the per-box common
+  case. The OPEN leg is sized so the TYPICAL leg averages ~9M (§5.1); the all-whale-pass worst case
+  (`OPEN_BATCH × ~5.4M`) exceeds 16.7M and is **ACCEPTED by the USER** as statistically unreachable
+  (whale-pass-boon rarity — a keeper would need every box in the batch to independently roll the
+  weight-8 boon).
 - The `OPEN_KNEE = 5` pro-rate (`AfKing.sol:890-891`) is the STRUCTURAL faucet-closer for the small-batch
   corner: a tiny mid-day open of `k < 5` boxes earns `unit * k / 5`, so a one-box self-crank earns
   `unit/5` — below a one-box tx's real gas (GAS-05 round-trip floor, proven by `CrankFaucetResistance`).
@@ -131,12 +190,13 @@ Measure the per-box MARGINAL at N>=32 (`CrankOpenBoxWorstCaseGas.t.sol` Test D i
 single-box total. 319 measured ~71,203 per-box marginal vs 137,944 single-box total — pegging to the
 total was the CR-01 faucet defect. One open-box ~= one resolve spin neighborhood (~66-72k).
 
-### 2(e) Worst-case-first prediction
+### 2(e) Worst-case-first prediction — CORRECTED
 
-The per-box marginal lands ~70k (the resolve-spin neighborhood), materially below the single-box total.
-The WHOLE `autoOpen(N)` of N ready boxes is far below 30M for any N the keeper batches.
+The TYPICAL per-box marginal lands ~89k (the resolve-spin neighborhood). The WHALE-PASS per-box cost is
+~5.4M (the 100-iter loop). The OPEN leg is sized so the typical `autoOpen(OPEN_BATCH)` averages ~9M;
+the all-whale-pass corner exceeds 16.7M and is USER-accepted (§2(c)).
 
-**FILLED BY Task 2:** [see §5 measured table]
+**FILLED BY CORRECTION PASS:** [see §5 measured table — typical ~89,288, whale-pass ~5,396,350]
 
 ---
 
@@ -171,7 +231,7 @@ PEG the relevant marginal is the **base advance cost at `mult = 1`** — the `mu
 multiplier ON TOP of the base, not part of the base gas, so the peg sizes the base and the ladder rides
 on it (GAS-04: the stall ladder stays advance-only, faucet-bounded). The harness measures the largest
 single advance step it can construct on the fresh fixture and asserts the day actually advanced
-(non-vacuity) and that the step fits 30M.
+(non-vacuity) and that the step fits the 16.7M ceiling.
 
 ### 3(d) The `mult == 0` gameover sentinel
 
@@ -181,8 +241,8 @@ harness need not measure this (it pays zero); it is documented as the no-bounty 
 
 ### 3(e) Worst-case-first prediction
 
-A single advance step (the heaviest realizable on the fresh fixture) is bounded well under 30M; the
-305-winner daily-jackpot single-call ceiling was proven ~7.5M < 30M at v46 Phase 319 (JGAS-04), and the
+A single advance step (the heaviest realizable on the fresh fixture) is bounded well under 16.7M; the
+305-winner daily-jackpot single-call ceiling was proven ~7.5M at v46 Phase 319 (JGAS-04), and the
 advance leg here is the same machinery minus the removed split. Predicted single-step advance marginal
 O(100k-1M) depending on how much queue drain the constructed step performs; the calibration uses the
 measured base step.
@@ -231,44 +291,80 @@ views). It is the once-per-tx floor the keeper pays before any leg work; the bre
 (the `OPEN_KNEE` closes that for opens; the flat 1.5x buy / 2x advance ratios are sized so a single-tx
 keeper is break-even, not faucet-positive).
 
-**FILLED BY Task 2:** [see §5 measured table]
+**FILLED BY CORRECTION PASS:** dispatch overhead rises to ~568,870 with a REAL landing buy (vs the
+old 228,084 which folded in a revert-catch buy). [see §5 measured table]
 
 ---
 
-## 5. MEASURED MARGINALS (FILLED BY Task 2 — `forge test --match-path test/gas/RouterWorstCaseGas.t.sol --isolate`, 6/6 PASS)
+## 5. MEASURED MARGINALS (CORRECTION PASS — `forge test --match-path test/gas/RouterWorstCaseGas.t.sol --isolate`, 7/7 PASS)
 
-Measured against the live `63bc16ca` tree this session (foundry nightly, `--isolate`). Every number is
-emitted as a `log_named_uint` the 331-04 calibration reads.
+Measured against the live `63bc16ca` tree (foundry 1.6.0-nightly, `--isolate`; harness commit
+`322fd972`). Every number is emitted as a `log_named_uint` the 331-04 calibration reads. **The buy +
+whale-pass-open rows are the CORRECTED values; the old buy ~40,224 (revert-catch) and the
+"no heavier per-box branch" claim are RETRACTED (see the §0 correction banner).**
 
-| Calibration input | Measured gas | N | < 30M mainnet | Non-vacuity asserted |
-|-------------------|--------------|---|---------------|----------------------|
-| `router_dowork_buy_per_player_marginal_gas`  | **40,224**  | 32 | yes (whole leg 1,287,173 << 30M) | each sub's `lastAutoBoughtDay == today` |
-| `router_dowork_open_per_box_marginal_gas`    | **89,287**  | 32 | yes (whole leg 2,857,213 << 30M) | each box's first-deposit signal zeroed |
-| `router_dowork_advance_marginal_gas`         | **210,689** | 1 (single advance step, no loop-N) | yes (211k << 30M) | game entered rngLock / day moved |
-| `router_dowork_dispatch_overhead_gas`        | **228,084** | 1 (doWork + minimal buy leg + creditFlip) | yes (228k << 30M) | doWork ran the buy leg (sub bought) |
+| Calibration input | Measured gas | N | < 16.7M ceiling | Non-vacuity asserted (CORRECTED) |
+|-------------------|--------------|---|-----------------|----------------------------------|
+| `router_dowork_buy_per_player_marginal_gas`  | **261,809** (clean N32 255,614) | 32 | yes (whole leg 8,377,899 < 16.7M) | each sub's buy LANDED (`lootboxEthBase[index][player] > 0`) |
+| `router_dowork_open_per_box_marginal_gas` (TYPICAL) | **89,288** | 32 | yes (whole leg 2,857,216 < 16.7M) | each box's first-deposit signal zeroed |
+| `router_dowork_open_whale_pass_box_marginal_gas` (RARE WORST CASE) | **5,396,350** | 1 | yes for ONE box; `OPEN_BATCH × 5.4M` exceeds 16.7M (USER-ACCEPTED, §2(c)) | the type-28 `LootBoxWhalePassJackpot` event fired |
+| `router_dowork_advance_marginal_gas`         | **210,689** | 1 (single advance step, no loop-N) | yes (211k < 16.7M) | game entered rngLock / day moved |
+| `router_dowork_dispatch_overhead_gas`        | **568,870** | 1 (doWork + minimal LANDING buy + creditFlip) | yes (569k < 16.7M) | doWork ran the buy leg and the buy LANDED |
 
-> **Dispatch-overhead note (conservative ceiling):** `router_dowork_dispatch_overhead_gas = 228,084`
-> is the cost of a `doWork()` whose buy leg, on the fresh day, re-walks the cursor from 0 over the 2
-> standing deploy subs (VAULT + SDGNRS) + 1 healthy test sub AND pays one `creditFlip`. It is therefore
-> an over-estimate of the pure once-per-tx routing+creditFlip cost (which 331-04 recovers by subtracting
-> the §1 single-player buy marginal). It never UNDER-states the dispatch floor — the safe direction for
-> a break-even peg (an under-stated overhead would starve keepers).
+> **Dispatch-overhead note (conservative ceiling, CORRECTED):** `router_dowork_dispatch_overhead_gas =
+> 568,870` is now the cost of a `doWork()` whose buy leg performs ONE REAL LANDING buy (slice >=
+> LOOTBOX_MIN) over the fresh-day cursor walk + one `creditFlip`. The old 228,084 folded in a buy that
+> REVERTED in the try/catch — i.e. it understated the real once-per-tx-plus-one-landing-buy cost. The
+> figure remains an over-estimate of the PURE routing+creditFlip overhead (331-04 recovers it by
+> subtracting the §1 single-player buy marginal) and never UNDER-states the dispatch floor.
 
-### N-amortization gradient (CR-01 convergence evidence) — FILLED BY Task 2
+### N-amortization gradient (CR-01 convergence evidence) — CORRECTION PASS
 
 The single-item TOTAL (N=1) bundles the per-tx fixed overhead into one item; the converged marginal
-(N>=32) amortizes it away. The gradient confirms the CR-01 rule empirically: pegging to N=1 would
-over-state the buy marginal ~3x (116k vs 38k) and the box marginal ~2x (180k vs 86k) — exactly the 319
-CR-01 faucet defect. Calibrate from the **N>=32 converged column**.
+(N>=32) amortizes it away. The CORRECTED buy gradient (every measured buy LANDS, verified via
+`lootboxEthBase > 0`):
 
 | Leg | N=1 (single-item total) | N=8 | N>=32 (converged marginal) | over-statement N1/N32 |
 |-----|-------------------------|-----|----------------------------|------------------------|
-| buy  | 116,437 | 43,916  | 37,986 | ~3.06x |
-| open | 180,221 | 105,947 | 85,967 | ~2.10x |
+| buy (LANDING) | 484,194 | 269,222 | 255,614 | ~1.89x |
+| open (typical) | 180,221 | 105,947 | 85,967 | ~2.10x |
 
 > The whole-set buy test divides by N=32 over a set that includes the 2 deploy subs, so its per-player
-> number (40,224) is marginally above the clean N=32 gradient figure (37,986) — the conservative
-> direction. 331-04 may use either; both sit in the ~38-40k buy-marginal band.
+> number (261,809) is marginally above the clean N=32 gradient figure (255,614) — the conservative
+> direction. 331-04 may use either; both sit in the ~256-262k LANDING buy-marginal band (the task's
+> ~244,158 reference is the same order of magnitude; the small spread is fixture/measurement detail —
+> all confirm BUY is ~6x the typical-open marginal, NOT below it).
+
+---
+
+## 5.1 SPLIT-CAP SIZING — the recommended `BUY_BATCH` + `OPEN_BATCH` (for the gated 331-05)
+
+`AfKing.sol:847` currently has a SINGLE `DOWORK_BATCH = 100` used for BOTH `_autoBuy(DOWORK_BATCH)`
+(`:876`) and `autoOpen(DOWORK_BATCH)` (`:888`). With the corrected marginals the two legs have very
+different per-item costs (buy ~262k vs typical-open ~89k), so a single cap is wrong: a 100-deep buy
+batch is ~26M (over the 16.7M HARD ceiling), while a 100-deep typical-open batch is ~9M (the target).
+**Recommendation: SPLIT into two constants.**
+
+| New constant | HARD/SOFT | Sizing rule | Math | **Recommended literal** |
+|--------------|-----------|-------------|------|-------------------------|
+| `BUY_BATCH`  | **HARD ≤ 16.7M** | `BUY_BATCH × buy_marginal ≤ 16.7M`; margin-safe | 16.7M / 261,809 ≈ 63.8 → margin-safe (~22% headroom) | **`50`** (50 × 261,809 ≈ 13.09M < 16.7M) |
+| `OPEN_BATCH` | SOFT (~9M typical avg) | `OPEN_BATCH × typical_open_marginal ≈ 9M` | 9M / 89,288 ≈ 100.8 | **`100`** (100 × 89,288 ≈ 8.93M ≈ 9M target) |
+
+- **`BUY_BATCH = 50` is HARD-bounded:** at the corrected ~261,809 marginal, 50 buys = ~13.09M, leaving
+  ~3.6M (≈22%) headroom under 16.7M. The ceiling-touching N would be ~63; 50 is the margin-safe pick
+  inside the requested ~50-60 band. **Buys must NEVER exceed 16.7M** (a reverting batch would brick
+  the keeper's buy leg for the day), so the HARD bound is enforced by capping the per-call buy count.
+- **`OPEN_BATCH = 100` sizes the TYPICAL open leg to ~9M:** 100 typical boxes ≈ 8.93M. The all-whale-
+  pass corner (100 × ~5.4M ≈ 540M) blows the ceiling — but it is **USER-ACCEPTED as statistically
+  unreachable** (each box must independently roll the weight-8 whale-pass boon; the probability of all
+  100 doing so is vanishingly small, and a keeper batching into it would simply run out of gas and
+  re-try a smaller count, which is liveness-safe — the open leg has no CEI debit that a partial open
+  could strand). Documented here so 331-05's comment strike reflects the split.
+
+> **Note for 331-05:** the split changes the §8 diff from "comment-only / NO-OP" to a REAL (still
+> gated) edit — `DOWORK_BATCH` is replaced by `BUY_BATCH = 50` + `OPEN_BATCH = 100`, with the two call
+> sites (`:876`, `:888`) re-pointed. This is a behavioral change (buy batches shrink from 100→50) and
+> MUST land under the USER-approved 331-05 gate; it is NOT applied in this correction pass.
 
 ---
 

@@ -51,7 +51,20 @@ completed: 2026-05-27
 
 # Phase 331 Plan 04: Break-Even @0.5gwei Peg Calibration Summary
 
-**Converted the 331-01 measured N>=32 worst-case marginals (buy 40,224 / open 89,287 / advance 210,689 gas) into the proposed exact values for the five frozen AfKing peg constants + RESOLVE_FLAT_BURNIE — all CONFIRMED at their placeholder literals (`100` / `2` / `3,2` / `5` / `1e18`) by the per-item MARGINAL faucet-floor proof — plus the BOUNTY_ETH_TARGET deploy-param ceiling recommendation (`<= 8.78e12` wei), the arithmetic level-invariance proof, and the GAS-04 NO-EXTENSION stall-ceiling decision; the exact 331-05 diff is comment-only / NO-OP.**
+> ### ⚠️ SUPERSEDED IN PART by the CORRECTION PASS (2026-05-27)
+> This record consumed the WRONG 331-01 buy marginal (`40,224`, the revert-catch path; corrected to
+> ~261,809). Consequences re-worked in the corrected `331-CALIBRATION.md`: (a) BUY is now the MOST
+> expensive per-item leg, inverting the "buy cheapest → richest 1.5x" justification (§2/§2.1); (b) the
+> buy faucet ceiling ROSE to ~85e12 (less binding) — advance-6x (8.78e12) is STILL the overall faucet
+> floor (§3); (c) the frozen ratios STILL avoid a faucet at the fixture B (re-verified), but the buy
+> UNDER-reimbursement is now FLAGGED (the buy leg is the binding INCENTIVE consideration if B is tuned
+> up, pulling against the faucet ceiling — §5); (d) `DOWORK_BATCH` is SPLIT into `BUY_BATCH=50` /
+> `OPEN_BATCH=100` (the 331-05 diff is NO LONGER comment-only / NO-OP — the split is behavioral); (e)
+> the `batchPurchase` rngLock docstring + `testBatchPurchaseRngLockedRejectsWholeBatchAtEntry` are
+> flagged stale. `RESOLVE_FLAT_BURNIE=1e18` + the ratio VALUES + level-invariance + the stall-ceiling
+> NO-EXTENSION decision are UNCHANGED. See `331-CALIBRATION.md` §0 banner + §11 correction summary.
+
+**Converted the 331-01 measured N>=32 worst-case marginals (buy 40,224 / open 89,287 / advance 210,689 gas) into the proposed exact values for the five frozen AfKing peg constants + RESOLVE_FLAT_BURNIE — all CONFIRMED at their placeholder literals (`100` / `2` / `3,2` / `5` / `1e18`) by the per-item MARGINAL faucet-floor proof — plus the BOUNTY_ETH_TARGET deploy-param ceiling recommendation (`<= 8.78e12` wei), the arithmetic level-invariance proof, and the GAS-04 NO-EXTENSION stall-ceiling decision; the exact 331-05 diff is comment-only / NO-OP. [BUY marginal + DOWORK_BATCH disposition CORRECTED — see the banner above.]**
 
 ## Performance
 

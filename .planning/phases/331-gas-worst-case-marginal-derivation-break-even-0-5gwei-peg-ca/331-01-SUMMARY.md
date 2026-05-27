@@ -49,7 +49,17 @@ completed: 2026-05-27
 
 # Phase 331 Plan 01: Keeper-Router Worst-Case Marginal Gas Derivation + Measurement Summary
 
-**Theory-first worst-case derivation for all four v49 keeper-router measurement targets, then a new `RouterWorstCaseGas.t.sol` harness measuring the per-item MARGINAL at N>=32 — buy 40,224 / open 89,287 gas per item, advance 210,689 / dispatch 228,084 gas per call — all under the 30M mainnet bar, emitted as the 331-04 break-even-peg calibration input.**
+> ### ⚠️ SUPERSEDED IN PART by the CORRECTION PASS (2026-05-27, harness commit `322fd972`)
+> The BUY marginal recorded below (`40,224`) is WRONG — it was measured on the REVERT-CATCH path (the
+> non-vacuity oracle was AfKing's `lastAutoBoughtDay` day-stamp, set before `batchPurchase` fires; the
+> forced-lootbox keeper buy reverted in the per-player try/catch on slices below `LOOTBOX_MIN` while
+> the stamp falsely passed). **Corrected LANDING buy marginal ~261,809** (verified via
+> `lootboxEthBase > 0`). The OPEN derivation also OMITTED the whale-pass-boon branch (the 100-iter
+> `_activateWhalePass` loop, ~5,396,350 gas/box — the true open worst case). The ceiling is 16.7M not
+> 30M, and `DOWORK_BATCH` should split to `BUY_BATCH=50`/`OPEN_BATCH=100`. The TYPICAL-open (89,287)
+> and ADVANCE (210,689) marginals remain correct. See the corrected `331-GAS-DERIVATION.md` §0/§1/§2/§5.
+
+**Theory-first worst-case derivation for all four v49 keeper-router measurement targets, then a new `RouterWorstCaseGas.t.sol` harness measuring the per-item MARGINAL at N>=32 — buy 40,224 / open 89,287 gas per item, advance 210,689 / dispatch 228,084 gas per call — all under the 30M mainnet bar, emitted as the 331-04 break-even-peg calibration input. [BUY + dispatch + ceiling values CORRECTED — see the banner above.]**
 
 ## Performance
 
