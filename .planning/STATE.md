@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v49.0
 milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
 status: executing
-last_updated: "2026-05-27T17:30:04.732Z"
+last_updated: "2026-05-27T17:45:13.414Z"
 last_activity: 2026-05-27
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 23
-  completed_plans: 21
+  completed_plans: 22
   percent: 60
 ---
 
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (Current Milestone: v49.0 section) + .planning/ROADMAP
 ## Current Position
 
 Phase: 332 (tst-freeze-fuzz-one-category-reward-routing-non-widening-reg) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-05-27
 
-Progress: [█████████░] 91%
+Progress: [██████████] 96%
 
 > **⚠️ v49.0 PROGRESS (sessions 2026-05-26 → 2026-05-27; "keep going, no contract commits"):**
 > - **Phase 329 SPEC RE-EXECUTED + COMPLETE** under the keeper-router redesign — 36 reqs, VERIFICATION **8/8 passed**, completion `0eae9c28`. `329-SPEC.md` is the authoritative design contract.
@@ -572,6 +572,7 @@ Audit deliverables:
 | Phase 332 P01 | 16min | 2 tasks | 1 files |
 | Phase 332 P02 | 22min | 2 tasks | 1 files |
 | Phase 332 P03 | 13min | 2 tasks | 1 files |
+| Phase 332 P04 | ~6min | 2 tasks | 1 files (test/fuzz/DegeneretteResolveRepeg.t.sol, 742 lines, 7 tests) + 1 SUMMARY |
 
 ## Decisions
 
@@ -704,3 +705,4 @@ Audit deliverables:
 - [Phase ?]: TST-01 freeze-fuzz: router same-tx doWork/autoBuy advance-consume reads only frozen totalFlipReversals (ADV-04), NON-VACUOUS via zero-reversals differential control; autoBuy-during-rngLock SAFE; autoOpen-blocked NO-OP + no-marooned-boxes; green default + deep; A7 red carried forward
 - [Phase ?]: TST-02 (332-02): one-category no-bounty-stacking proven by recipient-isolated creditFlip COUNT (1 across buy/advance/open, 0 on bountyEarned==0 skip, 0+NoWork revert); structural reentrancy attested by grep over the doWork() body (single CEI-last creditFlip, pinned GAME/COINFLIP, no ETH-push), NO attacker harness; 9 GREEN, zero contracts mutation
 - [Phase ?]: TST-03 advance reward-routing proven empirically: standalone advanceGame credits caller ZERO yet ticks the day; via doWork rewarded with 1/2/4/6 stall multiplier honored (relative magnitude, not 331 peg), mid-day mult==1 rewarded, gameover mult==0 unrewarded; GASOPT-01 owedMap hoist + GASOPT-03 keeperSnapshot same-results. 7 GREEN, zero contracts mutation (e2fff795)
+- [Phase 332]: TST-05 (332-04): degeneretteResolve flat ~1-BURNIE re-peg PROVEN empirically — recipient-isolated COUNT==1 AND amount==RESOLVE_FLAT_BURNIE (1e18), NEVER a per-item *summed* reward; >=3 non-WWXRP pay-gate; 1-2 resolved commit UNPAID (no strand); 0 resolved reverts NoWork(); WWXRP (currency==3) excluded from BOTH the >=3 count AND the reward (3 WWXRP-only unpaid / mixed pays once). RESULTS-equality by VALUE-INVARIANCE (Open Q1 route b, NO resurrected autoResolve source): mixed-currency deltas == per-spin baseline (non-vacuous) + the SAME bets gate-fires==gate-never-fires byte-identical (snapshot/revert). Documented crank-resolve operator relaxation (setOperatorApproval(GAME)) is the resolve-path opt-in, NOT a contract change. Hardhat stat 24-pass/1-pending v48 parity. 7 GREEN, ZERO contracts mutation (6f8bd35a + 75284aac)

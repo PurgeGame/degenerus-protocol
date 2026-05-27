@@ -48,7 +48,7 @@
 - [x] **TST-02**: A one-rewarded-category-per-tx assertion (no bounty-stacking) + a router→game→`creditFlip` reentrancy double-pay regression (the D-01b backstop proving the ROUTER-07 no-guard disposition — legs structurally cannot credit, only `doWork` credits once after the early-return). Plus the parameterless-`doWork()` default-batch proof (D-07): `doWork()` does its fixed per-leg default batch and does NOT OOG in the common case (a backlog larger than one batch leaves a remainder for the next call), with the standalone parametered + UNREWARDED `autoOpen(count)`/`autoBuy(count)` emergency escapes exercised.
 - [x] **TST-03**: `advanceGame` is unrewarded standalone but rewarded via the router; the GASOPT micro-opts are proven same-results (gas-only).
 - [ ] **TST-04**: Full-suite regression is NON-WIDENING vs the v48.0 baseline (net-zero new regression; enumerated-red-set guard). INCLUDES the GASOPT-04 test-oracle migration (`AutoBought` event → `lastAutoBoughtDay` storage / pool-balance-delta) keeping the suite net-zero vs the v48 baseline — the no-double-buy invariant re-expressed in storage terms WITHOUT weakening SAFE-03 / H-CANCEL-SWAP.
-- [ ] **TST-05**: The `degeneretteResolve` rename + re-peg (GAS-06) is proven — flat literal ~1 BURNIE per tx (NOT per-item), the ≥3-resolution pay-gate, revert-on-no-work (zero resolved), WWXRP excluded from BOTH the gate count and the reward, and byte-identical resolution RESULTS vs the per-item path (rename + bounty-shape change only, no payout/RNG change).
+- [x] **TST-05**: The `degeneretteResolve` rename + re-peg (GAS-06) is proven — flat literal ~1 BURNIE per tx (NOT per-item), the ≥3-resolution pay-gate, revert-on-no-work (zero resolved), WWXRP excluded from BOTH the gate count and the reward, and byte-identical resolution RESULTS vs the per-item path (rename + bounty-shape change only, no payout/RNG change).
 
 ### Gas + Adversarial Security Sweep (SWEEP)
 - [ ] **SWEEP-01**: A 3-skill adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) is run against the frozen v49 subject, charged with: advance-timing MEV / same-tx bundling of advance-consume + buy/open, composed reentrancy (router→game→creditFlip), faucet-drain re-attestation on the unified surface, bounty-stacking, stall-multiplier abuse, and the unrewarded-advance liveness backstop. Every elevation passes the skeptic dual-gate.
@@ -118,7 +118,7 @@
 | TST-02 | Phase 332 (TST) | Complete |
 | TST-03 | Phase 332 (TST) | Complete |
 | TST-04 | Phase 332 (TST) | Pending |
-| TST-05 | Phase 332 (TST) | Pending |
+| TST-05 | Phase 332 (TST) | Complete |
 | SWEEP-01 | Phase 333 (TERMINAL) | Pending |
 | SWEEP-02 | Phase 333 (TERMINAL) | Pending |
 | SWEEP-03 | Phase 333 (TERMINAL) | Pending |
