@@ -4,9 +4,9 @@ milestone: v50.0
 milestone_name: Whale-Pass O(1) Refactor + AfKing Pass-Gated Subs + MintModule Advance-Divergence + External RNG-Audit Protocol
 status: planning
 last_updated: "2026-05-27T20:32:59.381Z"
-last_activity: 2026-05-27
+last_activity: 2026-05-27 -- v50.0 roadmap created (phases 334-338); ready to plan Phase 334 SPEC
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,28 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v50.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v50.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v50.0 ACTIVE (started 2026-05-27) — defining requirements. Whale-Pass O(1) Refactor + AfKing Pass-Gated Subs + MintModule Advance-Divergence (ONE batched diff) + External RNG-Audit Protocol (package-only). Phase numbering continues from 333 → starts at Phase 334.
+**Current focus:** v50.0 ACTIVE (started 2026-05-27) — roadmap created (phases 334-338); ready to plan Phase 334 SPEC. Whale-Pass O(1) Refactor + AfKing Pass-Gated Subs + MintModule Advance-Divergence (ONE batched diff) + External RNG-Audit Protocol (package-only). 25 reqs / 7 categories.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 334 SPEC — Design-Lock + MINTDIV Reachability Proof + RNGAUDIT Structure + Call-Graph Attestation (Not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-27 — Milestone v50.0 started
+Status: Roadmap approved; ready for `/gsd-plan-phase 334`
+Last activity: 2026-05-27 — v50.0 roadmap created (5 phases 334-338, 25 reqs mapped, 0 orphaned)
+
+## Current Milestone Roadmap (v50.0 — phases 334-338)
+
+Shape: SPEC → IMPL → TST → AUDIT-PROTOCOL → TERMINAL (the established v44-v49 audit shape + a dedicated package-only AUDIT-PROTOCOL phase). Contract-boundary HARD STOP at the single IMPL phase (335); internal 3-skill adversarial sweep + closure at TERMINAL (338); the external RNGAUDIT protocol (337) is a separate work-product, NOT a substitute for the internal sweep.
+
+| Phase | Name | Type | Requirements | Status |
+|-------|------|------|--------------|--------|
+| 334 | SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure + Call-Graph Attestation | SPEC | BATCH-01 · WHALE-04 · MINTDIV-01 | Not started |
+| 335 | IMPL — The ONE Batched Contract Diff (WHALE + AFSUB + MINTDIV-if-real) | IMPL | WHALE-01/02/03 · AFSUB-01..05 · MINTDIV-02 · BATCH-02 | Not started |
+| 336 | TST — Equivalence + Freeze-Safety + Divergence-Repro + Non-Widening Regression | TST | TST-01/02/03/04 | Not started |
+| 337 | AUDIT-PROTOCOL — Model-Agnostic Multi-Round External-LLM RNG-Audit Kit (Package-Only) | DELIVERABLE | RNGAUDIT-01/02/03/04 | Not started |
+| 338 | TERMINAL — Internal Delta Audit + 3-Skill Adversarial Sweep + Closure | TERMINAL | SWEEP-01/02/03 · BATCH-03 | Not started |
+
+**Coverage:** 25/25 v50.0 requirements mapped (334: 3 · 335: 10 · 336: 4 · 337: 4 · 338: 4); 0 orphaned, 0 duplicated. MINTDIV-02's contract change is CONDITIONAL on the 334 MINTDIV-01 reachability verdict. Full detail in `.planning/ROADMAP.md`; per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
 
 ## Last Shipped Milestone (v49.0 — SHIPPED 2026-05-27; signal `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9`; baseline `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`)
 

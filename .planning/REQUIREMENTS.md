@@ -70,10 +70,49 @@
 
 ## Traceability
 
-*(empty — filled by the roadmapper at ROADMAP creation; statuses flip to Complete as phases close; all re-attested at the TERMINAL closure.)*
+**25/25 v50.0 requirements mapped to exactly one phase — 0 orphaned, 0 duplicated.** Phases continue from 333 → 334..338 (SPEC → IMPL → TST → AUDIT-PROTOCOL → TERMINAL). Statuses flip to Complete as phases close; all 25 re-attested at the Phase 338 TERMINAL closure (BATCH-03 + SWEEP-01/02/03).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| _pending roadmap_ | — | — |
+| WHALE-01 | Phase 335 (IMPL) | Pending |
+| WHALE-02 | Phase 335 (IMPL) | Pending |
+| WHALE-03 | Phase 335 (IMPL) | Pending |
+| WHALE-04 | Phase 334 (SPEC) | Pending |
+| AFSUB-01 | Phase 335 (IMPL) | Pending |
+| AFSUB-02 | Phase 335 (IMPL) | Pending |
+| AFSUB-03 | Phase 335 (IMPL) | Pending |
+| AFSUB-04 | Phase 335 (IMPL) | Pending |
+| AFSUB-05 | Phase 335 (IMPL) | Pending |
+| MINTDIV-01 | Phase 334 (SPEC) | Pending |
+| MINTDIV-02 | Phase 335 (IMPL) | Pending |
+| RNGAUDIT-01 | Phase 337 (AUDIT-PROTOCOL) | Pending |
+| RNGAUDIT-02 | Phase 337 (AUDIT-PROTOCOL) | Pending |
+| RNGAUDIT-03 | Phase 337 (AUDIT-PROTOCOL) | Pending |
+| RNGAUDIT-04 | Phase 337 (AUDIT-PROTOCOL) | Pending |
+| TST-01 | Phase 336 (TST) | Pending |
+| TST-02 | Phase 336 (TST) | Pending |
+| TST-03 | Phase 336 (TST) | Pending |
+| TST-04 | Phase 336 (TST) | Pending |
+| SWEEP-01 | Phase 338 (TERMINAL) | Pending |
+| SWEEP-02 | Phase 338 (TERMINAL) | Pending |
+| SWEEP-03 | Phase 338 (TERMINAL) | Pending |
+| BATCH-01 | Phase 334 (SPEC) | Pending |
+| BATCH-02 | Phase 335 (IMPL) | Pending |
+| BATCH-03 | Phase 338 (TERMINAL) | Pending |
 
-*Last updated: 2026-05-27 — v50.0 requirements authored at milestone init (25 reqs / 7 categories: WHALE 4 · AFSUB 5 · MINTDIV 2 · RNGAUDIT 4 · TST 4 · SWEEP 3 · BATCH 3). Traceability to be filled by the roadmapper (phases continue from 333 → 334).*
+**Per-phase count (verification):**
+
+| Phase | Requirements | Count |
+|-------|--------------|-------|
+| 334 SPEC | BATCH-01, WHALE-04, MINTDIV-01 | 3 |
+| 335 IMPL | WHALE-01, WHALE-02, WHALE-03, AFSUB-01, AFSUB-02, AFSUB-03, AFSUB-04, AFSUB-05, MINTDIV-02, BATCH-02 | 10 |
+| 336 TST | TST-01, TST-02, TST-03, TST-04 | 4 |
+| 337 AUDIT-PROTOCOL | RNGAUDIT-01, RNGAUDIT-02, RNGAUDIT-03, RNGAUDIT-04 | 4 |
+| 338 TERMINAL | SWEEP-01, SWEEP-02, SWEEP-03, BATCH-03 | 4 |
+| **Total** | | **25** |
+
+> **Center-of-gravity notes:** WHALE-04 (freeze-safety PROOF) and MINTDIV-01 (reachability PROVE/REFUTE) center at SPEC (334) because both are design-gating proofs that decide whether/how the split + the MintModule alignment are authored; their build lands at IMPL (335, under WHALE-01/02/03 and MINTDIV-02) and their empirical proof at TST (336, TST-01 / TST-03). RNGAUDIT-01..04 center at AUDIT-PROTOCOL (337) — the protocol STRUCTURE is sketched at SPEC under BATCH-01 but the authored deliverable lands at 337 against the FROZEN post-v50 tree. MINTDIV-02's contract scope is CONDITIONAL on the 334 reachability verdict (reachable → align; not-reachable → documented NEGATIVE, no contract change).
+
+> **Note on §13e-style "uncovered" warnings:** as in the v47/v48/v49 milestones, milestone-wide "uncovered" warnings are EXPECTED false alarms — each phase owns only its slice; the TERMINAL closure (Phase 338: SWEEP-01/02/03 + BATCH-03) re-attests the full 25-requirement set. The TST / AUDIT-PROTOCOL / TERMINAL phases do not "uncover" the IMPL reqs — they re-prove, package against, and re-attest them.
+
+*Last updated: 2026-05-27 — v50.0 traceability filled by the roadmapper at ROADMAP creation (25 reqs / 7 categories: WHALE 4 · AFSUB 5 · MINTDIV 2 · RNGAUDIT 4 · TST 4 · SWEEP 3 · BATCH 3; phases 334-338). Statuses flip to Complete as phases close; all re-attested at the Phase 338 TERMINAL closure.*
