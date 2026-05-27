@@ -419,6 +419,123 @@ contract CrankNonBrick is DeployProtocol {
     }
 
     // =========================================================================
+    // Seed 2 (331) — keeper-batch no-brick under the pre-validated path (HARD CONSTRAINT)
+    // =========================================================================
+    //
+    // CONTEXT D-07 + the `feedback_security_over_gas` HARD CONSTRAINT: Seed 2 replaces
+    // batchPurchase's per-player `this._batchPurchaseUnit{value}` try/catch isolation with a
+    // pre-validated keeper-specialized path (`batchPurchaseForKeeper`, the gated 331-05 diff). The
+    // per-player isolation is a SECURITY property — a single reverting / funding-skipped / poisoned
+    // player must NEVER brick the whole keeper batch. The mechanism may change (try/catch ->
+    // pre-validation / cheap-skip per 331-SEEDS-DESIGN.md R3/R5/R6/R7), but the LIVENESS must survive.
+    //
+    // These tests run against the CURRENT path now (GREEN baseline) and are parameterized via the
+    // SAME `_driveKeeperBatch(useKeeperPath)` toggle as KeeperBatchAffiliateDeltaAudit, so the SAME
+    // no-brick proof re-runs against `batchPurchaseForKeeper` once KEEPER_PATH_LANDED flips at 331-05.
+
+    /// @dev TODO-331-05: flip to `true` once `batchPurchaseForKeeper` lands in the gated 331-05 diff.
+    ///      While false, the keeper-path branch of `_driveKeeperBatch` is unreachable and only the
+    ///      CURRENT `batchPurchase` no-brick baseline runs.
+    bool internal constant KEEPER_PATH_LANDED = false;
+
+    /// @notice Seed 2 / T-331-06 (no-brick, HARD CONSTRAINT): a keeper batch whose MIDDLE player is
+    ///         poisoned (a sub-LOOTBOX_MIN slice — the R3 cheap-skip revert source) still purchases for
+    ///         the healthy players, skips the poisoned one, refunds its slice to the keeper, and the
+    ///         batch does NOT revert. This is the per-player isolation liveness the try/catch ->
+    ///         pre-validation swap MUST preserve.
+    function testKeeperBatchSkipsPoisonedMiddlePlayer() public {
+        address[] memory players = new address[](3);
+        uint256[] memory amounts = new uint256[](3);
+        uint8[] memory modes = new uint8[](3);
+        address healthyA = makeAddr("kb_healthyA");
+        address poisoned = makeAddr("kb_poisoned"); // sub-LOOTBOX_MIN -> mint module reverts E() / cheap-skip
+        address healthyB = makeAddr("kb_healthyB");
+        players[0] = healthyA; amounts[0] = 1 ether;          modes[0] = uint8(MintPaymentKind.DirectEth);
+        players[1] = poisoned; amounts[1] = LOOTBOX_MIN - 1;  modes[1] = uint8(MintPaymentKind.DirectEth);
+        players[2] = healthyB; amounts[2] = 1 ether;          modes[2] = uint8(MintPaymentKind.DirectEth);
+
+        uint256 keeperBefore;
+        _driveKeeperBatch(KEEPER_PATH_LANDED, players, amounts, modes); // MUST NOT revert
+        keeperBefore = _lastKeeperBefore;
+
+        uint48 idx = _activeLootboxIndex();
+        // (1) healthyA + healthyB purchased.
+        assertGt(_lootboxEthBase(idx, healthyA), 0, "healthy A purchased");
+        assertGt(_lootboxEthBase(idx, healthyB), 0, "healthy B purchased");
+        // (2) the poisoned player did NOT purchase + its slice was refunded.
+        assertEq(_lootboxEthBase(idx, poisoned), 0, "poisoned player bought nothing");
+        assertEq(
+            keeperBefore - ContractAddresses.AF_KING.balance,
+            2 ether,
+            "only the two healthy slices spent; the poisoned slice refunded (no drain)"
+        );
+        // (3) implicit: the batch did NOT revert (the drive call above would have reverted otherwise).
+    }
+
+    /// @notice Seed 2 / T-331-06 fuzz: wherever the single poisoned player sits in a length-3 keeper
+    ///         batch, the batch completes, the two healthy players purchase, the poisoned one is skipped
+    ///         + refunded, and the call never reverts — the poison position never bricks the keeper
+    ///         batch under the pre-validated path.
+    function testFuzz_KeeperBatchPoisonPositionNeverBricks(uint8 poisonSel) public {
+        uint256 poisonPos = poisonSel % 3;
+        address[] memory players = new address[](3);
+        uint256[] memory amounts = new uint256[](3);
+        uint8[] memory modes = new uint8[](3);
+        uint256 healthySpend;
+        for (uint256 i; i < 3; i++) {
+            players[i] = makeAddr(string(abi.encodePacked("kbf_", vm.toString(i), "_", vm.toString(poisonPos))));
+            amounts[i] = (i == poisonPos) ? (LOOTBOX_MIN - 1) : 1 ether;
+            modes[i] = uint8(MintPaymentKind.DirectEth);
+            if (i != poisonPos) healthySpend += amounts[i];
+        }
+
+        _driveKeeperBatch(KEEPER_PATH_LANDED, players, amounts, modes); // MUST NOT revert at any position
+
+        uint48 idx = _activeLootboxIndex();
+        for (uint256 i; i < 3; i++) {
+            if (i == poisonPos) {
+                assertEq(_lootboxEthBase(idx, players[i]), 0, "poisoned player skipped regardless of position");
+            } else {
+                assertGt(_lootboxEthBase(idx, players[i]), 0, "healthy player purchased regardless of position");
+            }
+        }
+        assertEq(
+            _lastKeeperBefore - ContractAddresses.AF_KING.balance,
+            healthySpend,
+            "exactly the poisoned slice refunded at every position (no drain, no brick)"
+        );
+    }
+
+    /// @dev The keeper-batch no-brick path toggle (mirrors KeeperBatchAffiliateDeltaAudit._drive).
+    ///      Funds the keeper, records its pre-balance, then drives EITHER the current `batchPurchase`
+    ///      try/catch path or — once KEEPER_PATH_LANDED — the proposed pre-validated
+    ///      `batchPurchaseForKeeper`. The SAME no-brick assertions run against whichever path.
+    uint256 private _lastKeeperBefore;
+
+    function _driveKeeperBatch(
+        bool useKeeperPath,
+        address[] memory players,
+        uint256[] memory amounts,
+        uint8[] memory modes
+    ) internal {
+        uint256 totalValue;
+        for (uint256 i; i < amounts.length; i++) totalValue += amounts[i];
+        address keeper = ContractAddresses.AF_KING;
+        vm.deal(keeper, totalValue);
+        _lastKeeperBefore = keeper.balance;
+        if (!useKeeperPath) {
+            vm.prank(keeper);
+            game.batchPurchase{value: totalValue}(players, amounts, modes); // CURRENT path
+        } else {
+            // TODO-331-05: call the proposed pre-validated aggregated path here, e.g.
+            //   vm.prank(keeper);
+            //   game.batchPurchaseForKeeper{value: totalValue}(players, amounts, modes);
+            // KEEPER_PATH_LANDED is false until 331-05, so this branch is unreachable today.
+            revert("TODO-331-05: batchPurchaseForKeeper not yet landed");
+        }
+    }
+
+    // =========================================================================
     // Task 2 — reentrancy rollback (no double-buy) + cancel un-brickable
     // =========================================================================
 
