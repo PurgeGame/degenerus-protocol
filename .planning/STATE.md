@@ -1,35 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v49.0
-milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
-status: shipped
-last_updated: "2026-05-27T20:30:00.000Z"
-last_activity: 2026-05-27 -- v49.0 SHIPPED (Phase 333 TERMINAL closed; signal MILESTONE_V49_AT_HEAD_b0511ca2)
+milestone: v50.0
+milestone_name: Whale-Pass O(1) Refactor + AfKing Pass-Gated Subs + MintModule Advance-Divergence + External RNG-Audit Protocol
+status: planning
+last_updated: "2026-05-27T20:32:59.381Z"
+last_activity: 2026-05-27
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 27
-  completed_plans: 27
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Completed Milestone: v49.0 section) + .planning/ROADMAP.md (v49.0 — phases 329-333, shipped)
+See: .planning/PROJECT.md (Current Milestone: v50.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v50.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v49.0 SHIPPED 2026-05-27 — no active milestone (next milestone TBD)
+**Current focus:** v50.0 ACTIVE (started 2026-05-27) — defining requirements. Whale-Pass O(1) Refactor + AfKing Pass-Gated Subs + MintModule Advance-Divergence (ONE batched diff) + External RNG-Audit Protocol (package-only). Phase numbering continues from 333 → starts at Phase 334.
 
 ## Current Position
 
-Milestone: v49.0 SHIPPED 2026-05-27 — no active milestone (next milestone TBD)
-Phase: 333 TERMINAL — Complete
-Status: v49.0 CLOSED — closure signal `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9`; `audit/FINDINGS-v49.0.md` chmod 444; nothing pushed
-Last activity: 2026-05-27 -- v49.0 milestone closed (Phase 333 TERMINAL: delta-audit + 3-skill sweep + FINDINGS-v49.0 + atomic 5-doc closure flip)
-
-Progress: [██████████] 100% (5/5 phases, 27/27 plans)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-27 — Milestone v50.0 started
 
 ## Last Shipped Milestone (v49.0 — SHIPPED 2026-05-27; signal `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9`; baseline `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`)
 
