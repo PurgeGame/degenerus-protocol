@@ -29,7 +29,7 @@
 - [ ] **ADV-05**: Mid-day partial-drain ticket processing (`day == dailyIdx` but tickets not fully processed) is router-rewardable advance-leg work.
 
 ### Bounty Recalibration + Worst-Case Gas Sweep (GAS)
-- [ ] **GAS-01**: Worst-case-first marginal gas is derived per keeper category (`autoBuy`/`autoOpen`/`degeneretteResolve`) + the router overhead (theoretical worst case before measurement). This derivation sizes the D-07 flat-per-tx model: the per-category max-laden gas at 0.5 gwei fixes the `1×` base unit + the `1 / 1.5 / 2` per-category ratios + the open `KNEE (~5)`. (`doWork()` is parameterless — D-07 supersedes D-06's `maxCount==0` default-count sizing; the fixed per-leg default batch is intrinsic to `doWork`.)
+- [x] **GAS-01**: Worst-case-first marginal gas is derived per keeper category (`autoBuy`/`autoOpen`/`degeneretteResolve`) + the router overhead (theoretical worst case before measurement). This derivation sizes the D-07 flat-per-tx model: the per-category max-laden gas at 0.5 gwei fixes the `1×` base unit + the `1 / 1.5 / 2` per-category ratios + the open `KNEE (~5)`. (`doWork()` is parameterless — D-07 supersedes D-06's `maxCount==0` default-count sizing; the fixed per-leg default batch is intrinsic to `doWork`.)
 - [ ] **GAS-02**: All keeper bounties are re-pegged to **flat-per-tx per-category** at break-even 0.5 gwei (BURNIE-denominated): advance `2× × mult`, buy `1.5×`, open `1×` pro-rated below the knee (`1× × min(opened, KNEE)/KNEE`). Pegged to the per-category max-laden MARGINAL, never a per-call total (the CR-01 self-crank-faucet rule); the open knee kills the small-batch corner.
 - [x] **GAS-03**: The single day-start stall epoch is **satisfied by DELETION — advance is the sole stall epoch** (D-03 dissolved by D-07: dropping the autoBuy stall multiplier deletes AfKing's autoBuy stall ladder + its absolute-day epoch, leaving the `AdvanceModule` GAME-day epoch as the only escalating path; there are no two epochs to collapse).
 - [ ] **GAS-04**: The stall multiplier (1/2/4/6) is kept **ADVANCE-ONLY** (only the advance leg escalates; the autoBuy stall ladder is deleted per D-07); any ceiling extension for extreme stalls is added ABOVE the 2h tier (never lowering existing thresholds) and is capped against the finite faucet pool.
@@ -103,7 +103,7 @@
 | ADV-03 | Phase 330 (IMPL) | Pending |
 | ADV-04 | Phase 329 (SPEC) | Complete |
 | ADV-05 | Phase 330 (IMPL) | Pending |
-| GAS-01 | Phase 331 (GAS) | Pending |
+| GAS-01 | Phase 331 (GAS) | Complete |
 | GAS-02 | Phase 331 (GAS) | Pending |
 | GAS-03 | Phase 329 (SPEC) | Complete |
 | GAS-04 | Phase 331 (GAS) | Pending |

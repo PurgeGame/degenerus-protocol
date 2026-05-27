@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v49.0
 milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
 status: executing
-last_updated: "2026-05-27T10:49:16.715Z"
-last_activity: 2026-05-27 -- Phase 331 planning complete
+last_updated: "2026-05-27T11:06:40.326Z"
+last_activity: 2026-05-27
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 17
-  completed_plans: 12
+  completed_plans: 13
   percent: 40
 ---
 
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v49.0 section) + .planning/ROADMAP.md (v49.0 — phases 329-333)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 331 — GAS (calibrate the GAS-331 placeholders to break-even @0.5gwei; CONTRACT boundary)
+**Current focus:** Phase 331 — gas-worst-case-marginal-derivation-break-even-0-5gwei-peg-ca
 
 ## Current Position
 
-Phase: 330 (impl-the-one-batched-contract-diff-router-advance-rework-mic) — ✅ COMPLETE
-Plan: 9 of 9 complete (all SUMMARYs backfilled at closeout)
-Status: Ready to execute
-Last activity: 2026-05-27 -- Phase 331 planning complete
+Phase: 331 (gas-worst-case-marginal-derivation-break-even-0-5gwei-peg-ca) — EXECUTING
+Plan: 2 of 5
+Status: Executing Phase 331 (331-01 GAS-01 complete: router marginals measured)
+Last activity: 2026-05-27 -- 331-01 complete (RouterWorstCaseGas harness; buy/open/advance/dispatch marginals measured << 30M; GAS-01 satisfied)
 
-Progress: [████░░░░░░] 40% (2/5 phases; 12/12 planned plans)
+Progress: [████████░░] 76%
 
 > **⚠️ v49.0 PROGRESS (sessions 2026-05-26 → 2026-05-27; "keep going, no contract commits"):**
 > - **Phase 329 SPEC RE-EXECUTED + COMPLETE** under the keeper-router redesign — 36 reqs, VERIFICATION **8/8 passed**, completion `0eae9c28`. `329-SPEC.md` is the authoritative design contract.
@@ -565,6 +565,7 @@ Audit deliverables:
 | Phase 327 P03 | 22min | 2 tasks | 1 files |
 | Phase 327 P05 | 22min | 2 tasks | 1 files |
 | Phase 327 P06 | 10 | 2 tasks | 1 files |
+| Phase 331 P01 | 35 | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -685,3 +686,5 @@ Audit deliverables:
 - [Phase 327]: 327-06: HERO byte-reproduce gate is Hardhat-only (15 passing / 1 failing PASS_ALL, 15/20 placeholders diverge); FOUNDRY HERO-deferred count = 0, so the constant landing flips the Hardhat stat gate 1->0 failing but leaves the forge count at 42; documented as the conditional post-landing delta, no contracts/*.sol edit applied
 - [Phase 328]: 328-01 SC1 delta-audit COMPLETE (commits ddc18b3a + d7d90064): all 12 v48 delta files (git diff da5c9d50..1575f4a9 -- contracts/, +611/-324) enumerated + all 7 surfaces (PFIX/RFALL/KEEP/POOL/BTOMB/HERO/SWAP) attested NON-WIDENING with re-grepped anchors @ 1575f4a9; keeper kill-set (crank/sweep/do-work) grep-ZERO in AfKing.sol + DegenerusGame.sol; hero-multiplier kill-set grep-ZERO in DegeneretteModule; composition matrix proves no orphan hunks; 632/42 regression NON-WIDENING (+38 NEW_PASSING/+0 net-new; HERO byte-reproduce Hardhat gate 15/20-diverge-RED -> 0-diff-GREEN at 1575f4a9); F-47-01 + F-47-02 RESOLVED-AT-V48 (skeptic-filtered); contracts/ byte-frozen
 - [Phase 328]: 328-01 reconciliation — AfKing.sol IS in the v48 delta (item-3 KEEP rename sweep->autoBuy/crankBets->autoResolve/crankBoxes->autoOpen + bytes32("DGNRS") affiliate wiring); the SPEC text "AfKing.sol UNCHANGED" is scoped to item-4 POOL ONLY (the withdraw/poolOf recovery-interface adds live in the consumer contracts sStonk + Vault, not AfKing's own logic)
+- [Phase ?]: 331-01: keeper-router worst-case marginals MEASURED at N>=32 — buy 40,224 / open 89,287 gas/item, advance 210,689 / dispatch 228,084 gas/call, all << 30M (331-04 calibration input)
+- [Phase ?]: 331-01: CR-01 confirmed empirically (buy N1/N32 ~3.06x, open ~2.10x) — calibrate the flat-per-item peg from the N>=32 converged marginal, never the single-item total
