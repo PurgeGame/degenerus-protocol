@@ -71,4 +71,4 @@ Applied + committed as part of the single USER-approved batched diff `63bc16ca` 
 - The `batchPurchase :1737` removal recorded here is the edit 330-06 Task 4 verifies (ROUTER-08 buy-path freeze-safety = AfKing `:568` + this game-side half, both dropped).
 
 ## Self-Check: PASSED
-- Wrapper decodes `(uint8 mult)`; `advanceDue`/`boxesPending` present; `autoOpen` entry-gated, no try/catch, `_autoOpenBox` internal, returns count; bare `batchPurchase` rngLock pre-check count 0, far-future compound revert intact, `gameOver` kept; `keeperSnapshot` present. Compiles within BATCH-02 (`forge build` exit 0).
+- Wrapper decodes `(uint8 mult)`; `advanceDue`/`boxesPending` present; `autoOpen` entry-gated, no try/catch, `_autoOpenBox` internal, returns count; the `batchPurchase` rngLock pre-check removed (`gameOver` kept), the far-future `_queueTickets` compound reverts (in `DegenerusGameStorage.sol`) untouched; the ONE remaining bare `if (rngLockedFlag) revert RngLocked();` in `DegenerusGame.sol` is `reverseFlip()` (`:2162`) — an unrelated existing guard, NOT the keeper buy path; `keeperSnapshot` present. Compiles within BATCH-02 (`forge build` exit 0).

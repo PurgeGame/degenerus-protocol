@@ -26,7 +26,7 @@ Goal-backward verification of the executed-and-committed phase. The contract wor
 | ROUTER-05 | autoResolve → degeneretteResolve rename + flat ≥3 re-peg | Game `:1585`; `successCount >= 3` flat `RESOLVE_FLAT_BURNIE` `:1620` |
 | ROUTER-06 | NoWork() when all predicates empty | AfKing `:895` + decl `:148`; Game decl `:98` |
 | ROUTER-07 | NO nonReentrant guard | 0 `nonReentrant` across all 6 contracts |
-| ROUTER-08 | both rngLock guards dropped (AfKing `:568` + game `:1737`), gameOver kept | bare `if (rngLockedFlag) revert RngLocked();` count 0; gameOver pre-check kept; far-future compound revert intact |
+| ROUTER-08 | both rngLock guards dropped (AfKing `:568` + game `batchPurchase :1737`), gameOver kept | the `batchPurchase` rngLock pre-check removed; gameOver pre-check kept; far-future `_queueTickets` compound reverts (DegenerusGameStorage.sol) untouched. The one remaining bare `if (rngLockedFlag) revert RngLocked();` is `reverseFlip()` (`:2162`) — an unrelated existing guard, not the keeper buy path (the naive plan grep expecting bare-form count 0 did not anticipate it; the substantive batchPurchase removal is correct). |
 | ROUTER-09/10 | autoOpen entry-gate + try/catch dropped + `_autoOpenBox` internal + unified single creditFlip | Game `:1666`/`:1732`; AfKing single `creditFlip(msg.sender)` in doWork `:902` |
 | GASOPT-01 | MintModule owedMap hoist ×2 | `:399`, `:673`; 0 `[rk][player]` direct accesses |
 | GASOPT-03 | keeperSnapshot batched read (SUBSUMES GASOPT-02) | Game `:2595`; AfKing IGame row + per-iter `claimableWinningsOf(player)` STATICCALLs eliminated |
