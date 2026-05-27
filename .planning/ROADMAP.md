@@ -107,7 +107,13 @@
   3. The reward-routing + GASOPT same-results hold (TST-03) — `advanceGame` is proven UNREWARDED when called standalone via `game.advanceGame()` and REWARDED when driven via `doWork` (the multiplier honored, the mid-day partial-drain leg rewarded), and the two GASOPT micro-opts (MintModule pointer + AfKing claimable-hoist) are proven same-results (gas-only, byte-identical behavior).
   4. The full-suite regression is NON-WIDENING vs the v48.0 baseline (TST-04) — net-zero new regression (every red named in the VRF/baseline + any enumerated-deferred set), the standalone `advanceGame` still drives the full daily tick (death-clock latches as the tertiary backstop), and a clean v49.0 regression baseline ledger is recorded.
   5. The `degeneretteResolve` rename + re-peg is proven (TST-05) — the bounty is flat literal ~1 BURNIE per tx (NOT per-item), the ≥3-resolution pay-gate holds, revert-on-no-work (zero resolved), WWXRP stays excluded from both the gate count and the reward, and the resolution RESULTS are byte-identical vs the per-item path (rename + bounty-shape change only, no payout/RNG change).
-**Plans**: TBD
+**Plans**: 6 plans (3 waves) — W1 the four independent proofs in parallel (each a sole-file owner), W2 the delete+rename gate (depends on the re-author homes), W3 the v49 ledger. All `autonomous: true` — `test/` + `.planning/` only, zero `contracts/*.sol`. Live HEAD re-confirmed this planning session: `forge test` = 640 passed / 59 failed / 17 skipped; 59 - 17 = exactly the 42 v48-baseline reds by NAME (the binding non-widening gate).
+- [ ] 332-01-PLAN.md - TST-01 freeze-fuzz: extend `RngLockDeterminism.t.sol` with the router same-tx perturbation classes (`doWork`/`autoBuy`) + `N_PERTURB_ACTIONS`->11 + autoBuy-during-lock-SAFE / autoOpen-blocked-no-maroon / non-vacuity (`totalFlipReversals` moved) - default + `FOUNDRY_PROFILE=deep` [Wave 1]
+- [ ] 332-02-PLAN.md - TST-02 one-category/no-stacking: NEW `KeeperRouterOneCategory.t.sol` - exactly-one `creditFlip`/tx across all 3 branches + zero on the `bountyEarned==0` skip + `NoWork()` (D-02 count oracle) + structural reentrancy grep-attest (D-01, no attacker harness) + parameterless default-batch/remainder + unrewarded escapes (D-03) [Wave 1]
+- [ ] 332-03-PLAN.md - TST-03 reward-routing + GASOPT same-results: NEW `KeeperRewardRoutingSameResults.t.sol` - advance UNREWARDED standalone vs REWARDED via `doWork` (mult honored, mid-day rewarded, gameover unrewarded) + GASOPT-01 (owedMap hoist) + GASOPT-03 (`keeperSnapshot` batched == individual; GASOPT-02 SUBSUMED) behavioral-equality [Wave 1]
+- [ ] 332-04-PLAN.md - TST-05 `degeneretteResolve` re-peg: NEW `DegeneretteResolveRepeg.t.sol` - flat ~1 BURNIE (1e18)/tx (never the sum) at >=3 non-WWXRP, 1-2 unpaid-no-strand, 0->`NoWork()`, WWXRP excluded from gate+reward, RESULTS value-invariance (delegatecall unchanged) + Hardhat stat re-confirm [Wave 1]
+- [ ] 332-05-PLAN.md - TST-04 part A: re-confirm the live red-set, DELETE the 17 enumerated premise-retired reds (re-authored fresh at 02/03/04), `git mv` the 5 `Crank*`->`Keeper*` files + internal symbol renames; failing set restored to exactly the 42 v48 union by NAME (SAFE-03 / H-CANCEL-SWAP preserved) [Wave 2, depends 02/03/04]
+- [ ] 332-06-PLAN.md - TST-04 part B: author `test/REGRESSION-BASELINE-v49.md` (mirror the v48 ledger §1-§6) - 42-union by NAME + the 17 deletions w/ re-homing + the 5 renames + the new green proof files + the net-zero membership proof [Wave 3, depends all]
 **UI hint**: no
 
 ### Phase 333: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure
@@ -133,7 +139,7 @@
 | 329. SPEC — Design-Lock + 4 Structural Invariants | v49.0 | 3/3 | Complete    | 2026-05-26 |
 | 330. IMPL — The ONE Batched Contract Diff | v49.0 | 9/9 | Complete   | 2026-05-27 |
 | 331. GAS — Worst-Case Marginal + Break-Even Peg | v49.0 | 6/5 | Complete    | 2026-05-27 |
-| 332. TST — Freeze Fuzz + One-Category + Regression | v49.0 | 0/TBD | Not started | - |
+| 332. TST — Freeze Fuzz + One-Category + Regression | v49.0 | 0/6 | Not started | - |
 | 333. TERMINAL — Delta Audit + Sweep + Closure | v49.0 | 0/TBD | Not started | - |
 
 ---
