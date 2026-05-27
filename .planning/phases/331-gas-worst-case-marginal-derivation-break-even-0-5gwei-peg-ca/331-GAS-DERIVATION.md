@@ -235,24 +235,40 @@ keeper is break-even, not faucet-positive).
 
 ---
 
-## 5. MEASURED MARGINALS (FILLED BY Task 2)
+## 5. MEASURED MARGINALS (FILLED BY Task 2 — `forge test --match-path test/gas/RouterWorstCaseGas.t.sol --isolate`, 6/6 PASS)
 
-> Populated from `test/gas/RouterWorstCaseGas.t.sol` `--isolate` emitted `log_named_uint` values.
-> Until Task 2 runs this section is a placeholder.
+Measured against the live `63bc16ca` tree this session (foundry nightly, `--isolate`). Every number is
+emitted as a `log_named_uint` the 331-04 calibration reads.
 
-| Calibration input | Measured gas (N) | < 30M mainnet | Non-vacuity asserted |
-|-------------------|------------------|---------------|----------------------|
-| `router_dowork_buy_per_player_marginal_gas`  | _PENDING (Task 2)_ | _PENDING_ | _PENDING_ |
-| `router_dowork_open_per_box_marginal_gas`    | _PENDING (Task 2)_ | _PENDING_ | _PENDING_ |
-| `router_dowork_advance_marginal_gas`         | _PENDING (Task 2)_ | _PENDING_ | _PENDING_ |
-| `router_dowork_dispatch_overhead_gas`        | _PENDING (Task 2)_ | _PENDING_ | _PENDING_ |
+| Calibration input | Measured gas | N | < 30M mainnet | Non-vacuity asserted |
+|-------------------|--------------|---|---------------|----------------------|
+| `router_dowork_buy_per_player_marginal_gas`  | **40,224**  | 32 | yes (whole leg 1,287,173 << 30M) | each sub's `lastAutoBoughtDay == today` |
+| `router_dowork_open_per_box_marginal_gas`    | **89,287**  | 32 | yes (whole leg 2,857,213 << 30M) | each box's first-deposit signal zeroed |
+| `router_dowork_advance_marginal_gas`         | **210,689** | 1 (single advance step, no loop-N) | yes (211k << 30M) | game entered rngLock / day moved |
+| `router_dowork_dispatch_overhead_gas`        | **228,084** | 1 (doWork + minimal buy leg + creditFlip) | yes (228k << 30M) | doWork ran the buy leg (sub bought) |
+
+> **Dispatch-overhead note (conservative ceiling):** `router_dowork_dispatch_overhead_gas = 228,084`
+> is the cost of a `doWork()` whose buy leg, on the fresh day, re-walks the cursor from 0 over the 2
+> standing deploy subs (VAULT + SDGNRS) + 1 healthy test sub AND pays one `creditFlip`. It is therefore
+> an over-estimate of the pure once-per-tx routing+creditFlip cost (which 331-04 recovers by subtracting
+> the §1 single-player buy marginal). It never UNDER-states the dispatch floor — the safe direction for
+> a break-even peg (an under-stated overhead would starve keepers).
 
 ### N-amortization gradient (CR-01 convergence evidence) — FILLED BY Task 2
 
-| Leg | N=1 (single-item total) | N=8 | N>=32 (converged marginal) |
-|-----|-------------------------|-----|----------------------------|
-| buy  | _PENDING_ | _PENDING_ | _PENDING_ |
-| open | _PENDING_ | _PENDING_ | _PENDING_ |
+The single-item TOTAL (N=1) bundles the per-tx fixed overhead into one item; the converged marginal
+(N>=32) amortizes it away. The gradient confirms the CR-01 rule empirically: pegging to N=1 would
+over-state the buy marginal ~3x (116k vs 38k) and the box marginal ~2x (180k vs 86k) — exactly the 319
+CR-01 faucet defect. Calibrate from the **N>=32 converged column**.
+
+| Leg | N=1 (single-item total) | N=8 | N>=32 (converged marginal) | over-statement N1/N32 |
+|-----|-------------------------|-----|----------------------------|------------------------|
+| buy  | 116,437 | 43,916  | 37,986 | ~3.06x |
+| open | 180,221 | 105,947 | 85,967 | ~2.10x |
+
+> The whole-set buy test divides by N=32 over a set that includes the 2 deploy subs, so its per-player
+> number (40,224) is marginally above the clean N=32 gradient figure (37,986) — the conservative
+> direction. 331-04 may use either; both sit in the ~38-40k buy-marginal band.
 
 ---
 
