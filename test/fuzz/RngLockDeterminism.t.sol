@@ -147,7 +147,17 @@ contract RngLockDeterminism is DeployProtocol {
     // Perturbation action library
     // ────────────────────────────────────────────────────────────────────
 
-    uint256 constant N_PERTURB_ACTIONS = 9;
+    // 9 legacy v43 classes (0..8) + 2 v49 keeper-router classes (9..10).
+    // cls 9 = AfKing.doWork() — the one-category router fired same-tx inside the
+    //   locked window (RD-1..5): the advance-consume `cw += totalFlipReversals`
+    //   (DegenerusGameAdvanceModule.sol:257) must read only FROZEN state.
+    // cls 10 = AfKing.autoBuy(0) — the standalone UNREWARDED escape, fired during
+    //   rngLock: autoBuy queues pre-entropy and is SAFE during the freeze (RD-2),
+    //   it must never abort the lock nor alter the consumed VRF-derived output.
+    // autoOpen during rngLock is a NO-OP (DegenerusGame.sol:1692 entry-gate returns
+    //   0, never reverts) so it cannot perturb the word — no autoOpen perturb class
+    //   is added that asserts a revert (Pitfall 3).
+    uint256 constant N_PERTURB_ACTIONS = 11;
 
     function _perturb(uint256 seed) internal {
         uint256 cls = seed % N_PERTURB_ACTIONS;
@@ -203,6 +213,21 @@ contract RngLockDeterminism is DeployProtocol {
         } else if (cls == 8) {
             vm.warp(block.timestamp + 6 hours + 1);
             try game.retryLootboxRng() {} catch { return; }
+        } else if (cls == 9) {
+            // v49 keeper-router: fire the one-category router same-tx inside the
+            // locked window. doWork routes buy → advance → open by priority; every
+            // leg targets a pinned ContractAddresses.* and the advance-consume reads
+            // only FROZEN state. May revert NoWork()/RngNotReady() depending on the
+            // routed leg — the try/catch absorbs that (the freeze proof is the byte-
+            // identity of the consumed word, not whether doWork found work).
+            vm.prank(actor);
+            try afKing.doWork() {} catch { return; }
+        } else if (cls == 10) {
+            // v49 keeper-router: the standalone UNREWARDED autoBuy escape fired during
+            // rngLock. autoBuy queues subscriber buys pre-entropy and is SAFE during the
+            // freeze (RD-2) — it must never abort the lock. count=0 = the default batch.
+            vm.prank(actor);
+            try afKing.autoBuy(0) {} catch { return; }
         }
     }
 
