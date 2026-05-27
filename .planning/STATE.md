@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v49.0
 milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
-status: ready_to_plan
-last_updated: 2026-05-27T15:15:50.701Z
+status: planning
+last_updated: "2026-05-27T15:46:25.311Z"
 last_activity: 2026-05-27
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 17
   completed_plans: 18
-  percent: 40
-stopped_at: Phase 331 complete (6/5) — ready to discuss Phase 332
+  percent: 60
 ---
 
 # Project State
