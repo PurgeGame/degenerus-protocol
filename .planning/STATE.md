@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v49.0
 milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
-status: executing
-last_updated: "2026-05-27T07:48:11.987Z"
-last_activity: 2026-05-27 -- Phase 330 execution started
+status: phase-complete
+last_updated: "2026-05-27T10:12:45.000Z"
+last_activity: 2026-05-27 -- Phase 330 IMPL complete + bookkeeping closed (63bc16ca); ready for Phase 331 GAS
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 12
-  completed_plans: 3
-  percent: 20
+  completed_plans: 12
+  percent: 40
 ---
 
 # Project State
@@ -20,30 +20,30 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v49.0 section) + .planning/ROADMAP.md (v49.0 — phases 329-333)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 330 — impl-the-one-batched-contract-diff-router-advance-rework-mic
+**Current focus:** Phase 331 — GAS (calibrate the GAS-331 placeholders to break-even @0.5gwei; CONTRACT boundary)
 
 ## Current Position
 
-Phase: 330 (impl-the-one-batched-contract-diff-router-advance-rework-mic) — EXECUTING
-Plan: 1 of 9
-Status: Executing Phase 330
-Last activity: 2026-05-27 -- Phase 330 execution started
+Phase: 330 (impl-the-one-batched-contract-diff-router-advance-rework-mic) — ✅ COMPLETE
+Plan: 9 of 9 complete (all SUMMARYs backfilled at closeout)
+Status: Phase 330 IMPL complete + USER-approved contract commit 63bc16ca; GSD bookkeeping closed. NEXT = Phase 331 GAS.
+Last activity: 2026-05-27 -- Phase 330 IMPL complete + bookkeeping closed; ready for Phase 331 GAS
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [████░░░░░░] 40% (2/5 phases; 12/12 planned plans)
 
 > **⚠️ v49.0 PROGRESS (sessions 2026-05-26 → 2026-05-27; "keep going, no contract commits"):**
 > - **Phase 329 SPEC RE-EXECUTED + COMPLETE** under the keeper-router redesign — 36 reqs, VERIFICATION **8/8 passed**, completion `0eae9c28`. `329-SPEC.md` is the authoritative design contract.
-> - **Phase 330 IMPL RE-PLANNED + plan-checker PASSED** (2026-05-27, `--force` over the superseded pre-redesign plans) — **9 plans / 8 waves, 18/18 reqs**, producer→consumer edit order (AdvanceModule → Game → interfaces → AfKing → MintModule → tests → BATCH-02 gate). Plans `b6141b2b`; 2 plan-checker warnings (W-01 batchPurchase:1737 explicitness / W-02 GASOPT-03 verify) fixed `c7a1398b`. **330-09 is the `autonomous:false` BATCH-02 hand-review/commit HARD STOP.**
-> - **⛔ CONTRACT BOUNDARY — execution HELD (not auto-advanced).** `/gsd-execute-phase 330` applies the batched `contracts/*.sol` diff (autonomous `.sol` edits OK) but HARD-STOPS at 330-09 before any contract commit, awaiting explicit USER hand-review. auto_advance is ON but the contract boundary overrides it (`feedback_pause_at_contract_phase_boundaries`).
-> - **✅ Held-330 diff RESET — working tree is CLEAN** (2026-05-27, USER-approved "save it AND reset"). Contracts are byte-identical to the frozen baseline `0cc5d10f`. The superseded diff is archived at **`.planning/held-330-superseded.patch`** (recover via `git apply`) and is the **SURVIVOR-code reference** for execution (reproduce advance re-home/tuple, degeneretteResolve rename, GASOPT-01, views from it; author the REWORKED router/bounty parts fresh). Tree is ready for `/gsd-execute-phase 330`.
-> - **Nothing pushed; zero contract commits.** The embedded phase-shape/coverage table BELOW is PRE-REDESIGN (29 reqs, old 330 mapping, 329 "Ready to plan") — authoritative is ROADMAP/REQUIREMENTS at 36 reqs with 329 Complete.
+> - **✅ Phase 330 IMPL EXECUTED + USER-APPROVED + COMMITTED `63bc16ca`** (2026-05-27) — the single batched keeper-router redesign diff (5 `contracts/*.sol` + interface + 9 test files, +617/−484); `forge build` exit 0; suite **616 passed / 58 failed** (= v48.0 632/42 baseline + 16 reward-rehoming tests INTENTIONALLY deferred to Phase 332 TST). 18/18 reqs satisfied (ROUTER/ADV/GASOPT/BATCH). **GSD bookkeeping CLOSED at this session** — 9 per-plan SUMMARYs backfilled + `330-VERIFICATION.md` + ROADMAP/STATE flipped (the contract work was approved+committed the prior session via the `330-09` `autonomous:false` BATCH-02 gate; only the SUMMARY/ROADMAP paperwork was outstanding, closed here via the execute-phase `safe_resume_gate` "close out manually" path).
+> - **USER-approved deviations (recorded in the SUMMARYs):** advance return collapsed `(uint8 mult, bool rewardable)` → `(uint8 mult)` with `mult==0` = unrewarded sentinel; `bountyMultiplier` folded into the returned `mult`; `maxCount==0` on the standalone escape = default batch; dead error vocabulary retired (`AutoBuyAborted`/`EmptyAutoBuy`/`NoSubscribersAutoBought`/`AutoBought` event). The held-330 superseded pre-redesign diff stays archived at `.planning/held-330-superseded.patch`.
+> - **⛔ NEXT = Phase 331 GAS is a CONTRACT boundary (HARD STOP).** It calibrates the GAS-331 placeholders (`RESOLVE_FLAT_BURNIE`, `DOWORK_BATCH`, the advance/buy ratios, `OPEN_KNEE`) → lands constants in `DegenerusGame.sol` + `AfKing.sol` under a SECOND USER-approved gate (the v46 Phase 319 CR-01 precedent). Plus the 333-SWEEP blocking-condition: re-attest the 4 OPEN-E protections hold without the per-iter `:676` approval check (revert GASOPT-05 if it fails).
+> - **Nothing pushed.** The embedded phase-shape/coverage table BELOW is PRE-REDESIGN (29 reqs, old 330 mapping, 329 "Ready to plan") — authoritative is ROADMAP/REQUIREMENTS at 36 reqs with 329 + 330 Complete.
 
 **v49.0 phase shape (ROADMAP created 2026-05-26):** matches the v46.0 FEATURE-with-GAS pattern (the dedicated GAS phase 331 exists because the break-even bounty re-peg is load-bearing — the v46 Phase 319 CR-01 precedent). Audit baseline → subject: v48.0 closure HEAD `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029` → v49.0 closure HEAD. ONE batched USER-APPROVED `contracts/*.sol` diff (the `doWork` router + advance-bounty rework + break-even re-peg + the 2 folded no-cost micro-opts); HARD STOP at the contract-commit boundary; the peg constants land under a SECOND USER-approved gate at GAS. Bounty stays minted FLIP CREDIT. RNG/VRF-freeze floor over gas.
 
 | Phase | Name | Type | Requirements (primary owner) | Status |
 |-------|------|------|------------------------------|--------|
-| 329 | SPEC — Design-Lock + Call-Graph Attestation + 4 Structural Invariants | SPEC | BATCH-01 · ROUTER-07 · ADV-04 · GAS-03 | Ready to plan |
-| 330 | IMPL — The ONE Batched Contract Diff (router + advance-rework + micro-opts) | IMPL | ROUTER-01..06 · ADV-01/02/03/05 · GASOPT-01/02 · BATCH-02 | Not started |
+| 329 | SPEC — Design-Lock + Call-Graph Attestation + 4 Structural Invariants | SPEC | BATCH-01 · ROUTER-07 · ADV-04 · GAS-03 | ✅ Complete (`0eae9c28`; 8/8) |
+| 330 | IMPL — The ONE Batched Contract Diff (router + advance-rework + micro-opts) | IMPL | ROUTER-01..06 · ADV-01/02/03/05 · GASOPT-01/02 · BATCH-02 | ✅ Complete (`63bc16ca`; 616/58) |
 | 331 | GAS — Worst-Case Marginal + Break-Even @0.5gwei Peg Calibration | GAS | GAS-01/02/04/05 | Not started |
 | 332 | TST — Freeze Fuzz + One-Category + Reward-Routing + Non-Widening Regression | TST | TST-01..04 | Not started |
 | 333 | TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | TERMINAL | SWEEP-01/02/03 · BATCH-03 (re-attests all 29) | Not started |
