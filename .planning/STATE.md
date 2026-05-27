@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v49.0
 milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
-status: ready_to_plan
-last_updated: 2026-05-26T21:35:07.344Z
-last_activity: 2026-05-26 -- Phase 329 execution started
+status: executing
+last_updated: "2026-05-27T07:17:42.585Z"
+last_activity: 2026-05-27 -- Phase 330 planning complete
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 10
-  completed_plans: 10
-  percent: 40
-stopped_at: Phase 329 complete (3/3) — ready to discuss Phase 330
+  completed_phases: 1
+  total_plans: 12
+  completed_plans: 3
+  percent: 20
 ---
 
 # Project State
@@ -26,18 +25,18 @@ See: .planning/PROJECT.md (Current Milestone: v49.0 section) + .planning/ROADMAP
 ## Current Position
 
 Phase: 330
-Plan: Not started — ⚠️ RE-PLAN REQUIRED (existing 7 plans are SUPERSEDED pre-redesign)
-Status: Ready to RE-PLAN (not execute)
-Last activity: 2026-05-26 -- Phase 329 re-executed + completed under keeper-router redesign (autonomous session)
+Plan: Not started (9 plans / 8 waves ready — keeper-router redesign re-plan)
+Status: Ready to execute (HELD at the contract boundary — see below)
+Last activity: 2026-05-27 -- Phase 330 RE-PLANNED + plan-checker PASSED
 
 Progress: [░░░░░░░░░░] 0%
 
-> **⚠️ AUTONOMOUS-SESSION HANDOFF (2026-05-26, user away — "keep going, no contract commits"):**
-> - **Phase 329 RE-EXECUTED + COMPLETE** under the keeper-router redesign — stale pre-redesign SUMMARY/ATTEST/SPEC invalidated; 3 plans freshly re-executed (11 `.planning/`-only commits + completion commit `0eae9c28`); `329-SPEC.md` reconciled to the redesign; REQUIREMENTS/ROADMAP amended **31 → 36 reqs** (ROUTER-08/09/10 + GASOPT-03/04/05 registered to 330 IMPL; GASOPT-02 subsumed into GASOPT-03); VERIFICATION **8/8 passed** (the lone editorial "31"→"36" straggler auto-fixed).
-> - **STOPPED at the Phase 330 contract boundary** (did NOT re-plan or apply the diff). Re-planning the contract IMPL unsupervised was declined because `330-CONTEXT.md` is STALE pre-redesign (anchoring risk) and the held-diff resolution + design judgment are the user's calls.
-> - **Phase 330 NEXT STEP = RE-PLAN, not execute.** The 7 PLAN.md + SUMMARYs in the 330 dir are SUPERSEDED (pre-redesign; their execution produced the held diff). Authoritative design = `329-SPEC.md §1–§3` + `330-ROUTER-REDESIGN-INTENT.md`. `330-CONTEXT.md` carries a staleness banner pointing there. Run `/gsd-plan-phase 330 --force`.
-> - **Held-330 diff still DIRTY + untouched** (6 `contracts/*.sol` + 7 `test/*` files = the superseded old-design IMPL). Decide whether to discard it before the redesigned diff is applied.
-> - **Nothing pushed; zero contract commits.** The embedded phase-shape/coverage table BELOW is PRE-REDESIGN (29 reqs, old 330 mapping) — authoritative is ROADMAP/REQUIREMENTS at 36.
+> **⚠️ v49.0 PROGRESS (sessions 2026-05-26 → 2026-05-27; "keep going, no contract commits"):**
+> - **Phase 329 SPEC RE-EXECUTED + COMPLETE** under the keeper-router redesign — 36 reqs, VERIFICATION **8/8 passed**, completion `0eae9c28`. `329-SPEC.md` is the authoritative design contract.
+> - **Phase 330 IMPL RE-PLANNED + plan-checker PASSED** (2026-05-27, `--force` over the superseded pre-redesign plans) — **9 plans / 8 waves, 18/18 reqs**, producer→consumer edit order (AdvanceModule → Game → interfaces → AfKing → MintModule → tests → BATCH-02 gate). Plans `b6141b2b`; 2 plan-checker warnings (W-01 batchPurchase:1737 explicitness / W-02 GASOPT-03 verify) fixed `c7a1398b`. **330-09 is the `autonomous:false` BATCH-02 hand-review/commit HARD STOP.**
+> - **⛔ CONTRACT BOUNDARY — execution HELD (not auto-advanced).** `/gsd-execute-phase 330` applies the batched `contracts/*.sol` diff (autonomous `.sol` edits OK) but HARD-STOPS at 330-09 before any contract commit, awaiting explicit USER hand-review. auto_advance is ON but the contract boundary overrides it (`feedback_pause_at_contract_phase_boundaries`).
+> - **PRECONDITION before executing 330:** the SUPERSEDED held-330 diff (6 `contracts/*.sol` + 7 `test/*`, still DIRTY/untouched) must be reset/discarded FIRST — otherwise the wave-1 executors edit on top of the old design. USER decides (the 330-09 gate also checks for this).
+> - **Nothing pushed; zero contract commits.** The embedded phase-shape/coverage table BELOW is PRE-REDESIGN (29 reqs, old 330 mapping, 329 "Ready to plan") — authoritative is ROADMAP/REQUIREMENTS at 36 reqs with 329 Complete.
 
 **v49.0 phase shape (ROADMAP created 2026-05-26):** matches the v46.0 FEATURE-with-GAS pattern (the dedicated GAS phase 331 exists because the break-even bounty re-peg is load-bearing — the v46 Phase 319 CR-01 precedent). Audit baseline → subject: v48.0 closure HEAD `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029` → v49.0 closure HEAD. ONE batched USER-APPROVED `contracts/*.sol` diff (the `doWork` router + advance-bounty rework + break-even re-peg + the 2 folded no-cost micro-opts); HARD STOP at the contract-commit boundary; the peg constants land under a SECOND USER-approved gate at GAS. Bounty stays minted FLIP CREDIT. RNG/VRF-freeze floor over gas.
 
