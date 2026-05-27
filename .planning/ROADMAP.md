@@ -139,7 +139,7 @@
 | 329. SPEC — Design-Lock + 4 Structural Invariants | v49.0 | 3/3 | Complete    | 2026-05-26 |
 | 330. IMPL — The ONE Batched Contract Diff | v49.0 | 9/9 | Complete   | 2026-05-27 |
 | 331. GAS — Worst-Case Marginal + Break-Even Peg | v49.0 | 6/5 | Complete    | 2026-05-27 |
-| 332. TST — Freeze Fuzz + One-Category + Regression | v49.0 | 6/6 | Complete   | 2026-05-27 |
+| 332. TST — Freeze Fuzz + One-Category + Regression | v49.0 | 6/6 | Complete    | 2026-05-27 |
 | 333. TERMINAL — Delta Audit + Sweep + Closure | v49.0 | 0/TBD | Not started | - |
 
 ---
