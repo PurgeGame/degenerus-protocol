@@ -6,8 +6,8 @@ milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Swe
 audit_baseline: 0cc5d10fbc1232a6d2e7b0464fe21541b9812029
 audit_baseline_signal: MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029
 source_tree_frozen_ref: 4c9f9d9b
-audit_subject_head: "MILESTONE_V49_AT_HEAD_<sha>"
-closure_signal: MILESTONE_V49_AT_HEAD_<sha>
+audit_subject_head: "MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9"
+closure_signal: MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9
 deliverable: audit/FINDINGS-v49.0.md
 new_findings: 0
 new_findings_disposition: 0 NEW_FINDINGS — the 3-skill genuine-PARALLEL adversarial sweep produced 0 FINDING_CANDIDATEs across 21 charged-probe rows (15 NEGATIVE-VERIFIED + 6 SAFE_BY_DESIGN); the OPEN-E 4-protection HARD-BLOCKING re-attestation HOLDS on all 4 without the per-iter :676 check (no GASOPT-05 revert; closure NOT blocked); KNOWN-ISSUES.md byte-unmodified vs v48; the v48 SWAP cash-share advisory carried-forward-unmodified (informational doc-drift, no-arb holds, USER-accepted <=60% canonical, NOT a finding)
@@ -19,8 +19,9 @@ new_findings_disposition: 0 NEW_FINDINGS — the 3-skill genuine-PARALLEL advers
 
 **Audit Baseline.** v48.0 closure HEAD `0cc5d10fbc1232a6d2e7b0464fe21541b9812029` (signal
 `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`). v49.0 closure HEAD is
-`MILESTONE_V49_AT_HEAD_<sha>` (resolved at the Phase 333 closure commit per the single-commit sequential-SHA
-closure orchestration; see §9c). SOURCE-TREE FROZEN reference for the terminal: `4c9f9d9b` (contracts/
+`MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9` (the signal = the findings-deliverable / pre-flip
+HEAD `b0511ca2`, recorded by the closure-flip commit on top per the v44/v46/v47/v48 2-commit sequential-SHA
+orchestration; see §9c). SOURCE-TREE FROZEN reference for the terminal: `4c9f9d9b` (contracts/
 byte-frozen; `git diff 4c9f9d9b HEAD -- contracts/` empty throughout Phase 333 — EMPTY-CONFIRMED).
 
 **Subject.** The frozen subject HEAD `4c9f9d9b` = the Phase 330 IMPL batched router/advance-redesign diff
@@ -512,10 +513,10 @@ shared signatures locked) + 330 (IMPL `63bc16ca`, USER-APPROVED batched router/a
 + one-category + reward-routing + the NON-WIDENING 666/42/17 ledger, ZERO contract mutation) + 333 (TERMINAL —
 this deliverable; SOURCE-TREE FROZEN at `4c9f9d9b`; SC2 delta-audit + SC1 3-skill genuine-PARALLEL sweep +
 regression + gated closure flip). NOTE: **5 phases** (v48 had 4 — the dedicated GAS phase is the difference).
-Closure signal: `MILESTONE_V49_AT_HEAD_<sha>`.
+Closure signal: `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9`.
 
 ### 9c. Closure Signal
-**`MILESTONE_V49_AT_HEAD_<sha>`** (resolved to the Phase 333 audit-deliverable / closure commit in 333-04;
+**`MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9`** (resolved to the Phase 333 audit-deliverable / closure commit in 333-04;
 contracts byte-identical to the frozen subject `4c9f9d9b`). Verbatim propagation targets (resolved at the 333-04
 closure gate by the single sed-style SHA substitution):
 1. Frontmatter `closure_signal:` + `audit_subject_head:`.
@@ -551,4 +552,4 @@ contracts/` empty). 0 NEW findings (the 3-skill genuine-PARALLEL sweep surfaced 
 charged-probe rows; the OPEN-E 4-protection HARD-BLOCKING re-attestation HOLDS without the per-iter :676 check
 — no GASOPT-05 revert, closure NOT blocked); the v48 SWAP cash-share advisory carried-forward-unmodified; the
 `advanceGame` `(uint8 mult)` IMPL signature recorded per the §5 USER-deviation reconciliation note (NON-WIDENING).
-Closure signal `MILESTONE_V49_AT_HEAD_<sha>` resolves at the Phase 333 closure commit (333-04).*
+Closure signal `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9` resolves at the Phase 333 closure commit (333-04).*

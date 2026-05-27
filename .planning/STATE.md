@@ -2,59 +2,48 @@
 gsd_state_version: 1.0
 milestone: v49.0
 milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
-status: executing
-last_updated: "2026-05-27T19:23:48.989Z"
-last_activity: 2026-05-27 -- Phase 333 planning complete
+status: shipped
+last_updated: "2026-05-27T20:30:00.000Z"
+last_activity: 2026-05-27 -- v49.0 SHIPPED (Phase 333 TERMINAL closed; signal MILESTONE_V49_AT_HEAD_b0511ca2)
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 27
-  completed_plans: 24
-  percent: 80
+  completed_plans: 27
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v49.0 section) + .planning/ROADMAP.md (v49.0 — phases 329-333)
+See: .planning/PROJECT.md (Completed Milestone: v49.0 section) + .planning/ROADMAP.md (v49.0 — phases 329-333, shipped)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 333 — terminal — delta audit + 3 skill adversarial sweep + closure
+**Current focus:** v49.0 SHIPPED 2026-05-27 — no active milestone (next milestone TBD)
 
 ## Current Position
 
-Phase: 333
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-27 -- Phase 333 planning complete
+Milestone: v49.0 SHIPPED 2026-05-27 — no active milestone (next milestone TBD)
+Phase: 333 TERMINAL — Complete
+Status: v49.0 CLOSED — closure signal `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9`; `audit/FINDINGS-v49.0.md` chmod 444; nothing pushed
+Last activity: 2026-05-27 -- v49.0 milestone closed (Phase 333 TERMINAL: delta-audit + 3-skill sweep + FINDINGS-v49.0 + atomic 5-doc closure flip)
 
-Progress: [██████████] 100%
+Progress: [██████████] 100% (5/5 phases, 27/27 plans)
 
-> **⚠️ v49.0 PROGRESS (sessions 2026-05-26 → 2026-05-27; "keep going, no contract commits"):**
-> - **Phase 329 SPEC RE-EXECUTED + COMPLETE** under the keeper-router redesign — 36 reqs, VERIFICATION **8/8 passed**, completion `0eae9c28`. `329-SPEC.md` is the authoritative design contract.
-> - **✅ Phase 330 IMPL EXECUTED + USER-APPROVED + COMMITTED `63bc16ca`** (2026-05-27) — the single batched keeper-router redesign diff (5 `contracts/*.sol` + interface + 9 test files, +617/−484); `forge build` exit 0; suite **616 passed / 58 failed** (= v48.0 632/42 baseline + 16 reward-rehoming tests INTENTIONALLY deferred to Phase 332 TST). 18/18 reqs satisfied (ROUTER/ADV/GASOPT/BATCH). **GSD bookkeeping CLOSED at this session** — 9 per-plan SUMMARYs backfilled + `330-VERIFICATION.md` + ROADMAP/STATE flipped (the contract work was approved+committed the prior session via the `330-09` `autonomous:false` BATCH-02 gate; only the SUMMARY/ROADMAP paperwork was outstanding, closed here via the execute-phase `safe_resume_gate` "close out manually" path).
-> - **USER-approved deviations (recorded in the SUMMARYs):** advance return collapsed `(uint8 mult, bool rewardable)` → `(uint8 mult)` with `mult==0` = unrewarded sentinel; `bountyMultiplier` folded into the returned `mult`; `maxCount==0` on the standalone escape = default batch; dead error vocabulary retired (`AutoBuyAborted`/`EmptyAutoBuy`/`NoSubscribersAutoBought`/`AutoBought` event). The held-330 superseded pre-redesign diff stays archived at `.planning/held-330-superseded.patch`.
-> - **⛔ NEXT = Phase 331 GAS is a CONTRACT boundary (HARD STOP).** It calibrates the GAS-331 placeholders (`RESOLVE_FLAT_BURNIE`, `DOWORK_BATCH`, the advance/buy ratios, `OPEN_KNEE`) → lands constants in `DegenerusGame.sol` + `AfKing.sol` under a SECOND USER-approved gate (the v46 Phase 319 CR-01 precedent). Plus the 333-SWEEP blocking-condition: re-attest the 4 OPEN-E protections hold without the per-iter `:676` approval check (revert GASOPT-05 if it fails).
-> - **Nothing pushed.** The embedded phase-shape/coverage table BELOW is PRE-REDESIGN (29 reqs, old 330 mapping, 329 "Ready to plan") — authoritative is ROADMAP/REQUIREMENTS at 36 reqs with 329 + 330 Complete.
+## Last Shipped Milestone (v49.0 — SHIPPED 2026-05-27; signal `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9`; baseline `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`)
 
-**v49.0 phase shape (ROADMAP created 2026-05-26):** matches the v46.0 FEATURE-with-GAS pattern (the dedicated GAS phase 331 exists because the break-even bounty re-peg is load-bearing — the v46 Phase 319 CR-01 precedent). Audit baseline → subject: v48.0 closure HEAD `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029` → v49.0 closure HEAD. ONE batched USER-APPROVED `contracts/*.sol` diff (the `doWork` router + advance-bounty rework + break-even re-peg + the 2 folded no-cost micro-opts); HARD STOP at the contract-commit boundary; the peg constants land under a SECOND USER-approved gate at GAS. Bounty stays minted FLIP CREDIT. RNG/VRF-freeze floor over gas.
+**Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep.** 5-phase audit-milestone (SPEC→IMPL→GAS→TST→TERMINAL): 329 SPEC design-lock (`0eae9c28`, VERIFICATION 8/8, 3 plans — the 4 structural invariants + the redesigned shared signatures) + 330 IMPL (the ONE batched USER-APPROVED `contracts/*.sol` router/advance-redesign diff `63bc16ca`, BATCH-02, 9 plans/8 waves, suite 616/58) + 331 GAS (`4c9f9d9b`, the worst-case-marginal break-even @0.5gwei flat-per-tx peg + the `degeneretteResolve` flat re-peg, 5 plans, USER-approved second gate) + 332 TST (`95aaf340`, 6 plans, freeze-fuzz + one-category + reward-routing + the NON-WIDENING 666/42/17 ledger, ZERO contract mutation) + 333 TERMINAL (delta-audit + 3-skill genuine-PARALLEL sweep + `audit/FINDINGS-v49.0.md` + closure flip). Subject FROZEN at `4c9f9d9b` (`git diff 4c9f9d9b HEAD -- contracts/` empty throughout the terminal).
 
-| Phase | Name | Type | Requirements (primary owner) | Status |
-|-------|------|------|------------------------------|--------|
-| 329 | SPEC — Design-Lock + Call-Graph Attestation + 4 Structural Invariants | SPEC | BATCH-01 · ROUTER-07 · ADV-04 · GAS-03 | ✅ Complete (`0eae9c28`; 8/8) |
-| 330 | IMPL — The ONE Batched Contract Diff (router + advance-rework + micro-opts) | IMPL | ROUTER-01..06 · ADV-01/02/03/05 · GASOPT-01/02 · BATCH-02 | ✅ Complete (`63bc16ca`; 616/58) |
-| 331 | GAS — Worst-Case Marginal + Break-Even @0.5gwei Peg Calibration | GAS | GAS-01/02/04/05 | Not started |
-| 332 | TST — Freeze Fuzz + One-Category + Reward-Routing + Non-Widening Regression | TST | TST-01..04 | Not started |
-| 333 | TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + Closure | TERMINAL | SWEEP-01/02/03 · BATCH-03 (re-attests all 29) | Not started |
+**Closure verdict (EMITTED, Phase 333):** `UNIFIED_KEEPER_ROUTER SHIPPED (parameterless doWork() one-category early-return, autoBuy→advance→autoOpen, single creditFlip CEI-last, NoWork() revert); ADVANCE_BOUNTY_RE-HOMED (3 in-callee creditFlip sites removed, advanceGame returns (uint8 mult) [the SPEC rewardable bool collapsed into the mult==0 gameover sentinel — USER deviation, NON-WIDENING], standalone advance UNREWARDED + free-fallback callers intact); BOUNTY_RE-PEGGED break-even @0.5gwei flat-per-tx (per-item MARGINAL, CR-01 rule, WR-01 round-trip -EV); DEGENERETTE_RESOLVE RENAMED + RE-PEGGED (flat ~1-BURNIE, ≥3-NON-WWXRP gate, NoWork()-on-zero, results byte-identical); GASOPT-01/03/04/05 SHIPPED; 4_STRUCTURAL_INVARIANTS INTACT; OPEN-E_4-PROTECTIONS RE-ATTESTED HOLD WITHOUT :676 (the GASOPT-05 HARD-BLOCKING condition SATISFIED — no revert); RNG_FREEZE_INTACT under the router composition; NON-WIDENING 666/42/17 (42-red == v48 §2 union BY NAME); 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`. Closure signal `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9`. Full report: `audit/FINDINGS-v49.0.md` (chmod 444).
 
-**Coverage:** 29/29 v49.0 requirements mapped to exactly one phase (329 SPEC: 4 · 330 IMPL: 13 · 331 GAS: 4 · 332 TST: 4 · 333 TERMINAL: 4, re-attests all 29); 0 orphaned; 0 duplicated. Per-category: ROUTER 7 (1 SPEC + 6 IMPL) · ADV 5 (1 SPEC + 4 IMPL) · GAS 5 (1 SPEC + 4 GAS) · GASOPT 2 (IMPL) · TST 4 (TST) · SWEEP 3 (TERMINAL) · BATCH 3 (1 SPEC + 1 IMPL + 1 TERMINAL). Full mapping in `.planning/ROADMAP.md` Coverage section + `.planning/REQUIREMENTS.md` Traceability table. §13e-style "uncovered" warnings are EXPECTED milestone-wide false alarms (each phase owns only its slice; SWEEP/BATCH-03 re-attest at TERMINAL).
+**Adversarial pass (Phase 333):** 3-skill GENUINE PARALLEL_SUBAGENT — `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` run as 3 concurrent background Task spawns from the orchestrator (run INLINE; the orchestrator held the Task tool); `/degen-skeptic` OUT per `D-271-ADVERSARIAL-02`. **21 charged-probe rows: 15 NEGATIVE-VERIFIED + 6 SAFE_BY_DESIGN + 0 FINDING_CANDIDATE.** The v49-novel surface (advance-timing MEV / same-tx bundling) NEGATIVE-VERIFIED (frozen-advance-consume / ADV-04 holds under the router composition; `reverseFlip` reverts under `rngLockedFlag`, consume-then-zero precedes unlock). SC2 delta-audit: all 5 v49 surfaces NON-WIDENING, zero orphan hunks; the 4 structural invariants + the OPEN-E 4-protection + VRF-freeze re-attested intact. Regression NON-WIDENING by NAME (666/42/17). KNOWN-ISSUES.md byte-unmodified. Disposition in `.planning/phases/333-*/333-02-ADVERSARIAL-LOG.md` + `333-01-DELTA-AUDIT.md`.
 
-**Contract-boundary HARD STOP:** Phase 330 IMPL is the single contract phase — the batched diff (AfKing router/`_autoBuy`/re-peg-placeholders/micro-opts + AdvanceModule bounty-removal + return + Game wrapper/views + interface updates + MintModule pointer) is applied + locally compiled/tested but HELD at the contract-commit boundary, never committed without explicit user hand-review (`feedback_batch_contract_approval` + `feedback_never_preapprove_contracts` + `feedback_manual_review_before_push` + `feedback_no_contract_commits`; `ContractAddresses.sol` freely modifiable). The break-even peg constants land under a SECOND USER-approved gate at Phase 331 GAS (the v46 Phase 319 precedent). Phase 333 TERMINAL closure is autonomous:false (auto-advance HELD at the closure boundary per `feedback_pause_at_contract_phase_boundaries`).
+**0 NEW findings.** No prior-milestone deferred findings carried into v49 (v48 closed clean). One informational SWAP cash-share advisory carried-forward-unmodified (USER-accepted ≤60% canonical, OUTSIDE the v49 blast radius, NOT a finding). 36/36 requirements re-attested at closure (329 SPEC: ROUTER-07+ADV-04+GAS-03+BATCH-01 · 330 IMPL: ROUTER-01..06/08/09/10+ADV-01/02/03/05+GASOPT-01/03/04/05+BATCH-02 · 331 GAS: GAS-01/02/04/05/06 · 332 TST: TST-01..05 · 333 TERMINAL: SWEEP-01/02/03+BATCH-03; GASOPT-02 SUBSUMED into GASOPT-03, not counted).
 
-**UI hint:** None across all 5 v49.0 phases — this is a keeper-subsystem contract/gas/audit milestone (router routing, bounty economics, AfKing internals, adversarial sweep), no UI/frontend phase. The off-chain keeper indexer / webpage stays OUT OF SCOPE (separate frontend track) per PROJECT.md.
+**v50 handoff:** 0 findings deferred. v49.1/v50 forward-seeds (all contract changes, OUT of v49): the whale-pass-claim O(1)-refactor; the mintmodule processed/future advance-divergence candidate (HIGH, unconfirmed); the AfKing pass-gated-subscription + `validThroughLevel` cheaper-validity seed (USER-raised 2026-05-27). The v44 §9d 135-anchor maximalist register carries forward unchanged (NOT live vectors).
 
-## Last Shipped Milestone (v48.0 — SHIPPED 2026-05-26; signal `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`; baseline `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`)
+### Prior Shipped Milestone (v48.0 — SHIPPED 2026-05-26; signal `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`; baseline `MILESTONE_V47_AT_HEAD_da5c9d50989707c8964a9411e68c51ca1b1a25f2`)
 
 **sDGNRS Far-Future Salvage Swap + v47 Deferred-Findings Fixes (F-47-01 + F-47-02) + Keeper/Pool/Tombstone/Hero Bundle.** 4-phase audit-milestone (SPEC→IMPL→TST→TERMINAL): 325 SPEC design-lock (`f7ad4ee2`, VERIFICATION 5/5) + 326 IMPL (the ONE batched USER-APPROVED `contracts/*.sol` diff `f50cc634`, all 7 work items, VERIFICATION 6/6 + 3 USER steers) + 327 TST (6 plans + the `1575f4a9` HERO-04 byte-reproduced Degenerette finals landing, USER-approved hand-review) + 328 TERMINAL. ONE USER-APPROVED contract IMPL phase (326) + the 327 HERO-04 constant-only finals landing. Subject FROZEN at `1575f4a9`.
 
