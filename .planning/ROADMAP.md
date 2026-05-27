@@ -54,9 +54,9 @@
   4. The RNGAUDIT external-protocol structure is fixed (feeding Phase 337) — the multi-round sequence (R1 catalog → R2 independent re-derive → R3 adversarial challenge → R4 reconcile) and the self-contained cold-start context-pack skeleton (module/RNG-window map, `rngLock` mechanics, VRF word entry/consume points, contract inventory, variable-tracing methodology) are sketched as the authoring target, with the "drive the external model's OWN discovery — no answer key" constraint recorded; full authoring against the FROZEN post-v50 tree is Phase 337.
   5. Every cited `file:line` across the milestone scope is grep-verified against the v49.0-closure HEAD `b0511ca2` and any drift is corrected in the SPEC (no "by construction" survives un-checked) — including the whale-pass inline mint (`DegenerusGameLootboxModule.sol:~1250-1260`), the two MintModule per-ticket loops (`:~671` / `:~398`), the AfKing `burnForKeeper`/`paidThroughDay` sink + the subscribe-time pass gate + the OPEN-E `fundingSource`/consent-gate surface, and the `_applyWhalePassStats` timing site — confirming the producer-before-consumer edit-order map for the IMPL re-author.
 **Plans**: 4 plans (paper-only SPEC; all autonomous, zero `contracts/*.sol`)
-- [ ] 334-01-PLAN.md — WHALE-04 freeze-safety proof (SC2) + MINTDIV-01 reachability verdict (SC3)
-- [ ] 334-02-PLAN.md — whale-pass + MintModule design-lock (SC1) + RNGAUDIT structure sketch (SC4) + grep-attestation table (SC5)
-- [ ] 334-03-PLAN.md — AfKing pass-gated subscription design-lock + OPEN-E/SUB-07/swap-pop preservation criteria (SC1, AFSUB slice)
+- [x] 334-01-PLAN.md — WHALE-04 freeze-safety proof (SC2) + MINTDIV-01 reachability verdict (SC3)
+- [x] 334-02-PLAN.md — whale-pass + MintModule design-lock (SC1) + RNGAUDIT structure sketch (SC4) + grep-attestation table (SC5)
+- [x] 334-03-PLAN.md — AfKing pass-gated subscription design-lock + OPEN-E/SUB-07/swap-pop preservation criteria (SC1, AFSUB slice)
 - [ ] 334-04-PLAN.md — producer-before-consumer IMPL-335 edit-order map (SC1 integration) + SPEC index + multi-source coverage audit
 **UI hint**: no
 
@@ -117,7 +117,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 0/4 | Not started | - |
+| 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 3/4 | In Progress|  |
 | 335. IMPL — The ONE Batched Contract Diff | v50.0 | 0/TBD | Not started | - |
 | 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 0/TBD | Not started | - |
 | 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 0/TBD | Not started | - |
