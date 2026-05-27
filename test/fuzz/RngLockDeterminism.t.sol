@@ -1794,4 +1794,270 @@ contract RngLockDeterminism is DeployProtocol {
             "RetryLootboxRngDuringLock: retry + perturbation must produce byte-identical VRF outputs vs retry-only baseline (D-42N-RETRY-RNG-DOMAIN-SEP-01 Option A invariant)"
         );
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    // TST-01 (v49) -- the keeper-router same-tx FREEZE proofs
+    //
+    // The advance-consume `cw = rngWordCurrent; cw += totalFlipReversals;
+    // _finalizeLootboxRng(cw)` (DegenerusGameAdvanceModule.sol:254-259) reads
+    // `totalFlipReversals` INSIDE the daily drain. ADV-04 / v45-vrf-freeze-invariant
+    // require that read to be FROZEN between the VRF request and the consume — even
+    // when the unified keeper router (AfKing.doWork) or the standalone autoBuy escape
+    // fires same-tx inside the locked window (RD-1..5).
+    //
+    // The consumed VRF-derived output is captured as the per-index lootbox word
+    // `_lootboxRngWord(purchaseIndex)` — `_finalizeLootboxRng(cw)` writes exactly the
+    // (rngWordCurrent + totalFlipReversals) value into that slot, so the captured word
+    // DIRECTLY incorporates the frozen read (Pitfall 4: capture the value that depends
+    // on the nudge, never one independent of it).
+    // ════════════════════════════════════════════════════════════════════
+
+    uint256 constant SLOT_TOTAL_FLIP_REVERSALS = 5; // verified via forge inspect (VRFStallEdgeCases.t.sol:346)
+
+    function _readTotalFlipReversals() internal view returns (uint256) {
+        return uint256(vm.load(address(game), bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS))));
+    }
+
+    /// @dev Mint BURNIE to `who` via the GAME-gated mintForGame (the project idiom,
+    ///      AfKingConcurrency.t.sol:761) so they can pay the reverseFlip nudge cost.
+    function _fundBurnie(address who, uint256 amount) internal {
+        if (amount == 0) return;
+        vm.prank(ContractAddresses.GAME);
+        coin.mintForGame(who, amount);
+    }
+
+    /// @notice TST-01 — autoBuy-during-lock SAFE + the router same-tx freeze byte-identity,
+    ///         proven NON-VACUOUS against the frozen `cw += totalFlipReversals` consume.
+    /// @dev Snapshot -> nudge totalFlipReversals nonzero PRE-lock (reverseFlip reverts under
+    ///      rngLock, so the move must happen before the boundary) -> advance to the VRF
+    ///      boundary so rngLocked() is true -> fire doWork()/autoBuy(0) in the locked window
+    ///      -> deliver the SAME word + capture the consumed per-index word -> revert ->
+    ///      re-advance -> re-deliver the SAME word WITHOUT the perturbation -> baseline.
+    ///      Byte-identity proves the consumed read is frozen across the keeper perturbation;
+    ///      a zero-reversals CONTROL run yields a DIFFERENT word — that is the non-vacuity
+    ///      guard (the proof cannot pass if totalFlipReversals were a no-op on the consume).
+    function testFuzz_RngLockDeterminism_AutoBuyDuringLockSafe(uint256 seed) public {
+        uint256 vrfWord = uint256(keccak256(abi.encode("tst01-autobuy-word", seed)));
+        // Bias the perturbation to the two v49 keeper classes (9 doWork / 10 autoBuy) so the
+        // router/autoBuy fires same-tx in the window; the freeze must hold for ANY seed though.
+        uint256 perturbSeed = 9 + (seed % 2); // 9 or 10
+
+        address buyer = makeAddr("tst01-autobuy-lootbox-buyer");
+        vm.deal(buyer, 100 ether);
+
+        _completeDay(0xDEAD0901);
+        vm.warp(block.timestamp + 1 days); // roll the wall day so the next advance is due
+
+        // Queue a lootbox so a per-index VRF word is finalized on the drain (the consume site).
+        uint48 purchaseIndex = _readLootboxRngIndex();
+        vm.prank(buyer);
+        game.purchase{value: 1.01 ether}(
+            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+        );
+
+        // Move totalFlipReversals nonzero PRE-lock (reverseFlip is RngLocked-gated). 1-3 nudges.
+        uint256 nudges = 1 + (seed % 3);
+        _fundBurnie(buyer, 100_000 ether); // ample BURNIE for the compounding nudge cost
+        for (uint256 n = 0; n < nudges; n++) {
+            vm.prank(buyer);
+            try game.reverseFlip() {} catch { break; }
+        }
+        uint256 movedReversals = _readTotalFlipReversals();
+        // NON-VACUITY (A): the perturbation actually moved totalFlipReversals before the consume.
+        assertGt(movedReversals, 0, "TST-01 non-vacuity: reverseFlip must move totalFlipReversals pre-lock");
+
+        uint256 preLockSnap = _snapshotPreLock();
+
+        // ---- perturbed run: doWork()/autoBuy(0) fires inside the locked window ----
+        game.advanceGame();
+        uint256 reqId = mockVRF.lastRequestId();
+        assertTrue(game.rngLocked(), "TST-01: rngLock must engage at the VRF boundary");
+        assertTrue(reqId != 0, "TST-01: VRF request must be pending");
+        assertEq(
+            _lootboxRngWord(purchaseIndex), 0,
+            "TST-01: per-index word must be 0 pre-VRF"
+        );
+
+        _perturb(perturbSeed); // cls 9 (doWork) or 10 (autoBuy(0)) — same-tx in the locked window
+        // autoBuy-during-lock SAFE / advance-consume reads frozen state: the lock must NOT lift.
+        assertTrue(
+            game.rngLocked(),
+            "TST-01: keeper doWork/autoBuy in the locked window must not abort the freeze"
+        );
+        assertEq(
+            _readTotalFlipReversals(), movedReversals,
+            "TST-01: the keeper perturbation must NOT move totalFlipReversals (frozen request->consume)"
+        );
+
+        _deliverMockVrf(reqId, vrfWord);
+        uint256 perturbedWord = _lootboxRngWord(purchaseIndex);
+        assertTrue(perturbedWord != 0, "TST-01: per-index word must be set post-VRF");
+
+        // ---- baseline run: SAME word, SAME reversals, NO perturbation ----
+        _revertToPreLock(preLockSnap);
+        assertEq(_lootboxRngWord(purchaseIndex), 0, "TST-01: word must be 0 post-revert");
+        assertEq(
+            _readTotalFlipReversals(), movedReversals,
+            "TST-01: reversals must survive the revert (part of the frozen pre-lock state)"
+        );
+        game.advanceGame();
+        uint256 baselineReqId = mockVRF.lastRequestId();
+        _deliverMockVrf(baselineReqId, vrfWord);
+        uint256 baselineWord = _lootboxRngWord(purchaseIndex);
+
+        _assertVrfOutputByteIdentity(
+            bytes32(perturbedWord),
+            bytes32(baselineWord),
+            "TST-01: the advance-consumed per-index word must be byte-identical with vs without the same-tx keeper perturbation (ADV-04 freeze)"
+        );
+
+        // ---- NON-VACUITY (B): a zero-reversals CONTROL must yield a DIFFERENT consumed word ----
+        // Proves the captured word genuinely incorporates totalFlipReversals (the consume is the
+        // frozen `cw += totalFlipReversals`), so the byte-identity above cannot pass vacuously.
+        _revertToPreLock(preLockSnap);
+        vm.store(address(game), bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS)), bytes32(uint256(0)));
+        assertEq(_readTotalFlipReversals(), 0, "TST-01 control: reversals zeroed");
+        game.advanceGame();
+        uint256 controlReqId = mockVRF.lastRequestId();
+        _deliverMockVrf(controlReqId, vrfWord);
+        uint256 controlWord = _lootboxRngWord(purchaseIndex);
+        assertTrue(
+            controlWord != baselineWord,
+            "TST-01 non-vacuity: a zero-reversals run MUST differ from the nudged run (the consume reads totalFlipReversals; otherwise the freeze proof is vacuous)"
+        );
+    }
+
+    /// @notice TST-01 — autoOpen during rngLock is a NO-OP (returns 0, opens nothing), never a revert.
+    /// @dev RD-3/RD-5: boxesPending() is rngLock-aware (DegenerusGame.sol:1656) and autoOpen has an
+    ///      entry-gate `if (rngLockedFlag || _livenessTriggered()) return 0;` (DegenerusGame.sol:1692).
+    ///      No expectRevert (Pitfall 3) — the open leg silently no-ops during the freeze.
+    function testAutoOpenBlockedDuringRngLockNoOps() public {
+        address buyer = makeAddr("tst01-autoopen-noop-buyer");
+        vm.deal(buyer, 100 ether);
+
+        _completeDay(0xDEAD0902);
+        vm.warp(block.timestamp + 1 days); // roll the wall day so the next advance is due
+
+        // Queue a lootbox, then engage rngLock via the daily advance boundary.
+        vm.prank(buyer);
+        game.purchase{value: 1.01 ether}(
+            buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+        );
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "autoOpen-noop: rngLock must be engaged");
+
+        // boxesPending() is FALSE during rngLock (the router routes past the open leg).
+        assertFalse(
+            game.boxesPending(),
+            "autoOpen-noop: boxesPending() must be false during rngLock (RD-3)"
+        );
+
+        // autoOpen(N) NO-OPs: returns 0, opens nothing, NEVER reverts (RD-5 entry-gate).
+        uint256 opened = game.autoOpen(100);
+        assertEq(opened, 0, "autoOpen-noop: autoOpen must return 0 during rngLock");
+
+        // The standalone AfKing.autoOpen escape is likewise a non-reverting no-op during lock.
+        address keeperCaller = makeAddr("tst01-autoopen-keeper");
+        vm.prank(keeperCaller);
+        afKing.autoOpen(100); // must not revert
+    }
+
+    /// @dev Read lootboxEthBase[index][who] (slot 22) — the first-deposit signal, zeroed on open
+    ///      (mirrors CrankOpenBoxWorstCaseGas.t.sol:251-256; the un-opened/opened oracle for a box).
+    uint256 constant SLOT_LOOTBOX_ETH_BASE = 22;
+
+    function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
+        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_ETH_BASE)));
+        bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
+        return uint256(vm.load(address(game), leaf));
+    }
+
+    /// @notice TST-01 — no marooned boxes (locked autoOpen no-op + post-unlock cursor open).
+    /// @dev Two faithful sub-proofs, NO storage forging of the lock state:
+    ///   (1) DURING a genuine daily rngLock: boxesPending()==false + autoOpen(N)==0 (RD-3/RD-5
+    ///       entry-gate no-op, never a revert) and the queued box is NOT consumed by the lock —
+    ///       it is preserved (openable) at its index, so nothing is stranded.
+    ///   (2) AFTER the lock clears: the box's per-index word landed (not orphaned), and the SAME
+    ///       box opens — the keeper open path materializes it (first-deposit signal zeroed). The
+    ///       autoOpen cursor + boxesPending are exercised on the active index via the word-inject
+    ///       idiom (CrankOpenBoxWorstCaseGas.t.sol) so the cursor walks a word-ready box.
+    /// The RD-5 entry-gate is what guarantees the loop body is non-reverting, so a tail can never be
+    /// marooned mid-walk; (1)+(2) prove the freeze defers — never drops — the queued box.
+    function testAutoOpenNoMaroonedBoxesAfterUnlock() public {
+        address boxOwner = makeAddr("tst01-no-maroon-owner");
+        address keeper = makeAddr("tst01-no-maroon-keeper");
+        vm.deal(boxOwner, 100 ether);
+        vm.deal(keeper, 100 ether);
+        vm.deal(address(game), 1_000 ether);
+
+        _completeDay(0xDEAD0903);
+        vm.warp(block.timestamp + 1 days);
+
+        // Queue a real lootbox-mode box (first-deposit enqueue) at the round's index.
+        uint48 boxIndex = _readLootboxRngIndex();
+        vm.prank(boxOwner);
+        game.purchase{value: 1.01 ether}(
+            boxOwner, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+        );
+        assertGt(
+            _lootboxEthBase(boxIndex, boxOwner), 0,
+            "no-maroon: box queued + un-opened (first-deposit signal present)"
+        );
+
+        // ---- (1) DURING a genuine daily rngLock: autoOpen NO-OPs, the box is not consumed ----
+        uint256 reqId = _advanceToVrfRequestBoundary();
+        assertTrue(game.rngLocked(), "no-maroon: rngLock engaged");
+        assertFalse(game.boxesPending(), "no-maroon: boxesPending() false during lock (RD-3)");
+        assertEq(game.autoOpen(100), 0, "no-maroon: zero boxes open during lock (RD-5 no-op)");
+        vm.prank(keeper);
+        afKing.autoOpen(100); // standalone escape: must not revert during lock
+        assertGt(
+            _lootboxEthBase(boxIndex, boxOwner), 0,
+            "no-maroon: the queued box is NOT consumed by the lock (deferred, not dropped)"
+        );
+
+        // ---- (2) AFTER the lock clears: the box's word landed (not orphaned), the box opens ----
+        _deliverMockVrf(reqId, uint256(keccak256("tst01-no-maroon-word")));
+        assertFalse(game.rngLocked(), "no-maroon: lock cleared post-VRF");
+        assertTrue(
+            _lootboxRngWord(boxIndex) != 0,
+            "no-maroon: the box index's per-index word landed (not orphaned/zeroed by the lock)"
+        );
+        // The box is openable at its index — it materializes post-unlock; none stranded.
+        vm.prank(boxOwner);
+        game.openLootBox(boxOwner, boxIndex);
+        assertEq(
+            _lootboxEthBase(boxIndex, boxOwner), 0,
+            "no-maroon: the deferred box materializes post-unlock (first-deposit signal zeroed)"
+        );
+
+        // ---- autoOpen cursor + boxesPending on a word-ready ACTIVE index (cursor-intact open) ----
+        // A fresh box at the now-active index with its word present: boxesPending() flips true
+        // (unlocked) and autoOpen walks the cursor and opens it — the SAME-boxes-open guarantee.
+        address boxOwner2 = makeAddr("tst01-no-maroon-owner2");
+        vm.deal(boxOwner2, 100 ether);
+        uint48 activeIndex = _readLootboxRngIndex();
+        vm.prank(boxOwner2);
+        game.purchase{value: 1.01 ether}(
+            boxOwner2, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
+        );
+        assertGt(_lootboxEthBase(activeIndex, boxOwner2), 0, "no-maroon: 2nd box queued at active index");
+        // Land the active index's word (unlocked) so the cursor can walk a word-ready box.
+        _injectActiveLootboxWord(activeIndex, uint256(keccak256("tst01-no-maroon-word2")));
+        assertFalse(game.rngLocked(), "no-maroon: unlocked for the cursor-open");
+        assertTrue(game.boxesPending(), "no-maroon: boxesPending() true once the active-index word lands");
+        uint256 openedViaCursor = game.autoOpen(100);
+        assertGt(openedViaCursor, 0, "no-maroon: autoOpen walks the cursor and opens the queued box");
+        assertEq(
+            _lootboxEthBase(activeIndex, boxOwner2), 0,
+            "no-maroon: the cursor-opened box materialized (signal zeroed) - none marooned"
+        );
+    }
+
+    /// @dev Land a VRF word at `index` in lootboxRngWordByIndex (the harness's verified slot 38,
+    ///      matching _lootboxRngWord). Mirrors CrankOpenBoxWorstCaseGas's _injectLootboxRngWord.
+    function _injectActiveLootboxWord(uint48 index, uint256 rngWord) internal {
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_RNG_WORD_BY_INDEX)));
+        vm.store(address(game), slot, bytes32(rngWord));
+    }
 }
