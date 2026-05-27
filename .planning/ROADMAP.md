@@ -91,7 +91,7 @@
   5. `autoResolve` is renamed to `degeneretteResolve` and its bounty re-pegged to a flat ~1-BURNIE "lose" (GAS-06) — restructured from per-item break-even to ONE flat literal ~1 BURNIE `creditFlip` per tx (count-independent) gated at ≥3 successfully-resolved NON-WWXRP bets (revert on zero work; 1–2 resolved → unpaid, lean = do-not-revert so a trailing tail isn't stranded). Anti-exploit basis (corrected — NOT the 0.5-gwei peg ref): the keeper pays REAL tx gas every call while ~1 BURNIE illiquid flip-credit is ≤ `mintPrice/1000` ETH (≤0.00024 ETH) → every qualifying tx is a net loss at any realistic gas price; the ≥3 gate widens the margin. WWXRP stays excluded (AUTO-04, the ≥3 count is non-WWXRP only), and AUTO-02 probe + per-item isolation + self-resolve-allowed (REW-04) are preserved; stays a SEPARATE call (the rename + bounty code rides the BATCH-02 diff, the exact constant confirmed sub-real-gas here — NOT a blocker). The SPEC (D-05f) verifies no invariant requires losing-bet resolution before the break-even incentive is dropped.
 **Plans**: 5 plans (3 waves) — W1 derive+measure ∥ faucet-guard (test-only), W2 seed design+delta-audit/no-brick ∥ calibration record (test+doc), W3 the single USER-gated batched contract diff (autonomous:false)
 - [x] 331-01-PLAN.md — GAS-01 worst-case marginal derivation (theoretical-first) + RouterWorstCaseGas.t.sol measurement (buy/open/advance/dispatch, N≥32 per-item marginal) [Wave 1, autonomous]
-- [ ] 331-02-PLAN.md — GAS-05 + GAS-06 WR-01 round-trip guards (open small-batch knee corner / buy / degeneretteResolve flat ~1-BURNIE) extending CrankFaucetResistance.t.sol [Wave 1, autonomous]
+- [x] 331-02-PLAN.md — GAS-05 + GAS-06 WR-01 round-trip guards (open small-batch knee corner / buy / degeneretteResolve flat ~1-BURNIE) extending CrankFaucetResistance.t.sol [Wave 1, autonomous]
 - [ ] 331-03-PLAN.md — Seed 1+2 design (revert-source enumeration + coalescible-SSTORE table + path shape) + money-path delta-audit + no-brick liveness test scaffolds [Wave 2, autonomous]
 - [ ] 331-04-PLAN.md — GAS-02 + GAS-04 calibration record: exact proposed constants from the marginals (per-item MARGINAL, at/below) + level-invariance + ADVANCE-ONLY stall-ceiling decision [Wave 2, autonomous]
 - [ ] 331-05-PLAN.md — BATCH contract gate (autonomous:false): land the calibrated AfKing constants + RESOLVE_FLAT_BURNIE re-peg + Seed 1/2 keeper-batch money-path code as ONE diff; HARD STOP for USER hand-review (GAS-02/04/06) [Wave 3, autonomous:false]
@@ -132,7 +132,7 @@
 |-------|-----------|----------------|--------|-----------|
 | 329. SPEC — Design-Lock + 4 Structural Invariants | v49.0 | 3/3 | Complete    | 2026-05-26 |
 | 330. IMPL — The ONE Batched Contract Diff | v49.0 | 9/9 | Complete   | 2026-05-27 |
-| 331. GAS — Worst-Case Marginal + Break-Even Peg | v49.0 | 1/5 | In Progress|  |
+| 331. GAS — Worst-Case Marginal + Break-Even Peg | v49.0 | 2/5 | In Progress|  |
 | 332. TST — Freeze Fuzz + One-Category + Regression | v49.0 | 0/TBD | Not started | - |
 | 333. TERMINAL — Delta Audit + Sweep + Closure | v49.0 | 0/TBD | Not started | - |
 

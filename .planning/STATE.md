@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v49.0
 milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
 status: executing
-last_updated: "2026-05-27T11:06:40.326Z"
+last_updated: "2026-05-27T11:23:09.703Z"
 last_activity: 2026-05-27
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 17
-  completed_plans: 13
+  completed_plans: 14
   percent: 40
 ---
 
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (Current Milestone: v49.0 section) + .planning/ROADMAP
 ## Current Position
 
 Phase: 331 (gas-worst-case-marginal-derivation-break-even-0-5gwei-peg-ca) — EXECUTING
-Plan: 2 of 5
-Status: Executing Phase 331 (331-01 GAS-01 complete: router marginals measured)
-Last activity: 2026-05-27 -- 331-01 complete (RouterWorstCaseGas harness; buy/open/advance/dispatch marginals measured << 30M; GAS-01 satisfied)
+Plan: 3 of 5
+Status: Executing Phase 331 (331-01 + 331-02 complete: router marginals measured + GAS-05/GAS-06 round-trip faucet guards proven)
+Last activity: 2026-05-27 -- 331-02 complete (10 new flat-per-tx round-trip guards in CrankFaucetResistance.t.sol: no positive-EV self-crank under the v49 router open/buy/resolve legs vs REAL gas 1..2000 gwei; GAS-05 + GAS-06 satisfied; 9 pre-existing v48-model failures DEFERRED to 332 TST per deferred-items.md)
 
-Progress: [████████░░] 76%
+Progress: [████████░░] 82%
 
 > **⚠️ v49.0 PROGRESS (sessions 2026-05-26 → 2026-05-27; "keep going, no contract commits"):**
 > - **Phase 329 SPEC RE-EXECUTED + COMPLETE** under the keeper-router redesign — 36 reqs, VERIFICATION **8/8 passed**, completion `0eae9c28`. `329-SPEC.md` is the authoritative design contract.
@@ -566,6 +566,7 @@ Audit deliverables:
 | Phase 327 P05 | 22min | 2 tasks | 1 files |
 | Phase 327 P06 | 10 | 2 tasks | 1 files |
 | Phase 331 P01 | 35 | 2 tasks | 2 files |
+| Phase 331 P02 | 45min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -688,3 +689,5 @@ Audit deliverables:
 - [Phase 328]: 328-01 reconciliation — AfKing.sol IS in the v48 delta (item-3 KEEP rename sweep->autoBuy/crankBets->autoResolve/crankBoxes->autoOpen + bytes32("DGNRS") affiliate wiring); the SPEC text "AfKing.sol UNCHANGED" is scoped to item-4 POOL ONLY (the withdraw/poolOf recovery-interface adds live in the consumer contracts sStonk + Vault, not AfKing's own logic)
 - [Phase ?]: 331-01: keeper-router worst-case marginals MEASURED at N>=32 — buy 40,224 / open 89,287 gas/item, advance 210,689 / dispatch 228,084 gas/call, all << 30M (331-04 calibration input)
 - [Phase ?]: 331-01: CR-01 confirmed empirically (buy N1/N32 ~3.06x, open ~2.10x) — calibrate the flat-per-item peg from the N>=32 converged marginal, never the single-item total
+- [Phase ?]: 331-02: GAS-05/GAS-06 round-trip faucet guards added to CrankFaucetResistance.t.sol — 10 new tests proving no positive-EV self-crank under the v49 flat-per-tx router (open small-batch corner + buy leg + degeneretteResolve flat reward), judged vs REAL gas 1..2000 gwei + flip-credit illiquidity; reward read LIVE so guards survive 331-04 calibration
+- [Phase ?]: 331-02: open-leg gas via the gas-identical unrewarded autoOpen(k) passthrough + reward computed from live unit (doWork->open is rngLock-blocked, RD-3); buy-leg reward observed off the doWork credit delta; 9 pre-existing v48-model failures DEFERRED to 332 TST (logged in deferred-items.md)
