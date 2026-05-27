@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v49.0
 milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
-status: executing
-last_updated: "2026-05-27T18:14:02.403Z"
+status: verifying
+last_updated: "2026-05-27T18:24:44.943Z"
 last_activity: 2026-05-27
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 23
-  completed_plans: 23
-  percent: 60
+  completed_plans: 24
+  percent: 80
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (Current Milestone: v49.0 section) + .planning/ROADMAP
 
 Phase: 332 (tst-freeze-fuzz-one-category-reward-routing-non-widening-reg) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-27
 
 Progress: [██████████] 100%
@@ -574,6 +574,7 @@ Audit deliverables:
 | Phase 332 P03 | 13min | 2 tasks | 1 files |
 | Phase 332 P04 | ~6min | 2 tasks | 1 files (test/fuzz/DegeneretteResolveRepeg.t.sol, 742 lines, 7 tests) + 1 SUMMARY |
 | Phase 332 P05 | ~38min | 2 tasks | 6 files (5 Crank*->Keeper* git mv + RngFreezeAndRemovalProofs in place) + 1 SUMMARY (17 premise-retired reds DELETED; failing set restored to EXACTLY the 42 v48 union by NAME 59->42; de-crank rename behavior-neutral 666/42; zero contracts mutation) |
+| Phase 332 P06 | 6min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -708,3 +709,4 @@ Audit deliverables:
 - [Phase ?]: TST-03 advance reward-routing proven empirically: standalone advanceGame credits caller ZERO yet ticks the day; via doWork rewarded with 1/2/4/6 stall multiplier honored (relative magnitude, not 331 peg), mid-day mult==1 rewarded, gameover mult==0 unrewarded; GASOPT-01 owedMap hoist + GASOPT-03 keeperSnapshot same-results. 7 GREEN, zero contracts mutation (e2fff795)
 - [Phase 332]: TST-05 (332-04): degeneretteResolve flat ~1-BURNIE re-peg PROVEN empirically — recipient-isolated COUNT==1 AND amount==RESOLVE_FLAT_BURNIE (1e18), NEVER a per-item *summed* reward; >=3 non-WWXRP pay-gate; 1-2 resolved commit UNPAID (no strand); 0 resolved reverts NoWork(); WWXRP (currency==3) excluded from BOTH the >=3 count AND the reward (3 WWXRP-only unpaid / mixed pays once). RESULTS-equality by VALUE-INVARIANCE (Open Q1 route b, NO resurrected autoResolve source): mixed-currency deltas == per-spin baseline (non-vacuous) + the SAME bets gate-fires==gate-never-fires byte-identical (snapshot/revert). Documented crank-resolve operator relaxation (setOperatorApproval(GAME)) is the resolve-path opt-in, NOT a contract change. Hardhat stat 24-pass/1-pending v48 parity. 7 GREEN, ZERO contracts mutation (6f8bd35a + 75284aac)
 - [Phase 332]: TST-04 part A (332-05): the 17 premise-retired reward-rehoming reds DELETED (count RE-CONFIRMED 17 not 16 at exec HEAD via live forge --json: 666/59) and the failing set restored to EXACTLY the 42 v48.0-baseline reds BY NAME — proven pre-delete (59-17==42, zero outside), post-delete (==42, zero new regression / zero baseline-red drop), and post-rename (==42, byte-identical 666/42). Deleted only the 17 named fns + helpers/constants orphaned SOLELY by them (CRANK_RESOLVE_BET/OPEN_BOX/GAS_PRICE_REF + _placeWinningBet/_winningTicketFor/_countCoinflipStakeUpdatedWithAmount) + dead section headers. The 5 Crank*->Keeper* files git mv'd (R094-R098, history preserved) + contract/@title/header de-crank + 5 GREEN survivor names de-cranked; pure rename = behavior-neutral. SAFE-03/H-CANCEL-SWAP + testCrankBoxOpenStaysPostUnlock PRESERVED GREEN (the one deliberate code-level Crank residual, in the NOT-renamed RngFreezeAndRemovalProofs per plan DO-NOT-DELETE). ZERO contracts mutation (8041451d delete + 52452fe1 rename)
+- [Phase ?]: 332-06 (TST-04 part B): authored test/REGRESSION-BASELINE-v49.md — the NON-WIDENING gate is a strict NAME-set EQUALITY (live whole-tree forge failing set == the 42 v48.0-baseline reds BY NAME, both set differences empty), 666/42/17 at the TST HEAD; the 333 TERMINAL delta-audit consumes this ledger
