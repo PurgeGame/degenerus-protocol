@@ -350,6 +350,196 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     }
 
     // =========================================================================
+    // Task 2 — RESULTS-equality, value-invariant to the bounty wrapper
+    // =========================================================================
+
+    /// @notice RESULTS-equality (paid path): resolve a >= 3 non-WWXRP mixed-currency batch via
+    ///         `degeneretteResolve` (the >= 3 gate fires, so the flat bounty is credited to the
+    ///         keeper) and prove the per-item RESOLUTION RESULTS are byte-identical to the
+    ///         per-spin-derived expected sums. The resolution math is produced by the UNCHANGED
+    ///         `_degeneretteResolveBet -> delegatecall resolveBets`, so the BURNIE/WWXRP mint deltas,
+    ///         the ETH claimable delta, and the claimablePool delta must each equal the additive
+    ///         per-spin baseline replayed from the contract's own `FullTicketResult` events — the
+    ///         bounty wrapper provably does not touch the resolution payout. Non-vacuity: each
+    ///         expected sum is asserted > 0 so the equality cannot pass against an empty baseline.
+    ///
+    /// @dev Per Open Question 1 route (b): value-invariance is proven DIRECTLY (the resolution
+    ///      deltas equal the per-spin sums). The deleted `autoResolve` source is NOT resurrected.
+    function testResultsEqualityValueInvariant() public {
+        // Large pool so the ETH 10% cap never binds (cap-free additive baseline; Tier-2 cap is
+        // a resolution property already proven in DegeneretteFreezeResolution, not the re-peg's job).
+        _seedFuturePrizePool(1_000_000 ether);
+
+        uint48 index = 1;
+        uint256 word = uint256(keccak256("results_equality_word"));
+        uint32 ticket = _winningTicketFor(index, word);
+
+        // >= 3 non-WWXRP: an ETH bet (4 spins) + a BURNIE bet (3 spins) trips the gate; a WWXRP
+        // bet (2 spins) resolves alongside and exercises the WWXRP mint delta. successCount == 2
+        // for non-WWXRP would be < 3, so add a 3rd non-WWXRP (ETH) to fire the gate.
+        uint128 ethPerTicket = 0.01 ether;
+        uint128 burniePerTicket = 200 ether;
+        uint128 wwxrpPerTicket = 2 ether;
+
+        _fundBurnie(player, uint256(burniePerTicket) * 3 + 1 ether);
+        _fundWwxrp(player, uint256(wwxrpPerTicket) * 2 + 1 ether);
+
+        // Emission order (the _replayPerSpinBaseline phases): ETH bet, then BURNIE, then WWXRP.
+        // A 4th non-WWXRP (a second ETH bet) ensures non-WWXRP successCount >= 3 (gate fires),
+        // but resolving it would emit a 4th phase the 3-phase replay does not model — so instead
+        // make the BURNIE bet count as 2 of the 3 non-WWXRP via a single multi-currency layout:
+        // place ETH (phase 0), BURNIE (phase 1), WWXRP (phase 2) AND a SECOND ETH appended last.
+        uint64 ethBet = _placeBet(CURRENCY_ETH, ethPerTicket, 4, ticket);
+        uint64 burnieBet = _placeBet(CURRENCY_BURNIE, burniePerTicket, 3, ticket);
+        uint64 wwxrpBet = _placeBet(CURRENCY_WWXRP, wwxrpPerTicket, 2, ticket);
+        uint64 ethBet2 = _placeBet(CURRENCY_ETH, ethPerTicket, 1, ticket);
+
+        _injectLootboxRngWord(index, word);
+
+        // Pre-resolve balances (player-facing resolution RESULTS).
+        uint256 preClaimable = game.claimableWinningsOf(player);
+        uint256 preClaimablePool = _readClaimablePool();
+        uint256 preBurnie = coin.balanceOf(player);
+        uint256 preWwxrp = wwxrp.balanceOf(player);
+
+        // Resolve all four in ONE call. Items are ordered ETH, BURNIE, WWXRP, ETH so the 3-phase
+        // replay (ETH / BURNIE / WWXRP) sees the FIRST ETH bet's spins as phase 0, the BURNIE bet
+        // as phase 1, the WWXRP bet as phase 2; the trailing 2nd ETH bet advances to phase 3 and is
+        // attributed to the ETH sum below. successCount (non-WWXRP) == 3 (two ETH + one BURNIE) >= gate.
+        address[] memory players = new address[](4);
+        uint64[] memory betIds = new uint64[](4);
+        for (uint256 i; i < 4; ++i) players[i] = player;
+        betIds[0] = ethBet;
+        betIds[1] = burnieBet;
+        betIds[2] = wwxrpBet;
+        betIds[3] = ethBet2;
+
+        vm.recordLogs();
+        vm.prank(keeper);
+        game.degeneretteResolve(players, betIds);
+
+        // Replay the per-spin baseline from the contract's own per-spin FullTicketResult events.
+        // Phases: 0 = first ETH bet, 1 = BURNIE, 2 = WWXRP, 3 = trailing ETH bet (folded into ETH).
+        (
+            uint256 expectedEthShare,
+            uint256 expectedBurnie,
+            uint256 expectedWwxrp,
+            uint256 payoutCappedCount,
+            uint256 keeperCreditCount
+        ) = _replayPerSpinBaselineAndKeeperCredit(ethPerTicket, burniePerTicket, wwxrpPerTicket);
+
+        assertEq(payoutCappedCount, 0, "RESULTS-equality: large pool -> no spin should cap");
+
+        // The >= 3 gate fired -> exactly one keeper creditFlip in the SAME tx (the bounty wrapper),
+        // proving the paid path is exercised while the resolution deltas below stay value-invariant.
+        assertEq(keeperCreditCount, 1, "RESULTS-equality: the >= 3 gate fired (paid path exercised)");
+
+        // The player-facing resolution RESULTS are byte-identical to the per-spin baseline.
+        uint256 burnieDelta = coin.balanceOf(player) - preBurnie;
+        uint256 wwxrpDelta = wwxrp.balanceOf(player) - preWwxrp;
+        uint256 claimableDelta = game.claimableWinningsOf(player) - preClaimable;
+        uint256 claimablePoolDelta = _readClaimablePool() - preClaimablePool;
+
+        assertEq(burnieDelta, expectedBurnie,
+            "RESULTS-equality: BURNIE mint delta == Sum of per-spin BURNIE payouts (value-invariant)");
+        assertEq(wwxrpDelta, expectedWwxrp,
+            "RESULTS-equality: WWXRP mint delta == Sum of per-spin WWXRP payouts (value-invariant)");
+        assertEq(claimableDelta, expectedEthShare,
+            "RESULTS-equality: ETH claimable delta == Sum of per-spin ethShare (value-invariant)");
+        assertEq(claimablePoolDelta, expectedEthShare,
+            "RESULTS-equality: claimablePool moved by exactly the ETH sum (additive, disjoint slot)");
+
+        // Non-vacuity: every payout currency was actually exercised — the equality cannot pass
+        // against an empty/zero baseline (T-332-04-VAC).
+        assertGt(expectedBurnie, 0, "non-vacuity: BURNIE payout exercised");
+        assertGt(expectedWwxrp, 0, "non-vacuity: WWXRP payout exercised");
+        assertGt(expectedEthShare, 0, "non-vacuity: ETH payout exercised");
+    }
+
+    /// @notice RESULTS independence of the reward gate: prove the per-bet RESOLUTION deltas are
+    ///         IDENTICAL whether or not the >= 3 flat reward fired. Resolve the SAME 3 non-WWXRP
+    ///         bets two ways against a snapshot:
+    ///           Run A — all 3 in ONE `degeneretteResolve` call (the >= 3 gate FIRES; keeper paid);
+    ///           Run B — revert, resolve the SAME 3 bets in THREE separate single-bet calls (the
+    ///                   gate NEVER fires — each call has 1 non-WWXRP < 3 -> UNPAID, no revert).
+    ///         The player's total resolution deltas (BURNIE/claimable/pool) must be byte-identical
+    ///         between A and B, while the keeper creditFlip count differs (1 in A, 0 in B). This
+    ///         proves the bounty wrapper provably never touches the resolution math: the resolution
+    ///         RESULTS are value-invariant to whether the gate fired.
+    function testResolutionDeltasIndependentOfRewardGate() public {
+        _seedFuturePrizePool(1_000_000 ether);
+
+        uint48 index = 1;
+        uint256 word = uint256(keccak256("gate_independence_word"));
+        uint32 ticket = _winningTicketFor(index, word);
+
+        _fundBurnie(player, 1_000 ether);
+        uint64 b0 = _placeBet(CURRENCY_ETH, 0.01 ether, 2, ticket);
+        uint64 b1 = _placeBet(CURRENCY_BURNIE, 200 ether, 2, ticket);
+        uint64 b2 = _placeBet(CURRENCY_ETH, 0.01 ether, 2, ticket);
+
+        _injectLootboxRngWord(index, word);
+
+        uint256 preClaimable = game.claimableWinningsOf(player);
+        uint256 preClaimablePool = _readClaimablePool();
+        uint256 preBurnie = coin.balanceOf(player);
+
+        uint256 snap = vm.snapshotState();
+
+        // --- Run A: all 3 in ONE call -> the >= 3 gate FIRES (keeper paid once) ---
+        (address[] memory players, uint64[] memory betIds) = _list3(b0, b1, b2);
+        vm.recordLogs();
+        vm.prank(keeper);
+        game.degeneretteResolve(players, betIds);
+
+        uint256 keeperCountA = _countCoinflipStakeUpdatedFor(keeper);
+        uint256 claimableDeltaA = game.claimableWinningsOf(player) - preClaimable;
+        uint256 claimablePoolDeltaA = _readClaimablePool() - preClaimablePool;
+        uint256 burnieDeltaA = coin.balanceOf(player) - preBurnie;
+
+        // --- Run B: revert, resolve the SAME 3 bets one-at-a-time -> the gate NEVER fires ---
+        vm.revertToState(snap);
+
+        uint256 keeperCountB;
+        keeperCountB += _resolveSingleAndCountKeeperCredit(b0);
+        keeperCountB += _resolveSingleAndCountKeeperCredit(b1);
+        keeperCountB += _resolveSingleAndCountKeeperCredit(b2);
+
+        uint256 claimableDeltaB = game.claimableWinningsOf(player) - preClaimable;
+        uint256 claimablePoolDeltaB = _readClaimablePool() - preClaimablePool;
+        uint256 burnieDeltaB = coin.balanceOf(player) - preBurnie;
+
+        // The bounty wrapper differs: gate fired once in A, never in B.
+        assertEq(keeperCountA, 1, "Run A: the >= 3 gate fired (keeper paid once)");
+        assertEq(keeperCountB, 0, "Run B: single-bet calls never trip the gate (keeper unpaid)");
+
+        // The player resolution RESULTS are byte-identical regardless of whether the reward fired.
+        assertEq(claimableDeltaA, claimableDeltaB,
+            "value-invariant: ETH claimable delta identical whether or not the >= 3 reward fired");
+        assertEq(claimablePoolDeltaA, claimablePoolDeltaB,
+            "value-invariant: claimablePool delta identical whether or not the >= 3 reward fired");
+        assertEq(burnieDeltaA, burnieDeltaB,
+            "value-invariant: BURNIE mint delta identical whether or not the >= 3 reward fired");
+
+        // Non-vacuity: the resolutions actually paid SOMETHING (the equality is not 0 == 0).
+        assertGt(claimableDeltaA, 0, "non-vacuity: the resolutions credited ETH claimable");
+        assertGt(burnieDeltaA, 0, "non-vacuity: the resolutions minted BURNIE");
+    }
+
+    /// @dev Resolve a SINGLE bet via `degeneretteResolve` (a 1-item list -> the >= 3 gate cannot
+    ///      fire) and return the keeper creditFlip count for that call (always 0 for one non-WWXRP).
+    function _resolveSingleAndCountKeeperCredit(uint64 betId) internal returns (uint256) {
+        address[] memory players = new address[](1);
+        uint64[] memory betIds = new uint64[](1);
+        players[0] = player;
+        betIds[0] = betId;
+        vm.recordLogs();
+        vm.prank(keeper);
+        game.degeneretteResolve(players, betIds);
+        return _countCoinflipStakeUpdatedFor(keeper);
+    }
+
+    // =========================================================================
     // creditFlip count + amount oracle (ported from CrankLeversAndPacking.t.sol:534-548)
     // =========================================================================
 
@@ -426,6 +616,73 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     ///      (8/8 self-match guarantees a win on spin 0 -> the resolution actually pays).
     function _winningTicketFor(uint48 index, uint256 word) internal pure returns (uint32) {
         return _resultTicketForSpin(index, word, 0);
+    }
+
+    /// @dev The 3-tier ETH split (_distributePayout, cap-free): ethShare = payout if
+    ///      payout <= 3*bet else max(2.5*bet, payout/4). The cap is a separate resolution
+    ///      property (proven in DegeneretteFreezeResolution); the large pool keeps it cap-free here.
+    function _ethShareOf(uint256 payout, uint128 betAmount) internal pure returns (uint256) {
+        if (payout == 0) return 0;
+        uint256 threeBet = uint256(betAmount) * 3;
+        if (payout <= threeBet) return payout;
+        uint256 minEth = (uint256(betAmount) * 5) / 2;
+        uint256 stdEth = payout / 4;
+        return stdEth > minEth ? stdEth : minEth;
+    }
+
+    /// @dev Replay the per-spin baseline AND count the keeper's creditFlip in a SINGLE log pass.
+    ///      Walks the recorded logs in emission order. The batch resolves bets front-to-back; each
+    ///      bet's spins emit FullTicketResult, terminated by one FullTicketResolved. betPhase
+    ///      0 = first ETH bet, 1 = BURNIE, 2 = WWXRP, 3 = trailing ETH bet (folded into the ETH sum,
+    ///      since it shares ethPerTicket). Returns the additive ETH ethShare sum, the BURNIE/WWXRP
+    ///      mint sums, the PayoutCapped count (asserted 0 in the cap-free large-pool test), and the
+    ///      keeper's CoinflipStakeUpdated count (the bounty wrapper firing in the SAME tx).
+    function _replayPerSpinBaselineAndKeeperCredit(
+        uint128 ethPerTicket,
+        uint128 burniePerTicket,
+        uint128 wwxrpPerTicket
+    )
+        internal
+        returns (
+            uint256 ethShareSum,
+            uint256 burnieSum,
+            uint256 wwxrpSum,
+            uint256 payoutCappedCount,
+            uint256 keeperCreditCount
+        )
+    {
+        // Silence unused-parameter warnings: currency is attributed by emission phase, not amount.
+        burniePerTicket;
+        wwxrpPerTicket;
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 betPhase;
+        bytes32 keeperTopic = bytes32(uint256(uint160(keeper)));
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 0) continue;
+            bytes32 t0 = logs[i].topics[0];
+            if (t0 == FULL_TICKET_RESULT_SIG) {
+                // data = (uint8 spinIdx, uint32 playerTicket, uint8 matches, uint256 payout)
+                (, , , uint256 payout) = abi.decode(logs[i].data, (uint8, uint32, uint8, uint256));
+                if (betPhase == 0 || betPhase == 3) {
+                    ethShareSum += _ethShareOf(payout, ethPerTicket);
+                } else if (betPhase == 1) {
+                    burnieSum += payout;
+                } else {
+                    wwxrpSum += payout;
+                }
+            } else if (t0 == PAYOUT_CAPPED_SIG) {
+                ++payoutCappedCount;
+            } else if (t0 == FULL_TICKET_RESOLVED_SIG) {
+                ++betPhase; // advance to the next bet's currency phase
+            } else if (
+                logs[i].emitter == address(coinflip) &&
+                logs[i].topics.length > 1 &&
+                t0 == COINFLIP_STAKE_UPDATED_SIG &&
+                logs[i].topics[1] == keeperTopic
+            ) {
+                ++keeperCreditCount;
+            }
+        }
     }
 
     /// @dev Reproduce the on-chain per-spin result ticket (_resolveFullTicketBet derivation).
