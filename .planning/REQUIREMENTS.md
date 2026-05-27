@@ -1,133 +1,79 @@
-# Requirements: Degenerus Protocol — v49.0 Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
+# Requirements: Degenerus Protocol — v50.0 Whale-Pass O(1) Refactor + AfKing Pass-Gated Subs + MintModule Advance-Divergence + External RNG-Audit Protocol
 
-**Milestone:** v49.0 (started 2026-05-26)
-**Audit baseline → subject:** v48.0 closure HEAD `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029` → v49.0 closure HEAD. Every cited `file:line` + the bounty/gas math MUST be re-attested vs the v48.0-closure HEAD before any patch.
-**Scope source:** the milestone discussion (2026-05-26) + `.planning/research/SUMMARY.md` + the 4 research dimension docs.
-**Posture:** ONE batched USER-APPROVED `contracts/*.sol` diff (router + advance-bounty rework + bounty re-peg + the folded no-cost micro-opts); HARD STOP at the commit boundary. Security/RNG-freeze floor over gas. Bounty stays minted FLIP CREDIT from the finite-pool / self-exclude / ETH-work-gate pattern.
+**Milestone:** v50.0 (started 2026-05-27)
+**Audit baseline → subject:** v49.0 closure HEAD `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9` → v50.0 closure HEAD. Every cited `file:line` MUST be re-attested vs the v49.0-closure HEAD before any patch.
+**Scope source:** the milestone discussion (2026-05-27) + the three v50 forward-seeds (`v49-whale-pass-claim-refactor-seed`, `v50-afking-pass-only-sub-simplify-seed`, `mintmodule-processed-advance-divergence-seed`). No research (internal refinements + an internally-grounded deliverable).
+**Posture:** the three contract items (WHALE/AFSUB/MINTDIV) ship as ONE batched USER-APPROVED `contracts/*.sol` diff; HARD STOP at the commit boundary. Security/RNG-freeze floor over gas (`feedback_security_over_gas`); items WHALE + MINTDIV touch RNG-adjacent paths and must be RE-PROVEN freeze-safe, not assumed. The external RNG-audit protocol (RNGAUDIT) is a package-only deliverable authored against the frozen post-v50 tree. Pre-launch redeploy-fresh (storage break fine).
 
 ---
 
-## v49.0 Requirements
+## v50.0 Requirements
 
-### Unified Keeper "Do-Work" Router (ROUTER)
-- [x] **ROUTER-01**: A keeper can call a single **PARAMETERLESS `doWork()`** entrypoint on `AfKing.sol` that performs exactly ONE keeper category of work per call and pays one gas-pegged bounty. `doWork()` takes NO `maxCount` — it determines its OWN fixed per-leg default batch internally (D-07 supersedes D-06; the `maxCount == 0` sentinel no longer exists). The standalone parametered **+ UNREWARDED** `autoOpen(uint256 count)` / `autoBuy(uint256 count)` stay as manual/emergency clears (RD-4: direct, non-router calls are unrewarded).
-- [x] **ROUTER-02**: `doWork` routes by priority — **`autoBuy` → advance-leg (new-day advance OR mid-day partial-drain ticket processing) → `autoOpen`** (RD-1: autoBuy runs first so subscriber boxes/tickets queue at day-open before advance requests the day's RNG → same-cycle reveal + same-day quest credit).
-- [x] **ROUTER-03**: The one-rewarded-category-per-call rule is enforced as a STRUCTURAL early-return (advance/open/buy bounties can never stack in one tx).
-- [x] **ROUTER-04**: `doWork` uses O(1) on-chain work-discovery predicates (advance-due incl. mid-day partial-drain / boxes-pending / buys-pending) — no unbounded scans. `boxesPending()` is **rngLock-aware** (RD-3: false during rngLock so the open leg no-ops during the freeze, but covers mid-day-resolved rounds whose word has landed); **buys-pending is TRUE during rngLock** (RD-2: autoBuy no longer aborts on rngLock; buys queue pre-entropy).
-- [x] **ROUTER-05**: `autoBuy` is refactored to an internal `_autoBuy` call (no new cross-contract money edge) **with the rngLock guard dropped (RD-2) and the bounty unified into `doWork` (RD-4)**; the KEEP-04 `bytes32("DGNRS")` affiliate passthrough (GAME-side `_batchPurchaseUnit`) survives the refactor. `autoResolve` is excluded from the router and stays a SEPARATE call — it is RENAMED to `degeneretteResolve` + its bounty RE-PEGGED per GAS-06 (the router-fold itself is architecturally blocked by the caller-supplied `(players[], betIds[])` requirement, which has no O(1) on-chain discovery).
-- [x] **ROUTER-06**: `doWork` signals "no work done" cleanly via a `NoWork()` revert (fires only when all 3 O(1) discovery predicates are empty; consistent with the existing no-buy anti-spam revert idiom), and never pays a bounty for no work.
-- [x] **ROUTER-07**: The router's reentrancy disposition is decided at SPEC: **NO `nonReentrant` guard on `doWork`** (D-01), re-grounded on the unified single `creditFlip` — under RD-4 there is exactly ONE `creditFlip` in `doWork`, CEI-last, fed by legs that return raw counts/mult and never self-credit. Formal basis = keeper-never-a-payee + no untrusted ETH send (per-leg + single-`creditFlip` grep D-01a) + one-category structural early-return + single-`creditFlip`-last CEI ordering; the D-01b TST-02 double-pay regression stays as the empirical backstop.
-- [x] **ROUTER-08**: `autoBuy` is a NORMAL buy — DROP both rngLock guards: the AfKing autoBuy-entry guard (`:568`) AND the game-side `batchPurchase` rngLock pre-check (`:1737`); KEEP the `gameOver` check (`:1738`). (RD-2; Q1 RESOLVED SAFE — the guard was v46 batch-hygiene, NOT orphan-index defense; buying is freeze-safe by construction, orphan defended on the resolution side. Q5: `batchPurchase` is AF_KING-gated with sole external caller `AfKing.sol:821` → no other dependent loses freeze protection.)
-- [x] **ROUTER-09**: BLOCK `autoOpen` during rngLock (RD-3: `boxesPending()` rngLock-aware) AND drop the `autoOpen` try/catch + add an entry-gate `if (rngLocked() || _livenessTriggered()) return;` + make `_autoOpenBox` internal (RD-5). Basis: the open path has EXACTLY TWO revert sources — rngLock + the deliberate terminal-jackpot liveness control (`contracts/storage/DegenerusGameStorage.sol:571`); the entry-gate replicates both pre-loop → brick-proof, terminal-jackpot guard intact for direct opens (USER-accepted frozen-contract trade; the entry-gate is MANDATORY if the try/catch goes).
-- [x] **ROUTER-10**: UNIFY the bounty into `doWork` (RD-4) — pull the 3 advance + the autoOpen (`:1676`) + the autoBuy (`:846`) in-callee `creditFlip`s into ONE `creditFlip` in `doWork` (CEI-last); legs return their raw reward basis and NEVER self-credit; direct (non-router) calls become unrewarded. Reverses the original per-leg-bounty model (old R4). Requires signature changes to `autoOpen`/`autoBuy` + `IDegenerusGame`.
+### Whale-Pass O(1) Claim Refactor (WHALE)
+- [ ] **WHALE-01**: The box-open whale-pass mint stops looping. The inline ~100-iteration `_queueTickets` whale-pass mint at box-open (`DegenerusGameLootboxModule.sol:~1250-1260`) is replaced by an O(1) record of a pending whale-pass claim (beneficiary + amount/level), so opening a box is uniform cost regardless of whale-pass status.
+- [ ] **WHALE-02**: A player-paid `claimWhalePass()` entrypoint materializes the queued whale-pass tickets (the deferred `_queueTickets` mint), with the gas borne by the beneficiary at claim time rather than the box-opener at open time. SPEC locks the exact signature (caller-is-beneficiary vs permissionless-with-beneficiary-arg) and the pending-claim storage shape.
+- [ ] **WHALE-03**: Box opens become uniform O(1) → the 331 whale-pass-weighted `autoOpen` gas budget carve-out is retired and `OPEN_BATCH` returns to a flat per-box sizing. The new flat `OPEN_BATCH` is re-confirmed to stay under the autoOpen tx-gas ceiling at the worst-case uniform open.
+- [ ] **WHALE-04**: RNG-freeze safety is PROVEN (not assumed) for the split: the queued whale-pass tickets target a FUTURE level (verify against the `_queueTickets` level math); neither the O(1) record at box-open nor `claimWhalePass()` writes any slot that participates in the CURRENT RNG window during `rngLock` (or reverts if it would); the `rngLock` liveness gate and the `_applyWhalePassStats` timing/semantics are preserved (stats applied at the same logical point, not advanced/delayed in a way that perturbs a frozen input).
 
-### advanceGame Bounty Rework (ADV)
-- [x] **ADV-01**: The 3 advance-bounty `creditFlip(caller,…)` sites in `DegenerusGameAdvanceModule.sol` (`:189`/`:225`/`:468`) are removed; standalone `advanceGame()` pays no bounty.
-- [x] **ADV-02**: `advanceGame` returns `(uint8 mult, bool rewardable)` — the stall multiplier + a rewardable flag — so the router pays the re-homed bounty from the multiplier's canonical day-epoch home (no recompute in a money path). `mult` = the stall ladder (`1/2/4/6`) on the NEW-DAY path ONLY; **the mid-day partial-drain returns `mult = 1`** (no escalation, ADV-05/D-07); the gameover path `mult = 1`. Decoded in the `DegenerusGame.advanceGame` wrapper (`:275`/`:283`, currently discards the delegatecall `data`).
-- [x] **ADV-03**: Standalone `advanceGame()` stays fully functional as an unrewarded liveness fallback; a guaranteed free-fallback caller path is identified so re-homing does not create a single-point liveness risk.
-- [x] **ADV-04**: The router's advance-consume reads only FROZEN VRF-window state even when fired in the same tx as `autoOpen`/`autoBuy` — the player-controllable `totalFlipReversals` nudge stays frozen (v45 freeze invariant preserved).
-- [x] **ADV-05**: Mid-day partial-drain ticket processing (`day == dailyIdx` but tickets not fully processed) is router-rewardable advance-leg work.
+### AfKing Pass-Gated Subscriptions (AFSUB)
+- [ ] **AFSUB-01**: The BURNIE-purchased subscription window is REMOVED — `burnForKeeper` and the `paidThroughDay` time-funding accounting are deleted; a subscription's lifetime is no longer extended by burning BURNIE. (`AfKing.sol`; the BURNIE `burnForKeeper` sink + its DegenerusGame/BurnieCoin counterpart are removed or repurposed per SPEC.)
+- [ ] **AFSUB-02**: Subscriptions are PASS-GATED — `validThroughLevel` is encoded at subscribe time (derived from the subscriber's pass), and each sweep iteration validity check is `currentLevel <= validThroughLevel` (the same cheap stored-field compare as the retired `paidThroughDay` — NO per-iteration external pass read on the non-crossing path, NO GASOPT-05-class regression).
+- [ ] **AFSUB-03**: At the level crossing (`currentLevel > validThroughLevel`) the sub's pass is re-read EXACTLY ONCE → refresh-or-evict: a still-valid (new or upgraded) pass refreshes `validThroughLevel` and the sub continues; otherwise the sub is evicted. This is NOT an unconditional kick, and the crossing is the ONLY external pass read on the hot path.
+- [ ] **AFSUB-04**: Third-party box funding (the OPEN-E shared `fundingSource`) is PRESERVED — pass-gating does NOT moot OPEN-E. The 4 OPEN-E structural protections (consent-gate-at-subscribe / default-self byte-identical / no-escalation / trust-the-sub temporal bound) are re-attested to hold under the pass-gated model (`open-e-operator-approval-trust-boundary`).
+- [ ] **AFSUB-05**: The cancel/eviction path preserves the locked SUB-07 in-place cancel-tombstone semantics and the v49 swap-pop membership invariant (membership ⟺ packed != 0); pass-eviction must NOT reproduce the H-CANCEL-SWAP-MISS missed-day class (`afking-cancel-tombstone-streak-finding`).
 
-### Bounty Recalibration + Worst-Case Gas Sweep (GAS)
-- [x] **GAS-01**: Worst-case-first marginal gas is derived per keeper category (`autoBuy`/`autoOpen`/`degeneretteResolve`) + the router overhead (theoretical worst case before measurement). This derivation sizes the D-07 flat-per-tx model: the per-category max-laden gas at 0.5 gwei fixes the `1×` base unit + the `1 / 1.5 / 2` per-category ratios + the open `KNEE (~5)`. (`doWork()` is parameterless — D-07 supersedes D-06's `maxCount==0` default-count sizing; the fixed per-leg default batch is intrinsic to `doWork`.)
-- [x] **GAS-02**: All keeper bounties are re-pegged to **flat-per-tx per-category** at break-even 0.5 gwei (BURNIE-denominated): advance `2× × mult`, buy `1.5×`, open `1×` pro-rated below the knee (`1× × min(opened, KNEE)/KNEE`). Pegged to the per-category max-laden MARGINAL, never a per-call total (the CR-01 self-crank-faucet rule); the open knee kills the small-batch corner. (Seed 1+2 design + money-path delta-audit + no-brick tests done in 331-03; the calibration record is 331-04; the constants land under the USER gate in 331-05 — GAS-02 closes there.)
-- [x] **GAS-03**: The single day-start stall epoch is **satisfied by DELETION — advance is the sole stall epoch** (D-03 dissolved by D-07: dropping the autoBuy stall multiplier deletes AfKing's autoBuy stall ladder + its absolute-day epoch, leaving the `AdvanceModule` GAME-day epoch as the only escalating path; there are no two epochs to collapse).
-- [x] **GAS-04**: The stall multiplier (1/2/4/6) is kept **ADVANCE-ONLY** (only the advance leg escalates; the autoBuy stall ladder is deleted per D-07); any ceiling extension for extreme stalls is added ABOVE the 2h tier (never lowering existing thresholds) and is capped against the finite faucet pool.
-- [x] **GAS-05**: A WR-01-style round-trip guard proves no positive-EV self-crank loop **under the flat-per-tx model** (esp. the open small-batch + low-gas corner: the per-box reward below the knee `1×/KNEE` ≤ a one-box tx's 0.5-gwei gas → a tiny mid-day open is −EV); the faucet bound holds, self-exclude + ETH-work-gate intact.
-- [x] **GAS-06**: `autoResolve` is RENAMED to `degeneretteResolve` (+ internal `_autoResolveBet`→`_degeneretteResolveBet`, interfaces, tests) and its bounty re-pegged from per-item break-even to a flat literal ~1 BURNIE flip-credit per tx (count-independent), gated at ≥3 successfully-resolved NON-WWXRP bets (revert `NoWork()` on zero work; the 1–2-resolved case → resolved but UNPAID, lean = do-not-revert so a trailing tail is never stranded — SPEC/IMPL confirms). Anti-exploit basis (corrected — NOT the 0.5-gwei peg ref): the keeper pays REAL tx gas (base + ≥3 resolutions + overhead) every call while ~1 BURNIE illiquid flip-credit is worth ≤ `mintPrice/1000` ETH (≤0.00024 ETH even at the 0.24-ETH milestone price) → every qualifying tx is a net loss at any realistic gas price → no positive-EV farm; the ≥3 gate widens the margin. WWXRP stays excluded (AUTO-04 — the ≥3 count is non-WWXRP only); AUTO-02 probe + per-item isolation + self-resolve (REW-04) preserved; kept a SEPARATE call (NOT in the router). GAS sanity check (NOT a blocker): confirm ~1 BURNIE stays below real 3-resolution gas across the low-gas/high-mintPrice corner factoring flip-credit illiquidity; only lower the constant or add a scaled gate if a realistic corner flips positive. (SPEC D-05f: verify losing-bet resolution is not required by any invariant before dropping the break-even incentive.)
+### MintModule Advance-Divergence — Confirm-Then-Fix (MINTDIV)
+- [ ] **MINTDIV-01**: SPEC establishes, with evidence, whether `processTicketBatch`'s within-player `startIndex` advance (`writesUsed>>1`, `DegenerusGameMintModule.sol:~671`) can diverge from `processFutureTicketBatch`'s `+= take` (`:~398`) — i.e., whether a single player's owed can split across budget slices AND that split yields divergent per-ticket trait indices. Reachability + the divergence mechanism are PROVEN or REFUTED (not asserted).
+- [ ] **MINTDIV-02**: If reachable → the within-player index advance is aligned across the two loops so per-ticket trait indices are identical whether or not a player's owed splits across budget slices, with NO change to the frozen-word trait derivation for any non-split case. If NOT reachable → documented NEGATIVE with the proof and no contract change (the seed candidate is closed either way).
 
-### No-Cost Gas Micro-Optimizations (GASOPT)
-- [x] **GASOPT-01**: `DegenerusGameMintModule.sol` hoists `mapping(address=>uint40) storage owedMap = ticketsOwedPacked[rk]` in both `processTicketBatch` (`:671`) and the resolve/future loop (`:398`) — `rk` is loop-invariant; behavior-identical.
-- [x] **GASOPT-02**: **SUBSUMED by GASOPT-03.** (Originally: `AfKing.autoBuy` hoists `IGame.claimableWinningsOf(player)` to one call per iteration. GASOPT-03's batched game-side keeper read is the superset of this per-iteration hoist — the per-player STATICCALL hoist is folded into the batched read. No separate work item.)
-- [x] **GASOPT-03**: NEW game-side `batchPurchaseForKeeper` / `keeperSnapshot` collapsing the two per-player `claimableWinningsOf(player)` STATICCALLs (`AfKing:691` + `:722`) into ONE batched call (~2-3k/player). New function + interface surface. SUBSUMES GASOPT-02. Behavior-identical (same values, fewer cross-contract calls).
-- [x] **GASOPT-04**: DROP the per-player `AutoBought` event (decl `:171`, emit `:785`, ~1.5k/player); the no-double-buy oracle migrates to the existing `lastAutoBoughtDay` storage stamp (`:81`/`:784`). The event-removal AND the test-oracle migration land TOGETHER (the suite's `AutoBought`-keyed assertions break the moment the event is gone). The no-double-buy invariant `_countAutoBoughtFor(sub)==1` is re-expressed in `lastAutoBoughtDay` + pool/balance-delta terms WITHOUT weakening SAFE-03 / H-CANCEL-SWAP. (No off-chain/frontend consumer — the USER owns the keeper.)
-- [x] **GASOPT-05**: REMOVE the per-iteration `isOperatorApproved(player, AfKing)` check (`:676`, ~2.8k/player) — the SUB is the consent unit (revoke = `setDailyQuantity(0)` → tombstone-skip; OPEN-E "consent-gate-at-subscribe + trust-the-sub"); KEEP the subscribe-time `isOperatorApproved(fundingSource, subscriber)` gate (`:401`). **BLOCKING CONDITION:** the Phase 333 SWEEP must re-attest the 4 OPEN-E protections hold WITHOUT `:676` BEFORE closure; if it fails, this removal is REVERTED before the milestone ships.
+### External-LLM RNG-Audit Protocol — Deliverable, Package-Only (RNGAUDIT)
+- [ ] **RNGAUDIT-01**: The protocol states the freeze invariant precisely as the external auditor's target — "while `rngLockedFlag = true`, every storage slot that participates in any VRF-influenced output is frozen until `rngLockedFlag = false`; only the incoming VRF word + its deterministic derivations may be unknown" — plus the exempt entry points (`advanceGame()` + reachable resolution flow, the VRF coordinator callback, `retryLootboxRng()` failsafe). (`v45-vrf-freeze-invariant`.)
+- [ ] **RNGAUDIT-02**: The protocol is a MULTI-ROUND adversarial sequence designed to force rigor across a multi-turn external session: (R1) catalog the VRF read-graph — every participating slot with its writers + readers across all modules; (R2) independently re-derive each slot's freeze status (frozen / reverts-if-written-during-lock / proven-non-participating); (R3) adversarially challenge the catalog (hunt for any writer that escapes the freeze, any cross-module composition that does); (R4) reconcile + report. The external model performs its OWN discovery — no answer key / no internal findings are embedded ("different perspective" is the point).
+- [ ] **RNGAUDIT-03**: The protocol ships a self-contained context pack sufficient to run cold against the contracts: the module/RNG-window map, the `rngLock` mechanics, where the VRF word enters and is consumed, the contract inventory, and the back-and-forth variable-tracing methodology ("trace every variable across modules — what writes it, what reads it, what is locked during an RNG window"). It does NOT depend on access to our `audit/FINDINGS-*.md`.
+- [ ] **RNGAUDIT-04**: The protocol is authored against the FROZEN post-v50 tree (after WHALE/AFSUB/MINTDIV land), is model-agnostic (usable in both Gemini and ChatGPT, with context-window chunking guidance for feeding the contracts), and is explicitly PACKAGE-ONLY — running it through the external models and triaging their output is a FUTURE cycle, OUT of v50.0.
 
 ### Test Proofs (TST)
-- [x] **TST-01**: Freeze-invariant fuzz (extending the v43 `RngLockDeterminism` harness) proves the router advance-consume reads only frozen state mid-tx (the `totalFlipReversals` class). ADDS (the redesign, Q4): autoBuy-during-rngLock SAFE; autoOpen-blocked-during-rngLock + NO marooned boxes (RD-3/RD-5); unified-bounty one-category + no-double-pay (the single `creditFlip` in `doWork`).
-- [x] **TST-02**: A one-rewarded-category-per-tx assertion (no bounty-stacking) + a router→game→`creditFlip` reentrancy double-pay regression (the D-01b backstop proving the ROUTER-07 no-guard disposition — legs structurally cannot credit, only `doWork` credits once after the early-return). Plus the parameterless-`doWork()` default-batch proof (D-07): `doWork()` does its fixed per-leg default batch and does NOT OOG in the common case (a backlog larger than one batch leaves a remainder for the next call), with the standalone parametered + UNREWARDED `autoOpen(count)`/`autoBuy(count)` emergency escapes exercised.
-- [x] **TST-03**: `advanceGame` is unrewarded standalone but rewarded via the router; the GASOPT micro-opts are proven same-results (gas-only).
-- [x] **TST-04**: Full-suite regression is NON-WIDENING vs the v48.0 baseline (net-zero new regression; enumerated-red-set guard). INCLUDES the GASOPT-04 test-oracle migration (`AutoBought` event → `lastAutoBoughtDay` storage / pool-balance-delta) keeping the suite net-zero vs the v48 baseline — the no-double-buy invariant re-expressed in storage terms WITHOUT weakening SAFE-03 / H-CANCEL-SWAP.
-- [x] **TST-05**: The `degeneretteResolve` rename + re-peg (GAS-06) is proven — flat literal ~1 BURNIE per tx (NOT per-item), the ≥3-resolution pay-gate, revert-on-no-work (zero resolved), WWXRP excluded from BOTH the gate count and the reward, and byte-identical resolution RESULTS vs the per-item path (rename + bounty-shape change only, no payout/RNG change).
+- [ ] **TST-01**: Whale-pass refactor is proven equivalent — a box-open followed by `claimWhalePass()` yields the same materialized tickets / traits / whale-pass stats as the old inline mint; box-open is demonstrated uniform-O(1) (whale vs non-whale opener); and a freeze-invariant fuzz (extending the v43 `RngLockDeterminism` harness) proves the deferred record + claim perturb no current-window entropy input.
+- [ ] **TST-02**: AfKing pass-gated subs are proven — an active sub is swept while `currentLevel <= validThroughLevel`; evicted at the crossing with no valid pass; refreshed (continues) at the crossing with a valid/upgraded pass; the non-crossing path performs NO external pass read; the OPEN-E 4-protection behavior re-attests; and the cancel-tombstone / swap-pop membership invariant holds (no missed-day regression).
+- [ ] **TST-03**: The MINTDIV same-traits regression lands — byte-identical per-ticket trait derivation across a budget-slice split for an affected player (covers the fix if real, or codifies the not-reachable boundary if refuted).
+- [ ] **TST-04**: Full-suite regression is NON-WIDENING vs the v49.0 baseline (net-zero new regression; enumerated-red-set guard by NAME), absorbing any test renames/oracle migrations from the three contract items.
 
-### Gas + Adversarial Security Sweep (SWEEP)
-- [x] **SWEEP-01**: A 3-skill adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`) is run against the frozen v49 subject, charged with: advance-timing MEV / same-tx bundling of advance-consume + buy/open, composed reentrancy (router→game→creditFlip), faucet-drain re-attestation on the unified surface, bounty-stacking, stall-multiplier abuse, and the unrewarded-advance liveness backstop. Every elevation passes the skeptic dual-gate.
-- [x] **SWEEP-02**: The delta-audit attests NON-WIDENING vs the v48.0 baseline `0cc5d10f` — every `contracts/`+`test/` diff is attributable to a v49 work item.
-- [x] **SWEEP-03**: `audit/FINDINGS-v49.0.md` is authored (9-section, mirroring v44/v46/v47/v48), with any findings adjudicated or deferred per USER direction.
+### Adversarial Security Sweep + Delta Audit (SWEEP)
+- [ ] **SWEEP-01**: A 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT per `D-271-ADVERSARIAL-02`) is run against the frozen v50 subject, charged with: whale-pass deferred-claim timing (can a claim alter RNG-derived outcomes / future-level traits / stats), pass-gated sub eviction-or-refresh abuse + OPEN-E re-attest, MintModule index correctness, and freeze across all the new paths. Every elevation passes the skeptic dual-gate.
+- [ ] **SWEEP-02**: The delta-audit attests NON-WIDENING vs the v49.0 baseline `b0511ca2` — every `contracts/`+`test/` diff is attributable to a v50 work item; the RNG/VRF-freeze invariant is re-attested intact across the WHALE + MINTDIV edits.
+- [ ] **SWEEP-03**: `audit/FINDINGS-v50.0.md` is authored (9-section, mirroring v44/v46/v47/v48/v49), with any findings adjudicated or deferred per USER direction; `chmod 444` at closure.
 
 ### Cross-Cutting — SPEC Reconciliation + IMPL + TERMINAL (BATCH)
-- [x] **BATCH-01**: SPEC design-lock — lock the 4 structural invariants (one-category structural early-return / frozen advance-consume / guaranteed free fallback caller / single day-start epoch), settle the shared signatures (`advanceGame` return shape, `doWork` signature, the discovery views), and grep-attest every cited `file:line` vs the v48.0 HEAD before any patch.
-- [x] **BATCH-02**: The ONE batched USER-APPROVED `contracts/*.sol` diff is applied in producer-before-consumer order (AdvanceModule bounty-removal + `(mult,rewardable)` return → Game wrapper decode + rngLock-aware views + autoOpen RD-3/RD-5 rework + `degeneretteResolve` rename + GASOPT-03 `keeperSnapshot` → interfaces → AfKing parameterless `doWork` router + `_autoBuy` refactor + RD-2 drop-guard + unified flat-per-tx bounty + GASOPT-04/05 → MintModule GASOPT-01 + tests rename-fixes + GASOPT-04 oracle migration); HARD STOP at the commit boundary (locally compiled/tested, never committed without explicit user hand-review).
-- [x] **BATCH-03**: TERMINAL closure — re-attest all v49.0 requirements at closure and apply the closure flip (`MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9` + the atomic ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS flip + chmod 444 the findings).
+- [ ] **BATCH-01**: SPEC design-lock — settle the shared signatures (the whale-pass pending-claim storage + `claimWhalePass()` signature, the AfKing `validThroughLevel` field + refresh-or-evict control flow, the MintModule index alignment), PROVE/REFUTE MINTDIV-01 reachability, fix the RNGAUDIT protocol structure, and grep-attest every cited `file:line` vs the v49.0 HEAD before any patch.
+- [ ] **BATCH-02**: The ONE batched USER-APPROVED `contracts/*.sol` diff (WHALE + AFSUB + MINTDIV-if-real) is applied in producer-before-consumer order; HARD STOP at the commit boundary (locally compiled/tested, never committed without explicit user hand-review).
+- [ ] **BATCH-03**: TERMINAL closure — re-attest all v50.0 requirements at closure and apply the atomic 5-doc closure flip (`MILESTONE_V50_AT_HEAD_<sha>` + ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS + chmod 444 the findings).
 
 ---
 
-## Out of Scope (v49.0)
+## Out of Scope (v50.0)
 
-- **`autoResolve`/`degeneretteResolve` FOLDED INTO the on-chain router** — the router-fold is out (architecturally blocked: it needs caller-supplied `(players[], betIds[])`, no O(1) discovery; router = buy/open/advance only; the unified "one button" is a frontend concern). NOTE: the rename `autoResolve`→`degeneretteResolve` + the flat ~1-BURNIE "lose" re-peg (≥3-gate) ARE in scope (GAS-06 + TST-05) — only the router-fold is excluded.
-- **Gas opts that trade an invariant** — the `Sub` memory-snapshot/write-back-at-end pattern (breaks the guard-less CEI + loses early-`continue` writes + collides with swap-pop), and the `batchPurchase` "trusted-batch" try/catch bypass (the per-slice try/catch IS the keeper isolation invariant). REJECTED in the 2026-05-26 scavenger review.
-- **`1 ether - decayN` unchecked** — DEFERRED pending a `_wadPow ≤ WAD including rounding` proof (catastrophic underflow if it can round above WAD); revisit only if proven free.
-- **SWAP cash-share ≤40% tighten** — the v48 advisory; USER accepted ≤60% as canonical. Revisit only if explicitly requested.
-- **Standing profit-margin bounty** — break-even + stall escalation is the chosen liveness lever (research: a minted-BURNIE premium gets bid to ~zero in gas under competition and is pure dilution).
-- **External keeper network** (Chainlink Automation / Gelato / Keep3r) — off-chain-network + funded-registry models contradict the permissionless self-serve, in-protocol-BURNIE-funded design.
+- **Running the external RNG-audit protocol / triaging its findings** — RNGAUDIT is package-only; feeding it to Gemini/ChatGPT and adjudicating their output is a FUTURE cycle (USER decision 2026-05-27).
 - **Off-chain indexer / webpage** — separate frontend track.
-- **Any non-keeper contract surface** — the sweep is scoped to the AfKing keeper subsystem + the router + advance.
+- **Any non-RNG / non-keeper-adjacent contract surface** beyond the three named items (WHALE box-open / AFSUB AfKing subs / MINTDIV MintModule per-ticket loops).
+- **The SWAP cash-share ≤40% tighten** — v48 advisory; USER accepted ≤60% as canonical. Revisit only if explicitly requested.
+- **The v44 §9d 135-anchor maximalist register** — carries forward unchanged; NOT live vectors (`project_rnglock_audit_disposition`).
+- **`1 ether - decayN` unchecked hardening** — still deferred pending the `_wadPow ≤ WAD` rounding proof.
 
 ---
 
 ## Future Requirements (deferred, not this milestone)
 
-- Extended stall-multiplier tiers beyond the GAS-sized ceiling, if deep-stall analysis warrants more than the v49 extension.
-- The `1 ether - decayN` unchecked hardening (pending the `_wadPow` rounding proof).
+- Run the external RNG-audit protocol through Gemini + ChatGPT, ingest their reports, and triage each claim (confirm/refute/fix/document) — the follow-on cycle to RNGAUDIT.
+- Any whale-pass / AfKing / MintModule follow-ups surfaced by SWEEP-01 and deferred by USER direction.
 
 ---
 
 ## Traceability
 
-**36/36 v49.0 requirements mapped to exactly one phase across 329–333 — 0 orphaned, 0 duplicated.** Phases: 329 SPEC · 330 IMPL · 331 GAS · 332 TST · 333 TERMINAL. Center-of-gravity assignment (design-at-SPEC / build-at-IMPL / calibrate-at-GAS / prove-at-TST / sweep+attest-at-TERMINAL); the TERMINAL closure (BATCH-03 + SWEEP-01/02/03) re-attests the full set. (29 at roadmap creation + GAS-06/TST-05 added 2026-05-26 for the rename/re-peg → 31; then the keeper-router REDESIGN re-SPEC 2026-05-26 added ROUTER-08/09/10 + GASOPT-03/04/05 (GASOPT-02 SUBSUMED into GASOPT-03, not counted) → 36 active reqs.)
+*(empty — filled by the roadmapper at ROADMAP creation; statuses flip to Complete as phases close; all re-attested at the TERMINAL closure.)*
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ROUTER-01 | Phase 330 (IMPL) | Complete |
-| ROUTER-02 | Phase 330 (IMPL) | Complete |
-| ROUTER-03 | Phase 330 (IMPL) | Complete |
-| ROUTER-04 | Phase 330 (IMPL) | Complete |
-| ROUTER-05 | Phase 330 (IMPL) | Complete |
-| ROUTER-06 | Phase 330 (IMPL) | Complete |
-| ROUTER-07 | Phase 329 (SPEC) | Complete |
-| ROUTER-08 | Phase 330 (IMPL) | Complete |
-| ROUTER-09 | Phase 330 (IMPL) | Complete |
-| ROUTER-10 | Phase 330 (IMPL) | Complete |
-| ADV-01 | Phase 330 (IMPL) | Complete |
-| ADV-02 | Phase 330 (IMPL) | Complete |
-| ADV-03 | Phase 330 (IMPL) | Complete |
-| ADV-04 | Phase 329 (SPEC) | Complete |
-| ADV-05 | Phase 330 (IMPL) | Complete |
-| GAS-01 | Phase 331 (GAS) | Complete |
-| GAS-02 | Phase 331 (GAS) | Complete |
-| GAS-03 | Phase 329 (SPEC) | Complete |
-| GAS-04 | Phase 331 (GAS) | Complete |
-| GAS-05 | Phase 331 (GAS) | Complete |
-| GAS-06 | Phase 331 (GAS) | Complete |
-| GASOPT-01 | Phase 330 (IMPL) | Complete |
-| GASOPT-02 | Phase 330 (IMPL) | SUBSUMED by GASOPT-03 (not counted) |
-| GASOPT-03 | Phase 330 (IMPL) | Complete |
-| GASOPT-04 | Phase 330 (IMPL) | Complete |
-| GASOPT-05 | Phase 330 (IMPL) | Complete |
-| TST-01 | Phase 332 (TST) | Complete |
-| TST-02 | Phase 332 (TST) | Complete |
-| TST-03 | Phase 332 (TST) | Complete |
-| TST-04 | Phase 332 (TST) | Complete |
-| TST-05 | Phase 332 (TST) | Complete |
-| SWEEP-01 | Phase 333 (TERMINAL) | Complete |
-| SWEEP-02 | Phase 333 (TERMINAL) | Complete |
-| SWEEP-03 | Phase 333 (TERMINAL) | Complete |
-| BATCH-01 | Phase 329 (SPEC) | Complete |
-| BATCH-02 | Phase 330 (IMPL) | Complete |
-| BATCH-03 | Phase 333 (TERMINAL) | Complete |
+| _pending roadmap_ | — | — |
 
-**Per-phase count:** 329 SPEC: 4 (BATCH-01, ROUTER-07, ADV-04, GAS-03) · 330 IMPL: 18 (ROUTER-01/02/03/04/05/06/08/09/10, ADV-01/02/03/05, GASOPT-01/03/04/05, BATCH-02 — GASOPT-02 SUBSUMED, not counted) · 331 GAS: 5 (GAS-01/02/04/05/06) · 332 TST: 5 (TST-01..05) · 333 TERMINAL: 4 (SWEEP-01/02/03, BATCH-03). **Total = 36** (4 + 18 + 5 + 5 + 4).
-
-**Note:** milestone-wide "uncovered" warnings (§13e-style) are EXPECTED false alarms — each phase owns only its slice; SWEEP-01/02/03 + BATCH-03 re-attest the full 36-requirement set at TERMINAL (same class as the v47/v48 roadmaps).
-
-*Last updated: 2026-05-26 — v49.0 traceability filled at roadmap creation (29 reqs / 7 categories: ROUTER 7 · ADV 5 · GAS 5 · GASOPT 2 · TST 4 · SWEEP 3 · BATCH 3 → phases 329–333), then GAS-06 + TST-05 added (Phase 329 discussion, 2026-05-26) for the `autoResolve`→`degeneretteResolve` rename + flat ~1-BURNIE "lose" bounty re-peg (≥3-gate) → 31 reqs (GAS 6 · TST 5). **Then the keeper-router REDESIGN re-SPEC (2026-05-26, after the 330-07 pivot) reworded ROUTER-01/02/04/05 + ADV-02 + GAS-02/03/04/05 + TST-01/02/04 and REGISTERED ROUTER-08/09/10 (RD-2 drop-guards / RD-3+RD-5 autoOpen-block+entry-gate / RD-4 unify-bounty) + GASOPT-03/04/05 (batched keeper read [SUBSUMES GASOPT-02] / drop AutoBought + oracle migration / drop per-iter isOperatorApproved), all homed to Phase 330 IMPL → 36 active reqs (ROUTER 10 · ADV 5 · GAS 6 · GASOPT 4-active+02-subsumed · TST 5 · SWEEP 3 · BATCH 3). D-06 SUPERSEDED by D-07 parameterless `doWork()` (no `maxCount` sentinel).** Statuses flip to Complete as phases close; all 36 re-attested at the Phase 333 closure.*
+*Last updated: 2026-05-27 — v50.0 requirements authored at milestone init (25 reqs / 7 categories: WHALE 4 · AFSUB 5 · MINTDIV 2 · RNGAUDIT 4 · TST 4 · SWEEP 3 · BATCH 3). Traceability to be filled by the roadmapper (phases continue from 333 → 334).*
