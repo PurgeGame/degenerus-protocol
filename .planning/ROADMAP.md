@@ -57,7 +57,7 @@
 - [x] 334-01-PLAN.md — WHALE-04 freeze-safety proof (SC2) + MINTDIV-01 reachability verdict (SC3)
 - [x] 334-02-PLAN.md — whale-pass + MintModule design-lock (SC1) + RNGAUDIT structure sketch (SC4) + grep-attestation table (SC5)
 - [x] 334-03-PLAN.md — AfKing pass-gated subscription design-lock + OPEN-E/SUB-07/swap-pop preservation criteria (SC1, AFSUB slice)
-- [ ] 334-04-PLAN.md — producer-before-consumer IMPL-335 edit-order map (SC1 integration) + SPEC index + multi-source coverage audit
+- [x] 334-04-PLAN.md — producer-before-consumer IMPL-335 edit-order map (SC1 integration) + SPEC index + multi-source coverage audit
 **UI hint**: no
 
 ### Phase 335: IMPL — The ONE Batched Contract Diff (WHALE + AFSUB + MINTDIV-if-real)
@@ -117,7 +117,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 3/4 | In Progress|  |
+| 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 4/4 | Complete   | 2026-05-27 |
 | 335. IMPL — The ONE Batched Contract Diff | v50.0 | 0/TBD | Not started | - |
 | 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 0/TBD | Not started | - |
 | 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 0/TBD | Not started | - |
