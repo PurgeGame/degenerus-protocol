@@ -7,17 +7,16 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
-/// @title CrankLeversAndPacking -- GAS-02/03/04 batched-reward + packing lever assertions, plus the
+/// @title KeeperLeversAndPacking -- GAS-02/03/04 batched-reward + packing lever assertions, plus the
 ///        G1-G13 security-floor guard byte-presence pins (Phase 319 Plan 04, Task 1).
 ///
 /// @notice RESEARCH (§GAS-02/03/04 Verification Targets) confirms the levers HOLD at HEAD; this
-///         suite proves it with CHECKABLE assertions so a future regression flips RED:
+///         suite proves it with CHECKABLE assertions so a future regression flips RED. The v49
+///         one-reward-per-tx BEHAVIORAL proof was re-authored fresh in storage-oracle / count terms
+///         at Phase 332 (KeeperRouterOneCategory / DegeneretteResolveRepeg); this suite keeps the
+///         SOURCE-PRESENCE structural pins:
 ///
 ///         GAS-02 (one creditFlip/batch, read-once, one batch transfer/refund):
-///           - BEHAVIORAL: a multi-item degeneretteResolve / autoOpen over N>1 successful items emits
-///             EXACTLY ONE crank-reward creditFlip with the summed amount (mirrors REW-02 in
-///             CrankFaucetResistance:417). Losing bets / freshly-opened boxes pay no winnings, so
-///             the single CoinflipStakeUpdated is the post-loop crank reward alone.
 ///           - SOURCE-PRESENCE (comment-stripped vm.readFile grep, idiom JackpotSingleCallCorrectness
 ///             :461-493 / RngFreezeAndRemovalProofs): degeneretteResolve/autoOpen read `_activeTicketLevel()`
 ///             ONCE before the loop; the per-tx creditFlip sits AFTER the loop; AfKing reads
@@ -43,9 +42,9 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @dev Comment-stripping (the `_stripComments` / `_countOccurrences` helpers are byte-faithful copies
 ///      of JackpotSingleCallCorrectness.t.sol:622-700) so NatSpec prose mentioning a symbol cannot
 ///      self-satisfy or self-invalidate a grep gate; every >0 gate is over comment-stripped source.
-///      Behavioral assertions reuse the CrankFaucetResistance losing-bet + creditFlip-count idiom and
-///      the CrankOpenBoxWorstCaseGas box-enqueue idiom. Zero contracts/*.sol mutation; test-only.
-contract CrankLeversAndPacking is DeployProtocol {
+///      The bet/box-driving helpers reuse the KeeperFaucetResistance losing-bet idiom and the
+///      KeeperOpenBoxWorstCaseGas box-enqueue idiom. Zero contracts/*.sol mutation; test-only.
+contract KeeperLeversAndPacking is DeployProtocol {
     // -------------------------------------------------------------------------
     // Storage-slot constants (confirmed via `forge inspect ... storage`; mirror CrankFaucetResistance)
     // -------------------------------------------------------------------------

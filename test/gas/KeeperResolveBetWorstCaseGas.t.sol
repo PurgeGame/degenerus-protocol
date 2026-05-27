@@ -5,10 +5,10 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 
-/// @title CrankResolveBetWorstCaseGas -- GAS-01 (Phase 319) + DSPIN-02 (Phase 323-04) resolve-bet
+/// @title KeeperResolveBetWorstCaseGas -- GAS-01 (Phase 319) + DSPIN-02 (Phase 323-04) resolve-bet
 ///        worst-case measurement.
 ///
-/// @notice The biggest do-work-crank cost center is a `degeneretteResolve` item resolving a degenerette bet
+/// @notice The biggest keeper-router cost center is a `degeneretteResolve` item resolving a degenerette bet
 ///         where the spin loop runs to the per-currency cap and the winning spins each flip into the
 ///         lootbox-conversion branch. The v47 per-currency caps raise the ETH spin ceiling from 10
 ///         (old MAX_SPINS_PER_BET) to MAX_SPINS_ETH = 25 (DegeneretteModule:226) — 2.5x the roll work.
@@ -30,8 +30,8 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 ///           - Test C: DSPIN-02 25-spin ETH worst case (derive-then-measure; absorbed under 30M).
 ///           - Test D: DSPIN-02 max mixed-currency batch (ETH 25 + BURNIE 15 + WWXRP 5 in one call).
 ///
-/// @dev Live `DeployProtocol` fixture (the crank writes Game storage). Clones the `CrankFaucetResistance`
-///      crank fixture (lootboxRngIndex seed + post-placement RNG-word inject + self-operator-approval)
+/// @dev Live `DeployProtocol` fixture (the keeper-router writes Game storage). Clones the `KeeperFaucetResistance`
+///      resolve fixture (lootboxRngIndex seed + post-placement RNG-word inject + self-operator-approval)
 ///      and the `RedemptionGas` gasleft-delta idiom.
 ///
 ///      Worst-case construction: each spin derives its own random result ticket, so a single
@@ -45,7 +45,7 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 ///      `PayoutCapped` emit. The on-chain `FullTicketResult` (one per spin) and `PayoutCapped` (one
 ///      per cap-flip) counts VERIFY the loop ran fully and the winning spins flipped (non-vacuity).
 ///      Test-only: no contracts/*.sol mutated.
-contract CrankResolveBetWorstCaseGas is DeployProtocol {
+contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
     // Storage-slot constants (DegenerusGame; confirmed via `forge inspect storage`)
     // -------------------------------------------------------------------------

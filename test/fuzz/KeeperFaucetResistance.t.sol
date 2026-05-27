@@ -8,41 +8,38 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title CrankFaucetResistance -- Proves SAFE-01: the permissionless do-work crank
-///        (degeneretteResolve / autoOpen) is faucet-bounded by three caller-independent locks:
+/// @title KeeperFaucetResistance -- Proves SAFE-01: the permissionless keeper-router
+///        (AfKing.doWork open/buy legs + degeneretteResolve) is faucet-bounded by three
+///        caller-independent locks:
 ///        (1) the purchase-gate (an item must already be a real, purchased, RNG-ready bet/box),
-///        (2) the FIXED gas-peg reward (CRANK_*_GAS_UNITS * 0.5 gwei, never measured gas), and
+///        (2) the flat-per-tx LIVE-unit reward judged against the REAL prevailing gas of the
+///            identical work at the >=1 gwei market floor (never measured gas, never the peg ref),
+///            and
 ///        (3) the coinflip-credit illiquidity (creditFlip = pending stake, not liquid BURNIE).
 ///
-/// @notice A self-crank / Sybil round-trip is net-zero-or-negative because the BURNIE coinflip
-///         credit a cranker earns for resolving their own item is valued, at the protocol's own
-///         reference peg, at exactly CRANK_RESOLVE_BET_GAS_UNITS * CRANK_GAS_PRICE_REF (0.5 gwei)
-///         of ETH — strictly below the real gas the crank transaction costs at any realistic gas
-///         price (> 0.5 gwei) over a gasUsed that exceeds the reserved gasUnits. The reward never
-///         reads gasleft()/tx.gasprice (REW-03), so it cannot scale up to chase a higher
-///         submission price. The credit lands as illiquid coinflip stake (not liquid BURNIE), so
-///         it cannot be immediately round-tripped to a profit.
+/// @notice A self-keeper / Sybil round-trip is net-zero-or-negative across the v49 router legs:
+///         the doWork() open-leg pro-rated below-knee reward, the flat 1.5x buy leg, and the
+///         degeneretteResolve flat >=3-gate RESOLVE_FLAT_BURNIE grant, each valued at the 0.5-gwei
+///         peg, stay strictly below the REAL gas the identical work burns at every realistic
+///         submission price (>= 1 gwei). The reward never reads gasleft()/tx.gasprice (REW-03), so
+///         it cannot scale up to chase a higher submission price, and the credit lands as illiquid
+///         coinflip stake (not liquid BURNIE), so it cannot be immediately round-tripped to a profit.
 ///
-///         Also asserts CRANK-04 (WWXRP currency==3 earns exactly zero reward), REW-02 (exactly
-///         ONE crank-reward creditFlip per crank tx with the summed amount, never per-item), the
-///         one-reward-per-item lock (re-crank of a resolved bet reverts BatchAlreadyTaken at item
-///         0; a duplicate in one batch rewards once), and the pre-RNG-word resolution block (a
-///         crank whose RNG word has not landed skips the item via the preserved RngNotReady guard,
-///         no reward).
+///         Also asserts WWXRP (currency==3) earns exactly zero reward, the one-reward-per-item lock
+///         (re-resolve of a committed bet reverts BatchAlreadyTaken at item 0), the
+///         degeneretteResolve below-gate-unpaid / zero-reverts-NoWork / WWXRP-excluded-from-gate
+///         shape, and the pre-RNG-word resolution/open block (an attempt before the word lands skips
+///         via the preserved RngNotReady / wordless-index guard, no reward).
 ///
-/// @dev Builds on the 318-01-repaired DeployProtocol fixture (AfKing live at AF_KING). Drives a
-///      REAL degenerette bet through the public placeDegeneretteBet API (mirroring the proven
+/// @dev Builds on the DeployProtocol fixture (AfKing live at AF_KING). Drives a REAL degenerette
+///      bet through the public placeDegeneretteBet API (mirroring the proven
 ///      DegeneretteFreezeResolution pattern: seed lootboxRngIndex=1, place with word==0, then
-///      inject the RNG word and crank). The bet outcome is controlled deterministically against
-///      the REAL resolve derivation (packedTraitsDegenerette over keccak(word,index,salt)):
-///        - LOSING bets (matches == 0) resolve fully but pay zero winnings, so the ONLY creditFlip
-///          in the crank tx is the crank reward itself — isolating the reward for exact counting
-///          and peg-equality assertions (a WINNING bet's BURNIE-winnings creditFlip would
-///          otherwise be conflated with the reward creditFlip).
-///        - One WINNING bet test proves the full resolve path runs end-to-end.
-///      The bet owner approves the game as operator so the crank's delegatecall-sender
+///      inject the RNG word and resolve). The bet outcome is controlled deterministically against
+///      the REAL resolve derivation (packedTraitsDegenerette over keccak(word,index,salt)) using
+///      LOSING bets so the only creditFlip in the resolve tx is the router reward itself.
+///      The bet owner approves the game as operator so the resolve path's delegatecall-sender
 ///      (address(game)) clears _requireApproved. Test-only: no contracts/*.sol mutated.
-contract CrankFaucetResistance is DeployProtocol {
+contract KeeperFaucetResistance is DeployProtocol {
     // -------------------------------------------------------------------------
     // Storage slot constants (confirmed via `forge inspect ... storage`)
     // -------------------------------------------------------------------------
@@ -177,7 +174,7 @@ contract CrankFaucetResistance is DeployProtocol {
 
     /// @notice One-reward-per-item: re-cranking an already-resolved bet reverts BatchAlreadyTaken
     ///         at item 0 (its slot is deleted on first resolve), yielding zero further credit.
-    function testReCrankResolvedBetRevertsNoSecondReward() public {
+    function testReResolveResolvedBetRevertsNoSecondReward() public {
         uint64 betId = _placeLosingBet(player);
         _injectLootboxRngWord(INDEX, FIXED_WORD);
 
@@ -212,7 +209,7 @@ contract CrankFaucetResistance is DeployProtocol {
 
     /// @notice Pre-RNG-word block (boxes / orphan-index gate): autoOpen on an index whose
     ///         word is zero returns early without rewarding (the orphan-index re-issue coupling).
-    function testCrankBoxesBeforeRngWordEmitsNoReward() public {
+    function testAutoOpenBoxesBeforeRngWordEmitsNoReward() public {
         // INDEX word is zero (we never inject it here). autoOpen must early-return at the
         // lootboxRngWordByIndex[index] == 0 guard, emitting no creditFlip.
         uint256 preStake = coinflip.coinflipAmount(sybil);
@@ -248,7 +245,7 @@ contract CrankFaucetResistance is DeployProtocol {
     ///         regime. The work gas is measured via the unrewarded `afKing.autoOpen(k)` passthrough, whose
     ///         body IS the doWork() open leg's box-opening work; the reward is the value doWork() would
     ///         credit (computed from the LIVE break-even unit). Round-trip <= 0 at every realistic price.
-    function testRouterOpenSelfCrankRoundTripNonPositive() public {
+    function testRouterOpenSelfKeeperRoundTripNonPositive() public {
         uint256[6] memory ks = [uint256(1), 2, 3, 4, 5, 12];
         for (uint256 j; j < ks.length; ++j) {
             uint256 k = ks[j];
@@ -326,7 +323,7 @@ contract CrankFaucetResistance is DeployProtocol {
     ///         real subscription buys (each bounded once/day/sub) far in excess of the bounty. The reward
     ///         here is OBSERVED directly off the doWork() credit delta (buy is the top-priority routed leg
     ///         on a fresh day with healthy subs), so this also proves the live buy ratio end to end.
-    function testRouterBuySelfCrankRoundTripNonPositive() public {
+    function testRouterBuySelfKeeperRoundTripNonPositive() public {
         address[] memory subs = _setupHealthyBuyingSubs(3, "buyRT_");
 
         address keeper = makeAddr("buyRT_keeper");
@@ -415,7 +412,7 @@ contract CrankFaucetResistance is DeployProtocol {
     ///         the work but credits exactly ZERO reward — the currency==3 fork at
     ///         DegenerusGame.sol:1564 takes the zero-reward branch. Uses a LOSING WWXRP ticket so
     ///         no winnings creditFlip occurs either: the player's stake is unchanged, end to end.
-    function testWwxrpCrankEarnsZeroReward() public {
+    function testWwxrpKeeperEarnsZeroReward() public {
         uint64 betId = _placeLosingWwxrpBet(player);
         _injectLootboxRngWord(INDEX, FIXED_WORD);
 

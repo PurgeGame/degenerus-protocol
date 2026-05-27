@@ -5,7 +5,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
-/// @title CrankOpenBoxWorstCaseGas -- GAS-01 open-box worst-case measurement (Phase 319 Plan 02)
+/// @title KeeperOpenBoxWorstCaseGas -- GAS-01 open-box worst-case measurement (Phase 319 Plan 02)
 ///
 /// @notice `autoOpen(maxCount)` (DegenerusGame.sol:1592) walks `boxPlayers[index]` from the
 ///         self-partitioning cursor and opens each ready box via `try this._autoOpenBox` ->
@@ -22,11 +22,11 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         owns the `CRANK_OPEN_BOX_GAS_UNITS` calibration. The single-box marginal is emitted via
 ///         `log_named_uint` as the Plan 05 calibration input.
 ///
-/// @dev Live `DeployProtocol` fixture (the crank writes Game storage). Clones the `CrankNonBrick`
+/// @dev Live `DeployProtocol` fixture (the keeper-router writes Game storage). Clones the `KeeperNonBrick`
 ///      box-enqueue helper (a real lootbox-mode `game.purchase{value:..}(...DirectEth)` deposit fires
 ///      the first-deposit `lootboxEthBase == 0` signal -> `enqueueBoxForAutoOpen`, MintModule:999) and the
-///      `CrankFaucetResistance` RNG-word inject helper. Test-only: no contracts/*.sol mutated.
-contract CrankOpenBoxWorstCaseGas is DeployProtocol {
+///      `KeeperFaucetResistance` RNG-word inject helper. Test-only: no contracts/*.sol mutated.
+contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
     // Storage-slot constants (DegenerusGame; confirmed via `forge inspect storage`)
     // -------------------------------------------------------------------------

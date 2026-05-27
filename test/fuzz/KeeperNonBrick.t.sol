@@ -8,44 +8,39 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
-/// @title CrankNonBrick -- Proves SAFE-02: the permissionless do-work cranks
-///        (degeneretteResolve / autoOpen) and the keeper-gated batchPurchase are NON-BRICK.
+/// @title KeeperNonBrick -- Proves SAFE-02: the keeper-gated batchPurchase and the keeper-router
+///        non-brick / un-brickable-cancel invariants survive a single poisoned actor.
 ///
-/// @notice One reverting / stale / not-ready item is isolated via the onlySelf +
-///         try/catch shell and SKIPPED — the batch completes, rewarding / buying only
-///         the successful items, and a single failing entry can never deny progress to
-///         the rest. Concretely this suite asserts:
+/// @notice One reverting / stale player is isolated via the per-slice try/catch shell and
+///         SKIPPED — the batch completes, buying only the successful slices, and a single failing
+///         entry can never deny progress to the rest. Concretely this suite asserts:
 ///
-///   Task 1 — skip-and-continue + slice-refund + batch-level pre-check:
-///     - degeneretteResolve over a list whose middle item is poisoned (not-ready, RNG word absent)
-///       still resolves the healthy items; the poisoned item is caught by
-///       `try this._degeneretteResolveBet catch {}` and the reward sums over SUCCESSES only.
-///     - autoOpen whose cursor walk hits a poisoned entry (lootboxEthBase != 0 so it is
-///       NOT the `continue`-skip, but lootboxEth == 0 so the module open reverts E()) skips
-///       that entry via the per-item try/catch and opens the rest, rewarding successes only.
+///   batchPurchase isolation + slice-refund + batch-level pre-check:
 ///     - batchPurchase where ONE player's _batchPurchaseUnit reverts (a sub-LOOTBOX_MIN
 ///       slice → mint module reverts E()) isolates that player via the per-slice try/catch,
 ///       lands the other players' lootboxes, refunds the failed slice to the keeper in the
-///       single post-loop refund, and the call returns WITHOUT reverting.
-///     - batchPurchase pre-checks rngLocked / gameOver ONCE at entry: when rngLocked is true
-///       the WHOLE batch is rejected at entry (single revert, not a partial per-player run).
+///       single post-loop refund, and the call returns WITHOUT reverting (incl. a fuzzed
+///       fail-position never-bricks invariant).
+///     - the keeper batch path skips a poisoned middle player and a fuzzed poison position
+///       never bricks the batch.
+///     - batchPurchase rejects a non-keeper caller and pre-checks gameOver ONCE at entry: when
+///       gameOver is true the WHOLE batch is rejected at entry (single revert, not a partial run).
 ///
-///   Task 2 — reentrancy rollback + cancel un-brickable:
+///   reentrancy rollback + cancel un-brickable (SAFE-03 / H-CANCEL-SWAP preserved):
 ///     - A re-entrant frame (a malicious player whose withdraw-recipient callback tries to
 ///       re-enter withdraw / setDailyQuantity) cannot double-spend: the inner withdraw
 ///       reverts InsufficientBalance under strict CEI (effects-before-interaction) and
 ///       unwinds, so the pool is debited at most once.
 ///     - Cancel (setDailyQuantity(0)) is un-brickable: a subscriber can always tombstone its
 ///       sub, and afterward its full _poolOf ETH is withdrawable — the CEI withdraw cannot be
-///       blocked by any downstream interaction.
+///       blocked by any downstream interaction; spam-cancel cannot strand tombstones.
 ///
-/// @dev Builds on the 318-01-repaired DeployProtocol fixture (AfKing live at AF_KING). Drives
-///      REAL degenerette bets (mirroring the 318-02 CrankFaucetResistance pattern) and REAL
-///      lootbox purchases through the public mint API; the only slot manipulation is the
-///      established LOOTBOX_RNG word injection and a single targeted lootboxEth-zeroing to
-///      forge the caught-revert poison entry. batchPurchase is called as the pinned AF_KING
-///      keeper (vm.prank(ContractAddresses.AF_KING)). Test-only: no contracts/*.sol mutated.
-contract CrankNonBrick is DeployProtocol {
+/// @dev Builds on the DeployProtocol fixture (AfKing live at AF_KING). Drives REAL lootbox
+///      purchases through the public mint API; the only slot manipulation is the established
+///      LOOTBOX_RNG word injection and a single targeted lootboxEth-zeroing to forge the
+///      caught-revert poison entry. batchPurchase is called as the pinned AF_KING keeper
+///      (vm.prank(ContractAddresses.AF_KING)). Test-only: no contracts/*.sol mutated.
+contract KeeperNonBrick is DeployProtocol {
     // -------------------------------------------------------------------------
     // Storage slot constants (DegenerusGame; confirmed via `forge inspect storage`)
     // -------------------------------------------------------------------------
@@ -214,9 +209,8 @@ contract CrankNonBrick is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 1 — batchPurchase batch-level rngLocked / gameOver pre-check
+    // batchPurchase batch-level gameOver pre-check
     // =========================================================================
-
 
     /// @notice SAFE-02 (batchPurchase batch-level pre-check): when gameOver is true the whole batch
     ///         is rejected ONCE at entry (E()), confirming the second batch-level gate fires before
