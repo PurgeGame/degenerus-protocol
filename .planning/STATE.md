@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v49.0
 milestone_name: Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep
 status: executing
-last_updated: "2026-05-27T11:46:47.918Z"
+last_updated: "2026-05-27T11:57:36.173Z"
 last_activity: 2026-05-27
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
   percent: 40
 ---
 
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (Current Milestone: v49.0 section) + .planning/ROADMAP
 ## Current Position
 
 Phase: 331 (gas-worst-case-marginal-derivation-break-even-0-5gwei-peg-ca) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-05-27
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 94%
 
 > **⚠️ v49.0 PROGRESS (sessions 2026-05-26 → 2026-05-27; "keep going, no contract commits"):**
 > - **Phase 329 SPEC RE-EXECUTED + COMPLETE** under the keeper-router redesign — 36 reqs, VERIFICATION **8/8 passed**, completion `0eae9c28`. `329-SPEC.md` is the authoritative design contract.
@@ -568,6 +568,7 @@ Audit deliverables:
 | Phase 331 P01 | 35 | 2 tasks | 2 files |
 | Phase 331 P02 | 45min | 2 tasks | 1 files |
 | Phase 331 P03 | ~50min | 3 tasks | 4 files |
+| Phase 331 P04 | ~30min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -693,3 +694,7 @@ Audit deliverables:
 - [Phase ?]: 331-02: GAS-05/GAS-06 round-trip faucet guards added to CrankFaucetResistance.t.sol — 10 new tests proving no positive-EV self-crank under the v49 flat-per-tx router (open small-batch corner + buy leg + degeneretteResolve flat reward), judged vs REAL gas 1..2000 gwei + flip-credit illiquidity; reward read LIVE so guards survive 331-04 calibration
 - [Phase ?]: 331-02: open-leg gas via the gas-identical unrewarded autoOpen(k) passthrough + reward computed from live unit (doWork->open is rngLock-blocked, RD-3); buy-leg reward observed off the doWork credit delta; 9 pre-existing v48-model failures DEFERRED to 332 TST (logged in deferred-items.md)
 - [Phase ?]: 331-03: Seed 2 keeper batch path = new batchPurchaseForKeeper + internal _keeperBuyUnit; keeper buy is lootbox-only; affiliateCommissionFromSender (:527) is the SOLE non-coalescible write
+- [Phase ?]: 331-04: all 5 frozen AfKing constants + RESOLVE_FLAT_BURNIE=1e18 CONFIRMED at placeholder from N>=32 marginals; 331-05 frozen diff comment-only/NO-OP
+- [Phase ?]: 331-04: BOUNTY_ETH_TARGET (deploy-param, not gated) SURFACED — recommended production ceiling <=8.78e12 wei (advance-6x @0.5gwei); fixture 885e6 ~14000x below (under-incentivizes, not a faucet)
+- [Phase ?]: 331-04 GAS-04: stall ceiling NO EXTENSION — 6x is a one-shot (one rewardable advance/day-move, un-fakeable, round-trip<=0 @>=1gwei market); 1/2/4/6 confirmed ADVANCE-ONLY, thresholds never lowered
+- [Phase ?]: 331-04: RESOLVE_FLAT_BURNIE anti-exploit = the bet-stake gate (self-resolver must place >=3 losing bets to harvest 1 BURNIE); milestone+sub-2gwei reference corner structurally dominated + WWXRP gate-excluded (AUTO-04)
