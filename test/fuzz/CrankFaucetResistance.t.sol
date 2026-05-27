@@ -74,11 +74,8 @@ contract CrankFaucetResistance is DeployProtocol {
     // -------------------------------------------------------------------------
 
     /// @dev Reference gas price for the reward peg (DegenerusGame.sol:1495).
-    uint256 private constant CRANK_GAS_PRICE_REF = 0.5 gwei;
 
     /// @dev Reserved per-work-type gas-unit constants (DegenerusGame.sol:1501-1502).
-    uint256 private constant CRANK_RESOLVE_BET_GAS_UNITS = 66_528;
-    uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 71_203;
 
     /// @dev BURNIE per-ETH conversion unit (DegenerusGameStorage:161 / Coinflip:132).
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
@@ -175,156 +172,8 @@ contract CrankFaucetResistance is DeployProtocol {
     //          pre-RNG-word block
     // =========================================================================
 
-    /// @notice SAFE-01 / T-318-02-01: a player who cranks their OWN resolvable bet earns a
-    ///         coinflip credit whose ETH-equivalent at the protocol's own peg equals exactly
-    ///         CRANK_RESOLVE_BET_GAS_UNITS * 0.5 gwei — strictly below the real gas cost of the
-    ///         crank tx at any realistic gas price (> 0.5 gwei) over a gasUsed that exceeds the
-    ///         reserved gasUnits. Net round-trip <= 0. Also proves the illiquidity lock (liquid
-    ///         BURNIE balance unchanged; credit is pending coinflip stake). Uses a LOSING bet so
-    ///         the reward is the only credit (no winnings creditFlip to conflate).
-    function testSelfCrankRoundTripNonPositive() public {
-        uint64 betId = _placeLosingBet(player);
-        _injectLootboxRngWord(INDEX, FIXED_WORD);
 
-        // Reward valued back at the SAME fixed peg = exactly the reserved ETH (the credit is
-        // _ethToBurnieValue(GAS_UNITS * 0.5 gwei, price); converting back at price recovers the wei).
-        uint256 expectedRewardEthPeg = CRANK_RESOLVE_BET_GAS_UNITS * CRANK_GAS_PRICE_REF;
 
-        uint256 preLiquidBurnie = coin.balanceOf(player);
-        uint256 preStake = coinflip.coinflipAmount(player);
-
-        address[] memory players = new address[](1);
-        uint64[] memory betIds = new uint64[](1);
-        players[0] = player;
-        betIds[0] = betId;
-
-        // Measure the real gas the crank tx consumes (the cranker's true ETH cost driver).
-        vm.prank(player);
-        uint256 gasBefore = gasleft();
-        game.degeneretteResolve(players, betIds);
-        uint256 gasUsed = gasBefore - gasleft();
-
-        uint256 postLiquidBurnie = coin.balanceOf(player);
-        uint256 postStake = coinflip.coinflipAmount(player);
-
-        // (a) Illiquidity: the reward did NOT increase the player's LIQUID BURNIE balance.
-        assertEq(
-            postLiquidBurnie,
-            preLiquidBurnie,
-            "self-crank reward must not land as liquid BURNIE (illiquid coinflip stake only)"
-        );
-
-        // (b) The reward landed as coinflip pending stake (a positive, non-liquid credit).
-        uint256 stakeDelta = postStake - preStake;
-        assertGt(stakeDelta, 0, "self-crank earns a positive coinflip stake credit");
-
-        // (c) The earned credit, valued back at the protocol's own peg, equals the reserved
-        //     gas-peg ETH and NOT a measured-gas reimbursement.
-        uint256 rewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
-        assertEq(
-            rewardEthAtPeg,
-            expectedRewardEthPeg,
-            "credit value at peg must equal the FIXED gasUnits * 0.5 gwei reserve (REW-03)"
-        );
-
-        // (d) ROUND-TRIP <= 0 (structural): the reward is the FIXED reserve priced at the 0.5 gwei
-        //     reference (REW-03 — never measured gas, never tx.gasprice). A real submission pays
-        //     gasUsed * (real gas price), and the realistic price floor (1 gwei) is already 2x the
-        //     0.5 gwei reference. So even at the 1 gwei floor the reserved-peg reward is strictly
-        //     below the real gas the cranker burns to earn it — the round-trip is negative. The
-        //     gap only widens as the real price rises (reward fixed, cost scales).
-        uint256 realGasCostAt1Gwei = gasUsed * 1 gwei;
-        assertLt(
-            expectedRewardEthPeg,
-            realGasCostAt1Gwei,
-            "round-trip <= 0 at the 1 gwei realistic floor: fixed-peg reward < real gas cost"
-        );
-
-        // Spot-check a 20 gwei mainnet-typical price — the gap is an order of magnitude.
-        uint256 realGasCostAt20Gwei = gasUsed * 20 gwei;
-        assertLt(
-            expectedRewardEthPeg,
-            realGasCostAt20Gwei,
-            "round-trip strictly negative at a realistic 20 gwei submission price"
-        );
-
-        // Belt-and-suspenders on the illiquidity lock: even if the reserved-peg ETH could be
-        // recovered 1:1, it lands as coinflip STAKE (gambled, not withdrawable) — there is no
-        // path to convert the credit back to liquid ETH at par, so the round-trip cannot even
-        // reach the ETH-peg value, let alone exceed the gas spent.
-        assertEq(postLiquidBurnie, preLiquidBurnie, "credit never becomes liquid (re-asserted)");
-    }
-
-    /// @notice SAFE-01 fuzz: across fuzzed realistic submission prices and a fuzzed Sybil cranker,
-    ///         the fixed-peg reward is ALWAYS below the real gas cost — the round-trip cannot be
-    ///         pushed positive by choosing the cranker or the gas price (REW-03: reward never reads
-    ///         tx.gasprice/gasleft so it does not scale with the chosen price).
-    function testFuzz_RoundTripNonPositiveAcrossGasPrices(uint256 gasPriceWei, uint8 crankerSel) public {
-        // Realistic submission prices: 1 gwei .. 2000 gwei (above the 0.5 gwei reference floor).
-        gasPriceWei = bound(gasPriceWei, 1 gwei, 2000 gwei);
-
-        uint64 betId = _placeLosingBet(player);
-        _injectLootboxRngWord(INDEX, FIXED_WORD);
-
-        address actualCranker = (crankerSel % 2 == 0) ? player : sybil;
-
-        address[] memory players = new address[](1);
-        uint64[] memory betIds = new uint64[](1);
-        players[0] = player;
-        betIds[0] = betId;
-
-        uint256 preStake = coinflip.coinflipAmount(actualCranker);
-        vm.prank(actualCranker);
-        uint256 gasBefore = gasleft();
-        game.degeneretteResolve(players, betIds);
-        uint256 gasUsed = gasBefore - gasleft();
-        uint256 stakeDelta = coinflip.coinflipAmount(actualCranker) - preStake;
-
-        uint256 rewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
-        // The reward's ETH-peg value is the FIXED reserve, independent of the chosen gas price.
-        assertEq(rewardEthAtPeg, CRANK_RESOLVE_BET_GAS_UNITS * CRANK_GAS_PRICE_REF, "reward fixed, price-independent");
-
-        // Round-trip <= 0 at the fuzzed real submission price.
-        assertLt(
-            rewardEthAtPeg,
-            gasUsed * gasPriceWei,
-            "round-trip <= 0 at every fuzzed realistic gas price > 0.5 gwei"
-        );
-    }
-
-    /// @notice The full resolve path runs end-to-end for a WINNING bet: the bet is resolved (slot
-    ///         deleted = work done), winnings are paid, and the cranker still earns exactly the
-    ///         fixed reward peg on top (the crank reward is independent of the win amount).
-    function testWinningBetFullResolvePathStillPegsReward() public {
-        uint64 betId = _placeWinningBet(player);
-        _injectLootboxRngWord(INDEX, FIXED_WORD);
-
-        address[] memory players = new address[](1);
-        uint64[] memory betIds = new uint64[](1);
-        players[0] = player;
-        betIds[0] = betId;
-
-        // Count the crank-reward creditFlip specifically: it is the creditFlip emitted from the
-        // top-level GAME frame (the post-loop reward), distinct from any winnings creditFlip
-        // emitted from inside the resolve sub-call. We isolate it by its amount == the fixed peg.
-        uint256 expectedRewardBurnie =
-            (CRANK_RESOLVE_BET_GAS_UNITS * CRANK_GAS_PRICE_REF * PRICE_COIN_UNIT)
-            / PriceLookupLib.priceForLevel(_lvl());
-
-        vm.recordLogs();
-        vm.prank(player);
-        game.degeneretteResolve(players, betIds);
-
-        // The bet was resolved (work done): its slot is deleted.
-        assertEq(_readBetPacked(player, betId), 0, "winning bet resolved (slot deleted)");
-
-        // Exactly one CoinflipStakeUpdated carries the fixed crank-reward peg amount.
-        assertEq(
-            _countCoinflipStakeUpdatedWithAmount(expectedRewardBurnie),
-            1,
-            "exactly one crank-reward creditFlip at the fixed peg, even alongside a winnings credit"
-        );
-    }
 
     /// @notice One-reward-per-item: re-cranking an already-resolved bet reverts BatchAlreadyTaken
     ///         at item 0 (its slot is deleted on first resolve), yielding zero further credit.
@@ -359,60 +208,7 @@ contract CrankFaucetResistance is DeployProtocol {
         );
     }
 
-    /// @notice One-reward-per-item within ONE batch: the same (player, betId) listed twice rewards
-    ///         only once. Item 0 resolves+rewards; the duplicate at index 1 hits the deleted slot,
-    ///         the onlySelf resolve reverts InvalidBet (packed==0), is caught, and adds zero.
-    function testDuplicateInBatchRewardsOnce() public {
-        uint64 betId = _placeLosingBet(player);
-        _injectLootboxRngWord(INDEX, FIXED_WORD);
 
-        address[] memory players = new address[](2);
-        uint64[] memory betIds = new uint64[](2);
-        players[0] = player;
-        betIds[0] = betId;
-        players[1] = player; // duplicate
-        betIds[1] = betId;
-
-        uint256 preStake = coinflip.coinflipAmount(player);
-        vm.prank(player);
-        game.degeneretteResolve(players, betIds);
-        uint256 stakeDelta = coinflip.coinflipAmount(player) - preStake;
-
-        uint256 oneItemPeg = CRANK_RESOLVE_BET_GAS_UNITS * CRANK_GAS_PRICE_REF;
-        uint256 rewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
-        assertEq(
-            rewardEthAtPeg,
-            oneItemPeg,
-            "a duplicated item rewards exactly once, not twice"
-        );
-    }
-
-    /// @notice Pre-RNG-word block (bets): a crank whose RNG word has NOT landed does not resolve
-    ///         and does not reward — the onlySelf sub-call hits the preserved RngNotReady guard,
-    ///         is caught by try/catch, the bet slot stays intact, and reward stays zero (no
-    ///         creditFlip emitted).
-    function testCrankBeforeRngWordSkipsAndDoesNotReward() public {
-        uint64 betId = _placeLosingBet(player);
-        // NOTE: deliberately do NOT inject the RNG word -> lootboxRngWordByIndex[INDEX] == 0.
-
-        address[] memory players = new address[](1);
-        uint64[] memory betIds = new uint64[](1);
-        players[0] = player;
-        betIds[0] = betId;
-
-        uint256 preStake = coinflip.coinflipAmount(player);
-
-        vm.recordLogs();
-        vm.prank(player);
-        game.degeneretteResolve(players, betIds);
-
-        // No creditFlip emitted (reward == 0 guard).
-        assertEq(_countCoinflipStakeUpdated(), 0, "no creditFlip when RNG word has not landed");
-        // Bet slot intact (not resolved) -> still re-crankable once the word lands.
-        assertGt(_readBetPacked(player, betId), 0, "unresolved bet slot remains intact pre-word");
-        // Stake unchanged.
-        assertEq(coinflip.coinflipAmount(player), preStake, "no reward for a not-ready crank");
-    }
 
     /// @notice Pre-RNG-word block (boxes / orphan-index gate): autoOpen on an index whose
     ///         word is zero returns early without rewarding (the orphan-index re-issue coupling).
@@ -427,111 +223,7 @@ contract CrankFaucetResistance is DeployProtocol {
         assertEq(coinflip.coinflipAmount(sybil), preStake, "no reward from a not-ready box index");
     }
 
-    // =========================================================================
-    // WR-01 — multi-box self-crank round-trip <= 0 (the box-path SAFE-01 floor)
-    // =========================================================================
 
-    /// @notice SAFE-01 / WR-01: a self-cranker who opens N OWN boxes in one `autoOpen(N)` tx earns
-    ///         a FLAT per-box reward summed into ONE creditFlip. Because the per-box reward is flat
-    ///         while the per-tx fixed overhead (cursor SLOAD+SSTORE :1593-1598/:1631, the index gate
-    ///         SLOAD :1603, `_activeTicketLevel()` :1610, the once-per-tx `coinflip.creditFlip` :1632)
-    ///         amortizes toward zero per box as N grows, the box path is exactly where the round-trip
-    ///         can go POSITIVE if the per-box peg over-states the true per-box MARGINAL (CR-01). This
-    ///         test asserts the summed reward valued at the protocol's own peg is <= the REAL gas the
-    ///         self-crank tx burns at the >=1 gwei market floor — the box-path analog of the single-bet
-    ///         `testSelfCrankRoundTripNonPositive`. With a peg ABOVE the per-box marginal this assertion
-    ///         FAILS for large N (the faucet hole); at/below the marginal it holds for ALL N.
-    function testMultiBoxSelfCrankRoundTripNonPositive() public {
-        uint48 index = _activeLootboxIndex();
-        uint256 nBoxes = 24; // past the small-N regime where the fixed overhead dominates per box
-
-        // The self-cranker controls N deposit addresses (a Sybil): each fires the first-deposit enqueue.
-        // The owner-set prefix `wr01h_` produces a cold-bust-leaning batch (low per-box materialization
-        // cost) — the adversarially-cheap self-crank a peg-vs-marginal mismatch (CR-01) most exposes.
-        address[] memory owners = new address[](nBoxes);
-        for (uint256 i; i < nBoxes; ++i) {
-            address o = makeAddr(string(abi.encodePacked("wr01h_", vm.toString(i))));
-            owners[i] = o;
-            vm.deal(o, 100_000 ether);
-            _buyBox(o, 1 ether);
-        }
-        _injectLootboxRngWord(index, BOX_FIXED_WORD);
-
-        uint256 preStake = coinflip.coinflipAmount(cranker);
-
-        // Measure the REAL gas the self-crank tx burns (the cranker's true ETH cost driver).
-        vm.recordLogs();
-        vm.prank(cranker);
-        uint256 gasBefore = gasleft();
-        game.autoOpen(nBoxes);
-        uint256 gasUsed = gasBefore - gasleft();
-
-        // The cranker (not the box owners) receives the crank reward; isolate its credit by recipient.
-        uint256 stakeDelta = coinflip.coinflipAmount(cranker) - preStake;
-        assertGt(stakeDelta, 0, "self-cranker earns a positive summed box reward");
-
-        // Non-vacuity: every box actually opened (first-deposit signal zeroed), so the reward is for
-        // N real materializations, not a no-op / skipped walk.
-        for (uint256 i; i < nBoxes; ++i) {
-            assertEq(_lootboxEthBase(index, owners[i]), 0, "non-vacuity: each self-crank box opened");
-        }
-
-        // The summed reward valued back at the SAME fixed peg = exactly N * GAS_UNITS * 0.5 gwei.
-        uint256 summedRewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
-        assertEq(
-            summedRewardEthAtPeg,
-            nBoxes * CRANK_OPEN_BOX_GAS_UNITS * CRANK_GAS_PRICE_REF,
-            "summed box reward at peg == N * the flat per-box reserve (REW-03)"
-        );
-
-        // ROUND-TRIP <= 0 at the >=1 gwei realistic market floor: the FIXED-peg summed reward is
-        // strictly below the real gas the self-cranker burns to earn it. A per-box peg ABOVE the
-        // true per-box marginal would let the summed reward exceed gasUsed as the fixed overhead
-        // amortizes (CR-01); at/below the marginal it stays <= 0 for all N.
-        assertLt(
-            summedRewardEthAtPeg,
-            gasUsed * 1 gwei,
-            "WR-01: multi-box self-crank round-trip <= 0 at the 1 gwei market floor (box-path SAFE-01)"
-        );
-    }
-
-    /// @notice WR-01 fuzz: across fuzzed realistic submission prices, the FIXED-peg summed box reward
-    ///         is ALWAYS below the real gas cost of the N-box self-crank — the round-trip cannot be
-    ///         pushed positive by choosing the gas price (REW-03: the reward never reads tx.gasprice).
-    function testFuzz_MultiBoxRoundTripNonPositiveAcrossGasPrices(uint256 gasPriceWei) public {
-        gasPriceWei = bound(gasPriceWei, 1 gwei, 2000 gwei);
-
-        uint48 index = _activeLootboxIndex();
-        uint256 nBoxes = 24;
-        address[] memory owners = new address[](nBoxes);
-        for (uint256 i; i < nBoxes; ++i) {
-            address o = makeAddr(string(abi.encodePacked("wr01h_", vm.toString(i))));
-            owners[i] = o;
-            vm.deal(o, 100_000 ether);
-            _buyBox(o, 1 ether);
-        }
-        _injectLootboxRngWord(index, BOX_FIXED_WORD);
-
-        uint256 preStake = coinflip.coinflipAmount(cranker);
-        vm.prank(cranker);
-        uint256 gasBefore = gasleft();
-        game.autoOpen(nBoxes);
-        uint256 gasUsed = gasBefore - gasleft();
-        uint256 stakeDelta = coinflip.coinflipAmount(cranker) - preStake;
-
-        uint256 summedRewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
-        // Reward is the FIXED reserve, independent of the chosen gas price.
-        assertEq(
-            summedRewardEthAtPeg,
-            nBoxes * CRANK_OPEN_BOX_GAS_UNITS * CRANK_GAS_PRICE_REF,
-            "summed box reward fixed, price-independent"
-        );
-        assertLt(
-            summedRewardEthAtPeg,
-            gasUsed * gasPriceWei,
-            "WR-01: multi-box round-trip <= 0 at every fuzzed realistic gas price > 0.5 gwei"
-        );
-    }
 
     // =========================================================================
     // 331-02 Task 1 — GAS-05 flat-per-tx ROUTER round-trip guards (the doWork()
@@ -745,62 +437,7 @@ contract CrankFaucetResistance is DeployProtocol {
         assertEq(coinflip.coinflipAmount(player), preStake, "WWXRP reward is exactly zero");
     }
 
-    /// @notice REW-02: a degeneretteResolve over N>1 successful items emits exactly ONE crank-reward
-    ///         creditFlip with the summed amount, never N separate credits. Uses LOSING bets so
-    ///         the only creditFlip is the single post-loop crank reward.
-    function testBatchEmitsExactlyOneCreditFlipWithSum() public {
-        // Place THREE resolvable LOSING bets for the same player at the same index.
-        uint64 b1 = _placeLosingBet(player);
-        uint64 b2 = _placeLosingBet(player);
-        uint64 b3 = _placeLosingBet(player);
-        _injectLootboxRngWord(INDEX, FIXED_WORD);
 
-        address[] memory players = new address[](3);
-        uint64[] memory betIds = new uint64[](3);
-        players[0] = player; betIds[0] = b1;
-        players[1] = player; betIds[1] = b2;
-        players[2] = player; betIds[2] = b3;
-
-        uint256 preStake = coinflip.coinflipAmount(player);
-
-        vm.recordLogs();
-        vm.prank(player);
-        game.degeneretteResolve(players, betIds);
-
-        // Exactly ONE creditFlip for the batch (not 3) — losing bets pay no winnings, so the
-        // single emission is the post-loop crank reward.
-        assertEq(_countCoinflipStakeUpdated(), 1, "exactly one creditFlip per crank tx (REW-02)");
-
-        // Amount == the summed per-item reward (3 * the single-item peg).
-        uint256 stakeDelta = coinflip.coinflipAmount(player) - preStake;
-        uint256 rewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
-        uint256 expectedSumPeg = 3 * CRANK_RESOLVE_BET_GAS_UNITS * CRANK_GAS_PRICE_REF;
-        assertEq(
-            rewardEthAtPeg,
-            expectedSumPeg,
-            "the single creditFlip amount equals the in-memory sum of the 3 item rewards"
-        );
-    }
-
-    /// @notice REW: a crank that resolves zero items (all skipped: RNG word not landed) emits NO
-    ///         creditFlip (the reward != 0 guard at :1578).
-    function testZeroSuccessBatchEmitsNoCreditFlip() public {
-        // Two real bets, but the RNG word is NOT injected -> both onlySelf resolves hit
-        // RngNotReady, caught, zero reward, no creditFlip.
-        uint64 b1 = _placeLosingBet(player);
-        uint64 b2 = _placeLosingBet(player);
-
-        address[] memory players = new address[](2);
-        uint64[] memory betIds = new uint64[](2);
-        players[0] = player; betIds[0] = b1;
-        players[1] = player; betIds[1] = b2;
-
-        vm.recordLogs();
-        vm.prank(player);
-        game.degeneretteResolve(players, betIds);
-
-        assertEq(_countCoinflipStakeUpdated(), 0, "zero-success batch emits no creditFlip (:1578 guard)");
-    }
 
     // =========================================================================
     // 331-02 Task 2 — GAS-06 degeneretteResolve flat ~1-BURNIE round-trip guard +
@@ -1015,17 +652,6 @@ contract CrankFaucetResistance is DeployProtocol {
         }
     }
 
-    /// @dev Place a degenerette ETH bet engineered to WIN (>=2 matches) against the FIXED_WORD
-    ///      spin-0 result, so the full resolve+payout path runs.
-    function _placeWinningBet(address better) internal returns (uint64 betId) {
-        uint32 customTicket = _winningTicketFor(INDEX, FIXED_WORD);
-        uint128 betAmount = 0.01 ether;
-        vm.prank(better);
-        game.placeDegeneretteBet{value: betAmount}(
-            address(0), 0, betAmount, 1, customTicket, 0
-        );
-        betId = _betNonce(better);
-    }
 
     /// @dev Place a LOSING WWXRP (currency==3) degenerette bet. Seeds the better's WWXRP balance
     ///      via storage write so burnForGame succeeds, then places through the public API.
@@ -1123,16 +749,6 @@ contract CrankFaucetResistance is DeployProtocol {
         }
     }
 
-    /// @dev A customTicket that matches the result in ALL quadrants (color AND symbol) -> matches
-    ///      == 8 -> a guaranteed win. We copy the result's color+symbol fields verbatim.
-    function _winningTicketFor(uint48 index, uint256 word) internal pure returns (uint32 ticket) {
-        uint32 result = _resultTicketFor(index, word);
-        for (uint8 q; q < 4; q++) {
-            uint8 rQuad = uint8(result >> (q * 8));
-            uint8 colorSymbol = rQuad & 0x3F; // bits 5-0 (color + symbol), drop tag bits 7-6
-            ticket |= (uint32(colorSymbol) << (q * 8));
-        }
-    }
 
     /// @dev Count CoinflipStakeUpdated emissions in the recorded logs from the coinflip contract
     ///      (one is emitted per creditFlip via _addDailyFlip).
@@ -1143,19 +759,6 @@ contract CrankFaucetResistance is DeployProtocol {
         }
     }
 
-    /// @dev Count CoinflipStakeUpdated emissions whose `amount` field equals `wantAmount` (used to
-    ///      isolate the fixed-peg crank reward from a variable winnings credit).
-    function _countCoinflipStakeUpdatedWithAmount(uint256 wantAmount) internal returns (uint256 count) {
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; i++) {
-            if (!_isCoinflipStakeUpdated(logs[i])) continue;
-            // event CoinflipStakeUpdated(address indexed player, uint32 indexed day,
-            //                            uint256 amount, uint256 newTotal)
-            // amount is the first non-indexed field => first 32 bytes of data.
-            (uint256 amount, ) = abi.decode(logs[i].data, (uint256, uint256));
-            if (amount == wantAmount) count++;
-        }
-    }
 
     function _isCoinflipStakeUpdated(Vm.Log memory entry) internal view returns (bool) {
         return

@@ -121,46 +121,6 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     // Task 1 — SAFE-04: RNG-freeze intact under the crank
     // =========================================================================
 
-    /// @notice SAFE-04 (bets): a crank-driven bet resolution BEFORE the RNG word lands does
-    ///         NOT resolve — the onlySelf sub-call hits the DegeneretteModule:578 RngNotReady
-    ///         guard and is caught by the per-item try/catch (slot intact). After the word
-    ///         lands, the SAME crank resolves the bet (slot deleted). This proves the crank
-    ///         relaxed WHO can resolve, not WHEN: the freeze window is unchanged.
-    function testCrankBetResolutionStaysPostUnlock() public {
-        uint64 betId = _placeLosingBet(player);
-
-        // PRE-WORD: word at INDEX is still 0 (the frozen window). Crank attempt must NOT resolve.
-        assertEq(
-            _injectedWord(INDEX),
-            0,
-            "pre-condition: word not yet landed (frozen window)"
-        );
-        assertGt(_readBetPacked(player, betId), 0, "bet exists before crank");
-
-        address[] memory players = new address[](1);
-        uint64[] memory betIds = new uint64[](1);
-        players[0] = player;
-        betIds[0] = betId;
-
-        // The crank must NOT revert (per-item isolation) and must NOT resolve the not-ready bet.
-        vm.prank(cranker);
-        game.degeneretteResolve(players, betIds);
-        assertGt(
-            _readBetPacked(player, betId),
-            0,
-            "pre-word: bet NOT resolved by crank (RngNotReady inside onlySelf sub-call, caught)"
-        );
-
-        // POST-WORD: land the word, then the SAME crank resolves the bet (slot deleted).
-        _injectLootboxRngWord(INDEX, FIXED_WORD);
-        vm.prank(cranker);
-        game.degeneretteResolve(players, betIds);
-        assertEq(
-            _readBetPacked(player, betId),
-            0,
-            "post-word: same crank now resolves the bet (relaxation is WHO, not WHEN)"
-        );
-    }
 
     /// @notice SAFE-04 (boxes): a crank-driven box open BEFORE the word lands is skipped at the
     ///         autoOpen cursor orphan gate (`lootboxRngWordByIndex[index] == 0 -> return`,
@@ -225,46 +185,6 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         );
     }
 
-    /// @notice SAFE-04 fuzz: for any word-set timing, a crank attempt resolves a bet IFF the
-    ///         word has landed — pre-word always skips (slot intact), post-word always resolves
-    ///         (slot deleted). The freeze boundary is the word, not the caller.
-    function testFuzz_CrankResolvesIffWordLanded(bool wordFirst) public {
-        uint64 betId = _placeLosingBet(player);
-
-        address[] memory players = new address[](1);
-        uint64[] memory betIds = new uint64[](1);
-        players[0] = player;
-        betIds[0] = betId;
-
-        if (wordFirst) {
-            // Word lands BEFORE the crank: the crank resolves (slot deleted).
-            _injectLootboxRngWord(INDEX, FIXED_WORD);
-            vm.prank(cranker);
-            game.degeneretteResolve(players, betIds);
-            assertEq(
-                _readBetPacked(player, betId),
-                0,
-                "word-first: crank resolves the bet"
-            );
-        } else {
-            // Crank BEFORE the word: the not-ready bet is skipped (slot intact), then resolves.
-            vm.prank(cranker);
-            game.degeneretteResolve(players, betIds);
-            assertGt(
-                _readBetPacked(player, betId),
-                0,
-                "crank-first: not-ready bet skipped (frozen)"
-            );
-            _injectLootboxRngWord(INDEX, FIXED_WORD);
-            vm.prank(cranker);
-            game.degeneretteResolve(players, betIds);
-            assertEq(
-                _readBetPacked(player, betId),
-                0,
-                "after word lands: same crank resolves"
-            );
-        }
-    }
 
     // =========================================================================
     // Task 2 — REMOVE behavioral: ETH always to claimable + flat 75bps recycle

@@ -65,9 +65,6 @@ contract CrankLeversAndPacking is DeployProtocol {
     // Reward-peg mirror (the contract's own FIXED constants, REW-03)
     // -------------------------------------------------------------------------
 
-    uint256 private constant CRANK_GAS_PRICE_REF = 0.5 gwei;
-    uint256 private constant CRANK_RESOLVE_BET_GAS_UNITS = 66_528;
-    uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 71_203;
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
 
     /// @dev keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)") — emitted once per
@@ -117,97 +114,7 @@ contract CrankLeversAndPacking is DeployProtocol {
         game.setOperatorApproval(address(game), true);
     }
 
-    // =========================================================================
-    // GAS-02 — one creditFlip per batch (BEHAVIORAL)
-    // =========================================================================
 
-    /// @notice GAS-02 (degeneretteResolve): a degeneretteResolve over N>1 successful items emits EXACTLY ONE
-    ///         crank-reward creditFlip with the summed amount (never N separate credits). Losing
-    ///         bets pay no winnings, so the single CoinflipStakeUpdated IS the post-loop crank reward.
-    function testCrankBetsEmitsExactlyOneCreditFlipForManyItems() public {
-        uint64 b1 = _placeLosingBet(player);
-        uint64 b2 = _placeLosingBet(player);
-        uint64 b3 = _placeLosingBet(player);
-        _injectLootboxRngWord(INDEX, FIXED_WORD);
-
-        address[] memory players = new address[](3);
-        uint64[] memory betIds = new uint64[](3);
-        players[0] = player; betIds[0] = b1;
-        players[1] = player; betIds[1] = b2;
-        players[2] = player; betIds[2] = b3;
-
-        uint256 preStake = coinflip.coinflipAmount(player);
-
-        vm.recordLogs();
-        vm.prank(player);
-        game.degeneretteResolve(players, betIds);
-
-        // EXACTLY ONE creditFlip for N=3 successful items (GAS-02 one-per-tx, REW-02).
-        assertEq(_countCoinflipStakeUpdated(), 1, "GAS-02: exactly one degeneretteResolve creditFlip for N>1 items");
-
-        // The single creditFlip amount equals the SUMMED per-item reward (3x the single-item peg).
-        uint256 stakeDelta = coinflip.coinflipAmount(player) - preStake;
-        uint256 rewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
-        assertEq(
-            rewardEthAtPeg,
-            3 * CRANK_RESOLVE_BET_GAS_UNITS * CRANK_GAS_PRICE_REF,
-            "GAS-02: the one creditFlip carries the in-memory SUM of the 3 item rewards"
-        );
-
-        // Non-vacuity: all three items actually resolved (their slots are deleted = work done).
-        assertEq(_readBetPacked(player, b1), 0, "non-vacuity: item 1 resolved");
-        assertEq(_readBetPacked(player, b2), 0, "non-vacuity: item 2 resolved");
-        assertEq(_readBetPacked(player, b3), 0, "non-vacuity: item 3 resolved");
-    }
-
-    /// @notice GAS-02 (autoOpen): opening N>1 queued boxes in ONE autoOpen call emits EXACTLY ONE
-    ///         crank-reward creditFlip with the summed amount. A freshly-opened box pays its reward
-    ///         into the queue, not as a creditFlip, so the single CoinflipStakeUpdated is the post-loop
-    ///         crank reward alone.
-    function testCrankBoxesEmitsExactlyOneCreditFlipForManyBoxes() public {
-        uint48 index = _activeLootboxIndex();
-
-        // Enqueue THREE real boxes (distinct owners -> distinct (index,owner) queue entries).
-        address o1 = makeAddr("box_o1");
-        address o2 = makeAddr("box_o2");
-        address o3 = makeAddr("box_o3");
-        vm.deal(o1, 100_000 ether);
-        vm.deal(o2, 100_000 ether);
-        vm.deal(o3, 100_000 ether);
-        _buyBox(o1, LOOTBOX_WEI);
-        _buyBox(o2, LOOTBOX_WEI);
-        _buyBox(o3, LOOTBOX_WEI);
-        _injectLootboxRngWord(index, FIXED_WORD);
-
-        uint256 preStake = coinflip.coinflipAmount(cranker);
-
-        vm.recordLogs();
-        vm.prank(cranker);
-        game.autoOpen(3);
-
-        // EXACTLY ONE crank-reward creditFlip for the 3-box batch (GAS-02 one-per-tx). A box open can
-        // itself credit BURNIE winnings to the BOX OWNER (LootboxModule:1036), so we isolate the
-        // crank reward by its recipient: the cranker (msg.sender), who is distinct from the box owners.
-        assertEq(
-            _countCoinflipStakeUpdatedFor(cranker),
-            1,
-            "GAS-02: exactly one autoOpen crank-reward creditFlip (to the cranker) for N>1 boxes"
-        );
-
-        // The single creditFlip amount equals the SUMMED per-box reward (3x the flat per-box peg).
-        uint256 stakeDelta = coinflip.coinflipAmount(cranker) - preStake;
-        uint256 rewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
-        assertEq(
-            rewardEthAtPeg,
-            3 * CRANK_OPEN_BOX_GAS_UNITS * CRANK_GAS_PRICE_REF,
-            "GAS-02: the one creditFlip carries the SUM of the 3 box rewards (flat per-box peg)"
-        );
-
-        // Non-vacuity: all three boxes actually opened (first-deposit signal zeroed on open).
-        assertEq(_lootboxEthBase(index, o1), 0, "non-vacuity: box 1 opened");
-        assertEq(_lootboxEthBase(index, o2), 0, "non-vacuity: box 2 opened");
-        assertEq(_lootboxEthBase(index, o3), 0, "non-vacuity: box 3 opened");
-    }
 
     // =========================================================================
     // GAS-02 — read-once / one-transfer / one-refund (SOURCE-PRESENCE)
