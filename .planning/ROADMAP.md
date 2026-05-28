@@ -82,21 +82,21 @@
 Plans:
 **Wave 1**
 
-- [ ] 335-01-PLAN.md — Storage confirm + DegenerusGame facade: add `lazyPassHorizon` view + retire WHALE-03 autoOpen gas-weighting → flat opened-count guard
-- [ ] 335-02-PLAN.md — LootboxModule WHALE-01: O(1) `whalePassClaims +=` at box-open + drop ≤10 bonus band (D-21); WHALE-02 by convergence onto existing `WhaleModule:1018`
-- [ ] 335-03-PLAN.md — MintModule MINTDIV-02 one-liner: `processed += writesUsed >> 1` → `+= take` (matches `processFutureTicketBatch:502`)
+- [x] 335-01-PLAN.md — Storage confirm + DegenerusGame facade: add `lazyPassHorizon` view + retire WHALE-03 autoOpen gas-weighting → flat opened-count guard
+- [x] 335-02-PLAN.md — LootboxModule WHALE-01: O(1) `whalePassClaims +=` at box-open + drop ≤10 bonus band (D-21); WHALE-02 by convergence onto existing `WhaleModule:1018`
+- [x] 335-03-PLAN.md — MintModule MINTDIV-02 one-liner: `processed += writesUsed >> 1` → `+= take` (matches `processFutureTicketBatch:502`)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 335-04-PLAN.md — AfKing + BurnieCoin AFSUB cluster: delete `burnForKeeper`/`paidThroughDay`/`WINDOW_DAYS`/`FLAG_WINDOW_PAID`; repurpose `Sub` offset 5 → `validThroughLevel`; rewrite subscribe + `_autoBuy` (refresh-or-evict via existing tombstone); preserve OPEN-E + v49 swap-pop
+- [x] 335-04-PLAN.md — AfKing + BurnieCoin AFSUB cluster: delete `burnForKeeper`/`paidThroughDay`/`WINDOW_DAYS`/`FLAG_WINDOW_PAID`; repurpose `Sub` offset 5 → `validThroughLevel`; rewrite subscribe + `_autoBuy` (refresh-or-evict via existing tombstone); preserve OPEN-E + v49 swap-pop
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 335-05-PLAN.md — Test migration (D-IMPL-02 full-alignment): 7 test files rewritten in lockstep with the contract diff
+- [x] 335-05-PLAN.md — Test migration (D-IMPL-02 full-alignment): 7 test files rewritten in lockstep with the contract diff
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 335-06-PLAN.md — Local verification: `forge build` + `forge test` green-or-baseline + `KeeperOpenBoxWorstCaseGas` re-run (D-IMPL-04 OPEN_BATCH picker); authors `335-LOCAL-VERIFICATION.md`
+- [x] 335-06-PLAN.md — Local verification: `forge build` + `forge test` green-or-baseline + `KeeperOpenBoxWorstCaseGas` re-run (D-IMPL-04 OPEN_BATCH picker); authors `335-LOCAL-VERIFICATION.md`
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -158,7 +158,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 4/4 | Complete    | 2026-05-27 |
-| 335. IMPL — The ONE Batched Contract Diff | v50.0 | 0/7    | Not started | - |
+| 335. IMPL — The ONE Batched Contract Diff | v50.0 | 6/7 | In Progress|  |
 | 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 0/TBD | Not started | - |
 | 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 0/TBD | Not started | - |
 | 338. TERMINAL — Internal Delta Audit + Sweep + Closure | v50.0 | 0/TBD | Not started | - |
