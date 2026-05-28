@@ -59,7 +59,11 @@
   4. The REBAL BPS-sum invariant + the JACK final-day deletion side-effects are attested (BATCH-01) — the `StakedDegenerusStonk.sol:294-298` rebalance (`AFFILIATE_POOL_BPS` 3 500→3 000, `REWARD_POOL_BPS` 500→1 000) is shown to keep the pool BPS summing to 10 000 with NO change to total sDGNRS supply (only the affiliate/reward split shifts, `Pool.Reward` 50B→100B) and no other pool/constant perturbed; and the `_paySoloBucket` final-day `Pool.Reward` deletion (`DegenerusGameJackpotModule.sol:1339-1352` + the `:191` `FINAL_DAY_DGNRS_BPS=100` constant + the `:1350` `JackpotDgnrsWin` emit if grep confirms it is orphaned) is shown to leave the rest of the `isFinalDay` plumbing intact (the `:617` `lvl + 1` ticket-index gate + the `:1085/1095/1135/1161/1190/1312` `_paySoloBucket` callers) — no non-`Pool.Reward` final-day behavior is broken.
   5. Every cited `file:line` across the milestone scope is grep-verified against the v50.0-closure HEAD `812abeee` and any drift is corrected in the SPEC (no "by construction" survives un-checked) — the `traitBurnTicket` storage decl (`storage/DegenerusGameStorage.sol:404-416`), the trait byte layout `[QQ][CCC][SSS]` (`DegenerusTraitUtils.sol:17-39`), the `transferFromPool` / `poolBalance` sDGNRS pool API + the `Pool.Reward` enum, the `coinflip.creditFlip` BURNIE path, the REBAL constants (`StakedDegenerusStonk.sol:294-298`), and the JACK deletion anchors (`DegenerusGameJackpotModule.sol:191 / 617 / 1085 / 1095 / 1135 / 1161 / 1190 / 1312 / 1339-1352 / 1350`) — confirming the producer-before-consumer edit-order map for the IMPL diff.
 
-**Plans**: TBD
+**Plans**: 4 plans / 2 waves (paper-only, all `autonomous: true`)
+- [ ] 339-01-PLAN.md — BINGO-06 RNG-freeze-safety proof (structured per-slot enumeration) + `traitBurnTicket` write-site soundness attestation (D-02 IFF) + whale-race ACCEPTED-BY-DESIGN non-finding (D-03) [Wave 1]
+- [ ] 339-02-PLAN.md — BINGO design-lock (signature + `uint32` slot-width disposition + storage shape + module placement + reward constants D-05) + the tier-precedence acceptance contract (D-06: quadrant-first-before-symbol-first + suppression) [Wave 1]
+- [ ] 339-03-PLAN.md — REBAL BPS-sum attestation (full pool-BPS set → 10000, incl `CREATOR_BPS=2000` at `:291`) + JACK final-day deletion side-effects (D-12) + grep-attestation vs `812abeee` + producer-before-consumer edit-order map (D-13) [Wave 1]
+- [ ] 339-04-PLAN.md — SPEC-INDEX + multi-source coverage audit (GOAL/REQ/RESEARCH-N-A/CONTEXT D-01..D-13 → ALL items COVERED) [Wave 2, depends on 01/02/03]
 **UI hint**: no
 
 ### Phase 340: IMPL — The ONE Batched Contract Diff (BINGO + REBAL + JACK)
@@ -119,7 +123,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 339. SPEC — Design-Lock + Freeze Proof + Tier-Precedence + Attestation | v51.0 | 0/TBD | Not started | - |
+| 339. SPEC — Design-Lock + Freeze Proof + Tier-Precedence + Attestation | v51.0 | 0/4 | Not started | - |
 | 340. IMPL — The ONE Batched Contract Diff (BINGO + REBAL + JACK) | v51.0 | 0/TBD | Not started | - |
 | 341. TST — Per-Tier + Precedence + Revert/Dedup + Empty-Pool + Jackpot + Non-Widening | v51.0 | 0/TBD | Not started | - |
 | 342. TERMINAL — Minimal Close: Re-Attest + Closure Flip (Sweep DEFERRED → v52) | v51.0 | 0/TBD | Not started | - |
