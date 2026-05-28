@@ -1,38 +1,39 @@
 ---
 gsd_state_version: 1.0
-milestone: v50.0
-milestone_name: Whale-Pass O(1) Refactor + AfKing Pass-Gated Subs + MintModule Advance-Divergence + External RNG-Audit Protocol
-status: milestone_complete
-last_updated: 2026-05-28
-last_activity: 2026-05-28 -- v50.0 CLOSED via USER-approved MINIMAL CLOSE. Phase 337 AUDIT-PROTOCOL complete + verified (6/6); Phase 338 internal 3-skill sweep + delta-audit + FINDINGS-v50.0.md DEFERRED → v52 consolidated audit (cumulative v50+v51 surface)
+milestone: v51.0
+milestone_name: claimBingo — Color-Completion Claim
+status: planning
+last_updated: "2026-05-28T21:00:19.525Z"
+last_activity: 2026-05-28
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 21
-  completed_plans: 21
-  percent: 100
-stopped_at: v50.0 CLOSED (minimal — 338 sweep DEFERRED → v52); next milestone = v51 (seed: claimBingo color-completion)
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v50.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v50.0 — defining requirements)
+See: .planning/PROJECT.md (Current Milestone: v51.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v51.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v50.0 CLOSED (minimal). Next = start v51 (`/gsd-new-milestone`; seed [[v51-claimbingo-color-completion-seed]]). The deferred v50 internal sweep is folded into the v52 consolidated audit.
+**Current focus:** v51.0 ACTIVE (started 2026-05-28) — claimBingo color-completion claim. One coupled contract bundle: the `claimBingo(level, symbol, slots[8])` 3-tier color-completion entrypoint (new `DegenerusGameBingoModule.sol`; reads post-resolution `traitBurnTicket`; pays a `Pool.Reward` draw + BURNIE flip credit) + the co-requisite sDGNRS `Pool.Reward` rebalance (50B→100B) + the deletion of the jackpot final-day `Pool.Reward` one-shot it replaces. Phases 339-342 (SPEC → IMPL → TST → TERMINAL). **Audit posture = minimal close:** the internal 3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v51.0.md` are DEFERRED → the v52 consolidated audit (cumulative v50+v51 surface). Next = define requirements → roadmap → Phase 339 SPEC.
 
-## ⚠ v50.0 AUDIT DEBT → v52 (carry forward)
+## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward)
 
-v50.0 closed 2026-05-28 via USER-approved MINIMAL CLOSE without running Phase 338's internal adversarial sweep. **The v52 consolidated audit MUST cover the cumulative v50 + v51 contract surface**, specifically the v50 changes that never got the 3-skill sweep + delta-audit: the whale-pass O(1) deferred-claim path (`claimWhalePass` + box-open record), AFSUB pass-gating (`validThroughLevel` eviction/refresh + OPEN-E re-attest), and the MINTDIV index alignment — plus authoring `audit/FINDINGS-v50.0.md` (deferred). Mitigation already in place: WHALE-04 freeze proven at SPEC (334), TST-01/03 empirical coverage (336), pre-launch (no live funds), v50 contract history UNPUSHED. SWEEP-01/02/03 + BATCH-03-findings = the v52 charge.
+**v50.0** closed 2026-05-28 via USER-approved MINIMAL CLOSE without running Phase 338's internal adversarial sweep. **The v52 consolidated audit MUST cover the cumulative v50 + v51 contract surface**, specifically the v50 changes that never got the 3-skill sweep + delta-audit: the whale-pass O(1) deferred-claim path (`claimWhalePass` + box-open record), AFSUB pass-gating (`validThroughLevel` eviction/refresh + OPEN-E re-attest), and the MINTDIV index alignment — plus authoring `audit/FINDINGS-v50.0.md` (deferred). Mitigation already in place: WHALE-04 freeze proven at SPEC (334), TST-01/03 empirical coverage (336), pre-launch (no live funds), v50 contract history UNPUSHED. SWEEP-01/02/03 + BATCH-03-findings = the v52 charge.
+
+**v51.0** is also closing minimally (USER decision 2026-05-28 at milestone start) — its internal 3-skill sweep + delta-audit + `audit/FINDINGS-v51.0.md` are likewise DEFERRED → v52. The v52 audit MUST additionally cover the v51 surface: the new `claimBingo` color-completion entrypoint / `DegenerusGameBingoModule.sol` (3-tier reward selection + tier-precedence suppression, per-player (level,quadrant) dedup, `transferFromPool(Pool.Reward,…)` + `coinflip.creditFlip` draws, empty-pool no-op, `gameOver` cutoff, freeze-safety of the `traitBurnTicket` read), the sDGNRS `Pool.Reward` rebalance (AFFILIATE 3500→3000 / REWARD 500→1000), and the jackpot final-day `Pool.Reward` deletion side-effects. Mitigation in place at v51 close: SPEC (339) proves freeze-safety + tier-precedence; TST (341) covers per-tier rewards / dedup / empty-pool / jackpot-final-day regression; pre-launch (no live funds); v51 contract history UNPUSHED. **Net v52 charge = the cumulative v50 + v51 contract surface + `FINDINGS-v50.0.md` + `FINDINGS-v51.0.md`.**
 
 ## Current Position
 
-Milestone: v50.0 — CLOSED (minimal close; 338 sweep deferred → v52)
-Next: v51 — not started (run /gsd-new-milestone)
-Status: v50 closed
-Last activity: 2026-05-28
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-28 — Milestone v51.0 started
 
 ## Current Milestone Roadmap (v50.0 — phases 334-338)
 
