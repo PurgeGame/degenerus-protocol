@@ -165,7 +165,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)* — protocol layer
 
-- [ ] 337-02-PLAN.md — author the freeze-invariant target (canonical `+` string) + the 4 exempt entries (RNGAUDIT-01) and the R1→R4 self-driven adversarial sequence (RNGAUDIT-02, R3 mirrors zero-day-hunter, no answer key) into `RNG-AUDIT-KIT.md`
+- [x] 337-02-PLAN.md — author the freeze-invariant target (canonical `+` string) + the 4 exempt entries (RNGAUDIT-01) and the R1→R4 self-driven adversarial sequence (RNGAUDIT-02, R3 mirrors zero-day-hunter, no answer key) into `RNG-AUDIT-KIT.md`
 
 **Wave 3** *(blocked on Wave 2)* — packaging layer
 
@@ -202,7 +202,7 @@ Plans:
 | 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 4/4 | Complete    | 2026-05-27 |
 | 335. IMPL — The ONE Batched Contract Diff | v50.0 | 7/7 | Complete   | 2026-05-28 |
 | 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 4/6 | In Progress|  |
-| 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 1/4 | In Progress|  |
+| 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 2/4 | In Progress|  |
 | 338. TERMINAL — Internal Delta Audit + Sweep + Closure | v50.0 | 0/TBD | Not started | - |
 
 ---

@@ -27,8 +27,8 @@
 - [ ] **MINTDIV-02**: If reachable → the within-player index advance is aligned across the two loops so per-ticket trait indices are identical whether or not a player's owed splits across budget slices, with NO change to the frozen-word trait derivation for any non-split case. If NOT reachable → documented NEGATIVE with the proof and no contract change (the seed candidate is closed either way).
 
 ### External-LLM RNG-Audit Protocol — Deliverable, Package-Only (RNGAUDIT)
-- [ ] **RNGAUDIT-01**: The protocol states the freeze invariant precisely as the external auditor's target — "while `rngLockedFlag = true`, every storage slot that participates in any VRF-influenced output is frozen until `rngLockedFlag = false`; only the incoming VRF word + its deterministic derivations may be unknown" — plus the exempt entry points (`advanceGame()` + reachable resolution flow, the VRF coordinator callback, `retryLootboxRng()` failsafe). (`v45-vrf-freeze-invariant`.)
-- [ ] **RNGAUDIT-02**: The protocol is a MULTI-ROUND adversarial sequence designed to force rigor across a multi-turn external session: (R1) catalog the VRF read-graph — every participating slot with its writers + readers across all modules; (R2) independently re-derive each slot's freeze status (frozen / reverts-if-written-during-lock / proven-non-participating); (R3) adversarially challenge the catalog (hunt for any writer that escapes the freeze, any cross-module composition that does); (R4) reconcile + report. The external model performs its OWN discovery — no answer key / no internal findings are embedded ("different perspective" is the point).
+- [x] **RNGAUDIT-01**: The protocol states the freeze invariant precisely as the external auditor's target — "while `rngLockedFlag = true`, every storage slot that participates in any VRF-influenced output is frozen until `rngLockedFlag = false`; only the incoming VRF word + its deterministic derivations may be unknown" — plus the exempt entry points (`advanceGame()` + reachable resolution flow, the VRF coordinator callback, `retryLootboxRng()` failsafe). (`v45-vrf-freeze-invariant`.)
+- [x] **RNGAUDIT-02**: The protocol is a MULTI-ROUND adversarial sequence designed to force rigor across a multi-turn external session: (R1) catalog the VRF read-graph — every participating slot with its writers + readers across all modules; (R2) independently re-derive each slot's freeze status (frozen / reverts-if-written-during-lock / proven-non-participating); (R3) adversarially challenge the catalog (hunt for any writer that escapes the freeze, any cross-module composition that does); (R4) reconcile + report. The external model performs its OWN discovery — no answer key / no internal findings are embedded ("different perspective" is the point).
 - [x] **RNGAUDIT-03**: The protocol ships a self-contained context pack sufficient to run cold against the contracts: the module/RNG-window map, the `rngLock` mechanics, where the VRF word enters and is consumed, the contract inventory, and the back-and-forth variable-tracing methodology ("trace every variable across modules — what writes it, what reads it, what is locked during an RNG window"). It does NOT depend on access to our `audit/FINDINGS-*.md`.
 - [ ] **RNGAUDIT-04**: The protocol is authored against the FROZEN post-v50 tree (after WHALE/AFSUB/MINTDIV land), is model-agnostic (usable in both Gemini and ChatGPT, with context-window chunking guidance for feeding the contracts), and is explicitly PACKAGE-ONLY — running it through the external models and triaging their output is a FUTURE cycle, OUT of v50.0.
 
@@ -85,8 +85,8 @@
 | AFSUB-05 | Phase 335 (IMPL) | Pending |
 | MINTDIV-01 | Phase 334 (SPEC) | Complete |
 | MINTDIV-02 | Phase 335 (IMPL) | Pending |
-| RNGAUDIT-01 | Phase 337 (AUDIT-PROTOCOL) | Pending |
-| RNGAUDIT-02 | Phase 337 (AUDIT-PROTOCOL) | Pending |
+| RNGAUDIT-01 | Phase 337 (AUDIT-PROTOCOL) | Complete |
+| RNGAUDIT-02 | Phase 337 (AUDIT-PROTOCOL) | Complete |
 | RNGAUDIT-03 | Phase 337 (AUDIT-PROTOCOL) | Complete |
 | RNGAUDIT-04 | Phase 337 (AUDIT-PROTOCOL) | Pending |
 | TST-01 | Phase 336 (TST) | Pending |
