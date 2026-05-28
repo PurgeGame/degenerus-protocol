@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v50.0
 milestone_name: Whale-Pass O(1) Refactor + AfKing Pass-Gated Subs + MintModule Advance-Divergence + External RNG-Audit Protocol
-status: executing
-last_updated: "2026-05-28T20:12:19.169Z"
-last_activity: 2026-05-28 -- Phase 337 plan 337-03 complete (RNGAUDIT-04 packaging: chunk manifest + feeding recipe + PACKAGE-ONLY)
+status: verifying
+last_updated: "2026-05-28T20:22:06.806Z"
+last_activity: 2026-05-28 -- Phase 337 plan 337-04 complete (kit self-validation gate: verify-kit.sh exit 0 / 11 PASS / 0 FAIL + 337-KIT-VALIDATION.md ledger; RNGAUDIT-01..04 re-attested) — Phase 337 ALL 4 PLANS COMPLETE, ready for verification
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 21
-  completed_plans: 20
-  percent: 95
+  completed_plans: 21
+  percent: 80
 ---
 
 # Project State
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (Current Milestone: v50.0 section) + .planning/REQUIRE
 
 Phase: 337 (AUDIT-PROTOCOL — Author the Model-Agnostic Multi-Round External-LLM RNG-Audit Kit (Package-Only)) — EXECUTING
 Plan: 4 of 4
-Status: Executing Phase 337 — 337-03 complete (RNGAUDIT-04 packaging layer: CHUNK-MANIFEST.md corpus inventory + 3 chunk groups + Storage-travels rule; RNG-AUDIT-KIT.md model-agnostic feeding recipe + PACKAGE-ONLY/future-cycle scope). Layout B complete; next = 337-04 (kit self-validation)
-Last activity: 2026-05-28 -- Phase 337 plan 337-03 complete
+Status: Phase complete — ready for verification. 337-04 complete (kit self-validation gate: verify-kit.sh runs the RESEARCH section-8 lint set, exit 0 / 11 PASS / 0 FAIL; 337-KIT-VALIDATION.md ledger records each check command+expected+actual; RNGAUDIT-01..04 structurally re-attested with no external-model run; zero contracts mutation). All 4 plans (337-01..04) complete; next = phase verification, then 338 TERMINAL.
+Last activity: 2026-05-28 -- Phase 337 plan 337-04 complete
 
 ## Current Milestone Roadmap (v50.0 — phases 334-338)
 
@@ -577,6 +577,7 @@ Audit deliverables:
 | Phase 332 P05 | ~38min | 2 tasks | 6 files (5 Crank*->Keeper* git mv + RngFreezeAndRemovalProofs in place) + 1 SUMMARY (17 premise-retired reds DELETED; failing set restored to EXACTLY the 42 v48 union by NAME 59->42; de-crank rename behavior-neutral 666/42; zero contracts mutation) |
 | Phase 332 P06 | 6min | 2 tasks | 1 files |
 | Phase 337 P02 | 4min | 2 tasks | 1 files |
+| Phase 337 P04 | ~25min | 2 tasks | 2 files (audit/rng-audit-kit/verify-kit.sh NEW 294 lines mode 100755 + audit/rng-audit-kit/337-KIT-VALIDATION.md NEW 105 lines) + 1 SUMMARY (verify-kit.sh exit 0, 11 PASS / 0 FAIL; RNGAUDIT-01..04 structurally re-attested; planted-defect-proven; zero contracts mutation) |
 
 ## Decisions
 

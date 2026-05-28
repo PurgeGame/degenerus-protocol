@@ -173,7 +173,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)* — validation gate (gates the whole kit)
 
-- [ ] 337-04-PLAN.md — author `verify-kit.sh` (the RESEARCH §8 lints: anchor-resolution + freeze-invariant verbatim + self-containment + no-answer-key + structural presence) + record `337-KIT-VALIDATION.md` (re-attests RNGAUDIT-01..04 structurally; no external-model run; zero contract edits)
+- [x] 337-04-PLAN.md — author `verify-kit.sh` (the RESEARCH §8 lints: anchor-resolution + freeze-invariant verbatim + self-containment + no-answer-key + structural presence) + record `337-KIT-VALIDATION.md` (re-attests RNGAUDIT-01..04 structurally; no external-model run; zero contract edits)
 **UI hint**: no
 
 ### Phase 338: TERMINAL — Internal Delta Audit + 3-Skill Adversarial Sweep + Closure
@@ -202,7 +202,7 @@ Plans:
 | 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 4/4 | Complete    | 2026-05-27 |
 | 335. IMPL — The ONE Batched Contract Diff | v50.0 | 7/7 | Complete   | 2026-05-28 |
 | 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 4/6 | In Progress|  |
-| 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 3/4 | In Progress|  |
+| 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 4/4 | Complete   | 2026-05-28 |
 | 338. TERMINAL — Internal Delta Audit + Sweep + Closure | v50.0 | 0/TBD | Not started | - |
 
 ---
