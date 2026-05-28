@@ -123,7 +123,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 339. SPEC — Design-Lock + Freeze Proof + Tier-Precedence + Attestation | v51.0 | 4/4 | Complete   | 2026-05-28 |
+| 339. SPEC — Design-Lock + Freeze Proof + Tier-Precedence + Attestation | v51.0 | 4/4 | Complete    | 2026-05-28 |
 | 340. IMPL — The ONE Batched Contract Diff (BINGO + REBAL + JACK) | v51.0 | 0/TBD | Not started | - |
 | 341. TST — Per-Tier + Precedence + Revert/Dedup + Empty-Pool + Jackpot + Non-Widening | v51.0 | 0/TBD | Not started | - |
 | 342. TERMINAL — Minimal Close: Re-Attest + Closure Flip (Sweep DEFERRED → v52) | v51.0 | 0/TBD | Not started | - |

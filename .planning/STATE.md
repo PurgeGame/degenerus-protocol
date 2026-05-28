@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v51.0
 milestone_name: claimBingo — Color-Completion Claim
-status: verifying
-last_updated: "2026-05-28T22:22:05.079Z"
+status: ready_to_plan
+last_updated: 2026-05-28T22:28:52.916Z
 last_activity: 2026-05-28
 progress:
   total_phases: 4
@@ -11,6 +11,7 @@ progress:
   total_plans: 4
   completed_plans: 4
   percent: 25
+stopped_at: Phase 339 complete (4/4) — ready to discuss Phase 340
 ---
 
 # Project State
@@ -20,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v51.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v51.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 339 — spec-design-lock-rng-freeze-safety-proof-tier-precedence-loc
+**Current focus:** Phase 340 — impl — the one batched contract diff (bingo + rebal + jack)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward)
 
@@ -30,10 +31,10 @@ See: .planning/PROJECT.md (Current Milestone: v51.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 339 (spec-design-lock-rng-freeze-safety-proof-tier-precedence-loc) — COMPLETE (ready for verification)
-Plan: 4 of 4 ✅ — Plan 01 ✅ (BINGO-06 freeze proof + soundness) · Plan 02 ✅ (BINGO design-lock + tier-precedence acceptance contract) · Plan 03 ✅ (REBAL BPS-sum 10000 + JACK clean-orphan + grep-attestation/edit-order) · Plan 04 ✅ (SPEC-INDEX + multi-source coverage audit: ALL items COVERED, 0 MISSING — BATCH-01 closure)
-Status: Phase 339 SPEC complete (4/4 plans) — BATCH-01 + BINGO-06 satisfied; ready for verification. Next: Phase 340 IMPL (the ONE batched contract diff — CONTRACT BOUNDARY hard stop).
-Last activity: 2026-05-28 -- Phase 339 Plan 04 complete (339-SPEC-INDEX; BATCH-01 coverage closure, ALL items COVERED 0 MISSING)
+Phase: 340
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-28
 
 ## Current Milestone Roadmap (v51.0 — phases 339-342)
 
