@@ -100,7 +100,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 335-07-PLAN.md — BATCH-02 HARD STOP: USER hand-review gate (`autonomous: false`); ONE atomic commit covering 5 contracts + 7 tests upon explicit USER approval; NO push
+- [x] 335-07-PLAN.md — BATCH-02 HARD STOP: USER hand-review gate (`autonomous: false`); ONE atomic commit covering 5 contracts + 7 tests upon explicit USER approval; NO push
 
 **UI hint**: no
 
@@ -158,7 +158,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 4/4 | Complete    | 2026-05-27 |
-| 335. IMPL — The ONE Batched Contract Diff | v50.0 | 6/7 | In Progress|  |
+| 335. IMPL — The ONE Batched Contract Diff | v50.0 | 7/7 | Complete   | 2026-05-28 |
 | 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 0/TBD | Not started | - |
 | 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 0/TBD | Not started | - |
 | 338. TERMINAL — Internal Delta Audit + Sweep + Closure | v50.0 | 0/TBD | Not started | - |
