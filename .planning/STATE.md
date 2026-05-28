@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v50.0
 milestone_name: Whale-Pass O(1) Refactor + AfKing Pass-Gated Subs + MintModule Advance-Divergence + External RNG-Audit Protocol
 status: executing
-last_updated: "2026-05-28T11:42:32.871Z"
-last_activity: 2026-05-28 -- Phase 336 planning complete
+last_updated: "2026-05-28T11:43:58.517Z"
+last_activity: 2026-05-28 -- Phase 336 execution started
 progress:
   total_phases: 5
   completed_phases: 2
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v50.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v50.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 336 — TST (Equivalence + Freeze + Divergence + Regression) — depends on Phase 335 IMPL HEAD `e756a6f3`
+**Current focus:** Phase 336 — TST — Equivalence + Freeze-Safety + Divergence-Repro + Non-Widening Regression
 
 ## Current Position
 
-Phase: 335 — COMPLETE (BATCH-02 USER-approved commit `e756a6f3`, not pushed)
-Plan: 7 of 7
-Status: Ready to execute
-Last activity: 2026-05-28 -- Phase 336 planning complete
+Phase: 336 (TST — Equivalence + Freeze-Safety + Divergence-Repro + Non-Widening Regression) — EXECUTING
+Plan: 1 of 6
+Status: Executing Phase 336
+Last activity: 2026-05-28 -- Phase 336 execution started
 
 ## Current Milestone Roadmap (v50.0 — phases 334-338)
 

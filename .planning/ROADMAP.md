@@ -121,7 +121,7 @@ Plans:
 
 **Wave 1** — TST-01 freeze leg
 
-- [ ] 336-01-PLAN.md — extend `test/fuzz/RngLockDeterminism.t.sol` with `testFuzz_RngLockDeterminism_ClaimWhalePassDuringLockSafe` + perturbation cls 11 (claimWhalePass); empirical re-attest of `334-WHALE04-FREEZE-PROOF.md` under default + `FOUNDRY_PROFILE=deep`
+- [x] 336-01-PLAN.md — extend `test/fuzz/RngLockDeterminism.t.sol` with `testFuzz_RngLockDeterminism_ClaimWhalePassDuringLockSafe` + perturbation cls 11 (claimWhalePass); empirical re-attest of `334-WHALE04-FREEZE-PROOF.md` under default + `FOUNDRY_PROFILE=deep`
 
 **Wave 2** *(blocked on Wave 1 completion)* — TST-01 equivalence/grant
 
@@ -184,7 +184,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 4/4 | Complete    | 2026-05-27 |
 | 335. IMPL — The ONE Batched Contract Diff | v50.0 | 7/7 | Complete   | 2026-05-28 |
-| 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 0/6 | Not started | - |
+| 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 1/6 | In Progress|  |
 | 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 0/TBD | Not started | - |
 | 338. TERMINAL — Internal Delta Audit + Sweep + Closure | v50.0 | 0/TBD | Not started | - |
 
