@@ -116,7 +116,32 @@ Plans:
   3. The MINTDIV same-traits regression lands (TST-03) — byte-identical per-ticket trait derivation across a budget-slice split for an affected player (covering the fix if MINTDIV-01 proved reachable, or codifying the not-reachable boundary with the proof if refuted) — the seed candidate is closed empirically either way.
   4. The full-suite regression is NON-WIDENING vs the v49.0 baseline (TST-04) — net-zero new regression (every red named in the v49 baseline / enumerated-deferred set by NAME), absorbing any test renames / oracle migrations from the three contract items (e.g. whale-pass open/claim test re-homes, AfKing sub-window → pass-gated oracle migration), and a clean v50.0 regression baseline ledger is recorded.
 
-**Plans**: TBD
+**Plans**: 6 plans (linear sequential per D-CC-02; W1=336-01, W2=336-02, W3=336-03, W4=336-04, W5=336-05, W6=336-06 USER hand-review gate per D-CC-03)
+Plans:
+
+**Wave 1** — TST-01 freeze leg
+
+- [ ] 336-01-PLAN.md — extend `test/fuzz/RngLockDeterminism.t.sol` with `testFuzz_RngLockDeterminism_ClaimWhalePassDuringLockSafe` + perturbation cls 11 (claimWhalePass); empirical re-attest of `334-WHALE04-FREEZE-PROOF.md` under default + `FOUNDRY_PROFILE=deep`
+
+**Wave 2** *(blocked on Wave 1 completion)* — TST-01 equivalence/grant
+
+- [ ] 336-02-PLAN.md — extend `test/fuzz/RngFreezeAndRemovalProofs.t.sol` with `testClaimWhalePassMaterializesFutureWindowAndAppliesStats`; closes the file header deferral at lines 38-46 (the WHALE-01/02 roundtrip equivalence per D-TST01-03 + D-03 + D-04 + D-IMPL-01)
+
+**Wave 3** *(blocked on Wave 2 completion)* — TST-01 uniform-O(1)
+
+- [ ] 336-03-PLAN.md — extend `test/gas/KeeperOpenBoxWorstCaseGas.t.sol` with `testWhaleOpenerEqualsNonWhaleOpenerGas`; whale vs non-whale opener gas equivalence within documented tolerance (D-TST01-04)
+
+**Wave 4** *(blocked on Wave 3 completion)* — TST-02 no-pass-SLOAD oracle
+
+- [ ] 336-04-PLAN.md — extend `test/fuzz/AfKingSubscription.t.sol` with `testNonCrossingPathPerformsZeroLazyPassHorizonSloads` (first `vm.expectCall` use in the test tree per RESEARCH §Summary finding 1; D-TST02-02)
+
+**Wave 5** *(blocked on Wave 4 completion)* — TST-03 MINTDIV cross-path equality
+
+- [ ] 336-05-PLAN.md — create NEW `test/fuzz/MintModuleDivergenceAcrossSplit.t.sol`: deterministic anchor `testMintDivCrossPathEquality_OwedSplitsAcrossSlices` + boundary fuzz overlay `testFuzz_MintDiv_BoundaryOwedCrossPath` (D-TST03-01..04; cites `334-MINTDIV01-REACHABILITY-VERDICT.md` by path)
+
+**Wave 6** *(blocked on Wave 5 completion)* — TST-04 ledger USER gate
+
+- [ ] 336-06-PLAN.md — author `test/REGRESSION-BASELINE-v50.md` mirroring `test/REGRESSION-BASELINE-v49.md` §1/§2/§6/§7 verbatim; copy pre-derived 42-name v50 union from `336-RESEARCH.md` §"Pre-derived v50 baseline set"; `autonomous: false` USER hand-review gate at the binding NAME-set-equality headline per D-CC-03 (the ONLY USER-gated commit in Phase 336)
 **UI hint**: no
 
 ### Phase 337: AUDIT-PROTOCOL — Author the Model-Agnostic Multi-Round External-LLM RNG-Audit Kit (Package-Only)
@@ -159,7 +184,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 4/4 | Complete    | 2026-05-27 |
 | 335. IMPL — The ONE Batched Contract Diff | v50.0 | 7/7 | Complete   | 2026-05-28 |
-| 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 0/TBD | Not started | - |
+| 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 0/6 | Not started | - |
 | 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 0/TBD | Not started | - |
 | 338. TERMINAL — Internal Delta Audit + Sweep + Closure | v50.0 | 0/TBD | Not started | - |
 
