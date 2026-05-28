@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {IGame} from "../../contracts/AfKing.sol";
 
 /// @title AfKingSubscription -- Proves the v50.0 AFSUB-01..05 acceptance properties for the
 ///        AF_KING keeper: the pass-eviction-OR-refresh crossing gate (AFSUB-02/03), the
@@ -196,6 +197,55 @@ contract AfKingSubscription is DeployProtocol {
         assertEq(_countEventFor(address(afKing), SUB_EXPIRED_SIG, pass), 0, "non-crossing: no eviction");
         // Sub still active.
         assertGt(_subscriberIndexOf(pass), 0, "non-crossing sub stays in set");
+    }
+
+    /// @notice TST-02 D-TST02-02 (AFSUB-02 no-SLOAD oracle): hot-path-accurate empirical proof
+    ///         that the non-crossing AfKing autoBuy iteration performs ZERO external
+    ///         `IGame.lazyPassHorizon` reads. Under the v50.0 AFSUB-02 stored-field gate, an
+    ///         iteration where `currentLevel <= sub.validThroughLevel` MUST be a cheap stored-field
+    ///         compare with no external pass read — only the crossing branch (AfKing.sol:627-647)
+    ///         calls `GAME.lazyPassHorizon(player)` at line :628. Empirically re-attests the
+    ///         GASOPT-05-class no-regression invariant carried from v49 (the per-iter
+    ///         `isOperatorApproved` SLOAD was already removed; this oracle proves no equivalent
+    ///         per-iter external pass read crept back in under AFSUB).
+    /// @dev    This is the FIRST `vm.expectCall` usage in the entire `test/` tree per
+    ///         RESEARCH §Summary finding 1. Pitfall 1 (RESEARCH §5) enforces strict staging
+    ///         order: STAGE (deity grant, subscribe, approve, fund) → `vm.expectCall(..., 0)` →
+    ///         `vm.prank` → `afKing.autoBuy(50)`. NOTHING between the cheatcode and the autoBuy
+    ///         invocation; the cheatcode begins counting from the next external call, so any
+    ///         interleaved staging call would consume the budget vacuously.
+    /// @dev    Cheatcode auto-verifies on test teardown — no explicit assertEq needed. If any
+    ///         `IGame.lazyPassHorizon` call fires after the `vm.expectCall` line (i.e. during
+    ///         the autoBuy sweep), the test fails at teardown with
+    ///         `vm.expectCall: counted N of expected 0 calls`.
+    function testNonCrossingPathPerformsZeroLazyPassHorizonSloads() public {
+        // STEP 1 — STAGE FIRST. All external calls happen here, BEFORE the cheatcode is invoked.
+        // Deity sentinel pins validThroughLevel = uint24.max (set at subscribe via the
+        // `lazyPassHorizon` snapshot at AfKing.sol:419), guaranteeing the non-crossing branch
+        // (`currentLevel <= sub.validThroughLevel`) for the entire game lifetime.
+        address pass = makeAddr("nx_no_sload_holder");
+        _grantDeityPass(pass);          // lazyPassHorizon(pass) = type(uint24).max
+        _subscribeTicketMode(pass, 1);  // validThroughLevel = uint24.max stamped at subscribe
+        _approveKeeper(pass);
+        _fundPool(pass, 1 ether);
+
+        // STEP 2 — Stage the cheatcode. Selector-only encoding matches ANY (address) arg, so
+        // an external call into `lazyPassHorizon(player)` for any `player` would be counted.
+        // The third arg `0` asserts EXACTLY ZERO calls into that selector at `address(game)` for
+        // the remainder of the test.
+        vm.expectCall(
+            address(game),
+            abi.encodeWithSelector(IGame.lazyPassHorizon.selector),
+            0
+        );
+
+        // STEP 3 — Prank the keeper caller.
+        vm.prank(makeAddr("autoBuyer_no_sload_check"));
+
+        // STEP 4 — Drive the non-crossing autoBuy sweep. NO statements between STEP 2 and here.
+        afKing.autoBuy(50);
+
+        // STEP 5 — End of test (cheatcode auto-verifies at teardown). No explicit assertEq.
     }
 
     // =========================================================================
