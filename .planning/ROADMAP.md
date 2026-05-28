@@ -161,7 +161,7 @@ Plans:
 
 **Wave 1** — foundation (factual locator layer)
 
-- [ ] 337-01-PLAN.md — re-attest every cited anchor against HEAD (`337-ANCHOR-ATTESTATION.md`) + author the self-contained cold-start context pack 4a-4e into `RNG-AUDIT-KIT.md` (RNGAUDIT-03; neutral locators only, no verdicts)
+- [x] 337-01-PLAN.md — re-attest every cited anchor against HEAD (`337-ANCHOR-ATTESTATION.md`) + author the self-contained cold-start context pack 4a-4e into `RNG-AUDIT-KIT.md` (RNGAUDIT-03; neutral locators only, no verdicts)
 
 **Wave 2** *(blocked on Wave 1)* — protocol layer
 
@@ -202,7 +202,7 @@ Plans:
 | 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 4/4 | Complete    | 2026-05-27 |
 | 335. IMPL — The ONE Batched Contract Diff | v50.0 | 7/7 | Complete   | 2026-05-28 |
 | 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 4/6 | In Progress|  |
-| 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 0/4 | Not started | - |
+| 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 1/4 | In Progress|  |
 | 338. TERMINAL — Internal Delta Audit + Sweep + Closure | v50.0 | 0/TBD | Not started | - |
 
 ---
