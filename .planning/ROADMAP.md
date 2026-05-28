@@ -137,7 +137,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)* — TST-03 MINTDIV cross-path equality
 
-- [ ] 336-05-PLAN.md — create NEW `test/fuzz/MintModuleDivergenceAcrossSplit.t.sol`: deterministic anchor `testMintDivCrossPathEquality_OwedSplitsAcrossSlices` + boundary fuzz overlay `testFuzz_MintDiv_BoundaryOwedCrossPath` (D-TST03-01..04; cites `334-MINTDIV01-REACHABILITY-VERDICT.md` by path)
+- [x] 336-05-PLAN.md — create NEW `test/fuzz/MintModuleDivergenceAcrossSplit.t.sol`: deterministic anchor `testMintDivCrossPathEquality_OwedSplitsAcrossSlices` + boundary fuzz overlay `testFuzz_MintDiv_BoundaryOwedCrossPath` (D-TST03-01..04; cites `334-MINTDIV01-REACHABILITY-VERDICT.md` by path)
 
 **Wave 6** *(blocked on Wave 5 completion)* — TST-04 ledger USER gate
 
