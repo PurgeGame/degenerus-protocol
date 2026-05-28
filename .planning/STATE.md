@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v51.0
 milestone_name: claimBingo — Color-Completion Claim
 status: executing
-last_updated: "2026-05-28T21:46:26.806Z"
-last_activity: 2026-05-28 -- Phase 339 planning complete
+last_updated: "2026-05-28T21:59:16.819Z"
+last_activity: 2026-05-28
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 4
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v51.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v51.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v51.0 ACTIVE (started 2026-05-28) — claimBingo color-completion claim. One coupled contract bundle: the `claimBingo(level, symbol, slots[8])` 3-tier color-completion entrypoint (new `DegenerusGameBingoModule.sol`; reads post-resolution `traitBurnTicket`; pays a `Pool.Reward` draw + BURNIE flip credit) + the co-requisite sDGNRS `Pool.Reward` rebalance (50B→100B) + the deletion of the jackpot final-day `Pool.Reward` one-shot it replaces. Phases 339-342 (SPEC → IMPL → TST → TERMINAL). **Audit posture = minimal close:** the internal 3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v51.0.md` are DEFERRED → the v52 consolidated audit (cumulative v50+v51 surface). Next = define requirements → roadmap → Phase 339 SPEC.
+**Current focus:** Phase 339 — spec-design-lock-rng-freeze-safety-proof-tier-precedence-loc
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward)
 
@@ -30,10 +30,10 @@ See: .planning/PROJECT.md (Current Milestone: v51.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Ready to execute
-Last activity: 2026-05-28 -- Phase 339 planning complete
+Phase: 339 (spec-design-lock-rng-freeze-safety-proof-tier-precedence-loc) — EXECUTING
+Plan: 2 of 4
+Status: Executing Phase 339 — Plan 01 ✅ Complete (BINGO-06 freeze proof + traitBurnTicket soundness; FREEZE-SAFE + SOUND)
+Last activity: 2026-05-28 -- Phase 339 Plan 01 complete (339-BINGO06-FREEZE-PROOF + 339-TRAITBURNTICKET-SOUNDNESS-ATTESTATION)
 
 ## Current Milestone Roadmap (v51.0 — phases 339-342)
 
@@ -591,6 +591,7 @@ Audit deliverables:
 | Phase 332 P06 | 6min | 2 tasks | 1 files |
 | Phase 337 P02 | 4min | 2 tasks | 1 files |
 | Phase 337 P04 | ~25min | 2 tasks | 2 files (audit/rng-audit-kit/verify-kit.sh NEW 294 lines mode 100755 + audit/rng-audit-kit/337-KIT-VALIDATION.md NEW 105 lines) + 1 SUMMARY (verify-kit.sh exit 0, 11 PASS / 0 FAIL; RNGAUDIT-01..04 structurally re-attested; planted-defect-proven; zero contracts mutation) |
+| 339 | 01 | ~20min | 2 | 2 files (339-BINGO06-FREEZE-PROOF.md + 339-TRAITBURNTICKET-SOUNDNESS-ATTESTATION.md) + 1 SUMMARY (BINGO-06 FREEZE-SAFE via D-04 per-slot enumeration + traitBurnTicket IFF/SOUND via D-02 write-site attestation; D-03 whale-race non-finding; D-13 anchor-drift corrected — sole writer = MintModule.sol:603-643; zero contracts mutation) |
 
 ## Decisions
 
@@ -728,3 +729,7 @@ Audit deliverables:
 - [Phase ?]: 332-06 (TST-04 part B): authored test/REGRESSION-BASELINE-v49.md — the NON-WIDENING gate is a strict NAME-set EQUALITY (live whole-tree forge failing set == the 42 v48.0-baseline reds BY NAME, both set differences empty), 666/42/17 at the TST HEAD; the 333 TERMINAL delta-audit consumes this ledger
 - [Phase ?]: 337-02: RNGAUDIT kit canonical freeze-invariant target = the REQUIREMENTS '+' wording verbatim (337-04 lint grep target); the 334 'and' form deliberately dropped
 - [Phase ?]: 337-02: RNGAUDIT protocol head (invariant target + 4 exempt entries + R1->R4) prepended above the 337-01 context pack; no-answer-key + self-containment lints clean
+- [Phase 339]: 339-01 (BINGO-06): VERDICT FREEZE-SAFE — D-04 structured per-slot enumeration classifies every claimBingo slot into (i) NEW write (bingoClaimed/firstQuadrant/firstSymbol) / (ii) post-resolution READ (traitBurnTicket/level/gameOver/poolBalance) / (iii) external CALL (transferFromPool :485 clamped+onlyGame / coinflip.creditFlip); NONE is a current-VRF-window output during rngLock (window = AdvanceModule.sol:1640 set / 1721 clear, :573 far-future guard). claimBingo adds NO write to traitBurnTicket (read-only consumer). v45-vrf-freeze-invariant re-attested BY NAME for the read; race-start = the moment level-N traits are RNG-resolved
+- [Phase 339]: 339-01 (D-02): VERDICT SOUND — traitBurnTicket IFF proven (address at [level][traitId][slot] iff owned a post-RNG-resolved entry of that exact trait byte [QQ][CCC][SSS]). Sub-claims: (a) append keyed by resolved trait byte / no cross-trait contamination, (b) duplicate-append benign + griefing impossible (8 colors = 8 disjoint buckets), (c) no non-owner re-population (no setter/swap/delete/pop; virtual deity entries read-time-only, never persisted). claimBingo cannot be spoofed
+- [Phase 339]: 339-01 (D-13 ANCHOR DRIFT CORRECTED): the SOLE traitBurnTicket write-site is contracts/modules/DegenerusGameMintModule.sol:603-643 (inline-asm batch append of `player`, keyed by RNG-resolved traitId at :586-587). The plan/CONTEXT-cited "write-sites" DegenerusGame.sol:2701/2730/2813 (sampleTraitTickets/sampleTraitTicketsAtLevel/getTickets — all `view`) + JackpotModule:654 (bucket reader → _randTraitTicket `view`) are ALL READ-side. IMPL 340 must treat MintModule:603-643 as the authoritative writer
+- [Phase 339]: 339-01 (D-03): whale-frontrunning on the per-VRF trait-resolution batch enshrined as a written ACCEPTED-BY-DESIGN non-finding (race window = per-VRF reveal, NOT per-block; both contenders must land their last needed color in the same VRF resolution — rare). Purpose: the deferred v52 sweep treats it as already-dispositioned/known
