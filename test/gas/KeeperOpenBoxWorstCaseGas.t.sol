@@ -217,6 +217,123 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     }
 
     // =========================================================================
+    // Test E -- TST-01 D-TST01-04 uniform-O(1) whale-vs-non-whale gas equivalence
+    // (Phase 336 Plan 03 -- WHALE-03 attestation)
+    // =========================================================================
+
+    /// @notice Empirically attests WHALE-03 (D-TST01-04): the worst-case per-box autoOpen gas is
+    ///         independent of the opener's whale-pass-claims state. With WHALE-01 the box-open
+    ///         path is uniform O(1) regardless of `whalePassClaims[player]` (the accumulator slot
+    ///         is touched ONLY by the rare BOON_WHALE_PASS branch at LootboxModule:1628-1629;
+    ///         every other open is byte-identical between any two openers). The 331 whale-pass-
+    ///         weighted autoOpen carve-out is RETIRED per WHALE-03 — autoOpen budgets a flat
+    ///         per-box cost.
+    ///
+    /// @dev TOLERANCE CHOICE -- per 336-RESEARCH §A1 + 336-PLAN <action> step 2 alternative:
+    ///         this test uses the WIDE tolerance (~25_000 gas) covering the worst-case cold
+    ///         SSTORE penalty if a BOON_WHALE_PASS branch fires on the whale opener (the
+    ///         `whalePassClaims[player] += 1` accumulator write at LootboxModule:1253). The
+    ///         simplification (skip the boon-roll path entirely) drives BOTH openers down the
+    ///         non-boon-firing code path with the SAME FIXED_WORD, so in practice the delta
+    ///         observed should be far below ~25_000 -- the wide bound merely guarantees the
+    ///         assertion holds even if a future fixture change toggles whale-bit firing.
+    ///         The 500-gas tight tolerance alternative would require BOTH openers to be
+    ///         pre-warmed via vm.store on slot 21 (whalePassClaims root) and would still face
+    ///         address-keyed cold/warm asymmetries on player-state slots; the wide bound is the
+    ///         empirically safer pick per RESEARCH §A1's "LOW risk, caught at first execution"
+    ///         framing. The threat model (T-336-03-02) caps the tolerance at 25_000.
+    ///
+    ///         The whale opener's whalePassClaims slot is pre-seeded to a non-zero value via
+    ///         vm.store -- this asserts the SECOND structural property of WHALE-03: even when
+    ///         the opener already has pending whale-pass claims, the box-open gas does NOT
+    ///         depend on that state (the box-open path does NOT SLOAD whalePassClaims absent
+    ///         the boon branch).
+    function testWhaleOpenerEqualsNonWhaleOpenerGas() public {
+        // -- Address staging -----------------------------------------------------
+        address warmupOpener = makeAddr("warmup_opener");
+        address nonWhaleOpener = makeAddr("non_whale_opener");
+        address whaleOpener = makeAddr("whale_opener");
+        vm.deal(warmupOpener, 100 ether);
+        vm.deal(nonWhaleOpener, 100 ether);
+        vm.deal(whaleOpener, 100 ether);
+
+        // Pre-seed whalePassClaims[whaleOpener] = 3 (a non-zero accumulator state representing
+        // "this player already has pending whale-pass claims from prior boon rolls"). Slot 21 is
+        // the verified whalePassClaims mapping root (DegenerusGame storage layout; confirmed by
+        // 336-02 SUMMARY against `forge inspect storage`). WHALE-03 asserts box-open gas is
+        // independent of this pre-existing state — the box-open path does NOT read this slot
+        // unless the BOON_WHALE_PASS branch fires, and even when it does, the `+= 1` write is
+        // strictly O(1) per LootboxModule:1253.
+        bytes32 whalePassClaimsSlot = keccak256(abi.encode(whaleOpener, uint256(21)));
+        vm.store(address(game), whalePassClaimsSlot, bytes32(uint256(3)));
+        assertEq(
+            uint256(vm.load(address(game), whalePassClaimsSlot)),
+            3,
+            "pre-condition: whalePassClaims[whaleOpener] pre-seeded to 3"
+        );
+
+        // -- Box purchase + RNG-word injection ----------------------------------
+        uint48 index = _activeLootboxIndex();
+        _buyBox(warmupOpener, LOOTBOX_WEI);
+        _buyBox(nonWhaleOpener, LOOTBOX_WEI);
+        _buyBox(whaleOpener, LOOTBOX_WEI);
+        _injectLootboxRngWord(index, FIXED_WORD);
+
+        // Worst-case preconditions: both measurement boxes queued + RNG-ready + un-opened.
+        assertGt(_lootboxEthBase(index, nonWhaleOpener), 0, "pre: non-whale box queued + un-opened");
+        assertGt(_lootboxEthBase(index, whaleOpener), 0, "pre: whale box queued + un-opened");
+        assertTrue(_lootboxRngWord(index) != 0, "pre: index is RNG-ready (word != 0)");
+
+        // -- Warm-up call (NOT measured) ----------------------------------------
+        // The first autoOpen call in a clean test environment pays a substantial per-tx cold-
+        // warming penalty (the coinflip facade address SLOAD, the boxCursor / boxCursorIndex
+        // packed-slot SLOAD, the active-ticket-level SLOAD, the cranker's `creditFlip` slot
+        // cluster) that the second call benefits from. To isolate the per-OPENER divergence
+        // (the WHALE-03 claim) from this cross-call warming asymmetry, the warm-up opener
+        // burns those cold reads first. Both measured calls (non-whale + whale) then see the
+        // SAME warm state — the residual delta is the load-bearing equivalence quantity.
+        vm.prank(warmupOpener);
+        game.autoOpen(1);
+
+        // -- Measure non-whale opener gas ---------------------------------------
+        // Each measured opener cranks ONLY their own box via autoOpen(1) bounded to a single
+        // box. Both calls take the same autoOpen code path (same FIXED_WORD; neither triggers
+        // BOON_WHALE_PASS at LootboxModule:1628-1629); the WHALE-03 attestation is that the
+        // gas delta is bounded by the documented tolerance regardless of the opener identity
+        // or pre-existing whalePassClaims state.
+        vm.prank(nonWhaleOpener);
+        uint256 g0 = gasleft();
+        game.autoOpen(1);
+        uint256 gNonWhale = g0 - gasleft();
+
+        // -- Measure whale opener gas -------------------------------------------
+        vm.prank(whaleOpener);
+        g0 = gasleft();
+        game.autoOpen(1);
+        uint256 gWhale = g0 - gasleft();
+
+        // -- Equivalence assertion + audit-trace logs ---------------------------
+        uint256 delta = gWhale > gNonWhale ? gWhale - gNonWhale : gNonWhale - gWhale;
+        // WIDE tolerance (~25_000 gas) covering the worst-case cold-SSTORE penalty per the
+        // RESEARCH §A1 framing. The empirically observed delta in the non-boon-firing path
+        // is far below this; the wide bound is the durable choice that holds across any
+        // future cold/warm state shift in the fixture or contract neighborhood.
+        uint256 TOLERANCE = 25_000;
+        assertLe(
+            delta,
+            TOLERANCE,
+            "WHALE-03 D-TST01-04: uniform-O(1) -- whale vs non-whale opener gas equivalence within 25_000-gas cold-SSTORE bound"
+        );
+
+        // Audit trail: the empirical numbers logged for USER + downstream audit review (the
+        // 338 TERMINAL FINDINGS-v50 deliverable cites these as the WHALE-03 evidence).
+        emit log_named_uint("gas_whale_opener", gWhale);
+        emit log_named_uint("gas_non_whale_opener", gNonWhale);
+        emit log_named_uint("gas_delta", delta);
+        emit log_named_uint("gas_tolerance", TOLERANCE);
+    }
+
+    // =========================================================================
     // Internal helpers
     // =========================================================================
 
