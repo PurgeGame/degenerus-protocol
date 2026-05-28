@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v51.0
 milestone_name: claimBingo — Color-Completion Claim
-status: executing
-last_updated: "2026-05-28T22:14:32.013Z"
+status: verifying
+last_updated: "2026-05-28T22:22:05.079Z"
 last_activity: 2026-05-28
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 0
+  completed_plans: 4
+  percent: 25
 ---
 
 # Project State
@@ -30,10 +30,10 @@ See: .planning/PROJECT.md (Current Milestone: v51.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 339 (spec-design-lock-rng-freeze-safety-proof-tier-precedence-loc) — EXECUTING
-Plan: 4 of 4
-Status: Executing Phase 339 — Plan 01 ✅ Complete (BINGO-06 freeze proof + soundness) · Plan 02 ✅ Complete (BINGO design-lock + tier-precedence acceptance contract) · Plan 03 ✅ Complete (REBAL BPS-sum invariant 10000 + JACK final-day deletion clean-orphan + grep-attestation/edit-order map; SC4 + SC5; D-11/D-12/D-13). Plan 04 next.
-Last activity: 2026-05-28 -- Phase 339 Plan 03 complete (339-REBAL-JACK-ATTESTATION + 339-GREP-ATTESTATION-EDIT-ORDER; BATCH-01 SC4+SC5)
+Phase: 339 (spec-design-lock-rng-freeze-safety-proof-tier-precedence-loc) — COMPLETE (ready for verification)
+Plan: 4 of 4 ✅ — Plan 01 ✅ (BINGO-06 freeze proof + soundness) · Plan 02 ✅ (BINGO design-lock + tier-precedence acceptance contract) · Plan 03 ✅ (REBAL BPS-sum 10000 + JACK clean-orphan + grep-attestation/edit-order) · Plan 04 ✅ (SPEC-INDEX + multi-source coverage audit: ALL items COVERED, 0 MISSING — BATCH-01 closure)
+Status: Phase 339 SPEC complete (4/4 plans) — BATCH-01 + BINGO-06 satisfied; ready for verification. Next: Phase 340 IMPL (the ONE batched contract diff — CONTRACT BOUNDARY hard stop).
+Last activity: 2026-05-28 -- Phase 339 Plan 04 complete (339-SPEC-INDEX; BATCH-01 coverage closure, ALL items COVERED 0 MISSING)
 
 ## Current Milestone Roadmap (v51.0 — phases 339-342)
 
@@ -41,7 +41,7 @@ Shape: SPEC → IMPL → TST → TERMINAL (the established v44-v50 audit shape, 
 
 | Phase | Name | Type | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 339 | SPEC — Design-Lock + RNG-Freeze-Safety Proof + Tier-Precedence Lock + Call-Graph Attestation | SPEC | BATCH-01 · BINGO-06 | Not started |
+| 339 | SPEC — Design-Lock + RNG-Freeze-Safety Proof + Tier-Precedence Lock + Call-Graph Attestation | SPEC | BATCH-01 · BINGO-06 | ✅ Complete (4/4 plans) |
 | 340 | IMPL — The ONE Batched Contract Diff (BINGO + REBAL + JACK) | IMPL (CONTRACT BOUNDARY) | BINGO-01/02/03/04/05 · REBAL-01 · JACK-01/02 · BATCH-02 | Not started |
 | 341 | TST — Per-Tier + Precedence-Suppression + Revert/Dedup + Empty-Pool + Jackpot Regression + Non-Widening | TST | TST-01/02/03/04/05/06 | Not started |
 | 342 | TERMINAL — Minimal Close: Re-Attest + Atomic 5-Doc Closure Flip (Sweep + FINDINGS DEFERRED → v52) | TERMINAL (minimal close) | BATCH-03 | Not started |
@@ -594,6 +594,7 @@ Audit deliverables:
 | 339 | 01 | ~20min | 2 | 2 files (339-BINGO06-FREEZE-PROOF.md + 339-TRAITBURNTICKET-SOUNDNESS-ATTESTATION.md) + 1 SUMMARY (BINGO-06 FREEZE-SAFE via D-04 per-slot enumeration + traitBurnTicket IFF/SOUND via D-02 write-site attestation; D-03 whale-race non-finding; D-13 anchor-drift corrected — sole writer = MintModule.sol:603-643; zero contracts mutation) |
 | Phase 339 P02 | ~18min | 2 tasks | 2 files |
 | 339 | 03 | ~22min | 2 | 2 files (339-REBAL-JACK-ATTESTATION.md + 339-GREP-ATTESTATION-EDIT-ORDER.md) + 1 SUMMARY (REBAL complete pool-BPS set incl CREATOR_BPS=2000 :291 sums to 10000 before+after net-zero swap, supply unchanged Pool.Reward 50B→100B; JACK :1339-1352 deletion cleanly orphaned [FINAL_DAY_DGNRS_BPS sole-use :1343 + JackpotDgnrsWin sole-emit :1350] + isFinalDay plumbing preserved [lvl+1 gate :617 + 6 callers]; 22-anchor grep table vs 812abeee + 4-step producer-before-consumer edit-order for BATCH-02; zero contracts mutation) |
+| Phase 339 P04 | ~15min | 1 tasks | 1 files |
 
 ## Decisions
 
@@ -738,3 +739,4 @@ Audit deliverables:
 - [Phase 339]: 339-01 (D-13 ANCHOR DRIFT CORRECTED): the SOLE traitBurnTicket write-site is contracts/modules/DegenerusGameMintModule.sol:603-643 (inline-asm batch append of `player`, keyed by RNG-resolved traitId at :586-587). The plan/CONTEXT-cited "write-sites" DegenerusGame.sol:2701/2730/2813 (sampleTraitTickets/sampleTraitTicketsAtLevel/getTickets — all `view`) + JackpotModule:654 (bucket reader → _randTraitTicket `view`) are ALL READ-side. IMPL 340 must treat MintModule:603-643 as the authoritative writer
 - [Phase 339]: 339-01 (D-03): whale-frontrunning on the per-VRF trait-resolution batch enshrined as a written ACCEPTED-BY-DESIGN non-finding (race window = per-VRF reveal, NOT per-block; both contenders must land their last needed color in the same VRF resolution — rare). Purpose: the deferred v52 sweep treats it as already-dispositioned/known
 - [Phase ?]: Phase 339-02: claimBingo BINGO design-lock + tier-precedence acceptance contract LOCKED — signature uint32[8] (D-01), three mappings uint24-keyed in shared storage (D-05/07/10), GAME_BINGO_MODULE delegatecall (D-10), six constants verbatim (D-05), quadrant-first-before-symbol-first + both-bits-marking + suppression (D-06)
+- [Phase 339]: SPEC-INDEX (BATCH-01 closure): ALL items COVERED, 0 MISSING — GOAL 5/5 (SC1->A3, SC2->A1+A2, SC3->A4, SC4->A5, SC5->A6), REQ 2/2 (BATCH-01 cross-cutting + BINGO-06 single-artifact), RESEARCH N/A-not-a-gap (locked plan doc = substitute source), CONTEXT D-01..D-13 13/13; seven Open-before-SPEC resolved (item 3 = Out-of-Scope exclusion); two Wave-1 corrections surfaced (traitBurnTicket writer = MintModule:603-643; CREATOR_BPS=2000@:291 + _handleSoloBucketWinner)
