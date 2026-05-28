@@ -204,3 +204,39 @@ This is a method for YOU to derive each slot's status from the attached source �
 4. Decide the slot's status for yourself, and record the file:line evidence for each writer/reader so your conclusion is reproducible from source.
 
 The exempt entry points (supplied in the protocol head reserved above) are the only writes you may take as the legitimate resolution; your job for those slots is to confirm from source that nothing OTHER than an exempt entry writes them.
+
+---
+
+## Feeding the Contracts (Model-Agnostic Recipe)
+
+This kit is **model-agnostic** — it is usable in both Gemini and ChatGPT, and the protocol (sections 1–3) and Context Pack (4a–4e) read identically whichever model you run. The contracts are referenced **by path**: you attach the source files themselves; the kit does not inline them. The exact file list, per-file sizes, the three feeding groups, and the Storage-travels rule live in the companion **`CHUNK-MANIFEST.md`** — read it first, attach the files it lists, then paste this kit as the prompt.
+
+The corpus is the 18-file core set plus `DegenerusQuests.sol` (≈ 280K tokens total per `CHUNK-MANIFEST.md`). Pick the path that matches your model:
+
+| Model (May 2026) | Context window | Corpus (~280K) | Feeding path |
+|------------------|---------------:|----------------|--------------|
+| Gemini 2.5 Pro (recommended primary) | ~1,048,576 | fits in one feed (~720K headroom) | **(a)** one feed, R1→R4 in one session |
+| GPT-5.5 (API) | ~1,000,000 | fits in one feed | **(b)** one feed, prefer file upload |
+| GPT-4.1 (API / Pro upload) | ~1,047,576 | fits in one feed | **(b)** one feed, prefer file upload |
+| GPT-5.4 (standard window) | ~272,000 | ~280K just exceeds it | **(c)** chunk by group, or use a 1M-window config |
+| ChatGPT web UI | well below the API ceiling | a single paste truncates | **(c)** 3-group chunked, re-attach Storage each group |
+
+The window numbers are the May-2026 figures the corpus was sized against; verify your model's current window before relying on a one-feed path. Whichever row applies, the protocol (R1→R4) and Context Pack are identical — only the attachment mechanics differ.
+
+**(a) Gemini 2.5 Pro — recommended primary, one feed.** The whole ≈ 280K-token corpus fits in a single context with substantial headroom. Attach all 19 files (or paste them) in one session and run **R1 → R4 as four turns in that same session**, so the model keeps its R1 catalog in front of it for R2/R3/R4. No chunking. This is the lowest-friction path and is recommended as the primary.
+
+**(b) GPT-5.5 / GPT-4.1 (API, or a Pro tier with file upload) — one feed.** The whole corpus fits these context windows as well. **Prefer file upload over inline paste** (cleaner tokenisation, no copy truncation). Then run R1 → R4 as four turns in one session, same as the Gemini path.
+
+**(c) ChatGPT web UI — chunked path.** A web chat box truncates a paste well below the API ceiling, so feed the corpus in the three groups from `CHUNK-MANIFEST.md`, **in this order: RNG-CORE → CONSUME-B → FACADE+PERIPHERAL-C**, re-attaching `DegenerusGameStorage.sol` with **each** group (the slot layout + the write-time gates are the shared anchor every cross-module trace resolves against — see the Storage-travels rule in the manifest). Then either:
+- load all three groups first and run **R1 only after all three are in**, or
+- if the session cannot hold all three at once, run **R1 per-group** and add a **reconciliation turn** that merges the three partial catalogs into one before you start R2.
+
+**(d) General (every model).** Long sessions evict early context. Instruct the model to **persist its R1 catalog as an artifact and paste it back at the top of each later round**, so R2/R3/R4 always see the full read-graph. Cite `file:line` throughout, as the protocol requires.
+
+**The kit reflects the frozen post-v50 tree.** The attached source is the post-v50 surface, which includes the O(1) whale-pass claim path (a box-open counter write plus a deferred player-paid claim), the realigned MintModule within-player trait-batch advance, and the AfKing pass-gating views. The kit names these only so you attach the right files and trace them — it states **no conclusion** about any of them. Build the read-graph and reach every per-slot result yourself, in R1 → R4, exactly as for any other slot.
+
+## Scope — PACKAGE-ONLY
+
+This is a **PACKAGE-ONLY** deliverable. Authoring this kit — the protocol, the cold-start Context Pack, and the feeding recipe above — **is** the deliverable. Actually running it through Gemini or ChatGPT, and then triaging, reproducing, and dispositioning whatever the external model reports, is a separate **future cycle** of work. That run-and-triage step is explicitly **out of scope** for the v50.0 milestone that produced this package.
+
+In other words: shipping this kit completes the package. Putting an independent model through R1 → R4 against the attached source, and adjudicating its output, happens in a later **future cycle** — not here.
