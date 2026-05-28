@@ -156,7 +156,24 @@ Plans:
   3. The protocol ships a self-contained cold-start context pack (RNGAUDIT-03) — the module/RNG-window map, the `rngLock` mechanics, where the VRF word enters and is consumed, the contract inventory, and the back-and-forth variable-tracing methodology ("trace every variable across modules — what writes it, what reads it, what is locked during an RNG window") — sufficient to run cold against the contracts WITHOUT access to our `audit/FINDINGS-*.md`.
   4. The protocol is authored against the FROZEN post-v50 tree, model-agnostic, and explicitly PACKAGE-ONLY (RNGAUDIT-04) — it reflects the post-WHALE/AFSUB/MINTDIV read-graph, is usable in both Gemini and ChatGPT (with context-window chunking guidance for feeding the contracts), and states explicitly that running it through the external models + triaging their output is a FUTURE cycle, OUT of v50.0.
 
-**Plans**: TBD
+**Plans**: 4 plans (4 waves, all autonomous; documentation/deliverable — ZERO `contracts/*.sol`; `RNG-AUDIT-KIT.md` is authored across waves 1→2→3 in producer-before-consumer order [context pack → protocol → packaging] so the shared file never races; W4 is the §8 grep/lint validation gate). Two-file Layout B under a NEW `audit/rng-audit-kit/` directory (proposed default flagged for USER review at the plan-checker gate — there is no CONTEXT.md). Canonical freeze-invariant string resolved to the REQUIREMENTS `+` form.
+Plans:
+
+**Wave 1** — foundation (factual locator layer)
+
+- [ ] 337-01-PLAN.md — re-attest every cited anchor against HEAD (`337-ANCHOR-ATTESTATION.md`) + author the self-contained cold-start context pack 4a-4e into `RNG-AUDIT-KIT.md` (RNGAUDIT-03; neutral locators only, no verdicts)
+
+**Wave 2** *(blocked on Wave 1)* — protocol layer
+
+- [ ] 337-02-PLAN.md — author the freeze-invariant target (canonical `+` string) + the 4 exempt entries (RNGAUDIT-01) and the R1→R4 self-driven adversarial sequence (RNGAUDIT-02, R3 mirrors zero-day-hunter, no answer key) into `RNG-AUDIT-KIT.md`
+
+**Wave 3** *(blocked on Wave 2)* — packaging layer
+
+- [ ] 337-03-PLAN.md — author `CHUNK-MANIFEST.md` (corpus inventory + 3 chunk groups + Storage-travels rule) + append the model-agnostic feeding recipe + the explicit PACKAGE-ONLY statement to `RNG-AUDIT-KIT.md` (RNGAUDIT-04)
+
+**Wave 4** *(blocked on Wave 3)* — validation gate (gates the whole kit)
+
+- [ ] 337-04-PLAN.md — author `verify-kit.sh` (the RESEARCH §8 lints: anchor-resolution + freeze-invariant verbatim + self-containment + no-answer-key + structural presence) + record `337-KIT-VALIDATION.md` (re-attests RNGAUDIT-01..04 structurally; no external-model run; zero contract edits)
 **UI hint**: no
 
 ### Phase 338: TERMINAL — Internal Delta Audit + 3-Skill Adversarial Sweep + Closure
@@ -185,7 +202,7 @@ Plans:
 | 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 4/4 | Complete    | 2026-05-27 |
 | 335. IMPL — The ONE Batched Contract Diff | v50.0 | 7/7 | Complete   | 2026-05-28 |
 | 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 4/6 | In Progress|  |
-| 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 0/TBD | Not started | - |
+| 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 0/4 | Not started | - |
 | 338. TERMINAL — Internal Delta Audit + Sweep + Closure | v50.0 | 0/TBD | Not started | - |
 
 ---
