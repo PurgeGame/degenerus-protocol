@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v50.0
 milestone_name: Whale-Pass O(1) Refactor + AfKing Pass-Gated Subs + MintModule Advance-Divergence + External RNG-Audit Protocol
 status: executing
-last_updated: "2026-05-28T10:39:59.321Z"
-last_activity: 2026-05-28 -- Phase 335 IMPL complete (BATCH-02 USER-approved commit e756a6f3); next = Phase 336 TST
+last_updated: "2026-05-28T11:42:32.871Z"
+last_activity: 2026-05-28 -- Phase 336 planning complete
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 11
+  total_plans: 17
   completed_plans: 11
   percent: 40
 ---
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (Current Milestone: v50.0 section) + .planning/REQUIRE
 
 Phase: 335 — COMPLETE (BATCH-02 USER-approved commit `e756a6f3`, not pushed)
 Plan: 7 of 7
-Status: Phase 336 TST next
-Last activity: 2026-05-28 -- Phase 335 IMPL complete; next = Phase 336 TST
+Status: Ready to execute
+Last activity: 2026-05-28 -- Phase 336 planning complete
 
 ## Current Milestone Roadmap (v50.0 — phases 334-338)
 
