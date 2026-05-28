@@ -7,6 +7,10 @@
 
 ---
 
+> **🔒 v50.0 CLOSED 2026-05-28 — MINIMAL CLOSE (USER-approved).** Phase 338's internal 3-skill adversarial sweep + delta-audit + `audit/FINDINGS-v50.0.md` are **DEFERRED to the v52 consolidated audit**, which MUST cover the cumulative **v50 + v51** contract surface (whale-pass O(1) claim · AFSUB pass-gating · MINTDIV alignment · + whatever v51 lands). Rationale: pre-launch (no live funds); WHALE-04 freeze-safety was PROVEN at SPEC (334) and empirically TESTED at TST (336 TST-01 freeze-fuzz / TST-03 divergence) — so v50 is not unaudited, only the adversarial-hunt + formal findings layer is batched into v52. **SWEEP-01/02/03 + the FINDINGS-doc portion of BATCH-03 = DEFERRED→v52** (status in the Traceability table below). Mirrors the v45.0 minimal-close precedent. The Traceability table is the authoritative per-req status; the prose `- [ ]` checkboxes below are not separately maintained.
+
+---
+
 ## v50.0 Requirements
 
 ### Whale-Pass O(1) Claim Refactor (WHALE)
@@ -74,31 +78,33 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WHALE-01 | Phase 335 (IMPL) | Pending |
-| WHALE-02 | Phase 335 (IMPL) | Pending |
-| WHALE-03 | Phase 335 (IMPL) | Pending |
+| WHALE-01 | Phase 335 (IMPL) | Complete |
+| WHALE-02 | Phase 335 (IMPL) | Complete |
+| WHALE-03 | Phase 335 (IMPL) | Complete |
 | WHALE-04 | Phase 334 (SPEC) | Complete |
-| AFSUB-01 | Phase 335 (IMPL) | Pending |
-| AFSUB-02 | Phase 335 (IMPL) | Pending |
-| AFSUB-03 | Phase 335 (IMPL) | Pending |
-| AFSUB-04 | Phase 335 (IMPL) | Pending |
-| AFSUB-05 | Phase 335 (IMPL) | Pending |
+| AFSUB-01 | Phase 335 (IMPL) | Complete |
+| AFSUB-02 | Phase 335 (IMPL) | Complete |
+| AFSUB-03 | Phase 335 (IMPL) | Complete |
+| AFSUB-04 | Phase 335 (IMPL) | Complete |
+| AFSUB-05 | Phase 335 (IMPL) | Complete |
 | MINTDIV-01 | Phase 334 (SPEC) | Complete |
-| MINTDIV-02 | Phase 335 (IMPL) | Pending |
+| MINTDIV-02 | Phase 335 (IMPL) | Complete |
 | RNGAUDIT-01 | Phase 337 (AUDIT-PROTOCOL) | Complete |
 | RNGAUDIT-02 | Phase 337 (AUDIT-PROTOCOL) | Complete |
 | RNGAUDIT-03 | Phase 337 (AUDIT-PROTOCOL) | Complete |
 | RNGAUDIT-04 | Phase 337 (AUDIT-PROTOCOL) | Complete |
-| TST-01 | Phase 336 (TST) | Pending |
-| TST-02 | Phase 336 (TST) | Pending |
-| TST-03 | Phase 336 (TST) | Pending |
-| TST-04 | Phase 336 (TST) | Pending |
-| SWEEP-01 | Phase 338 (TERMINAL) | Pending |
-| SWEEP-02 | Phase 338 (TERMINAL) | Pending |
-| SWEEP-03 | Phase 338 (TERMINAL) | Pending |
+| TST-01 | Phase 336 (TST) | Complete |
+| TST-02 | Phase 336 (TST) | Complete |
+| TST-03 | Phase 336 (TST) | Complete |
+| TST-04 | Phase 336 (TST) | Complete |
+| SWEEP-01 | Phase 338 (TERMINAL) | **DEFERRED → v52** (minimal close) |
+| SWEEP-02 | Phase 338 (TERMINAL) | **DEFERRED → v52** (minimal close) |
+| SWEEP-03 | Phase 338 (TERMINAL) | **DEFERRED → v52** (minimal close) |
 | BATCH-01 | Phase 334 (SPEC) | Complete |
-| BATCH-02 | Phase 335 (IMPL) | Pending |
-| BATCH-03 | Phase 338 (TERMINAL) | Pending |
+| BATCH-02 | Phase 335 (IMPL) | Complete |
+| BATCH-03 | Phase 338 (TERMINAL) | Minimal close — reqs re-attested here; `FINDINGS-v50.0.md` + 5-doc atomic flip DEFERRED → v52 |
+
+**Minimal-close tally:** 21/25 Complete · 3 DEFERRED→v52 (SWEEP-01/02/03) · 1 minimal-close (BATCH-03). v50.0 closed at HEAD without the Phase 338 adversarial sweep per USER decision 2026-05-28; the deferred 4 are the v52 consolidated audit's charge over the cumulative v50+v51 surface.
 
 **Per-phase count (verification):**
 
@@ -115,4 +121,4 @@
 
 > **Note on §13e-style "uncovered" warnings:** as in the v47/v48/v49 milestones, milestone-wide "uncovered" warnings are EXPECTED false alarms — each phase owns only its slice; the TERMINAL closure (Phase 338: SWEEP-01/02/03 + BATCH-03) re-attests the full 25-requirement set. The TST / AUDIT-PROTOCOL / TERMINAL phases do not "uncover" the IMPL reqs — they re-prove, package against, and re-attest them.
 
-*Last updated: 2026-05-27 — v50.0 traceability filled by the roadmapper at ROADMAP creation (25 reqs / 7 categories: WHALE 4 · AFSUB 5 · MINTDIV 2 · RNGAUDIT 4 · TST 4 · SWEEP 3 · BATCH 3; phases 334-338). Statuses flip to Complete as phases close; all re-attested at the Phase 338 TERMINAL closure.*
+*Last updated: 2026-05-28 — v50.0 CLOSED via USER-approved MINIMAL CLOSE. 21/25 Complete (334 SPEC + 335 IMPL + 336 TST + 337 AUDIT-PROTOCOL all done); SWEEP-01/02/03 + the FINDINGS-doc portion of BATCH-03 DEFERRED → the v52 consolidated audit (cumulative v50+v51 surface). Phase 338 internal sweep NOT run. Mirrors v45.0 minimal-close precedent. Original roadmapper note (2026-05-27): 25 reqs / 7 categories (WHALE 4 · AFSUB 5 · MINTDIV 2 · RNGAUDIT 4 · TST 4 · SWEEP 3 · BATCH 3; phases 334-338).*

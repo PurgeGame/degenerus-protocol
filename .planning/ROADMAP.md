@@ -201,9 +201,11 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 4/4 | Complete    | 2026-05-27 |
 | 335. IMPL — The ONE Batched Contract Diff | v50.0 | 7/7 | Complete   | 2026-05-28 |
-| 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 4/6 | In Progress|  |
+| 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 6/6 | Complete    | 2026-05-28 |
 | 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 4/4 | Complete    | 2026-05-28 |
-| 338. TERMINAL — Internal Delta Audit + Sweep + Closure | v50.0 | 0/TBD | Not started | - |
+| 338. TERMINAL — Internal Delta Audit + Sweep + Closure | v50.0 | 0/4 | DEFERRED → v52 (minimal close) | 2026-05-28 |
+
+> **🔒 v50.0 CLOSED 2026-05-28 — MINIMAL CLOSE (USER-approved).** Phases 334 SPEC + 335 IMPL + 336 TST + 337 AUDIT-PROTOCOL all Complete (21/25 reqs). **Phase 338's internal 3-skill adversarial sweep + delta-audit + `audit/FINDINGS-v50.0.md` are DEFERRED to the v52 consolidated audit** (SWEEP-01/02/03 + the findings/flip portion of BATCH-03), which MUST cover the cumulative **v50 + v51** contract surface. Rationale: pre-launch (no live funds); WHALE-04 freeze-safety PROVEN at SPEC + tested at TST. Mirrors the v45.0 minimal-close precedent. v50 contract history remains UNPUSHED. Next: v51.
 
 ---
 
