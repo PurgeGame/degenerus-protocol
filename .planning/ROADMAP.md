@@ -141,7 +141,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)* — TST-04 ledger USER gate
 
-- [ ] 336-06-PLAN.md — author `test/REGRESSION-BASELINE-v50.md` mirroring `test/REGRESSION-BASELINE-v49.md` §1/§2/§6/§7 verbatim; copy pre-derived 42-name v50 union from `336-RESEARCH.md` §"Pre-derived v50 baseline set"; `autonomous: false` USER hand-review gate at the binding NAME-set-equality headline per D-CC-03 (the ONLY USER-gated commit in Phase 336)
+- [x] 336-06-PLAN.md — author `test/REGRESSION-BASELINE-v50.md` mirroring `test/REGRESSION-BASELINE-v49.md` §1/§2/§6/§7 verbatim; copy pre-derived 42-name v50 union from `336-RESEARCH.md` §"Pre-derived v50 baseline set"; `autonomous: false` USER hand-review gate at the binding NAME-set-equality headline per D-CC-03 (the ONLY USER-gated commit in Phase 336)
 **UI hint**: no
 
 ### Phase 337: AUDIT-PROTOCOL — Author the Model-Agnostic Multi-Round External-LLM RNG-Audit Kit (Package-Only)

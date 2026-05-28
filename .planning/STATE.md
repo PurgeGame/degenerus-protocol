@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v50.0
 milestone_name: Whale-Pass O(1) Refactor + AfKing Pass-Gated Subs + MintModule Advance-Divergence + External RNG-Audit Protocol
 status: executing
-last_updated: "2026-05-28T11:43:58.517Z"
-last_activity: 2026-05-28 -- Phase 336 execution started
+last_updated: "2026-05-28T13:30:00Z"
+last_activity: 2026-05-28 -- Phase 336 TST complete (6/6); v50.0 NON-WIDENING baseline recorded
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 17
-  completed_plans: 11
-  percent: 40
+  completed_plans: 17
+  percent: 60
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (Current Milestone: v50.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 336 (TST — Equivalence + Freeze-Safety + Divergence-Repro + Non-Widening Regression) — EXECUTING
-Plan: 1 of 6
-Status: Executing Phase 336
-Last activity: 2026-05-28 -- Phase 336 execution started
+Phase: 336 (TST — Equivalence + Freeze-Safety + Divergence-Repro + Non-Widening Regression) — ✅ COMPLETE (6/6 plans)
+Plan: 6 of 6 (complete)
+Status: Phase 336 COMPLETE — next Phase 337 AUDIT-PROTOCOL (package-only deliverable)
+Last activity: 2026-05-28 -- Phase 336 TST complete; v50.0 NON-WIDENING baseline (674/40/17, ⊆ gate) recorded
 
 ## Current Milestone Roadmap (v50.0 — phases 334-338)
 
@@ -35,9 +35,9 @@ Shape: SPEC → IMPL → TST → AUDIT-PROTOCOL → TERMINAL (the established v4
 
 | Phase | Name | Type | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 334 | SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure + Call-Graph Attestation | SPEC | BATCH-01 · WHALE-04 · MINTDIV-01 | Not started |
-| 335 | IMPL — The ONE Batched Contract Diff (WHALE + AFSUB + MINTDIV-if-real) | IMPL | WHALE-01/02/03 · AFSUB-01..05 · MINTDIV-02 · BATCH-02 | Not started |
-| 336 | TST — Equivalence + Freeze-Safety + Divergence-Repro + Non-Widening Regression | TST | TST-01/02/03/04 | Not started |
+| 334 | SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure + Call-Graph Attestation | SPEC | BATCH-01 · WHALE-04 · MINTDIV-01 | ✅ Complete |
+| 335 | IMPL — The ONE Batched Contract Diff (WHALE + AFSUB + MINTDIV-if-real) | IMPL | WHALE-01/02/03 · AFSUB-01..05 · MINTDIV-02 · BATCH-02 | ✅ Complete |
+| 336 | TST — Equivalence + Freeze-Safety + Divergence-Repro + Non-Widening Regression | TST | TST-01/02/03/04 | ✅ Complete |
 | 337 | AUDIT-PROTOCOL — Model-Agnostic Multi-Round External-LLM RNG-Audit Kit (Package-Only) | DELIVERABLE | RNGAUDIT-01/02/03/04 | Not started |
 | 338 | TERMINAL — Internal Delta Audit + 3-Skill Adversarial Sweep + Closure | TERMINAL | SWEEP-01/02/03 · BATCH-03 | Not started |
 
