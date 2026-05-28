@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v51.0
 milestone_name: claimBingo — Color-Completion Claim
 status: executing
-last_updated: "2026-05-28T22:06:40.247Z"
+last_updated: "2026-05-28T22:14:32.013Z"
 last_activity: 2026-05-28
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -31,9 +31,9 @@ See: .planning/PROJECT.md (Current Milestone: v51.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 339 (spec-design-lock-rng-freeze-safety-proof-tier-precedence-loc) — EXECUTING
-Plan: 3 of 4
-Status: Executing Phase 339 — Plan 01 ✅ Complete (BINGO-06 freeze proof + soundness) · Plan 02 ✅ Complete (BINGO design-lock + tier-precedence acceptance contract; signature/storage/module/constants LOCKED + quadrant-first-before-symbol-first suppression rule)
-Last activity: 2026-05-28 -- Phase 339 Plan 02 complete (339-DESIGN-LOCK-BINGO + 339-TIER-PRECEDENCE-ACCEPTANCE-CONTRACT; BATCH-01)
+Plan: 4 of 4
+Status: Executing Phase 339 — Plan 01 ✅ Complete (BINGO-06 freeze proof + soundness) · Plan 02 ✅ Complete (BINGO design-lock + tier-precedence acceptance contract) · Plan 03 ✅ Complete (REBAL BPS-sum invariant 10000 + JACK final-day deletion clean-orphan + grep-attestation/edit-order map; SC4 + SC5; D-11/D-12/D-13). Plan 04 next.
+Last activity: 2026-05-28 -- Phase 339 Plan 03 complete (339-REBAL-JACK-ATTESTATION + 339-GREP-ATTESTATION-EDIT-ORDER; BATCH-01 SC4+SC5)
 
 ## Current Milestone Roadmap (v51.0 — phases 339-342)
 
@@ -593,9 +593,12 @@ Audit deliverables:
 | Phase 337 P04 | ~25min | 2 tasks | 2 files (audit/rng-audit-kit/verify-kit.sh NEW 294 lines mode 100755 + audit/rng-audit-kit/337-KIT-VALIDATION.md NEW 105 lines) + 1 SUMMARY (verify-kit.sh exit 0, 11 PASS / 0 FAIL; RNGAUDIT-01..04 structurally re-attested; planted-defect-proven; zero contracts mutation) |
 | 339 | 01 | ~20min | 2 | 2 files (339-BINGO06-FREEZE-PROOF.md + 339-TRAITBURNTICKET-SOUNDNESS-ATTESTATION.md) + 1 SUMMARY (BINGO-06 FREEZE-SAFE via D-04 per-slot enumeration + traitBurnTicket IFF/SOUND via D-02 write-site attestation; D-03 whale-race non-finding; D-13 anchor-drift corrected — sole writer = MintModule.sol:603-643; zero contracts mutation) |
 | Phase 339 P02 | ~18min | 2 tasks | 2 files |
+| 339 | 03 | ~22min | 2 | 2 files (339-REBAL-JACK-ATTESTATION.md + 339-GREP-ATTESTATION-EDIT-ORDER.md) + 1 SUMMARY (REBAL complete pool-BPS set incl CREATOR_BPS=2000 :291 sums to 10000 before+after net-zero swap, supply unchanged Pool.Reward 50B→100B; JACK :1339-1352 deletion cleanly orphaned [FINAL_DAY_DGNRS_BPS sole-use :1343 + JackpotDgnrsWin sole-emit :1350] + isFinalDay plumbing preserved [lvl+1 gate :617 + 6 callers]; 22-anchor grep table vs 812abeee + 4-step producer-before-consumer edit-order for BATCH-02; zero contracts mutation) |
 
 ## Decisions
 
+- [Phase 339]: Plan 03 — REBAL BPS-sum HOLDS (D-11): the COMPLETE pool-BPS set { CREATOR 2000 (:291), WHALE 1000 (:294), AFFILIATE 3500 (:295), LOOTBOX 2000 (:296), REWARD 500 (:297), PRESALE_BOX 1000 (:298) } = 10000; the plan-flagged missing 2000 is CREATOR_BPS=2000 at StakedDegenerusStonk.sol:291 (the :294-298 block alone sums to only 8000). Post-REBAL net-zero (AFFILIATE 3500→3000 :295 / REWARD 500→1000 :297) = 10000; total sDGNRS supply unchanged via the :354-359 (INITIAL_SUPPLY*X_POOL_BPS)/BPS_DENOM derivations (Pool.Reward 50B→100B ×2, affiliate ~14% haircut 350B→300B); only :295/:297 change, no other pool/constant perturbed
+- [Phase 339]: Plan 03 — JACK :1339-1352 final-day Pool.Reward deletion CLEANLY ORPHANED (D-12): FINAL_DAY_DGNRS_BPS sole-use :1343 + JackpotDgnrsWin (decl :112) sole-emit :1350 both inside the deleted branch (whole-file grep confirms no other use/emit); preserved plumbing = lvl+1 ticket-index gate :617 + the 6 isFinalDay callers :1085/:1095/:1135/:1161/:1190/:1312 + the whale-pass-on-final-day branch :1335-1338 (the containing fn is _handleSoloBucketWinner :1305, NOT _paySoloBucket as plan/CONTEXT named — function-name drift recorded). Empty-diff shortcut verified (git diff 812abeee HEAD -- contracts/ EMPTY); 22-anchor grep table vs 812abeee with drift corrections; 4-step producer-before-consumer edit-order (storage+module+ContractAddresses → DegenerusGame.claimBingo entrypoint+interface → REBAL → JACK) binding for BATCH-02 at Phase 340
 - [Phase 277]: D-277-02-FOLDIN-01: LootboxConsolation + LootboxAutoResolveSilentColdBust folded into 277-02 batched test diff with explicit user approval — 277-01 sentinel retirement invalidated their assertions, expanding scope from 4 to 6 test files + package.json
 - [Phase 277]: D-277-02-WT05-BASELINE-01: TST-WT-05 [05b] baseline-diff (vs v38 06623edb) replaced with a direct structural assertion — v38 baseline three phases stale, diff-count test no longer meaningful
 - [Phase 278]: D-278-ENT05-CHAIN-01: hash2(entropy, entropy) self-mix chosen over a fixed-salt constant for _jackpotTicketRoll entropy evolution — zero new constants, smaller audit surface; per-roll uniqueness depends on the FIRST arg differing between rolls (guaranteed by the _awardJackpotTickets rethread), not the second

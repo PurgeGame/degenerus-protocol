@@ -62,7 +62,7 @@
 **Plans**: 4 plans / 2 waves (paper-only, all `autonomous: true`)
 - [x] 339-01-PLAN.md — BINGO-06 RNG-freeze-safety proof (structured per-slot enumeration) + `traitBurnTicket` write-site soundness attestation (D-02 IFF) + whale-race ACCEPTED-BY-DESIGN non-finding (D-03) [Wave 1]
 - [x] 339-02-PLAN.md — BINGO design-lock (signature + `uint32` slot-width disposition + storage shape + module placement + reward constants D-05) + the tier-precedence acceptance contract (D-06: quadrant-first-before-symbol-first + suppression) [Wave 1]
-- [ ] 339-03-PLAN.md — REBAL BPS-sum attestation (full pool-BPS set → 10000, incl `CREATOR_BPS=2000` at `:291`) + JACK final-day deletion side-effects (D-12) + grep-attestation vs `812abeee` + producer-before-consumer edit-order map (D-13) [Wave 1]
+- [x] 339-03-PLAN.md — REBAL BPS-sum attestation (full pool-BPS set → 10000, incl `CREATOR_BPS=2000` at `:291`) + JACK final-day deletion side-effects (D-12) + grep-attestation vs `812abeee` + producer-before-consumer edit-order map (D-13) [Wave 1]
 - [ ] 339-04-PLAN.md — SPEC-INDEX + multi-source coverage audit (GOAL/REQ/RESEARCH-N-A/CONTEXT D-01..D-13 → ALL items COVERED) [Wave 2, depends on 01/02/03]
 **UI hint**: no
 
@@ -123,7 +123,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 339. SPEC — Design-Lock + Freeze Proof + Tier-Precedence + Attestation | v51.0 | 2/4 | In Progress|  |
+| 339. SPEC — Design-Lock + Freeze Proof + Tier-Precedence + Attestation | v51.0 | 3/4 | In Progress|  |
 | 340. IMPL — The ONE Batched Contract Diff (BINGO + REBAL + JACK) | v51.0 | 0/TBD | Not started | - |
 | 341. TST — Per-Tier + Precedence + Revert/Dedup + Empty-Pool + Jackpot + Non-Widening | v51.0 | 0/TBD | Not started | - |
 | 342. TERMINAL — Minimal Close: Re-Attest + Closure Flip (Sweep DEFERRED → v52) | v51.0 | 0/TBD | Not started | - |
