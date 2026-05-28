@@ -133,7 +133,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)* — TST-02 no-pass-SLOAD oracle
 
-- [ ] 336-04-PLAN.md — extend `test/fuzz/AfKingSubscription.t.sol` with `testNonCrossingPathPerformsZeroLazyPassHorizonSloads` (first `vm.expectCall` use in the test tree per RESEARCH §Summary finding 1; D-TST02-02)
+- [x] 336-04-PLAN.md — extend `test/fuzz/AfKingSubscription.t.sol` with `testNonCrossingPathPerformsZeroLazyPassHorizonSloads` (first `vm.expectCall` use in the test tree per RESEARCH §Summary finding 1; D-TST02-02)
 
 **Wave 5** *(blocked on Wave 4 completion)* — TST-03 MINTDIV cross-path equality
 
@@ -184,7 +184,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 4/4 | Complete    | 2026-05-27 |
 | 335. IMPL — The ONE Batched Contract Diff | v50.0 | 7/7 | Complete   | 2026-05-28 |
-| 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 3/6 | In Progress|  |
+| 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 4/6 | In Progress|  |
 | 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 0/TBD | Not started | - |
 | 338. TERMINAL — Internal Delta Audit + Sweep + Closure | v50.0 | 0/TBD | Not started | - |
 
