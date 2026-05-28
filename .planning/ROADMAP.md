@@ -70,7 +70,15 @@
   3. The AfKing subscription is pass-gated with the BURNIE window removed (AFSUB-01/02/03) — `burnForKeeper` + the `paidThroughDay` time-funding accounting are deleted (the BURNIE sink + its DegenerusGame/BurnieCoin counterpart removed or repurposed per SPEC), `validThroughLevel` is encoded at subscribe (derived from the subscriber's pass) and each sweep iteration validity check is the cheap stored-field compare `currentLevel <= validThroughLevel` (NO per-iteration external pass read on the non-crossing path, NO GASOPT-05-class regression), and at the crossing (`currentLevel > validThroughLevel`) the pass is re-read EXACTLY ONCE → refresh-or-evict (a still-valid new/upgraded pass refreshes `validThroughLevel` and the sub continues; otherwise evicted — NOT an unconditional kick; the crossing is the ONLY external pass read on the hot path).
   4. OPEN-E and the cancel/eviction invariants are preserved (AFSUB-04/05) — third-party box funding (the OPEN-E shared `fundingSource`) STAYS (pass-gating does NOT moot OPEN-E) and the 4 OPEN-E structural protections (consent-gate-at-subscribe / default-self byte-identical / no-escalation / trust-the-sub temporal bound) hold under the pass-gated model, and the cancel/eviction path preserves the locked SUB-07 in-place cancel-tombstone semantics + the v49 swap-pop membership invariant (membership ⟺ packed != 0) so pass-eviction does NOT reproduce the H-CANCEL-SWAP-MISS missed-day class.
   5. The MINTDIV index alignment lands only if reachable, and the diff is HELD at the contract-commit boundary (MINTDIV-02 / BATCH-02) — if MINTDIV-01 proved reachable, the within-player index advance is aligned across the two loops so per-ticket trait indices are identical whether or not a player's owed splits across budget slices (NO change to the frozen-word trait derivation for any non-split case); if NOT reachable, no MintModule change ships and MINTDIV-02 closes as a documented NEGATIVE with the proof. The whole diff is authored producer-before-consumer per the SPEC edit-order map, applied to `contracts/` and locally compiling/tested (`ContractAddresses.sol` freely modifiable), but NOT committed without explicit user hand-review of the single batched diff.
-**Plans**: TBD
+**Plans**: 7 plans (5 waves; W1 parallel = 335-01/02/03; W2 = 335-04; W3 = 335-05; W4 = 335-06; W5 USER hand-review = 335-07)
+Plans:
+- [ ] 335-01-PLAN.md — Storage confirm + DegenerusGame facade: add `lazyPassHorizon` view + retire WHALE-03 autoOpen gas-weighting → flat opened-count guard
+- [ ] 335-02-PLAN.md — LootboxModule WHALE-01: O(1) `whalePassClaims +=` at box-open + drop ≤10 bonus band (D-21); WHALE-02 by convergence onto existing `WhaleModule:1018`
+- [ ] 335-03-PLAN.md — MintModule MINTDIV-02 one-liner: `processed += writesUsed >> 1` → `+= take` (matches `processFutureTicketBatch:502`)
+- [ ] 335-04-PLAN.md — AfKing + BurnieCoin AFSUB cluster: delete `burnForKeeper`/`paidThroughDay`/`WINDOW_DAYS`/`FLAG_WINDOW_PAID`; repurpose `Sub` offset 5 → `validThroughLevel`; rewrite subscribe + `_autoBuy` (refresh-or-evict via existing tombstone); preserve OPEN-E + v49 swap-pop
+- [ ] 335-05-PLAN.md — Test migration (D-IMPL-02 full-alignment): 7 test files rewritten in lockstep with the contract diff
+- [ ] 335-06-PLAN.md — Local verification: `forge build` + `forge test` green-or-baseline + `KeeperOpenBoxWorstCaseGas` re-run (D-IMPL-04 OPEN_BATCH picker); authors `335-LOCAL-VERIFICATION.md`
+- [ ] 335-07-PLAN.md — BATCH-02 HARD STOP: USER hand-review gate (`autonomous: false`); ONE atomic commit covering 5 contracts + 7 tests upon explicit USER approval; NO push
 **UI hint**: no
 
 ### Phase 336: TST — Equivalence + Freeze-Safety + Divergence-Repro + Non-Widening Regression
@@ -118,7 +126,7 @@
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 4/4 | Complete    | 2026-05-27 |
-| 335. IMPL — The ONE Batched Contract Diff | v50.0 | 0/TBD | Not started | - |
+| 335. IMPL — The ONE Batched Contract Diff | v50.0 | 0/7    | Not started | - |
 | 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 0/TBD | Not started | - |
 | 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 0/TBD | Not started | - |
 | 338. TERMINAL — Internal Delta Audit + Sweep + Closure | v50.0 | 0/TBD | Not started | - |
