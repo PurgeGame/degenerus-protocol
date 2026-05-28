@@ -1,124 +1,108 @@
-# Requirements: Degenerus Protocol — v50.0 Whale-Pass O(1) Refactor + AfKing Pass-Gated Subs + MintModule Advance-Divergence + External RNG-Audit Protocol
+# Requirements: Degenerus Protocol — v51.0 claimBingo — Color-Completion Claim
 
-**Milestone:** v50.0 (started 2026-05-27)
-**Audit baseline → subject:** v49.0 closure HEAD `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9` → v50.0 closure HEAD. Every cited `file:line` MUST be re-attested vs the v49.0-closure HEAD before any patch.
-**Scope source:** the milestone discussion (2026-05-27) + the three v50 forward-seeds (`v49-whale-pass-claim-refactor-seed`, `v50-afking-pass-only-sub-simplify-seed`, `mintmodule-processed-advance-divergence-seed`). No research (internal refinements + an internally-grounded deliverable).
-**Posture:** the three contract items (WHALE/AFSUB/MINTDIV) ship as ONE batched USER-APPROVED `contracts/*.sol` diff; HARD STOP at the commit boundary. Security/RNG-freeze floor over gas (`feedback_security_over_gas`); items WHALE + MINTDIV touch RNG-adjacent paths and must be RE-PROVEN freeze-safe, not assumed. The external RNG-audit protocol (RNGAUDIT) is a package-only deliverable authored against the frozen post-v50 tree. Pre-launch redeploy-fresh (storage break fine).
-
----
-
-> **🔒 v50.0 CLOSED 2026-05-28 — MINIMAL CLOSE (USER-approved).** Phase 338's internal 3-skill adversarial sweep + delta-audit + `audit/FINDINGS-v50.0.md` are **DEFERRED to the v52 consolidated audit**, which MUST cover the cumulative **v50 + v51** contract surface (whale-pass O(1) claim · AFSUB pass-gating · MINTDIV alignment · + whatever v51 lands). Rationale: pre-launch (no live funds); WHALE-04 freeze-safety was PROVEN at SPEC (334) and empirically TESTED at TST (336 TST-01 freeze-fuzz / TST-03 divergence) — so v50 is not unaudited, only the adversarial-hunt + formal findings layer is batched into v52. **SWEEP-01/02/03 + the FINDINGS-doc portion of BATCH-03 = DEFERRED→v52** (status in the Traceability table below). Mirrors the v45.0 minimal-close precedent. The Traceability table is the authoritative per-req status; the prose `- [ ]` checkboxes below are not separately maintained.
+**Milestone:** v51.0 (started 2026-05-28)
+**Audit baseline → subject:** v50.0 closure HEAD `812abeee2719c32d6973771ad2a66187fae75b80` (the minimal-close commit; no formal `MILESTONE_V50_AT_HEAD` signal was emitted) → v51.0 closure HEAD. Every cited `file:line` MUST be re-attested vs the v50.0-closure HEAD before any patch.
+**Scope source:** the milestone init (2026-05-28) + the v51 forward-seed (`v51-claimbingo-color-completion-seed`) + the locked design doc `.planning/PLAN-V51-CLAIMBINGO-COLOR-COMPLETION.md`. No research (a fully-specced contract feature with game-theory / Monte-Carlo analysis already done in the plan doc).
+**Posture:** one coupled contract bundle (BINGO + REBAL + JACK) ships as ONE batched USER-APPROVED `contracts/*.sol` diff; HARD STOP at the commit boundary (`feedback_batch_contract_approval`). Security / RNG-freeze floor over gas (`feedback_security_over_gas`): `claimBingo` is a READ-ONLY consumer of the post-RNG-resolution `traitBurnTicket` map and writes only its own claim/first bitfields → freeze-safe by construction, RE-PROVEN at SPEC, not assumed (`v45-vrf-freeze-invariant`). Pre-launch redeploy-fresh (storage break + constructor-only constant change both fine; no migration).
 
 ---
 
-## v50.0 Requirements
+> **🔒 v51.0 AUDIT POSTURE — MINIMAL CLOSE (USER decision 2026-05-28 at milestone start).** v51 ships SPEC → IMPL → TST → TERMINAL with a minimal close. The internal 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT per `D-271-ADVERSARIAL-02`) + delta-audit + `audit/FINDINGS-v51.0.md` are **DEFERRED → the v52 consolidated audit**, which MUST cover the cumulative **v50 + v51** contract surface (see the STATE.md audit-debt note). v51 is NOT unaudited: SPEC (339) PROVES freeze-safety + tier-precedence, and TST (341) proves the per-tier rewards / dedup / empty-pool no-op / jackpot-final-day regression — only the adversarial-hunt + formal-findings layer is batched into v52. The Traceability table is the authoritative per-req status.
 
-### Whale-Pass O(1) Claim Refactor (WHALE)
-- [ ] **WHALE-01**: The box-open whale-pass mint stops looping. The inline ~100-iteration `_queueTickets` whale-pass mint at box-open (`DegenerusGameLootboxModule.sol:~1250-1260`) is replaced by an O(1) record of a pending whale-pass claim (beneficiary + amount/level), so opening a box is uniform cost regardless of whale-pass status.
-- [ ] **WHALE-02**: A player-paid `claimWhalePass()` entrypoint materializes the queued whale-pass tickets (the deferred `_queueTickets` mint), with the gas borne by the beneficiary at claim time rather than the box-opener at open time. SPEC locks the exact signature (caller-is-beneficiary vs permissionless-with-beneficiary-arg) and the pending-claim storage shape.
-- [ ] **WHALE-03**: Box opens become uniform O(1) → the 331 whale-pass-weighted `autoOpen` gas budget carve-out is retired and `OPEN_BATCH` returns to a flat per-box sizing. The new flat `OPEN_BATCH` is re-confirmed to stay under the autoOpen tx-gas ceiling at the worst-case uniform open.
-- [x] **WHALE-04**: RNG-freeze safety is PROVEN (not assumed) for the split: the queued whale-pass tickets target a FUTURE level (verify against the `_queueTickets` level math); neither the O(1) record at box-open nor `claimWhalePass()` writes any slot that participates in the CURRENT RNG window during `rngLock` (or reverts if it would); the `rngLock` liveness gate and the `_applyWhalePassStats` timing/semantics are preserved (stats applied at the same logical point, not advanced/delayed in a way that perturbs a frozen input).
+---
 
-### AfKing Pass-Gated Subscriptions (AFSUB)
-- [ ] **AFSUB-01**: The BURNIE-purchased subscription window is REMOVED — `burnForKeeper` and the `paidThroughDay` time-funding accounting are deleted; a subscription's lifetime is no longer extended by burning BURNIE. (`AfKing.sol`; the BURNIE `burnForKeeper` sink + its DegenerusGame/BurnieCoin counterpart are removed or repurposed per SPEC.)
-- [ ] **AFSUB-02**: Subscriptions are PASS-GATED — `validThroughLevel` is encoded at subscribe time (derived from the subscriber's pass), and each sweep iteration validity check is `currentLevel <= validThroughLevel` (the same cheap stored-field compare as the retired `paidThroughDay` — NO per-iteration external pass read on the non-crossing path, NO GASOPT-05-class regression).
-- [ ] **AFSUB-03**: At the level crossing (`currentLevel > validThroughLevel`) the sub's pass is re-read EXACTLY ONCE → refresh-or-evict: a still-valid (new or upgraded) pass refreshes `validThroughLevel` and the sub continues; otherwise the sub is evicted. This is NOT an unconditional kick, and the crossing is the ONLY external pass read on the hot path.
-- [ ] **AFSUB-04**: Third-party box funding (the OPEN-E shared `fundingSource`) is PRESERVED — pass-gating does NOT moot OPEN-E. The 4 OPEN-E structural protections (consent-gate-at-subscribe / default-self byte-identical / no-escalation / trust-the-sub temporal bound) are re-attested to hold under the pass-gated model (`open-e-operator-approval-trust-boundary`).
-- [ ] **AFSUB-05**: The cancel/eviction path preserves the locked SUB-07 in-place cancel-tombstone semantics and the v49 swap-pop membership invariant (membership ⟺ packed != 0); pass-eviction must NOT reproduce the H-CANCEL-SWAP-MISS missed-day class (`afking-cancel-tombstone-streak-finding`).
+## v51.0 Requirements
 
-### MintModule Advance-Divergence — Confirm-Then-Fix (MINTDIV)
-- [x] **MINTDIV-01**: SPEC establishes, with evidence, whether `processTicketBatch`'s within-player `startIndex` advance (`writesUsed>>1`, `DegenerusGameMintModule.sol:~671`) can diverge from `processFutureTicketBatch`'s `+= take` (`:~398`) — i.e., whether a single player's owed can split across budget slices AND that split yields divergent per-ticket trait indices. Reachability + the divergence mechanism are PROVEN or REFUTED (not asserted).
-- [ ] **MINTDIV-02**: If reachable → the within-player index advance is aligned across the two loops so per-ticket trait indices are identical whether or not a player's owed splits across budget slices, with NO change to the frozen-word trait derivation for any non-split case. If NOT reachable → documented NEGATIVE with the proof and no contract change (the seed candidate is closed either way).
+### claimBingo Color-Completion Entrypoint (BINGO)
+- [ ] **BINGO-01**: A new external `claimBingo(uint256 level, uint8 symbol, uint32[8] slots)` entrypoint exists (likely in a new `DegenerusGameBingoModule.sol` delegatecalled from `DegenerusGame`). It validates `symbol < 32`, `!gameOver`, `level <= currentLevel`; derives `quadrant = symbol >> 3` and `symInQ = symbol & 7`; and for each color `c ∈ [0,7]` verifies the caller owns the entry at `traitBurnTicket[level][traitId][slots[c]]` where `traitId = (quadrant<<6) | (c<<3) | symInQ` (trait byte layout `[QQ][CCC][SSS]`). Duplicate-slot griefing is impossible because each trait byte encodes exactly one (quadrant, color, symbol).
+- [ ] **BINGO-02**: Per-player dedup is enforced once per (level, quadrant) via a `bingoClaimed[level][msg.sender]` quadrant-mask bit — a second claim of the same quadrant on the same level reverts. A player may make at most 4 bingo claims per level (one per quadrant A/B/C/D).
+- [ ] **BINGO-03**: Three reward tiers are selected with **quadrant-first checked BEFORE symbol-first** precedence: (a) **quadrant-first** (`firstQuadrant[level]` bit unset) → replacement reward (0.5% `Pool.Reward` + 5 000 BURNIE), marks BOTH the `firstQuadrant` AND `firstSymbol` bits and **suppresses** the symbol-first bonus; (b) **symbol-first** (`firstSymbol[level]` bit unset, not quadrant-first) → regular + additive bonus (0.05%+0.05% = 0.1% `Pool.Reward` + 1 000+1 000 = 2 000 BURNIE), marks the `firstSymbol` bit; (c) **regular** (both set) → 0.05% `Pool.Reward` + 1 000 BURNIE. A quadrant-first claim marking the symbol-first bit guarantees no later claim of that symbol can re-collect the symbol-first bonus.
+- [ ] **BINGO-04**: The sDGNRS reward draws from `Pool.Reward` via `sdgnrs.transferFromPool(IStakedDegenerusStonk.Pool.Reward, msg.sender, (poolBal * bps) / 10_000)` (using `transferFromPool`'s clamped return as the paid amount); the BURNIE reward is paid via `coinflip.creditFlip(msg.sender, amount)`. Empty-pool behavior is a graceful no-op: if `poolBalance(Pool.Reward) == 0` or the computed amount is 0, the claim still succeeds (claim/first bits set + BURNIE flip credit paid, `dgnrsPaid == 0`) — matching the Degenerette / coinflip-bounty pattern.
+- [ ] **BINGO-05**: Leaderboard is event-only — `FirstQuadrantBingo`, `FirstSymbolBingo`, and `BingoClaimed` are emitted; there is no on-chain winner storage beyond the `firstQuadrant` / `firstSymbol` bitfields. Storage additions: `bingoClaimed` (per-player `uint8`, 4 bits used), `firstQuadrant` (systemwide `uint8`, 4 bits), `firstSymbol` (systemwide `uint32`, 32 bits), all keyed by the existing `uint24` level key. `gameOver` is a hard cutoff (`claimBingo` reverts once `gameOver == true`).
+- [ ] **BINGO-06**: RNG-freeze safety is PROVEN (not assumed): `claimBingo` reads only `traitBurnTicket`, which is fully written at lootbox/jackpot resolution (post-RNG), and writes only its own `bingoClaimed` / `firstQuadrant` / `firstSymbol` bitfields + the two external reward calls — it participates in NO storage slot of any current VRF-influenced output during `rngLock`. The `traitBurnTicket[level][traitId][i]` populated-only-after-level-L-resolution invariant is attested, and the race-start semantics (claimable the moment level-N entry traits are RNG-resolved; whale frontrunning on the trait-resolution batch accepted by design) are locked at SPEC.
 
-### External-LLM RNG-Audit Protocol — Deliverable, Package-Only (RNGAUDIT)
-- [x] **RNGAUDIT-01**: The protocol states the freeze invariant precisely as the external auditor's target — "while `rngLockedFlag = true`, every storage slot that participates in any VRF-influenced output is frozen until `rngLockedFlag = false`; only the incoming VRF word + its deterministic derivations may be unknown" — plus the exempt entry points (`advanceGame()` + reachable resolution flow, the VRF coordinator callback, `retryLootboxRng()` failsafe). (`v45-vrf-freeze-invariant`.)
-- [x] **RNGAUDIT-02**: The protocol is a MULTI-ROUND adversarial sequence designed to force rigor across a multi-turn external session: (R1) catalog the VRF read-graph — every participating slot with its writers + readers across all modules; (R2) independently re-derive each slot's freeze status (frozen / reverts-if-written-during-lock / proven-non-participating); (R3) adversarially challenge the catalog (hunt for any writer that escapes the freeze, any cross-module composition that does); (R4) reconcile + report. The external model performs its OWN discovery — no answer key / no internal findings are embedded ("different perspective" is the point).
-- [x] **RNGAUDIT-03**: The protocol ships a self-contained context pack sufficient to run cold against the contracts: the module/RNG-window map, the `rngLock` mechanics, where the VRF word enters and is consumed, the contract inventory, and the back-and-forth variable-tracing methodology ("trace every variable across modules — what writes it, what reads it, what is locked during an RNG window"). It does NOT depend on access to our `audit/FINDINGS-*.md`.
-- [x] **RNGAUDIT-04**: The protocol is authored against the FROZEN post-v50 tree (after WHALE/AFSUB/MINTDIV land), is model-agnostic (usable in both Gemini and ChatGPT, with context-window chunking guidance for feeding the contracts), and is explicitly PACKAGE-ONLY — running it through the external models and triaging their output is a FUTURE cycle, OUT of v50.0.
+### Co-requisite sDGNRS Pool.Reward Rebalance (REBAL)
+- [ ] **REBAL-01**: `StakedDegenerusStonk.sol:294-298` constructor constants are rebalanced — `AFFILIATE_POOL_BPS` 3 500 → 3 000 and `REWARD_POOL_BPS` 500 → 1 000 — doubling `Pool.Reward` from 50B to 100B sDGNRS with NO change to total sDGNRS supply (the pool BPS still sum to 10 000; affiliate per-share distribution takes a ~14% haircut). Constructor-only constant change → viable only pre-deploy. SPEC attests the BPS-sum invariant and that no other pool/constant is perturbed.
+
+### Jackpot Final-Day Pool.Reward Deletion (JACK)
+- [ ] **JACK-01**: The `isFinalDay` `Pool.Reward` branch in `_paySoloBucket` (`DegenerusGameJackpotModule.sol:1339-1352`) is DELETED, along with the `FINAL_DAY_DGNRS_BPS = 100` constant (`:191`) and the `JackpotDgnrsWin` event if grep confirms it has no other emitter. The one-shot final-day `Pool.Reward` draw (today 1% to the final-day jackpot solo winner) is removed; `Pool.Reward` distribution now flows through `claimBingo` instead.
+- [ ] **JACK-02**: The remaining `isFinalDay` plumbing is PRESERVED — the `lvl + 1` ticket-index gate (`:617`) and the `_paySoloBucket` callers passing `isFinalDay` (`:1085 / 1095 / 1135 / 1161 / 1190 / 1312`) are untouched; only the `Pool.Reward` draw is removed. SPEC attests no non-`Pool.Reward` final-day behavior is broken by the deletion.
 
 ### Test Proofs (TST)
-- [ ] **TST-01**: Whale-pass refactor is proven equivalent — a box-open followed by `claimWhalePass()` yields the same materialized tickets / traits / whale-pass stats as the old inline mint; box-open is demonstrated uniform-O(1) (whale vs non-whale opener); and a freeze-invariant fuzz (extending the v43 `RngLockDeterminism` harness) proves the deferred record + claim perturb no current-window entropy input.
-- [ ] **TST-02**: AfKing pass-gated subs are proven — an active sub is swept while `currentLevel <= validThroughLevel`; evicted at the crossing with no valid pass; refreshed (continues) at the crossing with a valid/upgraded pass; the non-crossing path performs NO external pass read; the OPEN-E 4-protection behavior re-attests; and the cancel-tombstone / swap-pop membership invariant holds (no missed-day regression).
-- [ ] **TST-03**: The MINTDIV same-traits regression lands — byte-identical per-ticket trait derivation across a budget-slice split for an affected player (covers the fix if real, or codifies the not-reachable boundary if refuted).
-- [ ] **TST-04**: Full-suite regression is NON-WIDENING vs the v49.0 baseline (net-zero new regression; enumerated-red-set guard by NAME), absorbing any test renames/oracle migrations from the three contract items.
-
-### Adversarial Security Sweep + Delta Audit (SWEEP)
-- [ ] **SWEEP-01**: A 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT per `D-271-ADVERSARIAL-02`) is run against the frozen v50 subject, charged with: whale-pass deferred-claim timing (can a claim alter RNG-derived outcomes / future-level traits / stats), pass-gated sub eviction-or-refresh abuse + OPEN-E re-attest, MintModule index correctness, and freeze across all the new paths. Every elevation passes the skeptic dual-gate.
-- [ ] **SWEEP-02**: The delta-audit attests NON-WIDENING vs the v49.0 baseline `b0511ca2` — every `contracts/`+`test/` diff is attributable to a v50 work item; the RNG/VRF-freeze invariant is re-attested intact across the WHALE + MINTDIV edits.
-- [ ] **SWEEP-03**: `audit/FINDINGS-v50.0.md` is authored (9-section, mirroring v44/v46/v47/v48/v49), with any findings adjudicated or deferred per USER direction; `chmod 444` at closure.
+- [ ] **TST-01**: Per-tier × per-quadrant happy path — a regular claim pays 0.05% `Pool.Reward` + 1 000 BURNIE; a symbol-first claim pays the additive 0.1% + 2 000 (and marks the `firstSymbol` bit); a quadrant-first claim pays the replacement 0.5% + 5 000 (and marks BOTH bits) — each verified across the relevant quadrants, with bits and emitted events asserted.
+- [ ] **TST-02**: Tier-precedence suppression — a quadrant-first claim SUPPRESSES the symbol-first bonus AND marks the `firstSymbol` bit, so a subsequent non-quadrant-first claim of the same symbol on the same level collects only the regular reward (not the symbol-first bonus). (Covers "Open before SPEC" item 7.)
+- [ ] **TST-03**: Revert + dedup table — `symbol >= 32` reverts; `gameOver == true` reverts; `level > currentLevel` reverts; a slot whose `traitBurnTicket` owner ≠ `msg.sender` reverts; a second claim of an already-claimed (level, quadrant) reverts; a player can make at most 4 distinct-quadrant claims per level.
+- [ ] **TST-04**: Empty-pool graceful no-op — a claim against an empty (or 0-amount) `Pool.Reward` still succeeds with the claim/first bits set and the BURNIE flip credit paid (`dgnrsPaid == 0`); and the post-REBAL doubled-pool sizing is reflected (e.g. a level-1 quadrant-first ≈ 0.5% × 100B = 500M sDGNRS).
+- [ ] **TST-05**: Jackpot final-day regression — the existing final-day jackpot test suite stays green minus the deleted `Pool.Reward` / `JackpotDgnrsWin` assertion (updated to drop it); no other final-day behavior (the `lvl + 1` ticket-index path, solo-bucket payout) regresses.
+- [ ] **TST-06**: Full-suite regression is NON-WIDENING vs the v50.0 closure baseline (net-zero new regression; any pre-existing reds enumerated and guarded BY NAME), absorbing any test renames/oracle migrations from the bundle.
 
 ### Cross-Cutting — SPEC Reconciliation + IMPL + TERMINAL (BATCH)
-- [x] **BATCH-01**: SPEC design-lock — settle the shared signatures (the whale-pass pending-claim storage + `claimWhalePass()` signature, the AfKing `validThroughLevel` field + refresh-or-evict control flow, the MintModule index alignment), PROVE/REFUTE MINTDIV-01 reachability, fix the RNGAUDIT protocol structure, and grep-attest every cited `file:line` vs the v49.0 HEAD before any patch.
-- [ ] **BATCH-02**: The ONE batched USER-APPROVED `contracts/*.sol` diff (WHALE + AFSUB + MINTDIV-if-real) is applied in producer-before-consumer order; HARD STOP at the commit boundary (locally compiled/tested, never committed without explicit user hand-review).
-- [ ] **BATCH-03**: TERMINAL closure — re-attest all v50.0 requirements at closure and apply the atomic 5-doc closure flip (`MILESTONE_V50_AT_HEAD_<sha>` + ROADMAP/STATE/MILESTONES/PROJECT/REQUIREMENTS + chmod 444 the findings).
+- [ ] **BATCH-01**: SPEC design-lock — settle module placement (new `DegenerusGameBingoModule.sol` recommended), the storage shape (`bingoClaimed` / `firstQuadrant` / `firstSymbol` + the `uint24` key), the slot type width (`uint32` vs the `traitBurnTicket` array indexing), the reward constants, and the `claimBingo` signature; resolve all 7 "Open before SPEC" items from the plan doc (module placement · slot width · view-helper-out-of-scope · `traitBurnTicket` post-resolution invariant · RNG-freeze interaction · jackpot final-day deletion side-effects · tier-precedence test coverage); and grep-attest every cited `file:line` vs the v50.0-closure HEAD before any patch.
+- [ ] **BATCH-02**: The ONE batched USER-APPROVED `contracts/*.sol` diff — new `DegenerusGameBingoModule.sol` + storage mappings + `DegenerusGame.claimBingo` entrypoint delegatecall + interface + `StakedDegenerusStonk` constructor rebalance + `JackpotModule` final-day deletion — is applied in producer-before-consumer order; HARD STOP at the commit boundary (locally compiled/tested, never committed without explicit user hand-review of the diff).
+- [ ] **BATCH-03**: TERMINAL minimal close — re-attest all v51.0 requirements at closure and apply the atomic 5-doc closure flip (`MILESTONE_V51_AT_HEAD_<sha>` + ROADMAP / STATE / MILESTONES / PROJECT / REQUIREMENTS). The internal 3-skill adversarial sweep + delta-audit + `audit/FINDINGS-v51.0.md` are DEFERRED → the v52 consolidated audit, and the v51 surface is recorded in the v52 audit-debt charge.
 
 ---
 
-## Out of Scope (v50.0)
+## Out of Scope (v51.0)
 
-- **Running the external RNG-audit protocol / triaging its findings** — RNGAUDIT is package-only; feeding it to Gemini/ChatGPT and adjudicating their output is a FUTURE cycle (USER decision 2026-05-27).
-- **Off-chain indexer / webpage** — separate frontend track.
-- **Any non-RNG / non-keeper-adjacent contract surface** beyond the three named items (WHALE box-open / AFSUB AfKing subs / MINTDIV MintModule per-ticket loops).
-- **The SWAP cash-share ≤40% tighten** — v48 advisory; USER accepted ≤60% as canonical. Revisit only if explicitly requested.
-- **The v44 §9d 135-anchor maximalist register** — carries forward unchanged; NOT live vectors (`project_rnglock_audit_disposition`).
-- **`1 ether - decayN` unchecked hardening** — still deferred pending the `_wadPow ≤ WAD` rounding proof.
+- **The internal 3-skill adversarial sweep + delta-audit + `audit/FINDINGS-v51.0.md`** — DEFERRED → the v52 consolidated audit (cumulative v50 + v51 surface). USER decision 2026-05-28 at milestone start.
+- **Bingo progress view helper** — "which (level, symbol) first-prizes are still up for grabs?" / "what bingos are still claimable for me on level L?" — frontend read-only, deferred follow-up.
+- **Cross-level / multi-level bingo prizes** — explicit non-goal.
+- **2nd/3rd-place ladders within a tier** — user picked binary (first vs not) within each tier.
+- **Commit-reveal anti-MEV** — user picked the public-mempool race (MEV dismissed: the race window is the per-VRF trait-resolution batch, not per-block).
+- **`Pool.Reward` refill automation** — not in scope; the pool drains toward zero by design (`transferBetweenPools` exists but is not auto-invoked).
+- **Any contract surface beyond the three coupled items** (BINGO / REBAL / JACK).
+- **Q3 (Dice) special-case naming** — the symbol byte still has 8 values; validation is identical, only a UI string differs.
 
 ---
 
 ## Future Requirements (deferred, not this milestone)
 
-- Run the external RNG-audit protocol through Gemini + ChatGPT, ingest their reports, and triage each claim (confirm/refute/fix/document) — the follow-on cycle to RNGAUDIT.
-- Any whale-pass / AfKing / MintModule follow-ups surfaced by SWEEP-01 and deferred by USER direction.
+- The v52 consolidated audit: 3-skill genuine-PARALLEL adversarial sweep + delta-audit over the cumulative v50 + v51 contract surface + `audit/FINDINGS-v50.0.md` + `audit/FINDINGS-v51.0.md`.
+- Bingo progress view helper / read-only frontend support module.
+- Any claimBingo / Pool.Reward follow-ups surfaced by the deferred v52 sweep.
 
 ---
 
 ## Traceability
 
-**25/25 v50.0 requirements mapped to exactly one phase — 0 orphaned, 0 duplicated.** Phases continue from 333 → 334..338 (SPEC → IMPL → TST → AUDIT-PROTOCOL → TERMINAL). Statuses flip to Complete as phases close; all 25 re-attested at the Phase 338 TERMINAL closure (BATCH-03 + SWEEP-01/02/03).
+**18/18 v51.0 requirements mapped to exactly one phase — 0 orphaned, 0 duplicated.** Phases continue from 338 → 339..342 (SPEC → IMPL → TST → TERMINAL). Statuses flip to Complete as phases close; all 18 re-attested at the Phase 342 TERMINAL minimal close (BATCH-03).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WHALE-01 | Phase 335 (IMPL) | Complete |
-| WHALE-02 | Phase 335 (IMPL) | Complete |
-| WHALE-03 | Phase 335 (IMPL) | Complete |
-| WHALE-04 | Phase 334 (SPEC) | Complete |
-| AFSUB-01 | Phase 335 (IMPL) | Complete |
-| AFSUB-02 | Phase 335 (IMPL) | Complete |
-| AFSUB-03 | Phase 335 (IMPL) | Complete |
-| AFSUB-04 | Phase 335 (IMPL) | Complete |
-| AFSUB-05 | Phase 335 (IMPL) | Complete |
-| MINTDIV-01 | Phase 334 (SPEC) | Complete |
-| MINTDIV-02 | Phase 335 (IMPL) | Complete |
-| RNGAUDIT-01 | Phase 337 (AUDIT-PROTOCOL) | Complete |
-| RNGAUDIT-02 | Phase 337 (AUDIT-PROTOCOL) | Complete |
-| RNGAUDIT-03 | Phase 337 (AUDIT-PROTOCOL) | Complete |
-| RNGAUDIT-04 | Phase 337 (AUDIT-PROTOCOL) | Complete |
-| TST-01 | Phase 336 (TST) | Complete |
-| TST-02 | Phase 336 (TST) | Complete |
-| TST-03 | Phase 336 (TST) | Complete |
-| TST-04 | Phase 336 (TST) | Complete |
-| SWEEP-01 | Phase 338 (TERMINAL) | **DEFERRED → v52** (minimal close) |
-| SWEEP-02 | Phase 338 (TERMINAL) | **DEFERRED → v52** (minimal close) |
-| SWEEP-03 | Phase 338 (TERMINAL) | **DEFERRED → v52** (minimal close) |
-| BATCH-01 | Phase 334 (SPEC) | Complete |
-| BATCH-02 | Phase 335 (IMPL) | Complete |
-| BATCH-03 | Phase 338 (TERMINAL) | Minimal close — reqs re-attested here; `FINDINGS-v50.0.md` + 5-doc atomic flip DEFERRED → v52 |
-
-**Minimal-close tally:** 21/25 Complete · 3 DEFERRED→v52 (SWEEP-01/02/03) · 1 minimal-close (BATCH-03). v50.0 closed at HEAD without the Phase 338 adversarial sweep per USER decision 2026-05-28; the deferred 4 are the v52 consolidated audit's charge over the cumulative v50+v51 surface.
+| BINGO-01 | Phase 340 (IMPL) | Pending |
+| BINGO-02 | Phase 340 (IMPL) | Pending |
+| BINGO-03 | Phase 340 (IMPL) | Pending |
+| BINGO-04 | Phase 340 (IMPL) | Pending |
+| BINGO-05 | Phase 340 (IMPL) | Pending |
+| BINGO-06 | Phase 339 (SPEC) | Pending |
+| REBAL-01 | Phase 340 (IMPL) | Pending |
+| JACK-01 | Phase 340 (IMPL) | Pending |
+| JACK-02 | Phase 340 (IMPL) | Pending |
+| TST-01 | Phase 341 (TST) | Pending |
+| TST-02 | Phase 341 (TST) | Pending |
+| TST-03 | Phase 341 (TST) | Pending |
+| TST-04 | Phase 341 (TST) | Pending |
+| TST-05 | Phase 341 (TST) | Pending |
+| TST-06 | Phase 341 (TST) | Pending |
+| BATCH-01 | Phase 339 (SPEC) | Pending |
+| BATCH-02 | Phase 340 (IMPL) | Pending |
+| BATCH-03 | Phase 342 (TERMINAL) | Pending |
 
 **Per-phase count (verification):**
 
 | Phase | Requirements | Count |
 |-------|--------------|-------|
-| 334 SPEC | BATCH-01, WHALE-04, MINTDIV-01 | 3 |
-| 335 IMPL | WHALE-01, WHALE-02, WHALE-03, AFSUB-01, AFSUB-02, AFSUB-03, AFSUB-04, AFSUB-05, MINTDIV-02, BATCH-02 | 10 |
-| 336 TST | TST-01, TST-02, TST-03, TST-04 | 4 |
-| 337 AUDIT-PROTOCOL | RNGAUDIT-01, RNGAUDIT-02, RNGAUDIT-03, RNGAUDIT-04 | 4 |
-| 338 TERMINAL | SWEEP-01, SWEEP-02, SWEEP-03, BATCH-03 | 4 |
-| **Total** | | **25** |
+| 339 SPEC | BATCH-01, BINGO-06 | 2 |
+| 340 IMPL | BINGO-01, BINGO-02, BINGO-03, BINGO-04, BINGO-05, REBAL-01, JACK-01, JACK-02, BATCH-02 | 9 |
+| 341 TST | TST-01, TST-02, TST-03, TST-04, TST-05, TST-06 | 6 |
+| 342 TERMINAL | BATCH-03 | 1 |
+| **Total** | | **18** |
 
-> **Center-of-gravity notes:** WHALE-04 (freeze-safety PROOF) and MINTDIV-01 (reachability PROVE/REFUTE) center at SPEC (334) because both are design-gating proofs that decide whether/how the split + the MintModule alignment are authored; their build lands at IMPL (335, under WHALE-01/02/03 and MINTDIV-02) and their empirical proof at TST (336, TST-01 / TST-03). RNGAUDIT-01..04 center at AUDIT-PROTOCOL (337) — the protocol STRUCTURE is sketched at SPEC under BATCH-01 but the authored deliverable lands at 337 against the FROZEN post-v50 tree. MINTDIV-02's contract scope is CONDITIONAL on the 334 reachability verdict (reachable → align; not-reachable → documented NEGATIVE, no contract change).
+> **Center-of-gravity notes:** BINGO-06 (the RNG-freeze-safety PROOF) centers at SPEC (339) because it is a design-gating attestation that confirms `claimBingo`'s read-only-of-post-resolution-`traitBurnTicket` shape is freeze-safe before the entrypoint is authored — its empirical coverage is folded into the TST happy-path/regression suite (341). The build of BINGO-01..05 + REBAL-01 + JACK-01/02 lands at IMPL (340) as the single batched diff. The REBAL BPS-sum attestation and the JACK final-day deletion side-effect attestation are SPEC concerns folded into BATCH-01.
 
-> **Note on §13e-style "uncovered" warnings:** as in the v47/v48/v49 milestones, milestone-wide "uncovered" warnings are EXPECTED false alarms — each phase owns only its slice; the TERMINAL closure (Phase 338: SWEEP-01/02/03 + BATCH-03) re-attests the full 25-requirement set. The TST / AUDIT-PROTOCOL / TERMINAL phases do not "uncover" the IMPL reqs — they re-prove, package against, and re-attest them.
+> **Note on §13e-style "uncovered" warnings:** as in the v44–v50 milestones, milestone-wide "uncovered" warnings are EXPECTED false alarms — each phase owns only its slice; the TERMINAL minimal close (Phase 342: BATCH-03) re-attests the full 18-requirement set. The TST / TERMINAL phases do not "uncover" the IMPL reqs — they re-prove and re-attest them.
 
-*Last updated: 2026-05-28 — v50.0 CLOSED via USER-approved MINIMAL CLOSE. 21/25 Complete (334 SPEC + 335 IMPL + 336 TST + 337 AUDIT-PROTOCOL all done); SWEEP-01/02/03 + the FINDINGS-doc portion of BATCH-03 DEFERRED → the v52 consolidated audit (cumulative v50+v51 surface). Phase 338 internal sweep NOT run. Mirrors v45.0 minimal-close precedent. Original roadmapper note (2026-05-27): 25 reqs / 7 categories (WHALE 4 · AFSUB 5 · MINTDIV 2 · RNGAUDIT 4 · TST 4 · SWEEP 3 · BATCH 3; phases 334-338).*
+> **Note on the deferred sweep:** v51 plans NO SWEEP category. The internal 3-skill adversarial sweep + delta-audit + `audit/FINDINGS-v51.0.md` are out of v51 scope by USER decision (minimal close) and are the v52 consolidated audit's charge over the cumulative v50 + v51 surface. v51's own regression bar is TST-06 (NON-WIDENING vs the v50.0 baseline); its security proof is BINGO-06 (freeze) + TST-01..05 (per-tier / precedence / dedup / empty-pool / jackpot-regression).
+
+*Last updated: 2026-05-28 — v51.0 requirements defined at milestone init. 18 reqs / 5 categories (BINGO 6 · REBAL 1 · JACK 2 · TST 6 · BATCH 3); phases 339-342 (SPEC → IMPL → TST → TERMINAL minimal close). Baseline = v50.0 closure HEAD `812abeee`. Audit posture = minimal close; internal sweep + FINDINGS DEFERRED → v52. Traceability/roadmap mapping finalized by the roadmapper.*
