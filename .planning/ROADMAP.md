@@ -129,7 +129,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)* — TST-01 uniform-O(1)
 
-- [ ] 336-03-PLAN.md — extend `test/gas/KeeperOpenBoxWorstCaseGas.t.sol` with `testWhaleOpenerEqualsNonWhaleOpenerGas`; whale vs non-whale opener gas equivalence within documented tolerance (D-TST01-04)
+- [x] 336-03-PLAN.md — extend `test/gas/KeeperOpenBoxWorstCaseGas.t.sol` with `testWhaleOpenerEqualsNonWhaleOpenerGas`; whale vs non-whale opener gas equivalence within documented tolerance (D-TST01-04)
 
 **Wave 4** *(blocked on Wave 3 completion)* — TST-02 no-pass-SLOAD oracle
 
@@ -184,7 +184,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 4/4 | Complete    | 2026-05-27 |
 | 335. IMPL — The ONE Batched Contract Diff | v50.0 | 7/7 | Complete   | 2026-05-28 |
-| 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 2/6 | In Progress|  |
+| 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 3/6 | In Progress|  |
 | 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 0/TBD | Not started | - |
 | 338. TERMINAL — Internal Delta Audit + Sweep + Closure | v50.0 | 0/TBD | Not started | - |
 
