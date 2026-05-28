@@ -169,7 +169,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)* — packaging layer
 
-- [ ] 337-03-PLAN.md — author `CHUNK-MANIFEST.md` (corpus inventory + 3 chunk groups + Storage-travels rule) + append the model-agnostic feeding recipe + the explicit PACKAGE-ONLY statement to `RNG-AUDIT-KIT.md` (RNGAUDIT-04)
+- [x] 337-03-PLAN.md — author `CHUNK-MANIFEST.md` (corpus inventory + 3 chunk groups + Storage-travels rule) + append the model-agnostic feeding recipe + the explicit PACKAGE-ONLY statement to `RNG-AUDIT-KIT.md` (RNGAUDIT-04)
 
 **Wave 4** *(blocked on Wave 3)* — validation gate (gates the whole kit)
 
@@ -202,7 +202,7 @@ Plans:
 | 334. SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure | v50.0 | 4/4 | Complete    | 2026-05-27 |
 | 335. IMPL — The ONE Batched Contract Diff | v50.0 | 7/7 | Complete   | 2026-05-28 |
 | 336. TST — Equivalence + Freeze + Divergence + Regression | v50.0 | 4/6 | In Progress|  |
-| 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 2/4 | In Progress|  |
+| 337. AUDIT-PROTOCOL — External-LLM RNG-Audit Kit (Package-Only) | v50.0 | 3/4 | In Progress|  |
 | 338. TERMINAL — Internal Delta Audit + Sweep + Closure | v50.0 | 0/TBD | Not started | - |
 
 ---
