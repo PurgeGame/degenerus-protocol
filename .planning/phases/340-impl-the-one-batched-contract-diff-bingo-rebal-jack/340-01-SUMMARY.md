@@ -132,7 +132,45 @@ Behavior is Phase 341 TST-01..06.
 
 ## Deviations from Plan
 
-None affecting semantics. Two faithful-transcription choices worth noting:
+### USER-DIRECTED SPEC OVERRIDE (2026-05-28, mid-execution): level guard REMOVED
+
+The locked 339 SPEC (D-01 / CONTEXT D-340) specified `require(level <= currentLevel)`.
+**The user identified this as a design defect and directed: "just get rid of the level
+guard."** Root cause confirmed against live source: traits are RNG-**pre-resolved up to
+`currentLevel + 5`** (`DegenerusGameAdvanceModule.sol:293-294` — "FF level = level + 5"),
+and the design intends a `(level, symbol)` to be claimable "the moment its traits are
+RNG-resolved" (`PLAN-V51:32`, `339-BINGO06-FREEZE-PROOF:116`). The conservative
+`level <= currentLevel` gate wrongly blocked the pre-resolved near-future window
+(`currentLevel+1 .. currentLevel+5`).
+
+**Applied:** removed `if (level > level_()) revert InvalidLevel();`, the now-orphaned
+`level_()` private helper (would warn "unused function"), and the unused `InvalidLevel`
+custom error. Retained `!gameOver` (`E()`) and `symbol < 32` (`InvalidSymbol`). The
+8-color `traitBurnTicket` ownership check is now the sole, self-gating validation — an
+unresolved/future bucket is empty, so the require fails closed on its own.
+
+**Signature simplification (same override, user-directed):** with the level guard gone,
+the `uint256 level` "ABI-convenience" width served no purpose, so the signature is now
+`claimBingo(uint24 level, uint8 symbol, uint32[8] calldata slots)` — taking the internal
+`uint24` storage-key width directly. This drops the `uint24 lvl = uint24(level)` recast +
+the `lvl` local AND removes a silent-truncation aliasing risk (`uint24(hugeLevel)` would
+wrap a huge level to a low storage key while the event logged the huge value); the ABI
+decoder now fail-closes on an oversized `level`. **Consumer wiring (Plan 340-02:
+`DegenerusGame.claimBingo` entrypoint + `IDegenerusGame` + `IDegenerusGameBingoModule`)
+MUST use the `uint24 level` signature so the delegatecall selector matches.** Supersedes
+the locked D-01 `uint256 level` and the acceptance-grep referencing it.
+
+**Freeze-safety (BINGO-06) preserved:** claimBingo still only READS `traitBurnTicket`
+(never writes it) and writes only its own 3 bitfields, so a read against an in-flight or
+future bucket merely reverts — it cannot corrupt VRF state. The 339-BINGO06 freeze proof's
+argument shifts from "the level gate prevents future-bucket reads" to "the ownership check
+fails closed on any unpopulated bucket"; **the 339-BINGO06-FREEZE-PROOF + the 340-CONTEXT
+D-01 / D-340 line need a one-line re-attestation to drop the `level <= currentLevel`
+premise (flagged for Phase 341 TST / the v52 audit).** Note `must_haves.truths` /
+acceptance-criteria entries referencing `InvalidLevel` and the level gate are superseded
+by this override.
+
+### Faithful-transcription choices (no semantic effect)
 
 1. **[Discretion - Storage placement]** The plan/SPEC say "after `:416`
    (`traitBurnTicket`)". The live `DegenerusGameStorage.sol` interleaves state-var
