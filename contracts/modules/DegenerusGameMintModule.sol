@@ -697,7 +697,7 @@ contract DegenerusGameMintModule is
         uint32 processed;
 
         while (idx < total && used < writesBudget) {
-            (uint32 writesUsed, bool advance) = _processOneTicketEntry(
+            (uint32 writesUsed, uint32 take, bool advance) = _processOneTicketEntry(
                 queue[idx],
                 lvl,
                 owedMap,
@@ -713,7 +713,11 @@ contract DegenerusGameMintModule is
                     ++idx;
                     processed = 0;
                 } else {
-                    processed += writesUsed >> 1;
+                    // MINTDIV-02: align with processFutureTicketBatch:502 — advance
+                    // the within-player startIndex by the per-iter ticket count, not
+                    // by the gas-budget-derived writesUsed>>1 heuristic (which diverged
+                    // for take > 256 per 334-MINTDIV01-REACHABILITY-VERDICT).
+                    processed += take;
                 }
             }
         }
@@ -767,7 +771,7 @@ contract DegenerusGameMintModule is
         uint32 processed,
         uint256 entropy,
         uint256 queueIdx
-    ) private returns (uint32 writesUsed, bool advance) {
+    ) private returns (uint32 writesUsed, uint32 take, bool advance) {
         uint40 packed = owedMap[player];
         uint32 owed = uint32(packed >> 8);
         uint256 baseKey = (uint256(lvl) << 224) |
@@ -784,13 +788,12 @@ contract DegenerusGameMintModule is
                 entropy,
                 baseKey
             );
-            if (skip) return (1, true);
+            if (skip) return (1, 0, true);
             owed = 1;
         }
 
         uint32 baseOv = (processed == 0 && owed <= 2) ? 4 : 2;
-        if (room <= baseOv) return (0, false);
-        uint32 take;
+        if (room <= baseOv) return (0, 0, false);
         {
             uint32 availRoom = room - baseOv;
             uint32 maxT = (availRoom <= 256)
@@ -798,7 +801,7 @@ contract DegenerusGameMintModule is
                 : (availRoom - 256);
             take = owed > maxT ? maxT : owed;
         }
-        if (take == 0) return (0, false);
+        if (take == 0) return (0, 0, false);
 
         _raritySymbolBatch(player, baseKey, processed, take, entropy);
         emit TraitsGenerated(player, baseKey, take);

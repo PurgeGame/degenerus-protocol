@@ -5,31 +5,39 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title AfKingSubscription -- Proves the testable acceptance of subscription correctness for the
-///        AF_KING keeper: the pass-OR-pay renewal gate (SUB-01), the all-or-nothing burnForKeeper
-///        charge (PROTO-02 / SUB-08), and the gas-pegged single-creditFlip autoBuy bounty (REW-02).
+/// @title AfKingSubscription -- Proves the v50.0 AFSUB-01..05 acceptance properties for the
+///        AF_KING keeper: the pass-eviction-OR-refresh crossing gate (AFSUB-02/03), the
+///        absence of any BURNIE-prepay window (AFSUB-01), and the gas-pegged single-creditFlip
+///        autoBuy bounty (REW-02).
 ///
 /// @notice Specifically:
-///   - Pass-OR-pay (SUB-01): at the day-31 renewal branch a subscriber WITH an active lazy pass
-///     (hasAnyLazyPass true) takes the FREE 30-day extend with NO burnForKeeper charge
-///     (SubscriptionExtendedFree, windowPaid cleared); a subscriber WITHOUT a pass is charged via
-///     the all-or-nothing burnForKeeper (BurnieAutoExtracted, windowPaid set).
-///   - burnForKeeper all-or-nothing (PROTO-02 / SUB-08): a player with spendable BURNIE >= cost is
-///     charged exactly `cost` and renews (windowPaid set, paidThroughDay reset); a player with
-///     spendable < cost has NOTHING burned, burnForKeeper returns 0, and the autoBuy AUTO-PAUSES that
-///     sub (dailyQuantity 0, removed from set, SubscriptionExpired) WITHOUT reverting the autoBuy.
-///   - Bounty (REW-02 / D-07): the REWARDED keeper entrypoint is the parameterless doWork() router; a
-///     doWork() whose autoBuy leg processes >= 1 buying subscriber emits exactly ONE creditFlip to the
-///     caller (msg.sender), never per-item. The standalone autoBuy(count) is UNREWARDED; a zero-buy
-///     chunk is a NO-OP — it commits any set-work and returns 0 without reverting, so the router can
-///     make progress.
+///   - Pass-eviction-OR-refresh (AFSUB-02/03): at the `currentLevel > validThroughLevel` crossing
+///     the keeper re-reads `IGame.lazyPassHorizon(player)` EXACTLY ONCE; a subscriber whose horizon
+///     still covers `currentLevel` REFRESHES (SubscriptionExtendedFree, validThroughLevel = h, NO
+///     BURNIE burn anywhere); a subscriber whose horizon no longer covers `currentLevel` is EVICTED
+///     via the tombstone-then-reclaim path (dailyQuantity = 0, _removeFromSet, SubscriptionExpired(.,1))
+///     WITHOUT reverting the autoBuy.
+///   - No BURNIE in subscribe / no all-or-nothing renewal charge (AFSUB-01): subscribe no longer
+///     issues any BURNIE keeper-burn; a no-pass subscriber's BURNIE balance is UNTOUCHED across
+///     subscribe (so the v49 "shortfall" failure mode is structurally gone — there is no charge
+///     to fail). The crossing-evict is the new "no-pass loses the sub" mechanism.
+///   - Bounty (REW-02 / D-07): unchanged from v49 — the REWARDED keeper entrypoint is the
+///     parameterless doWork() router; a doWork() whose autoBuy leg processes >= 1 buying
+///     subscriber emits exactly ONE creditFlip to the caller (msg.sender), never per-item.
 ///
 /// @dev Builds on the 318-01-repaired DeployProtocol fixture (AfKing live at AF_KING, with the two
 ///      SUB-09 self-subscribes — VAULT + SDGNRS — already present). Test subscribers are driven
-///      through the public subscribe() API; the day-31 renewal branch is reached by forcing the
-///      sub's packed paidThroughDay <= today via a single targeted slot write on the _subOf mapping
-///      (deterministic, avoids a 31-day warp that would shift the keeper-local day for every sub).
-///      BURNIE is funded via the GAME-gated mintForGame path. Test-only: no contracts/*.sol mutated.
+///      through the public subscribe() API. The crossing branch is reached by forcing a sub's
+///      packed validThroughLevel to a value strictly below the current game level via a single
+///      targeted slot write on the _subOf mapping (deterministic, avoids relying on real
+///      gameplay advancing the level). Test-only: no contracts/*.sol mutated.
+///
+/// @dev v50.0 D-IMPL-02 (test-fixture full alignment): this file migrates from the v49 pass-OR-pay
+///      day-31 renewal shape to the v50 pass-eviction-OR-refresh shape at the level crossing.
+///      The migration is BEHAVIOR-PRESERVING in spirit: a pass-holder still avoids being
+///      terminated at the "transition" (refresh ≡ free-extend); a non-pass-holder is still
+///      terminated (evict ≡ shortfall failure). Only the MECHANISM changes: level vs. day;
+///      tombstone-via-dailyQuantity vs. all-or-nothing-burn-shortfall.
 contract AfKingSubscription is DeployProtocol {
     // -------------------------------------------------------------------------
     // AfKing storage slots (4-slot pinned layout, per AfKing.sol)
@@ -37,31 +45,23 @@ contract AfKingSubscription is DeployProtocol {
     /// @dev _subOf mapping root slot (address => Sub packed in one slot).
     uint256 private constant SUBOF_SLOT = 1;
 
-    // Sub packed-field byte offsets within the single Sub slot, re-derived from the
-    // post-OPEN-E repack (319.1-01 AFTER layout): the two standalone bools collapsed into
-    // `flags` and a 20-byte `fundingSource` address was appended, shifting lastAutoBoughtDay
-    // 3->1, paidThroughDay 7->5, flags 12->10.
-    uint256 private constant OFF_DAILY = 0;          // uint8 dailyQuantity   (byte 0)
-    uint256 private constant OFF_LASTSWEPT = 1;      // uint32 lastAutoBoughtDay    (bytes 1..4)
-    uint256 private constant OFF_PAIDTHROUGH = 5;    // uint32 paidThroughDay  (bytes 5..8)
-    uint256 private constant OFF_REINVEST = 9;       // uint8 reinvestPct      (byte 9)
-    uint256 private constant OFF_FLAGS = 10;         // uint8 flags (bit 0 = windowPaid)
-    uint256 private constant OFF_FUNDING_SOURCE = 11; // address fundingSource (bytes 11..30)
-
-    // -------------------------------------------------------------------------
-    // BurnieCoin / mint constants
-    // -------------------------------------------------------------------------
-    /// @dev balanceOf mapping root slot in BurnieCoin (slot 1; slot 0 = _supply struct).
-    uint256 private constant BURNIE_BALANCE_SLOT = 1;
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    // Sub packed-field byte offsets re-derived from the post-AFSUB layout: slot offset 5 is
+    // repurposed in-place to `uint32 validThroughLevel` (same offset and width as the v49 slot —
+    // D-11 / Plan 335-04 Task 1). The two standalone bools were already collapsed into `flags`
+    // (v47 OPENE-01) and a 20-byte `fundingSource` appended at offset 11.
+    uint256 private constant OFF_DAILY = 0;              // uint8 dailyQuantity      (byte 0)
+    uint256 private constant OFF_LASTSWEPT = 1;          // uint32 lastAutoBoughtDay (bytes 1..4)
+    uint256 private constant OFF_VALIDTHROUGHLEVEL = 5;  // uint32 validThroughLevel (bytes 5..8) — v50.0 AFSUB-01 in-place repurpose
+    uint256 private constant OFF_REINVEST = 9;           // uint8 reinvestPct        (byte 9)
+    uint256 private constant OFF_FLAGS = 10;             // uint8 flags (bit 0 freed; bits 1+2 = drainFirst/useTickets)
+    uint256 private constant OFF_FUNDING_SOURCE = 11;    // address fundingSource    (bytes 11..30)
 
     /// @dev keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)") — one per creditFlip.
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
         keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)");
 
-    /// @dev AfKing event signatures used to assert the renewal branch taken.
+    /// @dev AfKing event signatures used to assert the crossing branch taken.
     bytes32 private constant EXTENDED_FREE_SIG = keccak256("SubscriptionExtendedFree(address,uint32)");
-    bytes32 private constant AUTO_EXTRACTED_SIG = keccak256("BurnieAutoExtracted(address,uint32,uint256)");
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
 
     function setUp() public {
@@ -70,19 +70,21 @@ contract AfKingSubscription is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 3a — Pass-OR-pay renewal gate (SUB-01)
+    // Task 3a — Pass-eviction-OR-refresh crossing gate (AFSUB-02 / AFSUB-03)
     // =========================================================================
 
-    /// @notice SUB-01: a PASS-HOLDING subscriber at the day-31 renewal branch takes the FREE extend
-    ///         (SubscriptionExtendedFree, no burnForKeeper charge, no BURNIE burned) — the pass gate
-    ///         short-circuits the charge entirely.
-    function testRenewalPassHolderFreeExtendNoCharge() public {
+    /// @notice AFSUB-03 (REFRESH branch): at the crossing (`currentLevel > sub.validThroughLevel`)
+    ///         a subscriber whose `lazyPassHorizon(player)` STILL COVERS `currentLevel` is REFRESHED
+    ///         in place — SubscriptionExtendedFree emitted, `validThroughLevel` stamped to `h`,
+    ///         dailyQuantity preserved, NO eviction, NO BURNIE burn. Deity = sentinel horizon
+    ///         (`type(uint24).max`), which always covers the current level.
+    function testCrossingPassHolderRefreshedNotEvicted() public {
         address pass = makeAddr("pass_holder");
-        _grantDeityPass(pass); // hasAnyLazyPass(pass) == true
-        _subscribeTicketMode(pass, 1, /*fundBurnie*/ false); // no BURNIE needed (pass = free at subscribe too)
+        _grantDeityPass(pass); // lazyPassHorizon(pass) = type(uint24).max (deity sentinel)
+        _subscribeTicketMode(pass, 1); // no BURNIE charge at subscribe under AFSUB-01
         _approveKeeper(pass);
-        _fundPool(pass, 1 ether); // pool funding so the post-renewal purchase can succeed
-        _forceRenewalDue(pass); // paidThroughDay <= today -> renewal branch
+        _fundPool(pass, 1 ether); // pool funding so the post-refresh purchase can succeed
+        _forceCrossingDue(pass); // validThroughLevel = 0 -> currentLevel > 0 -> crossing fires
 
         uint256 burnieBefore = coin.balanceOf(pass);
 
@@ -90,120 +92,120 @@ contract AfKingSubscription is DeployProtocol {
         vm.prank(makeAddr("autoBuyer_pass"));
         afKing.autoBuy(50);
 
-        // FREE extend taken: SubscriptionExtendedFree emitted; NO BurnieAutoExtracted; balance intact.
-        assertEq(_countEvent(address(afKing), EXTENDED_FREE_SIG), 1, "pass-holder free-extended");
-        assertEq(_countEvent(address(afKing), AUTO_EXTRACTED_SIG), 0, "pass-holder NOT charged via burnForKeeper");
-        assertEq(coin.balanceOf(pass), burnieBefore, "no BURNIE burned for a pass-holder renewal");
+        // REFRESH taken: SubscriptionExtendedFree emitted; NO SubscriptionExpired (evict) for this sub.
+        assertEq(_countEvent(address(afKing), EXTENDED_FREE_SIG), 1, "pass-holder refreshed at crossing");
+        assertEq(_countEventFor(address(afKing), SUB_EXPIRED_SIG, pass), 0, "pass-holder NOT evicted");
 
-        // Renewed: paidThroughDay advanced (today + WINDOW_DAYS) and windowPaid CLEARED.
-        assertGt(afKing.subscriptionOf(pass).paidThroughDay, _today(), "renewed window endpoint in the future");
-        assertEq(afKing.subscriptionOf(pass).flags & 1, 0, "windowPaid cleared on a free extend");
+        // NO BURNIE involvement: AFSUB-01 removed the BURNIE-prepay window entirely.
+        assertEq(coin.balanceOf(pass), burnieBefore, "no BURNIE burned at crossing (AFSUB-01)");
+
+        // Refresh stamped a horizon strictly past the current level (deity = uint24.max).
+        assertGt(
+            afKing.subscriptionOf(pass).validThroughLevel,
+            uint32(_currentLevel()),
+            "validThroughLevel refreshed past current level"
+        );
+        // Sub still active (dailyQuantity preserved, still in iterable set).
+        assertGt(afKing.subscriptionOf(pass).dailyQuantity, 0, "refreshed sub stays active");
+        assertGt(_subscriberIndexOf(pass), 0, "refreshed sub stays in the iterable set");
     }
 
-    /// @notice SUB-01: a NO-PASS subscriber at the day-31 renewal branch is CHARGED via the
-    ///         all-or-nothing burnForKeeper (BurnieAutoExtracted, exactly `cost` burned, windowPaid
-    ///         set), distinct from the pass-holder's free extend.
-    function testRenewalNoPassChargedViaBurnForKeeper() public {
+    /// @notice AFSUB-03 (EVICT branch): at the crossing a subscriber whose `lazyPassHorizon(player)`
+    ///         NO LONGER COVERS `currentLevel` (no pass → horizon == 0 < currentLevel) is EVICTED via
+    ///         the tombstone-then-reclaim path. dailyQuantity zeroed, _removeFromSet fired,
+    ///         SubscriptionExpired(player, 1) emitted, autoBuy does NOT revert. The v49 swap-pop
+    ///         invariant (membership ⟺ packed != 0) is preserved (Pitfall P6 — eviction routes
+    ///         through the existing tombstone-shape, not a direct mid-sweep removal).
+    function testCrossingNoPassEvictedViaTombstone() public {
         address nopass = makeAddr("no_pass");
-        uint256 cost = _subCost();
-        _subscribeTicketMode(nopass, 1, /*fundBurnie*/ true); // funds BURNIE for the subscribe charge
+        // No grantDeityPass: lazyPassHorizon(nopass) == 0 (no deity bit, no frozenUntilLevel).
+        _subscribeTicketMode(nopass, 1); // AFSUB-01: no BURNIE charge regardless of pass state
         _approveKeeper(nopass);
         _fundPool(nopass, 1 ether);
-        _fundBurnie(nopass, cost); // top up so the renewal charge has exactly enough
-        _forceRenewalDue(nopass);
+        _forceCrossingDue(nopass);
 
         uint256 burnieBefore = coin.balanceOf(nopass);
 
         vm.recordLogs();
         vm.prank(makeAddr("autoBuyer_nopass"));
-        afKing.autoBuy(50);
+        afKing.autoBuy(50); // MUST NOT revert despite the eviction
 
-        // PAID extend taken: BurnieAutoExtracted emitted; NO free extend; exactly `cost` burned.
-        assertEq(_countEvent(address(afKing), AUTO_EXTRACTED_SIG), 1, "no-pass charged via burnForKeeper");
-        assertEq(_countEvent(address(afKing), EXTENDED_FREE_SIG), 0, "no-pass did NOT free-extend");
-        assertEq(burnieBefore - coin.balanceOf(nopass), cost, "exactly the renewal cost burned");
+        // EVICTION taken via tombstone — assert the exact reclaim shape (SUB-07 invariant + swap-pop).
+        assertGe(_countEvent(address(afKing), SUB_EXPIRED_SIG), 1, "no-pass evicted at crossing");
+        assertEq(_countEventFor(address(afKing), EXTENDED_FREE_SIG, nopass), 0, "no-pass did NOT refresh");
+        assertEq(afKing.subscriptionOf(nopass).dailyQuantity, 0, "tombstoned (dailyQuantity zeroed)");
+        assertEq(_subscriberIndexOf(nopass), 0, "removed from iterable set (swap-pop)");
 
-        // Renewed: windowPaid SET, paidThroughDay advanced.
-        assertEq(afKing.subscriptionOf(nopass).flags & 1, 1, "windowPaid set on a paid renewal");
-        assertGt(afKing.subscriptionOf(nopass).paidThroughDay, _today(), "renewed window endpoint in the future");
+        // AFSUB-01: no BURNIE involvement on the eviction path either.
+        assertEq(coin.balanceOf(nopass), burnieBefore, "no BURNIE burned on eviction (AFSUB-01)");
     }
 
     // =========================================================================
-    // Task 3b — burnForKeeper all-or-nothing (PROTO-02 / SUB-08)
+    // Task 3b — AFSUB-01: no BURNIE prepay window at subscribe; horizon-encoded only
     // =========================================================================
 
-    /// @notice PROTO-02 / SUB-08: a no-pass subscriber whose spendable BURNIE is BELOW the renewal
-    ///         cost has NOTHING burned (all-or-nothing), burnForKeeper returns 0, and the autoBuy
-    ///         AUTO-PAUSES that sub (dailyQuantity 0, removed from the set, SubscriptionExpired)
-    ///         WITHOUT reverting the whole autoBuy — a shortfall cannot strand a half-paid sub.
-    function testRenewalShortfallBurnsNothingAndAutoPauses() public {
-        // A HEALTHY paying sub so the autoBuy produces at least one buy and is not a zero-buy
-        // no-op (which would mask the auto-pause behavior of the shortfall sub).
-        address healthy = makeAddr("healthy_payer");
-        uint256 cost = _subCost();
-        _subscribeTicketMode(healthy, 1, true);
-        _approveKeeper(healthy);
-        _fundPool(healthy, 1 ether);
-        _fundBurnie(healthy, cost);
-        _forceRenewalDue(healthy);
+    /// @notice AFSUB-01: subscribe NEVER charges BURNIE — neither the v49 SUB-01 window-1 burn nor
+    ///         the v49 day-31 renewal extract exists. A no-pass subscriber's BURNIE balance is
+    ///         UNCHANGED across subscribe; their `validThroughLevel` is encoded as `lazyPassHorizon`
+    ///         (zero for a no-pass subscriber).
+    function testSubscribeNoBurnieChargeRegardlessOfPass() public {
+        // (a) no-pass subscriber: zero BURNIE → subscribe MUST succeed; balance unchanged.
+        address nopass = makeAddr("subscribe_nopass");
+        uint256 nopassBefore = coin.balanceOf(nopass); // == 0
+        vm.prank(nopass);
+        afKing.subscribe(address(0), false, true, 1, 0, address(0)); // MUST NOT revert under AFSUB-01
+        assertEq(coin.balanceOf(nopass), nopassBefore, "AFSUB-01: no BURNIE burned at subscribe (no-pass)");
+        // horizon = 0 stamped into validThroughLevel (no pass → no coverage).
+        assertEq(afKing.subscriptionOf(nopass).validThroughLevel, 0, "no-pass subscriber: validThroughLevel = 0");
 
-        // The SHORTFALL sub: funded BELOW cost so the all-or-nothing burn takes nothing.
-        address shortfall = makeAddr("shortfall_payer");
-        _subscribeTicketMode(shortfall, 1, true);
-        _approveKeeper(shortfall);
-        _fundPool(shortfall, 1 ether);
-        _setBurnieBalance(shortfall, cost == 0 ? 0 : cost - 1); // strictly below cost
-        _forceRenewalDue(shortfall);
-
-        uint256 shortfallBurnieBefore = coin.balanceOf(shortfall);
-
-        vm.recordLogs();
-        vm.prank(makeAddr("autoBuyer_shortfall"));
-        afKing.autoBuy(50); // MUST NOT revert despite the shortfall sub
-
-        // All-or-nothing: NOTHING burned from the shortfall player.
-        assertEq(coin.balanceOf(shortfall), shortfallBurnieBefore, "shortfall: nothing burned (all-or-nothing)");
-
-        // Auto-paused: SubscriptionExpired emitted, dailyQuantity zeroed, removed from the set.
-        assertGe(_countEvent(address(afKing), SUB_EXPIRED_SIG), 1, "shortfall sub auto-paused (SubscriptionExpired)");
-        assertEq(afKing.subscriptionOf(shortfall).dailyQuantity, 0, "shortfall sub dailyQuantity zeroed");
-        assertEq(_subscriberIndexOf(shortfall), 0, "shortfall sub removed from the iterable set");
-
-        // The healthy sub still renewed (the shortfall did not brick the autoBuy).
-        assertEq(afKing.subscriptionOf(healthy).flags & 1, 1, "healthy sub still renewed (autoBuy not bricked)");
+        // (b) pass-holder: ditto — deity holder also has zero BURNIE charge.
+        address pass = makeAddr("subscribe_pass");
+        _grantDeityPass(pass);
+        uint256 passBefore = coin.balanceOf(pass);
+        vm.prank(pass);
+        afKing.subscribe(address(0), false, true, 1, 0, address(0));
+        assertEq(coin.balanceOf(pass), passBefore, "AFSUB-01: no BURNIE burned at subscribe (pass-holder)");
+        // Deity sentinel = type(uint24).max stamped into validThroughLevel.
+        assertEq(
+            afKing.subscriptionOf(pass).validThroughLevel,
+            uint32(type(uint24).max),
+            "deity subscriber: validThroughLevel = sentinel (uint24.max)"
+        );
     }
 
-    /// @notice PROTO-02 boundary: a no-pass subscriber funded EXACTLY at cost renews (windowPaid set,
-    ///         exactly `cost` burned) — the all-or-nothing predicate is `>=`, so at-cost is a full burn.
-    function testRenewalExactlyAtCostFullBurn() public {
-        address atCost = makeAddr("at_cost");
-        uint256 cost = _subCost();
-        vm.assume(cost > 0);
-        _subscribeTicketMode(atCost, 1, true);
-        _approveKeeper(atCost);
-        _fundPool(atCost, 1 ether);
-        _setBurnieBalance(atCost, cost); // exactly cost
-        _forceRenewalDue(atCost);
+    /// @notice AFSUB-02: the per-iter validity check is a pure stored-field compare —
+    ///         `currentLevel <= sub.validThroughLevel`. A sub whose horizon STILL COVERS the current
+    ///         level is NOT at the crossing this autoBuy; no SubscriptionExtendedFree fires (refresh
+    ///         is the crossing branch only), the sub buys normally, and the per-iter path consumes
+    ///         ZERO external `lazyPassHorizon` reads. Asserts the non-crossing case: pass-holder
+    ///         already at-or-above current level is processed cleanly with NO refresh event.
+    function testNonCrossingPassHolderBuysWithoutRefresh() public {
+        address pass = makeAddr("nx_pass_holder");
+        _grantDeityPass(pass); // horizon = uint24.max
+        _subscribeTicketMode(pass, 1); // validThroughLevel = uint24.max (deity sentinel)
+        _approveKeeper(pass);
+        _fundPool(pass, 1 ether);
+        // DO NOT force crossing — leave validThroughLevel at the sentinel so currentLevel <= horizon.
 
         vm.recordLogs();
-        vm.prank(makeAddr("autoBuyer_atcost"));
+        vm.prank(makeAddr("autoBuyer_nx"));
         afKing.autoBuy(50);
 
-        assertEq(_countEvent(address(afKing), AUTO_EXTRACTED_SIG), 1, "at-cost renews (full burn)");
-        assertEq(coin.balanceOf(atCost), 0, "exactly cost burned, balance to zero");
-        assertEq(afKing.subscriptionOf(atCost).flags & 1, 1, "windowPaid set at-cost");
+        // Non-crossing path: NO refresh event, NO eviction event for this sub.
+        assertEq(_countEventFor(address(afKing), EXTENDED_FREE_SIG, pass), 0, "non-crossing: no refresh");
+        assertEq(_countEventFor(address(afKing), SUB_EXPIRED_SIG, pass), 0, "non-crossing: no eviction");
+        // Sub still active.
+        assertGt(_subscriberIndexOf(pass), 0, "non-crossing sub stays in set");
     }
 
     // =========================================================================
     // Task 3c — Gas-pegged single-creditFlip autoBuy bounty (REW-02)
     // =========================================================================
 
-    /// @notice REW-02 (D-07 re-homed to doWork): the REWARDED keeper entrypoint is now the parameterless
-    ///         `doWork()` router (the standalone `autoBuy(count)` is UNREWARDED, 330-07). A doWork() call
-    ///         whose autoBuy leg processes >= 1 buying subscriber emits EXACTLY ONE creditFlip to the
-    ///         caller (never per-item) — the REW-02 one-bounty-per-tx property. The specific flat-per-tx
-    ///         bounty VALUE (the new BUY_RATIO peg) is a deep router proof deferred to Phase 332; here we
-    ///         pin the one-credit-per-tx shape + a positive bounty.
+    /// @notice REW-02 (D-07 re-homed to doWork): the REWARDED keeper entrypoint is the parameterless
+    ///         `doWork()` router (the standalone `autoBuy(count)` is UNREWARDED, 330-07). A doWork()
+    ///         call whose autoBuy leg processes >= 1 buying subscriber emits EXACTLY ONE creditFlip
+    ///         to the caller (never per-item) — the REW-02 one-bounty-per-tx property.
     function testDoWorkEmitsExactlyOneBuyBounty() public {
         address s1 = makeAddr("buy_s1");
         address s2 = makeAddr("buy_s2");
@@ -218,24 +220,26 @@ contract AfKingSubscription is DeployProtocol {
 
         // EXACTLY ONE creditFlip emission for the whole tx (the single unified bounty), to the caller.
         assertEq(_countCreditFlipTo(keeper), 1, "exactly one bounty creditFlip per doWork tx (REW-02)");
-        // The unrewarded standalone clear still buys but pays NOTHING (only doWork credits).
-        // Phase 332: re-prove the flat-per-tx BUY_RATIO bounty VALUE under doWork.
     }
 
     /// @notice REW-02 tail: a standalone `autoBuy` that processes ZERO buying subscribers is a
-    ///         NO-OP (a no-buy chunk returns 0 so the doWork router can make progress). Every active sub is forced
-    ///         AlreadyAutoBoughtToday so the loop produces no buys; assert the call succeeds and stamps
-    ///         no fresh buy (no double-buy), instead of the deleted revert.
+    ///         NO-OP (a no-buy chunk returns 0 so the doWork router can make progress). Every active
+    ///         sub is forced AlreadyAutoBoughtToday so the loop produces no buys; assert the call
+    ///         succeeds and stamps no fresh buy.
     function testZeroBuyAutoBuyIsNoOp() public {
-        // Mark the two SUB-09 deploy subs (VAULT, SDGNRS) already-autoBought-today so they are skipped,
-        // and add no buying sub — the autoBuy produces batchLen == 0.
+        // Mark the two SUB-09 deploy subs (VAULT, SDGNRS) already-autoBought-today so they are skipped.
+        // NOTE: under v50.0 AFSUB-01, the SUB-09 deploy-time entries subscribe with validThroughLevel =
+        // lazyPassHorizon(VAULT/SDGNRS) — VAULT carries the permanent deity bit (DegenerusGame ctor)
+        // so VAULT's horizon = uint24.max (no first-crossing eviction); SDGNRS holds no pass so its
+        // horizon = 0 and it would evict on the first crossing iteration. Here we BYPASS the
+        // crossing/refresh/evict path entirely by stamping lastAutoBoughtDay so the per-iter
+        // AlreadyAutoBoughtToday skip fires first (AfKing._autoBuy:613).
         _markAutoBoughtToday(ContractAddresses.VAULT);
         _markAutoBoughtToday(ContractAddresses.SDGNRS);
         uint32 vaultStampBefore = _lastAutoBoughtDayOf(ContractAddresses.VAULT);
 
-        // No revert (the no-buy chunk no-ops). And no fresh buy lands (the stamp is unchanged).
         vm.prank(makeAddr("empty_autoBuyer"));
-        afKing.autoBuy(50);
+        afKing.autoBuy(50); // MUST NOT revert
         assertEq(
             _lastAutoBoughtDayOf(ContractAddresses.VAULT),
             vaultStampBefore,
@@ -258,86 +262,90 @@ contract AfKingSubscription is DeployProtocol {
     ///         fundingSource reverts NotApproved at subscribe (the cross-account gate is checked HERE);
     ///         after the source approves the subscriber, the SAME subscribe is honored. Proves the
     ///         money-holder-grants-spender direction: S must approve M for M to draw from S.
+    /// @dev    Under AFSUB-01 there is no BURNIE charge at subscribe — the ONLY thing the
+    ///         fundingSource gates now is the future per-day ETH draw routing (OPENE-02 ETH
+    ///         direction). The OPENE-04 consent gate itself is UNCHANGED.
     function testUnapprovedFundingSourceRefusedThenHonored() public {
         address s = makeAddr("auth_s");
         address m = makeAddr("auth_m");
-        // S funds its own BURNIE for the window-1 burn (so only the AUTH gate, not a shortfall, governs).
-        _fundBurnie(s, _subCost());
+        // No BURNIE pre-funding needed under AFSUB-01 (subscribe is BURNIE-free).
 
         // REFUSED: M has NOT been approved by S -> the non-zero non-self source reverts NotApproved.
         vm.prank(m);
         vm.expectRevert(abi.encodeWithSignature("NotApproved()"));
         afKing.subscribe(address(0), false, true, 1, 0, s);
 
-        // S approves M on the game; now the SAME subscribe is honored (source stored, window-1 burn S).
+        // S approves M on the game; now the SAME subscribe is honored (source stored).
         vm.prank(s);
         game.setOperatorApproval(m, true);
-        uint256 sBefore = coin.balanceOf(s);
         vm.prank(m);
         afKing.subscribe(address(0), false, true, 1, 0, s);
 
         assertEq(afKing.subscriptionOf(m).fundingSource, s, "approved source honored (stored as S)");
-        assertEq(sBefore - coin.balanceOf(s), _subCost(), "window-1 burn debited the approved source S");
     }
 
     /// @notice OPENE-04 revoke-does-NOT-stop-an-active-sub (subscribe-only auth): after S approves M
     ///         and M subscribes with fundingSource = S, S REVOKES (setOperatorApproval(M,false)). The
-    ///         day-31 renewal STILL draws/burns from S — the keeper trusts the stored source and never
-    ///         re-checks approval at renewal or per-draw. The sub is stopped only when S DEFUNDS
-    ///         (spends down BURNIE -> day-31 auto-pause) or M cancels.
+    ///         autoBuy STILL draws ETH from S's pool — the keeper trusts the stored source and never
+    ///         re-checks approval at the per-day draw. The sub is stopped only when S DEFUNDS (the
+    ///         pool runs dry -> InsufficientPool funding-skip kills the NORMAL sub) or M cancels.
+    /// @dev    Under AFSUB-01 the v49 day-31 BURNIE auto-extract path is gone; the trust-the-
+    ///         sub temporal-bound property survives by being asserted on the per-day ETH draw.
     function testRevokeDoesNotStopActiveSubButDefundDoes() public {
         address s = makeAddr("revoke_s");
         address m = makeAddr("revoke_m");
-        // S funds BURNIE for the window-1 burn + the first renewal; M never holds BURNIE.
-        _fundBurnie(s, _subCost() * 2);
+        // S approves M on the game (the OPENE-04 cross-account gate honored at subscribe).
         vm.prank(s);
         game.setOperatorApproval(m, true);
         vm.prank(m);
-        afKing.subscribe(address(0), false, true, 1, 0, s); // source = S, window-1 burn from S
+        afKing.subscribe(address(0), false, true, 1, 0, s); // source = S, no BURNIE charge (AFSUB-01)
         _approveKeeper(m);
-        _fundPool(s, 1 ether); // S funds the per-day ETH draw too
-        _forceRenewalDue(m);
+        _fundPool(s, 1 ether); // S funds the per-day ETH draw
 
-        // A healthy buying sub so each autoBuy produces >= 1 buy and is not a zero-buy no-op
-        // (which would mask the renewal/auto-pause behavior of M).
-        address healthy1 = makeAddr("revoke_healthy_1");
-        _setupHealthyBuyingSub(healthy1);
+        uint256 sPoolBefore = afKing.poolOf(s);
 
         // S REVOKES M's approval AFTER the sub is active.
         vm.prank(s);
         game.setOperatorApproval(m, false);
         assertFalse(game.isOperatorApproved(s, m), "S has revoked M");
 
-        uint256 sBeforeRenewal = coin.balanceOf(s);
-
         vm.recordLogs();
         vm.prank(makeAddr("revoke_autoBuyer_1"));
         afKing.autoBuy(50);
 
-        // SUBSCRIBE-ONLY AUTH: the day-31 renewal STILL burned S despite the revoke (no re-check).
-        assertEq(_countEvent(address(afKing), AUTO_EXTRACTED_SIG), 1, "renewal still charged S after revoke");
-        assertEq(_countEvent(address(afKing), SUB_EXPIRED_SIG), 0, "active sub NOT auto-paused by a revoke");
-        assertEq(sBeforeRenewal - coin.balanceOf(s), _subCost(), "renewal burn STILL debits S (trust-the-sub)");
+        // SUBSCRIBE-ONLY AUTH: the per-day draw STILL debited S's pool despite the revoke (no re-check).
+        assertLt(afKing.poolOf(s), sPoolBefore, "per-day draw still debited S after revoke (trust-the-sub)");
+        assertEq(_countEventFor(address(afKing), SUB_EXPIRED_SIG, m), 0, "active sub NOT terminated by a revoke");
         assertGt(_subscriberIndexOf(m), 0, "M's sub stays in the set after S revokes");
 
-        // Now S DEFUNDS (BURNIE drained to zero). Advance one keeper-local day so the autoBuy cursor
-        // resets to 0 (re-reaching M, which the first autoBuy's advanced cursor moved past), then force
-        // M renewal-due relative to the NEW today. The all-or-nothing burn takes nothing -> M
-        // auto-pauses. This is the ONLY way the source halts an active sub.
-        _setBurnieBalance(s, 0);
+        // Now S DEFUNDS (the pool runs dry). Advance one keeper-local day so the cursor resets, then
+        // run autoBuy — M's draw funding-skips and the NORMAL sub auto-pauses via InsufficientPool.
+        // First drain S's remaining pool to zero so the next draw cannot fund.
+        // Plan 335-06 fix: read poolOf(s) BEFORE vm.prank, since vm.prank only affects the very next
+        // external call — calling afKing.poolOf inline as the prank's "next call" consumed the prank
+        // stamp before withdraw ran, so withdraw ended up with the test contract as msg.sender and
+        // reverted InsufficientBalance against a zero pool.
+        uint256 sPoolRemaining = afKing.poolOf(s);
+        vm.prank(s);
+        afKing.withdraw(sPoolRemaining);
         vm.warp(block.timestamp + 1 days);
-        _forceRenewalDue(m);
+        // Re-fund M's claimable to 0 (sentinel only) so the draw must come from the (now-zero) S pool.
 
-        // A healthy buyer so the defund autoBuy still produces a buy (it is the new keeper-local day, so
-        // the cursor resets and every sub is re-evaluated).
-        address healthy2 = makeAddr("revoke_healthy_2");
-        _setupHealthyBuyingSub(healthy2);
+        // A healthy buyer so the defund autoBuy still produces a buy.
+        address healthy = makeAddr("revoke_healthy");
+        _setupHealthyBuyingSub(healthy);
 
+        // Plan 335-06 fix: the test issues a second `vm.recordLogs()` after the first; reset the
+        // drain-once cache so the second autoBuy's logs are captured (otherwise the first drain
+        // already set `_logsCacheReady = true` and subsequent counts read stale buffer).
+        _resetLogsCache();
         vm.recordLogs();
         vm.prank(makeAddr("revoke_autoBuyer_2"));
         afKing.autoBuy(50);
 
-        assertGe(_countEvent(address(afKing), SUB_EXPIRED_SIG), 1, "defunded source -> day-31 auto-pause");
+        // Defund -> InsufficientPool funding-skip auto-pauses M (NORMAL-sub kill, NOT the exempt
+        // VAULT/SDGNRS — those have pinned-identity exemption tested separately).
+        assertGe(_countEventFor(address(afKing), SUB_EXPIRED_SIG, m), 1, "defunded source -> auto-pause kill");
         assertEq(afKing.subscriptionOf(m).dailyQuantity, 0, "M's sub auto-paused once S defunds");
         assertEq(_subscriberIndexOf(m), 0, "M removed from the set on the defund auto-pause");
     }
@@ -350,35 +358,24 @@ contract AfKingSubscription is DeployProtocol {
         return uint32((block.timestamp - 82620) / 1 days);
     }
 
-    /// @dev Live subscription cost in BURNIE = (SUB_COST_ETH_TARGET * PRICE_COIN_UNIT) / mintPrice.
-    function _subCost() internal view returns (uint256) {
-        return (afKing.SUB_COST_ETH_TARGET() * PRICE_COIN_UNIT) / game.mintPrice();
+    /// @dev Current game level (game.level() auto-getter for the `uint24 public level` storage var).
+    function _currentLevel() internal view returns (uint24) {
+        return game.level();
     }
 
-    /// @dev Mirror of the autoBuy's SUB-03 stall-escalating multiplier (AfKing.sol:539-550): 1x base,
-    ///      2x after 20 min, 4x after 1 hour, 6x after 2 hours, measured from day-start
-    ///      (today * 1 days + 82620).
-    function _stallMultiplier() internal view returns (uint256) {
-        uint256 dayStart = uint256(_today()) * 1 days + 82_620;
-        uint256 elapsed = block.timestamp > dayStart ? block.timestamp - dayStart : 0;
-        if (elapsed >= 2 hours) return 6;
-        if (elapsed >= 1 hours) return 4;
-        if (elapsed >= 20 minutes) return 2;
-        return 1;
-    }
-
-    /// @dev Subscribe `who` in ticket mode, dailyQuantity q. When fundBurnie, pre-funds enough BURNIE
-    ///      for the (no-pass) subscribe-time all-or-nothing charge.
-    function _subscribeTicketMode(address who, uint8 q, bool fundBurnie) internal {
-        if (fundBurnie) _fundBurnie(who, _subCost());
+    /// @dev Subscribe `who` in ticket mode, dailyQuantity q. Under v50.0 AFSUB-01 there is no BURNIE
+    ///      charge at subscribe regardless of pass state.
+    function _subscribeTicketMode(address who, uint8 q) internal {
         vm.prank(who);
         afKing.subscribe(address(0), false, true, q, 0, address(0)); // self-consent, ticket mode, no reinvest, self-funded
     }
 
-    /// @dev A fully-healthy buying sub: ticket mode, operator-approved, funded pool + BURNIE, and
-    ///      NOT due for renewal (paidThroughDay > today) so it skips straight to a clean purchase.
+    /// @dev A fully-healthy buying sub: ticket mode, operator-approved, funded pool. Under AFSUB-01
+    ///      no BURNIE pre-fund is needed. The sub is NOT at the crossing (validThroughLevel encoded
+    ///      from lazyPassHorizon at subscribe; for a no-pass subscriber this is 0, so a non-zero
+    ///      currentLevel would trigger the crossing — this helper is used only at currentLevel == 0).
     function _setupHealthyBuyingSub(address who) internal {
-        _subscribeTicketMode(who, 1, true);
+        _subscribeTicketMode(who, 1);
         _approveKeeper(who);
         _fundPool(who, 1 ether);
     }
@@ -395,25 +392,8 @@ contract AfKingSubscription is DeployProtocol {
         afKing.depositFor{value: amount}(who);
     }
 
-    /// @dev Mint `amount` liquid BURNIE to `who` via the GAME-gated mintForGame path (keeps
-    ///      totalSupply consistent so a later _burn does not underflow).
-    function _fundBurnie(address who, uint256 amount) internal {
-        if (amount == 0) return;
-        vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(who, amount);
-    }
-
-    /// @dev Force `who`'s BURNIE balance to an EXACT value via a direct slot write (slot 1). Used to
-    ///      pin the shortfall / at-cost boundary precisely. (totalSupply is left as-is; these tests
-    ///      assert balanceOf deltas, and the shortfall path burns nothing, so no underflow occurs;
-    ///      the at-cost path burns exactly the written balance to zero.)
-    function _setBurnieBalance(address who, uint256 bal) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(BURNIE_BALANCE_SLOT)));
-        vm.store(address(coin), slot, bytes32(bal));
-    }
-
-    /// @dev Grant `who` the permanent deity bit so hasAnyLazyPass(who) == true. Mirrors the game
-    ///      constructor's VAULT/SDGNRS deity seeding: set bit HAS_DEITY_PASS_SHIFT (184) in
+    /// @dev Grant `who` the permanent deity bit so lazyPassHorizon(who) == type(uint24).max. Mirrors
+    ///      the game constructor's VAULT/SDGNRS deity seeding: set bit HAS_DEITY_PASS_SHIFT (184) in
     ///      mintPacked_[who] (slot 9).
     function _grantDeityPass(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(9)));
@@ -422,18 +402,39 @@ contract AfKingSubscription is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Force `who`'s sub into the day-31 renewal branch: write paidThroughDay <= today (set to
-    ///      `today`, which is `<= today` so `sub.paidThroughDay <= today` is true) and clear
-    ///      lastAutoBoughtDay so the AlreadyAutoBoughtToday skip does not fire first.
-    function _forceRenewalDue(address who) internal {
+    /// @dev Force `who`'s sub into the crossing branch: write validThroughLevel = 0 (so any
+    ///      currentLevel > 0 triggers `currentLevel > sub.validThroughLevel`). Clear lastAutoBoughtDay
+    ///      so the AlreadyAutoBoughtToday skip does not fire first. Also bump `currentLevel` from 0 to
+    ///      1 via a direct slot write so the crossing predicate is reachable even on a fresh fixture
+    ///      where game.level() returns 0.
+    /// @dev `level` lives in DegenerusGameStorage SLOT 0 packed as:
+    ///        bytes 0..3   uint32 purchaseStartDay
+    ///        bytes 4..7   uint32 dailyIdx
+    ///        bytes 8..13  uint48 rngRequestTime
+    ///        bytes 14..16 uint24 level                  ← target field
+    ///        byte 17      bool jackpotPhaseFlag
+    ///      The Phase 335-06 helper-fix replaces the v49-era assumption that `level` sat at the low
+    ///      24 bits (it never did under the current Storage layout) — the byte-14 shift below
+    ///      writes to the correct field.
+    uint256 private constant LEVEL_BYTE_OFFSET = 14;
+    function _forceCrossingDue(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(afKing), slot));
-        // Clear lastAutoBoughtDay (bytes 1..4) and paidThroughDay (bytes 5..8).
-        uint256 mask = (uint256(0xFFFFFFFF) << (OFF_LASTSWEPT * 8)) | (uint256(0xFFFFFFFF) << (OFF_PAIDTHROUGH * 8));
+        // Clear lastAutoBoughtDay (bytes 1..4) and validThroughLevel (bytes 5..8).
+        uint256 mask = (uint256(0xFFFFFFFF) << (OFF_LASTSWEPT * 8)) | (uint256(0xFFFFFFFF) << (OFF_VALIDTHROUGHLEVEL * 8));
         packed &= ~mask;
-        // paidThroughDay = today (<= today -> renewal due); lastAutoBoughtDay = 0 (< today -> not skipped).
-        packed |= (uint256(_today()) << (OFF_PAIDTHROUGH * 8));
+        // validThroughLevel = 0, lastAutoBoughtDay = 0.
         vm.store(address(afKing), slot, bytes32(packed));
+        // Ensure the game's level is strictly greater than the sub's validThroughLevel (= 0). The
+        // `level` storage var is `uint24` packed at bytes 14..16 of DegenerusGameStorage slot 0
+        // (see Storage layout comment above). Bump those 24 bits to 1 if currently 0 so
+        // `currentLevel > validThroughLevel` is true.
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        uint256 levelMask = uint256(0xFFFFFF) << (LEVEL_BYTE_OFFSET * 8);
+        if (uint24((slot0 & levelMask) >> (LEVEL_BYTE_OFFSET * 8)) == 0) {
+            slot0 = (slot0 & ~levelMask) | (uint256(1) << (LEVEL_BYTE_OFFSET * 8));
+            vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
+        }
     }
 
     /// @dev Read `who`'s lastAutoBoughtDay (bytes 1..4 of the packed Sub slot) — the GASOPT-04 buy oracle.
@@ -458,23 +459,68 @@ contract AfKingSubscription is DeployProtocol {
         return uint256(vm.load(address(afKing), slot));
     }
 
-    /// @dev Count events with `sig` emitted by `emitter` in the recorded logs.
+    /// @dev Cached drained logs, populated once per test via `_drainLogs()` after `vm.recordLogs()`.
+    ///      `vm.getRecordedLogs()` is CONSUMING (empties the buffer); to allow multiple per-test
+    ///      assertions across different (sig, who) combinations the v50.0 migration switches to a
+    ///      drain-once cache. Each test calls `vm.recordLogs()` -> drives the autoBuy -> calls
+    ///      `_drainLogs()` once -> then reads `_countEvent` / `_countEventFor` / `_countCreditFlipTo`
+    ///      against the cache. Auto-drained lazily on first count call.
+    Vm.Log[] private _logsCache;
+    bool private _logsCacheReady;
+
+    function _drain() internal {
+        if (!_logsCacheReady) {
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            delete _logsCache;
+            for (uint256 i; i < logs.length; i++) _logsCache.push(logs[i]);
+            _logsCacheReady = true;
+        }
+    }
+
+    /// @dev Reset the drain-once cache so a subsequent `vm.recordLogs()` round is captured fresh.
+    ///      Plan 335-06 fix: needed by tests that issue multiple `vm.recordLogs()` calls per test
+    ///      (e.g. testRevokeDoesNotStopActiveSubButDefundDoes runs autoBuy twice with two record
+    ///      windows). Without this reset, the first drain locks the cache for the rest of the test.
+    function _resetLogsCache() internal {
+        delete _logsCache;
+        _logsCacheReady = false;
+    }
+
+    /// @dev Count events with `sig` emitted by `emitter` in the recorded logs. Drains the buffer
+    ///      lazily on first call per test; subsequent calls re-use the cached snapshot so multiple
+    ///      assertions per autoBuy work correctly (the v49 helper consumed the buffer per call,
+    ///      which silently zeroed every assertion after the first).
     function _countEvent(address emitter, bytes32 sig) internal returns (uint256 count) {
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; i++) {
-            if (logs[i].emitter == emitter && logs[i].topics.length > 0 && logs[i].topics[0] == sig) count++;
+        _drain();
+        for (uint256 i; i < _logsCache.length; i++) {
+            if (_logsCache[i].emitter == emitter && _logsCache[i].topics.length > 0 && _logsCache[i].topics[0] == sig) count++;
+        }
+    }
+
+    /// @dev Count events with `sig` emitted by `emitter` whose indexed first arg == `who` in the
+    ///      recorded logs. Used to discriminate per-player event counts (e.g. one sub's eviction
+    ///      vs. another sub's refresh in the same autoBuy).
+    function _countEventFor(address emitter, bytes32 sig, address who) internal returns (uint256 count) {
+        _drain();
+        for (uint256 i; i < _logsCache.length; i++) {
+            if (
+                _logsCache[i].emitter == emitter &&
+                _logsCache[i].topics.length >= 2 &&
+                _logsCache[i].topics[0] == sig &&
+                address(uint160(uint256(_logsCache[i].topics[1]))) == who
+            ) count++;
         }
     }
 
     /// @dev Count CoinflipStakeUpdated emissions whose indexed player == `to` (the bounty recipient).
     function _countCreditFlipTo(address to) internal returns (uint256 count) {
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; i++) {
+        _drain();
+        for (uint256 i; i < _logsCache.length; i++) {
             if (
-                logs[i].emitter == address(coinflip) &&
-                logs[i].topics.length >= 2 &&
-                logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
-                address(uint160(uint256(logs[i].topics[1]))) == to
+                _logsCache[i].emitter == address(coinflip) &&
+                _logsCache[i].topics.length >= 2 &&
+                _logsCache[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
+                address(uint160(uint256(_logsCache[i].topics[1]))) == to
             ) count++;
         }
     }

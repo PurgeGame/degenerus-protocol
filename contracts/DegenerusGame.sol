@@ -1528,6 +1528,26 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return frozenUntilLevel > level;
     }
 
+    /// @dev Per-pass-type level horizon, read once at the AfKing subscribe-time
+    ///      encoding and again exactly at the validity crossing. Deity holders
+    ///      return the `uint24` sentinel max (a permanent horizon by D-11);
+    ///      lazy/whale holders return their `frozenUntilLevel`; everyone else
+    ///      returns 0. Cheap stored-field-compare in the AfKing per-iter check
+    ///      (`currentLevel <= validThroughLevel`) consumes this horizon without
+    ///      re-reading the pass on the non-crossing path (GASOPT-05 preserved).
+    /// @param player Player address to check.
+    /// @return The level horizon through which the player's pass coverage extends.
+    function lazyPassHorizon(address player) external view returns (uint24) {
+        uint256 packed = mintPacked_[player];
+        if (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) {
+            return type(uint24).max;
+        }
+        return uint24(
+            (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
+                BitPackingLib.MASK_24
+        );
+    }
+
     /*+======================================================================+
       |                 AUTO-WORK + KEEPER BATCH                        |
       +======================================================================+
@@ -1550,15 +1570,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @dev Index against which the cursor currently walks (boxCursor day-reset key).
     uint48 internal boxCursorIndex;
-
-    /// @dev The reference gas a typical (non-whale-pass) box open costs, used as the
-    ///      denominator that converts measured per-box gas into weighted budget units in
-    ///      autoOpen. A typical box open measures ~89,288 gas; 90,000 is a clean,
-    ///      slightly-conservative value just above it (so a typical box weighs exactly 1
-    ///      unit), while a whale-pass box (~5.4M, the 100-iter _activateWhalePass loop)
-    ///      weighs ≈ 60 units — letting one gas-weighted maxCount budget bound the open
-    ///      leg against the 16.7M per-tx ceiling for ANY whale-pass mix.
-    uint256 private constant OPEN_NORMAL_GAS_UNIT = 90_000;
 
     /// @dev Players with an open box queued per lootbox RNG index, enqueued once at
     ///      first deposit (the lootboxEthBase == 0 signal). Keyed on the lootbox index,
@@ -1672,18 +1683,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      boxes opened; the re-homed bounty is paid by the unified router (AfKing.doWork),
     ///      never in-callee (RD-4) — UNREWARDED when called directly (ROUTER-10).
     ///
-    ///      maxCount is a GAS-WEIGHTED budget, not a raw box count: a box's measured open gas
-    ///      is converted to weighted units of OPEN_NORMAL_GAS_UNIT (ceil, min 1 per opened
-    ///      box), and the walk stops once the accumulated weight reaches maxCount. A typical
-    ///      box weighs 1; a whale-pass box (the rare ~5.4M, 100-iter _activateWhalePass boon)
-    ///      weighs ≈ 60. Because a box's weight is only known AFTER it opens, at most one
-    ///      whale-pass box can overshoot the budget, so the worst-case leg gas is bounded by
-    ///      (maxCount−1)×OPEN_NORMAL_GAS_UNIT + one whale-pass box ≈ 8.9M + 5.4M ≈ 14.3M at
-    ///      OPEN_BATCH=100 — under the 16.7M per-tx ceiling for ANY whale-pass mix. The reward
-    ///      pro-rate (AfKing OPEN_KNEE) keys off `opened` (real boxes), not the weighted units.
-    /// @param maxCount Gas-weighted open budget (in OPEN_NORMAL_GAS_UNIT units); caller-bounded,
-    ///        anti-DoS. A typical box consumes 1 unit, a whale-pass box ≈ 60.
-    /// @return opened The real number of boxes opened this call (drives the OPEN_KNEE reward).
+    ///      maxCount is a flat box-count budget: under v50.0's O(1) whale-pass refactor
+    ///      (WHALE-01/02), every box open is uniform cost regardless of pass status — the
+    ///      box-open boon writes `whalePassClaims[player] += grant` rather than running the
+    ///      100-iter _activateWhalePass loop, with materialization deferred to the
+    ///      player-paid claimWhalePass. The autoOpen leg's worst case is now bounded by
+    ///      `maxCount × measured_per_box` gas; OPEN_BATCH is picked from a fresh measurement
+    ///      (D-IMPL-04) so `chosen × measured ≤ 16.7M − headroom` holds by construction.
+    /// @param maxCount Flat per-call box-count budget; caller-bounded, anti-DoS.
+    /// @return opened The number of boxes opened this call (drives the OPEN_KNEE reward).
     function autoOpen(uint256 maxCount) external returns (uint256 opened) {
         // Entry-gate (RD-5): the open path has exactly two revert sources — rngLock and the
         // terminal-jackpot liveness control. Excluding both pre-loop makes the loop body
@@ -1707,9 +1715,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 qlen = queue.length;
         uint256 cursor = boxCursor;
 
-        // weighted is the gas-weighted budget consumed; opened is the real box count returned.
-        uint256 weighted;
-        while (cursor < qlen && weighted < maxCount) {
+        // Flat opened-count guard — every box is uniform O(1) cost under WHALE-01/02.
+        while (cursor < qlen && opened < maxCount) {
             address player = queue[cursor];
             unchecked {
                 ++cursor;
@@ -1717,16 +1724,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             // Skip already-emptied boxes (the first-deposit signal is reset on open).
             if (lootboxEthBase[index][player] == 0) continue;
             // Guaranteed-non-reverting under the entry-gate: open directly (no try/catch).
-            // Measure the box's open gas to weight it (a whale-pass box ≈ 60 typical boxes).
-            uint256 g0 = gasleft();
             _autoOpenBox(index, player);
-            uint256 used = g0 - gasleft();
             unchecked {
                 ++opened;
-                // Ceil-divide into weighted units, min 1 per opened box (so a typical box
-                // weighs exactly 1 and a heavy whale-pass box consumes its real budget share).
-                weighted += used / OPEN_NORMAL_GAS_UNIT;
-                if (used % OPEN_NORMAL_GAS_UNIT != 0 || used == 0) ++weighted;
             }
         }
 

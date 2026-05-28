@@ -306,17 +306,20 @@ contract KeeperRouterOneCategory is DeployProtocol {
         );
 
         // (b) Every external call in the doWork legs targets a PINNED ContractAddresses.* constant.
-        // The router's external calls are: IGame(ContractAddresses.GAME).{mintPrice,advanceDue,
-        // advanceGame,boxesPending,autoOpen} and ICoinflip(ContractAddresses.COINFLIP).creditFlip.
+        // The router's external calls are: GAME.{mintPrice,advanceDue,advanceGame,boxesPending,
+        // autoOpen} and COINFLIP.creditFlip. Plan 335-04 collapsed the v49-era inline
+        // `IGame(ContractAddresses.GAME).*` cast pattern into compile-time constant immutables
+        // declared at AfKing.sol :207 (`IGame internal constant GAME = IGame(ContractAddresses.GAME);`)
+        // — same pinned target, cheaper call site. The attestation tracks the immutable name here.
         assertGt(
-            _countOccurrences(doWorkBody, "IGame(ContractAddresses.GAME)"),
+            _countOccurrences(doWorkBody, "GAME."),
             0,
-            "D-01: the doWork game-leg calls target the pinned ContractAddresses.GAME"
+            "D-01: the doWork game-leg calls target the pinned GAME immutable (= IGame(ContractAddresses.GAME))"
         );
         assertEq(
-            _countOccurrences(doWorkBody, "ICoinflip(ContractAddresses.COINFLIP).creditFlip"),
+            _countOccurrences(doWorkBody, "COINFLIP.creditFlip"),
             1,
-            "D-01: the only creditFlip target in doWork is the pinned ContractAddresses.COINFLIP"
+            "D-01: the only creditFlip target in doWork is the pinned COINFLIP immutable (= ICoinflip(ContractAddresses.COINFLIP))"
         );
 
         // (c) No untrusted external-call primitive inside the doWork legs that could hand control to an

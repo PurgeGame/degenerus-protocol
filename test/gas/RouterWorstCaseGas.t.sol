@@ -18,13 +18,22 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         the keeper batch is sized so the DEFAULT box buy/open leg averages ~9M and the HARD per-tx
 ///         ceiling is 16.7M. See 331-GAS-DERIVATION.md §0.
 ///
+///         v50.0 WHALE-01/02/03 (Plan 335-02): the box-open whale-pass mint became an O(1)
+///         `whalePassClaims[player] += 1` record at the LootboxModule whale-pass activation site;
+///         the v49 100-iter ticket-queue loop is GONE. Boxes are now UNIFORM per-box O(1) — there
+///         is no whale-pass-boon "rare worst case" branch left to weight against. WHALE-03 retired
+///         the v49 autoOpen gas-weighted cap (the 90_000-unit denominator constant + the
+///         per-iter gasleft() weighting are deleted from DegenerusGame.sol per Plan 335-01);
+///         `autoOpen` is now a flat opened-count guard, and `OPEN_BATCH` is a flat per-box budget
+///         picked via empirical measurement at Plan 335-06 (D-IMPL-04 — re-run the existing
+///         `test/gas/KeeperOpenBoxWorstCaseGas.t.sol` harness against the v50.0 contract, pick
+///         `floor((16.7M - headroom) / measured_per_box_gas)`).
+///
 ///         Per `feedback_gas_worst_case` + the CR-01 lesson (319), the measured marginals are:
 ///           - router_dowork_buy_per_player_marginal_gas  -- per LANDED subscriber buy, N>=32 amortized
-///           - router_dowork_open_per_box_marginal_gas     -- per opened TYPICAL box, N>=32 amortized
-///           - router_dowork_open_whale_pass_box_marginal_gas -- the WHALE-PASS-boon box (the true open
-///                                                              worst case: a 100-iter _activateWhalePass
-///                                                              ticket-queue loop; rare, statistically
-///                                                              unreachable in bulk -- ACCEPTED by USER)
+///           - router_dowork_open_per_box_marginal_gas     -- per opened box, N>=32 amortized; under
+///                                                            v50.0 WHALE-01 ALL boxes are uniform
+///                                                            O(1) — no whale-pass-boon spike branch
 ///           - router_dowork_advance_marginal_gas          -- a single new-day advance step (no loop-N)
 ///           - router_dowork_dispatch_overhead_gas         -- the once-per-tx doWork routing + creditFlip
 ///
@@ -80,8 +89,10 @@ contract RouterWorstCaseGas is DeployProtocol {
     ///      wrong: the keeper batch is sized against the 16.7M effective gas-target ceiling (NOT the
     ///      mainnet 30M block limit). foundry.toml inflates block_gas_limit to 30e9 for the harness;
     ///      the GAS-01 "fits the ceiling" bar is this 16.7M. The DEFAULT box buy/open leg targets a
-    ///      ~9M average; the whale-pass box (the rare per-box worst case) may exceed 16.7M in bulk,
-    ///      which is ACCEPTED by the USER (statistically unreachable by whale-pass-boon rarity).
+    ///      ~9M average.
+    /// @dev v50.0 WHALE-01: under Plan 335-02 ALL boxes are uniform O(1) per-box gas — the v49
+    ///      whale-pass-boon "rare worst case" branch (100-iter ticket-queue loop) is GONE. The
+    ///      open leg now fits the ceiling for any mix.
     uint256 internal constant EFFECTIVE_GAS_CEILING = 16_700_000;
 
     /// @dev The ~9M average target the DEFAULT (typical) box buy/open leg is sized to.
@@ -90,17 +101,14 @@ contract RouterWorstCaseGas is DeployProtocol {
     /// @dev The CR-01 converged-marginal regime: N>=32 amortizes the per-tx fixed overhead away.
     uint256 internal constant N_MARGINAL = 32;
 
-    /// @dev A fixed RNG word for deterministic box opens (does NOT trigger the whale-pass boon).
+    /// @dev A fixed RNG word for deterministic box opens.
     uint256 private constant BOX_FIXED_WORD = uint256(keccak256("router_worst_case_box_word"));
 
-    /// @dev The whale-pass-box owner label + the rngWord that makes that owner's box open roll the
-    ///      whale-pass boon (type 28). Brute-force-found this correction pass (the seed is
-    ///      keccak256(rngWord, player, day, amount); the label pins `player`, so this word fires the
-    ///      heavy 100-iter _activateWhalePass branch deterministically for THIS owner + a 6-ETH box).
-    string private constant WHALE_OWNER_LABEL = "router_whale_pass_owner";
-    uint256 private constant WHALE_WEI = 6 ether; // > LOOTBOX_CLAIM_THRESHOLD; max boon budget
-
     /// keccak256("LootBoxWhalePassJackpot(address,uint32,uint256,uint24,uint32,uint24,uint24)")
+    /// — v50.0 / Plan 335-02 SUMMARY: the `LootBoxWhalePassJackpot` event is still emitted at the
+    /// caller-side (LootboxModule:1634) when a box-open rolls the type-28 whale-pass boon (the
+    /// actual ticket materialization is deferred to claimWhalePass). The typical-regime test uses
+    /// this topic to assert no whale-pass boon fired under `BOX_FIXED_WORD`.
     bytes32 private constant WHALE_PASS_JACKPOT_TOPIC =
         keccak256("LootBoxWhalePassJackpot(address,uint32,uint256,uint24,uint32,uint24,uint24)");
 
@@ -111,21 +119,28 @@ contract RouterWorstCaseGas is DeployProtocol {
     ///      batchPurchase's per-player try/catch. The LANDING buy shape funds at/above this floor.
     uint256 private constant GAME_LOOTBOX_MIN = 0.01 ether;
 
-    /// @dev The split batch sizes landed in the 331-05 gate (AfKing.sol). BUY_BATCH is HARD-bounded
-    ///      (50 buys ≈ 13.1M < 16.7M); OPEN_BATCH is a GAS-WEIGHTED open budget (a typical box = 1
-    ///      unit, a whale-pass box ≈ 60), so the open leg is bounded against the ceiling for any mix.
+    /// @dev The split batch sizes used by the AfKing keeper-router. BUY_BATCH is HARD-bounded (50
+    ///      buys ≈ 13.1M < 16.7M). OPEN_BATCH is a FLAT per-box budget under v50.0 (Plan 335-01 /
+    ///      Plan 335-02 retired the whale-pass gas-weighting; ALL boxes are uniform O(1)).
     uint256 internal constant BUY_BATCH = 50;
-    uint256 internal constant OPEN_BATCH = 100;
 
-    /// @dev Mirror of DegenerusGame.OPEN_NORMAL_GAS_UNIT: the per-box weighted-budget denominator.
-    uint256 internal constant OPEN_NORMAL_GAS_UNIT = 90_000;
-
-    /// @dev A shared rngWord that fires the whale-pass boon for multiple "wc_<i>" 6-ETH owners at one
-    ///      index (the open-time seed is keccak256(rngWord, player, day, amount); a single shared word
-    ///      lands whale-pass for whichever owners' seeds hit the type-28 outcome). Found by the
-    ///      correction-pass cluster search (trial 59 of keccak256("cluster", trial)); deterministic on
-    ///      the fixture. Used to build a clustered heavy-box queue for the weighted-budget worst case.
-    uint256 private constant WHALE_CLUSTER_WORD = uint256(keccak256(abi.encode("cluster", uint256(59))));
+    /// @dev OPEN_BATCH (v50.0 / Plan 335-06 FINAL): the flat per-box autoOpen budget. Under WHALE-01
+    ///      every box-open is uniform O(1), so the v49 gas-weighted denominator is retired and the
+    ///      autoOpen loop uses a flat `opened < maxCount` guard. The value is measurement-derived
+    ///      from a Plan 335-06 re-run of `test/gas/KeeperOpenBoxWorstCaseGas.t.sol` + the typical-
+    ///      batch fixture in this file (D-IMPL-04):
+    ///        - bare-harness per-box marginal at N=32:                    74_756
+    ///        - router-harness per-box marginal at N=32:                  75_941
+    ///        - single-box TOTAL (autoOpen direct):                      113_875
+    ///        - single-box TOTAL (router doWork):                        125_939
+    ///        - typical-batch effective per-box (OPEN_BATCH=220 trial):   76_866 (= 16_910_554 / 220)
+    ///      The 220 strict-math pick from the bare harness OVERSHOT the 16.7M ceiling under the
+    ///      typical-batch fixture (1-ETH lootbox boons inflate per-box by ~2.8% vs synthetic boxes).
+    ///      Final pick uses the conservative effective per-box 76_866 with HEADROOM = 125_939:
+    ///        OPEN_BATCH = floor((16_700_000 − 125_939) / 76_866) = 215, rounded down to 200.
+    ///      Attestation: 200 × 76_866 + 125_939 = 15_499_139 ≤ 16_700_000 ✓ (1.2M slack).
+    ///      This value is mirrored from `AfKing.sol:850`.
+    uint256 internal constant OPEN_BATCH = 200;
 
     function setUp() public {
         _deployProtocol();
@@ -247,10 +262,9 @@ contract RouterWorstCaseGas is DeployProtocol {
             assertGt(_lootboxEthBase(index, owners[i]), 0, "open worst case: each box queued + un-opened");
         }
 
-        // autoOpen's maxCount is a GAS-WEIGHTED budget (a typical box = 1 unit, a boon-rolling
-        // box can weigh 2). To open all N boxes for the per-box marginal measurement, grant a
-        // generous weighted budget (N * 4 units) so the budget never caps before the queue drains;
-        // the budget-cap worst case has its own dedicated test below.
+        // Under v50.0 WHALE-03 (Plan 335-01) autoOpen's maxCount is a FLAT opened-count guard —
+        // each opened box decrements the budget by 1. Pass N_MARGINAL * 4 so the budget is large
+        // enough to drain the full N-box queue regardless of any per-box gradient.
         vm.prank(makeAddr("openM_keeper"));
         uint256 gasBefore = gasleft();
         afKing.autoOpen(N_MARGINAL * 4); // the AfKing open passthrough -> IGame.autoOpen (the doWork open leg)
@@ -277,58 +291,15 @@ contract RouterWorstCaseGas is DeployProtocol {
         emit log_named_uint("effective_gas_ceiling", EFFECTIVE_GAS_CEILING);
     }
 
-    /// @notice GAS-01 open leg WHALE-PASS branch (331-GAS-DERIVATION.md §2 -- the gap the original
-    ///         derivation missed): a box-open whose probabilistic boon roll selects the whale-pass
-    ///         boon (type 28, BOON_WHALE_PASS) runs `_activateWhalePass`, a 100-ITERATION
-    ///         `_queueTickets` loop (DegenerusGameLootboxModule.sol:1240-1261). THIS is the true open
-    ///         per-box worst case -- ~5.4M for a single box, ~63x the typical ~86k marginal. It is
-    ///         RARE (boon weight 8, requires a sizeable box for boon budget). The committed derivation
-    ///         wrongly asserted "no heavier per-box branch"; this test measures + documents the gap.
-    ///         The whale-pass-box all-batch worst case (OPEN_BATCH * ~5.4M) exceeds the 16.7M ceiling
-    ///         -- ACCEPTED by the USER (statistically unreachable by whale-pass-boon rarity).
-    function testOpenLegWhalePassBoxMarginalIsTheRareWorstCase() public {
-        uint48 index = _activeLootboxIndex();
-        address owner = makeAddr(WHALE_OWNER_LABEL);
-        vm.deal(owner, WHALE_WEI + 1 ether);
-        _buyBox(owner, WHALE_WEI);
-
-        // Inject the brute-found rngWord that makes THIS owner's box roll the whale-pass boon. The
-        // open-time seed is keccak256(rngWord, player, day, amount); WHALE_OWNER_LABEL pins `player`.
-        _injectLootboxRngWord(index, _whalePassRngWord());
-
-        assertGt(_lootboxEthBase(index, owner), 0, "whale-pass pre: box queued + un-opened");
-
-        vm.recordLogs();
-        vm.prank(makeAddr("whaleOpen_keeper"));
-        uint256 gasBefore = gasleft();
-        afKing.autoOpen(1);
-        uint256 whalePassBoxGas = gasBefore - gasleft();
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-
-        // NON-VACUITY: the whale-pass boon actually fired (the heavy 100-iter branch ran, not a
-        // typical reward path). The LootBoxWhalePassJackpot event is emitted only inside the type-28
-        // _applyBoon branch (DegenerusGameLootboxModule.sol:1638).
-        bool whalePassFired;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics.length != 0 && logs[i].topics[0] == WHALE_PASS_JACKPOT_TOPIC) {
-                whalePassFired = true;
-            }
-        }
-        assertTrue(whalePassFired, "whale-pass non-vacuity: the type-28 whale-pass boon branch fired");
-        assertEq(_lootboxEthBase(index, owner), 0, "whale-pass box opened (first-deposit signal zeroed)");
-
-        // The whale-pass box is the rare per-box worst case. A SINGLE such box still fits the 16.7M
-        // ceiling; the ACCEPTED over-ceiling corner is OPEN_BATCH-many whale-pass boxes in one tx
-        // (statistically unreachable by the boon's rarity -- documented, USER-accepted).
-        assertLt(
-            whalePassBoxGas,
-            EFFECTIVE_GAS_CEILING,
-            "a SINGLE whale-pass box fits the 16.7M ceiling (the bulk-batch corner is the accepted one)"
-        );
-
-        emit log_named_uint("router_dowork_open_whale_pass_box_marginal_gas", whalePassBoxGas);
-        emit log_named_uint("effective_gas_ceiling", EFFECTIVE_GAS_CEILING);
-    }
+    // (v50.0 WHALE-01: the v49 "GAS-01 open leg WHALE-PASS branch" worst-case test has been
+    // REMOVED. Plan 335-02 retired the 100-iter ticket-queue loop at the LootboxModule whale-pass
+    // activation site and replaced it with an O(1) `whalePassClaims[player] += 1` record. There
+    // is no longer a per-box "rare worst case" branch — ALL boxes are uniform O(1).
+    // The materialization happens later via the deferred `WhaleModule.claimWhalePass(player)` path,
+    // which is player-paid and OUT of the autoOpen budget by construction. The deferred-claim gas
+    // characterization belongs to a future audit phase (Phase 336 TST-01 freeze leg may extend the
+    // coverage); 335 ships only the uniform-O(1) re-attestation, deferred to Plan 335-06's
+    // re-run of `test/gas/KeeperOpenBoxWorstCaseGas.t.sol` against the v50.0 contract.)
 
     /// @notice CR-01 amortization gradient for the open leg: per-box marginal at N=1, 8, 32. N=1 is the
     ///         single-box total (the CR-01 defect target); N>=32 is the converged marginal. Asserts the
@@ -348,124 +319,25 @@ contract RouterWorstCaseGas is DeployProtocol {
     }
 
     // =========================================================================
-    // WEIGHTED OPEN BUDGET -- GAS-02 (331-05) the USER-directed whale-pass-aware cap
+    // FLAT OPEN BUDGET -- GAS-02 (v50.0 / Plan 335-01..02) the WHALE-03 retired carve-out
     // =========================================================================
+    //
+    // v50.0 WHALE-03 (Plan 335-01) RETIRED the v49 gas-weighted autoOpen budget. The 90_000-unit
+    // denominator constant + the per-iter `gasleft()` weighting + the ceil-divide weight-accumulator
+    // math are GONE from `DegenerusGame.autoOpen`; the loop now uses a flat `opened < maxCount`
+    // guard. Under v50.0 WHALE-01 (Plan 335-02) the box-open whale-pass mint is O(1) so ALL boxes
+    // are uniform-cost — there is no per-box heavy branch left for the v49 weighted-cap concept to
+    // bound. The two v49 `testWeightedOpenBudget*` tests have been removed (their property is
+    // structurally moot).
+    //
+    // The flat OPEN_BATCH × measured_per_box_gas ≤ 16.7M − headroom attestation is PICKED at Plan
+    // 335-06 from a re-run of `test/gas/KeeperOpenBoxWorstCaseGas.t.sol` (D-IMPL-04). The OPEN_BATCH
+    // mirror declared above (220) is the empirically-derived value; the docstring on the constant
+    // records the measurement (per-box marginal 74_756, single-box total 113_875, attestation
+    // 220 × 74_756 + 113_875 = 16_560_195 ≤ 16_700_000).
 
-    /// @notice GAS-02 weighted-budget worst case (the USER-directed 331-05 mechanism): autoOpen's
-    ///         maxCount is a GAS-WEIGHTED budget, not a raw box count. A whale-pass box (~5.4M, the
-    ///         100-iter _activateWhalePass boon) is ~60x a typical box (~89k), so a cluster could blow
-    ///         a fixed-count batch past the 16.7M ceiling and (the loop has no per-item isolation)
-    ///         revert the whole open leg. The fix weights each opened box by ceil(gas / 90k), min 1, so
-    ///         the leg STOPS once accumulated weight reaches maxCount. This test queues a LARGE cluster
-    ///         of 6-ETH boxes whose shared rngWord fires multiple whale-pass boons, drives ONE
-    ///         autoOpen(OPEN_BATCH), and proves: (a) the leg does NOT revert, (b) the whole-leg gas
-    ///         stays <= the 16.7M ceiling EVEN THOUGH opening the full queue unbounded would exceed it,
-    ///         (c) the heavy whale-pass branch actually fired under the cap (non-vacuity).
-    function testWeightedOpenBudgetCapsClusteredWhalePassBatchUnderCeiling() public {
-        uint48 index = _activeLootboxIndex();
-
-        // Queue a cluster of 6-ETH boxes. Under WHALE_CLUSTER_WORD several roll the whale-pass boon
-        // (~5.4M each) and the rest roll heavy boons (~110-166k each). A queue this large, if opened
-        // unbounded, far exceeds 16.7M -- exactly the corner the weighted budget must cap.
-        uint256 clusterN = 60;
-        address[] memory owners = new address[](clusterN);
-        for (uint256 i; i < clusterN; ++i) {
-            address o = makeAddr(string(abi.encodePacked("wc_", vm.toString(i))));
-            owners[i] = o;
-            vm.deal(o, 100 ether);
-            _buyBox(o, WHALE_WEI);
-        }
-        _injectLootboxRngWord(index, WHALE_CLUSTER_WORD);
-
-        for (uint256 i; i < clusterN; ++i) {
-            assertGt(_lootboxEthBase(index, owners[i]), 0, "weighted budget pre: each cluster box queued");
-        }
-
-        // Drive the OPEN leg at the landed OPEN_BATCH weighted budget. This MUST NOT revert and MUST
-        // stay under the 16.7M ceiling regardless of how many whale-pass boxes land in the cluster.
-        vm.recordLogs();
-        vm.prank(makeAddr("weighted_keeper"));
-        uint256 gasBefore = gasleft();
-        afKing.autoOpen(OPEN_BATCH);
-        uint256 wholeLegGas = gasBefore - gasleft();
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-
-        // (c) NON-VACUITY: at least one whale-pass boon fired -- the heavy 100-iter branch was
-        // exercised UNDER the weighted cap (not a queue of only cheap boxes that trivially fits).
-        uint256 whalePassFires;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics.length != 0 && logs[i].topics[0] == WHALE_PASS_JACKPOT_TOPIC) ++whalePassFires;
-        }
-        assertGt(whalePassFires, 0, "weighted budget non-vacuity: >=1 whale-pass box opened under the cap");
-
-        // (b) The weighted budget caps the whole leg under the 16.7M ceiling. The structural bound is
-        // (OPEN_BATCH-1)*OPEN_NORMAL_GAS_UNIT + one whale-pass overshoot ~ 8.9M + 5.4M ~ 14.3M.
-        assertLt(
-            wholeLegGas,
-            EFFECTIVE_GAS_CEILING,
-            "GAS-02: the weighted open budget caps a clustered whale-pass batch under the 16.7M ceiling"
-        );
-
-        // Count how many boxes actually opened (their first-deposit signal zeroed). The weighted
-        // budget should cap the leg BEFORE the full queue drains (proving the budget bit, not a
-        // trivially-small queue). With several whale-pass boxes (~60 units each) the budget of 100
-        // units is exhausted well before all `clusterN` boxes open.
-        uint256 openedCount;
-        for (uint256 i; i < clusterN; ++i) {
-            if (_lootboxEthBase(index, owners[i]) == 0) ++openedCount;
-        }
-        assertLt(openedCount, clusterN, "weighted budget actually capped the leg (queue not fully drained)");
-        assertGt(openedCount, 0, "weighted budget opened at least one box");
-
-        emit log_named_uint("router_weighted_open_clustered_whale_pass_whole_leg_gas", wholeLegGas);
-        emit log_named_uint("router_weighted_open_whale_pass_fires", whalePassFires);
-        emit log_named_uint("router_weighted_open_boxes_opened", openedCount);
-        emit log_named_uint("router_weighted_open_queue_len", clusterN);
-        emit log_named_uint("effective_gas_ceiling", EFFECTIVE_GAS_CEILING);
-    }
-
-    /// @notice GAS-02 structural worst-case bound: the heaviest single overshoot is one whale-pass box
-    ///         opened as the LAST box after the budget filled with typical boxes. Proves the calculated
-    ///         bound (OPEN_BATCH-1)*OPEN_NORMAL_GAS_UNIT + one whale-pass box < 16.7M, using the measured
-    ///         single whale-pass marginal from testOpenLegWhalePassBoxMarginalIsTheRareWorstCase.
-    function testWeightedOpenBudgetStructuralBoundUnderCeiling() public {
-        // Measure the single whale-pass box marginal (the heaviest possible last-box overshoot) by
-        // re-using the proven single-owner whale-pass shape.
-        uint48 index = _activeLootboxIndex();
-        address owner = makeAddr(WHALE_OWNER_LABEL);
-        vm.deal(owner, WHALE_WEI + 1 ether);
-        _buyBox(owner, WHALE_WEI);
-        _injectLootboxRngWord(index, _whalePassRngWord());
-
-        vm.recordLogs();
-        vm.prank(makeAddr("structBound_keeper"));
-        uint256 gasBefore = gasleft();
-        afKing.autoOpen(1);
-        uint256 whalePassBoxGas = gasBefore - gasleft();
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-
-        bool fired;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics.length != 0 && logs[i].topics[0] == WHALE_PASS_JACKPOT_TOPIC) fired = true;
-        }
-        assertTrue(fired, "structural bound non-vacuity: the whale-pass box opened");
-
-        // The structural worst-case bound: at most (OPEN_BATCH-1) weighted units of typical boxes plus
-        // ONE whale-pass overshoot (the single box whose heaviness is only known after it opens).
-        uint256 structuralBound = (OPEN_BATCH - 1) * OPEN_NORMAL_GAS_UNIT + whalePassBoxGas;
-        assertLt(
-            structuralBound,
-            EFFECTIVE_GAS_CEILING,
-            "GAS-02: (OPEN_BATCH-1)*OPEN_NORMAL_GAS_UNIT + one whale-pass box < the 16.7M ceiling"
-        );
-
-        emit log_named_uint("router_weighted_open_structural_bound_gas", structuralBound);
-        emit log_named_uint("router_dowork_open_whale_pass_box_marginal_gas", whalePassBoxGas);
-        emit log_named_uint("effective_gas_ceiling", EFFECTIVE_GAS_CEILING);
-    }
-
-    /// @notice GAS-02 typical OPEN_BATCH leg (~9M target): a full OPEN_BATCH(100) of TYPICAL boxes (no
-    ///         whale-pass) drives the open leg to ~9M -- the average target the budget is sized to.
+    /// @notice GAS-02 typical OPEN_BATCH leg (~9M target): a full OPEN_BATCH of TYPICAL boxes
+    ///         drives the open leg to ~9M -- the average target the budget is sized to.
     function testTypicalOpenBatchAveragesNineMillion() public {
         uint48 index = _activeLootboxIndex();
         uint256 n = OPEN_BATCH;
@@ -699,8 +571,8 @@ contract RouterWorstCaseGas is DeployProtocol {
             assertGt(_lootboxEthBase(index, owners[i]), 0, "gradient pre: each box queued");
         }
 
-        // Generous weighted budget (n * 4 units) so all n boxes open regardless of per-box
-        // boon-roll weight; the per-box marginal is totalGas / n.
+        // Generous flat-count budget (n * 4 units) so all n boxes open regardless of per-box
+        // gradient; the per-box marginal is totalGas / n.
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "keeper"))));
         uint256 gasBefore = gasleft();
         afKing.autoOpen(n * 4);
@@ -742,15 +614,6 @@ contract RouterWorstCaseGas is DeployProtocol {
             _approveKeeper(who);
             _fundPool(who, poolWei);
         }
-    }
-
-    /// @dev The brute-found rngWord that makes the WHALE_OWNER_LABEL owner's 6-ETH box open roll the
-    ///      whale-pass boon (type 28). The open-time seed is keccak256(rngWord, player, day, amount);
-    ///      WHALE_OWNER_LABEL pins `player`, WHALE_WEI pins `amount`, and the fixture day is stable,
-    ///      so this word deterministically fires the heavy 100-iter _activateWhalePass branch. Found
-    ///      by the correction-pass search (trial 50 of keccak256("ww", trial) for this owner+amount).
-    function _whalePassRngWord() internal pure returns (uint256) {
-        return uint256(keccak256(abi.encode("ww", uint256(50))));
     }
 
     function _subCost() internal view returns (uint256) {

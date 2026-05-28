@@ -79,11 +79,6 @@ contract BurnieCoin {
     /// @notice Emitted on a terminal decimator (death bet) burn.
     event TerminalDecimatorBurn(address indexed player, uint256 amountBurned);
 
-    /// @notice Emitted when the AF_KING keeper burns a player's subscription charge.
-    /// @param user The player whose BURNIE was burned for the keeper charge.
-    /// @param amountBurned The amount burned (18 decimals); all-or-nothing, equals the requested amount.
-    event KeeperBurn(address indexed user, uint256 amountBurned);
-
     /// @notice Emitted when virtual coin is escrowed to the vault reserve.
     /// @param sender The contract that escrowed the funds (VAULT or GAME).
     /// @param amount The amount added to vault mint allowance (18 decimals).
@@ -105,9 +100,6 @@ contract BurnieCoin {
 
     /// @notice Caller is not the authorized ContractAddresses.VAULT contract.
     error OnlyVault();
-
-    /// @notice Caller is not the authorized ContractAddresses.AF_KING keeper.
-    error OnlyAfKing();
 
     /// @notice Requested amount exceeds available balance or allowance.
     error Insufficient();
@@ -458,35 +450,6 @@ contract BurnieCoin {
         _mint(to, amount);
     }
 
-    /// @notice Burn `amount` BURNIE from `user` for the AF_KING keeper subscription charge.
-    /// @dev Access: AF_KING only (onlyAfKing modifier). ALL-OR-NOTHING: a burn cannot be refunded,
-    ///      so the capacity decision precedes any state change. The source is the player's spendable
-    ///      total — wallet `balanceOf` plus pending coinflip winnings (`previewClaimCoinflips`). If that
-    ///      total is below `amount`, nothing is burned and 0 is returned (the keeper skips the charge);
-    ///      otherwise exactly `amount` is burned drawing from balance first then pending coinflip, and
-    ///      `amount` is returned. The balance-first draw mirrors burnCoin: _consumeCoinflipShortfall
-    ///      consumes only the shortfall above balance, then _burn destroys the wallet remainder.
-    /// @param user The player to charge.
-    /// @param amount The amount of BURNIE to burn (18 decimals).
-    /// @return burned `amount` on a full burn, or 0 when the spendable total cannot cover `amount`.
-    function burnForKeeper(
-        address user,
-        uint256 amount
-    ) external onlyAfKing returns (uint256 burned) {
-        if (amount == 0) return 0;
-        uint256 available = balanceOf[user];
-        unchecked {
-            available += coinflip.previewClaimCoinflips(user);
-        }
-        // All-or-nothing: if the spendable total cannot cover the charge, burn nothing.
-        if (available < amount) return 0;
-
-        uint256 consumed = _consumeCoinflipShortfall(user, amount);
-        _burn(user, amount - consumed);
-        emit KeeperBurn(user, amount);
-        return amount;
-    }
-
     function _claimCoinflipShortfall(address player, uint256 amount) private {
         if (amount == 0) return;
         if (degenerusGame.rngLocked()) return;
@@ -526,7 +489,6 @@ contract BurnieCoin {
       |  +------------------------+----------------------------------------+ |
       |  |  onlyGame              | GAME only                              | |
       |  |  onlyVault             | VAULT only                             | |
-      |  |  onlyAfKing            | AF_KING only                           | |
       |  +-----------------------------------------------------------------+ |
       +======================================================================+*/
 
@@ -541,13 +503,6 @@ contract BurnieCoin {
     ///      Used for: vaultMintTo.
     modifier onlyVault() {
         if (msg.sender != ContractAddresses.VAULT) revert OnlyVault();
-        _;
-    }
-
-    /// @dev Restricts access to the ContractAddresses.AF_KING keeper only.
-    ///      Used for: burnForKeeper (all-or-nothing subscription charge).
-    modifier onlyAfKing() {
-        if (msg.sender != ContractAddresses.AF_KING) revert OnlyAfKing();
         _;
     }
 

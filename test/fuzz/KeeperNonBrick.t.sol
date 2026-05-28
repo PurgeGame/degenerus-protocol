@@ -81,6 +81,7 @@ contract KeeperNonBrick is DeployProtocol {
     uint256 private constant AFK_SWEEP_PACKED_SLOT = 4;     // _autoBuyDay (uint32) + _autoBuyCursor (uint224)
     uint256 private constant AFK_OFF_DAILY = 0;             // uint8  dailyQuantity  (byte 0)
     uint256 private constant AFK_OFF_LASTSWEPT = 1;         // uint32 lastAutoBoughtDay    (bytes 1..4)
+    uint256 private constant AFK_OFF_VALIDTHROUGHLEVEL = 5; // uint32 validThroughLevel (bytes 5..8) — v50.0 AFSUB-01 in-place repurpose
     /// @dev SubscriptionExpired(address indexed player, uint8 reason). reason 1 = AutoPause, 2 = CancelReclaim.
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
 
@@ -412,10 +413,10 @@ contract KeeperNonBrick is DeployProtocol {
     ///         via setDailyQuantity(0), and afterward its full keeper pool ETH is withdrawable. The
     ///         CEI withdraw cannot be blocked by any downstream interaction.
     function testCancelThenWithdrawAlwaysSucceeds() public {
-        // Self-subscribe (player == msg.sender, hasAnyLazyPass(player) is false → paid path, but we
-        // fund BURNIE so subscribe succeeds), then deposit pool ETH.
+        // Self-subscribe (player == msg.sender). Under v50.0 AFSUB-01 subscribe never charges BURNIE
+        // (the v49 "no pass → paid path" branch was retired — `validThroughLevel = lazyPassHorizon(player)`
+        // is encoded in place, no BURNIE keeper-burn). Deposit pool ETH via the subscribe msg.value.
         uint256 poolEth = 3 ether;
-        _fundBurnieForSubscribe(player);
         vm.prank(player);
         afKing.subscribe{value: poolEth}(address(0), false, true, 1, 0, address(0));
         assertEq(afKing.poolOf(player), poolEth, "pool credited by subscribe msg.value");
@@ -441,7 +442,7 @@ contract KeeperNonBrick is DeployProtocol {
         uint256 poolEth = bound(uint256(poolWei), 1, 100 ether);
         uint256 first = bound(uint256(firstWithdraw), 0, poolEth);
 
-        _fundBurnieForSubscribe(player);
+        // v50.0 AFSUB-01: no BURNIE pre-fund needed for subscribe.
         vm.prank(player);
         afKing.subscribe{value: poolEth}(address(0), false, true, 1, 0, address(0));
 
@@ -516,8 +517,9 @@ contract KeeperNonBrick is DeployProtocol {
     ///         revert and rolled the auto-pause back; the fix commits it. Both the auto-pause and the
     ///         window-renewal branches set didWork identically, so this also covers the renewal-only case.
     function testRenewalOrAutoPauseOnlyChunkCommits() public {
-        // A NORMAL sub: approved, ticket mode (no lootbox floor), NOT renewal-due (paidThroughDay >
-        // today so the day-31 branch is skipped), but pool EMPTY so the funding-skip kills it.
+        // A NORMAL sub: approved, ticket mode (no lootbox floor), NOT at the v50.0 AFSUB-03 crossing
+        // (`currentLevel <= sub.validThroughLevel` holds via the deity sentinel — see _setupAutoBuySubs),
+        // but pool EMPTY so the funding-skip kills it.
         address[] memory subs = _setupAutoBuySubs(1, "apo_");
         address sub = subs[0];
 
@@ -585,6 +587,57 @@ contract KeeperNonBrick is DeployProtocol {
         for (uint256 i = 1; i < N; i += 2) {
             assertEq(_afkLastAutoBoughtDayOf(subs[i]), today, "active sub bought this day (spam-cancel missed no buy)");
         }
+    }
+
+    // =========================================================================
+    // v50.0 AFSUB-03 -- no-brick under heavy pass-eviction (concurrent crossings)
+    // =========================================================================
+
+    /// @notice v50.0 AFSUB-03 no-brick: under heavy concurrent pass-expiration (many subs whose
+    ///         `validThroughLevel` is below `currentLevel` simultaneously), `autoBuy` MUST NOT revert
+    ///         AND the H-CANCEL-SWAP-MISS class (missed-day / mint-streak-reset) does NOT reproduce.
+    ///         The eviction routes through the v50.0 tombstone-then-reclaim shape (Pitfall P6),
+    ///         which preserves the swap-pop invariant — every evicted slot's swap-pop occupant is
+    ///         re-evaluated at THIS index this same autoBuy.
+    /// @dev    The test forces the scenario by directly poking `validThroughLevel = 0` on every test
+    ///         sub via `vm.store` (no need to advance the real game level beyond 1); bumping
+    ///         `game.level` to 1 is sufficient to trigger the AFSUB-03 crossing for every test sub.
+    function testNoBrickUnderHeavyPassEviction() public {
+        uint256 N = 6;
+        address[] memory subs = _setupAutoBuySubs(N, "evict_brick_");
+
+        // Force every test sub into the crossing branch: validThroughLevel = 0, bump game.level to 1.
+        // (No deity bit granted → lazyPassHorizon = 0 for all; every sub will EVICT, none will refresh.)
+        // DegenerusGameStorage slot 0 packs `uint24 level` at bytes 14..16 (Plan 335-06 helper-fix:
+        // the v49-era low-24-bits assumption was incorrect — level sits at byte offset 14).
+        for (uint256 i; i < N; i++) {
+            _setValidThroughLevel(subs[i], 0);
+        }
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        uint256 levelMask = uint256(0xFFFFFF) << (14 * 8);
+        if (uint24((slot0 & levelMask) >> (14 * 8)) == 0) {
+            slot0 = (slot0 & ~levelMask) | (uint256(1) << (14 * 8));
+            vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
+        }
+
+        // The autoBuy MUST NOT revert despite the concurrent mass-eviction. The unified router's
+        // `_autoBuy` walks each slot, hits the crossing predicate, takes the EVICT branch
+        // (sub.dailyQuantity = 0; _removeFromSet; emit SubscriptionExpired(.,1); continue WITHOUT
+        // advancing the cursor), and every swap-pop occupant gets re-evaluated at the same slot.
+        vm.recordLogs();
+        vm.prank(makeAddr("evict_brick_keeper"));
+        afKing.autoBuy(afKing.subscriberCount() + 5); // MUST NOT revert (no-brick property)
+
+        // Every test sub is now evicted (tombstone + out of set). The set length contracted by
+        // exactly N (the deploy subs survived their crossing — VAULT has the permanent deity bit).
+        for (uint256 i; i < N; i++) {
+            assertEq(afKing.subscriptionOf(subs[i]).dailyQuantity, 0, "evicted sub dailyQuantity zeroed");
+            assertEq(_afkSubscriberIndexOf(subs[i]), 0, "evicted sub swap-popped out of the set");
+        }
+        // The H-CANCEL-SWAP-MISS class does NOT reproduce under AFSUB-03: there is no relocated
+        // pending tail behind the cursor (the EVICT continue does not advance the cursor, so the
+        // swap-pop occupant is re-read at the freed slot this iteration — same shape as the v47
+        // cancel-tombstone reclaim).
     }
 
     /// @notice empty-chunk no-op: a genuinely-empty chunk -- no buy, no reclaim, no auto-pause, no
@@ -815,6 +868,17 @@ contract KeeperNonBrick is DeployProtocol {
         bytes32 slot = keccak256(abi.encode(who, uint256(AFK_SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(afKing), slot));
         return uint32(packed >> (AFK_OFF_LASTSWEPT * 8));
+    }
+
+    /// @dev v50.0 AFSUB-03 helper: pin `who`'s validThroughLevel (bytes 5..8 of the packed Sub slot)
+    ///      to a specific value. Used by `testNoBrickUnderHeavyPassEviction` to force a mass crossing
+    ///      scenario without advancing the real game level via gameplay.
+    function _setValidThroughLevel(address who, uint32 level) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(AFK_SUBOF_SLOT)));
+        uint256 packed = uint256(vm.load(address(afKing), slot));
+        packed &= ~(uint256(0xFFFFFFFF) << (AFK_OFF_VALIDTHROUGHLEVEL * 8));
+        packed |= (uint256(level) << (AFK_OFF_VALIDTHROUGHLEVEL * 8));
+        vm.store(address(afKing), slot, bytes32(packed));
     }
 
     /// @dev Force the AfKing autoBuy cursor to 0 while keeping _autoBuyDay == today, so the next autoBuy

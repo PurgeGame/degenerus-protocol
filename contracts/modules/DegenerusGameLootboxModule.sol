@@ -80,8 +80,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player The player who won the jackpot
     /// @param day The day index of the jackpot
     /// @param lootboxAmount The ETH amount of the lootbox
-    /// @param targetLevel The target level for the jackpot
-    /// @param tickets Tickets per level granted by the whale pass reward
+    /// @param targetLevel Level AT BOX-OPEN TIME (`level + 1`) — historical
+    ///        context only. v50.0 WHALE-01 defers ticket queuing to the player-
+    ///        paid `claimWhalePass` endpoint at WhaleModule:1018; tickets actually
+    ///        get queued at the level when the beneficiary calls `claimWhalePass`,
+    ///        which may be greater than this value (the player can delay the claim).
+    /// @param tickets Tickets per level the materialized whale pass grants
     /// @param statsBoost Reserved for future use (always 0)
     /// @param frozenUntilLevel Reserved for future use (always 0)
     event LootBoxWhalePassJackpot(
@@ -201,12 +205,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Whale bundle standard price (used for whale discount boon EV estimation).
     uint256 private constant WHALE_BUNDLE_STANDARD_PRICE =
         4 ether;
-    /// @dev Whale pass standard tickets per level.
+    /// @dev Whale pass standard tickets per level. Reported in the
+    ///      LootBoxWhalePassJackpot event for downstream indexers; the
+    ///      actual ticket materialization lives at WhaleModule:1018
+    ///      (claimWhalePass) post-v50.0 WHALE-01.
     uint32 private constant WHALE_PASS_TICKETS_PER_LEVEL = 2;
-    /// @dev Whale pass bonus tickets per level for early levels.
-    uint32 private constant WHALE_PASS_BONUS_TICKETS_PER_LEVEL = 40;
-    /// @dev Last level eligible for whale pass bonus tickets.
-    uint24 private constant WHALE_PASS_BONUS_END_LEVEL = 10;
     /// @dev Deity pass base price (used for deity discount boon EV estimation).
     uint256 private constant DEITY_PASS_BASE = 24 ether;
     /// @dev 10% bonus in basis points for coinflip boon
@@ -1234,30 +1237,20 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         valueWei = (burnieAmount * priceWei) / PRICE_COIN_UNIT;
     }
 
-    /// @dev Activate a 100-level whale pass for a player.
-    ///      Applies the same mint/streak bonuses as a whale bundle purchase.
-    /// @return ticketStartLevel The first level tickets are queued for.
-    function _activateWhalePass(
-        address player
-    ) private returns (uint24 ticketStartLevel) {
-        uint24 passLevel = level + 1;
-
-        ticketStartLevel = passLevel;
-
-        _applyWhalePassStats(player, ticketStartLevel);
-
-        // Queue tickets: 40/lvl for bonus levels (passLevel to 10), 2/lvl for the rest
-        for (uint24 i = 0; i < 100; ) {
-            uint24 lvl = ticketStartLevel + i;
-            bool isBonus = (lvl >= passLevel && lvl <= WHALE_PASS_BONUS_END_LEVEL);
-            _queueTickets(
-                player,
-                lvl,
-                isBonus ? WHALE_PASS_BONUS_TICKETS_PER_LEVEL : WHALE_PASS_TICKETS_PER_LEVEL,
-                false
-            );
-            unchecked { ++i; }
-        }
+    /// @dev Activate a 100-level whale pass for a player by recording an O(1)
+    ///      pending claim (D-20). Pre-v50.0 this was an inline 100-iteration
+    ///      `_queueTickets` mint at box-open time; the loop is retired by
+    ///      WHALE-01 so opens become uniform O(1) regardless of pass status.
+    ///      Materialization (stats + 100 levels × tickets) is deferred to the
+    ///      player-paid `claimWhalePass` endpoint at WhaleModule:1018, where
+    ///      the stats helper is applied immediately after the read-then-zero
+    ///      of `whalePassClaims[player]` (D-04 — timing shifts from open-time
+    ///      to claim-time; the two other stats callers at WhaleModule:1032 +
+    ///      DecimatorModule:588 stay immediate-apply, untouched).
+    function _activateWhalePass(address player) private {
+        // O(1) record of one half-pass claim (D-21 per-boon shape locked).
+        // Mirrors PayoutUtils:52 and JackpotModule:1410's existing writers.
+        whalePassClaims[player] += 1;
     }
 
     /// @dev Calculate total weight and average max boon value (in ETH) for EV budgeting.
@@ -1633,9 +1626,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         // Whale pass (type 28) — no boon mapping access, delegates to _activateWhalePass
         if (boonType == BOON_WHALE_PASS) {
-            uint24 startLevel = _activateWhalePass(player);
+            _activateWhalePass(player);
             if (!isDeity) {
-                emit LootBoxWhalePassJackpot(player, day, originalAmount, startLevel, WHALE_PASS_TICKETS_PER_LEVEL, 0, 0);
+                // `targetLevel` records the level AT BOX-OPEN TIME for historical
+                // context; v50.0 WHALE-01 defers actual ticket queuing to claim-
+                // time at WhaleModule:1018, so the queued tickets start at the
+                // level when the player calls claimWhalePass — not necessarily
+                // `level + 1` here.
+                emit LootBoxWhalePassJackpot(player, day, originalAmount, level + 1, WHALE_PASS_TICKETS_PER_LEVEL, 0, 0);
             }
             return;
         }

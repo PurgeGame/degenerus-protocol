@@ -16,10 +16,14 @@ enum MintPaymentKind {
 /// @notice Minimal owner-less call surface into the protocol GAME contract.
 /// @dev Signatures match `contracts/DegenerusGame.sol` verbatim: `batchPurchase`
 ///      is the AF_KING-gated batched mint (the keeper is the sole authorized
-///      caller); `hasAnyLazyPass` is the exposed lazy-pass view; the rest are the
-///      operator-approval / pricing / claimable views the autoBuy reads. The keeper
-///      holds NO immutable IGame field — every call site is inline
-///      `IGame(ContractAddresses.GAME).foo()`.
+///      caller); `level()` is the auto-getter for the current game level; the
+///      `lazyPassHorizon` view is the v50.0 AFSUB pass-gating producer (D-11),
+///      read once at subscribe-time and exactly once at the autoBuy crossing
+///      branch; the rest are the operator-approval / pricing / claimable views
+///      the autoBuy reads. Call sites use the compile-time constant handle
+///      `GAME` (declared in the contract body); no immutable IGame field is
+///      held — `ContractAddresses` remains the protocol's single source of
+///      truth for the address.
 interface IGame {
     function isOperatorApproved(address owner, address operator) external view returns (bool);
 
@@ -32,7 +36,8 @@ interface IGame {
     function rngLocked() external view returns (bool);
     function mintPrice() external view returns (uint256);
     function claimableWinningsOf(address player) external view returns (uint256);
-    function hasAnyLazyPass(address player) external view returns (bool);
+    function level() external view returns (uint24);
+    function lazyPassHorizon(address player) external view returns (uint24);
 
     // Router-surface rows the doWork router calls on GAME (match DegenerusGame).
     function advanceGame() external returns (uint8 mult);
@@ -40,21 +45,6 @@ interface IGame {
     function advanceDue() external view returns (bool);
     function boxesPending() external view returns (bool);
     function keeperSnapshot(address[] calldata players) external view returns (uint256 mintPriceWei, bool rngLocked_, uint256[] memory claimables);
-}
-
-/// @title IBurnie
-/// @notice Minimal call surface into the protocol BURNIE coin for the keeper's
-///         subscription charge.
-/// @dev `burnForKeeper(user, amount) returns (uint256 burned)` matches
-///      `contracts/BurnieCoin.sol` verbatim. ALL-OR-NOTHING: when the player's
-///      spendable total (wallet balance + pending coinflip stake) cannot cover
-///      `amount`, NOTHING is burned and 0 is returned. The charge is a pure sink
-///      — burned BURNIE leaves supply; it is never transferred to the keeper, so
-///      the keeper holds no BURNIE custody and runs no payment pool. The BurnieCoin
-///      side gates `burnForKeeper` to `ContractAddresses.AF_KING` via `onlyAfKing`;
-///      the keeper IS that pinned address and does not re-check.
-interface IBurnie {
-    function burnForKeeper(address user, uint256 amount) external returns (uint256 burned);
 }
 
 /// @title ICoinflip
@@ -74,19 +64,26 @@ interface ICoinflip {
 ///         `subscriptionOf(address) returns (Sub memory)` name the type without
 ///         `AfKing.Sub` namespacing.
 /// @dev Maximal-packing layout (single 32-byte slot):
-///        offset 0  uint8   dailyQuantity   — 0 = paused / never-subscribed (minimum 1 when active)
-///        offset 1  uint32  lastAutoBoughtDay    — keeper-local day index of the last successful buy
-///        offset 5  uint32  paidThroughDay  — 30-day rolling prepay window endpoint
-///        offset 9  uint8   reinvestPct     — claimable reinvest percentage (0..100), 0 = no reinvest
-///        offset 10 uint8   flags           — bit 0 = windowPaid, bit 1 = drainGameCreditFirst, bit 2 = useTickets
-///        offset 11 address fundingSource   — wallet whose _poolOf ETH + BURNIE fund this sub; address(0) = self
+///        offset 0  uint8   dailyQuantity     — 0 = paused / never-subscribed (minimum 1 when active)
+///        offset 1  uint32  lastAutoBoughtDay  — keeper-local day index of the last successful buy
+///        offset 5  uint32  validThroughLevel — game-level horizon through which the sub's pass coverage
+///                                              extends (`lazyPassHorizon` snapshot at subscribe; refreshed
+///                                              on crossing; deity sentinel = `type(uint24).max`; non-pass = 0)
+///        offset 9  uint8   reinvestPct       — claimable reinvest percentage (0..100), 0 = no reinvest
+///        offset 10 uint8   flags             — bit 0 freed (was windowPaid; retired v50.0 AFSUB-01),
+///                                              bit 1 = drainGameCreditFirst, bit 2 = useTickets
+///        offset 11 address fundingSource     — wallet whose _poolOf ETH funds this sub; address(0) = self
 ///      Offset 31 is free padding. Storage slots 0-3 (the four state
 ///      mappings/array below) are pinned; this struct occupies a single slot
 ///      reached through `_subOf` at slot 1.
+///      v50.0 AFSUB: slot offset 5 was `paidThroughDay` (30-day BURNIE prepay window
+///      endpoint); repurposed in place to `validThroughLevel`. Width unchanged
+///      (uint32 — zero packing churn) so the assignment from the `uint24`
+///      `lazyPassHorizon` view casts up cleanly.
 struct Sub {
     uint8 dailyQuantity;
     uint32 lastAutoBoughtDay;
-    uint32 paidThroughDay;
+    uint32 validThroughLevel;
     uint8 reinvestPct;
     uint8 flags;
     address fundingSource;
@@ -99,10 +96,15 @@ struct Sub {
 ///         active subscribers and earns a gas-pegged bounty per successful player.
 /// @dev No admin. No upgrade. No owner. No fallback. No multicall. `receive()` is
 ///      the only untyped entrypoint and credits msg.sender's pool. The keeper
-///      holds NO immutable BURNIE/IGAME/ICOINFLIP references — every protocol call
-///      is inline `IGame(ContractAddresses.GAME)` / `IBurnie(ContractAddresses.COIN)`
-///      / `ICoinflip(ContractAddresses.COINFLIP)`. The constructor sets only the
-///      three economic immutables with sanity reverts.
+///      holds NO immutable IGAME/ICOINFLIP references — every protocol call
+///      flows through the compile-time constant handles `GAME` /
+///      `COINFLIP` declared at the top of the contract body, which resolve
+///      to `IGame(ContractAddresses.GAME)` and `ICoinflip(ContractAddresses.COINFLIP)`.
+///      v50.0 AFSUB-01: the BURNIE subscription window is retired — the keeper no
+///      longer calls BurnieCoin's `burnForKeeper`; subscriptions are pass-gated
+///      via `GAME.lazyPassHorizon`. The constructor sets only the three economic
+///      immutables with sanity reverts (`SUB_COST_ETH_TARGET` is retained for
+///      possible future re-use; under v50.0 it is unreferenced by any code path).
 /// @custom:invariant Steady-state: sum(_poolOf) <= address(this).balance.
 /// @custom:invariant No reentrancy guard — strict CEI everywhere; the keeper is
 ///                   never a payee in any contract it calls.
@@ -112,6 +114,20 @@ struct Sub {
 ///                   `ContractAddresses.VAULT` / `SDGNRS` identity — there is no
 ///                   settable exemption flag.
 contract AfKing {
+    /*------------------------------------------------------------------
+                              Protocol handles (compile-time constants)
+    ------------------------------------------------------------------*/
+    /// @dev Compile-time-typed handles into the two protocol contracts the keeper
+    ///      calls. Both resolve to `address constant`s in `ContractAddresses.sol`,
+    ///      so each call site compiles to a literal `PUSH20` — zero storage slots,
+    ///      no constructor wiring, no immutable bytecode slots, and the
+    ///      ContractAddresses library remains the protocol's single source of
+    ///      truth for these addresses. Mirrors the same pattern used by
+    ///      `DegenerusGameStorage.sol:136-147` for `coin` / `coinflip` / `quests` /
+    ///      `affiliate` / `dgnrs`.
+    IGame internal constant GAME = IGame(ContractAddresses.GAME);
+    ICoinflip internal constant COINFLIP = ICoinflip(ContractAddresses.COINFLIP);
+
     /*------------------------------------------------------------------
                               Custom errors
     ------------------------------------------------------------------*/
@@ -138,10 +154,6 @@ contract AfKing {
     /// @dev NotSubscribed: setDailyQuantity / setDrainGameCreditFirst / setMode /
     ///      setReinvestPct called while the caller is not in the iterable set.
     error NotSubscribed();
-    /// @dev BurnieChargeFailed: subscribe paid-path got `burned != cost` back from
-    ///      the all-or-nothing `burnForKeeper` — the player lacked sufficient
-    ///      spendable BURNIE.
-    error BurnieChargeFailed();
     /// @dev IndexOutOfBounds: subscriberAt(idx) with idx >= _subscribers.length.
     error IndexOutOfBounds();
     /// @dev NoWork: doWork() found no pending work in any category (all 3 O(1) predicates empty).
@@ -176,13 +188,13 @@ contract AfKing {
     event PlayerSkipped(address indexed player, uint8 reason);
     /// @dev Emitted once at the end of each successful autoBuy, after the bounty payout.
     event AutoBuyCompleted(address indexed caller, uint256 successfulPlayers, uint256 bountyEarned);
-    /// @dev Day-31 PAID auto-extract — emitted after `burnForKeeper` succeeds and
-    ///      paidThroughDay is written.
-    event BurnieAutoExtracted(address indexed player, uint32 day, uint256 burnieAmount);
-    /// @dev Day-31 FREE active-pass auto-extend — emitted after paidThroughDay is reset.
+    /// @dev Pass-validity refresh — emitted at the AFSUB-03 crossing branch when
+    ///      the keeper re-reads `lazyPassHorizon(player)` and the subscriber's
+    ///      coverage extends to or beyond the current level. Writes the new
+    ///      validThroughLevel and continues without eviction.
     event SubscriptionExtendedFree(address indexed player, uint32 day);
     /// @dev Subscription removed from the iterable set. `reason`:
-    ///        1 = AutoPause (day-31 burnForKeeper shortfall OR funding-skip kill of a NORMAL sub)
+    ///        1 = AutoPause (AFSUB-03 pass-eviction at crossing OR funding-skip kill of a NORMAL sub)
     ///        2 = CancelReclaim (in-autoBuy reclaim of an externally-cancelled `dailyQuantity == 0` tombstone)
     event SubscriptionExpired(address indexed player, uint8 reason);
 
@@ -216,9 +228,6 @@ contract AfKing {
     /*------------------------------------------------------------------
                               Constants
     ------------------------------------------------------------------*/
-    /// @dev Rolling prepay window length in days. Not configurable post-deploy.
-    uint32 internal constant WINDOW_DAYS = 30;
-
     /// @dev Keeper-local ticket scaling multiplier. TICKET_SCALE = 400 makes the
     ///      cost formula unit-consistent across modes: 400 * dailyQuantity *
     ///      mintPrice / 400 == mintPrice * dailyQuantity, so one dailyQuantity
@@ -228,15 +237,9 @@ contract AfKing {
 
     /// @dev BURNIE-per-ETH conversion unit, sourced verbatim from the protocol
     ///      (`DegenerusGameAdvanceModule` / `BurnieCoinflip` PRICE_COIN_UNIT). The
-    ///      three ETH-target call sites convert to live BURNIE via
+    ///      live BURNIE bounty-credit call site converts via
     ///      `(ethTarget * PRICE_COIN_UNIT) / mintPrice()`.
     uint256 internal constant PRICE_COIN_UNIT = 1000 ether;
-
-    /// @dev windowPaid flag bit within Sub.flags. Set on a successful day-31
-    ///      `burnForKeeper`; cleared on the free active-pass extend. Gates the
-    ///      SUB-07 `_subOf` reclaim — a paid, unexpired window is preserved on
-    ///      cancel; a free or expired window is deleted.
-    uint8 internal constant FLAG_WINDOW_PAID = 1;
 
     /// @dev drainGameCreditFirst bit within Sub.flags — when set the autoBuy spends
     ///      protocol-side claimable credit before tapping pool ETH.
@@ -337,15 +340,16 @@ contract AfKing {
     ///      check); otherwise the caller must be a game operator the player
     ///      approved (`IGame.isOperatorApproved(player, msg.sender)`). Authorization
     ///      is NEVER re-checked at autoBuy.
-    /// @dev SUB-01 pass-OR-pay gate fires LAST (CEI: effects first, interaction
-    ///      last). Active lazy pass (`IGame.hasAnyLazyPass(player)`) → free 30-day
-    ///      extend-from-endpoint with no charge, and windowPaid is CLEARED (the
-    ///      window is free, nothing to preserve on a later cancel). No pass →
-    ///      all-or-nothing `burnForKeeper` charge; on a full burn windowPaid is
-    ///      SET, on a shortfall the whole call reverts BurnieChargeFailed.
+    /// @dev AFSUB-02 pass-gating: subscribe encodes the subscriber's current pass
+    ///      horizon (`IGame.lazyPassHorizon(subscriber)`) into `Sub.validThroughLevel`
+    ///      with a SINGLE external read. No BURNIE charge — the v50.0 pass-gated
+    ///      model replaces the 30-day BURNIE prepay window (AFSUB-01). The per-iter
+    ///      autoBuy validity check is the cheap stored-field compare
+    ///      `currentLevel <= sub.validThroughLevel`; at the crossing
+    ///      (`currentLevel > validThroughLevel`) the keeper re-reads the horizon
+    ///      EXACTLY ONCE and refresh-or-evicts (AFSUB-03).
     /// @dev msg.value > 0 always credits the resolved player's pool via the
-    ///      canonical Deposited event before the pass gate; msg.value never
-    ///      participates in the BURNIE cost.
+    ///      canonical Deposited event.
     /// @param player Subscriber to act for (0 or msg.sender = self).
     /// @param drainGameCreditFirst When true, the autoBuy spends protocol-side
     ///        claimable credit before tapping pool ETH.
@@ -354,23 +358,17 @@ contract AfKing {
     ///        paused sentinel handled by setDailyQuantity(0).
     /// @param reinvestPct Claimable reinvest percentage, 0..100. The effective
     ///        daily buy is max(dailyQuantity, floor(claimable * reinvestPct / price)).
-    /// @param fundingSource Wallet whose `_poolOf` ETH and BURNIE fund this
-    ///        subscription's keeper spends — the first-window SUB-01 burn, the
-    ///        day-31 auto-extract burn, and the per-day ETH draw all resolve to
-    ///        this address. `address(0)` = self. A non-zero, non-self source is
-    ///        honored ONLY when it has operator-approved the subscriber on the
-    ///        game (`IGame.isOperatorApproved(fundingSource, subscriber)`),
-    ///        checked at subscribe() ONLY — never at the day-31 renewal, never
-    ///        per-draw.
+    /// @param fundingSource Wallet whose `_poolOf` ETH funds this subscription's
+    ///        keeper spends — the per-day ETH draw resolves to this address.
+    ///        `address(0)` = self. A non-zero, non-self source is honored ONLY when
+    ///        it has operator-approved the subscriber on the game
+    ///        (`IGame.isOperatorApproved(fundingSource, subscriber)`), checked at
+    ///        subscribe() ONLY — never per-draw. (OPEN-E preserved.)
     /// @dev Subscribe-time auth only: a later `setOperatorApproval(subscriber,
     ///      false)` by the source does NOT stop an active sub — the renewal trusts
-    ///      the stored source and keeps drawing/burning it. The source halts draws
-    ///      by defunding (`withdraw()` its pool / spending down BURNIE); the
-    ///      subscriber halts by cancelling; re-pointing the source means
-    ///      re-subscribing (which re-checks). BURNIE blast-radius caveat: the same
-    ///      approval also authorizes burning the source's general-wallet BURNIE and
-    ///      pending coinflip — sharper than the pre-funded ETH escrow; the named
-    ///      deferred tighter alternative is a dedicated `allowBurnieFunding[S][M]`.
+    ///      the stored source and keeps drawing it. The source halts draws by
+    ///      defunding (`withdraw()` its pool); the subscriber halts by cancelling;
+    ///      re-pointing the source means re-subscribing (which re-checks).
     function subscribe(
         address player,
         bool drainGameCreditFirst,
@@ -385,7 +383,7 @@ contract AfKing {
         // SUB-02 — self-consent (player == 0 or msg.sender) or operator-approval.
         address subscriber = player == address(0) ? msg.sender : player;
         if (subscriber != msg.sender) {
-            if (!IGame(ContractAddresses.GAME).isOperatorApproved(subscriber, msg.sender)) {
+            if (!GAME.isOperatorApproved(subscriber, msg.sender)) {
                 revert NotApproved();
             }
         }
@@ -396,24 +394,18 @@ contract AfKing {
         if (
             fundingSource != address(0) &&
             fundingSource != subscriber &&
-            !IGame(ContractAddresses.GAME).isOperatorApproved(fundingSource, subscriber)
+            !GAME.isOperatorApproved(fundingSource, subscriber)
         ) {
             revert NotApproved();
         }
 
-        // msg.value > 0 credits the subscriber's pool. Effects-first CEI; never
-        // participates in the BURNIE cost.
+        // msg.value > 0 credits the subscriber's pool. Effects-first CEI.
         if (msg.value > 0) {
             _poolOf[subscriber] += msg.value;
             emit Deposited(subscriber, msg.value);
         }
 
         Sub storage s = _subOf[subscriber];
-        uint32 today = _currentDay();
-
-        // Extend-from-endpoint: anchor = max(paidThroughDay, today); new endpoint
-        // = anchor + WINDOW_DAYS.
-        uint32 anchor = s.paidThroughDay > today ? s.paidThroughDay : today;
 
         s.dailyQuantity = dailyQuantity;
         if (drainGameCreditFirst) s.flags |= FLAG_DRAIN_FIRST;
@@ -421,26 +413,14 @@ contract AfKing {
         if (useTickets) s.flags |= FLAG_USE_TICKETS;
         else s.flags &= ~FLAG_USE_TICKETS;
         s.reinvestPct = reinvestPct;
-        s.paidThroughDay = anchor + WINDOW_DAYS;
+        // AFSUB-02 — single external read; encodes the subscriber's pass horizon
+        // into the stored field the per-iter check + crossing branch compare against.
+        // Deity sentinel = type(uint24).max via the lazyPassHorizon view (D-11).
+        s.validThroughLevel = uint32(GAME.lazyPassHorizon(subscriber));
         s.fundingSource = fundingSource;
 
         _addToSet(subscriber);
         emit SubscriptionUpdated(subscriber, dailyQuantity, drainGameCreditFirst, useTickets, reinvestPct, s.fundingSource);
-
-        // SUB-01 pass-OR-pay gate (interaction last). Active pass → free extend,
-        // clear windowPaid. No pass → all-or-nothing burn, set windowPaid.
-        if (IGame(ContractAddresses.GAME).hasAnyLazyPass(subscriber)) {
-            s.flags &= ~FLAG_WINDOW_PAID;
-        } else {
-            uint256 mp = IGame(ContractAddresses.GAME).mintPrice();
-            uint256 cost = (SUB_COST_ETH_TARGET * PRICE_COIN_UNIT) / mp;
-            uint256 burned = IBurnie(ContractAddresses.COIN).burnForKeeper(
-                s.fundingSource == address(0) ? subscriber : s.fundingSource,
-                cost
-            );
-            if (burned != cost) revert BurnieChargeFailed();
-            s.flags |= FLAG_WINDOW_PAID;
-        }
     }
 
     /// @notice Update caller's daily buy units. q == 0 is the in-place tombstone
@@ -449,12 +429,14 @@ contract AfKing {
     /// @dev SUB-07 tombstone-on-cancel: cancel only writes `dailyQuantity = 0` (the
     ///      "paused" sentinel) and leaves the entry in the iterable set — it moves
     ///      nothing, so it can never relocate an unprocessed entry behind the chunked
-    ///      autoBuy cursor. The `_subOf` record stays readable; the delete-vs-preserve
-    ///      decision (keep the paid window iff windowPaid set AND paidThroughDay >
-    ///      today, else delete) is applied by the in-autoBuy reclaim when the autoBuy
-    ///      reaches the tombstone. Reactivation (q > 0) flips the sentinel back in
-    ///      place with no set churn (the entry never left the set). Stranded
-    ///      `_poolOf` ETH always stays withdrawable.
+    ///      autoBuy cursor. The `_subOf` record stays readable; the in-autoBuy
+    ///      reclaim deletes `_subOf` and swap-pops the entry out when the autoBuy
+    ///      reaches the tombstone. Under v50.0 AFSUB-01 the pre-edit
+    ///      delete-vs-preserve decision (which kept `_subOf` when the BURNIE
+    ///      prepay window was paid + unexpired) is moot — every cancel = full
+    ///      delete. Reactivation (q > 0) flips the sentinel back in place with no
+    ///      set churn (the entry never left the set). Stranded `_poolOf` ETH
+    ///      always stays withdrawable.
     function setDailyQuantity(uint8 q) external {
         if (_subscriberIndex[msg.sender] == 0) revert NotSubscribed();
         Sub storage s = _subOf[msg.sender];
@@ -542,15 +524,20 @@ contract AfKing {
     /// @dev RD-2 — the buy path carries NO rngLock guard (buys are freeze-safe by
     ///      construction; a box queues at the current LR_INDEX, pre-entropy, and the
     ///      orphan hazard is defended on the resolution side via the autoOpen word-gate).
-    /// @dev Per-player ladder: (1) AlreadyAutoBoughtToday skip; (2) day-31 auto-extract
-    ///      (free pass-extend OR all-or-nothing burnForKeeper, auto-pause on
-    ///      shortfall); (3) cost + mode + payKind funding waterfall (claimable read once
-    ///      via keeperSnapshot, GASOPT-03); (4) LootboxFloor transient skip; (5)
-    ///      InsufficientPool — NORMAL sub is CANCELLED via swap-pop (two-tier kill),
-    ///      Vault/sDGNRS are EXEMPT (no-op-and-retry) by pinned identity; (6) CEI debit +
-    ///      day-stamp. The batched `IGame.batchPurchase` call carries one slice per
-    ///      successful player and fires once after the per-player accounting loop; CEI
-    ///      debit happens before the batched call, day-stamp after.
+    /// @dev Per-player ladder: (0) cancel-tombstone reclaim (in-set
+    ///      `dailyQuantity == 0` → swap-pop, no cursor advance — SUB-07 + v49
+    ///      swap-pop preserved); (1) AlreadyAutoBoughtToday skip; (2) AFSUB-02/03
+    ///      pass-validity gate (non-crossing path is the pure stored-field compare
+    ///      `currentLevel <= sub.validThroughLevel`; at the crossing re-read
+    ///      `lazyPassHorizon` EXACTLY ONCE → refresh-or-evict via tombstone-then-
+    ///      reclaim shape); (3) cost + mode + payKind funding waterfall (claimable
+    ///      read once via keeperSnapshot, GASOPT-03); (4) LootboxFloor transient
+    ///      skip; (5) InsufficientPool — NORMAL sub is CANCELLED via swap-pop
+    ///      (two-tier kill), Vault/sDGNRS are EXEMPT (no-op-and-retry) by pinned
+    ///      identity; (6) CEI debit + day-stamp. The batched `IGame.batchPurchase`
+    ///      call carries one slice per successful player and fires once after the
+    ///      per-player accounting loop; CEI debit happens before the batched call,
+    ///      day-stamp after.
     /// @dev No try/catch and no `nonReentrant` guard. Per-player batch isolation
     ///      lives in the game's `batchPurchase` (per-slice try/catch + slice
     ///      refund); the keeper preserves strict CEI.
@@ -562,7 +549,11 @@ contract AfKing {
         if (maxCount == 0) maxCount = BUY_BATCH;
 
         uint32 today = _currentDay();
-        uint256 mp = IGame(ContractAddresses.GAME).mintPrice();
+        uint256 mp = GAME.mintPrice();
+        // AFSUB-02 — hoist the level read ONCE per autoBuy call so the per-iter
+        // validity check is a pure stored-field compare (no external SLOAD on
+        // the non-crossing path). GASOPT-05 preserved.
+        uint24 currentLevel = GAME.level();
 
         // Daily cursor reset: the first autoBuy of a new keeper-local day restarts
         // the cursor at 0. Within a day the cursor advances monotonically so
@@ -594,19 +585,21 @@ contract AfKing {
             // (0) Cancel-tombstone reclaim. An externally-cancelled sub
             // (setDailyQuantity(0)) is an in-set `dailyQuantity == 0` tombstone:
             // it relocated no one on cancel, so it cannot have pushed a pending
-            // entry behind the cursor. The reclaim applies the deferred
-            // delete-vs-preserve (keep `_subOf` with the sentinel iff the window is
-            // paid and unexpired, else delete), swap-pops it out of the set, and
-            // continues WITHOUT advancing the cursor — the swap-pop occupant (a
-            // mover from ahead, hence still pending) is processed at this slot this
-            // autoBuy. Ordered ahead of the AlreadyAutoBoughtToday skip so a tombstone is
-            // ALWAYS reclaimed (never left as a permanent dead slot), independent of
-            // its `lastAutoBoughtDay`.
+            // entry behind the cursor. The reclaim deletes the `_subOf` record,
+            // swap-pops it out of the set, and continues WITHOUT advancing the
+            // cursor — the swap-pop occupant (a mover from ahead, hence still
+            // pending) is processed at this slot this autoBuy. Ordered ahead of
+            // the AlreadyAutoBoughtToday skip so a tombstone is ALWAYS reclaimed
+            // (never left as a permanent dead slot), independent of its
+            // `lastAutoBoughtDay`. AFSUB-05: the v49 swap-pop / SUB-07 cancel
+            // tombstone invariant (membership ⟺ packed != 0) is preserved by
+            // construction — no cursor advance.
+            // v50.0: the pre-AFSUB `preservePaidWindow` branch (keep `_subOf`
+            // iff windowPaid && paidThroughDay > today) is DROPPED — under
+            // AFSUB-01 there is no BURNIE-prepaid window to preserve; every
+            // cancel = full delete.
             if (sub.dailyQuantity == 0) {
-                bool preservePaidWindow = (sub.flags & FLAG_WINDOW_PAID) != 0 && sub.paidThroughDay > today;
-                if (!preservePaidWindow) {
-                    delete _subOf[player];
-                }
+                delete _subOf[player];
                 _removeFromSet(player);
                 emit SubscriptionExpired(player, 2);
                 didWork = true;
@@ -626,41 +619,30 @@ contract AfKing {
                 continue;
             }
 
-            // (2) Day-31 auto-extract branch. The hasAnyLazyPass view fires only here.
-            if (sub.paidThroughDay <= today) {
-                if (IGame(ContractAddresses.GAME).hasAnyLazyPass(player)) {
-                    // FREE active-pass extend — held-harmless reset; clear windowPaid.
-                    sub.paidThroughDay = today + WINDOW_DAYS;
-                    sub.flags &= ~FLAG_WINDOW_PAID;
+            // (2) AFSUB-02/03 pass-validity gate. Non-crossing path is a pure
+            // stored-field compare (currentLevel <= validThroughLevel) — no
+            // external read. At the crossing the keeper re-reads the horizon
+            // EXACTLY ONCE and refreshes (if still covered) or evicts via
+            // tombstone-then-reclaim (membership ⟺ packed != 0 preserved).
+            if (currentLevel > sub.validThroughLevel) {
+                uint24 h = GAME.lazyPassHorizon(player);
+                if (currentLevel <= h) {
+                    // REFRESH — still covered (newly minted pass, upgrade, etc.).
+                    sub.validThroughLevel = uint32(h);
                     emit SubscriptionExtendedFree(player, today);
                     didWork = true;
                 } else {
-                    // PAID branch — all-or-nothing burnForKeeper. On shortfall the
-                    // burn took nothing, so there is nothing to refund; auto-pause.
-                    uint256 extractCost = (SUB_COST_ETH_TARGET * PRICE_COIN_UNIT) / mp;
-                    uint256 burned = IBurnie(ContractAddresses.COIN).burnForKeeper(
-                        sub.fundingSource == address(0) ? player : sub.fundingSource,
-                        extractCost
-                    );
-                    if (burned != extractCost) {
-                        // Auto-pause: sentinel write, swap-pop, emit, continue
-                        // WITHOUT advancing the cursor (the swap-pop occupant at
-                        // this slot must be processed this autoBuy). windowPaid clears.
-                        sub.dailyQuantity = 0;
-                        sub.flags &= ~FLAG_WINDOW_PAID;
-                        _removeFromSet(player);
-                        emit SubscriptionExpired(player, 1);
-                        didWork = true;
-                        unchecked {
-                            ++processed;
-                        }
-                        continue;
-                    }
-                    // PAID success — held-harmless reset; set windowPaid.
-                    sub.paidThroughDay = today + WINDOW_DAYS;
-                    sub.flags |= FLAG_WINDOW_PAID;
-                    emit BurnieAutoExtracted(player, today, extractCost);
+                    // EVICT — route through tombstone-then-reclaim shape so the
+                    // v49 swap-pop invariant survives (Pitfall P6 — direct mid-
+                    // sweep removal would re-open H-CANCEL-SWAP-MISS).
+                    sub.dailyQuantity = 0;
+                    _removeFromSet(player);
+                    emit SubscriptionExpired(player, 1);
                     didWork = true;
+                    unchecked {
+                        ++processed;
+                    }
+                    continue;
                 }
             }
 
@@ -711,7 +693,6 @@ contract AfKing {
                     continue;
                 }
                 sub.dailyQuantity = 0;
-                sub.flags &= ~FLAG_WINDOW_PAID;
                 _removeFromSet(player);
                 emit SubscriptionExpired(player, 1);
                 didWork = true;
@@ -771,7 +752,7 @@ contract AfKing {
                 mstore(modes, batchLen)
             }
         }
-        IGame(ContractAddresses.GAME).batchPurchase{value: totalValue}(players, amounts, modes);
+        GAME.batchPurchase{value: totalValue}(players, amounts, modes);
 
         // Return the raw successful-buy count; the unified router (doWork) pays the flat
         // per-tx buy bounty (RD-4/D-07). This leg NEVER self-credits. Advance is the sole
@@ -804,7 +785,7 @@ contract AfKing {
         if (sub.reinvestPct > 0 || drainFirst) {
             address[] memory snap = new address[](1);
             snap[0] = player;
-            (, , uint256[] memory cl) = IGame(ContractAddresses.GAME).keeperSnapshot(snap);
+            (, , uint256[] memory cl) = GAME.keeperSnapshot(snap);
             claimable = cl[0];
         }
         uint256 effectiveQty = sub.dailyQuantity;
@@ -848,12 +829,38 @@ contract AfKing {
     ///      ceiling. Buys must NEVER exceed 16.7M (a reverting batch would brick the daily
     ///      buy leg), so the per-call buy count is HARD-bounded here.
     uint256 internal constant BUY_BATCH = 50;
-    /// @dev Open-leg default batch. A typical box open is ~89k gas, so 100 opens ≈ 9M (the
-    ///      ~9M average target). The open leg's `maxCount` is a GAS-WEIGHTED budget
-    ///      (DegenerusGame.autoOpen): a typical box costs 1 weighted unit, a whale-pass box
-    ///      ≈ 60, so the weighted budget bounds the leg at ≤ (OPEN_BATCH−1)×~90k + one
-    ///      whale-pass overshoot ≈ 14.3M < 16.7M for ANY whale-pass mix.
-    uint256 internal constant OPEN_BATCH = 100;
+    /// @dev Open-leg default batch (v50.0 WHALE-03 / Plan 335-06 — measurement-derived flat
+    ///      per-box budget). Under WHALE-01 every box-open is uniform O(1) (the 100-iter
+    ///      _activateWhalePass loop is retired; whale-pass writes the O(1) `whalePassClaims +=`
+    ///      accumulator), so the gas-weighted budget is retired too — `maxCount` is now an
+    ///      opened-count guard, not a gas-weighted unit count.
+    ///      KeeperOpenBoxWorstCaseGas re-run during Plan 335-06 (post-v50 contract diff):
+    ///        - per-box MARGINAL gas, N=32 isolated harness (autoOpen direct):       74_756
+    ///        - per-box MARGINAL gas, N=32 router doWork harness:                    75_941
+    ///        - single-box TOTAL at N=1 (isolated, overhead included):              113_875
+    ///        - single-box TOTAL at N=1 (router doWork, overhead included):         125_939
+    ///        - effective per-box from `testTypicalOpenBatchAveragesNineMillion`
+    ///          (1-ETH lootbox fixture, OPEN_BATCH=220 trial, larger boons rolled):  76_866
+    ///      The fixture-bound effective per-box (~77K) is HIGHER than the synthetic harness
+    ///      measurement (~75K) because the typical-batch fixture uses 1-ETH first-deposit boxes
+    ///      that roll real boons (extra writes per open), so the safe peg is ~77K. Pick formula
+    ///      with the conservative effective per-box:
+    ///        OPEN_BATCH = floor((16_700_000 − HEADROOM) / 76_866), HEADROOM = 125_939 (router
+    ///        single-box TOTAL = 1 full box including doWork overhead).
+    ///        floor((16_700_000 − 125_939) / 76_866) = floor(215.62) = 215.
+    ///      Rounded down to 200 (nearest 50 floor of 215) for SAFE headroom against the typical-
+    ///      batch fixture's effective per-box variance:
+    ///        200 × 76_866 + 125_939 = 15_499_139 ≤ 16_700_000 ✓ (1_200_861 slack ≈ 15.6 boxes).
+    ///      Uniform-O(1) tolerance check (D-02/D-04): under WHALE-01 the per-box cost is uniform
+    ///      across whale-pass and non-whale-pass openers BY CONSTRUCTION (the `_activateWhalePass`
+    ///      body is the same O(1) accumulator for every roll; the boon flag toggles `whalePassClaims`
+    ///      not the loop count) — divergence = 0 < 25% ✓. The intra-fixture variance between bare-
+    ///      harness 74_756 and router-fixture 76_866 is 2.8% (the doWork dispatch overhead +
+    ///      keeper-bound bookkeeping), well under the 25% uniformity bar. The 220 attempt failed
+    ///      at 16_910_554 (= 220 × 76_866 + 38_034 ≈ 16.91M, 1.3% above ceiling) — D-IMPL-04
+    ///      attestation requires a NON-FAILING `testTypicalOpenBatchAveragesNineMillion`, so 200
+    ///      is the final pick.
+    uint256 internal constant OPEN_BATCH = 200;
     /// @dev Advance reward ratio (2x * mult), pegged to the advance base marginal. The
     ///      1/2/4/6 stall ladder (advance-only) is the escalation lever; the ladder peak
     ///      (6x) is faucet-bounded and one-shot per day-advance.
@@ -881,7 +888,7 @@ contract AfKing {
     ///      one-category early-return. TST-02 (Phase 332) is the router->game->creditFlip
     ///      double-pay backstop proving this no-guard disposition.
     function doWork() external {
-        uint256 mp = IGame(ContractAddresses.GAME).mintPrice();
+        uint256 mp = GAME.mintPrice();
         uint256 unit = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / mp;
         uint256 bountyEarned;
 
@@ -893,14 +900,14 @@ contract AfKing {
             if (bought > 0) bountyEarned = (unit * BUY_RATIO_NUM) / BUY_RATIO_DEN;
         }
         // (2) advance — TRUE regardless of rngLock (liveness-critical).
-        else if (IGame(ContractAddresses.GAME).advanceDue()) {
-            uint8 mult = IGame(ContractAddresses.GAME).advanceGame();
+        else if (GAME.advanceDue()) {
+            uint8 mult = GAME.advanceGame();
             // Advance earns 2x * mult; mult == 0 (the gameover path) pays no bounty.
             if (mult > 0) bountyEarned = unit * ADVANCE_RATIO_NUM * mult;
         }
         // (3) autoOpen — FALSE during rngLock (RD-3); opens mid-day-resolved boxes.
-        else if (IGame(ContractAddresses.GAME).boxesPending()) {
-            uint256 opened = IGame(ContractAddresses.GAME).autoOpen(OPEN_BATCH);
+        else if (GAME.boxesPending()) {
+            uint256 opened = GAME.autoOpen(OPEN_BATCH);
             // 1x pro-rated below the knee, flat 1x at/above — kills the small-batch corner.
             uint256 k = opened < OPEN_KNEE ? opened : OPEN_KNEE;
             bountyEarned = (unit * k) / OPEN_KNEE;
@@ -914,7 +921,7 @@ contract AfKing {
         // early-return. Skipped at 0 (e.g. a buy chunk that walked only already-bought subs);
         // the category still ran, so we return rather than reverting NoWork().
         if (bountyEarned > 0) {
-            ICoinflip(ContractAddresses.COINFLIP).creditFlip(msg.sender, bountyEarned);
+            COINFLIP.creditFlip(msg.sender, bountyEarned);
         }
     }
 
@@ -927,7 +934,7 @@ contract AfKing {
     /// @notice Standalone UNREWARDED manual/emergency open clear — only doWork() credits.
     /// @param count Max boxes to open this call.
     function autoOpen(uint256 count) external {
-        IGame(ContractAddresses.GAME).autoOpen(count);
+        GAME.autoOpen(count);
     }
 
     /*------------------------------------------------------------------

@@ -211,8 +211,10 @@ contract KeeperLeversAndPacking is DeployProtocol {
     ///         hot path.
     /// @dev    v47 / OPENE-01: the two prior standalone bools (`drainGameCreditFirst` / `useTickets`)
     ///         were folded into the single `uint8 flags` field, and an `address fundingSource` (20
-    ///         bytes) was added. The post-OPENE-01 `Sub` is six fields summing to 31 used bytes:
-    ///           uint8 dailyQuantity(1) + uint32 lastAutoBoughtDay(4) + uint32 paidThroughDay(4)
+    ///         bytes) was added. v50.0 AFSUB-01 (Plan 335-04 Task 1): the slot 5 field is repurposed
+    ///         in-place to `uint32 validThroughLevel` (same offset, same width, zero packing churn).
+    ///         The post-AFSUB `Sub` is six fields summing to 31 used bytes:
+    ///           uint8 dailyQuantity(1) + uint32 lastAutoBoughtDay(4) + uint32 validThroughLevel(4)
     ///           + uint8 reinvestPct(1) + uint8 flags(1) + address fundingSource(20) = 31 bytes.
     ///         Still <= 32 (one slot); the INTENT — single-slot packing, no NEW hot-path storage —
     ///         is unchanged, only the shape it proves against.
@@ -220,13 +222,13 @@ contract KeeperLeversAndPacking is DeployProtocol {
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
         string memory game_ = _strippedGame();
 
-        // Sub struct: the six v47 fields at their exact widths sum to 31 bytes (<= 32 = one slot).
+        // Sub struct: the six post-AFSUB fields at their exact widths sum to 31 bytes (<= 32 = one slot).
         // Assert each field is byte-present at its width (so a widening regression flips RED). The
         // two standalone bools were removed (folded into `flags`); `fundingSource` (address) added.
         uint256 subBytes =
             _structFieldBytes(afking, "uint8 dailyQuantity;", 1) +
             _structFieldBytes(afking, "uint32 lastAutoBoughtDay;", 4) +
-            _structFieldBytes(afking, "uint32 paidThroughDay;", 4) +
+            _structFieldBytes(afking, "uint32 validThroughLevel;", 4) +
             _structFieldBytes(afking, "uint8 reinvestPct;", 1) +
             _structFieldBytes(afking, "uint8 flags;", 1) +
             _structFieldBytes(afking, "address fundingSource;", 20);
@@ -293,8 +295,11 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(game_, "function _autoOpenBox("), 0, "G7: _autoOpenBox onlySelf wrapper");
         assertGt(_countOccurrences(game_, "if (msg.sender != address(this)) revert E();"), 0, "G7: onlySelf (msg.sender == self) guard byte-present");
 
-        // G8 — burnForKeeper all-or-nothing (AfKing:396 — IBurnie.burnForKeeper).
-        assertGt(_countOccurrences(afking, "burnForKeeper("), 0, "G8: burnForKeeper all-or-nothing charge byte-present");
+        // (The v49 BURNIE keeper-burn all-or-nothing byte-presence assertion is RETIRED under
+        // v50.0 AFSUB-01 — Plan 335-04 deleted the keeper-burn function from both AfKing.sol and
+        // BurnieCoin.sol. There is no replacement guard because the semantics it protected are
+        // gone. The plan-level system-wide grep gate is the new structural attestation — Plan
+        // 335-05 verification §1.)
 
         // G9 — keeper / address gating: batchPurchase AF_KING gate + autoBuy isOperatorApproved.
         assertGt(_countOccurrences(game_, "if (msg.sender != ContractAddresses.AF_KING) revert E();"), 0, "G9: batchPurchase keeper gate");
