@@ -44,76 +44,108 @@
 ## Phase Details
 
 ### Phase 334: SPEC — Design-Lock + MINTDIV Reachability Proof + RNGAUDIT Structure + Call-Graph Attestation
+
 **Goal**: The three contract items' shared signatures are settled in writing so the IMPL phase re-authors a fully reconciled diff with zero "by construction" assumptions, the MINTDIV-01 divergence is PROVEN or REFUTED with evidence (not asserted), the WHALE-04 RNG-freeze safety of the deferred whale-pass claim is PROVEN on paper before any code is written, the RNGAUDIT external-protocol structure is fixed (the round sequence + context-pack skeleton it will be authored against at Phase 337), and every cited `file:line` is grep-verified against the v49.0-closure HEAD `b0511ca2` — paper-only, zero `contracts/*.sol`.
 **Depends on**: Nothing (first v50.0 phase; consumes the v49.0 closure HEAD `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9` as the frozen audit baseline)
 **Requirements**: BATCH-01, WHALE-04, MINTDIV-01
 **Success Criteria** (what must be TRUE):
+
   1. The shared signatures are settled in writing (BATCH-01) — the whale-pass pending-claim storage shape + the `claimWhalePass()` signature (caller-is-beneficiary vs permissionless-with-beneficiary-arg, decided), the AfKing `validThroughLevel` field placement (packed into the existing `Sub` layout, no per-iter SLOAD beyond the stored compare) + the refresh-or-evict control flow at the level crossing, and the MintModule within-player index alignment shape — are reconciled so no downstream file ships an intermediate broken state, and the shared `_queueTickets` surface (touched by WHALE, audited near by MINTDIV) is reconciled across the two RNG-adjacent edits.
   2. The WHALE-04 RNG-freeze safety is PROVEN, not assumed — the queued whale-pass tickets are shown to target a FUTURE level (verified against the `_queueTickets` level math at `DegenerusGameLootboxModule.sol`), neither the O(1) record at box-open nor `claimWhalePass()` is shown to write any slot that participates in the CURRENT RNG window during `rngLock` (or it reverts if it would), and the `rngLock` liveness gate + `_applyWhalePassStats` timing/semantics are proven preserved (stats applied at the same logical point, not advanced/delayed in a way that perturbs a frozen input) — `v45-vrf-freeze-invariant` re-attested for the split on paper.
   3. The MINTDIV-01 reachability is PROVEN or REFUTED with evidence — SPEC establishes, with a traced argument, whether `processTicketBatch`'s within-player `startIndex` advance (`writesUsed>>1`, `DegenerusGameMintModule.sol:~671`) can diverge from `processFutureTicketBatch`'s `+= take` (`:~398`): whether a single player's owed can split across budget slices AND whether that split yields divergent per-ticket trait indices. The verdict (reachable → fix at IMPL / not-reachable → documented NEGATIVE, no contract change) is recorded so MINTDIV-02's IMPL scope is decided before any patch.
   4. The RNGAUDIT external-protocol structure is fixed (feeding Phase 337) — the multi-round sequence (R1 catalog → R2 independent re-derive → R3 adversarial challenge → R4 reconcile) and the self-contained cold-start context-pack skeleton (module/RNG-window map, `rngLock` mechanics, VRF word entry/consume points, contract inventory, variable-tracing methodology) are sketched as the authoring target, with the "drive the external model's OWN discovery — no answer key" constraint recorded; full authoring against the FROZEN post-v50 tree is Phase 337.
   5. Every cited `file:line` across the milestone scope is grep-verified against the v49.0-closure HEAD `b0511ca2` and any drift is corrected in the SPEC (no "by construction" survives un-checked) — including the whale-pass inline mint (`DegenerusGameLootboxModule.sol:~1250-1260`), the two MintModule per-ticket loops (`:~671` / `:~398`), the AfKing `burnForKeeper`/`paidThroughDay` sink + the subscribe-time pass gate + the OPEN-E `fundingSource`/consent-gate surface, and the `_applyWhalePassStats` timing site — confirming the producer-before-consumer edit-order map for the IMPL re-author.
+
 **Plans**: 4 plans (paper-only SPEC; all autonomous, zero `contracts/*.sol`)
+
 - [x] 334-01-PLAN.md — WHALE-04 freeze-safety proof (SC2) + MINTDIV-01 reachability verdict (SC3)
 - [x] 334-02-PLAN.md — whale-pass + MintModule design-lock (SC1) + RNGAUDIT structure sketch (SC4) + grep-attestation table (SC5)
 - [x] 334-03-PLAN.md — AfKing pass-gated subscription design-lock + OPEN-E/SUB-07/swap-pop preservation criteria (SC1, AFSUB slice)
 - [x] 334-04-PLAN.md — producer-before-consumer IMPL-335 edit-order map (SC1 integration) + SPEC index + multi-source coverage audit
+
 **UI hint**: no
 
 ### Phase 335: IMPL — The ONE Batched Contract Diff (WHALE + AFSUB + MINTDIV-if-real)
+
 **Goal**: The three RNG-adjacent contract refinements land as a single reconciled `contracts/*.sol` diff under the SPEC's settled shared signatures — the box-open whale-pass mint becomes an O(1) pending-claim record + a player-paid `claimWhalePass()` that materializes the tickets (retiring the inline ~100-loop `_queueTickets` mint and, with uniform O(1) opens, the 331 whale-pass-weighted `autoOpen` budget carve-out so `OPEN_BATCH` returns to flat per-box sizing); the AfKing subscription is pass-gated (`burnForKeeper`/`paidThroughDay` removed, `validThroughLevel` encoded at subscribe, per-iter `currentLevel <= validThroughLevel` with a single pass re-read + refresh-or-evict at the crossing, OPEN-E + the cancel-tombstone/swap-pop invariants preserved); and — only if MINTDIV-01 proved reachable — the within-player index advance is aligned across the two loops — applied + locally compiled/tested, then HELD at the contract-commit boundary for explicit user hand-review.
 **Depends on**: Phase 334 (the SPEC must settle the shared signatures + return the MINTDIV-01 reachability verdict + prove the WHALE-04 freeze safety first)
 **Requirements**: WHALE-01, WHALE-02, WHALE-03, AFSUB-01, AFSUB-02, AFSUB-03, AFSUB-04, AFSUB-05, MINTDIV-02, BATCH-02
 **Success Criteria** (what must be TRUE):
+
   1. The box-open whale-pass mint stops looping and a player-paid claim materializes it (WHALE-01/02) — the inline ~100-iteration `_queueTickets` whale-pass mint at box-open (`DegenerusGameLootboxModule.sol:~1250-1260`) is replaced by an O(1) record of a pending whale-pass claim (beneficiary + amount/level) so opening a box is uniform cost regardless of whale-pass status, and a `claimWhalePass()` entrypoint (per the SPEC-locked signature + pending-claim storage shape) materializes the deferred mint with the gas borne by the beneficiary at claim time, not the box-opener at open time.
   2. Box opens become uniform O(1) → the autoOpen carve-out is retired (WHALE-03) — the 331 whale-pass-weighted `autoOpen` gas budget carve-out is removed and `OPEN_BATCH` returns to a flat per-box sizing, with the new flat `OPEN_BATCH` re-confirmed to stay under the autoOpen tx-gas ceiling at the worst-case uniform open.
   3. The AfKing subscription is pass-gated with the BURNIE window removed (AFSUB-01/02/03) — `burnForKeeper` + the `paidThroughDay` time-funding accounting are deleted (the BURNIE sink + its DegenerusGame/BurnieCoin counterpart removed or repurposed per SPEC), `validThroughLevel` is encoded at subscribe (derived from the subscriber's pass) and each sweep iteration validity check is the cheap stored-field compare `currentLevel <= validThroughLevel` (NO per-iteration external pass read on the non-crossing path, NO GASOPT-05-class regression), and at the crossing (`currentLevel > validThroughLevel`) the pass is re-read EXACTLY ONCE → refresh-or-evict (a still-valid new/upgraded pass refreshes `validThroughLevel` and the sub continues; otherwise evicted — NOT an unconditional kick; the crossing is the ONLY external pass read on the hot path).
   4. OPEN-E and the cancel/eviction invariants are preserved (AFSUB-04/05) — third-party box funding (the OPEN-E shared `fundingSource`) STAYS (pass-gating does NOT moot OPEN-E) and the 4 OPEN-E structural protections (consent-gate-at-subscribe / default-self byte-identical / no-escalation / trust-the-sub temporal bound) hold under the pass-gated model, and the cancel/eviction path preserves the locked SUB-07 in-place cancel-tombstone semantics + the v49 swap-pop membership invariant (membership ⟺ packed != 0) so pass-eviction does NOT reproduce the H-CANCEL-SWAP-MISS missed-day class.
   5. The MINTDIV index alignment lands only if reachable, and the diff is HELD at the contract-commit boundary (MINTDIV-02 / BATCH-02) — if MINTDIV-01 proved reachable, the within-player index advance is aligned across the two loops so per-ticket trait indices are identical whether or not a player's owed splits across budget slices (NO change to the frozen-word trait derivation for any non-split case); if NOT reachable, no MintModule change ships and MINTDIV-02 closes as a documented NEGATIVE with the proof. The whole diff is authored producer-before-consumer per the SPEC edit-order map, applied to `contracts/` and locally compiling/tested (`ContractAddresses.sol` freely modifiable), but NOT committed without explicit user hand-review of the single batched diff.
+
 **Plans**: 7 plans (5 waves; W1 parallel = 335-01/02/03; W2 = 335-04; W3 = 335-05; W4 = 335-06; W5 USER hand-review = 335-07)
 Plans:
+**Wave 1**
+
 - [ ] 335-01-PLAN.md — Storage confirm + DegenerusGame facade: add `lazyPassHorizon` view + retire WHALE-03 autoOpen gas-weighting → flat opened-count guard
 - [ ] 335-02-PLAN.md — LootboxModule WHALE-01: O(1) `whalePassClaims +=` at box-open + drop ≤10 bonus band (D-21); WHALE-02 by convergence onto existing `WhaleModule:1018`
 - [ ] 335-03-PLAN.md — MintModule MINTDIV-02 one-liner: `processed += writesUsed >> 1` → `+= take` (matches `processFutureTicketBatch:502`)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 335-04-PLAN.md — AfKing + BurnieCoin AFSUB cluster: delete `burnForKeeper`/`paidThroughDay`/`WINDOW_DAYS`/`FLAG_WINDOW_PAID`; repurpose `Sub` offset 5 → `validThroughLevel`; rewrite subscribe + `_autoBuy` (refresh-or-evict via existing tombstone); preserve OPEN-E + v49 swap-pop
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 335-05-PLAN.md — Test migration (D-IMPL-02 full-alignment): 7 test files rewritten in lockstep with the contract diff
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 335-06-PLAN.md — Local verification: `forge build` + `forge test` green-or-baseline + `KeeperOpenBoxWorstCaseGas` re-run (D-IMPL-04 OPEN_BATCH picker); authors `335-LOCAL-VERIFICATION.md`
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 335-07-PLAN.md — BATCH-02 HARD STOP: USER hand-review gate (`autonomous: false`); ONE atomic commit covering 5 contracts + 7 tests upon explicit USER approval; NO push
+
 **UI hint**: no
 
 ### Phase 336: TST — Equivalence + Freeze-Safety + Divergence-Repro + Non-Widening Regression
+
 **Goal**: The three contract items are proven behaviorally correct empirically — the whale-pass refactor materializes the same tickets/traits/whale-pass stats as the old inline mint with demonstrably uniform-O(1) opens and a freeze fuzz that the deferred record+claim perturb no current-window entropy; the pass-gated subscription sweeps while valid / evicts at the crossing with no valid pass / refreshes (continues) at the crossing with a valid pass, performs NO external pass read on the non-crossing path, re-attests the OPEN-E 4-protection behavior, and holds the cancel-tombstone / swap-pop membership invariant; the MINTDIV same-traits regression lands (covering the fix if real or codifying the not-reachable boundary if refuted); and the full suite is NON-WIDENING vs the v49.0 baseline — restoring a clean v50.0 regression baseline.
 **Depends on**: Phase 335 (tests exercise the applied diff — the materialized claim path, the pass-gated sweep, the index alignment — not SPEC placeholders)
 **Requirements**: TST-01, TST-02, TST-03, TST-04
 **Success Criteria** (what must be TRUE):
+
   1. The whale-pass refactor is proven equivalent + uniform + freeze-safe (TST-01) — a box-open followed by `claimWhalePass()` yields the same materialized tickets / traits / whale-pass stats as the old inline mint; box-open is demonstrated uniform-O(1) (whale vs non-whale opener, gas-bounded equivalent); and a freeze-invariant fuzz extending the v43 `RngLockDeterminism` harness proves the deferred record + claim perturb no current-window entropy input (byte-identical consumed VRF-derived output).
   2. The AfKing pass-gated subs are proven (TST-02) — an active sub is swept while `currentLevel <= validThroughLevel`; evicted at the crossing with no valid pass; refreshed (continues) at the crossing with a valid/upgraded pass; the non-crossing path performs NO external pass read (asserted, e.g. via a call-count / state-read oracle); the OPEN-E 4-protection behavior re-attests; and the cancel-tombstone / swap-pop membership invariant holds with no missed-day regression.
   3. The MINTDIV same-traits regression lands (TST-03) — byte-identical per-ticket trait derivation across a budget-slice split for an affected player (covering the fix if MINTDIV-01 proved reachable, or codifying the not-reachable boundary with the proof if refuted) — the seed candidate is closed empirically either way.
   4. The full-suite regression is NON-WIDENING vs the v49.0 baseline (TST-04) — net-zero new regression (every red named in the v49 baseline / enumerated-deferred set by NAME), absorbing any test renames / oracle migrations from the three contract items (e.g. whale-pass open/claim test re-homes, AfKing sub-window → pass-gated oracle migration), and a clean v50.0 regression baseline ledger is recorded.
+
 **Plans**: TBD
 **UI hint**: no
 
 ### Phase 337: AUDIT-PROTOCOL — Author the Model-Agnostic Multi-Round External-LLM RNG-Audit Kit (Package-Only)
+
 **Goal**: A self-contained, model-agnostic, multi-round adversarial external-LLM RNG-audit kit is authored against the FROZEN post-v50 tree (after WHALE/AFSUB/MINTDIV land) — it states the freeze invariant precisely as the external auditor's target, drives a multi-round R1→R4 adversarial sequence that forces the external model's OWN discovery (no answer key), and ships a cold-start context pack sufficient to run the contracts through Gemini or ChatGPT — so the USER can obtain an independent cross-model RNG audit in a future cycle. PACKAGE-ONLY: running it / triaging its output is explicitly OUT of v50.0. This is a documentation/deliverable phase — zero `contracts/*.sol`.
 **Depends on**: Phase 336 (the protocol is authored against the FROZEN post-v50 tree — the contract items must be implemented + test-proven so the variable-tracing catalog reflects the final post-v50 read-graph, not a moving target)
 **Requirements**: RNGAUDIT-01, RNGAUDIT-02, RNGAUDIT-03, RNGAUDIT-04
 **Success Criteria** (what must be TRUE):
+
   1. The protocol states the freeze invariant precisely as the external auditor's target (RNGAUDIT-01) — "while `rngLockedFlag = true`, every storage slot that participates in any VRF-influenced output is frozen until `rngLockedFlag = false`; only the incoming VRF word + its deterministic derivations may be unknown" — plus the exempt entry points (`advanceGame()` + reachable resolution flow, the VRF coordinator callback, `retryLootboxRng()` failsafe), grounded in `v45-vrf-freeze-invariant`.
   2. The protocol is a MULTI-ROUND adversarial sequence (RNGAUDIT-02) — (R1) catalog the VRF read-graph (every participating slot with its writers + readers across all modules); (R2) independently re-derive each slot's freeze status (frozen / reverts-if-written-during-lock / proven-non-participating); (R3) adversarially challenge the catalog (hunt for any writer that escapes the freeze, any cross-module composition that does); (R4) reconcile + report — designed so the external model performs its OWN discovery, with NO answer key / no internal findings embedded ("different perspective" is the point).
   3. The protocol ships a self-contained cold-start context pack (RNGAUDIT-03) — the module/RNG-window map, the `rngLock` mechanics, where the VRF word enters and is consumed, the contract inventory, and the back-and-forth variable-tracing methodology ("trace every variable across modules — what writes it, what reads it, what is locked during an RNG window") — sufficient to run cold against the contracts WITHOUT access to our `audit/FINDINGS-*.md`.
   4. The protocol is authored against the FROZEN post-v50 tree, model-agnostic, and explicitly PACKAGE-ONLY (RNGAUDIT-04) — it reflects the post-WHALE/AFSUB/MINTDIV read-graph, is usable in both Gemini and ChatGPT (with context-window chunking guidance for feeding the contracts), and states explicitly that running it through the external models + triaging their output is a FUTURE cycle, OUT of v50.0.
+
 **Plans**: TBD
 **UI hint**: no
 
 ### Phase 338: TERMINAL — Internal Delta Audit + 3-Skill Adversarial Sweep + Closure
+
 **Goal**: The v50.0 audit subject (the single batched diff — the O(1) whale-pass claim + pass-gated AfKing subs + the MINTDIV alignment-if-real, FROZEN at the IMPL HEAD) is delta-audited NON-WIDENING against the v49.0 baseline `b0511ca2`, swept by the internal 3-skill genuine-PARALLEL adversarial pass charged against the highest-risk whale-pass deferred-claim timing + pass-gated eviction/refresh abuse + MintModule index correctness + freeze-across-new-paths surfaces, consolidated into `audit/FINDINGS-v50.0.md`, and the milestone is closed with the `MILESTONE_V50_AT_HEAD_<sha>` signal and the atomic 5-doc closure flip — re-attesting all 25 v50.0 requirements. The internal sweep is the load-bearing close; the external RNGAUDIT protocol (Phase 337) is a separate work-product, NOT a substitute.
 **Depends on**: Phase 337 (the AUDIT-PROTOCOL deliverable is part of the v50.0 work-product set re-attested at closure; and the internal sweep runs against the same frozen post-v50 tree the protocol was authored against)
 **Requirements**: SWEEP-01, SWEEP-02, SWEEP-03, BATCH-03
 **Success Criteria** (what must be TRUE):
+
   1. The internal 3-skill genuine-PARALLEL adversarial sweep runs (SWEEP-01) — `/contract-auditor` + `/zero-day-hunter` + `/economic-analyst` (`/degen-skeptic` OUT per `D-271-ADVERSARIAL-02`) against the frozen v50 subject, charged with: whale-pass deferred-claim timing (can a claim alter RNG-derived outcomes / future-level traits / stats), pass-gated sub eviction-or-refresh abuse + the OPEN-E re-attest, MintModule index correctness, and freeze across ALL the new paths (the deferred record + claim, the pass-gated sweep, the index alignment) — with every elevation passed through the skeptic dual-gate before being recorded.
   2. The delta-audit attests NON-WIDENING vs the v49.0 baseline `b0511ca2` (SWEEP-02) — every `contracts/`+`test/` diff is attributable to a v50 work item (the LootboxModule whale-pass O(1) record + `claimWhalePass()`, the AfKing pass-gated sub surface, the MintModule alignment-if-real, the autoOpen carve-out retirement, the BURNIE `burnForKeeper` sink removal), each surface attested non-widening relative to the baseline, and the RNG/VRF-freeze invariant is re-attested intact across the WHALE + MINTDIV edits.
   3. `audit/FINDINGS-v50.0.md` is authored at the v50.0 closure HEAD (SWEEP-03) — 9-section, mirroring the v44/v46/v47/v48/v49 pattern, chmod 444, folding in the delta-audit (§3/§5) + the sweep disposition (§4), with any findings adjudicated or deferred per USER direction.
   4. The closure flip is applied (BATCH-03) — all 25 v50.0 requirements re-attested at closure, the `MILESTONE_V50_AT_HEAD_<sha>` closure signal emitted and propagated verbatim, and the atomic 5-doc closure flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) applied with `chmod 444` on the findings; the closure plan is a single blocking USER closure-verdict + signal-format approval gate (autonomous:false) — the auto-advance is HELD at the closure boundary per `feedback_pause_at_contract_phase_boundaries`.
+
 **Plans**: TBD
 **UI hint**: no
 
@@ -160,6 +192,7 @@ Plans:
 | **Total** | **25** | **3** | **10** | **4** | **4** | **4** |
 
 **Center-of-gravity rationale (where a requirement spans design + impl + test):**
+
 - **WHALE-04** (the RNG-freeze safety PROOF of the deferred-claim split — future-level target, no current-window write during `rngLock`, `_applyWhalePassStats` timing) → SPEC (334), where it is PROVEN on paper; the O(1) record + `claimWhalePass()` that the proof governs land under WHALE-01/02/03 (IMPL 335); the freeze fuzz that PROVES it empirically is TST-01 (TST 336). Centered at SPEC because the freeze-safety decision gates whether the split is even authored.
 - **MINTDIV-01** (the reachability PROVE/REFUTE) → SPEC (334), because the verdict determines whether MINTDIV-02 ships a contract change at all; **MINTDIV-02** (the alignment-if-real, or the documented NEGATIVE) → IMPL (335); the same-traits-across-split regression is TST-03 (TST 336).
 - **AFSUB-04/05** (OPEN-E re-attest + the cancel-tombstone/swap-pop invariant) → IMPL (335) as the structural-preservation acceptance criteria the pass-gated model must satisfy; their empirical re-attest is TST-02 (336) and the TERMINAL SWEEP-01 (338) re-attests OPEN-E as a closure condition. Homed at IMPL because the preservation must be built in, not bolted on.
