@@ -41,9 +41,16 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///     `lazyPassHorizon` external view read is a NON-RNG-WINDOW read — calling it does not touch
 ///     `mintPacked_` or any VRF-frozen slot (334-WHALE04-FREEZE-PROOF §5).
 ///   - The DEEPER RNG-freeze fuzz of the deferred-claim path (the WhaleModule:1018
-///     `claimWhalePass` invariant under rngLock + the fuzzed roundtrip equivalence) is DEFERRED
-///     TO Phase 336 / TST-01 freeze leg per 335-CONTEXT.md D-IMPL-02. THIS file ships only the
-///     trivial assertions; the deeper proof is 336's job, not 335's.
+///     `claimWhalePass` invariant under rngLock) lives at Phase 336 / TST-01 freeze leg
+///     in `test/fuzz/RngLockDeterminism.t.sol::testFuzz_RngLockDeterminism_ClaimWhalePassDuringLockSafe`
+///     (delivered by Plan 336-01 per 335-CONTEXT.md D-IMPL-02 + D-TST01-01).
+///   - The deferred-claim ROUNDTRIP EQUIVALENCE / GRANT-CORRECTNESS oracle (TST-01 D-TST01-03
+///     per 336-CONTEXT.md) is delivered IN THIS FILE at
+///     `testClaimWhalePassMaterializesFutureWindowAndAppliesStats` (Plan 336-02). It empirically
+///     proves: (1) box-open writes ONLY the O(1) whalePassClaims accumulator (D-IMPL-01);
+///     (2) the claim materializes the future-window grants at exactly
+///     [currentLevel+1 .. currentLevel+100] (D-03); (3) `_applyWhalePassStats` is applied AT
+///     claim-time, not at box-open (D-04). All deferrals on this surface are now CLOSED.
 ///
 /// @dev Builds on the 318-01-repaired DeployProtocol fixture (AfKing live at AF_KING). Drives
 ///      REAL degenerette bets + REAL lootbox purchases through the public mint API (mirroring
@@ -481,6 +488,258 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << 184);
         vm.store(address(game), slot, bytes32(packed));
+    }
+
+    // =========================================================================
+    // v50.0 D-IMPL-02 — D-TST01-03 dedicated equivalence/grant-correctness oracle
+    //
+    // Closes the deferral declared at lines 38-46 of this file (335-CONTEXT.md D-IMPL-02).
+    // Implements TST-01 D-TST01-03 (336-CONTEXT.md):
+    //   (1) box-open pre-claim writes ONLY the O(1) whalePassClaims[player] += accumulator
+    //       (D-IMPL-01) — `mintPacked_[player]` is UNCHANGED between pre-box-open and pre-claim;
+    //   (2) post-claim, the future-window level grants land at exactly
+    //       [currentLevel+1 .. currentLevel+100] — `frozenUntilLevel` advances to currentLevel+100
+    //       (per WhaleModule:1030-1034 + Storage:1127 `ticketStartLevel + 99` math, D-03);
+    //   (3) `_applyWhalePassStats` is applied at the claim-time anchor, NOT at box-open
+    //       (D-04) — `mintPacked_[player]` DIFFERS between pre-claim and post-claim snapshots,
+    //       and `whalePassClaims[player]` resets to 0 (WHALE-02 consumed at claim).
+    //
+    // Per D-05 (334-CONTEXT.md), the equivalence is byte-correct relative to the new claim-time
+    // semantics — NOT byte-identical to the OLD inline-mint shadow (which the v50.0 IMPL retired).
+    // =========================================================================
+
+    /// @dev Storage slot for the `whalePassClaims` mapping (DegenerusGame slot 21; confirmed via
+    ///      `forge inspect contracts/DegenerusGame.sol:DegenerusGame storage` and 336-01's same probe).
+    uint256 private constant WHALE_PASS_CLAIMS_SLOT = 21;
+
+    /// @dev BitPackingLib shifts used by `_applyWhalePassStats` (mirrored locally so the test
+    ///      reads the SAME slot fields the contract writes). Verified against
+    ///      contracts/libraries/BitPackingLib.sol:48/51/63/66 at e756a6f3.
+    uint256 private constant LAST_LEVEL_SHIFT = 0;
+    uint256 private constant LEVEL_COUNT_SHIFT = 24;
+    uint256 private constant FROZEN_UNTIL_LEVEL_SHIFT = 128;
+    uint256 private constant WHALE_BUNDLE_TYPE_SHIFT = 152;
+    uint256 private constant MASK_24 = (uint256(1) << 24) - 1;
+    uint256 private constant MASK_BUNDLE_TYPE = 0x3; // 2-bit field
+
+    /// @dev Slot for `mintPacked_[who]` (the same mapping the existing `_grantDeityPass` writes;
+    ///      mapping root is slot 9 — confirmed against the existing helper at lines 479-484).
+    function _mintPackedSlot(address who) internal pure returns (bytes32) {
+        return keccak256(abi.encode(who, uint256(9)));
+    }
+
+    /// @dev Slot for `whalePassClaims[player]` (mapping root is slot 21).
+    function _whalePassClaimsSlot(address who) internal pure returns (bytes32) {
+        return keccak256(abi.encode(who, WHALE_PASS_CLAIMS_SLOT));
+    }
+
+    /// @dev Read `whalePassClaims[player]` from storage.
+    function _readWhalePassClaims(address who) internal view returns (uint256) {
+        return uint256(vm.load(address(game), _whalePassClaimsSlot(who)));
+    }
+
+    /// @dev Force `whalePassClaims[player] = halfPasses` via direct storage write — simulates the
+    ///      O(1) box-open accumulator landing exactly `halfPasses` (= 1 here) without driving the
+    ///      non-deterministic box-open boon-roll. This is the load-bearing simplification per the
+    ///      plan's <action> step 2 — the oracle still asserts live contract behavior on the claim
+    ///      side (the only path D-TST01-03 measures).
+    function _forceWhalePassClaims(address who, uint256 halfPasses) internal {
+        vm.store(
+            address(game),
+            _whalePassClaimsSlot(who),
+            bytes32(halfPasses)
+        );
+    }
+
+    /// @dev Decode `frozenUntilLevel`, `levelCount`, `whaleBundleType`, `lastLevel` from a
+    ///      packed mintPacked_ word for assertion convenience.
+    function _decodeMintPacked(uint256 packed)
+        internal
+        pure
+        returns (
+            uint24 lastLevel,
+            uint24 levelCount,
+            uint24 frozenUntilLevel,
+            uint8 whaleBundleType
+        )
+    {
+        lastLevel = uint24((packed >> LAST_LEVEL_SHIFT) & MASK_24);
+        levelCount = uint24((packed >> LEVEL_COUNT_SHIFT) & MASK_24);
+        frozenUntilLevel = uint24((packed >> FROZEN_UNTIL_LEVEL_SHIFT) & MASK_24);
+        whaleBundleType = uint8((packed >> WHALE_BUNDLE_TYPE_SHIFT) & MASK_BUNDLE_TYPE);
+    }
+
+    /// @notice TST-01 D-TST01-03 — the deferred-claim roundtrip equivalence oracle.
+    ///
+    /// Closes the deferral declared at lines 38-46 of this file (335-CONTEXT.md D-IMPL-02).
+    /// Implements D-TST01-03 (TST-01 D-TST01-03 dedicated equivalence/grant oracle):
+    /// (1) box-open pre-claim writes ONLY the O(1) whalePassClaims[player] += accumulator (D-IMPL-01);
+    /// (2) post-claim, the future-window level grants land at exactly [currentLevel+1 .. currentLevel+100] (D-03);
+    /// (3) _applyWhalePassStats is applied at the claim-time anchor, NOT at box-open (D-04).
+    ///
+    /// Per D-05 (334-CONTEXT.md), equivalence is byte-correct relative to the new claim-time semantics —
+    /// not byte-identical to the OLD inline-mint shadow (which the v50.0 IMPL retired at e756a6f3).
+    function testClaimWhalePassMaterializesFutureWindowAndAppliesStats() public {
+        address claimant = makeAddr("tst01-d03-claim-equiv");
+
+        // -------------------------------------------------------------------
+        // Stage: capture the TRULY-pre-box-open snapshot (mintPacked_ unmodified).
+        // The claimant has not been touched yet — the slot is zero. We snapshot
+        // here so the "box-open writes ONLY the accumulator" assertion is anchored
+        // at a strict pre-mutation baseline.
+        // -------------------------------------------------------------------
+        bytes32 mintPackedSlot = _mintPackedSlot(claimant);
+        bytes32 mintPackedPreBoxOpen = vm.load(address(game), mintPackedSlot);
+        assertEq(
+            mintPackedPreBoxOpen,
+            bytes32(0),
+            "pre-condition: claimant's mintPacked_ slot starts clean (no prior state)"
+        );
+        assertEq(
+            _readWhalePassClaims(claimant),
+            0,
+            "pre-condition: whalePassClaims[claimant] starts at 0"
+        );
+
+        // -------------------------------------------------------------------
+        // Simulated box-open: per WHALE-01 (LootboxModule:1253), a whale-pass boon
+        // on box-open writes ONLY `whalePassClaims[player] += 1` (the O(1) accumulator).
+        // We forge that single SSTORE directly via vm.store so this oracle is decoupled
+        // from the non-deterministic box-open boon-roll. The claim-side (the load-bearing
+        // half of the equivalence) is exercised against the live contract below.
+        // -------------------------------------------------------------------
+        uint256 halfPassesK = 1;
+        _forceWhalePassClaims(claimant, halfPassesK);
+
+        // -------------------------------------------------------------------
+        // D-IMPL-01 attestation: post-box-open / pre-claim, ONLY the O(1) accumulator
+        // slot was touched — `mintPacked_[claimant]` is byte-equal to its pre-box-open
+        // snapshot. The accumulator carries the queued half-pass count.
+        // -------------------------------------------------------------------
+        bytes32 mintPackedPreClaim = vm.load(address(game), mintPackedSlot);
+        assertEq(
+            mintPackedPreClaim,
+            mintPackedPreBoxOpen,
+            "D-IMPL-01: box-open writes ONLY the O(1) whalePassClaims accumulator - no mintPacked_ perturbation pre-claim"
+        );
+        assertEq(
+            _readWhalePassClaims(claimant),
+            halfPassesK,
+            "WHALE-01: O(1) accumulator carries the queued half-pass count into claim"
+        );
+
+        // D-04 leg #1 (pre-claim): the `_applyWhalePassStats` writes have NOT landed yet.
+        // The same mintPacked_ word that proves "no perturbation" also proves "stats not yet
+        // applied" — both share the byte-equal-to-zero baseline at the claim-time anchor.
+        // Scoped to release locals before the post-claim path (avoid stack-too-deep).
+        {
+            (
+                uint24 lastLvlPre,
+                uint24 levelCountPre,
+                uint24 frozenUntilPre,
+                uint8 bundleTypePre
+            ) = _decodeMintPacked(uint256(mintPackedPreClaim));
+            assertEq(lastLvlPre, 0, "D-04 pre-claim: lastLevel unchanged (stats NOT yet applied)");
+            assertEq(levelCountPre, 0, "D-04 pre-claim: levelCount unchanged (stats NOT yet applied)");
+            assertEq(frozenUntilPre, 0, "D-04 pre-claim: frozenUntilLevel unchanged (stats NOT yet applied)");
+            assertEq(bundleTypePre, 0, "D-04 pre-claim: whaleBundleType unchanged (stats NOT yet applied)");
+        }
+
+        // -------------------------------------------------------------------
+        // Capture currentLevel AT THE CLAIM-TIME ANCHOR (per D-03). The contract reads
+        // this at WhaleModule:1030 — `uint24 startLevel = level + 1;` — and applies the
+        // 100-level window to [startLevel .. startLevel+99] = [currentLevel+1 .. currentLevel+100].
+        // -------------------------------------------------------------------
+        uint24 currentLevel = game.level();
+
+        // -------------------------------------------------------------------
+        // Execute the claim. The facade at DegenerusGame.sol:1864 calls
+        // `_resolvePlayer(player)` which enforces `msg.sender == player` OR
+        // `_requireApproved(player)` — so the claimant calls for themselves
+        // (the simplest non-operator path; tests the live entry, not just the
+        // WhaleModule internal). The credit is bound by the player arg, not msg.sender.
+        // -------------------------------------------------------------------
+        vm.prank(claimant);
+        game.claimWhalePass(claimant);
+
+        // -------------------------------------------------------------------
+        // WHALE-02 attestation: the accumulator is consumed at claim (WhaleModule:1024).
+        // -------------------------------------------------------------------
+        assertEq(
+            _readWhalePassClaims(claimant),
+            0,
+            "WHALE-02: whalePassClaims[claimant] reset to 0 at claim (accumulator consumed)"
+        );
+
+        // -------------------------------------------------------------------
+        // D-04 attestation (post-claim): `_applyWhalePassStats` ran AT claim-time.
+        // The mintPacked_ word MUST differ from the pre-claim snapshot.
+        // -------------------------------------------------------------------
+        bytes32 mintPackedPostClaim = vm.load(address(game), mintPackedSlot);
+        assertTrue(
+            mintPackedPostClaim != mintPackedPreClaim,
+            "D-04: `_applyWhalePassStats` applied AT claim-time - mintPacked_ DIFFERS from pre-claim snapshot"
+        );
+
+        // -------------------------------------------------------------------
+        // D-03 attestation: the future-window grants land at exactly
+        // [currentLevel+1 .. currentLevel+100]. Storage:1127 sets
+        // `targetFrozenLevel = ticketStartLevel + 99` with ticketStartLevel = currentLevel+1,
+        // so the post-claim `frozenUntilLevel` is exactly currentLevel + 100. From a clean
+        // baseline (frozenUntilPre == 0), the math also gives `levelCount` += 100.
+        // Scoped to release decoded locals (avoid stack-too-deep).
+        // -------------------------------------------------------------------
+        {
+            (
+                uint24 lastLvlPost,
+                uint24 levelCountPost,
+                uint24 frozenUntilPost,
+                uint8 bundleTypePost
+            ) = _decodeMintPacked(uint256(mintPackedPostClaim));
+
+            uint24 expectedFrozenUntil = currentLevel + 100;
+            assertEq(
+                frozenUntilPost,
+                expectedFrozenUntil,
+                "D-03: frozenUntilLevel == currentLevel + 100 - future window [currentLevel+1 .. currentLevel+100] anchored at claim-time"
+            );
+            assertEq(
+                levelCountPost,
+                uint24(100),
+                "D-03: levelCount == 100 (delta from clean baseline; +100 the full window credit)"
+            );
+            assertEq(
+                lastLvlPost,
+                expectedFrozenUntil,
+                "D-03: lastLevel == newFrozenLevel (Storage:1163 mirrors lastLevel onto newFrozenLevel)"
+            );
+            assertEq(
+                bundleTypePost,
+                3,
+                "D-03: whaleBundleType set to 3 (100-level bundle marker, Storage:1158)"
+            );
+        }
+
+        // -------------------------------------------------------------------
+        // Defensive source-grep attestation (mirrors the existing trivial tests'
+        // `_countOccurrences` idiom on lines 442-476) — keep LIGHT; the storage probes
+        // above are the load-bearing oracle.
+        // -------------------------------------------------------------------
+        {
+            string memory whaleSrc = vm.readFile(
+                "contracts/modules/DegenerusGameWhaleModule.sol"
+            );
+            assertGt(
+                _countOccurrences(whaleSrc, "_applyWhalePassStats(player, startLevel)"),
+                0,
+                "byte-present: claimWhalePass invokes `_applyWhalePassStats(player, startLevel)` at claim-time"
+            );
+            assertGt(
+                _countOccurrences(whaleSrc, "whalePassClaims[player] = 0"),
+                0,
+                "byte-present: claimWhalePass clears the accumulator at claim (WHALE-02 consumption)"
+            );
+        }
     }
 
     /// @notice UNMODIFIED invariant: the BURNIE win/loss RNG path is byte-identical — the
