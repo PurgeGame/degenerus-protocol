@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v51.0
 milestone_name: claimBingo — Color-Completion Claim
 status: executing
-last_updated: "2026-05-28T21:59:16.819Z"
+last_updated: "2026-05-28T22:06:40.247Z"
 last_activity: 2026-05-28
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -31,9 +31,9 @@ See: .planning/PROJECT.md (Current Milestone: v51.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 339 (spec-design-lock-rng-freeze-safety-proof-tier-precedence-loc) — EXECUTING
-Plan: 2 of 4
-Status: Executing Phase 339 — Plan 01 ✅ Complete (BINGO-06 freeze proof + traitBurnTicket soundness; FREEZE-SAFE + SOUND)
-Last activity: 2026-05-28 -- Phase 339 Plan 01 complete (339-BINGO06-FREEZE-PROOF + 339-TRAITBURNTICKET-SOUNDNESS-ATTESTATION)
+Plan: 3 of 4
+Status: Executing Phase 339 — Plan 01 ✅ Complete (BINGO-06 freeze proof + soundness) · Plan 02 ✅ Complete (BINGO design-lock + tier-precedence acceptance contract; signature/storage/module/constants LOCKED + quadrant-first-before-symbol-first suppression rule)
+Last activity: 2026-05-28 -- Phase 339 Plan 02 complete (339-DESIGN-LOCK-BINGO + 339-TIER-PRECEDENCE-ACCEPTANCE-CONTRACT; BATCH-01)
 
 ## Current Milestone Roadmap (v51.0 — phases 339-342)
 
@@ -592,6 +592,7 @@ Audit deliverables:
 | Phase 337 P02 | 4min | 2 tasks | 1 files |
 | Phase 337 P04 | ~25min | 2 tasks | 2 files (audit/rng-audit-kit/verify-kit.sh NEW 294 lines mode 100755 + audit/rng-audit-kit/337-KIT-VALIDATION.md NEW 105 lines) + 1 SUMMARY (verify-kit.sh exit 0, 11 PASS / 0 FAIL; RNGAUDIT-01..04 structurally re-attested; planted-defect-proven; zero contracts mutation) |
 | 339 | 01 | ~20min | 2 | 2 files (339-BINGO06-FREEZE-PROOF.md + 339-TRAITBURNTICKET-SOUNDNESS-ATTESTATION.md) + 1 SUMMARY (BINGO-06 FREEZE-SAFE via D-04 per-slot enumeration + traitBurnTicket IFF/SOUND via D-02 write-site attestation; D-03 whale-race non-finding; D-13 anchor-drift corrected — sole writer = MintModule.sol:603-643; zero contracts mutation) |
+| Phase 339 P02 | ~18min | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -733,3 +734,4 @@ Audit deliverables:
 - [Phase 339]: 339-01 (D-02): VERDICT SOUND — traitBurnTicket IFF proven (address at [level][traitId][slot] iff owned a post-RNG-resolved entry of that exact trait byte [QQ][CCC][SSS]). Sub-claims: (a) append keyed by resolved trait byte / no cross-trait contamination, (b) duplicate-append benign + griefing impossible (8 colors = 8 disjoint buckets), (c) no non-owner re-population (no setter/swap/delete/pop; virtual deity entries read-time-only, never persisted). claimBingo cannot be spoofed
 - [Phase 339]: 339-01 (D-13 ANCHOR DRIFT CORRECTED): the SOLE traitBurnTicket write-site is contracts/modules/DegenerusGameMintModule.sol:603-643 (inline-asm batch append of `player`, keyed by RNG-resolved traitId at :586-587). The plan/CONTEXT-cited "write-sites" DegenerusGame.sol:2701/2730/2813 (sampleTraitTickets/sampleTraitTicketsAtLevel/getTickets — all `view`) + JackpotModule:654 (bucket reader → _randTraitTicket `view`) are ALL READ-side. IMPL 340 must treat MintModule:603-643 as the authoritative writer
 - [Phase 339]: 339-01 (D-03): whale-frontrunning on the per-VRF trait-resolution batch enshrined as a written ACCEPTED-BY-DESIGN non-finding (race window = per-VRF reveal, NOT per-block; both contenders must land their last needed color in the same VRF resolution — rare). Purpose: the deferred v52 sweep treats it as already-dispositioned/known
+- [Phase ?]: Phase 339-02: claimBingo BINGO design-lock + tier-precedence acceptance contract LOCKED — signature uint32[8] (D-01), three mappings uint24-keyed in shared storage (D-05/07/10), GAME_BINGO_MODULE delegatecall (D-10), six constants verbatim (D-05), quadrant-first-before-symbol-first + both-bits-marking + suppression (D-06)

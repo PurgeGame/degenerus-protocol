@@ -37,7 +37,7 @@
 - [ ] **TST-06**: Full-suite regression is NON-WIDENING vs the v50.0 closure baseline (net-zero new regression; any pre-existing reds enumerated and guarded BY NAME), absorbing any test renames/oracle migrations from the bundle.
 
 ### Cross-Cutting — SPEC Reconciliation + IMPL + TERMINAL (BATCH)
-- [ ] **BATCH-01**: SPEC design-lock — settle module placement (new `DegenerusGameBingoModule.sol` recommended), the storage shape (`bingoClaimed` / `firstQuadrant` / `firstSymbol` + the `uint24` key), the slot type width (`uint32` vs the `traitBurnTicket` array indexing), the reward constants, and the `claimBingo` signature; resolve all 7 "Open before SPEC" items from the plan doc (module placement · slot width · view-helper-out-of-scope · `traitBurnTicket` post-resolution invariant · RNG-freeze interaction · jackpot final-day deletion side-effects · tier-precedence test coverage); and grep-attest every cited `file:line` vs the v50.0-closure HEAD before any patch.
+- [x] **BATCH-01**: SPEC design-lock — settle module placement (new `DegenerusGameBingoModule.sol` recommended), the storage shape (`bingoClaimed` / `firstQuadrant` / `firstSymbol` + the `uint24` key), the slot type width (`uint32` vs the `traitBurnTicket` array indexing), the reward constants, and the `claimBingo` signature; resolve all 7 "Open before SPEC" items from the plan doc (module placement · slot width · view-helper-out-of-scope · `traitBurnTicket` post-resolution invariant · RNG-freeze interaction · jackpot final-day deletion side-effects · tier-precedence test coverage); and grep-attest every cited `file:line` vs the v50.0-closure HEAD before any patch.
 - [ ] **BATCH-02**: The ONE batched USER-APPROVED `contracts/*.sol` diff — new `DegenerusGameBingoModule.sol` + storage mappings + `DegenerusGame.claimBingo` entrypoint delegatecall + interface + `StakedDegenerusStonk` constructor rebalance + `JackpotModule` final-day deletion — is applied in producer-before-consumer order; HARD STOP at the commit boundary (locally compiled/tested, never committed without explicit user hand-review of the diff).
 - [ ] **BATCH-03**: TERMINAL minimal close — re-attest all v51.0 requirements at closure and apply the atomic 5-doc closure flip (`MILESTONE_V51_AT_HEAD_<sha>` + ROADMAP / STATE / MILESTONES / PROJECT / REQUIREMENTS). The internal 3-skill adversarial sweep + delta-audit + `audit/FINDINGS-v51.0.md` are DEFERRED → the v52 consolidated audit, and the v51 surface is recorded in the v52 audit-debt charge.
 
@@ -85,7 +85,7 @@
 | TST-04 | Phase 341 (TST) | Pending |
 | TST-05 | Phase 341 (TST) | Pending |
 | TST-06 | Phase 341 (TST) | Pending |
-| BATCH-01 | Phase 339 (SPEC) | Pending |
+| BATCH-01 | Phase 339 (SPEC) | Complete |
 | BATCH-02 | Phase 340 (IMPL) | Pending |
 | BATCH-03 | Phase 342 (TERMINAL) | Pending |
 
