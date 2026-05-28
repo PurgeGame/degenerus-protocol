@@ -35,21 +35,28 @@ Plan: —
 Status: Defining requirements
 Last activity: 2026-05-28 — Milestone v51.0 started
 
-## Current Milestone Roadmap (v50.0 — phases 334-338)
+## Current Milestone Roadmap (v51.0 — phases 339-342)
 
-Shape: SPEC → IMPL → TST → AUDIT-PROTOCOL → TERMINAL (the established v44-v49 audit shape + a dedicated package-only AUDIT-PROTOCOL phase). Contract-boundary HARD STOP at the single IMPL phase (335); internal 3-skill adversarial sweep + closure at TERMINAL (338); the external RNGAUDIT protocol (337) is a separate work-product, NOT a substitute for the internal sweep.
+Shape: SPEC → IMPL → TST → TERMINAL (the established v44-v50 audit shape, run to a MINIMAL CLOSE — NO SWEEP/AUDIT phase + NO GAS phase). Contract-boundary HARD STOP at the single IMPL phase (340). The internal 3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v51.0.md` are DEFERRED → the v52 consolidated audit (cumulative v50 + v51 surface) per the audit-debt note above. Mirrors the v45.0 + v50.0 minimal-close precedent.
 
 | Phase | Name | Type | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 334 | SPEC — Design-Lock + MINTDIV Reachability + RNGAUDIT Structure + Call-Graph Attestation | SPEC | BATCH-01 · WHALE-04 · MINTDIV-01 | ✅ Complete |
-| 335 | IMPL — The ONE Batched Contract Diff (WHALE + AFSUB + MINTDIV-if-real) | IMPL | WHALE-01/02/03 · AFSUB-01..05 · MINTDIV-02 · BATCH-02 | ✅ Complete |
-| 336 | TST — Equivalence + Freeze-Safety + Divergence-Repro + Non-Widening Regression | TST | TST-01/02/03/04 | ✅ Complete |
-| 337 | AUDIT-PROTOCOL — Model-Agnostic Multi-Round External-LLM RNG-Audit Kit (Package-Only) | DELIVERABLE | RNGAUDIT-01/02/03/04 | ✅ Complete |
-| 338 | TERMINAL — Internal Delta Audit + 3-Skill Adversarial Sweep + Closure | TERMINAL | SWEEP-01/02/03 · BATCH-03 | 🔒 DEFERRED → v52 (minimal close) |
+| 339 | SPEC — Design-Lock + RNG-Freeze-Safety Proof + Tier-Precedence Lock + Call-Graph Attestation | SPEC | BATCH-01 · BINGO-06 | Not started |
+| 340 | IMPL — The ONE Batched Contract Diff (BINGO + REBAL + JACK) | IMPL (CONTRACT BOUNDARY) | BINGO-01/02/03/04/05 · REBAL-01 · JACK-01/02 · BATCH-02 | Not started |
+| 341 | TST — Per-Tier + Precedence-Suppression + Revert/Dedup + Empty-Pool + Jackpot Regression + Non-Widening | TST | TST-01/02/03/04/05/06 | Not started |
+| 342 | TERMINAL — Minimal Close: Re-Attest + Atomic 5-Doc Closure Flip (Sweep + FINDINGS DEFERRED → v52) | TERMINAL (minimal close) | BATCH-03 | Not started |
 
-**Coverage:** 25/25 v50.0 requirements mapped (334: 3 · 335: 10 · 336: 4 · 337: 4 · 338: 4); 0 orphaned, 0 duplicated. MINTDIV-02's contract change is CONDITIONAL on the 334 MINTDIV-01 reachability verdict. Full detail in `.planning/ROADMAP.md`; per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
+**Coverage:** 18/18 v51.0 requirements mapped (339: 2 · 340: 9 · 341: 6 · 342: 1); 0 orphaned, 0 duplicated. Per-category: BINGO 6 · REBAL 1 · JACK 2 · TST 6 · BATCH 3. The internal sweep + delta-audit + `audit/FINDINGS-v51.0.md` are DEFERRED → the v52 consolidated audit (NO SWEEP category in v51). Full detail in `.planning/ROADMAP.md`; per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
 
-## Last Shipped Milestone (v49.0 — SHIPPED 2026-05-27; signal `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9`; baseline `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`)
+## Last Shipped Milestone (v50.0 — CLOSED 2026-05-28, minimal close; closure HEAD `812abeee2719c32d6973771ad2a66187fae75b80`; no formal `MILESTONE_V50_AT_HEAD` signal emitted; baseline `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9`)
+
+**Whale-Pass O(1) Refactor + AfKing Pass-Gated Subs + MintModule Advance-Divergence + External RNG-Audit Protocol.** 5-phase audit-milestone (SPEC→IMPL→TST→AUDIT-PROTOCOL→TERMINAL) closed via a USER-approved **MINIMAL CLOSE**: 334 SPEC design-lock (4/4, VERIFICATION 5/5, ZERO `contracts/*.sol` — the three contract items' shared signatures settled, MINTDIV-01 PROVEN REACHABLE, WHALE-04 freeze-safety proven on paper, RNGAUDIT structure fixed) + 335 IMPL (the ONE batched USER-APPROVED `contracts/*.sol` diff: O(1) whale-pass `claimWhalePass` + box-open record retiring the inline ~100-loop mint, AfKing pass-gated subs `validThroughLevel` + refresh-or-evict with `burnForKeeper`/`paidThroughDay` removed, the MINTDIV index alignment `processed += writesUsed>>1` → `+= take`, 7 plans/5 waves) + 336 TST (6 plans: whale-pass equivalence + uniform-O(1) + freeze fuzz, pass-gated sweep/evict/refresh + no-pass-SLOAD oracle, MINTDIV cross-path equality, NON-WIDENING regression) + 337 AUDIT-PROTOCOL (the model-agnostic multi-round external-LLM RNG-audit kit `audit/rng-audit-kit/`, package-only, authored against the frozen post-v50 tree). **Phase 338's internal 3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v50.0.md` are DEFERRED → the v52 consolidated audit** (SWEEP-01/02/03 + the findings/flip portion of BATCH-03).
+
+**Closure (minimal):** closure HEAD `812abeee2719c32d6973771ad2a66187fae75b80` (the minimal-close commit); **NO formal `MILESTONE_V50_AT_HEAD` signal was emitted**. Closed verdict: `WHALE_O1_CLAIM + AFKING_PASS_GATED_SUBS + MINTDIV_ALIGNED + EXTERNAL_RNG_AUDIT_KIT shipped; KNOWN_ISSUES_UNMODIFIED`. 21/25 reqs Complete (334 SPEC: 3 · 335 IMPL: 10 · 336 TST: 4 · 337 AUDIT-PROTOCOL: 4); the 4 deferred = SWEEP-01/02/03 + the findings/flip portion of BATCH-03 → the v52 charge. Rationale: pre-launch (no live funds); WHALE-04 freeze-safety PROVEN at SPEC + tested at TST (336); mirrors the v45.0 minimal-close precedent. v50 contract history UNPUSHED. Phases 334–337 archived to `.planning/milestones/v50.0-phases/`.
+
+**v51 handoff:** 0 findings deferred-as-findings; the v50 audit debt (the whale-pass O(1) deferred-claim path, AFSUB pass-gating, the MINTDIV alignment + `audit/FINDINGS-v50.0.md`) carries forward into the v52 consolidated audit charge (see the "v50.0 + v51.0 AUDIT DEBT → v52" note above). v51 forward-seed at start: `v51-claimbingo-color-completion-seed` (the v51.0 contract bundle). The v44 §9d 135-anchor maximalist register carries forward unchanged (NOT live vectors).
+
+### Prior Shipped Milestone (v49.0 — SHIPPED 2026-05-27; signal `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9`; baseline `MILESTONE_V48_AT_HEAD_0cc5d10fbc1232a6d2e7b0464fe21541b9812029`)
 
 **Unified Keeper Router + Bounty Recalibration + AfKing Keeper Sweep.** 5-phase audit-milestone (SPEC→IMPL→GAS→TST→TERMINAL): 329 SPEC design-lock (`0eae9c28`, VERIFICATION 8/8, 3 plans — the 4 structural invariants + the redesigned shared signatures) + 330 IMPL (the ONE batched USER-APPROVED `contracts/*.sol` router/advance-redesign diff `63bc16ca`, BATCH-02, 9 plans/8 waves, suite 616/58) + 331 GAS (`4c9f9d9b`, the worst-case-marginal break-even @0.5gwei flat-per-tx peg + the `degeneretteResolve` flat re-peg, 5 plans, USER-approved second gate) + 332 TST (`95aaf340`, 6 plans, freeze-fuzz + one-category + reward-routing + the NON-WIDENING 666/42/17 ledger, ZERO contract mutation) + 333 TERMINAL (delta-audit + 3-skill genuine-PARALLEL sweep + `audit/FINDINGS-v49.0.md` + closure flip). Subject FROZEN at `4c9f9d9b` (`git diff 4c9f9d9b HEAD -- contracts/` empty throughout the terminal).
 
