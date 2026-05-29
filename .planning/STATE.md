@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v51.0
 milestone_name: claimBingo — Color-Completion Claim
-status: executing
-last_updated: "2026-05-28T23:30:34.215Z"
-last_activity: 2026-05-28 -- Phase 340 planning complete
+status: ready_to_plan
+last_updated: 2026-05-29T00:17:12.553Z
+last_activity: 2026-05-28 -- Phase 340 execution started
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 8
-  completed_plans: 4
+  completed_plans: 8
   percent: 25
+stopped_at: Phase 340 complete (4/4) — ready to discuss Phase 341
 ---
 
 # Project State
@@ -20,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v51.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v51.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 340 — impl — the one batched contract diff (bingo + rebal + jack)
+**Current focus:** Phase 341 — tst — per tier × per quadrant + tier precedence suppression + revert/dedup + empty pool + jackpot regression + non widening
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward)
 
@@ -30,10 +31,10 @@ See: .planning/PROJECT.md (Current Milestone: v51.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 340
+Phase: 341
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-28 -- Phase 340 planning complete
+Status: Ready to plan
+Last activity: 2026-05-29
 
 ## Current Milestone Roadmap (v51.0 — phases 339-342)
 

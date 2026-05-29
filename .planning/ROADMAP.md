@@ -81,10 +81,10 @@
   5. The JACK final-day `Pool.Reward` deletion lands with the rest of the `isFinalDay` plumbing preserved, and the diff is HELD at the contract-commit boundary (JACK-01 / JACK-02 / BATCH-02) — the `isFinalDay` `Pool.Reward` branch in `_paySoloBucket` (`DegenerusGameJackpotModule.sol:1339-1352`) + the `FINAL_DAY_DGNRS_BPS = 100` constant (`:191`) + the `JackpotDgnrsWin` event (if grep confirms it has no other emitter) are removed while the `lvl + 1` ticket-index gate (`:617`) and the `_paySoloBucket` callers passing `isFinalDay` (`:1085/1095/1135/1161/1190/1312`) are untouched; the whole diff is authored producer-before-consumer per the SPEC edit-order map, applied to `contracts/` and locally compiling/tested (`ContractAddresses.sol` freely modifiable), but NOT committed without explicit user hand-review of the single batched diff.
 
 **Plans**: 4 plans / 3 waves (every plan `autonomous: false` — CONTRACT BOUNDARY; the single batched diff is HELD for user hand-review)
-- [ ] 340-01-PLAN.md — BINGO producers (Step 1): append the 3 `uint24`-keyed storage bitfields + author `DegenerusGameBingoModule.sol` (the 3-tier cascade, CEI ordering, clamped-return draw, empty-pool no-op, custom-error guards, player-indexed events) + add `GAME_BINGO_MODULE` [Wave 1 · BINGO-01..05]
-- [ ] 340-02-PLAN.md — BINGO consumer wiring (Step 2): the `DegenerusGame.claimBingo` delegatecall entrypoint + `IDegenerusGameBingoModule` selector iface + the `IDegenerusGame.claimBingo` signature [Wave 2 · depends 340-01 · BINGO-01, BATCH-02]
-- [ ] 340-03-PLAN.md — REBAL + JACK (Steps 3-4, isolated): the `StakedDegenerusStonk` 2-constant swap (Pool.Reward 50B→100B) + the `JackpotModule` final-day `Pool.Reward` branch/constant/event deletion with the orphan-param handled + plumbing preserved [Wave 1 · REBAL-01, JACK-01, JACK-02]
-- [ ] 340-04-PLAN.md — `forge build` clean (the D-340-03 IMPL bar) + batched-diff inventory + the BATCH-02 contract-commit HARD STOP (blocking user hand-review) [Wave 3 · depends 340-01/02/03 · BATCH-02]
+- [x] 340-01-PLAN.md — BINGO producers (Step 1): append the 3 `uint24`-keyed storage bitfields + author `DegenerusGameBingoModule.sol` (the 3-tier cascade, CEI ordering, clamped-return draw, empty-pool no-op, custom-error guards, player-indexed events) + add `GAME_BINGO_MODULE` [Wave 1 · BINGO-01..05]
+- [x] 340-02-PLAN.md — BINGO consumer wiring (Step 2): the `DegenerusGame.claimBingo` delegatecall entrypoint + `IDegenerusGameBingoModule` selector iface + the `IDegenerusGame.claimBingo` signature [Wave 2 · depends 340-01 · BINGO-01, BATCH-02]
+- [x] 340-03-PLAN.md — REBAL + JACK (Steps 3-4, isolated): the `StakedDegenerusStonk` 2-constant swap (Pool.Reward 50B→100B) + the `JackpotModule` final-day `Pool.Reward` branch/constant/event deletion with the orphan-param handled + plumbing preserved [Wave 1 · REBAL-01, JACK-01, JACK-02]
+- [x] 340-04-PLAN.md — `forge build` clean (the D-340-03 IMPL bar) + batched-diff inventory + the BATCH-02 contract-commit HARD STOP (blocking user hand-review) [Wave 3 · depends 340-01/02/03 · BATCH-02]
 **UI hint**: no
 
 ### Phase 341: TST — Per-Tier × Per-Quadrant + Tier-Precedence Suppression + Revert/Dedup + Empty-Pool + Jackpot Regression + Non-Widening
@@ -128,7 +128,7 @@
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 339. SPEC — Design-Lock + Freeze Proof + Tier-Precedence + Attestation | v51.0 | 4/4 | Complete    | 2026-05-28 |
-| 340. IMPL — The ONE Batched Contract Diff (BINGO + REBAL + JACK) | v51.0 | 0/4 | Not started | - |
+| 340. IMPL — The ONE Batched Contract Diff (BINGO + REBAL + JACK) | v51.0 | 4/4 | Complete    | 2026-05-29 |
 | 341. TST — Per-Tier + Precedence + Revert/Dedup + Empty-Pool + Jackpot + Non-Widening | v51.0 | 0/TBD | Not started | - |
 | 342. TERMINAL — Minimal Close: Re-Attest + Closure Flip (Sweep DEFERRED → v52) | v51.0 | 0/TBD | Not started | - |
 

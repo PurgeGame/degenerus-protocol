@@ -14,19 +14,19 @@
 ## v51.0 Requirements
 
 ### claimBingo Color-Completion Entrypoint (BINGO)
-- [ ] **BINGO-01**: A new external `claimBingo(uint256 level, uint8 symbol, uint32[8] slots)` entrypoint exists (likely in a new `DegenerusGameBingoModule.sol` delegatecalled from `DegenerusGame`). It validates `symbol < 32`, `!gameOver`, `level <= currentLevel`; derives `quadrant = symbol >> 3` and `symInQ = symbol & 7`; and for each color `c ∈ [0,7]` verifies the caller owns the entry at `traitBurnTicket[level][traitId][slots[c]]` where `traitId = (quadrant<<6) | (c<<3) | symInQ` (trait byte layout `[QQ][CCC][SSS]`). Duplicate-slot griefing is impossible because each trait byte encodes exactly one (quadrant, color, symbol).
-- [ ] **BINGO-02**: Per-player dedup is enforced once per (level, quadrant) via a `bingoClaimed[level][msg.sender]` quadrant-mask bit — a second claim of the same quadrant on the same level reverts. A player may make at most 4 bingo claims per level (one per quadrant A/B/C/D).
-- [ ] **BINGO-03**: Three reward tiers are selected with **quadrant-first checked BEFORE symbol-first** precedence: (a) **quadrant-first** (`firstQuadrant[level]` bit unset) → replacement reward (0.5% `Pool.Reward` + 5 000 BURNIE), marks BOTH the `firstQuadrant` AND `firstSymbol` bits and **suppresses** the symbol-first bonus; (b) **symbol-first** (`firstSymbol[level]` bit unset, not quadrant-first) → regular + additive bonus (0.05%+0.05% = 0.1% `Pool.Reward` + 1 000+1 000 = 2 000 BURNIE), marks the `firstSymbol` bit; (c) **regular** (both set) → 0.05% `Pool.Reward` + 1 000 BURNIE. A quadrant-first claim marking the symbol-first bit guarantees no later claim of that symbol can re-collect the symbol-first bonus.
-- [ ] **BINGO-04**: The sDGNRS reward draws from `Pool.Reward` via `sdgnrs.transferFromPool(IStakedDegenerusStonk.Pool.Reward, msg.sender, (poolBal * bps) / 10_000)` (using `transferFromPool`'s clamped return as the paid amount); the BURNIE reward is paid via `coinflip.creditFlip(msg.sender, amount)`. Empty-pool behavior is a graceful no-op: if `poolBalance(Pool.Reward) == 0` or the computed amount is 0, the claim still succeeds (claim/first bits set + BURNIE flip credit paid, `dgnrsPaid == 0`) — matching the Degenerette / coinflip-bounty pattern.
-- [ ] **BINGO-05**: Leaderboard is event-only — `FirstQuadrantBingo`, `FirstSymbolBingo`, and `BingoClaimed` are emitted; there is no on-chain winner storage beyond the `firstQuadrant` / `firstSymbol` bitfields. Storage additions: `bingoClaimed` (per-player `uint8`, 4 bits used), `firstQuadrant` (systemwide `uint8`, 4 bits), `firstSymbol` (systemwide `uint32`, 32 bits), all keyed by the existing `uint24` level key. `gameOver` is a hard cutoff (`claimBingo` reverts once `gameOver == true`).
+- [x] **BINGO-01**: A new external `claimBingo(uint256 level, uint8 symbol, uint32[8] slots)` entrypoint exists (likely in a new `DegenerusGameBingoModule.sol` delegatecalled from `DegenerusGame`). It validates `symbol < 32`, `!gameOver`, `level <= currentLevel`; derives `quadrant = symbol >> 3` and `symInQ = symbol & 7`; and for each color `c ∈ [0,7]` verifies the caller owns the entry at `traitBurnTicket[level][traitId][slots[c]]` where `traitId = (quadrant<<6) | (c<<3) | symInQ` (trait byte layout `[QQ][CCC][SSS]`). Duplicate-slot griefing is impossible because each trait byte encodes exactly one (quadrant, color, symbol).
+- [x] **BINGO-02**: Per-player dedup is enforced once per (level, quadrant) via a `bingoClaimed[level][msg.sender]` quadrant-mask bit — a second claim of the same quadrant on the same level reverts. A player may make at most 4 bingo claims per level (one per quadrant A/B/C/D).
+- [x] **BINGO-03**: Three reward tiers are selected with **quadrant-first checked BEFORE symbol-first** precedence: (a) **quadrant-first** (`firstQuadrant[level]` bit unset) → replacement reward (0.5% `Pool.Reward` + 5 000 BURNIE), marks BOTH the `firstQuadrant` AND `firstSymbol` bits and **suppresses** the symbol-first bonus; (b) **symbol-first** (`firstSymbol[level]` bit unset, not quadrant-first) → regular + additive bonus (0.05%+0.05% = 0.1% `Pool.Reward` + 1 000+1 000 = 2 000 BURNIE), marks the `firstSymbol` bit; (c) **regular** (both set) → 0.05% `Pool.Reward` + 1 000 BURNIE. A quadrant-first claim marking the symbol-first bit guarantees no later claim of that symbol can re-collect the symbol-first bonus.
+- [x] **BINGO-04**: The sDGNRS reward draws from `Pool.Reward` via `sdgnrs.transferFromPool(IStakedDegenerusStonk.Pool.Reward, msg.sender, (poolBal * bps) / 10_000)` (using `transferFromPool`'s clamped return as the paid amount); the BURNIE reward is paid via `coinflip.creditFlip(msg.sender, amount)`. Empty-pool behavior is a graceful no-op: if `poolBalance(Pool.Reward) == 0` or the computed amount is 0, the claim still succeeds (claim/first bits set + BURNIE flip credit paid, `dgnrsPaid == 0`) — matching the Degenerette / coinflip-bounty pattern.
+- [x] **BINGO-05**: Leaderboard is event-only — `FirstQuadrantBingo`, `FirstSymbolBingo`, and `BingoClaimed` are emitted; there is no on-chain winner storage beyond the `firstQuadrant` / `firstSymbol` bitfields. Storage additions: `bingoClaimed` (per-player `uint8`, 4 bits used), `firstQuadrant` (systemwide `uint8`, 4 bits), `firstSymbol` (systemwide `uint32`, 32 bits), all keyed by the existing `uint24` level key. `gameOver` is a hard cutoff (`claimBingo` reverts once `gameOver == true`).
 - [x] **BINGO-06**: RNG-freeze safety is PROVEN (not assumed): `claimBingo` reads only `traitBurnTicket`, which is fully written at lootbox/jackpot resolution (post-RNG), and writes only its own `bingoClaimed` / `firstQuadrant` / `firstSymbol` bitfields + the two external reward calls — it participates in NO storage slot of any current VRF-influenced output during `rngLock`. The `traitBurnTicket[level][traitId][i]` populated-only-after-level-L-resolution invariant is attested, and the race-start semantics (claimable the moment level-N entry traits are RNG-resolved; whale frontrunning on the trait-resolution batch accepted by design) are locked at SPEC.
 
 ### Co-requisite sDGNRS Pool.Reward Rebalance (REBAL)
-- [ ] **REBAL-01**: `StakedDegenerusStonk.sol:294-298` constructor constants are rebalanced — `AFFILIATE_POOL_BPS` 3 500 → 3 000 and `REWARD_POOL_BPS` 500 → 1 000 — doubling `Pool.Reward` from 50B to 100B sDGNRS with NO change to total sDGNRS supply (the pool BPS still sum to 10 000; affiliate per-share distribution takes a ~14% haircut). Constructor-only constant change → viable only pre-deploy. SPEC attests the BPS-sum invariant and that no other pool/constant is perturbed.
+- [x] **REBAL-01**: `StakedDegenerusStonk.sol:294-298` constructor constants are rebalanced — `AFFILIATE_POOL_BPS` 3 500 → 3 000 and `REWARD_POOL_BPS` 500 → 1 000 — doubling `Pool.Reward` from 50B to 100B sDGNRS with NO change to total sDGNRS supply (the pool BPS still sum to 10 000; affiliate per-share distribution takes a ~14% haircut). Constructor-only constant change → viable only pre-deploy. SPEC attests the BPS-sum invariant and that no other pool/constant is perturbed.
 
 ### Jackpot Final-Day Pool.Reward Deletion (JACK)
-- [ ] **JACK-01**: The `isFinalDay` `Pool.Reward` branch in `_paySoloBucket` (`DegenerusGameJackpotModule.sol:1339-1352`) is DELETED, along with the `FINAL_DAY_DGNRS_BPS = 100` constant (`:191`) and the `JackpotDgnrsWin` event if grep confirms it has no other emitter. The one-shot final-day `Pool.Reward` draw (today 1% to the final-day jackpot solo winner) is removed; `Pool.Reward` distribution now flows through `claimBingo` instead.
-- [ ] **JACK-02**: The remaining `isFinalDay` plumbing is PRESERVED — the `lvl + 1` ticket-index gate (`:617`) and the `_paySoloBucket` callers passing `isFinalDay` (`:1085 / 1095 / 1135 / 1161 / 1190 / 1312`) are untouched; only the `Pool.Reward` draw is removed. SPEC attests no non-`Pool.Reward` final-day behavior is broken by the deletion.
+- [x] **JACK-01**: The `isFinalDay` `Pool.Reward` branch in `_paySoloBucket` (`DegenerusGameJackpotModule.sol:1339-1352`) is DELETED, along with the `FINAL_DAY_DGNRS_BPS = 100` constant (`:191`) and the `JackpotDgnrsWin` event if grep confirms it has no other emitter. The one-shot final-day `Pool.Reward` draw (today 1% to the final-day jackpot solo winner) is removed; `Pool.Reward` distribution now flows through `claimBingo` instead.
+- [x] **JACK-02**: The remaining `isFinalDay` plumbing is PRESERVED — the `lvl + 1` ticket-index gate (`:617`) and the `_paySoloBucket` callers passing `isFinalDay` (`:1085 / 1095 / 1135 / 1161 / 1190 / 1312`) are untouched; only the `Pool.Reward` draw is removed. SPEC attests no non-`Pool.Reward` final-day behavior is broken by the deletion.
 
 ### Test Proofs (TST)
 - [ ] **TST-01**: Per-tier × per-quadrant happy path — a regular claim pays 0.05% `Pool.Reward` + 1 000 BURNIE; a symbol-first claim pays the additive 0.1% + 2 000 (and marks the `firstSymbol` bit); a quadrant-first claim pays the replacement 0.5% + 5 000 (and marks BOTH bits) — each verified across the relevant quadrants, with bits and emitted events asserted.
@@ -38,7 +38,7 @@
 
 ### Cross-Cutting — SPEC Reconciliation + IMPL + TERMINAL (BATCH)
 - [x] **BATCH-01**: SPEC design-lock — settle module placement (new `DegenerusGameBingoModule.sol` recommended), the storage shape (`bingoClaimed` / `firstQuadrant` / `firstSymbol` + the `uint24` key), the slot type width (`uint32` vs the `traitBurnTicket` array indexing), the reward constants, and the `claimBingo` signature; resolve all 7 "Open before SPEC" items from the plan doc (module placement · slot width · view-helper-out-of-scope · `traitBurnTicket` post-resolution invariant · RNG-freeze interaction · jackpot final-day deletion side-effects · tier-precedence test coverage); and grep-attest every cited `file:line` vs the v50.0-closure HEAD before any patch.
-- [ ] **BATCH-02**: The ONE batched USER-APPROVED `contracts/*.sol` diff — new `DegenerusGameBingoModule.sol` + storage mappings + `DegenerusGame.claimBingo` entrypoint delegatecall + interface + `StakedDegenerusStonk` constructor rebalance + `JackpotModule` final-day deletion — is applied in producer-before-consumer order; HARD STOP at the commit boundary (locally compiled/tested, never committed without explicit user hand-review of the diff).
+- [x] **BATCH-02**: The ONE batched USER-APPROVED `contracts/*.sol` diff — new `DegenerusGameBingoModule.sol` + storage mappings + `DegenerusGame.claimBingo` entrypoint delegatecall + interface + `StakedDegenerusStonk` constructor rebalance + `JackpotModule` final-day deletion — is applied in producer-before-consumer order; HARD STOP at the commit boundary (locally compiled/tested, never committed without explicit user hand-review of the diff).
 - [ ] **BATCH-03**: TERMINAL minimal close — re-attest all v51.0 requirements at closure and apply the atomic 5-doc closure flip (`MILESTONE_V51_AT_HEAD_<sha>` + ROADMAP / STATE / MILESTONES / PROJECT / REQUIREMENTS). The internal 3-skill adversarial sweep + delta-audit + `audit/FINDINGS-v51.0.md` are DEFERRED → the v52 consolidated audit, and the v51 surface is recorded in the v52 audit-debt charge.
 
 ---
@@ -70,15 +70,15 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BINGO-01 | Phase 340 (IMPL) | Pending |
-| BINGO-02 | Phase 340 (IMPL) | Pending |
-| BINGO-03 | Phase 340 (IMPL) | Pending |
-| BINGO-04 | Phase 340 (IMPL) | Pending |
-| BINGO-05 | Phase 340 (IMPL) | Pending |
+| BINGO-01 | Phase 340 (IMPL) | Complete |
+| BINGO-02 | Phase 340 (IMPL) | Complete |
+| BINGO-03 | Phase 340 (IMPL) | Complete |
+| BINGO-04 | Phase 340 (IMPL) | Complete |
+| BINGO-05 | Phase 340 (IMPL) | Complete |
 | BINGO-06 | Phase 339 (SPEC) | Complete |
-| REBAL-01 | Phase 340 (IMPL) | Pending |
-| JACK-01 | Phase 340 (IMPL) | Pending |
-| JACK-02 | Phase 340 (IMPL) | Pending |
+| REBAL-01 | Phase 340 (IMPL) | Complete |
+| JACK-01 | Phase 340 (IMPL) | Complete |
+| JACK-02 | Phase 340 (IMPL) | Complete |
 | TST-01 | Phase 341 (TST) | Pending |
 | TST-02 | Phase 341 (TST) | Pending |
 | TST-03 | Phase 341 (TST) | Pending |
@@ -86,7 +86,7 @@
 | TST-05 | Phase 341 (TST) | Pending |
 | TST-06 | Phase 341 (TST) | Pending |
 | BATCH-01 | Phase 339 (SPEC) | Complete |
-| BATCH-02 | Phase 340 (IMPL) | Pending |
+| BATCH-02 | Phase 340 (IMPL) | Complete |
 | BATCH-03 | Phase 342 (TERMINAL) | Pending |
 
 **Per-phase count (verification):**
