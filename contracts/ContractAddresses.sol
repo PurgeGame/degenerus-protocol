@@ -30,6 +30,8 @@ library ContractAddresses {
         address(0x2a07706473244BC757E10F2a9E86fB532828afe3);
     address internal constant GAME_DEGENERETTE_MODULE =
         address(0x3D7Ebc40AF7092E3F1C81F2e996cbA5Cae2090d7);
+    address internal constant GAME_BINGO_MODULE =
+        address(0xB14609De6e7ec52e4eAE6cbB1fEaE8e4d4db1F60);
     address internal constant COIN =
         address(0xD16d567549A2a2a2005aEACf7fB193851603dd70);
     address internal constant COINFLIP =

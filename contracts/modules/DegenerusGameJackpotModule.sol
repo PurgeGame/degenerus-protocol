@@ -108,9 +108,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 bonusTargetLevel
     );
 
-    /// @dev DGNRS reward to solo bucket winner on final day.
-    event JackpotDgnrsWin(address indexed winner, uint256 amount);
-
     /// @dev Whale pass awarded to solo bucket winner.
     event JackpotWhalePassWin(
         address indexed winner,
@@ -186,9 +183,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Current-pool daily jackpot percentage bounds for days 1-4 (6%-14%).
     uint16 private constant DAILY_CURRENT_BPS_MIN = 600;
     uint16 private constant DAILY_CURRENT_BPS_MAX = 1400;
-
-    /// @dev Portion of DGNRS reward pool paid to the day-5 solo bucket winner (1%).
-    uint16 private constant FINAL_DAY_DGNRS_BPS = 100;
 
     /// @dev Portion of purchase-phase reward-pool jackpots converted to loot boxes (3/4).
     uint16 private constant PURCHASE_REWARD_JACKPOT_LOOTBOX_BPS = 7500;
@@ -290,7 +284,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             traitIds,
             shareBps,
             bucketCounts,
-            false, // not final day
             false // not jackpot phase
         );
     }
@@ -429,8 +422,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256 entropyDaily = EntropyLib.hash2(randWord, lvl);
             uint8[4] memory traitIdsDaily = JackpotBucketLib
                 .unpackWinningTraits(winningTraitsPacked);
-            uint8 soloQuadrant = _pickSoloQuadrant(traitIdsDaily, entropyDaily);
-            uint256 effectiveEntropy = (entropyDaily & ~uint256(3)) | uint256((3 - soloQuadrant) & 3);
+            uint8 soloQuadrantDaily = _pickSoloQuadrant(traitIdsDaily, entropyDaily);
+            uint256 effectiveEntropyDaily = (entropyDaily & ~uint256(3)) | uint256((3 - soloQuadrantDaily) & 3);
             (uint8 counterStep_, , , ) = _unpackDailyTicketBudgets(
                 dailyTicketBudgetsPacked
             );
@@ -441,7 +434,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 uint16[4] memory bucketCountsDaily = JackpotBucketLib
                     .bucketCountsForPoolCap(
                         dailyEthBudget,
-                        effectiveEntropy,
+                        effectiveEntropyDaily,
                         DAILY_ETH_MAX_WINNERS,
                         DAILY_JACKPOT_SCALE_MAX_BPS
                     );
@@ -452,16 +445,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     ? FINAL_DAY_SHARES_PACKED
                     : DAILY_JACKPOT_SHARES_PACKED;
                 uint16[4] memory shareBpsDaily = JackpotBucketLib
-                    .shareBpsByBucket(sharesPacked, uint8(effectiveEntropy & 3));
+                    .shareBpsByBucket(sharesPacked, uint8(effectiveEntropyDaily & 3));
 
                 uint256 paidDailyEth = _processDailyEth(
                     lvl,
                     dailyEthBudget,
-                    effectiveEntropy,
+                    effectiveEntropyDaily,
                     traitIdsDaily,
                     shareBpsDaily,
                     bucketCountsDaily,
-                    isFinalPhysicalDay_,
                     true // jackpot phase (solo bucket gets whale pass)
                 );
                 if (isFinalPhysicalDay_) {
@@ -1060,7 +1052,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 traitIds,
                 shareBps,
                 bucketCounts,
-                false, // not final day
                 false // not jackpot phase
             );
     }
@@ -1082,7 +1073,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param traitIds The 4 winning trait IDs.
     /// @param shareBps Basis-point share for each of the 4 buckets.
     /// @param bucketCounts Number of holders in each trait bucket.
-    /// @param isFinalDay True on the last physical jackpot day (controls DGNRS in solo bucket).
     /// @param isJackpotPhase True during jackpot phase (solo bucket gets whale pass).
     /// @return paidEth Total ETH actually paid out in this call.
     function _processDailyEth(
@@ -1092,7 +1082,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8[4] memory traitIds,
         uint16[4] memory shareBps,
         uint16[4] memory bucketCounts,
-        bool isFinalDay,
         bool isJackpotPhase
     ) private returns (uint256 paidEth) {
         if (ethPool == 0) {
@@ -1132,7 +1121,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 count,
                 share,
                 entropyState,
-                isFinalDay,
                 isJackpotPhase && traitIdx == remainderIdx
             );
             paidEth += paidDelta;
@@ -1158,7 +1146,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint16 count,
         uint256 share,
         uint256 entropy,
-        bool isFinalDay,
         bool isSolo
     ) private returns (uint256 paidDelta, uint256 claimDelta, uint256 newEntropy) {
         newEntropy = entropy;
@@ -1187,13 +1174,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             if (w != address(0)) {
                 (claimDelta, paidDelta, newEntropy) = _handleSoloBucketWinner(
                     w, lvl, traitId, ticketIndexes[0],
-                    perWinner, newEntropy, isFinalDay
+                    perWinner, newEntropy
                 );
             }
         } else {
             // Normal bucket: 100% ETH
             (paidDelta, claimDelta) = _payNormalBucket(
-                winners, ticketIndexes, perWinner, lvl, traitId, newEntropy
+                winners, ticketIndexes, perWinner, lvl, traitId
             );
         }
     }
@@ -1308,8 +1295,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8 traitId,
         uint256 ticketIndex,
         uint256 perWinner,
-        uint256 entropy,
-        bool isFinalDay
+        uint256 entropy
     )
         private
         returns (uint256 claimDelta, uint256 paidDelta, uint256 newEntropy)
@@ -1336,20 +1322,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             emit JackpotWhalePassWin(w, lvl, wpSpent / HALF_WHALE_PASS_PRICE);
             paidDelta += wpSpent;
         }
-        if (isFinalDay) {
-            uint256 dgnrsPool = dgnrs.poolBalance(
-                IStakedDegenerusStonk.Pool.Reward
-            );
-            uint256 reward = (dgnrsPool * FINAL_DAY_DGNRS_BPS) / 10_000;
-            if (reward != 0) {
-                dgnrs.transferFromPool(
-                    IStakedDegenerusStonk.Pool.Reward,
-                    w,
-                    reward
-                );
-                emit JackpotDgnrsWin(w, reward);
-            }
-        }
     }
 
     /// @dev Pays normal (non-solo) bucket winners. Extracted to avoid stack-too-deep in _processDailyEth.
@@ -1358,8 +1330,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256[] memory ticketIndexes,
         uint256 perWinner,
         uint24 lvl,
-        uint8 traitId,
-        uint256 entropy
+        uint8 traitId
     ) private returns (uint256 totalPaid, uint256 totalLiability) {
         uint256 len = winners.length;
         for (uint256 i; i < len; ) {

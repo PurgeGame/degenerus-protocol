@@ -1634,6 +1634,26 @@ abstract contract DegenerusGameStorage {
     ///      UI readers combine with currentDayView() to compute per-category expiry.
     mapping(address => BoonPacked) public boonPacked;
 
+    // =========================================================================
+    // claimBingo color-completion bitfields (v51.0 — claimBingo-EXCLUSIVE)
+    //
+    // Appended at the storage-layout tail; pre-launch redeploy-fresh, no migration.
+    // Keyed by uint24 level (the traitBurnTicket precedent at :416). The ONLY
+    // reader/writer of these three mappings is DegenerusGameBingoModule.claimBingo.
+    // =========================================================================
+
+    /// @dev Per-player 4-bit quadrant mask: which quadrants this player has already
+    ///      claimed on a level (max 4 claims/player/level). bingoClaimed[level][player].
+    mapping(uint24 => mapping(address => uint8)) internal bingoClaimed;
+
+    /// @dev Systemwide 4-bit quadrant mask: which quadrants have had their first
+    ///      bingo on a level (max 4 quadrant-firsts/level). firstQuadrant[level].
+    mapping(uint24 => uint8) internal firstQuadrant;
+
+    /// @dev Systemwide 32-bit symbol mask: which symbols (0-31) have had their first
+    ///      bingo on a level (max 32 symbol-firsts/level). firstSymbol[level].
+    mapping(uint24 => uint32) internal firstSymbol;
+
     // ---- Slot 0 shifts ----
     uint256 internal constant BP_COINFLIP_DAY_SHIFT = 0;
     uint256 internal constant BP_DEITY_COINFLIP_DAY_SHIFT = 24;

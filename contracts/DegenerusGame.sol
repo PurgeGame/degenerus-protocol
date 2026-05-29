@@ -40,7 +40,8 @@ import {
     IDegenerusGameWhaleModule,
     IDegenerusGameLootboxModule,
     IDegenerusGameBoonModule,
-    IDegenerusGameDegeneretteModule
+    IDegenerusGameDegeneretteModule,
+    IDegenerusGameBingoModule
 } from "./interfaces/IDegenerusGameModules.sol";
 import {MintPaymentKind} from "./interfaces/IDegenerusGame.sol";
 import {
@@ -313,6 +314,29 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                     coordinator_,
                     subId,
                     keyHash_
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level (v51.0).
+    /// @dev Dispatches to GAME_BINGO_MODULE via delegatecall; void return.
+    /// @param level The level to claim on (uint24 storage-key width).
+    /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
+    /// @param slots Per-color positions in traitBurnTicket[level][traitId] the caller occupies.
+    function claimBingo(
+        uint24 level,
+        uint8 symbol,
+        uint32[8] calldata slots
+    ) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_BINGO_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameBingoModule.claimBingo.selector,
+                    level,
+                    symbol,
+                    slots
                 )
             );
         if (!ok) _revertDelegate(data);

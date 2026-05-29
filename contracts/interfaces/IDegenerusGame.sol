@@ -445,6 +445,13 @@ interface IDegenerusGame {
         uint256 ticketQuantity
     ) external;
 
+    /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level (v51.0).
+    /// @dev Tiered reward (regular / symbol-first / quadrant-first); dispatches to the bingo module.
+    /// @param level The level to claim on (uint24 storage-key width).
+    /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
+    /// @param slots Per-color positions in traitBurnTicket[level][traitId] the caller occupies.
+    function claimBingo(uint24 level, uint8 symbol, uint32[8] calldata slots) external;
+
     // -------------------------------------------------------------------------
     // Degenerette Tracking Views
     // -------------------------------------------------------------------------

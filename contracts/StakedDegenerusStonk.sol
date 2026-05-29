@@ -292,9 +292,9 @@ contract StakedDegenerusStonk {
 
     /// @dev Non-creator pool distribution (BPS of total supply).
     uint16 private constant WHALE_POOL_BPS = 1000;
-    uint16 private constant AFFILIATE_POOL_BPS = 3500;
+    uint16 private constant AFFILIATE_POOL_BPS = 3000;
     uint16 private constant LOOTBOX_POOL_BPS = 2000;
-    uint16 private constant REWARD_POOL_BPS = 500;
+    uint16 private constant REWARD_POOL_BPS = 1000;
     uint16 private constant PRESALE_BOX_POOL_BPS = 1000;
 
     /// @dev Maximum base ethValueOwed a single wallet can accumulate per day via gambling burns
