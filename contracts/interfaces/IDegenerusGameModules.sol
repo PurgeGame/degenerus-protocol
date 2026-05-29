@@ -233,6 +233,17 @@ interface IDegenerusGameMintModule {
         MintPaymentKind payKind
     ) external payable;
 
+    /// @notice Keeper-batch buy entry: the fresh-ETH portion is an explicit `ethValue` param
+    ///         (not msg.value), so batchPurchase can run many subscriber buys inline in one frame.
+    function purchaseWith(
+        address buyer,
+        uint256 ticketQuantity,
+        uint256 lootBoxAmount,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind,
+        uint256 ethValue
+    ) external;
+
     /// @notice Processes a BURNIE purchase of tickets
     /// @param buyer Address of the buyer
     /// @param ticketQuantity Number of tickets to purchase

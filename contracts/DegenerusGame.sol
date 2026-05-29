@@ -1787,80 +1787,73 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         _openLootBoxFor(player, index);
     }
 
-    /// @notice Keeper-gated batch ticket/lootbox purchase for the subscription keeper.
+    /// @notice Per-subscriber buy descriptor for `batchPurchase` (keeper auto-buy).
+    /// @dev `amount` is ticket entry-units (whole tickets * 4 * TICKET_SCALE) when `isTicket` is
+    ///      true, else a lootbox spend in wei — ticket vs lootbox are mutually exclusive, so one
+    ///      `amount` + the `isTicket` flag replaces separate fields. `ethValue` is the fresh-ETH
+    ///      portion the keeper funds from its pool (0 = pure claimable); the mint module draws the
+    ///      remainder (cost - ethValue) from the buyer's claimable per `mode` (MintPaymentKind).
+    struct BatchBuy {
+        address player;
+        uint256 ethValue;
+        uint256 amount;
+        bool isTicket;
+        uint8 mode;
+    }
+
+    /// @notice Keeper-gated batch ticket/lootbox purchase for the subscription keeper (AfKing).
     /// @dev PROTO-04. Gated to the pinned AF_KING keeper; does NO per-player approval check
     ///      (it trusts the keeper, which structurally only acts on its own subscribers).
-    ///      game-over is pre-checked ONCE at entry for a clean whole-batch abort. There is NO
-    ///      rngLock entry-check: keeper buys are freeze-safe by construction (RD-2) — a lootbox
-    ///      queues at the current index pre-entropy, and the orphan hazard is defended on the
-    ///      OPEN side via the autoOpen word-gate, not by blocking the buy.
-    ///      The keeper sends ONE batch value transfer; per-player slices are forwarded via an
-    ///      onlySelf sub-call wrapped in try/catch + slice-refund, so one reverting player
-    ///      (a level/state-gated guard, liveness, or any per-player revert deep in the
-    ///      mint -> lootbox -> prize-pool -> EV-cap -> quest path) is skipped + refunded
-    ///      rather than bricking the batch. Any unspent value (failed slices + dust) is
-    ///      refunded to the keeper once after the loop, followed by the post-loop day-stamp.
+    ///      game-over is pre-checked ONCE at entry. Each slice runs INLINE via a delegatecall to
+    ///      the mint module's `purchaseWith` — the per-slice fresh-ETH portion is the `ethValue`
+    ///      PARAM (not msg.value) — so there is no per-slice value-bearing self-call (the gas win),
+    ///      and the buy honors the sub's mode (ticketQty vs lootBoxAmount) and claimable funding.
+    ///      Unreferred AfKing-joiners are captured into the protocol code bytes32("DGNRS")
+    ///      (75% SDGNRS / 20% VAULT); a player with a real affiliate keeps it.
     ///
-    ///      OPEN-C reentrancy disposition = CEI-proof, no guard. The only external call in the
-    ///      per-player mint -> lootbox path before the day-stamp is the fixed-recipient
-    ///      VAULT value-hop (DegenerusGameMintModule:1066), made AFTER the prize-pool state
-    ///      writes (CEI); its recipient is the pinned VAULT, which cannot pass this AF_KING
-    ///      gate, so no re-entrant double-buy path exists. The per-player slice moves into the
-    ///      sub-call frame on each try, and a failed slice stays in the contract (refunded
-    ///      once), so there is no stored batch-debit a reentrant auto-work/cancel could replay.
-    /// @param players Subscribers to purchase for.
-    /// @param amounts Per-player ETH value slice (parallel to players); sum must be <= msg.value.
-    /// @param modes Per-player payment kind (parallel to players).
-    function batchPurchase(
-        address[] calldata players,
-        uint256[] calldata amounts,
-        uint8[] calldata modes
-    ) external payable {
+    ///      NO per-slice try/catch and NO rngLock entry-check. AfKing pre-validates funding and
+    ///      game-over, so a funded buy in a live game has no reason to revert (full buy-path
+    ///      audit). A stray revert bubbles and rolls the WHOLE batch back atomically — which is
+    ///      benign: advanceGame() is a separate permissionless entrypoint, so the game never
+    ///      freezes; subscribers just retry next cycle. Atomicity also structurally removes the
+    ///      old failed-slice refund (which mis-credited the keeper's own _poolOf) and the false
+    ///      day-stamp. Keeper buys stay freeze-safe by construction (RD-2): a lootbox queues at
+    ///      the current index pre-entropy; the orphan hazard is defended on the OPEN side via the
+    ///      autoOpen word-gate, not by blocking the buy.
+    /// @param buys Per-subscriber buy descriptors; the sum of `ethValue` MUST equal msg.value.
+    function batchPurchase(BatchBuy[] calldata buys) external payable {
         if (msg.sender != ContractAddresses.AF_KING) revert E();
         if (gameOver) revert E();
 
-        uint256 len = players.length;
-        if (len == 0 || amounts.length != len || modes.length != len) revert E();
+        uint256 len = buys.length;
+        if (len == 0) revert E();
 
         uint256 spent;
         for (uint256 i; i < len; ) {
-            uint256 slice = amounts[i];
-            // Per-player isolation: forward the slice in-context; on revert the slice is
-            // not consumed (stays in the contract) and the player is skipped.
-            try
-                this._batchPurchaseUnit{value: slice}(
-                    players[i],
-                    MintPaymentKind(modes[i])
-                )
-            {
-                spent += slice;
-            } catch {}
+            BatchBuy calldata b = buys[i];
+            (bool ok, bytes memory data) = ContractAddresses
+                .GAME_MINT_MODULE
+                .delegatecall(
+                    abi.encodeWithSelector(
+                        IDegenerusGameMintModule.purchaseWith.selector,
+                        b.player,
+                        b.isTicket ? b.amount : 0,
+                        b.isTicket ? 0 : b.amount,
+                        bytes32("DGNRS"),
+                        MintPaymentKind(b.mode),
+                        b.ethValue
+                    )
+                );
+            if (!ok) _revertDelegate(data);
             unchecked {
+                spent += b.ethValue;
                 ++i;
             }
         }
 
-        // ONE refund of all unspent value (failed slices + any caller overage) to the keeper.
-        if (msg.value > spent) {
-            (bool ok, ) = payable(msg.sender).call{value: msg.value - spent}("");
-            if (!ok) revert E();
-        }
-    }
-
-    /// @notice Self-call wrapper performing one subscriber purchase (per-player isolation).
-    /// @dev onlySelf. Skips the operator-approval gate (batchPurchase already trusts the
-    ///      pinned keeper); the per-player msg.value slice flows into the mint module here.
-    /// @param player Subscriber to purchase for.
-    /// @param payKind Payment kind for this slice.
-    function _batchPurchaseUnit(
-        address player,
-        MintPaymentKind payKind
-    ) external payable {
-        if (msg.sender != address(this)) revert E();
-        // Capture unreferred AfKing-joiners into the protocol-owned registered code:
-        // primary 75% -> SDGNRS, secondary 20% -> VAULT (two-tier cross-referral). A player
-        // already holding a real human affiliate keeps it (the affiliate's !infoSet fall-through).
-        _purchaseFor(player, 0, msg.value, bytes32("DGNRS"), payKind);
+        // Exact funding: the keeper sends precisely the sum of per-slice fresh-ETH. No refund
+        // path (atomic batch) — a mismatch is a keeper bug and reverts rather than stranding ETH.
+        if (spent != msg.value) revert E();
     }
 
     /// @dev Convert an ETH wei amount to BURNIE coinflip-credit value at a given price.

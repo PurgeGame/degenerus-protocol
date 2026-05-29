@@ -856,6 +856,29 @@ contract DegenerusGameMintModule is
         );
     }
 
+    /// @notice Keeper-batch purchase entry: like `purchase`, but the fresh-ETH portion is an
+    ///         explicit `ethValue` parameter rather than `msg.value`. Lets `batchPurchase` run
+    ///         many subscriber buys inline in one frame (the contract holds the aggregate ETH),
+    ///         instead of one value-bearing self-call per slice. Reached only via the
+    ///         AF_KING-gated `batchPurchase` delegatecall.
+    function purchaseWith(
+        address buyer,
+        uint256 ticketQuantity,
+        uint256 lootBoxAmount,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind,
+        uint256 ethValue
+    ) external {
+        _purchaseForWith(
+            buyer,
+            ticketQuantity,
+            lootBoxAmount,
+            affiliateCode,
+            payKind,
+            ethValue
+        );
+    }
+
     /// @notice Purchase tickets with BURNIE.
     /// @dev BURNIE ticket purchases require RNG unlocked and gameOverPossible=false.
     /// @param buyer Recipient of the purchased tickets.
@@ -997,12 +1020,32 @@ contract DegenerusGameMintModule is
         }
     }
 
+    /// @dev Single-tx callers: the fresh-ETH portion is `msg.value`. Read here (a private fn)
+    ///      so external non-payable callers (e.g. claimable-only paths) never reference msg.value.
     function _purchaseFor(
         address buyer,
         uint256 ticketQuantity,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind
+    ) private {
+        _purchaseForWith(
+            buyer,
+            ticketQuantity,
+            lootBoxAmount,
+            affiliateCode,
+            payKind,
+            msg.value
+        );
+    }
+
+    function _purchaseForWith(
+        address buyer,
+        uint256 ticketQuantity,
+        uint256 lootBoxAmount,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind,
+        uint256 ethValue
     ) private {
         if (_livenessTriggered()) revert E();
         uint256 lootboxFlipCredit;
@@ -1024,7 +1067,9 @@ contract DegenerusGameMintModule is
 
         uint256 initialClaimable = claimableWinnings[buyer];
 
-        uint256 remainingEth = msg.value;
+        // ethValue is the per-slice fresh-ETH portion (== msg.value for single-tx callers; the
+        // explicit keeper batch slice for batchPurchase, which processes many buys in one frame).
+        uint256 remainingEth = ethValue;
         uint256 lootboxFreshEth = 0;
         uint256 lootboxClaimableUsed = 0;
         if (lootBoxAmount != 0) {

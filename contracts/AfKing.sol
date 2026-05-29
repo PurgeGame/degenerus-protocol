@@ -12,6 +12,19 @@ enum MintPaymentKind {
     Combined // Pay with both ETH and claimable
 }
 
+/// @notice Per-subscriber buy descriptor for the batched keeper purchase. File-scope mirror of
+///         `DegenerusGame.BatchBuy` (identical field order/types ⇒ ABI-compatible). `amount` is ticket
+///         entry-units when `isTicket`, else a lootbox spend in wei (the two are mutually exclusive);
+///         `ethValue` is the fresh-ETH portion funded from the keeper pool (0 = pure claimable), the
+///         rest drawn from the buyer's claimable per `mode`.
+struct BatchBuy {
+    address player;
+    uint256 ethValue;
+    uint256 amount;
+    bool isTicket;
+    uint8 mode;
+}
+
 /// @title IGame
 /// @notice Minimal owner-less call surface into the protocol GAME contract.
 /// @dev Signatures match `contracts/DegenerusGame.sol` verbatim: `batchPurchase`
@@ -27,11 +40,7 @@ enum MintPaymentKind {
 interface IGame {
     function isOperatorApproved(address owner, address operator) external view returns (bool);
 
-    function batchPurchase(
-        address[] calldata players,
-        uint256[] calldata amounts,
-        uint8[] calldata modes
-    ) external payable;
+    function batchPurchase(BatchBuy[] calldata buys) external payable;
 
     function rngLocked() external view returns (bool);
     function mintPrice() external view returns (uint256);
@@ -566,9 +575,7 @@ contract AfKing {
         // Per-chunk accumulation buffers. The batched purchase fires once, after the
         // per-player accounting loop, with one slice per successful player.
         uint256 cap = maxCount;
-        address[] memory players = new address[](cap);
-        uint256[] memory amounts = new uint256[](cap);
-        uint8[] memory modes = new uint8[](cap);
+        BatchBuy[] memory buys = new BatchBuy[](cap);
         uint256 batchLen;
         uint256 totalValue;
         // True once the chunk commits real set work (cancel-tombstone reclaim,
@@ -657,7 +664,9 @@ contract AfKing {
             // the stack-depth limit. GASOPT-03: ONE keeperSnapshot read per player.
             (
                 MintPaymentKind payKind,
-                uint256 msgValue,
+                uint256 ethValue,
+                uint256 amount,
+                bool isTicket,
                 bool lootboxSkip
             ) = _resolveBuy(sub, player, mp);
 
@@ -683,7 +692,7 @@ contract AfKing {
             // identity — a funding skip is transient for them (no-op-and-retry,
             // stays in the set). The exemption is the pinned-address branch only;
             // there is no settable exemption flag.
-            if (_poolOf[src] < msgValue) {
+            if (_poolOf[src] < ethValue) {
                 if (player == ContractAddresses.VAULT || player == ContractAddresses.SDGNRS) {
                     emit PlayerSkipped(player, 3);
                     unchecked {
@@ -703,20 +712,27 @@ contract AfKing {
             }
 
             // (7) CEI debit BEFORE the batched external call. Unchecked safe: the
-            // line above guarantees _poolOf[src] >= msgValue.
+            // line above guarantees _poolOf[src] >= ethValue. Only the pool-funded
+            // (fresh-ETH) portion is debited here; the claimable portion is drawn
+            // game-side from the buyer's claimableWinnings per payKind.
             unchecked {
-                _poolOf[src] -= msgValue;
+                _poolOf[src] -= ethValue;
             }
 
-            // Accumulate this player's slice for the single batched purchase. The
-            // game-side _batchPurchaseUnit forwards the per-player msg.value slice
-            // into the mint module, so the slice IS the per-player cost.
-            players[batchLen] = player;
-            amounts[batchLen] = msgValue;
-            modes[batchLen] = uint8(payKind);
+            // Accumulate this player's slice for the single batched purchase. ethValue is the
+            // fresh-ETH portion funded from the pool; the GAME draws the rest (cost - ethValue)
+            // from the buyer's claimable per payKind. `amount` is ticket entry-units (isTicket)
+            // or a lootbox spend in wei.
+            buys[batchLen] = BatchBuy({
+                player: player,
+                ethValue: ethValue,
+                amount: amount,
+                isTicket: isTicket,
+                mode: uint8(payKind)
+            });
             unchecked {
                 ++batchLen;
-                totalValue += msgValue;
+                totalValue += ethValue;
             }
 
             // Day-stamp after accounting (CEI). The single batched purchase fires
@@ -742,17 +758,14 @@ contract AfKing {
             return 0;
         }
 
-        // Single batched purchase. Trim the buffers to the exact batch length so
-        // the game's length-equality guard (players.length == amounts.length ==
-        // modes.length) holds.
+        // Single batched purchase. Trim the buffer to the exact batch length; the GAME
+        // requires sum(ethValue) == msg.value (atomic — no per-slice refund).
         if (batchLen != cap) {
             assembly {
-                mstore(players, batchLen)
-                mstore(amounts, batchLen)
-                mstore(modes, batchLen)
+                mstore(buys, batchLen)
             }
         }
-        GAME.batchPurchase{value: totalValue}(players, amounts, modes);
+        GAME.batchPurchase{value: totalValue}(buys);
 
         // Return the raw successful-buy count; the unified router (doWork) pays the flat
         // per-tx buy bounty (RD-4/D-07). This leg NEVER self-credits. Advance is the sole
@@ -762,14 +775,16 @@ contract AfKing {
     }
 
     /// @dev Per-player funding resolution for the _autoBuy loop: SUB-04 effective quantity
-    ///      (max of dailyQuantity and the reinvest term) -> cost -> payment mode + msg.value
-    ///      slice. GASOPT-03: reads the player's claimable ONCE via keeperSnapshot (per-player
-    ///      fallback — the swap-pop walk makes a pre-loop chunk batch unsafe), reused by the
-    ///      reinvest term AND the drain-first waterfall (identical value, one STATICCALL
-    ///      instead of up to two). Extracted as a helper so its temporaries live in this frame
-    ///      (the _autoBuy loop is at the stack-depth limit). View — no state writes.
-    /// @return payKind Payment mode for the batched purchase slice.
-    /// @return msgValue ETH-wei slice forwarded for this player (0 in the Claimable case).
+    ///      (max of dailyQuantity and the reinvest term) -> cost -> purchase mode + funding split.
+    ///      GASOPT-03: reads the player's claimable ONCE via keeperSnapshot (per-player fallback —
+    ///      the swap-pop walk makes a pre-loop chunk batch unsafe), reused by the reinvest term AND
+    ///      the funding split (identical value, one STATICCALL instead of up to two). Extracted as a
+    ///      helper so its temporaries live in this frame (the _autoBuy loop is at the stack-depth
+    ///      limit). View — no state writes.
+    /// @return payKind Payment mode (DirectEth / Claimable / Combined) for the slice.
+    /// @return ethValue Fresh-ETH portion funded from the keeper pool (0 in the pure-Claimable case).
+    /// @return amount Ticket entry-units (isTicket) or lootbox spend in wei (!isTicket).
+    /// @return isTicket True = buy `amount` ticket entry-units; false = buy an `amount`-wei lootbox.
     /// @return lootboxSkip True when a lootbox-mode sub is below LOOTBOX_MIN (transient skip).
     function _resolveBuy(
         Sub storage sub,
@@ -778,7 +793,13 @@ contract AfKing {
     )
         internal
         view
-        returns (MintPaymentKind payKind, uint256 msgValue, bool lootboxSkip)
+        returns (
+            MintPaymentKind payKind,
+            uint256 ethValue,
+            uint256 amount,
+            bool isTicket,
+            bool lootboxSkip
+        )
     {
         bool drainFirst = (sub.flags & FLAG_DRAIN_FIRST) != 0;
         uint256 claimable;
@@ -788,6 +809,7 @@ contract AfKing {
             (, , uint256[] memory cl) = GAME.keeperSnapshot(snap);
             claimable = cl[0];
         }
+        // Total quantity = max(dailyQuantity, reinvestPct% of claimable / price).
         uint256 effectiveQty = sub.dailyQuantity;
         if (sub.reinvestPct > 0) {
             uint256 reinvestQty = (claimable * sub.reinvestPct) / 100 / mp;
@@ -795,29 +817,38 @@ contract AfKing {
         }
         uint256 cost = mp * effectiveQty;
 
-        // LootboxFloor transient skip (lootbox mode only) — stays in the set, retries next
-        // autoBuy. Signalled out; the waterfall is skipped for it.
-        if ((sub.flags & FLAG_USE_TICKETS) == 0 && cost < LOOTBOX_MIN) {
-            lootboxSkip = true;
-        } else if (!drainFirst) {
-            payKind = MintPaymentKind.DirectEth;
-            msgValue = cost;
+        // Mode routing. Ticket mode buys `effectiveQty` whole tickets (entry-units =
+        // effectiveQty * TICKET_SCALE); lootbox mode buys a `cost`-wei box. LootboxFloor
+        // transient skip (lootbox mode ONLY) — the sub stays in the set and retries next
+        // autoBuy. Ticket mode needs no floor skip: one ticket is >= the ticket buy-in floor,
+        // so a >= 1-ticket buy never underflows it.
+        isTicket = (sub.flags & FLAG_USE_TICKETS) != 0;
+        if (isTicket) {
+            amount = effectiveQty * TICKET_SCALE;
         } else {
-            // Drain-first funding waterfall — preserved byte-faithfully.
-            uint256 cred = claimable;
-            if (cred > cost) {
-                payKind = MintPaymentKind.Claimable;
-                msgValue = 0;
-            } else if (cred > 1) {
-                payKind = MintPaymentKind.Combined;
-                unchecked {
-                    msgValue = cost - (cred - 1);
-                }
-            } else {
-                payKind = MintPaymentKind.DirectEth;
-                msgValue = cost;
+            if (cost < LOOTBOX_MIN) {
+                lootboxSkip = true;
+                return (payKind, ethValue, amount, isTicket, lootboxSkip);
             }
+            amount = cost;
         }
+
+        // Funding split (USER model): reinvestPct always spends that % of claimable; drainFirst is
+        // a superset (claimable-first up to cost). The AfKing pool funds the remainder. Never spend
+        // the entire claimable balance — leave >= 1 wei (the GAME's Claimable branch needs claimable
+        // strictly > cost, and the claimable shortfall settle needs basis > shortfall).
+        uint256 reinvestSpend = sub.reinvestPct > 0
+            ? (claimable * sub.reinvestPct) / 100
+            : 0;
+        if (reinvestSpend > cost) reinvestSpend = cost;
+        uint256 claimableUse = drainFirst
+            ? (claimable < cost ? claimable : cost)
+            : reinvestSpend;
+        if (claimable > 0 && claimableUse >= claimable) claimableUse = claimable - 1;
+        ethValue = cost - claimableUse;
+        payKind = ethValue == 0
+            ? MintPaymentKind.Claimable
+            : (claimableUse == 0 ? MintPaymentKind.DirectEth : MintPaymentKind.Combined);
     }
 
     /*------------------------------------------------------------------
