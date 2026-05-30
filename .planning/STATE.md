@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v54.0
 milestone_name: Game-Side Keeper-Funding Ledger + AfKing De-Custody
-status: planning
-last_updated: "2026-05-30T08:00:00.000Z"
-last_activity: 2026-05-30
+status: executing
+last_updated: "2026-05-30T08:52:47.903Z"
+last_activity: 2026-05-30 -- Phase 343 planning complete
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 5
   completed_plans: 0
   percent: 0
 ---
@@ -34,8 +34,8 @@ See: .planning/PROJECT.md (Current Milestone: v54.0 section) + .planning/REQUIRE
 
 Phase: 343 — SPEC (not started; roadmap defined)
 Plan: —
-Status: Roadmap defined — ready to plan Phase 343 SPEC
-Last activity: 2026-05-30 — Milestone v54.0 roadmap created (5 phases 343-347; 34 reqs / 9 categories mapped)
+Status: Ready to execute
+Last activity: 2026-05-30 -- Phase 343 planning complete
 
 ## Current Milestone Roadmap (v54.0 — phases 343-347)
 
@@ -50,7 +50,6 @@ Shape: SPEC → IMPL → GAS+CLEANUP → TST → TERMINAL (the established v49.0
 | 347 | TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v54.0 + Closure Flip | TERMINAL (FULL close — sweep IN-MILESTONE) | BATCH-03 | Not started |
 
 **Coverage:** 34/34 v54.0 requirements mapped (343: 5 · 344: 18 · 345: 3 · 346: 7 · 347: 1); 0 orphaned, 0 duplicated. Per-category: LEDGER 5 · AUTOBUY 5 · DECUSTODY 4 · GAMEOVER 2 · SOLVENCY 3 · CLEANUP 3 · GAS 3 · TST 6 · BATCH 3. The internal sweep + delta-audit + `audit/FINDINGS-v54.0.md` run IN-MILESTONE at 347 (NOT deferred). Full detail in `.planning/ROADMAP.md`; per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
-
 
 ## Last Shipped Milestone (v50.0 — CLOSED 2026-05-28, minimal close; closure HEAD `812abeee2719c32d6973771ad2a66187fae75b80`; no formal `MILESTONE_V50_AT_HEAD` signal emitted; baseline `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9`)
 
