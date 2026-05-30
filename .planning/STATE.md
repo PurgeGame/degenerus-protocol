@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
-status: in_progress
-last_updated: "2026-05-30T17:30:00.000Z"
-last_activity: 2026-05-30
+status: planning
+last_updated: "2026-05-30T18:00:00.000Z"
+last_activity: 2026-05-30 — Phase 348 SPEC context gathered (348-CONTEXT.md): §4 placement DECIDED = REQUIRED-PATH (USER override of the doc's separate-legs rec, on guaranteed-every-day grounds); try/catch valve DROPPED (REVERT-02 + proof §5 obl-4 rewrite → fail-loud-on-solvency); freeze live-read = accepted-by-design known issue; code-size = measure-and-verify; /gas-scavenger runs at SPEC
 progress:
   total_phases: 5
   completed_phases: 0
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v55.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** **v55.0 AfKing-in-Game Redesign — ROADMAP DEFINED 2026-05-30** (5 phases 348-352, 29 reqs / 10 categories). Fold AfKing's subscriber state + logic into DegenerusGame: the subscriber set + cursors + a per-sub box-stamp + the v54 `afkingFunding` ledger → `DegenerusGameStorage`; a new `GameAfkingModule` (delegatecall) owns subscribe/setters + the process-pass + the open-pass + the router; AfKing proper collapses to thin dispatch stubs. The box freeze RELOCATES into a per-sub stamp `(index, amount, day)` (not derived); afking boxes materialize at open; two open routes (afking-stamp + human `lootboxEth`/`boxPlayers`). ✅ **REVERT-FREE-CHAIN proof DISCHARGED 2026-05-30** (`.planning/PLAN-V55-REVERT-FREE-CHAIN-PROOF.md`, its §5 = the 4 LOCKED obligations): v54 is ALREADY revert-free on the funded afking path — every Game-side input revert is structurally prevented by AfKing's slice builder `_resolveBuy` (the v55 obligation = preserve those invariants verbatim when it folds into the process-pass); only solvency-violation [safe under the Phase-343 SOLVENCY-01] + liveness-timeout [game-dead] survive (accepted, absorbed by a thin per-sub skip valve). **§4 placement RESOLVED → required-path is viable/clean** (revert-safety no longer forces separate-legs; the decision is taken at SPEC on other grounds). Baseline = v54 de-custody HEAD `20ca1f79`. Design-lock: `.planning/PLAN-V55-AFKING-IN-GAME-REDESIGN.md` (canonical = §10). **Next = Phase 348 SPEC** (`/gsd-discuss-phase 348` or `/gsd-plan-phase 348`) — paper-only design-lock + FREEZE-spine proof; ZERO `contracts/*.sol`.
+**Current focus:** **v55.0 AfKing-in-Game Redesign — ROADMAP DEFINED 2026-05-30** (5 phases 348-352, 29 reqs / 10 categories). Fold AfKing's subscriber state + logic into DegenerusGame: the subscriber set + cursors + a per-sub box-stamp + the v54 `afkingFunding` ledger → `DegenerusGameStorage`; a new `GameAfkingModule` (delegatecall) owns subscribe/setters + the process-pass + the open-pass + the router; AfKing proper collapses to thin dispatch stubs. The box freeze RELOCATES into a per-sub stamp `(index, amount, day)` (not derived); afking boxes materialize at open; two open routes (afking-stamp + human `lootboxEth`/`boxPlayers`). ✅ **REVERT-FREE-CHAIN proof DISCHARGED 2026-05-30** (`.planning/PLAN-V55-REVERT-FREE-CHAIN-PROOF.md`, its §5 = the 4 LOCKED obligations): v54 is ALREADY revert-free on the funded afking path — every Game-side input revert is structurally prevented by AfKing's slice builder `_resolveBuy` (the v55 obligation = preserve those invariants verbatim when it folds into the process-pass); only solvency-violation [safe under the Phase-343 SOLVENCY-01] + liveness-timeout [game-dead] survive (accepted). **At Phase 348 the try/catch valve was DROPPED** (USER: "didnt we get rid of try/catch?") — the no-brick guarantee rests on obligation 1 (slice-builder fidelity); class B fails loud (never mask a solvency violation), class C is terminal (SPEC verifies the afking STAGE can't block game-over routing) — REVERT-02 + proof §5 obl-4 rewrite. **§4 placement DECIDED at Phase 348 → REQUIRED-PATH** (a chunked `advanceGame` STAGE before `rngGate`, uniform index epoch [block `requestLootboxRng` while `!subsFullyProcessed`], inherit the mint gate) — a USER override of the doc's separate-legs recommendation, on guaranteed-every-day grounds. Baseline = v54 de-custody HEAD `20ca1f79`. Design-lock: `.planning/PLAN-V55-AFKING-IN-GAME-REDESIGN.md` (canonical = §10; §4/§9 placement + §10 try/catch now superseded by 348). **Next = Phase 348 SPEC PLAN** (`/gsd-plan-phase 348`) — context gathered (`348-CONTEXT.md`); paper-only design-lock + FREEZE-spine proof; ZERO `contracts/*.sol`.
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -33,19 +33,19 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 348 of 352 (SPEC — Design-Lock + Freeze Proof + Discharged-Invariant Carry + §4 Placement Decision + Code-Size/GAS Inventories + Call-Graph Attestation)
-Plan: — (not yet planned)
-Status: Roadmap defined — ready to plan Phase 348
-Last activity: 2026-05-30 — Milestone v55.0 roadmap created (5 phases 348-352, 29 reqs / 10 categories; ROADMAP.md + REQUIREMENTS.md Traceability + STATE.md written)
+Plan: — (not yet planned; context gathered)
+Status: Phase 348 context gathered (348-CONTEXT.md) — ready to plan (`/gsd-plan-phase 348`)
+Last activity: 2026-05-30 — Phase 348 SPEC context gathered: required-path placement DECIDED, try/catch valve DROPPED, freeze live-read = accepted-by-design known issue, code-size = measure-and-verify, /gas-scavenger at SPEC
 
 Progress: [░░░░░░░░░░] 0% (0/5 phases)
 
 ## Current Milestone Roadmap (v55.0 — phases 348-352)
 
-Shape: SPEC → IMPL → GAS → TST → TERMINAL (the established v49.0 + v54.0 audit-milestone shape WITH a dedicated GAS phase). **TWO contract-boundary HARD STOPs** — 349 IMPL (the carefully-sequenced batched fold + box-redesign diff; code-size reclaim FIRST so the Game never breaches 24,576 mid-flight) + 350 GAS (the further behavior-identical no-cost wins). **FULL close — the internal 3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v55.0.md` run IN-MILESTONE at TERMINAL (352), NOT deferred** (the RNG-freeze + solvency-spine touch makes deferral unacceptable, like v54.0 and unlike v50.0/v51.0; focused on the box-stamp freeze + the liveness isolation + the two-path open). Baseline = v54 de-custody HEAD `20ca1f79`. Design-locked in `.planning/PLAN-V55-AFKING-IN-GAME-REDESIGN.md` (canonical = §10) + the discharged `.planning/PLAN-V55-REVERT-FREE-CHAIN-PROOF.md` (its §5 = the 4 LOCKED obligations: preserve `_resolveBuy` verbatim · EV-cap-at-open via `_applyEvMultiplierWithCap` · stamp `(index, amount, day)` · thin per-sub skip valve).
+Shape: SPEC → IMPL → GAS → TST → TERMINAL (the established v49.0 + v54.0 audit-milestone shape WITH a dedicated GAS phase). **TWO contract-boundary HARD STOPs** — 349 IMPL (the carefully-sequenced batched fold + box-redesign diff; code-size reclaim FIRST so the Game never breaches 24,576 mid-flight) + 350 GAS (the further behavior-identical no-cost wins). **FULL close — the internal 3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v55.0.md` run IN-MILESTONE at TERMINAL (352), NOT deferred** (the RNG-freeze + solvency-spine touch makes deferral unacceptable, like v54.0 and unlike v50.0/v51.0; focused on the box-stamp freeze + the liveness isolation + the two-path open). Baseline = v54 de-custody HEAD `20ca1f79`. Design-locked in `.planning/PLAN-V55-AFKING-IN-GAME-REDESIGN.md` (canonical = §10) + the discharged `.planning/PLAN-V55-REVERT-FREE-CHAIN-PROOF.md` (its §5 = the 4 LOCKED obligations: preserve `_resolveBuy` verbatim · EV-cap-at-open via `_applyEvMultiplierWithCap` · stamp `(index, amount, day)` · ~~thin per-sub skip valve~~ → **obl-4 DROPPED at Phase 348: no try/catch — revert-free-by-construction [obl 1] + fail-loud-on-solvency [class B] + terminal-routing-unblocked [class C]**).
 
 | Phase | Name | Type | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 348 | SPEC — Design-Lock + Freeze Proof + Discharged-Invariant Carry + §4 Placement + Code-Size/GAS Inventories + Attestation | SPEC | FREEZE-01/02/03 · PLACE-01 · ARCH-04 | Not started (ready to plan) |
+| 348 | SPEC — Design-Lock + Freeze Proof + Discharged-Invariant Carry + §4 Placement + Code-Size/GAS Inventories + Attestation | SPEC | FREEZE-01/02/03 · PLACE-01 · ARCH-04 | Context gathered (ready to plan) |
 | 349 | IMPL — The ONE Carefully-Sequenced Batched Contract Diff (code-size reclaim → fold + box redesign) | IMPL (CONTRACT BOUNDARY) | ARCH-01/02/03 · BOX-01..05 · REVERT-01/02 · EVCAP-01 · CONSENT-01/02 · PLACE-02 | Not started |
 | 350 | GAS — Behavior-Identical No-Cost Wins (box-ledger → warm Sub-stamp + staticcall → SLOAD + same-slot flushes) | GAS (CONTRACT BOUNDARY) | GAS-01 · GAS-02 · GAS-03 | Not started |
 | 351 | TST — Freeze/Determinism + Revert-Free + EV-Cap + Two-Path + Set-Mutation + Non-Widening + Gas | TST | TST-01..06 | Not started |
