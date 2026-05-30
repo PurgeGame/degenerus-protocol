@@ -93,7 +93,12 @@
 
   5. The consent/set-mutation carry over + the bounty is reconciled + `forge build` is clean + the diff is HELD at the boundary (CONSENT-01 / CONSENT-02 / PLACE-02) — the subscribe-time `isOperatorApproved` (OPEN-E) gate, the pass-gating (`validThroughLevel`), the VAULT/SDGNRS exemption-on-`player`, and the funder=src accounting carry over verbatim with the OPEN-E 4-protection structure re-attested (CONSENT-01); evictions preserve "no cursor advance after swap-pop" (the H-CANCEL-SWAP-MISS / cancel-tombstone-streak class) and the tombstone-then-reclaim shape carries over (CONSENT-02); the open stays a post-RNG router category (`OPEN_BATCH`/`OPEN_KNEE` pro-rate) and the buy/process bounty is work-scaled (not once-per-advance) to close the middle-chunk-unpaid gap and resist farm-by-splitting, with payment the deferred BURNIE flip-credit mint (`creditFlip`) (PLACE-02); and the whole diff is authored producer-before-consumer per the SPEC edit-order map, applied to `contracts/` and locally compiling (`forge build` clean; `ContractAddresses.sol` freely modifiable), but NOT committed without explicit user hand-review of the single batched diff.
 
-**Plans**: TBD
+**Plans**: 5 plans (5 sequential waves) — the producer-before-consumer single batched diff (344 precedent)
+- [ ] 349-01-PLAN.md — [BLOCKING-FIRST] re-pin all anchors vs the live tree + code-size reclaim FIRST (claimAffiliateDgnrs → BingoModule, no Game stub; R2/R3 insurance) [wave 1; ARCH-03 (ARCH-04 plan Step 1)]
+- [ ] 349-02-PLAN.md — DegenerusGameStorage append: subscriber set + cursors + subsFullyProcessed + the D-348-07 5-field Sub stamp + markers; afkingFunding reused (no aggregate) [wave 2; ARCH-01]
+- [ ] 349-03-PLAN.md — GameAfkingModule (A): subscribe/setters (CONSENT-01 OPEN-E gates) + the required-path process STAGE callee (REVERT-01 slice fold verbatim, no-valve REVERT-02; BOX-02 warm-dirty stamp; BOX-03 debit-gated marker; CONSENT-02 swap-pop) [wave 3; ARCH-02, BOX-02/03, REVERT-01/02, CONSENT-01/02]
+- [ ] 349-04-PLAN.md — GameAfkingModule (B): the open-pass (BOX-01 amount=spend; BOX-04 abi.encode stamped-day byte-identical + monotonic lastOpenedIndex; BOX-05 two-route hazard-free; EVCAP-01 EV-cap-at-open buy-time-bypassed) + router + PLACE-02 bounty [wave 4; BOX-01/04/05, EVCAP-01, PLACE-02]
+- [ ] 349-05-PLAN.md — AdvanceModule STAGE before rngGate + FREEZE-02 subsFullyProcessed/no-interleave guards + game-over-routing verify (REVERT-02 class C) + interfaces + AfKing thin stubs (ARCH-03) + forge build clean < 24,576 + HOLD at the contract-commit boundary [wave 5; ARCH-03, REVERT-02]
 **UI hint**: no
 
 ### Phase 350: GAS — Behavior-Identical No-Cost Wins (box-ledger → warm Sub-stamp + staticcall → SLOAD + same-slot aggregate flushes)
