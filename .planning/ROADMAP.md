@@ -61,7 +61,12 @@
   4. The CLEANUP-01 dead-code inventory is produced (CLEANUP-01) — a grep-attested kill-set (vs the v53 HEAD) of everything the de-custody orphans: the AfKing ETH entrypoints / `_poolOf` (slot 0) / `receive`/`deposit`/`depositFor`/`withdraw` (`AfKing.sol:214,298-341`), the now-moot v48 stuck-pool recovery (`Vault.recoverAfKingPool()` `:512`, the `StakedStonk.burnAtGameOver()` AfKing-withdraw leg `:533`, the AfKing `receive()` AF_KING relaxation), the `IGame.batchPurchase` payable ABI, the local CEI debit `_poolOf[src] -= ethValue` (`AfKing.sol:719`), the `sum(_poolOf) <= address(this).balance` invariant doc, and any now-unused helpers / events / errors / constants / stale `_poolOf`-referencing comments — each item with its kill-set grep target.
   5. The GAS-01 gas-opportunity inventory is produced + every cited `file:line` is grep-attested vs `83a84431` (GAS-01 / BATCH-01) — a gas-opportunity inventory for the keeper/funding blast radius (beyond the ~9k/buy already saved by removing the per-batch value call), each tagged behavior-identical / same-results (and the `claimableWinnings` packing candidate flagged for the GAS phase's gas-skeptic evaluation per PLAN-V54 §2); and every cited anchor across the milestone scope (the master invariant comment, `batchPurchase`, `_claimWinningsInternal`, the yield-surplus / drain / final-sweep / stETH-stake reservation sites, the sDGNRS valuation, the AfKing custody + OPEN-E surface, the v48 recovery) is grep-verified against the v53 HEAD `83a84431` with any drift corrected in the SPEC (no "by construction" survives un-checked).
 
-**Plans**: TBD
+**Plans**: 5 plans (4 waves)
+- [ ] 343-01-PLAN.md — Call-graph attestation + Drift-Correction Table vs 83a84431 (re-pins every anchor; handleAffiliate/single-interface-payable/double-invariant corrections) [wave 1]
+- [ ] 343-02-PLAN.md — SOLVENCY-01 reservation-site walk + SOLVENCY-03 valuation proof + GO_SWEPT withdraw-guard lock + OPEN-E carry-over + D-07 focused red-team (autonomous:false — USER adjudicates the solvency verdict) [wave 2]
+- [ ] 343-03-PLAN.md — CLEANUP-01 grep-attested de-custody kill-set + GAS-01 /gas-scavenger advisory inventory + packing-candidate framing [wave 2]
+- [ ] 343-04-PLAN.md — BATCH-01 design-lock + producer-before-consumer IMPL edit-order map (final signatures/storage/wiring; D-01 funder correction) [wave 3]
+- [ ] 343-05-PLAN.md — 343-SPEC-INDEX.md indexing the doc set + requirement/success-criterion traceability + SPEC verdict + 344 hand-off [wave 4]
 **UI hint**: no
 
 ### Phase 344: IMPL — The ONE Batched Contract Diff (ledger + de-custody + CLEANUP-02 orphan removal)
@@ -137,7 +142,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 343. SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Attestation | v54.0 | 0/? | Not started | - |
+| 343. SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Attestation | v54.0 | 0/5 | Not started | - |
 | 344. IMPL — The ONE Batched Contract Diff (ledger + de-custody + CLEANUP-02) | v54.0 | 0/? | Not started | - |
 | 345. GAS+CLEANUP — Further Behavior-Identical Gas Wins + Packing Eval + Broader Sweep | v54.0 | 0/? | Not started | - |
 | 346. TST — Deposit/Withdraw + Zero-Value Auto-Buy + Fresh-Rate + Solvency + Terminal-Merge + Non-Widening | v54.0 | 0/? | Not started | - |
