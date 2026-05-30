@@ -168,9 +168,6 @@ contract DegenerusAffiliate {
     uint16 private constant LOOTBOX_TAPER_START_SCORE = 10_000;
     uint16 private constant LOOTBOX_TAPER_END_SCORE = 25_500;
     uint16 private constant LOOTBOX_TAPER_MIN_BPS = 2_500;
-    /// @notice Max BURNIE commission an affiliate can earn from a single sender per level.
-    /// @dev At 25% fresh ETH rate (levels 0-3), caps after 2.0 ETH spend; at 20% (levels 4+), caps after 2.5 ETH.
-    uint256 private constant MAX_COMMISSION_PER_REFERRER_PER_LEVEL = 0.5 ether;
     bytes32 private constant AFFILIATE_ROLL_TAG = keccak256("affiliate-payout-roll-v1");
 
     /// @notice Sentinel value indicating a player's referral slot is permanently locked.
@@ -217,11 +214,6 @@ contract DegenerusAffiliate {
     /// @dev Running sum updated in payAffiliate; used as the exact denominator
     ///      for score-proportional DGNRS claim distribution.
     mapping(uint24 => uint256) private _totalAffiliateScore;
-
-    /// @notice Commission earned by affiliate from specific sender per level.
-    /// @dev Tracks cumulative BURNIE earned: level → affiliate → sender → amount.
-    ///      Used to enforce MAX_COMMISSION_PER_REFERRER_PER_LEVEL cap.
-    mapping(uint24 => mapping(address => mapping(address => uint256))) private affiliateCommissionFromSender;
 
     // =====================================================================
     //                              CONSTRUCTOR
@@ -506,25 +498,6 @@ contract DegenerusAffiliate {
         if (scaledAmount == 0) {
             emit Affiliate(amount, storedCode, sender);
             return 0;
-        }
-
-        // -----------------------------------------------------------------
-        // PER-REFERRER COMMISSION CAP
-        // -----------------------------------------------------------------
-        // Cap commission from any single sender to 0.5 ETH BURNIE per level.
-        // This prevents a single whale from dominating an affiliate's earnings.
-        {
-            uint256 alreadyEarned = affiliateCommissionFromSender[lvl][affiliateAddr][sender];
-            if (alreadyEarned >= MAX_COMMISSION_PER_REFERRER_PER_LEVEL) {
-                // Cap fully reached - no more commission from this sender this level.
-                emit Affiliate(amount, storedCode, sender);
-                return 0;
-            }
-            uint256 remainingCap = MAX_COMMISSION_PER_REFERRER_PER_LEVEL - alreadyEarned;
-            if (scaledAmount > remainingCap) {
-                scaledAmount = remainingCap;
-            }
-            affiliateCommissionFromSender[lvl][affiliateAddr][sender] = alreadyEarned + scaledAmount;
         }
 
         // Taper payout for high-activity lootbox buyers before leaderboard tracking.
