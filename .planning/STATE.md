@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v54.0
 milestone_name: Game-Side Keeper-Funding Ledger + AfKing De-Custody
 status: executing
-last_updated: "2026-05-30T09:00:00.000Z"
-last_activity: 2026-05-30 -- 343-03 COMPLETE (CLEANUP-01 grep-attested de-custody kill-set + GAS-01 gas-scavenger advisory inventory + packing framing; 0 contracts/ edits)
+last_updated: "2026-05-30T09:34:00.000Z"
+last_activity: 2026-05-30 -- 343-04 COMPLETE (BATCH-01 design-lock 343-IMPL-EDIT-ORDER-MAP.md: final signatures + keeperFunding storage shape + producer-before-consumer edit-order map + 4 corrections [D-01 funder, D-MR-01 src carve-out, payAffiliate-canonical, single-copy :18 invariant]; 0 contracts/ edits)
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 3
-  percent: 60
+  completed_plans: 4
+  percent: 80
 ---
 
 # Project State
@@ -33,9 +33,9 @@ See: .planning/PROJECT.md (Current Milestone: v54.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 343 (SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Call-Graph Attestation) — EXECUTING
-Plan: 4 of 5 (343-01 ✅ 6deda035 — call-graph attestation · 343-02 ✅ 1a4fb46d — solvency proof + D-07 red-team · 343-03 ✅ c35aadb2+428f7581 — CLEANUP-01 kill-set + GAS-01 inventory)
-Status: Executing Phase 343
-Last activity: 2026-05-30 -- 343-03 COMPLETE (CLEANUP-01 grep-attested de-custody kill-set + GAS-01 gas-scavenger advisory inventory + packing framing; paper-only, 0 contracts/ edits)
+Plan: 5 of 5 (343-01 ✅ 6deda035 — call-graph attestation · 343-02 ✅ 1a4fb46d — solvency proof + D-07 red-team · 343-03 ✅ c35aadb2+428f7581 — CLEANUP-01 kill-set + GAS-01 inventory · 343-04 ✅ 725c23ee — BATCH-01 design-lock + IMPL edit-order map)
+Status: Executing Phase 343 (343-05 SPEC-INDEX remaining)
+Last activity: 2026-05-30 -- 343-04 COMPLETE (BATCH-01 design-lock 343-IMPL-EDIT-ORDER-MAP.md: final signatures [non-payable batchPurchase+funder debit / depositKeeperFunding / withdrawKeeperFunding+GO_SWEPT-line-1 / keeperFundingOf / extended keeperSnapshot / _claimWinningsInternal Decision-B merge] + keeperFunding storage shape [mapping, no aggregate, invariant single-site :18] + producer-before-consumer edit-order map [D-06 ordered, no intermediate broken state] + 4 corrections; paper-only, 0 contracts/ edits)
 
 ## Current Milestone Roadmap (v54.0 — phases 343-347)
 

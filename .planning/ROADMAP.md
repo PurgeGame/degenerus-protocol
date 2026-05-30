@@ -65,7 +65,7 @@
 - [x] 343-01-PLAN.md — Call-graph attestation + Drift-Correction Table vs 83a84431 (re-pins every anchor; payAffiliate-EXISTS + single-interface-payable + single-copy-invariant corrections; 2 RESEARCH claims overturned) [wave 1] ✅ 6deda035
 - [x] 343-02-PLAN.md — SOLVENCY-01 reservation-site walk + SOLVENCY-03 valuation proof + GO_SWEPT withdraw-guard lock + OPEN-E carry-over + D-07 focused red-team (autonomous:false — USER adjudicates the solvency verdict) [wave 2]
 - [x] 343-03-PLAN.md — CLEANUP-01 grep-attested de-custody kill-set + GAS-01 /gas-scavenger advisory inventory + packing-candidate framing [wave 2] ✅ c35aadb2 + 428f7581
-- [ ] 343-04-PLAN.md — BATCH-01 design-lock + producer-before-consumer IMPL edit-order map (final signatures/storage/wiring; D-01 funder correction) [wave 3]
+- [x] 343-04-PLAN.md — BATCH-01 design-lock + producer-before-consumer IMPL edit-order map (final signatures/storage/wiring; D-01 funder correction; D-MR-01 src carve-out; payAffiliate-canonical; single-copy :18 invariant; D-06 kill order) [wave 3] ✅ 725c23ee
 - [ ] 343-05-PLAN.md — 343-SPEC-INDEX.md indexing the doc set + requirement/success-criterion traceability + SPEC verdict + 344 hand-off [wave 4]
 **UI hint**: no
 
@@ -142,7 +142,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 343. SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Attestation | v54.0 | 3/5 | In Progress|  |
+| 343. SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Attestation | v54.0 | 4/5 | In Progress|  |
 | 344. IMPL — The ONE Batched Contract Diff (ledger + de-custody + CLEANUP-02) | v54.0 | 0/? | Not started | - |
 | 345. GAS+CLEANUP — Further Behavior-Identical Gas Wins + Packing Eval + Broader Sweep | v54.0 | 0/? | Not started | - |
 | 346. TST — Deposit/Withdraw + Zero-Value Auto-Buy + Fresh-Rate + Solvency + Terminal-Merge + Non-Widening | v54.0 | 0/? | Not started | - |
