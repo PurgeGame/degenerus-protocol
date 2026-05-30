@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
-status: planning
-last_updated: "2026-05-30T18:00:00.000Z"
-last_activity: 2026-05-30 — Phase 348 SPEC context gathered (348-CONTEXT.md): §4 placement DECIDED = REQUIRED-PATH (USER override of the doc's separate-legs rec, on guaranteed-every-day grounds); try/catch valve DROPPED (REVERT-02 + proof §5 obl-4 rewrite → fail-loud-on-solvency); freeze live-read = accepted-by-design known issue; code-size = measure-and-verify; /gas-scavenger runs at SPEC
+status: executing
+last_updated: "2026-05-30T17:20:50.375Z"
+last_activity: 2026-05-30 -- Phase 348 planning complete
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 6
   completed_plans: 0
   percent: 0
 ---
@@ -34,8 +34,8 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 
 Phase: 348 of 352 (SPEC — Design-Lock + Freeze Proof + Discharged-Invariant Carry + §4 Placement Decision + Code-Size/GAS Inventories + Call-Graph Attestation)
 Plan: — (not yet planned; context gathered)
-Status: Phase 348 context gathered (348-CONTEXT.md) — ready to plan (`/gsd-plan-phase 348`)
-Last activity: 2026-05-30 — Phase 348 SPEC context gathered: required-path placement DECIDED, try/catch valve DROPPED, freeze live-read = accepted-by-design known issue, code-size = measure-and-verify, /gas-scavenger at SPEC
+Status: Ready to execute
+Last activity: 2026-05-30 -- Phase 348 planning complete
 
 Progress: [░░░░░░░░░░] 0% (0/5 phases)
 
