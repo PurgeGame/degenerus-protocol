@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
-status: verifying
-last_updated: "2026-05-30T18:52:14.679Z"
+status: ready_to_plan
+last_updated: 2026-05-30T19:06:09.743Z
 last_activity: 2026-05-30
 progress:
   total_phases: 5
-  completed_phases: 0
-  total_plans: 7
+  completed_phases: 1
+  total_plans: 6
   completed_plans: 6
-  percent: 86
+  percent: 20
+stopped_at: Phase 348 complete (6/6) — ready to discuss Phase 349
 ---
 
 # Project State
@@ -20,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v55.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 348 — spec-design-lock-freeze-proof-discharged-invariant-carry-4-p
+**Current focus:** Phase 349 — impl — the one carefully sequenced batched contract diff (code size reclaim → fold + box redesign)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,12 +33,12 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 348 (spec-design-lock-freeze-proof-discharged-invariant-carry-4-p) — SPEC COMPLETE (authoring); ready for verification
-Plan: 6 of 6
-Status: Phase complete — all 6 plans authored; the D-08 SPEC set is closed (348-SPEC-INDEX.md, verdict PASS); next = verify → 349 IMPL
+Phase: 349
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-05-30
 
-Progress: [█████████░] 86%
+Progress: [██░░░░░░░░] 20% (1/5 phases)
 
 ## Current Milestone Roadmap (v55.0 — phases 348-352)
 

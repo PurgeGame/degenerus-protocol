@@ -161,7 +161,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 348. SPEC — Design-Lock + Freeze Proof + Discharged-Invariant Carry + §4 Placement + Code-Size/GAS Inventories + Attestation | v55.0 | 6/7 | In Progress|  |
+| 348. SPEC — Design-Lock + Freeze Proof + Discharged-Invariant Carry + §4 Placement + Code-Size/GAS Inventories + Attestation | v55.0 | 6/6 | Complete    | 2026-05-30 |
 | 349. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (code-size reclaim → fold + box redesign) | v55.0 | 0/? | Not started | - |
 | 350. GAS — Behavior-Identical No-Cost Wins (box-ledger → warm Sub-stamp + staticcall → SLOAD + same-slot flushes) | v55.0 | 0/? | Not started | - |
 | 351. TST — Freeze/Determinism + Revert-Free + EV-Cap + Two-Path + Set-Mutation + Non-Widening + Gas | v55.0 | 0/? | Not started | - |
