@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v54.0
-milestone_name: Game-Side Keeper-Funding Ledger + AfKing De-Custody
-status: superseded
-last_updated: "2026-05-30"
-last_activity: 2026-05-30 -- v54.0 CLOSED-as-SUPERSEDED (343 SPEC + 344 IMPL shipped @ 20ca1f79, not pushed; 345/346/347 DROPPED → folded into v55); next = v55 AfKing-in-Game (discharging REVERT-FREE-CHAIN proof before formalizing the milestone)
+milestone: v55.0
+milestone_name: AfKing-in-Game Redesign
+status: planning
+last_updated: "2026-05-30T15:48:43.112Z"
+last_activity: 2026-05-30
 progress:
-  total_phases: 5
-  completed_phases: 2
-  total_plans: 10
-  completed_plans: 10
-  percent: 100
-  note: "v54 closed at REDUCED scope. 343 SPEC + 344 IMPL complete (344 executed via consolidated 344-EXECUTION-SUMMARY.md, no per-plan SUMMARYs). 345 GAS / 346 TST / 347 TERMINAL DROPPED — superseded by v55 (AfKing-in-Game redesign rips out the de-custody ledger machinery those phases would have gas-swept/tested/audited). No ship signal emitted (v54 never audited via 347). HEAD 20ca1f79 = the v55 baseline."
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -33,10 +32,10 @@ See: .planning/PROJECT.md (Current Milestone: v54.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Milestone: v54.0 — **CLOSED (superseded by v55)** at reduced scope
-Phase: 344 IMPL complete (committed `20ca1f79`, not pushed); 345 GAS / 346 TST / 347 TERMINAL **DROPPED → v55**
-Status: v55 design-lock in progress — discharging the REVERT-FREE-CHAIN proof (pre-formalization)
-Last activity: 2026-05-30 -- v54 closed-as-superseded; v55 revert-free-chain proof underway
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-30 — Milestone v55.0 started
 
 ## Current Milestone Roadmap (v54.0 — phases 343-347) — CLOSED (superseded by v55)
 
