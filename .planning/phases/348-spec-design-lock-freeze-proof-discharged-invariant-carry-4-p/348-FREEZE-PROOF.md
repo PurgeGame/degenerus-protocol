@@ -9,15 +9,27 @@ was grep/read-verified on the live tree, so a live grep IS a valid attestation a
 lines, **never** the drifted doc-cited lines. In particular the box seed is **`abi.encode`** at `LB:534` (NOT
 `abi.encodePacked` — that is the PRESALE box at `LB:644`, a distinct path; §1a of the attestation).
 
+> **Amended 2026-05-30 (D-348-07):** score + baseLevel moved from live-read → stamped-frozen in the afking Sub stamp
+> (now `(index, amount, day, scorePlus1, baseLevelPlus1)`); supersedes D-348-05 for those fields; residual live-read =
+> the EV-cap monotonic clamp only. The stamp grows by 40 bits (`scorePlus1` uint16 + `baseLevelPlus1` uint24) into the
+> SAME slot-2 word (~90 spare bits → same single SSTORE, no third slot), mirroring the human deposit-time freeze of
+> `scorePlus1`/`adj`/`baseLevelPlus1` into `lootboxPurchasePacked[index][player]` (`LB:529-530`). FREEZE-03 / the seed
+> are UNTOUCHED — score/baseLevel still enter AFTER the seed (they scale payout / floor the level; they do NOT feed
+> `keccak256`), so freezing them completes FREEZE-01's frozen set, it does NOT move them into the seed.
+
 **Verdict (bottom line):**
 - **FREEZE-02 — PROVEN** (index-binding; the load-bearing D-348-02 obligation). The required-path process STAGE reads
   `LR_INDEX` once and binds the stamp to the **pre-RNG** index; the no-interleave guard is SPECIFIED against source.
 - **FREEZE-03 — PROVEN** (stamped-day determinism). The afking open seeds `keccak256(abi.encode(rngWord, player, day,
   amount))` from the **STAMPED** buy-day, never open-time `_simulatedDayIndex()`; zero `block.*` entropy in the draw.
-- **FREEZE-01 — SPLIT.** The stamped fields `(index, amount, day)` are **genuinely frozen + proven** (by FREEZE-02 +
-  FREEZE-03). The live-read fields (score / baseLevel / EV-cap, read LIVE at open per §10) are filed as a **WRITTEN
-  ACCEPTED-BY-DESIGN KNOWN ISSUE** (D-348-05) — NOT proven-airtight, NOT red-teamed, carried into
-  `audit/FINDINGS-v55.0.md` + the v52 cumulative sweep as dispositioned/known.
+- **FREEZE-01 — PROVEN (D-348-07).** The stamped set is now `(index, amount, day, scorePlus1, baseLevelPlus1)` —
+  the **full seed-AND-multiplier-input set is proven-frozen** (`index`/`day`/`amount` by FREEZE-02 + FREEZE-03;
+  `scorePlus1`/`baseLevelPlus1` stamped at process and read from the stamp at open, the analog of the human
+  `lootboxPurchasePacked` snapshot). The **residual live-read narrows to the EV-cap RMW only**
+  (`lootboxEvBenefitUsedByLevel[player][level+1]`), which stays live by structural necessity (a shared
+  per-(player,level) accumulator) but is **benign** — a monotonic down-clamp, hard ≤10 ETH, no profitable timing.
+  D-348-07 SUPERSEDES D-348-05 for score+baseLevel (they move from accepted-by-design live-read → proven-frozen);
+  the residual D-348-05 = the EV-cap clamp only, noted (benign, not findings-grade).
 
 This is the SECURITY SPINE of Phase 348. The freeze story rests on obligation-1 (slice-builder fidelity, proven in
 `348-INVARIANT-CARRY.md`), which is BOTH the no-brick guarantor under the no-try/catch required-path AND the substrate
@@ -31,10 +43,12 @@ Under PLAN-V55 §10 (canonical, supersedes the §0–§3 stamp framing), an afki
 the day's VRF reveal:
 
 1. **Process leg (PRE-RNG)** — a chunked STAGE inserted in `advanceGame` immediately before `rngGate` (D-348-01,
-   required-path). For each funded sub it: stamps `(index = current LR_INDEX, amount, day)` into the Sub record,
-   debits `afkingFunding`, and sets the `lastAutoBoughtDay == today` success-marker (set atomically AFTER a successful
-   debit — a failed/mid-cycle subscribe leaves no marker → no free box). **boons OFF** → box `amount` = spend exactly
-   (the boosted-amount freeze field is deleted; this is what collapses the stamp to three fields).
+   required-path). For each funded sub it: stamps `(index = current LR_INDEX, amount, day, scorePlus1, baseLevelPlus1)`
+   into the Sub record (D-348-07 — score+baseLevel frozen at process, the analog of the human deposit-time freeze of
+   `lootboxPurchasePacked`, `LB:529-530`), debits `afkingFunding`, and sets the `lastAutoBoughtDay == today`
+   success-marker (set atomically AFTER a successful debit — a failed/mid-cycle subscribe leaves no marker → no free
+   box). **boons OFF** → box `amount` = spend exactly (no boosted-amount freeze field; `amount` enters the stamp at the
+   stamped spend directly).
 2. **Open leg (POST-RNG)** — a normal post-RNG leg that materializes the box from the stamp + the committed
    `lootboxRngWordByIndex[index]`, with identical draw math to `openLootBox` (`LB:503`).
 
@@ -46,20 +60,29 @@ the day's VRF reveal:
 | `day` | the **stamped** buy-day in the Sub record (mirrors today's frozen `lootboxDay[index][player]`, `LB:514`) | ✅ via FREEZE-03 |
 | `amount` | the stamped spend (boons OFF → `amount` = spend, no boost lever) | ✅ stamped at process |
 | `index` | the **pre-RNG** `LR_INDEX` stamped at process | ✅ via FREEZE-02 |
-| `score` (→ EV multiplier `_lootboxEvMultiplierFromScore`) | **read LIVE at open** (§10) | ⚠ live-read window — D-348-05 known issue |
-| `baseLevel` (→ target-level roll floor) | **read LIVE at open** (§10) | ⚠ live-read window — D-348-05 known issue |
-| EV-cap consumption (`lootboxEvBenefitUsedByLevel[player][level+1]`) | **RMW LIVE at open** via `_applyEvMultiplierWithCap` (`LB:459`) | ⚠ live-read window — D-348-05 known issue |
+| `score` (→ EV multiplier `_lootboxEvMultiplierFromScore`) | **stamped `scorePlus1` at process**, read from the stamp at open (D-348-07) | ✅ FROZEN — stamped at process, read from stamp at open (mirrors human `lootboxPurchasePacked` `:530`) |
+| `baseLevel` (→ target-level roll floor) | **stamped `baseLevelPlus1` at process**, read from the stamp at open (D-348-07) | ✅ FROZEN — stamped at process, read from stamp at open (mirrors human `lootboxPurchasePacked` `:530`) |
+| EV-cap consumption (`lootboxEvBenefitUsedByLevel[player][level+1]`) | **RMW LIVE at open** via `_applyEvMultiplierWithCap` (`LB:459`) | ⚠ live RMW by necessity (shared per-(player,level) accumulator) — benign monotonic down-clamp, hard ≤10 ETH, no profitable timing |
 
 The seed `keccak256(abi.encode(rngWord, player, day, amount))` (`LB:534`) consumes ONLY the four stamped/frozen inputs
-(`rngWord, player, day, amount`). The live-read fields enter **after** the seed — they scale the payout (`score` →
-`evMultiplierBps`) and floor the target level (`baseLevel`), they do **not** feed the seed. FREEZE-01's split falls out
-of exactly this line: the seed-side is provably frozen; the multiplier/floor-side is the accepted live-read window.
+(`rngWord, player, day, amount`). The multiplier/floor inputs enter **after** the seed — they scale the payout (`score`
+→ `evMultiplierBps`) and floor the target level (`baseLevel`), they do **not** feed the seed. Under D-348-07 `score` +
+`baseLevel` are now ALSO frozen (stamped `scorePlus1` / `baseLevelPlus1` at process, read from the stamp at open), so
+the entire seed-AND-multiplier-input set is frozen the instant the box is processed. The ONLY residual live-read is the
+EV-cap RMW (`lootboxEvBenefitUsedByLevel[player][level+1]`), a shared per-(player,level) accumulator that cannot be
+per-box-stamped — but it is a benign monotonic down-clamp (FREEZE-01b). Freezing score/baseLevel does **not** move them
+into the seed (FREEZE-03 unchanged) — it completes FREEZE-01's frozen set.
 
-> **Note on the human `openLootBox` path (`LB:529-532`):** today the human path FREEZES `scorePlus1` / `adj` /
-> `baseLevelPlus1` into `lootboxPurchasePacked[index][player]` at deposit and reads that snapshot at open. The v55
-> afking design **deliberately diverges** — it reads score/baseLevel/EV-cap LIVE at open (§10) rather than stamping
-> them, accepting the live-read window (D-348-05) in exchange for not carrying the snapshot word in the Sub stamp.
-> Humans keep the existing frozen-snapshot path; afking boxes take the live-read path → **two open routes** (§10).
+> **Note on the human `openLootBox` path (`LB:529-530`):** today the human path FREEZES `scorePlus1` / `adj` /
+> `baseLevelPlus1` into `lootboxPurchasePacked[index][player]` at deposit (104 bits unpacked at `:529-530`) and reads
+> that snapshot at open. Under **D-348-07** the v55 afking design **NO LONGER diverges on score/baseLevel** — it now
+> ALSO freezes them at process-time (the analog of the human deposit-time freeze), stamping `scorePlus1` (uint16) +
+> `baseLevelPlus1` (uint24) = 40 bits into the Sub stamp (the afking stamp does NOT need `adj`: the open passes full
+> `amount` to `_applyEvMultiplierWithCap` and derives the cap-adjusted portion live). The two open routes now **share
+> the freeze model** for score+baseLevel; the only remaining differences are the **seed inputs** and the **storage
+> location** (the Sub stamp vs `lootboxPurchasePacked`). There are still **two open routes** (§10) — distinct stamp
+> stores, identical freeze discipline — and the residual live-read narrows to the EV-cap RMW only (benign monotonic
+> clamp; FREEZE-01b).
 
 ---
 
@@ -182,8 +205,8 @@ to `currentDay = _simulatedDayIndex()` (`LB:513`) only when the stored day is `0
 (the sites the afking open must NOT copy: `LB:513/:766/:799/:836/:868`, attestation §2.1).
 
 **SPECIFICATION (obligation 3, 349-owned):** the afking open seeds from the **stamped** buy-day held in the Sub
-record (the third stamp field `(index, amount, day)`), mirroring today's `lootboxDay[index][player]` (`LB:514`) — it
-does **not** read open-time `_simulatedDayIndex()` for the seed `day` term.
+record (the `day` field of the stamp `(index, amount, day, scorePlus1, baseLevelPlus1)`), mirroring today's
+`lootboxDay[index][player]` (`LB:514`) — it does **not** read open-time `_simulatedDayIndex()` for the seed `day` term.
 
 ### (c) Monotonicity is necessary-but-NOT-sufficient — the boundary-pinned stamp is the structural closure
 
@@ -199,7 +222,8 @@ not close the determinism lever:
 **Structural closure:** stamp the boundary-pinned process day into the Sub record and seed the open from that
 **stamped** value (b). Then the `day` term is fixed at process time for every later open of that box, regardless of
 when the open is called. This makes the draw airtight at ~zero cost precisely because the day is already determined the
-moment the box is processed. → This is exactly why the v55 stamp is `(index, amount, day)`, not just `(index, amount)`.
+moment the box is processed. → This is exactly why the v55 stamp carries `day` (and, post-D-348-07, `scorePlus1` +
+`baseLevelPlus1`), not just `(index, amount)`.
 
 ### (d) FREEZE-03 disposition
 
@@ -209,71 +233,86 @@ by the boundary-pinned stamp. 351 TST owns the empirical same-seed determinism p
 
 ---
 
-## FREEZE-01 — Freeze-completeness (SPLIT: stamped fields proven; live-read window an accepted-by-design known issue)
+## FREEZE-01 — Freeze-completeness (PROVEN by D-348-07: full seed-AND-multiplier-input set frozen; EV-cap-only benign residual)
 
-Per D-348-05, FREEZE-01 **splits** into a proven half and a documented-tradeoff half.
+**Per D-348-07, FREEZE-01 is PROVEN** for the full seed-AND-multiplier-input set. (Under the prior D-348-05 framing
+FREEZE-01 *split* into a proven seed half and a live-read tradeoff half; D-348-07 collapses that split — score+baseLevel
+move from live-read → stamped-frozen — leaving only the EV-cap RMW live by structural necessity, and that residual is
+benign.)
 
-### (a) The stamped fields `(index, amount, day)` are genuinely frozen + proven
+### (a) The stamped fields `(index, amount, day, scorePlus1, baseLevelPlus1)` are genuinely frozen + proven
 
 - `index` — frozen at the pre-RNG `LR_INDEX` (FREEZE-02). The box reads `lootboxRngWordByIndex[stampedIndex]` at open;
   the word for that index does not exist at process and is committed write-once by `_finalizeLootboxRng` (`:1231`).
 - `day` — frozen at the boundary-pinned stamp; seeds the draw (FREEZE-03), not open-time `_simulatedDayIndex()`.
 - `amount` — frozen at the stamped spend. **boons OFF** for afking boxes (§10) ⇒ `amount` = spend exactly, with no
   boosted-amount field and no open-time amount lever. The seed consumes this stamped `amount` directly (`LB:534`).
+- `scorePlus1` (uint16) — **frozen at process (D-348-07).** The activity score (→ `_lootboxEvMultiplierFromScore`, the
+  80→135% EV multiplier) is stamped `score+1` at process and read from the stamp at open, NOT recomputed live. This is
+  the **direct analog of the human deposit-time freeze**: the human path SLOADs `lootboxPurchasePacked[index][player]`
+  and unpacks `(uint16 scorePlus1, uint64 adj, uint24 baseLevelPlus1)` (104 bits) written at deposit (`LB:529-530`). The
+  afking stamp needs only `scorePlus1` + `baseLevelPlus1` (40 bits — it does NOT need `adj`: the afking open passes the
+  full stamped `amount` to `_applyEvMultiplierWithCap` (`:771-772`) and derives the cap-adjusted portion live).
+- `baseLevelPlus1` (uint24) — **frozen at process (D-348-07).** The baseLevel (→ the target-level roll floor,
+  `_rollTargetLevel`) is stamped `baseLevel+1` at process and read from the stamp at open.
 
-Together with the no-`block.*` entropy guard (FREEZE-03a), the **seed-determining set is fully frozen**: an afking box's
-seed `keccak256(abi.encode(rngWord, player, day, amount))` is fixed the instant the box is processed.
+**Budget / gas (why it's cheap, verified against source):** the 40 bits (`scorePlus1` uint16 + `baseLevelPlus1` uint24)
+drop into the stamp's slot-2 word, which already holds `index`(uint48)+`day`(uint32)+`lastAutoBoughtDay`/
+`lastOpenedIndex` markers (~160 bits) → ~90 spare bits → **same single SSTORE, no third slot**. At OPEN this REPLACES the
+live `playerActivityScore` recompute (~953 B of logic per `348-CODE-SIZE-PLAN.md`) feeding
+`_lootboxEvMultiplierFromScore(uint256(activityScore))` (`:771`/`:804`) with a cheap SLOAD of the stamp — a small gas
+win at open.
 
-### (b) ⚠ ACCEPTED-BY-DESIGN KNOWN ISSUE — the live-read window (score / baseLevel / EV-cap read LIVE at open)
+Together with the no-`block.*` entropy guard (FREEZE-03a), the **seed-determining set is fully frozen** (an afking box's
+seed `keccak256(abi.encode(rngWord, player, day, amount))` is fixed the instant the box is processed), AND — post-D-348-07
+— the **multiplier/floor inputs (score, baseLevel) are equally frozen** at process. **Freezing score/baseLevel does NOT
+move them into the seed** (they still enter AFTER the seed, scaling the payout / flooring the level) — FREEZE-03 is
+UNCHANGED; freezing them completes FREEZE-01's frozen set.
 
-> **This is a written accepted-by-design known issue, NOT a proven-airtight guarantee and NOT a red-teamed surface.**
-> Precedent: the 339-01 D-03 whale-frontrunning-on-VRF-resolution non-finding (enshrined in
-> `339-TRAITBURNTICKET-SOUNDNESS-ATTESTATION.md`).
+### (b) The residual live-read — the EV-cap RMW only — is a benign monotonic down-clamp
 
-Under §10, the afking open reads three fields LIVE at open rather than stamping them: the activity **score** (→
-`_lootboxEvMultiplierFromScore`, the 80→135% EV multiplier), the **baseLevel** (→ the target-level roll floor,
-`_rollTargetLevel`), and the **EV-cap** consumption (`lootboxEvBenefitUsedByLevel[player][level+1]`, RMW at open via
-`_applyEvMultiplierWithCap`, `LB:459`). These enter the payout **after** the seed (they scale/floor the result; they
-do not feed `keccak256`), so the box's *seed* is frozen even though its *scaling* is live.
+Under D-348-07 the afking open reads exactly **one** field live: the **EV-cap** consumption
+(`lootboxEvBenefitUsedByLevel[player][level+1]`, RMW at open via `_applyEvMultiplierWithCap`, `LB:459`). It enters the
+payout **after** the seed (it clamps the resulting benefit; it does not feed `keccak256`), so the box's *seed* and now
+also its score/baseLevel inputs are frozen, while only this cap accumulator is live.
 
-**Why there is no credible attack vector (USER-established; the −EV / no-credible-actor rationale):**
+**Why it stays live, and why that is benign:**
+`lootboxEvBenefitUsedByLevel[player][level+1]` is a per-(player,level) **cumulative accumulator** — a shared running
+total RMW'd at open to enforce the ≤10 ETH per-level benefit budget across boxes. It **cannot** be stamped into a
+per-box slot (it is shared running state spanning multiple boxes), so it stays a live RMW by structural necessity. But
+it is a **monotonic DOWN-CLAMP**: it only ever *reduces* the benefit a box receives (the accumulator only grows; the
+hard `LOOTBOX_EV_BENEFIT_CAP = 10 ether` cap short-circuits to a no-write 100%-EV neutral once exhausted, `LB:478-481`).
+There is **no profitable timing** — a player cannot move the clamp in their favor (it only ever clamps *more* as it
+grows), and **freezing score does NOT change the cap semantics** (the cap still clamps the resulting benefit; the now-
+frozen `evMultiplierBps` derived from the stamped `scorePlus1` simply feeds it). So the residual live-read is benign.
 
-1. **Committed pass-holders.** Afking subs are pass-gated via `validThroughLevel` (`AfKing.sol:103`, written at
-   subscribe `:371`). The subscriber population in any given process→open window is a committed set; there is no
-   open-the-floodgates anonymous actor who can materialize a favorable live-read on demand.
-2. **No on-demand score lever in the ~5-min process→open window.** The activity score that drives the 80→135%
-   multiplier is **streak-built over many levels** — it cannot be spiked inside the short window between the post-
-   boundary process STAGE and the post-RNG open. There is no single transaction that moves a player's score enough to
-   matter within that window.
-3. **A legit full-price action is fine / −EV.** The only "lever" a player has is to legitimately improve their
-   standing (e.g. buy a deity pass at full price) before opening a pending box. That is a real economic action priced
-   at fair value, not an exploit — and on expectation it is −EV (you pay full price for a marginal multiplier shift on
-   one box). This aligns with the USER-LOCKED audit weighting ([[threat-model-reentrancy-mev-nonissues]]: RNG-freeze
-   is the dominant concern, and a player **cannot manipulate the VRF input after the request** — which the stamped
-   `(index, amount, day)` + committed word fully covers; the live multiplier is not VRF input).
-4. **The seed — the only VRF-determined output — is already frozen** (FREEZE-02 + FREEZE-03). The live-read affects
-   only the deterministic scaling/floor applied to an already-fixed draw, not which trait/level the box rolls.
-
-**Disposition:** filed as a written accepted-by-design known issue. **NO `/economic-analyst` red-team** (the USER
-established there is no credible vector; this is documented, not defended). **CARRIED into `audit/FINDINGS-v55.0.md`**
-(the in-milestone 352 sweep) **+ the v52 cumulative cross-model sweep** as dispositioned/known — so neither sweep
-re-litigates it; it is treated as a known accepted tradeoff.
+**Disposition:** **noted (benign monotonic clamp), NOT findings-grade.** This is the residual of the former D-348-05
+live-read window after D-348-07 froze score+baseLevel. **NO `/economic-analyst` red-team** (a monotonic down-clamp with
+a hard cap has no profitable timing; USER-established no-credible-vector, precedent 339-01 D-03). It is **carried into
+`audit/FINDINGS-v55.0.md`** (the in-milestone 352 sweep) **+ the v52 cumulative cross-model sweep** as a benign
+monotonic clamp (noted, not findings-grade) — neither sweep re-litigates it.
 
 ### (c) FREEZE-01 disposition
 
-**SPLIT-PROVEN.** The stamped fields `(index, amount, day)` — the seed-determining set — are genuinely frozen + proven
-(a). The live-read fields (score/baseLevel/EV-cap) are the documented accepted tradeoff (b), NOT proven-airtight.
+**PROVEN.** D-348-07 freezes the full seed-AND-multiplier-input set: the stamped fields `(index, amount, day,
+scorePlus1, baseLevelPlus1)` are all genuinely frozen + proven (a). The **only** field read live at open is the EV-cap
+accumulator, which stays live by structural necessity (shared per-(player,level) running state) but is **benign** — a
+monotonic down-clamp with a hard ≤10 ETH cap and no profitable timing (b). Freezing score/baseLevel does NOT move them
+into the seed (FREEZE-03 unchanged) — it completes FREEZE-01's frozen set.
 
 ---
 
 ## Dropped defenses (recorded so they are not re-raised)
 
-- **Early-slot post-RNG window-closure — DROPPED.** The idea of slotting the afking open early in the post-RNG chain
-  (USER, then set aside) was a window-*tightener* for the live-read window. Since the window is now **ACCEPTED as a
-  known issue (not closed)** (D-348-05), the tightener is **not needed** → the afking open stays a **normal post-RNG
-  leg**. This also resolves the PLACE-02 "protocol-early-sequenced" drift (the open is not specially sequenced), and
-  **the VRF-timing must-verify is DROPPED** (there is no early-slot ordering to verify against the VRF reveal). The
-  open's only freeze obligations are FREEZE-03 (stamped-day seed) + reading `lootboxRngWordByIndex[stampedIndex]`.
+- **Early-slot post-RNG window-closure — DROPPED (reasoning now stronger under D-348-07).** The idea of slotting the
+  afking open early in the post-RNG chain (USER, then set aside) was a window-*tightener* for the former live-read
+  window. The reasoning to drop it is now **stronger**: under D-348-07 score+baseLevel are stamped-frozen, so the
+  residual is just the EV-cap RMW — a **benign monotonic down-clamp** (FREEZE-01b) with no profitable timing. There is
+  no window worth tightening → the afking open stays a **normal post-RNG leg**. This also resolves the PLACE-02
+  "protocol-early-sequenced" drift (the open is not specially sequenced), and **the VRF-timing must-verify is DROPPED**
+  (there is no early-slot ordering to verify against the VRF reveal). The open's freeze obligations are FREEZE-03
+  (stamped-day seed) + FREEZE-01 (reading the stamped `scorePlus1`/`baseLevelPlus1`) + reading
+  `lootboxRngWordByIndex[stampedIndex]`.
 
 ---
 
@@ -281,8 +320,9 @@ re-litigates it; it is treated as a known accepted tradeoff.
 
 - **Obligation-1 (slice-builder fidelity)** — the substrate this freeze proof rests on (the process leg's stamp is
   built from the `_resolveBuy` slice math) — is carried + auditor-checked in `348-INVARIANT-CARRY.md`.
-- **EV-cap at open** (`_applyEvMultiplierWithCap` keyed `[player][level+1]`, the live RMW that is part of the live-read
-  window) — the equivalence + double-draw guard are in `348-INVARIANT-CARRY.md` (obligation 2 + §7-iii).
+- **EV-cap at open** (`_applyEvMultiplierWithCap` keyed `[player][level+1]`, the SOLE residual live RMW after D-348-07 —
+  a benign monotonic down-clamp) — the equivalence + double-draw guard are in `348-INVARIANT-CARRY.md` (obligation 2 +
+  §7-iii).
 - **The no-interleave guard SPEC** (FREEZE-02c) is the load-bearing input the 349 IMPL must author; 351 TST-01 proves
   it empirically.
 

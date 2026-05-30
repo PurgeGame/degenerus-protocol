@@ -8,6 +8,14 @@
 **Corrected invariant set (no-valve):** [`348-INVARIANT-CARRY.md`](./348-INVARIANT-CARRY.md) (348-03 — obligations 1–3; D-348-04 try/catch DROPPED).
 **Required-path STAGE placement:** [`348-PLACEMENT-DECISION.md`](./348-PLACEMENT-DECISION.md) (348-04 — D-348-01 USER override).
 
+> **Amended 2026-05-30 (D-348-07):** score + baseLevel moved from live-read → stamped-frozen in the afking Sub stamp
+> (now `(index, amount, day, scorePlus1, baseLevelPlus1)`); supersedes D-348-05 for those fields; residual live-read =
+> the EV-cap monotonic clamp only. At PROCESS the STAGE also computes+stamps `scorePlus1` (= activityScore+1) +
+> `baseLevelPlus1`; at OPEN the leg reads score+baseLevel FROM the stamp (not live) and passes the frozen
+> `evMultiplierBps` into `_applyEvMultiplierWithCap` (the cap RMW stays live). The two stamp/slot tables + the open-pass
+> directive below are amended accordingly. Adds ~a few hundred bytes of Game logic to write/read the 2 packed fields —
+> advisory, within the existing headroom narrative.
+
 > **This doc is the DOWNSTREAM CONSUMER of all five upstream 348 deliverables.** It does NOT re-discover lines, re-prove
 > the freeze, re-measure bytes, or re-decide the placement — every `file:line` below is the ACTUAL re-pinned anchor from
 > `348-GREP-ATTESTATION.md`, every code-size figure is the MEASURED running-total from `348-CODE-SIZE-PLAN.md`, the
@@ -46,7 +54,7 @@ confirms the widths are **2-slot-feasible**). The appended members:
 // APPENDED to contracts/storage/DegenerusGameStorage.sol (inherited by the Game + GameAfkingModule)
 
 // --- the subscriber SET (relocated from AfKing) ---
-mapping(address => Sub)     internal _subOf;          // per-subscriber record (incl. the (index,amount,day) stamp + markers)
+mapping(address => Sub)     internal _subOf;          // per-subscriber record (incl. the (index,amount,day,scorePlus1,baseLevelPlus1) stamp + markers)
 address[]                   internal _subscribers;    // the iterable set (swap-pop tombstone on cancel — H-CANCEL-SWAP-MISS class)
 mapping(address => uint256) internal _subscriberIndex; // membership ⟺ packed-index (swap-pop bookkeeping)
 
@@ -68,11 +76,15 @@ The per-sub **stamp** lives inside the `Sub` record (relocated from `AfKing.sol`
 | `index` | `uint48` | the **pre-RNG** `LR_INDEX` at process (today's `openLootBox` takes `uint48 index`, `LB:503`; `_finalizeLootboxRng` uses `uint48`, `:1230`) |
 | `amount` | full wei (`uint256`, or packed with a `purchaseLevel`-style headroom field à la `lootboxEth` `LB:505-509`) | the stamped spend; **boons OFF ⇒ `amount` = spend exactly** (no boosted-amount lever); feeds the seed `abi.encode` field (`LB:534`) at full 32-byte fidelity |
 | `day` | `uint32` | the **boundary-pinned** process day (mirrors today's frozen `lootboxDay[index][player]`, `LB:514`); seeds the open (FREEZE-03), NEVER open-time `_simulatedDayIndex()` |
+| `scorePlus1` | `uint16` | the **frozen** activity score+1 (D-348-07); → `_lootboxEvMultiplierFromScore` at open, read FROM the stamp, NOT live; mirrors the human deposit-freeze `scorePlus1` in `lootboxPurchasePacked` (`LB:529-530`) |
+| `baseLevelPlus1` | `uint24` | the **frozen** baseLevel+1 (D-348-07); → the target-level roll floor at open, read FROM the stamp, NOT live; mirrors the human deposit-freeze `baseLevelPlus1` (`LB:530`). The afking stamp does NOT carry `adj` (the open passes full `amount` to `_applyEvMultiplierWithCap`) |
 | `lastAutoBoughtDay` | `uint32` | success-marker (set atomically AFTER a successful `afkingFunding` debit → a failed/mid-cycle subscribe leaves no marker → no free box) |
 | `lastOpenedIndex` | `uint48` | monotonic no-double-open guard (the open leg only materializes indices strictly past it) |
 
-> **2-slot append (348-03 §3-ii):** one full slot for `amount` + one slot packing `index`(48) + `day`(32) +
-> `lastAutoBoughtDay`(32) + `lastOpenedIndex`(48) ≈ 160 bits, comfortably under 256. Exact packing = 349 decision.
+> **2-slot append (348-03 §3-ii, AS AMENDED D-348-07):** one full slot for `amount` + one slot packing `index`(48) +
+> `day`(32) + `scorePlus1`(16) + `baseLevelPlus1`(24) + `lastAutoBoughtDay`(32) + `lastOpenedIndex`(48) = 200 bits,
+> comfortably under 256. The 40-bit D-348-07 score+baseLevel drop into the SAME slot-2 word (~90 spare bits before they
+> were added) — no third slot, same single SSTORE. Exact packing = 349 decision.
 
 > **Storage adds ~0 B Game runtime** (slots, not deployed bytecode — `348-CODE-SIZE-PLAN.md` §3). The bytecode cost is
 > entirely in the dispatch stubs (§1.4) + the `GameAfkingModule` (off-budget, §1.2).
@@ -90,19 +102,21 @@ Its runtime size matters only vs its OWN 24,576 ceiling — **0 B to the Game** 
 | Module surface | What it is | Folded from |
 |---|---|---|
 | `subscribe` + the setters | `subscribe` (6 params) + `setDailyQuantity` / `setDrainGameCreditFirst` / `setMode` / `setReinvestPct` | `AfKing.sol:324` (subscribe) / `:392` / `:405` / `:414` / `:423` — incl. the OPEN-E SUB-02 `:338` + OPENE-04 `:343-352` consent gates + the AFSUB `validThroughLevel` write `:371` |
-| the **required-path process STAGE** | the chunked pre-RNG stamp pass: per funded sub → build the `_resolveBuy` slice (obligation 1, verbatim) → stamp `(index, amount, day)` → debit `afkingFunding` → set `lastAutoBoughtDay`; cursor-chunked, `BUY_BATCH`-style | `AfKing.sol:_resolveBuy :727-863` (the slice-builder substrate) — this is the logic the AdvanceModule STAGE (§1.5 / Step 4) CALLS |
-| the **open-pass** | the post-RNG `OPEN_BATCH`-style leg materializing the box from the stamp + `lootboxRngWordByIndex[stampedIndex]`, identical draw math to `openLootBox` (`LB:503`), seeding from the **stamped** day, routing the EV-cap through `_applyEvMultiplierWithCap(player, level+1, …)` (`LB:459`) exactly once | the afking open route (§1.3) |
+| the **required-path process STAGE** | the chunked pre-RNG stamp pass: per funded sub → build the `_resolveBuy` slice (obligation 1, verbatim) → compute+stamp `(index, amount, day, scorePlus1, baseLevelPlus1)` (D-348-07 — `scorePlus1` = activityScore+1, `baseLevelPlus1` = baseLevel+1, frozen at process) → debit `afkingFunding` → set `lastAutoBoughtDay`; cursor-chunked, `BUY_BATCH`-style | `AfKing.sol:_resolveBuy :727-863` (the slice-builder substrate) — this is the logic the AdvanceModule STAGE (§1.5 / Step 4) CALLS |
+| the **open-pass** | the post-RNG `OPEN_BATCH`-style leg materializing the box from the stamp + `lootboxRngWordByIndex[stampedIndex]`, identical draw math to `openLootBox` (`LB:503`), seeding from the **stamped** day, reading score+baseLevel FROM the stamp (`scorePlus1`/`baseLevelPlus1`, NOT live — D-348-07; mirrors the human read-from-snapshot path `LB:529-530`), passing the frozen `evMultiplierBps` into `_applyEvMultiplierWithCap(player, level+1, …)` (`LB:459`) exactly once (the cap RMW stays live) | the afking open route (§1.3) |
 | the **router** | the `doWork` / `autoBuy` / `autoOpen` dispatch (one-category early-return shape) | `AfKing.sol:864` (doWork) / `:904` (autoBuy) / `:910` (autoOpen) |
 
 ### 1.3 — The TWO open routes (producer-before-consumer; share no mutable-state hazard)
 
 Per `348-FREEZE-PROOF.md` §10 there are **two open routes**, by design — they must be reconciled to share no mutable-state
-hazard:
+hazard. Under **D-348-07** the two routes now **share the freeze model** for score+baseLevel (both read a frozen
+snapshot, not a live recompute); the only remaining differences are the **seed inputs** and the **storage location**
+(the Sub stamp vs `lootboxPurchasePacked`):
 
 | Route | Day source | EV-cap RMW | What it reads |
 |---|---|---|---|
-| **afking-stamp open** (the new leg) | the **stamped** `day` in the Sub record (FREEZE-03; never open-time) | LIVE at open via `_applyEvMultiplierWithCap` (`LB:459`), keyed `[player][level+1]`, **buy-time write BYPASSED** | `lootboxRngWordByIndex[stampedIndex]`; score/baseLevel/EV-cap read LIVE (D-348-05 accepted window) |
-| **human `openLootBox`** (existing, `LB:503`) | the **frozen** `lootboxDay[index][player]` (`LB:514`) snapshot | the existing frozen-snapshot path (`scorePlus1`/`adj`/`baseLevelPlus1` in `lootboxPurchasePacked`, `LB:529-532`) | `lootboxRngWordByIndex[index]` + the human's deposit-time snapshot |
+| **afking-stamp open** (the new leg) | the **stamped** `day` in the Sub record (FREEZE-03; never open-time) | the cap RMW is LIVE at open via `_applyEvMultiplierWithCap` (`LB:459`), keyed `[player][level+1]`, **buy-time write BYPASSED** — fed the FROZEN `evMultiplierBps` (from the stamped `scorePlus1`) | `lootboxRngWordByIndex[stampedIndex]`; score/baseLevel read FROM the stamp (`scorePlus1`/`baseLevelPlus1`, FROZEN — D-348-07); only the EV-cap accumulator is read live (benign monotonic clamp, FREEZE-01b) |
+| **human `openLootBox`** (existing, `LB:503`) | the **frozen** `lootboxDay[index][player]` (`LB:514`) snapshot | the existing frozen-snapshot path (`scorePlus1`/`adj`/`baseLevelPlus1` in `lootboxPurchasePacked`, `LB:529-530`) | `lootboxRngWordByIndex[index]` + the human's deposit-time snapshot |
 
 **Shared-no-mutable-state-hazard note (the producer-before-consumer reconciliation):**
 - The two routes share the **`lootboxEvBenefitUsedByLevel[player][level+1]`** EV-cap map — but that is exactly the
@@ -208,7 +222,8 @@ consumer) dispatch into the module.
 
 2a. `contracts/storage/DegenerusGameStorage.sol` — APPEND the subscriber set (`_subOf` / `_subscribers` /
     `_subscriberIndex`), the process/open cursors (`_subCursor` + the open-leg cursor) + **`subsFullyProcessed`**
-    (CONFIRMED-NEW — does NOT exist in source; §2.4 / FREEZE-02), the per-sub `(index, amount, day)` stamp + the
+    (CONFIRMED-NEW — does NOT exist in source; §2.4 / FREEZE-02), the per-sub `(index, amount, day, scorePlus1,
+    baseLevelPlus1)` stamp (the 40-bit score+baseLevel are D-348-07) + the
     `lastAutoBoughtDay` / `lastOpenedIndex` markers inside the `Sub` record, and confirm the v54 `afkingFunding` ledger is
     present (shipped at `20ca1f79`, `DegenerusGame.sol:1540` `afkingFundingOf`) — **REUSE it; NO new aggregate** (rides in
     `claimablePool`). Layout-safe append, 2-slot Sub extension (§1.1). **~0 B Game runtime.**
@@ -222,9 +237,15 @@ consumer) dispatch into the module.
     delegatecall module on the `GAME_*_MODULE` pattern; §1.2): `subscribe` + the 4 setters (carrying the OPEN-E SUB-02
     `:338` + OPENE-04 `:343-352` consent gates + the AFSUB `validThroughLevel` write `:371` — CONSENT-01/02, 349-owned),
     the **required-path process STAGE** logic (the `_resolveBuy` slice-builder folded VERBATIM — obligation 1; §4 carried
-    correction), the **open-pass** (afking-stamp route; §1.3 — seeds the stamped day, single `_applyEvMultiplierWithCap`
-    RMW), and the router (`doWork`/`autoBuy`/`autoOpen`). **Its bytecode is its OWN ~10–24 KB budget — 0 B to the Game**
-    (§1.2 / §2). The running-total is UNAFFECTED by this step (off-budget).
+    correction; AND, per D-348-07, compute+stamp `scorePlus1` = activityScore+1 and `baseLevelPlus1` = baseLevel+1
+    alongside `index`/`amount`/`day`), the **open-pass** (afking-stamp route; §1.3 — seeds the stamped day, reads
+    score+baseLevel FROM the stamp [`scorePlus1`/`baseLevelPlus1`, NOT live — D-348-07, mirroring the human
+    read-from-snapshot path `LB:529-530`], passes the frozen `evMultiplierBps` into the single `_applyEvMultiplierWithCap`
+    RMW [cap RMW stays live]), and the router (`doWork`/`autoBuy`/`autoOpen`). **Its bytecode is its OWN ~10–24 KB budget
+    — 0 B to the Game** (§1.2 / §2). The running-total is UNAFFECTED by this step (off-budget). **Advisory size note
+    (D-348-07):** writing/reading the 2 packed stamp fields adds a few hundred bytes of Game-side logic at most — within
+    the existing headroom narrative (§2), and offset at OPEN by replacing the live `playerActivityScore` recompute
+    (~953 B per `348-CODE-SIZE-PLAN.md`) with a cheap stamp SLOAD.
 
 > The module before the AdvanceModule STAGE + the interfaces: the process-pass callee + the dispatch targets must exist
 > before the STAGE calls them and before the interfaces/stubs reference them.
@@ -362,15 +383,19 @@ exactly once at open** — the same shape `resolveLootboxDirect`/`resolveRedempt
 (`:473`) + WRITE (`:488`) atomically at open, keyed on the SAME `lootboxEvBenefitUsedByLevel[player][level+1]` map
 MintModule uses at buy (`MintModule:1298/1303`, `:1321/1327`, both `[buyer][cachedLevel+1]`). One shared per-level 10-ETH
 budget (`LOOTBOX_EV_BENEFIT_CAP = 10 ether`, `Storage:1326`), hard-clamped ≤ 10 ETH with a no-write 100%-EV short-circuit
-(`LB:478-481`) — NO revert (not a class-B site). **The buy-time write at `MintModule:1303/1327` is BYPASSED for afking
-boxes** (the double-draw guard, §4-iii): with boons OFF and the process-pass *stamping* `(index, amount, day)` instead of
-routing through `_callTicketPurchase`'s lootbox tally (`MintModule:1496` / `:1261`), the buy-time EV write must NOT also
-fire — the open does the single live RMW. **Lands at:** the `GameAfkingModule` open-pass (Step 3a) — single
-`_applyEvMultiplierWithCap` RMW at open; the process STAGE (Step 3a / Step 4) stamps only, never touching
-`MintModule:1303/1327`.
+(`LB:478-481`) — NO revert (not a class-B site). The `mult` (`evMultiplierBps`) fed in now derives from the **FROZEN**
+`scorePlus1` stamped at process (D-348-07), NOT a live score recompute; the cap RMW itself stays live (a benign
+monotonic down-clamp — the SOLE residual live-read, FREEZE-01b). **The buy-time write at `MintModule:1303/1327` is
+BYPASSED for afking boxes** (the double-draw guard, §4-iii): with boons OFF and the process-pass *stamping*
+`(index, amount, day, scorePlus1, baseLevelPlus1)` instead of routing through `_callTicketPurchase`'s lootbox tally
+(`MintModule:1496` / `:1261`), the buy-time EV write must NOT also fire — the open does the single RMW. **Lands at:**
+the `GameAfkingModule` open-pass (Step 3a) — single `_applyEvMultiplierWithCap` RMW at open; the process STAGE (Step 3a
+/ Step 4) stamps only, never touching `MintModule:1303/1327`.
 
-> Recorded correction: EV-cap = one live `_applyEvMultiplierWithCap` RMW at open keyed `[player][level+1]`, ≤10 ETH
-> no-revert; the buy-time write is BYPASSED (no double-draw). This is part of the D-348-05 live-read window (accepted).
+> Recorded correction: EV-cap = one `_applyEvMultiplierWithCap` RMW at open keyed `[player][level+1]`, ≤10 ETH
+> no-revert, fed the FROZEN `evMultiplierBps` (from the stamped `scorePlus1`, D-348-07); the buy-time write is BYPASSED
+> (no double-draw). The cap RMW is the SOLE residual live-read after D-348-07 — a benign monotonic clamp (D-348-05
+> narrowed to EV-cap only).
 
 ---
 
@@ -400,9 +425,10 @@ corrections — it does **not** re-decide the build.
 ## Section 6 — ARCH-04 hand-off verdict
 
 - **Final reconciled shapes LOCKED** (Section 1): the `DegenerusGameStorage` 2-slot append (set + cursors +
-  `subsFullyProcessed` + the `(index, amount, day)` stamp + markers + the reused `afkingFunding` ledger); the
-  `GameAfkingModule` contents (subscribe/setters + process STAGE callee + open-pass + router — own budget, 0 B to Game);
-  the TWO open routes (afking-stamp + human `openLootBox`) with the shared-no-mutable-state-hazard reconciliation; the
+  `subsFullyProcessed` + the `(index, amount, day, scorePlus1, baseLevelPlus1)` stamp [score+baseLevel stamped-frozen,
+  D-348-07] + markers + the reused `afkingFunding` ledger); the `GameAfkingModule` contents (subscribe/setters + process
+  STAGE callee + open-pass + router — own budget, 0 B to Game); the TWO open routes (afking-stamp + human `openLootBox`,
+  now sharing the score+baseLevel freeze model per D-348-07) with the shared-no-mutable-state-hazard reconciliation; the
   `AfKing.sol` thin-dispatch-stub collapse.
 - **Code-size running-total CARRIED** (Section 2): MEASURED 24,358 B / 218 B headroom + corrected ~1.4–1.7 KB clean
   reclaim (NOT the overstated ~2.8 KB); R1 reclaim FIRST; every running-total row **< 24,576** (worst case 24,418).
@@ -411,6 +437,10 @@ corrections — it does **not** re-decide the build.
   thin stubs; no intermediate broken state; the Game never breaches 24,576 mid-flight.
 - **Four carried corrections THREADED** (Section 4): box-seed `abi.encode` re-pin → open-pass; no-try/catch REVERT-02 →
   process/open STAGE; required-path override → AdvanceModule STAGE; EV-cap-at-open buy-time-write-bypassed → open-pass.
+- **D-348-07 amendment THREADED** (header note + §1.1/§1.2/§1.3 + Steps 2a/3a + §4.4): score+baseLevel stamped-frozen
+  (`scorePlus1`/`baseLevelPlus1`, 40 bits into the slot-2 word) → process STAGE computes+stamps them, open reads them
+  FROM the stamp and feeds the frozen `evMultiplierBps` to the (still-live) EV-cap RMW. Seed UNCHANGED (FREEZE-03);
+  stamp still 2-slot-feasible; residual live-read = the EV-cap monotonic clamp only.
 - **Re-pin-before-authoring caution PRESENT** (Section 5).
 
 **349 IMPL is sequencing-complete from this map.** The author writes ONE fully-reconciled, code-size-safe

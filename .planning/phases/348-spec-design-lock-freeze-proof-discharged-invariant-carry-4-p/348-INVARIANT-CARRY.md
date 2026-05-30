@@ -10,6 +10,13 @@ lines.
 REVERT-FREE-CHAIN invariant is DISCHARGED** — v54 is already revert-free on the funded afking path; v55's job is
 **migration fidelity** (obligation 1), not re-proving.
 
+> **Amended 2026-05-30 (D-348-07):** score + baseLevel moved from live-read → stamped-frozen in the afking Sub stamp
+> (now `(index, amount, day, scorePlus1, baseLevelPlus1)`); supersedes D-348-05 for those fields; residual live-read =
+> the EV-cap monotonic clamp only. The stamp grows by 40 bits (`scorePlus1` uint16 + `baseLevelPlus1` uint24) into
+> slot 2's ~90 spare bits — still **2-slot-feasible** (cites the human precedent widths at `LB:530`). The
+> `evMultiplierBps` fed to `_applyEvMultiplierWithCap` now derives from the FROZEN `scorePlus1` (obligation 2/EVCAP-01),
+> while the cap RMW itself stays live (benign monotonic clamp).
+
 **Purpose:** 349 IMPL inherits the corrected (no-try/catch) invariant set + a verified obligation-1 so it can build the
 process-pass + the box-stamp without re-opening the proof. This doc:
 1. carries obligations 1–3 as the v55 locked invariant set;
@@ -58,21 +65,30 @@ map MintModule uses at buy (`MintModule:1298/1303` and `:1321/1327`, both keyed 
   100%-EV `return amount;` once the cap is hit (`LB:478-481`). The scale `(adjustedPortion · evMultiplierBps)/10_000`
   is bounded (`evMultiplierBps ≤ 13_500`, divisor constant). So the EV-cap increment cannot contribute a revert (it is
   NOT a class-B solvency site).
-- **Buy-time write BYPASSED (no double-draw):** with boons OFF and the process-pass *stamping* `(index, amount, day)`
-  (not routing through `_callTicketPurchase`'s lootbox tally), the buy-time EV write at `MintModule:1303/1327` must NOT
-  also fire for afking boxes — the open does the single live RMW. (See §4-iii, the double-draw guard.)
+- **Buy-time write BYPASSED (no double-draw):** with boons OFF and the process-pass *stamping*
+  `(index, amount, day, scorePlus1, baseLevelPlus1)` (not routing through `_callTicketPurchase`'s lootbox tally), the
+  buy-time EV write at `MintModule:1303/1327` must NOT also fire for afking boxes — the open does the single RMW (its
+  `evMultiplierBps` derived from the frozen `scorePlus1`). (See §4-iii, the double-draw guard.)
 
-> **Live-read coupling:** the EV-cap RMW is part of the live-read window (`348-FREEZE-PROOF.md` FREEZE-01b, D-348-05) —
-> it reads the player's live score/level at open by design. That window is the accepted-by-design known issue; the
-> equivalence + no-revert + no-double-draw stated here are the *correctness* obligations on top of it.
+> **Live-read coupling (reframed under D-348-07):** score + baseLevel are now FROZEN — stamped `scorePlus1` /
+> `baseLevelPlus1` at process and read from the stamp at open (`348-FREEZE-PROOF.md` FREEZE-01a). The **only** residual
+> live-read is the EV-cap RMW itself (`lootboxEvBenefitUsedByLevel[player][level+1]`), a shared per-(player,level)
+> cumulative accumulator that cannot be per-box-stamped — a **benign monotonic down-clamp** (hard ≤10 ETH, no
+> profitable timing; FREEZE-01b), NOT the former score/baseLevel/EV-cap window. The `evMultiplierBps` fed into the cap
+> helper now derives from the frozen `scorePlus1`; the equivalence + no-revert + no-double-draw stated here are the
+> *correctness* obligations on top of that.
 
-### Obligation 3: stamp `(index, amount, day)`; seed the open with the STAMPED buy-day
+### Obligation 3: stamp `(index, amount, day, scorePlus1, baseLevelPlus1)`; seed the open with the STAMPED buy-day
 
-Stamp `(index = pre-RNG LR_INDEX, amount = spend, day = boundary-pinned process day)` into the Sub record at process,
-and seed the open from the **stamped** day — mirroring today's frozen `lootboxDay[index][player]` (`LB:514`), NEVER
-open-time `_simulatedDayIndex()` (`LB:513` and the template sites `:766/:799/:836/:868`). Full proof in
-`348-FREEZE-PROOF.md` (FREEZE-02 index-binding + FREEZE-03 stamped-day determinism). Carried here as the third locked
-obligation because it is the third member of the invariant set the 349 process-pass must satisfy.
+Stamp `(index = pre-RNG LR_INDEX, amount = spend, day = boundary-pinned process day, scorePlus1 = activityScore+1,
+baseLevelPlus1 = baseLevel+1)` into the Sub record at process (D-348-07 — score+baseLevel frozen at process, the analog
+of the human deposit-time freeze of `lootboxPurchasePacked`, `LB:529-530`), and seed the open from the **stamped** day
+— mirroring today's frozen `lootboxDay[index][player]` (`LB:514`), NEVER open-time `_simulatedDayIndex()` (`LB:513` and
+the template sites `:766/:799/:836/:868`). The seed itself is UNCHANGED — it consumes only `(rngWord, player, day,
+amount)` (`LB:534`); score+baseLevel enter AFTER the seed (scale/floor) and are read from the stamp, NOT live. Full
+proof in `348-FREEZE-PROOF.md` (FREEZE-02 index-binding + FREEZE-03 stamped-day determinism + FREEZE-01a stamped
+score/baseLevel). Carried here as the third locked obligation because it is the third member of the invariant set the
+349 process-pass must satisfy.
 
 ### Obligation 4: ~~thin per-sub try/catch skip valve~~ → **DROPPED (D-348-04)** — see §2.
 
@@ -166,9 +182,9 @@ up with the Game's recompute. The two formulas reconcile **exactly** — with on
 > constant-collision a verbatim-preservation fold can silently break; flagged so 349 carries the right numeric in each
 > role. (No revert risk either way — this is a correctness/equivalence check, as §7 states.)
 
-### (ii) Stamp field widths hold `amount` (full wei) + `index` + `day`
+### (ii) Stamp field widths hold `amount` (full wei) + `index` + `day` + `scorePlus1` + `baseLevelPlus1`
 
-The stamp is `(index, amount, day)`:
+The stamp is `(index, amount, day, scorePlus1, baseLevelPlus1)` (D-348-07 — score+baseLevel stamped-frozen):
 - `amount` — **full wei** spend. A box `amount` is bounded by the per-box economics but must be stored at full `uint256`
   fidelity to feed the seed (`LB:534` consumes `amount` as a 32-byte `abi.encode` field) and the payout math — so
   `amount` takes a full slot (or is packed into a wide-enough field; today `lootboxEth` packs `amount` in the low 232
@@ -176,21 +192,29 @@ The stamp is `(index, amount, day)`:
 - `index` — the lootbox RNG index, `uint48` (today's `openLootBox` takes `uint48 index`, `LB:503`; `_finalizeLootboxRng`
   uses `uint48`, `:1230`). Fits comfortably alongside other small fields.
 - `day` — the simulated day index, `uint32` (today's `lootboxDay` and `_simulatedDayIndex()` are `uint32`, `LB:513-514`).
+- `scorePlus1` — the frozen activity score+1, `uint16` (D-348-07). Cites the human precedent: the human deposit-freeze
+  unpacks `(uint16 scorePlus1, uint64 adj, uint24 baseLevelPlus1)` from `lootboxPurchasePacked[index][player]` at
+  `LB:529-530` — the afking stamp reuses the `scorePlus1` width (uint16) but does **NOT** carry `adj` (the open passes
+  the full stamped `amount` to `_applyEvMultiplierWithCap` and derives the cap-adjusted portion live).
+- `baseLevelPlus1` — the frozen baseLevel+1, `uint24` (D-348-07; same width as the human `baseLevelPlus1` at `LB:530`).
 
-**Disposition:** the three fields fit a **2-slot Sub-record extension** (the §8 Sub-record-width item) — one full slot
+**Disposition:** the five fields fit a **2-slot Sub-record extension** (the §8 Sub-record-width item) — one full slot
 for `amount` (or `amount` packed with `purchaseLevel`-style headroom) + one slot holding `index` (`uint48`) + `day`
-(`uint32`) + the existing `lastAutoBoughtDay` / `lastOpenedIndex` markers, which pack together well under 256 bits. The
-exact packing is a 349 layout decision (pre-launch redeploy-fresh → storage break is fine, no migration); the SPEC
-confirms the widths are **sufficient and 2-slot-feasible**, which is all §7 asks.
+(`uint32`) + `scorePlus1` (`uint16`) + `baseLevelPlus1` (`uint24`) + the existing `lastAutoBoughtDay` / `lastOpenedIndex`
+markers. The added 40 bits (`scorePlus1` 16 + `baseLevelPlus1` 24) drop into slot 2's ~90 spare bits alongside the
+existing ~160 bits of small fields — **the same single SSTORE, no third slot**. The exact packing is a 349 layout
+decision (pre-launch redeploy-fresh → storage break is fine, no migration); the SPEC confirms the widths are
+**sufficient and still 2-slot-feasible** with the two D-348-07 fields added, which is all §7 asks.
 
 ### (iii) Double-draw guard: the process-pass never routes through `_callTicketPurchase`'s lootbox EV tally
 
 This is the obligation-2 double-draw guard. The buy-time EV write lives inside the ticket-purchase queue logic
 (`MintModule:1261` "Queue tickets (moved from `_callTicketPurchase`)", with the `lootboxEvBenefitUsedByLevel` writes at
-`:1303` and `:1327`). The process-pass **stamps** `(index, amount, day)` and **does not** route through
-`_callTicketPurchase` (`MintModule:1496`) nor reach the `:1303/:1327` buy-time tally — the single EV RMW happens at OPEN
-via `_applyEvMultiplierWithCap` (obligation 2). **Disposition:** confirmed against source — the process-pass's job is a
-stamp + `afkingFunding` debit + success-marker, none of which touch `MintModule:1303/1327`; the open does the one live
+`:1303` and `:1327`). The process-pass **stamps** `(index, amount, day, scorePlus1, baseLevelPlus1)` and **does not**
+route through `_callTicketPurchase` (`MintModule:1496`) nor reach the `:1303/:1327` buy-time tally — the single EV RMW
+happens at OPEN via `_applyEvMultiplierWithCap` (obligation 2). **Disposition:** confirmed against source — the
+process-pass's job is a stamp + `afkingFunding` debit + success-marker, none of which touch `MintModule:1303/1327`; the
+open does the one live
 RMW. 349 must preserve this separation (stamp at process, single RMW at open); 351 TST-04 (two-path) covers it
 empirically.
 
@@ -268,11 +292,13 @@ obligation-1 axis. (Residual freeze obligation — the FREEZE-02 `subsFullyProce
   terminal-routing-unblocked (class C). 349 IMPL owns REVERT-01 (preserve the §1 invariants verbatim) + REVERT-02 (the
   corrected no-valve placement + the game-over-routing verification).
 - **EVCAP-01 (349-owned):** `_applyEvMultiplierWithCap(player, level+1, amount, mult)` at open, exactly once, ≤10 ETH
-  no-revert, buy-time write bypassed.
+  no-revert, buy-time write bypassed. The `mult` (`evMultiplierBps`) now derives from the **FROZEN** `scorePlus1`
+  (stamped at process, D-348-07) — NOT a live score recompute; the cap RMW itself stays live (benign monotonic clamp).
 - **§10 knock-ons:** rule (2) is a pre-emptive skip (effectively unreachable for funded subs); the optional per-cycle
   eviction cap is recommended DROPPED (lost its revert-driven rationale); rule (1) unfunded eviction unaffected.
-- **§7 follow-ups discharged:** cost-units equivalent (mind the dual `TICKET_SCALE` = 400 vs 4×100); stamp widths
-  2-slot-feasible; double-draw guarded (stamp at process, single RMW at open).
+- **§7 follow-ups discharged:** cost-units equivalent (mind the dual `TICKET_SCALE` = 400 vs 4×100); stamp widths now 5
+  fields (`index, amount, day, scorePlus1, baseLevelPlus1`, D-348-07) — still 2-slot-feasible (40 bits into slot 2's
+  spare); double-draw guarded (stamp at process, single RMW at open).
 - **Obligation-1 light auditor pass:** PASS (5/5 invariants stated correctly; §5).
 
 ---
