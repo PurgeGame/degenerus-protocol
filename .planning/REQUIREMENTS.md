@@ -59,7 +59,7 @@
 ### Cross-Cutting — SPEC + IMPL + TERMINAL (BATCH)
 - [ ] **BATCH-01**: SPEC design-lock (343) — re-attest the PLAN-V54 design vs the v53 HEAD (every `file:line`); lock the final `batchPurchase` / `purchaseWith` / extended `keeperSnapshot` signatures + the `keeperFunding` storage shape + the deposit/withdraw/claim-merge wiring; produce the SOLVENCY-01/03 proofs + the CLEANUP-01 + GAS-01 inventories; confirm the OPEN-E carry-over. ZERO `contracts/*.sol` mutation at SPEC.
 - [ ] **BATCH-02**: IMPL (344) — the ONE batched USER-APPROVED `contracts/*.sol` diff (ledger + de-custody + the CLEANUP-02 orphan removal); HARD STOP at the contract-commit boundary (applied + locally compiled, never committed without explicit user hand-review); forge build clean.
-- [ ] **BATCH-03**: TERMINAL (347) — delta-audit (every v54 surface NON-WIDENING vs v53; the master invariant + OPEN-E re-attested) + the 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT per `D-271-ADVERSARIAL-02`) focused on the funding-ledger + de-custody surface + `audit/FINDINGS-v54.0.md` (chmod 444) + atomic 5-doc closure flip.
+- [ ] **BATCH-03**: TERMINAL (347) — delta-audit (every v54 surface NON-WIDENING vs v53; the master invariant + OPEN-E re-attested) + the 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT per `D-271-ADVERSARIAL-02`) focused on the funding-ledger + de-custody surface + `audit/FINDINGS-v54.0.md` (chmod 444) + atomic 5-doc closure flip. **Runs IN-MILESTONE (NOT deferred to v52, unlike v50.0/v51.0)** — the solvency-spine touch makes deferral unacceptable.
 
 ---
 
@@ -74,6 +74,42 @@
 - The v44 §9d 135-anchor maximalist register (carries forward unchanged; NOT live vectors).
 
 ## Traceability
+
+**34/34 v54.0 requirements mapped to exactly one phase — 0 orphaned, 0 duplicated.** Phases: 343 SPEC · 344 IMPL · 345 GAS+CLEANUP · 346 TST · 347 TERMINAL. BATCH-03 (347) re-attests the full 34-requirement set at the TERMINAL full close.
+
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| _(filled by the roadmapper — phase ↔ requirement mapping)_ | | |
+| LEDGER-01 | 344 IMPL | Pending |
+| LEDGER-02 | 344 IMPL | Pending |
+| LEDGER-03 | 344 IMPL | Pending |
+| LEDGER-04 | 344 IMPL | Pending |
+| LEDGER-05 | 344 IMPL | Pending |
+| AUTOBUY-01 | 344 IMPL | Pending |
+| AUTOBUY-02 | 344 IMPL | Pending |
+| AUTOBUY-03 | 344 IMPL | Pending |
+| AUTOBUY-04 | 344 IMPL | Pending |
+| AUTOBUY-05 | 344 IMPL | Pending |
+| DECUSTODY-01 | 344 IMPL | Pending |
+| DECUSTODY-02 | 344 IMPL | Pending |
+| DECUSTODY-03 | 344 IMPL | Pending |
+| DECUSTODY-04 | 344 IMPL | Pending |
+| GAMEOVER-01 | 344 IMPL | Pending |
+| GAMEOVER-02 | 344 IMPL | Pending |
+| SOLVENCY-01 | 343 SPEC | Pending |
+| SOLVENCY-02 | 346 TST | Pending |
+| SOLVENCY-03 | 343 SPEC | Pending |
+| CLEANUP-01 | 343 SPEC | Pending |
+| CLEANUP-02 | 344 IMPL | Pending |
+| CLEANUP-03 | 345 GAS+CLEANUP | Pending |
+| GAS-01 | 343 SPEC | Pending |
+| GAS-02 | 345 GAS+CLEANUP | Pending |
+| GAS-03 | 345 GAS+CLEANUP | Pending |
+| TST-01 | 346 TST | Pending |
+| TST-02 | 346 TST | Pending |
+| TST-03 | 346 TST | Pending |
+| TST-04 | 346 TST | Pending |
+| TST-05 | 346 TST | Pending |
+| TST-06 | 346 TST | Pending |
+| BATCH-01 | 343 SPEC | Pending |
+| BATCH-02 | 344 IMPL | Pending |
+| BATCH-03 | 347 TERMINAL | Pending |

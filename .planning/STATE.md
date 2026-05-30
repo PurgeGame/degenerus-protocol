@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v54.0
 milestone_name: Game-Side Keeper-Funding Ledger + AfKing De-Custody
 status: planning
-last_updated: "2026-05-30T07:30:56.169Z"
+last_updated: "2026-05-30T08:00:00.000Z"
 last_activity: 2026-05-30
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,36 +17,40 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v51.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v51.0 — defining requirements)
+See: .planning/PROJECT.md (Current Milestone: v54.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v54.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 341 — tst — per tier × per quadrant + tier precedence suppression + revert/dedup + empty pool + jackpot regression + non widening
+**Current focus:** Phase 343 — SPEC — design-lock the game-side `keeperFunding` ledger + PROVE the solvency reservation (SOLVENCY-01/03) + produce the dead-code (CLEANUP-01) + gas-opportunity (GAS-01) inventories + grep-attest every `file:line` vs the v53 HEAD `83a84431` (paper-only, zero `contracts/*.sol`).
 
-## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward)
+## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
 **v50.0** closed 2026-05-28 via USER-approved MINIMAL CLOSE without running Phase 338's internal adversarial sweep. **The v52 consolidated audit MUST cover the cumulative v50 + v51 contract surface**, specifically the v50 changes that never got the 3-skill sweep + delta-audit: the whale-pass O(1) deferred-claim path (`claimWhalePass` + box-open record), AFSUB pass-gating (`validThroughLevel` eviction/refresh + OPEN-E re-attest), and the MINTDIV index alignment — plus authoring `audit/FINDINGS-v50.0.md` (deferred). Mitigation already in place: WHALE-04 freeze proven at SPEC (334), TST-01/03 empirical coverage (336), pre-launch (no live funds), v50 contract history UNPUSHED. SWEEP-01/02/03 + BATCH-03-findings = the v52 charge.
 
-**v51.0** is also closing minimally (USER decision 2026-05-28 at milestone start) — its internal 3-skill sweep + delta-audit + `audit/FINDINGS-v51.0.md` are likewise DEFERRED → v52. The v52 audit MUST additionally cover the v51 surface: the new `claimBingo` color-completion entrypoint / `DegenerusGameBingoModule.sol` (3-tier reward selection + tier-precedence suppression, per-player (level,quadrant) dedup, `transferFromPool(Pool.Reward,…)` + `coinflip.creditFlip` draws, empty-pool no-op, `gameOver` cutoff, freeze-safety of the `traitBurnTicket` read), the sDGNRS `Pool.Reward` rebalance (AFFILIATE 3500→3000 / REWARD 500→1000), and the jackpot final-day `Pool.Reward` deletion side-effects. Mitigation in place at v51 close: SPEC (339) proves freeze-safety + tier-precedence; TST (341) covers per-tier rewards / dedup / empty-pool / jackpot-final-day regression; pre-launch (no live funds); v51 contract history UNPUSHED. **Net v52 charge = the cumulative v50 + v51 contract surface + `FINDINGS-v50.0.md` + `FINDINGS-v51.0.md`.**
+**v51.0** also closed minimally (USER decision 2026-05-28) — its internal 3-skill sweep + delta-audit + `audit/FINDINGS-v51.0.md` are likewise DEFERRED → v52. The v52 audit MUST additionally cover the v51 surface: the new `claimBingo` color-completion entrypoint / `DegenerusGameBingoModule.sol` (3-tier reward selection + tier-precedence suppression, per-player (level,quadrant) dedup, `transferFromPool(Pool.Reward,…)` + `coinflip.creditFlip` draws, empty-pool no-op, `gameOver` cutoff, freeze-safety of the `traitBurnTicket` read), the sDGNRS `Pool.Reward` rebalance (AFFILIATE 3500→3000 / REWARD 500→1000), and the jackpot final-day `Pool.Reward` deletion side-effects. Mitigation in place at v51 close: SPEC (339) proves freeze-safety + tier-precedence; TST (341) covers per-tier rewards / dedup / empty-pool / jackpot-final-day regression; pre-launch (no live funds); v51 contract history UNPUSHED. **Net v52 charge = the cumulative v50 + v51 contract surface + `FINDINGS-v50.0.md` + `FINDINGS-v51.0.md`.**
+
+> **Note — v54.0 is NOT on this deferral list.** v54.0 runs its OWN internal 3-skill adversarial sweep + delta-audit + `audit/FINDINGS-v54.0.md` IN-MILESTONE at TERMINAL (347, BATCH-03), because it touches the solvency spine (`claimablePool`). The v52 consolidated cross-model audit still folds the v54 surface into its cumulative sweep as an additional track — not a substitute for v54's own close.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 343 — SPEC (not started; roadmap defined)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-30 — Milestone v54.0 started
+Status: Roadmap defined — ready to plan Phase 343 SPEC
+Last activity: 2026-05-30 — Milestone v54.0 roadmap created (5 phases 343-347; 34 reqs / 9 categories mapped)
 
-## Current Milestone Roadmap (v51.0 — phases 339-342)
+## Current Milestone Roadmap (v54.0 — phases 343-347)
 
-Shape: SPEC → IMPL → TST → TERMINAL (the established v44-v50 audit shape, run to a MINIMAL CLOSE — NO SWEEP/AUDIT phase + NO GAS phase). Contract-boundary HARD STOP at the single IMPL phase (340). The internal 3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v51.0.md` are DEFERRED → the v52 consolidated audit (cumulative v50 + v51 surface) per the audit-debt note above. Mirrors the v45.0 + v50.0 minimal-close precedent.
+Shape: SPEC → IMPL → GAS+CLEANUP → TST → TERMINAL (the established v49.0 audit-milestone shape WITH a dedicated GAS phase). **TWO contract-boundary HARD STOPs** — 344 IMPL (the ledger + de-custody + CLEANUP-02 diff) + 345 GAS+CLEANUP (the further behavior-identical gas wins + packing eval + broader dead-code sweep). **FULL close — the internal 3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v54.0.md` run IN-MILESTONE at TERMINAL (347), NOT deferred** (the solvency-spine touch makes deferral unacceptable, unlike v50.0/v51.0). Baseline = v53 HEAD `83a84431` (the atomic `BatchBuy[]` batchPurchase; supersedes v53's cross-contract value-plumbing). Design-locked in `.planning/PLAN-V54-KEEPER-FUNDING-GAME-LEDGER.md` (Decisions A2 + B).
 
 | Phase | Name | Type | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 339 | SPEC — Design-Lock + RNG-Freeze-Safety Proof + Tier-Precedence Lock + Call-Graph Attestation | SPEC | BATCH-01 · BINGO-06 | ✅ Complete (4/4 plans) |
-| 340 | IMPL — The ONE Batched Contract Diff (BINGO + REBAL + JACK) | IMPL (CONTRACT BOUNDARY) | BINGO-01/02/03/04/05 · REBAL-01 · JACK-01/02 · BATCH-02 | Not started |
-| 341 | TST — Per-Tier + Precedence-Suppression + Revert/Dedup + Empty-Pool + Jackpot Regression + Non-Widening | TST | TST-01/02/03/04/05/06 | Not started |
-| 342 | TERMINAL — Minimal Close: Re-Attest + Atomic 5-Doc Closure Flip (Sweep + FINDINGS DEFERRED → v52) | TERMINAL (minimal close) | BATCH-03 | Not started |
+| 343 | SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Call-Graph Attestation | SPEC | BATCH-01 · SOLVENCY-01 · SOLVENCY-03 · CLEANUP-01 · GAS-01 | Not started |
+| 344 | IMPL — The ONE Batched Contract Diff (ledger + de-custody + CLEANUP-02) | IMPL (CONTRACT BOUNDARY) | LEDGER-01..05 · AUTOBUY-01..05 · DECUSTODY-01..04 · GAMEOVER-01/02 · CLEANUP-02 · BATCH-02 | Not started |
+| 345 | GAS+CLEANUP — Further Behavior-Identical Gas Wins + Packing Eval + Broader Dead-Code Sweep | GAS+CLEANUP (CONTRACT BOUNDARY) | GAS-02 · GAS-03 · CLEANUP-03 | Not started |
+| 346 | TST — Deposit/Withdraw + Zero-Value Auto-Buy + Fresh-Rate + Solvency Invariant + Terminal-Merge + Non-Widening | TST | TST-01..06 · SOLVENCY-02 | Not started |
+| 347 | TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v54.0 + Closure Flip | TERMINAL (FULL close — sweep IN-MILESTONE) | BATCH-03 | Not started |
 
-**Coverage:** 18/18 v51.0 requirements mapped (339: 2 · 340: 9 · 341: 6 · 342: 1); 0 orphaned, 0 duplicated. Per-category: BINGO 6 · REBAL 1 · JACK 2 · TST 6 · BATCH 3. The internal sweep + delta-audit + `audit/FINDINGS-v51.0.md` are DEFERRED → the v52 consolidated audit (NO SWEEP category in v51). Full detail in `.planning/ROADMAP.md`; per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
+**Coverage:** 34/34 v54.0 requirements mapped (343: 5 · 344: 18 · 345: 3 · 346: 7 · 347: 1); 0 orphaned, 0 duplicated. Per-category: LEDGER 5 · AUTOBUY 5 · DECUSTODY 4 · GAMEOVER 2 · SOLVENCY 3 · CLEANUP 3 · GAS 3 · TST 6 · BATCH 3. The internal sweep + delta-audit + `audit/FINDINGS-v54.0.md` run IN-MILESTONE at 347 (NOT deferred). Full detail in `.planning/ROADMAP.md`; per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
+
 
 ## Last Shipped Milestone (v50.0 — CLOSED 2026-05-28, minimal close; closure HEAD `812abeee2719c32d6973771ad2a66187fae75b80`; no formal `MILESTONE_V50_AT_HEAD` signal emitted; baseline `MILESTONE_V49_AT_HEAD_b0511ca29130c36cbe9bfb44e282c7379f9778c9`)
 
