@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
 status: executing
-last_updated: "2026-05-30T17:20:50.375Z"
-last_activity: 2026-05-30 -- Phase 348 planning complete
+last_updated: "2026-05-30T17:39:55.759Z"
+last_activity: 2026-05-30
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 6
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v55.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** **v55.0 AfKing-in-Game Redesign — ROADMAP DEFINED 2026-05-30** (5 phases 348-352, 29 reqs / 10 categories). Fold AfKing's subscriber state + logic into DegenerusGame: the subscriber set + cursors + a per-sub box-stamp + the v54 `afkingFunding` ledger → `DegenerusGameStorage`; a new `GameAfkingModule` (delegatecall) owns subscribe/setters + the process-pass + the open-pass + the router; AfKing proper collapses to thin dispatch stubs. The box freeze RELOCATES into a per-sub stamp `(index, amount, day)` (not derived); afking boxes materialize at open; two open routes (afking-stamp + human `lootboxEth`/`boxPlayers`). ✅ **REVERT-FREE-CHAIN proof DISCHARGED 2026-05-30** (`.planning/PLAN-V55-REVERT-FREE-CHAIN-PROOF.md`, its §5 = the 4 LOCKED obligations): v54 is ALREADY revert-free on the funded afking path — every Game-side input revert is structurally prevented by AfKing's slice builder `_resolveBuy` (the v55 obligation = preserve those invariants verbatim when it folds into the process-pass); only solvency-violation [safe under the Phase-343 SOLVENCY-01] + liveness-timeout [game-dead] survive (accepted). **At Phase 348 the try/catch valve was DROPPED** (USER: "didnt we get rid of try/catch?") — the no-brick guarantee rests on obligation 1 (slice-builder fidelity); class B fails loud (never mask a solvency violation), class C is terminal (SPEC verifies the afking STAGE can't block game-over routing) — REVERT-02 + proof §5 obl-4 rewrite. **§4 placement DECIDED at Phase 348 → REQUIRED-PATH** (a chunked `advanceGame` STAGE before `rngGate`, uniform index epoch [block `requestLootboxRng` while `!subsFullyProcessed`], inherit the mint gate) — a USER override of the doc's separate-legs recommendation, on guaranteed-every-day grounds. Baseline = v54 de-custody HEAD `20ca1f79`. Design-lock: `.planning/PLAN-V55-AFKING-IN-GAME-REDESIGN.md` (canonical = §10; §4/§9 placement + §10 try/catch now superseded by 348). **Next = Phase 348 SPEC PLAN** (`/gsd-plan-phase 348`) — context gathered (`348-CONTEXT.md`); paper-only design-lock + FREEZE-spine proof; ZERO `contracts/*.sol`.
+**Current focus:** Phase 348 — spec-design-lock-freeze-proof-discharged-invariant-carry-4-p
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,12 +32,12 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 348 of 352 (SPEC — Design-Lock + Freeze Proof + Discharged-Invariant Carry + §4 Placement Decision + Code-Size/GAS Inventories + Call-Graph Attestation)
-Plan: — (not yet planned; context gathered)
+Phase: 348 (spec-design-lock-freeze-proof-discharged-invariant-carry-4-p) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-05-30 -- Phase 348 planning complete
+Last activity: 2026-05-30 -- 348-01 complete (GREP-ATTESTATION; box-seed drift resolved, all v55 anchors re-pinned vs 20ca1f79, bd4e031e)
 
-Progress: [░░░░░░░░░░] 0% (0/5 phases)
+Progress: [██░░░░░░░░] 17%
 
 ## Current Milestone Roadmap (v55.0 — phases 348-352)
 
@@ -611,6 +611,7 @@ Audit deliverables:
 | Phase 339 P02 | ~18min | 2 tasks | 2 files |
 | 339 | 03 | ~22min | 2 | 2 files (339-REBAL-JACK-ATTESTATION.md + 339-GREP-ATTESTATION-EDIT-ORDER.md) + 1 SUMMARY (REBAL complete pool-BPS set incl CREATOR_BPS=2000 :291 sums to 10000 before+after net-zero swap, supply unchanged Pool.Reward 50B→100B; JACK :1339-1352 deletion cleanly orphaned [FINAL_DAY_DGNRS_BPS sole-use :1343 + JackpotDgnrsWin sole-emit :1350] + isFinalDay plumbing preserved [lvl+1 gate :617 + 6 callers]; 22-anchor grep table vs 812abeee + 4-step producer-before-consumer edit-order for BATCH-02; zero contracts mutation) |
 | Phase 339 P04 | ~15min | 1 tasks | 1 files |
+| Phase 348 P01 | 18min | 1 tasks | 1 files |
 
 ## Decisions
 
@@ -756,3 +757,6 @@ Audit deliverables:
 - [Phase 339]: 339-01 (D-03): whale-frontrunning on the per-VRF trait-resolution batch enshrined as a written ACCEPTED-BY-DESIGN non-finding (race window = per-VRF reveal, NOT per-block; both contenders must land their last needed color in the same VRF resolution — rare). Purpose: the deferred v52 sweep treats it as already-dispositioned/known
 - [Phase ?]: Phase 339-02: claimBingo BINGO design-lock + tier-precedence acceptance contract LOCKED — signature uint32[8] (D-01), three mappings uint24-keyed in shared storage (D-05/07/10), GAME_BINGO_MODULE delegatecall (D-10), six constants verbatim (D-05), quadrant-first-before-symbol-first + both-bits-marking + suppression (D-06)
 - [Phase 339]: SPEC-INDEX (BATCH-01 closure): ALL items COVERED, 0 MISSING — GOAL 5/5 (SC1->A3, SC2->A1+A2, SC3->A4, SC4->A5, SC5->A6), REQ 2/2 (BATCH-01 cross-cutting + BINGO-06 single-artifact), RESEARCH N/A-not-a-gap (locked plan doc = substitute source), CONTEXT D-01..D-13 13/13; seven Open-before-SPEC resolved (item 3 = Out-of-Scope exclusion); two Wave-1 corrections surfaced (traitBurnTicket writer = MintModule:603-643; CREATOR_BPS=2000@:291 + _handleSoloBucketWinner)
+- [Phase ?]: 348-01: box-seed pattern-drift RESOLVED — openLootBox seed at LootboxModule:534 is keccak256(abi.encode(rngWord,player,day,amount)) (line correct, cited grep-pattern abi.encodePacked was wrong); abi.encodePacked is the ONLY-other seed = PRESALE box :644 — FREEZE-03 (348-03) must cite abi.encode
+- [Phase ?]: 348-01: re-pinned OPEN-E subscribe gate AfKing.sol:343-352 (doc :400-409), src/funder resolution :624 (doc :682), _resolveBuy body :727-863 (doc to :795); all other v55 anchors MATCH vs 20ca1f79
+- [Phase ?]: 348-01: FREEZE-03 entropy-side confirmed clean — ZERO block.timestamp/number/prevrandao/coinbase/blockhash in DegenerusGameLootboxModule.sol draw (:534) and whole file

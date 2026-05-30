@@ -65,9 +65,9 @@ completed: 2026-05-30
 
 Each task was committed atomically:
 
-1. **Task 1: Record the empty-diff baseline identity + author the per-file Drift-Correction Table vs 20ca1f79** - `<hash>` (docs)
+1. **Task 1: Record the empty-diff baseline identity + author the per-file Drift-Correction Table vs 20ca1f79** - `bd4e031e` (docs)
 
-**Plan metadata:** `<hash>` (docs: complete plan)
+**Plan metadata:** `5661d341` (docs: complete plan — STATE.md + ROADMAP.md tracking updates)
 
 ## Files Created/Modified
 - `.planning/phases/348-spec-design-lock-freeze-proof-discharged-invariant-carry-4-p/348-GREP-ATTESTATION.md` - The call-graph attestation + per-file Drift-Correction Tables (LootboxModule / Storage / AfKing / AdvanceModule / DegenerusGame) re-pinning every v55 milestone-scope anchor vs `20ca1f79` with matched text, the box-seed drift resolution, the FREEZE-03 entropy-side guard, and the no-"by-construction" attestation.
