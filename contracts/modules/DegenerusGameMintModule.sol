@@ -856,7 +856,7 @@ contract DegenerusGameMintModule is
         );
     }
 
-    /// @notice Keeper-batch purchase entry: like `purchase`, but the fresh-ETH portion is an
+    /// @notice Afking-batch purchase entry: like `purchase`, but the fresh-ETH portion is an
     ///         explicit `ethValue` parameter rather than `msg.value`. Lets `batchPurchase` run
     ///         many subscriber buys inline in one frame (the contract holds the aggregate ETH),
     ///         instead of one value-bearing self-call per slice. Reached only via the
@@ -1068,7 +1068,7 @@ contract DegenerusGameMintModule is
         uint256 initialClaimable = claimableWinnings[buyer];
 
         // ethValue is the per-slice fresh-ETH portion (== msg.value for single-tx callers; the
-        // explicit keeper batch slice for batchPurchase, which processes many buys in one frame).
+        // explicit afking batch slice for batchPurchase, which processes many buys in one frame).
         uint256 remainingEth = ethValue;
         uint256 lootboxFreshEth = 0;
         uint256 lootboxClaimableUsed = 0;

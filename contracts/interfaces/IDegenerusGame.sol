@@ -410,7 +410,7 @@ interface IDegenerusGame {
     function hasDeityPass(address player) external view returns (bool);
 
     /// @notice Whether a player holds any active lazy pass (Deity, Whale bundle, or Lazy).
-    /// @dev Read by the AfKing subscription keeper as its pass-OR-pay gate.
+    /// @dev Read by the AfKing subscription afking as its pass-OR-pay gate.
     /// @param player The player to query.
     /// @return True if the player holds any of the three pass types.
     function hasAnyLazyPass(address player) external view returns (bool);

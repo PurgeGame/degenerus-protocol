@@ -233,8 +233,9 @@ interface IDegenerusGameMintModule {
         MintPaymentKind payKind
     ) external payable;
 
-    /// @notice Keeper-batch buy entry: the fresh-ETH portion is an explicit `ethValue` param
-    ///         (not msg.value), so batchPurchase can run many subscriber buys inline in one frame.
+    /// @notice Afking-batch buy entry: the fresh-ETH portion is an explicit `ethValue` param
+    ///         debited from the funder's `afkingFunding` bucket inside the Game (not msg.value),
+    ///         so the non-payable batchPurchase runs many subscriber buys inline in one frame.
     function purchaseWith(
         address buyer,
         uint256 ticketQuantity,

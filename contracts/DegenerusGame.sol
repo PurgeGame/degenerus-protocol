@@ -16,6 +16,7 @@ pragma solidity 0.8.34;
  *
  * @dev CRITICAL INVARIANTS:
  *      - address(this).balance + steth.balanceOf(this) >= claimablePool
+ *        (claimablePool == Σ claimableWinnings + Σ afkingFunding; both ride in the one reserve)
  *      - jackpotPhaseFlag transitions: false(PURCHASE) ↔ true(JACKPOT); gameOver is terminal
  *      - Presale starts active, auto-ends at PURCHASE→JACKPOT or via admin (one-way: never re-enables)
  *
@@ -1410,6 +1411,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 amount
     );
 
+    /// @notice Emitted when prepaid afking ETH is funded for a player.
+    /// @param player The player whose afkingFunding bucket was credited.
+    /// @param amount ETH amount funded (wei).
+    event AfkingFunded(address indexed player, uint256 amount);
+
+    /// @notice Emitted when a funding source withdraws its prepaid afking ETH.
+    /// @param player The funding source (msg.sender) whose bucket was debited.
+    /// @param amount ETH amount withdrawn (wei).
+    event AfkingWithdrew(address indexed player, uint256 amount);
+
     /// @notice Emitted when claimable winnings are spent during a mint payment.
     /// @param player The player whose claimable balance was used.
     /// @param amount Amount of claimable ETH spent.
@@ -1462,19 +1473,72 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function _claimWinningsInternal(address player, bool stethFirst) private {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert E();
         uint256 amount = claimableWinnings[player];
-        if (amount <= 1) revert E();
+        // Decision B (GAMEOVER-01): post-gameOver the claim ALSO pays the caller's prepaid
+        // afking ETH (lazy per-player merge — no unbounded loop). Pre-gameOver afkingFunding
+        // stays its own bucket (spent by batchPurchase / reclaimed via withdrawAfkingFunding).
+        // Both this merge and withdrawAfkingFunding zero the SAME bucket → no double-spend.
+        uint256 afking = gameOver ? afkingFunding[player] : 0;
+        if (amount <= 1 && afking == 0) revert E();
         uint256 payout;
         unchecked {
-            claimableWinnings[player] = 1; // Leave sentinel
-            payout = amount - 1;
+            if (amount > 1) {
+                claimableWinnings[player] = 1; // Leave sentinel
+                payout = amount - 1;
+            }
+            if (afking != 0) {
+                afkingFunding[player] = 0;
+                payout += afking;
+            }
         }
-        claimablePool -= uint128(payout); // CEI: update state before external call
+        claimablePool -= uint128(payout); // CEI: update state before external call (checked math)
         emit WinningsClaimed(player, msg.sender, payout);
         if (stethFirst) {
             _payoutWithEthFallback(player, payout);
         } else {
             _payoutWithStethFallback(player, payout);
         }
+    }
+
+    /// @notice Fund a player's prepaid afking ETH bucket (consumed by the AfKing afking auto-buy).
+    /// @dev Permissionless (fund anyone) — the AfKing subscribe-forward (A2) and the OPEN-E
+    ///      operator-funding case both route here. The Game's bare receive() routes msg.value to
+    ///      the prize pool, so afking deposits MUST use this dedicated entrypoint. The reservation
+    ///      rides inside claimablePool (no separate aggregate) — credited in tandem.
+    /// @param player The beneficiary whose afkingFunding bucket is credited.
+    function depositAfkingFunding(address player) external payable {
+        if (player == address(0)) revert E();
+        if (msg.value == 0) return;
+        afkingFunding[player] += msg.value;
+        claimablePool += uint128(msg.value);
+        emit AfkingFunded(player, msg.value);
+    }
+
+    /// @notice Withdraw prepaid afking ETH — the funding source reclaims its own balance.
+    /// @dev Un-brickable strict CEI: the GO_SWEPT guard is LINE 1 (before any debit), so a
+    ///      post-final-sweep withdraw reverts cleanly instead of underflowing claimablePool
+    ///      (which the sweep zeroes). Both debits land BEFORE the .call, so a re-entrant second
+    ///      call re-reads the already-debited balance and reverts. Available always pre-sweep
+    ///      (mid-game, after cancel, post-gameOver). The claimablePool debit stays checked math.
+    /// @param amount ETH amount (wei) to withdraw from the caller's afkingFunding bucket.
+    function withdrawAfkingFunding(uint256 amount) external {
+        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert E();
+        if (amount == 0) return;
+        uint256 bal = afkingFunding[msg.sender];
+        if (amount > bal) revert E();
+        unchecked {
+            afkingFunding[msg.sender] = bal - amount;
+        }
+        claimablePool -= uint128(amount); // tandem release (checked math)
+        (bool ok, ) = msg.sender.call{value: amount}("");
+        if (!ok) revert E();
+        emit AfkingWithdrew(msg.sender, amount);
+    }
+
+    /// @notice The canonical per-player prepaid afking ETH balance (replaces AfKing.poolOf).
+    /// @param player The player to query.
+    /// @return The player's afkingFunding balance (wei).
+    function afkingFundingOf(address player) external view returns (uint256) {
+        return afkingFunding[player];
     }
 
     /// @notice Claim DGNRS affiliate rewards for the current level.
@@ -1537,7 +1601,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Whether a player holds any active lazy pass (Deity, Whale bundle, or Lazy).
     /// @dev True if the permanent Deity bit is set, or the whale-bundle/lazy freeze
-    ///      window still covers the current level. Read by the AfKing subscription keeper
+    ///      window still covers the current level. Read by the AfKing subscription afking
     ///      as its pass-OR-pay gate.
     /// @param player Player address to check.
     /// @return True if the player holds any of the three pass types.
@@ -1573,7 +1637,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                 AUTO-WORK + KEEPER BATCH                        |
+      |                 AUTO-WORK + AFKING BATCH                        |
       +======================================================================+
       |  Permissionless layer letting any caller settle pending game work    |
       |  on others' behalf for a small gas-pegged BURNIE reward paid as       |
@@ -1787,13 +1851,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         _openLootBoxFor(player, index);
     }
 
-    /// @notice Per-subscriber buy descriptor for `batchPurchase` (keeper auto-buy).
-    /// @dev `amount` is ticket entry-units (whole tickets * 4 * TICKET_SCALE) when `isTicket` is
-    ///      true, else a lootbox spend in wei — ticket vs lootbox are mutually exclusive, so one
-    ///      `amount` + the `isTicket` flag replaces separate fields. `ethValue` is the fresh-ETH
-    ///      portion the keeper funds from its pool (0 = pure claimable); the mint module draws the
-    ///      remainder (cost - ethValue) from the buyer's claimable per `mode` (MintPaymentKind).
+    /// @notice Per-subscriber buy descriptor for `batchPurchase` (afking auto-buy).
+    /// @dev `funder` is the resolved funding source (the `afkingFunding` bucket the Game debits);
+    ///      `player` is the beneficiary (the `purchaseWith` target). `amount` is ticket entry-units
+    ///      (whole tickets * 4 * TICKET_SCALE) when `isTicket` is true, else a lootbox spend in wei —
+    ///      ticket vs lootbox are mutually exclusive, so one `amount` + the `isTicket` flag replaces
+    ///      separate fields. `ethValue` is the fresh-ETH portion debited from the funder's afking
+    ///      bucket (0 = pure claimable); the mint module draws the remainder (cost - ethValue) from
+    ///      the buyer's claimable per `mode` (MintPaymentKind).
     struct BatchBuy {
+        address funder;
         address player;
         uint256 ethValue;
         uint256 amount;
@@ -1801,36 +1868,48 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint8 mode;
     }
 
-    /// @notice Keeper-gated batch ticket/lootbox purchase for the subscription keeper (AfKing).
-    /// @dev PROTO-04. Gated to the pinned AF_KING keeper; does NO per-player approval check
-    ///      (it trusts the keeper, which structurally only acts on its own subscribers).
+    /// @notice Afking-gated batch ticket/lootbox purchase for the subscription afking (AfKing).
+    /// @dev PROTO-04. Gated to the pinned AF_KING afking; does NO per-player approval check
+    ///      (it trusts the afking, which structurally only acts on its own subscribers).
     ///      game-over is pre-checked ONCE at entry. Each slice runs INLINE via a delegatecall to
     ///      the mint module's `purchaseWith` — the per-slice fresh-ETH portion is the `ethValue`
-    ///      PARAM (not msg.value) — so there is no per-slice value-bearing self-call (the gas win),
-    ///      and the buy honors the sub's mode (ticketQty vs lootBoxAmount) and claimable funding.
-    ///      Unreferred AfKing-joiners are captured into the protocol code bytes32("DGNRS")
-    ///      (75% SDGNRS / 20% VAULT); a player with a real affiliate keeps it.
+    ///      PARAM, debited from the funder's prepaid `afkingFunding` bucket. The call is
+    ///      NON-payable (no value is sent), so there is no per-slice value-bearing self-call
+    ///      (the gas win); the buy honors the sub's mode (ticketQty vs lootBoxAmount) and
+    ///      claimable funding. Unreferred AfKing-joiners are captured into the protocol code
+    ///      bytes32("DGNRS") (75% SDGNRS / 20% VAULT); a player with a real affiliate keeps it.
+    ///
+    ///      The per-slice debit keys on `afkingFunding[b.funder]` (= the resolved src), NOT
+    ///      `b.player`: the funder is the funding identity (the OPEN-E operator-funded case has
+    ///      src != player). `claimablePool` is released in tandem (checked math) — the freed ETH
+    ///      becomes prize-pool / vault-share ETH inside purchaseWith exactly as a fresh-ETH buy
+    ///      would, earning the fresh affiliate rate.
     ///
     ///      NO per-slice try/catch and NO rngLock entry-check. AfKing pre-validates funding and
     ///      game-over, so a funded buy in a live game has no reason to revert (full buy-path
     ///      audit). A stray revert bubbles and rolls the WHOLE batch back atomically — which is
     ///      benign: advanceGame() is a separate permissionless entrypoint, so the game never
-    ///      freezes; subscribers just retry next cycle. Atomicity also structurally removes the
-    ///      old failed-slice refund (which mis-credited the keeper's own _poolOf) and the false
-    ///      day-stamp. Keeper buys stay freeze-safe by construction (RD-2): a lootbox queues at
-    ///      the current index pre-entropy; the orphan hazard is defended on the OPEN side via the
-    ///      autoOpen word-gate, not by blocking the buy.
-    /// @param buys Per-subscriber buy descriptors; the sum of `ethValue` MUST equal msg.value.
-    function batchPurchase(BatchBuy[] calldata buys) external payable {
+    ///      freezes; subscribers just retry next cycle. Afking buys stay freeze-safe by
+    ///      construction (RD-2): a lootbox queues at the current index pre-entropy; the orphan
+    ///      hazard is defended on the OPEN side via the autoOpen word-gate, not by blocking the buy.
+    /// @param buys Per-subscriber buy descriptors; each slice's `ethValue` is debited from
+    ///      `afkingFunding[funder]` in-contract (no msg.value — the call is non-payable).
+    function batchPurchase(BatchBuy[] calldata buys) external {
         if (msg.sender != ContractAddresses.AF_KING) revert E();
         if (gameOver) revert E();
 
         uint256 len = buys.length;
         if (len == 0) revert E();
 
-        uint256 spent;
         for (uint256 i; i < len; ) {
             BatchBuy calldata b = buys[i];
+            uint256 ev = b.ethValue;
+            uint256 bal = afkingFunding[b.funder]; // D-01: debit the FUNDER (= src), NOT b.player
+            if (bal < ev) revert E(); // atomic safety guard (AfKing pre-validates funding)
+            unchecked {
+                afkingFunding[b.funder] = bal - ev;
+            }
+            claimablePool -= uint128(ev); // release the afking reservation in tandem (checked math)
             (bool ok, bytes memory data) = ContractAddresses
                 .GAME_MINT_MODULE
                 .delegatecall(
@@ -1841,19 +1920,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                         b.isTicket ? 0 : b.amount,
                         bytes32("DGNRS"),
                         MintPaymentKind(b.mode),
-                        b.ethValue
+                        ev
                     )
                 );
             if (!ok) _revertDelegate(data);
             unchecked {
-                spent += b.ethValue;
                 ++i;
             }
         }
-
-        // Exact funding: the keeper sends precisely the sum of per-slice fresh-ETH. No refund
-        // path (atomic batch) — a mismatch is a keeper bug and reverts rather than stranding ETH.
-        if (spent != msg.value) revert E();
     }
 
     /// @dev Convert an ETH wei amount to BURNIE coinflip-credit value at a given price.
@@ -2634,22 +2708,25 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return claimableWinnings[player];
     }
 
-    /// @notice Batched keeper read — mintPrice + rngLock + per-player claimable in ONE call.
-    /// @dev GASOPT-03 (SUBSUMES GASOPT-02): collapses the keeper's per-player
+    /// @notice Batched afking read — mintPrice + rngLock + per-player claimable in ONE call.
+    /// @dev GASOPT-03 (SUBSUMES GASOPT-02): collapses the afking's per-player
     ///      claimableWinningsOf STATICCALLs into one batched call. Values are byte-identical
     ///      to the single-value accessors (same priceForLevel / rngLockedFlag / swept-gate).
     /// @param players The chunk of players to snapshot.
     /// @return mintPriceWei Current mint price (== mintPrice()).
     /// @return rngLocked_ Whether RNG is currently locked (== rngLocked()).
     /// @return claimables Per-player claimable winnings (== claimableWinningsOf(players[i])).
-    function keeperSnapshot(address[] calldata players) external view returns (uint256 mintPriceWei, bool rngLocked_, uint256[] memory claimables) {
+    /// @return afkingFundings Per-player prepaid afking ETH (== afkingFundingOf(players[i])).
+    function afkingSnapshot(address[] calldata players) external view returns (uint256 mintPriceWei, bool rngLocked_, uint256[] memory claimables, uint256[] memory afkingFundings) {
         mintPriceWei = PriceLookupLib.priceForLevel(_activeTicketLevel());
         rngLocked_ = rngLockedFlag;
         bool swept = _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0;
         uint256 n = players.length;
         claimables = new uint256[](n);
+        afkingFundings = new uint256[](n);
         for (uint256 i; i < n; ) {
             claimables[i] = swept ? 0 : claimableWinnings[players[i]];
+            afkingFundings[i] = afkingFunding[players[i]]; // raw — mirrors afkingFundingOf (D-MR-01)
             unchecked {
                 ++i;
             }

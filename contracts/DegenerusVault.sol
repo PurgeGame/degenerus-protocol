@@ -57,6 +57,10 @@ interface IDegenerusGamePlayerActions {
         uint256[] calldata quantities,
         uint256[] calldata queueIndices
     ) external;
+    /// @notice Withdraw the caller's prepaid afking ETH (sends to the caller).
+    function withdrawAfkingFunding(uint256 amount) external;
+    /// @notice The caller's prepaid afking ETH balance.
+    function afkingFundingOf(address player) external view returns (uint256);
 }
 
 /// @notice Interface for coinflip player actions used by DegenerusVault.
@@ -79,7 +83,7 @@ interface ICoinPlayerActions {
     function decimatorBurn(address player, uint256 amount) external;
 }
 
-/// @notice Interface for the AfKing subscription keeper used by DegenerusVault.
+/// @notice Interface for the AfKing subscription afking used by DegenerusVault.
 interface IAfKingSubscribe {
     /// @notice Start or extend a daily subscription for `player` (self when 0/msg.sender).
     function subscribe(
@@ -90,10 +94,6 @@ interface IAfKingSubscribe {
         uint8 reinvestPct,
         address fundingSource
     ) external payable;
-    /// @notice Withdraw `amount` of the caller's prepaid pool (sends to the caller).
-    function withdraw(uint256 amount) external;
-    /// @notice The `player`'s remaining prepaid pool balance.
-    function poolOf(address player) external view returns (uint256);
 }
 
 /// @notice Interface for sDGNRS player actions used by DegenerusVault.
@@ -411,7 +411,7 @@ contract DegenerusVault {
     /// @dev Coin contract for decimator actions
     ICoinPlayerActions internal constant coinPlayer =
         ICoinPlayerActions(ContractAddresses.COIN);
-    /// @dev AfKing subscription keeper for the vault's protocol-owned self-subscription
+    /// @dev AfKing subscription afking for the vault's protocol-owned self-subscription
     IAfKingSubscribe internal constant afKing =
         IAfKingSubscribe(ContractAddresses.AF_KING);
     /// @dev BURNIE token contract for minting and transfers
@@ -478,7 +478,7 @@ contract DegenerusVault {
         // buy of flat quantity 1, no reinvest, no BURNIE rebuy. Self-consent —
         // the vault IS the player (player == msg.sender). The vault holds the
         // permanent deity pass (granted in the DegenerusGame constructor), so the
-        // keeper's pass-OR-pay gate takes the free 30-day extend at zero cost.
+        // afking's pass-OR-pay gate takes the free 30-day extend at zero cost.
         afKing.subscribe(address(this), true, false, 1, 0, address(0));
     }
 
@@ -509,12 +509,14 @@ contract DegenerusVault {
         emit Deposit(msg.sender, msg.value, 0, 0);
     }
 
-    /// @notice Recover the vault's stranded AfKing prepaid-pool ETH back into vault reserves.
-    /// @dev Permissionless (no owner gate, no gameOver gate): AfKing.withdraw sends to the CALLER
-    ///      (this vault), so the recovered ETH only ever lands in the vault's own receive() — an
-    ///      external trigger cannot redirect it. withdraw(0) is a no-op when the pool is empty.
-    function recoverAfKingPool() external {
-        afKing.withdraw(afKing.poolOf(address(this)));
+    /// @notice Recover the vault's prepaid afking ETH back into vault reserves.
+    /// @dev Permissionless (no owner gate): game.withdrawAfkingFunding sends to the CALLER (this
+    ///      vault), so the recovered ETH only ever lands in the vault's own receive() — an external
+    ///      trigger cannot redirect it. A zero balance is a no-op (withdrawAfkingFunding(0) returns).
+    ///      Available anytime pre-sweep; reverts after the 30-day final sweep (the afking reservation
+    ///      is forfeited with claimablePool, claimable-equivalent — GAMEOVER-02).
+    function recoverAfkingFunding() external {
+        gamePlayer.withdrawAfkingFunding(gamePlayer.afkingFundingOf(address(this)));
     }
 
     // ---------------------------------------------------------------------

@@ -53,7 +53,7 @@ interface IBurnieCoinflipPlayer {
     function setCoinflipAutoRebuy(address player, bool enabled, uint256 takeProfit) external;
 }
 
-/// @notice Interface for the AfKing subscription keeper used by sDGNRS.
+/// @notice Interface for the AfKing subscription afking used by sDGNRS.
 interface IAfKingSubscribe {
     /// @notice Start or extend a daily subscription for `player` (self when 0/msg.sender).
     function subscribe(
@@ -64,10 +64,6 @@ interface IAfKingSubscribe {
         uint8 reinvestPct,
         address fundingSource
     ) external payable;
-    /// @notice Withdraw `amount` of the caller's prepaid pool (sends to the caller).
-    function withdraw(uint256 amount) external;
-    /// @notice The caller-or-`player`'s remaining prepaid pool balance.
-    function poolOf(address player) external view returns (uint256);
 }
 
 /// @notice Interface for DGNRS wrapper contract used by sDGNRS.
@@ -322,7 +318,7 @@ contract StakedDegenerusStonk {
     IBurnieCoinflipPlayer private constant coinflip =
         IBurnieCoinflipPlayer(ContractAddresses.COINFLIP);
 
-    /// @dev AfKing subscription keeper for sDGNRS's protocol-owned self-subscription
+    /// @dev AfKing subscription afking for sDGNRS's protocol-owned self-subscription
     IAfKingSubscribe private constant afKing =
         IAfKingSubscribe(ContractAddresses.AF_KING);
 
@@ -383,7 +379,7 @@ contract StakedDegenerusStonk {
         // buy of flat quantity 1 with a 2% claimable reinvest, plus full BURNIE-flip
         // recycle at the kept flat recycle rate. Self-consent — sDGNRS IS the player
         // (player == msg.sender). sDGNRS holds the permanent deity pass (granted in
-        // the DegenerusGame constructor), so the keeper's pass-OR-pay gate takes the
+        // the DegenerusGame constructor), so the afking's pass-OR-pay gate takes the
         // free 30-day extend at zero cost.
         afKing.subscribe(address(this), true, false, 1, 2, address(0));
         coinflip.setCoinflipAutoRebuy(address(this), true, 0);
@@ -431,16 +427,13 @@ contract StakedDegenerusStonk {
     //                          DEPOSITS (Game Only)
     // =====================================================================
 
-    /// @notice Receive ETH deposit from the game contract or the AfKing keeper.
-    /// @dev GAME deposits reserve ETH; AF_KING sends back recovered prepaid-pool ETH (its withdraw
-    ///      sends to the caller). Accounting-safe: reserves are read live via address(this).balance
-    ///      everywhere, so no running counter is kept here and an AF_KING credit is never mis-attributed.
-    /// @custom:reverts Unauthorized If caller is neither the game contract nor the AfKing keeper.
+    /// @notice Receive ETH deposit from the game contract.
+    /// @dev GAME deposits reserve ETH and the afking-funding claim/withdraw send-back (the Game's
+    ///      `.call` has msg.sender == GAME). Accounting-safe: reserves are read live via
+    ///      address(this).balance everywhere, so no running counter is kept here.
+    /// @custom:reverts Unauthorized If caller is not the game contract.
     receive() external payable {
-        if (
-            msg.sender != ContractAddresses.GAME &&
-            msg.sender != ContractAddresses.AF_KING
-        ) revert Unauthorized();
+        if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
         emit Deposit(msg.sender, msg.value, 0, 0);
     }
 
@@ -533,10 +526,6 @@ contract StakedDegenerusStonk {
     /// @notice Burn all undistributed pool tokens at game over
     /// @dev Only callable by game contract. Burns this contract's own balance.
     function burnAtGameOver() external onlyGame {
-        // Recover this contract's stranded AfKing prepaid pool BEFORE the zero-balance early-return,
-        // so a sDGNRS holding no pool TOKEN still recovers its ETH pool (lands in receive()). withdraw(0)
-        // is a no-op when poolOf == 0, so the common empty-pool case cannot brick gameOver.
-        afKing.withdraw(afKing.poolOf(address(this)));
         uint256 bal = balanceOf[address(this)];
         if (bal == 0) return;
         unchecked {

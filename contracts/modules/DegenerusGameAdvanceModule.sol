@@ -150,7 +150,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @notice Advance game state. Called daily to process jackpots, mints, and phase transitions.
     ///         Returns mult: the day-epoch stall multiplier (1 base / 2 / 4 / 6 by stall; 0 on
     ///         the gameover path = no bounty). Standalone callers earn nothing — the unified
-    ///         keeper router pays the re-homed bounty (2x * mult) only when mult > 0.
+    ///         afking router pays the re-homed bounty (2x * mult) only when mult > 0.
     function advanceGame() external returns (uint8 mult) {
         address caller = msg.sender;
         mult = 1;

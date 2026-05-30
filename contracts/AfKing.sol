@@ -4,7 +4,7 @@ pragma solidity 0.8.34;
 import {ContractAddresses} from "./ContractAddresses.sol";
 
 /// @notice Payment method for ticket / lootbox purchases. File-scope mirror of
-///         `contracts/interfaces/IDegenerusGame.sol` so the keeper's batched
+///         `contracts/interfaces/IDegenerusGame.sol` so the afking's batched
 ///         purchase carries the `uint8` mode cast through `batchPurchase`.
 enum MintPaymentKind {
     DirectEth, // Pay with fresh ETH only
@@ -12,12 +12,14 @@ enum MintPaymentKind {
     Combined // Pay with both ETH and claimable
 }
 
-/// @notice Per-subscriber buy descriptor for the batched keeper purchase. File-scope mirror of
-///         `DegenerusGame.BatchBuy` (identical field order/types ⇒ ABI-compatible). `amount` is ticket
-///         entry-units when `isTicket`, else a lootbox spend in wei (the two are mutually exclusive);
-///         `ethValue` is the fresh-ETH portion funded from the keeper pool (0 = pure claimable), the
-///         rest drawn from the buyer's claimable per `mode`.
+/// @notice Per-subscriber buy descriptor for the batched afking purchase. File-scope mirror of
+///         `DegenerusGame.BatchBuy` (identical field order/types ⇒ ABI-compatible). `funder` is the
+///         resolved funding source (the bucket the Game debits); `player` is the beneficiary. `amount`
+///         is ticket entry-units when `isTicket`, else a lootbox spend in wei (the two are mutually
+///         exclusive); `ethValue` is the fresh-ETH portion debited from the funder's afking bucket
+///         (0 = pure claimable), the rest drawn from the buyer's claimable per `mode`.
 struct BatchBuy {
+    address funder;
     address player;
     uint256 ethValue;
     uint256 amount;
@@ -28,7 +30,7 @@ struct BatchBuy {
 /// @title IGame
 /// @notice Minimal owner-less call surface into the protocol GAME contract.
 /// @dev Signatures match `contracts/DegenerusGame.sol` verbatim: `batchPurchase`
-///      is the AF_KING-gated batched mint (the keeper is the sole authorized
+///      is the AF_KING-gated batched mint (the afking is the sole authorized
 ///      caller); `level()` is the auto-getter for the current game level; the
 ///      `lazyPassHorizon` view is the v50.0 AFSUB pass-gating producer (D-11),
 ///      read once at subscribe-time and exactly once at the autoBuy crossing
@@ -40,7 +42,13 @@ struct BatchBuy {
 interface IGame {
     function isOperatorApproved(address owner, address operator) external view returns (bool);
 
-    function batchPurchase(BatchBuy[] calldata buys) external payable;
+    function batchPurchase(BatchBuy[] calldata buys) external;
+
+    // Afking-funding ledger: AfKing forwards subscribe ETH and reads afkingFunding (the
+    // Game holds the ETH; AfKing holds none). Signatures match DegenerusGame verbatim.
+    function depositAfkingFunding(address player) external payable;
+    function withdrawAfkingFunding(uint256 amount) external;
+    function afkingFundingOf(address player) external view returns (uint256);
 
     function rngLocked() external view returns (bool);
     function mintPrice() external view returns (uint256);
@@ -53,15 +61,15 @@ interface IGame {
     function autoOpen(uint256 maxCount) external returns (uint256 opened);
     function advanceDue() external view returns (bool);
     function boxesPending() external view returns (bool);
-    function keeperSnapshot(address[] calldata players) external view returns (uint256 mintPriceWei, bool rngLocked_, uint256[] memory claimables);
+    function afkingSnapshot(address[] calldata players) external view returns (uint256 mintPriceWei, bool rngLocked_, uint256[] memory claimables, uint256[] memory afkingFundings);
 }
 
 /// @title ICoinflip
 /// @notice Minimal call surface into BurnieCoinflip for the autoBuy bounty.
 /// @dev `creditFlip(player, amount)` matches `contracts/BurnieCoinflip.sol`
-///      verbatim. The keeper earns its per-autoBuy bounty as deferred coinflip-stake
+///      verbatim. The afking earns its per-autoBuy bounty as deferred coinflip-stake
 ///      credit (a deferred mint — liquid BURNIE only mints when the caller later
-///      claims), so no liquid BURNIE leaves the keeper and the bounty needs no
+///      claims), so no liquid BURNIE leaves the afking and the bounty needs no
 ///      payment pool. BurnieCoinflip gates `creditFlip` to authorized flip
 ///      creditors via `onlyFlipCreditors`, extended to include
 ///      `ContractAddresses.AF_KING`.
@@ -74,17 +82,17 @@ interface ICoinflip {
 ///         `AfKing.Sub` namespacing.
 /// @dev Maximal-packing layout (single 32-byte slot):
 ///        offset 0  uint8   dailyQuantity     — 0 = paused / never-subscribed (minimum 1 when active)
-///        offset 1  uint32  lastAutoBoughtDay  — keeper-local day index of the last successful buy
+///        offset 1  uint32  lastAutoBoughtDay  — afking-local day index of the last successful buy
 ///        offset 5  uint32  validThroughLevel — game-level horizon through which the sub's pass coverage
 ///                                              extends (`lazyPassHorizon` snapshot at subscribe; refreshed
 ///                                              on crossing; deity sentinel = `type(uint24).max`; non-pass = 0)
 ///        offset 9  uint8   reinvestPct       — claimable reinvest percentage (0..100), 0 = no reinvest
 ///        offset 10 uint8   flags             — bit 0 freed (was windowPaid; retired v50.0 AFSUB-01),
 ///                                              bit 1 = drainGameCreditFirst, bit 2 = useTickets
-///        offset 11 address fundingSource     — wallet whose _poolOf ETH funds this sub; address(0) = self
-///      Offset 31 is free padding. Storage slots 0-3 (the four state
-///      mappings/array below) are pinned; this struct occupies a single slot
-///      reached through `_subOf` at slot 1.
+///        offset 11 address fundingSource     — wallet whose game-side afkingFunding funds this sub; address(0) = self
+///      Offset 31 is free padding. Storage slots 0-2 (the three state
+///      mappings/array below) hold the afking's state; this struct occupies a single
+///      slot reached through `_subOf` at slot 0.
 ///      v50.0 AFSUB: slot offset 5 was `paidThroughDay` (30-day BURNIE prepay window
 ///      endpoint); repurposed in place to `validThroughLevel`. Width unchanged
 ///      (uint32 — zero packing churn) so the assignment from the `uint24`
@@ -99,23 +107,21 @@ struct Sub {
 }
 
 /// @title AfKing
-/// @notice Permissionless, owner-less daily subscription keeper. Players (or
+/// @notice Permissionless, owner-less daily subscription afking. Players (or
 ///         operator-approved third parties) subscribe to a daily ticket/lootbox
 ///         buy; anyone calls `autoBuy(maxCount)` to process the next chunk of
 ///         active subscribers and earns a gas-pegged bounty per successful player.
 /// @dev No admin. No upgrade. No owner. No fallback. No multicall. `receive()` is
-///      the only untyped entrypoint and credits msg.sender's pool. The keeper
+///      the only untyped entrypoint and credits msg.sender's pool. The afking
 ///      holds NO immutable IGAME/ICOINFLIP references — every protocol call
 ///      flows through the compile-time constant handles `GAME` /
 ///      `COINFLIP` declared at the top of the contract body, which resolve
 ///      to `IGame(ContractAddresses.GAME)` and `ICoinflip(ContractAddresses.COINFLIP)`.
-///      v50.0 AFSUB-01: the BURNIE subscription window is retired — the keeper no
-///      longer calls BurnieCoin's `burnForKeeper`; subscriptions are pass-gated
-///      via `GAME.lazyPassHorizon`. The constructor sets only the three economic
+///      v50.0 AFSUB-01: subscriptions are pass-gated via `GAME.lazyPassHorizon`
+///      (no BURNIE prepay window). The constructor sets only the three economic
 ///      immutables with sanity reverts (`SUB_COST_ETH_TARGET` is retained for
 ///      possible future re-use; under v50.0 it is unreferenced by any code path).
-/// @custom:invariant Steady-state: sum(_poolOf) <= address(this).balance.
-/// @custom:invariant No reentrancy guard — strict CEI everywhere; the keeper is
+/// @custom:invariant No reentrancy guard — strict CEI everywhere; the afking is
 ///                   never a payee in any contract it calls.
 /// @custom:invariant Caller-scoped writes: every player-state mutator writes only
 ///                   to the resolved player's slot. The two-tier funding-skip
@@ -126,7 +132,7 @@ contract AfKing {
     /*------------------------------------------------------------------
                               Protocol handles (compile-time constants)
     ------------------------------------------------------------------*/
-    /// @dev Compile-time-typed handles into the two protocol contracts the keeper
+    /// @dev Compile-time-typed handles into the two protocol contracts the afking
     ///      calls. Both resolve to `address constant`s in `ContractAddresses.sol`,
     ///      so each call site compiles to a literal `PUSH20` — zero storage slots,
     ///      no constructor wiring, no immutable bytecode slots, and the
@@ -140,12 +146,6 @@ contract AfKing {
     /*------------------------------------------------------------------
                               Custom errors
     ------------------------------------------------------------------*/
-    /// @dev InsufficientBalance: withdraw(amount) with amount > _poolOf[msg.sender].
-    error InsufficientBalance();
-    /// @dev EthSendFailed: withdraw's low-level `.call{value: amount}("")` returned false.
-    error EthSendFailed();
-    /// @dev ZeroAddress: depositFor(address(0)).
-    error ZeroAddress();
     /// @dev InvalidSubCostTarget: constructor revert when _subCostEthTarget == 0.
     error InvalidSubCostTarget();
     /// @dev InvalidBountyTarget: constructor revert when _bountyEthTarget == 0.
@@ -171,10 +171,6 @@ contract AfKing {
     /*------------------------------------------------------------------
                               Events
     ------------------------------------------------------------------*/
-    /// @dev Single canonical credit stream — emitted by receive(), deposit(), depositFor().
-    event Deposited(address indexed player, uint256 amount);
-    /// @dev Withdrawal stream.
-    event Withdrew(address indexed player, uint256 amount);
     /// @dev Single canonical subscription-state stream — POST-WRITE full state.
     ///      Manual pause (setDailyQuantity(0)) emits with dailyQuantity == 0.
     ///      `fundingSource` is the stored funding wallet (address(0) = self); indexed
@@ -190,7 +186,7 @@ contract AfKing {
     );
     /// @dev Per-player pre-check skip inside the autoBuy loop. `reason`:
     ///        2 = AlreadyAutoBoughtToday (sub.lastAutoBoughtDay >= today)
-    ///        3 = InsufficientPool  (_poolOf[player] < msgValue) — funding skip
+    ///        3 = InsufficientPool  (afkingFunding[src] < ethValue) — funding skip
     ///        4 = LootboxFloor      (!useTickets && cost < LOOTBOX_MIN) — transient
     ///        5 = NotApproved       (operator-approval revoked or never granted)
     ///      lastAutoBoughtDay is UNCHANGED on a skip.
@@ -198,7 +194,7 @@ contract AfKing {
     /// @dev Emitted once at the end of each successful autoBuy, after the bounty payout.
     event AutoBuyCompleted(address indexed caller, uint256 successfulPlayers, uint256 bountyEarned);
     /// @dev Pass-validity refresh — emitted at the AFSUB-03 crossing branch when
-    ///      the keeper re-reads `lazyPassHorizon(player)` and the subscriber's
+    ///      the afking re-reads `lazyPassHorizon(player)` and the subscriber's
     ///      coverage extends to or beyond the current level. Writes the new
     ///      validThroughLevel and continues without eviction.
     event SubscriptionExtendedFree(address indexed player, uint32 day);
@@ -208,36 +204,33 @@ contract AfKing {
     event SubscriptionExpired(address indexed player, uint8 reason);
 
     /*------------------------------------------------------------------
-                              State (4-slot layout pinned)
+                              State (slot layout)
     ------------------------------------------------------------------*/
-    /// @dev Slot 0 — per-player ETH pool credits/debits.
-    mapping(address => uint256) private _poolOf; // slot 0
+    /// @dev Slot 0 — per-player subscription record (file-scope Sub struct).
+    mapping(address => Sub) private _subOf; // slot 0
 
-    /// @dev Slot 1 — per-player subscription record (file-scope Sub struct).
-    mapping(address => Sub) private _subOf; // slot 1
+    /// @dev Slot 1 — insertion-ordered iterable subscriber set (length here,
+    ///      elements at keccak256(1)+i).
+    address[] private _subscribers; // slot 1
 
-    /// @dev Slot 2 — insertion-ordered iterable subscriber set (length here,
-    ///      elements at keccak256(2)+i).
-    address[] private _subscribers; // slot 2
-
-    /// @dev Slot 3 — 1-indexed subscriber index (0 = not in set). Hand-inlined OZ
+    /// @dev Slot 2 — 1-indexed subscriber index (0 = not in set). Hand-inlined OZ
     ///      EnumerableSet pattern.
-    mapping(address => uint256) private _subscriberIndex; // slot 3
+    mapping(address => uint256) private _subscriberIndex; // slot 2
 
-    /// @dev AutoBuy progress cursor + the keeper-local day it belongs to, packed in
+    /// @dev AutoBuy progress cursor + the afking-local day it belongs to, packed in
     ///      a single slot. `_autoBuyDay` stamps which day `_autoBuyCursor` indexes;
     ///      on the first autoBuy of a new day the cursor resets to 0. The cursor
     ///      advances monotonically within a day so concurrent same-block callers
     ///      self-partition (a later tx reads the earlier tx's advanced cursor and
     ///      takes the next chunk). The per-entry `lastAutoBoughtDay` day-stamp is the
     ///      idempotency backstop against any double-buy.
-    uint32 private _autoBuyDay; // slot 4 (offset 0)
-    uint224 private _autoBuyCursor; // slot 4 (offset 4)
+    uint32 private _autoBuyDay; // slot 3 (offset 0)
+    uint224 private _autoBuyCursor; // slot 3 (offset 4)
 
     /*------------------------------------------------------------------
                               Constants
     ------------------------------------------------------------------*/
-    /// @dev Keeper-local ticket scaling multiplier. TICKET_SCALE = 400 makes the
+    /// @dev Afking-local ticket scaling multiplier. TICKET_SCALE = 400 makes the
     ///      cost formula unit-consistent across modes: 400 * dailyQuantity *
     ///      mintPrice / 400 == mintPrice * dailyQuantity, so one dailyQuantity
     ///      unit resolves to exactly one mintPrice worth of spend in both ticket
@@ -291,56 +284,6 @@ contract AfKing {
     }
 
     /*------------------------------------------------------------------
-                          ETH ingress
-    ------------------------------------------------------------------*/
-    /// @notice Bare receive() — credits msg.sender's pool by msg.value. Zero-value
-    ///         is a silent no-op (no event). Writes effects only; no outgoing call.
-    receive() external payable {
-        if (msg.value == 0) return;
-        _poolOf[msg.sender] += msg.value;
-        emit Deposited(msg.sender, msg.value);
-    }
-
-    /// @notice Credit msg.sender's pool by msg.value. Silent no-op on zero.
-    function deposit() external payable {
-        if (msg.value == 0) return;
-        _poolOf[msg.sender] += msg.value;
-        emit Deposited(msg.sender, msg.value);
-    }
-
-    /// @notice Credit `player`'s pool by msg.value. Reverts ZeroAddress on
-    ///         player == 0 regardless of msg.value; silent no-op on zero value.
-    ///         The Deposited event carries the credited `player`, not msg.sender.
-    function depositFor(address player) external payable {
-        if (player == address(0)) revert ZeroAddress();
-        if (msg.value == 0) return;
-        _poolOf[player] += msg.value;
-        emit Deposited(player, msg.value);
-    }
-
-    /*------------------------------------------------------------------
-                          Pool egress
-    ------------------------------------------------------------------*/
-    /// @notice Debit caller's pool by `amount` and send ETH to caller via CEI. No
-    ///         reentrancy guard — effects-before-interactions makes a re-entrant
-    ///         second call revert InsufficientBalance, which surfaces as
-    ///         EthSendFailed on the outer frame and unwinds the pool debit.
-    function withdraw(uint256 amount) external {
-        if (amount == 0) return;
-        uint256 bal = _poolOf[msg.sender];
-        if (amount > bal) revert InsufficientBalance();
-
-        unchecked {
-            _poolOf[msg.sender] = bal - amount;
-        }
-
-        (bool ok, ) = msg.sender.call{value: amount}("");
-        if (!ok) revert EthSendFailed();
-
-        emit Withdrew(msg.sender, amount);
-    }
-
-    /*------------------------------------------------------------------
                           Subscription mutators
     ------------------------------------------------------------------*/
     /// @notice Start or extend a daily subscription for `player`.
@@ -355,10 +298,10 @@ contract AfKing {
     ///      model replaces the 30-day BURNIE prepay window (AFSUB-01). The per-iter
     ///      autoBuy validity check is the cheap stored-field compare
     ///      `currentLevel <= sub.validThroughLevel`; at the crossing
-    ///      (`currentLevel > validThroughLevel`) the keeper re-reads the horizon
+    ///      (`currentLevel > validThroughLevel`) the afking re-reads the horizon
     ///      EXACTLY ONCE and refresh-or-evicts (AFSUB-03).
-    /// @dev msg.value > 0 always credits the resolved player's pool via the
-    ///      canonical Deposited event.
+    /// @dev msg.value > 0 forwards to the Game's afkingFunding ledger
+    ///      (GAME.depositAfkingFunding) — AfKing never retains ETH.
     /// @param player Subscriber to act for (0 or msg.sender = self).
     /// @param drainGameCreditFirst When true, the autoBuy spends protocol-side
     ///        claimable credit before tapping pool ETH.
@@ -367,8 +310,8 @@ contract AfKing {
     ///        paused sentinel handled by setDailyQuantity(0).
     /// @param reinvestPct Claimable reinvest percentage, 0..100. The effective
     ///        daily buy is max(dailyQuantity, floor(claimable * reinvestPct / price)).
-    /// @param fundingSource Wallet whose `_poolOf` ETH funds this subscription's
-    ///        keeper spends — the per-day ETH draw resolves to this address.
+    /// @param fundingSource Wallet whose game-side `afkingFunding` funds this subscription's
+    ///        afking spends — the per-day ETH draw resolves to this address.
     ///        `address(0)` = self. A non-zero, non-self source is honored ONLY when
     ///        it has operator-approved the subscriber on the game
     ///        (`IGame.isOperatorApproved(fundingSource, subscriber)`), checked at
@@ -408,10 +351,10 @@ contract AfKing {
             revert NotApproved();
         }
 
-        // msg.value > 0 credits the subscriber's pool. Effects-first CEI.
+        // msg.value > 0 forwards to the Game's afkingFunding ledger (A2 — AfKing never
+        // retains ETH; the Game emits AfkingFunded). Permissionless deposit-for-subscriber.
         if (msg.value > 0) {
-            _poolOf[subscriber] += msg.value;
-            emit Deposited(subscriber, msg.value);
+            GAME.depositAfkingFunding{value: msg.value}(subscriber);
         }
 
         Sub storage s = _subOf[subscriber];
@@ -444,8 +387,8 @@ contract AfKing {
     ///      delete-vs-preserve decision (which kept `_subOf` when the BURNIE
     ///      prepay window was paid + unexpired) is moot — every cancel = full
     ///      delete. Reactivation (q > 0) flips the sentinel back in place with no
-    ///      set churn (the entry never left the set). Stranded `_poolOf` ETH
-    ///      always stays withdrawable.
+    ///      set churn (the entry never left the set). Stranded afking ETH always
+    ///      stays withdrawable game-side via GAME.withdrawAfkingFunding.
     function setDailyQuantity(uint8 q) external {
         if (_subscriberIndex[msg.sender] == 0) revert NotSubscribed();
         Sub storage s = _subOf[msg.sender];
@@ -488,11 +431,6 @@ contract AfKing {
     /*------------------------------------------------------------------
                           Views
     ------------------------------------------------------------------*/
-    /// @notice Return `player`'s current pool balance. Never reverts.
-    function poolOf(address player) external view returns (uint256) {
-        return _poolOf[player];
-    }
-
     /// @notice Return the full subscription record for `player`. Never reverts; an
     ///         uninitialized player returns the zero-value Sub.
     function subscriptionOf(address player) external view returns (Sub memory) {
@@ -510,7 +448,7 @@ contract AfKing {
         return _subscribers[idx];
     }
 
-    /// @notice Current autoBuy cursor and the keeper-local day it indexes.
+    /// @notice Current autoBuy cursor and the afking-local day it indexes.
     /// @dev On the first autoBuy of a new day the cursor resets to 0; reads return
     ///      the live (possibly stale-day) packed values for off-chain planning.
     function autoBuyProgress() external view returns (uint32 day, uint256 cursor) {
@@ -529,7 +467,7 @@ contract AfKing {
     ///      Concurrent same-block callers self-partition via the advancing cursor;
     ///      the per-entry `lastAutoBoughtDay` day-stamp is the idempotency backstop
     ///      (an already-autoBought entry is skipped with reason 2). On the first autoBuy
-    ///      of a new keeper-local day the cursor resets to 0.
+    ///      of a new afking-local day the cursor resets to 0.
     /// @dev RD-2 — the buy path carries NO rngLock guard (buys are freeze-safe by
     ///      construction; a box queues at the current LR_INDEX, pre-entropy, and the
     ///      orphan hazard is defended on the resolution side via the autoOpen word-gate).
@@ -540,7 +478,7 @@ contract AfKing {
     ///      `currentLevel <= sub.validThroughLevel`; at the crossing re-read
     ///      `lazyPassHorizon` EXACTLY ONCE → refresh-or-evict via tombstone-then-
     ///      reclaim shape); (3) cost + mode + payKind funding waterfall (claimable
-    ///      read once via keeperSnapshot, GASOPT-03); (4) LootboxFloor transient
+    ///      read once via afkingSnapshot, GASOPT-03); (4) LootboxFloor transient
     ///      skip; (5) InsufficientPool — NORMAL sub is CANCELLED via swap-pop
     ///      (two-tier kill), Vault/sDGNRS are EXEMPT (no-op-and-retry) by pinned
     ///      identity; (6) CEI debit + day-stamp. The batched `IGame.batchPurchase`
@@ -549,7 +487,7 @@ contract AfKing {
     ///      day-stamp after.
     /// @dev No try/catch and no `nonReentrant` guard. Per-player batch isolation
     ///      lives in the game's `batchPurchase` (per-slice try/catch + slice
-    ///      refund); the keeper preserves strict CEI.
+    ///      refund); the afking preserves strict CEI.
     /// @param maxCount Maximum number of un-autoBought active entries to process this
     ///        call. 0 = use the default batch (BUY_BATCH). Caller-bounded (no
     ///        contract-bounded loop) — the anti-gas-DoS property.
@@ -564,7 +502,7 @@ contract AfKing {
         // the non-crossing path). GASOPT-05 preserved.
         uint24 currentLevel = GAME.level();
 
-        // Daily cursor reset: the first autoBuy of a new keeper-local day restarts
+        // Daily cursor reset: the first autoBuy of a new afking-local day restarts
         // the cursor at 0. Within a day the cursor advances monotonically so
         // concurrent callers self-partition.
         uint256 cursor = _autoBuyDay == today ? uint256(_autoBuyCursor) : 0;
@@ -577,7 +515,6 @@ contract AfKing {
         uint256 cap = maxCount;
         BatchBuy[] memory buys = new BatchBuy[](cap);
         uint256 batchLen;
-        uint256 totalValue;
         // True once the chunk commits real set work (cancel-tombstone reclaim,
         // auto-pause, or window renewal). Gates the tail so a buy-less chunk that
         // did such work commits it instead of hitting the no-buy revert and rolling
@@ -628,7 +565,7 @@ contract AfKing {
 
             // (2) AFSUB-02/03 pass-validity gate. Non-crossing path is a pure
             // stored-field compare (currentLevel <= validThroughLevel) — no
-            // external read. At the crossing the keeper re-reads the horizon
+            // external read. At the crossing the afking re-reads the horizon
             // EXACTLY ONCE and refreshes (if still covered) or evicts via
             // tombstone-then-reclaim (membership ⟺ packed != 0 preserved).
             if (currentLevel > sub.validThroughLevel) {
@@ -660,14 +597,15 @@ contract AfKing {
 
             // SUB-04 funding resolution (cost + payment mode + msg.value slice). Extracted
             // to _resolveBuy so its temporaries (claimable / effectiveQty / cred + the
-            // keeperSnapshot scratch) live in that frame, not this loop's — the loop is at
-            // the stack-depth limit. GASOPT-03: ONE keeperSnapshot read per player.
+            // afkingSnapshot scratch) live in that frame, not this loop's — the loop is at
+            // the stack-depth limit. GASOPT-03: ONE afkingSnapshot read per player.
             (
                 MintPaymentKind payKind,
                 uint256 ethValue,
                 uint256 amount,
                 bool isTicket,
-                bool lootboxSkip
+                bool lootboxSkip,
+                uint256 playerFunding
             ) = _resolveBuy(sub, player, mp);
 
             if (lootboxSkip) {
@@ -685,14 +623,17 @@ contract AfKing {
             // un-spoofable `player`, never `src`.
             address src = sub.fundingSource == address(0) ? player : sub.fundingSource;
 
-            // (6) InsufficientPool funding skip → two-tier skip-kill. A NORMAL sub
-            // is CANCELLED via swap-pop (auto-pause WITHOUT advancing the cursor —
-            // the mover at this slot is processed this autoBuy). Vault + sDGNRS are
-            // EXEMPT by the un-spoofable pinned ContractAddresses.VAULT / SDGNRS
-            // identity — a funding skip is transient for them (no-op-and-retry,
-            // stays in the set). The exemption is the pinned-address branch only;
-            // there is no settable exemption flag.
-            if (_poolOf[src] < ethValue) {
+            // (6) Funding skip → two-tier skip-kill. The afking holds no ETH — read
+            // afkingFunding[src] from the GAME: the common path (src == player) reuses the
+            // per-player afkingSnapshot value from _resolveBuy (no extra staticcall); the rare
+            // OPEN-E operator-funded slice (src != player) pays ONE extra afkingFundingOf(src)
+            // (D-MR-01). A NORMAL underfunded sub is CANCELLED via swap-pop (auto-pause WITHOUT
+            // advancing the cursor — the mover at this slot is processed this autoBuy). Vault +
+            // sDGNRS are EXEMPT by the un-spoofable pinned ContractAddresses.VAULT / SDGNRS
+            // identity (kept on `player`, never `src`) — a funding skip is transient for them
+            // (no-op-and-retry, stays in the set). The exemption is the pinned-address branch
+            // only; there is no settable exemption flag.
+            if ((src == player ? playerFunding : GAME.afkingFundingOf(src)) < ethValue) {
                 if (player == ContractAddresses.VAULT || player == ContractAddresses.SDGNRS) {
                     emit PlayerSkipped(player, 3);
                     unchecked {
@@ -711,19 +652,14 @@ contract AfKing {
                 continue;
             }
 
-            // (7) CEI debit BEFORE the batched external call. Unchecked safe: the
-            // line above guarantees _poolOf[src] >= ethValue. Only the pool-funded
-            // (fresh-ETH) portion is debited here; the claimable portion is drawn
-            // game-side from the buyer's claimableWinnings per payKind.
-            unchecked {
-                _poolOf[src] -= ethValue;
-            }
-
-            // Accumulate this player's slice for the single batched purchase. ethValue is the
-            // fresh-ETH portion funded from the pool; the GAME draws the rest (cost - ethValue)
-            // from the buyer's claimable per payKind. `amount` is ticket entry-units (isTicket)
-            // or a lootbox spend in wei.
+            // (7) No local debit: the GAME's batchPurchase debits afkingFunding[b.funder] per
+            // slice (D-01, funder = src). AfKing holds no ETH. Accumulate this player's slice for
+            // the single batched purchase: ethValue is the fresh-ETH portion the GAME spends from
+            // the funder's afkingFunding; the GAME draws the rest (cost - ethValue) from the
+            // buyer's claimable per payKind. `amount` is ticket entry-units (isTicket) or a
+            // lootbox spend in wei.
             buys[batchLen] = BatchBuy({
+                funder: src,
                 player: player,
                 ethValue: ethValue,
                 amount: amount,
@@ -732,7 +668,6 @@ contract AfKing {
             });
             unchecked {
                 ++batchLen;
-                totalValue += ethValue;
             }
 
             // Day-stamp after accounting (CEI). The single batched purchase fires
@@ -758,14 +693,15 @@ contract AfKing {
             return 0;
         }
 
-        // Single batched purchase. Trim the buffer to the exact batch length; the GAME
-        // requires sum(ethValue) == msg.value (atomic — no per-slice refund).
+        // Single batched purchase (non-value call). Trim the buffer to the exact batch length;
+        // the GAME debits each slice's ethValue from afkingFunding[funder] (atomic — a poisoned
+        // slice rolls the whole batch back; no per-slice refund).
         if (batchLen != cap) {
             assembly {
                 mstore(buys, batchLen)
             }
         }
-        GAME.batchPurchase{value: totalValue}(buys);
+        GAME.batchPurchase(buys);
 
         // Return the raw successful-buy count; the unified router (doWork) pays the flat
         // per-tx buy bounty (RD-4/D-07). This leg NEVER self-credits. Advance is the sole
@@ -776,16 +712,18 @@ contract AfKing {
 
     /// @dev Per-player funding resolution for the _autoBuy loop: SUB-04 effective quantity
     ///      (max of dailyQuantity and the reinvest term) -> cost -> purchase mode + funding split.
-    ///      GASOPT-03: reads the player's claimable ONCE via keeperSnapshot (per-player fallback —
-    ///      the swap-pop walk makes a pre-loop chunk batch unsafe), reused by the reinvest term AND
-    ///      the funding split (identical value, one STATICCALL instead of up to two). Extracted as a
-    ///      helper so its temporaries live in this frame (the _autoBuy loop is at the stack-depth
-    ///      limit). View — no state writes.
+    ///      GASOPT-03: reads the player's claimable AND afkingFunding ONCE via the extended
+    ///      afkingSnapshot (per-player fallback — the swap-pop walk makes a pre-loop chunk batch
+    ///      unsafe); claimable feeds the reinvest term + funding split, afkingFunding is the
+    ///      common-path funding-skip source (one STATICCALL per player). Extracted as a helper so
+    ///      its temporaries live in this frame (the _autoBuy loop is at the stack-depth limit).
+    ///      View — no state writes.
     /// @return payKind Payment mode (DirectEth / Claimable / Combined) for the slice.
-    /// @return ethValue Fresh-ETH portion funded from the keeper pool (0 in the pure-Claimable case).
+    /// @return ethValue Fresh-ETH portion debited from the funder's afkingFunding (0 in the pure-Claimable case).
     /// @return amount Ticket entry-units (isTicket) or lootbox spend in wei (!isTicket).
     /// @return isTicket True = buy `amount` ticket entry-units; false = buy an `amount`-wei lootbox.
     /// @return lootboxSkip True when a lootbox-mode sub is below LOOTBOX_MIN (transient skip).
+    /// @return playerFunding The player's afkingFunding (the common-path funding-skip source; D-MR-01).
     function _resolveBuy(
         Sub storage sub,
         address player,
@@ -798,16 +736,21 @@ contract AfKing {
             uint256 ethValue,
             uint256 amount,
             bool isTicket,
-            bool lootboxSkip
+            bool lootboxSkip,
+            uint256 playerFunding
         )
     {
         bool drainFirst = (sub.flags & FLAG_DRAIN_FIRST) != 0;
+        // ONE afkingSnapshot staticcall per player yields BOTH the claimable (reinvest /
+        // drainFirst funding split) AND the player's afkingFunding (the common-path funding-skip
+        // source — D-MR-01; the src != player OPEN-E slice reads afkingFundingOf(src) separately).
         uint256 claimable;
-        if (sub.reinvestPct > 0 || drainFirst) {
+        {
             address[] memory snap = new address[](1);
             snap[0] = player;
-            (, , uint256[] memory cl) = GAME.keeperSnapshot(snap);
+            (, , uint256[] memory cl, uint256[] memory kf) = GAME.afkingSnapshot(snap);
             claimable = cl[0];
+            playerFunding = kf[0];
         }
         // Total quantity = max(dailyQuantity, reinvestPct% of claimable / price).
         uint256 effectiveQty = sub.dailyQuantity;
@@ -828,7 +771,7 @@ contract AfKing {
         } else {
             if (cost < LOOTBOX_MIN) {
                 lootboxSkip = true;
-                return (payKind, ethValue, amount, isTicket, lootboxSkip);
+                return (payKind, ethValue, amount, isTicket, lootboxSkip, playerFunding);
             }
             amount = cost;
         }
@@ -852,9 +795,9 @@ contract AfKing {
     }
 
     /*------------------------------------------------------------------
-                          Unified keeper router (doWork)
+                          Unified afking router (doWork)
     ------------------------------------------------------------------*/
-    /// @dev Buy-leg default batch. A landed keeper buy is ~262k gas (the per-subscriber
+    /// @dev Buy-leg default batch. A landed afking buy is ~262k gas (the per-subscriber
     ///      worst-case marginal at the 0.5 gwei reference; buys cannot roll boons, so the
     ///      per-item cost is uniform), so 50 buys ≈ 13.1M stays under the 16.7M HARD per-tx
     ///      ceiling. Buys must NEVER exceed 16.7M (a reverting batch would brick the daily
@@ -865,7 +808,7 @@ contract AfKing {
     ///      _activateWhalePass loop is retired; whale-pass writes the O(1) `whalePassClaims +=`
     ///      accumulator), so the gas-weighted budget is retired too — `maxCount` is now an
     ///      opened-count guard, not a gas-weighted unit count.
-    ///      KeeperOpenBoxWorstCaseGas re-run during Plan 335-06 (post-v50 contract diff):
+    ///      AfkingOpenBoxWorstCaseGas re-run during Plan 335-06 (post-v50 contract diff):
     ///        - per-box MARGINAL gas, N=32 isolated harness (autoOpen direct):       74_756
     ///        - per-box MARGINAL gas, N=32 router doWork harness:                    75_941
     ///        - single-box TOTAL at N=1 (isolated, overhead included):              113_875
@@ -887,7 +830,7 @@ contract AfKing {
     ///      body is the same O(1) accumulator for every roll; the boon flag toggles `whalePassClaims`
     ///      not the loop count) — divergence = 0 < 25% ✓. The intra-fixture variance between bare-
     ///      harness 74_756 and router-fixture 76_866 is 2.8% (the doWork dispatch overhead +
-    ///      keeper-bound bookkeeping), well under the 25% uniformity bar. The 220 attempt failed
+    ///      afking-bound bookkeeping), well under the 25% uniformity bar. The 220 attempt failed
     ///      at 16_910_554 (= 220 × 76_866 + 38_034 ≈ 16.91M, 1.3% above ceiling) — D-IMPL-04
     ///      attestation requires a NON-FAILING `testTypicalOpenBatchAveragesNineMillion`, so 200
     ///      is the final pick.
@@ -906,15 +849,15 @@ contract AfKing {
     ///      tx's gas. This closes the small-batch self-crank corner (−EV below the knee).
     uint256 internal constant OPEN_KNEE = 5;
 
-    /// @notice Unified permissionless keeper router: do ONE category of pending work this
+    /// @notice Unified permissionless afking router: do ONE category of pending work this
     ///         call (priority autoBuy -> advance -> autoOpen) and pay ONE flat-per-tx bounty.
     /// @dev ROUTER-01..06 — parameterless (each leg uses a fixed internal default batch).
     ///      RD-1 one-category STRUCTURAL early-return (invariant a): the rngLock-aware O(1)
     ///      predicates pick the first category with work; advance/buy/open bounties can never
-    ///      stack in one tx. ROUTER-07: NO nonReentrant guard — keeper-never-a-payee, every
+    ///      stack in one tx. ROUTER-07: NO nonReentrant guard — afking-never-a-payee, every
     ///      external call is to a pinned ContractAddresses.* (GAME/COINFLIP), player value
     ///      flows through the game's claimable pull ledger, and the bounty is minted
-    ///      flip-credit (never an ETH push the keeper receives). The legs return raw
+    ///      flip-credit (never an ETH push the afking receives). The legs return raw
     ///      counts/mult and NEVER self-credit; only doWork credits, ONCE, CEI-last after the
     ///      one-category early-return. TST-02 (Phase 332) is the router->game->creditFlip
     ///      double-pay backstop proving this no-guard disposition.
@@ -1000,7 +943,7 @@ contract AfKing {
         delete _subscriberIndex[player];
     }
 
-    /// @dev Keeper-local day index. Offsets block.timestamp by 82620 seconds to
+    /// @dev Afking-local day index. Offsets block.timestamp by 82620 seconds to
     ///      align with the protocol's 22:57 UTC day-rollover boundary, then divides
     ///      by 1 days. Single source of truth — never inlined at call sites.
     function _currentDay() internal view returns (uint32) {

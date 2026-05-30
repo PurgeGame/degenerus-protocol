@@ -342,11 +342,11 @@ abstract contract DegenerusGameStorage {
     ///      Access through _getCurrentPrizePool()/_setCurrentPrizePool() helpers.
     uint128 internal currentPrizePool;
 
-    /// @dev Aggregate ETH liability across all claimableWinnings entries.
+    /// @dev Aggregate ETH liability across all claimableWinnings AND afkingFunding entries.
     ///      Used for solvency checks: game must hold >= claimablePool ETH.
     ///
-    ///      INVARIANT: claimablePool >= sum(claimableWinnings[*])
-    ///      Maintained by crediting/debiting both in tandem.
+    ///      INVARIANT: claimablePool == Σ claimableWinnings[*] + Σ afkingFunding[*]
+    ///      Maintained by crediting/debiting every component in tandem.
     ///      NOTE: During decimator settlement, the full pool is reserved in claimablePool
     ///      before individual claims are credited, temporarily breaking equality.
     ///
@@ -400,6 +400,14 @@ abstract contract DegenerusGameStorage {
     ///      SECURITY: Pull pattern — players withdraw their own funds.
     ///      Prevents reentrancy by separating credit from transfer.
     mapping(address => uint256) internal claimableWinnings;
+
+    /// @dev Per-player prepaid afking ETH (AfKing subscription funding), distinct from
+    ///      claimableWinnings. No separate aggregate — the systemwide afking total rides
+    ///      inside claimablePool; every afkingFunding mutation moves claimablePool in tandem.
+    ///
+    ///      SECURITY: Pull pattern — the funding source withdraws its own balance via
+    ///      withdrawAfkingFunding; spent by batchPurchase keyed on the funder.
+    mapping(address => uint256) internal afkingFunding;
 
     /// @dev Nested mapping: level -> trait ID (0-255) -> array of ticket holders.
     ///      Used for jackpot winner selection: random index into trait's array.
