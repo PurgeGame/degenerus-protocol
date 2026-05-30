@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v54.0
 milestone_name: Game-Side Keeper-Funding Ledger + AfKing De-Custody
 status: executing
-last_updated: "2026-05-30T08:52:47.903Z"
-last_activity: 2026-05-30 -- Phase 343 planning complete
+last_updated: "2026-05-30T08:59:45.683Z"
+last_activity: 2026-05-30 -- 343-01 COMPLETE (call-graph attestation; 2 RESEARCH claims overturned)
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 20
 ---
 
 # Project State
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v54.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v54.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 343 — SPEC — design-lock the game-side `keeperFunding` ledger + PROVE the solvency reservation (SOLVENCY-01/03) + produce the dead-code (CLEANUP-01) + gas-opportunity (GAS-01) inventories + grep-attest every `file:line` vs the v53 HEAD `83a84431` (paper-only, zero `contracts/*.sol`).
+**Current focus:** Phase 343 — SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Call-Graph Attestation
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,10 +32,10 @@ See: .planning/PROJECT.md (Current Milestone: v54.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 343 — SPEC (not started; roadmap defined)
-Plan: —
-Status: Ready to execute
-Last activity: 2026-05-30 -- Phase 343 planning complete
+Phase: 343 (SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Call-Graph Attestation) — EXECUTING
+Plan: 2 of 5 (343-01 ✅ 6deda035 — call-graph attestation)
+Status: Executing Phase 343
+Last activity: 2026-05-30 -- Phase 343 execution started
 
 ## Current Milestone Roadmap (v54.0 — phases 343-347)
 
