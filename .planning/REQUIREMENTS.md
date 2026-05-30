@@ -1,115 +1,72 @@
-# Requirements: Degenerus Protocol — v54.0 Game-Side Keeper-Funding Ledger + AfKing De-Custody
+# Requirements — v55.0 AfKing-in-Game Redesign
 
-**Milestone:** v54.0 (started 2026-05-30)
-**Audit baseline → subject:** v53 HEAD `83a84431` (the atomic `BatchBuy[]` batchPurchase) → v54.0 closure HEAD. Every cited `file:line` MUST be re-attested vs the v53 HEAD before any patch. Supersedes v53's cross-contract value-plumbing (v53's atomic `BatchBuy[]` shape KEPT; only the funding location changes).
-**Scope source:** the design-locked doc `.planning/PLAN-V54-KEEPER-FUNDING-GAME-LEDGER.md` (SPEC source of truth) + the milestone init (2026-05-30) + USER additions (dead-code cleanup + further gas optimization). No research (a fully-specced internal contract refactor).
-**Posture:** the ledger + de-custody + cleanup ship as ONE batched USER-APPROVED `contracts/*.sol` diff; HARD STOP at the commit boundary (`feedback_batch_contract_approval` / `feedback_never_preapprove_contracts` / `feedback_no_contract_commits`); `ContractAddresses.sol` freely modifiable. **Security/solvency floor over gas** (`feedback_security_over_gas`): the keeper bucket rides inside `claimablePool` (no new reserved aggregate) → it inherits the already-correct solvency wiring; the master invariant `balance + steth.balanceOf(this) >= claimablePool` is re-proven, not assumed. Pre-launch redeploy-fresh (storage break fine, no migration; no live AfKing pools).
-
----
-
-## v54.0 Requirements
-
-### Game-Side keeperFunding Ledger (LEDGER)
-- [ ] **LEDGER-01**: A new per-player `mapping(address => uint256) keeperFunding` exists on the Game (`DegenerusGameStorage.sol`), segregated from `claimableWinnings` — no human-purchase path, no `_settleClaimableShortfall`, no claim path reads it (except the post-gameOver merge, GAMEOVER-01). Only the AF_KING-gated `batchPurchase` may spend it.
-- [ ] **LEDGER-02**: `keeperFunding` has NO separate aggregate — its systemwide total rides inside the existing `claimablePool`. Every `keeperFunding` mutation (deposit / withdraw / auto-buy spend / gameOver claim) moves `claimablePool` in tandem, so `claimablePool == Σ claimableWinnings[*] + Σ keeperFunding[*]`. The storage invariant comment (`DegenerusGameStorage.sol:344-352` + `DegenerusGame.sol:18`) is updated to name the keeper component (the existing invariant is already stated as `>=`, so this is consistent).
-- [ ] **LEDGER-03**: `depositKeeperFunding(address player) external payable` credits `keeperFunding[player] += msg.value` AND `claimablePool += msg.value` (reverts on `player == address(0)`, zero-value no-op, emits `KeeperFunded`). The Game's bare `receive()` (which routes to the prize pool) is NOT used for keeper deposits.
-- [ ] **LEDGER-04**: `withdrawKeeperFunding(uint256 amount) external` is un-brickable (strict CEI — debit `keeperFunding[msg.sender]` + `claimablePool` BEFORE the `.call`, so a re-entrant second call reverts on the debit), available ALWAYS (mid-game, after cancel, post-gameOver), reverts on `amount > balance`, zero-value no-op, emits `KeeperWithdrew`. Inherits the USER-locked "cancel-then-withdraw always succeeds / never strands ETH" invariant.
-- [ ] **LEDGER-05**: `keeperFundingOf(address) external view returns (uint256)` exposes the per-player balance (the aggregate is just `claimablePool`).
-
-### Non-Payable Batched Auto-Buy (AUTOBUY)
-- [ ] **AUTOBUY-01**: `batchPurchase(BatchBuy[] calldata buys)` is NON-payable (the `payable` modifier + the `spent == msg.value` exact-funding guard are removed). It stays AF_KING-gated, `!gameOver`-pre-checked, `len != 0`.
-- [ ] **AUTOBUY-02**: Per slice, `batchPurchase` debits `keeperFunding[b.player] -= b.ethValue` AND `claimablePool -= b.ethValue` (revert if `keeperFunding[b.player] < ethValue`), then delegatecalls `purchaseWith(b.player, …, b.ethValue)` — the ETH is already in the Game's balance, so it becomes prize-pool / vault-share ETH exactly as a fresh `msg.value` buy. `_purchaseForWith` / `purchaseWith` / `_settleClaimableShortfall` are UNCHANGED.
-- [ ] **AUTOBUY-03**: Keeper buys earn the **fresh** affiliate rate (20-25%, `isFreshEth=true`), NOT the recycled 5% — because the keeper ETH is spent as `ethValue` (DirectEth), preserving the fresh/recycled labeling. No affiliate-bonus rework (PLAN-V54 §10).
-- [ ] **AUTOBUY-04**: Atomic non-brick is preserved — a reverting slice rolls back the WHOLE batch (no per-slice try/catch), which is benign because `advanceGame()` is an independent permissionless entrypoint (the game never freezes; subscribers retry next cycle).
-- [ ] **AUTOBUY-05**: AfKing's funding-skip gate reads `keeperFunding[src]` from the Game via an EXTENDED `keeperSnapshot` (ONE staticcall per player — GASOPT-03 preserved); the two-tier branching (VAULT/SDGNRS exempt-skip reason 3; NORMAL sub auto-pause reason 1) is byte-identical; the local CEI debit `_poolOf[src] -= ethValue` (`AfKing.sol:719`) is removed; `GAME.batchPurchase{value: totalValue}(buys)` becomes the non-value `GAME.batchPurchase(buys)`.
-
-### AfKing De-Custody (DECUSTODY)
-- [ ] **DECUSTODY-01**: AfKing holds NO ETH — `_poolOf` (slot 0), `receive()`, `deposit()`, `depositFor()`, `withdraw()` (`AfKing.sol:214,298-341`) are deleted; the `sum(_poolOf) <= address(this).balance` invariant is retired; `poolOf(player)` delegates to `game.keeperFundingOf(player)` (or is removed).
-- [ ] **DECUSTODY-02**: `subscribe` stays `payable` and FORWARDS `msg.value` → `game.depositKeeperFunding{value}(subscriber)` (Decision A2) — AfKing never retains ETH. Standalone top-ups go directly to `game.depositKeeperFunding`.
-- [ ] **DECUSTODY-03**: The OPEN-E `fundingSource` storage + the subscribe-time operator-approval consent gate (`AfKing.sol:400-409`) + the `src` resolution (`:682`) are UNCHANGED; the 4-protection OPEN-E disposition (`open-e-operator-approval-trust-boundary`) carries over verbatim (funding-source ETH is now `keeperFunding[src]`, withdrawable by the source via `withdrawKeeperFunding`).
-- [ ] **DECUSTODY-04**: The now-moot v48 stuck-pool recovery is removed — `DegenerusVault.recoverAfKingPool()` (`Vault:512`), the `StakedStonk.burnAtGameOver()` AfKing-withdraw leg (`StakedStonk:533`), and the AfKing `receive()` AF_KING relaxation — confirmed dead by the de-custody (VAULT/sDGNRS funding is now game-side `keeperFunding`, withdrawable directly).
-
-### Unified Terminal Claim (GAMEOVER)
-- [ ] **GAMEOVER-01**: Post-gameOver, `claimWinnings` (`_claimWinningsInternal`, `DegenerusGame.sol:1471`) ALSO pays the caller's `keeperFunding` (lazy per-player merge — no unbounded loop): payout = `claimableWinnings[caller] + keeperFunding[caller]`, zeroing both and debiting `claimablePool` for the combined amount. `withdrawKeeperFunding` remains available too (both zero the bucket → no double-spend).
-- [ ] **GAMEOVER-02**: The final sweep (`GameOverModule:215`, 30 days post-end) sweeps the keeper reservation with `claimablePool` (same forfeiture lifecycle — keeperFunding is claimable-equivalent post-gameOver). Both withdraw/claim paths stay open until that sweep.
-
-### Solvency Spine (SOLVENCY)
-- [x] **SOLVENCY-01**: PROVEN (not assumed) at SPEC: because the keeper total rides inside `claimablePool`, every "free ETH = totalBal − reserved" site already reserves it with NO change — `distributeYieldSurplus` (`:691-707`, the prior-omission site [[project_yield_surplus_omits_pending_pools]], now structurally immune), the gameOver drain (`:98-99/:164`), and `adminStakeEthForStEth` (`:2113-2123`, keeper ETH never staked-away). The SPEC attests each reserves `claimablePool` (inclusive of keeper) unchanged.
-- [ ] **SOLVENCY-02**: The master invariant `balance + steth.balanceOf(this) >= claimablePool` (with `claimablePool` now including the keeper total) holds across the full lifecycle — deposit → autobuy → withdraw → `distributeYieldSurplus` → gameOver-drain → claim → final-sweep — proven by test.
-- [x] **SOLVENCY-03**: The sDGNRS redemption valuation (`StakedStonk:612/772/861`, `ethBal + stethBal + claimableEth − pendingRedemptionEthValue`) is UNCHANGED and CORRECT — keeper ETH lives in the Game's balance (not sDGNRS's), invisible to sDGNRS's own-balance valuation (same as the external AfKing pool today); attested at SPEC.
-
-### Dead-Code Cleanup (CLEANUP)
-- [x] **CLEANUP-01**: SPEC produces a dead-code inventory of everything the de-custody orphans (the AfKing ETH entrypoints / `_poolOf`, the v48 recovery, any now-unused helpers / events / errors / constants, the `IGame.batchPurchase` payable ABI, stale `_poolOf`-referencing comments) — each with a grep-attested kill-set vs the v53 HEAD.
-- [ ] **CLEANUP-02**: Every item in the CLEANUP-01 inventory is removed in the batched diff with the kill-set grep-confirmed empty; no orphaned references remain (forge build clean).
-- [ ] **CLEANUP-03**: A broader unused-code audit across the keeper/funding blast radius + adjacent surface (a gas-scavenger dead-code pass beyond the de-custody orphans) — anything found is removed (gas-skeptic-validated) or documented NEGATIVE with reasoning.
-
-### Further Gas Optimization (GAS)
-- [x] **GAS-01**: SPEC produces a gas-opportunity inventory for the keeper/funding blast radius (beyond the ~9k/buy already saved by removing the per-batch value call), each tagged behavior-identical / same-results.
-- [ ] **GAS-02**: The validated behavior-identical, no-cost gas wins from GAS-01 (gas-scavenger → gas-skeptic, under the security-over-gas floor) are applied; each is gas-only and proven same-results in TST. Wins that trade an invariant or aren't real are REJECTED with reasoning (do not re-litigate).
-- [ ] **GAS-03**: The `claimableWinnings` packing candidate (`{uint128 normal, uint128 keeper}` instead of a separate `keeperFunding` mapping) is EVALUATED by gas-skeptic against the security floor — landing as an ISOLATED change only if the slot/gas saving survives the blast-radius cost on the central accounting variable (~15+ access sites); otherwise documented NEGATIVE (PLAN-V54 §2 deferral). Default expectation: keep the separate mapping (hot-path-neutral; large spine refactor).
-
-### Test Proofs (TST)
-- [ ] **TST-01**: Deposit/withdraw — `depositKeeperFunding` credits `keeperFunding` + `claimablePool`; `withdrawKeeperFunding` is un-brickable (re-entrant double-withdraw reverts on the debit; pool fully restored), drains to zero, never strands ETH (fuzz any pool / partial-withdraw), and works mid-game + post-cancel + post-gameOver.
-- [ ] **TST-02**: Auto-buy with zero value transfer — `batchPurchase(buys)` (no value) debits each slice's `keeperFunding` + `claimablePool` by `ethValue`, lands the buy (ticket or lootbox per `isTicket`), draws claimable for the Combined/Claimable remainder (the v52 Finding A/B regressions — ticket-mode buys tickets, claimable funding is actually drawn), and reverts the WHOLE batch atomically on a poisoned slice (no partial landing); the game stays un-bricked via `advanceGame()`.
-- [ ] **TST-03**: Fresh affiliate rate — a keeper buy credits the affiliate at the FRESH rate (20-25%, `isFreshEth=true`), not the recycled 5% — proving keeper-funded ETH is labeled fresh.
-- [ ] **TST-04**: Solvency reservation — `distributeYieldSurplus` / `adminStakeEthForStEth` / the gameOver-drain never spend reserved keeper ETH (a yield-surplus run with outstanding `keeperFunding` distributes 0 of it; a stake call cannot stake below the keeper reserve).
-- [ ] **TST-05**: Terminal claim merge — post-gameOver `claimWinnings` pays `claimableWinnings + keeperFunding` in one call (both zeroed, `claimablePool` debited by the sum); the final sweep zeroes the keeper reservation; no double-spend vs `withdrawKeeperFunding`.
-- [ ] **TST-06**: NON-WIDENING regression vs the v53 baseline — the reconceived keeper suite (`KeeperNonBrick`, `KeeperBatchAffiliateDeltaAudit`, the 3 `test/gas/*`) compiles + passes against the ledger model; net-zero new regression (any pre-existing reds enumerated BY NAME); no test asserts strict `claimablePool == Σ claimableWinnings` across a keeper op. Baseline → `REGRESSION-BASELINE-v54.md`.
-
-### Cross-Cutting — SPEC + IMPL + TERMINAL (BATCH)
-- [x] **BATCH-01**: SPEC design-lock (343) — re-attest the PLAN-V54 design vs the v53 HEAD (every `file:line`); lock the final `batchPurchase` / `purchaseWith` / extended `keeperSnapshot` signatures + the `keeperFunding` storage shape + the deposit/withdraw/claim-merge wiring; produce the SOLVENCY-01/03 proofs + the CLEANUP-01 + GAS-01 inventories; confirm the OPEN-E carry-over. ZERO `contracts/*.sol` mutation at SPEC.
-- [ ] **BATCH-02**: IMPL (344) — the ONE batched USER-APPROVED `contracts/*.sol` diff (ledger + de-custody + the CLEANUP-02 orphan removal); HARD STOP at the contract-commit boundary (applied + locally compiled, never committed without explicit user hand-review); forge build clean.
-- [ ] **BATCH-03**: TERMINAL (347) — delta-audit (every v54 surface NON-WIDENING vs v53; the master invariant + OPEN-E re-attested) + the 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT per `D-271-ADVERSARIAL-02`) focused on the funding-ledger + de-custody surface + `audit/FINDINGS-v54.0.md` (chmod 444) + atomic 5-doc closure flip. **Runs IN-MILESTONE (NOT deferred to v52, unlike v50.0/v51.0)** — the solvency-spine touch makes deferral unacceptable.
+> **Baseline:** v54 de-custody HEAD `20ca1f79` (v54.0 closed-superseded).
+> **Design-lock:** `.planning/PLAN-V55-AFKING-IN-GAME-REDESIGN.md` (canonical = §10, which supersedes the §0–§3 stamp framing).
+> **Discharged foundations:** REVERT-FREE-CHAIN proof `.planning/PLAN-V55-REVERT-FREE-CHAIN-PROOF.md` (its §5 = the 4 LOCKED obligations below) + SOLVENCY-01 (Phase 343).
+> **Posture:** security/freeze/solvency floor over gas; carefully-sequenced batched USER-APPROVED contract diff (HARD STOP at the contract-commit boundary, `feedback_batch_contract_approval` / `feedback_never_preapprove_contracts` / `feedback_no_contract_commits`); `ContractAddresses.sol` freely modifiable; pre-launch redeploy-fresh (storage break fine). FULL close (sweep IN-MILESTONE at TERMINAL).
+> **No research** — a fully-specced internal contract refactor with a discharged proof.
 
 ---
+
+## v55.0 Requirements
+
+### ARCH — Architecture: state game-resident + module split + code-size
+- [ ] **ARCH-01**: The subscriber set (`_subOf`/`_subscribers`/`_subscriberIndex`), the process/open cursors, the per-sub box-stamp, and the v54 `afkingFunding` ledger are appended to `DegenerusGameStorage` (layout-safe append; every module already shares the base).
+- [ ] **ARCH-02**: A new `GameAfkingModule` (delegatecall, inherits `DegenerusGameStorage`) owns `subscribe`/setters + the process-pass + the open-pass + the router; its bytecode is its own budget, not the Game's.
+- [ ] **ARCH-03**: `AfKing.sol` collapses to thin dispatch stubs (`subscribe`/`setDailyQuantity`/`doWork`/…) ≈1–1.5KB; the `AF_KING`-address dissolution vs thin-external-shim question is resolved (incl. the mandatory-mint-gate interaction if any entry routes through `advanceGame`).
+- [ ] **ARCH-04**: Game runtime code-size stays < 24,576 bytes at every intermediate step — reclaim FIRST (`claimAffiliateDgnrs`→`BingoModule` ≈1.3KB; read-aggregators drop-`view`/→lens) before adding the afking stubs (sequenced so the Game never breaches the ceiling mid-flight).
+
+### BOX — Box redesign: relocate the freeze into a per-sub stamp
+- [ ] **BOX-01**: Boons are OFF for afking boxes → box `amount` = spend (deletes the boosted-amount freeze field).
+- [ ] **BOX-02**: The process-pass (pre-RNG) writes a per-sub stamp `(index = current `LR_INDEX`, amount, day)` — one warm-dirty write per process-day, overwritten each cycle (no cold `lootboxEth*`/`lootboxPurchasePacked`/`boxPlayers.push`).
+- [ ] **BOX-03**: The process-pass debits `afkingFunding` and sets the `lastAutoBoughtDay == today` success-marker ONLY after a successful debit (a failed buy writes no marker → no free box; a wallet subscribing between process and open has no this-cycle marker → no free box).
+- [ ] **BOX-04**: The open-pass (post-RNG) materializes the box from the stamp + the committed `lootboxRngWordByIndex[stamp.index]` with math byte-identical to `openLootBox`; `lastOpenedIndex` is monotonic per sub (open only if `stamp.index > lastOpenedIndex` → no double-open).
+- [ ] **BOX-05**: Humans keep the existing `lootboxEth`/`boxPlayers` open route unchanged; the two open routes share no mutable-state hazard.
+
+### FREEZE — RNG / determinism security spine
+- [ ] **FREEZE-01**: Freeze-completeness — the stamp captures ALL outcome-determining state at process; the open re-derives nothing manipulable from mutable per-player state (the §10 live score/base-level/EV-cap reads are admitted only because in-window manipulation is −EV; documented + attested).
+- [ ] **FREEZE-02**: Index-binding — the stamp binds to the pre-RNG `LR_INDEX` (read once at pass start); the process-pass MUST NOT straddle a mid-day `requestLootboxRng` index advance (`AdvanceModule.sol:1016`).
+- [ ] **FREEZE-03**: Determinism — the box seed `keccak256(rngWord, player, day, amount)` uses the STAMPED buy-day (never open-time `_simulatedDayIndex()`), and carries no `block.timestamp/number/prevrandao/coinbase/blockhash` in the draw.
+
+### REVERT — Revert-free-chain (discharged invariant, carried into IMPL)
+- [ ] **REVERT-01**: The process-pass slice construction preserves `_resolveBuy`'s validation invariants VERBATIM — `ev = cost − claimableUse` + enum payKind, the 1-wei claimable sentinel, the `LOOTBOX_MIN` transient skip, `quantity ≥ 1` — so the funded buy is revert-free by construction (migration fidelity; the proof's load-bearing obligation).
+- [ ] **REVERT-02**: A thin per-sub try/catch skip valve isolates the process AND open legs, absorbing the two residual revert classes (solvency-violation [safe under SOLVENCY-01], liveness-timeout [game-dead]) so no single sub can brick a batch / the day.
+
+### EVCAP — EV-cap accounting at open
+- [ ] **EVCAP-01**: The afking open increments `lootboxEvBenefitUsedByLevel[player][level+1]` via `_applyEvMultiplierWithCap` (read+write-at-open, exactly once per open, same map/key as MintModule's buy-time write, hard-clamped ≤10 ETH → no revert); the buy-time EV write is bypassed for afking boxes (no double-draw). Proven equivalent to the v54 per-`(sub,level)` accumulator.
+
+### CONSENT — OPEN-E / AFSUB / set-mutation carry-over
+- [ ] **CONSENT-01**: The subscribe-time `isOperatorApproved` (OPEN-E) gate, the pass-gating (`validThroughLevel`), the VAULT/SDGNRS exemption-on-`player`, and the funder=src accounting carry over verbatim; the OPEN-E 4-protection structure is re-attested.
+- [ ] **CONSENT-02**: Set-mutation — evictions preserve "no cursor advance after swap-pop" (the H-CANCEL-SWAP-MISS / cancel-tombstone-streak class); tombstone-then-reclaim shape carries over.
+
+### PLACE — Process/open placement + bounty
+- [ ] **PLACE-01**: The §4 placement (required-path `advanceGame` phase vs separate permissionless legs) is decided at SPEC on non-revert grounds (guaranteed-every-day vs minimal-surface, the `_enforceDailyMintGate` standing interaction, bounty farm-by-splitting); process-leg pre-RNG cursor-chunked, open-leg post-`_unlockRng` cursor-chunked.
+- [ ] **PLACE-02**: Bounty reconciliation — open stays a post-RNG router category (`OPEN_BATCH`/`OPEN_KNEE` pro-rate); the buy/process bounty is work-scaled (not once-per-advance) to close the middle-chunk-unpaid gap and resist farm-by-splitting; payment stays the deferred BURNIE flip-credit mint (`creditFlip`).
+
+### GAS — Behavior-identical relocations
+- [ ] **GAS-01**: The afking box-buy's ~6 cold box-ledger SSTOREs + `boxPlayers.push` + `enqueueBoxForAutoOpen` (~120–130k) collapse to one warm-dirty Sub-stamp write (~5k); behavior-identical, proven same-results in TST.
+- [ ] **GAS-02**: The per-subscriber `afkingSnapshot`/`afkingFundingOf` cross-contract staticcalls (~3–5k each) become in-context `SLOAD`s.
+- [ ] **GAS-03**: Same-slot affiliate/pool aggregate flushes across a process batch (`claimablePool`/`prizePoolsPacked` accumulate-and-flush; bucket affiliate by roll-winner) — SAFE-WITH-CONDITIONS (do NOT batch `quests.handleAffiliate` — non-linear completion logic); each gas-only under the security floor.
+
+### TST — Empirical proofs
+- [ ] **TST-01**: Freeze/determinism — the stamp+open produces an identical box outcome independent of open timing/block (seed uses the stamped day); index-binding holds across a mid-day index advance.
+- [ ] **TST-02**: Revert-free — a funded process/open never reverts on well-formed slices (the preserved `_resolveBuy` invariants), and the skip valve isolates the solvency/liveness residuals without bricking the batch/day.
+- [ ] **TST-03**: EV-cap — the per-`(player, level)` 10-ETH benefit budget is enforced exactly once per open with no double-draw vs the buy-time path; equivalent to v54.
+- [ ] **TST-04**: Two-path open coexistence + set-mutation (eviction/tombstone/swap-pop, streak preserved) + OPEN-E 4-protection regression.
+- [ ] **TST-05**: NON-WIDENING regression vs the v54 baseline — every pre-existing red enumerated BY NAME (`REGRESSION-BASELINE-v55.md`).
+- [ ] **TST-06**: Gas — measured per-buy + per-open marginal under the 16.7M HARD per-tx ceiling; the GAS-01/02/03 wins proven same-results.
+
+### AUDIT — Terminal close
+- [ ] **AUDIT-01**: FULL close — delta-audit (every v55 surface vs the v54 baseline; freeze + solvency + OPEN-E re-attested) + 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT) focused on the box-stamp freeze + the liveness isolation + the two-path open + `audit/FINDINGS-v55.0.md` (chmod 444) + the atomic 5-doc closure flip with the `MILESTONE_V55_AT_HEAD_<sha>` signal.
 
 ## Future Requirements (deferred)
-- Generalized "any operator-approved party may spend my `claimableWinnings`" (larger blast radius; PLAN-V54 §10).
-- The `claimableWinnings` packing optimization if GAS-03 lands NEGATIVE this milestone (revisit only with a measured win).
+- Generalized operator-spend of `claimableWinnings` (carried from v54 §10) — larger blast radius, separate optional feature.
+- A bingo / afking progress view helper (frontend read-only).
 
 ## Out of Scope
-- The v52 consolidated cross-model audit (separate track; v54's surface folds into it).
+- The v52 consolidated cross-model audit (separate track; v55's surface folds into it as an additional track, not a substitute for v55's own close).
 - Off-chain indexer / webpage (separate frontend track).
-- Any contract surface beyond the keeper-funding ledger, AfKing de-custody, and the gas/cleanup sweep.
-- The v44 §9d 135-anchor maximalist register (carries forward unchanged; NOT live vectors).
+- Any contract surface beyond the AfKing-in-Game fold + the box redesign + the gas pass.
 
 ## Traceability
-
-**34/34 v54.0 requirements mapped to exactly one phase — 0 orphaned, 0 duplicated.** Phases: 343 SPEC · 344 IMPL · 345 GAS+CLEANUP · 346 TST · 347 TERMINAL. BATCH-03 (347) re-attests the full 34-requirement set at the TERMINAL full close.
-
-| REQ-ID | Phase | Status |
-|--------|-------|--------|
-| LEDGER-01 | 344 IMPL | Pending |
-| LEDGER-02 | 344 IMPL | Pending |
-| LEDGER-03 | 344 IMPL | Pending |
-| LEDGER-04 | 344 IMPL | Pending |
-| LEDGER-05 | 344 IMPL | Pending |
-| AUTOBUY-01 | 344 IMPL | Pending |
-| AUTOBUY-02 | 344 IMPL | Pending |
-| AUTOBUY-03 | 344 IMPL | Pending |
-| AUTOBUY-04 | 344 IMPL | Pending |
-| AUTOBUY-05 | 344 IMPL | Pending |
-| DECUSTODY-01 | 344 IMPL | Pending |
-| DECUSTODY-02 | 344 IMPL | Pending |
-| DECUSTODY-03 | 344 IMPL | Pending |
-| DECUSTODY-04 | 344 IMPL | Pending |
-| GAMEOVER-01 | 344 IMPL | Pending |
-| GAMEOVER-02 | 344 IMPL | Pending |
-| SOLVENCY-01 | 343 SPEC | ✅ Complete |
-| SOLVENCY-02 | 346 TST | Pending |
-| SOLVENCY-03 | 343 SPEC | ✅ Complete |
-| CLEANUP-01 | 343 SPEC | ✅ Complete |
-| CLEANUP-02 | 344 IMPL | Pending |
-| CLEANUP-03 | 345 GAS+CLEANUP | Pending |
-| GAS-01 | 343 SPEC | ✅ Complete |
-| GAS-02 | 345 GAS+CLEANUP | Pending |
-| GAS-03 | 345 GAS+CLEANUP | Pending |
-| TST-01 | 346 TST | Pending |
-| TST-02 | 346 TST | Pending |
-| TST-03 | 346 TST | Pending |
-| TST-04 | 346 TST | Pending |
-| TST-05 | 346 TST | Pending |
-| TST-06 | 346 TST | Pending |
-| BATCH-01 | 343 SPEC | ✅ Complete |
-| BATCH-02 | 344 IMPL | Pending |
-| BATCH-03 | 347 TERMINAL | Pending |
+_(filled by the roadmap — each REQ-ID maps to exactly one phase.)_
