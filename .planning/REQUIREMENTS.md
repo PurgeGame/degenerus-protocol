@@ -4,7 +4,6 @@
 > **Design-lock:** `.planning/PLAN-V55-AFKING-IN-GAME-REDESIGN.md` (canonical = §10, which supersedes the §0–§3 stamp framing).
 > **Discharged foundations:** REVERT-FREE-CHAIN proof `.planning/PLAN-V55-REVERT-FREE-CHAIN-PROOF.md` (its §5 = the 4 LOCKED obligations below) + SOLVENCY-01 (Phase 343).
 > **Posture:** security/freeze/solvency floor over gas; carefully-sequenced batched USER-APPROVED contract diff (HARD STOP at the contract-commit boundary, `feedback_batch_contract_approval` / `feedback_never_preapprove_contracts` / `feedback_no_contract_commits`); `ContractAddresses.sol` freely modifiable; pre-launch redeploy-fresh (storage break fine). FULL close (sweep IN-MILESTONE at TERMINAL).
-> **No research** — a fully-specced internal contract refactor with a discharged proof.
 
 ---
 
@@ -69,4 +68,50 @@
 - Any contract surface beyond the AfKing-in-Game fold + the box redesign + the gas pass.
 
 ## Traceability
-_(filled by the roadmap — each REQ-ID maps to exactly one phase.)_
+
+Each REQ-ID maps to exactly ONE phase — the phase that DELIVERS/owns it. 29/29 mapped, 0 orphaned, 0 duplicated. Full rationale (the design+impl+test center-of-gravity split) in `.planning/ROADMAP.md` Coverage section.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| ARCH-01 | 349 IMPL | Pending |
+| ARCH-02 | 349 IMPL | Pending |
+| ARCH-03 | 349 IMPL | Pending |
+| ARCH-04 | 348 SPEC | Pending |
+| BOX-01 | 349 IMPL | Pending |
+| BOX-02 | 349 IMPL | Pending |
+| BOX-03 | 349 IMPL | Pending |
+| BOX-04 | 349 IMPL | Pending |
+| BOX-05 | 349 IMPL | Pending |
+| FREEZE-01 | 348 SPEC | Pending |
+| FREEZE-02 | 348 SPEC | Pending |
+| FREEZE-03 | 348 SPEC | Pending |
+| REVERT-01 | 349 IMPL | Pending |
+| REVERT-02 | 349 IMPL | Pending |
+| EVCAP-01 | 349 IMPL | Pending |
+| CONSENT-01 | 349 IMPL | Pending |
+| CONSENT-02 | 349 IMPL | Pending |
+| PLACE-01 | 348 SPEC | Pending |
+| PLACE-02 | 349 IMPL | Pending |
+| GAS-01 | 350 GAS | Pending |
+| GAS-02 | 350 GAS | Pending |
+| GAS-03 | 350 GAS | Pending |
+| TST-01 | 351 TST | Pending |
+| TST-02 | 351 TST | Pending |
+| TST-03 | 351 TST | Pending |
+| TST-04 | 351 TST | Pending |
+| TST-05 | 351 TST | Pending |
+| TST-06 | 351 TST | Pending |
+| AUDIT-01 | 352 TERMINAL | Pending |
+
+**Per-phase rollup:**
+
+| Phase | Type | Requirements | Count |
+|-------|------|--------------|-------|
+| 348 | SPEC | FREEZE-01, FREEZE-02, FREEZE-03, PLACE-01, ARCH-04 | 5 |
+| 349 | IMPL (CONTRACT BOUNDARY) | ARCH-01, ARCH-02, ARCH-03, BOX-01, BOX-02, BOX-03, BOX-04, BOX-05, REVERT-01, REVERT-02, EVCAP-01, CONSENT-01, CONSENT-02, PLACE-02 | 14 |
+| 350 | GAS (CONTRACT BOUNDARY) | GAS-01, GAS-02, GAS-03 | 3 |
+| 351 | TST | TST-01, TST-02, TST-03, TST-04, TST-05, TST-06 | 6 |
+| 352 | TERMINAL (FULL close) | AUDIT-01 | 1 |
+| **Total** | | | **29** |
+
+✓ All 29 v55.0 requirements mapped · ✓ 0 orphaned · ✓ 0 duplicated
