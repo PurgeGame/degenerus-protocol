@@ -83,7 +83,12 @@
   4. AfKing is de-custodied + the v48 recovery is removed + the OPEN-E gate carries over (DECUSTODY-01..04 / CLEANUP-02) — AfKing holds NO ETH (`_poolOf` slot 0 + `receive()`/`deposit()`/`depositFor()`/`withdraw()` `AfKing.sol:214,298-341` deleted, the `sum(_poolOf) <= address(this).balance` invariant retired, `poolOf(player)` delegates to `game.keeperFundingOf(player)` or is removed); `subscribe` stays `payable` and FORWARDS `msg.value` → `game.depositKeeperFunding{value}(subscriber)` (Decision A2; standalone top-ups go direct); the OPEN-E `fundingSource` storage + the subscribe-time operator-approval consent gate (`:400-409`) + the `src` resolution (`:682`) are UNCHANGED so the 4-protection disposition carries over verbatim (funding-source ETH is now withdrawable `keeperFunding[src]`); and the now-moot v48 stuck-pool recovery (`Vault.recoverAfKingPool()` `:512`, the `StakedStonk.burnAtGameOver()` AfKing-withdraw leg `:533`, the AfKing `receive()` AF_KING relaxation) plus every other CLEANUP-01 kill-set item are removed with the kill-set grep-confirmed empty (no orphaned references).
   5. The unified terminal claim lands + `forge build` is clean + the diff is HELD at the contract boundary (GAMEOVER-01 / GAMEOVER-02 / BATCH-02) — post-gameOver `claimWinnings` (`_claimWinningsInternal`, `DegenerusGame.sol:1471`) ALSO pays the caller's `keeperFunding` (lazy per-player merge, no unbounded loop): payout = `claimableWinnings[caller] + keeperFunding[caller]`, zeroing both and debiting `claimablePool` for the sum (`withdrawKeeperFunding` remains available too; both zero the bucket → no double-spend), and the final sweep (`GameOverModule:215`, 30 days post-end) sweeps the keeper reservation with `claimablePool` (same forfeiture lifecycle, both paths open until that sweep); the whole diff is authored producer-before-consumer per the SPEC edit-order map, applied to `contracts/` and locally compiling (`forge build` clean; `ContractAddresses.sol` freely modifiable), but NOT committed without explicit user hand-review of the single batched diff.
 
-**Plans**: TBD
+**Plans**: 5 plans (5 waves)
+- [ ] 344-01-PLAN.md — Storage producers: `keeperFunding` mapping (no aggregate, D-CF-03) + `funder` field on both `BatchBuy` structs + invariant comment; executor's first-action re-grep (D-344-05) [wave 1]
+- [ ] 344-02-PLAN.md — Game fns: `depositKeeperFunding` / un-brickable `withdrawKeeperFunding` (GO_SWEPT line-1) / `keeperFundingOf` + non-payable `batchPurchase` (D-01 `b.funder` debit) + Decision-B claim-merge + extended `keeperSnapshot` + `:18` invariant [wave 2]
+- [ ] 344-03-PLAN.md — Interfaces: AfKing `IGame` block — flip `batchPurchase` non-payable + extend `keeperSnapshot` + add the 3 ledger decls; `IDegenerusGameModules.sol:237` comment refresh [wave 3]
+- [ ] 344-04-PLAN.md — AfKing de-custody: forward `subscribe` msg.value → `depositKeeperFunding` (A2) + `funder: src` (D-01) + funding-skip reads `keeperFunding[src]` (D-MR-01) + non-value call + PURE-DELETE custody surface + remove `Deposited` event [wave 4]
+- [ ] 344-05-PLAN.md — v48-recovery removal (D-06 kill order) with the [BLOCKING] D-344-01 actor-consequence trace + sDGNRS `receive()` GAME-only narrow + CLEANUP-02 grep-empty + `forge build` gate + HOLD (autonomous:false) [wave 5]
 **UI hint**: no
 
 ### Phase 345: GAS+CLEANUP — Further Behavior-Identical Gas Wins + Packing-Candidate Eval + Broader Dead-Code Sweep
@@ -143,7 +148,7 @@
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 343. SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Attestation | v54.0 | 5/5 | Complete    | 2026-05-30 |
-| 344. IMPL — The ONE Batched Contract Diff (ledger + de-custody + CLEANUP-02) | v54.0 | 0/? | Not started | - |
+| 344. IMPL — The ONE Batched Contract Diff (ledger + de-custody + CLEANUP-02) | v54.0 | 0/5 | Not started | - |
 | 345. GAS+CLEANUP — Further Behavior-Identical Gas Wins + Packing Eval + Broader Sweep | v54.0 | 0/? | Not started | - |
 | 346. TST — Deposit/Withdraw + Zero-Value Auto-Buy + Fresh-Rate + Solvency + Terminal-Merge + Non-Widening | v54.0 | 0/? | Not started | - |
 | 347. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS + Closure | v54.0 | 0/? | Not started | - |
