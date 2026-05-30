@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
 status: executing
-last_updated: "2026-05-30T18:00:36.895Z"
+last_updated: "2026-05-30T18:16:12.000Z"
 last_activity: 2026-05-30
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 7
-  completed_plans: 3
-  percent: 43
+  completed_plans: 4
+  percent: 57
 ---
 
 # Project State
@@ -33,11 +33,11 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 348 (spec-design-lock-freeze-proof-discharged-invariant-carry-4-p) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-05-30
 
-Progress: [████░░░░░░] 43%
+Progress: [██████░░░░] 57%
 
 ## Current Milestone Roadmap (v55.0 — phases 348-352)
 
@@ -614,6 +614,7 @@ Audit deliverables:
 | Phase 348 P01 | 18min | 1 tasks | 1 files |
 | Phase 348 P02 | 8min | 2 tasks | 3 files |
 | Phase 348 P04 | 4 min | 1 tasks | 1 files |
+| Phase 348 P03 | ~13min | 3 tasks | 2 files (348-FREEZE-PROOF.md 293 lines + 348-INVARIANT-CARRY.md 282 lines) + 1 SUMMARY (FREEZE-01/02/03 PROVEN: index-binding subsFullyProcessed guard SPECIFIED, abi.encode stamped-day determinism zero block.* entropy, FREEZE-01 SPLIT live-read=accepted-by-design known issue D-348-05; D-348-04 try/catch valve DROPPED → no-valve; 3 §7 follow-ups DISCHARGED; /contract-auditor obligation-1 PASS 5/5; human-verify APPROVED; zero contracts mutation) |
 
 ## Decisions
 
@@ -766,3 +767,6 @@ Audit deliverables:
 - [Phase 348]: 348-02: gas-scavenger run at SPEC (D-348-09, advisory/UNVALIDATED, 350 /gas-skeptic the only gate). GAS-01 (~120k box-buy: cold box-ledger SSTOREs+boxPlayers.push+enqueue → warm Sub-stamp) + GAS-02 (~3-5k staticcall→SLOAD) flagged STRUCTURAL to the relocation; GAS-03 (same-slot flush ~0.6-1.2M/50-sub) residual. GAS-03 SAFE-WITH-CONDITIONS recorded verbatim: bucket affiliate by roll-winner SAFE; do NOT batch quests.handlePurchase/handleAffiliate (non-linear completion logic)
 - [Phase 348]: D-348-01 (PLACE-01): §4 placement DECIDED = required-path (chunked advanceGame STAGE before rngGate) — a DELIBERATE USER OVERRIDE of PLAN-V55 §4/§9 (separate-legs), marked SUPERSEDED; chosen on guaranteed-every-day grounds, NOT revert-safety (the REVERT-FREE-CHAIN proof made it VIABLE)
 - [Phase 348]: 348-04: the two carried proof obligations bound to their proofs — D-348-02 (uniform-index-epoch no-interleave guard) → 348-FREEZE-PROOF.md (FREEZE-02); D-348-04 (obligation-1 sole no-brick guarantor, try/catch valve DROPPED) → 348-INVARIANT-CARRY.md; mint-gate standing (D-348-03) ACCEPTED, ZERO new gate code
+- [Phase 348]: 348-03 (FREEZE-01/02/03): freeze spine PROVEN on paper. FREEZE-02 (load-bearing): STAGE reads LR_INDEX once (uniform epoch) + binds stamp to pre-RNG index; no-interleave guard SPECIFIED = block requestLootboxRng (:1016/advance :1089) while !subsFullyProcessed (NEW flag, grep=0, must be AUTHORED at 349) OR order STAGE before any advance. FREEZE-03: seed keccak256(abi.encode(rngWord,player,day,amount)) :534, ZERO block.* entropy, seeds from STAMPED day (monotonicity necessary-but-not-sufficient → boundary-pinned stamp = structural closure). FREEZE-01 SPLIT (D-348-05): stamped (index,amount,day) proven-frozen; live-read score/baseLevel/EV-cap = WRITTEN accepted-by-design known issue, NOT red-teamed, carried to FINDINGS-v55.0 + v52 sweep (339-01 D-03 precedent); early-slot window-closure DROPPED
+- [Phase 348]: 348-03: D-348-04 try/catch DROP recorded as REVERT-02 + proof §5 obl-4 REWRITE (343 D-01 precedent) → NO valve = revert-free-by-construction (obl 1) + fail-loud-on-solvency (class B, catching would MASK SOLVENCY-01) + terminal-routing-unblocked (class C, 349 verifies STAGE can't block game-over). No-brick burden CONCENTRATES on obligation 1. §10 rule-(2)=pre-emptive skip (LOOTBOX_MIN shape, unreachable for funded subs); per-cycle eviction cap recommended DROPPED (lost revert-driven rationale); rule-(1) unfunded eviction UNAFFECTED
+- [Phase 348]: 348-03: 3 §7 follow-ups DISCHARGED — (i) cost-units mp·effectiveQty ≡ Game priceForLevel·ticketQuantity/(4·TICKET_SCALE) EXACT, with LOAD-BEARING dual-constant warning (AfKing TICKET_SCALE=400 vs Game 4×TICKET_SCALE=4×100=400; do NOT reuse one symbol both roles); (ii) stamp widths 2-slot-feasible (amount full-wei + index uint48 + day uint32); (iii) double-draw guarded (process stamps + never routes _callTicketPurchase :1303/:1327; single EV RMW at open). Light /contract-auditor obligation-1 pass = PASS 5/5, zero findings (ran INLINE, no Task/Skill tool; real auditor at 352). Human-verify checkpoint APPROVED — freeze spine + no-valve invariant set LOCKED for 349
