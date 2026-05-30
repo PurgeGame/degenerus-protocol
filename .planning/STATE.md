@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v54.0
 milestone_name: Game-Side Keeper-Funding Ledger + AfKing De-Custody
 status: executing
-last_updated: "2026-05-30T08:59:45.683Z"
-last_activity: 2026-05-30 -- 343-01 COMPLETE (call-graph attestation; 2 RESEARCH claims overturned)
+last_updated: "2026-05-30T09:00:00.000Z"
+last_activity: 2026-05-30 -- 343-03 COMPLETE (CLEANUP-01 grep-attested de-custody kill-set + GAS-01 gas-scavenger advisory inventory + packing framing; 0 contracts/ edits)
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
-  percent: 20
+  completed_plans: 3
+  percent: 60
 ---
 
 # Project State
@@ -33,9 +33,9 @@ See: .planning/PROJECT.md (Current Milestone: v54.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 343 (SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Call-Graph Attestation) — EXECUTING
-Plan: 2 of 5 (343-01 ✅ 6deda035 — call-graph attestation)
+Plan: 4 of 5 (343-01 ✅ 6deda035 — call-graph attestation · 343-02 ✅ 1a4fb46d — solvency proof + D-07 red-team · 343-03 ✅ c35aadb2+428f7581 — CLEANUP-01 kill-set + GAS-01 inventory)
 Status: Executing Phase 343
-Last activity: 2026-05-30 -- Phase 343 execution started
+Last activity: 2026-05-30 -- 343-03 COMPLETE (CLEANUP-01 grep-attested de-custody kill-set + GAS-01 gas-scavenger advisory inventory + packing framing; paper-only, 0 contracts/ edits)
 
 ## Current Milestone Roadmap (v54.0 — phases 343-347)
 
