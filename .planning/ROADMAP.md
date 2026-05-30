@@ -71,7 +71,7 @@
 - [x] 348-02-PLAN.md — `348-CODE-SIZE-PLAN.md` (`forge build --sizes` measured reclaim, running-total < 24,576) + `348-GAS-INVENTORY.md` (`/gas-scavenger` advisory + GAS-03 SAFE-WITH-CONDITIONS) [wave 1; ARCH-04]
 - [x] 348-03-PLAN.md — `348-FREEZE-PROOF.md` (FREEZE-01/02/03 proven; live-read = accepted-by-design known issue) + `348-INVARIANT-CARRY.md` (the discharged invariants + the D-348-04 try/catch DROP + the light `/contract-auditor` obligation-1 pass); `autonomous: false` [wave 2; FREEZE-01/02/03]
 - [x] 348-04-PLAN.md — `348-PLACEMENT-DECISION.md`: §4 DECIDED = required-path (D-348-01 USER override; PLAN-V55 §4/§9 superseded; two proof obligations carried) [wave 2; PLACE-01]
-- [ ] 348-05-PLAN.md — `348-IMPL-EDIT-ORDER-MAP.md`: the producer-before-consumer edit-order for the 349 diff (reclaim FIRST → storage append → GameAfkingModule → AdvanceModule STAGE → interfaces → AfKing stubs) [wave 3; ARCH-04]
+- [x] 348-05-PLAN.md — `348-IMPL-EDIT-ORDER-MAP.md`: the producer-before-consumer edit-order for the 349 diff (reclaim FIRST → storage append → GameAfkingModule → AdvanceModule STAGE → interfaces → AfKing stubs) [wave 3; ARCH-04]
 - [ ] 348-06-PLAN.md — `348-SPEC-INDEX.md`: the D-08 index + requirement/SC traceability + the OPEN-E/set-mutation carry-over confirmation + the SPEC verdict + the 349 hand-off [wave 4; FREEZE-01/02/03, PLACE-01, ARCH-04]
 **UI hint**: no
 
@@ -161,7 +161,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 348. SPEC — Design-Lock + Freeze Proof + Discharged-Invariant Carry + §4 Placement + Code-Size/GAS Inventories + Attestation | v55.0 | 4/7 | In Progress|  |
+| 348. SPEC — Design-Lock + Freeze Proof + Discharged-Invariant Carry + §4 Placement + Code-Size/GAS Inventories + Attestation | v55.0 | 5/7 | In Progress|  |
 | 349. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (code-size reclaim → fold + box redesign) | v55.0 | 0/? | Not started | - |
 | 350. GAS — Behavior-Identical No-Cost Wins (box-ledger → warm Sub-stamp + staticcall → SLOAD + same-slot flushes) | v55.0 | 0/? | Not started | - |
 | 351. TST — Freeze/Determinism + Revert-Free + EV-Cap + Two-Path + Set-Mutation + Non-Widening + Gas | v55.0 | 0/? | Not started | - |
