@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v54.0
 milestone_name: Game-Side Keeper-Funding Ledger + AfKing De-Custody
 status: executing
-last_updated: "2026-05-30T09:34:00.000Z"
-last_activity: 2026-05-30 -- 343-04 COMPLETE (BATCH-01 design-lock 343-IMPL-EDIT-ORDER-MAP.md: final signatures + keeperFunding storage shape + producer-before-consumer edit-order map + 4 corrections [D-01 funder, D-MR-01 src carve-out, payAffiliate-canonical, single-copy :18 invariant]; 0 contracts/ edits)
+last_updated: "2026-05-30T09:43:00.000Z"
+last_activity: 2026-05-30 -- 343-05 COMPLETE → Phase 343 SPEC ✅ COMPLETE (343-SPEC-INDEX.md: D-08 multi-doc index + requirement/SC traceability all COVERED + SPEC verdict PASS [design DESIGN-LOCKED, SOLVENCY-01/03 PROVEN, D-07 red-team SURVIVES 0 FINDING_CANDIDATE, GO_SWEPT locked, zero contracts/ mutation] + 344 IMPL hand-off [D-01 funder / GO_SWEPT line-1 / D-06 order / payAffiliate-canonical]; index 519f0f16)
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 4
-  percent: 80
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -32,10 +32,10 @@ See: .planning/PROJECT.md (Current Milestone: v54.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 343 (SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Call-Graph Attestation) — EXECUTING
-Plan: 5 of 5 (343-01 ✅ 6deda035 — call-graph attestation · 343-02 ✅ 1a4fb46d — solvency proof + D-07 red-team · 343-03 ✅ c35aadb2+428f7581 — CLEANUP-01 kill-set + GAS-01 inventory · 343-04 ✅ 725c23ee — BATCH-01 design-lock + IMPL edit-order map)
-Status: Executing Phase 343 (343-05 SPEC-INDEX remaining)
-Last activity: 2026-05-30 -- 343-04 COMPLETE (BATCH-01 design-lock 343-IMPL-EDIT-ORDER-MAP.md: final signatures [non-payable batchPurchase+funder debit / depositKeeperFunding / withdrawKeeperFunding+GO_SWEPT-line-1 / keeperFundingOf / extended keeperSnapshot / _claimWinningsInternal Decision-B merge] + keeperFunding storage shape [mapping, no aggregate, invariant single-site :18] + producer-before-consumer edit-order map [D-06 ordered, no intermediate broken state] + 4 corrections; paper-only, 0 contracts/ edits)
+Phase: 343 (SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Call-Graph Attestation) — ✅ COMPLETE (5/5)
+Plan: 5 of 5 COMPLETE (343-01 ✅ 6deda035 — call-graph attestation · 343-02 ✅ 1a4fb46d — solvency proof + D-07 red-team · 343-03 ✅ c35aadb2+428f7581 — CLEANUP-01 kill-set + GAS-01 inventory · 343-04 ✅ 725c23ee — BATCH-01 design-lock + IMPL edit-order map · 343-05 ✅ 519f0f16 — 343-SPEC-INDEX.md)
+Status: Phase 343 SPEC ✅ COMPLETE — SPEC verdict PASS; ready for 344 IMPL (CONTRACT BOUNDARY HARD STOP, autonomous:false at the commit gate)
+Last activity: 2026-05-30 -- 343-05 COMPLETE → Phase 343 SPEC ✅ COMPLETE (343-SPEC-INDEX.md indexes the D-08 multi-doc set [6 sibling docs] + requirement traceability [BATCH-01/SOLVENCY-01/SOLVENCY-03/CLEANUP-01/GAS-01 → doc] + ROADMAP SC1-SC5 → doc, all COVERED + SPEC verdict PASS [design DESIGN-LOCKED, SOLVENCY-01/03 PROVEN, D-07 red-team SURVIVES 0 FINDING_CANDIDATE auto-approved, GO_SWEPT withdraw-guard locked, 4 corrections + double-invariant-comment finding, zero contracts/ mutation] + 344 IMPL hand-off [author the single batched diff vs 343-IMPL-EDIT-ORDER-MAP.md; red-team verdict = solvency gate; carry D-01 funder / GO_SWEPT line-1 / D-06 kill order / payAffiliate-canonical]; paper-only, index 519f0f16)
 
 ## Current Milestone Roadmap (v54.0 — phases 343-347)
 
@@ -43,7 +43,7 @@ Shape: SPEC → IMPL → GAS+CLEANUP → TST → TERMINAL (the established v49.0
 
 | Phase | Name | Type | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 343 | SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Call-Graph Attestation | SPEC | BATCH-01 · SOLVENCY-01 · SOLVENCY-03 · CLEANUP-01 · GAS-01 | Not started |
+| 343 | SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Call-Graph Attestation | SPEC | BATCH-01 · SOLVENCY-01 · SOLVENCY-03 · CLEANUP-01 · GAS-01 | ✅ Complete (5/5; verdict PASS) |
 | 344 | IMPL — The ONE Batched Contract Diff (ledger + de-custody + CLEANUP-02) | IMPL (CONTRACT BOUNDARY) | LEDGER-01..05 · AUTOBUY-01..05 · DECUSTODY-01..04 · GAMEOVER-01/02 · CLEANUP-02 · BATCH-02 | Not started |
 | 345 | GAS+CLEANUP — Further Behavior-Identical Gas Wins + Packing Eval + Broader Dead-Code Sweep | GAS+CLEANUP (CONTRACT BOUNDARY) | GAS-02 · GAS-03 · CLEANUP-03 | Not started |
 | 346 | TST — Deposit/Withdraw + Zero-Value Auto-Buy + Fresh-Rate + Solvency Invariant + Terminal-Merge + Non-Widening | TST | TST-01..06 · SOLVENCY-02 | Not started |
@@ -416,6 +416,13 @@ Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-fo
 | audit_process | Phase 257 Task 7 manual-fallback record | resolved at v34 | The original Phase 257 Task 7 adversarial validation fell back to executor-manual when `/contract-auditor` and `/zero-day-hunter` skills failed to spawn. RESOLVED at v34.0 Phase 262 Task 6 — both skills successfully spawned in parallel with real captured output (see `.planning/milestones/v34.0-phases/262-delta-audit-findings-consolidation/262-01-ADVERSARIAL-LOG.md`). The C4A-warden-contest independence-claim hardening is satisfied at v34 closure HEAD `6b63f6d4`. Concurrent v33.0 close concern (queue-branch redirect bug) was already structurally closed in Phase 258 FIX-01 + FIX-02 prior to the v34 re-run. |
 
 ## Accumulated Context
+
+### Phase 343 — SPEC Design-Lock + Solvency Proof + Inventories (COMPLETE 2026-05-30)
+
+- **Phase 343 SPEC ✅ COMPLETE (5/5) — verdict PASS.** Paper-only design-lock for the v54 Game-side `keeperFunding` ledger + AfKing de-custody (PLAN-V54 Decisions A2 + B) vs the v53 HEAD `83a84431`; ZERO `contracts/*.sol` mutation across all 5 plans. Delivered as the D-08 multi-doc SPEC set (v50/Phase-334 precedent): 6 discrete docs + `343-SPEC-INDEX.md` (343-05, `519f0f16`).
+- **SPEC verdict (343-05 index):** design DESIGN-LOCKED + reconciled (final signatures + `keeperFunding` storage shape [no aggregate, rides in `claimablePool`] + producer-before-consumer edit-order map); **SOLVENCY-01** (all 5 free-ETH reservation sites reserve `claimablePool` inclusive of the keeper total, zero edits — `distributeYieldSurplus` structurally immune) + **SOLVENCY-03** (sDGNRS valuation unchanged + correct, keeper ETH invisible) **PROVEN**; the **D-07 focused red-team SURVIVES with ZERO `FINDING_CANDIDATE`** (auto-approved per the operator's fully-autonomous direction — no unresolved solvency hole); the **GO_SWEPT withdraw-guard LOCKED** (T-343-04, line-1 + checked-math); the 4 RESEARCH corrections + the double-invariant-comment finding recorded.
+- **344 IMPL hand-off (carried by the index):** author the single batched `contracts/*.sol` diff against `343-IMPL-EDIT-ORDER-MAP.md` (producer-before-consumer, D-06 order), with the `343-SOLVENCY-REDTEAM.md` verdict as the solvency gate. The 4 must-honor items: **D-01** debit `keeperFunding[b.funder]` (= src), NOT `b.player` (the AUTOBUY-02 / PLAN-V54 §4 snippet is a live trap); the **GO_SWEPT guard as line 1** of `withdrawKeeperFunding` + checked-math `claimablePool -= amount`; the **D-06 kill-set order** (remove the v48 recovery-leg callers before/with deleting `AfKing.poolOf`/`withdraw`); **`payAffiliate` is the canonical symbol** (`DegenerusAffiliate.sol:388`), do NOT mis-rename to the unrelated `handleAffiliate` quest fn. Re-run every grep if the subject HEAD moves before 344 (the anchors are point-in-time snapshots of `83a84431`).
+- 343-05 itself = ZERO deviations; plan executed exactly as written; automated verify PASS; self-check PASSED.
 
 ### Roadmap Evolution
 

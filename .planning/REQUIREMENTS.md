@@ -34,17 +34,17 @@
 - [ ] **GAMEOVER-02**: The final sweep (`GameOverModule:215`, 30 days post-end) sweeps the keeper reservation with `claimablePool` (same forfeiture lifecycle — keeperFunding is claimable-equivalent post-gameOver). Both withdraw/claim paths stay open until that sweep.
 
 ### Solvency Spine (SOLVENCY)
-- [ ] **SOLVENCY-01**: PROVEN (not assumed) at SPEC: because the keeper total rides inside `claimablePool`, every "free ETH = totalBal − reserved" site already reserves it with NO change — `distributeYieldSurplus` (`:691-707`, the prior-omission site [[project_yield_surplus_omits_pending_pools]], now structurally immune), the gameOver drain (`:98-99/:164`), and `adminStakeEthForStEth` (`:2113-2123`, keeper ETH never staked-away). The SPEC attests each reserves `claimablePool` (inclusive of keeper) unchanged.
+- [x] **SOLVENCY-01**: PROVEN (not assumed) at SPEC: because the keeper total rides inside `claimablePool`, every "free ETH = totalBal − reserved" site already reserves it with NO change — `distributeYieldSurplus` (`:691-707`, the prior-omission site [[project_yield_surplus_omits_pending_pools]], now structurally immune), the gameOver drain (`:98-99/:164`), and `adminStakeEthForStEth` (`:2113-2123`, keeper ETH never staked-away). The SPEC attests each reserves `claimablePool` (inclusive of keeper) unchanged.
 - [ ] **SOLVENCY-02**: The master invariant `balance + steth.balanceOf(this) >= claimablePool` (with `claimablePool` now including the keeper total) holds across the full lifecycle — deposit → autobuy → withdraw → `distributeYieldSurplus` → gameOver-drain → claim → final-sweep — proven by test.
-- [ ] **SOLVENCY-03**: The sDGNRS redemption valuation (`StakedStonk:612/772/861`, `ethBal + stethBal + claimableEth − pendingRedemptionEthValue`) is UNCHANGED and CORRECT — keeper ETH lives in the Game's balance (not sDGNRS's), invisible to sDGNRS's own-balance valuation (same as the external AfKing pool today); attested at SPEC.
+- [x] **SOLVENCY-03**: The sDGNRS redemption valuation (`StakedStonk:612/772/861`, `ethBal + stethBal + claimableEth − pendingRedemptionEthValue`) is UNCHANGED and CORRECT — keeper ETH lives in the Game's balance (not sDGNRS's), invisible to sDGNRS's own-balance valuation (same as the external AfKing pool today); attested at SPEC.
 
 ### Dead-Code Cleanup (CLEANUP)
-- [ ] **CLEANUP-01**: SPEC produces a dead-code inventory of everything the de-custody orphans (the AfKing ETH entrypoints / `_poolOf`, the v48 recovery, any now-unused helpers / events / errors / constants, the `IGame.batchPurchase` payable ABI, stale `_poolOf`-referencing comments) — each with a grep-attested kill-set vs the v53 HEAD.
+- [x] **CLEANUP-01**: SPEC produces a dead-code inventory of everything the de-custody orphans (the AfKing ETH entrypoints / `_poolOf`, the v48 recovery, any now-unused helpers / events / errors / constants, the `IGame.batchPurchase` payable ABI, stale `_poolOf`-referencing comments) — each with a grep-attested kill-set vs the v53 HEAD.
 - [ ] **CLEANUP-02**: Every item in the CLEANUP-01 inventory is removed in the batched diff with the kill-set grep-confirmed empty; no orphaned references remain (forge build clean).
 - [ ] **CLEANUP-03**: A broader unused-code audit across the keeper/funding blast radius + adjacent surface (a gas-scavenger dead-code pass beyond the de-custody orphans) — anything found is removed (gas-skeptic-validated) or documented NEGATIVE with reasoning.
 
 ### Further Gas Optimization (GAS)
-- [ ] **GAS-01**: SPEC produces a gas-opportunity inventory for the keeper/funding blast radius (beyond the ~9k/buy already saved by removing the per-batch value call), each tagged behavior-identical / same-results.
+- [x] **GAS-01**: SPEC produces a gas-opportunity inventory for the keeper/funding blast radius (beyond the ~9k/buy already saved by removing the per-batch value call), each tagged behavior-identical / same-results.
 - [ ] **GAS-02**: The validated behavior-identical, no-cost gas wins from GAS-01 (gas-scavenger → gas-skeptic, under the security-over-gas floor) are applied; each is gas-only and proven same-results in TST. Wins that trade an invariant or aren't real are REJECTED with reasoning (do not re-litigate).
 - [ ] **GAS-03**: The `claimableWinnings` packing candidate (`{uint128 normal, uint128 keeper}` instead of a separate `keeperFunding` mapping) is EVALUATED by gas-skeptic against the security floor — landing as an ISOLATED change only if the slot/gas saving survives the blast-radius cost on the central accounting variable (~15+ access sites); otherwise documented NEGATIVE (PLAN-V54 §2 deferral). Default expectation: keep the separate mapping (hot-path-neutral; large spine refactor).
 
@@ -57,7 +57,7 @@
 - [ ] **TST-06**: NON-WIDENING regression vs the v53 baseline — the reconceived keeper suite (`KeeperNonBrick`, `KeeperBatchAffiliateDeltaAudit`, the 3 `test/gas/*`) compiles + passes against the ledger model; net-zero new regression (any pre-existing reds enumerated BY NAME); no test asserts strict `claimablePool == Σ claimableWinnings` across a keeper op. Baseline → `REGRESSION-BASELINE-v54.md`.
 
 ### Cross-Cutting — SPEC + IMPL + TERMINAL (BATCH)
-- [ ] **BATCH-01**: SPEC design-lock (343) — re-attest the PLAN-V54 design vs the v53 HEAD (every `file:line`); lock the final `batchPurchase` / `purchaseWith` / extended `keeperSnapshot` signatures + the `keeperFunding` storage shape + the deposit/withdraw/claim-merge wiring; produce the SOLVENCY-01/03 proofs + the CLEANUP-01 + GAS-01 inventories; confirm the OPEN-E carry-over. ZERO `contracts/*.sol` mutation at SPEC.
+- [x] **BATCH-01**: SPEC design-lock (343) — re-attest the PLAN-V54 design vs the v53 HEAD (every `file:line`); lock the final `batchPurchase` / `purchaseWith` / extended `keeperSnapshot` signatures + the `keeperFunding` storage shape + the deposit/withdraw/claim-merge wiring; produce the SOLVENCY-01/03 proofs + the CLEANUP-01 + GAS-01 inventories; confirm the OPEN-E carry-over. ZERO `contracts/*.sol` mutation at SPEC.
 - [ ] **BATCH-02**: IMPL (344) — the ONE batched USER-APPROVED `contracts/*.sol` diff (ledger + de-custody + the CLEANUP-02 orphan removal); HARD STOP at the contract-commit boundary (applied + locally compiled, never committed without explicit user hand-review); forge build clean.
 - [ ] **BATCH-03**: TERMINAL (347) — delta-audit (every v54 surface NON-WIDENING vs v53; the master invariant + OPEN-E re-attested) + the 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT per `D-271-ADVERSARIAL-02`) focused on the funding-ledger + de-custody surface + `audit/FINDINGS-v54.0.md` (chmod 444) + atomic 5-doc closure flip. **Runs IN-MILESTONE (NOT deferred to v52, unlike v50.0/v51.0)** — the solvency-spine touch makes deferral unacceptable.
 
@@ -95,13 +95,13 @@
 | DECUSTODY-04 | 344 IMPL | Pending |
 | GAMEOVER-01 | 344 IMPL | Pending |
 | GAMEOVER-02 | 344 IMPL | Pending |
-| SOLVENCY-01 | 343 SPEC | Pending |
+| SOLVENCY-01 | 343 SPEC | ✅ Complete |
 | SOLVENCY-02 | 346 TST | Pending |
-| SOLVENCY-03 | 343 SPEC | Pending |
-| CLEANUP-01 | 343 SPEC | Pending |
+| SOLVENCY-03 | 343 SPEC | ✅ Complete |
+| CLEANUP-01 | 343 SPEC | ✅ Complete |
 | CLEANUP-02 | 344 IMPL | Pending |
 | CLEANUP-03 | 345 GAS+CLEANUP | Pending |
-| GAS-01 | 343 SPEC | Pending |
+| GAS-01 | 343 SPEC | ✅ Complete |
 | GAS-02 | 345 GAS+CLEANUP | Pending |
 | GAS-03 | 345 GAS+CLEANUP | Pending |
 | TST-01 | 346 TST | Pending |
@@ -110,6 +110,6 @@
 | TST-04 | 346 TST | Pending |
 | TST-05 | 346 TST | Pending |
 | TST-06 | 346 TST | Pending |
-| BATCH-01 | 343 SPEC | Pending |
+| BATCH-01 | 343 SPEC | ✅ Complete |
 | BATCH-02 | 344 IMPL | Pending |
 | BATCH-03 | 347 TERMINAL | Pending |
