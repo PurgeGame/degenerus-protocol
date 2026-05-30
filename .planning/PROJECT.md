@@ -29,7 +29,34 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 **Contract HEAD anchor (v40.0 closure):** `cd549499` (carried forward as deeper audit-baseline NON-WIDENING anchor)
 
-## Current Milestone: v51.0 claimBingo — Color-Completion Claim (STARTED 2026-05-28)
+## Current Milestone: v54.0 Game-Side Keeper-Funding Ledger + AfKing De-Custody + Dead-Code/Gas Sweep (STARTED 2026-05-30)
+
+**Goal:** Move AfKing subscriber ETH out of AfKing's `_poolOf` and into DegenerusGame as a per-player `keeperFunding` ledger whose aggregate rides inside the existing `claimablePool` (no new reserved aggregate), so keeper auto-buys become pure in-contract reclassification — `batchPurchase` goes non-payable, no value is sent AfKing→Game per buy — structurally retiring the v52 keeper-finding class at its source. Concurrently sweep the now-dead custody code and run a further gas-optimization pass.
+
+**Audit baseline → subject:** v53 HEAD `83a84431` (the atomic `BatchBuy[]` batchPurchase) → v54.0 closure HEAD. Subject = the single batched contract diff for the ledger + de-custody + cleanup. **Supersedes** v53's cross-contract value-plumbing (`batchPurchase{value}` + `purchaseWith(ethValue)` funded from AfKing `_poolOf`); v53's atomic `BatchBuy[]` shape is KEPT, only the funding location changes. Every cited `file:line` re-attested vs the v53 HEAD before any patch. Funding touches the solvency spine (`claimablePool`) → the master invariant `balance + steth.balanceOf(this) >= claimablePool` is the load-bearing concern, re-proven not assumed. Design-locked in `.planning/PLAN-V54-KEEPER-FUNDING-GAME-LEDGER.md`.
+
+**Target work (one coupled bundle + a gas pass, all v54.0):**
+
+1. **Game-side keeperFunding ledger** (FEATURE — solvency-touching) — new per-player `keeperFunding[player]` mapping on the Game, segregated from `claimableWinnings`; its aggregate rides inside `claimablePool` (every mutation moves `claimablePool` in tandem → no new reserved total). `depositKeeperFunding{value}(player)` (credits both) + un-brickable CEI `withdrawKeeperFunding(amount)` (debits both, available always). Invariant comment updated to `claimablePool == Σ claimableWinnings + Σ keeperFunding`.
+2. **Non-payable batched auto-buy** (HOT PATH) — `batchPurchase(BatchBuy[])` goes non-payable; per slice it debits `keeperFunding[player]` + `claimablePool` by `ethValue`, then delegatecalls `purchaseWith(…, ethValue)` (ETH already in the Game's balance). Keeper buys keep the **fresh** affiliate rate (no recycled-claimable mislabel). Atomic non-brick preserved (advanceGame independence). AfKing's funding-skip reads `keeperFunding[src]` via an extended `keeperSnapshot` (one staticcall/player).
+3. **AfKing de-custody + dead-code cleanup** (CLEANUP) — delete `_poolOf` + `receive`/`deposit`/`depositFor`/`withdraw`; `subscribe` stays payable and FORWARDS `msg.value` → `game.depositKeeperFunding` (Decision A2; AfKing never retains ETH). OPEN-E `fundingSource`/consent gate unchanged. Remove the now-moot v48 VAULT/sDGNRS stuck-pool recovery. Sweep the broader contract surface for any other unused code surfaced by the de-custody.
+4. **Unified terminal claim** (GAMEOVER — Decision B) — post-gameOver, `claimWinnings` also pays the caller's `keeperFunding` (lazy per-player merge in `_claimWinningsInternal`); the reservation is swept with `claimablePool` at the final sweep; `withdrawKeeperFunding` remains available always.
+5. **Further gas-optimization pass** (GAS) — beyond the ~9k/buy already saved by removing the per-batch value call, hunt additional behavior-identical no-cost wins across the keeper/funding blast radius (gas-scavenger → gas-skeptic), under the security-over-gas floor. Each gas-only, proven same-results in TST.
+
+**Key context / posture:**
+- The contract changes (1–4) + the cleanup ship as **ONE batched USER-APPROVED `contracts/*.sol` diff** (established v44–v53 pattern; HARD STOP at the contract-commit boundary — applied + locally compiled/tested, NEVER committed without explicit user hand-review). Tests + planning + docs AGENT-committable; `ContractAddresses.sol` freely modifiable (`feedback_batch_contract_approval` / `feedback_never_preapprove_contracts` / `feedback_no_contract_commits`).
+- **Security / solvency floor over gas** (`feedback_security_over_gas`). The funding bucket rides inside `claimablePool` → it inherits the already-correct solvency wiring (yield-surplus / gameOver-drain / stETH-stake) for free; the prior-omission class (`project_yield_surplus_omits_pending_pools`) is structurally impossible. The master invariant is re-proven across deposit → autobuy → withdraw → yield-surplus → gameOver.
+- **Why a separate mapping (not a full merge into `claimableWinnings`):** a claimable-funded buy is economically identical (`prizeContribution = cost` for all payKinds), but the affiliate BURNIE reward tiers fresh (20-25%) vs recycled (5%) — keeper deposits are fresh capital and must stay labeled fresh, so the separate `keeperFunding` bucket spent as fresh ETH preserves the honest labeling with NO affiliate-bonus rework (PLAN-V54 §10). Generalized operator-spend of `claimableWinnings` is OUT of scope.
+- Pre-launch redeploy-fresh — storage break fine, no migration (no live AfKing pools).
+- **Phase numbering continues from 342 → v54.0 starts at Phase 343.** Shape (roadmapper finalizes): 343 SPEC (re-attest the design-lock + the solvency proof + the dead-code/gas-opportunity inventory) → 344 IMPL (the ONE batched diff: ledger + de-custody + cleanup) → 345 GAS+CLEANUP (further behavior-identical gas wins + final dead-code sweep) → 346 TST (keeper suite reconceived + deposit/withdraw/solvency/fresh-rate coverage + NON-WIDENING regression) → 347 TERMINAL (delta-audit + adversarial sweep + closure).
+
+**Out of scope for v54.0:**
+- Generalized "any operator-approved party may spend my `claimableWinnings`" (larger blast radius; separate optional feature — PLAN-V54 §10).
+- The v52 consolidated cross-model audit (separate track; v54's surface folds into it).
+- Off-chain indexer / webpage (separate frontend track).
+- Any contract surface beyond the keeper-funding ledger, AfKing de-custody, and the gas/cleanup sweep.
+
+## Completed Milestone: v51.0 claimBingo — Color-Completion Claim (CLOSED 2026-05-28 — minimal close at IMPL HEAD `c3e9d907`; 341 TST + 342 TERMINAL folded → the v52 consolidated audit. Note: v53 — AfKing keeper auto-buy mode/claimable fix `83a84431` — landed ad-hoc afterward and is the v54 baseline, superseded by this milestone.)
 
 **Goal:** Add a `claimBingo(level, symbol, slots[8])` entrypoint that rewards a player who proves they hold one ticket entry in each of the 8 color tiers of a single symbol on a given level — paying a draw from the sDGNRS `Pool.Reward` plus BURNIE flip credit across three first-systemwide reward tiers — and convert `Pool.Reward` from a one-shot final-day jackpot payout into a continuous, game-long distribution surface. Co-requisite: double the Reward pool (sDGNRS constructor rebalance) and delete the jackpot final-day `Pool.Reward` branch it replaces.
 
