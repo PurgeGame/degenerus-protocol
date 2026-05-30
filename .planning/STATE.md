@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v54.0
 milestone_name: Game-Side Keeper-Funding Ledger + AfKing De-Custody
 status: ready_to_plan
-last_updated: 2026-05-30T09:49:47.512Z
-last_activity: 2026-05-30 -- 343-05 COMPLETE → Phase 343 SPEC ✅ COMPLETE (343-SPEC-INDEX.md: D-08 multi-doc index + requirement/SC traceability all COVERED + SPEC verdict PASS [design DESIGN-LOCKED, SOLVENCY-01/03 PROVEN, D-07 red-team SURVIVES 0 FINDING_CANDIDATE, GO_SWEPT locked, zero contracts/ mutation] + 344 IMPL hand-off [D-01 funder / GO_SWEPT line-1 / D-06 order / payAffiliate-canonical]; index 519f0f16)
+last_updated: "2026-05-30T10:08:15.808Z"
+last_activity: 2026-05-30 -- 344 CONTEXT gathered (discuss-phase): Cleanup shape + Planning discussed; Verify-depth + Events locked to defaults. New IMPL-exec decisions D-344-01..08 (pure-removal+traced-equivalence recovery legs, pure-delete-no-comment, --skip-research plan-direct, executor-first re-grep, ~5 plans/edit-order-step→1 approval, build-only HOLD, KeeperFunded/KeeperWithdrew + Deposited removed) on top of the LOCKED 343 SPEC carry-forwards (D-01 funder trap / GO_SWEPT line-1 / D-06 order / payAffiliate / D-MR-01). Ready to plan. ctx a7f50f03
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 5
   completed_plans: 5
   percent: 20
-stopped_at: Phase 343 complete (5/5) — ready to discuss Phase 344
+stopped_at: Phase 344 context gathered — ready to plan (/gsd:plan-phase 344 --skip-research)
 ---
 
 # Project State
