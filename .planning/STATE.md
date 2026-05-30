@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v54.0
 milestone_name: Game-Side Keeper-Funding Ledger + AfKing De-Custody
-status: executing
-last_updated: "2026-05-30T10:36:13.468Z"
-last_activity: 2026-05-30 -- Phase 344 planning complete
+status: superseded
+last_updated: "2026-05-30"
+last_activity: 2026-05-30 -- v54.0 CLOSED-as-SUPERSEDED (343 SPEC + 344 IMPL shipped @ 20ca1f79, not pushed; 345/346/347 DROPPED → folded into v55); next = v55 AfKing-in-Game (discharging REVERT-FREE-CHAIN proof before formalizing the milestone)
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 10
-  completed_plans: 5
-  percent: 20
+  completed_plans: 10
+  percent: 100
+  note: "v54 closed at REDUCED scope. 343 SPEC + 344 IMPL complete (344 executed via consolidated 344-EXECUTION-SUMMARY.md, no per-plan SUMMARYs). 345 GAS / 346 TST / 347 TERMINAL DROPPED — superseded by v55 (AfKing-in-Game redesign rips out the de-custody ledger machinery those phases would have gas-swept/tested/audited). No ship signal emitted (v54 never audited via 347). HEAD 20ca1f79 = the v55 baseline."
 ---
 
 # Project State
@@ -20,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v54.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v54.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 344 — impl — the one batched contract diff (ledger + de custody + cleanup 02 orphan removal)
+**Current focus:** v54.0 CLOSED-as-superseded (343 SPEC + 344 IMPL shipped @ `20ca1f79`, not pushed; 345/346/347 dropped → folded into v55). **Active work = v55 AfKing-in-Game redesign** — discharging the REVERT-FREE-CHAIN proof (the §10 linchpin that decides §4 placement) BEFORE formalizing the milestone via `/gsd-new-milestone`. Design-lock draft: `.planning/PLAN-V55-AFKING-IN-GAME-REDESIGN.md` (canonical design = §10, which supersedes the §0–§3 stamp framing).
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,22 +33,24 @@ See: .planning/PROJECT.md (Current Milestone: v54.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 344
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-30 -- Phase 344 planning complete
+Milestone: v54.0 — **CLOSED (superseded by v55)** at reduced scope
+Phase: 344 IMPL complete (committed `20ca1f79`, not pushed); 345 GAS / 346 TST / 347 TERMINAL **DROPPED → v55**
+Status: v55 design-lock in progress — discharging the REVERT-FREE-CHAIN proof (pre-formalization)
+Last activity: 2026-05-30 -- v54 closed-as-superseded; v55 revert-free-chain proof underway
 
-## Current Milestone Roadmap (v54.0 — phases 343-347)
+## Current Milestone Roadmap (v54.0 — phases 343-347) — CLOSED (superseded by v55)
+
+> **v54.0 CLOSED-as-superseded 2026-05-30.** 343 SPEC + 344 IMPL shipped (HEAD `20ca1f79`, not pushed). 345/346/347 DROPPED — the v55 AfKing-in-Game redesign relocates subscriber state into Game storage and rips out most of v54's cross-contract de-custody ledger machinery, so gas-sweeping (345), testing (346), and auditing (347) that soon-to-be-replaced surface is wasted. No `MILESTONE_V54_AT_HEAD` ship signal (the diff was never audited via 347). `20ca1f79` is the v55 baseline; v55's own TST/TERMINAL will cover the net surface.
 
 Shape: SPEC → IMPL → GAS+CLEANUP → TST → TERMINAL (the established v49.0 audit-milestone shape WITH a dedicated GAS phase). **TWO contract-boundary HARD STOPs** — 344 IMPL (the ledger + de-custody + CLEANUP-02 diff) + 345 GAS+CLEANUP (the further behavior-identical gas wins + packing eval + broader dead-code sweep). **FULL close — the internal 3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v54.0.md` run IN-MILESTONE at TERMINAL (347), NOT deferred** (the solvency-spine touch makes deferral unacceptable, unlike v50.0/v51.0). Baseline = v53 HEAD `83a84431` (the atomic `BatchBuy[]` batchPurchase; supersedes v53's cross-contract value-plumbing). Design-locked in `.planning/PLAN-V54-KEEPER-FUNDING-GAME-LEDGER.md` (Decisions A2 + B).
 
 | Phase | Name | Type | Requirements | Status |
 |-------|------|------|--------------|--------|
 | 343 | SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Call-Graph Attestation | SPEC | BATCH-01 · SOLVENCY-01 · SOLVENCY-03 · CLEANUP-01 · GAS-01 | ✅ Complete (5/5; verdict PASS) |
-| 344 | IMPL — The ONE Batched Contract Diff (ledger + de-custody + CLEANUP-02) | IMPL (CONTRACT BOUNDARY) | LEDGER-01..05 · AUTOBUY-01..05 · DECUSTODY-01..04 · GAMEOVER-01/02 · CLEANUP-02 · BATCH-02 | Not started |
-| 345 | GAS+CLEANUP — Further Behavior-Identical Gas Wins + Packing Eval + Broader Dead-Code Sweep | GAS+CLEANUP (CONTRACT BOUNDARY) | GAS-02 · GAS-03 · CLEANUP-03 | Not started |
-| 346 | TST — Deposit/Withdraw + Zero-Value Auto-Buy + Fresh-Rate + Solvency Invariant + Terminal-Merge + Non-Widening | TST | TST-01..06 · SOLVENCY-02 | Not started |
-| 347 | TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v54.0 + Closure Flip | TERMINAL (FULL close — sweep IN-MILESTONE) | BATCH-03 | Not started |
+| 344 | IMPL — The ONE Batched Contract Diff (ledger + de-custody + CLEANUP-02) | IMPL (CONTRACT BOUNDARY) | LEDGER-01..05 · AUTOBUY-01..05 · DECUSTODY-01..04 · GAMEOVER-01/02 · CLEANUP-02 · BATCH-02 | ✅ Complete (executed + committed `d728263e`/`6d6aa424`/`20ca1f79`; `forge build` clean; consolidated `344-EXECUTION-SUMMARY.md`; not pushed) |
+| 345 | GAS+CLEANUP — Further Behavior-Identical Gas Wins + Packing Eval + Broader Dead-Code Sweep | GAS+CLEANUP (CONTRACT BOUNDARY) | GAS-02 · GAS-03 · CLEANUP-03 | ⊘ DROPPED — superseded by v55 (gas levers fold into v55's GAS phase on the game-resident surface) |
+| 346 | TST — Deposit/Withdraw + Zero-Value Auto-Buy + Fresh-Rate + Solvency Invariant + Terminal-Merge + Non-Widening | TST | TST-01..06 · SOLVENCY-02 | ⊘ DROPPED — superseded by v55 (v55 TST covers the net surface) |
+| 347 | TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v54.0 + Closure Flip | TERMINAL (FULL close — sweep IN-MILESTONE) | BATCH-03 | ⊘ DROPPED — superseded by v55 (v55 TERMINAL audits the net surface; no v54 ship signal) |
 
 **Coverage:** 34/34 v54.0 requirements mapped (343: 5 · 344: 18 · 345: 3 · 346: 7 · 347: 1); 0 orphaned, 0 duplicated. Per-category: LEDGER 5 · AUTOBUY 5 · DECUSTODY 4 · GAMEOVER 2 · SOLVENCY 3 · CLEANUP 3 · GAS 3 · TST 6 · BATCH 3. The internal sweep + delta-audit + `audit/FINDINGS-v54.0.md` run IN-MILESTONE at 347 (NOT deferred). Full detail in `.planning/ROADMAP.md`; per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
 
