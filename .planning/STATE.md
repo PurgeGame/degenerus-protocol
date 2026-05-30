@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
-status: executing
-last_updated: "2026-05-30T18:43:40.000Z"
+status: verifying
+last_updated: "2026-05-30T18:52:14.679Z"
 last_activity: 2026-05-30
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 7
-  completed_plans: 5
-  percent: 71
+  completed_plans: 6
+  percent: 86
 ---
 
 # Project State
@@ -32,12 +32,12 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 348 (spec-design-lock-freeze-proof-discharged-invariant-carry-4-p) — EXECUTING
+Phase: 348 (spec-design-lock-freeze-proof-discharged-invariant-carry-4-p) — SPEC COMPLETE (authoring); ready for verification
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — all 6 plans authored; the D-08 SPEC set is closed (348-SPEC-INDEX.md, verdict PASS); next = verify → 349 IMPL
 Last activity: 2026-05-30
 
-Progress: [███████░░░] 71%
+Progress: [█████████░] 86%
 
 ## Current Milestone Roadmap (v55.0 — phases 348-352)
 
@@ -616,6 +616,7 @@ Audit deliverables:
 | Phase 348 P04 | 4 min | 1 tasks | 1 files |
 | Phase 348 P03 | ~13min | 3 tasks | 2 files (348-FREEZE-PROOF.md 293 lines + 348-INVARIANT-CARRY.md 282 lines) + 1 SUMMARY (FREEZE-01/02/03 PROVEN: index-binding subsFullyProcessed guard SPECIFIED, abi.encode stamped-day determinism zero block.* entropy, FREEZE-01 SPLIT live-read=accepted-by-design known issue D-348-05; D-348-04 try/catch valve DROPPED → no-valve; 3 §7 follow-ups DISCHARGED; /contract-auditor obligation-1 PASS 5/5; human-verify APPROVED; zero contracts mutation) |
 | Phase 348 P05 | 8 | 1 tasks | 1 files |
+| Phase 348 P06 | 3m49s | 1 tasks | 1 files |
 
 ## Decisions
 
@@ -772,3 +773,5 @@ Audit deliverables:
 - [Phase 348]: 348-03: D-348-04 try/catch DROP recorded as REVERT-02 + proof §5 obl-4 REWRITE (343 D-01 precedent) → NO valve = revert-free-by-construction (obl 1) + fail-loud-on-solvency (class B, catching would MASK SOLVENCY-01) + terminal-routing-unblocked (class C, 349 verifies STAGE can't block game-over). No-brick burden CONCENTRATES on obligation 1. §10 rule-(2)=pre-emptive skip (LOOTBOX_MIN shape, unreachable for funded subs); per-cycle eviction cap recommended DROPPED (lost revert-driven rationale); rule-(1) unfunded eviction UNAFFECTED
 - [Phase 348]: 348-03: 3 §7 follow-ups DISCHARGED — (i) cost-units mp·effectiveQty ≡ Game priceForLevel·ticketQuantity/(4·TICKET_SCALE) EXACT, with LOAD-BEARING dual-constant warning (AfKing TICKET_SCALE=400 vs Game 4×TICKET_SCALE=4×100=400; do NOT reuse one symbol both roles); (ii) stamp widths 2-slot-feasible (amount full-wei + index uint48 + day uint32); (iii) double-draw guarded (process stamps + never routes _callTicketPurchase :1303/:1327; single EV RMW at open). Light /contract-auditor obligation-1 pass = PASS 5/5, zero findings (ran INLINE, no Task/Skill tool; real auditor at 352). Human-verify checkpoint APPROVED — freeze spine + no-valve invariant set LOCKED for 349
 - [Phase 348]: D-348-07 (USER-approved 2026-05-30, amendment to the locked freeze design): FREEZE score+baseLevel into the afking per-sub box-stamp instead of live-read at open. Stamp grows (index,amount,day) → (index,amount,day,scorePlus1,baseLevelPlus1) = +40 bits (uint16+uint24) into slot-2's ~90 spare bits = SAME single SSTORE, no 3rd slot, still 2-slot-feasible. Mirrors the human deposit-time freeze (lootboxPurchasePacked unpack scorePlus1/adj/baseLevelPlus1 @LB:529-530); afking stamp omits `adj` (open passes full amount to _applyEvMultiplierWithCap). SUPERSEDES D-348-05 for score+baseLevel (live-read → proven-frozen, fold into FREEZE-01a completeness set); FREEZE-01 now PROVEN (was SPLIT). RESIDUAL live-read narrows to the EV-cap RMW only (lootboxEvBenefitUsedByLevel[player][level+1], shared per-(player,level) cumulative accumulator → can't be per-box-stamped) = BENIGN monotonic down-clamp (hard ≤10 ETH, no profitable timing) → noted not findings-grade (was accepted-known-issue). SEED UNCHANGED — FREEZE-03 untouched (score/baseLevel enter AFTER the seed, do NOT feed keccak256(abi.encode(rngWord,player,day,amount)) :534); freezing them completes FREEZE-01's frozen set, does NOT move them into the seed. GAS WIN at open (replaces ~953B live playerActivityScore recompute with stamp SLOAD). Amended 348-FREEZE-PROOF.md + 348-INVARIANT-CARRY.md + 348-IMPL-EDIT-ORDER-MAP.md (349 directive: PROCESS stamps scorePlus1/baseLevelPlus1, OPEN reads from stamp + feeds frozen evMultiplierBps to the still-live cap RMW). NOT a contract change / NOT a new plan; no SUMMARY; FREEZE-01/02/03 stay Pending (phase-close attestation)
+- [Phase 348]: 348-06: 348-SPEC-INDEX.md authored (D-08 closure index, the 343-05 analog) — all 5 phase reqs (FREEZE-01/02/03, PLACE-01, ARCH-04) + all 5 ROADMAP SCs mapped COVERED; SPEC verdict PASS; CONSENT carry-over (OPEN-E/AFSUB/set-mutation) confirmed against re-pinned source; single 349 hand-off = 348-IMPL-EDIT-ORDER-MAP.md
+- [Phase 348]: 348-06: index reflects D-348-07 FINAL state throughout — FREEZE-01 PROVEN (not split), 5-field stamp (index,amount,day,scorePlus1,baseLevelPlus1), EV-cap-only benign residual; pre-D-348-07 '-EV live-read' framing in ROADMAP SC1 + REQUIREMENTS FREEZE-01 recorded SUPERSEDED at index level (343-05 discipline)

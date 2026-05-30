@@ -23,9 +23,9 @@
 - [ ] **BOX-05**: Humans keep the existing `lootboxEth`/`boxPlayers` open route unchanged; the two open routes share no mutable-state hazard.
 
 ### FREEZE — RNG / determinism security spine
-- [ ] **FREEZE-01**: Freeze-completeness — the stamp captures ALL outcome-determining state at process; the open re-derives nothing manipulable from mutable per-player state (the §10 live score/base-level/EV-cap reads are admitted only because in-window manipulation is −EV; documented + attested).
-- [ ] **FREEZE-02**: Index-binding — the stamp binds to the pre-RNG `LR_INDEX` (read once at pass start); the process-pass MUST NOT straddle a mid-day `requestLootboxRng` index advance (`AdvanceModule.sol:1016`).
-- [ ] **FREEZE-03**: Determinism — the box seed `keccak256(rngWord, player, day, amount)` uses the STAMPED buy-day (never open-time `_simulatedDayIndex()`), and carries no `block.timestamp/number/prevrandao/coinbase/blockhash` in the draw.
+- [x] **FREEZE-01**: Freeze-completeness — the stamp captures ALL outcome-determining state at process; the open re-derives nothing manipulable from mutable per-player state (the §10 live score/base-level/EV-cap reads are admitted only because in-window manipulation is −EV; documented + attested).
+- [x] **FREEZE-02**: Index-binding — the stamp binds to the pre-RNG `LR_INDEX` (read once at pass start); the process-pass MUST NOT straddle a mid-day `requestLootboxRng` index advance (`AdvanceModule.sol:1016`).
+- [x] **FREEZE-03**: Determinism — the box seed `keccak256(rngWord, player, day, amount)` uses the STAMPED buy-day (never open-time `_simulatedDayIndex()`), and carries no `block.timestamp/number/prevrandao/coinbase/blockhash` in the draw.
 
 ### REVERT — Revert-free-chain (discharged invariant, carried into IMPL)
 - [ ] **REVERT-01**: The process-pass slice construction preserves `_resolveBuy`'s validation invariants VERBATIM — `ev = cost − claimableUse` + enum payKind, the 1-wei claimable sentinel, the `LOOTBOX_MIN` transient skip, `quantity ≥ 1` — so the funded buy is revert-free by construction (migration fidelity; the proof's load-bearing obligation).
@@ -82,9 +82,9 @@ Each REQ-ID maps to exactly ONE phase — the phase that DELIVERS/owns it. 29/29
 | BOX-03 | 349 IMPL | Pending |
 | BOX-04 | 349 IMPL | Pending |
 | BOX-05 | 349 IMPL | Pending |
-| FREEZE-01 | 348 SPEC | Pending |
-| FREEZE-02 | 348 SPEC | Pending |
-| FREEZE-03 | 348 SPEC | Pending |
+| FREEZE-01 | 348 SPEC | Complete |
+| FREEZE-02 | 348 SPEC | Complete |
+| FREEZE-03 | 348 SPEC | Complete |
 | REVERT-01 | 349 IMPL | Pending |
 | REVERT-02 | 349 IMPL | Pending |
 | EVCAP-01 | 349 IMPL | Pending |
