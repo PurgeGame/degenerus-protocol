@@ -39,7 +39,7 @@
 - [ ] **CONSENT-02**: Set-mutation — evictions preserve "no cursor advance after swap-pop" (the H-CANCEL-SWAP-MISS / cancel-tombstone-streak class); tombstone-then-reclaim shape carries over.
 
 ### PLACE — Process/open placement + bounty
-- [ ] **PLACE-01**: The §4 placement (required-path `advanceGame` phase vs separate permissionless legs) is decided at SPEC on non-revert grounds (guaranteed-every-day vs minimal-surface, the `_enforceDailyMintGate` standing interaction, bounty farm-by-splitting); process-leg pre-RNG cursor-chunked, open-leg post-`_unlockRng` cursor-chunked.
+- [x] **PLACE-01**: The §4 placement (required-path `advanceGame` phase vs separate permissionless legs) is decided at SPEC on non-revert grounds (guaranteed-every-day vs minimal-surface, the `_enforceDailyMintGate` standing interaction, bounty farm-by-splitting); process-leg pre-RNG cursor-chunked, open-leg post-`_unlockRng` cursor-chunked.
 - [ ] **PLACE-02**: Bounty reconciliation — open stays a post-RNG router category (`OPEN_BATCH`/`OPEN_KNEE` pro-rate); the buy/process bounty is work-scaled (not once-per-advance) to close the middle-chunk-unpaid gap and resist farm-by-splitting; payment stays the deferred BURNIE flip-credit mint (`creditFlip`).
 
 ### GAS — Behavior-identical relocations
@@ -90,7 +90,7 @@ Each REQ-ID maps to exactly ONE phase — the phase that DELIVERS/owns it. 29/29
 | EVCAP-01 | 349 IMPL | Pending |
 | CONSENT-01 | 349 IMPL | Pending |
 | CONSENT-02 | 349 IMPL | Pending |
-| PLACE-01 | 348 SPEC | Pending |
+| PLACE-01 | 348 SPEC | Complete |
 | PLACE-02 | 349 IMPL | Pending |
 | GAS-01 | 350 GAS | Pending |
 | GAS-02 | 350 GAS | Pending |

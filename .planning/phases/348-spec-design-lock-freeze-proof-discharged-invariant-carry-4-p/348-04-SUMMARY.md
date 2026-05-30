@@ -85,4 +85,5 @@ None. This is a paper-only SPEC decision doc — no code, no data wiring, no pla
 ## Self-Check: PASSED
 
 - FOUND: .planning/phases/348-spec-design-lock-freeze-proof-discharged-invariant-carry-4-p/348-PLACEMENT-DECISION.md
-- Commit hash recorded post-commit below.
+- FOUND commit: be975460 (`docs(348-04): author 348-PLACEMENT-DECISION.md — §4 placement DECIDED = required-path (USER override)`)
+- No deletions in the commit; `contracts/`/`test/` untouched; pre-existing `scope.txt` left unstaged.

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
 status: executing
-last_updated: "2026-05-30T17:53:00.398Z"
+last_updated: "2026-05-30T18:00:36.895Z"
 last_activity: 2026-05-30
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 7
-  completed_plans: 2
-  percent: 0
+  completed_plans: 3
+  percent: 43
 ---
 
 # Project State
@@ -33,11 +33,11 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 348 (spec-design-lock-freeze-proof-discharged-invariant-carry-4-p) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-05-30
 
-Progress: [███░░░░░░░] 29%
+Progress: [████░░░░░░] 43%
 
 ## Current Milestone Roadmap (v55.0 — phases 348-352)
 
@@ -613,6 +613,7 @@ Audit deliverables:
 | Phase 339 P04 | ~15min | 1 tasks | 1 files |
 | Phase 348 P01 | 18min | 1 tasks | 1 files |
 | Phase 348 P02 | 8min | 2 tasks | 3 files |
+| Phase 348 P04 | 4 min | 1 tasks | 1 files |
 
 ## Decisions
 
@@ -763,3 +764,5 @@ Audit deliverables:
 - [Phase ?]: 348-01: FREEZE-03 entropy-side confirmed clean — ZERO block.timestamp/number/prevrandao/coinbase/blockhash in DegenerusGameLootboxModule.sol draw (:534) and whole file
 - [Phase 348]: 348-02: MEASURED DegenerusGame=24,358B / 218B headroom vs 24,576 (forge build --sizes + forge inspect; doc's 218B ACCURATE not stale). CORRECTED doc's ~2.8KB clean reclaim to ~1.4-1.7KB (R3 playerActivityScore 953B needs a 5-caller retarget incl 2 delegatecall modules, NOT a free delete). Running-total edit-order proves < 24,576 at every step: R1 claimAffiliateDgnrs (~1.2-1.35KB true void → BingoModule) FIRST, then stubs, then R2+R3-wrapper
 - [Phase 348]: 348-02: gas-scavenger run at SPEC (D-348-09, advisory/UNVALIDATED, 350 /gas-skeptic the only gate). GAS-01 (~120k box-buy: cold box-ledger SSTOREs+boxPlayers.push+enqueue → warm Sub-stamp) + GAS-02 (~3-5k staticcall→SLOAD) flagged STRUCTURAL to the relocation; GAS-03 (same-slot flush ~0.6-1.2M/50-sub) residual. GAS-03 SAFE-WITH-CONDITIONS recorded verbatim: bucket affiliate by roll-winner SAFE; do NOT batch quests.handlePurchase/handleAffiliate (non-linear completion logic)
+- [Phase 348]: D-348-01 (PLACE-01): §4 placement DECIDED = required-path (chunked advanceGame STAGE before rngGate) — a DELIBERATE USER OVERRIDE of PLAN-V55 §4/§9 (separate-legs), marked SUPERSEDED; chosen on guaranteed-every-day grounds, NOT revert-safety (the REVERT-FREE-CHAIN proof made it VIABLE)
+- [Phase 348]: 348-04: the two carried proof obligations bound to their proofs — D-348-02 (uniform-index-epoch no-interleave guard) → 348-FREEZE-PROOF.md (FREEZE-02); D-348-04 (obligation-1 sole no-brick guarantor, try/catch valve DROPPED) → 348-INVARIANT-CARRY.md; mint-gate standing (D-348-03) ACCEPTED, ZERO new gate code
