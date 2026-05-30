@@ -142,7 +142,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 343. SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Attestation | v54.0 | 5/5 | ✅ Complete |  |
+| 343. SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Attestation | v54.0 | 5/5 | Complete    | 2026-05-30 |
 | 344. IMPL — The ONE Batched Contract Diff (ledger + de-custody + CLEANUP-02) | v54.0 | 0/? | Not started | - |
 | 345. GAS+CLEANUP — Further Behavior-Identical Gas Wins + Packing Eval + Broader Sweep | v54.0 | 0/? | Not started | - |
 | 346. TST — Deposit/Withdraw + Zero-Value Auto-Buy + Fresh-Rate + Solvency + Terminal-Merge + Non-Widening | v54.0 | 0/? | Not started | - |

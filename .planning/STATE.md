@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v54.0
 milestone_name: Game-Side Keeper-Funding Ledger + AfKing De-Custody
-status: executing
-last_updated: "2026-05-30T09:43:00.000Z"
+status: ready_to_plan
+last_updated: 2026-05-30T09:49:47.512Z
 last_activity: 2026-05-30 -- 343-05 COMPLETE → Phase 343 SPEC ✅ COMPLETE (343-SPEC-INDEX.md: D-08 multi-doc index + requirement/SC traceability all COVERED + SPEC verdict PASS [design DESIGN-LOCKED, SOLVENCY-01/03 PROVEN, D-07 red-team SURVIVES 0 FINDING_CANDIDATE, GO_SWEPT locked, zero contracts/ mutation] + 344 IMPL hand-off [D-01 funder / GO_SWEPT line-1 / D-06 order / payAffiliate-canonical]; index 519f0f16)
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 5
   completed_plans: 5
-  percent: 100
+  percent: 20
+stopped_at: Phase 343 complete (5/5) — ready to discuss Phase 344
 ---
 
 # Project State
@@ -20,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v54.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v54.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 343 — SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Call-Graph Attestation
+**Current focus:** Phase 344 — impl — the one batched contract diff (ledger + de custody + cleanup 02 orphan removal)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,10 +33,10 @@ See: .planning/PROJECT.md (Current Milestone: v54.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 343 (SPEC — Design-Lock + Solvency Proof + Dead-Code/Gas Inventories + Call-Graph Attestation) — ✅ COMPLETE (5/5)
-Plan: 5 of 5 COMPLETE (343-01 ✅ 6deda035 — call-graph attestation · 343-02 ✅ 1a4fb46d — solvency proof + D-07 red-team · 343-03 ✅ c35aadb2+428f7581 — CLEANUP-01 kill-set + GAS-01 inventory · 343-04 ✅ 725c23ee — BATCH-01 design-lock + IMPL edit-order map · 343-05 ✅ 519f0f16 — 343-SPEC-INDEX.md)
-Status: Phase 343 SPEC ✅ COMPLETE — SPEC verdict PASS; ready for 344 IMPL (CONTRACT BOUNDARY HARD STOP, autonomous:false at the commit gate)
-Last activity: 2026-05-30 -- 343-05 COMPLETE → Phase 343 SPEC ✅ COMPLETE (343-SPEC-INDEX.md indexes the D-08 multi-doc set [6 sibling docs] + requirement traceability [BATCH-01/SOLVENCY-01/SOLVENCY-03/CLEANUP-01/GAS-01 → doc] + ROADMAP SC1-SC5 → doc, all COVERED + SPEC verdict PASS [design DESIGN-LOCKED, SOLVENCY-01/03 PROVEN, D-07 red-team SURVIVES 0 FINDING_CANDIDATE auto-approved, GO_SWEPT withdraw-guard locked, 4 corrections + double-invariant-comment finding, zero contracts/ mutation] + 344 IMPL hand-off [author the single batched diff vs 343-IMPL-EDIT-ORDER-MAP.md; red-team verdict = solvency gate; carry D-01 funder / GO_SWEPT line-1 / D-06 kill order / payAffiliate-canonical]; paper-only, index 519f0f16)
+Phase: 344
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-30
 
 ## Current Milestone Roadmap (v54.0 — phases 343-347)
 
