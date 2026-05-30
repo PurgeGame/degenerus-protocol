@@ -17,19 +17,19 @@
 
 ### BOX — Box redesign: relocate the freeze into a per-sub stamp
 - [ ] **BOX-01**: Boons are OFF for afking boxes → box `amount` = spend (deletes the boosted-amount freeze field).
-- [ ] **BOX-02**: The process-pass (pre-RNG) writes a per-sub stamp `(index = current `LR_INDEX`, amount, day)` — one warm-dirty write per process-day, overwritten each cycle (no cold `lootboxEth*`/`lootboxPurchasePacked`/`boxPlayers.push`).
+- [ ] **BOX-02**: The process-pass (pre-RNG) writes a per-sub stamp `(index = current LR_INDEX, amount, day, scorePlus1, baseLevelPlus1)` (D-348-07 added the score+baseLevel fields, +40 bits into the stamp's slot-2 spare, freezing the EV multiplier + target-level floor) — one warm-dirty write per process-day, overwritten each cycle (no cold `lootboxEth*`/`lootboxPurchasePacked`/`boxPlayers.push`).
 - [ ] **BOX-03**: The process-pass debits `afkingFunding` and sets the `lastAutoBoughtDay == today` success-marker ONLY after a successful debit (a failed buy writes no marker → no free box; a wallet subscribing between process and open has no this-cycle marker → no free box).
 - [ ] **BOX-04**: The open-pass (post-RNG) materializes the box from the stamp + the committed `lootboxRngWordByIndex[stamp.index]` with math byte-identical to `openLootBox`; `lastOpenedIndex` is monotonic per sub (open only if `stamp.index > lastOpenedIndex` → no double-open).
 - [ ] **BOX-05**: Humans keep the existing `lootboxEth`/`boxPlayers` open route unchanged; the two open routes share no mutable-state hazard.
 
 ### FREEZE — RNG / determinism security spine
-- [x] **FREEZE-01**: Freeze-completeness — the stamp captures ALL outcome-determining state at process; the open re-derives nothing manipulable from mutable per-player state (the §10 live score/base-level/EV-cap reads are admitted only because in-window manipulation is −EV; documented + attested).
+- [x] **FREEZE-01**: Freeze-completeness — the stamp captures ALL outcome-determining state at process, now including `scorePlus1` + `baseLevelPlus1` (D-348-07: stamped-frozen, superseding the earlier −EV live-read admission for score/base-level); the open re-derives nothing manipulable from mutable per-player state. The only residual live read is the EV-cap RMW accumulator (`lootboxEvBenefitUsedByLevel`), a benign monotonic ≤10-ETH down-clamp that cannot be per-box-stamped; documented + attested.
 - [x] **FREEZE-02**: Index-binding — the stamp binds to the pre-RNG `LR_INDEX` (read once at pass start); the process-pass MUST NOT straddle a mid-day `requestLootboxRng` index advance (`AdvanceModule.sol:1016`).
 - [x] **FREEZE-03**: Determinism — the box seed `keccak256(rngWord, player, day, amount)` uses the STAMPED buy-day (never open-time `_simulatedDayIndex()`), and carries no `block.timestamp/number/prevrandao/coinbase/blockhash` in the draw.
 
 ### REVERT — Revert-free-chain (discharged invariant, carried into IMPL)
 - [ ] **REVERT-01**: The process-pass slice construction preserves `_resolveBuy`'s validation invariants VERBATIM — `ev = cost − claimableUse` + enum payKind, the 1-wei claimable sentinel, the `LOOTBOX_MIN` transient skip, `quantity ≥ 1` — so the funded buy is revert-free by construction (migration fidelity; the proof's load-bearing obligation).
-- [ ] **REVERT-02**: A thin per-sub try/catch skip valve isolates the process AND open legs, absorbing the two residual revert classes (solvency-violation [safe under SOLVENCY-01], liveness-timeout [game-dead]) so no single sub can brick a batch / the day.
+- [ ] **REVERT-02**: No try/catch valve (D-348-04 DROPPED it). The no-brick guarantee rests on REVERT-01's revert-free-by-construction slice (obligation 1, the sole no-brick guarantor) + fail-loud-on-solvency (class B — a `claimablePool` underflow MUST revert, never be masked) + terminal-routing-unblocked (class C — the afking STAGE cannot block game-over routing). The two residual revert classes are accepted: solvency-violation [safe under SOLVENCY-01], liveness-timeout [game-dead].
 
 ### EVCAP — EV-cap accounting at open
 - [ ] **EVCAP-01**: The afking open increments `lootboxEvBenefitUsedByLevel[player][level+1]` via `_applyEvMultiplierWithCap` (read+write-at-open, exactly once per open, same map/key as MintModule's buy-time write, hard-clamped ≤10 ETH → no revert); the buy-time EV write is bypassed for afking boxes (no double-draw). Proven equivalent to the v54 per-`(sub,level)` accumulator.
@@ -49,7 +49,7 @@
 
 ### TST — Empirical proofs
 - [ ] **TST-01**: Freeze/determinism — the stamp+open produces an identical box outcome independent of open timing/block (seed uses the stamped day); index-binding holds across a mid-day index advance.
-- [ ] **TST-02**: Revert-free — a funded process/open never reverts on well-formed slices (the preserved `_resolveBuy` invariants), and the skip valve isolates the solvency/liveness residuals without bricking the batch/day.
+- [ ] **TST-02**: Revert-free — a funded process/open never reverts on well-formed slices (the preserved `_resolveBuy` invariants, REVERT-01); a solvency violation fails loud (never masked); the terminal game-over routing is never blocked by the afking STAGE (D-348-04 no-valve form — no try/catch).
 - [ ] **TST-03**: EV-cap — the per-`(player, level)` 10-ETH benefit budget is enforced exactly once per open with no double-draw vs the buy-time path; equivalent to v54.
 - [ ] **TST-04**: Two-path open coexistence + set-mutation (eviction/tombstone/swap-pop, streak preserved) + OPEN-E 4-protection regression.
 - [ ] **TST-05**: NON-WIDENING regression vs the v54 baseline — every pre-existing red enumerated BY NAME (`REGRESSION-BASELINE-v55.md`).
