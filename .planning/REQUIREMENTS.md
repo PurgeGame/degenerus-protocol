@@ -13,7 +13,7 @@
 - [ ] **ARCH-01**: The subscriber set (`_subOf`/`_subscribers`/`_subscriberIndex`), the process/open cursors, the per-sub box-stamp, and the v54 `afkingFunding` ledger are appended to `DegenerusGameStorage` (layout-safe append; every module already shares the base).
 - [ ] **ARCH-02**: A new `GameAfkingModule` (delegatecall, inherits `DegenerusGameStorage`) owns `subscribe`/setters + the process-pass + the open-pass + the router; its bytecode is its own budget, not the Game's.
 - [ ] **ARCH-03**: `AfKing.sol` collapses to thin dispatch stubs (`subscribe`/`setDailyQuantity`/`doWork`/…) ≈1–1.5KB; the `AF_KING`-address dissolution vs thin-external-shim question is resolved (incl. the mandatory-mint-gate interaction if any entry routes through `advanceGame`).
-- [ ] **ARCH-04**: Game runtime code-size stays < 24,576 bytes at every intermediate step — reclaim FIRST (`claimAffiliateDgnrs`→`BingoModule` ≈1.3KB; read-aggregators drop-`view`/→lens) before adding the afking stubs (sequenced so the Game never breaches the ceiling mid-flight).
+- [x] **ARCH-04**: Game runtime code-size stays < 24,576 bytes at every intermediate step — reclaim FIRST (`claimAffiliateDgnrs`→`BingoModule` ≈1.3KB; read-aggregators drop-`view`/→lens) before adding the afking stubs (sequenced so the Game never breaches the ceiling mid-flight).
 
 ### BOX — Box redesign: relocate the freeze into a per-sub stamp
 - [ ] **BOX-01**: Boons are OFF for afking boxes → box `amount` = spend (deletes the boosted-amount freeze field).
@@ -76,7 +76,7 @@ Each REQ-ID maps to exactly ONE phase — the phase that DELIVERS/owns it. 29/29
 | ARCH-01 | 349 IMPL | Pending |
 | ARCH-02 | 349 IMPL | Pending |
 | ARCH-03 | 349 IMPL | Pending |
-| ARCH-04 | 348 SPEC | Pending |
+| ARCH-04 | 348 SPEC | Complete |
 | BOX-01 | 349 IMPL | Pending |
 | BOX-02 | 349 IMPL | Pending |
 | BOX-03 | 349 IMPL | Pending |

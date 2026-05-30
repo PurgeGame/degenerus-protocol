@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
 status: executing
-last_updated: "2026-05-30T17:39:55.759Z"
+last_updated: "2026-05-30T17:53:00.398Z"
 last_activity: 2026-05-30
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 6
-  completed_plans: 1
+  total_plans: 7
+  completed_plans: 2
   percent: 0
 ---
 
@@ -33,11 +33,11 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 348 (spec-design-lock-freeze-proof-discharged-invariant-carry-4-p) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
-Last activity: 2026-05-30 -- 348-01 complete (GREP-ATTESTATION; box-seed drift resolved, all v55 anchors re-pinned vs 20ca1f79, bd4e031e)
+Last activity: 2026-05-30
 
-Progress: [██░░░░░░░░] 17%
+Progress: [███░░░░░░░] 29%
 
 ## Current Milestone Roadmap (v55.0 — phases 348-352)
 
@@ -612,6 +612,7 @@ Audit deliverables:
 | 339 | 03 | ~22min | 2 | 2 files (339-REBAL-JACK-ATTESTATION.md + 339-GREP-ATTESTATION-EDIT-ORDER.md) + 1 SUMMARY (REBAL complete pool-BPS set incl CREATOR_BPS=2000 :291 sums to 10000 before+after net-zero swap, supply unchanged Pool.Reward 50B→100B; JACK :1339-1352 deletion cleanly orphaned [FINAL_DAY_DGNRS_BPS sole-use :1343 + JackpotDgnrsWin sole-emit :1350] + isFinalDay plumbing preserved [lvl+1 gate :617 + 6 callers]; 22-anchor grep table vs 812abeee + 4-step producer-before-consumer edit-order for BATCH-02; zero contracts mutation) |
 | Phase 339 P04 | ~15min | 1 tasks | 1 files |
 | Phase 348 P01 | 18min | 1 tasks | 1 files |
+| Phase 348 P02 | 8min | 2 tasks | 3 files |
 
 ## Decisions
 
@@ -760,3 +761,5 @@ Audit deliverables:
 - [Phase ?]: 348-01: box-seed pattern-drift RESOLVED — openLootBox seed at LootboxModule:534 is keccak256(abi.encode(rngWord,player,day,amount)) (line correct, cited grep-pattern abi.encodePacked was wrong); abi.encodePacked is the ONLY-other seed = PRESALE box :644 — FREEZE-03 (348-03) must cite abi.encode
 - [Phase ?]: 348-01: re-pinned OPEN-E subscribe gate AfKing.sol:343-352 (doc :400-409), src/funder resolution :624 (doc :682), _resolveBuy body :727-863 (doc to :795); all other v55 anchors MATCH vs 20ca1f79
 - [Phase ?]: 348-01: FREEZE-03 entropy-side confirmed clean — ZERO block.timestamp/number/prevrandao/coinbase/blockhash in DegenerusGameLootboxModule.sol draw (:534) and whole file
+- [Phase 348]: 348-02: MEASURED DegenerusGame=24,358B / 218B headroom vs 24,576 (forge build --sizes + forge inspect; doc's 218B ACCURATE not stale). CORRECTED doc's ~2.8KB clean reclaim to ~1.4-1.7KB (R3 playerActivityScore 953B needs a 5-caller retarget incl 2 delegatecall modules, NOT a free delete). Running-total edit-order proves < 24,576 at every step: R1 claimAffiliateDgnrs (~1.2-1.35KB true void → BingoModule) FIRST, then stubs, then R2+R3-wrapper
+- [Phase 348]: 348-02: gas-scavenger run at SPEC (D-348-09, advisory/UNVALIDATED, 350 /gas-skeptic the only gate). GAS-01 (~120k box-buy: cold box-ledger SSTOREs+boxPlayers.push+enqueue → warm Sub-stamp) + GAS-02 (~3-5k staticcall→SLOAD) flagged STRUCTURAL to the relocation; GAS-03 (same-slot flush ~0.6-1.2M/50-sub) residual. GAS-03 SAFE-WITH-CONDITIONS recorded verbatim: bucket affiliate by roll-winner SAFE; do NOT batch quests.handlePurchase/handleAffiliate (non-linear completion logic)
