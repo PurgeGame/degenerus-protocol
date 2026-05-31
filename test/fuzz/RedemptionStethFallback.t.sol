@@ -4,7 +4,10 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {AfKing} from "../../contracts/AfKing.sol";
+// v55.0 D-351-02: the `AfKing` import is DROPPED — the standalone de-custody contract
+// (contracts/AfKing.sol) was DELETED (ARCH-03; funding is game-resident afkingFunding).
+// The redemption ETH-vs-stETH core does not need the AfKing type; the POOL-04 receive()
+// tests reframe onto the GAME-only receive() gate (StakedDegenerusStonk.sol:433-434).
 
 /// @notice Local mirror of the coinflip player surface for vm.mockCall selectors. Mirrors the
 ///         interface in StakedStonkRedemption.t.sol / RedemptionGas.t.sol; redeclared locally so
@@ -18,7 +21,20 @@ interface IBurnieCoinflipPlayerMock {
 /// @notice Deterministic scenario tests against the APPLIED Phase-326 diff that DRIVE each branch of
 ///         `DegenerusGame.pullRedemptionReserve` (ETH leg / stETH fallback / fail-closed revert) and
 ///         re-assert the v47 REDEEM-08 invariants under stETH coverage. Also proves the sDGNRS
-///         `receive()` AF_KING relaxation is accounting-safe (POOL-04).
+///         `receive()` credit path is accounting-safe (POOL-04).
+///
+///         v55.0 D-351-02 adaptation: the v54 de-custody machinery dissolved (AfKing removed,
+///         funding is game-resident `afkingFunding`). Two changes vs the v54 baseline:
+///           (1) the POOL-04 receive() tests are REFRAMED onto the v55 GAME-only `receive()` gate
+///               (StakedDegenerusStonk.sol:433-434 now `if (msg.sender != GAME) revert Unauthorized`);
+///               the v54 AF_KING relaxation is GONE (the afking-funding withdraw send-back routes
+///               through GAME — the Game's `.call` has `msg.sender == GAME`). The live-balance /
+///               counted-once / arbitrary-vector properties are UNCHANGED — only the authorized
+///               sender moved from AF_KING to GAME.
+///           (2) the v54 `burnAtGameOver`-recovers-the-AfKing-prepaid-pool leg is DROPPED BY NAME
+///               (no behavioral successor — `burnAtGameOver` is now a pure local-token burn,
+///               StakedDegenerusStonk.sol:526-535, and `depositFor`/`poolOf`/`withdraw` no longer
+///               exist). See 351-06-SUMMARY for the BY-NAME drop ledger entry.
 ///
 ///         The fix is the pure-ETH-OR-pure-stETH coverage branch in `pullRedemptionReserve`
 ///         (DegenerusGame.sol ~:1895): the ETH leg moves the at-risk claim-on-game ETH into sDGNRS
@@ -488,13 +504,16 @@ contract RedemptionStethFallback is DeployProtocol {
     //                          POOL-04 (Task 3)
     // =====================================================================
 
-    /// @notice (a) The sDGNRS receive() AF_KING relaxation reads reserves LIVE via
-    ///         address(this).balance — no running counter. An AF_KING-sourced credit IS reflected in
-    ///         the submit base (proven by previewBurn moving up by the credited amount's share), and
-    ///         there is no separate counter that could disagree with the balance.
+    /// @notice (a) The sDGNRS receive() reads reserves LIVE via address(this).balance — no running
+    ///         counter. A GAME-sourced credit (v55 gate: receive() accepts msg.sender == GAME) IS
+    ///         reflected in the submit base (proven by previewBurn moving up by the credited amount's
+    ///         share), and there is no separate counter that could disagree with the balance.
+    ///         v55.0 D-351-02 reframe: the credit sender moved from AF_KING to GAME (the v54 AF_KING
+    ///         receive() relaxation dissolved; the afking-funding withdraw send-back now routes through
+    ///         GAME). The live-read property is unchanged — only the authorized sender differs.
     function test_POOL04_ReceiveReadsLiveBalance_NoRunningCounter() public {
         // Keep claimable/game-ETH at 0 so the ETH-balance term of the submit base comes ONLY from
-        // sDGNRS's own ETH balance (the AF_KING credit), isolating the live-read.
+        // sDGNRS's own ETH balance (the GAME credit), isolating the live-read.
         vm.deal(address(game), 0);
         _setGameClaimableSdgnrs(0);
         _setGameClaimablePool(0);
@@ -504,27 +523,29 @@ contract RedemptionStethFallback is DeployProtocol {
         // claimable/stETH/pending all 0, the ETH term == address(sdgnrs).balance.
         (uint256 ethOutBefore, , ) = sdgnrs.previewBurn(BURN_AMOUNT);
 
-        // Send ETH in via the AF_KING-gated receive() (simulating AfKing's withdraw send-back).
+        // Send ETH in via the GAME-gated receive() (the afking-funding withdraw send-back path —
+        // the Game's `.call` carries msg.sender == GAME, StakedDegenerusStonk.sol:433-434).
         uint256 credit = 10 ether;
-        vm.deal(ContractAddresses.AF_KING, credit);
-        vm.prank(ContractAddresses.AF_KING);
+        vm.deal(ContractAddresses.GAME, credit);
+        vm.prank(ContractAddresses.GAME);
         (bool ok, ) = address(sdgnrs).call{value: credit}("");
-        assertTrue(ok, "(POOL04a) AF_KING receive() must accept the credit");
+        assertTrue(ok, "(POOL04a) GAME receive() must accept the credit");
 
         // The credit is reflected LIVE in the balance...
-        assertEq(address(sdgnrs).balance, balBefore + credit, "(POOL04a) AF_KING credit not reflected in live balance");
+        assertEq(address(sdgnrs).balance, balBefore + credit, "(POOL04a) GAME credit not reflected in live balance");
 
         // ... and therefore in the submit base read by previewBurn. ethValueOwed scales linearly with
         // the balance term, so the preview output must INCREASE after the credit (live read, not stale
         // counter). A running counter that ignored receive() would leave previewBurn unchanged.
         (uint256 ethOutAfter, , ) = sdgnrs.previewBurn(BURN_AMOUNT);
-        assertGt(ethOutAfter, ethOutBefore, "(POOL04a) submit base did not move with the AF_KING credit (stale counter?)");
+        assertGt(ethOutAfter, ethOutBefore, "(POOL04a) submit base did not move with the GAME credit (stale counter?)");
     }
 
-    /// @notice (b) The AF_KING-sourced ETH is counted EXACTLY ONCE in the redemption base: the
+    /// @notice (b) The GAME-sourced ETH is counted EXACTLY ONCE in the redemption base: the
     ///         previewBurn delta equals the credit's proportional share, NOT 2× (no double-count from a
-    ///         counter + balance both being read).
-    function test_POOL04_AfKingCreditNotDoubleCounted() public {
+    ///         counter + balance both being read). v55.0 D-351-02 reframe: credit sender AF_KING → GAME
+    ///         (the GAME-only receive() gate); the counted-once invariant is unchanged.
+    function test_POOL04_GameCreditNotDoubleCounted() public {
         vm.deal(address(game), 0);
         _setGameClaimableSdgnrs(0);
         _setGameClaimablePool(0);
@@ -533,10 +554,10 @@ contract RedemptionStethFallback is DeployProtocol {
         (uint256 ethOutBefore, , ) = sdgnrs.previewBurn(BURN_AMOUNT);
 
         uint256 credit = 10 ether;
-        vm.deal(ContractAddresses.AF_KING, credit);
-        vm.prank(ContractAddresses.AF_KING);
+        vm.deal(ContractAddresses.GAME, credit);
+        vm.prank(ContractAddresses.GAME);
         (bool ok, ) = address(sdgnrs).call{value: credit}("");
-        assertTrue(ok, "(POOL04b) AF_KING receive() must accept the credit");
+        assertTrue(ok, "(POOL04b) GAME receive() must accept the credit");
 
         (uint256 ethOutAfter, , ) = sdgnrs.previewBurn(BURN_AMOUNT);
 
@@ -545,12 +566,15 @@ contract RedemptionStethFallback is DeployProtocol {
         // share — a double-count (credit counted twice) would yield ~2× this delta.
         uint256 expectedDelta = (credit * BURN_AMOUNT) / supply;
         uint256 actualDelta = ethOutAfter - ethOutBefore;
-        assertEq(actualDelta, expectedDelta, "(POOL04b) AF_KING credit not counted exactly once in the base");
+        assertEq(actualDelta, expectedDelta, "(POOL04b) GAME credit not counted exactly once in the base");
     }
 
-    /// @notice (c) A receive() from any sender != GAME && != AF_KING reverts Unauthorized — the
-    ///         relaxation did NOT open an arbitrary deposit vector.
-    function test_POOL04_NonGameNonAfKingReceiveReverts() public {
+    /// @notice (c) A receive() from any sender != GAME reverts Unauthorized — the receive() path did
+    ///         NOT open an arbitrary deposit vector. v55.0 D-351-02: under the GAME-only gate
+    ///         (StakedDegenerusStonk.sol:433-434) this is STRICTLY TIGHTER than the v54 GAME||AF_KING
+    ///         relaxation — only GAME is authorized now, so a stranger (and, implicitly, the old
+    ///         AF_KING sender) reverts.
+    function test_POOL04_NonGameReceiveReverts() public {
         address stranger = makeAddr("stranger");
         vm.deal(stranger, 1 ether);
         vm.prank(stranger);
@@ -561,48 +585,25 @@ contract RedemptionStethFallback is DeployProtocol {
         ok;
     }
 
-    /// @notice (d) burnAtGameOver recovers the AfKing prepaid pool BEFORE the bal==0 early-return and
-    ///         does NOT brick on a zero pool-TOKEN sDGNRS. We fund sDGNRS's AfKing prepaid pool, then
-    ///         drive the gameover drain and assert the pool ETH is recovered (lands via receive()).
-    function test_POOL04_BurnAtGameOverRecoversPool_ZeroPoolTokenSafe() public {
-        // Fund sDGNRS's AfKing prepaid pool via the permissionless depositFor(SDGNRS).
-        uint256 poolAmount = 3 ether;
-        vm.deal(address(this), poolAmount);
-        AfKing(payable(ContractAddresses.AF_KING)).depositFor{value: poolAmount}(address(sdgnrs));
-        assertEq(
-            AfKing(payable(ContractAddresses.AF_KING)).poolOf(address(sdgnrs)),
-            poolAmount,
-            "(POOL04d) precondition: sDGNRS AfKing pool seeded"
-        );
-
-        uint256 sdgnrsEthBefore = address(sdgnrs).balance;
-
-        // Drive burnAtGameOver (onlyGame). It folds afKing.withdraw(afKing.poolOf(this)) BEFORE the
-        // bal==0 early-return. The recovered ETH lands back in sDGNRS via the AF_KING-gated receive().
-        vm.prank(address(game));
-        sdgnrs.burnAtGameOver();
-
-        // Pool drained back into sDGNRS; the keeper's pool entry is now 0.
-        assertEq(
-            AfKing(payable(ContractAddresses.AF_KING)).poolOf(address(sdgnrs)),
-            0,
-            "(POOL04d) AfKing pool not recovered by burnAtGameOver"
-        );
-        assertEq(
-            address(sdgnrs).balance,
-            sdgnrsEthBefore + poolAmount,
-            "(POOL04d) recovered pool ETH did not land in sDGNRS via receive()"
-        );
-
-        // Zero-pool safety: a SECOND gameover-drain (pool now 0 → withdraw(0) no-op) must NOT brick.
-        vm.prank(address(game));
-        sdgnrs.burnAtGameOver();
-        assertEq(
-            address(sdgnrs).balance,
-            sdgnrsEthBefore + poolAmount,
-            "(POOL04d) second drain (empty pool) must be a no-op, not a brick"
-        );
-    }
+    // =====================================================================
+    //   (d) DROPPED — D-351-02 removed-surface (AfKing custody-recovery leg)
+    // =====================================================================
+    //
+    // The v54 test `test_POOL04_BurnAtGameOverRecoversPool_ZeroPoolTokenSafe` is DROPPED BY NAME.
+    //
+    // Reason: it proved that `sDGNRS.burnAtGameOver()` folded `afKing.withdraw(afKing.poolOf(this))`
+    // to recover a PREPAID AfKing pool BEFORE its bal==0 early-return — v54 de-custody machinery the
+    // v55 redesign REMOVED with NO behavioral successor:
+    //   - the standalone `AfKing` de-custody contract (contracts/AfKing.sol) is DELETED; its
+    //     `depositFor` / `poolOf` / `withdraw` external API no longer exists (funding is game-resident
+    //     `afkingFunding`, recovered per-player via DegenerusGame.withdrawAfkingFunding — there is NO
+    //     game-resident recovery of a PREPAID third-party pool keyed to sDGNRS).
+    //   - `sDGNRS.burnAtGameOver()` is now a pure local-token burn (StakedDegenerusStonk.sol:526-535:
+    //     `bal = balanceOf[this]; if (bal==0) return; balanceOf[this]=0; totalSupply-=bal; delete
+    //     poolBalances;`) — it no longer folds any AfKing withdraw, so the property under test is gone.
+    // Per D-351-02 (bias=adapt; removal is the exception only when the entire subject is a fully-removed
+    // surface with NO successor). The POOL-04 receive()-safety properties (a/b/c) SURVIVE and are kept
+    // (reframed onto the GAME-only gate). Recorded BY NAME in 351-06-SUMMARY for the 351-09 ledger.
 
     // =====================================================================
     //                          INTERNAL HELPER
@@ -614,6 +615,7 @@ contract RedemptionStethFallback is DeployProtocol {
         _resolveDay(day, roll);
     }
 
-    /// @dev Accept ETH so depositFor refunds / test plumbing don't revert.
+    /// @dev Accept ETH so the redemption-claim payout plumbing (claimRedemption ETH legs) and any
+    ///      test value transfers don't revert.
     receive() external payable {}
 }
