@@ -301,6 +301,175 @@ contract V55RevertFreeEvCap is DeployProtocol {
     }
 
     // =========================================================================
+    // TST-03 — the EV-cap is drawn EXACTLY ONCE per open (no double-draw vs buy-time)
+    // =========================================================================
+
+    /// @notice EV-cap EXACTLY-ONCE + NO double-draw: an afking open increments
+    ///         `lootboxEvBenefitUsedByLevel[player][level+1]` by EXACTLY the open's `adjustedPortion`
+    ///         (= min(amount, remainingCap)) in ONE RMW (`_applyEvMultiplierWithCap`,
+    ///         DegenerusGameLootboxModule.sol:488), and NO buy-time EV write occurs for that afking box (the
+    ///         STAGE STAMPS only — DegenerusGameMintModule.sol:1298-1303/1321-1327 are never reached for an
+    ///         afking box, so the budget is UNTOUCHED before the open). Proven by reading the budget BEFORE
+    ///         the stamp/open and AFTER the open: it is 0 throughout the stamp (no buy-time draw) and becomes
+    ///         exactly `amount` only at the open (a single draw, amount <= cap so adjustedPortion == amount).
+    ///         A BONUS score is used so the multiplier > NEUTRAL and the cap-draw branch is exercised.
+    function testEvCapExactlyOnceNoDoubleDraw() public {
+        // Clean to a settled day, then build a bonus-score afking box via a poked in-set stamp (the genuine
+        // _openAfkingBox reads the poked tuple — 351-04 pattern; the poke writes ONLY the Sub slot, never the
+        // EV-cap map, so it faithfully models the buy-time-write-bypassed afking box).
+        _settleClean(0xE7CA01);
+        uint24 lvl = uint24(game.level()) + 1; // the live open level (the cap key)
+        uint32 day = _simDay();
+        uint256 amount = 3 ether; // < the 10-ETH cap => adjustedPortion == amount on a clean budget
+        uint256 rngWord = uint256(keccak256("evcap-once-word"));
+
+        address afk = makeAddr("evcap_once");
+        _grantDeityPass(afk);
+        _subscribeLootbox(afk, 1); // lives in _subscribers (the open walks it)
+
+        // BEFORE: the player's per-level EV-cap budget is clean (no buy-time draw for an afking box).
+        assertEq(_evBenefitUsed(afk, lvl), 0, "pre: EV-cap budget clean (no buy-time write for an afking box)");
+
+        // Poke the bonus-score stamp + land the day word. The poke writes ONLY the Sub slot — it does NOT
+        // touch lootboxEvBenefitUsedByLevel (the buy-time EV write is bypassed for the afking box).
+        _pokeAfkingStamp(afk, amount, day, BONUS_SCORE);
+        _setRngWordByDay(day, rngWord);
+        // STILL clean after the stamp: the stamp did not draw the cap (no double-draw surface).
+        assertEq(_evBenefitUsed(afk, lvl), 0, "post-stamp: budget STILL clean (the stamp did not draw the cap)");
+        assertTrue(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "afking box pending (poked)");
+
+        // OPEN via the real mintBurnie open leg -> the SINGLE _applyEvMultiplierWithCap RMW draws the cap.
+        assertFalse(game.rngLocked(), "mintBurnie takes the OPEN leg (not locked)");
+        vm.prank(makeAddr("evcap_once_opener"));
+        try game.mintBurnie() {} catch {}
+
+        // AFTER: the budget incremented by EXACTLY the open's adjustedPortion (== amount, since amount <= cap
+        // on a clean budget). ONE draw — exactly once, no double-draw.
+        assertEq(_lastOpenedDayOf(afk), day, "non-vacuity: the box materialized (open ran)");
+        assertEq(
+            _evBenefitUsed(afk, lvl),
+            amount,
+            "EV-cap drawn EXACTLY ONCE at open (== adjustedPortion == amount); no double-draw"
+        );
+    }
+
+    /// @notice EV-cap SHARED BUDGET (afking + human draw the SAME per-level key): an afking open and a human
+    ///         `openLootBox` at the SAME (player, level+1) both draw from the SAME
+    ///         `lootboxEvBenefitUsedByLevel[player][level+1]` key — one shared <= 10-ETH budget, proving
+    ///         equivalence to the v54 per-(sub, level) accumulator. Sequenced in ONE snapshot: the afking open
+    ///         draws `aAmt`, THEN a human box buy+open draws `min(hAmt, remaining)` from the SAME key — the
+    ///         budget is the cumulative sum (not two independent budgets).
+    function testEvCapSharedBudgetAcrossAfkingAndHuman() public {
+        _settleClean(0x5A1AD01);
+        uint24 lvl = uint24(game.level()) + 1;
+        uint32 day = _simDay();
+        uint256 aAmt = 3 ether; // afking draw
+        uint256 hAmt = 4 ether; // human draw (aAmt + hAmt = 7 ether, < the 10-ETH cap, so both draw in full)
+
+        address p = makeAddr("evcap_shared");
+        _grantDeityPass(p);
+        _subscribeLootbox(p, 1);
+
+        assertEq(_evBenefitUsed(p, lvl), 0, "pre: clean shared budget");
+
+        // ----- afking arm: draw aAmt from [p][lvl] -----
+        _pokeAfkingStamp(p, aAmt, day, BONUS_SCORE);
+        _setRngWordByDay(day, uint256(keccak256("shared-afk-word")));
+        vm.prank(makeAddr("evcap_shared_opener"));
+        try game.mintBurnie() {} catch {}
+        assertEq(_lastOpenedDayOf(p), day, "afking box materialized");
+        assertEq(_evBenefitUsed(p, lvl), aAmt, "afking open drew aAmt from the shared key");
+
+        // ----- human arm: a human box buy+open at the SAME (p, lvl) draws from the SAME key -----
+        // The human buy-time EV write (MintModule) draws from lootboxEvBenefitUsedByLevel[p][lvl] — the SAME
+        // map/key. With aAmt already used, the human draws min(hAmt, cap - aAmt) == hAmt (7 ETH < 10 ETH cap).
+        _buyHumanBonusBox(p, hAmt, lvl);
+
+        // SHARED BUDGET: the key now holds aAmt + hAmt (the cumulative draw across BOTH paths) — one budget,
+        // not two. (Equivalent to the v54 per-(sub, level) accumulator.)
+        assertEq(
+            _evBenefitUsed(p, lvl),
+            aAmt + hAmt,
+            "afking + human draw the SAME per-level budget key (shared 10-ETH budget; cumulative)"
+        );
+    }
+
+    /// @notice EV-cap CLAMP (<= 10 ETH, NO revert): with the per-level used-benefit driven NEAR 10 ETH, the
+    ///         next afking open CLAMPS — it draws only the remaining cap (saturating at 10 ETH) and does NOT
+    ///         revert (the no-write 100%-EV short-circuit at the cap, DegenerusGameLootboxModule.sol:478-481).
+    ///         Driven by pre-seeding the budget to (cap - 1 ETH), then opening a bonus box larger than the
+    ///         remaining 1 ETH: the budget saturates at exactly 10 ETH, the open completes.
+    function testEvCapClampsAtTenEthNoRevert() public {
+        _settleClean(0xC1A3D01);
+        uint24 lvl = uint24(game.level()) + 1;
+        uint32 day = _simDay();
+        uint256 amount = 5 ether; // larger than the 1-ETH remaining cap -> clamps
+
+        address p = makeAddr("evcap_clamp");
+        _grantDeityPass(p);
+        _subscribeLootbox(p, 1);
+
+        // Pre-seed the per-level budget to (cap - 1 ETH): only 1 ETH of benefit remains.
+        _setEvBenefitUsed(p, lvl, EV_BENEFIT_CAP - 1 ether);
+        assertEq(_evBenefitUsed(p, lvl), EV_BENEFIT_CAP - 1 ether, "pre: 1 ETH of cap remains");
+
+        // Open a 5-ETH bonus box: the cap draw clamps to the remaining 1 ETH (adjustedPortion == remaining),
+        // saturating the budget at exactly 10 ETH — NO revert.
+        _pokeAfkingStamp(p, amount, day, BONUS_SCORE);
+        _setRngWordByDay(day, uint256(keccak256("clamp-word")));
+        vm.prank(makeAddr("evcap_clamp_opener"));
+        try game.mintBurnie() {} catch {} // MUST NOT revert at the cap
+
+        assertEq(_lastOpenedDayOf(p), day, "non-vacuity: the box materialized (open ran, did not revert)");
+        // CLAMP: the budget saturated at exactly the 10-ETH cap (drew only the remaining 1 ETH, not the full 5).
+        assertEq(
+            _evBenefitUsed(p, lvl),
+            EV_BENEFIT_CAP,
+            "EV-cap clamped at 10 ETH (drew only the remaining cap; no overshoot, no revert)"
+        );
+    }
+
+    /// @notice EV-cap fuzz (exactly-once over a multi-open sequence, D-351-04): for a sequence of afking
+    ///         opens at the SAME (player, level) with random per-open amounts, the budget is the CLAMPED
+    ///         cumulative sum (Σ min over the running remaining, saturating at 10 ETH) — each open draws
+    ///         exactly once and never overshoots the cap, no revert. Proves the exactly-once + monotone-clamp
+    ///         invariant under repetition.
+    function testFuzzEvCapMultiOpenClampedCumulative(uint96 a1Raw, uint96 a2Raw, uint96 a3Raw) public {
+        _settleClean(0xF0ECA01);
+        uint24 lvl = uint24(game.level()) + 1;
+        uint32 day = _simDay();
+
+        address p = makeAddr("evcap_fz");
+        _grantDeityPass(p);
+        _subscribeLootbox(p, 1);
+
+        uint256[3] memory amts = [
+            bound(uint256(a1Raw), 0.1 ether, 8 ether),
+            bound(uint256(a2Raw), 0.1 ether, 8 ether),
+            bound(uint256(a3Raw), 0.1 ether, 8 ether)
+        ];
+
+        uint256 expectedUsed; // the model: Σ min(amount, remaining), clamped at the cap
+        for (uint256 i; i < 3; i++) {
+            uint256 remaining = expectedUsed >= EV_BENEFIT_CAP ? 0 : EV_BENEFIT_CAP - expectedUsed;
+            uint256 drawn = amts[i] < remaining ? amts[i] : remaining;
+            expectedUsed += drawn;
+
+            // Each open uses a fresh process day (advance the marker forward) so the pending-box gate holds.
+            uint32 d = day + uint32(i);
+            _pokeAfkingStamp(p, amts[i], d, BONUS_SCORE);
+            _setRngWordByDay(d, uint256(keccak256(abi.encode("fz-word", i))));
+            vm.prank(makeAddr(string(abi.encodePacked("evcap_fz_op_", _u(i)))));
+            try game.mintBurnie() {} catch {}
+            assertEq(_lastOpenedDayOf(p), d, "non-vacuity: open i materialized");
+        }
+
+        // The budget equals the clamped cumulative model — each open drew exactly once, clamped at 10 ETH.
+        assertEq(_evBenefitUsed(p, lvl), expectedUsed, "multi-open: clamped cumulative draw (exactly-once each, <= cap)");
+        assertLe(_evBenefitUsed(p, lvl), EV_BENEFIT_CAP, "the per-level budget never exceeds the 10-ETH cap");
+    }
+
+    // =========================================================================
     // Protocol-driving helpers (ported from V55FreezeDeterminism / V55SetMutationOpenE)
     // =========================================================================
 
@@ -378,6 +547,64 @@ contract V55RevertFreeEvCap is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
+    /// @dev Poke `who`'s in-set Sub stamp to the TST-03 tuple: `amount` (uint96), `scorePlus1 = score+1`,
+    ///      `lastAutoBoughtDay = day`, `lastOpenedDay = day-1` so `_afkingBoxReady` sees a PENDING box. The
+    ///      real `_openAfkingBox` then reads `(sub.amount, sub.lastAutoBoughtDay, rngWordByDay[day],
+    ///      sub.scorePlus1-1)` (GameAfkingModule.sol:901-907) — the open's tuple is the poked one, drawing
+    ///      the cap via the genuine resolveAfkingBox path. The poke writes ONLY the Sub slot (never the
+    ///      EV-cap map) — faithfully modelling the buy-time-EV-write-bypassed afking box.
+    function _pokeAfkingStamp(address who, uint256 amount, uint32 day, uint16 score) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        packed &= ~(uint256(0xFFFF) << (OFF_SCOREPLUS1 * 8));
+        packed &= ~(((uint256(1) << 96) - 1) << (OFF_AMOUNT * 8));
+        packed &= ~(uint256(0xFFFFFFFF) << (OFF_LASTBOUGHT * 8));
+        packed &= ~(uint256(0xFFFFFFFF) << (OFF_LASTOPENED * 8));
+        packed |= uint256(uint16(score) + 1) << (OFF_SCOREPLUS1 * 8);
+        packed |= (amount & ((uint256(1) << 96) - 1)) << (OFF_AMOUNT * 8);
+        packed |= uint256(day) << (OFF_LASTBOUGHT * 8);
+        packed |= uint256(day == 0 ? 0 : day - 1) << (OFF_LASTOPENED * 8);
+        vm.store(address(game), slot, bytes32(packed));
+    }
+
+    /// @dev Set the DAY-keyed afking word `rngWordByDay[day] = word` (the afking open's seed input + the
+    ///      readiness gate's non-zero word).
+    function _setRngWordByDay(uint32 day, uint256 word) internal {
+        vm.store(address(game), keccak256(abi.encode(uint256(day), uint256(RNG_WORD_BY_DAY_SLOT))), bytes32(word));
+    }
+
+    /// @dev Read the per-(player, level) EV-cap budget `lootboxEvBenefitUsedByLevel[who][lvl]` (the TST-03
+    ///      subject; RE-DERIVED root slot 48 — mapping(address => mapping(uint24 => uint256))).
+    function _evBenefitUsed(address who, uint24 lvl) internal view returns (uint256) {
+        bytes32 inner = keccak256(abi.encode(who, uint256(EV_BENEFIT_USED_SLOT)));
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(lvl), uint256(inner)))));
+    }
+
+    /// @dev Pre-seed the per-level EV-cap budget (the cap-clamp setup).
+    function _setEvBenefitUsed(address who, uint24 lvl, uint256 value) internal {
+        bytes32 inner = keccak256(abi.encode(who, uint256(EV_BENEFIT_USED_SLOT)));
+        vm.store(address(game), keccak256(abi.encode(uint256(lvl), uint256(inner))), bytes32(value));
+    }
+
+    /// @dev Buy a real human ETH lootbox for `buyer` (a deity-passed bonus-score buyer ⇒ the buy-time EV
+    ///      multiplier > NEUTRAL ⇒ the buy-time cap draw at MintModule.sol:1298-1303 fires) at the live
+    ///      level, then OPEN it so the human leg resolves. The human buy-time draw reads/writes the SAME
+    ///      `lootboxEvBenefitUsedByLevel[buyer][level+1]` key the afking arm used — proving the shared budget.
+    ///      `lvl` is asserted == the live open level so the draw keys on the shared budget.
+    function _buyHumanBonusBox(address buyer, uint256 lootboxAmount, uint24 lvl) internal {
+        // Deity-passed buyer ⇒ activity score 75% ⇒ EV multiplier > NEUTRAL ⇒ the buy-time cap draw fires.
+        assertEq(uint24(game.level()) + 1, lvl, "human buy at the shared live level (same cap key)");
+        uint48 index = _liveLootboxIndex();
+        vm.deal(buyer, lootboxAmount + 1 ether);
+        vm.prank(buyer);
+        game.purchase{value: lootboxAmount + 0.01 ether}(buyer, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth);
+        // The buy-time draw already happened (lbFirstDeposit branch). Open the box to complete the human leg
+        // (the open reads the FROZEN adj — no second draw; the draw was buy-time).
+        _forceLootboxWord(index, uint256(keccak256("human-shared-word")));
+        vm.prank(buyer);
+        game.openLootBox(buyer, index);
+    }
+
     /// @dev Credit `who` claimableWinnings AND bump claimablePool in tandem (SOLVENCY-01 balanced; the
     ///      351-02 test-infra reality) so a claimable-funded slice's `claimablePool -=` does not underflow.
     function _setClaimable(address who, uint256 amount) internal {
@@ -438,6 +665,17 @@ contract V55RevertFreeEvCap is DeployProtocol {
 
     function _bumpClaimablePool(uint256 delta) internal {
         _setClaimablePool(_claimablePool() + delta);
+    }
+
+    // ---- live lootbox index + per-index word (human box forcing) ----
+
+    function _liveLootboxIndex() internal view returns (uint48) {
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))));
+    }
+
+    function _forceLootboxWord(uint48 index, uint256 word) internal {
+        bytes32 leaf = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_BY_INDEX_SLOT)));
+        vm.store(address(game), leaf, bytes32(word));
     }
 
     // ---- LootBoxOpened decode ----
