@@ -5,7 +5,7 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
+import {MintPaymentKind, IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusGameLootboxModule, IDegenerusGameMintModule} from "../interfaces/IDegenerusGameModules.sol";
 
 /// @title IGameRouter
@@ -52,7 +52,7 @@ interface IGameRouter {
  *      afking-stamp open leg, driven by `_subOpenCursor`, materializing each box
  *      from its frozen stamp via a delegatecall to the LootboxModule's
  *      `resolveAfkingBox` — the FROZEN-INPUT twin of `resolveLootboxDirect`) and
- *      the ROUTER (`mintBurnie`/`autoBuy`/`autoOpen`, the one-category early-return
+ *      the ROUTER (`mintBurnie`/`autoOpen`, the one-category early-return
  *      dispatch). The open consumes the stamp the PART-A process STAGE produces.
  * @dev PLACE-02 bounty: the buy/process bounty FOLDS INTO the advance bounty
  *      (`mintBurnie`'s advance leg pays `2×·mult`, scaling the AdvanceModule's
@@ -733,12 +733,58 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // guard + _afkingBoxReady never treat a ticket sub as box-pending.
                 sub.lastOpenedDay = processDay;
             } else {
-                // STAMP the lootbox box — ONE warm-dirty SSTORE (the single Sub slot;
-                // amount is uint96, explicit cast SAFE: a single box can never exceed the
-                // ETH in existence, uint96 max ≈ 79e9 ETH).
+                // STAMP the lootbox box + RESTORE the manual-lootbox BURNIE side-effects
+                // (v55 box-redesign regression fix, 349.2 / DESIGN §2) — the quest-credit +
+                // affiliate that a manual lootbox buy (and an afking TICKET sub via
+                // purchaseWith :713-731) gets, replicating MintModule.purchaseWith's lootbox
+                // leg (:1211-1368) MINUS the cold box-ledger (the warm stamp replaces it —
+                // GAS-01) and MINUS the buy-time EV-cap tally (stays AT OPEN — EVCAP-01).
+                // boons OFF ⇒ amount == spend. ALL BURNIE flip-credit: the :708-711
+                // ETH/claimablePool debit is byte-unchanged and NO new ETH/pool write is
+                // added (DESIGN §3 — affiliate/quest are BURNIE, not an ETH cut; no solvency
+                // surface). Revert-free by construction (REVERT-01, D-348-04) — the calls run
+                // inside the already-funded, well-formed slice; NO try/catch, no valve.
+                uint256 flipCredit;
+
+                // (a) QUEST — handler BEFORE the score ("handlers before score",
+                // MintModule.sol:1211). Pure-lootbox shape (MintModule.sol:1222): ethMintSpend
+                // == lootBoxAmount == amount, burnieMintQty == 0, levelQuestPrice ==
+                // priceForLevel(currentLevel + 1). Capture the POST-buy streak it returns.
+                uint32 questStreak;
+                {
+                    (
+                        uint256 questReward,
+                        uint8 questType,
+                        uint32 streak,
+                        bool questCompleted
+                    ) = quests.handlePurchase(
+                            player,
+                            amount,
+                            0,
+                            amount,
+                            mp,
+                            PriceLookupLib.priceForLevel(currentLevel + 1)
+                        );
+                    questStreak = streak;
+                    if (questCompleted) {
+                        flipCredit += questReward;
+                        // recordMintQuestStreak on completion (MintModule.sol:1233-1235).
+                        if (amount > 0 && questType == 1) {
+                            IDegenerusGame(address(this)).recordMintQuestStreak(
+                                player
+                            );
+                        }
+                    }
+                }
+
+                // (b) STAMP — score now sourced from the POST-buy streak the handler returned
+                // (was the pre-action _questStreakOf read), so the stamped score matches a
+                // manual buy. ONE warm-dirty SSTORE (the single Sub slot; amount is uint96,
+                // explicit cast SAFE: a single box can never exceed the ETH in existence,
+                // uint96 max ≈ 79e9 ETH). Still frozen at stamp (FREEZE-03).
                 uint256 activityScore = _playerActivityScore(
                     player,
-                    _questStreakOf(player),
+                    questStreak,
                     currentLevel + 1
                 );
                 uint16 scorePlus1 = activityScore + 1 > type(uint16).max
@@ -746,6 +792,44 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     : uint16(activityScore + 1);
                 sub.scorePlus1 = scorePlus1;
                 sub.amount = uint96(amount);
+
+                // (c) AFFILIATE — BOTH branches (mirror MintModule.sol:1267-1287). The
+                // fresh-ETH portion is `ethValue` (debited from afkingFunding at :708-711);
+                // the claimable-used portion is `amount - ethValue` (the _resolveBuy split,
+                // == purchaseWith's lootboxClaimableUsed). Each is valued in BURNIE via
+                // _ethToBurnie (the valuation basis only — payAffiliate routes BURNIE
+                // flip-credit, never ETH). Protocol code bytes32("DGNRS") (== the ticket
+                // branch's code at :726). The fresh call passes the same un-incremented
+                // activity score the stamp computed (uint16(activityScore), matching
+                // purchaseWith :1275); the claimable call passes isFreshEth=false, score=0.
+                if (ethValue != 0) {
+                    flipCredit += affiliate.payAffiliate(
+                        _ethToBurnie(ethValue, mp),
+                        bytes32("DGNRS"),
+                        player,
+                        currentLevel + 1,
+                        true,
+                        uint16(activityScore)
+                    );
+                }
+                if (amount - ethValue != 0) {
+                    flipCredit += affiliate.payAffiliate(
+                        _ethToBurnie(amount - ethValue, mp),
+                        bytes32("DGNRS"),
+                        player,
+                        currentLevel + 1,
+                        false,
+                        0
+                    );
+                }
+
+                // (d) ONE BURNIE flip-credit — the accumulated questReward + both affiliate
+                // kickbacks, credited once (mirror MintModule.sol:1366-1367). All BURNIE; no
+                // ETH moves. Keyed on `player` (distinct from the :941 msg.sender open-bounty
+                // creditFlip).
+                if (flipCredit != 0) {
+                    coinflip.creditFlip(player, flipCredit);
+                }
             }
 
             // Success-marker (BOX-03) — set ONLY AFTER the successful debit + buy/stamp. A
@@ -764,16 +848,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // Persist the advanced cursor (uint16) for the next chunk / call.
         _subCursor = uint16(cursor);
         return processed;
-    }
-
-    /// @dev In-context quest-streak read for the activity-score stamp. Mirrors the
-    ///      `questView.playerQuestStates(player)` streak extraction the Game's
-    ///      `playerActivityScore` (:2633) and the DegeneretteModule (:504) use to feed
-    ///      `_playerActivityScore`. Isolated so the stamp's score source is a single
-    ///      point of truth.
-    function _questStreakOf(address player) internal view returns (uint32) {
-        (uint32 questStreak, , , ) = questView.playerQuestStates(player);
-        return questStreak;
     }
 
     /*==================================================================
@@ -942,19 +1016,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @notice Standalone UNREWARDED manual/emergency advance trigger — only mintBurnie()
-    ///         credits. Post-fold the subscriber "buy" is the required-path process STAGE
-    ///         that runs INSIDE `advanceGame` (D-348-01), so the manual buy-clear drives
-    ///         the advance (the buy-equivalent). The `count` arg is accepted for router
-    ///         ABI-shape parity with the afking surface; the STAGE's own
-    ///         `BUY_BATCH`-style chunk budget is internal to the AdvanceModule,
-    ///         so `advanceGame` is parameterless and `count` is intentionally inert here.
-    /// @param count Unused (ABI-parity); the process chunk budget lives in the STAGE.
-    function autoBuy(uint256 count) external {
-        count; // silence unused-parameter; the process chunk budget is the STAGE's
-        IGameRouter(address(this)).advanceGame();
-    }
-
     /// @notice Standalone UNREWARDED manual/emergency afking-box open clear — only
     ///         mintBurnie() credits. Walks `_subOpenCursor` opening up to `count` stamped
     ///         afking boxes (0 = OPEN_BATCH).
@@ -969,5 +1030,19 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      site (the bounty `unit`); never an open-time seed input (FREEZE-safe).
     function _mintPriceInContext() internal view returns (uint256) {
         return PriceLookupLib.priceForLevel(_activeTicketLevel());
+    }
+
+    /// @dev ETH-denominated spend → BURNIE base units at the buy-context ticket price —
+    ///      the VALUATION BASIS for the lootbox-branch affiliate routing (DESIGN §3:
+    ///      affiliate + quest rewards are BURNIE flip-credit, never an ETH cut). A faithful
+    ///      copy of MintModule._ethToBurnieValue (:1669-1675); PRICE_COIN_UNIT (= 1000 ETH)
+    ///      is the inherited Storage constant already used at the bounty unit (:913). Pure —
+    ///      no ETH moves, no state.
+    function _ethToBurnie(
+        uint256 amountWei,
+        uint256 priceWei
+    ) private pure returns (uint256) {
+        if (amountWei == 0 || priceWei == 0) return 0;
+        return (amountWei * PRICE_COIN_UNIT) / priceWei;
     }
 }

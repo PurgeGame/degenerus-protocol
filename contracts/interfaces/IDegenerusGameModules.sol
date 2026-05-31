@@ -485,10 +485,6 @@ interface IGameAfkingModule {
     ///         (advance → afking-box open) and pay ONE bounty (PLACE-02).
     function mintBurnie() external;
 
-    /// @notice Standalone UNREWARDED advance trigger (post-fold the subscriber "buy" is
-    ///         the required-path process STAGE that runs inside advanceGame).
-    function autoBuy(uint256 count) external;
-
     /// @notice Standalone UNREWARDED afking-box open clear (walks _subOpenCursor).
     function autoOpen(uint256 count) external;
 

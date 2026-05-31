@@ -347,7 +347,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  caller. These are the canonical entrypoints (there is no longer a        |
       |  separate afking logic host). `subscribe` is the SINGLE subscription       |
       |  mutator (create / replace / cancel — the 4 per-field setters are folded  |
-      |  into it), so only 3 stubs remain (subscribe / mintBurnie / autoBuy); none is  |
+      |  into it), so only 2 stubs remain (subscribe / mintBurnie); none is            |
       |  `view`. The afking box-open is reached via mintBurnie's router (the          |
       |  module's autoOpen would collide with this Game's existing human-box      |
       |  autoOpen(uint256) selector, so it is not re-exposed as a stub here).     |
@@ -392,17 +392,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_AFKING_MODULE
             .delegatecall(
                 abi.encodeWithSelector(IGameAfkingModule.mintBurnie.selector)
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Standalone UNREWARDED afking advance trigger (the subscriber "buy" is the
-    ///         required-path process STAGE inside advanceGame); count is inert ABI-parity.
-    function autoBuy(uint256 count) external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_AFKING_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(IGameAfkingModule.autoBuy.selector, count)
             );
         if (!ok) _revertDelegate(data);
     }
