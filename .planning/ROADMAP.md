@@ -167,7 +167,16 @@ Plans:
 
   5. The NON-WIDENING regression + the gas measurement are proven (TST-05 / TST-06) — the reconceived afking/keeper suite compiles + passes against the game-resident model with net-zero new regression vs the v54 baseline `20ca1f79` (every pre-existing red enumerated BY NAME, `REGRESSION-BASELINE-v55.md`), absorbing any test renames / oracle migrations from the fold (incl. whatever 350 landed); and the per-buy + per-open marginal gas is measured under the 16.7M HARD per-tx ceiling with the GAS-01/02/03 wins proven same-results (the ~120k box-buy collapse + the staticcall→SLOAD + the same-slot flushes confirmed behavior-identical).
 
-**Plans**: TBD
+**Plans**: 9 plans / 3 waves
+- [ ] 351-01-PLAN.md — Wave 0: repair DeployProtocol.sol fixture (deploy GameAfkingModule + BingoModule, drop standalone AfKing) + reconcile predictAddresses.js DEPLOY_ORDER nonces (un-bricks the 64-file compile cascade)
+- [ ] 351-02-PLAN.md — adapt the AfKing* fuzz corpus (subscription/funding/concurrency) + author the TST-04 set-mutation + OPEN-E 4-protection proof
+- [ ] 351-03-PLAN.md — adapt the Keeper* reward/router/faucet fuzz corpus to mintBurnie (the differential _settleGame scaffolding + the vm.readFile repoints)
+- [ ] 351-04-PLAN.md — TST-01 freeze/determinism + the D-351-05 differential box oracle (RngLockDeterminism adapt + new proof)
+- [ ] 351-05-PLAN.md — TST-02 revert-free/no-valve (class A/B/C) + TST-03 EV-cap exactly-once (KeeperNonBrick adapt + new proof)
+- [ ] 351-06-PLAN.md — the D-351-02 removed-surface files (KeeperBatchAffiliateDeltaAudit + RedemptionStethFallback) — adjudicate adapt-vs-drop, record drops BY NAME
+- [ ] 351-07-PLAN.md — adapt the *Gas worst-case corpus (Router/Sweep/Levers/ResolveBet) to the game-resident STAGE + the 16.7M ceiling
+- [ ] 351-08-PLAN.md — TST-06 marginal-gas harness per the 350 spec (per-buy + per-open marginal + no-STATICCALL trace + 16.7M; GAS-03 Outcome-A N/A)
+- [ ] 351-09-PLAN.md — TST-05 REGRESSION-BASELINE-v55.md + the whole-tree forge test non-widening reconciliation (BY NAME vs 20ca1f79) + Hardhat sanity
 **UI hint**: no
 
 ### Phase 352: TERMINAL — Delta Audit + 3-Skill Genuine-PARALLEL Adversarial Sweep + FINDINGS-v55.0 + Closure Flip
