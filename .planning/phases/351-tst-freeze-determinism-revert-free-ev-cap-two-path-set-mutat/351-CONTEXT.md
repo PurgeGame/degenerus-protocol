@@ -96,10 +96,29 @@ because load-bearing).
   REJECTED-with-reasoning; zero contract change). Record in the TST-06 results: "no Outcome-B diff produced; GAS-03
   measurement not exercised" (350-TST06 §4 under Outcome A). The Outcome-B per-slice-vs-batch oracle + forced-underflow
   test are **N/A**.
-- **Freeze target = the 5-field STAMPED stamp** `(index, amount, day, scorePlus1, baseLevelPlus1)` (D-348-07 —
-  score+baseLevel are stamped-frozen). The **EV-cap clamp is the SOLE live-read** — that is exactly TST-03's
-  exactly-once charge, **not** a freeze target. Do NOT write a freeze test trying to prove score/baseLevel are
-  unmanipulable: they're frozen in the stamp (the live-read window from D-348-05 was superseded by the 5-field stamp).
+- **⚠ Freeze target = the ACTUALLY-STAMPED fields (corrected vs the stale "5-field stamp" memory).** 349.1 SUPERSEDED
+  the 348/349 design-intent 5-field stamp: `_afkingEpoch`/`index` was **DROPPED** (the box word is keyed by the
+  stamped **DAY**, `rngWordByDay[lastAutoBoughtDay]`, not a lootbox index) and the **LEVEL resolves LIVE at open**
+  (`_rollTargetLevel`, mirroring `resolveLootboxDirect`/human `openLootBox`). The **committed** `Sub` struct
+  (`DegenerusGameStorage.sol:1867`) stamps **`scorePlus1` (uint16) + `amount` (uint96, = spend, boons off) +
+  `lastAutoBoughtDay` (uint32 = the FROZEN seed day)** + the `lastOpenedDay` no-double-open marker. So:
+  - **FREEZE-03 (TST-01 determinism)** = the box **seed** is frozen — `keccak256(abi.encode(rngWordByDay[stampedDay],
+    player, stampedDay, amount))` with the stamped day + the day's committed word + stamped `amount`/`scorePlus1`,
+    carrying **NO** `block.timestamp/number/prevrandao/coinbase/blockhash`. Two opens of the same stamp at different
+    blocks → byte-identical box. **Do NOT try to prove `level`/`baseLevel` is frozen** — the level is **LIVE by
+    design** (the "benign open-time level/currentDay dependence of `targetLevel`", ROADMAP 349 BOX-04), which is
+    exactly why the **differential oracle (D-351-05)** compares afking-open vs human-`openLootBox` **at the same live
+    level** → byte-identical. The two paths share the seed preimage (`resolveAfkingBox:877` ≡ `openLootBox:503`).
+  - **FREEZE-02 (TST-01 index-binding) — reconcile the literal ROADMAP wording against the DAY-keyed reality.** The
+    box word is now DAY-keyed, not lootbox-index-keyed; the freeze is that the stamp is written **PRE-RNG** (before
+    `rngGate` commits `rngWordByDay[day]`) and the open reads it after it lands. The planner reconciles the literal
+    "mid-day `requestLootboxRng` index advance" sub-test against `348-FREEZE-PROOF.md` + the live `GameAfkingModule`/
+    `AdvanceModule` STAGE (the property to prove is the pre-RNG/post-RNG ordering + no-interleave, not attachment to a
+    stale lootbox index).
+  - The **EV-cap clamp** (`lootboxEvBenefitUsedByLevel[player][level+1]`) is a live read-modify-write at open — that
+    is TST-03's exactly-once charge (the level it keys on is the live open-level, consistent with the live-level
+    resolve). This corrects the CONTEXT's earlier "sole live-read" phrasing: the **level itself is also live by
+    design** (matching the human path), and the differential oracle is what proves equivalence.
 - **Foundry `forge test`, sequential-on-main, NO worktrees** (the repo has a `lib/forge-std` submodule + node_modules
   → worktrees are avoided per v49's TST note).
 - **NON-WIDENING discipline + BY-NAME baseline doc** (v49 `666/42/17`, v48 `632/42` precedent): `REGRESSION-BASELINE-v55.md`
