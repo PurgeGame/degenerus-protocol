@@ -44,8 +44,10 @@ contract RngLockDeterminism is DeployProtocol {
     uint256 constant SLOT_PACKED_0 = 0;
     uint256 constant SLOT_RNG_WORD_CURRENT = 3;
     uint256 constant SLOT_VRF_REQUEST_ID = 4;
-    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 37;
-    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 38;
+    // RE-DERIVED via `forge inspect storage DegenerusGame` (the v55 afking append shifted these by 1):
+    // lootboxRngPacked 37→38 (the lootbox RNG index lives in bits[0:47]), lootboxRngWordByIndex 38→39.
+    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 38;
+    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 39;
     // Defensive slot constants for sec4 RunTerminalDecimatorJackpot
     // contribution. Exact values are placeholders; aggregator hash captures
     // post-resolution storage state at these slots for byte-identity
@@ -147,13 +149,16 @@ contract RngLockDeterminism is DeployProtocol {
     // Perturbation action library
     // ────────────────────────────────────────────────────────────────────
 
-    // 9 legacy v43 classes (0..8) + 2 v49 keeper-router classes (9..10) + 1 v50
-    // whale-pass-claim class (11).
-    // cls 9 = AfKing.doWork() — the one-category router fired same-tx inside the
-    //   locked window (RD-1..5): the advance-consume `cw += totalFlipReversals`
-    //   (DegenerusGameAdvanceModule.sol:257) must read only FROZEN state.
-    // cls 10 = AfKing.autoBuy(0) — the standalone UNREWARDED escape, fired during
-    //   rngLock: autoBuy queues pre-entropy and is SAFE during the freeze (RD-2),
+    // 9 legacy v43 classes (0..8) + 2 v55 game-resident router classes (9..10) + 1 v50
+    // whale-pass-claim class (11). [v55 Δ3: doWork→mintBurnie; the standalone autoBuy
+    // escape has no successor (the buy folded into advanceGame's STAGE), reframed to the
+    // box-open no-op.]
+    // cls 9 = game.mintBurnie() — the v55 unified router (the Δ3 doWork successor) fired
+    //   same-tx inside the locked window (RD-1..5): the advance-consume `cw +=
+    //   totalFlipReversals` (DegenerusGameAdvanceModule.sol:257) must read only FROZEN state.
+    // cls 10 = game.autoOpen(0) — the v55 box-open clear (the standalone afKing.autoBuy
+    //   escape's faithful permissionless-action-during-the-freeze successor; the per-sub buy
+    //   folded into the STAGE) fired during rngLock: a NON-REVERTING NO-OP (RD-5 entry-gate),
     //   it must never abort the lock nor alter the consumed VRF-derived output.
     // cls 11 = DegenerusGame.claimWhalePass(player) — the v50 WHALE-04 freeze leg:
     //   the deferred whale-pass materialization endpoint fired same-tx inside the
@@ -223,20 +228,24 @@ contract RngLockDeterminism is DeployProtocol {
             vm.warp(block.timestamp + 6 hours + 1);
             try game.retryLootboxRng() {} catch { return; }
         } else if (cls == 9) {
-            // v49 keeper-router: fire the one-category router same-tx inside the
-            // locked window. doWork routes buy → advance → open by priority; every
-            // leg targets a pinned ContractAddresses.* and the advance-consume reads
-            // only FROZEN state. May revert NoWork()/RngNotReady() depending on the
-            // routed leg — the try/catch absorbs that (the freeze proof is the byte-
-            // identity of the consumed word, not whether doWork found work).
+            // v55 game-resident router (Δ3 doWork→mintBurnie): fire the one-category router
+            // same-tx inside the locked window. mintBurnie routes advance → afking-box open by
+            // priority; every leg targets a pinned ContractAddresses.* (GAME self-call /
+            // LootboxModule delegatecall / COINFLIP) and the advance-consume reads only FROZEN
+            // state. May revert NoWork() depending on the routed leg — the try/catch absorbs
+            // that (the freeze proof is the byte-identity of the consumed word, not whether
+            // mintBurnie found work).
             vm.prank(actor);
-            try afKing.doWork() {} catch { return; }
+            try game.mintBurnie() {} catch { return; }
         } else if (cls == 10) {
-            // v49 keeper-router: the standalone UNREWARDED autoBuy escape fired during
-            // rngLock. autoBuy queues subscriber buys pre-entropy and is SAFE during the
-            // freeze (RD-2) — it must never abort the lock. count=0 = the default batch.
+            // v55 reframe (the standalone afKing.autoBuy escape has NO successor — the per-sub
+            // buy folded into advanceGame's required-path STAGE, 349-05). The faithful v55
+            // permissionless-action-during-the-freeze successor is the box open clear:
+            // game.autoOpen(0) (the human-box open) is a NON-REVERTING NO-OP during rngLock (the
+            // RD-5 entry-gate returns 0 at DegenerusGame.sol:1740/boxesPending false). It must
+            // never abort the lock nor alter the consumed VRF-derived output. count=0 = OPEN_BATCH.
             vm.prank(actor);
-            try afKing.autoBuy(0) {} catch { return; }
+            try game.autoOpen(0) {} catch { return; }
         } else if (cls == 11) {
             // v50 WHALE-04 freeze leg: the deferred whale-pass materialization endpoint
             // fired same-tx inside the locked window. Per 334-WHALE04-FREEZE-PROOF.md §2,
@@ -1818,14 +1827,15 @@ contract RngLockDeterminism is DeployProtocol {
     }
 
     // ════════════════════════════════════════════════════════════════════
-    // TST-01 (v49) -- the keeper-router same-tx FREEZE proofs
+    // TST-01 (v55 game-resident, was v49) -- the router same-tx FREEZE proofs
     //
     // The advance-consume `cw = rngWordCurrent; cw += totalFlipReversals;
     // _finalizeLootboxRng(cw)` (DegenerusGameAdvanceModule.sol:254-259) reads
     // `totalFlipReversals` INSIDE the daily drain. ADV-04 / v45-vrf-freeze-invariant
     // require that read to be FROZEN between the VRF request and the consume — even
-    // when the unified keeper router (AfKing.doWork) or the standalone autoBuy escape
-    // fires same-tx inside the locked window (RD-1..5).
+    // when the v55 unified router (game.mintBurnie, the Δ3 doWork successor) or the box-open
+    // clear (game.autoOpen, the standalone-autoBuy-escape successor) fires same-tx inside the
+    // locked window (RD-1..5).
     //
     // The consumed VRF-derived output is captured as the per-index lootbox word
     // `_lootboxRngWord(purchaseIndex)` — `_finalizeLootboxRng(cw)` writes exactly the
@@ -2165,15 +2175,19 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 opened = game.autoOpen(100);
         assertEq(opened, 0, "autoOpen-noop: autoOpen must return 0 during rngLock");
 
-        // The standalone AfKing.autoOpen escape is likewise a non-reverting no-op during lock.
+        // The v55 unified router mintBurnie() (the ONLY afking-open entry — the standalone afking
+        // autoOpen selector collides with the human autoOpen(uint256) so it is NOT re-exposed on the
+        // Game) is likewise safe during lock: its open leg no-ops via the `rngLockedFlag` entry-gate
+        // (_autoOpen, GameAfkingModule.sol:941), and a NoWork() on an empty router is the expected
+        // clean signal — never a freeze-aborting revert.
         address keeperCaller = makeAddr("tst01-autoopen-keeper");
         vm.prank(keeperCaller);
-        afKing.autoOpen(100); // must not revert
+        try game.mintBurnie() {} catch {} // must not abort the lock
     }
 
-    /// @dev Read lootboxEthBase[index][who] (slot 22) — the first-deposit signal, zeroed on open
-    ///      (mirrors CrankOpenBoxWorstCaseGas.t.sol:251-256; the un-opened/opened oracle for a box).
-    uint256 constant SLOT_LOOTBOX_ETH_BASE = 22;
+    /// @dev Read lootboxEthBase[index][who] (slot 23, RE-DERIVED: was 22 — the v55 afking append shifted
+    ///      it by 1) — the first-deposit signal, zeroed on open (the un-opened/opened oracle for a box).
+    uint256 constant SLOT_LOOTBOX_ETH_BASE = 23;
 
     function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
         bytes32 inner = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_ETH_BASE)));
@@ -2219,7 +2233,7 @@ contract RngLockDeterminism is DeployProtocol {
         assertFalse(game.boxesPending(), "no-maroon: boxesPending() false during lock (RD-3)");
         assertEq(game.autoOpen(100), 0, "no-maroon: zero boxes open during lock (RD-5 no-op)");
         vm.prank(keeper);
-        afKing.autoOpen(100); // standalone escape: must not revert during lock
+        try game.mintBurnie() {} catch {} // v55 unified router: must not abort the lock (afking open no-ops via the entry-gate)
         assertGt(
             _lootboxEthBase(boxIndex, boxOwner), 0,
             "no-maroon: the queued box is NOT consumed by the lock (deferred, not dropped)"
