@@ -2,15 +2,14 @@
 gsd_state_version: 1.0
 milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
-status: executing
-last_updated: "2026-05-30T20:03:26.539Z"
-last_activity: 2026-05-30 -- Phase 349 planning complete
+status: paused
+last_updated: "2026-05-31T10:20:07.594Z"
 progress:
-  total_phases: 5
-  completed_phases: 0
+  total_phases: 6
+  completed_phases: 1
   total_plans: 12
-  completed_plans: 6
-  percent: 0
+  completed_plans: 11
+  percent: 17
 ---
 
 # Project State
@@ -20,7 +19,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v55.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 349 — impl — the one carefully sequenced batched contract diff (code size reclaim → fold + box redesign)
+**Current focus:** Phase 349 — impl-the-one-carefully-sequenced-batched-contract-diff-code-
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,12 +31,12 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 349
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-30 -- Phase 349 planning complete
+Phase: 349.1 (afking-box-redesign-live-level-resolve-drop-afkingepoch) — IMPL EXECUTED, HELD at contract-commit gate (USER hand-review)
+Plan: 5 of 5 applied (the revised single batched diff SUPERSEDES-IN-PLACE the held 349 diff; whole tree UNCOMMITTED; HEAD 8d51a3ec)
+Status: Phase 349.1 redesign applied + contracts-only `forge build` CLEAN (DegenerusGame 22,925 B / margin 1,651 — under the 24,576 ceiling AND below the held-349 baseline 23,499; the _afkingEpoch + P5 deletions netted ~574 B back). Delivered: storage drops _afkingEpoch/pack/unpack + renames lastOpenedIndex→lastOpenedDay (day-keyed marker); the process STAGE gains the NO-ORPHAN guard FIRST (dominates re-stamp/reclaim/evict/funding-kill) + drops the epoch write/epochIndex param + the P2 ticket/lootbox split (ticket subs queue whole tickets via purchaseWith, lootbox subs stamp a box); resolveAfkingBox resolves at the LIVE level (mirrors resolveLootboxDirect) with a caller-passed frozen-day word rngWordByDay[stampDay] + frozen-day seed; the open leg (_afkingBoxReady/_openAfkingBox) is fully day-keyed; AdvanceModule STAGE caller + IDegenerusGameModules decls updated; P5 dead-code (batchPurchase/BatchBuy/AF_KING constant + onlyFlipCreditors clause) removed; doWork→mintBurnie rename (3 code sites + prose). TWO USER additions folded in: (1) SUBSCRIBER_CAP 65535→500 (bound the per-cycle iteration the protocol pays for; _addToSet new-insert-only, re-subscribe exempt); (2) subscribe msg.value → the RESOLVED funding bucket (the funder for operator-funded subs, gated by the OPENE-04 approval; self-funded byte-unchanged). All recorded in 349.1-DESIGN §6/§8 + the 5 SUMMARYs.
+>>> RESUME: contract-commit gate OPEN — review `git diff -- contracts/` (+ the untracked GameAfkingModule.sol). On USER "approved", make the ONE batched contracts/*.sol commit (needs CONTRACTS_COMMIT_APPROVED=1). `forge test` is 351's charge (stale AfKing.sol-import / _afkingEpoch / ABI test reds expected until then). Next after commit: 350 GAS. <<<
 
-Progress: [██░░░░░░░░] 20% (1/5 phases)
+Progress: [████░░░░░░] ~45% (349.1 IMPL applied+held, build-clean; contract commit pending USER review; 350/351/352 ahead)
 
 ## Current Milestone Roadmap (v55.0 — phases 348-352)
 
@@ -433,6 +432,7 @@ Items acknowledged and deferred at v34.0 milestone close on 2026-05-09 (carry-fo
 ### Roadmap Evolution
 
 - Phase 319.1 inserted after Phase 319: OPEN-E shared funding source (full BURNIE + ETH pool) promoted from Deferred into v46.0 scope; routes Sub.fundingSource ETH-pool draw + both burnForKeeper charge sites, operator-approval gated; lands after GAS, before the terminal audit
+- Phase 349.1 inserted after Phase 349: AfKing box redesign: live-level resolve + drop _afkingEpoch + ticket/lootbox split + no-orphan guard + mintBurnie rename (converged in Phase 349 hand-review) (URGENT)
 
 ### Phase 302 — Cross-Surface Adversarial Sweep (COMPLETE 2026-05-19)
 
