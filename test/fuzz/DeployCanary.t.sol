@@ -4,8 +4,13 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title DeployCanary -- Validates all 23+4 addresses match patched constants
+/// @title DeployCanary -- Validates all 25+4 addresses match patched constants
 /// @notice If any assertion fails, the nonce prediction or deploy order is wrong.
+/// @dev v55.0: the standalone AfKing was dissolved into DegenerusGame (GameAfkingModule);
+///      this canary now guards that the two new game-resident delegatecall modules land at
+///      their ContractAddresses constants. A deploy-order drift surfaces here as a LOUD
+///      assertEq failure, not a silent delegatecall mis-dispatch (the GAME_AFKING_MODULE /
+///      GAME_BINGO_MODULE compile-time constants the DegenerusGame stubs delegatecall into).
 contract DeployCanary is DeployProtocol {
     function setUp() public {
         _deployProtocol();
@@ -13,7 +18,7 @@ contract DeployCanary is DeployProtocol {
 
     /// @notice Every deployed contract address must match its ContractAddresses constant
     function test_allAddressesMatch() public view {
-        // Protocol contracts (23)
+        // Protocol contracts (25)
         assertEq(address(icons32), ContractAddresses.ICONS_32, "ICONS_32 mismatch");
         assertEq(address(mintModule), ContractAddresses.GAME_MINT_MODULE, "GAME_MINT_MODULE mismatch");
         assertEq(address(advanceModule), ContractAddresses.GAME_ADVANCE_MODULE, "GAME_ADVANCE_MODULE mismatch");
@@ -24,6 +29,9 @@ contract DeployCanary is DeployProtocol {
         assertEq(address(lootboxModule), ContractAddresses.GAME_LOOTBOX_MODULE, "GAME_LOOTBOX_MODULE mismatch");
         assertEq(address(boonModule), ContractAddresses.GAME_BOON_MODULE, "GAME_BOON_MODULE mismatch");
         assertEq(address(degeneretteModule), ContractAddresses.GAME_DEGENERETTE_MODULE, "GAME_DEGENERETTE_MODULE mismatch");
+        // v55.0 game-resident modules (deploy nonce N+10 / N+11, right after degenerette):
+        assertEq(address(bingoModule), ContractAddresses.GAME_BINGO_MODULE, "GAME_BINGO_MODULE mismatch");
+        assertEq(address(afkingModule), ContractAddresses.GAME_AFKING_MODULE, "GAME_AFKING_MODULE mismatch");
         assertEq(address(coin), ContractAddresses.COIN, "COIN mismatch");
         assertEq(address(coinflip), ContractAddresses.COINFLIP, "COINFLIP mismatch");
         assertEq(address(game), ContractAddresses.GAME, "GAME mismatch");
@@ -32,7 +40,6 @@ contract DeployCanary is DeployProtocol {
         assertEq(address(jackpots), ContractAddresses.JACKPOTS, "JACKPOTS mismatch");
         assertEq(address(quests), ContractAddresses.QUESTS, "QUESTS mismatch");
         assertEq(address(deityPass), ContractAddresses.DEITY_PASS, "DEITY_PASS mismatch");
-        assertEq(address(afKing), ContractAddresses.AF_KING, "AF_KING mismatch");
         assertEq(address(vault), ContractAddresses.VAULT, "VAULT mismatch");
         assertEq(address(sdgnrs), ContractAddresses.SDGNRS, "SDGNRS mismatch");
         assertEq(address(dgnrs), ContractAddresses.DGNRS, "DGNRS mismatch");
@@ -59,7 +66,8 @@ contract DeployCanary is DeployProtocol {
         assertTrue(address(sdgnrs).code.length > 0, "SDGNRS not deployed");
         assertTrue(address(admin).code.length > 0, "Admin not deployed");
         assertTrue(address(coinflip).code.length > 0, "Coinflip not deployed");
-        assertTrue(address(afKing).code.length > 0, "AfKing not deployed");
+        assertTrue(address(afkingModule).code.length > 0, "GameAfkingModule not deployed");
+        assertTrue(address(bingoModule).code.length > 0, "DegenerusGameBingoModule not deployed");
         assertTrue(address(gnrus).code.length > 0, "GNRUS not deployed");
     }
 }

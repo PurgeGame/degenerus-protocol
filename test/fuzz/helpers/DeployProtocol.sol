@@ -15,6 +15,8 @@ import {DegenerusGameGameOverModule} from "../../../contracts/modules/DegenerusG
 import {DegenerusGameLootboxModule} from "../../../contracts/modules/DegenerusGameLootboxModule.sol";
 import {DegenerusGameBoonModule} from "../../../contracts/modules/DegenerusGameBoonModule.sol";
 import {DegenerusGameDegeneretteModule} from "../../../contracts/modules/DegenerusGameDegeneretteModule.sol";
+import {DegenerusGameBingoModule} from "../../../contracts/modules/DegenerusGameBingoModule.sol";
+import {GameAfkingModule} from "../../../contracts/modules/GameAfkingModule.sol";
 import {BurnieCoin} from "../../../contracts/BurnieCoin.sol";
 import {BurnieCoinflip} from "../../../contracts/BurnieCoinflip.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -23,7 +25,6 @@ import {DegenerusAffiliate} from "../../../contracts/DegenerusAffiliate.sol";
 import {DegenerusJackpots} from "../../../contracts/DegenerusJackpots.sol";
 import {DegenerusQuests} from "../../../contracts/DegenerusQuests.sol";
 import {DegenerusDeityPass} from "../../../contracts/DegenerusDeityPass.sol";
-import {AfKing} from "../../../contracts/AfKing.sol";
 import {DegenerusVault} from "../../../contracts/DegenerusVault.sol";
 import {StakedDegenerusStonk} from "../../../contracts/StakedDegenerusStonk.sol";
 import {DegenerusStonk} from "../../../contracts/DegenerusStonk.sol";
@@ -37,10 +38,12 @@ import {MockLinkToken} from "../../../contracts/mocks/MockLinkToken.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 
 /// @title DeployProtocol -- Abstract base for Foundry invariant tests
-/// @notice Deploys all 4 mocks + 23 protocol contracts in setUp().
+/// @notice Deploys all 4 mocks + 25 protocol contracts in setUp().
 ///         Inherit this, call _deployProtocol() in your setUp().
 /// @dev Address correctness depends on patchForFoundry.js having patched
-///      ContractAddresses.sol before forge build.
+///      ContractAddresses.sol before forge build (there is no pretest hook —
+///      run `node scripts/...patchForFoundry...` before `forge build` to align
+///      the predicted CREATE addresses with the ContractAddresses.sol constants).
 abstract contract DeployProtocol is Test {
     // Mocks
     MockVRFCoordinator public mockVRF;
@@ -59,6 +62,8 @@ abstract contract DeployProtocol is Test {
     DegenerusGameLootboxModule public lootboxModule;
     DegenerusGameBoonModule public boonModule;
     DegenerusGameDegeneretteModule public degeneretteModule;
+    DegenerusGameBingoModule public bingoModule;
+    GameAfkingModule public afkingModule;
     BurnieCoin public coin;
     BurnieCoinflip public coinflip;
     DegenerusGame public game;
@@ -67,7 +72,6 @@ abstract contract DeployProtocol is Test {
     DegenerusJackpots public jackpots;
     DegenerusQuests public quests;
     DegenerusDeityPass public deityPass;
-    AfKing public afKing;
     DegenerusVault public vault;
     StakedDegenerusStonk public sdgnrs;
     DegenerusStonk public dgnrs;
@@ -81,7 +85,7 @@ abstract contract DeployProtocol is Test {
         vm.warp(86400);
 
         // --- Deploy 4 mocks (nonces 1-4) ---
-        // Then 24 protocol contracts (nonces 5-28) ---
+        // Then 25 protocol contracts (nonces 5-29) ---
         mockVRF = new MockVRFCoordinator();           // nonce 1
         mockStETH = new MockStETH();                  // nonce 2
         mockLINK = new MockLinkToken();               // nonce 3
@@ -100,12 +104,20 @@ abstract contract DeployProtocol is Test {
         boonModule = new DegenerusGameBoonModule();    // N+8 = nonce 13
         degeneretteModule = new DegenerusGameDegeneretteModule(); // N+9 = nonce 14
 
-        coin = new BurnieCoin();                       // N+10 = nonce 15
+        // v55.0: the two new game-resident delegatecall modules (no ctor args — same shape as the
+        // 10 siblings above). They MUST be deployed before VAULT/SDGNRS: the vault/stonk constructor
+        // self-subscribes hit the game-resident afking surface (DegenerusGame delegatecalls
+        // GameAfkingModule), which only resolves if the afking module sits at GAME_AFKING_MODULE.
+        // Order mirrors predictAddresses.js DEPLOY_ORDER (GAME_BINGO_MODULE N+10, GAME_AFKING_MODULE N+11).
+        bingoModule = new DegenerusGameBingoModule();  // N+10 = nonce 15
+        afkingModule = new GameAfkingModule();         // N+11 = nonce 16
 
-        coinflip = new BurnieCoinflip();                // N+11 = nonce 16
+        coin = new BurnieCoin();                       // N+12 = nonce 17
 
-        game = new DegenerusGame();                    // N+12 = nonce 17
-        wwxrp = new WrappedWrappedXRP();               // N+13 = nonce 18
+        coinflip = new BurnieCoinflip();                // N+13 = nonce 18
+
+        game = new DegenerusGame();                    // N+14 = nonce 19
+        wwxrp = new WrappedWrappedXRP();               // N+15 = nonce 20
 
         // DegenerusAffiliate needs empty arrays
         affiliate = new DegenerusAffiliate(
@@ -114,31 +126,33 @@ abstract contract DeployProtocol is Test {
             new uint8[](0),
             new address[](0),
             new bytes32[](0)
-        );                                             // N+14 = nonce 19
+        );                                             // N+16 = nonce 21
 
-        jackpots = new DegenerusJackpots();            // N+15 = nonce 20
-        quests = new DegenerusQuests();                // N+16 = nonce 21
-        deityPass = new DegenerusDeityPass();          // N+17 = nonce 22
+        jackpots = new DegenerusJackpots();            // N+17 = nonce 22
+        quests = new DegenerusQuests();                // N+18 = nonce 23
+        deityPass = new DegenerusDeityPass();          // N+19 = nonce 24
 
-        // AfKing: 3-arg constructor (subCost, bounty, lootboxMin), all non-zero so the
-        // sanity reverts pass; makes NO cross-contract calls. Must precede VAULT/SDGNRS
-        // so their SUB-09 afKing.subscribe() calls hit live code (not address(0)).
-        afKing = new AfKing(5_000_000_000, 885_000_000, 10_000_000_000); // N+18 = nonce 23
+        // v55.0: the standalone AfKing contract was DISSOLVED — its subscriber state + logic are
+        // game-resident (GameAfkingModule, deployed at N+11 above). VAULT/SDGNRS self-subscribe via
+        // the game-resident path: DegenerusVault.sol calls gamePlayer.subscribe(address(this), …,
+        // address(0)) (SUB-09) and StakedDegenerusStonk.sol calls game.subscribe(address(this), …,
+        // address(0)) (SUB-09 self-subscribe; OPEN-E default-self) — both hit live GameAfkingModule
+        // code because GAME + the afking module are already deployed.
 
-        // Vault constructor calls COIN.vaultMintAllowance() + AfKing.subscribe() (SUB-09)
-        vault = new DegenerusVault();                  // N+19 = nonce 24
+        // Vault constructor calls COIN.vaultMintAllowance() + game.subscribe(...) (SUB-09)
+        vault = new DegenerusVault();                  // N+20 = nonce 25
 
-        // Stonk constructor calls GAME.claimWhalePass() + AfKing.subscribe() (SUB-09 self-subscribe)
+        // Stonk constructor calls GAME.claimWhalePass() + game.subscribe(...) (SUB-09 self-subscribe)
         // Mints creator's 20% to DGNRS address
-        sdgnrs = new StakedDegenerusStonk();           // N+20 = nonce 25
+        sdgnrs = new StakedDegenerusStonk();           // N+21 = nonce 26
 
         // DGNRS reads its sDGNRS balance and mints DGNRS to CREATOR
-        dgnrs = new DegenerusStonk();                  // N+21 = nonce 26
+        dgnrs = new DegenerusStonk();                  // N+22 = nonce 27
 
         // Admin constructor calls VRF.createSubscription() + GAME.wireVrf()
-        admin = new DegenerusAdmin();                  // N+22 = nonce 27
+        admin = new DegenerusAdmin();                  // N+23 = nonce 28
 
         // GNRUS: self-mints 1T to address(this), no cross-contract constructor calls
-        gnrus = new GNRUS();                            // N+23 = nonce 28
+        gnrus = new GNRUS();                            // N+24 = nonce 29
     }
 }
