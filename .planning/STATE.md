@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
-status: verifying
-last_updated: "2026-05-31T16:00:46.151Z"
+status: ready_to_plan
+last_updated: 2026-05-31T16:10:06.559Z
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 21
-  completed_plans: 20
+  completed_plans: 26
   percent: 57
+stopped_at: Phase 350 complete (3/3) — ready to discuss Phase 351
 ---
 
 # Project State
@@ -19,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v55.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 350 — gas-behavior-identical-no-cost-wins-box-ledger-warm-sub-stam
+**Current focus:** Phase 351 — tst — freeze/determinism + revert free + ev cap + two path + set mutation + non widening + gas
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -31,9 +32,9 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 350 (gas-behavior-identical-no-cost-wins-box-ledger-warm-sub-stam) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
+Phase: 351
+Plan: Not started
+Status: Ready to plan
 >>> RESUME: **PHASE 350 GAS ✅ COMPLETE — all 3 plans shipped, NO net contract change (Outcome A). 350-03 EXECUTED (2026-05-31, docs-only, autonomous; `350-OUTCOME.md` commit `a6dfc276` + gate-phrasing amend `2ec78b4e`; SUMMARY `63f7c0c7`; `contracts/` diff EMPTY throughout — byte-identical to `453f8073`).** 350-03 executed the 350-02 W3 branch directive verbatim (`350-GAS-SKEPTIC-VERDICTS.md` §7 = **Outcome A**, re-read to verify): recorded **GAS-01 + GAS-02 = CONFIRMED-STRUCTURAL** (delivered by the 349/349.1 relocation; NO apply at 350; measured 351 TST-06) and **GAS-03 = REJECTED-with-reasoning** (warm SSTORE ~100 gas × (N−1) NOT ~2.9k · the 349.2-restored affiliate/quest/creditFlip `:760/:806/:816/:831` are BURNIE flip-credit OFF the ETH+pool path → no new batchable shared additive slot · `prizePoolsPacked` grep-absent · the mixed-chunk `purchaseWith` interleave hazard breaks the accumulate-and-flush identity → decisive · ~0.04%-of-chunk saving vs net audit surface on the SOLVENCY-01 spine; v49 REJECT-with-reasoning precedent). **Task 2 (Outcome-B penny-exact `claimablePool` same-slot-flush author) SKIPPED — Outcome A; no contract touched.** **NO contract-commit gate** (Outcome A has no diff; the close ran hands-off per the project rule — the ONLY action needing approval is committing `contracts/*.sol`, and there is none). Closed per ROADMAP Phase 350 SC4's explicit no-diff branch. 1 deviation (Rule 1): reworded `350-OUTCOME.md` prose so the coarse Task-2 verify gate (`Outcome B` + `in effect|APPROVED`) matched the actual branch — semantics unchanged. GAS-01/02/03 all `[x]` Complete in REQUIREMENTS.md. **NEXT = `/gsd-execute-phase 351` TST** (TST-01..06; TST-06 gas measurement of the GAS-01/02 marginals; **NO Outcome-B `claimablePool` byte-identical oracle** since GAS-03 REJECTED; clears the stale `AfKing.sol`-import reds + proves parity; `forge test` is 351's charge). Then 352 TERMINAL (FULL close — 3-skill sweep + delta-audit + FINDINGS-v55.0; **no net-new GAS contract surface** to delta-audit from 350). On `main`, NOT pushed (v55 ships at 352). scope.txt still modified in the working tree (held-349 audit-scope edit, NOT committed). <<<
 
 Progress: [██████████] 95%

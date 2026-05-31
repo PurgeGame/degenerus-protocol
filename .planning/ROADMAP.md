@@ -199,7 +199,7 @@ Plans:
 | 349. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (code-size reclaim → fold + box redesign) | v55.0 | 5/5 | Complete (shipped via 349.1) | 2026-05-31 |
 | 349.1 AfKing Box Redesign — live-level resolve, drop _afkingEpoch, ticket/lootbox split, mintBurnie rename (INSERTED) | v55.0 | 5/5 | Complete (committed 77c3d9ef) | 2026-05-31 |
 | 349.2 IMPL FIX — Restore quest-credit + affiliate for afking LOOTBOX subs (regression) (INSERTED) | v55.0 | 1/1 | Complete   | 2026-05-31 |
-| 350. GAS — Behavior-Identical No-Cost Wins (box-ledger → warm Sub-stamp + staticcall → SLOAD + same-slot flushes) | v55.0 | 3/3 | Complete   | 2026-05-31 |
+| 350. GAS — Behavior-Identical No-Cost Wins (box-ledger → warm Sub-stamp + staticcall → SLOAD + same-slot flushes) | v55.0 | 3/3 | Complete    | 2026-05-31 |
 | 351. TST — Freeze/Determinism + Revert-Free + EV-Cap + Two-Path + Set-Mutation + Non-Widening + Gas | v55.0 | 0/? | Not started | - |
 | 352. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v55.0 + Closure | v55.0 | 0/? | Not started | - |
 
