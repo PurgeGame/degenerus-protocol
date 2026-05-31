@@ -188,8 +188,9 @@ contract BurnieCoinflip {
     }
 
     /// @notice Restricts access to authorized flip creditors.
-    /// @dev Allowed callers: GAME (delegatecall modules), QUESTS (level quest rewards), AFFILIATE, ADMIN,
-    ///      AF_KING (afking sweep bounty, gas-pegged creditFlip), SDGNRS (redemption flip-credit at
+    /// @dev Allowed callers: GAME (delegatecall modules — incl. the afking router's
+    ///      in-context creditFlip bounty, which pays AS the GAME, not a separate keeper contract),
+    ///      QUESTS (level quest rewards), AFFILIATE, ADMIN, SDGNRS (redemption flip-credit at
     ///      submit via redeemBurnieShare — net BURNIE neutral, offset by burn+consume).
     modifier onlyFlipCreditors() {
         address sender = msg.sender;
@@ -198,7 +199,6 @@ contract BurnieCoinflip {
             sender != ContractAddresses.QUESTS &&
             sender != ContractAddresses.AFFILIATE &&
             sender != ContractAddresses.ADMIN &&
-            sender != ContractAddresses.AF_KING &&
             sender != ContractAddresses.SDGNRS
         ) revert OnlyFlipCreditors();
         _;

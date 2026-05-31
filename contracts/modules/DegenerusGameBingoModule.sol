@@ -4,6 +4,8 @@ pragma solidity 0.8.34;
 import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
+import {BitPackingLib} from "../libraries/BitPackingLib.sol";
+import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
 /**
  * @title DegenerusGameBingoModule
@@ -40,6 +42,9 @@ contract DegenerusGameBingoModule is
     /// @notice Thrown when this player has already claimed this (level, quadrant).
     error AlreadyClaimed();
 
+    /// @notice Thrown when msg.sender is neither the player nor an approved operator.
+    error NotApproved();
+
     // -------------------------------------------------------------------------
     // Reward constants (transcribed VERBATIM from 339-DESIGN-LOCK-BINGO §5)
     // -------------------------------------------------------------------------
@@ -59,6 +64,19 @@ contract DegenerusGameBingoModule is
     uint256 internal constant FIRST_QUADRANT_BURNIE = 5_000e18;
 
     // -------------------------------------------------------------------------
+    // claimAffiliateDgnrs constants
+    // -------------------------------------------------------------------------
+
+    /// @dev Bonus BURNIE flip credit for deity pass affiliate claims (20% of payout).
+    uint16 private constant AFFILIATE_DGNRS_DEITY_BONUS_BPS = 2000;
+
+    /// @dev Max deity bonus per level, denominated in ETH (converted to BURNIE at current price).
+    uint256 private constant AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH = 5 ether;
+
+    /// @dev Minimum affiliate score (approx 10 ETH of referral volume).
+    uint256 private constant AFFILIATE_DGNRS_MIN_SCORE = 10 ether;
+
+    // -------------------------------------------------------------------------
     // Events (D-340-01: player-only indexed; amounts/level/symbol non-indexed)
     // -------------------------------------------------------------------------
 
@@ -75,6 +93,17 @@ contract DegenerusGameBingoModule is
         uint8 symbol,
         uint256 burnieReward,
         uint256 dgnrsPaid
+    );
+
+    /// @notice Emitted when a player claims DGNRS affiliate rewards. Carries the affiliate,
+    ///         the level, the calling address, the claimant's frozen affiliate score, and
+    ///         the amount paid.
+    event AffiliateDgnrsClaimed(
+        address indexed affiliate,
+        uint24 indexed level,
+        address indexed caller,
+        uint256 score,
+        uint256 amount
     );
 
     // -------------------------------------------------------------------------
@@ -163,5 +192,86 @@ contract DegenerusGameBingoModule is
         coinflip.creditFlip(msg.sender, burnie);
 
         emit BingoClaimed(msg.sender, level, symbol, burnie, dgnrsPaid);
+    }
+
+    // -------------------------------------------------------------------------
+    // claimAffiliateDgnrs — the body lives here; the Game keeps a thin delegatecall
+    // dispatch stub shaped like claimBingo. It is reached via the Game's
+    // delegatecall (so the outbound msg.sender to SDGNRS / coinflip is GAME, which
+    // both transferFromPool [onlyGame] and creditFlip [onlyFlipCreditors] require);
+    // a direct call to this module address would revert at those gates. The two
+    // private caller-resolution helpers (_resolvePlayer / _requireApproved) travel
+    // with it (operatorApprovals is inherited from DegenerusGameStorage).
+    // -------------------------------------------------------------------------
+
+    /// @notice Claim DGNRS affiliate rewards for the current level.
+    /// @dev Requires a minimum affiliate score and allows one claim per level.
+    ///      Draws from a segregated allocation (5% of the affiliate pool snapshotted
+    ///      at level transition). All claimants for the same level share a fixed pot,
+    ///      eliminating first-mover advantage. Uses totalAffiliateScore as the exact
+    ///      denominator for score-proportional distribution.
+    ///      Affiliate scores always route to level + 1 during gameplay, so at
+    ///      transition time all scores for currLevel are frozen and immutable.
+    /// @param player Affiliate address to claim for (address(0) = msg.sender).
+    function claimAffiliateDgnrs(address player) external {
+        player = _resolvePlayer(player);
+
+        uint24 currLevel = level;
+        if (currLevel == 0) revert E();
+
+        if (affiliateDgnrsClaimedBy[currLevel][player]) revert E();
+
+        uint256 score = affiliate.affiliateScore(currLevel, player);
+        bool isDeityHolder = mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
+        if (!isDeityHolder && score < AFFILIATE_DGNRS_MIN_SCORE) revert E();
+
+        uint256 denominator = affiliate.totalAffiliateScore(currLevel);
+        if (denominator == 0) revert E();
+
+        uint256 allocation = levelDgnrsAllocation[currLevel];
+        if (allocation == 0) revert E();
+        uint256 reward = (allocation * score) / denominator;
+        if (reward == 0) revert E();
+
+        uint256 paid = dgnrs.transferFromPool(
+            IStakedDegenerusStonk.Pool.Affiliate,
+            player,
+            reward
+        );
+        if (paid == 0) revert E();
+
+        levelDgnrsClaimed[currLevel] += paid;
+
+        if (isDeityHolder && score != 0) {
+            uint256 bonus = (score * AFFILIATE_DGNRS_DEITY_BONUS_BPS) / 10_000;
+            uint256 cap = (AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH *
+                PRICE_COIN_UNIT) / PriceLookupLib.priceForLevel(level);
+            if (bonus > cap) {
+                bonus = cap;
+            }
+            if (bonus != 0) {
+                coinflip.creditFlip(player, bonus);
+            }
+        }
+
+        affiliateDgnrsClaimedBy[currLevel][player] = true;
+        emit AffiliateDgnrsClaimed(player, currLevel, msg.sender, score, paid);
+    }
+
+    /// @dev Resolve a player argument: address(0) -> msg.sender; otherwise require
+    ///      msg.sender is the player or an approved operator. Relocated with
+    ///      claimAffiliateDgnrs (the Game retains its own copies for other callers).
+    function _resolvePlayer(
+        address player
+    ) private view returns (address resolved) {
+        if (player == address(0)) return msg.sender;
+        if (player != msg.sender) _requireApproved(player);
+        return player;
+    }
+
+    function _requireApproved(address player) private view {
+        if (msg.sender != player && !operatorApprovals[player][msg.sender]) {
+            revert NotApproved();
+        }
     }
 }

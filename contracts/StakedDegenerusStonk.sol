@@ -9,6 +9,18 @@ import {IStETH} from "./interfaces/IStETH.sol";
 interface IDegenerusGamePlayer {
     /// @notice Advance the game to the next level/day.
     function advanceGame() external;
+    /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
+    /// @dev v55.0 ARCH-03: the afking subscription surface is GAME-resident (AfKing dissolved).
+    ///      sDGNRS self-subscribes (player == address(this) == msg.sender) so the GAME's
+    ///      SUB-02 self-consent path passes with no operator approval.
+    function subscribe(
+        address player,
+        bool drainGameCreditFirst,
+        bool useTickets,
+        uint8 dailyQuantity,
+        uint8 reinvestPct,
+        address fundingSource
+    ) external payable;
     /// @notice Claim accumulated ETH winnings for a player.
     function claimWinnings(address player) external;
     /// @notice Claim whale pass for a player.
@@ -51,19 +63,6 @@ interface IBurnieCoinflipPlayer {
     function redeemBurnieShare(address redeemer, uint256 base) external;
     /// @notice Configure auto-rebuy mode for coinflips (player == self for sDGNRS).
     function setCoinflipAutoRebuy(address player, bool enabled, uint256 takeProfit) external;
-}
-
-/// @notice Interface for the AfKing subscription afking used by sDGNRS.
-interface IAfKingSubscribe {
-    /// @notice Start or extend a daily subscription for `player` (self when 0/msg.sender).
-    function subscribe(
-        address player,
-        bool drainGameCreditFirst,
-        bool useTickets,
-        uint8 dailyQuantity,
-        uint8 reinvestPct,
-        address fundingSource
-    ) external payable;
 }
 
 /// @notice Interface for DGNRS wrapper contract used by sDGNRS.
@@ -318,10 +317,6 @@ contract StakedDegenerusStonk {
     IBurnieCoinflipPlayer private constant coinflip =
         IBurnieCoinflipPlayer(ContractAddresses.COINFLIP);
 
-    /// @dev AfKing subscription afking for sDGNRS's protocol-owned self-subscription
-    IAfKingSubscribe private constant afKing =
-        IAfKingSubscribe(ContractAddresses.AF_KING);
-
     /// @dev DGNRS wrapper contract for burning wrapped DGNRS to receive sDGNRS backing
     IDegenerusStonkWrapper private constant dgnrsWrapper = IDegenerusStonkWrapper(ContractAddresses.DGNRS);
 
@@ -381,7 +376,10 @@ contract StakedDegenerusStonk {
         // (player == msg.sender). sDGNRS holds the permanent deity pass (granted in
         // the DegenerusGame constructor), so the afking's pass-OR-pay gate takes the
         // free 30-day extend at zero cost.
-        afKing.subscribe(address(this), true, false, 1, 2, address(0));
+        // v55.0 ARCH-03: the afking surface is GAME-resident (AfKing dissolved);
+        // self-subscribe directly against the GAME (subscriber == msg.sender ⇒
+        // the GAME's SUB-02 self-consent path, no operator approval needed).
+        game.subscribe(address(this), true, false, 1, 2, address(0));
         coinflip.setCoinflipAutoRebuy(address(this), true, 0);
     }
 

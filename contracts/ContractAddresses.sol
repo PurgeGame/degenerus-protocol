@@ -32,6 +32,8 @@ library ContractAddresses {
         address(0x3D7Ebc40AF7092E3F1C81F2e996cbA5Cae2090d7);
     address internal constant GAME_BINGO_MODULE =
         address(0xB14609De6e7ec52e4eAE6cbB1fEaE8e4d4db1F60);
+    address internal constant GAME_AFKING_MODULE =
+        address(0xaf6109dE6e7eC52e4eaE6Cbb1Feae8e4D4db1f61);
     address internal constant COIN =
         address(0xD16d567549A2a2a2005aEACf7fB193851603dd70);
     address internal constant COINFLIP =
@@ -52,8 +54,6 @@ library ContractAddresses {
         address(0x92a6649Fdcc044DA968d94202465578a9371C7b1);
     address internal constant ADMIN =
         address(0xDA5A5ADC64C8013d334A0DA9e711B364Af7A4C2d);
-    address internal constant AF_KING =
-        address(0x3Cff5E7eBecb676c3Cb602D0ef2d46710b88854E);
     address internal constant DEITY_PASS =
         address(0xe8dc788818033232EF9772CB2e6622F1Ec8bc840);
     address internal constant WWXRP =

@@ -62,9 +62,9 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | [28:29] ticketWriteSlot          bool     Double-buffer write toggle         |
  * | [29:30] prizePoolFrozen          bool     Prize pool freeze active flag      |
  * | [30:31] presaleOver              bool     Coin-presale-box terminal latch    |
- * | [31:32] <padding>                         1 byte unused                      |
+ * | [31:32] subsFullyProcessed       bool     Afking STAGE drain-complete flag    |
  * +-----------------------------------------------------------------------------+
- *   Total: 31 bytes used (1 byte padding)
+ *   Total: 32 bytes used (0 bytes padding -- FULL)
  *
  * +-----------------------------------------------------------------------------+
  * | EVM SLOT 1 (32 bytes) -- Prize Pools                                        |
@@ -332,6 +332,16 @@ abstract contract DegenerusGameStorage {
     ///      credit accrual occur. Occupies slot-0 padding byte [30:31].
     bool internal presaleOver;
 
+    /// @dev Afking process-STAGE drain-completion flag — the subscriber-drain sibling
+    ///      of `ticketsFullyProcessed`. False while the STAGE is stamping the funded
+    ///      subscriber set this day; set true once the set is fully drained; flipped back
+    ///      to false forward-looking at the start of the next day (the advance's
+    ///      `_afkingResetDay != day` gate), so it always reflects "afking done for the
+    ///      current day". Packed into slot-0 byte [31:32] alongside `level` /
+    ///      `rngLockedFlag` / `ticketsFullyProcessed`, which the advance-path STAGE
+    ///      already SLOADs, so its read/write is free.
+    bool internal subsFullyProcessed;
+
     // =========================================================================
     // EVM SLOT 1: Prize Pools
     // =========================================================================
@@ -406,7 +416,7 @@ abstract contract DegenerusGameStorage {
     ///      inside claimablePool; every afkingFunding mutation moves claimablePool in tandem.
     ///
     ///      SECURITY: Pull pattern — the funding source withdraws its own balance via
-    ///      withdrawAfkingFunding; spent by batchPurchase keyed on the funder.
+    ///      withdrawAfkingFunding; spent by afking auto-buys keyed on the funder.
     mapping(address => uint256) internal afkingFunding;
 
     /// @dev Nested mapping: level -> trait ID (0-255) -> array of ticket holders.
@@ -1823,4 +1833,105 @@ abstract contract DegenerusGameStorage {
         if (mintCount >= currLevel) return 25;
         return (uint256(mintCount) * 25) / uint256(currLevel);
     }
+
+    // =========================================================================
+    // AfKing Subscriptions (game-resident; shared with the GameAfkingModule
+    // and the AdvanceModule process STAGE)
+    // =========================================================================
+    // The subscriber set lives on the shared base so the process/open passes
+    // operate on it in-context (plain SLOADs), with the per-sub box stamp read
+    // back from the same record at open. The systemwide afking ETH total is
+    // already carried inside `claimablePool` via the `afkingFunding` ledger
+    // (declared above); no separate aggregate is introduced.
+
+    /// @notice Per-player AfKing subscription record + the per-buy box stamp.
+    /// @dev Layout (Solidity packs sequentially) — ONE 32-byte slot (≈232/256 bits):
+    ///        config (56b):  dailyQuantity(8) + validThroughLevel(32) + reinvestPct(8) + flags(8)
+    ///        per-sub stamp (112b): scorePlus1(16) + amount(96)
+    ///        markers (64b): lastAutoBoughtDay(32) + lastOpenedDay(32)
+    ///      Under the 349.1 redesign there is NO per-day epoch: the box resolves at
+    ///      the LIVE level at open (no stored baseLevelPlus1 roll floor) and sources
+    ///      its RNG word from `rngWordByDay[lastAutoBoughtDay]` (an existing map), so
+    ///      the only frozen-at-stamp inputs are the two genuinely-per-sub fields —
+    ///      `scorePlus1` (per-sub activity score) and `amount` (per-sub mp×qty spend).
+    ///      `fundingSource` lives in the sparse `_fundingSourceOf` map (absent ⇒ self,
+    ///      the common case stores nothing). `lastAutoBoughtDay` double-duties as the
+    ///      success-marker AND the frozen seed `day` (it is NOT also an epoch key).
+    ///      `amount` is uint96 (max ~7.9e28 wei ≈ 79e9 ETH; a single box can never
+    ///      exceed the ETH in existence, so it never truncates), carried at full
+    ///      fidelity into the open's abi.encode(rngWord, player, day, amount) box seed
+    ///      and the EV-cap payout. The stamp freezes the box's SPEND and the seed
+    ///      `day`; the LEVEL and the EV-cap key read LIVE at open (auto-open removes
+    ///      the player's ability to time the level — see 349.1-DESIGN §2). No `adj`
+    ///      field is stored — the open passes the full stamped `amount` to the EV-cap.
+    struct Sub {
+        // --- config (56 bits) ---
+        /// @dev 0 = paused / never-subscribed; minimum 1 when active.
+        uint8 dailyQuantity;
+        /// @dev Game-level horizon through which the sub's pass coverage extends
+        ///      (lazyPassHorizon snapshot at subscribe; refreshed on crossing;
+        ///      deity sentinel = type(uint24).max; non-pass = 0). CONSENT-01 pass-gating.
+        uint32 validThroughLevel;
+        /// @dev Claimable reinvest percentage (0..100); 0 = no reinvest.
+        uint8 reinvestPct;
+        /// @dev bit 0 free; bit 1 = drainGameCreditFirst; bit 2 = useTickets.
+        uint8 flags;
+        // --- per-sub stamp (112 bits) ---
+        /// @dev Stamp: frozen activityScore + 1 (the EV multiplier input at open).
+        ///      Genuinely per-sub (each subscriber's own activity score).
+        uint16 scorePlus1;
+        /// @dev Stamp: spend in wei (boons off, so amount == spend). uint96 holds
+        ///      ~79e9 ETH of headroom; consumed at full fidelity by the box seed
+        ///      and the EV-cap payout math. Genuinely per-sub (mp × effectiveQty).
+        uint96 amount;
+        // --- markers (64 bits) ---
+        /// @dev Success-marker AND the frozen seed `day` (the same process day):
+        ///      day index of the last successful buy, written only after a successful
+        ///      afkingFunding debit. The open sources the box word from
+        ///      `rngWordByDay[lastAutoBoughtDay]` and freezes this `day` in the seed.
+        uint32 lastAutoBoughtDay;
+        /// @dev Day-keyed no-double-open marker: the open leg materializes a box only
+        ///      while `lastOpenedDay < lastAutoBoughtDay`; after the open it sets
+        ///      `lastOpenedDay = lastAutoBoughtDay`, making the predicate false until
+        ///      the next successful buy advances `lastAutoBoughtDay`. The no-orphan
+        ///      guard (process STAGE) keys on the same two day fields.
+        uint32 lastOpenedDay;
+    }
+
+    /// @dev Per-subscriber record (the iterable set's value), incl. the per-sub stamp.
+    mapping(address => Sub) internal _subOf;
+
+    /// @dev Sparse funder map — the wallet whose `afkingFunding` funds a sub.
+    ///      Absent / address(0) ⇒ self-funded (the common case, which stores NOTHING).
+    ///      CONSENT-01 funder identity. Written at
+    ///      subscribe (set-if-nonzero / delete-if-self) and read once per process
+    ///      iteration to resolve `src` (and once at open is NOT needed — funding is
+    ///      already debited at process). OPEN-E 4-protection unchanged.
+    mapping(address => address) internal _fundingSourceOf;
+
+    /// @dev Insertion-ordered iterable subscriber set (swap-pop tombstone on
+    ///      cancel — the H-CANCEL-SWAP-MISS membership class).
+    address[] internal _subscribers;
+
+    /// @dev 1-indexed membership ⟺ packed-index map (0 = not in set); the
+    ///      swap-pop bookkeeping for `_subscribers`.
+    mapping(address => uint256) internal _subscriberIndex;
+
+    /// @dev The two uint16 cursors + the uint32 afking reset-day pack into ONE slot
+    ///      (16 + 16 + 32 = 64 bits). The cursors index `_subscribers` (the active set
+    ///      is capped at 500 — GameAfkingModule.SUBSCRIBER_CAP, well within uint16) and
+    ///      are drained in chunks across advanceGame / router calls.
+    /// @dev Process-STAGE cursor: the pre-RNG stamp pass position.
+    uint16 internal _subCursor;
+
+    /// @dev Open-leg cursor: the post-RNG box-open pass position (the
+    ///      OPEN_BATCH-style router-category cursor).
+    uint16 internal _subOpenCursor;
+
+    /// @dev The day the process STAGE was last reset for. When the advance first enters
+    ///      a new `day` (`_afkingResetDay != day`), it resets `subsFullyProcessed` + the
+    ///      `_subCursor` ONCE, before that day's STAGE drains — a forward-looking reset
+    ///      (at the start of the new day, not trailing after the prior day completes),
+    ///      firing exactly once per day regardless of which RNG path runs.
+    uint32 internal _afkingResetDay;
 }

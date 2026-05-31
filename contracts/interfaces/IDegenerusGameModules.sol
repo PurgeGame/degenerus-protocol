@@ -233,9 +233,9 @@ interface IDegenerusGameMintModule {
         MintPaymentKind payKind
     ) external payable;
 
-    /// @notice Afking-batch buy entry: the fresh-ETH portion is an explicit `ethValue` param
+    /// @notice Afking ticket-buy entry: the fresh-ETH portion is an explicit `ethValue` param
     ///         debited from the funder's `afkingFunding` bucket inside the Game (not msg.value),
-    ///         so the non-payable batchPurchase runs many subscriber buys inline in one frame.
+    ///         so the afking process STAGE queues a ticket-mode sub's tickets inline (non-payable).
     function purchaseWith(
         address buyer,
         uint256 ticketQuantity,
@@ -346,6 +346,26 @@ interface IDegenerusGameLootboxModule {
         uint16 activityScore
     ) external;
 
+    /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed
+    ///         frozen-day word.
+    /// @dev The LIVE-level twin of resolveLootboxDirect — the box rolls from the LIVE level
+    ///      and the EV-cap RMW is the single draw at open (EVCAP-01), with two deviations:
+    ///      the word is a caller-passed param (rngWordByDay[stamp day], §1) and the seed
+    ///      `day` is the FROZEN stamped process day (§1). Called by the GameAfkingModule
+    ///      open-leg.
+    /// @param player Box owner (resolved from the subscription)
+    /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend)
+    /// @param day The boundary-pinned process day stamped at process (frozen seed input)
+    /// @param rngWord The frozen stamp day's word rngWordByDay[day], passed by the caller (§1)
+    /// @param activityScore The stamped activity-score bps (scorePlus1 - 1, frozen EV input)
+    function resolveAfkingBox(
+        address player,
+        uint256 amount,
+        uint32 day,
+        uint256 rngWord,
+        uint16 activityScore
+    ) external;
+
     /// @notice Returns deity boon slot information
     /// @param deity Address of the deity
     /// @return slots Array of 3 boon slot types
@@ -420,11 +440,69 @@ interface IDegenerusGameDegeneretteModule {
 }
 
 /// @title IDegenerusGameBingoModule
-/// @notice Interface for color-completion bingo claims (v51.0)
+/// @notice Interface for color-completion bingo claims (v51.0) + the affiliate-DGNRS claim.
 interface IDegenerusGameBingoModule {
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
     /// @param level The level to claim on (uint24 storage-key width).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
     /// @param slots Per-color positions in traitBurnTicket[level][traitId] the caller occupies.
     function claimBingo(uint24 level, uint8 symbol, uint32[8] calldata slots) external;
+
+    /// @notice Claim DGNRS affiliate rewards for the current level. The Game retains a
+    ///         thin delegatecall dispatch stub that targets this selector; the body must
+    ///         run in the Game's context for the onlyGame / onlyFlipCreditors external
+    ///         calls, which is what that stub provides.
+    /// @param player Affiliate address to claim for (address(0) = msg.sender).
+    function claimAffiliateDgnrs(address player) external;
+}
+
+/// @title IGameAfkingModule
+/// @notice Interface for the AfKing subscription logic.
+/// @dev The GameAfkingModule is a delegatecall module operating on the Game's storage
+///      (the subscriber set / cursors / Sub stamps live in
+///      DegenerusGameStorage). This interface declares the mutating surface
+///      so the Game-hosted dispatch stubs and the AdvanceModule process STAGE call
+///      resolve against a real ABI. Every function runs IN the Game's storage context
+///      (delegatecall), so msg.sender is preserved end-to-end (the consent gates and
+///      the bounty payee read the original caller).
+interface IGameAfkingModule {
+    /// @notice The SINGLE subscription entrypoint: create / replace (dailyQuantity >= 1)
+    ///         or cancel (dailyQuantity == 0, SUB-07 tombstone) for `player`
+    ///         (self when 0/msg.sender).
+    /// @dev FREEZE-01 rngLock guard (all of create / replace / cancel); CONSENT-01:
+    ///      SUB-02 self-consent OR operator-approval (third-party path); OPENE-04
+    ///      funding-source operator-approval gate; AFSUB validThroughLevel write.
+    function subscribe(
+        address player,
+        bool drainGameCreditFirst,
+        bool useTickets,
+        uint8 dailyQuantity,
+        uint8 reinvestPct,
+        address fundingSource
+    ) external payable;
+
+    /// @notice Unified permissionless router: do ONE category of pending work this call
+    ///         (advance → afking-box open) and pay ONE bounty (PLACE-02).
+    function mintBurnie() external;
+
+    /// @notice Standalone UNREWARDED advance trigger (post-fold the subscriber "buy" is
+    ///         the required-path process STAGE that runs inside advanceGame).
+    function autoBuy(uint256 count) external;
+
+    /// @notice Standalone UNREWARDED afking-box open clear (walks _subOpenCursor).
+    function autoOpen(uint256 count) external;
+
+    /// @notice The required-path process STAGE callee: for each funded sub it stamps the
+    ///         per-sub box fields (lootbox mode) or queues whole tickets (ticket mode),
+    ///         debits afkingFunding, advances _subCursor by up to maxCount. Called by the
+    ///         AdvanceModule STAGE via delegatecall (FREEZE-02b — the STAGE runs pre-RNG, so
+    ///         the day's word is uncommitted at stamp). A NO-ORPHAN guard skips any sub with
+    ///         a pending unopened box. No per-day epoch.
+    /// @param processDay The boundary-pinned process day (seeds the open, FREEZE-03).
+    /// @param maxCount Per-chunk budget (the anti-gas-DoS caller bound).
+    /// @return processed Number of set entries advanced/handled this chunk.
+    function processSubscriberStage(
+        uint32 processDay,
+        uint256 maxCount
+    ) external returns (uint256 processed);
 }

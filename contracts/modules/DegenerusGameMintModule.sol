@@ -856,11 +856,11 @@ contract DegenerusGameMintModule is
         );
     }
 
-    /// @notice Afking-batch purchase entry: like `purchase`, but the fresh-ETH portion is an
-    ///         explicit `ethValue` parameter rather than `msg.value`. Lets `batchPurchase` run
-    ///         many subscriber buys inline in one frame (the contract holds the aggregate ETH),
-    ///         instead of one value-bearing self-call per slice. Reached only via the
-    ///         AF_KING-gated `batchPurchase` delegatecall.
+    /// @notice Afking ticket-buy entry: like `purchase`, but the fresh-ETH portion is an
+    ///         explicit `ethValue` parameter rather than `msg.value`. Lets the afking process
+    ///         STAGE queue a ticket-mode subscriber's whole tickets inline in one frame (the
+    ///         contract holds the prepaid afkingFunding ETH), with no value-bearing self-call.
+    ///         Reached via the GameAfkingModule process STAGE's ticket-mode buy (delegatecall).
     function purchaseWith(
         address buyer,
         uint256 ticketQuantity,
@@ -1068,7 +1068,7 @@ contract DegenerusGameMintModule is
         uint256 initialClaimable = claimableWinnings[buyer];
 
         // ethValue is the per-slice fresh-ETH portion (== msg.value for single-tx callers; the
-        // explicit afking batch slice for batchPurchase, which processes many buys in one frame).
+        // explicit afking ticket-buy slice routed through purchaseWith from the process STAGE).
         uint256 remainingEth = ethValue;
         uint256 lootboxFreshEth = 0;
         uint256 lootboxClaimableUsed = 0;
@@ -1337,7 +1337,7 @@ contract DegenerusGameMintModule is
 
         // Coin-presale-box credit accrual: while the box presale is open, every ETH
         // ticket + lootbox spend (fresh + recycled) earns 25% spendable box credit.
-        // Covers batchPurchase, which routes through this path.
+        // Covers the afking ticket buy, which routes through this path.
         if (!presaleOver) {
             presaleBoxCredit[buyer] += (ticketCost + lootBoxAmount) / 4;
         }

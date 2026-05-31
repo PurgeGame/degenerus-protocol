@@ -8,7 +8,8 @@ import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 import {
     IDegenerusGameGameOverModule,
     IDegenerusGameJackpotModule,
-    IDegenerusGameMintModule
+    IDegenerusGameMintModule,
+    IGameAfkingModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {
     IVRFCoordinator,
@@ -68,6 +69,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint8 private constant STAGE_JACKPOT_COIN_TICKETS = 8;
     uint8 private constant STAGE_JACKPOT_PHASE_ENDED = 9;
     uint8 private constant STAGE_JACKPOT_DAILY_STARTED = 10;
+    /// @dev Partial-drain status for the afking process STAGE (mirrors
+    ///      STAGE_TICKETS_WORKING): the subscriber set has not yet fully stamped
+    ///      this cycle, so advance broke before rngGate and returns mult.
+    uint8 private constant STAGE_SUBS_WORKING = 11;
     event DailyRngApplied(
         uint32 day,
         uint256 rawWord,
@@ -137,6 +142,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
     uint48 private constant MIDDAY_RNG_RETRY_TIMEOUT = 6 hours;
 
+    /// @dev Per-call afking process-STAGE chunk budget (BUY_BATCH-style). A large
+    ///      subscriber set drains across several advanceGame calls so the STAGE
+    ///      stays well under the 16.7M advance-chain gas ceiling. Matches the
+    ///      afking BUY_BATCH (a landed buy ≈ 262k gas; 50 ≈ 13.1M).
+    uint256 private constant SUB_STAGE_BATCH = 50;
+
     /// @notice DGNRS reward for top affiliate: 1% of remaining affiliate pool.
     uint16 private constant AFFILIATE_POOL_REWARD_BPS = 100;
 
@@ -182,7 +193,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             (bool goReturn, uint8 goStage) = _handleGameOverPath(day, lvl, psd);
             if (goReturn) {
                 // Gameover path: advance ran but earns NO router bounty (the flip-credit
-                // coin is worthless at gameover) — return mult = 0 so doWork pays nothing.
+                // coin is worthless at gameover) — return mult = 0 so mintBurnie pays nothing.
                 emit Advance(goStage, lvl);
                 return 0;
             }
@@ -267,6 +278,51 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     }
                 }
                 ticketsFullyProcessed = true;
+            }
+
+            // --- Afking process STAGE (D-348-01 required-path; FREEZE-02b): stamp the
+            // funded subscriber set BEFORE the day requests its RNG. Inserted on the
+            // new-day path only, after the daily ticket-drain gate and the inherited
+            // _enforceDailyMintGate (:191 — ZERO new gate code, D-348-03), strictly
+            // before rngGate. The mid-day same-day path (:194) returns earlier, so the
+            // STAGE never runs mid-day. Chunked by SUB_STAGE_BATCH across advance calls
+            // (BUY_BATCH-style) so a large set stays under the 16.7M advance-chain
+            // ceiling — mirrors the ticketsFullyProcessed partial-drain discipline:
+            // break + return mult while !subsFullyProcessed; set true only at cursor
+            // end; then fall through to rngGate.
+            //
+            // The STAGE runs strictly pre-RNG (before rngGate writes the day's word), so
+            // rngWordByDay[processDay] is uncommitted when a sub is stamped — the
+            // load-bearing freeze property. The box reads the LIVE level +
+            // rngWordByDay[lastAutoBoughtDay] at open.
+            //
+            // Forward-looking per-day reset: the first time the advance enters a new `day`,
+            // flip the drain gate + cursor BEFORE that day's STAGE runs. subsFullyProcessed
+            // stays true after a day's STAGE completes (it means "afking done for that day")
+            // until the next day flips it here. Stamped to `day` at the reset, so it fires
+            // exactly once per day and never re-fires within the day (independent of when
+            // dailyIdx catches up in _unlockRng).
+            if (_afkingResetDay != day) {
+                _afkingResetDay = day;
+                subsFullyProcessed = false;
+                _subCursor = 0;
+            }
+            if (!subsFullyProcessed) {
+                if (_subscribers.length != 0) {
+                    _runSubscriberStage(day);
+                    if (_subCursor < _subscribers.length) {
+                        // Partial drain: more subs remain this cycle — break before
+                        // rngGate and return mult (no RNG request yet). subsFullyProcessed
+                        // stays false; the next advance call resumes the cursor.
+                        stage = STAGE_SUBS_WORKING;
+                        break;
+                    }
+                }
+                // Cursor reached the set end (or the set is empty) — the whole funded
+                // set is stamped for this cycle. Fall through to rngGate. subsFullyProcessed
+                // resets to false for the next day at _swapTicketSlot (the per-day reset,
+                // alongside ticketsFullyProcessed).
+                subsFullyProcessed = true;
             }
 
             // RNG: use existing word or request new one
@@ -684,6 +740,30 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
+    /// @dev Drive one chunk of the afking process STAGE via GAME_AFKING_MODULE
+    ///      delegatecall (the module operates on this contract's storage in-context —
+    ///      the subscriber set / cursors / Sub stamps all live in
+    ///      DegenerusGameStorage). For each funded sub the callee STAMPS the per-sub box
+    ///      fields (lootbox mode) or QUEUES whole tickets via purchaseWith (ticket mode),
+    ///      sets the lastAutoBoughtDay marker, debits afkingFunding (claimablePool in
+    ///      tandem, fail loud — D-348-04 no-valve), and advances _subCursor by up to
+    ///      SUB_STAGE_BATCH; it persists _subCursor itself. The STAGE caller decides
+    ///      drained-vs-partial by re-reading _subCursor against _subscribers.length. No
+    ///      per-day epoch is written — the box reads the LIVE level + rngWordByDay[day] at open.
+    /// @param processDay The boundary-pinned process day (seeds the open, FREEZE-03).
+    function _runSubscriberStage(uint32 processDay) private {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_AFKING_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IGameAfkingModule.processSubscriberStage.selector,
+                    processDay,
+                    SUB_STAGE_BATCH
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
     /// @dev Bubble up revert reason from delegatecall failure.
     ///      Uses assembly to preserve original error data.
     /// @param reason The error bytes from failed delegatecall.
@@ -1018,7 +1098,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Block while mid-day ticket processing is active — prevents entropy reroll
         // by requesting a new VRF word after inspecting the current one.
         if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) revert E();
-
         uint48 nowTs = uint48(block.timestamp);
         uint32 currentDay = _simulatedDayIndexAt(nowTs);
 

@@ -819,6 +819,103 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         );
     }
 
+    /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed
+    ///         frozen-day word.
+    /// @dev The afking open route (BOX-04/05 / EVCAP-01 / FREEZE-03). Under the 349.1
+    ///      redesign it is the LIVE-LEVEL twin of `resolveLootboxDirect` (:763) — identical
+    ///      resolution shape (derive the seed, roll the target level from the LIVE level, do
+    ///      the SINGLE `_applyEvMultiplierWithCap` RMW at open, then `_resolveLootboxCommon`)
+    ///      — with exactly TWO deviations from `resolveLootboxDirect`:
+    ///
+    ///        1. the RNG `rngWord` is a CALLER-PASSED param (the GameAfkingModule open-leg
+    ///           passes `rngWordByDay[lastAutoBoughtDay]`, the frozen stamp day's word —
+    ///           §1), NOT read from any index-keyed map; and
+    ///        2. the seed `day` is the FROZEN stamped process day (a passed param), NOT the
+    ///           live `_simulatedDayIndex()` — the day MUST stay frozen in the seed or a
+    ///           self-keepering player could grind the seed by open-timing (§1).
+    ///
+    ///      Everything else is IDENTICAL to `resolveLootboxDirect`: `currentLevel = level +
+    ///      1` LIVE, `targetLevel = _rollTargetLevel(currentLevel, seed)` rolls from the LIVE
+    ///      level (NO stored baseLevel floor — auto-open removes the player's ability to time
+    ///      the level, so the level freeze is unnecessary; the freeze proof is §2, LOCKED),
+    ///      and the SINGLE `_applyEvMultiplierWithCap(player, currentLevel, amount,
+    ///      evMultiplierBps)` RMW — the sole residual live-read, a benign monotonic
+    ///      down-clamp (FREEZE-01b), keyed on the SAME
+    ///      `lootboxEvBenefitUsedByLevel[player][level+1]` map the human buy-time write uses
+    ///      so the human + afking boxes share the one per-level 10-ETH EV budget (BOX-05).
+    ///      The buy-time EV write is bypassed for afking boxes (the process pass STAMPS only —
+    ///      DegenerusGameMintModule:1303/1327 are never reached for this box), so this is the
+    ///      single draw (no double-draw). The cap hard-clamps at 10 ETH with the no-write
+    ///      100%-EV short-circuit ⇒ NO revert (FREEZE-01b). The seed carries ZERO `block.*`
+    ///      entropy.
+    ///
+    ///      BOX-01: boons OFF for afking boxes ⇒ `amount` IS the spend exactly (there is no
+    ///      boosted-amount freeze field — the stamped `amount` is the unboosted box value).
+    ///      The boon/pass ROLL inside `_resolveLootboxCommon` still runs on every ETH-lootbox
+    ///      path (gated by real game-state, identical to the auto-resolve callers); BOX-01
+    ///      governs the AMOUNT field, not the roll.
+    ///
+    ///      Tail flags match the HUMAN `openLootBox` for outcome parity (an afking box must be
+    ///      identical to a normal box in every way that matters): `emitLootboxEvent = true`
+    ///      (emits `LootBoxOpened` like any box open) and `payColdBustConsolation = true` (a
+    ///      bust pays the same WWXRP consolation a human box does). The ONE intentional
+    ///      exception is the distress bonus — `distressEth = 0` / `totalPackedEth = 0`: the
+    ///      human value is frozen at buy in the cold-ledger `lootboxDistressEth`, which the
+    ///      stamp-only afking box never writes (BOX-02). Deliberately omitted as a mega-niche
+    ///      end-game feature (active only the final day before game-over, by which point
+    ///      afking subscribers are gone). No `RngNotReady` guard here — the caller
+    ///      (`_afkingBoxReady`) pre-gates on a landed `rngWordByDay[day] != 0`, so a zero word
+    ///      never reaches this function. Sole caller: the GameAfkingModule open-leg, via the
+    ///      GAME_LOOTBOX_MODULE delegatecall (the box materialization is private to this
+    ///      module — `resolveAfkingBox` is the one freeze-correct seam; `resolveLootboxDirect`
+    ///      derives the seed from the LIVE day and would not freeze the seed `day`).
+    /// @param player Box owner (resolved by the GameAfkingModule open-leg from the sub).
+    /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend).
+    /// @param day The boundary-pinned PROCESS day stamped at process (FREEZE-03 seed).
+    /// @param rngWord The frozen stamp day's word `rngWordByDay[day]`, passed by the caller (§1).
+    /// @param activityScore The stamped activity-score bps (scorePlus1 - 1, FROZEN EV input).
+    function resolveAfkingBox(
+        address player,
+        uint256 amount,
+        uint32 day,
+        uint256 rngWord,
+        uint16 activityScore
+    ) external {
+        if (amount == 0) return;
+
+        // Byte-identical to openLootBox (:534) / resolveLootboxDirect (:768): the
+        // abi.encode preimage — with the FROZEN stamped `day` (§1, prevents seed-grinding by
+        // open-timing) and the CALLER-PASSED frozen-day word `rngWordByDay[day]` (§1).
+        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
+
+        // LIVE level, exactly like resolveLootboxDirect (:767): auto-open removes the
+        // player's ability to time the level (§2), so the box rolls from the live level with
+        // NO stored baseLevel floor.
+        uint24 currentLevel = level + 1;
+        uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
+
+        // The SINGLE EV-cap RMW at open (EVCAP-01) — the sole residual live-read, a benign
+        // monotonic down-clamp (FREEZE-01b), keyed [player][currentLevel] on the SAME
+        // per-level 10-ETH budget map the human buy-time write uses (BOX-05). Fed the FROZEN
+        // evMultiplierBps from the stamped activityScore. Hard-clamped, no revert.
+        uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
+        uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
+
+        _resolveLootboxCommon(
+            player,
+            day,
+            0,
+            scaledAmount,
+            targetLevel,
+            currentLevel,
+            seed,
+            true,
+            true,
+            0,
+            0
+        );
+    }
+
     // =========================================================================
     // Deity Boon Functions
     // =========================================================================
@@ -1238,9 +1335,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Activate a 100-level whale pass for a player by recording an O(1)
-    ///      pending claim (D-20). Pre-v50.0 this was an inline 100-iteration
-    ///      `_queueTickets` mint at box-open time; the loop is retired by
-    ///      WHALE-01 so opens become uniform O(1) regardless of pass status.
+    ///      pending claim (D-20). Opens are uniform O(1) regardless of pass status.
     ///      Materialization (stats + 100 levels × tickets) is deferred to the
     ///      player-paid `claimWhalePass` endpoint at WhaleModule:1018, where
     ///      the stats helper is applied immediately after the read-then-zero

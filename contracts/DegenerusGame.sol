@@ -42,7 +42,8 @@ import {
     IDegenerusGameLootboxModule,
     IDegenerusGameBoonModule,
     IDegenerusGameDegeneretteModule,
-    IDegenerusGameBingoModule
+    IDegenerusGameBingoModule,
+    IGameAfkingModule
 } from "./interfaces/IDegenerusGameModules.sol";
 import {MintPaymentKind} from "./interfaces/IDegenerusGame.sol";
 import {
@@ -159,15 +160,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     uint16 private constant COINFLIP_BOUNTY_DGNRS_BPS = 20;
     uint256 private constant COINFLIP_BOUNTY_DGNRS_MIN_BET = 50_000 ether;
     uint256 private constant COINFLIP_BOUNTY_DGNRS_MIN_POOL = 20_000 ether;
-
-    /// @dev Bonus BURNIE flip credit for deity pass affiliate claims (20% of payout).
-    uint16 private constant AFFILIATE_DGNRS_DEITY_BONUS_BPS = 2000;
-
-    /// @dev Max deity bonus per level, denominated in ETH (converted to BURNIE at current price).
-    uint256 private constant AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH = 5 ether;
-
-    /// @dev Minimum affiliate score (approx 10 ETH of referral volume).
-    uint256 private constant AFFILIATE_DGNRS_MIN_SCORE = 10 ether;
 
     /// @dev Base cost for RNG nudge (100 BURNIE), compounds +50% per queued nudge.
     uint256 private constant RNG_NUDGE_BASE_COST = 100 ether;
@@ -339,6 +331,78 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                     symbol,
                     slots
                 )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /*+======================================================================+
+      |              AFKING DISPATCH STUBS (v55.0 ARCH-02/03)               |
+      +======================================================================+
+      |  Thin delegatecall dispatch stubs into GAME_AFKING_MODULE (the AfKing     |
+      |  subscription logic), shaped exactly like claimBingo.                     |
+      |  The afking subscriber set / cursors / Sub stamps live in this Game's     |
+      |  storage (DegenerusGameStorage), so the module MUST run in this           |
+      |  contract's context — delegatecall preserves msg.sender, so the SUB-02 /  |
+      |  OPENE-04 consent gates and the mintBurnie bounty payee read the real         |
+      |  caller. These are the canonical entrypoints (there is no longer a        |
+      |  separate afking logic host). `subscribe` is the SINGLE subscription       |
+      |  mutator (create / replace / cancel — the 4 per-field setters are folded  |
+      |  into it), so only 3 stubs remain (subscribe / mintBurnie / autoBuy); none is  |
+      |  `view`. The afking box-open is reached via mintBurnie's router (the          |
+      |  module's autoOpen would collide with this Game's existing human-box      |
+      |  autoOpen(uint256) selector, so it is not re-exposed as a stub here).     |
+      +======================================================================+*/
+
+    /// @notice Start or extend a daily afking subscription for `player`.
+    /// @dev CONSENT-01 (SUB-02 self-consent / OPENE-04 funding gate) runs in-context
+    ///      against the Game's operatorApprovals (delegatecall preserves msg.sender).
+    ///      msg.value > 0 credits the RESOLVED funding bucket's afkingFunding — the
+    ///      non-self (OPENE-04-approved) fundingSource for an operator-funded sub, else the
+    ///      subscriber (claimablePool in tandem) — so the deposit funds the bucket the
+    ///      draws debit.
+    function subscribe(
+        address player,
+        bool drainGameCreditFirst,
+        bool useTickets,
+        uint8 dailyQuantity,
+        uint8 reinvestPct,
+        address fundingSource
+    ) external payable {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_AFKING_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IGameAfkingModule.subscribe.selector,
+                    player,
+                    drainGameCreditFirst,
+                    useTickets,
+                    dailyQuantity,
+                    reinvestPct,
+                    fundingSource
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Unified permissionless afking router: do ONE category of pending work
+    ///         (advance → afking-box open) and pay ONE bounty (PLACE-02). The bounty
+    ///         credits msg.sender (preserved via delegatecall).
+    function mintBurnie() external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_AFKING_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(IGameAfkingModule.mintBurnie.selector)
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Standalone UNREWARDED afking advance trigger (the subscriber "buy" is the
+    ///         required-path process STAGE inside advanceGame); count is inert ABI-parity.
+    function autoBuy(uint256 count) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_AFKING_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(IGameAfkingModule.autoBuy.selector, count)
             );
         if (!ok) _revertDelegate(data);
     }
@@ -1435,20 +1499,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 costWei
     );
 
-    /// @notice Emitted when an affiliate claims DGNRS for the previous level.
-    /// @param affiliate Affiliate receiving DGNRS.
-    /// @param level Level the claim is for (previous level).
-    /// @param caller Address that initiated the claim.
-    /// @param score Affiliate score used for the claim.
-    /// @param amount DGNRS amount paid.
-    event AffiliateDgnrsClaimed(
-        address indexed affiliate,
-        uint24 indexed level,
-        address indexed caller,
-        uint256 score,
-        uint256 amount
-    );
-
     /// @notice Claim accrued ETH winnings.
     /// @dev Aggregates all winnings: affiliates, ContractAddresses.JACKPOTS, endgame payouts.
     ///      Uses pull pattern for security (CEI: check balance, update state, then transfer).
@@ -1475,7 +1525,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 amount = claimableWinnings[player];
         // Decision B (GAMEOVER-01): post-gameOver the claim ALSO pays the caller's prepaid
         // afking ETH (lazy per-player merge — no unbounded loop). Pre-gameOver afkingFunding
-        // stays its own bucket (spent by batchPurchase / reclaimed via withdrawAfkingFunding).
+        // stays its own bucket (spent by afking auto-buys / reclaimed via withdrawAfkingFunding).
         // Both this merge and withdrawAfkingFunding zero the SAME bucket → no double-spend.
         uint256 afking = gameOver ? afkingFunding[player] : 0;
         if (amount <= 1 && afking == 0) revert E();
@@ -1542,57 +1592,22 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Claim DGNRS affiliate rewards for the current level.
-    /// @dev Requires a minimum affiliate score and allows one claim per level.
-    ///      Draws from a segregated allocation (5% of the affiliate pool snapshotted
-    ///      at level transition). All claimants for the same level share a fixed pot,
-    ///      eliminating first-mover advantage. Uses totalAffiliateScore as the exact
-    ///      denominator for score-proportional distribution.
-    ///      Affiliate scores always route to level + 1 during gameplay, so at
-    ///      transition time all scores for currLevel are frozen and immutable.
+    /// @dev Thin delegatecall dispatch stub into DegenerusGameBingoModule's
+    ///      claimAffiliateDgnrs body. The delegatecall MUST be preserved (not a direct
+    ///      module call): the body invokes dgnrs.transferFromPool (onlyGame) and
+    ///      coinflip.creditFlip (onlyFlipCreditors), both of which authorize on
+    ///      msg.sender == GAME — so the logic has to execute in the Game's context.
     /// @param player Affiliate address to claim for (address(0) = msg.sender).
     function claimAffiliateDgnrs(address player) external {
-        player = _resolvePlayer(player);
-
-        uint24 currLevel = level;
-        if (currLevel == 0) revert E();
-
-        if (affiliateDgnrsClaimedBy[currLevel][player]) revert E();
-
-        uint256 score = affiliate.affiliateScore(currLevel, player);
-        bool isDeityHolder = mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
-        if (!isDeityHolder && score < AFFILIATE_DGNRS_MIN_SCORE) revert E();
-
-        uint256 denominator = affiliate.totalAffiliateScore(currLevel);
-        if (denominator == 0) revert E();
-
-        uint256 allocation = levelDgnrsAllocation[currLevel];
-        if (allocation == 0) revert E();
-        uint256 reward = (allocation * score) / denominator;
-        if (reward == 0) revert E();
-
-        uint256 paid = dgnrs.transferFromPool(
-            IStakedDegenerusStonk.Pool.Affiliate,
-            player,
-            reward
-        );
-        if (paid == 0) revert E();
-
-        levelDgnrsClaimed[currLevel] += paid;
-
-        if (isDeityHolder && score != 0) {
-            uint256 bonus = (score * AFFILIATE_DGNRS_DEITY_BONUS_BPS) / 10_000;
-            uint256 cap = (AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH *
-                PRICE_COIN_UNIT) / PriceLookupLib.priceForLevel(level);
-            if (bonus > cap) {
-                bonus = cap;
-            }
-            if (bonus != 0) {
-                coinflip.creditFlip(player, bonus);
-            }
-        }
-
-        affiliateDgnrsClaimedBy[currLevel][player] = true;
-        emit AffiliateDgnrsClaimed(player, currLevel, msg.sender, score, paid);
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_BINGO_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameBingoModule.claimAffiliateDgnrs.selector,
+                    player
+                )
+            );
+        if (!ok) _revertDelegate(data);
     }
 
     /*+======================================================================+
@@ -1768,7 +1783,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      in-flight request (a303ae18 detect-preserve-re-issue) and the word lands. The
     ///      first-deposit enqueue signal (lootboxEthBase == 0) and the open-time box-zeroing
     ///      (lootboxEth / lootboxEthBase) are preserved untouched. Returns the raw count of
-    ///      boxes opened; the re-homed bounty is paid by the unified router (AfKing.doWork),
+    ///      boxes opened; the re-homed bounty is paid by the unified router (AfKing.mintBurnie),
     ///      never in-callee (RD-4) — UNREWARDED when called directly (ROUTER-10).
     ///
     ///      maxCount is a flat box-count budget: under v50.0's O(1) whale-pass refactor
@@ -1849,85 +1864,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param player Box owner.
     function _autoOpenBox(uint48 index, address player) internal {
         _openLootBoxFor(player, index);
-    }
-
-    /// @notice Per-subscriber buy descriptor for `batchPurchase` (afking auto-buy).
-    /// @dev `funder` is the resolved funding source (the `afkingFunding` bucket the Game debits);
-    ///      `player` is the beneficiary (the `purchaseWith` target). `amount` is ticket entry-units
-    ///      (whole tickets * 4 * TICKET_SCALE) when `isTicket` is true, else a lootbox spend in wei —
-    ///      ticket vs lootbox are mutually exclusive, so one `amount` + the `isTicket` flag replaces
-    ///      separate fields. `ethValue` is the fresh-ETH portion debited from the funder's afking
-    ///      bucket (0 = pure claimable); the mint module draws the remainder (cost - ethValue) from
-    ///      the buyer's claimable per `mode` (MintPaymentKind).
-    struct BatchBuy {
-        address funder;
-        address player;
-        uint256 ethValue;
-        uint256 amount;
-        bool isTicket;
-        uint8 mode;
-    }
-
-    /// @notice Afking-gated batch ticket/lootbox purchase for the subscription afking (AfKing).
-    /// @dev PROTO-04. Gated to the pinned AF_KING afking; does NO per-player approval check
-    ///      (it trusts the afking, which structurally only acts on its own subscribers).
-    ///      game-over is pre-checked ONCE at entry. Each slice runs INLINE via a delegatecall to
-    ///      the mint module's `purchaseWith` — the per-slice fresh-ETH portion is the `ethValue`
-    ///      PARAM, debited from the funder's prepaid `afkingFunding` bucket. The call is
-    ///      NON-payable (no value is sent), so there is no per-slice value-bearing self-call
-    ///      (the gas win); the buy honors the sub's mode (ticketQty vs lootBoxAmount) and
-    ///      claimable funding. Unreferred AfKing-joiners are captured into the protocol code
-    ///      bytes32("DGNRS") (75% SDGNRS / 20% VAULT); a player with a real affiliate keeps it.
-    ///
-    ///      The per-slice debit keys on `afkingFunding[b.funder]` (= the resolved src), NOT
-    ///      `b.player`: the funder is the funding identity (the OPEN-E operator-funded case has
-    ///      src != player). `claimablePool` is released in tandem (checked math) — the freed ETH
-    ///      becomes prize-pool / vault-share ETH inside purchaseWith exactly as a fresh-ETH buy
-    ///      would, earning the fresh affiliate rate.
-    ///
-    ///      NO per-slice try/catch and NO rngLock entry-check. AfKing pre-validates funding and
-    ///      game-over, so a funded buy in a live game has no reason to revert (full buy-path
-    ///      audit). A stray revert bubbles and rolls the WHOLE batch back atomically — which is
-    ///      benign: advanceGame() is a separate permissionless entrypoint, so the game never
-    ///      freezes; subscribers just retry next cycle. Afking buys stay freeze-safe by
-    ///      construction (RD-2): a lootbox queues at the current index pre-entropy; the orphan
-    ///      hazard is defended on the OPEN side via the autoOpen word-gate, not by blocking the buy.
-    /// @param buys Per-subscriber buy descriptors; each slice's `ethValue` is debited from
-    ///      `afkingFunding[funder]` in-contract (no msg.value — the call is non-payable).
-    function batchPurchase(BatchBuy[] calldata buys) external {
-        if (msg.sender != ContractAddresses.AF_KING) revert E();
-        if (gameOver) revert E();
-
-        uint256 len = buys.length;
-        if (len == 0) revert E();
-
-        for (uint256 i; i < len; ) {
-            BatchBuy calldata b = buys[i];
-            uint256 ev = b.ethValue;
-            uint256 bal = afkingFunding[b.funder]; // D-01: debit the FUNDER (= src), NOT b.player
-            if (bal < ev) revert E(); // atomic safety guard (AfKing pre-validates funding)
-            unchecked {
-                afkingFunding[b.funder] = bal - ev;
-            }
-            claimablePool -= uint128(ev); // release the afking reservation in tandem (checked math)
-            (bool ok, bytes memory data) = ContractAddresses
-                .GAME_MINT_MODULE
-                .delegatecall(
-                    abi.encodeWithSelector(
-                        IDegenerusGameMintModule.purchaseWith.selector,
-                        b.player,
-                        b.isTicket ? b.amount : 0,
-                        b.isTicket ? 0 : b.amount,
-                        bytes32("DGNRS"),
-                        MintPaymentKind(b.mode),
-                        ev
-                    )
-                );
-            if (!ok) _revertDelegate(data);
-            unchecked {
-                ++i;
-            }
-        }
     }
 
     /// @dev Convert an ETH wei amount to BURNIE coinflip-credit value at a given price.

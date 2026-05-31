@@ -10,6 +10,18 @@ import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
 interface IDegenerusGamePlayerActions {
     /// @notice Advance the game to the next level/day.
     function advanceGame() external;
+    /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
+    /// @dev v55.0 ARCH-03: the afking subscription surface is GAME-resident (AfKing dissolved).
+    ///      The vault self-subscribes (player == address(this) == msg.sender) so the GAME's
+    ///      SUB-02 self-consent path passes with no operator approval.
+    function subscribe(
+        address player,
+        bool drainGameCreditFirst,
+        bool useTickets,
+        uint8 dailyQuantity,
+        uint8 reinvestPct,
+        address fundingSource
+    ) external payable;
     /// @notice Purchase tickets and/or lootboxes.
     function purchase(
         address buyer,
@@ -81,19 +93,6 @@ interface ICoinflipPlayerActions {
 interface ICoinPlayerActions {
     /// @notice Burn BURNIE for decimator jackpot eligibility.
     function decimatorBurn(address player, uint256 amount) external;
-}
-
-/// @notice Interface for the AfKing subscription afking used by DegenerusVault.
-interface IAfKingSubscribe {
-    /// @notice Start or extend a daily subscription for `player` (self when 0/msg.sender).
-    function subscribe(
-        address player,
-        bool drainGameCreditFirst,
-        bool useTickets,
-        uint8 dailyQuantity,
-        uint8 reinvestPct,
-        address fundingSource
-    ) external payable;
 }
 
 /// @notice Interface for sDGNRS player actions used by DegenerusVault.
@@ -411,9 +410,6 @@ contract DegenerusVault {
     /// @dev Coin contract for decimator actions
     ICoinPlayerActions internal constant coinPlayer =
         ICoinPlayerActions(ContractAddresses.COIN);
-    /// @dev AfKing subscription afking for the vault's protocol-owned self-subscription
-    IAfKingSubscribe internal constant afKing =
-        IAfKingSubscribe(ContractAddresses.AF_KING);
     /// @dev BURNIE token contract for minting and transfers
     IVaultCoin internal constant coinToken = IVaultCoin(ContractAddresses.COIN);
     /// @dev WWXRP token contract for vault minting
@@ -479,7 +475,10 @@ contract DegenerusVault {
         // the vault IS the player (player == msg.sender). The vault holds the
         // permanent deity pass (granted in the DegenerusGame constructor), so the
         // afking's pass-OR-pay gate takes the free 30-day extend at zero cost.
-        afKing.subscribe(address(this), true, false, 1, 0, address(0));
+        // v55.0 ARCH-03: the afking surface is GAME-resident (AfKing dissolved);
+        // self-subscribe directly against the GAME (subscriber == msg.sender ⇒
+        // the GAME's SUB-02 self-consent path, no operator approval needed).
+        gamePlayer.subscribe(address(this), true, false, 1, 0, address(0));
     }
 
     // ---------------------------------------------------------------------
