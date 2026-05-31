@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
 status: executing
-last_updated: "2026-05-31T15:44:48.487Z"
+last_updated: "2026-05-31T15:53:10.192Z"
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 21
-  completed_plans: 18
+  completed_plans: 19
   percent: 43
 ---
 
@@ -32,11 +32,11 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 350 (gas-behavior-identical-no-cost-wins-box-ledger-warm-sub-stam) — EXECUTING
-Plan: 2 of 3
-Status: Executing Phase 350 (350-01 ✅ done; 350-02 next)
->>> RESUME: **350-01 RE-PIN + CONFIRM ✅ COMPLETE (2026-05-31; READ-ONLY, contracts/ EMPTY; commits `6d52c043` re-pin + `45507ac8` TST-06 spec).** Re-pinned SCAV-348-01..07 against the LIVE post-349.2 `453f8073` tree (NOT the plan's stale `77c3d9ef` — STATE requires the post-349.2 surface); recorded the drift explicitly (T-350-01): stamp anchors `:747/:748/:756`→**`:793/:794/:840`**, view-helpers `:1590/:2656`→**`:1579/:2645`** (the funding anchors `:464/:662/:709/:710` HELD). **GAS-01** (afking box-buy = ONE warm Sub-stamp, cold-ledger symbols grep-ABSENT on the afking path) + **GAS-02** (in-context SLOADs `:463/:464/:662/:709`, NO STATICCALL on the hot path; `afkingFundingOf`/`afkingSnapshot` survive only as Game view-helpers for `DegenerusVault.sol:518`) = **CONFIRMED-STRUCTURAL** (already delivered by 349/349.1; NO apply work at 350 — measured at 351 TST-06). **Load-bearing finding:** 349.2 RESTORED quest/affiliate onto the lootbox STAGE (`GameAfkingModule.sol:760/:806/:816/:831`) — partially staling the research's "affiliate/quest NOT on the hot path" claim — but ALL BURNIE flip-credit (no ETH/pool write; `:710` claimablePool debit byte-unchanged) → NO verdict flip. **SCAV-348-03 (GAS-03, the `claimablePool` same-slot flush `:710`) = the SOLE residual candidate, CARRIED to plan 350-02** (research direction: NEGATIVE/marginal — warm SSTORE ~100 gas × (N−1) on the only batchable shared slot). `350-TST06-MEASUREMENT-SPEC.md` authored (per-buy `processSubscriberStage:539` + per-open `_openAfkingBox:888`→`resolveAfkingBox:877` marginals, the CR-01 loop-N-divide rule, the no-STATICCALL trace, the conditional GAS-03 oracle, the 16.7M ceiling w/ `SUB_STAGE_BATCH=50`). **NEXT = plan 350-02 `/gas-skeptic` validation gate** (adjudicate SCAV-348-03 under the security floor → expected REJECT-with-reasoning; then 350-03 branches Outcome-A no-diff / Outcome-B held `claimablePool`-flush diff at the contract boundary). On `main`, NOT pushed (v55 ships at 352). `forge test` stays 351's charge (stale AfKing.sol-import reds expected). scope.txt still modified in the working tree (held-349 audit-scope edit, NOT committed). <<<
+Plan: 3 of 3
+Status: Ready to execute (350-03 = Outcome A, docs-only, autonomous)
+>>> RESUME: **350-02 `/gas-skeptic` VALIDATION GATE ✅ COMPLETE (2026-05-31; READ-ONLY, contracts/ EMPTY; verdict doc commit `2cada6d4`).** Adjudicated SCAV-348-01..07 under the `feedback_security_over_gas` floor in `350-GAS-SKEPTIC-VERDICTS.md`, on a FRESH live-grep of the post-349.2 `453f8073` tree (verify-don't-copy). **VERDICTS: GAS-01 (SCAV-348-01) + GAS-02 (SCAV-348-02) = CONFIRMED-STRUCTURAL** (delivered by the 349/349.1 relocation; NO apply at 350; measured 351 TST-06). **SCAV-348-04/05/06/07 = DISSOLVED / DELIVERED-STRUCTURAL.** **GAS-03 (SCAV-348-03, the `claimablePool` same-slot flush `GameAfkingModule.sol:710`) = REJECT-with-reasoning** — (a) warm SSTORE ~100 gas × (N−1), NOT the inventory's ~2.9k; (b) the 349.2-restored affiliate/quest/creditFlip (`:760/:806/:816/:831`) are BURNIE flip-credit OFF the ETH+pool path (live-confirmed via the code's own comments `:799-805`/`:828-830`; the `:710` claimablePool debit byte-unchanged) → NO new batchable shared additive slot; (c) `prizePoolsPacked` grep-absent on the afking path; (d) the mixed-chunk `purchaseWith` interleave hazard (RESEARCH Open Q1) breaks the accumulate-and-flush identity → decisive REJECT; (e) ~0.04%-of-chunk saving vs net audit surface on the SOLVENCY-01 spine. v49 REJECT-with-reasoning precedent applied; NO penny-exact-obligated win survives. **Section 4 carve-out carried VERBATIM** (quests.handlePurchase/handleAffiliate = non-linear completion, NEVER batched; live site `:760` per-sub, handlers-before-score). **Floor-protected REJECT list stated** (afkingFunding[src] `:709` / swap-pop tombstone `:588`/`:622`/`:676` / no-orphan guard `:570` / freeze fields `:793`/`:794`/`:840` / fail-loud `claimablePool -=` `:710`). **W3 BRANCH DIRECTIVE: plan 350-03 = Outcome A** (no net contract change; record the verdict; `contracts/` stays EMPTY; closes on the documented verdict per ROADMAP SC4 "no diff is gated"). **Outcome B NOT taken** (no GAS-03 APPROVE). **NEXT = plan 350-03 Outcome A** (docs-only, autonomous — NOT a contract boundary; no held flush diff). Then 351 TST (TST-06 gas measurement; NO Outcome-B `claimablePool` oracle since GAS-03 REJECTED) / 352 TERMINAL (no net-new GAS contract surface to delta-audit/sweep). On `main`, NOT pushed (v55 ships at 352). `forge test` stays 351's charge (stale AfKing.sol-import reds expected). scope.txt still modified in the working tree (held-349 audit-scope edit, NOT committed). <<<
 
-Progress: [█████████░] 86%
+Progress: [█████████░] 90%
 
 ## Current Milestone Roadmap (v55.0 — phases 348-352)
 
@@ -620,6 +620,7 @@ Audit deliverables:
 | Phase 348 P05 | 8 | 1 tasks | 1 files |
 | Phase 348 P06 | 3m49s | 1 tasks | 1 files |
 | Phase 350 P01 | 7min | 2 tasks | 2 files |
+| Phase 350 P02 | 7min | 1 tasks | 1 files |
 
 ## Decisions
 
@@ -779,3 +780,4 @@ Audit deliverables:
 - [Phase 348]: 348-06: 348-SPEC-INDEX.md authored (D-08 closure index, the 343-05 analog) — all 5 phase reqs (FREEZE-01/02/03, PLACE-01, ARCH-04) + all 5 ROADMAP SCs mapped COVERED; SPEC verdict PASS; CONSENT carry-over (OPEN-E/AFSUB/set-mutation) confirmed against re-pinned source; single 349 hand-off = 348-IMPL-EDIT-ORDER-MAP.md
 - [Phase 348]: 348-06: index reflects D-348-07 FINAL state throughout — FREEZE-01 PROVEN (not split), 5-field stamp (index,amount,day,scorePlus1,baseLevelPlus1), EV-cap-only benign residual; pre-D-348-07 '-EV live-read' framing in ROADMAP SC1 + REQUIREMENTS FREEZE-01 recorded SUPERSEDED at index level (343-05 discipline)
 - [Phase ?]: 350-01 (re-pin/confirm) COMPLETE: GAS-01 (box-ledger→warm Sub-stamp) + GAS-02 (staticcall→in-context SLOAD) documented CONFIRMED-STRUCTURAL (already delivered by 349/349.1; no apply work at 350 — measured at 351 TST-06). Re-pinned against the LIVE post-349.2 453f8073 tree (NOT the plan's stale 77c3d9ef); recorded drift explicitly (T-350-01): stamp anchors :747/:748/:756→:793/:794/:840, view-helpers :1590/:2656→:1579/:2645. 349.2-restored quest/affiliate on the lootbox STAGE = BURNIE-only (no ETH/pool write; :710 byte-unchanged), no verdict flip. SCAV-348-03 (GAS-03 :710 flush) = sole residual candidate → 350-02 /gas-skeptic.
+- [Phase ?]: 350-02 /gas-skeptic: GAS-01/02 CONFIRMED-STRUCTURAL (no apply; 351 TST-06); GAS-03 (claimablePool flush :710) REJECT (warm ~100 gas x (N-1); 349.2 affiliate/quest BURNIE-only off ETH+pool path; prizePoolsPacked absent; mixed-chunk purchaseWith hazard; SOLVENCY-01 surface). W3 = Outcome A (no net contract change). Section 4 carve-out verbatim (quests.* never batched). Commit 2cada6d4; contracts/ EMPTY.

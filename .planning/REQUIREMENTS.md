@@ -43,9 +43,9 @@
 - [ ] **PLACE-02**: Bounty reconciliation — open stays a post-RNG router category (`OPEN_BATCH`/`OPEN_KNEE` pro-rate); the buy/process bounty is work-scaled (not once-per-advance) to close the middle-chunk-unpaid gap and resist farm-by-splitting; payment stays the deferred BURNIE flip-credit mint (`creditFlip`).
 
 ### GAS — Behavior-identical relocations
-- [ ] **GAS-01**: The afking box-buy's ~6 cold box-ledger SSTOREs + `boxPlayers.push` + `enqueueBoxForAutoOpen` (~120–130k) collapse to one warm-dirty Sub-stamp write (~5k); behavior-identical, proven same-results in TST.
-- [ ] **GAS-02**: The per-subscriber `afkingSnapshot`/`afkingFundingOf` cross-contract staticcalls (~3–5k each) become in-context `SLOAD`s.
-- [ ] **GAS-03**: Same-slot affiliate/pool aggregate flushes across a process batch (`claimablePool`/`prizePoolsPacked` accumulate-and-flush; bucket affiliate by roll-winner) — SAFE-WITH-CONDITIONS (do NOT batch `quests.handleAffiliate` — non-linear completion logic); each gas-only under the security floor.
+- [x] **GAS-01**: The afking box-buy's ~6 cold box-ledger SSTOREs + `boxPlayers.push` + `enqueueBoxForAutoOpen` (~120–130k) collapse to one warm-dirty Sub-stamp write (~5k); behavior-identical, proven same-results in TST.
+- [x] **GAS-02**: The per-subscriber `afkingSnapshot`/`afkingFundingOf` cross-contract staticcalls (~3–5k each) become in-context `SLOAD`s.
+- [x] **GAS-03**: Same-slot affiliate/pool aggregate flushes across a process batch (`claimablePool`/`prizePoolsPacked` accumulate-and-flush; bucket affiliate by roll-winner) — SAFE-WITH-CONDITIONS (do NOT batch `quests.handleAffiliate` — non-linear completion logic); each gas-only under the security floor.
 
 ### TST — Empirical proofs
 - [ ] **TST-01**: Freeze/determinism — the stamp+open produces an identical box outcome independent of open timing/block (seed uses the stamped day); index-binding holds across a mid-day index advance.
@@ -92,9 +92,9 @@ Each REQ-ID maps to exactly ONE phase — the phase that DELIVERS/owns it. 29/29
 | CONSENT-02 | 349 IMPL | Pending |
 | PLACE-01 | 348 SPEC | Complete |
 | PLACE-02 | 349 IMPL | Pending |
-| GAS-01 | 350 GAS | Pending |
-| GAS-02 | 350 GAS | Pending |
-| GAS-03 | 350 GAS | Pending |
+| GAS-01 | 350 GAS | Complete |
+| GAS-02 | 350 GAS | Complete |
+| GAS-03 | 350 GAS | Complete |
 | TST-01 | 351 TST | Pending |
 | TST-02 | 351 TST | Pending |
 | TST-03 | 351 TST | Pending |
