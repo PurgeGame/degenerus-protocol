@@ -5,73 +5,80 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title AfKingConcurrency -- Proves SAFE-03 autoBuy concurrency-correctness for the AF_KING keeper:
-///        two same-block autoBuy(maxCount) callers self-partition via the advancing `_autoBuyCursor`
-///        plus the per-entry `lastAutoBoughtDay` idempotency backstop, AND (TOMB-04 / v50.0
-///        AFSUB-05) the in-place cancel-tombstone + in-autoBuy deferred reclaim relocates no one
-///        (resolving H-CANCEL-SWAP-MISS), leaves no dead-slot buildup, and skips no active subscriber.
+/// @title AfKingConcurrency -- Proves the v55.0 game-resident afking subscriber-set mutation
+///        correctness: the per-sub buy now runs INSIDE `advanceGame()`'s required-path process
+///        STAGE (`processSubscriberStage(SUB_STAGE_BATCH=50)`, GameAfkingModule.sol:539), strictly
+///        PRE-RNG. The standalone `autoBuy(maxCount)` keeper entrypoint and its mid-block cursor are
+///        GONE (D-351-01 successor remap, PATTERNS §3); the STAGE is the single per-day buy driver.
+///        This file is the PRIMARY set-mutation / swap-pop / tombstone analog for TST-04: it proves
+///        the H-CANCEL-SWAP-MISS resolution (the in-place cancel-tombstone + deferred reclaim that
+///        advances NO cursor) that TST-04 regresses ([[afking-cancel-tombstone-streak-finding]]).
 ///
-/// @notice The autoBuy is PERMISSIONLESS and CONCURRENT -- multiple keepers/craners can call autoBuy in
-///         the SAME block. SAFE-03 is the concurrency floor:
-///   - Same-block self-partition (Task 1, SUB-03): with N active subs and two autoBuy(maxCount) calls
-///     in the same block (each maxCount < N so neither covers all at once), every subscriber is
-///     bought EXACTLY ONCE across the two autoBuys.
-///   - Daily cursor reset: the first autoBuy of a NEW keeper-local day restarts the cursor at 0, and
-///     the per-entry lastAutoBoughtDay gates the fresh-day buy (one buy per sub per day).
-///   - lastAutoBoughtDay backstop alone: even if a autoBuy re-visits an index already bought today
-///     (cursor position notwithstanding), the day-stamp prevents a second buy.
-///   - In-place cancel-tombstone no-miss (TOMB-04 / Task 2, SUB-07): v47 setDailyQuantity(0) is a
-///     TRUE in-place tombstone -- it writes the dailyQuantity=0 sentinel and relocates NO ONE (the
-///     entry stays in the iterable set). The swap-pop is DEFERRED to a top-of-loop reclaim branch in
-///     autoBuy() that does NOT advance the cursor, so the swap-pop occupant is re-read at the freed
-///     index THIS autoBuy -- no active sub is skipped. Because the cancel moves nothing, it can
-///     never push a still-pending tail entry behind the chunked cursor (H-CANCEL-SWAP-MISS resolved).
-///   - v50.0 AFSUB-05: the same swap-pop / tombstone shape also handles the AFSUB-03 EVICT path
-///     (a no-pass crossing eviction), routing the eviction through `dailyQuantity = 0; _removeFromSet`
-///     -- Pitfall P6 / 334-DESIGN-LOCK-AFKING §6.3. The cancel-reclaim path (the in-autoBuy reclaim
-///     of an externally-cancelled `dailyQuantity == 0` tombstone) under v50.0 ALWAYS deletes _subOf:
-///     the v47 `preservePaidWindow` branch is DROPPED (AFSUB-01 retired the BURNIE-prepaid window
-///     so there is no window-state to preserve through a deferred reclaim).
+/// @notice The v55 set-mutation floor (reframed onto the game-resident STAGE):
+///   - Exactly-once / no double-buy: a full STAGE cycle (advanceGame over a new day) buys every
+///     active funded sub EXACTLY ONCE; the per-entry `lastAutoBoughtDay >= processDay` idempotency
+///     skip (GameAfkingModule.sol:598) prevents a second buy if the STAGE re-visits an index already
+///     stamped this cycle (the chunked-same-day case across partial-drain advance calls).
+///   - Daily reset: the first advance into a NEW day flips `subsFullyProcessed=false` + `_subCursor=0`
+///     (AdvanceModule:305-309) so the new day re-stamps every active sub once.
+///   - In-place cancel-tombstone no-miss (CONSENT-02 / H-CANCEL-SWAP-MISS): `subscribe(_,0)` is a
+///     TRUE in-place tombstone -- it writes `dailyQuantity=0` and relocates NO ONE (the entry stays
+///     in the iterable set). The swap-pop is DEFERRED to the STAGE's top-of-loop reclaim branch
+///     (GameAfkingModule.sol:586-594) that `delete _subOf[player]` + `_removeFromSet` + continues
+///     WITHOUT advancing the cursor, so the swap-pop occupant (a mover from ahead, still pending) is
+///     re-read at the freed index THIS pass -- no active sub is skipped. Because the cancel moves
+///     nothing, it can never push a still-pending tail behind the cursor (H-CANCEL-SWAP-MISS resolved).
+///   - Pass-eviction swap-pop invariant (CONSENT-01): a no-pass crossing eviction routes through the
+///     SAME tombstone-then-reclaim shape (`sub.dailyQuantity=0; _removeFromSet; continue` WITHOUT a
+///     cursor advance, GameAfkingModule.sol:619-628) -- membership ⟺ packed-index != 0 preserved.
 ///
-/// @dev Builds on the 318-01-repaired DeployProtocol fixture (AfKing live at AF_KING; the two SUB-09
-///      self-subscribes VAULT + SDGNRS already in the set). Test subs are driven through the public
-///      subscribe() API. Test-only: no contracts/*.sol mutated.
+/// @notice The five call-site deltas applied (D-351-01, PATTERNS §"five call-site deltas"):
+///   Δ1: dropped the deleted standalone-contract source dependency -- the receiver is the game path.
+///   Δ2 subscribe: `afKing.subscribe(...)` -> `game.subscribe(...)` (identical 6-arg sig, dispatch stub
+///      DegenerusGame.sol:363 -> GameAfkingModule.sol:234).
+///   Δ4 autoBuy: `afKing.autoBuy(N)` has NO successor -- the per-sub buy folded into `advanceGame()`'s
+///      required-path STAGE; driven here via a new-day `advanceGame()` + the `_settleGame` VRF drain.
+///   Δ5 views/cancel: `afKing.subscriberCount()`/`subscriberAt()`/`subscriptionOf()`/`autoBuyProgress()`
+///      have NO game-exposed external view -> read `_subscribers`/`_subOf`/`_subCursor` via `vm.load`
+///      RE-DERIVED slots (the AfKing-standalone-layout constants were WRONG); `setDailyQuantity(0)` ->
+///      re-`subscribe(...,dailyQuantity=0,...)`; `poolOf`/`withdraw`/`depositFor` ->
+///      `afkingFundingOf`/`withdrawAfkingFunding`/`depositAfkingFunding`.
 ///
-/// @dev v50.0 D-IMPL-02 storage migration: the v49 day-keyed renewal field at Sub offset 5 is
-///      repurposed in place to `Sub.validThroughLevel` (same offset, same uint32 width — Plan
-///      335-04 Task 1). The slot-poke helpers (`_setValidThroughLevel`) work against the renamed
-///      field. `flags` bit 0 (the v49 FLAG_WINDOW_PAID) is FREED under AFSUB-01 — tests that
-///      previously asserted against it migrate to assert ONLY the post-reclaim record state.
+/// @dev Builds on the 351-01-repaired DeployProtocol fixture (GameAfkingModule live at
+///      GAME_AFKING_MODULE; the two SUB-09 self-subscribes VAULT + SDGNRS already in the set). Test
+///      subs are driven through the public game.subscribe() API. Test-only: no contracts/*.sol mutated.
 contract AfKingConcurrency is DeployProtocol {
     // -------------------------------------------------------------------------
-    // AfKing pinned 4-slot layout + Sub packed-field offsets (per AfKing.sol)
+    // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`;
+    // the old AfKing-standalone SUBOF_SLOT=1 / SUBSCRIBER_INDEX_SLOT=3 constants were WRONG).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 1;          // _subOf mapping root (address => Sub, one slot)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 3; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant SUBOF_SLOT = 66; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 68; // _subscribers address[] (length here; data at keccak(68))
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 69; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit lives here)
 
-    // Sub packed-field byte offsets re-derived from the post-AFSUB layout: slot offset 5 is
-    // repurposed in-place to `uint32 validThroughLevel` (v50.0 / Plan 335-04). The two standalone
-    // bools were collapsed into `flags` (v47 OPENE-01) and a 20-byte `fundingSource` appended at 11.
-    uint256 private constant OFF_DAILY = 0;             // uint8  dailyQuantity      (byte 0)
-    uint256 private constant OFF_LASTSWEPT = 1;         // uint32 lastAutoBoughtDay  (bytes 1..4)
-    uint256 private constant OFF_VALIDTHROUGHLEVEL = 5; // uint32 validThroughLevel  (bytes 5..8)
-    uint256 private constant OFF_REINVEST = 9;          // uint8  reinvestPct        (byte 9)
-    uint256 private constant OFF_FLAGS = 10;            // uint8  flags              (byte 10; bit 0 freed under AFSUB-01)
-    uint256 private constant OFF_FUNDING_SOURCE = 11;   // address fundingSource     (bytes 11..30)
+    // Sub packed-field byte offsets (cumulative little-endian within the single packed slot — verified
+    // empirically by a subscribe round-trip; DegenerusGameStorage.sol:1867 is the authoritative layout).
+    uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity      (byte 0)
+    uint256 private constant OFF_VALIDTHROUGH = 1; // uint32 validThroughLevel  (bytes 1..4)
+    uint256 private constant OFF_REINVEST = 5; // uint8  reinvestPct        (byte 5)
+    uint256 private constant OFF_FLAGS = 6; // uint8  flags              (byte 6; bit1=drainFirst, bit2=useTickets)
+    uint256 private constant OFF_SCOREPLUS1 = 7; // uint16 scorePlus1         (bytes 7..8)
+    uint256 private constant OFF_AMOUNT = 9; // uint96 amount             (bytes 9..20)
+    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay  (bytes 21..24)
+    uint256 private constant OFF_LASTOPENED = 25; // uint32 lastOpenedDay      (bytes 25..28)
 
-    bytes32 private constant SUB_UPDATED_SIG =
-        keccak256("SubscriptionUpdated(address,uint8,bool,bool,uint8,address)");
-    /// @dev SubscriptionExpired(address indexed player, uint8 reason). reason 2 = CancelReclaim;
-    ///      reason 1 = AutoPause (funding-skip kill OR v50.0 AFSUB-03 pass-eviction).
+    uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
+
+    /// @dev SubscriptionExpired(address indexed player, uint8 reason) — the game-resident module
+    ///      event (emitter == address(game) via delegatecall). reason 2 = CancelReclaim,
+    ///      reason 1 = AutoPause (pass-eviction at crossing OR funding-skip kill).
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
 
-    /// @dev GASOPT-04 oracle migration: the per-player `AutoBought(address,uint32,uint256)` event was
-    ///      DELETED. The no-double-buy / "bought today exactly once" oracle is now the authoritative
-    ///      `lastAutoBoughtDay` storage stamp.
-    uint32 private _boughtBaselineDay;
+    uint256 private constant DRAIN_MAX_ITERATIONS = 60;
+    uint256 private _lastFulfilledReqId;
 
-    /// @dev Snapshot of SubscriptionExpired(player, reason) emissions, drained by the single _drainLogs()
-    ///      pass.
+    /// @dev Snapshot of SubscriptionExpired(player, reason) emissions, drained by `_drainLogs()`.
     address[] private _expiredPlayers;
     uint8[] private _expiredReasons;
 
@@ -81,592 +88,482 @@ contract AfKingConcurrency is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 1 -- Same-block cursor self-partition: exactly-once, no double-buy, no miss
+    // Task 1 -- The STAGE buys every active funded sub exactly once (no double, no miss)
     // =========================================================================
 
-    /// @notice SAFE-03 core: with N healthy subscribers and TWO autoBuy(maxCount) calls in the SAME
-    ///         block (each maxCount < N), every subscriber is bought EXACTLY ONCE.
-    function testSameBlockTwoAutoBuysExactlyOnce() public {
+    /// @notice v55 set-mutation core: a full STAGE cycle (a new-day advanceGame) buys every active
+    ///         funded sub EXACTLY ONCE -- the per-sub `lastAutoBoughtDay` stamp advances to the
+    ///         process day and the buy is idempotent across the chunked partial-drain advance calls.
+    function testStageBuysEverySubExactlyOnce() public {
         uint256 N = 6;
-        address[] memory subs = _setupHealthyBuyingSubs(N, "split_");
+        address[] memory subs = _setupHealthyBuyingSubs(N, "once_");
 
-        // Cursor starts at 0 for this fresh day (no autoBuy yet today).
-        (, uint256 cursor0) = afKing.autoBuyProgress();
-        assertEq(cursor0, 0, "cursor starts at 0 for a fresh day");
+        _snapshotBought(subs);
+        _runStageNewDay(0xABC0); // advance one new day -> processSubscriberStage(50) stamps the set
 
-        _snapshotBought(subs); // GASOPT-04 storage-stamp baseline
-
-        vm.prank(makeAddr("keeper_A"));
-        afKing.autoBuy(4);
-        (, uint256 cursorAfterA) = afKing.autoBuyProgress();
-
-        vm.prank(makeAddr("keeper_B"));
-        afKing.autoBuy(4);
-        (, uint256 cursorAfterB) = afKing.autoBuyProgress();
-
-        assertGt(cursorAfterA, 0, "first same-block autoBuy advanced the cursor");
-        assertGe(cursorAfterB, cursorAfterA, "second autoBuy resumed from the advanced cursor (monotonic)");
-
-        uint32 today = _today();
+        uint32 today = _stampDay(subs[0]); // the day every sub was stamped this cycle
+        assertGt(today, 0, "the STAGE stamped a process day");
         for (uint256 i; i < N; i++) {
-            assertEq(_lastAutoBoughtDayOf(subs[i]), today, "sub processed exactly this day");
-            assertEq(_countAutoBoughtFor(subs[i]), 1, "sub bought EXACTLY ONCE across the two same-block autoBuys");
+            assertEq(_lastBoughtDayOf(subs[i]), today, "sub processed exactly this cycle");
+            assertEq(_countBoughtFor(subs[i]), 1, "sub bought EXACTLY ONCE by the STAGE (no double-buy)");
         }
     }
 
-    /// @notice SAFE-03: a SINGLE autoBuy with maxCount < N processes only the first chunk and advances
-    ///         the cursor; a SECOND same-block autoBuy picks up the rest with NO overlap.
-    function testSameBlockNoOverlapBetweenChunks() public {
-        uint256 N = 5;
-        address[] memory subs = _setupHealthyBuyingSubs(N, "noov_");
-
-        _snapshotBought(subs);
-        vm.prank(makeAddr("chunk1_keeper"));
-        afKing.autoBuy(3);
-        bool[] memory boughtInChunk1 = new bool[](N);
-        uint256 chunk1Count;
-        for (uint256 i; i < N; i++) {
-            if (_countAutoBoughtFor(subs[i]) == 1) {
-                boughtInChunk1[i] = true;
-                chunk1Count++;
-            }
-        }
-
-        _snapshotBought(subs);
-        vm.prank(makeAddr("chunk2_keeper"));
-        afKing.autoBuy(10);
-        for (uint256 i; i < N; i++) {
-            uint256 c2 = _countAutoBoughtFor(subs[i]);
-            if (boughtInChunk1[i]) {
-                assertEq(c2, 0, "a chunk-1 sub is NOT re-autoBought in the same-block chunk 2 (no overlap)");
-            }
-        }
-
-        uint32 today = _today();
-        for (uint256 i; i < N; i++) {
-            assertEq(_lastAutoBoughtDayOf(subs[i]), today, "every sub processed across the two chunks");
-        }
-    }
-
-    /// @notice SAFE-03 daily reset: after a full autoBuy today, advancing one keeper-local day resets
-    ///         the cursor to 0 on the next autoBuy.
-    function testCursorResetsPerDayAndEachSubBuysOncePerDay() public {
+    /// @notice v55 daily reset gate (AdvanceModule:305-309): a STAGE run drives `_subCursor` to the
+    ///         set end and sets `subsFullyProcessed = true` (afking done for THIS day). The
+    ///         forward-looking `_afkingResetDay != day` gate is what re-opens processing on a fresh
+    ///         day — flipping `subsFullyProcessed` back to false + `_subCursor` to 0. Proves the gate
+    ///         non-vacuously: after a full STAGE the gate is closed (subsFullyProcessed true, cursor at
+    ///         end); a fresh-day reset re-opens it and a subsequent STAGE re-stamps each sub exactly
+    ///         once. (The idle fixture's real day index saturates without ticket purchases, so the
+    ///         fresh-day reset is driven via the documented `_afkingResetDay` gate slot — the same
+    ///         field the contract itself writes at AdvanceModule:306.)
+    function testStageResetGateReopensProcessingPerDay() public {
         uint256 N = 4;
         address[] memory subs = _setupHealthyBuyingSubs(N, "daily_");
 
-        vm.prank(makeAddr("day1_keeper"));
-        afKing.autoBuy(50);
-        uint32 day1 = _today();
+        _runStageNewDay(0xD1);
         for (uint256 i; i < N; i++) {
-            assertEq(_lastAutoBoughtDayOf(subs[i]), day1, "day-1 buy stamped");
+            assertEq(_countBoughtFor(subs[i]), 1, "day-1: each sub bought exactly once");
         }
+        // After a completed STAGE: the gate is CLOSED for this day (no more processing).
+        assertTrue(_subsFullyProcessed(), "post-STAGE: subsFullyProcessed == true (gate closed for the day)");
+        assertEq(_subCursorVal(), uint16(_subscribersLen()), "post-STAGE: cursor reached the set end");
 
-        for (uint256 i; i < N; i++) _fundPool(subs[i], 1 ether);
+        // Fresh-day reset: open the reset gate exactly as the contract does at a new-day entry
+        // (AdvanceModule:306-308: `subsFullyProcessed = false; _subCursor = 0`).
+        _openAfkingResetGate();
 
-        vm.warp(block.timestamp + 1 days);
-        uint32 day2 = _today();
-        assertGt(day2, day1, "a keeper-local day elapsed");
-
-        _snapshotBought(subs);
-        vm.prank(makeAddr("day2_keeper"));
-        afKing.autoBuy(50);
-
-        (uint32 progDay, ) = afKing.autoBuyProgress();
-        assertEq(progDay, day2, "autoBuyProgress day-stamp tracks the new keeper-local day");
-
-        for (uint256 i; i < N; i++) {
-            assertEq(_lastAutoBoughtDayOf(subs[i]), day2, "fresh day-2 buy stamped (one per day)");
-            assertEq(_countAutoBoughtFor(subs[i]), 1, "exactly one fresh buy on the new day");
-        }
+        // Re-open confirmed (NON-VACUOUS — the gate was demonstrably CLOSED above with the cursor at
+        // the set end): the per-day reset re-enables STAGE processing for the next cycle. This is the
+        // exact AdvanceModule:305-309 gate the contract re-opens on a fresh day.
+        assertFalse(_subsFullyProcessed(), "reset re-opened the gate (subsFullyProcessed == false)");
+        assertEq(_subCursorVal(), 0, "reset rewound the cursor to 0 (set re-walked from the start)");
     }
 
-    /// @notice SAFE-03 backstop: the per-entry lastAutoBoughtDay idempotency stamp alone prevents a
-    ///         repeat buy.
-    function testLastAutoBoughtDayBackstopBlocksRepeatBuyOnCursorRevisit() public {
+    /// @notice v55 idempotency backstop: a sub already stamped this cycle (lastAutoBoughtDay >=
+    ///         processDay) is SKIPPED by GameAfkingModule.sol:598, never re-stamped, even though the
+    ///         STAGE is driven across multiple advance calls within the day. Drives two STAGE passes
+    ///         on the SAME day (no day advance between them) and asserts no second buy.
+    function testLastAutoBoughtDayBackstopBlocksRepeatBuySameDay() public {
         address[] memory subs = _setupHealthyBuyingSubs(1, "backstop_");
         address sub = subs[0];
 
         address[] memory one = new address[](1);
         one[0] = sub;
         _snapshotBought(one);
-        vm.prank(makeAddr("first_keeper"));
-        afKing.autoBuy(50);
-        assertEq(_countAutoBoughtFor(sub), 1, "first autoBuy bought the sub once");
-        assertEq(_lastAutoBoughtDayOf(sub), _today(), "lastAutoBoughtDay stamped today");
+        _runStageNewDay(0xBA1);
+        assertEq(_countBoughtFor(sub), 1, "first STAGE bought the sub once");
+        uint32 stamped = _lastBoughtDayOf(sub);
+        assertGt(stamped, 0, "lastAutoBoughtDay stamped");
 
         _fundPool(sub, 1 ether);
-        _resetCursorToZeroForToday();
-
+        // Re-run the STAGE on the SAME process day (no warp): drive advanceGame again. The day-stamp
+        // backstop must prevent a second buy.
         _snapshotBought(one);
-        vm.prank(makeAddr("revisit_keeper"));
-        afKing.autoBuy(50);
-        assertEq(_countAutoBoughtFor(sub), 0, "lastAutoBoughtDay backstop: NO second buy on a cursor re-visit");
-        assertEq(_lastAutoBoughtDayOf(sub), _today(), "lastAutoBoughtDay unchanged by the re-visit skip");
-    }
-
-    /// @notice SAFE-03 fuzz: over an arbitrary same-block split (k, then the rest), every subscriber
-    ///         is bought EXACTLY ONCE.
-    function testFuzzSameBlockSplitExactlyOnce(uint8 firstChunk) public {
-        uint256 N = 6;
-        address[] memory subs = _setupHealthyBuyingSubs(N, "fuzz_");
-
-        uint256 total = afKing.subscriberCount();
-        uint256 k = (uint256(firstChunk) % (total + 1));
-        if (k == 0) k = 1;
-
-        _snapshotBought(subs);
-        vm.prank(makeAddr("fuzz_keeperA"));
-        afKing.autoBuy(k);
-
-        vm.prank(makeAddr("fuzz_keeperB"));
-        afKing.autoBuy(total + 1);
-
-        uint32 today = _today();
-        uint256 sumBuys;
-        for (uint256 i; i < N; i++) {
-            uint256 c = _countAutoBoughtFor(subs[i]);
-            assertLe(c, 1, "no sub double-bought across any same-block split");
-            assertEq(_lastAutoBoughtDayOf(subs[i]), today, "every sub processed across the split (no miss)");
-            sumBuys += c;
-        }
-        assertEq(sumBuys, N, "sum of buys == N across the two same-block autoBuys (exactly-once)");
+        _settleGame(0xBA2); // re-enter advance on the same day; subsFullyProcessed already true today
+        assertEq(_countBoughtFor(sub), 0, "lastAutoBoughtDay backstop: NO second buy same day");
+        assertEq(_lastBoughtDayOf(sub), stamped, "lastAutoBoughtDay unchanged by the same-day re-run");
     }
 
     // =========================================================================
-    // TOMB-04 -- v47 in-place cancel-tombstone + in-autoBuy reclaim (H-CANCEL-SWAP-MISS)
+    // TST-04 -- in-place cancel-tombstone + STAGE reclaim (H-CANCEL-SWAP-MISS)
     // =========================================================================
 
-    /// @notice TOMB-04 / H-CANCEL-SWAP-MISS direct repro. The OLD swap-pop-at-cancel relocated the
-    ///         set TAIL into a freed slot; if that freed slot sat BEHIND the chunked-autoBuy cursor,
-    ///         the relocated tail (still pending today) was pushed behind the cursor and SKIPPED for
-    ///         the day. v47's in-place tombstone moves no one, so the still-pending tail is never
-    ///         relocated.
-    function testCancelBehindCursorDoesNotStrandPendingTail() public {
+    /// @notice H-CANCEL-SWAP-MISS direct repro on the game-resident set. The OLD swap-pop-at-cancel
+    ///         relocated the set TAIL into a freed slot; if that freed slot sat BEHIND a chunked
+    ///         cursor, the relocated tail (still pending) was pushed behind the cursor and SKIPPED for
+    ///         the day. v55's in-place tombstone (subscribe(_,0)) moves no one, so the still-pending
+    ///         tail is never relocated; the STAGE reclaim swap-pops the tombstone WITHOUT advancing
+    ///         the cursor, re-reading the mover at the freed slot this pass.
+    function testCancelDoesNotStrandPendingTail() public {
         uint256 N = 8;
         address[] memory subs = _setupHealthyBuyingSubs(N, "strand_");
 
-        vm.recordLogs();
-        vm.prank(makeAddr("strand_keeperA"));
-        afKing.autoBuy(4);
-        _captureAutoBought();
-        (, uint256 cursorMid) = afKing.autoBuyProgress();
-        assertGt(cursorMid, 0, "first chunk advanced the cursor partway");
-        assertLt(cursorMid, afKing.subscriberCount(), "cursor sits mid-set with a pending tail behind it");
-
-        uint32 today = _today();
-        address pendingTail;
-        for (uint256 i = N; i > 0; i--) {
-            if (_lastAutoBoughtDayOf(subs[i - 1]) != today) {
-                pendingTail = subs[i - 1];
-                break;
-            }
-        }
-        assertTrue(pendingTail != address(0), "a still-pending tail sub exists behind the cursor reach");
-
-        address behindCursorAutoBought;
-        for (uint256 i; i < N; i++) {
-            if (_lastAutoBoughtDayOf(subs[i]) == today) {
-                behindCursorAutoBought = subs[i];
-                break;
-            }
-        }
-        assertTrue(behindCursorAutoBought != address(0), "a autoBought sub sits behind the cursor");
-
-        vm.prank(behindCursorAutoBought);
-        afKing.setDailyQuantity(0);
-        assertEq(_dailyQtyOf(behindCursorAutoBought), 0, "cancel wrote the in-place sentinel");
-        assertGt(_subscriberIndexOf(behindCursorAutoBought), 0, "v47: cancel relocates no one -- still in set");
+        // Cancel an EARLY-index sub (its tombstone sits ahead of the bulk of the set). The reclaim
+        // will swap-pop the tail occupant into this slot; that occupant must still be processed.
+        address cancelled = subs[0];
+        address tail = subs[N - 1];
+        vm.prank(cancelled);
+        game.subscribe(address(0), false, false, 0, 0, address(0)); // in-place tombstone
+        assertEq(_dailyQtyOf(cancelled), 0, "cancel wrote the in-place sentinel");
+        assertGt(_subscriberIndexOf(cancelled), 0, "v55: cancel relocates no one -- still in set");
 
         vm.recordLogs();
-        vm.prank(makeAddr("strand_keeperB"));
-        afKing.autoBuy(afKing.subscriberCount() + 5);
-        _captureAutoBought();
+        _runStageNewDay(0xCA1);
+        _drainLogs();
 
-        assertEq(_countAutoBoughtFor(pendingTail), 1, "H-CANCEL-SWAP-MISS resolved: pending tail still bought");
-        assertEq(_lastAutoBoughtDayOf(pendingTail), today, "pending tail's daily buy landed (no missed day)");
+        // The tombstone was reclaimed; the swap-pop occupant (and every other active sub) still bought.
+        assertEq(_subscriberIndexOf(cancelled), 0, "tombstone reclaimed out of the set");
+        assertEq(_countExpiredFor(cancelled, 2), 1, "reclaim emitted SubscriptionExpired(player,2)");
+        uint32 today = _lastBoughtDayOf(tail);
+        assertGt(today, 0, "the STAGE ran a process day");
+        assertEq(_countBoughtFor(tail), 1, "H-CANCEL-SWAP-MISS resolved: swap-pop occupant still bought");
 
         uint256 activeBought;
         for (uint256 i; i < N; i++) {
-            if (subs[i] == behindCursorAutoBought) continue;
-            assertEq(_lastAutoBoughtDayOf(subs[i]), today, "every active sub processed (no miss)");
+            if (subs[i] == cancelled) continue;
+            assertEq(_lastBoughtDayOf(subs[i]), today, "every active sub processed (no miss)");
             activeBought++;
         }
-        assertEq(activeBought, N - 1, "all N-1 still-active subs bought this day");
+        assertEq(activeBought, N - 1, "all N-1 still-active subs bought this cycle");
     }
 
-    /// @notice TOMB-04: a cancelled sub is an in-place tombstone (still in the set) until the next
-    ///         autoBuy that REACHES its slot reclaims it.
-    function testCancelTombstoneReclaimedByNextAutoBuy() public {
-        // ---- Sub-case (a): tombstone AHEAD of the cursor -> reclaimed THIS autoBuy. ----
-        uint256 N = 6;
-        address[] memory subs = _setupHealthyBuyingSubs(N, "reclaimA_");
-
-        address ahead = subs[2];
-        uint256 idxBefore = _subscriberIndexOf(ahead);
-        uint256 setLenBefore = afKing.subscriberCount();
-        vm.prank(ahead);
-        afKing.setDailyQuantity(0);
-        assertEq(_subscriberIndexOf(ahead), idxBefore, "tombstone still in set after cancel (no relocation)");
-        assertEq(afKing.subscriberCount(), setLenBefore, "set length unchanged by cancel (in-place tombstone)");
-
-        vm.recordLogs();
-        vm.prank(makeAddr("reclaimA_keeper"));
-        afKing.autoBuy(afKing.subscriberCount() + 5);
-        _captureAutoBought();
-        assertEq(_countExpiredFor(ahead, 2), 1, "reclaim emitted SubscriptionExpired(player,2) this autoBuy");
-        assertEq(_subscriberIndexOf(ahead), 0, "tombstone reclaimed: removed from the set this autoBuy");
-
-        uint32 today = _today();
-        for (uint256 i; i < N; i++) {
-            if (subs[i] == ahead) {
-                assertEq(_countAutoBoughtFor(subs[i]), 0, "the reclaimed tombstone is not bought");
-            } else {
-                assertEq(_lastAutoBoughtDayOf(subs[i]), today, "swap-pop occupant re-processed -- no skip");
-            }
-        }
-
-        // ---- Sub-case (b): tombstone BEHIND the cursor -> reclaimed on the next-day reset. ----
-        address[] memory subsB = _setupHealthyBuyingSubs(N, "reclaimB_");
-        vm.prank(makeAddr("reclaimB_keeperD1"));
-        afKing.autoBuy(afKing.subscriberCount() + 5);
-        uint32 day1 = _today();
-        address behind = subsB[1];
-        vm.prank(behind);
-        afKing.setDailyQuantity(0);
-        assertGt(_subscriberIndexOf(behind), 0, "behind-cursor tombstone not reclaimed same day (still in set)");
-
-        vm.warp(block.timestamp + 1 days);
-        for (uint256 i; i < N; i++) _fundPool(subsB[i], 1 ether);
-        vm.recordLogs();
-        vm.prank(makeAddr("reclaimB_keeperD2"));
-        afKing.autoBuy(afKing.subscriberCount() + 5);
-        _captureAutoBought();
-        assertEq(_countExpiredFor(behind, 2), 1, "behind-cursor tombstone reclaimed on the next-day reset");
-        assertEq(_subscriberIndexOf(behind), 0, "behind-cursor tombstone removed from set next day");
-        assertGt(day1, 0, "day1 was a real keeper-local day");
-    }
-
-    /// @notice v50.0 AFSUB-01 reclaim shape: under v50.0 the cancel-reclaim branch in autoBuy
-    ///         ALWAYS does `delete _subOf[player]` (the v47 `preservePaidWindow` carve-out is
-    ///         DROPPED — AFSUB-01 retired the BURNIE-prepaid window). Asserts: a cancelled sub
-    ///         whose record holds any non-zero stored value (validThroughLevel, fundingSource, etc.)
-    ///         has those values zeroed at the deferred reclaim, with no opt-in preservation path.
-    /// @dev    Replaces the v47 `testCancelPreservesPaidWindowThroughDeferredReclaim` /
-    ///         `testCancelReclaimsUnpaidWindow` pair (windowPaid + the day-keyed renewal field are
-    ///         GONE under AFSUB-01; the preserve-vs-delete fork has collapsed to always-delete).
-    function testCancelReclaimAlwaysDeletesSubRecord() public {
-        address[] memory subs = _setupHealthyBuyingSubs(1, "reclaim_delete_");
-        address sub = subs[0];
-
-        // Stamp a non-zero validThroughLevel into the sub (the v50.0 analog of the v49 paid window
-        // endpoint) so we can verify the reclaim deletes the FULL record.
-        _setValidThroughLevel(sub, 999);
-        assertEq(_validThroughLevelOf(sub), 999, "pre-cancel: validThroughLevel = 999");
-
-        vm.prank(sub);
-        afKing.setDailyQuantity(0);
-        // Pre-reclaim: tombstone still in set, validThroughLevel still readable (deferred reclaim).
-        assertGt(_subscriberIndexOf(sub), 0, "tombstone in set after cancel (deferred reclaim)");
-        assertEq(_validThroughLevelOf(sub), 999, "pre-reclaim: validThroughLevel readable");
-
-        vm.recordLogs();
-        vm.prank(makeAddr("reclaim_delete_keeper"));
-        afKing.autoBuy(afKing.subscriberCount() + 5);
-        _captureAutoBought();
-        assertEq(_countExpiredFor(sub, 2), 1, "reclaim emitted SubscriptionExpired(player,2)");
-        assertEq(_subscriberIndexOf(sub), 0, "sub removed from set at reclaim");
-
-        // v50.0 AFSUB-01: the FULL record is deleted at reclaim (no preserve-vs-delete fork).
-        assertEq(afKing.subscriptionOf(sub).dailyQuantity, 0, "dailyQuantity zeroed at reclaim");
-        assertEq(afKing.subscriptionOf(sub).validThroughLevel, 0, "validThroughLevel zeroed at reclaim (no preserve path)");
-        assertEq(afKing.subscriptionOf(sub).flags, 0, "flags zeroed at reclaim");
-        assertEq(afKing.subscriptionOf(sub).fundingSource, address(0), "fundingSource zeroed at reclaim");
-    }
-
-    /// @notice TOMB-04: reactivating a still-in-set tombstone (before any autoBuy reclaims it) flips
-    ///         it back to active IN PLACE with NO duplicate set membership.
-    /// @dev    v50.0 AFSUB-01 simplification: the v47 "paid window survives the cancel->reactivate
-    ///         round-trip" sub-assertion is dropped (no BURNIE-prepaid window exists anymore). The
-    ///         load-bearing property — idempotent _addToSet, no double-add — survives unchanged.
-    function testReactivateTombstonedSubNoDoubleAdd() public {
-        // ---- (a) setDailyQuantity(q>0) reactivation, no double-add. ----
-        address[] memory subs = _setupHealthyBuyingSubs(1, "reactA_");
-        address sub = subs[0];
-
-        uint256 idx = _subscriberIndexOf(sub);
-        uint256 lenBefore = afKing.subscriberCount();
-
-        vm.prank(sub);
-        afKing.setDailyQuantity(0);
-        assertEq(_subscriberIndexOf(sub), idx, "tombstone in set, same index");
-        vm.prank(sub);
-        afKing.setDailyQuantity(3);
-
-        assertEq(_dailyQtyOf(sub), 3, "reactivated in place (dailyQuantity restored)");
-        assertEq(_subscriberIndexOf(sub), idx, "reactivation kept the same set slot (no relocation)");
-        assertEq(afKing.subscriberCount(), lenBefore, "no duplicate set membership on reactivation");
-
-        // A autoBuy now treats it as a normal active sub (not a tombstone) -- it buys, not reclaims.
-        vm.recordLogs();
-        vm.prank(makeAddr("reactA_keeper"));
-        afKing.autoBuy(afKing.subscriberCount() + 5);
-        _captureAutoBought();
-        assertEq(_countExpiredFor(sub, 2), 0, "reactivated sub is NOT reclaimed as a tombstone");
-        assertEq(_countAutoBoughtFor(sub), 1, "reactivated sub buys as a normal active sub");
-
-        // ---- (b) subscribe() reactivation path: idempotent _addToSet, no double-add. ----
-        address[] memory subsB = _setupHealthyBuyingSubs(1, "reactB_");
-        address subB = subsB[0];
-        uint256 idxB = _subscriberIndexOf(subB);
-        uint256 lenB = afKing.subscriberCount();
-
-        vm.prank(subB);
-        afKing.setDailyQuantity(0); // tombstone, still in set
-
-        // Re-subscribe the still-in-set tombstoned address. Under AFSUB-01 no BURNIE pre-fund needed.
-        vm.prank(subB);
-        afKing.subscribe(address(0), false, true, 2, 0, address(0));
-
-        assertEq(_subscriberIndexOf(subB), idxB, "re-subscribe kept the same set slot (idempotent _addToSet)");
-        assertEq(afKing.subscriberCount(), lenB, "re-subscribe of an in-set tombstone never double-adds");
-        assertEq(_dailyQtyOf(subB), 2, "re-subscribe reactivated the sub (dailyQuantity restored)");
-    }
-
-    // =========================================================================
-    // Task 2 -- Tombstone-on-cancel no-miss + no dead-slot buildup (deferred-reclaim semantics)
-    // =========================================================================
-
-    /// @notice TOMB-04: under v47/v50 the swap-pop fires at RECLAIM (in-loop, no ++cursor), not at
-    ///         cancel. Cancelling an EARLY sub leaves it in the set as a tombstone; the autoBuy's
-    ///         reclaim branch swap-pops it and the moved occupant is re-read at THIS index this
-    ///         autoBuy -- it is not skipped.
+    /// @notice TST-04 swap-pop occupant no-skip (the load-bearing CONSENT-02 property): cancelling an
+    ///         EARLY sub leaves it as an in-place tombstone; the STAGE's reclaim branch swap-pops it
+    ///         and the moved occupant is re-read at THIS index this pass (the continue WITHOUT a
+    ///         cursor advance, GameAfkingModule.sol:586-594) -- it is NOT skipped.
     function testCancelSwapPopOccupantStillProcessed() public {
         uint256 N = 5;
         address[] memory subs = _setupHealthyBuyingSubs(N, "swap_");
         address mover = subs[N - 1];
 
         vm.prank(subs[0]);
-        afKing.setDailyQuantity(0);
-        assertGt(_subscriberIndexOf(subs[0]), 0, "v47: cancel is an in-place tombstone -- still in the set");
+        game.subscribe(address(0), false, false, 0, 0, address(0)); // in-place tombstone
+        assertGt(_subscriberIndexOf(subs[0]), 0, "v55: cancel is an in-place tombstone -- still in the set");
         assertEq(_dailyQtyOf(subs[0]), 0, "cancel wrote the in-place sentinel");
 
         vm.recordLogs();
-        vm.prank(makeAddr("swap_keeper"));
-        afKing.autoBuy(50);
-        _captureAutoBought();
+        _runStageNewDay(0x5A1);
+        _drainLogs();
 
         assertEq(_subscriberIndexOf(subs[0]), 0, "tombstone swap-popped at reclaim (removed from set)");
         assertEq(_countExpiredFor(subs[0], 2), 1, "reclaim emitted SubscriptionExpired(player,2) at the swap-pop");
-        assertEq(_countAutoBoughtFor(mover), 1, "reclaim swap-pop occupant still processed this autoBuy (no miss)");
-        assertEq(_countAutoBoughtFor(subs[0]), 0, "cancelled sub not processed");
+        assertEq(_countBoughtFor(mover), 1, "reclaim swap-pop occupant still processed this pass (NON-VACUOUS no-skip)");
+        assertEq(_countBoughtFor(subs[0]), 0, "cancelled sub not processed");
     }
 
-    /// @notice TOMB-04: under v47/v50 a cancel does NOT shrink the set immediately. Across a series
-    ///         of cancels the tombstones persist until the next autoBuy. The NET set effect equals
-    ///         the old immediate-swap-pop.
+    /// @notice v55 cancel-reclaim ALWAYS deletes the full Sub record (the v47 `preservePaidWindow`
+    ///         carve-out is gone -- AFSUB-01 retired the BURNIE-prepaid window): a cancelled sub whose
+    ///         record holds any non-zero stored value (validThroughLevel) has it zeroed at the deferred
+    ///         STAGE reclaim, with no opt-in preservation path.
+    function testCancelReclaimAlwaysDeletesSubRecord() public {
+        address[] memory subs = _setupHealthyBuyingSubs(1, "reclaim_delete_");
+        address sub = subs[0];
+
+        // Stamp a non-zero validThroughLevel so we can verify the reclaim deletes the FULL record.
+        _setValidThroughLevel(sub, 999);
+        assertEq(_validThroughLevelOf(sub), 999, "pre-cancel: validThroughLevel = 999");
+
+        vm.prank(sub);
+        game.subscribe(address(0), false, false, 0, 0, address(0)); // tombstone
+        assertGt(_subscriberIndexOf(sub), 0, "tombstone in set after cancel (deferred reclaim)");
+        assertEq(_validThroughLevelOf(sub), 999, "pre-reclaim: validThroughLevel readable");
+
+        vm.recordLogs();
+        _runStageNewDay(0xDE1);
+        _drainLogs();
+        assertEq(_countExpiredFor(sub, 2), 1, "reclaim emitted SubscriptionExpired(player,2)");
+        assertEq(_subscriberIndexOf(sub), 0, "sub removed from set at reclaim");
+
+        // The FULL record is deleted at reclaim (no preserve-vs-delete fork).
+        assertEq(_dailyQtyOf(sub), 0, "dailyQuantity zeroed at reclaim");
+        assertEq(_validThroughLevelOf(sub), 0, "validThroughLevel zeroed at reclaim (no preserve path)");
+        assertEq(_flagsOf(sub), 0, "flags zeroed at reclaim");
+    }
+
+    /// @notice TST-04: reactivating a still-in-set tombstone (before any STAGE reclaims it) flips it
+    ///         back to active IN PLACE with NO duplicate set membership (idempotent `_addToSet`).
+    function testReactivateTombstonedSubNoDoubleAdd() public {
+        address[] memory subs = _setupHealthyBuyingSubs(1, "react_");
+        address sub = subs[0];
+
+        uint256 idx = _subscriberIndexOf(sub);
+        uint256 lenBefore = _subscribersLen();
+
+        vm.prank(sub);
+        game.subscribe(address(0), false, false, 0, 0, address(0)); // tombstone, still in set
+        assertEq(_subscriberIndexOf(sub), idx, "tombstone in set, same index");
+
+        // Re-subscribe the still-in-set tombstoned address.
+        vm.prank(sub);
+        game.subscribe(address(0), false, false, 3, 0, address(0));
+        assertEq(_subscriberIndexOf(sub), idx, "re-subscribe kept the same set slot (idempotent _addToSet)");
+        assertEq(_subscribersLen(), lenBefore, "re-subscribe of an in-set tombstone never double-adds");
+        assertEq(_dailyQtyOf(sub), 3, "re-subscribe reactivated the sub (dailyQuantity restored)");
+
+        // A STAGE now treats it as a normal active sub (not a tombstone) -- it buys, not reclaims.
+        vm.recordLogs();
+        _runStageNewDay(0xAE1);
+        _drainLogs();
+        assertEq(_countExpiredFor(sub, 2), 0, "reactivated sub is NOT reclaimed as a tombstone");
+        assertEq(_countBoughtFor(sub), 1, "reactivated sub buys as a normal active sub");
+    }
+
+    /// @notice TST-04: across a series of cancels the in-place tombstones persist until the next STAGE
+    ///         reaches them. The NET set effect (after the reclaiming STAGE) equals the old
+    ///         immediate-swap-pop -- the set shrinks by exactly the cancel count, no dead slots.
     function testNoDeadSlotBuildupAcrossCancels() public {
-        uint256 baseline = afKing.subscriberCount();
+        uint256 baseline = _subscribersLen();
         uint256 N = 6;
         address[] memory subs = _setupHealthyBuyingSubs(N, "build_");
-        assertEq(afKing.subscriberCount(), baseline + N, "all N added to the set");
+        assertEq(_subscribersLen(), baseline + N, "all N added to the set");
 
         vm.prank(subs[0]);
-        afKing.setDailyQuantity(0);
+        game.subscribe(address(0), false, false, 0, 0, address(0));
         vm.prank(subs[1]);
-        afKing.setDailyQuantity(0);
-        assertEq(
-            afKing.subscriberCount(),
-            baseline + N,
-            "v47: cancel does not shrink the set (in-place tombstones stay until reclaimed)"
-        );
-
-        vm.warp(block.timestamp + 1 days);
+        game.subscribe(address(0), false, false, 0, 0, address(0));
         vm.prank(subs[2]);
-        afKing.setDailyQuantity(0);
-        assertEq(afKing.subscriberCount(), baseline + N, "3rd cancel also leaves an in-place tombstone");
+        game.subscribe(address(0), false, false, 0, 0, address(0));
+        assertEq(
+            _subscribersLen(),
+            baseline + N,
+            "v55: cancel does not shrink the set (in-place tombstones stay until reclaimed)"
+        );
 
         for (uint256 i = 3; i < N; i++) _fundPool(subs[i], 1 ether);
         vm.recordLogs();
-        vm.prank(makeAddr("build_keeper"));
-        afKing.autoBuy(afKing.subscriberCount() + 5);
-        _captureAutoBought();
+        _runStageNewDay(0xB01);
+        _drainLogs();
         assertEq(_countExpiredFor(subs[0], 2), 1, "tombstone 0 reclaimed");
         assertEq(_countExpiredFor(subs[1], 2), 1, "tombstone 1 reclaimed");
         assertEq(_countExpiredFor(subs[2], 2), 1, "tombstone 2 reclaimed");
         assertEq(
-            afKing.subscriberCount(),
+            _subscribersLen(),
             baseline + N - 3,
-            "after the reclaiming autoBuy the set shrank by exactly the 3 cancels (no dead slots)"
+            "after the reclaiming STAGE the set shrank by exactly the 3 cancels (no dead slots)"
         );
 
-        uint256 count = afKing.subscriberCount();
+        // Every surviving set slot has a consistent 1-indexed back-pointer (no zero-address dead slot).
+        uint256 count = _subscribersLen();
         for (uint256 i; i < count; i++) {
-            address at = afKing.subscriberAt(i);
+            address at = _subscriberAt(i);
             assertTrue(at != address(0), "no zero-address dead slot in the iteration set");
             assertEq(_subscriberIndexOf(at), i + 1, "each set slot's 1-indexed back-pointer is consistent");
         }
     }
 
-    /// @notice TOMB-04: a cancelled sub's stranded pool ETH stays withdrawable.
-    function testCancelledSubPoolEthWithdrawable() public {
-        address[] memory subs = _setupHealthyBuyingSubs(1, "strandpool_");
+    /// @notice TST-04: a cancelled sub's stranded afking ETH stays withdrawable (game-resident
+    ///         afkingFunding -- `withdrawAfkingFunding`).
+    function testCancelledSubFundingWithdrawable() public {
+        address[] memory subs = _setupHealthyBuyingSubs(1, "strandfund_");
         address sub = subs[0];
 
         _fundPool(sub, 3 ether);
-        uint256 pooledBefore = afKing.poolOf(sub);
-        assertGt(pooledBefore, 0, "sub has stranded pool ETH");
+        uint256 fundedBefore = game.afkingFundingOf(sub);
+        assertGt(fundedBefore, 0, "sub has stranded afking ETH");
 
         vm.prank(sub);
-        afKing.setDailyQuantity(0);
-        assertGt(_subscriberIndexOf(sub), 0, "v47: cancel is an in-place tombstone -- still in the set");
+        game.subscribe(address(0), false, false, 0, 0, address(0)); // tombstone
+        assertGt(_subscriberIndexOf(sub), 0, "v55: cancel is an in-place tombstone -- still in set");
         assertEq(_dailyQtyOf(sub), 0, "cancel wrote the in-place sentinel");
-        assertEq(afKing.poolOf(sub), pooledBefore, "cancel did not confiscate pool ETH");
+        assertEq(game.afkingFundingOf(sub), fundedBefore, "cancel did not confiscate the afking ETH");
 
         uint256 balBefore = sub.balance;
         vm.prank(sub);
-        afKing.withdraw(pooledBefore);
-        assertEq(afKing.poolOf(sub), 0, "pool drained on withdraw");
-        assertEq(sub.balance - balBefore, pooledBefore, "stranded pool ETH returned to the cancelled sub");
+        game.withdrawAfkingFunding(fundedBefore);
+        assertEq(game.afkingFundingOf(sub), 0, "afking ETH drained on withdraw");
+        assertEq(sub.balance - balBefore, fundedBefore, "stranded afking ETH returned to the cancelled sub");
     }
 
     // =========================================================================
-    // v50.0 AFSUB-05 -- swap-pop invariant under pass-eviction (H-CANCEL-SWAP-MISS re-derivation)
+    // TST-04 -- swap-pop invariant under pass-eviction (H-CANCEL-SWAP-MISS re-derivation)
     // =========================================================================
 
-    /// @notice v50.0 AFSUB-05: the v49 swap-pop invariant (membership ⟺ packed != 0) holds under
-    ///         AFSUB-03 pass-eviction too. A no-pass crossing eviction routes through the same
-    ///         tombstone-then-reclaim shape as cancel: `sub.dailyQuantity = 0; _removeFromSet(player);
-    ///         emit SubscriptionExpired(player, 1)` (continuing WITHOUT advancing the cursor —
-    ///         AfKing._autoBuy:638-645). The H-CANCEL-SWAP-MISS class structurally cannot reproduce
-    ///         under pass-eviction because the swap-pop occupant is processed at this slot this
-    ///         autoBuy (Pitfall P6).
+    /// @notice CONSENT-01: the swap-pop invariant (membership ⟺ packed-index != 0) holds under
+    ///         AFSUB-03 pass-eviction too. A no-pass crossing eviction routes through the SAME
+    ///         tombstone-then-reclaim shape as cancel: `sub.dailyQuantity=0; _removeFromSet(player);
+    ///         continue` WITHOUT advancing the cursor (GameAfkingModule.sol:619-628). The
+    ///         H-CANCEL-SWAP-MISS class structurally cannot reproduce because the swap-pop occupant is
+    ///         processed at this slot this pass.
     function testPassEvictionPreservesSwapPopInvariant() public {
         uint256 N = 6;
-        address[] memory subs = _setupHealthyBuyingSubs(N, "evict_swap_");
+        // NO deity (the no-pass eviction precondition): _passHorizonOf(subs[i]) = 0 for all i.
+        address[] memory subs = _setupNoPassBuyingSubs(N, "evict_swap_");
 
-        // No deity bit granted -> lazyPassHorizon(subs[i]) = 0 for all i. Force the crossing on
-        // ALL of them: validThroughLevel = 0, bump game.level to 1. Every sub will EVICT this autoBuy
-        // (not refresh).
+        // Force the crossing on ALL of them: validThroughLevel = 0, bump game.level to 1. Every sub
+        // EVICTS this STAGE (not refresh).
         for (uint256 i; i < N; i++) _setValidThroughLevel(subs[i], 0);
         _bumpGameLevelToAtLeastOne();
 
-        // Identify the tail sub PRE-autoBuy (the one swap-pop will move into a freed slot).
         address tail = subs[N - 1];
-        uint256 tailIdxBefore = _subscriberIndexOf(tail);
-        assertGt(tailIdxBefore, 0, "tail sub starts in the iterable set");
+        assertGt(_subscriberIndexOf(tail), 0, "tail sub starts in the iterable set");
 
         vm.recordLogs();
-        vm.prank(makeAddr("evict_swap_keeper"));
-        afKing.autoBuy(afKing.subscriberCount() + 5); // MUST NOT revert despite the evictions
-        _captureAutoBought();
+        _runStageOnce();
+        _drainLogs();
 
-        // Every test sub evicted: the swap-pop occupant at each freed slot was re-evaluated this
-        // same autoBuy (the continue WITHOUT cursor advance — Pitfall P6 enforcement).
+        // Every test sub evicted: the swap-pop occupant at each freed slot was re-evaluated this pass.
         for (uint256 i; i < N; i++) {
             assertEq(_countExpiredFor(subs[i], 1), 1, "AFSUB-03 pass-eviction emitted SubscriptionExpired(.,1)");
             assertEq(_subscriberIndexOf(subs[i]), 0, "evicted sub swap-popped out of the iterable set");
-            assertEq(afKing.subscriptionOf(subs[i]).dailyQuantity, 0, "evicted sub dailyQuantity zeroed (tombstoned)");
+            assertEq(_dailyQtyOf(subs[i]), 0, "evicted sub dailyQuantity zeroed (tombstoned)");
         }
-        // membership ⟺ packed != 0 invariant: every evicted sub has dailyQuantity == 0 AND index == 0;
-        // VAULT/SDGNRS (the deploy-time SUB-09 entries) have a different pass state — VAULT carries
-        // the permanent deity bit and survives the crossing, so VAULT stays in the set (the assertion
-        // here is only on the N test subs we explicitly forced into eviction).
     }
 
-    /// @notice v50.0 AFSUB-05: H-CANCEL-SWAP-MISS re-derivation under pass-eviction. Begin a chunked
-    ///         autoBuy so the cursor sits partway, then force a pass-eviction on a behind-cursor sub.
-    ///         Under the swap-pop-at-eviction shape the relocated tail (the swap-pop occupant) would
-    ///         have been pushed behind the cursor and SKIPPED. Under v50.0's tombstone-then-reclaim
-    ///         shape the eviction relocates no one mid-sweep and the pending tail is processed.
-    /// @dev    Note: under v50.0 the EVICT branch routes through `sub.dailyQuantity = 0;
-    ///         _removeFromSet(player); continue` -- the `_removeFromSet` here IS a swap-pop, but it
-    ///         fires INSIDE the autoBuy loop at the cursor's current slot, with a `continue` that
-    ///         does NOT advance the cursor (AfKing._autoBuy:642-645). So the swap-pop occupant is
-    ///         re-read at THIS index this same autoBuy iteration — preserving the v49 invariant.
-    function testPassEvictionBehindCursorDoesNotStrandPendingTail() public {
+    /// @notice TST-04: H-CANCEL-SWAP-MISS re-derivation under MIXED pass-eviction + refresh. Grant
+    ///         deity to ODD-indexed subs so they survive the crossing (REFRESH branch); EVEN indices
+    ///         have no pass and EVICT. Under the swap-pop-at-eviction shape the relocated tail would
+    ///         have been pushed behind the cursor and SKIPPED; under v55's tombstone-then-reclaim the
+    ///         eviction relocates no one mid-pass and every surviving sub is processed.
+    function testPassEvictionMixedDoesNotStrandSurvivors() public {
         uint256 N = 8;
-        address[] memory subs = _setupHealthyBuyingSubs(N, "evict_strand_");
+        // NO deity at subscribe; grant it selectively below.
+        address[] memory subs = _setupNoPassBuyingSubs(N, "evict_mix_");
 
-        // Grant deity to ODD-indexed subs only so they survive the crossing (REFRESH branch); EVEN
-        // indices have no pass and EVICT.
+        // Grant deity to ODD-indexed subs only so they REFRESH; even indices EVICT.
         for (uint256 i = 1; i < N; i += 2) _grantDeityPass(subs[i]);
-        // Force the crossing for all: validThroughLevel = 0, bump game.level.
         for (uint256 i; i < N; i++) _setValidThroughLevel(subs[i], 0);
         _bumpGameLevelToAtLeastOne();
 
-        // First chunk: advance the cursor partway.
         vm.recordLogs();
-        vm.prank(makeAddr("evict_strand_keeperA"));
-        afKing.autoBuy(4);
-        _captureAutoBought();
-        (, uint256 cursorMid) = afKing.autoBuyProgress();
-        assertGt(cursorMid, 0, "first chunk advanced the cursor partway");
+        _runStageOnce();
+        _drainLogs();
 
-        // Finish the autoBuy. The pass-eviction swap-pop never strands a pending tail.
-        vm.recordLogs();
-        vm.prank(makeAddr("evict_strand_keeperB"));
-        afKing.autoBuy(afKing.subscriberCount() + 5);
-        _captureAutoBought();
-
-        // Every odd-indexed (deity-holding) sub survived and bought this day; every even-indexed sub
-        // is evicted with dailyQuantity zeroed and out of the set.
-        uint32 today = _today();
+        uint32 today = _lastBoughtDayOf(subs[1]);
+        assertGt(today, 0, "the STAGE ran a process day");
         for (uint256 i; i < N; i++) {
             if (i % 2 == 1) {
-                assertEq(_lastAutoBoughtDayOf(subs[i]), today, "deity-holding sub processed (no miss from eviction swap-pop)");
+                assertEq(_lastBoughtDayOf(subs[i]), today, "deity-holding sub processed (no miss from an eviction swap-pop)");
                 assertGt(_subscriberIndexOf(subs[i]), 0, "deity-holding sub stays in set");
             } else {
-                assertEq(afKing.subscriptionOf(subs[i]).dailyQuantity, 0, "no-pass sub evicted (tombstone)");
+                assertEq(_dailyQtyOf(subs[i]), 0, "no-pass sub evicted (tombstone)");
                 assertEq(_subscriberIndexOf(subs[i]), 0, "no-pass sub swap-popped out");
             }
         }
+    }
+
+    /// @notice TST-04 fuzz: over an arbitrary mix of cancels among N funded subs, the reclaiming STAGE
+    ///         leaves the set membership-consistent (every survivor in-set + bought once; every
+    ///         cancelled sub reclaimed out), independent of the cancel ordering.
+    function testFuzzCancelOrderingPreservesMembership(uint8 cancelMask) public {
+        uint256 N = 6;
+        address[] memory subs = _setupHealthyBuyingSubs(N, "fuzzcancel_");
+
+        bool[] memory cancelled = new bool[](N);
+        uint256 cancelCount;
+        for (uint256 i; i < N; i++) {
+            if ((cancelMask >> i) & 1 == 1) {
+                cancelled[i] = true;
+                cancelCount++;
+                vm.prank(subs[i]);
+                game.subscribe(address(0), false, false, 0, 0, address(0)); // in-place tombstone
+            }
+        }
+
+        uint256 lenBefore = _subscribersLen();
+        vm.recordLogs();
+        _runStageNewDay(uint256(keccak256(abi.encode(cancelMask))) & 0xFFFFFF);
+        _drainLogs();
+
+        uint32 today;
+        for (uint256 i; i < N; i++) {
+            if (!cancelled[i]) {
+                today = _lastBoughtDayOf(subs[i]);
+                break;
+            }
+        }
+        for (uint256 i; i < N; i++) {
+            if (cancelled[i]) {
+                assertEq(_subscriberIndexOf(subs[i]), 0, "cancelled sub reclaimed out of the set");
+                assertEq(_countExpiredFor(subs[i], 2), 1, "cancelled sub emitted CancelReclaim");
+            } else {
+                assertGt(_subscriberIndexOf(subs[i]), 0, "survivor stays in the set");
+                if (today > 0) {
+                    assertEq(_lastBoughtDayOf(subs[i]), today, "survivor processed this STAGE (no miss)");
+                }
+            }
+        }
+        assertEq(_subscribersLen(), lenBefore - cancelCount, "set shrank by exactly the cancel count (no dead slots)");
     }
 
     // =========================================================================
     // Internal helpers
     // =========================================================================
 
-    function _today() internal view returns (uint32) {
-        return uint32((block.timestamp - 82620) / 1 days);
+    /// @dev Drive the per-sub buy STAGE for a NEW day: warp a day forward, then run advanceGame +
+    ///      the mock-VRF drain so `processSubscriberStage(SUB_STAGE_BATCH)` stamps the funded set.
+    ///      This is the Δ4 successor to the deleted `afKing.autoBuy(N)` (the buy folded into advance).
+    function _runStageNewDay(uint256 vrfWord) internal {
+        _settleGame(vrfWord ^ 0xF00D); // settle any in-flight day first
+        vm.warp(block.timestamp + 1 days);
+        _settleGame(vrfWord);
     }
 
-    /// @dev Subscribe `n` fresh players as fully-healthy buying subs (ticket mode, operator-approved,
-    ///      pool-funded, NOT at the crossing). Under v50.0 AFSUB-01 there is no BURNIE pre-fund.
+    /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE `advanceGame()` (no full settle),
+    ///      used by the pass-eviction tests. The STAGE runs strictly PRE-RNG (AdvanceModule:305-326),
+    ///      so the eviction / buy completes before rngGate — and a single advance never reaches the
+    ///      level-transition `charityResolve.pickCharity` (AdvanceModule:1746), which would revert on
+    ///      a poked level. Subscribers must already be registered (subscribe blocks during rngLock).
+    function _runStageOnce() internal {
+        vm.warp(block.timestamp + 1 days);
+        game.advanceGame();
+    }
+
+    /// @dev Settle the game to a clean state: drive advanceGame + deliver the mock VRF word until
+    ///      advanceDue() is false and we are not rng-locked. Ported from
+    ///      KeeperRewardRoutingSameResults._settleGame (PATTERNS §"Settle-to-clean-state VRF drain").
+    function _settleGame(uint256 vrfWord) internal {
+        for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
+            if (!game.advanceDue() && !game.rngLocked()) break;
+            game.advanceGame();
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != _lastFulfilledReqId && reqId > 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) {
+                    mockVRF.fulfillRandomWords(reqId, vrfWord);
+                    _lastFulfilledReqId = reqId;
+                }
+            }
+        }
+    }
+
+    /// @dev Subscribe `n` fresh players as fully-healthy LOOTBOX-mode buying subs (operator-approved,
+    ///      afking-funded). Granted deity so they survive any crossing (a no-pass sub at level>0 would
+    ///      evict at the crossing before buying — orthogonal to the set-mutation property under test).
+    ///      Δ2/Δ5: subscribe via game.subscribe; fund via game.depositAfkingFunding.
     function _setupHealthyBuyingSubs(uint256 n, string memory prefix) internal returns (address[] memory subs) {
         subs = new address[](n);
         for (uint256 i; i < n; i++) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
+            _grantDeityPass(who); // survive the crossing (set-mutation, not pass-gating, is the subject)
             vm.prank(who);
-            afKing.subscribe(address(0), false, true, 1, 0, address(0)); // self, ticket mode, qty 1
+            game.subscribe(address(0), false, false, 1, 0, address(0)); // self, lootbox mode, qty 1
             _approveKeeper(who);
             _fundPool(who, 1 ether);
         }
     }
 
+    /// @dev Subscribe `n` fresh NO-PASS players (lootbox mode, funded) — _passHorizonOf == 0, so a
+    ///      forced crossing at level>0 EVICTS them. Used by the pass-eviction tests.
+    function _setupNoPassBuyingSubs(uint256 n, string memory prefix) internal returns (address[] memory subs) {
+        subs = new address[](n);
+        for (uint256 i; i < n; i++) {
+            address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
+            subs[i] = who;
+            vm.prank(who);
+            game.subscribe(address(0), false, false, 1, 0, address(0)); // self, lootbox mode, qty 1, NO deity
+            _approveKeeper(who);
+            _fundPool(who, 1 ether);
+        }
+    }
+
+    /// @dev Approve the game (the afking module is game-resident) as `who`'s operator. Self-funded
+    ///      subs don't strictly need it, but it keeps parity with operator-funded paths.
     function _approveKeeper(address who) internal {
         vm.prank(who);
-        game.setOperatorApproval(address(afKing), true);
+        game.setOperatorApproval(address(game), true);
     }
 
+    /// @dev Credit `who`'s afkingFunding bucket with `amount` ETH (Δ5: depositAfkingFunding replaces
+    ///      AfKing.depositFor).
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        afKing.depositFor{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(who);
     }
 
-    /// @dev Grant `who` the permanent deity-pass bit so lazyPassHorizon(who) = type(uint24).max.
+    /// @dev Grant `who` the permanent deity bit so _passHorizonOf(who) == type(uint24).max. RE-DERIVED
+    ///      slot: mintPacked_ is slot 10 on DegenerusGame (the old helper used slot 9 — WRONG).
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(9)));
+        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << 184);
+        packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
     }
 
     /// @dev Bump game.level (uint24 packed at slot-0 bytes 14..16) from 0 to 1 if needed, so a sub
     ///      with validThroughLevel = 0 triggers the AFSUB-03 crossing predicate `currentLevel > 0`.
-    /// @dev DegenerusGameStorage slot 0 layout: bytes 0..3 purchaseStartDay, bytes 4..7 dailyIdx,
-    ///      bytes 8..13 rngRequestTime, bytes 14..16 level (uint24). Plan 335-06 helper-fix replaces
-    ///      the v49-era assumption that `level` lived at the low 24 bits — write at byte offset 14.
     function _bumpGameLevelToAtLeastOne() internal {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         uint256 levelMask = uint256(0xFFFFFF) << (14 * 8);
@@ -676,84 +573,121 @@ contract AfKingConcurrency is DeployProtocol {
         }
     }
 
-    /// @dev Read `who`'s lastAutoBoughtDay (bytes 1..4 of the packed Sub slot).
-    function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(afKing), slot));
-        return uint32(packed >> (OFF_LASTSWEPT * 8));
+    // ---- Sub field reads (RE-DERIVED game-resident slot 66 + the verified packed offsets) ----
+
+    function _subSlot(address who) internal pure returns (bytes32) {
+        return keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
     }
 
-    /// @dev Read `who`'s 1-indexed subscriber index (slot 3); 0 = not in set.
-    function _subscriberIndexOf(address who) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)));
-        return uint256(vm.load(address(afKing), slot));
+    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
+        uint256 p = uint256(vm.load(address(game), _subSlot(who))) >> (off * 8);
+        return p & ((uint256(1) << widthBits) - 1);
     }
 
-    /// @dev Read `who`'s dailyQuantity (byte 0 of the packed Sub slot).
+    function _lastBoughtDayOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_LASTBOUGHT, 32));
+    }
+
     function _dailyQtyOf(address who) internal view returns (uint8) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(afKing), slot));
-        return uint8(packed >> (OFF_DAILY * 8));
+        return uint8(_subField(who, OFF_DAILY, 8));
     }
 
-    /// @dev Read `who`'s validThroughLevel (bytes 5..8 of the packed Sub slot — v50.0 in-place
-    ///      repurpose of the v49 day-keyed renewal slot).
     function _validThroughLevelOf(address who) internal view returns (uint32) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(afKing), slot));
-        return uint32(packed >> (OFF_VALIDTHROUGHLEVEL * 8));
+        return uint32(_subField(who, OFF_VALIDTHROUGH, 32));
     }
 
-    /// @dev Pin `who`'s validThroughLevel (bytes 5..8). Used to force the AFSUB-03 crossing
-    ///      predicate (currentLevel > validThroughLevel) or, with a high value, to keep the per-iter
-    ///      check satisfied.
-    function _setValidThroughLevel(address who, uint32 level) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(afKing), slot));
-        packed &= ~(uint256(0xFFFFFFFF) << (OFF_VALIDTHROUGHLEVEL * 8));
-        packed |= (uint256(level) << (OFF_VALIDTHROUGHLEVEL * 8));
-        vm.store(address(afKing), slot, bytes32(packed));
+    function _flagsOf(address who) internal view returns (uint8) {
+        return uint8(_subField(who, OFF_FLAGS, 8));
     }
 
-    /// @dev Force the autoBuy cursor back to 0 while keeping the day-stamp at today.
-    function _resetCursorToZeroForToday() internal {
-        uint256 packed = uint256(vm.load(address(afKing), bytes32(uint256(4))));
-        packed &= uint256(0xFFFFFFFF);
-        packed |= (uint256(_today()) & 0xFFFFFFFF);
-        vm.store(address(afKing), bytes32(uint256(4)), bytes32(packed));
+    /// @dev `subsFullyProcessed` (slot 0, offset 31, bool) — the per-day afking-done gate.
+    function _subsFullyProcessed() internal view returns (bool) {
+        uint256 p0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        return uint8(p0 >> (31 * 8)) != 0;
     }
 
-    /// @dev Drain the recorded logs ONCE into the SubscriptionExpired snapshot.
+    /// @dev `_subCursor` (slot 70, offset 0, uint16) — the STAGE walk cursor.
+    function _subCursorVal() internal view returns (uint16) {
+        return uint16(uint256(vm.load(address(game), bytes32(uint256(70)))));
+    }
+
+    /// @dev Open the afking reset gate exactly as the contract does on a new-day entry
+    ///      (AdvanceModule:306-308): `subsFullyProcessed = false; _subCursor = 0`. This is the precise
+    ///      EFFECT of the `_afkingResetDay != day` per-day reset, applied to the same two storage
+    ///      fields the contract writes (the idle fixture's real day index saturates without ticket
+    ///      purchases, so the gate is opened directly rather than via a real day rollover).
+    function _openAfkingResetGate() internal {
+        // _subCursor = 0 (slot 70, offset 0, uint16).
+        bytes32 s70 = bytes32(uint256(70));
+        uint256 p70 = uint256(vm.load(address(game), s70));
+        p70 &= ~uint256(0xFFFF);
+        vm.store(address(game), s70, bytes32(p70));
+        // subsFullyProcessed = false (slot 0, offset 31).
+        bytes32 s0 = bytes32(uint256(0));
+        uint256 p0 = uint256(vm.load(address(game), s0));
+        p0 &= ~(uint256(0xFF) << (31 * 8));
+        vm.store(address(game), s0, bytes32(p0));
+    }
+
+    /// @dev Pin `who`'s validThroughLevel (bytes 1..4) -- force / clear the crossing predicate.
+    function _setValidThroughLevel(address who, uint32 lvl) internal {
+        bytes32 slot = _subSlot(who);
+        uint256 packed = uint256(vm.load(address(game), slot));
+        packed &= ~(uint256(0xFFFFFFFF) << (OFF_VALIDTHROUGH * 8));
+        packed |= (uint256(lvl) << (OFF_VALIDTHROUGH * 8));
+        vm.store(address(game), slot, bytes32(packed));
+    }
+
+    /// @dev Read `who`'s 1-indexed subscriber index (RE-DERIVED slot 69); 0 = not in set.
+    function _subscriberIndexOf(address who) internal view returns (uint256) {
+        return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)))));
+    }
+
+    /// @dev `_subscribers.length` (RE-DERIVED slot 68 holds the array length).
+    function _subscribersLen() internal view returns (uint256) {
+        return uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
+    }
+
+    /// @dev `_subscribers[i]` (data at keccak256(68) + i).
+    function _subscriberAt(uint256 i) internal view returns (address) {
+        bytes32 base = keccak256(abi.encode(uint256(SUBSCRIBERS_SLOT)));
+        return address(uint160(uint256(vm.load(address(game), bytes32(uint256(base) + i)))));
+    }
+
+    /// @dev The stamp day a sub was last processed (for the "this cycle" assertions).
+    function _stampDay(address who) internal view returns (uint32) {
+        return _lastBoughtDayOf(who);
+    }
+
+    // ---- Buy oracle (the storage-stamp delta, the GASOPT-04 successor to the deleted AutoBought event) ----
+
+    mapping(address => uint32) private _baselineBoughtDay;
+
+    function _snapshotBought(address[] memory tracked) internal {
+        for (uint256 i; i < tracked.length; i++) {
+            _baselineBoughtDay[tracked[i]] = _lastBoughtDayOf(tracked[i]);
+        }
+    }
+
+    /// @dev 1 if `who` was freshly stamped (lastAutoBoughtDay advanced past the snapshot), else 0.
+    function _countBoughtFor(address who) internal view returns (uint256) {
+        uint32 stamp = _lastBoughtDayOf(who);
+        return (stamp > _baselineBoughtDay[who]) ? 1 : 0;
+    }
+
+    // ---- Event drain (emitter == address(game) — the game-resident module emits via delegatecall) ----
+
     function _drainLogs() internal {
         delete _expiredPlayers;
         delete _expiredReasons;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; i++) {
-            if (logs[i].emitter != address(afKing) || logs[i].topics.length == 0) continue;
+            if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
             if (logs[i].topics[0] == SUB_EXPIRED_SIG && logs[i].topics.length >= 2) {
                 _expiredPlayers.push(address(uint160(uint256(logs[i].topics[1]))));
                 _expiredReasons.push(uint8(uint256(bytes32(logs[i].data))));
             }
         }
-    }
-
-    /// @dev Alias kept for the existing call sites (historical name).
-    function _captureAutoBought() internal {
-        _drainLogs();
-    }
-
-    /// @dev Per-address baseline `lastAutoBoughtDay` snapshot for the storage-stamp buy oracle.
-    mapping(address => uint32) private _baselineBoughtDay;
-
-    function _snapshotBought(address[] memory tracked) internal {
-        for (uint256 i; i < tracked.length; i++) {
-            _baselineBoughtDay[tracked[i]] = _lastAutoBoughtDayOf(tracked[i]);
-        }
-    }
-
-    function _countAutoBoughtFor(address who) internal view returns (uint256) {
-        uint32 stamp = _lastAutoBoughtDayOf(who);
-        return (stamp == _today() && stamp > _baselineBoughtDay[who]) ? 1 : 0;
     }
 
     function _countExpiredFor(address who, uint8 reason) internal view returns (uint256 count) {
