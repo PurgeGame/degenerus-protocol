@@ -14,9 +14,11 @@ This plan READS the 350-02 W3 branch directive and records the phase outcome it 
 
 > **"Plan 350-03 MUST execute Outcome A."** … *"Directive: plan 350-03 = Outcome A (no net contract change; record the verdict). Do NOT author the GAS-03 flush diff."*
 
-**Outcome A is in effect.** GAS-03 was REJECTED-with-reasoning at 350-02; GAS-01 and GAS-02 are CONFIRMED-STRUCTURAL; all other SCAV-348 candidates are DISSOLVED / DELIVERED-STRUCTURAL. There is **NO `contracts/*.sol` diff this phase, and NO contract-commit gate** — the phase closes on the documented verdict per ROADMAP Phase 350 SC4's explicit "if the phase produces no net contract change … that is recorded as the outcome and no diff is gated" branch.
+**Outcome A is the executed branch.** GAS-03 was REJECTED-with-reasoning at 350-02; GAS-01 and GAS-02 are CONFIRMED-STRUCTURAL; all other SCAV-348 candidates are DISSOLVED / DELIVERED-STRUCTURAL. There is **NO `contracts/*.sol` diff this phase, and NO contract-commit gate** — the phase closes on the documented verdict per ROADMAP Phase 350 SC4's explicit "if the phase produces no net contract change … that is recorded as the outcome and no diff is gated" branch.
 
-Under Outcome A, **Task 2 of this plan does NOT run** (it is the Outcome-B flush-diff author, contingent on a 350-02 GAS-03 APPROVAL that did not happen). Task 2 is recorded "skipped — Outcome A" in `350-03-SUMMARY.md`. No contract is touched in either task.
+Under Outcome A, **Task 2 of this plan does NOT run** (it is the contingency-branch flush-diff author, which would run only had 350-02 cleared a GAS-03 win — it did not). Task 2 is recorded "skipped — Outcome A" in `350-03-SUMMARY.md`. No contract is touched in either task.
+
+> Note on the contingency branch: the alternate (NOT-taken) branch is referenced by name throughout this doc only to record that it was excluded. The decisive `## ⮕ EXECUTED BRANCH` heading above (Outcome A) is the single source of truth for which branch ran; this doc never asserts the contingency branch is the active one.
 
 ---
 
@@ -54,7 +56,7 @@ GAS-03 proposed collapsing the per-iteration `claimablePool -= uint128(ethValue)
 
 ## 3. NO-INVARIANT-TRADED ATTESTATION
 
-No invariant-trading candidate was APPROVED. The floor-protected sites stay byte-untouched (no diff exists this phase):
+No invariant-trading candidate was accepted. The floor-protected sites stay byte-untouched (no diff exists this phase):
 - `afkingFunding[src]` per-key debit (`:709`) — the per-account underflow guard / SOLVENCY-01 precondition.
 - The swap-pop set-mutation tombstone (CONSENT-02 / H-CANCEL-SWAP-MISS) — `_removeFromSet` `:391`, called `:588`/`:622`/`:676`; `sub.dailyQuantity = 0` `:621`/`:675`.
 - The no-orphan guard (`:570`).
