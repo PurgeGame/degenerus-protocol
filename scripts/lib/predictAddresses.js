@@ -9,14 +9,22 @@ const JACKPOT_RESET_TIME = 82620n;
  * must appear AFTER their dependencies.
  *
  * Constraints:
- *  - COIN (N+10) before VAULT (N+19): vault reads vaultMintAllowance()
- *  - GAME (N+12) + modules (N+1..9) before SDGNRS (N+20): stonk calls claimWhalePass/setAfKingMode
- *  - AFKING (N+18) before VAULT (N+19) / SDGNRS (N+20): their constructors call afKing.subscribe()
- *    (AfKing's own constructor makes no cross-contract calls — sets 3 immutables only — so it has
- *    no upstream dependency; placed right before VAULT to minimize the downstream address shift)
- *  - SDGNRS (N+20) before DGNRS (N+21): DGNRS reads SDGNRS balance
- *  - GAME (N+12) before ADMIN (N+22): admin calls wireVrf()
- *  - GNRUS (N+23) last: no constructor cross-calls, reads compile-time constants only
+ *  - COIN (N+12) before VAULT (N+21): vault reads vaultMintAllowance()
+ *  - GAME (N+14) + modules (N+1..11) before SDGNRS (N+22): stonk calls claimWhalePass; vault/stonk
+ *    constructors self-subscribe via the game-resident afking path (game.subscribe, SUB-09)
+ *  - GAME_AFKING_MODULE (N+11) before VAULT (N+21) / SDGNRS (N+22): the v55 afking surface is
+ *    game-resident (DegenerusGame delegatecalls GameAfkingModule); the vault/stonk constructor
+ *    self-subscribes hit live module code only if GAME + the afking module are deployed first.
+ *    Both new modules are constructor-arg-less delegatecall modules (like the other 10) — no
+ *    upstream dependency of their own; placed in the game-module block so source-order ≡ DEPLOY_ORDER
+ *    ≡ the patched ContractAddresses.sol constant order (GAME_BINGO_MODULE :33 / GAME_AFKING_MODULE :35).
+ *  - SDGNRS (N+22) before DGNRS (N+23): DGNRS reads SDGNRS balance
+ *  - GAME (N+14) before ADMIN (N+24): admin calls wireVrf()
+ *  - GNRUS (N+25) last: no constructor cross-calls, reads compile-time constants only
+ *
+ * v55.0 note: the standalone AfKing contract (old AF_KING key at the former N+18) was DISSOLVED — its
+ * subscriber state + logic folded into DegenerusGame (GameAfkingModule). That key is removed here; the
+ * two new game modules GAME_BINGO_MODULE + GAME_AFKING_MODULE are inserted in the game-module block.
  */
 export const DEPLOY_ORDER = [
   "ICONS_32",              // N+0:  Icons32Data
@@ -29,20 +37,21 @@ export const DEPLOY_ORDER = [
   "GAME_LOOTBOX_MODULE",   // N+7:  DegenerusGameLootboxModule
   "GAME_BOON_MODULE",      // N+8:  DegenerusGameBoonModule
   "GAME_DEGENERETTE_MODULE", // N+9:  DegenerusGameDegeneretteModule
-  "COIN",                  // N+10: BurnieCoin
-  "COINFLIP",              // N+11: BurnieCoinflip (no constructor args)
-  "GAME",                  // N+12: DegenerusGame (internal storage only)
-  "WWXRP",                 // N+13: WrappedWrappedXRP
-  "AFFILIATE",             // N+14: DegenerusAffiliate
-  "JACKPOTS",              // N+15: DegenerusJackpots
-  "QUESTS",                // N+16: DegenerusQuests
-  "DEITY_PASS",            // N+17: DegenerusDeityPass
-  "AF_KING",               // N+18: AfKing (no cross-calls; must precede VAULT/SDGNRS subscribe)
-  "VAULT",                 // N+19: DegenerusVault (calls COIN; calls AF_KING.subscribe)
-  "SDGNRS",                // N+20: StakedDegenerusStonk (calls GAME, AF_KING.subscribe; mints to DGNRS)
-  "DGNRS",                 // N+21: DegenerusStonk (reads SDGNRS balance)
-  "ADMIN",                 // N+22: DegenerusAdmin (calls VRF + GAME)
-  "GNRUS",                 // N+23: GNRUS (self-mint only, no cross-calls)
+  "GAME_BINGO_MODULE",     // N+10: DegenerusGameBingoModule (no ctor args; claimBingo + ARCH-04 reclaim)
+  "GAME_AFKING_MODULE",    // N+11: GameAfkingModule (no ctor args; game-resident afking surface; must precede VAULT/SDGNRS subscribe)
+  "COIN",                  // N+12: BurnieCoin
+  "COINFLIP",              // N+13: BurnieCoinflip (no constructor args)
+  "GAME",                  // N+14: DegenerusGame (internal storage only)
+  "WWXRP",                 // N+15: WrappedWrappedXRP
+  "AFFILIATE",             // N+16: DegenerusAffiliate
+  "JACKPOTS",              // N+17: DegenerusJackpots
+  "QUESTS",                // N+18: DegenerusQuests
+  "DEITY_PASS",            // N+19: DegenerusDeityPass
+  "VAULT",                 // N+20: DegenerusVault (calls COIN; constructor self-subscribes via game.subscribe)
+  "SDGNRS",                // N+21: StakedDegenerusStonk (calls GAME; constructor self-subscribes via game.subscribe; mints to DGNRS)
+  "DGNRS",                 // N+22: DegenerusStonk (reads SDGNRS balance)
+  "ADMIN",                 // N+23: DegenerusAdmin (calls VRF + GAME)
+  "GNRUS",                 // N+24: GNRUS (self-mint only, no cross-calls)
 ];
 
 /**
@@ -59,6 +68,8 @@ export const KEY_TO_CONTRACT = {
   GAME_LOOTBOX_MODULE: "DegenerusGameLootboxModule",
   GAME_BOON_MODULE: "DegenerusGameBoonModule",
   GAME_DEGENERETTE_MODULE: "DegenerusGameDegeneretteModule",
+  GAME_BINGO_MODULE: "DegenerusGameBingoModule",
+  GAME_AFKING_MODULE: "GameAfkingModule",
   COIN: "BurnieCoin",
   COINFLIP: "BurnieCoinflip",
   GAME: "DegenerusGame",
@@ -67,7 +78,6 @@ export const KEY_TO_CONTRACT = {
   JACKPOTS: "DegenerusJackpots",
   QUESTS: "DegenerusQuests",
   DEITY_PASS: "DegenerusDeityPass",
-  AF_KING: "AfKing",
   VAULT: "DegenerusVault",
   SDGNRS: "StakedDegenerusStonk",
   DGNRS: "DegenerusStonk",
