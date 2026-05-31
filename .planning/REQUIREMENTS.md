@@ -53,7 +53,7 @@
 - [x] **TST-03**: EV-cap — the per-`(player, level)` 10-ETH benefit budget is enforced exactly once per open with no double-draw vs the buy-time path; equivalent to v54.
 - [x] **TST-04**: Two-path open coexistence + set-mutation (eviction/tombstone/swap-pop, streak preserved) + OPEN-E 4-protection regression.
 - [x] **TST-05**: NON-WIDENING regression vs the v54 baseline — every pre-existing red enumerated BY NAME (`REGRESSION-BASELINE-v55.md`).
-- [ ] **TST-06**: Gas — measured per-buy + per-open marginal under the 16.7M HARD per-tx ceiling; the GAS-01/02/03 wins proven same-results.
+- [x] **TST-06**: Gas — measured per-buy + per-open marginal under the 16.7M HARD per-tx ceiling; the GAS-01/02/03 wins proven same-results.
 
 ### AUDIT — Terminal close
 - [ ] **AUDIT-01**: FULL close — delta-audit (every v55 surface vs the v54 baseline; freeze + solvency + OPEN-E re-attested) + 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT) focused on the box-stamp freeze + the liveness isolation + the two-path open + `audit/FINDINGS-v55.0.md` (chmod 444) + the atomic 5-doc closure flip with the `MILESTONE_V55_AT_HEAD_<sha>` signal.
@@ -100,7 +100,7 @@ Each REQ-ID maps to exactly ONE phase — the phase that DELIVERS/owns it. 29/29
 | TST-03 | 351 TST | Complete |
 | TST-04 | 351 TST | Complete |
 | TST-05 | 351 TST | Complete |
-| TST-06 | 351 TST | Pending |
+| TST-06 | 351 TST | Complete |
 | AUDIT-01 | 352 TERMINAL | Pending |
 
 **Per-phase rollup:**

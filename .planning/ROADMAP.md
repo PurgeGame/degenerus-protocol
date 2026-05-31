@@ -174,7 +174,7 @@ Plans:
 - [x] 351-04-PLAN.md — TST-01 freeze/determinism + the D-351-05 differential box oracle (RngLockDeterminism adapt + new proof)
 - [x] 351-05-PLAN.md — TST-02 revert-free/no-valve (class A/B/C) + TST-03 EV-cap exactly-once (KeeperNonBrick adapt + new proof)
 - [x] 351-06-PLAN.md — the D-351-02 removed-surface files (KeeperBatchAffiliateDeltaAudit + RedemptionStethFallback) — adjudicate adapt-vs-drop, record drops BY NAME
-- [ ] 351-07-PLAN.md — adapt the *Gas worst-case corpus (Router/Sweep/Levers/ResolveBet) to the game-resident STAGE + the 16.7M ceiling
+- [x] 351-07-PLAN.md — adapt the *Gas worst-case corpus (Router/Sweep/Levers/ResolveBet) to the game-resident STAGE + the 16.7M ceiling
 - [ ] 351-08-PLAN.md — TST-06 marginal-gas harness per the 350 spec (per-buy + per-open marginal + no-STATICCALL trace + 16.7M; GAS-03 Outcome-A N/A)
 - [ ] 351-09-PLAN.md — TST-05 REGRESSION-BASELINE-v55.md + the whole-tree forge test non-widening reconciliation (BY NAME vs 20ca1f79) + Hardhat sanity
 **UI hint**: no
@@ -209,7 +209,7 @@ Plans:
 | 349.1 AfKing Box Redesign — live-level resolve, drop _afkingEpoch, ticket/lootbox split, mintBurnie rename (INSERTED) | v55.0 | 5/5 | Complete (committed 77c3d9ef) | 2026-05-31 |
 | 349.2 IMPL FIX — Restore quest-credit + affiliate for afking LOOTBOX subs (regression) (INSERTED) | v55.0 | 1/1 | Complete   | 2026-05-31 |
 | 350. GAS — Behavior-Identical No-Cost Wins (box-ledger → warm Sub-stamp + staticcall → SLOAD + same-slot flushes) | v55.0 | 3/3 | Complete    | 2026-05-31 |
-| 351. TST — Freeze/Determinism + Revert-Free + EV-Cap + Two-Path + Set-Mutation + Non-Widening + Gas | v55.0 | 6/9 | In Progress|  |
+| 351. TST — Freeze/Determinism + Revert-Free + EV-Cap + Two-Path + Set-Mutation + Non-Widening + Gas | v55.0 | 7/9 | In Progress|  |
 | 352. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v55.0 + Closure | v55.0 | 0/? | Not started | - |
 
 > **🔒 v55.0 CONTRACT-BOUNDARY HARD STOPS (THREE gates — 349 IMPL · 349.2 lootbox quest/affiliate fix · 350 GAS).** Phase 349 IMPL is the FIRST contract phase — the carefully-sequenced batched fold + box-redesign diff (code-size reclaim FIRST so the Game stays < 24,576 mid-flight, then the GameAfkingModule + storage append + box stamp/process-pass/open-pass + AfKing stubs + preserved slice-builder invariants + EV-cap-at-open + no-valve no-brick guarantee) is applied to `contracts/` and locally compiled (`forge build` clean) but HELD at the contract-commit boundary, NEVER committed without explicit user hand-review (`feedback_batch_contract_approval` + `feedback_never_preapprove_contracts` + `feedback_manual_review_before_push` + `feedback_no_contract_commits`). Phase 350 GAS is the SECOND contract phase — any further behavior-identical gas change (residual same-slot batching + extra gas-scavenger wins) rides its own batched USER-APPROVED diff at the same boundary. `ContractAddresses.sol` freely modifiable per `feedback_contractaddresses_policy`; tests + planning + docs AGENT-committable.
