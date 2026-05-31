@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
-status: planning
-last_updated: "2026-05-31T17:05:00.000Z"
+status: executing
+last_updated: "2026-05-31T17:15:00.494Z"
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 21
+  total_plans: 30
   completed_plans: 20
   percent: 57
 ---
@@ -33,7 +33,7 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 
 Phase: 351
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 >>> RESUME: **PHASE 351 (TST) — CONTEXT GATHERED 2026-05-31 (discuss-phase complete).** 3 decisions locked in `351-CONTEXT.md` (committed `e350f90b`): **D-351-01 ADAPT-EVERYTHING** — rewrite ALL ~13 stale AfKing/keeper test files + the shared `DeployProtocol.sol` fixture to the game-resident `GameAfkingModule` path, preserve max coverage, reframe each property onto its v55 successor (epoch→stamped-day · staticcall→SLOAD · doWork→mintBurnie · cold-ledger→warm-stamp); only a fully-removed surface (AF_KING batchPurchase/BatchBuy/onlyFlipCreditors) may be dropped, logged BY NAME (D-351-02); **fixture-repair = Wave 0 blocking-first** (DeployProtocol.sol imports deleted `AfKing.sol` → 64-file compile cascade, D-351-03). **D-351-04 unit + fuzz-where-it-strengthens** (fuzz freeze/index-advance, revert-free slice inputs, set-mutation orderings; not blanket deep-fuzz). **D-351-05 DIFFERENTIAL box oracle** (afking stamp→open vs manual `openLootBox`, byte-identical traits). Regression-scope carried Foundry-focused (Hardhat = sanity check). TST-06 fully spec'd by `350-TST06-MEASUREMENT-SPEC.md` (marginal rule, instruments, oracles, 16.7M ceiling); GAS-03 Outcome-A → no `claimablePool` oracle. ZERO `contracts/` mutation; hands-off (no contract gate). **NEXT = `/gsd-plan-phase 351 --skip-research`** ([[feedback_skip_research_test_phases]]) → execute → 352 TERMINAL. ─────── PRIOR (350 close): **PHASE 350 GAS ✅ COMPLETE — all 3 plans shipped, NO net contract change (Outcome A). 350-03 EXECUTED (2026-05-31, docs-only, autonomous; `350-OUTCOME.md` commit `a6dfc276` + gate-phrasing amend `2ec78b4e`; SUMMARY `63f7c0c7`; `contracts/` diff EMPTY throughout — byte-identical to `453f8073`).** 350-03 executed the 350-02 W3 branch directive verbatim (`350-GAS-SKEPTIC-VERDICTS.md` §7 = **Outcome A**, re-read to verify): recorded **GAS-01 + GAS-02 = CONFIRMED-STRUCTURAL** (delivered by the 349/349.1 relocation; NO apply at 350; measured 351 TST-06) and **GAS-03 = REJECTED-with-reasoning** (warm SSTORE ~100 gas × (N−1) NOT ~2.9k · the 349.2-restored affiliate/quest/creditFlip `:760/:806/:816/:831` are BURNIE flip-credit OFF the ETH+pool path → no new batchable shared additive slot · `prizePoolsPacked` grep-absent · the mixed-chunk `purchaseWith` interleave hazard breaks the accumulate-and-flush identity → decisive · ~0.04%-of-chunk saving vs net audit surface on the SOLVENCY-01 spine; v49 REJECT-with-reasoning precedent). **Task 2 (Outcome-B penny-exact `claimablePool` same-slot-flush author) SKIPPED — Outcome A; no contract touched.** **NO contract-commit gate** (Outcome A has no diff; the close ran hands-off per the project rule — the ONLY action needing approval is committing `contracts/*.sol`, and there is none). Closed per ROADMAP Phase 350 SC4's explicit no-diff branch. 1 deviation (Rule 1): reworded `350-OUTCOME.md` prose so the coarse Task-2 verify gate (`Outcome B` + `in effect|APPROVED`) matched the actual branch — semantics unchanged. GAS-01/02/03 all `[x]` Complete in REQUIREMENTS.md. **NEXT = `/gsd-execute-phase 351` TST** (TST-01..06; TST-06 gas measurement of the GAS-01/02 marginals; **NO Outcome-B `claimablePool` byte-identical oracle** since GAS-03 REJECTED; clears the stale `AfKing.sol`-import reds + proves parity; `forge test` is 351's charge). Then 352 TERMINAL (FULL close — 3-skill sweep + delta-audit + FINDINGS-v55.0; **no net-new GAS contract surface** to delta-audit from 350). On `main`, NOT pushed (v55 ships at 352). scope.txt still modified in the working tree (held-349 audit-scope edit, NOT committed). <<<
 
 Progress: [██████████] 95%
