@@ -146,7 +146,7 @@ Plans:
 **Plans**: 3 plans / 3 waves (W3 is the contract-boundary gate, contingent)
 - [x] 350-01-PLAN.md — Re-pin SCAV-348-01..07 vs live 77c3d9ef + confirm GAS-01/02 structural-present + author the 351 TST-06 measurement spec (read-only, autonomous)
 - [x] 350-02-PLAN.md — /gas-skeptic adjudication under the security-over-gas floor: GAS-01/02 CONFIRMED-STRUCTURAL, GAS-03 expected REJECT (warm-SSTORE + off-hot-path + solvency-surface); §4 carve-out verbatim; W3 branch directive (read-only, autonomous)
-- [ ] 350-03-PLAN.md — Branch on the W2 verdict: Outcome A (expected) record the no-diff close (SC4); Outcome B (contingency) author the single penny-exact claimablePool same-slot-flush diff, forge build clean, HELD at the contract-commit boundary (autonomous: false)
+- [x] 350-03-PLAN.md — Branch on the W2 verdict: Outcome A (expected) record the no-diff close (SC4); Outcome B (contingency) author the single penny-exact claimablePool same-slot-flush diff, forge build clean, HELD at the contract-commit boundary (autonomous: false)
 **UI hint**: no
 
 ### Phase 351: TST — Freeze/Determinism + Revert-Free + EV-Cap + Two-Path + Set-Mutation + Non-Widening + Gas
@@ -199,7 +199,7 @@ Plans:
 | 349. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (code-size reclaim → fold + box redesign) | v55.0 | 5/5 | Complete (shipped via 349.1) | 2026-05-31 |
 | 349.1 AfKing Box Redesign — live-level resolve, drop _afkingEpoch, ticket/lootbox split, mintBurnie rename (INSERTED) | v55.0 | 5/5 | Complete (committed 77c3d9ef) | 2026-05-31 |
 | 349.2 IMPL FIX — Restore quest-credit + affiliate for afking LOOTBOX subs (regression) (INSERTED) | v55.0 | 1/1 | Complete   | 2026-05-31 |
-| 350. GAS — Behavior-Identical No-Cost Wins (box-ledger → warm Sub-stamp + staticcall → SLOAD + same-slot flushes) | v55.0 | 2/3 | In Progress|  |
+| 350. GAS — Behavior-Identical No-Cost Wins (box-ledger → warm Sub-stamp + staticcall → SLOAD + same-slot flushes) | v55.0 | 3/3 | Complete   | 2026-05-31 |
 | 351. TST — Freeze/Determinism + Revert-Free + EV-Cap + Two-Path + Set-Mutation + Non-Widening + Gas | v55.0 | 0/? | Not started | - |
 | 352. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v55.0 + Closure | v55.0 | 0/? | Not started | - |
 

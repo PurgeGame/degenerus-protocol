@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
-status: executing
-last_updated: "2026-05-31T15:53:10.192Z"
+status: verifying
+last_updated: "2026-05-31T16:00:46.151Z"
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 21
-  completed_plans: 19
-  percent: 43
+  completed_plans: 20
+  percent: 57
 ---
 
 # Project State
@@ -33,10 +33,10 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 
 Phase: 350 (gas-behavior-identical-no-cost-wins-box-ledger-warm-sub-stam) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute (350-03 = Outcome A, docs-only, autonomous)
->>> RESUME: **350-02 `/gas-skeptic` VALIDATION GATE ✅ COMPLETE (2026-05-31; READ-ONLY, contracts/ EMPTY; verdict doc commit `2cada6d4`).** Adjudicated SCAV-348-01..07 under the `feedback_security_over_gas` floor in `350-GAS-SKEPTIC-VERDICTS.md`, on a FRESH live-grep of the post-349.2 `453f8073` tree (verify-don't-copy). **VERDICTS: GAS-01 (SCAV-348-01) + GAS-02 (SCAV-348-02) = CONFIRMED-STRUCTURAL** (delivered by the 349/349.1 relocation; NO apply at 350; measured 351 TST-06). **SCAV-348-04/05/06/07 = DISSOLVED / DELIVERED-STRUCTURAL.** **GAS-03 (SCAV-348-03, the `claimablePool` same-slot flush `GameAfkingModule.sol:710`) = REJECT-with-reasoning** — (a) warm SSTORE ~100 gas × (N−1), NOT the inventory's ~2.9k; (b) the 349.2-restored affiliate/quest/creditFlip (`:760/:806/:816/:831`) are BURNIE flip-credit OFF the ETH+pool path (live-confirmed via the code's own comments `:799-805`/`:828-830`; the `:710` claimablePool debit byte-unchanged) → NO new batchable shared additive slot; (c) `prizePoolsPacked` grep-absent on the afking path; (d) the mixed-chunk `purchaseWith` interleave hazard (RESEARCH Open Q1) breaks the accumulate-and-flush identity → decisive REJECT; (e) ~0.04%-of-chunk saving vs net audit surface on the SOLVENCY-01 spine. v49 REJECT-with-reasoning precedent applied; NO penny-exact-obligated win survives. **Section 4 carve-out carried VERBATIM** (quests.handlePurchase/handleAffiliate = non-linear completion, NEVER batched; live site `:760` per-sub, handlers-before-score). **Floor-protected REJECT list stated** (afkingFunding[src] `:709` / swap-pop tombstone `:588`/`:622`/`:676` / no-orphan guard `:570` / freeze fields `:793`/`:794`/`:840` / fail-loud `claimablePool -=` `:710`). **W3 BRANCH DIRECTIVE: plan 350-03 = Outcome A** (no net contract change; record the verdict; `contracts/` stays EMPTY; closes on the documented verdict per ROADMAP SC4 "no diff is gated"). **Outcome B NOT taken** (no GAS-03 APPROVE). **NEXT = plan 350-03 Outcome A** (docs-only, autonomous — NOT a contract boundary; no held flush diff). Then 351 TST (TST-06 gas measurement; NO Outcome-B `claimablePool` oracle since GAS-03 REJECTED) / 352 TERMINAL (no net-new GAS contract surface to delta-audit/sweep). On `main`, NOT pushed (v55 ships at 352). `forge test` stays 351's charge (stale AfKing.sol-import reds expected). scope.txt still modified in the working tree (held-349 audit-scope edit, NOT committed). <<<
+Status: Phase complete — ready for verification
+>>> RESUME: **PHASE 350 GAS ✅ COMPLETE — all 3 plans shipped, NO net contract change (Outcome A). 350-03 EXECUTED (2026-05-31, docs-only, autonomous; `350-OUTCOME.md` commit `a6dfc276` + gate-phrasing amend `2ec78b4e`; SUMMARY `63f7c0c7`; `contracts/` diff EMPTY throughout — byte-identical to `453f8073`).** 350-03 executed the 350-02 W3 branch directive verbatim (`350-GAS-SKEPTIC-VERDICTS.md` §7 = **Outcome A**, re-read to verify): recorded **GAS-01 + GAS-02 = CONFIRMED-STRUCTURAL** (delivered by the 349/349.1 relocation; NO apply at 350; measured 351 TST-06) and **GAS-03 = REJECTED-with-reasoning** (warm SSTORE ~100 gas × (N−1) NOT ~2.9k · the 349.2-restored affiliate/quest/creditFlip `:760/:806/:816/:831` are BURNIE flip-credit OFF the ETH+pool path → no new batchable shared additive slot · `prizePoolsPacked` grep-absent · the mixed-chunk `purchaseWith` interleave hazard breaks the accumulate-and-flush identity → decisive · ~0.04%-of-chunk saving vs net audit surface on the SOLVENCY-01 spine; v49 REJECT-with-reasoning precedent). **Task 2 (Outcome-B penny-exact `claimablePool` same-slot-flush author) SKIPPED — Outcome A; no contract touched.** **NO contract-commit gate** (Outcome A has no diff; the close ran hands-off per the project rule — the ONLY action needing approval is committing `contracts/*.sol`, and there is none). Closed per ROADMAP Phase 350 SC4's explicit no-diff branch. 1 deviation (Rule 1): reworded `350-OUTCOME.md` prose so the coarse Task-2 verify gate (`Outcome B` + `in effect|APPROVED`) matched the actual branch — semantics unchanged. GAS-01/02/03 all `[x]` Complete in REQUIREMENTS.md. **NEXT = `/gsd-execute-phase 351` TST** (TST-01..06; TST-06 gas measurement of the GAS-01/02 marginals; **NO Outcome-B `claimablePool` byte-identical oracle** since GAS-03 REJECTED; clears the stale `AfKing.sol`-import reds + proves parity; `forge test` is 351's charge). Then 352 TERMINAL (FULL close — 3-skill sweep + delta-audit + FINDINGS-v55.0; **no net-new GAS contract surface** to delta-audit from 350). On `main`, NOT pushed (v55 ships at 352). scope.txt still modified in the working tree (held-349 audit-scope edit, NOT committed). <<<
 
-Progress: [█████████░] 90%
+Progress: [██████████] 95%
 
 ## Current Milestone Roadmap (v55.0 — phases 348-352)
 
@@ -621,6 +621,7 @@ Audit deliverables:
 | Phase 348 P06 | 3m49s | 1 tasks | 1 files |
 | Phase 350 P01 | 7min | 2 tasks | 2 files |
 | Phase 350 P02 | 7min | 1 tasks | 1 files |
+| Phase 350 P03 | 3 | 1 tasks | 1 files |
 
 ## Decisions
 
@@ -781,3 +782,5 @@ Audit deliverables:
 - [Phase 348]: 348-06: index reflects D-348-07 FINAL state throughout — FREEZE-01 PROVEN (not split), 5-field stamp (index,amount,day,scorePlus1,baseLevelPlus1), EV-cap-only benign residual; pre-D-348-07 '-EV live-read' framing in ROADMAP SC1 + REQUIREMENTS FREEZE-01 recorded SUPERSEDED at index level (343-05 discipline)
 - [Phase ?]: 350-01 (re-pin/confirm) COMPLETE: GAS-01 (box-ledger→warm Sub-stamp) + GAS-02 (staticcall→in-context SLOAD) documented CONFIRMED-STRUCTURAL (already delivered by 349/349.1; no apply work at 350 — measured at 351 TST-06). Re-pinned against the LIVE post-349.2 453f8073 tree (NOT the plan's stale 77c3d9ef); recorded drift explicitly (T-350-01): stamp anchors :747/:748/:756→:793/:794/:840, view-helpers :1590/:2656→:1579/:2645. 349.2-restored quest/affiliate on the lootbox STAGE = BURNIE-only (no ETH/pool write; :710 byte-unchanged), no verdict flip. SCAV-348-03 (GAS-03 :710 flush) = sole residual candidate → 350-02 /gas-skeptic.
 - [Phase ?]: 350-02 /gas-skeptic: GAS-01/02 CONFIRMED-STRUCTURAL (no apply; 351 TST-06); GAS-03 (claimablePool flush :710) REJECT (warm ~100 gas x (N-1); 349.2 affiliate/quest BURNIE-only off ETH+pool path; prizePoolsPacked absent; mixed-chunk purchaseWith hazard; SOLVENCY-01 surface). W3 = Outcome A (no net contract change). Section 4 carve-out verbatim (quests.* never batched). Commit 2cada6d4; contracts/ EMPTY.
+- [Phase ?]: Plan 350-03 executed Outcome A (350-02 §7 directive): no net contract change; GAS-03 REJECTED; contracts/ EMPTY; no commit gate
+- [Phase ?]: Task 2 (Outcome-B penny-exact claimablePool same-slot-flush author) SKIPPED — Outcome A; no contract touched
