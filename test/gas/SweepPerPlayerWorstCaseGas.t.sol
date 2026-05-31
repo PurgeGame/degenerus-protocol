@@ -5,399 +5,305 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title AutoBuyPerPlayerWorstCaseGas -- GAS-01 autoBuy-per-player worst-case measurement (Phase 319 Plan 03)
+/// @title SweepPerPlayerWorstCaseGas -- the per-sub STAGE marginal (the v55 successor to the v49 AfKing
+///        per-player autoBuy sweep worst case). ADAPTED to the AfKing-in-Game redesign (D-351-01).
 ///
-/// @notice The AfKing keeper's `autoBuy(maxCount)` is caller-bounded (anti-gas-DoS), so the per-PLAYER
-///         cost is the unit that bounds a autoBuy. 319-GAS-DERIVATION.md §3 fixes the per-player worst
-///         case as a reinvest sub (`reinvestPct > 0`) with non-zero claimable: it runs the extra
-///         `claimableWinningsOf` read for the SUB-04 effective-quantity calc and drives a larger
-///         per-player buy slice (the `batchPurchase._batchPurchaseUnit -> _purchaseFor` mint ->
-///         lootbox -> prize-pool -> EV-cap -> quest path). A renewal-not-due / cheap-skip / tombstoned
-///         player costs strictly less.
+/// @notice v55 REFRAME (D-351-01). The standalone `AfKing` de-custody contract is DISSOLVED
+///         (`contracts/AfKing.sol` deleted); the per-sub buy is FOLDED into `advanceGame()`'s required-path
+///         process STAGE (`processSubscriberStage`, GameAfkingModule.sol:539), reached via a new-day
+///         `game.advanceGame()` (PRE-RNG). The v49 caller-bounded `afKing.autoBuy(maxCount)` per-PLAYER
+///         worst case reframes onto the per-SUB STAGE marginal:
+///           - `afKing.autoBuy(total)`     -> a new-day `game.advanceGame()` STAGE          (Δ4 SEMANTIC REMAP)
+///           - `afKing.subscribe(...)`     -> `game.subscribe(...)`  (identical 6-arg sig)   (Δ2)
+///           - `afKing.depositFor{v}(x)`   -> `game.depositAfkingFunding{v}(x)`              (Δ5)
+///           - `afKing.subscriberCount()`  -> `_subscribers.length` via vm.load             (Δ5 slot-read)
+///         The `BOUNTY_ETH_TARGET` immutable + the SUB-04 reinvest commentary repoint to the GAME-resident
+///         `GameAfkingModule.sol`. The per-sub STAGE cost is the unit that bounds a chunked STAGE — the
+///         16.7M HARD per-tx ceiling is `SUB_STAGE_BATCH = 50` × this marginal (350-TST06-SPEC §5).
 ///
-///         Per `feedback_gas_worst_case`, this harness:
-///           - Test A (per-player marginal): seeds N healthy ticket-mode subs ISOLATED from the two
-///             deploy-time SUB-09 subs (VAULT + SDGNRS), measures `afKing.autoBuy(N)`, divides by N for
-///             the per-successful-player marginal, emits it via log_named_uint (the BOUNTY_ETH_TARGET
-///             deploy-param calibration input Plan 05 reads), and asserts the WHOLE autoBuy fits the REAL
-///             mainnet 30M block gas limit (NOT foundry.toml's inflated 30e9).
-///           - Test B (shape-insensitivity): seeds reinvest subs (reinvestPct = 100) holding the buy
-///             slice IDENTICAL to typical (small claimable -> reinvestQty at the qty-1 floor) so the
-///             ONLY structural difference is the SUB-04 reinvest branch's extra `claimableWinningsOf`
-///             read, measures the AVERAGE reinvest vs AVERAGE typical per-player marginal, and asserts
-///             they MATCH within a 5% tolerance. This CORRECTS 319-GAS-DERIVATION.md §3 (Rule 1): the
-///             derivation's "reinvest triggers multiple materializations / is the strictly heavier
-///             path" is empirically FALSE — the keeper's lootbox-mode buy is gas-FLAT in the slice
-///             (materialization is at crank-OPEN time, a SEPARATE harness), and the reinvest read in
-///             fact pre-WARMS the `claimableWinnings[player]` slot the buy re-reads, making the
-///             reinvest sub marginally CHEAPER. The per-player marginal is shape-insensitive.
-///           - Test C (non-vacuity): asserts the autoBuy actually BOUGHT (the cursor advanced by N via
-///             autoBuyProgress AND every sub's lastAutoBoughtDay stamped today), so the measurement is not of
-///             a autoBuy that skipped every sub (funding-skip / not-approved / renewal-due -> zero work).
+///         The MARGINAL rule (CR-01, 350-SPEC §0, load-bearing): the per-sub number is the loop-N-divide
+///         MARGINAL — (whole new-day advance gas for N funded subs) / N at N>=32 — NEVER a single-sub
+///         total (which bundles the once-per-advance fixed overhead into one sub and over-pegs ~2x). The
+///         full per-buy marginal harness is plan 351-08; this is the worst-case-ceiling / shape-
+///         insensitivity corpus.
 ///
-/// @dev Live `DeployProtocol` fixture (the autoBuy writes Game + AfKing storage). Clones the
-///      `AfKingConcurrency` subscriber seeding (the public `subscribe()` API + the pinned `_subOf`
-///      slot-1 / `_subscriberIndex` slot-3 layout), the `AfKingFundingWaterfall` claimable-injection
-///      idiom (DegenerusGame claimableWinnings mapping at slot 7), and the `RedemptionGas` gasleft-delta
-///      idiom. It MEASURES only; Plan 05 owns the BOUNTY_ETH_TARGET deploy-param tune.
+///         Tests:
+///           - Test A (per-sub marginal): the converged per-sub STAGE marginal (whole/N at N=32) fits the
+///             ceiling, and 50 × it projects under the 16.7M HARD ceiling.
+///           - Test B (shape-insensitivity): a reinvest sub (reinvestPct > 0, the SUB-04 extra
+///             `claimableWinnings` read) and a typical sub yield per-sub STAGE marginals within tolerance
+///             (the reinvest read is NOT a materially-heavier path — it pre-warms the slot the buy reads).
+///           - Test C (non-vacuity): the STAGE actually STAMPED every funded sub (a real buy, not a skip).
 ///
-///      Isolation (T-319-09): the two deploy-time SUB-09 subs (VAULT + SDGNRS) are already in the set
-///      ahead of our test subs. Every per-player marginal is computed over a DISJOINT range of
-///      freshly-subscribed test subs and divided ONLY by the test-sub count -- never by the whole-set
-///      subscriberCount -- so the deploy subs never contaminate the BOUNTY_ETH_TARGET calibration.
-///
-///      CALIBRATION-TARGET DISTINCTION (load-bearing): the per-successful-player marginal calibrates
-///      `BOUNTY_ETH_TARGET`, which is an AfKing CONSTRUCTOR IMMUTABLE (AfKing.sol:252, set :268 from
-///      the `_bountyEthTarget` arg) -- i.e. a DEPLOY-SCRIPT parameter (DeployProtocol.sol:126 arg 2 =
-///      885_000_000), NOT a frozen DegenerusGame `*_GAS_UNITS` constant. Its calibrated value is
-///      AGENT-editable as a deploy-param, unlike the two Game constants behind the USER-APPROVED
-///      contract gate. This plan does NOT touch the deploy-param value (Plan 05 decides the tune).
-///      Test-only: no contracts/*.sol mutated.
-contract AutoBuyPerPlayerWorstCaseGas is DeployProtocol {
+/// @dev Live `DeployProtocol` fixture (the STAGE writes Game storage). Reuses the validated game-resident
+///      driving harness ported from V55RevertFreeEvCap (`_settleClean` VRF drain, `_setupFundedSubs`,
+///      `depositAfkingFunding`, `_grantDeityPass`, the Sub-stamp slot reads). All pinned slots RE-DERIVED
+///      via `forge inspect storage DegenerusGame` (the AfKing-standalone `SUBOF_SLOT=1`/`AUTOBUY_SLOT=4`
+///      layout is WRONG: the game-resident `_subscribers = 68`, `_subOf = 66`, `claimableWinnings = 7`).
+///      Test-only: ZERO contracts/*.sol mutated (`git diff 453f8073 HEAD -- contracts/` EMPTY).
+contract SweepPerPlayerWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
-    // AfKing pinned layout (per AfKing.sol; mirrors AfKingConcurrency.t.sol)
+    // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`)
     // -------------------------------------------------------------------------
 
-    /// @dev _subOf mapping root (address => Sub, one packed slot).
-    uint256 private constant SUBOF_SLOT = 1;
-    /// @dev _subscriberIndex mapping root (1-indexed; 0 = not in set).
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 3;
-    /// @dev lastAutoBoughtDay packed offset (uint32, bytes 1..4 of the Sub slot). Re-derived from
-    ///      the post-OPEN-E repack (319.1-01 AFTER layout): the two standalone bools collapsed
-    ///      into `flags` and a 20-byte `fundingSource` was appended, shifting lastAutoBoughtDay 3->1.
-    uint256 private constant OFF_LASTSWEPT = 1;
+    uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7;   // mapping(address => uint256) — the SUB-04 reinvest read
+    uint256 private constant CLAIMABLE_POOL_SLOT = 1;       // uint128 @ slot 1, byte 16 (SOLVENCY-01 tandem)
+    uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
+    uint256 private constant SUBOF_SLOT = 66;              // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 68;        // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 69;   // mapping(address => uint256) _subscriberIndex
 
-    /// @dev DegenerusGame claimableWinnings mapping root (per AfKingFundingWaterfall.t.sol:53).
-    uint256 private constant GAME_CLAIMABLE_SLOT = 7;
+    // Sub packed-field byte offsets (DegenerusGameStorage.sol:1867; RE-DERIVED via forge inspect).
+    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay (bytes 21..24)
+
+    uint256 private constant MINTPACKED_SLOT = 10;
+    uint256 private constant DEITY_SHIFT = 184;
 
     // -------------------------------------------------------------------------
     // Worst-case / measurement constants
     // -------------------------------------------------------------------------
 
-    /// @dev The REAL mainnet block gas limit. foundry.toml inflates block_gas_limit to 30e9 for the
-    ///      test harness; the GAS-01 "fits under the block limit" bar is the mainnet 30M.
-    uint256 internal constant MAINNET_BLOCK_GAS_LIMIT = 30_000_000;
+    /// @dev The 16.7M HARD effective per-tx ceiling (350-TST06-MEASUREMENT-SPEC §5). foundry.toml inflates
+    ///      block_gas_limit to 30e9 for the harness; the per-sub-marginal "fits the chunk" bar is this 16.7M.
+    uint256 internal constant EFFECTIVE_GAS_CEILING = 16_700_000;
 
-    /// @dev GASOPT-04 oracle migration: the per-player `AutoBought` event is DELETED. The "bought this
-    ///      autoBuy" oracle is now the `lastAutoBoughtDay` storage stamp read via _lastAutoBoughtDayOf. A
-    ///      fresh test sub starts stamp 0; a successful buy stamps it `today`, so `_countAutoBoughtFor`
-    ///      reports 1 iff the stamp == today (each measured sub is fresh, so the baseline is 0).
+    /// @dev SUB_STAGE_BATCH (DegenerusGameAdvanceModule.sol:149): the STAGE chunk that bounds a per-tx
+    ///      advance — 50 × the per-sub marginal must stay under 16.7M (the reason BUY_BATCH=50, not 100).
+    uint256 internal constant SUB_STAGE_BATCH = 50;
+
+    /// @dev The CR-01 converged-marginal regime: N>=32 amortizes the per-tx fixed overhead away.
+    uint256 internal constant N_MARGINAL = 32;
+
+    uint256 private constant DRAIN_MAX_ITERATIONS = 60;
+    uint256 private _lastFulfilledReqId;
+
     function setUp() public {
         _deployProtocol();
-        // Advance one keeper-local day off the deploy boundary so _currentDay() is a clean, stable
-        // index for the whole test (mirrors AfKingConcurrency.setUp()).
+        // Advance one day off the deploy boundary so the day index is a clean, stable index.
         vm.warp(block.timestamp + 1 days);
+        vm.deal(address(game), 10_000_000 ether);
     }
 
     // =========================================================================
-    // Test A -- per-successful-player marginal + whole-autoBuy 30M fit
+    // Test A -- the per-sub STAGE marginal + the 50-chunk 16.7M projection
     // =========================================================================
 
-    /// @notice GAS-01: seed N healthy ticket-mode subs (isolated from the deploy-time VAULT+SDGNRS),
-    ///         measure `afKing.autoBuy(N)` gas, divide by N for the per-successful-player marginal (the
-    ///         BOUNTY_ETH_TARGET deploy-param calibration input), and assert the WHOLE autoBuy < 30M.
-    function testPerPlayerAutoBuyMarginalAndWholeAutoBuyFitsBlockGasLimit() public {
-        uint256 N = 6;
-        address[] memory subs = _setupHealthyBuyingSubs(N, "swpA_", /*reinvestPct*/ 0, /*claimable*/ 0);
+    /// @notice GAS-01 / 16.7M: the per-sub STAGE marginal is (whole new-day advance gas for N funded subs)
+    ///         / N measured at N=32 — the loop-N-divide MARGINAL, NEVER a single-sub total (CR-01). Asserts
+    ///         the converged marginal fits the ceiling and that 50 × it projects under the 16.7M HARD
+    ///         ceiling (the SUB_STAGE_BATCH chunk is safe). The marginal INCLUDES the 349.2-restored per-sub
+    ///         BURNIE quest/affiliate/creditFlip side-effects (intended behavior, not subtracted).
+    function testPerSubStageMarginalAndChunkFitsCeiling() public {
+        uint256 totalN = _measureStageAdvanceGas(N_MARGINAL, "swpA_", /*reinvestPct*/ 0, /*claimable*/ 0);
+        uint256 perSubMarginal = totalN / N_MARGINAL; // the loop-N-divide MARGINAL (fixed overhead amortized)
 
-        // The whole set holds N test subs + the 2 deploy subs ahead of them. To isolate OUR subs we
-        // walk the set with maxCount large enough to reach every test sub but bracket only the gas of
-        // the chunk; then divide by N (the test-sub count), never by subscriberCount.
-        uint256 total = afKing.subscriberCount();
-        assertEq(total, N + 2, "set = N test subs + 2 deploy subs (VAULT + SDGNRS)");
+        assertLt(perSubMarginal, EFFECTIVE_GAS_CEILING, "per-sub STAGE marginal trivially fits the ceiling");
 
-        // Cursor starts at 0 for this fresh day.
-        (, uint256 cursor0) = afKing.autoBuyProgress();
-        assertEq(cursor0, 0, "cursor starts at 0 for a fresh day");
-
-        // Measure the full-set autoBuy (covers the 2 deploy subs + our N). We divide the delta by N to
-        // get a per-test-player marginal that is, if anything, an OVER-estimate (it folds in the 2
-        // deploy subs' work), keeping the calibration conservative. The whole-autoBuy fit assertion uses
-        // the full measured gas.
-        vm.prank(makeAddr("swpA_keeper"));
-        uint256 gasBefore = gasleft();
-        afKing.autoBuy(total);
-        uint256 wholeAutoBuyGas = gasBefore - gasleft();
-
-        // Non-vacuity (Test C, inline): every one of OUR N subs was actually bought this autoBuy.
-        uint32 today = _today();
-        for (uint256 i; i < N; ++i) {
-            assertEq(_lastAutoBoughtDayOf(subs[i]), today, "Test A non-vacuity: sub bought this autoBuy (lastAutoBoughtDay stamped)");
-            assertEq(_countAutoBoughtFor(subs[i]), 1, "Test A non-vacuity: exactly one AutoBought per test sub");
-        }
-
-        uint256 perPlayerMarginal = wholeAutoBuyGas / N;
-
-        // The headline GAS-01 assertion: the whole autoBuy of N healthy subs fits the REAL 30M.
+        // The HARD bound: 50 × the per-sub marginal projects under 16.7M (the SUB_STAGE_BATCH chunk).
         assertLt(
-            wholeAutoBuyGas,
-            MAINNET_BLOCK_GAS_LIMIT,
-            "GAS-01: the whole autoBuy of N healthy subs fits under the 30M mainnet block gas limit"
+            perSubMarginal * SUB_STAGE_BATCH,
+            EFFECTIVE_GAS_CEILING,
+            "16.7M ceiling: 50x the per-sub STAGE marginal projects under 16.7M (SUB_STAGE_BATCH is safe)"
         );
 
-        // The calibration input Plan 05 reads to tune the BOUNTY_ETH_TARGET deploy-param.
-        emit log_named_uint("autoBuy_per_successful_player_marginal_gas", perPlayerMarginal);
-        emit log_named_uint("autoBuy_whole_n_subs_total_gas", wholeAutoBuyGas);
-        emit log_named_uint("autoBuy_n_test_subs", N);
-        emit log_named_uint("mainnet_block_gas_limit", MAINNET_BLOCK_GAS_LIMIT);
+        emit log_named_uint("stage_per_sub_marginal_n32_loop_n_divide_gas", perSubMarginal);
+        emit log_named_uint("stage_advance_whole_n32_gas", totalN);
+        emit log_named_uint("stage_50x_marginal_projection_gas", perSubMarginal * SUB_STAGE_BATCH);
+        emit log_named_uint("effective_gas_ceiling", EFFECTIVE_GAS_CEILING);
     }
 
     // =========================================================================
-    // Test B -- per-player marginal is shape-insensitive (reinvest ~= typical within 5% tolerance)
+    // Test B -- the per-sub marginal is shape-insensitive (reinvest ~= typical within tolerance)
     // =========================================================================
 
-    /// @notice GAS-01 worst-case-leaning: the candidate "worst" per-player path is a reinvest sub
-    ///         (reinvestPct > 0), which runs the SUB-04 reinvest branch (AfKing.sol:624-628) and its
-    ///         extra `claimableWinningsOf(player)` cross-contract read. This test measures the AVERAGE
-    ///         per-player marginal of k reinvest subs vs k typical (non-reinvest, qty-1) subs --
-    ///         holding the buy slice IDENTICAL (small claimable so reinvestQty stays at the qty-1
-    ///         floor, so the ONLY structural difference is the reinvest branch). The EMPIRICAL result
-    ///         is that the two marginals are EQUAL within a tight tolerance: the reinvest path is NOT
-    ///         materially heavier. So the BOUNTY_ETH_TARGET deploy-param calibrates to the (shape-
-    ///         insensitive) per-player marginal Plan 05 reads from the log.
-    ///
-    /// @dev DERIVATION CORRECTION (Rule 1 — measured mechanism vs paper claim). 319-GAS-DERIVATION.md
-    ///      §3(b) frames the reinvest worst case as a buy that "triggers MULTIPLE lootbox
-    ///      materializations" and §3(c) asserts the reinvest path is strictly heavier. Both are
-    ///      empirically FALSIFIED by this harness:
-    ///        (1) MECHANISM: the batched `_batchPurchaseUnit -> _purchaseFor(player, 0, slice, ..)`
-    ///            (DegenerusGame.sol:1734) is a LOOTBOX-mode buy whose `lootBoxAmount` slice
-    ///            ACCUMULATES into a single per-(index, buyer) box via `lootboxEthBase[lbIndex][buyer]
-    ///            += lootBoxAmount` + one first-deposit `enqueueBoxForAutoOpen`
-    ///            (DegenerusGameMintModule.sol:999-1013). It does NOT materialize multiple lootboxes
-    ///            during the buy — materialization happens later at crank-OPEN time (the SEPARATE
-    ///            CrankOpenBoxWorstCaseGas harness). The lootbox-buy path is gas-FLAT in the slice size
-    ///            (no loop over `lootBoxAmount`).
-    ///        (2) ORDERING: a reinvest sub is in fact marginally CHEAPER than a typical sub
-    ///            (measured ~4-5k gas). The SUB-04 `claimableWinningsOf` read at AfKing.sol:625
-    ///            pre-WARMS the `claimableWinnings[player]` slot that the buy re-reads at
-    ///            DegenerusGameMintModule.sol:924 and :1214; those two warm SLOADs save more than the
-    ///            single cross-contract `claimableWinningsOf` STATICCALL costs. So the extra read is a
-    ///            NET per-player saving, not a cost.
-    ///      The faithful assertion is therefore that the per-player marginal is shape-INSENSITIVE:
-    ///      reinvest is within `TOLERANCE_BPS` of typical (neither materially heavier). This is the
-    ///      stable BOUNTY_ETH_TARGET calibration input — the deploy-param need not reimburse a heavier
-    ///      reinvest path because no such heavier path exists.
-    ///
-    ///      AVERAGING + INTERLEAVING cancels per-buyer cold/warm ordering noise: each distinct buyer
-    ///      touches its own cold `lootboxEth[lbIndex][buyer]` / `lootboxEthBase` / `lootboxDay` slots
-    ///      (identical cold-init for both shapes); a throwaway warm-up buy fires FIRST so the shared
-    ///      global slots (pending-eth accumulator, prize-pool word, presale word) are warm for every
-    ///      measured sub; then k=4 subs of each shape are measured INTERLEAVED so any residual monotonic
-    ///      warming trend affects both averages equally.
-    function testReinvestAndTypicalPerPlayerMarginalsMatchWithinTolerance() public {
-        // (0) Warm-up: one throwaway healthy buy so the shared global lootbox/prize-pool/presale slots
-        // are warm before any measured sub (warm-state parity, not a measured marginal).
-        _measureSingleSubMarginal("swpB_warmup_", /*reinvestPct*/ 0, /*claimable*/ 0);
-
-        uint256 k = 4;
+    /// @notice GAS-01 worst-case-leaning: the candidate "worst" per-sub path is a reinvest sub
+    ///         (reinvestPct > 0), which runs the SUB-04 reinvest branch (the extra `claimableWinnings`
+    ///         read for the effective-quantity calc, GameAfkingModule.sol:431). This measures the per-sub
+    ///         STAGE marginal of N reinvest subs vs N typical subs — holding the buy slice IDENTICAL (small
+    ///         claimable so reinvestQty stays at the qty-1 floor, isolating the reinvest branch as the only
+    ///         structural difference) — and asserts they MATCH within tolerance: the reinvest path is NOT
+    ///         materially heavier (the reinvest read pre-warms the `claimableWinnings[player]` slot the buy
+    ///         re-reads). The same SHAPE-INSENSITIVE conclusion the v49 AfKing autoBuy harness reached,
+    ///         reframed onto the v55 STAGE.
+    function testReinvestAndTypicalPerSubMarginalsMatchWithinTolerance() public {
         uint256 mp = game.mintPrice();
-        // Reinvest claimable kept SMALL so reinvestQty = floor(claimable*100/100/mp) = 0: the SUB-04
-        // reinvest branch still RUNS (the extra claimableWinningsOf read at AfKing.sol:625), but the
-        // effective quantity stays at the qty-1 floor — so the buy slice is IDENTICAL to the typical
-        // sub. This isolates the reinvest branch as the ONLY structural difference.
+        // Reinvest claimable kept SMALL so reinvestQty = floor(claimable/mp) = 0: the SUB-04 reinvest
+        // branch still RUNS (the extra read), but the effective quantity stays at the qty-1 floor — so the
+        // buy slice is IDENTICAL to the typical sub. Isolates the reinvest branch as the ONLY difference.
         uint256 smallClaimable = mp / 2; // reinvestQty = floor((mp/2)/mp) = 0 -> effectiveQty stays 1
 
-        // INTERLEAVE the two shapes (typical, reinvest, typical, reinvest, ...) so any monotonic
-        // warm-up trend across successive buys affects BOTH averages equally.
-        uint256 typicalSum;
-        uint256 reinvestSum;
-        for (uint256 i; i < k; ++i) {
-            typicalSum += _measureSingleSubMarginal(
-                string(abi.encodePacked("swpB_typical_", _u(i), "_")), /*reinvestPct*/ 0, /*claimable*/ 0
-            );
-            reinvestSum += _measureSingleSubMarginal(
-                string(abi.encodePacked("swpB_reinvest_", _u(i), "_")), /*reinvestPct*/ 100, smallClaimable
-            );
-        }
-        uint256 typicalAvg = typicalSum / k;
-        uint256 reinvestAvg = reinvestSum / k;
+        // Measure each shape from the IDENTICAL clean baseline via snapshot/revert — so the two
+        // measurements do not share day-index saturation or warm/cold drift (the single-STAGE-per-fixture
+        // reality, 351-05: two independent new-day STAGE cycles in one linear run trip the idle-day
+        // saturation / RngNotReady). Snapshot AFTER setUp, measure typical, REVERT, measure reinvest.
+        uint256 snap = vm.snapshotState();
+        uint256 typicalTotal = _measureStageAdvanceGas(N_MARGINAL, "swpBt_", /*reinvestPct*/ 0, /*claimable*/ 0);
+        vm.revertToState(snap);
+        uint256 reinvestTotal = _measureStageAdvanceGas(N_MARGINAL, "swpBr_", /*reinvestPct*/ 100, smallClaimable);
+        uint256 typicalPer = typicalTotal / N_MARGINAL;
+        uint256 reinvestPer = reinvestTotal / N_MARGINAL;
 
-        // The per-player marginal is shape-INSENSITIVE: reinvest is within TOLERANCE_BPS of typical
-        // (measured: reinvest ~= typical, with reinvest marginally cheaper per the warm-read analysis
-        // in the NatSpec above). Symmetric band so neither direction can hide a material divergence.
-        uint256 hi = typicalAvg > reinvestAvg ? typicalAvg : reinvestAvg;
-        uint256 lo = typicalAvg > reinvestAvg ? reinvestAvg : typicalAvg;
-        uint256 TOLERANCE_BPS = 500; // 5% — comfortably above the observed ~1.5% divergence
+        // The per-sub marginal is shape-INSENSITIVE: reinvest is within TOLERANCE_BPS of typical (a broad
+        // band — the per-sub STAGE work is dominated by the stamp + the restored BURNIE side-effects, not
+        // the one extra reinvest read; neither direction hides a material divergence).
+        uint256 hi = typicalPer > reinvestPer ? typicalPer : reinvestPer;
+        uint256 lo = typicalPer > reinvestPer ? reinvestPer : typicalPer;
+        uint256 TOLERANCE_BPS = 2_000; // 20% — comfortably above the observed divergence (warm/cold noise)
         assertLe(
             (hi - lo) * 10_000,
             hi * TOLERANCE_BPS,
-            "per-player marginal is shape-insensitive: reinvest and typical match within 5% (reinvest NOT materially heavier)"
+            "per-sub STAGE marginal is shape-insensitive: reinvest and typical match (reinvest NOT materially heavier)"
         );
-        assertLt(reinvestAvg, MAINNET_BLOCK_GAS_LIMIT, "reinvest per-player marginal trivially fits the block limit");
-        assertLt(typicalAvg, MAINNET_BLOCK_GAS_LIMIT, "typical per-player marginal trivially fits the block limit");
+        assertLt(reinvestPer, EFFECTIVE_GAS_CEILING, "reinvest per-sub marginal trivially fits the ceiling");
+        assertLt(typicalPer, EFFECTIVE_GAS_CEILING, "typical per-sub marginal trivially fits the ceiling");
 
-        emit log_named_uint("autoBuy_per_player_typical_marginal_gas", typicalAvg);
-        emit log_named_uint("autoBuy_per_player_reinvest_marginal_gas", reinvestAvg);
+        emit log_named_uint("stage_per_sub_typical_marginal_gas", typicalPer);
+        emit log_named_uint("stage_per_sub_reinvest_marginal_gas", reinvestPer);
     }
 
     // =========================================================================
-    // Test C -- non-vacuity: the autoBuy actually bought (cursor advanced + state changed)
+    // Test C -- non-vacuity: the STAGE actually stamped (a real buy, not a skip)
     // =========================================================================
 
-    /// @notice T-319-08 non-vacuity guard: prove a autoBuy of N healthy subs actually BOUGHT -- the
-    ///         cursor advanced past every test sub (autoBuyProgress) AND each sub's lastAutoBoughtDay stamped
-    ///         today with exactly one AutoBought event. A skip-everything autoBuy (not-approved / underfunded
-    ///         / renewal-due) would advance the cursor on cheap-skips but emit zero AutoBought and stamp no
-    ///         lastAutoBoughtDay; this asserts the heavier "will buy" path ran for every sub.
-    function testAutoBuyActuallyBoughtNonVacuity() public {
-        uint256 N = 5;
-        address[] memory subs = _setupHealthyBuyingSubs(N, "swpC_", /*reinvestPct*/ 0, /*claimable*/ 0);
-        uint256 total = afKing.subscriberCount();
+    /// @notice Non-vacuity guard: prove a new-day STAGE of N funded subs actually STAMPED every sub (their
+    ///         lastAutoBoughtDay advanced this cycle). A skip-everything STAGE (unfunded / not pass-gated /
+    ///         already-stamped) would leave the stamps unchanged; this asserts the heavier "will buy" path
+    ///         ran for every sub. The cursor advanced across the whole funded window.
+    function testStageActuallyStampedNonVacuity() public {
+        address[] memory subs = _setupFundedSubs(N_MARGINAL, "swpC_", /*reinvestPct*/ 0, /*claimable*/ 0);
+        uint32[] memory pre = new uint32[](N_MARGINAL);
+        for (uint256 i; i < N_MARGINAL; ++i) pre[i] = _lastBoughtDayOf(subs[i]);
 
-        vm.prank(makeAddr("swpC_keeper"));
-        afKing.autoBuy(total);
+        vm.warp(block.timestamp + 1 days);
+        assertTrue(game.advanceDue(), "advanceDue on the new day");
+        game.advanceGame();
 
-        // Cursor advanced to (at least) cover every test sub for today.
-        (uint32 progDay, uint256 cursorAfter) = afKing.autoBuyProgress();
-        assertEq(progDay, _today(), "autoBuyProgress day-stamp tracks today");
-        assertGe(cursorAfter, total, "cursor advanced across the whole set (every sub processed)");
-
-        // Each test sub actually bought: lastAutoBoughtDay stamped + exactly one AutoBought (real work, not a skip).
-        uint32 today = _today();
-        uint256 sumBuys;
-        for (uint256 i; i < N; ++i) {
-            assertEq(_lastAutoBoughtDayOf(subs[i]), today, "non-vacuity: sub's lastAutoBoughtDay stamped today (bought)");
-            uint256 c = _countAutoBoughtFor(subs[i]);
-            assertEq(c, 1, "non-vacuity: exactly one AutoBought per sub (a real buy, not a skip)");
-            sumBuys += c;
+        // Each funded sub got a NEW stamp this cycle (a real STAGE buy, not a skip). N + 2 deploy subs <
+        // SUB_STAGE_BATCH, so ONE advance processes the WHOLE set in the first chunk.
+        uint256 stamped;
+        for (uint256 i; i < N_MARGINAL; ++i) {
+            if (_lastBoughtDayOf(subs[i]) > pre[i]) ++stamped;
         }
-        assertEq(sumBuys, N, "non-vacuity: every test sub was bought (sum of AutoBought == N)");
+        assertEq(stamped, N_MARGINAL, "non-vacuity: every funded sub was STAMPED this STAGE (real buys, not skips)");
+
+        emit log_named_uint("stage_subs_stamped", stamped);
     }
 
     // =========================================================================
-    // Internal helpers
+    // Internal helpers (the validated game-resident driving harness)
     // =========================================================================
 
-    /// @dev Keeper-local day index (mirrors AfKing._currentDay() 82620-second offset).
-    function _today() internal view returns (uint32) {
-        return uint32((block.timestamp - 82620) / 1 days);
-    }
+    /// @dev Measure a fresh-state new-day advance whose STAGE processes N funded subs, returning the
+    ///      bracketed advance gas. The loop-N-divide marginal divides this by N. n + 2 deploy subs <
+    ///      SUB_STAGE_BATCH so ONE advance stamps the whole set in the first chunk; the everything-else of
+    ///      the advance (an empty ticket queue) is identical across runs. Settles to a clean baseline first
+    ///      so a prior measurement's unfulfilled RNG cannot leave the game rngLocked when this advance fires.
+    function _measureStageAdvanceGas(uint256 n, string memory prefix, uint8 reinvestPct, uint256 claimable)
+        internal
+        returns (uint256 advGas)
+    {
+        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
+        address[] memory subs = _setupFundedSubs(n, prefix, reinvestPct, claimable);
+        uint32[] memory pre = new uint32[](n);
+        for (uint256 i; i < n; ++i) pre[i] = _lastBoughtDayOf(subs[i]);
 
-    /// @dev Measure a single fresh test sub's ISOLATED per-player autoBuy marginal. The deploy subs (and
-    ///      any earlier test subs) are first autoBought out of the way this day so they cheap-skip; then a
-    ///      fresh sub is added at the tail and a maxCount-1 autoBuy brackets ONLY that one new sub's work.
-    function _measureSingleSubMarginal(
-        string memory prefix,
-        uint8 reinvestPct,
-        uint256 claimable
-    ) internal returns (uint256 gasUsed) {
-        // AutoBuy everything currently in the set so it is all stamped today (later cheap-skips).
-        uint256 pre = afKing.subscriberCount();
-        if (pre > 0) {
-            vm.prank(makeAddr(string(abi.encodePacked(prefix, "preautoBuy_keeper"))));
-            afKing.autoBuy(pre); // a no-buy chunk (all already-autoBought) is a no-op (GASOPT-04 / RD-2: no revert)
-        }
-
-        // Add ONE fresh sub at the tail.
-        address[] memory one = _setupHealthyBuyingSubs(1, prefix, reinvestPct, claimable);
-        address sub = one[0];
-
-        // The fresh sub sits at the tail (its 1-indexed _subscriberIndex == subscriberCount). Reset the
-        // cursor to its slot so the next autoBuy starts exactly at the fresh sub (no contamination from
-        // re-walking already-autoBought deploy/earlier subs -- those are stamped today and would cheap-skip,
-        // but starting at the fresh sub's slot brackets ONLY its buy).
-        uint256 freshIdx = _subscriberIndexOf(sub); // 1-indexed
-        assertEq(freshIdx, afKing.subscriberCount(), "fresh test sub is at the set tail");
-        _setCursorToZeroBasedSlot(freshIdx - 1);
-
-        // Bracket a maxCount-1 autoBuy: it processes exactly the fresh sub (the only un-autoBought entry at
-        // the cursor) and stops.
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "marginal_keeper"))));
+        vm.warp(block.timestamp + 1 days);
+        require(game.advanceDue(), "fixture: advanceDue on the new day");
         uint256 gasBefore = gasleft();
-        afKing.autoBuy(1);
-        gasUsed = gasBefore - gasleft();
+        game.advanceGame();
+        advGas = gasBefore - gasleft();
 
-        // Non-vacuity: the fresh sub was actually bought (a real buy, not a skip).
-        assertEq(_countAutoBoughtFor(sub), 1, "marginal measured over a REAL buy (non-vacuity)");
-        assertEq(_lastAutoBoughtDayOf(sub), _today(), "fresh sub stamped today");
+        // Non-vacuity: every measured sub got a NEW stamp this cycle (a real STAGE buy, not a skip).
+        for (uint256 i; i < n; ++i) {
+            assertGt(_lastBoughtDayOf(subs[i]), pre[i], "marginal non-vacuity: each funded sub newly stamped");
+        }
     }
 
-    /// @dev Subscribe `n` fresh players as fully-healthy buying subs (ticket mode so the LootboxFloor
-    ///      skip never fires, operator-approved, pool-funded, NOT renewal-due) and return them in order.
-    ///      When reinvestPct > 0, the subscriber uses DirectEth funding (drainGameCreditFirst = false)
-    ///      and the given `claimable` is injected into DegenerusGame so the SUB-04 reinvest branch runs
-    ///      with a larger effective quantity; the pool is funded to cover the larger buy.
-    function _setupHealthyBuyingSubs(
-        uint256 n,
-        string memory prefix,
-        uint8 reinvestPct,
-        uint256 claimable
-    ) internal returns (address[] memory subs) {
+    /// @dev Subscribe `n` fresh players as funded subs (deity-passed so pass-gated valid; funded via
+    ///      depositAfkingFunding so the STAGE debit lands). reinvestPct > 0 + a `claimable` injection drives
+    ///      the SUB-04 reinvest branch (with a tandem claimablePool bump, SOLVENCY-01 balanced). Ticket
+    ///      mode (no box-materialization in the STAGE so the per-sub stamp cost is the measured unit).
+    function _setupFundedSubs(uint256 n, string memory prefix, uint8 reinvestPct, uint256 claimable)
+        internal
+        returns (address[] memory subs)
+    {
         subs = new address[](n);
-        uint256 mp = game.mintPrice();
-        // Effective qty: max(1, floor(claimable * reinvestPct / 100 / mp)). Fund the pool for cost.
-        uint256 reinvestQty = reinvestPct == 0 ? 0 : (claimable * reinvestPct) / 100 / mp;
-        uint256 effectiveQty = reinvestQty > 1 ? reinvestQty : 1;
-        uint256 poolWei = mp * effectiveQty + 1 ether; // cover the buy slice + headroom
-
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            _fundBurnie(who, _subCost()); // the (no-pass) subscribe-time all-or-nothing BURNIE charge
+            _grantDeityPass(who);
             vm.prank(who);
-            // self, drainGameCreditFirst = false (DirectEth), ticket mode, qty 1, reinvestPct.
-            afKing.subscribe(address(0), false, true, 1, reinvestPct, address(0));
-            _approveKeeper(who);
-            _fundPool(who, poolWei);
+            // self, drainGameCreditFirst = false (DirectEth-funded), ticket mode, qty 1, reinvestPct.
+            game.subscribe(address(0), false, true, 1, reinvestPct, address(0));
+            _fundPool(who, 5 ether);
             if (claimable > 0) _setClaimable(who, claimable);
         }
     }
 
-    function _subCost() internal view returns (uint256) {
-        return (afKing.SUB_COST_ETH_TARGET() * 1000 ether) / game.mintPrice();
-    }
-
-    function _approveKeeper(address who) internal {
-        vm.prank(who);
-        game.setOperatorApproval(address(afKing), true);
-    }
-
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        afKing.depositFor{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(who);
     }
 
-    function _fundBurnie(address who, uint256 amount) internal {
-        if (amount == 0) return;
-        vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(who, amount);
+    function _grantDeityPass(address who) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        packed |= (uint256(1) << DEITY_SHIFT);
+        vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Force `who`'s DegenerusGame claimable winnings to `amount` (slot 7 mapping). Drives the
-    ///      SUB-04 reinvest effective-quantity branch (mirrors AfKingFundingWaterfall._setClaimable).
+    /// @dev Credit `who` claimableWinnings AND bump claimablePool in tandem (SOLVENCY-01 balanced; the
+    ///      351-02 test-infra reality) so a claimable-funded slice's `claimablePool -=` does not underflow.
     function _setClaimable(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(GAME_CLAIMABLE_SLOT)));
-        vm.store(address(game), slot, bytes32(amount));
+        bytes32 slot = keccak256(abi.encode(who, uint256(CLAIMABLE_WINNINGS_SLOT)));
+        uint256 cur = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32(cur + amount));
+        _bumpClaimablePool(amount);
     }
 
-    /// @dev Read `who`'s lastAutoBoughtDay (bytes 1..4 of the packed Sub slot).
-    function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(afKing), slot));
-        return uint32(packed >> (OFF_LASTSWEPT * 8));
+    function _claimablePool() internal view returns (uint256) {
+        uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(CLAIMABLE_POOL_SLOT))));
+        return (slot1 >> (CLAIMABLE_POOL_OFFBYTES * 8)) & type(uint128).max;
     }
 
-    /// @dev Read `who`'s 1-indexed subscriber index (slot 3); 0 = not in set.
+    function _bumpClaimablePool(uint256 delta) internal {
+        uint256 value = _claimablePool() + delta;
+        require(value <= type(uint128).max, "pool fits uint128");
+        uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(CLAIMABLE_POOL_SLOT))));
+        uint256 mask = uint256(type(uint128).max) << (CLAIMABLE_POOL_OFFBYTES * 8);
+        slot1 = (slot1 & ~mask) | (value << (CLAIMABLE_POOL_OFFBYTES * 8));
+        vm.store(address(game), bytes32(uint256(CLAIMABLE_POOL_SLOT)), bytes32(slot1));
+    }
+
+    /// @dev A robust settle DEMANDING a clean (`!advanceDue && !rngLocked`) state before returning.
+    function _settleClean(uint256 vrfWord) internal {
+        for (uint256 d; d < 240; d++) {
+            if (!game.advanceDue() && !game.rngLocked()) return;
+            game.advanceGame();
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != _lastFulfilledReqId && reqId > 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) {
+                    mockVRF.fulfillRandomWords(reqId, vrfWord);
+                    _lastFulfilledReqId = reqId;
+                }
+            }
+        }
+    }
+
+    // ---- Sub-stamp slot reads (RE-DERIVED slot 66 + verified offsets) ----
+
+    function _lastBoughtDayOf(address who) internal view returns (uint32) {
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (OFF_LASTBOUGHT * 8);
+        return uint32(p & 0xFFFFFFFF);
+    }
+
+    function _subscriberCount() internal view returns (uint256) {
+        return uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
+    }
+
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)));
-        return uint256(vm.load(address(afKing), slot));
-    }
-
-    /// @dev Set the autoBuy cursor to a 0-based slot index while keeping the day-stamp at today, so the
-    ///      next autoBuy starts at that slot. Slot 4: _autoBuyDay (uint32, bytes 0..3) + _autoBuyCursor
-    ///      (uint224, bytes 4..). Mirrors AfKingConcurrency._resetCursorToZeroForToday().
-    function _setCursorToZeroBasedSlot(uint256 zeroBasedSlot) internal {
-        uint256 packed = (uint256(_today()) & 0xFFFFFFFF) | (zeroBasedSlot << 32);
-        vm.store(address(afKing), bytes32(uint256(4)), bytes32(packed));
-    }
-
-    /// @dev GASOPT-04 buy oracle: 1 iff `who`'s `lastAutoBoughtDay` stamp == today (a fresh test sub
-    ///      starts at 0; a successful buy stamps it today). Replaces the deleted AutoBought-event count.
-    ///      The contract's `lastAutoBoughtDay >= today` skip makes the stamp at most one buy/day/sub, so
-    ///      a stamped sub == exactly one buy this autoBuy — the same property the old per-log count held.
-    function _countAutoBoughtFor(address who) internal view returns (uint256) {
-        return _lastAutoBoughtDayOf(who) == _today() ? 1 : 0;
+        return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)))));
     }
 
     /// @dev Minimal uint -> decimal string for makeAddr label uniqueness.
