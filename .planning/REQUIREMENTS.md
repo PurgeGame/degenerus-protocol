@@ -48,7 +48,7 @@
 - [x] **GAS-03**: Same-slot affiliate/pool aggregate flushes across a process batch (`claimablePool`/`prizePoolsPacked` accumulate-and-flush; bucket affiliate by roll-winner) — SAFE-WITH-CONDITIONS (do NOT batch `quests.handleAffiliate` — non-linear completion logic); each gas-only under the security floor.
 
 ### TST — Empirical proofs
-- [ ] **TST-01**: Freeze/determinism — the stamp+open produces an identical box outcome independent of open timing/block (seed uses the stamped day); index-binding holds across a mid-day index advance.
+- [x] **TST-01**: Freeze/determinism — the stamp+open produces an identical box outcome independent of open timing/block (seed uses the stamped day); index-binding holds across a mid-day index advance.
 - [ ] **TST-02**: Revert-free — a funded process/open never reverts on well-formed slices (the preserved `_resolveBuy` invariants, REVERT-01); a solvency violation fails loud (never masked); the terminal game-over routing is never blocked by the afking STAGE (D-348-04 no-valve form — no try/catch).
 - [ ] **TST-03**: EV-cap — the per-`(player, level)` 10-ETH benefit budget is enforced exactly once per open with no double-draw vs the buy-time path; equivalent to v54.
 - [x] **TST-04**: Two-path open coexistence + set-mutation (eviction/tombstone/swap-pop, streak preserved) + OPEN-E 4-protection regression.
@@ -95,7 +95,7 @@ Each REQ-ID maps to exactly ONE phase — the phase that DELIVERS/owns it. 29/29
 | GAS-01 | 350 GAS | Complete |
 | GAS-02 | 350 GAS | Complete |
 | GAS-03 | 350 GAS | Complete |
-| TST-01 | 351 TST | Pending |
+| TST-01 | 351 TST | Complete |
 | TST-02 | 351 TST | Pending |
 | TST-03 | 351 TST | Pending |
 | TST-04 | 351 TST | Complete |
