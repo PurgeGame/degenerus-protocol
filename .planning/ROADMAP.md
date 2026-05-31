@@ -124,7 +124,7 @@ Plans:
 **Requirements:** No formal REQ-IDs (inserted phase, mirrors 349.1) — must_haves derive from `349.2-DESIGN.md` §6 IMPL-CHECKLIST + §7 SWEEP.
 **Depends on:** Phase 349.1 (the committed AfKing-in-Game fold + box redesign `77c3d9ef` this phase corrects-in-place — the lootbox stamp branch the fix edits)
 **Plans:** 1 plan / 1 wave (small, surgical — one batched contract diff). The lootbox-branch BURNIE side-effect restoration (handlePurchase-before-score → streak-sourced scorePlus1 → both payAffiliate branches → single creditFlip) is purely additive; the ETH/`claimablePool` path is byte-unchanged (DESIGN §3 — no reconciliation, no solvency surface). [plan-checker: SKIPPED — single small additive plan, no cross-plan deps; structure + frontmatter SDK-validated]
-- [ ] 349.2-01-PLAN.md — restore quest-credit + affiliate (BURNIE) in the GameAfkingModule lootbox stamp branch + contracts-only forge build clean < 24,576 + HOLD at the contract-commit gate [wave 1; autonomous:false USER contract gate]
+- [x] 349.2-01-PLAN.md — restore quest-credit + affiliate (BURNIE) in the GameAfkingModule lootbox stamp branch + contracts-only forge build clean < 24,576 + HOLD at the contract-commit gate [wave 1; autonomous:false USER contract gate] ✅ committed `453f8073` 2026-05-31
 **UI hint:** no
 
 ### Phase 350: GAS — Behavior-Identical No-Cost Wins (box-ledger → warm Sub-stamp + staticcall → SLOAD + same-slot aggregate flushes)
@@ -198,7 +198,7 @@ Plans:
 | 348. SPEC — Design-Lock + Freeze Proof + Discharged-Invariant Carry + §4 Placement + Code-Size/GAS Inventories + Attestation | v55.0 | 6/6 | Complete    | 2026-05-30 |
 | 349. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (code-size reclaim → fold + box redesign) | v55.0 | 5/5 | Complete (shipped via 349.1) | 2026-05-31 |
 | 349.1 AfKing Box Redesign — live-level resolve, drop _afkingEpoch, ticket/lootbox split, mintBurnie rename (INSERTED) | v55.0 | 5/5 | Complete (committed 77c3d9ef) | 2026-05-31 |
-| 349.2 IMPL FIX — Restore quest-credit + affiliate for afking LOOTBOX subs (regression) (INSERTED) | v55.0 | 0/1 | Planned (1 plan / 1 wave) | 2026-05-31 |
+| 349.2 IMPL FIX — Restore quest-credit + affiliate for afking LOOTBOX subs (regression) (INSERTED) | v55.0 | 1/1 | Complete   | 2026-05-31 |
 | 350. GAS — Behavior-Identical No-Cost Wins (box-ledger → warm Sub-stamp + staticcall → SLOAD + same-slot flushes) | v55.0 | 0/3 | Not started | - |
 | 351. TST — Freeze/Determinism + Revert-Free + EV-Cap + Two-Path + Set-Mutation + Non-Widening + Gas | v55.0 | 0/? | Not started | - |
 | 352. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v55.0 + Closure | v55.0 | 0/? | Not started | - |
