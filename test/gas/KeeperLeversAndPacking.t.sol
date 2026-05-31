@@ -3,77 +3,64 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
-import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
-/// @title KeeperLeversAndPacking -- GAS-02/03/04 batched-reward + packing lever assertions, plus the
-///        G1-G13 security-floor guard byte-presence pins (Phase 319 Plan 04, Task 1).
+/// @title KeeperLeversAndPacking -- GAS-02/03/04 batched-reward + packing lever assertions + the G1-G13
+///        security-floor guard byte-presence pins. ADAPTED to the v55 AfKing-in-Game redesign (D-351-01).
 ///
-/// @notice RESEARCH (§GAS-02/03/04 Verification Targets) confirms the levers HOLD at HEAD; this
-///         suite proves it with CHECKABLE assertions so a future regression flips RED. The v49
-///         one-reward-per-tx BEHAVIORAL proof was re-authored fresh in storage-oracle / count terms
-///         at Phase 332 (KeeperRouterOneCategory / DegeneretteResolveRepeg); this suite keeps the
-///         SOURCE-PRESENCE structural pins:
+/// @notice v55 REFRAME (D-351-01). The standalone `AfKing` de-custody contract is DISSOLVED
+///         (`contracts/AfKing.sol` deleted); the afking router/packing surface is GAME-resident in
+///         `contracts/modules/GameAfkingModule.sol` (logic) + `contracts/storage/DegenerusGameStorage.sol`
+///         (the packed `Sub` struct). This suite REPOINTS the `vm.readFile` source-grep gates:
+///           - the afking-LOGIC gates  -> `GameAfkingModule.sol` (`AFKING_SRC`): the `mintBurnie` router's
+///             read-once `_mintPriceInContext()` + the single CEI-last bounty `creditFlip`, the swap-pop
+///             `_removeFromSet`/`_subscribers.pop()`, the subscribe-time consent gate `operatorApprovals`,
+///             the per-entry day-stamp.
+///           - the Sub packed-LAYOUT gate -> `DegenerusGameStorage.sol` (`STORAGE_SRC`): the `struct Sub`
+///             field widths (RE-DERIVED — the game-resident Sub is 8 fields summing to 29 bytes, one slot;
+///             the old AfKing-standalone 6-field/31-byte offsets are WRONG).
+///           - `afKing.doWork()`        -> `game.mintBurnie()` (Δ3) for the driving helpers.
 ///
-///         GAS-02 (one creditFlip/batch, read-once, one batch transfer/refund):
-///           - SOURCE-PRESENCE (comment-stripped vm.readFile grep, idiom JackpotSingleCallCorrectness
-///             :461-493 / RngFreezeAndRemovalProofs): degeneretteResolve/autoOpen read `_activeTicketLevel()`
-///             ONCE before the loop; the per-tx creditFlip sits AFTER the loop; AfKing reads
-///             `mintPrice()` once and does ONE batchPurchase value transfer; batchPurchase does ONE
-///             refund of unspent value.
+///         D-351-02 REMOVED-SURFACE DROP (BY NAME, for the 351-09 REGRESSION-BASELINE-v55 ledger): the v49
+///         keeper `batchPurchase` is GONE from contracts (`grep -rn "function batchPurchase" contracts/`
+///         == EMPTY). The GAS-02/03 grep gates whose subject was `batchPurchase` are removed surfaces with
+///         NO behavioral successor (the per-buy work folded into `advanceGame()`'s required-path STAGE,
+///         which fires NO batched value-transfer). The DROPPED assertions (by their old token):
+///           - GAS-02 AfKing `batchPurchase{value: totalValue}(players, amounts, modes)` one-transfer
+///           - GAS-02 AfKing `creditFlip(msg.sender, bountyEarned)` (REFRAMED onto mintBurnie's, kept)
+///           - GAS-02 `_batchPurchaseUnit{value: slice}` one-refund (G6 — removed; the STAGE is per-sub)
+///           - GAS-03 `function batchPurchase(` + `uint256[] calldata amounts` + `uint8[] calldata modes`
+///             parallel-array grouping (removed; the STAGE iterates the in-context `_subscribers` set)
+///           - G9 `if (msg.sender != ContractAddresses.AF_KING) revert E();` batchPurchase keeper gate
+///         REFRAMED (kept): the read-once mintPrice → mintBurnie's `_mintPriceInContext()`; the one
+///         creditFlip/tx → mintBurnie's single CEI-last bounty; the keeper auth → the subscribe-time
+///         `operatorApprovals` consent gate (CONSENT-01/OPENE-04); G10 swap-pop → `_removeFromSet`.
 ///
-///         GAS-03 (calldata grouped by player; homogeneous per-work-type fns): SOURCE-PRESENCE the
-///           parallel-array signatures `degeneretteResolve(address[],uint64[])` /
-///           `batchPurchase(address[],uint256[],uint8[])` and that the three crank/purchase fns are
-///           homogeneous per work-type (no mixed-work dispatcher).
-///
-///         GAS-04 (maximal packing, no new hot-path storage): SOURCE-PRESENCE the `Sub` struct field
-///           widths sum to <= 32 bytes (one slot), the documented single-slot NatSpec, `boxCursor` /
-///           `boxCursorIndex` are uint48, and `enqueueBoxForAutoOpen` is the ONLY crank-added storage
-///           write, fired from the first-deposit signal (NOT the bet-placement path).
-///
-///         G1-G13 security-floor guard byte-presence (the test-side companion to the Plan-04
-///           319-GAS-05-GUARDRAILS.md audit): each guard from RESEARCH §GAS-05 is asserted byte-present
-///           (comment-stripped) at its source file, so a future regression that deletes a guard flips
-///           THIS suite RED. `feedback_security_over_gas` (HARD floor): the guards are the security
-///           floor; this suite PINS them, it never optimizes one away.
-///
-/// @dev Comment-stripping (the `_stripComments` / `_countOccurrences` helpers are byte-faithful copies
-///      of JackpotSingleCallCorrectness.t.sol:622-700) so NatSpec prose mentioning a symbol cannot
-///      self-satisfy or self-invalidate a grep gate; every >0 gate is over comment-stripped source.
-///      The bet/box-driving helpers reuse the KeeperFaucetResistance losing-bet idiom and the
-///      KeeperOpenBoxWorstCaseGas box-enqueue idiom. Zero contracts/*.sol mutation; test-only.
+/// @dev Comment-stripping (the `_stripComments` / `_countOccurrences` helpers are byte-faithful copies of
+///      JackpotSingleCallCorrectness.t.sol:622-700) so NatSpec prose mentioning a symbol cannot
+///      self-satisfy/self-invalidate a grep gate. ZERO contracts/*.sol mutation; test-only.
 contract KeeperLeversAndPacking is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Storage-slot constants (confirmed via `forge inspect ... storage`; mirror CrankFaucetResistance)
+    // Storage-slot constants (RE-DERIVED via `forge inspect storage DegenerusGame`)
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 37 (v47: +2 from presale-box storage additions); lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 37;
+    /// @dev lootboxRngPacked at slot 38 (v55 append shifted +1); lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 38;
-    /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 45;
-    /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 46;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 39;
     /// @dev lootboxEthBase mapping root slot (uint48 index => address => base). First-deposit signal.
-    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 22;
+    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 23;
 
     // -------------------------------------------------------------------------
-    // Reward-peg mirror (the contract's own FIXED constants, REW-03)
+    // Constants
     // -------------------------------------------------------------------------
-
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
 
     /// @dev keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)") — emitted once per
     ///      creditFlip via _addDailyFlip; used to count creditFlip emissions.
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
         keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)");
 
-    bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q' — first-spin salt
     uint48 private constant INDEX = 1;
-    uint256 private constant FIXED_WORD = uint256(keccak256("crank_levers_fixed_word"));
     uint256 private constant LOOTBOX_WEI = 1 ether; // >= LOOTBOX_MIN
 
     // -------------------------------------------------------------------------
@@ -85,7 +72,11 @@ contract KeeperLeversAndPacking is DeployProtocol {
         "contracts/modules/DegenerusGameDegeneretteModule.sol";
     string private constant LOOTBOX_SRC =
         "contracts/modules/DegenerusGameLootboxModule.sol";
-    string private constant AFKING_SRC = "contracts/AfKing.sol";
+    /// @dev v55: the afking LOGIC source (repointed from the deleted contracts/AfKing.sol — D-351-01).
+    string private constant AFKING_SRC = "contracts/modules/GameAfkingModule.sol";
+    /// @dev v55: the packed `Sub` struct lives in game storage, NOT the afking module — the layout gate
+    ///      greps HERE (D-351-01 RE-DERIVE).
+    string private constant STORAGE_SRC = "contracts/storage/DegenerusGameStorage.sol";
 
     address private player;
     address private cranker;
@@ -113,75 +104,77 @@ contract KeeperLeversAndPacking is DeployProtocol {
         game.setOperatorApproval(address(game), true);
     }
 
-
-
     // =========================================================================
-    // GAS-02 — read-once / one-transfer / one-refund (SOURCE-PRESENCE)
+    // GAS-02 — read-once / one-creditFlip per tx (SOURCE-PRESENCE, v55-reframed)
     // =========================================================================
 
-    /// @notice GAS-02 read-once: degeneretteResolve and autoOpen each read `_activeTicketLevel()` exactly
-    ///         ONCE (the `uint24 lvl = _activeTicketLevel();` hoist before the loop), and each
-    ///         creditFlip sits AFTER the loop (one per tx). AfKing reads `mintPrice()` once.
-    function testGas02ReadOnceAndOneTransferSourcePresence() public view {
+    /// @notice GAS-02 read-once + one-reward-per-tx, v55-reframed. The game crank reward path
+    ///         (degeneretteResolve) holds exactly ONE post-loop creditFlip (the flat-≥3 grant). The v55
+    ///         afking router `mintBurnie()` reads `_mintPriceInContext()` once and pays exactly ONE
+    ///         CEI-last bounty creditFlip per tx (the one-category early-return). The v49 AfKing
+    ///         `batchPurchase` one-transfer/one-refund gates are DROPPED (removed surface, D-351-02).
+    function testGas02ReadOnceAndOneRewardSourcePresence() public view {
         string memory game_ = _strippedGame();
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
 
-        // 330-03 flat-≥3 re-peg: degeneretteResolve's reward is now a FLAT level-INDEPENDENT
-        // RESOLVE_FLAT_BURNIE constant, so the prior per-item `uint24 lvl = _activeTicketLevel();`
-        // hoist is gone (the lever is now "no per-item level read at all", strictly stronger). autoOpen's
-        // crank reward was re-homed to AfKing.doWork() (D-07), so the game crank fns hold exactly ONE
-        // post-loop creditFlip: degeneretteResolve's single flat-≥3 grant.
+        // 330-03 flat-≥3 re-peg: degeneretteResolve's reward is a FLAT level-INDEPENDENT constant, so the
+        // prior per-item `uint24 lvl = _activeTicketLevel();` hoist is gone (strictly stronger).
         assertEq(
             _countOccurrences(game_, "uint24 lvl = _activeTicketLevel();"),
             0,
             "GAS-02 (330-03): no per-item level read - degeneretteResolve reward is a flat level-independent constant"
         );
-
-        // The per-tx crank reward creditFlip is byte-present exactly ONCE (degeneretteResolve's flat-≥3
-        // grant; autoOpen's reward moved to doWork). One guarded post-loop emission per tx (REW-02).
+        // The per-tx crank reward creditFlip is byte-present exactly ONCE (degeneretteResolve's flat-≥3 grant).
         assertEq(
             _countOccurrences(game_, "coinflip.creditFlip(msg.sender, RESOLVE_FLAT_BURNIE);"),
             1,
             "GAS-02: one guarded post-loop creditFlip in degeneretteResolve (flat->=3 re-peg, one-per-tx)"
         );
-        // Phase 332: re-prove the autoOpen/advance bounty one-per-tx VALUE under the doWork router.
 
-        // AfKing reads mintPrice() once into a local before its loop (read-once lever).
+        // v55 REFRAME: the afking router mintBurnie reads mintPrice ONCE into a local (read-once lever).
         assertGt(
-            _countOccurrences(afking, "mintPrice()"),
+            _countOccurrences(afking, "_mintPriceInContext()"),
             0,
-            "GAS-02: AfKing reads mintPrice() (hoisted once per autoBuy)"
+            "GAS-02 (v55): mintBurnie reads _mintPriceInContext() (the hoisted-once mint price)"
         );
-        // AfKing makes exactly ONE batched value transfer per autoBuy.
+        // v55 REFRAME: mintBurnie pays exactly ONE unified bounty creditFlip per tx, CEI-LAST, after the
+        // one-category early-return (the v49 AfKing autoBuy `creditFlip(msg.sender, bountyEarned)` lever).
         assertEq(
-            _countOccurrences(afking, "batchPurchase{value: totalValue}(players, amounts, modes)"),
+            _countOccurrences(afking, "coinflip.creditFlip(msg.sender, bountyEarned);"),
             1,
-            "GAS-02: AfKing autoBuy does ONE batchPurchase value transfer"
+            "GAS-02 (v55): mintBurnie does ONE CEI-last bounty creditFlip per tx (one-category router)"
         );
-        // AfKing emits exactly ONE bounty creditFlip per autoBuy.
-        assertEq(
-            _countOccurrences(afking, "creditFlip(msg.sender, bountyEarned)"),
-            1,
-            "GAS-02: AfKing autoBuy does ONE bounty creditFlip per tx"
+        // The one-category structural early-return (no advance+open bounty stacked in one tx): the advance
+        // branch then the `else` open branch — exactly one category routed per call.
+        assertGt(
+            _countOccurrences(afking, "if (IGameRouter(address(this)).advanceDue()) {"),
+            0,
+            "GAS-02 (v55): mintBurnie's one-category early-return (advance branch) byte-present"
         );
 
-        // batchPurchase performs ONE refund of unspent value (the single end-of-loop refund).
-        assertGt(
+        // D-351-02 DROP (removed surface — batchPurchase GONE from contracts): the GAS-02 AfKing
+        // batchPurchase one-transfer + the `_batchPurchaseUnit{value: slice}` one-refund gates are dropped
+        // (no successor — the per-sub STAGE makes no batched value transfer). Asserted ABSENT so a
+        // regression that re-introduces the removed surface flips RED.
+        assertEq(
             _countOccurrences(game_, "_batchPurchaseUnit{value: slice}"),
             0,
-            "GAS-02: batchPurchase forwards per-player slices then refunds unspent once"
+            "D-351-02: batchPurchase (the v49 keeper batched value transfer) is REMOVED - no successor"
         );
     }
 
     // =========================================================================
-    // GAS-03 — calldata grouping + homogeneous fns (SOURCE-PRESENCE)
+    // GAS-03 — homogeneous per-work-type fns (SOURCE-PRESENCE, v55-reframed)
     // =========================================================================
 
-    /// @notice GAS-03: the work fns take parallel arrays grouped by player (item i = (players[i], …))
-    ///         and are homogeneous per work-type — degeneretteResolve resolves bets only, autoOpen opens
-    ///         boxes only (parameterless cursor), batchPurchase purchases only. No mixed-work dispatcher.
-    function testGas03GroupingAndHomogeneitySourcePresence() public view {
+    /// @notice GAS-03: the game work fns are homogeneous per work-type — degeneretteResolve resolves bets
+    ///         only (parallel arrays grouped by player), autoOpen opens boxes only (parameterless cursor).
+    ///         The v49 `batchPurchase(address[],uint256[],uint8[])` parallel-array grouping is DROPPED
+    ///         (removed surface, D-351-02 — the v55 per-sub buy iterates the in-context `_subscribers`
+    ///         set in `processSubscriberStage`, no calldata array).
+    function testGas03HomogeneitySourcePresence() public view {
         string memory game_ = _strippedGame();
+        string memory afking = _stripComments(vm.readFile(AFKING_SRC));
 
         // degeneretteResolve: parallel arrays (players[] + betIds[]) grouped by player.
         assertGt(_countOccurrences(game_, "function degeneretteResolve("), 0, "GAS-03: degeneretteResolve present");
@@ -191,154 +184,152 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // autoOpen: homogeneous box-only work with a parameterless cursor walk (uint256 maxCount).
         assertGt(_countOccurrences(game_, "function autoOpen(uint256 maxCount)"), 0, "GAS-03: autoOpen(maxCount) homogeneous box cursor");
 
-        // batchPurchase: parallel arrays (players[] + amounts[] + modes[]) grouped by player.
-        assertGt(_countOccurrences(game_, "function batchPurchase("), 0, "GAS-03: batchPurchase present");
-        assertGt(_countOccurrences(game_, "uint256[] calldata amounts"), 0, "GAS-03: batchPurchase amounts[] grouping");
-        assertGt(_countOccurrences(game_, "uint8[] calldata modes"), 0, "GAS-03: batchPurchase modes[] grouping");
-
-        // Homogeneity: there is exactly ONE degeneretteResolve and ONE autoOpen definition (no fused dispatcher).
+        // Homogeneity: exactly ONE degeneretteResolve and ONE autoOpen definition (no fused dispatcher).
         assertEq(_countOccurrences(game_, "function degeneretteResolve("), 1, "GAS-03: single degeneretteResolve (no mixed-work dispatcher)");
         assertEq(_countOccurrences(game_, "function autoOpen(uint256 maxCount)"), 1, "GAS-03: single autoOpen (homogeneous)");
+
+        // v55: the per-sub buy is the in-context STAGE `processSubscriberStage`, homogeneous and iterating
+        // the `_subscribers` set (NOT a calldata-array batch).
+        assertGt(
+            _countOccurrences(afking, "function processSubscriberStage("),
+            0,
+            "GAS-03 (v55): processSubscriberStage present (the per-sub STAGE, in-context set iteration)"
+        );
+
+        // D-351-02 DROP: the v49 batchPurchase parallel-array signature is REMOVED.
+        assertEq(_countOccurrences(game_, "function batchPurchase("), 0, "D-351-02: batchPurchase parallel-array fn REMOVED");
     }
 
     // =========================================================================
     // GAS-04 — Sub 1-slot + boxCursor uint48 + no new hot-path storage (SOURCE-PRESENCE)
     // =========================================================================
 
-    /// @notice GAS-04 / TOMB-05: the `Sub` struct packs to ONE slot, `boxCursor`/`boxCursorIndex`
-    ///         are uint48, and the crank adds storage ONLY via `enqueueBoxForAutoOpen` from the
-    ///         first-deposit signal (one SSTORE per (index,player)), NOT on the bet/box-placement
-    ///         hot path.
-    /// @dev    v47 / OPENE-01: the two prior standalone bools (`drainGameCreditFirst` / `useTickets`)
-    ///         were folded into the single `uint8 flags` field, and an `address fundingSource` (20
-    ///         bytes) was added. v50.0 AFSUB-01 (Plan 335-04 Task 1): the slot 5 field is repurposed
-    ///         in-place to `uint32 validThroughLevel` (same offset, same width, zero packing churn).
-    ///         The post-AFSUB `Sub` is six fields summing to 31 used bytes:
-    ///           uint8 dailyQuantity(1) + uint32 lastAutoBoughtDay(4) + uint32 validThroughLevel(4)
-    ///           + uint8 reinvestPct(1) + uint8 flags(1) + address fundingSource(20) = 31 bytes.
-    ///         Still <= 32 (one slot); the INTENT — single-slot packing, no NEW hot-path storage —
-    ///         is unchanged, only the shape it proves against.
+    /// @notice GAS-04: the game-resident `Sub` struct packs to ONE slot (RE-DERIVED), `boxCursor`/
+    ///         `boxCursorIndex` are uint48, and the crank adds storage ONLY via `enqueueBoxForAutoOpen`
+    ///         from the first-deposit signal.
+    /// @dev    v55 (D-351-01 RE-DERIVE): the game-resident `Sub` (DegenerusGameStorage.sol:1867) is EIGHT
+    ///         fields summing to 29 used bytes (<= 32 = one slot) — the box-redesign added the per-sub
+    ///         stamp fields (`scorePlus1` uint16 + `amount` uint96) + the `lastOpenedDay` uint32 marker,
+    ///         dropped the standalone `fundingSource` (relocated to the sparse `_fundingSourceOf` map):
+    ///           uint8 dailyQuantity(1) + uint32 validThroughLevel(4) + uint8 reinvestPct(1)
+    ///           + uint8 flags(1) + uint16 scorePlus1(2) + uint96 amount(12) + uint32 lastAutoBoughtDay(4)
+    ///           + uint32 lastOpenedDay(4) = 29 bytes. The INTENT — single-slot packing, no NEW hot-path
+    ///         storage — is unchanged; only the shape it proves against (greps STORAGE_SRC, not AFKING_SRC).
     function testGas04PackingAndNoNewHotPathStorageSourcePresence() public view {
-        string memory afking = _stripComments(vm.readFile(AFKING_SRC));
+        string memory storage_ = _stripComments(vm.readFile(STORAGE_SRC));
         string memory game_ = _strippedGame();
 
-        // Sub struct: the six post-AFSUB fields at their exact widths sum to 31 bytes (<= 32 = one slot).
-        // Assert each field is byte-present at its width (so a widening regression flips RED). The
-        // two standalone bools were removed (folded into `flags`); `fundingSource` (address) added.
+        // Sub struct: the eight game-resident fields at their exact widths sum to 29 bytes (<= 32 = one slot).
         uint256 subBytes =
-            _structFieldBytes(afking, "uint8 dailyQuantity;", 1) +
-            _structFieldBytes(afking, "uint32 lastAutoBoughtDay;", 4) +
-            _structFieldBytes(afking, "uint32 validThroughLevel;", 4) +
-            _structFieldBytes(afking, "uint8 reinvestPct;", 1) +
-            _structFieldBytes(afking, "uint8 flags;", 1) +
-            _structFieldBytes(afking, "address fundingSource;", 20);
+            _structFieldBytes(storage_, "uint8 dailyQuantity;", 1) +
+            _structFieldBytes(storage_, "uint32 validThroughLevel;", 4) +
+            _structFieldBytes(storage_, "uint8 reinvestPct;", 1) +
+            _structFieldBytes(storage_, "uint8 flags;", 1) +
+            _structFieldBytes(storage_, "uint16 scorePlus1;", 2) +
+            _structFieldBytes(storage_, "uint96 amount;", 12) +
+            _structFieldBytes(storage_, "uint32 lastAutoBoughtDay;", 4) +
+            _structFieldBytes(storage_, "uint32 lastOpenedDay;", 4);
         assertLe(subBytes, 32, "GAS-04: Sub struct fields sum to <= 32 bytes (one slot)");
-        assertEq(subBytes, 31, "GAS-04/TOMB-05: Sub is 31 used bytes (post-OPENE-01: bools folded into flags + address fundingSource)");
-        // The two prior standalone bools must be GONE (folded into `flags`) — a regression that
-        // re-introduces a standalone bool field would push the struct over one slot.
-        assertEq(_countOccurrences(afking, "bool drainGameCreditFirst;"), 0, "GAS-04/TOMB-05: drainGameCreditFirst bool folded into flags (no standalone field)");
-        assertEq(_countOccurrences(afking, "bool useTickets;"), 0, "GAS-04/TOMB-05: useTickets bool folded into flags (no standalone field)");
+        assertEq(subBytes, 29, "GAS-04 (v55): the game-resident Sub is 29 used bytes (8 fields, one slot)");
         // The `struct Sub {` declaration is byte-present (the packed sub record exists at all).
-        assertGt(_countOccurrences(afking, "struct Sub {"), 0, "GAS-04: Sub struct present (the packed sub record)");
+        assertGt(_countOccurrences(storage_, "struct Sub {"), 0, "GAS-04: Sub struct present (the packed sub record)");
+        // The two prior standalone bools must be GONE (folded into `flags`) — re-introducing one would push
+        // the struct over one slot.
+        assertEq(_countOccurrences(storage_, "bool drainGameCreditFirst;"), 0, "GAS-04: drainGameCreditFirst bool folded into flags");
+        assertEq(_countOccurrences(storage_, "bool useTickets;"), 0, "GAS-04: useTickets bool folded into flags");
 
         // boxCursor / boxCursorIndex are uint48 (the packed cursor pair).
         assertGt(_countOccurrences(game_, "uint48 internal boxCursor;"), 0, "GAS-04: boxCursor is uint48");
         assertGt(_countOccurrences(game_, "uint48 internal boxCursorIndex;"), 0, "GAS-04: boxCursorIndex is uint48");
 
-        // No new hot-path storage: enqueueBoxForAutoOpen is the ONLY crank-added storage write, and it is
-        // an onlySelf external fn fired from the first-deposit signal — NOT inside degeneretteResolve/autoOpen
-        // and NOT on the bet-placement path.
+        // No new hot-path storage: enqueueBoxForAutoOpen is the ONLY crank-added storage write (the
+        // first-deposit enqueue), an onlySelf external fn — NOT on the bet/box-placement hot path.
         assertEq(_countOccurrences(game_, "function enqueueBoxForAutoOpen("), 1, "GAS-04: single enqueueBoxForAutoOpen (first-deposit enqueue)");
-        // enqueueBoxForAutoOpen is onlySelf (msg.sender == address(this)) — keeps the enqueue authority-gated.
-        assertGt(_countOccurrences(game_, "function enqueueBoxForAutoOpen("), 0, "GAS-04: enqueueBoxForAutoOpen present (off the placement hot path)");
     }
 
     // =========================================================================
     // G1-G13 — security-floor guard byte-presence (companion to 319-GAS-05-GUARDRAILS.md)
     // =========================================================================
 
-    /// @notice G1-G13 (RESEARCH §GAS-05, `feedback_security_over_gas` HARD floor): every security-floor
-    ///         guard is byte-present (comment-stripped) at its source. A future regression that deletes
-    ///         a guard makes one of these gates flip to 0 -> RED. This is the test-side pin for the
-    ///         Plan-04 GAS-05 audit deliverable's reject-set.
+    /// @notice G1-G13 (`feedback_security_over_gas` HARD floor): every security-floor guard is byte-present
+    ///         (comment-stripped) at its source. A regression that deletes a guard makes a gate flip to 0
+    ///         -> RED. v55: the afking-side guards (G10 swap-pop, the consent gate) repoint to
+    ///         GameAfkingModule; the removed-surface batchPurchase keeper-gate (G9 AF_KING) is DROPPED.
     function testG1ThroughG13GuardsBytePresent() public view {
         string memory game_ = _strippedGame();
         string memory degenerette = _stripComments(vm.readFile(DEGENERETTE_SRC));
         string memory lootbox = _stripComments(vm.readFile(LOOTBOX_SRC));
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
 
-        // G1 — RngNotReady resolve guard (bet) + placement mirror (DegeneretteModule:578 / :452).
+        // G1 — RngNotReady resolve guard (bet) + placement mirror.
         assertGt(_countOccurrences(degenerette, "revert RngNotReady()"), 0, "G1: RngNotReady resolve/placement guard byte-present");
         assertGt(_countOccurrences(degenerette, "if (rngWord == 0) revert RngNotReady();"), 0, "G1: bet resolve RngNotReady freeze guard");
 
-        // G2 — RngNotReady open-box guard / orphan-index skip. RD-3: the reworked autoOpen returns a
-        // count, so the orphan-index skip is now `return 0;` (was bare `return;`).
+        // G2 — RngNotReady open-box guard / orphan-index skip (autoOpen returns a count -> `return 0;`).
         assertGt(_countOccurrences(game_, "if (lootboxRngWordByIndex[index] == 0) return 0;"), 0, "G2: autoOpen orphan-index / RngNotReady skip (return 0)");
         assertGt(_countOccurrences(lootbox, "revert RngNotReady()"), 0, "G2: LootboxModule open RngNotReady guard byte-present");
 
-        // G3 — one-reward-per-item: bet delete (DegeneretteModule:580).
+        // G3 — one-reward-per-item: bet delete.
         assertGt(_countOccurrences(degenerette, "delete degeneretteBets[player][betId];"), 0, "G3: bet delete one-reward guard");
 
-        // G4 — one-reward-per-item: box zeroing (LootboxModule:531) + autoOpen already-emptied skip.
+        // G4 — one-reward-per-item: box zeroing + autoOpen already-emptied skip.
         assertGt(_countOccurrences(lootbox, "lootboxEthBase[index][player] = 0;"), 0, "G4: box base zeroing one-reward guard");
         assertGt(_countOccurrences(game_, "if (lootboxEthBase[index][player] == 0) continue;"), 0, "G4: autoOpen already-opened skip");
 
-        // G5 — double-crank short-circuit BatchAlreadyTaken (degeneretteResolve:1552).
+        // G5 — double-crank short-circuit BatchAlreadyTaken (degeneretteResolve).
         assertGt(_countOccurrences(game_, "revert BatchAlreadyTaken();"), 0, "G5: double-crank short-circuit BatchAlreadyTaken");
         assertGt(_countOccurrences(game_, "if (degeneretteBets[players[0]][betIds[0]] == 0) revert BatchAlreadyTaken();"), 0, "G5: item-0 probe short-circuit");
 
-        // G6 — batchPurchase per-player try/catch + slice-refund (Game:1705-1721).
-        assertGt(_countOccurrences(game_, "this._batchPurchaseUnit{value: slice}"), 0, "G6: batchPurchase per-player slice try");
+        // G6 — (v49 batchPurchase per-player slice try/catch) DROPPED, D-351-02 (removed surface). The
+        // afking per-sub STAGE is revert-free by construction (D-348-04 no valve); asserted ABSENT.
+        assertEq(_countOccurrences(game_, "this._batchPurchaseUnit{value: slice}"), 0, "G6 (D-351-02): batchPurchase per-slice try REMOVED (no valve under D-348-04)");
 
-        // G7 — crank per-item onlySelf isolation (degeneretteResolve:1641 / autoOpen:1662 onlySelf guards).
+        // G7 — crank per-item onlySelf isolation (the onlySelf wrappers + the onlySelf guard).
         assertGt(_countOccurrences(game_, "function _degeneretteResolveBet("), 0, "G7: _degeneretteResolveBet onlySelf wrapper");
         assertGt(_countOccurrences(game_, "function _autoOpenBox("), 0, "G7: _autoOpenBox onlySelf wrapper");
         assertGt(_countOccurrences(game_, "if (msg.sender != address(this)) revert E();"), 0, "G7: onlySelf (msg.sender == self) guard byte-present");
 
-        // (The v49 BURNIE keeper-burn all-or-nothing byte-presence assertion is RETIRED under
-        // v50.0 AFSUB-01 — Plan 335-04 deleted the keeper-burn function from both AfKing.sol and
-        // BurnieCoin.sol. There is no replacement guard because the semantics it protected are
-        // gone. The plan-level system-wide grep gate is the new structural attestation — Plan
-        // 335-05 verification §1.)
+        // G9 — (v49 batchPurchase AF_KING keeper gate) DROPPED, D-351-02. v55: the afking auth is the
+        // subscribe-time `operatorApprovals` consent gate (CONSENT-01 / OPENE-04) in GameAfkingModule.
+        assertEq(_countOccurrences(game_, "if (msg.sender != ContractAddresses.AF_KING) revert E();"), 0, "G9 (D-351-02): batchPurchase AF_KING keeper gate REMOVED");
+        assertGt(_countOccurrences(afking, "operatorApprovals["), 0, "G9 (v55): the subscribe-time operatorApprovals consent gate byte-present (CONSENT-01/OPENE-04)");
 
-        // G9 — keeper / address gating: batchPurchase AF_KING gate + autoBuy isOperatorApproved.
-        assertGt(_countOccurrences(game_, "if (msg.sender != ContractAddresses.AF_KING) revert E();"), 0, "G9: batchPurchase keeper gate");
-        assertGt(_countOccurrences(afking, "isOperatorApproved("), 0, "G9: autoBuy isOperatorApproved gate byte-present");
-
-        // G10 — swap-pop cursor integrity (AfKing _removeFromSet then continue without ++cursor).
+        // G10 — swap-pop cursor integrity (the game-resident set's _removeFromSet then continue, the
+        // _subscribers.pop() — now in GameAfkingModule).
         assertGt(_countOccurrences(afking, "_removeFromSet("), 0, "G10: swap-pop _removeFromSet byte-present");
+        assertGt(_countOccurrences(afking, "_subscribers.pop();"), 0, "G10: swap-pop _subscribers.pop() byte-present");
 
-        // G11 — bounded tombstone / cursor self-partition (AfKing:532).
-        assertGt(_countOccurrences(afking, "_autoBuyDay == today"), 0, "G11: cursor self-partition byte-present");
+        // G11 — per-entry day-stamp self-partition (the STAGE's same-day idempotency on lastAutoBoughtDay).
         assertGt(_countOccurrences(afking, "lastAutoBoughtDay"), 0, "G11: per-entry lastAutoBoughtDay day-stamp byte-present");
+        assertGt(_countOccurrences(afking, "sub.lastAutoBoughtDay >= processDay"), 0, "G11 (v55): the STAGE same-day idempotency self-partition byte-present");
 
-        // G12 — WWXRP excluded from the reward gate (330-03 flat-≥3 re-peg): currency == 3 (WWXRP) does
-        // NOT count toward the >=3 non-WWXRP reward gate, keeping the faucet closed (AUTO-04). The fork
-        // is now the `if (currency != 3) ++successCount;` reward-gate increment.
+        // G12 — WWXRP excluded from the reward gate (currency == 3 does NOT count toward the >=3 gate).
         assertGt(_countOccurrences(game_, "if (currency != 3) ++successCount;"), 0, "G12: WWXRP (currency==3) excluded from the >=3 reward gate");
 
-        // G13 — rngLocked / gameOver freeze guards. batchPurchase pre-checks both at entry; the open
-        // path no-ops during the freeze (RD-3). RD-2 REMOVED the AfKing autoBuy rngLock abort (buys are
-        // freeze-safe by construction — a box queues at the current LR_INDEX pre-entropy and the orphan
-        // hazard is defended on the open side), so the freeze guard is now the GAME-side autoOpen no-op,
-        // not an AfKing autoBuy abort.
-        assertGt(_countOccurrences(game_, "if (rngLockedFlag) revert RngLocked();"), 0, "G13: batchPurchase rngLocked pre-check");
-        assertGt(_countOccurrences(game_, "if (gameOver) revert E();"), 0, "G13: batchPurchase gameOver pre-check");
+        // G13 — rngLocked / gameOver freeze guards. The open path no-ops during the freeze (RD-3).
+        assertGt(_countOccurrences(game_, "if (rngLockedFlag) revert RngLocked();"), 0, "G13: rngLocked pre-check byte-present");
+        assertGt(_countOccurrences(game_, "if (gameOver) revert E();"), 0, "G13: gameOver pre-check byte-present");
         assertGt(_countOccurrences(game_, "if (rngLockedFlag || _livenessTriggered()) return 0;"), 0, "G13 (RD-3): autoOpen rngLock/liveness freeze no-op");
     }
 
-    /// @notice Anti-vacuity backstop for the G1-G13 grep gates: the comment-stripped sources are
-    ///         non-empty and a sentinel substring that DOES exist in code is found (proves the
-    ///         _stripComments + _countOccurrences harness is live, not silently returning 0).
+    /// @notice Anti-vacuity backstop for the grep gates: the comment-stripped sources are non-empty and a
+    ///         sentinel substring that DOES exist in code is found (proves the _stripComments +
+    ///         _countOccurrences harness is live, not silently returning 0). Extended to the v55 afking +
+    ///         storage sources (the repointed gates).
     function testGuardGrepHarnessIsLive() public view {
         string memory game_ = _strippedGame();
+        string memory afking = _stripComments(vm.readFile(AFKING_SRC));
+        string memory storage_ = _stripComments(vm.readFile(STORAGE_SRC));
         assertGt(bytes(game_).length, 1000, "stripped Game source is non-empty");
-        // A code identifier that unquestionably exists post-strip.
-        assertGt(_countOccurrences(game_, "function degeneretteResolve("), 0, "harness live: a known code symbol is found");
-        // A comment-only sentinel must be STRIPPED (proves comments are actually removed, so a
-        // guard mentioned only in NatSpec could not self-satisfy a gate).
+        assertGt(bytes(afking).length, 1000, "stripped GameAfkingModule source is non-empty (repoint live)");
+        assertGt(bytes(storage_).length, 1000, "stripped DegenerusGameStorage source is non-empty (repoint live)");
+        // Known code identifiers that unquestionably exist post-strip in each repointed source.
+        assertGt(_countOccurrences(game_, "function degeneretteResolve("), 0, "harness live: a known Game code symbol is found");
+        assertGt(_countOccurrences(afking, "function mintBurnie()"), 0, "harness live: a known GameAfkingModule code symbol is found");
+        assertGt(_countOccurrences(storage_, "struct Sub {"), 0, "harness live: a known DegenerusGameStorage code symbol is found");
+        // A comment-only sentinel must be STRIPPED (proves comments are actually removed).
         assertEq(
-            _countOccurrences(game_, "GREP_HARNESS_SENTINEL_NOT_IN_SOURCE_XYZ"),
+            _countOccurrences(afking, "GREP_HARNESS_SENTINEL_NOT_IN_SOURCE_XYZ"),
             0,
             "harness live: a non-existent symbol is correctly absent"
         );
@@ -348,114 +339,18 @@ contract KeeperLeversAndPacking is DeployProtocol {
     // Internal helpers
     // =========================================================================
 
-    function _lvl() internal view returns (uint24) {
-        return game.level() + 1;
-    }
-
     function _strippedGame() internal view returns (string memory) {
         return _stripComments(vm.readFile(GAME_SRC));
     }
 
     /// @dev Returns `widthBytes` iff the field declaration is byte-present in `src` (comment-stripped),
-    ///      else 0 — so a widening/removal of any Sub field changes the summed byte count and the
-    ///      GAS-04 assertion flips RED.
+    ///      else type(uint256).max — so a widening/removal of any Sub field overflows the <=32 assert.
     function _structFieldBytes(string memory src, string memory decl, uint256 widthBytes)
         internal
         pure
         returns (uint256)
     {
-        return _countOccurrences(src, decl) > 0 ? widthBytes : type(uint256).max; // max -> overflow the <=32 assert if missing
-    }
-
-    function _placeLosingBet(address better) internal returns (uint64 betId) {
-        uint32 customTicket = _losingTicketFor(INDEX, FIXED_WORD);
-        uint128 betAmount = 0.01 ether;
-        vm.prank(better);
-        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, customTicket, 0);
-        betId = _betNonce(better);
-    }
-
-    function _buyBox(address buyer, uint256 lootboxAmount) internal {
-        vm.prank(buyer);
-        game.purchase{value: lootboxAmount + 0.01 ether}(
-            buyer, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth
-        );
-    }
-
-    function _activeLootboxIndex() internal view returns (uint48) {
-        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        return uint48(packed & 0xFFFFFFFFFFFF);
-    }
-
-    function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
-        vm.store(address(game), slot, bytes32(rngWord));
-    }
-
-    function _readBetPacked(address owner, uint64 id) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(owner, uint256(DEGENERETTE_BETS_SLOT)));
-        bytes32 leaf = keccak256(abi.encode(uint256(id), uint256(inner)));
-        return uint256(vm.load(address(game), leaf));
-    }
-
-    function _betNonce(address who) internal view returns (uint64) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT)));
-        return uint64(uint256(vm.load(address(game), slot)));
-    }
-
-    function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_ETH_BASE_SLOT)));
-        bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        return uint256(vm.load(address(game), leaf));
-    }
-
-    /// @dev The REAL spin-0 result ticket for (index, word): packedTraitsDegenerette over
-    ///      keccak256(abi.encodePacked(word, uint32(index), 'Q')). Mirrors _resolveFullTicketBet.
-    function _resultTicketFor(uint48 index, uint256 word) internal pure returns (uint32) {
-        uint256 resultSeed = uint256(keccak256(abi.encodePacked(word, uint32(index), QUICK_PLAY_SALT)));
-        return DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
-    }
-
-    /// @dev A customTicket that matches the result in ZERO quadrants (clean loss -> resolution runs,
-    ///      slot deleted, zero winnings) so the only creditFlip is the post-loop crank reward.
-    function _losingTicketFor(uint48 index, uint256 word) internal pure returns (uint32 ticket) {
-        uint32 result = _resultTicketFor(index, word);
-        for (uint8 q; q < 4; q++) {
-            uint8 rQuad = uint8(result >> (q * 8));
-            uint8 rColor = (rQuad >> 3) & 7;
-            uint8 rSymbol = rQuad & 7;
-            uint8 newColor = (rColor + 1) & 7;
-            uint8 newSymbol = (rSymbol + 1) & 7;
-            uint8 newQuad = (newColor << 3) | newSymbol;
-            ticket |= (uint32(newQuad) << (q * 8));
-        }
-    }
-
-    function _countCoinflipStakeUpdated() internal returns (uint256 count) {
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; i++) {
-            if (
-                logs[i].emitter == address(coinflip) &&
-                logs[i].topics.length > 0 &&
-                logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG
-            ) count++;
-        }
-    }
-
-    /// @dev Count CoinflipStakeUpdated emissions whose indexed `player` topic == `who`. The event is
-    ///      `CoinflipStakeUpdated(address indexed player, uint32 indexed day, uint256 amount, uint256 newTotal)`
-    ///      so the player address is topics[1]. Used to isolate the crank-reward creditFlip (to the
-    ///      cranker) from box-winnings creditFlips (to the box owners).
-    function _countCoinflipStakeUpdatedFor(address who) internal returns (uint256 count) {
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; i++) {
-            if (
-                logs[i].emitter == address(coinflip) &&
-                logs[i].topics.length > 1 &&
-                logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
-                logs[i].topics[1] == bytes32(uint256(uint160(who)))
-            ) count++;
-        }
+        return _countOccurrences(src, decl) > 0 ? widthBytes : type(uint256).max;
     }
 
     // -------------------------------------------------------------------------
@@ -493,8 +388,8 @@ contract KeeperLeversAndPacking is DeployProtocol {
     }
 
     /// @dev Strip `//` line comments and lines whose first non-space char starts a block comment
-    ///      (`*` or `/*`), so NatSpec prose mentioning a symbol cannot self-satisfy/self-invalidate
-    ///      a grep gate. Code matches survive.
+    ///      (`*` or `/*`), so NatSpec prose mentioning a symbol cannot self-satisfy/self-invalidate a grep
+    ///      gate. Code matches survive.
     function _stripComments(string memory src) private pure returns (string memory) {
         bytes memory b = bytes(src);
         bytes memory out = new bytes(b.length);
