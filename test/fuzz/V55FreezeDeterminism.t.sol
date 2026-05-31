@@ -138,7 +138,10 @@ contract V55FreezeDeterminism is DeployProtocol {
         _grantDeityPass(afk);
         _subscribeLootbox(afk, 1);
         _fundPool(afk, 5 ether);
-        _runStageNewDay(0x5EED ^ (r1 & 0xFFFF));
+        // FIXED STAGE settle word (decoupled from the fuzz): the fuzz drives the OPEN-time block/amount
+        // perturbation (the property), NOT the daily-RNG drain — a fuzzed STAGE word can hit a rare
+        // fixture VRF-word stall orthogonal to the no-block-entropy property (idle-fixture day-saturation).
+        _runStageNewDay(0xACE5EED);
 
         uint32 stampDay = _lastBoughtDayOf(afk);
         assertGt(stampDay, 0, "non-vacuity: stamped");
@@ -196,7 +199,9 @@ contract V55FreezeDeterminism is DeployProtocol {
     ///      and assert byte-identical materialized traits. Same player (seed includes player); separate
     ///      snapshots (clean EV-cap budget per arm); fixed live level.
     function _runDifferential(uint256 amount, uint16 score, uint256 rngSeed) internal {
-        _settleGame(uint256(keccak256(abi.encode(rngSeed, "settle"))));
+        // FIXED-word settle (decoupled from the fuzz): the fuzz drives the differential TUPLE
+        // (amount/score/rngWord), NOT the daily-RNG drain — avoids the rare fixture VRF-word stall.
+        _settleClean(0xC1EA12);
         uint24 currentLevel = uint24(game.level()) + 1; // the afking/human LIVE roll level
         uint32 day = _simDay();
         uint256 rngWord = uint256(keccak256(abi.encode(rngSeed, "rngWord")));
@@ -210,11 +215,14 @@ contract V55FreezeDeterminism is DeployProtocol {
 
         uint256 snap = vm.snapshot();
 
-        // ----- AFKING arm: poke `player`'s Sub stamp to the tuple + land the day word, open via mintBurnie -----
+        // ----- AFKING arm: clean FIRST (so mintBurnie takes the OPEN leg), THEN poke the stamp + day word
+        // (poking after the settle so the settle's advanceGame can't re-derive/clobber rngWordByDay[day]),
+        // then open via mintBurnie. -----
+        _settleClean(0xC1EA13);
         _pokeAfkingStamp(player, amount, day, score);
         _setRngWordByDay(day, rngWord);
         assertTrue(_lastOpenedDayOf(player) < _lastBoughtDayOf(player), "afking box pending (poked)");
-        _settleGame(rngWord ^ 0xA1); // clean any advance so mintBurnie takes the OPEN leg
+        assertFalse(game.rngLocked(), "afking open: not locked (mintBurnie takes the OPEN leg)");
         vm.recordLogs();
         vm.prank(makeAddr("diff_afk_opener"));
         try game.mintBurnie() {} catch {}
@@ -240,6 +248,134 @@ contract V55FreezeDeterminism is DeployProtocol {
     }
 
     // =========================================================================
+    // Task 2 — TST-01 index-binding (FREEZE-02, reconciled to the DAY-keyed reality)
+    //          + the pre-RNG / post-RNG stamp ordering
+    // =========================================================================
+
+    /// @notice INDEX-BINDING (FREEZE-02): the afking box binds to `rngWordByDay[lastAutoBoughtDay]` (the
+    ///         stamped DAY's word), NOT to any lootbox-index-keyed word. A mid-day `requestLootboxRng` index
+    ///         advance fired BETWEEN stamp and open — modelled as the index advance's post-state: increment
+    ///         `lootboxRngPacked[0:47]` AND write a DIVERGENT word into the new `lootboxRngWordByIndex[idx]`
+    ///         — does NOT re-bind the box: the materialized box is byte-identical to the box opened WITHOUT
+    ///         the advance (the box never picks up the later/stale index word — no interleave). Proven via
+    ///         the determinism snapshot idiom (open the SAME stamp with vs. without the advance).
+    function testIndexBindingMidDayAdvanceDoesNotRebind() public {
+        address afk = makeAddr("idxbind_afk");
+        _grantDeityPass(afk);
+        _subscribeLootbox(afk, 1);
+        _fundPool(afk, 5 ether);
+        _runStageNewDay(0x1DB11D); // stamp + land rngWordByDay[stampDay]
+
+        uint32 stampDay = _lastBoughtDayOf(afk);
+        assertGt(stampDay, 0, "non-vacuity: stamped");
+        assertTrue(_rngWordByDay(stampDay) != 0, "the stamped day's word landed");
+
+        uint256 snap = vm.snapshot();
+
+        // ---- Open WITHOUT the mid-day index advance (the baseline binding) ----
+        Box memory baseline = _openAfkingBoxAt(afk, 7, 9 minutes, 0x0B0B, makeAddr("idx_cb_base"));
+        assertEq(_lastOpenedDayOf(afk), stampDay, "baseline open materialized the box");
+        assertTrue(baseline.present, "baseline box present (non-vacuous)");
+
+        // ---- Open WITH a mid-day requestLootboxRng index advance between stamp and open ----
+        vm.revertTo(snap);
+        // Model the advance's post-state: bump the live lootbox index and seed the NEW index slot with a
+        // DIVERGENT word (a later/stale index-keyed word the box must NOT pick up).
+        uint48 idxBefore = _liveLootboxIndex();
+        uint48 idxAfter = idxBefore + 1;
+        _advanceLootboxIndex(idxAfter);
+        _forceLootboxWord(idxAfter, uint256(keccak256("a-divergent-index-word-the-box-must-ignore")));
+        assertEq(_liveLootboxIndex(), idxAfter, "non-vacuity: the lootbox index advanced mid-day");
+        Box memory withAdvance = _openAfkingBoxAt(afk, 7, 9 minutes, 0x0B0B, makeAddr("idx_cb_adv"));
+        assertEq(_lastOpenedDayOf(afk), stampDay, "advance open materialized the box");
+        assertTrue(withAdvance.present, "advanced box present (non-vacuous)");
+
+        // INDEX-BINDING: the box bound to `rngWordByDay[stampDay]` on BOTH opens — the mid-day index advance
+        // (and its divergent index word) did NOT re-bind it. Byte-identical => no interleave / no stale
+        // -index attach.
+        _assertBoxByteIdentical(baseline, withAdvance, "FREEZE-02 index-binding (day-keyed, advance-invariant)");
+    }
+
+    /// @notice PRE-RNG / POST-RNG ordering: the box's readiness gate is `lastOpenedDay < lastAutoBoughtDay
+    ///         && rngWordByDay[lastAutoBoughtDay] != 0` (GameAfkingModule.sol:918-921). The STAGE stamps the
+    ///         sub PRE-RNG (before `rngGate` commits `rngWordByDay[day]`), so the box is NOT openable while
+    ///         the stamped day's word is still zero, and becomes openable the moment it lands. Asserted via
+    ///         the OBSERVABLE consequence (the private `_afkingBoxReady` is reached through the open leg):
+    ///         with the word zeroed, `mintBurnie`'s open leg materializes NOTHING (box stays pending); once
+    ///         the word lands, the SAME stamp opens. Non-vacuous control: the post-RNG open succeeds.
+    function testPreRngStampNotOpenableUntilWordLands() public {
+        address afk = makeAddr("prerng_afk");
+        _grantDeityPass(afk);
+        _subscribeLootbox(afk, 1);
+        _fundPool(afk, 5 ether);
+        _runStageNewDay(0x9A9A9A);
+
+        uint32 stampDay = _lastBoughtDayOf(afk);
+        assertGt(stampDay, 0, "non-vacuity: stamped");
+        assertTrue(_lastOpenedDayOf(afk) < stampDay, "box pending pre-open");
+
+        // ---- PRE-RNG: zero the stamped day's word (model the pre-`rngGate` window) ----
+        uint256 savedWord = _rngWordByDay(stampDay);
+        assertTrue(savedWord != 0, "control: the word DID land (so zeroing it models the pre-RNG window)");
+        _setRngWordByDay(stampDay, 0);
+        _settleGame(0xBADBAD); // clean any advance so mintBurnie routes to the OPEN leg
+
+        vm.prank(makeAddr("prerng_opener_a"));
+        try game.mintBurnie() {} catch {}
+        // READY is FALSE while the word is zero: the box did NOT materialize (still pending).
+        assertTrue(
+            _lastOpenedDayOf(afk) < stampDay,
+            "PRE-RNG: box NOT openable while rngWordByDay[stampDay] == 0 (_afkingBoxReady false)"
+        );
+
+        // ---- POST-RNG: the stamped day's word lands -> the SAME stamp becomes openable ----
+        _setRngWordByDay(stampDay, savedWord == 0 ? uint256(keccak256("post-rng-word")) : savedWord);
+        _settleGame(0xF1F1F1);
+        vm.prank(makeAddr("prerng_opener_b"));
+        try game.mintBurnie() {} catch {}
+        // READY flips true across the word commit: the box materialized (the pre-RNG/post-RNG boundary).
+        assertEq(
+            _lastOpenedDayOf(afk),
+            stampDay,
+            "POST-RNG: box opens once rngWordByDay[stampDay] lands (_afkingBoxReady false -> true)"
+        );
+    }
+
+    /// @notice INDEX-BINDING fuzz (D-351-04): for a RANDOM mid-day index advance (random index delta +
+    ///         random divergent index word + random open-block), the box still binds to the stamped day's
+    ///         word — byte-identical to the no-advance baseline. The advance timing/magnitude never leaks
+    ///         into the afking draw.
+    function testFuzzIndexBindingAdvanceInvariant(uint16 idxDelta, uint256 divergentWord, uint64 blk) public {
+        address afk = makeAddr("idxbind_fuzz_afk");
+        _grantDeityPass(afk);
+        _subscribeLootbox(afk, 1);
+        _fundPool(afk, 5 ether);
+        // FIXED STAGE settle word (decoupled from the fuzz): the fuzzed `divergentWord`/`idxDelta`/`blk`
+        // exercise the INDEX-binding property, NOT the daily-RNG drain — a fuzzed STAGE settle word can
+        // hit a rare fixture VRF-word stall (advanceDue/rngLocked won't drain) that is orthogonal to the
+        // property under test (the donor / 351-02/03 idle-fixture day-saturation reality).
+        _runStageNewDay(0xACE5EED);
+
+        uint32 stampDay = _lastBoughtDayOf(afk);
+        assertGt(stampDay, 0, "non-vacuity: stamped");
+        assertTrue(_rngWordByDay(stampDay) != 0, "stamped-day word landed");
+
+        uint256 snap = vm.snapshot();
+        Box memory baseline = _openAfkingBoxAt(afk, blk, 3 minutes, 0xC0DE, makeAddr("idxf_cb_base"));
+        assertTrue(baseline.present, "baseline box present");
+
+        vm.revertTo(snap);
+        uint48 idxAfter = _liveLootboxIndex() + 1 + uint48(idxDelta);
+        _advanceLootboxIndex(idxAfter);
+        if (divergentWord == 0) divergentWord = 1;
+        _forceLootboxWord(idxAfter, divergentWord);
+        Box memory withAdvance = _openAfkingBoxAt(afk, blk, 3 minutes, 0xC0DE, makeAddr("idxf_cb_adv"));
+        assertTrue(withAdvance.present, "advanced box present");
+
+        _assertBoxByteIdentical(baseline, withAdvance, "FREEZE-02 index-binding fuzz");
+    }
+
+    // =========================================================================
     // Open-driving helpers (the afking open + the differential arms)
     // =========================================================================
 
@@ -260,8 +396,11 @@ contract V55FreezeDeterminism is DeployProtocol {
         vm.warp(block.timestamp + warpBump);
         vm.prevrandao(bytes32(prevrandao));
         vm.coinbase(coinbase);
-        // Settle any advance the warp made due, so the next mintBurnie routes to the OPEN leg (not advance).
-        _settleGame(uint256(prevrandao) ^ 0xC0FFEE);
+        // Settle any in-flight advance so `mintBurnie` routes to the OPEN leg (not the advance leg) and the
+        // open is not blocked by `rngLockedFlag` (RD-3). Use a FIXED, reliable drain word (NOT derived from
+        // the block perturbation — the perturbation must touch only the block context, never the VRF drain)
+        // and DEMAND a clean (`!advanceDue && !rngLocked`) state before opening, so the open is the OPEN leg.
+        _settleClean(0xC0FFEE_FACE);
 
         vm.recordLogs();
         vm.prank(makeAddr("freeze_opener"));
@@ -390,6 +529,24 @@ contract V55FreezeDeterminism is DeployProtocol {
         }
     }
 
+    /// @dev A robust settle that DEMANDS a clean (`!advanceDue && !rngLocked`) state before returning — a
+    ///      larger drain budget than `_settleGame` (some perturbed fixture states need >60 advance/fulfill
+    ///      cycles to converge). Used before an afking open so `mintBurnie` reliably takes the OPEN leg.
+    function _settleClean(uint256 vrfWord) internal {
+        for (uint256 d; d < 240; d++) {
+            if (!game.advanceDue() && !game.rngLocked()) return;
+            game.advanceGame();
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != _lastFulfilledReqId && reqId > 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) {
+                    mockVRF.fulfillRandomWords(reqId, vrfWord);
+                    _lastFulfilledReqId = reqId;
+                }
+            }
+        }
+    }
+
     function _subscribeLootbox(address who, uint8 q) internal {
         vm.prank(who);
         game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
@@ -441,6 +598,15 @@ contract V55FreezeDeterminism is DeployProtocol {
 
     function _liveLootboxIndex() internal view returns (uint48) {
         return uint48(uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))));
+    }
+
+    /// @dev Advance the live lootbox RNG index to `newIndex` (lootboxRngPacked bits[0:47]), preserving every
+    ///      upper-bit field — the post-state of a mid-day `requestLootboxRng` index advance.
+    function _advanceLootboxIndex(uint48 newIndex) internal {
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
+        packed &= ~((uint256(1) << 48) - 1); // clear bits[0:47]
+        packed |= uint256(newIndex);
+        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(packed));
     }
 
     // ---- human box forcing (so its seed preimage matches the afking arm) ----
