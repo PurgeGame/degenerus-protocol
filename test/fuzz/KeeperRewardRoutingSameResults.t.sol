@@ -16,51 +16,57 @@ contract FFKeyHarness is DegenerusGameStorage {
     }
 }
 
-/// @title KeeperRewardRoutingSameResults -- TST-03 (Phase 332): the advanceGame reward-routing rework
-///        (ADV-01..05) proven EMPIRICALLY plus the two GASOPT micro-opts proven same-results.
+/// @title KeeperRewardRoutingSameResults -- TST-02 (Phase 351, v55.0 game-resident): the afking router
+///        reward-routing (the advance bounty re-homed onto `mintBurnie()`) proven EMPIRICALLY, plus the
+///        `afkingSnapshot` batched-read same-results + the `owedMap` pointer-hoist same-results.
 ///
-/// @notice TST-03 closes the SC3 reward-routing + same-results bar for the v49 unified keeper-router.
-///         The re-homing must demonstrably MOVE the advance bounty from the standalone path to the
-///         router WITHOUT changing the advance behavior, and the two gas-only micro-opts must produce
-///         byte-identical RESULTS.
+/// @notice This file is the PRIMARY DIFFERENTIAL same-results scaffolding (D-351-05): the
+///         `CoinflipStakeUpdated` recipient-isolated topic-decode (:COINFLIP_STAKE_UPDATED_SIG) and the
+///         `_settleGame` VRF-drain helper are the exact instruments the v55 box differential proofs
+///         (351-04/05/08) port. Both are preserved VERBATIM here.
 ///
-///   Reward routing (the load-bearing re-home proof):
-///   - advanceGame() called STANDALONE (directly on GAME) earns the caller NOTHING — the 3 in-callee
-///     `creditFlip` sites were removed at ADV-01; `advanceGame` returns only `uint8 mult` (no credit).
-///   - The SAME advance driven via `afKing.doWork()` CREDITS the keeper: the router pays
-///     `unit * ADVANCE_RATIO_NUM * mult` (AfKing.sol:899). The stall multiplier is HONORED — a stalled
-///     new-day advance (`mult > 1`) credits STRICTLY MORE than the un-stalled (`mult == 1`) advance,
-///     proven by RELATIVE magnitude (not the GAS-calibrated 331 peg constant, which this proof does
-///     NOT own). The mid-day partial-drain leg (`mult == 1`) is REWARDED. The gameover leg
-///     (`mult == 0`) is UNREWARDED — zero creditFlip.
+///         The reward routing (the load-bearing re-home proof, reframed onto `mintBurnie`):
+///   - `advanceGame()` called STANDALONE (directly on GAME) earns the caller NOTHING — `advanceGame`
+///     returns only `uint8 mult` and self-credits nobody (the 3 in-callee `creditFlip` sites were removed
+///     at ADV-01 and never restored; v55 keeps the advance leg unrewarded standalone).
+///   - The SAME advance driven via `game.mintBurnie()` CREDITS the keeper: the router pays
+///     `unit * ADVANCE_RATIO_NUM * mult` (GameAfkingModule.sol:995). The stall multiplier is HONORED — a
+///     stalled new-day advance (`mult > 1`) credits STRICTLY MORE than the un-stalled (`mult == 1`)
+///     advance, proven by RELATIVE magnitude (not the GAS-calibrated peg constant). The mid-day
+///     partial-drain leg (`mult == 1`) is REWARDED. The gameover leg (`mult == 0`) is UNREWARDED — zero
+///     creditFlip (the one-category early-return returns at the `bountyEarned == 0` skip, no revert).
 ///   All reward observation is recipient-isolated to the keeper via the `_countCoinflipStakeUpdatedFor`
-///   / `_creditAmountFor` oracle (topics[1] == keeper), so a box-owner's / player's winnings credit can
-///   never inflate or mask the router bounty count or amount.
+///   / `_keeperCreditCountAndAmount` oracle (topics[1] == keeper), so a box-owner's / player's winnings
+///   credit can never inflate or mask the router bounty count or amount.
 ///
-///   GASOPT same-results (Foundry behavioral / value-equality — these opts touch NO RNG/result):
-///   - GASOPT-03 (DegenerusGame.keeperSnapshot, :2628 — SUBSUMES the original GASOPT-02): the batched
-///     read returns the SAME `(mintPriceWei, rngLocked_, claimables[])` as N individual
-///     `mintPrice()` / `rngLocked()` / `claimableWinningsOf(player)` accessors, element-by-element, and
-///     an autoBuy driven through it produces identical buy outcomes. There is NO separate AfKing
-///     per-iteration `claimableWinningsOf` hoist site — GASOPT-02 was subsumed; this proof does NOT
-///     search AfKing.sol for one (RESEARCH Pitfall 5; count is 0).
-///   - GASOPT-01 (DegenerusGameMintModule `owedMap` pointer hoist, :399 + :673): the
-///     `processTicketBatch` / `processFutureTicketBatch` ticket-processing RESULTS (per-player owed
-///     drain) are byte-identical to the expected per-player accounting. The hoist
-///     (`mapping(...) storage owedMap = ticketsOwedPacked[rk]`) is `rk`-loop-invariant, so a multi-player
-///     backlog drains every player's owed to zero — a broken pointer hoist would skip / double-process a
-///     player, stranding non-zero owed or mis-decrementing it. This is observed via the contract's own
-///     `ticketsOwedPacked` storage (the per-player owed truth) after a real advance-driven drain.
+///   Batched-read same-results (Foundry behavioral / value-equality — touches NO RNG/result):
+///   - `afkingSnapshot` (DegenerusGame.sol:2645 — the v55 successor to the v49 `keeperSnapshot`, renamed +
+///     relocated game-resident; D-351-01): the batched read returns the SAME
+///     `(mintPriceWei, rngLocked_, claimables[], afkingFundings[])` as N individual
+///     `mintPrice()` / `rngLocked()` / `claimableWinningsOf(player)` / `afkingFundingOf(player)`
+///     accessors, element-by-element. (`afkingSnapshot` is an OFF-hot-path Game view — called only by
+///     `DegenerusVault.sol:518` — NOT a GAS-02 STATICCALL violation; the v55 hot path reads
+///     `afkingFunding[*]` in-context.)
+///   - GASOPT-01 (DegenerusGameMintModule `owedMap` pointer hoist): the `processFutureTicketBatch`
+///     ticket-processing RESULTS (per-player owed drain) are byte-identical to the expected per-player
+///     accounting. The hoist (`mapping(...) storage owedMap = ticketsOwedPacked[rk]`) is `rk`-loop-invariant,
+///     so a multi-player backlog drains every player's owed to zero — a broken pointer hoist would
+///     skip / double-process a player, stranding non-zero owed or mis-decrementing it. Observed via the
+///     contract's own `ticketsOwedPacked` storage (the per-player owed truth) after a real advance drain.
 ///
-/// @dev The `_countCoinflipStakeUpdated` / `_countCoinflipStakeUpdatedFor` log-count helpers, the
-///      `_settleGame` VRF drain, the buy-leg slot-forcing (`_pinBuyLegWalkedForToday`), and the
-///      `_setupHealthyBuyingSubs` driving mirror KeeperRouterOneCategory.t.sol / AfKingConcurrency.t.sol.
-///      The far-future ticket seeding (`_seedFarTickets`) + claimable seeding (`_seedClaimable`) mirror
-///      FarFutureSalvageSwap.t.sol. Zero contracts/*.sol mutation; test-only; FROZEN subject honored.
+/// @dev The five call-site deltas applied (D-351-01, PATTERNS §"five call-site deltas"):
+///   Δ3 doWork→mintBurnie: `afKing.doWork()` -> `game.mintBurnie()` (the rewarded router).
+///   Δ4 autoBuy: `afKing.autoBuy(N)` has NO successor — the per-sub buy folded into `advanceGame()`'s
+///      required-path STAGE; driven via a new-day `advanceGame()` + the `_settleGame` VRF drain.
+///   Δ5 views/funding: `afKing.subscriberCount()` -> `_subscribers.length` via vm.load (RE-DERIVED slot
+///      68); `afKing.depositFor` -> `game.depositAfkingFunding`; `keeperSnapshot` -> `afkingSnapshot`.
+///   The pinned-slot constants are RE-DERIVED via `forge inspect storage DegenerusGame` (the AfKing
+///   standalone-layout SUBOF_SLOT=1 / TICKET_QUEUE_SLOT=12 constants were WRONG). Zero contracts/*.sol
+///   mutation; test-only; FROZEN subject (453f8073) honored.
 contract KeeperRewardRoutingSameResults is DeployProtocol {
     // -------------------------------------------------------------------------
-    // creditFlip-count / amount oracle (CrankLeversAndPacking.t.sol:75 / :523-548 — verbatim port,
-    // extended with a recipient-isolated AMOUNT decode for the multiplier-honored magnitude check)
+    // creditFlip-count / amount oracle — the recipient-isolated DIFFERENTIAL instrument
+    // (PRESERVED VERBATIM: 351-04/05/08 port this topic-decode).
     // -------------------------------------------------------------------------
 
     /// @dev keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)") — emitted once per
@@ -70,22 +76,20 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)");
 
     // -------------------------------------------------------------------------
-    // AfKing pinned slot layout (mirrors KeeperRouterOneCategory / AfKingConcurrency)
+    // DegenerusGame pinned slot layout (RE-DERIVED via `forge inspect storage DegenerusGame`;
+    // the AfKing-standalone SUBOF_SLOT=1 / TICKET_QUEUE_SLOT=12 / TICKETS_OWED_PACKED_SLOT=13 were WRONG).
     // -------------------------------------------------------------------------
 
-    uint256 private constant SUBOF_SLOT = 1;   // _subOf mapping root (address => Sub, one slot)
-    uint256 private constant OFF_LASTSWEPT = 1; // uint32 lastAutoBoughtDay (bytes 1..4)
-    uint256 private constant AUTOBUY_SLOT = 4;  // _autoBuyDay (uint32 bytes 0..3) + _autoBuyCursor (uint224)
+    uint256 private constant SUBOF_SLOT = 66; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay (bytes 21..24 of the Sub slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 68; // _subscribers address[] (length here)
+    uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)
+    uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
-    // -------------------------------------------------------------------------
-    // DegenerusGame pinned slot layout (forge inspect; mirrors FarFutureSalvageSwap / FarFutureIntegration)
-    // -------------------------------------------------------------------------
-
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1;       // uint128 packed at offset 16 of slot 1
-    uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7;   // mapping(address => uint256)
-    uint256 private constant TICKET_QUEUE_SLOT = 12;        // mapping(uint24 => address[])
-    uint256 private constant TICKETS_OWED_PACKED_SLOT = 13; // mapping(uint24 => mapping(address => uint40))
-    uint256 private constant GAMEOVER_SLOT_BIT = 23;        // public bool gameOver at byte 23 of its packed slot
+    uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 packed at offset 16 of slot 1
+    uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7; // mapping(address => uint256)
+    uint256 private constant TICKET_QUEUE_SLOT = 13; // mapping(uint24 => address[]) (RE-DERIVED: was 12)
+    uint256 private constant TICKETS_OWED_PACKED_SLOT = 14; // mapping(uint24 => mapping(address => uint40)) (RE-DERIVED: was 13)
 
     FFKeyHarness private ffk;
     address private keeper;
@@ -95,7 +99,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         // One keeper-local day off the deploy boundary so the day index is a clean, stable value
-        // (mirrors KeeperRouterOneCategory / AfKingConcurrency).
+        // (mirrors AfKingConcurrency / V55SetMutationOpenE).
         vm.warp(block.timestamp + 1 days);
         mockVRF.fundSubscription(1, 100e18);
 
@@ -107,7 +111,8 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     /// @dev Settle the game to a clean state: complete the pending day-advance (drive advanceGame +
     ///      deliver the mock VRF word + drain the rngLock) until advanceDue() is false and we are not
-    ///      locked. Mirrors KeeperRouterOneCategory._settleGame / RngLockDeterminism._completeDay.
+    ///      locked. PRESERVED VERBATIM — the donor VRF-drain helper (PATTERNS §"Settle-to-clean-state
+    ///      VRF drain"); 351-04/05/08 port this.
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
@@ -124,12 +129,12 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 1 — advanceGame UNREWARDED-standalone vs REWARDED-via-doWork (multiplier honored)
+    // Task 1 — advanceGame UNREWARDED-standalone vs REWARDED-via-mintBurnie (multiplier honored)
     // =========================================================================
 
-    /// @notice STANDALONE advanceGame() earns the caller NOTHING (ADV-01: the 3 in-callee creditFlip
-    ///         sites were removed; advanceGame returns only `uint8 mult`), yet the day STILL ADVANCES
-    ///         (advance is fully functional standalone — it is just the unrewarded liveness fallback).
+    /// @notice STANDALONE advanceGame() earns the caller NOTHING (the in-callee creditFlip sites were
+    ///         removed; advanceGame returns only `uint8 mult`), yet the day STILL ADVANCES (advance is
+    ///         fully functional standalone — it is just the unrewarded liveness fallback).
     function testAdvanceStandaloneUnrewarded() public {
         // Settle the deploy-day advance, then roll the wall clock so a fresh day-advance is due.
         _settleGame(0x57A11A10E0001);
@@ -144,11 +149,11 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         vm.prank(caller);
         uint8 mult = game.advanceGame();
 
-        // The caller earned ZERO router bounty — the standalone advance pays nothing (re-homed to doWork).
+        // The caller earned ZERO router bounty — the standalone advance pays nothing (re-homed to mintBurnie).
         assertEq(
             _countCoinflipStakeUpdatedFor(caller),
             0,
-            "STANDALONE: advanceGame() credits the caller zero (the 3 in-callee creditFlip removed at ADV-01)"
+            "STANDALONE: advanceGame() credits the caller zero (no in-callee creditFlip)"
         );
         // And it returned a live (non-gameover) multiplier — the advance ran, it just paid nobody.
         assertGt(mult, 0, "STANDALONE: advanceGame returned a live mult (a normal day-advance, not gameover)");
@@ -160,12 +165,12 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         assertTrue(progressed, "non-vacuity: the standalone advance ticked the day (still fully functional)");
     }
 
-    /// @notice REWARDED via doWork with the MULTIPLIER HONORED: the SAME new-day advance, driven via
-    ///         doWork at a HIGHER STALL, credits the keeper STRICTLY MORE than at the un-stalled base.
-    ///         Proven by RELATIVE magnitude (the 1/2/4/6 ladder flows through `unit * 2 * mult`), never
-    ///         by the GAS-calibrated 331 peg constant. mintPrice is identical across both scenarios
-    ///         (same deploy level), so `unit` is identical and the credit ratio == the mult ratio.
-    function testAdvanceViaDoWorkRewardedMultiplierHonored() public {
+    /// @notice REWARDED via mintBurnie with the MULTIPLIER HONORED: the SAME new-day advance, driven via
+    ///         mintBurnie at a HIGHER STALL, credits the keeper STRICTLY MORE than at the un-stalled base.
+    ///         Proven by RELATIVE magnitude (the 1/2/4/6 ladder flows through `unit * ADVANCE_RATIO_NUM *
+    ///         mult`), never by the GAS-calibrated peg constant. mintPrice is identical across both
+    ///         scenarios (same deploy level), so `unit` is identical and the credit ratio == the mult ratio.
+    function testAdvanceViaMintBurnieRewardedMultiplierHonored() public {
         // Settle so we start from a clean, not-due, not-locked baseline.
         _settleGame(0xADADAD0002);
         assertFalse(game.advanceDue(), "pre: settled");
@@ -174,15 +179,12 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         uint256 snap = vm.snapshot();
 
         // --- Scenario A: lightly-stalled new-day advance (mult == 2: >= 20 min past the day boundary) ---
-        // We use a 31-minute offset so the advance ALSO clears the _enforceDailyMintGate 30-minute
-        // permissionless bypass (a fresh keeper that has not minted today otherwise reverts
-        // MustMintToday). 31 min => mult == 2 (the >= 20-min ladder step), gate bypassed.
-        uint256 lowStallCredit = _doWorkAdvanceCreditAtStall(31 minutes);
+        uint256 lowStallCredit = _mintBurnieAdvanceCreditAtStall(31 minutes);
         assertGt(lowStallCredit, 0, "REWARDED: the lightly-stalled advance credited the keeper (mult==2)");
 
         // --- Scenario B: heavily-stalled new-day advance (mult == 6: >= 2 hours past the day boundary) ---
         vm.revertTo(snap);
-        uint256 highStallCredit = _doWorkAdvanceCreditAtStall(2 hours + 1 minutes);
+        uint256 highStallCredit = _mintBurnieAdvanceCreditAtStall(2 hours + 1 minutes);
         assertGt(highStallCredit, 0, "REWARDED: the heavily-stalled advance credited the keeper (mult==6)");
 
         // The multiplier is HONORED: the higher stall credits STRICTLY MORE (unit identical, only mult
@@ -195,34 +197,31 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         );
     }
 
-    /// @dev Drive ONE doWork() advance leg at `stallElapsed` past a fresh day boundary and return the
+    /// @dev Drive ONE mintBurnie() advance leg at `stallElapsed` past a fresh day boundary and return the
     ///      keeper's credited router-bounty amount. Aligns the wall clock so a new-day advance is due and
-    ///      the stall window resolves to the intended multiplier; pins the buy leg empty so doWork routes
-    ///      straight to the advance leg.
-    function _doWorkAdvanceCreditAtStall(uint256 stallElapsed) internal returns (uint256) {
+    ///      the stall window resolves to the intended multiplier. In v55 mintBurnie's structural
+    ///      early-return takes the advance leg directly whenever `advanceDue()` is TRUE (no separate buy
+    ///      leg to pin — the buy folded into advanceGame's STAGE), so no buy-leg pinning is needed.
+    function _mintBurnieAdvanceCreditAtStall(uint256 stallElapsed) internal returns (uint256) {
         // Move to the START of the NEXT calendar-day window, then add the stall offset. The advance
         // module derives day = _simulatedDayIndexAt(ts) = (ts-82620)/1days + 1, and the stall window is
-        // elapsed = ts - ((day-1)*1days + 82620) = (ts-82620) mod 1days (DEPLOY_DAY_BOUNDARY==0). Rolling
-        // _today() forward by 1 makes a fresh day-advance due (day != dailyIdx after settle); the offset
-        // INTO that day window is exactly `stallElapsed`, so the stall ladder resolves as intended.
+        // elapsed = (ts-82620) mod 1days (DEPLOY_DAY_BOUNDARY==0). Rolling _today() forward by 1 makes a
+        // fresh day-advance due; the offset INTO that day window is exactly `stallElapsed`, so the stall
+        // ladder resolves as intended.
         uint32 dayNow = _today();
         uint256 nextDayStart = (uint256(dayNow + 1) * 1 days) + 82_620; // start of the next day's window
         vm.warp(nextDayStart + stallElapsed);
         assertTrue(game.advanceDue(), "pre: a fresh day-advance is due at the chosen stall");
 
-        // Force the router past the buy leg (no backlog due) into the advance leg.
-        _pinBuyLegWalkedForToday();
-        _assertBuyLegEmpty();
-
         vm.recordLogs();
         vm.prank(keeper);
-        afKing.doWork();
+        game.mintBurnie();
 
         // Read the recorded logs ONCE (vm.getRecordedLogs drains them) and derive BOTH the count and the
         // credited amount in a single pass, so the amount is not lost to a prior drain.
         (uint256 count, uint256 amount) = _keeperCreditCountAndAmount();
         // Exactly one router bounty credit on the advance leg.
-        assertEq(count, 1, "REWARDED: the advance leg credits the keeper exactly once via doWork");
+        assertEq(count, 1, "REWARDED: the advance leg credits the keeper exactly once via mintBurnie");
         return amount;
     }
 
@@ -243,14 +242,14 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         }
     }
 
-    /// @notice MID-DAY partial-drain leg (mult == 1) is REWARDED via doWork: a `day == dailyIdx` advance
-    ///         that drains a non-empty read slot returns mult=1 (ADV-05/D-07, no escalation), so the
-    ///         router credits the keeper exactly once. The mid-day partial-drain path (AdvanceModule:194)
-    ///         is reachable only at `day == dailyIdx`; after a clean settle we stage it by seeding a
-    ///         multi-player read-slot backlog with `ticketsFullyProcessed = false` (the same condition the
-    ///         contract reaches when tickets are bought after the day already advanced). The advance then
-    ///         takes the mid-day branch, `_runProcessTicketBatch` WORKS, and `mult` returns 1.
-    function testMidDayPartialDrainRewardedViaDoWork() public {
+    /// @notice MID-DAY partial-drain leg (mult == 1) is REWARDED via mintBurnie: a `day == dailyIdx`
+    ///         advance that drains a non-empty read slot returns mult=1 (ADV-05/D-07, no escalation), so
+    ///         the router credits the keeper exactly once. The mid-day partial-drain path is reachable
+    ///         only at `day == dailyIdx`; after a clean settle we stage it by seeding a multi-player
+    ///         read-slot backlog with `ticketsFullyProcessed = false` (the same condition the contract
+    ///         reaches when tickets are bought after the day already advanced). The advance then takes
+    ///         the mid-day branch, `_runProcessTicketBatch` WORKS, and `mult` returns 1.
+    function testMidDayPartialDrainRewardedViaMintBurnie() public {
         // Settle to a clean, not-due, not-locked baseline: `day == dailyIdx` (the mid-day precondition).
         _settleGame(0x1D0E0003);
         assertFalse(game.advanceDue(), "pre: settled (advance not due)");
@@ -264,10 +263,9 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
         // Seed a LARGE multi-player read-slot backlog (each player owed whole tickets) and clear the
         // fully-processed flag so advanceDue() is TRUE mid-day (read slot non-empty + not fully processed).
-        // The backlog is sized to exceed the per-batch write budget (WRITES_BUDGET_SAFE=550, 65%-scaled on
-        // the first batch) so the mid-day _runProcessTicketBatch WORKS but does NOT finish -> the advance
-        // takes the STAGE_TICKETS_WORKING partial-drain return (mult==1) rather than fully draining and
-        // falling through to NotTimeYet.
+        // The backlog is sized to exceed the per-batch write budget so the mid-day _runProcessTicketBatch
+        // WORKS but does NOT finish -> the advance takes the partial-drain return (mult==1) rather than
+        // fully draining and falling through to NotTimeYet.
         uint256 M = 200;
         address[] memory players = new address[](M);
         for (uint256 i; i < M; i++) {
@@ -279,13 +277,9 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         assertTrue(game.advanceDue(), "pre: a mid-day partial-drain advance is due (read slot un-fully-processed)");
         assertFalse(game.rngLocked(), "pre: not locked (mid-day, no escalation)");
 
-        // Pin the buy leg empty so doWork routes to the advance leg (which takes the mid-day path).
-        _pinBuyLegWalkedForToday();
-        _assertBuyLegEmpty();
-
         vm.recordLogs();
         vm.prank(keeper);
-        afKing.doWork();
+        game.mintBurnie();
 
         // The mid-day partial-drain leg IS rewardable advance-leg work - exactly one creditFlip (mult==1).
         assertEq(
@@ -295,9 +289,10 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         );
     }
 
-    /// @notice GAMEOVER leg (mult == 0) is UNREWARDED via doWork: the advance runs the gameover path
+    /// @notice GAMEOVER leg (mult == 0) is UNREWARDED via mintBurnie: the advance runs the gameover path
     ///         (the flip-credit coin is worthless at gameover) and returns mult=0, so the router skips
-    ///         the creditFlip entirely — zero credit.
+    ///         the creditFlip entirely — zero credit. The one-category early-return RETURNS (does not
+    ///         revert NoWork) — the advance category ran, it just earned nothing.
     function testGameoverAdvanceUnrewarded() public {
         // Settle, then make a fresh day-advance due.
         _settleGame(0x90E00004);
@@ -306,23 +301,18 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         assertTrue(game.advanceDue(), "pre: a fresh day-advance is due");
 
         // Latch the terminal gameOver flag (the public bool). With gameOver==true and the gameover-time
-        // slot still 0, _handleGameOverPath takes the gameOver branch -> handleFinalSweep early-returns
-        // ("Game not over yet" at GO_TIME==0, a harmless no-op) -> advanceGame returns mult=0 (the
-        // gameover path: advance ran but earns no bounty).
+        // slot still 0, the gameover advance branch -> handleFinalSweep early-returns ("Game not over yet"
+        // at GO_TIME==0, a harmless no-op) -> advanceGame returns mult=0 (advance ran but earns no bounty).
         _latchGameOver();
         assertTrue(game.gameOver(), "pre: gameOver latched");
-
-        // Pin the buy leg empty so doWork routes to the advance leg, which takes the gameover (mult=0) path.
-        _pinBuyLegWalkedForToday();
-        _assertBuyLegEmpty();
-        assertTrue(game.advanceDue(), "pre: advance still due (the router will route to the advance leg)");
+        assertTrue(game.advanceDue(), "pre: advance still due (the router routes to the advance leg)");
 
         vm.recordLogs();
         vm.prank(keeper);
-        afKing.doWork();
+        game.mintBurnie();
 
-        // mult==0 => the router's `if (mult > 0)` guard skips bounty, and the CEI-last creditFlip is the
-        // `bountyEarned > 0` skip — ZERO credit to the keeper.
+        // mult==0 => the advance leg's `if (mult > 0)` guard skips the bounty, and the CEI-last creditFlip
+        // is the `bountyEarned > 0` skip — ZERO credit to the keeper.
         assertEq(
             _countCoinflipStakeUpdatedFor(keeper),
             0,
@@ -337,81 +327,89 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 2 — GASOPT-03 (keeperSnapshot) + GASOPT-01 (owedMap pointer hoist) behavioral same-results
+    // Task 2 — afkingSnapshot (the keeperSnapshot successor) + owedMap pointer-hoist same-results
     // =========================================================================
 
-    /// @notice GASOPT-03 (keeperSnapshot SUBSUMES GASOPT-02): the batched read is VALUE-IDENTICAL to N
-    ///         individual reads — `mintPriceWei == mintPrice()`, `rngLocked_ == rngLocked()`, and
-    ///         `claimables[i] == claimableWinningsOf(players[i])` element-by-element across N players with
-    ///         varied claimable balances.
-    function testKeeperSnapshotEqualsIndividualReads() public {
-        // N players holding VARIED claimable balances (some zero, some non-zero, distinct).
+    /// @notice afkingSnapshot batched-read same-results: the batched read is VALUE-IDENTICAL to N
+    ///         individual reads — `mintPriceWei == mintPrice()`, `rngLocked_ == rngLocked()`,
+    ///         `claimables[i] == claimableWinningsOf(players[i])`, and
+    ///         `afkingFundings[i] == afkingFundingOf(players[i])` element-by-element across N players with
+    ///         varied claimable + afking-funding balances. (afkingSnapshot is the v55 rename of
+    ///         keeperSnapshot — same batched-read role, with the added afkingFundings column.)
+    function testAfkingSnapshotEqualsIndividualReads() public {
+        // N players holding VARIED claimable + afking-funding balances (some zero, some non-zero, distinct).
         uint256 N = 6;
         address[] memory players = new address[](N);
-        uint256[] memory seeded = new uint256[](N);
+        uint256[] memory seededClaim = new uint256[](N);
+        uint256[] memory seededFund = new uint256[](N);
         for (uint256 i; i < N; i++) {
             players[i] = makeAddr(string(abi.encodePacked("snap_player_", _u(i))));
             // Vary: alternate zero / non-zero, distinct magnitudes.
-            seeded[i] = (i % 3 == 0) ? 0 : (uint256(i + 1) * 1.337 ether);
-            if (seeded[i] > 0) _seedClaimable(players[i], seeded[i]);
+            seededClaim[i] = (i % 3 == 0) ? 0 : (uint256(i + 1) * 1.337 ether);
+            if (seededClaim[i] > 0) _seedClaimable(players[i], seededClaim[i]);
+            seededFund[i] = (i % 2 == 0) ? (uint256(i + 1) * 0.5 ether) : 0;
+            if (seededFund[i] > 0) _fundAfking(players[i], seededFund[i]);
         }
 
         // Batched read.
-        (uint256 mintPriceWei, bool rngLocked_, uint256[] memory claimables) = game.keeperSnapshot(players);
+        (uint256 mintPriceWei, bool rngLocked_, uint256[] memory claimables, uint256[] memory afkingFundings) =
+            game.afkingSnapshot(players);
 
         // Field 1: mintPriceWei == mintPrice().
-        assertEq(mintPriceWei, game.mintPrice(), "GASOPT-03: keeperSnapshot.mintPriceWei == mintPrice()");
+        assertEq(mintPriceWei, game.mintPrice(), "afkingSnapshot.mintPriceWei == mintPrice()");
         // Field 2: rngLocked_ == rngLocked().
-        assertEq(rngLocked_, game.rngLocked(), "GASOPT-03: keeperSnapshot.rngLocked_ == rngLocked()");
-        // Field 3: claimables[i] == claimableWinningsOf(players[i]) for every i.
-        assertEq(claimables.length, N, "GASOPT-03: claimables length == N");
-        bool sawNonZero;
+        assertEq(rngLocked_, game.rngLocked(), "afkingSnapshot.rngLocked_ == rngLocked()");
+        // Field 3+4: claimables[i]/afkingFundings[i] == the individual accessors for every i.
+        assertEq(claimables.length, N, "afkingSnapshot: claimables length == N");
+        assertEq(afkingFundings.length, N, "afkingSnapshot: afkingFundings length == N");
+        bool sawNonZeroClaim;
+        bool sawNonZeroFund;
         for (uint256 i; i < N; i++) {
             assertEq(
                 claimables[i],
                 game.claimableWinningsOf(players[i]),
-                "GASOPT-03: claimables[i] == claimableWinningsOf(players[i])"
+                "afkingSnapshot: claimables[i] == claimableWinningsOf(players[i])"
             );
-            // Non-vacuity: the batched value tracks the seeded balance (it is not a constant zero).
-            assertEq(claimables[i], seeded[i], "GASOPT-03 non-vacuity: claimables[i] tracks the seeded balance");
-            if (claimables[i] > 0) sawNonZero = true;
+            assertEq(
+                afkingFundings[i],
+                game.afkingFundingOf(players[i]),
+                "afkingSnapshot: afkingFundings[i] == afkingFundingOf(players[i])"
+            );
+            // Non-vacuity: the batched values track the seeded balances (not a constant zero).
+            assertEq(claimables[i], seededClaim[i], "afkingSnapshot non-vacuity: claimables[i] tracks the seeded balance");
+            assertEq(afkingFundings[i], seededFund[i], "afkingSnapshot non-vacuity: afkingFundings[i] tracks the seeded funding");
+            if (claimables[i] > 0) sawNonZeroClaim = true;
+            if (afkingFundings[i] > 0) sawNonZeroFund = true;
         }
-        assertTrue(sawNonZero, "GASOPT-03 non-vacuity: at least one player held a non-zero claimable");
+        assertTrue(sawNonZeroClaim, "afkingSnapshot non-vacuity: at least one player held a non-zero claimable");
+        assertTrue(sawNonZeroFund, "afkingSnapshot non-vacuity: at least one player held a non-zero afking funding");
     }
 
-    /// @notice GASOPT-03 drives an IDENTICAL autoBuy outcome: a reinvest-subscriber's autoBuy reads the
-    ///         keeperSnapshot claimable (AfKing._buildSubBuyParams consumes the batched read) and produces
-    ///         the same buy outcome as the reference per-player computation — the buy lands and stamps the
-    ///         sub bought-today (the keeperSnapshot read fed the correct claimable into the buy waterfall).
-    function testKeeperSnapshotDrivenAutoBuyIdenticalOutcome() public {
-        // A reinvest subscriber: reinvestPct > 0 forces _buildSubBuyParams down the keeperSnapshot read
-        // path (it builds a 1-element snap and reads cl[0]); the buy outcome must match the reference.
+    /// @notice The STAGE-driven autoBuy produces the expected buy outcome: a funded LOOTBOX-mode sub
+    ///         processed by the required-path STAGE (a new-day advanceGame) is stamped bought-today
+    ///         (lastAutoBoughtDay == the process day). In v55 the per-sub buy folded into the STAGE
+    ///         (Δ4 — the standalone `afKing.autoBuy` that consumed `keeperSnapshot` is GONE), so the
+    ///         identical-outcome claim is reframed onto the STAGE: a funded sub buys exactly once.
+    function testStageDrivenAutoBuyStampsSubBoughtToday() public {
+        // A funded LOOTBOX-mode sub (deity-passed so it survives any level crossing — set-mutation/
+        // pass-gating is orthogonal here). The STAGE runs the buy in advanceGame's pre-RNG window.
         address sub = makeAddr("snap_autobuy_sub");
-        _fundBurnie(sub, _subCost());
+        _grantDeityPass(sub);
         vm.prank(sub);
-        // (player=self, drainCredit=false, useTickets=true, dailyQty=1, reinvestPct=50, fundingSource=self)
-        afKing.subscribe(address(0), false, true, 1, 50, address(0));
+        // (player=self, drainCredit=false, lootbox mode, dailyQty=1, reinvestPct=0, fundingSource=self)
+        game.subscribe(address(0), false, false, 1, 0, address(0));
         vm.prank(sub);
-        game.setOperatorApproval(address(afKing), true);
-        _fundPool(sub, 5 ether);
+        game.setOperatorApproval(address(game), true);
+        _fundAfking(sub, 5 ether);
 
-        // Reference: what the keeperSnapshot returns for this sub right now (the value the buy will read).
-        address[] memory one = new address[](1);
-        one[0] = sub;
-        (uint256 snapPrice, , uint256[] memory snapClaim) = game.keeperSnapshot(one);
-        assertEq(snapPrice, game.mintPrice(), "ref: keeperSnapshot price == mintPrice()");
-        assertEq(snapClaim[0], game.claimableWinningsOf(sub), "ref: keeperSnapshot claimable == claimableWinningsOf(sub)");
+        uint32 boughtBefore = _lastAutoBoughtDayOf(sub);
 
-        // Drive the autoBuy (the leg that consumes keeperSnapshot internally) and assert the buy landed.
-        vm.prank(keeper);
-        afKing.autoBuy(afKing.subscriberCount() + 5);
+        // Drive the STAGE for a new day (the buy leg that v55 folded into advanceGame).
+        _runStageNewDay(0x5AB0);
 
-        // Outcome: the reinvest sub was bought today (the keeperSnapshot-fed waterfall produced a buy).
-        assertEq(
-            _lastAutoBoughtDayOf(sub),
-            _today(),
-            "GASOPT-03: the keeperSnapshot-driven autoBuy bought the reinvest sub today (identical outcome)"
-        );
+        // Outcome: the sub was bought this STAGE (its lastAutoBoughtDay advanced to the process day).
+        uint32 boughtAfter = _lastAutoBoughtDayOf(sub);
+        assertGt(boughtAfter, boughtBefore, "the STAGE-driven buy stamped the sub bought-today (identical outcome)");
     }
 
     /// @notice GASOPT-01 (owedMap pointer hoist) same-results: a MULTI-PLAYER far-future ticket backlog
@@ -421,7 +419,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     ///         per-player owed RESULTS are byte-identical to the expected per-player accounting (full drain).
     function testGasopt01OwedMapHoistSameResults() public {
         // Multi-player backlog: seed M fresh players each with K whole far-future tickets at a level the
-        // advance will process. Mirrors FarFutureSalvageSwap._seedFarTickets / FarFutureIntegration.
+        // advance will process.
         uint24 L = 6; // a far-future level the constructor also pre-queues (sDGNRS + VAULT) — multi-player
         uint256 M = 5;
         uint32 K = 4; // 4 whole tickets => owed packed = (4*4 entries) << 8
@@ -458,7 +456,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     // =========================================================================
-    // creditFlip-count / amount oracle (port of CrankLeversAndPacking.t.sol:523-548 + amount decode)
+    // creditFlip-count / amount oracle (recipient-isolated — the DIFFERENTIAL instrument)
     // =========================================================================
 
     function _countCoinflipStakeUpdated() internal returns (uint256 count) {
@@ -487,52 +485,45 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     // =========================================================================
-    // Protocol-driving helpers (mirror KeeperRouterOneCategory / AfKingConcurrency / FarFutureSalvageSwap)
+    // Protocol-driving helpers (mirror AfKingConcurrency / V55SetMutationOpenE)
     // =========================================================================
 
     function _today() internal view returns (uint32) {
         return uint32((block.timestamp - 82620) / 1 days);
     }
 
-    function _buyLegDue() internal view returns (bool) {
-        (uint32 progDay, uint256 cursor) = afKing.autoBuyProgress();
-        return progDay != _today() || cursor < afKing.subscriberCount();
+    /// @dev Drive the per-sub buy STAGE for a NEW day (Δ4 successor to afKing.autoBuy): warp +1 day,
+    ///      settle so processSubscriberStage(SUB_STAGE_BATCH) stamps the funded set + the day word lands.
+    function _runStageNewDay(uint256 vrfWord) internal {
+        _settleGame(vrfWord ^ 0xF00D); // settle any in-flight day first
+        vm.warp(block.timestamp + 1 days);
+        _settleGame(vrfWord);
     }
 
-    function _assertBuyLegEmpty() internal view {
-        assertFalse(_buyLegDue(), "pre: buy leg is empty (walked + stamped for today)");
+    /// @dev Grant `who` the permanent deity bit (RE-DERIVED slot: mintPacked_ is slot 10).
+    function _grantDeityPass(address who) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        packed |= (uint256(1) << DEITY_SHIFT);
+        vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Pin the buy leg "walked for today": stamp _autoBuyDay == today AND cursor >= length so the
-    ///      buy-leg predicate is FALSE. Forces the router past the buy leg into advance / open / NoWork.
-    function _pinBuyLegWalkedForToday() internal {
-        uint256 len = afKing.subscriberCount();
-        uint256 packed = (uint256(_today()) & 0xFFFFFFFF) | ((len + 1) << 32);
-        vm.store(address(afKing), bytes32(uint256(AUTOBUY_SLOT)), bytes32(packed));
-    }
-
-    function _subCost() internal view returns (uint256) {
-        return (afKing.SUB_COST_ETH_TARGET() * 1000 ether) / game.mintPrice();
-    }
-
-    function _fundPool(address who, uint256 amount) internal {
+    /// @dev Credit `who`'s afkingFunding bucket with `amount` ETH (Δ5: depositAfkingFunding replaces
+    ///      AfKing.depositFor). The deposit credits both the player bucket AND claimablePool in-contract,
+    ///      so SOLVENCY-01 stays balanced.
+    function _fundAfking(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        afKing.depositFor{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(who);
     }
 
-    function _fundBurnie(address who, uint256 amount) internal {
-        if (amount == 0) return;
-        vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(who, amount);
-    }
-
+    /// @dev Read `who`'s lastAutoBoughtDay (RE-DERIVED slot 66, bytes 21..24 of the packed Sub slot).
     function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(afKing), slot));
-        return uint32(packed >> (OFF_LASTSWEPT * 8));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        return uint32(packed >> (OFF_LASTBOUGHT * 8));
     }
 
-    // ---- claimable seeding (mirror FarFutureSalvageSwap._seedClaimable) ----
+    // ---- claimable seeding (with the tandem claimablePool credit so SOLVENCY-01 stays balanced) ----
 
     function _claimableSlot(address who) internal pure returns (bytes32) {
         return keccak256(abi.encode(who, CLAIMABLE_WINNINGS_SLOT));
@@ -556,7 +547,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         vm.store(address(game), bytes32(CLAIMABLE_POOL_SLOT), bytes32(newPacked));
     }
 
-    // ---- far-future ticket seeding (mirror FarFutureSalvageSwap._seedFarTickets) ----
+    // ---- far-future ticket seeding (RE-DERIVED slots 13/14) ----
 
     function _ownedPackedSlot(uint24 key, address who) internal pure returns (bytes32) {
         bytes32 inner = keccak256(abi.encode(uint256(key), TICKETS_OWED_PACKED_SLOT));
@@ -635,18 +626,18 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     /// @dev Latch the terminal gameOver public bool WITHOUT setting the gameover-time slot, so
     ///      handleFinalSweep early-returns harmlessly ("Game not over yet" at GO_TIME==0) and advanceGame
-    ///      takes the gameover branch (mult=0). Per the DegenerusGameStorage layout doc, `gameOver` is the
-    ///      bool at byte [23:24] of EVM SLOT 0 (the timing/FSM/flags pack). Set only that byte, preserving
-    ///      every other field in the slot, and confirm the public getter flips.
+    ///      takes the gameover branch (mult=0). `gameOver` is the bool at byte 23 of EVM SLOT 0 (the
+    ///      timing/FSM/flags pack). Set only that byte, preserving every other field, and confirm the
+    ///      public getter flips.
     function _latchGameOver() internal {
         bytes32 slot = bytes32(uint256(0)); // SLOT 0 — the timing/FSM/flag pack holding gameOver at byte 23
         uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << (GAMEOVER_SLOT_BIT * 8));
+        packed |= (uint256(1) << (23 * 8));
         vm.store(address(game), slot, bytes32(packed));
         require(game.gameOver(), "_latchGameOver: gameOver did not flip (slot 0 byte 23)");
     }
 
-    // ---- real ticket-backlog driving (mirror FarFutureIntegration) ----
+    // ---- real ticket-backlog driving ----
 
     /// @dev Buy a large current-level ticket backlog via the public mint API (enqueues at the write slot).
     function _buyManyTickets(address who, uint256 qty) internal {
@@ -688,7 +679,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         }
     }
 
-    /// @dev Seed nextPrizePool to accelerate level transitions (mirror FarFutureIntegration).
+    /// @dev Seed nextPrizePool to accelerate level transitions.
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 PRIZE_POOLS_PACKED_SLOT = 2;
         uint256 currentPacked = uint256(vm.load(address(game), bytes32(PRIZE_POOLS_PACKED_SLOT)));
