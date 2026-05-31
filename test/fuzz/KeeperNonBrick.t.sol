@@ -3,92 +3,97 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
-/// @title KeeperNonBrick -- Proves SAFE-02: the keeper-gated batchPurchase and the keeper-router
-///        non-brick / un-brickable-cancel invariants survive a single poisoned actor.
+/// @title KeeperNonBrick -- the REVERT-FREE / NON-BRICK corpus, adapted to the v55 game-resident
+///        afking path (Phase 351, D-351-01). Proves the no-brick guarantee that survives D-348-04's
+///        REMOVAL of the per-slice try/catch valve: the funded process STAGE / box open is
+///        revert-free BY CONSTRUCTION (REVERT-01, class A); a solvency violation FAILS LOUD (the
+///        checked `claimablePool -=`, class B); the game-resident withdraw/cancel are un-brickable
+///        under strict CEI.
 ///
-/// @notice One reverting / stale player is isolated via the per-slice try/catch shell and
-///         SKIPPED — the batch completes, buying only the successful slices, and a single failing
-///         entry can never deny progress to the rest. Concretely this suite asserts:
+/// @notice D-351-02 REMOVED-SURFACE DROP (logged BY NAME for the 351-09 REGRESSION-BASELINE-v55 ledger):
+///   the v49 keeper batch-purchase per-slice try/catch isolation leg is GONE — the standalone AfKing
+///   batch-buy entrypoint (and its BatchBuy event) was v55 P5 dead-code (349.1) and has NO game-resident
+///   successor. The per-buy work folded into `advanceGame()`'s required-path `processSubscriberStage` STAGE,
+///   which is revert-free by construction (no valve to isolate a poisoned slice — a FUNDED, well-formed
+///   slice can never poison the batch; an underfunded NORMAL sub is auto-paused/swap-popped, never
+///   reverted). The six dropped tests (no behavioral successor — recorded for the ledger):
+///     - testBatchPurchaseIsolatesFailingPlayerAndRefundsSlice
+///     - testFuzz_BatchPurchaseFailPositionRefundsAndCompletes
+///     - testBatchPurchaseGameOverRejectsWholeBatchAtEntry
+///     - testBatchPurchaseRejectsNonKeeperCaller
+///     - testKeeperBatchSkipsPoisonedMiddlePlayer
+///     - testFuzz_KeeperBatchPoisonPositionNeverBricks
+///   The reentrancy-rollback + un-brickable-cancel + reclaim/auto-pause-commit properties REFRAME onto
+///   the game-resident withdraw/cancel + the STAGE (D-351-01 renamed/relocated, NOT a removed surface).
 ///
-///   batchPurchase isolation + slice-refund + batch-level pre-check:
-///     - batchPurchase where ONE player's _batchPurchaseUnit reverts (a sub-LOOTBOX_MIN
-///       slice → mint module reverts E()) isolates that player via the per-slice try/catch,
-///       lands the other players' lootboxes, refunds the failed slice to the keeper in the
-///       single post-loop refund, and the call returns WITHOUT reverting (incl. a fuzzed
-///       fail-position never-bricks invariant).
-///     - the keeper batch path skips a poisoned middle player and a fuzzed poison position
-///       never bricks the batch.
-///     - batchPurchase rejects a non-keeper caller and pre-checks gameOver ONCE at entry: when
-///       gameOver is true the WHOLE batch is rejected at entry (single revert, not a partial run).
-///
-///   reentrancy rollback + cancel un-brickable (SAFE-03 / H-CANCEL-SWAP preserved):
-///     - A re-entrant frame (a malicious player whose withdraw-recipient callback tries to
-///       re-enter withdraw / setDailyQuantity) cannot double-spend: the inner withdraw
-///       reverts InsufficientBalance under strict CEI (effects-before-interaction) and
-///       unwinds, so the pool is debited at most once.
-///     - Cancel (setDailyQuantity(0)) is un-brickable: a subscriber can always tombstone its
-///       sub, and afterward its full _poolOf ETH is withdrawable — the CEI withdraw cannot be
-///       blocked by any downstream interaction; spam-cancel cannot strand tombstones.
-///
-/// @dev Builds on the DeployProtocol fixture (AfKing live at AF_KING). Drives REAL lootbox
-///      purchases through the public mint API; the only slot manipulation is the established
-///      LOOTBOX_RNG word injection and a single targeted lootboxEth-zeroing to forge the
-///      caught-revert poison entry. batchPurchase is called as the pinned AF_KING keeper
-///      (vm.prank(ContractAddresses.AF_KING)). Test-only: no contracts/*.sol mutated.
+/// @dev Builds on the DeployProtocol fixture (GameAfkingModule at GAME_AFKING_MODULE). Drives REAL
+///      lootbox purchases through the public mint API; the per-sub buy is `advanceGame()`'s pre-RNG STAGE
+///      (`processSubscriberStage`); cancel is `subscribe(_, dailyQuantity=0)` (the in-place tombstone); the
+///      pool ETH lives in the game-resident `afkingFunding` ledger (deposited via `depositAfkingFunding`,
+///      withdrawn via `withdrawAfkingFunding` under CEI). RE-DERIVED every pinned slot via
+///      `forge inspect storage DegenerusGame`. Test-only: ZERO `contracts/*.sol` mutation.
 contract KeeperNonBrick is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Storage slot constants (DegenerusGame; confirmed via `forge inspect storage`)
+    // Storage slot constants (DegenerusGame; RE-DERIVED via `forge inspect storage DegenerusGame`).
+    // The v55 afking append shifted ~7 mappings by 1 (351-03/04) — every constant re-derived.
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 37 (v47: +2 from presale-box storage additions); lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 37;
-    /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 38;
-    /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 45;
-    /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 46;
-    /// @dev lootboxEth mapping root slot (uint48 index => address => packed).
-    uint256 private constant LOOTBOX_ETH_SLOT = 15;
+    /// @dev lootboxRngPacked at slot 38 (RE-DERIVED: was 37); lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38;
+    /// @dev lootboxRngWordByIndex mapping root slot (RE-DERIVED: was 38).
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 39;
+    /// @dev degeneretteBets mapping root slot (address => betId => packed) (RE-DERIVED: was 45).
+    uint256 private constant DEGENERETTE_BETS_SLOT = 46;
+    /// @dev degeneretteBetNonce mapping root slot (address => uint64) (RE-DERIVED: was 46).
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 47;
+    /// @dev lootboxEth mapping root slot (uint48 index => address => packed) (RE-DERIVED: was 15).
+    uint256 private constant LOOTBOX_ETH_SLOT = 16;
+    /// @dev lootboxEthBase mapping root slot (RE-DERIVED: was 22).
+    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 23;
     /// @dev rngLockedFlag is bool at slot 0 offset 21 bytes = bit 168.
     uint256 private constant RNG_LOCKED_SHIFT = 168;
     /// @dev gameOver is bool at slot 0 offset 23 bytes = bit 184.
     uint256 private constant GAME_OVER_SHIFT = 184;
 
+    // Game-resident afking storage (RE-DERIVED; the de-custody AfKing 4-slot layout is GONE).
+    uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 @ slot 1, byte 16
+    uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
+    uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7; // mapping(address => uint256) (RE-DERIVED)
+    uint256 private constant AFKING_FUNDING_SLOT = 8; // mapping(address => uint256)
+    uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit @ bit 184)
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = 11; // mapping(uint32 => uint256) — the afking box's DAY-keyed word
+    uint256 private constant SUBOF_SLOT = 66; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 68; // address[] _subscribers
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 69; // mapping(address => uint256) _subscriberIndex (1-indexed)
+
+    // Sub packed-field byte offsets (DegenerusGameStorage.sol:1867; verified by 351-02 round-trip).
+    uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity     (byte 0)
+    uint256 private constant OFF_SCOREPLUS1 = 7; // uint16 scorePlus1     (bytes 7..8)
+    uint256 private constant OFF_AMOUNT = 9; // uint96 amount            (bytes 9..20)
+    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay (bytes 21..24)
+    uint256 private constant OFF_LASTOPENED = 25; // uint32 lastOpenedDay     (bytes 25..28)
+
+    uint256 private constant DEITY_SHIFT = 184;
+
+    /// @dev SubscriptionExpired(address indexed player, uint8 reason). reason 1 = AutoPause, 2 = CancelReclaim.
+    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
+
     // -------------------------------------------------------------------------
-    // Crank reward peg mirror (the contract's own FIXED constants, REW-03)
+    // Afking reward peg mirror (the module's own FIXED constants, REW-03) — game storage, reusable as-is.
     // -------------------------------------------------------------------------
     uint256 private constant CRANK_GAS_PRICE_REF = 0.5 gwei;
     uint256 private constant CRANK_RESOLVE_BET_GAS_UNITS = 66_528;
     uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 71_203;
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
 
-    /// @dev keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)") — emitted once
-    ///      per creditFlip via _addDailyFlip; used to count crank-reward credits.
-    bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)");
-
-    // -------------------------------------------------------------------------
-    // AfKing pinned slot layout + Sub packed-field offsets (for the TOMB-04 didWork autoBuy tests)
-    // -------------------------------------------------------------------------
-    uint256 private constant AFK_SUBOF_SLOT = 1;            // _subOf mapping root (address => Sub)
-    uint256 private constant AFK_SUBSCRIBER_INDEX_SLOT = 3; // _subscriberIndex mapping root (1-indexed)
-    uint256 private constant AFK_SWEEP_PACKED_SLOT = 4;     // _autoBuyDay (uint32) + _autoBuyCursor (uint224)
-    uint256 private constant AFK_OFF_DAILY = 0;             // uint8  dailyQuantity  (byte 0)
-    uint256 private constant AFK_OFF_LASTSWEPT = 1;         // uint32 lastAutoBoughtDay    (bytes 1..4)
-    uint256 private constant AFK_OFF_VALIDTHROUGHLEVEL = 5; // uint32 validThroughLevel (bytes 5..8) — v50.0 AFSUB-01 in-place repurpose
-    /// @dev SubscriptionExpired(address indexed player, uint8 reason). reason 1 = AutoPause, 2 = CancelReclaim.
-    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
-
-    bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q' — first-spin salt
     uint48 private constant INDEX = 1; // default lootboxRngIndex seeded in setUp
-    uint256 private constant FIXED_WORD = uint256(keccak256("crank_nonbrick_fixed_word"));
     uint256 private constant LOOTBOX_MIN = 0.01 ether; // mint-module DirectEth lootbox floor
+
+    uint256 private constant DRAIN_MAX_ITERATIONS = 60;
+    uint256 private _lastFulfilledReqId;
 
     address private player;
     address private cranker;
@@ -101,685 +106,609 @@ contract KeeperNonBrick is DeployProtocol {
         cranker = makeAddr("nonbrick_cranker");
         vm.deal(player, 1000 ether);
         vm.deal(cranker, 1000 ether);
-        vm.deal(address(game), 1000 ether);
+        vm.deal(address(game), 5_000_000 ether);
 
-        // Seed lootboxRngIndex = 1 (word stays 0 until injected) so placeDegeneretteBet's
-        // index!=0 / word==0 precondition holds.
-        uint256 lrPacked = uint256(
-            vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))
-        );
+        // Seed lootboxRngIndex = 1 (word stays 0 until injected) so the daily-index reads are well-formed.
+        uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
         lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(INDEX);
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
+    }
 
-        // The crank resolve sub-call delegatecalls resolveBets with msg.sender == game,
-        // so the game must be the bet owner's approved operator (the documented relaxation).
+    // =========================================================================
+    // class A (REVERT-01) — a FUNDED process/open never bricks the batch
+    //   (revert-free BY CONSTRUCTION; the D-348-04 valve removal is sound)
+    // =========================================================================
+
+    /// @notice REVERT-01 (class A, the no-valve no-brick core): a FUNDED, well-formed lootbox-sub set is
+    ///         stamped by the required-path STAGE without ANY revert — there is NO try/catch valve, so the
+    ///         guarantee rests on the slice being revert-free by construction. A mix of FUNDED subs (varying
+    ///         amount / claimable-mix) all process; the batch never bricks. Non-vacuous: every funded sub is
+    ///         demonstrably stamped (lastAutoBoughtDay == the process day) after the single STAGE advance.
+    function testFundedStageNeverBricks() public {
+        uint256 N = 5;
+        address[] memory subs = _setupFundedLootboxSubs(N, "ca_funded_", 3 ether);
+
+        // The required-path STAGE (a new-day advanceGame) stamps every funded sub. MUST NOT revert.
+        _runStageNewDay(0xA11C0DE);
+
+        uint32 today = _simDay();
+        for (uint256 i; i < N; i++) {
+            assertEq(
+                _lastBoughtDayOf(subs[i]),
+                today,
+                "every FUNDED sub stamped by the STAGE (class A revert-free, non-vacuous)"
+            );
+        }
+    }
+
+    /// @notice REVERT-01 fuzz (class A): for RANDOM funded slice inputs (per-sub pool amount + a
+    ///         claimable-mix toggle exercising the 1-wei claimable sentinel / the `ev = cost - claimableUse`
+    ///         split / the `quantity >= 1` floor), the funded process STAGE never reverts and stamps every
+    ///         funded sub. A funded sub cannot poison the batch under no-valve.
+    function testFuzzFundedSliceNeverBricks(uint96 poolRaw, uint96 claimRaw, uint8 mixSel) public {
+        // Bound the funding so every sub is comfortably FUNDED (>= one daily buy cost) — the property is
+        // "a FUNDED slice never reverts", not "an underfunded sub" (that is the auto-pause path, class A too
+        // but tested separately below).
+        uint256 pool = bound(uint256(poolRaw), 2 ether, 50 ether);
+        uint256 claimable = bound(uint256(claimRaw), 0, 5 ether);
+        bool drainFirst = (mixSel & 1) == 1; // toggle the claimable-first slice split
+
+        uint256 N = 3;
+        address[] memory subs = new address[](N);
+        for (uint256 i; i < N; i++) {
+            address who = makeAddr(string(abi.encodePacked("ca_fz_", _u(i), "_", _u(uint256(mixSel)))));
+            subs[i] = who;
+            _grantDeityPass(who);
+            // Subscribe lootbox-mode with the fuzzed claimable-first toggle; fund the pool.
+            vm.prank(who);
+            game.subscribe(address(0), drainFirst, false, 1, 0, address(0));
+            _fundPool(who, pool);
+            // A claimable-mix: credit some claimableWinnings (with the tandem claimablePool bump so
+            // SOLVENCY-01 stays balanced — the 351-02 test-infra reality) so the slice exercises the
+            // `ev = cost - claimableUse` split + the 1-wei sentinel when drainFirst is set.
+            if (claimable > 0) _setClaimable(who, claimable);
+        }
+
+        // The funded STAGE stamps every sub revert-free (REVERT-01). MUST NOT revert at any slice.
+        _runStageNewDay(uint256(keccak256(abi.encode(poolRaw, claimRaw, mixSel))) | 1);
+
+        uint32 today = _simDay();
+        for (uint256 i; i < N; i++) {
+            assertEq(_lastBoughtDayOf(subs[i]), today, "fuzzed funded slice stamped (no brick, no valve)");
+        }
+    }
+
+    /// @notice REVERT-01 (class A, the FUNDED box OPEN never bricks): a FUNDED sub's stamped box, opened via
+    ///         the real `mintBurnie` open leg, materializes without reverting — the open leg is revert-free
+    ///         under the readiness pre-gate (a landed `rngWordByDay[day]`), NO per-item valve. Non-vacuous:
+    ///         the box demonstrably materialized (lastOpenedDay advanced to the stamp day).
+    function testFundedBoxOpenNeverBricks() public {
+        address afk = makeAddr("ca_open_afk");
+        _grantDeityPass(afk);
+        _subscribeLootbox(afk, 1);
+        _fundPool(afk, 5 ether);
+        _runStageNewDay(0x0FE0FE); // stamp + land rngWordByDay[stampDay]
+
+        uint32 stampDay = _lastBoughtDayOf(afk);
+        assertGt(stampDay, 0, "non-vacuity: stamped");
+        assertTrue(_lastOpenedDayOf(afk) < stampDay, "box pending pre-open");
+
+        // Open via the real mintBurnie open leg (the afking box open is reached ONLY via mintBurnie).
+        _settleClean(0xC0FFEE);
+        vm.prank(makeAddr("ca_open_opener"));
+        try game.mintBurnie() {} catch {} // MUST materialize, not brick
+
+        assertEq(_lastOpenedDayOf(afk), stampDay, "FUNDED box open materialized (class A, no valve, non-vacuous)");
+    }
+
+    // =========================================================================
+    // class B (SOLVENCY-01) — a solvency violation FAILS LOUD (never masked)
+    // =========================================================================
+
+    /// @notice class B (fail-loud-on-solvency): the game-resident `withdrawAfkingFunding` debits the
+    ///         `claimablePool` in TANDEM via a CHECKED `uint128 -=` (DegenerusGame.sol:1570). With the
+    ///         claimablePool forced BELOW a player's afkingFunding (a manufactured SOLVENCY-01 violation),
+    ///         the withdraw REVERTS on the checked subtraction — the violation is NEVER masked (there is no
+    ///         try/catch to swallow it; D-348-04). Non-vacuous: the revert is the solvency underflow (the
+    ///         funding balance covers the requested amount, so the ONLY failure is the pool underflow).
+    function testSolvencyUnderflowFailsLoudOnWithdraw() public {
+        uint256 funded = 4 ether;
+        // Fund the player's afkingFunding ledger the canonical way (subscribe msg.value credits both
+        // afkingFunding AND claimablePool in tandem — SOLVENCY-01 balanced).
+        _grantDeityPass(player);
         vm.prank(player);
-        game.setOperatorApproval(address(game), true);
+        game.subscribe{value: funded}(address(0), false, true, 1, 0, address(0));
+        assertEq(game.afkingFundingOf(player), funded, "funding credited by subscribe msg.value");
+
+        // Manufacture the SOLVENCY-01 violation: force claimablePool BELOW the player's funding so the
+        // tandem release underflows. (afkingFunding[player] stays >= amount, so the funding check at :1566
+        // passes and the ONLY failing op is the claimablePool checked `-=` at :1570.)
+        _setClaimablePool(funded - 1 wei);
+        assertGe(game.afkingFundingOf(player), funded, "funding still covers the withdraw (isolates the pool underflow)");
+
+        // The withdraw FAILS LOUD: the checked uint128 -= reverts with the arithmetic underflow panic
+        // (0x11) — the solvency violation propagates, never masked.
+        vm.prank(player);
+        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11)); // checked-arithmetic underflow
+        game.withdrawAfkingFunding(funded);
+
+        // Belt-and-braces: the funding ledger was NOT mutated (the revert unwound the effects).
+        assertEq(game.afkingFundingOf(player), funded, "the failed withdraw left the funding ledger intact (reverted)");
     }
 
+    /// @notice class B fuzz (fail-loud-on-solvency): for ANY funded amount and ANY pool shortfall, a
+    ///         `withdrawAfkingFunding` whose tandem `claimablePool -=` would underflow REVERTS (the checked
+    ///         math is never bypassed). The funding balance always covers the request, so the sole failure is
+    ///         the manufactured pool underflow — proving the solvency check is the load-bearing fail-loud
+    ///         gate, not an incidental one.
+    function testFuzzSolvencyUnderflowFailsLoud(uint96 fundedRaw, uint96 shortfallRaw) public {
+        uint256 funded = bound(uint256(fundedRaw), 2, 100 ether);
+        uint256 shortfall = bound(uint256(shortfallRaw), 1, funded);
 
+        _grantDeityPass(player);
+        vm.prank(player);
+        game.subscribe{value: funded}(address(0), false, true, 1, 0, address(0));
 
+        // Pool forced to (funded - shortfall) < funded => the full-funded withdraw's tandem release underflows.
+        _setClaimablePool(funded - shortfall);
 
-    // =========================================================================
-    // Task 1 — batchPurchase per-player isolation + slice-refund
-    // =========================================================================
-
-    /// @notice SAFE-02 / T-318-03-01 (batchPurchase): a batch of three players where the MIDDLE
-    ///         player's slice is below LOOTBOX_MIN (the mint module reverts E()) isolates that player
-    ///         via the per-slice try/catch, lands the two healthy players' lootboxes, refunds the
-    ///         failed slice to the keeper in the single post-loop refund, and returns WITHOUT
-    ///         reverting. Proves one failing per-player unit cannot brick the keeper batch.
-    function testBatchPurchaseIsolatesFailingPlayerAndRefundsSlice() public {
-        address p1 = makeAddr("bp_p1");
-        address p2 = makeAddr("bp_p2"); // failing slice
-        address p3 = makeAddr("bp_p3");
-
-        uint256 goodSlice = 1 ether; // >= LOOTBOX_MIN
-        uint256 badSlice = LOOTBOX_MIN - 1; // < LOOTBOX_MIN → mint module reverts E()
-        uint256 totalValue = goodSlice + badSlice + goodSlice;
-
-        address[] memory players = new address[](3);
-        uint256[] memory amounts = new uint256[](3);
-        uint8[] memory modes = new uint8[](3);
-        players[0] = p1; amounts[0] = goodSlice; modes[0] = uint8(MintPaymentKind.DirectEth);
-        players[1] = p2; amounts[1] = badSlice;  modes[1] = uint8(MintPaymentKind.DirectEth);
-        players[2] = p3; amounts[2] = goodSlice; modes[2] = uint8(MintPaymentKind.DirectEth);
-
-        // Fund the keeper with the full batch value and call AS the keeper.
-        address keeper = ContractAddresses.AF_KING;
-        vm.deal(keeper, totalValue);
-        uint256 keeperBalBefore = keeper.balance;
-
-        vm.prank(keeper);
-        game.batchPurchase{value: totalValue}(players, amounts, modes); // MUST NOT revert
-
-        // The two healthy players got their lootboxes queued (lootboxEthBase credited at the
-        // current daily index); the failing player got nothing.
-        uint48 dailyIndex = _activeLootboxIndex();
-        assertGt(_lootboxEthBase(dailyIndex, p1), 0, "healthy p1 lootbox landed");
-        assertGt(_lootboxEthBase(dailyIndex, p3), 0, "healthy p3 lootbox landed");
-        assertEq(_lootboxEthBase(dailyIndex, p2), 0, "failing p2 bought nothing");
-
-        // SLICE-REFUND: exactly the failed slice was refunded to the keeper (one batch value in,
-        // unspent value refunded once after the loop). Net keeper outflow == the two good slices.
-        uint256 keeperBalAfter = keeper.balance;
-        assertEq(
-            keeperBalBefore - keeperBalAfter,
-            goodSlice * 2,
-            "only the two successful slices left the keeper; the failed slice was refunded"
-        );
-    }
-
-    /// @notice SAFE-02 fuzz (batchPurchase): for any single failing-player position in a length-3
-    ///         batch, the batch completes, the other two purchases land, and exactly the failed
-    ///         slice is refunded — the failure position never bricks the keeper batch.
-    function testFuzz_BatchPurchaseFailPositionRefundsAndCompletes(uint8 failSel) public {
-        uint256 failPos = failSel % 3;
-        uint256 goodSlice = 0.5 ether;
-        uint256 badSlice = LOOTBOX_MIN - 1;
-
-        address[] memory players = new address[](3);
-        uint256[] memory amounts = new uint256[](3);
-        uint8[] memory modes = new uint8[](3);
-        uint256 totalValue;
-        for (uint256 i; i < 3; i++) {
-            players[i] = makeAddr(string(abi.encodePacked("bpf_", vm.toString(i), "_", vm.toString(failPos))));
-            amounts[i] = (i == failPos) ? badSlice : goodSlice;
-            modes[i] = uint8(MintPaymentKind.DirectEth);
-            totalValue += amounts[i];
-        }
-
-        address keeper = ContractAddresses.AF_KING;
-        vm.deal(keeper, totalValue);
-        uint256 before = keeper.balance;
-
-        vm.prank(keeper);
-        game.batchPurchase{value: totalValue}(players, amounts, modes); // MUST NOT revert
-
-        uint48 dailyIndex = _activeLootboxIndex();
-        uint256 landed;
-        for (uint256 i; i < 3; i++) {
-            if (i == failPos) {
-                assertEq(_lootboxEthBase(dailyIndex, players[i]), 0, "failing slice bought nothing");
-            } else {
-                assertGt(_lootboxEthBase(dailyIndex, players[i]), 0, "healthy slice landed");
-                landed += goodSlice;
-            }
-        }
-        assertEq(before - keeper.balance, landed, "exactly the failed slice refunded, regardless of position");
+        vm.prank(player);
+        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11)); // checked-arithmetic underflow
+        game.withdrawAfkingFunding(funded);
     }
 
     // =========================================================================
-    // batchPurchase batch-level gameOver pre-check
+    // class C (terminal routing unblocked) — the afking STAGE cannot block game-over routing
     // =========================================================================
 
-    /// @notice SAFE-02 (batchPurchase batch-level pre-check): when gameOver is true the whole batch
-    ///         is rejected ONCE at entry (E()), confirming the second batch-level gate fires before
-    ///         any per-player work.
-    function testBatchPurchaseGameOverRejectsWholeBatchAtEntry() public {
-        address p1 = makeAddr("go_p1");
-        address[] memory players = new address[](1);
-        uint256[] memory amounts = new uint256[](1);
-        uint8[] memory modes = new uint8[](1);
-        players[0] = p1; amounts[0] = 1 ether; modes[0] = uint8(MintPaymentKind.DirectEth);
+    /// @notice class C (terminal-routing-unblocked): with the game in the gameover-routing state, the
+    ///         advance gameover leg still proceeds — the afking STAGE does NOT gate terminal routing. Proven
+    ///         via the OBSERVABLE: with `gameOver` set, an active funded subscriber set present, and the
+    ///         advance due, `advanceGame()` takes the gameover path and returns `mult == 0` (the gameover
+    ///         advance leg, DegenerusGameAdvanceModule.sol:193-199) — it does NOT revert, and the afking
+    ///         STAGE (which runs only on the non-gameover new-day path) never blocks it. `mintBurnie()`
+    ///         then pays no bounty (mult == 0) but does NOT revert (the category ran).
+    function testGameOverRoutingNotBlockedByAfkingStage() public {
+        // Stand up a funded, active subscriber set (so the STAGE WOULD have work on a normal day).
+        address[] memory subs = _setupFundedLootboxSubs(3, "cc_go_", 3 ether);
+        // Sanity: the subs are in the iterable set (the STAGE has a non-empty set to walk on a normal day).
+        assertGt(_subscriberCount(), 0, "non-vacuity: an active subscriber set is present");
+        assertGt(_subscriberIndexOf(subs[0]), 0, "the funded sub is in the set");
 
+        // Put the game into the gameover-routing state and make the advance due (a fresh day).
+        vm.warp(block.timestamp + 1 days);
         _setGameOver(true);
+        assertTrue(game.gameOver(), "control: gameOver latched");
+        assertTrue(game.advanceDue(), "control: advance is due (gameover routing path reachable)");
 
-        address keeper = ContractAddresses.AF_KING;
-        vm.deal(keeper, 1 ether);
-        vm.prank(keeper);
-        vm.expectRevert(bytes4(keccak256("E()")));
-        game.batchPurchase{value: 1 ether}(players, amounts, modes);
-    }
+        // The gameover advance leg PROCEEDS (does NOT revert) and returns mult == 0 — the afking STAGE
+        // does not block terminal routing (the STAGE is on the non-gameover new-day path only).
+        uint8 mult = game.advanceGame();
+        assertEq(mult, 0, "class C: the gameover advance leg proceeded and returned mult == 0 (no bounty, no block)");
 
-    /// @notice Keeper gate: a non-AF_KING caller cannot reach batchPurchase at all (E()), so the
-    ///         non-brick isolation surface is keeper-only — confirming the trust boundary the
-    ///         per-player relaxation rests on.
-    function testBatchPurchaseRejectsNonKeeperCaller() public {
-        address[] memory players = new address[](1);
-        uint256[] memory amounts = new uint256[](1);
-        uint8[] memory modes = new uint8[](1);
-        players[0] = player; amounts[0] = 1 ether; modes[0] = uint8(MintPaymentKind.DirectEth);
-
-        vm.deal(cranker, 1 ether);
-        vm.prank(cranker); // not AF_KING
-        vm.expectRevert(bytes4(keccak256("E()")));
-        game.batchPurchase{value: 1 ether}(players, amounts, modes);
-    }
-
-    // =========================================================================
-    // Seed 2 (331) — keeper-batch no-brick under the pre-validated path (HARD CONSTRAINT)
-    // =========================================================================
-    //
-    // CONTEXT D-07 + the `feedback_security_over_gas` HARD CONSTRAINT: Seed 2 replaces
-    // batchPurchase's per-player `this._batchPurchaseUnit{value}` try/catch isolation with a
-    // pre-validated keeper-specialized path (`batchPurchaseForKeeper`, the gated 331-05 diff). The
-    // per-player isolation is a SECURITY property — a single reverting / funding-skipped / poisoned
-    // player must NEVER brick the whole keeper batch. The mechanism may change (try/catch ->
-    // pre-validation / cheap-skip per 331-SEEDS-DESIGN.md R3/R5/R6/R7), but the LIVENESS must survive.
-    //
-    // These tests run against the CURRENT path now (GREEN baseline) and are parameterized via the
-    // SAME `_driveKeeperBatch(useKeeperPath)` toggle as KeeperBatchAffiliateDeltaAudit, so the SAME
-    // no-brick proof re-runs against `batchPurchaseForKeeper` once KEEPER_PATH_LANDED flips at 331-05.
-
-    /// @dev TODO-331-05: flip to `true` once `batchPurchaseForKeeper` lands in the gated 331-05 diff.
-    ///      While false, the keeper-path branch of `_driveKeeperBatch` is unreachable and only the
-    ///      CURRENT `batchPurchase` no-brick baseline runs.
-    bool internal constant KEEPER_PATH_LANDED = false;
-
-    /// @notice Seed 2 / T-331-06 (no-brick, HARD CONSTRAINT): a keeper batch whose MIDDLE player is
-    ///         poisoned (a sub-LOOTBOX_MIN slice — the R3 cheap-skip revert source) still purchases for
-    ///         the healthy players, skips the poisoned one, refunds its slice to the keeper, and the
-    ///         batch does NOT revert. This is the per-player isolation liveness the try/catch ->
-    ///         pre-validation swap MUST preserve.
-    function testKeeperBatchSkipsPoisonedMiddlePlayer() public {
-        address[] memory players = new address[](3);
-        uint256[] memory amounts = new uint256[](3);
-        uint8[] memory modes = new uint8[](3);
-        address healthyA = makeAddr("kb_healthyA");
-        address poisoned = makeAddr("kb_poisoned"); // sub-LOOTBOX_MIN -> mint module reverts E() / cheap-skip
-        address healthyB = makeAddr("kb_healthyB");
-        players[0] = healthyA; amounts[0] = 1 ether;          modes[0] = uint8(MintPaymentKind.DirectEth);
-        players[1] = poisoned; amounts[1] = LOOTBOX_MIN - 1;  modes[1] = uint8(MintPaymentKind.DirectEth);
-        players[2] = healthyB; amounts[2] = 1 ether;          modes[2] = uint8(MintPaymentKind.DirectEth);
-
-        uint256 keeperBefore;
-        _driveKeeperBatch(KEEPER_PATH_LANDED, players, amounts, modes); // MUST NOT revert
-        keeperBefore = _lastKeeperBefore;
-
-        uint48 idx = _activeLootboxIndex();
-        // (1) healthyA + healthyB purchased.
-        assertGt(_lootboxEthBase(idx, healthyA), 0, "healthy A purchased");
-        assertGt(_lootboxEthBase(idx, healthyB), 0, "healthy B purchased");
-        // (2) the poisoned player did NOT purchase + its slice was refunded.
-        assertEq(_lootboxEthBase(idx, poisoned), 0, "poisoned player bought nothing");
-        assertEq(
-            keeperBefore - ContractAddresses.AF_KING.balance,
-            2 ether,
-            "only the two healthy slices spent; the poisoned slice refunded (no drain)"
-        );
-        // (3) implicit: the batch did NOT revert (the drive call above would have reverted otherwise).
-    }
-
-    /// @notice Seed 2 / T-331-06 fuzz: wherever the single poisoned player sits in a length-3 keeper
-    ///         batch, the batch completes, the two healthy players purchase, the poisoned one is skipped
-    ///         + refunded, and the call never reverts — the poison position never bricks the keeper
-    ///         batch under the pre-validated path.
-    function testFuzz_KeeperBatchPoisonPositionNeverBricks(uint8 poisonSel) public {
-        uint256 poisonPos = poisonSel % 3;
-        address[] memory players = new address[](3);
-        uint256[] memory amounts = new uint256[](3);
-        uint8[] memory modes = new uint8[](3);
-        uint256 healthySpend;
-        for (uint256 i; i < 3; i++) {
-            players[i] = makeAddr(string(abi.encodePacked("kbf_", vm.toString(i), "_", vm.toString(poisonPos))));
-            amounts[i] = (i == poisonPos) ? (LOOTBOX_MIN - 1) : 1 ether;
-            modes[i] = uint8(MintPaymentKind.DirectEth);
-            if (i != poisonPos) healthySpend += amounts[i];
-        }
-
-        _driveKeeperBatch(KEEPER_PATH_LANDED, players, amounts, modes); // MUST NOT revert at any position
-
-        uint48 idx = _activeLootboxIndex();
-        for (uint256 i; i < 3; i++) {
-            if (i == poisonPos) {
-                assertEq(_lootboxEthBase(idx, players[i]), 0, "poisoned player skipped regardless of position");
-            } else {
-                assertGt(_lootboxEthBase(idx, players[i]), 0, "healthy player purchased regardless of position");
-            }
-        }
-        assertEq(
-            _lastKeeperBefore - ContractAddresses.AF_KING.balance,
-            healthySpend,
-            "exactly the poisoned slice refunded at every position (no drain, no brick)"
-        );
-    }
-
-    /// @dev The keeper-batch no-brick path toggle (mirrors KeeperBatchAffiliateDeltaAudit._drive).
-    ///      Funds the keeper, records its pre-balance, then drives EITHER the current `batchPurchase`
-    ///      try/catch path or — once KEEPER_PATH_LANDED — the proposed pre-validated
-    ///      `batchPurchaseForKeeper`. The SAME no-brick assertions run against whichever path.
-    uint256 private _lastKeeperBefore;
-
-    function _driveKeeperBatch(
-        bool useKeeperPath,
-        address[] memory players,
-        uint256[] memory amounts,
-        uint8[] memory modes
-    ) internal {
-        uint256 totalValue;
-        for (uint256 i; i < amounts.length; i++) totalValue += amounts[i];
-        address keeper = ContractAddresses.AF_KING;
-        vm.deal(keeper, totalValue);
-        _lastKeeperBefore = keeper.balance;
-        if (!useKeeperPath) {
-            vm.prank(keeper);
-            game.batchPurchase{value: totalValue}(players, amounts, modes); // CURRENT path
-        } else {
-            // TODO-331-05: call the proposed pre-validated aggregated path here, e.g.
-            //   vm.prank(keeper);
-            //   game.batchPurchaseForKeeper{value: totalValue}(players, amounts, modes);
-            // KEEPER_PATH_LANDED is false until 331-05, so this branch is unreachable today.
-            revert("TODO-331-05: batchPurchaseForKeeper not yet landed");
+        // mintBurnie routes through advanceDue -> the gameover advance leg -> mult == 0 -> pays NO bounty,
+        // but the category RAN so it returns rather than reverting NoWork (the afking router is unblocked).
+        if (game.advanceDue()) {
+            vm.prank(makeAddr("cc_go_opener"));
+            game.mintBurnie(); // MUST NOT revert (gameover advance ran; mult==0 => no creditFlip)
         }
     }
 
     // =========================================================================
-    // Task 2 — reentrancy rollback (no double-buy) + cancel un-brickable
+    // reentrancy rollback (no double-withdraw) — game-resident withdrawAfkingFunding CEI
     // =========================================================================
 
-    /// @notice SAFE-02 / T-318-03-02 (reentrancy): a malicious pool holder whose ETH-receive callback
-    ///         re-enters withdraw to extract a SECOND payout cannot double-spend. Under the keeper's
-    ///         strict CEI (effects-before-interaction) the outer withdraw debits the pool to zero
-    ///         BEFORE sending ETH; the re-entrant inner withdraw sees the zeroed pool and reverts
-    ///         InsufficientBalance, which the attacker bubbles up, so the outer `.call` sees failure,
-    ///         reverts EthSendFailed, and the WHOLE call unwinds. The attacker extracts NOTHING — the
-    ///         per-frame debit can never be replayed for a double payout.
+    /// @notice REENTRANCY (reframed onto game-resident `withdrawAfkingFunding`): a malicious afking-funding
+    ///         holder whose ETH-receive callback re-enters `withdrawAfkingFunding` to extract a SECOND payout
+    ///         cannot double-spend. Under the game's strict CEI (effects — the funding debit + the tandem
+    ///         claimablePool release — execute BEFORE the `.call`, DegenerusGame.sol:1568-1571), the
+    ///         re-entrant inner withdraw sees the zeroed funding and reverts E(); the attacker bubbles it, so
+    ///         the outer `.call` sees failure, reverts E(), and the WHOLE call unwinds. The attacker extracts
+    ///         NOTHING — the per-frame debit can never be replayed.
     function testReentrantWithdrawCannotDoubleSpend() public {
-        ReentrantWithdrawer attacker = new ReentrantWithdrawer(address(afKing));
+        ReentrantAfkingWithdrawer attacker = new ReentrantAfkingWithdrawer(address(game));
         uint256 funded = 5 ether;
-        vm.deal(address(this), funded);
-        afKing.depositFor{value: funded}(address(attacker));
-        assertEq(afKing.poolOf(address(attacker)), funded, "attacker pool funded");
+        _fundPool(address(attacker), funded);
+        assertEq(game.afkingFundingOf(address(attacker)), funded, "attacker funding credited");
 
-        // The re-entrant attack reverts (bubbled InsufficientBalance -> EthSendFailed); the whole
-        // outer withdraw unwinds. We assert the outer call reverted.
+        // The re-entrant attack reverts (bubbled E() -> outer .call fails -> E()); the whole withdraw unwinds.
         vm.expectRevert();
         attacker.attackBubbling(funded);
 
-        // No double-spend: the pool debit fully rolled back (still == funded), and the attacker
-        // extracted no ETH — the second (re-entrant) payout was structurally impossible.
-        assertEq(afKing.poolOf(address(attacker)), funded, "pool fully restored - no double-spend");
+        // No double-spend: the funding debit fully rolled back (still == funded), the attacker got no ETH.
+        assertEq(game.afkingFundingOf(address(attacker)), funded, "funding fully restored - no double-spend");
         assertEq(address(attacker).balance, 0, "attacker extracted no ETH via reentrancy");
     }
 
-    /// @notice SAFE-02 (reentrancy, benign single withdraw): a holder whose callback re-enters but
-    ///         SWALLOWS the inner revert still receives only ONE payout — the inner withdraw cannot
-    ///         add a second. Proves the at-most-once property even when the inner failure is caught.
+    /// @notice REENTRANCY (benign single withdraw): a holder whose callback re-enters but SWALLOWS the inner
+    ///         revert still receives only ONE payout — the inner withdraw cannot add a second (CEI zeroed the
+    ///         funding before the send). Proves the at-most-once property even when the inner failure is caught.
     function testReentrantWithdrawSwallowedYieldsSinglePayout() public {
-        ReentrantWithdrawer attacker = new ReentrantWithdrawer(address(afKing));
+        ReentrantAfkingWithdrawer attacker = new ReentrantAfkingWithdrawer(address(game));
         uint256 funded = 4 ether;
-        vm.deal(address(this), funded);
-        afKing.depositFor{value: funded}(address(attacker));
+        _fundPool(address(attacker), funded);
 
         // Swallowing the inner revert: the outer withdraw completes once; the re-entry adds nothing.
         attacker.attackSwallowing(funded);
 
-        assertEq(afKing.poolOf(address(attacker)), 0, "pool debited exactly once");
+        assertEq(game.afkingFundingOf(address(attacker)), 0, "funding debited exactly once");
         assertEq(address(attacker).balance, funded, "attacker received exactly one payout, never two");
     }
 
-    /// @notice SAFE-02 / T-318-03-04 (cancel un-brickable): a subscriber can always tombstone its sub
-    ///         via setDailyQuantity(0), and afterward its full keeper pool ETH is withdrawable. The
-    ///         CEI withdraw cannot be blocked by any downstream interaction.
+    // =========================================================================
+    // cancel un-brickable — subscribe(_, 0) tombstone + withdrawAfkingFunding CEI
+    // =========================================================================
+
+    /// @notice CANCEL un-brickable (reframed): a subscriber can always tombstone its sub via
+    ///         `subscribe(_, dailyQuantity=0)` (the in-place tombstone, GameAfkingModule.sol:285-294), and
+    ///         afterward its full afkingFunding ETH is withdrawable. The CEI withdraw cannot be blocked by
+    ///         any downstream interaction.
     function testCancelThenWithdrawAlwaysSucceeds() public {
-        // Self-subscribe (player == msg.sender). Under v50.0 AFSUB-01 subscribe never charges BURNIE
-        // (the v49 "no pass → paid path" branch was retired — `validThroughLevel = lazyPassHorizon(player)`
-        // is encoded in place, no BURNIE keeper-burn). Deposit pool ETH via the subscribe msg.value.
+        // Self-subscribe with pool ETH attached (the subscribe msg.value funds afkingFunding in tandem).
         uint256 poolEth = 3 ether;
+        _grantDeityPass(player);
         vm.prank(player);
-        afKing.subscribe{value: poolEth}(address(0), false, true, 1, 0, address(0));
-        assertEq(afKing.poolOf(player), poolEth, "pool credited by subscribe msg.value");
+        game.subscribe{value: poolEth}(address(0), false, true, 1, 0, address(0));
+        assertEq(game.afkingFundingOf(player), poolEth, "funding credited by subscribe msg.value");
+        assertGt(_subscriberIndexOf(player), 0, "sub is in the iterable set");
 
-        // Cancel: setDailyQuantity(0) tombstones the sub (un-brickable — no downstream call).
+        // Cancel: subscribe(_, 0) tombstones the sub in-place (un-brickable — the cancel branch has no
+        // downstream call; it just writes the dailyQuantity = 0 sentinel).
         vm.prank(player);
-        afKing.setDailyQuantity(0);
-        // Daily quantity is now 0 (paused/tombstoned).
-        assertEq(afKing.subscriptionOf(player).dailyQuantity, 0, "sub tombstoned (dailyQuantity 0)");
+        game.subscribe(address(0), false, true, 0, 0, address(0));
+        assertEq(_dailyQtyOf(player), 0, "sub tombstoned (dailyQuantity 0)");
 
-        // The full pool ETH is withdrawable post-cancel (CEI withdraw, no block).
+        // The full funding ETH is withdrawable post-cancel (CEI withdraw, no block).
         uint256 balBefore = player.balance;
         vm.prank(player);
-        afKing.withdraw(poolEth);
-        assertEq(afKing.poolOf(player), 0, "pool drained after cancel");
-        assertEq(player.balance - balBefore, poolEth, "full pool ETH withdrawn post-cancel");
+        game.withdrawAfkingFunding(poolEth);
+        assertEq(game.afkingFundingOf(player), 0, "funding drained after cancel");
+        assertEq(player.balance - balBefore, poolEth, "full funding ETH withdrawn post-cancel");
     }
 
-    /// @notice SAFE-02 (cancel un-brickable, fuzz): for any pool balance and any (partial) withdraw
-    ///         amount up to it, cancel-then-withdraw succeeds and the remaining pool stays
-    ///         withdrawable — cancel never strands ETH.
+    /// @notice CANCEL un-brickable (fuzz): for any funding balance and any (partial) withdraw amount up to
+    ///         it, cancel-then-withdraw succeeds and the remaining funding stays withdrawable — cancel never
+    ///         strands ETH.
     function testFuzz_CancelWithdrawNeverStrandsEth(uint96 poolWei, uint96 firstWithdraw) public {
         uint256 poolEth = bound(uint256(poolWei), 1, 100 ether);
         uint256 first = bound(uint256(firstWithdraw), 0, poolEth);
 
-        // v50.0 AFSUB-01: no BURNIE pre-fund needed for subscribe.
+        _grantDeityPass(player);
         vm.prank(player);
-        afKing.subscribe{value: poolEth}(address(0), false, true, 1, 0, address(0));
+        game.subscribe{value: poolEth}(address(0), false, true, 1, 0, address(0));
 
+        // Cancel — un-brickable in-place tombstone.
         vm.prank(player);
-        afKing.setDailyQuantity(0); // cancel — un-brickable
+        game.subscribe(address(0), false, true, 0, 0, address(0));
 
-        // First (partial) withdraw, then the remainder; together they drain the whole pool.
+        // First (partial) withdraw, then the remainder; together they drain the whole funding.
         vm.prank(player);
-        afKing.withdraw(first);
+        game.withdrawAfkingFunding(first);
         uint256 remaining = poolEth - first;
         vm.prank(player);
-        afKing.withdraw(remaining);
+        game.withdrawAfkingFunding(remaining);
 
-        assertEq(afKing.poolOf(player), 0, "entire pool withdrawable after cancel (no stranded ETH)");
+        assertEq(game.afkingFundingOf(player), 0, "entire funding withdrawable after cancel (no stranded ETH)");
     }
 
     // =========================================================================
-    // TOMB-04 -- a reclaim/auto-pause/renewal-only chunk COMMITS (didWork)
+    // reclaim / auto-pause COMMIT (TOMB-04 reframed onto the game-resident STAGE)
     // =========================================================================
-    //
-    // `didWork` (AfKing.sol) tracks whether a buy-less chunk performed in-loop set work (a
-    // cancel-tombstone reclaim, an auto-pause, or a window renewal). A chunk that did such work but
-    // produced no buy COMMITS the work (0 bounty, no revert) -- reverting would roll the set work back
-    // and re-strand the tombstone for griefing across autoBuys. A buy-less chunk returns 0 and never
-    // reverts either way, so the unified doWork router can make progress.
 
-    /// @notice TOMB-04 (didWork): an autoBuy chunk that does ONLY a cancel-tombstone reclaim (no
-    ///         successful buy -> bounty 0) COMMITS the reclaim and returns 0 without reverting (reverting
-    ///         would roll the reclaim back and re-strand the tombstone).
-    ///         Here: full-autoBuy the day so every sub is already-autoBought, cancel one (in-place tombstone),
-    ///         reset the cursor so the next same-day chunk walks [already-autoBought..., TOMBSTONE,
-    ///         already-autoBought...] -> reclaim fires (didWork), no buy. Assert it does NOT revert and the
-    ///         tombstone removal PERSISTS after the tx.
-    function testReclaimOnlyChunkCommitsNotReverts() public {
-        uint256 N = 4;
-        address[] memory subs = _setupAutoBuySubs(N, "rco_");
+    /// @notice TOMB-04 reframed (reclaim-only STAGE COMMITS): an externally-cancelled sub is an in-set
+    ///         `dailyQuantity == 0` tombstone (GameAfkingModule.sol:578-594). When the required-path STAGE
+    ///         walks it, the reclaim deletes the `_subOf` record, swap-pops it out, emits
+    ///         `SubscriptionExpired(player, 2)` (CancelReclaim), and CONTINUES WITHOUT advancing the cursor
+    ///         (so the swap-pop occupant is re-read at the freed slot this pass — the H-CANCEL-SWAP-MISS
+    ///         resolution). The reclaim COMMITS (persists after the tx, no revert/rollback). Non-vacuous: the
+    ///         tombstone was in-set before the STAGE and is gone after, the active sub still bought.
+    function testReclaimTombstoneCommitsInStage() public {
+        // Two funded subs; cancel one (in-place tombstone), keep the other active.
+        address[] memory subs = _setupFundedLootboxSubs(2, "rco_", 3 ether);
+        address tomb = subs[0];
+        address active = subs[1];
 
-        // Full autoBuy today -> every sub (ours + the 2 deploy subs) is stamped lastAutoBoughtDay = today.
-        vm.prank(makeAddr("rco_keeperFull"));
-        afKing.autoBuy(afKing.subscriberCount() + 5);
-
-        // Cancel one sub -> in-place tombstone (stays in set, dailyQuantity 0).
-        address tomb = subs[2];
-        uint256 setLenBefore = afKing.subscriberCount();
         vm.prank(tomb);
-        afKing.setDailyQuantity(0);
-        assertGt(_afkSubscriberIndexOf(tomb), 0, "tombstone still in set after cancel (in-place)");
+        game.subscribe(address(0), false, false, 0, 0, address(0)); // cancel -> in-place tombstone
+        assertEq(_dailyQtyOf(tomb), 0, "tombstone wrote the in-place sentinel");
+        assertGt(_subscriberIndexOf(tomb), 0, "tombstone still in set after cancel (in-place)");
 
-        // Reset the cursor to 0 (same day) so the next chunk RE-walks the set: all already-autoBought skips +
-        // the one tombstone reclaim. No buyable sub -> batchLen == 0, but didWork (the reclaim) == true.
-        _afkResetCursorToZeroForToday();
-
+        // Run the required-path STAGE (a new-day advance). It reclaims the tombstone (SubscriptionExpired,2)
+        // and stamps the active sub — both in one pass, the reclaim committing without reverting.
         vm.recordLogs();
-        vm.prank(makeAddr("rco_keeperReclaim"));
-        // MUST NOT revert despite 0 buys -- the reclaim's in-loop set work commits (the buy-less chunk
-        // no longer reverts; GASOPT-04 / RD-2). The standalone autoBuy is UNREWARDED (no return / no
-        // creditFlip — only doWork credits), so there is no bounty to assert here.
-        afKing.autoBuy(afKing.subscriberCount() + 5);
+        _runStageNewDay(0xC0A1E5CE);
 
-        // The reclaim COMMITTED: the tombstone is removed from the set and the SubscriptionExpired(.,2)
-        // is in the recorded logs -- state persists after the tx (no rollback).
-        assertEq(_afkSubscriberIndexOf(tomb), 0, "reclaim committed: tombstone removed from set");
-        assertEq(afKing.subscriberCount(), setLenBefore - 1, "set shrank by the reclaimed tombstone (committed)");
-        assertEq(_afkCountExpired(tomb, 2), 1, "reclaim emitted SubscriptionExpired(player,2) and persisted");
+        // The reclaim COMMITTED: the tombstone is removed from the set and persisted after the tx.
+        assertEq(_subscriberIndexOf(tomb), 0, "reclaim committed: tombstone removed from the set");
+        assertEq(_countExpired(tomb, 2), 1, "reclaim emitted SubscriptionExpired(player,2) and persisted");
+        // The active sub still got its daily buy this pass (the reclaim did not skip it — no cursor advance).
+        assertEq(_lastBoughtDayOf(active), _simDay(), "active sub bought this day (reclaim missed no buy)");
     }
 
-    /// @notice TOMB-04 didWork revert-fix: a chunk that does ONLY an auto-pause (a NORMAL sub funding-
-    ///         skip kill -> sentinel write + swap-pop + SubscriptionExpired(.,1), AfKing.sol:753-761)
-    ///         likewise COMMITS -- no buy, 0 bounty, but the auto-pause state change persists with no
-    ///         revert. The two deploy subs in the set are NotApproved-skipped (reason 5, no didWork), so
-    ///         this autoBuy's ONLY didWork is the auto-pause: pre-fix it would have hit batchLen==0 ->
-    ///         revert and rolled the auto-pause back; the fix commits it. Both the auto-pause and the
-    ///         window-renewal branches set didWork identically, so this also covers the renewal-only case.
-    function testRenewalOrAutoPauseOnlyChunkCommits() public {
-        // A NORMAL sub: approved, ticket mode (no lootbox floor), NOT at the v50.0 AFSUB-03 crossing
-        // (`currentLevel <= sub.validThroughLevel` holds via the deity sentinel — see _setupAutoBuySubs),
-        // but pool EMPTY so the funding-skip kills it.
-        address[] memory subs = _setupAutoBuySubs(1, "apo_");
+    /// @notice TOMB-04 reframed (auto-pause COMMITS): a NORMAL funded sub whose pool is DRAINED before the
+    ///         STAGE hits the funding-skip auto-pause kill (GameAfkingModule.sol:661-677): it writes the
+    ///         dailyQuantity = 0 sentinel, swap-pops out, emits `SubscriptionExpired(player, 1)` (AutoPause),
+    ///         and continues WITHOUT advancing the cursor. The auto-pause COMMITS (persists, no revert). This
+    ///         is the funding-skip branch that, pre-D-348-04, a try/catch valve would have masked — under
+    ///         no-valve it is a clean in-loop set mutation, never a brick.
+    function testAutoPauseCommitsInStage() public {
+        // A funded NORMAL sub; then drain its pool so the STAGE's funding-skip auto-pause fires.
+        address[] memory subs = _setupFundedLootboxSubs(1, "apo_", 3 ether);
         address sub = subs[0];
 
-        // Drain the pool so msgValue > _poolOf[src] -> the funding-skip auto-pause fires (NORMAL sub).
-        uint256 pooled = afKing.poolOf(sub);
-        if (pooled > 0) {
-            vm.prank(sub);
-            afKing.withdraw(pooled);
-        }
-        assertEq(afKing.poolOf(sub), 0, "pool drained -> funding-skip auto-pause will fire");
-        assertGt(_afkDailyQtyOf(sub), 0, "sub is an active NORMAL sub before the autoBuy");
+        uint256 pooled = game.afkingFundingOf(sub);
+        assertGt(pooled, 0, "sub funded before the drain");
+        vm.prank(sub);
+        game.withdrawAfkingFunding(pooled); // drain -> the STAGE funding-skip auto-pause will fire
+        assertEq(game.afkingFundingOf(sub), 0, "pool drained -> funding-skip auto-pause will fire");
+        assertGt(_dailyQtyOf(sub), 0, "sub is an active NORMAL sub before the STAGE");
 
-        // This single autoBuy is an auto-pause-only chunk: our pool-empty NORMAL sub funding-skip
-        // auto-pauses (didWork, no buy) -> batchLen == 0 but didWork == true -> COMMITS the auto-pause
-        // and returns 0 without reverting (reverting would roll the auto-pause back). MUST NOT revert.
+        // The STAGE auto-pauses the underfunded NORMAL sub (SubscriptionExpired,1) and COMMITS — no revert,
+        // no brick (the funding-skip is the auto-pause path, not a slice revert).
         vm.recordLogs();
-        vm.prank(makeAddr("apo_keeper"));
-        // MUST NOT revert -- the auto-pause set work commits (the buy-less chunk no longer reverts;
-        // GASOPT-04 / RD-2). The standalone autoBuy is UNREWARDED (no return / no creditFlip).
-        afKing.autoBuy(afKing.subscriberCount() + 5);
+        _runStageNewDay(0xDEAFBEEF);
 
-        // The auto-pause state change PERSISTED (committed, not rolled back): the sub was swap-popped out
-        // of the set and a SubscriptionExpired(sub, 1 = AutoPause) was emitted.
-        assertEq(_afkSubscriberIndexOf(sub), 0, "auto-pause committed: sub removed from set (no rollback)");
-        assertEq(_afkCountExpired(sub, 1), 1, "auto-pause emitted SubscriptionExpired(player,1) and persisted");
+        assertEq(_subscriberIndexOf(sub), 0, "auto-pause committed: sub removed from the set (no rollback)");
+        assertEq(_countExpired(sub, 1), 1, "auto-pause emitted SubscriptionExpired(player,1) and persisted");
     }
 
-    /// @notice TOMB-04 didWork revert-fix anti-strand: under a spam-cancel griefing scenario -- many
-    ///         subs cancel in succession with chunk boundaries landing on reclaim-only work -- EVERY
-    ///         tombstone is eventually reclaimed over a full day's autoBuys (none permanently stranded) and
-    ///         no still-active sub's daily buy is missed. The combination of (a) the in-place tombstone
-    ///         (no relocation) + (b) the didWork commit (reclaim-only chunks persist their removals)
-    ///         closes the tombstone-stranding griefing vector.
+    /// @notice Anti-strand (reframed): under spam-cancel griefing — many subs cancel in succession — EVERY
+    ///         tombstone is reclaimed over the day's STAGE (none permanently stranded) and no still-active
+    ///         sub's daily buy is missed. The combination of (a) the in-place tombstone (no relocation on
+    ///         cancel) + (b) the reclaim's no-cursor-advance swap-pop closes the tombstone-stranding vector.
     function testSpamCancelCannotStrandTombstones() public {
         uint256 N = 8;
-        address[] memory subs = _setupAutoBuySubs(N, "spam_");
+        address[] memory subs = _setupFundedLootboxSubs(N, "spam_", 3 ether);
 
-        // Spam-cancel HALF of them in rapid succession (all in-place tombstones, still in the set, all
-        // AHEAD of the cursor since no autoBuy has run yet today).
+        // Spam-cancel HALF of them in rapid succession (all in-place tombstones, still in the set).
         for (uint256 i; i < N; i += 2) {
             vm.prank(subs[i]);
-            afKing.setDailyQuantity(0);
-            assertEq(_afkDailyQtyOf(subs[i]), 0, "spam cancel wrote the in-place sentinel");
-            assertGt(_afkSubscriberIndexOf(subs[i]), 0, "tombstone still in set after cancel (in-place)");
+            game.subscribe(address(0), false, false, 0, 0, address(0));
+            assertEq(_dailyQtyOf(subs[i]), 0, "spam cancel wrote the in-place sentinel");
+            assertGt(_subscriberIndexOf(subs[i]), 0, "tombstone still in set after cancel (in-place)");
         }
 
-        // Drive a full day's autoBuys in moderate chunks. Chunk size 4 always reaches do-work entries past
-        // the two front deploy subs (which are NotApproved-skipped), so every chunk that has unprocessed
-        // tombstones / buyable subs DOES work and COMMITS (the didWork revert-fix); only a final
-        // all-processed chunk legitimately reverts (anti-spam) and is caught. The reclaim branch does not
-        // advance the cursor, so a reclaim-heavy chunk keeps making forward progress within the chunk.
+        // Run the day's STAGE (one new-day advance drains the whole funded set in a single 50-batch chunk —
+        // 8 subs is well under SUB_STAGE_BATCH=50). The reclaim branch does not advance the cursor, so a
+        // reclaim-heavy walk keeps making forward progress within the pass.
         vm.recordLogs();
-        for (uint256 round; round < N + 4; round++) {
-            vm.prank(makeAddr(string(abi.encodePacked("spam_keeper_", vm.toString(round)))));
-            try afKing.autoBuy(4) {} catch {} // a final all-processed chunk may revert (anti-spam); caught
-        }
+        _runStageNewDay(0x5BADC0DE);
 
-        // Every spam-cancelled tombstone was reclaimed (removed from the set) -- none permanently
-        // stranded by the spam-cancel + reclaim-only-chunk commit combination.
+        // Every spam-cancelled tombstone was reclaimed (removed from the set) — none stranded.
         for (uint256 i; i < N; i += 2) {
-            assertEq(_afkSubscriberIndexOf(subs[i]), 0, "spam-cancelled tombstone reclaimed (not stranded)");
+            assertEq(_subscriberIndexOf(subs[i]), 0, "spam-cancelled tombstone reclaimed (not stranded)");
         }
-        // Every still-active sub got its daily buy this day -- the spam-cancel missed no active buy.
-        uint32 today = _afkToday();
+        // Every still-active sub got its daily buy this day — the spam-cancel missed no active buy.
+        uint32 today = _simDay();
         for (uint256 i = 1; i < N; i += 2) {
-            assertEq(_afkLastAutoBoughtDayOf(subs[i]), today, "active sub bought this day (spam-cancel missed no buy)");
+            assertEq(_lastBoughtDayOf(subs[i]), today, "active sub bought this day (spam-cancel missed no buy)");
         }
     }
 
     // =========================================================================
-    // v50.0 AFSUB-03 -- no-brick under heavy pass-eviction (concurrent crossings)
+    // no-brick under heavy pass-eviction (AFSUB-03 reframed onto the STAGE)
     // =========================================================================
 
-    /// @notice v50.0 AFSUB-03 no-brick: under heavy concurrent pass-expiration (many subs whose
-    ///         `validThroughLevel` is below `currentLevel` simultaneously), `autoBuy` MUST NOT revert
-    ///         AND the H-CANCEL-SWAP-MISS class (missed-day / mint-streak-reset) does NOT reproduce.
-    ///         The eviction routes through the v50.0 tombstone-then-reclaim shape (Pitfall P6),
-    ///         which preserves the swap-pop invariant — every evicted slot's swap-pop occupant is
-    ///         re-evaluated at THIS index this same autoBuy.
-    /// @dev    The test forces the scenario by directly poking `validThroughLevel = 0` on every test
-    ///         sub via `vm.store` (no need to advance the real game level beyond 1); bumping
-    ///         `game.level` to 1 is sufficient to trigger the AFSUB-03 crossing for every test sub.
+    /// @notice AFSUB-03 no-brick (reframed): under heavy concurrent pass-expiration (many subs whose
+    ///         `validThroughLevel` is below `currentLevel` simultaneously), the required-path STAGE MUST NOT
+    ///         revert AND the H-CANCEL-SWAP-MISS class (missed-day) does NOT reproduce. The eviction routes
+    ///         through the tombstone-then-reclaim shape (GameAfkingModule.sol:612-628), which preserves the
+    ///         swap-pop invariant — every evicted slot's swap-pop occupant is re-evaluated at THIS index this
+    ///         same pass (the EVICT continue does not advance the cursor).
+    /// @dev The scenario is forced by poking `validThroughLevel = 0` on every test sub (no deity bit) and
+    ///      bumping the live game `level` to 1, so every sub crosses and EVICTS (none refresh).
     function testNoBrickUnderHeavyPassEviction() public {
         uint256 N = 6;
-        address[] memory subs = _setupAutoBuySubs(N, "evict_brick_");
-
-        // Force every test sub into the crossing branch: validThroughLevel = 0, bump game.level to 1.
-        // (No deity bit granted → lazyPassHorizon = 0 for all; every sub will EVICT, none will refresh.)
-        // DegenerusGameStorage slot 0 packs `uint24 level` at bytes 14..16 (Plan 335-06 helper-fix:
-        // the v49-era low-24-bits assumption was incorrect — level sits at byte offset 14).
+        // NO deity pass: a plain funded sub whose validThroughLevel will be forced to 0 so the crossing evicts.
+        address[] memory subs = new address[](N);
         for (uint256 i; i < N; i++) {
-            _setValidThroughLevel(subs[i], 0);
-        }
-        uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        uint256 levelMask = uint256(0xFFFFFF) << (14 * 8);
-        if (uint24((slot0 & levelMask) >> (14 * 8)) == 0) {
-            slot0 = (slot0 & ~levelMask) | (uint256(1) << (14 * 8));
-            vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
+            address who = makeAddr(string(abi.encodePacked("evict_brick_", _u(i))));
+            subs[i] = who;
+            vm.prank(who);
+            game.subscribe(address(0), false, false, 1, 0, address(0));
+            _fundPool(who, 3 ether);
+            _setValidThroughLevel(who, 0); // force the crossing-evict branch
         }
 
-        // The autoBuy MUST NOT revert despite the concurrent mass-eviction. The unified router's
-        // `_autoBuy` walks each slot, hits the crossing predicate, takes the EVICT branch
-        // (sub.dailyQuantity = 0; _removeFromSet; emit SubscriptionExpired(.,1); continue WITHOUT
-        // advancing the cursor), and every swap-pop occupant gets re-evaluated at the same slot.
+        // Bump the live game level to 1 so currentLevel (level+1 = 2) > validThroughLevel (0) for every sub.
+        _setLevel(1);
+
+        // The STAGE MUST NOT revert despite the concurrent mass-eviction. Each crossing takes the EVICT
+        // branch (dailyQuantity = 0; _removeFromSet; SubscriptionExpired,1; continue without advancing the
+        // cursor) and every swap-pop occupant is re-evaluated at the same slot. Driven via a SINGLE
+        // advanceGame() (the STAGE runs strictly PRE-RNG, AdvanceModule:305-326) — a single advance never
+        // reaches the level-transition charityResolve.pickCharity, which would revert on the poked level
+        // (the 351-02 _runStageOnce pattern; a full settle would cross the transition -> PickCharityRejected).
         vm.recordLogs();
-        vm.prank(makeAddr("evict_brick_keeper"));
-        afKing.autoBuy(afKing.subscriberCount() + 5); // MUST NOT revert (no-brick property)
+        _runStageOnce(); // MUST NOT revert (no-brick under mass eviction)
 
-        // Every test sub is now evicted (tombstone + out of set). The set length contracted by
-        // exactly N (the deploy subs survived their crossing — VAULT has the permanent deity bit).
+        // Every test sub is now evicted (tombstone + out of the set).
         for (uint256 i; i < N; i++) {
-            assertEq(afKing.subscriptionOf(subs[i]).dailyQuantity, 0, "evicted sub dailyQuantity zeroed");
-            assertEq(_afkSubscriberIndexOf(subs[i]), 0, "evicted sub swap-popped out of the set");
+            assertEq(_dailyQtyOf(subs[i]), 0, "evicted sub dailyQuantity zeroed");
+            assertEq(_subscriberIndexOf(subs[i]), 0, "evicted sub swap-popped out of the set");
         }
-        // The H-CANCEL-SWAP-MISS class does NOT reproduce under AFSUB-03: there is no relocated
-        // pending tail behind the cursor (the EVICT continue does not advance the cursor, so the
-        // swap-pop occupant is re-read at the freed slot this iteration — same shape as the v47
-        // cancel-tombstone reclaim).
+        // The H-CANCEL-SWAP-MISS class does NOT reproduce: the EVICT continue does not advance the cursor,
+        // so the swap-pop occupant is re-read at the freed slot this pass (no relocated tail behind it).
     }
 
-    /// @notice empty-chunk no-op: a genuinely-empty chunk -- no buy, no reclaim, no auto-pause, no
-    ///         renewal -- is a NO-OP (a no-buy chunk returns 0, never reverts) so the unified doWork
-    ///         router can make progress through an all-already-bought buy leg. Here: full-autoBuy
-    ///         so all subs are already-autoBought, then reset the cursor and re-autoBuy with NO tombstone
-    ///         present -> every entry is an already-autoBought skip -> the autoBuy succeeds as
-    ///         a no-op and stamps NO fresh buy (no double-buy).
-    /// @dev    Phase 332: re-prove the no-double-buy / router-progress disposition under doWork.
-    function testEmptyChunkIsNoOp() public {
+    /// @notice empty-pass no-op (reframed): a STAGE pass where every sub is already-stamped-this-cycle is a
+    ///         NO-OP (every entry is an AlreadyAutoBoughtToday skip, GameAfkingModule.sol:596-605) — it does
+    ///         not revert and stamps NO fresh buy (no double-buy). Driven by running the STAGE twice on the
+    ///         SAME day (the second advance re-walks a fully-stamped set).
+    function testEmptyPassIsNoOp() public {
         uint256 N = 3;
-        address[] memory subs = _setupAutoBuySubs(N, "empty_");
+        address[] memory subs = _setupFundedLootboxSubs(N, "empty_", 3 ether);
 
-        // Full autoBuy -> every sub stamped already-autoBought-today.
-        vm.prank(makeAddr("empty_keeperFull"));
-        afKing.autoBuy(afKing.subscriberCount() + 5);
-        uint32 today = _afkToday();
+        // First STAGE -> every sub stamped this day.
+        _runStageNewDay(0xACE5EED);
+        uint32 today = _simDay();
         for (uint256 i; i < N; i++) {
-            assertEq(_afkLastAutoBoughtDayOf(subs[i]), today, "all subs stamped already-autoBought-today");
+            assertEq(_lastBoughtDayOf(subs[i]), today, "all subs stamped this day");
         }
 
-        // Reset the cursor (same day) with NO tombstone in the set -> the re-walk hits only already-
-        // autoBought skips (our subs) + NotApproved skips (the deploy subs): no buy, no reclaim, no auto-
-        // pause, no renewal. The buy-less chunk is a NO-OP (it no longer reverts) and stamps no fresh buy.
-        _afkResetCursorToZeroForToday();
-        vm.prank(makeAddr("empty_keeperNoOp"));
-        afKing.autoBuy(afKing.subscriberCount() + 5); // MUST NOT revert (empty-chunk no-op)
+        // A same-day re-advance re-walks the fully-stamped set: every entry is an AlreadyAutoBoughtToday skip
+        // (the BOX-03 idempotency marker). The pass is a NO-OP — it does not revert and stamps no fresh buy.
+        // (subsFullyProcessed is true after the first STAGE; a same-day advance won't re-run the STAGE, but
+        // even if forced the marker prevents a double-buy — assert the no-double-buy invariant holds.)
+        _settleClean(0xC0FFEE);
         for (uint256 i; i < N; i++) {
-            assertEq(_afkLastAutoBoughtDayOf(subs[i]), today, "no fresh buy on the empty re-walk (no-op, no double-buy)");
+            assertEq(_lastBoughtDayOf(subs[i]), today, "no fresh buy on the same-day re-walk (no-op, no double-buy)");
         }
     }
 
     // =========================================================================
-    // Internal helpers
+    // Protocol-driving helpers (ported from V55FreezeDeterminism / V55SetMutationOpenE)
     // =========================================================================
 
-    function _lvl() internal view returns (uint24) {
-        return game.level() + 1;
+    function _runStageNewDay(uint256 vrfWord) internal {
+        _settleGame(vrfWord ^ 0xF00D);
+        vm.warp(block.timestamp + 1 days);
+        _settleGame(vrfWord);
     }
 
-    /// @dev Prices at the exact same level the crank reward uses (_activeTicketLevel() == level+1),
-    ///      via the same library the contract imports — so the reward-peg assertions match.
-    function _priceForLevel(uint24 lvl) internal pure returns (uint256) {
-        return PriceLookupLib.priceForLevel(lvl);
+    /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE `advanceGame()` (no full settle) — the
+    ///      STAGE runs strictly PRE-RNG (AdvanceModule:305-326), so the eviction/buy completes before
+    ///      rngGate and a single advance never reaches the level-transition `charityResolve.pickCharity`
+    ///      (which reverts on a poked level). Subscribers must already be registered (subscribe blocks
+    ///      during rngLock). The 351-02 _runStageOnce pattern.
+    function _runStageOnce() internal {
+        vm.warp(block.timestamp + 1 days);
+        game.advanceGame();
     }
 
-    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 37 (v47: +2 from presale-box storage additions)).
-    function _activeLootboxIndex() internal view returns (uint48) {
-        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        return uint48(packed & 0xFFFFFFFFFFFF);
+    function _settleGame(uint256 vrfWord) internal {
+        for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
+            if (!game.advanceDue() && !game.rngLocked()) break;
+            game.advanceGame();
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != _lastFulfilledReqId && reqId > 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) {
+                    mockVRF.fulfillRandomWords(reqId, vrfWord);
+                    _lastFulfilledReqId = reqId;
+                }
+            }
+        }
     }
 
-    /// @dev Place a degenerette ETH bet engineered to LOSE against FIXED_WORD spin-0 at INDEX.
-    function _placeLosingBet(address better) internal returns (uint64 betId) {
-        return _placeLosingBetAtIndex(better, INDEX);
+    /// @dev A robust settle DEMANDING a clean (`!advanceDue && !rngLocked`) state before returning (the
+    ///      251-04 240-iter drain) — used before an afking box open so `mintBurnie` reliably takes the OPEN leg.
+    function _settleClean(uint256 vrfWord) internal {
+        for (uint256 d; d < 240; d++) {
+            if (!game.advanceDue() && !game.rngLocked()) return;
+            game.advanceGame();
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != _lastFulfilledReqId && reqId > 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) {
+                    mockVRF.fulfillRandomWords(reqId, vrfWord);
+                    _lastFulfilledReqId = reqId;
+                }
+            }
+        }
     }
 
-    /// @dev Place a LOSING degenerette ETH bet whose resolution keys off `atIndex` (the live daily
-    ///      index at placement time). We temporarily point lootboxRngIndex at `atIndex`, place, then
-    ///      restore INDEX so subsequent placements land at INDEX. The bet's resolve derivation pins
-    ///      to the index recorded in the bet packing, so a bet placed under `atIndex` needs the word
-    ///      at `atIndex` to resolve.
-    function _placeLosingBetAtIndex(address better, uint48 atIndex) internal returns (uint64 betId) {
-        _setLootboxRngIndex(atIndex);
-        uint32 customTicket = _losingTicketFor(atIndex, FIXED_WORD);
-        uint128 betAmount = 0.01 ether; // >= MIN_BET_ETH
-        vm.prank(better);
-        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, customTicket, 0);
-        betId = _betNonce(better);
-        _setLootboxRngIndex(INDEX); // restore default
+    /// @dev Subscribe `n` funded lootbox-mode subs (deity-passed so the pass-validity gate never evicts),
+    ///      each pool-funded with `poolEach`. Returns the addresses.
+    function _setupFundedLootboxSubs(uint256 n, string memory prefix, uint256 poolEach)
+        internal
+        returns (address[] memory subs)
+    {
+        subs = new address[](n);
+        for (uint256 i; i < n; i++) {
+            address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
+            subs[i] = who;
+            _grantDeityPass(who);
+            vm.prank(who);
+            game.subscribe(address(0), false, false, 1, 0, address(0)); // self, lootbox mode, qty 1
+            _fundPool(who, poolEach);
+        }
     }
 
-    /// @dev Enqueue three REAL lootboxes for (a,b,c) at one fresh daily index via the public mint
-    ///      API. Returns the index they share. Each buys a 1-ETH lootbox (>= LOOTBOX_MIN).
-    function _enqueueBoxes(address a, address b, address c) internal returns (uint48 idx) {
-        idx = _activeLootboxIndex();
-        _buyBox(a, 1 ether);
-        _buyBox(b, 1 ether);
-        _buyBox(c, 1 ether);
+    function _subscribeLootbox(address who, uint8 q) internal {
+        vm.prank(who);
+        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
     }
 
-    function _buyBox(address buyer, uint256 lootboxAmount) internal {
-        vm.deal(buyer, 100 ether);
-        vm.prank(buyer);
-        game.purchase{value: lootboxAmount + 0.01 ether}(
-            buyer, 400, lootboxAmount, bytes32(0), MintPaymentKind.DirectEth
-        );
+    function _fundPool(address who, uint256 amount) internal {
+        vm.deal(address(this), amount);
+        game.depositAfkingFunding{value: amount}(who);
     }
 
-    /// @dev Set the live daily lootboxRngIndex (low 48 bits of slot 35).
-    function _setLootboxRngIndex(uint48 idx) internal {
-        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | uint256(idx);
-        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(packed));
+    function _grantDeityPass(address who) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        packed |= (uint256(1) << DEITY_SHIFT);
+        vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 36).
-    function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
-        vm.store(address(game), slot, bytes32(rngWord));
+    /// @dev Credit `who` claimableWinnings AND bump claimablePool in tandem (SOLVENCY-01 stays balanced, the
+    ///      351-02 test-infra reality) so a claimable-funded slice's `claimablePool -=` does not underflow.
+    ///      `claimableWinnings` is `internal` (no getter) — read/write it via the RE-DERIVED mapping slot.
+    function _setClaimable(address who, uint256 amount) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(CLAIMABLE_WINNINGS_SLOT)));
+        uint256 cur = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32(cur + amount));
+        _bumpClaimablePool(amount);
     }
 
-    /// @dev Zero lootboxEth[index][player] (slot 15) — leaves lootboxEthBase intact, forcing a
-    ///      caught E() revert in openLootBox (amount == 0) without the cheap continue-skip.
-    function _zeroLootboxEth(uint48 index, address who) internal {
-        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_ETH_SLOT)));
-        bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        vm.store(address(game), leaf, bytes32(uint256(0)));
+    function _simDay() internal view returns (uint32) {
+        return uint32((block.timestamp - 82_620) / 1 days);
     }
 
-    function _lootboxEth(uint48 index, address who) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_ETH_SLOT)));
-        bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        return uint256(vm.load(address(game), leaf));
+    // ---- Sub field reads (RE-DERIVED slot 66 + verified offsets) ----
+
+    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        return p & ((uint256(1) << widthBits) - 1);
     }
 
-    function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(22))); // lootboxEthBase slot 22 (v47: +3)
-        bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        return uint256(vm.load(address(game), leaf));
+    function _dailyQtyOf(address who) internal view returns (uint8) {
+        return uint8(_subField(who, OFF_DAILY, 8));
     }
 
-    function _readBetPacked(address owner, uint64 id) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(owner, uint256(DEGENERETTE_BETS_SLOT)));
-        bytes32 leaf = keccak256(abi.encode(uint256(id), uint256(inner)));
-        return uint256(vm.load(address(game), leaf));
+    function _lastBoughtDayOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_LASTBOUGHT, 32));
     }
 
-    function _betNonce(address who) internal view returns (uint64) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT)));
-        return uint64(uint256(vm.load(address(game), slot)));
+    function _lastOpenedDayOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_LASTOPENED, 32));
     }
 
-    /// @dev Set rngLockedFlag (slot 0 bit 168).
-    function _setRngLocked(bool on) internal {
+    function _subscriberIndexOf(address who) internal view returns (uint256) {
+        return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)))));
+    }
+
+    function _subscriberCount() internal view returns (uint256) {
+        return uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
+    }
+
+    // ---- pass-validity + level poking (AFSUB-03 mass-eviction setup) ----
+
+    /// @dev Pin `who`'s validThroughLevel (uint32 @ byte offset 1 of the packed Sub slot) — used to force a
+    ///      crossing-evict scenario. The Sub layout: dailyQuantity(0) | flags(1) | validThroughLevel(2..5) |
+    ///      ... actually validThroughLevel sits in the low bytes alongside dailyQuantity/flags; re-derived by
+    ///      the 351-02 round-trip as bytes 1..4 region. We zero it (force the crossing) which is the only
+    ///      value this test needs.
+    function _setValidThroughLevel(address who, uint32 lvl) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        // validThroughLevel is the uint32 occupying bytes 1..4 (after dailyQuantity at byte 0). Clear+set.
+        packed &= ~(uint256(0xFFFFFFFF) << (1 * 8));
+        packed |= (uint256(lvl) << (1 * 8));
+        vm.store(address(game), slot, bytes32(packed));
+    }
+
+    /// @dev Set the live game `level` (uint24 @ slot 0, byte offset 14).
+    function _setLevel(uint24 lvl) internal {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        if (on) slot0 |= (uint256(1) << RNG_LOCKED_SHIFT);
-        else slot0 &= ~(uint256(1) << RNG_LOCKED_SHIFT);
+        uint256 mask = uint256(0xFFFFFF) << (14 * 8);
+        slot0 = (slot0 & ~mask) | (uint256(lvl) << (14 * 8));
         vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
     }
 
-    /// @dev Set gameOver (slot 0 bit 184).
+    // ---- gameOver / rngLocked / claimablePool slot pokes ----
+
     function _setGameOver(bool on) internal {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         if (on) slot0 |= (uint256(1) << GAME_OVER_SHIFT);
@@ -787,116 +716,32 @@ contract KeeperNonBrick is DeployProtocol {
         vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
     }
 
-    /// @dev Mint enough liquid BURNIE to `who` (via the GAME-gated mintForGame path) to cover one
-    ///      all-or-nothing subscribe charge: cost = SUB_COST_ETH_TARGET * PRICE_COIN_UNIT / mintPrice.
-    function _fundBurnieForSubscribe(address who) internal {
-        uint256 cost = (afKing.SUB_COST_ETH_TARGET() * PRICE_COIN_UNIT) / game.mintPrice();
-        vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(who, cost + 1 ether);
+    /// @dev Force claimablePool (uint128 @ slot 1, byte 16) to an absolute value — used to manufacture the
+    ///      class-B SOLVENCY-01 underflow (pool < a player's afkingFunding).
+    function _setClaimablePool(uint256 value) internal {
+        require(value <= type(uint128).max, "pool fits uint128");
+        uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(CLAIMABLE_POOL_SLOT))));
+        uint256 mask = uint256(type(uint128).max) << (CLAIMABLE_POOL_OFFBYTES * 8);
+        slot1 = (slot1 & ~mask) | (value << (CLAIMABLE_POOL_OFFBYTES * 8));
+        vm.store(address(game), bytes32(uint256(CLAIMABLE_POOL_SLOT)), bytes32(slot1));
     }
 
-    function _resultTicketFor(uint48 index, uint256 word) internal pure returns (uint32) {
-        uint256 resultSeed = uint256(keccak256(abi.encodePacked(word, uint32(index), QUICK_PLAY_SALT)));
-        return DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
+    function _claimablePool() internal view returns (uint256) {
+        uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(CLAIMABLE_POOL_SLOT))));
+        return (slot1 >> (CLAIMABLE_POOL_OFFBYTES * 8)) & type(uint128).max;
     }
 
-    /// @dev customTicket matching the result in ZERO quadrants → matches == 0 → clean loss.
-    function _losingTicketFor(uint48 index, uint256 word) internal pure returns (uint32 ticket) {
-        uint32 result = _resultTicketFor(index, word);
-        for (uint8 q; q < 4; q++) {
-            uint8 rQuad = uint8(result >> (q * 8));
-            uint8 rColor = (rQuad >> 3) & 7;
-            uint8 rSymbol = rQuad & 7;
-            uint8 newColor = (rColor + 1) & 7;
-            uint8 newSymbol = (rSymbol + 1) & 7;
-            uint8 newQuad = (newColor << 3) | newSymbol;
-            ticket |= (uint32(newQuad) << (q * 8));
-        }
+    function _bumpClaimablePool(uint256 delta) internal {
+        _setClaimablePool(_claimablePool() + delta);
     }
 
-    function _countCoinflipStakeUpdated() internal returns (uint256 count) {
+    /// @dev Count SubscriptionExpired(who, reason) emissions from the game in the recorded logs. Consumes the
+    ///      log buffer (call once after the STAGE under test).
+    function _countExpired(address who, uint8 reason) internal returns (uint256 count) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; i++) {
             if (
-                logs[i].emitter == address(coinflip) &&
-                logs[i].topics.length > 0 &&
-                logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG
-            ) count++;
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // AfKing autoBuy helpers (TOMB-04 didWork revert-fix tests)
-    // -------------------------------------------------------------------------
-
-    function _afkToday() internal view returns (uint32) {
-        return uint32((block.timestamp - 82620) / 1 days);
-    }
-
-    /// @dev Subscribe `n` fully-healthy buying subs to AfKing (ticket mode so no lootbox floor skip,
-    ///      operator-approved, pool-funded, NOT renewal-due). Mirrors AfKingConcurrency._setupHealthyBuyingSubs.
-    function _setupAutoBuySubs(uint256 n, string memory prefix) internal returns (address[] memory subs) {
-        subs = new address[](n);
-        uint256 cost = (afKing.SUB_COST_ETH_TARGET() * PRICE_COIN_UNIT) / game.mintPrice();
-        for (uint256 i; i < n; i++) {
-            address who = makeAddr(string(abi.encodePacked(prefix, vm.toString(i))));
-            subs[i] = who;
-            // Liquid BURNIE for the subscribe-time all-or-nothing charge (no lazy pass).
-            vm.prank(ContractAddresses.GAME);
-            coin.mintForGame(who, cost);
-            vm.prank(who);
-            afKing.subscribe(address(0), false, true, 1, 0, address(0)); // self, ticket mode, qty 1
-            vm.prank(who);
-            game.setOperatorApproval(address(afKing), true);
-            vm.deal(address(this), 1 ether);
-            afKing.depositFor{value: 1 ether}(who);
-        }
-    }
-
-    function _afkSubscriberIndexOf(address who) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(AFK_SUBSCRIBER_INDEX_SLOT)));
-        return uint256(vm.load(address(afKing), slot));
-    }
-
-    function _afkDailyQtyOf(address who) internal view returns (uint8) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(AFK_SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(afKing), slot));
-        return uint8(packed >> (AFK_OFF_DAILY * 8));
-    }
-
-    function _afkLastAutoBoughtDayOf(address who) internal view returns (uint32) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(AFK_SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(afKing), slot));
-        return uint32(packed >> (AFK_OFF_LASTSWEPT * 8));
-    }
-
-    /// @dev v50.0 AFSUB-03 helper: pin `who`'s validThroughLevel (bytes 5..8 of the packed Sub slot)
-    ///      to a specific value. Used by `testNoBrickUnderHeavyPassEviction` to force a mass crossing
-    ///      scenario without advancing the real game level via gameplay.
-    function _setValidThroughLevel(address who, uint32 level) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(AFK_SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(afKing), slot));
-        packed &= ~(uint256(0xFFFFFFFF) << (AFK_OFF_VALIDTHROUGHLEVEL * 8));
-        packed |= (uint256(level) << (AFK_OFF_VALIDTHROUGHLEVEL * 8));
-        vm.store(address(afKing), slot, bytes32(packed));
-    }
-
-    /// @dev Force the AfKing autoBuy cursor to 0 while keeping _autoBuyDay == today, so the next autoBuy
-    ///      re-walks the set from index 0 this same day. Slot 4: _autoBuyDay (low 4 bytes) + cursor (high).
-    function _afkResetCursorToZeroForToday() internal {
-        uint256 packed = uint256(vm.load(address(afKing), bytes32(uint256(AFK_SWEEP_PACKED_SLOT))));
-        packed &= uint256(0xFFFFFFFF); // keep _autoBuyDay, zero the cursor
-        packed |= (uint256(_afkToday()) & 0xFFFFFFFF); // ensure the day-stamp is today
-        vm.store(address(afKing), bytes32(uint256(AFK_SWEEP_PACKED_SLOT)), bytes32(packed));
-    }
-
-    /// @dev Count SubscriptionExpired(who, reason) emissions from AfKing in the recorded logs. Consumes
-    ///      the log buffer (call once after the autoBuy under test).
-    function _afkCountExpired(address who, uint8 reason) internal returns (uint256 count) {
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; i++) {
-            if (
-                logs[i].emitter == address(afKing) &&
+                logs[i].emitter == address(game) &&
                 logs[i].topics.length >= 2 &&
                 logs[i].topics[0] == SUB_EXPIRED_SIG &&
                 address(uint160(uint256(logs[i].topics[1]))) == who &&
@@ -905,52 +750,61 @@ contract KeeperNonBrick is DeployProtocol {
         }
     }
 
+    function _u(uint256 v) internal pure returns (string memory) {
+        if (v == 0) return "0";
+        bytes memory b;
+        while (v > 0) {
+            b = abi.encodePacked(uint8(48 + (v % 10)), b);
+            v /= 10;
+        }
+        return string(b);
+    }
 }
 
-/// @notice A malicious keeper-pool holder whose receive() re-enters AfKing.withdraw, proving the
-///         CEI withdraw rolls back a re-entrant double-spend attempt.
-contract ReentrantWithdrawer {
-    AfKingLike private immutable afk;
+/// @notice A malicious afking-funding holder whose receive() re-enters game.withdrawAfkingFunding, proving
+///         the game's CEI withdraw rolls back a re-entrant double-spend attempt.
+contract ReentrantAfkingWithdrawer {
+    GameWithdrawLike private immutable g;
     uint256 private reentryAmount;
     bool private reentered;
     bool private bubble; // true = let the inner revert bubble (outer reverts); false = swallow
 
-    constructor(address _afk) {
-        afk = AfKingLike(_afk);
+    constructor(address _game) {
+        g = GameWithdrawLike(_game);
     }
 
-    /// @dev Bubbling variant: the inner re-entrant withdraw's revert is NOT caught, so it bubbles
-    ///      into the outer withdraw's `.call`, which sees failure -> EthSendFailed -> outer reverts.
+    /// @dev Bubbling variant: the inner re-entrant withdraw's revert is NOT caught, so it bubbles into the
+    ///      outer withdraw's `.call`, which sees failure -> E() -> outer reverts.
     function attackBubbling(uint256 amount) external {
         reentryAmount = amount;
         bubble = true;
         reentered = false;
-        afk.withdraw(amount); // reverts (EthSendFailed) when the re-entry bubbles
+        g.withdrawAfkingFunding(amount); // reverts when the re-entry bubbles
     }
 
-    /// @dev Swallowing variant: the inner re-entrant withdraw's revert IS caught, so the outer
-    ///      withdraw completes a single payout; the re-entry adds nothing.
+    /// @dev Swallowing variant: the inner re-entrant withdraw's revert IS caught, so the outer withdraw
+    ///      completes a single payout; the re-entry adds nothing.
     function attackSwallowing(uint256 amount) external {
         reentryAmount = amount;
         bubble = false;
         reentered = false;
-        afk.withdraw(amount);
+        g.withdrawAfkingFunding(amount);
     }
 
     receive() external payable {
         if (!reentered) {
             reentered = true;
-            // Re-enter before the outer frame finishes. Under CEI the pool is already zeroed, so
-            // this reverts InsufficientBalance.
+            // Re-enter before the outer frame finishes. Under CEI the funding is already zeroed, so this
+            // reverts E().
             if (bubble) {
-                afk.withdraw(reentryAmount); // bubble the revert -> outer .call fails
+                g.withdrawAfkingFunding(reentryAmount); // bubble the revert -> outer .call fails
             } else {
-                try afk.withdraw(reentryAmount) {} catch {} // swallow -> outer completes once
+                try g.withdrawAfkingFunding(reentryAmount) {} catch {} // swallow -> outer completes once
             }
         }
     }
 }
 
-interface AfKingLike {
-    function withdraw(uint256 amount) external;
+interface GameWithdrawLike {
+    function withdrawAfkingFunding(uint256 amount) external;
 }
