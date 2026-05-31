@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
 status: executing
-last_updated: "2026-05-31T15:08:49.517Z"
+last_updated: "2026-05-31T15:44:48.487Z"
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 21
-  completed_plans: 16
-  percent: 29
+  completed_plans: 18
+  percent: 43
 ---
 
 # Project State
@@ -19,7 +19,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v55.0 — defining requirements)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 349.2 — afking-lootbox-quest-credit-affiliate-restore
+**Current focus:** Phase 350 — gas-behavior-identical-no-cost-wins-box-ledger-warm-sub-stam
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -31,12 +31,12 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 349.2 (afking-lootbox-quest-credit-affiliate-restore) — ✅ COMPLETE (committed `453f8073`)
-Plan: 1 of 1 ✅
-Status: 349.2 IMPL FIX shipped — contract-commit gate CLOSED (`453f8073` on main, NOT pushed)
->>> RESUME: **349.2-01 IMPL FIX COMMITTED `453f8073` (2026-05-31)** — the v55 lootbox-afking regression is closed: GameAfkingModule lootbox branch now restores quest-credit (handlePurchase + recordMintQuestStreak) + both affiliate.payAffiliate branches as BURNIE flip-credit (single creditFlip), score sourced from the returned post-buy streak; `_questStreakOf` removed + `_ethToBurnie` added; the vestigial `autoBuy` stub dropped from all three sites. ETH/claimablePool byte-unchanged (no solvency surface). contracts-only `forge build` clean (DegenerusGame **22,855 B**, 1,721 under ceiling); Task-1 9/9 + Task-1b gates PASS. On `main`, **NOT pushed** (v55 ships at 352, then push per USER). `forge test` is 351's charge (stale AfKing.sol-import / _afkingEpoch / ABI reds expected until the 351 sweep). **NEXT = 350 GAS** (`/gsd-execute-phase 350` — re-confirms GAS-01 net of the restored side-effects on the post-349.2 surface; plans already written + committed `d80ae052`, 3 plans/3 waves, stay structurally valid; 350 is a CONTRACT BOUNDARY → another held-at-commit gate). scope.txt still modified in the working tree (held-349 audit-scope edit, NOT committed — review/commit separately if intended). <<<
+Phase: 350 (gas-behavior-identical-no-cost-wins-box-ledger-warm-sub-stam) — EXECUTING
+Plan: 2 of 3
+Status: Executing Phase 350 (350-01 ✅ done; 350-02 next)
+>>> RESUME: **350-01 RE-PIN + CONFIRM ✅ COMPLETE (2026-05-31; READ-ONLY, contracts/ EMPTY; commits `6d52c043` re-pin + `45507ac8` TST-06 spec).** Re-pinned SCAV-348-01..07 against the LIVE post-349.2 `453f8073` tree (NOT the plan's stale `77c3d9ef` — STATE requires the post-349.2 surface); recorded the drift explicitly (T-350-01): stamp anchors `:747/:748/:756`→**`:793/:794/:840`**, view-helpers `:1590/:2656`→**`:1579/:2645`** (the funding anchors `:464/:662/:709/:710` HELD). **GAS-01** (afking box-buy = ONE warm Sub-stamp, cold-ledger symbols grep-ABSENT on the afking path) + **GAS-02** (in-context SLOADs `:463/:464/:662/:709`, NO STATICCALL on the hot path; `afkingFundingOf`/`afkingSnapshot` survive only as Game view-helpers for `DegenerusVault.sol:518`) = **CONFIRMED-STRUCTURAL** (already delivered by 349/349.1; NO apply work at 350 — measured at 351 TST-06). **Load-bearing finding:** 349.2 RESTORED quest/affiliate onto the lootbox STAGE (`GameAfkingModule.sol:760/:806/:816/:831`) — partially staling the research's "affiliate/quest NOT on the hot path" claim — but ALL BURNIE flip-credit (no ETH/pool write; `:710` claimablePool debit byte-unchanged) → NO verdict flip. **SCAV-348-03 (GAS-03, the `claimablePool` same-slot flush `:710`) = the SOLE residual candidate, CARRIED to plan 350-02** (research direction: NEGATIVE/marginal — warm SSTORE ~100 gas × (N−1) on the only batchable shared slot). `350-TST06-MEASUREMENT-SPEC.md` authored (per-buy `processSubscriberStage:539` + per-open `_openAfkingBox:888`→`resolveAfkingBox:877` marginals, the CR-01 loop-N-divide rule, the no-STATICCALL trace, the conditional GAS-03 oracle, the 16.7M ceiling w/ `SUB_STAGE_BATCH=50`). **NEXT = plan 350-02 `/gas-skeptic` validation gate** (adjudicate SCAV-348-03 under the security floor → expected REJECT-with-reasoning; then 350-03 branches Outcome-A no-diff / Outcome-B held `claimablePool`-flush diff at the contract boundary). On `main`, NOT pushed (v55 ships at 352). `forge test` stays 351's charge (stale AfKing.sol-import reds expected). scope.txt still modified in the working tree (held-349 audit-scope edit, NOT committed). <<<
 
-Progress: [██████░░░░] ~60% (349.1 `77c3d9ef` + 349.2 `453f8073` IMPL committed; 350 GAS / 351 TST / 352 TERMINAL ahead)
+Progress: [█████████░] 86%
 
 ## Current Milestone Roadmap (v55.0 — phases 348-352)
 
@@ -619,6 +619,7 @@ Audit deliverables:
 | Phase 348 P03 | ~13min | 3 tasks | 2 files (348-FREEZE-PROOF.md 293 lines + 348-INVARIANT-CARRY.md 282 lines) + 1 SUMMARY (FREEZE-01/02/03 PROVEN: index-binding subsFullyProcessed guard SPECIFIED, abi.encode stamped-day determinism zero block.* entropy, FREEZE-01 SPLIT live-read=accepted-by-design known issue D-348-05; D-348-04 try/catch valve DROPPED → no-valve; 3 §7 follow-ups DISCHARGED; /contract-auditor obligation-1 PASS 5/5; human-verify APPROVED; zero contracts mutation) |
 | Phase 348 P05 | 8 | 1 tasks | 1 files |
 | Phase 348 P06 | 3m49s | 1 tasks | 1 files |
+| Phase 350 P01 | 7min | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -777,3 +778,4 @@ Audit deliverables:
 - [Phase 348]: D-348-07 (USER-approved 2026-05-30, amendment to the locked freeze design): FREEZE score+baseLevel into the afking per-sub box-stamp instead of live-read at open. Stamp grows (index,amount,day) → (index,amount,day,scorePlus1,baseLevelPlus1) = +40 bits (uint16+uint24) into slot-2's ~90 spare bits = SAME single SSTORE, no 3rd slot, still 2-slot-feasible. Mirrors the human deposit-time freeze (lootboxPurchasePacked unpack scorePlus1/adj/baseLevelPlus1 @LB:529-530); afking stamp omits `adj` (open passes full amount to _applyEvMultiplierWithCap). SUPERSEDES D-348-05 for score+baseLevel (live-read → proven-frozen, fold into FREEZE-01a completeness set); FREEZE-01 now PROVEN (was SPLIT). RESIDUAL live-read narrows to the EV-cap RMW only (lootboxEvBenefitUsedByLevel[player][level+1], shared per-(player,level) cumulative accumulator → can't be per-box-stamped) = BENIGN monotonic down-clamp (hard ≤10 ETH, no profitable timing) → noted not findings-grade (was accepted-known-issue). SEED UNCHANGED — FREEZE-03 untouched (score/baseLevel enter AFTER the seed, do NOT feed keccak256(abi.encode(rngWord,player,day,amount)) :534); freezing them completes FREEZE-01's frozen set, does NOT move them into the seed. GAS WIN at open (replaces ~953B live playerActivityScore recompute with stamp SLOAD). Amended 348-FREEZE-PROOF.md + 348-INVARIANT-CARRY.md + 348-IMPL-EDIT-ORDER-MAP.md (349 directive: PROCESS stamps scorePlus1/baseLevelPlus1, OPEN reads from stamp + feeds frozen evMultiplierBps to the still-live cap RMW). NOT a contract change / NOT a new plan; no SUMMARY; FREEZE-01/02/03 stay Pending (phase-close attestation)
 - [Phase 348]: 348-06: 348-SPEC-INDEX.md authored (D-08 closure index, the 343-05 analog) — all 5 phase reqs (FREEZE-01/02/03, PLACE-01, ARCH-04) + all 5 ROADMAP SCs mapped COVERED; SPEC verdict PASS; CONSENT carry-over (OPEN-E/AFSUB/set-mutation) confirmed against re-pinned source; single 349 hand-off = 348-IMPL-EDIT-ORDER-MAP.md
 - [Phase 348]: 348-06: index reflects D-348-07 FINAL state throughout — FREEZE-01 PROVEN (not split), 5-field stamp (index,amount,day,scorePlus1,baseLevelPlus1), EV-cap-only benign residual; pre-D-348-07 '-EV live-read' framing in ROADMAP SC1 + REQUIREMENTS FREEZE-01 recorded SUPERSEDED at index level (343-05 discipline)
+- [Phase ?]: 350-01 (re-pin/confirm) COMPLETE: GAS-01 (box-ledger→warm Sub-stamp) + GAS-02 (staticcall→in-context SLOAD) documented CONFIRMED-STRUCTURAL (already delivered by 349/349.1; no apply work at 350 — measured at 351 TST-06). Re-pinned against the LIVE post-349.2 453f8073 tree (NOT the plan's stale 77c3d9ef); recorded drift explicitly (T-350-01): stamp anchors :747/:748/:756→:793/:794/:840, view-helpers :1590/:2656→:1579/:2645. 349.2-restored quest/affiliate on the lootbox STAGE = BURNIE-only (no ETH/pool write; :710 byte-unchanged), no verdict flip. SCAV-348-03 (GAS-03 :710 flush) = sole residual candidate → 350-02 /gas-skeptic.
