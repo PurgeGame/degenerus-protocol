@@ -6,86 +6,99 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
-/// @title KeeperRouterOneCategory -- TST-02 (Phase 332): one-rewarded-category-per-tx (no
-///        bounty-stacking) + the router->game->creditFlip double-pay disposition + the
-///        parameterless-`doWork()` default-batch/remainder behavior + the standalone UNREWARDED
-///        `autoBuy(count)` / `autoOpen(count)` escapes.
+/// @title KeeperRouterOneCategory -- TST-02 (Phase 351, v55.0 game-resident): one-rewarded-category-per-tx
+///        (no bounty-stacking) on `mintBurnie()` + the router->game->creditFlip double-pay disposition + the
+///        standalone UNREWARDED human `autoOpen(count)` escape.
 ///
-/// @notice TST-02 is the second load-bearing v49 SECURITY proof (with TST-01). The `doWork()`
-///         one-category STRUCTURAL early-return (AfKing.sol:883-919) is the mitigation for
-///         bounty-stacking; the single CEI-last `creditFlip` (AfKing.sol:916-918) is the mitigation
-///         for a composed reentrant double-pay. Security is the HARD FLOOR.
+/// @notice The v55 router (`game.mintBurnie()`, GameAfkingModule.sol:985) is a STRUCTURAL one-category
+///         early-return: `if (advanceDue) {advance leg} else {open leg}` (GameAfkingModule.sol:993 vs :1000).
+///         There are exactly TWO router categories — advance (the buy folded into advanceGame's required-path
+///         STAGE, so it rides the advance bounty) and the afking-box open. The else-if XOR is the mitigation
+///         for bounty-stacking; the single CEI-last `creditFlip(msg.sender, bountyEarned)`
+///         (GameAfkingModule.sol:1014-1016) is the mitigation for a composed reentrant double-pay. Security
+///         is the HARD FLOOR.
 ///
-///   D-02 (no-stacking proven by COUNTING `creditFlip`, NOT exact amounts): each `doWork()` tx fires
-///   EXACTLY ONE `COINFLIP.creditFlip` across all three category branches (buy / advance / open),
-///   ZERO on the `bountyEarned==0` skip (a buy chunk that walked only already-bought subs runs the
-///   category but credits nothing, still no revert), and ZERO + `revert NoWork()` when all three O(1)
-///   predicates are empty. The count is taken via the recipient-isolated
-///   `_countCoinflipStakeUpdatedFor(keeper)` oracle (topics[1] == keeper) so a box-owner's winnings
-///   credit (LootboxModule:1036) can never inflate or mask the router bounty count. Asserting COUNT
-///   (==1 / ==0) across all three branches IS the proof the else-if chain can never credit two
-///   categories in one tx — no exact-amount or retired per-item *summed* reward is asserted anywhere.
+///   D-02 (no-stacking proven by COUNTING `creditFlip`, NOT exact amounts): each `mintBurnie()` tx fires
+///   EXACTLY ONE `coinflip.creditFlip` across both category branches (advance / open), ZERO on the
+///   `bountyEarned==0` skip (a mult==0 gameover advance runs the category but credits nothing, still no
+///   revert), and ZERO + `revert NoWork()` when BOTH O(1) predicates are empty. The count is taken via the
+///   recipient-isolated `_countCoinflipStakeUpdatedFor(keeper)` oracle (topics[1] == keeper) so a
+///   box-owner's / player's winnings credit can never inflate or mask the router bounty count. Asserting
+///   COUNT (==1 / ==0) across both branches IS the proof the else early-return can never credit two
+///   categories in one tx.
 ///
-///   D-01 (reentrancy is STRUCTURAL, NO attacker harness): `doWork` pays only minted FLIP CREDIT,
-///   makes NO ETH push, and every external call in every leg targets a pinned `ContractAddresses.*`
-///   (GAME / COINFLIP). There is no untrusted call to re-enter through, so a synthetic reentrant
-///   attacker has no hook (it would be false-soundness theatre). The disposition is satisfied by a
+///   D-01 (reentrancy is STRUCTURAL, NO attacker harness): `mintBurnie` pays only minted FLIP CREDIT, makes
+///   NO ETH push, and every external call in every leg targets either a self-call
+///   (`IGameRouter(address(this))`) or the pinned `coinflip` immutable. There is no untrusted call to
+///   re-enter through, so a synthetic reentrant attacker has no hook. The disposition is satisfied by a
 ///   comment-stripped source grep-attestation: (a) the single `creditFlip(msg.sender, bountyEarned)`
-///   occurrence (==1, CEI-last), and (b) every external call site in `doWork` targets only the pinned
-///   `ContractAddresses.GAME` / `ContractAddresses.COINFLIP` (no untrusted address literal, no
-///   `.call` / `.transfer` / `.send` to a non-pinned target). NO attacker/reentrant mock exists in
-///   this file (User verbatim: "reentrancy is not an issue, nothing here pays eth and this only
+///   occurrence (==1, CEI-last), and (b) ZERO low-level ETH-push primitives in the mintBurnie legs (the
+///   module pushes no ETH at all — funding withdraw moved to DegenerusGame). NO attacker/reentrant mock
+///   exists in this file (User verbatim: "reentrancy is not an issue, nothing here pays eth and this only
 ///   interacts with trusted contracts.").
 ///
-///   D-03 (default-batch / escapes): parameterless `doWork()` runs the fixed per-leg default batch
-///   (BUY_BATCH=50 / OPEN_BATCH=100) and does NOT OOG; a backlog larger than the batch leaves a
-///   remainder for the next call (the `autoBuyProgress()` cursor < length). The standalone parametered
-///   `autoBuy(count)` / `autoOpen(count)` are emergency escapes that run the leg but credit NOTHING.
+///   D-03 (default-batch / escapes): `mintBurnie()` runs the fixed open-leg default batch (OPEN_BATCH=200)
+///   and does NOT OOG; the standalone parametered HUMAN `game.autoOpen(count)` is an emergency escape that
+///   runs the human box leg but credits NOTHING (only `mintBurnie` credits). The afking-module standalone
+///   `autoOpen` selector COLLIDES with the human `autoOpen(uint256)` so the afking open is reachable ONLY
+///   through `mintBurnie` (DegenerusGame.sol:352-353) — there is no separately-callable unrewarded afking
+///   escape to test here.
 ///
-/// @dev The `_countCoinflipStakeUpdated` / `_countCoinflipStakeUpdatedFor` log-count helpers and the
-///      `_stripComments` / `_countOccurrences` source-grep helpers are byte-faithful ports of
-///      CrankLeversAndPacking.t.sol (they are not in a shared base). The buy-side driving
-///      (`_setupHealthyBuyingSubs`, the storage-stamp / cursor helpers) mirrors AfKingConcurrency.t.sol;
-///      the box-enqueue driving (`_buyBox` + `_injectLootboxRngWord`) mirrors CrankOpenBoxWorstCaseGas.t.sol.
-///      Zero contracts/*.sol mutation; test-only.
+/// @dev The five call-site deltas applied (D-351-01):
+///   Δ3 doWork->mintBurnie: `afKing.doWork()` -> `game.mintBurnie()` (all sites).
+///   Δ4 autoBuy: the per-sub buy folded into `advanceGame()`'s STAGE — driven via a new-day advanceGame()
+///      + the `_settleGame` VRF drain; the standalone `autoBuy(count)` has NO successor.
+///   Δ5 views: `afKing.subscriberCount()`/`autoBuyProgress()` -> read `_subscribers.length`/`_subCursor` via
+///      vm.load (RE-DERIVED slots).
+///   Two runtime traps cleared: AFKING_SRC repointed from the deleted standalone-contract path to
+///   "contracts/modules/GameAfkingModule.sol" (the deleted file THROWS at runtime under vm.readFile) +
+///   every grepped token re-derived for the relocated mintBurnie body.
+///   Pinned slots RE-DERIVED via `forge inspect storage DegenerusGame`. Zero contracts/*.sol mutation.
 contract KeeperRouterOneCategory is DeployProtocol {
     // -------------------------------------------------------------------------
-    // creditFlip-count oracle (CrankLeversAndPacking.t.sol:75 / :523-548 — verbatim port)
+    // creditFlip-count oracle (recipient-isolated)
     // -------------------------------------------------------------------------
 
     /// @dev keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)") — emitted once per
-    ///      creditFlip via _addDailyFlip; counting topic[0] is the canonical "how many bounty credits
-    ///      fired this tx" oracle. The indexed `player` is topics[1] (recipient isolation).
+    ///      creditFlip. The indexed `player` is topics[1] (recipient isolation).
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
         keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)");
 
     // -------------------------------------------------------------------------
-    // AfKing pinned slot layout (per AfKing.sol; mirrors AfKingConcurrency.t.sol)
+    // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`;
+    // the AfKing-standalone SUBOF_SLOT=1 / AUTOBUY_SLOT=4 / lootbox slots 37/38 were WRONG).
     // -------------------------------------------------------------------------
 
-    uint256 private constant SUBOF_SLOT = 1;            // _subOf mapping root (address => Sub, one slot)
-    uint256 private constant OFF_LASTSWEPT = 1;         // uint32 lastAutoBoughtDay (bytes 1..4)
-    uint256 private constant AUTOBUY_SLOT = 4;          // _autoBuyDay (uint32 bytes 0..3) + _autoBuyCursor (uint224)
+    uint256 private constant SUBOF_SLOT = 66; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay (bytes 21..24)
+    uint256 private constant OFF_LASTOPENED = 25; // uint32 lastOpenedDay     (bytes 25..28)
+    uint256 private constant SUBSCRIBERS_SLOT = 68; // _subscribers address[] (length here)
+    uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)
+    uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
-    // -------------------------------------------------------------------------
-    // DegenerusGame pinned slot layout (per the lootbox-box helpers; confirmed via forge inspect)
-    // -------------------------------------------------------------------------
-
-    /// @dev lootboxRngPacked at slot 37 (v47: +2 from presale-box storage additions); index = low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 37;
-    /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 38;
+    /// @dev lootboxRngPacked at slot 38 (RE-DERIVED: was 37); index = low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38;
+    /// @dev lootboxRngWordByIndex mapping root slot (RE-DERIVED: was 38).
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 39;
     /// @dev lootboxEthBase mapping root slot (uint48 index => address => base). First-deposit signal.
-    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 22;
+    ///      RE-DERIVED: was 22, now 23 via `forge inspect storage DegenerusGame`.
+    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 23;
+
+    /// @dev ticketQueue mapping root (uint24 => address[]) + ticketsOwedPacked
+    ///      (uint24 => address => uint40) — for forcing advanceDue via a read-slot backlog.
+    uint256 private constant TICKET_QUEUE_SLOT = 13;
+    uint256 private constant TICKETS_OWED_PACKED_SLOT = 14;
+    uint24 private constant TICKET_SLOT_BIT = 1 << 23; // mirrors DegenerusGameStorage.TICKET_SLOT_BIT
 
     uint256 private constant FIXED_WORD = uint256(keccak256("keeper_router_one_category_word"));
-    uint256 private constant LOOTBOX_WEI = 1 ether; // >= LOOTBOX_MIN; a real first-deposit box
+    uint256 private constant LOOTBOX_WEI = 1 ether; // >= LOOTBOX_MIN; a real first-deposit human box
 
     // -------------------------------------------------------------------------
-    // Source path for the comment-stripped grep attestation
+    // Source path for the comment-stripped grep attestation (REPOINTED: the standalone AfKing.sol is
+    // deleted -> vm.readFile would THROW at runtime; the rewarded router now lives in GameAfkingModule).
     // -------------------------------------------------------------------------
 
-    string private constant AFKING_SRC = "contracts/AfKing.sol";
+    string private constant AFKING_SRC = "contracts/modules/GameAfkingModule.sol";
 
     address private keeper;
     uint256 private constant DRAIN_MAX_ITERATIONS = 50;
@@ -93,8 +106,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        // One keeper-local day off the deploy boundary so _currentDay() is a clean, stable index
-        // (mirrors AfKingConcurrency / CrankLeversAndPacking).
+        // One keeper-local day off the deploy boundary so the day index is a clean, stable value.
         vm.warp(block.timestamp + 1 days);
         mockVRF.fundSubscription(1, 100e18);
 
@@ -103,9 +115,8 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.deal(address(game), 1_000_000 ether);
     }
 
-    /// @dev Settle the game to a clean state: complete the pending day-advance (drive advanceGame +
-    ///      deliver the mock VRF word + drain the rngLock) until `advanceDue()` is false and we are no
-    ///      longer locked. Mirrors RngLockDeterminism._completeDay. Idempotent once settled.
+    /// @dev Settle the game to a clean state: drive advanceGame + deliver the mock VRF word until
+    ///      `advanceDue()` is false and we are not locked. (PATTERNS §"Settle-to-clean-state VRF drain".)
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
@@ -122,320 +133,239 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 1 — D-02 one-category creditFlip COUNT across all branches + skip + NoWork
+    // Task 1 — D-02 one-category creditFlip COUNT across both branches + skip + NoWork
     // =========================================================================
 
-    /// @notice BUY branch: a fresh-day backlog routes `doWork()` to the buy leg (highest priority);
-    ///         a successful buy credits the keeper EXACTLY ONCE.
-    function testBuyBranchCreditsExactlyOnce() public {
-        address[] memory subs = _setupHealthyBuyingSubs(3, "buy1_");
-
-        // Pre-state: a fresh keeper-local day with an un-walked backlog -> the buy-leg predicate
-        // (`_autoBuyDay != _currentDay() || _autoBuyCursor < length`) is TRUE.
-        (uint32 progDay, uint256 cursor0) = afKing.autoBuyProgress();
-        assertTrue(progDay != _today() || cursor0 < afKing.subscriberCount(), "pre: buy leg is due (fresh-day backlog)");
-
-        vm.recordLogs();
-        vm.prank(keeper);
-        afKing.doWork();
-
-        // Exactly one router bounty credit to the keeper across the whole tx.
-        assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "BUY branch: exactly one doWork creditFlip to the keeper");
-
-        // Non-vacuity: the buy leg actually bought (a sub's lastAutoBoughtDay advanced to today).
-        bool boughtOne;
-        for (uint256 i; i < subs.length; i++) {
-            if (_lastAutoBoughtDayOf(subs[i]) == _today()) boughtOne = true;
-        }
-        assertTrue(boughtOne, "non-vacuity: the buy leg landed at least one buy");
-    }
-
-    /// @notice ADVANCE branch: with the buy leg empty (all subs walked + bought) and `advanceDue()`
-    ///         true, `doWork()` routes to the advance leg; a multiplier > 0 credits EXACTLY ONCE.
+    /// @notice ADVANCE branch: with `advanceDue()` true, `mintBurnie()` takes the advance leg (the
+    ///         structural early-return's `if (advanceDue)` arm); a multiplier > 0 credits EXACTLY ONCE.
+    ///         The buy folded into advanceGame's STAGE rides this single advance bounty.
     function testAdvanceBranchCreditsExactlyOnce() public {
         // Settle the deploy-day advance so we start from a clean, not-due, not-locked state.
         _settleGame(0xADADADAD0001);
         assertFalse(game.advanceDue(), "pre: settled (advance not due)");
         assertFalse(game.rngLocked(), "pre: settled (not locked)");
 
-        // Drive `advanceDue()` true: roll the wall clock forward so the simulated day index moves ahead
-        // of dailyIdx. The buy predicate keys on AfKing's _currentDay(); advanceDue() keys on the game's
-        // _simulatedDayIndex(). Pin the buy stamp to AfKing's *current* day so the buy leg is "already
-        // walked today" (FALSE) while the game owes a day-advance — the router falls through to advance.
+        // Drive `advanceDue()` true: roll the wall clock forward so the simulated day index moves ahead.
         vm.warp(block.timestamp + 1 days);
         assertTrue(game.advanceDue(), "pre: advance is due");
-        _pinBuyLegWalkedForToday();
-        _assertBuyLegEmpty();
 
         bool dueBefore = game.advanceDue();
         bool lockedBefore = game.rngLocked();
 
         vm.recordLogs();
         vm.prank(keeper);
-        afKing.doWork();
+        game.mintBurnie();
 
         // The advance leg credited exactly once (mult > 0 on a normal day-advance).
-        assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "ADVANCE branch: exactly one doWork creditFlip to the keeper");
+        assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "ADVANCE branch: exactly one mintBurnie creditFlip to the keeper");
 
-        // Non-vacuity: the advance leg actually ran — doWork's advanceGame() either cleared the
+        // Non-vacuity: the advance leg actually ran — mintBurnie's advanceGame() either cleared the
         // advance-due predicate or engaged rngLock for the day it just advanced (the multi-stage
-        // day-advance locks RNG mid-flight). Either is observable state progress only the advance leg
-        // produces (the buy leg was pinned empty and no boxes are pending).
+        // day-advance locks RNG mid-flight). Either is observable state progress only the advance leg produces.
         bool progressed = (dueBefore && !game.advanceDue()) || (!lockedBefore && game.rngLocked());
         assertTrue(progressed, "non-vacuity: the advance leg ran (advance consumed or rngLock engaged)");
     }
 
-    /// @notice OPEN branch: buy leg empty + advance not due + a box pending (RNG-ready, un-opened) ->
-    ///         `doWork()` routes to the open leg and credits EXACTLY ONCE.
+    /// @notice OPEN branch: advance NOT due + an afking-stamped box pending (RNG-ready, un-opened) ->
+    ///         `mintBurnie()` takes the `else` open leg and credits EXACTLY ONCE. (The afking open is
+    ///         reachable ONLY via mintBurnie — the module's standalone autoOpen selector collides with the
+    ///         human autoOpen(uint256) and is not re-exposed on the Game.)
     function testOpenBranchCreditsExactlyOnce() public {
-        address boxOwner = makeAddr("open1_box_owner");
-        vm.deal(boxOwner, 100_000 ether);
+        // A funded LOOTBOX-mode sub gets a stamped afking box via the STAGE (deity-passed so it survives
+        // any level crossing — orthogonal to the router-branch property).
+        address sub = makeAddr("open1_afk_sub");
+        _grantDeityPass(sub);
+        _subscribeLootbox(sub, 1);
+        _fundPool(sub, 5 ether);
+        _runStageNewDay(0x0BACED01); // stamp the afking box (lastAutoBoughtDay set, day word landed)
 
-        // Settle the deploy-day advance so advance is NOT due and we are not locked (boxesPending() is
-        // FALSE during rngLock, so the open leg is only reachable from a settled state).
-        _settleGame(0x0BACED0001);
-        assertFalse(game.advanceDue(), "pre: settled (advance not due, open leg is reachable)");
-        assertFalse(game.rngLocked(), "pre: settled (not locked, so boxesPending can be TRUE)");
+        // Settle so advance is NOT due and we are not locked (the open leg is the `else` arm, reachable
+        // only when !advanceDue; the open leg also no-ops during rngLock).
+        _settleGame(0x0BACED02);
+        assertFalse(game.advanceDue(), "pre: settled (advance not due, the open leg is reachable)");
+        assertFalse(game.rngLocked(), "pre: settled (not locked)");
 
-        // Queue a real box (first-deposit signal) and land its index's RNG word.
-        uint48 index = _activeLootboxIndex();
-        _buyBox(boxOwner, LOOTBOX_WEI);
-        _injectLootboxRngWord(index, FIXED_WORD);
-
-        // Clear the buy leg so the router falls through buy -> advance(not due) -> open.
-        _pinBuyLegWalkedForToday();
-        _assertBuyLegEmpty();
-        assertFalse(game.advanceDue(), "pre: advance not due (open leg is reachable)");
-        assertTrue(game.boxesPending(), "pre: a box is pending (RNG-ready, un-opened)");
+        uint32 stampDay = _lastBoughtDayOf(sub);
+        assertGt(stampDay, 0, "pre: an afking box is stamped (RNG-ready)");
+        assertTrue(_lastOpenedDayOf(sub) < stampDay, "pre: the afking box is un-opened (pending)");
 
         vm.recordLogs();
         vm.prank(keeper);
-        afKing.doWork();
+        game.mintBurnie();
 
         // The open leg credited exactly once.
-        assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "OPEN branch: exactly one doWork creditFlip to the keeper");
+        assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "OPEN branch: exactly one mintBurnie creditFlip to the keeper");
 
-        // Non-vacuity: the queued box actually opened (first-deposit signal zeroed).
-        assertEq(_lootboxEthBase(index, boxOwner), 0, "non-vacuity: the open leg opened the queued box");
+        // Non-vacuity: the stamped afking box actually opened (its open marker advanced to the stamp day).
+        assertEq(_lastOpenedDayOf(sub), stampDay, "non-vacuity: the open leg materialized the afking box");
     }
 
-    /// @notice bountyEarned==0 SKIP path: a buy chunk that walks ONLY already-bought subs runs the buy
-    ///         category but credits ZERO (no creditFlip) and does NOT revert. Proves the else-if chain
-    ///         entered the buy leg yet the single CEI-last creditFlip was skipped at bounty==0.
+    /// @notice bountyEarned==0 SKIP path: a gameover advance (mult==0) runs the advance CATEGORY (the
+    ///         `if (advanceDue)` arm executes advanceGame) but credits ZERO (no creditFlip) and does NOT
+    ///         revert. Proves the early-return took a category yet the single CEI-last creditFlip was
+    ///         skipped at bountyEarned==0 (the category still ran, so mintBurnie RETURNS, not NoWork()).
     function testBountyEarnedZeroSkipCreditsNothing() public {
-        address[] memory subs = _setupHealthyBuyingSubs(2, "skip1_");
+        _settleGame(0x5C1F0001);
+        assertFalse(game.advanceDue(), "pre: settled");
+        vm.warp(block.timestamp + 1 days);
+        assertTrue(game.advanceDue(), "pre: a fresh day-advance is due");
 
-        // Stamp every sub bought-today via a full autoBuy.
-        vm.prank(makeAddr("skip1_buy_keeper"));
-        afKing.autoBuy(afKing.subscriberCount() + 5);
-        for (uint256 i; i < subs.length; i++) {
-            assertEq(_lastAutoBoughtDayOf(subs[i]), _today(), "pre: each sub bought today");
-        }
-
-        // Re-open the buy leg by resetting the cursor to 0 while keeping the day-stamp == today. The
-        // buy predicate (`_autoBuyCursor < length`) is now TRUE, so doWork ENTERS the buy category,
-        // but every sub hits the AlreadyAutoBoughtToday skip -> bought == 0 -> bountyEarned == 0.
-        _resetCursorToZeroForToday();
-        (uint32 progDay, uint256 cursorReset) = afKing.autoBuyProgress();
-        assertEq(progDay, _today(), "pre: day-stamp still today (buy leg re-entered, not a fresh day)");
-        assertEq(cursorReset, 0, "pre: cursor reset to 0 so the buy leg re-walks the already-bought subs");
+        // Latch gameOver so the advance leg returns mult==0 (the flip-credit is worthless at gameover).
+        _latchGameOver();
+        assertTrue(game.gameOver(), "pre: gameOver latched");
+        assertTrue(game.advanceDue(), "pre: advance still due (mintBurnie routes to the advance leg)");
 
         vm.recordLogs();
         vm.prank(keeper);
-        // Must NOT revert: the category ran (it just bought nothing) so doWork returns, not NoWork().
-        afKing.doWork();
+        // Must NOT revert: the advance category ran (it just earned mult==0) so mintBurnie returns, not NoWork().
+        game.mintBurnie();
 
         // ZERO router creditFlips — the bounty was skipped at bountyEarned == 0.
-        assertEq(_countCoinflipStakeUpdatedFor(keeper), 0, "SKIP path: zero creditFlip when the buy chunk bought nothing");
+        assertEq(_countCoinflipStakeUpdatedFor(keeper), 0, "SKIP path: zero creditFlip when the advance leg earned mult==0");
         assertEq(_countCoinflipStakeUpdated(), 0, "SKIP path: zero creditFlip emissions at all (no stacking, no winnings credit)");
     }
 
-    /// @notice NoWork: all three O(1) predicates empty -> `doWork()` reverts `NoWork()` and credits
-    ///         nothing. No subs (buy empty), advance not due, no boxes pending.
+    /// @notice NoWork: BOTH O(1) predicates empty -> `mintBurnie()` reverts `NoWork()` and credits
+    ///         nothing. Advance not due + no afking boxes pending.
     function testNoWorkRevertsAndCreditsNothing() public {
         // Settle the deploy-day advance so advance is NOT due and we are not locked.
         _settleGame(uint256(keccak256("nowork-settle")));
         assertFalse(game.advanceDue(), "pre: settled (advance not due)");
         assertFalse(game.rngLocked(), "pre: settled (not locked)");
-
-        // Pin the buy leg walked-for-today with NO subscribers backlog, advance not due, no boxes.
-        _pinBuyLegWalkedForToday();
-        _assertBuyLegEmpty();
-        assertFalse(game.advanceDue(), "pre: advance not due");
-        assertFalse(game.boxesPending(), "pre: no boxes pending");
+        // No afking subscriber stamped a box (no STAGE buy was driven), so the open leg has nothing.
 
         vm.recordLogs();
         vm.prank(keeper);
-        vm.expectRevert(); // AfKing.NoWork()
-        afKing.doWork();
+        vm.expectRevert(); // GameAfkingModule.NoWork()
+        game.mintBurnie();
 
         // Nothing credited (the revert rolls back, but assert the count is zero regardless).
         assertEq(_countCoinflipStakeUpdated(), 0, "NoWork: zero creditFlip emissions on the empty-work revert");
     }
 
     // =========================================================================
-    // Task 2 — D-01 structural reentrancy attest + D-03 default-batch/remainder + escapes
+    // Task 2 — D-01 structural reentrancy attest + D-03 one-category early-return + the human escape
     // =========================================================================
 
-    /// @notice STRUCTURAL reentrancy attestation (D-01), grep over COMMENT-STRIPPED AfKing source — NO
-    ///         attacker harness. Proves (a) the single `creditFlip(msg.sender, bountyEarned)` occurrence
-    ///         (CEI-last, one money edge per tx) and (b) every external call in `doWork`/`_autoBuy`
-    ///         targets only the pinned `ContractAddresses.GAME` / `ContractAddresses.COINFLIP` — no
-    ///         untrusted address and no raw `.call` / `.transfer` / `.send` to a non-pinned target.
-    function testDoWorkReentrancyStructurallySafeSourceAttest() public view {
+    /// @notice STRUCTURAL reentrancy attestation (D-01), grep over the COMMENT-STRIPPED GameAfkingModule
+    ///         source — NO attacker harness. Proves (a) the single `creditFlip(msg.sender, bountyEarned)`
+    ///         occurrence (CEI-last, one money edge per tx) and (b) ZERO low-level ETH-push primitives in
+    ///         the mintBurnie legs (the module pushes no ETH at all). The source-grep finds the relocated
+    ///         mintBurnie body at the new GameAfkingModule.sol location (no runtime throw on the deleted
+    ///         AfKing.sol).
+    function testMintBurnieReentrancyStructurallySafeSourceAttest() public view {
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
-        // Scope the attestation to the doWork() function body (the router legs) — the disposition is
-        // about the router path, not unrelated player paths (e.g. the pool withdraw self-send).
-        string memory doWorkBody = _extractFunctionBody(afking, "function doWork() external {");
-        assertGt(bytes(doWorkBody).length, 0, "D-01: doWork() body extracted");
+        // Scope the attestation to the mintBurnie() function body (the router legs).
+        string memory body = _extractFunctionBody(afking, "function mintBurnie() external {");
+        assertGt(bytes(body).length, 0, "D-01: mintBurnie() body extracted (source-grep repointed, no readFile throw)");
 
-        // (a) The single unified bounty credit is byte-present EXACTLY ONCE in doWork (CEI-last after
-        // the one-category early-return). The :257-style gate, re-pinned here for TST-02. This is the
-        // ONLY money edge in the router per tx.
+        // (a) The single unified bounty credit is byte-present EXACTLY ONCE in mintBurnie (CEI-last after
+        // the one-category early-return). This is the ONLY money edge in the router per tx.
         assertEq(
-            _countOccurrences(doWorkBody, "creditFlip(msg.sender, bountyEarned)"),
+            _countOccurrences(body, "creditFlip(msg.sender, bountyEarned)"),
             1,
-            "D-01: exactly one CEI-last doWork creditFlip (the only money edge per tx)"
+            "D-01: exactly one CEI-last mintBurnie creditFlip (the only money edge per tx)"
         );
-        // The same gate over the whole file proves there is no second creditFlip site anywhere in
-        // AfKing — the unified bounty is the sole creditFlip caller (RD-4 re-homing).
+        // The same gate over the whole file proves the unified bounty is the SOLE `creditFlip(msg.sender,...)`
+        // site — there is no second router self-credit (the other creditFlip in the file is the 349.2 per-buy
+        // `creditFlip(player, flipCredit)` affiliate/quest side-effect inside the STAGE, a different recipient
+        // and a different argument shape, NOT a router bounty).
         assertEq(
             _countOccurrences(afking, "creditFlip(msg.sender, bountyEarned)"),
             1,
-            "D-01: the unified bounty is the ONLY creditFlip site in AfKing (no per-leg self-credit)"
+            "D-01: the unified bounty is the ONLY creditFlip(msg.sender, bountyEarned) site (no per-leg self-credit)"
         );
 
-        // (b) Every external call in the doWork legs targets a PINNED ContractAddresses.* constant.
-        // The router's external calls are: GAME.{mintPrice,advanceDue,advanceGame,boxesPending,
-        // autoOpen} and COINFLIP.creditFlip. Plan 335-04 collapsed the v49-era inline
-        // `IGame(ContractAddresses.GAME).*` cast pattern into compile-time constant immutables
-        // declared at AfKing.sol :207 (`IGame internal constant GAME = IGame(ContractAddresses.GAME);`)
-        // — same pinned target, cheaper call site. The attestation tracks the immutable name here.
-        assertGt(
-            _countOccurrences(doWorkBody, "GAME."),
-            0,
-            "D-01: the doWork game-leg calls target the pinned GAME immutable (= IGame(ContractAddresses.GAME))"
-        );
-        assertEq(
-            _countOccurrences(doWorkBody, "COINFLIP.creditFlip"),
-            1,
-            "D-01: the only creditFlip target in doWork is the pinned COINFLIP immutable (= ICoinflip(ContractAddresses.COINFLIP))"
-        );
+        // (b) NO untrusted external-call primitive inside the mintBurnie legs that could hand control to an
+        // arbitrary address. The bounty is a minted flip-credit ledger move (NO ETH push), so a low-level
+        // `.call{value:` / `.transfer(` / `.send(` ETH-push has NO place in any router leg. Asserting ZERO
+        // over the comment-stripped mintBurnie body pins the no-ETH-push / no-untrusted-call shape.
+        assertEq(_countOccurrences(body, ".call{value:"), 0, "D-01: no low-level ETH-push call in the mintBurnie legs");
+        assertEq(_countOccurrences(body, ".transfer("), 0, "D-01: no .transfer ETH-push in the mintBurnie legs");
+        assertEq(_countOccurrences(body, ".send("), 0, "D-01: no .send ETH-push in the mintBurnie legs");
 
-        // (c) No untrusted external-call primitive inside the doWork legs that could hand control to an
-        // arbitrary address. The bounty is a minted flip-credit ledger move (NO ETH push the keeper
-        // receives), so a low-level `.call{value:` / `.transfer(` / `.send(` ETH-push has NO place in
-        // any router leg. Asserting ZERO over the comment-stripped doWork body pins the
-        // no-ETH-push / no-untrusted-call shape (NatSpec is comment-stripped, so prose can't self-satisfy).
+        // (c) File-wide, the GameAfkingModule pushes NO ETH at all (the funding self-send was re-homed to
+        // DegenerusGame.withdrawAfkingFunding, NOT this module). Pin the module's low-level ETH-push count at
+        // exactly 0 so a future ETH-push surface (a potential reentrancy vector) flips RED.
         assertEq(
-            _countOccurrences(doWorkBody, ".call{value:"),
+            _countOccurrences(afking, ".call{value:"),
             0,
-            "D-01: no low-level ETH-push call in the doWork legs (no untrusted reentrancy hook)"
-        );
-        assertEq(
-            _countOccurrences(doWorkBody, ".transfer("),
-            0,
-            "D-01: no .transfer ETH-push in the doWork legs"
-        );
-        assertEq(
-            _countOccurrences(doWorkBody, ".send("),
-            0,
-            "D-01: no .send ETH-push in the doWork legs"
-        );
-
-        // (d) File-wide, the SOLE low-level ETH-push in AfKing is the CEI-correct `withdraw` self-send
-        // (`msg.sender.call{value: amount}("")` after the pool is zeroed) — a subscriber pulling its own
-        // prepaid pool, a separate player path, NOT a doWork leg and NOT a creditFlip recipient. Pin its
-        // count at exactly 1 so a future second ETH-push (a potential reentrancy surface) flips RED.
-        assertEq(
-            _countOccurrences(afking, ".call{value: amount}(\"\")"),
-            1,
-            "D-01: the only file-wide ETH-push is the CEI-correct withdraw self-send (msg.sender)"
+            "D-01: the GameAfkingModule pushes no ETH file-wide (funding withdraw lives on DegenerusGame)"
         );
     }
 
-    /// @notice D-03 (no-OOG): parameterless `doWork()` runs the FIXED buy default batch (BUY_BATCH=50)
-    ///         over a backlog LARGER than the batch, returns without OOG, and leaves a REMAINDER (cursor
-    ///         < length); a second `doWork()` advances the cursor further — proving the parameterless
-    ///         router chunks (D-07) and never runs an unbounded loop.
-    function testParameterlessDoWorkDefaultBatchLeavesRemainder() public {
-        // Backlog larger than BUY_BATCH=50 (plus the 2 deploy-time subs). 60 healthy subs.
-        uint256 N = 60;
-        _setupHealthyBuyingSubs(N, "batch_");
-        uint256 total = afKing.subscriberCount();
-        assertGt(total, 50, "pre: backlog exceeds the BUY_BATCH default of 50");
+    /// @notice D-03 ONE-CATEGORY structural early-return (the load-bearing no-stack property): a single
+    ///         `mintBurnie()` tx credits EXACTLY ONE category. When advance is due it credits the advance
+    ///         leg ONCE and does NOT additionally open a pending afking box in the SAME tx (the `else` arm
+    ///         is unreachable when the `if (advanceDue)` arm is taken). Proven by: stage a pending afking
+    ///         box AND make advance due, then assert the single mintBurnie credits once AND leaves the
+    ///         afking box unopened (the open leg never ran — no stacking).
+    function testOneCategoryEarlyReturnNoStack() public {
+        // Stage a pending afking box first (on a settled day).
+        address sub = makeAddr("nostack_afk_sub");
+        _grantDeityPass(sub);
+        _subscribeLootbox(sub, 1);
+        _fundPool(sub, 5 ether);
+        _runStageNewDay(0x0FACE01);
+        _settleGame(0x0FACE02);
+        uint32 stampDay = _lastBoughtDayOf(sub);
+        assertGt(stampDay, 0, "pre: an afking box is stamped");
+        assertTrue(_lastOpenedDayOf(sub) < stampDay, "pre: the afking box is pending (un-opened)");
 
-        // First parameterless doWork — runs the fixed default batch, must NOT OOG (it returns).
-        vm.prank(keeper);
-        afKing.doWork();
-        (, uint256 cursorAfter1) = afKing.autoBuyProgress();
-        assertGt(cursorAfter1, 0, "first doWork advanced the buy cursor");
-        assertLt(cursorAfter1, total, "default batch leaves a remainder for the next call (cursor < length)");
-
-        // Buy leg still due (a remainder remains), so a second doWork advances further.
-        assertTrue(_buyLegDue(), "pre: buy leg still due after the first default batch");
-        vm.prank(keeper);
-        afKing.doWork();
-        (, uint256 cursorAfter2) = afKing.autoBuyProgress();
-        assertGt(cursorAfter2, cursorAfter1, "second doWork advanced the cursor further (chunked, no OOG)");
-    }
-
-    /// @notice D-03 UNREWARDED escape: the standalone parametered `autoBuy(count)` runs the buy leg
-    ///         (state changes — a sub gets bought) but credits NOTHING (only doWork() credits).
-    function testStandaloneAutoBuyEscapeUnrewarded() public {
-        address[] memory subs = _setupHealthyBuyingSubs(3, "esc_buy_");
+        // Now ALSO make advance due — via a LARGE multi-player read-slot backlog (advanceDue() is TRUE
+        // when the read slot is non-empty + not fully processed). The backlog exceeds the per-batch write
+        // budget so the mid-day partial-drain advance WORKS but does NOT finish (mult==1, no NotTimeYet),
+        // and a warp cannot drive a fresh new-day advance here (the idle fixture's day index saturates
+        // after the STAGE day — 351-02). The structural early-return takes the advance arm (XOR), so the
+        // pending afking box is NOT opened in this same tx.
+        uint24 readKey = _readKey(uint24(game.level()) + 1);
+        for (uint256 i; i < 200; i++) {
+            _seedReadSlotTickets(readKey, makeAddr(string(abi.encodePacked("nostack_backlog_", _u(i)))), 3);
+        }
+        _setTicketsFullyProcessed(false);
+        assertTrue(game.advanceDue(), "pre: advance is due (the `if` arm will be taken, not the open `else`)");
 
         vm.recordLogs();
         vm.prank(keeper);
-        afKing.autoBuy(afKing.subscriberCount() + 5);
+        game.mintBurnie();
 
-        // Work happened: at least one sub bought.
-        bool boughtOne;
-        for (uint256 i; i < subs.length; i++) {
-            if (_lastAutoBoughtDayOf(subs[i]) == _today()) boughtOne = true;
-        }
-        assertTrue(boughtOne, "non-vacuity: the standalone autoBuy ran the buy leg (a sub was bought)");
-
-        // ...but it credited the KEEPER (caller) NOTHING — the standalone escape pays no router bounty
-        // (only doWork() credits). Recipient-isolated to the keeper (D-02): the buy itself can route
-        // flip-credit to the BOUGHT subscriber as part of that sub's own reinvest/BURNIE-auto-rebuy
-        // config (the two deploy-time protocol subs do exactly this), which is the buy's player-side
-        // economic effect, NOT the router bounty. The unrewarded-escape claim is "the caller gets no
-        // bounty", so isolate by the keeper recipient.
-        assertEq(
-            _countCoinflipStakeUpdatedFor(keeper),
-            0,
-            "UNREWARDED: standalone autoBuy(count) pays the caller zero router bounty"
+        // Exactly ONE category credited (the advance leg) — no second open-leg credit.
+        assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "ONE-CATEGORY: exactly one credit (advance), no stacked open credit");
+        // The pending afking box was NOT opened this tx (the `else` open arm never ran — XOR).
+        assertTrue(
+            _lastOpenedDayOf(sub) < stampDay,
+            "ONE-CATEGORY: the pending afking box stayed unopened (advance arm taken, open arm not stacked)"
         );
     }
 
-    /// @notice D-03 UNREWARDED escape: the standalone parametered `autoOpen(count)` runs the open leg
-    ///         (a queued box opens) but credits NOTHING (the in-callee bounty was re-homed to doWork at
-    ///         RD-4; `game.autoOpen` self-credits zero).
+    /// @notice D-03 UNREWARDED escape: the standalone parametered HUMAN `game.autoOpen(count)` runs the
+    ///         human box leg (a queued human box opens) but credits NOTHING (only `mintBurnie` credits).
     function testStandaloneAutoOpenEscapeUnrewarded() public {
         address boxOwner = makeAddr("esc_open_box_owner");
         vm.deal(boxOwner, 100_000 ether);
 
+        // Settle so the human box can be queued + opened cleanly.
+        _settleGame(0xE5C0_0001);
         uint48 index = _activeLootboxIndex();
         _buyBox(boxOwner, LOOTBOX_WEI);
         _injectLootboxRngWord(index, FIXED_WORD);
-        assertGt(_lootboxEthBase(index, boxOwner), 0, "pre: box queued + un-opened");
-        assertTrue(game.boxesPending(), "pre: a box is pending");
+        assertGt(_lootboxEthBase(index, boxOwner), 0, "pre: human box queued + un-opened");
+        assertTrue(game.boxesPending(), "pre: a human box is pending");
 
         vm.recordLogs();
         vm.prank(keeper);
-        afKing.autoOpen(50);
+        game.autoOpen(50);
 
-        // Work happened: the box opened (first-deposit signal zeroed).
-        assertEq(_lootboxEthBase(index, boxOwner), 0, "non-vacuity: the standalone autoOpen opened the box");
+        // Work happened: the human box opened (first-deposit signal zeroed).
+        assertEq(_lootboxEthBase(index, boxOwner), 0, "non-vacuity: the standalone autoOpen opened the human box");
 
-        // ...but the keeper got NO bounty credit (only doWork credits). A box open can itself credit
-        // BURNIE winnings to the BOX OWNER (LootboxModule:1036), so isolate the keeper's count: it is 0.
+        // ...but the keeper got NO bounty credit (only mintBurnie credits). A box open can itself credit
+        // BURNIE winnings to the BOX OWNER, so isolate the keeper's count: it is 0.
         assertEq(_countCoinflipStakeUpdatedFor(keeper), 0, "UNREWARDED: standalone autoOpen(count) credits the keeper zero");
     }
 
     // =========================================================================
-    // creditFlip-count oracle (verbatim port of CrankLeversAndPacking.t.sol:523-548)
+    // creditFlip-count oracle
     // =========================================================================
 
     function _countCoinflipStakeUpdated() internal returns (uint256 count) {
@@ -449,10 +379,8 @@ contract KeeperRouterOneCategory is DeployProtocol {
         }
     }
 
-    /// @dev Count CoinflipStakeUpdated emissions whose indexed `player` topic == `who`. The event is
-    ///      `CoinflipStakeUpdated(address indexed player, uint32 indexed day, uint256 amount, uint256 newTotal)`
-    ///      so the player address is topics[1]. Isolates the router bounty (to the keeper) from a
-    ///      box-owner's winnings credit (LootboxModule:1036) — the count cannot be inflated/masked.
+    /// @dev Count CoinflipStakeUpdated emissions whose indexed `player` topic == `who` (topics[1]).
+    ///      Isolates the router bounty (to the keeper) from a box-owner's winnings credit.
     function _countCoinflipStakeUpdatedFor(address who) internal returns (uint256 count) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; i++) {
@@ -466,7 +394,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     // =========================================================================
-    // Source-grep helpers (byte-faithful port of CrankLeversAndPacking.t.sol:554-633)
+    // Source-grep helpers (comment-stripped, function-body scoped)
     // =========================================================================
 
     /// @dev Count non-overlapping occurrences of `needle` in `haystack`.
@@ -552,7 +480,6 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
     /// @dev Extract a function body: locate `sig` (which ends at the opening `{`), then return the
     ///      substring from that `{` to its brace-depth-matched `}` (inclusive). Returns "" if not found.
-    ///      Used to scope a grep gate to a single function body (e.g. doWork()'s router legs).
     function _extractFunctionBody(string memory haystack, string memory sig)
         private
         pure
@@ -561,7 +488,6 @@ contract KeeperRouterOneCategory is DeployProtocol {
         bytes memory hb = bytes(haystack);
         bytes memory s = bytes(sig);
         if (s.length == 0 || hb.length < s.length) return "";
-        // Find the signature (its trailing `{` is the open brace we depth-match from).
         uint256 sigStart = type(uint256).max;
         for (uint256 i = 0; i <= hb.length - s.length; i++) {
             bool matched = true;
@@ -596,82 +522,72 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     // =========================================================================
-    // Protocol-driving helpers (mirror AfKingConcurrency / CrankOpenBoxWorstCaseGas)
+    // Protocol-driving helpers (mirror AfKingConcurrency / V55SetMutationOpenE)
     // =========================================================================
 
     function _today() internal view returns (uint32) {
         return uint32((block.timestamp - 82620) / 1 days);
     }
 
-    /// @dev True iff AfKing's buy-leg predicate (`_autoBuyDay != _currentDay() || cursor < length`) is TRUE.
-    function _buyLegDue() internal view returns (bool) {
-        (uint32 progDay, uint256 cursor) = afKing.autoBuyProgress();
-        return progDay != _today() || cursor < afKing.subscriberCount();
+    /// @dev Drive the per-sub buy STAGE for a NEW day (Δ4 successor to afKing.autoBuy): warp +1 day,
+    ///      settle so processSubscriberStage(SUB_STAGE_BATCH) stamps the funded set + the day word lands.
+    function _runStageNewDay(uint256 vrfWord) internal {
+        _settleGame(vrfWord ^ 0xF00D);
+        vm.warp(block.timestamp + 1 days);
+        _settleGame(vrfWord);
     }
 
-    function _assertBuyLegEmpty() internal view {
-        assertFalse(_buyLegDue(), "pre: buy leg is empty (walked + stamped for today)");
+    /// @dev Subscribe `who` as a self-funded LOOTBOX-mode sub (the afking box stamp path).
+    function _subscribeLootbox(address who, uint8 q) internal {
+        vm.prank(who);
+        game.subscribe(address(0), false, false, q, 0, address(0)); // self, lootbox mode, no reinvest
     }
 
-    /// @dev Subscribe `n` fresh players as fully-healthy buying subs (ticket mode, operator-approved,
-    ///      pool-funded, not renewal-due) so each lands a clean buy. Mirrors AfKingConcurrency.
-    function _setupHealthyBuyingSubs(uint256 n, string memory prefix) internal returns (address[] memory subs) {
-        subs = new address[](n);
-        for (uint256 i; i < n; i++) {
-            address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
-            subs[i] = who;
-            _fundBurnie(who, _subCost()); // for the no-pass subscribe-time all-or-nothing charge
-            vm.prank(who);
-            afKing.subscribe(address(0), false, true, 1, 0, address(0)); // self, drainCredit=false, ticket, qty 1, self-funded
-            vm.prank(who);
-            game.setOperatorApproval(address(afKing), true);
-            _fundPool(who, 1 ether);
-        }
-    }
-
-    function _subCost() internal view returns (uint256) {
-        return (afKing.SUB_COST_ETH_TARGET() * 1000 ether) / game.mintPrice();
-    }
-
+    /// @dev Credit `who`'s afkingFunding bucket (Δ5: depositAfkingFunding replaces AfKing.depositFor).
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        afKing.depositFor{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(who);
     }
 
-    function _fundBurnie(address who, uint256 amount) internal {
-        if (amount == 0) return;
-        vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(who, amount);
+    /// @dev Grant `who` the permanent deity bit (RE-DERIVED slot: mintPacked_ is slot 10).
+    function _grantDeityPass(address who) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        packed |= (uint256(1) << DEITY_SHIFT);
+        vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Read `who`'s lastAutoBoughtDay (bytes 1..4 of the packed Sub slot).
-    function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(afKing), slot));
-        return uint32(packed >> (OFF_LASTSWEPT * 8));
+    // ---- Sub field reads (RE-DERIVED slot 66 + verified offsets) ----
+
+    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        return p & ((uint256(1) << widthBits) - 1);
     }
 
-    /// @dev Force the autoBuy cursor back to 0 while keeping the day-stamp == today, so the next autoBuy
-    ///      re-walks index 0. Slot 4: _autoBuyDay (uint32 bytes 0..3) + _autoBuyCursor (uint224 bytes 4..).
-    function _resetCursorToZeroForToday() internal {
-        uint256 packed = uint256(vm.load(address(afKing), bytes32(uint256(AUTOBUY_SLOT))));
-        packed &= uint256(0xFFFFFFFF);             // keep _autoBuyDay (low 4 bytes), zero the cursor
-        packed &= ~uint256(0xFFFFFFFF);            // clear the day field too, then re-stamp today
-        packed |= (uint256(_today()) & 0xFFFFFFFF);
-        vm.store(address(afKing), bytes32(uint256(AUTOBUY_SLOT)), bytes32(packed));
+    function _lastBoughtDayOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_LASTBOUGHT, 32));
     }
 
-    /// @dev Pin the buy leg "walked for today": stamp _autoBuyDay == today AND cursor >= length so the
-    ///      buy-leg predicate (`_autoBuyDay != _currentDay() || cursor < length`) is FALSE. Used to force
-    ///      the router past the buy leg into advance / open / NoWork without re-opening the buy backlog.
-    function _pinBuyLegWalkedForToday() internal {
-        uint256 len = afKing.subscriberCount();
-        uint256 packed = (uint256(_today()) & 0xFFFFFFFF) | ((len + 1) << 32);
-        vm.store(address(afKing), bytes32(uint256(AUTOBUY_SLOT)), bytes32(packed));
+    function _lastOpenedDayOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_LASTOPENED, 32));
     }
 
-    /// @dev Buy a real lootbox-mode deposit via the public mint API. The first deposit for
-    ///      (index, buyer) fires the `lootboxEthBase == 0` signal -> enqueueBoxForAutoOpen (MintModule).
+    // ---- gameover latch ----
+
+    /// @dev Latch the terminal gameOver public bool (byte 23 of SLOT 0) WITHOUT setting the gameover-time
+    ///      slot, so the advance takes the gameover branch (mult=0) harmlessly.
+    function _latchGameOver() internal {
+        bytes32 slot = bytes32(uint256(0));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        packed |= (uint256(1) << (23 * 8));
+        vm.store(address(game), slot, bytes32(packed));
+        require(game.gameOver(), "_latchGameOver: gameOver did not flip (slot 0 byte 23)");
+    }
+
+    // ---- human box helpers (the unrewarded human autoOpen escape) ----
+
+    /// @dev Buy a real human lootbox-mode deposit via the public mint API. The first deposit for
+    ///      (index, buyer) fires the `lootboxEthBase == 0` signal -> enqueueBoxForAutoOpen.
     function _buyBox(address buyer, uint256 lootboxAmount) internal {
         vm.prank(buyer);
         game.purchase{value: lootboxAmount + 0.01 ether}(
@@ -679,13 +595,13 @@ contract KeeperRouterOneCategory is DeployProtocol {
         );
     }
 
-    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 37).
+    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 38).
     function _activeLootboxIndex() internal view returns (uint48) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
         return uint48(packed & 0xFFFFFFFFFFFF);
     }
 
-    /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 38).
+    /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 39).
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         vm.store(address(game), slot, bytes32(rngWord));
@@ -696,6 +612,43 @@ contract KeeperRouterOneCategory is DeployProtocol {
         bytes32 inner = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_ETH_BASE_SLOT)));
         bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
         return uint256(vm.load(address(game), leaf));
+    }
+
+    // ---- read-slot ticket seeding (force advanceDue via a non-empty current-level read slot) ----
+
+    /// @dev Read the GAME's live ticketWriteSlot bool (SLOT 0 byte 28).
+    function _ticketWriteSlot() internal view returns (bool) {
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        return ((slot0 >> (28 * 8)) & 0x1) != 0;
+    }
+
+    /// @dev The current read key for a level — byte-faithful to DegenerusGameStorage._tqReadKey.
+    function _readKey(uint24 lvl) internal view returns (uint24) {
+        return !_ticketWriteSlot() ? (lvl | TICKET_SLOT_BIT) : lvl;
+    }
+
+    /// @dev Seed `whole` current-level tickets for `who` at the read key (packed: owed=whole*4 << 8 | rem)
+    ///      and append `who` to ticketQueue[readKey], so advanceDue() sees a non-empty read slot.
+    function _seedReadSlotTickets(uint24 readKey, address who, uint32 whole) internal {
+        uint32 entries = whole * 4;
+        uint40 packed = uint40(uint256(entries) << 8);
+        bytes32 owedInner = keccak256(abi.encode(uint256(readKey), TICKETS_OWED_PACKED_SLOT));
+        vm.store(address(game), keccak256(abi.encode(who, uint256(owedInner))), bytes32(uint256(packed)));
+
+        bytes32 lenSlot = keccak256(abi.encode(uint256(readKey), TICKET_QUEUE_SLOT));
+        uint256 len = uint256(vm.load(address(game), lenSlot));
+        bytes32 dataBase = keccak256(abi.encode(lenSlot));
+        vm.store(address(game), bytes32(uint256(dataBase) + len), bytes32(uint256(uint160(who))));
+        vm.store(address(game), lenSlot, bytes32(len + 1));
+    }
+
+    /// @dev Set the ticketsFullyProcessed bool (SLOT 0 byte 26), preserving the rest of slot 0.
+    function _setTicketsFullyProcessed(bool v) internal {
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        uint256 mask = uint256(0xFF) << (26 * 8);
+        slot0 &= ~mask;
+        if (v) slot0 |= (uint256(1) << (26 * 8));
+        vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
     }
 
     /// @dev Minimal uint -> decimal string for makeAddr label uniqueness.
