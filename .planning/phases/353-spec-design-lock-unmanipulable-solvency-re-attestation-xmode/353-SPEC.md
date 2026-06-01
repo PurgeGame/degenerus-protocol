@@ -159,3 +159,89 @@ The design-level **unmanipulable / SOLVENCY-01-untouched / RNG-freeze-intact** a
 **RNG-freeze assertion (LOCKED):** the in-slot accumulator (`affiliateBase`/`lastSettledDay`/`questProgress`) is **disjoint** from the RNG-window state; the afking open keeps the **frozen stamp-day seed + word** (`rngWordByDay[lastAutoBoughtDay]`, day-frozen at the stamp). The accrue/settle never read or write `rngWordByDay` or any frozen-window slot.
 
 **Block-on-HIGH (design gate):** no HIGH design hole remains open at lock. T-353-01/02/03/04/06 (the STRIDE register) are all mitigated by named design assertions above; T-353-05 (open-timing) is re-verified post-refactor at TST 356 (OPEN-02). The block-on-HIGH gate for this paper-only phase is the DESIGN gate — every unmanipulability/solvency/freeze hole is closed on paper with a named anchor + a TST-356 proof obligation.
+
+---
+
+> **The five sections below are DESIGN FEEDS for the requirements built/proven downstream.** They are flagged **owned at IMPL 354 — design fixed here**. The requirement IDs AGG-01..05 / TKT-01/02 / QST-01..05 / OPEN-01/02 are **NOT** in this plan's `requirements` (which is AFF-01/AFF-02 only) — the design is locked here, the code is owned at 354, the proofs at 356.
+
+## AGG — Mode-Agnostic Aggregator (design feed) (LOCKED — owned at IMPL 354)
+
+**Shape:** accrue-cheap-per-buy → settle-once. The per-buy path does ONE warm SSTORE into the re-packed Sub accumulator slot (`affiliateBase` += tapered whole-BURNIE base; `questProgress`/delivered-day markers advanced; `lastSettledDay` window epoch checked) and NOTHING cross-contract. The cross-contract storm defers to a uniform **settle** leg.
+
+- **Scheduled ~10-day flush ("settlement-due"):** a `mintBurnie`-driven settle leg fires when the global ~10-day epoch elapses (`currentDay - lastSettledDay >= 10`). It runs the deferred affiliate distribution (AFF-01: the winner-takes-all roll seeded by the **fixed window-boundary day**) + the deferred quest credit + the one batched leaderboard write (AFF-02 option A), then advances `lastSettledDay`.
+- **Player-triggered-mutation flush BEFORE applying the change:** any sub/unsub/param-change first flushes the pending window via the **deterministic 75/20/5 split (NO roll)** at the locked params, THEN applies the mutation. The mutator pays the settle gas → churn self-limits (SEC-01).
+- **Uniform mode-agnostic settle:** the SAME settle path handles BOTH ticket-mode and lootbox-mode accruals (the accumulator is mode-agnostic — it holds whole-BURNIE affiliate base + quest progress regardless of how the per-buy stamp was written).
+- **Double-settle gates (AGG-05):** `lastSettledDay` (in-slot) gates a second scheduled flush in the same window to a no-op; the player-flush resets the window. This mirrors the existing `lastAutoBoughtDay` / `lastOpenedDay` monotone-idempotency-marker shape (the established template).
+
+**Gas substrate (grounded in `353-AFKING-READS-WRITES.md`):** the irreducible per-buy accesses that MUST stay on the hot path are — **R1** `_subscribers[cursor]→player` (`:551`), **R2** `_subOf[player]` (one warm slot, `:552`), **R3** `_goRead(swept)` (`:461`), **R5** `afkingFunding[player]` (`:464`); the **W1/W2 solvency debit** `afkingFunding[src] -= ethValue` (`:709`) + `claimablePool -= uint128(ethValue)` (`:710`) [💰 byte-unchanged]; the **W3/W4 stamp** `scorePlus1`+`amount` (lootbox `:793-794`) or the minimal ticket-queue write; **+ ONE accrue SSTORE** into the re-packed Sub slot. The **deferrable cross-contract storm** that v56 moves to the settle is: `quests.handlePurchase` (`:760`) + `affiliate.payAffiliate` ×2 (`:806`/`:816`) + per-buy `coinflip.creditFlip` (`:831`) → all collapse into the once-per-window settle. **The OPEN path is already lean** (per `353-AFKING-READS-WRITES.md` §2: no cold ledger, one marker write + the EV-cap RMW that *is* the box + one cursor write + one bounty) — OPEN is a **re-verification target, not an optimization target**; all v56 everyday-gas savings live on the **buy** side. Cross-reference: the accumulator slot is the re-packed in-slot layout locked in `## Accumulator Layout`.
+
+## TKT — Ticket-Mode Minimal-Write Primitive (design feed) (LOCKED — owned at IMPL 354)
+
+**Replace** the per-day `purchaseWith` heavyweight delegatecall (`contracts/modules/GameAfkingModule.sol:713-731`, ~262k) with a custom `_queueTicketsScaled`-equivalent **minimal-write primitive** that mirrors the lootbox box-stamp: a resolution-equivalent placement/trait/quantity write, with affiliate + quest **deferred to the aggregator settle** (no per-buy `payAffiliate`/`handlePurchase`/`creditFlip`).
+
+**Century/x00 parity — KEEP (D-10, flipped 2026-06-01):** afking-ticket buyers **GET** the century bonus at **parity** with manual ticket buyers. The primitive replicates the `targetLevel % 100 == 0` quantity bonus (`contracts/modules/DegenerusGameMintModule.sol:1243-1259`) **before queuing**, REUSING the existing `centuryBonusLevel` (uint24, `DegenerusGameStorage.sol:1563`) + `centuryBonusUsed` (mapping, `:1567`) storage — **NO new slot** — and reusing the per-buy activity score already computed for the AFF-02 affiliate taper (so **no extra `_playerActivityScore` call**).
+
+**Gas analysis (why KEEP is amortized-free):** the bonus is gated by the every-100th-level check (`targetLevel % 100 == 0`) → it fires only on the rare century-level buy; the only real cost (~7–31k, the `centuryBonusUsed[buyer]` zero→nonzero write) lands on that rare buy and amortizes to negligible. The SPEC documents this is **parity-by-choice** — the original "drop for simplicity" (D-10 first pass) was about primitive-simplicity, NOT gas; with the cost shown trivial, parity is the fairer choice.
+
+## QST — Shared DegenerusQuests Core (design feed) (LOCKED — owned at IMPL 354)
+
+**Batched-settle entrypoint shape:** a NEW `onlyGame`-gated entrypoint (`onlyGame` admits GAME only — `DegenerusQuests.sol:321-324`) invoked from the GAME-context settle leg. It touches **`questPlayerState[player]` (slot-0)** + **`questStreakShieldCount[player]`** only, mirrors `awardQuestStreakBonus` (`:365-384`) semantics for the streak, **MUST call `_questSyncState` first** (like `awardQuestStreakBonus:369`, so it respects the same day-reset / anchor logic, `_questSyncState` `:1285-1318`), and **MUST NOT touch slot-1** (`progress[1]`, `lastProgressDay[1]`, `lastQuestVersion[1]` — the player's manual quest, QST-01).
+
+**Non-perturbation approach (QST-04, RESEARCH §4.2 — OWNED at IMPL, PROVEN at TST 356):** the manual/bingo/degenerette/boon callers produce **byte-identical `PlayerQuestState`** with the entrypoint present vs absent, for any interleaving. The entrypoint adds writes only to `streak`/`lastActiveDay`/`lastCompletedDay`/`lastSyncDay` — the SAME fields `awardQuestStreakBonus` + `_questSyncState` already write — so the proof reduces to: the entrypoint's writes are commutative-or-ordered-identically with the existing handlers' for the afk-covered days (the `lastSyncDay`/`completionMask` reset logic `:1312-1317` already serializes by day; the entrypoint's mandatory `_questSyncState`-first respects the same day-reset).
+
+**±10-streak / confirmed-vs-provisional derivation (QST-02/QST-03, RESEARCH §4.3):**
+- **+10-at-subscribe is PROVISIONAL** — applied only to the accumulator counter (the in-slot `questProgress`), NEVER directly to `state.streak`. (No injectable player add-lever: `awardQuestStreakBonus` is `onlyGame` — there is no player-callable path that adds to `state.streak` ahead of delivery → no pre-credit-EV inflation, QST-02.)
+- **`state.streak` advances ONLY at settle** for **delivered days** `(afkCoveredThroughDay, settleDay]`, with `afkCoveredThroughDay` **monotone-advanced** in the same write (debit-gated: each day credited exactly once; the marker is monotone like `lastOpenedDay`/`lastAutoBoughtDay`).
+- **Double-credit guard (QST-03):** the `lastCompletedDay` / `afkCoveredThroughDay` guard gates **`state.streak` advancement** — NEVER the slot-0 reward accrual. A manual completion on an afk-covered day must not double-credit the streak (credit the streak once per day, whichever path reaches it first); slot rewards are never suppressed.
+- **Active-pass anti-reset (QST-03):** suppress `_questSyncState`'s gap-reset (`:1306`, which zeroes `state.streak` when `currentDay > anchorDay + 1` unless `questStreakShieldCount` covers the gap) **without a daily write** — via the marker-update approach: on settle, advance `lastActiveDay`/`lastCompletedDay` to the last afk-covered delivered day so `anchorDay` stays current (no shield-balance accounting).
+
+## QST-05 O1 Fix + Dead-Code Removal (design feed) (LOCKED — owned at IMPL 354)
+
+**O1 fix (D-01/D-03):** **DROP** the internal `coinflip.creditFlip(player, lootboxReward)` at `contracts/DegenerusQuests.sol:890` (inside the `if (lootboxReward != 0)` at `:889`); **KEEP** `lootboxReward` in the return `totalReturned = ethMintReward + lootboxReward` at `:893` so the caller's single batched `creditFlip` pays it **exactly once**. KEEP the burnie credit at `:887` (always internal-only, correct). **Non-perturbing to the MintModule caller:** it already re-credits the return (`lootboxFlipCredit += questReward` `:1232` → batched `coinflip.creditFlip(buyer, lootboxFlipCredit)` `:1366-1367`); dropping `:890` removes the duplicate, leaving the lootbox reward credited once via `:1367` (the eth-mint leg was always return-only; the burnie-mint leg `:887` was always internal-only).
+
+**The KEY v56 nuance (RESEARCH §5.3):** under the aggregator, the afking per-buy `handlePurchase` call (`GameAfkingModule.sol:760`) **DISAPPEARS** (deferred to settle) → the afking per-buy path no longer calls `handlePurchase` at all. So the O1 fix is **two halves**: (a) drop `:890` at the source (fixes the manual `purchaseWith` path's double-credit); AND (b) the v56 afking **SETTLE** must route the deferred lootbox-quest reward through **exactly ONE `creditFlip`** (the settle's single batched credit, never an internal one) — inheriting the post-fix invariant. TST 356 + TERMINAL 357 verify the afking settle credits once.
+
+**Dead-code removal (D-05):** remove `handleLootBox` (`contracts/DegenerusQuests.sol:698-741`; its internal `creditFlip` `:739` is unreachable) + the interface entry (`contracts/interfaces/IDegenerusQuests.sol:107`) + the access-control tests. **Zero production callers** (RESEARCH §5.2 grep: only comment refs at `:746` / `IDegenerusQuests:126`; test refs in `test/fuzz/CoverageGap222.t.sol` + `test/unit/DegenerusQuests.test.js`). Pre-launch redeploy-fresh accepts the interface break; removing it drops bytecode + a latent double-credit footgun while we are already in the shared core.
+
+## OPEN — Afking Open-End Re-Verification (design feed) (LOCKED — owned at IMPL 354)
+
+**OPEN-01 (cheapest viable shared materialization):** the afking open path (`_openAfkingBox` `GameAfkingModule.sol:888-910` → `resolveAfkingBox` `DegenerusGameLootboxModule.sol:877-...`, driven by `mintBurnie` `:985` / `_autoOpen` `:938-966` / `OPEN_BATCH` `:191`) already shares `_resolveLootboxCommon` with the human `openLootBox` path — that **IS** the cheapest viable shared materialization (one resolve function; only the seed-source + day-freeze differ). v56 must **NOT** touch the open's freeze/parity guarantees (per `353-AFKING-READS-WRITES.md` §2: the OPEN path is already lean — no fat to cut).
+
+**OPEN-02 (re-verify AFTER the accrual/settle refactor):**
+- **Live-level parity:** `resolveAfkingBox` rolls `currentLevel = level + 1` LIVE (`DegenerusGameLootboxModule.sol:894`), exactly like `resolveLootboxDirect` — parity with the human box.
+- **Frozen stamp-day seed + word:** the box word is the caller-passed `rngWordByDay[lastAutoBoughtDay]` (the FROZEN stamp-day word, `:905`) and the seed `day` is the FROZEN stamp day (`:904`/`:889`), NOT the live day — the freeze prevents seed-grinding by open-timing.
+- **No double-open:** `lastOpenedDay` advances BEFORE the resolve (`_openAfkingBox:892`, effects-first); `_afkingBoxReady` gates on `lastOpenedDay < lastAutoBoughtDay` (`:918-922`); `lastOpenedDay` is monotone → a re-walked open is a no-op.
+- **EV-cap exactly-once:** the SINGLE `_applyEvMultiplierWithCap(player, currentLevel, ...)` RMW (`:902`), keyed `[player][currentLevel]` (`currentLevel = level + 1`) on the SAME `lootboxEvBenefitUsedByLevel` map the human path uses; the afking buy-time EV write is bypassed → the open is the single draw, no double-draw.
+- **No shared-state hazard:** the in-slot accumulator fields (`affiliateBase`/`lastSettledDay`/`questProgress`) are **disjoint** from the open's `lastOpenedDay`/`lastAutoBoughtDay` markers within the shared Sub slot (different fields, different write paths) → no collision. The human + afking routes share only the intended per-`(player,level)` EV-cap budget.
+
+---
+
+## XMODEL-01 Cross-Model Design-Input (PENDING — Plan 02)
+
+> **PLACEHOLDER — filled by Plan 02 (the XMODEL cross-model design-input pass).** This section will hold the per-concern bespoke prompts fed to BOTH `codex` + `gemini` (D-11) and the disposition table folded into the design-lock BEFORE IMPL 354. XMODEL-01 is OWNED by Phase 353 (this SPEC is its home); the TERMINAL close-augmentation half is reflected in AUDIT-01 at Phase 357.
+
+The FIVE concerns (C1–C5) Plan 02 runs (RESEARCH §7.3):
+
+| # | Concern | Prompt focus |
+|---|---------|--------------|
+| C1 | Strategic sub/unsub edge | Can a player extract more value than a steady subscriber by subscribe→accrue→unsub-flush (deterministic 75/20/5 at locked params)→re-subscribe? (roll buyer-never-wins `:579`; per-buy immutable taper; double-settle gated by `lastSettledDay`.) Find any positive-EV churn vector. |
+| C2 | Settle-timing / roll-seed | Can a player select a favorable roll seed by timing the flush? The scheduled flush rolls `keccak256(TAG, windowBoundaryDay, sender, code) % 20`; the player-flush is a deterministic split (no roll); the buyer never receives the roll. |
+| C3 | Ticket-mode primitive parity | Does KEEPING the century bonus at parity (reusing `centuryBonusLevel`/`centuryBonusUsed` + the per-buy score) while deferring affiliate/quest to the settle create any exploit or resolution mismatch vs the manual ticket leg? |
+| C4 | Open-end unmanipulability | After moving affiliate/quest to a deferred settle, is the open still unmanipulable (no double-open, no EV double-draw, no level/seed timing edge)? (live level, frozen stamp-day seed+word, shared per-(player,level) EV-cap, `lastOpenedDay` monotone.) |
+| C5 | Long-run gas | Suggest gas optimizations for the per-buy accrue (one warm SSTORE into the re-packed Sub slot — whole-BURNIE affiliate base + 100M clamp + milli-ETH amount + narrowed day/level fields, NO new cold slot), the ~10-day settle leg, and the `OPEN_BATCH` open walk — without weakening any unmanipulability invariant. |
+
+**Disposition table (Plan 02 produces, folds BEFORE IMPL 354):**
+
+| Concern | Codex verdict | Gemini verdict | Disposition (FOLD / REJECT-with-reason / NEEDS-DESIGN-CHANGE) |
+|---------|---------------|----------------|----------------------------------------------------------------|
+| C1 | _(PENDING — Plan 02)_ | _(PENDING — Plan 02)_ | _(PENDING — Plan 02)_ |
+| C2 | _(PENDING — Plan 02)_ | _(PENDING — Plan 02)_ | _(PENDING — Plan 02)_ |
+| C3 | _(PENDING — Plan 02)_ | _(PENDING — Plan 02)_ | _(PENDING — Plan 02)_ |
+| C4 | _(PENDING — Plan 02)_ | _(PENDING — Plan 02)_ | _(PENDING — Plan 02)_ |
+| C5 | _(PENDING — Plan 02)_ | _(PENDING — Plan 02)_ | _(PENDING — Plan 02)_ |
+
+---
+
+## SPEC Lock (PENDING — flipped by Plan 02 after the XMODEL fold-in)
+
+> **PLACEHOLDER — flipped by Plan 02.** The SPEC is DRAFT until Plan 02 runs the XMODEL cross-model design-input pass, folds the C1–C5 disposition table above, applies any NEEDS-DESIGN-CHANGE adjustments to the locked sections, and then flips this status to **LOCKED** with the lock attestation (date, the disposition summary, the confirmation that no XMODEL concern reopened a HIGH design hole, and the re-confirmation that `git diff --quiet 453f8073 HEAD -- contracts/` is still clean — paper-only). Until then: **STATUS = DRAFT.**
