@@ -1,92 +1,105 @@
 # AfKing Buy + Open — Storage Reads/Writes Inventory
 
-**Purpose:** A SLOAD/SSTORE map of the everyday afking paths, annotated with which accesses are *strictly necessary for the path to function* vs which are the deferrable "extraneous stuff" v56 batches into the ~10-day settle. This is the gas-optimization substrate for the v56.0 SPEC (feeds AGG/GAS/TKT/OPEN).
+**Purpose:** A SLOAD/SSTORE map of the everyday afking paths, marking which accesses are *strictly necessary for the path to function* vs the deferrable "extraneous stuff" v56 batches into the ~10-day settle. The gas-optimization substrate for the v56.0 SPEC (feeds AGG/GAS/TKT/OPEN).
 
-**Source:** `contracts/modules/GameAfkingModule.sol` at the v55.0 frozen subject `453f8073` (working tree byte-identical, per `353-RESEARCH.md`).
-**Key fact:** the `Sub` record is a **single 256-bit slot** (232/256 packed — `contracts/storage/DegenerusGameStorage.sol`), so every per-sub field touch coalesces into ONE warm SLOAD / ONE warm SSTORE.
+**Source:** `contracts/modules/GameAfkingModule.sol` @ the v55.0 frozen subject `453f8073` (working tree byte-identical, per `353-RESEARCH.md`).
+
+**Verdict legend**
+
+| Mark | Meaning |
+|:--:|---|
+| ✅ | core — required for the path to function |
+| 💰 | solvency-critical — the ETH/`claimablePool` debit (must stay byte-unchanged in v56) |
+| ⚠️ | conditional — only needed in some sub configs |
+| ◑ | rare — only on an uncommon branch (common path skips) |
+| 🔁 | **deferrable** — the cross-contract "extraneous stuff" v56 moves to the settle |
+
+> The `Sub` record is a **single 256-bit slot** (232/256 packed — `DegenerusGameStorage.sol:1867-1899`), so every per-sub field touch is ONE warm SLOAD / ONE warm SSTORE (marked `¹`).
 
 ---
 
 ## 1. AFKING BUY — `processSubscriberStage` (`:539`), per subscriber
 
-The per-day `advanceGame` STAGE walks the subscriber set in `SUB_STAGE_BATCH`-sized chunks. `_resolveBuy` (`:440`) is `view` — its reads are listed under the caller.
+**Hoisted once per chunk** (not per-sub): price/`_activeTicketLevel` (`:543`), `level`→`currentLevel` (`:546`), `_subCursor` (1 SLOAD in `:548` / 1 SSTORE out `:849`).
 
-**Hoisted ONCE per chunk (not per-sub):**
-- `_mintPriceInContext()` → `_activeTicketLevel` + price (`:543`)
-- `level` → `currentLevel` (`:546`, AFSUB-02 hoist — non-crossing pass needs no per-iter level SLOAD)
-- `_subCursor` (`:548` 1 SLOAD in / `:849` 1 SSTORE out)
+### Reads
 
-### Per-subscriber READS
+| Access | Site | Op | |
+|---|---|---|:--:|
+| `_subscribers[cursor]` → player | `:551` | SLOAD | ✅ |
+| `_subOf[player]` (flags, markers, dailyQty, reinvestPct, validThroughLevel, scorePlus1, amount) | `:552` | SLOAD¹ | ✅ |
+| `_goRead(swept)` | `:461` | SLOAD | ✅ |
+| `claimableWinnings[player]` | `:463` | SLOAD | ⚠️ |
+| `afkingFunding[player]` → playerFunding | `:464` | SLOAD | ✅ |
+| `_fundingSourceOf[player]` | `:649` | SLOAD | ◑ |
+| `afkingFunding[src]` (funding-skip) | `:662` | SLOAD | ◑ |
 
-| # | Access | Site | Type | Strictly necessary? |
-|---|--------|------|------|---------------------|
-| R1 | `_subscribers[cursor]` → player | `:551` | SLOAD (array) | ✅ core — who to process |
-| R2 | `_subOf[player]` (flags, lastOpenedDay, lastAutoBoughtDay, dailyQuantity, reinvestPct, validThroughLevel, scorePlus1, amount) | `:552` + field reads | 1 SLOAD (warm after) | ✅ core — config + idempotency/no-orphan markers |
-| R3 | `_goRead(GO_SWEPT…)` (swept-gate) | `:461` | SLOAD | ✅ core — mirrors afkingSnapshot/claimableWinningsOf |
-| R4 | `claimableWinnings[player]` | `:463` | SLOAD | ⚠️ only meaningful when `reinvestPct>0` OR `drainFirst`; read unconditionally today (skipped only when swept) |
-| R5 | `afkingFunding[player]` → playerFunding | `:464` | SLOAD | ✅ core — funded check + debit source |
-| R6 | `_fundingSourceOf[player]` | `:649` | SLOAD | rare — ONLY if `FLAG_EXTERNAL_FUNDING` set (common self-funded path skips entirely, OPENE-02) |
-| R7 | `afkingFunding[src]` (funding-skip) | `:662` | SLOAD | rare — only if `src != player`; common path reuses R5 (no extra SLOAD) |
+### Writes (common funded path)
 
-### Per-subscriber WRITES (common funded path)
+| Access | Site | Op | |
+|---|---|---|:--:|
+| `afkingFunding[src] -= ethValue` | `:709` | SSTORE | ✅💰 |
+| `claimablePool -= uint128(ethValue)` | `:710` | SSTORE | ✅💰 |
+| stamp `sub.scorePlus1` + `sub.amount` (lootbox) | `:793-794` | SSTORE¹ | ✅ |
+| `sub.lastAutoBoughtDay = processDay` | `:840` | SSTORE¹ | ✅ |
+| `sub.lastOpenedDay = processDay` (ticket only) | `:734` | SSTORE¹ | ✅ |
 
-| # | Access | Site | Type | Strictly necessary? |
-|---|--------|------|------|---------------------|
-| W1 | `afkingFunding[src] -= ethValue` | `:709` | SSTORE | ✅ **core, solvency-critical** (only if ethValue≠0) |
-| W2 | `claimablePool -= uint128(ethValue)` | `:710` | SSTORE | ✅ **core — SOLVENCY-01, must stay byte-identical in v56** |
-| W3 | `sub.scorePlus1` + `sub.amount` (lootbox stamp) | `:793-794` | 1 SSTORE (warm Sub slot) | ✅ core (lootbox) — IS the box record; materialized at open |
-| W4 | `sub.lastAutoBoughtDay = processDay` | `:840` | same slot | ✅ core — idempotency marker + the open's frozen seed `day` |
-| W5 | `sub.lastOpenedDay = processDay` (ticket mode only) | `:734` | same slot | ✅ core (ticket) — keeps the open leg/no-orphan guard from treating a ticket sub as box-pending |
+### The cross-contract "storm" (lootbox branch `:749-832`) — all deferrable
 
-### The cross-contract "storm" (lootbox branch `:749-832`) — NONE necessary for the buy to *function*
+| Call | Site | What it costs | |
+|---|---|---|:--:|
+| `quests.handlePurchase` | `:760` | QUESTS writes + internal COINFLIP credit (+ the **O1** double-credit `:890`) | 🔁 |
+| `recordMintQuestStreak` | `:773` | self-call (streak bookkeeping) | 🔁 |
+| `_playerActivityScore` | `:785` | activity SLOADs | ⚠️🔁 |
+| `affiliate.payAffiliate` (fresh) | `:806` | 3 leaderboard writes + roll + 2 cross-calls | 🔁 |
+| `affiliate.payAffiliate` (claimable) | `:816` | same | 🔁 |
+| `coinflip.creditFlip(player, …)` | `:831` | the per-buy reward payout | 🔁 |
 
-| Call | Site | What it does | v56 disposition |
-|------|------|-------------|-----------------|
-| `quests.handlePurchase` | `:760` | quest credit → QUESTS writes + an internal COINFLIP `creditFlip` (and the **O1** double-credit at `DegenerusQuests:890`) | **DEFER → settle** (AGG-01). v56 removes this from the per-buy path entirely; O1 fixed at source |
-| `recordMintQuestStreak` | `:773` | streak bookkeeping (self-call), if questCompleted && questType==1 | **DEFER → settle** |
-| `_playerActivityScore` | `:785` | reads activity inputs → the stamped score | **partially necessary** — the box STAMP needs the score; the affiliate-taper use of it defers |
-| `affiliate.payAffiliate` (fresh) | `:806` | leaderboard (`affiliateCoinEarned` + `_totalAffiliateScore` + `_updateTopAffiliate`) + winner-takes-all roll + `handleAffiliate`→QUESTS + `_routeAffiliateReward`→COINFLIP | **DEFER → settle** — accrue base only per-buy (AGG-01); leaderboard one batched write at settle (option A) |
-| `affiliate.payAffiliate` (claimable) | `:816` | same, for the claimable-funded portion | **DEFER → settle** |
-| `coinflip.creditFlip(player, flipCredit)` | `:831` | the per-buy reward payout (quest + both affiliate kickbacks) | **DEFER → settle** — one batched creditFlip per window |
-
-**Ticket mode is worse:** the entire `purchaseWith` delegatecall (`:718-731`, the ~262k binding case) does the ticket-queue write **plus** its own internal storm. v56 replaces it with a minimal "write the ticket entries to the queue" primitive + the same deferred accrue.
+**Notes**
+- **`_subOf` (R2)** — one slot, warm after the first field read; covers the no-orphan guard, tombstone, idempotency, pass-gate, and `_resolveBuy` reads.
+- **`claimableWinnings` (R4)** — only *meaningful* when `reinvestPct>0` or `drainFirst`; read unconditionally today (skipped only when swept).
+- **`_fundingSourceOf` / `afkingFunding[src]` (R6/R7)** — common self-funded path skips both (OPENE-02); only the operator-funded sub (`FLAG_EXTERNAL_FUNDING`) pays them.
+- **`claimablePool -= ` (W2)** — the SOLVENCY-01 site; v56 keeps it byte-unchanged (affiliate/quest are BURNIE-only, never an ETH cut).
+- **`_playerActivityScore`** — the box *stamp* genuinely needs the score (frozen into `scorePlus1`); only its affiliate-taper use defers.
+- **Ticket mode is worse:** the whole `purchaseWith` delegatecall (`:718-731`, ~262k) does the queue write **plus** its own internal storm. v56 replaces it with a minimal queue-write + the same deferred accrue.
 
 ### Irreducible afking buy (v56 target)
+
 ```
-reads:  R1 (player) + R2 (Sub) + R3 (swept) + R5 (afkingFunding[player])
-debit:  W1 (afkingFunding -=) + W2 (claimablePool -=)        [solvency, byte-unchanged]
-stamp:  W3+W4 (lootbox: scorePlus1/amount/lastAutoBoughtDay)  OR  minimal ticket-queue write + W5
-accrue: +1 warm SSTORE  (affiliate base + quest progress + window markers)
+reads:  R1 player · R2 Sub · R3 swept · R5 afkingFunding[player]
+debit:  W1 afkingFunding -= · W2 claimablePool -=        [💰 byte-unchanged]
+stamp:  W3+W4 (lootbox)  OR  minimal ticket-queue write + W5
+accrue: +1 warm SSTORE   (affiliate base + quest progress + window markers)
 ```
-**Caveat (from `353-RESEARCH.md` §2):** the `Sub` slot is full (232/256), so the accumulator can NOT pack into Sub spare bits — it needs a **new dedicated cold slot**. The accrue is therefore one warm per-buy SSTORE into that dedicated slot (still vastly cheaper than the ~5-call cross-contract storm it replaces). GAS-02 is re-framed accordingly.
+
+**Caveat (RESEARCH §2):** the `Sub` slot is full (232/256) → the accumulator can't pack into Sub spare bits; it needs a **new dedicated cold slot**. The accrue is one warm per-buy SSTORE into that slot — still vastly cheaper than the ~5-call storm it replaces. GAS-02 is re-framed accordingly.
 
 ---
 
-## 2. AFKING OPEN — `_autoOpen` (`:938`) → `_openAfkingBox` (`:888`) → `resolveAfkingBox` (LootboxModule), per box
+## 2. AFKING OPEN — `_autoOpen` (`:938`) → `_openAfkingBox` (`:888`) → `resolveAfkingBox`, per box
 
-**Hoisted per call:** `rngLockedFlag` + `_livenessTriggered()` entry gate (`:941`), `_subscribers.length` (`:943`), `_subOpenCursor` (`:945` 1 SLOAD / `:965` 1 SSTORE).
+**Hoisted per call:** entry gate `rngLockedFlag` + `_livenessTriggered()` (`:941`), `_subscribers.length` (`:943`), `_subOpenCursor` (1 SLOAD `:945` / 1 SSTORE `:965`).
 
-### Per-box READS
+### Reads
 
-| # | Access | Site | Type | Strictly necessary? |
-|---|--------|------|------|---------------------|
-| R1 | `_subscribers[cursor]` → player | `:951` | SLOAD | ✅ core |
-| R2 | `_subOf[player]` (lastOpenedDay, lastAutoBoughtDay, amount, scorePlus1) | `:952` | 1 SLOAD (warm) | ✅ core |
-| R3 | `rngWordByDay[lastAutoBoughtDay]` (readiness `:921` + resolve `:905`) | `:921`/`:905` | SLOAD (warm 2nd use) | ✅ core — the box's frozen RNG word |
+| Access | Site | Op | |
+|---|---|---|:--:|
+| `_subscribers[cursor]` → player | `:951` | SLOAD | ✅ |
+| `_subOf[player]` (markers, amount, scorePlus1) | `:952` | SLOAD¹ | ✅ |
+| `rngWordByDay[lastAutoBoughtDay]` (ready + resolve) | `:921`/`:905` | SLOAD | ✅ |
 
-### Per-box WRITES
+### Writes
 
-| # | Access | Site | Type | Strictly necessary? |
-|---|--------|------|------|---------------------|
-| W1 | `sub.lastOpenedDay = day` | `:892` | SSTORE (warm slot) | ✅ **core — no-double-open, effects-before-interaction** |
-| RW2 | inside `resolveAfkingBox`: EV-cap `lootboxEvBenefitUsedByLevel[player][level]` RMW + live `level` read + ticket-queue writes | delegatecall `:897-908` | SLOAD + cond. SSTORE + queue writes | ✅ **core — IS the box payout** |
-| W3 | `_subOpenCursor = uint16(cursor)` | `:965` | SSTORE (per call) | ✅ core — walk progress |
-| W4 | `coinflip.creditFlip(msg.sender, bountyEarned)` | `:1015` | SSTORE (per call, in `mintBurnie`) | keeper incentive — necessary for the permissionless-open model, not per-box |
+| Access | Site | Op | |
+|---|---|---|:--:|
+| `sub.lastOpenedDay = day` (no-double-open) | `:892` | SSTORE¹ | ✅ |
+| EV-cap `lootboxEvBenefitUsedByLevel[player][level]` RMW + ticket-queue writes | `resolveAfkingBox` `:897-908` | SLOAD + SSTORE | ✅ |
+| `_subOpenCursor = cursor` | `:965` | SSTORE | ✅ |
+| `coinflip.creditFlip(msg.sender, bounty)` (in `mintBurnie`) | `:1015` | SSTORE | bounty |
 
-### Verdict on OPEN: already lean
-No cold ledger — the box is the warm `Sub` stamp + `rngWordByDay[day]`. One marker write (W1), the EV-cap RMW + ticket-queue write that *are* the box (RW2), one cursor write per call, one bounty creditFlip per call. There is essentially **no fat to cut on open**. OPEN-01's job is to confirm exactly this: cheapest materialization shared with the human `openLootBox` path, `lastOpenedDay` monotone no-double-open, EV-cap drawn exactly-once per `(player, level)`, no shared-state hazard with the human route.
+**Verdict on OPEN: already lean.** No cold ledger — the box is the warm `Sub` stamp + `rngWordByDay[day]`. One marker write (W1), the EV-cap RMW + queue write that *are* the box, one cursor write per call, one bounty per call. **There is no fat to cut on open** — OPEN-01's job is to confirm exactly this (shared cheapest materialization with human `openLootBox`, `lastOpenedDay` monotone, EV-cap exactly-once, no shared-state hazard).
 
-**All the v56 everyday-gas savings live on the BUY side** (collapsing the cross-contract storm into a cheap accrue + a deferred settle). The OPEN side is a re-verification (unmanipulability + no-double-open), not an optimization target.
+**All v56 everyday-gas savings live on the BUY side** (collapsing the storm into a cheap accrue + a deferred settle). OPEN is a re-verification (unmanipulability + no-double-open), not an optimization target.
 
 ---
 
