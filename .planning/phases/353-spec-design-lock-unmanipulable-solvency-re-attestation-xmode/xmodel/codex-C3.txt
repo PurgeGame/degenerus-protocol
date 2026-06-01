@@ -1,0 +1,28 @@
+MODEL-UNAVAILABLE
+
+Model: codex (`@openai/codex`, gpt-5.5), invoked via the verified read-only template
+  codex exec --sandbox read-only --skip-git-repo-check -C /tmp -o <out> -  (prompt on stdin)
+
+Concern: C3 (ticket-mode primitive parity — prompt-C3-ticket-parity.md).
+
+Outcome: the codex CLI HUNG on this large adversarial prompt. The CLI itself is healthy
+(a trivial `Reply with exactly: SMOKE_OK` prompt returned in seconds, exit 0; and codex-C1
++ codex-C2 both completed successfully earlier in this same session) — but after those two
+successes the CLI began consistently hanging on the large C3/C4/C5 prompts (the model spins
+indefinitely and never writes the -o final-message file). Three invocation attempts were made
+for C3, each killed by a hard `timeout`:
+  - attempt 1: `-o xmodel/codex-C3.txt`, cwd=phase dir, 360s timeout → exit 124 (timeout, no output)
+  - attempt 2 (retry): stdin pipe, `-C /tmp` workdir, 420s timeout → no output
+  - attempt 3: stdin pipe, `-C /tmp -m gpt-5.5`, no-exploration preamble, 300s timeout → no output
+No partial model output was ever produced (the -o file is only written at completion). Nothing
+was fabricated. Per the plan's robustness clause (retry once, then record MODEL-UNAVAILABLE),
+C3 is recorded as MODEL-UNAVAILABLE for codex.
+
+Coverage note: concern C3 is STILL covered by the gemini-C3 artifact (gemini answered C3 —
+VERDICT: EXPLOITABLE, flagging a deferred-quest streak-penalty dodge for unfunded AFK subs and
+a potential `consumePurchaseBoost` resolution mismatch in the minimal-write primitive). Those
+findings are dispositioned in the 353-SPEC.md XMODEL table.
+
+Probable cause: codex (gpt-5.5) throttling / extended-reasoning timeout on the large
+security-review prompts after a burst of successful calls — NOT a contracts or design problem,
+and NOT a CLI authentication failure.

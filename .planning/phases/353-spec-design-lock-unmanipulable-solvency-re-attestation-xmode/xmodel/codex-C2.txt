@@ -1,0 +1,9 @@
+I found no settle-block grinding vector under the stated v56 seed formula. If scheduled settle uses `windowBoundaryDay` rather than live `currentDayIndex()`, the keeper’s block, caller, timestamp-within-day, and delayed execution do not change the scheduled roll.
+
+But there is a design-level path/input option to close: because the scheduled roll is deterministic and knowable before settlement, a buyer who controls an affiliate/upline address can compare the scheduled winner against the deterministic player-triggered flush. If scheduled pays their controlled address, they wait; if not, they trigger sub/unsub/param-change and take the deterministic 75/20/5 allocation. Separately, if arbitrary affiliate codes can be registered, `storedCode` is grindable before subscribe for a known boundary day, letting a cooperative/self-controlled affiliate register codes until `keccak256(tag, boundary, sender, code) % 20` lands in the desired bucket. The `winner != sender` guard only blocks the exact buyer address; it does not neutralize same-economic-actor affiliate/upline addresses.
+
+```text
+VERDICT: EXPLOITABLE
+RATIONALE: Scheduled-settle timing itself is not grindable if the seed is exactly `(AFFILIATE_ROLL_TAG, windowBoundaryDay, sender, storedCode)`, because no live settle-call value enters the hash; however the deterministic player-triggered flush creates a path option against a precomputable scheduled WTA roll, and arbitrary `storedCode` registration creates a pre-subscribe seed-grind input. Buyer-never-wins only excludes `winner == sender`, so it does not remove EV for a buyer controlling a distinct affiliate/upline address.
+SEED-GRIND-VECTOR: precompute the scheduled roll; if it pays a controlled affiliate/upline, wait for scheduled WTA, otherwise trigger sub/unsub/param-change to force deterministic 75/20/5, and/or register many custom `storedCode` values before subscribe until the fixed-boundary hash lands in the desired bucket
+```

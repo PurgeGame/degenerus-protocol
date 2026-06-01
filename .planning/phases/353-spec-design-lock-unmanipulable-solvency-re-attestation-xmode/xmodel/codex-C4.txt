@@ -1,0 +1,26 @@
+MODEL-UNAVAILABLE
+
+Model: codex (`@openai/codex`, gpt-5.5), invoked via the verified read-only template
+  codex exec --sandbox read-only --skip-git-repo-check -C /tmp -o <out> -  (prompt on stdin)
+
+Concern: C4 (open-end unmanipulability — prompt-C4-open-end.md).
+
+Outcome: the codex CLI HUNG on this large adversarial prompt (same pattern as C3/C5). The CLI
+itself is healthy (trivial smoke prompt returned `SMOKE_OK` in seconds, exit 0; codex-C1 +
+codex-C2 completed earlier this session) but consistently hangs on the large C3/C4/C5 prompts.
+Two invocation attempts were made for C4, each killed by a hard `timeout`:
+  - attempt 1: stdin pipe, `-C /tmp` workdir, 420s timeout → no output
+  - attempt 2 (retry): stdin pipe, `-C /tmp` workdir, 420s timeout → no output
+No partial model output was ever produced (the -o file is only written at completion). Nothing
+was fabricated. Per the plan's robustness clause (retry once, then record MODEL-UNAVAILABLE),
+C4 is recorded as MODEL-UNAVAILABLE for codex.
+
+Coverage note: concern C4 is STILL covered by the gemini-C4 artifact (gemini answered C4 —
+VERDICT: NOT-EXPLOITABLE, confirming the open's frozen-seed + live-level + monotone-marker +
+exactly-once-EV-cap invariants survive the refactor, and the in-slot accumulator fields are
+disjoint from the open markers with no slot-clobber since EVM storage writes are atomic
+SLOAD-mask-SSTORE at assignment). That disposition is recorded in the 353-SPEC.md XMODEL table.
+
+Probable cause: codex (gpt-5.5) throttling / extended-reasoning timeout on the large
+security-review prompts after a burst of successful calls — NOT a contracts or design problem,
+and NOT a CLI authentication failure.
