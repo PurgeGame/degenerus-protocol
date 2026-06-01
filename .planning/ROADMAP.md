@@ -73,7 +73,11 @@
 
   5. The unmanipulable/solvency/freeze re-attestation + the XMODEL design-input pass land + every cited `file:line` is grep-attested vs `453f8073` (XMODEL-01; SEC design feed) — the unmanipulable property (esp. the strategic sub/unsub edge), SOLVENCY-01-untouched (the affiliate/quest stay BURNIE flip-credit OFF the ETH/`claimablePool` path; this is a BURNIE-emission-timing change only), and RNG-freeze-intact-under-the-new-accrual/settle are re-attested on paper as the SPEC's design gate (SEC-01/02 are owned at TST; their design is fixed here); the XMODEL-01 cross-model DESIGN-INPUT pass is run — Codex + Gemini are fed crafted prompts covering the FULL afking system (the BUYING STAGE/accrual/settle AND the OPENING open-pass/materialize) for (a) long-run gas-optimization suggestions and (b) adversarial verification that the design is completely unmanipulable (PARTICULAR focus on the strategic sub/unsub edge), and the suggestions + exploit findings are folded into the design-lock BEFORE IMPL (this is XMODEL-01's primary deliverable / home; its TERMINAL close-augmentation half is reflected in Phase 357's success criteria); and every cited anchor across the milestone scope (the per-buy cross-contract storm + the lootbox stamp branch + the ticket `purchaseWith` route in `GameAfkingModule`, the affiliate roll + leaderboard sites, the `DegenerusQuests.handlePurchase` double-credit + `awardQuestStreakBonus`, the afking open path, the `Sub` stamp + the EV-cap map, the STAGE placement in `DegenerusGameAdvanceModule`) is grep-verified against `453f8073` with any drift corrected in the SPEC (no "by construction" survives un-checked).
 
-**Plans**: TBD
+**Plans**: 2 plans (Wave 1: 353-01 SPEC core authoring [AFF-01/AFF-02 + AGG/TKT/QST/OPEN design feeds + corrected accumulator slot + anchor attestation + threat-model re-attestation]; Wave 2: 353-02 XMODEL-01 cross-model design-input pass [codex + gemini × 5 concerns] + disposition fold-in + SPEC lock)
+
+Plans:
+- [ ] 353-01-PLAN.md — Author the SPEC core: lock AFF-01/AFF-02 + fold the AGG/TKT/QST/OPEN design feeds + the corrected new-dedicated accumulator slot + the anchor attestation table + the unmanipulable/solvency/freeze re-attestation
+- [ ] 353-02-PLAN.md — Run the XMODEL-01 cross-model design-input pass (codex + gemini, 5 bespoke per-concern prompts), fold the disposition table into the SPEC, and flip the SPEC lock
 
 **UI hint**: no
 
@@ -167,7 +171,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 353. SPEC — Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation | v56.0 | 0/? | Not started | - |
+| 353. SPEC — Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation | v56.0 | 0/2 | Not started | - |
 | 354. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (aggregator + ticket-mode primitive + DegenerusQuests batched-settle + accumulator + open-end) | v56.0 | 0/? | Not started | - |
 | 355. GAS — Measure + Tune (marginals + accumulator packing + SUB_STAGE_BATCH re-tune + mode/SLOAD collapse) | v56.0 | 0/? | Not started | - |
 | 356. TST — Unmanipulable (strategic sub/unsub) + Quest-Core Non-Perturbation + Two-Path-Open + Gas Marginals + Non-Widening | v56.0 | 0/? | Not started | - |
