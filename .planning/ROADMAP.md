@@ -105,7 +105,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 354-01-PLAN.md — Wave 1: re-pack the Sub struct + the in-slot accumulator (affiliateBase/questProgress/buyerOwedBurnie + hasEverSubscribed; drop window/settled markers; amount->milli-ETH) (AGG-05)
+- [x] 354-01-PLAN.md — Wave 1: re-pack the Sub struct + the in-slot accumulator (affiliateBase/questProgress/buyerOwedBurnie + hasEverSubscribed; drop window/settled markers; amount->milli-ETH) (AGG-05)
 - [ ] 354-02-PLAN.md — Wave 1: DegenerusQuests core — the onlyGame batched-settle entrypoint (non-perturbing) + O1 line-890 double-credit fix + dead handleLootBox removal (QST-01..05)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -195,7 +195,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 353. SPEC — Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation | v56.0 | 2/2 | Complete    | 2026-06-01 |
-| 354. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (aggregator + ticket-mode primitive + DegenerusQuests batched-settle + accumulator + open-end) | v56.0 | 0/? | Not started | - |
+| 354. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (aggregator + ticket-mode primitive + DegenerusQuests batched-settle + accumulator + open-end) | v56.0 | 1/6 | In Progress|  |
 | 355. GAS — Measure + Tune (marginals + accumulator packing + SUB_STAGE_BATCH re-tune + mode/SLOAD collapse) | v56.0 | 0/? | Not started | - |
 | 356. TST — Unmanipulable (strategic sub/unsub) + Quest-Core Non-Perturbation + Two-Path-Open + Gas Marginals + Non-Widening | v56.0 | 0/? | Not started | - |
 | 357. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep (AUGMENTED by XMODEL) + FINDINGS-v56.0 + Closure | v56.0 | 0/? | Not started | - |

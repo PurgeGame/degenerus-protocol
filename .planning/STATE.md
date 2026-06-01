@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
 status: executing
-last_updated: "2026-06-01T17:01:34.834Z"
-last_activity: 2026-06-01 -- Phase 354 planning complete
+last_updated: "2026-06-01T17:28:33.209Z"
+last_activity: 2026-06-01
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 8
-  completed_plans: 2
+  completed_plans: 3
   percent: 20
 ---
 
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIREMENTS.md (24 v56.0 requirements) + .planning/ROADMAP.md (v56.0 — ACTIVE, phases 353-357) + the design-lock input .planning/PLAN-V56-AFKING-BATCHING-GAS.md
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 354 — impl — the one carefully sequenced batched contract diff (aggregator + ticket mode primitive + degenerusquests batched settle + accumulator + open end)
+**Current focus:** Phase 354 — impl-the-one-carefully-sequenced-batched-contract-diff-aggre
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,10 +32,10 @@ See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 354
-Plan: Not started
+Phase: 354 (impl-the-one-carefully-sequenced-batched-contract-diff-aggre) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-06-01 -- Phase 354 planning complete
+Last activity: 2026-06-01
 
 ## ▶ Active Milestone Roadmap (v56.0 — phases 353-357 — ACTIVE 2026-06-01; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`)
 
@@ -657,6 +657,7 @@ Audit deliverables:
 | Phase 351 P09 | 95min | 3 tasks | 1 files |
 | Phase 352 P04 | ~30min | 2 tasks | 6 closure docs (FINDINGS-v55.0.md resolved+chmod 444 + ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) + 1 SUMMARY |
 | Phase 353 P01 | 18min | 3 tasks | 1 files |
+| Phase 354 P01 | 16min | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -833,3 +834,4 @@ Audit deliverables:
 - [Phase 353-01]: AFF-02 force-flush-before-jackpot DECLINED — claimAffiliateDgnrs (:216) reads cumulative affiliateScore/totalAffiliateScore (exact regardless of option-A cross-level lag); only the minority 1%-top ranking lags (accepted, D-07)
 - [Phase 353-01]: century/x00 bonus KEPT at parity for afking-ticket subs (D-10 flipped 2026-06-01) — amortized-negligible, reuses centuryBonusLevel/Used storage + the per-buy score
 - [Phase 353-01]: O1 fix is two halves — drop DegenerusQuests:890 at source AND the v56 afking settle routes the deferred lootbox reward through exactly one creditFlip (the afking per-buy handlePurchase :760 disappears under the aggregator)
+- [Phase ?]: 354-01: Sub struct re-packed to one slot (241/256) with the in-slot accumulator (affiliateBase u32 + questProgress u8 + buyerOwedBurnie u32 + hasEverSubscribed bit) + afkCoveredThroughDay u24 marker; amount→milli-ETH u32, validThroughLevel/lastAutoBoughtDay/lastOpenedDay→u24; three settle markers never introduced (AGG-05); pendingClaim locked to DegenerusAffiliate (354-04); contract edits UNCOMMITTED for the 354-06 USER batch gate.
