@@ -140,4 +140,62 @@ Per `[[v45-vrf-freeze-invariant]]`: re-attested INTACT — **no in-window SLOAD 
 
 ---
 
-*Section 4 (the Regression-Baseline Attestation) is appended by Task 2.*
+## 4. Regression-Baseline Attestation (the §5 LEAN Regression Appendix, mirroring FINDINGS-v49 §5)
+
+**AUTHORITATIVE SOURCE — cite, do NOT re-run forge or re-derive:** `test/REGRESSION-BASELINE-v55.md` (the 351-09 ledger, TST-05). The whole-tree `forge test` run at the v55 TST HEAD was **603 passed / 134 failed / 16 skipped** (753 run, default profile, WHOLE tree — NOT `--match-path`). This section folds that ledger; the binding gate, the empirical v54-baseline derivation, the rewrite map, and the D-351-02 drops are recorded below exactly as the ledger established them.
+
+### §4a Suite Baseline — 603 / 134 / 16, NON-WIDENING BY NAME vs the v54 `20ca1f79` baseline
+
+| Quantity | v54 baseline `20ca1f79` (empirical) | v55 corpus delta (351-01..08) | v55 TST HEAD |
+| --- | --- | --- | --- |
+| `forge test` passed | 461 | +142 (the adapted-green corpus + the 4 new v55 proofs) | **603** |
+| `forge test` failed | 148 | −14 v54 reds FIXED by the v55 adaptation (the NARROWING) | **134** |
+| `forge test` skipped | 16 | +0 (the 16 `RngLockDeterminism` `vm.skip` blocks carried unchanged) | **16** |
+
+The 134 v55-live reds classify into three named buckets (per the ledger §2): **Bucket A** VRF/RNG-window baseline reds = **41** (out of v55 scope — v55 touched no VRF/Advance RNG-window code), **Bucket B** stale-harness/behavioral = **92** (pre-existing v54 fixtures; `git diff 20ca1f79 453f8073` for these suites' files is empty — they fail identically at both HEADs), **Bucket F** the unseeded `DegeneretteBet.inv` flaky cluster = **1**. **41 + 92 + 1 = 134.**
+
+### §4b The BINDING gate — a failing-NAME-set strict SUBSET (134 in 148), NOT a count delta (the Pitfall-3 guard, adapted)
+
+**NON-WIDENING = a strict failing-NAME-set SUBSET**, NOT a count match and NOT a strict equality. The binding, load-bearing gate is:
+
+> **`v55 live failing set − v54 §2 148-name union == ∅`** (0 names outside the baseline) → **net-zero NEW regression.**
+
+The ledger §6 verified BOTH directions empirically: `v55 live − v54 union = ∅` (**0 names** — no new red outside baseline; this is the binding gate, and it HOLDS) AND `v54 union − v55 live = 14 names` (exactly the §4d NARROWING — v54 reds the v55 adaptation FIXED red→green). So **`v55 live (134) ⊆ v54 union (148)` BY NAME** (intersection = 134; the 14-name slack is the narrowing). **Do NOT quote "134 failures, down from 148" as a count delta** — the gate is the NAME-set membership test `live − union == ∅`. The v49-precedent strict-equality gate (`live == union`) is intentionally **RELAXED to the ⊆ gate** here because of the unseeded `DegeneretteBet.inv` cluster (the ledger §4 — `[invariant]` has no `seed`, so its red-subset is non-deterministic run-to-run) + the v55 NARROWING; the relaxation weakens nothing on the regression-detection side (a new red would still appear in `live − union ≠ ∅` and trip the STOP — none did).
+
+### §4c The v54 baseline was established EMPIRICALLY (the strongest non-widening position)
+
+The plan's original "byte-identical contract tree" premise was **WRONG** — the v54→v55 step **IS** the AfKing dissolution (13 contract files differ; `AfKing.sol` present-at-v54 / deleted-at-v55, `GameAfkingModule.sol` new-at-v55), so the v54 baseline red union could NOT be carried verbatim from a prior doc. It was established **EMPIRICALLY** in the same session: checkout `20ca1f79` → `node scripts/lib/patchForFoundry.js` → `forge test --json` (WHOLE tree, the **11 uncompilable-at-v54 files sidelined**) → `461 passed / 148 failed / 16 skipped` → restore → checkout back to HEAD. This is the **STRONGEST possible non-widening position**: the 11 files that did not compile at `20ca1f79` (referencing the vanished `afKing.poolOf` / de-custody API — `AfKingConcurrency`, `AfKingFundingWaterfall`, `AfKingSubscription`, `KeeperBatchAffiliateDeltaAudit`, `KeeperFaucetResistance`, `KeeperNonBrick`, `KeeperRewardRoutingSameResults`, `KeeperRouterOneCategory`, `RedemptionStethFallback`, `RouterWorstCaseGas`, `SweepPerPlayerWorstCaseGas`) contributed **ZERO compilable v54 reds** to the 148-name union — so **no baseline red could be lost** by the wholesale rewrite or the D-351-02 drops (there were none in those files to lose — they were broken at v54).
+
+### §4d The test-surface churn is ATTRIBUTED via the ledger, NOT counted as regression
+
+- **The D-351-01 wholesale REWRITE MAP** (ledger §3a) — the ~13 stale AfKing/keeper test files + `DeployProtocol.sol` rewritten to the game-resident `GameAfkingModule` path (the five call-site deltas: `afKing.subscribe`→`game.subscribe`, `doWork`→`mintBurnie`, `autoBuy(N)`→the `advanceGame()` STAGE, cold-ledger→warm Sub-stamp, cross-contract `afkingFunding` reads→in-context SLOADs, every pinned slot re-derived). A renamed/relocated test is a **rewrite-map entry (OUT-old + IN-new)**, never a new red. Each v54 file → its v55 adapted successor is enumerated BY NAME + plan/commit (e.g. `AfKingConcurrency`→game-resident swap-pop/STAGE-reclaim 351-02 `0f78c896`; `KeeperNonBrick`→game-resident revert-free 351-05 `49ce1908`; `RouterWorstCaseGas`→STAGE-50 + `mintBurnie` under 16.7M 351-07 `e334a91a`).
+- **The 4 dedicated v55 proof files authored** (ledger §5, all GREEN, contribute zero red): `V55FreezeDeterminism.t.sol` (TST-01, 7 tests), `V55RevertFreeEvCap.t.sol` (TST-02 + TST-03, 11 tests), `V55SetMutationOpenE.t.sol` (TST-04, 10 tests), `V55AfkingGasMarginal.t.sol` (TST-06, 5 tests) = **33 passing**.
+- **The D-351-02 removed-surface DROPS** (ledger §3b, BY NAME + reason — NOT counted as regression; **every drop is from the 11 uncompilable-at-v54 files → zero compilable v54 reds lost**):
+  - **D1** — WHOLE FILE `KeeperBatchAffiliateDeltaAudit.t.sol` (`testBaselineDgnrsBatchMoneyOutcomes`, `testFuzz_BaselinePoisonPositionMoneyInvariant`, `testPathEquivalence_DgnrsBatchByteIdentical` + the `_drive`/`KEEPER_PATH_LANDED` machinery), `git rm` 351-06 `c5f600bd` — entire subject = the removed `batchPurchase` + the never-landed `batchPurchaseForKeeper` (`game.batchPurchase` exists NOWHERE in v55 `contracts/`); the batch-aggregation byte-identity has NO successor (per-buy work folded into the `advanceGame()` STAGE); the incidental affiliate-conservation property survives non-redundantly in `AffiliateDgnrsClaim.t.sol` + the per-buy `payAffiliate` exercised by 351-05's funded STAGE.
+  - **D2** — `RedemptionStethFallback.t.sol :: test_POOL04_BurnAtGameOverRecoversPool_ZeroPoolTokenSafe` (partial leg), 351-06 `aad3aad8` — the v54 de-custody machinery (`afKing.withdraw(afKing.poolOf(this))` prepaid-pool recovery) was removed with NO successor (`burnAtGameOver` is now a pure local-token burn, `StakedDegenerusStonk.sol:526`); the 6 RFALL05 ETH-vs-stETH core tests + the POOL-04 (a)/(b)/(c) receive() tests are KEPT (the latter reframed onto the v55 GAME-only receive() gate — strictly tighter).
+  - **D3** — `KeeperNonBrick.t.sol` the `batchPurchase` per-slice try/catch ISOLATION leg: 6 tests (`testBatchPurchaseIsolatesFailingPlayerAndRefundsSlice`, `testFuzz_BatchPurchaseFailPositionRefundsAndCompletes`, `testBatchPurchaseGameOverRejectsWholeBatchAtEntry`, `testBatchPurchaseRejectsNonKeeperCaller`, `testKeeperBatchSkipsPoisonedMiddlePlayer`, `testFuzz_KeeperBatchPoisonPositionNeverBricks`) + `_driveKeeperBatch`/`KEEPER_PATH_LANDED`, removed in-adapt 351-05 `49ce1908` — `game.batchPurchase` does not exist on the v55 game (349.1 P5 dead-code, NO successor — the per-buy work folded into the required-path STAGE, revert-free BY CONSTRUCTION with no valve to isolate); the reentrancy-rollback + un-brickable-cancel + TOMB-04 + AFSUB-03 properties REFRAME onto `withdrawAfkingFunding`/`subscribe(_,0)`/the STAGE — kept.
+  - **D4** — `RouterWorstCaseGas.t.sol` the 7 AfKing cursor/bounty-calibration gas tests (`testBuyLegPerPlayerMarginalAndWholeLegFitsBlockGasLimit`, `testBuyLegAmortizationGradientConvergesAtN32`, `testOpenLegAmortizationGradientBelowSingleBoxTotal`, `testTypicalOpenBatchAveragesNineMillion`, `testBuyBatchFiftyLandsUnderHardCeiling`, `testAdvanceLegMarginalRoutedThroughDoWorkFitsBlockGasLimit`, `testDispatchOverheadIsBoundedAndFitsBlockGasLimit`), reframed-out 351-07 `e334a91a` — the standalone `autoBuy`/`doWork` cursor surface has NO v55 successor (reframed onto the STAGE-50 + the `mintBurnie` open leg under 16.7M; the property [a leg fits the per-tx ceiling] is PRESERVED, the mechanism relocated).
+  - **D5** — `KeeperLeversAndPacking.t.sol` the v49 `batchPurchase` source-grep gates (the GAS-02 `batchPurchase{value}` one-transfer + one-refund, the GAS-03 parallel-array signature, the G9 `AF_KING` keeper gate), asserted ABSENT (count==0) 351-07 `6c69e627` — the v49 keeper `batchPurchase` is GONE from `contracts/`; the gates are DROPPED + re-asserted ABSENT so a regression re-introducing the removed surface flips RED; the GAS-02 read-once/one-reward + G9 auth + G10 swap-pop REFRAME onto `mintBurnie`/`operatorApprovals`/`_removeFromSet` — kept.
+- **The 14 NARROWING fixes** (ledger §3c, `v54 union − v55 live`, v54 red → v55 green — the opposite of a regression): `KeeperLeversAndPacking` (3), `KeeperOpenBoxWorstCaseGas` (3), `KeeperResolveBetWorstCaseGas` (4), `RngLockDeterminism` (4) — all in the adapted afking/gas corpus, flipped GREEN by the re-pointing/re-derivation/stamped-day adaptation.
+
+### §4e SWEEP NON-WIDENING attestation
+
+Every `git diff 20ca1f79 453f8073 -- contracts/ test/` hunk is attributable to a known v55-scope commit: the **349.1 box-redesign `77c3d9ef`** + the **349.2 restore `453f8073`** (the contract surface, §2) + the **AGENT-committed 351 TST test work** (the §4d rewrite map, the 4 dedicated proof files, the D-351-02 drops, and `test/REGRESSION-BASELINE-v55.md` itself). `git diff 453f8073 HEAD -- contracts/` is **EMPTY** (zero contract mutation in this terminal phase; subject byte-frozen). The ledger's **FC1–FC6** false-confidence guards are all mitigated (FC1 name-set not count; FC2 every delta attributed BY NAME; FC3 the §6 `## STOP` block returned ∅; FC4 the WHOLE tree was run at BOTH HEADs + `forge build` EXIT 0; FC5 the flaky cluster kept in the Bucket-F ceiling; FC6 the empirical v54 re-derivation + the 11-file zero-compilable-reds proof + every rewrite/drop reconciled BY NAME). **NON-WIDENING confirmed.**
+
+### §4f Hardhat sanity arm (Foundry is the primary BY-NAME ledger; Hardhat is the sanity check)
+
+`npx hardhat compile` → **EXIT 0** (Compiled 32 Solidity files successfully — the AfKing dissolution + the game-resident fold do not break the Hardhat compilation surface). The one Hardhat suite with afking references, `test/unit/DegenerusGame.test.js`, is **BYTE-IDENTICAL** between the v54 `20ca1f79` baseline and the v55 HEAD (`git diff 20ca1f79 HEAD -- test/unit/DegenerusGame.test.js` is EMPTY) — it references three game methods (`afKingModeFor`/`deactivateAfKingFromCoin`/`syncAfKingLazyPassFromCoin`) that were ALREADY ABSENT at the v54 baseline (0 defs in v54's and v55's `DegenerusGame.sol`), so there is no v55-introduced ABI break to adapt. The Foundry whole-tree run (§4a–§4e) is the authoritative regression ledger.
+
+---
+
+## 5. Self-Check — PASSED
+
+- **Deliverable present:** `.planning/phases/352-terminal-delta-audit-3-skill-genuine-parallel-adversarial-sw/352-01-DELTA-AUDIT.md` — FOUND.
+- **Cited authoritative source present:** `test/REGRESSION-BASELINE-v55.md` — FOUND (not re-derived; folded into §4).
+- **Frozen-subject invariant:** `git diff --quiet 453f8073 HEAD -- contracts/` — **EMPTY** (zero contract mutation; re-asserted after each task).
+- **Forbidden-citation scan:** no 5-field stamp and no `baseLevelPlus1` Sub-field attribution — only the explicit CORRECTION-banner disclaimers + the human-path disambiguation are present (all 3 `baseLevelPlus1` mentions are supersession-note / human-`_packLootboxPurchase` context).
+- **Delta enumeration:** the 13-file set re-derived from `git diff --stat 20ca1f79 453f8073 -- contracts/` (reconciled identical to the interfaces list); every file carries a NON-WIDENING verdict + a concrete grep/diff anchor @ `453f8073`.
+- **Read-only:** the entire delta surface was inspected via `git show 453f8073:…` / `git diff 20ca1f79 453f8073` / `grep` — no `contracts/*.sol` was opened or mutated; this plan edits ONLY this markdown log.
+
+**SC1 delta-audit half of AUDIT-01: SATISFIED.** (The 3-skill genuine-PARALLEL adversarial sweep is 352-02; the `audit/FINDINGS-v55.0.md` deliverable that folds this log into its §3/§5 is 352-03; the closure flip + the OPEN-E blocking adjudication are 352-04.)
+
