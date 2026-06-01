@@ -76,6 +76,7 @@
 **Plans**: 2 plans (Wave 1: 353-01 SPEC core authoring [AFF-01/AFF-02 + AGG/TKT/QST/OPEN design feeds + corrected accumulator slot + anchor attestation + threat-model re-attestation]; Wave 2: 353-02 XMODEL-01 cross-model design-input pass [codex + gemini × 5 concerns] + disposition fold-in + SPEC lock)
 
 Plans:
+
 - [x] 353-01-PLAN.md — Author the SPEC core: lock AFF-01/AFF-02 + fold the AGG/TKT/QST/OPEN design feeds + the corrected new-dedicated accumulator slot + the anchor attestation table + the unmanipulable/solvency/freeze re-attestation
 - [x] 353-02-PLAN.md — Run the XMODEL-01 cross-model design-input pass (codex + gemini, 5 bespoke per-concern prompts), fold the disposition table into the SPEC, and flip the SPEC lock
 
@@ -102,11 +103,25 @@ Plans:
 **Plans**: 6 plans in 4 waves (producer-before-consumer)
 
 Plans:
+**Wave 1**
+
 - [ ] 354-01-PLAN.md — Wave 1: re-pack the Sub struct + the in-slot accumulator (affiliateBase/questProgress/buyerOwedBurnie + hasEverSubscribed; drop window/settled markers; amount->milli-ETH) (AGG-05)
 - [ ] 354-02-PLAN.md — Wave 1: DegenerusQuests core — the onlyGame batched-settle entrypoint (non-perturbing) + O1 line-890 double-credit fix + dead handleLootBox removal (QST-01..05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 354-03-PLAN.md — Wave 2: GameAfkingModule mode-agnostic accrue + inline _settleQuest (rides the STAGE) + claimQuest fallback + unsub-settle + first-sub head-start; SOLVENCY-01 byte-unchanged (AGG-01..05, QST-01/02/03)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 354-04-PLAN.md — Wave 2: DegenerusAffiliate flat-7% deterministic-split PULL — claim(subs[]) 75/20/5 + CEI withdraw() + pendingClaim; no roll/seed (AGG-01/04/05)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 354-05-PLAN.md — Wave 3: ticket minimal-write primitive + buyerOwedBurnie 10%/20% accrual + century parity (boons-OFF) + the open-end re-verification + wiring (TKT-01/02, OPEN-01/02)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 354-06-PLAN.md — Wave 4: forge-build-clean + the per-requirement diff-review + the autonomous:false USER hand-review-and-commit gate (the ONE v56 contract boundary)
 
 **UI hint**: no
