@@ -5,8 +5,8 @@ milestone: v55.0
 milestone_name: AfKing-in-Game Redesign
 audit_baseline: 20ca1f79
 source_tree_frozen_ref: 453f8073
-audit_subject_head: "MILESTONE_V55_AT_HEAD_<sha>"
-closure_signal: MILESTONE_V55_AT_HEAD_<sha>
+audit_subject_head: "MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583"
+closure_signal: MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583
 deliverable: audit/FINDINGS-v55.0.md
 new_findings: 0
 new_findings_disposition: 0 NEW_FINDINGS — the 3-skill genuine-PARALLEL adversarial sweep produced 0 FINDING_CANDIDATEs across 21 charged-probe rows (18 NEGATIVE-VERIFIED + 3 SAFE_BY_DESIGN); the box-stamp-freeze spine holds adversarially against the AS-BUILT COMMITTED 4-field/DAY-keyed/live-level model (FREEZE-01/02/03), the no-valve STAGE is revert-free-by-construction + fail-loud-on-solvency + gameover-unblocked (REVERT-01/02 + SOLVENCY-01), the two-path open is storage-isolated with an intentionally-shared monotonic EV/boon budget (BOX-04/05 + EVCAP-01), and the OPEN-E 4-protection + CONSENT-02 set-mutation HOLD (the HARD BLOCKING condition SATISFIED — closure NOT blocked); KNOWN-ISSUES.md byte-unmodified vs v54. ONE out-of-scope informational advisory (O1) recorded:  a PRE-EXISTING, SYMMETRIC, immaterial lootbox-quest BURNIE double-credit in the UNCHANGED DegenerusQuests core — NOT a v55 vector (not in the v55 delta; identical across the manual purchaseWith path; a fixed day-idempotent <=300-BURNIE flip-stake OFF the ETH/claimablePool/solvency path) — routed to a future quest-core audit lane + the v52 consolidated cross-model audit. It does NOT amend the 0 NEW_FINDINGS verdict.
@@ -20,7 +20,7 @@ new_findings_disposition: 0 NEW_FINDINGS — the 3-skill genuine-PARALLEL advers
 ledger). **v54.0 closed-as-superseded with NO ship signal** — there is intentionally no
 `MILESTONE_V54_AT_HEAD` string (345/346/347 were dropped -> folded into v55; the diff was never audited via a
 347 TERMINAL), so this report cites the **raw SHA** `20ca1f79` as the baseline. v55.0 closure HEAD is
-`MILESTONE_V55_AT_HEAD_<sha>` (the literal placeholder; resolved to the findings-deliverable / closure-flip
+`MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583` (the literal placeholder; resolved to the findings-deliverable / closure-flip
 HEAD by 352-04 — the self-referential closure commit's own SHA; see §9c). SOURCE-TREE FROZEN reference for the
 terminal: `453f8073` (`contracts/` byte-frozen; `git diff 453f8073 HEAD -- contracts/` empty throughout Phase
 352 — EMPTY-CONFIRMED).
@@ -822,10 +822,10 @@ sequential-on-main no-worktrees, ZERO contract mutation; TST-01..06 + the NON-WI
 ledger, gsd-verifier 6/6) + 352 (TERMINAL — this deliverable; SOURCE-TREE FROZEN at `453f8073`; the SC1 delta-audit
 + the SC1 3-skill genuine-PARALLEL sweep + the regression + the gated closure flip). NOTE: **7 phases** (the v49.0/
 v54.0 SPEC→IMPL→GAS→TST→TERMINAL shape + the TWO inserted IMPL phases 349.1 + 349.2). Closure signal:
-`MILESTONE_V55_AT_HEAD_<sha>` (the literal placeholder; resolved at 352-04).
+`MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583` (the literal placeholder; resolved at 352-04).
 
 ### 9c. Closure Signal
-**`MILESTONE_V55_AT_HEAD_<sha>`** (the literal placeholder — resolved to the Phase 352 audit-deliverable / closure
+**`MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`** (the literal placeholder — resolved to the Phase 352 audit-deliverable / closure
 commit's own SHA in 352-04 [self-referential]; contracts byte-identical to the frozen subject `453f8073`).
 Verbatim propagation targets (resolved at the 352-04 closure gate by the single sed-style SHA substitution):
 1. Frontmatter `closure_signal:` + `audit_subject_head:`.
@@ -871,5 +871,5 @@ two-path-open spine holds adversarially against the as-built 4-field/DAY-keyed/l
 informational advisory (O1, the symmetric `DegenerusQuests` lootbox-quest double-credit) recorded + routed to a
 future quest-core lane + the v52 consolidated audit — NOT a v55.0 finding, does NOT amend the `0 NEW_FINDINGS`
 verdict. KNOWN-ISSUES.md byte-unmodified. The COMMITTED 4-field stamp / DAY-keyed seed / live-level open framing
-used throughout (349.1 SUPERSEDED the 348 5-field design). Closure signal `MILESTONE_V55_AT_HEAD_<sha>` resolves
+used throughout (349.1 SUPERSEDED the 348 5-field design). Closure signal `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583` resolves
 at the Phase 352 closure commit (352-04); chmod 444 applied at closure (NOT here).*

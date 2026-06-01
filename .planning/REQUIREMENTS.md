@@ -56,7 +56,7 @@
 - [x] **TST-06**: Gas — measured per-buy + per-open marginal under the 16.7M HARD per-tx ceiling; the GAS-01/02/03 wins proven same-results.
 
 ### AUDIT — Terminal close
-- [ ] **AUDIT-01**: FULL close — delta-audit (every v55 surface vs the v54 baseline; freeze + solvency + OPEN-E re-attested) + 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT) focused on the box-stamp freeze + the liveness isolation + the two-path open + `audit/FINDINGS-v55.0.md` (chmod 444) + the atomic 5-doc closure flip with the `MILESTONE_V55_AT_HEAD_<sha>` signal.
+- [x] **AUDIT-01**: ✅ COMPLETE (Phase 352, 2026-06-01) — FULL close — delta-audit (every v55 surface vs the v54 baseline; freeze + solvency + OPEN-E re-attested) + 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT) focused on the box-stamp freeze + the liveness isolation + the two-path open + `audit/FINDINGS-v55.0.md` (chmod 444) + the atomic 5-doc closure flip with the `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583` signal. 0 NEW_FINDINGS.
 
 ## Future Requirements (deferred)
 - Generalized operator-spend of `claimableWinnings` (carried from v54 §10) — larger blast radius, separate optional feature.
@@ -73,25 +73,25 @@ Each REQ-ID maps to exactly ONE phase — the phase that DELIVERS/owns it. 29/29
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ARCH-01 | 349 IMPL | Pending |
-| ARCH-02 | 349 IMPL | Pending |
-| ARCH-03 | 349 IMPL | Pending |
+| ARCH-01 | 349 IMPL | Complete (attested-at-closure 352) |
+| ARCH-02 | 349 IMPL | Complete (attested-at-closure 352) |
+| ARCH-03 | 349 IMPL | Complete (attested-at-closure 352) |
 | ARCH-04 | 348 SPEC | Complete |
-| BOX-01 | 349 IMPL | Pending |
-| BOX-02 | 349 IMPL | Pending |
-| BOX-03 | 349 IMPL | Pending |
-| BOX-04 | 349 IMPL | Pending |
-| BOX-05 | 349 IMPL | Pending |
+| BOX-01 | 349 IMPL | Complete (attested-at-closure 352) |
+| BOX-02 | 349 IMPL | Complete (attested-at-closure 352) |
+| BOX-03 | 349 IMPL | Complete (attested-at-closure 352) |
+| BOX-04 | 349 IMPL | Complete (attested-at-closure 352) |
+| BOX-05 | 349 IMPL | Complete (attested-at-closure 352) |
 | FREEZE-01 | 348 SPEC | Complete |
 | FREEZE-02 | 348 SPEC | Complete |
 | FREEZE-03 | 348 SPEC | Complete |
-| REVERT-01 | 349 IMPL | Pending |
-| REVERT-02 | 349 IMPL | Pending |
-| EVCAP-01 | 349 IMPL | Pending |
-| CONSENT-01 | 349 IMPL | Pending |
-| CONSENT-02 | 349 IMPL | Pending |
+| REVERT-01 | 349 IMPL | Complete (attested-at-closure 352) |
+| REVERT-02 | 349 IMPL | Complete (attested-at-closure 352) |
+| EVCAP-01 | 349 IMPL | Complete (attested-at-closure 352) |
+| CONSENT-01 | 349 IMPL | Complete (attested-at-closure 352) |
+| CONSENT-02 | 349 IMPL | Complete (attested-at-closure 352) |
 | PLACE-01 | 348 SPEC | Complete |
-| PLACE-02 | 349 IMPL | Pending |
+| PLACE-02 | 349 IMPL | Complete (attested-at-closure 352) |
 | GAS-01 | 350 GAS | Complete |
 | GAS-02 | 350 GAS | Complete |
 | GAS-03 | 350 GAS | Complete |
@@ -101,7 +101,7 @@ Each REQ-ID maps to exactly ONE phase — the phase that DELIVERS/owns it. 29/29
 | TST-04 | 351 TST | Complete |
 | TST-05 | 351 TST | Complete |
 | TST-06 | 351 TST | Complete |
-| AUDIT-01 | 352 TERMINAL | Pending |
+| AUDIT-01 | 352 TERMINAL | Complete (FINDINGS-v55.0.md shipped; closure signal MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583) |
 
 **Per-phase rollup:**
 
@@ -115,3 +115,5 @@ Each REQ-ID maps to exactly ONE phase — the phase that DELIVERS/owns it. 29/29
 | **Total** | | | **29** |
 
 ✓ All 29 v55.0 requirements mapped · ✓ 0 orphaned · ✓ 0 duplicated
+
+**✅ Closure attestation (Phase 352 TERMINAL, 2026-06-01).** All 29/29 v55.0 requirements re-attested COMPLETE at the closure HEAD. Closure signal `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583` (subject frozen at `453f8073`; baseline `20ca1f79`). The delta-audit (352-01; 13 surfaces NON-WIDENING, zero orphan hunks, freeze spine + REVERT-FREE-CHAIN + EVCAP-01 + SOLVENCY-01 HELD NET + OPEN-E 4-protection re-attested HOLD [HARD BLOCKING condition SATISFIED] + VRF-freeze intact) + the 3-skill genuine-PARALLEL adversarial sweep (352-02; 21 charged-probe rows = 18 NEGATIVE-VERIFIED + 3 SAFE_BY_DESIGN + **0 FINDING_CANDIDATE**) + `audit/FINDINGS-v55.0.md` (9-section, chmod 444). **0 NEW_FINDINGS** (one PRE-EXISTING, out-of-scope, immaterial informational advisory O1 — the symmetric `DegenerusQuests` lootbox-quest BURNIE double-credit, NOT in the v55 delta — recorded + routed to a future quest-core lane + the v52 consolidated audit; does NOT amend the verdict). KNOWN-ISSUES.md byte-unmodified. v55 = the 7-phase shape (348 SPEC / 349 + 349.1 + 349.2 IMPL / 350 GAS [Outcome A] / 351 TST / 352 TERMINAL). Nothing pushed.
