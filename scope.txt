@@ -1,5 +1,7 @@
 # Degenerus Protocol — Audit Scope
 # Solidity 0.8.34 | Hardhat + viaIR | Optimizer runs=200
+# Re-attested against the v55.0 closure — frozen subject 453f8073, 2026-06-01 (AfKing.sol dissolved into modules/GameAfkingModule.sol; closure MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583).
+# The separate v52 cross-model audit track stays pinned to its own FROZEN_SHA c3e9d907 (v51-closure HEAD).
 
 ## In Scope — Core Contracts (17)
 contracts/BurnieCoin.sol
@@ -20,12 +22,12 @@ contracts/GNRUS.sol
 contracts/Icons32Data.sol
 contracts/WrappedWrappedXRP.sol
 
-## In Scope — Delegatecall Game Modules (12)
+## In Scope — Delegatecall Game Modules (13)
 contracts/modules/DegenerusGameAdvanceModule.sol
+contracts/modules/DegenerusGameBingoModule.sol
 contracts/modules/DegenerusGameBoonModule.sol
 contracts/modules/DegenerusGameDecimatorModule.sol
 contracts/modules/DegenerusGameDegeneretteModule.sol
-contracts/modules/DegenerusGameEndgameModule.sol
 contracts/modules/DegenerusGameGameOverModule.sol
 contracts/modules/DegenerusGameJackpotModule.sol
 contracts/modules/DegenerusGameLootboxModule.sol
@@ -33,6 +35,7 @@ contracts/modules/DegenerusGameMintModule.sol
 contracts/modules/DegenerusGameMintStreakUtils.sol
 contracts/modules/DegenerusGamePayoutUtils.sol
 contracts/modules/DegenerusGameWhaleModule.sol
+contracts/modules/GameAfkingModule.sol
 
 ## In Scope — Shared Storage
 contracts/storage/DegenerusGameStorage.sol
@@ -44,8 +47,7 @@ contracts/libraries/GameTimeLib.sol
 contracts/libraries/JackpotBucketLib.sol
 contracts/libraries/PriceLookupLib.sol
 
-## In Scope — Interfaces (12)
-contracts/interfaces/DegenerusGameModuleInterfaces.sol
+## In Scope — Interfaces (11)
 contracts/interfaces/IBurnieCoinflip.sol
 contracts/interfaces/IDegenerusAffiliate.sol
 contracts/interfaces/IDegenerusCoin.sol
@@ -60,6 +62,7 @@ contracts/interfaces/IVRFCoordinator.sol
 
 ## Out of Scope
 contracts/mocks/             # Test mock contracts
+contracts/test/              # In-tree Solidity test harnesses
 test/                        # Test suite
 scripts/                     # Deployment and simulation scripts
 node_modules/                # Third-party dependencies
