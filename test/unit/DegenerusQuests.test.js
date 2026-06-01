@@ -26,7 +26,6 @@ import {
  *  - handleFlip (onlyCoin, progress, completion)
  *  - handleDecimator (onlyCoin, access)
  *  - handleAffiliate (onlyCoin, access)
- *  - handleLootBox (onlyCoin, access)
  *  - handleDegenerette (onlyCoin, access)
  *  - playerQuestStates (view)
  *  - getActiveQuests (view)
@@ -640,31 +639,7 @@ describe("DegenerusQuests", function () {
   });
 
   // =========================================================================
-  // 10. handleLootBox - Access Control
-  // =========================================================================
-  describe("handleLootBox - access control", function () {
-    it("reverts OnlyCoin when called by EOA", async function () {
-      const { quests, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        quests.connect(alice).handleLootBox(alice.address, eth("0.01"), 0)
-      ).to.be.revertedWithCustomError(quests, "OnlyCoin");
-    });
-
-    it("coin can call handleLootBox without revert", async function () {
-      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsGame(hre.ethers, game, quests, 11n, 99n);
-      await expect(
-        callHandlerAsCoin(hre.ethers, coin, quests, "handleLootBox", [
-          alice.address,
-          eth("0.01"),
-          0,
-        ])
-      ).to.not.be.reverted;
-    });
-  });
-
-  // =========================================================================
-  // 11. handleDegenerette - Access Control
+  // 10. handleDegenerette - Access Control
   // =========================================================================
   describe("handleDegenerette - access control", function () {
     it("reverts OnlyCoin when called by EOA", async function () {
@@ -973,7 +948,6 @@ describe("DegenerusQuests", function () {
         ["handleFlip", [alice.address, eth(1000)]],
         ["handleDecimator", [alice.address, eth(1000)]],
         ["handleAffiliate", [alice.address, eth(1000)]],
-        ["handleLootBox", [alice.address, eth("0.01"), 0]],
         ["handleDegenerette", [alice.address, eth("0.01"), true, 0]],
       ];
 
