@@ -209,8 +209,8 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 352-01-PLAN.md — DELTA-AUDIT: enumerate the 13-file v55 contract delta (vs v54 20ca1f79) NON-WIDENING + the Composition Attestation Matrix (freeze spine [as-built 4-field/DAY-keyed/live-level] + REVERT-FREE-CHAIN + EVCAP-01 + SOLVENCY-01 + OPEN-E 4-protection + VRF-freeze) + the 603/134/16 regression subset-by-NAME (Wave 1)
-- [ ] 352-02-PLAN.md — ADVERSARIAL-LOG: the 3-skill genuine-PARALLEL sweep (/contract-auditor + /zero-day-hunter + /economic-analyst; /degen-skeptic = dual-gate filter only) on the box-stamp freeze + liveness isolation + two-path open (Wave 1)
+- [x] 352-01-PLAN.md — DELTA-AUDIT: enumerate the 13-file v55 contract delta (vs v54 20ca1f79) NON-WIDENING + the Composition Attestation Matrix (freeze spine [as-built 4-field/DAY-keyed/live-level] + REVERT-FREE-CHAIN + EVCAP-01 + SOLVENCY-01 + OPEN-E 4-protection + VRF-freeze) + the 603/134/16 regression subset-by-NAME (Wave 1)
+- [x] 352-02-PLAN.md — ADVERSARIAL-LOG: the 3-skill genuine-PARALLEL sweep (/contract-auditor + /zero-day-hunter + /economic-analyst; /degen-skeptic = dual-gate filter only) on the box-stamp freeze + liveness isolation + two-path open (Wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -236,7 +236,7 @@ Plans:
 | 349.2 IMPL FIX — Restore quest-credit + affiliate for afking LOOTBOX subs (regression) (INSERTED) | v55.0 | 1/1 | Complete   | 2026-05-31 |
 | 350. GAS — Behavior-Identical No-Cost Wins (box-ledger → warm Sub-stamp + staticcall → SLOAD + same-slot flushes) | v55.0 | 3/3 | Complete    | 2026-05-31 |
 | 351. TST — Freeze/Determinism + Revert-Free + EV-Cap + Two-Path + Set-Mutation + Non-Widening + Gas | v55.0 | 9/9 | Complete    | 2026-05-31 |
-| 352. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v55.0 + Closure | v55.0 | 0/? | Not started | - |
+| 352. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v55.0 + Closure | v55.0 | 2/4 | In Progress|  |
 
 > **🔒 v55.0 CONTRACT-BOUNDARY HARD STOPS (THREE gates — 349 IMPL · 349.2 lootbox quest/affiliate fix · 350 GAS).** Phase 349 IMPL is the FIRST contract phase — the carefully-sequenced batched fold + box-redesign diff (code-size reclaim FIRST so the Game stays < 24,576 mid-flight, then the GameAfkingModule + storage append + box stamp/process-pass/open-pass + AfKing stubs + preserved slice-builder invariants + EV-cap-at-open + no-valve no-brick guarantee) is applied to `contracts/` and locally compiled (`forge build` clean) but HELD at the contract-commit boundary, NEVER committed without explicit user hand-review (`feedback_batch_contract_approval` + `feedback_never_preapprove_contracts` + `feedback_manual_review_before_push` + `feedback_no_contract_commits`). Phase 350 GAS is the SECOND contract phase — any further behavior-identical gas change (residual same-slot batching + extra gas-scavenger wins) rides its own batched USER-APPROVED diff at the same boundary. `ContractAddresses.sol` freely modifiable per `feedback_contractaddresses_policy`; tests + planning + docs AGENT-committable.
 
