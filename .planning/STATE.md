@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
-status: planning
-last_updated: "2026-06-01T11:00:53.545Z"
+status: active
+last_updated: "2026-06-01T12:00:00.000Z"
 last_activity: 2026-06-01
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,10 +17,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIREMENTS.md + .planning/ROADMAP.md (v55.0 — defining requirements)
+See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIREMENTS.md (24 v56.0 requirements) + .planning/ROADMAP.md (v56.0 — ACTIVE, phases 353-357) + the design-lock input .planning/PLAN-V56-AFKING-BATCHING-GAS.md
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v55.0 SHIPPED (2026-06-01) — all 7 phases complete. No active milestone; start the next with `/gsd-new-milestone`. NOTHING pushed (push is a separate USER step).
+**Current focus:** v56.0 ACTIVE (started 2026-06-01) — AfKing Everyday-Gas Minimization. Roadmap DEFINED: 5 phases 353-357 (SPEC → IMPL → GAS → TST → TERMINAL), 24 requirements mapped 24/24 (0 orphaned, 0 duplicated). Baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`. **Next = Phase 353 SPEC** (`/gsd-discuss-phase 353` or `/gsd-plan-phase 353`) — paper-only design-lock (the mode-agnostic ~10-day aggregator + the ticket-mode minimal-write primitive + the afking-OPEN-end review + the per-sub accumulator layout + the shared-`DegenerusQuests`-core non-perturbation approach + the unmanipulable/solvency re-attestation + the XMODEL-01 cross-model design-input pass), ZERO `contracts/*.sol`. v55.0 SHIPPED 2026-06-01 (0 NEW_FINDINGS); NOTHING pushed (push is a separate USER step).
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,10 +32,24 @@ See: .planning/PROJECT.md (Current Milestone: v55.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-06-01 — Milestone v56.0 started
+Phase: 353 — SPEC (Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation)
+Plan: — (not yet planned)
+Status: Roadmap defined — ready to plan Phase 353
+Last activity: 2026-06-01 — Milestone v56.0 roadmap created (5 phases 353-357; 24/24 requirements mapped)
+
+## ▶ Active Milestone Roadmap (v56.0 — phases 353-357 — ACTIVE 2026-06-01; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`)
+
+Shape: SPEC → IMPL → GAS → TST → TERMINAL (the established v54.0 + v55.0 audit-milestone shape WITH a dedicated GAS phase). **ONE contract-boundary HARD STOP** — 354 IMPL (the ONE carefully-sequenced batched diff: the mode-agnostic aggregator + the ticket-mode minimal-write primitive + the `DegenerusQuests` batched-settle entrypoint + the per-sub accumulator + the open-end optimizations); 355 GAS rides the same boundary if it produces a net tune (or records Outcome-A no-diff per the v55 350 precedent). **FULL close — the internal 3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v56.0.md` run IN-MILESTONE at TERMINAL (357), AUGMENTED by the XMODEL Codex + Gemini cross-model close, NOT deferred** (the shared-`DegenerusQuests`-core + everyday-STAGE touch makes deferral unacceptable, like v54.0/v55.0 and unlike v50.0/v51.0; focused on the strategic sub/unsub edge + the shared-quest-core non-perturbation + the two-path open). Baseline = v55 HEAD frozen `453f8073`. Design-lock input `.planning/PLAN-V56-AFKING-BATCHING-GAS.md` (the USER-converged mode-agnostic aggregator) + the `[[v56-batch-afking-affiliate-quest-seed]]` memory. **No research** (a fully-specced internal gas+batching refactor with a converged mechanism). The load-bearing non-exploitability fact: the affiliate roll is EV-neutral + intra-upline-chain-only-redistributive + buyer-never-wins (`DegenerusAffiliate.sol:558`/`:579`) → the buyer can't profit from settle-timing; the scheduled flush rolls on a fixed day, the player-triggered flush is a deterministic 75/20/5 split (no roll). Affiliate/quest stay BURNIE flip-credit OFF the ETH/`claimablePool` path → SOLVENCY-01 not in scope (a BURNIE-emission-timing + gas change only).
+
+| Phase | Name | Type | Requirements | Status |
+|-------|------|------|--------------|--------|
+| 353 | SPEC — Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation | SPEC | AFF-01/02 · XMODEL-01 | Not started |
+| 354 | IMPL — The ONE Carefully-Sequenced Batched Contract Diff (aggregator + ticket-mode primitive + DegenerusQuests batched-settle + accumulator + open-end) | IMPL (CONTRACT BOUNDARY) | AGG-01..05 · TKT-01/02 · QST-01..05 · OPEN-01/02 | Not started |
+| 355 | GAS — Measure + Tune (marginals + accumulator packing + SUB_STAGE_BATCH re-tune + mode/SLOAD collapse) | GAS (CONTRACT BOUNDARY if net diff) | GAS-01/02/03/04 | Not started |
+| 356 | TST — Unmanipulable (strategic sub/unsub) + Quest-Core Non-Perturbation + Two-Path-Open + Gas Marginals + Non-Widening | TST | SEC-01/02 | Not started |
+| 357 | TERMINAL — Delta Audit + 3-Skill Adversarial Sweep (AUGMENTED by XMODEL Codex + Gemini close) + FINDINGS-v56.0 + Closure Flip | TERMINAL (FULL close — sweep IN-MILESTONE) | AUDIT-01 | Not started |
+
+**Coverage:** 24/24 v56.0 requirements mapped to exactly one phase (353: 3 · 354: 14 · 355: 4 · 356: 2 · 357: 1); 0 orphaned, 0 duplicated. Per-category: AGG 5 (IMPL) · TKT 2 (IMPL) · AFF 2 (SPEC) · QST 5 (IMPL) · OPEN 2 (IMPL) · GAS 4 (GAS) · SEC 2 (TST) · XMODEL 1 (SPEC home + TERMINAL close touchpoint) · AUDIT 1 (TERMINAL). The internal sweep + delta-audit + `audit/FINDINGS-v56.0.md` + the XMODEL cross-model close run IN-MILESTONE at 357 (NOT deferred). AFF-01/02 (the affiliate distribution mechanism — the non-gameability design decision) design-locked at SPEC, BUILT inside the aggregator at IMPL; XMODEL-01 home = SPEC (the design-input pass folded BEFORE IMPL), close-augmentation reflected in AUDIT-01; SEC-01/02 (the hard security floor — unmanipulable esp. strategic sub/unsub) PROVEN empirically + adversarially at TST (the explicit "TST Owns SEC-01/02" directive; the SPEC re-attestation is the design gate). Full detail in `.planning/ROADMAP.md`; per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
 
 ## ✅ Shipped Milestone Roadmap (v55.0 — phases 348-352 — SHIPPED 2026-06-01; closure signal `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`)
 

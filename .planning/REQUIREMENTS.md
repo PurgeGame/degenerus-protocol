@@ -64,4 +64,66 @@
 
 ## Traceability
 
-_(empty — filled by the roadmapper: each REQ-ID maps to exactly one phase; phases continue from 352 → 353.)_
+Each REQ-ID maps to exactly ONE phase (the phase that OWNS/delivers it). Phases continue from 352 → 353. **24/24 mapped, 0 orphaned, 0 duplicated.** Shape: 353 SPEC → 354 IMPL → 355 GAS → 356 TST → 357 TERMINAL (the established v54.0/v55.0 audit pattern). Full phase detail + per-requirement center-of-gravity rationale: `.planning/ROADMAP.md` (Phase Details + Coverage).
+
+| Requirement | Phase | Phase Type | Status |
+|-------------|-------|------------|--------|
+| AGG-01 | Phase 354 | IMPL | Pending |
+| AGG-02 | Phase 354 | IMPL | Pending |
+| AGG-03 | Phase 354 | IMPL | Pending |
+| AGG-04 | Phase 354 | IMPL | Pending |
+| AGG-05 | Phase 354 | IMPL | Pending |
+| TKT-01 | Phase 354 | IMPL | Pending |
+| TKT-02 | Phase 354 | IMPL | Pending |
+| AFF-01 | Phase 353 | SPEC | Pending |
+| AFF-02 | Phase 353 | SPEC | Pending |
+| QST-01 | Phase 354 | IMPL | Pending |
+| QST-02 | Phase 354 | IMPL | Pending |
+| QST-03 | Phase 354 | IMPL | Pending |
+| QST-04 | Phase 354 | IMPL | Pending |
+| QST-05 | Phase 354 | IMPL | Pending |
+| OPEN-01 | Phase 354 | IMPL | Pending |
+| OPEN-02 | Phase 354 | IMPL | Pending |
+| GAS-01 | Phase 355 | GAS | Pending |
+| GAS-02 | Phase 355 | GAS | Pending |
+| GAS-03 | Phase 355 | GAS | Pending |
+| GAS-04 | Phase 355 | GAS | Pending |
+| SEC-01 | Phase 356 | TST | Pending |
+| SEC-02 | Phase 356 | TST | Pending |
+| XMODEL-01 | Phase 353 | SPEC (home — design-input; TERMINAL 357 close-augmentation reflected in AUDIT-01 SC) | Pending |
+| AUDIT-01 | Phase 357 | TERMINAL | Pending |
+
+**Per-phase rollup:**
+
+| Phase | Type | Requirements | Count |
+|-------|------|--------------|-------|
+| 353 | SPEC | AFF-01, AFF-02, XMODEL-01 | 3 |
+| 354 | IMPL | AGG-01, AGG-02, AGG-03, AGG-04, AGG-05, TKT-01, TKT-02, QST-01, QST-02, QST-03, QST-04, QST-05, OPEN-01, OPEN-02 | 14 |
+| 355 | GAS | GAS-01, GAS-02, GAS-03, GAS-04 | 4 |
+| 356 | TST | SEC-01, SEC-02 | 2 |
+| 357 | TERMINAL | AUDIT-01 | 1 |
+| **Total** | | | **24** |
+
+**Per-category rollup:**
+
+| Category | Total | Phase(s) |
+|----------|-------|----------|
+| AGG | 5 | 354 IMPL |
+| TKT | 2 | 354 IMPL |
+| AFF | 2 | 353 SPEC |
+| QST | 5 | 354 IMPL |
+| OPEN | 2 | 354 IMPL |
+| GAS | 4 | 355 GAS |
+| SEC | 2 | 356 TST |
+| XMODEL | 1 | 353 SPEC (home) + 357 TERMINAL (close touchpoint) |
+| AUDIT | 1 | 357 TERMINAL |
+| **Total** | **24** | |
+
+**Center-of-gravity notes (where a requirement's work spans phases):**
+
+- **AFF-01 / AFF-02 → SPEC (353):** the affiliate distribution mechanism (winner-takes-all daily-seeded roll on the scheduled flush / deterministic 75/20/5 split on player-triggered alteration; taper-at-accrue + leaderboard option-A) is a DESIGN DECISION that gates non-gameability — it is locked at SPEC and BUILT inside the aggregator at IMPL (the AGG-02/03 settle plumbing consumes the AFF rule). No double-count: AGG = the accrue/settle plumbing; AFF = the distribution rule the settle applies.
+- **XMODEL-01 → SPEC (353) home + TERMINAL (357) touchpoint:** its PRIMARY deliverable is the design-input cross-model pass folded into the design-lock BEFORE IMPL (the gating half → home = SPEC); its TERMINAL close-augmentation (Codex + Gemini augmenting the Claude 3-skill sweep) is reflected in AUDIT-01's success criteria (Phase 357), not separately counted.
+- **SEC-01 / SEC-02 → TST (356):** the hard security floor (unmanipulable esp. strategic sub/unsub; SOLVENCY-01 untouched + RNG-freeze intact) is PROVEN empirically + adversarially at TST as the gate (mirrors v55, where FREEZE design lived at SPEC but the empirical proofs were a distinct phase). The SPEC "SEC design" (the unmanipulable/solvency/freeze re-attestation on paper) is the design gate folded into 353's SC5, and the TERMINAL adversarial review (AUDIT-01) is the final re-confirmation — SEC-01/02's center-of-gravity (first PROVEN) is TST.
+- **AGG / TKT / QST / OPEN → IMPL (354):** the built behaviors. The SPEC concerns they feed (accumulator layout, ticket-primitive shape, the DegenerusQuests batched-settle entrypoint + non-perturbation approach, the ±10-streak derivation, the open-end review) are folded into 353's SC2/SC3/SC4 — counted only at their IMPL home.
+- **GAS → GAS (355):** measured everyday-cost reduction; much of GAS-01/02 is structural to the IMPL refactor (the GAS phase MEASURES + lands the residual `SUB_STAGE_BATCH` re-tune + mode/SLOAD collapse, or records Outcome-A no-diff per the v55 350 precedent).
+- **AUDIT-01 → TERMINAL (357):** the FULL in-milestone close re-attests all 24 requirements.
