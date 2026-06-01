@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
 status: executing
-last_updated: "2026-06-01T18:29:11Z"
+last_updated: "2026-06-01T19:10:37.984Z"
 last_activity: 2026-06-01
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
-  percent: 75
+  completed_plans: 7
+  percent: 20
 ---
 
 # Project State
@@ -33,9 +33,9 @@ See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 354 (impl-the-one-carefully-sequenced-batched-contract-diff-aggre) — EXECUTING
-Plan: 5 of 6
-Status: Ready to execute (354-01/02/03/04 contract edits applied + UNCOMMITTED in the working tree, accumulating for the 354-06 USER batched-commit gate; `forge build` clean). Next = 354-05 (the ticket minimal-write primitive + `buyerOwedBurnie` 10%/20% accrual + century parity + the open-end re-verification; parallel with the now-complete 354-04, no files_modified overlap).
-Last activity: 2026-06-01 — completed 354-04 (DegenerusAffiliate flat-7% deterministic-split PULL: permissionless SAME-AFFILIATE-batch `claim(address[] subs)` draining each sub's accrued `affiliateBase` ATOMICALLY at the owner via the 354-03 `drainAffiliateBase(sub)` producer [called in-loop, never pre-loaded — duplicate-sub double-credit guard], ONE running `sumB`, FIXED deterministic 75/20/5 [floor + remainder-to-A, `Σ ≤ sumB`, buyer-never-wins via the rare U1/U2==sub cycle skip] → off-slot `pendingClaim[A/U1/U2]`; noReferrer subs 50/50 VAULT/DGNRS deterministic [remainder→VAULT, NO entropy]; claim-time leaderboard write to A [whole-BURNIE→base-unit ×1e18 unit-bridge, Rule 2]; NO roll/seed/`currentDayIndex`/`keccak256`; + CEI `withdraw()` [zero `pendingClaim` BEFORE the single `coinflip.creditFlip`]; does NOT edit GameAfkingModule.sol; `forge build` clean)
+Plan: 6 of 6
+Status: Ready to execute
+Last activity: 2026-06-01
 
 ## ▶ Active Milestone Roadmap (v56.0 — phases 353-357 — ACTIVE 2026-06-01; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`)
 
@@ -659,6 +659,7 @@ Audit deliverables:
 | Phase 353 P01 | 18min | 3 tasks | 1 files |
 | Phase 354 P01 | 16min | 2 tasks | 2 files |
 | Phase 354 P02 | 24min | 2 tasks | 4 files |
+| Phase 354 P05 | 28min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -836,3 +837,5 @@ Audit deliverables:
 - [Phase 353-01]: century/x00 bonus KEPT at parity for afking-ticket subs (D-10 flipped 2026-06-01) — amortized-negligible, reuses centuryBonusLevel/Used storage + the per-buy score
 - [Phase 353-01]: O1 fix is two halves — drop DegenerusQuests:890 at source AND the v56 afking settle routes the deferred lootbox reward through exactly one creditFlip (the afking per-buy handlePurchase :760 disappears under the aggregator)
 - [Phase ?]: 354-01: Sub struct re-packed to one slot (241/256) with the in-slot accumulator (affiliateBase u32 + questProgress u8 + buyerOwedBurnie u32 + hasEverSubscribed bit) + afkCoveredThroughDay u24 marker; amount→milli-ETH u32, validThroughLevel/lastAutoBoughtDay/lastOpenedDay→u24; three settle markers never introduced (AGG-05); pendingClaim locked to DegenerusAffiliate (354-04); contract edits UNCOMMITTED for the 354-06 USER batch gate.
+- [Phase ?]: 354-05: afking ticket purchaseWith (~262k) REPLACED by a minimal-write primitive — direct _queueTicketsScaled resolution-equivalent queue behind the byte-unchanged SOLVENCY-01 debit; no recordMint/prize-pool contribution (mirrors the lootbox branch); 10%/20% buyerOwedBurnie accrued (live :1653-1659 minus kickback, /1e18 whole-BURNIE, 100M clamp before +=); century parity reusing centuryBonusLevel/centuryBonusUsed (no new slot); boons/boost-OFF
+- [Phase ?]: 354-05: afking OPEN re-verified unmanipulable (OPEN-01/02) with ZERO change — 354-01 already applied the milli-ETH→wei rescale; effects-first marker + frozen stamp-day word + LIVE level + single EV-cap RMW intact; accumulator fields disjoint from the open markers

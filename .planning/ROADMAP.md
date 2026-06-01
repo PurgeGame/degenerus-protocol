@@ -118,7 +118,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 354-05-PLAN.md — Wave 3: ticket minimal-write primitive + buyerOwedBurnie 10%/20% accrual + century parity (boons-OFF) + the open-end re-verification + wiring (TKT-01/02, OPEN-01/02)
+- [x] 354-05-PLAN.md — Wave 3: ticket minimal-write primitive + buyerOwedBurnie 10%/20% accrual + century parity (boons-OFF) + the open-end re-verification + wiring (TKT-01/02, OPEN-01/02)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -195,7 +195,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 353. SPEC — Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation | v56.0 | 2/2 | Complete    | 2026-06-01 |
-| 354. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (aggregator + ticket-mode primitive + DegenerusQuests batched-settle + accumulator + open-end) | v56.0 | 4/6 | In Progress|  |
+| 354. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (aggregator + ticket-mode primitive + DegenerusQuests batched-settle + accumulator + open-end) | v56.0 | 5/6 | In Progress|  |
 | 355. GAS — Measure + Tune (marginals + accumulator packing + SUB_STAGE_BATCH re-tune + mode/SLOAD collapse) | v56.0 | 0/? | Not started | - |
 | 356. TST — Unmanipulable (strategic sub/unsub) + Quest-Core Non-Perturbation + Two-Path-Open + Gas Marginals + Non-Widening | v56.0 | 0/? | Not started | - |
 | 357. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep (AUGMENTED by XMODEL) + FINDINGS-v56.0 + Closure | v56.0 | 0/? | Not started | - |
