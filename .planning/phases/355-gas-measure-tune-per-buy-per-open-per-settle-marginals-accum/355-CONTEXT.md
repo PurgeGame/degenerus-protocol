@@ -24,22 +24,44 @@ cross-contract `settleAfkingQuest`. The harness MUST accrue `questProgress`/`buy
 prior non-settle days, then measure the FULLY-LOADED settle-day per-sub marginal. (The halted
 355-01 agent had independently reached this.)
 
-## Locked decision 2 — defer the quest+buyer-bonus PAYOUT to a player claim (keep the streak)
-In `_settleQuest` (`GameAfkingModule.sol:1141`):
-- **KEEP** `quests.settleAfkingQuest(player, progress, currentDay)` — the quest-core streak STILL
-  advances on the ~10-day cadence ("I still want to do the quest stuff").
-- **KEEP** draining `questProgress` each settle (so the `uint8` 255-cap stays a non-issue).
-- **REPLACE** the per-sub `coinflip.creditFlip(player, owed)` (`:1164`) with `pendingBurnie += owed`
-  — a warm in-slot SSTORE into a NEW accumulator field on the `Sub`. NO coinflip CALL in the
-  auto-run.
-- **NEW permissionless claim entrypoint** (extends the `claimQuest` family): does a final settle of
-  any un-drained progress, then `creditFlip(player, pendingBurnie); pendingBurnie = 0`. The flip
-  credit happens WHEN THE SUB CLAIMS. Always credits the sub, never the caller; idempotent.
-- **Keeper `mintBurnie` bounty stays an IMMEDIATE push** (`:1090`) — "quest + buyer-bonus only".
-  It is one `creditFlip` per call (the keeper's own crank incentive), not a per-item batch cost.
-- **Scope = auto-run only.** The manual-buy path is UNCHANGED.
-- Off the solvency path (BURNIE-emission-timing only) → SOLVENCY-01 byte-unchanged, RNG-freeze
-  intact. (= the new GAS-05 requirement; SUPERSEDES the AGG-02 inline settle-day `creditFlip`.)
+## Locked decision 2 — accrue the BURNIE PER DAY into a claimable balance; status on settle day; claim anytime
+(FURTHER refined by the USER 2026-06-01 — SUPERSEDES the earlier "count-then-convert + gated claim"
+framing. Rationale: the per-day reward is LINEAR [no settle-time multiplier], so there is no
+conversion event to game and nothing to gate — accruing the actual BURNIE daily and letting the sub
+pull it whenever is non-exploitable by construction: "they already earned that.")
+
+**Per delivered (paid) day — the warm in-slot accrue (no cross-contract call, "basically free", same
+slot already written):**
+- `pendingBurnie += QUEST_SLOT0_REWARD + thisBuy'sTicketBuyerBonus` — the actual claimable BURNIE,
+  accrued DAILY. This FOLDS IN / REPLACES the separate `buyerOwedBurnie` accumulator (quest reward
+  AND ticket-buy bonus go into the one balance — "update the burnie from quests and any other source
+  like ticket buys every day since it's in the sub struct").
+- `++questProgress` — KEPT, but now ONLY as the delivered-day COUNT for the streak (NOT a BURNIE
+  proxy).
+- `affiliateBase += …` — unchanged (pulled separately via `drainAffiliateBase`).
+
+**Settle day (~10-day cadence, `currentDay % SETTLE_PERIOD == 0`) — the ONLY per-sub cross-contract
+work:** `quests.settleAfkingQuest(player, questProgress, currentDay)` advances the ±10 streak ("just
+do quest status on settle day"), then zeroes `questProgress`. NO BURNIE work here — it is already in
+`pendingBurnie`. This `settleAfkingQuest` cost is the heavier per-sub case → the binding marginal for
+`SUB_STAGE_BATCH_SETTLE`. (`_settleQuest`'s old `creditFlip` body is GONE.)
+
+**Claim (player PULL, anytime) — the ONLY `creditFlip`, off the auto-run:**
+`creditFlip(player, pendingBurnie); pendingBurnie = 0`. A permissionless entrypoint (always credits
+the sub, never the caller; idempotent). It does NOT touch quest status/streak and does NOT settle
+in-flight progress — it only pays the accrued balance.
+
+**Unsub / claim whenever — unrestricted, no gating:** `pendingBurnie` is the sub's already-earned
+per-delivered-day balance, so realizing it early gains nothing ("if they unsub or claim whenever it's
+fine they already earned that"). The unsub `_settleQuest` call (`:314`) and the ungated early-settle
+in `claimQuest` (`:1182-1192`) are REMOVED — the streak gap-resets naturally; `pendingBurnie` stays
+claimable.
+
+**Keeper `mintBurnie` bounty stays an IMMEDIATE push** (`:1090`) — one `creditFlip`/call, the keeper's
+own crank incentive, not a per-item batch cost. **Scope = auto-run only;** the manual-buy path is
+UNCHANGED. Off the solvency path (BURNIE-emission-timing only) → SOLVENCY-01 byte-unchanged,
+RNG-freeze intact. (= the new GAS-05 requirement; SUPERSEDES the AGG-02 inline settle-day
+`creditFlip`.)
 
 ## Locked decision 3 — TWO STAGE batch sizes (normal vs quest/settle day)
 Split `SUB_STAGE_BATCH` (=50, `DegenerusGameAdvanceModule.sol:149`, used `:761`) into:
@@ -52,23 +74,27 @@ day's MEASURED per-sub marginal so the worst-case chunk TARGETS <10M and is PROV
 stays SINGLE — box opens are uniform (no quest-day variant).
 
 ## Sequencing guidance (for the planner — not a hard plan structure)
-The harness can measure the `creditFlip` component cost on the current tree and DERIVE the
-post-swap settle marginal (= current settle marginal − the per-sub creditFlip cost) WITHOUT
-applying the IMPL first. So both batch sizes are derivable pre-IMPL, and the contract change can
-land as ONE batched USER-APPROVED diff at 355-03: the `creditFlip`→`pendingBurnie` swap + the claim
-entrypoint + the two-batch chunker branch + the two computed constants. Files in play:
-`contracts/modules/GameAfkingModule.sol` (swap + claim + `pendingBurnie` field — coordinate with
-`contracts/storage/DegenerusGameStorage.sol` Sub-slot packing), `contracts/modules/DegenerusGameAdvanceModule.sol`
-(the two-batch chunker branch + constants), `test/gas/V56AfkingGasMarginal.t.sol` (extend the
-before-baseline harness).
+The contract change lands as ONE batched USER-APPROVED diff at 355-03: the per-day `pendingBurnie`
+accrue (folding in `buyerOwedBurnie`) + the `_settleQuest` body reduced to streak-only on the settle
+day + the payout claim entrypoint + the removal of the unsub/ungated early-settle + the two-batch
+chunker branch + the two computed constants. The settle-day per-sub marginal is now the
+`settleAfkingQuest` streak cost (no `creditFlip`, no conversion), so the harness measures it directly
+on the IMPL-applied tree to size `SUB_STAGE_BATCH_SETTLE`; the cheap-day marginal (warm accrue only)
+sizes `SUB_STAGE_BATCH_NORMAL`. Files in play: `contracts/modules/GameAfkingModule.sol` (per-day
+accrue + streak-only `_settleQuest` + claim + `pendingBurnie` field — coordinate with
+`contracts/storage/DegenerusGameStorage.sol` Sub-slot packing, replacing `buyerOwedBurnie`),
+`contracts/modules/DegenerusGameAdvanceModule.sol` (the two-batch chunker branch + constants),
+`test/gas/V56AfkingGasMarginal.t.sol` (extend the before-baseline harness `3b9df3fb`).
 
 ## Hard constraints (unchanged from the phase floor)
 - Security-over-gas floor: gas-scavenger surfaces, gas-skeptic validates; any simplification must
   stay UNMANIPULABLE — not-real / invariant-trading wins REJECTED with reasoning.
-- The `pendingBurnie` field must add NO new cold per-buy SSTORE (written only on the settle day in
-  the already-warm Sub slot; drained at claim) — GAS-02.
+- `pendingBurnie` must PACK INTO THE ALREADY-WARM accrue slot (whole-BURNIE width + the 100M-style
+  clamp, replacing `buyerOwedBurnie`) so the per-day accrue stays a SINGLE warm SSTORE — no new cold
+  per-buy SSTORE (GAS-02). If it would spill to a new slot, the per-day accrue is no longer "free" —
+  the IMPL must confirm it fits (preserving `QUEST_SLOT0_REWARD` granularity).
 - The contract diff is HELD at the `autonomous:false` 355-03 boundary for explicit USER hand-review
   (never auto-committed). Doc/test plans run hands-off.
-- `pendingBurnie` field width: size so it does not saturate over a realistic claim horizon
-  (`questProgress` ≤ ~10/epoch × `QUEST_SLOT0_REWARD` + `buyerOwedBurnie` whole-BURNIE, accumulated
-  across many epochs until claim) — the planner/SPEC picks the width + Sub-slot packing.
+- `pendingBurnie` field width: hold the accrued claimable (per-delivered-day `QUEST_SLOT0_REWARD` +
+  ticket buyer-bonus, accumulated across many days until claim) without saturating over a realistic
+  horizon — the planner/SPEC picks the width + Sub-slot packing.
