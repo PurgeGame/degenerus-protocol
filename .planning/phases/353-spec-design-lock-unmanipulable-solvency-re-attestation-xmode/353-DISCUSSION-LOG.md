@@ -70,6 +70,7 @@ Second pass — fix mechanic:
 | Investigate first | Researcher measures EV/gas before deciding | |
 
 **User's choice:** Drop for simplicity (intentional semantic simplification under the v56 scope latitude).
+**REVERSED 2026-06-01 (plan-phase):** flipped to **KEEP at parity** after a gas analysis showed the cost is amortized-negligible — the bonus is gated by the century-level check (every 100th level), reuses the existing `centuryBonusLevel`/`centuryBonusUsed` storage + the per-buy activity score already computed for the affiliate taper, so only ~7–31k lands on the rare century-level buy. The drop was about primitive-simplicity, not gas; with the cost shown trivial, parity is the fairer choice. See CONTEXT.md D-10 (updated).
 
 ---
 
