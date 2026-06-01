@@ -114,7 +114,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 354-04-PLAN.md — Wave 2: DegenerusAffiliate flat-7% deterministic-split PULL — claim(subs[]) 75/20/5 + CEI withdraw() + pendingClaim; no roll/seed (AGG-01/04/05)
+- [x] 354-04-PLAN.md — Wave 2: DegenerusAffiliate flat-7% deterministic-split PULL — claim(subs[]) 75/20/5 + CEI withdraw() + pendingClaim; no roll/seed (AGG-01/04/05)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -195,7 +195,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 353. SPEC — Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation | v56.0 | 2/2 | Complete    | 2026-06-01 |
-| 354. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (aggregator + ticket-mode primitive + DegenerusQuests batched-settle + accumulator + open-end) | v56.0 | 3/6 | In Progress|  |
+| 354. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (aggregator + ticket-mode primitive + DegenerusQuests batched-settle + accumulator + open-end) | v56.0 | 4/6 | In Progress|  |
 | 355. GAS — Measure + Tune (marginals + accumulator packing + SUB_STAGE_BATCH re-tune + mode/SLOAD collapse) | v56.0 | 0/? | Not started | - |
 | 356. TST — Unmanipulable (strategic sub/unsub) + Quest-Core Non-Perturbation + Two-Path-Open + Gas Marginals + Non-Widening | v56.0 | 0/? | Not started | - |
 | 357. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep (AUGMENTED by XMODEL) + FINDINGS-v56.0 + Closure | v56.0 | 0/? | Not started | - |

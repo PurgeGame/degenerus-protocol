@@ -10,10 +10,10 @@
 ## v56.0 Requirements
 
 ### AGG — Mode-agnostic ~10-day aggregator settlement
-- [ ] **AGG-01**: Per buy, the STAGE accrues the affiliate base + quest progress into a per-sub accumulator with NO cross-contract calls (the cheap hot path — replaces the per-buy `handlePurchase`/`payAffiliate`/`creditFlip` storm).
+- [x] **AGG-01**: Per buy, the STAGE accrues the affiliate base + quest progress into a per-sub accumulator with NO cross-contract calls (the cheap hot path — replaces the per-buy `handlePurchase`/`payAffiliate`/`creditFlip` storm). **(accrue producer built 354-03; the affiliate PULL consumer `claim`/`withdraw` completing the no-cross-contract-on-the-hot-path design built 354-04.)**
 - [ ] **AGG-02**: The QUEST leg settles AUTOMATICALLY by RIDING THE DAILY BUY STAGE on the global settle day (`currentDay % settlePeriod == 0`, ~10-day cadence) — the internal `_settleQuest(sub)` runs INLINE in the STAGE (riding the warm Sub-slot write the buy already does), minting the sub's accrued slot-0 `questProgress × QUEST_SLOT0_REWARD` BURNIE **+ the accrued `buyerOwedBurnie` ticket buyer-bonus** in ONE `creditFlip` to the sub + applies the streak, draining both counters once per epoch — PLUS a permissionless `claimQuest(address[] subs)` keeper-liveness fallback running the SAME `_settleQuest(sub)` (always credits the sub, never the caller); quests stay AUTOMATIC (the sub's own reward; no sub action). The separate `mintBurnie` "settlement-due" router leg is REJECTED as a redundant cold-SLOAD pass; `SUB_STAGE_BATCH` is SHRUNK so the heavier settle-day chunk fits the 16.7M ceiling (number deferred to 355). **(amended 2026-06-01 — quest settle RIDES THE BUY STAGE [separate settlement-due leg rejected]; the slot-0 quest BURNIE + the 10%/20% ticket buyer-bonus mint TOGETHER in one creditFlip; the AFFILIATE leg is PULL with NO scheduled flush; claimQuest fallback stays; first-sub-only +daysToNextSettle streak, no provisional. See `353-SPEC.md` AGG/QST/TKT.)**
 - [ ] **AGG-03**: A player-triggered unsub triggers a lightweight QUEST-settle that drains the sub's accrued `questProgress` → one `creditFlip` to the sub before applying the change; the AFFILIATE base is NOT flushed on mutation — it persists in the slot for the uplines to PULL (an unsub does not forfeit the uplines' accrued affiliate). **(amended 2026-06-01 — flat-7% deterministic-split pull; quests stay automatic: the prior "player-flush replays the fixed-seed roll" mechanism is REMOVED — there is no affiliate roll/flush at all. See `353-SPEC.md` AFF-01/AGG.)**
-- [ ] **AGG-04**: The QUEST-settle path settles uniformly for BOTH ticket and lootbox subs (mode-agnostic — `questProgress` is mode-independent); the affiliate base is likewise mode-agnostic and pulled uniformly via `claim`. **(amended 2026-06-01 — flat-7% deterministic-split pull; quests stay automatic.)**
+- [x] **AGG-04**: The QUEST-settle path settles uniformly for BOTH ticket and lootbox subs (mode-agnostic — `questProgress` is mode-independent); the affiliate base is likewise mode-agnostic and pulled uniformly via `claim`. **(amended 2026-06-01 — flat-7% deterministic-split pull; quests stay automatic.) (the mode-agnostic affiliate PULL `claim` — uniform for ticket + lootbox subs — built 354-04; the mode-agnostic quest settle built 354-03.)**
 - [x] **AGG-05**: Double-settle is impossible via self-marking running balances — the affiliate `claim` zeroes `affiliateBase[sub]` (a re-claim sees `B == 0` → no-op) and the quest flush drains `questProgress` (a double-fire finds `0` → no-op); the per-sub `windowStartDay`/`lastSettledDay` double-settle markers are DROPPED (the zeroed running balance is self-marking). **(amended 2026-06-01 — flat-7% deterministic-split pull; quests stay automatic: markers DROPPED. See `353-SPEC.md` AGG.)**
 
 ### TKT — Ticket-mode parity (minimal write primitive)
@@ -68,11 +68,11 @@ Each REQ-ID maps to exactly ONE phase (the phase that OWNS/delivers it). Phases 
 
 | Requirement | Phase | Phase Type | Status |
 |-------------|-------|------------|--------|
-| AGG-01 | Phase 354 | IMPL | Pending |
+| AGG-01 | Phase 354 | IMPL | Complete |
 | AGG-02 | Phase 354 | IMPL | Pending |
 | AGG-03 | Phase 354 | IMPL | Pending |
-| AGG-04 | Phase 354 | IMPL | Pending |
-| AGG-05 | Phase 354 | IMPL | Pending |
+| AGG-04 | Phase 354 | IMPL | Complete |
+| AGG-05 | Phase 354 | IMPL | Complete |
 | TKT-01 | Phase 354 | IMPL | Pending |
 | TKT-02 | Phase 354 | IMPL | Pending |
 | AFF-01 | Phase 353 | SPEC | Complete |
