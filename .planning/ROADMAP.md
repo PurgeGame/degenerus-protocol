@@ -99,7 +99,15 @@ Plans:
 
   5. The diff is producer-before-consumer + `forge build` is clean + HELD at the boundary (all 14 IMPL reqs) — the whole diff is authored producer-before-consumer per the SPEC edit-order map (accumulator storage → aggregator accrue/settle → `DegenerusQuests` batched-settle → ticket-mode primitive → open-end → interfaces/wiring), applied to `contracts/` and locally compiling (`forge build` clean; `ContractAddresses.sol` freely modifiable), but NOT committed without explicit user hand-review of the single batched diff (the SOLVENCY-01 ETH/`claimablePool` path stays byte-unchanged — affiliate/quest are BURNIE flip-credit only — and RNG-freeze stays intact, both carried as IMPL invariants and re-proven at TST 356).
 
-**Plans**: TBD
+**Plans**: 6 plans in 4 waves (producer-before-consumer)
+
+Plans:
+- [ ] 354-01-PLAN.md — Wave 1: re-pack the Sub struct + the in-slot accumulator (affiliateBase/questProgress/buyerOwedBurnie + hasEverSubscribed; drop window/settled markers; amount->milli-ETH) (AGG-05)
+- [ ] 354-02-PLAN.md — Wave 1: DegenerusQuests core — the onlyGame batched-settle entrypoint (non-perturbing) + O1 line-890 double-credit fix + dead handleLootBox removal (QST-01..05)
+- [ ] 354-03-PLAN.md — Wave 2: GameAfkingModule mode-agnostic accrue + inline _settleQuest (rides the STAGE) + claimQuest fallback + unsub-settle + first-sub head-start; SOLVENCY-01 byte-unchanged (AGG-01..05, QST-01/02/03)
+- [ ] 354-04-PLAN.md — Wave 2: DegenerusAffiliate flat-7% deterministic-split PULL — claim(subs[]) 75/20/5 + CEI withdraw() + pendingClaim; no roll/seed (AGG-01/04/05)
+- [ ] 354-05-PLAN.md — Wave 3: ticket minimal-write primitive + buyerOwedBurnie 10%/20% accrual + century parity (boons-OFF) + the open-end re-verification + wiring (TKT-01/02, OPEN-01/02)
+- [ ] 354-06-PLAN.md — Wave 4: forge-build-clean + the per-requirement diff-review + the autonomous:false USER hand-review-and-commit gate (the ONE v56 contract boundary)
 
 **UI hint**: no
 
