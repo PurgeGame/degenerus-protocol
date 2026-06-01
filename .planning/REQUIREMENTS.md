@@ -11,8 +11,8 @@
 
 ### AGG — Mode-agnostic ~10-day aggregator settlement
 - [x] **AGG-01**: Per buy, the STAGE accrues the affiliate base + quest progress into a per-sub accumulator with NO cross-contract calls (the cheap hot path — replaces the per-buy `handlePurchase`/`payAffiliate`/`creditFlip` storm). **(accrue producer built 354-03; the affiliate PULL consumer `claim`/`withdraw` completing the no-cross-contract-on-the-hot-path design built 354-04.)**
-- [ ] **AGG-02**: The QUEST leg settles AUTOMATICALLY by RIDING THE DAILY BUY STAGE on the global settle day (`currentDay % settlePeriod == 0`, ~10-day cadence) — the internal `_settleQuest(sub)` runs INLINE in the STAGE (riding the warm Sub-slot write the buy already does), minting the sub's accrued slot-0 `questProgress × QUEST_SLOT0_REWARD` BURNIE **+ the accrued `buyerOwedBurnie` ticket buyer-bonus** in ONE `creditFlip` to the sub + applies the streak, draining both counters once per epoch — PLUS a permissionless `claimQuest(address[] subs)` keeper-liveness fallback running the SAME `_settleQuest(sub)` (always credits the sub, never the caller); quests stay AUTOMATIC (the sub's own reward; no sub action). The separate `mintBurnie` "settlement-due" router leg is REJECTED as a redundant cold-SLOAD pass; `SUB_STAGE_BATCH` is SHRUNK so the heavier settle-day chunk fits the 16.7M ceiling (number deferred to 355). **(amended 2026-06-01 — quest settle RIDES THE BUY STAGE [separate settlement-due leg rejected]; the slot-0 quest BURNIE + the 10%/20% ticket buyer-bonus mint TOGETHER in one creditFlip; the AFFILIATE leg is PULL with NO scheduled flush; claimQuest fallback stays; first-sub-only +daysToNextSettle streak, no provisional. See `353-SPEC.md` AGG/QST/TKT.)**
-- [ ] **AGG-03**: A player-triggered unsub triggers a lightweight QUEST-settle that drains the sub's accrued `questProgress` → one `creditFlip` to the sub before applying the change; the AFFILIATE base is NOT flushed on mutation — it persists in the slot for the uplines to PULL (an unsub does not forfeit the uplines' accrued affiliate). **(amended 2026-06-01 — flat-7% deterministic-split pull; quests stay automatic: the prior "player-flush replays the fixed-seed roll" mechanism is REMOVED — there is no affiliate roll/flush at all. See `353-SPEC.md` AFF-01/AGG.)**
+- [x] **AGG-02**: The QUEST leg settles AUTOMATICALLY by RIDING THE DAILY BUY STAGE on the global settle day (`currentDay % settlePeriod == 0`, ~10-day cadence) — the internal `_settleQuest(sub)` runs INLINE in the STAGE (riding the warm Sub-slot write the buy already does), minting the sub's accrued slot-0 `questProgress × QUEST_SLOT0_REWARD` BURNIE **+ the accrued `buyerOwedBurnie` ticket buyer-bonus** in ONE `creditFlip` to the sub + applies the streak, draining both counters once per epoch — PLUS a permissionless `claimQuest(address[] subs)` keeper-liveness fallback running the SAME `_settleQuest(sub)` (always credits the sub, never the caller); quests stay AUTOMATIC (the sub's own reward; no sub action). The separate `mintBurnie` "settlement-due" router leg is REJECTED as a redundant cold-SLOAD pass; `SUB_STAGE_BATCH` is SHRUNK so the heavier settle-day chunk fits the 16.7M ceiling (number deferred to 355). **(amended 2026-06-01 — quest settle RIDES THE BUY STAGE [separate settlement-due leg rejected]; the slot-0 quest BURNIE + the 10%/20% ticket buyer-bonus mint TOGETHER in one creditFlip; the AFFILIATE leg is PULL with NO scheduled flush; claimQuest fallback stays; first-sub-only +daysToNextSettle streak, no provisional. See `353-SPEC.md` AGG/QST/TKT.)**
+- [x] **AGG-03**: A player-triggered unsub triggers a lightweight QUEST-settle that drains the sub's accrued `questProgress` → one `creditFlip` to the sub before applying the change; the AFFILIATE base is NOT flushed on mutation — it persists in the slot for the uplines to PULL (an unsub does not forfeit the uplines' accrued affiliate). **(amended 2026-06-01 — flat-7% deterministic-split pull; quests stay automatic: the prior "player-flush replays the fixed-seed roll" mechanism is REMOVED — there is no affiliate roll/flush at all. See `353-SPEC.md` AFF-01/AGG.)**
 - [x] **AGG-04**: The QUEST-settle path settles uniformly for BOTH ticket and lootbox subs (mode-agnostic — `questProgress` is mode-independent); the affiliate base is likewise mode-agnostic and pulled uniformly via `claim`. **(amended 2026-06-01 — flat-7% deterministic-split pull; quests stay automatic.) (the mode-agnostic affiliate PULL `claim` — uniform for ticket + lootbox subs — built 354-04; the mode-agnostic quest settle built 354-03.)**
 - [x] **AGG-05**: Double-settle is impossible via self-marking running balances — the affiliate `claim` zeroes `affiliateBase[sub]` (a re-claim sees `B == 0` → no-op) and the quest flush drains `questProgress` (a double-fire finds `0` → no-op); the per-sub `windowStartDay`/`lastSettledDay` double-settle markers are DROPPED (the zeroed running balance is self-marking). **(amended 2026-06-01 — flat-7% deterministic-split pull; quests stay automatic: markers DROPPED. See `353-SPEC.md` AGG.)**
 
@@ -25,11 +25,11 @@
 - [x] **AFF-02**: The activity taper is afking-N/A (flat 7%; the `_applyLootboxTaper` anti-concentration reduction applies to MANUAL buys only); the affiliate leaderboard credits at `claim` time to the direct affiliate `A` (USER-accepted claim-time distortion). **(amended 2026-06-01 — flat-7% deterministic-split pull; quests stay automatic: replaces the option-A-lump-at-settle wording — there is no scheduled affiliate settle under the pull. See `353-SPEC.md` AFF-02.)**
 
 ### QST — Quest batching (shared `DegenerusQuests` core, non-perturbing)
-- [ ] **QST-01**: The afking quest streak uses a SIMPLIFIED first-sub-only `+daysToNextSettle` head-start (`hasEverSubscribed` 1-bit; bounded +0..+9 over the manual baseline, no provisional/vesting) on top of the ±10-per-window activity model (−10 on unsub); the slot-0 reward accrues as a delivered-day `questProgress` COUNTER → settled = mint `× QUEST_SLOT0_REWARD` (the ONLY direct quest BURNIE); slot-1 remains the player's own manual quest; the ±10 streak is the activity-score multiplier, NOT direct BURNIE. **(amended 2026-06-01 — automatic slot-0 BURNIE via mintBurnie chain + claimQuest fallback; first-sub-only +daysToNextSettle streak, no provisional. See `353-SPEC.md` QST.)**
-- [ ] **QST-02**: The first-sub-only `+daysToNextSettle` head-start is a bounded (+0..+9, once/account) DIRECT streak grant that is USER-ACCEPTED-BY-DESIGN — the prior "read confirmed-delivered, never the +10 pre-credit / no pre-credit-EV inflation" escrow guard is SIMPLIFIED AWAY for the afking grant (the bound REPLACES the escrow; a deliberate accepted tradeoff, NOT a missed control — 356/357 treat it as accepted-by-design); the activity-score still reads the actual `state.streak`, and the per-window streak still advances only on debit-DELIVERED days (the C3-a streak-dodge fix stays in force). **(amended 2026-06-01 — automatic slot-0 BURNIE via mintBurnie chain + claimQuest fallback; first-sub-only +daysToNextSettle streak, no provisional. See `353-SPEC.md` QST-02 reframe.)**
-- [ ] **QST-03**: An afk+manual double-credit guard (`lastCompletedDay` / `afkCoveredThroughDay`) prevents double streak credit on afk-covered days; the gap-reset is suppressed via an active-pass check (anti-reset without daily writes). Slot rewards are NEVER suppressed (only the duplicate streak credit).
-- [ ] **QST-04**: The batched-settle entrypoint added to the shared `DegenerusQuests` core is proven non-perturbing to the manual / bingo / degenerette / boon callers (`awardQuestStreakBonus` etc.).
-- [ ] **QST-05**: The pre-existing lootbox-quest BURNIE double-credit (O1 — `handlePurchase` internal `creditFlip` + the returned-and-re-credited value) is confirmed intended or fixed.
+- [x] **QST-01**: The afking quest streak uses a SIMPLIFIED first-sub-only `+daysToNextSettle` head-start (`hasEverSubscribed` 1-bit; bounded +0..+9 over the manual baseline, no provisional/vesting) on top of the ±10-per-window activity model (−10 on unsub); the slot-0 reward accrues as a delivered-day `questProgress` COUNTER → settled = mint `× QUEST_SLOT0_REWARD` (the ONLY direct quest BURNIE); slot-1 remains the player's own manual quest; the ±10 streak is the activity-score multiplier, NOT direct BURNIE. **(amended 2026-06-01 — automatic slot-0 BURNIE via mintBurnie chain + claimQuest fallback; first-sub-only +daysToNextSettle streak, no provisional. See `353-SPEC.md` QST.)**
+- [x] **QST-02**: The first-sub-only `+daysToNextSettle` head-start is a bounded (+0..+9, once/account) DIRECT streak grant that is USER-ACCEPTED-BY-DESIGN — the prior "read confirmed-delivered, never the +10 pre-credit / no pre-credit-EV inflation" escrow guard is SIMPLIFIED AWAY for the afking grant (the bound REPLACES the escrow; a deliberate accepted tradeoff, NOT a missed control — 356/357 treat it as accepted-by-design); the activity-score still reads the actual `state.streak`, and the per-window streak still advances only on debit-DELIVERED days (the C3-a streak-dodge fix stays in force). **(amended 2026-06-01 — automatic slot-0 BURNIE via mintBurnie chain + claimQuest fallback; first-sub-only +daysToNextSettle streak, no provisional. See `353-SPEC.md` QST-02 reframe.)**
+- [x] **QST-03**: An afk+manual double-credit guard (`lastCompletedDay` / `afkCoveredThroughDay`) prevents double streak credit on afk-covered days; the gap-reset is suppressed via an active-pass check (anti-reset without daily writes). Slot rewards are NEVER suppressed (only the duplicate streak credit).
+- [x] **QST-04**: The batched-settle entrypoint added to the shared `DegenerusQuests` core is proven non-perturbing to the manual / bingo / degenerette / boon callers (`awardQuestStreakBonus` etc.).
+- [x] **QST-05**: The pre-existing lootbox-quest BURNIE double-credit (O1 — `handlePurchase` internal `creditFlip` + the returned-and-re-credited value) is confirmed intended or fixed.
 
 ### OPEN — The afking opening end (max-efficient + unmanipulable)
 - [x] **OPEN-01**: The afking open path — `_openAfkingBox` → `resolveAfkingBox` + the `mintBurnie` open leg / the `autoOpen` cursor + `OPEN_BATCH` — is reviewed and optimized for maximum gas efficiency (the per-open marginal ~74–78k + the batch cost), reading no cold ledger and sharing the cheapest viable materialization with the human path.
@@ -69,21 +69,21 @@ Each REQ-ID maps to exactly ONE phase (the phase that OWNS/delivers it). Phases 
 | Requirement | Phase | Phase Type | Status |
 |-------------|-------|------------|--------|
 | AGG-01 | Phase 354 | IMPL | Complete |
-| AGG-02 | Phase 354 | IMPL | Pending |
-| AGG-03 | Phase 354 | IMPL | Pending |
+| AGG-02 | Phase 354 | IMPL | Complete |
+| AGG-03 | Phase 354 | IMPL | Complete |
 | AGG-04 | Phase 354 | IMPL | Complete |
 | AGG-05 | Phase 354 | IMPL | Complete |
-| TKT-01 | Phase 354 | IMPL | Pending |
-| TKT-02 | Phase 354 | IMPL | Pending |
+| TKT-01 | Phase 354 | IMPL | Complete |
+| TKT-02 | Phase 354 | IMPL | Complete |
 | AFF-01 | Phase 353 | SPEC | Complete |
 | AFF-02 | Phase 353 | SPEC | Complete |
-| QST-01 | Phase 354 | IMPL | Pending |
-| QST-02 | Phase 354 | IMPL | Pending |
-| QST-03 | Phase 354 | IMPL | Pending |
-| QST-04 | Phase 354 | IMPL | Pending |
-| QST-05 | Phase 354 | IMPL | Pending |
-| OPEN-01 | Phase 354 | IMPL | Pending |
-| OPEN-02 | Phase 354 | IMPL | Pending |
+| QST-01 | Phase 354 | IMPL | Complete |
+| QST-02 | Phase 354 | IMPL | Complete |
+| QST-03 | Phase 354 | IMPL | Complete |
+| QST-04 | Phase 354 | IMPL | Complete |
+| QST-05 | Phase 354 | IMPL | Complete |
+| OPEN-01 | Phase 354 | IMPL | Complete |
+| OPEN-02 | Phase 354 | IMPL | Complete |
 | GAS-01 | Phase 355 | GAS | Pending |
 | GAS-02 | Phase 355 | GAS | Pending |
 | GAS-03 | Phase 355 | GAS | Pending |
