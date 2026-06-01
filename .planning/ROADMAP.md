@@ -214,7 +214,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 352-03-PLAN.md — FINDINGS-v55.0: the 9-section deliverable (folds 352-01 + 352-02; re-attests all 29 reqs; carries the MILESTONE_V55_AT_HEAD placeholder) (Wave 2, deps 01+02)
+- [x] 352-03-PLAN.md — FINDINGS-v55.0: the 9-section deliverable (folds 352-01 + 352-02; re-attests all 29 reqs; carries the MILESTONE_V55_AT_HEAD placeholder) (Wave 2, deps 01+02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -236,7 +236,7 @@ Plans:
 | 349.2 IMPL FIX — Restore quest-credit + affiliate for afking LOOTBOX subs (regression) (INSERTED) | v55.0 | 1/1 | Complete   | 2026-05-31 |
 | 350. GAS — Behavior-Identical No-Cost Wins (box-ledger → warm Sub-stamp + staticcall → SLOAD + same-slot flushes) | v55.0 | 3/3 | Complete    | 2026-05-31 |
 | 351. TST — Freeze/Determinism + Revert-Free + EV-Cap + Two-Path + Set-Mutation + Non-Widening + Gas | v55.0 | 9/9 | Complete    | 2026-05-31 |
-| 352. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v55.0 + Closure | v55.0 | 2/4 | In Progress|  |
+| 352. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v55.0 + Closure | v55.0 | 3/4 | In Progress|  |
 
 > **🔒 v55.0 CONTRACT-BOUNDARY HARD STOPS (THREE gates — 349 IMPL · 349.2 lootbox quest/affiliate fix · 350 GAS).** Phase 349 IMPL is the FIRST contract phase — the carefully-sequenced batched fold + box-redesign diff (code-size reclaim FIRST so the Game stays < 24,576 mid-flight, then the GameAfkingModule + storage append + box stamp/process-pass/open-pass + AfKing stubs + preserved slice-builder invariants + EV-cap-at-open + no-valve no-brick guarantee) is applied to `contracts/` and locally compiled (`forge build` clean) but HELD at the contract-commit boundary, NEVER committed without explicit user hand-review (`feedback_batch_contract_approval` + `feedback_never_preapprove_contracts` + `feedback_manual_review_before_push` + `feedback_no_contract_commits`). Phase 350 GAS is the SECOND contract phase — any further behavior-identical gas change (residual same-slot batching + extra gas-scavenger wins) rides its own batched USER-APPROVED diff at the same boundary. `ContractAddresses.sol` freely modifiable per `feedback_contractaddresses_policy`; tests + planning + docs AGENT-committable.
 
