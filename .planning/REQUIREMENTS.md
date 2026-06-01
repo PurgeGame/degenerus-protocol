@@ -1,119 +1,67 @@
-# Requirements — v55.0 AfKing-in-Game Redesign
+# Requirements — v56.0 AfKing Everyday-Gas Minimization
 
-> **Baseline:** v54 de-custody HEAD `20ca1f79` (v54.0 closed-superseded).
-> **Design-lock:** `.planning/PLAN-V55-AFKING-IN-GAME-REDESIGN.md` (canonical = §10, which supersedes the §0–§3 stamp framing).
-> **Discharged foundations:** REVERT-FREE-CHAIN proof `.planning/PLAN-V55-REVERT-FREE-CHAIN-PROOF.md` (its §5 = the 4 LOCKED obligations below) + SOLVENCY-01 (Phase 343).
-> **Posture:** security/freeze/solvency floor over gas; carefully-sequenced batched USER-APPROVED contract diff (HARD STOP at the contract-commit boundary, `feedback_batch_contract_approval` / `feedback_never_preapprove_contracts` / `feedback_no_contract_commits`); `ContractAddresses.sol` freely modifiable; pre-launch redeploy-fresh (storage break fine). FULL close (sweep IN-MILESTONE at TERMINAL).
+> **Baseline:** v55.0 HEAD — frozen contract subject `453f8073`, closure `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`.
+> **Design-lock input:** `.planning/PLAN-V56-AFKING-BATCHING-GAS.md` + the `[[v56-batch-afking-affiliate-quest-seed]]` memory.
+> **Scope (USER-locked):** the AFKING SYSTEM specifically — **BOTH ENDS: the BUYING (the per-day process STAGE / accrual / settle) AND the OPENING (the box open-pass / materialize)**. Make the whole afking path maximally gas-efficient while remaining COMPLETELY secure and UNMANIPULABLE (no economic edge from any "fuckery" — with particular focus on gaining an edge by subscribing/unsubscribing strategically). NOT a whole-ecosystem sweep — afking buy + open only (shared-code touches handled with care).
+> **Posture:** **NOT a behavior-identical pass** — slight semantic simplifications are acceptable if they cut gas and stay unmanipulable; the hard floor is unmanipulable + secure, enforced by a mandatory 3-skill adversarial economic review PLUS a baked-in **cross-model (Codex + Gemini) review** (XMODEL below — crafted prompts, in-milestone). Carefully-sequenced batched USER-APPROVED contract diff (HARD STOP at the contract-commit boundary); sequential-on-main (worktrees unsafe: submodule + node_modules); pre-launch redeploy-fresh (storage break fine). FULL close (sweep IN-MILESTONE at TERMINAL, like v54/v55). Affiliate/quest rewards stay BURNIE flip-credit off the ETH/`claimablePool` path → SOLVENCY-01 not in scope (a BURNIE-emission-timing change).
 
 ---
 
-## v55.0 Requirements
+## v56.0 Requirements
 
-### ARCH — Architecture: state game-resident + module split + code-size
-- [ ] **ARCH-01**: The subscriber set (`_subOf`/`_subscribers`/`_subscriberIndex`), the process/open cursors, the per-sub box-stamp, and the v54 `afkingFunding` ledger are appended to `DegenerusGameStorage` (layout-safe append; every module already shares the base).
-- [ ] **ARCH-02**: A new `GameAfkingModule` (delegatecall, inherits `DegenerusGameStorage`) owns `subscribe`/setters + the process-pass + the open-pass + the router; its bytecode is its own budget, not the Game's.
-- [ ] **ARCH-03**: `AfKing.sol` collapses to thin dispatch stubs (`subscribe`/`setDailyQuantity`/`doWork`/…) ≈1–1.5KB; the `AF_KING`-address dissolution vs thin-external-shim question is resolved (incl. the mandatory-mint-gate interaction if any entry routes through `advanceGame`).
-- [x] **ARCH-04**: Game runtime code-size stays < 24,576 bytes at every intermediate step — reclaim FIRST (`claimAffiliateDgnrs`→`BingoModule` ≈1.3KB; read-aggregators drop-`view`/→lens) before adding the afking stubs (sequenced so the Game never breaches the ceiling mid-flight).
+### AGG — Mode-agnostic ~10-day aggregator settlement
+- [ ] **AGG-01**: Per buy, the STAGE accrues the affiliate base + quest progress into a per-sub accumulator with NO cross-contract calls (the cheap hot path — replaces the per-buy `handlePurchase`/`payAffiliate`/`creditFlip` storm).
+- [ ] **AGG-02**: A scheduled ~10-day flush (a `mintBurnie` "settlement-due" router leg, seeded by the fixed window boundary) settles the accrued affiliate + quest exactly once per window.
+- [ ] **AGG-03**: Any player-triggered sub mutation (`setDailyQuantity` / funding change / unsub) flushes the accrued amounts at locked params (deterministic 75/20/5 affiliate split, NO roll) BEFORE applying the change (the mutator pays the settle gas → churn self-limits).
+- [ ] **AGG-04**: The aggregator settles affiliate + quest uniformly for BOTH ticket and lootbox subs (mode-agnostic — the single settlement path for all sub types).
+- [ ] **AGG-05**: Double-settle is impossible — `windowStartDay` + `lastSettledDay` markers gate the scheduled flush and reset on any player-triggered flush (the `lastAutoBoughtDay`/`lastOpenedDay` idempotency shape).
 
-### BOX — Box redesign: relocate the freeze into a per-sub stamp
-- [ ] **BOX-01**: Boons are OFF for afking boxes → box `amount` = spend (deletes the boosted-amount freeze field).
-- [ ] **BOX-02**: The process-pass (pre-RNG) writes a per-sub stamp `(index = current LR_INDEX, amount, day, scorePlus1, baseLevelPlus1)` (D-348-07 added the score+baseLevel fields, +40 bits into the stamp's slot-2 spare, freezing the EV multiplier + target-level floor) — one warm-dirty write per process-day, overwritten each cycle (no cold `lootboxEth*`/`lootboxPurchasePacked`/`boxPlayers.push`).
-- [ ] **BOX-03**: The process-pass debits `afkingFunding` and sets the `lastAutoBoughtDay == today` success-marker ONLY after a successful debit (a failed buy writes no marker → no free box; a wallet subscribing between process and open has no this-cycle marker → no free box).
-- [ ] **BOX-04**: The open-pass (post-RNG) materializes the box from the stamp + the committed `lootboxRngWordByIndex[stamp.index]` with math byte-identical to `openLootBox`; `lastOpenedIndex` is monotonic per sub (open only if `stamp.index > lastOpenedIndex` → no double-open).
-- [ ] **BOX-05**: Humans keep the existing `lootboxEth`/`boxPlayers` open route unchanged; the two open routes share no mutable-state hazard.
+### TKT — Ticket-mode parity (minimal write primitive)
+- [ ] **TKT-01**: Afking ticket subs use a custom minimal function that ONLY writes the ticket entries to the queue (mirrors the lootbox box-stamp); the per-day `MintModule.purchaseWith` heavyweight and its inline affiliate/quest are removed from the per-buy path (deferred to the AGG aggregator).
+- [ ] **TKT-02**: The custom ticket-write produces the same queued ticket entries as `purchaseWith`'s ticket leg (resolution-equivalent placement/trait/quantity); the afking-ticket century / x00 quantity-bonus parity (`MintModule:1243`) is explicitly decided — keep, or drop-for-simplicity under the scope latitude.
 
-### FREEZE — RNG / determinism security spine
-- [x] **FREEZE-01**: Freeze-completeness — the stamp captures ALL outcome-determining state at process, now including `scorePlus1` + `baseLevelPlus1` (D-348-07: stamped-frozen, superseding the earlier −EV live-read admission for score/base-level); the open re-derives nothing manipulable from mutable per-player state. The only residual live read is the EV-cap RMW accumulator (`lootboxEvBenefitUsedByLevel`), a benign monotonic ≤10-ETH down-clamp that cannot be per-box-stamped; documented + attested.
-- [x] **FREEZE-02**: Index-binding — the stamp binds to the pre-RNG `LR_INDEX` (read once at pass start); the process-pass MUST NOT straddle a mid-day `requestLootboxRng` index advance (`AdvanceModule.sol:1016`).
-- [x] **FREEZE-03**: Determinism — the box seed `keccak256(rngWord, player, day, amount)` uses the STAMPED buy-day (never open-time `_simulatedDayIndex()`), and carries no `block.timestamp/number/prevrandao/coinbase/blockhash` in the draw.
+### AFF — Affiliate batching (non-exploitable distribution)
+- [ ] **AFF-01**: The scheduled flush keeps the winner-takes-all daily-seeded roll (seeded by the fixed window-boundary day — not player-chosen); the deterministic 75/20/5 split is used ONLY on the player-triggered-alteration path (so settle-timing can never select a favorable roll seed).
+- [ ] **AFF-02**: The activity taper is applied per-buy at accrue (immutable); the affiliate leaderboard credit lumps into the settle-level (option A), with a force-flush-before-jackpot-snapshot path if the affiliate-selection ranking needs exactness.
 
-### REVERT — Revert-free-chain (discharged invariant, carried into IMPL)
-- [ ] **REVERT-01**: The process-pass slice construction preserves `_resolveBuy`'s validation invariants VERBATIM — `ev = cost − claimableUse` + enum payKind, the 1-wei claimable sentinel, the `LOOTBOX_MIN` transient skip, `quantity ≥ 1` — so the funded buy is revert-free by construction (migration fidelity; the proof's load-bearing obligation).
-- [ ] **REVERT-02**: No try/catch valve (D-348-04 DROPPED it). The no-brick guarantee rests on REVERT-01's revert-free-by-construction slice (obligation 1, the sole no-brick guarantor) + fail-loud-on-solvency (class B — a `claimablePool` underflow MUST revert, never be masked) + terminal-routing-unblocked (class C — the afking STAGE cannot block game-over routing). The two residual revert classes are accepted: solvency-violation [safe under SOLVENCY-01], liveness-timeout [game-dead].
+### QST — Quest batching (shared `DegenerusQuests` core, non-perturbing)
+- [ ] **QST-01**: The afking quest streak uses the ±10 model (+10 at subscribe / +10 per 10-day window / −10 on unsub); the slot-0 reward accrues + pays in the settle; slot-1 remains the player's own manual quest.
+- [ ] **QST-02**: Streak bonuses + the activity-score read the confirmed-delivered streak (never the +10 pre-credit) — derived from immutable debit-gated delivered-day markers (no injectable add/subtract lever, so no pre-credit-EV inflation).
+- [ ] **QST-03**: An afk+manual double-credit guard (`lastCompletedDay` / `afkCoveredThroughDay`) prevents double streak credit on afk-covered days; the gap-reset is suppressed via an active-pass check (anti-reset without daily writes). Slot rewards are NEVER suppressed (only the duplicate streak credit).
+- [ ] **QST-04**: The batched-settle entrypoint added to the shared `DegenerusQuests` core is proven non-perturbing to the manual / bingo / degenerette / boon callers (`awardQuestStreakBonus` etc.).
+- [ ] **QST-05**: The pre-existing lootbox-quest BURNIE double-credit (O1 — `handlePurchase` internal `creditFlip` + the returned-and-re-credited value) is confirmed intended or fixed.
 
-### EVCAP — EV-cap accounting at open
-- [ ] **EVCAP-01**: The afking open increments `lootboxEvBenefitUsedByLevel[player][level+1]` via `_applyEvMultiplierWithCap` (read+write-at-open, exactly once per open, same map/key as MintModule's buy-time write, hard-clamped ≤10 ETH → no revert); the buy-time EV write is bypassed for afking boxes (no double-draw). Proven equivalent to the v54 per-`(sub,level)` accumulator.
+### OPEN — The afking opening end (max-efficient + unmanipulable)
+- [ ] **OPEN-01**: The afking open path — `_openAfkingBox` → `resolveAfkingBox` + the `mintBurnie` open leg / the `autoOpen` cursor + `OPEN_BATCH` — is reviewed and optimized for maximum gas efficiency (the per-open marginal ~74–78k + the batch cost), reading no cold ledger and sharing the cheapest viable materialization with the human path.
+- [ ] **OPEN-02**: The afking open stays COMPLETELY unmanipulable under the v56 changes: the live-level open = parity with human `openLootBox` (open is permissionless + bounty-driven, never player-timed → no tier-timing edge); no double-open (`lastOpenedDay` monotone); no EV-cap double-draw (the shared per-`(player,level)` budget); no shared-mutable-state hazard with the human route — all RE-VERIFIED after the accrual/settle refactor.
 
-### CONSENT — OPEN-E / AFSUB / set-mutation carry-over
-- [ ] **CONSENT-01**: The subscribe-time `isOperatorApproved` (OPEN-E) gate, the pass-gating (`validThroughLevel`), the VAULT/SDGNRS exemption-on-`player`, and the funder=src accounting carry over verbatim; the OPEN-E 4-protection structure is re-attested.
-- [ ] **CONSENT-02**: Set-mutation — evictions preserve "no cursor advance after swap-pop" (the H-CANCEL-SWAP-MISS / cancel-tombstone-streak class); tombstone-then-reclaim shape carries over.
+### GAS — Everyday-cost reduction (measured)
+- [ ] **GAS-01**: The per-buy marginal is measurably reduced (target: lootbox ~206k → ~130–140k; ticket off the ~262k `purchaseWith` heavyweight), measured per-buy + per-settle marginal under the 16.7M HARD per-tx ceiling (a TST-06-style harness).
+- [ ] **GAS-02**: The per-sub accumulator packs into the `Sub` slot's spare bits where feasible (no new cold per-buy SSTORE).
+- [ ] **GAS-03**: `SUB_STAGE_BATCH` is re-tuned for the lower per-sub cost (throughput / headroom); the per-day STAGE stays under the 16.7M ceiling at the `SUBSCRIBER_CAP`.
+- [ ] **GAS-04**: Redundant payment-mode branches / repeated SLOADs in the STAGE are collapsed where a slight simplification is cheaper (allowed under the scope latitude).
 
-### PLACE — Process/open placement + bounty
-- [x] **PLACE-01**: The §4 placement (required-path `advanceGame` phase vs separate permissionless legs) is decided at SPEC on non-revert grounds (guaranteed-every-day vs minimal-surface, the `_enforceDailyMintGate` standing interaction, bounty farm-by-splitting); process-leg pre-RNG cursor-chunked, open-leg post-`_unlockRng` cursor-chunked.
-- [ ] **PLACE-02**: Bounty reconciliation — open stays a post-RNG router category (`OPEN_BATCH`/`OPEN_KNEE` pro-rate); the buy/process bounty is work-scaled (not once-per-advance) to close the middle-chunk-unpaid gap and resist farm-by-splitting; payment stays the deferred BURNIE flip-credit mint (`creditFlip`).
+### SEC — Security floor (the hard gate)
+- [ ] **SEC-01**: The afking system (buy + open) is unmanipulable — no positive-EV vector from roll-timing, **strategic sub/unsub churn (the USER-flagged PRIMARY concern — churn to re-rate / re-roll the affiliate / dodge a streak penalty / harvest or duplicate a settlement / reset a window)**, re-rate-on-alteration, pre-credit-EV inflation, double-credit, open-timing, or settle-griefing. The 3-skill adversarial economic review + the XMODEL cross-model review are the gate.
+- [ ] **SEC-02**: SOLVENCY-01 is untouched — affiliate/quest rewards remain BURNIE flip-credit off the ETH/`claimablePool` path; the ETH/pool debit is byte-unchanged; RNG-freeze intact under the new accrual/settle.
 
-### GAS — Behavior-identical relocations
-- [x] **GAS-01**: The afking box-buy's ~6 cold box-ledger SSTOREs + `boxPlayers.push` + `enqueueBoxForAutoOpen` (~120–130k) collapse to one warm-dirty Sub-stamp write (~5k); behavior-identical, proven same-results in TST.
-- [x] **GAS-02**: The per-subscriber `afkingSnapshot`/`afkingFundingOf` cross-contract staticcalls (~3–5k each) become in-context `SLOAD`s.
-- [x] **GAS-03**: Same-slot affiliate/pool aggregate flushes across a process batch (`claimablePool`/`prizePoolsPacked` accumulate-and-flush; bucket affiliate by roll-winner) — SAFE-WITH-CONDITIONS (do NOT batch `quests.handleAffiliate` — non-linear completion logic); each gas-only under the security floor.
-
-### TST — Empirical proofs
-- [x] **TST-01**: Freeze/determinism — the stamp+open produces an identical box outcome independent of open timing/block (seed uses the stamped day); index-binding holds across a mid-day index advance.
-- [x] **TST-02**: Revert-free — a funded process/open never reverts on well-formed slices (the preserved `_resolveBuy` invariants, REVERT-01); a solvency violation fails loud (never masked); the terminal game-over routing is never blocked by the afking STAGE (D-348-04 no-valve form — no try/catch).
-- [x] **TST-03**: EV-cap — the per-`(player, level)` 10-ETH benefit budget is enforced exactly once per open with no double-draw vs the buy-time path; equivalent to v54.
-- [x] **TST-04**: Two-path open coexistence + set-mutation (eviction/tombstone/swap-pop, streak preserved) + OPEN-E 4-protection regression.
-- [x] **TST-05**: NON-WIDENING regression vs the v54 baseline — every pre-existing red enumerated BY NAME (`REGRESSION-BASELINE-v55.md`).
-- [x] **TST-06**: Gas — measured per-buy + per-open marginal under the 16.7M HARD per-tx ceiling; the GAS-01/02/03 wins proven same-results.
+### XMODEL — Cross-model review (Codex + Gemini, baked in)
+- [ ] **XMODEL-01**: A cross-model review (Codex + Gemini, fed crafted prompts in-milestone) covers the FULL afking system — both the BUYING (STAGE / accrual / settle) and the OPENING (open-pass / materialize) — for (a) long-run gas-optimization suggestions and (b) adversarial verification that the design is completely unmanipulable, with PARTICULAR focus on gaining an edge by strategic sub/unsub. Runs at SPEC (design input — suggestions folded into the design-lock before IMPL) and the cross-model models AUGMENT the TERMINAL adversarial close (Claude 3-skill + Codex + Gemini).
 
 ### AUDIT — Terminal close
-- [x] **AUDIT-01**: ✅ COMPLETE (Phase 352, 2026-06-01) — FULL close — delta-audit (every v55 surface vs the v54 baseline; freeze + solvency + OPEN-E re-attested) + 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/zero-day-hunter` + `/economic-analyst`; `/degen-skeptic` OUT) focused on the box-stamp freeze + the liveness isolation + the two-path open + `audit/FINDINGS-v55.0.md` (chmod 444) + the atomic 5-doc closure flip with the `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583` signal. 0 NEW_FINDINGS.
+- [ ] **AUDIT-01**: The in-milestone TERMINAL close — delta-audit (every changed surface NON-WIDENING vs the v55 baseline `453f8073`) + the mandatory 3-skill genuine-parallel adversarial economic review (`/contract-auditor` + `/economic-analyst` + `/zero-day-hunter`; `/degen-skeptic` dual-gate filter) + `audit/FINDINGS-v56.0.md` + the atomic closure flip.
 
 ## Future Requirements (deferred)
-- Generalized operator-spend of `claimableWinnings` (carried from v54 §10) — larger blast radius, separate optional feature.
-- A bingo / afking progress view helper (frontend read-only).
+- Generalized operator-spend of `claimableWinnings` (carried from v54/v55) — larger blast radius, separate optional feature.
+- The WWXRP 8-match jackpot whale-halfpass ([[wwxrp-jackpot-whalepass-seed]]) — small, foldable into a later bundle, NOT v56.
+- The terminal-decimator final-day streak-boost ([[terminal-decimator-final-day-streak-boost-seed]]) — separate feature, NOT v56.
 
 ## Out of Scope
-- The v52 consolidated cross-model audit (separate track; v55's surface folds into it as an additional track, not a substitute for v55's own close).
+- The v52 consolidated cross-model audit (separate track; v56's surface folds into it as an additional track, not a substitute for v56's own in-milestone close).
+- Restoring the old escalating/milestone streak BURNIE payout (USER-declined 2026-05-31 — the 1%/activity-score model stays).
+- Any ETH/`claimablePool`/solvency-path change (this is a BURNIE-emission-timing + gas change only).
 - Off-chain indexer / webpage (separate frontend track).
-- Any contract surface beyond the AfKing-in-Game fold + the box redesign + the gas pass.
 
 ## Traceability
 
-Each REQ-ID maps to exactly ONE phase — the phase that DELIVERS/owns it. 29/29 mapped, 0 orphaned, 0 duplicated. Full rationale (the design+impl+test center-of-gravity split) in `.planning/ROADMAP.md` Coverage section.
-
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| ARCH-01 | 349 IMPL | Complete (attested-at-closure 352) |
-| ARCH-02 | 349 IMPL | Complete (attested-at-closure 352) |
-| ARCH-03 | 349 IMPL | Complete (attested-at-closure 352) |
-| ARCH-04 | 348 SPEC | Complete |
-| BOX-01 | 349 IMPL | Complete (attested-at-closure 352) |
-| BOX-02 | 349 IMPL | Complete (attested-at-closure 352) |
-| BOX-03 | 349 IMPL | Complete (attested-at-closure 352) |
-| BOX-04 | 349 IMPL | Complete (attested-at-closure 352) |
-| BOX-05 | 349 IMPL | Complete (attested-at-closure 352) |
-| FREEZE-01 | 348 SPEC | Complete |
-| FREEZE-02 | 348 SPEC | Complete |
-| FREEZE-03 | 348 SPEC | Complete |
-| REVERT-01 | 349 IMPL | Complete (attested-at-closure 352) |
-| REVERT-02 | 349 IMPL | Complete (attested-at-closure 352) |
-| EVCAP-01 | 349 IMPL | Complete (attested-at-closure 352) |
-| CONSENT-01 | 349 IMPL | Complete (attested-at-closure 352) |
-| CONSENT-02 | 349 IMPL | Complete (attested-at-closure 352) |
-| PLACE-01 | 348 SPEC | Complete |
-| PLACE-02 | 349 IMPL | Complete (attested-at-closure 352) |
-| GAS-01 | 350 GAS | Complete |
-| GAS-02 | 350 GAS | Complete |
-| GAS-03 | 350 GAS | Complete |
-| TST-01 | 351 TST | Complete |
-| TST-02 | 351 TST | Complete |
-| TST-03 | 351 TST | Complete |
-| TST-04 | 351 TST | Complete |
-| TST-05 | 351 TST | Complete |
-| TST-06 | 351 TST | Complete |
-| AUDIT-01 | 352 TERMINAL | Complete (FINDINGS-v55.0.md shipped; closure signal MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583) |
-
-**Per-phase rollup:**
-
-| Phase | Type | Requirements | Count |
-|-------|------|--------------|-------|
-| 348 | SPEC | FREEZE-01, FREEZE-02, FREEZE-03, PLACE-01, ARCH-04 | 5 |
-| 349 | IMPL (CONTRACT BOUNDARY) | ARCH-01, ARCH-02, ARCH-03, BOX-01, BOX-02, BOX-03, BOX-04, BOX-05, REVERT-01, REVERT-02, EVCAP-01, CONSENT-01, CONSENT-02, PLACE-02 | 14 |
-| 350 | GAS (CONTRACT BOUNDARY) | GAS-01, GAS-02, GAS-03 | 3 |
-| 351 | TST | TST-01, TST-02, TST-03, TST-04, TST-05, TST-06 | 6 |
-| 352 | TERMINAL (FULL close) | AUDIT-01 | 1 |
-| **Total** | | | **29** |
-
-✓ All 29 v55.0 requirements mapped · ✓ 0 orphaned · ✓ 0 duplicated
-
-**✅ Closure attestation (Phase 352 TERMINAL, 2026-06-01).** All 29/29 v55.0 requirements re-attested COMPLETE at the closure HEAD. Closure signal `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583` (subject frozen at `453f8073`; baseline `20ca1f79`). The delta-audit (352-01; 13 surfaces NON-WIDENING, zero orphan hunks, freeze spine + REVERT-FREE-CHAIN + EVCAP-01 + SOLVENCY-01 HELD NET + OPEN-E 4-protection re-attested HOLD [HARD BLOCKING condition SATISFIED] + VRF-freeze intact) + the 3-skill genuine-PARALLEL adversarial sweep (352-02; 21 charged-probe rows = 18 NEGATIVE-VERIFIED + 3 SAFE_BY_DESIGN + **0 FINDING_CANDIDATE**) + `audit/FINDINGS-v55.0.md` (9-section, chmod 444). **0 NEW_FINDINGS** (one PRE-EXISTING, out-of-scope, immaterial informational advisory O1 — the symmetric `DegenerusQuests` lootbox-quest BURNIE double-credit, NOT in the v55 delta — recorded + routed to a future quest-core lane + the v52 consolidated audit; does NOT amend the verdict). KNOWN-ISSUES.md byte-unmodified. v55 = the 7-phase shape (348 SPEC / 349 + 349.1 + 349.2 IMPL / 350 GAS [Outcome A] / 351 TST / 352 TERMINAL). Nothing pushed.
+_(empty — filled by the roadmapper: each REQ-ID maps to exactly one phase; phases continue from 352 → 353.)_
