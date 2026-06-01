@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
-status: planning
-last_updated: "2026-06-01T11:50:02.639Z"
-last_activity: 2026-06-01 — Milestone v56.0 roadmap created (5 phases 353-357; 24/24 requirements mapped)
+status: executing
+last_updated: "2026-06-01T12:53:13.030Z"
+last_activity: 2026-06-01
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
   percent: 0
 ---
 
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIREMENTS.md (24 v56.0 requirements) + .planning/ROADMAP.md (v56.0 — ACTIVE, phases 353-357) + the design-lock input .planning/PLAN-V56-AFKING-BATCHING-GAS.md
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v56.0 ACTIVE (started 2026-06-01) — AfKing Everyday-Gas Minimization. Roadmap DEFINED: 5 phases 353-357 (SPEC → IMPL → GAS → TST → TERMINAL), 24 requirements mapped 24/24 (0 orphaned, 0 duplicated). Baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`. **Next = Phase 353 SPEC** (`/gsd-discuss-phase 353` or `/gsd-plan-phase 353`) — paper-only design-lock (the mode-agnostic ~10-day aggregator + the ticket-mode minimal-write primitive + the afking-OPEN-end review + the per-sub accumulator layout + the shared-`DegenerusQuests`-core non-perturbation approach + the unmanipulable/solvency re-attestation + the XMODEL-01 cross-model design-input pass), ZERO `contracts/*.sol`. v55.0 SHIPPED 2026-06-01 (0 NEW_FINDINGS); NOTHING pushed (push is a separate USER step).
+**Current focus:** Phase 353 — spec-design-lock-unmanipulable-solvency-re-attestation-xmode
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,10 +32,10 @@ See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 353 — SPEC (Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation)
-Plan: — (not yet planned)
-Status: Roadmap defined — ready to plan Phase 353
-Last activity: 2026-06-01 — Milestone v56.0 roadmap created (5 phases 353-357; 24/24 requirements mapped)
+Phase: 353 (spec-design-lock-unmanipulable-solvency-re-attestation-xmode) — EXECUTING
+Plan: 2 of 2
+Status: Plan 01 (SPEC core) ✅ COMPLETE — Plan 02 (XMODEL cross-model pass) ready to execute
+Last activity: 2026-06-01 -- 353-01 done (353-SPEC.md DRAFT: AFF-01/AFF-02 locked + in-slot accumulator + anchor table + threat re-attestation + design feeds; commits e4ec0e1d/9580e806/df09381b; paper-only, contracts clean)
 
 ## ▶ Active Milestone Roadmap (v56.0 — phases 353-357 — ACTIVE 2026-06-01; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`)
 
@@ -43,7 +43,7 @@ Shape: SPEC → IMPL → GAS → TST → TERMINAL (the established v54.0 + v55.0
 
 | Phase | Name | Type | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 353 | SPEC — Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation | SPEC | AFF-01/02 · XMODEL-01 | Not started |
+| 353 | SPEC — Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation | SPEC | AFF-01/02 · XMODEL-01 | ◐ In progress (Plan 01 ✅ AFF-01/02 locked; Plan 02 XMODEL pending) |
 | 354 | IMPL — The ONE Carefully-Sequenced Batched Contract Diff (aggregator + ticket-mode primitive + DegenerusQuests batched-settle + accumulator + open-end) | IMPL (CONTRACT BOUNDARY) | AGG-01..05 · TKT-01/02 · QST-01..05 · OPEN-01/02 | Not started |
 | 355 | GAS — Measure + Tune (marginals + accumulator packing + SUB_STAGE_BATCH re-tune + mode/SLOAD collapse) | GAS (CONTRACT BOUNDARY if net diff) | GAS-01/02/03/04 | Not started |
 | 356 | TST — Unmanipulable (strategic sub/unsub) + Quest-Core Non-Perturbation + Two-Path-Open + Gas Marginals + Non-Widening | TST | SEC-01/02 | Not started |
@@ -656,6 +656,7 @@ Audit deliverables:
 | Phase 351 P08 | 25min | 3 tasks | 2 files |
 | Phase 351 P09 | 95min | 3 tasks | 1 files |
 | Phase 352 P04 | ~30min | 2 tasks | 6 closure docs (FINDINGS-v55.0.md resolved+chmod 444 + ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) + 1 SUMMARY |
+| Phase 353 P01 | 18min | 3 tasks | 1 files |
 
 ## Decisions
 
@@ -827,3 +828,8 @@ Audit deliverables:
 - [Phase ?]: 351-06: KeeperBatchAffiliateDeltaAudit DROPPED whole-file (D-351-02) — entire subject = removed batchPurchase + never-landed batchPurchaseForKeeper, no successor; affiliate-conservation covered non-redundantly by AffiliateDgnrsClaim.t.sol + 351-05 funded STAGE so reframe rejected as duplication
 - [Phase ?]: 351-06: RedemptionStethFallback core (RFALL05 a-f) KEPT verbatim; POOL-04(d) AfKing-custody-recovery DROPPED BY NAME (burnAtGameOver now pure local burn, no successor); POOL-04(a/b/c) receive() reframed AF_KING->GAME (v55 GAME-only gate); 9 green; ZERO contracts mutation
 - [Phase ?]: 351-09 (TST-05): REGRESSION-BASELINE-v55.md authored; v54 20ca1f79 baseline established EMPIRICALLY (v54->v55 IS the AfKing dissolution); v55 603/134/16 vs v54 461/148/16; BY-NAME gate v55(134) subset v54(148), v55-v54==EMPTY = NET-ZERO new regression; 14-name slack = NARROWING (v54 reds FIXED red->green); Hardhat compile EXIT 0; ZERO contracts mutation.
+- [Phase 353-01]: in-slot accumulator (re-pack Sub + whole-BURNIE uint32 + 100M clamp + milli-ETH amount + uint24 day/level), NO new cold slot — supersedes RESEARCH §3 Option B
+- [Phase 353-01]: AFF-01 roll seeds on the FIXED window-boundary day (not the live settle-call currentDayIndex); player-flush = deterministic 75/20/5 split (no roll); buyer-never-wins (:579) → zero EV regardless of settle-timing
+- [Phase 353-01]: AFF-02 force-flush-before-jackpot DECLINED — claimAffiliateDgnrs (:216) reads cumulative affiliateScore/totalAffiliateScore (exact regardless of option-A cross-level lag); only the minority 1%-top ranking lags (accepted, D-07)
+- [Phase 353-01]: century/x00 bonus KEPT at parity for afking-ticket subs (D-10 flipped 2026-06-01) — amortized-negligible, reuses centuryBonusLevel/Used storage + the per-buy score
+- [Phase 353-01]: O1 fix is two halves — drop DegenerusQuests:890 at source AND the v56 afking settle routes the deferred lootbox reward through exactly one creditFlip (the afking per-buy handlePurchase :760 disappears under the aggregator)

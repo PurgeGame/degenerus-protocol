@@ -21,8 +21,8 @@
 - [ ] **TKT-02**: The custom ticket-write produces the same queued ticket entries as `purchaseWith`'s ticket leg (resolution-equivalent placement/trait/quantity); the afking-ticket century / x00 quantity-bonus parity (`MintModule:1243`) is explicitly decided — keep, or drop-for-simplicity under the scope latitude.
 
 ### AFF — Affiliate batching (non-exploitable distribution)
-- [ ] **AFF-01**: The scheduled flush keeps the winner-takes-all daily-seeded roll (seeded by the fixed window-boundary day — not player-chosen); the deterministic 75/20/5 split is used ONLY on the player-triggered-alteration path (so settle-timing can never select a favorable roll seed).
-- [ ] **AFF-02**: The activity taper is applied per-buy at accrue (immutable); the affiliate leaderboard credit lumps into the settle-level (option A), with a force-flush-before-jackpot-snapshot path if the affiliate-selection ranking needs exactness.
+- [x] **AFF-01**: The scheduled flush keeps the winner-takes-all daily-seeded roll (seeded by the fixed window-boundary day — not player-chosen); the deterministic 75/20/5 split is used ONLY on the player-triggered-alteration path (so settle-timing can never select a favorable roll seed).
+- [x] **AFF-02**: The activity taper is applied per-buy at accrue (immutable); the affiliate leaderboard credit lumps into the settle-level (option A), with a force-flush-before-jackpot-snapshot path if the affiliate-selection ranking needs exactness.
 
 ### QST — Quest batching (shared `DegenerusQuests` core, non-perturbing)
 - [ ] **QST-01**: The afking quest streak uses the ±10 model (+10 at subscribe / +10 per 10-day window / −10 on unsub); the slot-0 reward accrues + pays in the settle; slot-1 remains the player's own manual quest.
@@ -75,8 +75,8 @@ Each REQ-ID maps to exactly ONE phase (the phase that OWNS/delivers it). Phases 
 | AGG-05 | Phase 354 | IMPL | Pending |
 | TKT-01 | Phase 354 | IMPL | Pending |
 | TKT-02 | Phase 354 | IMPL | Pending |
-| AFF-01 | Phase 353 | SPEC | Pending |
-| AFF-02 | Phase 353 | SPEC | Pending |
+| AFF-01 | Phase 353 | SPEC | Complete |
+| AFF-02 | Phase 353 | SPEC | Complete |
 | QST-01 | Phase 354 | IMPL | Pending |
 | QST-02 | Phase 354 | IMPL | Pending |
 | QST-03 | Phase 354 | IMPL | Pending |

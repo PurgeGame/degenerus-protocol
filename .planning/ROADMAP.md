@@ -76,7 +76,7 @@
 **Plans**: 2 plans (Wave 1: 353-01 SPEC core authoring [AFF-01/AFF-02 + AGG/TKT/QST/OPEN design feeds + corrected accumulator slot + anchor attestation + threat-model re-attestation]; Wave 2: 353-02 XMODEL-01 cross-model design-input pass [codex + gemini × 5 concerns] + disposition fold-in + SPEC lock)
 
 Plans:
-- [ ] 353-01-PLAN.md — Author the SPEC core: lock AFF-01/AFF-02 + fold the AGG/TKT/QST/OPEN design feeds + the corrected new-dedicated accumulator slot + the anchor attestation table + the unmanipulable/solvency/freeze re-attestation
+- [x] 353-01-PLAN.md — Author the SPEC core: lock AFF-01/AFF-02 + fold the AGG/TKT/QST/OPEN design feeds + the corrected new-dedicated accumulator slot + the anchor attestation table + the unmanipulable/solvency/freeze re-attestation
 - [ ] 353-02-PLAN.md — Run the XMODEL-01 cross-model design-input pass (codex + gemini, 5 bespoke per-concern prompts), fold the disposition table into the SPEC, and flip the SPEC lock
 
 **UI hint**: no
@@ -171,7 +171,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 353. SPEC — Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation | v56.0 | 0/2 | Not started | - |
+| 353. SPEC — Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation | v56.0 | 1/2 | In Progress|  |
 | 354. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (aggregator + ticket-mode primitive + DegenerusQuests batched-settle + accumulator + open-end) | v56.0 | 0/? | Not started | - |
 | 355. GAS — Measure + Tune (marginals + accumulator packing + SUB_STAGE_BATCH re-tune + mode/SLOAD collapse) | v56.0 | 0/? | Not started | - |
 | 356. TST — Unmanipulable (strategic sub/unsub) + Quest-Core Non-Perturbation + Two-Path-Open + Gas Marginals + Non-Widening | v56.0 | 0/? | Not started | - |
