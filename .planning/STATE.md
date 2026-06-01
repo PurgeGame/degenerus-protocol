@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
 status: executing
-last_updated: "2026-06-01T17:53:58.160Z"
+last_updated: "2026-06-01T18:10:43.749Z"
 last_activity: 2026-06-01
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 8
-  completed_plans: 4
-  percent: 50
+  completed_plans: 5
+  percent: 63
 ---
 
 # Project State
@@ -33,9 +33,9 @@ See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 354 (impl-the-one-carefully-sequenced-batched-contract-diff-aggre) — EXECUTING
-Plan: 3 of 6
-Status: Ready to execute (354-01 + 354-02 contract edits applied + UNCOMMITTED in working tree, accumulating for the 354-06 USER batched-commit gate; `forge build` clean)
-Last activity: 2026-06-01 — completed 354-02 (DegenerusQuests settleAfkingQuest entrypoint + O1 fix + handleLootBox removal)
+Plan: 4 of 6
+Status: Ready to execute (354-01/02/03 contract edits applied + UNCOMMITTED in the working tree, accumulating for the 354-06 USER batched-commit gate; `forge build` clean). Next = 354-04 (the affiliate PULL `claim`/`withdraw` consuming the `drainAffiliateBase` producer authored in 354-03).
+Last activity: 2026-06-01 — completed 354-03 (GameAfkingModule mode-agnostic aggregator: per-buy storm → ONE warm in-slot accrue [flat-7% affiliateBase + 100M clamp-before-`+=`, questProgress++, debit-gated afkCoveredThroughDay] + the AFFILIATE-only atomic drainAffiliateBase producer + the inline _settleQuest [slot-0 quest BURNIE + buyerOwedBurnie in ONE creditFlip to the sub, riding the STAGE on the global settle day] + the permissionless claimQuest fallback + the unsub-settle [affiliateBase NOT flushed] + the first-sub-only +0..+9 head-start; SOLVENCY-01 debit byte-unchanged)
 
 ## ▶ Active Milestone Roadmap (v56.0 — phases 353-357 — ACTIVE 2026-06-01; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`)
 
