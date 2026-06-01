@@ -1844,61 +1844,126 @@ abstract contract DegenerusGameStorage {
     // already carried inside `claimablePool` via the `afkingFunding` ledger
     // (declared above); no separate aggregate is introduced.
 
-    /// @notice Per-player AfKing subscription record + the per-buy box stamp.
-    /// @dev Layout (Solidity packs sequentially) — ONE 32-byte slot (≈232/256 bits):
-    ///        config (56b):  dailyQuantity(8) + validThroughLevel(32) + reinvestPct(8) + flags(8)
-    ///        per-sub stamp (112b): scorePlus1(16) + amount(96)
-    ///        markers (64b): lastAutoBoughtDay(32) + lastOpenedDay(32)
-    ///      Under the 349.1 redesign there is NO per-day epoch: the box resolves at
-    ///      the LIVE level at open (no stored baseLevelPlus1 roll floor) and sources
-    ///      its RNG word from `rngWordByDay[lastAutoBoughtDay]` (an existing map), so
-    ///      the only frozen-at-stamp inputs are the two genuinely-per-sub fields —
-    ///      `scorePlus1` (per-sub activity score) and `amount` (per-sub mp×qty spend).
-    ///      `fundingSource` lives in the sparse `_fundingSourceOf` map (absent ⇒ self,
-    ///      the common case stores nothing). `lastAutoBoughtDay` double-duties as the
-    ///      success-marker AND the frozen seed `day` (it is NOT also an epoch key).
-    ///      `amount` is uint96 (max ~7.9e28 wei ≈ 79e9 ETH; a single box can never
-    ///      exceed the ETH in existence, so it never truncates), carried at full
-    ///      fidelity into the open's abi.encode(rngWord, player, day, amount) box seed
-    ///      and the EV-cap payout. The stamp freezes the box's SPEND and the seed
-    ///      `day`; the LEVEL and the EV-cap key read LIVE at open (auto-open removes
-    ///      the player's ability to time the level — see 349.1-DESIGN §2). No `adj`
-    ///      field is stored — the open passes the full stamped `amount` to the EV-cap.
+    /// @notice Per-player AfKing subscription record: the per-buy box stamp plus the
+    ///         in-slot per-sub accumulator.
+    /// @dev Layout (Solidity packs sequentially) — fits in ONE 32-byte slot (≈241/256
+    ///      bits), so the whole record reads/writes as a single warm slot with no extra
+    ///      cold slot:
+    ///        config (48b):  dailyQuantity(8) + validThroughLevel(24) + reinvestPct(8) + flags(8)
+    ///        per-sub stamp (48b): scorePlus1(16) + amount(32, milli-ETH)
+    ///        markers (72b): lastAutoBoughtDay(24) + lastOpenedDay(24) + afkCoveredThroughDay(24)
+    ///        accumulator (73b): affiliateBase(32) + questProgress(8) + buyerOwedBurnie(32) + hasEverSubscribed(1)
+    ///      There is NO per-day epoch: the box resolves at the LIVE level at open (no
+    ///      stored roll floor) and sources its RNG word from
+    ///      `rngWordByDay[lastAutoBoughtDay]`, so the only frozen-at-stamp inputs are the
+    ///      two genuinely-per-sub fields — `scorePlus1` (activity score) and `amount`
+    ///      (mp×qty spend). `fundingSource` lives in the sparse `_fundingSourceOf` map
+    ///      (absent ⇒ self, the common case stores nothing). `lastAutoBoughtDay`
+    ///      double-duties as the success-marker AND the frozen seed `day`.
+    ///      `amount` is stored in milli-ETH so it packs into uint32; the open unpacks it
+    ///      back to wei before the box seed / EV-cap payout math. The stamp freezes the
+    ///      box's SPEND and the seed `day`; the LEVEL and the EV-cap key read LIVE at
+    ///      open, so the player cannot time the level. The milli-ETH round-down only
+    ///      touches this recorded EV/seed input — the actual ETH/`claimablePool` debit
+    ///      consumes the full wei `ethValue` and is never rounded.
+    ///
+    ///      In-slot accumulator (cheap per-buy, settle-by-pull / settle-by-push; advanced
+    ///      by the per-buy accrue write into this already-warm slot, so no new cold slot):
+    ///        • `affiliateBase` — per-sub running unclaimed AFFILIATE balance, whole
+    ///          BURNIE; drained and paid out by `DegenerusAffiliate.claim`, zeroed there
+    ///          so a re-claim finds 0.
+    ///        • `questProgress` — delivered-day slot-0 quest completion COUNTER; settled
+    ///          (× QUEST_SLOT0_REWARD) by the quest push riding the buy stage; zeroed at
+    ///          settle so a double-fire finds 0.
+    ///        • `buyerOwedBurnie` — per-sub running TICKET buyer-bonus balance (the
+    ///          10%/20% accrual), whole BURNIE, ticket-mode only (lootbox subs get the
+    ///          boon instead). Pays the sub directly via the quest push, minted together
+    ///          with questProgress in ONE creditFlip.
+    ///        • `hasEverSubscribed` — set-once first-sub streak head-start latch (bounded
+    ///          +0..+9, once per account).
+    ///      `affiliateBase` and `buyerOwedBurnie` are uint32 with a 100M-whole-BURNIE
+    ///      saturating clamp at the accrue write — uint32 holds ~4.29e9 > 100M so the
+    ///      clamp binds first, and it can only ever UNDER-credit a pathological
+    ///      reinvest-whale (off the solvency path). The accumulator fields are written on
+    ///      the buy-accrue path and the open markers (`lastOpenedDay`/`lastAutoBoughtDay`)
+    ///      on the open path — disjoint fields in one warm slot, no collision.
+    ///      There are no settle-day markers: the running balances self-mark, the pull has
+    ///      no window, and the quest flush drains the counters so a double-fire finds 0.
+    ///      `afkCoveredThroughDay` is a delivered-day high-water mark, not a settle
+    ///      marker.
     struct Sub {
-        // --- config (56 bits) ---
+        // --- config (48 bits) ---
         /// @dev 0 = paused / never-subscribed; minimum 1 when active.
         uint8 dailyQuantity;
         /// @dev Game-level horizon through which the sub's pass coverage extends
         ///      (lazyPassHorizon snapshot at subscribe; refreshed on crossing;
-        ///      deity sentinel = type(uint24).max; non-pass = 0). CONSENT-01 pass-gating.
-        uint32 validThroughLevel;
+        ///      deity sentinel = type(uint24).max; non-pass = 0). uint24 gives ~16.7M
+        ///      levels of headroom and the deity sentinel type(uint24).max fits exactly.
+        uint24 validThroughLevel;
         /// @dev Claimable reinvest percentage (0..100); 0 = no reinvest.
         uint8 reinvestPct;
         /// @dev bit 0 free; bit 1 = drainGameCreditFirst; bit 2 = useTickets.
         uint8 flags;
-        // --- per-sub stamp (112 bits) ---
+        // --- per-sub stamp (48 bits) ---
         /// @dev Stamp: frozen activityScore + 1 (the EV multiplier input at open).
         ///      Genuinely per-sub (each subscriber's own activity score).
         uint16 scorePlus1;
-        /// @dev Stamp: spend in wei (boons off, so amount == spend). uint96 holds
-        ///      ~79e9 ETH of headroom; consumed at full fidelity by the box seed
-        ///      and the EV-cap payout math. Genuinely per-sub (mp × effectiveQty).
-        uint96 amount;
-        // --- markers (64 bits) ---
+        /// @dev Stamp: spend in milli-ETH (0.001-ETH units; boons off, so amount ==
+        ///      spend, = mp × effectiveQty). Milli-ETH so it packs into uint32 (~4.3M
+        ///      ETH of headroom); packed via `_packEthToMilliEth` at the stamp write and
+        ///      unpacked via `_unpackMilliEthToWei` before the box seed / EV-cap payout
+        ///      math. The round-down is on this recorded EV/seed input only — the actual
+        ///      ETH debit still uses the full wei `ethValue`.
+        uint32 amount;
+        // --- markers (72 bits) ---
         /// @dev Success-marker AND the frozen seed `day` (the same process day):
         ///      day index of the last successful buy, written only after a successful
         ///      afkingFunding debit. The open sources the box word from
         ///      `rngWordByDay[lastAutoBoughtDay]` and freezes this `day` in the seed.
-        uint32 lastAutoBoughtDay;
+        ///      uint24 day index ~ 45,000 years of headroom.
+        uint24 lastAutoBoughtDay;
         /// @dev Day-keyed no-double-open marker: the open leg materializes a box only
         ///      while `lastOpenedDay < lastAutoBoughtDay`; after the open it sets
         ///      `lastOpenedDay = lastAutoBoughtDay`, making the predicate false until
         ///      the next successful buy advances `lastAutoBoughtDay`. The no-orphan
-        ///      guard (process STAGE) keys on the same two day fields.
-        uint32 lastOpenedDay;
+        ///      guard (process stage) keys on the same two day fields.
+        ///      uint24 day index, same width as lastAutoBoughtDay.
+        uint24 lastOpenedDay;
+        /// @dev Delivered-day high-water mark: monotone, advanced only on a day whose
+        ///      ETH debit actually fired (a skipped/un-debited day does not advance it).
+        ///      The quest streak guard gates `state.streak` advancement on it so the
+        ///      streak is credited at most once per delivered day — a manual completion
+        ///      on an afk-covered day does not double-credit the streak. Advanced in the
+        ///      same warm slot accrue write. uint24 day index, same width as the other
+        ///      day markers.
+        uint24 afkCoveredThroughDay;
+        // --- in-slot accumulator (73 bits) ---
+        /// @dev Per-sub running unclaimed affiliate balance, whole BURNIE. Accrued a flat
+        ///      7% per buy (one warm in-slot `+=`); drained and paid out by
+        ///      `DegenerusAffiliate.claim`, zeroed there so a re-claim finds 0. uint32
+        ///      with a 100,000,000-whole-BURNIE saturating clamp at the accrue write
+        ///      (uint32 holds ~4.29e9 > 100M, so the clamp binds first); the clamp can
+        ///      only ever under-credit, off the solvency path.
+        uint32 affiliateBase;
+        /// @dev Delivered-day slot-0 quest completion counter. Settled to the sub as
+        ///      `questProgress × QUEST_SLOT0_REWARD` BURNIE by the quest push riding the
+        ///      buy stage (or the claimQuest/unsub fallback), then zeroed so a double-fire
+        ///      finds 0.
+        uint8 questProgress;
+        /// @dev Per-sub running TICKET buyer-bonus balance (the 10%/20% accrual), whole
+        ///      BURNIE, ticket-mode only (a lootbox sub never accrues this — it gets the
+        ///      lootbox boon instead). Pays the sub directly via the quest push, minted
+        ///      together with questProgress in ONE creditFlip. Same uint32 + 100M
+        ///      saturating clamp + under-credit-only behaviour as `affiliateBase`.
+        uint32 buyerOwedBurnie;
+        /// @dev Set-once first-sub head-start latch: on the very first subscribe the
+        ///      streak gets a bounded +0..+9 head-start, once per account. Never cleared.
+        bool hasEverSubscribed;
     }
 
-    /// @dev Per-subscriber record (the iterable set's value), incl. the per-sub stamp.
+    /// @dev Per-subscriber record (the iterable set's value): the per-sub stamp, the
+    ///      in-slot accumulator (affiliateBase / questProgress / buyerOwedBurnie /
+    ///      hasEverSubscribed), and the afkCoveredThroughDay marker.
     mapping(address => Sub) internal _subOf;
 
     /// @dev Sparse funder map — the wallet whose `afkingFunding` funds a sub.

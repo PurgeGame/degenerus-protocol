@@ -383,6 +383,81 @@ contract DegenerusQuests is IDegenerusQuests {
         emit QuestStreakBonusAwarded(player, amount, state.streak, currentDay);
     }
 
+    /**
+     * @notice Advances an afking subscriber's quest streak for the days their daily buy
+     *         actually executed.
+     * @dev GAME-only entrypoint, called when the subscriber's afking quest is settled. This
+     *      only advances the quest streak; the BURNIE reward is minted by the caller in a
+     *      single batched creditFlip, not here.
+     *
+     *      Syncs day-reset state first (like awardQuestStreakBonus), then adds one streak
+     *      count per delivered day, clamping at uint24 max. Only touches this player's
+     *      streak/slot-0/anchor state — never their manual quest (slot 1).
+     *
+     *      `deliveredStreakDays` counts only days on which the daily buy's ETH debit fired,
+     *      so an unfunded sub earns no streak credit.
+     *
+     *      Guards against double-crediting today's streak: if a manual completion already
+     *      set the per-day STREAK_CREDITED bit for `currentDay`, that day was already
+     *      counted, so credit one fewer day. The streak advances at most once per delivered
+     *      day; slot rewards are never affected.
+     *
+     *      Keeps `lastActiveDay`/`lastCompletedDay` at `currentDay` so the next sync does not
+     *      gap-reset the streak. Silently returns if player or currentDay is zero, or no days
+     *      were delivered.
+     * @param player The subscriber whose quest streak is being settled.
+     * @param deliveredStreakDays Number of days in this settle window whose daily buy executed.
+     * @param currentDay The current quest day for state synchronization.
+     * @custom:reverts OnlyGame When caller is not GAME contract.
+     */
+    function settleAfkingQuest(address player, uint16 deliveredStreakDays, uint32 currentDay)
+        external
+        onlyGame
+    {
+        if (player == address(0) || deliveredStreakDays == 0 || currentDay == 0) return;
+
+        PlayerQuestState storage state = questPlayerState[player];
+        // Applies the same day-reset/anchor logic as awardQuestStreakBonus, and resets the
+        // per-day completionMask (incl. the STREAK_CREDITED bit) when the day rolls over, so
+        // the guard read below reflects only the current day.
+        _questSyncState(state, player, currentDay);
+
+        // Double-credit guard: if a manual completion already credited the streak for
+        // `currentDay`, the last delivered day of this window was already counted — credit one
+        // fewer day so each delivered day advances the streak at most once. Slot rewards are
+        // unaffected (minted GAME-side).
+        uint8 mask = state.completionMask;
+        uint24 currentDay24 = uint24(currentDay);
+        uint32 creditDays = uint32(deliveredStreakDays);
+        if ((mask & QUEST_STATE_STREAK_CREDITED) != 0 && state.lastCompletedDay == currentDay24) {
+            // Today's streak credit already landed via a manual path — drop the duplicate day.
+            creditDays = creditDays - 1;
+        }
+
+        if (creditDays != 0) {
+            uint32 updated = uint32(state.streak) + creditDays;
+            if (updated > type(uint24).max) {
+                state.streak = type(uint24).max;
+            } else {
+                state.streak = uint24(updated);
+            }
+            // Mark today as streak-credited so a later same-day manual completion or a
+            // double settle does not re-credit.
+            state.completionMask = mask | QUEST_STATE_STREAK_CREDITED;
+        }
+
+        // Keep the anchor current so the next settle's _questSyncState does not gap-reset the
+        // streak.
+        if (state.lastActiveDay < currentDay24) {
+            state.lastActiveDay = currentDay24;
+        }
+        if (state.lastCompletedDay < currentDay24) {
+            state.lastCompletedDay = currentDay24;
+        }
+
+        emit QuestStreakBonusAwarded(player, uint16(creditDays), state.streak, currentDay);
+    }
+
     // =========================================================================
     //                      PROGRESS HANDLERS (COIN-ONLY)
     // =========================================================================
@@ -683,70 +758,12 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /**
-     * @notice Handle loot box purchase progress in ETH value (wei).
-     * @dev Access: COIN or COINFLIP contract only.
-     *      Loot box quests track cumulative ETH spent on loot boxes.
-     *      Target is 2x current ticket price, capped at QUEST_ETH_TARGET_CAP.
-     * @param player The player who purchased the loot box.
-     * @param amountWei ETH amount spent on the loot box (in wei).
-     * @return reward BURNIE tokens earned (in base units, 18 decimals).
-     * @return questType The type of quest that was processed.
-     * @return streak Player's current streak after this action.
-     * @return completed True if a quest was completed by this action.
-     * @custom:reverts OnlyCoin When caller is not COIN or COINFLIP contract.
-     */
-    function handleLootBox(
-        address player,
-        uint256 amountWei,
-        uint256 mintPrice
-    )
-        external
-        onlyCoin
-        returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
-    {
-        DailyQuest[QUEST_SLOT_COUNT] memory quests = activeQuests;
-        uint32 currentDay = _currentQuestDay(quests);
-        PlayerQuestState storage state = questPlayerState[player];
-        if (player == address(0) || amountWei == 0 || currentDay == 0) {
-            return (0, quests[0].questType, state.streak, false);
-        }
-        _questSyncState(state, player, currentDay);
-        _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, amountWei, mintPrice);
-
-        (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_LOOTBOX);
-        if (slotIndex == type(uint8).max) {
-            return (0, QUEST_TYPE_LOOTBOX, state.streak, false);
-        }
-        _questSyncProgress(state, slotIndex, currentDay, quest.version);
-        state.progress[slotIndex] = _clampedAdd128(state.progress[slotIndex], amountWei);
-        uint256 target = _questTargetValue(quest, slotIndex, mintPrice);
-        emit QuestProgressUpdated(
-            player,
-            currentDay,
-            slotIndex,
-            quest.questType,
-            state.progress[slotIndex],
-            target
-        );
-        if (state.progress[slotIndex] < target) {
-            return (0, quest.questType, state.streak, false);
-        }
-        if (slotIndex == 1 && (state.completionMask & 1) == 0) {
-            return (0, quest.questType, state.streak, false);
-        }
-        (reward, questType, streak, completed) = _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, mintPrice);
-        if (completed && reward != 0) {
-            coinflip.creditFlip(player, reward);
-        }
-    }
-
-    /**
      * @notice Handle combined purchase-path activity (mint tickets + lootbox) in a single call.
      * @dev Access: COIN or COINFLIP contract only.
-     *      Combines handleMint + handleLootBox quest logic for the purchase path.
-     *      ETH mint rewards are returned for caller batching. BURNIE mint and lootbox
-     *      rewards are creditFlipped internally (matching standalone handler behavior).
-     *      Returns streak for compute-once score forwarding.
+     *      Combines the mint + lootbox quest legs for the purchase path.
+     *      BURNIE mint rewards are creditFlipped internally; ETH mint and lootbox rewards are
+     *      returned for the caller to batch (the caller credits the lootbox reward exactly
+     *      once). Returns streak for compute-once score forwarding.
      * @param player The player who purchased.
      * @param ethMintSpendWei Gross ETH-denominated spend on tickets + lootbox in wei
      *        (fresh + recycled), credited 1:1 to MINT_ETH quest.
@@ -879,15 +896,13 @@ contract DegenerusQuests is IDegenerusQuests {
             }
         }
 
-        // Reward routing (match standalone handler behavior):
-        // - BURNIE mint rewards: creditFlip internally (handleMint behavior for !paidWithEth)
-        // - Lootbox rewards: creditFlip internally AND returned to caller (caller adds to lootboxFlipCredit)
-        // - ETH mint rewards: returned to caller (handleMint behavior for paidWithEth)
+        // Reward routing:
+        // - BURNIE mint rewards: credited here.
+        // - Lootbox rewards: returned to the caller only — the caller adds them to
+        //   lootboxFlipCredit and credits them exactly once, so they are NOT credited here.
+        // - ETH mint rewards: returned to the caller.
         if (burnieMintReward != 0) {
             coinflip.creditFlip(player, burnieMintReward);
-        }
-        if (lootboxReward != 0) {
-            coinflip.creditFlip(player, lootboxReward);
         }
         // Return ETH mint reward + lootbox reward (caller adds lootbox to lootboxFlipCredit)
         uint256 totalReturned = ethMintReward + lootboxReward;

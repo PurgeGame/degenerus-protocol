@@ -95,19 +95,6 @@ interface IDegenerusQuests {
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
-    /// @notice Records player lootbox activity and checks quest completion
-    /// @dev Called by the game contract when a player opens a lootbox
-    /// @param player The address of the player
-    /// @param amountWei The amount of ETH spent on the lootbox in wei
-    /// @param mintPrice Current ticket price in wei (for target scaling)
-    /// @return reward The quest reward amount earned (0 if quest not completed)
-    /// @return questType The type of quest that was completed
-    /// @return streak The player's current quest streak
-    /// @return completed Whether a quest was completed by this action
-    function handleLootBox(address player, uint256 amountWei, uint256 mintPrice)
-        external
-        returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
-
     /// @notice Records player Degenerette activity and checks quest completion
     /// @dev Called by the game contract when a player places a Degenerette bet
     /// @param player The address of the player
@@ -123,8 +110,9 @@ interface IDegenerusQuests {
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
     /// @notice Records combined purchase-path activity (mint tickets + lootbox) and checks quest completion
-    /// @dev Called by MintModule for the unified purchase path. Combines handleMint + handleLootBox
-    ///      into a single cross-contract call. Returns streak for compute-once score forwarding.
+    /// @dev Called by MintModule for the unified purchase path. Combines the mint + lootbox
+    ///      quest legs into a single cross-contract call. Returns streak for compute-once
+    ///      score forwarding.
     /// @param player The address of the player
     /// @param ethMintSpendWei Gross ETH-denominated spend on tickets + lootbox in wei
     ///        (fresh + recycled), credited 1:1 to MINT_ETH quest
@@ -151,6 +139,17 @@ interface IDegenerusQuests {
     /// @param amount The number of bonus streak days to award
     /// @param currentDay The current unix day for tracking purposes
     function awardQuestStreakBonus(address player, uint16 amount, uint32 currentDay) external;
+
+    /// @notice Advances an afking subscriber's quest streak when their quest is settled
+    /// @dev GAME-only; called when the subscriber's afking quest is settled. Advances only the
+    ///      quest streak/slot-0/anchor state for the delivered days — the BURNIE reward is
+    ///      minted by the caller, not here. Syncs day-reset state first, never touches the
+    ///      player's manual (slot-1) quest, and uses the per-day STREAK_CREDITED bit to avoid
+    ///      crediting today's streak twice.
+    /// @param player The subscriber whose quest streak is being settled
+    /// @param deliveredStreakDays Number of days in this settle window whose daily buy executed
+    /// @param currentDay The current unix day for state synchronization
+    function settleAfkingQuest(address player, uint16 deliveredStreakDays, uint32 currentDay) external;
 
     /// @notice Returns the quest state for a specific player
     /// @param player The address of the player to query

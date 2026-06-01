@@ -26,6 +26,14 @@ interface IDegenerusAffiliate {
         uint16 lootboxActivityScore
     ) external returns (uint256 playerKickback);
 
+    /// @notice Settle a batch of afking subs' accrued affiliate base to the upline chain.
+    /// @dev Permissionless. All `subs` must resolve to the same direct affiliate `A` (else revert).
+    ///      Drains each sub's `affiliateBase` atomically at the Game storage owner, splits the total
+    ///      75/20/5 (floored, remainder to A) and pays A / U1 / U2 directly via `creditFlip`; no-referrer
+    ///      subs split 50/50 VAULT/DGNRS. Fixed split (no roll, no seed). Leaderboard credits A once.
+    /// @param subs Afking subscribers to settle; all must share the same direct affiliate `A`.
+    function claim(address[] calldata subs) external;
+
     /// @notice Get the top affiliate for a given game level.
     /// @dev Returns the affiliate with the highest earnings for that level.
     ///      Used for affiliate trophies and jackpot selections.

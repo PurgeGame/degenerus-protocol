@@ -45,6 +45,23 @@ interface IBurnieCoinflipAffiliate {
     function creditFlip(address player, uint256 amount) external;
 }
 
+/// @notice Game-side accessor for the afking affiliate-base PULL (354-03 producer, 354-04 consumer).
+/// @dev The atomic read-and-zero of a sub's accrued `affiliateBase` (the running unclaimed flat-7%
+///      affiliate balance, WHOLE BURNIE) happens AT THE STORAGE OWNER (the Game / GameAfkingModule via
+///      delegatecall) — AFF-PULL guardrail 1: the affiliate `claim` consumer can NEVER pre-load the
+///      bases into a memory array, so a duplicate sub in `subs[]` drains 0 the second time. The accessor
+///      is AFFILIATE-gated on the Game side (only `ContractAddresses.AFFILIATE` may drain).
+interface IGameAfkingDrain {
+    /// @notice Atomic read-and-zero of a sub's accrued affiliate base (whole BURNIE).
+    /// @param sub The subscriber whose affiliate base is drained.
+    /// @return base The drained whole-BURNIE affiliate base (0 if already drained / never accrued).
+    function drainAffiliateBase(address sub) external returns (uint256 base);
+
+    /// @notice Current game level (the claim-time level basis for the leaderboard write).
+    /// @return Current jackpot level (starts at 0).
+    function level() external view returns (uint24);
+}
+
 /**
  * @title DegenerusAffiliate
  * @notice Multi-tier affiliate referral system with leaderboard tracking.
@@ -183,6 +200,11 @@ contract DegenerusAffiliate {
     IBurnieCoinflipAffiliate internal constant coinflip = IBurnieCoinflipAffiliate(ContractAddresses.COINFLIP);
     /// @notice Game contract for presale status checks (constant).
     IDegenerusGame internal constant game = IDegenerusGame(ContractAddresses.GAME);
+    /// @notice Game-side afking accessor for the affiliate-base PULL drain + claim-time level (constant).
+    /// @dev Same address as `game` (the GameAfkingModule runs in the Game's storage context via
+    ///      delegatecall); a distinct typed handle for the `drainAffiliateBase` / `level` calls the
+    ///      flat-7% deterministic-split PULL consumes (354-03 producer).
+    IGameAfkingDrain internal constant afkingDrain = IGameAfkingDrain(ContractAddresses.GAME);
 
     // =====================================================================
     //                        AFFILIATE STATE
@@ -585,6 +607,92 @@ contract DegenerusAffiliate {
 
         emit Affiliate(amount, storedCode, sender);
         return playerKickback;
+    }
+
+    // =====================================================================
+    //              AFKING AFFILIATE — FLAT-7% DETERMINISTIC-SPLIT PULL (v56)
+    // =====================================================================
+
+    /**
+     * @notice Settle a batch of afking subs' accrued affiliate base to the upline chain.
+     * @dev Permissionless. Every sub in `subs` must resolve to the same direct affiliate `A` (mixed
+     *      batches revert), so the chain A / U1 / U2 is resolved once. Each sub's accrued `affiliateBase`
+     *      is drained atomically at the storage owner via `drainAffiliateBase` — a duplicate sub drains 0
+     *      the second time, so it can't be double-counted. The batch total `sumB` is split 75/20/5
+     *      (A 75% / U1 20% / U2 5%), floored with the remainder to A so the parts never exceed `sumB`.
+     *      `skipU1`/`skipU2` drop the share for the rare case where an upline is itself the sub (A is
+     *      never the sub — self-referral resolves to VAULT). No-referrer subs split 50/50 VAULT/DGNRS.
+     *      The split is fixed (no roll, no seed), so claiming on any day yields the same result.
+     *      Recipients are paid directly via `creditFlip` (BURNIE; no ETH/`claimablePool` touch).
+     * @param subs Afking subscribers to settle; all must share the same direct affiliate `A` (from subs[0]).
+     */
+    function claim(address[] calldata subs) external {
+        uint256 n = subs.length;
+        if (n == 0) return;
+
+        // Resolve the upline chain ONCE from subs[0]. `A != sub` is guaranteed by the referral layer
+        // (self-referral resolves to VAULT), so the 75% leg never skips to a buyer.
+        address a = _referrerAddress(subs[0]);
+        bool noReferrer = a == ContractAddresses.VAULT;
+        address u1;
+        address u2;
+        if (!noReferrer) {
+            u1 = _referrerAddress(a);
+            u2 = _referrerAddress(u1);
+        }
+
+        uint256 sumB;
+        uint256 skipU1;
+        uint256 skipU2;
+
+        for (uint256 i; i < n; ) {
+            address sub = subs[i];
+            // SAME-AFFILIATE batch: every sub MUST resolve to the same direct affiliate (mixed reverts).
+            if (_referrerAddress(sub) != a) revert Insufficient();
+
+            // Atomic read-and-zero at the storage owner: a duplicate sub drains 0 the second time.
+            uint256 b = afkingDrain.drainAffiliateBase(sub);
+            if (b != 0) {
+                sumB += b;
+                // The rare mutual-referral cycle (an upline IS the sub): drop that leg, not redirect.
+                if (!noReferrer) {
+                    if (sub == u1) skipU1 += b;
+                    if (sub == u2) skipU2 += b;
+                }
+            }
+
+            unchecked { ++i; }
+        }
+
+        if (sumB == 0) return; // nothing accrued / already drained — no-op (idempotent re-claim)
+
+        if (noReferrer) {
+            // No referrer: 50/50 VAULT/DGNRS, remainder to VAULT (×1e18: whole BURNIE → base units).
+            uint256 dgnrsShare = sumB / 2;
+            uint256 vaultShare = sumB - dgnrsShare;
+            coinflip.creditFlip(ContractAddresses.VAULT, vaultShare * 1 ether);
+            coinflip.creditFlip(ContractAddresses.DGNRS, dgnrsShare * 1 ether);
+            return;
+        }
+
+        // 75/20/5 split, floored with the remainder to A so the parts never exceed sumB.
+        uint256 u1Share = ((sumB - skipU1) * 20) / 100;
+        uint256 u2Share = ((sumB - skipU2) * 5) / 100;
+        uint256 aShare = sumB - u1Share - u2Share;
+
+        // Leaderboard credit to A at the current level (sumB scaled ×1e18 to the base-unit maps).
+        uint24 lvl = afkingDrain.level() + 1;
+        uint256 scaled = sumB * 1 ether;
+        mapping(address => uint256) storage earned = affiliateCoinEarned[lvl];
+        uint256 newTotal = earned[a] + scaled;
+        earned[a] = newTotal;
+        _totalAffiliateScore[lvl] += scaled;
+        _updateTopAffiliate(a, newTotal, lvl);
+
+        // Pay the (at most 3) recipients directly. creditFlip is a pure ledger add (recordAmount=0).
+        coinflip.creditFlip(a, aShare * 1 ether);
+        if (u1Share != 0) coinflip.creditFlip(u1, u1Share * 1 ether);
+        if (u2Share != 0) coinflip.creditFlip(u2, u2Share * 1 ether);
     }
 
     // =====================================================================

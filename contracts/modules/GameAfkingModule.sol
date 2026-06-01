@@ -5,8 +5,8 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {MintPaymentKind, IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
-import {IDegenerusGameLootboxModule, IDegenerusGameMintModule} from "../interfaces/IDegenerusGameModules.sol";
+import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
+import {IDegenerusGameLootboxModule} from "../interfaces/IDegenerusGameModules.sol";
 
 /// @title IGameRouter
 /// @notice Minimal in-context self-call surface the router uses to reach the
@@ -163,6 +163,21 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      protocol's burden to service — those users arrange their own keepering.
     uint256 internal constant SUBSCRIBER_CAP = 500;
 
+    /// @dev Global quest-settle cadence (~10 days). On a settle day
+    ///      (`currentDay % SETTLE_PERIOD == 0`) the quest leg settles inline in the buy
+    ///      stage, riding the warm Sub-slot write the buy already does. It also sizes the
+    ///      first-sub head-start window (`daysToNextSettle = SETTLE_PERIOD -
+    ///      (currentDay % SETTLE_PERIOD)`, bounded +0..+9). A global epoch, not a per-sub
+    ///      marker.
+    uint256 internal constant SETTLE_PERIOD = 10;
+
+    /// @dev Slot-0 quest completion reward — mirrors `DegenerusQuests.QUEST_SLOT0_REWARD`
+    ///      (a private constant not visible cross-contract). Each delivered afking buy
+    ///      completes slot-0; the settle mints `questProgress × QUEST_SLOT0_REWARD` BURNIE
+    ///      to the sub (base units, 18 decimals). Only values the BURNIE mint, off the
+    ///      solvency path.
+    uint256 internal constant QUEST_SLOT0_REWARD = 100 ether;
+
     /*------------------------------------------------------------------
                           Router bounty constants (PLACE-02)
     ------------------------------------------------------------------*/
@@ -282,15 +297,21 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             claimablePool += uint128(msg.value);
         }
 
-        // CANCEL branch (SUB-07 in-place tombstone) — dailyQuantity == 0 writes the
-        // `dailyQuantity = 0` sentinel and relocates NO ONE (the in-pass reclaim
-        // swap-pops the tombstone when the process STAGE reaches it; CONSENT-02 /
-        // H-CANCEL-SWAP-MISS preserved). Revert if the caller has no active sub
-        // (nothing to cancel). Any msg.value above was still credited to funding, so
-        // a cancel-with-ETH never strands the deposit (it stays game-side withdrawable).
+        // CANCEL branch — dailyQuantity == 0 writes the `dailyQuantity = 0` tombstone in
+        // place and relocates no one (the in-pass reclaim swap-pops the tombstone when the
+        // process stage reaches it). Revert if the caller has no active sub. Any msg.value
+        // above was still credited to funding, so a cancel-with-ETH never strands the
+        // deposit (it stays game-side withdrawable).
         if (dailyQuantity == 0) {
             if (_subscriberIndex[subscriber] == 0) revert NotSubscribed();
             Sub storage c = _subOf[subscriber];
+            // Drain the accrued quest counters before the tombstone (one creditFlip to the
+            // sub of `questProgress × QUEST_SLOT0_REWARD` + `buyerOwedBurnie`, plus the
+            // delivered-day streak advance). `affiliateBase` is NOT flushed — it persists in
+            // the slot for the uplines to pull via `drainAffiliateBase`, so an unsub does not
+            // forfeit the uplines' accrued affiliate. The streak gap-resets naturally once no
+            // further delivered days arrive.
+            _settleQuest(subscriber, c, _simulatedDayIndex());
             c.dailyQuantity = 0;
             emit SubscriptionUpdated(
                 subscriber,
@@ -314,20 +335,42 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (useTickets) s.flags |= FLAG_USE_TICKETS;
         else s.flags &= ~FLAG_USE_TICKETS;
         s.reinvestPct = reinvestPct;
-        // AFSUB-02 — single read; encodes the subscriber's pass horizon into the
-        // stored field the per-iter check + crossing branch compare against.
-        // Deity sentinel = type(uint24).max via _passHorizonOf (D-11).
-        s.validThroughLevel = uint32(_passHorizonOf(subscriber));
-        // Sparse funder map: store only a
-        // non-self source; clear on self so re-pointing operator-funded → self does
-        // not strand a stale funder (OPENE-03 no-escalation — the source is fixed
-        // here, re-pointing it IS a re-subscribe, which re-runs the OPENE-04 gate).
+        // Single read; encodes the subscriber's pass horizon (deity sentinel =
+        // type(uint24).max) into the field the per-iter check and crossing branch compare
+        // against.
+        s.validThroughLevel = _passHorizonOf(subscriber);
+        // Sparse funder map: store only a non-self source; clear on self so re-pointing an
+        // operator-funded sub back to self does not strand a stale funder. Re-pointing the
+        // source IS a re-subscribe, which re-runs the operator-approval gate.
         if (fundingSource != address(0)) {
             _fundingSourceOf[subscriber] = fundingSource;
             s.flags |= FLAG_EXTERNAL_FUNDING;
         } else {
             delete _fundingSourceOf[subscriber];
             s.flags &= ~FLAG_EXTERNAL_FUNDING;
+        }
+
+        // First-sub head-start — granted once per account, gated on the set-once
+        // `hasEverSubscribed` latch. On the first-ever subscribe, advance the quest streak
+        // by `daysToNextSettle = SETTLE_PERIOD - (currentDay % SETTLE_PERIOD)`, taken
+        // `% SETTLE_PERIOD` so it maps to +0..+9 (a subscribe on a settle boundary grants 0,
+        // never a full extra window). It is a real immediate streak advance through the
+        // DegenerusQuests onlyGame entrypoint. Re-subs after a cancel get no fresh head-start
+        // (the latch stays set). The per-window streak otherwise advances only on
+        // debit-delivered days, so this is the only direct streak grant.
+        if (!s.hasEverSubscribed) {
+            s.hasEverSubscribed = true;
+            uint32 currentDay = _simulatedDayIndex();
+            uint32 daysToNextSettle = uint32(
+                (SETTLE_PERIOD - (currentDay % SETTLE_PERIOD)) % SETTLE_PERIOD
+            );
+            if (daysToNextSettle != 0) {
+                quests.settleAfkingQuest(
+                    subscriber,
+                    uint16(daysToNextSettle),
+                    currentDay
+                );
+            }
         }
 
         _addToSet(subscriber);
@@ -613,7 +656,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 uint24 h = _passHorizonOf(player);
                 if (currentLevel <= h) {
                     // REFRESH — still covered (newly minted pass, upgrade, etc.).
-                    sub.validThroughLevel = uint32(h);
+                    sub.validThroughLevel = h;
                     emit SubscriptionExtendedFree(player, processDay);
                 } else {
                     // EVICT — route through tombstone-then-reclaim so the swap-pop
@@ -628,8 +671,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 }
             }
 
-            // SUB-04 funding resolution (cost + payment mode + ethValue slice). The slice
-            // builder (REVERT-01) computes everything revert-free by construction.
+            // Funding resolution (cost + payment mode + ethValue slice). The slice builder
+            // computes everything revert-free by construction.
             (
                 MintPaymentKind payKind,
                 uint256 ethValue,
@@ -638,26 +681,24 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 uint256 playerFunding
             ) = _resolveBuy(sub, player, mp);
 
-            // OPENE-02 — resolve the once-per-iteration funding source. The common
-            // self-funded path is detected from the already-loaded `sub.flags`
-            // (FLAG_EXTERNAL_FUNDING clear ⇒ src = player) and SKIPS the
-            // `_fundingSourceOf` SLOAD entirely; only the rare operator-funded sub
-            // (flag set) reads the sparse map. Both the ETH skip-gate read and the CEI
-            // debit key on this same `src`. The VAULT/SDGNRS exemption below stays keyed
-            // on the un-spoofable `player`, never `src`.
+            // Resolve the once-per-iteration funding source. The common self-funded path
+            // is detected from the already-loaded `sub.flags` (FLAG_EXTERNAL_FUNDING clear
+            // ⇒ src = player) and skips the `_fundingSourceOf` SLOAD entirely; only the rare
+            // operator-funded sub (flag set) reads the sparse map. Both the funding skip-gate
+            // read and the debit key on this same `src`. The VAULT/SDGNRS exemption below
+            // stays keyed on the un-spoofable `player`, never `src`.
             address src = (sub.flags & FLAG_EXTERNAL_FUNDING) != 0
                 ? _fundingSourceOf[player]
                 : player;
 
-            // (5) Funding skip → two-tier skip-kill. Read afkingFunding[src]: the common
-            // path (src == player) reuses the `playerFunding` from _resolveBuy (no extra
-            // SLOAD); the rare OPEN-E operator-funded slice (src != player) reads
-            // afkingFunding[src]. A NORMAL underfunded sub is CANCELLED via swap-pop
-            // (auto-pause WITHOUT advancing the cursor — the mover at this slot is processed
-            // this pass). VAULT + sDGNRS are EXEMPT by the un-spoofable pinned
-            // ContractAddresses.VAULT / SDGNRS identity (kept on `player`, never `src`) — a
-            // funding skip is transient for them (no-op-and-retry, stays in the set). The
-            // exemption is the pinned-address branch only; there is no settable flag.
+            // Funding skip → two-tier skip-kill. Read afkingFunding[src]: the common path
+            // (src == player) reuses `playerFunding` from _resolveBuy (no extra SLOAD); the
+            // rare operator-funded slice (src != player) reads afkingFunding[src]. A normal
+            // underfunded sub is cancelled via swap-pop (auto-pause WITHOUT advancing the
+            // cursor — the mover into this slot is processed this pass). VAULT and sDGNRS are
+            // exempt by the un-spoofable pinned ContractAddresses identity (kept on `player`,
+            // never `src`) — a funding skip is transient for them (no-op-and-retry, stays in
+            // the set). The exemption is the pinned-address branch only; there is no flag.
             if (
                 (src == player ? playerFunding : afkingFunding[src]) < ethValue
             ) {
@@ -681,107 +722,138 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 continue;
             }
 
-            // (6) BUY (P2 split) + DEBIT + MARKER (BOX-03). The fresh-ETH `ethValue` is
-            // debited from `afkingFunding[src]` with `claimablePool` released in TANDEM for
-            // BOTH modes (the afking funding-ledger debit shape `afkingFunding[funder] -= ev;
-            // claimablePool -= ev`). Then, per mode:
-            //   • LOOTBOX (isTicket == false): STAMP the box (BOX-02) — freeze the two
-            //     genuinely-per-sub inputs (scorePlus1 = activityScore + 1 [D-348-07, the EV
-            //     multiplier input at open]; amount = the stamped spend, boons OFF ⇒
-            //     amount == spend) warm-dirty into the single Sub slot. The box is
-            //     materialized LATER by _openAfkingBox at the LIVE level (349.1-03), a pure
-            //     function of the record + rngWordByDay[lastAutoBoughtDay]. No cold ledger,
-            //     no purchaseWith here; the freed ETH becomes the box's spend at open and the
-            //     buyer's own claimableUse portion is settled at OPEN.
-            //   • TICKET (isTicket == true, P2 fix): do NOT stamp a box — queue `amount`
-            //     ticket entry-units NOW via the MintModule purchaseWith path (the existing
-            //     ticket-queue mechanic), and set lastOpenedDay = lastAutoBoughtDay so the
-            //     open-leg never sees a ticket
-            //     sub (no garbage micro-box). The MintModule computes the ticket's own
-            //     activity score on the buy path — no per-sub box EV stamp. Revert-free by
-            //     construction under REVERT-01 (funded, well-formed slice) — NO try/catch,
-            //     no valve (D-348-04).
-            // ⚠ SOLVENCY-01: the `claimablePool -= uint128(ethValue)` site FAILS LOUD on an
-            // underflow (a debit can never exceed the per-account afkingFunding ≤ the
-            // claimablePool reservation — a revert here means SOLVENCY-01 is already
-            // violated; class B, MUST propagate, NEVER caught).
+            // BUY + DEBIT + MARKER. The fresh-ETH `ethValue` is debited from
+            // `afkingFunding[src]` with `claimablePool` released in tandem for both modes
+            // (`afkingFunding[funder] -= ev; claimablePool -= ev`). Then, per mode:
+            //   • LOOTBOX (isTicket == false): stamp the box — freeze the two per-sub inputs
+            //     (scorePlus1 = activityScore + 1, the EV multiplier input at open; amount =
+            //     the stamped spend, boons OFF ⇒ amount == spend) warm-dirty into the single
+            //     Sub slot. The box is materialized later by _openAfkingBox at the live level,
+            //     a pure function of the record + rngWordByDay[lastAutoBoughtDay]. The freed
+            //     ETH becomes the box's spend at open and the buyer's claimableUse portion is
+            //     settled at open.
+            //   • TICKET (isTicket == true): do NOT stamp a box — queue `amount` ticket
+            //     entry-units now, and set lastOpenedDay = lastAutoBoughtDay so the open-leg
+            //     never sees a ticket sub (no garbage micro-box).
+            // Revert-free by construction (funded, well-formed slice) — no try/catch.
+            // The `claimablePool -= uint128(ethValue)` site fails loud on an underflow: a
+            // debit can never exceed the per-account afkingFunding ≤ the claimablePool
+            // reservation, so a revert here means solvency is already violated and must
+            // propagate.
             if (ethValue != 0) {
                 afkingFunding[src] -= ethValue;
                 claimablePool -= uint128(ethValue);
             }
 
             if (isTicket) {
-                // Queue whole tickets via purchaseWith — the ticket encoding: entry-units in
-                // ticketQuantity, 0 lootbox wei, the protocol affiliate code bytes32("DGNRS"),
-                // the resolved payKind, and the fresh-ETH ethValue param (non-payable; the
-                // freed ETH is the buy's value).
-                (bool ok, bytes memory data) = ContractAddresses
-                    .GAME_MINT_MODULE
-                    .delegatecall(
-                        abi.encodeWithSelector(
-                            IDegenerusGameMintModule.purchaseWith.selector,
-                            player,
-                            amount,
-                            uint256(0),
-                            bytes32("DGNRS"),
-                            payKind,
-                            ethValue
-                        )
-                    );
-                if (!ok) _revertDelegate(data);
-                // No pending box: keep lastOpenedDay == lastAutoBoughtDay so the no-orphan
-                // guard + _afkingBoxReady never treat a ticket sub as box-pending.
-                sub.lastOpenedDay = processDay;
-            } else {
-                // STAMP the lootbox box + RESTORE the manual-lootbox BURNIE side-effects
-                // (v55 box-redesign regression fix, 349.2 / DESIGN §2) — the quest-credit +
-                // affiliate that a manual lootbox buy (and an afking TICKET sub via
-                // purchaseWith :713-731) gets, replicating MintModule.purchaseWith's lootbox
-                // leg (:1211-1368) MINUS the cold box-ledger (the warm stamp replaces it —
-                // GAS-01) and MINUS the buy-time EV-cap tally (stays AT OPEN — EVCAP-01).
-                // boons OFF ⇒ amount == spend. ALL BURNIE flip-credit: the :708-711
-                // ETH/claimablePool debit is byte-unchanged and NO new ETH/pool write is
-                // added (DESIGN §3 — affiliate/quest are BURNIE, not an ETH cut; no solvency
-                // surface). Revert-free by construction (REVERT-01, D-348-04) — the calls run
-                // inside the already-funded, well-formed slice; NO try/catch, no valve.
-                uint256 flipCredit;
+                // Ticket minimal-write primitive — replaces the ~262k `purchaseWith`
+                // delegatecall (which dragged in `recordMint` and the whole
+                // quests/affiliate/coinflip work). It mirrors the lootbox-branch shape: the
+                // claimablePool debit above is the only ETH accounting; this leg just queues
+                // resolution-equivalent ticket entries and accrues the ticket buyer-bonus into
+                // the warm Sub slot. The affiliate flat-7% and the quest delivered-day counter
+                // are advanced by the mode-agnostic accrue AFTER this if/else, so they are not
+                // re-accrued here. boons/boost off by design.
+                //
+                // (1) targetLevel — jackpotPhaseFlag ? level : level + 1. `currentLevel` is
+                //     the hoisted `level` read; reuse it instead of a second SLOAD.
+                uint24 targetLevel = jackpotPhaseFlag
+                    ? currentLevel
+                    : currentLevel + 1;
 
-                // (a) QUEST — handler BEFORE the score ("handlers before score",
-                // MintModule.sol:1211). Pure-lootbox shape (MintModule.sol:1222): ethMintSpend
-                // == lootBoxAmount == amount, burnieMintQty == 0, levelQuestPrice ==
-                // priceForLevel(currentLevel + 1). Capture the POST-buy streak it returns.
-                uint32 questStreak;
-                {
-                    (
-                        uint256 questReward,
-                        uint8 questType,
-                        uint32 streak,
-                        bool questCompleted
-                    ) = quests.handlePurchase(
-                            player,
-                            amount,
-                            0,
-                            amount,
-                            mp,
-                            PriceLookupLib.priceForLevel(currentLevel + 1)
+                // (2) Century (x00-level) quantity bonus at parity with the manual mint,
+                //     reusing the existing `centuryBonusLevel`/`centuryBonusUsed` storage (no
+                //     new slot) and the per-buy activity score (`_playerActivityScore`,
+                //     sourcing the pre-action quest streak the same way the lootbox stamp
+                //     does). `amount` is the scaled entry-units; `adjustedQty` grows by the
+                //     century bonus. The per-player purchase-boost quantity multiplier (a
+                //     boon-derived boost the manual leg applies) is deliberately not applied
+                //     here, matching the boons-off lootbox leg — an intentional omission.
+                uint32 adjustedQty = uint32(amount);
+                if (targetLevel % 100 == 0) {
+                    (uint32 questStreakTkt, , , ) = questView.playerQuestStates(
+                        player
+                    );
+                    uint256 cachedScore = _playerActivityScore(
+                        player,
+                        questStreakTkt,
+                        targetLevel
+                    );
+                    if (cachedScore != 0) {
+                        uint256 priceWei = PriceLookupLib.priceForLevel(
+                            targetLevel
                         );
-                    questStreak = streak;
-                    if (questCompleted) {
-                        flipCredit += questReward;
-                        // recordMintQuestStreak on completion (MintModule.sol:1233-1235).
-                        if (amount > 0 && questType == 1) {
-                            IDegenerusGame(address(this)).recordMintQuestStreak(
-                                player
-                            );
+                        uint256 _score = cachedScore > 30_500
+                            ? 30_500
+                            : cachedScore;
+                        uint256 bonusQty = (uint256(adjustedQty) * _score) /
+                            30_500;
+                        if (bonusQty != 0 && priceWei != 0) {
+                            uint256 maxBonus = (20 ether) / (priceWei >> 2);
+                            uint256 used = centuryBonusLevel == targetLevel
+                                ? centuryBonusUsed[player]
+                                : 0;
+                            uint256 remaining = maxBonus > used
+                                ? maxBonus - used
+                                : 0;
+                            if (bonusQty > remaining) bonusQty = remaining;
+                            if (bonusQty != 0) {
+                                centuryBonusLevel = targetLevel;
+                                centuryBonusUsed[player] = used + bonusQty;
+                                adjustedQty += uint32(bonusQty);
+                            }
                         }
                     }
                 }
 
-                // (b) STAMP — score now sourced from the POST-buy streak the handler returned
-                // (was the pre-action _questStreakOf read), so the stamped score matches a
-                // manual buy. ONE warm-dirty SSTORE (the single Sub slot; amount is uint96,
-                // explicit cast SAFE: a single box can never exceed the ETH in existence,
-                // uint96 max ≈ 79e9 ETH). Still frozen at stamp (FREEZE-03).
+                // (3) Queue resolution-equivalent ticket entries — the same
+                //     `_queueTicketsScaled(buyer, targetLevel, adjustedQty, false)` the manual
+                //     leg uses, so the queued placement/quantity is equivalent to
+                //     `purchaseWith`'s ticket leg.
+                _queueTicketsScaled(player, targetLevel, adjustedQty, false);
+
+                // (4) Accrue the 10%/20% ticket buyer-bonus into `Sub.buyerOwedBurnie` — the
+                //     manual mint's magnitude minus the affiliate-kickback leg (the affiliate
+                //     is deferred to the pull). The bonus uses the pre-bonus `amount` (the
+                //     input ticket units, not the century-adjusted qty). `coinCost` is
+                //     base-unit BURNIE; `buyerOwedBurnie` is whole BURNIE, so /1e18 before the
+                //     100M saturating clamp (applied before the +=, so it can only
+                //     under-credit). It pays the sub via the quest push (`_settleQuest`), not
+                //     the affiliate pull.
+                uint256 coinCost = (amount * (PRICE_COIN_UNIT / 4)) /
+                    TICKET_SCALE;
+                uint256 bonusBase = coinCost / 10; // flat 10%
+                if (amount >= 10 * 4 * TICKET_SCALE) {
+                    bonusBase += (amount * PRICE_COIN_UNIT) / (40 * TICKET_SCALE); // +10% → 20% on ≥10 tickets
+                }
+                uint256 bonusWhole = bonusBase / 1 ether; // base BURNIE → whole BURNIE
+                if (bonusWhole != 0) {
+                    uint256 newOwed = uint256(sub.buyerOwedBurnie) + bonusWhole;
+                    if (newOwed > 100_000_000) newOwed = 100_000_000;
+                    sub.buyerOwedBurnie = uint32(newOwed);
+                }
+
+                // No pending box: keep lastOpenedDay == lastAutoBoughtDay so the no-orphan
+                // guard and _afkingBoxReady never treat a ticket sub as box-pending.
+                sub.lastOpenedDay = uint24(processDay);
+            } else {
+                // STAMP the lootbox box. The per-buy cross-contract side-effects of a manual
+                // lootbox buy (quests.handlePurchase + recordMintQuestStreak,
+                // affiliate.payAffiliate ×2, and the per-buy coinflip.creditFlip) are NOT run
+                // on the hot path — they are deferred to the cheap in-slot accrue + settle
+                // below (affiliate pulled via drainAffiliateBase; quest pushed when the stage
+                // rides the global settle day). boons OFF ⇒ amount == spend. The ETH debit
+                // above is unchanged and no new ETH/pool write is added — the affiliate/quest
+                // credits are BURNIE off the solvency path, a BURNIE-emission-timing change
+                // only.
+
+                // (a) Activity score — sourced from the pre-action quest streak (the post-buy
+                // handler that previously returned it is gone with the per-buy handlePurchase).
+                // The stamped score matches a manual buy's EV input, which reads the same
+                // activity-score path.
+                (uint32 questStreak, , , ) = questView.playerQuestStates(player);
+
+                // (b) STAMP — one warm-dirty SSTORE into the single Sub slot. Frozen at stamp.
                 uint256 activityScore = _playerActivityScore(
                     player,
                     questStreak,
@@ -791,53 +863,59 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     ? type(uint16).max
                     : uint16(activityScore + 1);
                 sub.scorePlus1 = scorePlus1;
-                sub.amount = uint96(amount);
-
-                // (c) AFFILIATE — BOTH branches (mirror MintModule.sol:1267-1287). The
-                // fresh-ETH portion is `ethValue` (debited from afkingFunding at :708-711);
-                // the claimable-used portion is `amount - ethValue` (the _resolveBuy split,
-                // == purchaseWith's lootboxClaimableUsed). Each is valued in BURNIE via
-                // _ethToBurnie (the valuation basis only — payAffiliate routes BURNIE
-                // flip-credit, never ETH). Protocol code bytes32("DGNRS") (== the ticket
-                // branch's code at :726). The fresh call passes the same un-incremented
-                // activity score the stamp computed (uint16(activityScore), matching
-                // purchaseWith :1275); the claimable call passes isFreshEth=false, score=0.
-                if (ethValue != 0) {
-                    flipCredit += affiliate.payAffiliate(
-                        _ethToBurnie(ethValue, mp),
-                        bytes32("DGNRS"),
-                        player,
-                        currentLevel + 1,
-                        true,
-                        uint16(activityScore)
-                    );
-                }
-                if (amount - ethValue != 0) {
-                    flipCredit += affiliate.payAffiliate(
-                        _ethToBurnie(amount - ethValue, mp),
-                        bytes32("DGNRS"),
-                        player,
-                        currentLevel + 1,
-                        false,
-                        0
-                    );
-                }
-
-                // (d) ONE BURNIE flip-credit — the accumulated questReward + both affiliate
-                // kickbacks, credited once (mirror MintModule.sol:1366-1367). All BURNIE; no
-                // ETH moves. Keyed on `player` (distinct from the :941 msg.sender open-bounty
-                // creditFlip).
-                if (flipCredit != 0) {
-                    coinflip.creditFlip(player, flipCredit);
-                }
+                // `amount` is stored as uint32 milli-ETH (0.001-ETH units): pack the
+                // full-wei stamp spend to milli-ETH for storage; the open unpacks it back to
+                // wei. This rounding is on the stamp (the EV/seed input) only — the ETH debit
+                // above consumes the full wei `ethValue` and is unchanged.
+                sub.amount = uint32(_packEthToMilliEth(amount));
             }
 
-            // Success-marker (BOX-03) — set ONLY AFTER the successful debit + buy/stamp. A
+            // (c) Mode-agnostic accrue — one warm in-slot SSTORE, zero cross-contract calls,
+            // run for both modes off the already-warm Sub slot:
+            //   • Affiliate base: a flat 7% of the full ETH spend (fresh `ethValue` +
+            //     claimable `amount - ethValue` == `amount`), valued in whole BURNIE via
+            //     `_ethToBurnie` (no taper, no kickback for afking). The 100M whole-BURNIE
+            //     saturating clamp is applied before the `+=` write. It is a running unclaimed
+            //     balance the uplines pull via `drainAffiliateBase`, not flushed on mutation.
+            //   • Quest progress: the delivered-day slot-0 completion counter `questProgress`
+            //     (a count, not a BURNIE amount). Settled `× QUEST_SLOT0_REWARD` by the quest
+            //     push.
+            //   • `afkCoveredThroughDay`: the delivered-day high-water mark, advanced only
+            //     here on the delivered-day branch where the ETH debit fired (monotone, like
+            //     lastAutoBoughtDay) — an unfunded/skipped day never reaches here, so it earns
+            //     no per-window streak. Not a settle marker.
+            {
+                uint256 base = (_ethToBurnie(amount, mp) * 7) / 100;
+                if (base != 0) {
+                    uint256 newBase = uint256(sub.affiliateBase) + base;
+                    if (newBase > 100_000_000) newBase = 100_000_000;
+                    sub.affiliateBase = uint32(newBase);
+                }
+                if (sub.questProgress < type(uint8).max) {
+                    unchecked {
+                        ++sub.questProgress;
+                    }
+                }
+                sub.afkCoveredThroughDay = uint24(processDay);
+            }
+
+            // Success marker — set only AFTER the successful debit + buy/stamp. A
             // failed/skipped buy writes no marker (no free box/tickets); a wallet
-            // subscribing between this pass and the open has no this-cycle marker.
-            // Preserves the lastAutoBoughtDay >= processDay idempotency at (1); for a
-            // lootbox sub it doubles as the open's seed `day` (FREEZE-03).
-            sub.lastAutoBoughtDay = processDay;
+            // subscribing between this pass and the open has no this-cycle marker. Preserves
+            // the lastAutoBoughtDay >= processDay idempotency at (1); for a lootbox sub it
+            // doubles as the open's frozen seed `day`.
+            sub.lastAutoBoughtDay = uint24(processDay);
+
+            // Quest settle riding the stage. On the global settle day
+            // (`processDay % SETTLE_PERIOD == 0`, ~10-day cadence) settle the quest leg
+            // inline in this per-sub iteration — riding the warm Sub slot the buy already
+            // touched, so the only settle-day overhead is the single `creditFlip`. The other
+            // ~9/10 days stay cheap (buy + the in-slot accrue, no cross-contract calls). A
+            // double-fire is idempotent (the self-marking counters find questProgress == 0).
+            // No affiliate distribution here — the affiliate leg is pulled.
+            if (processDay % SETTLE_PERIOD == 0) {
+                _settleQuest(player, sub, processDay);
+            }
 
             unchecked {
                 ++cursor;
@@ -866,41 +944,40 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @dev Materialize ONE subscriber's stamped afking box (the freeze-critical open).
     ///      The box's word comes from `rngWordByDay[sub.lastAutoBoughtDay]` (the frozen
-    ///      stamp day, §1); the level + the EV-cap key read LIVE inside `resolveAfkingBox`
-    ///      (§2); the per-sub inputs (amount, scorePlus1) come from the Sub record. Day-keyed
+    ///      stamp day); the level and the EV-cap key read live inside `resolveAfkingBox`;
+    ///      the per-sub inputs (amount, scorePlus1) come from the Sub record. Day-keyed
     ///      no-double-open: the leg runs only while `lastOpenedDay < lastAutoBoughtDay`
     ///      (pre-gated by `_afkingBoxReady`), and advances the marker
     ///      (`lastOpenedDay = lastAutoBoughtDay`) BEFORE the resolve (effects-before-
     ///      interaction; a re-entrant open re-checks the now-equal marker and no-ops). The
     ///      box is materialized by delegatecalling the LootboxModule's `resolveAfkingBox`
-    ///      (the LIVE-level twin of `resolveLootboxDirect`) with: the spend `amount` widened
-    ///      uint96→uint256 (boons OFF ⇒ amount == spend, BOX-01), the FROZEN process `day` =
-    ///      `lastAutoBoughtDay` (FREEZE-03 seed), the frozen day's word `rngWordByDay[day]`
-    ///      (§1), and the FROZEN `activityScore = scorePlus1 - 1` (D-348-07). The draw math +
-    ///      the single EV-cap RMW live in `resolveAfkingBox`; this leg is the thin
-    ///      cursor/marker/dispatch shell. The box materialization is PRIVATE to the
-    ///      LootboxModule, so the delegatecall to `resolveAfkingBox` is the one
-    ///      freeze-correct seam (the public `resolveLootboxDirect` derives its seed from the
-    ///      LIVE day and would NOT freeze the seed `day`). No stored baseLevel/index — the
-    ///      live roll needs no floor.
+    ///      (the live-level twin of `resolveLootboxDirect`) with: the stamped spend (boons
+    ///      OFF ⇒ amount == spend), the frozen process `day` = `lastAutoBoughtDay`, the
+    ///      frozen day's word `rngWordByDay[day]`, and the frozen
+    ///      `activityScore = scorePlus1 - 1`. The draw math and the single EV-cap RMW live in
+    ///      `resolveAfkingBox`; this leg is the thin cursor/marker/dispatch shell.
+    ///      `resolveAfkingBox` is the one freeze-correct seam (the public
+    ///      `resolveLootboxDirect` derives its seed from the live day and would NOT freeze the
+    ///      seed `day`). No stored baseLevel/index — the live roll needs no floor.
     /// @param player The subscriber whose box is materialized.
     /// @param sub The subscriber's stamped record (storage ref — the marker advances here).
     function _openAfkingBox(address player, Sub storage sub) private {
-        uint32 day = sub.lastAutoBoughtDay;
+        // lastAutoBoughtDay is uint24; widen to uint32 for the seed/word key.
+        uint32 day = uint32(sub.lastAutoBoughtDay);
         // Advance the day-keyed no-double-open marker BEFORE the resolve (effects-first; a
         // re-entrant open re-checks `lastOpenedDay < lastAutoBoughtDay` → false → no-op).
-        sub.lastOpenedDay = day;
+        sub.lastOpenedDay = sub.lastAutoBoughtDay;
 
-        // boons OFF ⇒ the stamped spend IS the box amount (BOX-01) — widen uint96→uint256.
-        // The word is the frozen stamp day's word (§1); the level + EV-cap read LIVE in the
-        // callee (§2). No index, no baseLevel.
+        // boons OFF ⇒ the stamped spend IS the box amount (unpacked milli-ETH → wei). The
+        // word is the frozen stamp day's word so the open can't be re-seeded; the level and
+        // EV-cap read live in the callee. No index, no baseLevel.
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameLootboxModule.resolveAfkingBox.selector,
                     player,
-                    uint256(sub.amount),
+                    _unpackMilliEthToWei(uint64(sub.amount)), // milli-ETH → wei
                     day,
                     rngWordByDay[day],
                     uint16(sub.scorePlus1) - 1
@@ -911,30 +988,28 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @dev O(1) afking-box-open materializability for a single stamped sub: it has a
     ///      pending unopened box (`lastOpenedDay < lastAutoBoughtDay`) AND the frozen stamp
-    ///      day's word has landed (`rngWordByDay[lastAutoBoughtDay] != 0`). A zero word =
+    ///      day's word has landed (`rngWordByDay[lastAutoBoughtDay] != 0`). A zero word means
     ///      not-ready (the day's word hasn't been committed yet — the open is skipped until
-    ///      it lands; mirrors LootboxModule's RngNotReady guard + the Game `autoOpen` skip).
-    ///      View — no state writes.
+    ///      it lands). View — no state writes.
     function _afkingBoxReady(Sub storage sub) private view returns (bool) {
         return
             sub.lastOpenedDay < sub.lastAutoBoughtDay &&
             rngWordByDay[sub.lastAutoBoughtDay] != 0;
     }
 
-    /// @notice The post-RNG afking-box OPEN leg — a NORMAL `OPEN_BATCH`-style router
-    ///         category driven by `_subOpenCursor` (NOT folded into advance, PLACE-02).
-    /// @dev rngLock-block (RD-3): the open leg no-ops during the freeze (a mid-day RNG
-    ///      lock or the terminal-jackpot liveness control), so the loop body is
-    ///      guaranteed-non-reverting under the entry-gate (each open is pre-gated on a
-    ///      landed word) — no per-item try/catch, no valve (D-348-04). Walks
-    ///      `_subscribers` from `_subOpenCursor`, opening up to `maxCount` materializable
-    ///      boxes; the per-sub day-keyed `lastOpenedDay` marker makes the walk
-    ///      idempotent, so the cursor wrap-resets to 0 at the set end (a re-walk skips
-    ///      already-opened subs by the marker — no extra per-index storage needed).
-    ///      Concurrent callers self-partition via the advancing cursor.
-    /// @param maxCount Max boxes to open this call (0 = OPEN_BATCH). Caller-bounded — the
-    ///        anti-gas-DoS property (every afking box is uniform O(1), like a human box).
-    /// @return opened The number of afking boxes materialized this call (drives OPEN_KNEE).
+    /// @notice The post-RNG afking-box OPEN leg — an `OPEN_BATCH`-style router category
+    ///         driven by `_subOpenCursor` (not folded into advance).
+    /// @dev The open leg no-ops during the freeze (a mid-day RNG lock or the terminal-jackpot
+    ///      liveness control), so the loop body cannot revert under the entry-gate (each open
+    ///      is pre-gated on a landed word) — no per-item try/catch. Walks `_subscribers` from
+    ///      `_subOpenCursor`, opening up to `maxCount` materializable boxes; the per-sub
+    ///      day-keyed `lastOpenedDay` marker makes the walk idempotent, so the cursor
+    ///      wrap-resets to 0 at the set end (a re-walk skips already-opened subs by the marker
+    ///      — no extra per-index storage). Concurrent callers self-partition via the advancing
+    ///      cursor.
+    /// @param maxCount Max boxes to open this call (0 = OPEN_BATCH). Caller-bounded; every
+    ///        afking box is uniform O(1), like a human box.
+    /// @return opened The number of afking boxes materialized this call.
     function _autoOpen(uint256 maxCount) internal returns (uint256 opened) {
         if (maxCount == 0) maxCount = OPEN_BATCH;
         // Entry-gate (RD-3/RD-5): the open path no-ops in the freeze / terminal control.
@@ -1044,5 +1119,96 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ) private pure returns (uint256) {
         if (amountWei == 0 || priceWei == 0) return 0;
         return (amountWei * PRICE_COIN_UNIT) / priceWei;
+    }
+
+    /*------------------------------------------------------------------
+                                  Quest settle
+    ------------------------------------------------------------------*/
+    /// @dev The one internal quest-settle path — shared by the stage-riding settle-day hook,
+    ///      the permissionless `claimQuest` fallback, and the unsub-settle. It always credits
+    ///      the sub (`player`), never the caller. Mints the accrued quest slot-0 BURNIE
+    ///      (`questProgress × QUEST_SLOT0_REWARD`) + the accrued ticket buyer-bonus
+    ///      (`buyerOwedBurnie`, whole BURNIE → base units) in one `creditFlip` off the
+    ///      solvency path (a BURNIE-emission-timing change only), advances the quest-core
+    ///      streak for the delivered days via the DegenerusQuests onlyGame entrypoint (the
+    ///      module runs in the Game's storage context, so that call's msg.sender is the Game),
+    ///      then zeroes both counters. If both counters are zero it is a no-op, so a
+    ///      double-fire (settle-day + claimQuest + unsub) is idempotent — no per-sub settle
+    ///      marker. No affiliate distribution here — the affiliate leg is pulled.
+    /// @param player The subscriber whose quest leg is settled (the credit recipient).
+    /// @param sub The subscriber's record (storage ref — the counters are drained here).
+    /// @param currentDay The settle day (the quest-core day for the streak advance / sync).
+    function _settleQuest(address player, Sub storage sub, uint32 currentDay) internal {
+        uint8 progress = sub.questProgress;
+        uint32 owedBonus = sub.buyerOwedBurnie;
+        // Self-marking no-op: nothing accrued → nothing to settle.
+        if (progress == 0 && owedBonus == 0) return;
+
+        // Advance the quest-core streak for the delivered days (`questProgress` is the
+        // debit-gated per-window delivered-day count; the in-core guard bounds it against a
+        // same-day manual completion). Skipped when no delivered day accrued (progress == 0
+        // → the buyer-bonus-only unsub path advances no streak).
+        if (progress != 0) {
+            quests.settleAfkingQuest(player, uint16(progress), currentDay);
+        }
+
+        // One BURNIE flip-credit to the sub: the slot-0 quest reward + the accrued ticket
+        // buyer-bonus, aggregated. `buyerOwedBurnie` is whole BURNIE → multiply to base units
+        // (1e18); `QUEST_SLOT0_REWARD` is already in base units. Off the solvency path — never
+        // an ETH cut.
+        uint256 owed = uint256(progress) *
+            QUEST_SLOT0_REWARD +
+            uint256(owedBonus) *
+            1 ether;
+        if (owed != 0) {
+            coinflip.creditFlip(player, owed);
+        }
+
+        // Drain both running counters (a re-fire finds them zero → no-op). The affiliate base
+        // is not touched (it persists for the uplines to pull).
+        sub.questProgress = 0;
+        sub.buyerOwedBurnie = 0;
+    }
+
+    /// @notice Permissionless quest-settle fallback — runs the same `_settleQuest` for each
+    ///         sub (always credits the sub, never the caller). The backstop covering
+    ///         off-cadence / lagging stage settles so a sub's earned quest BURNIE (+ ticket
+    ///         buyer-bonus) is never stranded.
+    /// @dev Runs in the Game's storage context, so the `_subOf` reads and the
+    ///      `settleAfkingQuest`/`creditFlip` calls are game-context, like the stage settle. No
+    ///      access control needed: it can only ever credit a sub its own accrued counters,
+    ///      drained atomically, so a griefer gains nothing and a redundant call is a no-op.
+    /// @param subs The subscribers to settle (each credited its own accrued counters).
+    function claimQuest(address[] calldata subs) external {
+        uint32 currentDay = _simulatedDayIndex();
+        uint256 len = subs.length;
+        for (uint256 i; i < len; ) {
+            address player = subs[i];
+            _settleQuest(player, _subOf[player], currentDay);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /*------------------------------------------------------------------
+                            Affiliate base accessor
+    ------------------------------------------------------------------*/
+    /// @notice Affiliate-only atomic read-and-zero of a sub's accrued `affiliateBase` (the
+    ///         running unclaimed flat-7% affiliate balance, whole BURNIE), which the affiliate
+    ///         `claim` consumes.
+    /// @dev The read-and-zero happen together at the storage owner, so a duplicate sub in the
+    ///      affiliate `claim` array drains 0 the second time — the key guard against
+    ///      double-credit. There is no separate read accessor, so the caller can never
+    ///      pre-load bases into a memory array. Only `ContractAddresses.AFFILIATE` may drain,
+    ///      so a non-affiliate caller can never redirect a sub's base to a wrong recipient.
+    ///      Runs in the Game's storage context; `msg.sender` is the original caller.
+    /// @param sub The subscriber whose affiliate base is drained.
+    /// @return base The drained whole-BURNIE affiliate base (0 if already drained / never accrued).
+    function drainAffiliateBase(address sub) external returns (uint256 base) {
+        if (msg.sender != ContractAddresses.AFFILIATE) revert NotApproved();
+        Sub storage s = _subOf[sub];
+        base = s.affiliateBase;
+        s.affiliateBase = 0;
     }
 }
