@@ -142,7 +142,13 @@ Plans:
 
   4. The mode/SLOAD collapse lands + any net diff is held at the boundary (GAS-04 / GAS-01..03) — redundant payment-mode branches / repeated SLOADs in the STAGE are collapsed where a slight simplification is cheaper (allowed under the scope latitude, proven unmanipulable); and any `contracts/*.sol` change from this phase rides the batched USER-APPROVED diff, applied + locally compiling (`forge build` clean), HELD at the contract-commit boundary for explicit user hand-review (never auto-committed) — or, if the savings are structural to the IMPL refactor and no net tune lands (the v55 Outcome-A precedent), that is recorded as the outcome and no separate diff is gated.
 
-**Plans**: TBD
+**Plans**: 3 plans in 3 waves (measure -> scavenge/skeptic-validate -> set SUB_STAGE_BATCH/tune-or-Outcome-A; sequential, each wave consumes the prior's measurements)
+
+Plans:
+
+- [ ] 355-01-PLAN.md — Build the v56 gas-marginal harness + measure per-buy (lootbox + ticket) / per-open / per-settle marginals + the worst-case settle-day STAGE chunk at the cap, all under 16.7M; prove GAS-02 no-new-cold-SSTORE (GAS-01/02; autonomous, test-only)
+- [ ] 355-02-PLAN.md — gas-scavenger over the STAGE/accrue/settle/open + gas-skeptic verdicts -> the APPROVED/REJECTED candidate ledger (GAS-04 mode/SLOAD collapse + GAS-02 packing finalization) feeding 355-03 (GAS-02/04; autonomous, doc-only)
+- [ ] 355-03-PLAN.md — Set SUB_STAGE_BATCH against the measured settle-day chunk + land the skeptic-APPROVED GAS-04 changes (or record Outcome-A), re-prove the STAGE under 16.7M at the cap, HOLD at the contract-commit boundary (GAS-03/04; autonomous:false — the ONE Phase-355 contract gate)
 
 **UI hint**: no
 
