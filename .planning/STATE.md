@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
-status: executing
-last_updated: "2026-06-01T12:53:13.030Z"
+status: verifying
+last_updated: "2026-06-01T14:15:52.223Z"
 last_activity: 2026-06-01
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 20
 ---
 
 # Project State
@@ -34,16 +34,16 @@ See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIRE
 
 Phase: 353 (spec-design-lock-unmanipulable-solvency-re-attestation-xmode) — EXECUTING
 Plan: 2 of 2
-Status: Plan 01 (SPEC core) ✅ COMPLETE — Plan 02 (XMODEL cross-model pass) ready to execute
-Last activity: 2026-06-01 -- 353-01 done (353-SPEC.md DRAFT: AFF-01/AFF-02 locked + in-slot accumulator + anchor table + threat re-attestation + design feeds; commits e4ec0e1d/9580e806/df09381b; paper-only, contracts clean)
+Status: Phase complete — ready for verification (both plans done; SPEC LOCKED)
+Last activity: 2026-06-01 -- 353-02 done (XMODEL cross-model pass: 5 bespoke prompts C1-C5 × codex+gemini, 10 raw outputs captured [7 real + 3 honest MODEL-UNAVAILABLE — codex hung on the large C3/C4/C5 prompts, covered by gemini twins]; 11-row disposition table folded; PRIMARY C1/C2 4-model-convergent free-option path-arbitrage CLOSED on paper by unifying the player-flush onto the SAME fixed-boundary-day WTA roll [D-09 AMENDED] + C3-a delivered-day streak gate + C3-b afking-ticket boons/boost-OFF + 2 C5 gas micro-opts→355; 353-SPEC.md SPEC Lock flipped PENDING→LOCKED (2026-06-01), no BLOCKING DESIGN HOLE; commits 7bae9173/ac712b18/9038d42d; paper-only, contracts byte-unchanged vs 453f8073)
 
 ## ▶ Active Milestone Roadmap (v56.0 — phases 353-357 — ACTIVE 2026-06-01; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`)
 
-Shape: SPEC → IMPL → GAS → TST → TERMINAL (the established v54.0 + v55.0 audit-milestone shape WITH a dedicated GAS phase). **ONE contract-boundary HARD STOP** — 354 IMPL (the ONE carefully-sequenced batched diff: the mode-agnostic aggregator + the ticket-mode minimal-write primitive + the `DegenerusQuests` batched-settle entrypoint + the per-sub accumulator + the open-end optimizations); 355 GAS rides the same boundary if it produces a net tune (or records Outcome-A no-diff per the v55 350 precedent). **FULL close — the internal 3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v56.0.md` run IN-MILESTONE at TERMINAL (357), AUGMENTED by the XMODEL Codex + Gemini cross-model close, NOT deferred** (the shared-`DegenerusQuests`-core + everyday-STAGE touch makes deferral unacceptable, like v54.0/v55.0 and unlike v50.0/v51.0; focused on the strategic sub/unsub edge + the shared-quest-core non-perturbation + the two-path open). Baseline = v55 HEAD frozen `453f8073`. Design-lock input `.planning/PLAN-V56-AFKING-BATCHING-GAS.md` (the USER-converged mode-agnostic aggregator) + the `[[v56-batch-afking-affiliate-quest-seed]]` memory. **No research** (a fully-specced internal gas+batching refactor with a converged mechanism). The load-bearing non-exploitability fact: the affiliate roll is EV-neutral + intra-upline-chain-only-redistributive + buyer-never-wins (`DegenerusAffiliate.sol:558`/`:579`) → the buyer can't profit from settle-timing; the scheduled flush rolls on a fixed day, the player-triggered flush is a deterministic 75/20/5 split (no roll). Affiliate/quest stay BURNIE flip-credit OFF the ETH/`claimablePool` path → SOLVENCY-01 not in scope (a BURNIE-emission-timing + gas change only).
+Shape: SPEC → IMPL → GAS → TST → TERMINAL (the established v54.0 + v55.0 audit-milestone shape WITH a dedicated GAS phase). **ONE contract-boundary HARD STOP** — 354 IMPL (the ONE carefully-sequenced batched diff: the mode-agnostic aggregator + the ticket-mode minimal-write primitive + the `DegenerusQuests` batched-settle entrypoint + the per-sub accumulator + the open-end optimizations); 355 GAS rides the same boundary if it produces a net tune (or records Outcome-A no-diff per the v55 350 precedent). **FULL close — the internal 3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v56.0.md` run IN-MILESTONE at TERMINAL (357), AUGMENTED by the XMODEL Codex + Gemini cross-model close, NOT deferred** (the shared-`DegenerusQuests`-core + everyday-STAGE touch makes deferral unacceptable, like v54.0/v55.0 and unlike v50.0/v51.0; focused on the strategic sub/unsub edge + the shared-quest-core non-perturbation + the two-path open). Baseline = v55 HEAD frozen `453f8073`. Design-lock input `.planning/PLAN-V56-AFKING-BATCHING-GAS.md` (the USER-converged mode-agnostic aggregator) + the `[[v56-batch-afking-affiliate-quest-seed]]` memory. **No research** (a fully-specced internal gas+batching refactor with a converged mechanism). The load-bearing non-exploitability fact: the affiliate roll is EV-neutral + intra-upline-chain-only-redistributive + buyer-never-wins (`DegenerusAffiliate.sol:558`/`:579`) → the buyer can't profit from settle-timing; the scheduled flush rolls on a fixed (window-boundary) day, and **the player-triggered flush replays the IDENTICAL fixed-day WTA roll** (XMODEL C1/C2 fix 2026-06-01: D-09's original "deterministic 75/20/5 split, no roll" was AMENDED — that path-divergence was a free-option arbitrage 4 models converged on; unifying both paths onto the one roll closes it). Affiliate/quest stay BURNIE flip-credit OFF the ETH/`claimablePool` path → SOLVENCY-01 not in scope (a BURNIE-emission-timing + gas change only).
 
 | Phase | Name | Type | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 353 | SPEC — Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation | SPEC | AFF-01/02 · XMODEL-01 | ◐ In progress (Plan 01 ✅ AFF-01/02 locked; Plan 02 XMODEL pending) |
+| 353 | SPEC — Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation | SPEC | AFF-01/02 · XMODEL-01 | ✅ Complete (Plan 01 AFF-01/02 locked; Plan 02 XMODEL pass folded — 11 dispositions, PRIMARY C1/C2 free-option CLOSED via roll-unification, SPEC LOCKED 2026-06-01) |
 | 354 | IMPL — The ONE Carefully-Sequenced Batched Contract Diff (aggregator + ticket-mode primitive + DegenerusQuests batched-settle + accumulator + open-end) | IMPL (CONTRACT BOUNDARY) | AGG-01..05 · TKT-01/02 · QST-01..05 · OPEN-01/02 | Not started |
 | 355 | GAS — Measure + Tune (marginals + accumulator packing + SUB_STAGE_BATCH re-tune + mode/SLOAD collapse) | GAS (CONTRACT BOUNDARY if net diff) | GAS-01/02/03/04 | Not started |
 | 356 | TST — Unmanipulable (strategic sub/unsub) + Quest-Core Non-Perturbation + Two-Path-Open + Gas Marginals + Non-Widening | TST | SEC-01/02 | Not started |

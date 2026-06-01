@@ -46,7 +46,7 @@
 - [ ] **SEC-02**: SOLVENCY-01 is untouched — affiliate/quest rewards remain BURNIE flip-credit off the ETH/`claimablePool` path; the ETH/pool debit is byte-unchanged; RNG-freeze intact under the new accrual/settle.
 
 ### XMODEL — Cross-model review (Codex + Gemini, baked in)
-- [ ] **XMODEL-01**: A cross-model review (Codex + Gemini, fed crafted prompts in-milestone) covers the FULL afking system — both the BUYING (STAGE / accrual / settle) and the OPENING (open-pass / materialize) — for (a) long-run gas-optimization suggestions and (b) adversarial verification that the design is completely unmanipulable, with PARTICULAR focus on gaining an edge by strategic sub/unsub. Runs at SPEC (design input — suggestions folded into the design-lock before IMPL) and the cross-model models AUGMENT the TERMINAL adversarial close (Claude 3-skill + Codex + Gemini).
+- [x] **XMODEL-01**: A cross-model review (Codex + Gemini, fed crafted prompts in-milestone) covers the FULL afking system — both the BUYING (STAGE / accrual / settle) and the OPENING (open-pass / materialize) — for (a) long-run gas-optimization suggestions and (b) adversarial verification that the design is completely unmanipulable, with PARTICULAR focus on gaining an edge by strategic sub/unsub. Runs at SPEC (design input — suggestions folded into the design-lock before IMPL) and the cross-model models AUGMENT the TERMINAL adversarial close (Claude 3-skill + Codex + Gemini).
 
 ### AUDIT — Terminal close
 - [ ] **AUDIT-01**: The in-milestone TERMINAL close — delta-audit (every changed surface NON-WIDENING vs the v55 baseline `453f8073`) + the mandatory 3-skill genuine-parallel adversarial economic review (`/contract-auditor` + `/economic-analyst` + `/zero-day-hunter`; `/degen-skeptic` dual-gate filter) + `audit/FINDINGS-v56.0.md` + the atomic closure flip.
@@ -90,7 +90,7 @@ Each REQ-ID maps to exactly ONE phase (the phase that OWNS/delivers it). Phases 
 | GAS-04 | Phase 355 | GAS | Pending |
 | SEC-01 | Phase 356 | TST | Pending |
 | SEC-02 | Phase 356 | TST | Pending |
-| XMODEL-01 | Phase 353 | SPEC (home — design-input; TERMINAL 357 close-augmentation reflected in AUDIT-01 SC) | Pending |
+| XMODEL-01 | Phase 353 | SPEC (home — design-input; TERMINAL 357 close-augmentation reflected in AUDIT-01 SC) | Complete |
 | AUDIT-01 | Phase 357 | TERMINAL | Pending |
 
 **Per-phase rollup:**
