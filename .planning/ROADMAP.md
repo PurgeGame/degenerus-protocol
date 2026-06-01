@@ -69,12 +69,14 @@
   5. The OPEN-E/set-mutation carry-over is confirmed + every cited `file:line` is grep-attested vs `20ca1f79` (CONSENT inputs / FREEZE / ARCH) — the subscribe-time `isOperatorApproved` (OPEN-E) gate (`AfKing.sol:400-409`), the pass-gating (`validThroughLevel`), the VAULT/SDGNRS exemption-on-`player`, the funder=src accounting (`:682`), and the set-mutation invariant ("no cursor advance after swap-pop", the H-CANCEL-SWAP-MISS / cancel-tombstone-streak class) are confirmed to carry over verbatim with the OPEN-E 4-protection structure re-attested; the GameAfkingModule + storage-append + two-path-open shapes are reconciled producer-before-consumer for the IMPL edit-order map; and every cited anchor across the milestone scope (the box-freeze snapshot, the EV-cap helper + map, the slice builder + its named-revert comments, the index-advance sites, the non-reverting drain loop, the mint-gate, the OPEN-E surface, the code-size reclaim targets) is grep-verified against `20ca1f79` with any drift corrected in the SPEC (no "by construction" survives un-checked).
 
 **Plans**: 6 plans (4 waves) — the D-08 multi-doc SPEC set (343 precedent)
+
 - [x] 348-01-PLAN.md — `348-GREP-ATTESTATION.md`: re-pin every cited `file:line` vs `20ca1f79` (resolve the box-seed `abi.encode`-vs-`abi.encodePacked` drift); upstream producer [wave 1; FREEZE-02/03, ARCH-04]
 - [x] 348-02-PLAN.md — `348-CODE-SIZE-PLAN.md` (`forge build --sizes` measured reclaim, running-total < 24,576) + `348-GAS-INVENTORY.md` (`/gas-scavenger` advisory + GAS-03 SAFE-WITH-CONDITIONS) [wave 1; ARCH-04]
 - [x] 348-03-PLAN.md — `348-FREEZE-PROOF.md` (FREEZE-01/02/03 proven; live-read = accepted-by-design known issue) + `348-INVARIANT-CARRY.md` (the discharged invariants + the D-348-04 try/catch DROP + the light `/contract-auditor` obligation-1 pass); `autonomous: false` [wave 2; FREEZE-01/02/03]
 - [x] 348-04-PLAN.md — `348-PLACEMENT-DECISION.md`: §4 DECIDED = required-path (D-348-01 USER override; PLAN-V55 §4/§9 superseded; two proof obligations carried) [wave 2; PLACE-01]
 - [x] 348-05-PLAN.md — `348-IMPL-EDIT-ORDER-MAP.md`: the producer-before-consumer edit-order for the 349 diff (reclaim FIRST → storage append → GameAfkingModule → AdvanceModule STAGE → interfaces → AfKing stubs) [wave 3; ARCH-04]
 - [x] 348-06-PLAN.md — `348-SPEC-INDEX.md`: the D-08 index + requirement/SC traceability + the OPEN-E/set-mutation carry-over confirmation + the SPEC verdict + the 349 hand-off [wave 4; FREEZE-01/02/03, PLACE-01, ARCH-04]
+
 **UI hint**: no
 
 ### Phase 349: IMPL — The ONE Carefully-Sequenced Batched Contract Diff (code-size reclaim → fold + box redesign)
@@ -96,11 +98,13 @@
   5. The consent/set-mutation carry over + the bounty is reconciled + `forge build` is clean + the diff is HELD at the boundary (CONSENT-01 / CONSENT-02 / PLACE-02) — the subscribe-time `isOperatorApproved` (OPEN-E) gate, the pass-gating (`validThroughLevel`), the VAULT/SDGNRS exemption-on-`player`, and the funder=src accounting carry over verbatim with the OPEN-E 4-protection structure re-attested (CONSENT-01); evictions preserve "no cursor advance after swap-pop" (the H-CANCEL-SWAP-MISS / cancel-tombstone-streak class) and the tombstone-then-reclaim shape carries over (CONSENT-02); the open stays a post-RNG router category (`OPEN_BATCH`/`OPEN_KNEE` pro-rate) and the buy/process bounty is work-scaled (not once-per-advance) to close the middle-chunk-unpaid gap and resist farm-by-splitting, with payment the deferred BURNIE flip-credit mint (`creditFlip`) (PLACE-02); and the whole diff is authored producer-before-consumer per the SPEC edit-order map, applied to `contracts/` and locally compiling (`forge build` clean; `ContractAddresses.sol` freely modifiable), but NOT committed without explicit user hand-review of the single batched diff.
 
 **Plans**: 5 plans (5 sequential waves) — the producer-before-consumer single batched diff (344 precedent)
+
 - [ ] 349-01-PLAN.md — [BLOCKING-FIRST] re-pin all anchors vs the live tree + code-size reclaim FIRST (claimAffiliateDgnrs → BingoModule, no Game stub; R2/R3 insurance) [wave 1; ARCH-03 (ARCH-04 plan Step 1)]
 - [ ] 349-02-PLAN.md — DegenerusGameStorage append: subscriber set + cursors + subsFullyProcessed + the D-348-07 5-field Sub stamp + markers; afkingFunding reused (no aggregate) [wave 2; ARCH-01]
 - [ ] 349-03-PLAN.md — GameAfkingModule (A): subscribe/setters (CONSENT-01 OPEN-E gates) + the required-path process STAGE callee (REVERT-01 slice fold verbatim, no-valve REVERT-02; BOX-02 warm-dirty stamp; BOX-03 debit-gated marker; CONSENT-02 swap-pop) [wave 3; ARCH-02, BOX-02/03, REVERT-01/02, CONSENT-01/02]
 - [ ] 349-04-PLAN.md — GameAfkingModule (B): the open-pass (BOX-01 amount=spend; BOX-04 abi.encode stamped-day byte-identical + monotonic lastOpenedIndex; BOX-05 two-route hazard-free; EVCAP-01 EV-cap-at-open buy-time-bypassed) + router + PLACE-02 bounty [wave 4; BOX-01/04/05, EVCAP-01, PLACE-02]
 - [ ] 349-05-PLAN.md — AdvanceModule STAGE before rngGate + FREEZE-02 subsFullyProcessed/no-interleave guards + game-over-routing verify (REVERT-02 class C) + interfaces + AfKing thin stubs (ARCH-03) + forge build clean < 24,576 + HOLD at the contract-commit boundary [wave 5; ARCH-03, REVERT-02]
+
 **UI hint**: no
 
 ### Phase 349.1: AfKing Box Redesign — live-level resolve, drop afkingEpoch, ticket/lootbox split, no-orphan guard, mintBurnie rename (INSERTED)
@@ -111,6 +115,7 @@
 **Plans:** 5 plans (5 sequential waves) — the producer-before-consumer single batched diff
 
 Plans:
+
 - [ ] 349.1-01-PLAN.md — Storage: Sub.lastOpenedIndex → lastOpenedDay; delete `_afkingEpoch` map + pack/unpack + shift constant [wave 1]
 - [ ] 349.1-02-PLAN.md — GameAfkingModule STAGE: NO-ORPHAN guard FIRST in the loop; drop the epoch write + epochIndex param; P2 ticket/lootbox split [wave 2]
 - [ ] 349.1-03-PLAN.md — GameAfkingModule open-leg + LootboxModule resolveAfkingBox: live-level resolve, word = rngWordByDay[lastAutoBoughtDay], frozen stamped-day seed, lastOpenedDay marker [wave 3]
@@ -124,7 +129,9 @@ Plans:
 **Requirements:** No formal REQ-IDs (inserted phase, mirrors 349.1) — must_haves derive from `349.2-DESIGN.md` §6 IMPL-CHECKLIST + §7 SWEEP.
 **Depends on:** Phase 349.1 (the committed AfKing-in-Game fold + box redesign `77c3d9ef` this phase corrects-in-place — the lootbox stamp branch the fix edits)
 **Plans:** 1 plan / 1 wave (small, surgical — one batched contract diff). The lootbox-branch BURNIE side-effect restoration (handlePurchase-before-score → streak-sourced scorePlus1 → both payAffiliate branches → single creditFlip) is purely additive; the ETH/`claimablePool` path is byte-unchanged (DESIGN §3 — no reconciliation, no solvency surface). [plan-checker: SKIPPED — single small additive plan, no cross-plan deps; structure + frontmatter SDK-validated]
+
 - [x] 349.2-01-PLAN.md — restore quest-credit + affiliate (BURNIE) in the GameAfkingModule lootbox stamp branch + contracts-only forge build clean < 24,576 + HOLD at the contract-commit gate [wave 1; autonomous:false USER contract gate] ✅ committed `453f8073` 2026-05-31
+
 **UI hint:** no
 
 ### Phase 350: GAS — Behavior-Identical No-Cost Wins (box-ledger → warm Sub-stamp + staticcall → SLOAD + same-slot aggregate flushes)
@@ -144,9 +151,11 @@ Plans:
   4. The second contract diff is held at the boundary (GAS-01 / GAS-02 / GAS-03) — any `contracts/*.sol` change from this phase (the residual same-slot batching + any extra gas-scavenger wins beyond the structural IMPL relocation) rides a SECOND batched USER-APPROVED diff, applied + locally compiling (`forge build` clean), HELD at the contract-commit boundary for explicit user hand-review (never auto-committed); if the phase produces no net contract change beyond what the IMPL relocation already delivered (all residual wins rejected / NEGATIVE), that is recorded as the outcome and no diff is gated.
 
 **Plans**: 3 plans / 3 waves (W3 is the contract-boundary gate, contingent)
+
 - [x] 350-01-PLAN.md — Re-pin SCAV-348-01..07 vs live 77c3d9ef + confirm GAS-01/02 structural-present + author the 351 TST-06 measurement spec (read-only, autonomous)
 - [x] 350-02-PLAN.md — /gas-skeptic adjudication under the security-over-gas floor: GAS-01/02 CONFIRMED-STRUCTURAL, GAS-03 expected REJECT (warm-SSTORE + off-hot-path + solvency-surface); §4 carve-out verbatim; W3 branch directive (read-only, autonomous)
 - [x] 350-03-PLAN.md — Branch on the W2 verdict: Outcome A (expected) record the no-diff close (SC4); Outcome B (contingency) author the single penny-exact claimablePool same-slot-flush diff, forge build clean, HELD at the contract-commit boundary (autonomous: false)
+
 **UI hint**: no
 
 ### Phase 351: TST — Freeze/Determinism + Revert-Free + EV-Cap + Two-Path + Set-Mutation + Non-Widening + Gas
@@ -168,6 +177,7 @@ Plans:
   5. The NON-WIDENING regression + the gas measurement are proven (TST-05 / TST-06) — the reconceived afking/keeper suite compiles + passes against the game-resident model with net-zero new regression vs the v54 baseline `20ca1f79` (every pre-existing red enumerated BY NAME, `REGRESSION-BASELINE-v55.md`), absorbing any test renames / oracle migrations from the fold (incl. whatever 350 landed); and the per-buy + per-open marginal gas is measured under the 16.7M HARD per-tx ceiling with the GAS-01/02/03 wins proven same-results (the ~120k box-buy collapse + the staticcall→SLOAD + the same-slot flushes confirmed behavior-identical).
 
 **Plans**: 9 plans / 3 waves
+
 - [x] 351-01-PLAN.md — Wave 0: repair DeployProtocol.sol fixture (deploy GameAfkingModule + BingoModule, drop standalone AfKing) + reconcile predictAddresses.js DEPLOY_ORDER nonces (un-bricks the 64-file compile cascade)
 - [x] 351-02-PLAN.md — adapt the AfKing* fuzz corpus (subscription/funding/concurrency) + author the TST-04 set-mutation + OPEN-E 4-protection proof
 - [x] 351-03-PLAN.md — adapt the Keeper* reward/router/faucet fuzz corpus to mintBurnie (the differential _settleGame scaffolding + the vm.readFile repoints)
@@ -177,6 +187,7 @@ Plans:
 - [x] 351-07-PLAN.md — adapt the *Gas worst-case corpus (Router/Sweep/Levers/ResolveBet) to the game-resident STAGE + the 16.7M ceiling
 - [x] 351-08-PLAN.md — TST-06 marginal-gas harness per the 350 spec (per-buy + per-open marginal + no-STATICCALL trace + 16.7M; GAS-03 Outcome-A N/A)
 - [x] 351-09-PLAN.md — TST-05 REGRESSION-BASELINE-v55.md + the whole-tree forge test non-widening reconciliation (BY NAME vs 20ca1f79) + Hardhat sanity
+
 **UI hint**: no
 
 ### Phase 352: TERMINAL — Delta Audit + 3-Skill Genuine-PARALLEL Adversarial Sweep + FINDINGS-v55.0 + Closure Flip
@@ -196,10 +207,19 @@ Plans:
 **Plans**: 4 plans (3 waves)
 
 Plans:
+**Wave 1**
+
 - [ ] 352-01-PLAN.md — DELTA-AUDIT: enumerate the 13-file v55 contract delta (vs v54 20ca1f79) NON-WIDENING + the Composition Attestation Matrix (freeze spine [as-built 4-field/DAY-keyed/live-level] + REVERT-FREE-CHAIN + EVCAP-01 + SOLVENCY-01 + OPEN-E 4-protection + VRF-freeze) + the 603/134/16 regression subset-by-NAME (Wave 1)
 - [ ] 352-02-PLAN.md — ADVERSARIAL-LOG: the 3-skill genuine-PARALLEL sweep (/contract-auditor + /zero-day-hunter + /economic-analyst; /degen-skeptic = dual-gate filter only) on the box-stamp freeze + liveness isolation + two-path open (Wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 352-03-PLAN.md — FINDINGS-v55.0: the 9-section deliverable (folds 352-01 + 352-02; re-attests all 29 reqs; carries the MILESTONE_V55_AT_HEAD placeholder) (Wave 2, deps 01+02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 352-04-PLAN.md — CLOSURE FLIP: the single blocking USER gate (autonomous:false) -> resolve the signal SHA + the atomic 5-doc flip + chmod 444 (Wave 3, deps 03)
+
 **UI hint**: no
 
 ---
