@@ -72,7 +72,7 @@ stamp:  W3+W4 (lootbox)  OR  minimal ticket-queue write + W5
 accrue: +1 warm SSTORE   (affiliate base + quest progress + window markers)
 ```
 
-**Caveat (RESEARCH §2):** the `Sub` slot is full (232/256) → the accumulator can't pack into Sub spare bits; it needs a **new dedicated cold slot**. The accrue is one warm per-buy SSTORE into that slot — still vastly cheaper than the ~5-call storm it replaces. GAS-02 is re-framed accordingly.
+**Accumulator (LOCKED — USER 2026-06-01, supersedes RESEARCH §3):** the `Sub` slot starts at 232/256 (24 spare), but the accumulator fits **in the same slot** — NO new cold slot — via: (1) affiliate base in **whole BURNIE**, uint32 with a **100M saturating clamp** (per-window accrual never exceeds 100M; round-down <1 BURNIE is immaterial); (2) **re-pack** the Sub struct — `amount` in 0.001-ETH/milli-ETH units (uint96→~uint32), `validThroughLevel`+`lastAutoBoughtDay`+`lastOpenedDay` uint32→uint24 — reclaiming well over the ~64 bits needed; (3) `windowStartDay` dropped (derived from a global ~10-day epoch). So the accrue is **one warm per-buy SSTORE into the re-packed Sub slot, zero new cold SSTORE** — even cheaper than RESEARCH's new-slot option. GAS-02 re-framed accordingly; exact widths confirmed at IMPL 354.
 
 ---
 
