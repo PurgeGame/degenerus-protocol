@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
-status: verifying
-last_updated: "2026-06-01T14:15:52.223Z"
+status: ready_to_plan
+last_updated: 2026-06-01T14:27:51.760Z
 last_activity: 2026-06-01
 progress:
   total_phases: 5
@@ -11,6 +11,7 @@ progress:
   total_plans: 2
   completed_plans: 2
   percent: 20
+stopped_at: Phase 353 complete (2/2) — ready to discuss Phase 354
 ---
 
 # Project State
@@ -20,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIREMENTS.md (24 v56.0 requirements) + .planning/ROADMAP.md (v56.0 — ACTIVE, phases 353-357) + the design-lock input .planning/PLAN-V56-AFKING-BATCHING-GAS.md
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 353 — spec-design-lock-unmanipulable-solvency-re-attestation-xmode
+**Current focus:** Phase 354 — impl — the one carefully sequenced batched contract diff (aggregator + ticket mode primitive + degenerusquests batched settle + accumulator + open end)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,10 +33,10 @@ See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 353 (spec-design-lock-unmanipulable-solvency-re-attestation-xmode) — EXECUTING
-Plan: 2 of 2
-Status: Phase complete — ready for verification (both plans done; SPEC LOCKED)
-Last activity: 2026-06-01 -- 353-02 done (XMODEL cross-model pass: 5 bespoke prompts C1-C5 × codex+gemini, 10 raw outputs captured [7 real + 3 honest MODEL-UNAVAILABLE — codex hung on the large C3/C4/C5 prompts, covered by gemini twins]; 11-row disposition table folded; PRIMARY C1/C2 4-model-convergent free-option path-arbitrage CLOSED on paper by unifying the player-flush onto the SAME fixed-boundary-day WTA roll [D-09 AMENDED] + C3-a delivered-day streak gate + C3-b afking-ticket boons/boost-OFF + 2 C5 gas micro-opts→355; 353-SPEC.md SPEC Lock flipped PENDING→LOCKED (2026-06-01), no BLOCKING DESIGN HOLE; commits 7bae9173/ac712b18/9038d42d; paper-only, contracts byte-unchanged vs 453f8073)
+Phase: 354
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-06-01
 
 ## ▶ Active Milestone Roadmap (v56.0 — phases 353-357 — ACTIVE 2026-06-01; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`)
 
