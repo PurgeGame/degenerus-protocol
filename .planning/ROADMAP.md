@@ -193,7 +193,13 @@ Plans:
 
   3. The closure flip is applied (AUDIT-01) — the `MILESTONE_V55_AT_HEAD_<sha>` closure signal is emitted and propagated verbatim, and the atomic 5-doc closure flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) is applied; the closure plan is a single blocking USER closure-verdict + signal-format approval gate (`autonomous: false`) — the auto-advance is HELD at the closure boundary per `feedback_pause_at_contract_phase_boundaries`. (The separate v52 consolidated cross-model audit still folds the v55 surface into its cumulative sweep — an additional track, recorded in the v52 charge, NOT a substitute for this in-milestone close.)
 
-**Plans**: TBD
+**Plans**: 4 plans (3 waves)
+
+Plans:
+- [ ] 352-01-PLAN.md — DELTA-AUDIT: enumerate the 13-file v55 contract delta (vs v54 20ca1f79) NON-WIDENING + the Composition Attestation Matrix (freeze spine [as-built 4-field/DAY-keyed/live-level] + REVERT-FREE-CHAIN + EVCAP-01 + SOLVENCY-01 + OPEN-E 4-protection + VRF-freeze) + the 603/134/16 regression subset-by-NAME (Wave 1)
+- [ ] 352-02-PLAN.md — ADVERSARIAL-LOG: the 3-skill genuine-PARALLEL sweep (/contract-auditor + /zero-day-hunter + /economic-analyst; /degen-skeptic = dual-gate filter only) on the box-stamp freeze + liveness isolation + two-path open (Wave 1)
+- [ ] 352-03-PLAN.md — FINDINGS-v55.0: the 9-section deliverable (folds 352-01 + 352-02; re-attests all 29 reqs; carries the MILESTONE_V55_AT_HEAD placeholder) (Wave 2, deps 01+02)
+- [ ] 352-04-PLAN.md — CLOSURE FLIP: the single blocking USER gate (autonomous:false) -> resolve the signal SHA + the atomic 5-doc flip + chmod 444 (Wave 3, deps 03)
 **UI hint**: no
 
 ---
