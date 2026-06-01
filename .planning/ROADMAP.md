@@ -146,8 +146,16 @@ Plans:
 
 Plans:
 
+**Wave 1**
+
 - [ ] 355-01-PLAN.md — Build the v56 gas-marginal harness + measure per-buy (lootbox + ticket) / per-open / per-settle marginals + the worst-case settle-day STAGE chunk at the cap, all under 16.7M; prove GAS-02 no-new-cold-SSTORE (GAS-01/02; autonomous, test-only)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 355-02-PLAN.md — gas-scavenger over the STAGE/accrue/settle/open + gas-skeptic verdicts -> the APPROVED/REJECTED candidate ledger (GAS-04 mode/SLOAD collapse + GAS-02 packing finalization) feeding 355-03 (GAS-02/04; autonomous, doc-only)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 355-03-PLAN.md — Set SUB_STAGE_BATCH against the measured settle-day chunk + land the skeptic-APPROVED GAS-04 changes (or record Outcome-A), re-prove the STAGE under 16.7M at the cap, HOLD at the contract-commit boundary (GAS-03/04; autonomous:false — the ONE Phase-355 contract gate)
 
 **UI hint**: no
