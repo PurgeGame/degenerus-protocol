@@ -680,3 +680,196 @@ afking-referencing Hardhat suite `test/unit/DegenerusGame.test.js` is BYTE-IDENT
 confirmed.**
 
 ---
+
+## 6. KI Gating Walk + KNOWN-ISSUES.md Re-Verification
+- **KNOWN-ISSUES.md byte-unmodified** vs v54 (`git diff 20ca1f79 HEAD -- KNOWN-ISSUES.md` empty;
+  KNOWN-ISSUES.md lives at the REPO ROOT, not `audit/`). No KI promotion/demotion this milestone; the SC1 sweep
+  surfaced no KI-eligible item (0 FINDING_CANDIDATE). The one out-of-scope informational advisory (O1, the
+  pre-existing symmetric `DegenerusQuests` lootbox-quest double-credit) is NOT a v55 KI promotion — it is
+  PRE-EXISTING, out of the v55 delta, and routed to a future quest-core audit lane + the v52 consolidated audit
+  (§8 / §9d); it does not touch this milestone's KNOWN-ISSUES.md ledger.
+- **RNG-freeze intact** under the game-resident model — the per-subscriber process/open passes introduce NO
+  in-window SLOAD a player can manipulate (the v45 north-star, [[v45-vrf-freeze-invariant]]; §3.B): the afking
+  open is **post-RNG** (`_afkingBoxReady` false until `rngWordByDay[lastAutoBoughtDay] != 0` lands,
+  `GameAfkingModule:921-934` — the open path is blocked in the protected window), the stamp froze the SEED at
+  **process (pre-RNG)** behind the `subsFullyProcessed` STAGE-before-`rngGate` gate (FREEZE-02,
+  `AdvanceModule:294`/`:300-325`), and the box draw consumes only frozen/stamped inputs + the benign EV-cap clamp
+  (FREEZE-01b). The 349.1 LIVE-level resolve is the same posture as the human `openLootBox` (the outcome bucket
+  is a pure function of the frozen seed; the live level cannot change WHICH prize is won, only `targetPrice`, and
+  open timing is not player-controlled — the permissionless bounty-incentivized open, §4.3 FREEZE-iii). The
+  mid-day `requestLootboxRng` path lives in a disjoint `lootboxRngWordByIndex` keyspace the DAY-keyed afking open
+  never reads (FREEZE-02 / §4.3 FREEZE-ii). GAS-02's no-STATICCALL trace (TST-06) confirmed 0 foreign re-entrant
+  afking-funding-view StaticCalls on the STAGE + the open.
+- **Obligations conserved** — the SOLVENCY-01 spine (the Phase-343 master inequality `balance +
+  steth.balanceOf(this) >= claimablePool`, inclusive of the afking total) is HELD NET under the game-resident
+  model: the `afkingFunding` ledger rides **INSIDE** `claimablePool` (`DegenerusGameStorage:358` INVARIANT
+  `claimablePool == sum claimableWinnings[*] + sum afkingFunding[*]`; every `afkingFunding` mutation moves
+  `claimablePool` in tandem, `:416`), so there is **no new aggregate** — the afking funding is a sub-account of
+  `claimablePool` and the master inequality inherits the v54-correct yield-surplus / gameOver-drain / stETH-stake
+  wiring for free (§3.B / §3.5). The 349.2-restored affiliate/quest rewards are minted BURNIE flip-credit
+  (`coinflip.creditFlip`, `GameAfkingModule:806`/`:816`/`:831`), OFF the ETH/`claimablePool` path — `_ethToBurnie`
+  is the valuation basis only, so the existing ETH accounting is byte-UNCHANGED (no new emission, no solvency
+  surface; GAS-03 re-confirmed). The empirical guard that an afking debit can never silently breach the invariant
+  is the **class-B fail-loud** (TST-02 — a forced `claimablePool` underflow reverts `Panic(0x11)` at the checked
+  `uint128 -=`, never masked; no try/catch valve, D-348-04). No accounting axis widened.
+
+---
+
+## 7. Prior-Artifact Cross-Cites
+- **v55.0 phase artifacts:** Phase 348 SPEC (the D-08 multi-doc set — `348-FREEZE-PROOF.md` [FREEZE-01/02/03
+  proven] + `348-INVARIANT-CARRY.md` [the discharged REVERT-FREE-CHAIN + EV-cap invariants + the D-348-04
+  try/catch DROP] + `348-PLACEMENT-DECISION.md` [D-348-01 required-path] + `348-CODE-SIZE-PLAN.md` +
+  `348-GAS-INVENTORY.md` + `348-IMPL-EDIT-ORDER-MAP.md` + `348-SPEC-INDEX.md`); Phase 349 IMPL — the 349.1 box
+  redesign `77c3d9ef` + the 349.2 quest/affiliate restore `453f8073` (both USER-APPROVED hand-review) +
+  `349.1-DESIGN.md` + `349.2-DESIGN.md`; Phase 350 GAS `350-OUTCOME.md` (Outcome-A) + `350-GAS-SKEPTIC-VERDICTS.md`
+  + `350-TST06-MEASUREMENT-SPEC.md`; Phase 351 TST `351-VERIFICATION.md` (status passed, gsd-verifier 6/6) + the 4
+  dedicated proof files (`V55FreezeDeterminism.t.sol` / `V55RevertFreeEvCap.t.sol` / `V55SetMutationOpenE.t.sol` /
+  `V55AfkingGasMarginal.t.sol`) + `test/REGRESSION-BASELINE-v55.md`; Phase 352 logs
+  (`352-01-DELTA-AUDIT.md` + `352-02-ADVERSARIAL-LOG.md` + the 3 per-skill sweep outputs).
+- **Prior milestone FINDINGS templates:** `audit/FINDINGS-v49.0.md` (the proven 9-section template this report
+  mirrors, shipped across v44/v46/v47/v48/v49); `audit/FINDINGS-v48.0.md` / `audit/FINDINGS-v47.0.md` /
+  `audit/FINDINGS-v46.0.md` / `audit/FINDINGS-v44.0.md` (the 9-section templates + the v44 §9d maximalist handoff
+  register).
+- **Carry-forward anchors:** the v54 audit baseline `20ca1f79` (the raw SHA — v54.0 closed-superseded with NO
+  `MILESTONE_V54_AT_HEAD` signal); the discharged foundations `PLAN-V55-AFKING-IN-GAME-REDESIGN.md` (§10 canonical)
+  + `PLAN-V55-REVERT-FREE-CHAIN-PROOF.md` (§5 = the 4 LOCKED obligations, obligation 4 DROPPED at D-348-04) + the
+  Phase-343 SOLVENCY-01 master invariant; the v44 §9d maximalist handoff register (135 anchors — NOT live vectors,
+  [[project_rnglock_audit_disposition]]), carried forward unchanged (§9d).
+
+---
+
+## 8. Forward-Cite Closure
+- **0 prior-milestone findings carried into v55.0.** v54.0 closed-as-superseded with 0 NEW findings (343 SPEC +
+  344 IMPL shipped `20ca1f79`; 345/346/347 dropped → folded into v55); there was no deferred finding to resolve
+  this milestone.
+- **Newly-surfaced 352-02 finding:** NONE. The 3-skill sweep produced 0 FINDING_CANDIDATE across 21 charged-probe
+  rows. **One OUT-OF-SCOPE informational advisory (O1) carried forward (NOT a v55.0 finding):** the pre-existing
+  symmetric lootbox-quest BURNIE double-credit in the UNCHANGED `DegenerusQuests` core (`handlePurchase` credits
+  `lootboxReward` via `creditFlip` AND includes it in `totalReturned`, which both callers re-credit) — it is
+  PRE-EXISTING + SYMMETRIC across the manual `purchaseWith` path AND the afking path (NOT a 349.2 regression),
+  `DegenerusQuests.sol` is NOT in the v55 delta (out of the v55 blast radius), and it is a fixed day-idempotent
+  ≤300-BURNIE flip-stake entirely OFF the ETH/`claimablePool`/solvency path. **Routed to a future quest-core
+  (`DegenerusQuests`) audit lane + the v52 consolidated cross-model audit** (§4.3 / §9d). It does NOT amend the
+  `0 NEW_FINDINGS` verdict.
+- **Prior-milestone v55 descriptive seeds now SHIPPED (no longer forward-seeds):** the AfKing-in-Game fold
+  (ARCH-01..04 — `AfKing.sol` dissolved into `GameAfkingModule` + the `DegenerusGameStorage` append), the box
+  redesign (BOX-01..05 — boons-OFF amount=spend, the 4-field stamp, the DAY-keyed seed, the live-level open, the
+  `lastOpenedDay` no-double-open), and the 349.2 quest/affiliate restore (the afking LOOTBOX-sub per-buy BURNIE
+  flip-credit).
+- **v56 forward-seeds carried forward (deferred, OUT of v55 — contract changes):**
+  - **Batch-afking-affiliate-quest aggregation seed** ([[v56-batch-afking-affiliate-quest-seed]], USER 2026-05-31,
+    designed live during 349.2/350). After 349.2 restores the afking lootbox quest+affiliate **per-buy**, the gas
+    optimization is to **batch the afking affiliate + quest to ~every 10 days** so the daily STAGE drops back to a
+    cheap stamp+debit+accrual (no daily cross-contract `handlePurchase`/`payAffiliate`/`creditFlip` — most of the
+    ~262k/sub `SUB_STAGE_BATCH` budget; quest state lives in the separate `DegenerusQuests` contract). USER
+    decision: its OWN full-effort phase/milestone (v56-ish), spun after v55, **WITH a mandatory 3-skill
+    adversarial economic review** (`/contract-auditor` + `/economic-analyst` + `/zero-day-hunter`) to hunt
+    exploits AND determine whether they actually matter. Affiliate (cleanly batchable): accrue daily into a
+    per-sub accumulator, settle on a ~10-day flush (a `mintBurnie` router leg) OR any sub mutation (flush at
+    locked params first); the scheduled flush KEEPS the per-buy winner-takes-all roll (un-gameable), a
+    deterministic EV-equivalent split ONLY on the player-triggered mid-cycle alteration. Quest (harder — the
+    SHARED `DegenerusQuests` core): afking = slot-0 + the streak, with the streak-skip guard suppressing only the
+    duplicate STREAK credit (never the slot rewards), a confirmed-vs-provisional streak read (bonuses MUST read
+    delivered, not pre-credited), and a `lastCompletedDay` double-credit guard — TOUCHES the shared quest core →
+    needs freeze/double-credit/solvency proofs. (Note: the historical escalating/milestone streak BURNIE bonus
+    USER-DECLINED restoring — the current 1%/activity-score model stays.) A contract change to `GameAfkingModule`/
+    `DegenerusQuests`, OUT of v55.
+  - **Terminal-decimator final-day streak-boost seed** ([[terminal-decimator-final-day-streak-boost-seed]], USER
+    backlog 2026-05-30). A one-time final-day `boostTerminalDecimator()` (callable while `!gameOver`) that
+    validates a live, valid quest streak via the canonical `DegenerusQuests` path and multiplies the player's
+    `weightedBurn` (NOT bucket/odds) by a streak factor (anchors: streak 100→20x, 10→4x), folding the delta into
+    `terminalDecBucketBurnTotal` so the pool still finalizes in the resolution tx. WEIGHT-only → the `require(!gameOver)`
+    gate is freeze-safe; must verify lazy day-gap-reset/raw-streak, shields consume-vs-check, uint88 overflow,
+    quest-streak double-count. Doc `PLAN-TERMINAL-DECIMATOR-STREAK-BOOST.md`. A contract change, OUT of v55.
+- **The v52 consolidated cross-model audit (ADDITIONAL track — NOT a substitute).** The separate v52 consolidated
+  cross-model audit STILL folds the v55 surface into its cumulative sweep as an ADDITIONAL track (recorded in the
+  v52 charge), NOT a substitute for this in-milestone close. Per STATE.md the v50/v51 internal sweeps were
+  deferred → v52, but **v54.0 + v55.0 run their OWN in-milestone close because they touch the solvency/freeze
+  spine** (`claimablePool` + the RNG-freeze invariant). The O1 advisory + any cumulative cross-model re-probe of
+  the AfKing-in-Game surface fold into the v52 charge alongside the prior-deferred v50/v51 surfaces.
+- **Carry-forward (NOT live vectors):** the v44 §9d maximalist handoff register (135 anchors) carries forward
+  unchanged ([[project_rnglock_audit_disposition]]).
+
+---
+
+## 9. Milestone Closure Attestation
+
+### 9a. Closure Verdict
+
+**Locked target (ROADMAP Phase 352 goal + the v55 surface set, for the record):**
+`AFKING_IN_GAME_FOLD SHIPPED (AfKing.sol dissolved -> GameAfkingModule delegatecall + DegenerusGameStorage append; ARCH-01..04); BOX_REDESIGN SHIPPED (boons-OFF amount=spend, per-sub 4-field stamp scorePlus1+amount+lastAutoBoughtDay+lastOpenedDay, DAY-keyed seed rngWordByDay[day], live-level open byte-identical to openLootBox, lastOpenedDay no-double-open; BOX-01..05); FREEZE_SPINE INTACT (FREEZE-01/02/03 re-proven against the as-built 4-field/DAY-keyed/live-level model — the 349.1 live-level collapse NARROWS the frozen set to the SEED, strictly safe); REVERT_FREE_CHAIN DISCHARGED (REVERT-01 _resolveBuy verbatim revert-free-by-construction + REVERT-02 no-valve: fail-loud-on-solvency class B + terminal-routing-unblocked class C); EVCAP_AT_OPEN (EVCAP-01 RMW exactly-once, buy-time write bypassed, clamp sole live read, equivalent to v54); OPEN-E_4-PROTECTION RE-ATTESTED HOLD (CONSENT-01/02 consent-gate-at-subscribe / default-self / no-escalation / trust-the-sub + set-mutation no-cursor-advance-after-swap-pop / cancel-tombstone-streak); SOLVENCY-01 HELD NET (afkingFunding rides inside claimablePool, no new aggregate); GAS Outcome-A (GAS-01/02 structural to the relocation, GAS-03 REJECTED-with-reasoning); RNG_FREEZE_INTACT under the game-resident model; NON-WIDENING 603/134/16 (134-red SUBSET of the v54 148-name union BY NAME); 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED`
+
+**Actual verdict (the sweep surfaced 0 FINDING_CANDIDATE -> the `0 NEW_FINDINGS` clause HOLDS UNAMENDED; one
+PRE-EXISTING, out-of-scope, immaterial informational advisory [O1] is recorded — NOT a v55.0 finding, does NOT
+amend the verdict):**
+`AFKING_IN_GAME_FOLD SHIPPED (AfKing.sol dissolved -> GameAfkingModule delegatecall + DegenerusGameStorage append, AF_KING address removed 1->0, receive()/credit gates retargeted GAME-only; ARCH-01..04); BOX_REDESIGN SHIPPED (boons-OFF amount=spend, the COMMITTED 4-field stamp scorePlus1+amount+lastAutoBoughtDay+lastOpenedDay [349.1 SUPERSEDED the 348 5-field (index,...,baseLevelPlus1) design], DAY-keyed seed rngWordByDay[lastAutoBoughtDay], live-level open byte-identical to openLootBox, lastOpenedDay no-double-open; BOX-01..05); FREEZE_SPINE INTACT (FREEZE-01/02/03 re-proven against the as-built 4-field/DAY-keyed/live-level model — the live-level collapse NARROWS the frozen set to the SEED, strictly safe [the live read of level/score is the human-openLootBox posture, -EV to manipulate]; TST-01); REVERT_FREE_CHAIN DISCHARGED (REVERT-01 _resolveBuy verbatim revert-free-by-construction + REVERT-02 no-valve [D-348-04 dropped the try/catch]: fail-loud-on-solvency class B [Panic(0x11), never masked] + terminal-routing-unblocked class C; TST-02); EVCAP_AT_OPEN (EVCAP-01 RMW exactly-once, buy-time write bypassed, clamp sole live read, equivalent to v54; TST-03); OPEN-E_4-PROTECTION RE-ATTESTED HOLD (CONSENT-01/02 — the HARD BLOCKING condition SATISFIED, no element requires reversion, closure NOT blocked; TST-04); SOLVENCY-01 HELD NET (afkingFunding rides inside claimablePool, no new aggregate; the 349.2 affiliate/quest are BURNIE flip-credit OFF the ETH+pool path); GAS Outcome-A (GAS-01/02 CONFIRMED-STRUCTURAL by the relocation, GAS-03 REJECTED-with-reasoning, no contract diff); RNG_FREEZE_INTACT under the game-resident model (the afking open post-RNG, the SEED frozen pre-RNG, 0 foreign re-entrant StaticCalls); NON-WIDENING 603/134/16 (134-red SUBSET of the v54 148-name union BY NAME, live - union = empty); 0 NEW_FINDINGS; KNOWN_ISSUES_UNMODIFIED; + 1 OUT-OF-SCOPE informational advisory O1 [pre-existing symmetric DegenerusQuests lootbox-quest double-credit, NOT in the v55 delta, immaterial off-ETH -> routed to a future quest-core lane + v52, does NOT amend the verdict]`
+
+All clauses of the locked target hold verbatim; the only addition vs the locked target is the explicit O1
+out-of-scope advisory carry (recorded for the closure gate's awareness, NOT a finding). `0 NEW_FINDINGS` is
+UNAMENDED. (Had any FINDING_CANDIDATE survived the dual-gate, this verdict would be amended + the candidate flagged
+for the 352-04 closure gate; none did.)
+
+### 9b. 7-Phase Wave Summary
+Phase 348 (SPEC design-lock, the D-08 multi-doc set, 6 plans/4 waves, paper-only — the FREEZE spine proven + the
+discharged REVERT-FREE-CHAIN/EV-cap carried + the D-348-01 required-path placement + the D-348-04 try/catch DROP +
+the sequenced code-size reclaim plan + ARCH-04 MEASURED Complete) + 349 (IMPL — the carefully-sequenced batched
+fold + box redesign, shipped across the inserted **349.1** `77c3d9ef` [box redesign — live-level resolve, DAY-keyed
+word, drop `_afkingEpoch`/stamp-`index`, NO-ORPHAN guard, ticket/lootbox split, `doWork`→`mintBurnie`, dead
+`AF_KING` removal] + **349.2** `453f8073` [restore quest-credit + affiliate for afking LOOTBOX subs as BURNIE
+flip-credit OFF the ETH/pool path]; both USER-APPROVED hand-review) + 350 (GAS — Outcome A, NO net contract change;
+GAS-01/02 CONFIRMED-STRUCTURAL by the 349/349.1 relocation, GAS-03 REJECTED-with-reasoning) + 351 (TST, 9 plans,
+sequential-on-main no-worktrees, ZERO contract mutation; TST-01..06 + the NON-WIDENING **603/134/16** regression
+ledger, gsd-verifier 6/6) + 352 (TERMINAL — this deliverable; SOURCE-TREE FROZEN at `453f8073`; the SC1 delta-audit
++ the SC1 3-skill genuine-PARALLEL sweep + the regression + the gated closure flip). NOTE: **7 phases** (the v49.0/
+v54.0 SPEC→IMPL→GAS→TST→TERMINAL shape + the TWO inserted IMPL phases 349.1 + 349.2). Closure signal:
+`MILESTONE_V55_AT_HEAD_<sha>` (the literal placeholder; resolved at 352-04).
+
+### 9c. Closure Signal
+**`MILESTONE_V55_AT_HEAD_<sha>`** (the literal placeholder — resolved to the Phase 352 audit-deliverable / closure
+commit's own SHA in 352-04 [self-referential]; contracts byte-identical to the frozen subject `453f8073`).
+Verbatim propagation targets (resolved at the 352-04 closure gate by the single sed-style SHA substitution):
+1. Frontmatter `closure_signal:` + `audit_subject_head:`.
+2. §1 Audit Subject prose.
+3. §9b / §9c references.
+4. ROADMAP.md (the v55.0 milestone flip).
+5. STATE.md (Last Shipped Milestone) + MILESTONES.md (archive entry) + PROJECT.md (the v55.0 evolution).
+6. REQUIREMENTS.md (all 29 v55.0 requirement row-flips re-attested at closure — the SPEC/GAS/TST reqs already
+   Complete; the IMPL reqs ARCH-01/02/03 + BOX-01..05 + REVERT-01/02 + EVCAP-01 + CONSENT-01/02 + PLACE-02 + AUDIT-01
+   flip at the 352-04 closure).
+
+`chmod 444` is applied to `audit/FINDINGS-v55.0.md` at the 352-04 closure HEAD (the v44/v46/v47/v48/v49 precedent),
+NOT here — this deliverable stays writable until the closure flip resolves the SHA + applies the read-only bit.
+
+### 9d. Deferred to v56+ — Handoff Register
+- **0 NEW findings deferred.** The SC1 sweep produced 0 FINDING_CANDIDATE; there were no prior-milestone deferred
+  findings carried into v55 (v54.0 closed clean). Nothing is carried forward as a finding.
+- **OUT-OF-SCOPE informational advisory (NOT a finding) — the pre-existing `DegenerusQuests` lootbox-quest
+  double-credit (O1).** `DegenerusQuests.handlePurchase`'s lootbox branch credits `lootboxReward` via `creditFlip`
+  AND includes it in `totalReturned` (both callers re-credit) → a completed LOOTBOX quest's fixed reward
+  (100/200/300 BURNIE) appears credited twice. It is PRE-EXISTING + SYMMETRIC across the manual `purchaseWith`
+  path AND the afking path (NOT a 349.2 regression); `DegenerusQuests.sol` is NOT in the v55 delta (out of the v55
+  blast radius); the amount is a fixed, day-idempotent BURNIE flip-stake, entirely OFF the ETH/`claimablePool`/
+  solvency path. **Recorded for the USER's awareness; routed to a future quest-core (`DegenerusQuests`) audit lane
+  + the v52 consolidated cross-model audit** (the v48 SWAP cash-share doc-drift class — an out-of-scope informational
+  carry). It does NOT amend the verdict or stop closure.
+- **v56 forward-seeds (§8):** the batch-afking-affiliate-quest aggregation seed
+  ([[v56-batch-afking-affiliate-quest-seed]], with the mandatory 3-skill adversarial economic review — touches the
+  shared `DegenerusQuests` core); the terminal-decimator final-day streak-boost seed
+  ([[terminal-decimator-final-day-streak-boost-seed]]). Both are contract changes, OUT of v55.0 scope.
+- **The v52 consolidated cross-model audit (ADDITIONAL track).** The v55 surface (the AfKing-in-Game fold + the box
+  redesign) folds into the v52 cumulative sweep as an ADDITIONAL track alongside the prior-deferred v50/v51
+  surfaces — NOT a substitute for this in-milestone close (§8).
+- The v44 §9d maximalist handoff register (135 anchors) carries forward unchanged (NOT live vectors).
+
+---
+
+*v55.0 TERMINAL findings authored 2026-06-01. Source-tree frozen throughout (`git diff 453f8073 HEAD --
+contracts/` empty). 0 NEW findings (the 3-skill genuine-PARALLEL sweep surfaced 0 FINDING_CANDIDATE across 21
+charged-probe rows: 18 NEGATIVE-VERIFIED + 3 SAFE_BY_DESIGN; the box-stamp-freeze + liveness-isolation +
+two-path-open spine holds adversarially against the as-built 4-field/DAY-keyed/live-level model; the OPEN-E
+4-protection HARD BLOCKING condition SATISFIED — closure NOT blocked). One PRE-EXISTING, out-of-scope, immaterial
+informational advisory (O1, the symmetric `DegenerusQuests` lootbox-quest double-credit) recorded + routed to a
+future quest-core lane + the v52 consolidated audit — NOT a v55.0 finding, does NOT amend the `0 NEW_FINDINGS`
+verdict. KNOWN-ISSUES.md byte-unmodified. The COMMITTED 4-field stamp / DAY-keyed seed / live-level open framing
+used throughout (349.1 SUPERSEDED the 348 5-field design). Closure signal `MILESTONE_V55_AT_HEAD_<sha>` resolves
+at the Phase 352 closure commit (352-04); chmod 444 applied at closure (NOT here).*
