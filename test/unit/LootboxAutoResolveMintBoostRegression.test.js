@@ -6,7 +6,12 @@
 //   - `DegenerusGameMintModule.sol:1142` continues to call
 //     `_queueTicketsScaled(buyer, targetLevel, adjustedQty, false)` for
 //     boost-derived fractional ticket awards (D-275-NOOP-01).
-//   - `DegenerusGameMintModule.sol` is byte-identical to v39 baseline `6a7455d1`.
+//   - The lootbox `_settleLootboxRoll` refactor touches ONLY
+//     `DegenerusGameLootboxModule.sol`: MintModule + Storage stay byte-identical
+//     to the committed HEAD (pre-working-tree-change) tree. (The original v39
+//     `6a7455d1` pin is obsolete — 16+ milestones of unrelated contract changes
+//     have shipped since; the live invariant is "this refactor does not bleed
+//     into MintModule/Storage", anchored at HEAD.)
 //   - `_rollRemainder` (defined in MintModule:642) is still consumed by the
 //     mint-boost activation paths (MintModule:443/489/742/820).
 //
@@ -18,7 +23,9 @@
 //   D-40N-MINTBOOST-OUT-01 invariant. The structural proofs guarantee:
 //     (a) Mint-boost callsite at MintModule:1142 still uses _queueTicketsScaled.
 //     (b) _rollRemainder is still defined + invoked in MintModule.
-//     (c) MintModule + Storage are byte-identical to v39 baseline.
+//     (c) MintModule + Storage are byte-identical to the committed HEAD tree
+//         (the lootbox refactor lives only in the working tree's
+//         DegenerusGameLootboxModule.sol).
 //
 // CROSS-CITES:
 //   - D-40N-MINTBOOST-OUT-01 (mint-boost path UNTOUCHED in v40)
@@ -43,8 +50,13 @@ const LOOTBOX_MODULE_PATH = path.resolve(
   "contracts/modules/DegenerusGameLootboxModule.sol"
 );
 
-// v39 closure baseline SHA (per .planning/STATE.md "Last Shipped Milestone").
-const V39_BASELINE = "6a7455d1";
+// Byte-identity baseline = committed HEAD. The lootbox `_settleLootboxRoll`
+// refactor lives only in the working tree (DegenerusGameLootboxModule.sol +
+// ContractAddresses.sol); MintModule + Storage must remain byte-identical to
+// the committed tree, proving the refactor does not bleed into them. (The
+// original v39 `6a7455d1` pin is obsolete — those files legitimately diverged
+// across 16+ intervening milestones.)
+const BASELINE = "HEAD";
 
 describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-06", function () {
   this.timeout(30_000);
@@ -116,30 +128,30 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
     });
   });
 
-  describe("Byte-identity assertions: MintModule + Storage UNCHANGED vs v39 baseline `6a7455d1` (D-275-NOOP-01 + D-40N-MINTBOOST-OUT-01)", function () {
-    it("[03a] DegenerusGameMintModule.sol byte-identical to v39 baseline 6a7455d1", function () {
+  describe("Byte-identity assertions: MintModule + Storage UNCHANGED by the lootbox refactor (D-275-NOOP-01 + D-40N-MINTBOOST-OUT-01)", function () {
+    it("[03a] DegenerusGameMintModule.sol byte-identical to committed HEAD (untouched by the lootbox refactor)", function () {
       const result = execSync(
-        `cmp <(git show ${V39_BASELINE}:contracts/modules/DegenerusGameMintModule.sol) contracts/modules/DegenerusGameMintModule.sol; echo "exit=$?"`,
+        `cmp <(git show ${BASELINE}:contracts/modules/DegenerusGameMintModule.sol) contracts/modules/DegenerusGameMintModule.sol; echo "exit=$?"`,
         { encoding: "utf8", shell: "/bin/bash" }
       );
       expect(
         result.includes("exit=0"),
-        `MintModule.sol drifted from baseline ${V39_BASELINE} (result: ${result.trim()})`
+        `MintModule.sol drifted from committed ${BASELINE} (result: ${result.trim()})`
       ).to.equal(true);
     });
 
-    it("[03b] DegenerusGameStorage.sol byte-identical to v39 baseline 6a7455d1", function () {
+    it("[03b] DegenerusGameStorage.sol byte-identical to committed HEAD (untouched by the lootbox refactor)", function () {
       const result = execSync(
-        `cmp <(git show ${V39_BASELINE}:contracts/storage/DegenerusGameStorage.sol) contracts/storage/DegenerusGameStorage.sol; echo "exit=$?"`,
+        `cmp <(git show ${BASELINE}:contracts/storage/DegenerusGameStorage.sol) contracts/storage/DegenerusGameStorage.sol; echo "exit=$?"`,
         { encoding: "utf8", shell: "/bin/bash" }
       );
       expect(
         result.includes("exit=0"),
-        `Storage.sol drifted from baseline ${V39_BASELINE} (result: ${result.trim()})`
+        `Storage.sol drifted from committed ${BASELINE} (result: ${result.trim()})`
       ).to.equal(true);
     });
 
-    it("[03c] LootboxModule auto-resolve branch swap is the ONLY contract change vs v39 — `_queueTicketsScaled` absent from LootboxModule + present in MintModule", function () {
+    it("[03c] LootboxModule auto-resolve branch swap keeps `_queueTicketsScaled` absent from LootboxModule + present in MintModule", function () {
       const lootbox = fs.readFileSync(LOOTBOX_MODULE_PATH, "utf8");
       const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
       expect(

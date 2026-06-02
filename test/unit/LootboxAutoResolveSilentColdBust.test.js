@@ -112,19 +112,19 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
   });
 
   describe("Source-level proof: ticket award is a single unconditional _queueTickets call; auto-resolve callers pass payColdBustConsolation = false", function () {
-    it("[02a] `_queueTickets(player, targetLevel, whole, false)` appears exactly once; the consolation that follows it is `payColdBustConsolation`-gated", function () {
+    it("[02a] `_queueTickets(player, rollLevel, whole, false)` appears at one source site; the consolation that follows it is `payColdBustConsolation`-gated", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The sentinel branch is retired: the ticket award is a single
-      // unconditional `_queueTickets(player, targetLevel, whole, false)`
-      // callsite shared by every path. The cold-bust case is absorbed by the
-      // helper's `if (quantity == 0) return;` early-return.
-      const callLine = "_queueTickets(player, targetLevel, whole, false)";
+      // `_queueTickets(player, rollLevel, whole, false)` source site inside the
+      // per-roll `_settleLootboxRoll` helper. The cold-bust case is absorbed by
+      // the helper's `if (quantity == 0) return;` early-return.
+      const callLine = "_queueTickets(player, rollLevel, whole, false)";
       const firstIdx = source.indexOf(callLine);
       const secondIdx = source.indexOf(callLine, firstIdx + 1);
-      expect(firstIdx, "`_queueTickets(player, targetLevel, whole, false)` callsite not found").to.be.greaterThan(-1);
+      expect(firstIdx, "`_queueTickets(player, rollLevel, whole, false)` callsite not found").to.be.greaterThan(-1);
       expect(
         secondIdx,
-        "`_queueTickets(player, targetLevel, whole, false)` must appear exactly once (sentinel-branch duplication retired)"
+        "`_queueTickets(player, rollLevel, whole, false)` must appear at exactly one source site (sentinel-branch duplication retired)"
       ).to.equal(-1);
       // The consolation `mintPrize` payout that follows the queue call sits
       // inside `if (payColdBustConsolation && whole == 0)` — so an auto-resolve
@@ -149,13 +149,13 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
 
     it("[02b] both auto-resolve callers (resolveLootboxDirect + resolveRedemptionLootbox) pass `index = 0`, `emitLootboxEvent = false`, and `payColdBustConsolation = false`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // v47 `_resolveLootboxCommon` positional args (now 2-bool / 11 args — the old
-      // 5-bool presale/allowPasses/allowBoons gating params were removed; the 3 ETH
-      // callers always roll full boons+passes): player(1), day(2), index(3),
-      // amount(4), targetLevel(5), currentLevel(6), seed(7), emitLootboxEvent(8),
-      // payColdBustConsolation(9), distressEth(10), totalPackedEth(11). The
-      // auto-resolve callers pass `index = 0`, `emitLootboxEvent = false`, and
-      // `payColdBustConsolation = false` (silent on cold-bust).
+      // `_resolveLootboxCommon` positional args (now 12 — the refactor appended a
+      // trailing `bool allowSplit`): player(1), day(2), index(3), amount(4),
+      // targetLevel(5), currentLevel(6), seed(7), emitLootboxEvent(8),
+      // payColdBustConsolation(9), distressEth(10), totalPackedEth(11),
+      // allowSplit(12). The auto-resolve callers pass `index = 0`,
+      // `emitLootboxEvent = false`, and `payColdBustConsolation = false`
+      // (silent on cold-bust).
       for (const fnName of ["function resolveLootboxDirect(", "function resolveRedemptionLootbox("]) {
         const fnIdx = source.indexOf(fnName);
         expect(fnIdx, `${fnName} not found`).to.be.greaterThan(-1);
@@ -184,7 +184,7 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
           .split(",")
           .map((a) => a.replace(/\/\/.*$/gm, "").trim())
           .filter((a) => a.length > 0);
-        expect(args.length, `${fnName}: _resolveLootboxCommon must receive 11 positional args (v47 2-bool shape)`).to.equal(11);
+        expect(args.length, `${fnName}: _resolveLootboxCommon must receive 12 positional args (post-refactor allowSplit shape)`).to.equal(12);
         expect(args[2], `${fnName} must pass index = 0 (3rd positional)`).to.equal("0");
         expect(args[7], `${fnName} must pass emitLootboxEvent = false (8th positional)`).to.equal("false");
         expect(args[8], `${fnName} must pass payColdBustConsolation = false (9th positional)`).to.equal("false");
@@ -276,7 +276,7 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // Phase 277 deleted the v39-additive `LootboxTicketRoll` event entirely —
       // no event def, no emit site. The cold-bust ticket roll is now observable
-      // only via the `LootBoxOpened` event's `futureTickets` + `roundedUp`
+      // only via the `LootBoxOpened` event's `scaledTickets` + `roundedUp`
       // fields (manual path) or stays silent (auto-resolve path).
       const refs = (source.match(/LootboxTicketRoll/g) || []).length;
       expect(refs, "`LootboxTicketRoll` must have zero references (Phase 277 retired the event)").to.equal(0);

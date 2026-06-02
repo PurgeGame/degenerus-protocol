@@ -122,26 +122,40 @@ describe("LootboxAutoResolveRemByte — Phase 275 Wave 2 TST-LBX-AR-05", functio
   });
 
   describe("LootboxModule auto-resolve branch calls `_queueTickets` (whole) — not `_queueTicketsScaled` (LBX-AR-02)", function () {
-    it("[02a] LootboxModule contains `_queueTickets(player, targetLevel, whole, false)` exactly twice (manual + auto-resolve) and ZERO occurrences of `_queueTicketsScaled`", function () {
+    it("[02a] LootboxModule contains `_queueTickets(player, rollLevel, whole, false)` at one source site and ZERO occurrences of `_queueTicketsScaled`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const callPattern = /_queueTickets\(player, targetLevel, whole, false\)/g;
+      // Pre-refactor the manual true-branch and auto-resolve else-arm each had
+      // their own `_queueTickets(player, targetLevel, whole, false)` call (the
+      // "exactly twice" structure). The refactor unifies both paths into a
+      // single per-roll `_settleLootboxRoll` helper, so the whole-ticket queue
+      // is now ONE source site (invoked once per roll at runtime — a split box
+      // runs the helper twice). The load-bearing invariant survives: the lootbox
+      // path queues WHOLE tickets via `_queueTickets`, never `_queueTicketsScaled`.
+      const callPattern = /_queueTickets\(player, rollLevel, whole, false\)/g;
       const calls = (source.match(callPattern) || []).length;
-      expect(calls, "expected ≥2 `_queueTickets(player, targetLevel, whole, false)` callsites (manual + auto-resolve)").to.be.gte(2);
+      expect(calls, "expected exactly one `_queueTickets(player, rollLevel, whole, false)` source site (unified per-roll settle path)").to.equal(1);
       expect(
         source.includes("_queueTicketsScaled"),
-        "`_queueTicketsScaled` must not appear in DegenerusGameLootboxModule.sol post-Phase-275"
+        "`_queueTicketsScaled` must not appear in DegenerusGameLootboxModule.sol"
       ).to.equal(false);
     });
 
-    it("[02b] manual call comes first (true-branch), auto-resolve second (else-arm) — structural ordering invariant", function () {
+    it("[02b] the single whole-ticket queue site lives inside `_settleLootboxRoll` (the unified per-roll helper that replaced the manual/auto branch arms)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const callLine = "_queueTickets(player, targetLevel, whole, false)";
-      const firstIdx = source.indexOf(callLine);
-      const elseIdx = source.indexOf("} else {", firstIdx);
-      const autoIdx = source.indexOf(callLine, firstIdx + 1);
-      expect(firstIdx).to.be.greaterThan(-1);
-      expect(elseIdx).to.be.greaterThan(firstIdx);
-      expect(autoIdx).to.be.greaterThan(elseIdx);
+      // The pre-refactor manual-first / auto-second branch-ordering invariant is
+      // retired: there are no longer two arms. The equivalent structural anchor
+      // is that the sole whole-ticket queue call sits inside `_settleLootboxRoll`,
+      // which both the manual (emitLootboxEvent/payColdBustConsolation = true) and
+      // auto-resolve (both false) paths invoke via `_resolveLootboxCommon`.
+      const settleBody = extractBody(source, "function _settleLootboxRoll(");
+      expect(settleBody, "`_settleLootboxRoll` body not found").to.not.equal(null);
+      expect(
+        settleBody.includes("_queueTickets(player, rollLevel, whole, false)"),
+        "the whole-ticket queue call must live inside `_settleLootboxRoll`"
+      ).to.equal(true);
+      // The queue site appears nowhere else in the module.
+      const totalCalls = (source.match(/_queueTickets\(player, rollLevel, whole, false\)/g) || []).length;
+      expect(totalCalls, "the whole-ticket queue call must be single-site").to.equal(1);
     });
   });
 

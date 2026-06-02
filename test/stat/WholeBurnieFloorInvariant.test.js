@@ -8,7 +8,7 @@
 //
 // THE INVARIANT:
 //   Every observable BURNIE-mint amount producible from the 3 BUR sites —
-//     BUR-01  `_resolveLootboxCommon`         (DegenerusGameLootboxModule.sol)
+//     BUR-01  `_settleLootboxRoll`            (DegenerusGameLootboxModule.sol)
 //     BUR-02  `_awardDailyCoinToTraitWinners` (DegenerusGameJackpotModule.sol)
 //     BUR-03  `_awardFarFutureCoinJackpot`    (DegenerusGameJackpotModule.sol)
 //   — is a multiple of `1 ether` after the inline `(x / 1 ether) * 1 ether`
@@ -21,9 +21,9 @@
 //   never flake.
 //
 // NEGATIVE CROSS-SITE ASSERTION (D-40N-BUR-MINTBOOST-OUT-01):
-//   The mint-boost flip-credit at `DegenerusGameMintModule.sol:1199` —
-//   `coinflip.creditFlip(buyer, lootboxFlipCredit)` inside `_purchaseFor` — is
-//   explicitly OUT of v40.0 BUR scope: `lootboxFlipCredit` is a deterministic
+//   The mint-boost flip-credit `coinflip.creditFlip(buyer, lootboxFlipCredit)`
+//   inside `_purchaseForWith` (DegenerusGameMintModule.sol) — is explicitly OUT
+//   of v40.0 BUR scope: `lootboxFlipCredit` is a deterministic
 //   mint-amount-derived value, NOT an RNG amount, and stays status-quo
 //   fractional. This test proves NO whole-BURNIE floor was added to that path.
 //
@@ -184,17 +184,20 @@ describe("WholeBurnieFloorInvariant (stat-suite) — Phase 279 Wave 2 TST-BUR-04
   });
 
   describe("3-site source-structural combined gate: all 3 BUR sites carry the inline whole-BURNIE floor", function () {
-    it("[02a] BUR-01 `_resolveLootboxCommon` floors `burnieAmount`", function () {
+    it("[02a] BUR-01 `_settleLootboxRoll` floors this roll's `burnieOut` into `burnieAmount`", function () {
       const source = fs.readFileSync(LOOTBOX_MODULE_PATH, "utf8");
+      // The per-roll floor moved into `_settleLootboxRoll` (the refactor split
+      // the per-roll ticket/BURNIE/emit logic out of `_resolveLootboxCommon`).
+      // The floor now derives `burnieAmount` from this roll's raw `burnieOut`.
       const body = stripLineComments(
-        extractBody(source, "function _resolveLootboxCommon(")
+        extractBody(source, "function _settleLootboxRoll(")
       );
-      expect(body, "`_resolveLootboxCommon` body not found").to.not.equal(null);
+      expect(body, "`_settleLootboxRoll` body not found").to.not.equal(null);
       expect(
-        /burnieAmount\s*=\s*\(\s*burnieAmount\s*\/\s*1 ether\s*\)\s*\*\s*1 ether/.test(
+        /burnieAmount\s*=\s*\(\s*burnieOut\s*\/\s*1 ether\s*\)\s*\*\s*1 ether/.test(
           body
         ),
-        "BUR-01: `_resolveLootboxCommon` must floor `burnieAmount` via `(burnieAmount / 1 ether) * 1 ether`"
+        "BUR-01: `_settleLootboxRoll` must floor this roll's `burnieOut` via `(burnieOut / 1 ether) * 1 ether`"
       ).to.equal(true);
     });
 
@@ -228,29 +231,32 @@ describe("WholeBurnieFloorInvariant (stat-suite) — Phase 279 Wave 2 TST-BUR-04
   });
 
   describe("Negative cross-site assertion: the mint-boost flip-credit path stayed status-quo fractional (D-40N-BUR-MINTBOOST-OUT-01)", function () {
-    it("[03a] `_purchaseFor` in DegenerusGameMintModule.sol contains `creditFlip(buyer, lootboxFlipCredit)` (positive pin to the right call site)", function () {
+    it("[03a] `_purchaseForWith` in DegenerusGameMintModule.sol contains `creditFlip(buyer, lootboxFlipCredit)` (positive pin to the right call site)", function () {
       const source = fs.readFileSync(MINT_MODULE_PATH, "utf8");
+      // The flip-credit accumulator + creditFlip moved from `_purchaseFor` (now a
+      // thin msg.value wrapper) into `_purchaseForWith` during the afking
+      // ETH-slice refactor; the pin follows it there.
       const body = stripLineComments(
-        extractBody(source, "function _purchaseFor(")
+        extractBody(source, "function _purchaseForWith(")
       );
-      expect(body, "`_purchaseFor` body not found").to.not.equal(null);
+      expect(body, "`_purchaseForWith` body not found").to.not.equal(null);
       expect(
         body.includes("creditFlip(buyer, lootboxFlipCredit)"),
-        "`_purchaseFor` must contain `creditFlip(buyer, lootboxFlipCredit)` — the mint-boost flip-credit call site (positive pin)"
+        "`_purchaseForWith` must contain `creditFlip(buyer, lootboxFlipCredit)` — the mint-boost flip-credit call site (positive pin)"
       ).to.equal(true);
     });
 
-    it("[03b] `_purchaseFor` applies NO whole-BURNIE floor to `lootboxFlipCredit` — the mint-boost path is OUT of v40.0 BUR scope (D-40N-BUR-MINTBOOST-OUT-01)", function () {
+    it("[03b] `_purchaseForWith` applies NO whole-BURNIE floor to `lootboxFlipCredit` — the mint-boost path is OUT of v40.0 BUR scope (D-40N-BUR-MINTBOOST-OUT-01)", function () {
       const source = fs.readFileSync(MINT_MODULE_PATH, "utf8");
       const body = stripLineComments(
-        extractBody(source, "function _purchaseFor(")
+        extractBody(source, "function _purchaseForWith(")
       );
-      expect(body, "`_purchaseFor` body not found").to.not.equal(null);
+      expect(body, "`_purchaseForWith` body not found").to.not.equal(null);
       // No `(... / 1 ether) * 1 ether` floor expression anywhere in the
       // function body — the mint-boost flip-credit stays status-quo fractional.
       expect(
         /\/\s*1 ether\s*\)\s*\*\s*1 ether/.test(body),
-        "`_purchaseFor` must NOT apply a `/ 1 ether) * 1 ether` whole-BURNIE floor (mint-boost is OUT of BUR scope — D-40N-BUR-MINTBOOST-OUT-01)"
+        "`_purchaseForWith` must NOT apply a `/ 1 ether) * 1 ether` whole-BURNIE floor (mint-boost is OUT of BUR scope — D-40N-BUR-MINTBOOST-OUT-01)"
       ).to.equal(false);
       // Specifically, `lootboxFlipCredit` is never reassigned through a floor.
       expect(

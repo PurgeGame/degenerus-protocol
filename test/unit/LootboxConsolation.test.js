@@ -3,10 +3,10 @@
 // LootboxConsolation.test.js — Phase 274 Wave 2 TST-WX-01..03
 //
 // WWXRP cold-bust consolation coverage. The contract under test is the
-// ticket-collapse block of `_resolveLootboxCommon` at
-// `contracts/modules/DegenerusGameLootboxModule.sol` (post-Phase-277 surface):
+// ticket-collapse block of `_settleLootboxRoll` at
+// `contracts/modules/DegenerusGameLootboxModule.sol` (per-roll settle surface):
 //
-//   _queueTickets(player, targetLevel, whole, false);
+//   _queueTickets(player, rollLevel, whole, false);
 //   if (payColdBustConsolation && whole == 0) {
 //       wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);
 //   }
@@ -167,17 +167,18 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
 
     it("[02b] ticket award is a single unconditional `_queueTickets` call; the consolation is `payColdBustConsolation`-gated below it", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The sentinel branch is retired: `_queueTickets(player, targetLevel,
-      // whole, false)` is called once, unconditionally, for every path
-      // (manual openLootBox + both auto-resolve callers). Its
-      // `if (quantity == 0) return;` early-return absorbs the cold-bust case.
-      const callLine = "_queueTickets(player, targetLevel, whole, false)";
+      // The sentinel branch is retired: `_queueTickets(player, rollLevel,
+      // whole, false)` is a single source site in `_settleLootboxRoll`,
+      // reached unconditionally for every path (manual openLootBox + both
+      // auto-resolve callers). Its `if (quantity == 0) return;` early-return
+      // absorbs the cold-bust case.
+      const callLine = "_queueTickets(player, rollLevel, whole, false)";
       const firstIdx = source.indexOf(callLine);
       const secondIdx = source.indexOf(callLine, firstIdx + 1);
-      expect(firstIdx, "`_queueTickets(player, targetLevel, whole, false)` callsite not found").to.be.greaterThan(-1);
+      expect(firstIdx, "`_queueTickets(player, rollLevel, whole, false)` callsite not found").to.be.greaterThan(-1);
       expect(
         secondIdx,
-        "`_queueTickets(player, targetLevel, whole, false)` must appear exactly once (sentinel-branch duplication retired)"
+        "`_queueTickets(player, rollLevel, whole, false)` must appear at exactly one source site (sentinel-branch duplication retired)"
       ).to.equal(-1);
       // Immediately after the queue call comes the
       // `if (payColdBustConsolation && whole == 0)` consolation gate — the
@@ -193,15 +194,15 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       expect(mintIdx, "consolation mintPrize must sit after the gate").to.be.greaterThan(gateIdx);
     });
 
-    it("[02c] ticket-path-not-selected case: when `futureTickets == 0` the outer `if (futureTickets != 0)` guard skips the entire Bernoulli/queue/consolation block", function () {
+    it("[02c] ticket-path-not-selected case: when `scaledTickets == 0` the outer `if (scaledTickets != 0)` guard skips the entire Bernoulli/queue/consolation block", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The outer `if (futureTickets != 0)` guard wraps the whole Bernoulli
+      // The outer `if (scaledTickets != 0)` guard wraps the whole Bernoulli
       // collapse + `_queueTickets` + consolation. Anything inside it requires
       // a non-zero scaled pre-Bernoulli ticket count.
-      const outerGuard = source.indexOf("if (futureTickets != 0)");
+      const outerGuard = source.indexOf("if (scaledTickets != 0)");
       expect(outerGuard).to.be.greaterThan(-1);
-      // The unconditional `_queueTickets` callsite is inside the outer guard.
-      const queueCall = source.indexOf("_queueTickets(player, targetLevel, whole, false)");
+      // The `_queueTickets` callsite is inside the outer guard.
+      const queueCall = source.indexOf("_queueTickets(player, rollLevel, whole, false)");
       expect(queueCall).to.be.greaterThan(outerGuard);
       // The `payColdBustConsolation && whole == 0` consolation gate is inside the
       // outer guard too (it sits immediately below the queue call).

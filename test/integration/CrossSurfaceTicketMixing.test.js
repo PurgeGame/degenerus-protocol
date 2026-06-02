@@ -714,10 +714,10 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       ).to.equal(true);
 
       // (3) Manual + auto-resolve lootbox surfaces: LootboxModule routes its
-      //     ticket award through `_queueTickets` (whole) and contains ZERO
-      //     `_queueTicketsScaled` invocations.
+      //     per-roll ticket award through `_queueTickets` (whole, at this roll's
+      //     `rollLevel`) and contains ZERO `_queueTicketsScaled` invocations.
       expect(
-        lootboxSrc.includes("_queueTickets(player, targetLevel, whole, false)"),
+        lootboxSrc.includes("_queueTickets(player, rollLevel, whole, false)"),
         "LootboxModule must route the ticket award through `_queueTickets` (whole)"
       ).to.equal(true);
       expect(

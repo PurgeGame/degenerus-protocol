@@ -578,7 +578,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             true,
             true,
             distressEth,
-            amount
+            amount,
+            true
         );
     }
 
@@ -790,7 +791,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             false,
             false,
             0,
-            0
+            0,
+            true
         );
     }
 
@@ -823,7 +825,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             false,
             false,
             0,
-            0
+            0,
+            true
         );
     }
 
@@ -871,9 +874,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      human value is frozen at buy in the cold-ledger `lootboxDistressEth`, which the
     ///      stamp-only afking box never writes (BOX-02). Deliberately omitted as a mega-niche
     ///      end-game feature (active only the final day before game-over, by which point
-    ///      afking subscribers are gone). No `RngNotReady` guard here — the caller
-    ///      (`_afkingBoxReady`) pre-gates on a landed `rngWordByDay[day] != 0`, so a zero word
-    ///      never reaches this function. Sole caller: the GameAfkingModule open-leg, via the
+    ///      afking subscribers are gone). No `RngNotReady` guard here — the caller (the
+    ///      GameAfkingModule open leg `_autoOpen`) pre-gates on a landed `rngWordByDay[day] != 0`,
+    ///      so a zero word never reaches this function. Sole caller: the GameAfkingModule open-leg, via the
     ///      GAME_LOOTBOX_MODULE delegatecall (the box materialization is private to this
     ///      module — `resolveAfkingBox` is the one freeze-correct seam; `resolveLootboxDirect`
     ///      derives the seed from the LIVE day and would not freeze the seed `day`).
@@ -920,7 +923,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             true,
             true,
             0,
-            0
+            0,
+            false
         );
     }
 
@@ -1036,72 +1040,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
     }
 
-    /// @dev Accumulates the one or two `_resolveLootboxRoll` invocations for a lootbox
-    ///      resolution into presale / non-presale BURNIE totals and a scaled future-ticket
-    ///      count. The second invocation runs only when `amountSecond != 0` and uses a
-    ///      counter-tagged seed chunk (`EntropyLib.hash2(seed, 1)`) so the two invocations'
-    ///      bit-slice ranges are collision-free.
-    /// @param player Player receiving rewards
-    /// @param amountFirst First (or whole) main-amount chunk
-    /// @param amountSecond Second main-amount chunk; zero when the lootbox is not split
-    /// @param amount Full ETH-equivalent amount for reward calculations
-    /// @param targetPrice Price for the resolved target level
-    /// @param day Day index for events
-    /// @param seed Per-resolution 256-bit keccak seed
-    /// @return burniePresale BURNIE awarded subject to the presale multiplier
-    /// @return burnieNoMultiplier BURNIE awarded without the presale multiplier
-    /// @return futureTickets Scaled (× TICKET_SCALE) future-ticket count
-    function _accumulateLootboxRolls(
-        address player,
-        uint256 amountFirst,
-        uint256 amountSecond,
-        uint256 amount,
-        uint256 targetPrice,
-        uint32 day,
-        uint256 seed
-    )
-        private
-        returns (
-            uint256 burniePresale,
-            uint256 burnieNoMultiplier,
-            uint32 futureTickets
-        )
-    {
-        (
-            uint256 burnieOut,
-            uint32 ticketsOut,
-            bool applyPresaleMultiplier
-        ) = _resolveLootboxRoll(player, amountFirst, amount, targetPrice, day, seed);
-
-        if (burnieOut != 0) {
-            if (applyPresaleMultiplier) {
-                burniePresale += burnieOut;
-            } else {
-                burnieNoMultiplier += burnieOut;
-            }
-        }
-        if (ticketsOut != 0) {
-            futureTickets = ticketsOut;
-        }
-
-        if (amountSecond != 0) {
-            uint256 seed2 = EntropyLib.hash2(seed, 1);
-            (burnieOut, ticketsOut, applyPresaleMultiplier) =
-                _resolveLootboxRoll(player, amountSecond, amount, targetPrice, day, seed2);
-
-            if (burnieOut != 0) {
-                if (applyPresaleMultiplier) {
-                    burniePresale += burnieOut;
-                } else {
-                    burnieNoMultiplier += burnieOut;
-                }
-            }
-            if (ticketsOut != 0) {
-                futureTickets += ticketsOut;
-            }
-        }
-    }
-
     /// @dev Common lootbox resolution logic shared by ETH and BURNIE lootboxes.
     ///      Handles whale pass jackpots, lazy pass awards, ticket/BURNIE rolls, and boons.
     /// @param player Player receiving rewards
@@ -1124,10 +1062,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        bits[80..95]   varianceRoll % 20       (_resolveLootboxRoll large-BURNIE)
     ///        bits[96..119]  ticketVariance % 10000  (_lootboxTicketCount)
     ///        bits[120..151] boon roll % BOON_PPM_SCALE (_rollLootboxBoons)
-    ///        bits[152..167] fracRoundUp % 100      (_resolveLootboxCommon ticket whole-collapse on both manual + auto-resolve paths; bias 0.10%)
-    ///      Total primary-chunk consumption: 168 bits / 256 available (bits[152..167] consumed on both manual + auto-resolve paths).
-    ///      ETH-amount-second branch uses seed2 = EntropyLib.hash2(seed, 1)
-    ///      (counter-tagged chunk 1; collision-free vs primary chunk 0).
+    ///        bits[152..167] fracRoundUp % 100      (_settleLootboxRoll ticket whole-collapse, per roll; bias 0.10%)
+    ///      Total primary-chunk consumption: 168 bits / 256 available.
+    ///      The split second roll uses seed2 = EntropyLib.hash2(seed, 1) (counter-tagged chunk 1,
+    ///      collision-free vs primary chunk 0) for BOTH its reward draw AND its own re-rolled
+    ///      target level (seed2 bits[0..39], unused by chunk 1's reward draw).
     /// @param emitLootboxEvent Whether to emit the `LootBoxOpened` event; `true` for
     ///        `openLootBox`, `false` for both auto-resolve callers
     /// @param payColdBustConsolation Whether a ticket-path cold-bust (`whole == 0`) pays
@@ -1136,10 +1075,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        `resolveRedemptionLootbox`), which stay silent on cold-bust
     /// @param distressEth Portion of lootbox ETH bought during distress mode (pre-EV-scaling basis)
     /// @param totalPackedEth Total packed lootbox ETH (pre-EV-scaling basis, denominator for distress fraction)
-    /// @return futureTickets Pre-Bernoulli scaled (× TICKET_SCALE) future ticket count
-    /// @return burnieAmount Total BURNIE awarded
-    /// @return roundedUp True iff the Bernoulli round-up incremented the awarded
-    ///         whole-ticket count by 1
+    /// @param allowSplit When true, a box over LOOTBOX_SPLIT_THRESHOLD resolves as two
+    ///        independent rolls (the 2nd re-rolling its own target level); afking passes false
+    ///        so afking boxes always resolve as a single roll (a bounded per-open cost).
     function _resolveLootboxCommon(
         address player,
         uint32 day,
@@ -1151,69 +1089,31 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         bool emitLootboxEvent,
         bool payColdBustConsolation,
         uint256 distressEth,
-        uint256 totalPackedEth
-    )
-        private
-        returns (
-            uint32 futureTickets,
-            uint256 burnieAmount,
-            bool roundedUp
-        )
-    {
+        uint256 totalPackedEth,
+        bool allowSplit
+    ) private {
         if (targetLevel < currentLevel) {
             targetLevel = currentLevel;
         }
-        uint256 targetPrice = PriceLookupLib.priceForLevel(targetLevel);
-        if (targetPrice == 0) revert E();
 
-        uint256 amountFirst;
+        uint256 boonBudget = _lootboxBoonBudget(amount);
+        uint256 mainAmount = amount - boonBudget;
+        uint256 amountFirst = mainAmount;
         uint256 amountSecond;
-        {
-            uint256 mainAmount = amount - _lootboxBoonBudget(amount);
-            amountFirst = mainAmount;
-            if (mainAmount > LOOTBOX_SPLIT_THRESHOLD) {
-                amountFirst = mainAmount / 2;
-                amountSecond = mainAmount - amountFirst;
-            }
+        // Boxes over the split threshold resolve as two independent rolls — UNLESS the caller
+        // forbids it (afking boxes always resolve as one roll, for a bounded per-open cost).
+        if (allowSplit && mainAmount > LOOTBOX_SPLIT_THRESHOLD) {
+            amountFirst = mainAmount / 2;
+            amountSecond = mainAmount - amountFirst;
         }
 
-        (
-            uint256 burniePresale,
-            uint256 burnieNoMultiplier,
-            uint32 rolledTickets
-        ) = _accumulateLootboxRolls(
-            player,
-            amountFirst,
-            amountSecond,
-            amount,
-            targetPrice,
-            day,
-            seed
-        );
-        futureTickets = rolledTickets;
-
-        burnieAmount = burnieNoMultiplier + burniePresale;
-        // Floored to whole-BURNIE (1 BURNIE = 1 ether); sub-1-BURNIE residue
-        // evaporates. The floored value reaches the `creditFlip` arg, the
-        // `LootBoxOpened.burnie` event field, and the return tuple.
-        burnieAmount = (burnieAmount / 1 ether) * 1 ether;
-
-        // Boons always roll on every ETH lootbox path (the haircut
-        // `amount - _lootboxBoonBudget(amount)` above always pairs with a spent
-        // boon budget). Pass-type boons stay gated by real game-state inside the
-        // roll (lazyPassValue != 0 / deity eligibility).
-        _rollLootboxBoons(
-            player,
-            day,
-            amount,
-            _lootboxBoonBudget(amount),
-            seed
-        );
-        // Activity-boon consumption is a no-op unless a pending bonus is set, so gate the
-        // BoonModule delegatecall on a direct read of the pending field (slot1 is warm — the
-        // expiry sweep inside _rollLootboxBoons read it, and a roll that just applied an
-        // activity boon left the fresh pending here). Skips the call frame on the common
-        // no-boon box; identical writes/events when a pending bonus exists.
+        // Box-level boon work runs ONCE (not per roll). Boons always roll on every ETH lootbox
+        // path (the haircut above always pairs with a spent boon budget); pass-type boons stay
+        // gated by real game-state inside the roll.
+        _rollLootboxBoons(player, day, amount, boonBudget, seed);
+        // consumeActivityBoon is a no-op unless a pending bonus is set; gate the BoonModule
+        // delegatecall on a direct read of the (warm) pending field, skipping the call frame on
+        // the common no-boon box.
         if (uint24(boonPacked[player].slot1 >> BP_ACTIVITY_PENDING_SHIFT) != 0) {
             (bool okAct, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
                 abi.encodeWithSelector(IDegenerusGameBoonModule.consumeActivityBoon.selector, player)
@@ -1221,38 +1121,81 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if (!okAct) revert E();
         }
 
-        if (futureTickets != 0) {
-            // Distress-mode ticket bonus: 25% extra on the fraction bought during distress
+        // Roll 1 settles at the caller-rolled `targetLevel` (from the primary seed).
+        _settleLootboxRoll(
+            player, index, day, amountFirst, amount, targetLevel, seed,
+            emitLootboxEvent, payColdBustConsolation, distressEth, totalPackedEth
+        );
+
+        // Roll 2 (split paths only) draws from the counter-tagged seed2 and RE-ROLLS its own
+        // target level (seed2 bits[0..39], unused by roll 2's reward draw), so its tickets can
+        // land at a different level than roll 1.
+        if (amountSecond != 0) {
+            uint256 seed2 = EntropyLib.hash2(seed, 1);
+            uint24 level2 = _rollTargetLevel(currentLevel, seed2);
+            if (level2 < currentLevel) level2 = currentLevel;
+            _settleLootboxRoll(
+                player, index, day, amountSecond, amount, level2, seed2,
+                emitLootboxEvent, payColdBustConsolation, distressEth, totalPackedEth
+            );
+        }
+    }
+
+    /// @dev Settle ONE reward roll: the reward-type draw, then (for a ticket roll) the distress
+    ///      bonus + single Bernoulli whole-collapse + queue at `rollLevel`, the whole-BURNIE
+    ///      floor + creditFlip, and one LootBoxOpened. `fullAmount` (the box's pre-split amount)
+    ///      feeds the reward calc and the event's amount field, so an UNSPLIT box settles and
+    ///      emits exactly as a single combined resolution did; a split box runs this twice, each
+    ///      half at its own re-rolled level with its own event.
+    /// @param rollAmount This roll's ETH chunk (the whole main amount, or one split half).
+    /// @param fullAmount The box's full ETH-equivalent amount (reward basis + event amount).
+    /// @param rollLevel The target level this roll's tickets queue at.
+    /// @param rollSeed This roll's seed (primary `seed` for roll 1, `seed2` for roll 2).
+    function _settleLootboxRoll(
+        address player,
+        uint48 index,
+        uint32 day,
+        uint256 rollAmount,
+        uint256 fullAmount,
+        uint24 rollLevel,
+        uint256 rollSeed,
+        bool emitLootboxEvent,
+        bool payColdBustConsolation,
+        uint256 distressEth,
+        uint256 totalPackedEth
+    ) private {
+        if (rollAmount == 0) return;
+        uint256 targetPrice = PriceLookupLib.priceForLevel(rollLevel);
+        if (targetPrice == 0) revert E();
+
+        (uint256 burnieOut, uint32 scaledTickets, ) =
+            _resolveLootboxRoll(player, rollAmount, fullAmount, targetPrice, day, rollSeed);
+
+        // Floored to whole-BURNIE (1 BURNIE = 1 ether); sub-1-BURNIE residue evaporates.
+        uint256 burnieAmount = (burnieOut / 1 ether) * 1 ether;
+
+        bool roundedUp;
+        if (scaledTickets != 0) {
+            // Distress-mode ticket bonus: 25% extra on the distress-bought fraction.
             if (distressEth != 0 && totalPackedEth != 0) {
-                uint256 bonus = (uint256(futureTickets) * distressEth * DISTRESS_TICKET_BONUS_BPS)
+                uint256 bonus = (uint256(scaledTickets) * distressEth * DISTRESS_TICKET_BONUS_BPS)
                     / (totalPackedEth * 10_000);
                 if (bonus != 0) {
-                    uint256 boosted = uint256(futureTickets) + bonus;
-                    futureTickets = uint32(boosted);
+                    scaledTickets = uint32(uint256(scaledTickets) + bonus);
                 }
             }
-            // Collapse scaled tickets to whole via a single Bernoulli round-up on
-            // bits[152..167] of the per-resolution seed. Function-scope
-            // `futureTickets` stays at the scaled value (consumed by the
-            // `LootBoxOpened` emit below and returned in the result tuple). The
-            // local `whole` carries the post-collapse value into `_queueTickets`.
-            uint32 whole = futureTickets / uint32(TICKET_SCALE);
-            uint32 frac = futureTickets % uint32(TICKET_SCALE);
-            if (frac != 0 && (uint16(seed >> 152) % uint16(TICKET_SCALE)) < uint16(frac)) {
+            // Collapse scaled tickets to whole via a single Bernoulli round-up on bits[152..167]
+            // of THIS roll's seed; `scaledTickets` stays at the scaled value for the event emit.
+            uint32 whole = scaledTickets / uint32(TICKET_SCALE);
+            uint32 frac = scaledTickets % uint32(TICKET_SCALE);
+            if (frac != 0 && (uint16(rollSeed >> 152) % uint16(TICKET_SCALE)) < uint16(frac)) {
                 unchecked { whole += 1; }
                 roundedUp = true;
             }
-            // `_queueTickets` early-returns on `whole == 0`, so the cold-bust case
-            // queues nothing. The manual caller (`openLootBox`) passes
-            // `payColdBustConsolation = true` and pays the WWXRP consolation here;
-            // the auto-resolve callers pass `false` and stay silent on cold-bust.
-            _queueTickets(player, targetLevel, whole, false);
+            // `_queueTickets` early-returns on `whole == 0`. The manual caller (`openLootBox`)
+            // pays the WWXRP cold-bust consolation here; auto-resolve callers stay silent.
+            _queueTickets(player, rollLevel, whole, false);
             if (payColdBustConsolation && whole == 0) {
-                // Manual cold-bust: pay the LOOTBOX_WWXRP_CONSOLATION via the same
-                // `mintPrize` interface used by the regular 10%-path WWXRP win.
-                // Observable off-chain via the WWXRP ERC-20 `Transfer` event
-                // (`0x0` -> player) together with same-tx context: a consolation
-                // carries no same-tx ticket-path emission, unlike a regular win.
                 wwxrp.mintPrize(player, LOOTBOX_WWXRP_CONSOLATION);
             }
         }
@@ -1266,14 +1209,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 player,
                 index,
                 day,
-                amount,
-                targetLevel,
-                futureTickets,
+                fullAmount,
+                rollLevel,
+                scaledTickets,
                 burnieAmount,
                 roundedUp
             );
         }
-        return (futureTickets, burnieAmount, roundedUp);
     }
 
     /// @dev Roll for lootbox boons. Lootbox can award at most one boon.

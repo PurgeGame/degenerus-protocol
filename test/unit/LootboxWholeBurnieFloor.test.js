@@ -85,31 +85,31 @@ function floorWholeBurnie(x) {
 describe("LootboxWholeBurnieFloor — Phase 279 Wave 2 TST-BUR-01", function () {
   this.timeout(30_000);
 
-  describe("Source-structural proof: `_resolveLootboxCommon` floors `burnieAmount` before the `!= 0` guard and the `creditFlip` call", function () {
-    it("[01a] body contains the inline whole-BURNIE floor expression `burnieAmount = (burnieAmount / 1 ether) * 1 ether`", function () {
+  describe("Source-structural proof: `_settleLootboxRoll` floors this roll's `burnieOut` before the `!= 0` guard and the `creditFlip` call", function () {
+    it("[01a] body contains the inline whole-BURNIE floor expression `burnieAmount = (burnieOut / 1 ether) * 1 ether`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
-        extractBody(source, "function _resolveLootboxCommon(")
+        extractBody(source, "function _settleLootboxRoll(")
       );
-      expect(body, "`_resolveLootboxCommon` body not found").to.not.equal(null);
-      // Whitespace-tolerant: `burnieAmount = ( burnieAmount / 1 ether ) * 1 ether`.
+      expect(body, "`_settleLootboxRoll` body not found").to.not.equal(null);
+      // Whitespace-tolerant: `burnieAmount = ( burnieOut / 1 ether ) * 1 ether`.
       const floorPattern =
-        /burnieAmount\s*=\s*\(\s*burnieAmount\s*\/\s*1 ether\s*\)\s*\*\s*1 ether/;
+        /burnieAmount\s*=\s*\(\s*burnieOut\s*\/\s*1 ether\s*\)\s*\*\s*1 ether/;
       expect(
         floorPattern.test(body),
-        "`_resolveLootboxCommon` must floor `burnieAmount` via `(burnieAmount / 1 ether) * 1 ether` (D-279-INLINE-01 / D-279-BUR01-SITE-01)"
+        "`_settleLootboxRoll` must floor this roll's `burnieOut` via `(burnieOut / 1 ether) * 1 ether` (D-279-INLINE-01 / D-279-BUR01-SITE-01)"
       ).to.equal(true);
     });
 
     it("[01b] index-ordering: the floor expression precedes the `if (burnieAmount != 0)` guard, which precedes the `coinflip.creditFlip(player, burnieAmount)` call", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
-        extractBody(source, "function _resolveLootboxCommon(")
+        extractBody(source, "function _settleLootboxRoll(")
       );
-      expect(body, "`_resolveLootboxCommon` body not found").to.not.equal(null);
+      expect(body, "`_settleLootboxRoll` body not found").to.not.equal(null);
 
       const floorIdx = body.search(
-        /burnieAmount\s*=\s*\(\s*burnieAmount\s*\/\s*1 ether\s*\)\s*\*\s*1 ether/
+        /burnieAmount\s*=\s*\(\s*burnieOut\s*\/\s*1 ether\s*\)\s*\*\s*1 ether/
       );
       const guardIdx = body.search(/if\s*\(\s*burnieAmount\s*!=\s*0\s*\)/);
       const creditIdx = body.indexOf(
@@ -125,7 +125,7 @@ describe("LootboxWholeBurnieFloor — Phase 279 Wave 2 TST-BUR-01", function () 
 
       expect(
         floorIdx,
-        "the floor must precede the `if (burnieAmount != 0)` guard so a sub-1-BURNIE accumulator floors to 0 BEFORE the guard"
+        "the floor must precede the `if (burnieAmount != 0)` guard so a sub-1-BURNIE roll floors to 0 BEFORE the guard"
       ).to.be.lessThan(guardIdx);
       expect(
         guardIdx,
@@ -133,25 +133,25 @@ describe("LootboxWholeBurnieFloor — Phase 279 Wave 2 TST-BUR-01", function () 
       ).to.be.lessThan(creditIdx);
     });
 
-    it("[01c] the floor precedes the `bonusBurnie` accumulation read — it floors the FINAL post-bonus accumulator, not a per-component value", function () {
+    it("[01c] the floor is derived once from this roll's raw `burnieOut` draw — per-roll, no cross-roll accumulator", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
-        extractBody(source, "function _resolveLootboxCommon(")
+        extractBody(source, "function _settleLootboxRoll(")
       );
-      expect(body, "`_resolveLootboxCommon` body not found").to.not.equal(null);
+      expect(body, "`_settleLootboxRoll` body not found").to.not.equal(null);
 
-      // The `burnieAmount += bonusBurnie;` accumulation must come BEFORE the
-      // floor — proving the floor is applied once to the FINAL post-bonus
-      // accumulator (D-279-BUR01-SITE-01), not per-component.
-      const bonusAddIdx = body.indexOf("burnieAmount += bonusBurnie;");
+      // Post-refactor each roll settles independently: `burnieOut` is the single
+      // value `_resolveLootboxRoll` returns for THIS roll, floored once. The draw
+      // producing `burnieOut` must precede the floor (the floor floors that draw).
+      const drawIdx = body.search(/\(\s*uint256 burnieOut\s*,/);
       const floorIdx = body.search(
-        /burnieAmount\s*=\s*\(\s*burnieAmount\s*\/\s*1 ether\s*\)\s*\*\s*1 ether/
+        /burnieAmount\s*=\s*\(\s*burnieOut\s*\/\s*1 ether\s*\)\s*\*\s*1 ether/
       );
-      expect(bonusAddIdx, "`burnieAmount += bonusBurnie;` not found").to.be.greaterThan(-1);
+      expect(drawIdx, "`burnieOut` reward draw not found").to.be.greaterThan(-1);
       expect(floorIdx, "floor expression not found").to.be.greaterThan(-1);
       expect(
-        bonusAddIdx,
-        "the presale-bonus accumulation must precede the floor (the floor floors the FINAL post-bonus accumulator once)"
+        drawIdx,
+        "the reward draw producing `burnieOut` must precede the floor"
       ).to.be.lessThan(floorIdx);
     });
   });
@@ -160,13 +160,13 @@ describe("LootboxWholeBurnieFloor — Phase 279 Wave 2 TST-BUR-01", function () 
     it("[02a] the `LootBoxOpened` emit carries `burnieAmount` as its 7th positional arg, and no other floored/unfloored `burnie*` snapshot is introduced between the floor and the emit", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
-        extractBody(source, "function _resolveLootboxCommon(")
+        extractBody(source, "function _settleLootboxRoll(")
       );
-      expect(body, "`_resolveLootboxCommon` body not found").to.not.equal(null);
+      expect(body, "`_settleLootboxRoll` body not found").to.not.equal(null);
 
-      // The emit threads `burnieAmount` as its 7th positional arg (the
-      // post-Phase-277 signature: player, index, day, amount, targetLevel,
-      // futureTickets, burnieAmount, roundedUp).
+      // The emit threads `burnieAmount` as its 7th positional arg (the per-roll
+      // signature: player, index, day, fullAmount, rollLevel, scaledTickets,
+      // burnieAmount, roundedUp).
       const emitMatch = body.match(/emit LootBoxOpened\(([\s\S]*?)\);/);
       expect(emitMatch, "`LootBoxOpened` emit not found").to.not.equal(null);
       const emitArgs = emitMatch[1]
@@ -184,10 +184,9 @@ describe("LootboxWholeBurnieFloor — Phase 279 Wave 2 TST-BUR-01", function () 
 
       // Between the floor and the emit, `burnieAmount` is the only `burnie*`
       // amount local in play — no `burnieFloored`, `burniePreFloor`,
-      // `burnieSnapshot`, etc. is introduced. (`bonusBurnie` is block-scoped to
-      // the presale `if` BEFORE the floor and is not in the floor->emit span.)
+      // `burnieSnapshot`, etc. is introduced.
       const floorIdx = body.search(
-        /burnieAmount\s*=\s*\(\s*burnieAmount\s*\/\s*1 ether\s*\)\s*\*\s*1 ether/
+        /burnieAmount\s*=\s*\(\s*burnieOut\s*\/\s*1 ether\s*\)\s*\*\s*1 ether/
       );
       const emitIdx = body.indexOf("emit LootBoxOpened(");
       expect(floorIdx, "floor expression not found").to.be.greaterThan(-1);
@@ -203,18 +202,20 @@ describe("LootboxWholeBurnieFloor — Phase 279 Wave 2 TST-BUR-01", function () 
       ).to.equal(null);
     });
 
-    it("[02b] the return tuple's BURNIE element is the bare `burnieAmount` local — `return (futureTickets, burnieAmount, roundedUp)`", function () {
+    it("[02b] the floored `burnieAmount` local is the single source of truth — it feeds the `creditFlip`, and `_settleLootboxRoll` is void (no return tuple re-introduces an unfloored snapshot)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
-        extractBody(source, "function _resolveLootboxCommon(")
+        extractBody(source, "function _settleLootboxRoll(")
       );
-      expect(body, "`_resolveLootboxCommon` body not found").to.not.equal(null);
+      expect(body, "`_settleLootboxRoll` body not found").to.not.equal(null);
       expect(
-        /return\s*\(\s*futureTickets\s*,\s*burnieAmount\s*,\s*roundedUp\s*\)/.test(
-          body
-        ),
-        "`_resolveLootboxCommon` must return the bare floored `burnieAmount` local in its tuple"
-      ).to.equal(true);
+        body.indexOf("coinflip.creditFlip(player, burnieAmount)"),
+        "`creditFlip` must use the bare floored `burnieAmount` local"
+      ).to.be.greaterThan(-1);
+      expect(
+        /return\s*\(/.test(body),
+        "`_settleLootboxRoll` is void — no return tuple carrying a BURNIE snapshot"
+      ).to.equal(false);
     });
   });
 

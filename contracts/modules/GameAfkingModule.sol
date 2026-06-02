@@ -1083,7 +1083,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      seed `day`). No stored baseLevel/index — the live roll needs no floor.
     /// @param player The subscriber whose box is materialized.
     /// @param sub The subscriber's stamped record (storage ref — the marker advances here).
-    function _openAfkingBox(address player, Sub storage sub) private {
+    function _openAfkingBox(address player, Sub storage sub, uint256 word) private {
         // lastAutoBoughtDay is uint24; widen to uint32 for the seed/word key.
         uint32 day = uint32(sub.lastAutoBoughtDay);
         // Advance the day-keyed no-double-open marker BEFORE the resolve (effects-first; a
@@ -1091,8 +1091,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         sub.lastOpenedDay = sub.lastAutoBoughtDay;
 
         // boons OFF ⇒ the stamped spend IS the box amount (unpacked milli-ETH → wei). The
-        // word is the frozen stamp day's word so the open can't be re-seeded; the level and
-        // EV-cap read live in the callee. No index, no baseLevel.
+        // word (the frozen stamp day's `rngWordByDay[day]`, passed in from the readiness check
+        // so it isn't re-read) keeps the open from being re-seeded; the level and EV-cap read
+        // live in the callee. No index, no baseLevel.
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
             .delegatecall(
@@ -1101,22 +1102,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     player,
                     _unpackMilliEthToWei(uint64(sub.amount)), // milli-ETH → wei
                     day,
-                    rngWordByDay[day],
+                    word,
                     uint16(sub.scorePlus1) - 1
                 )
             );
         if (!ok) _revertDelegate(data);
-    }
-
-    /// @dev O(1) afking-box-open materializability for a single stamped sub: it has a
-    ///      pending unopened box (`lastOpenedDay < lastAutoBoughtDay`) AND the frozen stamp
-    ///      day's word has landed (`rngWordByDay[lastAutoBoughtDay] != 0`). A zero word means
-    ///      not-ready (the day's word hasn't been committed yet — the open is skipped until
-    ///      it lands). View — no state writes.
-    function _afkingBoxReady(Sub storage sub) private view returns (bool) {
-        return
-            sub.lastOpenedDay < sub.lastAutoBoughtDay &&
-            rngWordByDay[sub.lastAutoBoughtDay] != 0;
     }
 
     /// @notice The post-RNG afking-box OPEN leg — an `OPEN_BATCH`-style router category
@@ -1144,16 +1134,37 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // on already-opened subs; a fresh-stamp sub past its marker opens).
         if (cursor >= len) cursor = 0;
 
+        // Day-cache: the boxes in one pass are almost always all stamped on the current day,
+        // so the frozen stamp-day word is read from `rngWordByDay` once per DISTINCT day, not
+        // once per box. Mixed days CAN occur (the open leg falls behind OPEN_BATCH or a keeper
+        // skips a day → the no-orphan rule keeps an old-day box), so each box still resolves
+        // ITS OWN stamp day — the cache only short-circuits the repeated same-day SLOAD, never
+        // crosses a box to another day's word (the seed-freeze invariant).
+        uint24 cachedDay;
+        uint256 cachedWord; // != 0 ⇒ cache holds rngWordByDay[cachedDay]
+
         while (cursor < len && opened < maxCount) {
             address player = _subscribers[cursor];
             Sub storage sub = _subOf[player];
             unchecked {
                 ++cursor;
             }
-            // Skip subs with no fresh, RNG-ready stamp (already-opened / word not landed).
-            if (!_afkingBoxReady(sub)) continue;
+            // Skip subs with no pending box (already-opened: lastOpenedDay >= lastAutoBoughtDay).
+            uint24 stampDay = sub.lastAutoBoughtDay;
+            if (sub.lastOpenedDay >= stampDay) continue;
+            // Resolve this box's frozen stamp-day word — cache hit on the common same-day path.
+            uint256 word;
+            if (stampDay == cachedDay && cachedWord != 0) {
+                word = cachedWord;
+            } else {
+                word = rngWordByDay[stampDay];
+                cachedDay = stampDay;
+                cachedWord = word;
+            }
+            // word == 0 ⇒ the stamp day's word hasn't landed yet — skip until it does.
+            if (word == 0) continue;
             // Guaranteed-non-reverting under the entry-gate + the readiness pre-gate.
-            _openAfkingBox(player, sub);
+            _openAfkingBox(player, sub, word);
             unchecked {
                 ++opened;
             }

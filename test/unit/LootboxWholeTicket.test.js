@@ -69,9 +69,9 @@ async function deployTester() {
   return tester;
 }
 
-// Brace-match extractor for the `_resolveLootboxCommon` function body.
-function extractCommonBody(source) {
-  const fnIdx = source.indexOf("function _resolveLootboxCommon(");
+// Brace-match extractor for a named function body.
+function extractFnBody(source, signature) {
+  const fnIdx = source.indexOf(signature);
   if (fnIdx < 0) return null;
   let depth = 0;
   let bodyStart = -1;
@@ -85,6 +85,13 @@ function extractCommonBody(source) {
     }
   }
   return null;
+}
+
+// The per-roll ticket/BURNIE/emit/consolation logic now lives in
+// `_settleLootboxRoll` (post-refactor; `_resolveLootboxCommon` became a void
+// dispatcher that calls this helper once per roll).
+function extractSettleBody(source) {
+  return extractFnBody(source, "function _settleLootboxRoll(");
 }
 
 /**
@@ -157,42 +164,43 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       // drift detector — if production reformats this expression, the tester
       // contract above MUST be updated in lock-step.
       const bernoulliPattern =
-        /\(uint16\(seed >> 152\)\s*%\s*uint16\(TICKET_SCALE\)\)\s*<\s*uint16\(frac\)/;
+        /\(uint16\(rollSeed >> 152\)\s*%\s*uint16\(TICKET_SCALE\)\)\s*<\s*uint16\(frac\)/;
       expect(
         source.match(bernoulliPattern),
         "production Bernoulli pattern drifted from tester — update LootboxBernoulliTester.sol to match"
       ).to.not.be.null;
 
-      // The scaled count is read straight from function-scope `futureTickets`
-      // into the `whole` local — `futureTickets` itself is never reassigned by
+      // The scaled count is read straight from this roll's `scaledTickets` local
+      // into the `whole` local — `scaledTickets` itself is never reassigned by
       // the collapse, so it stays the scaled value for the `LootBoxOpened` emit.
       expect(
-        /uint32 whole = futureTickets \/ uint32\(TICKET_SCALE\);/.test(source),
-        "`whole = futureTickets / uint32(TICKET_SCALE)` derivation missing"
+        /uint32 whole = scaledTickets \/ uint32\(TICKET_SCALE\);/.test(source),
+        "`whole = scaledTickets / uint32(TICKET_SCALE)` derivation missing"
       ).to.equal(true);
       expect(
-        /uint32 frac = futureTickets % uint32\(TICKET_SCALE\);/.test(source),
-        "`frac = futureTickets % uint32(TICKET_SCALE)` derivation missing"
+        /uint32 frac = scaledTickets % uint32\(TICKET_SCALE\);/.test(source),
+        "`frac = scaledTickets % uint32(TICKET_SCALE)` derivation missing"
       ).to.equal(true);
 
-      // Phase 277: the Bernoulli math sits in the unified ticket-queue path
-      // inside the `if (futureTickets != 0)` guard — the
+      // Post-refactor the Bernoulli math sits in the per-roll ticket-queue path
+      // inside the `if (scaledTickets != 0)` guard — the
       // `index != type(uint48).max` sentinel gate is fully retired.
       // Structural invariants verified here:
-      //   (a) `seed >> 152` appears exactly once (no duplication across paths).
+      //   (a) `rollSeed >> 152` appears exactly once (one source site; fires
+      //       per-roll at runtime — a split box runs `_settleLootboxRoll` twice).
       //   (b) The Bernoulli slice sits INSIDE the outer
-      //       `if (futureTickets != 0)` guard (no slice consumption when
-      //       `futureTickets == 0`).
+      //       `if (scaledTickets != 0)` guard (no slice consumption when
+      //       `scaledTickets == 0`).
       //   (c) No `index != type(uint48).max` sentinel gate exists anywhere.
-      const sliceMatches = [...source.matchAll(/uint16\(seed >> 152\)/g)];
+      const sliceMatches = [...source.matchAll(/uint16\(rollSeed >> 152\)/g)];
       expect(
         sliceMatches.length,
-        "Bernoulli slice must appear exactly once (unified path, no duplication)"
+        "Bernoulli slice must appear exactly once (single source site, no duplication)"
       ).to.equal(1);
       const sliceLineIdx = sliceMatches[0].index;
       const preamble = source.slice(0, sliceLineIdx);
-      // Outer-guard ancestor: `if (futureTickets != 0)` precedes the slice.
-      const outerGuardIdx = preamble.lastIndexOf("if (futureTickets != 0)");
+      // Outer-guard ancestor: `if (scaledTickets != 0)` precedes the slice.
+      const outerGuardIdx = preamble.lastIndexOf("if (scaledTickets != 0)");
       expect(
         outerGuardIdx,
         "Bernoulli slice not gated by outer `if (futureTickets != 0)` guard"
@@ -395,50 +403,50 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
   });
 
   describe("TST-WT-03 — bits[152..167] independence + unified-path gating", function () {
-    it("[03-static] bits[152..167] is consumed exactly once inside the outer `if (futureTickets != 0)` guard (Phase 277 unified path)", function () {
+    it("[03-static] bits[152..167] is consumed exactly once inside the outer `if (scaledTickets != 0)` guard (per-roll settle path)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Locate the unique reference to `seed >> 152` and assert: (a) it appears
-      // exactly once (no duplication across paths), (b) it sits inside the outer
-      // `if (futureTickets != 0)` guard, (c) no `index != type(uint48).max`
-      // sentinel gate exists (Phase 277 retirement).
-      const matches = [...source.matchAll(/seed >> 152/g)];
-      expect(matches.length, "bits[152..167] should be consumed exactly once").to.equal(1);
+      // Locate the unique reference to `rollSeed >> 152` and assert: (a) it appears
+      // exactly once (one source site; fires per-roll at runtime), (b) it sits
+      // inside the outer `if (scaledTickets != 0)` guard, (c) no
+      // `index != type(uint48).max` sentinel gate exists (sentinel retirement).
+      const matches = [...source.matchAll(/rollSeed >> 152/g)];
+      expect(matches.length, "bits[152..167] should appear at exactly one source site").to.equal(1);
       const idx = matches[0].index;
       const preamble = source.slice(0, idx);
-      // Outer guard `if (futureTickets != 0)` must precede the slice.
+      // Outer guard `if (scaledTickets != 0)` must precede the slice.
       expect(
-        preamble.lastIndexOf("if (futureTickets != 0)"),
-        "Bernoulli slice not gated by outer `if (futureTickets != 0)` guard"
+        preamble.lastIndexOf("if (scaledTickets != 0)"),
+        "Bernoulli slice not gated by outer `if (scaledTickets != 0)` guard"
       ).to.be.greaterThan(-1);
       // The `index != type(uint48).max` sentinel gate must be fully retired.
       expect(
         source.includes("if (index != type(uint48).max)"),
-        "Phase 277 sentinel retirement: `if (index != type(uint48).max)` must not appear"
+        "sentinel retirement: `if (index != type(uint48).max)` must not appear"
       ).to.equal(false);
     });
 
-    it("[03-static] the unified ticket-queue path consumes `seed >> 152` exactly once — no per-path re-consumption", function () {
+    it("[03-static] the per-roll ticket-queue path consumes `rollSeed >> 152` exactly once — single source site", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Phase 277: the manual + auto-resolve paths share one unconditional
-      // `_queueTickets(player, targetLevel, whole, false)` call, so the
-      // Bernoulli slice is consumed exactly once for both.
-      const callLine = "_queueTickets(player, targetLevel, whole, false)";
+      // The `_queueTickets(player, rollLevel, whole, false)` call is a single
+      // source site inside `_settleLootboxRoll` (invoked once per roll), so the
+      // Bernoulli slice is consumed exactly once per roll from one source site.
+      const callLine = "_queueTickets(player, rollLevel, whole, false)";
       const callMatches = (
-        source.match(/_queueTickets\(player, targetLevel, whole, false\)/g) || []
+        source.match(/_queueTickets\(player, rollLevel, whole, false\)/g) || []
       ).length;
       expect(
         callMatches,
-        "the unified ticket-queue path must call `_queueTickets(player, targetLevel, whole, false)` exactly once"
+        "the per-roll ticket-queue path must call `_queueTickets(player, rollLevel, whole, false)` at exactly one source site"
       ).to.equal(1);
-      // The slice itself appears exactly once — no branch re-consumes it.
-      const sliceMatches = (source.match(/seed >> 152/g) || []).length;
+      // The slice itself appears at exactly one source site.
+      const sliceMatches = (source.match(/rollSeed >> 152/g) || []).length;
       expect(
         sliceMatches,
-        "bits[152..167] must be consumed exactly once across the unified path"
+        "bits[152..167] must appear at exactly one source site"
       ).to.equal(1);
       // And the queue call sits after the slice (collapse precedes the queue).
       const callIdx = source.indexOf(callLine);
-      const sliceIdx = source.indexOf("seed >> 152");
+      const sliceIdx = source.indexOf("rollSeed >> 152");
       expect(callIdx, "_queueTickets callsite not found").to.be.greaterThan(-1);
       expect(
         callIdx,
@@ -528,33 +536,32 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
   });
 
   describe("TST-WT-04 — `TicketsQueued` (not `TicketsQueuedScaled`) on the unified ticket-queue path (Phase 277)", function () {
-    it("the unified ticket-queue path calls `_queueTickets(player, targetLevel, whole, false)` exactly once — `_queueTicketsScaled` no longer appears in LootboxModule", function () {
+    it("the per-roll ticket-queue path calls `_queueTickets(player, rollLevel, whole, false)` at one source site — `_queueTicketsScaled` no longer appears in LootboxModule", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Phase 277 retired the `index != type(uint48).max` sentinel: the manual
-      // and auto-resolve paths share one unconditional
-      // `_queueTickets(player, targetLevel, whole, false)` call.
-      const callPattern = /_queueTickets\(player, targetLevel, whole, false\)/g;
+      // The `_queueTickets(player, rollLevel, whole, false)` call is a single
+      // source site inside `_settleLootboxRoll` (invoked per roll).
+      const callPattern = /_queueTickets\(player, rollLevel, whole, false\)/g;
       const calls = (source.match(callPattern) || []).length;
       expect(
         calls,
-        "expected exactly one `_queueTickets(player, targetLevel, whole, false)` callsite (unified path post-Phase-277)"
+        "expected exactly one `_queueTickets(player, rollLevel, whole, false)` source site (per-roll settle path)"
       ).to.equal(1);
 
       // `_queueTicketsScaled` must no longer appear in this module.
       expect(
         source.includes("_queueTicketsScaled"),
-        "`_queueTicketsScaled` must not appear in LootboxModule post-Phase-275"
+        "`_queueTicketsScaled` must not appear in LootboxModule"
       ).to.equal(false);
 
-      // The unified call sits inside the outer `if (futureTickets != 0)` guard
+      // The call sits inside the outer `if (scaledTickets != 0)` guard
       // and is NOT wrapped in any `index`-conditional branch.
-      const callLine = "_queueTickets(player, targetLevel, whole, false)";
+      const callLine = "_queueTickets(player, rollLevel, whole, false)";
       const callIdx = source.indexOf(callLine);
       expect(callIdx).to.be.greaterThan(-1);
       const preamble = source.slice(0, callIdx);
       expect(
-        preamble.lastIndexOf("if (futureTickets != 0)"),
-        "the unified `_queueTickets` call must sit inside the `if (futureTickets != 0)` guard"
+        preamble.lastIndexOf("if (scaledTickets != 0)"),
+        "the `_queueTickets` call must sit inside the `if (scaledTickets != 0)` guard"
       ).to.be.greaterThan(-1);
       expect(
         source.includes("if (index != type(uint48).max)"),
@@ -580,56 +587,57 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
   });
 
   describe("TST-WT-05 — `LootBoxOpened.futureTickets` scaled-preservation (D-274-NO-EVT-BREAK-01; BurnieLootOpen removed in v47)", function () {
-    it("[05a] `_resolveLootboxCommon` returns function-scope `futureTickets` (scaled) and `LootBoxOpened` emit consumes the same scaled value", function () {
+    it("[05a] `_settleLootboxRoll` carries this roll's `scaledTickets` (scaled) and the `LootBoxOpened` emit consumes the same scaled value", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The `LootBoxOpened` emit must reference `futureTickets` (the function-
-      // scope return-variable). The ticket-queue path uses a SEPARATE `whole`
-      // local; the function-scope `futureTickets` MUST NOT be reassigned
-      // (G17 grep gate). Post-Phase-277 the emit signature is
-      // `(player, index, day, amount, targetLevel, futureTickets,
-      //   burnieAmount, roundedUp)` — `index` and `day` are now separate
-      // fields, the trailing `roundedUp` is new, and the `bonusBurnie`
-      // breakdown field is dropped (folded into `burnieAmount`).
+      // The `LootBoxOpened` emit must reference `scaledTickets` (this roll's
+      // scaled ticket count). The ticket-queue path uses a SEPARATE `whole`
+      // local; `scaledTickets` is reassigned only by the distress bonus (a
+      // still-scaled value) BEFORE the collapse, never by the collapse itself.
+      // The emit signature is `(player, index, day, fullAmount, rollLevel,
+      // scaledTickets, burnieAmount, roundedUp)`.
       const lootboxOpenedEmit =
-        /emit LootBoxOpened\(\s*player,\s*index,\s*day,\s*amount,\s*targetLevel,\s*futureTickets,/;
+        /emit LootBoxOpened\(\s*player,\s*index,\s*day,\s*fullAmount,\s*rollLevel,\s*scaledTickets,/;
       expect(
         source.match(lootboxOpenedEmit),
-        "LootBoxOpened emit must consume function-scope futureTickets (scaled) in the post-Phase-277 signature"
+        "LootBoxOpened emit must consume `scaledTickets` (scaled) in the per-roll signature"
       ).to.not.be.null;
     });
 
-    it("[05b] the Bernoulli collapse never reassigns function-scope `futureTickets` — it stays the scaled value the `LootBoxOpened` emit consumes", function () {
+    it("[05b] the Bernoulli collapse never reassigns this roll's `scaledTickets` — it stays the scaled value the `LootBoxOpened` emit consumes", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const body = extractCommonBody(source);
-      expect(body, "_resolveLootboxCommon body not found").to.not.equal(null);
-      // Within `_resolveLootboxCommon`, `futureTickets` is assigned only by:
-      //   (1) `futureTickets = rolledTickets;` — the scaled roll result
-      //   (2) `futureTickets = uint32(boosted);` — the distress-mode bonus,
-      //       still a scaled value, applied BEFORE the Bernoulli collapse
-      // The Bernoulli collapse derives the separate `whole` local and must
-      // NEVER write back to function-scope `futureTickets`.
-      const assignMatches = [...body.matchAll(/futureTickets\s*=[^=]/g)];
+      const body = extractSettleBody(source);
+      expect(body, "_settleLootboxRoll body not found").to.not.equal(null);
+      // Within `_settleLootboxRoll`, `scaledTickets` is sourced by the
+      // `_resolveLootboxRoll` destructure (`uint32 scaledTickets`) and then
+      // reassigned at most once by the distress-mode bonus
+      // (`scaledTickets = uint32(uint256(scaledTickets) + bonus);`), still a
+      // scaled value, applied BEFORE the Bernoulli collapse. The collapse
+      // derives the separate `whole` local and must NEVER write back to
+      // `scaledTickets`.
+      const assignMatches = [...body.matchAll(/scaledTickets\s*=[^=]/g)];
       expect(
         assignMatches.length,
-        `_resolveLootboxCommon assigns futureTickets ${assignMatches.length} times (expected 2: the scaled roll result + the scaled distress bonus)`
-      ).to.equal(2);
+        `_settleLootboxRoll assigns scaledTickets ${assignMatches.length} times (expected 1: the scaled distress bonus; the initial value comes from the destructure)`
+      ).to.equal(1);
+      // The scaled count is produced by the `_resolveLootboxRoll` destructure.
       expect(
-        body.includes("futureTickets = rolledTickets;"),
-        "futureTickets must take the scaled roll result"
+        /\(\s*uint256 burnieOut\s*,\s*uint32 scaledTickets\s*,/.test(body),
+        "scaledTickets must be the scaled roll result from the `_resolveLootboxRoll` destructure"
       ).to.equal(true);
+      // The distress-bonus reassignment stays a scaled value.
       expect(
-        body.includes("futureTickets = uint32(boosted);"),
-        "futureTickets distress-bonus reassignment must stay a scaled value"
+        body.includes("scaledTickets = uint32(uint256(scaledTickets) + bonus);"),
+        "the scaledTickets distress-bonus reassignment must stay a scaled value"
       ).to.equal(true);
-      // The collapse writes only `whole` — never `futureTickets`.
+      // The collapse writes only `whole` — never `scaledTickets`.
       const collapseIdx = body.indexOf(
-        "uint32 whole = futureTickets / uint32(TICKET_SCALE);"
+        "uint32 whole = scaledTickets / uint32(TICKET_SCALE);"
       );
       expect(collapseIdx, "Bernoulli collapse not found").to.be.greaterThan(-1);
       const collapseRegion = body.slice(collapseIdx);
       expect(
-        /futureTickets\s*=[^=]/.test(collapseRegion),
-        "the Bernoulli collapse must not reassign function-scope `futureTickets`"
+        /scaledTickets\s*=[^=]/.test(collapseRegion),
+        "the Bernoulli collapse must not reassign this roll's `scaledTickets`"
       ).to.equal(false);
     });
 
@@ -662,36 +670,36 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.equal(0);
     });
 
-    it("[06b] the unified ticket-queue path sits inside the outer `if (futureTickets != 0)` guard with no `index`-conditional gate", function () {
+    it("[06b] the per-roll ticket-queue path sits inside the outer `if (scaledTickets != 0)` guard with no `index`-conditional gate", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Phase 277: the `index != type(uint48).max` sentinel gate is retired.
-      // The unified `_queueTickets` call sits directly inside the outer
-      // `if (futureTickets != 0)` guard.
+      // The `index != type(uint48).max` sentinel gate is retired. The
+      // `_queueTickets` call sits directly inside the outer
+      // `if (scaledTickets != 0)` guard.
       expect(
         source.includes("if (index != type(uint48).max)"),
         "the `index != type(uint48).max` sentinel gate must be fully retired"
       ).to.equal(false);
       const callIdx = source.indexOf(
-        "_queueTickets(player, targetLevel, whole, false)"
+        "_queueTickets(player, rollLevel, whole, false)"
       );
-      expect(callIdx, "the unified `_queueTickets` callsite not found").to.be.greaterThan(
+      expect(callIdx, "the `_queueTickets` callsite not found").to.be.greaterThan(
         -1
       );
       const preamble = source.slice(0, callIdx);
       expect(
-        preamble.lastIndexOf("if (futureTickets != 0)"),
-        "the unified `_queueTickets` call must sit inside the `if (futureTickets != 0)` guard"
+        preamble.lastIndexOf("if (scaledTickets != 0)"),
+        "the `_queueTickets` call must sit inside the `if (scaledTickets != 0)` guard"
       ).to.be.greaterThan(-1);
     });
 
-    it("[06c] the unified `_queueTickets` call + the `payColdBustConsolation`-gated consolation are ALL inside the outer `if (futureTickets != 0)` guard", function () {
+    it("[06c] the per-roll `_queueTickets` call + the `payColdBustConsolation`-gated consolation are ALL inside the outer `if (scaledTickets != 0)` guard", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const outerGuardIdx = source.indexOf("if (futureTickets != 0)");
-      expect(outerGuardIdx, "outer `if (futureTickets != 0)` guard not found").to.be.greaterThan(
+      const outerGuardIdx = source.indexOf("if (scaledTickets != 0)");
+      expect(outerGuardIdx, "outer `if (scaledTickets != 0)` guard not found").to.be.greaterThan(
         -1
       );
       const callIdx = source.indexOf(
-        "_queueTickets(player, targetLevel, whole, false)"
+        "_queueTickets(player, rollLevel, whole, false)"
       );
       const consolationGateIdx = source.indexOf(
         "if (payColdBustConsolation && whole == 0)"
@@ -747,44 +755,50 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
   });
 
   describe("TST-WT-07 — field-consistency invariants for the unified ticket-queue path", function () {
-    it("[07a] function-scope `futureTickets` is the scaled value the `LootBoxOpened` emit consumes — the collapse writes only the separate `whole` local", function () {
+    it("[07a] this roll's `scaledTickets` is the scaled value the `LootBoxOpened` emit consumes — the collapse writes only the separate `whole` local", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The Bernoulli collapse derives `whole` from `futureTickets` but never
-      // reassigns `futureTickets` itself between the derivation and the emit,
-      // so `LootBoxOpened.futureTickets` carries the scaled pre-Bernoulli count.
+      // The Bernoulli collapse derives `whole` from `scaledTickets` but never
+      // reassigns `scaledTickets` itself between the derivation and the emit,
+      // so `LootBoxOpened.scaledTickets` carries the scaled pre-Bernoulli count.
       const deriveIdx = source.indexOf(
-        "uint32 whole = futureTickets / uint32(TICKET_SCALE);"
+        "uint32 whole = scaledTickets / uint32(TICKET_SCALE);"
       );
       const emitIdx = source.indexOf("emit LootBoxOpened(");
       expect(deriveIdx, "`whole` derivation not found").to.be.greaterThan(-1);
       expect(emitIdx, "LootBoxOpened emit not found").to.be.greaterThan(deriveIdx);
       const region = source.slice(deriveIdx, emitIdx);
-      // `futureTickets` must not be reassigned between the derivation and the emit.
-      const reassign = [...region.matchAll(/futureTickets\s*=[^=]/g)];
+      // `scaledTickets` must not be reassigned between the derivation and the emit.
+      const reassign = [...region.matchAll(/scaledTickets\s*=[^=]/g)];
       expect(
         reassign.length,
-        `futureTickets reassigned ${reassign.length} times between the collapse and the emit (expected 0)`
+        `scaledTickets reassigned ${reassign.length} times between the collapse and the emit (expected 0)`
       ).to.equal(0);
     });
 
-    it("[07b] the `LootBoxOpened` emit threads the function `index` parameter into the `lootboxIndex` slot and `day` into the `day` slot", function () {
+    it("[07b] the `LootBoxOpened` emit threads the `index` parameter into the `lootboxIndex` slot and `day` into the `day` slot", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Post-Phase-277 the emit signature is
-      // `(player, index, day, amount, targetLevel, futureTickets,
-      //   burnieAmount, roundedUp)` — the `bonusBurnie` breakdown field is
-      // dropped (folded into `burnieAmount`).
+      // The per-roll emit signature is
+      // `(player, index, day, fullAmount, rollLevel, scaledTickets,
+      //   burnieAmount, roundedUp)`.
       expect(
-        /emit LootBoxOpened\(\s*player,\s*index,\s*day,\s*amount,\s*targetLevel,\s*futureTickets,\s*burnieAmount,\s*roundedUp\s*\)/.test(
+        /emit LootBoxOpened\(\s*player,\s*index,\s*day,\s*fullAmount,\s*rollLevel,\s*scaledTickets,\s*burnieAmount,\s*roundedUp\s*\)/.test(
           source
         ),
-        "LootBoxOpened emit must thread (player, index, day, amount, targetLevel, futureTickets, burnieAmount, roundedUp)"
+        "LootBoxOpened emit must thread (player, index, day, fullAmount, rollLevel, scaledTickets, burnieAmount, roundedUp)"
       ).to.equal(true);
 
-      // Signature contains `uint48 index`.
-      const sigPattern = /function _resolveLootboxCommon\([\s\S]*?uint48 index/;
+      // `_resolveLootboxCommon` signature still carries `uint48 index` (it
+      // threads index through to `_settleLootboxRoll`), and the helper that
+      // emits (`_settleLootboxRoll`) also carries `uint48 index`.
+      const commonSig = /function _resolveLootboxCommon\([\s\S]*?uint48 index/;
       expect(
-        source.match(sigPattern),
+        source.match(commonSig),
         "_resolveLootboxCommon signature missing `uint48 index` parameter"
+      ).to.not.be.null;
+      const settleSig = /function _settleLootboxRoll\([\s\S]*?uint48 index/;
+      expect(
+        source.match(settleSig),
+        "_settleLootboxRoll signature missing `uint48 index` parameter"
       ).to.not.be.null;
     });
 

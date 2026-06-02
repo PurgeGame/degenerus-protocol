@@ -289,12 +289,12 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
 
     it("[03c] auto-resolve callers pass index=0 (3rd positional), emitLootboxEvent=false (8th positional), and payColdBustConsolation=false (9th positional) to _resolveLootboxCommon", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      // v47 _resolveLootboxCommon positional arg order (now 2-bool / 11 args; the
-      // old 5-bool presale/allowPasses/allowBoons gating params were removed — the
-      // 3 ETH callers now always roll full boons+passes):
+      // _resolveLootboxCommon positional arg order (now 12 args — the refactor
+      // added a trailing `bool allowSplit` param; the index/emit/consolation
+      // positions are unchanged):
       //   1 player, 2 day, 3 index, 4 amount, 5 targetLevel, 6 currentLevel,
       //   7 seed, 8 emitLootboxEvent, 9 payColdBustConsolation,
-      //   10 distressEth, 11 totalPackedEth
+      //   10 distressEth, 11 totalPackedEth, 12 allowSplit
       for (const fnSig of [
         "function resolveLootboxDirect(",
         "function resolveRedemptionLootbox(",
@@ -314,8 +314,8 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         const args = splitTopLevelArgs(callArgs);
         expect(
           args.length,
-          `${fnSig} _resolveLootboxCommon must receive 11 positional args (v47 2-bool shape)`
-        ).to.equal(11);
+          `${fnSig} _resolveLootboxCommon must receive 12 positional args (post-refactor allowSplit shape)`
+        ).to.equal(12);
         expect(
           args[2],
           `${fnSig} must pass index=0 as the 3rd positional arg (D-277-AR-INDEX-01)`
@@ -336,21 +336,23 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       }
     });
 
-    it("[03d] the unified ticket-queue path calls `_queueTickets(player, targetLevel, whole, false)` exactly once inside _resolveLootboxCommon — not inside any index-conditional branch", function () {
+    it("[03d] the per-roll ticket-queue path calls `_queueTickets(player, rollLevel, whole, false)` at one source site inside _settleLootboxRoll — not inside any index-conditional branch", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      const body = extractBody(src, "function _resolveLootboxCommon(");
-      expect(body, "_resolveLootboxCommon body not found").to.not.equal(null);
+      // The ticket/emit/consolation logic moved to `_settleLootboxRoll` (the
+      // void `_resolveLootboxCommon` dispatcher calls it once per roll).
+      const body = extractBody(src, "function _settleLootboxRoll(");
+      expect(body, "_settleLootboxRoll body not found").to.not.equal(null);
       const calls = (
-        body.match(/_queueTickets\(player, targetLevel, whole, false\)/g) || []
+        body.match(/_queueTickets\(player, rollLevel, whole, false\)/g) || []
       ).length;
       expect(
         calls,
-        "the post-retirement _resolveLootboxCommon must contain exactly one `_queueTickets(player, targetLevel, whole, false)` call (unified, unconditional)"
+        "_settleLootboxRoll must contain exactly one `_queueTickets(player, rollLevel, whole, false)` call (unconditional)"
       ).to.equal(1);
       // No `if (index` conditional should wrap any logic in this function body.
       expect(
         /if\s*\(\s*index\b/.test(body),
-        "_resolveLootboxCommon must not branch on `index` after sentinel retirement"
+        "_settleLootboxRoll must not branch on `index` after sentinel retirement"
       ).to.equal(false);
     });
   });
@@ -393,28 +395,30 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       }
     });
 
-    it("[04c] _resolveLootboxCommon keeps function-scope `futureTickets` at the scaled value and the LootBoxOpened emit consumes it (whole is a separate local)", function () {
+    it("[04c] _settleLootboxRoll keeps this roll's `scaledTickets` at the scaled value and the LootBoxOpened emit consumes it (whole is a separate local)", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      const body = extractBody(src, "function _resolveLootboxCommon(");
-      expect(body, "_resolveLootboxCommon body not found").to.not.equal(null);
+      const body = extractBody(src, "function _settleLootboxRoll(");
+      expect(body, "_settleLootboxRoll body not found").to.not.equal(null);
       // The Bernoulli collapse writes to a SEPARATE local `whole`, never to
-      // function-scope `futureTickets`.
+      // this roll's `scaledTickets`.
       expect(
-        /uint32 whole = futureTickets \/ uint32\(TICKET_SCALE\);/.test(body),
-        "`whole` must be derived from scaled `futureTickets` as a separate local"
+        /uint32 whole = scaledTickets \/ uint32\(TICKET_SCALE\);/.test(body),
+        "`whole` must be derived from scaled `scaledTickets` as a separate local"
       ).to.equal(true);
-      // The LootBoxOpened emit references `futureTickets` (scaled), not `whole`.
+      // The LootBoxOpened emit references `scaledTickets` (scaled), not `whole`.
       const emitArgList = extractCallArgs(body, "emit LootBoxOpened(");
       expect(emitArgList, "LootBoxOpened emit not found").to.not.equal(null);
       const emitArgs = splitTopLevelArgs(emitArgList);
       // Positional order matches the event def:
-      //   player, lootboxIndex(index), day, amount, futureLevel(targetLevel),
-      //   futureTickets, burnie(burnieAmount), roundedUp
+      //   player, lootboxIndex(index), day, fullAmount, futureLevel(rollLevel),
+      //   scaledTickets, burnie(burnieAmount), roundedUp
       expect(emitArgs.length).to.equal(8);
       expect(emitArgs[0]).to.equal("player");
       expect(emitArgs[1]).to.equal("index"); // lootboxIndex slot fed the `index` param
       expect(emitArgs[2]).to.equal("day"); // day slot fed the `day` param
-      expect(emitArgs[5]).to.equal("futureTickets"); // scaled, un-mutated
+      expect(emitArgs[3]).to.equal("fullAmount"); // box pre-split amount
+      expect(emitArgs[4]).to.equal("rollLevel"); // this roll's queue level
+      expect(emitArgs[5]).to.equal("scaledTickets"); // scaled, un-mutated by the collapse
       expect(emitArgs[7]).to.equal("roundedUp");
     });
 
@@ -435,12 +439,12 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       ).to.equal(false);
     });
 
-    it("[04e] the WWXRP-consolation case is inferable as `whole == 0 && futureTickets > 0` corroborated by a same-tx WWXRP ERC-20 Transfer from mintPrize", function () {
+    it("[04e] the WWXRP-consolation case is inferable as `whole == 0 && scaledTickets > 0` corroborated by a same-tx WWXRP ERC-20 Transfer from mintPrize", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      const body = extractBody(src, "function _resolveLootboxCommon(");
-      expect(body, "_resolveLootboxCommon body not found").to.not.equal(null);
+      const body = extractBody(src, "function _settleLootboxRoll(");
+      expect(body, "_settleLootboxRoll body not found").to.not.equal(null);
       // The consolation predicate is `payColdBustConsolation && whole == 0` and
-      // sits inside the `if (futureTickets != 0)` guard — i.e. it only fires when
+      // sits inside the `if (scaledTickets != 0)` guard — i.e. it only fires when
       // the scaled count was non-zero but the Bernoulli collapse produced whole==0.
       expect(
         /if \(payColdBustConsolation && whole == 0\)/.test(body),
@@ -463,14 +467,14 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
   });
 
   describe("TST-EVT-UNI-05 — auto-resolve field-consistency, EVT-UNI-06 resolved form (auto-resolve is SILENT; consolation is payColdBustConsolation-gated)", function () {
-    it("[05a] the only `emit LootBoxOpened` site in _resolveLootboxCommon is inside the `if (emitLootboxEvent)` gate", function () {
+    it("[05a] the only `emit LootBoxOpened` site in _settleLootboxRoll is inside the `if (emitLootboxEvent)` gate", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      const body = extractBody(src, "function _resolveLootboxCommon(");
-      expect(body, "_resolveLootboxCommon body not found").to.not.equal(null);
+      const body = extractBody(src, "function _settleLootboxRoll(");
+      expect(body, "_settleLootboxRoll body not found").to.not.equal(null);
       const emitMatches = [...body.matchAll(/emit LootBoxOpened\(/g)];
       expect(
         emitMatches.length,
-        "_resolveLootboxCommon must contain exactly one `emit LootBoxOpened` site"
+        "_settleLootboxRoll must contain exactly one `emit LootBoxOpened` site"
       ).to.equal(1);
       const emitIdx = emitMatches[0].index;
       // Walk back: the nearest preceding `if (emitLootboxEvent)` must enclose it.
@@ -517,8 +521,9 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       // proving it cannot fire on the auto-resolve (payColdBustConsolation=false)
       // path, while the surviving manual caller (openLootBox) passes
       // payColdBustConsolation=true and DOES pay it. (The BURNIE-lootbox manual
-      // caller openBurnieLootBox was removed in v47.)
-      const body = extractBody(src, "function _resolveLootboxCommon(");
+      // caller openBurnieLootBox was removed in v47.) The gate now lives in the
+      // per-roll `_settleLootboxRoll` helper.
+      const body = extractBody(src, "function _settleLootboxRoll(");
       expect(
         /if \(payColdBustConsolation && whole == 0\)\s*\{/.test(body),
         "the consolation must be gated by `payColdBustConsolation && whole == 0` — manual-only per D-277-CONSOLATION-GATE-01"
@@ -527,13 +532,13 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
 
     it("[05d] auto-resolve ticket awards stay observable via the unified `_queueTickets` path → `TicketsQueued`", function () {
       const lootbox = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      const body = extractBody(lootbox, "function _resolveLootboxCommon(");
-      // The unified path calls _queueTickets unconditionally (proven single-site
+      const body = extractBody(lootbox, "function _settleLootboxRoll(");
+      // The per-roll path calls _queueTickets unconditionally (proven single-site
       // in [03d]); _queueTickets is what makes auto-resolve awards observable
       // without a LootBoxOpened emit.
       expect(
-        body.includes("_queueTickets(player, targetLevel, whole, false)"),
-        "the unified path must call _queueTickets so auto-resolve awards remain observable via TicketsQueued"
+        body.includes("_queueTickets(player, rollLevel, whole, false)"),
+        "the per-roll path must call _queueTickets so auto-resolve awards remain observable via TicketsQueued"
       ).to.equal(true);
       // _queueTickets emits TicketsQueued (verified at the storage layer).
       const storage = fs.readFileSync(
@@ -650,7 +655,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       // Lootbox path: bits[152..167]; Jackpot path: bits[200..215]. Both use the
       // same `frac != 0 && (uint16(...) % uint16(TICKET_SCALE)) < uint16(frac)` shape.
       expect(
-        /frac != 0 && \(uint16\(seed >> 152\) % uint16\(TICKET_SCALE\)\) < uint16\(frac\)/.test(
+        /frac != 0 && \(uint16\(rollSeed >> 152\) % uint16\(TICKET_SCALE\)\) < uint16\(frac\)/.test(
           lootbox
         ),
         "LootboxModule Bernoulli predicate shape drifted"
