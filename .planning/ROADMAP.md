@@ -188,6 +188,7 @@ Plans:
   7. The gap-backfill / daily-jackpot decouple is proven (GAS-06, NEW from 355 — commit `3d969621`; closes the Codex-found protocol-forced 16.7M composition breach) — after a multi-day VRF-stall gap backfill, `advanceGame` breaks at `STAGE_GAP_BACKFILLED` (the day's jackpot is NOT paid that tx) and the NEXT advance pays it with the same frozen word (idempotent resume: `rngGate` returns `gapDays==0`, `dailyIdx` not advanced so `advanceDue()` stays true, `purchaseStartDay` bumped once). PROVE EACH `advanceGame` call in the gap-resume is < 16.7M (the existing test bounds only the 25M total resume — write a per-advance harness) + a `gap→defer→next-pays` regression test.
 
 **Plans**: 7 plans in 3 waves (Wave 0: fixture-sanity gate + the D-10 offset migration [the NON-WIDENING precondition]; Wave 1: the SEC-01/SEC-02/QST-04 fuzz+repro proofs + the gas/LIVE/GAS-06 EXTEND; Wave 2: the BY-NAME NON-WIDENING ledger)
+
 - [x] 356-01-PLAN.md — Wave-0 fixture-sanity gate + migrate the 7 read-only keeper/afking fuzz files (OFF_LASTBOUGHT 21->11/uint24) [SEC-01]
 - [x] 356-02-PLAN.md — Wave-0 migrate the 3 v55-proof files (offsets + _setStamp/_setScorePlus1 write-masks in lockstep; the SEC ADAPT-source templates) [SEC-01, SEC-02]
 - [x] 356-03-PLAN.md — Wave-1 SEC-01 V56SecUnmanipulable: churn-fuzz invariants + the 4 named repros (affiliate re-claim churn / streak decay-gap dodge / pendingBurnie double-claim CEI / 4 finalize hooks before delete) [SEC-01] ✅ 2026-06-02 (11/11 green incl. 1000-run churn fuzz; affiliateBase persists byte-identical across unsub+re-sub; decay-on-read + funding-kill guard zero the streak; CEI pays once; 4 finalize hooks all finalize-before-delete; no-orphan holds; ZERO contract mutation; commits cad9c48f + e8b68c89; threat_flag: drainAffiliateBase has no DegenerusGame dispatch stub → 357)
@@ -215,11 +216,22 @@ Plans:
 **Plans**: 6 plans in 4 waves (Wave 1: the leading contract gate + the D-14 reconciliation; Wave 2: the delta-audit ∥ the 3-skill genuine-PARALLEL sweep [+ best-effort XMODEL], both READ-ONLY @ HEAD'; Wave 3: FINDINGS-v56.0; Wave 4: the closure flip + the close-then-prompt-to-push offer). TWO `autonomous: false` gates (357-00 contract gate + 357-04 closure gate) — unlike every prior TERMINAL's single closure gate.
 
 Plans:
+**Wave 1**
+
 - [ ] 357-00-PLAN.md — Wave 1 (autonomous:false CONTRACT GATE): the THREE bundled contract changes — F-356-01 drainAffiliateBase dispatch stub + D-11 pass-required subscribe + D-12 purchase-grounded subscribe (D-13 VAULT/SDGNRS exempt) — forge build clean, HELD for USER hand-review, committed as the SOLE .sol commit (HEAD') [AUDIT-01]
 - [ ] 357-00b-PLAN.md — Wave 1 (autonomous): the D-14 NON-WIDENING reconciliation — re-run forge test at HEAD', drop the D-11/D-12 supersession reds (vm.skip + re-prove via the new V56SubHardening positive proofs), record the F-356-01 narrowing, re-freeze the subject at HEAD' [AUDIT-01]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 357-01-PLAN.md — Wave 2 (autonomous, READ-ONLY @ HEAD', ∥ 357-02): the delta-audit — every v56 surface NON-WIDENING vs 453f8073 (zero orphan hunks; SOLVENCY-01 byte-unchanged + RNG-freeze + affiliate flat-7% deterministic-split-PULL non-gameability + open two-path + LIVE-01 + GAS-06 + shared-quest non-perturbation + the 5cb707f2 + the 357-00 hardening attributed) + the regression live − union == ∅ BY NAME [AUDIT-01]
 - [ ] 357-02-PLAN.md — Wave 2 (autonomous, READ-ONLY @ HEAD', ∥ 357-01): the 3-skill genuine-PARALLEL adversarial sweep (run INLINE from the orchestrator context per D-06) + best-effort XMODEL augmentation — the strategic sub/unsub edge (PRIMARY) + settle-timing + pre-credit-EV + two-path open + the D-11/D-12 hardened gates + the now-sound 5cb707f2 bypass + the drainAffiliateBase stub + the affiliate claim CEI; /degen-skeptic dual-gate filter [AUDIT-01]
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 357-03-PLAN.md — Wave 3 (autonomous): author audit/FINDINGS-v56.0.md (the 9-section report, chmod 444 deferred to closure) folding the delta-audit + the adversarial disposition; F-356-01 RESOLVED-AT-357; re-attest the CURRENT v56.0 requirement set [AUDIT-01]
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 357-04-PLAN.md — Wave 4 (autonomous:false CLOSURE GATE): the atomic 5-doc closure flip + the MILESTONE_V56_AT_HEAD_<sha> signal (reconcile the stale 356 progress row; chmod 444 the findings; no .sol in the closure commit) + the close-then-prompt-to-push offer (D-02 — wait for explicit USER GO) [AUDIT-01]
 
 **UI hint**: no
