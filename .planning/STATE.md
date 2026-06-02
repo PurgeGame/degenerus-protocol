@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
 status: executing
-last_updated: "2026-06-02T19:49:10.044Z"
+last_updated: "2026-06-02T20:30:00.000Z"
 last_activity: 2026-06-02
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 18
-  completed_plans: 12
-  percent: 60
+  completed_plans: 13
+  percent: 64
 ---
 
 # Project State
@@ -33,9 +33,9 @@ See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 356 (TST — Unmanipulable + Quest-Core Non-Perturbation + Two-Path-Open + Liveness Valve + Gap-Decouple + Gas Marginals + Non-Widening) — EXECUTING
-Plan: 2 of 7
-Status: Ready to execute (356-01 complete — fixture green + 7 read-only fuzz files migrated to v56 uint24 re-pack)
-Last activity: 2026-06-02 -- 356-01 complete (fixture-sanity gate PASSED; 7 keeper/afking fuzz files migrated to OFF_LASTBOUGHT=11/uint24; KeeperFaucetResistance garbage-read reds NARROWED)
+Plan: 3 of 7
+Status: Ready to execute (356-02 complete — the 3 v55-PROOF fuzz files migrated offsets+write-masks in lockstep to the v56 Sub re-pack; valid Wave-1 ADAPT templates)
+Last activity: 2026-06-02 -- 356-02 complete (V55FreezeDeterminism/V55RevertFreeEvCap/V55SetMutationOpenE: read offsets + _pokeAfkingStamp/_setScorePlus1 write masks migrated 21/uint32+9/uint96+7 -> 11/14+8/uint24+6; forge build EXIT 0; freeze/determinism/no-orphan/swap-pop/OPEN-E proofs green; 9 v56-behavior reds [milli-ETH amount packing, subscribe-funding 0.01-ETH delta, withdraw E() custom-error, unified openBoxes valve] recorded PRE-EXISTING for the 356-07 baseline union; ZERO contract mutation)
 
 ## ▶ Active Milestone Roadmap (v56.0 — phases 353-357 — ACTIVE 2026-06-01; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`)
 

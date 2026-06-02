@@ -189,7 +189,7 @@ Plans:
 
 **Plans**: 7 plans in 3 waves (Wave 0: fixture-sanity gate + the D-10 offset migration [the NON-WIDENING precondition]; Wave 1: the SEC-01/SEC-02/QST-04 fuzz+repro proofs + the gas/LIVE/GAS-06 EXTEND; Wave 2: the BY-NAME NON-WIDENING ledger)
 - [x] 356-01-PLAN.md — Wave-0 fixture-sanity gate + migrate the 7 read-only keeper/afking fuzz files (OFF_LASTBOUGHT 21->11/uint24) [SEC-01]
-- [ ] 356-02-PLAN.md — Wave-0 migrate the 3 v55-proof files (offsets + _setStamp/_setScorePlus1 write-masks in lockstep; the SEC ADAPT-source templates) [SEC-01, SEC-02]
+- [x] 356-02-PLAN.md — Wave-0 migrate the 3 v55-proof files (offsets + _setStamp/_setScorePlus1 write-masks in lockstep; the SEC ADAPT-source templates) [SEC-01, SEC-02]
 - [ ] 356-03-PLAN.md — Wave-1 SEC-01 V56SecUnmanipulable: churn-fuzz invariants + the 4 named repros (affiliate re-claim churn / streak decay-gap dodge / pendingBurnie double-claim CEI / 4 finalize hooks before delete) [SEC-01]
 - [ ] 356-04-PLAN.md — Wave-1 SEC-02 V56FreezeSolvency: solvency invariant fuzz + RNG-freeze determinism + the SOLVENCY-01 debit byte-diff anchor [SEC-02]
 - [ ] 356-05-PLAN.md — Wave-1 QST-04 V56QuestNonPerturb: slot-1 streak-neutral during afking + cross-caller (awardQuestStreakBonus/bingo/degenerette/boon) byte-identity [SEC-01]
