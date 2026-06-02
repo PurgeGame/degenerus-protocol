@@ -51,6 +51,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
     //   affiliateBase u32 @23 · pendingBurnie u32 @27 · subStreakLatch u8 @31
     uint256 private constant OFF_DAILY = 0;           // uint8  dailyQuantity        (byte 0)
+    uint256 private constant OFF_VALIDTHROUGH = 1;     // uint24 validThroughLevel    (bytes 1..3)
     uint256 private constant OFF_LASTBOUGHT = 11;     // uint24 lastAutoBoughtDay    (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 14;     // uint24 lastOpenedDay        (bytes 14..16)
     uint256 private constant OFF_AFKCOVERED = 17;     // uint24 afkCoveredThroughDay (bytes 17..19)
@@ -61,8 +62,16 @@ contract V56SecUnmanipulable is DeployProtocol {
 
     uint256 private constant DEITY_SHIFT = 184;
 
+    /// @dev The game `level` lives in slot 0 at byte 14 (uint24) — poked up to drive the pass-eviction
+    ///      crossing (the fixture level does not advance organically over the harness's day loop).
+    uint256 private constant LEVEL_OFF = 14;
+
     /// @dev QUEST_SLOT0_REWARD / 1 ether = 100 whole BURNIE accrued to pendingBurnie per delivered buy.
     uint256 private constant SLOT0_BURNIE_PER_BUY = 100;
+
+    /// @dev SubscriptionExpired(player indexed, uint8 reason): reason 1 = pass-evict / funding-kill,
+    ///      reason 2 = cancel-reclaim (the in-stage tombstone reclaim).
+    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -309,6 +318,215 @@ contract V56SecUnmanipulable is DeployProtocol {
     }
 
     // =========================================================================
+    // Repro 3 — pendingBurnie double-claim CEI idempotency (pays EXACTLY once)
+    // =========================================================================
+
+    /// @notice claimAfkingBurnie pays the accrued pendingBurnie EXACTLY ONCE. The CEI zero-before-credit
+    ///         (`s.pendingBurnie = 0;` precedes `coinflip.creditFlip`, GameAfkingModule.sol:1277) means a
+    ///         double-call in one block credits the BURNIE on the first call and ZERO on the second (the
+    ///         second sees owed == 0 and `creditFlip(_, 0)` early-returns). Observed via the recipient's
+    ///         next-day coinflip stake delta: it rises by exactly `owed * 1e18` once, then not again.
+    function testDoubleClaimPaysExactlyOnceCEI() public {
+        address p = makeAddr("dbl_p");
+        _grantDeityPass(p);
+        _subscribeLootbox(p, 1);
+        _fundPool(p, 50 ether);
+        _deliverDay(_singleton(p), 0xDB1C01); // accrue 100 whole BURNIE into pendingBurnie
+
+        uint256 owedWhole = _pendingBurnieOf(p);
+        assertEq(owedWhole, SLOT0_BURNIE_PER_BUY, "non-vacuity: one delivered buy accrued 100 whole BURNIE");
+        uint256 expectedCredit = owedWhole * 1 ether;
+
+        // FIRST claim: credits owed * 1e18 to the recipient's flip stake and zeroes pendingBurnie.
+        uint256 stakeBefore = coinflip.coinflipAmount(p);
+        game.claimAfkingBurnie(_singleton(p));
+        uint256 stakeAfter1 = coinflip.coinflipAmount(p);
+        assertEq(_pendingBurnieOf(p), 0, "CEI: pendingBurnie zeroed before the credit (reads 0 after the first claim)");
+        assertEq(stakeAfter1 - stakeBefore, expectedCredit, "first claim credited exactly the accrued BURNIE");
+
+        // SECOND claim in the same block: the CEI zero means owed == 0 -> creditFlip(_, 0) is a no-op.
+        game.claimAfkingBurnie(_singleton(p));
+        assertEq(coinflip.coinflipAmount(p), stakeAfter1, "double-call: the SECOND claim credited 0 (pays exactly once)");
+
+        // claim -> unsub -> claim variant: unsub does not re-arm pendingBurnie; the post-unsub claim is a no-op.
+        _deliverDay(_singleton(p), 0xDB1C02); // re-accrue
+        assertEq(_pendingBurnieOf(p), SLOT0_BURNIE_PER_BUY, "re-accrued 100 for the claim->unsub->claim variant");
+        uint256 stakeBefore2 = coinflip.coinflipAmount(p);
+        game.claimAfkingBurnie(_singleton(p)); // claim
+        uint256 stakeAfterClaim2 = coinflip.coinflipAmount(p);
+        assertEq(stakeAfterClaim2 - stakeBefore2, SLOT0_BURNIE_PER_BUY * 1 ether, "claim credited the re-accrued BURNIE once");
+        vm.prank(p);
+        game.subscribe(address(0), false, false, 0, 0, address(0)); // unsub (pendingBurnie persists at 0)
+        game.claimAfkingBurnie(_singleton(p)); // re-claim after unsub
+        assertEq(coinflip.coinflipAmount(p), stakeAfterClaim2, "claim->unsub->claim: the post-unsub re-claim credited 0 (idempotent)");
+    }
+
+    // =========================================================================
+    // Repro 4 — the 4 finalize hooks each write the decay-applied streak BEFORE the slot delete/tombstone
+    // =========================================================================
+
+    /// @notice Hook (A) explicit cancel `subscribe(_, 0)`: the finalize (`_finalizeAfking` at
+    ///         GameAfkingModule.sol:318) runs BEFORE `c.dailyQuantity = 0` (:319). After the cancel, a
+    ///         QuestStreakBonusAwarded(amount==0) finalize event was emitted AND the slot is tombstoned
+    ///         (dailyQuantity == 0) — the streak was handed back before the tombstone.
+    function testFinalizeHookA_ExplicitCancelBeforeTombstone() public {
+        address p = makeAddr("hookA");
+        _grantDeityPass(p);
+        _subscribeLootbox(p, 1);
+        _fundPool(p, 50 ether);
+        _deliverDay(_singleton(p), 0xA0A0);
+
+        vm.recordLogs();
+        vm.prank(p);
+        game.subscribe(address(0), false, false, 0, 0, address(0)); // explicit cancel
+        // The finalize ran (event present) and the slot is tombstoned in place.
+        _lastFinalizeStreakFor(p); // reverts if no finalize event fired before the tombstone
+        assertEq(_dailyQtyOf(p), 0, "hook A: the slot is tombstoned (dailyQuantity == 0) AFTER the finalize handed the streak back");
+    }
+
+    /// @notice Hook (B) cancel-reclaim (load-bearing ordering): an in-set tombstone is reclaimed by the next
+    ///         STAGE — `_finalizeAfking` (:912) runs BEFORE `delete _subOf[player]` (:915). After the reclaim,
+    ///         the record is deleted (subscriberIndex == 0); the SubscriptionExpired reason-2 event confirms
+    ///         the cancel-reclaim path executed (the finalize is in that branch, ahead of the delete).
+    function testFinalizeHookB_CancelReclaimBeforeDelete() public {
+        // A SECOND in-set sub so the STAGE has reason to run; tombstone p BEFORE any buy (no pending box, so
+        // the no-orphan guard does not protect it) so the next STAGE reclaim path fires.
+        address p = makeAddr("hookB");
+        address keep = makeAddr("hookB_keep");
+        _grantDeityPass(p);
+        _grantDeityPass(keep);
+        _subscribeLootbox(p, 1);
+        _subscribeLootbox(keep, 1);
+        vm.prank(p);
+        game.subscribe(address(0), false, false, 0, 0, address(0));
+        assertGt(_subscriberIndexOf(p), 0, "p still in-set as a tombstone pre-reclaim");
+
+        vm.recordLogs();
+        _runStageNewDay(0xB0B0); // the STAGE reclaims the tombstone (finalize -> delete)
+        _settleClean(0xB0B1);
+
+        assertGt(_countExpired(p, 2), 0, "hook B: cancel-reclaim fired (SubscriptionExpired reason 2)");
+        assertEq(_subscriberIndexOf(p), 0, "hook B: _subOf record deleted AFTER the finalize (removed from set)");
+    }
+
+    /// @notice Hook (C) pass-eviction crossing: when the current level rises past a sub's pass horizon and
+    ///         the re-read horizon no longer covers, `_finalizeAfking` (:952) runs BEFORE the tombstone +
+    ///         remove (:953-954). Driven by delivering a deity-passed sub a day (box opened), then CLEARING
+    ///         its deity bit + poking validThroughLevel below a poked-up game level, so the next STAGE's
+    ///         pass-validity gate (`currentLevel > sub.validThroughLevel` with the re-read horizon no longer
+    ///         covering) takes the EVICT branch. (The fixture's level does not advance organically, so the
+    ///         crossing is set up by the level poke — the same vm.store technique the gas/v55 harnesses use.)
+    function testFinalizeHookC_PassEvictBeforeRemove() public {
+        address p = makeAddr("hookC");
+        _grantDeityPass(p);
+        _subscribeLootbox(p, 1);
+        _fundPool(p, 50 ether);
+        _deliverDay(_singleton(p), 0xC0C0); // an active afking run; the box is opened (no pending-box skip)
+
+        // Force the pass-eviction crossing: clear the deity bit (so _passHorizonOf reads the finite frozen
+        // horizon 0), set a finite validThroughLevel, and poke the game level ABOVE it so the next STAGE sees
+        // currentLevel > validThroughLevel AND the re-read horizon (0) < currentLevel -> EVICT.
+        _clearDeityPass(p);
+        _setValidThroughLevel(p, 3);
+
+        vm.recordLogs();
+        _settleGame(uint256(keccak256("hookC_pre")) | 1); // reach a clean pre-advance point
+        _t += 1 days;
+        vm.warp(_t);
+        _setLevel(10); // poke the level up so the new-day STAGE crosses the pass gate
+        _settleGame(uint256(keccak256("hookC_ev")) | 1); // the STAGE runs -> EVICT (finalize -> tombstone -> remove)
+
+        assertGt(_countExpired(p, 1), 0, "hook C: pass-eviction fired (SubscriptionExpired reason 1)");
+        assertEq(_subscriberIndexOf(p), 0, "hook C: removed from set AFTER the finalize handed the streak back");
+    }
+
+    /// @notice Hook (D) funding-kill + the funding-kill BOUNDARY (Pitfall 4). A NORMAL underfunded sub is
+    ///         finalized (`_finalizeAfking` at :1010) BEFORE the tombstone + remove (:1011-1012). The
+    ///         DegenerusQuests funding-kill guard keeps the streak when a valid mint landed no earlier than
+    ///         yesterday (`lastValid + 1 >= currentDay`) and zeroes it when a full prior day was missed
+    ///         (`lastValid <= currentDay - 2`). This asserts BOTH boundaries:
+    ///           - KEPT: deliver up to yesterday, defund, kill on the next day -> finalize keeps the streak.
+    ///           - ZEROED: defund, let >= 2 days pass with no valid mint, cancel -> finalize zeroes it.
+    function testFinalizeHookD_FundingKillBoundaryKeptAndZeroed() public {
+        // ---- KEPT boundary: lastValid == currentDay - 1 (delivered yesterday) ----
+        address kept = makeAddr("hookD_kept");
+        _grantDeityPass(kept);
+        _subscribeLootbox(kept, 1);
+        _fundPool(kept, 50 ether);
+        _deliverDay(_singleton(kept), 0xD0D0);
+        _deliverDay(_singleton(kept), 0xD0D1);
+        _deliverDay(_singleton(kept), 0xD0D2); // a multi-day run with a real earned streak
+        uint32 earnedSpan = _afkCoveredOf(kept) - _afkingStartOf(kept);
+        assertGt(earnedSpan, 0, "kept: a real earned streak built (non-vacuous)");
+
+        // Defund, then kill on the VERY NEXT day (lastValid == covered == currentDay - 1): the finalize KEEPS
+        // the streak (no full prior funded day was missed).
+        _drainAllFunding(kept);
+        vm.recordLogs();
+        _runStageNewDay(0xD0D3); // funding-kill on the next day -> finalize KEEPS
+        _settleClean(0xD0D4);
+        uint24 keptStreak = _lastFinalizeStreakFor(kept);
+        assertGt(keptStreak, 0, "hook D KEPT: lastValid + 1 >= currentDay -> finalize kept the earned streak");
+        assertEq(_subscriberIndexOf(kept), 0, "hook D KEPT: removed from set AFTER the finalize");
+
+        // ---- ZEROED boundary: lastValid <= currentDay - 2 (a full prior funded day missed) ----
+        address zeroed = makeAddr("hookD_zeroed");
+        _grantDeityPass(zeroed);
+        _subscribeLootbox(zeroed, 1);
+        _fundPool(zeroed, 50 ether);
+        _deliverDay(_singleton(zeroed), 0xD1D0);
+        _deliverDay(_singleton(zeroed), 0xD1D1);
+        _deliverDay(_singleton(zeroed), 0xD1D2);
+
+        // Defund, then let >= 2 days pass with no delivery before re-subscribing + cancelling — the run
+        // lapsed a full funded day with NO valid mint, so the finalize ZEROES the streak.
+        _drainAllFunding(zeroed);
+        _skipDaysNoDelivery(0xD1D3); // funding-kill out
+        _skipDaysNoDelivery(0xD1D4);
+        _skipDaysNoDelivery(0xD1D5);
+        if (_subscriberIndexOf(zeroed) == 0) _subscribeLootbox(zeroed, 1);
+        vm.recordLogs();
+        vm.prank(zeroed);
+        game.subscribe(address(0), false, false, 0, 0, address(0)); // explicit cancel finalize on a post-gap day
+        uint24 zeroedStreak = _lastFinalizeStreakFor(zeroed);
+        assertEq(zeroedStreak, 0, "hook D ZEROED: lastValid <= currentDay - 2 -> finalize zeroed the streak (decay)");
+    }
+
+    // =========================================================================
+    // No-orphan arm — a pending-box sub is left ENTIRELY untouched by the STAGE
+    // =========================================================================
+
+    /// @notice The NO-ORPHAN guard (GameAfkingModule.sol:892): a sub with a pending unopened box
+    ///         (`lastOpenedDay < lastAutoBoughtDay`) is left ENTIRELY untouched by a STAGE cycle — no reclaim,
+    ///         no evict, no funding-kill, no re-stamp — so its paid-for box is never orphaned. Stamp a box
+    ///         (do NOT open it), then run a STAGE: the sub stays in-set with its stamp markers byte-unchanged.
+    function testNoOrphanPendingBoxSubUntouchedByStage() public {
+        address p = makeAddr("orphan_p");
+        _grantDeityPass(p);
+        _subscribeLootbox(p, 1);
+        _fundPool(p, 50 ether);
+        // STAGE a buy but DO NOT open — the box is pending (lastOpenedDay < lastAutoBoughtDay).
+        _runStageNewDay(0x0F0F);
+        _settleClean(0x0F10);
+        uint32 boughtBefore = _lastBoughtDayOf(p);
+        uint32 openedBefore = _lastOpenedDayOf(p);
+        assertGt(boughtBefore, 0, "non-vacuity: a box was stamped");
+        assertTrue(openedBefore < boughtBefore, "the box is pending (lastOpenedDay < lastAutoBoughtDay)");
+        uint256 idxBefore = _subscriberIndexOf(p);
+
+        // Run a STAGE cycle WITHOUT opening the box: the no-orphan guard skips the sub entirely.
+        vm.recordLogs();
+        _runStageNewDay(0x0F11);
+        _settleClean(0x0F12);
+
+        // UNTOUCHED: the stamp markers are byte-identical, the sub stays in-set, no expiry event fired.
+        assertEq(_lastBoughtDayOf(p), boughtBefore, "no-orphan: lastAutoBoughtDay untouched (no re-stamp)");
+        assertEq(_lastOpenedDayOf(p), openedBefore, "no-orphan: lastOpenedDay untouched (the box still pending)");
+        assertEq(_subscriberIndexOf(p), idxBefore, "no-orphan: the sub stays in-set (no reclaim/evict/funding-kill)");
+        assertEq(_countExpiredAnyReason(p), 0, "no-orphan: no SubscriptionExpired fired for the pending-box sub");
+    }
+
+    // =========================================================================
     // Protocol-driving helpers (ported from V55SetMutationOpenE / V56AfkingGasMarginal)
     // =========================================================================
 
@@ -403,6 +621,57 @@ contract V56SecUnmanipulable is DeployProtocol {
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
+    }
+
+    /// @dev Clear `who`'s deity-pass bit so `_passHorizonOf` reads the finite frozen horizon (the
+    ///      pass-eviction crossing setup).
+    function _clearDeityPass(address who) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        packed &= ~(uint256(1) << DEITY_SHIFT);
+        vm.store(address(game), slot, bytes32(packed));
+    }
+
+    /// @dev Poke `who`'s Sub.validThroughLevel (bytes 1..3, uint24) so the pass-validity gate compares the
+    ///      live level against this stored horizon.
+    function _setValidThroughLevel(address who, uint24 lvl) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        packed &= ~(uint256(0xFFFFFF) << (OFF_VALIDTHROUGH * 8));
+        packed |= (uint256(lvl) & 0xFFFFFF) << (OFF_VALIDTHROUGH * 8);
+        vm.store(address(game), slot, bytes32(packed));
+    }
+
+    /// @dev Poke the game `level` (slot 0, byte 14, uint24) up so the pass-validity crossing fires.
+    function _setLevel(uint24 lvl) internal {
+        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        s0 &= ~(uint256(0xFFFFFF) << (LEVEL_OFF * 8));
+        s0 |= (uint256(lvl) & 0xFFFFFF) << (LEVEL_OFF * 8);
+        vm.store(address(game), bytes32(uint256(0)), bytes32(s0));
+    }
+
+    /// @dev Count the SubscriptionExpired(player, reason) events recorded since the last vm.recordLogs()
+    ///      for `who` with the given reason (1 = pass-evict/funding-kill, 2 = cancel-reclaim). The
+    ///      game-resident module emits via delegatecall, so the emitter is address(game).
+    function _countExpired(address who, uint8 reason) internal returns (uint256 count) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
+            if (logs[i].topics[0] != SUB_EXPIRED_SIG) continue;
+            if (address(uint160(uint256(logs[i].topics[1]))) != who) continue;
+            if (uint8(uint256(bytes32(logs[i].data))) == reason) count++;
+        }
+    }
+
+    /// @dev Count SubscriptionExpired events for `who` of ANY reason (drains the recorded logs once).
+    function _countExpiredAnyReason(address who) internal returns (uint256 count) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
+            if (logs[i].topics[0] != SUB_EXPIRED_SIG) continue;
+            if (address(uint160(uint256(logs[i].topics[1]))) != who) continue;
+            count++;
+        }
     }
 
     /// @dev The decay-applied streak DegenerusQuests.finalizeAfking wrote for `who` on its most recent
