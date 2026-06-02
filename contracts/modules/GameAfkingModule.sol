@@ -156,22 +156,27 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev Active-subscriber cap = 500. Bounds the iterable set the protocol pays
     ///      to iterate every cycle — the advance chain walks `_subscribers` in the
     ///      process/open passes, so an unbounded set would bog the daily heartbeat.
-    ///      500 keeps the per-cycle work cheap and sits well within the uint16
+    ///      1000 keeps the per-cycle work cheap (every pass is weight-/OPEN_BATCH-chunked,
+    ///      so the cap bounds total subs, not per-tx gas) and sits well within the uint16
     ///      `_subCursor`/`_subOpenCursor` range (no cursor aliasing). `subscribe`
     ///      reverts a NEW-subscriber insert at the cap; a re-subscribe of an existing
-    ///      member does not grow the set, so it is exempt. Demand past 500 is not the
+    ///      member does not grow the set, so it is exempt. Demand past 1000 is not the
     ///      protocol's burden to service — those users arrange their own keepering.
-    uint256 internal constant SUBSCRIBER_CAP = 500;
+    uint256 internal constant SUBSCRIBER_CAP = 1000;
 
     /// @dev Per-sub gas-weight of an in-stage sub-ending finalize (cancel-reclaim / pass-evict
-    ///      / funding-kill) relative to a cheap local buy (weight 1): the finalize does a
-    ///      cross-contract quest read + streak write the call-free buy does not, so it is the
-    ///      heavier branch and consumes more of the STAGE's per-call weight budget. The chunk
-    ///      ends on accumulated weight, bounding even an all-evicts chunk under the 16.7M
-    ///      advance-chain ceiling. GAS-phase measured: an evict-finalize ≈ 11k vs a lootbox buy
-    ///      ≈ 7k → W = ceil(11k/7k) = 2 (conservative — it over-weights an evict relative to the
-    ///      heavier ticket buy ≈ 54k, so the budget binds on buys).
+    ///      / funding-kill): the finalize does a cross-contract quest read + streak write the
+    ///      call-free buy does not. One weight unit = a lootbox buy (≈7k). GAS-phase measured:
+    ///      evict-finalize ≈ 11k → W = ceil(11k/7k) = 2. The chunk ends on accumulated weight,
+    ///      bounding every mix under the 16.7M advance-chain ceiling.
     uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 2;
+
+    /// @dev Per-sub gas-weight of a TICKET buy, relative to the lootbox-buy unit (weight 1). A
+    ///      ticket queues a cold ticketQueue push + an owed-mapping SSTORE that the lootbox stamp
+    ///      does not — GAS-phase measured: ticket buy ≈ 54k vs lootbox ≈ 7k → 8. Weighting the
+    ///      two buy modes by true cost lets a chunk drain many cheap lootbox subs OR fewer ticket
+    ///      subs in one tx, each landing near the budget's gas target.
+    uint256 internal constant SUB_STAGE_TICKET_WEIGHT = 8;
 
     /// @dev Slot-0 quest completion reward — mirrors `DegenerusQuests.QUEST_SLOT0_REWARD`
     ///      (a private constant not visible cross-contract). Each delivered afking buy accrues
@@ -1018,8 +1023,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // debit `afkingFunding[src]` (claimablePool in tandem, fail-loud on underflow),
             // stamp the lootbox box / queue the tickets, accrue the day's affiliate + the
             // pendingBurnie reward, advance the compute-on-read streak markers (gap-resuming a
-            // fresh run if a day was missed), and set the success marker. A cheap local buy is
-            // weight 1.
+            // fresh run if a day was missed), and set the success marker. A lootbox buy is
+            // weight 1; a ticket buy is weight SUB_STAGE_TICKET_WEIGHT (the cold ticketQueue
+            // push makes it ~8x a lootbox), so the budget binds on the true per-buy cost.
             _deliverAfkingBuy(
                 player,
                 sub,
@@ -1035,7 +1041,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             unchecked {
                 ++cursor;
                 ++processed;
-                ++weight;
+                weight += isTicket ? SUB_STAGE_TICKET_WEIGHT : 1;
             }
         }
 

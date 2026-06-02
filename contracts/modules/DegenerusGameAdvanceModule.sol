@@ -145,19 +145,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Per-call afking process-STAGE gas-weight budget. Every day is uniform now: the
     ///      streak is computed on read from the Sub slot (no per-buy `playerQuestStates`
     ///      STATICCALL, no settle day), so there is a SINGLE budget. The STAGE consumes a
-    ///      gas-weight per iteration — a cheap local buy/skip costs 1, a cross-contract
-    ///      sub-ending finalize (cancel-reclaim / pass-evict / funding-kill) costs
-    ///      `SUB_STAGE_EVICT_WEIGHT` (GameAfkingModule) — and ends the chunk on accumulated
-    ///      weight, not raw count, so the worst-case chunk (even all-evicts) stays under the
-    ///      16.7M advance-chain ceiling at SUBSCRIBER_CAP while a normal all-buy chunk targets
-    ///      <10M. A large set drains across several advanceGame calls.
-    ///      GAS-phase measured (V56AfkingGasMarginal, compute-on-read tree): the binding per-buy
-    ///      marginal is the ticket mode ≈ 54k (the cold ticketQueue push; lootbox reuses the warm
-    ///      Sub slot ≈ 7k); an in-stage finalize ≈ 11k (weight 2). The derived max-safe budget
-    ///      keeping the worst-case all-ticket-buys chunk < 10M is ~184; 100 is chosen with margin
-    ///      for the century-day (x00-level) per-buy quantity-bonus overhead (≈ 5.4M worst-case
-    ///      chunk at 100, deep headroom to the 16.7M ceiling).
-    uint256 private constant SUB_STAGE_WEIGHT_BUDGET = 100;
+    ///      gas-weight per iteration — buys are weighted by true cost (a lootbox buy ≈ 7k = 1,
+    ///      a ticket buy ≈ 54k = `SUB_STAGE_TICKET_WEIGHT` (8)), a buy-skip costs 1, and a
+    ///      cross-contract sub-ending finalize (cancel-reclaim / pass-evict / funding-kill) costs
+    ///      `SUB_STAGE_EVICT_WEIGHT` (2) — and ends the chunk on accumulated weight, not raw
+    ///      count, so the worst-case chunk (any mix) stays under the 16.7M advance-chain ceiling
+    ///      while a normal chunk targets <10M. A large set drains across several advanceGame calls.
+    ///      GAS-phase measured (V56AfkingGasMarginal, compute-on-read tree): a budget-B chunk
+    ///      drains up to B lootbox subs (≈ B·7k) OR B/8 ticket subs (≈ B/8·54k) OR any mix, each
+    ///      landing near the same gas. At 1000: an all-lootbox day drains the full SUBSCRIBER_CAP
+    ///      in one tx (≈ 6.8M); the binding all-ticket chunk is 125 tickets ≈ 6.8M — deep headroom
+    ///      to 10M for the century-day (x00-level) per-buy quantity-bonus overhead and to the
+    ///      16.7M ceiling. Largest-under-10M is ~1472 (184 tickets).
+    uint256 private constant SUB_STAGE_WEIGHT_BUDGET = 1000;
 
     /// @notice DGNRS reward for top affiliate: 1% of remaining affiliate pool.
     uint16 private constant AFFILIATE_POOL_REWARD_BPS = 100;

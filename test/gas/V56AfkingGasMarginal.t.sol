@@ -103,14 +103,18 @@ contract V56AfkingGasMarginal is DeployProtocol {
     uint256 internal constant EFFECTIVE_GAS_CEILING = 16_700_000;
 
     /// @dev SUB_STAGE_WEIGHT_BUDGET (DegenerusGameAdvanceModule.sol): the per-call STAGE gas-weight budget.
-    ///      Every day is uniform now (compute-on-read streak, no settle day, no per-buy STATICCALL); a chunk
-    ///      ends when accumulated weight reaches the budget. A cheap local buy/skip costs 1; a cross-contract
-    ///      sub-ending finalize costs SUB_STAGE_EVICT_WEIGHT.
-    uint256 internal constant SUB_STAGE_WEIGHT_BUDGET = 100;
+    ///      Buys are weighted by true cost (lootbox = 1, ticket = SUB_STAGE_TICKET_WEIGHT); a chunk ends when
+    ///      accumulated weight reaches the budget, so a budget-B chunk holds up to B lootbox subs OR
+    ///      B/SUB_STAGE_TICKET_WEIGHT ticket subs. The binding worst-case is the all-ticket chunk.
+    uint256 internal constant SUB_STAGE_WEIGHT_BUDGET = 1000;
 
     /// @dev SUB_STAGE_EVICT_WEIGHT (GameAfkingModule.sol): the gas-weight of an in-stage sub-ending finalize
-    ///      (pass-evict / funding-kill / cancel-reclaim) relative to a cheap buy (1) — the heavier branch.
+    ///      (pass-evict / funding-kill / cancel-reclaim) relative to a lootbox buy (1) — the heavier branch.
     uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 2;
+
+    /// @dev SUB_STAGE_TICKET_WEIGHT (GameAfkingModule.sol): a ticket buy's gas-weight vs the lootbox-buy unit
+    ///      (the cold ticketQueue push makes it ~8x). A budget-B chunk holds B/SUB_STAGE_TICKET_WEIGHT tickets.
+    uint256 internal constant SUB_STAGE_TICKET_WEIGHT = 8;
 
     /// @dev OPEN_BATCH (GameAfkingModule.sol): the flat per-box open chunk; each afking box uniform O(1).
     uint256 internal constant OPEN_BATCH = 130;
@@ -362,10 +366,13 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 buyNm1 = _measureStageAdvanceGas(N_LO, "wcmLo_", true, false);
         uint256 perBuy = buyN > buyNm1 ? buyN - buyNm1 : 1;
 
-        uint256 fixedOverhead = chunkAllBuys > perBuy * SUB_STAGE_WEIGHT_BUDGET
-            ? chunkAllBuys - perBuy * SUB_STAGE_WEIGHT_BUDGET
+        // A budget-B chunk holds B/SUB_STAGE_TICKET_WEIGHT ticket buys (the binding worst case).
+        uint256 ticketsInChunk = SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_TICKET_WEIGHT;
+        uint256 fixedOverhead = chunkAllBuys > perBuy * ticketsInChunk
+            ? chunkAllBuys - perBuy * ticketsInChunk
             : 0;
-        uint256 derivedMaxSafeBudget = _maxSafeBatch(fixedOverhead, perBuy);
+        // _maxSafeBatch returns max ticket COUNT under the 10M target; the budget is that × weight.
+        uint256 derivedMaxSafeBudget = _maxSafeBatch(fixedOverhead, perBuy) * SUB_STAGE_TICKET_WEIGHT;
 
         emit log_named_uint("stage_all_buys_chunk_at_budget_gas", chunkAllBuys);
         emit log_named_uint("per_buy_lootbox_marginal_gas", perBuy);
@@ -419,7 +426,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      new-day advance, bracketed. The weight budget caps the work; this is the all-cheap-buys worst case.
     function _measureFullBudgetBuyChunk(string memory prefix) internal returns (uint256 chunkGas) {
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
-        _setupFundedSubs(SUB_STAGE_WEIGHT_BUDGET, prefix, 50 ether, true);
+        // Weighted budget: a ticket buy costs SUB_STAGE_TICKET_WEIGHT, so BUDGET/WEIGHT ticket
+        // subs (+2 margin so the loop fills the budget, not the set) fill the chunk.
+        _setupFundedSubs(SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_TICKET_WEIGHT + 2, prefix, 50 ether, true);
         _warpToBoundary(false);
         require(game.advanceDue(), "fixture: advanceDue on the new day");
         uint256 gasBefore = gasleft();
