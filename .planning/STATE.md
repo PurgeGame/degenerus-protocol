@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
 status: executing
-last_updated: "2026-06-02T19:34:09.111Z"
-last_activity: 2026-06-02 -- Phase 356 execution started
+last_updated: "2026-06-02T19:49:10.044Z"
+last_activity: 2026-06-02
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 18
-  completed_plans: 11
+  completed_plans: 12
   percent: 60
 ---
 
@@ -33,9 +33,9 @@ See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 356 (TST — Unmanipulable + Quest-Core Non-Perturbation + Two-Path-Open + Liveness Valve + Gap-Decouple + Gas Marginals + Non-Widening) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 356
-Last activity: 2026-06-02 -- Phase 356 execution started
+Plan: 2 of 7
+Status: Ready to execute (356-01 complete — fixture green + 7 read-only fuzz files migrated to v56 uint24 re-pack)
+Last activity: 2026-06-02 -- 356-01 complete (fixture-sanity gate PASSED; 7 keeper/afking fuzz files migrated to OFF_LASTBOUGHT=11/uint24; KeeperFaucetResistance garbage-read reds NARROWED)
 
 ## ▶ Active Milestone Roadmap (v56.0 — phases 353-357 — ACTIVE 2026-06-01; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`)
 
@@ -660,6 +660,8 @@ Audit deliverables:
 | Phase 354 P01 | 16min | 2 tasks | 2 files |
 | Phase 354 P02 | 24min | 2 tasks | 4 files |
 | Phase 354 P05 | 28min | 2 tasks | 1 files |
+| Phase 356 P01 | 11 min | 2 tasks | 7 files |
+| Phase 356 P01 | 11 min | 2 tasks | 7 files |
 
 ## Decisions
 
@@ -839,3 +841,4 @@ Audit deliverables:
 - [Phase ?]: 354-01: Sub struct re-packed to one slot (241/256) with the in-slot accumulator (affiliateBase u32 + questProgress u8 + buyerOwedBurnie u32 + hasEverSubscribed bit) + afkCoveredThroughDay u24 marker; amount→milli-ETH u32, validThroughLevel/lastAutoBoughtDay/lastOpenedDay→u24; three settle markers never introduced (AGG-05); pendingClaim locked to DegenerusAffiliate (354-04); contract edits UNCOMMITTED for the 354-06 USER batch gate.
 - [Phase ?]: 354-05: afking ticket purchaseWith (~262k) REPLACED by a minimal-write primitive — direct _queueTicketsScaled resolution-equivalent queue behind the byte-unchanged SOLVENCY-01 debit; no recordMint/prize-pool contribution (mirrors the lootbox branch); 10%/20% buyerOwedBurnie accrued (live :1653-1659 minus kickback, /1e18 whole-BURNIE, 100M clamp before +=); century parity reusing centuryBonusLevel/centuryBonusUsed (no new slot); boons/boost-OFF
 - [Phase ?]: 354-05: afking OPEN re-verified unmanipulable (OPEN-01/02) with ZERO change — 354-01 already applied the milli-ETH→wei rescale; effects-first marker + frozen stamp-day word + LIVE level + single EV-cap RMW intact; accumulator fields disjoint from the open markers
+- [Phase 356]: 356-01: migrated the 7 read-only keeper/afking fuzz files to the v56 uint24/OFF_LASTBOUGHT=11 Sub re-pack (the 08e59a4a transform — early offsets validThroughLevel u24@1 / amount u24@8 / scorePlus1@6 re-derived too, day-marker reads narrowed to width 24, write-masks 0xFFFFFFFF→0xFFFFFF). Fixture-sanity gate PASSED (V56AfkingGasMarginal 5/5). KeeperFaucetResistance's 3 `6555125 != 3774873600` garbage-read reds flipped GREEN (NARROWING); 4 v56-behavior reds (0.01-ETH subscribe fee + dropped withdraw two-step + E()/Panic-0x11 revert-selector expectation) unmasked → recorded PRE-EXISTING for the 356-07 baseline union. ZERO contracts/*.sol mutation; ContractAddresses.sol restored each round-trip.
