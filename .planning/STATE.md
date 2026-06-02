@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
 status: executing
-last_updated: "2026-06-01T23:47:23.213Z"
-last_activity: 2026-06-01 -- Phase 355 execution started
+last_updated: "2026-06-02T00:00:00.000Z"
+last_activity: 2026-06-02 -- Phase 355 complete + PUSHED (gas tune + openBoxes valve + gap/jackpot decouple); ready to plan 356 TST
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
-  completed_plans: 8
-  percent: 40
+  completed_plans: 11
+  percent: 60
 ---
 
 # Project State
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIREMENTS.md (24 v56.0 requirements) + .planning/ROADMAP.md (v56.0 — ACTIVE, phases 353-357) + the design-lock input .planning/PLAN-V56-AFKING-BATCHING-GAS.md
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 355 — gas-measure-tune-per-buy-per-open-per-settle-marginals-accum
+**Current focus:** Phase 356 — TST (355 GAS complete + pushed; ready to plan the test phase)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,10 +32,10 @@ See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 355 (gas-measure-tune-per-buy-per-open-per-settle-marginals-accum) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 355
-Last activity: 2026-06-01 -- Phase 355 execution started
+Phase: 356 (TST) — NEXT (ready to plan)
+Plan: 0 of ? (not yet planned)
+Status: Phase 355 GAS ✅ Complete + PUSHED; Phase 356 TST is the next phase to plan
+Last activity: 2026-06-02 -- 355 reconciled/closed; openBoxes valve + gap/jackpot decouple landed + pushed (`414c8260`→`3d969621`)
 
 ## ▶ Active Milestone Roadmap (v56.0 — phases 353-357 — ACTIVE 2026-06-01; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`)
 
@@ -45,8 +45,8 @@ Shape: SPEC → IMPL → GAS → TST → TERMINAL (the established v54.0 + v55.0
 |-------|------|------|--------------|--------|
 | 353 | SPEC — Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation | SPEC | AFF-01/02 · XMODEL-01 | ✅ Complete (Plan 01 AFF-01/02 locked; Plan 02 XMODEL pass folded — 11 dispositions, PRIMARY C1/C2 free-option CLOSED via roll-unification, SPEC LOCKED 2026-06-01) |
 | 354 | IMPL — The ONE Carefully-Sequenced Batched Contract Diff (aggregator + ticket-mode primitive + DegenerusQuests batched-settle + accumulator + open-end) | IMPL (CONTRACT BOUNDARY) | AGG-01..05 · TKT-01/02 · QST-01..05 · OPEN-01/02 | ✅ Complete (batched diff committed `e18af451`, USER-approved 2026-06-01; forge build clean; 14/14 reqs; affiliate single-step claim + comment-cleanup folded in at the gate) |
-| 355 | GAS — Measure + Tune (marginals + accumulator packing + SUB_STAGE_BATCH re-tune + mode/SLOAD collapse) | GAS (CONTRACT BOUNDARY if net diff) | GAS-01/02/03/04 | Not started |
-| 356 | TST — Unmanipulable (strategic sub/unsub) + Quest-Core Non-Perturbation + Two-Path-Open + Gas Marginals + Non-Widening | TST | SEC-01/02 | Not started |
+| 355 | GAS — Measure + Tune (marginals + accumulator packing + SUB_STAGE re-tune + mode/SLOAD collapse) + GAS-05 deferred payout + liveness adds | GAS (CONTRACT BOUNDARY — net diff) | GAS-01..05 | ✅ Complete + PUSHED 2026-06-02 (net diff, NOT Outcome-A: GAS-05 deferred `pendingBurnie` + weighted SUB_STAGE budget + OPEN_BATCH→130 + single-roll open; PLUS USER liveness adds `openBoxes` valve `86a2d6c8` + gap/jackpot decouple `3d969621`; gas suites 26/26, every chunk <16.7M; 3-model 16.7M proof; `414c8260`→`3d969621`. Per-tx gap-resume measure + decouple/valve tests + stale-offset fuzz migration deferred→356) |
+| 356 | TST — Unmanipulable (strategic sub/unsub) + Quest-Core Non-Perturbation + Two-Path-Open + Liveness Valve + Gap-Decouple + Gas Marginals + Non-Widening | TST | SEC-01/02 · LIVE-01 · GAS-06 | Not started (EXPANDED: + `openBoxes` valve + gap/jackpot decouple + the 355-deferred tests) |
 | 357 | TERMINAL — Delta Audit + 3-Skill Adversarial Sweep (AUGMENTED by XMODEL Codex + Gemini close) + FINDINGS-v56.0 + Closure Flip | TERMINAL (FULL close — sweep IN-MILESTONE) | AUDIT-01 | Not started |
 
 **Coverage:** 24/24 v56.0 requirements mapped to exactly one phase (353: 3 · 354: 14 · 355: 4 · 356: 2 · 357: 1); 0 orphaned, 0 duplicated. Per-category: AGG 5 (IMPL) · TKT 2 (IMPL) · AFF 2 (SPEC) · QST 5 (IMPL) · OPEN 2 (IMPL) · GAS 4 (GAS) · SEC 2 (TST) · XMODEL 1 (SPEC home + TERMINAL close touchpoint) · AUDIT 1 (TERMINAL). The internal sweep + delta-audit + `audit/FINDINGS-v56.0.md` + the XMODEL cross-model close run IN-MILESTONE at 357 (NOT deferred). AFF-01/02 (the affiliate distribution mechanism — the non-gameability design decision) design-locked at SPEC, BUILT inside the aggregator at IMPL; XMODEL-01 home = SPEC (the design-input pass folded BEFORE IMPL), close-augmentation reflected in AUDIT-01; SEC-01/02 (the hard security floor — unmanipulable esp. strategic sub/unsub) PROVEN empirically + adversarially at TST (the explicit "TST Owns SEC-01/02" directive; the SPEC re-attestation is the design gate). Full detail in `.planning/ROADMAP.md`; per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
