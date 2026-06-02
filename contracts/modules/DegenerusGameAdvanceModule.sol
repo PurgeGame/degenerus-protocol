@@ -1115,6 +1115,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 if (frozenUntilLevel > lvl) return;
             }
 
+            // Active AfKing subscriber — the daily auto-buy IS participation, but the
+            // cold-ledger buy never stamps DAY_SHIFT so the lastEthDay check above misses
+            // it. No time predicate: the tiers above don't early-return in the first 15
+            // min, so a sub falls through to here and can advance from the day's first
+            // second. One config SLOAD (dailyQuantity packs into Sub's first slot), paid
+            // only on this stuck path and short-circuiting before the vault call below.
+            if (_subOf[caller].dailyQuantity != 0) return;
+
             // DGVE majority bypass — last resort, external call
             if (!vault.isVaultOwner(caller)) revert MustMintToday();
         }
