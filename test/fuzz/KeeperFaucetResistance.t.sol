@@ -116,8 +116,8 @@ contract KeeperFaucetResistance is DeployProtocol {
 
     /// @dev _subOf mapping root (one packed Sub slot per subscriber).
     uint256 private constant SUBOF_SLOT = 66;
-    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay (bytes 21..24)
-    uint256 private constant OFF_LASTOPENED = 25; // uint32 lastOpenedDay     (bytes 25..28)
+    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
     uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
@@ -809,17 +809,17 @@ contract KeeperFaucetResistance is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Read `who`'s lastAutoBoughtDay (RE-DERIVED slot 66, bytes 21..24) — the buy non-vacuity oracle.
+    /// @dev Read `who`'s lastAutoBoughtDay (RE-DERIVED slot 66, uint24 bytes 11..13) — the buy non-vacuity oracle.
     function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
-        return uint32(packed >> (OFF_LASTBOUGHT * 8));
+        return uint32(uint24(packed >> (OFF_LASTBOUGHT * 8)));
     }
 
-    /// @dev Read `who`'s lastOpenedDay (bytes 25..28) — the afking-box open marker.
+    /// @dev Read `who`'s lastOpenedDay (uint24 bytes 14..16) — the afking-box open marker.
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
-        return uint32(packed >> (OFF_LASTOPENED * 8));
+        return uint32(uint24(packed >> (OFF_LASTOPENED * 8)));
     }
 }

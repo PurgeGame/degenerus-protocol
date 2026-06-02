@@ -70,8 +70,8 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // -------------------------------------------------------------------------
 
     uint256 private constant SUBOF_SLOT = 66; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay (bytes 21..24)
-    uint256 private constant OFF_LASTOPENED = 25; // uint32 lastOpenedDay     (bytes 25..28)
+    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
     uint256 private constant SUBSCRIBERS_SLOT = 68; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
@@ -565,11 +565,11 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 32));
+        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTOPENED, 32));
+        return uint32(_subField(who, OFF_LASTOPENED, 24));
     }
 
     // ---- gameover latch ----

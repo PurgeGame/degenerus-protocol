@@ -54,10 +54,11 @@ contract AfKingSubscription is DeployProtocol {
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 69; // _subscriberIndex mapping root (1-indexed)
     uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit lives here)
 
-    // Sub packed-field byte offsets (verified empirically by a subscribe round-trip).
+    // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack
+    // narrowed validThroughLevel + the day markers to uint24).
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity      (byte 0)
-    uint256 private constant OFF_VALIDTHROUGH = 1; // uint32 validThroughLevel  (bytes 1..4)
-    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay  (bytes 21..24)
+    uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel  (bytes 1..3)
+    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay  (bytes 11..13)
 
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
@@ -354,8 +355,8 @@ contract AfKingSubscription is DeployProtocol {
     function _forceCrossingDue(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
-        // Clear lastAutoBoughtDay (bytes 21..24) and validThroughLevel (bytes 1..4).
-        uint256 mask = (uint256(0xFFFFFFFF) << (OFF_LASTBOUGHT * 8)) | (uint256(0xFFFFFFFF) << (OFF_VALIDTHROUGH * 8));
+        // Clear lastAutoBoughtDay (uint24, bytes 11..13) and validThroughLevel (uint24, bytes 1..3).
+        uint256 mask = (uint256(0xFFFFFF) << (OFF_LASTBOUGHT * 8)) | (uint256(0xFFFFFF) << (OFF_VALIDTHROUGH * 8));
         packed &= ~mask;
         vm.store(address(game), slot, bytes32(packed));
         // Bump game.level to 1 if currently 0 so `currentLevel > validThroughLevel = 0` is true.
@@ -379,7 +380,7 @@ contract AfKingSubscription is DeployProtocol {
     }
 
     function _validThroughLevelOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_VALIDTHROUGH, 32));
+        return uint32(_subField(who, OFF_VALIDTHROUGH, 24));
     }
 
     /// @dev Read `who`'s 1-indexed subscriber index (RE-DERIVED slot 69); 0 = not in set.

@@ -57,10 +57,11 @@ contract AfKingFundingWaterfall is DeployProtocol {
     uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)
     uint256 private constant GAME_CLAIMABLE_SLOT = 7; // claimableWinnings mapping root
 
-    // Sub packed-field byte offsets (verified empirically by a subscribe round-trip).
+    // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack
+    // narrowed validThroughLevel + the day markers to uint24).
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity     (byte 0)
-    uint256 private constant OFF_VALIDTHROUGH = 1; // uint32 validThroughLevel (bytes 1..4)
-    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay (bytes 21..24)
+    uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel (bytes 1..3)
+    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -498,7 +499,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     function _forceCrossingDue(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 mask = (uint256(0xFFFFFFFF) << (OFF_LASTBOUGHT * 8)) | (uint256(0xFFFFFFFF) << (OFF_VALIDTHROUGH * 8));
+        uint256 mask = (uint256(0xFFFFFF) << (OFF_LASTBOUGHT * 8)) | (uint256(0xFFFFFF) << (OFF_VALIDTHROUGH * 8));
         packed &= ~mask;
         vm.store(address(game), slot, bytes32(packed));
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
@@ -521,7 +522,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     }
 
     function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 32));
+        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {

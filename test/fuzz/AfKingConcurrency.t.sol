@@ -57,16 +57,17 @@ contract AfKingConcurrency is DeployProtocol {
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 69; // _subscriberIndex mapping root (1-indexed)
     uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit lives here)
 
-    // Sub packed-field byte offsets (cumulative little-endian within the single packed slot — verified
-    // empirically by a subscribe round-trip; DegenerusGameStorage.sol:1867 is the authoritative layout).
+    // Sub packed-field byte offsets (cumulative little-endian within the single packed slot —
+    // DegenerusGameStorage.sol:1895 is the authoritative layout; the v56 compute-on-read re-pack
+    // narrowed `amount` to uint24 and the day markers to uint24).
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity      (byte 0)
-    uint256 private constant OFF_VALIDTHROUGH = 1; // uint32 validThroughLevel  (bytes 1..4)
-    uint256 private constant OFF_REINVEST = 5; // uint8  reinvestPct        (byte 5)
-    uint256 private constant OFF_FLAGS = 6; // uint8  flags              (byte 6; bit1=drainFirst, bit2=useTickets)
-    uint256 private constant OFF_SCOREPLUS1 = 7; // uint16 scorePlus1         (bytes 7..8)
-    uint256 private constant OFF_AMOUNT = 9; // uint96 amount             (bytes 9..20)
-    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay  (bytes 21..24)
-    uint256 private constant OFF_LASTOPENED = 25; // uint32 lastOpenedDay      (bytes 25..28)
+    uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel  (bytes 1..3)
+    uint256 private constant OFF_REINVEST = 4; // uint8  reinvestPct        (byte 4)
+    uint256 private constant OFF_FLAGS = 5; // uint8  flags              (byte 5; bit1=drainFirst, bit2=useTickets)
+    uint256 private constant OFF_SCOREPLUS1 = 6; // uint16 scorePlus1         (bytes 6..7)
+    uint256 private constant OFF_AMOUNT = 8; // uint24 amount             (bytes 8..10)
+    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay  (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay      (bytes 14..16)
 
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
@@ -585,7 +586,7 @@ contract AfKingConcurrency is DeployProtocol {
     }
 
     function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 32));
+        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
     }
 
     function _dailyQtyOf(address who) internal view returns (uint8) {
@@ -593,7 +594,7 @@ contract AfKingConcurrency is DeployProtocol {
     }
 
     function _validThroughLevelOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_VALIDTHROUGH, 32));
+        return uint32(_subField(who, OFF_VALIDTHROUGH, 24));
     }
 
     function _flagsOf(address who) internal view returns (uint8) {
@@ -629,12 +630,12 @@ contract AfKingConcurrency is DeployProtocol {
         vm.store(address(game), s0, bytes32(p0));
     }
 
-    /// @dev Pin `who`'s validThroughLevel (bytes 1..4) -- force / clear the crossing predicate.
+    /// @dev Pin `who`'s validThroughLevel (uint24, bytes 1..3) -- force / clear the crossing predicate.
     function _setValidThroughLevel(address who, uint32 lvl) internal {
         bytes32 slot = _subSlot(who);
         uint256 packed = uint256(vm.load(address(game), slot));
-        packed &= ~(uint256(0xFFFFFFFF) << (OFF_VALIDTHROUGH * 8));
-        packed |= (uint256(lvl) << (OFF_VALIDTHROUGH * 8));
+        packed &= ~(uint256(0xFFFFFF) << (OFF_VALIDTHROUGH * 8));
+        packed |= ((uint256(lvl) & 0xFFFFFF) << (OFF_VALIDTHROUGH * 8));
         vm.store(address(game), slot, bytes32(packed));
     }
 
