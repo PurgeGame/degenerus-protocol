@@ -1209,11 +1209,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             _lootboxBoonBudget(amount),
             seed
         );
-        // Nested delegatecall to BoonModule for activity boon consumption
-        (bool okAct, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameBoonModule.consumeActivityBoon.selector, player)
-        );
-        if (!okAct) revert E();
+        // Activity-boon consumption is a no-op unless a pending bonus is set, so gate the
+        // BoonModule delegatecall on a direct read of the pending field (slot1 is warm — the
+        // expiry sweep inside _rollLootboxBoons read it, and a roll that just applied an
+        // activity boon left the fresh pending here). Skips the call frame on the common
+        // no-boon box; identical writes/events when a pending bonus exists.
+        if (uint24(boonPacked[player].slot1 >> BP_ACTIVITY_PENDING_SHIFT) != 0) {
+            (bool okAct, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
+                abi.encodeWithSelector(IDegenerusGameBoonModule.consumeActivityBoon.selector, player)
+            );
+            if (!okAct) revert E();
+        }
 
         if (futureTickets != 0) {
             // Distress-mode ticket bonus: 25% extra on the fraction bought during distress
@@ -1289,11 +1295,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ) private {
         if (player == address(0) || originalAmount == 0) return;
 
-        // Nested delegatecall to BoonModule for expired boon cleanup
-        (bool okClr, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameBoonModule.checkAndClearExpiredBoon.selector, player)
-        );
-        if (!okClr) revert E();
+        // Expiry cleanup is a no-op unless some boon bit is set (every clear branch is gated
+        // on a non-zero tier/day field), so gate the BoonModule delegatecall on a direct read
+        // of the two packed slots — the same SLOADs the sweep would do, minus the call frame
+        // on the common no-boon box.
+        BoonPacked storage bp = boonPacked[player];
+        if (bp.slot0 != 0 || bp.slot1 != 0) {
+            (bool okClr, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
+                abi.encodeWithSelector(IDegenerusGameBoonModule.checkAndClearExpiredBoon.selector, player)
+            );
+            if (!okClr) revert E();
+        }
 
         uint32 currentDay = _simulatedDayIndex();
         uint24 currentLevel = level + 1;
