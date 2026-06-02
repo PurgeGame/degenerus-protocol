@@ -48,13 +48,14 @@ contract V55SetMutationOpenE is DeployProtocol {
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 69; // _subscriberIndex mapping root (1-indexed)
     uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)
 
-    // Sub packed-field byte offsets (verified empirically by a subscribe round-trip).
+    // Sub packed-field byte offsets — the v56 compute-on-read re-pack (single 256-bit slot).
+    // OFF_DAILY/OFF_VALIDTHROUGH did not move; scorePlus1/amount/day-markers shifted down.
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity     (byte 0)
-    uint256 private constant OFF_VALIDTHROUGH = 1; // uint32 validThroughLevel (bytes 1..4)
-    uint256 private constant OFF_SCOREPLUS1 = 7; // uint16 scorePlus1        (bytes 7..8)
-    uint256 private constant OFF_AMOUNT = 9; // uint96 amount            (bytes 9..20)
-    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay (bytes 21..24)
-    uint256 private constant OFF_LASTOPENED = 25; // uint32 lastOpenedDay     (bytes 25..28)
+    uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel (bytes 1..3)
+    uint256 private constant OFF_SCOREPLUS1 = 6; // uint16 scorePlus1        (bytes 6..7)
+    uint256 private constant OFF_AMOUNT = 8; // uint24 amount            (bytes 8..10)
+    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -462,14 +463,14 @@ contract V55SetMutationOpenE is DeployProtocol {
     }
 
     function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 32));
+        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTOPENED, 32));
+        return uint32(_subField(who, OFF_LASTOPENED, 24));
     }
 
-    /// @dev Pin `who`'s scorePlus1 (bytes 7..8) — the mint-streak EV input.
+    /// @dev Pin `who`'s scorePlus1 (bytes 6..7) — the mint-streak EV input.
     function _setScorePlus1(address who, uint16 score) internal {
         bytes32 slot = _subSlot(who);
         uint256 packed = uint256(vm.load(address(game), slot));
