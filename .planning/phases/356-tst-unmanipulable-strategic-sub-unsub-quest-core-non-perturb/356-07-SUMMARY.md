@@ -138,6 +138,10 @@ None. The ledger is a doc-only artifact recording the empirical whole-tree run; 
 - Carried into 357: the `drainAffiliateBase` dispatch-stub reachability finding (§7b) — confirm intended-vs-bug in the adversarial sweep.
 - ZERO `contracts/*.sol` mutation by this plan (`git diff 453f8073 HEAD -- contracts/` is the committed v56 diff, unchanged); the subject stays byte-frozen for 357.
 
+### Reconciliation — the post-authoring `5cb707f2` advance fix (re-confirmation at HEAD)
+
+After this ledger was first authored (`97fac47b`), a USER `contracts/*.sol` commit `5cb707f2` ("feat(advance): active AfKing sub bypasses mustMintToday with no time delay") landed — an 8-line no-time-predicate fall-through in `_enforceDailyMintGate` (`DegenerusGameAdvanceModule.sol:1124`), inside the already-counted 14th changed file. It is NOT a 356 edit (the contract diff stays a USER-owned milestone commit; this plan touched ZERO contracts). The WHOLE-tree `forge test --json` was RE-RUN at the current HEAD (which includes `5cb707f2`): **624 passed / 134 failed / 30 skipped**, the live 134 failing NAME set BYTE-IDENTICAL to the §2 `453f8073` union (`live − union == ∅` AND `union − live == ∅`, intersection 134, re-verified by `comm` on the `(file::fn)` keys). The advance-gate fix introduced **zero new failing test** — the NON-WIDENING gate HOLDS at HEAD; all 4 v56 proof suites stay GREEN; the SOLVENCY-01 leg-1 byte-diff anchor is unaffected (the `5cb707f2` hunk is in `DegenerusGameAdvanceModule.sol`, not the `GameAfkingModule` debit). The ledger §-header + §7 are updated to name `5cb707f2`, correct the diffstat (`+1445`→`+1453`/−733, still 14 files), and record this re-confirmation run; the `git diff 453f8073 HEAD -- contracts/` enumeration now includes `5cb707f2`. `git diff --quiet HEAD -- contracts/` exits 0 (ContractAddresses.sol restored byte-identical sha256 `f7206e6c…`).
+
 ## Self-Check: PASSED
 
 - test/REGRESSION-BASELINE-v56.md — FOUND (435 lines; `453f8073` anchor + binding headline + SOLVENCY-01 anchor `:663-664` + NARROWING + drainAffiliateBase carried finding all present).

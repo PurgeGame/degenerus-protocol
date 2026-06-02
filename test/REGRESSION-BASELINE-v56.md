@@ -3,10 +3,12 @@
 **Plan:** 356-07 (Wave-2 full-suite NON-WIDENING regression gate).
 **Subject:** the v56.0 audit subject — the **AfKing Everyday-Gas Minimization** milestone committed across the
 v55 frozen subject `453f8073` (the IMPL diff `e18af451` + the 355 GAS net tune + the two USER liveness adds:
-the `openBoxes` valve `86a2d6c8` + the gap/jackpot decouple `3d969621`). **Zero `contracts/*.sol` edits were
-applied by this phase** (TST is a `test/` + `.planning/` phase; the audit subject stays byte-frozen — the v56
-contract tree is the SHIPPED milestone, `git diff 453f8073 HEAD -- contracts/` is the committed 14-file v56
-diff, +1445/−733, NOT a 356 edit).
+the `openBoxes` valve `86a2d6c8` + the gap/jackpot decouple `3d969621` + the USER `mustMintToday`-bypass advance
+fix `5cb707f2` — an active-sub no-time-predicate fall-through in `_enforceDailyMintGate`, an 8-line hunk inside
+the already-counted `DegenerusGameAdvanceModule.sol`). **Zero `contracts/*.sol` edits were applied by this
+phase** (TST is a `test/` + `.planning/` phase; the audit subject stays byte-frozen — the v56 contract tree is
+the SHIPPED milestone, `git diff 453f8073 HEAD -- contracts/` is the committed 14-file v56 diff, +1453/−733, NOT
+a 356 edit).
 **Baseline anchored against:** the **v55 frozen subject `453f8073`** (the 349.2 IMPL HEAD — the v55.0 closure
 subject). Because the v56 contract tree DIFFERS from `453f8073` (the IMPL + 355 tune + valve + decouple are all
 post-`453f8073`), the baseline red union is **established EMPIRICALLY** by running the `453f8073` contract
@@ -390,9 +392,21 @@ directions):
 - **Zero `contracts/*.sol` modifications** this phase; no `contracts/*.sol`-touching proof authored; the audit
   subject is FROZEN at the v56 milestone tree (on top of `453f8073`). `git diff HEAD -- contracts/` is EMPTY
   (committed AND working-tree); `git diff 453f8073 HEAD -- contracts/` is the committed 14-file v56 IMPL+tune+
-  liveness diff (`e18af451` + the 355 tune + `86a2d6c8` + `3d969621`), NOT a 356 edit. `ContractAddresses.sol`
-  is restored byte-identical (sha256 `f7206e6c29b2c2767b4b835d1f636ac80a88129098eb13976bb2473da1dccfed`) after
-  every `patchForFoundry` round-trip.
+  liveness diff (`e18af451` + the 355 tune + `86a2d6c8` + `3d969621` + the `mustMintToday`-bypass advance fix
+  `5cb707f2`), +1453/−733, NOT a 356 edit. `ContractAddresses.sol` is restored byte-identical (sha256
+  `f7206e6c29b2c2767b4b835d1f636ac80a88129098eb13976bb2473da1dccfed`) after every `patchForFoundry` round-trip.
+
+> **Re-confirmation run at HEAD (post-`5cb707f2`).** The `mustMintToday`-bypass advance fix `5cb707f2` landed on
+> the contract tree AFTER the ledger's first authoring run. The WHOLE-tree `forge test --json` was re-run at the
+> current HEAD (which INCLUDES `5cb707f2`) → **624 passed / 134 failed / 30 skipped** (788 run) — BYTE-IDENTICAL
+> totals to the first run, and the live 134 failing NAME set is BYTE-IDENTICAL to the §2 `453f8073` 134-name
+> union (`live − union == ∅` AND `union − live == ∅`, intersection 134, re-verified by set-diff on the
+> `(file::fn)` keys). The `5cb707f2` advance-gate fix (an active-sub no-time-predicate fall-through in
+> `_enforceDailyMintGate`) introduced **zero new failing test** — the NON-WIDENING gate HOLDS at the current
+> HEAD. All 4 v56 proof files stay GREEN (`V56SecUnmanipulable`/`V56FreezeSolvency`/`V56QuestNonPerturb`/
+> `V56AfkingGasMarginal`, 0 failing each); the 30 skips remain 16 carried `RngLockDeterminism` + the 14 §3b
+> DROPs. `git diff --quiet HEAD -- contracts/` exits 0 after the restore (ContractAddresses.sol byte-identical
+> sha256 `f7206e6c…`).
 
 ### 7a. The SEC-02 leg-1 SOLVENCY-01 byte-diff anchor (the ETH/`claimablePool` debit byte-unchanged vs `453f8073`)
 
