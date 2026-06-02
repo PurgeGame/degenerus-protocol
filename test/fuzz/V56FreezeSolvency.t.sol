@@ -256,6 +256,188 @@ contract V56FreezeSolvency is DeployProtocol {
     }
 
     // =========================================================================
+    // Leg 3 — RNG-freeze determinism: STAMP-not-resolve + single-roll open consumes
+    //         ONLY the frozen rngWordByDay[stampDay] (two blocks -> byte-identical box)
+    // =========================================================================
+
+    /// @notice STAMP-NOT-RESOLVE: the subscribe min-buy + the STAGE buy STAMP a box for-later-open and NEVER
+    ///         inline-resolve it pre-RNG — across the subscribe AND a new-day STAGE, NO LootBoxOpened is
+    ///         emitted (the box is stamped, the materialization is deferred to the open). Non-vacuous: a box
+    ///         WAS stamped (lastAutoBoughtDay advanced, the box is pending lastOpenedDay < lastAutoBoughtDay),
+    ///         and a subsequent open DOES emit LootBoxOpened (so the absence above is real, not vacuous).
+    function testSubscribeMinBuyStampsNoInlineResolve() public {
+        address p = makeAddr("stamp_noresolve");
+        _grantDeityPass(p);
+
+        // Record across BOTH the subscribe (min-buy) AND the funded STAGE buy: neither materializes a box.
+        vm.recordLogs();
+        _subscribeLootbox(p, 1);
+        _fundPool(p, 50 ether);
+        _runStageNewDay(0x57A11);
+        _settleClean(0x57A12);
+        assertEq(_countLootBoxOpened(p), 0, "STAMP-not-resolve: no LootBoxOpened at subscribe/STAGE time (the box is stamped, not resolved)");
+
+        // The box WAS stamped (pending), so the absence of a resolve above is non-vacuous.
+        uint32 stampDay = _lastBoughtDayOf(p);
+        assertGt(stampDay, 0, "non-vacuity: a box was stamped (lastAutoBoughtDay advanced)");
+        assertTrue(_lastOpenedDayOf(p) < stampDay, "non-vacuity: the box is pending (lastOpenedDay < lastAutoBoughtDay)");
+
+        // And the open DOES emit LootBoxOpened — the materialization is reached only at the (deferred) open.
+        vm.recordLogs();
+        Box memory opened = _openAfkingBoxAt(p, 7, 5 minutes, 0xA11CE, makeAddr("stamp_opener"));
+        assertTrue(opened.present, "the deferred open materialized the box (LootBoxOpened emitted at open, not stamp)");
+        assertEq(_lastOpenedDayOf(p), stampDay, "the open advanced lastOpenedDay to the stamp day");
+    }
+
+    /// @notice TWO-BLOCK DETERMINISM (the freeze observable): open the SAME stamp twice at DIFFERENT blocks
+    ///         (vm.roll/warp + perturbed prevrandao/coinbase) and the materialized box is BYTE-IDENTICAL —
+    ///         the single-roll open seed `keccak256(abi.encode(rngWordByDay[stampDay], player, stampDay,
+    ///         amount))` carries NO block.* entropy. The box's `day` field is the FROZEN stamp day (the live
+    ///         day moved between stamp and open). Adapted from V55FreezeDeterminism:91+ to the v56 harness.
+    function testStampedDayOpenAtTwoBlocksByteIdentical() public {
+        address afk = makeAddr("freeze_twoblock");
+        _grantDeityPass(afk);
+        _subscribeLootbox(afk, 1);
+        _fundPool(afk, 50 ether);
+        _runStageNewDay(0xF00D01);
+        _settleClean(0xF00D02);
+
+        uint32 stampDay = _lastBoughtDayOf(afk);
+        assertGt(stampDay, 0, "non-vacuity: the afking box was stamped");
+        assertTrue(_lastOpenedDayOf(afk) < stampDay, "box pending (lastOpenedDay < lastAutoBoughtDay)");
+        assertTrue(_rngWordByDay(stampDay) != 0, "the stamped day's word has landed (open is reachable)");
+
+        // Snapshot the SHARED pre-open state so both opens replay from an identical stamp.
+        uint256 snap = vm.snapshotState();
+
+        Box memory box1 = _openAfkingBoxAt(afk, 1_000, 11 minutes, 0xAA11AA11, makeAddr("coinbase_1"));
+        assertEq(_lastOpenedDayOf(afk), stampDay, "open#1 materialized the box");
+        assertTrue(box1.present, "open#1 emitted LootBoxOpened (non-vacuous)");
+
+        vm.revertToState(snap);
+        assertEq(_lastBoughtDayOf(afk), stampDay, "revert restored the stamp day");
+        assertTrue(_lastOpenedDayOf(afk) < stampDay, "revert restored the pending box");
+        Box memory box2 = _openAfkingBoxAt(afk, 999_999, 47 minutes, 0xBB22BB22, makeAddr("coinbase_2"));
+        assertEq(_lastOpenedDayOf(afk), stampDay, "open#2 materialized the box");
+        assertTrue(box2.present, "open#2 emitted LootBoxOpened (non-vacuous)");
+
+        // FREEZE: byte-identical across the two block contexts (the seed froze on the stamped day; no block.*).
+        _assertBoxByteIdentical(box1, box2, "RNG-freeze two-block determinism");
+        assertEq(box1.day, stampDay, "the box's day field IS the frozen stamp day (single-roll open, no open-time entropy)");
+    }
+
+    /// @notice TWO-BLOCK DETERMINISM fuzz: for RANDOM perturbed open-block contexts (prevrandao/coinbase/
+    ///         number/timestamp), the SAME stamp opens to a byte-identical box — ANY two block contexts agree,
+    ///         so the single-roll open + pendingBurnie credit consume ONLY the frozen rngWordByDay[stampDay].
+    function testFuzzTwoBlockOpenNoBlockEntropy(uint256 r1, uint256 r2, uint64 dt1, uint64 dt2) public {
+        address afk = makeAddr("freeze_twoblock_fz");
+        _grantDeityPass(afk);
+        _subscribeLootbox(afk, 1);
+        _fundPool(afk, 50 ether);
+        _runStageNewDay(0xACE5EED);
+        _settleClean(0xACE5EEE);
+
+        uint32 stampDay = _lastBoughtDayOf(afk);
+        assertGt(stampDay, 0, "non-vacuity: stamped");
+        assertTrue(_rngWordByDay(stampDay) != 0, "stamped-day word landed");
+
+        // Keep both opens inside the same level/day window (< ~6h each) so the live level is unchanged; the
+        // property under test is the SEED freeze, not the (LIVE-by-design) level.
+        uint256 w1 = uint256(dt1) % (6 hours);
+        uint256 w2 = uint256(dt2) % (6 hours);
+
+        uint256 snap = vm.snapshotState();
+        Box memory boxA = _openAfkingBoxAt(
+            afk, uint64(r1), w1, uint256(keccak256(abi.encode(r1, "pr"))), address(uint160(uint256(keccak256(abi.encode(r1, "cb")))))
+        );
+        assertTrue(boxA.present, "fuzz open A materialized (non-vacuous)");
+
+        vm.revertToState(snap);
+        Box memory boxB = _openAfkingBoxAt(
+            afk, uint64(r2), w2, uint256(keccak256(abi.encode(r2, "pr"))), address(uint160(uint256(keccak256(abi.encode(r2, "cb")))))
+        );
+        assertTrue(boxB.present, "fuzz open B materialized (non-vacuous)");
+
+        _assertBoxByteIdentical(boxA, boxB, "RNG-freeze no-block-entropy fuzz");
+    }
+
+    // =========================================================================
+    // Leg 3 open-driving + box-oracle helpers (ported from V55FreezeDeterminism)
+    // =========================================================================
+
+    /// @dev Open `afk`'s stamped afking box at a perturbed block context and return the materialized box
+    ///      decoded from the LootBoxOpened event. Perturbs block number / timestamp (sub-day, level held) /
+    ///      prevrandao / coinbase (NONE enter the single-roll afking seed by design), then settles any
+    ///      in-flight advance so mintBurnie takes the OPEN leg (!advanceDue) and fires the open. Uses a FIXED
+    ///      drain word (NOT derived from the perturbation — the perturbation touches only the block context).
+    function _openAfkingBoxAt(
+        address afk,
+        uint64 blockBump,
+        uint256 warpBump,
+        uint256 prevrandao,
+        address coinbase
+    ) internal returns (Box memory) {
+        vm.roll(block.number + 1 + uint256(blockBump));
+        if (block.timestamp + warpBump > _t) _t = block.timestamp + warpBump;
+        vm.warp(block.timestamp + warpBump);
+        vm.prevrandao(bytes32(prevrandao));
+        vm.coinbase(coinbase);
+        _settleClean(0xC0FFEEFACE);
+
+        vm.recordLogs();
+        vm.prank(makeAddr("freeze_opener"));
+        try game.mintBurnie() {} catch {}
+        return _decodeLootBoxOpenedFor(afk);
+    }
+
+    /// @dev Decode the (single) LootBoxOpened event whose indexed player == `who` from the recorded logs.
+    function _decodeLootBoxOpenedFor(address who) internal returns (Box memory b) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; i++) {
+            if (
+                logs[i].emitter == address(game) &&
+                logs[i].topics.length >= 3 &&
+                logs[i].topics[0] == LOOTBOX_OPENED_SIG &&
+                logs[i].topics[1] == bytes32(uint256(uint160(who)))
+            ) {
+                b.present = true;
+                b.lootboxIndex = uint48(uint256(logs[i].topics[2]));
+                (b.day, b.amount, b.futureLevel, b.futureTickets, b.burnie, b.roundedUp) =
+                    abi.decode(logs[i].data, (uint32, uint256, uint24, uint32, uint256, bool));
+                return b;
+            }
+        }
+    }
+
+    /// @dev Count the LootBoxOpened events for `who` recorded since the last vm.recordLogs() (the STAMP-not-
+    ///      resolve observable: ZERO at subscribe/STAGE time, NON-ZERO at open). Emitter == address(game).
+    function _countLootBoxOpened(address who) internal returns (uint256 count) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
+            if (logs[i].topics[0] != LOOTBOX_OPENED_SIG) continue;
+            if (logs[i].topics[1] == bytes32(uint256(uint160(who)))) count++;
+        }
+    }
+
+    /// @dev Assert two materialized boxes are byte-identical in every RESOLVED trait field. The event's
+    ///      lootboxIndex is a storage tag (NOT a resolved trait) — excluded (both opens replay the SAME stamp,
+    ///      so it is identical anyway).
+    function _assertBoxByteIdentical(Box memory a, Box memory b, string memory tag) internal {
+        assertEq(a.day, b.day, string(abi.encodePacked(tag, ": day")));
+        assertEq(a.amount, b.amount, string(abi.encodePacked(tag, ": amount")));
+        assertEq(a.futureLevel, b.futureLevel, string(abi.encodePacked(tag, ": futureLevel")));
+        assertEq(a.futureTickets, b.futureTickets, string(abi.encodePacked(tag, ": futureTickets")));
+        assertEq(a.burnie, b.burnie, string(abi.encodePacked(tag, ": burnie")));
+        assertEq(a.roundedUp, b.roundedUp, string(abi.encodePacked(tag, ": roundedUp")));
+    }
+
+    /// @dev Read the DAY-keyed afking word `rngWordByDay[day]` (the single-roll open's frozen seed input).
+    function _rngWordByDay(uint32 day) internal view returns (uint256) {
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), uint256(RNG_WORD_BY_DAY_SLOT)))));
+    }
+
+    // =========================================================================
     // The solvency observable
     // =========================================================================
 
