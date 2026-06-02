@@ -163,19 +163,25 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      protocol's burden to service — those users arrange their own keepering.
     uint256 internal constant SUBSCRIBER_CAP = 500;
 
-    /// @dev Global quest-settle cadence (~10 days). On a settle day
-    ///      (`currentDay % SETTLE_PERIOD == 0`) the quest leg settles inline in the buy
-    ///      stage, riding the warm Sub-slot write the buy already does. It also sizes the
-    ///      first-sub head-start window (`daysToNextSettle = SETTLE_PERIOD -
-    ///      (currentDay % SETTLE_PERIOD)`, bounded +0..+9). A global epoch, not a per-sub
-    ///      marker.
-    uint256 internal constant SETTLE_PERIOD = 10;
+    /// @dev First-sub head-start window (bounded +0..+9). On the very first subscribe the
+    ///      streak snapshot gets a `(PERIOD - currentDay % PERIOD) % PERIOD` boost (a subscribe
+    ///      on a period boundary grants 0), folded once into `streakAtAfkingStart`.
+    uint256 internal constant FIRST_SUB_HEADSTART_PERIOD = 10;
+
+    /// @dev Per-sub gas-weight of an in-stage sub-ending finalize (cancel-reclaim / pass-evict
+    ///      / funding-kill) relative to a cheap local buy (weight 1): the finalize does a
+    ///      cross-contract quest read + streak write the call-free buy does not, so it is the
+    ///      heavier branch and consumes more of the STAGE's per-call weight budget. The chunk
+    ///      ends on accumulated weight, bounding even an all-evicts chunk under the 16.7M
+    ///      advance-chain ceiling. GAS-phase measured: an evict-finalize ≈ 11k vs a lootbox buy
+    ///      ≈ 7k → W = ceil(11k/7k) = 2 (conservative — it over-weights an evict relative to the
+    ///      heavier ticket buy ≈ 54k, so the budget binds on buys).
+    uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 2;
 
     /// @dev Slot-0 quest completion reward — mirrors `DegenerusQuests.QUEST_SLOT0_REWARD`
-    ///      (a private constant not visible cross-contract). Each delivered afking buy
-    ///      completes slot-0; the settle mints `questProgress × QUEST_SLOT0_REWARD` BURNIE
-    ///      to the sub (base units, 18 decimals). Only values the BURNIE mint, off the
-    ///      solvency path.
+    ///      (a private constant not visible cross-contract). Each delivered afking buy accrues
+    ///      `QUEST_SLOT0_REWARD` (whole BURNIE) into the sub's claimable `pendingBurnie`, pulled
+    ///      via `claimAfkingBurnie`. Only values the BURNIE mint, off the solvency path.
     uint256 internal constant QUEST_SLOT0_REWARD = 100 ether;
 
     /*------------------------------------------------------------------
@@ -198,12 +204,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      work done, not once-per-call — the "middle-chunk-unpaid" liveness gap).
     uint256 internal constant OPEN_KNEE = 5;
 
-    /// @dev Open-leg default box-count budget (the post-RNG `_subOpenCursor` drain).
-    ///      Carried from AfKing's measurement-derived `OPEN_BATCH` (the per-box open is
-    ///      uniform O(1); the afking box rolls boons like a human box ≈ 77K/box, so
-    ///      200 boxes stays under the 16.7M per-tx ceiling). ⚠ The flat-budget
-    ///      re-measurement is the GAS phase's charge (350); carried unchanged.
-    uint256 internal constant OPEN_BATCH = 200;
+    /// @dev Open-leg default box-count budget (the post-RNG `_subOpenCursor` drain). The per-box
+    ///      open is uniform O(1) (the afking box rolls boons like a human box). GAS-phase measured
+    ///      ≈ 74k/box: 200 boxes ≈ 15.0M stays under the 16.7M hard ceiling but EXCEEDS the 10M
+    ///      comfort target; the derived max-safe count under 10M is ~132, so 130 is chosen
+    ///      (≈ 9.6M worst-case open chunk) to honor the dual bound.
+    uint256 internal constant OPEN_BATCH = 130;
 
     /*------------------------------------------------------------------
                           Subscription entrypoint (CONSENT-01 carried verbatim)
@@ -305,13 +311,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (dailyQuantity == 0) {
             if (_subscriberIndex[subscriber] == 0) revert NotSubscribed();
             Sub storage c = _subOf[subscriber];
-            // Drain the accrued quest counters before the tombstone (one creditFlip to the
-            // sub of `questProgress × QUEST_SLOT0_REWARD` + `buyerOwedBurnie`, plus the
-            // delivered-day streak advance). `affiliateBase` is NOT flushed — it persists in
-            // the slot for the uplines to pull via `drainAffiliateBase`, so an unsub does not
-            // forfeit the uplines' accrued affiliate. The streak gap-resets naturally once no
-            // further delivered days arrive.
-            _settleQuest(subscriber, c, _simulatedDayIndex());
+            // Hand the afking-computed streak back to the manual quest system, then tombstone in
+            // place. The accrued `pendingBurnie` (claimable) and `affiliateBase` (upline-pull)
+            // persist in the slot, so an unsub forfeits neither: the sub pulls its earned BURNIE
+            // via `claimAfkingBurnie` whenever.
+            _finalizeAfking(subscriber, c, _simulatedDayIndex());
             c.dailyQuantity = 0;
             emit SubscriptionUpdated(
                 subscriber,
@@ -328,6 +332,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // is idempotent (adds only when `_subscriberIndex == 0`), so a re-subscribe of
         // an active member replaces its fields without set churn.
         Sub storage s = _subOf[subscriber];
+
+        // Captured BEFORE the dailyQuantity overwrite: a non-zero stored dailyQuantity means the
+        // sub is mid-afking-run (afkingActive set) — a re-subscribe CONTINUES that run; 0 means
+        // new / cancelled / evicted (afkingActive cleared by a prior finalize) — a fresh run.
+        bool wasActive = s.dailyQuantity != 0;
 
         s.dailyQuantity = dailyQuantity;
         if (drainGameCreditFirst) s.flags |= FLAG_DRAIN_FIRST;
@@ -350,26 +359,112 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             s.flags &= ~FLAG_EXTERNAL_FUNDING;
         }
 
-        // First-sub head-start — granted once per account, gated on the set-once
-        // `hasEverSubscribed` latch. On the first-ever subscribe, advance the quest streak
-        // by `daysToNextSettle = SETTLE_PERIOD - (currentDay % SETTLE_PERIOD)`, taken
-        // `% SETTLE_PERIOD` so it maps to +0..+9 (a subscribe on a settle boundary grants 0,
-        // never a full extra window). It is a real immediate streak advance through the
-        // DegenerusQuests onlyGame entrypoint. Re-subs after a cancel get no fresh head-start
-        // (the latch stays set). The per-window streak otherwise advances only on
-        // debit-delivered days, so this is the only direct streak grant.
-        if (!s.hasEverSubscribed) {
-            s.hasEverSubscribed = true;
-            uint32 currentDay = _simulatedDayIndex();
-            uint32 daysToNextSettle = uint32(
-                (SETTLE_PERIOD - (currentDay % SETTLE_PERIOD)) % SETTLE_PERIOD
-            );
-            if (daysToNextSettle != 0) {
-                quests.settleAfkingQuest(
-                    subscriber,
-                    uint16(daysToNextSettle),
-                    currentDay
-                );
+        // Afking-run start (new sub) OR a streak-refreshing cover-buy (active sub re-subscribe).
+        {
+            uint32 today = _simulatedDayIndex();
+            if (wasActive) {
+                // ACTIVE sub re-subscribe — subscribe doubles as a manual "keep my streak alive +
+                // buy something" action. Do a funded cover-buy for TODAY (advancing the funded
+                // high-water afkCoveredThroughDay), which CONTINUES the run's streak via
+                // _deliverAfkingBuy's own gap-reset/accrue: a still-current run keeps its streak and
+                // gains today; a gapped run re-bases to 0 (a full missed day is gone, same as the
+                // stage). No re-snapshot / no head-start / no forfeit — the afking streak is never
+                // reset by a re-subscribe. Skipped (streak just persists + decays on read) when
+                // already bought today OR a pending unopened box exists (re-stamping would orphan
+                // it — the no-orphan rule) OR the cover-buy is unfunded.
+                if (
+                    s.lastAutoBoughtDay != uint24(today) &&
+                    s.lastOpenedDay >= s.lastAutoBoughtDay
+                ) {
+                    uint256 mp = _mintPriceInContext();
+                    (
+                        ,
+                        uint256 ethValue,
+                        uint256 buyAmount,
+                        bool isTicket,
+                        uint256 playerFunding
+                    ) = _resolveBuy(s, subscriber, mp);
+                    address src = (s.flags & FLAG_EXTERNAL_FUNDING) != 0
+                        ? _fundingSourceOf[subscriber]
+                        : subscriber;
+                    if (
+                        (src == subscriber ? playerFunding : afkingFunding[src]) >=
+                        ethValue
+                    ) {
+                        _deliverAfkingBuy(
+                            subscriber,
+                            s,
+                            today,
+                            mp,
+                            level,
+                            src,
+                            ethValue,
+                            buyAmount,
+                            isTicket
+                        );
+                    }
+                }
+            } else {
+                // NEW run. Snapshot the player's (gap-synced) manual quest streak and flip the
+                // afking flag (slot-0 completions become streak-neutral / reward-deferred — the
+                // Game-side compute-on-read owns the streak until finalize hands it back). The
+                // once-per-account head-start (+0..9, gated on subStreakLatch bit 7) folds into the
+                // snapshot. The run is grounded on a FUNDED day-0 (a funded min-buy OR an
+                // already-complete manual slot-0 today) — the debit-gate that makes the streak
+                // unfarmable. An unfunded subscribe still starts the run but FORFEITS the snapshot
+                // (base 0); it never reverts (VAULT / SDGNRS self-subscribe with no funds at
+                // construction).
+                uint256 snap = quests.beginAfking(subscriber, today); // syncs + sets afkingActive
+                if ((s.subStreakLatch & SUB_EVER_SUBSCRIBED_BIT) == 0) {
+                    s.subStreakLatch |= SUB_EVER_SUBSCRIBED_BIT;
+                    snap +=
+                        (FIRST_SUB_HEADSTART_PERIOD -
+                            (today % FIRST_SUB_HEADSTART_PERIOD)) %
+                        FIRST_SUB_HEADSTART_PERIOD;
+                }
+                // Frame the run on today (the compute-on-read base; afkCovered == today keeps the
+                // delivery's gap-reset from wiping the snapshot and guarantees
+                // afkCovered >= afkingStartDay so the streak span never underflows).
+                s.afkCoveredThroughDay = uint24(today);
+                s.afkingStartDay = uint24(today);
+
+                (, , , bool[2] memory done) = questView.playerQuestStates(subscriber);
+                if (done[0]) {
+                    _setStreakBase(s, snap); // funded (manual) day-0 — keep the snapshot
+                    s.lastAutoBoughtDay = uint24(today);
+                    s.lastOpenedDay = uint24(today); // no pending box
+                } else {
+                    uint256 mp = _mintPriceInContext();
+                    (
+                        ,
+                        uint256 ethValue,
+                        uint256 buyAmount,
+                        bool isTicket,
+                        uint256 playerFunding
+                    ) = _resolveBuy(s, subscriber, mp);
+                    address src = (s.flags & FLAG_EXTERNAL_FUNDING) != 0
+                        ? _fundingSourceOf[subscriber]
+                        : subscriber;
+                    if (
+                        (src == subscriber ? playerFunding : afkingFunding[src]) >=
+                        ethValue
+                    ) {
+                        _setStreakBase(s, snap); // funded day-0 — keep the snapshot
+                        _deliverAfkingBuy(
+                            subscriber,
+                            s,
+                            today,
+                            mp,
+                            level,
+                            src,
+                            ethValue,
+                            buyAmount,
+                            isTicket
+                        );
+                    } else {
+                        _setStreakBase(s, 0); // unfunded — forfeit the snapshot; run builds from 0
+                    }
+                }
             }
         }
 
@@ -539,6 +634,196 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /*------------------------------------------------------------------
+              Shared per-sub funded delivery + compute-on-read streak
+    ------------------------------------------------------------------*/
+    /// @dev The shared per-sub funded delivery — used by both the process STAGE (after its
+    ///      pre-buy gates) and the subscribe funded day-0. The slice is already confirmed funded
+    ///      by the caller (`afkingFunding[src] >= ethValue`), so this is revert-free by
+    ///      construction (no try/catch). Debits the fresh-ETH leg (claimablePool in tandem,
+    ///      fail-loud on underflow — a debit can never exceed afkingFunding[src] ≤ the
+    ///      claimablePool reservation, so a revert here means solvency is already violated and
+    ///      must propagate), materializes the buy per mode (stamp a lootbox box / queue tickets),
+    ///      accrues the day's affiliate base + the slot-0 pendingBurnie reward, advances the
+    ///      compute-on-read streak markers (gap-resuming a fresh run from zero if the last funded
+    ///      day is older than yesterday), and sets the success marker. The lootbox stamp's frozen
+    ///      activity score reads the COMPUTE-ON-READ streak off the Sub slot — no DegenerusQuests
+    ///      STATICCALL on the hot path. boons OFF ⇒ amount == spend.
+    /// @param player The subscriber being delivered to (the credit recipient).
+    /// @param sub The subscriber's record (storage ref — stamped/accrued here).
+    /// @param processDay The delivered day (the stamp's frozen seed day + the streak marker).
+    /// @param mp The in-context mint price.
+    /// @param currentLevel The hoisted level (the buy's target-level base).
+    /// @param src The funding bucket the fresh-ETH leg debits.
+    /// @param ethValue The fresh-ETH portion (0 = pure claimable).
+    /// @param amount Ticket entry-units (ticket mode) or lootbox spend in wei (lootbox mode).
+    /// @param isTicket Mode — true = queue tickets, false = stamp a lootbox box.
+    function _deliverAfkingBuy(
+        address player,
+        Sub storage sub,
+        uint32 processDay,
+        uint256 mp,
+        uint24 currentLevel,
+        address src,
+        uint256 ethValue,
+        uint256 amount,
+        bool isTicket
+    ) private {
+        if (ethValue != 0) {
+            afkingFunding[src] -= ethValue;
+            claimablePool -= uint128(ethValue);
+        }
+
+        if (isTicket) {
+            // Ticket minimal-write primitive: queue resolution-equivalent ticket entries and
+            // accrue the ticket buyer-bonus into the warm Sub slot. The affiliate flat-7% and the
+            // slot-0 reward are added by the mode-agnostic accrue below (not re-accrued here).
+            uint24 targetLevel = jackpotPhaseFlag
+                ? currentLevel
+                : currentLevel + 1;
+
+            // Century (x00-level) quantity bonus at parity with the manual mint, reusing the
+            // existing centuryBonusLevel/centuryBonusUsed storage and the per-buy activity score
+            // off the COMPUTE-ON-READ streak (no STATICCALL). The purchase-boost quantity
+            // multiplier is omitted, matching the boons-off lootbox leg.
+            uint32 adjustedQty = uint32(amount);
+            if (targetLevel % 100 == 0) {
+                uint256 cachedScore = _playerActivityScore(
+                    player,
+                    _afkingStreak(sub, processDay),
+                    targetLevel
+                );
+                if (cachedScore != 0) {
+                    uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
+                    uint256 _score = cachedScore > 30_500 ? 30_500 : cachedScore;
+                    uint256 bonusQty = (uint256(adjustedQty) * _score) / 30_500;
+                    if (bonusQty != 0 && priceWei != 0) {
+                        uint256 maxBonus = (20 ether) / (priceWei >> 2);
+                        uint256 used = centuryBonusLevel == targetLevel
+                            ? centuryBonusUsed[player]
+                            : 0;
+                        uint256 remaining = maxBonus > used ? maxBonus - used : 0;
+                        if (bonusQty > remaining) bonusQty = remaining;
+                        if (bonusQty != 0) {
+                            centuryBonusLevel = targetLevel;
+                            centuryBonusUsed[player] = used + bonusQty;
+                            adjustedQty += uint32(bonusQty);
+                        }
+                    }
+                }
+            }
+
+            _queueTicketsScaled(player, targetLevel, adjustedQty, false);
+
+            // 10%/20% ticket buyer-bonus → claimable pendingBurnie (pulled via
+            // claimAfkingBurnie). Uses the pre-bonus `amount`; whole BURNIE with the 100M clamp.
+            uint256 coinCost = (amount * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE;
+            uint256 bonusBase = coinCost / 10; // flat 10%
+            if (amount >= 10 * 4 * TICKET_SCALE) {
+                bonusBase += (amount * PRICE_COIN_UNIT) / (40 * TICKET_SCALE); // +10% → 20% on ≥10 tickets
+            }
+            uint256 bonusWhole = bonusBase / 1 ether;
+            if (bonusWhole != 0) {
+                uint256 newOwed = uint256(sub.pendingBurnie) + bonusWhole;
+                if (newOwed > 100_000_000) newOwed = 100_000_000;
+                sub.pendingBurnie = uint32(newOwed);
+            }
+
+            // No pending box: keep lastOpenedDay == lastAutoBoughtDay so the no-orphan guard and
+            // _afkingBoxReady never treat a ticket sub as box-pending.
+            sub.lastOpenedDay = uint24(processDay);
+        } else {
+            // STAMP the lootbox box. The per-buy manual side-effects (handlePurchase, affiliate
+            // ×2, the per-buy creditFlip) are deferred to the in-slot accrue (affiliate pulled via
+            // drainAffiliateBase; the slot-0 reward into pendingBurnie). The stamp freezes
+            // scorePlus1 (the EV input at open, off the compute-on-read streak — no STATICCALL)
+            // and amount; the level + EV-cap key read LIVE at open.
+            uint256 activityScore = _playerActivityScore(
+                player,
+                _afkingStreak(sub, processDay),
+                currentLevel + 1
+            );
+            uint16 scorePlus1 = activityScore + 1 > type(uint16).max
+                ? type(uint16).max
+                : uint16(activityScore + 1);
+            sub.scorePlus1 = scorePlus1;
+            // milli-ETH stamp (the EV/seed input only — the ETH debit used the full wei ethValue).
+            sub.amount = uint24(_packEthToMilliEth(amount));
+        }
+
+        // Mode-agnostic accrue — one warm in-slot write, zero cross-contract calls:
+        //   • affiliate base: flat 7% of the full ETH spend (== amount), whole BURNIE, 100M clamp;
+        //   • slot-0 quest reward: QUEST_SLOT0_REWARD (whole BURNIE) into the claimable pendingBurnie;
+        //   • compute-on-read streak markers: gap-resume a fresh run from zero if the last funded
+        //     day is older than yesterday (matching the decay-on-read), then advance the
+        //     funded-day high-water mark afkCoveredThroughDay.
+        {
+            uint256 base = (_ethToBurnie(amount, mp) * 7) / 100;
+            if (base != 0) {
+                uint256 newBase = uint256(sub.affiliateBase) + base;
+                if (newBase > 100_000_000) newBase = 100_000_000;
+                sub.affiliateBase = uint32(newBase);
+            }
+            {
+                uint256 newOwed = uint256(sub.pendingBurnie) +
+                    (QUEST_SLOT0_REWARD / 1 ether);
+                if (newOwed > 100_000_000) newOwed = 100_000_000;
+                sub.pendingBurnie = uint32(newOwed);
+            }
+            if (uint32(sub.afkCoveredThroughDay) + 1 < processDay) {
+                sub.afkingStartDay = uint24(processDay);
+                _setStreakBase(sub, 0);
+            }
+            sub.afkCoveredThroughDay = uint24(processDay);
+        }
+
+        sub.lastAutoBoughtDay = uint24(processDay);
+    }
+
+    /// @dev Compute-on-read effective afking quest streak from the Sub slot — no DegenerusQuests
+    ///      STATICCALL. The run's snapshot (`streakAtAfkingStart`) plus the funded delivered days
+    ///      since the run's base day, while the last funded day is no older than yesterday;
+    ///      otherwise 0 (decay-on-read: miss one full day and the streak is gone). Capped to 100
+    ///      downstream by the activity score.
+    function _afkingStreak(Sub storage sub, uint32 currentDay)
+        private
+        view
+        returns (uint32)
+    {
+        uint32 covered = uint32(sub.afkCoveredThroughDay);
+        if (currentDay == 0 || covered + 1 < currentDay) return 0;
+        return uint32(_streakBaseOf(sub)) + (covered - uint32(sub.afkingStartDay));
+    }
+
+    /// @dev Hand the afking-computed streak back to the manual quest system on a sub-ending path,
+    ///      BEFORE the Sub slot is deleted. Computes the run's earned streak (snapshot + funded
+    ///      delivered days) and the afking funded high-water day, then defers the decay decision
+    ///      and the anchor to `quests.finalizeAfking`, which also folds in any manual completion
+    ///      day (so a sub who let afking funding lapse but kept minting manually is not wrongly
+    ///      zeroed) and is idempotent (a no-op if the player is not currently afking — safe for the
+    ///      cancel-then-reclaim double call). Clears the Sub's afking framing. The cross-contract
+    ///      read+write is the heavier (EVICT_WEIGHT) STAGE branch.
+    /// @param player The subscriber whose run is ending.
+    /// @param sub The subscriber's record (storage ref — afking framing cleared here).
+    /// @param currentDay The current day (the decay reference passed to DegenerusQuests).
+    function _finalizeAfking(
+        address player,
+        Sub storage sub,
+        uint32 currentDay
+    ) private {
+        uint32 covered = uint32(sub.afkCoveredThroughDay);
+        uint256 earned = uint256(_streakBaseOf(sub)) +
+            (covered - uint32(sub.afkingStartDay));
+        quests.finalizeAfking(
+            player,
+            earned > type(uint24).max ? type(uint24).max : uint24(earned),
+            covered,
+            currentDay
+        );
+        sub.afkingStartDay = 0;
+        _setStreakBase(sub, 0);
+    }
+
+    /*------------------------------------------------------------------
               The REQUIRED-PATH process STAGE (BOX-02 stamp + BOX-03 debit + CONSENT-02)
     ------------------------------------------------------------------*/
     /// @notice The chunked pre-RNG stamp/buy pass the AdvanceModule STAGE drives across
@@ -576,12 +861,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      identity); the SOLVENCY-01 `claimablePool -=` site FAILS LOUD (class B, must
     ///      propagate). The per-cycle eviction cap is DROPPED.
     /// @param processDay The boundary-pinned process day (computed once by the STAGE).
-    /// @param maxCount Maximum entries to process this chunk (caller-bounded — the
-    ///        anti-gas-DoS property; the STAGE supplies a BUY_BATCH-style budget).
+    /// @param weightBudget Per-call gas-weight budget (caller-bounded — the anti-gas-DoS
+    ///        property). Each iteration consumes weight — a cheap local buy/skip 1, a
+    ///        cross-contract sub-ending finalize `SUB_STAGE_EVICT_WEIGHT` — and the chunk ends
+    ///        when the accumulated weight reaches the budget, bounding even an all-evicts chunk.
     /// @return processed Number of set entries advanced/handled this chunk.
     function processSubscriberStage(
         uint32 processDay,
-        uint256 maxCount
+        uint256 weightBudget
     ) external returns (uint256 processed) {
         uint256 mp = _mintPriceInContext();
         // AFSUB-02 — hoist the level read ONCE so the per-iter validity check is a pure
@@ -589,8 +876,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint24 currentLevel = level;
 
         uint256 cursor = _subCursor;
+        uint256 weight; // accumulated gas-weight; the chunk ends at weightBudget
 
-        while (processed < maxCount && cursor < _subscribers.length) {
+        while (weight < weightBudget && cursor < _subscribers.length) {
             address player = _subscribers[cursor];
             Sub storage sub = _subOf[player];
 
@@ -614,6 +902,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 unchecked {
                     ++cursor;
                     ++processed;
+                    ++weight;
                 }
                 continue;
             }
@@ -621,17 +910,28 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // (0) Cancel-tombstone reclaim (CONSENT-02 — SUB-07 / H-CANCEL-SWAP-MISS).
             // An externally-cancelled sub (subscribe(_, 0)) is an in-set
             // `dailyQuantity == 0` tombstone: it relocated no one on cancel, so it cannot
-            // have pushed a pending entry behind the cursor. The reclaim deletes the
-            // `_subOf` record, swap-pops it out, and continues WITHOUT advancing the cursor
-            // — the swap-pop occupant (a mover from ahead, still pending) is processed at
-            // this slot this pass. Ordered ahead of the AlreadyAutoBoughtToday skip so a
-            // tombstone is ALWAYS reclaimed, independent of its lastAutoBoughtDay.
+            // have pushed a pending entry behind the cursor. Finalize the afking streak (a
+            // no-op if the cancel already did — idempotent), then delete the `_subOf` record,
+            // swap-pop it out, and continue WITHOUT advancing the cursor — the swap-pop
+            // occupant (a mover from ahead, still pending) is processed at this slot this pass.
+            // Ordered ahead of the AlreadyAutoBoughtToday skip so a tombstone is ALWAYS
+            // reclaimed, independent of its lastAutoBoughtDay. The finalize is the cross-contract
+            // work that makes this the heavier (EVICT_WEIGHT) branch.
             if (sub.dailyQuantity == 0) {
+                _finalizeAfking(player, sub, processDay);
+                // Preserve the once-per-account head-start latch (subStreakLatch bit 7) across the
+                // `delete` — otherwise a subscribe -> cancel -> reclaim -> resubscribe cycle would
+                // re-grant the +0..9 head-start every cycle and compound it into the manual streak
+                // via finalizeAfking. The streak base (bits 0-6) is dropped (already handed back to
+                // the manual streak by the finalize above); only the latch survives.
+                bool everSub = (sub.subStreakLatch & SUB_EVER_SUBSCRIBED_BIT) != 0;
                 delete _subOf[player];
+                if (everSub) _subOf[player].subStreakLatch = SUB_EVER_SUBSCRIBED_BIT;
                 _removeFromSet(player);
                 emit SubscriptionExpired(player, 2);
                 unchecked {
                     ++processed;
+                    weight += SUB_STAGE_EVICT_WEIGHT;
                 }
                 continue;
             }
@@ -643,6 +943,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 unchecked {
                     ++cursor;
                     ++processed;
+                    ++weight;
                 }
                 continue;
             }
@@ -659,13 +960,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     sub.validThroughLevel = h;
                     emit SubscriptionExtendedFree(player, processDay);
                 } else {
-                    // EVICT — route through tombstone-then-reclaim so the swap-pop
-                    // invariant survives (no cursor advance after the swap-pop).
+                    // EVICT — finalize the afking streak (hand it back), then route through
+                    // tombstone-then-reclaim so the swap-pop invariant survives (no cursor
+                    // advance after the swap-pop). The finalize is the EVICT_WEIGHT cross-call.
+                    _finalizeAfking(player, sub, processDay);
                     sub.dailyQuantity = 0;
                     _removeFromSet(player);
                     emit SubscriptionExpired(player, 1);
                     unchecked {
                         ++processed;
+                        weight += SUB_STAGE_EVICT_WEIGHT;
                     }
                     continue;
                 }
@@ -674,7 +978,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // Funding resolution (cost + payment mode + ethValue slice). The slice builder
             // computes everything revert-free by construction.
             (
-                MintPaymentKind payKind,
+                ,
                 uint256 ethValue,
                 uint256 amount,
                 bool isTicket,
@@ -710,216 +1014,47 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     unchecked {
                         ++cursor;
                         ++processed;
+                        ++weight;
                     }
                     continue;
                 }
+                // Funding-kill of a NORMAL underfunded sub — finalize the afking streak (hand it
+                // back; its decay-on-read zeroes only if a full prior day was missed with NO
+                // valid mint, afking OR manual), then tombstone + swap-pop.
+                _finalizeAfking(player, sub, processDay);
                 sub.dailyQuantity = 0;
                 _removeFromSet(player);
                 emit SubscriptionExpired(player, 1);
                 unchecked {
                     ++processed;
+                    weight += SUB_STAGE_EVICT_WEIGHT;
                 }
                 continue;
             }
 
-            // BUY + DEBIT + MARKER. The fresh-ETH `ethValue` is debited from
-            // `afkingFunding[src]` with `claimablePool` released in tandem for both modes
-            // (`afkingFunding[funder] -= ev; claimablePool -= ev`). Then, per mode:
-            //   • LOOTBOX (isTicket == false): stamp the box — freeze the two per-sub inputs
-            //     (scorePlus1 = activityScore + 1, the EV multiplier input at open; amount =
-            //     the stamped spend, boons OFF ⇒ amount == spend) warm-dirty into the single
-            //     Sub slot. The box is materialized later by _openAfkingBox at the live level,
-            //     a pure function of the record + rngWordByDay[lastAutoBoughtDay]. The freed
-            //     ETH becomes the box's spend at open and the buyer's claimableUse portion is
-            //     settled at open.
-            //   • TICKET (isTicket == true): do NOT stamp a box — queue `amount` ticket
-            //     entry-units now, and set lastOpenedDay = lastAutoBoughtDay so the open-leg
-            //     never sees a ticket sub (no garbage micro-box).
-            // Revert-free by construction (funded, well-formed slice) — no try/catch.
-            // The `claimablePool -= uint128(ethValue)` site fails loud on an underflow: a
-            // debit can never exceed the per-account afkingFunding ≤ the claimablePool
-            // reservation, so a revert here means solvency is already violated and must
-            // propagate.
-            if (ethValue != 0) {
-                afkingFunding[src] -= ethValue;
-                claimablePool -= uint128(ethValue);
-            }
-
-            if (isTicket) {
-                // Ticket minimal-write primitive — replaces the ~262k `purchaseWith`
-                // delegatecall (which dragged in `recordMint` and the whole
-                // quests/affiliate/coinflip work). It mirrors the lootbox-branch shape: the
-                // claimablePool debit above is the only ETH accounting; this leg just queues
-                // resolution-equivalent ticket entries and accrues the ticket buyer-bonus into
-                // the warm Sub slot. The affiliate flat-7% and the quest delivered-day counter
-                // are advanced by the mode-agnostic accrue AFTER this if/else, so they are not
-                // re-accrued here. boons/boost off by design.
-                //
-                // (1) targetLevel — jackpotPhaseFlag ? level : level + 1. `currentLevel` is
-                //     the hoisted `level` read; reuse it instead of a second SLOAD.
-                uint24 targetLevel = jackpotPhaseFlag
-                    ? currentLevel
-                    : currentLevel + 1;
-
-                // (2) Century (x00-level) quantity bonus at parity with the manual mint,
-                //     reusing the existing `centuryBonusLevel`/`centuryBonusUsed` storage (no
-                //     new slot) and the per-buy activity score (`_playerActivityScore`,
-                //     sourcing the pre-action quest streak the same way the lootbox stamp
-                //     does). `amount` is the scaled entry-units; `adjustedQty` grows by the
-                //     century bonus. The per-player purchase-boost quantity multiplier (a
-                //     boon-derived boost the manual leg applies) is deliberately not applied
-                //     here, matching the boons-off lootbox leg — an intentional omission.
-                uint32 adjustedQty = uint32(amount);
-                if (targetLevel % 100 == 0) {
-                    (uint32 questStreakTkt, , , ) = questView.playerQuestStates(
-                        player
-                    );
-                    uint256 cachedScore = _playerActivityScore(
-                        player,
-                        questStreakTkt,
-                        targetLevel
-                    );
-                    if (cachedScore != 0) {
-                        uint256 priceWei = PriceLookupLib.priceForLevel(
-                            targetLevel
-                        );
-                        uint256 _score = cachedScore > 30_500
-                            ? 30_500
-                            : cachedScore;
-                        uint256 bonusQty = (uint256(adjustedQty) * _score) /
-                            30_500;
-                        if (bonusQty != 0 && priceWei != 0) {
-                            uint256 maxBonus = (20 ether) / (priceWei >> 2);
-                            uint256 used = centuryBonusLevel == targetLevel
-                                ? centuryBonusUsed[player]
-                                : 0;
-                            uint256 remaining = maxBonus > used
-                                ? maxBonus - used
-                                : 0;
-                            if (bonusQty > remaining) bonusQty = remaining;
-                            if (bonusQty != 0) {
-                                centuryBonusLevel = targetLevel;
-                                centuryBonusUsed[player] = used + bonusQty;
-                                adjustedQty += uint32(bonusQty);
-                            }
-                        }
-                    }
-                }
-
-                // (3) Queue resolution-equivalent ticket entries — the same
-                //     `_queueTicketsScaled(buyer, targetLevel, adjustedQty, false)` the manual
-                //     leg uses, so the queued placement/quantity is equivalent to
-                //     `purchaseWith`'s ticket leg.
-                _queueTicketsScaled(player, targetLevel, adjustedQty, false);
-
-                // (4) Accrue the 10%/20% ticket buyer-bonus into `Sub.buyerOwedBurnie` — the
-                //     manual mint's magnitude minus the affiliate-kickback leg (the affiliate
-                //     is deferred to the pull). The bonus uses the pre-bonus `amount` (the
-                //     input ticket units, not the century-adjusted qty). `coinCost` is
-                //     base-unit BURNIE; `buyerOwedBurnie` is whole BURNIE, so /1e18 before the
-                //     100M saturating clamp (applied before the +=, so it can only
-                //     under-credit). It pays the sub via the quest push (`_settleQuest`), not
-                //     the affiliate pull.
-                uint256 coinCost = (amount * (PRICE_COIN_UNIT / 4)) /
-                    TICKET_SCALE;
-                uint256 bonusBase = coinCost / 10; // flat 10%
-                if (amount >= 10 * 4 * TICKET_SCALE) {
-                    bonusBase += (amount * PRICE_COIN_UNIT) / (40 * TICKET_SCALE); // +10% → 20% on ≥10 tickets
-                }
-                uint256 bonusWhole = bonusBase / 1 ether; // base BURNIE → whole BURNIE
-                if (bonusWhole != 0) {
-                    uint256 newOwed = uint256(sub.buyerOwedBurnie) + bonusWhole;
-                    if (newOwed > 100_000_000) newOwed = 100_000_000;
-                    sub.buyerOwedBurnie = uint32(newOwed);
-                }
-
-                // No pending box: keep lastOpenedDay == lastAutoBoughtDay so the no-orphan
-                // guard and _afkingBoxReady never treat a ticket sub as box-pending.
-                sub.lastOpenedDay = uint24(processDay);
-            } else {
-                // STAMP the lootbox box. The per-buy cross-contract side-effects of a manual
-                // lootbox buy (quests.handlePurchase + recordMintQuestStreak,
-                // affiliate.payAffiliate ×2, and the per-buy coinflip.creditFlip) are NOT run
-                // on the hot path — they are deferred to the cheap in-slot accrue + settle
-                // below (affiliate pulled via drainAffiliateBase; quest pushed when the stage
-                // rides the global settle day). boons OFF ⇒ amount == spend. The ETH debit
-                // above is unchanged and no new ETH/pool write is added — the affiliate/quest
-                // credits are BURNIE off the solvency path, a BURNIE-emission-timing change
-                // only.
-
-                // (a) Activity score — sourced from the pre-action quest streak (the post-buy
-                // handler that previously returned it is gone with the per-buy handlePurchase).
-                // The stamped score matches a manual buy's EV input, which reads the same
-                // activity-score path.
-                (uint32 questStreak, , , ) = questView.playerQuestStates(player);
-
-                // (b) STAMP — one warm-dirty SSTORE into the single Sub slot. Frozen at stamp.
-                uint256 activityScore = _playerActivityScore(
-                    player,
-                    questStreak,
-                    currentLevel + 1
-                );
-                uint16 scorePlus1 = activityScore + 1 > type(uint16).max
-                    ? type(uint16).max
-                    : uint16(activityScore + 1);
-                sub.scorePlus1 = scorePlus1;
-                // `amount` is stored as uint32 milli-ETH (0.001-ETH units): pack the
-                // full-wei stamp spend to milli-ETH for storage; the open unpacks it back to
-                // wei. This rounding is on the stamp (the EV/seed input) only — the ETH debit
-                // above consumes the full wei `ethValue` and is unchanged.
-                sub.amount = uint32(_packEthToMilliEth(amount));
-            }
-
-            // (c) Mode-agnostic accrue — one warm in-slot SSTORE, zero cross-contract calls,
-            // run for both modes off the already-warm Sub slot:
-            //   • Affiliate base: a flat 7% of the full ETH spend (fresh `ethValue` +
-            //     claimable `amount - ethValue` == `amount`), valued in whole BURNIE via
-            //     `_ethToBurnie` (no taper, no kickback for afking). The 100M whole-BURNIE
-            //     saturating clamp is applied before the `+=` write. It is a running unclaimed
-            //     balance the uplines pull via `drainAffiliateBase`, not flushed on mutation.
-            //   • Quest progress: the delivered-day slot-0 completion counter `questProgress`
-            //     (a count, not a BURNIE amount). Settled `× QUEST_SLOT0_REWARD` by the quest
-            //     push.
-            //   • `afkCoveredThroughDay`: the delivered-day high-water mark, advanced only
-            //     here on the delivered-day branch where the ETH debit fired (monotone, like
-            //     lastAutoBoughtDay) — an unfunded/skipped day never reaches here, so it earns
-            //     no per-window streak. Not a settle marker.
-            {
-                uint256 base = (_ethToBurnie(amount, mp) * 7) / 100;
-                if (base != 0) {
-                    uint256 newBase = uint256(sub.affiliateBase) + base;
-                    if (newBase > 100_000_000) newBase = 100_000_000;
-                    sub.affiliateBase = uint32(newBase);
-                }
-                if (sub.questProgress < type(uint8).max) {
-                    unchecked {
-                        ++sub.questProgress;
-                    }
-                }
-                sub.afkCoveredThroughDay = uint24(processDay);
-            }
-
-            // Success marker — set only AFTER the successful debit + buy/stamp. A
-            // failed/skipped buy writes no marker (no free box/tickets); a wallet
-            // subscribing between this pass and the open has no this-cycle marker. Preserves
-            // the lastAutoBoughtDay >= processDay idempotency at (1); for a lootbox sub it
-            // doubles as the open's frozen seed `day`.
-            sub.lastAutoBoughtDay = uint24(processDay);
-
-            // Quest settle riding the stage. On the global settle day
-            // (`processDay % SETTLE_PERIOD == 0`, ~10-day cadence) settle the quest leg
-            // inline in this per-sub iteration — riding the warm Sub slot the buy already
-            // touched, so the only settle-day overhead is the single `creditFlip`. The other
-            // ~9/10 days stay cheap (buy + the in-slot accrue, no cross-contract calls). A
-            // double-fire is idempotent (the self-marking counters find questProgress == 0).
-            // No affiliate distribution here — the affiliate leg is pulled.
-            if (processDay % SETTLE_PERIOD == 0) {
-                _settleQuest(player, sub, processDay);
-            }
+            // BUY + DEBIT + ACCRUE + MARKER. The funded, well-formed slice is delivered
+            // revert-free by construction (no try/catch) by the shared `_deliverAfkingBuy`:
+            // debit `afkingFunding[src]` (claimablePool in tandem, fail-loud on underflow),
+            // stamp the lootbox box / queue the tickets, accrue the day's affiliate + the
+            // pendingBurnie reward, advance the compute-on-read streak markers (gap-resuming a
+            // fresh run if a day was missed), and set the success marker. A cheap local buy is
+            // weight 1.
+            _deliverAfkingBuy(
+                player,
+                sub,
+                processDay,
+                mp,
+                currentLevel,
+                src,
+                ethValue,
+                amount,
+                isTicket
+            );
 
             unchecked {
                 ++cursor;
                 ++processed;
+                ++weight;
             }
         }
 
@@ -1122,69 +1257,25 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /*------------------------------------------------------------------
-                                  Quest settle
+                                  BURNIE claim
     ------------------------------------------------------------------*/
-    /// @dev The one internal quest-settle path — shared by the stage-riding settle-day hook,
-    ///      the permissionless `claimQuest` fallback, and the unsub-settle. It always credits
-    ///      the sub (`player`), never the caller. Mints the accrued quest slot-0 BURNIE
-    ///      (`questProgress × QUEST_SLOT0_REWARD`) + the accrued ticket buyer-bonus
-    ///      (`buyerOwedBurnie`, whole BURNIE → base units) in one `creditFlip` off the
-    ///      solvency path (a BURNIE-emission-timing change only), advances the quest-core
-    ///      streak for the delivered days via the DegenerusQuests onlyGame entrypoint (the
-    ///      module runs in the Game's storage context, so that call's msg.sender is the Game),
-    ///      then zeroes both counters. If both counters are zero it is a no-op, so a
-    ///      double-fire (settle-day + claimQuest + unsub) is idempotent — no per-sub settle
-    ///      marker. No affiliate distribution here — the affiliate leg is pulled.
-    /// @param player The subscriber whose quest leg is settled (the credit recipient).
-    /// @param sub The subscriber's record (storage ref — the counters are drained here).
-    /// @param currentDay The settle day (the quest-core day for the streak advance / sync).
-    function _settleQuest(address player, Sub storage sub, uint32 currentDay) internal {
-        uint8 progress = sub.questProgress;
-        uint32 owedBonus = sub.buyerOwedBurnie;
-        // Self-marking no-op: nothing accrued → nothing to settle.
-        if (progress == 0 && owedBonus == 0) return;
-
-        // Advance the quest-core streak for the delivered days (`questProgress` is the
-        // debit-gated per-window delivered-day count; the in-core guard bounds it against a
-        // same-day manual completion). Skipped when no delivered day accrued (progress == 0
-        // → the buyer-bonus-only unsub path advances no streak).
-        if (progress != 0) {
-            quests.settleAfkingQuest(player, uint16(progress), currentDay);
-        }
-
-        // One BURNIE flip-credit to the sub: the slot-0 quest reward + the accrued ticket
-        // buyer-bonus, aggregated. `buyerOwedBurnie` is whole BURNIE → multiply to base units
-        // (1e18); `QUEST_SLOT0_REWARD` is already in base units. Off the solvency path — never
-        // an ETH cut.
-        uint256 owed = uint256(progress) *
-            QUEST_SLOT0_REWARD +
-            uint256(owedBonus) *
-            1 ether;
-        if (owed != 0) {
-            coinflip.creditFlip(player, owed);
-        }
-
-        // Drain both running counters (a re-fire finds them zero → no-op). The affiliate base
-        // is not touched (it persists for the uplines to pull).
-        sub.questProgress = 0;
-        sub.buyerOwedBurnie = 0;
-    }
-
-    /// @notice Permissionless quest-settle fallback — runs the same `_settleQuest` for each
-    ///         sub (always credits the sub, never the caller). The backstop covering
-    ///         off-cadence / lagging stage settles so a sub's earned quest BURNIE (+ ticket
-    ///         buyer-bonus) is never stranded.
-    /// @dev Runs in the Game's storage context, so the `_subOf` reads and the
-    ///      `settleAfkingQuest`/`creditFlip` calls are game-context, like the stage settle. No
-    ///      access control needed: it can only ever credit a sub its own accrued counters,
-    ///      drained atomically, so a griefer gains nothing and a redundant call is a no-op.
-    /// @param subs The subscribers to settle (each credited its own accrued counters).
-    function claimQuest(address[] calldata subs) external {
-        uint32 currentDay = _simulatedDayIndex();
+    /// @notice Permissionless BURNIE claim — pays each sub its accrued `pendingBurnie` (the
+    ///         per-delivered-day slot-0 quest reward + the ticket buyer-bonus) in ONE
+    ///         `creditFlip` and zeroes it, so a re-claim finds 0. Always credits the sub, never
+    ///         the caller; callable anytime — the reward is already earned per delivered day,
+    ///         so there is no settle-timing or claim-timing edge to exploit. Off the solvency
+    ///         path: a BURNIE flip-credit, never an ETH cut.
+    /// @param subs The subscribers to pay (each credited its own accrued `pendingBurnie`).
+    function claimAfkingBurnie(address[] calldata subs) external {
         uint256 len = subs.length;
         for (uint256 i; i < len; ) {
             address player = subs[i];
-            _settleQuest(player, _subOf[player], currentDay);
+            Sub storage s = _subOf[player];
+            uint256 owed = uint256(s.pendingBurnie); // whole BURNIE
+            if (owed != 0) {
+                s.pendingBurnie = 0; // CEI: zero before the external credit
+                coinflip.creditFlip(player, owed * 1 ether); // whole → base units
+            }
             unchecked {
                 ++i;
             }

@@ -396,6 +396,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
+    /// @notice Permissionless BURNIE claim — pays each listed sub its accrued `pendingBurnie`
+    ///         (the per-delivered-day quest reward + ticket buyer-bonus) in one creditFlip,
+    ///         zeroed. Always credits the sub, never the caller.
+    function claimAfkingBurnie(address[] calldata subs) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_AFKING_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IGameAfkingModule.claimAfkingBurnie.selector,
+                    subs
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
     /*+======================================================================+
       |                       MINT RECORDING                                 |
       +======================================================================+

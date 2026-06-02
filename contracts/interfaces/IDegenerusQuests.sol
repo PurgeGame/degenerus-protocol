@@ -140,16 +140,25 @@ interface IDegenerusQuests {
     /// @param currentDay The current unix day for tracking purposes
     function awardQuestStreakBonus(address player, uint16 amount, uint32 currentDay) external;
 
-    /// @notice Advances an afking subscriber's quest streak when their quest is settled
-    /// @dev GAME-only; called when the subscriber's afking quest is settled. Advances only the
-    ///      quest streak/slot-0/anchor state for the delivered days — the BURNIE reward is
-    ///      minted by the caller, not here. Syncs day-reset state first, never touches the
-    ///      player's manual (slot-1) quest, and uses the per-day STREAK_CREDITED bit to avoid
-    ///      crediting today's streak twice.
-    /// @param player The subscriber whose quest streak is being settled
-    /// @param deliveredStreakDays Number of days in this settle window whose daily buy executed
-    /// @param currentDay The current unix day for state synchronization
-    function settleAfkingQuest(address player, uint16 deliveredStreakDays, uint32 currentDay) external;
+    /// @notice Begins an afking run: snapshots the gap-synced streak and flips the afking flag
+    /// @dev GAME-only. While afking, the Game-side compute-on-read owns the player's streak and
+    ///      slot-0 completions are streak-neutral / reward-deferred; returns the synced streak
+    ///      so the caller bases the run's snapshot on it.
+    /// @param player The subscriber starting an afking run
+    /// @param currentDay The current quest day for state synchronization
+    /// @return streak The player's gap-synced streak at the start of the run
+    function beginAfking(address player, uint32 currentDay) external returns (uint24 streak);
+
+    /// @notice Ends an afking run: hands the afking-computed streak back to the manual system
+    /// @dev GAME-only, called on every sub-ending path before the Sub slot is deleted.
+    ///      Idempotent (a no-op unless the player is currently afking). Keeps the Game-computed
+    ///      earned streak if a valid mint (afking high-water or manual completion) landed no
+    ///      earlier than yesterday, else zeroes it (decay); anchors the gap-reset at that day.
+    /// @param player The subscriber whose run is ending
+    /// @param earnedStreak The run's earned streak (snapshot + funded delivered days), Game-computed
+    /// @param afkingCoveredDay The afking funded high-water day (Game-side)
+    /// @param currentDay The current quest day (the decay reference)
+    function finalizeAfking(address player, uint24 earnedStreak, uint32 afkingCoveredDay, uint32 currentDay) external;
 
     /// @notice Returns the quest state for a specific player
     /// @param player The address of the player to query

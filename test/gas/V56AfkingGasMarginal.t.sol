@@ -4,45 +4,34 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 
-/// @title V56AfkingGasMarginal -- the v56 everyday-afking gas-MARGINAL harness (Phase 355, GAS-01/GAS-02)
-///        on the e18af451 applied tree (baseline 453f8073). Measures every marginal the GAS phase needs:
-///        the per-buy LOOTBOX marginal, the per-buy TICKET marginal (the new minimal-write primitive), the
-///        per-OPEN marginal, the per-SETTLE marginal (the settle-day chunk riding the buy stage), and the
-///        WORST-CASE per-tx chunk for EVERY batched advance/afking loop — the settle-day STAGE chunk at
-///        SUB_STAGE_BATCH (the binding case, where every sub fires _settleQuest) and the OPEN_BATCH open
-///        chunk. From each measured worst-case per-item marginal it DERIVES the max safe batch (the largest
-///        N keeping the per-tx chunk under the 10M comfort TARGET) and reports the dual bound (< 10M target,
-///        provably <= 16.7M hard ceiling). Also proves GAS-02 empirically: the per-buy in-slot accrue makes
-///        NO new cold per-buy SSTORE.
+/// @title V56AfkingGasMarginal -- the v56 everyday-afking gas-MARGINAL harness (Phase 355) on the
+///        compute-on-read applied tree (baseline 453f8073). Measures every marginal the GAS phase needs:
+///        the per-buy LOOTBOX marginal, the per-buy TICKET marginal (the minimal-write primitive), the
+///        per-OPEN marginal, the per-EVICT-finalize marginal (the heavier in-stage sub-ending branch), and
+///        the WORST-CASE per-tx chunk for each batched advance/afking loop — the weighted-budget STAGE chunk
+///        (SUB_STAGE_WEIGHT_BUDGET) and the OPEN_BATCH open chunk. From each measured worst-case per-item
+///        marginal it DERIVES the max safe batch (the largest N keeping the per-tx chunk under the 10M comfort
+///        TARGET) and reports the dual bound (< 10M target, provably <= 16.7M hard ceiling).
 ///
-/// @notice The v56 applied tree (what THIS harness measures — the v55 storm described in the old
-///         V55AfkingGasMarginal header is GONE):
+/// @notice The v56 compute-on-read applied tree (what THIS harness measures):
 ///
-///         (1) The per-buy hot path (GameAfkingModule.processSubscriberStage, :582-929) collapsed: the
-///             SOLVENCY-01 debit (`afkingFunding[src] -= ethValue; claimablePool -= uint128(ethValue)`,
-///             :744-745, byte-frozen from v55) → the per-mode primitive (lootbox box-stamp OR the NEW ticket
-///             minimal-write `_queueTicketsScaled` + buyerOwedBurnie accrue, replacing the ~262k purchaseWith
-///             heavyweight) → the MODE-AGNOSTIC in-slot accrue (:887-900: affiliateBase flat-7% +=,
-///             ++questProgress, afkCoveredThroughDay = processDay) → the lastAutoBoughtDay marker (:907) →
-///             IF processDay % SETTLE_PERIOD == 0 THEN _settleQuest (:916-918). The per-buy cross-contract
-///             quest/affiliate/coinflip storm of v55 is DEFERRED to the ~10-day aggregator: the everyday buy
-///             is a warm SLOAD-mask-SSTORE on ONE Sub slot, no cross-contract calls except the rare settle
-///             day.
+///         (1) The per-buy hot path (GameAfkingModule, _deliverAfkingBuy) is call-free: the SOLVENCY-01 debit
+///             (`afkingFunding[src] -= ethValue; claimablePool -= uint128(ethValue)`, byte-frozen from v55) ->
+///             the per-mode primitive (lootbox box-stamp OR the ticket minimal-write `_queueTicketsScaled`,
+///             replacing the ~262k purchaseWith heavyweight) -> the MODE-AGNOSTIC in-slot accrue (affiliateBase
+///             flat-7% += and the slot-0 reward into pendingBurnie) + the compute-on-read streak markers
+///             (gap-resume + afkCoveredThroughDay) -> the lastAutoBoughtDay marker. There is NO per-buy
+///             DegenerusQuests STATICCALL (the streak is computed on read from the Sub slot) and NO settle day.
 ///
-///         (2) The Sub slot (DegenerusGameStorage.sol:1894-1962) is a SINGLE 256-bit slot, 241/256 bits used:
-///             config 48 + stamp 48 (scorePlus1 uint16 / amount uint32 milli-ETH) + markers 72
-///             (lastAutoBoughtDay/lastOpenedDay/afkCoveredThroughDay uint24 each) + accumulator 73
-///             (affiliateBase uint32 / questProgress uint8 / buyerOwedBurnie uint32 / hasEverSubscribed bool).
-///             The accumulator is IN-SLOT — the per-buy accrue is a warm write on the SAME slot the stamp
-///             dirtied, NOT a new cold slot. THIS is the GAS-02 property (proven in Task 3). The day markers
-///             narrowed to uint24 and the accumulator fields are NEW vs v55, so the byte offsets are
-///             RE-DERIVED below (the v55 OFF_LASTBOUGHT=21 / OFF_LASTOPENED=25 premise is WRONG here).
+///         (2) The Sub slot is a SINGLE 256-bit slot, EXACTLY full (0 free): config 40 + stamp 40 (scorePlus1
+///             uint16 / amount uint24 milli-ETH) + markers 96 (lastAutoBoughtDay / lastOpenedDay /
+///             afkCoveredThroughDay / afkingStartDay uint24 each) + accumulator 72 (affiliateBase uint32 /
+///             pendingBurnie uint32 / subStreakLatch uint8). The accumulator is IN-SLOT — the per-buy accrue
+///             is a warm write on the SAME slot the stamp dirtied, NOT a new cold slot.
 ///
-///         (3) The settle-day ride (:916-918): on a global settle boundary (processDay % SETTLE_PERIOD == 0,
-///             ~10-day cadence) every sub fires _settleQuest (:1141 — one coinflip.creditFlip of
-///             questProgress×QUEST_SLOT0_REWARD + buyerOwedBurnie, + quests.settleAfkingQuest streak-advance,
-///             then drains both counters to 0). The settle-day STAGE chunk is the BINDING worst case for
-///             SUB_STAGE_BATCH (every sub pays the settle overhead).
+///         (3) Sub-ending finalize (cancel / cancel-reclaim / pass-evict / funding-kill): the only cross-contract
+///             work left on the advance chain (a DegenerusQuests playerQuestStates read + finalizeAfking streak
+///             write), so an in-stage evict is the heavier branch — weighted SUB_STAGE_EVICT_WEIGHT in the budget.
 ///
 /// @notice The MARGINAL rule (CR-01 / 350-SPEC §0, load-bearing, verbatim): every per-item number is the
 ///         loop-N-divide MARGINAL — (gas for N items − gas for N−1 items), NEVER a single-item TOTAL. A
@@ -80,19 +69,21 @@ contract V56AfkingGasMarginal is DeployProtocol {
     uint256 private constant SUBSCRIBERS_SLOT = 68;     // address[] _subscribers (slot holds the length)
     uint256 private constant SUBCURSOR_SLOT = 70;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint32 @ byte 4)
 
-    // Sub packed-field byte offsets (DegenerusGameStorage.sol:1894-1962; RE-DERIVED via
-    // `forge inspect DegenerusGame storageLayout` @ e18af451 — the v56 re-pack narrowed the day markers to
-    // uint24 and ADDED the in-slot accumulator, so the v55 offsets are WRONG). Single 256-bit Sub slot:
+    // Sub packed-field byte offsets — RE-DERIVED via `forge inspect DegenerusGame storageLayout` after the
+    // v56 compute-on-read re-pack: `amount` narrowed uint32→uint24 (so everything after it shifts down one
+    // byte), `questProgress` DROPPED, `afkingStartDay` ADDED, `hasEverSubscribed` bool → `subStreakLatch`
+    // uint8. Single 256-bit Sub slot (exactly one slot, 0 free):
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
-    //   scorePlus1 u16 @6 · amount u32 @8
-    //   lastAutoBoughtDay u24 @12 · lastOpenedDay u24 @15 · afkCoveredThroughDay u24 @18
-    //   affiliateBase u32 @21 · questProgress u8 @25 · buyerOwedBurnie u32 @26 · hasEverSubscribed bool @30
-    uint256 private constant OFF_LASTBOUGHT = 12; // uint24 lastAutoBoughtDay (bytes 12..14)
-    uint256 private constant OFF_LASTOPENED = 15; // uint24 lastOpenedDay     (bytes 15..17)
-    uint256 private constant OFF_AFKCOVERED = 18; // uint24 afkCoveredThroughDay (bytes 18..20)
-    uint256 private constant OFF_AFFBASE = 21;    // uint32 affiliateBase    (bytes 21..24)
-    uint256 private constant OFF_QUESTPROG = 25;  // uint8  questProgress    (byte 25)
-    uint256 private constant OFF_OWEDBURNIE = 26; // uint32 buyerOwedBurnie  (bytes 26..29)
+    //   scorePlus1 u16 @6 · amount u24 @8
+    //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
+    //   affiliateBase u32 @23 · pendingBurnie u32 @27 · subStreakLatch u8 @31
+    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay    (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay        (bytes 14..16)
+    uint256 private constant OFF_AFKCOVERED = 17; // uint24 afkCoveredThroughDay (bytes 17..19)
+    uint256 private constant OFF_AFKINGSTART = 20; // uint24 afkingStartDay      (bytes 20..22)
+    uint256 private constant OFF_AFFBASE = 23;    // uint32 affiliateBase        (bytes 23..26)
+    uint256 private constant OFF_PENDINGBURNIE = 27; // uint32 pendingBurnie     (bytes 27..30)
+    uint256 private constant OFF_STREAKLATCH = 31; // uint8 subStreakLatch       (byte 31; bit7 ever-sub, bits0-6 streak)
 
     uint256 private constant MINTPACKED_SLOT = 10;
     uint256 private constant DEITY_SHIFT = 184;
@@ -111,17 +102,21 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      bar is this 16.7M. The headroom (16.7M − the measured-at-target chunk) is the safety margin.
     uint256 internal constant EFFECTIVE_GAS_CEILING = 16_700_000;
 
-    /// @dev SUB_STAGE_BATCH (DegenerusGameAdvanceModule.sol:149): one advanceGame() STAGE processes up to 50
-    ///      funded subs (the per-day buy/stage chunk; there is NO standalone BUY_BATCH constant). The BINDING
-    ///      worst case is the settle-day STAGE chunk (processDay % SETTLE_PERIOD == 0, every sub fires
-    ///      _settleQuest).
-    uint256 internal constant SUB_STAGE_BATCH = 50;
+    /// @dev SUB_STAGE_WEIGHT_BUDGET (DegenerusGameAdvanceModule.sol): the per-call STAGE gas-weight budget.
+    ///      Every day is uniform now (compute-on-read streak, no settle day, no per-buy STATICCALL); a chunk
+    ///      ends when accumulated weight reaches the budget. A cheap local buy/skip costs 1; a cross-contract
+    ///      sub-ending finalize costs SUB_STAGE_EVICT_WEIGHT.
+    uint256 internal constant SUB_STAGE_WEIGHT_BUDGET = 100;
 
-    /// @dev OPEN_BATCH (GameAfkingModule.sol:206): the flat per-box open chunk; each afking box uniform O(1).
-    uint256 internal constant OPEN_BATCH = 200;
+    /// @dev SUB_STAGE_EVICT_WEIGHT (GameAfkingModule.sol): the gas-weight of an in-stage sub-ending finalize
+    ///      (pass-evict / funding-kill / cancel-reclaim) relative to a cheap buy (1) — the heavier branch.
+    uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 2;
 
-    /// @dev SETTLE_PERIOD (GameAfkingModule.sol:172): the quest leg settles inline on
-    ///      processDay % SETTLE_PERIOD == 0 (~10-day cadence).
+    /// @dev OPEN_BATCH (GameAfkingModule.sol): the flat per-box open chunk; each afking box uniform O(1).
+    uint256 internal constant OPEN_BATCH = 130;
+
+    /// @dev Harness-local day-parity period for `_warpToBoundary` deterministic day selection. The contracts no
+    ///      longer have a settle cadence (compute-on-read obviated it); this is purely a test warp helper.
     uint256 internal constant SETTLE_PERIOD = 10;
 
     /// @dev SUBSCRIBER_CAP (GameAfkingModule.sol:164): the worst-case active sub count.
@@ -308,226 +303,128 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     // =========================================================================
-    // (d) per-SETTLE marginal — the added cost of the settle-day ride (GAS-01)
+    // (d) per-EVICT-finalize marginal — the heavier in-stage branch (GAS-03)
     // =========================================================================
 
-    /// @notice The per-settle marginal isolates ONE sub's settle-day _settleQuest cost (the creditFlip +
-    ///         quests.settleAfkingQuest streak-advance). gasN = a STAGE advance landing on a settle boundary
-    ///         (processDay % SETTLE_PERIOD == 0) over N subs that have ACCRUED questProgress + (for ticket
-    ///         mode) buyerOwedBurnie; gasNm1 = the same minus one sub. (gasN − gasNm1) = the Nth sub's full
-    ///         settle-day buy (the everyday buy + the settle ride). This per-sub settle-day marginal is the
-    ///         BINDING per-item marginal for SUB_STAGE_BATCH. Measured for BOTH modes; the heavier is binding.
-    ///         To accrue questProgress before the settle day, prior non-settle STAGE days run for the set.
-    function testPerSettleMarginal() public {
-        // Lootbox-mode settle-day marginal.
-        uint256 perSettleLootbox = _measureSettleDayPerSubMarginal(false, "psL_");
-        assertLt(perSettleLootbox, EFFECTIVE_GAS_CEILING, "per-settle lootbox marginal fits the 16.7M ceiling");
+    /// @notice The per-evict marginal = (gas for N evicting subs - gas for N-1) / 1, snapshot/revert. An
+    ///         in-stage sub-ending finalize (pass-evict / funding-kill / cancel-reclaim) does a cross-contract
+    ///         DegenerusQuests read (playerQuestStates) + streak write (finalizeAfking) that the now call-free
+    ///         local buy does not, so it is the heavier branch. This sizes SUB_STAGE_EVICT_WEIGHT =
+    ///         ceil(evict-marginal / buy-marginal): the STAGE weights an evict that many buy-units so even an
+    ///         all-evicts chunk stays under the ceiling. Subs are pass-evicted (no deity pass -> validThroughLevel
+    ///         0 < currentLevel) on the measured advance.
+    function testEvictFinalizeMarginal() public {
+        uint256 snap = vm.snapshotState();
+        uint256 gasN = _measureEvictStageGas(N_HI, "evHi_");
+        vm.revertToState(snap);
+        uint256 gasNm1 = _measureEvictStageGas(N_LO, "evLo_");
 
-        // Ticket-mode settle-day marginal (buyerOwedBurnie ALSO settles — the heavier creditFlip payload).
-        uint256 perSettleTicket = _measureSettleDayPerSubMarginal(true, "psT_");
-        assertLt(perSettleTicket, EFFECTIVE_GAS_CEILING, "per-settle ticket marginal fits the 16.7M ceiling");
+        assertGt(gasN, gasNm1, "per-evict marginal: N evicting subs cost strictly more than N-1");
+        uint256 perEvict = gasN - gasNm1;
+        assertLt(perEvict, EFFECTIVE_GAS_CEILING, "per-evict marginal fits the 16.7M ceiling");
 
-        uint256 perSettleBinding = perSettleLootbox > perSettleTicket ? perSettleLootbox : perSettleTicket;
+        // The lootbox buy marginal (the box-stamp path) to weight the evict against.
+        vm.revertToState(snap);
+        uint256 buyN = _measureStageAdvanceGas(N_HI, "evbHi_", false, false);
+        vm.revertToState(snap);
+        uint256 buyNm1 = _measureStageAdvanceGas(N_LO, "evbLo_", false, false);
+        uint256 perBuy = buyN > buyNm1 ? buyN - buyNm1 : 1;
 
-        emit log_named_uint("per_settle_marginal_lootbox_gas", perSettleLootbox);
-        emit log_named_uint("per_settle_marginal_ticket_gas", perSettleTicket);
-        emit log_named_uint("per_settle_marginal_binding_gas", perSettleBinding);
+        uint256 derivedEvictWeight = (perEvict + perBuy - 1) / perBuy; // ceil(evict/buy)
+        emit log_named_uint("per_evict_finalize_marginal_gas", perEvict);
+        emit log_named_uint("per_buy_lootbox_marginal_gas", perBuy);
+        emit log_named_uint("derived_evict_weight_W", derivedEvictWeight);
+        emit log_named_uint("current_sub_stage_evict_weight", SUB_STAGE_EVICT_WEIGHT);
+        emit log_named_string(
+            "evict_weight_finding",
+            SUB_STAGE_EVICT_WEIGHT >= derivedEvictWeight
+                ? "SUB_STAGE_EVICT_WEIGHT >= derived W - conservative-safe (over-weights evicts)"
+                : "SUB_STAGE_EVICT_WEIGHT < derived W - 355-03 must raise it to the derived value"
+        );
     }
 
     // =========================================================================
-    // (e) worst-case settle-day STAGE chunk at SUB_STAGE_BATCH + dual bound (GAS-01)
+    // (e) worst-case STAGE chunk under the weighted budget at the cap (GAS-03)
     // =========================================================================
 
-    /// @notice Seed SUB_STAGE_BATCH funded subs per mode, accrue questProgress on prior non-settle days, drive
-    ///         ONE settle-day advance, and record the whole settle-day advance (which BOUNDS the 50-chunk
-    ///         STAGE) for BOTH lootbox and ticket modes. For the BINDING (heavier) mode: assert the whole
-    ///         settle-day advance < 10M (TARGET) at the current SUB_STAGE_BATCH, log the headroom to 16.7M,
-    ///         emit the derived max-safe SUB_STAGE_BATCH from the (d) binding-mode per-sub settle-day
-    ///         marginal, and cross-check SUB_STAGE_BATCH <= derived (FAIL → 355-03 must shrink it). Non-vacuity:
-    ///         the cursor advanced a full chunk AND >= cap−2 newly stamped AND >=1 settle fired (questProgress
-    ///         drained to 0).
-    function testWorstCaseSettleDayStageChunkAtCap() public {
-        // ---- both modes: measure the full settle-day chunk (each from a CLEAN snapshot — the two modes
-        //      otherwise stack 50+50 subs and break the SUBSCRIBER_CAP+2 invariant) ----
+    /// @notice The weighted budget caps a chunk at SUB_STAGE_WEIGHT_BUDGET weight. The all-cheap-buys chunk
+    ///         (BUDGET buys) is one worst-case extreme; an all-evicts chunk is BUDGET/W evicts (each ~= W buys),
+    ///         so by construction both bound to roughly the same gas. Asserts the all-buys chunk at the current
+    ///         budget stays <= the 16.7M never-exceed ceiling and derives the max-safe budget for the <10M target.
+    function testWorstCaseStageChunkUnderBudget() public {
         uint256 snap = vm.snapshotState();
-        (uint256 chunkLootbox, uint256 settledLootbox) = _measureSettleDayFullChunk(false, "wcL_");
+        // BINDING mode = TICKET (the cold ticketQueue push dominates; lootbox reuses the warm Sub slot).
+        uint256 chunkAllBuys = _measureFullBudgetBuyChunk("wcb_");
         vm.revertToState(snap);
-        (uint256 chunkTicket, uint256 settledTicket) = _measureSettleDayFullChunk(true, "wcT_");
+
+        uint256 buyN = _measureStageAdvanceGas(N_HI, "wcmHi_", true, false);
         vm.revertToState(snap);
+        uint256 buyNm1 = _measureStageAdvanceGas(N_LO, "wcmLo_", true, false);
+        uint256 perBuy = buyN > buyNm1 ? buyN - buyNm1 : 1;
 
-        bool ticketHeavier = chunkTicket >= chunkLootbox;
-        uint256 bindingChunk = ticketHeavier ? chunkTicket : chunkLootbox;
-        uint256 bindingSettled = ticketHeavier ? settledTicket : settledLootbox;
+        uint256 fixedOverhead = chunkAllBuys > perBuy * SUB_STAGE_WEIGHT_BUDGET
+            ? chunkAllBuys - perBuy * SUB_STAGE_WEIGHT_BUDGET
+            : 0;
+        uint256 derivedMaxSafeBudget = _maxSafeBatch(fixedOverhead, perBuy);
 
-        // ---- the BINDING-mode per-sub settle-day marginal → derive the max-safe SUB_STAGE_BATCH ----
-        uint256 perSubSettleBinding = _measureSettleDayPerSubMarginal(ticketHeavier, ticketHeavier ? "wcdT_" : "wcdL_");
-
-        // fixed_stage_overhead = the binding full chunk minus the SUB_STAGE_BATCH per-sub settle marginals.
-        uint256 fixedStageOverhead =
-            bindingChunk > perSubSettleBinding * SUB_STAGE_BATCH ? bindingChunk - perSubSettleBinding * SUB_STAGE_BATCH : 0;
-        uint256 derivedMaxSafeSubStageBatch = _maxSafeBatch(fixedStageOverhead, perSubSettleBinding);
-        uint256 chunkAtDerived = fixedStageOverhead + derivedMaxSafeSubStageBatch * perSubSettleBinding;
-        uint256 stageHeadroom = EFFECTIVE_GAS_CEILING > bindingChunk ? EFFECTIVE_GAS_CEILING - bindingChunk : 0;
-        bool stageBatchFits10MTarget = bindingChunk < GAS_TARGET;
-
-        // EMIT-FIRST — the settle-day chunk number + the derived max-safe SUB_STAGE_BATCH are the load-bearing
-        // inputs to GAS-03 (355-03).
-        emit log_named_uint("stage_settle_day_full_chunk_lootbox_gas", chunkLootbox);
-        emit log_named_uint("stage_settle_day_full_chunk_ticket_gas", chunkTicket);
-        emit log_named_uint("stage_settle_day_binding_chunk_gas", bindingChunk);
-        emit log_named_string("stage_settle_day_binding_mode", ticketHeavier ? "ticket" : "lootbox");
-        emit log_named_uint("stage_fixed_overhead_gas", fixedStageOverhead);
-        emit log_named_uint("per_sub_settle_day_binding_marginal_gas", perSubSettleBinding);
-        emit log_named_uint("stage_chunk_headroom_to_16p7M_gas", stageHeadroom);
-        emit log_named_uint("derived_max_safe_sub_stage_batch", derivedMaxSafeSubStageBatch);
-        emit log_named_uint("stage_chunk_at_derived_max_safe_batch_gas", chunkAtDerived);
-        emit log_named_uint("stage_batch_fits_10M_target", stageBatchFits10MTarget ? 1 : 0);
-        emit log_named_uint("current_sub_stage_batch", SUB_STAGE_BATCH);
+        emit log_named_uint("stage_all_buys_chunk_at_budget_gas", chunkAllBuys);
+        emit log_named_uint("per_buy_lootbox_marginal_gas", perBuy);
+        emit log_named_uint("stage_fixed_overhead_gas", fixedOverhead);
+        emit log_named_uint("derived_max_safe_weight_budget", derivedMaxSafeBudget);
+        emit log_named_uint("current_sub_stage_weight_budget", SUB_STAGE_WEIGHT_BUDGET);
+        emit log_named_uint(
+            "chunk_headroom_to_16p7M_gas",
+            EFFECTIVE_GAS_CEILING > chunkAllBuys ? EFFECTIVE_GAS_CEILING - chunkAllBuys : 0
+        );
         emit log_named_string(
-            "sub_stage_batch_dual_bound_finding",
-            stageBatchFits10MTarget
-                ? "settle-day SUB_STAGE_BATCH chunk < 10M target AND <= 16.7M ceiling - no retune needed"
-                : "settle-day SUB_STAGE_BATCH chunk EXCEEDS the 10M target (still <= 16.7M ceiling) - 355-03 must shrink SUB_STAGE_BATCH to derived_max_safe_sub_stage_batch"
+            "weight_budget_finding",
+            chunkAllBuys < GAS_TARGET
+                ? "all-buys chunk at SUB_STAGE_WEIGHT_BUDGET < 10M target AND <= 16.7M ceiling - headroom to raise"
+                : "all-buys chunk EXCEEDS the 10M target (measure vs 16.7M) - 355-03 may shrink the budget"
         );
 
-        // Non-vacuity for the binding-mode chunk: >= 1 settle fired (questProgress drained to 0).
-        assertGt(bindingSettled, 0, "settle-day non-vacuity: >= 1 settle fired this binding chunk (questProgress drained)");
-
-        // HARD safety asserts (the never-breach floor; the 10M target at the current SUB_STAGE_BATCH is a
-        // logged 355-03 finding, NOT a hard revert):
-        // (1) a < 10M-safe SUB_STAGE_BATCH is ACHIEVABLE (a positive derived max-safe N exists).
-        assertGt(derivedMaxSafeSubStageBatch, 0, "a < 10M-safe SUB_STAGE_BATCH is achievable (derived max-safe N > 0)");
-        // (2) the derivation is sound: the chunk AT the derived max-safe batch is under the 10M target.
-        assertLt(chunkAtDerived, GAS_TARGET, "the chunk at the derived max-safe SUB_STAGE_BATCH is under the 10M TARGET (derivation sound)");
-        // (3) the never-exceed ceiling holds at the CURRENT SUB_STAGE_BATCH (the hard kill bar — must never
-        //     breach, even before the 355-03 retune toward the 10M target).
-        assertLe(bindingChunk, EFFECTIVE_GAS_CEILING, "settle-day SUB_STAGE_BATCH chunk at the current constant stays <= the 16.7M never-exceed ceiling");
+        assertGt(derivedMaxSafeBudget, 0, "a < 10M-safe weight budget is achievable");
+        assertLe(chunkAllBuys, EFFECTIVE_GAS_CEILING, "all-buys chunk at the current budget stays <= the 16.7M ceiling");
     }
 
     // =========================================================================
-    // Internal helpers (the validated game-resident driving harness)
+    // Internal helpers (new-design driving harness)
     // =========================================================================
 
-    /// @dev Measure ONE sub's settle-day marginal (the binding per-item marginal for SUB_STAGE_BATCH): the
-    ///      (gasN − gasNm1) of a settle-day STAGE advance over N vs N−1 subs that have each ACCRUED
-    ///      questProgress (+ buyerOwedBurnie for ticket mode) over prior non-settle days, so the Nth sub's
-    ///      difference includes its full settle-day buy (the everyday buy + the _settleQuest ride). Both runs
-    ///      from one clean baseline (snapshot/revert).
-    function _measureSettleDayPerSubMarginal(bool isTicket, string memory prefix) internal returns (uint256) {
-        uint256 snap = vm.snapshotState();
-        uint256 gasN = _measureSettleDayStageGas(N_HI, string(abi.encodePacked(prefix, "hi_")), isTicket);
-        vm.revertToState(snap);
-        uint256 gasNm1 = _measureSettleDayStageGas(N_LO, string(abi.encodePacked(prefix, "lo_")), isTicket);
-        require(gasN > gasNm1, "per-settle marginal: N subs cost strictly more than N-1");
-        return gasN - gasNm1;
-    }
-
-    /// @dev Drive a settle-day STAGE advance over N funded subs that have accrued questProgress on prior
-    ///      non-settle days, returning the bracketed advance gas. Steps: settle clean → subscribe+fund N subs
-    ///      → run prior NON-settle STAGE days (each stamps + accrues ++questProgress); for LOOTBOX subs the
-    ///      box MUST be opened between days (the no-orphan guard skips a sub with an unopened box, so an
-    ///      un-opened lootbox sub would never re-buy → no further accrual), TICKET subs need no open (the buy
-    ///      sets lastOpenedDay == lastAutoBoughtDay) → warp onto a settle boundary, drain to a CLEAN day-9
-    ///      baseline, then bracket the FIRST day-10 advance (the settle-day STAGE buys + fires _settleQuest
-    ///      per sub). Non-vacuity: each sub had questProgress > 0 before the settle and the settle drained it
-    ///      to 0.
-    function _measureSettleDayStageGas(uint256 n, string memory prefix, bool isTicket) internal returns (uint256 advGas) {
+    /// @dev Drive a new-day STAGE advance over N unfunded, NON-deity subs that all PASS-EVICT this cycle
+    ///      (validThroughLevel 0 < currentLevel -> each routes through _finalizeAfking + swap-pop), returning the
+    ///      bracketed advance gas. Both runs from one clean baseline.
+    function _measureEvictStageGas(uint256 n, string memory prefix) internal returns (uint256 advGas) {
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
-        address[] memory subs = _setupFundedSubs(n, prefix, 200 ether, isTicket);
-
-        // Accrue questProgress on >= 1 prior NON-settle day (one delivered buy ++questProgress is enough to
-        // make the settle non-vacuous). The full-day primitive stamps + (for lootbox) opens, leaving a clean
-        // day so the next stamping day is unobstructed by the no-orphan guard.
-        _advanceFullDayAndOpen(false, isTicket, uint256(keccak256(abi.encodePacked(prefix, "acc"))) | 1);
+        // No deity pass + no funding: the unfunded subscribe is non-reverting (it enters the set with base 0),
+        // and the stage pass-evicts each (currentLevel > validThroughLevel == 0) through the finalize path.
         for (uint256 i; i < n; ++i) {
-            require(_questProgressOf(subs[i]) > 0, "fixture: sub accrued questProgress before settle");
-            require(_lastOpenedDayOf(subs[i]) == _lastBoughtDayOf(subs[i]), "fixture: box opened / ticket no-box (no orphan guard on settle day)");
+            address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
+            vm.prank(who);
+            game.subscribe(address(0), false, false, 1, 0, address(0));
         }
-        uint32[] memory preBought = new uint32[](n);
-        for (uint256 i; i < n; ++i) preBought[i] = _lastBoughtDayOf(subs[i]);
+        uint256 preCount = _subscriberCount();
+        require(preCount >= n, "fixture: N evicting subs in the set");
 
-        // Warp onto a settle boundary and bracket the FIRST advance of that day — the settle-day STAGE buys +
-        // fires _settleQuest per sub. The prior day is already CLEAN (the accrue primitive settled it), so the
-        // first settle-day advance runs the STAGE pre-RNG directly.
-        _warpToBoundary(true);
-        require(uint256(_simulatedDayIndex()) % SETTLE_PERIOD == 0, "fixture: on a settle boundary");
-        require(game.advanceDue() && !game.rngLocked(), "fixture: clean + advanceDue on the settle day");
+        _warpToBoundary(false);
+        require(game.advanceDue(), "fixture: advanceDue on the new day");
         uint256 gasBefore = gasleft();
         game.advanceGame();
         advGas = gasBefore - gasleft();
 
-        // Non-vacuity: each sub got a NEW settle-day stamp AND the settle drained questProgress to 0.
-        for (uint256 i; i < n; ++i) {
-            require(_lastBoughtDayOf(subs[i]) > preBought[i], "settle non-vacuity: each sub newly stamped this settle day");
-            require(_questProgressOf(subs[i]) == 0, "settle non-vacuity: the settle drained questProgress to 0");
-        }
+        require(_subscriberCount() < preCount, "evict non-vacuity: the stage evicted subs");
     }
 
-    /// @dev Advance ONE full day (warp to the desired settle parity, run the new-day STAGE, fulfill the day's
-    ///      RNG, and — for LOOTBOX subs — OPEN the stamped boxes so the no-orphan guard clears for the next
-    ///      day) leaving the game in a CLEAN (`!advanceDue && !rngLocked`) state. TICKET subs need no open
-    ///      (the buy leg sets lastOpenedDay == lastAutoBoughtDay). Idempotent re-open is a no-op (the
-    ///      day-keyed marker).
-    function _advanceFullDayAndOpen(bool onSettle, bool isTicket, uint256 vrfWord) internal {
-        _warpToBoundary(onSettle);
-        require(game.advanceDue(), "fixture: advanceDue on the new day");
-        // Run the day: advance (stamps the STAGE pre-RNG) + fulfill the day's word + drain to clean.
-        game.advanceGame();
-        _settleClean(vrfWord);
-        // Open the stamped lootbox boxes so the no-orphan guard clears (the next day re-stamps them). The
-        // mintBurnie router opens when advance is not due (clean) and the stamp-day word has landed.
-        if (!isTicket) {
-            vm.prank(makeAddr("fullday_opener"));
-            game.mintBurnie();
-            _settleClean(vrfWord ^ 0xBEEF);
-        }
-    }
-
-    /// @dev Seed exactly SUB_STAGE_BATCH funded subs, accrue questProgress on prior non-settle days, drive ONE
-    ///      settle-day advance (its STAGE runs processSubscriberStage(50) firing _settleQuest per sub), and
-    ///      return (whole-advance gas, settled-count). Non-vacuity: the cursor advanced a FULL chunk, >= cap−2
-    ///      newly stamped, and >= 1 settle fired (questProgress drained to 0).
-    function _measureSettleDayFullChunk(bool isTicket, string memory prefix)
-        internal
-        returns (uint256 chunkGas, uint256 settledCount)
-    {
+    /// @dev Measure a full-budget all-buys STAGE chunk: SUB_STAGE_WEIGHT_BUDGET funded lootbox subs, one
+    ///      new-day advance, bracketed. The weight budget caps the work; this is the all-cheap-buys worst case.
+    function _measureFullBudgetBuyChunk(string memory prefix) internal returns (uint256 chunkGas) {
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
-        address[] memory subs = _setupFundedSubs(SUB_STAGE_BATCH, prefix, 200 ether, isTicket);
-        require(_subscriberCount() == SUB_STAGE_BATCH + 2, "set = 50 funded subs + 2 deploy subs");
-
-        // Accrue questProgress on a prior non-settle day (each delivered buy ++questProgress). For lootbox the
-        // box is opened so the no-orphan guard clears for the settle day; ticket needs no open. The primitive
-        // leaves a clean day, so the first settle-day advance runs the STAGE directly.
-        _advanceFullDayAndOpen(false, isTicket, uint256(keccak256(abi.encodePacked(prefix, "acc"))) | 1);
-        for (uint256 i; i < SUB_STAGE_BATCH; ++i) {
-            require(_questProgressOf(subs[i]) > 0, "fixture: each sub accrued questProgress before settle");
-            require(_lastOpenedDayOf(subs[i]) == _lastBoughtDayOf(subs[i]), "fixture: box opened / ticket no-box (no orphan guard on settle day)");
-        }
-
-        uint32[] memory preBought = new uint32[](SUB_STAGE_BATCH);
-        for (uint256 i; i < SUB_STAGE_BATCH; ++i) preBought[i] = _lastBoughtDayOf(subs[i]);
-
-        _warpToBoundary(true);
-        require(uint256(_simulatedDayIndex()) % SETTLE_PERIOD == 0, "fixture: on a settle boundary");
-        require(game.advanceDue() && !game.rngLocked(), "fixture: clean + advanceDue on the settle day");
+        _setupFundedSubs(SUB_STAGE_WEIGHT_BUDGET, prefix, 50 ether, true);
+        _warpToBoundary(false);
+        require(game.advanceDue(), "fixture: advanceDue on the new day");
         uint256 gasBefore = gasleft();
         game.advanceGame();
         chunkGas = gasBefore - gasleft();
-
-        // Non-vacuity (1/3): the cursor advanced a FULL SUB_STAGE_BATCH chunk (the new-day reset zeroed it
-        // inside advanceGame, then the chunk drained 50).
-        require(_subCursor() == SUB_STAGE_BATCH, "STAGE non-vacuity: the cursor advanced a full 50-chunk");
-        // Non-vacuity (2/3): >= cap−2 of mine got a NEW stamp (the 2 deploy subs occupy cursor 0..1).
-        uint256 stampedCount;
-        for (uint256 i; i < SUB_STAGE_BATCH; ++i) {
-            if (_lastBoughtDayOf(subs[i]) > preBought[i]) ++stampedCount;
-        }
-        require(stampedCount >= SUB_STAGE_BATCH - 2, "STAGE non-vacuity: >= 48 newly stamped this chunk");
-        // Non-vacuity (3/3): >= 1 settle fired (questProgress drained to 0 on the settled subs).
-        for (uint256 i; i < SUB_STAGE_BATCH; ++i) {
-            if (_questProgressOf(subs[i]) == 0) ++settledCount;
-        }
-        require(settledCount > 0, "STAGE non-vacuity: >= 1 settle fired (questProgress drained to 0)");
     }
 
     // =========================================================================
@@ -730,12 +627,16 @@ contract V56AfkingGasMarginal is DeployProtocol {
         return uint32(_subField(who, OFF_AFFBASE, 32)); // uint32
     }
 
-    function _questProgressOf(address who) internal view returns (uint8) {
-        return uint8(_subField(who, OFF_QUESTPROG, 8)); // uint8
+    function _afkingStartOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_AFKINGSTART, 24)); // uint24
     }
 
-    function _buyerOwedBurnieOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_OWEDBURNIE, 32)); // uint32
+    function _pendingBurnieOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_PENDINGBURNIE, 32)); // uint32
+    }
+
+    function _streakBaseOf(address who) internal view returns (uint8) {
+        return uint8(_subField(who, OFF_STREAKLATCH, 8)) & 0x7f; // bits 0-6
     }
 
     function _subscriberCount() internal view returns (uint256) {
@@ -777,4 +678,5 @@ contract V56AfkingGasMarginal is DeployProtocol {
         }
         return string(b);
     }
+
 }

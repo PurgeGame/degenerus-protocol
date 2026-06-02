@@ -1846,13 +1846,13 @@ abstract contract DegenerusGameStorage {
 
     /// @notice Per-player AfKing subscription record: the per-buy box stamp plus the
     ///         in-slot per-sub accumulator.
-    /// @dev Layout (Solidity packs sequentially) — fits in ONE 32-byte slot (≈241/256
-    ///      bits), so the whole record reads/writes as a single warm slot with no extra
-    ///      cold slot:
-    ///        config (48b):  dailyQuantity(8) + validThroughLevel(24) + reinvestPct(8) + flags(8)
-    ///        per-sub stamp (48b): scorePlus1(16) + amount(32, milli-ETH)
-    ///        markers (72b): lastAutoBoughtDay(24) + lastOpenedDay(24) + afkCoveredThroughDay(24)
-    ///        accumulator (73b): affiliateBase(32) + questProgress(8) + buyerOwedBurnie(32) + hasEverSubscribed(1)
+    /// @dev Layout (Solidity packs sequentially) — fits EXACTLY in ONE 32-byte slot (256
+    ///      bits, 0 free), so the whole record reads/writes as a single warm slot with no
+    ///      extra cold slot:
+    ///        config (40b):  dailyQuantity(8) + validThroughLevel(24) + reinvestPct(8) + flags(8)
+    ///        per-sub stamp (40b): scorePlus1(16) + amount(24, milli-ETH)
+    ///        markers (96b): lastAutoBoughtDay(24) + lastOpenedDay(24) + afkCoveredThroughDay(24) + afkingStartDay(24)
+    ///        accumulator (72b): affiliateBase(32) + pendingBurnie(32) + subStreakLatch(8)
     ///      There is NO per-day epoch: the box resolves at the LIVE level at open (no
     ///      stored roll floor) and sources its RNG word from
     ///      `rngWordByDay[lastAutoBoughtDay]`, so the only frozen-at-stamp inputs are the
@@ -1867,21 +1867,23 @@ abstract contract DegenerusGameStorage {
     ///      touches this recorded EV/seed input — the actual ETH/`claimablePool` debit
     ///      consumes the full wei `ethValue` and is never rounded.
     ///
-    ///      In-slot accumulator (cheap per-buy, settle-by-pull / settle-by-push; advanced
-    ///      by the per-buy accrue write into this already-warm slot, so no new cold slot):
+    ///      Compute-on-read streak: `afkingStartDay` + `subStreakLatch`'s `streakAtAfkingStart`
+    ///      (bits 0-6) frame the run; the effective afking quest streak is derived on read from
+    ///      `afkCoveredThroughDay` (no DegenerusQuests STATICCALL on the buy path) and handed
+    ///      back to the manual quest system on any sub-ending path (finalize).
+    ///
+    ///      In-slot accumulator (cheap per-buy; advanced by the per-buy accrue write into this
+    ///      already-warm slot, so no new cold slot):
     ///        • `affiliateBase` — per-sub running unclaimed AFFILIATE balance, whole
     ///          BURNIE; drained and paid out by `DegenerusAffiliate.claim`, zeroed there
     ///          so a re-claim finds 0.
-    ///        • `questProgress` — delivered-day slot-0 quest completion COUNTER; settled
-    ///          (× QUEST_SLOT0_REWARD) by the quest push riding the buy stage; zeroed at
-    ///          settle so a double-fire finds 0.
-    ///        • `buyerOwedBurnie` — per-sub running TICKET buyer-bonus balance (the
-    ///          10%/20% accrual), whole BURNIE, ticket-mode only (lootbox subs get the
-    ///          boon instead). Pays the sub directly via the quest push, minted together
-    ///          with questProgress in ONE creditFlip.
-    ///        • `hasEverSubscribed` — set-once first-sub streak head-start latch (bounded
-    ///          +0..+9, once per account).
-    ///      `affiliateBase` and `buyerOwedBurnie` are uint32 with a 100M-whole-BURNIE
+    ///        • `pendingBurnie` — per-sub running CLAIMABLE BURNIE balance, whole BURNIE,
+    ///          accrued per delivered day (the slot-0 quest reward every mode + the
+    ///          ticket-mode 10%/20% buyer bonus). Paid out only by the player-pull
+    ///          `claimAfkingBurnie`, zeroed there.
+    ///        • `subStreakLatch` — bit 7 the set-once ever-subscribed latch (the +0..+9
+    ///          head-start, once per account), bits 0-6 the afking-run streak snapshot.
+    ///      `affiliateBase` and `pendingBurnie` are uint32 with a 100M-whole-BURNIE
     ///      saturating clamp at the accrue write — uint32 holds ~4.29e9 > 100M so the
     ///      clamp binds first, and it can only ever UNDER-credit a pathological
     ///      reinvest-whale (off the solvency path). The accumulator fields are written on
@@ -1909,12 +1911,13 @@ abstract contract DegenerusGameStorage {
         ///      Genuinely per-sub (each subscriber's own activity score).
         uint16 scorePlus1;
         /// @dev Stamp: spend in milli-ETH (0.001-ETH units; boons off, so amount ==
-        ///      spend, = mp × effectiveQty). Milli-ETH so it packs into uint32 (~4.3M
-        ///      ETH of headroom); packed via `_packEthToMilliEth` at the stamp write and
-        ///      unpacked via `_unpackMilliEthToWei` before the box seed / EV-cap payout
-        ///      math. The round-down is on this recorded EV/seed input only — the actual
-        ///      ETH debit still uses the full wei `ethValue`.
-        uint32 amount;
+        ///      spend, = mp × effectiveQty). Milli-ETH in a uint24 (16,777 ETH/buy of
+        ///      headroom — a single auto-buy never approaches it); packed via
+        ///      `_packEthToMilliEth` at the stamp write and unpacked via
+        ///      `_unpackMilliEthToWei` before the box seed / EV-cap payout math. The
+        ///      round-down is on this recorded EV/seed input only — the actual ETH debit
+        ///      still uses the full wei `ethValue`.
+        uint24 amount;
         // --- markers (72 bits) ---
         /// @dev Success-marker AND the frozen seed `day` (the same process day):
         ///      day index of the last successful buy, written only after a successful
@@ -1931,13 +1934,19 @@ abstract contract DegenerusGameStorage {
         uint24 lastOpenedDay;
         /// @dev Delivered-day high-water mark: monotone, advanced only on a day whose
         ///      ETH debit actually fired (a skipped/un-debited day does not advance it).
-        ///      The quest streak guard gates `state.streak` advancement on it so the
-        ///      streak is credited at most once per delivered day — a manual completion
-        ///      on an afk-covered day does not double-credit the streak. Advanced in the
-        ///      same warm slot accrue write. uint24 day index, same width as the other
-        ///      day markers.
+        ///      The afking quest streak is computed ON READ from this marker (no
+        ///      DegenerusQuests STATICCALL on the buy path): the effective streak is
+        ///      `streakAtAfkingStart + (afkCoveredThroughDay - afkingStartDay)` while the
+        ///      last funded day is no older than yesterday, else 0 (decay-on-read). Advanced
+        ///      in the same warm slot accrue write. uint24 day index.
         uint24 afkCoveredThroughDay;
-        // --- in-slot accumulator (73 bits) ---
+        /// @dev Day the current afking run's streak snapshot was taken — the base day for the
+        ///      compute-on-read `afkCoveredThroughDay - afkingStartDay` span. Set at subscribe
+        ///      (the funded day-0) and re-based on a gap-resumed delivered day; cleared at
+        ///      finalize when streak control hands back to the manual quest system. uint24 day
+        ///      index, same width as the other day markers.
+        uint24 afkingStartDay;
+        // --- in-slot accumulator (72 bits) ---
         /// @dev Per-sub running unclaimed affiliate balance, whole BURNIE. Accrued a flat
         ///      7% per buy (one warm in-slot `+=`); drained and paid out by
         ///      `DegenerusAffiliate.claim`, zeroed there so a re-claim finds 0. uint32
@@ -1945,25 +1954,45 @@ abstract contract DegenerusGameStorage {
         ///      (uint32 holds ~4.29e9 > 100M, so the clamp binds first); the clamp can
         ///      only ever under-credit, off the solvency path.
         uint32 affiliateBase;
-        /// @dev Delivered-day slot-0 quest completion counter. Settled to the sub as
-        ///      `questProgress × QUEST_SLOT0_REWARD` BURNIE by the quest push riding the
-        ///      buy stage (or the claimQuest/unsub fallback), then zeroed so a double-fire
-        ///      finds 0.
-        uint8 questProgress;
-        /// @dev Per-sub running TICKET buyer-bonus balance (the 10%/20% accrual), whole
-        ///      BURNIE, ticket-mode only (a lootbox sub never accrues this — it gets the
-        ///      lootbox boon instead). Pays the sub directly via the quest push, minted
-        ///      together with questProgress in ONE creditFlip. Same uint32 + 100M
-        ///      saturating clamp + under-credit-only behaviour as `affiliateBase`.
-        uint32 buyerOwedBurnie;
-        /// @dev Set-once first-sub head-start latch: on the very first subscribe the
-        ///      streak gets a bounded +0..+9 head-start, once per account. Never cleared.
-        bool hasEverSubscribed;
+        /// @dev Per-sub running CLAIMABLE BURNIE balance, whole BURNIE. Accrued per
+        ///      delivered day by the warm in-slot buy accrue: the slot-0 quest reward
+        ///      (every mode) plus the ticket-mode 10%/20% buyer bonus. Paid out only by the
+        ///      player-pull `claimAfkingBurnie` (one creditFlip, zeroed there so a re-claim
+        ///      finds 0); the sub claims whenever, so there is no settle/claim-timing edge.
+        ///      Same uint32 + 100M saturating clamp + under-credit-only behaviour as
+        ///      `affiliateBase`.
+        uint32 pendingBurnie;
+        /// @dev Packed byte: bit 7 = the set-once first-sub latch (the +0..+9 head-start is
+        ///      granted once per account, folded into the streak snapshot below); bits 0-6 =
+        ///      `streakAtAfkingStart`, the quest streak snapshot at the start of the current
+        ///      afking run (0..100, the score's effective cap). The compute-on-read effective
+        ///      streak adds the funded delivered days `(afkCoveredThroughDay - afkingStartDay)`
+        ///      to this base. Written rarely (subscribe + gap-resume); read per buy as a couple
+        ///      of mask ops, so `affiliateBase`/`pendingBurnie` stay unmasked for the hot accrue.
+        uint8 subStreakLatch;
+    }
+
+    /// @dev `subStreakLatch` bit 7 — set-once latch that the account has ever subscribed
+    ///      (gates the once-per-account head-start). Never cleared.
+    uint8 internal constant SUB_EVER_SUBSCRIBED_BIT = 0x80;
+    /// @dev `subStreakLatch` bits 0-6 — `streakAtAfkingStart` (0..100, clamped on write).
+    uint8 internal constant SUB_STREAK_MASK = 0x7f;
+
+    /// @dev Read the afking-run streak snapshot (bits 0-6 of the packed latch byte).
+    function _streakBaseOf(Sub storage sub) internal view returns (uint8) {
+        return sub.subStreakLatch & SUB_STREAK_MASK;
+    }
+
+    /// @dev Write the afking-run streak snapshot (bits 0-6), clamped to 100 (the score cap),
+    ///      preserving the ever-subscribed latch (bit 7).
+    function _setStreakBase(Sub storage sub, uint256 value) internal {
+        uint8 v = value > 100 ? 100 : uint8(value);
+        sub.subStreakLatch = (sub.subStreakLatch & SUB_EVER_SUBSCRIBED_BIT) | v;
     }
 
     /// @dev Per-subscriber record (the iterable set's value): the per-sub stamp, the
-    ///      in-slot accumulator (affiliateBase / questProgress / buyerOwedBurnie /
-    ///      hasEverSubscribed), and the afkCoveredThroughDay marker.
+    ///      day markers (incl. `afkingStartDay` / `afkCoveredThroughDay` for the compute-on-read
+    ///      streak), and the in-slot accumulator (affiliateBase / pendingBurnie / subStreakLatch).
     mapping(address => Sub) internal _subOf;
 
     /// @dev Sparse funder map — the wallet whose `afkingFunding` funds a sub.

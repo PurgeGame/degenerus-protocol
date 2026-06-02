@@ -267,6 +267,7 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 streak;                              // Current streak of days with full completion
         uint24 baseStreak;                          // Snapshot of streak at start of day (for rewards)
         uint24 lastSyncDay;                         // Day we last reset progress/completionMask
+        bool afkingActive;                          // While set (GAME-only, subscribe→finalize): slot-0 completions are streak-neutral and pay no immediate reward (the afking compute-on-read owns the streak; the reward is the per-day pendingBurnie accrual)
         uint24[QUEST_SLOT_COUNT] lastProgressDay;   // Per-slot: day when progress was recorded
         uint24[QUEST_SLOT_COUNT] lastQuestVersion;  // Per-slot: quest version when progress was recorded
         uint128[QUEST_SLOT_COUNT] progress;         // Per-slot: accumulated progress toward targets
@@ -384,78 +385,71 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /**
-     * @notice Advances an afking subscriber's quest streak for the days their daily buy
-     *         actually executed.
-     * @dev GAME-only entrypoint, called when the subscriber's afking quest is settled. This
-     *      only advances the quest streak; the BURNIE reward is minted by the caller in a
-     *      single batched creditFlip, not here.
+     * @notice Begins an afking run for a subscriber: snapshots the (gap-synced) streak and
+     *         flips the afking flag so subsequent slot-0 completions are streak-neutral.
+     * @dev GAME-only. While afking, the afking compute-on-read (Game-side, off the Sub slot)
+     *      owns the player's quest streak; the manual `state.streak` is dormant and is
+     *      overwritten by `finalizeAfking` when the run ends. Returns the synced streak so the
+     *      caller can base the run's snapshot on it.
      *
-     *      Syncs day-reset state first (like awardQuestStreakBonus), then adds one streak
-     *      count per delivered day, clamping at uint24 max. Only touches this player's
-     *      streak/slot-0/anchor state — never their manual quest (slot 1).
-     *
-     *      `deliveredStreakDays` counts only days on which the daily buy's ETH debit fired,
-     *      so an unfunded sub earns no streak credit.
-     *
-     *      Guards against double-crediting today's streak: if a manual completion already
-     *      set the per-day STREAK_CREDITED bit for `currentDay`, that day was already
-     *      counted, so credit one fewer day. The streak advances at most once per delivered
-     *      day; slot rewards are never affected.
-     *
-     *      Keeps `lastActiveDay`/`lastCompletedDay` at `currentDay` so the next sync does not
-     *      gap-reset the streak. Silently returns if player or currentDay is zero, or no days
-     *      were delivered.
-     * @param player The subscriber whose quest streak is being settled.
-     * @param deliveredStreakDays Number of days in this settle window whose daily buy executed.
+     *      Syncs day-reset state first (applying any pending gap-decay) so the snapshot is
+     *      honest, then sets `afkingActive`. Does not touch the slot-1 quest.
+     * @param player The subscriber starting an afking run.
      * @param currentDay The current quest day for state synchronization.
+     * @return streak The player's gap-synced streak at the start of the run.
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
-    function settleAfkingQuest(address player, uint16 deliveredStreakDays, uint32 currentDay)
+    function beginAfking(address player, uint32 currentDay)
         external
         onlyGame
+        returns (uint24 streak)
     {
-        if (player == address(0) || deliveredStreakDays == 0 || currentDay == 0) return;
-
+        if (player == address(0)) return 0;
         PlayerQuestState storage state = questPlayerState[player];
-        // Applies the same day-reset/anchor logic as awardQuestStreakBonus, and resets the
-        // per-day completionMask (incl. the STREAK_CREDITED bit) when the day rolls over, so
-        // the guard read below reflects only the current day.
-        _questSyncState(state, player, currentDay);
+        if (currentDay != 0) _questSyncState(state, player, currentDay);
+        streak = state.streak;
+        state.afkingActive = true;
+    }
 
-        // Double-credit guard: if a manual completion already credited the streak for
-        // `currentDay`, the last delivered day of this window was already counted — credit one
-        // fewer day so each delivered day advances the streak at most once. Slot rewards are
-        // unaffected (minted GAME-side).
-        uint8 mask = state.completionMask;
-        uint24 currentDay24 = uint24(currentDay);
-        uint32 creditDays = uint32(deliveredStreakDays);
-        if ((mask & QUEST_STATE_STREAK_CREDITED) != 0 && state.lastCompletedDay == currentDay24) {
-            // Today's streak credit already landed via a manual path — drop the duplicate day.
-            creditDays = creditDays - 1;
-        }
-
-        if (creditDays != 0) {
-            uint32 updated = uint32(state.streak) + creditDays;
-            if (updated > type(uint24).max) {
-                state.streak = type(uint24).max;
-            } else {
-                state.streak = uint24(updated);
-            }
-            // Mark today as streak-credited so a later same-day manual completion or a
-            // double settle does not re-credit.
-            state.completionMask = mask | QUEST_STATE_STREAK_CREDITED;
-        }
-
-        // Keep the anchor current so the next settle's _questSyncState does not gap-reset the
-        // streak.
-        if (state.lastActiveDay < currentDay24) {
-            state.lastActiveDay = currentDay24;
-        }
-        if (state.lastCompletedDay < currentDay24) {
-            state.lastCompletedDay = currentDay24;
-        }
-
-        emit QuestStreakBonusAwarded(player, uint16(creditDays), state.streak, currentDay);
+    /**
+     * @notice Ends an afking run: hands the afking-computed streak back to the manual quest
+     *         system. Idempotent — a no-op unless the player is currently afking.
+     * @dev GAME-only, called on every sub-ending path (cancel / cancel-reclaim / pass-eviction
+     *      / funding-kill) BEFORE the Sub slot is deleted. The last valid mint day is the later of
+     *      the afking funded high-water (`afkingCoveredDay`, Game-side) and `lastActiveDay` (which
+     *      captures manual completions during the run — slot completions still bump it even though
+     *      they are streak-neutral while afking). Keeps the Game-computed `earnedStreak` if a valid
+     *      mint landed no earlier than yesterday; else a full prior day was missed with NO valid
+     *      mint (afking or manual) → zero (decay). Anchors `lastActiveDay`/`lastCompletedDay` at
+     *      that day so the manual gap-reset is honest from there, and clears `afkingActive`. A
+     *      double-call (cancel then in-stage reclaim) is safe: the second finds `afkingActive`
+     *      already false and returns.
+     * @param player The subscriber whose run is ending.
+     * @param earnedStreak The run's earned streak (snapshot + funded delivered days), Game-computed.
+     * @param afkingCoveredDay The afking funded high-water day (Game-side).
+     * @param currentDay The current quest day (the decay reference).
+     * @custom:reverts OnlyGame When caller is not GAME contract.
+     */
+    function finalizeAfking(
+        address player,
+        uint24 earnedStreak,
+        uint32 afkingCoveredDay,
+        uint32 currentDay
+    ) external onlyGame {
+        if (player == address(0)) return;
+        PlayerQuestState storage state = questPlayerState[player];
+        if (!state.afkingActive) return; // idempotent: already finalized / never afking
+        uint32 lastValid = afkingCoveredDay;
+        if (uint32(state.lastActiveDay) > lastValid) lastValid = uint32(state.lastActiveDay);
+        uint24 finalStreak = (currentDay == 0 || lastValid + 1 >= currentDay)
+            ? earnedStreak
+            : 0;
+        state.streak = finalStreak;
+        uint24 d = uint24(lastValid);
+        state.lastActiveDay = d;
+        state.lastCompletedDay = d;
+        state.afkingActive = false;
+        emit QuestStreakBonusAwarded(player, 0, finalStreak, lastValid);
     }
 
     // =========================================================================
@@ -1592,17 +1586,29 @@ contract DegenerusQuests is IDegenerusQuests {
             return (0, quest.questType, state.streak, false);
         }
 
+        // While afking, the compute-on-read owns the streak (off the Game-side Sub slot), so
+        // a completion of EITHER slot is streak-neutral here, and the slot-0 reward is the
+        // per-delivered-day pendingBurnie accrual (paying it here too would double-credit). The
+        // slot-1 (manual) quest stays fully accessible and pays its reward normally.
+        bool afking = state.afkingActive;
+
         // Mark slot as complete
         mask |= slotMask;
         uint24 questDay24 = uint24(quest.day);
-        if (questDay24 > state.lastActiveDay) {
+        // `lastActiveDay` tracks ONLY a normal funded mint (slot 0 is always MINT_ETH) — a
+        // slot-1 completion never advances it. This keeps it the honest "last funded manual
+        // mint day": the afking finalize's no-zero protection keys on max(afkCovered,
+        // lastActiveDay), so a cheap slot-1 quest can no longer hold a lapsed afking streak
+        // alive. During an active afking run with no manual mint, lastActiveDay stays put and
+        // the afking machinery (afkCoveredThroughDay) carries the streak.
+        if (slot == 0 && questDay24 > state.lastActiveDay) {
             state.lastActiveDay = questDay24;
         }
 
         uint32 newStreak = uint32(state.streak);
 
-        // Streak is credited on the first quest completion of the day.
-        if ((mask & QUEST_STATE_STREAK_CREDITED) == 0) {
+        // Streak is credited on the first quest completion of the day — suppressed while afking.
+        if (!afking && (mask & QUEST_STATE_STREAK_CREDITED) == 0) {
             mask |= QUEST_STATE_STREAK_CREDITED;
             if (newStreak < type(uint24).max) {
                 newStreak += 1;
@@ -1612,7 +1618,9 @@ contract DegenerusQuests is IDegenerusQuests {
         }
         state.completionMask = mask;
 
-        uint256 rewardShare = slot == 1 ? QUEST_RANDOM_REWARD : QUEST_SLOT0_REWARD;
+        uint256 rewardShare = slot == 1
+            ? QUEST_RANDOM_REWARD
+            : (afking ? 0 : QUEST_SLOT0_REWARD);
         emit QuestCompleted(
             player,
             quest.day,

@@ -488,12 +488,10 @@ interface IGameAfkingModule {
     /// @notice Standalone UNREWARDED afking-box open clear (walks _subOpenCursor).
     function autoOpen(uint256 count) external;
 
-    /// @notice Permissionless quest-settle fallback — runs the same internal _settleQuest
-    ///         for each sub (always credits the sub, never the caller). Mints
-    ///         questProgress × QUEST_SLOT0_REWARD + the accrued buyerOwedBurnie ticket
-    ///         buyer-bonus in one creditFlip to the sub and advances the streak, off the
-    ///         solvency path. A re-fire finds zero counters and no-ops.
-    function claimQuest(address[] calldata subs) external;
+    /// @notice Permissionless BURNIE claim — pays each sub its accrued pendingBurnie (the
+    ///         per-delivered-day slot-0 quest reward + ticket buyer-bonus) in one creditFlip
+    ///         and zeroes it; always credits the sub, never the caller. Off the solvency path.
+    function claimAfkingBurnie(address[] calldata subs) external;
 
     /// @notice Affiliate-only atomic read-and-zero of a sub's accrued affiliateBase (the
     ///         running flat-7% affiliate balance, whole BURNIE). Read and zero happen
@@ -505,14 +503,14 @@ interface IGameAfkingModule {
 
     /// @notice For each funded sub it stamps the per-sub box fields (lootbox mode) or
     ///         queues whole tickets (ticket mode), debits afkingFunding, and advances
-    ///         _subCursor by up to maxCount. Called by the AdvanceModule via delegatecall;
-    ///         it runs pre-RNG, so the day's word is uncommitted at stamp. A no-orphan
-    ///         guard skips any sub with a pending unopened box.
+    ///         _subCursor until the accumulated gas-weight reaches weightBudget. Called by the
+    ///         AdvanceModule via delegatecall; it runs pre-RNG, so the day's word is uncommitted
+    ///         at stamp. A no-orphan guard skips any sub with a pending unopened box.
     /// @param processDay The boundary-pinned process day (seeds the open).
-    /// @param maxCount Per-chunk budget bounding gas.
+    /// @param weightBudget Per-chunk gas-weight budget (cheap buy 1, sub-ending finalize heavier).
     /// @return processed Number of set entries advanced/handled this chunk.
     function processSubscriberStage(
         uint32 processDay,
-        uint256 maxCount
+        uint256 weightBudget
     ) external returns (uint256 processed);
 }

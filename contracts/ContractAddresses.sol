@@ -31,39 +31,39 @@ library ContractAddresses {
     address internal constant GAME_DEGENERETTE_MODULE =
         address(0x3D7Ebc40AF7092E3F1C81F2e996cbA5Cae2090d7);
     address internal constant GAME_BINGO_MODULE =
-        address(0xB14609De6e7ec52e4eAE6cbB1fEaE8e4d4db1F60);
-    address internal constant GAME_AFKING_MODULE =
-        address(0xaf6109dE6e7eC52e4eaE6Cbb1Feae8e4D4db1f61);
-    address internal constant COIN =
         address(0xD16d567549A2a2a2005aEACf7fB193851603dd70);
-    address internal constant COINFLIP =
+    address internal constant GAME_AFKING_MODULE =
         address(0x96d3F6c20EEd2697647F543fE6C08bC2Fbf39758);
-    address internal constant VAULT =
-        address(0x27cc01A4676C73fe8b6d0933Ac991BfF1D77C4da);
-    address internal constant AFFILIATE =
-        address(0x3381cD18e2Fb4dB236BF0525938AB6E43Db0440f);
-    address internal constant JACKPOTS =
-        address(0x756e0562323ADcDA4430d6cb456d9151f605290B);
-    address internal constant QUESTS =
-        address(0x1aF7f588A501EA2B5bB3feeFA744892aA2CF00e6);
-    address internal constant GAME =
+    address internal constant COIN =
         address(0x13aa49bAc059d709dd0a18D6bb63290076a702D7);
-    address internal constant SDGNRS =
-        address(0x796f2974e3C1af763252512dd6d521E9E984726C);
-    address internal constant DGNRS =
-        address(0x92a6649Fdcc044DA968d94202465578a9371C7b1);
-    address internal constant ADMIN =
-        address(0xDA5A5ADC64C8013d334A0DA9e711B364Af7A4C2d);
-    address internal constant DEITY_PASS =
-        address(0xe8dc788818033232EF9772CB2e6622F1Ec8bc840);
-    address internal constant WWXRP =
+    address internal constant COINFLIP =
         address(0xDB25A7b768311dE128BBDa7B8426c3f9C74f3240);
+    address internal constant VAULT =
+        address(0x796f2974e3C1af763252512dd6d521E9E984726C);
+    address internal constant AFFILIATE =
+        address(0x1aF7f588A501EA2B5bB3feeFA744892aA2CF00e6);
+    address internal constant JACKPOTS =
+        address(0xe8dc788818033232EF9772CB2e6622F1Ec8bc840);
+    address internal constant QUESTS =
+        address(0x3Cff5E7eBecb676c3Cb602D0ef2d46710b88854E);
+    address internal constant GAME =
+        address(0x3381cD18e2Fb4dB236BF0525938AB6E43Db0440f);
+    address internal constant SDGNRS =
+        address(0x92a6649Fdcc044DA968d94202465578a9371C7b1);
+    address internal constant DGNRS =
+        address(0xDA5A5ADC64C8013d334A0DA9e711B364Af7A4C2d);
+    address internal constant ADMIN =
+        address(0x886D6d1eB8D415b00052828CD6d5B321f072073d);
+    address internal constant DEITY_PASS =
+        address(0x27cc01A4676C73fe8b6d0933Ac991BfF1D77C4da);
+    address internal constant WWXRP =
+        address(0x756e0562323ADcDA4430d6cb456d9151f605290B);
     address internal constant STETH_TOKEN =
         address(0x2e234DAe75C793f67A35089C9d99245E1C58470b);
     address internal constant LINK_TOKEN =
         address(0xF62849F9A0B5Bf2913b396098F7c7019b51A820a);
     address internal constant GNRUS =
-        address(0x886D6d1eB8D415b00052828CD6d5B321f072073d);
+        address(0x3C4293F66941ECa00f4950C10d4255d5c271bAeF);
     address internal constant CREATOR =
         address(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496);
     address internal constant VRF_COORDINATOR =
