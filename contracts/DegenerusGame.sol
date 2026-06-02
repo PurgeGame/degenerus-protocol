@@ -1789,28 +1789,44 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return boxPlayers[index].length > effectiveCursor;
     }
 
-    /// @notice Permissionlessly open queued lootboxes via the parameterless cursor.
-    /// @dev AUTO-03. Walks boxPlayers[activeIndex] from the self-partitioning boxCursor,
-    ///      opening up to maxCount ready boxes. STRUCTURAL re-issue coupling (the v45
-    ///      orphan-index landmine): each open is gated on lootboxRngWordByIndex[index] != 0,
-    ///      mirroring the LootboxModule RngNotReady guard — an index orphaned mid-day by an
-    ///      emergency VRF rotation is skipped until updateVrfCoordinatorAndSub re-issues the
-    ///      in-flight request (a303ae18 detect-preserve-re-issue) and the word lands. The
-    ///      first-deposit enqueue signal (lootboxEthBase == 0) and the open-time box-zeroing
-    ///      (lootboxEth / lootboxEthBase) are preserved untouched. Returns the raw count of
-    ///      boxes opened; the re-homed bounty is paid by the unified router (AfKing.mintBurnie),
-    ///      never in-callee (RD-4) — UNREWARDED when called directly (ROUTER-10).
-    ///
-    ///      maxCount is a flat box-count budget: under v50.0's O(1) whale-pass refactor
-    ///      (WHALE-01/02), every box open is uniform cost regardless of pass status — the
-    ///      box-open boon writes `whalePassClaims[player] += grant` rather than running the
-    ///      100-iter _activateWhalePass loop, with materialization deferred to the
-    ///      player-paid claimWhalePass. The autoOpen leg's worst case is now bounded by
-    ///      `maxCount × measured_per_box` gas; OPEN_BATCH is picked from a fresh measurement
-    ///      (D-IMPL-04) so `chosen × measured ≤ 16.7M − headroom` holds by construction.
-    /// @param maxCount Flat per-call box-count budget; caller-bounded, anti-DoS.
-    /// @return opened The number of boxes opened this call (drives the OPEN_KNEE reward).
-    function autoOpen(uint256 maxCount) external returns (uint256 opened) {
+    /// @notice Permissionless liveness valve: open up to `maxCount` ready boxes total —
+    ///         AFKING boxes FIRST, then human boxes with whatever budget remains — so any
+    ///         backlog of either type can always be cleared in caller-sized chunks that stay
+    ///         under the 16.7M per-tx ceiling. Uncapped by design: the caller picks a
+    ///         maxCount their gas affords (each box is uniform O(1), so the tx cost is
+    ///         maxCount-bounded). Unrewarded — only mintBurnie() pays a bounty.
+    /// @param maxCount Max boxes to open this call across both queues (afking + human).
+    /// @return opened Total boxes opened (afking + human).
+    function openBoxes(uint256 maxCount) external returns (uint256 opened) {
+        if (maxCount == 0) return 0;
+        // AfKing boxes first — delegatecall the afking module so the open runs in this Game's
+        // storage; drainAfkingBoxes is the afking-side cursor walk (the human-box leg follows).
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_AFKING_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IGameAfkingModule.drainAfkingBoxes.selector,
+                    maxCount
+                )
+            );
+        if (!ok) _revertDelegate(data);
+        uint256 openedAfking = abi.decode(data, (uint256));
+        // Then human boxes with the remaining budget.
+        if (openedAfking < maxCount) {
+            opened = _openHumanBoxes(maxCount - openedAfking);
+        }
+        opened += openedAfking;
+    }
+
+    /// @dev AUTO-03 human-box leg of openBoxes(): walk boxPlayers[activeIndex] from the
+    ///      self-partitioning boxCursor, opening up to `maxCount` ready boxes; returns the count
+    ///      opened. STRUCTURAL re-issue coupling (the v45 orphan-index landmine): each open is
+    ///      gated on lootboxRngWordByIndex[index] != 0, mirroring the LootboxModule RngNotReady
+    ///      guard — an index orphaned mid-day by an emergency VRF rotation is skipped until the
+    ///      re-issued word lands. Every box is uniform O(1) under the v50 whale-pass refactor
+    ///      (WHALE-01/02: the open boon writes whalePassClaims[player] += grant, materialization
+    ///      deferred to player-paid claimWhalePass), so the worst case is maxCount × per-box.
+    function _openHumanBoxes(uint256 maxCount) internal returns (uint256 opened) {
         // Entry-gate (RD-5): the open path has exactly two revert sources — rngLock and the
         // terminal-jackpot liveness control. Excluding both pre-loop makes the loop body
         // guaranteed-non-reverting, so dropping the per-item try/catch cannot maroon a tail.

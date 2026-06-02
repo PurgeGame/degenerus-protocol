@@ -38,7 +38,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///   interacts with trusted contracts.").
 ///
 ///   D-03 (default-batch / escapes): `mintBurnie()` runs the fixed open-leg default batch (OPEN_BATCH=200)
-///   and does NOT OOG; the standalone parametered HUMAN `game.autoOpen(count)` is an emergency escape that
+///   and does NOT OOG; the standalone parametered HUMAN `game.openBoxes(count)` is an emergency escape that
 ///   runs the human box leg but credits NOTHING (only `mintBurnie` credits). The afking-module standalone
 ///   `autoOpen` selector COLLIDES with the human `autoOpen(uint256)` so the afking open is reachable ONLY
 ///   through `mintBurnie` (DegenerusGame.sol:352-353) — there is no separately-callable unrewarded afking
@@ -338,7 +338,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         );
     }
 
-    /// @notice D-03 UNREWARDED escape: the standalone parametered HUMAN `game.autoOpen(count)` runs the
+    /// @notice D-03 UNREWARDED escape: the standalone parametered HUMAN `game.openBoxes(count)` runs the
     ///         human box leg (a queued human box opens) but credits NOTHING (only `mintBurnie` credits).
     function testStandaloneAutoOpenEscapeUnrewarded() public {
         address boxOwner = makeAddr("esc_open_box_owner");
@@ -354,7 +354,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(keeper);
-        game.autoOpen(50);
+        game.openBoxes(50);
 
         // Work happened: the human box opened (first-deposit signal zeroed).
         assertEq(_lootboxEthBase(index, boxOwner), 0, "non-vacuity: the standalone autoOpen opened the human box");

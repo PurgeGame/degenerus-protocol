@@ -225,7 +225,7 @@ contract AfKingSubscription is DeployProtocol {
         address keeper = makeAddr("autoopen_keeper");
         vm.recordLogs();
         vm.prank(keeper);
-        game.autoOpen(0); // no openable boxes -> no-op; UNREWARDED regardless
+        game.openBoxes(0); // no openable boxes -> no-op; UNREWARDED regardless
         assertEq(_countCreditFlipTo(keeper), 0, "standalone autoOpen pays no bounty (UNREWARDED)");
     }
 

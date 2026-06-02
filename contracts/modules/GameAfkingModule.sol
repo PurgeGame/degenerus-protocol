@@ -1224,12 +1224,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @notice Standalone UNREWARDED manual/emergency afking-box open clear — only
-    ///         mintBurnie() credits. Walks `_subOpenCursor` opening up to `count` stamped
-    ///         afking boxes (0 = OPEN_BATCH).
+    /// @notice Drain up to `count` ready afking boxes (walks `_subOpenCursor`); returns the
+    ///         number opened so the caller can budget the remaining per-tx work. Unrewarded —
+    ///         only mintBurnie() credits. Reached via the Game's openBoxes() liveness valve
+    ///         (a distinct selector from the Game's human-box autoOpen(uint256), so the two
+    ///         do not collide; calling this module contract directly hits empty storage).
     /// @param count Max afking boxes to open this call (0 = the default OPEN_BATCH).
-    function autoOpen(uint256 count) external {
-        _autoOpen(count);
+    /// @return opened The number of afking boxes opened this call.
+    function drainAfkingBoxes(uint256 count) external returns (uint256 opened) {
+        return _autoOpen(count);
     }
 
     /// @dev In-context mint price (the bounty's ETH→BURNIE conversion divisor). Mirrors

@@ -204,7 +204,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint256 preStake = coinflip.coinflipAmount(sybil);
         vm.recordLogs();
         vm.prank(sybil);
-        game.autoOpen(100);
+        game.openBoxes(100);
         assertEq(_countCoinflipStakeUpdated(), 0, "autoOpen on a wordless index emits no creditFlip");
         assertEq(coinflip.coinflipAmount(sybil), preStake, "no reward from a not-ready box index");
     }

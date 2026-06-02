@@ -485,8 +485,9 @@ interface IGameAfkingModule {
     ///         (advance → afking-box open) and pay ONE bounty (PLACE-02).
     function mintBurnie() external;
 
-    /// @notice Standalone UNREWARDED afking-box open clear (walks _subOpenCursor).
-    function autoOpen(uint256 count) external;
+    /// @notice Drain up to `count` ready afking boxes (walks _subOpenCursor); returns the
+    ///         number opened. Unrewarded; reached via the Game's openBoxes() valve.
+    function drainAfkingBoxes(uint256 count) external returns (uint256 opened);
 
     /// @notice Permissionless BURNIE claim — pays each sub its accrued pendingBurnie (the
     ///         per-delivered-day slot-0 quest reward + ticket buyer-bonus) in one creditFlip

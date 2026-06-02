@@ -166,7 +166,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             "pre-condition: box index word not yet landed (frozen window)"
         );
         vm.prank(cranker);
-        game.autoOpen(100);
+        game.openBoxes(100);
         assertGt(
             _lootboxEthBase(idx, boxOwner),
             0,
@@ -176,7 +176,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // POST-WORD: land the word -> the SAME crank opens the box (signal cleared on open).
         _injectLootboxRngWord(idx, FIXED_WORD);
         vm.prank(cranker);
-        game.autoOpen(100);
+        game.openBoxes(100);
         assertEq(
             _lootboxEthBase(idx, boxOwner),
             0,

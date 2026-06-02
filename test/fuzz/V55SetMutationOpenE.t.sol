@@ -13,7 +13,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///        ([[open-e-operator-approval-trust-boundary]]).
 ///
 /// @notice The two open routes are GENUINELY SEPARATE (no selector / queue overlap):
-///   - HUMAN box open: `game.autoOpen(maxCount)` (DegenerusGame.sol:1787) walks `boxPlayers[index]`.
+///   - HUMAN box open: `game.openBoxes(maxCount)` (DegenerusGame.sol:1787) walks `boxPlayers[index]`.
 ///   - AFKING box open: `game.mintBurnie()`'s open leg (GameAfkingModule.sol:1000-1009, only when
 ///     !advanceDue) walks `_subscribers` via `_autoOpen`. The afking module's own `autoOpen` selector
 ///     COLLIDES with the human `autoOpen(uint256)` so it is NOT re-exposed on the Game (DegenerusGame.sol
@@ -103,7 +103,7 @@ contract V55SetMutationOpenE is DeployProtocol {
 
         // Open the HUMAN box path. It must NOT touch the afking sub's stamp.
         vm.prank(makeAddr("human_opener"));
-        game.autoOpen(50);
+        game.openBoxes(50);
         assertEq(_lastBoughtDayOf(afk), afkBoughtBefore, "human open did not mutate the afking stamp (lastAutoBoughtDay)");
         assertEq(_lastOpenedDayOf(afk), afkOpenedBefore, "human open did not open the afking box (lastOpenedDay unchanged)");
 
