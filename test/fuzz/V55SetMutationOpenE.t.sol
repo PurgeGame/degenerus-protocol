@@ -81,6 +81,13 @@ contract V55SetMutationOpenE is DeployProtocol {
     ///         opening the afking box leaves the human box queue untouched. The two routes share no
     ///         mutable state (distinct queues / cursors / records).
     function testTwoPathOpenCoexistenceNoCrossCorruption() public {
+        // v56 DROP (356-07, removed/adapted surface): the v55 two-path-SEPARATION assertion (a human
+        // openBoxes leaves the afking stamp untouched) is superseded by the v56 LIVE-01 UNIFIED openBoxes
+        // valve (commit 86a2d6c8), which calls drainAfkingBoxes FIRST then the human leg — so openBoxes(50)
+        // now legitimately opens the afking box too (lastOpenedDay advances). The v56 two-path coexistence
+        // (afking-first ordering, both cursors drain, lastOpenedDay monotone no-double-open, selector
+        // isolation) is proven against the v56 valve by V56AfkingGasMarginal's LIVE-01 cases.
+        vm.skip(true, "v56: unified openBoxes valve opens afking-first; coexistence re-proven in V56AfkingGasMarginal LIVE-01");
         // AFKING arm: a funded lootbox sub gets a stamped box via the STAGE.
         address afk = makeAddr("afk_player");
         _grantDeityPass(afk);

@@ -182,6 +182,13 @@ contract V55FreezeDeterminism is DeployProtocol {
     ///         (NOT asserting the level is frozen; the human box's `baseLevel` is forced to `currentLevel`
     ///         via `baseLevelPlus1 == 0` ⇒ `graceLevel == currentLevel`).
     function testDifferentialAfkingVsHumanOpenSameTuple() public {
+        // v56 DROP (356-07, removed/adapted surface): the v56 re-pack made Sub.amount uint24 MILLI-ETH
+        // (_packEthToMilliEth at the stamp, _unpackMilliEthToWei at the afking open) while this differential
+        // harness pokes a RAW-WEI amount into the field — so the afking arm reads milli-ETH and the human arm
+        // reads raw-wei, diverging by design (the assertion encodes the v55 raw-wei amount field). The v56
+        // afking-open == human-open byte-identity is proven against the v56 layout by
+        // V56FreezeSolvency::testStampedDayOpenAtTwoBlocksByteIdentical.
+        vm.skip(true, "v56: Sub.amount is uint24 milli-ETH; differential re-proven in V56FreezeSolvency");
         _runDifferential(1 ether, 0, 0xD1FF0100); // NEUTRAL score: no cap branch on either arm
     }
 
@@ -189,6 +196,10 @@ contract V55FreezeDeterminism is DeployProtocol {
     ///         amount/score/rngWord — INCLUDING bonus scores (the full EV-cap RMW on both arms) with
     ///         `amount <= 10 ETH` (so `adj == amount` on the human side matches the afking `adjustedPortion`).
     function testFuzzDifferentialAfkingVsHumanOpen(uint96 rawAmount, uint16 rawScore, uint256 rngSeed) public {
+        // v56 DROP (356-07, removed/adapted surface): same milli-ETH unmask as the unit differential — the
+        // raw-wei poke vs the v56 uint24 milli-ETH amount field diverges by design. Re-proven against the v56
+        // layout by V56FreezeSolvency::testFuzzTwoBlockOpenNoBlockEntropy.
+        vm.skip(true, "v56: Sub.amount is uint24 milli-ETH; differential re-proven in V56FreezeSolvency");
         // 0.1 .. 9.6 ETH (strictly < the 10-ETH cap so the frozen-adj == full-RMW equivalence holds).
         uint256 amount = (uint256(rawAmount) % (9.5 ether)) + 0.1 ether;
         // Raw activity bps (maxes ~31_800), exercises the penalty / neutral / bonus branches.

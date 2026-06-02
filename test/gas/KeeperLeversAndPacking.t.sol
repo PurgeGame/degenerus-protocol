@@ -172,7 +172,14 @@ contract KeeperLeversAndPacking is DeployProtocol {
     ///         The v49 `batchPurchase(address[],uint256[],uint8[])` parallel-array grouping is DROPPED
     ///         (removed surface, D-351-02 — the v55 per-sub buy iterates the in-context `_subscribers`
     ///         set in `processSubscriberStage`, no calldata array).
-    function testGas03HomogeneitySourcePresence() public view {
+    function testGas03HomogeneitySourcePresence() public {
+        // v56 DROP (356-07, removed/adapted surface): this source-presence gate asserts
+        // `function autoOpen(uint256 maxCount)` exists on DegenerusGame, but the v56 LIVE-01 redesign
+        // (commit 86a2d6c8) unified the human box-open into `openBoxes(maxCount)` + `drainAfkingBoxes`,
+        // dropping the standalone `autoOpen` source string. The v56 homogeneous-per-work-type open surface
+        // (openBoxes valve + selector isolation) is proven against the v56 source by V56AfkingGasMarginal's
+        // LIVE-01 cases. (Dropped `view` to call the vm.skip cheatcode.)
+        vm.skip(true, "v56: autoOpen unified into openBoxes valve; homogeneity re-proven in V56AfkingGasMarginal LIVE-01");
         string memory game_ = _strippedGame();
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
 
