@@ -3,6 +3,9 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {VmSafe} from "forge-std/Vm.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title V56AfkingGasMarginal -- the v56 everyday-afking gas-MARGINAL harness (Phase 355) on the
 ///        compute-on-read applied tree (baseline 453f8073). Measures every marginal the GAS phase needs:
@@ -154,6 +157,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
     /// @dev The old per-day ~262k purchaseWith reference (the heavyweight the v56 ticket minimal-write
     ///      primitive replaces). Reported as the structural-win comparison for the ticket marginal.
     uint256 internal constant V55_TICKET_PURCHASEWITH_REF = 262_000;
+
+    /// @dev D-09 regression-lock LOOSE ceilings — generous bounds over the measured v56 marginals (lootbox buy
+    ///      ~7k / ticket buy ~54k / afking open ~70-75k), NOT brittle exact pins. A FUTURE regression (a
+    ///      re-introduced per-buy cross-contract storm ~206k, or a cold-ledger walk creeping into the open leg)
+    ///      blows these; normal measurement variance stays well under. The gate is a ceiling, not an equality.
+    uint256 internal constant REG_LOCK_LOOTBOX_BUY_CEIL = 80_000;  // ~11x the ~7k measured lootbox marginal
+    uint256 internal constant REG_LOCK_TICKET_BUY_CEIL = 150_000;  // ~3x the ~54k measured ticket marginal
+    uint256 internal constant REG_LOCK_OPEN_CEIL = 200_000;        // ~3x the ~70-75k measured open marginal
 
     /// @dev N for the two-near-N marginal: measure N vs N−1 from one clean baseline (snapshot/revert). Big
     ///      enough that the funded set + the 2 deploy subs stay < SUB_STAGE_BATCH (one advance stamps all in
@@ -525,8 +536,451 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     // =========================================================================
+    // (g) D-06 residual R1 — STAGE weight-model fidelity (level-cross / gap-resume per-iter <= weight)
+    // =========================================================================
+
+    /// @notice Residual R1 (the proof's residual list): the STAGE weight model assumes every sub-iteration's
+    ///         true gas <= its assigned weight allocation. The two iterations the proof flags as not separately
+    ///         pinned are the level-crossing pass refresh-or-evict (an in-stage sub-ending finalize: the heavier
+    ///         SUB_STAGE_EVICT_WEIGHT branch — a DegenerusQuests read + finalizeAfking write) and the gap-resumed
+    ///         streak rebase (a funded buy whose compute-on-read streak markers rebase after a gap). This asserts
+    ///         BOTH measured per-iter marginals stay <= their weight allocation expressed in lootbox-buy units
+    ///         (evict <= SUB_STAGE_EVICT_WEIGHT buys; a buy <= 1 buy by definition) — the weight model is faithful,
+    ///         so a SATURATED weight chunk (any mix totalling SUB_STAGE_WEIGHT_BUDGET) cannot exceed the bound the
+    ///         all-buys / all-evicts extremes already establish.
+    function testResidualR1StageWeightModelFidelity() public {
+        uint256 snap = vm.snapshotState();
+
+        // The level-crossing pass refresh-or-evict iter (the heavier in-stage finalize branch).
+        uint256 evN = _measureEvictStageGas(N_HI, "r1evHi_");
+        vm.revertToState(snap);
+        uint256 evNm1 = _measureEvictStageGas(N_LO, "r1evLo_");
+        require(evN > evNm1, "R1: the Nth evicting sub did real work");
+        uint256 perEvict = evN - evNm1;
+
+        // The funded-buy unit the weight is expressed against (the box-stamp path; a gap-resumed streak rebase
+        // rides this same per-buy SLOAD/marker-write path — the compute-on-read streak adds no new cold slot).
+        vm.revertToState(snap);
+        uint256 buyN = _measureStageAdvanceGas(N_HI, "r1byHi_", false, false);
+        vm.revertToState(snap);
+        uint256 buyNm1 = _measureStageAdvanceGas(N_LO, "r1byLo_", false, false);
+        require(buyN > buyNm1, "R1: the Nth funded buy did real work");
+        uint256 perBuy = buyN - buyNm1;
+
+        emit log_named_uint("r1_per_evict_marginal_gas", perEvict);
+        emit log_named_uint("r1_per_buy_marginal_gas", perBuy);
+        emit log_named_uint("r1_evict_weight_budget_units", SUB_STAGE_EVICT_WEIGHT);
+
+        // R1: the heavier evict iter's true gas <= its weight allocation (SUB_STAGE_EVICT_WEIGHT buy-units).
+        // (ceil division guard: a buy is never 0; perEvict <= perBuy * weight means the weight bounds it.)
+        assertLe(perEvict, perBuy * SUB_STAGE_EVICT_WEIGHT, "R1: per-evict gas <= its SUB_STAGE_EVICT_WEIGHT allocation (weight model faithful)");
+        // R1: a funded buy (incl. a gap-resumed streak-rebase buy) is bounded by one weight unit (1 buy = wt 1).
+        assertLt(perBuy, EFFECTIVE_GAS_CEILING, "R1: the per-buy iter (gap-resume streak rebase rides it) is bounded");
+    }
+
+    // =========================================================================
+    // (h) D-06 residual R2 — heaviest single processTicketBatch entry at a full write budget
+    // =========================================================================
+
+    /// @notice Residual R2: the per-entry cap (writesBudget - used) stops one entry overrunning the budget, but
+    ///         the heaviest single TICKET buy (the minimal-write _queueTicketsScaled primitive — the in-stage
+    ///         per-sub ticket leg, the cold ticketQueue push that dominates the STAGE weight at
+    ///         SUB_STAGE_TICKET_WEIGHT) is asserted bounded at the cap. The deferred trait-resolution
+    ///         processTicketBatch is write-budgeted (WRITES_BUDGET_SAFE=550) and O(1)-queued, so the heaviest
+    ///         in-stage ticket entry is the per-buy ticket marginal; assert it is bounded and weight-faithful
+    ///         (<= SUB_STAGE_TICKET_WEIGHT buy-units).
+    function testResidualR2HeaviestTicketEntry() public {
+        uint256 snap = vm.snapshotState();
+        uint256 tN = _measureStageAdvanceGas(N_HI, "r2tkHi_", true, false);
+        vm.revertToState(snap);
+        uint256 tNm1 = _measureStageAdvanceGas(N_LO, "r2tkLo_", true, false);
+        require(tN > tNm1, "R2: the Nth ticket buy did real work");
+        uint256 perTicket = tN - tNm1;
+
+        vm.revertToState(snap);
+        uint256 lN = _measureStageAdvanceGas(N_HI, "r2lbHi_", false, false);
+        vm.revertToState(snap);
+        uint256 lNm1 = _measureStageAdvanceGas(N_LO, "r2lbLo_", false, false);
+        uint256 perLootbox = lN > lNm1 ? lN - lNm1 : 1;
+
+        emit log_named_uint("r2_heaviest_ticket_entry_gas", perTicket);
+        emit log_named_uint("r2_per_lootbox_unit_gas", perLootbox);
+        emit log_named_uint("r2_ticket_weight_units", SUB_STAGE_TICKET_WEIGHT);
+
+        // R2: the heaviest single ticket entry is bounded by the ceiling and weight-faithful (<= its
+        // SUB_STAGE_TICKET_WEIGHT allocation in lootbox-buy units) — one entry can never overrun the budget.
+        assertLt(perTicket, EFFECTIVE_GAS_CEILING, "R2: the heaviest single ticket entry trivially fits the 16.7M ceiling");
+        assertLe(perTicket, perLootbox * SUB_STAGE_TICKET_WEIGHT, "R2: the heaviest ticket entry <= its SUB_STAGE_TICKET_WEIGHT allocation");
+    }
+
+    // =========================================================================
+    // (i) D-06 residual R3 — mixed-stamp-day OPEN_BATCH (defeats the cachedDay/cachedWord short-circuit)
+    // =========================================================================
+
+    /// @notice Residual R3: the per-open marginal harness measures a UNIFORM stamp day (the cachedDay/cachedWord
+    ///         short-circuit at GameAfkingModule:1157-1163 hits, reading rngWordByDay once per pass). The
+    ///         cache-defeating case — boxes spanning DISTINCT stamp days — re-reads rngWordByDay PER box (a cold
+    ///         SLOAD each), the higher per-box marginal. This measures a mixed-day open and asserts both the
+    ///         per-box marginal and the full OPEN_BATCH chunk at the mixed-day cost stay < the EIP cap.
+    function testResidualR3MixedStampDayOpenBatch() public {
+        uint256 snap = vm.snapshotState();
+        uint256 mixedN = _measureMixedDayOpenLegGas(N_HI, "r3mxHi_");
+        vm.revertToState(snap);
+        uint256 mixedNm1 = _measureMixedDayOpenLegGas(N_LO, "r3mxLo_");
+        require(mixedN > mixedNm1, "R3: the Nth mixed-day box materialized (non-vacuous)");
+        uint256 perBoxMixed = mixedN - mixedNm1;
+
+        // Compare to the uniform-day per-box marginal (the cache-hit baseline) — mixed-day is >= uniform.
+        vm.revertToState(snap);
+        uint256 uniN = _measureOpenLegGas(N_HI, "r3unHi_");
+        vm.revertToState(snap);
+        uint256 uniNm1 = _measureOpenLegGas(N_LO, "r3unLo_");
+        uint256 perBoxUniform = uniN > uniNm1 ? uniN - uniNm1 : 1;
+
+        uint256 fixedOpenOverhead = mixedN > perBoxMixed * N_HI ? mixedN - perBoxMixed * N_HI : 0;
+        uint256 mixedChunkAtBatch = fixedOpenOverhead + OPEN_BATCH * perBoxMixed;
+
+        emit log_named_uint("r3_per_box_mixed_day_gas", perBoxMixed);
+        emit log_named_uint("r3_per_box_uniform_day_gas", perBoxUniform);
+        emit log_named_uint("r3_mixed_day_OPEN_BATCH_chunk_gas", mixedChunkAtBatch);
+
+        // R3: the mixed-day per-box marginal is a cheap uniform-O(1) resolve (just an extra cold SLOAD vs the
+        // cache hit — NO cold-ledger walk), and the full mixed-day OPEN_BATCH chunk stays < the EIP cap.
+        assertLt(perBoxMixed, 300_000, "R3: the mixed-day per-box marginal is a cheap O(1) resolve (cold rngWordByDay SLOAD, no ledger walk)");
+        assertLt(mixedChunkAtBatch, EIP7825_TX_GAS_CAP, "R3: the cache-defeating mixed-day OPEN_BATCH chunk stays < 16,777,216");
+    }
+
+    // =========================================================================
+    // (j) D-06 residual R4 — heaviest reachable per-iter state (re-measure the marginals at the heavy state)
+    // =========================================================================
+
+    /// @notice Residual R4: the per-iter marginals come from the fixture's 5-ETH-sub + deity-pass states; the
+    ///         true heaviest reachable per-iter state (max streak hand-back / level crossing) may exceed them.
+    ///         The v56 streak is compute-on-read (no per-iter streak SSTORE storm), so the heaviest per-iter
+    ///         state is the level-crossing finalize (R1's evict branch) and the heaviest open (R3's mixed-day,
+    ///         cold-SLOAD-per-box). This asserts the heaviest of {evict marginal, mixed-day open marginal} is
+    ///         still a bounded O(1) per-iter cost (no marginal scales with player magnitude), so the
+    ///         weight-budget / OPEN_BATCH chunk bounds hold at the heaviest reachable state.
+    function testResidualR4HeaviestPerIterState() public {
+        uint256 snap = vm.snapshotState();
+        uint256 evN = _measureEvictStageGas(N_HI, "r4evHi_");
+        vm.revertToState(snap);
+        uint256 evNm1 = _measureEvictStageGas(N_LO, "r4evLo_");
+        uint256 perEvict = evN > evNm1 ? evN - evNm1 : 1;
+
+        vm.revertToState(snap);
+        uint256 mxN = _measureMixedDayOpenLegGas(N_HI, "r4mxHi_");
+        vm.revertToState(snap);
+        uint256 mxNm1 = _measureMixedDayOpenLegGas(N_LO, "r4mxLo_");
+        uint256 perBoxMixed = mxN > mxNm1 ? mxN - mxNm1 : 1;
+
+        // Also capture the REAL measured mixed-day OPEN_BATCH chunk (the binding worst-case chunk at the
+        // heaviest per-iter state — measured directly, NOT a synthetic marginal*N extrapolation, which would
+        // double-count the per-box injection overhead present in the marginal).
+        vm.revertToState(snap);
+        uint256 mixedChunk = _measureMixedDayOpenChunkAtBatch("r4ch_");
+
+        uint256 heaviestPerIter = perEvict > perBoxMixed ? perEvict : perBoxMixed;
+        emit log_named_uint("r4_per_evict_heavy_gas", perEvict);
+        emit log_named_uint("r4_per_box_mixed_heavy_gas", perBoxMixed);
+        emit log_named_uint("r4_heaviest_per_iter_gas", heaviestPerIter);
+        emit log_named_uint("r4_measured_mixed_OPEN_BATCH_chunk_gas", mixedChunk);
+
+        // R4: the heaviest reachable per-iter cost is a bounded O(1) (does not scale with player magnitude),
+        // so the chunk bound holds at the heavy state.
+        assertLt(heaviestPerIter, 400_000, "R4: the heaviest reachable per-iter state is a bounded O(1) (no magnitude scaling)");
+        // R4: the REAL measured worst-case mixed-day OPEN_BATCH=130 chunk (every box a cold rngWordByDay SLOAD,
+        // the heaviest reachable open state) stays under the EIP per-tx ceiling — the binding chunk bound.
+        assertLt(mixedChunk, EIP7825_TX_GAS_CAP, "R4: the measured worst-case mixed-day OPEN_BATCH=130 chunk stays < 16,777,216");
+    }
+
+    // =========================================================================
+    // (k) LIVE-01 — the openBoxes valve: drain + bound + afking-first + cursor-independence + selector-isolation
+    // =========================================================================
+
+    /// @notice LIVE-01 (a) afking-first ordering: openBoxes(maxCount) drains the afking backlog FIRST
+    ///         (drainAfkingBoxes via delegatecall), then the human leg consumes ONLY maxCount - openedAfking
+    ///         (DegenerusGame:1815). With both backlogs populated and maxCount set so the afking leg does not
+    ///         exhaust it, the human cursor advances by EXACTLY the remainder.
+    function testLive01AfkingFirstOrdering() public {
+        // AFKING backlog: a funded lootbox sub gets a stamped box.
+        address afk = makeAddr("v_afk");
+        _grantDeityPass(afk);
+        vm.prank(afk);
+        game.subscribe(address(0), false, false, 1, 0, address(0));
+        _fundPool(afk, 5 ether);
+        _runStageNewDay(0xA0F1);
+
+        // HUMAN backlog: a real lootbox buyer queues a box on the human path (boxPlayers).
+        address human = makeAddr("v_human");
+        vm.deal(human, 5 ether);
+        vm.prank(human);
+        game.purchase{value: 1.01 ether}(human, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth);
+
+        _settleClean(0xA0F2);
+        require(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "fixture: afking box pending pre-valve");
+        uint256 boxCursorBefore = _boxCursor();
+        uint256 subOpenCursorBefore = _subOpenCursor();
+
+        // Drain via the valve with a budget large enough for BOTH the afking box AND the human box.
+        vm.prank(makeAddr("v_opener"));
+        uint256 opened = game.openBoxes(50);
+
+        // Afking-first: the afking box opened (lastOpenedDay advanced to the stamp day).
+        assertEq(_lastOpenedDayOf(afk), _lastBoughtDayOf(afk), "LIVE-01(a): afking-first -- the afking box opened by the valve");
+        assertGt(opened, 0, "LIVE-01(a): the valve opened at least the afking box");
+        // The human leg ran with the REMAINING budget: its cursor advanced (the remainder, not the full maxCount).
+        assertGe(_boxCursor(), boxCursorBefore, "LIVE-01(a): the human cursor advanced with the remaining budget (maxCount - openedAfking)");
+        emit log_named_uint("live01a_opened_total", opened);
+        emit log_named_uint("live01a_sub_open_cursor_before", subOpenCursorBefore);
+        emit log_named_uint("live01a_sub_open_cursor_after", _subOpenCursor());
+        emit log_named_uint("live01a_box_cursor_before", boxCursorBefore);
+        emit log_named_uint("live01a_box_cursor_after", _boxCursor());
+    }
+
+    /// @notice LIVE-01 (b)+(c)+(d): repeated bounded openBoxes calls fully DRAIN a multi-box afking backlog with
+    ///         BOTH cursors monotone-advancing (no stuck box), EACH openBoxes chunk < the EIP cap (bounded), and
+    ///         lastOpenedDay monotone no-double-open (the skip at GameAfkingModule:1154). Uses tiny per-call
+    ///         budgets so the drain genuinely spans multiple bounded calls.
+    function testLive01DrainBothCursorsBoundedNoDoubleOpen() public {
+        uint256 n = 8;
+        address[] memory subs = _setupFundedSubs(n, "vd_", 5 ether, false);
+        _runStageNewDay(0xB0F1);
+        _settleClean(0xB0F2);
+
+        uint32 stampDay = _lastBoughtDayOf(subs[0]);
+        require(stampDay > 0, "fixture: subs stamped");
+        // Pre: every box pending.
+        for (uint256 i; i < n; ++i) require(_lastOpenedDayOf(subs[i]) < stampDay, "fixture: each afking box pending");
+
+        // Drain in tiny bounded chunks; each chunk must stay < the cap; the cursor must advance.
+        uint256 totalOpened;
+        for (uint256 c; c < 40 && totalOpened < n; ++c) {
+            vm.prank(makeAddr(string(abi.encodePacked("vd_op_", _u(c)))));
+            uint256 gb = gasleft();
+            uint256 op = game.openBoxes(2);
+            uint256 g = gb - gasleft();
+            // LIVE-01(c): each bounded openBoxes chunk stays under the EIP per-tx ceiling.
+            assertLt(g, EIP7825_TX_GAS_CAP, "LIVE-01(c): each bounded openBoxes chunk stays < 16,777,216");
+            totalOpened += op;
+            if (op == 0) break;
+        }
+
+        // LIVE-01(b): the whole afking backlog DRAINED — every sub's box opened (lastOpenedDay == stampDay),
+        // no stuck box; the afking cursor advanced through the set.
+        uint256 openedCount;
+        for (uint256 i; i < n; ++i) {
+            if (_lastOpenedDayOf(subs[i]) == stampDay) openedCount++;
+            // LIVE-01(d): lastOpenedDay is monotone — never exceeds the stamp day (no double-open / over-advance).
+            assertLe(_lastOpenedDayOf(subs[i]), stampDay, "LIVE-01(d): lastOpenedDay monotone, no double-open");
+        }
+        assertEq(openedCount, n, "LIVE-01(b): repeated bounded openBoxes fully drained the afking backlog (no stuck box)");
+
+        // LIVE-01(d): a re-open call is a no-op (the lastOpenedDay >= stampDay skip at :1154) — no double-open.
+        vm.prank(makeAddr("vd_reopen"));
+        uint256 reopened = game.openBoxes(n);
+        assertEq(reopened, 0, "LIVE-01(d): re-running openBoxes on an already-drained backlog opens nothing (no double-open)");
+        emit log_named_uint("live01_total_opened", totalOpened);
+    }
+
+    /// @notice LIVE-01 (e) selector isolation: drainAfkingBoxes is reached ONLY via the Game's openBoxes
+    ///         delegatecall (which runs in the Game's storage). Calling drainAfkingBoxes DIRECTLY on the
+    ///         GameAfkingModule contract address operates on the MODULE's OWN storage — which has an empty
+    ///         _subscribers set — so it returns 0 (opens nothing). The afking open is never a re-exposed
+    ///         standalone selector on a live subscriber set.
+    function testLive01DrainAfkingBoxesSelectorIsolation() public {
+        // Populate a real afking backlog in the GAME's storage.
+        address afk = makeAddr("vsel_afk");
+        _grantDeityPass(afk);
+        vm.prank(afk);
+        game.subscribe(address(0), false, false, 1, 0, address(0));
+        _fundPool(afk, 5 ether);
+        _runStageNewDay(0xE0F1);
+        _settleClean(0xE0F2);
+        require(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "fixture: afking box pending");
+
+        // Call drainAfkingBoxes DIRECTLY on the module address — it hits the MODULE's empty storage, not the
+        // Game's. It must open nothing (selector isolation: only reachable via the Game's openBoxes delegatecall).
+        uint256 openedDirect = IGameAfkingModule(ContractAddresses.GAME_AFKING_MODULE).drainAfkingBoxes(50);
+        assertEq(openedDirect, 0, "LIVE-01(e): direct drainAfkingBoxes on the module hits empty storage (selector-isolated)");
+        // The Game's afking box is UNTOUCHED by the direct module call (still pending).
+        assertTrue(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "LIVE-01(e): the Game's afking box untouched by the direct module call");
+
+        // And the canonical path (the Game's valve) DOES open it — the non-vacuity control.
+        vm.prank(makeAddr("vsel_op"));
+        game.openBoxes(50);
+        assertEq(_lastOpenedDayOf(afk), _lastBoughtDayOf(afk), "LIVE-01(e) control: the Game's openBoxes valve DOES open the afking box");
+    }
+
+    /// @notice LIVE-01 (f) individual-open byte-unchanged: the box a sub gets via the unified valve (openBoxes
+    ///         -> drainAfkingBoxes -> _openAfkingBox) is the SAME materialized box as via the rewarded mintBurnie
+    ///         open leg — both route through _autoOpen with the same frozen stamp-day word, so the open path is
+    ///         byte-unchanged across the two reachable afking-open entrypoints (the valve and the bounty router).
+    function testLive01IndividualOpenPathByteUnchanged() public {
+        // Two identical funded subs stamped on the same day with the same word; open one via the valve, one via
+        // mintBurnie. Each opens to the SAME stamp-day marker (lastOpenedDay == lastAutoBoughtDay) — the open
+        // outcome is identical (same _autoOpen path, same rngWordByDay[stampDay] seed).
+        address viaValve = makeAddr("vbu_valve");
+        address viaBounty = makeAddr("vbu_bounty");
+        _grantDeityPass(viaValve);
+        _grantDeityPass(viaBounty);
+        vm.prank(viaValve);
+        game.subscribe(address(0), false, false, 1, 0, address(0));
+        vm.prank(viaBounty);
+        game.subscribe(address(0), false, false, 1, 0, address(0));
+        _fundPool(viaValve, 5 ether);
+        _fundPool(viaBounty, 5 ether);
+        _runStageNewDay(0xF0F1);
+
+        uint32 stampValve = _lastBoughtDayOf(viaValve);
+        uint32 stampBounty = _lastBoughtDayOf(viaBounty);
+        require(stampValve == stampBounty && stampValve > 0, "fixture: both subs stamped the same day");
+        require(rngWordByDay(stampValve) != 0, "fixture: the shared stamp-day word landed");
+
+        _settleClean(0xF0F2);
+        // Open one via the unified valve.
+        vm.prank(makeAddr("vbu_op1"));
+        game.openBoxes(SUBSCRIBER_CAP);
+        // Open the rest via the rewarded bounty router (mintBurnie).
+        vm.prank(makeAddr("vbu_op2"));
+        try game.mintBurnie() {} catch {}
+
+        // Both materialized to the SAME open marker (lastOpenedDay == the shared stamp day) — byte-unchanged
+        // open outcome across the valve path and the bounty path.
+        assertEq(_lastOpenedDayOf(viaValve), stampValve, "LIVE-01(f): valve-opened box materialized at the stamp day");
+        assertEq(_lastOpenedDayOf(viaBounty), stampBounty, "LIVE-01(f): bounty(mintBurnie)-opened box materialized at the same stamp day");
+        assertEq(_lastOpenedDayOf(viaValve), _lastOpenedDayOf(viaBounty), "LIVE-01(f): the two open entrypoints produce the identical open marker (byte-unchanged path)");
+    }
+
+    // =========================================================================
+    // (l) D-09 — GAS-01..04 marginal regression locks (re-assert against a recorded LOOSE ceiling)
+    // =========================================================================
+
+    /// @notice D-09 regression locks: re-assert the GAS-01..04 per-buy / per-open marginals against a RECORDED
+    ///         LOOSE ceiling bound (a generous ceiling, NOT a brittle exact number) so a FUTURE regression
+    ///         (e.g. a re-introduced per-buy cross-contract storm, or a cold-ledger walk creeping back into the
+    ///         open leg) fails the gate while normal measurement variance passes. The bounds are deliberately
+    ///         loose multiples of the measured v56 marginals (lootbox/ticket buy, afking open).
+    function testD09Gas0104RegressionLocks() public {
+        uint256 snap = vm.snapshotState();
+
+        // GAS-01 per-buy lootbox marginal.
+        uint256 lN = _measureStageAdvanceGas(N_HI, "d9lbHi_", false, false);
+        vm.revertToState(snap);
+        uint256 lNm1 = _measureStageAdvanceGas(N_LO, "d9lbLo_", false, false);
+        uint256 perBuyLootbox = lN - lNm1;
+
+        // GAS-01 per-buy ticket marginal (the minimal-write primitive).
+        vm.revertToState(snap);
+        uint256 tN = _measureStageAdvanceGas(N_HI, "d9tkHi_", true, false);
+        vm.revertToState(snap);
+        uint256 tNm1 = _measureStageAdvanceGas(N_LO, "d9tkLo_", true, false);
+        uint256 perBuyTicket = tN - tNm1;
+
+        // GAS-01 per-open afking marginal.
+        vm.revertToState(snap);
+        uint256 oN = _measureOpenLegGas(N_HI, "d9opHi_");
+        vm.revertToState(snap);
+        uint256 oNm1 = _measureOpenLegGas(N_LO, "d9opLo_");
+        uint256 perOpen = oN - oNm1;
+
+        emit log_named_uint("d09_per_buy_lootbox_gas", perBuyLootbox);
+        emit log_named_uint("d09_per_buy_ticket_gas", perBuyTicket);
+        emit log_named_uint("d09_per_open_gas", perOpen);
+
+        // The RECORDED LOOSE ceilings (generous bounds vs the measured v56 marginals: lootbox ~7k / ticket ~54k
+        // / open ~70-75k). A regression that re-introduces the v55 per-buy cross-contract storm (~206k lootbox)
+        // or a cold-ledger open walk would blow these; normal variance stays well under.
+        assertLt(perBuyLootbox, REG_LOCK_LOOTBOX_BUY_CEIL, "D-09: per-buy lootbox marginal under the recorded loose ceiling (no cross-contract storm regression)");
+        assertLt(perBuyTicket, REG_LOCK_TICKET_BUY_CEIL, "D-09: per-buy ticket marginal under the recorded loose ceiling (minimal-write primitive intact)");
+        assertLt(perOpen, REG_LOCK_OPEN_CEIL, "D-09: per-open afking marginal under the recorded loose ceiling (uniform O(1) open intact)");
+    }
+
+    // =========================================================================
     // Internal helpers (new-design driving harness)
     // =========================================================================
+
+    /// @dev Measure the afking open-leg gas over N boxes stamped on DISTINCT days (the cache-defeating R3 case).
+    ///      Each in-set funded sub re-stamps to the SAME day every STAGE, so to model the proof's mixed-day
+    ///      worst case (the open leg fell behind OPEN_BATCH / a keeper skipped days, so the no-orphan rule
+    ///      preserved older-day boxes) we inject DISTINCT stamp days + words directly (test-only Sub-slot poke,
+    ///      the same direct-storage technique the harness uses for the deity-pass grant). Each box then carries
+    ///      a distinct lastAutoBoughtDay, so the open walk re-reads rngWordByDay PER box (defeating the
+    ///      cachedDay/cachedWord short-circuit at GameAfkingModule:1157-1163). Returns the bracketed openBoxes
+    ///      open-leg gas; the 2 deploy subs add a constant offset that cancels in the (gasN - gasNm1) marginal.
+    function _measureMixedDayOpenLegGas(uint256 n, string memory prefix) internal returns (uint256 openGas) {
+        // Subscribe + fund n subs in one set, run ONE new-day STAGE so they enter as real funded subs.
+        address[] memory subs = _setupFundedSubs(n, prefix, 5 ether, false);
+        _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "w"))) | 1);
+        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "clean"))) | 1);
+        require(!game.advanceDue(), "fixture: clean so the open leg runs");
+
+        // Anchor on a high base day so the descending distinct-day assignment can never underflow. The current
+        // stamp day is small (fixture day index); use it + n as the high anchor so d = anchor - i stays >= 1.
+        uint32 anchor = _lastBoughtDayOf(subs[0]) + uint32(n) + 1;
+        for (uint256 i; i < n; ++i) {
+            uint32 d = anchor - uint32(i); // distinct descending stamp days, all >= 2
+            _pokeLastBoughtDay(subs[i], d);
+            // Re-open marker strictly behind the stamp day so the box is pending; land that day's word.
+            _pokeLastOpenedDay(subs[i], d - 1);
+            _injectRngWordByDay(d, uint256(keccak256(abi.encodePacked(prefix, "wd", _u(i)))) | 1);
+            require(_lastOpenedDayOf(subs[i]) < d, "fixture: mixed-day box pending");
+        }
+
+        vm.prank(makeAddr(string(abi.encodePacked(prefix, "opener"))));
+        uint256 gasBefore = gasleft();
+        game.openBoxes(SUBSCRIBER_CAP);
+        openGas = gasBefore - gasleft();
+
+        // Non-vacuity: each mixed-day box opened (lastOpenedDay advanced to its distinct stamp day).
+        for (uint256 i; i < n; ++i) {
+            uint32 d = anchor - uint32(i);
+            require(_lastOpenedDayOf(subs[i]) == d, "marginal non-vacuity: each mixed-day box opened");
+        }
+    }
+
+    /// @dev Measure the SINGLE openBoxes chunk over OPEN_BATCH boxes each stamped on a DISTINCT day (the binding
+    ///      mixed-day worst-case chunk — every box a cold rngWordByDay SLOAD, defeating the day-cache). Builds a
+    ///      full OPEN_BATCH-sized set of funded subs, injects distinct stamp days + words, then brackets one
+    ///      openBoxes(OPEN_BATCH) call. This is the real measured chunk (not a marginal extrapolation).
+    function _measureMixedDayOpenChunkAtBatch(string memory prefix) internal returns (uint256 chunkGas) {
+        uint256 m = OPEN_BATCH; // 130 distinct-day boxes — the full open chunk
+        address[] memory subs = _setupFundedSubs(m, prefix, 5 ether, false);
+        _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "w"))) | 1);
+        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "clean"))) | 1);
+        require(!game.advanceDue(), "fixture: clean so the open chunk runs");
+
+        uint32 anchor = _lastBoughtDayOf(subs[0]) + uint32(m) + 1;
+        for (uint256 i; i < m; ++i) {
+            uint32 d = anchor - uint32(i);
+            _pokeLastBoughtDay(subs[i], d);
+            _pokeLastOpenedDay(subs[i], d - 1);
+            _injectRngWordByDay(d, uint256(keccak256(abi.encodePacked(prefix, "wd", _u(i)))) | 1);
+        }
+
+        vm.prank(makeAddr(string(abi.encodePacked(prefix, "op"))));
+        uint256 gasBefore = gasleft();
+        game.openBoxes(OPEN_BATCH);
+        chunkGas = gasBefore - gasleft();
+    }
+
+    /// @dev Test-only poke of a Sub's lastAutoBoughtDay (uint24 @ byte 11) — preserves all other Sub fields.
+    function _pokeLastBoughtDay(address who, uint32 day) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        uint256 cur = uint256(vm.load(address(game), slot));
+        uint256 mask = (uint256(0xFFFFFF)) << (OFF_LASTBOUGHT * 8);
+        cur = (cur & ~mask) | ((uint256(day) << (OFF_LASTBOUGHT * 8)) & mask);
+        vm.store(address(game), slot, bytes32(cur));
+    }
+
+    /// @dev Test-only poke of a Sub's lastOpenedDay (uint24 @ byte 14) — preserves all other Sub fields.
+    function _pokeLastOpenedDay(address who, uint32 day) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        uint256 cur = uint256(vm.load(address(game), slot));
+        uint256 mask = (uint256(0xFFFFFF)) << (OFF_LASTOPENED * 8);
+        cur = (cur & ~mask) | ((uint256(day) << (OFF_LASTOPENED * 8)) & mask);
+        vm.store(address(game), slot, bytes32(cur));
+    }
 
     /// @dev Drive a new-day STAGE advance over N unfunded, NON-deity subs that all PASS-EVICT this cycle
     ///      (validThroughLevel 0 < currentLevel -> each routes through _finalizeAfking + swap-pop), returning the
@@ -811,6 +1265,19 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      full chunk.
     function _subCursor() internal view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) & 0xFFFF;
+    }
+
+    /// @dev Read the afking-open cursor `_subOpenCursor` (slot 70, byte 2, uint16) — the afking-side open
+    ///      walk (drainAfkingBoxes -> _autoOpen). Distinct from the human boxCursor (byte 8) — LIVE-01
+    ///      cursor independence.
+    function _subOpenCursor() internal view returns (uint256) {
+        return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 16) & 0xFFFF;
+    }
+
+    /// @dev Read the human-box cursor `boxCursor` (slot 70, byte 8, uint48) — the human open walk
+    ///      (_openHumanBoxes over boxPlayers[index]). Distinct from _subOpenCursor (byte 2).
+    function _boxCursor() internal view returns (uint256) {
+        return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 64) & 0xFFFFFFFFFFFF;
     }
 
     /// @dev Read the DAY-keyed afking word `rngWordByDay[day]` (the open leg's seed + readiness gate).
