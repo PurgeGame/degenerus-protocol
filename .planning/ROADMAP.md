@@ -187,7 +187,14 @@ Plans:
 
   7. The gap-backfill / daily-jackpot decouple is proven (GAS-06, NEW from 355 — commit `3d969621`; closes the Codex-found protocol-forced 16.7M composition breach) — after a multi-day VRF-stall gap backfill, `advanceGame` breaks at `STAGE_GAP_BACKFILLED` (the day's jackpot is NOT paid that tx) and the NEXT advance pays it with the same frozen word (idempotent resume: `rngGate` returns `gapDays==0`, `dailyIdx` not advanced so `advanceDue()` stays true, `purchaseStartDay` bumped once). PROVE EACH `advanceGame` call in the gap-resume is < 16.7M (the existing test bounds only the 25M total resume — write a per-advance harness) + a `gap→defer→next-pays` regression test.
 
-**Plans**: TBD
+**Plans**: 7 plans in 3 waves (Wave 0: fixture-sanity gate + the D-10 offset migration [the NON-WIDENING precondition]; Wave 1: the SEC-01/SEC-02/QST-04 fuzz+repro proofs + the gas/LIVE/GAS-06 EXTEND; Wave 2: the BY-NAME NON-WIDENING ledger)
+- [ ] 356-01-PLAN.md — Wave-0 fixture-sanity gate + migrate the 7 read-only keeper/afking fuzz files (OFF_LASTBOUGHT 21->11/uint24) [SEC-01]
+- [ ] 356-02-PLAN.md — Wave-0 migrate the 3 v55-proof files (offsets + _setStamp/_setScorePlus1 write-masks in lockstep; the SEC ADAPT-source templates) [SEC-01, SEC-02]
+- [ ] 356-03-PLAN.md — Wave-1 SEC-01 V56SecUnmanipulable: churn-fuzz invariants + the 4 named repros (affiliate re-claim churn / streak decay-gap dodge / pendingBurnie double-claim CEI / 4 finalize hooks before delete) [SEC-01]
+- [ ] 356-04-PLAN.md — Wave-1 SEC-02 V56FreezeSolvency: solvency invariant fuzz + RNG-freeze determinism + the SOLVENCY-01 debit byte-diff anchor [SEC-02]
+- [ ] 356-05-PLAN.md — Wave-1 QST-04 V56QuestNonPerturb: slot-1 streak-neutral during afking + cross-caller (awardQuestStreakBonus/bingo/degenerette/boon) byte-identity [SEC-01]
+- [ ] 356-06-PLAN.md — Wave-1 LIVE-01 + GAS-06 EXTEND V56AfkingGasMarginal: SUBSCRIBER_CAP fix 500->1000 + per-tx gap-resume <16.7M ceiling + the decouple idempotent-resume + the openBoxes valve + the 4 residuals + the GAS-01..04 regression locks [LIVE-01, GAS-06]
+- [ ] 356-07-PLAN.md — Wave-2 REGRESSION-BASELINE-v56.md: the BY-NAME NON-WIDENING ledger (empirical 453f8073 checkout + the subset gate live-union==empty + the D-10 narrowing) [SEC-01, SEC-02, LIVE-01, GAS-06]
 
 **UI hint**: no
 
