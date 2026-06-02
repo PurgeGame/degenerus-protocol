@@ -59,11 +59,12 @@ contract V55RevertFreeEvCap is DeployProtocol {
 
     uint256 private constant GAME_OVER_SHIFT = 184;
 
-    // Sub packed-field byte offsets (DegenerusGameStorage.sol:1867; verified by 351-02/04 round-trip).
-    uint256 private constant OFF_SCOREPLUS1 = 7; // uint16 scorePlus1        (bytes 7..8)
-    uint256 private constant OFF_AMOUNT = 9; // uint96 amount            (bytes 9..20)
-    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay (bytes 21..24)
-    uint256 private constant OFF_LASTOPENED = 25; // uint32 lastOpenedDay     (bytes 25..28)
+    // Sub packed-field byte offsets — the v56 compute-on-read re-pack (single 256-bit slot):
+    //   scorePlus1 u16 @6 · amount u24 @8 · lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14.
+    uint256 private constant OFF_SCOREPLUS1 = 6; // uint16 scorePlus1        (bytes 6..7)
+    uint256 private constant OFF_AMOUNT = 8; // uint24 amount            (bytes 8..10)
+    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -557,11 +558,11 @@ contract V55RevertFreeEvCap is DeployProtocol {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed &= ~(uint256(0xFFFF) << (OFF_SCOREPLUS1 * 8));
-        packed &= ~(((uint256(1) << 96) - 1) << (OFF_AMOUNT * 8));
-        packed &= ~(uint256(0xFFFFFFFF) << (OFF_LASTBOUGHT * 8));
-        packed &= ~(uint256(0xFFFFFFFF) << (OFF_LASTOPENED * 8));
+        packed &= ~(uint256(0xFFFFFF) << (OFF_AMOUNT * 8));
+        packed &= ~(uint256(0xFFFFFF) << (OFF_LASTBOUGHT * 8));
+        packed &= ~(uint256(0xFFFFFF) << (OFF_LASTOPENED * 8));
         packed |= uint256(uint16(score) + 1) << (OFF_SCOREPLUS1 * 8);
-        packed |= (amount & ((uint256(1) << 96) - 1)) << (OFF_AMOUNT * 8);
+        packed |= (amount & uint256(0xFFFFFF)) << (OFF_AMOUNT * 8);
         packed |= uint256(day) << (OFF_LASTBOUGHT * 8);
         packed |= uint256(day == 0 ? 0 : day - 1) << (OFF_LASTOPENED * 8);
         vm.store(address(game), slot, bytes32(packed));
@@ -626,11 +627,11 @@ contract V55RevertFreeEvCap is DeployProtocol {
     }
 
     function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 32));
+        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTOPENED, 32));
+        return uint32(_subField(who, OFF_LASTOPENED, 24));
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {

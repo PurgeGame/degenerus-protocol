@@ -50,11 +50,12 @@ contract V55FreezeDeterminism is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38; // [0:47] lootboxRngIndex (RE-DERIVED: was 37)
     uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 39; // mapping(uint48 => uint256) (RE-DERIVED: was 38)
 
-    // Sub packed-field byte offsets (DegenerusGameStorage.sol:1867; verified by 351-02 round-trip).
-    uint256 private constant OFF_SCOREPLUS1 = 7; // uint16 scorePlus1        (bytes 7..8)
-    uint256 private constant OFF_AMOUNT = 9; // uint96 amount            (bytes 9..20)
-    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay (bytes 21..24)
-    uint256 private constant OFF_LASTOPENED = 25; // uint32 lastOpenedDay     (bytes 25..28)
+    // Sub packed-field byte offsets — the v56 compute-on-read re-pack (single 256-bit slot):
+    //   scorePlus1 u16 @6 · amount u24 @8 · lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14.
+    uint256 private constant OFF_SCOREPLUS1 = 6; // uint16 scorePlus1        (bytes 6..7)
+    uint256 private constant OFF_AMOUNT = 8; // uint24 amount            (bytes 8..10)
+    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
 
     uint256 private constant DEITY_SHIFT = 184;
 
@@ -408,23 +409,23 @@ contract V55FreezeDeterminism is DeployProtocol {
         return _decodeLootBoxOpenedFor(afk);
     }
 
-    /// @dev Poke `player`'s in-set Sub stamp to the differential tuple: `amount` (uint96, bytes 9..20),
-    ///      `scorePlus1 = score+1` (bytes 7..8), `lastAutoBoughtDay = day` (bytes 21..24), and
-    ///      `lastOpenedDay = day-1` (bytes 25..28) so `_afkingBoxReady` sees a PENDING box
+    /// @dev Poke `player`'s in-set Sub stamp to the differential tuple: `amount` (uint24, bytes 8..10),
+    ///      `scorePlus1 = score+1` (bytes 6..7), `lastAutoBoughtDay = day` (bytes 11..13), and
+    ///      `lastOpenedDay = day-1` (bytes 14..16) so `_afkingBoxReady` sees a PENDING box
     ///      (`lastOpenedDay < lastAutoBoughtDay`). The real `_openAfkingBox` then reads EXACTLY
     ///      `(sub.amount, sub.lastAutoBoughtDay, rngWordByDay[day], sub.scorePlus1-1)` (GameAfkingModule.sol
     ///      :901-907) — so the open's seed preimage is the poked tuple, materialized via the genuine path.
     function _pokeAfkingStamp(address player, uint256 amount, uint32 day, uint16 score) internal {
         bytes32 slot = keccak256(abi.encode(player, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
-        // Clear + set scorePlus1 (16b @ byte 7), amount (96b @ byte 9), lastAutoBoughtDay (32b @ byte 21),
-        // lastOpenedDay (32b @ byte 25).
+        // Clear + set scorePlus1 (16b @ byte 6), amount (24b @ byte 8), lastAutoBoughtDay (24b @ byte 11),
+        // lastOpenedDay (24b @ byte 14).
         packed &= ~(uint256(0xFFFF) << (OFF_SCOREPLUS1 * 8));
-        packed &= ~(((uint256(1) << 96) - 1) << (OFF_AMOUNT * 8));
-        packed &= ~(uint256(0xFFFFFFFF) << (OFF_LASTBOUGHT * 8));
-        packed &= ~(uint256(0xFFFFFFFF) << (OFF_LASTOPENED * 8));
+        packed &= ~(uint256(0xFFFFFF) << (OFF_AMOUNT * 8));
+        packed &= ~(uint256(0xFFFFFF) << (OFF_LASTBOUGHT * 8));
+        packed &= ~(uint256(0xFFFFFF) << (OFF_LASTOPENED * 8));
         packed |= uint256(uint16(score) + 1) << (OFF_SCOREPLUS1 * 8);
-        packed |= (amount & ((uint256(1) << 96) - 1)) << (OFF_AMOUNT * 8);
+        packed |= (amount & uint256(0xFFFFFF)) << (OFF_AMOUNT * 8);
         packed |= uint256(day) << (OFF_LASTBOUGHT * 8);
         packed |= uint256(day == 0 ? 0 : day - 1) << (OFF_LASTOPENED * 8);
         vm.store(address(game), slot, bytes32(packed));
@@ -576,11 +577,11 @@ contract V55FreezeDeterminism is DeployProtocol {
     }
 
     function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 32));
+        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTOPENED, 32));
+        return uint32(_subField(who, OFF_LASTOPENED, 24));
     }
 
     // ---- DAY-keyed afking word + EV-cap budget reads ----
