@@ -73,6 +73,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      STAGE_TICKETS_WORKING): the subscriber set has not yet fully stamped
     ///      this cycle, so advance broke before rngGate and returns mult.
     uint8 private constant STAGE_SUBS_WORKING = 11;
+    /// @dev A multi-day VRF-stall gap backfill ran this advance; the day's jackpot
+    ///      distribution is deferred to the next advance so the backfill + jackpot never
+    ///      share one tx (each stays under the per-tx gas ceiling). rngGate is idempotent on
+    ///      re-entry (gapDays == 0 next call), dailyIdx is not yet advanced, so advanceDue()
+    ///      stays true and the next advance pays the jackpot with the same frozen word.
+    uint8 private constant STAGE_GAP_BACKFILLED = 12;
     event DailyRngApplied(
         uint32 day,
         uint256 rawWord,
@@ -349,6 +355,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (rngWord == 1) {
                 _swapAndFreeze(purchaseLevel);
                 stage = STAGE_RNG_REQUESTED;
+                break;
+            }
+
+            // Decouple a multi-day VRF-stall gap backfill from the day's jackpot distribution:
+            // if rngGate just backfilled a gap (gapDays != 0), defer everything downstream (the
+            // phase transition + the up-to-305-winner daily jackpot) to the next advance so the
+            // backfill and the jackpot never execute in one tx (each stays under the per-tx gas
+            // ceiling). rngGate is idempotent (rngWordByDay[day] is now set -> gapDays == 0 next
+            // call) and dailyIdx is not yet advanced (no _unlockRng reached), so advanceDue() stays
+            // true and the next advance pays the jackpot with the same frozen word. The break
+            // returns mult so the keeper is paid for the backfill work (mirrors the partial drains).
+            if (gapDays != 0) {
+                stage = STAGE_GAP_BACKFILLED;
                 break;
             }
 
