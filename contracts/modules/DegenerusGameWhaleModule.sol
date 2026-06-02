@@ -560,7 +560,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 k = deityPassOwners.length;
         uint256 basePrice = DEITY_PASS_BASE + (k * (k + 1) * 1 ether) / 2;
 
-        // Apply discount boon if active (tier 1=10%, 2=25%, 3=50%)
+        // Apply discount boon if active (tier 1=10%, 2=20%, 3=35%)
         uint256 totalPrice = basePrice;
         BoonPacked storage bpDeity = boonPacked[buyer];
         uint256 s1Deity = bpDeity.slot1;
@@ -580,8 +580,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             }
             if (!expired) {
                 uint16 discountBps = boonTier == 3
-                    ? uint16(5000)
-                    : (boonTier == 2 ? uint16(2500) : uint16(1000));
+                    ? uint16(3500)
+                    : (boonTier == 2 ? uint16(2000) : uint16(1000));
                 totalPrice = (basePrice * (10_000 - discountBps)) / 10_000;
             }
             // Consume boon regardless of expiry — clear deity pass fields

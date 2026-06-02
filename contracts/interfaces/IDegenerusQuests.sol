@@ -140,6 +140,12 @@ interface IDegenerusQuests {
     /// @param currentDay The current unix day for tracking purposes
     function awardQuestStreakBonus(address player, uint16 amount, uint32 currentDay) external;
 
+    /// @notice Grant quest streak shields to a player (each absorbs one missed day)
+    /// @dev GAME-only. Used by the lootbox quest-shield boon.
+    /// @param player The address of the player to grant shields to
+    /// @param amount The number of shields to add (uint8-saturating)
+    function awardQuestStreakShield(address player, uint16 amount) external;
+
     /// @notice Begins an afking run: snapshots the gap-synced streak and flips the afking flag
     /// @dev GAME-only. While afking, the Game-side compute-on-read owns the player's streak and
     ///      slot-0 completions are streak-neutral / reward-deferred; returns the synced streak

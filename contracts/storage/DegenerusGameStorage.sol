@@ -1628,13 +1628,13 @@ abstract contract DegenerusGameStorage {
     ///   [176-199] deityDecimatorDay    uint24   Deity-source day for decimator
     ///   [200-223] whaleDay             uint24   Day whale boon was awarded
     ///   [224-247] deityWhaleDay        uint24   Deity-source day for whale boon
-    ///   [248-255] whaleTier            uint8    0=none, 1=10%, 2=25%, 3=50%
+    ///   [248-255] whaleTier            uint8    0=none, 1=10%, 2=20%, 3=35%
     ///
     /// Slot 1 (256 bits, using 184):
     ///   [0-23]    activityPending      uint24   Pending activity bonus levels
     ///   [24-47]   activityDay          uint24   Day activity boon was awarded
     ///   [48-71]   deityActivityDay     uint24   Deity-source day for activity boon
-    ///   [72-79]   deityPassTier        uint8    0=none, 1=10%, 2=25%, 3=50%
+    ///   [72-79]   deityPassTier        uint8    0=none, 1=10%, 2=20%, 3=35%
     ///   [80-103]  deityPassDay         uint24   Day deity pass boon was awarded
     ///   [104-127] deityDeityPassDay    uint24   Deity-granted deity pass boon day
     ///   [128-151] lazyPassDay          uint24   Day lazy pass boon was awarded
@@ -1764,10 +1764,10 @@ abstract contract DegenerusGameStorage {
         return 0;
     }
 
-    /// @dev Decode whale boon tier to BPS. Tier: 0=0, 1=1000, 2=2500, 3=5000.
+    /// @dev Decode whale boon tier to BPS. Tier: 0=0, 1=1000, 2=2000, 3=3500.
     function _whaleTierToBps(uint8 tier) internal pure returns (uint16) {
-        if (tier == 3) return 5000;
-        if (tier == 2) return 2500;
+        if (tier == 3) return 3500;
+        if (tier == 2) return 2000;
         if (tier == 1) return 1000;
         return 0;
     }
@@ -1804,10 +1804,10 @@ abstract contract DegenerusGameStorage {
         return 0;
     }
 
-    /// @dev Encode whale BPS to tier. 1000->1, 2500->2, 5000->3, else 0.
+    /// @dev Encode whale BPS to tier. 1000->1, 2000->2, 3500->3, else 0.
     function _whaleBpsToTier(uint16 bps) internal pure returns (uint8) {
-        if (bps >= 5000) return 3;
-        if (bps >= 2500) return 2;
+        if (bps >= 3500) return 3;
+        if (bps >= 2000) return 2;
         if (bps >= 1000) return 1;
         return 0;
     }
@@ -1881,8 +1881,7 @@ abstract contract DegenerusGameStorage {
     ///          accrued per delivered day (the slot-0 quest reward every mode + the
     ///          ticket-mode 10%/20% buyer bonus). Paid out only by the player-pull
     ///          `claimAfkingBurnie`, zeroed there.
-    ///        • `subStreakLatch` — bit 7 the set-once ever-subscribed latch (the +0..+9
-    ///          head-start, once per account), bits 0-6 the afking-run streak snapshot.
+    ///        • `subStreakLatch` — bits 0-6 the afking-run streak snapshot (bit 7 unused).
     ///      `affiliateBase` and `pendingBurnie` are uint32 with a 100M-whole-BURNIE
     ///      saturating clamp at the accrue write — uint32 holds ~4.29e9 > 100M so the
     ///      clamp binds first, and it can only ever UNDER-credit a pathological
@@ -1962,20 +1961,17 @@ abstract contract DegenerusGameStorage {
         ///      Same uint32 + 100M saturating clamp + under-credit-only behaviour as
         ///      `affiliateBase`.
         uint32 pendingBurnie;
-        /// @dev Packed byte: bit 7 = the set-once first-sub latch (the +0..+9 head-start is
-        ///      granted once per account, folded into the streak snapshot below); bits 0-6 =
-        ///      `streakAtAfkingStart`, the quest streak snapshot at the start of the current
-        ///      afking run (0..100, the score's effective cap). The compute-on-read effective
-        ///      streak adds the funded delivered days `(afkCoveredThroughDay - afkingStartDay)`
-        ///      to this base. Written rarely (subscribe + gap-resume); read per buy as a couple
-        ///      of mask ops, so `affiliateBase`/`pendingBurnie` stay unmasked for the hot accrue.
+        /// @dev `streakAtAfkingStart` — the quest streak snapshot at the start of the current
+        ///      afking run (0..100, the score's effective cap; fits bits 0-6, bit 7 unused). The
+        ///      compute-on-read effective streak adds the funded delivered days
+        ///      `(afkCoveredThroughDay - afkingStartDay)` to this base. Written rarely (subscribe +
+        ///      gap-resume); read per buy as a mask op, so `affiliateBase`/`pendingBurnie` stay
+        ///      unmasked for the hot accrue.
         uint8 subStreakLatch;
     }
 
-    /// @dev `subStreakLatch` bit 7 — set-once latch that the account has ever subscribed
-    ///      (gates the once-per-account head-start). Never cleared.
-    uint8 internal constant SUB_EVER_SUBSCRIBED_BIT = 0x80;
     /// @dev `subStreakLatch` bits 0-6 — `streakAtAfkingStart` (0..100, clamped on write).
+    ///      Bit 7 is unused (formerly a first-sub latch, removed with the head-start).
     uint8 internal constant SUB_STREAK_MASK = 0x7f;
 
     /// @dev Read the afking-run streak snapshot (bits 0-6 of the packed latch byte).
@@ -1983,11 +1979,9 @@ abstract contract DegenerusGameStorage {
         return sub.subStreakLatch & SUB_STREAK_MASK;
     }
 
-    /// @dev Write the afking-run streak snapshot (bits 0-6), clamped to 100 (the score cap),
-    ///      preserving the ever-subscribed latch (bit 7).
+    /// @dev Write the afking-run streak snapshot, clamped to 100 (the score cap).
     function _setStreakBase(Sub storage sub, uint256 value) internal {
-        uint8 v = value > 100 ? 100 : uint8(value);
-        sub.subStreakLatch = (sub.subStreakLatch & SUB_EVER_SUBSCRIBED_BIT) | v;
+        sub.subStreakLatch = value > 100 ? 100 : uint8(value);
     }
 
     /// @dev Per-subscriber record (the iterable set's value): the per-sub stamp, the

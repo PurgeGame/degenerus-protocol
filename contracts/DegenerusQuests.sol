@@ -35,11 +35,13 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  * 4. Player actions trigger handle* functions (handleMint, handleFlip, etc.)
  * 5. Progress accumulates until target is met; completing either slot credits streak once per day
  *
- * Progress Versioning
+ * Progress Freshness
  * -----------------------------------------------------------------------------
- * Each quest has a monotonic `version` field. When a quest is seeded for a new day,
- * the version bumps and stale player progress is automatically reset via
- * `_questSyncProgress`.
+ * Each quest has a monotonic `version` field (bumped once per day when seeded, and
+ * surfaced to indexers). Player progress is tagged with the day it was recorded;
+ * when that day no longer matches the active quest day, stale progress is reset via
+ * `_questSyncProgress`. Because a slot is only ever re-seeded on a day change, the
+ * day tag alone is sufficient — no per-player version copy is kept.
  *
  * Streak System
  * -----------------------------------------------------------------------------
@@ -97,6 +99,13 @@ contract DegenerusQuests is IDegenerusQuests {
         uint16 used,
         uint16 remaining,
         uint32 currentDay
+    );
+
+    /// @notice Emitted when quest streak shields are granted (e.g. by a lootbox boon).
+    event QuestStreakShieldGranted(
+        address indexed player,
+        uint16 amount,
+        uint8 newTotal
     );
 
     /// @notice Emitted when quest streak is manually increased.
@@ -251,8 +260,8 @@ contract DegenerusQuests is IDegenerusQuests {
      * - `lastActiveDay` tracks any slot completion (not just full completion)
      * - Missing a day (gap > 1 between lastActiveDay and currentDay) resets streak
      *
-     * Progress Versioning:
-     * - `lastProgressDay[slot]` and `lastQuestVersion[slot]` must match active quest
+     * Progress Freshness:
+     * - `lastProgressDay{0,1}` must match the active quest day
      * - Mismatch triggers automatic progress reset via `_questSyncProgress`
      *
      * Completion Mask Layout:
@@ -261,17 +270,23 @@ contract DegenerusQuests is IDegenerusQuests {
      * | (prevents double streak credit) | slot 1  | slot 0  |
      * +---------------------------------+---------+---------+
      */
+    // All fields pack into a single 32-byte slot (25 bytes used). The per-slot day and
+    // progress markers are flattened from fixed arrays — Solidity reserves a fresh slot
+    // per fixed array, so the arrays are what forced the old 5-slot layout. Daily progress
+    // is held in a compact per-family unit (see `_progressUnit`) so it fits uint16.
     struct PlayerQuestState {
-        uint24 lastCompletedDay;                    // Last day where a streak was credited (first slot completion)
-        uint24 lastActiveDay;                       // Last day where ANY quest slot completed
-        uint24 streak;                              // Current streak of days with full completion
-        uint24 baseStreak;                          // Snapshot of streak at start of day (for rewards)
-        uint24 lastSyncDay;                         // Day we last reset progress/completionMask
-        bool afkingActive;                          // While set (GAME-only, subscribe→finalize): slot-0 completions are streak-neutral and pay no immediate reward (the afking compute-on-read owns the streak; the reward is the per-day pendingBurnie accrual)
-        uint24[QUEST_SLOT_COUNT] lastProgressDay;   // Per-slot: day when progress was recorded
-        uint24[QUEST_SLOT_COUNT] lastQuestVersion;  // Per-slot: quest version when progress was recorded
-        uint128[QUEST_SLOT_COUNT] progress;         // Per-slot: accumulated progress toward targets
-        uint8 completionMask;                       // Bits 0-1: slot completion; bit 7: streak credited
+        uint24 lastCompletedDay;   // Last day where a streak was credited (first slot completion)
+        uint24 lastActiveDay;      // Last day where slot-0 (funded mint) completed
+        uint24 lastSyncDay;        // Day we last reset progress/completionMask
+        uint16 streak;             // Current streak of days with full completion (capped ~100 by score)
+        uint16 baseStreak;         // Snapshot of streak at start of day (for rewards)
+        bool afkingActive;         // While set (GAME-only, subscribe→finalize): slot-0 completions are streak-neutral and pay no immediate reward (the afking compute-on-read owns the streak; the reward is the per-day pendingBurnie accrual)
+        uint24 lastProgressDay0;   // Slot 0: day when progress was recorded
+        uint24 lastProgressDay1;   // Slot 1: day when progress was recorded
+        uint16 progress0;          // Slot 0: accumulated progress in stored units (milli-ETH / whole-BURNIE / ticket count)
+        uint16 progress1;          // Slot 1: accumulated progress in stored units
+        uint8 completionMask;      // Bits 0-1: slot completion; bit 7: streak credited
+        uint8 streakShield;        // Stackable quest-streak shields, consumed on missed days to preserve streak
     }
 
     // =========================================================================
@@ -281,11 +296,8 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice Active quests for the current day (indexed by slot 0/1).
     DailyQuest[QUEST_SLOT_COUNT] private activeQuests;
 
-    /// @notice Per-player quest state including progress and streak.
+    /// @notice Per-player quest state including progress, streak, and streak shields.
     mapping(address => PlayerQuestState) private questPlayerState;
-
-    /// @notice Quest streak shields per player (stackable, consumed on missed days).
-    mapping(address => uint16) private questStreakShieldCount;
 
     /// @notice Monotonically increasing version counter for daily quest invalidation.
     uint24 private questVersionCounter = 1;
@@ -369,12 +381,12 @@ contract DegenerusQuests is IDegenerusQuests {
         PlayerQuestState storage state = questPlayerState[player];
         _questSyncState(state, player, currentDay);
 
-        uint24 prevStreak = state.streak;
+        uint16 prevStreak = state.streak;
         uint32 updated = uint32(prevStreak) + uint32(amount);
-        if (updated > type(uint24).max) {
-            state.streak = type(uint24).max;
+        if (updated > type(uint16).max) {
+            state.streak = type(uint16).max;
         } else {
-            state.streak = uint24(updated);
+            state.streak = uint16(updated);
         }
 
         uint24 currentDay24 = uint24(currentDay);
@@ -382,6 +394,24 @@ contract DegenerusQuests is IDegenerusQuests {
             state.lastActiveDay = currentDay24;
         }
         emit QuestStreakBonusAwarded(player, amount, state.streak, currentDay);
+    }
+
+    /**
+     * @notice Grant quest streak shields to a player. Each shield absorbs one missed day,
+     *         preserving the streak instead of resetting it (consumed in `_questSyncState`).
+     * @dev Access: GAME contract only (the lootbox quest-shield boon routes through GAME).
+     *      Silently returns on zero address / zero amount. The shield count is a uint8 and
+     *      saturates at 255 — far above any reachable balance.
+     * @param player The player to receive shields.
+     * @param amount Number of shields to add.
+     * @custom:reverts OnlyGame When caller is not GAME contract.
+     */
+    function awardQuestStreakShield(address player, uint16 amount) external onlyGame {
+        if (player == address(0) || amount == 0) return;
+        PlayerQuestState storage state = questPlayerState[player];
+        uint256 updated = uint256(state.streakShield) + amount;
+        state.streakShield = updated > type(uint8).max ? type(uint8).max : uint8(updated);
+        emit QuestStreakShieldGranted(player, amount, state.streakShield);
     }
 
     /**
@@ -444,7 +474,7 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 finalStreak = (currentDay == 0 || lastValid + 1 >= currentDay)
             ? earnedStreak
             : 0;
-        state.streak = finalStreak;
+        state.streak = finalStreak > type(uint16).max ? type(uint16).max : uint16(finalStreak);
         uint24 d = uint24(lastValid);
         state.lastActiveDay = d;
         state.lastCompletedDay = d;
@@ -621,17 +651,20 @@ contract DegenerusQuests is IDegenerusQuests {
             return (0, QUEST_TYPE_FLIP, state.streak, false);
         }
 
-        _questSyncProgress(state, slotIndex, currentDay, quest.version);
-        uint128 progressAfter = _clampedAdd128(state.progress[slotIndex], flipCredit);
-        state.progress[slotIndex] = progressAfter;
+        _questSyncProgress(state, slotIndex, currentDay);
+        uint16 progressAfter = _clampedAddU16(
+            _progressOf(state, slotIndex),
+            _toStoredProgress(quest.questType, flipCredit)
+        );
+        _setProgressOf(state, slotIndex, progressAfter);
         uint256 target = _questTargetValue(quest, slotIndex, 0);
         emit QuestProgressUpdated(
             player,
             currentDay,
             slotIndex,
             quest.questType,
-            progressAfter,
-            target
+            uint128(_toNativeProgress(quest.questType, progressAfter)),
+            _toNativeProgress(quest.questType, target)
         );
         if (progressAfter < target) {
             return (0, quest.questType, state.streak, false);
@@ -676,18 +709,22 @@ contract DegenerusQuests is IDegenerusQuests {
         if (slotIndex == type(uint8).max) {
             return (0, QUEST_TYPE_DECIMATOR, state.streak, false);
         }
-        _questSyncProgress(state, slotIndex, currentDay, quest.version);
-        state.progress[slotIndex] = _clampedAdd128(state.progress[slotIndex], burnAmount);
+        _questSyncProgress(state, slotIndex, currentDay);
+        uint16 progressAfter = _clampedAddU16(
+            _progressOf(state, slotIndex),
+            _toStoredProgress(quest.questType, burnAmount)
+        );
+        _setProgressOf(state, slotIndex, progressAfter);
         uint256 target = _questTargetValue(quest, slotIndex, 0);
         emit QuestProgressUpdated(
             player,
             currentDay,
             slotIndex,
             quest.questType,
-            state.progress[slotIndex],
-            target
+            uint128(_toNativeProgress(quest.questType, progressAfter)),
+            _toNativeProgress(quest.questType, target)
         );
-        if (state.progress[slotIndex] < target) {
+        if (progressAfter < target) {
             return (0, quest.questType, state.streak, false);
         }
         if (slotIndex == 1 && (state.completionMask & 1) == 0) {
@@ -731,18 +768,22 @@ contract DegenerusQuests is IDegenerusQuests {
         if (slotIndex == type(uint8).max) {
             return (0, QUEST_TYPE_AFFILIATE, state.streak, false);
         }
-        _questSyncProgress(state, slotIndex, currentDay, quest.version);
-        state.progress[slotIndex] = _clampedAdd128(state.progress[slotIndex], amount);
+        _questSyncProgress(state, slotIndex, currentDay);
+        uint16 progressAfter = _clampedAddU16(
+            _progressOf(state, slotIndex),
+            _toStoredProgress(quest.questType, amount)
+        );
+        _setProgressOf(state, slotIndex, progressAfter);
         uint256 target = _questTargetValue(quest, slotIndex, 0);
         emit QuestProgressUpdated(
             player,
             currentDay,
             slotIndex,
             quest.questType,
-            state.progress[slotIndex],
-            target
+            uint128(_toNativeProgress(quest.questType, progressAfter)),
+            _toNativeProgress(quest.questType, target)
         );
-        if (state.progress[slotIndex] < target) {
+        if (progressAfter < target) {
             return (0, quest.questType, state.streak, false);
         }
         if (slotIndex == 1 && (state.completionMask & 1) == 0) {
@@ -868,12 +909,20 @@ contract DegenerusQuests is IDegenerusQuests {
 
             (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_LOOTBOX);
             if (slotIndex != type(uint8).max) {
-                _questSyncProgress(state, slotIndex, currentDay, quest.version);
-                state.progress[slotIndex] = _clampedAdd128(state.progress[slotIndex], lootBoxAmount);
+                _questSyncProgress(state, slotIndex, currentDay);
+                uint16 progressAfter = _clampedAddU16(
+                    _progressOf(state, slotIndex),
+                    _toStoredProgress(quest.questType, lootBoxAmount)
+                );
+                _setProgressOf(state, slotIndex, progressAfter);
                 uint256 target = _questTargetValue(quest, slotIndex, mintPrice);
-                emit QuestProgressUpdated(player, currentDay, slotIndex, quest.questType, state.progress[slotIndex], target);
+                emit QuestProgressUpdated(
+                    player, currentDay, slotIndex, quest.questType,
+                    uint128(_toNativeProgress(quest.questType, progressAfter)),
+                    _toNativeProgress(quest.questType, target)
+                );
 
-                if (state.progress[slotIndex] >= target) {
+                if (progressAfter >= target) {
                     bool canComplete = !(slotIndex == 1 && (state.completionMask & 1) == 0);
                     if (canComplete) {
                         (uint256 r, uint8 qt, uint32 s, bool c) = _questCompleteWithPair(
@@ -1018,7 +1067,9 @@ contract DegenerusQuests is IDegenerusQuests {
         for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
             DailyQuest memory quest = local[slot];
             // Only return progress if it's valid for the current quest day/version
-            progress[slot] = _questProgressValid(state, quest, slot, currentDay) ? state.progress[slot] : 0;
+            progress[slot] = _questProgressValid(state, quest, slot, currentDay)
+                ? uint128(_toNativeProgress(quest.questType, _progressOfMem(state, slot)))
+                : 0;
             completed[slot] = _questCompleted(state, quest, slot);
             unchecked {
                 ++slot;
@@ -1044,7 +1095,7 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 anchorDay = state.lastActiveDay != 0 ? state.lastActiveDay : state.lastCompletedDay;
         if (anchorDay != 0 && currentDay > anchorDay + 1) {
             uint32 missedDays = currentDay - anchorDay - 1;
-            uint16 shields = questStreakShieldCount[player];
+            uint16 shields = state.streakShield;
             if (missedDays > uint32(shields)) {
                 effectiveStreak = 0;
             }
@@ -1100,7 +1151,7 @@ contract DegenerusQuests is IDegenerusQuests {
             requirements: _questRequirements(quest, slot)
         });
         if (_questProgressValid(state, quest, slot, currentDay)) {
-            progress = state.progress[slot];
+            progress = uint128(_toNativeProgress(quest.questType, _progressOfMem(state, slot)));
         }
         completed = _questCompleted(state, quest, slot);
     }
@@ -1127,7 +1178,7 @@ contract DegenerusQuests is IDegenerusQuests {
             ) {
                 currentPrice = questGame.mintPrice();
             }
-            req.tokenAmount = _questTargetValue(quest, slot, currentPrice);
+            req.tokenAmount = _toNativeProgress(qType, _questTargetValue(quest, slot, currentPrice));
         }
     }
 
@@ -1208,6 +1259,92 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /**
+     * @dev Adds delta to a uint16 daily-progress field, clamping at uint16 max.
+     *      All daily targets are <= 2000 stored units, so the clamp never blocks completion.
+     */
+    function _clampedAddU16(uint16 current, uint256 delta) private pure returns (uint16) {
+        unchecked {
+            uint256 sum = uint256(current) + delta;
+            if (sum > type(uint16).max) {
+                sum = type(uint16).max;
+            }
+            return uint16(sum);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Progress Unit Conversion
+    // -------------------------------------------------------------------------
+    // Daily progress is stored in a compact per-family unit so it fits uint16:
+    //   ETH-value quests    -> milli-ETH   (wei / 1e15; target <= 500)
+    //   BURNIE-value quests -> whole BURNIE (wei / 1e18; target = 2000)
+    //   MINT_BURNIE         -> ticket count (already a count; target = 1)
+    // Accumulation converts the native delta to stored units before adding, and the
+    // stored target compares against it like-for-like. View/event surfaces convert
+    // back so the external ABI keeps reporting native wei / counts.
+
+    /// @dev Stored-unit divisor for a quest family.
+    function _progressUnit(uint8 questType) private pure returns (uint256) {
+        if (
+            questType == QUEST_TYPE_MINT_ETH ||
+            questType == QUEST_TYPE_LOOTBOX ||
+            questType == QUEST_TYPE_DEGENERETTE_ETH
+        ) {
+            return 1e15; // milli-ETH
+        }
+        if (questType == QUEST_TYPE_MINT_BURNIE) {
+            return 1; // ticket count
+        }
+        return 1e18; // whole BURNIE: FLIP / DECIMATOR / AFFILIATE / DEGENERETTE_BURNIE
+    }
+
+    /// @dev Native delta (wei / count) -> stored progress units. Truncates toward zero.
+    function _toStoredProgress(uint8 questType, uint256 nativeDelta) private pure returns (uint256) {
+        return nativeDelta / _progressUnit(questType);
+    }
+
+    /// @dev Stored progress units -> native (wei / count) for views and events.
+    function _toNativeProgress(uint8 questType, uint256 storedAmount) private pure returns (uint256) {
+        return storedAmount * _progressUnit(questType);
+    }
+
+    // -------------------------------------------------------------------------
+    // Flattened Slot Accessors (progress / lastProgressDay, slot in {0,1})
+    // -------------------------------------------------------------------------
+
+    function _progressOf(PlayerQuestState storage s, uint8 slot) private view returns (uint16) {
+        return slot == 0 ? s.progress0 : s.progress1;
+    }
+
+    function _setProgressOf(PlayerQuestState storage s, uint8 slot, uint16 v) private {
+        if (slot == 0) {
+            s.progress0 = v;
+        } else {
+            s.progress1 = v;
+        }
+    }
+
+    function _progressOfMem(PlayerQuestState memory s, uint8 slot) private pure returns (uint16) {
+        return slot == 0 ? s.progress0 : s.progress1;
+    }
+
+    function _lastProgressDayOf(PlayerQuestState storage s, uint8 slot) private view returns (uint24) {
+        return slot == 0 ? s.lastProgressDay0 : s.lastProgressDay1;
+    }
+
+    function _setLastProgressDayOf(PlayerQuestState storage s, uint8 slot, uint24 v) private {
+        if (slot == 0) {
+            s.lastProgressDay0 = v;
+        } else {
+            s.lastProgressDay1 = v;
+        }
+    }
+
+    function _lastProgressDayOfMem(PlayerQuestState memory s, uint8 slot) private pure returns (uint24) {
+        return slot == 0 ? s.lastProgressDay0 : s.lastProgressDay1;
+    }
+
+    /**
      * @dev Increments and returns the quest version counter.
      *      Used to invalidate stale progress when a new quest is seeded for the day.
      * @return newVersion The new version number.
@@ -1253,18 +1390,22 @@ contract DegenerusQuests is IDegenerusQuests {
         uint256 levelDelta,
         uint256 levelQuestPrice
     ) private returns (uint256 reward, uint8 questType, uint32 streak, bool completed) {
-        _questSyncProgress(state, slot, quest.day, quest.version);
-        state.progress[slot] = _clampedAdd128(state.progress[slot], delta);
+        _questSyncProgress(state, slot, quest.day);
+        uint16 progressAfter = _clampedAddU16(
+            _progressOf(state, slot),
+            _toStoredProgress(quest.questType, delta)
+        );
+        _setProgressOf(state, slot, progressAfter);
         emit QuestProgressUpdated(
             player,
             quest.day,
             slot,
             quest.questType,
-            state.progress[slot],
-            target
+            uint128(_toNativeProgress(quest.questType, progressAfter)),
+            _toNativeProgress(quest.questType, target)
         );
         _handleLevelQuestProgress(player, handlerQuestType, levelDelta, levelQuestPrice);
-        if (state.progress[slot] >= target) {
+        if (progressAfter >= target) {
             if (slot == 1 && (state.completionMask & 1) == 0) {
                 return (0, quest.questType, state.streak, false);
             }
@@ -1292,19 +1433,19 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param currentDay The current quest day.
      */
     function _questSyncState(PlayerQuestState storage state, address player, uint32 currentDay) private {
-        uint24 prevStreak = state.streak;
+        uint16 prevStreak = state.streak;
         uint24 anchorDay = state.lastActiveDay != 0 ? state.lastActiveDay : state.lastCompletedDay;
         if (anchorDay != 0 && currentDay > anchorDay + 1) {
             uint32 missedDays = currentDay - anchorDay - 1;
-            uint16 shields = questStreakShieldCount[player];
+            uint16 shields = state.streakShield;
             if (shields != 0) {
                 uint32 used = missedDays > uint32(shields) ? uint32(shields) : missedDays;
-                questStreakShieldCount[player] = shields - uint16(used);
+                state.streakShield = uint8(shields - uint16(used));
                 if (used != 0) {
                     emit QuestStreakShieldUsed(
                         player,
                         uint16(used),
-                        questStreakShieldCount[player],
+                        state.streakShield,
                         currentDay
                     );
                 }
@@ -1327,26 +1468,23 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /**
-     * @dev Clears progress for a slot when the tracked day or quest version differs.
-     *      This is the key anti-exploit mechanism:
-     *      - Progress from a previous day cannot be applied to today's quest
-     *      - Progress from a different quest version is invalidated
+     * @dev Clears progress for a slot when the tracked day differs from the active day.
+     *      A slot is only ever re-seeded on a day change (rollDailyQuest is idempotent per
+     *      day), so the day tag alone invalidates stale progress — progress from a previous
+     *      day cannot be applied to today's quest.
      * @param state Storage reference to player's quest state.
      * @param slot The slot index to sync.
      * @param currentDay The current quest day.
-     * @param questVersion The current quest version.
      */
     function _questSyncProgress(
         PlayerQuestState storage state,
         uint8 slot,
-        uint32 currentDay,
-        uint24 questVersion
+        uint32 currentDay
     ) private {
         uint24 currentDay24 = uint24(currentDay);
-        if (state.lastProgressDay[slot] != currentDay24 || state.lastQuestVersion[slot] != questVersion) {
-            state.lastProgressDay[slot] = currentDay24;
-            state.lastQuestVersion[slot] = questVersion;
-            state.progress[slot] = 0;
+        if (_lastProgressDayOf(state, slot) != currentDay24) {
+            _setLastProgressDayOf(state, slot, currentDay24);
+            _setProgressOf(state, slot, 0);
         }
     }
 
@@ -1368,7 +1506,7 @@ contract DegenerusQuests is IDegenerusQuests {
             return false;
         }
         uint24 questDay = uint24(quest.day);
-        return state.lastProgressDay[slot] == questDay && state.lastQuestVersion[slot] == quest.version;
+        return _lastProgressDayOfMem(state, slot) == questDay;
     }
 
     /**
@@ -1389,7 +1527,7 @@ contract DegenerusQuests is IDegenerusQuests {
             return false;
         }
         uint24 questDay = uint24(quest.day);
-        return state.lastProgressDay[slot] == questDay && state.lastQuestVersion[slot] == quest.version;
+        return _lastProgressDayOf(state, slot) == questDay;
     }
 
     /**
@@ -1428,29 +1566,31 @@ contract DegenerusQuests is IDegenerusQuests {
         uint256 mintPrice
     ) private pure returns (uint256) {
         uint8 qType = quest.questType;
+        uint256 nativeTarget;
         if (qType == QUEST_TYPE_MINT_ETH) {
             uint256 mult = slot == 0
                 ? QUEST_DEPOSIT_ETH_TARGET_MULTIPLIER
                 : QUEST_LOOTBOX_TARGET_MULTIPLIER;
-            uint256 target = mintPrice * mult;
-            return target > QUEST_ETH_TARGET_CAP ? QUEST_ETH_TARGET_CAP : target;
-        }
-        if (qType == QUEST_TYPE_LOOTBOX || qType == QUEST_TYPE_DEGENERETTE_ETH) {
-            uint256 target = mintPrice * QUEST_LOOTBOX_TARGET_MULTIPLIER;
-            return target > QUEST_ETH_TARGET_CAP ? QUEST_ETH_TARGET_CAP : target;
-        }
-        if (qType == QUEST_TYPE_MINT_BURNIE) {
-            return QUEST_MINT_TARGET;
-        }
-        if (
+            nativeTarget = mintPrice * mult;
+            if (nativeTarget > QUEST_ETH_TARGET_CAP) nativeTarget = QUEST_ETH_TARGET_CAP;
+        } else if (qType == QUEST_TYPE_LOOTBOX || qType == QUEST_TYPE_DEGENERETTE_ETH) {
+            nativeTarget = mintPrice * QUEST_LOOTBOX_TARGET_MULTIPLIER;
+            if (nativeTarget > QUEST_ETH_TARGET_CAP) nativeTarget = QUEST_ETH_TARGET_CAP;
+        } else if (qType == QUEST_TYPE_MINT_BURNIE) {
+            nativeTarget = QUEST_MINT_TARGET;
+        } else if (
             qType == QUEST_TYPE_FLIP ||
             qType == QUEST_TYPE_DECIMATOR ||
             qType == QUEST_TYPE_AFFILIATE ||
             qType == QUEST_TYPE_DEGENERETTE_BURNIE
         ) {
-            return QUEST_BURNIE_TARGET;
+            nativeTarget = QUEST_BURNIE_TARGET;
+        } else {
+            return 0;
         }
-        return 0;
+        // Convert to the stored unit that daily progress accumulates in (milli-ETH /
+        // whole-BURNIE / ticket count) so `progress >= target` compares like-for-like.
+        return nativeTarget / _progressUnit(qType);
     }
 
     // -------------------------------------------------------------------------
@@ -1610,10 +1750,10 @@ contract DegenerusQuests is IDegenerusQuests {
         // Streak is credited on the first quest completion of the day — suppressed while afking.
         if (!afking && (mask & QUEST_STATE_STREAK_CREDITED) == 0) {
             mask |= QUEST_STATE_STREAK_CREDITED;
-            if (newStreak < type(uint24).max) {
+            if (newStreak < type(uint16).max) {
                 newStreak += 1;
             }
-            state.streak = uint24(newStreak);
+            state.streak = uint16(newStreak);
             state.lastCompletedDay = questDay24;
         }
         state.completionMask = mask;
@@ -1745,7 +1885,7 @@ contract DegenerusQuests is IDegenerusQuests {
         uint256 mintPrice
     ) private view returns (bool) {
         if (!_questProgressValidStorage(state, quest, slot, quest.day)) return false;
-        uint256 progress = state.progress[slot];
+        uint256 progress = _progressOf(state, slot);
         uint256 currentPrice = mintPrice;
         if (
             currentPrice == 0 &&

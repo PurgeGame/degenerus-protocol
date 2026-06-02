@@ -7,6 +7,7 @@ import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 
 import {IDegenerusGameBoonModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
@@ -176,19 +177,20 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Assumed utilization of max boon value (50%)
     uint16 private constant LOOTBOX_BOON_UTILIZATION_BPS = 5000;
 
-    /// @dev Whale boon discount tiers (10%, 25%, 50%).
+    /// @dev Whale boon discount tiers 1/2/3 (10%, 20%, 35%). The _25/_50 suffixes name the
+    ///      tier slot, not the literal percentage.
     uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS = 1000;
-    uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS = 2500;
-    uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS = 5000;
+    uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS = 2000;
+    uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS = 3500;
     /// @dev Lazy pass boon discount tiers (10%, 25%, 50%).
     uint16 private constant LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS = 1000;
     uint16 private constant LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS = 2500;
     uint16 private constant LOOTBOX_LAZY_PASS_DISCOUNT_50_BPS = 5000;
     /// @dev Tier identifier for 10% deity pass discount boon (1000 bps)
     uint8 private constant DEITY_PASS_BOON_TIER_10 = 1;
-    /// @dev Tier identifier for 25% deity pass discount boon (2500 bps)
+    /// @dev Tier identifier for the tier-2 deity pass discount boon (20%, 2000 bps)
     uint8 private constant DEITY_PASS_BOON_TIER_25 = 2;
-    /// @dev Tier identifier for 50% deity pass discount boon (5000 bps)
+    /// @dev Tier identifier for the tier-3 deity pass discount boon (35%, 3500 bps)
     uint8 private constant DEITY_PASS_BOON_TIER_50 = 3;
     /// @dev Threshold used by deity-pass discount boon availability logic.
     uint32 private constant DEITY_PASS_MAX_TOTAL = 32;
@@ -240,6 +242,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint24 private constant LOOTBOX_ACTIVITY_BOON_25_BONUS = 25;
     /// @dev 50 point activity boon bonus
     uint24 private constant LOOTBOX_ACTIVITY_BOON_50_BONUS = 50;
+    /// @dev Quest-streak shields granted per quest-shield boon
+    uint16 private constant LOOTBOX_QUEST_SHIELD_GRANT = 1;
 
     // Lootbox roll constants
     /// @dev Base ticket roll budget in BPS (~127% EV after variance, 55% chance path)
@@ -341,6 +345,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint8 private constant BOON_COINFLIP_10 = 2;
     /// @dev Boon type: 25% coinflip bonus
     uint8 private constant BOON_COINFLIP_25 = 3;
+    /// @dev Boon type: grant one quest-streak shield
+    uint8 private constant BOON_QUEST_SHIELD = 4;
     /// @dev Boon type: 5% lootbox boost
     uint8 private constant BOON_LOOTBOX_5 = 5;
     /// @dev Boon type: 15% lootbox boost
@@ -367,15 +373,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint8 private constant BOON_ACTIVITY_50 = 19;
     /// @dev Boon type: 25% lootbox boost
     uint8 private constant BOON_LOOTBOX_25 = 22;
-    /// @dev Boon type: 25% whale discount
+    /// @dev Boon type: tier-2 whale discount (20%)
     uint8 private constant BOON_WHALE_25 = 23;
-    /// @dev Boon type: 50% whale discount
+    /// @dev Boon type: tier-3 whale discount (35%)
     uint8 private constant BOON_WHALE_50 = 24;
     /// @dev Boon type: 10% deity pass discount
     uint8 private constant BOON_DEITY_PASS_10 = 25;
-    /// @dev Boon type: 25% deity pass discount
+    /// @dev Boon type: tier-2 deity pass discount (20%)
     uint8 private constant BOON_DEITY_PASS_25 = 26;
-    /// @dev Boon type: 50% deity pass discount
+    /// @dev Boon type: tier-3 deity pass discount (35%)
     uint8 private constant BOON_DEITY_PASS_50 = 27;
     /// @dev Boon type: whale pass award
     uint8 private constant BOON_WHALE_PASS = 28;
@@ -413,15 +419,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant BOON_WEIGHT_DECIMATOR_50 = 2;
     /// @dev Weight for 10% whale boon
     uint16 private constant BOON_WEIGHT_WHALE_10 = 28;
-    /// @dev Weight for 25% whale boon
+    /// @dev Weight for tier-2 whale boon (20%)
     uint16 private constant BOON_WEIGHT_WHALE_25 = 10;
-    /// @dev Weight for 50% whale boon
+    /// @dev Weight for tier-3 whale boon (35%)
     uint16 private constant BOON_WEIGHT_WHALE_50 = 2;
     /// @dev Weight for 10% deity pass discount boon
     uint16 private constant BOON_WEIGHT_DEITY_PASS_10 = 28;
-    /// @dev Weight for 25% deity pass discount boon
+    /// @dev Weight for tier-2 deity pass discount boon (20%)
     uint16 private constant BOON_WEIGHT_DEITY_PASS_25 = 10;
-    /// @dev Weight for 50% deity pass discount boon
+    /// @dev Weight for tier-3 deity pass discount boon (35%)
     uint16 private constant BOON_WEIGHT_DEITY_PASS_50 = 2;
     /// @dev Weight for 10 point activity boon
     uint16 private constant BOON_WEIGHT_ACTIVITY_10 = 100;
@@ -429,6 +435,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant BOON_WEIGHT_ACTIVITY_25 = 30;
     /// @dev Weight for 50 point activity boon
     uint16 private constant BOON_WEIGHT_ACTIVITY_50 = 8;
+    /// @dev Weight for the quest-streak-shield boon
+    uint16 private constant BOON_WEIGHT_QUEST_SHIELD = 200;
     /// @dev Weight for whale pass award
     uint16 private constant BOON_WEIGHT_WHALE_PASS = 8;
     /// @dev Weight for 10% lazy pass discount boon
@@ -439,10 +447,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant BOON_WEIGHT_LAZY_PASS_50 = 2;
     /// @dev Combined weight of deity pass discount boons (10% + 25% + 50%)
     uint16 private constant BOON_WEIGHT_DEITY_PASS_ALL = 40;
-    /// @dev Total weight sum when decimator boons are allowed
-    uint16 private constant BOON_WEIGHT_TOTAL = 1298;
+    /// @dev Total weight sum when decimator boons are allowed (includes the +200 quest-shield weight)
+    uint16 private constant BOON_WEIGHT_TOTAL = 1498;
     /// @dev Total weight sum when decimator boons are not allowed
-    uint16 private constant BOON_WEIGHT_TOTAL_NO_DECIMATOR = 1248;
+    uint16 private constant BOON_WEIGHT_TOTAL_NO_DECIMATOR = 1448;
 
     // =========================================================================
     // Lootbox Opening Functions
@@ -1427,7 +1435,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             weightedMax += BOON_WEIGHT_DECIMATOR_50 * decMax50;
         }
 
-        // Whale discount boons (10/25/50% off standard price)
+        // Whale discount boons (10/20/35% off standard price)
         uint256 whaleMax10 = (WHALE_BUNDLE_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS) / 10_000;
         uint256 whaleMax25 = (WHALE_BUNDLE_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS) / 10_000;
         uint256 whaleMax50 = (WHALE_BUNDLE_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS) / 10_000;
@@ -1443,8 +1451,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 k = deityPassOwners.length;
             uint256 deityPrice = DEITY_PASS_BASE + (k * (k + 1) * 1 ether) / 2;
             uint256 deityMax10 = (deityPrice * 1000) / 10_000;
-            uint256 deityMax25 = (deityPrice * 2500) / 10_000;
-            uint256 deityMax50 = (deityPrice * 5000) / 10_000;
+            uint256 deityMax25 = (deityPrice * 2000) / 10_000;
+            uint256 deityMax50 = (deityPrice * 3500) / 10_000;
             totalWeight += BOON_WEIGHT_DEITY_PASS_10;
             weightedMax += BOON_WEIGHT_DEITY_PASS_10 * deityMax10;
             totalWeight += BOON_WEIGHT_DEITY_PASS_25;
@@ -1457,6 +1465,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         totalWeight += BOON_WEIGHT_ACTIVITY_10;
         totalWeight += BOON_WEIGHT_ACTIVITY_25;
         totalWeight += BOON_WEIGHT_ACTIVITY_50;
+
+        // Quest-streak-shield boon (value assumed 0 for EV budgeting, like activity)
+        totalWeight += BOON_WEIGHT_QUEST_SHIELD;
 
         // Pass awards (now eligible on every ETH lootbox path)
         totalWeight += BOON_WEIGHT_WHALE_PASS;
@@ -1532,6 +1543,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (roll < cursor) return BOON_ACTIVITY_25;
         cursor += BOON_WEIGHT_ACTIVITY_50;
         if (roll < cursor) return BOON_ACTIVITY_50;
+        cursor += BOON_WEIGHT_QUEST_SHIELD;
+        if (roll < cursor) return BOON_QUEST_SHIELD;
         cursor += BOON_WEIGHT_WHALE_PASS;
         if (roll < cursor) return BOON_WHALE_PASS;
         cursor += BOON_WEIGHT_LAZY_PASS_10;
@@ -1674,6 +1687,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             return;
         }
 
+        // Quest-streak-shield boon (type 4) — instant grant, no boon-mapping state.
+        // Runs in GAME's delegatecall context, so the call to QUESTS is GAME-authorized.
+        if (boonType == BOON_QUEST_SHIELD) {
+            IDegenerusQuests(ContractAddresses.QUESTS).awardQuestStreakShield(player, LOOTBOX_QUEST_SHIELD_GRANT);
+            if (!isDeity) emit LootBoxReward(player, day, 12, originalAmount, LOOTBOX_QUEST_SHIELD_GRANT);
+            return;
+        }
+
         // Activity boons (types 17, 18, 19) — slot1
         if (boonType == BOON_ACTIVITY_10 || boonType == BOON_ACTIVITY_25 || boonType == BOON_ACTIVITY_50) {
             uint24 amt = boonType == BOON_ACTIVITY_50
@@ -1713,7 +1734,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_DEITY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_DEITY_PASS_DAY_SHIFT);
             bp.slot1 = s1;
             if (!isDeity) {
-                uint16 bps = tier == DEITY_PASS_BOON_TIER_50 ? 5000 : (tier == DEITY_PASS_BOON_TIER_25 ? 2500 : 1000);
+                uint16 bps = tier == DEITY_PASS_BOON_TIER_50 ? 3500 : (tier == DEITY_PASS_BOON_TIER_25 ? 2000 : 1000);
                 emit LootBoxReward(player, day, 10, originalAmount, bps);
             }
             return;

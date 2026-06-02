@@ -9,6 +9,8 @@ import {IStETH} from "./interfaces/IStETH.sol";
 interface IDegenerusGamePlayer {
     /// @notice Advance the game to the next level/day.
     function advanceGame() external;
+    /// @notice Queue this caller's perpetual tickets for levels 1-100 (VAULT/SDGNRS only, once).
+    function initPerpetualTickets() external;
     /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
     /// @dev v55.0 ARCH-03: the afking subscription surface is GAME-resident (AfKing dissolved).
     ///      sDGNRS self-subscribes (player == address(this) == msg.sender) so the GAME's
@@ -369,6 +371,10 @@ contract StakedDegenerusStonk {
         poolBalances[uint8(Pool.PresaleBox)] = presaleBoxAmount;
 
         game.claimWhalePass(address(0));
+
+        // Queue this contract's perpetual tickets (levels 1-100). Moved out of the GAME
+        // constructor so GAME's deploy stays under the per-tx gas cap.
+        game.initPerpetualTickets();
 
         // SUB-09 protocol-owned self-subscription: claimable-only daily lootbox
         // buy of flat quantity 1 with a 2% claimable reinvest, plus full BURNIE-flip

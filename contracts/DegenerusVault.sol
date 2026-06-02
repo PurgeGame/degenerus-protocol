@@ -10,6 +10,8 @@ import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
 interface IDegenerusGamePlayerActions {
     /// @notice Advance the game to the next level/day.
     function advanceGame() external;
+    /// @notice Queue this caller's perpetual tickets for levels 1-100 (VAULT/SDGNRS only, once).
+    function initPerpetualTickets() external;
     /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
     /// @dev v55.0 ARCH-03: the afking subscription surface is GAME-resident (AfKing dissolved).
     ///      The vault self-subscribes (player == address(this) == msg.sender) so the GAME's
@@ -479,6 +481,10 @@ contract DegenerusVault {
         // self-subscribe directly against the GAME (subscriber == msg.sender ⇒
         // the GAME's SUB-02 self-consent path, no operator approval needed).
         gamePlayer.subscribe(address(this), true, false, 1, 0, address(0));
+
+        // Queue this vault's perpetual tickets (levels 1-100). Moved out of the GAME
+        // constructor so GAME's deploy stays under the per-tx gas cap.
+        gamePlayer.initPerpetualTickets();
     }
 
     // ---------------------------------------------------------------------

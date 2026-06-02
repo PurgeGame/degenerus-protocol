@@ -163,11 +163,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      protocol's burden to service — those users arrange their own keepering.
     uint256 internal constant SUBSCRIBER_CAP = 500;
 
-    /// @dev First-sub head-start window (bounded +0..+9). On the very first subscribe the
-    ///      streak snapshot gets a `(PERIOD - currentDay % PERIOD) % PERIOD` boost (a subscribe
-    ///      on a period boundary grants 0), folded once into `streakAtAfkingStart`.
-    uint256 internal constant FIRST_SUB_HEADSTART_PERIOD = 10;
-
     /// @dev Per-sub gas-weight of an in-stage sub-ending finalize (cancel-reclaim / pass-evict
     ///      / funding-kill) relative to a cheap local buy (weight 1): the finalize does a
     ///      cross-contract quest read + streak write the call-free buy does not, so it is the
@@ -368,7 +363,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // high-water afkCoveredThroughDay), which CONTINUES the run's streak via
                 // _deliverAfkingBuy's own gap-reset/accrue: a still-current run keeps its streak and
                 // gains today; a gapped run re-bases to 0 (a full missed day is gone, same as the
-                // stage). No re-snapshot / no head-start / no forfeit — the afking streak is never
+                // stage). No re-snapshot / no forfeit — the afking streak is never
                 // reset by a re-subscribe. Skipped (streak just persists + decays on read) when
                 // already bought today OR a pending unopened box exists (re-stamping would orphan
                 // it — the no-orphan rule) OR the cover-buy is unfunded.
@@ -407,21 +402,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             } else {
                 // NEW run. Snapshot the player's (gap-synced) manual quest streak and flip the
                 // afking flag (slot-0 completions become streak-neutral / reward-deferred — the
-                // Game-side compute-on-read owns the streak until finalize hands it back). The
-                // once-per-account head-start (+0..9, gated on subStreakLatch bit 7) folds into the
-                // snapshot. The run is grounded on a FUNDED day-0 (a funded min-buy OR an
-                // already-complete manual slot-0 today) — the debit-gate that makes the streak
-                // unfarmable. An unfunded subscribe still starts the run but FORFEITS the snapshot
-                // (base 0); it never reverts (VAULT / SDGNRS self-subscribe with no funds at
-                // construction).
+                // Game-side compute-on-read owns the streak until finalize hands it back). The run
+                // is grounded on a FUNDED day-0 (a funded min-buy OR an already-complete manual
+                // slot-0 today) — the debit-gate that makes the streak unfarmable. An unfunded
+                // subscribe still starts the run but FORFEITS the snapshot (base 0); it never
+                // reverts (VAULT / SDGNRS self-subscribe with no funds at construction).
                 uint256 snap = quests.beginAfking(subscriber, today); // syncs + sets afkingActive
-                if ((s.subStreakLatch & SUB_EVER_SUBSCRIBED_BIT) == 0) {
-                    s.subStreakLatch |= SUB_EVER_SUBSCRIBED_BIT;
-                    snap +=
-                        (FIRST_SUB_HEADSTART_PERIOD -
-                            (today % FIRST_SUB_HEADSTART_PERIOD)) %
-                        FIRST_SUB_HEADSTART_PERIOD;
-                }
                 // Frame the run on today (the compute-on-read base; afkCovered == today keeps the
                 // delivery's gap-reset from wiping the snapshot and guarantees
                 // afkCovered >= afkingStartDay so the streak span never underflows).
@@ -919,14 +905,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // work that makes this the heavier (EVICT_WEIGHT) branch.
             if (sub.dailyQuantity == 0) {
                 _finalizeAfking(player, sub, processDay);
-                // Preserve the once-per-account head-start latch (subStreakLatch bit 7) across the
-                // `delete` — otherwise a subscribe -> cancel -> reclaim -> resubscribe cycle would
-                // re-grant the +0..9 head-start every cycle and compound it into the manual streak
-                // via finalizeAfking. The streak base (bits 0-6) is dropped (already handed back to
-                // the manual streak by the finalize above); only the latch survives.
-                bool everSub = (sub.subStreakLatch & SUB_EVER_SUBSCRIBED_BIT) != 0;
+                // The streak base was already handed back to the manual streak by the finalize
+                // above, so the sub is fully cleared on reclaim.
                 delete _subOf[player];
-                if (everSub) _subOf[player].subStreakLatch = SUB_EVER_SUBSCRIBED_BIT;
                 _removeFromSet(player);
                 emit SubscriptionExpired(player, 2);
                 unchecked {

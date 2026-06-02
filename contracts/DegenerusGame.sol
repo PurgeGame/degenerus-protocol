@@ -209,10 +209,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // Vault addresses get deity-equivalent score boost (no symbol, not in deityPassOwners)
         mintPacked_[ContractAddresses.SDGNRS] = BitPackingLib.setPacked(mintPacked_[ContractAddresses.SDGNRS], BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
         mintPacked_[ContractAddresses.VAULT] = BitPackingLib.setPacked(mintPacked_[ContractAddresses.VAULT], BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
-        // Pre-queue vault perpetual tickets for levels 1-100 (advance module handles 101+)
+        // Perpetual vault/SDGNRS tickets (levels 1-100) are queued post-deploy by VAULT and
+        // SDGNRS via initPerpetualTickets() — moved out of this constructor so GAME's deploy
+        // stays under the per-tx gas cap.
+    }
+
+    /// @notice Queue the perpetual vault/SDGNRS tickets for levels 1-100 (advance handles 101+).
+    /// @dev Split out of the constructor to keep GAME's deploy under the per-tx gas cap. VAULT and
+    ///      SDGNRS each call this exactly once from their own constructor (one deploy tx each), so
+    ///      no re-entry path exists. Restricted to those two protocol addresses — the only
+    ///      recipients of perpetual tickets — and queues for the caller only.
+    function initPerpetualTickets() external {
+        address who = msg.sender;
+        if (who != ContractAddresses.SDGNRS && who != ContractAddresses.VAULT) revert E();
         for (uint24 i = 1; i <= 100; ) {
-            _queueTickets(ContractAddresses.SDGNRS, i, 16, false);
-            _queueTickets(ContractAddresses.VAULT, i, 16, false);
+            _queueTickets(who, i, 16, false);
             unchecked {
                 ++i;
             }
