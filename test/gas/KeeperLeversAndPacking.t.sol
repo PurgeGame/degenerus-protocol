@@ -219,18 +219,26 @@ contract KeeperLeversAndPacking is DeployProtocol {
         string memory storage_ = _stripComments(vm.readFile(STORAGE_SRC));
         string memory game_ = _strippedGame();
 
-        // Sub struct: the eight game-resident fields at their exact widths sum to 29 bytes (<= 32 = one slot).
+        // Sub struct: the thirteen game-resident fields at their exact widths sum to 32 bytes (= one slot).
+        // The v56 re-pack added the markers (afkCoveredThroughDay / afkingStartDay) + the in-slot accumulator
+        // (affiliateBase / pendingBurnie / subStreakLatch) and narrowed the v55 uint32 day markers + uint96
+        // amount to uint24, so the record still fits a single 256-bit slot.
         uint256 subBytes =
             _structFieldBytes(storage_, "uint8 dailyQuantity;", 1) +
-            _structFieldBytes(storage_, "uint32 validThroughLevel;", 4) +
+            _structFieldBytes(storage_, "uint24 validThroughLevel;", 3) +
             _structFieldBytes(storage_, "uint8 reinvestPct;", 1) +
             _structFieldBytes(storage_, "uint8 flags;", 1) +
             _structFieldBytes(storage_, "uint16 scorePlus1;", 2) +
-            _structFieldBytes(storage_, "uint96 amount;", 12) +
-            _structFieldBytes(storage_, "uint32 lastAutoBoughtDay;", 4) +
-            _structFieldBytes(storage_, "uint32 lastOpenedDay;", 4);
+            _structFieldBytes(storage_, "uint24 amount;", 3) +
+            _structFieldBytes(storage_, "uint24 lastAutoBoughtDay;", 3) +
+            _structFieldBytes(storage_, "uint24 lastOpenedDay;", 3) +
+            _structFieldBytes(storage_, "uint24 afkCoveredThroughDay;", 3) +
+            _structFieldBytes(storage_, "uint24 afkingStartDay;", 3) +
+            _structFieldBytes(storage_, "uint32 affiliateBase;", 4) +
+            _structFieldBytes(storage_, "uint32 pendingBurnie;", 4) +
+            _structFieldBytes(storage_, "uint8 subStreakLatch;", 1);
         assertLe(subBytes, 32, "GAS-04: Sub struct fields sum to <= 32 bytes (one slot)");
-        assertEq(subBytes, 29, "GAS-04 (v55): the game-resident Sub is 29 used bytes (8 fields, one slot)");
+        assertEq(subBytes, 32, "GAS-04 (v56): the game-resident Sub is 32 used bytes (13 fields, one full slot)");
         // The `struct Sub {` declaration is byte-present (the packed sub record exists at all).
         assertGt(_countOccurrences(storage_, "struct Sub {"), 0, "GAS-04: Sub struct present (the packed sub record)");
         // The two prior standalone bools must be GONE (folded into `flags`) — re-introducing one would push

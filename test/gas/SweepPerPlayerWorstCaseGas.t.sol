@@ -53,8 +53,9 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
     uint256 private constant SUBSCRIBERS_SLOT = 68;        // address[] _subscribers (slot holds the length)
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 69;   // mapping(address => uint256) _subscriberIndex
 
-    // Sub packed-field byte offsets (DegenerusGameStorage.sol:1867; RE-DERIVED via forge inspect).
-    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay (bytes 21..24)
+    // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot —
+    // the markers are uint24 each, not the old uint32 232-bit layout).
+    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
 
     uint256 private constant MINTPACKED_SLOT = 10;
     uint256 private constant DEITY_SHIFT = 184;
@@ -295,7 +296,7 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
 
     function _lastBoughtDayOf(address who) internal view returns (uint32) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (OFF_LASTBOUGHT * 8);
-        return uint32(p & 0xFFFFFFFF);
+        return uint32(p & 0xFFFFFF); // uint24
     }
 
     function _subscriberCount() internal view returns (uint256) {

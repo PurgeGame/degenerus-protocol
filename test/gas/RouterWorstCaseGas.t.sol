@@ -64,10 +64,10 @@ contract RouterWorstCaseGas is DeployProtocol {
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 69;            // mapping(address => uint256) _subscriberIndex
     uint256 private constant SUBCURSOR_SLOT = 70;                   // _subCursor (uint16 @ byte 0) | _afkingResetDay (@ byte 4)
 
-    // Sub packed-field byte offsets (DegenerusGameStorage.sol:1867; re-derived via forge inspect; the
-    // game-resident Sub is a single 232-bit slot — the old AfKing-standalone offsets are WRONG).
-    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay (bytes 21..24)
-    uint256 private constant OFF_LASTOPENED = 25; // uint32 lastOpenedDay     (bytes 25..28)
+    // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot,
+    // 241/256 bits used — the markers are uint24 each, not the old uint32 232-bit layout).
+    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
 
     // -------------------------------------------------------------------------
     // Worst-case / measurement constants
@@ -77,13 +77,15 @@ contract RouterWorstCaseGas is DeployProtocol {
     ///      block_gas_limit to 30e9 for the harness; the TST-06 "fits the ceiling" bar is this 16.7M.
     uint256 internal constant EFFECTIVE_GAS_CEILING = 16_700_000;
 
-    /// @dev SUB_STAGE_BATCH (DegenerusGameAdvanceModule.sol:149): one `advanceGame()` processes up to 50
-    ///      funded lootbox subs in the STAGE leg (pre-RNG), partial-draining past that — the HARD chunk.
-    ///      The reason it is 50 not 100: 50 landed lootbox buys ≈ 13.1M < the 16.7M ceiling.
+    /// @dev The funded-sub count this test seeds. The contract no longer chunks the STAGE by a flat count —
+    ///      it advances under a gas-weight budget (SUB_STAGE_WEIGHT_BUDGET; lootbox weight 1, ticket weight 8),
+    ///      so a full budget drains up to ~1000 lootbox subs in one advance. The binding all-ticket worst-case
+    ///      STAGE chunk is measured directly in V56AfkingGasMarginal; this suite bounds the router-entry path
+    ///      over a funded lootbox set.
     uint256 internal constant SUB_STAGE_BATCH = 50;
 
-    /// @dev OPEN_BATCH (GameAfkingModule.sol:191): the flat per-box open budget; each afking box uniform O(1).
-    uint256 internal constant OPEN_BATCH = 200;
+    /// @dev OPEN_BATCH (GameAfkingModule.sol): the flat per-box open budget; each afking box uniform O(1).
+    uint256 internal constant OPEN_BATCH = 130;
 
     /// @dev The CR-01 converged-marginal regime: N>=32 amortizes the per-tx fixed overhead away.
     uint256 internal constant N_MARGINAL = 32;
@@ -137,8 +139,8 @@ contract RouterWorstCaseGas is DeployProtocol {
         game.advanceGame();
         uint256 stageAdvanceGas = gasBefore - gasleft();
 
-        // Non-vacuity (1/2): the cursor advanced a FULL SUB_STAGE_BATCH chunk (the 50-chunk really ran).
-        assertEq(_subCursor(), SUB_STAGE_BATCH, "STAGE non-vacuity: the cursor advanced a full 50-chunk");
+        // Non-vacuity (1/2): the weighted-budget chunk advanced past the full funded window (it really ran).
+        assertGe(_subCursor(), SUB_STAGE_BATCH, "STAGE non-vacuity: the cursor advanced past the funded set");
         // Non-vacuity (2/2): the chunk STAMPED the funded subs in its window. The 2 deploy subs occupy
         // cursor 0..1, so the first 50-chunk stamps my first 48 (cursor 2..49). Assert >= 48 of mine got a
         // NEW stamp (their lastAutoBoughtDay advanced past the pre-state) — a real 50-chunk, not a skip.
@@ -152,12 +154,13 @@ contract RouterWorstCaseGas is DeployProtocol {
             "STAGE non-vacuity: the 50-chunk stamped its funded window (>= 48 of mine newly stamped)"
         );
 
-        // Headline TST-06 / 16.7M: the new-day advance whose STAGE processes the 50-sub chunk fits the
-        // HARD per-tx ceiling (a landed lootbox buy ~ 262k -> 50 ~ 13.1M < 16.7M; 350-SPEC §5).
+        // Headline 16.7M: the new-day advance, whose STAGE drains the full funded lootbox set under the
+        // gas-weight budget (lootbox weight 1, so all fit one advance), stays under the HARD per-tx ceiling.
+        // The binding all-ticket worst-case stage chunk is measured in V56AfkingGasMarginal.
         assertLt(
             stageAdvanceGas,
             EFFECTIVE_GAS_CEILING,
-            "16.7M ceiling: the new-day advance STAGE 50-chunk (50 funded lootbox subs, post-349.2) fits under 16.7M"
+            "16.7M ceiling: the new-day advance draining the funded lootbox set fits under 16.7M"
         );
 
         emit log_named_uint("stage_advance_50chunk_whole_gas", stageAdvanceGas);
@@ -457,15 +460,13 @@ contract RouterWorstCaseGas is DeployProtocol {
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
+            // Fulfill any in-flight request FIRST (before advancing) — a stamping advance can leave the game
+            // rngLocked with an unfilled word, and advanceGame() would revert RngNotReady if called while the
+            // word is 0. Fulfilling at the loop top clears the lock so the next advance can proceed.
+            _fulfillPending(vrfWord);
+            if (!game.advanceDue() && !game.rngLocked()) break;
             game.advanceGame();
-            uint256 reqId = mockVRF.lastRequestId();
-            if (reqId != _lastFulfilledReqId && reqId > 0) {
-                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
-                if (!fulfilled) {
-                    mockVRF.fulfillRandomWords(reqId, vrfWord);
-                    _lastFulfilledReqId = reqId;
-                }
-            }
+            _fulfillPending(vrfWord);
         }
     }
 
@@ -474,14 +475,21 @@ contract RouterWorstCaseGas is DeployProtocol {
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;
+            _fulfillPending(vrfWord);
+            if (!game.advanceDue() && !game.rngLocked()) return;
             game.advanceGame();
-            uint256 reqId = mockVRF.lastRequestId();
-            if (reqId != _lastFulfilledReqId && reqId > 0) {
-                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
-                if (!fulfilled) {
-                    mockVRF.fulfillRandomWords(reqId, vrfWord);
-                    _lastFulfilledReqId = reqId;
-                }
+            _fulfillPending(vrfWord);
+        }
+    }
+
+    /// @dev Fulfill the latest pending mock-VRF request (idempotent — no-op if already fulfilled / none).
+    function _fulfillPending(uint256 vrfWord) internal {
+        uint256 reqId = mockVRF.lastRequestId();
+        if (reqId != _lastFulfilledReqId && reqId > 0) {
+            (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+            if (!fulfilled) {
+                mockVRF.fulfillRandomWords(reqId, vrfWord);
+                _lastFulfilledReqId = reqId;
             }
         }
     }
@@ -494,11 +502,11 @@ contract RouterWorstCaseGas is DeployProtocol {
     }
 
     function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 32));
+        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTOPENED, 32));
+        return uint32(_subField(who, OFF_LASTOPENED, 24));
     }
 
     function _subscriberCount() internal view returns (uint256) {
@@ -506,7 +514,8 @@ contract RouterWorstCaseGas is DeployProtocol {
     }
 
     /// @dev Read the STAGE cursor `_subCursor` (slot 70, byte 0, uint16) — the number of set entries the
-    ///      current cycle's STAGE has advanced past (a full SUB_STAGE_BATCH chunk advances it by 50).
+    ///      current cycle's STAGE has advanced past (the weighted-budget chunk advances it by as many subs
+    ///      as fit the gas-weight budget).
     function _subCursor() internal view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) & 0xFFFF;
     }

@@ -54,10 +54,10 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     uint256 private constant SUBOF_SLOT = 66;           // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant SUBSCRIBERS_SLOT = 68;     // address[] _subscribers (slot holds the length)
 
-    // Sub packed-field byte offsets (DegenerusGameStorage.sol:1867; RE-DERIVED via forge inspect; the
-    // game-resident Sub is a single 232-bit slot — the old AfKing-standalone offsets are WRONG).
-    uint256 private constant OFF_LASTBOUGHT = 21; // uint32 lastAutoBoughtDay (bytes 21..24)
-    uint256 private constant OFF_LASTOPENED = 25; // uint32 lastOpenedDay     (bytes 25..28)
+    // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot,
+    // 241/256 bits used — the markers are uint24 each, not the old uint32 232-bit layout).
+    uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
+    uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
 
     uint256 private constant MINTPACKED_SLOT = 10;
     uint256 private constant DEITY_SHIFT = 184;
@@ -74,8 +74,8 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     ///      (a full OPEN_BATCH of uniform-O(1) boxes) stays under it.
     uint256 internal constant EFFECTIVE_GAS_CEILING = 16_700_000;
 
-    /// @dev OPEN_BATCH (GameAfkingModule.sol:191): the flat per-box open budget; each afking box uniform O(1).
-    uint256 internal constant OPEN_BATCH = 200;
+    /// @dev OPEN_BATCH (GameAfkingModule.sol): the flat per-box open budget; each afking box uniform O(1).
+    uint256 internal constant OPEN_BATCH = 130;
 
     /// @dev The CR-01 converged-marginal regime: N>=32 amortizes the per-call fixed overhead away (the
     ///      donor's Test-D N). The afking open is uniform O(1) so the marginal is stable; N=32 is robust.
@@ -349,15 +349,13 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
+            // Fulfill any in-flight request FIRST (before advancing) — a stamping advance can leave the game
+            // rngLocked with an unfilled word, and advanceGame() would revert RngNotReady if called while the
+            // word is 0. Fulfilling at the loop top clears the lock so the next advance can proceed.
+            _fulfillPending(vrfWord);
+            if (!game.advanceDue() && !game.rngLocked()) break;
             game.advanceGame();
-            uint256 reqId = mockVRF.lastRequestId();
-            if (reqId != _lastFulfilledReqId && reqId > 0) {
-                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
-                if (!fulfilled) {
-                    mockVRF.fulfillRandomWords(reqId, vrfWord);
-                    _lastFulfilledReqId = reqId;
-                }
-            }
+            _fulfillPending(vrfWord);
         }
     }
 
@@ -366,14 +364,21 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;
+            _fulfillPending(vrfWord);
+            if (!game.advanceDue() && !game.rngLocked()) return;
             game.advanceGame();
-            uint256 reqId = mockVRF.lastRequestId();
-            if (reqId != _lastFulfilledReqId && reqId > 0) {
-                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
-                if (!fulfilled) {
-                    mockVRF.fulfillRandomWords(reqId, vrfWord);
-                    _lastFulfilledReqId = reqId;
-                }
+            _fulfillPending(vrfWord);
+        }
+    }
+
+    /// @dev Fulfill the latest pending mock-VRF request (idempotent — no-op if already fulfilled / none).
+    function _fulfillPending(uint256 vrfWord) internal {
+        uint256 reqId = mockVRF.lastRequestId();
+        if (reqId != _lastFulfilledReqId && reqId > 0) {
+            (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+            if (!fulfilled) {
+                mockVRF.fulfillRandomWords(reqId, vrfWord);
+                _lastFulfilledReqId = reqId;
             }
         }
     }
@@ -386,11 +391,11 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     }
 
     function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 32));
+        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTOPENED, 32));
+        return uint32(_subField(who, OFF_LASTOPENED, 24));
     }
 
     function _subscriberCount() internal view returns (uint256) {
