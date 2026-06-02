@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
 status: executing
-last_updated: "2026-06-02T20:30:00.000Z"
+last_updated: "2026-06-02T21:30:00.000Z"
 last_activity: 2026-06-02
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 18
-  completed_plans: 13
-  percent: 64
+  completed_plans: 14
+  percent: 67
 ---
 
 # Project State
@@ -33,9 +33,9 @@ See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 356 (TST — Unmanipulable + Quest-Core Non-Perturbation + Two-Path-Open + Liveness Valve + Gap-Decouple + Gas Marginals + Non-Widening) — EXECUTING
-Plan: 3 of 7
-Status: Ready to execute (356-02 complete — the 3 v55-PROOF fuzz files migrated offsets+write-masks in lockstep to the v56 Sub re-pack; valid Wave-1 ADAPT templates)
-Last activity: 2026-06-02 -- 356-02 complete (V55FreezeDeterminism/V55RevertFreeEvCap/V55SetMutationOpenE: read offsets + _pokeAfkingStamp/_setScorePlus1 write masks migrated 21/uint32+9/uint96+7 -> 11/14+8/uint24+6; forge build EXIT 0; freeze/determinism/no-orphan/swap-pop/OPEN-E proofs green; 9 v56-behavior reds [milli-ETH amount packing, subscribe-funding 0.01-ETH delta, withdraw E() custom-error, unified openBoxes valve] recorded PRE-EXISTING for the 356-07 baseline union; ZERO contract mutation)
+Plan: 356-06 complete (Wave-1 LIVE-01/GAS-06); 356-03/04/05 (SEC/QST fuzz) still pending
+Status: Ready to execute 356-03/04/05 (the SEC-01/02 + QST-04 fuzz suites) → then 356-07 NON-WIDENING ledger
+Last activity: 2026-06-02 -- 356-06 complete (EXTEND V56AfkingGasMarginal: SUBSCRIBER_CAP 500->1000 + the per-tx gap-resume ceiling [each advanceGame tx < 16,777,216; gap-backfill advance N ~6.85M, deferred-jackpot N+1 a SEPARATE tx — the Codex composition breach closed] + the GAS-06 decouple idempotent-resume invariants D-07 [STAGE_GAP_BACKFILLED break observable: dailyIdx not advanced/advanceDue stays true/gapDays==0 re-entry/purchaseStartDay bumped once/same frozen word] + the 4 D-06 residuals empirically pinned [R1 weight fidelity, R2 heaviest ticket entry, R3 mixed-130-day open, R4 measured worst-case mixed-day OPEN_BATCH chunk ~10.35M] + LIVE-01 openBoxes valve [afking-first/both-cursors-drain/each-chunk<cap/lastOpenedDay-monotone/drainAfkingBoxes-selector-isolated/byte-unchanged] + D-09 GAS-01..04 loose-bound regression locks; 15/15 green; forge build EXIT 0; ZERO contract mutation; commits c6b087dc + f3cda660)
 
 ## ▶ Active Milestone Roadmap (v56.0 — phases 353-357 — ACTIVE 2026-06-01; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`)
 

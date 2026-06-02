@@ -193,7 +193,7 @@ Plans:
 - [ ] 356-03-PLAN.md — Wave-1 SEC-01 V56SecUnmanipulable: churn-fuzz invariants + the 4 named repros (affiliate re-claim churn / streak decay-gap dodge / pendingBurnie double-claim CEI / 4 finalize hooks before delete) [SEC-01]
 - [ ] 356-04-PLAN.md — Wave-1 SEC-02 V56FreezeSolvency: solvency invariant fuzz + RNG-freeze determinism + the SOLVENCY-01 debit byte-diff anchor [SEC-02]
 - [ ] 356-05-PLAN.md — Wave-1 QST-04 V56QuestNonPerturb: slot-1 streak-neutral during afking + cross-caller (awardQuestStreakBonus/bingo/degenerette/boon) byte-identity [SEC-01]
-- [ ] 356-06-PLAN.md — Wave-1 LIVE-01 + GAS-06 EXTEND V56AfkingGasMarginal: SUBSCRIBER_CAP fix 500->1000 + per-tx gap-resume <16.7M ceiling + the decouple idempotent-resume + the openBoxes valve + the 4 residuals + the GAS-01..04 regression locks [LIVE-01, GAS-06]
+- [x] 356-06-PLAN.md — Wave-1 LIVE-01 + GAS-06 EXTEND V56AfkingGasMarginal: SUBSCRIBER_CAP fix 500->1000 + per-tx gap-resume <16.7M ceiling + the decouple idempotent-resume + the openBoxes valve + the 4 residuals + the GAS-01..04 regression locks [LIVE-01, GAS-06] ✅ 2026-06-02 (15/15 green; gap-backfill advance N ~6.85M + deferred-jackpot N+1 SEPARATE tx; mixed-day OPEN_BATCH chunk ~10.35M; ZERO contract mutation; commits c6b087dc + f3cda660)
 - [ ] 356-07-PLAN.md — Wave-2 REGRESSION-BASELINE-v56.md: the BY-NAME NON-WIDENING ledger (empirical 453f8073 checkout + the subset gate live-union==empty + the D-10 narrowing) [SEC-01, SEC-02, LIVE-01, GAS-06]
 
 **UI hint**: no
