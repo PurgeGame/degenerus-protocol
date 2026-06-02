@@ -159,6 +159,116 @@ contract V56QuestNonPerturb is DeployProtocol {
     }
 
     // =========================================================================
+    // (b) cross-caller byte-identity (afking subs present vs absent) + O1 single-credit
+    // =========================================================================
+
+    /// @notice `awardQuestStreakBonus` produces a byte-identical PlayerQuestState for a TARGET player
+    ///         whether or not OTHER players hold afking subs (have begun afking) — the new shared-core
+    ///         entrypoints (beginAfking / finalizeAfking) write only their own player's slot and cannot
+    ///         perturb the target's. Asserted on the full packed PlayerQuestState word in two worlds via
+    ///         snapshot/revert (NOT a linear re-run).
+    function testByteIdentAwardStreakBonusWithAfkingPresentVsAbsent() public {
+        address target = makeAddr("byteident_target");
+        address other1 = makeAddr("byteident_other1");
+        address other2 = makeAddr("byteident_other2");
+        uint32 day = _rollDay(13);
+
+        uint256 snap = vm.snapshotState();
+
+        // WORLD-A: NO afking subs present. Run the target's awardQuestStreakBonus path.
+        _awardStreak(target, 4, day);
+        _awardStreak(target, 3, day);
+        uint256 wordA = _questStateWord(target);
+
+        vm.revertToState(snap);
+
+        // WORLD-B: OTHER players hold afking subs (afkingActive set + one mid-finalize), THEN run the
+        // IDENTICAL target path.
+        _awardStreak(other1, 11, day);
+        _beginAfking(other1, day);
+        _beginAfking(other2, day);
+        _finalizeAfking(other2, 2, day, day); // a sibling finalize write lands before the target path
+        _awardStreak(target, 4, day);
+        _awardStreak(target, 3, day);
+        uint256 wordB = _questStateWord(target);
+
+        assertEq(
+            wordB,
+            wordA,
+            "ByteIdent: the target's PlayerQuestState is byte-identical with afking subs present vs absent"
+        );
+        assertEq(_streakOf(target), 7, "non-vacuity: the target path actually moved the streak (4+3)");
+    }
+
+    /// @notice The manual quest-reward callers (a slot completion + a streak bonus) produce a
+    ///         byte-identical target PlayerQuestState across the two worlds (afking siblings present vs
+    ///         absent) — the cross-caller boundary does not perturb the existing callers.
+    function testByteIdentCrossCallerCompletionWithAfkingPresentVsAbsent() public {
+        address target = makeAddr("crosscaller_target");
+        address other = makeAddr("crosscaller_other");
+        uint32 day = _rollDay(11);
+
+        uint256 snap = vm.snapshotState();
+
+        // WORLD-A: no afking siblings — seed streak, complete slot 0, complete slot 1.
+        _awardStreak(target, 6, day);
+        _completeSlot0(target, day);
+        _completeSlot1(target, day);
+        uint256 wordA = _questStateWord(target);
+        uint16 streakA = _streakOf(target);
+        uint24 lastActiveA = _lastActiveDayOf(target);
+
+        vm.revertToState(snap);
+
+        // WORLD-B: an afking sibling is active across the identical target path.
+        _awardStreak(other, 8, day);
+        _beginAfking(other, day);
+        _awardStreak(target, 6, day);
+        _completeSlot0(target, day);
+        _completeSlot1(target, day);
+        uint256 wordB = _questStateWord(target);
+
+        assertEq(wordB, wordA, "CrossCaller: byte-identical target PlayerQuestState (afking sibling present vs absent)");
+        assertEq(streakA, 7, "non-vacuity: the non-afking target advanced its streak (6 -> 7)");
+        assertEq(lastActiveA, uint24(day), "non-vacuity: the slot-0 completion bumped lastActiveDay");
+    }
+
+    /// @notice O1 single-credit: a completed LOOTBOX quest credits its reward exactly once. In the v56
+    ///         fix the lootbox-quest reward is RETURNED to the caller (credited once there) and is NOT
+    ///         internally creditFlipped — so the handler returns the single QUEST_RANDOM_REWARD and the
+    ///         player's accrued flip balance does NOT move by the lootbox reward inside the handler (no
+    ///         internal double-credit). Holds identically whether or not afking siblings are present.
+    function testO1LootboxSingleCreditAcrossTwoWorlds() public {
+        address target = makeAddr("o1_target");
+        address other = makeAddr("o1_other");
+        uint32 day = _rollDay(4); // slot-1 rolls LOOTBOX (the O1 region)
+        {
+            QuestInfo[2] memory active = quests.getActiveQuests();
+            assertEq(active[1].questType, QT_LOOTBOX, "fixture: day-4 slot-1 is LOOTBOX (the O1 region)");
+        }
+
+        uint256 snap = vm.snapshotState();
+
+        // WORLD-A: no afking siblings.
+        uint256 rewardA = _completeLootboxSlot1(target, day);
+        uint256 internalCreditA = coinflip.coinflipAmount(target);
+
+        vm.revertToState(snap);
+
+        // WORLD-B: an afking sibling is active.
+        _beginAfking(other, day);
+        uint256 rewardB = _completeLootboxSlot1(target, day);
+        uint256 internalCreditB = coinflip.coinflipAmount(target);
+
+        // The lootbox reward is RETURNED once (the single credit the caller applies) and is NOT
+        // internally creditFlipped — proving the O1 double-credit is not re-introduced.
+        assertEq(rewardA, QUEST_RANDOM_REWARD, "O1: WORLD-A lootbox reward returned exactly once (single QUEST_RANDOM_REWARD)");
+        assertEq(rewardB, rewardA, "SingleCredit: identical returned reward with afking present vs absent");
+        assertEq(internalCreditA, 0, "O1: lootbox reward NOT internally creditFlipped (returned to caller only)");
+        assertEq(internalCreditB, internalCreditA, "SingleCredit: no internal credit in either world");
+    }
+
+    // =========================================================================
     // Internal helpers
     // =========================================================================
 
@@ -180,6 +290,23 @@ contract V56QuestNonPerturb is DeployProtocol {
     function _beginAfking(address player, uint32 day) internal {
         vm.prank(ContractAddresses.GAME);
         quests.beginAfking(player, day);
+    }
+
+    /// @dev End a player's afking run (hands the earned streak back), pranked as GAME.
+    function _finalizeAfking(address player, uint24 earned, uint32 coveredDay, uint32 day) internal {
+        vm.prank(ContractAddresses.GAME);
+        quests.finalizeAfking(player, earned, coveredDay, day);
+    }
+
+    /// @dev Complete a LOOTBOX slot-1 quest via the COIN-gated handlePurchase (the O1 region) with the
+    ///      lootbox leg ISOLATED: slot 0 (MINT_ETH) is completed first in a separate handleMint, then a
+    ///      lootbox-only handlePurchase (ethMintSpendWei = 0) clears the slot-1 LOOTBOX target so the
+    ///      returned reward is PURELY the single lootbox reward (the value the caller credits once).
+    function _completeLootboxSlot1(address player, uint32 /*day*/) internal returns (uint256 reward) {
+        vm.prank(ContractAddresses.COIN);
+        quests.handleMint(player, 1, true, MINT_PRICE); // slot-0 pre-req (its reward is returned, not relevant here)
+        vm.prank(ContractAddresses.COIN);
+        (reward, , , ) = quests.handlePurchase(player, 0, 0, 1 ether, MINT_PRICE, MINT_PRICE);
     }
 
     /// @dev Complete slot 0 (MINT_ETH) via the COIN-gated handleMint with a 1-ticket ETH mint sized
