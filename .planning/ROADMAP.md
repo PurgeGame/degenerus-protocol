@@ -212,7 +212,15 @@ Plans:
 
   3. The closure flip is applied (AUDIT-01) — the `MILESTONE_V56_AT_HEAD_<sha>` closure signal is emitted and propagated verbatim, and the atomic 5-doc closure flip (ROADMAP + STATE + MILESTONES + PROJECT + REQUIREMENTS) is applied; the closure plan is a single blocking USER closure-verdict + signal-format approval gate (`autonomous: false`) — the auto-advance is HELD at the closure boundary per `feedback_pause_at_contract_phase_boundaries`. (The separate v52 consolidated cross-model audit still folds the v56 surface into its cumulative sweep — an additional track, recorded in the v52 charge, NOT a substitute for this in-milestone close.)
 
-**Plans**: TBD
+**Plans**: 6 plans in 4 waves (Wave 1: the leading contract gate + the D-14 reconciliation; Wave 2: the delta-audit ∥ the 3-skill genuine-PARALLEL sweep [+ best-effort XMODEL], both READ-ONLY @ HEAD'; Wave 3: FINDINGS-v56.0; Wave 4: the closure flip + the close-then-prompt-to-push offer). TWO `autonomous: false` gates (357-00 contract gate + 357-04 closure gate) — unlike every prior TERMINAL's single closure gate.
+
+Plans:
+- [ ] 357-00-PLAN.md — Wave 1 (autonomous:false CONTRACT GATE): the THREE bundled contract changes — F-356-01 drainAffiliateBase dispatch stub + D-11 pass-required subscribe + D-12 purchase-grounded subscribe (D-13 VAULT/SDGNRS exempt) — forge build clean, HELD for USER hand-review, committed as the SOLE .sol commit (HEAD') [AUDIT-01]
+- [ ] 357-00b-PLAN.md — Wave 1 (autonomous): the D-14 NON-WIDENING reconciliation — re-run forge test at HEAD', drop the D-11/D-12 supersession reds (vm.skip + re-prove via the new V56SubHardening positive proofs), record the F-356-01 narrowing, re-freeze the subject at HEAD' [AUDIT-01]
+- [ ] 357-01-PLAN.md — Wave 2 (autonomous, READ-ONLY @ HEAD', ∥ 357-02): the delta-audit — every v56 surface NON-WIDENING vs 453f8073 (zero orphan hunks; SOLVENCY-01 byte-unchanged + RNG-freeze + affiliate flat-7% deterministic-split-PULL non-gameability + open two-path + LIVE-01 + GAS-06 + shared-quest non-perturbation + the 5cb707f2 + the 357-00 hardening attributed) + the regression live − union == ∅ BY NAME [AUDIT-01]
+- [ ] 357-02-PLAN.md — Wave 2 (autonomous, READ-ONLY @ HEAD', ∥ 357-01): the 3-skill genuine-PARALLEL adversarial sweep (run INLINE from the orchestrator context per D-06) + best-effort XMODEL augmentation — the strategic sub/unsub edge (PRIMARY) + settle-timing + pre-credit-EV + two-path open + the D-11/D-12 hardened gates + the now-sound 5cb707f2 bypass + the drainAffiliateBase stub + the affiliate claim CEI; /degen-skeptic dual-gate filter [AUDIT-01]
+- [ ] 357-03-PLAN.md — Wave 3 (autonomous): author audit/FINDINGS-v56.0.md (the 9-section report, chmod 444 deferred to closure) folding the delta-audit + the adversarial disposition; F-356-01 RESOLVED-AT-357; re-attest the CURRENT v56.0 requirement set [AUDIT-01]
+- [ ] 357-04-PLAN.md — Wave 4 (autonomous:false CLOSURE GATE): the atomic 5-doc closure flip + the MILESTONE_V56_AT_HEAD_<sha> signal (reconcile the stale 356 progress row; chmod 444 the findings; no .sol in the closure commit) + the close-then-prompt-to-push offer (D-02 — wait for explicit USER GO) [AUDIT-01]
 
 **UI hint**: no
 
