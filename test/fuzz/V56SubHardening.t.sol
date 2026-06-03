@@ -237,6 +237,149 @@ contract V56SubHardening is DeployProtocol {
     }
 
     // =========================================================================
+    // CHURN-IDEMPOTENCY (HEAD''' = 7b0b2a0b) — the NEW-run subscribe per-day slot-0
+    // guard: subscribe -> funded cover-buy -> cancel -> subscribe (same day) accrues
+    // the flat per-day slot-0 BURNIE (pendingBurnie) EXACTLY ONCE, not once-per-cycle.
+    // The cancel branch tombstones in place (dailyQuantity = 0, record kept), so the
+    // lastAutoBoughtDay stamp survives the unsub; the re-subscribe re-enters the NEW
+    // run (wasActive == false) but now takes the new `else if (s.lastAutoBoughtDay ==
+    // uint24(today))` guard (:451) — keep the snapshot, skip a SECOND cover-buy, no
+    // slot-0 re-accrual. Mirrors the active-sub re-subscribe guard at :395.
+    // =========================================================================
+
+    /// @notice CHURN-IDEMPOTENCY: a pass-holding + funded EOA subscribes (a grounded NEW run whose funded
+    ///         cover-buy stamps `lastAutoBoughtDay = today` and accrues the flat per-day slot-0 BURNIE into
+    ///         `pendingBurnie` ONCE), then churns subscribe(dailyQuantity 0) [cancel] -> subscribe N times
+    ///         in the SAME day. After every same-day churn cycle `pendingBurnie` is UNCHANGED — the per-day
+    ///         flat slot-0 reward is accrued EXACTLY ONCE, not N×. Pre-HEAD''' the NEW-run cover-buy guarded
+    ///         only on the manual `done[0]` (which an afking buy never sets), so each re-subscribe re-ran the
+    ///         cover-buy and re-accrued the flat reward; the HEAD''' guard (`s.lastAutoBoughtDay ==
+    ///         uint24(today)`, :451) closes that. Deity-passed (clears D-11) + funded (grounds D-12) so the
+    ///         churn loop actually reaches the cover-buy on the FIRST subscribe.
+    function testChurnSameDayAccruesSlot0Once() public {
+        address p = makeAddr("churn_idempotency");
+        _grantDeityPass(p);            // clears D-11 so the sub can be created at every cycle
+        _fundPool(p, 200 ether);       // funds the FIRST cover-buy (grounds D-12) + leaves headroom
+
+        // FIRST subscribe — a grounded NEW run; the funded cover-buy stamps lastAutoBoughtDay = today and
+        // accrues the flat slot-0 BURNIE into pendingBurnie ONCE.
+        _subscribeLootbox(p, 1);
+        uint32 today = uint32(game.currentDayView());
+        assertEq(_lastBoughtDayOf(p), today, "non-vacuity: the first funded cover-buy stamped today");
+        uint32 pendingAfterFirst = _pendingBurnieOf(p);
+        assertGt(pendingAfterFirst, 0, "non-vacuity: the first cover-buy accrued the flat slot-0 BURNIE");
+
+        // Churn N times in the SAME day: cancel (dailyQuantity = 0 tombstones IN PLACE — the record + the
+        // lastAutoBoughtDay stamp are retained; the swap-pop happens later in the STAGE, so the slot stays
+        // in the set with dailyQuantity 0) -> re-subscribe (NEW run again, wasActive == false because the
+        // stored dailyQuantity is 0, but lastAutoBoughtDay == today -> the HEAD''' guard at :451 keeps the
+        // snapshot + skips a second cover-buy -> NO slot-0 re-accrual).
+        for (uint256 i; i < 5; i++) {
+            _subscribeLootbox(p, 0);   // cancel — tombstone in place, lastAutoBoughtDay retained
+            assertEq(_dailyQtyOf(p), 0, "cancel wrote the dailyQuantity=0 tombstone in place");
+            _subscribeLootbox(p, 1);   // re-subscribe SAME day — the NEW-run idempotency guard fires
+            assertGt(_subscriberIndexOf(p), 0, "re-subscribe keeps the sub active");
+            assertEq(_dailyQtyOf(p), 1, "re-subscribe restored the dailyQuantity (a NEW run, wasActive==false)");
+            assertEq(_lastBoughtDayOf(p), today, "the stamp survived the churn (still today)");
+            assertEq(
+                _pendingBurnieOf(p),
+                pendingAfterFirst,
+                "CHURN-IDEMPOTENCY: pendingBurnie UNCHANGED across same-day churn (slot-0 accrued once, not per cycle)"
+            );
+        }
+
+        // NEXT-day subscribe (lastAutoBoughtDay != today) DOES a fresh funded cover-buy — the guard only
+        // skips a SAME-day re-entry. Roll a clean fresh day, re-subscribe, assert the stamp advances AND
+        // pendingBurnie accrues again (a genuine new-day buy is not suppressed).
+        _subscribeLootbox(p, 0);       // cancel before the day roll (so the next subscribe is a NEW run)
+        _settleClean(uint256(keccak256("churn_nextday")) | 1);
+        _t += 1 days;
+        vm.warp(_t);
+        _settleClean(uint256(keccak256("churn_nextday2")) | 1);
+        uint32 nextDay = uint32(game.currentDayView());
+        require(nextDay > today, "fixture: the day actually rolled forward");
+        _subscribeLootbox(p, 1);       // NEW run on the fresh day — lastAutoBoughtDay != today -> fresh buy
+        assertEq(_lastBoughtDayOf(p), nextDay, "NEXT-day subscribe did a fresh funded cover-buy (stamp advanced)");
+        assertGt(
+            _pendingBurnieOf(p),
+            pendingAfterFirst,
+            "NEXT-day buy accrued a fresh slot-0 reward (the guard only skips SAME-day, not a real new day)"
+        );
+    }
+
+    // =========================================================================
+    // LEVEL-0 PASS GATE (HEAD'''' = 77d8bc88) — a zero pass horizon (== no pass) is
+    // rejected at EVERY level, INCLUDING level 0. Pre-HEAD'''' the gate was
+    // `validThroughLevel < level`, vacuous at level 0 (`0 < 0` is false), so a funded
+    // PASSLESS EOA (horizon 0) cleared NoPass at level 0 and could afk through level 0
+    // (evicted at L1). The gate is now `(validThroughLevel == 0 || validThroughLevel <
+    // level)` (:372) — a zero horizon is rejected at level 0 too. A real pass has
+    // horizon >= passLevel+99 (never 0); deity = type(uint24).max; VAULT/SDGNRS stay
+    // D-13 exempt. The existing D-11 negative proof runs at level >= 1 and never
+    // exercised level 0 — exactly the gap the 357-02 sweep MISSED, USER-caught.
+    // =========================================================================
+
+    /// @notice LEVEL-0 NEGATIVE (the closed gap): at level 0 (the initial fixture state, made explicit via
+    ///         `_setLevel(0)`), a FUNDED PASSLESS EOA reverts `NoPass()` on subscribe. Pre-HEAD'''' the gate
+    ///         `validThroughLevel(0) < level(0)` was `0 < 0` == false, so the passless EOA slipped through
+    ///         at level 0 (evicted only at L1). The `== 0` arm now rejects a zero horizon at level 0 too.
+    ///         Funded (so the revert can ONLY be NoPass, not MustPurchase — isolates the pass failure at the
+    ///         level-0 boundary the existing level-5 negative never reached).
+    function testD11PasslessEoaRevertsNoPassAtLevelZero() public {
+        address p = makeAddr("d11_nopass_l0");
+        _setLevel(0);                 // the boundary the existing level>=1 negative proof never exercised
+        _fundPool(p, 50 ether);       // funded -> the revert can ONLY be NoPass (the level-0 zero-horizon arm)
+        vm.prank(p);
+        vm.expectRevert(abi.encodeWithSignature("NoPass()"));
+        game.subscribe(address(0), false, false, 1, 0, address(0));
+        assertEq(_subscriberIndexOf(p), 0, "LEVEL-0: the passless sub was rejected at level 0 (no NoPass-vacuity slip)");
+    }
+
+    /// @notice LEVEL-0 POSITIVE (real finite pass): at level 0, an EOA with a real finite pass horizon
+    ///         (`validThroughLevel >= 1`, e.g. 99) subscribes OK — the `== 0` arm rejects only a ZERO
+    ///         horizon, so a genuine pass (never 0) is unaffected at level 0. Funded so D-12 is also cleared.
+    function testD11RealPassSubscribesAtLevelZero() public {
+        address p = makeAddr("d11_realpass_l0");
+        _setLevel(0);
+        _grantFinitePass(p, 99);      // a real pass horizon (>= passLevel+99 in production; never 0)
+        _fundPool(p, 50 ether);
+        vm.prank(p);
+        game.subscribe(address(0), false, false, 1, 0, address(0)); // MUST NOT revert (horizon 99 != 0)
+        assertGt(_subscriberIndexOf(p), 0, "LEVEL-0: a real finite-pass holder subscribes at level 0");
+        assertEq(_validThroughLevelOf(p), 99, "LEVEL-0: the real horizon was stamped (not zeroed by the gate)");
+    }
+
+    /// @notice LEVEL-0 POSITIVE (deity): at level 0, a deity holder (horizon == type(uint24).max) subscribes
+    ///         OK — the sentinel covers every level and is never 0, so the `== 0` arm never fires for deity.
+    function testD11DeityHolderSubscribesAtLevelZero() public {
+        address p = makeAddr("d11_deity_l0");
+        _setLevel(0);
+        _grantDeityPass(p);           // _passHorizonOf == type(uint24).max (never 0)
+        _fundPool(p, 50 ether);
+        vm.prank(p);
+        game.subscribe(address(0), false, false, 1, 0, address(0)); // MUST NOT revert
+        assertGt(_subscriberIndexOf(p), 0, "LEVEL-0: a deity holder subscribes at level 0 (sentinel covers)");
+        assertEq(_validThroughLevelOf(p), uint32(type(uint24).max), "LEVEL-0: deity sentinel stamped at level 0");
+    }
+
+    /// @notice LEVEL-0 POSITIVE (D-13 VAULT/sDGNRS exempt): at level 0, the two protocol self-subscribers
+    ///         subscribe with NO pass + UNFUNDED — the `exemptSub` short-circuit gates the WHOLE
+    ///         `(validThroughLevel == 0 || ...)` predicate, so the new `== 0` arm does NOT break the
+    ///         construction-time bootstrap (they have horizon 0 and would otherwise be rejected by the new
+    ///         arm — the carve-out is what lets them through at level 0).
+    function testD13VaultSdgnrsExemptAtLevelZero() public {
+        _setLevel(0);
+        // VAULT — no pass (horizon 0), unfunded; the new `== 0` arm would reject a non-exempt sub here.
+        vm.prank(ContractAddresses.VAULT);
+        game.subscribe(ContractAddresses.VAULT, true, false, 1, 0, address(0));
+        assertGt(_subscriberIndexOf(ContractAddresses.VAULT), 0, "LEVEL-0: VAULT exempt subscribe at level 0 (zero horizon carve-out)");
+        // sDGNRS — same pinned-identity exemption at level 0.
+        vm.prank(ContractAddresses.SDGNRS);
+        game.subscribe(ContractAddresses.SDGNRS, true, false, 1, 0, address(0));
+        assertGt(_subscriberIndexOf(ContractAddresses.SDGNRS), 0, "LEVEL-0: sDGNRS exempt subscribe at level 0 (zero horizon carve-out)");
+    }
+
+    // =========================================================================
     // F-356-01 — the drainAffiliateBase Game dispatch stub is reachable + AFFILIATE-only
     // =========================================================================
 
@@ -594,6 +737,10 @@ contract V56SubHardening is DeployProtocol {
 
     function _affiliateBaseOf(address who) internal view returns (uint32) {
         return uint32(_subField(who, OFF_AFFBASE, 32));
+    }
+
+    function _pendingBurnieOf(address who) internal view returns (uint32) {
+        return uint32(_subField(who, OFF_PENDINGBURNIE, 32));
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {
