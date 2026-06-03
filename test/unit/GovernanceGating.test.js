@@ -446,36 +446,47 @@ describe("Governance & Gating (Phase 43)", function () {
   });
 
   // ===========================================================================
-  // GATE-01 through GATE-04: advanceGame daily mint gate
+  // GATE-01 through GATE-04: advanceGame liveness + the mintBurnie advance-bounty
+  // SOFT pay-gate (357 advance-incentive redesign, HEAD'' 61315ecd)
   // ===========================================================================
   //
-  // The _enforceDailyMintGate checks:
-  //   1. gateIdx = uint32(dailyIdx). If gateIdx == 0 → no gate.
-  //   2. lastEthDay + 1 < gateIdx: if false → passes (minted recently enough).
-  //   3. If true → tiered bypasses: deity pass, 30min anyone, 15min pass holder,
-  //      DGVE majority → or revert MustMintToday().
+  // The 357 redesign DROPPED the MustMintToday hard revert. advanceGame() is now
+  // PURE LIVENESS: anyone may crank it any time; the dead _enforceDailyMintGate /
+  // MustMintToday / vault / caller arguments were removed. The error no longer
+  // exists in the contract surface, so asserting revertedWithCustomError(...,
+  // "MustMintToday") would itself error on an unknown selector — those assertions
+  // are gone.
+  //
+  // The must-mint tier ladder moved to _bountyEligible(address) in
+  // DegenerusGameMintStreakUtils, surfaced as the view game.bountyEligible(addr).
+  // It is now a SOFT PAY gate: mintBurnie() reads bountyEligible(msg.sender)
+  // BEFORE the self-call and pays the advance bounty only when mult>0 && eligible.
+  // The advance WORK is always permitted regardless of eligibility.
+  //
+  // Tier ladder (cheapest-first short-circuit):
+  //   minted today/yesterday → true; deity pass → true; anyone 30+ min into the
+  //   day → true; any pass holder 15+ min in → true; active afking sub → true;
+  //   DGVE-majority owner → true; else false (no bounty, but advance still runs).
   //
   // The elapsed time check uses: elapsed = (block.timestamp - 82620) % 1 days
   //
-  // CRITICAL: We must position the block timestamp just past a day boundary
-  // (within the first few seconds) to avoid the 30-minute time bypass.
-  // Using advanceToNextDay() lands ~19h into the game day, always bypassing.
-  // Instead, we use jumpToNextGameDayBoundary(5) for 5 seconds past boundary.
+  // CRITICAL: position the block timestamp just past a day boundary (within the
+  // first few seconds) to land BELOW the 15-minute window. jumpToNextGameDayBoundary(5)
+  // gives 5 seconds past the boundary; advanceToNextDay() lands ~19h in (always >30m).
 
-  describe("GATE-01: Tiered advanceGame mint gate (caller must have minted)", function () {
-    it("caller who purchased on current day can call advanceGame", async function () {
-      const { game, advanceModule, deployer, alice, mockVRF } =
+  describe("GATE-01: advanceGame is permissionless liveness (no MustMintToday)", function () {
+    it("a same-day minter is bountyEligible AND can advance", async function () {
+      const { game, deployer, alice, mockVRF } =
         await loadFixture(deployFullProtocol);
 
       // Process day 1 and day 2 to get dailyIdx >= 2
-      // Use advanceToNextDay for processing days (timing doesn't matter for deployer
-      // since deployer has 100% DGVE and bypasses the gate anyway)
+      // (timing doesn't matter for deployer — it holds 100% DGVE)
       await advanceToNextDay();
       await advanceGameOneDay(game, deployer, mockVRF);
       await advanceToNextDay();
       await advanceGameOneDay(game, deployer, mockVRF);
 
-      // Jump to day 3, positioned 5 seconds past the boundary
+      // Jump to day 3, positioned 5 seconds past the boundary (below the 15-min window)
       await jumpToNextGameDayBoundary(5);
 
       // Alice purchases (mints) on day 3 -- creates a mint record for today
@@ -492,19 +503,19 @@ describe("Governance & Gating (Phase 43)", function () {
           { value: cost }
         );
 
-      // Alice should pass the mint gate (she minted today).
-      // May revert for other game-state reasons, but NOT MustMintToday.
-      const tx = game.connect(alice).advanceGame();
-      await expect(tx).to.not.be.revertedWithCustomError(
-        advanceModule,
-        "MustMintToday"
-      );
+      // Soft pay-gate: minted-today → bountyEligible == true.
+      expect(await game.bountyEligible(alice.address)).to.equal(true);
+
+      // Liveness: advanceGame never reverts for a mint-gate reason (MustMintToday
+      // is gone). It may revert NotTimeYet for ordinary game-state reasons, but
+      // NEVER for a removed gate — and it does not for alice on this fresh day.
+      await expect(game.connect(alice).advanceGame()).to.not.be.reverted;
     });
   });
 
-  describe("GATE-02: Time-based unlock relaxes mint gate", function () {
-    it("non-minter can call advanceGame after 30-minute delay", async function () {
-      const { game, advanceModule, deployer, alice, mockVRF } =
+  describe("GATE-02: 30-minute window flips bountyEligible true; advance always works", function () {
+    it("non-minter is ineligible in the first seconds, eligible after 30 min", async function () {
+      const { game, deployer, alice, mockVRF } =
         await loadFixture(deployFullProtocol);
 
       // Process day 1 and day 2
@@ -513,29 +524,25 @@ describe("Governance & Gating (Phase 43)", function () {
       await advanceToNextDay();
       await advanceGameOneDay(game, deployer, mockVRF);
 
-      // Jump to day 3, 5 seconds past boundary
+      // Jump to day 3, 5 seconds past boundary (< 15 min)
       await jumpToNextGameDayBoundary(5);
 
-      // Verify that alice FAILS the gate when within the first few seconds
-      await expect(
-        game.connect(alice).advanceGame()
-      ).to.be.revertedWithCustomError(advanceModule, "MustMintToday");
+      // Fresh non-minter, non-DGVE, no pass, < 15 min in → NOT bounty-eligible …
+      expect(await game.bountyEligible(alice.address)).to.equal(false);
+      // … yet the advance WORK is still permitted (pure liveness, no MustMintToday).
+      await expect(game.connect(alice).advanceGame()).to.not.be.reverted;
 
       // Advance 31 minutes past the day boundary
       await advanceTime(31 * 60);
 
-      // Now the 30-minute time-based unlock should bypass the gate
-      const tx = game.connect(alice).advanceGame();
-      await expect(tx).to.not.be.revertedWithCustomError(
-        advanceModule,
-        "MustMintToday"
-      );
+      // Now the 30-minute window makes anyone bounty-eligible.
+      expect(await game.bountyEligible(alice.address)).to.equal(true);
     });
   });
 
-  describe("GATE-03: DGVE majority holder bypasses mint gate", function () {
-    it("deployer (100% DGVE) bypasses mint gate without minting", async function () {
-      const { game, advanceModule, deployer, mockVRF } =
+  describe("GATE-03: DGVE majority holder is always bountyEligible", function () {
+    it("deployer (100% DGVE) is eligible without minting", async function () {
+      const { game, deployer, mockVRF } =
         await loadFixture(deployFullProtocol);
 
       // Process day 1 and day 2
@@ -544,19 +551,16 @@ describe("Governance & Gating (Phase 43)", function () {
       await advanceToNextDay();
       await advanceGameOneDay(game, deployer, mockVRF);
 
-      // Jump to day 3, 5 seconds past boundary
+      // Jump to day 3, 5 seconds past boundary (the DGVE tier must not depend on time)
       await jumpToNextGameDayBoundary(5);
 
-      // Deployer has NOT minted today, but holds 100% DGVE → bypasses gate
-      const tx = game.connect(deployer).advanceGame();
-      await expect(tx).to.not.be.revertedWithCustomError(
-        advanceModule,
-        "MustMintToday"
-      );
+      // Deployer has NOT minted today, but holds 100% DGVE → bountyEligible via the
+      // DGVE-majority tier (the cold-path isVaultOwner read).
+      expect(await game.bountyEligible(deployer.address)).to.equal(true);
     });
 
-    it("alice with >50.1% DGVE bypasses mint gate without minting", async function () {
-      const { game, advanceModule, vault, deployer, alice, mockVRF } =
+    it("alice with >50.1% DGVE is eligible without minting", async function () {
+      const { game, vault, deployer, alice, mockVRF } =
         await loadFixture(deployFullProtocol);
 
       const dgve = await getDgveToken(vault);
@@ -566,7 +570,6 @@ describe("Governance & Gating (Phase 43)", function () {
       await dgve.connect(deployer).transfer(alice.address, amount);
 
       // Process day 1 and day 2 using deployer
-      // gateIdx=0 on day 1, and gateIdx=1 on day 2 where lastEthDay=0 → 0+1<1=false → passes
       await advanceToNextDay();
       await advanceGameOneDay(game, deployer, mockVRF);
       await advanceToNextDay();
@@ -575,18 +578,14 @@ describe("Governance & Gating (Phase 43)", function () {
       // Jump to day 3, 5 seconds past boundary
       await jumpToNextGameDayBoundary(5);
 
-      // Alice has NOT minted but holds >50.1% DGVE → bypasses gate
-      const tx = game.connect(alice).advanceGame();
-      await expect(tx).to.not.be.revertedWithCustomError(
-        advanceModule,
-        "MustMintToday"
-      );
+      // Alice has NOT minted but holds >50.1% DGVE → bountyEligible.
+      expect(await game.bountyEligible(alice.address)).to.equal(true);
     });
   });
 
-  describe("GATE-04: Non-minter, non-DGVE-holder reverts with MustMintToday()", function () {
-    it("alice (0% DGVE, no mint) reverts with MustMintToday", async function () {
-      const { game, advanceModule, deployer, alice, mockVRF } =
+  describe("GATE-04: ineligible keeper earns no bounty, but the advance still works", function () {
+    it("alice (0% DGVE, no mint, <15 min) is ineligible yet can advance", async function () {
+      const { game, deployer, alice, mockVRF } =
         await loadFixture(deployFullProtocol);
 
       // Process through day 2 to get dailyIdx >= 2
@@ -598,14 +597,14 @@ describe("Governance & Gating (Phase 43)", function () {
       // Jump to day 3, 5 seconds past boundary
       await jumpToNextGameDayBoundary(5);
 
-      // alice: 0% DGVE, never minted, no deity pass, <15 min elapsed
-      await expect(
-        game.connect(alice).advanceGame()
-      ).to.be.revertedWithCustomError(advanceModule, "MustMintToday");
+      // alice: 0% DGVE, never minted, no deity pass, no afking sub, < 15 min in.
+      expect(await game.bountyEligible(alice.address)).to.equal(false);
+      // The advance work is still permissionless — MustMintToday no longer exists.
+      await expect(game.connect(alice).advanceGame()).to.not.be.reverted;
     });
 
-    it("bob (0% DGVE, no mint) also reverts within 15 min window", async function () {
-      const { game, advanceModule, deployer, bob, mockVRF } =
+    it("bob (0% DGVE, no mint) is likewise ineligible within the 15-min window", async function () {
+      const { game, deployer, bob, mockVRF } =
         await loadFixture(deployFullProtocol);
 
       // Process through day 2
@@ -617,13 +616,12 @@ describe("Governance & Gating (Phase 43)", function () {
       // Jump to day 3, 5 seconds past boundary
       await jumpToNextGameDayBoundary(5);
 
-      await expect(
-        game.connect(bob).advanceGame()
-      ).to.be.revertedWithCustomError(advanceModule, "MustMintToday");
+      expect(await game.bountyEligible(bob.address)).to.equal(false);
+      await expect(game.connect(bob).advanceGame()).to.not.be.reverted;
     });
 
-    it("non-minter fails within first seconds but succeeds after 30 min", async function () {
-      const { game, advanceModule, deployer, carol, mockVRF } =
+    it("carol is ineligible in the first seconds, then eligible after 30 min", async function () {
+      const { game, deployer, carol, mockVRF } =
         await loadFixture(deployFullProtocol);
 
       // Process through day 2
@@ -635,20 +633,14 @@ describe("Governance & Gating (Phase 43)", function () {
       // Jump to day 3, 5 seconds past boundary
       await jumpToNextGameDayBoundary(5);
 
-      // Within first seconds: should fail with MustMintToday
-      await expect(
-        game.connect(carol).advanceGame()
-      ).to.be.revertedWithCustomError(advanceModule, "MustMintToday");
+      // Within the first seconds: ineligible (the soft pay-gate withholds the bounty).
+      expect(await game.bountyEligible(carol.address)).to.equal(false);
 
       // Advance past 30 minutes
       await advanceTime(31 * 60);
 
-      // After 30 min: gate relaxed
-      const tx = game.connect(carol).advanceGame();
-      await expect(tx).to.not.be.revertedWithCustomError(
-        advanceModule,
-        "MustMintToday"
-      );
+      // After 30 min: the anyone-tier flips eligibility true.
+      expect(await game.bountyEligible(carol.address)).to.equal(true);
     });
   });
 
