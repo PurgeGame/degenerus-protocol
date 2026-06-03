@@ -1,6 +1,26 @@
 # Regression Baseline — v56.0 (NON-WIDENING clean-baseline gate ledger)
 
-> **357-00b RE-RUN @ HEAD' `ac5f1e03` (the D-14 reconciliation — see §8).** After the 357-00 contract
+> **357-00b RE-RUN @ HEAD'' `61315ecd` (the advance-incentive redesign — see §9, the CURRENT re-frozen
+> subject).** After the SECOND 357 contract gate (HEAD'' = `61315ecd0d617e5ece386676aaf452282331ebdf` — the
+> advance-incentive redesign: `advanceGame()` DROPPED the `MustMintToday` hard revert → pure liveness; the
+> must-mint tier ladder moved to the SOFT pay-gate `_bountyEligible(address)` in
+> `DegenerusGameMintStreakUtils`, read by `mintBurnie()` BEFORE the self-call so the advance bounty pays only
+> when `mult>0 && eligible`; NEW `bountyEligible(address) external view`; `DegenerusVault.gameAdvance()` +
+> `StakedDegenerusStonk.gameAdvance()` now route through `mintBurnie()`), the whole tree was re-run at the
+> re-frozen subject HEAD'' and reconciled (§9). **New counts: 567 passed / 133 failed / 99 skipped.** The live
+> 133 failing NAME set is a STRICT SUBSET of the §2 134-name `453f8073` union (`live − union == ∅`, verified
+> empirically — empty diff) — **NON-WIDENING HOLDS at HEAD''; ZERO new forge regression from the redesign.**
+> The redesign NARROWED the live count by 1 (133 vs the HEAD' 134) — run-variance within the documented
+> non-deterministic Bucket A (VRF/RNG-window) + Bucket F (flaky invariant) + `vm.assume`-exhaustion fuzz
+> cluster (§4/§6); the `MustMintToday` hard-revert had a SINGLE consumer — the Hardhat `GovernanceGating`
+> GATE-01..04 block, rewritten to the soft pay-gate model in 357-00b (§9b), NOT a forge fixture. The NEW
+> `V56SubHardening` advance-soft-gate proofs (6 added → 17 GREEN) prove `advanceGame` liveness +
+> `bountyEligible` truth table + the `mintBurnie` eligible/ineligible pay + the Vault/sDGNRS→mintBurnie
+> routing. The SOLVENCY-01 leg-1 byte-anchor STILL HOLDS (the redesign is BURNIE-bounty-only + liveness-only —
+> it touches no ETH/`claimablePool` debit). **`git diff 61315ecd HEAD -- contracts/` is EMPTY** — 357-00b is
+> test + ledger writes ONLY; the subject stays re-frozen at HEAD''.
+
+> **357-00b RE-RUN @ HEAD' `ac5f1e03` (the D-14 reconciliation — see §8; SUPERSEDED by §9 at HEAD'').** After the 357-00 contract
 > gate (the F-356-01 `drainAffiliateBase` Game dispatch stub + the D-11 pass-required / D-12
 > purchase-grounded / D-13 VAULT-sDGNRS-exempt subscribe hardening), the whole tree was re-run at the
 > re-frozen subject HEAD' `ac5f1e033a785d18a9f0b89b7de5d05268431dbd` and reconciled. **The live failing
@@ -560,3 +580,107 @@ ac5f1e03 -- contracts/modules/GameAfkingModule.sol` does NOT touch the SOLVENCY-
 `afkingFunding[src] -= ethValue; claimablePool -= uint128(ethValue);` statements are byte-unchanged (relocated to
 HEAD' `:690-691`, byte-identical to the `453f8073` `:709-710` two-liner re-anchored in §7a). The ETH/
 `claimablePool` debit is byte-frozen across 357-00; SOLVENCY-01 leg-1 HOLDS.
+
+---
+
+## 9. The 357-00b D-14 reconciliation @ HEAD'' `61315ecd` (the advance-incentive redesign re-run — CURRENT SUBJECT)
+
+**Subject re-freeze:** HEAD'' = `61315ecd0d617e5ece386676aaf452282331ebdf` — the SECOND `contracts/*.sol` commit of
+phase 357 (after HEAD' `ac5f1e03`, §8), the **advance-incentive redesign** (6 files, USER-approved gate). This is
+the CURRENT re-frozen audit subject — everything downstream (357-01 delta-audit, 357-02 sweep, 357-03 FINDINGS,
+357-04 closure) re-freezes against HEAD'' and is READ-ONLY against `contracts/`. **`git diff 61315ecd HEAD --
+contracts/` is EMPTY** — the 357-00b extension (this §9) is TEST + ledger writes ONLY.
+
+### 9a. The HEAD'' contract changes (the advance-incentive redesign, 6 files)
+
+- **`advanceGame()` is PURE LIVENESS** — the `MustMintToday` hard revert was DROPPED; the dead
+  `_enforceDailyMintGate` / `MustMintToday` error / vault / caller arguments were removed. Anyone may crank
+  `advanceGame()` any time; it reverts only `NotTimeYet()` for ordinary game-state reasons, NEVER for a mint gate.
+  `MustMintToday` no longer exists anywhere in `contracts/` (`grep -rn MustMintToday contracts/` → 0).
+- **The must-mint tier ladder moved to `_bountyEligible(address)`** in `DegenerusGameMintStreakUtils.sol:32` — a
+  SOFT PAY gate (cheapest-first short-circuit): minted today/yesterday → deity pass → anyone 30+ min into the day
+  → any pass holder 15+ min in → active afking sub → DGVE-majority owner (the only external call, cold path). The
+  `gateIdx == 0` first-day branch returns `true` (nothing to earn against yet).
+- **`mintBurnie()` reads `_bountyEligible(msg.sender)` BEFORE the self-call** (`GameAfkingModule.sol:1233`) and
+  pays the advance bounty only when `mult > 0 && eligible` (`:1235`). The advance WORK runs regardless — an
+  ineligible keeper just earns no bounty (real participants get first shot; free cranks are welcome).
+- **NEW `bountyEligible(address) external view`** on `DegenerusGame.sol:1799` (returns `_bountyEligible(who)`) —
+  the off-chain pre-check + the test oracle.
+- **`DegenerusVault.gameAdvance()` (`:537`) + `StakedDegenerusStonk.gameAdvance()` (`:425`) now route through
+  `mintBurnie()`** — they earn the keeper bounty for the work and revert `NoWork()` when idle. The vault is
+  owner-gated (`onlyVaultOwner`, the DGVE majority); sDGNRS is permissionless. Both hold deity passes / afking
+  subs → always bounty-eligible.
+
+### 9b. The 357-00b arithmetic @ HEAD''
+
+| Quantity | §8a HEAD' `ac5f1e03` | HEAD'' delta (the redesign) | HEAD'' `61315ecd` (this run) |
+|----------|----------------------|-----------------------------|------------------------------|
+| `forge test` passed | 566 | **+1** (the narrowed red flips into the pass column; run-variance in the §4 cluster) | **567** |
+| `forge test` failed | 134 | **−1** (NARROWING — run-variance within the non-deterministic Bucket A/F + `vm.assume`-exhaustion cluster) | **133** |
+| `forge test` skipped | 99 | **±0** (the §8c 69 drops + the §3b/§2 carried 30 are unchanged — the redesign superseded NO new fixtures) | **99** |
+
+**The binding gate, re-run @ HEAD'':** `forge test --json` parsed the HEAD'' live failing `(suite, test)` set and
+compared it to the §2 `453f8073` 134-name union. **`live − union == ∅` (0 names) — NON-WIDENING HOLDS at
+HEAD''** (verified empirically: the HEAD'' 133-name failing set is a strict SUBSET of the §2 union; the set-diff
+`live − union` is EMPTY — `forge` log at `/tmp/ft357.log`). ZERO new forge red was introduced by the
+advance-incentive redesign. (The HEAD'' run was `567 passed / 133 failed / 99 skipped`, 799 total.)
+
+### 9c. The 1-red NARROWING (133 vs the HEAD' 134) — run-variance, NOT a gate-freed forge fixture
+
+The live failing count narrowed by exactly 1 (133 vs HEAD' 134). **This is run-variance within the documented
+non-deterministic cluster, NOT a deterministic gate-freed fixture:** the `MustMintToday` hard-revert had a SINGLE
+consumer — the **Hardhat `GovernanceGating` GATE-01..04 block** (a unit test, NOT in the `forge` tree / NOT in the
+§2 forge union) — which 357-00b rewrote to the soft pay-gate model (§9e). No `forge` `.t.sol` ever asserted the
+`MustMintToday` revert (`grep -rln MustMintToday test/ --include='*.t.sol'` → only the NEW `V56SubHardening`, which
+asserts it does NOT revert). The `union − live` slack (the §2 names not failing this HEAD'' run) is entirely Bucket
+A (VRF/RNG-window: `test_wordWrite*`, `test_index*`, `test_*Rotation*`, `invariant_allGapDaysBackfilled` /
+`invariant_rngUnlockedAfterSwap` / `invariant_stallRecoveryValid`, `test_entropyUniqueDifferentPlayers`,
+`testClaimWhalePassMaterializesFutureWindowAndAppliesStats`) + Bucket F (`invariant_solvencyUnderDegenerette`,
+flaky) + the `vm.assume`-exhaustion fuzzer `testFuzz_RngLockDeterminism_StakedStonkRedemption` + the
+`testFuzz_MintDiv_*` differential — all members the §4 ⊆-gate rationale explicitly accounts for as
+fuzz/invariant-campaign variance. The redesign is BURNIE-bounty + liveness only; it touches no VRF/RNG-window
+code, so it cannot have deterministically narrowed any Bucket-A red. The 133 ⊆ 134 subset gate is the
+load-bearing property and it holds.
+
+### 9d. The NEW advance-soft-gate proofs (the re-prove side) — `test/fuzz/V56SubHardening.t.sol` (17 GREEN)
+
+The §8b `V56SubHardening` suite was EXTENDED with 6 new advance-soft-gate proofs (11 → 17, all GREEN against
+HEAD'' — `forge test --match-contract V56SubHardening` = 17 passed / 0 failed / 0 skipped):
+- **`testAdvanceGameLivenessFreshNonMinterNotGated`** — a passless/unfunded non-DGVE EOA in the first seconds of a
+  fresh day (`advanceDue()`) cranks `advanceGame()` with NO `MustMintToday` revert (pure liveness).
+- **`testBountyEligibleTruthTable`** — `bountyEligible(addr)`: false for a fresh non-minter/non-DGVE in the first
+  15 min; true after 30 min elapsed; true for a deity holder; true for an active afking sub; true for the DGVE
+  owner (`ContractAddresses.CREATOR`, 100% DGVE + permanent deity). (Settles past the `gateIdx==0` first-day
+  bypass so the per-tier checks are non-vacuous.)
+- **`testMintBurnieEligibleKeeperEarnsAdvanceBounty`** — an ELIGIBLE (deity) keeper cranking `mintBurnie` with an
+  advance due earns the bounty (`coinflip.coinflipAmount(keeper)` strictly increases).
+- **`testMintBurnieIneligibleKeeperEarnsZeroButWorkRuns`** — an INELIGIBLE (fresh, < 15 min) keeper earns ZERO
+  advance bounty (`coinflipAmount` byte-unchanged) yet the advance WORK still ran (the directional pay invariant).
+- **`testVaultGameAdvanceRoutesThroughMintBurnie`** — `vault.gameAdvance()` (pranked as CREATOR, the DGVE owner)
+  cranks via `mintBurnie` when work is due and reverts `NoWork()` when idle.
+- **`testSdgnrsGameAdvanceRoutesThroughMintBurnie`** — `sdgnrs.gameAdvance()` (permissionless) cranks via
+  `mintBurnie` when work is due and reverts `NoWork()` when idle.
+
+The existing 11 D-11/D-12/D-13 + crossing-eviction + `drainAffiliateBase` proofs (§8b) stay GREEN at HEAD'' (the
+subscribe-hardening + the stub are untouched by the advance redesign).
+
+### 9e. The Hardhat `GovernanceGating` GATE-01..04 rewrite (the only `MustMintToday` consumer)
+
+`test/unit/GovernanceGating.test.js` GATE-01..04 (~`:448-665`) asserted the now-REMOVED
+`revertedWithCustomError(advanceModule, "MustMintToday")`. Since the error no longer exists in the contract
+surface, those assertions are DROPPED (they would themselves error on an unknown selector) and the block was
+rewritten to the soft pay-gate model: GATE-01 a same-day minter is `bountyEligible` AND advances; GATE-02 the
+30-minute window flips a non-minter eligible while the advance always works; GATE-03 the DGVE majority holder is
+always eligible; GATE-04 an ineligible keeper earns no bounty but the advance still runs. **6/6 GATE tests GREEN**
+(`npx hardhat test test/unit/GovernanceGating.test.js`). (One unrelated `ADMIN-02` red — a stale `gameSetAutoRebuy`
+fixture, the method no longer exists on `DegenerusVault` — is PRE-EXISTING + out of scope, logged to the phase
+`deferred-items.md`; Hardhat tests are a separate runner, not part of this forge NON-WIDENING ledger.)
+
+### 9f. The SOLVENCY-01 leg-1 byte-anchor re-confirmed @ HEAD'' (§7a / §8e still hold)
+
+The HEAD'' advance-incentive redesign is **liveness-only** (`advanceGame` drops a VIEW-only revert gate) +
+**BURNIE-bounty-only** (the `mintBurnie` soft pay-gate decides whether a `creditFlip` BURNIE bounty is paid — OFF
+the ETH/`claimablePool`/solvency path). It adds no ETH/`claimablePool` debit and touches no frozen RNG-window slot.
+The SOLVENCY-01 leg-1 two-liner (`afkingFunding[src] -= ethValue; claimablePool -= uint128(ethValue);`) is
+byte-unchanged from §8e (the `c5715297`→`ac5f1e03`→`61315ecd` chain never edits it). SOLVENCY-01 leg-1 HOLDS at
+HEAD''.
