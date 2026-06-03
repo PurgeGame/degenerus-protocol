@@ -364,9 +364,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         s.validThroughLevel = _passHorizonOf(subscriber);
         // Pass-required: the just-stored horizon must reach the current level (the deity
         // sentinel type(uint24).max always covers). Reuses the value written above — no
-        // second pass read. A pass valid now can still be outgrown later; the per-iter
-        // crossing eviction handles that.
-        if (!exemptSub && s.validThroughLevel < level) revert NoPass();
+        // second pass read. A zero horizon means NO pass and is rejected at every level —
+        // including level 0, where `< level` (0 < 0) would otherwise be vacuously false and
+        // let a passless EOA afk through level 0 (a real pass has horizon >= passLevel+99,
+        // never 0). A pass valid now can still be outgrown later; the per-iter crossing
+        // eviction handles that.
+        if (!exemptSub && (s.validThroughLevel == 0 || s.validThroughLevel < level))
+            revert NoPass();
         // Sparse funder map: store only a non-self source; clear on self so re-pointing an
         // operator-funded sub back to self does not strand a stale funder. Re-pointing the
         // source IS a re-subscribe, which re-runs the operator-approval gate.
