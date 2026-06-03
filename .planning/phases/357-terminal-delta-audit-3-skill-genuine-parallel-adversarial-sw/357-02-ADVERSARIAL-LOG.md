@@ -1,10 +1,12 @@
 # 357-02 — Adversarial Sweep Log (v56.0 TERMINAL, AUDIT-01 SC1 adversarial-sweep half)
 
-**Audit subject (FROZEN, CURRENT):** `77d8bc883048b3ba4213f94fc2ac5d830ba3f4a3` (**HEAD''''** — the FOURTH 357 contract gate). The sweep RAN against HEAD'' `61315ecd`; the subject was then re-frozen at HEAD'''' by two further subscribe-hardening gates that RESOLVE two items this sweep surfaced (the slot-0 churn advisory) or MISSED (the D-11 level-0 gap), recorded in §B.3-addendum + §D below.
+**Audit subject (FROZEN, CURRENT):** `c9b5d20d756f9dfc5f3b0584aae56bdfa215d8bf` (**c9b5d20d** — the FIFTH / FINAL 357 contract gate, the flat-10% pass lootbox + dead-guard refactor). The 3-skill sweep RAN against HEAD'' `61315ecd`; the subject was re-frozen at HEAD'''' `77d8bc88` by two subscribe-hardening gates (RESOLVING the slot-0 churn advisory + the D-11 level-0 gap, §B.3-addendum + §D), then at **c9b5d20d** by the FIFTH gate, which got a FOCUSED single-skill contract-auditor pass (proportionate to a contained economic + dead-code refactor — §F below) rather than a full 3-skill re-sweep.
 **Baseline:** v55.0 contract HEAD `453f8073` (`MILESTONE_V55_AT_HEAD_ca3bbd32…`).
-**Frozen-subject invariant:** `git diff 77d8bc88 HEAD -- contracts/` is EMPTY (zero contract mutation; `DIFF_LINES: 0`). (The sweep itself ran read-only against HEAD'' `61315ecd`; HEAD'''' adds only the two revert-only / control-flow-only subscribe gates.)
+**Frozen-subject invariant:** `git diff c9b5d20d HEAD -- contracts/` is EMPTY (zero contract mutation; `DIFF_LINES: 0`). (The 3-skill sweep ran read-only against HEAD'' `61315ecd`; HEAD'''' adds the two revert-only / control-flow-only subscribe gates; c9b5d20d adds the FIFTH-gate pass refactor — §F.)
 
 > **⚠ HEAD'''' RECONCILIATION (357-00d).** This sweep ran against HEAD'' `61315ecd` and recorded ONE armed advisory (ZDH probe 7 — the NEW-run cover-buy slot-0 double-accrue) and marked D-11 NEGATIVE-VERIFIED. Two further USER-approved gates then re-froze the subject at **HEAD'''' `77d8bc88`**: (1) **HEAD''' `7b0b2a0b`** RESOLVES the ZDH-7 slot-0 churn advisory (the `:451` `else if (s.lastAutoBoughtDay == uint24(today))` idempotency guard); (2) **HEAD'''' `77d8bc88`** closes a **D-11 LEVEL-0 PASSLESS GAP the sweep MISSED** — the sweep's D-11 probes (CA e-passforge / ZDH 9) ran only at level ≥ 1 and never exercised level 0, where `validThroughLevel < level` (`0 < 0`) was vacuously false and a funded passless EOA cleared `NoPass()`. The USER's review caught it; HEAD'''' adds the `(s.validThroughLevel == 0 || ...)` arm. **Honest disclosure: the 3-skill sweep was NEGATIVE-VERIFIED on D-11 but had a level-0 coverage gap.** The clean-closure outcome now has **THREE resolved-in-phase items** (F-356-01 + the slot-0 churn advisory + the level-0 D-11 gap), still **0 UNRESOLVED FINDING_CANDIDATE**.
+
+> **⚠ c9b5d20d RECONCILIATION (357-00e — the FIFTH / FINAL gate).** A FIFTH USER-committed `contracts/*.sol` gate — **c9b5d20d** (the flat-10% pass lootbox on all 3 pass types replacing the presale-20%/post-10% split + 3 unreachable-guard removals + a `hasAnyLazyPass` docstring fix; `DegenerusGame.sol` 8 lines + `DegenerusGameWhaleModule.sol` −46/+25) — re-freezes the subject from HEAD'''' to **c9b5d20d**. It is a contained pass-PURCHASE economic refactor that does NOT touch the afking / advance / subscribe / affiliate surfaces or `_passHorizonOf`, so it got a **FOCUSED single-skill `/contract-auditor` pass** (proportionate to a contained economic + dead-code refactor) rather than a full 3-skill re-sweep — recorded in §F below. **4 probes (guard reachability / flat-10% solvency / dangling refs / `hasAnyLazyPass` doc) all NEGATIVE-VERIFIED, 0 FINDING_CANDIDATE** (full disposition `/tmp/sweep357/c9-auditor.md`). The clean-closure outcome is UNCHANGED — still THREE resolved-in-phase items, **0 UNRESOLVED FINDING_CANDIDATE**; the FIFTH gate adds ZERO findings (a clean refactor, NOT a finding).
 
 ---
 
@@ -373,4 +375,34 @@ This matches the v55-style clean close: every item is RESOLVED in-phase, 0 defer
 
 ## §E — Read-only invariant
 
-The sweep ran read-only against HEAD'' `61315ecd` (`DIFF_LINES: 0` at sweep time — no `contracts/*.sol` read from anything other than `git show 61315ecd:...`; every cited `file:line` re-grep-verifiable at HEAD''). The subject was then re-frozen at **HEAD'''' `77d8bc88`** by two further revert-only / control-flow-only subscribe gates (HEAD''' `7b0b2a0b` slot-0 idempotency + HEAD'''' `77d8bc88` D-11 level-0 rejection) that RESOLVE the ZDH-7 advisory and the USER-caught level-0 gap. **`git diff 77d8bc88 HEAD -- contracts/` is EMPTY** — zero contract mutation in the 357-00d reconciliation; the CURRENT subject is HEAD'''' `77d8bc883048b3ba4213f94fc2ac5d830ba3f4a3`. The HEAD''→HEAD'''' delta is byte-confined to `GameAfkingModule.subscribe` (the `:451` idempotency guard + the `:372` D-11 level-0 arm); the SOLVENCY-01 debit two-liner is byte-frozen (relocated `:690-691`→`:702-703` only). HEAD == HEAD'''' for `contracts/`.
+The sweep ran read-only against HEAD'' `61315ecd` (`DIFF_LINES: 0` at sweep time — no `contracts/*.sol` read from anything other than `git show 61315ecd:...`; every cited `file:line` re-grep-verifiable at HEAD''). The subject was then re-frozen at **HEAD'''' `77d8bc88`** by two further revert-only / control-flow-only subscribe gates (HEAD''' `7b0b2a0b` slot-0 idempotency + HEAD'''' `77d8bc88` D-11 level-0 rejection) that RESOLVE the ZDH-7 advisory and the USER-caught level-0 gap, then at **c9b5d20d** by the FIFTH-gate pass refactor (§F). **`git diff c9b5d20d HEAD -- contracts/` is EMPTY** — zero contract mutation in the 357-00e reconciliation; the CURRENT subject is c9b5d20d `c9b5d20d756f9dfc5f3b0584aae56bdfa215d8bf`. The HEAD''→HEAD'''' delta is byte-confined to `GameAfkingModule.subscribe` (the `:451` idempotency guard + the `:372` D-11 level-0 arm); the HEAD''''→c9b5d20d delta is byte-confined to `DegenerusGameWhaleModule.sol` (the lootbox-bps collapse + dead-guard removal) + `DegenerusGame.sol` (the `hasAnyLazyPass` docstring); the SOLVENCY-01 debit two-liner is byte-frozen (relocated `:690-691`→`:702-703` only — `GameAfkingModule.sol` untouched by the FIFTH gate). HEAD == c9b5d20d for `contracts/`.
+
+---
+
+## §F — The FIFTH / FINAL gate `c9b5d20d` — focused single-skill contract-auditor pass (357-00e)
+
+The FIFTH v56.0 contract gate `c9b5d20d` (USER-committed directly) is a **contained pass-PURCHASE economic refactor**: a flat-10% lootbox on all 3 pass types (whale / lazy / deity) replacing the presale-20%/post-10% split (the `*_LOOTBOX_PRESALE_BPS` constants + the `_psRead(PS_ACTIVE)` ternaries dropped, `*_LOOTBOX_POST_BPS → *_LOOTBOX_BPS`; the 25% `presaleBoxCredit` unchanged) + 3 unreachable-guard removals + a `hasAnyLazyPass` docstring fix; it touches `DegenerusGame.sol` (8 lines) + `DegenerusGameWhaleModule.sol` (−46/+25). It does NOT touch the afking / advance / subscribe / affiliate surfaces or `_passHorizonOf` — i.e. NONE of the v56-NEW security spine the 3-skill sweep charged. **Proportionate to a contained economic + dead-code refactor, it got a FOCUSED single-skill `/contract-auditor` pass, NOT a full 3-skill re-sweep** (the genuine-parallel 3-skill sweep §A–§E already discharged the afking/advance/subscribe/affiliate surfaces; this refactor adds no new surface to those). Full disposition: `/tmp/sweep357/c9-auditor.md`.
+
+**4 probes — all NEGATIVE-VERIFIED, 0 FINDING_CANDIDATE:**
+
+**Probe c9-A — the 3 dropped guards reachability**
+- Surface: pass-purchase dead-code removal.
+- Finding @ c9b5d20d: the lazy `if (baseCost == 0) revert E();` is dead — `priceForLevel` (`PriceLookupLib.sol:21`) has NO zero branch (returns ≥ `0.01 ether` over all `uint24`), so the 10-level `_lazyPassCost` sum is always > 0. The lazy `if (lootboxAmount == 0) return;` + the deity `if (lootboxAmount != 0) { … }` zero-guards are dead — 10% of a positive price ≥ 0.18 ETH (lazy) / ≥ 1.2 ETH (whale) / ≥ 24 ETH (deity) is never 0. `_recordLootboxEntry` is safe even vs a hypothetical 0 (its explicit `!= 0` RMW guard on the sensitive branch). Removing provably-dead branches is byte-irrelevant.
+- Disposition: **NEGATIVE-VERIFIED**.
+
+**Probe c9-B — flat-10% solvency / value-conservation**
+- Surface: pass-purchase flat-10% lootbox.
+- Finding: only the `*_LOOTBOX_BPS` multiplier shifts (2000→1000 presale); OFF the ETH/`claimablePool` path; the ETH pool splits are computed from `totalPrice` INDEPENDENT of the lootbox %; the 25% `presaleBoxCredit` byte-unchanged; reducing an award can't create unbacked value / exceed the EV-cap / underflow. A pure downward tweak (intended). SOLVENCY-01 untouched (`git diff 77d8bc88 c9b5d20d -- contracts/modules/GameAfkingModule.sol` EMPTY).
+- Disposition: **NEGATIVE-VERIFIED**.
+
+**Probe c9-C — dangling refs to the dropped constants**
+- Surface: pass-purchase constant removal.
+- Finding: ZERO remaining refs to the dropped `*_LOOTBOX_PRESALE_BPS` / `*_LOOTBOX_POST_BPS` constants in `contracts/` or `test/` (`git grep` → 0); the `PS_ACTIVE` shift/mask is still used elsewhere (not orphaned). Clean removal.
+- Disposition: **NEGATIVE-VERIFIED**.
+
+**Probe c9-D — the `hasAnyLazyPass` docstring**
+- Surface: pass-view NatSpec.
+- Finding: the docstring is now ACCURATE — `hasAnyLazyPass` is a UI/external VIEW (exclusive `> level`), NOT the AfKing gate (which uses `_passHorizonOf` inclusive through `frozenUntilLevel`); the off-by-one is view-only, referenced only in `IDegenerusGame.sol` + a regression doc, NEVER consumed by any on-chain decision. Benign + the docstring correctly documents the by-design divergence. The function body is byte-unchanged.
+- Disposition: **NEGATIVE-VERIFIED**.
+
+**§F outcome:** the FIFTH gate is a clean behavior-preserving simplification + an intended presale-20%→10% lootbox reduction. **4 probes NEGATIVE-VERIFIED, 0 FINDING_CANDIDATE.** SOLVENCY-01 untouched. The clean-closure verdict is UNCHANGED — the FIFTH gate adds ZERO findings (recorded as a clean refactor, NOT a finding); the v56.0 audit still closes with THREE resolved-in-phase items + 0 UNRESOLVED FINDING_CANDIDATE.
