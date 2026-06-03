@@ -112,10 +112,11 @@ contract V56FreezeSolvency is DeployProtocol {
         address b = makeAddr("solv_b");
         _grantDeityPass(a);
         _grantDeityPass(b);
-        _subscribeLootbox(a, 1);
-        _subscribeLootbox(b, 1);
+        // Fund BEFORE subscribe so each NEW-run cover-buy is grounded (D-12 — an unfunded start reverts).
         _fundPool(a, 200 ether);
         _fundPool(b, 200 ether);
+        _subscribeLootbox(a, 1);
+        _subscribeLootbox(b, 1);
 
         _assertSolvent("post-setup");
 
@@ -146,13 +147,17 @@ contract V56FreezeSolvency is DeployProtocol {
                     game.subscribe(address(0), false, false, 0, 0, address(0));
                 }
             } else if (action == 6) {
-                // re-sub a (re-uses the in-place slot) if it is not currently active.
-                if (_dailyQtyOf(a) == 0) _subscribeLootbox(a, 1);
+                // re-sub a (re-uses the in-place slot) if it is not currently active. Top up its funding
+                // FIRST so the re-sub's NEW-run cover-buy is grounded (D-12).
+                if (_dailyQtyOf(a) == 0) {
+                    _fundPool(a, 20 ether);
+                    _subscribeLootbox(a, 1);
+                }
             } else {
-                // top up b's funding (deposit credits afkingFunding + claimablePool in tandem); re-sub b
-                // first if a STAGE reclaim deleted its slot (depositAfkingFunding needs an active sub).
-                if (_dailyQtyOf(b) == 0) _subscribeLootbox(b, 1);
+                // top up b's funding (deposit credits afkingFunding + claimablePool in tandem); fund FIRST
+                // then re-sub b if a STAGE reclaim deleted its slot (grounds the re-sub cover-buy — D-12).
                 _fundPool(b, 20 ether);
+                if (_dailyQtyOf(b) == 0) _subscribeLootbox(b, 1);
             }
             _assertSolvent("post-action");
         }
@@ -168,12 +173,13 @@ contract V56FreezeSolvency is DeployProtocol {
     function testSolvencyHoldsBuyThenBurnieClaim() public {
         address p = makeAddr("solv_repro");
         _grantDeityPass(p);
-        _subscribeLootbox(p, 1);
+        // Fund-before-subscribe grounds the NEW-run cover-buy (D-12); under the hardened gate the grounded
+        // subscribe IS the delivered buy, so measure the claimablePool debit across the subscribe itself.
         _fundPool(p, 50 ether);
         _assertSolvent("post-fund");
 
         uint256 poolBeforeBuy = _claimablePool();
-        _deliverDay(0x501E1C01);
+        _subscribeLootbox(p, 1); // the grounded NEW-run cover-buy debits the fresh-ETH spend at this site
         uint256 poolAfterBuy = _claimablePool();
         // The delivered buy spent fresh ETH from the (reserved) funding -> the pool decreased by the spend.
         assertLt(poolAfterBuy, poolBeforeBuy, "the delivered buy debited claimablePool by its fresh-ETH spend");
@@ -205,21 +211,24 @@ contract V56FreezeSolvency is DeployProtocol {
     function testDebitEqualsDeliveredEthValueExactly() public {
         address p = makeAddr("debit_eq");
         _grantDeityPass(p);
-        _subscribeLootbox(p, 1);
+        // Fund BEFORE subscribe; under D-12 the grounded subscribe IS the delivered buy (the cover-buy
+        // debits the fresh-ETH spend at the subscribe site), so measure the SOLVENCY-01 leg-1 debit across
+        // the grounded subscribe itself — exactly the byte-frozen `afkingFunding -= ethValue; claimablePool
+        // -= ethValue` two-liner.
         _fundPool(p, 50 ether);
 
         uint256 fundingBefore = game.afkingFundingOf(p);
         uint256 poolBefore = _claimablePool();
         assertGt(fundingBefore, 0, "non-vacuity: the sub is funded pre-buy");
 
-        _deliverDay(0xDEB17EC0);
+        _subscribeLootbox(p, 1); // the grounded NEW-run cover-buy debits fresh ETH at this site
 
         uint256 fundingAfter = game.afkingFundingOf(p);
         uint256 poolAfter = _claimablePool();
         uint256 fundingDebit = fundingBefore - fundingAfter;
         uint256 poolDebit = poolBefore - poolAfter;
 
-        assertGt(fundingDebit, 0, "non-vacuity: the delivered buy spent fresh ETH");
+        assertGt(fundingDebit, 0, "non-vacuity: the grounded subscribe cover-buy spent fresh ETH");
         // The debit is the SAME ethValue on both ledgers (the byte-frozen SOLVENCY-01 two-liner).
         assertEq(
             poolDebit,
@@ -237,8 +246,8 @@ contract V56FreezeSolvency is DeployProtocol {
     function testBurnieClaimLeavesClaimablePoolUnchanged() public {
         address p = makeAddr("burnie_offpath");
         _grantDeityPass(p);
-        _subscribeLootbox(p, 1);
         _fundPool(p, 50 ether);
+        _subscribeLootbox(p, 1);
         _deliverDay(0xB04E0FF); // accrue pendingBurnie + affiliateBase
 
         uint256 owed = _pendingBurnieOf(p);
@@ -271,8 +280,8 @@ contract V56FreezeSolvency is DeployProtocol {
 
         // Record across BOTH the subscribe (min-buy) AND the funded STAGE buy: neither materializes a box.
         vm.recordLogs();
-        _subscribeLootbox(p, 1);
         _fundPool(p, 50 ether);
+        _subscribeLootbox(p, 1);
         _runStageNewDay(0x57A11);
         _settleClean(0x57A12);
         assertEq(_countLootBoxOpened(p), 0, "STAMP-not-resolve: no LootBoxOpened at subscribe/STAGE time (the box is stamped, not resolved)");
@@ -297,8 +306,8 @@ contract V56FreezeSolvency is DeployProtocol {
     function testStampedDayOpenAtTwoBlocksByteIdentical() public {
         address afk = makeAddr("freeze_twoblock");
         _grantDeityPass(afk);
-        _subscribeLootbox(afk, 1);
         _fundPool(afk, 50 ether);
+        _subscribeLootbox(afk, 1);
         _runStageNewDay(0xF00D01);
         _settleClean(0xF00D02);
 
@@ -332,8 +341,8 @@ contract V56FreezeSolvency is DeployProtocol {
     function testFuzzTwoBlockOpenNoBlockEntropy(uint256 r1, uint256 r2, uint64 dt1, uint64 dt2) public {
         address afk = makeAddr("freeze_twoblock_fz");
         _grantDeityPass(afk);
-        _subscribeLootbox(afk, 1);
         _fundPool(afk, 50 ether);
+        _subscribeLootbox(afk, 1);
         _runStageNewDay(0xACE5EED);
         _settleClean(0xACE5EEE);
 

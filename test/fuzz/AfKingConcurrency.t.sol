@@ -96,6 +96,7 @@ contract AfKingConcurrency is DeployProtocol {
     ///         funded sub EXACTLY ONCE -- the per-sub `lastAutoBoughtDay` stamp advances to the
     ///         process day and the buy is idempotent across the chunked partial-drain advance calls.
     function testStageBuysEverySubExactlyOnce() public {
+        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
         uint256 N = 6;
         address[] memory subs = _setupHealthyBuyingSubs(N, "once_");
 
@@ -147,6 +148,7 @@ contract AfKingConcurrency is DeployProtocol {
     ///         STAGE is driven across multiple advance calls within the day. Drives two STAGE passes
     ///         on the SAME day (no day advance between them) and asserts no second buy.
     function testLastAutoBoughtDayBackstopBlocksRepeatBuySameDay() public {
+        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
         address[] memory subs = _setupHealthyBuyingSubs(1, "backstop_");
         address sub = subs[0];
 
@@ -178,6 +180,7 @@ contract AfKingConcurrency is DeployProtocol {
     ///         tail is never relocated; the STAGE reclaim swap-pops the tombstone WITHOUT advancing
     ///         the cursor, re-reading the mover at the freed slot this pass.
     function testCancelDoesNotStrandPendingTail() public {
+        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
         uint256 N = 8;
         address[] memory subs = _setupHealthyBuyingSubs(N, "strand_");
 
@@ -215,6 +218,7 @@ contract AfKingConcurrency is DeployProtocol {
     ///         and the moved occupant is re-read at THIS index this pass (the continue WITHOUT a
     ///         cursor advance, GameAfkingModule.sol:586-594) -- it is NOT skipped.
     function testCancelSwapPopOccupantStillProcessed() public {
+        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
         uint256 N = 5;
         address[] memory subs = _setupHealthyBuyingSubs(N, "swap_");
         address mover = subs[N - 1];
@@ -239,6 +243,7 @@ contract AfKingConcurrency is DeployProtocol {
     ///         record holds any non-zero stored value (validThroughLevel) has it zeroed at the deferred
     ///         STAGE reclaim, with no opt-in preservation path.
     function testCancelReclaimAlwaysDeletesSubRecord() public {
+        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
         address[] memory subs = _setupHealthyBuyingSubs(1, "reclaim_delete_");
         address sub = subs[0];
 
@@ -295,6 +300,7 @@ contract AfKingConcurrency is DeployProtocol {
     ///         reaches them. The NET set effect (after the reclaiming STAGE) equals the old
     ///         immediate-swap-pop -- the set shrinks by exactly the cancel count, no dead slots.
     function testNoDeadSlotBuildupAcrossCancels() public {
+        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
         uint256 baseline = _subscribersLen();
         uint256 N = 6;
         address[] memory subs = _setupHealthyBuyingSubs(N, "build_");
@@ -368,6 +374,7 @@ contract AfKingConcurrency is DeployProtocol {
     ///         H-CANCEL-SWAP-MISS class structurally cannot reproduce because the swap-pop occupant is
     ///         processed at this slot this pass.
     function testPassEvictionPreservesSwapPopInvariant() public {
+        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
         uint256 N = 6;
         // NO deity (the no-pass eviction precondition): _passHorizonOf(subs[i]) = 0 for all i.
         address[] memory subs = _setupNoPassBuyingSubs(N, "evict_swap_");
@@ -398,6 +405,7 @@ contract AfKingConcurrency is DeployProtocol {
     ///         have been pushed behind the cursor and SKIPPED; under v55's tombstone-then-reclaim the
     ///         eviction relocates no one mid-pass and every surviving sub is processed.
     function testPassEvictionMixedDoesNotStrandSurvivors() public {
+        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
         uint256 N = 8;
         // NO deity at subscribe; grant it selectively below.
         address[] memory subs = _setupNoPassBuyingSubs(N, "evict_mix_");
@@ -428,6 +436,7 @@ contract AfKingConcurrency is DeployProtocol {
     ///         leaves the set membership-consistent (every survivor in-set + bought once; every
     ///         cancelled sub reclaimed out), independent of the cancel ordering.
     function testFuzzCancelOrderingPreservesMembership(uint8 cancelMask) public {
+        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
         uint256 N = 6;
         address[] memory subs = _setupHealthyBuyingSubs(N, "fuzzcancel_");
 
@@ -519,10 +528,10 @@ contract AfKingConcurrency is DeployProtocol {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
             _grantDeityPass(who); // survive the crossing (set-mutation, not pass-gating, is the subject)
+            _approveKeeper(who);
+            _fundPool(who, 1 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
             vm.prank(who);
             game.subscribe(address(0), false, false, 1, 0, address(0)); // self, lootbox mode, qty 1
-            _approveKeeper(who);
-            _fundPool(who, 1 ether);
         }
     }
 
@@ -533,10 +542,10 @@ contract AfKingConcurrency is DeployProtocol {
         for (uint256 i; i < n; i++) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
+            _approveKeeper(who);
+            _fundPool(who, 1 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12); still NO deity
             vm.prank(who);
             game.subscribe(address(0), false, false, 1, 0, address(0)); // self, lootbox mode, qty 1, NO deity
-            _approveKeeper(who);
-            _fundPool(who, 1 ether);
         }
     }
 

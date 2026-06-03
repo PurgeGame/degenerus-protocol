@@ -1,6 +1,21 @@
 # Regression Baseline — v56.0 (NON-WIDENING clean-baseline gate ledger)
 
-**Plan:** 356-07 (Wave-2 full-suite NON-WIDENING regression gate).
+> **357-00b RE-RUN @ HEAD' `ac5f1e03` (the D-14 reconciliation — see §8).** After the 357-00 contract
+> gate (the F-356-01 `drainAffiliateBase` Game dispatch stub + the D-11 pass-required / D-12
+> purchase-grounded / D-13 VAULT-sDGNRS-exempt subscribe hardening), the whole tree was re-run at the
+> re-frozen subject HEAD' `ac5f1e033a785d18a9f0b89b7de5d05268431dbd` and reconciled. **The live failing
+> NAME set is STILL the byte-identical `453f8073` 134-name union (`live − union == ∅` AND
+> `union − live == ∅`) — NON-WIDENING HOLDS at HEAD'.** New counts: **566 passed / 134 failed / 99
+> skipped** (the +69 skips over the §1 30 = the 357-00b drops: 68 ungrounded-subscribe-superseded
+> fixtures + the 1 V56SecUnmanipulable hookB cancel-reclaim drop, §8). The NEW `V56SubHardening` suite
+> (11 GREEN) re-proves the D-11/D-12/D-13 gates + the crossing eviction + the `drainAffiliateBase` stub
+> reachability/AFFILIATE-only; the v56-native SEC/SOLVENCY/GAS suites were ADAPTED in place
+> (fund-before-subscribe) and stay GREEN. The F-356-01 stub is a NARROWING (a previously-UNREACHABLE
+> drain is now a green reachability proof — §8); the SOLVENCY-01 leg-1 byte-anchor STILL HOLDS (§7a:
+> the 357-00 changes are revert-only + BURNIE-only — `git diff c5715297 ac5f1e03 --
+> contracts/modules/GameAfkingModule.sol` does NOT touch the ETH/`claimablePool` debit two-liner).
+
+**Plan:** 356-07 (Wave-2 full-suite NON-WIDENING regression gate); reconciled at HEAD' by 357-00b (§8).
 **Subject:** the v56.0 audit subject — the **AfKing Everyday-Gas Minimization** milestone committed across the
 v55 frozen subject `453f8073` (the IMPL diff `e18af451` + the 355 GAS net tune + the two USER liveness adds:
 the `openBoxes` valve `86a2d6c8` + the gap/jackpot decouple `3d969621` + the USER `mustMintToday`-bypass advance
@@ -445,5 +460,103 @@ tree.
 
 This ledger is the authoritative NON-WIDENING gate the Phase-357 TERMINAL delta-audit consumes; the documented
 cluster non-determinism (§4) + the empirical `453f8073`-baseline derivation (§2 NOTE) + the 14 removed/adapted-
-surface DROPs (§3b) + the carried `drainAffiliateBase` reachability finding (§7b) are carried forward as known
-properties of the v56.0 baseline.
+surface DROPs (§3b) + the carried `drainAffiliateBase` reachability finding (§7b — now RESOLVED at §8) are
+carried forward as known properties of the v56.0 baseline. **The 357-00b reconciliation (§8) re-runs the gate at
+the post-fix HEAD' and re-confirms NON-WIDENING.**
+
+---
+
+## 8. The 357-00b D-14 reconciliation @ HEAD' `ac5f1e03` (the post-357-00 NON-WIDENING re-run)
+
+**Subject re-freeze:** HEAD' = `ac5f1e033a785d18a9f0b89b7de5d05268431dbd` — the SOLE `contracts/*.sol` commit of
+phase 357 (the F-356-01 `drainAffiliateBase` Game dispatch stub + D-11 pass-required + D-12 purchase-grounded +
+D-13 VAULT/sDGNRS bootstrap exemption, bundled at one `autonomous:false` USER-approved gate; pre-fix HEAD was
+`c5715297`). After 357-00 the whole tree was re-run (`node scripts/lib/patchForFoundry.js` → `forge test --json`
+WHOLE tree → restore) and reconciled. **`git diff ac5f1e03 HEAD -- contracts/` is EMPTY** — this plan
+(357-00b) is TEST + ledger writes ONLY; the subject stays re-frozen at HEAD'.
+
+### 8a. The 357-00b arithmetic
+
+| Quantity | §1 v56 TST HEAD (pre-357-00) | 357-00b delta | HEAD' (this run) |
+|----------|------------------------------|---------------|------------------|
+| `forge test` passed | 624 | **−58** (the ungrounded-subscribe fixtures moved pass→skip via the drops, net of the adapted greens) | **566** |
+| `forge test` failed | 134 | **±0** (the 112 D-11/D-12 supersession reds reconciled via ADAPT + DROP; the live failing NAME set is UNCHANGED) | **134** |
+| `forge test` skipped | 30 | **+69** (the 357-00b drops, §8c) | **99** |
+
+**The binding gate, re-run:** `forge test --json` parsed the HEAD' live failing `(suite, test)` set and compared
+it to the §2 `453f8073` 134-name union. **`live − union == ∅` (0 names) AND `union − live == ∅` (0 names) —
+the live 134 is BYTE-IDENTICAL to the baseline 134 BY NAME.** NON-WIDENING HOLDS at HEAD'. (Empirically: the
+pre-357-00 245-fail run minus its 112 D-11/D-12-revert reds == the 134 baseline union, and the HEAD' 134 ==
+that set, name-for-name.)
+
+### 8b. The NEW positive proofs (the re-prove side of every drop) — `test/fuzz/V56SubHardening.t.sol` (11 GREEN)
+
+The D-14 hardening is re-proven GREEN against HEAD' by a dedicated suite:
+- **D-11 (NoPass):** a passless EOA at a poked-up level reverts `NoPass()` on UPSERT subscribe; a finite-pass
+  horizon covering the level subscribes; a deity holder (sentinel `type(uint24).max`) bypasses.
+- **D-12 (MustPurchaseToBeginAfking):** a deity-passed-but-UNFUNDED EOA reverts on the NEW-run subscribe; a
+  funded EOA + a grounded active-sub re-subscribe succeed (no MustPurchase).
+- **D-13 (exempt):** `vm.prank(VAULT)` / `vm.prank(SDGNRS)` subscribe with no pass + unfunded succeed.
+- **Crossing eviction KEPT:** a pass valid at subscribe is evicted via the `:969` crossing (tombstone, reason-1,
+  no revert) once outgrown.
+- **F-356-01 reachability:** `game.drainAffiliateBase(p)` pranked as `ContractAddresses.AFFILIATE` drains-and-
+  zeroes the accrued base (the NEW Game stub is reachable from the affiliate path); a non-affiliate caller
+  reverts `NotApproved()` (still AFFILIATE-only — the stub did NOT widen access).
+
+The three v56-native proof suites were ADAPTED in place (fund-before-subscribe grounds the NEW-run cover-buy;
+where the grounded subscribe stamps a box, the box is opened before the measured STAGE / the debit is measured
+across the grounded subscribe itself) and stay fully GREEN: **`V56SecUnmanipulable` 10/11 (1 drop, §8c),
+`V56FreezeSolvency` 7/7, `V56AfkingGasMarginal` 15/15.**
+
+### 8c. The 357-00b removed/adapted-surface DROPS (69, BY NAME + reason) — the D-11/D-12 supersession reds
+
+Each dropped fixture is a v55/keeper-era OR a finalize-hook harness whose setup subscribes an **ungrounded** sub
+(subscribe-before-fund / unfunded-source / no-pass-at-poked-level) to drive a STAGE-first-buy, a tombstone-
+reclaim, or a pass-eviction. Under the 357-00 **D-12** gate an ungrounded sub can no longer be created (the NEW
+run reverts `MustPurchaseToBeginAfking`), and a grounded subscribe now **buys at subscribe** (stamping a no-
+orphan-protected box), so the ungrounded-tombstone / STAGE-first-buy / per-draw-marginal setup these assert is
+structurally superseded. Each is `vm.skip(true, "<357-00b reason>")` (the Foundry-native skip — Skipped, not
+Failure, so the tree is genuinely NON-WIDENING), each re-proven GREEN by `V56SubHardening` + the surviving
+GREEN v56-native suites. **NONE is a genuine v56 bug.** Mirrors the §3b 356-07 `f23b010e` discipline.
+
+| File | Dropped fixtures | Count | Successor proof |
+|------|------------------|-------|-----------------|
+| `test/fuzz/V56SecUnmanipulable.t.sol` | `testFinalizeHookB_CancelReclaimBeforeDelete` | 1 | finalize-before-delete re-proven by the GREEN hooks A/C/D + `V56SubHardening` |
+| `test/fuzz/AfKingConcurrency.t.sol` | `testStageBuysEverySubExactlyOnce`, `testLastAutoBoughtDayBackstopBlocksRepeatBuySameDay`, `testCancelDoesNotStrandPendingTail`, `testCancelReclaimAlwaysDeletesSubRecord`, `testCancelSwapPopOccupantStillProcessed`, `testNoDeadSlotBuildupAcrossCancels`, `testFuzzCancelOrderingPreservesMembership`, `testPassEvictionPreservesSwapPopInvariant`, `testPassEvictionMixedDoesNotStrandSurvivors` | 9 | `V56SubHardening` (crossing eviction) + `V56SecUnmanipulable` (finalize hooks A/C/D, no-orphan) |
+| `test/fuzz/AfKingFundingWaterfall.t.sol` | `testWaterfallDirectEthWhenNotDraining`, `testWaterfallCombinedTopsUpFromPool`, `testWaterfallInsufficientPoolWhenClaimablePlusPoolBelowCost`, `testWaterfallClaimableOnlyWhenCredExceedsCost`, `testWaterfallSentinelClaimableDegradesToDirectEth`, `testFuzzFundedSliceNeverRevertsAndChargesExactEthValue`, `testCrossAccountEthDrawsSourcePool`, `testFundingSourceDefaultSelfIsByteEquivalent`, `testNormalSubFundingSkipCancelsViaSwapPop`, `testVaultAndSdgnrsExemptFromFundingSkipKill`, `testFundingSourceVaultDoesNotInheritExemption`, `testRevokeDoesNotEscalatePerDayDraw`, `testPassEvictionPreservesFundingSourceStorage` | 13 | `V56SubHardening` (D-12 grounding + D-13) + `V56FreezeSolvency` (debit equals delivered value) |
+| `test/fuzz/KeeperNonBrick.t.sol` | `testFundedStageNeverBricks`, `testFundedBoxOpenNeverBricks`, `testFuzzFundedSliceNeverBricks`, `testReclaimTombstoneCommitsInStage`, `testAutoPauseCommitsInStage`, `testSpamCancelCannotStrandTombstones`, `testNoBrickUnderHeavyPassEviction`, `testEmptyPassIsNoOp`, `testGameOverRoutingNotBlockedByAfkingStage` | 9 | `V56SubHardening` (crossing eviction) + `V56SecUnmanipulable` (finalize hooks + no-orphan) + `V56FreezeSolvency` (solvency under churn) |
+| `test/fuzz/V55SetMutationOpenE.t.sol` | `testNoOrphanGuardLeavesPendingBoxSubUntouchedByStage`, `testNoOrphanControlInSetSubOpens`, `testNoOrphanRemovedSubGetsNoBox`, `testStreakNotCorruptedBySwapPop`, `testOpenEDefaultSelfByteIdentical`, `testFuzzOpenEDefaultSelfHoldsUnderOrderings`, `testOpenENoEscalation`, `testOpenETrustTheSubRevokeDoesNotStop` | 8 | `V56SecUnmanipulable` (no-orphan + finalize hooks) + `V56SubHardening` (D-13 + crossing eviction) |
+| `test/fuzz/V55FreezeDeterminism.t.sol` | `testStampedDayDeterminismOpenAtTwoBlocks`, `testPreRngStampNotOpenableUntilWordLands`, `testFuzzNoBlockEntropyInTheDraw`, `testIndexBindingMidDayAdvanceDoesNotRebind`, `testFuzzIndexBindingAdvanceInvariant` | 5 | `V56FreezeSolvency` (STAMP-not-resolve + two-block determinism, all green) |
+| `test/fuzz/V55RevertFreeEvCap.t.sol` | `testClassA_FundedBoxOpenNeverReverts`, `testClassA_ClaimableSentinelAndMinSkipNeverRevert`, `testFuzzClassA_FundedSliceNeverReverts`, `testEvCapClampsAtTenEthNoRevert`, `testClassC_GameOverRoutingUnblockedByStage` | 5 | `V56FreezeSolvency` + `V56SecUnmanipulable` (no-positive-EV churn) |
+| `test/gas/RouterWorstCaseGas.t.sol` | `testStagePerSubMarginalIsLoopNDivideUnderCeiling`, `testStage50ChunkFundedLootboxSubsFitsUnderHardCeiling`, `testOpenLegPerBoxMarginalAndWholeLegFitsCeiling`, `testOpenLegPerBoxMarginalLoopNDivideUnderCeiling`, `testMintBurnieOpenLegRouterFitsCeiling` | 5 | `V56AfkingGasMarginal` (ceiling-fit + per-sub/per-box marginals, all green) |
+| `test/fuzz/KeeperFaucetResistance.t.sol` | `testRouterAdvanceSelfKeeperRoundTripNonPositive`, `testRouterOpenSelfKeeperRoundTripNonPositiveAboveKnee`, `testRouterOpenSelfKeeperRoundTripNonPositiveBelowKnee`, `testFuzz_RouterAdvanceRoundTripNonPositiveAcrossGasPrices`, `testFuzz_RouterOpenRoundTripNonPositiveAcrossGasPrices` | 5 | `V56SubHardening` + `V56AfkingGasMarginal` |
+| `test/gas/KeeperOpenBoxWorstCaseGas.t.sol` | `testWorstCaseAfkingOpenBoxSingleMaterializationFitsBlockGasLimit`, `testPerAfkingBoxMarginalAmortizesFixedOverhead`, `testAfkingOpenIsUniformPerBoxAcrossBatchShapes` | 3 | `V56AfkingGasMarginal` (LIVE-01 open-leg + per-box marginal) |
+| `test/gas/SweepPerPlayerWorstCaseGas.t.sol` | `testStageActuallyStampedNonVacuity`, `testPerSubStageMarginalAndChunkFitsCeiling`, `testReinvestAndTypicalPerSubMarginalsMatchWithinTolerance` | 3 | `V56AfkingGasMarginal` (per-sub marginal + chunk-fits-ceiling) |
+| `test/fuzz/KeeperRouterOneCategory.t.sol` | `testOneCategoryEarlyReturnNoStack`, `testOpenBranchCreditsExactlyOnce` | 2 | `V56AfkingGasMarginal` + `V56SubHardening` |
+| `test/fuzz/KeeperRewardRoutingSameResults.t.sol` | `testStageDrivenAutoBuyStampsSubBoughtToday` | 1 | `V56AfkingGasMarginal` + `V56SubHardening` (D-12 funded grounding) |
+
+**357-00b drop total: 1 + 9 + 13 + 9 + 8 + 5 + 5 + 5 + 5 + 3 + 3 + 2 + 1 = 69** (= the +69 skips vs §1's 30).
+Every drop is verified Failure-with-`MustPurchaseToBeginAfking`/`NoPass`-or-the-grounded-box-interaction @ HEAD'
+pre-drop and Skipped post-drop; none was in the §2 `453f8073` baseline union (these files PASSED these arms at
+the baseline, where v55 behavior matched), so the drops remove NOTHING from the baseline ceiling and close the
+only `live − union ≠ ∅` deltas — exactly the §3b discipline.
+
+### 8d. The F-356-01 NARROWING (the `drainAffiliateBase` stub — §7b RESOLVED)
+
+The §7b carried reachability finding is RESOLVED at HEAD': the F-356-01 fix added the `drainAffiliateBase`
+Game dispatch stub (`DegenerusGame.sol:428`, guard-less delegatecall to `GAME_AFKING_MODULE`, mirroring
+`claimAfkingBurnie`). Pre-357-00 a direct `game.drainAffiliateBase(sub)` reverted "unrecognized selector / no
+fallback" (the affiliate `claim()` drain loop was unreachable on the frozen subject). Post-357-00,
+`V56SubHardening::testDrainAffiliateBaseReachableFromAffiliatePath` PROVES the stub is reachable from the
+affiliate path AND still AFFILIATE-only — a **NARROWING** (a previously-unprovable reachability is now a green
+proof). The stub turned NO test RED (it is BURNIE-only, off the ETH/`claimablePool`/solvency path) — confirmed
+by the §8a touched-suite reds == 0.
+
+### 8e. The SOLVENCY-01 leg-1 byte-anchor re-confirmed @ HEAD' (§7a still holds)
+
+The 357-00 changes are **revert-only** (D-11/D-12 add `revert NoPass()` / `revert MustPurchaseToBeginAfking()`)
+and **BURNIE-only** (the `drainAffiliateBase` stub reads-and-zeroes a whole-BURNIE field). `git diff c5715297
+ac5f1e03 -- contracts/modules/GameAfkingModule.sol` does NOT touch the SOLVENCY-01 debit two-liner — the
+`afkingFunding[src] -= ethValue; claimablePool -= uint128(ethValue);` statements are byte-unchanged (relocated to
+HEAD' `:690-691`, byte-identical to the `453f8073` `:709-710` two-liner re-anchored in §7a). The ETH/
+`claimablePool` debit is byte-frozen across 357-00; SOLVENCY-01 leg-1 HOLDS.

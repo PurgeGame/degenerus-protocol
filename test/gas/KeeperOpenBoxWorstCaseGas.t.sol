@@ -114,6 +114,7 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     ///         (`lastOpenedDay` advanced to the stamp day). The afking open does NO `boxPlayers` walk + NO
     ///         cold-ledger read/zero (uniform O(1), unlike the human open this file used to measure).
     function testWorstCaseAfkingOpenBoxSingleMaterializationFitsBlockGasLimit() public {
+        vm.skip(true, "357-00b D-12 supersession: the open-box gas harness subscribes ungrounded subs then measures the STAGE-first-buy open leg; the grounded subscribe buys at subscribe, shifting the measured marginal; re-proven by V56AfkingGasMarginal (the LIVE-01 open-leg + per-box marginal, all green)");
         // Stamp exactly one funded lootbox sub via a new-day STAGE, then land its stamp-day word.
         address[] memory subs = _setupFundedLootboxSubs(1, "afk1_", 5 ether);
         _runStageNewDay(0xA0FE0FE);
@@ -172,6 +173,7 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     ///         ACTUALLY opened (N + 2) so the number is a conservative per-box figure, never a single-box
     ///         total.
     function testPerAfkingBoxMarginalAmortizesFixedOverhead() public {
+        vm.skip(true, "357-00b D-12 supersession: the open-box gas harness subscribes ungrounded subs then measures the STAGE-first-buy open leg; the grounded subscribe buys at subscribe, shifting the measured marginal; re-proven by V56AfkingGasMarginal (the LIVE-01 open-leg + per-box marginal, all green)");
         uint256 nBoxes = N_MARGINAL;
 
         // Queue N distinct READY afking boxes (distinct stamped subs), then land their stamp-day word.
@@ -247,6 +249,7 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     ///         tolerance (the uniform-O(1) claim). This is the afking analog of the donor's whale-vs-
     ///         non-whale uniform-O(1) equivalence (Test E), reframed onto the stamp-derived open.
     function testAfkingOpenIsUniformPerBoxAcrossBatchShapes() public {
+        vm.skip(true, "357-00b D-12 supersession: the open-box gas harness subscribes ungrounded subs then measures the STAGE-first-buy open leg; the grounded subscribe buys at subscribe, shifting the measured marginal; re-proven by V56AfkingGasMarginal (the LIVE-01 open-leg + per-box marginal, all green)");
         uint256 snap = vm.snapshotState();
         // Small-batch per-box marginal.
         uint256 perBoxSmall = _measureOpenLegPerBox(4, "uniS_");

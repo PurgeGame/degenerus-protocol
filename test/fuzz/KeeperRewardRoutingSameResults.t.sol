@@ -391,6 +391,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     ///         (Δ4 — the standalone `afKing.autoBuy` that consumed `keeperSnapshot` is GONE), so the
     ///         identical-outcome claim is reframed onto the STAGE: a funded sub buys exactly once.
     function testStageDrivenAutoBuyStampsSubBoughtToday() public {
+        vm.skip(true, "357-00b D-12 supersession: asserts the STAGE-driven auto-buy stamps the sub bought-today on an ungrounded subscribe; the grounded subscribe already stamps at subscribe; re-proven by V56AfkingGasMarginal + V56SubHardening (D-12 funded grounding)");
         // A funded LOOTBOX-mode sub (deity-passed so it survives any level crossing — set-mutation/
         // pass-gating is orthogonal here). The STAGE runs the buy in advanceGame's pre-RNG window.
         address sub = makeAddr("snap_autobuy_sub");

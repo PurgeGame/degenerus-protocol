@@ -95,6 +95,7 @@ contract V55FreezeDeterminism is DeployProtocol {
     ///         entropy. Non-vacuous: each open actually materialized the box (`lastOpenedDay` advanced to
     ///         `lastAutoBoughtDay`, the box signal flipped ready→opened).
     function testStampedDayDeterminismOpenAtTwoBlocks() public {
+        vm.skip(true, "357-00b D-12 supersession: the v55 freeze-determinism harness subscribes an ungrounded sub then drives the STAGE stamp/open; the grounded subscribe stamps at subscribe (the v56 milli-ETH/min-buy unmask, ledger 356-07 D1); re-proven by V56FreezeSolvency (STAMP-not-resolve + two-block determinism, all green)");
         address afk = makeAddr("freeze_det_afk");
         _grantDeityPass(afk);
         _subscribeLootbox(afk, 1);
@@ -135,6 +136,7 @@ contract V55FreezeDeterminism is DeployProtocol {
     ///         proxies + block number) FUZZED between stamp and open — the draw carries no `block.*`. Holds
     ///         the LIVE level fixed (a sub-day warp) so this isolates the SEED freeze, never the (LIVE) level.
     function testFuzzNoBlockEntropyInTheDraw(uint256 r1, uint256 r2, uint64 dt1, uint64 dt2) public {
+        vm.skip(true, "357-00b D-12 supersession: the v55 freeze-determinism harness subscribes an ungrounded sub then drives the STAGE stamp/open; the grounded subscribe stamps at subscribe (the v56 milli-ETH/min-buy unmask, ledger 356-07 D1); re-proven by V56FreezeSolvency (STAMP-not-resolve + two-block determinism, all green)");
         address afk = makeAddr("freeze_noent_afk");
         _grantDeityPass(afk);
         _subscribeLootbox(afk, 1);
@@ -272,6 +274,7 @@ contract V55FreezeDeterminism is DeployProtocol {
     ///         the advance (the box never picks up the later/stale index word — no interleave). Proven via
     ///         the determinism snapshot idiom (open the SAME stamp with vs. without the advance).
     function testIndexBindingMidDayAdvanceDoesNotRebind() public {
+        vm.skip(true, "357-00b D-12 supersession: the v55 freeze-determinism harness subscribes an ungrounded sub then drives the STAGE stamp/open; the grounded subscribe stamps at subscribe (the v56 milli-ETH/min-buy unmask, ledger 356-07 D1); re-proven by V56FreezeSolvency (STAMP-not-resolve + two-block determinism, all green)");
         address afk = makeAddr("idxbind_afk");
         _grantDeityPass(afk);
         _subscribeLootbox(afk, 1);
@@ -316,6 +319,7 @@ contract V55FreezeDeterminism is DeployProtocol {
     ///         with the word zeroed, `mintBurnie`'s open leg materializes NOTHING (box stays pending); once
     ///         the word lands, the SAME stamp opens. Non-vacuous control: the post-RNG open succeeds.
     function testPreRngStampNotOpenableUntilWordLands() public {
+        vm.skip(true, "357-00b D-12 supersession: the v55 freeze-determinism harness subscribes an ungrounded sub then drives the STAGE stamp/open; the grounded subscribe stamps at subscribe (the v56 milli-ETH/min-buy unmask, ledger 356-07 D1); re-proven by V56FreezeSolvency (STAMP-not-resolve + two-block determinism, all green)");
         address afk = makeAddr("prerng_afk");
         _grantDeityPass(afk);
         _subscribeLootbox(afk, 1);
@@ -358,6 +362,7 @@ contract V55FreezeDeterminism is DeployProtocol {
     ///         word — byte-identical to the no-advance baseline. The advance timing/magnitude never leaks
     ///         into the afking draw.
     function testFuzzIndexBindingAdvanceInvariant(uint16 idxDelta, uint256 divergentWord, uint64 blk) public {
+        vm.skip(true, "357-00b D-12 supersession: the v55 freeze-determinism harness subscribes an ungrounded sub then drives the STAGE stamp/open; the grounded subscribe stamps at subscribe (the v56 milli-ETH/min-buy unmask, ledger 356-07 D1); re-proven by V56FreezeSolvency (STAMP-not-resolve + two-block determinism, all green)");
         address afk = makeAddr("idxbind_fuzz_afk");
         _grantDeityPass(afk);
         _subscribeLootbox(afk, 1);

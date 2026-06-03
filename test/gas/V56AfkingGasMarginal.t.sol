@@ -80,6 +80,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     //   scorePlus1 u16 @6 · amount u24 @8
     //   lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14 · afkCoveredThroughDay u24 @17 · afkingStartDay u24 @20
     //   affiliateBase u32 @23 · pendingBurnie u32 @27 · subStreakLatch u8 @31
+    uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel   (bytes 1..3)
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay    (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay        (bytes 14..16)
     uint256 private constant OFF_AFKCOVERED = 17; // uint24 afkCoveredThroughDay (bytes 17..19)
@@ -706,9 +707,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // AFKING backlog: a funded lootbox sub gets a stamped box.
         address afk = makeAddr("v_afk");
         _grantDeityPass(afk);
+        _fundPool(afk, 5 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
         vm.prank(afk);
         game.subscribe(address(0), false, false, 1, 0, address(0));
-        _fundPool(afk, 5 ether);
         _runStageNewDay(0xA0F1);
 
         // HUMAN backlog: a real lootbox buyer queues a box on the human path (boxPlayers).
@@ -792,9 +793,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // Populate a real afking backlog in the GAME's storage.
         address afk = makeAddr("vsel_afk");
         _grantDeityPass(afk);
+        _fundPool(afk, 5 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
         vm.prank(afk);
         game.subscribe(address(0), false, false, 1, 0, address(0));
-        _fundPool(afk, 5 ether);
         _runStageNewDay(0xE0F1);
         _settleClean(0xE0F2);
         require(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "fixture: afking box pending");
@@ -824,12 +825,13 @@ contract V56AfkingGasMarginal is DeployProtocol {
         address viaBounty = makeAddr("vbu_bounty");
         _grantDeityPass(viaValve);
         _grantDeityPass(viaBounty);
+        // Fund BEFORE subscribe so each grounded NEW-run cover-buy is funded (D-12).
+        _fundPool(viaValve, 5 ether);
+        _fundPool(viaBounty, 5 ether);
         vm.prank(viaValve);
         game.subscribe(address(0), false, false, 1, 0, address(0));
         vm.prank(viaBounty);
         game.subscribe(address(0), false, false, 1, 0, address(0));
-        _fundPool(viaValve, 5 ether);
-        _fundPool(viaBounty, 5 ether);
         _runStageNewDay(0xF0F1);
 
         uint32 stampValve = _lastBoughtDayOf(viaValve);
@@ -982,18 +984,62 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.store(address(game), slot, bytes32(cur));
     }
 
+    /// @dev Test-only poke of a Sub's validThroughLevel (uint24 @ byte 1) — forces the pass-evict crossing
+    ///      (currentLevel > validThroughLevel) on the next STAGE without re-running the contract path.
+    function _pokeValidThroughLevel(address who, uint24 lvl) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        uint256 cur = uint256(vm.load(address(game), slot));
+        uint256 mask = (uint256(0xFFFFFF)) << (OFF_VALIDTHROUGH * 8);
+        cur = (cur & ~mask) | ((uint256(lvl) << (OFF_VALIDTHROUGH * 8)) & mask);
+        vm.store(address(game), slot, bytes32(cur));
+    }
+
+    /// @dev Clear `who`'s deity bit so `_passHorizonOf` reads the finite frozen horizon (0 here) at the
+    ///      crossing re-read — the EVICT branch then fires instead of REFRESH.
+    function _clearDeityPass(address who) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        packed &= ~(uint256(1) << DEITY_SHIFT);
+        vm.store(address(game), slot, bytes32(packed));
+    }
+
+    /// @dev Poke the game `level` (slot 0, uint24 @ byte 14) so the pass-evict crossing
+    ///      (currentLevel > validThroughLevel) is reachable in the gas harness (the fixture level does not
+    ///      advance organically over the bracketed STAGE measure).
+    function _setLevel(uint24 lvl) internal {
+        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        s0 &= ~(uint256(0xFFFFFF) << (14 * 8));
+        s0 |= (uint256(lvl) & 0xFFFFFF) << (14 * 8);
+        vm.store(address(game), bytes32(uint256(0)), bytes32(s0));
+    }
+
     /// @dev Drive a new-day STAGE advance over N unfunded, NON-deity subs that all PASS-EVICT this cycle
     ///      (validThroughLevel 0 < currentLevel -> each routes through _finalizeAfking + swap-pop), returning the
     ///      bracketed advance gas. Both runs from one clean baseline.
     function _measureEvictStageGas(uint256 n, string memory prefix) internal returns (uint256 advGas) {
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
-        // No deity pass + no funding: the unfunded subscribe is non-reverting (it enters the set with base 0),
-        // and the stage pass-evicts each (currentLevel > validThroughLevel == 0) through the finalize path.
+        // Under the 357-00 D-11/D-12 gates an unfunded passless subscribe REVERTS, so the evicting subs are
+        // built GROUNDED (deity + funded -> subscribe passes both gates), then forced into the pass-evict
+        // crossing by clearing the deity bit + poking validThroughLevel to 0 (so the STAGE re-reads horizon 0
+        // < currentLevel -> each routes through _finalizeAfking + swap-pop, the same EVICT path measured before).
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
+            _grantDeityPass(who);
+            _fundPool(who, 5 ether);
             vm.prank(who);
             game.subscribe(address(0), false, false, 1, 0, address(0));
         }
+        // OPEN the grounded subscribe's pending boxes first — the no-orphan guard dominates the evict branch,
+        // so a pending-box sub would be skipped, not evicted. After the open, clear the deity bit + poke
+        // validThroughLevel to 0 so the STAGE crossing re-reads horizon 0 < currentLevel -> the EVICT path.
+        vm.prank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
+        game.openBoxes(400);
+        for (uint256 i; i < n; ++i) {
+            address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
+            _clearDeityPass(who);          // horizon -> finite 0 at the crossing re-read
+            _pokeValidThroughLevel(who, 0); // validThroughLevel 0 < currentLevel -> the EVICT branch fires
+        }
+        _setLevel(10); // ensure currentLevel(10) > validThroughLevel(0) at the STAGE crossing
         uint256 preCount = _subscriberCount();
         require(preCount >= n, "fixture: N evicting subs in the set");
 
@@ -1037,6 +1083,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
     {
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
         address[] memory subs = _setupFundedSubs(n, prefix, 5 ether, isTicket);
+        // The grounded subscribe (D-12) stamps a box at subscribe time; OPEN those pending boxes so the
+        // no-orphan guard does not skip the measured STAGE buy (a pending-box sub is left untouched).
+        vm.prank(makeAddr(string(abi.encodePacked(prefix, "setup_open"))));
+        game.openBoxes(400);
         uint32[] memory pre = new uint32[](n);
         for (uint256 i; i < n; ++i) pre[i] = _lastBoughtDayOf(subs[i]);
 
@@ -1111,10 +1161,12 @@ contract V56AfkingGasMarginal is DeployProtocol {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
             _grantDeityPass(who);
+            // Fund BEFORE subscribe so the grounded NEW-run cover-buy is funded (D-12 — an unfunded start
+            // reverts MustPurchaseToBeginAfking).
+            _fundPool(who, poolEach);
             vm.prank(who);
             // self, mode = isTicket, qty 1, reinvest 0, self-funded
             game.subscribe(address(0), false, isTicket, 1, 0, address(0));
-            _fundPool(who, poolEach);
         }
     }
 

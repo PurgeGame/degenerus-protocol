@@ -90,8 +90,8 @@ contract AfKingSubscription is DeployProtocol {
     function testCrossingPassHolderRefreshedNotEvicted() public {
         address pass = makeAddr("pass_holder");
         _grantDeityPass(pass); // _passHorizonOf(pass) = type(uint24).max (deity sentinel)
-        _subscribeLootboxMode(pass, 1);
         _fundPool(pass, 1 ether);
+        _subscribeLootboxMode(pass, 1);
         _forceCrossingDue(pass); // validThroughLevel = 0 -> currentLevel > 0 -> crossing fires
 
         uint256 burnieBefore = coin.balanceOf(pass);
@@ -125,8 +125,8 @@ contract AfKingSubscription is DeployProtocol {
     function testCrossingNoPassEvictedViaTombstone() public {
         address nopass = makeAddr("no_pass");
         // No grantDeityPass: _passHorizonOf(nopass) == 0.
-        _subscribeLootboxMode(nopass, 1);
         _fundPool(nopass, 1 ether);
+        _subscribeLootboxMode(nopass, 1);
         _forceCrossingDue(nopass);
 
         uint256 burnieBefore = coin.balanceOf(nopass);
@@ -150,17 +150,21 @@ contract AfKingSubscription is DeployProtocol {
     ///         UNCHANGED across subscribe; their `validThroughLevel` is encoded as `_passHorizonOf`
     ///         (zero for a no-pass subscriber).
     function testSubscribeNoBurnieChargeRegardlessOfPass() public {
-        // (a) no-pass subscriber: zero BURNIE → subscribe MUST succeed; balance unchanged.
+        // (a) no-pass subscriber: zero BURNIE → subscribe charges no BURNIE; balance unchanged. At level 0 a
+        // no-pass sub clears D-11 (validThroughLevel 0 < level 0 is false); funded (the grounding deposit)
+        // clears D-12. AFSUB-01 (no BURNIE charge at subscribe) is the property under test.
         address nopass = makeAddr("subscribe_nopass");
+        _fundPool(nopass, 1 ether); // grounds the NEW-run cover-buy (D-12); the deposit is ETH, not BURNIE
         uint256 nopassBefore = coin.balanceOf(nopass); // == 0
         vm.prank(nopass);
-        game.subscribe(address(0), false, true, 1, 0, address(0)); // MUST NOT revert under AFSUB-01
+        game.subscribe(address(0), false, true, 1, 0, address(0)); // MUST NOT revert; charges no BURNIE
         assertEq(coin.balanceOf(nopass), nopassBefore, "AFSUB-01: no BURNIE burned at subscribe (no-pass)");
         assertEq(_validThroughLevelOf(nopass), 0, "no-pass subscriber: validThroughLevel = 0");
 
         // (b) pass-holder: ditto — deity holder also has zero BURNIE charge.
         address pass = makeAddr("subscribe_pass");
         _grantDeityPass(pass);
+        _fundPool(pass, 1 ether); // grounds the NEW-run cover-buy (D-12)
         uint256 passBefore = coin.balanceOf(pass);
         vm.prank(pass);
         game.subscribe(address(0), false, true, 1, 0, address(0));
@@ -182,8 +186,8 @@ contract AfKingSubscription is DeployProtocol {
     function testNonCrossingPassHolderProcessedWithoutRefresh() public {
         address pass = makeAddr("nx_pass_holder");
         _grantDeityPass(pass); // horizon = uint24.max
-        _subscribeLootboxMode(pass, 1); // validThroughLevel = uint24.max (deity sentinel)
         _fundPool(pass, 1 ether);
+        _subscribeLootboxMode(pass, 1); // validThroughLevel = uint24.max (deity sentinel)
         // DO NOT force crossing — leave validThroughLevel at the sentinel so currentLevel <= horizon.
 
         vm.recordLogs();
@@ -250,6 +254,9 @@ contract AfKingSubscription is DeployProtocol {
         // S approves M on the game; now the SAME subscribe is honored (source stored).
         vm.prank(s);
         game.setOperatorApproval(m, true);
+        // Fund S's bucket BEFORE the honored subscribe so M's NEW-run cover-buy (drawn from the resolved
+        // source S) is grounded (D-12); the OPEN-E approval gate is the property under test.
+        _fundPool(s, 1 ether);
         vm.prank(m);
         game.subscribe(address(0), false, true, 1, 0, s);
 
@@ -266,9 +273,11 @@ contract AfKingSubscription is DeployProtocol {
         address m = makeAddr("revoke_m");
         vm.prank(s);
         game.setOperatorApproval(m, true);
+        // Fund S's bucket BEFORE subscribe so M's NEW-run cover-buy (drawn from the resolved source S) is
+        // grounded (D-12); the trust-the-sub revoke semantics are the property under test.
+        _fundPool(s, 1 ether); // S funds the per-day ETH draw + grounds the subscribe cover-buy
         vm.prank(m);
         game.subscribe(address(0), false, true, 1, 0, s); // source = S, no BURNIE charge (AFSUB-01)
-        _fundPool(s, 1 ether); // S funds the per-day ETH draw
 
         assertEq(_fundingSourceOf(m), s, "M's sub funded by S");
         assertGt(_subscriberIndexOf(m), 0, "M's sub in the set");
@@ -329,8 +338,8 @@ contract AfKingSubscription is DeployProtocol {
     ///      Granted deity because a no-pass sub at level>0 would evict at the crossing before buying.
     function _setupHealthyBuyingSub(address who) internal {
         _grantDeityPass(who);
+        _fundPool(who, 1 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
         _subscribeLootboxMode(who, 1);
-        _fundPool(who, 1 ether);
     }
 
     /// @dev Credit `who`'s afkingFunding bucket with `amount` ETH (Δ5: depositAfkingFunding).

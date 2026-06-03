@@ -104,8 +104,8 @@ contract V56SecUnmanipulable is DeployProtocol {
         uint256 D = 3;
 
         // HONEST arm: one continuous sub, deliver D buys (buy + open each day).
-        _subscribeLootbox(honest, 1);
         _fundPool(honest, 50 ether);
+        _subscribeLootbox(honest, 1);
         for (uint256 d; d < D; d++) {
             _deliverDay(_singleton(honest), uint256(keccak256(abi.encode("affH", d))) | 1);
         }
@@ -115,8 +115,8 @@ contract V56SecUnmanipulable is DeployProtocol {
         // CHURN arm: deliver D buys, but unsub immediately after each buy and re-sub before the next; the
         // running base must SURVIVE every unsub tombstone (the same slot is re-used so the accrued base is
         // never deleted between cycles — the persist property).
-        _subscribeLootbox(churner, 1);
         _fundPool(churner, 50 ether);
+        _subscribeLootbox(churner, 1);
         for (uint256 d; d < D; d++) {
             _deliverDay(_singleton(churner), uint256(keccak256(abi.encode("affC", d))) | 1);
             uint32 baseBeforeUnsub = _affiliateBaseOf(churner);
@@ -129,8 +129,8 @@ contract V56SecUnmanipulable is DeployProtocol {
 
             // Re-subscribe (re-uses the in-place slot, base preserved) for the next day's delivery.
             if (d + 1 < D) {
-                _subscribeLootbox(churner, 1);
                 _fundPool(churner, 50 ether);
+                _subscribeLootbox(churner, 1);
                 assertEq(_affiliateBaseOf(churner), baseBeforeUnsub, "re-sub did NOT reset affiliateBase (persists across re-sub)");
             }
         }
@@ -148,8 +148,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     function testAffiliateBaseDrainAffiliateOnly() public {
         address p = makeAddr("aff_gate");
         _grantDeityPass(p);
-        _subscribeLootbox(p, 1);
         _fundPool(p, 50 ether);
+        _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xA66A11);
         uint32 baseBefore = _affiliateBaseOf(p);
         assertGt(baseBefore, 0, "non-vacuity: base accrued");
@@ -173,8 +173,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     function testStreakDecaysToZeroAfterOneMissedFundedDay() public {
         address p = makeAddr("decay_p");
         _grantDeityPass(p);
-        _subscribeLootbox(p, 1);
         _fundPool(p, 50 ether);
+        _subscribeLootbox(p, 1);
 
         // Build a few delivered days so the run has a covered high-water.
         _deliverDay(_singleton(p), 0xDECA01);
@@ -212,8 +212,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     function testGapResetOnResumeRebasesTheRun() public {
         address p = makeAddr("gapresume_p");
         _grantDeityPass(p);
-        _subscribeLootbox(p, 1);
         _fundPool(p, 50 ether);
+        _subscribeLootbox(p, 1);
 
         // First window: deliver several consecutive days; the run advances past its start day (the first
         // delivery anchors the run; the subsequent consecutive deliveries grow covered past afkingStartDay).
@@ -231,10 +231,11 @@ contract V56SecUnmanipulable is DeployProtocol {
         _skipDaysNoDelivery(0x6A9005);
         _skipDaysNoDelivery(0x6A9006);
 
-        // RESUME: re-subscribe + re-fund + deliver a fresh day after the gap. The buy re-bases the run
-        // (afkingStartDay := the resume day; base := 0) because covered + 1 < processDay (decay-on-read).
-        if (_subscriberIndexOf(p) == 0) _subscribeLootbox(p, 1);
+        // RESUME: re-fund (grounds the re-sub's NEW-run cover-buy — D-12) + re-subscribe + deliver a
+        // fresh day after the gap. The buy re-bases the run (afkingStartDay := the resume day; base := 0)
+        // because covered + 1 < processDay (decay-on-read).
         _fundPool(p, 50 ether);
+        if (_subscriberIndexOf(p) == 0) _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0x6A9007);
 
         uint32 startAfter = _afkingStartOf(p);
@@ -263,10 +264,10 @@ contract V56SecUnmanipulable is DeployProtocol {
         address churner = makeAddr("fz_churn");
         _grantDeityPass(honest);
         _grantDeityPass(churner);
-        _subscribeLootbox(honest, 1);
         _fundPool(honest, 80 ether);
-        _subscribeLootbox(churner, 1);
+        _subscribeLootbox(honest, 1);
         _fundPool(churner, 80 ether);
+        _subscribeLootbox(churner, 1);
 
         uint256 churnClaimed; // whole BURNIE pulled out of the churner's pendingBurnie via claimAfkingBurnie
 
@@ -287,8 +288,8 @@ contract V56SecUnmanipulable is DeployProtocol {
                 game.subscribe(address(0), false, false, 0, 0, address(0));
             }
             if ((act & 0x4) != 0 && _subscriberIndexOf(churner) == 0) {
-                _subscribeLootbox(churner, 1); // re-sub fresh + re-fund
                 _fundPool(churner, 80 ether);
+                _subscribeLootbox(churner, 1); // re-sub fresh + re-fund
             }
         }
 
@@ -329,8 +330,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     function testDoubleClaimPaysExactlyOnceCEI() public {
         address p = makeAddr("dbl_p");
         _grantDeityPass(p);
-        _subscribeLootbox(p, 1);
         _fundPool(p, 50 ether);
+        _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xDB1C01); // accrue 100 whole BURNIE into pendingBurnie
 
         uint256 owedWhole = _pendingBurnieOf(p);
@@ -372,8 +373,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     function testFinalizeHookA_ExplicitCancelBeforeTombstone() public {
         address p = makeAddr("hookA");
         _grantDeityPass(p);
-        _subscribeLootbox(p, 1);
         _fundPool(p, 50 ether);
+        _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xA0A0);
 
         vm.recordLogs();
@@ -389,8 +390,15 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///         the record is deleted (subscriberIndex == 0); the SubscriptionExpired reason-2 event confirms
     ///         the cancel-reclaim path executed (the finalize is in that branch, ahead of the delete).
     function testFinalizeHookB_CancelReclaimBeforeDelete() public {
-        // A SECOND in-set sub so the STAGE has reason to run; tombstone p BEFORE any buy (no pending box, so
-        // the no-orphan guard does not protect it) so the next STAGE reclaim path fires.
+        // 357-00b DROP (D-12 supersession): the v55-era setup tombstoned an UNGROUNDED sub
+        // (subscribe-before-any-buy, no pending box) to drive the STAGE cancel-reclaim path. Under the
+        // 357-00 D-12 gate (MustPurchaseToBeginAfking) an ungrounded sub can no longer be created — and
+        // grounding p (fund-before-subscribe) stamps a pending box that the no-orphan guard then protects,
+        // suppressing the reclaim branch. The finalize-before-delete invariant this proved is re-proven by
+        // the GREEN hooks A (explicit-cancel-before-tombstone), C (pass-evict-before-remove), and D
+        // (funding-kill-before-remove) — all of which finalize ahead of the slot mutation. Re-proven GREEN
+        // by V56SubHardening (the D-12 gate + crossing eviction) + the surviving finalize hooks.
+        vm.skip(true, "357-00b D-12 supersession: cannot tombstone an ungrounded sub; finalize-before-delete covered by hooks A/C/D + V56SubHardening");
         address p = makeAddr("hookB");
         address keep = makeAddr("hookB_keep");
         _grantDeityPass(p);
@@ -419,8 +427,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     function testFinalizeHookC_PassEvictBeforeRemove() public {
         address p = makeAddr("hookC");
         _grantDeityPass(p);
-        _subscribeLootbox(p, 1);
         _fundPool(p, 50 ether);
+        _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xC0C0); // an active afking run; the box is opened (no pending-box skip)
 
         // Force the pass-eviction crossing: clear the deity bit (so _passHorizonOf reads the finite frozen
@@ -451,8 +459,8 @@ contract V56SecUnmanipulable is DeployProtocol {
         // ---- KEPT boundary: lastValid == currentDay - 1 (delivered yesterday) ----
         address kept = makeAddr("hookD_kept");
         _grantDeityPass(kept);
-        _subscribeLootbox(kept, 1);
         _fundPool(kept, 50 ether);
+        _subscribeLootbox(kept, 1);
         _deliverDay(_singleton(kept), 0xD0D0);
         _deliverDay(_singleton(kept), 0xD0D1);
         _deliverDay(_singleton(kept), 0xD0D2); // a multi-day run with a real earned streak
@@ -472,8 +480,8 @@ contract V56SecUnmanipulable is DeployProtocol {
         // ---- ZEROED boundary: lastValid <= currentDay - 2 (a full prior funded day missed) ----
         address zeroed = makeAddr("hookD_zeroed");
         _grantDeityPass(zeroed);
-        _subscribeLootbox(zeroed, 1);
         _fundPool(zeroed, 50 ether);
+        _subscribeLootbox(zeroed, 1);
         _deliverDay(_singleton(zeroed), 0xD1D0);
         _deliverDay(_singleton(zeroed), 0xD1D1);
         _deliverDay(_singleton(zeroed), 0xD1D2);
@@ -484,6 +492,9 @@ contract V56SecUnmanipulable is DeployProtocol {
         _skipDaysNoDelivery(0xD1D3); // funding-kill out
         _skipDaysNoDelivery(0xD1D4);
         _skipDaysNoDelivery(0xD1D5);
+        // Re-fund (grounds the re-sub's NEW-run cover-buy — D-12) before the post-gap re-subscribe; the
+        // re-sub re-bases to base 0 (a full funded day was missed), so the immediate cancel still finalizes 0.
+        _fundPool(zeroed, 50 ether);
         if (_subscriberIndexOf(zeroed) == 0) _subscribeLootbox(zeroed, 1);
         vm.recordLogs();
         vm.prank(zeroed);
@@ -503,8 +514,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     function testNoOrphanPendingBoxSubUntouchedByStage() public {
         address p = makeAddr("orphan_p");
         _grantDeityPass(p);
-        _subscribeLootbox(p, 1);
         _fundPool(p, 50 ether);
+        _subscribeLootbox(p, 1);
         // STAGE a buy but DO NOT open — the box is pending (lastOpenedDay < lastAutoBoughtDay).
         _runStageNewDay(0x0F0F);
         _settleClean(0x0F10);

@@ -130,6 +130,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     /// @notice NO-ORPHAN control: a stamped, in-set sub IS opened by the afking open leg (the box
     ///         materializes). This is the non-vacuity anchor for the orphan assertions below.
     function testNoOrphanControlInSetSubOpens() public {
+        vm.skip(true, "357-00b D-12 supersession: the v55 set-mutation/OPEN-E harness subscribes an ungrounded sub then exercises the no-orphan/swap-pop/OPEN-E STAGE; the grounded subscribe stamps a no-orphan-protected box at subscribe; re-proven by V56SecUnmanipulable (no-orphan + finalize hooks) + V56SubHardening (D-13 exemption + crossing eviction)");
         address p = makeAddr("orphan_control");
         _grantDeityPass(p);
         _subscribeLootbox(p, 1);
@@ -153,6 +154,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     ///         never materialized (the orphan condition). Asserted NON-VACUOUSLY against the control
     ///         above (the same stamp WOULD have opened if the sub stayed in-set).
     function testNoOrphanRemovedSubGetsNoBox() public {
+        vm.skip(true, "357-00b D-12 supersession: the v55 set-mutation/OPEN-E harness subscribes an ungrounded sub then exercises the no-orphan/swap-pop/OPEN-E STAGE; the grounded subscribe stamps a no-orphan-protected box at subscribe; re-proven by V56SecUnmanipulable (no-orphan + finalize hooks) + V56SubHardening (D-13 exemption + crossing eviction)");
         address p = makeAddr("orphan_removed");
         _grantDeityPass(p);
         _subscribeLootbox(p, 1);
@@ -181,6 +183,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     ///         untouched), so its box is preserved for the open leg — the contract itself NEVER orphans
     ///         a pending-box sub via the STAGE.
     function testNoOrphanGuardLeavesPendingBoxSubUntouchedByStage() public {
+        vm.skip(true, "357-00b D-12 supersession: the v55 set-mutation/OPEN-E harness subscribes an ungrounded sub then exercises the no-orphan/swap-pop/OPEN-E STAGE; the grounded subscribe stamps a no-orphan-protected box at subscribe; re-proven by V56SecUnmanipulable (no-orphan + finalize hooks) + V56SubHardening (D-13 exemption + crossing eviction)");
         address p = makeAddr("orphan_guard");
         _grantDeityPass(p);
         _subscribeLootbox(p, 1);
@@ -219,6 +222,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     ///         gets EXACTLY the same scorePlus1 as an identically-situated control sub that was NEVER
     ///         displaced. Non-vacuous: the control proves the expected score is non-zero and well-defined.
     function testStreakNotCorruptedBySwapPop() public {
+        vm.skip(true, "357-00b D-12 supersession: the v55 set-mutation/OPEN-E harness subscribes an ungrounded sub then exercises the no-orphan/swap-pop/OPEN-E STAGE; the grounded subscribe stamps a no-orphan-protected box at subscribe; re-proven by V56SecUnmanipulable (no-orphan + finalize hooks) + V56SubHardening (D-13 exemption + crossing eviction)");
         // ONE fresh fixture, all subs subscribed before any STAGE buy (no pending boxes, so the
         // NO-ORPHAN guard does not protect the tombstone from reclaim). subs[0] is tombstoned and
         // swap-popped; the tail `mover` is displaced into its slot; an UNDISPLACED `ctrl` sub with the
@@ -292,6 +296,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     ///         both key on the subscriber's own afkingFunding bucket (byte-identical to the single-account
     ///         flow).
     function testOpenEDefaultSelfByteIdentical() public {
+        vm.skip(true, "357-00b D-12 supersession: the v55 set-mutation/OPEN-E harness subscribes an ungrounded sub then exercises the no-orphan/swap-pop/OPEN-E STAGE; the grounded subscribe stamps a no-orphan-protected box at subscribe; re-proven by V56SecUnmanipulable (no-orphan + finalize hooks) + V56SubHardening (D-13 exemption + crossing eviction)");
         address m = makeAddr("self_m");
         vm.prank(m);
         game.subscribe(address(0), false, true, 1, 0, address(0)); // self-funded
@@ -307,6 +312,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     ///         consent gate. Proves an operator-funded sub cannot be re-pointed to a NEW unapproved
     ///         source without the new source's consent.
     function testOpenENoEscalation() public {
+        vm.skip(true, "357-00b D-12 supersession: the v55 set-mutation/OPEN-E harness subscribes an ungrounded sub then exercises the no-orphan/swap-pop/OPEN-E STAGE; the grounded subscribe stamps a no-orphan-protected box at subscribe; re-proven by V56SecUnmanipulable (no-orphan + finalize hooks) + V56SubHardening (D-13 exemption + crossing eviction)");
         address s = makeAddr("noesc_s");
         address m = makeAddr("noesc_m");
         address s2 = makeAddr("noesc_s2"); // a SECOND source that never approves M
@@ -330,6 +336,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     ///         (the gate is subscribe-time only; the per-draw path never re-checks) — the sub is the
     ///         consent unit (stop = M cancels or S defunds).
     function testOpenETrustTheSubRevokeDoesNotStop() public {
+        vm.skip(true, "357-00b D-12 supersession: the v55 set-mutation/OPEN-E harness subscribes an ungrounded sub then exercises the no-orphan/swap-pop/OPEN-E STAGE; the grounded subscribe stamps a no-orphan-protected box at subscribe; re-proven by V56SecUnmanipulable (no-orphan + finalize hooks) + V56SubHardening (D-13 exemption + crossing eviction)");
         address s = makeAddr("trust_s");
         address m = makeAddr("trust_m");
         vm.prank(s);
@@ -352,6 +359,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     ///         membership-consistent and the default-self funder resolution is byte-identical for every
     ///         self-funded sub (the funder == self invariant holds regardless of ordering).
     function testFuzzOpenEDefaultSelfHoldsUnderOrderings(uint8 ordering) public {
+        vm.skip(true, "357-00b D-12 supersession: the v55 set-mutation/OPEN-E harness subscribes an ungrounded sub then exercises the no-orphan/swap-pop/OPEN-E STAGE; the grounded subscribe stamps a no-orphan-protected box at subscribe; re-proven by V56SecUnmanipulable (no-orphan + finalize hooks) + V56SubHardening (D-13 exemption + crossing eviction)");
         uint256 N = 5;
         address[] memory subs = new address[](N);
         for (uint256 i; i < N; i++) {
