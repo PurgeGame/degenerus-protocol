@@ -9,6 +9,8 @@ import {IStETH} from "./interfaces/IStETH.sol";
 interface IDegenerusGamePlayer {
     /// @notice Advance the game to the next level/day.
     function advanceGame() external;
+    /// @notice Crank the unified keeper router (advance + box opens), paying any earned bounty.
+    function mintBurnie() external;
     /// @notice Queue this caller's perpetual tickets for levels 1-100 (VAULT/SDGNRS only, once).
     function initPerpetualTickets() external;
     /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
@@ -417,9 +419,11 @@ contract StakedDegenerusStonk {
     //                          PLAYER ACTIONS
     // =====================================================================
 
-    /// @notice Advance the game on behalf of sDGNRS
+    /// @notice Crank the game keeper router on behalf of sDGNRS (advance + box opens)
+    /// @dev Routes through mintBurnie so sDGNRS earns the keeper bounty for the work;
+    ///      reverts NoWork() when nothing is due.
     function gameAdvance() external {
-        game.advanceGame();
+        game.mintBurnie();
     }
 
     /// @notice Claim whale pass on behalf of sDGNRS

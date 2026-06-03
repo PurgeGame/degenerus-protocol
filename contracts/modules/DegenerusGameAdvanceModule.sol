@@ -24,11 +24,6 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
-/// @dev Vault interface for DGVE ownership check (advanceGame mint-gate bypass).
-interface IDegenerusVaultOwner {
-    function isVaultOwner(address account) external view returns (bool);
-}
-
 /// @dev GNRUS interface for level-transition governance resolution.
 interface IGNRUSResolve {
     function pickCharity(uint24 level) external;
@@ -41,7 +36,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       +======================================================================+*/
 
     // error E() — inherited from DegenerusGameStorage
-    error MustMintToday();
     error NotTimeYet();
     error RngNotReady();
     // error RngLocked() — inherited from DegenerusGameStorage
@@ -171,16 +165,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @notice Max share of affiliate DGNRS pool segregated per level for claims (5%).
     uint16 private constant AFFILIATE_DGNRS_LEVEL_BPS = 500;
 
-    /// @dev Vault contract for DGVE ownership check (advanceGame mint-gate bypass).
-    IDegenerusVaultOwner private constant vault =
-        IDegenerusVaultOwner(ContractAddresses.VAULT);
-
     /// @notice Advance game state. Called daily to process jackpots, mints, and phase transitions.
     ///         Returns mult: the day-epoch stall multiplier (1 base / 2 / 4 / 6 by stall; 0 on
     ///         the gameover path = no bounty). Standalone callers earn nothing — the unified
     ///         afking router pays the re-homed bounty (2x * mult) only when mult > 0.
     function advanceGame() external returns (uint8 mult) {
-        address caller = msg.sender;
         mult = 1;
         uint48 ts = uint48(block.timestamp);
         uint32 day = _simulatedDayIndexAt(ts);
@@ -215,8 +204,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 return 0;
             }
         }
-
-        _enforceDailyMintGate(caller, purchaseLevel, dailyIdx);
 
         // --- Mid-day path: same-day queue draining ---
         if (day == dailyIdx) {
@@ -297,12 +284,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 ticketsFullyProcessed = true;
             }
 
-            // --- Afking process STAGE (D-348-01 required-path; FREEZE-02b): stamp the
-            // funded subscriber set BEFORE the day requests its RNG. Inserted on the
-            // new-day path only, after the daily ticket-drain gate and the inherited
-            // _enforceDailyMintGate (:191 — ZERO new gate code, D-348-03), strictly
-            // before rngGate. The mid-day same-day path (:194) returns earlier, so the
-            // STAGE never runs mid-day. Chunked by SUB_STAGE_BATCH across advance calls
+            // --- Afking process STAGE: stamp the funded subscriber set BEFORE the day
+            // requests its RNG. Inserted on the new-day path only, after the daily
+            // ticket-drain gate and strictly before rngGate. The mid-day same-day path
+            // returns earlier, so the STAGE never runs mid-day. Chunked by SUB_STAGE_BATCH across advance calls
             // (BUY_BATCH-style) so a large set stays under the 16.7M advance-chain
             // ceiling — mirrors the ticketsFullyProcessed partial-drain discipline:
             // break + return mult while !subsFullyProcessed; set true only at cursor
@@ -1073,59 +1058,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             randWord,
             bonusTargetLevel
         );
-    }
-
-    /// @dev Enforce "must mint today" gate for advanceGame callers.
-    ///      Bypass tiers (only checked on revert path, zero cost for normal callers):
-    ///        1. Deity pass holder — always bypasses
-    ///        2. Anyone — bypasses 30+ min after day boundary
-    ///        3. Any pass holder (lazy/whale freeze active) — bypasses 15+ min after day boundary
-    ///        4. DGVE majority holder — always bypasses (last resort, external call)
-    function _enforceDailyMintGate(
-        address caller,
-        uint24 lvl,
-        uint32 dailyIdx_
-    ) private view {
-        uint32 gateIdx = uint32(dailyIdx_);
-        if (gateIdx == 0) return;
-
-        uint256 mintData = mintPacked_[caller];
-        uint32 lastEthDay = uint32(
-            (mintData >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_32
-        );
-        // Allow mints from current day or previous day
-        if (lastEthDay + 1 < gateIdx) {
-            // Deity pass — always bypasses
-            if ((mintData >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1 != 0)
-                return;
-
-            // Time elapsed since today's day boundary (pure arithmetic, no SLOAD)
-            // 82620 = 22:57 UTC = JACKPOT_RESET_TIME
-            uint256 elapsed = (block.timestamp - 82620) % 1 days;
-
-            // Anyone after 30 min
-            if (elapsed >= 30 minutes) return;
-
-            // Any pass holder after 15 min
-            if (elapsed >= 15 minutes) {
-                uint24 frozenUntilLevel = uint24(
-                    (mintData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
-                        BitPackingLib.MASK_24
-                );
-                if (frozenUntilLevel > lvl) return;
-            }
-
-            // Active AfKing subscriber — the daily auto-buy IS participation, but the
-            // cold-ledger buy never stamps DAY_SHIFT so the lastEthDay check above misses
-            // it. No time predicate: the tiers above don't early-return in the first 15
-            // min, so a sub falls through to here and can advance from the day's first
-            // second. One config SLOAD (dailyQuantity packs into Sub's first slot), paid
-            // only on this stuck path and short-circuiting before the vault call below.
-            if (_subOf[caller].dailyQuantity != 0) return;
-
-            // DGVE majority bypass — last resort, external call
-            if (!vault.isVaultOwner(caller)) revert MustMintToday();
-        }
     }
 
     /// @notice Request lootbox RNG when activity threshold is met.

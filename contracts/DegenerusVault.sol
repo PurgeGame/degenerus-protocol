@@ -10,6 +10,8 @@ import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
 interface IDegenerusGamePlayerActions {
     /// @notice Advance the game to the next level/day.
     function advanceGame() external;
+    /// @notice Crank the unified keeper router (advance + box opens), paying any earned bounty.
+    function mintBurnie() external;
     /// @notice Queue this caller's perpetual tickets for levels 1-100 (VAULT/SDGNRS only, once).
     function initPerpetualTickets() external;
     /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
@@ -528,11 +530,12 @@ contract DegenerusVault {
     // GAMEPLAY (Vault Owner)
     // ---------------------------------------------------------------------
 
-    /// @notice Advance the game on behalf of the vault
-    /// @dev Requires caller to hold >50.1% of DGVE supply
+    /// @notice Crank the game keeper router on behalf of the vault (advance + box opens)
+    /// @dev Requires caller to hold >50.1% of DGVE supply. Routes through mintBurnie so the
+    ///      vault earns the keeper bounty for the work; reverts NoWork() when nothing is due.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameAdvance() external onlyVaultOwner {
-        gamePlayer.advanceGame();
+        gamePlayer.mintBurnie();
     }
 
     /// @notice Purchase tickets and lootboxes for the vault

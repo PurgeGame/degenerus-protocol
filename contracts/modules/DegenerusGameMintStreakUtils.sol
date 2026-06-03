@@ -2,8 +2,14 @@
 pragma solidity 0.8.34;
 
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
+import {ContractAddresses} from "../ContractAddresses.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
+
+/// @dev Vault interface for the DGVE-majority bounty-eligibility tier (cold path).
+interface IDegenerusVaultOwner {
+    function isVaultOwner(address account) external view returns (bool);
+}
 
 /// @dev Shared mint streak and activity score utilities. Contains _playerActivityScore
 ///      (5-component scoring: mint streak, mint count, quest streak, affiliate bonus, deity/whale pass)
@@ -15,6 +21,48 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     uint256 private constant MINT_STREAK_FIELDS_MASK =
         (BitPackingLib.MASK_24 << MINT_STREAK_LAST_COMPLETED_SHIFT) |
         (BitPackingLib.MASK_24 << BitPackingLib.LEVEL_STREAK_SHIFT);
+
+    /// @dev Soft pay-gate for the mintBurnie advance bounty: is `who` entitled to the
+    ///      advance bounty right now? The advance work itself is always permitted — this
+    ///      only decides whether the keeper earns the re-homed bounty, so real participants
+    ///      get first shot while anyone may still do the work for free. Tiers, cheapest
+    ///      first with short-circuit: minted today/yesterday, deity pass, anyone 30+ min
+    ///      into the day, any pass holder 15+ min in, active afking sub, and finally the
+    ///      DGVE-majority owner (the only external call, reached on the cold path only).
+    function _bountyEligible(address who) internal view returns (bool) {
+        uint32 gateIdx = dailyIdx;
+        if (gateIdx == 0) return true; // first day — nothing to earn against yet
+
+        uint256 mintData = mintPacked_[who];
+        // Minted today or yesterday — the participation signal, no extra read.
+        uint32 lastEthDay = uint32(
+            (mintData >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_32
+        );
+        if (lastEthDay + 1 >= gateIdx) return true;
+
+        // Deity pass — always earns.
+        if ((mintData >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1 != 0) return true;
+
+        // 82620 = 22:57 UTC = the daily reset; elapsed is pure arithmetic, no SLOAD.
+        uint256 elapsed = (block.timestamp - 82620) % 1 days;
+        // Anyone, 30+ min into the day.
+        if (elapsed >= 30 minutes) return true;
+        // Any pass holder, 15+ min in.
+        if (elapsed >= 15 minutes) {
+            uint24 frozenUntilLevel = uint24(
+                (mintData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
+                    BitPackingLib.MASK_24
+            );
+            if (frozenUntilLevel > level) return true;
+        }
+
+        // Active afking subscriber — the daily auto-buy is participation that never
+        // stamps DAY_SHIFT, so the lastEthDay check above misses it.
+        if (_subOf[who].dailyQuantity != 0) return true;
+
+        // DGVE majority owner — last resort, the only external call.
+        return IDegenerusVaultOwner(ContractAddresses.VAULT).isVaultOwner(who);
+    }
 
     /// @dev Record a mint streak completion for a given level (idempotent per level).
     function _recordMintStreakForLevel(address player, uint24 mintLevel) internal {

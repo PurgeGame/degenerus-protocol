@@ -1793,6 +1793,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return false;
     }
 
+    /// @notice Would `who` earn the mintBurnie advance bounty if they cranked right now?
+    /// @dev The advance work is always permitted; this only reflects pay-eligibility
+    ///      (the soft must-mint gate), so off-chain keepers can pre-check before cranking.
+    function bountyEligible(address who) external view returns (bool) {
+        return _bountyEligible(who);
+    }
+
     /// @notice O(1) discovery: are there openable boxes for the active lootbox index?
     /// @dev rngLock-aware (RD-3): FALSE during rngLock so the open leg no-ops in the freeze;
     ///      TRUE for a mid-day-resolved round whose VRF word landed and we are not locked.

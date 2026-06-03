@@ -1226,8 +1226,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // The self-call re-enters the Game's advanceGame, which runs the required-path
         // process STAGE in-context (349-05); the process bounty rides this 2x·mult.
         if (IGameRouter(address(this)).advanceDue()) {
+            // Read pay-eligibility BEFORE the advance — it sees the pre-advance day (the
+            // advance bumps dailyIdx). The advance work runs regardless; an ineligible
+            // keeper just earns no bounty (real participants get first shot, free cranks
+            // are welcome).
+            bool eligible = _bountyEligible(msg.sender);
             uint8 mult = IGameRouter(address(this)).advanceGame();
-            if (mult > 0) bountyEarned = unit * ADVANCE_RATIO_NUM * mult;
+            if (mult > 0 && eligible) bountyEarned = unit * ADVANCE_RATIO_NUM * mult;
         }
         // (2) afking-box open — FALSE during rngLock (RD-3); opens mid-day-resolved
         // stamped boxes via _subOpenCursor. 1x pro-rated below the knee, flat 1x
