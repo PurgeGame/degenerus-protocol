@@ -1,7 +1,30 @@
 # Regression Baseline — v56.0 (NON-WIDENING clean-baseline gate ledger)
 
-> **357-00d RE-RUN @ HEAD'''' `77d8bc88` (the two subscribe-hardening follow-up gates — see §10, the CURRENT
-> re-frozen subject).** After TWO further `contracts/*.sol` commits layered on HEAD'' `61315ecd` —
+> **357-00e RE-RUN @ c9b5d20d `c9b5d20d756f9dfc5f3b0584aae56bdfa215d8bf` (the FIFTH / FINAL v56.0 contract gate —
+> the flat-10% pass lootbox + dead-guard removal; see §11, the CURRENT re-frozen subject).** After ONE further
+> `contracts/*.sol` commit layered on HEAD'''' `77d8bc88` — **c9b5d20d** (a contained pass-PURCHASE economic
+> refactor: the presale lootbox elevation on all 3 pass types — whale bundle / lazy pass / deity — REMOVED, the
+> lootbox now a flat 10% of pass value regardless of presale state; the `*_LOOTBOX_PRESALE_BPS` constants + the
+> `_psRead(PS_ACTIVE)` ternaries dropped, `*_LOOTBOX_POST_BPS → *_LOOTBOX_BPS`; the 25% `presaleBoxCredit`
+> byte-unchanged so presale buyers now get 25% credit + 10% lootbox instead of 25% + 20%; 3 unreachable guards
+> removed [the lazy `baseCost == 0` check — `priceForLevel` is strictly positive over all `uint24`; the lazy/deity
+> `lootboxAmount == 0` zero-guards — 10% of a positive price is never 0]; a stale `hasAnyLazyPass` docstring fixed)
+> — the whole tree was re-run at the re-frozen subject c9b5d20d and reconciled (§11). **New counts: 574 passed /
+> 133 failed / 103 skipped (810 total).** The live **133** failing NAME set is a STRICT SUBSET of the §2 134-name
+> `453f8073` union (`live − union == ∅`, verified empirically — empty set-diff) — **NON-WIDENING HOLDS at
+> c9b5d20d; ZERO new forge regression from the flat-10% pass-lootbox + dead-guard removal.** The refactor only
+> tweaks the lootbox-award MULTIPLIER (`2000 → 1000` presale bps) — off the ETH/`claimablePool` solvency path; the
+> ETH pool splits are computed from `totalPrice` INDEPENDENT of the lootbox %, the `presaleBoxCredit` is
+> byte-unchanged, and reducing an award can only DECREASE value (no unbacked value, no EV-cap breach, no
+> underflow). The `574/133/103` vs HEAD'''' `573/134/103` is a 1-fail NARROWING (run-variance re-membership in the
+> documented non-deterministic Bucket A/F cluster, §4 — the refactor touches no VRF/RNG-window code, so it cannot
+> deterministically change a Bucket-A red). The SOLVENCY-01 leg-1 byte-anchor STILL HOLDS (the pass refactor is off
+> the ETH path; the afking debit two-liner is untouched — `git diff 77d8bc88 c9b5d20d -- contracts/modules/GameAfkingModule.sol`
+> is EMPTY). **`git diff c9b5d20d HEAD -- contracts/` is EMPTY** — 357-00e is test + ledger writes ONLY; the
+> subject stays re-frozen at c9b5d20d.
+
+> **357-00d RE-RUN @ HEAD'''' `77d8bc88` (the two subscribe-hardening follow-up gates — see §10, SUPERSEDED as
+> CURRENT by §11 at c9b5d20d).** After TWO further `contracts/*.sol` commits layered on HEAD'' `61315ecd` —
 > **HEAD''' `7b0b2a0b`** (the NEW-run subscribe per-day slot-0 idempotency guard: a subscribe→funded-buy→cancel→
 > subscribe loop no longer re-accrues the flat per-day `QUEST_SLOT0_REWARD`, `GameAfkingModule.sol:451`
 > `else if (s.lastAutoBoughtDay == uint24(today)) { _setStreakBase(s, snap); }`) and **HEAD'''' `77d8bc88`** (the
@@ -823,3 +846,89 @@ git checkout -- contracts/ContractAddresses.sol   (restore frozen — sha256 f72
 this reconciliation; subject byte-frozen at HEAD''''). `ContractAddresses.sol` restored byte-identical (sha256
 `f7206e6c29b2c2767b4b835d1f636ac80a88129098eb13976bb2473da1dccfed`) after the `patchForFoundry` round-trip.
 **NON-WIDENING confirmed at HEAD''''.**
+
+---
+
+## 11. The 357-00e reconciliation @ c9b5d20d (the FIFTH / FINAL v56.0 gate — the flat-10% pass lootbox + dead-guard removal — CURRENT SUBJECT)
+
+**Subject re-freeze:** c9b5d20d = `c9b5d20d756f9dfc5f3b0584aae56bdfa215d8bf` — ONE further `contracts/*.sol` commit
+layered on HEAD'''' `77d8bc88` (§10). It is the FIFTH and FINAL v56.0 contract gate (USER-committed directly), a
+contained pass-PURCHASE economic refactor on `DegenerusGame.sol` (8 lines) + `DegenerusGameWhaleModule.sol`
+(−46/+25):
+- **The presale lootbox elevation REMOVED on all 3 pass types** (whale bundle / lazy pass / deity). The lootbox is
+  now a **flat 10% of pass value** regardless of presale state — the `LAZY_PASS_LOOTBOX_PRESALE_BPS` /
+  `WHALE_LOOTBOX_PRESALE_BPS` / `DEITY_LOOTBOX_PRESALE_BPS` (2000) constants + the
+  `_psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0 ? *_PRESALE_BPS : *_POST_BPS` ternaries are DROPPED, and
+  `*_LOOTBOX_POST_BPS → *_LOOTBOX_BPS` (the single `1000` rate now). The 25% `presaleBoxCredit` (gated on
+  `!presaleOver`) is byte-UNCHANGED, so presale buyers now get **25% credit + 10% lootbox** instead of
+  25% + 20% — only the lootbox award shrinks.
+- **3 unreachable guards removed.** The lazy-pass `if (baseCost == 0) revert E();` (dead — `priceForLevel` is
+  strictly positive over all `uint24`: ≥ 0.01 ETH, so the 10-level `_lazyPassCost` sum is always > 0); the lazy
+  `if (lootboxAmount == 0) return;` and the deity `if (lootboxAmount != 0) { … }` zero-guards (dead — 10% of a
+  positive price ≥ 0.18 ETH is never 0). `_recordLootboxEntry` is safe even vs a hypothetical 0 (its explicit
+  `!= 0` RMW guard).
+- **A stale `hasAnyLazyPass` docstring fixed** (`DegenerusGame.sol`) — clarifies it is a UI/external view
+  (exclusive `> level`) NOT consumed by the AfKing pass gate (which uses `lazyPassHorizon` / `_passHorizonOf`
+  inclusive through `frozenUntilLevel`); the one-level off-by-one is a documented, by-design view divergence.
+
+Everything downstream (357-03 FINDINGS re-point, 357-04 closure) re-freezes against c9b5d20d. **`git diff c9b5d20d
+HEAD -- contracts/` is EMPTY** — 357-00e is TEST + ledger writes ONLY.
+
+### 11a. The 357-00e arithmetic @ c9b5d20d
+
+| Quantity | §10a HEAD'''' `77d8bc88` | c9b5d20d delta (the pass refactor + 357-00e) | c9b5d20d (this run) |
+|----------|---------------------------|-----------------------------------------------|----------------------|
+| `forge test` passed | 573 | **+1** (run-variance re-membership — the refactor adds no green/red of its own) | **574** |
+| `forge test` failed | 134 | **−1** (run-variance NARROWING within the §2 union; no new red) | **133** |
+| `forge test` skipped | 103 | **±0** (no new drops — the refactor unmasks no fixture) | **103** |
+
+**The binding gate, re-run @ c9b5d20d:** `forge test --json` parsed the c9b5d20d live failing `(suite, test)` set
+and compared it to the §2 `453f8073` 134-name union BY NAME. **`live − union == ∅` (0 names outside the baseline)
+— the live 133 failing set is a STRICT SUBSET of the baseline 134-name union.** NON-WIDENING HOLDS at c9b5d20d.
+(The c9b5d20d run was `574 passed / 133 failed / 103 skipped`, 810 total. The `133` vs the HEAD'''' `134` is a
+1-fail NARROWING within the documented run-variance of the non-deterministic Bucket A/F cluster, §4 — the pass
+refactor touches NO VRF/RNG-window code, so it cannot deterministically free a Bucket-A red; the `union − live`
+slack is the same fuzz/invariant-campaign variance the §4 ⊆-gate rationale accounts for.)
+
+### 11b. ZERO new forge red — the flat-10% + dead-guard removal adds no test surface
+
+The refactor introduces no new `.t.sol` fixture and removes no live behavior any fixture asserts:
+- **No dangling refs to the dropped constants.** `git grep -n 'LOOTBOX_PRESALE_BPS\|LOOTBOX_POST_BPS' -- 'contracts/*.sol' 'test/'`
+  → **0** (the `*_PRESALE_BPS`/`*_POST_BPS` symbols are fully removed; nothing in `contracts/` or `test/` references
+  them). The `PS_ACTIVE` shift/mask is still used elsewhere (not orphaned).
+- **No fixture asserted the presale-20% lootbox award.** The pass-purchase suites assert pass mechanics (ticket
+  queueing, freeze horizon, stat boost) + the `presaleBoxCredit` 25% leg (byte-unchanged), not the
+  presale-vs-post lootbox-bps split; so dropping the presale elevation flips no fixture (no `vm.skip` drop needed —
+  §11a skipped count `±0`).
+- **The 3 dropped guards are provably dead** (no fixture ever hit `baseCost == 0` / `lootboxAmount == 0`):
+  `priceForLevel` (`PriceLookupLib.sol:21`) has no zero branch (min `0.01 ether` at `targetLevel < 5`), so the
+  lazy 10-level sum is always > 0; 10% of a positive price (lazy ≥ 0.18 ETH, whale ≥ 1.2 ETH, deity ≥ 24 ETH) is
+  never 0. Removing dead branches is behavior-equivalent → zero red delta.
+
+### 11c. The SOLVENCY-01 leg-1 byte-anchor re-confirmed @ c9b5d20d (§7a / §8e / §9f / §10d still hold)
+
+The pass refactor is **off the ETH/`claimablePool` solvency path** — it only changes the lootbox-award MULTIPLIER
+on the pass-purchase legs (the `(price * bps) / 10_000` arithmetic in `DegenerusGameWhaleModule`), which feeds
+`_recordLootboxEntry` (a BURNIE-ledger lootbox-entry write), NOT the afking ETH debit. The afking SOLVENCY-01 leg-1
+debit two-liner lives in `GameAfkingModule.sol` and is byte-UNCHANGED across HEAD''''→c9b5d20d:
+`git diff 77d8bc88 c9b5d20d -- contracts/modules/GameAfkingModule.sol` is **EMPTY** (the refactor touches only
+`DegenerusGame.sol` + `DegenerusGameWhaleModule.sol`). The
+`afkingFunding[src] -= ethValue; claimablePool -= uint128(ethValue);` statements stay byte-frozen at `:702-703`
+(last touched `77c3d9ef` v349.1). The ETH pool splits (affiliate / reward / pool) are computed from `totalPrice`
+INDEPENDENT of the lootbox %, and the `presaleBoxCredit` 25% leg is byte-unchanged — reducing the lootbox award
+20%→10% can only DECREASE delivered value (no unbacked value, no EV-cap breach, no underflow). SOLVENCY-01 leg-1
+HOLDS at c9b5d20d.
+
+### 11d. The authoritative c9b5d20d run + the read-only attestation
+
+```
+forge build                                  (exit 0 — clean at c9b5d20d)
+node scripts/lib/patchForFoundry.js          (predict CREATE addrs — no pretest hook)
+forge test --json   (default profile, WHOLE tree — NOT --match-path)
+  → 574 passed / 133 failed / 103 skipped   (810 run)   [FORGE_EXIT=1, expected with reds]
+git checkout -- contracts/ContractAddresses.sol   (restore frozen)
+```
+
+`live − union == ∅` (name-keyed set-diff — the live 133 failing set ⊆ the §2 134-name `453f8073` union BY NAME).
+`git diff c9b5d20d HEAD -- contracts/` is **EMPTY** (zero contract mutation in this reconciliation; subject
+byte-frozen at c9b5d20d, the FIFTH / FINAL v56.0 gate). **NON-WIDENING confirmed at c9b5d20d.**
