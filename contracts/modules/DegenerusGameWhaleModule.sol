@@ -116,11 +116,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Lazy pass: tickets per level (4 tickets = 1 level).
     uint32 private constant LAZY_PASS_TICKETS_PER_LEVEL = 4;
 
-    /// @dev Lazy pass: share of purchase value awarded as lootbox during presale (20%).
-    uint16 private constant LAZY_PASS_LOOTBOX_PRESALE_BPS = 2000;
-
-    /// @dev Lazy pass: share of purchase value awarded as lootbox after presale (10%).
-    uint16 private constant LAZY_PASS_LOOTBOX_POST_BPS = 1000;
+    /// @dev Lazy pass: share of purchase value awarded as lootbox (10%).
+    uint16 private constant LAZY_PASS_LOOTBOX_BPS = 1000;
 
     /// @dev Lazy pass: default discount for boons without stored tier (10%).
     uint16 private constant LAZY_PASS_BOON_DEFAULT_DISCOUNT_BPS = 1000;
@@ -143,17 +140,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Last level eligible for whale bundle bonus tickets.
     uint24 private constant WHALE_BONUS_END_LEVEL = 10;
 
-    /// @dev Whale bundle lootbox share during presale (20%).
-    uint16 private constant WHALE_LOOTBOX_PRESALE_BPS = 2000;
+    /// @dev Whale bundle lootbox share (10%).
+    uint16 private constant WHALE_LOOTBOX_BPS = 1000;
 
-    /// @dev Whale bundle lootbox share after presale (10%).
-    uint16 private constant WHALE_LOOTBOX_POST_BPS = 1000;
-
-    /// @dev Deity pass lootbox share during presale (20%).
-    uint16 private constant DEITY_LOOTBOX_PRESALE_BPS = 2000;
-
-    /// @dev Deity pass lootbox share after presale (10%).
-    uint16 private constant DEITY_LOOTBOX_POST_BPS = 1000;
+    /// @dev Deity pass lootbox share (10%).
+    uint16 private constant DEITY_LOOTBOX_BPS = 1000;
 
     /// @dev Deity pass base price (24 ETH, unscaled). Actual price = 24 + T(n) where T(n) = n*(n+1)/2, n = passes sold so far.
     uint256 private constant DEITY_PASS_BASE = 24 ether;
@@ -170,7 +161,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @dev Available at any level. Tickets always start at x1.
      *      - Boosts levelCount by delta between current freeze and new freeze (max 100, no double dipping).
      *      - Queues 40 × quantity bonus tickets/lvl for levels passLevel-10, 2 × quantity standard tickets/lvl for the rest.
-     *      - Lootbox: 20% of price (presale), 10% (post-presale).
+     *      - Lootbox: 10% of price.
      *      - Distributes DGNRS rewards to buyer and affiliates.
      *
      *      Price: 2.4 ETH at levels 0-3, 4 ETH at levels 4+, 10/25/50% off standard with boon.
@@ -361,11 +352,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             );
         }
 
-        // Lootbox: 20% of price during presale, 10% after
-        uint16 whaleLootboxBps = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0
-            ? WHALE_LOOTBOX_PRESALE_BPS
-            : WHALE_LOOTBOX_POST_BPS;
-        uint256 lootboxAmount = (totalPrice * whaleLootboxBps) / 10_000;
+        // Lootbox: 10% of price
+        uint256 lootboxAmount = (totalPrice * WHALE_LOOTBOX_BPS) / 10_000;
         _recordLootboxEntry(buyer, lootboxAmount, passLevel, data);
     }
 
@@ -377,7 +365,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      - Applies the standard 10-level stat boost via _activate10LevelPass.
      *      - Price: flat 0.24 ETH at levels 0-2 (excess buys bonus tickets), sum of per-level
      *        ticket prices across the 10-level window at levels 3+.
-     *      - Awards a lootbox equal to 20% (presale) or 10% (post-presale) of pass value.
+     *      - Awards a lootbox equal to 10% of pass value.
      *      - Boon purchases apply a discount (default 10%) to the payment amount.
      * @param buyer The address receiving the pass.
      * @custom:reverts E When level is not 0-2 or x9 (excluding x99) and no boon, pass has 8+ levels remaining, or msg.value is incorrect.
@@ -434,7 +422,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         uint24 startLevel = currentLevel == 0 ? 1 : currentLevel + 1;
         uint256 baseCost = _lazyPassCost(startLevel);
-        if (baseCost == 0) revert E();
 
         // Levels 0-2: flat 0.24 ETH worth of benefits, balance → bonus tickets
         // Boon at 0-2: same benefits, discounted payment
@@ -511,13 +498,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             );
         }
 
-        // Award lootbox as a percentage of pass value (presale 20%, post 10%)
-        uint16 lootboxBps = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0
-            ? LAZY_PASS_LOOTBOX_PRESALE_BPS
-            : LAZY_PASS_LOOTBOX_POST_BPS;
-        uint256 lootboxAmount = (benefitValue * lootboxBps) / 10_000;
-        if (lootboxAmount == 0) return;
-
+        // Award lootbox as 10% of pass value
+        uint256 lootboxAmount = (benefitValue * LAZY_PASS_LOOTBOX_BPS) / 10_000;
         _recordLootboxEntry(
             buyer,
             lootboxAmount,
@@ -670,19 +652,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             );
         }
 
-        // Lootbox: 20% presale, 10% post
-        uint16 deityLootboxBps = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0
-            ? DEITY_LOOTBOX_PRESALE_BPS
-            : DEITY_LOOTBOX_POST_BPS;
-        uint256 lootboxAmount = (totalPrice * deityLootboxBps) / 10_000;
-        if (lootboxAmount != 0) {
-            _recordLootboxEntry(
-                buyer,
-                lootboxAmount,
-                passLevel,
-                mintPacked_[buyer]
-            );
-        }
+        // Lootbox: 10% of price
+        uint256 lootboxAmount = (totalPrice * DEITY_LOOTBOX_BPS) / 10_000;
+        _recordLootboxEntry(
+            buyer,
+            lootboxAmount,
+            passLevel,
+            mintPacked_[buyer]
+        );
 
         emit DeityPassPurchased(buyer, symbolId, totalPrice, passLevel);
     }

@@ -1646,9 +1646,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @notice Whether a player holds any active lazy pass (Deity, Whale bundle, or Lazy).
-    /// @dev True if the permanent Deity bit is set, or the whale-bundle/lazy freeze
-    ///      window still covers the current level. Read by the AfKing subscription afking
-    ///      as its pass-OR-pay gate.
+    /// @dev True if the permanent Deity bit is set, or the whale-bundle/lazy freeze still
+    ///      covers the current level — `frozenUntilLevel > level`, so coverage ends AT
+    ///      `frozenUntilLevel` (exclusive). External/UI view only; the AfKing pass gate does
+    ///      NOT read this — it uses `lazyPassHorizon` and keeps a sub through `frozenUntilLevel`
+    ///      inclusively, so this reports "no pass" one level before AfKing evicts. By design.
     /// @param player Player address to check.
     /// @return True if the player holds any of the three pass types.
     function hasAnyLazyPass(address player) external view returns (bool) {
