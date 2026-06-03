@@ -230,7 +230,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 357-03-PLAN.md — Wave 3 (autonomous): author audit/FINDINGS-v56.0.md (the 9-section report, chmod 444 deferred to closure) folding the delta-audit + the adversarial disposition; **THREE resolved-in-phase items (F-356-01 @ HEAD' + slot-0 churn advisory @ HEAD''' + D-11 level-0 gap [USER-caught, sweep-missed] @ HEAD''''), all RESOLVED-AT-357**; re-attest the CURRENT v56.0 requirement set against **HEAD'''' `77d8bc88`** [AUDIT-01]
+- [x] 357-03-PLAN.md — Wave 3 (autonomous): author audit/FINDINGS-v56.0.md (the 9-section report, chmod 444 deferred to closure) folding the delta-audit + the adversarial disposition; **THREE resolved-in-phase items (F-356-01 @ HEAD' + slot-0 churn advisory @ HEAD''' + D-11 level-0 gap [USER-caught, sweep-missed] @ HEAD''''), all RESOLVED-AT-357**; re-attest the CURRENT v56.0 requirement set against **HEAD'''' `77d8bc88`** [AUDIT-01] ✅ COMPLETE 2026-06-03 (`audit/FINDINGS-v56.0.md`, 843 lines, all 9 sections mirroring FINDINGS-v55.0.md; 0 UNRESOLVED FINDING_CANDIDATE / 3 RESOLVED-AT-357; the CURRENT 27-row REQUIREMENTS.md set re-attested [AUDIT-01 the only Pending]; MILESTONE_V56_AT_HEAD_<sha> carried verbatim; chmod 444 deferred to 357-04; DOC-ONLY zero source edits). **⚠ 357-04 ACTION:** a FIFTH source commit `c9b5d20d` ("refactor(passes): flat 10% pass lootbox") landed AFTER the HEAD'''' freeze (mutates DegenerusGame.sol + WhaleModule) — OUTSIDE the audited subject `77d8bc88`; the deliverable is authored against the planned subject `77d8bc88`; 357-04 must decide in-scope (re-freeze + 357-00d-style reconcile) vs out-of-scope (pin the signal to `77d8bc88`). Logged to deferred-items.md.
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
