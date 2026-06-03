@@ -218,7 +218,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 357-00-PLAN.md — Wave 1 (autonomous:false CONTRACT GATE): the THREE bundled contract changes — F-356-01 drainAffiliateBase dispatch stub + D-11 pass-required subscribe + D-12 purchase-grounded subscribe (D-13 VAULT/SDGNRS exempt) — forge build clean, HELD for USER hand-review, committed as the SOLE .sol commit (HEAD') [AUDIT-01]
+- [x] 357-00-PLAN.md — Wave 1 (autonomous:false CONTRACT GATE): the THREE bundled contract changes — F-356-01 drainAffiliateBase dispatch stub + D-11 pass-required subscribe + D-12 purchase-grounded subscribe (D-13 VAULT/SDGNRS exempt) — forge build clean, HELD for USER hand-review, committed as the SOLE .sol commit (HEAD') [AUDIT-01]
 - [ ] 357-00b-PLAN.md — Wave 1 (autonomous): the D-14 NON-WIDENING reconciliation — re-run forge test at HEAD', drop the D-11/D-12 supersession reds (vm.skip + re-prove via the new V56SubHardening positive proofs), record the F-356-01 narrowing, re-freeze the subject at HEAD' [AUDIT-01]
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -248,7 +248,7 @@ Plans:
 | 354. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (aggregator + ticket-mode primitive + DegenerusQuests batched-settle + accumulator + open-end) | v56.0 | 6/6 | Complete   | 2026-06-01 |
 | 355. GAS — Measure + Tune (+ GAS-05 deferred payout + liveness adds: openBoxes valve + gap/jackpot decouple) | v56.0 | 3/3 | Complete + PUSHED | 2026-06-02 |
 | 356. TST — Unmanipulable (strategic sub/unsub) + Quest-Core Non-Perturbation + Two-Path-Open + Liveness Valve + Gap-Decouple + Gas Marginals + Non-Widening | v56.0 | 5/7 | In Progress|  |
-| 357. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep (AUGMENTED by XMODEL) + FINDINGS-v56.0 + Closure | v56.0 | 0/? | Not started | - |
+| 357. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep (AUGMENTED by XMODEL) + FINDINGS-v56.0 + Closure | v56.0 | 1/6 | In Progress|  |
 
 > **🔒 v56.0 CONTRACT-BOUNDARY HARD STOP (ONE gate — 354 IMPL · 355 GAS rides the same boundary if it produces a net diff).** Phase 354 IMPL is THE contract phase — the carefully-sequenced batched diff (the per-sub accumulator + the mode-agnostic aggregator accrue/settle + the ticket-mode minimal-write primitive + the `DegenerusQuests` batched-settle entrypoint + the open-end optimizations, authored producer-before-consumer) is applied to `contracts/` and locally compiled (`forge build` clean) but HELD at the contract-commit boundary, NEVER committed without explicit user hand-review (`feedback_batch_contract_approval` + `feedback_never_preapprove_contracts` + `feedback_manual_review_before_push` + `feedback_no_contract_commits`). Phase 355 GAS is a tuning pass — any net behavior-preserving gas change rides the same batched USER-APPROVED diff at the same boundary (or records Outcome-A no-diff per the v55 350 precedent). `ContractAddresses.sol` freely modifiable per `feedback_contractaddresses_policy`; tests + planning + docs AGENT-committable.
 
