@@ -444,6 +444,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     _setStreakBase(s, snap); // funded (manual) day-0 — keep the snapshot
                     s.lastAutoBoughtDay = uint24(today);
                     s.lastOpenedDay = uint24(today); // no pending box
+                } else if (s.lastAutoBoughtDay == uint24(today)) {
+                    // Already bought today in a prior subscribe cycle this day — the cancel
+                    // tombstone retained the stamp across the unsub/re-subscribe. The run is
+                    // already purchase-grounded, so keep the snapshot and skip a second
+                    // cover-buy: the per-day flat slot-0 reward is not re-accrued, and
+                    // lastOpenedDay is left untouched so a pending box is not orphaned. This
+                    // mirrors the active-sub re-subscribe guard above.
+                    _setStreakBase(s, snap);
                 } else {
                     uint256 mp = _mintPriceInContext();
                     (
