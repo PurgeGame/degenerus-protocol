@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
 status: executing
-last_updated: "2026-06-03T10:11:50.302Z"
-last_activity: 2026-06-03 -- Phase 357 execution started
+last_updated: "2026-06-03T12:04:56.227Z"
+last_activity: 2026-06-03 -- 357-00b D-14 reconciliation COMPLETE @ HEAD'' (61315ecd)
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 24
-  completed_plans: 18
-  percent: 75
+  completed_plans: 20
+  percent: 80
 ---
 
 # Project State
@@ -33,9 +33,11 @@ See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 357 (terminal-delta-audit-3-skill-genuine-parallel-adversarial-sw) — EXECUTING
-Plan: 1 of 6
+Plan: 357-00 + 357-00b COMPLETE (Wave 1 done) → next 357-01 ∥ 357-02 (Wave 2, READ-ONLY @ HEAD'')
 Status: Executing Phase 357
-Last activity: 2026-06-03 -- Phase 357 execution started
+Last activity: 2026-06-03 -- 357-00b D-14 reconciliation COMPLETE @ HEAD'' (61315ecd)
+
+> **⚓ RE-FREEZE ANCHOR — the audit subject is HEAD'' = `61315ecd0d617e5ece386676aaf452282331ebdf`** (the SECOND 357 contract gate, the advance-incentive redesign: `advanceGame` PURE LIVENESS [`MustMintToday` removed] + the must-mint ladder → SOFT pay-gate `_bountyEligible`/`bountyEligible(addr)` view + `mintBurnie` pays the advance bounty only when `mult>0 && eligible` + Vault+sDGNRS→`mintBurnie`). 357-00b (commits `056e78c8`+`1d5fd872`+`48fab561`) reconciled the NON-WIDENING ledger §9 to HEAD'' (567/133/99; `live − union == ∅` HOLDS — 133 ⊆ the §2 134-name 453f8073 union, empty set-diff; 134→133 = run-variance in the non-deterministic Bucket A/F + vm.assume cluster; SOLVENCY-01 leg-1 byte-anchor held), rewrote GovernanceGating GATE-01..04 to the soft pay-gate model (6/6 GREEN), and extended V56SubHardening 11→17 (advance-soft-gate proofs). **ZERO contracts/*.sol mutation in 357-00b; `git diff 61315ecd HEAD -- contracts/` EMPTY.** Downstream 357-01/02/03/04 re-freeze against HEAD'' (NOT HEAD' `ac5f1e03`).
 
 ## 🛠 v56 CARRIED FINDING + USER HARDENING — the 357-00 contract gate (3 changes, autonomous:false)
 
