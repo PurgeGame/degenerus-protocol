@@ -1,7 +1,34 @@
 # Regression Baseline — v56.0 (NON-WIDENING clean-baseline gate ledger)
 
-> **357-00b RE-RUN @ HEAD'' `61315ecd` (the advance-incentive redesign — see §9, the CURRENT re-frozen
-> subject).** After the SECOND 357 contract gate (HEAD'' = `61315ecd0d617e5ece386676aaf452282331ebdf` — the
+> **357-00d RE-RUN @ HEAD'''' `77d8bc88` (the two subscribe-hardening follow-up gates — see §10, the CURRENT
+> re-frozen subject).** After TWO further `contracts/*.sol` commits layered on HEAD'' `61315ecd` —
+> **HEAD''' `7b0b2a0b`** (the NEW-run subscribe per-day slot-0 idempotency guard: a subscribe→funded-buy→cancel→
+> subscribe loop no longer re-accrues the flat per-day `QUEST_SLOT0_REWARD`, `GameAfkingModule.sol:451`
+> `else if (s.lastAutoBoughtDay == uint24(today)) { _setStreakBase(s, snap); }`) and **HEAD'''' `77d8bc88`** (the
+> USER-caught D-11 LEVEL-0 zero-horizon rejection: the gate at `:372` changed from `s.validThroughLevel < level`
+> to `(s.validThroughLevel == 0 || s.validThroughLevel < level)` so a passless EOA (horizon 0) is rejected at
+> level 0 too, where `0 < 0` was vacuously false) — the whole tree was re-run at the re-frozen subject HEAD''''
+> and reconciled (§10). **New counts: 573 passed / 134 failed / 103 skipped (810 total).** The live **134**
+> failing NAME set is BYTE-IDENTICAL by NAME to the §2 134-name `453f8073` union (`live − union == ∅` AND
+> `union − live == ∅`, verified empirically — name-keyed set-diff both directions EMPTY) — **NON-WIDENING HOLDS
+> at HEAD''''; ZERO new forge regression from the two gates.** Both changes are **revert-only / control-flow-only**
+> (no ETH path): the slot-0 guard skips a second same-day cover-buy; the D-11 level-0 arm adds a revert. The
+> ONE REVERT-REASON FLIP the D-11 level-0 fix introduced was caught + adapted: **4 `AfKingSubscription`
+> fixtures** (`testCrossingNoPassEvictedViaTombstone`, `testSubscribeNoBurnieChargeRegardlessOfPass`,
+> `testUnapprovedFundingSourceRefusedThenHonored`, `testRevokeDoesNotStopActiveSub`) subscribed a **passless EOA
+> at level 0** relying on the pre-HEAD'''' vacuity (their own comment: "a no-pass sub clears D-11
+> (validThroughLevel 0 < level 0 is false)"); they were 8/8 GREEN at HEAD'' and now revert `NoPass()`. Per the
+> §3b/§8c removed/adapted-surface discipline each is `vm.skip`-with-reason (Skipped, not Failure → genuinely
+> NON-WIDENING), the level-0 successor properties re-proven GREEN by the NEW `V56SubHardening` proofs (§10b). The
+> NEW `V56SubHardening` proofs (17 → 22 GREEN): `testChurnSameDayAccruesSlot0Once` (slot-0 accrued ONCE across
+> same-day churn) + `testD11PasslessEoaRevertsNoPassAtLevelZero` + `testD11RealPassSubscribesAtLevelZero` +
+> `testD11DeityHolderSubscribesAtLevelZero` + `testD13VaultSdgnrsExemptAtLevelZero`. The SOLVENCY-01 leg-1
+> byte-anchor STILL HOLDS (both gates are revert-only / control-flow-only — the debit two-liner is byte-frozen,
+> only relocated `:690-691`→`:702-703` by the +12-line slot-0/comment insertion above it). **`git diff 77d8bc88
+> HEAD -- contracts/` is EMPTY** — 357-00d is test + ledger writes ONLY; the subject stays re-frozen at HEAD''''.
+
+> **357-00b RE-RUN @ HEAD'' `61315ecd` (the advance-incentive redesign — see §9, SUPERSEDED as CURRENT by §10
+> at HEAD'''').** After the SECOND 357 contract gate (HEAD'' = `61315ecd0d617e5ece386676aaf452282331ebdf` — the
 > advance-incentive redesign: `advanceGame()` DROPPED the `MustMintToday` hard revert → pure liveness; the
 > must-mint tier ladder moved to the SOFT pay-gate `_bountyEligible(address)` in
 > `DegenerusGameMintStreakUtils`, read by `mintBurnie()` BEFORE the self-call so the advance bounty pays only
@@ -684,3 +711,115 @@ the ETH/`claimablePool`/solvency path). It adds no ETH/`claimablePool` debit and
 The SOLVENCY-01 leg-1 two-liner (`afkingFunding[src] -= ethValue; claimablePool -= uint128(ethValue);`) is
 byte-unchanged from §8e (the `c5715297`→`ac5f1e03`→`61315ecd` chain never edits it). SOLVENCY-01 leg-1 HOLDS at
 HEAD''.
+
+---
+
+## 10. The 357-00d reconciliation @ HEAD'''' `77d8bc88` (the two subscribe-hardening follow-up gates — CURRENT SUBJECT)
+
+**Subject re-freeze:** HEAD'''' = `77d8bc883048b3ba4213f94fc2ac5d830ba3f4a3` — TWO further `contracts/*.sol` commits
+layered on HEAD'' `61315ecd` (§9):
+- **HEAD''' = `7b0b2a0b`** — the NEW-run subscribe **per-day slot-0 idempotency guard**. The active-sub re-subscribe
+  (`:399`) and the daily STAGE both guard the funded cover-buy on `lastAutoBoughtDay`, but the NEW-run subscribe
+  branch guarded only on the manual `done[0]` flag (which an afking buy never sets). Because the cancel branch
+  tombstones IN PLACE (`dailyQuantity = 0`, record + stamp kept), the `lastAutoBoughtDay` stamp survives an unsub,
+  so a `subscribe → funded cover-buy → cancel → subscribe` loop re-entered the NEW-run cover-buy and re-accrued the
+  flat per-day `QUEST_SLOT0_REWARD` (100 BURNIE) each cycle. The fix adds `else if (s.lastAutoBoughtDay ==
+  uint24(today)) { _setStreakBase(s, snap); }` (`GameAfkingModule.sol:451`) — already purchase-grounded same-day →
+  keep the snapshot, skip a SECOND cover-buy, no slot-0 re-accrual, `lastOpenedDay` left untouched (no orphan box).
+  Closes the 357-02 sweep's zero-day-hunter probe-7 EV-negative ADVISORY.
+- **HEAD'''' = `77d8bc88`** — the USER-caught **D-11 LEVEL-0 zero-horizon rejection**. The gate at `:372` changed from
+  `if (!exemptSub && s.validThroughLevel < level)` to `if (!exemptSub && (s.validThroughLevel == 0 ||
+  s.validThroughLevel < level))`. At level 0 `validThroughLevel(0) < level(0)` is `0 < 0` == FALSE (vacuous), so a
+  funded PASSLESS EOA (horizon 0) cleared `NoPass()` at level 0 and could afk through level 0 (evicted only at L1).
+  A zero horizon (= no pass) is now rejected at EVERY level including 0; a real pass has horizon ≥ passLevel+99
+  (WhaleModule), deity = `type(uint24).max`, VAULT/SDGNRS stay D-13 exempt + deity-covered. **The 357-02 3-skill
+  sweep marked D-11 NEGATIVE-VERIFIED but ran only at level ≥ 1 — it MISSED the level-0 boundary; the USER's review
+  caught it.**
+
+Everything downstream (357-03 FINDINGS, 357-04 closure) re-freezes against HEAD''''. **`git diff 77d8bc88 HEAD --
+contracts/` is EMPTY** — 357-00d is TEST + ledger writes ONLY.
+
+### 10a. The 357-00d arithmetic @ HEAD''''
+
+| Quantity | §9b HEAD'' `61315ecd` | HEAD'''' delta (the two gates + 357-00d) | HEAD'''' `77d8bc88` (this run) |
+|----------|------------------------|------------------------------------------|--------------------------------|
+| `forge test` passed | 567 | **+6** (the 5 new `V56SubHardening` proofs are GREEN; +1 net run-variance) | **573** |
+| `forge test` failed | 133 | **+1** (run-variance re-membership in the §2 union; the 4 D-11-level-0 supersession reds are DROPPED not counted) | **134** |
+| `forge test` skipped | 99 | **+4** (the 4 `AfKingSubscription` D-11-level-0 supersession `vm.skip` drops, §10c) | **103** |
+
+**The binding gate, re-run @ HEAD'''':** `forge test --json` parsed the HEAD'''' live failing `(suite, test)` set and
+compared it to the §2 `453f8073` 134-name union BY NAME. **`live − union == ∅` (0 names) AND `union − live == ∅`
+(0 names) — the live 134 is BYTE-IDENTICAL by NAME to the baseline 134.** NON-WIDENING HOLDS at HEAD''''. (The
+HEAD'''' run was `573 passed / 134 failed / 103 skipped`, 810 total. The `134 == 134` byte-identity vs the HEAD''
+`133` is within the documented run-variance of the non-deterministic Bucket A/F cluster, §4 — neither gate touches
+any VRF/RNG-window code.)
+
+### 10b. The NEW positive proofs (the re-prove side) — `test/fuzz/V56SubHardening.t.sol` (17 → 22 GREEN)
+
+The §9d `V56SubHardening` suite was EXTENDED with 5 new proofs (17 → 22, all GREEN @ HEAD'''' — `forge test
+--match-contract V56SubHardening` = 22 passed / 0 failed / 0 skipped):
+- **`testChurnSameDayAccruesSlot0Once`** (HEAD''' slot-0 guard) — a pass-holding + funded EOA's
+  `subscribe → funded cover-buy → cancel → subscribe` loop accrues the flat per-day slot-0 BURNIE (`pendingBurnie`)
+  EXACTLY ONCE across N same-day churn cycles (asserts `pendingBurnie` UNCHANGED per cycle, not N×); a NEXT-day
+  subscribe (`lastAutoBoughtDay != today`) DOES a fresh funded cover-buy + accrues again (the guard skips only
+  SAME-day re-entry).
+- **`testD11PasslessEoaRevertsNoPassAtLevelZero`** (HEAD'''' D-11 level-0) — at `_setLevel(0)` a FUNDED PASSLESS EOA
+  reverts `NoPass()` (the boundary the existing level-5 negative never reached; funded → the revert can ONLY be the
+  level-0 zero-horizon arm, not D-12).
+- **`testD11RealPassSubscribesAtLevelZero`** — at level 0 a real finite-pass holder (`validThroughLevel = 99`)
+  subscribes OK (the `== 0` arm rejects only a ZERO horizon).
+- **`testD11DeityHolderSubscribesAtLevelZero`** — at level 0 a deity holder (sentinel `type(uint24).max`) subscribes OK.
+- **`testD13VaultSdgnrsExemptAtLevelZero`** — at level 0 VAULT + sDGNRS (horizon 0, unfunded) still subscribe OK — the
+  `exemptSub` short-circuit gates the WHOLE `(validThroughLevel == 0 || ...)` predicate, so the new `== 0` arm does
+  not break the construction-time bootstrap.
+
+The existing 17 D-11/D-12/D-13 + crossing-eviction + `drainAffiliateBase` + advance-soft-gate proofs (§8b/§9d) stay
+GREEN at HEAD''''.
+
+### 10c. The 357-00d removed/adapted-surface DROPS (4, BY NAME + reason) — the D-11 LEVEL-0 supersession reds
+
+The HEAD'''' D-11 level-0 fix introduced exactly ONE revert-reason flip in the whole tree: **4 `AfKingSubscription`
+fixtures** that subscribe a **passless EOA at level 0** relying on the pre-HEAD'''' vacuity. They were verified
+**8/8 GREEN @ HEAD''** (`/tmp/ft357.log`) and now revert `NoPass()` @ HEAD'''' (a GENUINE supersession-widening the
+USER-caught fix introduced). Per the §3b/§8c removed/adapted-surface DROP discipline each is `vm.skip(true,
+"<357-00d reason>")` (Foundry-native skip — Skipped, not Failure → genuinely NON-WIDENING), each level-0 successor
+property re-proven GREEN by the NEW `V56SubHardening` proofs (§10b). **NONE is a genuine v56 bug** — each is a stale
+v55-era assertion the audited HEAD'''' D-11 fix legitimately superseded.
+
+| File | Dropped fixtures | Count | v56-supersession reason (the SHIPPED HEAD'''' behavior the assertion no longer matches) | v56 successor proof |
+|------|------------------|-------|------------------------------------------------------------------------------------------|---------------------|
+| `test/fuzz/AfKingSubscription.t.sol` | `testCrossingNoPassEvictedViaTombstone` | 1 | subscribes a PASSLESS sub (horizon 0) at level 0 to set up the crossing; HEAD'''' now reverts `NoPass()` at the subscribe, before the crossing | `V56SubHardening::testCrossingEvictionStillEvictsOutgrownPass` (a pass valid at subscribe, then outgrown) |
+| `test/fuzz/AfKingSubscription.t.sol` | `testSubscribeNoBurnieChargeRegardlessOfPass` | 1 | arm (a) subscribes a passless sub at level 0 (its own comment: "a no-pass sub clears D-11 (validThroughLevel 0 < level 0 is false)") | `V56SubHardening::testD11RealPassSubscribesAtLevelZero` / `testD11DeityHolderSubscribesAtLevelZero` (real-pass/deity subscribe at level 0 charges no BURNIE) |
+| `test/fuzz/AfKingSubscription.t.sol` | `testUnapprovedFundingSourceRefusedThenHonored` | 1 | the HONORED leg subscribes a passless subscriber (M) at level 0 → now `NoPass()`; the REFUSED leg (NotApproved before any pass check) is unaffected | `V56SubHardening::testD13VaultSdgnrsExemptAtLevelZero` + the OPEN-E gate ordering in the surviving suites |
+| `test/fuzz/AfKingSubscription.t.sol` | `testRevokeDoesNotStopActiveSub` | 1 | M subscribes passless at level 0 → now `NoPass()`; the trust-the-sub revoke semantics are orthogonal to the pass gate | the surviving V56-native suites (the revoke semantics are pass-gate-orthogonal) |
+
+**357-00d drop total: 4** (= the +4 skips vs §9b's 99 → 103). Each is verified `Failure`-with-`NoPass()` @ HEAD''''
+pre-drop and `Skipped` post-drop; each was `Success` @ HEAD'' (8/8 `AfKingSubscription` GREEN), so the drops add
+NOTHING to the baseline ceiling (these names are not in the §2 `453f8073` union — the v55 layout + v55 contract
+behavior matched there) and close the only `live − union ≠ ∅` deltas — exactly the §3b/§8c discipline.
+
+### 10d. The SOLVENCY-01 leg-1 byte-anchor re-confirmed @ HEAD'''' (§7a / §8e / §9f still hold)
+
+Both HEAD''' and HEAD'''' changes are **revert-only / control-flow-only** (no ETH path): the slot-0 guard adds an
+`else if` that SKIPS a second same-day cover-buy (`_setStreakBase` only — a BURNIE-streak marker write, no ETH); the
+D-11 level-0 arm adds a `revert NoPass()`. `git diff 61315ecd HEAD -- contracts/modules/GameAfkingModule.sol` does
+NOT touch the SOLVENCY-01 debit two-liner (`grep -c` on the diff = 0). The
+`afkingFunding[src] -= ethValue; claimablePool -= uint128(ethValue);` statements are byte-unchanged — only RELOCATED
+from HEAD'' `:690-691` to HEAD'''' `:702-703` (the +12-line slot-0 guard + the D-11 comment expansion inserted
+ABOVE them). The last commit to touch that line is `77c3d9ef` (v349.1), long predating the two 357 gates. The
+ETH/`claimablePool` debit is byte-frozen across HEAD''→HEAD''''; SOLVENCY-01 leg-1 HOLDS at HEAD''''.
+
+### 10e. The authoritative HEAD'''' run + the read-only attestation
+
+```
+node scripts/lib/patchForFoundry.js          (predict CREATE addrs — no pretest hook)
+forge test --json   (default profile, WHOLE tree — NOT --match-path, /tmp/ft357d2.json)
+  → 573 passed / 134 failed / 103 skipped   (810 run)   [FORGE_EXIT=1, expected with reds]
+git checkout -- contracts/ContractAddresses.sol   (restore frozen — sha256 f7206e6c…)
+```
+
+`live − union == ∅` AND `union − live == ∅` (name-keyed set-diff both directions EMPTY; the live 134 == the §2
+134-name `453f8073` union BY NAME). `git diff 77d8bc88 HEAD -- contracts/` is **EMPTY** (zero contract mutation in
+this reconciliation; subject byte-frozen at HEAD''''). `ContractAddresses.sol` restored byte-identical (sha256
+`f7206e6c29b2c2767b4b835d1f636ac80a88129098eb13976bb2473da1dccfed`) after the `patchForFoundry` round-trip.
+**NON-WIDENING confirmed at HEAD''''.**

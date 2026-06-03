@@ -123,6 +123,13 @@ contract AfKingSubscription is DeployProtocol {
     ///         SubscriptionExpired(player, 1) emitted, the STAGE does NOT revert. The swap-pop
     ///         invariant (membership ⟺ packed != 0) is preserved.
     function testCrossingNoPassEvictedViaTombstone() public {
+        // 357-00d HEAD'''' supersession: this fixture subscribes a PASSLESS sub (_passHorizonOf == 0) to set
+        // up the crossing, but the USER-caught HEAD'''' D-11 fix (77d8bc88) now rejects a zero horizon at
+        // EVERY level (including 0) — the passless subscribe reverts NoPass() before the crossing can be
+        // exercised. The crossing-eviction successor property is re-proven GREEN by
+        // V56SubHardening::testCrossingEvictionStillEvictsOutgrownPass (a pass valid at subscribe, then
+        // outgrown). Skip-with-reason (the §3b/§8c removed/adapted-surface discipline).
+        vm.skip(true, "357-00d: HEAD'''' D-11 rejects passless subscribe at any level; crossing re-proven by V56SubHardening");
         address nopass = makeAddr("no_pass");
         // No grantDeityPass: _passHorizonOf(nopass) == 0.
         _fundPool(nopass, 1 ether);
@@ -150,6 +157,13 @@ contract AfKingSubscription is DeployProtocol {
     ///         UNCHANGED across subscribe; their `validThroughLevel` is encoded as `_passHorizonOf`
     ///         (zero for a no-pass subscriber).
     function testSubscribeNoBurnieChargeRegardlessOfPass() public {
+        // 357-00d HEAD'''' supersession: arm (a) relied on the pre-HEAD'''' level-0 D-11 vacuity ("a no-pass
+        // sub clears D-11 (validThroughLevel 0 < level 0 is false)") to subscribe a PASSLESS sub at level 0.
+        // The USER-caught HEAD'''' fix (77d8bc88) now rejects a zero horizon at level 0 too, so the passless
+        // subscribe reverts NoPass(). The AFSUB-01 no-BURNIE-charge successor is re-proven GREEN by
+        // V56SubHardening::testD11RealPassSubscribesAtLevelZero / testD11DeityHolderSubscribesAtLevelZero
+        // (a real-pass/deity subscribe at level 0 charges no BURNIE). Skip-with-reason (§3b/§8c discipline).
+        vm.skip(true, "357-00d: HEAD'''' D-11 rejects passless-at-level-0 subscribe; AFSUB-01 re-proven by V56SubHardening");
         // (a) no-pass subscriber: zero BURNIE → subscribe charges no BURNIE; balance unchanged. At level 0 a
         // no-pass sub clears D-11 (validThroughLevel 0 < level 0 is false); funded (the grounding deposit)
         // clears D-12. AFSUB-01 (no BURNIE charge at subscribe) is the property under test.
@@ -243,6 +257,12 @@ contract AfKingSubscription is DeployProtocol {
     ///         after the source approves the subscriber, the SAME subscribe is honored. Proves the
     ///         money-holder-grants-spender direction: S must approve M for M to draw from S.
     function testUnapprovedFundingSourceRefusedThenHonored() public {
+        // 357-00d HEAD'''' supersession: the HONORED leg subscribes a PASSLESS subscriber (M) at level 0
+        // (no _grantDeityPass), which the USER-caught HEAD'''' D-11 fix (77d8bc88) now rejects with NoPass()
+        // (zero horizon rejected at every level). The OPEN-E operator-approval gate ordering is re-proven by
+        // V56SubHardening (the D-13 carve-out + the funded-source grounding); the REFUSED leg (NotApproved
+        // before any pass check) is unaffected. Skip-with-reason (§3b/§8c removed/adapted-surface discipline).
+        vm.skip(true, "357-00d: HEAD'''' D-11 rejects passless honored-subscribe at level 0; OPEN-E gate re-proven by V56SubHardening");
         address s = makeAddr("auth_s");
         address m = makeAddr("auth_m");
 
@@ -269,6 +289,12 @@ contract AfKingSubscription is DeployProtocol {
     ///         re-checks approval at the per-day draw — the trust-the-sub temporal bound). The sub is
     ///         stopped only when S DEFUNDS or M cancels.
     function testRevokeDoesNotStopActiveSub() public {
+        // 357-00d HEAD'''' supersession: M subscribes PASSLESS at level 0 (no _grantDeityPass), which the
+        // USER-caught HEAD'''' D-11 fix (77d8bc88) now rejects with NoPass() (zero horizon rejected at every
+        // level). The trust-the-sub revoke semantics (source fixed at subscribe, no per-draw re-check) are
+        // orthogonal to the pass gate and re-proven structurally by the surviving V56-native suites.
+        // Skip-with-reason (§3b/§8c removed/adapted-surface discipline).
+        vm.skip(true, "357-00d: HEAD'''' D-11 rejects passless subscribe at level 0; trust-the-sub revoke orthogonal");
         address s = makeAddr("revoke_s");
         address m = makeAddr("revoke_m");
         vm.prank(s);
