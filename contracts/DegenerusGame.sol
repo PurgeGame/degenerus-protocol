@@ -422,6 +422,22 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
+    /// @notice Affiliate-only drain of a sub's accrued `affiliateBase`, zeroed and
+    ///         returned to the caller. Routed from DegenerusAffiliate.claim(); the
+    ///         module impl enforces the AFFILIATE-only access gate under delegatecall.
+    function drainAffiliateBase(address sub) external returns (uint256) {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_AFKING_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IGameAfkingModule.drainAffiliateBase.selector, sub
+                )
+            );
+        if (!ok) _revertDelegate(data);
+        if (data.length == 0) revert E();
+        return abi.decode(data, (uint256));
+    }
+
     /*+======================================================================+
       |                       MINT RECORDING                                 |
       +======================================================================+

@@ -93,6 +93,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev mintBurnie() found all router categories empty — the clean no-work signal
     ///      (ROUTER-06; the unbounded-scan-free early-return on no pending work).
     error NoWork();
+    /// @dev subscribe (upsert) where the subscriber's live pass horizon does not reach
+    ///      the current level — an active sub must hold a pass that covers `level` so it
+    ///      cannot occupy a subscriber slot without a valid pass.
+    error NoPass();
+    /// @dev subscribe (upsert) starting a NEW afking run that is not grounded on a real
+    ///      purchase — neither already bought today nor a funded in-tx cover-buy. An
+    ///      unfunded start now reverts instead of beginning an inert, free-riding run.
+    error MustPurchaseToBeginAfking();
 
     /*------------------------------------------------------------------
                               Events
@@ -344,10 +352,21 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (useTickets) s.flags |= FLAG_USE_TICKETS;
         else s.flags &= ~FLAG_USE_TICKETS;
         s.reinvestPct = reinvestPct;
+        // The two protocol self-subscribers (VAULT / sDGNRS) self-subscribe at
+        // construction with no pass and no funds; they are exempt from the pass-required
+        // and purchase-grounded gates below, keyed on the un-spoofable resolved subscriber
+        // identity. Every other sub must clear both gates.
+        bool exemptSub = subscriber == ContractAddresses.VAULT ||
+            subscriber == ContractAddresses.SDGNRS;
         // Single read; encodes the subscriber's pass horizon (deity sentinel =
         // type(uint24).max) into the field the per-iter check and crossing branch compare
         // against.
         s.validThroughLevel = _passHorizonOf(subscriber);
+        // Pass-required: the just-stored horizon must reach the current level (the deity
+        // sentinel type(uint24).max always covers). Reuses the value written above — no
+        // second pass read. A pass valid now can still be outgrown later; the per-iter
+        // crossing eviction handles that.
+        if (!exemptSub && s.validThroughLevel < level) revert NoPass();
         // Sparse funder map: store only a non-self source; clear on self so re-pointing an
         // operator-funded sub back to self does not strand a stale funder. Re-pointing the
         // source IS a re-subscribe, which re-runs the operator-approval gate.
@@ -410,8 +429,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // Game-side compute-on-read owns the streak until finalize hands it back). The run
                 // is grounded on a FUNDED day-0 (a funded min-buy OR an already-complete manual
                 // slot-0 today) — the debit-gate that makes the streak unfarmable. An unfunded
-                // subscribe still starts the run but FORFEITS the snapshot (base 0); it never
-                // reverts (VAULT / SDGNRS self-subscribe with no funds at construction).
+                // start reverts (MustPurchaseToBeginAfking); only VAULT / SDGNRS, which
+                // self-subscribe with no funds at construction, forfeit the snapshot (base 0)
+                // instead.
                 uint256 snap = quests.beginAfking(subscriber, today); // syncs + sets afkingActive
                 // Frame the run on today (the compute-on-read base; afkCovered == today keeps the
                 // delivery's gap-reset from wiping the snapshot and guarantees
@@ -452,8 +472,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                             buyAmount,
                             isTicket
                         );
+                    } else if (exemptSub) {
+                        // VAULT / sDGNRS bootstrap: unfunded at construction — forfeit the
+                        // snapshot and start the run from base 0 without reverting.
+                        _setStreakBase(s, 0);
                     } else {
-                        _setStreakBase(s, 0); // unfunded — forfeit the snapshot; run builds from 0
+                        // A NEW run must be grounded on a real purchase: already bought
+                        // today (the done[0] branch above) or a funded in-tx cover-buy (the
+                        // branch above). An unfunded start would free-ride the advance gate.
+                        revert MustPurchaseToBeginAfking();
                     }
                 }
             }
