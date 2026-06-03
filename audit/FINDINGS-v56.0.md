@@ -4,12 +4,12 @@ plan: 03
 milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
 audit_baseline: 453f8073
-source_tree_frozen_ref: 77d8bc883048b3ba4213f94fc2ac5d830ba3f4a3
+source_tree_frozen_ref: c9b5d20d756f9dfc5f3b0584aae56bdfa215d8bf
 audit_subject_head: "MILESTONE_V56_AT_HEAD_<sha>"
 closure_signal: MILESTONE_V56_AT_HEAD_<sha>
 deliverable: audit/FINDINGS-v56.0.md
 new_findings: 3
-new_findings_disposition: 3 RESOLVED-AT-357 / 0 UNRESOLVED FINDING_CANDIDATE — the v56.0 audit closes with THREE resolved-in-phase items, each fixed at a 357 contract gate, none a live FINDING_CANDIDATE: (1) F-356-01 — the missing drainAffiliateBase Game dispatch stub (the v56.0 carried HIGH; DegenerusAffiliate.claim() reverted at the drain loop -> afking-affiliate rewards permanently unreachable) FIXED at HEAD' ac5f1e03 (357-00), re-verified at HEAD'' / HEAD'''' (357-00b / 357-00d); (2) the NEW-run subscribe slot-0 churn ADVISORY — the zero-day-hunter 357-02 probe-7 EV-negative wart (a subscribe->funded-buy->cancel->subscribe loop re-accrued the flat per-day QUEST_SLOT0_REWARD) HARDENED at HEAD''' 7b0b2a0b (the :451 idempotency guard); (3) the D-11 LEVEL-0 passless gap — a USER-caught boundary the 3-skill sweep MISSED (D-11 probed only at level >= 1; the level-0 0 < 0 vacuity let a funded passless EOA clear NoPass()) CLOSED at HEAD'''' 77d8bc88 (the validThroughLevel == 0 rejection arm). The 3-skill genuine-PARALLEL adversarial sweep produced 0 FINDING_CANDIDATE across 32 charged Claude probe rows (18 NEGATIVE-VERIFIED + 13 SAFE_BY_DESIGN + 1 EV-negative advisory now RESOLVED) AUGMENTED by the Codex XMODEL close (4-area NO ISSUE; Gemini attempted-partial per D-03). The O1/QST-05 lootbox-quest double-credit is RESOLVED (single-credit at 356-05), NOT a finding. SOLVENCY-01 byte-unchanged (BURNIE-emission-timing only); RNG-freeze intact (premature-advance-INERT); KNOWN-ISSUES.md byte-unmodified vs v55.
+new_findings_disposition: 3 RESOLVED-AT-357 / 0 UNRESOLVED FINDING_CANDIDATE — the v56.0 audit closes with THREE resolved-in-phase items, each fixed at a 357 contract gate, none a live FINDING_CANDIDATE: (1) F-356-01 — the missing drainAffiliateBase Game dispatch stub (the v56.0 carried HIGH; DegenerusAffiliate.claim() reverted at the drain loop -> afking-affiliate rewards permanently unreachable) FIXED at HEAD' ac5f1e03 (357-00), re-verified at HEAD'' / HEAD'''' (357-00b / 357-00d); (2) the NEW-run subscribe slot-0 churn ADVISORY — the zero-day-hunter 357-02 probe-7 EV-negative wart (a subscribe->funded-buy->cancel->subscribe loop re-accrued the flat per-day QUEST_SLOT0_REWARD) HARDENED at HEAD''' 7b0b2a0b (the :451 idempotency guard); (3) the D-11 LEVEL-0 passless gap — a USER-caught boundary the 3-skill sweep MISSED (D-11 probed only at level >= 1; the level-0 0 < 0 vacuity let a funded passless EOA clear NoPass()) CLOSED at HEAD'''' 77d8bc88 (the validThroughLevel == 0 rejection arm). The 3-skill genuine-PARALLEL adversarial sweep produced 0 FINDING_CANDIDATE across 32 charged Claude probe rows (18 NEGATIVE-VERIFIED + 13 SAFE_BY_DESIGN + 1 EV-negative advisory now RESOLVED) AUGMENTED by the Codex XMODEL close (4-area NO ISSUE; Gemini attempted-partial per D-03) AND by the focused single-skill contract-auditor pass on the FIFTH/FINAL gate c9b5d20d (4 probes NEGATIVE-VERIFIED, 0 FINDING_CANDIDATE). The FIFTH gate c9b5d20d (the flat-10% pass lootbox + 3 dead-guard removals + a hasAnyLazyPass docstring fix — a contained pass-PURCHASE economic refactor) adds ZERO findings (recorded as a clean refactor, NOT a finding). The O1/QST-05 lootbox-quest double-credit is RESOLVED (single-credit at 356-05), NOT a finding. SOLVENCY-01 byte-unchanged (BURNIE-emission-timing only; the FIFTH gate is off the ETH path); RNG-freeze intact (premature-advance-INERT); KNOWN-ISSUES.md byte-unmodified vs v55.
 ---
 
 # v56.0 Findings — AfKing Everyday-Gas Minimization (Terminal)
@@ -20,21 +20,22 @@ new_findings_disposition: 3 RESOLVED-AT-357 / 0 UNRESOLVED FINDING_CANDIDATE —
 mutation; closure signal MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583). v56.0 closure HEAD is
 MILESTONE_V56_AT_HEAD_<sha> (the literal placeholder; resolved to the findings-deliverable / closure-flip HEAD
 by 357-04 — the self-referential closure commit own SHA; see §9c). SOURCE-TREE FROZEN reference for the
-terminal: **77d8bc883048b3ba4213f94fc2ac5d830ba3f4a3** (the CURRENT re-frozen v56.0 subject == HEAD'''' — the
-FOURTH 357 contract gate; `git diff 77d8bc88 HEAD -- contracts/` is EMPTY throughout the rest of Phase 357 — EMPTY-CONFIRMED).
+terminal: **c9b5d20d756f9dfc5f3b0584aae56bdfa215d8bf** (the CURRENT re-frozen v56.0 subject == the FIFTH / FINAL
+357 contract gate — the flat-10% pass-lootbox + dead-guard refactor layered on HEAD'''' 77d8bc88;
+`git diff c9b5d20d HEAD -- contracts/` is EMPTY throughout the rest of Phase 357 — EMPTY-CONFIRMED).
 
-**Subject.** The frozen subject HEAD 77d8bc88 = the AfKing-everyday-gas-minimization batching PLUS the four
+**Subject.** The frozen subject HEAD c9b5d20d = the AfKing-everyday-gas-minimization batching PLUS the FIVE
 357 contract gates. The v55->v56 step is the **AFKING-EVERYDAY-GAS-MINIMIZATION BATCHING** (the per-sub
 accumulator + the mode-agnostic ~10-day aggregator + the ticket minimal-write primitive + the open-end
 re-verification + the affiliate flat-7% deterministic-split PULL + the GAS-05 deferred pendingBurnie payout +
 the LIVE-01 openBoxes valve + the GAS-06 gap/jackpot decouple) — so the source-tree is NOT byte-identical to
-the baseline. `git diff --stat 453f8073 77d8bc88 -- contracts/` is **15 files, +1565 / -803** (the delta enumerated
+the baseline. `git diff --stat 453f8073 77d8bc88 -- contracts/` (the HEAD'''' landing) is **15 files, +1565 / -803**; the FIFTH gate `c9b5d20d` adds the `77d8bc88 -> c9b5d20d` pass-refactor delta on top (2 files already in the set) (the delta enumerated
 re-derived in §3.A, NOT trusted from the plan list — the advance-incentive redesign added
 DegenerusGameMintStreakUtils.sol to the delta and reshaped DegenerusGameAdvanceModule.sol / DegenerusGame.sol).
 
-**This is the FIRST TERMINAL ever to MUTATE contracts/ — across FOUR USER-approved gates** (unlike every prior
+**This is the FIRST TERMINAL ever to MUTATE contracts/ — across FIVE USER-approved gates** (unlike every prior
 TERMINAL's zero-mutation close). The v56-specific contract gate footprint of Phase 357 — the leading **357-00**
-FIX-FIRST gate plus three follow-on USER-approved gates — is, on top of the v56 IMPL/GAS landing already in the
+FIX-FIRST gate plus four follow-on USER-approved gates — is, on top of the v56 IMPL/GAS landing already in the
 `453f8073`-> delta:
 - **HEAD' ac5f1e03** (357-00) — the **F-356-01** drainAffiliateBase dispatch stub (the carried HIGH fix) + the
   **D-11** NoPass pass-required + the **D-12** MustPurchaseToBeginAfking purchase-grounded subscribe gates,
@@ -51,9 +52,20 @@ FIX-FIRST gate plus three follow-on USER-approved gates — is, on top of the v5
 - **HEAD''' 7b0b2a0b** (357) — the **NEW-run subscribe slot-0 idempotency guard** (GameAfkingModule.sol:451
   "else if (s.lastAutoBoughtDay == uint24(today)) { _setStreakBase(s, snap); }") — closes the 357-02
   zero-day-hunter probe-7 EV-negative slot-0 churn advisory.
-- **HEAD'''' 77d8bc88** (357, the CURRENT subject) — the USER-caught **D-11 LEVEL-0 zero-horizon rejection**
+- **HEAD'''' 77d8bc88** (357, the FOURTH gate) — the USER-caught **D-11 LEVEL-0 zero-horizon rejection**
   (GameAfkingModule.sol:372 "if (!exemptSub && (s.validThroughLevel == 0 || s.validThroughLevel < level)) revert
   NoPass();") — closes the level-0 passless gap the 3-skill sweep MISSED (it ran D-11 only at level >= 1).
+- **c9b5d20d** (357-00e, the CURRENT subject — the FIFTH / FINAL gate) — the **flat-10% pass lootbox + dead-guard
+  removal** (a contained pass-PURCHASE economic refactor on DegenerusGame.sol [8 lines] + DegenerusGameWhaleModule.sol
+  [-46/+25]): the presale lootbox elevation on all 3 pass types (whale bundle / lazy pass / deity) REMOVED, the
+  lootbox now a flat 10% of pass value regardless of presale state (the *_LOOTBOX_PRESALE_BPS 2000 constants + the
+  _psRead(PS_ACTIVE) ternaries dropped, *_LOOTBOX_POST_BPS -> *_LOOTBOX_BPS); the 25% presaleBoxCredit byte-unchanged
+  (presale buyers now get 25% credit + 10% lootbox instead of 25% + 20%); 3 unreachable guards removed (the lazy
+  baseCost==0 check — priceForLevel strictly positive; the lazy/deity lootboxAmount==0 zero-guards — 10% of a
+  positive price never 0); a stale hasAnyLazyPass docstring fixed. It does NOT touch the afking / advance / subscribe
+  / affiliate surfaces or _passHorizonOf; off the ETH/claimablePool solvency path. **0 findings** (a clean
+  behavior-preserving simplification + an intended presale-20%->10% lootbox reduction; §3.A Family 10 / §3.B §3.9 /
+  §4.5).
 
 This is a **5-phase milestone** (353 SPEC / 354 IMPL / 355 GAS / 356 TST / 357 TERMINAL) and a **FULL close** —
 the internal 3-skill genuine-PARALLEL adversarial sweep + the delta-audit + audit/FINDINGS-v56.0.md run
@@ -63,14 +75,18 @@ unmanipulability (esp. the strategic sub/unsub edge) + the shared-quest-core non
 concerns and must be adversarially probed in-milestone. It ships the full 9-section deliverable, chmod 444 at
 close (applied in 357-04, NOT here).
 
-> **WARNING — THE FOUR-GATE / HEAD'''' SUBJECT (LOAD-BEARING — the as-built COMMITTED reality, re-grepped @
-> 77d8bc88).** The delta-audit (357-01) was first authored against HEAD'' 61315ecd; the 357-00d reconciliation
+> **WARNING — THE FIVE-GATE / c9b5d20d SUBJECT (LOAD-BEARING — the as-built COMMITTED reality, re-grepped @
+> c9b5d20d).** The delta-audit (357-01) was first authored against HEAD'' 61315ecd; the 357-00d reconciliation
 > re-froze the subject at HEAD'''' 77d8bc88 (the two further subscribe-hardening gates, §3.A Family 2 addenda +
-> §3.B). Where any body anchor below cites HEAD'' 61315ecd as "the CURRENT subject", read HEAD'''' 77d8bc88 —
-> the two follow-up gates layer cleanly on the HEAD'' surface and change no attestation except as recorded in §3.B
-> (both new hunks are **revert-only / control-flow-only** — no ETH path; SOLVENCY-01 leg-1 byte-anchor re-confirmed).
-> This report describes the advance-incentive REDESIGN (the dominant HEAD'' work item) in place of the obsolete
-> 5cb707f2 bypass framing throughout; MustMintToday / _enforceDailyMintGate are grep-ZERO at the subject.
+> §3.B); the **357-00e reconciliation re-froze it at the FIFTH / FINAL gate c9b5d20d** (the flat-10% pass-lootbox +
+> dead-guard refactor, §3.A Family 10 + §3.B §3.9 + §4.5). Where any body anchor below cites HEAD'' 61315ecd or
+> HEAD'''' 77d8bc88 as "the CURRENT subject", read c9b5d20d — the four follow-up gates layer cleanly on the HEAD''
+> surface and change no attestation except as recorded in §3.B (the two subscribe gates are **revert-only /
+> control-flow-only** — no ETH path; the FIFTH gate is a **contained pass-PURCHASE economic refactor** off the ETH
+> path — dead guards provably unreachable, ETH pool splits + presaleBoxCredit byte-unchanged; SOLVENCY-01 leg-1
+> byte-anchor re-confirmed). This report describes the advance-incentive REDESIGN (the dominant HEAD'' work item) in
+> place of the obsolete 5cb707f2 bypass framing throughout; MustMintToday / _enforceDailyMintGate are grep-ZERO at
+> the subject.
 
 ---
 
@@ -86,7 +102,7 @@ settle** with the GAS-05 deferred pendingBurnie payout (QST-01..05), the **TICKE
 the buyerOwedBurnie 10%/20% accrual folded into pendingBurnie (the v55 dropped-bonus regression CLOSED;
 TKT-01/02), the **OPEN-end re-verification** (live-level parity, lastOpenedDay monotone, no EV-cap double-draw;
 OPEN-01/02), the measured GAS wins under the 16.7M HARD ceiling (GAS-01..05), the **LIVE-01 openBoxes valve** +
-the **GAS-06 gap/jackpot decouple** (each advanceGame tx < 16,777,216), and — folded across the four 357 gates —
+the **GAS-06 gap/jackpot decouple** (each advanceGame tx < 16,777,216), and — folded across the FIVE 357 gates —
 the **advance-incentive REDESIGN** (advanceGame() pure liveness, the must-mint ladder -> the non-reverting
 _bountyEligible SOFT pay-predicate) + the **D-11/D-12/D-13 subscribe HARDENING** (passless cap-occupancy +
 unfunded free-rider vectors CLOSED) + the **F-356-01** affiliate-claim fix. The **SEC-01 unmanipulable spine HOLDS
@@ -110,23 +126,31 @@ D-11 level-0 gap, each fixed at a 357 contract gate). The O1/QST-05 lootbox-ques
   -> EV-negative -> ADVISORY, then RESOLVED at HEAD''' 7b0b2a0b. GENUINE PARALLEL_SUBAGENT (/contract-auditor +
   /economic-analyst + /zero-day-hunter; /degen-skeptic OUT per D-271-ADVERSARIAL-02); each probed the
   frozen subject via `git show 61315ecd:contracts/...` (READ-ONLY); the Codex XMODEL close corroborated 4 redesign /
-  fix-surface areas with NO concrete finding (Gemini attempted, empty/malformed -> PARTIAL per D-03). **Honest
-  disclosure:** the sweep marked D-11 NEGATIVE-VERIFIED but ran only at level >= 1 — it MISSED the level-0 boundary;
-  the USER's review caught it (probe 11, §4.2).
-- **Delta-audit (Phase 357 SC1, from 357-01):** every one of the 15 v56 contract gate surfaces attests NON-WIDENING vs
-  `453f8073` with grep/diff anchors @ the frozen subject; the +1565/-803 delta has **ZERO orphan hunks** (every
-  hunk maps to exactly one of the nine v56 work-item families). The SOLVENCY-01 leg-1 debit two-liner
-  (afkingFunding[src] -= ethValue; claimablePool -= uint128(ethValue);) is **BYTE-IDENTICAL** between `453f8073`
-  and the subject (relocated :709-710 -> :702-703 only). MustMintToday / _enforceDailyMintGate are grep-ZERO
-  (the advance-gate DELETED). The two HEAD'''/HEAD'''' subscribe gates are revert-only / control-flow-only (§3.B).
-- **Regression:** NON-WIDENING **BY NAME (a strict SUBSET, both directions EMPTY)** — foundry whole-tree
-  forge test **573 pass / 134 fail / 103 skip** (810 run) at HEAD'''' per test/REGRESSION-BASELINE-v56.md §10.
-  The live failing NAME set is **byte-identical by NAME to the empirically-established 134-name `453f8073` baseline
-  union** (live - union == empty AND union - live == empty — the binding gate, 0 names outside baseline). The
-  wholesale 356-07 migration drops + the D-10 offset migration + the 357-00b D-11/D-12 supersession drops + the
-  357-00d D-11-level-0 revert-reason-flip drops + the F-356-01 narrowing are attributed BY NAME (§5d), NOT counted
-  as regression. The binding gate is failing-NAME-set SUBSET membership (live - union == empty), not an arithmetic
-  count delta (the 134==134 vs the HEAD'' 133 is run-variance in the documented non-deterministic Bucket A/F cluster).
+  fix-surface areas with NO concrete finding (Gemini attempted, empty/malformed -> PARTIAL per D-03). **The FIFTH /
+  FINAL gate c9b5d20d** (the flat-10% pass lootbox + dead-guard refactor) got a FOCUSED single-skill
+  /contract-auditor pass (proportionate to a contained pass-PURCHASE economic + dead-code refactor, NOT a full
+  3-skill re-sweep) — 4 probes (guard reachability / flat-10% solvency / dangling refs / hasAnyLazyPass doc) all
+  NEGATIVE-VERIFIED, 0 FINDING_CANDIDATE (§4.5). **Honest disclosure:** the sweep marked D-11 NEGATIVE-VERIFIED but
+  ran only at level >= 1 — it MISSED the level-0 boundary; the USER's review caught it (probe 11, §4.2).
+- **Delta-audit (Phase 357 SC1, from 357-01):** every one of the 15 HEAD'''' v56 contract gate surfaces (+ the
+  FIFTH-gate Family 10 pass-refactor surface) attests NON-WIDENING vs `453f8073` with grep/diff anchors @ the frozen
+  subject; the +1565/-803 HEAD'''' delta has **ZERO orphan hunks** (every hunk maps to exactly one of the nine v56
+  work-item families); the FIFTH gate adds the `77d8bc88 -> c9b5d20d` pass-refactor delta (2 files, Family 10),
+  off the solvency path. The SOLVENCY-01 leg-1 debit two-liner (afkingFunding[src] -= ethValue; claimablePool -=
+  uint128(ethValue);) is **BYTE-IDENTICAL** between `453f8073` and the subject (relocated :709-710 -> :702-703 only;
+  GameAfkingModule.sol byte-unchanged 77d8bc88 -> c9b5d20d). MustMintToday / _enforceDailyMintGate are grep-ZERO
+  (the advance-gate DELETED). The two HEAD'''/HEAD'''' subscribe gates are revert-only / control-flow-only; the
+  FIFTH gate is a pass-purchase economic refactor off the ETH path (§3.B §3.9).
+- **Regression:** NON-WIDENING **BY NAME (a strict failing-NAME-set SUBSET, live - union == empty)** — foundry
+  whole-tree forge test **574 pass / 133 fail / 103 skip** (810 run) at the FIFTH gate c9b5d20d per
+  test/REGRESSION-BASELINE-v56.md §11 (forge build clean exit 0 at c9b5d20d). The live failing NAME set (133 names)
+  is a **STRICT SUBSET of the empirically-established 134-name `453f8073` baseline union** (live - union == empty —
+  the binding gate, 0 names outside baseline). The wholesale 356-07 migration drops + the D-10 offset migration +
+  the 357-00b D-11/D-12 supersession drops + the 357-00d D-11-level-0 revert-reason-flip drops + the F-356-01
+  narrowing are attributed BY NAME (§5d), NOT counted as regression; the FIFTH-gate flat-10% + dead-guard refactor
+  adds ZERO new forge red (§5d / ledger §11b). The binding gate is failing-NAME-set SUBSET membership (live - union
+  == empty), not an arithmetic count delta (the 574/133/103 vs the HEAD'''' 573/134/103 -1-fail NARROWING is
+  run-variance in the documented non-deterministic Bucket A/F cluster — no gate touches VRF/RNG-window code).
 
 ### Severity Counts
 - CATASTROPHE 0 . HIGH 0 (the F-356-01 carried HIGH is RESOLVED-AT-357, not live) . MEDIUM 0 . LOW 0 .
@@ -154,8 +178,10 @@ a substitute for this in-milestone close (§8).
 
 ### Attestation Anchor
 All contracts/ file:line anchors herein are sourced from the Phase 357 workstream logs (357-01-DELTA-AUDIT,
-357-02-ADVERSARIAL-LOG), each re-grep-verified against the frozen subject 77d8bc88
-(`git diff 77d8bc88 HEAD -- contracts/` empty). The affiliate anchors use the CORRECTED DegenerusAffiliate.sol
+357-02-ADVERSARIAL-LOG), each re-grep-verified against the frozen subject c9b5d20d
+(`git diff c9b5d20d HEAD -- contracts/` empty; the HEAD'' / HEAD'''' anchors re-verify identically at c9b5d20d for
+all surfaces the FIFTH gate does not touch — it touches only DegenerusGameWhaleModule.sol + DegenerusGame.sol).
+The affiliate anchors use the CORRECTED DegenerusAffiliate.sol
 lines (:629 claim() entry / :633-634 buyer-never-wins / :654 drain loop / :678-695 the 75/20/5 split) per
 the 357-PATTERNS DRIFT NOTE — the stale :579 / :558 citations are superseded.
 
@@ -202,13 +228,15 @@ the 357-PATTERNS DRIFT NOTE — the stale :579 / :558 citations are superseded.
   LIVE-01 valve cases + the GAS-06 gap-resume per-tx + D-07), the D-10 10-file offset migration, and the BY-NAME
   NON-WIDENING ledger test/REGRESSION-BASELINE-v56.md (the 14 migration-unmasked v56-behavior reds DROPPED-by-name).
   The F-356-01 drainAffiliateBase reachability carried to 357. Reqs: SEC-01/02 . LIVE-01 . GAS-06 (Complete at TST).
-- **§3e Phase 357 — TERMINAL.** This deliverable; SOURCE-TREE FROZEN at 77d8bc88 (HEAD''''); the leading 357-00
-  FIX-FIRST contract gate (HEAD' ac5f1e03 — F-356-01 + D-11/D-12/D-13) + the advance-incentive redesign gate
+- **§3e Phase 357 — TERMINAL.** This deliverable; SOURCE-TREE FROZEN at the FIFTH / FINAL gate c9b5d20d; the leading
+  357-00 FIX-FIRST contract gate (HEAD' ac5f1e03 — F-356-01 + D-11/D-12/D-13) + the advance-incentive redesign gate
   (HEAD'' 61315ecd) + the two subscribe-hardening gates (HEAD''' 7b0b2a0b slot-0 idempotency + HEAD'''' 77d8bc88
-  D-11 level-0) + the 357-00b/357-00d test reconciliations + the SC1 delta-audit (357-01) + the SC1 3-skill GENUINE
-  PARALLEL_SUBAGENT sweep AUGMENTED by the Codex XMODEL close (357-02) + the regression + the gated closure flip
+  D-11 level-0) + the FIFTH-gate flat-10% pass-lootbox + dead-guard refactor (c9b5d20d) + the 357-00b/357-00d/357-00e
+  test reconciliations + the SC1 delta-audit (357-01) + the SC1 3-skill GENUINE PARALLEL_SUBAGENT sweep AUGMENTED by
+  the Codex XMODEL close + the focused FIFTH-gate auditor pass (357-02) + the regression + the gated closure flip
   (357-04). Req: AUDIT-01 (Pending -> flip at 357-04). **TWO autonomous:false gates** (the 357-00 contract gate +
-  the 357-04 closure gate) — unlike every prior TERMINAL's single closure gate.
+  the 357-04 closure gate) — unlike every prior TERMINAL's single closure gate. The FIFTH gate c9b5d20d was
+  USER-committed directly (not an autonomous:false-gated 357 task).
 
 ### §3.A Delta-Surface Table (folded from 357-01-DELTA-AUDIT.md §2)
 
@@ -234,11 +262,15 @@ Grouped by the nine v56 work-item families. Columns mirror FINDINGS-v49/v55 §3.
 | **interfaces/IDegenerusGameModules.sol** (+25 / -12) — *F2/F8 (interface wiring)* | (interface wiring) | The IGameAfkingModule signatures track the contract verbatim — processSubscriberStage, drainAffiliateBase, mintBurnie, the accumulator accessors, the bountyEligible plumbing. | **NON-WIDENING** — interface tracks the new module ABI; behavior-attributed to the owning item. |
 | **modules/DegenerusGameWhaleModule.sol** (+3 / -3) — *F9 (quest-pack discount rebalance)* | (quest-pack rebalance) | The whale/deity discount-boon tiers rebalanced **25/50 -> 20/35** (e2590c1c quest-pack/deploy-cap follow-up folded in). A parameter-value change on the existing discount path. | **NON-WIDENING** — a discount-tier parameter rebalance (the boon mechanism unchanged; the bps values shifted); no new surface, no new emission. |
 | **ContractAddresses.sol** (+15 / -15) — *F9 (deploy-cap address reshuffle)* | (deploy-cap reshuffle) | The deployed-address constants reshuffled (the deploy-cap re-ordering); freely-modifiable per project policy. No symbol added/removed beyond the address rebind. | **NON-WIDENING** — an address-constant reshuffle (deploy-time wiring; no behavioral surface). |
+| **modules/DegenerusGameWhaleModule.sol** (-46 / +25) — *F10 (FIFTH gate c9b5d20d: flat-10% pass lootbox + dead-guard removal)* | (pass-purchase flat-10% lootbox + dead-guard removal) | The presale lootbox elevation REMOVED on all 3 pass types. The constants collapse to a single flat rate: LAZY_PASS_LOOTBOX_BPS = 1000 (:120) / WHALE_LOOTBOX_BPS = 1000 (:144) / DEITY_LOOTBOX_BPS = 1000 (:147) — the *_LOOTBOX_PRESALE_BPS (2000) constants + the _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0 ? *_PRESALE_BPS : *_POST_BPS ternaries DROPPED, *_LOOTBOX_POST_BPS -> *_LOOTBOX_BPS. The award sites are the flat (totalPrice * WHALE_LOOTBOX_BPS) / 10_000 (:356) / (benefitValue * LAZY_PASS_LOOTBOX_BPS) / 10_000 (:502) / (totalPrice * DEITY_LOOTBOX_BPS) / 10_000 (:656). **3 unreachable guards removed:** the lazy `if (baseCost == 0) revert E();` (dead — priceForLevel PriceLookupLib.sol:21 has no zero branch, min 0.01 ETH); the lazy `if (lootboxAmount == 0) return;` + the deity `if (lootboxAmount != 0) { ... }` zero-guards (dead — 10% of a positive price never 0). `git grep 'LOOTBOX_PRESALE_BPS\|LOOTBOX_POST_BPS' -- contracts/ test/` -> 0 (no dangling refs). | **NON-WIDENING** — a DOWNWARD award tweak (the lootbox-award MULTIPLIER 2000->1000 presale bps), OFF the ETH/claimablePool solvency path (the ETH pool splits are computed from totalPrice INDEPENDENT of the lootbox %; the 25% presaleBoxCredit byte-unchanged); reducing an award can only DECREASE value (no unbacked value, no EV-cap breach, no underflow — _recordLootboxEntry's `!= 0` RMW guard safe even vs a hypothetical 0); the 3 dropped guards are PROVABLY DEAD. The auditor's 4 NEGATIVE-VERIFIED probes confirm (§4.5). |
+| **DegenerusGame.sol** (8 lines) — *F10 (FIFTH gate c9b5d20d: hasAnyLazyPass docstring fix)* | (hasAnyLazyPass docstring fix) | The stale hasAnyLazyPass `@dev` NatSpec corrected: it documents the function is a UI/external VIEW (exclusive frozenUntilLevel > level) NOT read by the AfKing pass gate (which uses lazyPassHorizon / _passHorizonOf, inclusive through frozenUntilLevel), so the view reports "no pass" one level before AfKing evicts — by design. The function body is byte-UNCHANGED (comment-only). | **NON-WIDENING** — DOCSTRING-ONLY (the view body is byte-identical); the documented off-by-one is a UI-view-only divergence NEVER consumed by any on-chain decision (referenced only in IDegenerusGame.sol + a regression doc). Benign + accurate (§4.5). |
 
-**Per-file delta accounted: 1 (F1) + 2 (F2) + 2 (F3) + 2 (F4) + 1 (F5) + 1 (F6) + 1 (F7) + 3 (F8) + 2 (F9) =
-15 files** — exactly the `git diff --numstat 453f8073 77d8bc88 -- contracts/` set (+1565 / -803). **Every file
-carries a NON-WIDENING verdict backed by a concrete grep/diff anchor @ the frozen subject, mapped to its owning v56
-work item.**
+**Per-file delta accounted (the `453f8073` -> HEAD'''' landing): 1 (F1) + 2 (F2) + 2 (F3) + 2 (F4) + 1 (F5) +
+1 (F6) + 1 (F7) + 3 (F8) + 2 (F9) = 15 files** — exactly the `git diff --numstat 453f8073 77d8bc88 -- contracts/`
+set (+1565 / -803). **The FIFTH gate (c9b5d20d, F10) adds the `77d8bc88 -> c9b5d20d` pass-refactor delta on top —
+2 files touched (DegenerusGameWhaleModule.sol + DegenerusGame.sol), both already in the 15-file set, NO new file
+enters the delta.** **Every file carries a NON-WIDENING verdict backed by a concrete grep/diff anchor @ the frozen
+subject c9b5d20d, mapped to its owning v56 work item.**
 
 All current v56.0 REQ-IDs are referenced in §3.A + §3.C (per .planning/REQUIREMENTS.md): the 15-surface table
 carries every IMPL/GAS-resident req + the redesign + the 357 gates; the SPEC-resident AFF-01/02 + XMODEL-01 are
@@ -260,6 +292,7 @@ families (357-01 §3.1):
 | **advance-incentive soft pay-predicate** (redesign) | DegenerusGameMintStreakUtils.sol | NEW _bountyEligible(address) — the non-reverting must-mint relocation |
 | **DegenerusGame redesign view + F-356-01 stub + deploy-cap + redesign routing** (redesign / F-356-01 / deploy-cap) | DegenerusGame.sol, DegenerusVault.sol, StakedDegenerusStonk.sol | bountyEligible view + the drainAffiliateBase stub + initPerpetualTickets + gameAdvance->mintBurnie |
 | **quest-pack rebalance + address reshuffle** (wiring) | DegenerusGameWhaleModule.sol, ContractAddresses.sol | 25/50->20/35 discount tiers + the deploy-cap address reshuffle |
+| **FIFTH gate: flat-10% pass lootbox + dead-guard removal** (c9b5d20d, pass-purchase economic refactor) | DegenerusGameWhaleModule.sol, DegenerusGame.sol | flat-10% lootbox on all 3 pass types (the presale-20%/post-10% split dropped) + 3 unreachable-guard removals + the hasAnyLazyPass docstring fix |
 
 **The advance-incentive redesign is the dominant HEAD'' work item** and supersedes the plan's stale 5cb707f2
 bypass framing (the gate it bypassed — _enforceDailyMintGate + MustMintToday — was DELETED ENTIRELY; grep-ZERO
@@ -280,13 +313,15 @@ claimablePool -= uint128(ethValue);
 ```
 at 453f8073:709-710 <-> subject GameAfkingModule.sol:702-703 (the v56 refactor hoisted them into a helper,
 less-indented; the economic statements are byte-unchanged; the +12-line slot-0 guard + the D-11 comment expansion
-inserted ABOVE relocated :690-691->:702-703; last touched by 77c3d9ef v349.1, long predating the four gates).
+inserted ABOVE relocated :690-691->:702-703; last touched by 77c3d9ef v349.1, long predating the five gates).
 The afkingFunding mutation moves claimablePool in tandem (the :247 INVARIANT), so the master inequality is
-structurally unchanged. **The four 357 gates do NOT touch the debit:** the 357-00 changes are BURNIE-only +
+structurally unchanged. **The FIVE 357 gates do NOT touch the debit:** the 357-00 changes are BURNIE-only +
 revert-only (the drainAffiliateBase stub drains a BURNIE-flip accumulator; D-11/D-12 are pre-UPSERT reverts); the
 advance-incentive redesign is liveness-only (advanceGame() drops a private view revert) + BURNIE-bounty-only
 (mintBurnie's soft-gate pays via creditFlip, off the ETH path); the two subscribe-hardening gates are
-revert-only / control-flow-only. Cross-ref V56FreezeSolvency 7/7 (356-04). **SOLVENCY-01 HELD NET — byte-unchanged.**
+revert-only / control-flow-only; the FIFTH gate (the flat-10% pass lootbox) touches only DegenerusGameWhaleModule.sol
++ DegenerusGame.sol — GameAfkingModule.sol byte-unchanged 77d8bc88->c9b5d20d (§3.9). Cross-ref V56FreezeSolvency 7/7
+(356-04). **SOLVENCY-01 HELD NET — byte-unchanged.**
 
 **RNG-freeze intact (SEC-02) — the v45 north-star re-attested.** Per [[v45-vrf-freeze-invariant]]: re-attested
 INTACT — **no in-window SLOAD a player can manipulate between rng-request and unlock**. The v56 accrue/settle + the
@@ -364,6 +399,36 @@ ETH/claimablePool debit and NO frozen RNG-window slot:
 :690-691->:702-703). The last commit to touch that line is 77c3d9ef (v349.1). SOLVENCY-01 leg-1 HOLDS at the
 subject.
 
+**The FIFTH / FINAL gate c9b5d20d (the flat-10% pass lootbox + dead-guard removal) — attested NON-WIDENING (a
+contained pass-PURCHASE economic refactor, off the solvency path).** The FIFTH USER-committed gate re-freezes the
+subject from HEAD'''' 77d8bc88 to c9b5d20d. It touches only DegenerusGameWhaleModule.sol (-46/+25) +
+DegenerusGame.sol (8 lines, docstring-only) — NO ETH/claimablePool debit, NO frozen RNG-window slot, and NONE of
+the afking / advance / subscribe / affiliate surfaces or _passHorizonOf:
+- **The flat-10% lootbox award (the economic substance).** The presale lootbox elevation on all 3 pass types
+  (whale / lazy / deity) is REMOVED — flat 10% of pass value regardless of presale state (the *_LOOTBOX_PRESALE_BPS
+  2000 constants + the _psRead(PS_ACTIVE) ternaries dropped, *_LOOTBOX_POST_BPS -> *_LOOTBOX_BPS); the 25%
+  presaleBoxCredit byte-UNCHANGED (presale buyers get 25% credit + 10% lootbox instead of 25% + 20%). **Disposition:
+  NON-WIDENING** — a DOWNWARD award tweak off the ETH/claimablePool path (the ETH pool splits computed from
+  totalPrice INDEPENDENT of the lootbox %; presaleBoxCredit byte-unchanged; _recordLootboxEntry writes a BURNIE
+  lootbox entry, not an ETH debit); reducing an award can ONLY decrease delivered value (no unbacked value, no
+  EV-cap breach, no underflow — the `!= 0` RMW guard is safe even vs a hypothetical 0).
+- **The 3 unreachable-guard removals (dead-code).** The lazy baseCost==0 check (priceForLevel has no zero branch,
+  min 0.01 ETH) + the lazy/deity lootboxAmount==0 zero-guards (10% of a positive price >= 0.18 ETH never 0) are
+  PROVABLY DEAD. **Disposition: NON-WIDENING** — removing dead branches is behavior-equivalent.
+- **The hasAnyLazyPass docstring fix (NatSpec-only).** The corrected `@dev` documents the view is a UI/external
+  exclusive-`> level` view NOT read by the afking gate (which uses _passHorizonOf inclusive); the off-by-one is a
+  by-design view-only divergence never consumed on-chain. **Disposition: NON-WIDENING** — docstring-only, body
+  byte-identical.
+
+No dangling refs (`git grep 'LOOTBOX_PRESALE_BPS|LOOTBOX_POST_BPS' -- contracts/ test/` -> 0; PS_ACTIVE
+shift/mask still used elsewhere). The focused contract-auditor pass on c9b5d20d (§4.5) probed all four surfaces
+NEGATIVE-VERIFIED, 0 FINDING_CANDIDATE.
+
+**SOLVENCY-01 leg-1 re-confirmed @ c9b5d20d.** The FIFTH gate touches only DegenerusGameWhaleModule.sol +
+DegenerusGame.sol — `git diff 77d8bc88 c9b5d20d -- contracts/modules/GameAfkingModule.sol` is EMPTY, so the afking
+SOLVENCY-01 leg-1 debit two-liner is byte-frozen at :702-703 (untouched by the FIFTH gate). SOLVENCY-01 leg-1
+HOLDS at the CURRENT subject c9b5d20d.
+
 ### §3.C Requirement Re-Attestation
 The CURRENT v56.0 requirement set is re-attested at closure from .planning/REQUIREMENTS.md (the EXPANDED set —
 cite the table, NOT a hardcoded 24): the Traceability table totals **27 rows** —
@@ -428,7 +493,8 @@ AUDIT-01 flips at the 357-04 closure. The actual REQUIREMENTS.md row-flip to Com
 - **AUDIT (1):** **AUDIT-01** (TERMINAL, Pending -> flip at 357-04) the FULL in-milestone close (this
   audit/FINDINGS-v56.0.md) — the delta-audit (357-01; 15 surfaces NON-WIDENING + zero orphan hunks + SOLVENCY-01
   byte-unchanged + RNG-freeze + the affiliate PULL non-gameability + the open two-path + LIVE-01 + GAS-06 + the
-  shared-quest non-perturbation + the four 357 gates) + the 3-skill genuine-PARALLEL adversarial sweep (357-02; 0
+  shared-quest non-perturbation + the FIVE 357 gates [incl. the FIFTH-gate flat-10% pass-lootbox Family 10]) + the
+  3-skill genuine-PARALLEL adversarial sweep + the focused FIFTH-gate auditor pass (357-02; 0
   UNRESOLVED FINDING_CANDIDATE / THREE resolved-in-phase items / the Codex XMODEL close + the dual-gate skeptic
   filter) + this 9-section deliverable + the atomic 5-doc closure flip (357-04).
 
@@ -574,43 +640,75 @@ sweep was a real hunt with a known coverage gap, both items now RESOLVED at a co
 approving" actor modeled (per [[open-e-operator-approval-trust-boundary]]); reentrancy SAFE_BY_DESIGN / MEV
 LOW-confirmatory per the USER-locked weighting ([[threat-model-reentrancy-mev-nonissues]]).
 
-**Read-only attestation.** `git diff 77d8bc88 HEAD -- contracts/` is empty throughout the sweep — no
-`contracts/*.sol` was opened or mutated; all source was read via `git show 61315ecd:...` (the sweep ran read-only at
-HEAD''; the two HEAD'''/HEAD'''' gates layer cleanly + RESOLVE two of the items); every cited file:line was
-re-grep-verified. **Attestation: 0 UNRESOLVED FINDING_CANDIDATEs survived the dual-gate.** SWEEP outcome = THREE
-resolved-in-phase items, KNOWN_ISSUES_UNMODIFIED.
+**Read-only attestation.** `git diff c9b5d20d HEAD -- contracts/` is empty throughout the sweep — no
+`contracts/*.sol` was opened or mutated; all source was read via `git show 61315ecd:...` (the 3-skill sweep ran
+read-only at HEAD''; the two HEAD'''/HEAD'''' gates layer cleanly + RESOLVE two of the items; the FIFTH gate
+c9b5d20d got a focused read-only contract-auditor pass, §4.5); every cited file:line was re-grep-verified.
+**Attestation: 0 UNRESOLVED FINDING_CANDIDATEs survived the dual-gate.** SWEEP outcome = THREE resolved-in-phase
+items, KNOWN_ISSUES_UNMODIFIED.
+
+### §4.5 The FIFTH / FINAL gate c9b5d20d — focused single-skill contract-auditor pass (357-00e)
+The FIFTH v56.0 contract gate c9b5d20d (the flat-10% pass lootbox + 3 dead-guard removals + a hasAnyLazyPass
+docstring fix — a contained pass-PURCHASE economic refactor touching DegenerusGame.sol [8 lines] +
+DegenerusGameWhaleModule.sol [-46/+25]) does NOT touch the afking / advance / subscribe / affiliate surfaces or
+_passHorizonOf — i.e. NONE of the v56-NEW security spine the 3-skill sweep charged. **Proportionate to a contained
+economic + dead-code refactor, it got a FOCUSED single-skill /contract-auditor pass, NOT a full 3-skill re-sweep**
+(the genuine-parallel 3-skill sweep §4.1-§4.4 already discharged those surfaces; this refactor adds no new surface
+to them). **4 probes, all NEGATIVE-VERIFIED, 0 FINDING_CANDIDATE** (full disposition 357-02-ADVERSARIAL-LOG.md §F,
+sourced from the contract-auditor run):
+1. **Guard reachability (probe c9-A) — NEGATIVE-VERIFIED.** The 3 dropped guards are provably dead: priceForLevel
+   (PriceLookupLib.sol:21) has no zero branch (>= 0.01 ETH over all uint24), so the lazy 10-level sum is always
+   > 0; 10% of a positive price (lazy >= 0.18 ETH / whale >= 1.2 ETH / deity >= 24 ETH) is never 0; _recordLootboxEntry
+   is safe even vs a hypothetical 0 (its `!= 0` RMW guard). Removal is byte-irrelevant.
+2. **Flat-10% solvency (probe c9-B) — NEGATIVE-VERIFIED.** Only the *_LOOTBOX_BPS multiplier shifts (2000->1000
+   presale); off the ETH/claimablePool path; the ETH pool splits computed from totalPrice INDEPENDENT of the lootbox
+   %; presaleBoxCredit byte-unchanged; reducing an award can't create unbacked value / breach the EV-cap / underflow.
+   A pure downward tweak (intended). SOLVENCY-01 untouched (GameAfkingModule.sol byte-unchanged 77d8bc88->c9b5d20d).
+3. **Dangling refs (probe c9-C) — NEGATIVE-VERIFIED.** ZERO remaining refs to the dropped *_LOOTBOX_PRESALE_BPS /
+   *_LOOTBOX_POST_BPS constants in contracts/ or test/; PS_ACTIVE shift/mask still used elsewhere (not orphaned).
+4. **hasAnyLazyPass doc (probe c9-D) — NEGATIVE-VERIFIED.** The docstring is accurate; hasAnyLazyPass is a UI view
+   (exclusive `> level`), NOT the afking gate (which uses _passHorizonOf inclusive through frozenUntilLevel); the
+   off-by-one is view-only, referenced only in IDegenerusGame.sol + a regression doc, never consumed by any on-chain
+   decision. Benign + the docstring documents the by-design divergence.
+
+**§4.5 outcome:** the FIFTH gate is a clean behavior-preserving simplification + an intended presale-20%->10%
+lootbox reduction. 4 NEGATIVE-VERIFIED / 0 FINDING_CANDIDATE; SOLVENCY-01 untouched. **It adds ZERO findings —
+recorded as a clean refactor, NOT a finding.** The clean-closure outcome stands: THREE resolved-in-phase items
+(F-356-01 + the slot-0 churn advisory + the D-11 level-0 gap), 0 UNRESOLVED FINDING_CANDIDATE.
 
 ---
 
-## 5. LEAN Regression Appendix (folded from 357-01 §4 / REGRESSION-BASELINE-v56.md §10)
+## 5. LEAN Regression Appendix (folded from 357-01 §4 / REGRESSION-BASELINE-v56.md §11)
 
-**AUTHORITATIVE SOURCE — cite, do NOT re-run forge or re-derive:** test/REGRESSION-BASELINE-v56.md §10 (the
-357-00d reconciliation at HEAD'''', CURRENT — supersedes §9 at HEAD''). The whole-tree forge test run at HEAD''''
-77d8bc88 was **573 passed / 134 failed / 103 skipped** (810 run, default profile, WHOLE tree — NOT --match-path).
+**AUTHORITATIVE SOURCE — cite, do NOT re-run forge or re-derive:** test/REGRESSION-BASELINE-v56.md §11 (the
+357-00e reconciliation at c9b5d20d, CURRENT — supersedes §10 at HEAD''''). The whole-tree forge test run at the
+FIFTH / FINAL gate c9b5d20d was **574 passed / 133 failed / 103 skipped** (810 run, default profile, WHOLE tree —
+NOT --match-path). forge build is clean at c9b5d20d (exit 0).
 
-### §5a Suite Baseline — 573 / 134 / 103, NON-WIDENING BY NAME vs the `453f8073` baseline
+### §5a Suite Baseline — 574 / 133 / 103, NON-WIDENING BY NAME vs the `453f8073` baseline
 
-| Quantity | 453f8073 baseline (§2, empirical via 83a6a9ca) | v56 corpus delta (356-01..07 + 357-00/00b/00d) | HEAD'''' 77d8bc88 |
+| Quantity | 453f8073 baseline (§2, empirical via 83a6a9ca) | v56 corpus delta (356-01..07 + 357-00/00b/00d/00e) | c9b5d20d (FIFTH gate) |
 | --- | --- | --- | --- |
-| forge test passed | 603 | +the adapted-green corpus + the v56 proof files | **573** |
-| forge test failed | 134 | +-0 (the live 134 == the §2 134-name union BY NAME) | **134** |
-| forge test skipped | 16 | +the 356-07 / 357-00b / 357-00d drops | **103** |
+| forge test passed | 603 | +the adapted-green corpus + the v56 proof files (+1 run-variance vs HEAD'''') | **574** |
+| forge test failed | 134 | -1 NARROWING vs HEAD'''' (the live 133 is a STRICT SUBSET of the §2 134-name union) | **133** |
+| forge test skipped | 16 | +the 356-07 / 357-00b / 357-00d drops (the FIFTH-gate refactor adds NO drop) | **103** |
 
 ### §5b The BINDING gate — a failing-NAME-set strict SUBSET (live - union == empty), NOT a count delta
 **NON-WIDENING = a strict failing-NAME-set SUBSET**, NOT a count match. The binding, load-bearing gate is stated as
-a **SUBSET relation** (live is a subset of union, BY NAME), verified empirically at HEAD'''' BOTH directions:
+a **SUBSET relation** (live is a subset of union, BY NAME), verified empirically at the CURRENT subject c9b5d20d:
 
-> **HEAD'''' live failing set (134 names) - the empirical 453f8073 §2 134-name union == empty** (0 names outside
-> the baseline) AND **union - live == empty** (no baseline name missing this run) -> the live 134 is
-> **byte-identical by NAME** to the baseline -> **net-zero NEW regression.**
+> **c9b5d20d live failing set (133 names) - the empirical 453f8073 §2 134-name union == empty** (0 names outside
+> the baseline) -> the live 133 is a **STRICT SUBSET** of the baseline -> **net-zero NEW regression.**
 
-The ledger §10 verified this empirically (the live 134 == the §2 134-name 453f8073 union, name-keyed set-diff
-both directions EMPTY). **ZERO new forge red was introduced by the four 357 gates** (the advance-incentive redesign,
-the F-356-01 stub, the slot-0 idempotency guard, the D-11 level-0 rejection). The gate is the NAME-set membership
-test, not "134 vs 133." The **134==134 vs the HEAD'' 133 is run-variance** in the documented non-deterministic Bucket
-A (VRF/RNG-window) + Bucket F (the flaky invariant_solvencyUnderDegenerette) + the vm.assume-exhaustion cluster
-(§5d) — neither the redesign nor the two subscribe gates touch VRF/RNG-window code, so neither can deterministically
-change a Bucket-A red.
+The ledger §11 verified this empirically at c9b5d20d (the live 133 ⊆ the §2 134-name 453f8073 union, the set-diff
+live - union EMPTY). **ZERO new forge red was introduced by the FIVE 357 gates** (the advance-incentive redesign,
+the F-356-01 stub, the slot-0 idempotency guard, the D-11 level-0 rejection, AND the FIFTH-gate flat-10% pass
+lootbox + dead-guard refactor). The gate is the NAME-set membership test, not "133 vs 134." The **574/133/103 vs
+HEAD'''' 573/134/103 (a -1 fail NARROWING) is run-variance** in the documented non-deterministic Bucket A
+(VRF/RNG-window) + Bucket F (the flaky invariant_solvencyUnderDegenerette) + the vm.assume-exhaustion cluster
+(§5d) — none of the FIVE gates (the redesign, the two subscribe gates, or the FIFTH pass-purchase refactor) touch
+VRF/RNG-window code, so none can deterministically free a Bucket-A red. (The HEAD'''' run earlier showed 134==134
+byte-identical by NAME both directions; the 1-fail variance is the same fuzz/invariant-campaign cluster.)
 
 ### §5c The 453f8073 baseline was established EMPIRICALLY (the strongest non-widening position)
 The 453f8073 baseline red union was established EMPIRICALLY (the raw 453f8073 corpus is UNCOMPILABLE — AfKing.sol
@@ -635,13 +733,21 @@ node scripts/lib/patchForFoundry.js + the WHOLE-tree forge test --json, parsing 
   surface discipline; each level-0 successor re-proven GREEN by the new V56SubHardening proofs. These are
   STALE-ASSERTION supersession reds, NOT contract gate bugs, NOT in the §2 453f8073 baseline union -> they add nothing
   to the ceiling and close the only live - union != empty delta.
+- **The 357-00e FIFTH-gate flat-10% pass-lootbox + dead-guard refactor adds ZERO new forge red** (ledger §11b): no
+  fixture asserted the presale-20% lootbox award (the pass-purchase suites assert pass mechanics + the byte-unchanged
+  25% presaleBoxCredit, not the presale-vs-post lootbox-bps split), so dropping the presale elevation flips no
+  fixture (NO vm.skip drop — the §11a skipped count is ±0); the 3 removed guards are provably dead (no fixture ever
+  hit baseCost==0 / lootboxAmount==0); no dangling refs to the dropped constants. Behavior-equivalent -> zero red
+  delta (the 574/133/103 vs HEAD'''' 573/134/103 is a -1 fail run-variance NARROWING, not a refactor effect).
 - **The new v56 proof suites** (all GREEN, contribute zero red): V56SecUnmanipulable (11), V56FreezeSolvency (7),
   V56QuestNonPerturb (7), V56AfkingGasMarginal (15), and the V56SubHardening suite extended to **22 GREEN**
-  across the four 357 gates (the D-11/D-12/D-13 gates + the crossing eviction + the drainAffiliateBase reachability
-  + the advance-soft-gate proofs + the churn-idempotency + the level-0 pass-gate proofs).
+  across the 357 gates (the D-11/D-12/D-13 gates + the crossing eviction + the drainAffiliateBase reachability
+  + the advance-soft-gate proofs + the churn-idempotency + the level-0 pass-gate proofs). The FIFTH-gate refactor
+  adds no new proof suite (a contained pass-purchase economic change covered by the focused auditor pass §4.5 + the
+  whole-tree NON-WIDENING).
 
 ### §5e SWEEP NON-WIDENING attestation
-Every `git diff 453f8073 77d8bc88 -- contracts/ test/` hunk is attributable to a known v56-scope commit: the **354
+Every `git diff 453f8073 c9b5d20d -- contracts/ test/` hunk is attributable to a known v56-scope commit: the **354
 IMPL e18af451** (the batching contract gate diff) + the **355 GAS net tune** + the **liveness adds 86a2d6c8
 (LIVE-01 valve) / 3d969621 (GAS-06 decouple)** + the **quest-pack/deploy-cap e2590c1c** + the **AGENT-committed
 356 TST work** (the rewrite map, the 4 v56 proof files, the D-10 migration, test/REGRESSION-BASELINE-v56.md
@@ -650,12 +756,17 @@ itself) + the **357-00 hardening ac5f1e03** (F-356-01 stub + D-11/D-12/D-13) + t
 Vault/sDGNRS routing) + the **357-00b reconciliation** (056e78c8/1d5fd872/48fab561 — the GovernanceGating
 rewrite + the V56SubHardening soft-gate proofs + the §9 ledger reconcile) + the two **357 subscribe-hardening
 gates** (7b0b2a0b slot-0 idempotency + 77d8bc88 D-11 level-0) + the **357-00d reconciliation**
-(30ea4b89/519f6e00/b541c445 — the churn/level-0 proofs + the §10 ledger reconcile + the delta-audit / sweep
-fold). `git diff 77d8bc88 HEAD -- contracts/` is **EMPTY** (zero contract gate mutation in this terminal authoring;
-subject byte-frozen at HEAD''''). **The SOLVENCY-01 leg-1 byte anchor (453f8073:709-710 <-> subject :702-703,
-byte-identical — relocated only) holds** (§3.B). The Hardhat sanity arm: the GovernanceGating GATE-01..04 block —
-the ONLY MustMintToday consumer — was rewritten to the soft pay-gate model in 357-00b (6/6 GATE GREEN; the
-Foundry whole-tree run is the authoritative BY-NAME ledger). **NON-WIDENING confirmed at HEAD''''.**
+(30ea4b89/519f6e00/b541c445 — the churn/level-0 proofs + the §10 ledger reconcile) + the **FIFTH / FINAL gate
+c9b5d20d** (the flat-10% pass lootbox + 3 dead-guard removals + the hasAnyLazyPass docstring — a contained
+pass-PURCHASE economic refactor off the solvency path) + the **357-00e reconciliation**
+(4234477e/7056339f — the §11 ledger reconcile + the delta-audit Family 10/§3.9 + the adversarial-log §F auditor
+fold). `git diff c9b5d20d HEAD -- contracts/` is **EMPTY** (zero contract gate mutation in this terminal authoring;
+subject byte-frozen at the FIFTH / FINAL gate c9b5d20d). **The SOLVENCY-01 leg-1 byte anchor (453f8073:709-710 <->
+subject :702-703, byte-identical — relocated only) holds** (§3.B; the FIFTH gate touches only
+DegenerusGameWhaleModule.sol + DegenerusGame.sol — GameAfkingModule.sol byte-unchanged 77d8bc88->c9b5d20d). The
+Hardhat sanity arm: the GovernanceGating GATE-01..04 block — the ONLY MustMintToday consumer — was rewritten to the
+soft pay-gate model in 357-00b (6/6 GATE GREEN; the Foundry whole-tree run is the authoritative BY-NAME ledger).
+**NON-WIDENING confirmed at c9b5d20d.**
 
 ---
 
@@ -681,8 +792,10 @@ Foundry whole-tree run is the authoritative BY-NAME ledger). **NON-WIDENING conf
   claimablePool in tandem), so there is **no new aggregate**; the leg-1 debit two-liner is byte-identical
   (453f8073:709-710 <-> subject :702-703, relocated only). The v56 affiliate/quest/buyer rewards are minted BURNIE
   flip-credit (coinflip.creditFlip), OFF the ETH/claimablePool path — a BURNIE-emission-timing change only, the
-  existing ETH accounting byte-UNCHANGED (no new emission, no solvency surface). The four 357 gates are BURNIE-only +
-  revert-only / liveness-only / control-flow-only — none touches the ETH/claimablePool debit. The empirical guard
+  existing ETH accounting byte-UNCHANGED (no new emission, no solvency surface). The FIVE 357 gates are BURNIE-only +
+  revert-only / liveness-only / control-flow-only / pass-purchase-economic — none touches the ETH/claimablePool
+  debit (the FIFTH gate's flat-10% lootbox shrinks a BURNIE-ledger pass-lootbox award off the ETH path; the ETH pool
+  splits + presaleBoxCredit byte-unchanged). The empirical guard
   is V56FreezeSolvency 7/7 (the solvency-invariant fuzz + the leg-1 debit-equals-delivered-value forge arm,
   356-04). No accounting axis widened.
 
@@ -695,11 +808,12 @@ Foundry whole-tree run is the authoritative BY-NAME ledger). **NON-WIDENING conf
   Phase 355 GAS — the net diff (GAS-05 deferred pendingBurnie + the weighted SUB_STAGE budget) + the liveness
   commits 86a2d6c8 (LIVE-01 valve) / 3d969621 (GAS-06 decouple) + the quest-pack/deploy-cap e2590c1c; Phase
   356 TST — V56SecUnmanipulable (11) / V56FreezeSolvency (7) / V56QuestNonPerturb (7) / V56AfkingGasMarginal
-  (15) + test/REGRESSION-BASELINE-v56.md + the D-10 offset migration; the **four 357 contract gates** (HEAD'
+  (15) + test/REGRESSION-BASELINE-v56.md + the D-10 offset migration; the **FIVE 357 contract gates** (HEAD'
   ac5f1e03 F-356-01 + D-11/D-12/D-13 [357-00-SUMMARY] / HEAD'' 61315ecd the advance-incentive redesign / HEAD'''
-  7b0b2a0b slot-0 idempotency / HEAD'''' 77d8bc88 D-11 level-0 [357-00d-SUMMARY]) + the V56SubHardening suite
-  (22 GREEN across the gates) + the 357-00b/357-00d reconciliations + the 357-01-DELTA-AUDIT.md +
-  357-02-ADVERSARIAL-LOG.md logs + the 3 per-skill sweep outputs + the Codex XMODEL augmentation (Gemini PARTIAL).
+  7b0b2a0b slot-0 idempotency / HEAD'''' 77d8bc88 D-11 level-0 [357-00d-SUMMARY] / c9b5d20d the flat-10% pass-lootbox
+  + dead-guard refactor [357-00e-SUMMARY]) + the V56SubHardening suite (22 GREEN across the gates) + the
+  357-00b/357-00d/357-00e reconciliations + the 357-01-DELTA-AUDIT.md + 357-02-ADVERSARIAL-LOG.md logs + the 3
+  per-skill sweep outputs + the Codex XMODEL augmentation (Gemini PARTIAL) + the focused FIFTH-gate auditor pass.
 - **Prior milestone FINDINGS templates:** audit/FINDINGS-v55.0.md (the proven 9-section template this report
   mirrors, shipped across v44/v46/v47/v48/v49/v55); audit/FINDINGS-v49.0.md / audit/FINDINGS-v48.0.md (the
   9-section templates + the v44 §9d maximalist handoff register).
@@ -728,7 +842,8 @@ Foundry whole-tree run is the authoritative BY-NAME ledger). **NON-WIDENING conf
   the mode-agnostic aggregator + the ticket minimal-write primitive + the affiliate flat-7% PULL + the open-end
   optimizations + the GAS-05 deferred payout + the LIVE-01 valve + the GAS-06 decouple). The two USER hardening
   directives (the advance-incentive redesign + the D-11/D-12/D-13 subscribe gates) + the two follow-up gates (the
-  slot-0 idempotency + the D-11 level-0 rejection) also SHIPPED across the four 357 gates.
+  slot-0 idempotency + the D-11 level-0 rejection) + the FIFTH-gate flat-10% pass-lootbox + dead-guard refactor
+  also SHIPPED across the FIVE 357 gates.
 - **v57+ forward-seeds carried forward (deferred, OUT of v56 — contract gate changes):**
   - **type Day is uint24 UDVT** ([[type-day-udvt-post-v56-seed]], USER 2026-06-01) — a repo-wide UDVT (~24 files /
     200+ sites; includes rngWordByDay key->Day, a safe pure-annotation, RNG-freeze byte-preserved) as its OWN
@@ -763,11 +878,11 @@ Foundry whole-tree run is the authoritative BY-NAME ledger). **NON-WIDENING conf
 ### 9a. Closure Verdict
 
 **Locked target (ROADMAP Phase 357 goal + the v56 surface set, for the record):**
-AFKING_EVERYDAY_GAS_MINIMIZATION SHIPPED (the mode-agnostic ~10-day aggregator [accrue-cheap-per-buy + the AFFILIATE flat-7% deterministic-split PULL claim 75/20/5 + the QUEST automatic STAGE-riding settle + the GAS-05 deferred pendingBurnie payout]; AGG-01..05); TICKET_MINIMAL_WRITE_PRIMITIVE SHIPPED (TKT-01/02 — the buyerOwedBurnie 10%/20% accrual folded into pendingBurnie, the v55 dropped-bonus regression CLOSED); AFFILIATE_FLAT_7PCT_DETERMINISTIC_SPLIT_PULL non-gameable (AFF-01/02 — no roll/seed/flush, buyer-never-wins, the C1/C2 free-option MOOT); QUEST_BATCHED_SETTLE non-perturbing (QST-01..05 — O1/QST-05 single-credit RESOLVED); OPEN_END_OPTIMIZED + COMPLETELY_UNMANIPULABLE (OPEN-01/02); GAS wins measured under 16.7M (GAS-01..05); SEC-01 unmanipulable [strategic sub/unsub the PRIMARY probe — forfeit-nothing-gain-nothing] + the D-11/D-12/D-13 HARDENING (passless cap-occupancy + unfunded free-rider vectors CLOSED) + the advance-incentive REDESIGN (advanceGame pure liveness, the must-mint ladder -> the non-reverting _bountyEligible SOFT pay-predicate; premature-advance-INERT); SEC-02 SOLVENCY-01 untouched (ETH/pool debit byte-unchanged) + RNG-freeze intact; LIVE-01 openBoxes valve + GAS-06 gap/jackpot decouple (each advance < 16.7M); XMODEL-01 cross-model close augmented the sweep; F-356-01 RESOLVED-AT-357 (the drainAffiliateBase dispatch stub — the LIVE-public-contract affiliate-claim bug FIXED at the leading 357-00 gate); NON-WIDENING live - union == empty BY NAME at HEAD''''; KNOWN_ISSUES_UNMODIFIED
+AFKING_EVERYDAY_GAS_MINIMIZATION SHIPPED (the mode-agnostic ~10-day aggregator [accrue-cheap-per-buy + the AFFILIATE flat-7% deterministic-split PULL claim 75/20/5 + the QUEST automatic STAGE-riding settle + the GAS-05 deferred pendingBurnie payout]; AGG-01..05); TICKET_MINIMAL_WRITE_PRIMITIVE SHIPPED (TKT-01/02 — the buyerOwedBurnie 10%/20% accrual folded into pendingBurnie, the v55 dropped-bonus regression CLOSED); AFFILIATE_FLAT_7PCT_DETERMINISTIC_SPLIT_PULL non-gameable (AFF-01/02 — no roll/seed/flush, buyer-never-wins, the C1/C2 free-option MOOT); QUEST_BATCHED_SETTLE non-perturbing (QST-01..05 — O1/QST-05 single-credit RESOLVED); OPEN_END_OPTIMIZED + COMPLETELY_UNMANIPULABLE (OPEN-01/02); GAS wins measured under 16.7M (GAS-01..05); SEC-01 unmanipulable [strategic sub/unsub the PRIMARY probe — forfeit-nothing-gain-nothing] + the D-11/D-12/D-13 HARDENING (passless cap-occupancy + unfunded free-rider vectors CLOSED) + the advance-incentive REDESIGN (advanceGame pure liveness, the must-mint ladder -> the non-reverting _bountyEligible SOFT pay-predicate; premature-advance-INERT); SEC-02 SOLVENCY-01 untouched (ETH/pool debit byte-unchanged) + RNG-freeze intact; LIVE-01 openBoxes valve + GAS-06 gap/jackpot decouple (each advance < 16.7M); XMODEL-01 cross-model close augmented the sweep; F-356-01 RESOLVED-AT-357 (the drainAffiliateBase dispatch stub — the LIVE-public-contract affiliate-claim bug FIXED at the leading 357-00 gate); the FIFTH-gate flat-10% pass-lootbox + dead-guard refactor (c9b5d20d) a clean off-solvency-path simplification (0 findings); NON-WIDENING live - union == empty BY NAME at the FIFTH/FINAL gate c9b5d20d; KNOWN_ISSUES_UNMODIFIED
 
 **Actual verdict (the sweep surfaced 0 UNRESOLVED FINDING_CANDIDATE — THREE resolved-in-phase items, each fixed at a
 357 contract gate; the clean-closure clause HOLDS):**
-AFKING_EVERYDAY_GAS_MINIMIZATION SHIPPED (the mode-agnostic ~10-day aggregator — accrue-cheap-per-buy NO-cross-contract + the AFFILIATE flat-7% deterministic-split PULL [claim(subs[]) 75/20/5 @ DegenerusAffiliate.sol:629/:654/:678-695, buyer-never-wins :633-634, NO roll/seed/flush] + the QUEST automatic STAGE-riding settle + the GAS-05 deferred pendingBurnie payout + the claimQuest fallback + unsub-settle + the self-marking running balances [window/settled markers DROPPED]; AGG-01..05); TICKET_MINIMAL_WRITE_PRIMITIVE SHIPPED (TKT-01/02 — the warm-Sub-stamp ticket write, the buyerOwedBurnie 10%/20% accrual folded into pendingBurnie, the century/x00 parity decision applied; the v55 dropped-bonus regression CLOSED); AFFILIATE_FLAT_7PCT_DETERMINISTIC_SPLIT_PULL non-gameable (AFF-01/02 — exactly ONE deterministic path, no favorable-seed selection AND no two-distribution free option, buyer-never-wins, a duplicate sub drains 0; V56SecUnmanipulable 11/11); QUEST_BATCHED_SETTLE non-perturbing (QST-01..05 — afkingActive-gated, byte-identity with siblings present vs absent; the O1/QST-05 lootbox-quest double-credit RESOLVED single-credit at 356-05; V56QuestNonPerturb 7/7); OPEN_END_OPTIMIZED + COMPLETELY_UNMANIPULABLE (OPEN-01/02 — live-level parity with openLootBox, lastOpenedDay monotone no-double-open, single monotonic per-level EV-cap draw, two-path storage-isolated; V56AfkingGasMarginal); GAS wins measured under 16.7M (GAS-01..05 — the weighted SUB_STAGE budget + the GAS-05 deferred payout); SEC-01 unmanipulable [strategic sub/unsub forfeit-nothing-gain-nothing — affiliateBase = uplines' money persists on unsub, pendingBurnie zeroed-before-credit, decay recomputed honestly, D-11/D-12 make re-sub strictly EV-negative; V56SecUnmanipulable 11/11] + the D-11/D-12/D-13 HARDENING (passless cap-occupancy + unfunded free-rider CLOSED, the level-0 boundary closed at HEAD'''') + the advance-incentive REDESIGN (advanceGame PURE LIVENESS — MustMintToday/_enforceDailyMintGate DELETED grep-ZERO; the must-mint ladder -> the non-reverting _bountyEligible SOFT pay-predicate, MONOTONE + BURNIE-bounty-only off the ETH path; premature-advance-INERT — VRF timing-independent, separate callback tx, rngLockedFlag fences reactive actions, freeze atomic with the request -> firing early strictly more conservative; CA e1 / ZDH 2 / Codex A); SEC-02 SOLVENCY-01 untouched (the leg-1 ETH/claimablePool debit two-liner byte-identical 453f8073:709-710 <-> subject :702-703, relocated only; affiliate/quest/buyer BURNIE flip-credit off the ETH/pool path) + RNG-freeze intact (V56FreezeSolvency 7/7); LIVE-01 openBoxes valve (86a2d6c8) + GAS-06 gap/jackpot decouple (3d969621) — each advanceGame tx < 16,777,216; XMODEL-01 Codex 4-area NO ISSUE corroboration (Gemini attempted-partial per D-03) augmented the sweep; THREE resolved-in-phase items [F-356-01 drainAffiliateBase stub @ HEAD' ac5f1e03; the slot-0 churn EV-negative advisory @ HEAD''' 7b0b2a0b; the USER-caught D-11 level-0 passless gap, sweep-MISSED, @ HEAD'''' 77d8bc88] — 0 UNRESOLVED FINDING_CANDIDATE; NON-WIDENING live - union == empty AND union - live == empty BY NAME at HEAD'''' (573/134/103); KNOWN_ISSUES_UNMODIFIED
+AFKING_EVERYDAY_GAS_MINIMIZATION SHIPPED (the mode-agnostic ~10-day aggregator — accrue-cheap-per-buy NO-cross-contract + the AFFILIATE flat-7% deterministic-split PULL [claim(subs[]) 75/20/5 @ DegenerusAffiliate.sol:629/:654/:678-695, buyer-never-wins :633-634, NO roll/seed/flush] + the QUEST automatic STAGE-riding settle + the GAS-05 deferred pendingBurnie payout + the claimQuest fallback + unsub-settle + the self-marking running balances [window/settled markers DROPPED]; AGG-01..05); TICKET_MINIMAL_WRITE_PRIMITIVE SHIPPED (TKT-01/02 — the warm-Sub-stamp ticket write, the buyerOwedBurnie 10%/20% accrual folded into pendingBurnie, the century/x00 parity decision applied; the v55 dropped-bonus regression CLOSED); AFFILIATE_FLAT_7PCT_DETERMINISTIC_SPLIT_PULL non-gameable (AFF-01/02 — exactly ONE deterministic path, no favorable-seed selection AND no two-distribution free option, buyer-never-wins, a duplicate sub drains 0; V56SecUnmanipulable 11/11); QUEST_BATCHED_SETTLE non-perturbing (QST-01..05 — afkingActive-gated, byte-identity with siblings present vs absent; the O1/QST-05 lootbox-quest double-credit RESOLVED single-credit at 356-05; V56QuestNonPerturb 7/7); OPEN_END_OPTIMIZED + COMPLETELY_UNMANIPULABLE (OPEN-01/02 — live-level parity with openLootBox, lastOpenedDay monotone no-double-open, single monotonic per-level EV-cap draw, two-path storage-isolated; V56AfkingGasMarginal); GAS wins measured under 16.7M (GAS-01..05 — the weighted SUB_STAGE budget + the GAS-05 deferred payout); SEC-01 unmanipulable [strategic sub/unsub forfeit-nothing-gain-nothing — affiliateBase = uplines' money persists on unsub, pendingBurnie zeroed-before-credit, decay recomputed honestly, D-11/D-12 make re-sub strictly EV-negative; V56SecUnmanipulable 11/11] + the D-11/D-12/D-13 HARDENING (passless cap-occupancy + unfunded free-rider CLOSED, the level-0 boundary closed at HEAD'''') + the advance-incentive REDESIGN (advanceGame PURE LIVENESS — MustMintToday/_enforceDailyMintGate DELETED grep-ZERO; the must-mint ladder -> the non-reverting _bountyEligible SOFT pay-predicate, MONOTONE + BURNIE-bounty-only off the ETH path; premature-advance-INERT — VRF timing-independent, separate callback tx, rngLockedFlag fences reactive actions, freeze atomic with the request -> firing early strictly more conservative; CA e1 / ZDH 2 / Codex A); SEC-02 SOLVENCY-01 untouched (the leg-1 ETH/claimablePool debit two-liner byte-identical 453f8073:709-710 <-> subject :702-703, relocated only; affiliate/quest/buyer BURNIE flip-credit off the ETH/pool path) + RNG-freeze intact (V56FreezeSolvency 7/7); LIVE-01 openBoxes valve (86a2d6c8) + GAS-06 gap/jackpot decouple (3d969621) — each advanceGame tx < 16,777,216; XMODEL-01 Codex 4-area NO ISSUE corroboration (Gemini attempted-partial per D-03) augmented the sweep; THREE resolved-in-phase items [F-356-01 drainAffiliateBase stub @ HEAD' ac5f1e03; the slot-0 churn EV-negative advisory @ HEAD''' 7b0b2a0b; the USER-caught D-11 level-0 passless gap, sweep-MISSED, @ HEAD'''' 77d8bc88] — 0 UNRESOLVED FINDING_CANDIDATE; the FIFTH/FINAL gate c9b5d20d (the flat-10% pass lootbox + 3 dead-guard removals + the hasAnyLazyPass docstring — a contained pass-PURCHASE economic refactor off the ETH path, dead guards provably dead, ETH pool splits + presaleBoxCredit byte-unchanged) adds ZERO findings (focused contract-auditor pass 4 NEGATIVE-VERIFIED / 0 FINDING_CANDIDATE); NON-WIDENING live - union == empty (the live 133 ⊆ the 134-name union) BY NAME at the FIFTH/FINAL gate c9b5d20d (574/133/103); KNOWN_ISSUES_UNMODIFIED
 
 All clauses of the locked target hold; the actual verdict makes explicit the THREE resolved-in-phase items (each
 fixed at a 357 contract gate, NOT deferred — the FIRST TERMINAL ever to mutate contracts/) and the honest disclosure
@@ -786,17 +901,17 @@ IMPL reqs AGG/TKT/QST/OPEN) + 355 (GAS — net diff, NOT Outcome-A: GAS-05 defer
 SUB_STAGE budget + the LIVE-01 valve 86a2d6c8 + the GAS-06 decouple 3d969621; GAS-01..05 + LIVE-01 + GAS-06,
 pushed) + 356 (TST, 7 plans, sequential-on-main no-worktrees, ZERO contract gate mutation; SEC-01/02 + QST-04 + LIVE-01 +
 GAS-06 empirically proven [the 4 v56 proof suites], the D-10 offset migration, the BY-NAME NON-WIDENING ledger; the
-F-356-01 reachability carried to 357) + 357 (TERMINAL — this deliverable; SOURCE-TREE FROZEN at HEAD'''' 77d8bc88;
-the **four 357 contract gates** [the FIRST TERMINAL ever to mutate contracts/ — HEAD' F-356-01 + D-11/D-12/D-13 / HEAD''
-the advance-incentive redesign / HEAD''' slot-0 idempotency / HEAD'''' D-11 level-0] + the 357-00b/357-00d test
-reconciliations + the SC1 delta-audit + the SC1 3-skill genuine-PARALLEL sweep AUGMENTED by the Codex XMODEL close +
+F-356-01 reachability carried to 357) + 357 (TERMINAL — this deliverable; SOURCE-TREE FROZEN at the FIFTH / FINAL gate c9b5d20d;
+the **FIVE 357 contract gates** [the FIRST TERMINAL ever to mutate contracts/ — HEAD' F-356-01 + D-11/D-12/D-13 / HEAD''
+the advance-incentive redesign / HEAD''' slot-0 idempotency / HEAD'''' D-11 level-0 / c9b5d20d the flat-10% pass-lootbox + dead-guard refactor] + the 357-00b/357-00d/357-00e test
+reconciliations + the SC1 delta-audit + the SC1 3-skill genuine-PARALLEL sweep AUGMENTED by the Codex XMODEL close + the focused FIFTH-gate auditor pass +
 the regression + the gated closure flip). NOTE: **5 phases** (the v54.0 / v55.0 SPEC->IMPL->GAS->TST->TERMINAL shape) but
-with TWO autonomous:false gates in 357 (the 357-00 contract gate + the 357-04 closure gate). Closure signal:
+with TWO autonomous:false gates in 357 (the 357-00 contract gate + the 357-04 closure gate; the FIFTH gate c9b5d20d was USER-committed directly). Closure signal:
 MILESTONE_V56_AT_HEAD_<sha> (the literal placeholder; resolved at 357-04).
 
 ### 9c. Closure Signal
 **MILESTONE_V56_AT_HEAD_<sha>** (the literal placeholder — resolved to the Phase 357 audit-deliverable / closure
-commit own SHA in 357-04 [self-referential]; contracts/ byte-identical to the frozen subject 77d8bc88).
+commit own SHA in 357-04 [self-referential]; contracts/ byte-identical to the frozen subject c9b5d20d — the FIFTH / FINAL gate).
 Verbatim propagation targets (resolved at the 357-04 closure gate by the single sed-style SHA substitution):
 1. Frontmatter closure_signal: + audit_subject_head:.
 2. §1 Audit Subject prose.
@@ -823,21 +938,25 @@ read-only bit.
   ([[wwxrp-jackpot-whalepass-seed]]); the terminal-decimator final-day streak-boost
   ([[terminal-decimator-final-day-streak-boost-seed]]). All are contract gate changes, OUT of v56.0 scope.
 - **The v52 consolidated cross-model audit (ADDITIONAL track).** The v56 surface (the batching + the afking
-  everyday-gas minimization + the four 357 gates) folds into the v52 cumulative sweep as an ADDITIONAL track
+  everyday-gas minimization + the FIVE 357 gates) folds into the v52 cumulative sweep as an ADDITIONAL track
   alongside the prior-deferred v50/v51 surfaces — NOT a substitute for this in-milestone close (§8).
 - The v44 §9d maximalist handoff register (135 anchors) carries forward unchanged (NOT live vectors).
 
 ---
 
-*v56.0 TERMINAL findings authored 2026-06-03. Source-tree frozen at HEAD'''' 77d8bc88 throughout
-(`git diff 77d8bc88 HEAD -- contracts/` empty). 0 UNRESOLVED findings — the 3-skill genuine-PARALLEL sweep surfaced
+*v56.0 TERMINAL findings authored 2026-06-03. Source-tree frozen at the FIFTH / FINAL gate c9b5d20d throughout
+(`git diff c9b5d20d HEAD -- contracts/` empty). 0 UNRESOLVED findings — the 3-skill genuine-PARALLEL sweep surfaced
 0 FINDING_CANDIDATE across 32 charged Claude probe rows (18 NEGATIVE-VERIFIED + 13 SAFE_BY_DESIGN + 1 EV-negative
-advisory now RESOLVED) AUGMENTED by the Codex XMODEL close (4-area NO ISSUE; Gemini attempted-partial per D-03); the
+advisory now RESOLVED) AUGMENTED by the Codex XMODEL close (4-area NO ISSUE; Gemini attempted-partial per D-03) AND
+the focused FIFTH-gate contract-auditor pass (4 NEGATIVE-VERIFIED / 0 FINDING_CANDIDATE); the
 strategic-sub/unsub + the premature-advance-INERT + the two-path-open spine holds adversarially against the as-built
-HEAD'''' four-gate subject. THREE resolved-in-phase items (F-356-01 @ HEAD' + the slot-0 churn advisory @ HEAD''' +
+FIVE-gate subject. THREE resolved-in-phase items (F-356-01 @ HEAD' + the slot-0 churn advisory @ HEAD''' +
 the USER-caught D-11 level-0 passless gap [the sweep MISSED it, having run D-11 only at level >= 1] @ HEAD''''), each
-fixed at a 357 contract gate — the FIRST TERMINAL ever to mutate contracts/. SOLVENCY-01 leg-1 byte-unchanged
-(relocated only); RNG-freeze intact; KNOWN-ISSUES.md byte-unmodified; the O1/QST-05 double-credit RESOLVED
-(single-credit at 356-05). The corrected affiliate anchors (:629/:633-634/:654/:678-695) used throughout. Closure
+fixed at a 357 contract gate — the FIRST TERMINAL ever to mutate contracts/. The FIFTH / FINAL gate c9b5d20d (the
+flat-10% pass lootbox + 3 dead-guard removals + a hasAnyLazyPass docstring fix — a contained pass-PURCHASE economic
+refactor off the ETH path) adds ZERO findings (a clean refactor, NOT a finding). SOLVENCY-01 leg-1 byte-unchanged
+(relocated only; GameAfkingModule.sol byte-unchanged 77d8bc88->c9b5d20d); RNG-freeze intact; KNOWN-ISSUES.md
+byte-unmodified; the O1/QST-05 double-credit RESOLVED (single-credit at 356-05). The corrected affiliate anchors
+(:629/:633-634/:654/:678-695) used throughout. Closure
 signal MILESTONE_V56_AT_HEAD_<sha> resolves at the Phase 357 closure commit (357-04); chmod 444 applied at closure
 (NOT here).*
