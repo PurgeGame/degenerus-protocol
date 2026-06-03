@@ -59,10 +59,10 @@ contract RouterWorstCaseGas is DeployProtocol {
     uint256 private constant LOOTBOX_ETH_BASE_SLOT = 23;            // first-deposit signal (human box)
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38;          // [0:47] lootboxRngIndex
     uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 39;   // mapping(uint48 => uint256) (human box)
-    uint256 private constant SUBOF_SLOT = 66;                       // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 68;                 // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 69;            // mapping(address => uint256) _subscriberIndex
-    uint256 private constant SUBCURSOR_SLOT = 70;                   // _subCursor (uint16 @ byte 0) | _afkingResetDay (@ byte 4)
+    uint256 private constant SUBOF_SLOT = 65;                       // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 67;                 // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68;            // mapping(address => uint256) _subscriberIndex
+    uint256 private constant SUBCURSOR_SLOT = 69;                   // _subCursor (uint16 @ byte 0) | _afkingResetDay (@ byte 4)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot,
     // 241/256 bits used — the markers are uint24 each, not the old uint32 232-bit layout).

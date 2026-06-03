@@ -46,9 +46,9 @@ contract KeeperNonBrick is DeployProtocol {
     /// @dev lootboxRngWordByIndex mapping root slot (RE-DERIVED: was 38).
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = 39;
     /// @dev degeneretteBets mapping root slot (address => betId => packed) (RE-DERIVED: was 45).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 46;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 45;
     /// @dev degeneretteBetNonce mapping root slot (address => uint64) (RE-DERIVED: was 46).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 47;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 46;
     /// @dev lootboxEth mapping root slot (uint48 index => address => packed) (RE-DERIVED: was 15).
     uint256 private constant LOOTBOX_ETH_SLOT = 16;
     /// @dev lootboxEthBase mapping root slot (RE-DERIVED: was 22).
@@ -65,9 +65,9 @@ contract KeeperNonBrick is DeployProtocol {
     uint256 private constant AFKING_FUNDING_SLOT = 8; // mapping(address => uint256)
     uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit @ bit 184)
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 11; // mapping(uint32 => uint256) — the afking box's DAY-keyed word
-    uint256 private constant SUBOF_SLOT = 66; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 68; // address[] _subscribers
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 69; // mapping(address => uint256) _subscriberIndex (1-indexed)
+    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 67; // address[] _subscribers
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // mapping(address => uint256) _subscriberIndex (1-indexed)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack
     // narrowed `amount` to uint24 and the day markers to uint24).

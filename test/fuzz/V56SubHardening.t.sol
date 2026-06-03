@@ -43,8 +43,8 @@ contract V56SubHardening is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the v56 Sub-slot offset block (V56SecUnmanipulable:44-67)
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 66;            // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 69; // mapping(address => uint256) _subscriberIndex (1-indexed)
+    uint256 private constant SUBOF_SLOT = 65;            // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // mapping(address => uint256) _subscriberIndex (1-indexed)
     uint256 private constant MINTPACKED_SLOT = 10;       // mintPacked_ mapping root (deity bit @ 184, frozenUntil @ 128)
 
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
@@ -290,7 +290,10 @@ contract V56SubHardening is DeployProtocol {
 
         // NEXT-day subscribe (lastAutoBoughtDay != today) DOES a fresh funded cover-buy — the guard only
         // skips a SAME-day re-entry. Roll a clean fresh day, re-subscribe, assert the stamp advances AND
-        // pendingBurnie accrues again (a genuine new-day buy is not suppressed).
+        // the cover-buy accrues exactly one fresh slot-0. Measured as a DELTA so it holds whether or not
+        // the settle reclaimed the cancelled tombstone first (reclaim wipes the cancelled run's unclaimed
+        // pendingBurnie — a cancelled sub forfeits unclaimed BURNIE unless it claims before the sweep,
+        // consistent with ticket subs; either way the new-day cover-buy adds one fresh 100).
         _subscribeLootbox(p, 0);       // cancel before the day roll (so the next subscribe is a NEW run)
         _settleClean(uint256(keccak256("churn_nextday")) | 1);
         _t += 1 days;
@@ -298,12 +301,13 @@ contract V56SubHardening is DeployProtocol {
         _settleClean(uint256(keccak256("churn_nextday2")) | 1);
         uint32 nextDay = uint32(game.currentDayView());
         require(nextDay > today, "fixture: the day actually rolled forward");
+        uint32 pendingBeforeNextDay = _pendingBurnieOf(p);
         _subscribeLootbox(p, 1);       // NEW run on the fresh day — lastAutoBoughtDay != today -> fresh buy
         assertEq(_lastBoughtDayOf(p), nextDay, "NEXT-day subscribe did a fresh funded cover-buy (stamp advanced)");
-        assertGt(
-            _pendingBurnieOf(p),
+        assertEq(
+            _pendingBurnieOf(p) - pendingBeforeNextDay,
             pendingAfterFirst,
-            "NEXT-day buy accrued a fresh slot-0 reward (the guard only skips SAME-day, not a real new day)"
+            "NEXT-day cover-buy accrued exactly one fresh slot-0 (a real new day is not suppressed)"
         );
     }
 

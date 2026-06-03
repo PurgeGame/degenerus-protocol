@@ -66,13 +66,13 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`;
-    // the AfKing-standalone SUBOF_SLOT=1 / AUTOBUY_SLOT=4 / lootbox slots 37/38 were WRONG).
+    // the AfKing-standalone SUBOF_SLOT=65 / AUTOBUY_SLOT=4 / lootbox slots 37/38 were WRONG).
     // -------------------------------------------------------------------------
 
-    uint256 private constant SUBOF_SLOT = 66; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
-    uint256 private constant SUBSCRIBERS_SLOT = 68; // _subscribers address[] (length here)
+    uint256 private constant SUBSCRIBERS_SLOT = 67; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 

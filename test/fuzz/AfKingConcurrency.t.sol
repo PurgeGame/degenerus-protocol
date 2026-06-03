@@ -50,11 +50,11 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 contract AfKingConcurrency is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`;
-    // the old AfKing-standalone SUBOF_SLOT=1 / SUBSCRIBER_INDEX_SLOT=3 constants were WRONG).
+    // the old AfKing-standalone SUBOF_SLOT=65 / SUBSCRIBER_INDEX_SLOT=68 constants were WRONG).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 66; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 68; // _subscribers address[] (length here; data at keccak(68))
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 69; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 67; // _subscribers address[] (length here; data at keccak(68))
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // _subscriberIndex mapping root (1-indexed)
     uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit lives here)
 
     // Sub packed-field byte offsets (cumulative little-endian within the single packed slot —
@@ -616,9 +616,9 @@ contract AfKingConcurrency is DeployProtocol {
         return uint8(p0 >> (31 * 8)) != 0;
     }
 
-    /// @dev `_subCursor` (slot 70, offset 0, uint16) — the STAGE walk cursor.
+    /// @dev `_subCursor` (slot 69, offset 0, uint16) — the STAGE walk cursor.
     function _subCursorVal() internal view returns (uint16) {
-        return uint16(uint256(vm.load(address(game), bytes32(uint256(70)))));
+        return uint16(uint256(vm.load(address(game), bytes32(uint256(69)))));
     }
 
     /// @dev Open the afking reset gate exactly as the contract does on a new-day entry
@@ -627,11 +627,11 @@ contract AfKingConcurrency is DeployProtocol {
     ///      fields the contract writes (the idle fixture's real day index saturates without ticket
     ///      purchases, so the gate is opened directly rather than via a real day rollover).
     function _openAfkingResetGate() internal {
-        // _subCursor = 0 (slot 70, offset 0, uint16).
-        bytes32 s70 = bytes32(uint256(70));
-        uint256 p70 = uint256(vm.load(address(game), s70));
-        p70 &= ~uint256(0xFFFF);
-        vm.store(address(game), s70, bytes32(p70));
+        // _subCursor = 0 (slot 69, offset 0, uint16).
+        bytes32 s69 = bytes32(uint256(69));
+        uint256 p69 = uint256(vm.load(address(game), s69));
+        p69 &= ~uint256(0xFFFF);
+        vm.store(address(game), s69, bytes32(p69));
         // subsFullyProcessed = false (slot 0, offset 31).
         bytes32 s0 = bytes32(uint256(0));
         uint256 p0 = uint256(vm.load(address(game), s0));

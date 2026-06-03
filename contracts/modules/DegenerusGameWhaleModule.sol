@@ -44,14 +44,17 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint16 boostBps
     );
 
-    /// @notice Emitted when a player is assigned a new lootbox index for the day.
-    /// @param buyer The address receiving the lootbox assignment.
-    /// @param index The lootbox RNG index assigned.
-    /// @param day The day index of the assignment.
-    event LootBoxIndexAssigned(
+    /// @notice Emitted on every pass-bundled lootbox deposit (whale / lazy / deity pass). Same
+    ///         signature/topic as the mint module's `LootBoxBuy` — one box-buy event across paths.
+    /// @param buyer The box recipient.
+    /// @param index The lootbox RNG index the box queued at.
+    /// @param amount The deposited box ETH (this deposit).
+    /// @param presale Always false here — a pass box is never a presale box.
+    event LootBoxBuy(
         address indexed buyer,
-        uint32 indexed index,
-        uint32 indexed day
+        uint48 indexed index,
+        uint256 amount,
+        bool presale
     );
 
     /// @notice Emitted when whale pass rewards are claimed.
@@ -832,17 +835,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint24 purchaseLevel,
         uint256 cachedPacked
     ) private {
-        uint32 dayIndex = _simulatedDayIndex();
         uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
 
-        _recordLootboxMintDay(buyer, uint32(dayIndex), cachedPacked);
+        _recordLootboxMintDay(buyer, cachedPacked);
 
         uint256 packed = lootboxEth[index][buyer];
         uint256 existingAmount = packed & ((1 << 232) - 1);
-        uint32 storedDay = lootboxDay[index][buyer];
 
         if (existingAmount == 0) {
-            lootboxDay[index][buyer] = dayIndex;
             // Purchase-time EV-cap tally (first deposit). The score is snapshotted
             // inline (DIV-2) and the multiplier frozen from it; the cap key is
             // level + 1 (== the resolver's currentLevel = level + 1), distinct from the
@@ -866,16 +866,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 adj,
                 uint24(level + 2)
             );
-            emit LootBoxIndexAssigned(buyer, uint32(index), dayIndex);
-        } else {
-            if (storedDay != dayIndex) revert E();
         }
+        // Subsequent deposits accumulate onto the existing box — no day-coherence gate and no stored
+        // day (the box binds to lootboxRngWordByIndex[index] and rolls from the LIVE open level, so
+        // cross-day deposits at an un-advanced index are harmless).
 
-        uint256 boostedAmount = _applyLootboxBoostOnPurchase(
-            buyer,
-            dayIndex,
-            lootboxAmount
-        );
+        uint256 boostedAmount = _applyLootboxBoostOnPurchase(buyer, lootboxAmount);
         uint256 existingBase = lootboxEthBase[index][buyer];
         if (existingAmount != 0 && existingBase == 0) {
             existingBase = existingAmount;
@@ -918,18 +914,21 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (_isDistressMode()) {
             lootboxDistressEth[index][buyer] += boostedAmount;
         }
+
+        // One box-buy event across paths (same topic as the mint module's LootBoxBuy), on every
+        // deposit. presale=false — a pass-bundled box is never a presale box.
+        emit LootBoxBuy(buyer, index, lootboxAmount, false);
     }
 
     /// @dev Apply any active lootbox boost boon to the purchase amount.
-    ///      Reads packed lootbox tier from boonPacked[player].slot0.
+    ///      Reads packed lootbox tier from boonPacked[player].slot0. The purchase day is read
+    ///      in-function (only on the boost path) for the expiry check.
     ///      Boost is capped at LOOTBOX_BOOST_MAX_VALUE (10 ETH) and expires after 2 game days.
     /// @param player The player whose boost to check and consume.
-    /// @param day The current day index for event emission.
     /// @param amount The base lootbox amount before boost.
     /// @return boostedAmount The lootbox amount after applying any boost.
     function _applyLootboxBoostOnPurchase(
         address player,
-        uint32 day,
         uint256 amount
     ) private returns (uint256 boostedAmount) {
         boostedAmount = amount;
@@ -938,6 +937,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint8 tier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
         if (tier == 0) return boostedAmount;
 
+        // The purchase day (== the buy is happening now) — read here, only on the boost path.
+        uint32 day = _simulatedDayIndex();
         // Check expiry
         uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
         if (
@@ -962,15 +963,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         emit LootBoxBoostConsumed(player, day, amount, boostedAmount, boostBps);
     }
 
-    /// @dev Record the mint day in player's packed data for lootbox tracking.
+    /// @dev Record the current day in player's packed data for lootbox activity tracking.
     /// @param player The player address.
-    /// @param day The current day index.
     /// @param cachedPacked The caller's cached mintPacked_ value to avoid a redundant SLOAD.
     function _recordLootboxMintDay(
         address player,
-        uint32 day,
         uint256 cachedPacked
     ) private {
+        uint32 day = _simulatedDayIndex();
         uint32 prevDay = uint32(
             (cachedPacked >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_32
         );

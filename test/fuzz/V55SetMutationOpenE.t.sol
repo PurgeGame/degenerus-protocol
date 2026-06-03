@@ -43,9 +43,9 @@ contract V55SetMutationOpenE is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 66; // _subOf mapping root
-    uint256 private constant SUBSCRIBERS_SLOT = 68; // _subscribers address[] (length here; data at keccak(68))
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 69; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root
+    uint256 private constant SUBSCRIBERS_SLOT = 67; // _subscribers address[] (length here; data at keccak(68))
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // _subscriberIndex mapping root (1-indexed)
     uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)
 
     // Sub packed-field byte offsets — the v56 compute-on-read re-pack (single 256-bit slot).
@@ -499,7 +499,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     }
 
     function _fundingSourceOf(address who) internal view returns (address) {
-        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(67)))))));
+        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(66)))))));
     }
 
     // ---- Event drain (emitter == address(game) — the game-resident module emits via delegatecall) ----

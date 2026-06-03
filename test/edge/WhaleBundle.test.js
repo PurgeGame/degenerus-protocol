@@ -165,7 +165,7 @@ describe("WhaleBundle", function () {
       ).to.be.reverted;
     });
 
-    it("purchase at level 0 with exact ETH emits LootBoxIndexAssigned", async function () {
+    it("purchase at level 0 with exact ETH emits LootBoxBuy", async function () {
       const { game, alice, whaleModule } = await loadFixture(
         deployFullProtocol
       );
@@ -173,7 +173,7 @@ describe("WhaleBundle", function () {
       const tx = await game
         .connect(alice)
         .purchaseWhaleBundle(alice.address, 1, { value: eth(2.4) });
-      const events = await getEvents(tx, whaleModule, "LootBoxIndexAssigned");
+      const events = await getEvents(tx, whaleModule, "LootBoxBuy");
       expect(events.length).to.be.gte(1);
       expect(events[0].args.buyer).to.equal(alice.address);
     });
@@ -294,7 +294,7 @@ describe("WhaleBundle", function () {
       ).to.be.reverted;
     });
 
-    it("lazy pass emits LootBoxIndexAssigned", async function () {
+    it("lazy pass emits LootBoxBuy", async function () {
       const { game, alice, whaleModule } = await loadFixture(
         deployFullProtocol
       );
@@ -302,7 +302,7 @@ describe("WhaleBundle", function () {
       const tx = await game
         .connect(alice)
         .purchaseLazyPass(alice.address, { value: eth(0.24) });
-      const events = await getEvents(tx, whaleModule, "LootBoxIndexAssigned");
+      const events = await getEvents(tx, whaleModule, "LootBoxBuy");
       expect(events.length).to.be.gte(1);
     });
   });

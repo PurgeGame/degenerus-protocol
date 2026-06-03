@@ -42,7 +42,7 @@ contract V55FreezeDeterminism is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 66; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 11; // mapping(uint32 => uint256) — the afking box's DAY-keyed word
     uint256 private constant LOOTBOX_ETH_SLOT = 16; // mapping(uint48 => mapping(address => uint256)) [232:amount | 24:lvl]
@@ -607,7 +607,7 @@ contract V55FreezeDeterminism is DeployProtocol {
     }
 
     function _evBenefitUsed(address who, uint24 lvl) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(who, uint256(48))); // lootboxEvBenefitUsedByLevel root = slot 48
+        bytes32 inner = keccak256(abi.encode(who, uint256(47))); // lootboxEvBenefitUsedByLevel root = slot 47
         return uint256(vm.load(address(game), keccak256(abi.encode(uint256(lvl), uint256(inner)))));
     }
 

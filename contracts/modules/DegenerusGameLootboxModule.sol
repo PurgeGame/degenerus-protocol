@@ -514,15 +514,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 amount = packed & ((1 << 232) - 1);
         if (amount == 0) revert E();
 
-        uint24 purchaseLevel = uint24(packed >> 232);
         uint256 rngWord = lootboxRngWordByIndex[index];
         if (rngWord == 0) revert RngNotReady();
 
         uint32 currentDay = _simulatedDayIndex();
-        uint32 day = lootboxDay[index][player];
-        if (day == 0) {
-            day = currentDay;
-        }
 
         uint256 baseAmount = lootboxEthBase[index][player];
         if (baseAmount == 0) {
@@ -530,17 +525,21 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         uint24 currentLevel = level + 1;
-        bool withinGracePeriod = currentDay <= day + 7;
-        // Single SLOAD of the frozen purchase snapshot: score+1, the cap-eligible
-        // adjustedPortion allocated at deposit time, and baseLevel+1 (the per-module
-        // sentinel offset encoded at first deposit).
+        // The box rolls from the LIVE level at open — no stored purchase-level basis, no grace
+        // window. Auto-open (the permissionless openBoxes bounty) opens every ready box ASAP and a
+        // holder cannot prevent it, so the open level is NOT player-timable: the holder can never
+        // steer the box to a level they prefer, whichever way the level cuts. The EV multiplier
+        // stays FROZEN at deposit (`scorePlus1`) — that is the anti-gaming knob. One unified roll
+        // basis with `resolveAfkingBox` / `resolveLootboxDirect`.
         uint256 purchaseWord = lootboxPurchasePacked[index][player];
-        (uint16 scorePlus1, uint64 adj, uint24 baseLevelPlus1) = _unpackLootboxPurchase(purchaseWord);
-        uint24 graceLevel = baseLevelPlus1 == 0 ? currentLevel : baseLevelPlus1 - 1;
-        uint24 baseLevel = withinGracePeriod ? graceLevel : purchaseLevel;
+        (uint16 scorePlus1, uint64 adj, ) = _unpackLootboxPurchase(purchaseWord);
 
-        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
-        uint24 targetLevel = _rollTargetLevel(baseLevel, seed);
+        // Seed = the per-index VRF anchor `rngWord` (fixed at the index's advance, never knowable at
+        // deposit) + player + amount. No day term: the box binds to the index word for uniqueness and
+        // freeze-safety, so a day adds nothing — and a day keyed to the OPEN day would be re-rollable
+        // by timing the open. boons/events below take the live `currentDay`.
+        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, amount)));
+        uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         if (targetLevel < currentLevel) {
             targetLevel = currentLevel;
@@ -569,7 +568,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
         _resolveLootboxCommon(
             player,
-            day,
+            currentDay,
             index,
             scaledAmount,
             targetLevel,

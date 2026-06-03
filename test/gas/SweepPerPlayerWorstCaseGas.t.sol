@@ -38,7 +38,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @dev Live `DeployProtocol` fixture (the STAGE writes Game storage). Reuses the validated game-resident
 ///      driving harness ported from V55RevertFreeEvCap (`_settleClean` VRF drain, `_setupFundedSubs`,
 ///      `depositAfkingFunding`, `_grantDeityPass`, the Sub-stamp slot reads). All pinned slots RE-DERIVED
-///      via `forge inspect storage DegenerusGame` (the AfKing-standalone `SUBOF_SLOT=1`/`AUTOBUY_SLOT=4`
+///      via `forge inspect storage DegenerusGame` (the AfKing-standalone `SUBOF_SLOT=65`/`AUTOBUY_SLOT=4`
 ///      layout is WRONG: the game-resident `_subscribers = 68`, `_subOf = 66`, `claimableWinnings = 7`).
 ///      Test-only: ZERO contracts/*.sol mutated (`git diff 453f8073 HEAD -- contracts/` EMPTY).
 contract SweepPerPlayerWorstCaseGas is DeployProtocol {
@@ -49,9 +49,9 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
     uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7;   // mapping(address => uint256) — the SUB-04 reinvest read
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;       // uint128 @ slot 1, byte 16 (SOLVENCY-01 tandem)
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant SUBOF_SLOT = 66;              // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 68;        // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 69;   // mapping(address => uint256) _subscriberIndex
+    uint256 private constant SUBOF_SLOT = 65;              // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 67;        // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68;   // mapping(address => uint256) _subscriberIndex
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot —
     // the markers are uint24 each, not the old uint32 232-bit layout).

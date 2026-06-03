@@ -50,8 +50,8 @@ contract AfKingSubscription is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 66; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 69; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // _subscriberIndex mapping root (1-indexed)
     uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit lives here)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack
@@ -423,10 +423,10 @@ contract AfKingSubscription is DeployProtocol {
         return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)))));
     }
 
-    /// @dev Read `who`'s fundingSource from the sparse `_fundingSourceOf` map (RE-DERIVED slot 67).
+    /// @dev Read `who`'s fundingSource from the sparse `_fundingSourceOf` map (RE-DERIVED slot 66).
     ///      address(0) = self-funded (the common case stores nothing).
     function _fundingSourceOf(address who) internal view returns (address) {
-        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(67)))))));
+        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(66)))))));
     }
 
     // ---- Event drain (emitter == address(game) — the game-resident module emits via delegatecall) ----

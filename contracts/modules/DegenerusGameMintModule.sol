@@ -128,15 +128,9 @@ contract DegenerusGameMintModule is
 
     event LootBoxBuy(
         address indexed buyer,
-        uint32 indexed day,
+        uint48 indexed index,
         uint256 amount,
-        bool presale,
-        uint24 level
-    );
-    event LootBoxIdx(
-        address indexed buyer,
-        uint32 indexed index,
-        uint32 indexed day
+        bool presale
     );
     /// @notice Emitted when a coin-presale box is bought and queued for resolution.
     /// @param buyer The player who bought the box.
@@ -1117,38 +1111,32 @@ contract DegenerusGameMintModule is
         }
 
         // --- Lootbox setup (pool splits, RNG request, presale/distress tracking) ---
-        uint32 lbDay;
         uint48 lbIndex;
         bool lbFirstDeposit;
         if (lootBoxAmount != 0) {
-            lbDay = _simulatedDayIndex();
             lbIndex = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
             bool presale = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0;
 
             uint256 packed = lootboxEth[lbIndex][buyer];
             uint256 existingAmount = packed & ((1 << 232) - 1);
-            uint32 storedDay = lootboxDay[lbIndex][buyer];
 
             if (existingAmount == 0) {
                 lbFirstDeposit = true;
-                lootboxDay[lbIndex][buyer] = lbDay;
                 // score+1 and baseLevel+1 (cachedLevel + 1, DIV-1) are packed into
-                // lootboxPurchasePacked after score computation below
-                emit LootBoxIdx(buyer, uint32(lbIndex), lbDay);
+                // lootboxPurchasePacked after score computation below.
                 // First deposit for this (index, buyer): enqueue the box index for
                 // the permissionless box auto-open cursor. The consumer-side
                 // walk gates each index on lootboxRngWordByIndex != 0 (VRF
-                // orphan-index protection), so enqueue is producer-only here.
+                // orphan-index protection), so enqueue is producer-only here. The
+                // per-buy LootBoxBuy event (below) carries the index for off-chain.
                 IDegenerusGame(address(this)).enqueueBoxForAutoOpen(lbIndex, buyer);
-            } else {
-                if (storedDay != lbDay) revert E();
             }
+            // Subsequent deposits accumulate onto the existing box. No day-coherence gate and no
+            // stored day at all: the box binds to lootboxRngWordByIndex[index] and rolls from the
+            // LIVE open level, so cross-day deposits at an un-advanced index (only reachable in the
+            // pre-first-advance genesis window) are harmless.
 
-            uint256 boostedAmount = _applyLootboxBoostOnPurchase(
-                buyer,
-                lbDay,
-                lootBoxAmount
-            );
+            uint256 boostedAmount = _applyLootboxBoostOnPurchase(buyer, lootBoxAmount);
             uint256 existingBase = lootboxEthBase[lbIndex][buyer];
             if (existingAmount != 0 && existingBase == 0) {
                 existingBase = existingAmount;
@@ -1205,7 +1193,7 @@ contract DegenerusGameMintModule is
                 );
             }
 
-            emit LootBoxBuy(buyer, lbDay, lootBoxAmount, presale, cachedLevel);
+            emit LootBoxBuy(buyer, lbIndex, lootBoxAmount, presale);
         }
 
         // --- Single quest handler call (post-action: handlers execute before score) ---
@@ -1689,7 +1677,6 @@ contract DegenerusGameMintModule is
 
     function _applyLootboxBoostOnPurchase(
         address player,
-        uint32 day,
         uint256 amount
     ) private returns (uint256 boostedAmount) {
         boostedAmount = amount;
@@ -1698,6 +1685,8 @@ contract DegenerusGameMintModule is
         uint8 tier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
         if (tier == 0) return boostedAmount;
 
+        // The purchase day (== the buy is happening now) — read here, only on the boost path.
+        uint32 day = _simulatedDayIndex();
         // Check expiry
         uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
         if (

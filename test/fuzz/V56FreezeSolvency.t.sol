@@ -50,8 +50,8 @@ contract V56FreezeSolvency is DeployProtocol {
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 11; // mapping(uint32 => uint256) — the afking box DAY-keyed word
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38; // [0:47] lootboxRngIndex
     uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 39; // mapping(uint48 => uint256)
-    uint256 private constant SUBOF_SLOT = 66; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 69; // mapping(address => uint256) _subscriberIndex (1-indexed)
+    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // mapping(address => uint256) _subscriberIndex (1-indexed)
 
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
     //   scorePlus1 u16 @6 · amount u24 @8 (milli-ETH)
@@ -247,11 +247,12 @@ contract V56FreezeSolvency is DeployProtocol {
         address p = makeAddr("burnie_offpath");
         _grantDeityPass(p);
         _fundPool(p, 50 ether);
-        _subscribeLootbox(p, 1);
-        _deliverDay(0xB04E0FF); // accrue pendingBurnie + affiliateBase
+        _subscribeLootbox(p, 1); // join-day cover-buy accrues 100
+        _deliverDay(0xB04E0FF); // next-day STAGE buy accrues another 100 + affiliateBase
 
+        // Cover-buy (join day) + one delivered STAGE day = TWO paid buys = 200 whole BURNIE.
         uint256 owed = _pendingBurnieOf(p);
-        assertEq(owed, SLOT0_BURNIE_PER_BUY, "non-vacuity: a delivered buy accrued claimable BURNIE");
+        assertEq(owed, 2 * SLOT0_BURNIE_PER_BUY, "non-vacuity: cover-buy + one delivered STAGE buy accrued claimable BURNIE (200)");
 
         // Isolate the BURNIE claim: the pool must be byte-identical before/after (BURNIE is a creditFlip, not
         // an ETH/pool debit) — this is the exact equality the acceptance criterion demands.

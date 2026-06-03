@@ -56,9 +56,9 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     /// @dev lootboxRngWordByIndex mapping root slot (v55: 38 -> 39).
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = 39;
     /// @dev degeneretteBets mapping root slot (address => betId => packed) (v55: 45 -> 46).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 46;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 45;
     /// @dev degeneretteBetNonce mapping root slot (address => uint64) (v55: 46 -> 47).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 47;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 46;
     /// @dev prizePoolsPacked at slot 2 ((future << 128) | next) — unchanged in v55.
     uint256 private constant PRIZE_POOLS_SLOT = 2;
 

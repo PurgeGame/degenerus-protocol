@@ -61,7 +61,7 @@ contract FFKeyHarness is DegenerusGameStorage {
 ///   Δ5 views/funding: `afKing.subscriberCount()` -> `_subscribers.length` via vm.load (RE-DERIVED slot
 ///      68); `afKing.depositFor` -> `game.depositAfkingFunding`; `keeperSnapshot` -> `afkingSnapshot`.
 ///   The pinned-slot constants are RE-DERIVED via `forge inspect storage DegenerusGame` (the AfKing
-///   standalone-layout SUBOF_SLOT=1 / TICKET_QUEUE_SLOT=12 constants were WRONG). Zero contracts/*.sol
+///   standalone-layout SUBOF_SLOT=65 / TICKET_QUEUE_SLOT=12 constants were WRONG). Zero contracts/*.sol
 ///   mutation; test-only; FROZEN subject (453f8073) honored.
 contract KeeperRewardRoutingSameResults is DeployProtocol {
     // -------------------------------------------------------------------------
@@ -77,12 +77,12 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     // -------------------------------------------------------------------------
     // DegenerusGame pinned slot layout (RE-DERIVED via `forge inspect storage DegenerusGame`;
-    // the AfKing-standalone SUBOF_SLOT=1 / TICKET_QUEUE_SLOT=12 / TICKETS_OWED_PACKED_SLOT=13 were WRONG).
+    // the AfKing-standalone SUBOF_SLOT=65 / TICKET_QUEUE_SLOT=12 / TICKETS_OWED_PACKED_SLOT=13 were WRONG).
     // -------------------------------------------------------------------------
 
-    uint256 private constant SUBOF_SLOT = 66; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13 of the Sub slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 68; // _subscribers address[] (length here)
+    uint256 private constant SUBSCRIBERS_SLOT = 67; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 

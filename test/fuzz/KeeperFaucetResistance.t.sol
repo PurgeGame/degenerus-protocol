@@ -48,7 +48,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 contract KeeperFaucetResistance is DeployProtocol {
     // -------------------------------------------------------------------------
     // Storage slot constants (RE-DERIVED via `forge inspect storage DegenerusGame`; the old lootbox slots
-    // 37/38/19 and the AfKing-standalone SUBOF_SLOT=1 were WRONG).
+    // 37/38/19 and the AfKing-standalone SUBOF_SLOT=65 were WRONG).
     // -------------------------------------------------------------------------
 
     /// @dev lootboxRngPacked at slot 38 (RE-DERIVED: was 37); lootboxRngIndex is the low 48 bits.
@@ -58,10 +58,10 @@ contract KeeperFaucetResistance is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = 39;
 
     /// @dev degeneretteBets mapping root slot (address => betId => packed). RE-DERIVED: was 45, now 46.
-    uint256 private constant DEGENERETTE_BETS_SLOT = 46;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 45;
 
     /// @dev degeneretteBetNonce mapping root slot (address => uint64). RE-DERIVED: was 46, now 47.
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 47;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 46;
 
     /// @dev WWXRP balanceOf mapping root slot.
     uint256 private constant WWXRP_BALANCEOF_SLOT = 2;
@@ -115,7 +115,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     // -------------------------------------------------------------------------
 
     /// @dev _subOf mapping root (one packed Sub slot per subscriber).
-    uint256 private constant SUBOF_SLOT = 66;
+    uint256 private constant SUBOF_SLOT = 65;
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
     uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)

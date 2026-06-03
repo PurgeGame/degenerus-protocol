@@ -1418,9 +1418,6 @@ abstract contract DegenerusGameStorage {
     /// @dev RNG words keyed by lootbox RNG index.
     mapping(uint48 => uint256) internal lootboxRngWordByIndex;
 
-    /// @dev Lootbox purchase day per RNG index and player.
-    mapping(uint48 => mapping(address => uint32)) internal lootboxDay;
-
     /// @dev Per-(index, player) lootbox purchase snapshot packed into one uint256 word.
     ///      Bit layout (LSB -> MSB):
     ///      - [0:16]    score + 1     (uint16; 0 = unset)

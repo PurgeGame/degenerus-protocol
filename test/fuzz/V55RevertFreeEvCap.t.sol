@@ -51,11 +51,11 @@ contract V55RevertFreeEvCap is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38; // [0:47] lootboxRngIndex
     uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 39; // mapping(uint48 => uint256)
     uint256 private constant LOOTBOX_DAY_SLOT = 40; // mapping(uint48 => mapping(address => uint32))
-    uint256 private constant LOOTBOX_PURCHASE_PACKED_SLOT = 41; // mapping(uint48 => mapping(address => uint256))
-    uint256 private constant EV_BENEFIT_USED_SLOT = 48; // mapping(address => mapping(uint24 => uint256)) — the TST-03 budget
-    uint256 private constant SUBOF_SLOT = 66; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 68; // address[] _subscribers
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 69; // mapping(address => uint256) _subscriberIndex
+    uint256 private constant LOOTBOX_PURCHASE_PACKED_SLOT = 40; // mapping(uint48 => mapping(address => uint256))
+    uint256 private constant EV_BENEFIT_USED_SLOT = 47; // mapping(address => mapping(uint24 => uint256)) — the TST-03 budget
+    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 67; // address[] _subscribers
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // mapping(address => uint256) _subscriberIndex
 
     uint256 private constant GAME_OVER_SHIFT = 184;
 

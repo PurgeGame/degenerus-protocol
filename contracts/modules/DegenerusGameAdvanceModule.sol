@@ -145,19 +145,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Per-call afking process-STAGE gas-weight budget. Every day is uniform now: the
     ///      streak is computed on read from the Sub slot (no per-buy `playerQuestStates`
     ///      STATICCALL, no settle day), so there is a SINGLE budget. The STAGE consumes a
-    ///      gas-weight per iteration — buys are weighted by true cost (a lootbox buy ≈ 7k = 1,
-    ///      a ticket buy ≈ 54k = `SUB_STAGE_TICKET_WEIGHT` (8)), a buy-skip costs 1, and a
-    ///      cross-contract sub-ending finalize (cancel-reclaim / pass-evict / funding-kill) costs
-    ///      `SUB_STAGE_EVICT_WEIGHT` (2) — and ends the chunk on accumulated weight, not raw
-    ///      count, so the worst-case chunk (any mix) stays under the 16.7M advance-chain ceiling
-    ///      while a normal chunk targets <10M. A large set drains across several advanceGame calls.
-    ///      GAS-phase measured (V56AfkingGasMarginal, compute-on-read tree): a budget-B chunk
-    ///      drains up to B lootbox subs (≈ B·7k) OR B/8 ticket subs (≈ B/8·54k) OR any mix, each
-    ///      landing near the same gas. At 1000: an all-lootbox day drains the full SUBSCRIBER_CAP
-    ///      in one tx (≈ 6.8M); the binding all-ticket chunk is 125 tickets ≈ 6.8M — deep headroom
-    ///      to 10M for the century-day (x00-level) per-buy quantity-bonus overhead and to the
-    ///      16.7M ceiling. Largest-under-10M is ~1472 (184 tickets).
-    uint256 private constant SUB_STAGE_WEIGHT_BUDGET = 1000;
+    ///      gas-weight per iteration — buys are weighted by true marginal cost (a lootbox buy
+    ///      ≈34k = `SUB_STAGE_LOOTBOX_WEIGHT` (2), a ticket buy ≈73k = `SUB_STAGE_TICKET_WEIGHT`
+    ///      (4)), and a cross-contract sub-ending finalize (cancel-reclaim / pass-evict /
+    ///      funding-kill) ≈18k = `SUB_STAGE_EVICT_WEIGHT` (1) — and ends the chunk on accumulated
+    ///      weight, not raw count, so the worst-case chunk (any mix) stays under the 16.7M
+    ///      advance-chain ceiling while a normal chunk targets <10M. A large set drains across
+    ///      several advanceGame calls. Composition-flat at ~18k per weight-unit: chunk gas ≈
+    ///      `per-call overhead (≈83k) + budget × ~18k`. At 500 the worst chunk is ~9.2M (all-ticket
+    ///      ≈9.2M / all-lootbox ≈8.6M / all-evict ≈5.5M), comfortably under 10M with ~7.5M headroom
+    ///      to the 16.7M ceiling. A large set drains across several advanceGame calls.
+    uint256 private constant SUB_STAGE_WEIGHT_BUDGET = 500;
 
     /// @notice DGNRS reward for top affiliate: 1% of remaining affiliate pool.
     uint16 private constant AFFILIATE_POOL_REWARD_BPS = 100;

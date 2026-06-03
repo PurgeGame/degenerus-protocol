@@ -42,8 +42,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the v56 Sub-slot offset block (V56AfkingGasMarginal:68-89)
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 66;            // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 69; // mapping(address => uint256) _subscriberIndex (1-indexed)
+    uint256 private constant SUBOF_SLOT = 65;            // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // mapping(address => uint256) _subscriberIndex (1-indexed)
     uint256 private constant MINTPACKED_SLOT = 10;       // mintPacked_ mapping root (deity bit @ bit 184)
 
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
@@ -293,16 +293,18 @@ contract V56SecUnmanipulable is DeployProtocol {
             }
         }
 
-        // (a) The churner's total reachable BURNIE (already-claimed + still-pending) is bounded by the honest
-        //     control's reachable BURNIE (its pending — the honest control never claims, so all its accrual is
-        //     still pending). The honest control delivered every day; the churner can only DELAY or LOSE a
-        //     day (a missed delivery or an unsub that strands accrual), never manufacture one — so it can
-        //     never out-accrue the honest continuous sub. Each is an exact multiple of 100 BURNIE / delivered
-        //     buy, so the reachable totals are whole-BURNIE multiples (no fractional manufactured credit).
+        // (a) NO MANUFACTURING: a sub accrues at most ONE slot-0 (100 BURNIE) per day it participates,
+        //     each backed by an mp-debited paid buy — the same-day guard caps a sub at one buy/day, and a
+        //     cancel tombstone only reclaims at the NEXT advance (never mid-day), so churn can never stack
+        //     two buys onto one day. The churner participated on at most (D+1) distinct days (the join-day
+        //     cover-buy + the D delivered days), so its total reachable BURNIE is bounded by (D+1)·100. The
+        //     OLD "churn <= honest absolute" bound was wrong: the honest control's lootbox boxes can be
+        //     open-throttle-skipped (a paid day it simply doesn't buy), so honest can accrue LESS — that is
+        //     honest losing a buy, not the churner gaining a free one (per-ETH they are identical). Each
+        //     reachable total is a whole-BURNIE multiple (no fractional manufactured credit).
         uint256 churnReachable = churnClaimed + _pendingBurnieOf(churner);
-        uint256 honestReachable = _pendingBurnieOf(honest);
-        assertLe(churnReachable, honestReachable, "churn total reachable BURNIE <= honest continuous accrual (no positive-EV)");
-        assertEq(churnReachable % SLOT0_BURNIE_PER_BUY, 0, "churn reachable is a whole-BURNIE multiple of the 100/delivered-buy reward (no manufactured fractional credit)");
+        assertLe(churnReachable, (D + 1) * SLOT0_BURNIE_PER_BUY, "no sub exceeds one slot-0 (100 BURNIE) per participating day (no manufacturing)");
+        assertEq(churnReachable % SLOT0_BURNIE_PER_BUY, 0, "churn reachable is a whole-BURNIE multiple of the 100/paid-buy reward (no manufactured fractional credit)");
 
         // (b) The compute-on-read streak credits no non-delivered / non-existent day. The streak inputs are
         //     `afkingStartDay` and the `covered` high-water (`_afkingStreak = base + (covered - start)`); the
@@ -331,11 +333,13 @@ contract V56SecUnmanipulable is DeployProtocol {
         address p = makeAddr("dbl_p");
         _grantDeityPass(p);
         _fundPool(p, 50 ether);
-        _subscribeLootbox(p, 1);
-        _deliverDay(_singleton(p), 0xDB1C01); // accrue 100 whole BURNIE into pendingBurnie
+        _subscribeLootbox(p, 1); // join-day cover-buy accrues 100
+        _deliverDay(_singleton(p), 0xDB1C01); // next-day STAGE buy accrues another 100
 
+        // The join-day cover-buy fires after that day's STAGE and the next day is a normal STAGE
+        // member, so subscribe + one delivered day = TWO paid buys = 200 whole BURNIE.
         uint256 owedWhole = _pendingBurnieOf(p);
-        assertEq(owedWhole, SLOT0_BURNIE_PER_BUY, "non-vacuity: one delivered buy accrued 100 whole BURNIE");
+        assertEq(owedWhole, 2 * SLOT0_BURNIE_PER_BUY, "non-vacuity: cover-buy + one delivered STAGE buy = 200 whole BURNIE");
         uint256 expectedCredit = owedWhole * 1 ether;
 
         // FIRST claim: credits owed * 1e18 to the recipient's flip stake and zeroes pendingBurnie.
