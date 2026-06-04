@@ -983,7 +983,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Get raw deity boon state for off-chain or viewer contract computation.
     /// @param deity The deity address to query.
-    /// @return dailySeed RNG seed for today's boon generation.
+    /// @return dailySeed RNG seed for today's boon generation (0 until today's VRF word lands).
     /// @return day Current day index.
     /// @return usedMask Bitmask of slots already used (bit i = slot i used).
     /// @return decimatorOpen Whether decimator boons are available.
@@ -1005,11 +1005,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         usedMask = deityBoonDay[deity] == day ? deityBoonUsedMask[deity] : 0;
         decimatorOpen = decWindowOpen;
         deityPassAvailable = deityPassOwners.length < 32; // DEITY_PASS_MAX_TOTAL (see LootboxModule)
-        uint256 rngWord = rngWordByDay[day];
-        if (rngWord == 0) rngWord = rngWordCurrent;
-        if (rngWord == 0)
-            rngWord = uint256(keccak256(abi.encodePacked(day, address(this))));
-        dailySeed = rngWord;
+        // 0 until today's VRF word lands — callers render no boons while it's 0
+        // (mirrors the rngWordByDay[day] gate on issueDeityBoon). No placeholder
+        // seed: a preview built from fake entropy wouldn't match the real boons.
+        dailySeed = rngWordByDay[day];
     }
 
     /// @notice Issue a deity boon to a recipient.

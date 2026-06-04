@@ -105,6 +105,10 @@ contract DeityBoonViewer {
         day = d;
         usedMask = mask;
 
+        // No seed yet (today's VRF word hasn't landed): return no boons rather
+        // than a fabricated menu that won't match the real ones.
+        if (dailySeed == 0) return (slots, usedMask, day);
+
         for (uint8 i = 0; i < DEITY_DAILY_BOON_COUNT; ) {
             uint256 seed = uint256(keccak256(abi.encode(dailySeed, deity, d, i)));
             uint256 total = decimatorOpen ? W_TOTAL : W_TOTAL_NO_DECIMATOR;
