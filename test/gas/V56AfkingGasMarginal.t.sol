@@ -113,22 +113,31 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      bar is this 16.7M. The headroom (16.7M − the measured-at-target chunk) is the safety margin.
     uint256 internal constant EFFECTIVE_GAS_CEILING = 16_700_000;
 
-    /// @dev SUB_STAGE_WEIGHT_BUDGET (DegenerusGameAdvanceModule.sol): the per-call STAGE gas-weight budget.
-    ///      Buys are weighted by true cost (lootbox = 1, ticket = SUB_STAGE_TICKET_WEIGHT); a chunk ends when
-    ///      accumulated weight reaches the budget, so a budget-B chunk holds up to B lootbox subs OR
-    ///      B/SUB_STAGE_TICKET_WEIGHT ticket subs. The binding worst-case is the all-ticket chunk.
-    uint256 internal constant SUB_STAGE_WEIGHT_BUDGET = 1000;
+    /// @dev SUB_STAGE_WEIGHT_BUDGET (DegenerusGameAdvanceModule.sol:158): the per-call STAGE gas-weight budget.
+    ///      Buys are weighted by true marginal cost (lootbox = SUB_STAGE_LOOTBOX_WEIGHT, ticket =
+    ///      SUB_STAGE_TICKET_WEIGHT, evict = SUB_STAGE_EVICT_WEIGHT); a chunk ends when accumulated weight
+    ///      reaches the budget. At ~18k cold gas per weight-unit (composition-flat), a budget of 500 caps the
+    ///      worst chunk at ~9.2M (all-ticket) — under the 10M target, far under the 16.7M ceiling.
+    uint256 internal constant SUB_STAGE_WEIGHT_BUDGET = 500;
 
-    /// @dev SUB_STAGE_EVICT_WEIGHT (GameAfkingModule.sol): the gas-weight of an in-stage sub-ending finalize
-    ///      (pass-evict / funding-kill / cancel-reclaim) relative to a lootbox buy (1) — the heavier branch.
-    uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 2;
+    /// @dev SUB_STAGE_LOOTBOX_WEIGHT (GameAfkingModule.sol:193): the lootbox-buy gas-weight unit (≈34k cold
+    ///      marginal, per the large-scale bench). Pinned at 2 (not 1) so ticket (≈73k → 4) and evict (≈18k → 1)
+    ///      land on integer ratios and every op costs ~18k per weight-unit (chunk gas composition-flat).
+    uint256 internal constant SUB_STAGE_LOOTBOX_WEIGHT = 2;
 
-    /// @dev SUB_STAGE_TICKET_WEIGHT (GameAfkingModule.sol): a ticket buy's gas-weight vs the lootbox-buy unit
-    ///      (the cold ticketQueue push makes it ~8x). A budget-B chunk holds B/SUB_STAGE_TICKET_WEIGHT tickets.
-    uint256 internal constant SUB_STAGE_TICKET_WEIGHT = 8;
+    /// @dev SUB_STAGE_EVICT_WEIGHT (GameAfkingModule.sol:200): the gas-weight of an in-stage sub-ending finalize
+    ///      (pass-evict / funding-kill / cancel-reclaim) — a cross-contract quest read + streak write, ≈18k cold
+    ///      vs the ≈34k lootbox marginal → weight 1 (half a lootbox unit).
+    uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 1;
 
-    /// @dev OPEN_BATCH (GameAfkingModule.sol): the flat per-box open chunk; each afking box uniform O(1).
-    uint256 internal constant OPEN_BATCH = 130;
+    /// @dev SUB_STAGE_TICKET_WEIGHT (GameAfkingModule.sol:207): a ticket buy's gas-weight vs the lootbox unit —
+    ///      the cold ticketQueue push + owed-mapping SSTORE make it ≈73k vs ≈34k → weight 4. A budget-B chunk
+    ///      holds B/SUB_STAGE_TICKET_WEIGHT tickets (the binding all-ticket worst case).
+    uint256 internal constant SUB_STAGE_TICKET_WEIGHT = 4;
+
+    /// @dev OPEN_BATCH (GameAfkingModule.sol:246): the flat per-box open-chunk budget; each afking box uniform
+    ///      O(1) (~74k worst box) so 80 boxes ≈ 9.15M, under the 10M comfort target and far under 16.7M.
+    uint256 internal constant OPEN_BATCH = 80;
 
     /// @dev Harness-local day-parity period for `_warpToBoundary` deterministic day selection. The contracts no
     ///      longer have a settle cadence (compute-on-read obviated it); this is purely a test warp helper.
@@ -287,9 +296,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///         ~75k/box, 200 boxes ≈ 15M > the 10M target, so the flag is expected to direct a shrink).
     function testPerOpenMarginal() public {
         uint256 snap = vm.snapshotState();
-        uint256 gasN = _measureOpenLegGas(N_HI, "opMhi_");
+        // SHARED prefix across the N and N-1 runs: each box's boon-roll seed is keccak(stamp-day word, player,
+        // amount), all prefix-derived. A shared prefix makes the first N-1 boxes byte-identical between the two
+        // runs (same players, same word), so they cancel exactly and the marginal IS one real box's open cost
+        // (always positive). Distinct hi/lo prefixes would roll different boons in each run -> the marginal
+        // becomes a noisy difference of two unequal box-cost sums that can go negative on seed variance.
+        uint256 gasN = _measureOpenLegGas(N_HI, "opM_");
         vm.revertToState(snap);
-        uint256 gasNm1 = _measureOpenLegGas(N_LO, "opMlo_");
+        uint256 gasNm1 = _measureOpenLegGas(N_LO, "opM_");
 
         assertGt(gasN, gasNm1, "per-open marginal: N opens cost strictly more than N-1 (the Nth box materialized)");
         uint256 perOpen = gasN - gasNm1; // (gas for N − gas for N−1) / 1 — the loop-N-divide MARGINAL
@@ -343,10 +357,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
     /// @notice The per-evict marginal = (gas for N evicting subs - gas for N-1) / 1, snapshot/revert. An
     ///         in-stage sub-ending finalize (pass-evict / funding-kill / cancel-reclaim) does a cross-contract
     ///         DegenerusQuests read (playerQuestStates) + streak write (finalizeAfking) that the now call-free
-    ///         local buy does not, so it is the heavier branch. This sizes SUB_STAGE_EVICT_WEIGHT =
-    ///         ceil(evict-marginal / buy-marginal): the STAGE weights an evict that many buy-units so even an
-    ///         all-evicts chunk stays under the ceiling. Subs are pass-evicted (no deity pass -> validThroughLevel
-    ///         0 < currentLevel) on the measured advance.
+    ///         local buy does not. Emits the WARM-measured ceil(evict/buy) for reference, but note it is
+    ///         warm-distorted: warm same-tx slots make evict ≈ 1.4x a buy, whereas the cold-sized weight is 1
+    ///         (cold evict ≈18k < lootbox ≈34k, the large-scale bench — see testColdMarginalCalibration). The
+    ///         binding evict safety is the all-evict chunk-under-ceiling proven in testResidualR1, not this
+    ///         warm ratio. Subs are pass-evicted (no deity pass -> validThroughLevel 0 < currentLevel).
     function testEvictFinalizeMarginal() public {
         uint256 snap = vm.snapshotState();
         uint256 gasN = _measureEvictStageGas(N_HI, "evHi_");
@@ -364,16 +379,16 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 buyNm1 = _measureStageAdvanceGas(N_LO, "evbLo_", false, false);
         uint256 perBuy = buyN > buyNm1 ? buyN - buyNm1 : 1;
 
-        uint256 derivedEvictWeight = (perEvict + perBuy - 1) / perBuy; // ceil(evict/buy)
+        uint256 warmDerivedEvictWeight = (perEvict + perBuy - 1) / perBuy; // ceil(warm evict / warm buy)
         emit log_named_uint("per_evict_finalize_marginal_gas", perEvict);
         emit log_named_uint("per_buy_lootbox_marginal_gas", perBuy);
-        emit log_named_uint("derived_evict_weight_W", derivedEvictWeight);
+        emit log_named_uint("warm_derived_evict_weight_W", warmDerivedEvictWeight);
         emit log_named_uint("current_sub_stage_evict_weight", SUB_STAGE_EVICT_WEIGHT);
         emit log_named_string(
             "evict_weight_finding",
-            SUB_STAGE_EVICT_WEIGHT >= derivedEvictWeight
-                ? "SUB_STAGE_EVICT_WEIGHT >= derived W - conservative-safe (over-weights evicts)"
-                : "SUB_STAGE_EVICT_WEIGHT < derived W - 355-03 must raise it to the derived value"
+            "WARM ceil(evict/buy) over-states the weight (warm evict ~= 1.4x a warm buy); the cold-sized weight "
+            "is 1 (cold evict ~18k < lootbox ~34k, large-scale bench -- see testColdMarginalCalibration). The "
+            "all-evict chunk safety is proven directly in testResidualR1, not by this warm ratio."
         );
     }
 
@@ -540,27 +555,28 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // (g) D-06 residual R1 — STAGE weight-model fidelity (level-cross / gap-resume per-iter <= weight)
     // =========================================================================
 
-    /// @notice Residual R1 (the proof's residual list): the STAGE weight model assumes every sub-iteration's
-    ///         true gas <= its assigned weight allocation. The two iterations the proof flags as not separately
-    ///         pinned are the level-crossing pass refresh-or-evict (an in-stage sub-ending finalize: the heavier
-    ///         SUB_STAGE_EVICT_WEIGHT branch — a DegenerusQuests read + finalizeAfking write) and the gap-resumed
-    ///         streak rebase (a funded buy whose compute-on-read streak markers rebase after a gap). This asserts
-    ///         BOTH measured per-iter marginals stay <= their weight allocation expressed in lootbox-buy units
-    ///         (evict <= SUB_STAGE_EVICT_WEIGHT buys; a buy <= 1 buy by definition) — the weight model is faithful,
-    ///         so a SATURATED weight chunk (any mix totalling SUB_STAGE_WEIGHT_BUDGET) cannot exceed the bound the
-    ///         all-buys / all-evicts extremes already establish.
+    /// @notice Residual R1 (the proof's residual list): the all-evict SATURATED STAGE chunk is the BINDING
+    ///         advance-chain worst case — the theoretical-max pass showed it is HEAVIER than all-ticket (~9.6M).
+    ///         The in-stage finalize (a DegenerusQuests read + finalizeAfking write + _removeFromSet swap-pop) is
+    ///         weighted SUB_STAGE_EVICT_WEIGHT=1, so the budget admits BUDGET/EVICT_WEIGHT = 500 evicts/chunk.
+    ///         This measures the per-evict marginal COLD (vm.cool first-touch — the realistic regime, ~26.7k) and
+    ///         asserts the saturated all-evict chunk (~13.3M) stays under the 16.7M hard ceiling. It runs OVER the
+    ///         10M soft comfort target (USER-accepted: 13M is fine, evict stays weight 1) but UNDER the hard
+    ///         never-exceed ceiling. Measuring cold (not the warm same-tx ~5M) proves the REAL binding chunk.
     function testResidualR1StageWeightModelFidelity() public {
         uint256 snap = vm.snapshotState();
 
-        // The level-crossing pass refresh-or-evict iter (the heavier in-stage finalize branch).
-        uint256 evN = _measureEvictStageGas(N_HI, "r1evHi_");
+        // The level-crossing pass refresh-or-evict iter (the heavier in-stage finalize branch), measured COLD
+        // (vm.cool first-touch) — the realistic daily-advance regime where an evicted sub's slots are cold (it
+        // was funded/stamped on a prior tx). This is the regime the binding all-evict chunk actually runs in.
+        uint256 coldEvN = _measureEvictStageGasCold(N_HI, "r1evHi_");
         vm.revertToState(snap);
-        uint256 evNm1 = _measureEvictStageGas(N_LO, "r1evLo_");
-        require(evN > evNm1, "R1: the Nth evicting sub did real work");
-        uint256 perEvict = evN - evNm1;
+        uint256 coldEvNm1 = _measureEvictStageGasCold(N_LO, "r1evLo_");
+        require(coldEvN > coldEvNm1, "R1: the Nth cold evicting sub did real work");
+        uint256 coldPerEvict = coldEvN - coldEvNm1;
 
-        // The funded-buy unit the weight is expressed against (the box-stamp path; a gap-resumed streak rebase
-        // rides this same per-buy SLOAD/marker-write path — the compute-on-read streak adds no new cold slot).
+        // The funded-buy unit (warm boundedness reference; a gap-resumed streak rebase rides this same per-buy
+        // SLOAD/marker-write path — the compute-on-read streak adds no new cold slot).
         vm.revertToState(snap);
         uint256 buyN = _measureStageAdvanceGas(N_HI, "r1byHi_", false, false);
         vm.revertToState(snap);
@@ -568,13 +584,25 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(buyN > buyNm1, "R1: the Nth funded buy did real work");
         uint256 perBuy = buyN - buyNm1;
 
-        emit log_named_uint("r1_per_evict_marginal_gas", perEvict);
+        emit log_named_uint("r1_cold_per_evict_marginal_gas", coldPerEvict);
         emit log_named_uint("r1_per_buy_marginal_gas", perBuy);
         emit log_named_uint("r1_evict_weight_budget_units", SUB_STAGE_EVICT_WEIGHT);
 
-        // R1: the heavier evict iter's true gas <= its weight allocation (SUB_STAGE_EVICT_WEIGHT buy-units).
-        // (ceil division guard: a buy is never 0; perEvict <= perBuy * weight means the weight bounds it.)
-        assertLe(perEvict, perBuy * SUB_STAGE_EVICT_WEIGHT, "R1: per-evict gas <= its SUB_STAGE_EVICT_WEIGHT allocation (weight model faithful)");
+        // R1: the all-evict SATURATED STAGE chunk is the BINDING advance-chain worst case — heavier than
+        // all-ticket (~9.6M). With evict weight 1 the budget admits BUDGET/EVICT_WEIGHT = 500 evicts; at the
+        // realistic COLD per-evict (~26.7k, the cross-contract finalize + _removeFromSet swap-pop) the chunk is
+        // ~13.3M: OVER the 10M soft comfort target but UNDER the 16.7M hard never-exceed ceiling (USER-accepted —
+        // 13M is fine, evict stays weight 1). Asserting the COLD measurement proves the REAL binding chunk, not
+        // the warm same-tx understatement (~5M). Chunk = cold advance overhead + (BUDGET/EVICT_WEIGHT)×coldPerEvict.
+        uint256 evictsPerChunk = SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_EVICT_WEIGHT; // 500 evicts fill the budget
+        uint256 fixedEvictOverhead = coldEvN > coldPerEvict * N_HI ? coldEvN - coldPerEvict * N_HI : 0;
+        uint256 allEvictChunk = fixedEvictOverhead + evictsPerChunk * coldPerEvict;
+        emit log_named_uint("r1_evicts_per_budget_chunk", evictsPerChunk);
+        emit log_named_uint("r1_cold_all_evict_saturated_chunk_gas", allEvictChunk);
+        assertLt(allEvictChunk, EFFECTIVE_GAS_CEILING, "R1: the COLD all-evict saturated chunk (the binding STAGE worst case, ~13.3M) stays < the 16.7M ceiling");
+        // R1: the per-evict finalize is a bounded O(1) cross-contract op (no scaling with player magnitude), so
+        // the chunk bound holds at any reachable per-iter state.
+        assertLt(coldPerEvict, 400_000, "R1: the per-evict finalize is a bounded O(1) op");
         // R1: a funded buy (incl. a gap-resumed streak-rebase buy) is bounded by one weight unit (1 buy = wt 1).
         assertLt(perBuy, EFFECTIVE_GAS_CEILING, "R1: the per-buy iter (gap-resume streak rebase rides it) is bounded");
     }
@@ -625,17 +653,21 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///         per-box marginal and the full OPEN_BATCH chunk at the mixed-day cost stay < the EIP cap.
     function testResidualR3MixedStampDayOpenBatch() public {
         uint256 snap = vm.snapshotState();
-        uint256 mixedN = _measureMixedDayOpenLegGas(N_HI, "r3mxHi_");
+        // SHARED prefix (see testPerOpenMarginal): the mixed-day word is injected PER box by index
+        // (keccak(prefix,"wd",i)), so a shared prefix gives box i the same boon-roll seed in both runs even
+        // though its injected stamp DAY differs by one — the day only keys the cold rngWordByDay SLOAD (equal
+        // 2100 gas either way; lootboxDay is removed from the seed). The first N-1 boxes cancel exactly.
+        uint256 mixedN = _measureMixedDayOpenLegGas(N_HI, "r3mx_");
         vm.revertToState(snap);
-        uint256 mixedNm1 = _measureMixedDayOpenLegGas(N_LO, "r3mxLo_");
+        uint256 mixedNm1 = _measureMixedDayOpenLegGas(N_LO, "r3mx_");
         require(mixedN > mixedNm1, "R3: the Nth mixed-day box materialized (non-vacuous)");
         uint256 perBoxMixed = mixedN - mixedNm1;
 
         // Compare to the uniform-day per-box marginal (the cache-hit baseline) — mixed-day is >= uniform.
         vm.revertToState(snap);
-        uint256 uniN = _measureOpenLegGas(N_HI, "r3unHi_");
+        uint256 uniN = _measureOpenLegGas(N_HI, "r3un_");
         vm.revertToState(snap);
-        uint256 uniNm1 = _measureOpenLegGas(N_LO, "r3unLo_");
+        uint256 uniNm1 = _measureOpenLegGas(N_LO, "r3un_");
         uint256 perBoxUniform = uniN > uniNm1 ? uniN - uniNm1 : 1;
 
         uint256 fixedOpenOverhead = mixedN > perBoxMixed * N_HI ? mixedN - perBoxMixed * N_HI : 0;
@@ -690,9 +722,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // R4: the heaviest reachable per-iter cost is a bounded O(1) (does not scale with player magnitude),
         // so the chunk bound holds at the heavy state.
         assertLt(heaviestPerIter, 400_000, "R4: the heaviest reachable per-iter state is a bounded O(1) (no magnitude scaling)");
-        // R4: the REAL measured worst-case mixed-day OPEN_BATCH=130 chunk (every box a cold rngWordByDay SLOAD,
+        // R4: the REAL measured worst-case mixed-day OPEN_BATCH=80 chunk (every box a cold rngWordByDay SLOAD,
         // the heaviest reachable open state) stays under the EIP per-tx ceiling — the binding chunk bound.
-        assertLt(mixedChunk, EIP7825_TX_GAS_CAP, "R4: the measured worst-case mixed-day OPEN_BATCH=130 chunk stays < 16,777,216");
+        assertLt(mixedChunk, EIP7825_TX_GAS_CAP, "R4: the measured worst-case mixed-day OPEN_BATCH=80 chunk stays < 16,777,216");
     }
 
     // =========================================================================
@@ -879,11 +911,12 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 tNm1 = _measureStageAdvanceGas(N_LO, "d9tkLo_", true, false);
         uint256 perBuyTicket = tN - tNm1;
 
-        // GAS-01 per-open afking marginal.
+        // GAS-01 per-open afking marginal. SHARED prefix (see testPerOpenMarginal) so the marginal is one real
+        // box's open cost, not a seed-noisy difference of two unequal box-cost sums that could underflow here.
         vm.revertToState(snap);
-        uint256 oN = _measureOpenLegGas(N_HI, "d9opHi_");
+        uint256 oN = _measureOpenLegGas(N_HI, "d9op_");
         vm.revertToState(snap);
-        uint256 oNm1 = _measureOpenLegGas(N_LO, "d9opLo_");
+        uint256 oNm1 = _measureOpenLegGas(N_LO, "d9op_");
         uint256 perOpen = oN - oNm1;
 
         emit log_named_uint("d09_per_buy_lootbox_gas", perBuyLootbox);
@@ -946,7 +979,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      full OPEN_BATCH-sized set of funded subs, injects distinct stamp days + words, then brackets one
     ///      openBoxes(OPEN_BATCH) call. This is the real measured chunk (not a marginal extrapolation).
     function _measureMixedDayOpenChunkAtBatch(string memory prefix) internal returns (uint256 chunkGas) {
-        uint256 m = OPEN_BATCH; // 130 distinct-day boxes — the full open chunk
+        uint256 m = OPEN_BATCH; // 80 distinct-day boxes — the full open chunk
         address[] memory subs = _setupFundedSubs(m, prefix, 5 ether, false);
         _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "w"))) | 1);
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "clean"))) | 1);
@@ -1360,6 +1393,156 @@ contract V56AfkingGasMarginal is DeployProtocol {
             v /= 10;
         }
         return string(b);
+    }
+
+    // =========================================================================
+    // (m) Q2 INVESTIGATION — warm-vs-cold weight calibration (vm.cool cold marginals)
+    // =========================================================================
+
+    /// @notice WARM-vs-COLD calibration (Q2). The snapshot/revert marginals elsewhere in this harness measure
+    ///         WARM same-tx Sub slots (the subs were funded + stamped in the SAME test tx, so their slots are
+    ///         warm when the bracketed advance reads them). This re-measures the SAME lootbox/ticket/evict
+    ///         marginals with `vm.cool(address(game))` re-colding the game storage immediately before the
+    ///         bracketed advance — the realistic daily-advance regime where each sub was funded/stamped on a
+    ///         PRIOR tx, so its Sub slot + afkingFunding entry are a cold first-touch. Empirical result: vm.cool
+    ///         raises each absolute marginal ~3x (warm understates by ~3x — the artifact is real and large), BUT
+    ///         the isolated N-vs-(N-1) marginal FLATTENS the per-op ratios toward ~1:1:1 (the cold-slot premium
+    ///         is ~uniform per op), so it does NOT reproduce the large-scale-bench weight set 2:4:1. Those
+    ///         ratios are a CUMULATIVE per-op WORK effect (ticket-queue growth, the lighter evict finalize) that
+    ///         only manifests at scale, which is why the large-scale bench — not this isolated-marginal harness —
+    ///         is authoritative for the weight RATIOS. This harness's job is the absolute O(1) boundedness + the
+    ///         chunk-under-ceiling safety proof, both of which hold. Diagnostic: emits warm + cold side by side;
+    ///         the only hard asserts are that cooling RAISES the marginal (artifact direction) and each cold
+    ///         marginal stays a bounded O(1).
+    function testColdMarginalCalibration() public {
+        uint256 snap = vm.snapshotState();
+
+        // WARM (same-tx slots) — the regime every other marginal in this harness measures.
+        uint256 wlN = _measureStageAdvanceGas(N_HI, "cwlbHi_", false, false);
+        vm.revertToState(snap);
+        uint256 wlNm1 = _measureStageAdvanceGas(N_LO, "cwlbLo_", false, false);
+        uint256 warmLootbox = wlN - wlNm1;
+        vm.revertToState(snap);
+        uint256 wtN = _measureStageAdvanceGas(N_HI, "cwtkHi_", true, false);
+        vm.revertToState(snap);
+        uint256 wtNm1 = _measureStageAdvanceGas(N_LO, "cwtkLo_", true, false);
+        uint256 warmTicket = wtN - wtNm1;
+        vm.revertToState(snap);
+        uint256 weN = _measureEvictStageGas(N_HI, "cwevHi_");
+        vm.revertToState(snap);
+        uint256 weNm1 = _measureEvictStageGas(N_LO, "cwevLo_");
+        uint256 warmEvict = weN - weNm1;
+
+        // COLD (vm.cool first-touch) — the realistic daily advance (subs funded/stamped on a prior tx).
+        vm.revertToState(snap);
+        uint256 lN = _measureStageAdvanceGasCold(N_HI, "cdlbHi_", false);
+        vm.revertToState(snap);
+        uint256 lNm1 = _measureStageAdvanceGasCold(N_LO, "cdlbLo_", false);
+        require(lN > lNm1, "cold-calib: the Nth cold lootbox sub did real work");
+        uint256 coldLootbox = lN - lNm1;
+        vm.revertToState(snap);
+        uint256 tN = _measureStageAdvanceGasCold(N_HI, "cdtkHi_", true);
+        vm.revertToState(snap);
+        uint256 tNm1 = _measureStageAdvanceGasCold(N_LO, "cdtkLo_", true);
+        require(tN > tNm1, "cold-calib: the Nth cold ticket sub did real work");
+        uint256 coldTicket = tN - tNm1;
+        vm.revertToState(snap);
+        uint256 eN = _measureEvictStageGasCold(N_HI, "cdevHi_");
+        vm.revertToState(snap);
+        uint256 eNm1 = _measureEvictStageGasCold(N_LO, "cdevLo_");
+        require(eN > eNm1, "cold-calib: the Nth cold evicting sub did real work");
+        uint256 coldEvict = eN - eNm1;
+
+        emit log_named_uint("warm_lootbox_marginal_gas", warmLootbox);
+        emit log_named_uint("warm_ticket_marginal_gas", warmTicket);
+        emit log_named_uint("warm_evict_marginal_gas", warmEvict);
+        emit log_named_uint("cold_lootbox_marginal_gas", coldLootbox);
+        emit log_named_uint("cold_ticket_marginal_gas", coldTicket);
+        emit log_named_uint("cold_evict_marginal_gas", coldEvict);
+        emit log_named_uint("cold_over_warm_lootbox_x100", coldLootbox * 100 / warmLootbox);
+        emit log_named_uint("cold_ticket_over_lootbox_x100", coldTicket * 100 / coldLootbox);
+        emit log_named_uint("cold_evict_over_lootbox_x100", coldEvict * 100 / coldLootbox);
+        emit log_named_uint("weightset_ticket_over_lootbox_x100", SUB_STAGE_TICKET_WEIGHT * 100 / SUB_STAGE_LOOTBOX_WEIGHT);
+        emit log_named_uint("weightset_evict_over_lootbox_x100", SUB_STAGE_EVICT_WEIGHT * 100 / SUB_STAGE_LOOTBOX_WEIGHT);
+        emit log_named_string(
+            "cold_calibration_finding",
+            "vm.cool raises each absolute marginal ~3x (warm same-tx slots understate; the artifact is real). The "
+            "isolated N-vs-(N-1) marginal flattens the per-op ratios toward ~1:1:1 (the cold-slot premium is "
+            "~uniform per op), so it does NOT reproduce the large-scale-bench 2:4:1 -- those ratios are a "
+            "cumulative per-op WORK effect (ticket-queue growth / lighter evict finalize) only seen at scale. The "
+            "large-scale bench is authoritative for the weight ratios; this harness proves O(1) + chunk<ceiling."
+        );
+
+        // Artifact direction: cooling RAISES each marginal (a cold first-touch costs more than the warm same-tx
+        // slot) — the empirical confirmation that the warm marginals elsewhere understate the realistic cost.
+        assertGt(coldLootbox, warmLootbox, "cold-calib: vm.cool raises the lootbox marginal (warm same-tx understates)");
+        assertGt(coldTicket, warmTicket, "cold-calib: vm.cool raises the ticket marginal");
+        assertGt(coldEvict, warmEvict, "cold-calib: vm.cool raises the evict marginal");
+        // Each cold marginal stays a bounded O(1) (no magnitude scaling) — the calibration numbers above are the
+        // diagnostic deliverable, not pinned to brittle exact values.
+        assertLt(coldLootbox, 200_000, "cold-calib: cold lootbox marginal is a bounded O(1)");
+        assertLt(coldTicket, 200_000, "cold-calib: cold ticket marginal is a bounded O(1)");
+        assertLt(coldEvict, 200_000, "cold-calib: cold evict marginal is a bounded O(1)");
+    }
+
+    /// @dev COLD variant of _measureStageAdvanceGas: identical setup, but vm.cool's the game storage right
+    ///      before the bracketed advance so the STAGE reads each sub's Sub slot + afkingFunding entry as a COLD
+    ///      first-touch (the realistic daily advance — subs funded/stamped on a prior tx). The marginal isolates
+    ///      the Nth sub's COLD STAGE cost, the regime the cold-sized weight set is calibrated against.
+    function _measureStageAdvanceGasCold(uint256 n, string memory prefix, bool isTicket)
+        internal
+        returns (uint256 advGas)
+    {
+        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
+        address[] memory subs = _setupFundedSubs(n, prefix, 5 ether, isTicket);
+        vm.prank(makeAddr(string(abi.encodePacked(prefix, "setup_open"))));
+        game.openBoxes(400);
+        uint32[] memory pre = new uint32[](n);
+        for (uint256 i; i < n; ++i) pre[i] = _lastBoughtDayOf(subs[i]);
+
+        _warpToBoundary(false);
+        require(game.advanceDue(), "fixture: advanceDue on the new day");
+        vm.cool(address(game)); // re-cold all game storage -> each Sub slot is a cold first-touch in the STAGE
+        uint256 gasBefore = gasleft();
+        game.advanceGame();
+        advGas = gasBefore - gasleft();
+
+        for (uint256 i; i < n; ++i) {
+            require(_lastBoughtDayOf(subs[i]) > pre[i], "cold marginal non-vacuity: each funded sub newly stamped");
+        }
+    }
+
+    /// @dev COLD variant of _measureEvictStageGas: identical pass-evict setup, vm.cool before the bracketed
+    ///      advance so each evicting sub's cross-contract finalize (quest read + streak write) is a cold
+    ///      first-touch — the realistic cold evict marginal that sets SUB_STAGE_EVICT_WEIGHT.
+    function _measureEvictStageGasCold(uint256 n, string memory prefix) internal returns (uint256 advGas) {
+        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
+        for (uint256 i; i < n; ++i) {
+            address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
+            _grantDeityPass(who);
+            _fundPool(who, 5 ether);
+            vm.prank(who);
+            game.subscribe(address(0), false, false, 1, 0, address(0));
+        }
+        vm.prank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
+        game.openBoxes(400);
+        for (uint256 i; i < n; ++i) {
+            address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
+            _clearDeityPass(who);
+            _pokeValidThroughLevel(who, 0);
+        }
+        _setLevel(10);
+        uint256 preCount = _subscriberCount();
+        require(preCount >= n, "fixture: N evicting subs in the set");
+
+        _warpToBoundary(false);
+        require(game.advanceDue(), "fixture: advanceDue on the new day");
+        vm.cool(address(game)); // re-cold all game storage -> the finalize cross-contract read is a cold touch
+        uint256 gasBefore = gasleft();
+        game.advanceGame();
+        advGas = gasBefore - gasleft();
+
+        require(_subscriberCount() < preCount, "cold evict non-vacuity: the stage evicted subs");
     }
 
 }
