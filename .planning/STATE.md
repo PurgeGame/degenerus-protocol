@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v56.0
-milestone_name: AfKing Everyday-Gas Minimization
-status: complete
-last_updated: "2026-06-04T06:30:00.000Z"
-last_activity: 2026-06-04 -- ✅ v56.0 SHIPPED — 357-04 CLOSURE FLIP COMPLETE (`1bd1366b`, pushed; origin/main == HEAD). Adjudicated the post-c9b5d20d SIXTH gate `1e7a646d` in-scope → re-froze the subject + reconciled (gas re-bench 16/16, freeze+solvency HOLD, NON-WIDENING STRICT, FINDINGS §10). Resolved the closure signal `MILESTONE_V56_AT_HEAD_1e7a646d44da4ee26375edd0b006274821fef73e` across the atomic 5-doc flip + audit/FINDINGS-v56.0.md (chmod 444). 0 NEW_FINDINGS (3 resolved-in-phase: F-356-01 + slot-0 churn advisory + D-11 level-0 gap). All 5 phases / 24 plans Complete.
+milestone: v57.0
+milestone_name: Small-Feature Bundle + Day-Type UDVT Refactor
+status: planning
+last_updated: "2026-06-04T08:06:09.687Z"
+last_activity: 2026-06-04
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 24
-  completed_plans: 24
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -32,14 +32,10 @@ See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 357 (terminal-delta-audit-3-skill-genuine-parallel-adversarial-sw) — ✅ COMPLETE
-Plan: 357-00 + 357-00b + 357-01 + 357-02 + 357-00d + 357-03 + **357-04 COMPLETE** (all 4 waves done — delta-audit + 3-skill genuine-PARALLEL adversarial sweep + XMODEL close + `audit/FINDINGS-v56.0.md` + the atomic 5-doc closure flip; adjudicated the post-freeze SIXTH gate `1e7a646d` in-scope → re-froze + reconciled)
-Status: ✅ v56.0 SHIPPED + PUSHED — Phase 357 TERMINAL Complete (closure signal `MILESTONE_V56_AT_HEAD_1e7a646d44da4ee26375edd0b006274821fef73e`; subject frozen `1e7a646d`); closure flip `1bd1366b` pushed to origin/main (origin/main == HEAD)
-Last activity: 2026-06-03 -- 357-02 adversarial sweep COMPLETE @ HEAD'' (61315ecd) — the 3-skill genuine-PARALLEL sweep (`/contract-auditor` + `/economic-analyst` + `/zero-day-hunter`; `/degen-skeptic` = the dual-gate filter) + the Codex XMODEL close (clean; Gemini attempted-partial per D-03) assembled into `357-02-ADVERSARIAL-LOG.md` (§A/§B/§C/§D/§E). **0 FINDING_CANDIDATE** across all 3 Claude skills + Codex (18 NEGATIVE-VERIFIED + 13 SAFE_BY_DESIGN charged rows); the ONLY new finding = **F-356-01 RESOLVED-AT-357** (not a live candidate) — clean v55-style close. **1 ADVISORY** (ZDH-7: the NEW-run subscribe cover-buy double-accrues the flat 100-BURNIE slot-0 reward — guards only `done[0]`, missing the `lastAutoBoughtDay>=today` skip the STAGE `:954` + active-sub re-sub `:395` carry; EV-NEGATIVE [~0.001 ETH non-extractable BURNIE vs ~400k+ gas + a funded ≥0.01-ETH buy/cycle, 7% affiliateBase routes to the upline]) — explicitly NOT a finding, surfaced to 357-03/357-04 with the optional one-line `if (s.lastAutoBoughtDay == uint24(today)) skip` hardening (default leaning: cosmetic, USER decides fold-vs-defer). Premature-advance-INERT HOLDS; `_bountyEligible` = sound pay-predicate (not a security boundary); the passless cap-occupancy + unfunded free-rider vectors CONFIRMED CLOSED (SEC-01 strengthened). `git diff 61315ecd HEAD -- contracts/` EMPTY (`357-02-ADVERSARIAL-LOG.md`, commit `851409a4`)
-
-> **⚓ RE-FREEZE ANCHOR (CURRENT) — the audit subject is HEAD'''' = `77d8bc883048b3ba4213f94fc2ac5d830ba3f4a3`** (the FOURTH 357 contract gate). Two further subscribe-hardening gates layered on HEAD'': **HEAD''' `7b0b2a0b`** (the NEW-run slot-0 per-day idempotency guard `GameAfkingModule.sol:451` — closes the ZDH-7 churn advisory) + **HEAD'''' `77d8bc88`** (the USER-caught D-11 LEVEL-0 zero-horizon rejection `:372` `(validThroughLevel == 0 || …)` — closes a level-0 passless gap the 357-02 sweep MISSED, having run D-11 only at level ≥ 1). 357-00d (commits `30ea4b89`+`519f6e00`+`b541c445`) reconciled the NON-WIDENING ledger §10 to HEAD'''' (**573/134/103**; `live − union == ∅` AND `union − live == ∅` HOLD — the live 134 == the §2 134-name `453f8073` union BY NAME; SOLVENCY-01 leg-1 byte-anchor held, debit relocated `:690-691`→`:702-703` only), extended V56SubHardening 17→22 (the churn-idempotency + level-0 pass-gate proofs), `vm.skip`-dropped the 4 `AfKingSubscription` passless-at-level-0 supersession reds (8/8 GREEN @ HEAD'' → `NoPass()` @ HEAD'''', §3b/§8c discipline, re-proven GREEN), and recorded both items RESOLVED-IN-PHASE in 357-01-DELTA-AUDIT §3.8 + 357-02-ADVERSARIAL-LOG (probe-7 RESOLVED + probe-11 §B.3-addendum). **ZERO contracts/*.sol mutation in 357-00d; `git diff 77d8bc88 HEAD -- contracts/` EMPTY.** Downstream 357-03/04 re-freeze against HEAD'''' (NOT HEAD'' `61315ecd`). **Clean close: THREE resolved-in-phase items (F-356-01 + slot-0 advisory + level-0 D-11 gap), 0 unresolved FINDING_CANDIDATE.**
-
-> **⚓ RE-FREEZE ANCHOR (prior, HEAD'') — the audit subject WAS HEAD'' = `61315ecd0d617e5ece386676aaf452282331ebdf`** (the SECOND 357 contract gate, the advance-incentive redesign: `advanceGame` PURE LIVENESS [`MustMintToday` removed] + the must-mint ladder → SOFT pay-gate `_bountyEligible`/`bountyEligible(addr)` view + `mintBurnie` pays the advance bounty only when `mult>0 && eligible` + Vault+sDGNRS→`mintBurnie`). 357-00b (commits `056e78c8`+`1d5fd872`+`48fab561`) reconciled the NON-WIDENING ledger §9 to HEAD'' (567/133/99; `live − union == ∅` HOLDS — 133 ⊆ the §2 134-name 453f8073 union, empty set-diff; 134→133 = run-variance in the non-deterministic Bucket A/F + vm.assume cluster; SOLVENCY-01 leg-1 byte-anchor held), rewrote GovernanceGating GATE-01..04 to the soft pay-gate model (6/6 GREEN), and extended V56SubHardening 11→17 (advance-soft-gate proofs). **ZERO contracts/*.sol mutation in 357-00b; `git diff 61315ecd HEAD -- contracts/` EMPTY.** Downstream 357-01/02/03/04 re-freeze against HEAD'' (NOT HEAD' `ac5f1e03`).
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-06-04 — Milestone v57.0 started
 
 ## 🛠 v56 CARRIED FINDING + USER HARDENING — the 357-00 contract gate (3 changes, autonomous:false)
 
