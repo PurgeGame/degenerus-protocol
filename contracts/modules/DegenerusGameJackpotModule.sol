@@ -1938,15 +1938,19 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     // Small lootbox: award immediately (2 rolls, probabilistic targeting).
                     // JackpotTicketWin is emitted per-roll inside _jackpotTicketRoll
                     // with the real targetLevel and scaled ticketCount.
-                    rngWord = _awardJackpotTickets(
+                    uint256 cd;
+                    (rngWord, cd) = _awardJackpotTickets(
                         winner,
                         lootboxPortion,
                         lvl,
                         rngWord
                     );
+                    claimableDelta += cd;
                 } else {
-                    // Large lootbox: defer to claim (whale pass equivalent)
-                    _queueWhalePassClaimCore(winner, lootboxPortion);
+                    // Large lootbox: defer to claim (whale pass equivalent). The sub-half-pass
+                    // remainder is folded into claimableDelta so the caller's memFuture debit
+                    // and claimablePool credit both move it out of futurePool exactly once.
+                    claimableDelta += _queueWhalePassClaimCore(winner, lootboxPortion);
                     emit JackpotWhalePassWin(
                         winner,
                         lvl,
@@ -1965,7 +1969,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 // JackpotTicketWin is emitted per-roll inside _jackpotTicketRoll;
                 // whale-pass fallback (amount > LOOTBOX_CLAIM_THRESHOLD) emits
                 // JackpotWhalePassWin inside _awardJackpotTickets.
-                rngWord = _awardJackpotTickets(winner, amount, lvl, rngWord);
+                uint256 cd;
+                (rngWord, cd) = _awardJackpotTickets(winner, amount, lvl, rngWord);
+                claimableDelta += cd;
             }
 
             unchecked {
@@ -1973,8 +1979,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
         }
 
-        // Refund + lootbox + whale pass ETH stays in futurePool implicitly:
-        // caller only deducts claimableDelta from memFuture. No storage write needed.
+        // Ticket-leg lootbox ETH stays in futurePool implicitly. The ETH halves and the
+        // whale-pass remainders are returned in claimableDelta, which the caller deducts
+        // from memFuture and credits to claimablePool in one batch. No storage write here.
     }
 
     /**
@@ -1988,28 +1995,30 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
      * @param amount ETH amount for ticket conversion.
      * @param minTargetLevel Minimum target level for tickets.
      * @param entropy RNG state.
-     * @return Updated entropy state.
+     * @return newEntropy Updated entropy state.
+     * @return claimableDelta Wei credited to claimableWinnings on the whale-pass remainder leg
+     *         (0 on the ticket-roll legs), folded by the caller into futurePool→claimablePool.
      */
     function _awardJackpotTickets(
         address winner,
         uint256 amount,
         uint24 minTargetLevel,
         uint256 entropy
-    ) private returns (uint256) {
+    ) private returns (uint256 newEntropy, uint256 claimableDelta) {
         // Large amounts (> 5 ETH): defer to whale pass claim system
         if (amount > LOOTBOX_CLAIM_THRESHOLD) {
-            _queueWhalePassClaimCore(winner, amount);
+            claimableDelta = _queueWhalePassClaimCore(winner, amount);
             emit JackpotWhalePassWin(
                 winner,
                 minTargetLevel,
                 amount / HALF_WHALE_PASS_PRICE
             );
-            return entropy;
+            return (entropy, claimableDelta);
         }
 
         // Very small amounts (<= 0.5 ETH): single roll
         if (amount <= SMALL_LOOTBOX_THRESHOLD) {
-            return _jackpotTicketRoll(winner, amount, minTargetLevel, entropy);
+            return (_jackpotTicketRoll(winner, amount, minTargetLevel, entropy), 0);
         }
 
         // Medium amounts (0.5-5 ETH): split in half, 2 rolls
@@ -2032,7 +2041,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             entropy
         );
 
-        return entropy;
+        return (entropy, 0);
     }
 
     /**

@@ -355,7 +355,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 c.pendingBurnie = 0;
                 if (!presaleOver) {
                     uint256 credit = (owed * 0.0025 ether) / 100;
-                    if ((c.flags & FLAG_USE_TICKETS) != 0) credit /= 2;
+                    if ((c.flags & FLAG_USE_TICKETS) != 0)
+                        credit /= (c.dailyQuantity >= 10 ? 3 : 2);
                     presaleBoxCredit[subscriber] += credit;
                 }
                 coinflip.creditFlip(subscriber, owed * 1 ether);
@@ -390,6 +391,22 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // sub is mid-afking-run (afkingActive set) — a re-subscribe CONTINUES that run; 0 means
         // new / cancelled / evicted (afkingActive cleared by a prior finalize) — a fresh run.
         bool wasActive = s.dailyQuantity != 0;
+
+        // Settle the prior run's pendingBurnie under its CURRENT flag + dailyQuantity before the
+        // overwrite below, so the presale-box credit keys on the state in force during accrual.
+        if (wasActive) {
+            uint256 owedPrev = uint256(s.pendingBurnie); // whole BURNIE
+            if (owedPrev != 0) {
+                s.pendingBurnie = 0;
+                if (!presaleOver) {
+                    uint256 credit = (owedPrev * 0.0025 ether) / 100;
+                    if ((s.flags & FLAG_USE_TICKETS) != 0)
+                        credit /= (s.dailyQuantity >= 10 ? 3 : 2);
+                    presaleBoxCredit[subscriber] += credit;
+                }
+                coinflip.creditFlip(subscriber, owedPrev * 1 ether);
+            }
+        }
 
         s.dailyQuantity = dailyQuantity;
         if (drainGameCreditFirst) s.flags |= FLAG_DRAIN_FIRST;
@@ -876,7 +893,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         //     day is older than yesterday (matching the decay-on-read), then advance the
         //     funded-day high-water mark afkCoveredThroughDay.
         {
-            uint256 base = (_ethToBurnie(amount, mp) * 7) / 100;
+            uint256 base = ((_ethToBurnie(amount, mp) * 7) / 100) / 1 ether;
             if (base != 0) {
                 uint256 newBase = uint256(sub.affiliateBase) + base;
                 if (newBase > 100_000_000) newBase = 100_000_000;
@@ -1593,11 +1610,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             if (owed != 0) {
                 s.pendingBurnie = 0; // CEI: zero before the external credit
                 if (presaleLive) {
-                    // A ticket sub's pendingBurnie also carries the ticket buyer-bonus on top of
-                    // the flat slot-0, so it overstates the mint spend — halve the ticket-sub grant
-                    // to net it back toward the slot-0-implied spend.
+                    // A ticket sub's pendingBurnie also carries the quantity-scaling buyer-bonus
+                    // on top of the flat slot-0, overstating the mint spend — divide the ticket
+                    // grant back toward it: /3 for heavy buyers (dailyQuantity >= 10, where the
+                    // bonus doubles to 20%), else /2.
                     uint256 credit = (owed * 0.0025 ether) / 100;
-                    if ((s.flags & FLAG_USE_TICKETS) != 0) credit /= 2;
+                    if ((s.flags & FLAG_USE_TICKETS) != 0)
+                        credit /= (s.dailyQuantity >= 10 ? 3 : 2);
                     presaleBoxCredit[player] += credit;
                 }
                 coinflip.creditFlip(player, owed * 1 ether); // whole → base units

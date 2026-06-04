@@ -15,11 +15,9 @@ interface IDegenerusVaultOwner {
 ///      (5-component scoring: mint streak, mint count, quest streak, affiliate bonus, deity/whale pass)
 ///      and mint streak helpers (credits on completed 1x price ETH quest).
 abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
-    /// @dev Packed mint data field storing last level credited for mint streak (24 bits).
-    uint256 internal constant MINT_STREAK_LAST_COMPLETED_SHIFT = 160;
     /// @dev Mask for clearing last-completed + streak fields in one pass.
     uint256 private constant MINT_STREAK_FIELDS_MASK =
-        (BitPackingLib.MASK_24 << MINT_STREAK_LAST_COMPLETED_SHIFT) |
+        (BitPackingLib.MASK_24 << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) |
         (BitPackingLib.MASK_24 << BitPackingLib.LEVEL_STREAK_SHIFT);
 
     /// @dev Soft pay-gate for the mintBurnie advance bounty: is `who` entitled to the
@@ -53,7 +51,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
                 (mintData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
                     BitPackingLib.MASK_24
             );
-            if (frozenUntilLevel > level) return true;
+            if (frozenUntilLevel >= level) return true;
         }
 
         // Active afking subscriber — the daily auto-buy is participation that never
@@ -69,7 +67,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         if (player == address(0)) return;
         uint256 mintData = mintPacked_[player];
         uint24 lastCompleted = uint24(
-            (mintData >> MINT_STREAK_LAST_COMPLETED_SHIFT) & BitPackingLib.MASK_24
+            (mintData >> BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) & BitPackingLib.MASK_24
         );
         if (lastCompleted == mintLevel) return;
 
@@ -91,7 +89,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         }
 
         uint256 updated = (mintData & ~MINT_STREAK_FIELDS_MASK) |
-            (uint256(mintLevel) << MINT_STREAK_LAST_COMPLETED_SHIFT) |
+            (uint256(mintLevel) << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) |
             (uint256(newStreak) << BitPackingLib.LEVEL_STREAK_SHIFT);
         mintPacked_[player] = updated;
     }
@@ -102,7 +100,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         uint24 currentMintLevel
     ) internal view returns (uint24 streak) {
         uint256 packed = mintPacked_[player];
-        uint256 lastCompleted = (packed >> MINT_STREAK_LAST_COMPLETED_SHIFT) &
+        uint256 lastCompleted = (packed >> BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) &
             BitPackingLib.MASK_24;
         if (lastCompleted == 0) return 0;
         if (uint256(currentMintLevel) > lastCompleted + 1) return 0;
@@ -171,7 +169,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             uint256 d = uint256(L) - uint256(cl); // reverts if L < cl
             if (d < 6 || d > 100) revert E();
             uint256 n = quantities[i];
-            if (n == 0) revert E();
+            if (n == 0 || n > type(uint32).max) revert E();
             uint256 faceWei = PriceLookupLib.priceForLevel(L) * n;
             totalFaceWei += faceWei;
             totalBudget +=
@@ -259,7 +257,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         uint8 bundleType = uint8(
             (packed >> BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT) & 3
         );
-        bool passActive = frozenUntilLevel > currLevel &&
+        bool passActive = frozenUntilLevel >= currLevel &&
             (bundleType == 1 || bundleType == 3);
 
         uint256 bonusBps;
@@ -307,7 +305,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
 
             if (hasDeityPass) {
                 bonusBps += DEITY_PASS_ACTIVITY_BONUS_BPS;
-            } else if (frozenUntilLevel > currLevel) {
+            } else if (frozenUntilLevel >= currLevel) {
                 // Whale pass bonus: varies by bundle type (only active while frozen)
                 if (bundleType == 1) {
                     bonusBps += 1000; // +10% for 10-level bundle

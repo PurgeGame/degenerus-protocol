@@ -288,11 +288,11 @@ contract DegenerusGameMintModule is
             (prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
                 BitPackingLib.MASK_24
         );
-        bool isFrozen = frozenUntilLevel > 0 && lvl < frozenUntilLevel;
+        bool isFrozen = frozenUntilLevel > 0 && lvl <= frozenUntilLevel;
 
         // If frozen, skip updating total (it's pre-set by whale bundle)
         // If we've reached the frozen level, clear the flag and resume normal tracking
-        if (frozenUntilLevel > 0 && lvl >= frozenUntilLevel) {
+        if (frozenUntilLevel > 0 && lvl > frozenUntilLevel) {
             // Clear frozen flag and whale bundle type - resume normal tracking from here
             data = BitPackingLib.setPacked(
                 data,

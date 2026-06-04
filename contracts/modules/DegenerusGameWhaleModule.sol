@@ -299,6 +299,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             BitPackingLib.MASK_32
         );
 
+        // Front-load the LEVEL mint streak by the same freeze delta (survives pass expiry).
+        data = _withPassStreakFrontLoad(
+            data,
+            ticketStartLevel,
+            newFrozenLevel,
+            levelsToAdd
+        );
+
         mintPacked_[buyer] = data;
 
         // Queue tickets: 40*quantity/lvl for bonus levels (passLevel to 10), 2*quantity/lvl for the rest
@@ -372,7 +380,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      - Awards a lootbox equal to 10% of pass value.
      *      - Boon purchases apply a discount (default 10%) to the payment amount.
      * @param buyer The address receiving the pass.
-     * @custom:reverts E When level is not 0-2, x9 (excl. x99), or x0 (excl. terminal x00) and no boon, pass has 8+ levels remaining, or msg.value is incorrect.
+     * @custom:reverts E When level is not 0-2, x9 (excl. x99), x0, or a century x00 in its purchase phase (and no boon), pass has 8+ levels remaining, or msg.value is incorrect.
      */
     function purchaseLazyPass(address buyer) external payable {
         _purchaseLazyPass(buyer);
@@ -406,12 +414,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
             boonDiscountBps = 0;
         }
-        // Purchasable at levels 0-2, x9 (9,19,...; not x99), or x0 (10,20,...; not the
-        // terminal x00 whose 10-level window would overrun level 100), or with a boon.
+        // Purchasable at levels 0-2, x9 (9,19,...; not x99), x0 (10,20,...), a century x00
+        // during its purchase phase (!jackpotPhaseFlag) — its x01-x10 window holds no century
+        // level and never overruns — or with a boon. Blocked during the x00 jackpot phase.
         if (
             currentLevel > 2 &&
             (currentLevel % 10 != 9 || currentLevel % 100 == 99) &&
-            (currentLevel % 10 != 0 || currentLevel % 100 == 0) &&
+            (currentLevel % 10 != 0 ||
+                (currentLevel % 100 == 0 && jackpotPhaseFlag)) &&
             !hasValidBoon
         ) revert E();
 

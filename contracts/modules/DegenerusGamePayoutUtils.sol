@@ -41,9 +41,16 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
         _creditClaimable(ContractAddresses.SDGNRS, sdgnrsShare);
     }
 
-    /// @dev Queue deferred whale pass claims for large payouts.
-    function _queueWhalePassClaimCore(address winner, uint256 amount) internal {
-        if (winner == address(0) || amount == 0) return;
+    /// @dev Queue deferred whale pass claims for large payouts. Credits the sub-half-pass
+    ///      remainder to claimableWinnings and returns it (mirrors _addClaimableEth): the
+    ///      caller folds it into its claimableDelta so the single claimablePool bump and the
+    ///      source-pool debit both cover it exactly once, preserving the solvency identity.
+    /// @return remainderCredited Wei credited to claimableWinnings (0 if none) for the caller to fold.
+    function _queueWhalePassClaimCore(
+        address winner,
+        uint256 amount
+    ) internal returns (uint256 remainderCredited) {
+        if (winner == address(0) || amount == 0) return 0;
 
         uint256 fullHalfPasses = amount / HALF_WHALE_PASS_PRICE;
         uint256 remainder = amount - (fullHalfPasses * HALF_WHALE_PASS_PRICE);
@@ -55,8 +62,8 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
             unchecked {
                 claimableWinnings[winner] += remainder;
             }
-            claimablePool += uint128(remainder);
             emit PlayerCredited(winner, winner, remainder);
         }
+        return remainder;
     }
 }

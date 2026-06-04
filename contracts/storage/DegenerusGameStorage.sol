@@ -1040,6 +1040,50 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
 
 
+    /// @dev Front-load the LEVEL mint streak by a pass's freeze delta. Contiguity-aware: if the
+    ///      prior completed run reaches the pass start with no gap, extend the streak by
+    ///      `levelsToAdd`; otherwise reset to that span. `lastCompleted` advances to the pass
+    ///      horizon and never regresses. `MASK_24`-saturating. Folds into the packed `data` word
+    ///      before its single SSTORE — no ticket/freeze side effects.
+    function _withPassStreakFrontLoad(
+        uint256 data,
+        uint24 startLevel,
+        uint24 throughLevel,
+        uint24 levelsToAdd
+    ) internal pure returns (uint256) {
+        if (levelsToAdd == 0) return data;
+        uint24 lastCompleted = uint24(
+            (data >> BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) &
+                BitPackingLib.MASK_24
+        );
+        uint256 prevStreak = (data >> BitPackingLib.LEVEL_STREAK_SHIFT) &
+            BitPackingLib.MASK_24;
+        // Continue the prior run while it is still alive. The streak decay rule tolerates one
+        // un-minted level (alive at lastCompleted+1, breaks at +2), and startLevel == currentLevel+1,
+        // so the run is alive at purchase iff startLevel <= lastCompleted+2. Otherwise a full level
+        // lapsed with no mint — reset to this pass's span.
+        uint256 newStreak = uint256(lastCompleted) + 2 >= startLevel
+            ? prevStreak + levelsToAdd
+            : levelsToAdd;
+        if (newStreak > BitPackingLib.MASK_24) newStreak = BitPackingLib.MASK_24;
+        uint24 newLastCompleted = throughLevel > lastCompleted
+            ? throughLevel
+            : lastCompleted;
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT,
+            BitPackingLib.MASK_24,
+            newLastCompleted
+        );
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.LEVEL_STREAK_SHIFT,
+            BitPackingLib.MASK_24,
+            uint24(newStreak)
+        );
+        return data;
+    }
+
     /// @dev Activates a 10-level pass for a player. Shared logic for lazy pass purchases and awards.
     ///      Updates mintPacked_ (levelCount +10, frozenUntilLevel, bundleType, lastLevel, day)
     ///      and queues tickets for the 10-level range.
@@ -1123,6 +1167,14 @@ abstract contract DegenerusGameStorage {
             BitPackingLib.MASK_32
         );
 
+        // Front-load the LEVEL mint streak by the same freeze delta (survives pass expiry).
+        data = _withPassStreakFrontLoad(
+            data,
+            ticketStartLevel,
+            newFrozenLevel,
+            levelsToAdd
+        );
+
         mintPacked_[player] = data;
 
         _queueTicketRange(player, ticketStartLevel, 10, ticketsPerLevel, false);
@@ -1194,6 +1246,14 @@ abstract contract DegenerusGameStorage {
             BitPackingLib.DAY_SHIFT,
             BitPackingLib.MASK_32
         );
+        // Front-load the LEVEL mint streak by the same freeze delta (survives pass expiry).
+        data = _withPassStreakFrontLoad(
+            data,
+            ticketStartLevel,
+            newFrozenLevel,
+            levelsToAdd
+        );
+
         mintPacked_[player] = data;
     }
 

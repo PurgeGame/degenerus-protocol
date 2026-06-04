@@ -594,6 +594,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             }
             if (remainder != 0) {
                 _creditClaimable(winner, remainder);
+                claimablePool += uint128(remainder);
             }
             return;
         }

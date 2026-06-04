@@ -67,6 +67,9 @@ library BitPackingLib {
     /// @notice Mask for 2-bit whale bundle type field
     uint256 internal constant MASK_2 = 0x3;
 
+    /// @notice Bit position for last level credited for mint streak (bits 160-183)
+    uint256 internal constant MINT_STREAK_LAST_COMPLETED_SHIFT = 160;
+
     /// @notice Bit position for deity pass flag (bit 184)
     uint256 internal constant HAS_DEITY_PASS_SHIFT = 184;
     /// @notice Mask for 1-bit flag field
