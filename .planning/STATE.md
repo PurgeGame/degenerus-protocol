@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v59.0
 milestone_name: Council-Findings Remediation + Pass-Stat Front-Load Bundle
-status: planning
-last_updated: "2026-06-04T22:00:00.000Z"
-last_activity: 2026-06-04
+status: executing
+last_updated: "2026-06-04T21:56:13.483Z"
+last_activity: 2026-06-04 -- Phase 370 planning complete
 progress:
-  total_phases: 5
+  total_phases: 12
   completed_phases: 0
-  total_plans: 0
+  total_plans: 2
   completed_plans: 0
   percent: 0
 ---
@@ -34,9 +34,9 @@ See: .planning/PROJECT.md (Current Milestone: v59.0 section) + .planning/REQUIRE
 
 Phase: 370 — SPEC (Design-Lock + Anchor Re-Attestation vs `2b26ec91` + COV-01 Second-Model Solvency Re-Run) — Not started
 Plan: — (run /gsd-plan-phase 370)
-Status: ROADMAP CREATED — ready to plan Phase 370
+Status: Ready to execute
 Next up: 370 SPEC → 371 IMPL (the ONE contract-boundary HARD STOP) → 372 GAS → 373 TST → 374 TERMINAL (FULL in-milestone close)
-Last activity: 2026-06-04 — v59.0 roadmap created (5 phases 370-374; 21/21 reqs mapped; 0 orphaned, 0 duplicated)
+Last activity: 2026-06-04 -- Phase 370 planning complete
 
 ## ✅ v57.0 FOLLOW-UP — RESOLVED at v58.0 Phase 368 FORENSIC (root-caused to `24f0898b`, phase-160 2026-04-01; lived ~63d pre-launch; fixed `980865e8`; regression-test rec delivered → `368-FORENSIC.md`)
 
