@@ -109,7 +109,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 359-03-PLAN.md — WWXRP-01 (per-bracket jackpot whale-halfpass) + TDEC-01 (boostTerminalDecimator + bucket promotion) + CANCEL-01 (manual-cancel auto-claim / auto-evict forfeit) + forge-build CHECKPOINT 1 (wave 3, autonomous:false)
+- [x] 359-03-PLAN.md — WWXRP-01 (per-bracket jackpot whale-halfpass) + TDEC-01 (boostTerminalDecimator + bucket promotion) + CANCEL-01 (manual-cancel auto-claim / auto-evict forfeit) + forge-build CHECKPOINT 1 (wave 3, autonomous:false) — ✅ executed 2026-06-04; CHECKPOINT 1 forge build GREEN; 7 contracts uncommitted
 
 **Wave 4** *(blocked on Wave 3 completion)*
 

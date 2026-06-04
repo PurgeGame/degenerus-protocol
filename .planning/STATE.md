@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v57.0
 milestone_name: Small-Feature Bundle + Day-Type UDVT Refactor
 status: executing
-last_updated: "2026-06-04T13:04:12.133Z"
-last_activity: 2026-06-04 -- Phase 359 plan 02 (BURNIE-01/02 + SALVAGE-01) executed; 4 contracts uncommitted, held for plan-04 gate
+last_updated: "2026-06-04T13:57:00.000Z"
+last_activity: 2026-06-04 -- Phase 359 plan 03 (WWXRP-01 + TDEC-01 + CANCEL-01 + CHECKPOINT 1 GREEN) executed; 7 contracts uncommitted, held for plan-04 gate
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 7
-  completed_plans: 5
-  percent: 10
+  completed_plans: 6
+  percent: 11
 ---
 
 # Project State
@@ -33,9 +33,9 @@ See: .planning/PROJECT.md (Current Milestone: v57.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 359 (impl-the-one-carefully-sequenced-batched-contract-diff-handl) — EXECUTING
-Plan: 3 of 4
-Status: Plans 01+02 complete + 3 USER-directed in-session revisions applied (uncommitted, working tree compiles — sanity `forge build` GREEN). P01 (BATCH-01/02) — handlePurchase folds burnieMintReward into the return (KEPT). P02 (BURNIE-01/02 + SALVAGE-01). **In-session revisions (supersede parts of P02):** (1) SALVAGE preview merged into one 5-tuple `previewSellFarFutureTickets(totalFaceWei,totalBudget,ticketWei,ethCashWei,burnieTokens)`; `previewSellFarFutureSplit` DELETED; 6 forge fixtures bumped. (2) BURNIE-02 rebate DROPPED → MINT_BURNIE quest reward now `coinflip.creditFlip(buyer,questReward)`; full coin burn restored in the `_callTicketPurchase` payInCoin branch; the rebate-only `balanceOfWithClaimable(buyer)` gate removed (interface decl kept — SALVAGE uses it). (3) NEW SCOPE: lazy-pass purchase window made additive **0–2 OR x9 OR x0** (terminal x00 excluded) in `DegenerusGameWhaleModule.sol` — NOT one of the 11 v57 REQ-IDs; **plan 04 MUST add WhaleModule to the UDVT sweep** (its day-bearing boon-day code) so the tree ends with no raw-int islands, and surface it at the HARD STOP review. **6 contracts/*.sol UNCOMMITTED** (DegenerusQuests, DegenerusGame, IDegenerusCoin, MintModule, MintStreakUtils, WhaleModule) + 1 forge fixture, delta vs 1e7a646d +165/−41, committed only at the plan-04 USER hand-review HARD STOP. Ready to execute plan 03 (WWXRP-01 + TDEC-01 + CANCEL-01 + build CHECKPOINT 1).
-Last activity: 2026-06-04 -- Phase 359 plan 02 + 3 USER in-session revisions (preview merge, rebate→creditFlip, lazy-pass x0)
+Plan: 4 of 4 (ready to execute)
+Status: Plans 01+02+03 complete + 3 USER-directed in-session revisions (uncommitted, features-first `forge build` GREEN — CHECKPOINT 1 satisfied). P01 (BATCH-01/02) handlePurchase return fold (KEPT). P02 (BURNIE-01/02 + SALVAGE-01). **P03 (WWXRP-01 + TDEC-01 + CANCEL-01):** WWXRP — first `s==9` WWXRP jackpot (currency 3, ≥1 ether) per `level/10` bracket grants `whalePassClaims[player]+=1` (new `wwxrpJackpotWhalePassBracketAwarded` flag; `s==9` short-circuits first; bettor-credited; no ETH). TDEC — new `boostTerminalDecimator()` (gate `require(!_livenessTriggered())`, last-day window `daysRemaining==0`, view-only `getPlayerQuestView.baseStreak`, boostFactor 1x..20x [D-08 curve], promote bucket if strictly-lower live activity → re-derive subBucket + conserved aggregate re-key, uint88 saturate, one-time `boosted` bit) + DegenerusGame router stub + `boosted` field added to `TerminalDecEntry` (232→240/256 bits, same slot) + `getPlayerQuestView` added to IDegenerusQuests interface + `boostTerminalDecimator` selector added to IDegenerusGameModules. CANCEL — manual cancel auto-claims self `pendingBurnie` (CEI zero-first, presale-box parity) + settles upline tree via `IDegenerusAffiliate.claim([sub])` BEFORE `_finalizeAfking`+tombstone (FALSE "claim whenever" comment fixed); both auto-evict paths (pass-expiry, funding-out) now `delete _subOf[player]` (pure forfeit; count 1→3). **In-session revisions (supersede parts of P02):** (1) SALVAGE preview merged into one 5-tuple `previewSellFarFutureTickets(totalFaceWei,totalBudget,ticketWei,ethCashWei,burnieTokens)`; `previewSellFarFutureSplit` DELETED; 6 forge fixtures bumped. (2) BURNIE-02 rebate DROPPED → MINT_BURNIE quest reward now `coinflip.creditFlip(buyer,questReward)`; full coin burn restored in the `_callTicketPurchase` payInCoin branch. (3) NEW SCOPE: lazy-pass purchase window made additive **0–2 OR x9 OR x0** in `DegenerusGameWhaleModule.sol` — NOT a v57 REQ-ID; **plan 04 MUST add WhaleModule to the UDVT sweep** + surface at HARD STOP. **12 contracts/*.sol UNCOMMITTED** (DegenerusQuests, DegenerusGame, IDegenerusCoin, IDegenerusGameModules, IDegenerusQuests, MintModule, MintStreakUtils, WhaleModule, DegeneretteModule, DecimatorModule, GameAfkingModule, DegenerusGameStorage) + 1 forge fixture, delta vs 1e7a646d +370/−47, committed only at the plan-04 USER hand-review HARD STOP. NEXT = plan 04 (UDVT sweep + post-UDVT build CHECKPOINT 2 + the single batched contract-commit HARD STOP).
+Last activity: 2026-06-04 -- Phase 359 plan 03 (WWXRP-01 + TDEC-01 + CANCEL-01) + CHECKPOINT 1 features-first forge build GREEN
 
 ## 🛠 v56 CARRIED FINDING + USER HARDENING — the 357-00 contract gate (3 changes, autonomous:false)
 
