@@ -59,6 +59,7 @@
 **Depends on**: Nothing (first v57.0 phase; consumes the v56.0 closure HEAD `1e7a646d` as the frozen audit baseline, plus the design-lock inputs `.planning/PLAN-WWXRP-JACKPOT-WHALEPASS.md` + `.planning/PLAN-TERMINAL-DECIMATOR-STREAK-BOOST.md` + the `type-day-udvt-post-v56-seed` + `handlepurchase-burnie-flip-batching-post-v56-seed` memories; the BURNIE fix was found+verified mid-358 against `1e7a646d`)
 **Requirements**: WWXRP-02, TDEC-02, TDEC-03, BURNIE-03, SALVAGE-02, CANCEL-02
 **Success Criteria** (what must be TRUE):
+
   1. The WWXRP whale-halfpass design is locked (WWXRP-02 design half) — the per-10-level-bracket rationing key is settled (`level/10`, a per-bracket award flag, NOT a global 0→5 lifetime cap), the operator-placed-bet recipient policy is decided (pass to `player` = bet owner vs operator) and whether one player may win multiple brackets across the game is settled (default allow — naturally rationed), the new `wwxrpJackpotWhalePass*` per-bracket storage shape is fixed, and the freeze-safe/cheap properties (writes only an RNG-insensitive counter gated by the already-committed `s==9`, reuses `claimWhalePass`, short-circuits on non-jackpot spins) are re-attested on paper — recorded for the IMPL (WWXRP-01 is owned at IMPL; its design is fixed here).
   2. The terminal-decimator design decisions are locked (TDEC-02 SPEC half) — the effective-streak source is `getPlayerQuestView` (gap-reset + shields applied, NOT raw `playerQuestStates.streak`), the bucket "improvement"/promotion rule is defined (what makes a bucket better) along with the keep-or-re-derive-`subBucket` decision on a promotion, the `uint88 weightedBurn` overflow policy is decided (base × time-mult ≤20× × boost ≤20× ≈ 400× base — saturate or prove headroom), the double-count policy vs the burn-time `multBps` streak lever is resolved (keep both levers vs strip streak from burn-time), and the shields consume-vs-read decision is made — recorded for the IMPL (TDEC-01 is owned at IMPL; its design is fixed here).
   3. The terminal-decimator freeze-safety is RE-PROVEN under the bucket-promotion allowance (TDEC-03 SPEC half) — since TDEC-01 now allows a bucket PROMOTION (not only a within-bucket share increase), the validator's original `subBucket`-fixed simplification no longer holds, so SPEC re-proves freeze-safety on the basis "all weight + bucket mutation precedes the draw" (the boost + any promotion are DETERMINISTIC from the player's fixed effective-streak factor × their burn, committed in the same tx BEFORE `gameOver` flips and BEFORE subbuckets are drawn from `rngWord` → the player cannot use draw knowledge to manipulate placement), the `require(!gameOver)` gate + the pool-finalized-in-resolution + the shares-sum-to-pool invariants are re-attested — recorded for the IMPL (TDEC-01 builds it; the freeze-safety proof is the SPEC's design gate).
@@ -71,9 +72,11 @@
 **Plans**: 3 plans
 
 Plans:
+
 - [x] 358-01-PLAN.md — SPEC header + frozen-subject guard + terminal-decimator mechanics design-lock (TDEC-02 / D-04..D-13) + the load-bearing TDEC-03 freeze-safety proof (future-day-word lemma, D-01/D-02/D-03)
 - [x] 358-02-PLAN.md — the four small-feature design-locks: WWXRP-02 (D-14..D-18) + BURNIE-03 (D-21..D-24) + SALVAGE-02 (D-25..D-29) + CANCEL-02 (D-30..D-33)
 - [x] 358-03-PLAN.md — cross-cutting RNG-freeze + SOLVENCY re-attestation + UDVT byte-preservation discipline (D-19/D-20) + the full call-graph grep-attestation vs 1e7a646d (3 drifts reconciled) + the SPEC Lock asserting all 8 Success Criteria
+
 **UI hint**: no
 
 ### Phase 359: IMPL — The ONE Carefully-Sequenced Batched Contract Diff (handlePurchase batching + WWXRP whale-halfpass + terminal-decimator boost + the wide UDVT refactor)
@@ -83,6 +86,7 @@ Plans:
 **Depends on**: Phase 358 (the SPEC must lock the WWXRP rationing key + recipient policy, the terminal-decimator design decisions + the bucket-promotion freeze re-proof, the UDVT per-site cast/keep/widen discipline, the BURNIE queue-on-return + burn-rebate design, and grep-attest the edit-order first)
 **Requirements**: BATCH-01, BATCH-02, WWXRP-01, TDEC-01, UDVT-01, UDVT-02, UDVT-03, BURNIE-01, BURNIE-02, SALVAGE-01, CANCEL-01
 **Success Criteria** (what must be TRUE):
+
   1. The `handlePurchase` BURNIE-flip batching lands behavior-equivalent (BATCH-01 / BATCH-02) — `DegenerusQuests.handlePurchase` returns `burnieMintReward` in `totalReturned` instead of crediting it inline (the `coinflip.creditFlip(player, burnieMintReward)` at `:947-949` dropped); the sole caller `DegenerusGameMintModule.sol:1220` already folds the full return into `lootboxFlipCredit` (single credit `:1355`) → same recipient + same amount + additive accumulator = behavior-equivalent, saving one cross-contract `creditFlip` per MINT_BURNIE-quest-completing buy (the afking path is unaffected — it never calls `handlePurchase`) (BATCH-01); and the misleading `ethMintReward`/"ETH mint reward" naming + comments are corrected to reflect quest-TYPE semantics — MINT_ETH/LOOTBOX/MINT_BURNIE are quest TYPE constants and ALL quest rewards pay BURNIE flip stake; no payout is ETH (BATCH-02).
   2. The WWXRP jackpot whale-halfpass lands rationed per bracket (WWXRP-01) — a player who hits the Degenerette jackpot (`s == 9`) on a `currency == CURRENCY_WWXRP` (=3) bet with `amountPerTicket >= MIN_BET_WWXRP` is awarded a Whale halfpass via `whalePassClaims[player] += 1`, RATIONED to one award per 10-level bracket (a per-bracket award flag keyed by `level/10` — NOT a global 0→5 lifetime cap), hooked at `DegeneretteModule._resolveFullTicketBet` (~:713, after the s≥7 sDGNRS award), with the new `wwxrpJackpotWhalePass*` per-bracket state in `DegenerusGameStorage`, the recipient + multi-bracket policy from SPEC applied, reusing the `claimWhalePass` future-ticket deferral (no ETH/`claimablePool` touch), and short-circuiting to zero added cost on non-jackpot spins.
   3. The terminal-decimator final-day streak boost lands with bucket promotion (TDEC-01) — a new `boostTerminalDecimator()` lets a player on the final day multiply their `weightedBurn` by their effective quest-streak factor (validated via `getPlayerQuestView` — the EFFECTIVE streak with gap-reset + shields, NOT raw `playerQuestStates.streak`; streak 100→20×, 10→4×) folded into `terminalDecBucketBurnTotal[key]` via the existing `keccak256(abi.encode(lvl,bucket,subBucket))` key, with a `boosted` bit added to the packed `TerminalDecEntry` for idempotence, AND PROMOTES the player's bucket if the boosted weight qualifies for an improved bucket (per the SPEC improvement + keep-vs-re-derive-subBucket rule), overflow-handled per the SPEC `uint88` policy, reusing the live `DegenerusGameDecimatorModule` machinery (`recordTerminalDecBurn`/`runTerminalDecimatorJackpot`/`_terminalDecMultiplierBps`), gated by `require(!gameOver)`, landing same-tx before `gameOver` flips and before subbuckets are drawn (the freeze-safety carried as an IMPL invariant, re-proven at TST).
@@ -95,10 +99,22 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 359-01-PLAN.md — BATCH-01/02 producer: handlePurchase returns burnieMintReward (drop inline credit) + quest-TYPE comment fix (wave 1, autonomous:false)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 359-02-PLAN.md — BURNIE-01/02 (queue-on-return + MINT_BURNIE deferred net-burn rebate) + SALVAGE-01 (combo ETH/BURNIE pawn-shop cash-leg split), same MintModule file (wave 2, autonomous:false)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 359-03-PLAN.md — WWXRP-01 (per-bracket jackpot whale-halfpass) + TDEC-01 (boostTerminalDecimator + bucket promotion) + CANCEL-01 (manual-cancel auto-claim / auto-evict forfeit) + forge-build CHECKPOINT 1 (wave 3, autonomous:false)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 359-04-PLAN.md — UDVT-01/02/03 the wide type Day is uint24 sweep (3 encodePacked uint32 casts, packed uint24 / standalone+key uint32) + forge .t.sol churn + forge-build CHECKPOINT 2 + the USER hand-review contract-commit HARD STOP (wave 4, autonomous:false)
+
 **UI hint**: no
 
 ### Phase 360: GAS — Measure + Tune (the UDVT gas-neutrality gate)
@@ -108,6 +124,7 @@ Plans:
 **Depends on**: Phase 359 (the IMPL diff must be applied + locally compiling before the gas marginals can be measured)
 **Requirements**: (none — the gas-neutrality measurement gate; UDVT-03 is OWNED at IMPL, its gas-half measured here)
 **Success Criteria** (what must be TRUE):
+
   1. The UDVT is proven GAS-NEUTRAL — the packed `Sub`/struct day fields stay uint24-backed with NO cold-slot spill (the v56 gas win intact, measured), and the explicit uint32 widening of standalone day slots + indexed day event topics is the only intentional storage delta (no unexpected slot growth).
   2. The small-feature gas wins are measured — the `handlePurchase` batching saves exactly one cross-contract `creditFlip` per MINT_BURNIE-quest-completing buy (BATCH-01's ~5–25k win confirmed same-results), and the WWXRP grant + the terminal-decimator boost short-circuit to ~zero added cost on the non-triggering (non-jackpot / non-final-day) path.
   3. The outcome is recorded — if the bundle is gas-neutral-by-construction (the expected outcome — the UDVT is a pure-annotation/explicit-cast pass with no packed-field storage-layout change), that is recorded as the Outcome-A no-diff outcome (per the v55 350 / v56 precedent); any net behavior-preserving change rides the same batched USER-APPROVED diff held at the contract-commit boundary.
@@ -122,6 +139,7 @@ Plans:
 **Depends on**: Phase 360 (the IMPL+GAS subject must be settled — the byte-diff + solvency + non-widening proofs run against the frozen contract subject)
 **Requirements**: SEC-01, SEC-02, HYG-01, HYG-02, HYG-03, SALVAGE-03, CANCEL-03
 **Success Criteria** (what must be TRUE):
+
   1. RNG-freeze is intact across all 8 items (SEC-01) — the UDVT `abi.encodePacked` sites preserve the EXACT byte-image (the per-site RNG-freeze byte-diff gate: the derived `rngWord` is byte-identical at `DegenerusGameAdvanceModule.sol:1828`/`:1405` + `DegenerusGame.sol:1011` after the uint32 casts — UDVT-02 enforced empirically), the WWXRP grant + the terminal-decimator boost + bucket-promotion touch only RNG-insensitive counters/weights gated by already-committed outcomes (`s==9` deterministic from the committed word; the boost + promotion deterministic from the fixed effective-streak factor × burn, committed before the draw via `!_livenessTriggered()`), `handlePurchase` batching is BURNIE-accounting only, and the BURNIE ticket-queue fix reads no `rngWord` (`purchaseCoin` gated by `_livenessTriggered`/`gameOverPossible`) — proven empirically (byte-diff + determinism) as the hard gate.
   2. SOLVENCY is preserved (SEC-02) — 5 of 6 items are BURNIE flip-credit / weight-only / pure-annotation OFF the ETH/`claimablePool` path with the ETH/pool DEBIT byte-unchanged; the BURNIE fix restores queued ticket claims on the pools (intended pre-160 design) without creating an unbacked obligation (claimablePool never exceeds balance; ticket wins stay pro-rata) — proven empirically (the solvency-invariant harness against the v56 baseline, incl. a BURNIE-buy-then-claim path).
   3. The suite is NON-WIDENING vs the v56 baseline `1e7a646d` (UDVT-03's regression half) — every pre-existing red is enumerated BY NAME (`REGRESSION-BASELINE-v57.md`), `live − union = empty`, no new contract regression introduced by the bundle (the wide UDVT refactor + the small features incl. the BURNIE coin-buy fix + the salvage combo payout).
@@ -139,6 +157,7 @@ Plans:
 **Depends on**: Phase 361 (the TST proofs + the NON-WIDENING ledger must be established before the delta-audit + adversarial sweep run against the frozen subject)
 **Requirements**: AUDIT-01
 **Success Criteria** (what must be TRUE):
+
   1. The delta-audit lands NON-WIDENING vs the v56 baseline (AUDIT-01 part 1) — every changed surface (the `handlePurchase`/`MintModule` fold, the `_resolveFullTicketBet` WWXRP grant, the `boostTerminalDecimator()` + the `DegenerusGameDecimatorModule` machinery, the wide UDVT refactor across the day-bearing surface) is NON-WIDENING with grep/diff anchors @ `1e7a646d`, zero orphan hunks; the RNG-freeze byte-diff (the per-site `abi.encodePacked` uint32-cast byte-image) + the SOLVENCY-01 byte-anchor + the WWXRP per-bracket-grant correctness + the terminal-decimator weight-only-boost + bucket-promotion freeze-safety + the `handlePurchase` batching equivalence are re-attested.
   2. The 3-skill genuine-PARALLEL adversarial sweep runs + is skeptic-filtered (AUDIT-01 part 2) — `/contract-auditor` + `/economic-analyst` + `/zero-day-hunter` run as concurrent background Task spawns (`/degen-skeptic` = the dual-gate filter per `D-271-ADVERSARIAL-02`), focused on the UDVT byte-image preservation + the terminal-decimator bucket-promotion freeze-safety (the NEW weight-determining write before the draw) + the WWXRP rationing-key correctness + the operator-recipient policy; every charged probe is dispositioned (NEGATIVE-VERIFIED / SAFE_BY_DESIGN / FINDING_CANDIDATE) in the adversarial log.
   3. FINDINGS-v57.0 is authored + the closure flip is atomic (AUDIT-01 part 3) — `audit/FINDINGS-v57.0.md` (9-section, chmod 444) records the verdict + the dispositions; the atomic 5-doc closure flip emits the `MILESTONE_V57_AT_HEAD_<sha>` signal; all 25 v57.0 requirements are re-attested against the frozen closure HEAD; KNOWN-ISSUES.md is byte-unmodified unless a genuine new finding is recorded.
