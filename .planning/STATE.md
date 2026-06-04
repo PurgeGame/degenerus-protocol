@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v57.0
 milestone_name: Small-Feature Bundle + Day-Type UDVT Refactor
 status: planning
-last_updated: "2026-06-04T08:06:09.687Z"
-last_activity: 2026-06-04
+last_updated: "2026-06-04T09:20:00.000Z"
+last_activity: 2026-06-04 — Phase 358 SPEC context gathered (WWXRP-02 / TDEC-02 / TDEC-03 design-locked via discuss-phase; resume: 358-CONTEXT.md → /gsd-plan-phase 358)
 progress:
   total_phases: 5
   completed_phases: 0
