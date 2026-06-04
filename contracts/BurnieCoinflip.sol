@@ -62,7 +62,7 @@ contract BurnieCoinflip {
     /// @param newTotal The new total stake for that day.
     event CoinflipStakeUpdated(
         address indexed player,
-        uint32 indexed day,
+        uint24 indexed day,
         uint256 amount,
         uint256 newTotal
     );
@@ -74,7 +74,7 @@ contract BurnieCoinflip {
     /// @param bountyPaid Amount paid to the bounty owner for this day (0 if none).
     /// @param bountyRecipient Recipient of bounty payout (address(0) if none).
     event CoinflipDayResolved(
-        uint32 indexed day,
+        uint24 indexed day,
         bool win,
         uint16 rewardPercent,
         uint128 bountyAfter,
@@ -86,7 +86,7 @@ contract BurnieCoinflip {
     /// @param player New top bettor.
     /// @param score The score in whole tokens (uint96-capped).
     event CoinflipTopUpdated(
-        uint32 indexed day,
+        uint24 indexed day,
         address indexed player,
         uint96 score
     );
@@ -148,16 +148,16 @@ contract BurnieCoinflip {
     // Player coinflip state (packed where possible)
     struct PlayerCoinflipState {
         uint128 claimableStored;
-        uint32 lastClaim;
-        uint32 autoRebuyStartDay;
+        uint24 lastClaim;
+        uint24 autoRebuyStartDay;
         bool autoRebuyEnabled;
         uint128 autoRebuyStop;
         uint128 autoRebuyCarry;
     }
 
     // Daily coinflip storage
-    mapping(uint32 => mapping(address => uint256)) internal coinflipBalance;
-    mapping(uint32 => CoinflipDayResult) internal coinflipDayResult;
+    mapping(uint24 => mapping(address => uint256)) internal coinflipBalance;
+    mapping(uint24 => CoinflipDayResult) internal coinflipDayResult;
     mapping(address => PlayerCoinflipState) internal playerState;
 
 
@@ -167,14 +167,14 @@ contract BurnieCoinflip {
     address internal bountyOwedTo;
 
     // RNG state
-    uint32 internal flipsClaimableDay;
+    uint24 internal flipsClaimableDay;
 
     // Leaderboard
     struct PlayerScore {
         address player;
         uint96 score;
     }
-    mapping(uint32 => PlayerScore) internal coinflipTopByDay;
+    mapping(uint24 => PlayerScore) internal coinflipTopByDay;
 
     // No constructor needed — all contract references are compile-time constants.
 
@@ -352,7 +352,7 @@ contract BurnieCoinflip {
     /// @param day The day to query.
     /// @return rewardPercent The reward percentage for that day.
     /// @return win Whether the flip was a win.
-    function getCoinflipDayResult(uint32 day) external view returns (uint16 rewardPercent, bool win) {
+    function getCoinflipDayResult(uint24 day) external view returns (uint16 rewardPercent, bool win) {
         CoinflipDayResult memory result = coinflipDayResult[day];
         return (result.rewardPercent, result.win);
     }
@@ -404,15 +404,15 @@ contract BurnieCoinflip {
     ) internal returns (uint256 mintable) {
         IDegenerusGame game = degenerusGame;
         PlayerCoinflipState storage state = playerState[player];
-        uint32 latest = flipsClaimableDay;
-        uint32 start = state.lastClaim;
+        uint24 latest = flipsClaimableDay;
+        uint24 start = state.lastClaim;
 
         bool rebuyActive = state.autoRebuyEnabled;
         bool deep = deepAutoRebuy && rebuyActive;
         uint256 takeProfit = rebuyActive ? state.autoRebuyStop : 0;
         uint256 carry;
         uint256 winningBafCredit;
-        uint32 bafResolvedDay;
+        uint24 bafResolvedDay;
         bool bafResolvedDayCached;
         uint256 lossCount;
         bool levelCached;
@@ -430,7 +430,7 @@ contract BurnieCoinflip {
 
         // Enforce claim window unless auto-rebuy is enabled (settles back to enable day).
         uint8 windowDays = start == 0 ? COIN_CLAIM_FIRST_DAYS : COIN_CLAIM_DAYS;
-        uint32 minClaimableDay;
+        uint24 minClaimableDay;
         if (rebuyActive) {
             minClaimableDay = state.autoRebuyStartDay;
             if (minClaimableDay > latest) {
@@ -448,11 +448,11 @@ contract BurnieCoinflip {
             }
         }
 
-        uint32 cursor;
+        uint24 cursor;
         unchecked {
             cursor = start + 1;
         }
-        uint32 processed = start;
+        uint24 processed = start;
 
         uint32 remaining;
         if (deep) {
@@ -616,7 +616,7 @@ contract BurnieCoinflip {
         }
 
         // Determine which future day this stake applies to (always the next window).
-        uint32 targetDay = _targetFlipDay();
+        uint24 targetDay = _targetFlipDay();
 
         uint256 prevStake = coinflipBalance[targetDay][player];
         uint256 newStake = prevStake + coinflipDeposit;
@@ -766,7 +766,7 @@ contract BurnieCoinflip {
     function processCoinflipPayouts(
         bool bonusFlip,
         uint256 rngWord,
-        uint32 epoch
+        uint24 epoch
     ) external onlyDegenerusGameContract {
         // Mix entropy with epoch for unique per-day randomness
         uint256 seedWord = uint256(keccak256(abi.encodePacked(rngWord, epoch)));
@@ -932,7 +932,7 @@ contract BurnieCoinflip {
 
     /// @notice Get player's current coinflip stake for next day.
     function coinflipAmount(address player) external view returns (uint256) {
-        uint32 targetDay = _targetFlipDay();
+        uint24 targetDay = _targetFlipDay();
         return coinflipBalance[targetDay][player];
     }
 
@@ -944,7 +944,7 @@ contract BurnieCoinflip {
             bool enabled,
             uint256 stop,
             uint256 carry,
-            uint32 startDay
+            uint24 startDay
         )
     {
         PlayerCoinflipState storage state = playerState[player];
@@ -960,7 +960,7 @@ contract BurnieCoinflip {
         view
         returns (address player, uint128 score)
     {
-        uint32 lastDay = flipsClaimableDay;
+        uint24 lastDay = flipsClaimableDay;
         if (lastDay == 0) return (address(0), 0);
         PlayerScore memory top = coinflipTopByDay[lastDay];
         return (top.player, uint128(top.score));
@@ -971,12 +971,12 @@ contract BurnieCoinflip {
         address player
     ) internal view returns (uint256 total) {
         // Pending flip winnings within the claim window; staking removed.
-        uint32 latestDay = flipsClaimableDay;
-        uint32 startDay = playerState[player].lastClaim;
+        uint24 latestDay = flipsClaimableDay;
+        uint24 startDay = playerState[player].lastClaim;
         if (startDay >= latestDay) return 0;
 
         uint8 windowDays = startDay == 0 ? COIN_CLAIM_FIRST_DAYS : COIN_CLAIM_DAYS;
-        uint32 minClaimableDay;
+        uint24 minClaimableDay;
         unchecked {
             minClaimableDay = latestDay > windowDays
                 ? latestDay - windowDays
@@ -987,7 +987,7 @@ contract BurnieCoinflip {
         }
 
         uint8 remaining = windowDays;
-        uint32 cursor;
+        uint24 cursor;
         unchecked {
             cursor = startDay + 1;
         }
@@ -1057,7 +1057,7 @@ contract BurnieCoinflip {
     ///      Derived locally from GameTimeLib — the same time-only source that
     ///      DegenerusGame.currentDayView resolves to — so this equals the game's
     ///      day index without a cross-contract call.
-    function _targetFlipDay() internal view returns (uint32) {
+    function _targetFlipDay() internal view returns (uint24) {
         return GameTimeLib.currentDayIndex() + 1;
     }
 
@@ -1092,7 +1092,7 @@ contract BurnieCoinflip {
     function _updateTopDayBettor(
         address player,
         uint256 stakeScore,
-        uint32 day
+        uint24 day
     ) private {
         uint96 score = _score96(stakeScore);
         PlayerScore memory dayLeader = coinflipTopByDay[day];

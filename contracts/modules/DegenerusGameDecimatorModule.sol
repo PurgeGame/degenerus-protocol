@@ -1055,12 +1055,12 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
     /// @dev Calculate days remaining on death clock using day-index arithmetic. Returns 0 if expired.
     function _terminalDecDaysRemaining() private view returns (uint256) {
-        uint32 currentDay = _simulatedDayIndex();
-        uint32 psd = purchaseStartDay;
-        uint256 deadlineDay = uint256(psd) +
-            (
+        uint24 currentDay = _simulatedDayIndex();
+        uint24 psd = purchaseStartDay;
+        uint24 deadlineDay = psd +
+            uint24(
                 level == 0
-                    ? uint256(TERMINAL_DEC_IDLE_TIMEOUT_DAYS)
+                    ? TERMINAL_DEC_IDLE_TIMEOUT_DAYS
                     : TERMINAL_DEC_DEATH_CLOCK_DAYS
             );
         if (currentDay >= deadlineDay) return 0;

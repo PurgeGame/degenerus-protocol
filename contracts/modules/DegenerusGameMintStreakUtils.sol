@@ -30,12 +30,12 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ///      into the day, any pass holder 15+ min in, active afking sub, and finally the
     ///      DGVE-majority owner (the only external call, reached on the cold path only).
     function _bountyEligible(address who) internal view returns (bool) {
-        uint32 gateIdx = dailyIdx;
+        uint24 gateIdx = dailyIdx;
         if (gateIdx == 0) return true; // first day — nothing to earn against yet
 
         uint256 mintData = mintPacked_[who];
         // Minted today or yesterday — the participation signal, no extra read.
-        uint32 lastEthDay = uint32(
+        uint24 lastEthDay = uint24(
             (mintData >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_32
         );
         if (lastEthDay + 1 >= gateIdx) return true;

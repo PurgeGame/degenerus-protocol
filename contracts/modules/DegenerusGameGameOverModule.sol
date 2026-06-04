@@ -83,7 +83,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///      VRF fallback logic (historical word, stall timeout) is in AdvanceModule._gameOverEntropy.
     /// @param day Day index for RNG word lookup from rngWordByDay mapping.
     /// @custom:reverts E When funds exist but RNG word unavailable (defense-in-depth), or stETH transfer fails
-    function handleGameOverDrain(uint32 day) external {
+    function handleGameOverDrain(uint24 day) external {
         if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) != 0) return; // Already processed
 
         uint24 lvl = level;

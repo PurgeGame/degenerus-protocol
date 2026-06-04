@@ -110,7 +110,7 @@ interface IDegenerusGame {
         address deity
     ) external view returns (
         uint256 dailySeed,
-        uint32 day,
+        uint24 day,
         uint8 usedMask,
         bool decimatorOpen,
         bool deityPassAvailable
@@ -263,7 +263,7 @@ interface IDegenerusGame {
     function rngLocked() external view returns (bool);
 
     /// @notice Current day index.
-    function currentDayView() external view returns (uint32);
+    function currentDayView() external view returns (uint24);
 
     /// @notice Request lootbox RNG when activity threshold is met.
     /// @dev Standalone function for mid-day lootbox RNG requests.
@@ -457,7 +457,7 @@ interface IDegenerusGame {
     // -------------------------------------------------------------------------
 
     /// @notice Get total wager units for a specific hero symbol on a given day.
-    function getDailyHeroWager(uint32 day, uint8 quadrant, uint8 symbol) external view returns (uint256 wagerUnits);
+    function getDailyHeroWager(uint24 day, uint8 quadrant, uint8 symbol) external view returns (uint256 wagerUnits);
     /// @notice Get the winning hero symbol and amount for a given day.
-    function getDailyHeroWinner(uint32 day) external view returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount);
+    function getDailyHeroWinner(uint24 day) external view returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount);
 }

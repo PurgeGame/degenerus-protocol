@@ -69,7 +69,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     event LootBoxOpened(
         address indexed player,
         uint48 indexed lootboxIndex,
-        uint32 day,
+        uint24 day,
         uint256 amount,
         uint24 futureLevel,
         uint32 futureTickets,
@@ -91,7 +91,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param frozenUntilLevel Reserved for future use (always 0)
     event LootBoxWhalePassJackpot(
         address indexed player,
-        uint32 indexed day,
+        uint24 indexed day,
         uint256 lootboxAmount,
         uint24 targetLevel,
         uint32 tickets,
@@ -106,7 +106,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param dgnrsAmount The amount of DGNRS tokens awarded
     event LootBoxDgnrsReward(
         address indexed player,
-        uint32 indexed day,
+        uint24 indexed day,
         uint256 lootboxAmount,
         uint256 dgnrsAmount
     );
@@ -137,7 +137,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param amount Primary reward amount (varies by type: BPS for boosts, token amount for boons)
     event LootBoxReward(
         address indexed player,
-        uint32 indexed day,
+        uint24 indexed day,
         uint8 indexed rewardType,
         uint256 lootboxAmount,
         uint256 amount
@@ -152,7 +152,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     event DeityBoonIssued(
         address indexed deity,
         address indexed recipient,
-        uint32 indexed day,
+        uint24 indexed day,
         uint8 slot,
         uint8 boonType
     );
@@ -517,7 +517,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 rngWord = lootboxRngWordByIndex[index];
         if (rngWord == 0) revert RngNotReady();
 
-        uint32 currentDay = _simulatedDayIndex();
+        uint24 currentDay = _simulatedDayIndex();
 
         uint256 baseAmount = lootboxEthBase[index][player];
         if (baseAmount == 0) {
@@ -771,7 +771,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     function resolveLootboxDirect(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external {
         if (amount == 0) return;
 
-        uint32 day = _simulatedDayIndex();
+        uint24 day = _simulatedDayIndex();
         uint24 currentLevel = level + 1;
         uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
@@ -805,7 +805,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external {
         if (amount == 0) return;
 
-        uint32 day = _simulatedDayIndex();
+        uint24 day = _simulatedDayIndex();
         uint24 currentLevel = level + 1;
         uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
@@ -887,7 +887,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     function resolveAfkingBox(
         address player,
         uint256 amount,
-        uint32 day,
+        uint24 day,
         uint256 rngWord,
         uint16 activityScore
     ) external {
@@ -940,7 +940,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @return day The current day index
     function deityBoonSlots(
         address deity
-    ) external view returns (uint8[3] memory slots, uint8 usedMask, uint32 day) {
+    ) external view returns (uint8[3] memory slots, uint8 usedMask, uint24 day) {
         day = _simulatedDayIndex();
         if (rngWordByDay[day] == 0) return (slots, usedMask, day);
         if (deityBoonDay[deity] == day) {
@@ -973,7 +973,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (slot >= DEITY_DAILY_BOON_COUNT) revert E();
         if (deityPassPurchasedCount[deity] == 0) revert E();
 
-        uint32 day = _simulatedDayIndex();
+        uint24 day = _simulatedDayIndex();
         if (rngWordByDay[day] == 0) revert E();
         if (deityBoonDay[deity] != day) {
             deityBoonDay[deity] = day;
@@ -1079,7 +1079,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        so afking boxes always resolve as a single roll (a bounded per-open cost).
     function _resolveLootboxCommon(
         address player,
-        uint32 day,
+        uint24 day,
         uint48 index,
         uint256 amount,
         uint24 targetLevel,
@@ -1153,7 +1153,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     function _settleLootboxRoll(
         address player,
         uint48 index,
-        uint32 day,
+        uint24 day,
         uint256 rollAmount,
         uint256 fullAmount,
         uint24 rollLevel,
@@ -1229,7 +1229,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; no advance)
     function _rollLootboxBoons(
         address player,
-        uint32 day,
+        uint24 day,
         uint256 originalAmount,
         uint256 boonBudget,
         uint256 seed
@@ -1248,7 +1248,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if (!okClr) revert E();
         }
 
-        uint32 currentDay = _simulatedDayIndex();
+        uint24 currentDay = _simulatedDayIndex();
         uint24 currentLevel = level + 1;
 
         uint24 lazyPassLevel = currentLevel == 0 ? 1 : currentLevel + 1;
@@ -1519,8 +1519,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     function _applyBoon(
         address player,
         uint8 boonType,
-        uint32 day,
-        uint32 currentDay,
+        uint24 day,
+        uint24 currentDay,
         uint256 originalAmount,
         bool isDeity
     ) private {
@@ -1750,7 +1750,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 amount,
         uint256 lootboxAmount,
         uint256 targetPrice,
-        uint32 day,
+        uint24 day,
         uint256 seed
     )
         private
@@ -1948,7 +1948,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @return boonType The boon type (1-31)
     function _deityBoonForSlot(
         address deity,
-        uint32 day,
+        uint24 day,
         uint8 slot,
         bool decimatorAllowed,
         bool deityPassAvailable

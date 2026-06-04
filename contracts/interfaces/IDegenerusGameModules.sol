@@ -52,7 +52,7 @@ interface IDegenerusGameAdvanceModule {
 interface IDegenerusGameGameOverModule {
     /// @notice Handles draining funds during game over state
     /// @param day The day identifier for the drain operation
-    function handleGameOverDrain(uint32 day) external;
+    function handleGameOverDrain(uint24 day) external;
 
     /// @notice Performs the final sweep of remaining funds after game over
     function handleFinalSweep() external;
@@ -364,7 +364,7 @@ interface IDegenerusGameLootboxModule {
     function resolveAfkingBox(
         address player,
         uint256 amount,
-        uint32 day,
+        uint24 day,
         uint256 rngWord,
         uint16 activityScore
     ) external;
@@ -377,7 +377,7 @@ interface IDegenerusGameLootboxModule {
     function deityBoonSlots(address deity)
         external
         view
-        returns (uint8[3] memory slots, uint8 usedMask, uint32 day);
+        returns (uint8[3] memory slots, uint8 usedMask, uint24 day);
 
     /// @notice Issues a deity boon from a deity to a recipient
     /// @param deity Address of the deity issuing the boon
@@ -514,7 +514,7 @@ interface IGameAfkingModule {
     /// @param weightBudget Per-chunk gas-weight budget (cheap buy 1, sub-ending finalize heavier).
     /// @return processed Number of set entries advanced/handled this chunk.
     function processSubscriberStage(
-        uint32 processDay,
+        uint24 processDay,
         uint256 weightBudget
     ) external returns (uint256 processed);
 }

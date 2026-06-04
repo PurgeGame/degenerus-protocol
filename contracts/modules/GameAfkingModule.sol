@@ -127,7 +127,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev Pass-validity refresh — emitted at the AFSUB-03 crossing branch when
     ///      the re-read horizon still covers the current level. Writes the new
     ///      validThroughLevel and continues without eviction.
-    event SubscriptionExtendedFree(address indexed player, uint32 day);
+    event SubscriptionExtendedFree(address indexed player, uint24 day);
     /// @dev Subscription removed from the iterable set. `reason`:
     ///        1 = AutoPause (AFSUB-03 pass-eviction at crossing OR funding-skip kill of a NORMAL sub)
     ///        2 = CancelReclaim (in-pass reclaim of an externally-cancelled tombstone)
@@ -429,7 +429,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
         // Afking-run start (new sub) OR a streak-refreshing cover-buy (active sub re-subscribe).
         {
-            uint32 today = _simulatedDayIndex();
+            uint24 today = _simulatedDayIndex();
             if (wasActive) {
                 // ACTIVE sub re-subscribe — subscribe doubles as a manual "keep my streak alive +
                 // buy something" action. Do a funded cover-buy for TODAY (advancing the funded
@@ -755,7 +755,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     function _deliverAfkingBuy(
         address player,
         Sub storage sub,
-        uint32 processDay,
+        uint24 processDay,
         uint256 mp,
         uint24 currentLevel,
         address src,
@@ -786,7 +786,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 : currentLevel + 1;
 
             // Century (x00-level) quantity bonus at parity with the manual mint, reusing the
-            // existing centuryBonusLevel/centuryBonusUsed storage and the per-buy activity score
+            // per-player centuryBonusUsed storage and the per-buy activity score
             // off the COMPUTE-ON-READ streak (no STATICCALL). The purchase-boost quantity
             // multiplier is omitted, matching the boons-off lootbox leg.
             uint32 adjustedQty = uint32(amount);
@@ -802,14 +802,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     uint256 bonusQty = (uint256(adjustedQty) * _score) / 30_500;
                     if (bonusQty != 0 && priceWei != 0) {
                         uint256 maxBonus = (20 ether) / (priceWei >> 2);
-                        uint256 used = centuryBonusLevel == targetLevel
-                            ? centuryBonusUsed[player]
-                            : 0;
+                        uint256 used = _centuryUsedFor(player, targetLevel);
                         uint256 remaining = maxBonus > used ? maxBonus - used : 0;
                         if (bonusQty > remaining) bonusQty = remaining;
                         if (bonusQty != 0) {
-                            centuryBonusLevel = targetLevel;
-                            centuryBonusUsed[player] = used + bonusQty;
+                            _setCenturyUsedFor(player, targetLevel, used + bonusQty);
                             adjustedQty += uint32(bonusQty);
                         }
                     }
@@ -891,7 +888,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 if (newOwed > 100_000_000) newOwed = 100_000_000;
                 sub.pendingBurnie = uint32(newOwed);
             }
-            if (uint32(sub.afkCoveredThroughDay) + 1 < processDay) {
+            if (sub.afkCoveredThroughDay + 1 < processDay) {
                 sub.afkingStartDay = uint24(processDay);
                 _setStreakBase(sub, 0);
             }
@@ -1021,14 +1018,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      since the run's base day, while the last funded day is no older than yesterday;
     ///      otherwise 0 (decay-on-read: miss one full day and the streak is gone). Capped to 100
     ///      downstream by the activity score.
-    function _afkingStreak(Sub storage sub, uint32 currentDay)
+    function _afkingStreak(Sub storage sub, uint24 currentDay)
         private
         view
         returns (uint32)
     {
-        uint32 covered = uint32(sub.afkCoveredThroughDay);
+        uint24 covered = sub.afkCoveredThroughDay;
         if (currentDay == 0 || covered + 1 < currentDay) return 0;
-        return uint32(_streakBaseOf(sub)) + (covered - uint32(sub.afkingStartDay));
+        return uint32(_streakBaseOf(sub)) + uint32(covered - sub.afkingStartDay);
     }
 
     /// @dev Hand the afking-computed streak back to the manual quest system on a sub-ending path,
@@ -1045,11 +1042,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     function _finalizeAfking(
         address player,
         Sub storage sub,
-        uint32 currentDay
+        uint24 currentDay
     ) private {
-        uint32 covered = uint32(sub.afkCoveredThroughDay);
+        uint24 covered = sub.afkCoveredThroughDay;
         uint256 earned = uint256(_streakBaseOf(sub)) +
-            (covered - uint32(sub.afkingStartDay));
+            (covered - sub.afkingStartDay);
         quests.finalizeAfking(
             player,
             earned > type(uint24).max ? type(uint24).max : uint24(earned),
@@ -1104,7 +1101,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///        when the accumulated weight reaches the budget, bounding even an all-evicts chunk.
     /// @return processed Number of set entries advanced/handled this chunk.
     function processSubscriberStage(
-        uint32 processDay,
+        uint24 processDay,
         uint256 weightBudget
     ) external returns (uint256 processed) {
         uint256 mp = _mintPriceInContext();
@@ -1392,8 +1389,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @param player The subscriber whose box is materialized.
     /// @param sub The subscriber's stamped record (storage ref — the marker advances here).
     function _openAfkingBox(address player, Sub storage sub, uint256 word) private {
-        // lastAutoBoughtDay is uint24; widen to uint32 for the seed/word key.
-        uint32 day = uint32(sub.lastAutoBoughtDay);
+        // lastAutoBoughtDay is the frozen stamp day used as the seed/word key.
+        uint24 day = sub.lastAutoBoughtDay;
         // Advance the day-keyed no-double-open marker BEFORE the resolve (effects-first; a
         // re-entrant open re-checks `lastOpenedDay < lastAutoBoughtDay` → false → no-op).
         sub.lastOpenedDay = sub.lastAutoBoughtDay;

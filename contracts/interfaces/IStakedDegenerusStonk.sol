@@ -84,12 +84,12 @@ interface IStakedDegenerusStonk {
     /// @notice Check if day `day` has an unresolved gambling-burn pool (SPEC-03).
     /// @param day Wall-clock day to query.
     /// @return True if `pendingByDay[day]` has non-zero ETH or BURNIE base.
-    function hasPendingRedemptions(uint32 day) external view returns (bool);
+    function hasPendingRedemptions(uint24 day) external view returns (bool);
 
     /// @notice Sentinel for the single-pool invariant (INV-13).
     /// @return The wall-day of the currently-pending unresolved gambling-burn pool, or 0 if none.
     ///         Read by AdvanceModule to derive `dayToResolve` under both normal and stall paths.
-    function pendingResolveDay() external view returns (uint32);
+    function pendingResolveDay() external view returns (uint24);
 
     /// @notice Total ETH physically held but reserved for in-flight gambling-burn redemptions.
     /// @dev handleGameOverDrain subtracts this so reserved ETH is not swept into terminal payouts.
@@ -100,5 +100,5 @@ interface IStakedDegenerusStonk {
     ///      emits RedemptionResolved, then deletes pendingByDay[dayToResolve] per SPEC-04 (c).
     /// @param roll The random roll (25-175).
     /// @param dayToResolve Wall-clock day whose pool this call resolves.
-    function resolveRedemptionPeriod(uint16 roll, uint32 dayToResolve) external;
+    function resolveRedemptionPeriod(uint16 roll, uint24 dayToResolve) external;
 }

@@ -38,9 +38,9 @@ interface IDegenerusGamePlayer {
     /// @notice Check if the liveness-timeout game-over trigger is active (State 1 precursor).
     function livenessTriggered() external view returns (bool);
     /// @notice Get current day index.
-    function currentDayView() external view returns (uint32);
+    function currentDayView() external view returns (uint24);
     /// @notice Get RNG word for a specific day.
-    function rngWordForDay(uint32 day) external view returns (uint256);
+    function rngWordForDay(uint24 day) external view returns (uint256);
     /// @notice Get player's activity score.
     function playerActivityScore(address player) external view returns (uint256);
     /// @notice Resolve a redemption lootbox for a player (sDGNRS forwards lootboxEth as msg.value).
@@ -175,10 +175,10 @@ contract StakedDegenerusStonk {
 
     /// @notice Emitted when a player submits a gambling burn redemption
     /// @param burnieSettled BURNIE backing settled at submit (burned/consumed and credited as a flip)
-    event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 burnieSettled, uint32 periodIndex);
+    event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 burnieSettled, uint24 periodIndex);
 
     /// @notice Emitted when a redemption period is resolved with a roll
-    event RedemptionResolved(uint32 indexed periodIndex, uint16 roll);
+    event RedemptionResolved(uint24 indexed periodIndex, uint16 roll);
 
     /// @notice Emitted when a player claims their resolved redemption (ETH-only; BURNIE settled at submit)
     event RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout, uint256 lootboxEth);
@@ -260,11 +260,11 @@ contract StakedDegenerusStonk {
         uint64 burned;
     }
 
-    mapping(address => mapping(uint32 => PendingRedemption)) public pendingRedemptions;
-    mapping(uint32 => RedemptionPeriod) public redemptionPeriods;
+    mapping(address => mapping(uint24 => PendingRedemption)) public pendingRedemptions;
+    mapping(uint24 => RedemptionPeriod) public redemptionPeriods;
 
     uint256 public pendingRedemptionEthValue;      // total physically-segregated ETH across all periods
-    mapping(uint32 => DayPending) internal pendingByDay;
+    mapping(uint24 => DayPending) internal pendingByDay;
 
     /// @notice Wall-day of the currently-pending unresolved gambling-burn pool, or 0 if none.
     /// @dev Enforces INV-13 (single-pool invariant): at most one day's pool may be unresolved at
@@ -274,7 +274,7 @@ contract StakedDegenerusStonk {
     ///      multi-day RNG stalls. Game day 0 is unreachable by construction
     ///      (`_simulatedDayIndexAt` underflows at day-1 → day 1 is the lowest legitimate value),
     ///      so 0 unambiguously means "no pool pending".
-    uint32 public pendingResolveDay;
+    uint24 public pendingResolveDay;
 
     // =====================================================================
     //                          CONSTANTS
@@ -649,7 +649,7 @@ contract StakedDegenerusStonk {
     /// @notice Check whether day `day` has an unresolved gambling-burn pool (SPEC-03).
     /// @param day Wall-clock day to query.
     /// @return True if `pendingByDay[day]` has a non-zero ETH base.
-    function hasPendingRedemptions(uint32 day) external view returns (bool) {
+    function hasPendingRedemptions(uint24 day) external view returns (bool) {
         return pendingByDay[day].ethBase != 0;
     }
 
@@ -663,7 +663,7 @@ contract StakedDegenerusStonk {
     ///      transfer back to claimable). BURNIE is already fully settled at submit (no roll).
     /// @param roll The random roll result (range 25-175, applied as percentage).
     /// @param dayToResolve Wall-clock day whose pool this call resolves.
-    function resolveRedemptionPeriod(uint16 roll, uint32 dayToResolve) external {
+    function resolveRedemptionPeriod(uint16 roll, uint24 dayToResolve) external {
         if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
 
         DayPending storage pool = pendingByDay[dayToResolve];
@@ -699,7 +699,7 @@ contract StakedDegenerusStonk {
     ///      ETH is paid direct from this contract's segregated balance, 50% is forwarded to the
     ///      Game as real ETH (msg.value) for lootbox rewards; post-gameOver, 100% paid direct.
     /// @param day Wall-clock day whose claim this caller is settling.
-    function claimRedemption(uint32 day) external {
+    function claimRedemption(uint24 day) external {
         address player = msg.sender;
         PendingRedemption storage claim = pendingRedemptions[player][day];
         if (claim.ethValueOwed == 0) revert NoClaim();
@@ -823,12 +823,12 @@ contract StakedDegenerusStonk {
         if (amount == 0 || amount > bal) revert Insufficient();
         if (amount < MIN_BURN_AMOUNT) revert BurnTooSmall();
 
-        uint32 currentPeriod = game.currentDayView();
+        uint24 currentPeriod = game.currentDayView();
 
         // Single-pool invariant (INV-13): if any prior day still holds an unresolved pool,
         // block this burn. AdvanceModule resolves the stamped day on the next successful advance;
         // burns are only permitted to land in today's pool or onto an already-active today's pool.
-        uint32 stamp = pendingResolveDay;
+        uint24 stamp = pendingResolveDay;
         if (stamp != 0 && stamp != currentPeriod) revert PriorDayUnresolved();
         if (stamp == 0) pendingResolveDay = currentPeriod;
 

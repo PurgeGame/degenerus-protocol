@@ -146,7 +146,7 @@ contract DegenerusGameMintModule is
     );
     event BoostUsed(
         address indexed player,
-        uint32 indexed day,
+        uint24 indexed day,
         uint256 originalAmount,
         uint256 boostedAmount,
         uint16 boostBps
@@ -248,7 +248,7 @@ contract DegenerusGameMintModule is
         // Update mint day
         // ---------------------------------------------------------------------
 
-        uint32 day = _currentMintDay();
+        uint24 day = _currentMintDay();
         data = _setMintDay(
             prevData,
             day,
@@ -1290,14 +1290,11 @@ contract DegenerusGameMintModule is
             uint256 bonusQty = (uint256(adjustedQty) * _score) / 30_500;
             if (bonusQty != 0) {
                 uint256 maxBonus = (20 ether) / (priceWei >> 2);
-                uint256 used = centuryBonusLevel == targetLevel
-                    ? centuryBonusUsed[buyer]
-                    : 0;
+                uint256 used = _centuryUsedFor(buyer, targetLevel);
                 uint256 remaining = maxBonus > used ? maxBonus - used : 0;
                 if (bonusQty > remaining) bonusQty = remaining;
                 if (bonusQty != 0) {
-                    centuryBonusLevel = targetLevel;
-                    centuryBonusUsed[buyer] = used + bonusQty;
+                    _setCenturyUsedFor(buyer, targetLevel, used + bonusQty);
                     adjustedQty += uint32(bonusQty);
                 }
             }
@@ -1743,11 +1740,11 @@ contract DegenerusGameMintModule is
         if (tier == 0) return boostedAmount;
 
         // The purchase day (== the buy is happening now) — read here, only on the boost path.
-        uint32 day = _simulatedDayIndex();
+        uint24 day = _simulatedDayIndex();
         // Check expiry
         uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
         if (
-            stampDay != 0 && uint24(day) > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS
+            stampDay != 0 && day > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS
         ) {
             // Expired: clear lootbox fields
             bp.slot0 = s0 & BP_LOOTBOX_CLEAR;

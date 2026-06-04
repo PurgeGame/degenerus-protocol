@@ -18,7 +18,7 @@ library GameTimeLib {
      * @dev Day 1 = deploy day. Days reset at JACKPOT_RESET_TIME (22:57 UTC).
      * @return Current day index (1-indexed from deploy day).
      */
-    function currentDayIndex() internal view returns (uint32) {
+    function currentDayIndex() internal view returns (uint24) {
         return currentDayIndexAt(uint48(block.timestamp));
     }
 
@@ -28,8 +28,8 @@ library GameTimeLib {
      * @param ts Timestamp to evaluate.
      * @return Day index (1-indexed from deploy day).
      */
-    function currentDayIndexAt(uint48 ts) internal pure returns (uint32) {
-        uint32 currentDayBoundary = uint32((ts - JACKPOT_RESET_TIME) / 1 days);
-        return currentDayBoundary - uint32(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 1;
+    function currentDayIndexAt(uint48 ts) internal pure returns (uint24) {
+        uint24 currentDayBoundary = uint24((ts - JACKPOT_RESET_TIME) / 1 days);
+        return currentDayBoundary - uint24(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 1;
     }
 }

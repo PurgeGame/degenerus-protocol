@@ -34,5 +34,5 @@ interface IDegenerusJackpots {
     function markBafSkipped(uint24 lvl) external;
 
     /// @notice Day index of the most recent BAF jackpot resolution.
-    function getLastBafResolvedDay() external view returns (uint32);
+    function getLastBafResolvedDay() external view returns (uint24);
 }

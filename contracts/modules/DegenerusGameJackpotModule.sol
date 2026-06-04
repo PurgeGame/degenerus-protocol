@@ -102,7 +102,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Emitted once per daily drawing with both main and bonus winning traits.
     event DailyWinningTraits(
-        uint32 indexed day,
+        uint24 indexed day,
         uint32 mainTraitsPacked,
         uint32 bonusTraitsPacked,
         uint24 bonusTargetLevel
@@ -315,7 +315,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 lvl,
         uint256 randWord
     ) external {
-        uint32 questDay = _simulatedDayIndex();
+        uint24 questDay = _simulatedDayIndex();
         uint32 winningTraitsPacked;
 
         if (isJackpotPhase) {
@@ -1444,7 +1444,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      effective ×1.5 weight on the leader, no min-wager floor on any other slot.
     ///      Returns `(false, 0, 0)` when no slot has any wagers.
     function _rollHeroSymbol(
-        uint32 day,
+        uint24 day,
         uint256 entropy
     )
         private
@@ -1610,7 +1610,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param bonusTargetLevel Target level for the first (main-equivalent) coin distribution.
     function emitDailyWinningTraits(uint24, uint256 randWord, uint24 bonusTargetLevel) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
-        uint32 questDay = _simulatedDayIndex();
+        uint24 questDay = _simulatedDayIndex();
         uint32 mainTraitsPacked = _rollWinningTraits(randWord, true);
         uint256 saltedRng = uint256(keccak256(abi.encodePacked(randWord, BONUS_TRAITS_TAG)));
         uint32 bonusTraitsPacked = _rollWinningTraits(saltedRng, true);

@@ -12,7 +12,7 @@ interface IDeityBoonDataSource {
     /// @return deityPassAvailable Whether deity pass boons are eligible.
     function deityBoonData(address deity) external view returns (
         uint256 dailySeed,
-        uint32 day,
+        uint24 day,
         uint8 usedMask,
         bool decimatorOpen,
         bool deityPassAvailable
@@ -93,10 +93,10 @@ contract DeityBoonViewer {
     function deityBoonSlots(
         address game,
         address deity
-    ) external view returns (uint8[3] memory slots, uint8 usedMask, uint32 day) {
+    ) external view returns (uint8[3] memory slots, uint8 usedMask, uint24 day) {
         (
             uint256 dailySeed,
-            uint32 d,
+            uint24 d,
             uint8 mask,
             bool decimatorOpen,
             bool deityPassAvailable

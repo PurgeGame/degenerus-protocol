@@ -44,27 +44,27 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * +-----------------------------------------------------------------------------+
  * | EVM SLOT 0 (32 bytes) -- Timing, FSM, Counters, Flags, Buffer, Freeze       |
  * +-----------------------------------------------------------------------------+
- * | [0:4]   purchaseStartDay         uint32   Day index when purchase/deploy began|
- * | [4:8]   dailyIdx                 uint32   Monotonic day counter             |
- * | [8:14]  rngRequestTime           uint48   When last VRF request was fired   |
- * | [14:17] level                    uint24   Current jackpot level (starts at 0)|
- * | [17:18] jackpotPhaseFlag         bool     Phase: false=PURCHASE, true=JACKPOT|
- * | [18:19] jackpotCounter           uint8    Jackpots processed this level      |
- * | [19:20] lastPurchaseDay          bool     Prize target met flag              |
- * | [20:21] decWindowOpen            bool     Decimator window latch             |
- * | [21:22] rngLockedFlag            bool     Daily RNG lock (jackpot window)    |
- * | [22:23] phaseTransitionActive    bool     Level transition in progress       |
- * | [23:24] gameOver                 bool     Terminal state flag                |
- * | [24:25] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
- * | [25:26] compressedJackpotFlag    uint8    0=normal, 1=compressed, 2=turbo    |
- * | [26:27] ticketsFullyProcessed    bool     Read slot fully drained flag       |
- * | [27:28] gameOverPossible         bool     Drip projection endgame flag       |
- * | [28:29] ticketWriteSlot          bool     Double-buffer write toggle         |
- * | [29:30] prizePoolFrozen          bool     Prize pool freeze active flag      |
- * | [30:31] presaleOver              bool     Coin-presale-box terminal latch    |
- * | [31:32] subsFullyProcessed       bool     Afking STAGE drain-complete flag    |
+ * | [0:3]   purchaseStartDay         uint24   Day index when purchase/deploy began|
+ * | [3:6]   dailyIdx                 uint24   Monotonic day counter             |
+ * | [6:12]  rngRequestTime           uint48   When last VRF request was fired   |
+ * | [12:15] level                    uint24   Current jackpot level (starts at 0)|
+ * | [15:16] jackpotPhaseFlag         bool     Phase: false=PURCHASE, true=JACKPOT|
+ * | [16:17] jackpotCounter           uint8    Jackpots processed this level      |
+ * | [17:18] lastPurchaseDay          bool     Prize target met flag              |
+ * | [18:19] decWindowOpen            bool     Decimator window latch             |
+ * | [19:20] rngLockedFlag            bool     Daily RNG lock (jackpot window)    |
+ * | [20:21] phaseTransitionActive    bool     Level transition in progress       |
+ * | [21:22] gameOver                 bool     Terminal state flag                |
+ * | [22:23] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
+ * | [23:24] compressedJackpotFlag    uint8    0=normal, 1=compressed, 2=turbo    |
+ * | [24:25] ticketsFullyProcessed    bool     Read slot fully drained flag       |
+ * | [25:26] gameOverPossible         bool     Drip projection endgame flag       |
+ * | [26:27] ticketWriteSlot          bool     Double-buffer write toggle         |
+ * | [27:28] prizePoolFrozen          bool     Prize pool freeze active flag      |
+ * | [28:29] presaleOver              bool     Coin-presale-box terminal latch    |
+ * | [29:30] subsFullyProcessed       bool     Afking STAGE drain-complete flag    |
  * +-----------------------------------------------------------------------------+
- *   Total: 32 bytes used (0 bytes padding -- FULL)
+ *   Total: 30 bytes used (2 bytes padding)
  *
  * +-----------------------------------------------------------------------------+
  * | EVM SLOT 1 (32 bytes) -- Prize Pools                                        |
@@ -124,7 +124,7 @@ interface IDegenerusQuestView {
         view
         returns (
             uint32 streak,
-            uint32 lastCompletedDay,
+            uint24 lastCompletedDay,
             uint128[2] memory progress,
             bool[2] memory completed
         );
@@ -218,17 +218,17 @@ abstract contract DegenerusGameStorage {
     ///      Initialized to GameTimeLib.currentDayIndex() in the constructor.
     ///      Used for death clock, distress mode, future take curve, and gap extension.
     ///
-    ///      SECURITY: uint32 holds day indices up to ~4.2 billion — effectively unlimited
+    ///      SECURITY: uint24 holds day indices up to ~16.7 million — effectively unlimited
     ///      for day-granularity counters.
-    uint32 internal purchaseStartDay;
+    uint24 internal purchaseStartDay;
 
     /// @dev Monotonically increasing "day" counter derived from block timestamps.
     ///      Incremented during game progression; used to key RNG words and track
     ///      daily jackpot eligibility. NOT tied to calendar days — it's game-relative.
     ///
-    ///      SECURITY: uint32 holds day indices up to ~4.2 billion — effectively unlimited
+    ///      SECURITY: uint24 holds day indices up to ~16.7 million — effectively unlimited
     ///      for day-granularity counters.
-    uint32 internal dailyIdx;
+    uint24 internal dailyIdx;
 
     /// @dev Timestamp when the last VRF (Chainlink) request was submitted.
     ///      Used for timeout detection: rngRequestTime != 0 means a VRF request
@@ -451,7 +451,7 @@ abstract contract DegenerusGameStorage {
     ///      Historical words enable verifiable replay of past randomness.
     ///
     ///      SECURITY: Immutable once written; provides audit trail for RNG.
-    mapping(uint32 => uint256) internal rngWordByDay;
+    mapping(uint24 => uint256) internal rngWordByDay;
 
     // =========================================================================
     // Future Mint Awards
@@ -560,8 +560,8 @@ abstract contract DegenerusGameStorage {
     ///      and 25% ticket bonus on the distress-bought portion.
     function _isDistressMode() internal view returns (bool) {
         if (gameOver) return false;
-        uint32 psd = purchaseStartDay;
-        uint32 currentDay = _simulatedDayIndex();
+        uint24 psd = purchaseStartDay;
+        uint24 currentDay = _simulatedDayIndex();
         if (level == 0) {
             // Distress fires on the final day before the liveness guard would trigger.
             return currentDay >= psd + _DEPLOY_IDLE_TIMEOUT_DAYS;
@@ -1115,7 +1115,7 @@ abstract contract DegenerusGameStorage {
             lastLevelTarget
         );
 
-        uint32 day = _currentMintDay();
+        uint24 day = _currentMintDay();
         data = _setMintDay(
             data,
             day,
@@ -1187,7 +1187,7 @@ abstract contract DegenerusGameStorage {
             newFrozenLevel
         );
 
-        uint32 day = _currentMintDay();
+        uint24 day = _currentMintDay();
         data = _setMintDay(
             data,
             day,
@@ -1198,7 +1198,7 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Returns the current day index.
-    function _simulatedDayIndex() internal view returns (uint32) {
+    function _simulatedDayIndex() internal view returns (uint24) {
         return GameTimeLib.currentDayIndex();
     }
 
@@ -1236,8 +1236,8 @@ abstract contract DegenerusGameStorage {
     function _livenessTriggered() internal view returns (bool) {
         if (lastPurchaseDay || jackpotPhaseFlag) return false;
         uint24 lvl = level;
-        uint32 psd = purchaseStartDay;
-        uint32 currentDay = _simulatedDayIndex();
+        uint24 psd = purchaseStartDay;
+        uint24 currentDay = _simulatedDayIndex();
         if (lvl == 0 && currentDay - psd > _DEPLOY_IDLE_TIMEOUT_DAYS) return true;
         if (lvl != 0 && currentDay - psd > 120) return true;
         uint48 rngStart = rngRequestTime;
@@ -1245,13 +1245,13 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Returns the day index for a specific timestamp.
-    function _simulatedDayIndexAt(uint48 ts) internal pure returns (uint32) {
+    function _simulatedDayIndexAt(uint48 ts) internal pure returns (uint24) {
         return GameTimeLib.currentDayIndexAt(ts);
     }
 
     /// @dev Gets the current mint day from dailyIdx or calculates from timestamp.
-    function _currentMintDay() internal view returns (uint32) {
-        uint32 day = dailyIdx;
+    function _currentMintDay() internal view returns (uint24) {
+        uint24 day = dailyIdx;
         if (day == 0) {
             day = _simulatedDayIndex();
         }
@@ -1261,11 +1261,11 @@ abstract contract DegenerusGameStorage {
     /// @dev Updates the day field in packed mint data if changed.
     function _setMintDay(
         uint256 data,
-        uint32 day,
+        uint24 day,
         uint256 dayShift,
         uint256 dayMask
     ) internal pure returns (uint256) {
-        uint32 prevDay = uint32((data >> dayShift) & dayMask);
+        uint24 prevDay = uint24((data >> dayShift) & dayMask);
         if (prevDay == day) return data;
         uint256 clearedDay = data & ~(dayMask << dayShift);
         return clearedDay | (uint256(day) << dayShift);
@@ -1443,13 +1443,13 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Day when deity's boon slots were assigned.
-    mapping(address => uint32) internal deityBoonDay;
+    mapping(address => uint24) internal deityBoonDay;
 
     /// @dev Bitmask of used slots for the current day (bit i = slot i used).
     mapping(address => uint8) internal deityBoonUsedMask;
 
     /// @dev Day when recipient last received a deity boon (prevents double-receipt).
-    mapping(address => uint32) internal deityBoonRecipientDay;
+    mapping(address => uint24) internal deityBoonRecipientDay;
 
     // =========================================================================
     // Degenerette (Roulette) Bets
@@ -1533,9 +1533,9 @@ abstract contract DegenerusGameStorage {
     /// @dev Daily hero symbol wagers (ETH only), indexed by day.
     ///      Key: day index (from GameTimeLib). Value: 4 packed uint256s.
     ///      Each uint256 packs 8 × 32-bit amounts (one per symbol in that quadrant).
-    ///      Amounts stored in units of 1e12 wei (0.000001 ETH) to fit 32 bits
-    ///      (max ~4,295 ETH per symbol per day).
-    mapping(uint32 => uint256[4]) internal dailyHeroWagers;
+    ///      Amounts stored in units of 1e14 wei (0.0001 ETH) to fit 32 bits
+    ///      (max ~429,500 ETH per symbol per day).
+    mapping(uint24 => uint256[4]) internal dailyHeroWagers;
 
     // =========================================================================
     // Distress-Mode Lootbox Tracking
@@ -1560,13 +1560,26 @@ abstract contract DegenerusGameStorage {
     // Century (x00) Ticket Bonus Tracking
     // =========================================================================
 
-    /// @dev The x00 level the centuryBonusUsed mapping applies to.
-    ///      When targetLevel differs, all per-player values are stale (treated as 0).
-    uint24 internal centuryBonusLevel;
-
-    /// @dev Bonus entries awarded per player at the current x00 level.
-    ///      Used to enforce the 20 ETH cap across multiple purchases.
+    /// @dev Per-player century (x00) bonus usage, packed as (level << 224 | used).
+    ///      The high bits stamp WHICH x00 level the usage applies to, so every
+    ///      player is independent: a value stamped to a prior century reads as 0
+    ///      (a fresh 20-ETH allowance) with no global reset. Enforces the
+    ///      20-ETH-equivalent per-player cap across multiple buys at one level.
     mapping(address => uint256) internal centuryBonusUsed;
+
+    uint256 private constant _CENTURY_USED_MASK = (uint256(1) << 224) - 1;
+
+    /// @dev A player's century-bonus usage for the given x00 level; 0 if the
+    ///      stored stamp belongs to a prior century (stale).
+    function _centuryUsedFor(address player, uint256 level) internal view returns (uint256) {
+        uint256 packed = centuryBonusUsed[player];
+        return (packed >> 224) == level ? (packed & _CENTURY_USED_MASK) : 0;
+    }
+
+    /// @dev Records a player's century-bonus usage, stamped to the given x00 level.
+    function _setCenturyUsedFor(address player, uint256 level, uint256 used) internal {
+        centuryBonusUsed[player] = (level << 224) | (used & _CENTURY_USED_MASK);
+    }
 
     // =========================================================================
     // VRF Liveness Timestamp (Governance)
@@ -2009,8 +2022,8 @@ abstract contract DegenerusGameStorage {
     ///      swap-pop bookkeeping for `_subscribers`.
     mapping(address => uint256) internal _subscriberIndex;
 
-    /// @dev The two uint16 cursors + the uint32 afking reset-day pack into ONE slot
-    ///      (16 + 16 + 32 = 64 bits). The cursors index `_subscribers` (the active set
+    /// @dev The two uint16 cursors + the uint24 afking reset-day pack into ONE slot
+    ///      (16 + 16 + 24 = 56 bits). The cursors index `_subscribers` (the active set
     ///      is capped at 500 — GameAfkingModule.SUBSCRIBER_CAP, well within uint16) and
     ///      are drained in chunks across advanceGame / router calls.
     /// @dev Process-STAGE cursor: the pre-RNG stamp pass position.
@@ -2025,5 +2038,5 @@ abstract contract DegenerusGameStorage {
     ///      `_subCursor` ONCE, before that day's STAGE drains — a forward-looking reset
     ///      (at the start of the new day, not trailing after the prior day completes),
     ///      firing exactly once per day regardless of which RNG path runs.
-    uint32 internal _afkingResetDay;
+    uint24 internal _afkingResetDay;
 }

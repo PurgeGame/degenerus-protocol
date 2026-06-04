@@ -38,7 +38,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @param boostBps The boost percentage in basis points that was applied.
     event LootBoxBoostConsumed(
         address indexed player,
-        uint32 indexed day,
+        uint24 indexed day,
         uint256 originalAmount,
         uint256 boostedAmount,
         uint16 boostBps
@@ -197,8 +197,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 s0 = bp.slot0;
         uint24 boonDay = uint24(s0 >> BP_WHALE_DAY_SHIFT);
         if (boonDay != 0) {
-            uint32 currentDay = _simulatedDayIndex();
-            hasValidBoon = uint24(currentDay) <= boonDay + 4;
+            uint24 currentDay = _simulatedDayIndex();
+            hasValidBoon = currentDay <= boonDay + 4;
         }
 
         uint256 prevData = mintPacked_[buyer];
@@ -291,7 +291,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         );
 
         // Update mint day
-        uint32 day = _currentMintDay();
+        uint24 day = _currentMintDay();
         data = _setMintDay(
             data,
             day,
@@ -388,13 +388,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint16 boonDiscountBps = _lazyPassTierToBps(lazyTier);
         uint24 boonDay = uint24(s1 >> BP_LAZY_PASS_DAY_SHIFT);
         if (boonDay != 0) {
-            uint32 currentDay = _simulatedDayIndex();
+            uint24 currentDay = _simulatedDayIndex();
             uint24 deityDay = uint24(s1 >> BP_DEITY_LAZY_PASS_DAY_SHIFT);
-            if (deityDay != 0 && deityDay != uint24(currentDay)) {
+            if (deityDay != 0 && deityDay != currentDay) {
                 bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
                 boonDay = 0;
                 boonDiscountBps = 0;
-            } else if (uint24(currentDay) <= boonDay + 4) {
+            } else if (currentDay <= boonDay + 4) {
                 hasValidBoon = true;
             } else {
                 bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
@@ -942,11 +942,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (tier == 0) return boostedAmount;
 
         // The purchase day (== the buy is happening now) — read here, only on the boost path.
-        uint32 day = _simulatedDayIndex();
+        uint24 day = _simulatedDayIndex();
         // Check expiry
         uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
         if (
-            stampDay > 0 && uint24(day) > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS
+            stampDay > 0 && day > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS
         ) {
             // Expired: clear lootbox fields
             bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
@@ -974,8 +974,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         address player,
         uint256 cachedPacked
     ) private {
-        uint32 day = _simulatedDayIndex();
-        uint32 prevDay = uint32(
+        uint24 day = _simulatedDayIndex();
+        uint24 prevDay = uint24(
             (cachedPacked >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_32
         );
         if (prevDay == day) {

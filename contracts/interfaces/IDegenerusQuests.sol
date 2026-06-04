@@ -12,7 +12,7 @@ struct QuestRequirements {
 /// @notice Information about a single quest
 struct QuestInfo {
     /// @notice The day this quest is active (unix day)
-    uint32 day;
+    uint24 day;
     /// @notice The type of quest (mint, flip, affiliate, etc.)
     uint8 questType;
     /// @notice Whether this is a high difficulty quest with increased requirements and rewards
@@ -30,7 +30,7 @@ struct PlayerQuestView {
     /// @notice Whether the player has completed each quest
     bool[2] completed;
     /// @notice The last day the player completed a quest
-    uint32 lastCompletedDay;
+    uint24 lastCompletedDay;
     /// @notice The player's base streak count before shields
     uint32 baseStreak;
 }
@@ -43,7 +43,7 @@ interface IDegenerusQuests {
     /// @dev Called by AdvanceModule (via GAME delegatecall) to determine which quests are active.
     /// @param day The unix day to roll quests for
     /// @param entropy Random entropy used to determine the slot 1 quest type
-    function rollDailyQuest(uint32 day, uint256 entropy) external;
+    function rollDailyQuest(uint24 day, uint256 entropy) external;
 
     /// @notice Records player minting activity and checks quest completion
     /// @dev Called by the game contract when a player mints tickets
@@ -138,7 +138,7 @@ interface IDegenerusQuests {
     /// @param player The address of the player to award bonus to
     /// @param amount The number of bonus streak days to award
     /// @param currentDay The current unix day for tracking purposes
-    function awardQuestStreakBonus(address player, uint16 amount, uint32 currentDay) external;
+    function awardQuestStreakBonus(address player, uint16 amount, uint24 currentDay) external;
 
     /// @notice Grant quest streak shields to a player (each absorbs one missed day)
     /// @dev GAME-only. Used by the lootbox quest-shield boon.
@@ -153,7 +153,7 @@ interface IDegenerusQuests {
     /// @param player The subscriber starting an afking run
     /// @param currentDay The current quest day for state synchronization
     /// @return streak The player's gap-synced streak at the start of the run
-    function beginAfking(address player, uint32 currentDay) external returns (uint24 streak);
+    function beginAfking(address player, uint24 currentDay) external returns (uint24 streak);
 
     /// @notice Ends an afking run: hands the afking-computed streak back to the manual system
     /// @dev GAME-only, called on every sub-ending path before the Sub slot is deleted.
@@ -164,7 +164,7 @@ interface IDegenerusQuests {
     /// @param earnedStreak The run's earned streak (snapshot + funded delivered days), Game-computed
     /// @param afkingCoveredDay The afking funded high-water day (Game-side)
     /// @param currentDay The current quest day (the decay reference)
-    function finalizeAfking(address player, uint24 earnedStreak, uint32 afkingCoveredDay, uint32 currentDay) external;
+    function finalizeAfking(address player, uint24 earnedStreak, uint24 afkingCoveredDay, uint24 currentDay) external;
 
     /// @notice Returns the quest state for a specific player
     /// @param player The address of the player to query
@@ -177,7 +177,7 @@ interface IDegenerusQuests {
         view
         returns (
             uint32 streak,
-            uint32 lastCompletedDay,
+            uint24 lastCompletedDay,
             uint128[2] memory progress,
             bool[2] memory completed
         );

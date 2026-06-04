@@ -66,7 +66,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @notice Emitted when a quest slot is rolled for a new day.
     event QuestSlotRolled(
-        uint32 indexed day,
+        uint24 indexed day,
         uint8 indexed slot,
         uint8 questType,
         uint8 flags,
@@ -76,7 +76,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice Emitted when player quest progress is updated.
     event QuestProgressUpdated(
         address indexed player,
-        uint32 indexed day,
+        uint24 indexed day,
         uint8 indexed slot,
         uint8 questType,
         uint128 progress,
@@ -86,7 +86,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice Emitted when a quest slot is completed.
     event QuestCompleted(
         address indexed player,
-        uint32 indexed day,
+        uint24 indexed day,
         uint8 indexed slot,
         uint8 questType,
         uint32 streak,
@@ -98,7 +98,7 @@ contract DegenerusQuests is IDegenerusQuests {
         address indexed player,
         uint16 used,
         uint16 remaining,
-        uint32 currentDay
+        uint24 currentDay
     );
 
     /// @notice Emitted when quest streak shields are granted (e.g. by a lootbox boon).
@@ -113,14 +113,14 @@ contract DegenerusQuests is IDegenerusQuests {
         address indexed player,
         uint16 amount,
         uint24 newStreak,
-        uint32 currentDay
+        uint24 currentDay
     );
 
     /// @notice Emitted when quest streak resets due to missed days.
     event QuestStreakReset(
         address indexed player,
         uint24 previousStreak,
-        uint32 currentDay
+        uint24 currentDay
     );
 
     /// @notice Emitted when a player completes the level quest.
@@ -243,11 +243,11 @@ contract DegenerusQuests is IDegenerusQuests {
      * - Player progress is invalidated when version mismatches
      */
     struct DailyQuest {
-        uint32 day;       // Quest day identifier (derived by caller, not block timestamp)
+        uint24 day;       // Quest day identifier (derived by caller, not block timestamp)
         uint8 questType;  // One of the QUEST_TYPE_* constants
         uint8 flags;      // Difficulty flags (HIGH/VERY_HIGH)
         uint24 version;     // Bumped when quest mutates mid-day to reset stale player progress
-        // 16 bits free
+        // 24 bits free
     }
 
     /**
@@ -344,7 +344,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Idempotent per day. Called by AdvanceModule when RNG word is available.
     /// @param day Quest day identifier.
     /// @param entropy VRF entropy word.
-    function rollDailyQuest(uint32 day, uint256 entropy) external onlyGame {
+    function rollDailyQuest(uint24 day, uint256 entropy) external onlyGame {
         DailyQuest[QUEST_SLOT_COUNT] storage quests = activeQuests;
         if (quests[0].day == day) return;
 
@@ -375,7 +375,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param currentDay The current quest day for state synchronization.
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
-    function awardQuestStreakBonus(address player, uint16 amount, uint32 currentDay) external onlyGame {
+    function awardQuestStreakBonus(address player, uint16 amount, uint24 currentDay) external onlyGame {
         if (player == address(0) || amount == 0 || currentDay == 0) return;
 
         PlayerQuestState storage state = questPlayerState[player];
@@ -429,7 +429,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @return streak The player's gap-synced streak at the start of the run.
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
-    function beginAfking(address player, uint32 currentDay)
+    function beginAfking(address player, uint24 currentDay)
         external
         onlyGame
         returns (uint24 streak)
@@ -463,19 +463,19 @@ contract DegenerusQuests is IDegenerusQuests {
     function finalizeAfking(
         address player,
         uint24 earnedStreak,
-        uint32 afkingCoveredDay,
-        uint32 currentDay
+        uint24 afkingCoveredDay,
+        uint24 currentDay
     ) external onlyGame {
         if (player == address(0)) return;
         PlayerQuestState storage state = questPlayerState[player];
         if (!state.afkingActive) return; // idempotent: already finalized / never afking
-        uint32 lastValid = afkingCoveredDay;
-        if (uint32(state.lastActiveDay) > lastValid) lastValid = uint32(state.lastActiveDay);
+        uint24 lastValid = afkingCoveredDay;
+        if (state.lastActiveDay > lastValid) lastValid = state.lastActiveDay;
         uint24 finalStreak = (currentDay == 0 || lastValid + 1 >= currentDay)
             ? earnedStreak
             : 0;
         state.streak = finalStreak > type(uint16).max ? type(uint16).max : uint16(finalStreak);
-        uint24 d = uint24(lastValid);
+        uint24 d = lastValid;
         state.lastActiveDay = d;
         state.lastCompletedDay = d;
         state.afkingActive = false;
@@ -524,7 +524,7 @@ contract DegenerusQuests is IDegenerusQuests {
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = activeQuests;
-        uint32 currentDay = _currentQuestDay(quests);
+        uint24 currentDay = _currentQuestDay(quests);
         PlayerQuestState storage state = questPlayerState[player];
         if (player == address(0) || quantity == 0 || currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
@@ -638,7 +638,7 @@ contract DegenerusQuests is IDegenerusQuests {
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = activeQuests;
-        uint32 currentDay = _currentQuestDay(quests);
+        uint24 currentDay = _currentQuestDay(quests);
         PlayerQuestState storage state = questPlayerState[player];
         if (player == address(0) || flipCredit == 0 || currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
@@ -697,7 +697,7 @@ contract DegenerusQuests is IDegenerusQuests {
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = activeQuests;
-        uint32 currentDay = _currentQuestDay(quests);
+        uint24 currentDay = _currentQuestDay(quests);
         PlayerQuestState storage state = questPlayerState[player];
         if (player == address(0) || burnAmount == 0 || currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
@@ -756,7 +756,7 @@ contract DegenerusQuests is IDegenerusQuests {
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = activeQuests;
-        uint32 currentDay = _currentQuestDay(quests);
+        uint24 currentDay = _currentQuestDay(quests);
         PlayerQuestState storage state = questPlayerState[player];
         if (player == address(0) || amount == 0 || currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
@@ -825,7 +825,7 @@ contract DegenerusQuests is IDegenerusQuests {
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = activeQuests;
-        uint32 currentDay = _currentQuestDay(quests);
+        uint24 currentDay = _currentQuestDay(quests);
         PlayerQuestState storage state = questPlayerState[player];
         if (player == address(0) || currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
@@ -974,7 +974,7 @@ contract DegenerusQuests is IDegenerusQuests {
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = activeQuests;
-        uint32 currentDay = _currentQuestDay(quests);
+        uint24 currentDay = _currentQuestDay(quests);
         PlayerQuestState storage state = questPlayerState[player];
         if (player == address(0) || amount == 0 || currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
@@ -1020,7 +1020,7 @@ contract DegenerusQuests is IDegenerusQuests {
      */
     function getActiveQuests() external view returns (QuestInfo[2] memory quests) {
         DailyQuest[QUEST_SLOT_COUNT] memory local = _materializeActiveQuestsForView();
-        uint32 currentDay = _currentQuestDay(local);
+        uint24 currentDay = _currentQuestDay(local);
         PlayerQuestState memory emptyState;
         for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
             (quests[slot], , ) = _questViewData(local[slot], emptyState, slot, currentDay);
@@ -1052,11 +1052,11 @@ contract DegenerusQuests is IDegenerusQuests {
         external
         view
         override
-        returns (uint32 streak, uint32 lastCompletedDay, uint128[2] memory progress, bool[2] memory completed)
+        returns (uint32 streak, uint24 lastCompletedDay, uint128[2] memory progress, bool[2] memory completed)
     {
         DailyQuest[QUEST_SLOT_COUNT] memory local = activeQuests;
         PlayerQuestState memory state = questPlayerState[player];
-        uint32 currentDay = _currentQuestDay(local);
+        uint24 currentDay = _currentQuestDay(local);
         streak = state.streak;
         lastCompletedDay = state.lastCompletedDay;
         for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
@@ -1082,7 +1082,7 @@ contract DegenerusQuests is IDegenerusQuests {
      */
     function getPlayerQuestView(address player) external view returns (PlayerQuestView memory viewData) {
         DailyQuest[QUEST_SLOT_COUNT] memory local = _materializeActiveQuestsForView();
-        uint32 currentDay = _currentQuestDay(local);
+        uint24 currentDay = _currentQuestDay(local);
         PlayerQuestState memory state = questPlayerState[player];
 
         // Preview streak decay: if player missed days beyond available shields, show 0 streak
@@ -1137,7 +1137,7 @@ contract DegenerusQuests is IDegenerusQuests {
         DailyQuest memory quest,
         PlayerQuestState memory state,
         uint8 slot,
-        uint32 currentDay
+        uint24 currentDay
     ) private view returns (QuestInfo memory info, uint128 progress, bool completed) {
         info = QuestInfo({
             day: quest.day,
@@ -1191,7 +1191,7 @@ contract DegenerusQuests is IDegenerusQuests {
      */
     function _currentDayQuestOfType(
         DailyQuest[QUEST_SLOT_COUNT] memory quests,
-        uint32 currentDay,
+        uint24 currentDay,
         uint8 questType
     ) private pure returns (DailyQuest memory quest, uint8 slotIndex) {
         slotIndex = type(uint8).max; // Sentinel for "not found"
@@ -1379,7 +1379,7 @@ contract DegenerusQuests is IDegenerusQuests {
         uint8 slot,
         uint256 delta,
         uint256 target,
-        uint32 currentDay,
+        uint24 currentDay,
         uint256 mintPrice,
         uint8 handlerQuestType,
         uint256 levelDelta,
@@ -1427,7 +1427,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param player Player address for event emission and streak shield lookup.
      * @param currentDay The current quest day.
      */
-    function _questSyncState(PlayerQuestState storage state, address player, uint32 currentDay) private {
+    function _questSyncState(PlayerQuestState storage state, address player, uint24 currentDay) private {
         uint16 prevStreak = state.streak;
         uint24 anchorDay = state.lastActiveDay != 0 ? state.lastActiveDay : state.lastCompletedDay;
         if (anchorDay != 0 && currentDay > anchorDay + 1) {
@@ -1474,7 +1474,7 @@ contract DegenerusQuests is IDegenerusQuests {
     function _questSyncProgress(
         PlayerQuestState storage state,
         uint8 slot,
-        uint32 currentDay
+        uint24 currentDay
     ) private {
         uint24 currentDay24 = uint24(currentDay);
         if (_lastProgressDayOf(state, slot) != currentDay24) {
@@ -1495,7 +1495,7 @@ contract DegenerusQuests is IDegenerusQuests {
         PlayerQuestState memory state,
         DailyQuest memory quest,
         uint8 slot,
-        uint32 currentDay
+        uint24 currentDay
     ) private pure returns (bool) {
         if (quest.day == 0 || quest.day != currentDay) {
             return false;
@@ -1516,7 +1516,7 @@ contract DegenerusQuests is IDegenerusQuests {
         PlayerQuestState storage state,
         DailyQuest memory quest,
         uint8 slot,
-        uint32 currentDay
+        uint24 currentDay
     ) private view returns (bool) {
         if (quest.day == 0 || quest.day != currentDay) {
             return false;
@@ -1789,7 +1789,7 @@ contract DegenerusQuests is IDegenerusQuests {
         DailyQuest[QUEST_SLOT_COUNT] memory quests,
         uint8 slot,
         DailyQuest memory quest,
-        uint32 currentDay,
+        uint24 currentDay,
         uint256 mintPrice
     )
         private
@@ -1841,7 +1841,7 @@ contract DegenerusQuests is IDegenerusQuests {
         PlayerQuestState storage state,
         DailyQuest[QUEST_SLOT_COUNT] memory quests,
         uint8 slot,
-        uint32 currentDay,
+        uint24 currentDay,
         uint256 mintPrice
     )
         private
@@ -1910,7 +1910,7 @@ contract DegenerusQuests is IDegenerusQuests {
      */
     function _seedQuestType(
         DailyQuest storage quest,
-        uint32 day,
+        uint24 day,
         uint8 questType
     ) private {
         quest.day = day;
@@ -1923,8 +1923,8 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param quests Memory array of active quests.
      * @return The current quest day (prefers slot 0 if both are set).
      */
-    function _currentQuestDay(DailyQuest[QUEST_SLOT_COUNT] memory quests) private pure returns (uint32) {
-        uint32 day0 = quests[0].day;
+    function _currentQuestDay(DailyQuest[QUEST_SLOT_COUNT] memory quests) private pure returns (uint24) {
+        uint24 day0 = quests[0].day;
         if (day0 != 0) return day0;
         return quests[1].day;
     }

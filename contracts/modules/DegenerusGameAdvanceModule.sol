@@ -74,7 +74,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      stays true and the next advance pays the jackpot with the same frozen word.
     uint8 private constant STAGE_GAP_BACKFILLED = 12;
     event DailyRngApplied(
-        uint32 day,
+        uint24 day,
         uint256 rawWord,
         uint256 nudges,
         uint256 finalWord
@@ -170,10 +170,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function advanceGame() external returns (uint8 mult) {
         mult = 1;
         uint48 ts = uint48(block.timestamp);
-        uint32 day = _simulatedDayIndexAt(ts);
+        uint24 day = _simulatedDayIndexAt(ts);
         bool inJackpot = jackpotPhaseFlag;
         uint24 lvl = level;
-        uint32 psd = purchaseStartDay;
+        uint24 psd = purchaseStartDay;
         // Turbo: if target already met on day ≤1, flag now so the upcoming
         // _requestRng does the level pre-increment (matching normal
         // lastPurchaseDay flow). Skipped when rngLockedFlag is set because
@@ -334,7 +334,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 lastPurchase,
                 bonusFlip
             );
-            psd += gapDays;
+            psd += uint24(gapDays);
             if (rngWord == 1) {
                 _swapAndFreeze(purchaseLevel);
                 stage = STAGE_RNG_REQUESTED;
@@ -561,9 +561,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///         STAGE_GAMEOVER -- normal game-over completion or final sweep
     ///         STAGE_TICKETS_WORKING -- partial best-effort drain; caller retries
     function _handleGameOverPath(
-        uint32 day,
+        uint24 day,
         uint24 lvl,
-        uint32 psd
+        uint24 psd
     ) private returns (bool shouldReturn, uint8 stage) {
         // Liveness guard: prevent permanent lockup if game is abandoned.
         // Uses the shared _livenessTriggered() helper so purchase paths (in
@@ -765,7 +765,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      _subscribers.length. No per-day epoch is written — the box reads the LIVE level +
     ///      rngWordByDay[day] at open.
     /// @param processDay The boundary-pinned process day (seeds the open, FREEZE-03).
-    function _runSubscriberStage(uint32 processDay) private {
+    function _runSubscriberStage(uint24 processDay) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
             .delegatecall(
@@ -794,9 +794,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function _consolidatePoolsAndRewardJackpots(
         uint24 lvl,
         uint24 purchaseLevel,
-        uint32 day,
+        uint24 day,
         uint256 rngWord,
-        uint32 psd
+        uint24 psd
     ) private {
         uint256 memFuture = _getFuturePrizePool();
         uint256 memCurrent = _getCurrentPrizePool();
@@ -1068,7 +1068,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // by requesting a new VRF word after inspecting the current one.
         if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) revert E();
         uint48 nowTs = uint48(block.timestamp);
-        uint32 currentDay = _simulatedDayIndexAt(nowTs);
+        uint24 currentDay = _simulatedDayIndexAt(nowTs);
 
         // Block in the 15-minute pre-reset window to avoid competing with daily jackpot RNG flow.
         if ((nowTs - 82620) % 1 days >= 1 days - 15 minutes) revert E();
@@ -1199,7 +1199,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      burn redemptions, stores lootbox RNG, and handles VRF timeout retries (12h).
     function rngGate(
         uint48 ts,
-        uint32 day,
+        uint24 day,
         uint24 lvl,
         bool isTicketJackpotDay,
         bool bonusFlip
@@ -1218,9 +1218,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // this branch on each new wall-clock day and re-process the
             // same gap range, doubling purchaseStartDay and re-running
             // coinflip payouts for already-resolved days.
-            uint32 idx = dailyIdx;
+            uint24 idx = dailyIdx;
             if (day > idx + 1 && rngWordByDay[idx + 1] == 0) {
-                uint32 gapCount = day - idx - 1;
+                uint24 gapCount = day - idx - 1;
                 _backfillGapDays(currentWord, idx + 1, day, bonusFlip);
 
                 // Backfill any lootbox indices that never got a VRF word (orphaned by stall).
@@ -1246,7 +1246,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(
                     ContractAddresses.SDGNRS
                 );
-                uint32 toResolve = sdgnrs.pendingResolveDay();
+                uint24 toResolve = sdgnrs.pendingResolveDay();
                 if (toResolve != 0) {
                     uint16 redemptionRoll = uint16(
                         ((currentWord >> 8) % 151) + 25
@@ -1288,7 +1288,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @return word RNG word, 1 if request sent, or 0 if waiting on fallback.
     function _gameOverEntropy(
         uint48 ts,
-        uint32 day,
+        uint24 day,
         uint24 lvl,
         bool isTicketJackpotDay
     ) private returns (uint256 word) {
@@ -1311,7 +1311,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(
                     ContractAddresses.SDGNRS
                 );
-                uint32 toResolve = sdgnrs.pendingResolveDay();
+                uint24 toResolve = sdgnrs.pendingResolveDay();
                 if (toResolve != 0) {
                     uint16 redemptionRoll = uint16(
                         ((currentWord >> 8) % 151) + 25
@@ -1343,7 +1343,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(
                         ContractAddresses.SDGNRS
                     );
-                    uint32 toResolve = sdgnrs.pendingResolveDay();
+                    uint24 toResolve = sdgnrs.pendingResolveDay();
                     if (toResolve != 0) {
                         uint16 redemptionRoll = uint16(
                             ((fallbackWord >> 8) % 151) + 25
@@ -1382,12 +1382,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @param currentDay Current day index.
     /// @return word Combined historical entropy.
     function _getHistoricalRngFallback(
-        uint32 currentDay
+        uint24 currentDay
     ) private view returns (uint256 word) {
         uint256 found;
         uint256 combined;
-        uint32 searchLimit = currentDay > 30 ? 30 : currentDay;
-        for (uint32 searchDay = 1; searchDay < searchLimit; ) {
+        uint24 searchLimit = currentDay > 30 ? 30 : currentDay;
+        for (uint24 searchDay = 1; searchDay < searchLimit; ) {
             uint256 w = rngWordByDay[searchDay];
             if (w != 0) {
                 combined = uint256(keccak256(abi.encodePacked(combined, w)));
@@ -1764,7 +1764,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Unlock RNG after processing is complete for the day.
     ///      Resets VRF state and re-enables RNG usage.
     /// @param day Current day index to record.
-    function _unlockRng(uint32 day) private {
+    function _unlockRng(uint24 day) private {
         dailyIdx = day;
         rngLockedFlag = false;
         rngWordCurrent = 0;
@@ -1816,14 +1816,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @param bonusFlip Whether presale bonus applies to coinflip resolution.
     function _backfillGapDays(
         uint256 vrfWord,
-        uint32 startDay,
-        uint32 endDay,
+        uint24 startDay,
+        uint24 endDay,
         bool bonusFlip
     ) private {
         // Cap at 120 gap days to stay within block gas limit (~9M gas).
         // Backfills oldest days first (most likely to have active coinflips).
         if (endDay - startDay > 120) endDay = startDay + 120;
-        for (uint32 gapDay = startDay; gapDay < endDay; ) {
+        for (uint24 gapDay = startDay; gapDay < endDay; ) {
             uint256 derivedWord = uint256(
                 keccak256(abi.encodePacked(vrfWord, gapDay))
             );
@@ -1864,7 +1864,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev Apply daily RNG nudges, record the word, and emit the finalized word.
     function _applyDailyRng(
-        uint32 day,
+        uint24 day,
         uint256 rawWord
     ) private returns (uint256 finalWord) {
         uint256 nudges = totalFlipReversals;
@@ -1916,8 +1916,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      Below L10: flag is always cleared.
     function _evaluateGameOverAndTarget(
         uint24 lvl,
-        uint32 psd,
-        uint32 day
+        uint24 psd,
+        uint24 day
     ) private returns (bool targetMet) {
         uint256 nextPool = _getNextPrizePool();
         uint256 target = levelPrizePool[lvl];

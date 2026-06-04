@@ -71,7 +71,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @notice Emitted when a BAF bracket is skipped because the daily flip lost.
     /// @param lvl Level whose BAF was skipped.
     /// @param day Day index on which the skip occurred.
-    event BafSkipped(uint24 indexed lvl, uint32 day);
+    event BafSkipped(uint24 indexed lvl, uint24 day);
 
     /*+======================================================================+
       |                              STRUCTS                                 |
@@ -133,7 +133,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     mapping(uint24 => mapping(address => uint256)) internal bafPlayerEpoch;
 
     /// @notice Day index of the most recent BAF jackpot resolution (any bracket).
-    uint32 internal lastBafResolvedDay;
+    uint24 internal lastBafResolvedDay;
 
     /*+======================================================================+
       |                      MODIFIERS & ACCESS CONTROL                      |
@@ -504,7 +504,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param lvl Level whose BAF was skipped.
     /// @custom:access Restricted to game contract via onlyGame modifier.
     function markBafSkipped(uint24 lvl) external onlyGame {
-        uint32 today = degenerusGame.currentDayView();
+        uint24 today = degenerusGame.currentDayView();
         lastBafResolvedDay = today;
         emit BafSkipped(lvl, today);
     }
@@ -663,7 +663,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
       +======================================================================+*/
 
     /// @notice Day index of the most recent BAF jackpot resolution.
-    function getLastBafResolvedDay() external view returns (uint32) {
+    function getLastBafResolvedDay() external view returns (uint24) {
         return lastBafResolvedDay;
     }
 }

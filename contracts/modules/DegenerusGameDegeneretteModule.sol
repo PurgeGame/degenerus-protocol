@@ -534,9 +534,9 @@ contract DegenerusGameDegeneretteModule is
         // Track daily hero wagers (ETH bets only)
         if (currency == CURRENCY_ETH) {
             // Daily hero symbol tracking (heroQuadrant validated to {0..3} above)
-            uint32 day = _simulatedDayIndex();
+            uint24 day = _simulatedDayIndex();
             uint8 heroSymbol = uint8(customTicket >> (heroQuadrant * 8)) & 7;
-            uint256 wagerUnit = totalBet / 1e12;
+            uint256 wagerUnit = totalBet / 1e14;
             if (wagerUnit > 0) {
                 uint256 wPacked = dailyHeroWagers[day][heroQuadrant];
                 uint256 shift = uint256(heroSymbol) * 32;

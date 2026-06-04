@@ -202,7 +202,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
      *      Deploy day boundary determines which calendar day is "day 1" in the game.
      */
     constructor() {
-        uint32 currentDay = GameTimeLib.currentDayIndex();
+        uint24 currentDay = GameTimeLib.currentDayIndex();
         purchaseStartDay = currentDay;
         dailyIdx = currentDay;
         levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
@@ -583,7 +583,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @notice Current day index.
-    function currentDayView() external view returns (uint32) {
+    function currentDayView() external view returns (uint24) {
         return _simulatedDayIndex();
     }
 
@@ -995,7 +995,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         view
         returns (
             uint256 dailySeed,
-            uint32 day,
+            uint24 day,
             uint8 usedMask,
             bool decimatorOpen,
             bool deityPassAvailable
@@ -2569,7 +2569,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Days are indexed from deploy time (day 1 = deploy day).
     /// @param day The day index to query.
     /// @return The random word (0 if no word recorded for that day).
-    function rngWordForDay(uint32 day) external view returns (uint256) {
+    function rngWordForDay(uint24 day) external view returns (uint256) {
         return rngWordByDay[day];
     }
 
@@ -2954,9 +2954,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param day Day index (from GameTimeLib).
     /// @param quadrant Quadrant (0-3).
     /// @param symbol Symbol index within quadrant (0-7).
-    /// @return wagerUnits Amount wagered in 1e12 wei units.
+    /// @return wagerUnits Amount wagered in 1e14 wei units.
     function getDailyHeroWager(
-        uint32 day,
+        uint24 day,
         uint8 quadrant,
         uint8 symbol
     ) external view returns (uint256 wagerUnits) {
@@ -2971,7 +2971,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return winSymbol The winning symbol within that quadrant.
     /// @return winAmount The wagered units for the winner.
     function getDailyHeroWinner(
-        uint32 day
+        uint24 day
     )
         external
         view

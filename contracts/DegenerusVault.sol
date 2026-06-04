@@ -104,7 +104,7 @@ interface IStakedDegenerusStonkBurn {
     /// @notice Burn sDGNRS to claim proportional backing assets.
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
     /// @notice Claim a resolved gambling-burn redemption for day `day` (SPEC-02 composite key).
-    function claimRedemption(uint32 day) external;
+    function claimRedemption(uint24 day) external;
 }
 
 /// @notice Interface for WWXRP vault-minting used by DegenerusVault.
@@ -737,7 +737,7 @@ contract DegenerusVault {
     ///      day has not been resolved.
     /// @param day Wall-clock day whose redemption to claim.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function sdgnrsClaimRedemption(uint32 day) external onlyVaultOwner {
+    function sdgnrsClaimRedemption(uint24 day) external onlyVaultOwner {
         sdgnrsToken.claimRedemption(day);
     }
 
