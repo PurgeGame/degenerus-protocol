@@ -101,7 +101,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 359-01-PLAN.md — BATCH-01/02 producer: handlePurchase returns burnieMintReward (drop inline credit) + quest-TYPE comment fix (wave 1, autonomous:false)
+- [x] 359-01-PLAN.md — BATCH-01/02 producer: handlePurchase returns burnieMintReward (drop inline credit) + quest-TYPE comment fix (wave 1, autonomous:false)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -174,7 +174,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 358. SPEC — Design-Lock (WWXRP rationing + terminal-decimator decisions + UDVT discipline) + Freeze/Solvency Re-Attestation + Call-Graph Attestation | v57.0 | 3/3 | Complete   | 2026-06-04 |
-| 359. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (handlePurchase batching + WWXRP whale-halfpass + terminal-decimator boost + the wide UDVT refactor) | v57.0 | 0/TBD | Not started | - |
+| 359. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (handlePurchase batching + WWXRP whale-halfpass + terminal-decimator boost + the wide UDVT refactor) | v57.0 | 1/4 | In Progress|  |
 | 360. GAS — Measure + Tune (the UDVT gas-neutrality gate) | v57.0 | 0/TBD | Not started | - |
 | 361. TST — RNG-Freeze Intact + SOLVENCY-01 Byte-Untouched + Non-Widening + Test/Comment Hygiene | v57.0 | 0/TBD | Not started | - |
 | 362. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v57.0 + Closure | v57.0 | 0/TBD | Not started | - |
