@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v57.0
 milestone_name: Small-Feature Bundle + Day-Type UDVT Refactor
-status: planning
-last_updated: "2026-06-04T10:00:00.000Z"
-last_activity: 2026-06-04 — Phase 358 PLANNED + plan-checker VERIFIED (3 plans 358-01/02/03, all autonomous, paper-only). v57.0 scope EXPANDED mid-358 to 8 items / 25 reqs / 10 categories (+BURNIE +SALVAGE +CANCEL). Resume: /clear → /gsd-execute-phase 358
+status: executing
+last_updated: "2026-06-04T11:09:00.985Z"
+last_activity: 2026-06-04 -- Phase 358 plan 01 complete (TDEC-02 mechanics + TDEC-03 freeze-safety proof locked)
 progress:
-  total_phases: 5
+  total_phases: 10
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 33
 ---
 
 # Project State
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v57.0 section) + .planning/REQUIREMENTS.md (15 v57.0 requirements) + .planning/ROADMAP.md (v57.0 — ACTIVE, phases 358-362) + the design-lock inputs .planning/PLAN-WWXRP-JACKPOT-WHALEPASS.md + .planning/PLAN-TERMINAL-DECIMATOR-STREAK-BOOST.md + the type-day-udvt-post-v56-seed + handlepurchase-burnie-flip-batching-post-v56-seed memories
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** ▶ v57.0 ACTIVE — Small-Feature Bundle + Day-Type UDVT Refactor (phases 358-362; defining requirements → planning Phase 358 SPEC). 4 small wins (handlePurchase BURNIE-batching · WWXRP jackpot whale-halfpass · terminal-decimator final-day streak boost · test/comment hygiene) + the repo-wide `type Day is uint24` UDVT (the heavy item) as ONE batched diff; baseline = v56.0 closure HEAD frozen `1e7a646d`. (Prior: ✅ v56.0 SHIPPED — phases 353-357 Complete across SIX contract gates, the SIXTH gate `1e7a646d` = the v57.0 baseline.)
+**Current focus:** Phase 358 — spec-design-lock-freeze-solvency-re-attestation-call-graph-a
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,10 +32,10 @@ See: .planning/PROJECT.md (Current Milestone: v57.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 358 (SPEC — Design-Lock + Freeze/Solvency Re-Attestation + Call-Graph Attestation)
-Plan: — (roadmap drafted; Phase 358 not yet planned)
-Status: Planning (roadmap created — phases 358-362 derived; ready to plan Phase 358)
-Last activity: 2026-06-04 — Milestone v57.0 roadmap created (5 phases 358-362; 15/15 requirements mapped; 0 orphaned, 0 duplicated)
+Phase: 358 (spec-design-lock-freeze-solvency-re-attestation-call-graph-a) — EXECUTING
+Plan: 2 of 3
+Status: Executing Phase 358 — plan 01 ✅ complete (TDEC-02 + TDEC-03 design-locked in 358-SPEC.md); next = 358-02 (WWXRP/BURNIE/SALVAGE/CANCEL)
+Last activity: 2026-06-04 -- Phase 358 plan 01 complete (TDEC-02 mechanics + TDEC-03 freeze-safety proof)
 
 ## 🛠 v56 CARRIED FINDING + USER HARDENING — the 357-00 contract gate (3 changes, autonomous:false)
 
@@ -682,6 +682,7 @@ Audit deliverables:
 | Phase 354 P05 | 28min | 2 tasks | 1 files |
 | Phase 356 P01 | 11 min | 2 tasks | 7 files |
 | Phase 356 P01 | 11 min | 2 tasks | 7 files |
+| Phase 358 P01 | 1 session | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -862,3 +863,5 @@ Audit deliverables:
 - [Phase ?]: 354-05: afking ticket purchaseWith (~262k) REPLACED by a minimal-write primitive — direct _queueTicketsScaled resolution-equivalent queue behind the byte-unchanged SOLVENCY-01 debit; no recordMint/prize-pool contribution (mirrors the lootbox branch); 10%/20% buyerOwedBurnie accrued (live :1653-1659 minus kickback, /1e18 whole-BURNIE, 100M clamp before +=); century parity reusing centuryBonusLevel/centuryBonusUsed (no new slot); boons/boost-OFF
 - [Phase ?]: 354-05: afking OPEN re-verified unmanipulable (OPEN-01/02) with ZERO change — 354-01 already applied the milli-ETH→wei rescale; effects-first marker + frozen stamp-day word + LIVE level + single EV-cap RMW intact; accumulator fields disjoint from the open markers
 - [Phase 356]: 356-01: migrated the 7 read-only keeper/afking fuzz files to the v56 uint24/OFF_LASTBOUGHT=11 Sub re-pack (the 08e59a4a transform — early offsets validThroughLevel u24@1 / amount u24@8 / scorePlus1@6 re-derived too, day-marker reads narrowed to width 24, write-masks 0xFFFFFFFF→0xFFFFFF). Fixture-sanity gate PASSED (V56AfkingGasMarginal 5/5). KeeperFaucetResistance's 3 `6555125 != 3774873600` garbage-read reds flipped GREEN (NARROWING); 4 v56-behavior reds (0.01-ETH subscribe fee + dropped withdraw two-step + E()/Panic-0x11 revert-selector expectation) unmasked → recorded PRE-EXISTING for the 356-07 baseline union. ZERO contracts/*.sol mutation; ContractAddresses.sol restored each round-trip.
+- [Phase ?]: 358-01: TDEC-03 gate = require(!_livenessTriggered()) ALONE; !gameOver was the wrong gate (flips after the resolution word is read/consumed)
+- [Phase ?]: 358-01: future-day-word lemma discharged — gameOverDay word is born the exact day the boost becomes inadmissible (day-constant liveness ⇒ disjoint windows); dual write :1879/:1831 + the :106 preRefundAvailable guard reconciled

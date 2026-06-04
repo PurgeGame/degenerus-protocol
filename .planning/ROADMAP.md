@@ -71,7 +71,7 @@
 **Plans**: 3 plans
 
 Plans:
-- [ ] 358-01-PLAN.md — SPEC header + frozen-subject guard + terminal-decimator mechanics design-lock (TDEC-02 / D-04..D-13) + the load-bearing TDEC-03 freeze-safety proof (future-day-word lemma, D-01/D-02/D-03)
+- [x] 358-01-PLAN.md — SPEC header + frozen-subject guard + terminal-decimator mechanics design-lock (TDEC-02 / D-04..D-13) + the load-bearing TDEC-03 freeze-safety proof (future-day-word lemma, D-01/D-02/D-03)
 - [ ] 358-02-PLAN.md — the four small-feature design-locks: WWXRP-02 (D-14..D-18) + BURNIE-03 (D-21..D-24) + SALVAGE-02 (D-25..D-29) + CANCEL-02 (D-30..D-33)
 - [ ] 358-03-PLAN.md — cross-cutting RNG-freeze + SOLVENCY re-attestation + UDVT byte-preservation discipline (D-19/D-20) + the full call-graph grep-attestation vs 1e7a646d (3 drifts reconciled) + the SPEC Lock asserting all 8 Success Criteria
 **UI hint**: no
@@ -148,7 +148,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 358. SPEC — Design-Lock (WWXRP rationing + terminal-decimator decisions + UDVT discipline) + Freeze/Solvency Re-Attestation + Call-Graph Attestation | v57.0 | 0/3 | Planned | - |
+| 358. SPEC — Design-Lock (WWXRP rationing + terminal-decimator decisions + UDVT discipline) + Freeze/Solvency Re-Attestation + Call-Graph Attestation | v57.0 | 1/3 | In Progress|  |
 | 359. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (handlePurchase batching + WWXRP whale-halfpass + terminal-decimator boost + the wide UDVT refactor) | v57.0 | 0/TBD | Not started | - |
 | 360. GAS — Measure + Tune (the UDVT gas-neutrality gate) | v57.0 | 0/TBD | Not started | - |
 | 361. TST — RNG-Freeze Intact + SOLVENCY-01 Byte-Untouched + Non-Widening + Test/Comment Hygiene | v57.0 | 0/TBD | Not started | - |
