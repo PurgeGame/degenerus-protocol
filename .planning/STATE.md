@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v57.0
 milestone_name: Small-Feature Bundle + Day-Type UDVT Refactor
-status: executing
-last_updated: "2026-06-04T13:57:00.000Z"
-last_activity: 2026-06-04 -- Phase 359 plan 03 (WWXRP-01 + TDEC-01 + CANCEL-01 + CHECKPOINT 1 GREEN) executed; 7 contracts uncommitted, held for plan-04 gate
+status: shipped
+last_updated: "2026-06-04T18:00:00.000Z"
+last_activity: 2026-06-04 -- v57.0 SHIPPED (internal-sweep full close); signal MILESTONE_V57_AT_HEAD_2b26ec91810a733e15666a4c23e8f365a4f04f51; 1 LOW found+resolved at 362, 0 MEDIUM+; SOLVENCY-01 held; RNG re-based by design; NOT pushed
 progress:
   total_phases: 10
   completed_phases: 1
@@ -31,6 +31,8 @@ See: .planning/PROJECT.md (Current Milestone: v57.0 section) + .planning/REQUIRE
 > **Note — v54.0 is NOT on this deferral list.** v54.0 runs its OWN internal 3-skill adversarial sweep + delta-audit + `audit/FINDINGS-v54.0.md` IN-MILESTONE at TERMINAL (347, BATCH-03), because it touches the solvency spine (`claimablePool`). The v52 consolidated cross-model audit still folds the v54 surface into its cumulative sweep as an additional track — not a substitute for v54's own close.
 
 ## Current Position
+
+**⚡ RE-CHARTER + 359 DONE + TERMINAL IN PROGRESS (2026-06-04 session 2).** The `type Day` UDVT was DROPPED for plain `uint24` (USER cancelled it as overcomplicated). Plan 04 shipped as a day-width normalization that INTENTIONALLY re-bases the RNG (pre-launch; the byte-image belonged to a never-deployed build), + 3 in-session fixes (century-bonus per-player packed stamp = a real cross-player staleness bug; dailyHeroWagers 1e12→1e14; deityBoonData honest 0-preview). **3 USER-approved commits on main (NOT pushed): `c3e84b79` feat + `aed10dab` test + `38389c07` fix; forge build GREEN.** SC re-charter: UDVT-01/02/03 byte-preservation + the TST-361 per-site byte-diff gate are MOOT → "day-comparison BEHAVIOR preserved + RNG re-based by design + 3 fixes correct"; SOLVENCY-01 holds (only debit change = the documented solvency-POSITIVE SALVAGE ethRelabel). **361 TST done** (`test/REGRESSION-BASELINE-v57.md`: 529 pass/179 fail = 134 carried baseline + ≤44 NEW, ALL harness artifacts of the layout-shift+RNG-rebase [proven, e.g. VRFCore vm.load(slot 37)]; ZERO solvency reds; hard floor intact). **360 GAS** = Outcome-A no-net-tune (uint24 gas-neutral; the century fix reclaims the `centuryBonusLevel` slot; gas harness needs the same layout refresh). **362 TERMINAL in progress** = delta-audit done (26 contracts +651/−329 vs `1e7a646d`; clean) + the 3-skill adversarial sweep running → `FINDINGS-v57.0.md` → closure flip + `MILESTONE_V57_AT_HEAD`. Deferred pre-launch follow-up: the forge-harness layout/RNG refresh + the ~143 Hardhat JS recompile. Full detail → [[v57-bundle-udvt-milestone]].
 
 Phase: 359 (impl-the-one-carefully-sequenced-batched-contract-diff-handl) — EXECUTING
 Plan: 4 of 4 (UDVT sweep remaining)
