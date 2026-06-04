@@ -228,3 +228,56 @@ These invariants are the design gate; the empirical byte-diff + determinism proo
 **Flag:** CANCEL-01 owned at IMPL 359, CANCEL-03 at TST 361 — design fixed here.
 
 **Anchor drift reconciled (vs the planning notes).** `_referrerAddress` is at `:809` (the planning's `:809-815` is the function body span). The funding-out evict tombstone is at `:1245` (within the planning's `:1226-1252` range). `Sub.affiliateBase`/`pendingBurnie` are the packed `uint32` fields at `:1952`/`:1960` (within the planning's `:1946-1952`/`:1953-1960` docstring+field spans). All other CANCEL anchors confirmed exactly: manual cancel `:345-362` (FALSE comment `:348-351`, `_finalizeAfking` call `:353`, tombstone `:354`), `subscribe` `rngLock` gate `:300`, `_finalizeAfking:1026`, tombstone-reclaim `delete _subOf` `:1148`, pass-expiry evict `:1175-1186`, `claimAfkingBurnie:1560` (CEI `:1574`), `drainAffiliateBase:1605`, `DegenerusAffiliate.claim:629` (75/20/5), `creditFlip:859`.
+
+---
+
+## Small-Feature Anchor Re-Attestation Summary (vs `1e7a646d`)
+
+Every `file:line` cited in the four sections above was re-grepped against the frozen subject before being written. The table consolidates the load-bearing anchors + the corrections (no "by construction" survives un-grepped).
+
+| Feature | Anchor | Status @ `1e7a646d` |
+|---------|--------|---------------------|
+| WWXRP-02 | `_resolveFullTicketBet:614`, score `s:674`, `_resolvePlayer:142-150`, `resolveBets:407` | confirmed |
+| WWXRP-02 | ETH-only `s>=7` sDGNRS block | **DRIFT** — `:713-715`, NOT `:710-715` |
+| WWXRP-02 | liveness revert in `resolveBets` | **DRIFT** — `:413`, NOT `:414` |
+| WWXRP-02 | `CURRENCY_WWXRP=3:216`, `MIN_BET_WWXRP=1 ether:225`, `whalePassClaims:973`, `lootboxEthBase:977` | confirmed |
+| WWXRP-02 | router stubs `resolveDegeneretteBets:902` / `degeneretteResolve:1742` / `_degeneretteResolveBet:1900` | confirmed |
+| BURNIE-03 | `_purchaseCoinFor:887-907` (discards 4 returns), `purchaseCoin:880`/router `:660` | confirmed |
+| BURNIE-03 | payInCoin branch (burn, no queue) | spans `:1545-1555` (planning `:1545-1554` in-range); `_coinReceive:1652`→`burnCoin:1653` |
+| BURNIE-03 | `_queueTicketsScaled` callers | **DRIFT** — exactly 2 (`MintModule:1251`, `GameAfkingModule:800`); `DegenerusGame:226` is the UN-scaled `_queueTickets` |
+| BURNIE-03 | `gamePurchaseTicketsBurnie:571-574`, `handlePurchase` call `:1210-1217`/fold `:1220`/credit `:1355`, BATCH-01 inline `:947-949`, `_ethToBurnieValue:1657`, root-cause `24f0898b` | confirmed |
+| SALVAGE-02 | `sellFarFutureTickets:2074`→`MintModule:929` (gates `:935-937`), SDGNRS floor `:958`, ticket leg `:983` | confirmed |
+| SALVAGE-02 | SDGNRS relabel assignment pair | `:976-977` (planning `:975-977` includes the comment `:975`) |
+| SALVAGE-02 | `_quoteFarFutureSwap:145-190` (seed `:160-163`, jitter `:165`, ticketShareBps `:166`, `cashWei` `:190`), `_farFutureFractionBps:127-130` | confirmed |
+| SALVAGE-02 | sDGNRS-owned-BURNIE: `previewClaimCoinflips:927`, `coinflipAmount:934`, `consumeCoinflipsForBurn:366`, stake-consume `:904-912`, `creditFlip:859`, `BurnieCoin.transfer:315`/`transferFrom:329` | confirmed |
+| SALVAGE-02 | no-arb test `test_SWAP08_NoArbAtCeiling_SweepAllDistances:168`, `_ethToBurnieValue:1657`, `mintPrice:2539` | confirmed |
+| CANCEL-02 | manual cancel `:345-362` (FALSE comment `:348-351`, finalize `:353`, tombstone `:354`), `rngLock` gate `:300` | confirmed |
+| CANCEL-02 | `_finalizeAfking:1026`, tombstone-reclaim `delete _subOf:1148`, pass-expiry evict `:1175-1186`, funding-out evict `:1245` | confirmed |
+| CANCEL-02 | `claimAfkingBurnie:1560` (CEI `:1574`), `drainAffiliateBase:1605`, `Affiliate.claim:629` (75/20/5), `_referrerAddress:809` | confirmed (`_referrerAddress:809` = header; planning `:809-815` = body span) |
+| CANCEL-02 | `Sub.affiliateBase:1952`, `Sub.pendingBurnie:1960` (packed `uint32`) | confirmed (within planning span) |
+
+## IMPL Handoff Invariants — small features (carried into 359, re-proven at TST 361)
+
+The IMPL author MUST preserve these as code-level invariants:
+
+1. **WWXRP recipient** — the award credits `whalePassClaims[player]` (the bet OWNER from `_resolvePlayer`), NEVER `msg.sender`/the operator. The `s == 9` short-circuit gate is FIRST in the conjunction so non-jackpot spins read no new state.
+2. **WWXRP rationing** — `wwxrpJackpotWhalePassBracketAwarded[level/10]` is keyed by bracket (NOT a per-player or `0→5` lifetime counter); the flag set is part of the same award branch (set-on-win, idempotent per bracket).
+3. **BURNIE queue-on-return** — `_purchaseCoinFor` MUST capture the adjusted quantity and `_queueTicketsScaled(buyer, targetLevel, adjustedQty, false)` when non-zero; the ETH/`claimablePool` DEBIT code stays byte-unchanged.
+4. **BURNIE producer-before-consumer** — the full-cost affordability gate is UPFRONT; `handlePurchase` (MINT_BURNIE leg, `ethMintSpendWei=0`/`lootBoxAmount=0`) runs to produce the reward; the burn is DEFERRED and netted (full `coinCost` − reward, floored at 0). The reward is a rebate ≤ full cost, never a separate `creditFlip`.
+5. **SALVAGE BURNIE source** — the BURNIE leg is TRANSFERRED from sDGNRS-owned BURNIE (token balance + claimable coinflip stake), NEVER `creditFlip`-minted; `actualBurnie = min(target, sDGNRS-available)` with the remainder + zero-available case paid as ETH; `ethOut = cashWei − actualBurnie ≤ ethCap`.
+6. **SALVAGE preview parity** — the preview/quote MUST reflect source-availability + the ETH fallback so the offer is truly knowable-in-advance; the randomness source stays the SETTLED prior-day word (no new VRF). The no-arb ceiling + eth-% cap bound EVERY reachable offer (SALVAGE-03 extends `SWAP08`).
+7. **CANCEL auto-claim ordering** — manual cancel pays self (`pendingBurnie`→`creditFlip`, CEI zero-first) + drains `affiliateBase` to the 75/20/5 tree (A = referrer-upline) BEFORE `_finalizeAfking`+clear.
+8. **CANCEL forfeit explicitness** — auto-evict paths (pass-expiry, funding-out, tombstone-reclaim) MUST `delete _subOf[player]` so no out-of-set claimable residue survives (pure forfeit, no self/upline payout).
+
+## Freeze / Solvency Posture — small-feature summary (design feed → plan 03 cross-cutting)
+
+The milestone hard floor is RNG-freeze intact + SOLVENCY-01 byte-untouched. Of the four small features, two stay in the CLEAN posture (RNG-insensitive / BURNIE-emission only) and two are FUNCTIONAL solvency-posture exceptions that are explicitly flagged. Plan 03's cross-cutting re-attestation expands this into the SEC design feed.
+
+| Feature | RNG-freeze | Solvency (ETH/`claimablePool`) | Posture |
+|---------|-----------|--------------------------------|---------|
+| WWXRP-02 | Award is RNG-INSENSITIVE (counter/flag gated by the already-committed `s==9`); pre-liveness only (`:413`) | NO touch — reuses the `claimWhalePass` future-ticket deferral (SOLVENCY-neutral) | CLEAN |
+| BURNIE-03 | UNAFFECTED — `purchaseCoin` reads no `rngWord` (gated by `_livenessTriggered`/`gameOverPossible`) | DEBIT byte-unchanged BUT RESTORES ticket claims (genuine functional fix; ticket wins stay pro-rata; BURNIE adds no ETH) | **FLAGGED** (functional restoration; SEC-02) |
+| SALVAGE-02 | Transparent function of the SETTLED prior-day word under `rngLockedFlag` (the v48 jitter pattern); NO new VRF | SOLVENCY-positive — ETH part `≤ cashWei` relabeled out of SDGNRS (liability DROPS); BURNIE TRANSFERRED not minted | **FLAGGED** (pawn-shop cap, not value-neutral; no-arb re-proof @ SALVAGE-03) |
+| CANCEL-02 | Reads no `rngWord`; `rngLock`-gated at `subscribe` entry (`:300`) | NO touch — BURNIE-emission only (`creditFlip`/`drainAffiliateBase`); SOLVENCY-01 untouched | CLEAN |
+
+The two FLAGGED exceptions are both solvency-positive-or-neutral with their proof obligations handed to TST 361 (BURNIE → HYG-03 positive test + the `claimablePool <= balance` re-attestation; SALVAGE → the EXTEND-`SWAP08` no-arb re-proof across the full split range). No HIGH design hole remains open at lock for these four surfaces — every reachable behavior is bounded by a named invariant + anchor.
