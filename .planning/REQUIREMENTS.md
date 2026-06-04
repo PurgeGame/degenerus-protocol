@@ -86,8 +86,8 @@ _Phase mapping (roadmapper, 2026-06-04; BURNIE + SALVAGE categories + HYG-03 ADD
 | WWXRP-01 | 359 | IMPL | Not started |
 | WWXRP-02 | 358 | SPEC | Complete |
 | TDEC-01 | 359 | IMPL | Not started |
-| TDEC-02 | 358 | SPEC | Not started |
-| TDEC-03 | 358 | SPEC | Not started |
+| TDEC-02 | 358 | SPEC | Complete |
+| TDEC-03 | 358 | SPEC | Complete |
 | UDVT-01 | 359 | IMPL | Not started |
 | UDVT-02 | 359 | IMPL | Not started |
 | UDVT-03 | 359 | IMPL | Not started |

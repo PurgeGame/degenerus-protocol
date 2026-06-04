@@ -2,7 +2,7 @@
 gsd_state_version: 1.0
 milestone: v57.0
 milestone_name: Small-Feature Bundle + Day-Type UDVT Refactor
-status: verifying
+status: phase-complete
 last_updated: "2026-06-04T11:30:34.731Z"
 last_activity: 2026-06-04
 progress:
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v57.0 section) + .planning/REQUIREMENTS.md (15 v57.0 requirements) + .planning/ROADMAP.md (v57.0 — ACTIVE, phases 358-362) + the design-lock inputs .planning/PLAN-WWXRP-JACKPOT-WHALEPASS.md + .planning/PLAN-TERMINAL-DECIMATOR-STREAK-BOOST.md + the type-day-udvt-post-v56-seed + handlepurchase-burnie-flip-batching-post-v56-seed memories
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 358 — spec-design-lock-freeze-solvency-re-attestation-call-graph-a
+**Current focus:** Phase 358 ✅ COMPLETE + VERIFIED (8/8 must-haves; 358-SPEC.md LOCKED) — next is Phase 359 IMPL (the contract HARD STOP)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
