@@ -5,6 +5,10 @@ import {
     IDegenerusGameLootboxModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
+import {
+    IDegenerusQuests,
+    PlayerQuestView
+} from "../interfaces/IDegenerusQuests.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
@@ -657,6 +661,21 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 amountWei
     );
 
+    /// @notice Emitted when a final-day streak boost scales (and possibly promotes)
+    ///         a player's terminal decimator entry.
+    /// @param player The boosted player.
+    /// @param lvl Terminal decimator level.
+    /// @param oldBucket Bucket before the boost.
+    /// @param newBucket Bucket after the boost (lower = better; equal if no promotion).
+    /// @param newWeightedBurn The post-boost weighted burn (saturated at uint88 max).
+    event TerminalDecBoosted(
+        address indexed player,
+        uint24 indexed lvl,
+        uint8 oldBucket,
+        uint8 newBucket,
+        uint256 newWeightedBurn
+    );
+
     // -------------------------------------------------------------------------
     // Terminal Decimator Errors
     // -------------------------------------------------------------------------
@@ -665,6 +684,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     error TerminalDecNotActive();
     error TerminalDecNotWinner();
     error TerminalDecDeadlinePassed();
+    error TerminalDecNotBoostable();
+    error TerminalDecAlreadyBoosted();
 
     // -------------------------------------------------------------------------
     // Terminal Decimator Constants
@@ -764,6 +785,103 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             weightedAmount,
             timeMultBps
         );
+    }
+
+    /// @notice Final-day streak boost: scales an existing terminal decimator
+    ///         entry by the player's effective quest streak and, if the live
+    ///         activity score now qualifies a better (lower) bucket, promotes it.
+    /// @dev Weight-only — the ETH/BURNIE payout path is untouched. Gated by
+    ///      `!_livenessTriggered()` (the death-clock predicate is day-constant),
+    ///      so the boost and any promotion provably commit BEFORE the game-over
+    ///      resolution word exists: the placement is deterministic from the
+    ///      committed burn and a view-read streak, never from draw knowledge.
+    ///      Admissible only on the deadline day itself (daysRemaining == 0,
+    ///      still pre-liveness) — forcing the streak to be kept alive to the end.
+    ///      On promotion the subBucket is re-derived for the new denominator and
+    ///      the aggregate is re-keyed (remove from old key, add to new) so total
+    ///      weight in `terminalDecBucketBurnTotal` is conserved. One-time per
+    ///      level via the `boosted` bit.
+    function boostTerminalDecimator() external {
+        if (_livenessTriggered()) revert TerminalDecNotActive();
+        if (_terminalDecDaysRemaining() != 0) revert TerminalDecNotBoostable();
+
+        address player = msg.sender;
+        uint24 lvl = level;
+
+        TerminalDecEntry storage e = terminalDecEntries[player];
+        // Scale committed weight — never buy an entry. A stale (prior-level) or
+        // empty entry has no weight to boost.
+        if (e.burnLevel != uint48(lvl) || e.bucket == 0) {
+            revert TerminalDecNotBoostable();
+        }
+        if (e.boosted) revert TerminalDecAlreadyBoosted();
+
+        uint256 effectiveStreak = uint256(
+            IDegenerusQuests(ContractAddresses.QUESTS)
+                .getPlayerQuestView(player)
+                .baseStreak
+        );
+        if (effectiveStreak == 0) revert TerminalDecNotBoostable();
+
+        uint256 oldWeighted = uint256(e.weightedBurn);
+        if (oldWeighted == 0) revert TerminalDecNotBoostable();
+
+        // Scale weight by the streak factor, saturating at uint88 max.
+        uint256 factorBps = _terminalDecBoostFactorBps(effectiveStreak);
+        uint256 newWeighted = (oldWeighted * factorBps) / BPS_DENOMINATOR;
+        if (newWeighted > type(uint88).max) newWeighted = type(uint88).max;
+
+        uint8 oldBucket = e.bucket;
+        uint8 oldSub = e.subBucket;
+
+        // Recompute the bucket from the LIVE activity score (which now reflects
+        // the kept-alive streak). Promote only if strictly better (lower).
+        uint256 bonusBps = IDegenerusGame(address(this)).playerActivityScore(
+            player
+        );
+        if (bonusBps > TERMINAL_DEC_ACTIVITY_CAP_BPS) {
+            bonusBps = TERMINAL_DEC_ACTIVITY_CAP_BPS;
+        }
+        uint8 liveBucket = _terminalDecBucket(bonusBps);
+
+        uint8 newBucket = oldBucket;
+        uint8 newSub = oldSub;
+        if (liveBucket < oldBucket) {
+            newBucket = liveBucket;
+            newSub = _decSubbucketFor(player, lvl, liveBucket);
+            e.bucket = newBucket;
+            e.subBucket = newSub;
+        }
+
+        e.weightedBurn = uint88(newWeighted);
+        e.boosted = true;
+
+        // Re-key the aggregate: remove the player's pre-boost weight from the old
+        // key and add the post-boost weight to the (possibly new) key. Total
+        // weight is conserved on a same-key boost (remove oldWeighted, add
+        // newWeighted to the SAME key nets to +delta) and on a promotion.
+        bytes32 oldKey = keccak256(abi.encode(lvl, oldBucket, oldSub));
+        bytes32 newKey = keccak256(abi.encode(lvl, newBucket, newSub));
+        terminalDecBucketBurnTotal[oldKey] -= oldWeighted;
+        terminalDecBucketBurnTotal[newKey] += newWeighted;
+
+        emit TerminalDecBoosted(player, lvl, oldBucket, newBucket, newWeighted);
+    }
+
+    /// @dev Streak → weight multiplier in bps (1x floor at streak 0, 4x at 10,
+    ///      20x at 100, capped at 20x). The quest streak itself caps at 100.
+    function _terminalDecBoostFactorBps(
+        uint256 streak
+    ) private pure returns (uint256) {
+        if (streak > 100) streak = 100;
+        uint256 factorBps;
+        if (streak <= 10) {
+            factorBps = BPS_DENOMINATOR + streak * 3000;
+        } else {
+            factorBps = 40000 + (streak - 10) * 1778;
+        }
+        if (factorBps > 200000) factorBps = 200000;
+        return factorBps;
     }
 
     // -------------------------------------------------------------------------

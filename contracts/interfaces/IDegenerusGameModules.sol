@@ -170,6 +170,9 @@ interface IDegenerusGameDecimatorModule {
         uint256 baseAmount
     ) external;
 
+    /// @notice Final-day streak boost for the caller's terminal decimator entry.
+    function boostTerminalDecimator() external;
+
     /// @notice Resolve terminal decimator at GAMEOVER.
     function runTerminalDecimatorJackpot(
         uint256 poolWei,

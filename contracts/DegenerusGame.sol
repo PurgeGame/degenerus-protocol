@@ -1292,6 +1292,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
+    /// @notice Apply the caller's final-day terminal decimator streak boost.
+    /// @dev Delegatecalls to DecimatorModule. Permissionless; credits msg.sender.
+    function boostTerminalDecimator() external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_DECIMATOR_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameDecimatorModule
+                        .boostTerminalDecimator
+                        .selector
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
     /// @notice Resolve terminal decimator at GAMEOVER.
     /// @dev Access: Game-only (self-call from handleGameOverDrain).
     /// @param poolWei Total ETH prize pool for terminal decimator resolution.
@@ -2093,15 +2108,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Quote a far-future salvage swap WITHOUT executing (the UI offer; -EV by design).
-    /// @dev Read-only; shares the exact valuation (curve + daily per-player jitter + split) the
-    ///      executing path uses, so the displayed offer matches what would be paid. Reverts on an
-    ///      ineligible distance / zero quantity; does NOT check ownership (a quote for the given
-    ///      bundle). For a bundle too small to fund one whole current ticket, ticketWei == totalBudget
-    ///      and cashWei == 0 (the executing path reverts on that bundle).
+    /// @dev Read-only; shares the exact valuation (curve + daily per-player jitter + ETH/BURNIE
+    ///      split) the executing path uses, so the displayed offer matches what would be paid.
+    ///      Reverts on an ineligible distance / zero quantity; does NOT check ownership (a quote
+    ///      for the given bundle). For a bundle too small to fund one whole current ticket,
+    ///      ticketWei == totalBudget and the cash legs are 0 (the executing path reverts on that).
+    ///      The cash leg splits into ETH + BURNIE: when sDGNRS holds no BURNIE (or the seed targets
+    ///      zero) the whole cash leg is paid in ETH; conserved as ethCashWei + value(burnieTokens).
     /// @return totalFaceWei Sum of priceForLevel(L) * n over all lines (the bundle's face value).
     /// @return totalBudget Total ETH sDGNRS would pay (the -EV offer).
     /// @return ticketWei Portion delivered as current-level tickets.
-    /// @return cashWei Portion delivered as withdrawable claimable.
+    /// @return ethCashWei Cash portion delivered as withdrawable ETH claimable.
+    /// @return burnieTokens Cash portion delivered as BURNIE (transferred from sDGNRS).
     function previewSellFarFutureTickets(
         address player,
         uint32[] calldata levels,
@@ -2113,10 +2131,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             uint256 totalFaceWei,
             uint256 totalBudget,
             uint256 ticketWei,
-            uint256 cashWei
+            uint256 ethCashWei,
+            uint256 burnieTokens
         )
     {
-        return _quoteFarFutureSwap(player, levels, quantities);
+        uint256 cashWei;
+        (totalFaceWei, totalBudget, ticketWei, cashWei) = _quoteFarFutureSwap(
+            player,
+            levels,
+            quantities
+        );
+        (ethCashWei, burnieTokens) = _quoteFarFutureBurnieSplit(player, cashWei);
     }
 
     /*+===============================================================================================+

@@ -189,6 +189,48 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         cashWei = totalBudget - ticketWei;
     }
 
+    /// @dev Splits the cash leg of a salvage swap into an ETH part and a BURNIE part, sharing the
+    ///      SAME settled prior-day seed as _quoteFarFutureSwap (no new VRF). A third bit-slice of the
+    ///      seed picks an ETH-denominated target in [0, cashWei]; the BURNIE part is capped at the
+    ///      BURNIE sDGNRS actually owns (wallet balance + claimable coinflip stake), with the
+    ///      shortfall and the zero-available case falling back to ETH. The value of the cash leg is
+    ///      conserved: ethCashWei + (value of burnieTokens) == cashWei, so the offer stays <= the
+    ///      no-arb ceiling regardless of the split. Both the preview and the executing path call this,
+    ///      so the displayed ETH/BURNIE breakdown matches what is paid.
+    /// @param player Seller (seeds the per-player jitter, identical to _quoteFarFutureSwap).
+    /// @param cashWei The cash residual being split (totalBudget - ticketWei).
+    /// @return ethCashWei ETH part relabeled to the player (cashWei - the BURNIE part's ETH value).
+    /// @return burnieTokens BURNIE base units transferred from sDGNRS to the player.
+    function _quoteFarFutureBurnieSplit(
+        address player,
+        uint256 cashWei
+    ) internal view returns (uint256 ethCashWei, uint256 burnieTokens) {
+        if (cashWei == 0) return (0, 0);
+
+        uint256 seed = uint256(
+            keccak256(
+                abi.encodePacked(player, rngWordByDay[_simulatedDayIndex() - 1])
+            )
+        );
+        // Third slice (distinct window from the jitter [bits 0..] and ticket-share [bits 128..]
+        // slices): an ETH target in [0, cashWei].
+        uint256 targetEth = ((seed >> 64) % (cashWei + 1));
+        if (targetEth == 0) return (cashWei, 0);
+
+        uint256 priceWei = PriceLookupLib.priceForLevel(_activeTicketLevel());
+        if (priceWei == 0) return (cashWei, 0);
+
+        // Cap the BURNIE part at sDGNRS-owned BURNIE (wallet + claimable coinflip stake), valued at
+        // the current ticket price. The uncovered remainder is paid as ETH.
+        uint256 ownedBurnie = coin.balanceOfWithClaimable(ContractAddresses.SDGNRS);
+        uint256 targetBurnie = (targetEth * PRICE_COIN_UNIT) / priceWei;
+        burnieTokens = targetBurnie <= ownedBurnie ? targetBurnie : ownedBurnie;
+        // ETH value of the BURNIE actually payable (re-derived from tokens so conservation is exact).
+        uint256 burnieEth = (burnieTokens * priceWei) / PRICE_COIN_UNIT;
+        if (burnieEth > cashWei) burnieEth = cashWei; // defensive; rounding can never exceed cashWei
+        ethCashWei = cashWei - burnieEth;
+    }
+
     /// @dev Shared activity score computation with explicit quest streak and streak base level.
     ///      Accepts pre-fetched questStreak (eliminating STATICCALL to DegenerusQuests on hot path)
     ///      and streakBaseLevel (allowing DegeneretteModule to pass level + 1 instead of _activeTicketLevel()).

@@ -114,6 +114,11 @@ contract DegenerusGameDegeneretteModule is
         uint256 excessConverted
     );
 
+    /// @notice Emitted when a WWXRP jackpot awards the bracket's whale halfpass.
+    /// @param player The bettor who landed the jackpot (the award recipient).
+    /// @param bracket The level/10 bracket whose one halfpass is now claimed.
+    event WwxrpJackpotWhalePass(address indexed player, uint256 indexed bracket);
+
     // -------------------------------------------------------------------------
     // Internal Helpers
     // -------------------------------------------------------------------------
@@ -712,6 +717,23 @@ contract DegenerusGameDegeneretteModule is
             // off a stale balance would change the payout.
             if (currency == CURRENCY_ETH && s >= 7) {
                 _awardDegeneretteDgnrs(player, amountPerTicket, s);
+            }
+
+            // First WWXRP jackpot in this level/10 bracket grants the bettor one
+            // whale halfpass (deferred via whalePassClaims, no ETH/pool touch).
+            // The s == 9 check short-circuits first, so non-jackpot spins read no
+            // new state. The award always credits the bet owner `player`.
+            if (
+                s == 9 &&
+                currency == CURRENCY_WWXRP &&
+                amountPerTicket >= MIN_BET_WWXRP
+            ) {
+                uint256 bracket = uint256(level) / 10;
+                if (!wwxrpJackpotWhalePassBracketAwarded[bracket]) {
+                    whalePassClaims[player] += 1;
+                    wwxrpJackpotWhalePassBracketAwarded[bracket] = true;
+                    emit WwxrpJackpotWhalePass(player, bracket);
+                }
             }
 
             unchecked {

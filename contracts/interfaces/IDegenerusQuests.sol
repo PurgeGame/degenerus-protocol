@@ -199,4 +199,13 @@ interface IDegenerusQuests {
         view
         returns (uint8 questType, uint128 progress, uint256 target, bool completed, bool eligible);
 
+    /// @notice Returns the player's daily quest view, including the effective
+    ///         (gap/shield-decayed) base streak. A pure view — no mutation.
+    /// @param player The player address to query.
+    /// @return viewData The player's quest view with the effective baseStreak.
+    function getPlayerQuestView(address player)
+        external
+        view
+        returns (PlayerQuestView memory viewData);
+
 }

@@ -18,4 +18,11 @@ interface IDegenerusCoin {
     /// @param player The address to mint coins to
     /// @param amount The amount of coins to mint
     function mintForGame(address player, uint256 amount) external;
+
+    /// @notice Spendable BURNIE for a player: wallet balance + claimable coinflip stake.
+    /// @param player The address to read.
+    /// @return spendable The total amount the player can spend on a burn/transfer.
+    function balanceOfWithClaimable(
+        address player
+    ) external view returns (uint256 spendable);
 }

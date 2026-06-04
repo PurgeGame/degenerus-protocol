@@ -976,6 +976,11 @@ abstract contract DegenerusGameStorage {
     ///      Tracks unboosted amounts so boosts apply at purchase time, not open time.
     mapping(uint48 => mapping(address => uint256)) internal lootboxEthBase;
 
+    /// @dev True once a WWXRP Degenerette jackpot in this level/10 bracket has
+    ///      awarded its one whale halfpass. Rationed globally per bracket: the
+    ///      first jackpot wins, later jackpots in the same bracket award nothing.
+    mapping(uint256 => bool) internal wwxrpJackpotWhalePassBracketAwarded;
+
     // =========================================================================
     // Operator Approvals
     // =========================================================================
@@ -1576,18 +1581,20 @@ abstract contract DegenerusGameStorage {
     // Terminal Decimator (Always-Open Death Bet)
     // =========================================================================
 
-    /// @dev Per-player terminal decimator entry. Packed into a single 256-bit slot (232/256 bits).
+    /// @dev Per-player terminal decimator entry. Packed into a single 256-bit slot (240/256 bits).
     ///      totalBurn: pre-time-multiplier cumulative burn (capped at DECIMATOR_MULTIPLIER_CAP).
     ///      weightedBurn: post-time-multiplier cumulative burn (used for claim share calculation).
     ///      bucket: bucket denominator (2-12), computed from activity score using lvl 100 rules.
     ///      subBucket: deterministic from keccak256(player, level, bucket).
     ///      burnLevel: which level this entry belongs to (stale detection for lazy reset).
+    ///      boosted: set once a final-day streak boost has been applied this level (one-time).
     struct TerminalDecEntry {
         uint80 totalBurn;
         uint88 weightedBurn;
         uint8 bucket;
         uint8 subBucket;
         uint48 burnLevel;
+        bool boosted;
     }
     mapping(address => TerminalDecEntry) internal terminalDecEntries;
 

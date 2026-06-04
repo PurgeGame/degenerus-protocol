@@ -939,16 +939,11 @@ contract DegenerusQuests is IDegenerusQuests {
             }
         }
 
-        // Reward routing:
-        // - BURNIE mint rewards: credited here.
-        // - Lootbox rewards: returned to the caller only — the caller adds them to
-        //   lootboxFlipCredit and credits them exactly once, so they are NOT credited here.
-        // - ETH mint rewards: returned to the caller.
-        if (burnieMintReward != 0) {
-            coinflip.creditFlip(player, burnieMintReward);
-        }
-        // Return ETH mint reward + lootbox reward (caller adds lootbox to lootboxFlipCredit)
-        uint256 totalReturned = ethMintReward + lootboxReward;
+        // Reward routing: MINT_ETH, LOOTBOX and MINT_BURNIE are quest TYPES, not
+        // payout currencies — every quest reward is paid as a BURNIE flip stake.
+        // No reward is credited here; the full earned amount is returned to the
+        // caller, which adds it to lootboxFlipCredit and credits it exactly once.
+        uint256 totalReturned = ethMintReward + lootboxReward + burnieMintReward;
         if (anyCompleted) {
             return (totalReturned, outQuestType, outStreak, true);
         }

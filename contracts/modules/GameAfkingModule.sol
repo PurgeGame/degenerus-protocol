@@ -7,6 +7,7 @@ import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusGameLootboxModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 
 /// @title IGameRouter
 /// @notice Minimal in-context self-call surface the router uses to reach the
@@ -345,10 +346,28 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (dailyQuantity == 0) {
             if (_subscriberIndex[subscriber] == 0) revert NotSubscribed();
             Sub storage c = _subOf[subscriber];
-            // Hand the afking-computed streak back to the manual quest system, then tombstone in
-            // place. The accrued `pendingBurnie` (claimable) and `affiliateBase` (upline-pull)
-            // persist in the slot, so an unsub forfeits neither: the sub pulls its earned BURNIE
-            // via `claimAfkingBurnie` whenever.
+            // Auto-claim BEFORE clearing: the next advance-driven reclaim deletes the
+            // slot (wiping both accumulators), so leaving them for a later pull would
+            // lose them in that race. Pay the sub its own pendingBurnie (CEI: zero
+            // first), then settle the upline affiliate tree, THEN finalize + tombstone.
+            uint256 owed = uint256(c.pendingBurnie); // whole BURNIE
+            if (owed != 0) {
+                c.pendingBurnie = 0;
+                if (!presaleOver) {
+                    uint256 credit = (owed * 0.0025 ether) / 100;
+                    if ((c.flags & FLAG_USE_TICKETS) != 0) credit /= 2;
+                    presaleBoxCredit[subscriber] += credit;
+                }
+                coinflip.creditFlip(subscriber, owed * 1 ether);
+            }
+            // Drain affiliateBase to the 75/20/5 upline tree (50/50 VAULT/DGNRS if no
+            // referrer). The affiliate consumes the base via the AFFILIATE-only
+            // drainAffiliateBase callback, so this must run while the slot still holds it.
+            address[] memory drainOne = new address[](1);
+            drainOne[0] = subscriber;
+            IDegenerusAffiliate(ContractAddresses.AFFILIATE).claim(drainOne);
+
+            // Hand the afking-computed streak back to the manual quest system, then tombstone.
             _finalizeAfking(subscriber, c, _simulatedDayIndex());
             c.dailyQuantity = 0;
             emit SubscriptionUpdated(
@@ -1179,11 +1198,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     sub.validThroughLevel = h;
                     emit SubscriptionExtendedFree(player, processDay);
                 } else {
-                    // EVICT — finalize the afking streak (hand it back), then route through
-                    // tombstone-then-reclaim so the swap-pop invariant survives (no cursor
-                    // advance after the swap-pop). The finalize is the EVICT_WEIGHT cross-call.
+                    // EVICT — finalize the afking streak (hand it back), then delete the slot
+                    // and swap-pop out of the set (no cursor advance after the swap-pop). The
+                    // finalize is the EVICT_WEIGHT cross-call. A got-kicked sub forfeits both
+                    // accumulators: deleting _subOf wipes pendingBurnie / affiliateBase so
+                    // nothing survives claimable out-of-set.
                     _finalizeAfking(player, sub, processDay);
-                    sub.dailyQuantity = 0;
+                    delete _subOf[player];
                     _removeFromSet(player);
                     emit SubscriptionExpired(player, 1);
                     unchecked {
@@ -1240,9 +1261,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 }
                 // Funding-kill of a NORMAL underfunded sub — finalize the afking streak (hand it
                 // back; its decay-on-read zeroes only if a full prior day was missed with NO
-                // valid mint, afking OR manual), then tombstone + swap-pop.
+                // valid mint, afking OR manual), then delete the slot + swap-pop. A got-kicked
+                // sub forfeits both accumulators: deleting _subOf wipes pendingBurnie /
+                // affiliateBase so nothing survives claimable out-of-set.
                 _finalizeAfking(player, sub, processDay);
-                sub.dailyQuantity = 0;
+                delete _subOf[player];
                 _removeFromSet(player);
                 emit SubscriptionExpired(player, 1);
                 unchecked {

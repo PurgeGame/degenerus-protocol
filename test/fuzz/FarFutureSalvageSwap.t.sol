@@ -182,7 +182,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
             levels[0] = uint32(cl + d);
             qtys[0] = 1; // one whole far ticket
 
-            (uint256 faceWei, uint256 totalBudget, , ) = game.previewSellFarFutureTickets(
+            (uint256 faceWei, uint256 totalBudget, , , ) = game.previewSellFarFutureTickets(
                 seller,
                 levels,
                 qtys
@@ -277,7 +277,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
             uint256[] memory qtys = new uint256[](1);
             levels[0] = uint32(cl + ds[k]);
             qtys[0] = 1;
-            (uint256 faceWei, uint256 totalBudget, , ) = game.previewSellFarFutureTickets(
+            (uint256 faceWei, uint256 totalBudget, , , ) = game.previewSellFarFutureTickets(
                 seller,
                 levels,
                 qtys
@@ -373,7 +373,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         (uint32[] memory levels, uint256[] memory qtys, uint256[] memory idxs) =
             _setupExecutableSwap(6, 100, uint256(keccak256("solv_jitter")), 50 ether);
 
-        (, uint256 totalBudget, uint256 ticketWei, ) = game.previewSellFarFutureTickets(seller, levels, qtys);
+        (, uint256 totalBudget, uint256 ticketWei, , ) = game.previewSellFarFutureTickets(seller, levels, qtys);
         assertGt(ticketWei, 0, "ticket leg must be non-zero for this bundle");
 
         uint256 poolBefore = game.claimablePoolView();
@@ -416,7 +416,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         (uint32[] memory levels, uint256[] memory qtys, uint256[] memory idxs) =
             _setupExecutableSwap(94, 1, uint256(keccak256("floor_small")), 50 ether);
         // distance 94 -> level cl+94; ensure budget < oneTicketWei
-        (, uint256 budgetSmall, , ) = game.previewSellFarFutureTickets(seller, levels, qtys);
+        (, uint256 budgetSmall, , , ) = game.previewSellFarFutureTickets(seller, levels, qtys);
         uint256 oneTicketWei = PriceLookupLib.priceForLevel(game.level() + 1);
         assertLt(budgetSmall, oneTicketWei, "fixture: small bundle budget must be below one whole ticket");
 
@@ -427,7 +427,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         // A bundle that clears the floor succeeds and the seller gets a current-level ticket.
         (uint32[] memory levels2, uint256[] memory qtys2, uint256[] memory idxs2) =
             _setupExecutableSwap(6, 50, uint256(keccak256("floor_ok")), 50 ether);
-        (, uint256 budgetOk, uint256 ticketWeiOk, ) = game.previewSellFarFutureTickets(seller, levels2, qtys2);
+        (, uint256 budgetOk, uint256 ticketWeiOk, , ) = game.previewSellFarFutureTickets(seller, levels2, qtys2);
         assertGe(budgetOk, oneTicketWei, "fixture: ok bundle budget must clear the floor");
         assertGe(ticketWeiOk, oneTicketWei, "ticket leg must deliver >= 1 whole current ticket");
 
@@ -446,7 +446,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         // Build a bundle, compute its budget, then fund SDGNRS to JUST BELOW budget + 1 ether -> must revert.
         (uint32[] memory levels, uint256[] memory qtys, uint256[] memory idxs) =
             _setupExecutableSwap(6, 100, uint256(keccak256("eth_floor")), 0);
-        (, uint256 totalBudget, , ) = game.previewSellFarFutureTickets(seller, levels, qtys);
+        (, uint256 totalBudget, , , ) = game.previewSellFarFutureTickets(seller, levels, qtys);
         assertGt(totalBudget, 0, "budget must be positive");
 
         // Underfund: budget + 1 ether - 1 wei -> floor not satisfied -> revert.

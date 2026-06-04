@@ -891,28 +891,65 @@ contract DegenerusGameMintModule is
         if (_livenessTriggered()) revert E();
 
         if (ticketQuantity != 0) {
-            // ENF-01: Block BURNIE tickets when drip projection cannot cover nextPool deficit.
+            // Block BURNIE tickets when drip projection cannot cover nextPool deficit.
             if (gameOverPossible) revert GameOverPossible();
-            _callTicketPurchase(
-                buyer,
-                ticketQuantity,
-                MintPaymentKind.DirectEth,
-                true,
-                bytes32(0),
-                0,
-                level,
-                jackpotPhaseFlag
-            );
+
+            (
+                ,
+                uint32 adjustedQty32,
+                uint24 targetLevel,
+                uint32 burnieMintUnits
+            ) = _callTicketPurchase(
+                    buyer,
+                    ticketQuantity,
+                    MintPaymentKind.DirectEth,
+                    true,
+                    bytes32(0),
+                    0,
+                    level,
+                    jackpotPhaseFlag
+                );
+
+            // MINT_BURNIE quest leg only (no ETH spend, no lootbox): skips activity
+            // score, affiliate, and non-mint quests. The returned reward is a BURNIE
+            // flip stake, awarded via creditFlip — the full coin cost was already
+            // burned inside _callTicketPurchase.
+            {
+                uint256 nextLevelPrice = PriceLookupLib.priceForLevel(
+                    level + 1
+                );
+                (uint256 questReward, , , bool questCompleted) = quests
+                    .handlePurchase(
+                        buyer,
+                        0,
+                        burnieMintUnits,
+                        0,
+                        nextLevelPrice,
+                        nextLevelPrice
+                    );
+                if (questCompleted && questReward != 0) {
+                    coinflip.creditFlip(buyer, questReward);
+                }
+            }
+
+            // Queue tickets on the captured adjusted quantity (the coin path previously
+            // discarded these returns and queued nothing — a pure BURNIE sink).
+            if (adjustedQty32 != 0) {
+                _queueTicketsScaled(buyer, targetLevel, adjustedQty32, false);
+            }
         }
     }
 
     /// @notice Emitted on a far-future salvage swap (sellFarFutureTickets).
+    /// @dev cashWei subdivides into ethCashWei (relabeled claimable) + burnieTokens (sDGNRS-owned
+    ///      BURNIE transferred to the player). value(burnieTokens) + ethCashWei == cashWei.
     event FarFutureSwap(
         address indexed player,
         uint256 lineCount,
         uint256 totalBudgetWei,
         uint256 ticketWei,
-        uint256 cashWei
+        uint256 ethCashWei,
+        uint256 burnieTokens
     );
 
     /// @notice Sell far-future ticket entries to sDGNRS (current-level tickets + cash; -EV exit).
@@ -948,15 +985,25 @@ contract DegenerusGameMintModule is
             ,
             uint256 totalBudget,
             uint256 ticketWei,
-
+            uint256 cashWei
         ) = _quoteFarFutureSwap(player, levels, quantities);
         if (totalBudget < oneTicketWei) revert E(); // too small to deliver even 1 whole ticket
 
         // Fund fail-closed from sDGNRS's OWN claimable, leaving a >=1 ETH floor. The gambling-burn
         // redemption desk is protected STRUCTURALLY (its ETH is segregated out of claimable at submit),
-        // so NO pendingRedemptionEthValue term is needed; NO daily cap.
+        // so NO pendingRedemptionEthValue term is needed; NO daily cap. The full budget is gated even
+        // though only the ETH part leaves claimable below (the BURNIE part is paid from sDGNRS-owned
+        // BURNIE) — a strictly more conservative funding check.
         if (claimableWinnings[ContractAddresses.SDGNRS] < totalBudget + 1 ether)
             revert E();
+
+        // Split the cash leg: pay an ETH part (claimable relabel) + a BURNIE part transferred from
+        // sDGNRS-owned BURNIE, with an ETH fallback when sDGNRS holds no BURNIE. The split conserves
+        // the cash-leg value (ethCashWei + value(burnieTokens) == cashWei), so the offer is unchanged.
+        (uint256 ethCashWei, uint256 burnieTokens) = _quoteFarFutureBurnieSplit(
+            player,
+            cashWei
+        );
 
         // Debit the seller's far entries (owed is in entries, 4 per whole ticket; swap-pop on full
         // sell-out) and credit sDGNRS the same entries. Distances were validated by _quoteFarFutureSwap;
@@ -972,17 +1019,27 @@ contract DegenerusGameMintModule is
             }
         }
 
-        // Move the whole budget sDGNRS -> player as claimable (relabel; claimablePool unchanged).
-        claimableWinnings[ContractAddresses.SDGNRS] -= totalBudget;
-        claimableWinnings[player] += totalBudget;
+        // Relabel only the ETH portion (ticket leg + ETH cash) sDGNRS -> player as claimable; the
+        // BURNIE part never touches claimable (claimablePool unchanged) — solvency-positive:
+        // ethRelabel <= totalBudget.
+        uint256 ethRelabel = ticketWei + ethCashWei;
+        claimableWinnings[ContractAddresses.SDGNRS] -= ethRelabel;
+        claimableWinnings[player] += ethRelabel;
+        // BURNIE part: deduct from sDGNRS (wallet holdings first, then its claimable coinflip
+        // stake — the burnCoin shortfall path) and pay the player as flip credit, not a token
+        // transfer. burnieTokens <= sDGNRS's spendable (quote cap), so the burn always covers.
+        if (burnieTokens != 0) {
+            _coinReceive(ContractAddresses.SDGNRS, burnieTokens);
+            coinflip.creditFlip(player, burnieTokens);
+        }
 
         // Ticket leg = NORMAL recycled mint of `ticketWei` of current-level tickets from the player's
-        // claimable (routes 90% next / 10% future + queues current tickets). Leftover (~cashWei) is the
-        // player's withdrawable cash. qty in purchase units (4 * TICKET_SCALE = 400 = one whole ticket).
+        // claimable (routes 90% next / 10% future + queues current tickets). Leftover (~ethCashWei) is
+        // the player's withdrawable cash. qty in purchase units (4 * TICKET_SCALE = 400 = one whole ticket).
         uint256 qty = (ticketWei * 4 * TICKET_SCALE) / oneTicketWei;
         _purchaseFor(player, qty, 0, bytes32(0), MintPaymentKind.Claimable);
 
-        emit FarFutureSwap(player, len, totalBudget, ticketWei, totalBudget - ticketWei);
+        emit FarFutureSwap(player, len, totalBudget, ticketWei, ethCashWei, burnieTokens);
     }
 
     /// @dev Debit `entries` (owed is in entries, 4 per whole ticket) of the player's far-future tickets
@@ -1547,7 +1604,7 @@ contract DegenerusGameMintModule is
                 TICKET_SCALE;
             _coinReceive(buyer, coinCost);
 
-            // Accumulate BURNIE mint quest units (deferred to handlePurchase)
+            // MINT_BURNIE quest units (the reward is credited by the caller).
             uint32 questQty = uint32(quantity / (4 * TICKET_SCALE));
             if (questQty != 0) {
                 burnieMintUnits += questQty;
