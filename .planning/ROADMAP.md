@@ -14,7 +14,7 @@
 - ✅ **v51.0 claimBingo — Color-Completion Claim** — Phases 339-342 (closed 2026-05-28 at IMPL HEAD `c3e9d907`; 341 TST + 342 TERMINAL folded → v52 audit)
 - ⊘ **v54.0 Game-Side Keeper-Funding Ledger + AfKing De-Custody + Dead-Code/Gas Sweep** — Phases 343-347 (CLOSED-as-superseded 2026-05-30 — 343 SPEC + 344 IMPL shipped `20ca1f79`; 345/346/347 dropped → folded into v55; no `MILESTONE_V54_AT_HEAD` signal)
 - ✅ **v55.0 AfKing-in-Game Redesign** — Phases 348-352 (shipped 2026-06-01; closure signal `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`; subject frozen `453f8073`; baseline `20ca1f79`; 7 phases incl. 349.1/349.2; 0 NEW_FINDINGS)
-- ▶ **v56.0 AfKing Everyday-Gas Minimization** — Phases 353-357 (ACTIVE 2026-06-01; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`)
+- ✅ **v56.0 AfKing Everyday-Gas Minimization** — Phases 353-357 (shipped 2026-06-04; closure signal `MILESTONE_V56_AT_HEAD_1e7a646d44da4ee26375edd0b006274821fef73e`; subject frozen `1e7a646d`; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`; 0 NEW_FINDINGS)
 
 ---
 
@@ -249,8 +249,8 @@ Plans:
 | 353. SPEC — Design-Lock + Unmanipulable/Solvency Re-Attestation + XMODEL Design-Input + Call-Graph Attestation | v56.0 | 2/2 | Complete    | 2026-06-01 |
 | 354. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (aggregator + ticket-mode primitive + DegenerusQuests batched-settle + accumulator + open-end) | v56.0 | 6/6 | Complete   | 2026-06-01 |
 | 355. GAS — Measure + Tune (+ GAS-05 deferred payout + liveness adds: openBoxes valve + gap/jackpot decouple) | v56.0 | 3/3 | Complete + PUSHED | 2026-06-02 |
-| 356. TST — Unmanipulable (strategic sub/unsub) + Quest-Core Non-Perturbation + Two-Path-Open + Liveness Valve + Gap-Decouple + Gas Marginals + Non-Widening | v56.0 | 5/7 | In Progress|  |
-| 357. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep (AUGMENTED by XMODEL) + FINDINGS-v56.0 + Closure | v56.0 | 4/6 (+357-00d HEAD'''' reconcile) | In Progress|  |
+| 356. TST — Unmanipulable (strategic sub/unsub) + Quest-Core Non-Perturbation + Two-Path-Open + Liveness Valve + Gap-Decouple + Gas Marginals + Non-Widening | v56.0 | 7/7 | Complete | 2026-06-02 |
+| 357. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep (AUGMENTED by XMODEL) + FINDINGS-v56.0 + Closure | v56.0 | 6/6 (+357-00d HEAD'''' reconcile) | Complete | 2026-06-04 |
 
 > **🔒 v56.0 CONTRACT-BOUNDARY HARD STOP (ONE gate — 354 IMPL · 355 GAS rides the same boundary if it produces a net diff).** Phase 354 IMPL is THE contract phase — the carefully-sequenced batched diff (the per-sub accumulator + the mode-agnostic aggregator accrue/settle + the ticket-mode minimal-write primitive + the `DegenerusQuests` batched-settle entrypoint + the open-end optimizations, authored producer-before-consumer) is applied to `contracts/` and locally compiled (`forge build` clean) but HELD at the contract-commit boundary, NEVER committed without explicit user hand-review (`feedback_batch_contract_approval` + `feedback_never_preapprove_contracts` + `feedback_manual_review_before_push` + `feedback_no_contract_commits`). Phase 355 GAS is a tuning pass — any net behavior-preserving gas change rides the same batched USER-APPROVED diff at the same boundary (or records Outcome-A no-diff per the v55 350 precedent). `ContractAddresses.sol` freely modifiable per `feedback_contractaddresses_policy`; tests + planning + docs AGENT-committable.
 
