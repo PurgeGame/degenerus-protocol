@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-06-04T08:06:09.687Z"
 last_activity: 2026-06-04
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,10 +17,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIREMENTS.md (24 v56.0 requirements) + .planning/ROADMAP.md (v56.0 — ACTIVE, phases 353-357) + the design-lock input .planning/PLAN-V56-AFKING-BATCHING-GAS.md
+See: .planning/PROJECT.md (Current Milestone: v57.0 section) + .planning/REQUIREMENTS.md (15 v57.0 requirements) + .planning/ROADMAP.md (v57.0 — ACTIVE, phases 358-362) + the design-lock inputs .planning/PLAN-WWXRP-JACKPOT-WHALEPASS.md + .planning/PLAN-TERMINAL-DECIMATOR-STREAK-BOOST.md + the type-day-udvt-post-v56-seed + handlepurchase-burnie-flip-batching-post-v56-seed memories
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** ✅ v56.0 SHIPPED — all phases 353-357 Complete across SIX contract gates (terminating at the SIXTH gate `1e7a646d`)
+**Current focus:** ▶ v57.0 ACTIVE — Small-Feature Bundle + Day-Type UDVT Refactor (phases 358-362; defining requirements → planning Phase 358 SPEC). 4 small wins (handlePurchase BURNIE-batching · WWXRP jackpot whale-halfpass · terminal-decimator final-day streak boost · test/comment hygiene) + the repo-wide `type Day is uint24` UDVT (the heavy item) as ONE batched diff; baseline = v56.0 closure HEAD frozen `1e7a646d`. (Prior: ✅ v56.0 SHIPPED — phases 353-357 Complete across SIX contract gates, the SIXTH gate `1e7a646d` = the v57.0 baseline.)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,16 +32,30 @@ See: .planning/PROJECT.md (Current Milestone: v56.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-06-04 — Milestone v57.0 started
+Phase: 358 (SPEC — Design-Lock + Freeze/Solvency Re-Attestation + Call-Graph Attestation)
+Plan: — (roadmap drafted; Phase 358 not yet planned)
+Status: Planning (roadmap created — phases 358-362 derived; ready to plan Phase 358)
+Last activity: 2026-06-04 — Milestone v57.0 roadmap created (5 phases 358-362; 15/15 requirements mapped; 0 orphaned, 0 duplicated)
 
 ## 🛠 v56 CARRIED FINDING + USER HARDENING — the 357-00 contract gate (3 changes, autonomous:false)
 
 **F-356-01 (HIGH functional; CONFIRMED at source 2026-06-02, Phase 356):** `DegenerusGame` has **no `drainAffiliateBase` dispatch stub** (and only `receive()`, no `fallback()`), so `DegenerusAffiliate.claim()` reverts at `DegenerusAffiliate.sol:654` → the afking-affiliate `affiliateBase` rewards (flat-7% accrued per-buy into the Sub slot) are **permanently unreachable**. Same omission class as the already-fixed `claimAfkingBurnie` stub (contract-auditor F-1). FIX = ONE-line dispatch stub in `DegenerusGame.sol` mirroring `claimAfkingBurnie:413` (`delegatecall IGameAfkingModule.drainAffiliateBase.selector`). OFF the ETH/`claimablePool` solvency path (BURNIE-only) → SOLVENCY-01 untouched. Module impl (`GameAfkingModule.sol:1300`) + accrual + `level()` getter are all correct — the stub is the only gap. **Disposition (357-discuss, D-01): FIX-FIRST — authored at the 357-00 contract gate, then audit the fixed subject; FINDINGS-v56.0 §4 = RESOLVED-AT-357.** Full detail: memory `[[v56-affiliate-drain-missing-game-stub-bug]]` + `test/REGRESSION-BASELINE-v56.md` carried-findings.
 
 **Plus TWO USER-directed afking sub-hardening gates fold into the SAME 357-00 gate (357-discuss 2026-06-02 — SEC-01 strategic-sub/unsub spine):** (D-11) PASS-REQUIRED subscribe — revert unless `_passHorizonOf(subscriber) >= currentLevel` (deity always covers; keep the `:942` crossing eviction for outgrown passes); (D-12) PURCHASE-GROUNDED subscribe — revert unless purchased-today OR a funded immediate cover-buy executes (kills the `GameAfkingModule.sol:455-457` unfunded-forfeit path; the `5cb707f2` `:1124` advance bypass left as-is, now provably backed by a real buy); (D-13) the protocol self-subscribers `DegenerusVault:483` + `StakedDegenerusStonk:388` (no-pass / unfunded-at-construction) are EXEMPT from BOTH gates — LOAD-BEARING for bootstrap, USER-confirmed. (D-14) re-run + reconcile `REGRESSION-BASELINE-v56.md` after 357-00 (F-356-01 narrows; the D-11/D-12 supersession reds `vm.skip`-dropped + re-proven via new positive proofs), re-freeze at HEAD'. The hardening may warrant formal new SEC-* REQ-IDs before planning so the closure flip re-attests them. Full detail: `357-CONTEXT.md` D-01/D-11/D-12/D-13/D-14.
+
+## ▶ ACTIVE Milestone Roadmap (v57.0 — phases 358-362 — ACTIVE 2026-06-04; baseline = v56.0 closure HEAD frozen `1e7a646d` / `MILESTONE_V56_AT_HEAD_1e7a646d44da4ee26375edd0b006274821fef73e`)
+
+Shape: SPEC → IMPL → GAS → TST → TERMINAL (the established v54.0 + v55.0 + v56.0 audit-milestone shape WITH a dedicated GAS phase). **ONE contract-boundary HARD STOP** — 359 IMPL (the ONE carefully-sequenced batched diff: the `handlePurchase` BURNIE-flip batching + the WWXRP jackpot whale-halfpass + the terminal-decimator final-day streak boost + the repo-wide `type Day is uint24` UDVT [the heavy item, dominating IMPL]); 360 GAS is the gas-neutrality measurement gate (rides the same boundary if a net tune, else records Outcome-A no-diff per the v55 350 / v56 precedent — the expected outcome, since the UDVT is gas-neutral-by-construction with the packed Sub day fields kept uint24-backed). **FULL close — the internal 3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v57.0.md` run IN-MILESTONE at TERMINAL (362), NOT deferred** (the UDVT touches the RNG-entropy `abi.encodePacked` sites [the freeze spine] + the terminal-decimator bucket-promotion is a NEW weight-determining write before the draw → like v54.0/v55.0/v56.0 and unlike v50.0/v51.0; focused on the UDVT byte-image preservation + the bucket-promotion freeze-safety + the WWXRP rationing-key correctness). Baseline = v56.0 closure HEAD frozen `1e7a646d`. Design-lock inputs `.planning/PLAN-WWXRP-JACKPOT-WHALEPASS.md` + `.planning/PLAN-TERMINAL-DECIMATOR-STREAK-BOOST.md` + the `[[type-day-udvt-post-v56-seed]]` + `[[handlepurchase-burnie-flip-batching-post-v56-seed]]` memories (the UDVT seed's "pure annotation" claim CORRECTED per the 2026-06-04 validation — the 3 `abi.encodePacked(…day…)` sites need explicit uint32 casts to preserve the keccak byte-image). **No research** (a fully-specced internal refactor/feature bundle; the 5 items pre-validated READ-ONLY against `1e7a646d` on 2026-06-04). Hard floor on EVERY item: RNG-freeze intact + SOLVENCY-01 byte-untouched (each change is BURNIE-credit / weight-only / pure-annotation OFF the ETH/`claimablePool` path).
+
+| Phase | Name | Type | Requirements | Status |
+|-------|------|------|--------------|--------|
+| 358 | SPEC — Design-Lock (WWXRP per-bracket rationing + operator-recipient policy · terminal-decimator decisions + bucket-promotion freeze re-proof · UDVT width/byte-preservation discipline) + Freeze/Solvency Re-Attestation + Call-Graph Attestation | SPEC | WWXRP-02 · TDEC-02 · TDEC-03 | Not started |
+| 359 | IMPL — The ONE Carefully-Sequenced Batched Contract Diff (handlePurchase batching + WWXRP whale-halfpass + terminal-decimator boost + the wide UDVT refactor) | IMPL (CONTRACT BOUNDARY) | BATCH-01/02 · WWXRP-01 · TDEC-01 · UDVT-01/02/03 | Not started |
+| 360 | GAS — Measure + Tune (the UDVT gas-neutrality gate: packed Sub day fields stay uint24 / no cold-slot spill + the small features measured) | GAS (CONTRACT BOUNDARY — net diff, else Outcome-A) | (none — gas-neutrality measurement gate; UDVT-03 gas-half measured here) | Not started |
+| 361 | TST — RNG-Freeze Intact (incl. the UDVT per-site byte-diff gate) + SOLVENCY-01 Byte-Untouched + Non-Widening + Test/Comment Hygiene | TST | SEC-01/02 · HYG-01/02 | Not started |
+| 362 | TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v57.0 + Closure Flip | TERMINAL (FULL close — sweep IN-MILESTONE) | AUDIT-01 | Not started |
+
+**Coverage:** 15/15 v57.0 requirements mapped to exactly one phase (358: 3 · 359: 7 · 360: 0 · 361: 4 · 362: 1); 0 orphaned, 0 duplicated. Per-category: BATCH 2 (IMPL) · WWXRP 2 (1 SPEC design half + 1 IMPL) · TDEC 3 (2 SPEC design half + 1 IMPL) · UDVT 3 (IMPL; the gas-half measured at 360, the regression-half proven at 361) · HYG 2 (TST) · SEC 2 (TST) · AUDIT 1 (TERMINAL). The internal sweep + delta-audit + `audit/FINDINGS-v57.0.md` run IN-MILESTONE at 362 (NOT deferred). WWXRP-02 + TDEC-02/03 (the design halves — the per-bracket rationing key + recipient policy, the terminal-decimator design decisions, and the bucket-promotion freeze re-proof) design-locked at SPEC, BUILT (WWXRP-01 + TDEC-01) at IMPL. UDVT-01/02/03 BUILT at IMPL (the byte-preservation discipline = SPEC's design feed). **Phase 360 GAS owns NO REQ-ID** — it is the gas-neutrality measurement gate (the v56 packed-Sub uint24 gas win must be PROVEN intact; Outcome-A no-diff in the expected gas-neutral-by-construction case; UDVT-03 is OWNED at IMPL, its gas-half measured here, its regression-half proven at TST). SEC-01/02 (the hard floor — RNG-freeze intact incl. the UDVT per-site byte-diff gate + SOLVENCY-01 byte-untouched) PROVEN empirically at TST (the SPEC re-attestation at 358's SC5 is the design gate). HYG-01/02 (the test/comment hygiene, no contract logic change → AGENT-committable, off the contract-commit gate) land at TST. Full detail in `.planning/ROADMAP.md`; per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
 
 ## ✅ SHIPPED Milestone Roadmap (v56.0 — phases 353-357 — SHIPPED 2026-06-04; closure signal `MILESTONE_V56_AT_HEAD_1e7a646d44da4ee26375edd0b006274821fef73e`; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`)
 

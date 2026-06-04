@@ -49,22 +49,22 @@
 
 ## Traceability
 
-_To be filled by the roadmapper (Phase mapping). Each REQ-ID maps to exactly ONE owning phase. Phases continue from 357 → 358. Expected shape: 358 SPEC → 359 IMPL → 360 GAS → 361 TST → 362 TERMINAL (the established v54/v55/v56 audit pattern)._
+_Phase mapping (roadmapper, 2026-06-04). Each REQ-ID maps to exactly ONE owning phase. Phases continue from 357 → 358. Shape: 358 SPEC → 359 IMPL → 360 GAS → 361 TST → 362 TERMINAL (the established v54/v55/v56 audit pattern). **15/15 mapped — 0 orphaned, 0 duplicated.** Per-category: BATCH 2 (IMPL) · WWXRP 2 (1 SPEC design half + 1 IMPL) · TDEC 3 (2 SPEC design half + 1 IMPL) · UDVT 3 (IMPL; the gas-half measured at 360, the regression-half proven at 361) · HYG 2 (TST) · SEC 2 (TST) · AUDIT 1 (TERMINAL). Phase 360 GAS owns NO REQ-ID — it is the gas-neutrality measurement gate (the v56 packed-Sub uint24 gas win must be PROVEN intact; Outcome-A no-diff in the expected gas-neutral-by-construction case)._
 
 | Requirement | Phase | Phase Type | Status |
 |-------------|-------|------------|--------|
-| BATCH-01 | — | — | Not started |
-| BATCH-02 | — | — | Not started |
-| WWXRP-01 | — | — | Not started |
-| WWXRP-02 | — | — | Not started |
-| TDEC-01 | — | — | Not started |
-| TDEC-02 | — | — | Not started |
-| TDEC-03 | — | — | Not started |
-| UDVT-01 | — | — | Not started |
-| UDVT-02 | — | — | Not started |
-| UDVT-03 | — | — | Not started |
-| HYG-01 | — | — | Not started |
-| HYG-02 | — | — | Not started |
-| SEC-01 | — | — | Not started |
-| SEC-02 | — | — | Not started |
-| AUDIT-01 | — | — | Not started |
+| BATCH-01 | 359 | IMPL | Not started |
+| BATCH-02 | 359 | IMPL | Not started |
+| WWXRP-01 | 359 | IMPL | Not started |
+| WWXRP-02 | 358 | SPEC | Not started |
+| TDEC-01 | 359 | IMPL | Not started |
+| TDEC-02 | 358 | SPEC | Not started |
+| TDEC-03 | 358 | SPEC | Not started |
+| UDVT-01 | 359 | IMPL | Not started |
+| UDVT-02 | 359 | IMPL | Not started |
+| UDVT-03 | 359 | IMPL | Not started |
+| HYG-01 | 361 | TST | Not started |
+| HYG-02 | 361 | TST | Not started |
+| SEC-01 | 361 | TST | Not started |
+| SEC-02 | 361 | TST | Not started |
+| AUDIT-01 | 362 | TERMINAL | Not started |
