@@ -15,7 +15,107 @@
 - ⊘ **v54.0 Game-Side Keeper-Funding Ledger + AfKing De-Custody + Dead-Code/Gas Sweep** — Phases 343-347 (CLOSED-as-superseded 2026-05-30 — 343 SPEC + 344 IMPL shipped `20ca1f79`; 345/346/347 dropped → folded into v55; no `MILESTONE_V54_AT_HEAD` signal)
 - ✅ **v55.0 AfKing-in-Game Redesign** — Phases 348-352 (shipped 2026-06-01; closure signal `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`; subject frozen `453f8073`; baseline `20ca1f79`; 7 phases incl. 349.1/349.2; 0 NEW_FINDINGS)
 - ✅ **v56.0 AfKing Everyday-Gas Minimization** — Phases 353-357 (shipped 2026-06-04; closure signal `MILESTONE_V56_AT_HEAD_1e7a646d44da4ee26375edd0b006274821fef73e`; subject frozen `1e7a646d`; baseline = v55 HEAD frozen `453f8073` / `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583`; 0 NEW_FINDINGS)
+- ✅ **v58.0 RNG-Safety, ETH-Flow & Gas-Ceiling Documentation Audit** (document-only; autonomous + resumable; reshaped from the drafted "v52 idea" `.planning/PLAN-V58-CONSOLIDATED-AUDIT.md`) — Phases 363-369 (SHIPPED 2026-06-04; closure signal `MILESTONE_V58_AT_HEAD_2b26ec91810a733e15666a4c23e8f365a4f04f51`; baseline = v57.0 closure HEAD `b7237db4` / contract subject frozen `2b26ec91`; FIVE artifacts as ONE cohesive dark-themed static site over the full cumulative v50→v57 surface; **7 CONFIRMED findings [1 CRIT · 1 HIGH · 2 MED · 2 LOW · 1 INFO] + 5 REFUTED** — the 5 Claude analysis phases found 0 on their own surfaces, the XMODEL Gemini+Codex council surfaced 7 on adjacent surfaces [salvage arithmetic, AfKing affiliate units, BAF/decimator whale-pass remainders], all verified vs frozen source + routed to a LATER remediation milestone [document-only]; NO contract-commit gate; 22 reqs / 10 categories; NOT pushed)
 - ✅ **v57.0 Small-Feature Bundle + Day-Width `uint24` Normalization** (the `type Day` UDVT was dropped for plain uint24; RNG re-based by design, pre-launch) — Phases 358-362 (shipped 2026-06-04; closure signal `MILESTONE_V57_AT_HEAD_2b26ec91810a733e15666a4c23e8f365a4f04f51`; subject frozen `2b26ec91`; 1 LOW found+RESOLVED at 362, 0 MEDIUM+; SOLVENCY-01 held; NOT pushed; baseline = v56.0 closure HEAD frozen `1e7a646d` / `MILESTONE_V56_AT_HEAD_1e7a646d44da4ee26375edd0b006274821fef73e`; 7 small wins [handlePurchase BURNIE-batching · WWXRP jackpot whale-halfpass · terminal-decimator final-day streak boost · test/comment hygiene · **BURNIE coin-buy ticket-queue Critical fix** · **sDGNRS salvage combo ETH/BURNIE pawn-shop payout** · **manual-cancel auto-claim + auto-evict forfeit** (last three added mid-358)] + the repo-wide `type Day is uint24` UDVT [the heavy item]; ONE batched diff; SPEC→IMPL→GAS→TST→TERMINAL)
+
+---
+
+## ✅ v58.0 RNG-Safety, ETH-Flow & Gas-Ceiling Documentation Audit (SHIPPED 2026-06-04 — document-only; closure signal `MILESTONE_V58_AT_HEAD_2b26ec91810a733e15666a4c23e8f365a4f04f51`; 7 CONFIRMED findings [1 CRIT · 1 HIGH · 2 MED · 2 LOW · 1 INFO] + 5 REFUTED, all routed to a later remediation milestone; baseline = v57.0 closure HEAD `b7237db4`, contract subject frozen `2b26ec91`; phases 363-369)
+
+**Milestone:** v58.0 (started 2026-06-04)
+**Defined:** 2026-06-04
+**Audit subject:** the full cumulative v50→v57 contract surface at the frozen v57-closure HEAD (contract subject `2b26ec91`; `b7237db4` closure + `0d5d2afe` archive on top are docs-only → identical contracts). 363 PREP-01 pins `FROZEN_SHA`. Every cited `file:line` MUST be re-attested against the frozen HEAD before use (the `audit-v52/` context-pack refs predate the AfKing.sol→GameAfkingModule dissolution).
+**Scope source:** `.planning/REQUIREMENTS.md` (22 v58.0 REQ-IDs across 10 categories: PREP 3 · RNGSAFE 3 · RNGVAR 3 · ETHFLOW 3 · GASCEIL 3 · FORENSIC 2 · XMODEL 1 · SITE 1 · AUDIT 1 · OPS 2) + the milestone init (2026-06-04) + the drafted plan `.planning/PLAN-V58-CONSOLIDATED-AUDIT.md` (reshaped). **No research** — pure in-repo code analysis.
+
+> **Scope (USER-locked 2026-06-04):** a DOCUMENT-ONLY, autonomous, resumable audit producing FIVE artifacts packaged as ONE cohesive dark-themed static site (`audit/site/`): (1) a **Player-Function RNG-Safety** page — every player-facing function, what it does + WHY it cannot influence any RNG-dependent variable, + a sanity/comment check that flags behavior↔name/comment mismatches as findings (e.g. a BURNIE-burning buy that queues zero tickets); (2) an **RNG-Variable Freeze** table — every RNG-interacting variable + why it cannot change between RNG request and resolution; (3) a full **ETH-Flow chart** — inflow → pool cycling → outflow; (4) an **advanceGame Gas-Ceiling** table — theoretical max gas per stage vs the 16,777,216 (EIP-7825) per-tx cap; (5) a side-track **BURNIE ticket-mint forensic**. Coverage basis = the full cumulative v50→v57 surface. The drafted plan's TOP track (the AfKing reward-leak hunt) FOLDS into the RNG-safety + ETH-flow + solvency tracks rather than leading.
+
+> **Posture — DOCUMENT-ONLY, NO CONTRACT GATE.** This milestone changes NO `contracts/*.sol` — it produces analysis + HTML + markdown only → there is NO contract-commit HARD STOP and the whole run is hands-off. Any fix the audit surfaces routes to a LATER remediation milestone. Deliverables persist under `audit/` (and `audit/site/`); planning is gitignored-local. The v50/v51 `FINDINGS` backfill is DROPPED from this run (carried forward). External Gemini + Codex are a ~5-prompt targeted SECOND OPINION only ($20-tier), NOT the per-cell council.
+
+> **Execution posture — AUTONOMOUS + RESUMABLE + BUDGET-PACED (USER-locked 2026-06-04, OPS-01/02).** Runs autonomously with no mid-run user interaction; RESUMES GRACEFULLY after any usage-limit hit or error (each phase checkpoints its partial artifact + commits per-phase so a restart continues from the last checkpoint). PACED to ~45% of a weekly usage allotment over 24h, NEVER slamming a 5h cap mid-task → `concurrency: 1`, small batches with frequent persist, spine-weighted depth (RNG-freeze + solvency + the AfKing surface first), pausable between work windows. The `audit-v52/` harness (`coordinator.sh`, `cross-model/`, `context-pack/`) is the run scaffold.
+
+> **Phase numbering** continues from the previous milestone — v57.0 ran 358-362, so **v58.0 starts at Phase 363.** Not reset to 1.
+
+> **Milestone shape** — a documentation/analysis audit (NOT the SPEC→IMPL→GAS→TST→TERMINAL contract shape, since nothing is built): **363 PREP** (pin `FROZEN_SHA` + rebuild/re-attest the context-pack + enumerate the raw inventory for all four web sections + scaffold the cohesive site + lock the resumable run scaffold) → **364 RNGSAFE** (the Player-Function RNG-Safety page + sanity/comment check) → **365 RNGVAR** (the RNG-Variable Freeze table) → **366 ETHFLOW** (the ETH-Flow chart) → **367 GASCEIL** (the advanceGame Gas-Ceiling table) → **368 FORENSIC** (the BURNIE ticket-mint regression forensic — the side track) → **369 TERMINAL** (targeted external corroboration + cohesive-site assembly/polish + consolidate `audit/FINDINGS-v58.0.md` + the closure flip with the `MILESTONE_V58_AT_HEAD_<sha>` signal). Phases 364-367 each ANALYZE + RENDER their own site section into the 363 scaffold; 369 assembles + polishes the whole. 368 FORENSIC is parallelizable / lower-priority (the "on the side" track).
+
+### Phases
+
+- [x] **Phase 363: PREP — Scope Freeze, Inventory & Run Scaffold** ✅ (2026-06-04 — FROZEN_SHA `2b26ec91` pinned; scope.txt rebuilt; 4 inventories enumerated [164 player fns · 44 RNG vars/47 entropy sites · 46 ETH edges · 13 advanceGame stages] seeding `audit/site/data/*.js`; cohesive static site scaffolded; run contract locked) - Pin `FROZEN_SHA` to the v57.0 contract-frozen HEAD (`2b26ec91`); rebuild + re-attest the `audit-v52/` context-pack against it (`scope.txt` — drop `AfKing.sol`, add `GameAfkingModule.sol` + `DegenerusGameBingoModule.sol`; `targets.md`; `hot-surfaces.md`; every cited `file:line` verified vs the frozen tree); enumerate the raw inventory for the four web deliverables (every player-facing function · every RNG-interacting variable · every ETH inflow/pool/outflow site · the ordered `advanceGame` stages) as the source-of-truth list each section builds from, gaps flagged explicitly; scaffold the cohesive dark-themed static site under `audit/site/` (vanilla HTML/CSS/JS, shared nav/tabs, searchable table component, no build step / no framework / no CDN); and lock the resumable run scaffold (the harness config + the checkpoint/persist convention + the autonomous + budget-pacing rules OPS-01/02). PREP-01/02/03 + OPS-01/02.
+- [x] **Phase 364: ✅ RNGSAFE — Player-Function RNG-Safety Page + Sanity/Comment Check** (164 fns: 129 safe/31 gate/4 lock/0 finding; RNGSAFE-03 clean) - For every player-facing (external/public, user-callable, non-admin) function: a site row with contract + signature + plain-English "what it does" + access/gating, COMPLETE against the 363 enumeration (RNGSAFE-01); an RNG-safety verdict + reasoning per row (WHY it cannot influence any RNG-dependent variable between request and resolution — writes no participating slot / reverts under `rngLockedFlag` / reads only post-resolution state, cited to `file:line`; any window-touching writer escalated to a finding) (RNGSAFE-02); and a sanity + comment check flagging any function whose behavior diverges from its name/NatSpec/comment/intent (e.g. a BURNIE-burning buy that queues zero tickets) → recorded as a finding with severity + fix sketch (RNGSAFE-03). Renders into the site's RNG-Safety section. RNGSAFE-01/02/03.
+- [x] **Phase 365: ✅ RNGVAR — RNG-Variable Freeze Invariant Table** (45 vars: 13 lock/15 gate/17 safe/0 finding; 6 edge-cases resolved) - Enumerate every state variable that participates in an RNG-derived output (entropy inputs to the `abi.encode(Packed)` sites, ticket-selection inputs, weights/buckets, day keys, `rngWordByDay`, the lock flags) with its declaring contract + slot/struct location + the RNG outputs it feeds (RNGVAR-01); prove the freeze per variable — the writer set enumerated, each shown to revert under the lock or be unreachable in the request→resolution window, cited to `file:line`; any window-mutating writer escalated to a finding (RNGVAR-02); render as the site's RNG-Variable Freeze section (searchable table: variable → outputs → writers → freeze-gate) (RNGVAR-03). RNGVAR-01/02/03.
+- [x] **Phase 366: ✅ ETHFLOW — ETH Flow Chart** (46 edges: 21 safe/20 gate/5 warn/0 finding; solvency identity HOLDS; SVG diagram built) - Trace every ETH INFLOW (presale, ticket buys, cover-buys, redemptions-in, any `payable`/`receive` entry) with entry `file:line` + destination pool/ledger (ETHFLOW-01); trace the internal pool cycling + every OUTFLOW — the `claimablePool` / `_poolOf` / `Pool.*` buckets, the consolidation path, and every exit (claims, payouts, redemptions-out, withdrawals, the salvage ETH leg), with the conservation/solvency invariant noted at each hop (ETHFLOW-02); render a full ETH-flow DIAGRAM (nodes = sources/pools/sinks, edges = labeled transfers) in the site with a companion table backing each edge to a `file:line` (ETHFLOW-03). ETHFLOW-01/02/03.
+- [x] **Phase 367: ✅ GASCEIL — advanceGame Gas-Ceiling Table** (13 stages; max ~15.08M @ 305-winner jackpot, ~10% headroom vs 16.7M; OPEN_BATCH+degenerette excluded; 2 LOW/info notes) - Decompose `advanceGame` into its ordered stages (subscriber STAGE, resolution, jackpot/decimator, pool consolidation, etc.), each with its bounding loop + the protocol cap on its iteration count (GASCEIL-01); derive the THEORETICAL WORST-CASE (max) gas per stage = measured per-item marginal × the proven iteration ceiling, bounding assumptions stated explicitly (worst-case branch, NOT typical seed) (GASCEIL-02); render a gas-ceiling table (stage → bound → marginal → worst-case total) with a per-stage verdict against the 16,777,216 (EIP-7825) per-tx cap; any stage that could approach/exceed the cap escalated to a finding (GASCEIL-03). GASCEIL-01/02/03.
+- [x] **Phase 368: ✅ FORENSIC — BURNIE Ticket-Mint Regression Forensic (side track)** (root cause `24f0898b` phase-160 2026-04-01; live ~63d pre-launch; fixed `980865e8`; regression-test rec given) - Root-cause the regression — the commit SHA + era/refactor where BURNIE ticket buying (`purchaseCoin` → `_purchaseCoinFor`) stopped queuing tickets while still burning BURNIE (the BURNIE-01 coin-burned-zero-tickets sink, fixed in `980865e8`), via git history (candidate: the phase-160 `_queueTicketsScaled` relocation, or the v47 BURNIE-lootbox-removal rework) (FORENSIC-01); explain HOW it went unnoticed (no test asserted post-buy ticket-queue growth on the coin path) + recommend the regression test that would have caught it, delivered as a short root-cause note (FORENSIC-02). Parallelizable / lower-priority. FORENSIC-01/02.
+- [x] **Phase 369: TERMINAL — External Corroboration + Site Assembly + FINDINGS-v58.0 + Closure** ✅ (2026-06-04 — XMODEL council adjudicated [7 confirmed / 5 refuted]; `audit/FINDINGS-v58.0.md` consolidated [chmod 444]; site Findings tab populated; closure flip + `MILESTONE_V58_AT_HEAD_2b26ec91810a733e15666a4c23e8f365a4f04f51` signal; 22 reqs re-attested) - Run the targeted external second opinion (~5 area prompts × 2 models [Gemini + Codex, $20-tier] on RNG-freeze invariant / solvency-conservation / AfKing-value-leak / v57 money paths / composition, via the `cross-model/` area-result pattern after a council PONG smoke-test; Claude adjudicates each external claim and folds corroboration/divergence in — XMODEL-01); assemble the four analysis sections into ONE cohesive navigable site under `audit/site/` (shared nav/tabs, dark game aesthetic, searchable tables, embedded ETH-flow diagram, opens from a local file with no server/build — SITE-01); consolidate every finding (RNGSAFE-03 / RNGVAR-02 / ETHFLOW-02 / GASCEIL-03 / FORENSIC / XMODEL) into `audit/FINDINGS-v58.0.md` (severity-classified, each fix sketch routed to a later milestone — document-only) and close the milestone via the atomic closure flip + the `MILESTONE_V58_AT_HEAD_<sha>` signal, re-attesting all 22 requirements against the frozen HEAD (AUDIT-01). XMODEL-01 · SITE-01 · AUDIT-01.
+
+**Coverage:** 22/22 v58.0 requirements mapped to exactly one phase (363: 5 · 364: 3 · 365: 3 · 366: 3 · 367: 3 · 368: 2 · 369: 3); 0 orphaned, 0 duplicated. Per-category: PREP 3 + OPS 2 (PREP/scaffold) · RNGSAFE 3 (364) · RNGVAR 3 (365) · ETHFLOW 3 (366) · GASCEIL 3 (367) · FORENSIC 2 (368) · XMODEL 1 + SITE 1 + AUDIT 1 (369 TERMINAL). Document-only — NO contract-commit gate; the whole run is hands-off + resumable. Full per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
+
+---
+
+### Phase Details (v58.0)
+
+#### Phase 363: PREP — Scope Freeze, Inventory & Run Scaffold
+
+**Goal**: The audit subject is frozen and the run is set up so phases 364-369 can execute hands-off and resumably with zero re-attestation drift: `FROZEN_SHA` is pinned, the context-pack is rebuilt + every `file:line` re-attested against it, the complete source-of-truth inventory for all four web sections is enumerated, the cohesive static-site shell exists under `audit/site/`, and the autonomous + budget-paced + checkpoint/resume run contract is locked.
+**Requirements**: PREP-01, PREP-02, PREP-03, OPS-01, OPS-02
+**Success criteria**:
+1. `FROZEN_SHA` pinned to the v57 contract-frozen HEAD; `audit-v52/` `scope.txt`/`targets.md`/`hot-surfaces.md` rebuilt with `AfKing.sol`→`GameAfkingModule.sol` + `DegenerusGameBingoModule.sol` reconciled and 0 stale `file:line` refs.
+2. The four enumerations (player-facing functions · RNG-interacting variables · ETH inflow/pool/outflow sites · `advanceGame` stages) exist as explicit lists, with any coverage gap logged (no silent truncation).
+3. `audit/site/` opens from a local file with a working shared nav/tabs shell + a searchable-table component, no build step / framework / CDN.
+4. The resumable run contract is written down: the harness config (`concurrency: 1`, small batches), the per-phase checkpoint/persist + commit convention, and the ~45%-weekly / 24h / no-5h-cap pacing rule.
+
+#### Phase 364: RNGSAFE — Player-Function RNG-Safety Page + Sanity/Comment Check
+
+**Goal**: A reader can see every player-facing function, understand what it does, and read a cited reason WHY it cannot influence any RNG-dependent variable between request and resolution — and every behavior↔name/comment mismatch (a real-bug class, e.g. a BURNIE-burning buy that queues zero tickets) is surfaced as a finding.
+**Requirements**: RNGSAFE-01, RNGSAFE-02, RNGSAFE-03
+**Success criteria**:
+1. Every player-facing function from the 363 enumeration has a row (contract · signature · what-it-does · gating); 0 unlisted, deliberate exclusions noted.
+2. Each row carries an RNG-safety verdict + cited reasoning; any function able to touch a participating slot in the freeze window is escalated to a finding.
+3. The sanity/comment check is applied to every row; each behavior↔comment mismatch is recorded as a severity-classified finding with a fix sketch.
+4. The RNG-Safety section renders in the site as a searchable/filterable table.
+
+#### Phase 365: RNGVAR — RNG-Variable Freeze Invariant Table
+
+**Goal**: A reader can see every variable that feeds RNG and a cited proof of why it cannot be modified between RNG request and resolution.
+**Requirements**: RNGVAR-01, RNGVAR-02, RNGVAR-03
+**Success criteria**:
+1. Every RNG-participating variable is enumerated with its location + the RNG outputs it feeds.
+2. Each variable's writer set is enumerated and each writer shown lock-gated or window-unreachable, cited to `file:line`; any window-mutating writer escalated to a finding.
+3. The RNG-Variable Freeze table renders in the site (variable → outputs → writers → freeze-gate), searchable.
+
+#### Phase 366: ETHFLOW — ETH Flow Chart
+
+**Goal**: A reader can follow every ETH wei from where it enters, through the pools, to where it leaves — and the conservation/solvency invariant is visible at each hop.
+**Requirements**: ETHFLOW-01, ETHFLOW-02, ETHFLOW-03
+**Success criteria**:
+1. Every ETH inflow is traced to its destination pool/ledger with an entry `file:line`.
+2. Pool cycling + every outflow is traced with the conservation/solvency invariant noted per hop; any leak/mismatch escalated to a finding.
+3. A readable ETH-flow diagram (sources/pools/sinks + labeled edges) renders in the site, each edge backed by a `file:line`.
+
+#### Phase 367: GASCEIL — advanceGame Gas-Ceiling Table
+
+**Goal**: A reader can see the theoretical worst-case gas of each `advanceGame` stage and whether it stays under the 16.7M per-tx cap.
+**Requirements**: GASCEIL-01, GASCEIL-02, GASCEIL-03
+**Success criteria**:
+1. `advanceGame` is decomposed into ordered stages, each with its bounding loop + iteration cap.
+2. Worst-case max gas per stage is derived (marginal × ceiling) with explicit bounding assumptions (worst-case branch, not typical seed).
+3. The gas-ceiling table renders with a per-stage verdict vs the 16,777,216 cap; any stage that could approach/exceed it is escalated to a finding.
+
+#### Phase 368: FORENSIC — BURNIE Ticket-Mint Regression Forensic (side track)
+
+**Goal**: The "BURNIE burned but no tickets queued" regression is root-caused to a commit and explained, with a regression-test recommendation so it can't recur silently.
+**Requirements**: FORENSIC-01, FORENSIC-02
+**Success criteria**:
+1. The introducing commit SHA + era/refactor is identified via git history.
+2. A short root-cause note explains why no test caught it + recommends the specific regression test (post-buy ticket-queue-growth assertion on the coin path).
+
+#### Phase 369: TERMINAL — External Corroboration + Site Assembly + FINDINGS-v58.0 + Closure
+
+**Goal**: The artifacts are corroborated by a targeted external second opinion, assembled into one cohesive shippable site, and every finding is consolidated into `audit/FINDINGS-v58.0.md`; the milestone closes with a signal.
+**Requirements**: XMODEL-01, SITE-01, AUDIT-01
+**Success criteria**:
+1. ~5 area prompts × 2 models run (after a council PONG smoke-test); each external claim adjudicated by Claude and folded into the artifacts/FINDINGS.
+2. The four sections assemble into ONE cohesive navigable site under `audit/site/` (shared nav, dark aesthetic, searchable tables, embedded ETH-flow diagram, opens with no server/build).
+3. `audit/FINDINGS-v58.0.md` consolidates all findings (severity-classified, fix sketches routed to a later milestone); the atomic closure flip lands with a `MILESTONE_V58_AT_HEAD_<sha>` signal and all 22 requirements re-attested.
 
 ---
 
