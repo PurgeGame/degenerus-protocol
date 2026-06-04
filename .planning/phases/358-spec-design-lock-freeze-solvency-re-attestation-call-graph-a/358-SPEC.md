@@ -2,8 +2,8 @@
 
 **Milestone:** v57.0 — Small-Feature Bundle + Day-Type UDVT Refactor
 **Baseline / frozen subject:** v56.0 closure HEAD — frozen contract subject `1e7a646d`, closure signal `MILESTONE_V56_AT_HEAD_1e7a646d44da4ee26375edd0b006274821fef73e`.
-**Status:** DRAFT (design-lock in progress — plan 01 authors the header + TDEC-02 + TDEC-03; plans 02/03 append the remaining sections).
-**Owns (this plan, 01):** TDEC-02 (terminal-decimator mechanics, D-04..D-13) · TDEC-03 (freeze-safety proof, D-01..D-03).
+**Status:** LOCKED (design-lock COMPLETE — plan 01 authored the header + TDEC-02 + TDEC-03; plan 02 appended WWXRP-02 + BURNIE-03 + SALVAGE-02 + CANCEL-02; plan 03 appended the cross-cutting RNG-freeze + SOLVENCY re-attestation + the UDVT byte-preservation discipline + the Full Call-Graph Grep-Attestation + this SPEC Lock — see `## SPEC Lock (LOCKED)` for the per-criterion assertion).
+**Owns (358 design-locks):** TDEC-02 (terminal-decimator mechanics, D-04..D-13) · TDEC-03 (freeze-safety proof, D-01..D-03) · WWXRP-02 (D-14..D-18) · BURNIE-03 (D-21..D-24) · SALVAGE-02 (D-25..D-29) · CANCEL-02 (D-30..D-33). UDVT-01/02/03 design-fed (D-19/D-20, built at IMPL 359).
 
 > **PAPER-ONLY.** This phase locks design and grep-attests anchors. It mutates ZERO `contracts/*.sol`. No contract code is authored, no implementation bodies or fenced Solidity are inlined — every reference is an identifier + line range + behavior description, re-attested against the frozen subject before being written here.
 
@@ -349,3 +349,175 @@ The two FLAGGED exceptions are both solvency-positive-or-neutral with their proo
 **D-20 — test-file handling.** The contract-side UDVT is part of the ONE batched USER-approved 359 diff (HELD for hand-review at the contract-commit boundary). The ~143 test-file updates land as SEPARATE AGENT-committable commits (only `contracts/*.sol` commits need explicit approval — the project's "only contract commits need approval" rule).
 
 **UDVT-01/02/03 are owned at IMPL 359** — their byte-preservation discipline is FIXED here; the GAS-neutrality is measured at 360 (packed Sub day fields stay uint24, no cold-slot spill), the per-site byte-diff regression proven at 361 (SEC-01). The IMPL author must preserve items (1)–(4) as code-level invariants.
+
+---
+
+## Full Call-Graph Grep-Attestation (vs `1e7a646d`)
+
+> **Frozen-subject guard (re-asserted):** `git diff --quiet 1e7a646d HEAD -- contracts/` is **clean** at execution of this plan — the working tree is byte-identical to the frozen subject `1e7a646d`, so every grep below (run against the working tree) is read-equivalent to the frozen subject. Each row was actually grep-run at SPEC time; the recorded Y / drift is the grep result, NOT a "by construction" claim. The drifts already recorded by plans 01 + 02 are folded in (consistent with their re-attestation tables); the three NOTED drifts (HYG-02 `:809`, GameOverModule `:106` guard, auto-evict explicit-delete) are reconciled below.
+
+**No "by construction" / "single fn reaches all paths" claim survives un-checked** — every cited `file:line` across the whole milestone scope is grep-confirmed here against `1e7a646d`.
+
+### Block A — Degenerette / WWXRP (`DegenerusGameDegeneretteModule.sol` unless noted)
+
+| Anchor (symbol) | Cited path:line | Confirmed | Drift note |
+|-----------------|-----------------|-----------|------------|
+| `_resolveFullTicketBet` | `:614` | Y | — |
+| score `s = _score(...)` | `:674` | Y | — |
+| jackpot gate `s == 9` | (in `_resolveFullTicketBet`) | Y | the relabeled 8-match jackpot; `s` ∈ {0..9} |
+| ETH-only sDGNRS `s >= 7` block | `:713-715` | Y (drift fixed) | **DRIFT** (plan 02) — `:713-715` (`currency == CURRENCY_ETH && s >= 7` → `_awardDegeneretteDgnrs`), NOT the planning's `:710-715`. WWXRP hook goes immediately after. |
+| `CURRENCY_WWXRP = 3` | `:216` | Y | — |
+| `MIN_BET_WWXRP = 1 ether` | `:225` | Y | — |
+| `resolveBets` (permissionless) | `:407` | Y | no access modifier |
+| liveness revert in `resolveBets` | `:413` | Y (drift fixed) | **DRIFT** (plan 02) — `:413`, NOT the planning's `:414` |
+| `_resolvePlayer` | `:142-150` | Y | returns the bet OWNER; operator out of scope at the award site |
+| router stub `resolveDegeneretteBets` | `DegenerusGame.sol:902` | Y | — |
+| router stub `degeneretteResolve` | `DegenerusGame.sol:1742` | Y | — |
+| router stub `_degeneretteResolveBet` | `DegenerusGame.sol:1900` | Y | — |
+| `whalePassClaims[player] += 1` grant | `DegenerusGameStorage.sol:973` | Y | the cheap freeze-safe grant |
+
+### Block B — Terminal-Decimator (`DegenerusGameDecimatorModule.sol`)
+
+| Anchor (symbol) | Cited path:line | Confirmed | Drift note |
+|-----------------|-----------------|-----------|------------|
+| `recordTerminalDecBurn` | `:693` (burn gate `:700-701`, bucket freeze `:725-728`, uint88 saturate `:750-752`) | Y | — |
+| `_decSubbucketFor` | `:559-570` | Y | `keccak256(player, lvl, bucket) % bucket` |
+| `_terminalDecBucket` | `:925-936` | Y | range BASE=12 → MIN=2 (lower = better) |
+| `_terminalDecMultiplierBps` | `:916` | Y | 20× cap at the deadline |
+| `runTerminalDecimatorJackpot` | `:780` | Y | pro-rata draw from the aggregates |
+| `_terminalDecDaysRemaining` | `:939-950` | Y | deadline helper |
+| aggregate key `terminalDecBucketBurnTotal` | `:755` (`keccak256(abi.encode(lvl, bucket, subBucket))`) | Y | `abi.encode`, NOT `abi.encodePacked` |
+| `TerminalDecEntry` packing (24 spare bits) | `DegenerusGameStorage.sol:1585-1591` | Y | `uint80 / uint88 / uint8 / uint8 / uint48` = 232/256 |
+| `getPlayerQuestView` (effective streak) | `DegenerusQuests.sol:1088` | Y | a `view` (no mutation) |
+| quest-streak → activity score | `DegenerusGameMintStreakUtils.sol:251-252` | Y | `questStreakCapped * 100` bps fold |
+
+### Block C — Advance / GameOver / RNG (the freeze spine)
+
+| Anchor (symbol) | Cited path:line | Confirmed | Drift note |
+|-----------------|-----------------|-----------|------------|
+| `_handleGameOverPath` liveness gate | `AdvanceModule:591` | Y | `if (!_livenessTriggered()) return` |
+| `_gameOverEntropy` (fresh word) | `AdvanceModule:1289` (`:1295` return-if-present) | Y | materializes the gameOverDay word |
+| `_applyDailyRng` write `rngWordByDay[day]=finalWord` | `AdvanceModule:1879` | Y | the normal-path daily-word write |
+| 2nd daily-word writer `_backfillGapDays` | `AdvanceModule:1817` (write `:1831`, loop `:1826`) | Y (drift folded) | **DRIFT** (plan 01) — the planning's "`:1879` is the only write" is WRONG; the backfill writes gap days `< endDay` (current-day-EXCLUSIVE) → never pre-writes `gameOverDay` |
+| encodePacked site (combined, currentDay, prevrandao) | `AdvanceModule:1405` | Y | UDVT casts `Day → uint32` |
+| encodePacked site (vrfWord, gapDay) | `AdvanceModule:1828` | Y | UDVT casts `Day → uint32` |
+| encodePacked site (day, address(this)) | `DegenerusGame.sol:1011` | Y | UDVT casts `Day → uint32` |
+| `rngWordByDay` mapping (KEY layout) | `DegenerusGameStorage.sol:454` | Y | `mapping(uint32 => uint256)` — KEY byte-preserved |
+| `handleGameOverDrain` | `GameOverModule:86` | Y | — |
+| `rngWord = rngWordByDay[day]` read | `GameOverModule:106` | Y (guard reconciled) | **DRIFT (NOTED)** — the read is INSIDE `if (preRefundAvailable != 0)` (`:105`), with revert-on-zero at `:107`; reconciled in TDEC-03 Step 4 — the future-day-word property is a property of the KEY, so the guard does NOT weaken the lemma; cross-ref TDEC-03 |
+| `gameOver = true` | `GameOverModule:145` | Y | flips AFTER the `:106` read / `:174` draw |
+| decimator draw `runTerminalDecimatorJackpot(decPool, lvl, rngWord)` | `GameOverModule:174` | Y | inside `handleGameOverDrain` |
+| `_livenessTriggered` (day-constant) | `DegenerusGameStorage.sol:1231-1240` | Y | death-clock + VRF-grace-stall branches |
+| HYG-02 first comment site `_runRewardJackpots` | `AdvanceModule:1191` | Y (drift reconciled) | **DRIFT (NOTED)** — `:1191` is a comment-table row naming `JackpotModule (_runRewardJackpots)`; the actual resolution function is `_consolidatePoolsAndRewardJackpots` (`:794`, called `:477`). HYG-02 fix target = `_consolidatePoolsAndRewardJackpots`; comment-only, owned at TST 361 |
+| HYG-02 second comment site | `DegeneretteModule:809` | Y (drift reconciled) | **DRIFT (NOTED)** — `:809` does NOT match a `_runRewardJackpots` SYMBOL grep; the exact text @ `1e7a646d` is the comment `// snapshot that advanceGame / runRewardJackpots operates on stays` (a `runRewardJackpots` mention inside the poolFrozen ETH-share comment block `:807-812`). HYG-02 also names `EndgameModule`/`runRewardJackpots`; the fix target is `_consolidatePoolsAndRewardJackpots`. Comment-only, owned at TST 361 |
+
+### Block D — Quests / streak / BATCH-01
+
+| Anchor (symbol) | Cited path:line | Confirmed | Drift note |
+|-----------------|-----------------|-----------|------------|
+| `getPlayerQuestView` | `DegenerusQuests.sol:1088` | Y | (also Block B) |
+| `PlayerQuestState` | `DegenerusQuests.sol:277-290` | Y | — |
+| BATCH-01 inline `creditFlip(player, burnieMintReward)` | `DegenerusQuests.sol:947-949` | Y | the inline credit BATCH-01 replaces with a return |
+| BATCH-01 caller return-fold | `DegenerusGameMintModule.sol:1220` | Y | `lootboxFlipCredit += questReward` |
+| BATCH-01 caller single credit | `DegenerusGameMintModule.sol:1355` | Y | `coinflip.creditFlip(buyer, lootboxFlipCredit)` — confirms the `:1220`/`:1355` fold |
+
+### Block E — BURNIE coin-buy path
+
+| Anchor (symbol) | Cited path:line | Confirmed | Drift note |
+|-----------------|-----------------|-----------|------------|
+| `purchaseCoin` impl | `DegenerusGameMintModule.sol:880` | Y | — |
+| `_purchaseCoinFor` (discards 4 returns) | `DegenerusGameMintModule.sol:887-907` | Y | the `_callTicketPurchase(... payInCoin=true ...)` bare statement — discards-returns CONFIRMED; gated `_livenessTriggered():891` + `gameOverPossible:895` |
+| `payInCoin` branch (burns, no queue) | `DegenerusGameMintModule.sol:1545-1555` | Y (drift folded) | **DRIFT** (plan 02) — spans `:1545-1555` (planning's `:1545-1554` in-range); accumulates `burnieMintUnits`, never calls `_queueTicketsScaled` |
+| `_queueTicketsScaled` definition | `DegenerusGameStorage.sol:612` | Y | — |
+| `_queueTicketsScaled` callers | `MintModule:1251` + `GameAfkingModule:800` | Y (drift folded) | **DRIFT** (plan 02) — EXACTLY 2 callers, NEITHER coin-reachable; `DegenerusGame:226` is the UN-scaled `_queueTickets` (a different fn), NOT a third `_queueTicketsScaled` caller — the "no coin-path queue caller" conclusion is STRONGER |
+| `purchaseCoin` router stub | `DegenerusGame.sol:660` | Y | — |
+| `gamePurchaseTicketsBurnie` (live consumer) | `DegenerusVault.sol:571-574` | Y | `gamePlayer.purchaseCoin(address(this), ticketQuantity)` |
+| `handlePurchase` call site | `DegenerusGameMintModule.sol:1210-1217` | Y | — |
+| `_ethToBurnieValue` | `DegenerusGameMintModule.sol:1657` | Y | — |
+| root-cause commit (phase 160) | `24f0898b` | Y | moved `_queueTicketsScaled` out of the shared tail |
+
+### Block F — SALVAGE swap
+
+| Anchor (symbol) | Cited path:line | Confirmed | Drift note |
+|-----------------|-----------------|-----------|------------|
+| `sellFarFutureTickets` router | `DegenerusGame.sol:2074` | Y | — |
+| `sellFarFutureTickets` impl + gates | `DegenerusGameMintModule.sol:929` (gates `:935-937`) | Y | `rngLockedFlag` `:935` / `gameOver` `:936` / `_livenessTriggered` `:937` |
+| SDGNRS relabel (assignment pair) | `DegenerusGameMintModule.sol:976-977` | Y (drift folded) | **DRIFT** (plan 02) — the `-= totalBudget` / `+= totalBudget` pair is `:976-977`; the planning's `:975-977` includes the leading comment `:975` |
+| SDGNRS `>= 1 ETH` floor | `DegenerusGameMintModule.sol:958` | Y | — |
+| ticket leg `_purchaseFor(...Claimable)` | `DegenerusGameMintModule.sol:983` | Y | — |
+| `_quoteFarFutureSwap` (seed/jitter/share) | `DegenerusGameMintStreakUtils.sol:145-190` (seed `:160-163`, jitter `:165`, ticketShareBps `:166`) | Y | the prior-day-word + jitter pattern |
+| `_farFutureFractionBps` | `DegenerusGameMintStreakUtils.sol:127-130` | Y | — |
+| sDGNRS-owned-BURNIE: `previewClaimCoinflips` | `BurnieCoinflip.sol:927` | Y | — |
+| sDGNRS-owned-BURNIE: `coinflipAmount` | `BurnieCoinflip.sol:934` | Y | — |
+| sDGNRS-owned-BURNIE: `consumeCoinflipsForBurn` | `BurnieCoinflip.sol:366` | Y | `onlyBurnieCoin` |
+| `creditFlip` | `BurnieCoinflip.sol:859` | Y | — |
+| `BurnieCoin.transfer` | `BurnieCoin.sol:315` | Y | — |
+| `BurnieCoin.transferFrom` | `BurnieCoin.sol:329` | Y | — |
+| no-arb proof to EXTEND `test_SWAP08_NoArbAtCeiling_SweepAllDistances` | `test/fuzz/FarFutureSalvageSwap.t.sol:168` | Y | TST-owned at SALVAGE-03 (361) |
+| `mintPrice` | `DegenerusGame.sol:2539` | Y | — |
+
+### Block G — CANCEL (afking sub-cancel / evict)
+
+| Anchor (symbol) | Cited path:line | Confirmed | Drift note |
+|-----------------|-----------------|-----------|------------|
+| manual cancel branch `subscribe(…, dailyQuantity=0)` | `GameAfkingModule.sol:345-362` | Y | `if (dailyQuantity == 0)` block; `_finalizeAfking` call `:353`, tombstone `c.dailyQuantity = 0` `:354` |
+| FALSE "claim whenever" comment | `GameAfkingModule.sol:348-351` | Y | the comment "the sub pulls its earned BURNIE via `claimAfkingBurnie` whenever" — FALSE (the reclaim is permissionless/advance-driven) |
+| `subscribe` `rngLock` gate | `GameAfkingModule.sol:300` | Y | docstring `:257` confirms it covers create/replace/cancel |
+| `_finalizeAfking` | `GameAfkingModule.sol:1026` | Y | — |
+| tombstone-reclaim `delete _subOf[player]` | `GameAfkingModule.sol:1148` (+ `_removeFromSet:1149`) | Y | the ONLY evict path that `delete`s `_subOf` today |
+| pass-expiry evict | `GameAfkingModule.sol:1175-1187` | Y (drift NOTED) | **DRIFT (NOTED — auto-evict explicit-delete)** — the pass-expiry path does `_finalizeAfking` + `sub.dailyQuantity = 0` + `_removeFromSet:1187` but does NOT `delete _subOf` → leaves the slot's `pendingBurnie`/`affiliateBase` claimable OUT-OF-SET (a latent inconsistency); the CANCEL-02 D-32 forfeit intent requires an EXPLICIT `delete _subOf` here |
+| funding-out evict | `GameAfkingModule.sol:1240-1252` (`_removeFromSet:1246`) | Y (drift NOTED) | **DRIFT (NOTED — auto-evict explicit-delete)** — same shape as pass-expiry: `_finalizeAfking` + `sub.dailyQuantity = 0` + `_removeFromSet:1246`, NO `delete _subOf` → out-of-set residue; CANCEL-02 D-32 requires the explicit delete |
+| `claimAfkingBurnie` (CEI mirror) | `GameAfkingModule.sol:1560` (CEI zero-first `:1574`) | Y | the self-pay parity the cancel auto-claim mirrors |
+| `drainAffiliateBase` | `GameAfkingModule.sol:1605` | Y | the upline-tree drain the cancel auto-claim mirrors |
+| `claimAfkingBurnie` dispatcher | `DegenerusGame.sol:413` | Y | — |
+| `DegenerusAffiliate.claim` (A/U1/U2 75/20/5) | `DegenerusAffiliate.sol:629` | Y | — |
+| `_referrerAddress` | `DegenerusAffiliate.sol:809` | Y (drift folded) | **DRIFT** (plan 02) — header at `:809` (planning's `:809-815` = body span) |
+| `creditFlip` | `BurnieCoinflip.sol:859` | Y | (also Block F) |
+
+### Block H — HYG-01 stale `gameSetAutoRebuy` test refs (TST-owned at 361; cited in CONTEXT → attested present)
+
+| Anchor (symbol) | Cited path:line | Confirmed | Drift note |
+|-----------------|-----------------|-----------|------------|
+| `gameSetAutoRebuy(true)` revert-non-owner | `test/unit/DegenerusVault.test.js:385` | Y (drift NOTED) | the `it("gameSetAutoRebuy reverts …")` block is `:382`, the call `:385`; the planning's `:385/456` conflates this with `:456` which is `gameSetAutoRebuyTakeProfit` (`:453/456`). Present at the cited line. |
+| `gameSetAutoRebuyTakeProfit` | `test/unit/DegenerusVault.test.js:453/456` | Y | the `:456` ref is the TakeProfit variant, not the base |
+| `gameSetAutoRebuy(true)` | `test/unit/GovernanceGating.test.js:247` | Y | — |
+| `gameSetAutoRebuy(bool)` sig + asserts | `test/fuzz/CoverageGap222.t.sol:1055/1060/1084/1085` | Y | — |
+| rename TARGET `coinSetAutoRebuy(bool,uint256)` | `test/fuzz/CoverageGap222.t.sol:1183` (+ `coinSetAutoRebuyTakeProfit:1191`) | Y | the live 2-arg signature the HYG-01 fix points the stale refs to |
+
+**Attestation result:** every CONTEXT "Source anchors" `file:line` is grep-confirmed at `1e7a646d`. The line-drifts (folded from plans 01 + 02 + the three NOTED drifts) are corrected/reconciled inline; in every case the CONCLUSION is unchanged or strengthened (the BURNIE 2-caller grep is stronger; the GameOverModule guard does not weaken the future-day-word lemma; the HYG-02 `:809` is a comment-only mention with a clear fix target; the auto-evict out-of-set residue is exactly the latent inconsistency CANCEL-02 D-32 closes with an explicit delete). **No "by construction" / "single fn reaches all paths" claim survives un-checked.**
+
+---
+
+## SPEC Lock (LOCKED)
+
+**Status: LOCKED** (was DRAFT). The v57.0 design-lock SPEC is COMPLETE — the document header's status DRAFT is hereby superseded by LOCKED. After this lock the SPEC provides: (1) every owned design-lock IMPL-ready (TDEC-02/03 · WWXRP-02 · BURNIE-03 · SALVAGE-02 · CANCEL-02), (2) the RNG-freeze + SOLVENCY design floor re-attested on paper across all 8 milestone items, (3) the UDVT byte-preservation discipline the IMPL must follow byte-for-byte, and (4) every cited `file:line` grep-proven against the frozen subject `1e7a646d` (the 3 noted drifts reconciled). Phase 359 authors the batched diff with zero un-checked assumptions.
+
+### Owned requirement IDs — DESIGN-LOCKED (this phase 358)
+
+| Req-ID | Design-lock | IMPL/TST owner |
+|--------|-------------|----------------|
+| **WWXRP-02** | Degenerette jackpot whale-halfpass (D-14..D-18) — per-bracket rationing key `level/10`, recipient = bettor `player`, hook + gate, freeze-safe RNG-insensitive grant | WWXRP-01 @ IMPL 359 |
+| **TDEC-02** | Terminal-decimator boost mechanics (D-04..D-13) — last-day window, bucket promotion, subBucket re-derive, aggregate re-key, weight scaling, effective-streak source, uint88 saturate, boosted bit | TDEC-01 @ IMPL 359 |
+| **TDEC-03** | Freeze-safety re-proof (D-01..D-03) — the future-day-word lemma under the bucket-promotion allowance | TDEC-01 @ IMPL 359 (built); proven at TST 361 SEC-01 + adversarial at TERMINAL 362 |
+| **BURNIE-03** | Coin-buy ticket-queue Critical fix (D-21..D-24) — queue-on-return + MINT_BURNIE burn-rebate + the BATCH-01 co-design + posture-widening flag | BURNIE-01/02 @ IMPL 359; HYG-03 positive test @ TST 361 |
+| **SALVAGE-02** | sDGNRS salvage combo ETH/BURNIE pawn-shop payout (D-25..D-29) — sDGNRS-owned-BURNIE source + fallback + the pawn-shop cap model + the no-arb re-proof obligation | SALVAGE-01 @ IMPL 359; SALVAGE-03 (EXTEND-`SWAP08`) @ TST 361 |
+| **CANCEL-02** | Manual-cancel auto-claim + auto-evict pure-forfeit (D-30..D-33) — self + tree A/U1/U2 75/20/5 then clear; auto-evict explicit-delete forfeit; the latent loss-race fix | CANCEL-01 @ IMPL 359; CANCEL-03 (loss-race proof) @ TST 361 |
+
+**UDVT-01/02/03** (the heavy item) are DESIGN-FED here (the D-19/D-20 byte-preservation discipline) and built at IMPL 359; the GAS-neutrality is measured at 360, the per-site byte-diff regression proven at 361 (SEC-01). They are NOT owned 358 req-IDs (UDVT is a 359 IMPL category) — the SPEC fixes their discipline.
+
+### ROADMAP Phase-358 Success Criteria
+
+All EIGHT ROADMAP Phase-358 Success Criteria are SATISFIED, each mapped to the SPEC section that satisfies it:
+
+- [x] **SC1 — WWXRP whale-halfpass design locked** → SATISFIED by **`## WWXRP-02 — Degenerette Jackpot Whale-Halfpass`** (D-14..D-18: per-bracket rationing key `level/10`, recipient = bettor `player`, multi-bracket allow, hook + gate, the RNG-insensitive/pre-liveness/SOLVENCY-neutral re-attestation). Owned req-ID: WWXRP-02.
+- [x] **SC2 — Terminal-decimator design decisions locked** → SATISFIED by **`## TDEC-02 — Terminal-Decimator Boost Mechanics`** (D-04..D-13: effective-streak source `getPlayerQuestView`, the bucket-improvement/promotion rule, the keep-vs-re-derive-subBucket decision, the uint88 overflow policy, the double-count-vs-burn-time resolution, shields consume-vs-read). Owned req-ID: TDEC-02.
+- [x] **SC3 — Terminal-decimator freeze-safety RE-PROVEN under the bucket-promotion allowance** → SATISFIED by **`## TDEC-03 — Freeze-Safety Proof`** (D-01..D-03: the future-day-word lemma rigorously discharged — all weight + bucket + subBucket mutation precedes the resolution word; the `require(!_livenessTriggered())` gate; the dual-write reconciliation; the `:106` guard reconciliation). Owned req-ID: TDEC-03.
+- [x] **SC4 — UDVT width/byte-preservation discipline locked** → SATISFIED by **`## UDVT Width/Byte-Preservation Discipline (design feed)`** (D-19 per-site matrix items 1–6: 3 encodePacked sites cast uint32, packed Sub fields stay uint24, standalone/indexed stay uint32, `rngWordByDay` KEY unchanged, operator-overload set + solc 0.8.34 confirmed; D-20 test-file handling). Design-fed: UDVT-01/02/03.
+- [x] **SC5 — Freeze/solvency re-attestation + every cited `file:line` grep-attested vs `1e7a646d`** → SATISFIED by **`## Cross-Cutting RNG-Freeze Re-Attestation (paper)`** + **`## Cross-Cutting SOLVENCY Re-Attestation (paper)`** + **`## Full Call-Graph Grep-Attestation (vs 1e7a646d)`** (all 8 items freeze-intact with the UDVT byte-image load-bearing; 6-of-8 off the ETH path + the 2 flagged exceptions; every anchor grep-confirmed with the 3 noted drifts reconciled — no "by construction" survives un-checked). Design feed: SEC-01/02 (owned at TST 361).
+- [x] **SC6 — BURNIE coin-buy ticket-queue Critical fix design-locked** → SATISFIED by **`## BURNIE-03 — Coin-Buy Ticket-Queue Critical Fix`** (D-21..D-24: the verified bug with all decisive anchors, the queue-on-return fix, the MINT_BURNIE burn-rebate full-cost-upfront/deferred-net-burn mechanic, the BATCH-01 co-design, the freeze + posture-widening framing). Owned req-ID: BURNIE-03.
+- [x] **SC7 — sDGNRS salvage-swap combo ETH/BURNIE pawn-shop payout design-locked** → SATISFIED by **`## SALVAGE-02 — sDGNRS Salvage-Swap Combo ETH/BURNIE Pawn-Shop Payout`** (D-25..D-29: the cash-leg split, the sDGNRS-owned-BURNIE source + fallback, the pawn-shop total-payout-cap + eth-%-cap safety model, the no-new-VRF freeze framing, the solvency-positive accounting + the EXTEND-`SWAP08` no-arb re-proof obligation). Owned req-ID: SALVAGE-02.
+- [x] **SC8 — manual-sub-cancel auto-claim + auto-evict pure-forfeit design-locked** → SATISFIED by **`## CANCEL-02 — Manual Sub-Cancel Auto-Claim + Auto-Evict Pure-Forfeit`** (D-30..D-33: the documented latent loss bug + the FALSE "claim whenever" comment, the auto-claim self + tree A/U1/U2 75/20/5 then clear, the auto-evict explicit-delete pure-forfeit, the BURNIE-emission-only clean freeze/solvency posture). Owned req-ID: CANCEL-02.
+
+### Final paper-only attestation
+
+ZERO `contracts/*.sol` were touched in this phase — `git diff --quiet 1e7a646d HEAD -- contracts/` is clean throughout (re-asserted at the Full Call-Graph Grep-Attestation guard above and at every commit). This is a paper-only design-lock SPEC; the single batched contract diff is authored at IMPL 359 (the one contract-commit boundary). The SPEC is **LOCKED**.
