@@ -288,7 +288,7 @@ contract VrfRotationLiveness is DeployProtocol {
         // POSITIVE liveness: drain the day to completion -- the :271 gate no longer reverts.
         _drainUntilUnlocked(vrfWord);
         assertFalse(game.rngLocked(), "drain reaches rngLocked()==false after daily rotation");
-        assertTrue(game.rngWordForDay(day) != 0, "day completes: rngWordForDay(currentDay) != 0");
+        assertTrue(game.rngWordForDay(uint24(day)) != 0, "day completes: rngWordForDay(currentDay) != 0");
     }
 
     /// @notice Daily-already-delivered short-circuit (rngWordCurrent!=0 at :1738): if the daily
@@ -325,7 +325,7 @@ contract VrfRotationLiveness is DeployProtocol {
         // POSITIVE liveness: the advance/drain still completes the day.
         _drainUntilUnlocked(vrfWord);
         assertFalse(game.rngLocked(), "drain completes after short-circuit rotation");
-        assertTrue(game.rngWordForDay(day) != 0, "day completes with the pre-rotation delivered word");
+        assertTrue(game.rngWordForDay(uint24(day)) != 0, "day completes with the pre-rotation delivered word");
     }
 
     /// @notice Nothing-in-flight no-op (rngLocked()==false, LR_MID_DAY==0 at :1741): a rotation

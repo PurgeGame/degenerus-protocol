@@ -276,26 +276,26 @@ contract V56QuestNonPerturb is DeployProtocol {
     ///      as GAME. Returns the day so callers thread the same currentDay into the handlers.
     function _rollDay(uint32 day) internal returns (uint32) {
         vm.prank(ContractAddresses.GAME);
-        quests.rollDailyQuest(day, uint256(keccak256(abi.encode(day, "v56qnp"))));
+        quests.rollDailyQuest(uint24(day), uint256(keccak256(abi.encode(day, "v56qnp"))));
         return day;
     }
 
     /// @dev Seed a player's streak via the shared manual/bingo/degenerette/boon caller.
     function _awardStreak(address player, uint16 amount, uint32 day) internal {
         vm.prank(ContractAddresses.GAME);
-        quests.awardQuestStreakBonus(player, amount, day);
+        quests.awardQuestStreakBonus(player, amount, uint24(day));
     }
 
     /// @dev Flip the afking flag for a player (snapshots the synced streak), pranked as GAME.
     function _beginAfking(address player, uint32 day) internal {
         vm.prank(ContractAddresses.GAME);
-        quests.beginAfking(player, day);
+        quests.beginAfking(player, uint24(day));
     }
 
     /// @dev End a player's afking run (hands the earned streak back), pranked as GAME.
     function _finalizeAfking(address player, uint24 earned, uint32 coveredDay, uint32 day) internal {
         vm.prank(ContractAddresses.GAME);
-        quests.finalizeAfking(player, earned, coveredDay, day);
+        quests.finalizeAfking(player, earned, uint24(coveredDay), uint24(day));
     }
 
     /// @dev Complete a LOOTBOX slot-1 quest via the COIN-gated handlePurchase (the O1 region) with the

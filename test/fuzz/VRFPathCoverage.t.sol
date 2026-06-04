@@ -163,7 +163,7 @@ contract VRFPathCoverage is DeployProtocol {
         uint256 gapCount = resumeDay - stallDay;
         uint256[] memory words = new uint256[](gapCount);
         for (uint256 d = stallDay; d < resumeDay; d++) {
-            uint256 w = game.rngWordForDay(uint32(d));
+            uint256 w = game.rngWordForDay(uint24(uint32(d)));
             assertTrue(w != 0, "Gap day word must be nonzero");
             words[d - stallDay] = w;
         }
@@ -208,7 +208,7 @@ contract VRFPathCoverage is DeployProtocol {
         // Verify all 120 gap days (3..122) have nonzero words
         for (uint32 d = 3; d <= 122; d++) {
             assertTrue(
-                game.rngWordForDay(d) != 0,
+                game.rngWordForDay(uint24(d)) != 0,
                 "120-day gap: all gap days must have nonzero words"
             );
         }
@@ -260,7 +260,7 @@ contract VRFPathCoverage is DeployProtocol {
         // Verify gap days have nonzero words (days 4..7 are the gap)
         for (uint32 d = 4; d <= 7; d++) {
             assertTrue(
-                game.rngWordForDay(d) != 0,
+                game.rngWordForDay(uint24(d)) != 0,
                 "Gap day must have nonzero word after mid-day stall recovery"
             );
         }
@@ -300,7 +300,7 @@ contract VRFPathCoverage is DeployProtocol {
         // Collect all gap day words (days 3..12)
         uint256[10] memory words;
         for (uint32 d = 3; d <= 12; d++) {
-            uint256 w = game.rngWordForDay(d);
+            uint256 w = game.rngWordForDay(uint24(d));
             assertTrue(w != 0, "Gap day word must be nonzero");
             words[d - 3] = w;
         }

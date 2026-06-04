@@ -166,7 +166,7 @@ contract VRFPathHandler is Test {
                     uint32 gapEnd = dayAfter;
                     if (gapEnd - gapStart > 120) gapEnd = gapStart + 120;
                     for (uint32 d = gapStart; d < gapEnd; d++) {
-                        if (game.rngWordForDay(d) == 0) {
+                        if (game.rngWordForDay(uint24(d)) == 0) {
                             ghost_gapBackfillFailures++;
                         }
                     }

@@ -148,7 +148,7 @@ contract RedemptionStethFallback is DeployProtocol {
     ///      deterministic roll). StakedStonkRedemption.t.sol :_resolveDay precedent.
     function _resolveDay(uint32 dayToResolve, uint16 roll) internal {
         vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(roll, dayToResolve);
+        sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
     }
 
     /// @dev THE load-bearing v47 REDEEM-08 solvency invariant under the fallback: sDGNRS's own
@@ -285,7 +285,7 @@ contract RedemptionStethFallback is DeployProtocol {
         uint256 playerStethBefore = mockStETH.balanceOf(playerA);
 
         vm.prank(playerA);
-        sdgnrs.claimRedemption(burnDay);
+        sdgnrs.claimRedemption(uint24(burnDay));
 
         // sDGNRS held ZERO ETH (game depleted, ETH leg never ran), so the direct payout MUST be stETH
         // via _payEth's ETH-first/stETH-fallback (ethBal == 0 → entire amount paid in stETH).
@@ -444,7 +444,7 @@ contract RedemptionStethFallback is DeployProtocol {
         uint256 aEthBefore = playerA.balance;
         uint256 aStethBefore = mockStETH.balanceOf(playerA);
         vm.prank(playerA);
-        sdgnrs.claimRedemption(day);
+        sdgnrs.claimRedemption(uint24(day));
         uint256 aPaid = (playerA.balance - aEthBefore) + (mockStETH.balanceOf(playerA) - aStethBefore);
         assertGt(aPaid, 0, "(e) A must be paid the rolled (direct) amount");
         _assertSolvency("(e) post-A-claim");
@@ -453,7 +453,7 @@ contract RedemptionStethFallback is DeployProtocol {
         uint256 bEthBefore = playerB.balance;
         uint256 bStethBefore = mockStETH.balanceOf(playerB);
         vm.prank(playerB);
-        sdgnrs.claimRedemption(day);
+        sdgnrs.claimRedemption(uint24(day));
         uint256 bPaid = (playerB.balance - bEthBefore) + (mockStETH.balanceOf(playerB) - bStethBefore);
         assertGt(bPaid, 0, "(e) B must be paid the rolled (direct) amount");
         _assertSolvency("(e) post-B-claim");
@@ -493,7 +493,7 @@ contract RedemptionStethFallback is DeployProtocol {
         uint256 ethBefore = playerA.balance;
         uint256 stethBefore = mockStETH.balanceOf(playerA);
         vm.prank(playerA);
-        sdgnrs.claimRedemption(day);
+        sdgnrs.claimRedemption(uint24(day));
         uint256 paid = (playerA.balance - ethBefore) + (mockStETH.balanceOf(playerA) - stethBefore);
         assertGt(paid, 0, "(f) BURNIE shortfall must NOT block the ETH/stETH redemption payout");
 

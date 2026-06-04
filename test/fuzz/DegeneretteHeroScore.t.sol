@@ -411,7 +411,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         // Resolve every placed bet (nonce 1..3) under wordLow.
         _injectLootboxRngWord(index, wordLow);
         _resolveAllNoLeak();
-        (uint8 wqLow, uint8 wsLow, uint256 waLow) = game.getDailyHeroWinner(day);
+        (uint8 wqLow, uint8 wsLow, uint256 waLow) = game.getDailyHeroWinner(uint24(day));
         uint256[32] memory ledgerLowPost = _readHeroLedger(day);
 
         // --- Run HIGH: revert, place the SAME wagers, resolve under wordHigh ---
@@ -420,7 +420,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
         uint256[32] memory ledgerHigh = _readHeroLedger(day);
         _injectLootboxRngWord(index, wordHigh);
         _resolveAllNoLeak();
-        (uint8 wqHigh, uint8 wsHigh, uint256 waHigh) = game.getDailyHeroWinner(day);
+        (uint8 wqHigh, uint8 wsHigh, uint256 waHigh) = game.getDailyHeroWinner(uint24(day));
         uint256[32] memory ledgerHighPost = _readHeroLedger(day);
 
         // (1) The wager ledger is identical across the two runs (wagers identical).
@@ -474,7 +474,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
     function _readHeroLedger(uint32 day) internal view returns (uint256[32] memory ledger) {
         for (uint8 q; q < 4; ++q) {
             for (uint8 s; s < 8; ++s) {
-                ledger[(q << 3) | s] = game.getDailyHeroWager(day, q, s);
+                ledger[(q << 3) | s] = game.getDailyHeroWager(uint24(day), q, s);
             }
         }
     }

@@ -164,7 +164,7 @@ contract StakedStonkRedemption is DeployProtocol {
     ///      `test/fuzz/RedemptionGas.t.sol:77-78`.
     function _resolveDay(uint32 dayToResolve, uint16 roll) internal {
         vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(roll, dayToResolve);
+        sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
     }
 
     /// @dev Read packed `pendingByDay[day]` slot and unpack the 3×uint64 fields per the v47 layout
@@ -313,8 +313,8 @@ contract StakedStonkRedemption is DeployProtocol {
         // pre/post since the resolver only writes [dayBurn]).
         uint32 dayLow = dayBurn > 0 ? dayBurn - 1 : 0;
         uint32 dayHigh = dayBurn + 1;
-        (uint16 rollLowPre) = sdgnrs.redemptionPeriods(dayLow);
-        (uint16 rollHighPre) = sdgnrs.redemptionPeriods(dayHigh);
+        (uint16 rollLowPre) = sdgnrs.redemptionPeriods(uint24(dayLow));
+        (uint16 rollHighPre) = sdgnrs.redemptionPeriods(uint24(dayHigh));
 
         // Step 2: advance wall day so we're no longer on dayBurn — production semantics
         // (AdvanceModule resolves the prior day after the wall clock has crossed the boundary).
@@ -324,12 +324,12 @@ contract StakedStonkRedemption is DeployProtocol {
         _resolveDay(dayBurn, roll);
 
         // Positive assertion: redemptionPeriods[dayBurn].roll == roll
-        (uint16 rollPost) = sdgnrs.redemptionPeriods(dayBurn);
+        (uint16 rollPost) = sdgnrs.redemptionPeriods(uint24(dayBurn));
         assertEq(uint256(rollPost), uint256(roll), "resolve: redemptionPeriods[dayBurn].roll mismatch");
 
         // Negative assertion: adjacent days byte-identical pre/post
-        (uint16 rollLowPost) = sdgnrs.redemptionPeriods(dayLow);
-        (uint16 rollHighPost) = sdgnrs.redemptionPeriods(dayHigh);
+        (uint16 rollLowPost) = sdgnrs.redemptionPeriods(uint24(dayLow));
+        (uint16 rollHighPost) = sdgnrs.redemptionPeriods(uint24(dayHigh));
         assertEq(uint256(rollLowPost), uint256(rollLowPre), "resolve: dayBurn-1.roll mutated");
         assertEq(uint256(rollHighPost), uint256(rollHighPre), "resolve: dayBurn+1.roll mutated");
 
@@ -381,13 +381,13 @@ contract StakedStonkRedemption is DeployProtocol {
         // and dayBurn+1 (must be byte-identical pre/post since claim only touches [actor][dayBurn]).
         // Only ethValueOwed is needed for the payout-equality assertion; the slot is asserted
         // cleared post-claim via a fresh read.
-        (uint96 evBurnPre, ) = sdgnrs.pendingRedemptions(actor, dayBurn);
+        (uint96 evBurnPre, ) = sdgnrs.pendingRedemptions(actor, uint24(dayBurn));
         uint32 dayLow = dayBurn > 0 ? dayBurn - 1 : 0;
         uint32 dayHigh = dayBurn + 1;
         (uint96 evLowPre, uint16 asLowPre) =
-            sdgnrs.pendingRedemptions(actor, dayLow);
+            sdgnrs.pendingRedemptions(actor, uint24(dayLow));
         (uint96 evHighPre, uint16 asHighPre) =
-            sdgnrs.pendingRedemptions(actor, dayHigh);
+            sdgnrs.pendingRedemptions(actor, uint24(dayHigh));
 
         // Pre-burn slot must be populated for the test to be meaningful.
         assertGt(uint256(evBurnPre), 0, "claim: precondition - claim slot must populate post-burn");
@@ -401,21 +401,21 @@ contract StakedStonkRedemption is DeployProtocol {
         // Step 3: claim — capture ETH delta
         uint256 ethBefore = actor.balance;
         vm.prank(actor);
-        sdgnrs.claimRedemption(dayBurn);
+        sdgnrs.claimRedemption(uint24(dayBurn));
         uint256 ethDelta = actor.balance - ethBefore;
 
         // Positive: payout matches expected EXACTLY (D-305-GWEI-SNAP-01 zero-drift)
         assertEq(ethDelta, expectedEthDirect, "claim: ETH delivered != expected (ethValueOwed * roll / 100 / 2)");
 
         // Slot cleared on claim (v47 claim is ETH-only; burnieOwed field removed).
-        (uint96 evBurnPost, ) = sdgnrs.pendingRedemptions(actor, dayBurn);
+        (uint96 evBurnPost, ) = sdgnrs.pendingRedemptions(actor, uint24(dayBurn));
         assertEq(uint256(evBurnPost), 0, "claim: full-claim path must delete ethValueOwed");
 
         // Negative assertion: adjacent days' slots byte-identical
         (uint96 evLowPost, uint16 asLowPost) =
-            sdgnrs.pendingRedemptions(actor, dayLow);
+            sdgnrs.pendingRedemptions(actor, uint24(dayLow));
         (uint96 evHighPost, uint16 asHighPost) =
-            sdgnrs.pendingRedemptions(actor, dayHigh);
+            sdgnrs.pendingRedemptions(actor, uint24(dayHigh));
         assertEq(uint256(evLowPost), uint256(evLowPre), "claim: dayBurn-1 ethValueOwed mutated");
         assertEq(uint256(asLowPost), uint256(asLowPre), "claim: dayBurn-1 activityScore mutated");
         assertEq(uint256(evHighPost), uint256(evHighPre), "claim: dayBurn+1 ethValueOwed mutated");
@@ -458,19 +458,19 @@ contract StakedStonkRedemption is DeployProtocol {
         uint96 evPre1 = 0; // claim slot is zero-init pre-burn-1
         vm.prank(actor);
         sdgnrs.burn(a1);
-        (uint96 evPost1, ) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evPost1, ) = sdgnrs.pendingRedemptions(actor, uint24(dayD));
         uint256 delta1 = uint256(evPost1) - uint256(evPre1);
 
         // Burn 2 — capture per-burn delta
         vm.prank(actor);
         sdgnrs.burn(a2);
-        (uint96 evPost2, ) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evPost2, ) = sdgnrs.pendingRedemptions(actor, uint24(dayD));
         uint256 delta2 = uint256(evPost2) - uint256(evPost1);
 
         // Burn 3 — capture per-burn delta
         vm.prank(actor);
         sdgnrs.burn(a3);
-        (uint96 evPost3, ) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evPost3, ) = sdgnrs.pendingRedemptions(actor, uint24(dayD));
         uint256 delta3 = uint256(evPost3) - uint256(evPost2);
 
         // Positive assertion: aggregate equals sum of deltas (strict assertEq — gwei alignment)
@@ -595,7 +595,7 @@ contract StakedStonkRedemption is DeployProtocol {
         vm.store(address(sdgnrs), claimSlot, bytes32(packed));
 
         // Verify seed visible
-        (uint96 evSeed, uint16 asSeed) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evSeed, uint16 asSeed) = sdgnrs.pendingRedemptions(actor, uint24(dayD));
         assertEq(uint256(evSeed), MAX_DAILY_REDEMPTION_EV, "evCap: pre-seed ethValueOwed mismatch");
         assertEq(uint256(asSeed), 1, "evCap: pre-seed activityScore mismatch");
 
@@ -611,7 +611,7 @@ contract StakedStonkRedemption is DeployProtocol {
         sdgnrs.burn(amount);
 
         // Negative assertion: claim slot byte-identical post failed burn
-        (uint96 evPost, uint16 asPost) = sdgnrs.pendingRedemptions(actor, dayD);
+        (uint96 evPost, uint16 asPost) = sdgnrs.pendingRedemptions(actor, uint24(dayD));
         assertEq(uint256(evPost), MAX_DAILY_REDEMPTION_EV, "evCap: ethValueOwed mutated by failed burn");
         // v47: burnieOwed field removed — nothing to byte-compare.
         assertEq(uint256(asPost), 1, "evCap: activityScore mutated by failed burn");
@@ -641,7 +641,7 @@ contract StakedStonkRedemption is DeployProtocol {
 
         // Pre-state snapshots (must be byte-identical pre/post revert).
         // v47: resolveRedemptionPeriod is 2-arg (roll, dayToResolve); RedemptionPeriod.flipDay removed.
-        (uint16 rollPre) = sdgnrs.redemptionPeriods(day);
+        (uint16 rollPre) = sdgnrs.redemptionPeriods(uint24(day));
         uint256 cumulativeEthPre = sdgnrs.pendingRedemptionEthValue();
         uint32 sentinelPre = sdgnrs.pendingResolveDay();
         // pendingByDay[day] packed slot snapshot
@@ -651,10 +651,10 @@ contract StakedStonkRedemption is DeployProtocol {
         // Reverting call
         vm.prank(caller);
         vm.expectRevert(StakedDegenerusStonk.Unauthorized.selector);
-        sdgnrs.resolveRedemptionPeriod(roll, day);
+        sdgnrs.resolveRedemptionPeriod(roll, uint24(day));
 
         // Negative assertions: no state change.
-        (uint16 rollPost) = sdgnrs.redemptionPeriods(day);
+        (uint16 rollPost) = sdgnrs.redemptionPeriods(uint24(day));
         uint256 cumulativeEthPost = sdgnrs.pendingRedemptionEthValue();
         uint32 sentinelPost = sdgnrs.pendingResolveDay();
         uint256 pbdRawPost = uint256(vm.load(address(sdgnrs), pbdSlot));
@@ -889,9 +889,9 @@ contract StakedStonkRedemption is DeployProtocol {
         _resolveDay(dayBurn, 100);
 
         vm.prank(playerA);
-        sdgnrs.claimRedemption(dayBurn);
+        sdgnrs.claimRedemption(uint24(dayBurn));
         vm.prank(playerB);
-        sdgnrs.claimRedemption(dayBurn);
+        sdgnrs.claimRedemption(uint24(dayBurn));
 
         uint256 claimableAfterClaims = _claimableSdgnrs();
         assertEq(
@@ -956,7 +956,7 @@ contract StakedStonkRedemption is DeployProtocol {
 
         // Burn landed: supply dropped, a claim slot exists for the day.
         assertLt(sdgnrs.totalSupply(), supplyBefore, "drain: burn did not land after claimable recovered");
-        (uint96 ev, ) = sdgnrs.pendingRedemptions(playerA, dayBurn);
+        (uint96 ev, ) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
         assertGt(uint256(ev), 0, "drain: claim slot not populated after recovery burn");
     }
 
@@ -998,7 +998,7 @@ contract StakedStonkRedemption is DeployProtocol {
         vm.prank(playerA);
         sdgnrs.burn(burnAmount);
 
-        (uint96 evOwed, ) = sdgnrs.pendingRedemptions(playerA, dayBurn);
+        (uint96 evOwed, ) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
         assertGt(uint256(evOwed), 0, "burnie-block: claim slot must populate post-burn");
 
         _advanceWallDay();
@@ -1009,7 +1009,7 @@ contract StakedStonkRedemption is DeployProtocol {
 
         uint256 ethBefore = playerA.balance;
         vm.prank(playerA);
-        sdgnrs.claimRedemption(dayBurn);
+        sdgnrs.claimRedemption(uint24(dayBurn));
         uint256 ethDelta = playerA.balance - ethBefore;
 
         // ETH leg pays in full irrespective of BURNIE — there is no BURNIE leg to block it.
@@ -1019,7 +1019,7 @@ contract StakedStonkRedemption is DeployProtocol {
             "REDEEM-08: ETH leg did not pay full rolled/2 - BURNIE must not be able to block ETH"
         );
         // Claim slot fully cleared (ETH-only full-claim path).
-        (uint96 evAfter, ) = sdgnrs.pendingRedemptions(playerA, dayBurn);
+        (uint96 evAfter, ) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
         assertEq(uint256(evAfter), 0, "REDEEM-08: claim slot not cleared after ETH-only claim");
     }
 
@@ -1097,10 +1097,10 @@ contract StakedStonkRedemption is DeployProtocol {
         _advanceWallDay();
         // The 2-arg call (roll, dayToResolve) — this is the v47 signature.
         vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(roll, dayBurn);
+        sdgnrs.resolveRedemptionPeriod(roll, uint24(dayBurn));
 
         // roll written.
-        (uint16 rollAfter) = sdgnrs.redemptionPeriods(dayBurn);
+        (uint16 rollAfter) = sdgnrs.redemptionPeriods(uint24(dayBurn));
         assertEq(uint256(rollAfter), uint256(roll), "R4: 2-arg resolveRedemptionPeriod did not write roll");
 
         // pendingRedemptionEthValue lowered from MAX(175%) to rolled(100%): rolled < MAX → strictly down.

@@ -102,7 +102,7 @@ contract RedemptionGasTest is DeployProtocol {
         // Now resolve the same-wall-day pool as the game contract
         uint32 currentDay = game.currentDayView();
         vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(100, currentDay);
+        sdgnrs.resolveRedemptionPeriod(100, uint24(currentDay));
     }
 
     // =====================================================================
@@ -118,7 +118,7 @@ contract RedemptionGasTest is DeployProtocol {
         // Step 2: Game resolves the same-wall-day pool
         uint32 currentDay = game.currentDayView();
         vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(100, currentDay);
+        sdgnrs.resolveRedemptionPeriod(100, uint24(currentDay));
 
         // Step 3: Mock the coinflip day result so claimRedemption doesn't revert
         // getCoinflipDayResult(currentDay) must return (rewardPercent != 0, flipWon)
@@ -148,7 +148,7 @@ contract RedemptionGasTest is DeployProtocol {
 
         // Step 5: Player claims the day they burned + resolved against
         vm.prank(player);
-        sdgnrs.claimRedemption(currentDay);
+        sdgnrs.claimRedemption(uint24(currentDay));
     }
 
     // =====================================================================
@@ -163,7 +163,7 @@ contract RedemptionGasTest is DeployProtocol {
         sdgnrs.burn(PLAYER_SDGNRS / 10);
 
         // Now check today's pool -- should be true
-        bool pending = sdgnrs.hasPendingRedemptions(currentDay);
+        bool pending = sdgnrs.hasPendingRedemptions(uint24(currentDay));
         assertTrue(pending, "Expected pending redemptions");
     }
 
@@ -237,7 +237,7 @@ contract RedemptionGasTest is DeployProtocol {
 
         uint32 currentDay = game.currentDayView();
         vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(100, currentDay);
+        sdgnrs.resolveRedemptionPeriod(100, uint24(currentDay));
 
         vm.mockCall(
             address(coinflip),
@@ -260,7 +260,7 @@ contract RedemptionGasTest is DeployProtocol {
         // Bracket: measure ONLY the claimRedemption(uint32 day) call.
         vm.prank(player);
         uint256 gasBefore = gasleft();
-        sdgnrs.claimRedemption(currentDay);
+        sdgnrs.claimRedemption(uint24(currentDay));
         uint256 actualGas = gasBefore - gasleft();
 
         emit log_named_uint("actual_claim_gas", actualGas);

@@ -310,7 +310,7 @@ contract RedemptionHandler is Test {
 
         // Per-(actor, day) EV cap clamp — read existing pendingRedemptions[actor][today]
         // and skip if already at 160 ETH (a re-burn would revert with ExceedsDailyRedemptionCap).
-        (uint96 existingEth, ) = sdgnrs.pendingRedemptions(currentActor, today);
+        (uint96 existingEth, ) = sdgnrs.pendingRedemptions(currentActor, uint24(today));
         if (uint256(existingEth) >= 160 ether) return;
 
         // Sentinel single-pool guard: if another day's pool is still pending, this burn would
@@ -348,7 +348,7 @@ contract RedemptionHandler is Test {
             uint32 burnDay = game.currentDayView(); // re-read defensively (in case advanceGame fires inside burn)
             // v47: PendingRedemption.burnieOwed removed (BURNIE settled at submit) — only the
             // ethValueOwed leg is tracked; the legacy BURNIE ghosts are left at zero.
-            (uint96 ethOwed, ) = sdgnrs.pendingRedemptions(currentActor, burnDay);
+            (uint96 ethOwed, ) = sdgnrs.pendingRedemptions(currentActor, uint24(burnDay));
 
             // Per-burn delta = post - prior tracked. Cumulative because same-day re-burns
             // accumulate additively per claim.ethValueOwed += ethValueOwed semantics.
@@ -455,7 +455,7 @@ contract RedemptionHandler is Test {
             if (ghost_dayResolved[candidate] && !ghost_claimDone[candidate][currentActor]) {
                 // Also require the actor actually has a claim slot to settle.
                 // v47: only ethValueOwed remains (burnieOwed field removed).
-                (uint96 ev, ) = sdgnrs.pendingRedemptions(currentActor, candidate);
+                (uint96 ev, ) = sdgnrs.pendingRedemptions(currentActor, uint24(candidate));
                 if (ev != 0) {
                     claimDay = candidate;
                     break;
@@ -470,7 +470,7 @@ contract RedemptionHandler is Test {
 
         vm.recordLogs();
         vm.prank(currentActor);
-        try sdgnrs.claimRedemption(claimDay) {
+        try sdgnrs.claimRedemption(uint24(claimDay)) {
             ghost_claimCount++;
             ghost_totalEthClaimed += currentActor.balance - ethBefore;
             ghost_totalBurnieClaimed += coin.balanceOf(currentActor) - burnieBefore;
@@ -505,7 +505,7 @@ contract RedemptionHandler is Test {
         // No-double-claim probe — keeps legacy ghost_doubleClaim counter live.
         uint256 ethBeforeReClaim = currentActor.balance;
         vm.prank(currentActor);
-        try sdgnrs.claimRedemption(claimDay) {
+        try sdgnrs.claimRedemption(uint24(claimDay)) {
             if (currentActor.balance > ethBeforeReClaim) {
                 ghost_doubleClaim++;
             }
@@ -595,7 +595,7 @@ contract RedemptionHandler is Test {
         for (uint256 i = 0; i < scanBound; i++) {
             uint32 d = ghost_daysWritten[i];
             if (ghost_dayResolved[d]) continue;
-            (uint16 roll) = sdgnrs.redemptionPeriods(d);
+            (uint16 roll) = sdgnrs.redemptionPeriods(uint24(d));
             if (roll == 0) continue;
             if (roll < 25 || roll > 175) {
                 ghost_rollOutOfBounds++;

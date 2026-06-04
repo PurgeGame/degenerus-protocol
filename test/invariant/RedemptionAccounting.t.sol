@@ -92,7 +92,7 @@ contract RedemptionAccounting is DeployProtocol {
             uint32 d = handler.getDayWritten(i);
             if (!handler.ghost_dayResolved(d)) continue;
             // v47: RedemptionPeriod.flipDay removed; only the write-once roll remains.
-            (uint16 roll) = sdgnrs.redemptionPeriods(d);
+            (uint16 roll) = sdgnrs.redemptionPeriods(uint24(d));
             assertEq(
                 uint256(roll),
                 uint256(handler.ghost_perDay_firstRoll(d)),
@@ -125,11 +125,11 @@ contract RedemptionAccounting is DeployProtocol {
                 expected += (uint256(ethBase) * 1e9 * MAX_ROLL) / 100;
             } else {
                 // Resolved: sum over players of (ethValueOwed × roll / 100).
-                (uint16 roll) = sdgnrs.redemptionPeriods(d);
+                (uint16 roll) = sdgnrs.redemptionPeriods(uint24(d));
                 for (uint256 j = 0; j < actorN; j++) {
                     address actor = handler.getActor(j);
                     if (handler.ghost_claimDone(d, actor)) continue;
-                    (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, d);
+                    (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, uint24(d));
                     expected += (uint256(ev) * uint256(roll)) / 100;
                 }
             }
@@ -181,7 +181,7 @@ contract RedemptionAccounting is DeployProtocol {
             uint256 sumEth;
             for (uint256 j = 0; j < actorN; j++) {
                 address actor = handler.getActor(j);
-                (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, d);
+                (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, uint24(d));
                 sumEth += uint256(ev);
             }
             assertEq(
@@ -212,11 +212,11 @@ contract RedemptionAccounting is DeployProtocol {
                 (uint64 ethBase, , ) = _readPendingByDay(d);
                 expected += (uint256(ethBase) * 1e9 * MAX_ROLL) / 100;
             } else {
-                (uint16 roll) = sdgnrs.redemptionPeriods(d);
+                (uint16 roll) = sdgnrs.redemptionPeriods(uint24(d));
                 for (uint256 j = 0; j < actorN; j++) {
                     address actor = handler.getActor(j);
                     if (handler.ghost_claimDone(d, actor)) continue;
-                    (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, d);
+                    (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, uint24(d));
                     expected += (uint256(ev) * uint256(roll)) / 100;
                 }
             }
@@ -250,7 +250,7 @@ contract RedemptionAccounting is DeployProtocol {
             for (uint256 j = 0; j < actorN; j++) {
                 address actor = handler.getActor(j);
                 if (handler.ghost_perDay_perPlayer_ethValueOwed(d, actor) == 0) continue;
-                (uint16 roll) = sdgnrs.redemptionPeriods(d);
+                (uint16 roll) = sdgnrs.redemptionPeriods(uint24(d));
                 assertEq(
                     uint256(roll),
                     uint256(handler.ghost_perDay_firstRoll(d)),
@@ -282,7 +282,7 @@ contract RedemptionAccounting is DeployProtocol {
                 uint96 locked = handler.ghost_perPlayer_locked_ethValueOwed(d, actor);
                 if (locked == 0) continue;
                 if (handler.ghost_claimDone(d, actor)) continue;
-                (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, d);
+                (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, uint24(d));
                 assertEq(
                     uint256(ev),
                     uint256(locked),
@@ -384,7 +384,7 @@ contract RedemptionAccounting is DeployProtocol {
             uint32 d = handler.getDayWritten(i);
             for (uint256 j = 0; j < actorN; j++) {
                 address actor = handler.getActor(j);
-                (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, d);
+                (uint96 ev, ) = sdgnrs.pendingRedemptions(actor, uint24(d));
                 if (ev == 0) continue;
                 assertLe(
                     uint256(ev),

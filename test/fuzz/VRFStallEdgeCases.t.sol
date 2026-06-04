@@ -138,7 +138,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         for (uint32 d = 3; d <= 7; d++) {
             uint256 expected = uint256(keccak256(abi.encodePacked(vrfWord, d)));
             if (expected == 0) expected = 1;
-            uint256 actual = game.rngWordForDay(d);
+            uint256 actual = game.rngWordForDay(uint24(d));
             assertEq(actual, expected, "Gap day word must match keccak256(vrfWord, day)");
             words[d - 3] = actual;
         }
@@ -171,7 +171,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Verify all gap day words (3..12) are nonzero (zero guard: derivedWord==0 -> 1)
         for (uint32 d = 3; d <= 12; d++) {
             assertTrue(
-                game.rngWordForDay(d) != 0,
+                game.rngWordForDay(uint24(d)) != 0,
                 "Zero guard: gap day word must be nonzero"
             );
         }
@@ -699,7 +699,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Verify rngWordByDay for days 2-6 are all nonzero (inputs to fallback hash)
         for (uint32 d = 2; d <= 6; d++) {
             assertTrue(
-                game.rngWordForDay(d) != 0,
+                game.rngWordForDay(uint24(d)) != 0,
                 "Historical VRF word must be nonzero for fallback"
             );
         }
@@ -708,7 +708,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         for (uint32 i = 2; i <= 5; i++) {
             for (uint32 j = i + 1; j <= 6; j++) {
                 assertTrue(
-                    game.rngWordForDay(i) != game.rngWordForDay(j),
+                    game.rngWordForDay(uint24(i)) != game.rngWordForDay(uint24(j)),
                     "Historical words must be distinct"
                 );
             }

@@ -420,7 +420,7 @@ contract RngLockDeterminism is DeployProtocol {
             uint32 today = game.currentDayView();
             uint32 claimDay = today == 0 ? 0 : today - 1;
             vm.prank(vaultOwner);
-            try vault.sdgnrsClaimRedemption(claimDay) {} catch { return; }
+            try vault.sdgnrsClaimRedemption(uint24(claimDay)) {} catch { return; }
             return;
         }
     }
