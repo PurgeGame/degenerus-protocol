@@ -159,8 +159,17 @@ Per the contract-commit boundary (this plan is `autonomous: false`; project rule
 - `quests.handlePurchase` routed on the coin path with `ethMintSpendWei=0, lootBoxAmount=0` (grep `handlePurchase` count = 2: ETH caller + coin caller).
 - `sellFarFutureTickets` debits only `ethRelabel` from `claimableWinnings[SDGNRS]` and transfers `burnieTokens` via `coin.transferFrom` (grep shows the floor gate `< totalBudget + 1 ether` byte-unchanged + the new `-= ethRelabel`).
 - `_quoteFarFutureBurnieSplit` present (`MintStreakUtils.sol:204`); reads `coin.balanceOfWithClaimable` for availability; `_quoteFarFutureSwap` 4-tuple unchanged.
-- `previewSellFarFutureSplit` present (`DegenerusGame.sol:2130`); `previewSellFarFutureTickets` 4-tuple unchanged.
-- `git status` shows 5 modified `contracts/*.sol` (DegenerusQuests from plan 01 + the 4 from this plan), all UNCOMMITTED; no `contracts/*.sol` staged.
+- `git status` shows modified `contracts/*.sol`, all UNCOMMITTED; no `contracts/*.sol` staged.
+
+## In-Session Revisions (post-commit, USER-directed — supersede the above where noted)
+
+After this SUMMARY was committed (`af1dc742`), the USER directed two revisions to this plan's deliverables, applied to the still-uncommitted working tree (held for the same plan-04 HARD STOP) and confirmed by a green `forge build`:
+
+1. **SALVAGE preview merged into one 5-tuple (supersedes deviation #2 + the `previewSellFarFutureSplit` view).** The separate `previewSellFarFutureSplit` is **deleted**; `previewSellFarFutureTickets` now returns the full breakdown `(totalFaceWei, totalBudget, ticketWei, ethCashWei, burnieTokens)` — `cashWei` replaced by its `ethCashWei + burnieTokens` split (conserved as `cashWei == ethCashWei + value(burnieTokens)`). One call gives the whole picture; no redundant `_quoteFarFutureSwap` recompute. The 6 binding sites in `test/fuzz/FarFutureSalvageSwap.t.sol` were bumped to the 5-tuple arity (they ignore the cash slot). `_quoteFarFutureBurnieSplit` and the SALVAGE execute path are unchanged.
+
+2. **BURNIE-02 rebate dropped → MINT_BURNIE quest reward awarded via `creditFlip` (supersedes the deferred net-burn rebate).** The deferred net-burn rebate is removed. The **full** `coinCost` burn is restored at its original site (the `payInCoin` branch of `_callTicketPurchase`, matching frozen `1e7a646d`). `_purchaseCoinFor` keeps the BURNIE-01 queue-on-return fix and now, after `handlePurchase`, awards the returned reward as `if (questCompleted && questReward != 0) coinflip.creditFlip(buyer, questReward);` — the normal flip-credit mechanism. The rebate-only `balanceOfWithClaimable(buyer)` full-cost gate is removed (the burn itself gates affordability); the `balanceOfWithClaimable` **interface declaration stays** (SALVAGE's quote at `MintStreakUtils:225` still uses it). **BATCH-01 (plan 01) is KEPT** — `handlePurchase` still returns the reward; the ETH path still batches into `lootboxFlipCredit`; the coin path `creditFlip`s the return. Both paths award via flip credit.
+
+**Related (out-of-plan, same batched diff):** the USER also directed a lazy-pass purchase-window change in `contracts/modules/DegenerusGameWhaleModule.sol` (now purchasable at **0–2 OR x9 OR x0**, terminal x00 excluded). That is NOT part of this plan's three requirements; it is a new in-session scope addition tracked for the plan-04 UDVT sweep (its day-bearing code) and the HARD STOP hand-review. See STATE.md.
 
 ---
 *Phase: 359-impl-the-one-carefully-sequenced-batched-contract-diff-handl*
