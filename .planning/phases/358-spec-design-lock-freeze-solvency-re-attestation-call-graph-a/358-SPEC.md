@@ -55,3 +55,100 @@ The boost is a final-day weight-AND-bucket re-derivation that SCALES already-com
 **D-12 — Shields = READ-ONLY, no consume.** The boost reads the effective streak via the `view` (`getPlayerQuestView` already factors shields into whether the streak survived gaps); it CONSUMES NOTHING. Shields are still consumed naturally by the player's normal quest actions / `_questSyncState`.
 
 **D-13 — Idempotence + prerequisite.** One-time per terminal level via a `boosted` bit added to the packed `TerminalDecEntry`. The packing has 24 spare bits — verified at `DegenerusGameStorage.sol:1585-1591`: `uint80 totalBurn / uint88 weightedBurn / uint8 bucket / uint8 subBucket / uint48 burnLevel` = 80+88+8+8+48 = **232 of 256 bits** (24 spare). The boost REQUIRES an existing terminal-dec burn for the current level (you scale committed weight, you do not buy an entry) — consistent with the lazy-reset on stale `burnLevel` at `:716-723`.
+
+---
+
+## TDEC-03 — Freeze-Safety Proof (LOCKED — the load-bearing re-proof under the bucket-promotion allowance)
+
+> **TDEC-01 builds it; this proof is the SPEC's design gate.** SEC-01 (RNG-freeze) is OWNED empirically at TST 361; the bucket-promotion freeze is adversarially probed at TERMINAL 362. This section RIGOROUSLY DISCHARGES the future-day-word lemma — it does not assert it.
+
+### Proof map (the discharge in one table)
+
+| Step | Claim | Discharged by (anchors @ `1e7a646d`) |
+|------|-------|--------------------------------------|
+| 0 | Obligation = "all weight + bucket + subBucket mutation precedes the resolution word" (the `subBucket`-fixed simplification is dead under D-05 promotion) | USER framing (CONTEXT `<specifics>`); TDEC-02 D-05/D-06/D-07 |
+| 1 | `require(!_livenessTriggered())` ALONE is the correct + sufficient gate (`!gameOver` was wrong) | `_livenessTriggered:1231-1240` (day-constant); `gameOver=true:145` flips AFTER the read `:106`/draw `:174` |
+| 2 | Future-day-word lemma: `rngWordByDay[gameOverDay]` cannot exist before the gate closes | day-constant liveness ⇒ first advance routes to game-over `:591`/`:599-604`; word materialized fresh by `_gameOverEntropy:1289` (`:1295`); consumed `:106`→`:174` |
+| 3 | The 2nd daily-word writer does not pre-write `gameOverDay` | `_backfillGapDays:1817` writes `gapDay < endDay` (current-day-EXCLUSIVE, `:1815`/`:1826`) |
+| 4 | VRF-grace stall has no fallback-seed hole; `:106` guard drift reconciled | RNG-locked during stall; `handleGameOverDrain` reverts on word 0 `:107` (inside `preRefundAvailable != 0` `:104`) |
+| 5 | The same-day-reuse refinement is internally inconsistent → RETRACTED | evening-liveness ⇒ morning-liveness ⇒ already routed; belt-and-suspenders `==0` gate recorded, default OFF |
+| 6 | Pool finalized + shares sum to pool (D-07 conservation) | draw inside `handleGameOverDrain:172-183`; re-key conserves `terminalDecBucketBurnTotal:755` total → `runTerminalDecimatorJackpot:780` |
+
+### Step 0 — Statement of the obligation
+
+The original terminal-decimator design (`PLAN-TERMINAL-DECIMATOR-STREAK-BOOST.md`, weight-only) was freeze-safe under a `subBucket`-FIXED simplification: the bucket and subBucket were frozen on the first burn (`recordTerminalDecBurn:725-728`) and never changed, so the only mutable quantity was the within-bucket WEIGHT, and the validator could lean on "the bucket is immutable". TDEC-01 (D-05) now allows a bucket PROMOTION — a NEW write that changes BOTH the bucket AND the subBucket AND re-keys the aggregate (D-06/D-07). The `subBucket`-fixed simplification therefore NO LONGER HOLDS.
+
+The correct freeze-safety argument is the GENERAL rule, per the USER framing (CONTEXT `<specifics>`): "if the number OR bucket was manipulable between the rng request and the decimator resolution that would violate the rules." So the obligation is:
+
+> **ALL weight + bucket + subBucket mutation (the boost and any promotion) must provably precede the RNG word that determines the draw.** Promotion is NOT a special case — the standard pre-request freeze gate covers both weight and bucket.
+
+The gap that matters is between the RNG REQUEST and the resolution, NOT between the rngWord reveal and the `gameOver` flip.
+
+### Step 1 — Gate (D-01): `require(!_livenessTriggered())` ALONE is sufficient
+
+`boostTerminalDecimator()` gates on `require(!_livenessTriggered())` (plus the idempotent `boosted` bit, an existing entry for the current terminal level, and a live effective streak from D-09). `_livenessTriggered` (`DegenerusGameStorage.sol:1231-1240`) is a DAY-CONSTANT predicate: it returns `true` for the death-clock path once `currentDay − purchaseStartDay > 120` (`level != 0`) or `> _DEPLOY_IDLE_TIMEOUT_DAYS` (`level == 0`), and `true` for the VRF-grace-stall branch once `block.timestamp − rngRequestTime >= _VRF_GRACE_PERIOD`.
+
+The original `!gameOver` framing was the WRONG gate. `gameOver` flips only INSIDE the resolution (`handleGameOverDrain` sets `gameOver = true` at `GameOverModule:145`), AFTER the resolution word has already been read at `:106` and consumed by the decimator draw at `:174`. Gating on `!gameOver` would still permit a boost in the same block, after the word was revealed but before the flip latched — a real manipulation window. Gating on `!_livenessTriggered()` closes the window strictly earlier: the boost is only admissible while liveness is still false, i.e. BEFORE the day on which the game-over path can run at all. This is the timing buffer the original plan's caveat ("a variant that improves the BUCKET would need a hard timing buffer") demanded — the `!liveness` gate IS that buffer.
+
+### Step 2 — The future-day-word lemma (D-02): the resolution word cannot exist before the boost gate closes
+
+**Resolution read.** The decimator resolution reads `rngWord = rngWordByDay[day]` (`GameOverModule:106`) and feeds it into `runTerminalDecimatorJackpot(decPool, lvl, rngWord)` (`:174`, inside `handleGameOverDrain` reached from `:86`). Here `day` is the `gameOverDay` — the day liveness fires (e.g. `purchaseStartDay + 121` on the death-clock path). The word is keyed by the CURRENT processing day.
+
+**The word for `gameOverDay` is written FRESH at game-over, never before.** On `gameOverDay` itself the day-index liveness predicate is already `true` from the day's start (it is day-constant — the inequality `currentDay − psd > 120` does not depend on intra-day timestamp). So the FIRST `advanceGame` of that day routes straight into the game-over path: `_handleGameOverPath` (`AdvanceModule:565`) checks `if (!_livenessTriggered()) return (false, 0)` (`:591`) — which now passes through — then, if `rngWordByDay[day] == 0` (`:599`), acquires the word via `_gameOverEntropy(...)` (`:600-604`) and proceeds to `handleGameOverDrain` (the delegatecall at `:665-670`). `_gameOverEntropy` (`:1289`) returns the existing word if present (`:1295 if (rngWordByDay[day] != 0) return rngWordByDay[day]`) or requests/derives one — so the `gameOverDay` word is materialized AT game-over, as part of the same routing that consumes it.
+
+**Conclusion.** Any boost that passed `!_livenessTriggered()` necessarily executed on an EARLIER day (liveness was still false, so `currentDay − psd <= 120`), strictly before `gameOverDay` and therefore before the resolution word for `gameOverDay` could exist. The resolution word is ALWAYS a FUTURE-DAY word relative to any admitted boost. The boost + any promotion are deterministic from the player's fixed effective-streak factor (D-09, read from a `view`) × their committed burn — fixed BEFORE any randomness is revealed. The player cannot use draw knowledge to manipulate placement (bucket OR subBucket OR weight). ∎
+
+**Worked timeline (death-clock path, `level != 0`, `purchaseStartDay = P`).**
+
+- Days `P+1 .. P+120` — `currentDay − P <= 120` ⇒ `_livenessTriggered()` is FALSE. The boost is admissible. A player may call `boostTerminalDecimator()` on any of these days; it re-derives the bucket from the LIVE activity score, re-keys the aggregate, and scales `weightedBurn` — all writes commit now, with NO resolution word in existence (`rngWordByDay[P+121]` is unwritten).
+- Day `P+121` — `currentDay − P = 121 > 120` ⇒ `_livenessTriggered()` is TRUE from the day's start. The boost gate `require(!_livenessTriggered())` now REVERTS — no further mutation possible. The first `advanceGame` of this day routes to `_handleGameOverPath` (`:591` passes), acquires `rngWordByDay[P+121]` fresh via `_gameOverEntropy` (`:600-604`), and `handleGameOverDrain` reads it (`:106`) and draws the decimator winners (`:174`).
+
+The resolution word `rngWordByDay[P+121]` is born on day `P+121`, the exact day the boost becomes inadmissible. There is no day on which BOTH the boost is admissible AND the resolution word exists. The two windows are disjoint by the day-constant predicate.
+
+### Step 3 — The dual daily-word-write reconciliation (the backlog/catch-up edge)
+
+The planning note called `_applyDailyRng` (`AdvanceModule:1879`, `rngWordByDay[day] = finalWord`) "the only daily-word write". Grep at `1e7a646d` shows a SECOND write: `_backfillGapDays` (`:1831`, `rngWordByDay[gapDay] = derivedWord`). This is the exact backlog/catch-up surface D-03 worries about, so it is reconciled here explicitly rather than asserted away.
+
+`_backfillGapDays(vrfWord, startDay, endDay, ...)` (`:1817`) backfills words for PAST gap days `for (gapDay = startDay; gapDay < endDay; ...)` — `endDay` is documented "Current day (exclusive — not backfilled, handled by normal path)" (`:1815`) and is capped at `startDay + 120`. So the gap backfill writes words for days STRICTLY BEFORE the current day; it NEVER pre-writes the word for the day the game-over path is currently processing. The `gameOverDay` word is always acquired by the fresh `_gameOverEntropy` path (Step 2), not lifted from a pre-set backfill slot. The future-day-word property holds for the resolution key regardless of the gap backfill: a boost admitted on day D (liveness false) cannot see the word for `gameOverDay > D`, and the backfill of intermediate gap days `< gameOverDay` does not write the `gameOverDay` key.
+
+### Step 4 — The VRF-grace-stall branch (D-02)
+
+`_livenessTriggered` also fires on the VRF-grace-stall branch (`Storage:1239-1240`, `rngRequestTime != 0 && block.timestamp − rngRequestTime >= _VRF_GRACE_PERIOD`). Handle it explicitly: during a stall the stalled day's word stays 0 and the game is RNG-LOCKED (no new daily words are written during the stall — `_applyDailyRng` runs only on VRF fulfillment). The decimator path requires a REAL VRF word: `handleGameOverDrain` reverts on `rngWordByDay[day] == 0` when funds are distributable (`:107 if (rngWord == 0) revert E()`, inside the `preRefundAvailable != 0` guard). So there is NO predictable-fallback-seed hole — the draw cannot proceed on a zero/derivable word.
+
+**Reconcile the verified `:106` `preRefundAvailable != 0` guard drift.** At `1e7a646d` the `rngWord = rngWordByDay[day]` read at `:106` is INSIDE `if (preRefundAvailable != 0)` (`:104`), NOT unconditional — the planning note flagged this. Reconciliation: the decimator pool branch is `decPool = remaining / 10` with `remaining = available`, and the function early-returns `if (available == 0) return` (`:165`) BEFORE the decimator block (`:172-183`); `available` is the post-refund distributable, ≤ the pre-refund `preRefundAvailable` plus refunds-into-claimablePool... more simply: the decimator draw `runTerminalDecimatorJackpot(decPool, lvl, rngWord)` only runs when `decPool != 0`, which requires `available != 0`, which requires distributable funds exist — and whenever distributable funds exist the `:104` guard has populated `rngWord` (or reverted via `:107` if the word is 0). The guard does NOT weaken the lemma: (a) the future-day-word property is a property of the KEY `rngWordByDay[gameOverDay]` and holds regardless of whether the read is guarded; (b) when no funds are distributable the decimator draw is moot (no pool to place into / win from), so a `rngWord` of 0 in that case is harmless. Either way, no admitted boost ever observed the resolution word.
+
+### Step 5 — The retracted same-day-reuse refinement (D-03)
+
+An earlier "same-day rngWord reuse" concern — gate additionally on `rngWordByDay[currentDay] == 0` — was investigated and is RETRACTED as internally inconsistent. The scenario it imagined (a pre-set word for the day game-over processes) cannot arise on the normal path: for liveness to be true in the evening it was already true that morning (the day-constant predicate, Step 2), so any "normal advance" that morning would ALREADY have routed to the game-over path — there is no separate, earlier, pre-set word for `gameOverDay`. Step 3 confirms the only other writer (`_backfillGapDays`) writes strictly-earlier days, not `gameOverDay`.
+
+**Belt-and-suspenders fallback (recorded, default OFF).** IF a later formal/empirical pass surfaces a genuine backlog/catch-up edge in which the game-over path processes a day whose word was PRE-SET by some other writer, the cheap mitigation is to AND-in a `rngWordByDay[resolutionDay] == 0` gate at the boost. The default per USER is `!_livenessTriggered()` ALONE. **Conclusion of this formal pass: NO such edge surfaced** — Step 2 (day-constant liveness ⇒ fresh game-over-day word) + Step 3 (gap backfill is current-day-exclusive) close it. The fallback is documented for the IMPL author as a known cheap escape hatch, NOT a required gate.
+
+### Step 6 — Invariant re-attestation
+
+- **`!_livenessTriggered()` / pre-request gate** (D-01) — re-attested as the correct and sufficient freeze gate; supersedes the obsolete `!gameOver` framing.
+- **Pool finalized in the resolution tx** — the decimator pool `decPool = remaining / 10` is computed and drawn inside `handleGameOverDrain` (`:172-183`), in the same tx as the `gameOverDay` word read; no boost runs after that tx (liveness is true, the boost gate is closed).
+- **Shares sum to the pool** (D-07 conservation) — the aggregate re-key on promotion REMOVES the weighted contribution from the old key and ADDS the identical amount to the new key (cross-reference TDEC-02 D-07), so `terminalDecBucketBurnTotal` total weight is conserved and `runTerminalDecimatorJackpot`'s pro-rata shares (`:780`) still sum to `decPool`. SOLVENCY-neutral, weight-only; the ETH/BURNIE payout path is byte-untouched.
+
+The terminal-decimator boost + bucket promotion are FREEZE-SAFE and SOLVENCY-NEUTRAL. The proof rests on the future-day-word lemma (all weight/bucket/subBucket mutation provably precedes the resolution word), not on any "by construction" assertion.
+
+### Step 7 — Threat-register mapping (what 361/362 must verify)
+
+This proof discharges, on paper, the two load-bearing TDEC threats; TST 361 and TERMINAL 362 verify them empirically/adversarially against the frozen subject.
+
+| Threat | Claim | Proof step | Verified at |
+|--------|-------|-----------|-------------|
+| T-358-01 (Tampering — RNG/freeze) | A boost or bucket-promotion timed to exploit draw knowledge is impossible | Steps 1–3 (gate + future-day-word lemma + dual-write reconciliation) | TST 361 SEC-01 (determinism); 362 adversarial (bucket-promotion freeze) |
+| T-358-02 (Tampering — RNG) | No predictable-fallback-seed hole on the VRF-grace stall | Step 4 (RNG-locked stall + revert-on-zero `:107`) | TST 361 SEC-01; 362 adversarial |
+| T-358-03 (Tampering — solvency-of-shares) | Aggregate re-key on promotion conserves total weight | Step 6 (D-07 conservation) | cross-cutting solvency section (plan 03); TST 361 SEC-02 |
+
+### Step 8 — IMPL handoff invariants (carried into TDEC-01 @ 359)
+
+The IMPL author MUST preserve these as code-level invariants (re-proven at TST 361):
+
+1. The boost gate is EXACTLY `require(!_livenessTriggered())` (NOT `require(!gameOver)`) plus the `boosted`-bit / existing-entry / live-streak preconditions. Do not relax to `!gameOver`.
+2. The bucket promotion + subBucket re-derive + aggregate re-key are a single atomic in-tx mutation, committed under the gate (no deferred / two-phase placement that could straddle the resolution).
+3. The re-key REMOVES the exact pre-boost weighted contribution from the old aggregate key and ADDS the post-boost weighted contribution to the new key — net conservation of `terminalDecBucketBurnTotal` total weight (D-07).
+4. The boost reads the effective streak via the `view` `getPlayerQuestView` only (D-09/D-12 — no mutation, no shield consume).
+5. The `boosted` bit makes the boost one-time per terminal level (D-13); a second call is a no-op / revert, never a second scaling.
+
+These invariants are the design gate; the empirical byte-diff + determinism proofs are owned at TST 361 (SEC-01) and the adversarial bucket-promotion probe at TERMINAL 362.
