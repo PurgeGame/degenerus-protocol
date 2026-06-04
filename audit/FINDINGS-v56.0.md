@@ -5,8 +5,8 @@ milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
 audit_baseline: 453f8073
 source_tree_frozen_ref: 1e7a646d44da4ee26375edd0b006274821fef73e
-audit_subject_head: "MILESTONE_V56_AT_HEAD_<sha>"
-closure_signal: MILESTONE_V56_AT_HEAD_<sha>
+audit_subject_head: "MILESTONE_V56_AT_HEAD_1e7a646d44da4ee26375edd0b006274821fef73e"
+closure_signal: MILESTONE_V56_AT_HEAD_1e7a646d44da4ee26375edd0b006274821fef73e
 deliverable: audit/FINDINGS-v56.0.md
 new_findings: 3
 new_findings_disposition: 3 RESOLVED-AT-357 / 0 UNRESOLVED FINDING_CANDIDATE — the v56.0 audit closes with THREE resolved-in-phase items, each fixed at a 357 contract gate, none a live FINDING_CANDIDATE: (1) F-356-01 — the missing drainAffiliateBase Game dispatch stub (the v56.0 carried HIGH; DegenerusAffiliate.claim() reverted at the drain loop -> afking-affiliate rewards permanently unreachable) FIXED at HEAD' ac5f1e03 (357-00), re-verified at HEAD'' / HEAD'''' (357-00b / 357-00d); (2) the NEW-run subscribe slot-0 churn ADVISORY — the zero-day-hunter 357-02 probe-7 EV-negative wart (a subscribe->funded-buy->cancel->subscribe loop re-accrued the flat per-day QUEST_SLOT0_REWARD) HARDENED at HEAD''' 7b0b2a0b (the :451 idempotency guard); (3) the D-11 LEVEL-0 passless gap — a USER-caught boundary the 3-skill sweep MISSED (D-11 probed only at level >= 1; the level-0 0 < 0 vacuity let a funded passless EOA clear NoPass()) CLOSED at HEAD'''' 77d8bc88 (the validThroughLevel == 0 rejection arm). The 3-skill genuine-PARALLEL adversarial sweep produced 0 FINDING_CANDIDATE across 32 charged Claude probe rows (18 NEGATIVE-VERIFIED + 13 SAFE_BY_DESIGN + 1 EV-negative advisory now RESOLVED) AUGMENTED by the Codex XMODEL close (4-area NO ISSUE; Gemini attempted-partial per D-03) AND by the focused single-skill contract-auditor pass on the FIFTH/FINAL gate c9b5d20d (4 probes NEGATIVE-VERIFIED, 0 FINDING_CANDIDATE). The FIFTH gate c9b5d20d (the flat-10% pass lootbox + 3 dead-guard removals + a hasAnyLazyPass docstring fix — a contained pass-PURCHASE economic refactor) adds ZERO findings (recorded as a clean refactor, NOT a finding). The O1/QST-05 lootbox-quest double-credit is RESOLVED (single-credit at 356-05), NOT a finding. SOLVENCY-01 byte-unchanged (BURNIE-emission-timing only; the FIFTH gate is off the ETH path); RNG-freeze intact (premature-advance-INERT); KNOWN-ISSUES.md byte-unmodified vs v55. ⟶ **SIXTH GATE 1e7a646d** (post-c9b5d20d — the "FIFTH/FINAL" framing throughout this doc is SUPERSEDED; read 1e7a646d as the CURRENT frozen subject): the afking cover-buy box-clean + gas-tune {LOOTBOX2/TICKET4/EVICT1, BUDGET500, OPEN_BATCH80} + lootboxDay removal + LootBoxBuy event unify + afking presale-box credit — 6 files, +379/-135 — adds ZERO findings. FREEZE (cover-buy INDEXED box off lootboxRngWordByIndex / lootboxDay-removal seed keccak(rngWord,player,amount)) HOLDS adversarially-verified; SOLVENCY-01 (the new claimableUse debit leg + the _routeAfkingPoolEth pool routing) HOLDS adversarially-verified — single in-tandem debit, sole afking->pool path; this commit FIXES the prior afking pool-under-funding + claimable under-debit; GAS bounded by a THEORETICAL-MAX pass (binding all-EVICT chunk ~13.5M < 16.7M, USER-accepted — over the 10M soft target, under the 16.7M hard ceiling). NON-WIDENING: 0 new failing test names vs c9b5d20d (574/133/103), narrows 1 (testZeroResolvedRevertsNoWork). Two low/informational observations (presale-credit BURNIE->ETH approximation; an optional defense-in-depth lootboxRngWordByIndex!=0 guard). Re-frozen subject = 1e7a646d. See §10 (SIXTH GATE).
@@ -23,7 +23,7 @@ new_findings_disposition: 3 RESOLVED-AT-357 / 0 UNRESOLVED FINDING_CANDIDATE —
 
 **Audit Baseline.** v55.0 closure-frozen subject `453f8073` (the 349.2 IMPL fix — the last v55 `contracts/*.sol`
 mutation; closure signal MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583). v56.0 closure HEAD is
-MILESTONE_V56_AT_HEAD_<sha> (the literal placeholder; resolved to the findings-deliverable / closure-flip HEAD
+MILESTONE_V56_AT_HEAD_1e7a646d44da4ee26375edd0b006274821fef73e (the literal placeholder; resolved to the findings-deliverable / closure-flip HEAD
 by 357-04 — the self-referential closure commit own SHA; see §9c). SOURCE-TREE FROZEN reference for the
 terminal: **c9b5d20d756f9dfc5f3b0584aae56bdfa215d8bf** (the CURRENT re-frozen v56.0 subject == the FIFTH / FINAL
 357 contract gate — the flat-10% pass-lootbox + dead-guard refactor layered on HEAD'''' 77d8bc88;
@@ -912,10 +912,10 @@ the advance-incentive redesign / HEAD''' slot-0 idempotency / HEAD'''' D-11 leve
 reconciliations + the SC1 delta-audit + the SC1 3-skill genuine-PARALLEL sweep AUGMENTED by the Codex XMODEL close + the focused FIFTH-gate auditor pass +
 the regression + the gated closure flip). NOTE: **5 phases** (the v54.0 / v55.0 SPEC->IMPL->GAS->TST->TERMINAL shape) but
 with TWO autonomous:false gates in 357 (the 357-00 contract gate + the 357-04 closure gate; the FIFTH gate c9b5d20d was USER-committed directly). Closure signal:
-MILESTONE_V56_AT_HEAD_<sha> (the literal placeholder; resolved at 357-04).
+MILESTONE_V56_AT_HEAD_1e7a646d44da4ee26375edd0b006274821fef73e (the literal placeholder; resolved at 357-04).
 
 ### 9c. Closure Signal
-**MILESTONE_V56_AT_HEAD_<sha>** (the literal placeholder — resolved to the Phase 357 audit-deliverable / closure
+**MILESTONE_V56_AT_HEAD_1e7a646d44da4ee26375edd0b006274821fef73e** (the literal placeholder — resolved to the Phase 357 audit-deliverable / closure
 commit own SHA in 357-04 [self-referential]; contracts/ byte-identical to the frozen subject c9b5d20d — the FIFTH / FINAL gate).
 Verbatim propagation targets (resolved at the 357-04 closure gate by the single sed-style SHA substitution):
 1. Frontmatter closure_signal: + audit_subject_head:.
@@ -963,7 +963,7 @@ refactor off the ETH path) adds ZERO findings (a clean refactor, NOT a finding).
 (relocated only; GameAfkingModule.sol byte-unchanged 77d8bc88->c9b5d20d); RNG-freeze intact; KNOWN-ISSUES.md
 byte-unmodified; the O1/QST-05 double-credit RESOLVED (single-credit at 356-05). The corrected affiliate anchors
 (:629/:633-634/:654/:678-695) used throughout. Closure
-signal MILESTONE_V56_AT_HEAD_<sha> resolves at the Phase 357 closure commit (357-04); chmod 444 applied at closure
+signal MILESTONE_V56_AT_HEAD_1e7a646d44da4ee26375edd0b006274821fef73e resolves at the Phase 357 closure commit (357-04); chmod 444 applied at closure
 (NOT here).*
 
 ---
