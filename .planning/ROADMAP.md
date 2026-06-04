@@ -105,7 +105,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 359-02-PLAN.md — BURNIE-01/02 (queue-on-return + MINT_BURNIE deferred net-burn rebate) + SALVAGE-01 (combo ETH/BURNIE pawn-shop cash-leg split), same MintModule file (wave 2, autonomous:false)
+- [x] 359-02-PLAN.md — BURNIE-01/02 (queue-on-return + MINT_BURNIE deferred net-burn rebate) + SALVAGE-01 (combo ETH/BURNIE pawn-shop cash-leg split), same MintModule file (wave 2, autonomous:false)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -174,7 +174,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 358. SPEC — Design-Lock (WWXRP rationing + terminal-decimator decisions + UDVT discipline) + Freeze/Solvency Re-Attestation + Call-Graph Attestation | v57.0 | 3/3 | Complete   | 2026-06-04 |
-| 359. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (handlePurchase batching + WWXRP whale-halfpass + terminal-decimator boost + the wide UDVT refactor) | v57.0 | 1/4 | In Progress|  |
+| 359. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (handlePurchase batching + WWXRP whale-halfpass + terminal-decimator boost + the wide UDVT refactor) | v57.0 | 2/4 | In Progress|  |
 | 360. GAS — Measure + Tune (the UDVT gas-neutrality gate) | v57.0 | 0/TBD | Not started | - |
 | 361. TST — RNG-Freeze Intact + SOLVENCY-01 Byte-Untouched + Non-Widening + Test/Comment Hygiene | v57.0 | 0/TBD | Not started | - |
 | 362. TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v57.0 + Closure | v57.0 | 0/TBD | Not started | - |

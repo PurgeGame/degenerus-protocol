@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v57.0
 milestone_name: Small-Feature Bundle + Day-Type UDVT Refactor
 status: executing
-last_updated: "2026-06-04T12:49:32.091Z"
-last_activity: 2026-06-04 -- Phase 359 plan 01 (BATCH-01/02) executed; contract uncommitted, held for plan-04 gate
+last_updated: "2026-06-04T13:04:12.133Z"
+last_activity: 2026-06-04 -- Phase 359 plan 02 (BURNIE-01/02 + SALVAGE-01) executed; 4 contracts uncommitted, held for plan-04 gate
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 7
-  completed_plans: 4
+  completed_plans: 5
   percent: 10
 ---
 
@@ -33,9 +33,9 @@ See: .planning/PROJECT.md (Current Milestone: v57.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 359 (impl-the-one-carefully-sequenced-batched-contract-diff-handl) — EXECUTING
-Plan: 2 of 4
-Status: Plan 01 (BATCH-01/02) complete — handlePurchase folds burnieMintReward into the return; DegenerusQuests.sol edit UNCOMMITTED in the working tree (batched-contract-diff accumulating across plans 01–04, committed only at the plan-04 USER hand-review HARD STOP). Ready to execute plan 02 (BURNIE/SALVAGE).
-Last activity: 2026-06-04 -- Phase 359 plan 01 (BATCH-01/02) executed
+Plan: 3 of 4
+Status: Plans 01+02 complete. P01 (BATCH-01/02) — handlePurchase folds burnieMintReward into the return. P02 (BURNIE-01/02 + SALVAGE-01) — _purchaseCoinFor queues on return + applies the MINT_BURNIE deferred net-burn rebate (full cost gated upfront); sellFarFutureTickets cash leg splits ETH+BURNIE (sDGNRS-owned BURNIE via coin.transferFrom, ETH fallback, only the ETH part leaving claimableWinnings[SDGNRS]); new _quoteFarFutureBurnieSplit + previewSellFarFutureSplit for preview parity; IDegenerusCoin extended with balanceOfWithClaimable + transferFrom. **5 contracts/*.sol UNCOMMITTED** (DegenerusQuests from P01 + MintModule/MintStreakUtils/IDegenerusCoin/DegenerusGame from P02), accumulating across plans 01–04, committed only at the plan-04 USER hand-review HARD STOP. NO forge build run (SPEC D-03 = build checkpoints at end of P03 + P04). Ready to execute plan 03 (WWXRP-01 + TDEC-01 + CANCEL-01 + build CHECKPOINT 1).
+Last activity: 2026-06-04 -- Phase 359 plan 02 (BURNIE-01/02 + SALVAGE-01) executed
 
 ## 🛠 v56 CARRIED FINDING + USER HARDENING — the 357-00 contract gate (3 changes, autonomous:false)
 
@@ -687,8 +687,11 @@ Audit deliverables:
 | Phase 358 P03 | ~1 session | - tasks | - files |
 | Phase 358 P03 | ~1 session | 2 tasks | 1 files |
 | Phase 359 P01 | 7 | 3 tasks | 1 files |
+| Phase 359 P02 | ~25 min | 3 tasks | 4 files |
 
 ## Decisions
+
+- [Phase 359]: Plan 02 — BURNIE-01/02 + SALVAGE-01 authored (uncommitted, held for plan-04 gate). BURNIE-02 affordability gate uses the FULL coinCost via `coin.balanceOfWithClaimable(buyer)` (added to IDegenerusCoin) — the deferred net burn (`coinCost − reward` floored 0) can only reduce the burn, never enable an unaffordable buy. The burn was moved out of `_callTicketPurchase`'s payInCoin branch (only reachable from `_purchaseCoinFor`) and re-issued in `_purchaseCoinFor` after `handlePurchase`. SALVAGE pays the BURNIE leg via `coin.transferFrom(SDGNRS, player, burnieTokens)` — a single GAME-bypass primitive that auto-sources sDGNRS's wallet balance THEN claimable coinflip stake (via `_claimCoinflipShortfall`), so no `onlyBurnieCoin` consume is needed and value is conserved; only `ethRelabel = ticketWei + ethCashWei = totalBudget − burnieEthValue` leaves `claimableWinnings[SDGNRS]` (solvency-positive; the `>=1 ETH` floor stays gated on the full `totalBudget`, byte-unchanged). Quote kept as a sibling `_quoteFarFutureBurnieSplit` (NOT a re-typed `_quoteFarFutureSwap`) so the existing 4-tuple preview + the 45 forge fixtures are byte-untouched; the split is exposed via a NEW `previewSellFarFutureSplit` view. Plan-01's flagged "stale comment" at MintModule:1712 re-examined = NOT stale (it belongs to dead-code `_questMint`→`handleMint`, which still credits BURNIE internally; left untouched).
 
 - [Phase 352]: Plan 04 — v55.0 CLOSURE SHIPPED. Closure signal resolved to the pre-flip HEAD `MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583` (the v44/v46/v47/v48/v49 sequential-SHA orchestration — the signal = the Phase 352 audit-deliverable / pre-flip HEAD `ca3bbd32`; the single closure-flip commit is its CHILD, true self-reference impossible without a SHA-breaking amend). The 6 `MILESTONE_V55_AT_HEAD_<sha>` placeholders in `audit/FINDINGS-v55.0.md` were resolved via `sed` (the Write tool's name-heuristic rejects `FINDINGS-*.md`); the structured 5-doc flip via the Edit tool. `audit/FINDINGS-v55.0.md` chmod 444 at close (the v44/v46/v47/v48/v49 precedent). The closure is DOC-ONLY (ZERO `contracts/*.sol` edits; `git diff 453f8073 HEAD -- contracts/` empty). Both `.planning/` and `audit/*` are gitignored → force-added at commit. scope.txt left modified-but-UNSTAGED (the orchestrator handles it). NOTHING pushed.
 
