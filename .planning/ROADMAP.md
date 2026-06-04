@@ -92,7 +92,13 @@ Plans:
   7. The sDGNRS salvage-swap combo ETH/BURNIE pawn-shop payout lands (SALVAGE-01) — `sellFarFutureTickets`'s cash leg is split into `ethWei` + `burnieValue = cashWei − ethWei`, the ETH share RANDOMIZED full-range `[0..ethCap]` from a new slice of the existing prior-day `seed` (no new VRF), `ethCap` = the existing eth-% cap (BURNIE excluded); the BURNIE leg paid by TRANSFERRING sDGNRS-OWNED BURNIE (token balance + claimable coinflip stake), valued via `_ethToBurnieValue` @ current eth-equivalent — NOT a `creditFlip` mint; `actualBurnie = min(target, sDGNRS-available)`, the remainder + the zero-available case paid as ETH ("like now"); ticket leg unchanged; both the execute path (`MintModule:929/975`) and the preview/quote (`_quoteFarFutureSwap`, reflecting source-availability) updated so the offer stays previewable. Only the ETH part is relabeled out of `claimableWinnings[SDGNRS]` (NO new BURNIE emission) → solvency-positive. Every reachable offer stays ≤ the no-arb ceiling + the eth-% cap (the pawn-shop safety invariant, re-proven at TST 361 / SALVAGE-03).
   8. The manual-sub-cancel auto-claim + auto-evict pure-forfeit lands (CANCEL-01) — manual cancel (`subscribe(…, dailyQuantity=0)`) auto-claims BEFORE clearing: pay the canceller's `pendingBurnie` to themselves via `coinflip.creditFlip` (+ presale-box-credit parity, zero the field/CEI) + drain `affiliateBase` and settle the affiliate tree A/U1/U2 75/20/5 (via `drainAffiliateBase`→`creditFlip`), then `_finalizeAfking`+clear — closing the loss-on-reclaim race; AUTO-EVICT (pass/funding/reclaim) stays a pure FORFEIT (delete the Sub record incl. both accumulators, no payout to self or uplines). BURNIE-emission only (no `rngWord`, no ETH/`claimablePool` touch), `rngLock`-gated at the subscribe entry; SOLVENCY-untouched + RNG-freeze-clean, re-proven at TST 361 / CANCEL-03.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 359-01-PLAN.md — BATCH-01/02 producer: handlePurchase returns burnieMintReward (drop inline credit) + quest-TYPE comment fix (wave 1, autonomous:false)
+- [ ] 359-02-PLAN.md — BURNIE-01/02 (queue-on-return + MINT_BURNIE deferred net-burn rebate) + SALVAGE-01 (combo ETH/BURNIE pawn-shop cash-leg split), same MintModule file (wave 2, autonomous:false)
+- [ ] 359-03-PLAN.md — WWXRP-01 (per-bracket jackpot whale-halfpass) + TDEC-01 (boostTerminalDecimator + bucket promotion) + CANCEL-01 (manual-cancel auto-claim / auto-evict forfeit) + forge-build CHECKPOINT 1 (wave 3, autonomous:false)
+- [ ] 359-04-PLAN.md — UDVT-01/02/03 the wide type Day is uint24 sweep (3 encodePacked uint32 casts, packed uint24 / standalone+key uint32) + forge .t.sol churn + forge-build CHECKPOINT 2 + the USER hand-review contract-commit HARD STOP (wave 4, autonomous:false)
 **UI hint**: no
 
 ### Phase 360: GAS — Measure + Tune (the UDVT gas-neutrality gate)
