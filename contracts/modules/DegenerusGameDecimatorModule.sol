@@ -741,6 +741,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             e.bucket = 0;
             e.subBucket = 0;
             e.burnLevel = uint48(lvl);
+            e.boosted = false; // boost is one-time PER LEVEL; clear with the rest
         }
 
         // First burn this level: set bucket and subbucket
