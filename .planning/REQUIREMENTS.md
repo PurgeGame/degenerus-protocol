@@ -80,8 +80,28 @@
 
 ## Traceability
 
-_Phase mapping is filled by the roadmapper. Each REQ-ID maps to exactly ONE owning phase. Expected: 5 phases continuing 369 → 370 (SPEC → IMPL → GAS → TST → TERMINAL); GAS owns no REQ-ID (gas-neutrality gate)._
+Each REQ-ID maps to exactly ONE owning phase. 21 v59.0 requirements across 12 categories, continuing 369 → phases 370–374 (SPEC → IMPL → GAS → TST → TERMINAL). **Phase 372 GAS owns NO REQ-ID** — it is the gas-neutrality measurement gate. COV-01 runs EARLY at SPEC (370) so any confirmed solvency finding folds into the IMPL diff; the 9 contract reqs land producer-before-consumer in the ONE batched diff at IMPL (371); SEC-01/02 + TST-01..07 are PROVEN at TST (373); AUDIT-01 re-attests all 21 reqs at the in-milestone TERMINAL close (374). 0 orphaned, 0 duplicated.
 
 | Requirement | Phase | Phase Type | Status |
 |-------------|-------|------------|--------|
-| _(to be filled by roadmapper)_ | | | |
+| COV-01 | Phase 370 | SPEC | Pending |
+| SPEC-01 | Phase 370 | SPEC | Pending |
+| SALV-01 | Phase 371 | IMPL | Pending |
+| AFAFF-01 | Phase 371 | IMPL | Pending |
+| SOLV-01 | Phase 371 | IMPL | Pending |
+| SOLV-02 | Phase 371 | IMPL | Pending |
+| PRESALE-01 | Phase 371 | IMPL | Pending |
+| WINDOW-01 | Phase 371 | IMPL | Pending |
+| STREAK-01 | Phase 371 | IMPL | Pending |
+| STREAK-02 | Phase 371 | IMPL | Pending |
+| CENTURY-01 | Phase 371 | IMPL | Pending |
+| SEC-01 | Phase 373 | TST | Pending |
+| SEC-02 | Phase 373 | TST | Pending |
+| TST-01 | Phase 373 | TST | Pending |
+| TST-02 | Phase 373 | TST | Pending |
+| TST-03 | Phase 373 | TST | Pending |
+| TST-04 | Phase 373 | TST | Pending |
+| TST-05 | Phase 373 | TST | Pending |
+| TST-06 | Phase 373 | TST | Pending |
+| TST-07 | Phase 373 | TST | Pending |
+| AUDIT-01 | Phase 374 | TERMINAL | Pending |
