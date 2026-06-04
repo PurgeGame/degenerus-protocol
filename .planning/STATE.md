@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v58.0
 milestone_name: RNG-Safety, ETH-Flow & Gas-Ceiling Documentation Audit
 status: shipped
-last_updated: "2026-06-04T20:30:00.000Z"
-last_activity: 2026-06-04
+last_updated: "2026-06-04T21:30:00.000Z"
+last_activity: 2026-06-04 -- v58.0 SHIPPED + ARCHIVED (milestone-complete): 7 phases 363-369; ROADMAP/REQUIREMENTS snapshotted to milestones/, REQUIREMENTS.md removed, phase dirs archived; signal MILESTONE_V58_AT_HEAD_2b26ec91810a733e15666a4c23e8f365a4f04f51; next = remediation milestone for the 7 findings (run /gsd-new-milestone)
 progress:
   total_phases: 7
   completed_phases: 7
@@ -17,10 +17,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v58.0 section) + .planning/REQUIREMENTS.md (22 v58.0 REQ-IDs / 10 categories) + .planning/ROADMAP.md (▶ v58.0 ACTIVE, phases 363-369) + .planning/PLAN-V58-CONSOLIDATED-AUDIT.md (the drafted "v52 idea", reshaped into v58.0). v57.0 archived: .planning/milestones/v57.0-ROADMAP.md + v57.0-REQUIREMENTS.md.
+See: .planning/PROJECT.md (Completed Milestone: v58.0 section) + .planning/MILESTONES.md (v58.0 entry, top) + .planning/milestones/v58.0-ROADMAP.md + v58.0-REQUIREMENTS.md (archived, force-tracked) + .planning/ROADMAP.md (v58.0 ✅ SHIPPED). v58.0 audit deliverables (gitignored-local, on disk): audit/FINDINGS-v58.0.md (chmod 444) + audit/site/. v57.0 archived: .planning/milestones/v57.0-ROADMAP.md + v57.0-REQUIREMENTS.md. **NEXT milestone = remediation of the 7 confirmed v58.0 findings** (run /gsd-new-milestone).
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v58.0 RNG-Safety, ETH-Flow & Gas-Ceiling Documentation Audit — document-only, autonomous + resumable; NEXT = Phase 363 PREP (`/gsd-discuss-phase 363` or `/gsd-plan-phase 363`, or run autonomously via `/gsd-autonomous`).
+**Current focus:** BETWEEN MILESTONES — v58.0 shipped + archived; plan the REMEDIATION milestone for the 7 confirmed v58.0 findings (F-01 CRIT + F-02 HIGH priority; run /gsd-new-milestone).
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -36,20 +36,19 @@ Phase: 369 TERMINAL — ✅ COMPLETE. **v58.0 SHIPPED 2026-06-04** (closure sign
 
 **v58.0 AUDIT OUTCOME — 7 CONFIRMED findings (1 CRIT · 1 HIGH · 2 MED · 2 LOW · 1 INFO) · 5 REFUTED.** The 5 Claude analysis phases (364-368) found **0 internal findings** on their own surfaces; the **XMODEL council (Gemini + Codex, 5 areas)**, adjudicated at 369 against frozen source by 4 parallel verification agents, surfaced **7 confirmed findings** on adjacent surfaces (salvage swap, AfKing affiliate, BAF/decimator solvency remainders) + refuted 5 (2 corroborate the 364/365 RNG-freeze analysis). The v52-predicted AfKing reward-leak (F-02) was vindicated. **Document-only → all 7 route to a LATER remediation milestone; findings do NOT block closure.**
 - Confirmed: **F-01 CRIT** salvage uint256-quote/uint32-debit (drains sDGNRS, `MintStreakUtils:173`/`MintModule:1013`) · **F-02 HIGH** afking `affiliateBase` missing `/1 ether` → unbacked BURNIE emission (`GameAfkingModule:879`) · **F-03 MED** BAF whale-pass remainder unbacked (`PayoutUtils:58`/`AdvanceModule:897`) · **F-04 MED** decimator whale remainder under-reserves claimablePool (`DecimatorModule:398/:596`) · **F-05 LOW** pendingBurnie 2× presale-credit via flag flip (`GameAfkingModule:397/1599`) · **F-06 LOW** >120-day VRF stall strands coinflip wagers (`AdvanceModule:1823`) · **F-07 INFO** affiliate rounding dust. Plus carried gas notes GASCEIL-F-01/02/03 (367, not breaches).
-- DONE at 369: `369-ADJUDICATION.md` (full verdict log) · `audit/FINDINGS-v58.0.md` consolidated (all phases + 7 confirmed + 5 refuted + 2 coverage gaps; **NOT yet chmod 444**) · `audit/site/data/findings.js` + app.js badge fix (Findings tab renders; all 7 site files `node --check` clean) · `369-SUMMARY.md`.
+- DONE at 369: `369-ADJUDICATION.md` (full verdict log) · `audit/FINDINGS-v58.0.md` consolidated (all phases + 7 confirmed + 5 refuted + 2 coverage gaps; **chmod 444** ✓) · `audit/site/data/findings.js` + app.js badge fix (Findings tab renders; all 7 site files `node --check` clean) · `369-SUMMARY.md`.
 
 **Coverage gaps (logged, LOW-impact):** `area-rng-freeze` Gemini leg EMPTY (sole claim C1 refuted + 364/365 deep-cover the freeze); `area-solvency` Gemini leg REFUSED/Plan-Mode (Codex solvency + composition + Claude 366 cover the spine, 3 sources). Optional re-run before closure.
 
-Last activity: 2026-06-04 — Phase 369 XMODEL council ADJUDICATED (7 confirmed / 5 refuted), FINDINGS-v58.0 consolidated, site Findings tab populated. Checkpoint-committed.
-Next on resume: **AUDIT-01 closure (HELD for user ack — the audit flipped from "0 findings" to a CRIT+HIGH, so surfacing before the milestone "shipped" signal):** (optionally re-run the 2 incomplete Gemini legs) → chmod 444 `audit/FINDINGS-v58.0.md` → atomic closure flip (STATE/ROADMAP/MILESTONES) + `MILESTONE_V58_AT_HEAD_<sha>` signal, re-attest all 22 v58.0 requirements. FROZEN_SHA `2b26ec91`.
-Plan: — (executed directly, lean/no-ceremony per the budget-paced run contract)
-Status: **v58.0 ACTIVE; Phase 363 ✅ COMPLETE (1/7).** PREP-01 (FROZEN_SHA `2b26ec91` pinned → `.planning/audit-v52/runs/v58/run-state.json`; `context-pack/scope.txt` rebuilt, 47 files) · PREP-02 (4 inventories enumerated vs frozen tree, all seed `audit/site/data/*.js` [all `node --check` clean]: **rng-safety.js 164 player fns**, **rng-var-freeze.js 44 vars/47 entropy sites** [rngLock set `Advance:1688`/clear `:1769`; VRF cb `rawFulfillRandomWords Advance:1784`], **eth-flow.js 46 edges** [solvency identity captured; Pool.* = sDGNRS tokens NOT ETH], **gas-ceiling.js 13 advanceGame stages** [do-while(false) one-stage-per-call; batch caps captured; degenerette NOT in advance chain]; each + a `363-INVENTORY-*.md`) · PREP-03 (cohesive static site `audit/site/`, shell+all 4 data files validated, runs from file://) · OPS-01/02 (`RUN-CONTRACT-v58.md`). Full detail → `363-SUMMARY.md`.
-Last activity: 2026-06-04 — Phase 363 closed; site scaffold + 4 inventories live
-Next on resume: **Phase 364 RNGSAFE** — fill the per-function RNG-safety verdict + reasoning + cite into `audit/site/data/rng-safety.js` (164 rows): fast-path views ("reads only → cannot influence RNG"), depth on state-changers, cross-reference the rng-vars writer/site map (rng-var-freeze inventory) for "does it write a participating slot in the lock window"; flag any behavior↔comment mismatch as a finding (RNGSAFE-03 → `audit/FINDINGS-v58.0.md`). SINGLE owner edits rng-safety.js (no concurrent writes). Reads use `git show 2b26ec91:<path>`. Checkpoint via STATE + the on-disk data file.
+Phase: — (v58.0 COMPLETE — all 7 phases 363-369 shipped + archived)
+Plan: — (between milestones)
+Status: **v58.0 SHIPPED + ARCHIVED (milestone-complete 2026-06-04).** Closure signal `MILESTONE_V58_AT_HEAD_2b26ec91810a733e15666a4c23e8f365a4f04f51` (audited frozen contract subject `2b26ec91`; baseline = v57.0 closure HEAD `b7237db4`); document-only — 7 CONFIRMED findings + 5 REFUTED, all routed to a LATER remediation milestone; **NOT pushed.** Deliverables (gitignored-local, persist on disk): `audit/FINDINGS-v58.0.md` (chmod 444) + the cohesive site `audit/site/` (7 sections incl. the populated Findings tab). Archived: `milestones/v58.0-ROADMAP.md` + `v58.0-REQUIREMENTS.md` (force-tracked) + phase dirs 363-369 → `milestones/v58.0-phases/` (gitignored-local); `.planning/REQUIREMENTS.md` removed (fresh for next milestone). Both v58-era follow-ups are DONE in-milestone: the BURNIE ticket-buy regression forensic (Phase 368 → root-caused to `24f0898b`) and the gas-ceiling bound (Phase 367). The deferred v57 pre-launch plumbing (forge-harness layout/RNG refresh + ~143 Hardhat JS recompile) carries forward.
+**NEXT = `/gsd-new-milestone` → a REMEDIATION milestone for the 7 confirmed v58.0 findings** (priority F-01 CRIT salvage uint32-trunc `MintStreakUtils:173`/`MintModule:1013` + F-02 HIGH afking `affiliateBase` unit-slip `GameAfkingModule:879`; then F-03/F-04 MED whale-pass remainder solvency, F-05/F-06 LOW, F-07 INFO — all in `audit/FINDINGS-v58.0.md`). The v52 consolidated cross-model audit remains a separate future track (v58.0 was its document-only first delivery; the v50/v51 FINDINGS backfill stays carried-forward).
+Last activity: 2026-06-04 — v58.0 milestone-complete: ROADMAP/REQUIREMENTS snapshotted to `milestones/v58.0-*`, REQUIREMENTS.md removed from `.planning/`, phase dirs 363-369 archived, PROJECT/STATE flipped to shipped+archived.
 
-## ⏳ v57.0 FOLLOW-UP (USER-requested 2026-06-04 — do at the END of phase 359, after the UDVT commit)
+## ✅ v57.0 FOLLOW-UP — RESOLVED at v58.0 Phase 368 FORENSIC (root-caused to `24f0898b`, phase-160 2026-04-01; lived ~63d pre-launch; fixed `980865e8`; regression-test rec delivered → `368-FORENSIC.md`)
 
-**BURNIE ticket-buy regression forensic:** figure out WHEN/WHERE in git history BURNIE ticket buying (`purchaseCoin` → `_purchaseCoinFor`) stopped actually queuing tickets (the BURNIE-01 coin-burned-zero-tickets sink, fixed in `980865e8`), and HOW the functionality change went unnoticed (no test asserted post-buy ticket-queue growth on the coin path). Likely root: `_purchaseCoinFor` discarding `_callTicketPurchase`'s returns since a coin-path/return-shape refactor (candidate eras: the v47 BURNIE-lootbox-removal rework, or the ~160 change the 359-02 plan references). Deliverable: a short root-cause note (commit SHA that introduced it + why no test caught it + a regression-test recommendation for 361 TST).
+**BURNIE ticket-buy regression forensic (✅ DONE — Phase 368):** figure out WHEN/WHERE in git history BURNIE ticket buying (`purchaseCoin` → `_purchaseCoinFor`) stopped actually queuing tickets (the BURNIE-01 coin-burned-zero-tickets sink, fixed in `980865e8`), and HOW the functionality change went unnoticed (no test asserted post-buy ticket-queue growth on the coin path). Likely root: `_purchaseCoinFor` discarding `_callTicketPurchase`'s returns since a coin-path/return-shape refactor (candidate eras: the v47 BURNIE-lootbox-removal rework, or the ~160 change the 359-02 plan references). Deliverable: a short root-cause note (commit SHA that introduced it + why no test caught it + a regression-test recommendation for 361 TST).
 
 ## 🛠 v56 CARRIED FINDING + USER HARDENING — the 357-00 contract gate (3 changes, autonomous:false)
 
