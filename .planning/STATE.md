@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v57.0
 milestone_name: Small-Feature Bundle + Day-Type UDVT Refactor
-status: executing
-last_updated: "2026-06-04T11:20:56.476Z"
+status: verifying
+last_updated: "2026-06-04T11:30:34.731Z"
 last_activity: 2026-06-04
 progress:
   total_phases: 10
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 0
+  completed_plans: 3
+  percent: 10
 ---
 
 # Project State
@@ -34,7 +34,7 @@ See: .planning/PROJECT.md (Current Milestone: v57.0 section) + .planning/REQUIRE
 
 Phase: 358 (spec-design-lock-freeze-solvency-re-attestation-call-graph-a) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-04
 
 ## 🛠 v56 CARRIED FINDING + USER HARDENING — the 357-00 contract gate (3 changes, autonomous:false)
@@ -684,6 +684,8 @@ Audit deliverables:
 | Phase 356 P01 | 11 min | 2 tasks | 7 files |
 | Phase 358 P01 | 1 session | 2 tasks | 1 files |
 | Phase 358 P02 | 7m | 2 tasks | 1 files |
+| Phase 358 P03 | ~1 session | - tasks | - files |
+| Phase 358 P03 | ~1 session | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -870,3 +872,4 @@ Audit deliverables:
 - [Phase 358]: BURNIE-03 locked (highest severity): _purchaseCoinFor:887-907 discards _callTicketPurchase returns -> burns coin (payInCoin :1545-1555) but queues 0 tickets; root cause phase-160 24f0898b; fix=queue-on-return + MINT_BURNIE burn-rebate (full-cost upfront, deferred net burn, producer-before-consumer co-design w/ BATCH-01 :947-949); posture-widening FLAGGED (restores ticket claims)
 - [Phase 358]: SALVAGE-02 locked: cash-leg split ETH+BURNIE, BURNIE leg from sDGNRS-OWNED BURNIE (balanceOf+claimable coinflip stake) TRANSFERRED not creditFlip-minted, actualBurnie=min(target,available)+ETH fallback; pawn-shop safety=total-payout-cap+eth-%-cap (NOT value-neutral); solvency-positive; no-arb re-proof=EXTEND test_SWAP08 @TST361
 - [Phase 358]: CANCEL-02 locked: manual-cancel auto-claims self (pendingBurnie->creditFlip CEI mirror claimAfkingBurnie:1560) + tree A/U1/U2 75/20/5 (drainAffiliateBase:1605, Affiliate.claim:629, A=referrer-upline) BEFORE clear; auto-evict=pure FORFEIT explicit delete _subOf; fixes latent loss race (reclaim :1148 wipes accruals; ':348-351 claim whenever' comment FALSE)
+- [Phase ?]: 358-03: v57.0 design-lock SPEC LOCKED — RNG-freeze (UDVT abi.encodePacked uint32-cast byte-image LOAD-BEARING) + SOLVENCY (claimablePool<=balance every path; BURNIE posture-widening + SALVAGE solvency-positive flagged) re-attested on paper; UDVT D-19/D-20 per-site byte-preservation discipline locked; full call-graph grep-attestation of every CONTEXT anchor vs 1e7a646d (8 blocks; 3 noted drifts reconciled — HYG-02 :809 comment / GameOverModule :106 preRefundAvailable guard / auto-evict :1175/:1240 out-of-set explicit-delete); SPEC flipped DRAFT->LOCKED; all 8 ROADMAP Phase-358 Success Criteria SATISFIED
