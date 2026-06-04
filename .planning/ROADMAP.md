@@ -133,7 +133,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 370. SPEC — Design-Lock (F-03 fix-variant + edit order) + Anchor Re-Attestation vs `2b26ec91` + COV-01 Second-Model Solvency Re-Run | v59.0 | 2/2 | Complete   | 2026-06-04 |
+| 370. SPEC — Design-Lock (F-03 fix-variant + edit order) + Anchor Re-Attestation vs `2b26ec91` + COV-01 Second-Model Solvency Re-Run | v59.0 | 2/2 | Complete    | 2026-06-04 |
 | 371. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (5 council-findings fixes + pass-stat Changes A/B/C) | v59.0 | 0/TBD | Not started | - |
 | 372. GAS — Gas-Neutrality Gate (Change A/C lazy-pass path + F-04 decimator path) | v59.0 | 0/TBD | Not started | - |
 | 373. TST — One Proving Regression Test per Fix (TST-01..07) + RNG-Freeze Intact + SOLVENCY-01 Re-Attested | v59.0 | 0/TBD | Not started | - |

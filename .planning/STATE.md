@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v59.0
 milestone_name: Council-Findings Remediation + Pass-Stat Front-Load Bundle
-status: verifying
-last_updated: "2026-06-04T22:33:44.027Z"
+status: ready_to_plan
+last_updated: 2026-06-04T22:49:43.340Z
 last_activity: 2026-06-04 -- Phase 370 Plan 02 complete (COV-01 second-model area-solvency re-run vs 2b26ec91: F-03/F-04 corroborated by Gemini, K=0, coverage gap CLOSED)
 progress:
   total_phases: 12
@@ -11,6 +11,7 @@ progress:
   total_plans: 2
   completed_plans: 2
   percent: 8
+stopped_at: Phase 370 complete (2/2) — ready to discuss Phase 371
 ---
 
 # Project State
@@ -20,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v59.0 section) + .planning/REQUIREMENTS.md (the 21 v59.0 reqs / 12 categories) + .planning/ROADMAP.md (v59.0 🚧 ACTIVE — phases 370-374) + .planning/MILESTONES.md (v58.0 entry, top). v58.0 audit deliverables (gitignored-local, on disk): audit/FINDINGS-v58.0.md (chmod 444 — the 7 confirmed council findings + fix sketches, the v59.0 design-lock input) + audit/site/. Pass-stat design-lock input: .planning/PLAN-PASS-STAT-FRONTLOAD.md. v58.0/v57.0 archived: .planning/milestones/v58.0-ROADMAP.md + v57.0-ROADMAP.md (+ their REQUIREMENTS, force-tracked). Baseline = the v58.0-audited frozen contract subject `2b26ec91`. **NEXT = /gsd-plan-phase 370 (SPEC).**
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 370 — spec-design-lock-anchor-re-attestation-vs-2b26ec91-cov-01-se
+**Current focus:** Phase 371 — impl — the one carefully sequenced batched contract diff (5 council findings fixes + pass stat changes a/b/c)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,11 +33,11 @@ See: .planning/PROJECT.md (Current Milestone: v59.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 370 (spec-design-lock-anchor-re-attestation-vs-2b26ec91-cov-01-se) — BOTH PLANS COMPLETE (ready for verification)
-Plan: 2 of 2 ✅ (Plan 01 ✅ design-lock SPEC done `8025f06e`+`d3a6d0b6`; Plan 02 ✅ COV-01 second-model area-solvency re-run done `4f5c2658`+`ea217437`)
-Status: Phase 370 complete — ready for verification. COV-01 area-solvency coverage gap CLOSED: a second independent model (Gemini, NOT the v58 Codex leg) read frozen `2b26ec91` via a materialized solvency pack (defeating the v58 Gemini Plan-Mode refusal) and independently corroborated F-03 (BAF whale-pass remainder) + F-04 (decimator whale-pass remainder); claim 3 (yield over-distribution) = confirmed downstream of F-04; salvage-relabel/redemption attestation upheld. **Net-new solvency findings K=0** → no new IMPL absorption; the 370-01 SOLV-01 variant (a) + SOLV-02 edit order stands unchanged. Record: `370-02-COV01-ADJUDICATION.md`; raw run: `.planning/audit-v52/runs/v59/xmodel/results/`. TERMINAL carry-forward note ready for 374.
+Phase: 371
+Plan: Not started
+Status: Ready to plan
 Next up: 371 IMPL (the ONE contract-boundary HARD STOP, authors against 370-01-SPEC.md AS-FOUND anchors + variant (a) + edit-order; F-03/F-04 now backed by an independent second-model read) → 372 GAS → 373 TST → 374 TERMINAL (FULL in-milestone close)
-Last activity: 2026-06-04 -- Phase 370 Plan 02 complete (COV-01 second-model area-solvency re-run: F-03/F-04 corroborated, K=0, coverage gap CLOSED)
+Last activity: 2026-06-04
 
 ## ✅ v57.0 FOLLOW-UP — RESOLVED at v58.0 Phase 368 FORENSIC (root-caused to `24f0898b`, phase-160 2026-04-01; lived ~63d pre-launch; fixed `980865e8`; regression-test rec delivered → `368-FORENSIC.md`)
 
