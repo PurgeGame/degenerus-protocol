@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v57.0
 milestone_name: Small-Feature Bundle + Day-Type UDVT Refactor
 status: executing
-last_updated: "2026-06-04T11:09:00.985Z"
-last_activity: 2026-06-04 -- Phase 358 plan 01 complete (TDEC-02 mechanics + TDEC-03 freeze-safety proof locked)
+last_updated: "2026-06-04T11:20:56.476Z"
+last_activity: 2026-06-04
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 2
+  percent: 0
 ---
 
 # Project State
@@ -33,9 +33,9 @@ See: .planning/PROJECT.md (Current Milestone: v57.0 section) + .planning/REQUIRE
 ## Current Position
 
 Phase: 358 (spec-design-lock-freeze-solvency-re-attestation-call-graph-a) — EXECUTING
-Plan: 2 of 3
-Status: Executing Phase 358 — plan 01 ✅ complete (TDEC-02 + TDEC-03 design-locked in 358-SPEC.md); next = 358-02 (WWXRP/BURNIE/SALVAGE/CANCEL)
-Last activity: 2026-06-04 -- Phase 358 plan 01 complete (TDEC-02 mechanics + TDEC-03 freeze-safety proof)
+Plan: 3 of 3
+Status: Ready to execute
+Last activity: 2026-06-04
 
 ## 🛠 v56 CARRIED FINDING + USER HARDENING — the 357-00 contract gate (3 changes, autonomous:false)
 
@@ -683,6 +683,7 @@ Audit deliverables:
 | Phase 356 P01 | 11 min | 2 tasks | 7 files |
 | Phase 356 P01 | 11 min | 2 tasks | 7 files |
 | Phase 358 P01 | 1 session | 2 tasks | 1 files |
+| Phase 358 P02 | 7m | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -865,3 +866,7 @@ Audit deliverables:
 - [Phase 356]: 356-01: migrated the 7 read-only keeper/afking fuzz files to the v56 uint24/OFF_LASTBOUGHT=11 Sub re-pack (the 08e59a4a transform — early offsets validThroughLevel u24@1 / amount u24@8 / scorePlus1@6 re-derived too, day-marker reads narrowed to width 24, write-masks 0xFFFFFFFF→0xFFFFFF). Fixture-sanity gate PASSED (V56AfkingGasMarginal 5/5). KeeperFaucetResistance's 3 `6555125 != 3774873600` garbage-read reds flipped GREEN (NARROWING); 4 v56-behavior reds (0.01-ETH subscribe fee + dropped withdraw two-step + E()/Panic-0x11 revert-selector expectation) unmasked → recorded PRE-EXISTING for the 356-07 baseline union. ZERO contracts/*.sol mutation; ContractAddresses.sol restored each round-trip.
 - [Phase ?]: 358-01: TDEC-03 gate = require(!_livenessTriggered()) ALONE; !gameOver was the wrong gate (flips after the resolution word is read/consumed)
 - [Phase ?]: 358-01: future-day-word lemma discharged — gameOverDay word is born the exact day the boost becomes inadmissible (day-constant liveness ⇒ disjoint windows); dual write :1879/:1831 + the :106 preRefundAvailable guard reconciled
+- [Phase 358]: WWXRP-02 locked: GLOBAL-per-bracket whale-halfpass (mapping wwxrpJackpotWhalePassBracketAwarded keyed level/10, NOT 0->5 cap); recipient=bettor player via _resolvePlayer; hook after :713-715 s>=7 ETH block, gate s==9&&CURRENCY_WWXRP&&>=MIN_BET_WWXRP&&!awarded[level/10], grant whalePassClaims[player]+=1 (RNG-insensitive, pre-liveness :413, SOLVENCY-neutral)
+- [Phase 358]: BURNIE-03 locked (highest severity): _purchaseCoinFor:887-907 discards _callTicketPurchase returns -> burns coin (payInCoin :1545-1555) but queues 0 tickets; root cause phase-160 24f0898b; fix=queue-on-return + MINT_BURNIE burn-rebate (full-cost upfront, deferred net burn, producer-before-consumer co-design w/ BATCH-01 :947-949); posture-widening FLAGGED (restores ticket claims)
+- [Phase 358]: SALVAGE-02 locked: cash-leg split ETH+BURNIE, BURNIE leg from sDGNRS-OWNED BURNIE (balanceOf+claimable coinflip stake) TRANSFERRED not creditFlip-minted, actualBurnie=min(target,available)+ETH fallback; pawn-shop safety=total-payout-cap+eth-%-cap (NOT value-neutral); solvency-positive; no-arb re-proof=EXTEND test_SWAP08 @TST361
+- [Phase 358]: CANCEL-02 locked: manual-cancel auto-claims self (pendingBurnie->creditFlip CEI mirror claimAfkingBurnie:1560) + tree A/U1/U2 75/20/5 (drainAffiliateBase:1605, Affiliate.claim:629, A=referrer-upline) BEFORE clear; auto-evict=pure FORFEIT explicit delete _subOf; fixes latent loss race (reclaim :1148 wipes accruals; ':348-351 claim whenever' comment FALSE)
