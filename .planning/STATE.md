@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v59.0
 milestone_name: Council-Findings Remediation + Pass-Stat Front-Load Bundle
-status: executing
-last_updated: "2026-06-04T22:08:04.006Z"
-last_activity: 2026-06-04 -- Phase 370 Plan 01 complete (v59.0 design-lock SPEC: anchors re-attested vs 2b26ec91, F-03 variant (a) locked, edit-order mapped, WINDOW-01 verified)
+status: verifying
+last_updated: "2026-06-04T22:33:44.027Z"
+last_activity: 2026-06-04 -- Phase 370 Plan 02 complete (COV-01 second-model area-solvency re-run vs 2b26ec91: F-03/F-04 corroborated by Gemini, K=0, coverage gap CLOSED)
 progress:
   total_phases: 12
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 8
 ---
 
 # Project State
@@ -32,11 +32,11 @@ See: .planning/PROJECT.md (Current Milestone: v59.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 370 (spec-design-lock-anchor-re-attestation-vs-2b26ec91-cov-01-se) — EXECUTING
-Plan: 2 of 2 (Plan 01 ✅ design-lock SPEC done `8025f06e`+`d3a6d0b6`; Plan 02 = COV-01 second-model area-solvency re-run, runs in parallel)
-Status: Plan 01 complete — Plan 02 (COV-01) pending
-Next up: 370 Plan 02 (COV-01) → 371 IMPL (the ONE contract-boundary HARD STOP, authors against 370-01-SPEC.md AS-FOUND anchors + variant (a) + edit-order) → 372 GAS → 373 TST → 374 TERMINAL (FULL in-milestone close)
-Last activity: 2026-06-04 -- Phase 370 Plan 01 design-lock SPEC complete
+Phase: 370 (spec-design-lock-anchor-re-attestation-vs-2b26ec91-cov-01-se) — BOTH PLANS COMPLETE (ready for verification)
+Plan: 2 of 2 ✅ (Plan 01 ✅ design-lock SPEC done `8025f06e`+`d3a6d0b6`; Plan 02 ✅ COV-01 second-model area-solvency re-run done `4f5c2658`+`ea217437`)
+Status: Phase 370 complete — ready for verification. COV-01 area-solvency coverage gap CLOSED: a second independent model (Gemini, NOT the v58 Codex leg) read frozen `2b26ec91` via a materialized solvency pack (defeating the v58 Gemini Plan-Mode refusal) and independently corroborated F-03 (BAF whale-pass remainder) + F-04 (decimator whale-pass remainder); claim 3 (yield over-distribution) = confirmed downstream of F-04; salvage-relabel/redemption attestation upheld. **Net-new solvency findings K=0** → no new IMPL absorption; the 370-01 SOLV-01 variant (a) + SOLV-02 edit order stands unchanged. Record: `370-02-COV01-ADJUDICATION.md`; raw run: `.planning/audit-v52/runs/v59/xmodel/results/`. TERMINAL carry-forward note ready for 374.
+Next up: 371 IMPL (the ONE contract-boundary HARD STOP, authors against 370-01-SPEC.md AS-FOUND anchors + variant (a) + edit-order; F-03/F-04 now backed by an independent second-model read) → 372 GAS → 373 TST → 374 TERMINAL (FULL in-milestone close)
+Last activity: 2026-06-04 -- Phase 370 Plan 02 complete (COV-01 second-model area-solvency re-run: F-03/F-04 corroborated, K=0, coverage gap CLOSED)
 
 ## ✅ v57.0 FOLLOW-UP — RESOLVED at v58.0 Phase 368 FORENSIC (root-caused to `24f0898b`, phase-160 2026-04-01; lived ~63d pre-launch; fixed `980865e8`; regression-test rec delivered → `368-FORENSIC.md`)
 
@@ -901,3 +901,4 @@ Audit deliverables:
 - [Phase 358]: SALVAGE-02 locked: cash-leg split ETH+BURNIE, BURNIE leg from sDGNRS-OWNED BURNIE (balanceOf+claimable coinflip stake) TRANSFERRED not creditFlip-minted, actualBurnie=min(target,available)+ETH fallback; pawn-shop safety=total-payout-cap+eth-%-cap (NOT value-neutral); solvency-positive; no-arb re-proof=EXTEND test_SWAP08 @TST361
 - [Phase 358]: CANCEL-02 locked: manual-cancel auto-claims self (pendingBurnie->creditFlip CEI mirror claimAfkingBurnie:1560) + tree A/U1/U2 75/20/5 (drainAffiliateBase:1605, Affiliate.claim:629, A=referrer-upline) BEFORE clear; auto-evict=pure FORFEIT explicit delete _subOf; fixes latent loss race (reclaim :1148 wipes accruals; ':348-351 claim whenever' comment FALSE)
 - [Phase ?]: 358-03: v57.0 design-lock SPEC LOCKED — RNG-freeze (UDVT abi.encodePacked uint32-cast byte-image LOAD-BEARING) + SOLVENCY (claimablePool<=balance every path; BURNIE posture-widening + SALVAGE solvency-positive flagged) re-attested on paper; UDVT D-19/D-20 per-site byte-preservation discipline locked; full call-graph grep-attestation of every CONTEXT anchor vs 1e7a646d (8 blocks; 3 noted drifts reconciled — HYG-02 :809 comment / GameOverModule :106 preRefundAvailable guard / auto-evict :1175/:1240 out-of-set explicit-delete); SPEC flipped DRAFT->LOCKED; all 8 ROADMAP Phase-358 Success Criteria SATISFIED
+- [Phase ?]: 370-02 COV-01: second-model Gemini read frozen 2b26ec91 via materialized pack; corroborated F-03+F-04; net-new K=0; coverage gap CLOSED
