@@ -60,7 +60,7 @@
   4. The COV-01 second-model `area-solvency` XMODEL re-run is adjudicated EARLY (COV-01) — the `area-solvency` leg is re-run with a second independent model against the frozen `2b26ec91` (via the `.planning/audit-v52/` harness, after a council smoke-test), Claude owns the verdict against frozen source (parallel verification), any CONFIRMED new solvency claim is routed to fold into the SAME IMPL batched diff, refuted claims are logged, and the disposition is recorded for the TERMINAL `audit/FINDINGS-v59.0.md` — closing the v58.0 coverage gap (the original Gemini solvency leg refused via Plan-Mode) BEFORE the milestone relies on the F-03/F-04 corrections. (The rng-freeze Gemini gap is deliberately NOT re-run — Claude 364/365 RNGSAFE/RNGVAR + the refuted Codex C1 already deep-cover the freeze.)
 
 **Plans**: 2 plans (2 waves collapse to 1 — both autonomous, no file overlap, run in parallel)
-- [ ] 370-01-PLAN.md — Design-lock SPEC: re-attest every anchor vs frozen `2b26ec91`, lock the F-03/SOLV-01 fix variant + the producer-before-consumer edit order, complete the WINDOW-01 pre-edit verification (SPEC-01)
+- [x] 370-01-PLAN.md — Design-lock SPEC: re-attest every anchor vs frozen `2b26ec91`, lock the F-03/SOLV-01 fix variant + the producer-before-consumer edit order, complete the WINDOW-01 pre-edit verification (SPEC-01)
 - [ ] 370-02-PLAN.md — COV-01 second-model `area-solvency` XMODEL re-run vs `2b26ec91` + per-claim adjudication against frozen source, routing any confirmed finding into the Phase-371 IMPL diff (COV-01)
 **UI hint**: no
 
@@ -133,7 +133,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 370. SPEC — Design-Lock (F-03 fix-variant + edit order) + Anchor Re-Attestation vs `2b26ec91` + COV-01 Second-Model Solvency Re-Run | v59.0 | 0/TBD | Not started | - |
+| 370. SPEC — Design-Lock (F-03 fix-variant + edit order) + Anchor Re-Attestation vs `2b26ec91` + COV-01 Second-Model Solvency Re-Run | v59.0 | 1/2 | In Progress|  |
 | 371. IMPL — The ONE Carefully-Sequenced Batched Contract Diff (5 council-findings fixes + pass-stat Changes A/B/C) | v59.0 | 0/TBD | Not started | - |
 | 372. GAS — Gas-Neutrality Gate (Change A/C lazy-pass path + F-04 decimator path) | v59.0 | 0/TBD | Not started | - |
 | 373. TST — One Proving Regression Test per Fix (TST-01..07) + RNG-Freeze Intact + SOLVENCY-01 Re-Attested | v59.0 | 0/TBD | Not started | - |

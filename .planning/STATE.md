@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v59.0
 milestone_name: Council-Findings Remediation + Pass-Stat Front-Load Bundle
 status: executing
-last_updated: "2026-06-04T21:56:13.483Z"
-last_activity: 2026-06-04 -- Phase 370 planning complete
+last_updated: "2026-06-04T22:08:04.006Z"
+last_activity: 2026-06-04 -- Phase 370 Plan 01 complete (v59.0 design-lock SPEC: anchors re-attested vs 2b26ec91, F-03 variant (a) locked, edit-order mapped, WINDOW-01 verified)
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v59.0 section) + .planning/REQUIREMENTS.md (the 21 v59.0 reqs / 12 categories) + .planning/ROADMAP.md (v59.0 🚧 ACTIVE — phases 370-374) + .planning/MILESTONES.md (v58.0 entry, top). v58.0 audit deliverables (gitignored-local, on disk): audit/FINDINGS-v58.0.md (chmod 444 — the 7 confirmed council findings + fix sketches, the v59.0 design-lock input) + audit/site/. Pass-stat design-lock input: .planning/PLAN-PASS-STAT-FRONTLOAD.md. v58.0/v57.0 archived: .planning/milestones/v58.0-ROADMAP.md + v57.0-ROADMAP.md (+ their REQUIREMENTS, force-tracked). Baseline = the v58.0-audited frozen contract subject `2b26ec91`. **NEXT = /gsd-plan-phase 370 (SPEC).**
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v59.0 ROADMAP CREATED — phases 370-374 (SPEC → IMPL → GAS → TST → TERMINAL); the council-findings remediation (F-01 CRIT salvage uint32-trunc · F-02 HIGH afking affiliateBase unit slip · F-03/F-04 MED whale-pass remainder solvency corrections · F-05 LOW pendingBurnie presale 2×) + the pass-stat seed (Change A inclusive window · Change B mint-streak front-load · Change C century purchase-phase gate) + the COV-01 second-model solvency re-run — ONE batched contract diff at IMPL (371). NEXT = /gsd-plan-phase 370 (SPEC).
+**Current focus:** Phase 370 — spec-design-lock-anchor-re-attestation-vs-2b26ec91-cov-01-se
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,11 +32,11 @@ See: .planning/PROJECT.md (Current Milestone: v59.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 370 — SPEC (Design-Lock + Anchor Re-Attestation vs `2b26ec91` + COV-01 Second-Model Solvency Re-Run) — Not started
-Plan: — (run /gsd-plan-phase 370)
-Status: Ready to execute
-Next up: 370 SPEC → 371 IMPL (the ONE contract-boundary HARD STOP) → 372 GAS → 373 TST → 374 TERMINAL (FULL in-milestone close)
-Last activity: 2026-06-04 -- Phase 370 planning complete
+Phase: 370 (spec-design-lock-anchor-re-attestation-vs-2b26ec91-cov-01-se) — EXECUTING
+Plan: 2 of 2 (Plan 01 ✅ design-lock SPEC done `8025f06e`+`d3a6d0b6`; Plan 02 = COV-01 second-model area-solvency re-run, runs in parallel)
+Status: Plan 01 complete — Plan 02 (COV-01) pending
+Next up: 370 Plan 02 (COV-01) → 371 IMPL (the ONE contract-boundary HARD STOP, authors against 370-01-SPEC.md AS-FOUND anchors + variant (a) + edit-order) → 372 GAS → 373 TST → 374 TERMINAL (FULL in-milestone close)
+Last activity: 2026-06-04 -- Phase 370 Plan 01 design-lock SPEC complete
 
 ## ✅ v57.0 FOLLOW-UP — RESOLVED at v58.0 Phase 368 FORENSIC (root-caused to `24f0898b`, phase-160 2026-04-01; lived ~63d pre-launch; fixed `980865e8`; regression-test rec delivered → `368-FORENSIC.md`)
 
@@ -707,8 +707,13 @@ Audit deliverables:
 | Phase 358 P03 | ~1 session | 2 tasks | 1 files |
 | Phase 359 P01 | 7 | 3 tasks | 1 files |
 | Phase 359 P02 | ~25 min | 3 tasks | 4 files |
+| Phase 370 P01 | 1 session | 2 tasks | 1 file (370-01-SPEC.md, 329 lines — anchor re-attestation + F-03 variant lock + edit-order map + WINDOW-01 verification) + 1 SUMMARY; ZERO contracts |
 
 ## Decisions
+
+- [Phase 370]: Plan 01 — v59.0 F-03/SOLV-01 LOCKED to **variant (a)**: return the BAF whale-pass `remainder` from `_queueWhalePassClaimCore` (`PayoutUtils:45`, change to `returns (uint256)`, drop the inline `claimablePool += uint128(remainder)` at `:58`) and fold it into the BAF caller's `claimableDelta` (`JackpotModule:1949`, + reconcile the second caller `:2001`) so the existing single `memFuture -= claimed` (`AdvanceModule:902`) / `claimablePool += claimableDelta` (`:972`) accounting debits `futurePrizePool` for it — mirrors `_addClaimableEth` (`:730-740`, credits via `_creditClaimable` and returns the wei for the caller to fold, no inline pool bump). **Variant (b) push-remainder-back-to-`futurePrizePool` REJECTED** on a decisive structural fact: in the BAF path `futurePrizePool` is a stale cached local `memFuture` (read once `AdvanceModule:801`, single writeback `_setPrizePools` `:968`), so a mid-loop `_setFuturePrizePool` push-back inside `runBafJackpot` is silently CLOBBERED; `_processSoloBucketWinner` (`:1382`) can use the push-back shape only because it runs OUTSIDE that cached-`memFuture` window. SOLV-02 (F-04) = confirm-only single add `claimablePool += uint128(remainder);` at `DecimatorModule:596` (no variant). SALV-01 = custom-error widening `if (n == 0 || n > type(uint32).max) revert E();` at `MintStreakUtils:174` (repo uses `revert E()` not `require`).
+- [Phase 370]: Plan 01 — v59.0 anchor re-attestation vs frozen `2b26ec91`: **24 anchors grep-verified across 7 groups** (SALV/AFAFF/SOLV/PRESALE + Change A/B/C), drifts ±1–2 lines corrected to AS-FOUND (the council read approximate context-pack cites). Two structural corrections: the F-03/F-04 `claimWinnings :1588` cite resolves to **`DegenerusGame.sol:1588`** (not a module); the decimator `:392-399`/`:596` decl cites drift to the AS-FOUND `_creditDecJackpotClaimCore:385` / `_awardDecimatorLootbox:580`. STREAK-01 shift-160 promotion confirmed a **clean no-conflict add** — the `BitPackingLib.sol` bit-layout doc ALREADY reserves `[160-183] MINT_STREAK_LAST_COMPLETED` with `[154-159] unused`, bracketed by `WHALE_BUNDLE_TYPE_SHIFT=152`/`HAS_DEITY_PASS_SHIFT=184`; the local at `MintStreakUtils:19` + 4 refs (`:22/:72/:94/:105`) repoint to the library (preserve the `MINT_STREAK_FIELDS_MASK` dual-field clear). Edit-order = producer-before-consumer: STREAK-01 before STREAK-02; SOLV-01 return-value before the BAF caller fold; the other 6 reqs order-free.
+- [Phase 370]: Plan 01 — v59.0 WINDOW-01 pre-edit verified via exhaustive `frozenUntilLevel` grep: **exactly 6 FLIP comparisons** (`MintModule:291/295`, `MintStreakUtils:56/262/310`, `DegenerusGame:1678` + the `:1662-1668` docstring rewrite) — matching the Change-A table, no missed reader. The **3 EXTENSION sites** (`> targetFrozenLevel` renewal-horizon max at `WhaleModule:221`, `Storage:1070`, `Storage:1151`) and the **1 EARLY-RENEWAL guard** (`WhaleModule:428` `> currentLevel + 7`) are different semantics, UNTOUCHED. Afking eviction re-confirmed inclusive-through-`validThroughLevel` (`processSubscriberStage` evicts only at `currentLevel > sub.validThroughLevel`, `:1191`); the flip makes freeze/floor/bonus/view cover 1–10 inclusively to **MATCH** it (not diverge), fixing the latent level-10 `levelCount` over-count. Paper-only: `git diff 2b26ec91 HEAD -- contracts/` empty.
 
 - [Phase 359]: Plan 02 — BURNIE-01/02 + SALVAGE-01 authored (uncommitted, held for plan-04 gate). BURNIE-02 affordability gate uses the FULL coinCost via `coin.balanceOfWithClaimable(buyer)` (added to IDegenerusCoin) — the deferred net burn (`coinCost − reward` floored 0) can only reduce the burn, never enable an unaffordable buy. The burn was moved out of `_callTicketPurchase`'s payInCoin branch (only reachable from `_purchaseCoinFor`) and re-issued in `_purchaseCoinFor` after `handlePurchase`. SALVAGE pays the BURNIE leg via `coin.transferFrom(SDGNRS, player, burnieTokens)` — a single GAME-bypass primitive that auto-sources sDGNRS's wallet balance THEN claimable coinflip stake (via `_claimCoinflipShortfall`), so no `onlyBurnieCoin` consume is needed and value is conserved; only `ethRelabel = ticketWei + ethCashWei = totalBudget − burnieEthValue` leaves `claimableWinnings[SDGNRS]` (solvency-positive; the `>=1 ETH` floor stays gated on the full `totalBudget`, byte-unchanged). Quote kept as a sibling `_quoteFarFutureBurnieSplit` (NOT a re-typed `_quoteFarFutureSwap`) so the existing 4-tuple preview + the 45 forge fixtures are byte-untouched; the split is exposed via a NEW `previewSellFarFutureSplit` view. Plan-01's flagged "stale comment" at MintModule:1712 re-examined = NOT stale (it belongs to dead-code `_questMint`→`handleMint`, which still credits BURNIE internally; left untouched).
 
