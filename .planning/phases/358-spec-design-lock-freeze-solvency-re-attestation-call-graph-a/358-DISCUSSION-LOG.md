@@ -65,6 +65,16 @@ Reformulated into three locked sub-decisions:
 **User's choice:** confirm the matrix (3 encodePacked sites cast→uint32; packed fields = Day/uint24; standalone slots + event topics stay uint32; rngWordByDay key unchanged; operators `<,<=,==,%,+,-`; repo-wide); test updates land as separate agent-committable commits.
 **Notes:** The 3 RNG `abi.encodePacked` day sites were grep-attested present at `AdvanceModule:1405`, `:1828`, `Game:1011` before the question.
 
+## Mid-358 scope additions (post-discussion, USER-driven 2026-06-04)
+
+Two new items folded into v57.0 AFTER the four-area discussion, surfaced by the user during 358:
+
+**BURNIE — coin-buy ticket-queue Critical fix (BURNIE-01/02/03).** The user reported (from the degenerus-sim afking-scale stress test) that BURNIE ticket buys via `purchaseCoin` burn the coin but queue zero tickets. VERIFIED against the audit tree `1e7a646d` (a dedicated scout: `_purchaseCoinFor:887-907` discards `_callTicketPurchase`'s returns; phase-160 `24f0898b` orphaned the coin path). USER decisions: fold into v57.0 (not a separate hot-fix — pre-launch); restore tickets + MINT_BURNIE quest credit (skip score/affiliate); **the MINT_BURNIE reward is a BURN REBATE** (require full cost upfront, defer the burn, burn net = full − reward); fix all three doc/test drifts (positive test, 3-arg `purchaseCoin` test, RNG-locked docstring). Highest-severity item.
+
+**SALVAGE — sDGNRS salvage-swap combo ETH/BURNIE pawn-shop payout (SALVAGE-01/02/03).** The user asked to turn the v48 `sellFarFutureTickets` cash leg into a combo ETH + BURNIE-flip payout with variability. VERIFIED structure via scout. USER decisions: full-range `[0..eth-cap]` randomized ETH/BURNIE split of the cash leg (BURNIE @ current eth-equivalent via `_ethToBurnieValue`→`creditFlip`); ticket leg unchanged; reuse the existing prior-day seed (no new VRF). Key framing correction (USER): it's a **pawn shop** — VARIABLE, KNOWABLE-IN-ADVANCE offers, NOT value-neutral; the SOLE safety property is the **total payout cap (no-arb ceiling) + eth-% cap** → no exploitability even though predictable; suboptimal players forfeit EV to the protocol/pools (intended). Solvency-positive (less ETH out, BURNIE off the pool).
+
+(The degenerus-sim "afking scale test" transition prompt that arrived alongside the BURNIE report was a wrong copy-paste — confirmed by the user, NOT acted on.)
+
 ## Claude's Discretion
 
 - Exact `daysRemaining` "last day" threshold, the precise `boostFactor` curve constants, and the final operator-overload set + per-site UDVT count — calibrated/grepped at SPEC/IMPL within the locked shapes.
