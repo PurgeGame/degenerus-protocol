@@ -406,3 +406,15 @@ The FIFTH v56.0 contract gate `c9b5d20d` (USER-committed directly) is a **contai
 - Disposition: **NEGATIVE-VERIFIED**.
 
 **§F outcome:** the FIFTH gate is a clean behavior-preserving simplification + an intended presale-20%→10% lootbox reduction. **4 probes NEGATIVE-VERIFIED, 0 FINDING_CANDIDATE.** SOLVENCY-01 untouched. The clean-closure verdict is UNCHANGED — the FIFTH gate adds ZERO findings (recorded as a clean refactor, NOT a finding); the v56.0 audit still closes with THREE resolved-in-phase items + 0 UNRESOLVED FINDING_CANDIDATE.
+
+---
+
+## §6th-GATE ADVERSARIAL ENTRY — `1e7a646d` (freeze + solvency, 2 focused adversarial subagents, PARALLEL)
+
+**Subject:** `1e7a646d` (the 6th gate — afking cover-buy box-clean + gas tune + lootboxDay removal + event unify + presale credit). Two focused adversarial reviewers (Claude opus, read-only, genuine PARALLEL) each tasked to BREAK one spine, given the diff + a preliminary verdict to verify/refute.
+
+**FREEZE reviewer — all 4 surfaces HOLD.** (1) No seed grind: `lootboxRngWordByIndex[index]` writes ONLY to `LR_INDEX−1` and the index advances ONLY at RNG request → the active index's word is provably 0 at deposit; subscribe-timing is irrelevant (the cover-buy keys off the index word, not the public `rngWordByDay`). (2) Open-level roll is a STRUCTURAL non-steer (not merely mitigated): `level` mutates only at `_finalizeRngRequest:1697` coincident with `rngLockedFlag=true:1688`, opens are lock-blocked → every openable window is one constant level for holder and keeper. (3) Day-coherence-gate removal bounded to genesis/stall, EV-cap conserved. (4) Genesis box resolves off index-1's word (old brick fixed). One defense-in-depth note (the `lootboxRngWordByIndex[index]!=0` guard the presale path has — provably unreachable, optional). **0 FINDING_CANDIDATE.**
+
+**SOLVENCY reviewer — all 4 surfaces HOLD.** (1) SOLVENCY-01 preserved: single in-tandem `claimableUse` debit (`_resolveBuy` view; `:757`), 1-wei sentinel prevents underflow, no `uint128` truncation, all pay-modes balanced. (2) Pool route exactly once per cover-buy/chunk keyed on `cost`, sole afking→pool path, skip/evict branches route nothing. (3) Distress/frozen-pool routing correct (no wrong-pool/strand). (4) `presaleBoxCredit` is a paid+capped+presale-bounded entitlement off the solvency path, drained-`owed`-grounded (counts once) — inflated `owed` extracts nothing. **0 FINDING_CANDIDATE.**
+
+**Disposition:** 0 UNRESOLVED FINDING_CANDIDATE; 2 low/informational observations (presale-credit approximation; the optional `!=0` guard). Verdict folds into FINDINGS-v56.0.md §10.

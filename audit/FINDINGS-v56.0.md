@@ -4,17 +4,22 @@ plan: 03
 milestone: v56.0
 milestone_name: AfKing Everyday-Gas Minimization
 audit_baseline: 453f8073
-source_tree_frozen_ref: c9b5d20d756f9dfc5f3b0584aae56bdfa215d8bf
+source_tree_frozen_ref: 1e7a646d44da4ee26375edd0b006274821fef73e
 audit_subject_head: "MILESTONE_V56_AT_HEAD_<sha>"
 closure_signal: MILESTONE_V56_AT_HEAD_<sha>
 deliverable: audit/FINDINGS-v56.0.md
 new_findings: 3
-new_findings_disposition: 3 RESOLVED-AT-357 / 0 UNRESOLVED FINDING_CANDIDATE — the v56.0 audit closes with THREE resolved-in-phase items, each fixed at a 357 contract gate, none a live FINDING_CANDIDATE: (1) F-356-01 — the missing drainAffiliateBase Game dispatch stub (the v56.0 carried HIGH; DegenerusAffiliate.claim() reverted at the drain loop -> afking-affiliate rewards permanently unreachable) FIXED at HEAD' ac5f1e03 (357-00), re-verified at HEAD'' / HEAD'''' (357-00b / 357-00d); (2) the NEW-run subscribe slot-0 churn ADVISORY — the zero-day-hunter 357-02 probe-7 EV-negative wart (a subscribe->funded-buy->cancel->subscribe loop re-accrued the flat per-day QUEST_SLOT0_REWARD) HARDENED at HEAD''' 7b0b2a0b (the :451 idempotency guard); (3) the D-11 LEVEL-0 passless gap — a USER-caught boundary the 3-skill sweep MISSED (D-11 probed only at level >= 1; the level-0 0 < 0 vacuity let a funded passless EOA clear NoPass()) CLOSED at HEAD'''' 77d8bc88 (the validThroughLevel == 0 rejection arm). The 3-skill genuine-PARALLEL adversarial sweep produced 0 FINDING_CANDIDATE across 32 charged Claude probe rows (18 NEGATIVE-VERIFIED + 13 SAFE_BY_DESIGN + 1 EV-negative advisory now RESOLVED) AUGMENTED by the Codex XMODEL close (4-area NO ISSUE; Gemini attempted-partial per D-03) AND by the focused single-skill contract-auditor pass on the FIFTH/FINAL gate c9b5d20d (4 probes NEGATIVE-VERIFIED, 0 FINDING_CANDIDATE). The FIFTH gate c9b5d20d (the flat-10% pass lootbox + 3 dead-guard removals + a hasAnyLazyPass docstring fix — a contained pass-PURCHASE economic refactor) adds ZERO findings (recorded as a clean refactor, NOT a finding). The O1/QST-05 lootbox-quest double-credit is RESOLVED (single-credit at 356-05), NOT a finding. SOLVENCY-01 byte-unchanged (BURNIE-emission-timing only; the FIFTH gate is off the ETH path); RNG-freeze intact (premature-advance-INERT); KNOWN-ISSUES.md byte-unmodified vs v55.
+new_findings_disposition: 3 RESOLVED-AT-357 / 0 UNRESOLVED FINDING_CANDIDATE — the v56.0 audit closes with THREE resolved-in-phase items, each fixed at a 357 contract gate, none a live FINDING_CANDIDATE: (1) F-356-01 — the missing drainAffiliateBase Game dispatch stub (the v56.0 carried HIGH; DegenerusAffiliate.claim() reverted at the drain loop -> afking-affiliate rewards permanently unreachable) FIXED at HEAD' ac5f1e03 (357-00), re-verified at HEAD'' / HEAD'''' (357-00b / 357-00d); (2) the NEW-run subscribe slot-0 churn ADVISORY — the zero-day-hunter 357-02 probe-7 EV-negative wart (a subscribe->funded-buy->cancel->subscribe loop re-accrued the flat per-day QUEST_SLOT0_REWARD) HARDENED at HEAD''' 7b0b2a0b (the :451 idempotency guard); (3) the D-11 LEVEL-0 passless gap — a USER-caught boundary the 3-skill sweep MISSED (D-11 probed only at level >= 1; the level-0 0 < 0 vacuity let a funded passless EOA clear NoPass()) CLOSED at HEAD'''' 77d8bc88 (the validThroughLevel == 0 rejection arm). The 3-skill genuine-PARALLEL adversarial sweep produced 0 FINDING_CANDIDATE across 32 charged Claude probe rows (18 NEGATIVE-VERIFIED + 13 SAFE_BY_DESIGN + 1 EV-negative advisory now RESOLVED) AUGMENTED by the Codex XMODEL close (4-area NO ISSUE; Gemini attempted-partial per D-03) AND by the focused single-skill contract-auditor pass on the FIFTH/FINAL gate c9b5d20d (4 probes NEGATIVE-VERIFIED, 0 FINDING_CANDIDATE). The FIFTH gate c9b5d20d (the flat-10% pass lootbox + 3 dead-guard removals + a hasAnyLazyPass docstring fix — a contained pass-PURCHASE economic refactor) adds ZERO findings (recorded as a clean refactor, NOT a finding). The O1/QST-05 lootbox-quest double-credit is RESOLVED (single-credit at 356-05), NOT a finding. SOLVENCY-01 byte-unchanged (BURNIE-emission-timing only; the FIFTH gate is off the ETH path); RNG-freeze intact (premature-advance-INERT); KNOWN-ISSUES.md byte-unmodified vs v55. ⟶ **SIXTH GATE 1e7a646d** (post-c9b5d20d — the "FIFTH/FINAL" framing throughout this doc is SUPERSEDED; read 1e7a646d as the CURRENT frozen subject): the afking cover-buy box-clean + gas-tune {LOOTBOX2/TICKET4/EVICT1, BUDGET500, OPEN_BATCH80} + lootboxDay removal + LootBoxBuy event unify + afking presale-box credit — 6 files, +379/-135 — adds ZERO findings. FREEZE (cover-buy INDEXED box off lootboxRngWordByIndex / lootboxDay-removal seed keccak(rngWord,player,amount)) HOLDS adversarially-verified; SOLVENCY-01 (the new claimableUse debit leg + the _routeAfkingPoolEth pool routing) HOLDS adversarially-verified — single in-tandem debit, sole afking->pool path; this commit FIXES the prior afking pool-under-funding + claimable under-debit; GAS bounded by a THEORETICAL-MAX pass (binding all-EVICT chunk ~13.5M < 16.7M, USER-accepted — over the 10M soft target, under the 16.7M hard ceiling). NON-WIDENING: 0 new failing test names vs c9b5d20d (574/133/103), narrows 1 (testZeroResolvedRevertsNoWork). Two low/informational observations (presale-credit BURNIE->ETH approximation; an optional defense-in-depth lootboxRngWordByIndex!=0 guard). Re-frozen subject = 1e7a646d. See §10 (SIXTH GATE).
 ---
 
 # v56.0 Findings — AfKing Everyday-Gas Minimization (Terminal)
 
 ## 1. Audit Subject + Baseline
+
+> **⟶ SUPERSEDED — read with §10.** This section (and §2–§9) name `c9b5d20d` the "FIFTH / FINAL" gate. One further
+> USER-approved gate then layered on top: the SIXTH gate **`1e7a646d`** (the afking cover-buy box-clean + gas-tune +
+> lootboxDay removal + event unify + presale credit; 6 files, +379/−135), the CURRENT re-frozen subject — **0 new
+> findings, STRICT NON-WIDENING**. Wherever §1–§9 say "FINAL gate c9b5d20d", read `1e7a646d`. Full attestation in §10.
 
 **Audit Baseline.** v55.0 closure-frozen subject `453f8073` (the 349.2 IMPL fix — the last v55 `contracts/*.sol`
 mutation; closure signal MILESTONE_V55_AT_HEAD_ca3bbd3220de763298ef2e742111f6e6ef90d583). v56.0 closure HEAD is
@@ -960,3 +965,106 @@ byte-unmodified; the O1/QST-05 double-credit RESOLVED (single-credit at 356-05).
 (:629/:633-634/:654/:678-695) used throughout. Closure
 signal MILESTONE_V56_AT_HEAD_<sha> resolves at the Phase 357 closure commit (357-04); chmod 444 applied at closure
 (NOT here).*
+
+---
+
+## 10. SIXTH GATE — `1e7a646d` (afking cover-buy box-clean + gas-tune + lootboxDay removal + event unify + presale credit)
+
+> **SUPERSESSION (LOAD-BEARING).** §1–§9 above name `c9b5d20d` the "FIFTH / FINAL" gate. That was true through the
+> 357-00e reconciliation; one further USER-approved `contracts/*.sol` gate then layered on top — **`1e7a646d`**,
+> the CURRENT re-frozen subject. Where §1–§9 say "FINAL gate c9b5d20d", read "the SIXTH gate `1e7a646d`". This
+> section is authoritative for the `c9b5d20d → 1e7a646d` delta. `git diff 1e7a646d HEAD -- contracts/` is **EMPTY**
+> (this section + the gas re-bench are test/doc-only; the subject is re-frozen at `1e7a646d`).
+
+**Delta range:** `c9b5d20d → 1e7a646d`. **Magnitude:** `git diff --numstat c9b5d20d 1e7a646d -- 'contracts/*.sol'` = **6 files, +379 / −135**.
+
+| File | +ins / −del | Work item |
+| --- | --- | --- |
+| `modules/GameAfkingModule.sol` | +316 / −55 | Cover-buy (`_recordAfkingCoverBox` INDEXED box) + the new `claimableUse` debit leg + `_routeAfkingPoolEth` per-buy/per-chunk pool routing + presale-box credit (`claimAfkingBurnie`) + the gas-weight constants |
+| `modules/DegenerusGameWhaleModule.sol` | +25 / −25 | lootboxDay removal (subsequent-deposit day-gate dropped) + `LootBoxIndexAssigned` → unified `LootBoxBuy` |
+| `modules/DegenerusGameLootboxModule.sol` | +14 / −15 | `openLootBox` open-seed drops the day (`keccak(rngWord, player, amount)`); target rolls from the LIVE level; grace window removed |
+| `modules/DegenerusGameMintModule.sol` | +13 / −24 | lootboxDay removal + `LootBoxBuy`/`LootBoxIdx` unify; `_applyLootboxBoostOnPurchase` reads day on the boost path only |
+| `modules/DegenerusGameAdvanceModule.sol` | +11 / −13 | `SUB_STAGE_WEIGHT_BUDGET` 1000→500 + the gas-weight docstring |
+| `storage/DegenerusGameStorage.sol` | +0 / −3 | `lootboxDay` mapping DELETED |
+
+**Provenance.** This is the WIP fix landing (the [[afking-coverbuy-freeze-pool-fix-wip]] cluster): the cover-buy
+RNG-freeze fix, the day-1 genesis brick fix, and the **"afking boxes don't pool-route" fix**. Verified against the
+OLD subject: at `c9b5d20d` the afking buy debited ONLY `ethValue` (never `claimableWinnings`) and had **zero**
+prize-pool routing (`grep _setPrizePools|_setPendingPools|_routeAfkingPoolEth` on `c9b5d20d:GameAfkingModule.sol`
+= 0). So `1e7a646d` is a SOLVENCY FIX, not a regression.
+
+### 10.A Re-attestation — FREEZE (DOMINANT threat) · HOLDS (adversarially verified)
+
+- **Cover-buy indexed box.** The subscribe-time grounding box (`_deliverAfkingBuy(coverBuy=true)` → `_recordAfkingCoverBox`,
+  `GameAfkingModule.sol:~888`) binds to `lootboxRngWordByIndex[LR_INDEX]`. The index invariant is airtight:
+  `lootboxRngWordByIndex` is written ONLY to `LR_INDEX−1` (AdvanceModule `:1280`/`:1799`) and the index advances
+  ONLY at an RNG request — so the active index's word is **provably 0 at deposit**, unknowable at subscribe. A
+  `rngWordByDay`-keyed Sub-stamp box WOULD break freeze here (subscribe runs after the day's word is public); the
+  index word is the fix. **No seed grind.**
+- **lootboxDay-removal seed.** `openLootBox` seed `= keccak(rngWord, player, amount)` (day dropped) is freeze-NEUTRAL:
+  the per-index VRF word already anchors uniqueness; `day` was redundant. Adversarial verification found **no**
+  window where the index word is public while the (index, player, amount) can still be chosen/redone.
+- **Open-level roll = STRUCTURAL NON-STEER.** `targetLevel = _rollTargetLevel(currentLevel, seed)` now rolls off the
+  LIVE open level, but the seed (hence the roll outcome) is frozen, and `level` mutates ONLY at `_finalizeRngRequest`
+  (`:1697`) coincident with `rngLockedFlag = true` (`:1688`), while opens are lock-blocked — so every openable window
+  sits at ONE constant level, identical for the holder and the permissionless keeper. There is no timing edge to win.
+- **Removed day-coherence gate** (`storedDay != lbDay` revert) is bounded to the genesis/stall window and conserves
+  the per-(player, level) EV-cap (`add = min(amount, CAP − used)`, multiplier frozen from the first-deposit score).
+- **Genesis box FIXED:** index 1's word is always written (`lootboxRngIndex` inits to 1; the first advance requests
+  RNG, a later advance writes `LR_INDEX−1 = 1`), so a day-1 cover-buy resolves — the old `rngWordByDay[1]`-never-written
+  brick is gone.
+
+### 10.B Re-attestation — SOLVENCY-01 (SPINE) · HOLDS (adversarially verified)
+
+`claimablePool == Σ claimableWinnings[*] + Σ afkingFunding[*]` preserved exactly:
+- **Single in-tandem debit.** `_resolveBuy` is `view` (`:646`) — it only COMPUTES `claimableUse`; the SOLE
+  `claimableWinnings` debit is `GameAfkingModule.sol:757` (`claimableWinnings[player] -= claimableUse; claimablePool -= claimableUse`),
+  paired with the fresh leg (`afkingFunding[src] -= ethValue; claimablePool -= ethValue`, `:750-751`). Total
+  `claimablePool` debit = `ethValue + claimableUse = cost`. The 1-wei sentinel (`_resolveBuy:693`) prevents
+  underflow; no `uint128` truncation.
+- **Pool routing is the SOLE afking→pool path** (`afkingFunding` debited only at `:750`; no other sweep), applied
+  EXACTLY once per cover-buy (inline) and once per STAGE chunk (batched, keyed on `cost` not `amount`), matching the
+  manual splits (box 9000/1000, ticket 1000/9000, distress 100% next) and the frozen→pending routing. All five
+  skip/evict branches `continue` BEFORE delivery → route/accrue nothing (no phantom routing).
+- **Presale-box credit** (`claimAfkingBurnie:~1559`) is a presale-bounded, drained-`owed`-grounded (counts each
+  BURNIE once), **paid + capped** entitlement OFF the solvency path — the consumer (`_buyPresaleBoxFor`) requires
+  payment + reverts post-presale, so even an inflated `owed` extracts nothing.
+
+### 10.C Re-attestation — GAS (HIGH threat) · BOUNDED (theoretical-max pass)
+
+The gas tune was re-benched against committed code (`V56AfkingGasMarginal` **16/16** green) AND a **theoretical
+worst-case pass** (opcode/storage-cost accounting over every branch, not measurement — see the appended
+`PROOF-V56-16P7M-GAS-CEILING.md` "v56 FINAL" section). Result: every advanceGame-FORCED box chunk is < 16.7M —
+all-lootbox ~8.5M, all-ticket ~9.6M, **binding all-EVICT ~13.5M** (cold-measured 13,478,047 = 500 × ~26.7k;
+**USER-accepted** — over the 10M soft comfort target, under the 16.7M hard never-exceed ceiling; evict stays weight 1,
+no contract change). The afking OPEN is caller-budgeted (~6–15M, retriable at smaller `maxCount`), not advanceGame-forced.
+Per-item bounds reconcile to the large-scale bench. `_queueTicketsScaled` is O(1). The cold-based `testResidualR1`
+now proves the realistic ~13.5M binding chunk; new `testColdMarginalCalibration` (vm.cool) documents the warm-vs-cold
+artifact (~3.1×).
+
+### 10.D NON-WIDENING (whole-tree forge)
+
+Re-run at both gates: **`c9b5d20d` = 574 pass / 133 fail / 103 skip (810)** — exactly the documented baseline;
+**`1e7a646d` (+ the test-only gas re-bench) = 576 / 132 / 103 (811)** (+1 = the new `testColdMarginalCalibration`).
+NAME-keyed set diff: **`HEAD − c9b5d20d` failing names = ∅** (ZERO new reds) AND `HEAD` NARROWS by 1
+(`testZeroResolvedRevertsNoWork` now passes). **STRICT NON-WIDENING.** *(Honest note: committed `1e7a646d` ALONE
+leaves 2 open-marginal gas tests — `testPerOpenMarginal`, `testResidualR3MixedStampDayOpenBatch` — failing on a
+seed-noise fragility the slot migration introduced [distinct hi/lo prefixes roll different boons]; the gas re-bench
+fix [shared prefix → the first N−1 boxes cancel] repairs them. Test-only, no contract regression.)*
+
+### 10.E Observations (LOW / informational — NOT findings)
+
+- **O-6G-01 (presale-credit approximation).** The BURNIE→ETH basis (`(owed * 0.0025 ether)/100`, 100 BURNIE ≈ one
+  0.01-ETH buy, halved for ticket subs) is a deliberate loose proxy — the 25% presale entitlement an afking buyer
+  earns can drift slightly from the manual buyer's exact `cost/4`. Off the solvency path (paid, capped, presale-only).
+  USER-accepted.
+- **O-6G-02 (defense-in-depth).** The cover-buy + regular-mint lootbox deposit lack the `lootboxRngWordByIndex[index] != 0`
+  revert the mint-presale path has (`DegenerusGameMintModule.sol:1447`). Provably unreachable today (a deposit only
+  targets the active `LR_INDEX`, whose word is structurally 0), so optional hardening, not a vulnerability.
+
+### 10.F Verdict
+
+**0 UNRESOLVED FINDING_CANDIDATE from the `1e7a646d` delta.** Freeze + solvency adversarially verified HOLD; gas
+bounded by the theoretical-max pass (binding all-evict ~13.5M < 16.7M, accepted); whole-tree STRICT NON-WIDENING.
+The delta is the WIP fix landing (cover-buy freeze + genesis-brick + the afking pool-route + claimableUse) — it
+FIXES the prior afking pool-under-funding + claimable under-debit. **Re-frozen subject = `1e7a646d`.**

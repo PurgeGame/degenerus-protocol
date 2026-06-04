@@ -300,3 +300,17 @@ The Hardhat `GovernanceGating` GATE-01..04 block — the ONLY `MustMintToday` co
 - **Read-only:** the entire delta surface was inspected via `git show 61315ecd:…` / `git diff 453f8073 61315ecd` / `grep` — no `contracts/*.sol` was opened or mutated; this plan edits ONLY this markdown log.
 
 **SC1 delta-audit half of AUDIT-01: SATISFIED.** (The 3-skill genuine-PARALLEL adversarial sweep is 357-02; the `audit/FINDINGS-v56.0.md` deliverable that folds this log into its §3/§5 is 357-03; the closure flip + the OPEN-E blocking adjudication are 357-04.)
+
+---
+
+## §6th-GATE RECONCILIATION — `1e7a646d` (delta-surface NON-WIDENING; supersedes the c9b5d20d "5th/final" subject)
+
+**Re-frozen subject:** `1e7a646d` (delta `c9b5d20d → 1e7a646d` = **6 files, +379/−135**: GameAfkingModule +316/−55, WhaleModule +25/−25, LootboxModule +14/−15, MintModule +13/−24, AdvanceModule +11/−13, Storage −3). The afking cover-buy box-clean + gas-tune {2:4:1/500/80} + lootboxDay removal + LootBoxBuy event unify + afking presale credit — the WIP fix landing (cover-buy freeze + genesis-brick + the afking pool-route + the claimableUse debit).
+
+**Delta-surface dispositions (all NON-WIDENING):**
+- **GameAfkingModule cover-buy / claimableUse / pool-route** — NON-WIDENING **as a SOLVENCY FIX**: at `c9b5d20d` the afking buy debited ONLY `ethValue` (never `claimableWinnings`) and had ZERO pool routing (grep `_setPrizePools|_setPendingPools|_routeAfkingPoolEth` on `c9b5d20d:GameAfkingModule.sol` = 0). The new `claimableUse` leg is the sole `claimableWinnings` debit (`_resolveBuy` is `view`; debit at `:757`, `claimablePool` in tandem); `_routeAfkingPoolEth` is the sole afking→pool path (once per cover-buy inline / per STAGE chunk batched, keyed on `cost`, manual splits). SOLVENCY-01 preserved.
+- **lootboxDay removal (Lootbox/Mint/Whale/Storage)** — NON-WIDENING: open seed `keccak(rngWord, player, amount)` is freeze-neutral (the per-index VRF word anchors); the open-level roll is a structural non-steer (`level` mutates only under `rngLockedFlag`); `lootboxDay` mapping + the subsequent-deposit day-gate removed (bounded to genesis/stall, EV-cap conserved); genesis box now resolves off index-1's word.
+- **LootBoxBuy event unify** — cosmetic; same topic0 across mint/whale/afking; `LootBoxIdx`/`LootBoxIndexAssigned` removed.
+- **Gas-weight constants (AdvanceModule)** — `BUDGET 1000→500`; the {2,4,1} weight set; bounded by the theoretical-max pass (§10.C of FINDINGS).
+
+**Whole-tree NON-WIDENING:** `c9b5d20d` 574/133/103 (baseline-exact) vs `1e7a646d`+gas-rebench 576/132/103 — `HEAD − c9b5d20d` failing-name set = ∅ (STRICT), narrows 1. Full attestation in **FINDINGS-v56.0.md §10**.
