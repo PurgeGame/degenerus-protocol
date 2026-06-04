@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v57.0
 milestone_name: Small-Feature Bundle + Day-Type UDVT Refactor
 status: planning
-last_updated: "2026-06-04T09:20:00.000Z"
-last_activity: 2026-06-04 — Phase 358 SPEC context gathered (WWXRP-02 / TDEC-02 / TDEC-03 design-locked via discuss-phase; resume: 358-CONTEXT.md → /gsd-plan-phase 358)
+last_updated: "2026-06-04T10:00:00.000Z"
+last_activity: 2026-06-04 — Phase 358 PLANNED + plan-checker VERIFIED (3 plans 358-01/02/03, all autonomous, paper-only). v57.0 scope EXPANDED mid-358 to 8 items / 25 reqs / 10 categories (+BURNIE +SALVAGE +CANCEL). Resume: /clear → /gsd-execute-phase 358
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 3
   completed_plans: 0
   percent: 0
 ---
