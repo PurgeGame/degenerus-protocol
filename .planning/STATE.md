@@ -3,24 +3,24 @@ gsd_state_version: 1.0
 milestone: v57.0
 milestone_name: Small-Feature Bundle + Day-Type UDVT Refactor
 status: shipped
-last_updated: "2026-06-04T18:00:00.000Z"
-last_activity: 2026-06-04 -- v57.0 SHIPPED (internal-sweep full close); signal MILESTONE_V57_AT_HEAD_2b26ec91810a733e15666a4c23e8f365a4f04f51; 1 LOW found+resolved at 362, 0 MEDIUM+; SOLVENCY-01 held; RNG re-based by design; NOT pushed
+last_updated: "2026-06-04T19:00:00.000Z"
+last_activity: 2026-06-04 -- v57.0 SHIPPED + ARCHIVED (milestone-complete): 5 phases 358-362 + REQUIREMENTS/ROADMAP archived to milestones/, REQUIREMENTS.md removed, ROADMAP collapsed; signal MILESTONE_V57_AT_HEAD_2b26ec91810a733e15666a4c23e8f365a4f04f51; next = v58.0 (run /gsd-new-milestone)
 progress:
-  total_phases: 10
-  completed_phases: 1
+  total_phases: 5
+  completed_phases: 5
   total_plans: 7
-  completed_plans: 6
-  percent: 11
+  completed_plans: 7
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v57.0 section) + .planning/REQUIREMENTS.md (15 v57.0 requirements) + .planning/ROADMAP.md (v57.0 — ACTIVE, phases 358-362) + the design-lock inputs .planning/PLAN-WWXRP-JACKPOT-WHALEPASS.md + .planning/PLAN-TERMINAL-DECIMATOR-STREAK-BOOST.md + the type-day-udvt-post-v56-seed + handlepurchase-burnie-flip-batching-post-v56-seed memories
+See: .planning/PROJECT.md (Completed Milestone: v57.0 section) + .planning/MILESTONES.md (v57.0 entry, top) + .planning/milestones/v57.0-ROADMAP.md + v57.0-REQUIREMENTS.md (archived) + .planning/ROADMAP.md (v57.0 ✅ SHIPPED). **NEXT milestone drafted:** .planning/PLAN-V58-CONSOLIDATED-AUDIT.md (the budget-aware "v52 idea" consolidated cross-model audit; FROZEN_SHA = v57 closure HEAD `b7237db4`).
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 359 — impl-the-one-carefully-sequenced-batched-contract-diff-handl
+**Current focus:** BETWEEN MILESTONES — v57.0 shipped + archived; plan v58.0 Consolidated Cross-Model Audit (run /gsd-new-milestone)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,12 +32,12 @@ See: .planning/PROJECT.md (Current Milestone: v57.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-**⚡ RE-CHARTER + 359 DONE + TERMINAL IN PROGRESS (2026-06-04 session 2).** The `type Day` UDVT was DROPPED for plain `uint24` (USER cancelled it as overcomplicated). Plan 04 shipped as a day-width normalization that INTENTIONALLY re-bases the RNG (pre-launch; the byte-image belonged to a never-deployed build), + 3 in-session fixes (century-bonus per-player packed stamp = a real cross-player staleness bug; dailyHeroWagers 1e12→1e14; deityBoonData honest 0-preview). **3 USER-approved commits on main (NOT pushed): `c3e84b79` feat + `aed10dab` test + `38389c07` fix; forge build GREEN.** SC re-charter: UDVT-01/02/03 byte-preservation + the TST-361 per-site byte-diff gate are MOOT → "day-comparison BEHAVIOR preserved + RNG re-based by design + 3 fixes correct"; SOLVENCY-01 holds (only debit change = the documented solvency-POSITIVE SALVAGE ethRelabel). **361 TST done** (`test/REGRESSION-BASELINE-v57.md`: 529 pass/179 fail = 134 carried baseline + ≤44 NEW, ALL harness artifacts of the layout-shift+RNG-rebase [proven, e.g. VRFCore vm.load(slot 37)]; ZERO solvency reds; hard floor intact). **360 GAS** = Outcome-A no-net-tune (uint24 gas-neutral; the century fix reclaims the `centuryBonusLevel` slot; gas harness needs the same layout refresh). **362 TERMINAL in progress** = delta-audit done (26 contracts +651/−329 vs `1e7a646d`; clean) + the 3-skill adversarial sweep running → `FINDINGS-v57.0.md` → closure flip + `MILESTONE_V57_AT_HEAD`. Deferred pre-launch follow-up: the forge-harness layout/RNG refresh + the ~143 Hardhat JS recompile. Full detail → [[v57-bundle-udvt-milestone]].
+**✅ v57.0 SHIPPED + ARCHIVED (2026-06-04 — milestone-complete).** The `type Day` UDVT was DROPPED for plain `uint24` (USER cancelled it as overcomplicated). Plan 04 shipped as a day-width normalization that INTENTIONALLY re-bases the RNG (pre-launch; the byte-image belonged to a never-deployed build), + 3 in-session fixes (century-bonus per-player packed stamp = a real cross-player staleness bug; dailyHeroWagers 1e12→1e14; deityBoonData honest 0-preview). **3 USER-approved commits on main (NOT pushed): `c3e84b79` feat + `aed10dab` test + `38389c07` fix; forge build GREEN.** SC re-charter: UDVT-01/02/03 byte-preservation + the TST-361 per-site byte-diff gate are MOOT → "day-comparison BEHAVIOR preserved + RNG re-based by design + 3 fixes correct"; SOLVENCY-01 holds (only debit change = the documented solvency-POSITIVE SALVAGE ethRelabel). **361 TST done** (`test/REGRESSION-BASELINE-v57.md`: 529 pass/179 fail = 134 carried baseline + ≤44 NEW, ALL harness artifacts of the layout-shift+RNG-rebase [proven, e.g. VRFCore vm.load(slot 37)]; ZERO solvency reds; hard floor intact). **360 GAS** = Outcome-A no-net-tune (uint24 gas-neutral; the century fix reclaims the `centuryBonusLevel` slot; gas harness needs the same layout refresh). **362 TERMINAL ✅** = delta-audit clean (26 contracts +651/−329 vs `1e7a646d`) + the 3-skill genuine-PARALLEL adversarial sweep (1 LOW found+RESOLVED [TDEC sticky-`boosted`], 0 MEDIUM+) → `audit/FINDINGS-v57.0.md` (chmod 444) → atomic 5-doc closure flip + `MILESTONE_V57_AT_HEAD_2b26ec91` signal. **Milestone ARCHIVED 2026-06-04** (phases 358-359 → `milestones/v57.0-phases/`; ROADMAP/REQUIREMENTS snapshotted to `milestones/v57.0-*`; REQUIREMENTS.md removed; ROADMAP collapsed). Deferred pre-launch follow-up: the forge-harness layout/RNG refresh + the ~143 Hardhat JS recompile. Full detail → [[v57-bundle-udvt-milestone]].
 
-Phase: 359 (impl-the-one-carefully-sequenced-batched-contract-diff-handl) — EXECUTING
-Plan: 4 of 4 (UDVT sweep remaining)
-Status: **The contract gate was SPLIT into two commits (USER-approved 2026-06-04).** COMMIT 1 = the behavior block (plans 01–03 + all in-session revisions), USER-APPROVED + COMMITTED **`980865e8`** `feat(359): v57.0 behavior features (pre-UDVT)` (13 files, +370/−58, on main, UNPUSHED; pre-commit hook moved aside + restored; forge build GREEN). Features: BATCH-01/02 (handlePurchase returns the reward, batched into the ETH caller's lootboxFlipCredit), BURNIE-01 (coin buy queues tickets — sink closed), BURNIE-02 (MINT_BURNIE reward via `creditFlip`, full burn, NO rebate), SALVAGE-01 (cash leg ETH+BURNIE; **BURNIE paid as flip credit, deducted from sDGNRS holdings-then-claimable**; merged 5-tuple `previewSellFarFutureTickets`; `transferFrom` removed from IDegenerusCoin), WWXRP-01 (`s==9` WWXRP jackpot grants a whale halfpass to the bettor, per `level/10` bracket), TDEC-01 (`boostTerminalDecimator()` weight+bucket promotion under `!_livenessTriggered()`, one-time `boosted` bit), CANCEL-01 (manual cancel auto-claims self + drains affiliate tree before clear; auto-evict = explicit `delete _subOf` forfeit — and the redundant `sub.dailyQuantity=0` dead-writes were dropped in both evict paths). NEW SCOPE (not a v57 REQ-ID): lazy-pass window additive **0–2 OR x9 OR x0** in `DegenerusGameWhaleModule.sol`. COMMIT 2 (PENDING) = the wide `type Day` UDVT sweep = plan 04, authored ON TOP of `980865e8`; **MUST include WhaleModule** in the sweep; lands as its own USER-approved contract commit at CHECKPOINT 2 / the HARD STOP. NEXT = execute plan 04 (UDVT sweep + post-UDVT build CHECKPOINT 2 + the UDVT contract-commit gate).
-Last activity: 2026-06-04 -- Phase 359 behavior block USER-APPROVED + committed 980865e8 (plans 01-03 + in-session revisions); UDVT sweep (plan 04) next
+Phase: — (v57.0 COMPLETE — all phases 358-362 shipped + archived)
+Plan: — (between milestones)
+Status: **v57.0 SHIPPED + ARCHIVED.** Closure signal `MILESTONE_V57_AT_HEAD_2b26ec91810a733e15666a4c23e8f365a4f04f51` (subject `2b26ec91`, baseline v56.0 `1e7a646d`); 1 LOW found+RESOLVED, 0 MEDIUM+; SOLVENCY-01 held; RNG re-based by design (pre-launch); **NOT pushed.** The two v57.0-era follow-ups carry into v58.0: (1) the BURNIE ticket-buy regression forensic (§ below — root-cause WHEN/WHERE `_purchaseCoinFor` stopped queuing tickets; the BURNIE ticket-queue fix is explicitly in the v58 plan's AfKing/BURNIE scope) and (2) the deferred forge-harness layout/RNG refresh + ~143 Hardhat JS recompile. **NEXT = `/gsd-new-milestone` → v58.0 Consolidated Cross-Model Audit** (plan drafted `.planning/PLAN-V58-CONSOLIDATED-AUDIT.md`; full cumulative v50→v57 surface; TOP track = the AfKing reward-leak hunt; FROZEN_SHA = v57 closure HEAD `b7237db4`).
+Last activity: 2026-06-04 -- v57.0 milestone-complete: archived + collapsed; ready for v58.0
 
 ## ⏳ v57.0 FOLLOW-UP (USER-requested 2026-06-04 — do at the END of phase 359, after the UDVT commit)
 **BURNIE ticket-buy regression forensic:** figure out WHEN/WHERE in git history BURNIE ticket buying (`purchaseCoin` → `_purchaseCoinFor`) stopped actually queuing tickets (the BURNIE-01 coin-burned-zero-tickets sink, fixed in `980865e8`), and HOW the functionality change went unnoticed (no test asserted post-buy ticket-queue growth on the coin path). Likely root: `_purchaseCoinFor` discarding `_callTicketPurchase`'s returns since a coin-path/return-shape refactor (candidate eras: the v47 BURNIE-lootbox-removal rework, or the ~160 change the 359-02 plan references). Deliverable: a short root-cause note (commit SHA that introduced it + why no test caught it + a regression-test recommendation for 361 TST).
