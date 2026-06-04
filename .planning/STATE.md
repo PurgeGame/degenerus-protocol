@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v58.0
-milestone_name: RNG-Safety, ETH-Flow & Gas-Ceiling Documentation Audit
-status: shipped
-last_updated: "2026-06-04T21:30:00.000Z"
-last_activity: 2026-06-04 -- v58.0 SHIPPED + ARCHIVED (milestone-complete): 7 phases 363-369; ROADMAP/REQUIREMENTS snapshotted to milestones/, REQUIREMENTS.md removed, phase dirs archived; signal MILESTONE_V58_AT_HEAD_2b26ec91810a733e15666a4c23e8f365a4f04f51; next = remediation milestone for the 7 findings (run /gsd-new-milestone)
+milestone: v59.0
+milestone_name: Council-Findings Remediation + Pass-Stat Front-Load Bundle
+status: planning
+last_updated: "2026-06-04T21:20:52.024Z"
+last_activity: 2026-06-04
 progress:
-  total_phases: 7
-  completed_phases: 7
+  total_phases: 0
+  completed_phases: 0
   total_plans: 0
   completed_plans: 0
-  percent: 100
+  percent: 0
 ---
 
 # Project State
@@ -32,19 +32,10 @@ See: .planning/PROJECT.md (Completed Milestone: v58.0 section) + .planning/MILES
 
 ## Current Position
 
-Phase: 369 TERMINAL — ✅ COMPLETE. **v58.0 SHIPPED 2026-06-04** (closure signal `MILESTONE_V58_AT_HEAD_2b26ec91810a733e15666a4c23e8f365a4f04f51`; all 7 phases complete; 22 reqs re-attested; document-only, NOT pushed). USER chose "close now" at the 369 closure gate.
-
-**v58.0 AUDIT OUTCOME — 7 CONFIRMED findings (1 CRIT · 1 HIGH · 2 MED · 2 LOW · 1 INFO) · 5 REFUTED.** The 5 Claude analysis phases (364-368) found **0 internal findings** on their own surfaces; the **XMODEL council (Gemini + Codex, 5 areas)**, adjudicated at 369 against frozen source by 4 parallel verification agents, surfaced **7 confirmed findings** on adjacent surfaces (salvage swap, AfKing affiliate, BAF/decimator solvency remainders) + refuted 5 (2 corroborate the 364/365 RNG-freeze analysis). The v52-predicted AfKing reward-leak (F-02) was vindicated. **Document-only → all 7 route to a LATER remediation milestone; findings do NOT block closure.**
-- Confirmed: **F-01 CRIT** salvage uint256-quote/uint32-debit (drains sDGNRS, `MintStreakUtils:173`/`MintModule:1013`) · **F-02 HIGH** afking `affiliateBase` missing `/1 ether` → unbacked BURNIE emission (`GameAfkingModule:879`) · **F-03 MED** BAF whale-pass remainder unbacked (`PayoutUtils:58`/`AdvanceModule:897`) · **F-04 MED** decimator whale remainder under-reserves claimablePool (`DecimatorModule:398/:596`) · **F-05 LOW** pendingBurnie 2× presale-credit via flag flip (`GameAfkingModule:397/1599`) · **F-06 LOW** >120-day VRF stall strands coinflip wagers (`AdvanceModule:1823`) · **F-07 INFO** affiliate rounding dust. Plus carried gas notes GASCEIL-F-01/02/03 (367, not breaches).
-- DONE at 369: `369-ADJUDICATION.md` (full verdict log) · `audit/FINDINGS-v58.0.md` consolidated (all phases + 7 confirmed + 5 refuted + 2 coverage gaps; **chmod 444** ✓) · `audit/site/data/findings.js` + app.js badge fix (Findings tab renders; all 7 site files `node --check` clean) · `369-SUMMARY.md`.
-
-**Coverage gaps (logged, LOW-impact):** `area-rng-freeze` Gemini leg EMPTY (sole claim C1 refuted + 364/365 deep-cover the freeze); `area-solvency` Gemini leg REFUSED/Plan-Mode (Codex solvency + composition + Claude 366 cover the spine, 3 sources). Optional re-run before closure.
-
-Phase: — (v58.0 COMPLETE — all 7 phases 363-369 shipped + archived)
-Plan: — (between milestones)
-Status: **v58.0 SHIPPED + ARCHIVED (milestone-complete 2026-06-04).** Closure signal `MILESTONE_V58_AT_HEAD_2b26ec91810a733e15666a4c23e8f365a4f04f51` (audited frozen contract subject `2b26ec91`; baseline = v57.0 closure HEAD `b7237db4`); document-only — 7 CONFIRMED findings + 5 REFUTED, all routed to a LATER remediation milestone; **NOT pushed.** Deliverables (gitignored-local, persist on disk): `audit/FINDINGS-v58.0.md` (chmod 444) + the cohesive site `audit/site/` (7 sections incl. the populated Findings tab). Archived: `milestones/v58.0-ROADMAP.md` + `v58.0-REQUIREMENTS.md` (force-tracked) + phase dirs 363-369 → `milestones/v58.0-phases/` (gitignored-local); `.planning/REQUIREMENTS.md` removed (fresh for next milestone). Both v58-era follow-ups are DONE in-milestone: the BURNIE ticket-buy regression forensic (Phase 368 → root-caused to `24f0898b`) and the gas-ceiling bound (Phase 367). The deferred v57 pre-launch plumbing (forge-harness layout/RNG refresh + ~143 Hardhat JS recompile) carries forward.
-**NEXT = `/gsd-new-milestone` → a REMEDIATION milestone for the 7 confirmed v58.0 findings** (priority F-01 CRIT salvage uint32-trunc `MintStreakUtils:173`/`MintModule:1013` + F-02 HIGH afking `affiliateBase` unit-slip `GameAfkingModule:879`; then F-03/F-04 MED whale-pass remainder solvency, F-05/F-06 LOW, F-07 INFO — all in `audit/FINDINGS-v58.0.md`). The v52 consolidated cross-model audit remains a separate future track (v58.0 was its document-only first delivery; the v50/v51 FINDINGS backfill stays carried-forward).
-Last activity: 2026-06-04 — v58.0 milestone-complete: ROADMAP/REQUIREMENTS snapshotted to `milestones/v58.0-*`, REQUIREMENTS.md removed from `.planning/`, phase dirs 363-369 archived, PROJECT/STATE flipped to shipped+archived.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-06-04 — Milestone v59.0 started
 
 ## ✅ v57.0 FOLLOW-UP — RESOLVED at v58.0 Phase 368 FORENSIC (root-caused to `24f0898b`, phase-160 2026-04-01; lived ~63d pre-launch; fixed `980865e8`; regression-test rec delivered → `368-FORENSIC.md`)
 
