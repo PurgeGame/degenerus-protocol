@@ -1151,6 +1151,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      pre-advanced lootboxRngIndex are preserved so the new word lands in the
     ///      same bucket the original was bound to.
     function retryLootboxRng() external {
+        // Never touch the shared VRF slots while a daily request holds the lock — otherwise
+        // a retry could overwrite the in-flight daily requestId. Mirrors requestLootboxRng.
+        // Legitimate mid-day retries run with rngLockedFlag == false.
+        if (rngLockedFlag) revert RngLocked();
         if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == 0) revert E();
         if (rngRequestTime == 0) revert E();
         if (uint48(block.timestamp) < rngRequestTime + MIDDAY_RNG_RETRY_TIMEOUT) revert E();
