@@ -69,7 +69,9 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         uint24 lastCompleted = uint24(
             (mintData >> BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) & BitPackingLib.MASK_24
         );
-        if (lastCompleted == mintLevel) return;
+        // Already covered (e.g. a pass front-load advanced lastCompleted to a future horizon):
+        // a mint at or below it must not regress lastCompleted or reset the streak to 1.
+        if (mintLevel <= lastCompleted) return;
 
         uint24 newStreak;
         if (lastCompleted != 0 && lastCompleted + 1 == mintLevel) {

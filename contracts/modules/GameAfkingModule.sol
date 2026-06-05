@@ -509,7 +509,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 s.afkingStartDay = uint24(today);
 
                 (, , , bool[2] memory done) = questView.playerQuestStates(subscriber);
-                if (done[0]) {
+                if (s.lastOpenedDay < s.lastAutoBoughtDay) {
+                    // A pending unopened box (this or a prior day) already grounds the run on a real
+                    // purchase. Keep the snapshot and leave the box markers untouched so the open leg
+                    // still materializes it — re-stamping here would orphan the prepaid box.
+                    _setStreakBase(s, snap);
+                } else if (done[0]) {
                     _setStreakBase(s, snap); // funded (manual) day-0 — keep the snapshot
                     s.lastAutoBoughtDay = uint24(today);
                     s.lastOpenedDay = uint24(today); // no pending box
@@ -887,13 +892,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         }
 
         // Mode-agnostic accrue — one warm in-slot write, zero cross-contract calls:
-        //   • affiliate base: flat 7% of the full ETH spend (== amount), whole BURNIE, 100M clamp;
+        //   • affiliate base: flat 7% of the full wei spend (ethValue + claimableUse = the cost in
+        //     both modes; the dual-unit `amount` is entry-units in ticket mode), whole BURNIE, 100M clamp;
         //   • slot-0 quest reward: QUEST_SLOT0_REWARD (whole BURNIE) into the claimable pendingBurnie;
         //   • compute-on-read streak markers: gap-resume a fresh run from zero if the last funded
         //     day is older than yesterday (matching the decay-on-read), then advance the
         //     funded-day high-water mark afkCoveredThroughDay.
         {
-            uint256 base = ((_ethToBurnie(amount, mp) * 7) / 100) / 1 ether;
+            uint256 base = ((_ethToBurnie(ethValue + claimableUse, mp) * 7) / 100) / 1 ether;
             if (base != 0) {
                 uint256 newBase = uint256(sub.affiliateBase) + base;
                 if (newBase > 100_000_000) newBase = 100_000_000;

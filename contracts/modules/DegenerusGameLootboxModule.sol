@@ -59,7 +59,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @notice Emitted when an ETH lootbox is successfully opened
     /// @param player The player who opened the lootbox
     /// @param lootboxIndex The per-player storage index of the opened lootbox
-    /// @param day The day index when the lootbox was opened
     /// @param amount The ETH amount of the lootbox (in wei)
     /// @param futureLevel The target level for future tickets
     /// @param futureTickets The pre-Bernoulli scaled (× TICKET_SCALE) future ticket count
@@ -69,7 +68,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     event LootBoxOpened(
         address indexed player,
         uint48 indexed lootboxIndex,
-        uint24 day,
         uint256 amount,
         uint24 futureLevel,
         uint32 futureTickets,
@@ -79,7 +77,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Emitted when a lootbox awards a whale pass jackpot
     /// @param player The player who won the jackpot
-    /// @param day The day index of the jackpot
     /// @param lootboxAmount The ETH amount of the lootbox
     /// @param targetLevel Level AT BOX-OPEN TIME (`level + 1`) — historical
     ///        context only. v50.0 WHALE-01 defers ticket queuing to the player-
@@ -91,7 +88,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param frozenUntilLevel Reserved for future use (always 0)
     event LootBoxWhalePassJackpot(
         address indexed player,
-        uint24 indexed day,
         uint256 lootboxAmount,
         uint24 targetLevel,
         uint32 tickets,
@@ -101,12 +97,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Emitted when a lootbox awards DGNRS tokens
     /// @param player The player who received the reward
-    /// @param day The day index of the reward
     /// @param lootboxAmount The ETH amount of the lootbox
     /// @param dgnrsAmount The amount of DGNRS tokens awarded
     event LootBoxDgnrsReward(
         address indexed player,
-        uint24 indexed day,
         uint256 lootboxAmount,
         uint256 dgnrsAmount
     );
@@ -131,13 +125,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Unified lootbox reward event for boon awards
     /// @param player The player receiving the reward
-    /// @param day The day index of the reward
     /// @param rewardType The type of reward (2=CoinflipBoon, 4=Boost5, 5=Boost15, 6=Boost25/Purchase, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon/DeityPassBoon, 11=LazyPassBoon)
     /// @param lootboxAmount The lootbox amount spent (ETH-equivalent for BURNIE lootboxes)
     /// @param amount Primary reward amount (varies by type: BPS for boosts, token amount for boons)
     event LootBoxReward(
         address indexed player,
-        uint24 indexed day,
         uint8 indexed rewardType,
         uint256 lootboxAmount,
         uint256 amount
@@ -517,8 +509,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 rngWord = lootboxRngWordByIndex[index];
         if (rngWord == 0) revert RngNotReady();
 
-        uint24 currentDay = _simulatedDayIndex();
-
         uint256 baseAmount = lootboxEthBase[index][player];
         if (baseAmount == 0) {
             baseAmount = amount;
@@ -537,7 +527,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // Seed = the per-index VRF anchor `rngWord` (fixed at the index's advance, never knowable at
         // deposit) + player + amount. No day term: the box binds to the index word for uniqueness and
         // freeze-safety, so a day adds nothing — and a day keyed to the OPEN day would be re-rollable
-        // by timing the open. boons/events below take the live `currentDay`.
+        // by timing the open. The boon path reads its own live day internally.
         uint256 seed = uint256(keccak256(abi.encode(rngWord, player, amount)));
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
@@ -568,7 +558,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
         _resolveLootboxCommon(
             player,
-            currentDay,
             index,
             scaledAmount,
             targetLevel,
@@ -771,9 +760,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     function resolveLootboxDirect(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external {
         if (amount == 0) return;
 
-        uint24 day = _simulatedDayIndex();
         uint24 currentLevel = level + 1;
-        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
+        // Freeze-safe seed with NO live day: claim timing cannot re-roll the outcome (rngWord
+        // already domain-separates per claim). No live day is read here at all — boon expiry uses
+        // the boon path's own currentDay, and the event day is unused for player-timed claims.
+        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, amount)));
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
@@ -781,7 +772,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         _resolveLootboxCommon(
             player,
-            day,
             0,
             scaledAmount,
             targetLevel,
@@ -805,9 +795,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external {
         if (amount == 0) return;
 
-        uint24 day = _simulatedDayIndex();
         uint24 currentLevel = level + 1;
-        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
+        // Freeze-safe seed with NO live day: claim timing must not re-roll the outcome (rngWord,
+        // frozen at submission, already domain-separates). No live day is read here — boon expiry
+        // uses the boon path's own currentDay, and the event day is unused for this claim.
+        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, amount)));
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
@@ -815,7 +807,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         _resolveLootboxCommon(
             player,
-            day,
             0,
             scaledAmount,
             targetLevel,
@@ -913,7 +904,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         _resolveLootboxCommon(
             player,
-            day,
             0,
             scaledAmount,
             targetLevel,
@@ -1042,7 +1032,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Common lootbox resolution logic shared by ETH and BURNIE lootboxes.
     ///      Handles whale pass jackpots, lazy pass awards, ticket/BURNIE rolls, and boons.
     /// @param player Player receiving rewards
-    /// @param day Day index for events
     /// @param index Per-player storage index of the lootbox being opened. Used purely as
     ///        the `lootboxIndex` identifier on the manual `LootBoxOpened` emit; auto-resolve
     ///        callers pass `0`.
@@ -1079,7 +1068,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        so afking boxes always resolve as a single roll (a bounded per-open cost).
     function _resolveLootboxCommon(
         address player,
-        uint24 day,
         uint48 index,
         uint256 amount,
         uint24 targetLevel,
@@ -1109,7 +1097,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // Box-level boon work runs ONCE (not per roll). Boons always roll on every ETH lootbox
         // path (the haircut above always pairs with a spent boon budget); pass-type boons stay
         // gated by real game-state inside the roll.
-        _rollLootboxBoons(player, day, amount, boonBudget, seed);
+        _rollLootboxBoons(player, amount, boonBudget, seed);
         // consumeActivityBoon is a no-op unless a pending bonus is set; gate the BoonModule
         // delegatecall on a direct read of the (warm) pending field, skipping the call frame on
         // the common no-boon box.
@@ -1122,7 +1110,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         // Roll 1 settles at the caller-rolled `targetLevel` (from the primary seed).
         _settleLootboxRoll(
-            player, index, day, amountFirst, amount, targetLevel, seed,
+            player, index, amountFirst, amount, targetLevel, seed,
             emitLootboxEvent, payColdBustConsolation, distressEth, totalPackedEth
         );
 
@@ -1134,7 +1122,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint24 level2 = _rollTargetLevel(currentLevel, seed2);
             if (level2 < currentLevel) level2 = currentLevel;
             _settleLootboxRoll(
-                player, index, day, amountSecond, amount, level2, seed2,
+                player, index, amountSecond, amount, level2, seed2,
                 emitLootboxEvent, payColdBustConsolation, distressEth, totalPackedEth
             );
         }
@@ -1153,7 +1141,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     function _settleLootboxRoll(
         address player,
         uint48 index,
-        uint24 day,
         uint256 rollAmount,
         uint256 fullAmount,
         uint24 rollLevel,
@@ -1168,7 +1155,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (targetPrice == 0) revert E();
 
         (uint256 burnieOut, uint32 scaledTickets, ) =
-            _resolveLootboxRoll(player, rollAmount, fullAmount, targetPrice, day, rollSeed);
+            _resolveLootboxRoll(player, rollAmount, fullAmount, targetPrice, rollSeed);
 
         // Floored to whole-BURNIE (1 BURNIE = 1 ether); sub-1-BURNIE residue evaporates.
         uint256 burnieAmount = (burnieOut / 1 ether) * 1 ether;
@@ -1207,7 +1194,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             emit LootBoxOpened(
                 player,
                 index,
-                day,
                 fullAmount,
                 rollLevel,
                 scaledTickets,
@@ -1223,13 +1209,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      Bit budget (consumed from `seed`):
     ///        - boon roll: bits[120..151] via uint32(seed >> 120) % BOON_PPM_SCALE (bias 0.022%; BOON_PPM_SCALE = 1_000_000)
     /// @param player Player address
-    /// @param day Current day index
     /// @param originalAmount Amount used for chance calculations
     /// @param boonBudget Amount of lootbox value allocated to boon/pass draw
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; no advance)
     function _rollLootboxBoons(
         address player,
-        uint24 day,
         uint256 originalAmount,
         uint256 boonBudget,
         uint256 seed
@@ -1283,7 +1267,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             deityEligible
         );
 
-        _applyBoon(player, boonType, day, currentDay, originalAmount, false);
+        _applyBoon(player, boonType, 0, currentDay, originalAmount, false);
     }
 
     /// @dev Convert BURNIE amount to ETH value using current price.
@@ -1542,7 +1526,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
             s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_COINFLIP_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_COINFLIP_DAY_SHIFT);
             bp.slot0 = s0;
-            if (!isDeity) emit LootBoxReward(player, day, 2, originalAmount, LOOTBOX_BOON_MAX_BONUS);
+            if (!isDeity) emit LootBoxReward(player, 2, originalAmount, LOOTBOX_BOON_MAX_BONUS);
             return;
         }
 
@@ -1566,7 +1550,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 // Map active tier back to BPS and rewardType for event
                 uint16 activeBps = _lootboxTierToBps(activeTier);
                 uint8 rewardType = activeTier == 3 ? 6 : (activeTier == 2 ? 5 : 4);
-                emit LootBoxReward(player, day, rewardType, originalAmount, activeBps);
+                emit LootBoxReward(player, rewardType, originalAmount, activeBps);
             }
             return;
         }
@@ -1592,7 +1576,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if (!isDeity) {
                 uint8 rewardType = bps == LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS
                     ? 6 : (bps == LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS ? 5 : 4);
-                emit LootBoxReward(player, day, rewardType, originalAmount, bps);
+                emit LootBoxReward(player, rewardType, originalAmount, bps);
             }
             return;
         }
@@ -1613,7 +1597,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
             s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_DECIMATOR_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_DECIMATOR_DAY_SHIFT);
             bp.slot0 = s0;
-            if (!isDeity) emit LootBoxReward(player, day, 8, originalAmount, bps);
+            if (!isDeity) emit LootBoxReward(player, 8, originalAmount, bps);
             return;
         }
 
@@ -1636,7 +1620,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
             s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_WHALE_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_WHALE_DAY_SHIFT);
             bp.slot0 = s0;
-            if (!isDeity) emit LootBoxReward(player, day, 9, originalAmount, bps);
+            if (!isDeity) emit LootBoxReward(player, 9, originalAmount, bps);
             return;
         }
 
@@ -1644,7 +1628,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // Runs in GAME's delegatecall context, so the call to QUESTS is GAME-authorized.
         if (boonType == BOON_QUEST_SHIELD) {
             IDegenerusQuests(ContractAddresses.QUESTS).awardQuestStreakShield(player, LOOTBOX_QUEST_SHIELD_GRANT);
-            if (!isDeity) emit LootBoxReward(player, day, 12, originalAmount, LOOTBOX_QUEST_SHIELD_GRANT);
+            if (!isDeity) emit LootBoxReward(player, 12, originalAmount, LOOTBOX_QUEST_SHIELD_GRANT);
             return;
         }
 
@@ -1665,7 +1649,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
             s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_ACTIVITY_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_ACTIVITY_DAY_SHIFT);
             bp.slot1 = s1;
-            if (!isDeity) emit LootBoxReward(player, day, 10, originalAmount, amt);
+            if (!isDeity) emit LootBoxReward(player, 10, originalAmount, amt);
             return;
         }
 
@@ -1688,7 +1672,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             bp.slot1 = s1;
             if (!isDeity) {
                 uint16 bps = tier == DEITY_PASS_BOON_TIER_50 ? 3500 : (tier == DEITY_PASS_BOON_TIER_25 ? 2000 : 1000);
-                emit LootBoxReward(player, day, 10, originalAmount, bps);
+                emit LootBoxReward(player, 10, originalAmount, bps);
             }
             return;
         }
@@ -1702,7 +1686,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 // time at WhaleModule:1018, so the queued tickets start at the
                 // level when the player calls claimWhalePass — not necessarily
                 // `level + 1` here.
-                emit LootBoxWhalePassJackpot(player, day, originalAmount, level + 1, WHALE_PASS_TICKETS_PER_LEVEL, 0, 0);
+                emit LootBoxWhalePassJackpot(player, originalAmount, level + 1, WHALE_PASS_TICKETS_PER_LEVEL, 0, 0);
             }
             return;
         }
@@ -1726,7 +1710,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
             s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_LAZY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_LAZY_PASS_DAY_SHIFT);
             bp.slot1 = s1;
-            if (!isDeity) emit LootBoxReward(player, day, 11, originalAmount, bps);
+            if (!isDeity) emit LootBoxReward(player, 11, originalAmount, bps);
         }
     }
 
@@ -1736,7 +1720,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param amount Amount for this roll (may be half of total for split lootboxes)
     /// @param lootboxAmount Total lootbox amount (for events)
     /// @param targetPrice Price at target level
-    /// @param day Current day index
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; first invocation uses primary chunk, ETH-amount-second branch uses seed2 = EntropyLib.hash2(seed, 1))
     /// @return burnieOut BURNIE tokens to award
     /// @return ticketsOut Tickets to queue for future level
@@ -1750,7 +1733,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 amount,
         uint256 lootboxAmount,
         uint256 targetPrice,
-        uint24 day,
         uint256 seed
     )
         private
@@ -1780,7 +1762,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 if (paid != 0) {
                     emit LootBoxDgnrsReward(
                         player,
-                        day,
                         lootboxAmount,
                         paid
                     );
