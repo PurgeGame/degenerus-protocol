@@ -592,9 +592,12 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
                 _applyWhalePassStats(winner, startLevel);
                 _queueTicketRange(winner, startLevel, 100, uint32(fullHalfPasses), false);
             }
-            if (remainder != 0) {
-                _creditClaimable(winner, remainder);
-                claimablePool += uint128(remainder);
+            if (remainder >= 0.01 ether) {
+                // Sub-half-pass remainder: resolve it as a futurePool-backed lootbox (like any
+                // small decimator claim), staying in futurePrizePool where the caller put it so
+                // it is never double-backed. Below 0.01 ETH it is too small to be worth a box, so
+                // the dust simply stays in futurePrizePool as future-prize liquidity (no credit).
+                _awardDecimatorLootbox(winner, remainder, rngWord, evScore);
             }
             return;
         }
