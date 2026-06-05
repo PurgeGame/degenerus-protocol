@@ -1666,9 +1666,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint24 lvl,
         uint256 requestId
     ) private {
+        // isRetry: some VRF request already reserved the lootbox index (a daily retry OR an
+        // in-flight mid-day lootbox request) — so the index must not be advanced again.
         bool isRetry = vrfRequestId != 0 &&
             rngRequestTime != 0 &&
             rngWordCurrent == 0;
+        // isDailyRetry: a genuine retry of the *daily* request. A daily request holds the lock
+        // (rngLockedFlag set true by the first daily request); a mid-day lootbox request leaves
+        // rngLockedFlag false. Distinguishing them stops an in-flight lootbox request from
+        // making this fresh daily request look like a retry and skip the level increment below.
+        bool isDailyRetry = isRetry && rngLockedFlag;
         if (!isRetry) {
             // Fresh request: advance lootbox index so new purchases target the NEXT RNG.
             _lrWrite(
@@ -1689,8 +1696,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         // Increment level at RNG request time when lastPurchaseDay = true.
         // lvl is already purchaseLevel (= level + 1), so set directly.
-        // Only on fresh request - retry would double-increment.
-        if (isTicketJackpotDay && !isRetry) {
+        // Only on a fresh daily request - a daily retry would double-increment, and an
+        // in-flight mid-day lootbox request must not suppress this increment.
+        if (isTicketJackpotDay && !isDailyRetry) {
             // Snapshot affiliate reward before level increment.
             // Scores routed to lvl (= level + 1) during the purchase phase just ended.
             _rewardTopAffiliate(lvl);
