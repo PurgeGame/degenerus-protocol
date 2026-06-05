@@ -148,6 +148,9 @@ classify_error() { # $1=out $2=rc  -> echoes one class token
   #   "You've hit your session limit · resets 11:10pm (America/Chicago)"  (note: "session" not "usage",
   #   and "resets 11:10pm" with NO "at"). Anchor on the API-specific limit phrasings + any "reset(s) <clock>".
   #   Checked BEFORE rate_limit so a hard window-reset waits for the clock instead of a 600s rate nap.
+  # Anthropic server-side throttle explicitly says "(not your usage limit)" — must NOT be read as a
+  # 5h usage window: the literal "usage limit" substring inside that negation would misfire below.
+  grep -qiE 'not your usage limit|temporarily limiting requests' <<<"$t" && { echo rate_limit; return; }
   grep -qiE 'session limit|usage limit|hit your[^.]*limit|[0-9]+-hour limit|limit reached|limit will reset|reset[s]?( at)? +[0-9]{1,2}(:[0-9]{2})? *[ap]?m?' <<<"$t" && { echo usage_limit; return; }
   grep -qiE 'request_too_large|prompt is too long|exceed the length limit|maximum context' <<<"$t" && { echo context_length; return; }
   grep -qiE 'invalid_request_error|Prefilling assistant messages|is not supported for this model' <<<"$t" && { echo invalid_request; return; }
