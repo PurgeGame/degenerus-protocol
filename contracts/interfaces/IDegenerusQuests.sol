@@ -208,4 +208,10 @@ interface IDegenerusQuests {
         view
         returns (PlayerQuestView memory viewData);
 
+    /// @notice The player's decay-aware effective reward streak (getPlayerQuestView's baseStreak),
+    ///         computed without materializing the per-quest view structs — a cheap read for scoring.
+    /// @param player The player address to query.
+    /// @return The effective (decay-applied) reward streak.
+    function effectiveBaseStreak(address player) external view returns (uint32);
+
 }

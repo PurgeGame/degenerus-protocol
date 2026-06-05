@@ -2691,7 +2691,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function playerActivityScore(
         address player
     ) external view returns (uint256 scoreBps) {
-        (uint32 streak, , , ) = questView.playerQuestStates(player);
+        // Decay-aware effective reward streak: effectiveBaseStreak zeroes a streak that lapsed
+        // past its shields, so a stale-high RAW streak (built then abandoned with no quest sync)
+        // can no longer inflate terminal-decimator weight, lootbox EV, or sDGNRS claims. Cheap
+        // read (decay logic only — no quest-view materialization).
+        uint32 streak = quests.effectiveBaseStreak(player);
         return _playerActivityScore(player, streak);
     }
 

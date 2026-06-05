@@ -1085,22 +1085,8 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 currentDay = _currentQuestDay(local);
         PlayerQuestState memory state = questPlayerState[player];
 
-        // Preview streak decay: if player missed days beyond available shields, show 0 streak
-        uint32 effectiveStreak = state.streak;
-        uint24 anchorDay = state.lastActiveDay != 0 ? state.lastActiveDay : state.lastCompletedDay;
-        if (anchorDay != 0 && currentDay > anchorDay + 1) {
-            uint32 missedDays = currentDay - anchorDay - 1;
-            uint16 shields = state.streakShield;
-            if (missedDays > uint32(shields)) {
-                effectiveStreak = 0;
-            }
-        }
-        // Use synced baseStreak if already active today, otherwise preview effective streak
-        uint24 currentDay24 = uint24(currentDay);
-        uint32 effectiveBaseStreak = (state.lastSyncDay == currentDay24) ? state.baseStreak : effectiveStreak;
-
         viewData.lastCompletedDay = state.lastCompletedDay;
-        viewData.baseStreak = effectiveBaseStreak;
+        viewData.baseStreak = _effectiveBaseStreak(state, currentDay);
 
         for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
             (viewData.quests[slot], viewData.progress[slot], viewData.completed[slot]) = _questViewData(
@@ -1115,9 +1101,41 @@ contract DegenerusQuests is IDegenerusQuests {
         }
     }
 
+    /// @notice The player's decay-aware effective reward streak — the value getPlayerQuestView
+    ///         exposes as baseStreak, computed WITHOUT materializing the per-quest view structs
+    ///         (a cheap read for reward scaling). A streak lapsed past its shields reads 0, so a
+    ///         stale-high raw streak (built then abandoned with no quest sync) can't inflate
+    ///         downstream reward scaling — terminal-decimator weight, lootbox EV, or sDGNRS claims.
+    /// @param player The player address to query.
+    /// @return The effective (decay-applied) reward streak.
+    function effectiveBaseStreak(address player) external view returns (uint32) {
+        return _effectiveBaseStreak(
+            questPlayerState[player],
+            _currentQuestDay(_materializeActiveQuestsForView())
+        );
+    }
+
     // =========================================================================
     //                           INTERNAL HELPERS
     // =========================================================================
+
+    /// @dev Single source of truth for the effective reward streak (getPlayerQuestView.baseStreak
+    ///      and effectiveBaseStreak). A streak lapsed past its shields reads 0; once active today
+    ///      the synced start-of-day baseStreak snapshot is used.
+    function _effectiveBaseStreak(
+        PlayerQuestState memory state,
+        uint24 currentDay
+    ) private pure returns (uint32) {
+        uint32 effectiveStreak = state.streak;
+        uint24 anchorDay = state.lastActiveDay != 0 ? state.lastActiveDay : state.lastCompletedDay;
+        if (anchorDay != 0 && currentDay > anchorDay + 1) {
+            uint32 missedDays = currentDay - anchorDay - 1;
+            if (missedDays > uint32(state.streakShield)) {
+                effectiveStreak = 0;
+            }
+        }
+        return (state.lastSyncDay == currentDay) ? state.baseStreak : effectiveStreak;
+    }
 
     // -------------------------------------------------------------------------
     // View Data Assembly
