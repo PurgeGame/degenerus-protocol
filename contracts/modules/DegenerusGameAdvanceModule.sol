@@ -171,6 +171,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         mult = 1;
         uint48 ts = uint48(block.timestamp);
         uint24 day = _simulatedDayIndexAt(ts);
+        // RNGREUSE guard: never resolve a NEW wall-day with a prior day's still-unsealed
+        // VRF word. If the in-progress day (dailyIdx+1) already recorded its word but was
+        // not yet sealed (_unlockRng deferred behind chunked drains / a pending daily
+        // jackpot / a phase transition) and the wall-clock has moved past it, clamp this
+        // advance to that day so its OWN word resolves it: rngGate returns the cached word,
+        // the deferred jackpot half stays on its Phase-1 word, and the afking box keeps a
+        // real word. The next advance picks up the wall-day with a fresh VRF request.
+        // Distinct from a VRF gap stall (rngWordByDay[dailyIdx+1] == 0 → backfill path).
+        if (day > dailyIdx + 1 && rngWordByDay[dailyIdx + 1] != 0) {
+            day = dailyIdx + 1;
+        }
         bool inJackpot = jackpotPhaseFlag;
         uint24 lvl = level;
         uint24 psd = purchaseStartDay;
