@@ -75,7 +75,11 @@
   4. SMITE lands on the shared counter (afker-immune, ≥5-stack ceiling).
   5. `forge build` clean, HELD at the boundary for hand-review.
 
-**Plans**: TBD
+**Plans**: 3 plans (sequential-on-main, all `autonomous:false` — ONE batched diff held at ONE boundary)
+Plans:
+- [ ] 376-01-PLAN.md — Track A: PACK accessor + repack (PACK-01/02) then the AFPAY waterfall + AfkingSpent (AFPAY-01..07)
+- [ ] 376-02-PLAN.md — Track B: cashout-curse counter/APPLY/SET/CURE/stamp/decurse/view (CURSE-01..07) + deity-smite (SMITE-01)
+- [ ] 376-03-PLAN.md — Build-cleanliness (SettleClaimableShortfallTester + test sweep) + EIP-170 guardrail + contract-commit boundary HOLD
 **UI hint**: no
 
 ### Phase 377: GAS — Gas-Neutrality Gate (curse APPLY zero-SLOAD · packing no cold slot · no advance-ceiling regression)
@@ -126,7 +130,7 @@
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 375. SPEC — Design-Lock + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map | v61.0 | 2/2 | Complete    | 2026-06-06 |
-| 376. IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE) | v61.0 | 0/TBD | Not started | - |
+| 376. IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE) | v61.0 | 0/3 | Planned     | 2026-06-06 |
 | 377. GAS — Gas-Neutrality Gate (curse APPLY zero-SLOAD · packing no cold slot) | v61.0 | 0/TBD | Not started | - |
 | 378. TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | v61.0 | 0/TBD | Not started | - |
 | 379. TERMINAL — Delta Audit + 3-Skill Sweep + FINDINGS-v61.0 + Closure Flip | v61.0 | 0/TBD | Not started | - |
