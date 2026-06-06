@@ -146,3 +146,77 @@ CONTEXT.md cited the `~:NNN` values against the 2026-06-06 working-tree HEAD; th
 | `DegenerusGameStorage.sol:1174,1253` | `data = setPacked(…); data = _setMintDay(data,…); data = _withPassStreakFrontLoad(data,…)` (seeded from slot) | No — field-isolated chain |
 
 **Keystone:** `BitPackingLib.setPacked(data, shift, mask, value) = (data & ~(mask << shift)) | ((value & mask) << shift)` (line 101) — clears EXACTLY the `[shift, shift+width)` field and ORs the new value, preserving every other bit. `_setMintDay` (line 1318) and `_withPassStreakFrontLoad` (line 1044) are likewise field-isolated. No writer targets a shift in [215, 222], and no writer assigns a freshly-built full word that omits the curse bits. **Conclusion: bits 215-222 are unconditionally preserved across every existing write → CURSE-01 may claim the gap.**
+
+---
+
+## SPEC Verification Item (1): `purchaseWith` Dead-Confirm
+
+**Question (AFPAY §8 / §5 note):** Is `DegenerusGameMintModule.purchaseWith` reachable in production? If live, the AFPAY waterfall must wire the afking interaction through it; if dead, leave it untouched.
+
+**Method:** `git grep -n purchaseWith 2bee6d6f -- 'contracts/*.sol' 'contracts/**/*.sol'` (every reference) + a targeted selector/call-site grep.
+
+**Every `purchaseWith` reference at `2bee6d6f` (5 total):**
+
+| Ref | Kind | Live? |
+|---|---|---|
+| `contracts/interfaces/IDegenerusGameModules.sol:242` | interface declaration | No (declaration, not a call) |
+| `contracts/modules/DegenerusGameMintModule.sol:858` | function **definition** (`external`, forwards to `_purchaseForWith`) | No (the def itself) |
+| `contracts/modules/DegenerusGameAdvanceModule.sol:759` | doc-comment `///      … QUEUES whole tickets via purchaseWith (ticket mode),` | No (comment) |
+| `contracts/modules/DegenerusGameMintModule.sol:1122` | doc-comment `//      … routed through purchaseWith from the process STAGE).` | No (comment) |
+| `contracts/modules/GameAfkingModule.sol:1097` | doc-comment `///         the MintModule `purchaseWith` path (no box). …` | No (comment) |
+
+**Selector / dispatch / call-site grep:** `git grep -n 'purchaseWith\.selector|purchaseWith\s*\(' 2bee6d6f` returns ONLY the AdvanceModule:759 prose line ("via purchaseWith (ticket mode)" — a parenthetical in a comment, not a call). There is **NO `purchaseWith.selector`, NO delegatecall dispatch, NO call site** anywhere in `contracts/`. The function is `external` and thus reachable only through the Game's delegatecall dispatch table — and no `purchaseWith.selector` appears in any Game dispatch stub, so it is unreachable.
+
+**VERDICT: `purchaseWith` is DEAD at `2bee6d6f`** — only its definition (`:858`) + the `IDegenerusGameModules:242` interface entry + 3 stale doc-comments survive; no call site, no selector, no dispatch. **Leave untouched at IMPL.** The AFPAY waterfall lands inside the live buy host `_purchaseForWith` (`:1093`) and `_processMintPayment` (`DegenerusGame.sol:1054`), NOT via this dead entry. No live-site flag required.
+
+---
+
+## SPEC Verification Item (2): Self-Smite Sanity
+
+**Question (SMITE §4 open):** A deity paying 200 BURNIE to `smite` their OWN address adds a curse stack to themselves. Does the shared `uint8` curse counter create any score-floor or bounty exploit (a positive-EV path) via self-smite?
+
+**Reasoning chain (mechanics re-attested above + `PLAN-V61-DEITY-SMITE.md` §1-3):**
+
+1. **The shared curse counter only LOWERS the activity score, floored at 0.** The single APPLY site is `MintStreakUtils._playerActivityScore` `scoreBps = bonusBps;` at **line 320** (re-attested CONFIRMED). CURSE-02 subtracts `curseCount * 100` bps from `bonusBps`, floored at 0. A curse stack can only *reduce* (or leave at 0) the smitee's own score — there is no branch where a higher `curseCount` raises any value. Self-smite therefore strictly lowers (or no-ops, if already 0) the deity's own activity score. A lower activity score is uniformly a *penalty* (smaller century bonus, smaller streak-derived multipliers); there is no game path where a player benefits from a lower score.
+
+2. **`smite` burns the caller's OWN BURNIE — no rebate, no mint.** `smite` calls `BurnieCoin.burnCoin(msg.sender, PRICE_COIN_UNIT / 5)` = 200 BURNIE burned from the deity (re-attested: `burnCoin … onlyGame` @ `BurnieCoin.sol:572`). Burning is a pure sink — no ETH, no claimable credit, no token mint, no prize-pool touch (SMITE §3: "Pure ledger/score effect; no ETH, no RNG, no prize-pool touch"). Self-smite is a self-paid 200-BURNIE burn for a self-inflicted score penalty.
+
+3. **No bounty / keeper interaction with the curse counter.** `_bountyEligible` (re-attested @ `MintStreakUtils.sol:30`) gates keeper bounties; it does not read `curseCount`, and the curse counter feeds only the activity-score APPLY at line 320 (the single consumer). There is no path where raising one's own `curseCount` unlocks, inflates, or qualifies for a bounty/reward. (The counter shares bits 215-222 in `mintPacked_`; the §`[215-222]` proof shows no other field is perturbed by writing it.)
+
+4. **The smite ceiling (≥5 stacks rejected) and the self-cure path add no asymmetry.** A self-smiting deity cannot exceed 5 stacks (the same ceiling as smiting anyone), and can cure their own stack with a single ≥1-ticket buy (or `decurse` 100 BURNIE) — exactly as any other smitee. There is no self-referential loop that accrues anything positive.
+
+**VERDICT: self-smite is HARMLESS-BY-DESIGN** — a self-inflicted activity-score penalty (floored 0, never beneficial) paid for with a self-burned 200 BURNIE, with no bounty/keeper/score-floor interaction and no positive-EV path. Matches the STRIDE register disposition T-375-03 (accept). No guard against self-smite is required (though the protocol-addr skip D-04 still applies to VAULT/SDGNRS/GNRUS for the redemption-snapshot reason, unrelated to self-smite).
+
+---
+
+## SPEC Verification Item (3): SOLVENCY Accessor-Invariant Location
+
+**Question (CONTEXT §SOLVENCY / D-01 / SEC-02 378):** Name the ONE place the `claimablePool == Σ(claimableWinnings + afkingFunding)` identity is centralized, so the SPEC and SEC-02 can anchor on a single invariant home.
+
+**The single home = the PACK accessor layer** (D-01 lands `_creditClaimable/_debitClaimable/_creditAfking/_debitAfking`, each paired with the `claimablePool` update, BEFORE the AFPAY spend path exists). At `2bee6d6f` the invariant's written + enforced surface (the targets the accessor layer subsumes) re-attests to:
+
+| Component | File:line @ `2bee6d6f` | Role |
+|---|---|---|
+| **Invariant statement** (the canonical written home) | `contracts/storage/DegenerusGameStorage.sol:358` | `///      INVARIANT: claimablePool == Σ claimableWinnings[*] + Σ afkingFunding[*]` (in the `claimablePool` decl doc-block, decl @ **365**) |
+| **The aggregate slot** | `DegenerusGameStorage.sol:365` | `uint128 internal claimablePool;` (the Σ both halves must equal) |
+| **Canonical claimable-shortfall debit** (paired) | `DegenerusGameStorage.sol:851` (`_settleClaimableShortfall`); the paired `claimablePool -= uint128(shortfall)` @ **857** | the helper AFPAY-01 generalizes to `_settleShortfall(buyer, shortfall, allowClaimable) → (claimableUsed, afkingUsed)`, pairing every claimable AND afking debit with a `claimablePool -=` |
+| **The 2 centralized claimable credits** (paired) | `DegenerusGamePayoutUtils.sol`: `claimableWinnings[…] += weiAmount` @ **25** with `claimablePool += uint128(boxEth)` @ **39**; `claimableWinnings[winner] += remainder` @ **63** | already-centralized `+=` credits; PACK-01 routes them through `_creditClaimable` |
+| **Afking credit/debit (the other half of Σ)** | `afkingFunding[fundDest] += msg.value` @ `GameAfkingModule.sol:337` (credit); `afkingFunding[src] -= ethValue` + paired `claimablePool -= uint128(ethValue)` @ `GameAfkingModule.sol:~791` (auto-buy debit, OUT of scope) | each afking move already pairs a `claimablePool` move; PACK-01 routes these through `_creditAfking/_debitAfking` |
+| **Post-gameOver claim-merge** (both halves zeroed, single pool debit) | `DegenerusGame.sol:1575-1589` | `claimableWinnings[player]=1` + `afkingFunding[player]=0` with one `claimablePool -= uint128(payout)` @ **1589** — the merge PACK collapses to one slot |
+
+**VERDICT:** the `claimablePool == Σ(claimable + afking)` identity is centralized in the **PACK accessor layer** (`_creditClaimable/_debitClaimable/_creditAfking/_debitAfking`, each paired with `claimablePool`), whose pre-existing scattered enforcement points re-attest to: the invariant statement @ `DegenerusGameStorage.sol:358` + the `claimablePool` decl @ **365** + the canonical `_settleClaimableShortfall` @ **851** (→ `_settleShortfall` at IMPL) + the 2 `DegenerusGamePayoutUtils` credits @ **25/39/63** + the afking credit/debit pair in `GameAfkingModule`. D-01 lands the accessor layer FIRST so SEC-02 (378) re-proves the identity at ONE home rather than across these scattered debit/credit sites. SPEC and SEC-02 anchor here.
+
+---
+
+## Re-Attestation Summary
+
+- **Anchors re-attested:** 29 rows across 13 files (every CONTEXT.md `<canonical_refs>` "Contract anchors" symbol; 0 dropped). Of these, 4 are to-be-added symbols correctly **ABSENT** at the baseline (`AfkingSpent`, `decurse`/`smite`, `CURSE_COUNT_CAP`, `MASK_8`/`CURSE_COUNT_SHIFT`).
+- **CORRECTED (material baseline-line drift the SPEC must adopt):** **4** —
+  1. `claimablePool` `uint128` decl: cited ~:838-839 (a `_setCurrentPrizePool` doc-comment) → actual decl @ **365**.
+  2. cure-site function name: cited `_purchaseWithFor` ~:1285 → actual host `_purchaseForWith` def @ **1093** (line 1285 is inside its body).
+  3. `_recordLootboxMintDay`: cited ~:983 → actual def @ **1000**.
+  4. sDGNRS redemption activity-score read: cited ~:942 → actual @ **932**.
+  All other anchors **CONFIRMED** at/within a few lines of their cite (the baseline is an ancestor of the 2026-06-06 HEAD the docs were grepped against, so most cites are exact or within ±a handful).
+- **Spot-checks (acceptance criteria):** `purchaseWith` @ **858** ✅ · `claimablePool uint128` decl @ **365** (distinguished from the cited ~:838-839 doc-comment) ✅ · `AFFILIATE_BONUS_POINTS_SHIFT = 209` ends bit **214** + `LEVEL_UNITS_SHIFT = 228` → `[215-222]` free for `CURSE_COUNT_SHIFT = 215` ✅ · no full-slot `mintPacked_` writer clobbers 215-222 (12 writes all field-isolated RMW; `setPacked` keystone) ✅.
+- **Verification-item verdicts:** (1) `purchaseWith` **DEAD** (def + interface + 3 comments; no call/selector/dispatch) → leave untouched. (2) self-smite **HARMLESS-BY-DESIGN** (shared counter only lowers score floored 0; caller burns own 200 BURNIE; no bounty/score-floor/positive-EV path). (3) SOLVENCY identity home = the **PACK accessor layer**, re-attested to `DegenerusGameStorage.sol:358/365/851` + `DegenerusGamePayoutUtils.sol:25/39/63` + the `GameAfkingModule` afking pair.
+- **Paper-only:** ZERO `contracts/*.sol` modified — every anchor read FROM `2bee6d6f` via git; only this `.planning/` artifact written.
