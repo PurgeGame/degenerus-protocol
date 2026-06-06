@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v61.0
 milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
-status: planning
-last_updated: "2026-06-06T20:28:20.926Z"
-last_activity: 2026-06-06 — Phase 375 context gathered (/gsd-discuss-phase)
+status: executing
+last_updated: "2026-06-06T20:52:08.119Z"
+last_activity: 2026-06-06 -- Phase 375 planning complete
 progress:
-  total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 10
+  completed_phases: 1
+  total_plans: 6
+  completed_plans: 2
+  percent: 10
 ---
 
 # Project State
@@ -34,9 +34,9 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 
 Phase: 375 (SPEC)
 Plan: Not started
-Status: 375 context gathered (375-CONTEXT.md) — ready to /gsd-plan-phase 375
+Status: Ready to execute
 Next up: 375 SPEC (design-lock the open knobs + re-attest anchors vs `2bee6d6f` + edit-order map) → 376 IMPL (the ONE batched diff, contract boundary) → 377 GAS → 378 TST → 379 TERMINAL (FULL in-milestone close)
-Last activity: 2026-06-06 — Phase 375 context gathered (/gsd-discuss-phase); ROADMAP.md v61 phase-heading format fixed (`### Phase N:`) so the SDK resolves 375-379
+Last activity: 2026-06-06 -- Phase 375 planning complete
 
 ## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
 
