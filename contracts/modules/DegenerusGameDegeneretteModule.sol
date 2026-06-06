@@ -506,7 +506,12 @@ contract DegenerusGameDegeneretteModule is
         _validateMinBet(currency, amountPerTicket);
 
         totalBet = uint256(amountPerTicket) * uint256(ticketCount);
-        (uint32 questStreak, , , ) = questView.playerQuestStates(player);
+        // Decay-aware effective quest streak (mirrors the DECSTREAK chokepoint fix): a streak
+        // lapsed past its shields reads 0, so a returning-inactive player can't snapshot a
+        // stale-high streak into the bet's activityScore (which scales the ETH ROI and the
+        // lootbox-share EV multiplier). WWXRP bets never sync via handleDegenerette, so a raw
+        // playerQuestStates read would let the zombie streak persist indefinitely.
+        uint32 questStreak = quests.effectiveBaseStreak(player);
         uint16 activityScore = uint16(
             _playerActivityScore(player, questStreak, level + 1)
         );
