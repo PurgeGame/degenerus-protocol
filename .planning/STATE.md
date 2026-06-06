@@ -1,27 +1,26 @@
 ---
 gsd_state_version: 1.0
 milestone: v61.0
-milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite (FORMING)
-status: forming
-last_updated: 2026-06-06
-last_activity: 2026-06-06 -- v60.0 SHIPPED (single combined close: v59 IMPL 4577cfb6 + the maximal cross-model audit; closure signal MILESTONE_V60_AT_HEAD_2bee6d6faa2f66a9231d4b9bd01a53d09f40ff5e; 7 commits ahead of origin/main, NOT pushed)
+milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
+status: planning
+last_updated: "2026-06-06T19:00:03.469Z"
+last_activity: 2026-06-06
 progress:
   total_phases: 0
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
   percent: 0
-stopped_at: v60.0 closed 2026-06-06 (combined close). v61.0 forming — scope .planning/PLAN-V61-MILESTONE-SCOPE.md; not yet roadmapped (run /gsd-new-milestone).
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/MILESTONES.md (v60.0 entry, top) + .planning/ROADMAP.md (v60.0 ✅ SHIPPED, top) + .planning/milestones/v60.0-ROADMAP.md + v60.0-REQUIREMENTS.md (the combined-close archive). v60.0 canonical audit deliverable: audit/FINDINGS-v60.0.md (chmod 444). v61 design inputs: .planning/PLAN-V61-MILESTONE-SCOPE.md + PLAN-V61-AFKING-AS-PAYMENT-SOURCE.md + PLAN-V61-DEITY-SMITE.md + PLAN-CASHOUT-CURSE.md (`[[v61-milestone-seed]]`). Baseline for v60 was the v58.0-audited frozen tree `2b26ec91`; v60 fix HEAD = `2bee6d6f`. REQUIREMENTS.md removed (fresh for v61). **NEXT = /gsd-new-milestone (v61.0); then push the 7 ahead-of-origin commits when USER ready.**
+See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP.md (v61.0 🚧 ACTIVE — phases 375-379, once roadmapped) + .planning/REQUIREMENTS.md (v61.0 reqs, once defined) + .planning/MILESTONES.md (v60.0 entry, top). v61 design inputs (design-locked): .planning/PLAN-V61-MILESTONE-SCOPE.md + PLAN-V61-AFKING-AS-PAYMENT-SOURCE.md + PLAN-CASHOUT-CURSE.md + PLAN-V61-DEITY-SMITE.md (`[[v61-milestone-seed]]`). Baseline = the v60.0 closure HEAD `2bee6d6f` (10 commits ahead of origin, NOT pushed). v60.0 archive: .planning/milestones/v60.0-ROADMAP.md + v60.0-REQUIREMENTS.md; canonical audit deliverable audit/FINDINGS-v60.0.md (chmod 444). **NEXT = define v61.0 requirements + roadmap (in progress), then /gsd-plan-phase 375 (SPEC).**
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v61.0 forming — afking-as-payment-source + cashout-curse + deity-smite (no `.sol` yet; scope locked in PLAN-V61-MILESTONE-SCOPE.md)
+**Current focus:** v61.0 — defining requirements + roadmap (afking-as-payment-source + cashout-curse + deity-smite; SPEC→IMPL→GAS→TST→TERMINAL, phases 375-379; all 3 work items + feature-first claimable/afking slot-packing locked 2026-06-06)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -33,11 +32,10 @@ See: .planning/MILESTONES.md (v60.0 entry, top) + .planning/ROADMAP.md (v60.0 �
 
 ## Current Position
 
-Phase: — (v60.0 closed; v61.0 not yet roadmapped)
+Phase: Not started (defining requirements)
 Plan: —
-Status: v60.0 SHIPPED 2026-06-06 (single combined close: v59 IMPL + the maximal cross-model audit); v61.0 forming
-Next up: /gsd-new-milestone (v61.0 — afking-as-payment-source · cashout-curse · deity-smite). Then push the 7 ahead-of-origin commits (`6bd94bb5`..`2bee6d6f`) when USER ready.
-Last activity: 2026-06-06 — v60.0 combined close (archives + MILESTONES + ROADMAP + PROJECT + RETROSPECTIVE; REQUIREMENTS reset; closure signal MILESTONE_V60_AT_HEAD_2bee6d6faa2f66a9231d4b9bd01a53d09f40ff5e)
+Status: Defining requirements
+Last activity: 2026-06-06 — Milestone v61.0 started
 
 ## ✅ v57.0 FOLLOW-UP — RESOLVED at v58.0 Phase 368 FORENSIC (root-caused to `24f0898b`, phase-160 2026-04-01; lived ~63d pre-launch; fixed `980865e8`; regression-test rec delivered → `368-FORENSIC.md`)
 
