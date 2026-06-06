@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v61.0
 milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
 status: planning
-last_updated: "2026-06-06T19:00:03.469Z"
-last_activity: 2026-06-06
+last_updated: "2026-06-06T20:28:20.926Z"
+last_activity: 2026-06-06 — Phase 375 context gathered (/gsd-discuss-phase)
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,10 +17,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP.md (v61.0 🚧 ACTIVE — phases 375-379, once roadmapped) + .planning/REQUIREMENTS.md (v61.0 reqs, once defined) + .planning/MILESTONES.md (v60.0 entry, top). v61 design inputs (design-locked): .planning/PLAN-V61-MILESTONE-SCOPE.md + PLAN-V61-AFKING-AS-PAYMENT-SOURCE.md + PLAN-CASHOUT-CURSE.md + PLAN-V61-DEITY-SMITE.md (`[[v61-milestone-seed]]`). Baseline = the v60.0 closure HEAD `2bee6d6f` (10 commits ahead of origin, NOT pushed). v60.0 archive: .planning/milestones/v60.0-ROADMAP.md + v60.0-REQUIREMENTS.md; canonical audit deliverable audit/FINDINGS-v60.0.md (chmod 444). **NEXT = define v61.0 requirements + roadmap (in progress), then /gsd-plan-phase 375 (SPEC).**
+See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP.md (v61.0 🚧 ACTIVE — phases 375-379, once roadmapped) + .planning/REQUIREMENTS.md (v61.0 reqs, once defined) + .planning/MILESTONES.md (v60.0 entry, top). v61 design inputs (design-locked): .planning/PLAN-V61-MILESTONE-SCOPE.md + PLAN-V61-AFKING-AS-PAYMENT-SOURCE.md + PLAN-CASHOUT-CURSE.md + PLAN-V61-DEITY-SMITE.md (`[[v61-milestone-seed]]`). Baseline = the v60.0 closure HEAD `2bee6d6f` (10 commits ahead of origin, NOT pushed). v60.0 archive: .planning/milestones/v60.0-ROADMAP.md + v60.0-REQUIREMENTS.md; canonical audit deliverable audit/FINDINGS-v60.0.md (chmod 444). **NEXT = /gsd-plan-phase 375 (SPEC).**
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v61.0 — defining requirements + roadmap (afking-as-payment-source + cashout-curse + deity-smite; SPEC→IMPL→GAS→TST→TERMINAL, phases 375-379; all 3 work items + feature-first claimable/afking slot-packing locked 2026-06-06)
+**Current focus:** v61.0 — Phase 375 SPEC design-lock (afking-as-payment-source + cashout-curse + deity-smite; SPEC→IMPL→GAS→TST→TERMINAL, phases 375-379; 375 open knobs locked 2026-06-06 incl. **accessor-first** PACK/AFPAY sequencing, AfkingSpent-every-debit, CURSE_COUNT_CAP=20, protocol-addr skip kept)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -34,9 +34,9 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 
 Phase: 375 (SPEC)
 Plan: Not started
-Status: Ready to plan — v61.0 requirements (27) + roadmap (phases 375-379) defined
+Status: 375 context gathered (375-CONTEXT.md) — ready to /gsd-plan-phase 375
 Next up: 375 SPEC (design-lock the open knobs + re-attest anchors vs `2bee6d6f` + edit-order map) → 376 IMPL (the ONE batched diff, contract boundary) → 377 GAS → 378 TST → 379 TERMINAL (FULL in-milestone close)
-Last activity: 2026-06-06 — v61.0 requirements + roadmap defined (/gsd-new-milestone)
+Last activity: 2026-06-06 — Phase 375 context gathered (/gsd-discuss-phase); ROADMAP.md v61 phase-heading format fixed (`### Phase N:`) so the SDK resolves 375-379
 
 ## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
 
