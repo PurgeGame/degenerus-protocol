@@ -474,7 +474,7 @@ contract DegenerusGameDegeneretteModule is
                 totalBet,
                 currency == CURRENCY_ETH,
                 currency == CURRENCY_ETH
-                    ? PriceLookupLib.priceForLevel(level)
+                    ? PriceLookupLib.priceForLevel(level + 1)
                     : 0
             );
         }

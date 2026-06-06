@@ -198,7 +198,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint24 boonDay = uint24(s0 >> BP_WHALE_DAY_SHIFT);
         if (boonDay != 0) {
             uint24 currentDay = _simulatedDayIndex();
-            hasValidBoon = currentDay <= boonDay + 4;
+            // Deity-granted boons are valid only on the grant day; lootbox-rolled
+            // keep the 4-day window (mirrors the BoonModule/deity-pass siblings).
+            uint24 deityWhaleDay = uint24(s0 >> BP_DEITY_WHALE_DAY_SHIFT);
+            hasValidBoon = deityWhaleDay != 0
+                ? deityWhaleDay == currentDay
+                : currentDay <= boonDay + 4;
         }
 
         uint256 prevData = mintPacked_[buyer];
@@ -953,6 +958,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // The purchase day (== the buy is happening now) — read here, only on the boost path.
         uint24 day = _simulatedDayIndex();
+        // Deity-granted boosts are valid only on the grant day.
+        uint24 deityDay = uint24(s0 >> BP_DEITY_LOOTBOX_DAY_SHIFT);
+        if (deityDay != 0 && deityDay != day) {
+            bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
+            return boostedAmount;
+        }
         // Check expiry
         uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
         if (

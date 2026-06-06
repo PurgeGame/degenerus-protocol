@@ -31,6 +31,7 @@ contract DeityBoonViewer {
     uint8 private constant DEITY_BOON_COINFLIP_5 = 1;
     uint8 private constant DEITY_BOON_COINFLIP_10 = 2;
     uint8 private constant DEITY_BOON_COINFLIP_25 = 3;
+    uint8 private constant DEITY_BOON_QUEST_SHIELD = 4;
     uint8 private constant DEITY_BOON_LOOTBOX_5 = 5;
     uint8 private constant DEITY_BOON_LOOTBOX_15 = 6;
     uint8 private constant DEITY_BOON_PURCHASE_5 = 7;
@@ -76,13 +77,14 @@ contract DeityBoonViewer {
     uint16 private constant W_ACTIVITY_10 = 100;
     uint16 private constant W_ACTIVITY_25 = 30;
     uint16 private constant W_ACTIVITY_50 = 8;
+    uint16 private constant W_QUEST_SHIELD = 200;
     uint16 private constant W_WHALE_PASS = 8;
     uint16 private constant W_LAZY_PASS_10 = 30;
     uint16 private constant W_LAZY_PASS_25 = 8;
     uint16 private constant W_LAZY_PASS_50 = 2;
     uint16 private constant W_DEITY_PASS_ALL = 40;
-    uint16 private constant W_TOTAL = 1298;
-    uint16 private constant W_TOTAL_NO_DECIMATOR = 1248;
+    uint16 private constant W_TOTAL = 1498;
+    uint16 private constant W_TOTAL_NO_DECIMATOR = 1448;
 
     /// @notice Compute deity boon slots for a given deity.
     /// @param game Address of the DegenerusGame contract.
@@ -175,6 +177,8 @@ contract DeityBoonViewer {
         if (roll < cursor) return DEITY_BOON_ACTIVITY_25;
         cursor += W_ACTIVITY_50;
         if (roll < cursor) return DEITY_BOON_ACTIVITY_50;
+        cursor += W_QUEST_SHIELD;
+        if (roll < cursor) return DEITY_BOON_QUEST_SHIELD;
         cursor += W_WHALE_PASS;
         if (roll < cursor) return DEITY_BOON_WHALE_PASS;
         cursor += W_LAZY_PASS_10;

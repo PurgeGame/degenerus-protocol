@@ -1741,6 +1741,12 @@ contract DegenerusGameMintModule is
 
         // The purchase day (== the buy is happening now) — read here, only on the boost path.
         uint24 day = _simulatedDayIndex();
+        // Deity-granted boosts are valid only on the grant day.
+        uint24 deityDay = uint24(s0 >> BP_DEITY_LOOTBOX_DAY_SHIFT);
+        if (deityDay != 0 && deityDay != day) {
+            bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
+            return boostedAmount;
+        }
         // Check expiry
         uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
         if (

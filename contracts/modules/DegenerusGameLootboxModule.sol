@@ -1517,15 +1517,18 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 s0 = bp.slot0;
             uint8 newTier = _coinflipBpsToTier(bps);
             uint8 existingTier = uint8(s0 >> BP_COINFLIP_TIER_SHIFT);
+            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
+            // ignored lower/equal-tier roll is a no-op and must not refresh the timer
+            // (nor zero a held deity boon's same-day flag).
             if (newTier > existingTier) {
                 s0 = (s0 & ~(uint256(BP_MASK_8) << BP_COINFLIP_TIER_SHIFT)) | (uint256(newTier) << BP_COINFLIP_TIER_SHIFT);
+                // Set coinflipDay = currentDay
+                s0 = (s0 & ~(uint256(BP_MASK_24) << BP_COINFLIP_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_COINFLIP_DAY_SHIFT);
+                // Set deityCoinflipDay = isDeity ? day : 0
+                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+                s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_COINFLIP_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_COINFLIP_DAY_SHIFT);
+                bp.slot0 = s0;
             }
-            // Set coinflipDay = currentDay
-            s0 = (s0 & ~(uint256(BP_MASK_24) << BP_COINFLIP_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_COINFLIP_DAY_SHIFT);
-            // Set deityCoinflipDay = isDeity ? day : 0
-            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-            s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_COINFLIP_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_COINFLIP_DAY_SHIFT);
-            bp.slot0 = s0;
             if (!isDeity) emit LootBoxReward(player, 2, originalAmount, LOOTBOX_BOON_MAX_BONUS);
             return;
         }
@@ -1539,13 +1542,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint8 existingTier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
             // Both deity and lootbox: upgrade semantics — keep higher tier
             uint8 activeTier = newTier > existingTier ? newTier : existingTier;
-            // Clear lootbox fields, set new values
-            s0 = s0 & BP_LOOTBOX_CLEAR;
-            s0 = s0 | (uint256(uint24(currentDay)) << BP_LOOTBOX_DAY_SHIFT);
-            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-            s0 = s0 | (uint256(deityDayVal) << BP_DEITY_LOOTBOX_DAY_SHIFT);
-            s0 = s0 | (uint256(activeTier) << BP_LOOTBOX_TIER_SHIFT);
-            bp.slot0 = s0;
+            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
+            // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
+            if (newTier > existingTier) {
+                // Clear lootbox fields, set new values
+                s0 = s0 & BP_LOOTBOX_CLEAR;
+                s0 = s0 | (uint256(uint24(currentDay)) << BP_LOOTBOX_DAY_SHIFT);
+                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+                s0 = s0 | (uint256(deityDayVal) << BP_DEITY_LOOTBOX_DAY_SHIFT);
+                s0 = s0 | (uint256(activeTier) << BP_LOOTBOX_TIER_SHIFT);
+                bp.slot0 = s0;
+            }
             if (!isDeity) {
                 // Map active tier back to BPS and rewardType for event
                 uint16 activeBps = _lootboxTierToBps(activeTier);
@@ -1564,15 +1571,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 s0 = bp.slot0;
             uint8 newTier = _purchaseBpsToTier(bps);
             uint8 existingTier = uint8(s0 >> BP_PURCHASE_TIER_SHIFT);
+            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
+            // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (newTier > existingTier) {
                 s0 = (s0 & ~(uint256(BP_MASK_8) << BP_PURCHASE_TIER_SHIFT)) | (uint256(newTier) << BP_PURCHASE_TIER_SHIFT);
+                // Set purchaseDay = currentDay
+                s0 = (s0 & ~(uint256(BP_MASK_24) << BP_PURCHASE_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_PURCHASE_DAY_SHIFT);
+                // Set deityPurchaseDay
+                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+                s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_PURCHASE_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_PURCHASE_DAY_SHIFT);
+                bp.slot0 = s0;
             }
-            // Set purchaseDay = currentDay
-            s0 = (s0 & ~(uint256(BP_MASK_24) << BP_PURCHASE_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_PURCHASE_DAY_SHIFT);
-            // Set deityPurchaseDay
-            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-            s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_PURCHASE_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_PURCHASE_DAY_SHIFT);
-            bp.slot0 = s0;
             if (!isDeity) {
                 uint8 rewardType = bps == LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS
                     ? 6 : (bps == LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS ? 5 : 4);
@@ -1590,13 +1599,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 s0 = bp.slot0;
             uint8 newTier = _decimatorBpsToTier(bps);
             uint8 existingTier = uint8(s0 >> BP_DECIMATOR_TIER_SHIFT);
+            // Only a genuine tier upgrade applies the boon and (re)sets its deity-day; an
+            // ignored lower/equal-tier roll is a no-op and must not zero a held deity boon.
             if (newTier > existingTier) {
                 s0 = (s0 & ~(uint256(BP_MASK_8) << BP_DECIMATOR_TIER_SHIFT)) | (uint256(newTier) << BP_DECIMATOR_TIER_SHIFT);
+                // Set deityDecimatorDay (no award day for decimator)
+                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+                s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_DECIMATOR_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_DECIMATOR_DAY_SHIFT);
+                bp.slot0 = s0;
             }
-            // Set deityDecimatorDay (no award day for decimator)
-            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-            s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_DECIMATOR_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_DECIMATOR_DAY_SHIFT);
-            bp.slot0 = s0;
             if (!isDeity) emit LootBoxReward(player, 8, originalAmount, bps);
             return;
         }
@@ -1610,16 +1621,18 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 s0 = bp.slot0;
             uint8 newTier = _whaleBpsToTier(bps);
             uint8 existingTier = uint8(s0 >> BP_WHALE_TIER_SHIFT);
+            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
+            // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (newTier > existingTier) {
                 s0 = (s0 & ~(uint256(BP_MASK_8) << BP_WHALE_TIER_SHIFT)) | (uint256(newTier) << BP_WHALE_TIER_SHIFT);
+                // whaleDay = isDeity ? day : currentDay (matching original behavior)
+                uint24 whaleDayVal = isDeity ? uint24(day) : uint24(currentDay);
+                s0 = (s0 & ~(uint256(BP_MASK_24) << BP_WHALE_DAY_SHIFT)) | (uint256(whaleDayVal) << BP_WHALE_DAY_SHIFT);
+                // deityWhaleDay = isDeity ? day : 0
+                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+                s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_WHALE_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_WHALE_DAY_SHIFT);
+                bp.slot0 = s0;
             }
-            // whaleDay = isDeity ? day : currentDay (matching original behavior)
-            uint24 whaleDayVal = isDeity ? uint24(day) : uint24(currentDay);
-            s0 = (s0 & ~(uint256(BP_MASK_24) << BP_WHALE_DAY_SHIFT)) | (uint256(whaleDayVal) << BP_WHALE_DAY_SHIFT);
-            // deityWhaleDay = isDeity ? day : 0
-            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-            s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_WHALE_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_WHALE_DAY_SHIFT);
-            bp.slot0 = s0;
             if (!isDeity) emit LootBoxReward(player, 9, originalAmount, bps);
             return;
         }
@@ -1640,15 +1653,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             BoonPacked storage bp = boonPacked[player];
             uint256 s1 = bp.slot1;
             uint24 existingAmt = uint24(s1 >> BP_ACTIVITY_PENDING_SHIFT);
+            // Only a genuine increase applies the boon and (re)sets its expiry; an ignored
+            // lower/equal roll is a no-op and must not refresh the timer.
             if (amt > existingAmt) {
                 s1 = (s1 & ~(uint256(BP_MASK_24) << BP_ACTIVITY_PENDING_SHIFT)) | (uint256(amt) << BP_ACTIVITY_PENDING_SHIFT);
+                // Set activityDay = currentDay
+                s1 = (s1 & ~(uint256(BP_MASK_24) << BP_ACTIVITY_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_ACTIVITY_DAY_SHIFT);
+                // Set deityActivityDay
+                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+                s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_ACTIVITY_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_ACTIVITY_DAY_SHIFT);
+                bp.slot1 = s1;
             }
-            // Set activityDay = currentDay
-            s1 = (s1 & ~(uint256(BP_MASK_24) << BP_ACTIVITY_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_ACTIVITY_DAY_SHIFT);
-            // Set deityActivityDay
-            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-            s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_ACTIVITY_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_ACTIVITY_DAY_SHIFT);
-            bp.slot1 = s1;
             if (!isDeity) emit LootBoxReward(player, 10, originalAmount, amt);
             return;
         }
@@ -1661,15 +1676,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             BoonPacked storage bp = boonPacked[player];
             uint256 s1 = bp.slot1;
             uint8 existingTier = uint8(s1 >> BP_DEITY_PASS_TIER_SHIFT);
+            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
+            // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (tier > existingTier) {
                 s1 = (s1 & ~(uint256(BP_MASK_8) << BP_DEITY_PASS_TIER_SHIFT)) | (uint256(tier) << BP_DEITY_PASS_TIER_SHIFT);
+                // Set deityPassDay = currentDay
+                s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_PASS_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_DEITY_PASS_DAY_SHIFT);
+                // Set deityDeityPassDay
+                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+                s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_DEITY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_DEITY_PASS_DAY_SHIFT);
+                bp.slot1 = s1;
             }
-            // Set deityPassDay = currentDay
-            s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_PASS_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_DEITY_PASS_DAY_SHIFT);
-            // Set deityDeityPassDay
-            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-            s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_DEITY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_DEITY_PASS_DAY_SHIFT);
-            bp.slot1 = s1;
             if (!isDeity) {
                 uint16 bps = tier == DEITY_PASS_BOON_TIER_50 ? 3500 : (tier == DEITY_PASS_BOON_TIER_25 ? 2000 : 1000);
                 emit LootBoxReward(player, 10, originalAmount, bps);
@@ -1700,16 +1717,18 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 s1 = bp.slot1;
             uint8 newTier = _lazyPassBpsToTier(bps);
             uint8 existingTier = uint8(s1 >> BP_LAZY_PASS_TIER_SHIFT);
+            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
+            // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (newTier > existingTier) {
                 s1 = (s1 & ~(uint256(BP_MASK_8) << BP_LAZY_PASS_TIER_SHIFT)) | (uint256(newTier) << BP_LAZY_PASS_TIER_SHIFT);
+                // lazyPassDay = isDeity ? day : currentDay (matching original behavior)
+                uint24 lazyDayVal = isDeity ? uint24(day) : uint24(currentDay);
+                s1 = (s1 & ~(uint256(BP_MASK_24) << BP_LAZY_PASS_DAY_SHIFT)) | (uint256(lazyDayVal) << BP_LAZY_PASS_DAY_SHIFT);
+                // deityLazyPassDay = isDeity ? day : 0
+                uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+                s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_LAZY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_LAZY_PASS_DAY_SHIFT);
+                bp.slot1 = s1;
             }
-            // lazyPassDay = isDeity ? day : currentDay (matching original behavior)
-            uint24 lazyDayVal = isDeity ? uint24(day) : uint24(currentDay);
-            s1 = (s1 & ~(uint256(BP_MASK_24) << BP_LAZY_PASS_DAY_SHIFT)) | (uint256(lazyDayVal) << BP_LAZY_PASS_DAY_SHIFT);
-            // deityLazyPassDay = isDeity ? day : 0
-            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
-            s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_LAZY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_LAZY_PASS_DAY_SHIFT);
-            bp.slot1 = s1;
             if (!isDeity) emit LootBoxReward(player, 11, originalAmount, bps);
         }
     }
