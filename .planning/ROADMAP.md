@@ -53,13 +53,16 @@
 **Depends on**: Nothing (first v61.0 phase; consumes the v60.0-closed frozen subject `2bee6d6f` + the 3 design-lock plan docs)
 **Requirements**: SPEC-01
 **Success Criteria** (what must be TRUE):
+
   1. The open knobs are LOCKED in writing (packing sequencing · `AfkingSpent` breadth · `purchaseWith`-dead · curse cap + staleness basis · smite protocol-skip/self-smite).
   2. Every cited anchor is re-attested against `2bee6d6f` with any drift corrected.
   3. The producer-before-consumer edit order is mapped (CURSE before SMITE; PACK accessor before repack).
 
 **Plans**: 2 plans
+
   - [x] 375-01-PLAN.md — Re-attest every cited anchor vs `2bee6d6f` (drift corrected) + resolve the `purchaseWith`-dead / self-smite / SOLVENCY-accessor verification items → `375-ANCHOR-REATTESTATION.md`
   - [x] 375-02-PLAN.md — Author `SPEC-V61-DESIGN-LOCK.md`: lock the knobs D-01..D-05, fold the re-attested anchor table, map the producer-before-consumer edit order (Track A PACK→AFPAY / Track B CURSE→SMITE)
+
 **UI hint**: no
 
 ### Phase 376: IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE)
@@ -69,6 +72,7 @@
 **Depends on**: Phase 375
 **Requirements**: AFPAY-01..07, PACK-01/02, CURSE-01..07, SMITE-01
 **Success Criteria** (what must be TRUE):
+
   1. The AFPAY waterfall lands on all spend paths with the afking portion treated as fresh ETH (no rebuy bonus).
   2. The PACK accessor layer + repack land feature-first, `claimablePool == Σ` in one place.
   3. The CURSE counter/APPLY/SET/cure/bounty-stamp/`decurse` land (zero new SLOAD on the score read).
@@ -77,9 +81,18 @@
 
 **Plans**: 3 plans (sequential-on-main, all `autonomous:false` — ONE batched diff held at ONE boundary)
 Plans:
+**Wave 1**
+
 - [ ] 376-01-PLAN.md — Track A: PACK accessor + repack (PACK-01/02) then the AFPAY waterfall + AfkingSpent (AFPAY-01..07)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 376-02-PLAN.md — Track B: cashout-curse counter/APPLY/SET/CURE/stamp/decurse/view (CURSE-01..07) + deity-smite (SMITE-01)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 376-03-PLAN.md — Build-cleanliness (SettleClaimableShortfallTester + test sweep) + EIP-170 guardrail + contract-commit boundary HOLD
+
 **UI hint**: no
 
 ### Phase 377: GAS — Gas-Neutrality Gate (curse APPLY zero-SLOAD · packing no cold slot · no advance-ceiling regression)
@@ -89,6 +102,7 @@ Plans:
 **Depends on**: Phase 376
 **Requirements**: none
 **Success Criteria** (what must be TRUE):
+
   1. The lazy/score read path + the spend paths stay within budget; outcome recorded (Outcome-A no-diff expected).
 
 **Plans**: TBD
@@ -101,6 +115,7 @@ Plans:
 **Depends on**: Phase 377
 **Requirements**: SEC-01, SEC-02, TST-01..06
 **Success Criteria** (what must be TRUE):
+
   1. One proving test per surface passes.
   2. RNG-freeze intact across all changes.
   3. SOLVENCY-01 re-attested (`claimablePool == Σ`, never exceeds `bal + stETH`).
@@ -116,6 +131,7 @@ Plans:
 **Depends on**: Phase 378
 **Requirements**: AUDIT-01
 **Success Criteria** (what must be TRUE):
+
   1. Delta-audit clean (NON-WIDENING, RNG-freeze + SOLVENCY-01 anchored).
   2. The 3-skill adversarial sweep runs as genuine concurrent spawns.
   3. `audit/FINDINGS-v61.0.md` authored + the atomic closure flip emits `MILESTONE_V61_AT_HEAD_<sha>`; all 27 reqs re-attested.
@@ -191,14 +207,17 @@ Per-category: AFPAY 7 (IMPL) · PACK 2 (IMPL) · CURSE 7 (IMPL) · SMITE 1 (IMPL
 **Depends on**: Nothing (first v59.0 phase; consumes the v58.0-audited frozen contract subject `2b26ec91` as the baseline, plus the design-lock inputs `audit/FINDINGS-v58.0.md` + `.planning/PLAN-PASS-STAT-FRONTLOAD.md`)
 **Requirements**: COV-01, SPEC-01
 **Success Criteria** (what must be TRUE):
+
   1. The one open fix variant is LOCKED + the batched-diff edit order is fixed (SPEC-01 part 1) — F-03 / SOLV-01's choice is decided (return-the-`remainder`-from-`_queueWhalePassClaimCore`-and-fold-into-`claimableDelta` vs push-the-`remainder`-back-to-`futurePrizePool` via the `_processSoloBucketWinner` pattern), with the rationale recorded; and the producer-before-consumer edit order is mapped (STREAK-01 `BitPackingLib` shift promotion BEFORE STREAK-02's helper; SOLV-01 return-value BEFORE the BAF caller's `memFuture -= claimed` fold) so the IMPL authors a single reconciled diff.
   2. Every cited `file:line` anchor is re-attested against the frozen baseline `2b26ec91` (SPEC-01 part 2) — the SALV (`DegenerusGameMintStreakUtils.sol:173-181`/`DegenerusGameMintModule.sol:1013-1015`/`:1059`), AFAFF (`GameAfkingModule.sol:879` + the `:826`/`:887` siblings), SOLV (`DegenerusGamePayoutUtils.sol:46-65`/`DegenerusGameAdvanceModule.sol:897-903`/`DegenerusGameDecimatorModule.sol:392-399`/`:596`/`:1588`), PRESALE (`GameAfkingModule.sol:397-398`/`:1599-1601`), and Change-A/B/C anchors (the 6 WINDOW comparisons + `hasAnyLazyPass` docstring, the 3 STREAK activation sites + the `MINT_STREAK_LAST_COMPLETED_SHIFT` local, the CENTURY gate `DegenerusGameWhaleModule.sol:411-416`) are grep-verified against `2b26ec91` (the same SHA the v58.0 council read) with any drift corrected in the SPEC (no "by construction" survives un-checked).
   3. The WINDOW-01 pre-edit verification is complete (SPEC-01 part 3) — a re-grep for any OTHER `frozenUntilLevel` window-reader (the seed's verification checklist) confirms exactly the 6 comparisons to flip + the `> targetFrozenLevel` extension math + the `frozenUntilLevel > currentLevel + 7` early-renewal guard are left UNTOUCHED (different semantics), and the afking eviction boundary is re-confirmed inclusive-through-`validThroughLevel` (this change makes freeze/floor MATCH the already-inclusive eviction boundary, not diverge from it).
   4. The COV-01 second-model `area-solvency` XMODEL re-run is adjudicated EARLY (COV-01) — the `area-solvency` leg is re-run with a second independent model against the frozen `2b26ec91` (via the `.planning/audit-v52/` harness, after a council smoke-test), Claude owns the verdict against frozen source (parallel verification), any CONFIRMED new solvency claim is routed to fold into the SAME IMPL batched diff, refuted claims are logged, and the disposition is recorded for the TERMINAL `audit/FINDINGS-v59.0.md` — closing the v58.0 coverage gap (the original Gemini solvency leg refused via Plan-Mode) BEFORE the milestone relies on the F-03/F-04 corrections. (The rng-freeze Gemini gap is deliberately NOT re-run — Claude 364/365 RNGSAFE/RNGVAR + the refuted Codex C1 already deep-cover the freeze.)
 
 **Plans**: 2 plans (2 waves collapse to 1 — both autonomous, no file overlap, run in parallel)
+
 - [x] 370-01-PLAN.md — Design-lock SPEC: re-attest every anchor vs frozen `2b26ec91`, lock the F-03/SOLV-01 fix variant + the producer-before-consumer edit order, complete the WINDOW-01 pre-edit verification (SPEC-01)
 - [x] 370-02-PLAN.md — COV-01 second-model `area-solvency` XMODEL re-run vs `2b26ec91` + per-claim adjudication against frozen source, routing any confirmed finding into the Phase-371 IMPL diff (COV-01)
+
 **UI hint**: no
 
 ### Phase 371: IMPL — The ONE Carefully-Sequenced Batched Contract Diff (5 council-findings fixes + pass-stat Changes A/B/C)
@@ -208,6 +227,7 @@ Per-category: AFPAY 7 (IMPL) · PACK 2 (IMPL) · CURSE 7 (IMPL) · SMITE 1 (IMPL
 **Depends on**: Phase 370 (the SPEC must lock the F-03 fix variant + the producer-before-consumer edit order + grep-attest the anchors first; any COV-01-confirmed solvency finding folds into this same diff)
 **Requirements**: SALV-01, AFAFF-01, SOLV-01, SOLV-02, PRESALE-01, WINDOW-01, STREAK-01, STREAK-02, CENTURY-01
 **Success Criteria** (what must be TRUE):
+
   1. The 3 sDGNRS/BURNIE-supply fixes land solvency-positive (SALV-01 / AFAFF-01 / PRESALE-01) — the salvage quote-loop zero-check is widened to `if (n == 0 || n > type(uint32).max) revert E();` so every reachable swap values exactly the `uint32` entries it removes and the `n = 2^32 + k` exploit reverts (SALV-01); the afking `affiliateBase` accrual gains the missing `/ 1 ether` at `GameAfkingModule.sol:879` so it stores whole-BURNIE units with no clamp saturation and no unbacked `recordAmount=0` emission, mirroring the `:826`/`:887` siblings (AFAFF-01); and the `subscribe` UPSERT branch auto-claims `pendingBurnie` BEFORE flipping `FLAG_USE_TICKETS` so the presale-box halving keys on the settled flag and the allowance is halved exactly once (PRESALE-01).
   2. The 2 whale-pass remainder solvency-identity corrections land (SOLV-01 / SOLV-02) — `_queueWhalePassClaimCore` returns the BAF whale-pass `remainder` and the BAF caller folds it into `claimableDelta` (per the SPEC-locked variant) so `memFuture -= claimed` debits `futurePrizePool` and the same wei no longer backs two obligations (SOLV-01, F-03); and the non-gameover `_creditDecJackpotClaimCore` path bumps `claimablePool += uint128(remainder);` alongside the `_creditClaimable(winner, remainder)` at `DegenerusGameDecimatorModule.sol:596` so `Σ claimableWinnings` never exceeds `claimablePool` and the tail claimant no longer reverts on checked-math underflow at `claimWinnings` (SOLV-02, F-04; the gameOver + terminal claim legs are already correct and unaffected). Both RESTORE `claimablePool == Σ claimableWinnings + Σ afkingFunding`.
   3. Change A (inclusive 1–10 pass-coverage window) lands correct (WINDOW-01) — the 6 "is this level covered / is the pass active" comparisons are flipped to inclusive (`DegenerusGameMintModule.sol:291`/`:295`, `DegenerusGameMintStreakUtils.sol:262`/`:310`/`:56`, `DegenerusGame.sol:1678` `hasAnyLazyPass`) AND its stale docstring is updated to the inclusive semantics; post-flip, freeze clears at `lvl > frozenUntilLevel` (level 11) so a fresh L1 pass freezes 1–10 and `+10 levelCount` covers exactly 10 levels (no double-count, the latent level-10 over-count fixed); the `> targetFrozenLevel` extension math + the `frozenUntilLevel > currentLevel + 7` early-renewal guard are LEFT UNTOUCHED (different semantics).
@@ -225,6 +245,7 @@ Per-category: AFPAY 7 (IMPL) · PACK 2 (IMPL) · CURSE 7 (IMPL) · SMITE 1 (IMPL
 **Depends on**: Phase 371 (the IMPL diff must be applied + locally compiling before the gas marginals can be measured)
 **Requirements**: (none — the gas-neutrality measurement gate)
 **Success Criteria** (what must be TRUE):
+
   1. The lazy-pass path stays within budget (Change A/B/C) — Change A's inclusive-window comparison flips + Change C's century-gate edit are comparison/gate-only (no new storage, no new loop), and the STREAK-01/02 front-load is a delta-based fold into the existing single SSTORE at the activation sites (no extra cold slot) → the lazy-pass far-future-ticket path adds no `advanceGame`-ceiling regression, measured against the frozen baseline `2b26ec91`.
   2. The F-04 decimator remainder path stays within budget (SOLV-02) — the added `claimablePool += uint128(remainder);` is a single warm add alongside the existing `_creditClaimable` write, adding no measurable cost to the decimator remainder path; the binding all-evict STAGE retains ~19% headroom at 13.60M cold; NO structural loop is added (F-06's structural gap-resolution change is explicitly WONTFIX / out of scope).
   3. The outcome is recorded — if the bundle is gas-neutral-by-construction (the expected outcome — the fixes are arithmetic/accounting/guard edits + the pass-stat changes are comparison/delta-fold/gate edits with no packed-field storage-layout growth), that is recorded as the Outcome-A no-diff outcome (per the v55 350 / v56 / v57 precedent); any net behavior-preserving change rides the same batched USER-APPROVED diff held at the contract-commit boundary.
@@ -239,6 +260,7 @@ Per-category: AFPAY 7 (IMPL) · PACK 2 (IMPL) · CURSE 7 (IMPL) · SMITE 1 (IMPL
 **Depends on**: Phase 372 (the IMPL+GAS subject must be settled — the per-fix + freeze + solvency + non-widening proofs run against the frozen contract subject)
 **Requirements**: SEC-01, SEC-02, TST-01, TST-02, TST-03, TST-04, TST-05, TST-06, TST-07
 **Success Criteria** (what must be TRUE):
+
   1. The 5 council-findings fixes each have a proving regression test (TST-01..04 + the SOLV pair in TST-03) — the `n = 2^32 + k` salvage swap REVERTS (`E()`) while a positive small-`n` swap still values exactly the entries it debits (TST-01, the missing bound that let F-01 hide); an afking buy accrues `affiliateBase` in whole-BURNIE units with no 100M clamp saturation and `DegenerusAffiliate.claim` mints ~70 whole BURNIE to the A/U1/U2 tree not ~100M (TST-02); after a BAF whale-pass remainder AND a non-gameover decimator whale-pass remainder (`lootboxPortion > 5 ETH`, non-exact-2.25-multiple) the `claimablePool == Σ claimableWinnings + Σ afkingFunding` identity holds, `futurePrizePool` is debited by the BAF remainder, and the tail claimant withdraws with no underflow revert (TST-03); and a ticket-sub re-`subscribe(useTickets=false)` then `claimAfkingBurnie` halves the presale-box credit exactly once with the pre-claim firing in the UPSERT branch (TST-04).
   2. The pass-stat Changes A/B/C each have a proving regression test (TST-05 / TST-06) — a fresh lazy pass @ L1 yields `levelCount += 10`, `frozenUntilLevel=10`, `streak=10`, `lastCompleted=10`; freeze covers manual mints 1–10 (no `levelCount` double-count), the first un-frozen mint at L11 increments `levelCount`, the activity-score floor + whale bonus are active through L10 inclusive and off at L11, renewal/overlap is delta-only (no double-credit) with `lastCompleted` advancing to the new horizon, and the whale 100-bundle path mirrors lazy (TST-05); and a lazy pass is buyable at `level==x00 && !jackpotPhaseFlag`, reverts at `level==x00 && jackpotPhaseFlag`, x90/x9/x0 entries are unchanged, and the x01–x10 window queues fine across multiple centuries (100/200/…) (TST-06).
   3. The suite is NON-WIDENING vs the frozen baseline `2b26ec91` (TST-07) — the forge + Hardhat suite is enumerated BY NAME (every pre-existing red), the v59 fixes add green, and the carried v57 pre-launch harness layout/RNG artifacts stay characterized (no new contract regression introduced by the bundle).
@@ -255,6 +277,7 @@ Per-category: AFPAY 7 (IMPL) · PACK 2 (IMPL) · CURSE 7 (IMPL) · SMITE 1 (IMPL
 **Depends on**: Phase 373 (the IMPL+GAS+TST subject must be settled + the SEC floor proven before the delta-audit + adversarial sweep + closure flip run against the frozen contract subject)
 **Requirements**: AUDIT-01
 **Success Criteria** (what must be TRUE):
+
   1. The delta-audit is clean (AUDIT-01 part 1) — every changed surface across the 9 contract reqs (SALV / AFAFF / SOLV / PRESALE / WINDOW / STREAK / CENTURY) is NON-WIDENING vs the baseline `2b26ec91` with grep/diff anchors and zero orphan hunks; the RNG-freeze (no new player-manipulable VRF-derived read/write) + the SOLVENCY-01 identity (`claimablePool == Σ claimableWinnings + Σ afkingFunding`, restored by F-03/F-04) are re-attested with anchors.
   2. The 3-skill genuine-PARALLEL adversarial sweep + the COV-01 adjudication land (AUDIT-01 part 2) — the mandatory `/contract-auditor` + `/economic-analyst` + `/zero-day-hunter` review runs as genuine concurrent spawns (`/degen-skeptic` = the dual-gate filter per `D-271-ADVERSARIAL-02`), focused on the F-03/F-04 solvency-identity restoration + the Change A/B/C interaction with the lazy-pass far-future-ticket path; and the COV-01 second-model `area-solvency` re-run adjudication (any CONFIRMED finding already folded into the IMPL diff; refuted claims logged) is folded into the close with its final disposition recorded.
   3. FINDINGS-v59.0 is authored + the closure flip is atomic (AUDIT-01 part 3) — `audit/FINDINGS-v59.0.md` (chmod 444) records all 5 findings RESOLVED-AT-V59, the F-06 WONTFIX + F-07 INFO dispositions, the pass-stat seed, and any COV-01 result; the atomic closure flip emits the `MILESTONE_V59_AT_HEAD_<sha>` signal; all v59.0 requirements are re-attested against the frozen closure HEAD; KNOWN-ISSUES.md is byte-unmodified unless a genuine new finding is recorded.
@@ -361,6 +384,7 @@ Per-category: AFPAY 7 (IMPL) · PACK 2 (IMPL) · CURSE 7 (IMPL) · SMITE 1 (IMPL
 **Goal**: The audit subject is frozen and the run is set up so phases 364-369 can execute hands-off and resumably with zero re-attestation drift: `FROZEN_SHA` is pinned, the context-pack is rebuilt + every `file:line` re-attested against it, the complete source-of-truth inventory for all four web sections is enumerated, the cohesive static-site shell exists under `audit/site/`, and the autonomous + budget-paced + checkpoint/resume run contract is locked.
 **Requirements**: PREP-01, PREP-02, PREP-03, OPS-01, OPS-02
 **Success criteria**:
+
 1. `FROZEN_SHA` pinned to the v57 contract-frozen HEAD; `audit-v52/` `scope.txt`/`targets.md`/`hot-surfaces.md` rebuilt with `AfKing.sol`→`GameAfkingModule.sol` + `DegenerusGameBingoModule.sol` reconciled and 0 stale `file:line` refs.
 2. The four enumerations (player-facing functions · RNG-interacting variables · ETH inflow/pool/outflow sites · `advanceGame` stages) exist as explicit lists, with any coverage gap logged (no silent truncation).
 3. `audit/site/` opens from a local file with a working shared nav/tabs shell + a searchable-table component, no build step / framework / CDN.
@@ -371,6 +395,7 @@ Per-category: AFPAY 7 (IMPL) · PACK 2 (IMPL) · CURSE 7 (IMPL) · SMITE 1 (IMPL
 **Goal**: A reader can see every player-facing function, understand what it does, and read a cited reason WHY it cannot influence any RNG-dependent variable between request and resolution — and every behavior↔name/comment mismatch (a real-bug class, e.g. a BURNIE-burning buy that queues zero tickets) is surfaced as a finding.
 **Requirements**: RNGSAFE-01, RNGSAFE-02, RNGSAFE-03
 **Success criteria**:
+
 1. Every player-facing function from the 363 enumeration has a row (contract · signature · what-it-does · gating); 0 unlisted, deliberate exclusions noted.
 2. Each row carries an RNG-safety verdict + cited reasoning; any function able to touch a participating slot in the freeze window is escalated to a finding.
 3. The sanity/comment check is applied to every row; each behavior↔comment mismatch is recorded as a severity-classified finding with a fix sketch.
@@ -381,6 +406,7 @@ Per-category: AFPAY 7 (IMPL) · PACK 2 (IMPL) · CURSE 7 (IMPL) · SMITE 1 (IMPL
 **Goal**: A reader can see every variable that feeds RNG and a cited proof of why it cannot be modified between RNG request and resolution.
 **Requirements**: RNGVAR-01, RNGVAR-02, RNGVAR-03
 **Success criteria**:
+
 1. Every RNG-participating variable is enumerated with its location + the RNG outputs it feeds.
 2. Each variable's writer set is enumerated and each writer shown lock-gated or window-unreachable, cited to `file:line`; any window-mutating writer escalated to a finding.
 3. The RNG-Variable Freeze table renders in the site (variable → outputs → writers → freeze-gate), searchable.
@@ -390,6 +416,7 @@ Per-category: AFPAY 7 (IMPL) · PACK 2 (IMPL) · CURSE 7 (IMPL) · SMITE 1 (IMPL
 **Goal**: A reader can follow every ETH wei from where it enters, through the pools, to where it leaves — and the conservation/solvency invariant is visible at each hop.
 **Requirements**: ETHFLOW-01, ETHFLOW-02, ETHFLOW-03
 **Success criteria**:
+
 1. Every ETH inflow is traced to its destination pool/ledger with an entry `file:line`.
 2. Pool cycling + every outflow is traced with the conservation/solvency invariant noted per hop; any leak/mismatch escalated to a finding.
 3. A readable ETH-flow diagram (sources/pools/sinks + labeled edges) renders in the site, each edge backed by a `file:line`.
@@ -399,6 +426,7 @@ Per-category: AFPAY 7 (IMPL) · PACK 2 (IMPL) · CURSE 7 (IMPL) · SMITE 1 (IMPL
 **Goal**: A reader can see the theoretical worst-case gas of each `advanceGame` stage and whether it stays under the 16.7M per-tx cap.
 **Requirements**: GASCEIL-01, GASCEIL-02, GASCEIL-03
 **Success criteria**:
+
 1. `advanceGame` is decomposed into ordered stages, each with its bounding loop + iteration cap.
 2. Worst-case max gas per stage is derived (marginal × ceiling) with explicit bounding assumptions (worst-case branch, not typical seed).
 3. The gas-ceiling table renders with a per-stage verdict vs the 16,777,216 cap; any stage that could approach/exceed it is escalated to a finding.
@@ -408,6 +436,7 @@ Per-category: AFPAY 7 (IMPL) · PACK 2 (IMPL) · CURSE 7 (IMPL) · SMITE 1 (IMPL
 **Goal**: The "BURNIE burned but no tickets queued" regression is root-caused to a commit and explained, with a regression-test recommendation so it can't recur silently.
 **Requirements**: FORENSIC-01, FORENSIC-02
 **Success criteria**:
+
 1. The introducing commit SHA + era/refactor is identified via git history.
 2. A short root-cause note explains why no test caught it + recommends the specific regression test (post-buy ticket-queue-growth assertion on the coin path).
 
@@ -416,6 +445,7 @@ Per-category: AFPAY 7 (IMPL) · PACK 2 (IMPL) · CURSE 7 (IMPL) · SMITE 1 (IMPL
 **Goal**: The artifacts are corroborated by a targeted external second opinion, assembled into one cohesive shippable site, and every finding is consolidated into `audit/FINDINGS-v58.0.md`; the milestone closes with a signal.
 **Requirements**: XMODEL-01, SITE-01, AUDIT-01
 **Success criteria**:
+
 1. ~5 area prompts × 2 models run (after a council PONG smoke-test); each external claim adjudicated by Claude and folded into the artifacts/FINDINGS.
 2. The four sections assemble into ONE cohesive navigable site under `audit/site/` (shared nav, dark aesthetic, searchable tables, embedded ETH-flow diagram, opens with no server/build).
 3. `audit/FINDINGS-v58.0.md` consolidates all findings (severity-classified, fix sketches routed to a later milestone); the atomic closure flip lands with a `MILESTONE_V58_AT_HEAD_<sha>` signal and all 22 requirements re-attested.

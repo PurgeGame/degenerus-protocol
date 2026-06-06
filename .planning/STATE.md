@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v61.0
 milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
-status: ready_to_plan
-last_updated: "2026-06-06T21:58:10.664Z"
-last_activity: 2026-06-06 -- Phase 376 CONTEXT gathered (376-CONTEXT.md + DISCUSSION-LOG): curse entrypoint placement LOCKED (decurse/smite = thin Game stubs -> existing module; planner picks exact module by code-size+cohesion [GameAfkingModule > MintModule]; Game-under-24576 guardrail). Design otherwise fully locked by SPEC-V61-DESIGN-LOCK.md. Ready to plan 376.
+status: executing
+last_updated: "2026-06-06T22:30:42.549Z"
+last_activity: 2026-06-06 -- Phase 376 planning complete
 progress:
   total_phases: 10
   completed_phases: 2
-  total_plans: 6
+  total_plans: 9
   completed_plans: 4
   percent: 20
 ---
@@ -34,9 +34,9 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 
 Phase: 376
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Next up: 376 IMPL (the ONE batched contract diff AFPAY+PACK+CURSE+SMITE, producer-before-consumer Track A/B per `SPEC-V61-DESIGN-LOCK.md`; CONTRACT-BOUNDARY HARD STOP) → 377 GAS → 378 TST → 379 TERMINAL (FULL in-milestone close)
-Last activity: 2026-06-06
+Last activity: 2026-06-06 -- Phase 376 planning complete
 
 ## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
 
