@@ -1979,14 +1979,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
-    /// @dev Called by sDGNRS during claimRedemption. The owed ETH physically arrives as
-    ///      msg.value (sDGNRS forwards the segregated lootbox share); it is credited to
-    ///      futurePrizePool. No claimableWinnings[SDGNRS] debit occurs — the ETH was already
-    ///      pulled out of claimable at submit via pullRedemptionReserve, so reclassifying
-    ///      claimable here would double-spend it.
-    ///      Splits into 5 ETH boxes and resolves each via lootbox module delegatecall.
+    /// @dev Called by sDGNRS during claimRedemption. The owed value arrives as forwarded ETH
+    ///      (msg.value) plus a stETH top-up for any remainder: msg.value covers 0..amount and the
+    ///      rest is pulled via transferFrom (sDGNRS pre-approves GAME for max). This lets a
+    ///      partial- or zero-ETH sDGNRS (mid-game depletion) still settle — an ETH-only forward
+    ///      would revert and strand the whole claim. Both media credit futurePrizePool and count
+    ///      toward the game's claimablePool backing identically. No claimableWinnings[SDGNRS]
+    ///      debit occurs — the value was already pulled out of claimable at submit via
+    ///      pullRedemptionReserve, so reclassifying claimable here would double-spend it. Splits
+    ///      into 5 ETH boxes and resolves each via lootbox module delegatecall.
     /// @param player Player receiving lootbox rewards
-    /// @param amount Total lootbox ETH amount to resolve (must equal msg.value)
+    /// @param amount Total lootbox value to resolve (msg.value ETH + the stETH remainder pulled here)
     /// @param rngWord RNG entropy for lootbox resolution
     /// @param activityScore Snapshotted activity score (bps) from burn submission
     function resolveRedemptionLootbox(
@@ -1996,12 +1999,19 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint16 activityScore
     ) external payable {
         if (msg.sender != ContractAddresses.SDGNRS) revert E();
-        if (msg.value != amount) revert E();
         if (amount == 0) return;
+        // Forwarded ETH (msg.value) funds the leg; any remainder is pulled as stETH so a
+        // partial-ETH sDGNRS can still settle. msg.value must not exceed the leg amount.
+        if (msg.value > amount) revert E();
+        uint256 stethPortion;
+        unchecked { stethPortion = amount - msg.value; }
+        if (stethPortion != 0) {
+            if (!steth.transferFrom(msg.sender, address(this), stethPortion)) revert E();
+        }
 
-        // Credit the just-arrived ETH (msg.value) to the future prize pool (respects freeze
-        // state). The ETH was segregated out of claimableWinnings[SDGNRS] at submit, so there
-        // is no claimable debit here — only a real-ETH-in credit.
+        // Credit the just-arrived value to the future prize pool (respects freeze state). The
+        // value was segregated out of claimableWinnings[SDGNRS] at submit, so there is no
+        // claimable debit here — only a real-value-in credit.
         if (prizePoolFrozen) {
             (uint128 pNext, uint128 pFuture) = _getPendingPools();
             _setPendingPools(pNext, pFuture + uint128(amount));

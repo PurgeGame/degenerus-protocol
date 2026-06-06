@@ -1343,6 +1343,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (elapsed >= GAMEOVER_RNG_FALLBACK_DELAY) {
                 // Use earliest historical VRF word as fallback (more secure than blockhash)
                 uint256 fallbackWord = _getHistoricalRngFallback(day);
+                // Cancel any reverseFlip nudge from the fallback word: the VRF-dead fallback
+                // never set rngLockedFlag, so reverseFlip stayed open and a committer could
+                // otherwise steer the terminal distribution. Pre-subtracting cancels the +=
+                // inside _applyDailyRng (and consumes the nudges), leaving the pure
+                // historical+prevrandao word.
+                unchecked { fallbackWord -= totalFlipReversals; }
                 fallbackWord = _applyDailyRng(day, fallbackWord);
                 if (lvl != 0) {
                     coinflip.processCoinflipPayouts(

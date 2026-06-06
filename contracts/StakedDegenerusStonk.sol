@@ -43,7 +43,7 @@ interface IDegenerusGamePlayer {
     function rngWordForDay(uint24 day) external view returns (uint256);
     /// @notice Get player's activity score.
     function playerActivityScore(address player) external view returns (uint256);
-    /// @notice Resolve a redemption lootbox for a player (sDGNRS forwards lootboxEth as msg.value).
+    /// @notice Resolve a redemption lootbox (sDGNRS forwards ETH as msg.value; GAME pulls any stETH remainder).
     function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external payable;
     /// @notice Segregate redemption ETH out of claimableWinnings[SDGNRS] into the sDGNRS balance.
     function pullRedemptionReserve(uint256 amount) external;
@@ -232,10 +232,6 @@ contract StakedDegenerusStonk {
     } // 96 + 16 = 112 bits (1 slot); composite outer key (player, day) carries the day reference per SPEC-02.
       // BURNIE is settled entirely at submit (redeemBurnieShare) — nothing BURNIE-related is recorded per claim.
 
-    struct RedemptionPeriod {
-        uint16  roll;           // 0 = unresolved, 25-175 = resolved
-    }
-
     /// @dev Per-day unresolved gambling-burn pool (SPEC-01, tightened per D-305-STRUCT-TIGHTEN-01
     ///      to 1 slot via denomination conversion).
     ///      Three fields packed into a single 256-bit slot (BURNIE is settled at submit, so no
@@ -261,7 +257,7 @@ contract StakedDegenerusStonk {
     }
 
     mapping(address => mapping(uint24 => PendingRedemption)) public pendingRedemptions;
-    mapping(uint24 => RedemptionPeriod) public redemptionPeriods;
+    mapping(uint24 => uint16) public redemptionPeriods;   // day => resolved roll (0 = unresolved, 25-175 = resolved)
 
     uint256 public pendingRedemptionEthValue;      // total physically-segregated ETH across all periods
     mapping(uint24 => DayPending) internal pendingByDay;
@@ -389,6 +385,11 @@ contract StakedDegenerusStonk {
         // the GAME's SUB-02 self-consent path, no operator approval needed).
         game.subscribe(address(this), true, false, 1, 2, address(0));
         coinflip.setCoinflipAutoRebuy(address(this), true, 0);
+
+        // Pre-approve GAME to pull stETH for the redemption-lootbox leg. claimRedemption funds
+        // that leg with stETH (resolveRedemptionLootboxSteth → transferFrom) whenever liquid ETH
+        // is short, so the claim can't strand mid-game on an ETH-only forward.
+        steth.approve(ContractAddresses.GAME, type(uint256).max);
     }
 
     // =====================================================================
@@ -679,9 +680,7 @@ contract StakedDegenerusStonk {
         pendingRedemptionEthValue = pendingRedemptionEthValue - segregatedMax + rolledEth;
 
         // Store per-day result (write before emit before delete per SPEC-04 (c))
-        redemptionPeriods[dayToResolve] = RedemptionPeriod({
-            roll: roll
-        });
+        redemptionPeriods[dayToResolve] = roll;
 
         emit RedemptionResolved(dayToResolve, roll);
 
@@ -693,7 +692,7 @@ contract StakedDegenerusStonk {
     }
 
     /// @notice Claim a resolved gambling-burn redemption for day `day` (SPEC-02).
-    /// @dev Requires `redemptionPeriods[day].roll != 0` (period resolved). Reads composite-keyed
+    /// @dev Requires `redemptionPeriods[day] != 0` (period resolved). Reads composite-keyed
     ///      `pendingRedemptions[msg.sender][day]`; deletes that slot per SPEC-04 (d).
     ///      ETH-only: BURNIE is fully settled at submit (no claim-time BURNIE leg). 50% of rolled
     ///      ETH is paid direct from this contract's segregated balance, 50% is forwarded to the
@@ -704,10 +703,9 @@ contract StakedDegenerusStonk {
         PendingRedemption storage claim = pendingRedemptions[player][day];
         if (claim.ethValueOwed == 0) revert NoClaim();
 
-        RedemptionPeriod storage period = redemptionPeriods[day];
-        if (period.roll == 0) revert NotResolved();
+        uint16 roll = redemptionPeriods[day];
+        if (roll == 0) revert NotResolved();
 
-        uint16 roll = period.roll;
         uint16 claimActivityScore = claim.activityScore;
 
         // Total rolled ETH. Per-claimant floor division may leave up to (n-1) wei
@@ -734,17 +732,30 @@ contract StakedDegenerusStonk {
 
         emit RedemptionClaimed(player, roll, ethDirect, lootboxEth);
 
-        // Pay direct ETH first from this contract's segregated balance (raw .call to untrusted address).
-        _payEth(player, ethDirect);
-
-        // Forward the lootbox share to the Game as real ETH (msg.value). The Game credits it to
-        // futurePrizePool — no claimable debit (the ETH was already pulled out at submit).
+        // Fund the lootbox leg BEFORE the direct payout (CEI: the untrusted .call goes last).
+        // The leg mixes ETH and stETH like _payEth — msg.value carries the ETH, the GAME pulls any
+        // remainder as stETH — so a mid-game ETH-depleted contract can't strand the claim on an
+        // ETH-only forward. ETH is reserved for the player's direct half first; the pool-bound leg
+        // is medium-indifferent and absorbs the stETH shortfall. The MAX reservation guarantees
+        // ETH + stETH >= rolled, so the stETH remainder is always coverable.
         if (lootboxEth != 0) {
             uint16 actScore = claimActivityScore > 0 ? claimActivityScore - 1 : 0;
-            uint256 rngWord = game.rngWordForDay(day);
+            // Key the lootbox draw to the NEXT day's word (day+1) - unknown when the burn was
+            // submitted (day+1 isn't drawn yet), so a post-advance burn can't grind a known
+            // draw. Only reached when !gameOver (lootboxEth != 0); in a live game day+1's word
+            // is always set by claim time (the daily advance, or gap-backfill after a stall).
+            uint256 rngWord = game.rngWordForDay(day + 1);
             uint256 entropy = uint256(keccak256(abi.encode(rngWord, player)));
-            game.resolveRedemptionLootbox{value: lootboxEth}(player, lootboxEth, entropy, actScore);
+            uint256 bal = address(this).balance;
+            uint256 ethForLootbox = bal > ethDirect
+                ? (bal - ethDirect < lootboxEth ? bal - ethDirect : lootboxEth)
+                : 0;
+            game.resolveRedemptionLootbox{value: ethForLootbox}(player, lootboxEth, entropy, actScore);
         }
+
+        // Player's direct half last (untrusted .call; CEI — the slot deletes above precede it).
+        // ETH was reserved for it above, so it pays pure ETH whenever the contract holds enough.
+        _payEth(player, ethDirect);
     }
 
     // =====================================================================

@@ -305,6 +305,69 @@ contract RedemptionStethFallback is DeployProtocol {
     }
 
     // =====================================================================
+    //   (b2) test_RFALL_C2_StethOnlyClaim_RealForward_NoStrand
+    // =====================================================================
+
+    /// @notice C-2 strand regression. With sDGNRS mid-game ETH-depleted (0 ETH, stETH-only) AND the
+    ///         REAL lootbox forward un-mocked, claimRedemption must NOT strand. Pre-fix the claim
+    ///         forwarded the lootbox half as `{value: lootboxEth}` ETH, which reverts when liquid ETH
+    ///         < lootboxEth, reverting the whole claim despite stETH fully backing it (the suite's
+    ///         setUp no-op mock was MASKING this). The fix funds the leg as a mix: msg.value carries
+    ///         whatever ETH is free, the GAME pulls the remainder as stETH (here the full half, since
+    ///         ETH is 0). So the claim succeeds — the game's stETH balance rises by the lootbox half,
+    ///         and the player is paid the direct half in stETH.
+    function test_RFALL_C2_StethOnlyClaim_RealForward_NoStrand() public {
+        // Drop the setUp lootbox no-op so the REAL funding path runs; re-establish only the coinflip
+        // mocks the burn/claim still need (the lootbox resolution itself is left real).
+        vm.clearMockedCalls();
+        vm.mockCall(
+            address(coinflip),
+            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.getCoinflipDayResult.selector),
+            abi.encode(uint16(100), true)
+        );
+        vm.mockCall(
+            address(coinflip),
+            abi.encodeWithSelector(IBurnieCoinflipPlayerMock.claimCoinflipsForRedemption.selector),
+            abi.encode(uint256(0))
+        );
+
+        // Mid-game ETH depletion: zero ETH anywhere the claim could draw on; stETH-only backing.
+        vm.deal(address(game), 0);
+        _setGameClaimableSdgnrs(0);
+        _setGameClaimablePool(0);
+        mockStETH.mint(address(sdgnrs), 100 ether);
+
+        uint32 burnDay = game.currentDayView();
+        vm.prank(playerA);
+        sdgnrs.burn(BURN_AMOUNT);
+
+        _advanceWallDayAndResolve(burnDay, 100);
+
+        assertEq(address(sdgnrs).balance, 0, "(b2) precondition: sDGNRS must hold ZERO ETH (depleted)");
+        uint256 gameStethBefore = mockStETH.balanceOf(address(game));
+        uint256 playerStethBefore = mockStETH.balanceOf(playerA);
+
+        // THE PoC: pre-fix this reverts (ETH-only {value: lootboxEth} forward against a 0 balance);
+        // post-fix it succeeds via the stETH pull.
+        vm.prank(playerA);
+        sdgnrs.claimRedemption(uint24(burnDay));
+
+        // The lootbox half was funded by a stETH pull into the game (msg.value was 0).
+        assertGt(
+            mockStETH.balanceOf(address(game)),
+            gameStethBefore,
+            "(b2) lootbox leg must have pulled stETH into the game (mixed-fund path)"
+        );
+        // The player's direct half was paid in stETH (no ETH anywhere to draw on).
+        assertGt(
+            mockStETH.balanceOf(playerA),
+            playerStethBefore,
+            "(b2) direct half must be paid in stETH"
+        );
+        _assertSolvency("(b2) post-claim");
+    }
+
+    // =====================================================================
     //   (c) test_RFALL05_DonationRobust_StethForceFeed
     // =====================================================================
 
