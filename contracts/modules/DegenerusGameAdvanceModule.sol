@@ -617,24 +617,23 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (rngWord == 1 || rngWord == 0) return (true, STAGE_GAMEOVER);
         }
 
-        // Best-effort dual-round drain of queued tickets so every purchased
-        // ticket is eligible for the terminal jackpot trait-bucket share.
-        // Round 1: drain the current read slot under the now-populated lootbox
-        //          RNG slot.
-        // Round 2: after round 1 fully finishes, swap the write slot into the
-        //          read position and drain it too (covers tickets purchased
-        //          after the most recent swap).
+        // Best-effort drain of queued tickets so every purchased ticket is
+        // eligible for the terminal jackpot trait-bucket share. Both ticket
+        // slots drain ONE batch per tx (mirroring the normal daily ticket
+        // drain): after any batch does work the path breaks with
+        // STAGE_TICKETS_WORKING, so a finishing batch never composes with a
+        // second ticket batch -- or with handleGameOverDrain's terminal
+        // jackpot -- inside one transaction. That composition would push a
+        // single advanceGame tx past the EIP-7825 per-tx gas ceiling and
+        // permanently brick the game-over heartbeat. handleGameOverDrain runs
+        // only in its OWN tx, entered with ticketsFullyProcessed already set.
         //
-        // Partial rounds (succeeded but unfinished) break out with
-        // STAGE_TICKETS_WORKING so the caller can retry until the queue is
-        // exhausted -- mirrors the do-while stage/break pattern.
-        //
-        // Catastrophic delegatecall reverts (e.g., queue exceeds the block
-        // gas limit) are swallowed so game-over continues to terminal jackpot
-        // distribution; undrained tickets forfeit trait-bucket eligibility but
-        // fund release is never blocked.
+        // FUND-RELEASE FALLBACK: a catastrophic delegatecall revert (e.g., an
+        // unforeseen error in ticket processing) is swallowed so game-over
+        // continues straight to handleGameOverDrain -- undrained tickets forfeit
+        // trait-bucket eligibility, but terminal fund release is never blocked.
         if (!ticketsFullyProcessed) {
-            (bool d1Ok, bytes memory d1Data) = ContractAddresses
+            (bool dOk, bytes memory dData) = ContractAddresses
                 .GAME_MINT_MODULE
                 .delegatecall(
                     abi.encodeWithSelector(
@@ -642,35 +641,24 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         lvl + 1
                     )
                 );
-            if (d1Ok && d1Data.length >= 32) {
-                bool d1Finished = abi.decode(d1Data, (bool));
-                if (!d1Finished) {
+            if (dOk && dData.length >= 32) {
+                bool finished = abi.decode(dData, (bool));
+                if (!finished) {
+                    // Read slot has more entries -- retry next tx.
                     return (true, STAGE_TICKETS_WORKING);
                 }
-                // Round 1 completed: read slot drained. Swap write->read
-                // (safe because queue is now empty) and run round 2 so
-                // write-slot tickets also get their traits.
+                // Read slot drained: swap the write slot into the read position
+                // (safe because the read queue is now empty) so its tickets
+                // drain on the next tx. When the swapped-in slot is already
+                // empty, both slots are drained -- mark fully processed. Either
+                // way break, so the terminal jackpot runs in its own tx.
                 _swapTicketSlot(lvl + 1);
-                (bool d2Ok, bytes memory d2Data) = ContractAddresses
-                    .GAME_MINT_MODULE
-                    .delegatecall(
-                        abi.encodeWithSelector(
-                            IDegenerusGameMintModule
-                                .processTicketBatch
-                                .selector,
-                            lvl + 1
-                        )
-                    );
-                if (d2Ok && d2Data.length >= 32) {
-                    bool d2Finished = abi.decode(d2Data, (bool));
-                    if (!d2Finished) {
-                        return (true, STAGE_TICKETS_WORKING);
-                    }
+                if (ticketQueue[_tqReadKey(lvl + 1)].length == 0) {
                     ticketsFullyProcessed = true;
                 }
-                // d2Ok=false -> swallow, fall through to handleGameOverDrain
+                return (true, STAGE_TICKETS_WORKING);
             }
-            // d1Ok=false -> swallow, fall through to handleGameOverDrain
+            // dOk=false -> swallow, fall through to handleGameOverDrain.
         }
 
         (ok, data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
