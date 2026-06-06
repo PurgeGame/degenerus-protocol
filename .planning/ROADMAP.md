@@ -46,15 +46,76 @@
 
 ### Phase Details (v61.0)
 
-**Phase 375: SPEC** — Goal: the open design decisions are settled so IMPL authors a fully reconciled diff with zero "by construction" assumptions. Depends on: nothing (first v61.0 phase; consumes the v60.0-closed frozen subject `2bee6d6f` + the 3 design-lock plan docs). Requirements: SPEC-01. Success: (1) the open knobs are LOCKED in writing (packing sequencing · `AfkingSpent` breadth · `purchaseWith`-dead · curse cap + staleness basis · smite protocol-skip/self-smite); (2) every cited anchor is re-attested against `2bee6d6f` with any drift corrected; (3) the producer-before-consumer edit order is mapped (CURSE before SMITE; PACK accessor before repack).
+### Phase 375: SPEC — Design-Lock (open knobs) + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map
 
-**Phase 376: IMPL** — Goal: the v61.0 bundle lands as a single reconciled `contracts/*.sol` diff under the SPEC's settled knobs + edit order, with RNG-freeze intact + SOLVENCY-01 held. Type: IMPL (CONTRACT BOUNDARY; `autonomous:false` at the commit gate). Depends on: Phase 375. Requirements: AFPAY-01..07, PACK-01/02, CURSE-01..07, SMITE-01. Success: (1) the AFPAY waterfall lands on all spend paths with the afking portion treated as fresh ETH (no rebuy bonus); (2) the PACK accessor layer + repack land feature-first, `claimablePool == Σ` in one place; (3) the CURSE counter/APPLY/SET/cure/bounty-stamp/`decurse` land (zero new SLOAD on the score read); (4) SMITE lands on the shared counter (afker-immune, ≥5-stack ceiling); (5) `forge build` clean, HELD at the boundary for hand-review.
+**Goal**: The open design decisions are settled so IMPL authors a fully reconciled diff with zero "by construction" assumptions.
+**Type**: SPEC
+**Depends on**: Nothing (first v61.0 phase; consumes the v60.0-closed frozen subject `2bee6d6f` + the 3 design-lock plan docs)
+**Requirements**: SPEC-01
+**Success Criteria** (what must be TRUE):
+  1. The open knobs are LOCKED in writing (packing sequencing · `AfkingSpent` breadth · `purchaseWith`-dead · curse cap + staleness basis · smite protocol-skip/self-smite).
+  2. Every cited anchor is re-attested against `2bee6d6f` with any drift corrected.
+  3. The producer-before-consumer edit order is mapped (CURSE before SMITE; PACK accessor before repack).
 
-**Phase 377: GAS** — Goal: confirm gas-neutrality (CURSE APPLY zero-new-SLOAD, PACK no cold slot, AFPAY/SMITE no advance-ceiling regression). Type: GAS (CONTRACT BOUNDARY — net diff rides the same boundary, else Outcome-A). Depends on: Phase 376. Requirements: none. Success: the lazy/score read path + the spend paths stay within budget; outcome recorded (Outcome-A no-diff expected).
+**Plans**: TBD
+**UI hint**: no
 
-**Phase 378: TST** — Goal: the milestone proven behaviorally correct + the hard floor proven empirically vs `2bee6d6f`. Type: TST. Depends on: Phase 377. Requirements: SEC-01, SEC-02, TST-01..06. Success: (1) one proving test per surface passes; (2) RNG-freeze intact across all changes; (3) SOLVENCY-01 re-attested (`claimablePool == Σ`, never exceeds `bal + stETH`); (4) suite NON-WIDENING by name vs `2bee6d6f`.
+### Phase 376: IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE)
 
-**Phase 379: TERMINAL** — Goal: close the v61.0 subject via a FULL in-milestone sweep. Type: TERMINAL. Depends on: Phase 378. Requirements: AUDIT-01. Success: (1) delta-audit clean (NON-WIDENING, RNG-freeze + SOLVENCY-01 anchored); (2) the 3-skill adversarial sweep runs as genuine concurrent spawns; (3) `audit/FINDINGS-v61.0.md` authored + the atomic closure flip emits `MILESTONE_V61_AT_HEAD_<sha>`; all 27 reqs re-attested.
+**Goal**: The v61.0 bundle lands as a single reconciled `contracts/*.sol` diff under the SPEC's settled knobs + edit order, with RNG-freeze intact + SOLVENCY-01 held.
+**Type**: IMPL (CONTRACT BOUNDARY; `autonomous:false` at the commit gate)
+**Depends on**: Phase 375
+**Requirements**: AFPAY-01..07, PACK-01/02, CURSE-01..07, SMITE-01
+**Success Criteria** (what must be TRUE):
+  1. The AFPAY waterfall lands on all spend paths with the afking portion treated as fresh ETH (no rebuy bonus).
+  2. The PACK accessor layer + repack land feature-first, `claimablePool == Σ` in one place.
+  3. The CURSE counter/APPLY/SET/cure/bounty-stamp/`decurse` land (zero new SLOAD on the score read).
+  4. SMITE lands on the shared counter (afker-immune, ≥5-stack ceiling).
+  5. `forge build` clean, HELD at the boundary for hand-review.
+
+**Plans**: TBD
+**UI hint**: no
+
+### Phase 377: GAS — Gas-Neutrality Gate (curse APPLY zero-SLOAD · packing no cold slot · no advance-ceiling regression)
+
+**Goal**: Confirm gas-neutrality (CURSE APPLY zero-new-SLOAD, PACK no cold slot, AFPAY/SMITE no advance-ceiling regression).
+**Type**: GAS (CONTRACT BOUNDARY — net diff rides the same boundary, else Outcome-A)
+**Depends on**: Phase 376
+**Requirements**: none
+**Success Criteria** (what must be TRUE):
+  1. The lazy/score read path + the spend paths stay within budget; outcome recorded (Outcome-A no-diff expected).
+
+**Plans**: TBD
+**UI hint**: no
+
+### Phase 378: TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze Intact + SOLVENCY-01 Re-Attested (SEC-01/02)
+
+**Goal**: The milestone proven behaviorally correct + the hard floor proven empirically vs `2bee6d6f`.
+**Type**: TST
+**Depends on**: Phase 377
+**Requirements**: SEC-01, SEC-02, TST-01..06
+**Success Criteria** (what must be TRUE):
+  1. One proving test per surface passes.
+  2. RNG-freeze intact across all changes.
+  3. SOLVENCY-01 re-attested (`claimablePool == Σ`, never exceeds `bal + stETH`).
+  4. Suite NON-WIDENING by name vs `2bee6d6f`.
+
+**Plans**: TBD
+**UI hint**: no
+
+### Phase 379: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v61.0 + Closure Flip
+
+**Goal**: Close the v61.0 subject via a FULL in-milestone sweep.
+**Type**: TERMINAL
+**Depends on**: Phase 378
+**Requirements**: AUDIT-01
+**Success Criteria** (what must be TRUE):
+  1. Delta-audit clean (NON-WIDENING, RNG-freeze + SOLVENCY-01 anchored).
+  2. The 3-skill adversarial sweep runs as genuine concurrent spawns.
+  3. `audit/FINDINGS-v61.0.md` authored + the atomic closure flip emits `MILESTONE_V61_AT_HEAD_<sha>`; all 27 reqs re-attested.
+
+**Plans**: TBD
+**UI hint**: no
 
 ### Progress (v61.0)
 
