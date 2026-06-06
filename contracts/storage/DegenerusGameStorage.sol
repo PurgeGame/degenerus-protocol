@@ -1011,17 +1011,13 @@ abstract contract DegenerusGameStorage {
     // Deity Pass (Perma Whale) Grants
     // =========================================================================
 
-    /// @dev Count of deity passes purchased (excludes grants).
-    mapping(address => uint16) internal deityPassPurchasedCount;
-
-    /// @dev Total ETH paid per buyer for deity passes.
-    mapping(address => uint256) internal deityPassPaidTotal;
+    /// @dev ETH paid for a buyer's (single) deity pass. The early-game-over refund is capped at
+    ///      this, so a boon-discounted deity that paid < 20 ETH refunds only what it actually paid.
+    ///      Ownership itself is tracked by the HAS_DEITY_PASS bit in mintPacked_.
+    mapping(address => uint96) internal deityPassPricePaid;
 
     /// @dev List of deity pass owners for iteration.
     address[] internal deityPassOwners;
-
-    /// @dev Symbol assigned to each deity pass holder (0-31). 0 is valid (Bitcoin).
-    mapping(address => uint8) internal deityPassSymbol;
 
     /// @dev Reverse lookup: symbol ID (0-31) → current owner address.
     mapping(uint8 => address) internal deityBySymbol;

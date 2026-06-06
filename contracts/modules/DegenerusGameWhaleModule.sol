@@ -597,8 +597,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         uint24 passLevel = level + 1;
 
-        // Issue the pass with symbol
-        deityPassPaidTotal[buyer] += totalPrice;
+        // Record the price paid (caps the early-game-over refund). A buyer holds exactly one deity
+        // pass (the HAS_DEITY_PASS guard above blocks a second), so this is a plain assignment.
+        deityPassPricePaid[buyer] = uint96(totalPrice);
         // Coin-presale-box credit accrual: 25% of the committed ETH while presale open.
         if (!presaleOver) {
             presaleBoxCredit[buyer] += totalPrice / 4;
@@ -610,9 +611,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             1,
             1
         );
-        deityPassPurchasedCount[buyer] += 1;
         deityPassOwners.push(buyer);
-        deityPassSymbol[buyer] = symbolId;
         deityBySymbol[symbolId] = buyer;
 
         // Mint ERC721 token (tokenId = symbolId)
@@ -885,6 +884,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 adj,
                 uint24(level + 2)
             );
+            // First deposit for this (index, buyer): enqueue for the permissionless
+            // box auto-open cursor, exactly like the human-mint and afking-cover box
+            // paths. Without it a pass-bundled lootbox never auto-opens, letting the
+            // sole opener (manual openLootBox is operator-gated) hold the box and time
+            // the open against the known per-index word. The consumer gates each index
+            // on lootboxRngWordByIndex != 0, so this is producer-only.
+            IDegenerusGame(address(this)).enqueueBoxForAutoOpen(index, buyer);
         }
         // Subsequent deposits accumulate onto the existing box — no day-coherence gate and no stored
         // day (the box binds to lootboxRngWordByIndex[index] and rolls from the LIVE open level, so

@@ -109,17 +109,20 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
         // === All side effects below this line (RNG confirmed or no funds to distribute) ===
 
-        // Deity pass refunds (levels 0-9)
+        // Deity pass refunds (levels 0-9): refund each owner what they paid, capped at the flat
+        // DEITY_PASS_EARLY_GAMEOVER_REFUND so a boon-discounted deity (paid < 20 ETH) never refunds
+        // more than it paid, then clamped to the remaining distributable budget (FIFO).
         if (lvl < 10) {
-            uint256 refundPerPass = DEITY_PASS_EARLY_GAMEOVER_REFUND;
             uint256 ownerCount = deityPassOwners.length;
             uint256 budget = preRefundAvailable;
             uint256 totalRefunded;
             for (uint256 i; i < ownerCount; ) {
                 address owner = deityPassOwners[i];
-                uint16 purchasedCount = deityPassPurchasedCount[owner];
-                if (purchasedCount != 0) {
-                    uint256 refund = refundPerPass * uint256(purchasedCount);
+                uint256 refund = deityPassPricePaid[owner];
+                if (refund != 0) {
+                    if (refund > DEITY_PASS_EARLY_GAMEOVER_REFUND) {
+                        refund = DEITY_PASS_EARLY_GAMEOVER_REFUND;
+                    }
                     if (refund > budget) {
                         refund = budget;
                     }

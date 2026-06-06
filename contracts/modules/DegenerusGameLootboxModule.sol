@@ -953,7 +953,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @custom:reverts E When deity or recipient is zero address
     /// @custom:reverts E When deity tries to issue boon to themselves
     /// @custom:reverts E When slot is >= 3
-    /// @custom:reverts E When deity has no purchased passes
+    /// @custom:reverts E When deity does not own a deity pass
     /// @custom:reverts E When no RNG is available for the day
     /// @custom:reverts E When recipient already received a boon today
     /// @custom:reverts E When slot was already used today
@@ -961,7 +961,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (deity == address(0) || recipient == address(0)) revert E();
         if (deity == recipient) revert E();
         if (slot >= DEITY_DAILY_BOON_COUNT) revert E();
-        if (deityPassPurchasedCount[deity] == 0) revert E();
+        if (mintPacked_[deity] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) revert E();
 
         uint24 day = _simulatedDayIndex();
         if (rngWordByDay[day] == 0) revert E();
