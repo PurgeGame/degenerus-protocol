@@ -3,22 +3,21 @@ gsd_state_version: 1.0
 milestone: v61.0
 milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
 status: ready_to_plan
-last_updated: 2026-06-06T21:23:48.484Z
-last_activity: 2026-06-06 -- Phase 375 COMPLETE (both plans; SPEC-V61-DESIGN-LOCK.md authored — knobs D-01..D-05 locked, re-attested anchor table folded, Track A/B edit order mapped)
+last_updated: "2026-06-06T21:58:10.664Z"
+last_activity: 2026-06-06 -- Phase 376 CONTEXT gathered (376-CONTEXT.md + DISCUSSION-LOG): curse entrypoint placement LOCKED (decurse/smite = thin Game stubs -> existing module; planner picks exact module by code-size+cohesion [GameAfkingModule > MintModule]; Game-under-24576 guardrail). Design otherwise fully locked by SPEC-V61-DESIGN-LOCK.md. Ready to plan 376.
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 6
   completed_plans: 4
   percent: 20
-stopped_at: Phase 375 complete (2/2) — ready to discuss Phase 376
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP.md (v61.0 🚧 ACTIVE — phases 375-379, once roadmapped) + .planning/REQUIREMENTS.md (v61.0 reqs, once defined) + .planning/MILESTONES.md (v60.0 entry, top). v61 design inputs (design-locked): .planning/PLAN-V61-MILESTONE-SCOPE.md + PLAN-V61-AFKING-AS-PAYMENT-SOURCE.md + PLAN-CASHOUT-CURSE.md + PLAN-V61-DEITY-SMITE.md (`[[v61-milestone-seed]]`). Baseline = the v60.0 closure HEAD `2bee6d6f` (10 commits ahead of origin, NOT pushed). v60.0 archive: .planning/milestones/v60.0-ROADMAP.md + v60.0-REQUIREMENTS.md; canonical audit deliverable audit/FINDINGS-v60.0.md (chmod 444). **NEXT = /gsd-plan-phase 375 (SPEC).**
+See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP.md (v61.0 🚧 ACTIVE — phases 375-379, once roadmapped) + .planning/REQUIREMENTS.md (v61.0 reqs, once defined) + .planning/MILESTONES.md (v60.0 entry, top). v61 design inputs (design-locked): .planning/PLAN-V61-MILESTONE-SCOPE.md + PLAN-V61-AFKING-AS-PAYMENT-SOURCE.md + PLAN-CASHOUT-CURSE.md + PLAN-V61-DEITY-SMITE.md (`[[v61-milestone-seed]]`). Baseline = the v60.0 closure HEAD `2bee6d6f` (10 commits ahead of origin, NOT pushed). v60.0 archive: .planning/milestones/v60.0-ROADMAP.md + v60.0-REQUIREMENTS.md; canonical audit deliverable audit/FINDINGS-v60.0.md (chmod 444). **NEXT = /gsd-plan-phase 376 (IMPL).**
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 **Current focus:** Phase 376 — impl — the one batched contract diff (afpay + pack + curse + smite)
