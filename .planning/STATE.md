@@ -1,27 +1,27 @@
 ---
 gsd_state_version: 1.0
-milestone: v59.0
-milestone_name: Council-Findings Remediation + Pass-Stat Front-Load Bundle
-status: ready_to_plan
-last_updated: 2026-06-04T22:49:43.340Z
-last_activity: 2026-06-04 -- Phase 370 Plan 02 complete (COV-01 second-model area-solvency re-run vs 2b26ec91: F-03/F-04 corroborated by Gemini, K=0, coverage gap CLOSED)
+milestone: v61.0
+milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite (FORMING)
+status: forming
+last_updated: 2026-06-06
+last_activity: 2026-06-06 -- v60.0 SHIPPED (single combined close: v59 IMPL 4577cfb6 + the maximal cross-model audit; closure signal MILESTONE_V60_AT_HEAD_2bee6d6faa2f66a9231d4b9bd01a53d09f40ff5e; 7 commits ahead of origin/main, NOT pushed)
 progress:
-  total_phases: 12
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 8
-stopped_at: Phase 370 complete (2/2) — ready to discuss Phase 371
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
+stopped_at: v60.0 closed 2026-06-06 (combined close). v61.0 forming — scope .planning/PLAN-V61-MILESTONE-SCOPE.md; not yet roadmapped (run /gsd-new-milestone).
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v59.0 section) + .planning/REQUIREMENTS.md (the 21 v59.0 reqs / 12 categories) + .planning/ROADMAP.md (v59.0 🚧 ACTIVE — phases 370-374) + .planning/MILESTONES.md (v58.0 entry, top). v58.0 audit deliverables (gitignored-local, on disk): audit/FINDINGS-v58.0.md (chmod 444 — the 7 confirmed council findings + fix sketches, the v59.0 design-lock input) + audit/site/. Pass-stat design-lock input: .planning/PLAN-PASS-STAT-FRONTLOAD.md. v58.0/v57.0 archived: .planning/milestones/v58.0-ROADMAP.md + v57.0-ROADMAP.md (+ their REQUIREMENTS, force-tracked). Baseline = the v58.0-audited frozen contract subject `2b26ec91`. **NEXT = /gsd-plan-phase 370 (SPEC).**
+See: .planning/MILESTONES.md (v60.0 entry, top) + .planning/ROADMAP.md (v60.0 ✅ SHIPPED, top) + .planning/milestones/v60.0-ROADMAP.md + v60.0-REQUIREMENTS.md (the combined-close archive). v60.0 canonical audit deliverable: audit/FINDINGS-v60.0.md (chmod 444). v61 design inputs: .planning/PLAN-V61-MILESTONE-SCOPE.md + PLAN-V61-AFKING-AS-PAYMENT-SOURCE.md + PLAN-V61-DEITY-SMITE.md + PLAN-CASHOUT-CURSE.md (`[[v61-milestone-seed]]`). Baseline for v60 was the v58.0-audited frozen tree `2b26ec91`; v60 fix HEAD = `2bee6d6f`. REQUIREMENTS.md removed (fresh for v61). **NEXT = /gsd-new-milestone (v61.0); then push the 7 ahead-of-origin commits when USER ready.**
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 371 — impl — the one carefully sequenced batched contract diff (5 council findings fixes + pass stat changes a/b/c)
+**Current focus:** v61.0 forming — afking-as-payment-source + cashout-curse + deity-smite (no `.sol` yet; scope locked in PLAN-V61-MILESTONE-SCOPE.md)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -33,11 +33,11 @@ See: .planning/PROJECT.md (Current Milestone: v59.0 section) + .planning/REQUIRE
 
 ## Current Position
 
-Phase: 371
-Plan: Not started
-Status: Ready to plan
-Next up: 371 IMPL (the ONE contract-boundary HARD STOP, authors against 370-01-SPEC.md AS-FOUND anchors + variant (a) + edit-order; F-03/F-04 now backed by an independent second-model read) → 372 GAS → 373 TST → 374 TERMINAL (FULL in-milestone close)
-Last activity: 2026-06-04
+Phase: — (v60.0 closed; v61.0 not yet roadmapped)
+Plan: —
+Status: v60.0 SHIPPED 2026-06-06 (single combined close: v59 IMPL + the maximal cross-model audit); v61.0 forming
+Next up: /gsd-new-milestone (v61.0 — afking-as-payment-source · cashout-curse · deity-smite). Then push the 7 ahead-of-origin commits (`6bd94bb5`..`2bee6d6f`) when USER ready.
+Last activity: 2026-06-06 — v60.0 combined close (archives + MILESTONES + ROADMAP + PROJECT + RETROSPECTIVE; REQUIREMENTS reset; closure signal MILESTONE_V60_AT_HEAD_2bee6d6faa2f66a9231d4b9bd01a53d09f40ff5e)
 
 ## ✅ v57.0 FOLLOW-UP — RESOLVED at v58.0 Phase 368 FORENSIC (root-caused to `24f0898b`, phase-160 2026-04-01; lived ~63d pre-launch; fixed `980865e8`; regression-test rec delivered → `368-FORENSIC.md`)
 
@@ -49,7 +49,9 @@ Last activity: 2026-06-04
 
 **Plus TWO USER-directed afking sub-hardening gates fold into the SAME 357-00 gate (357-discuss 2026-06-02 — SEC-01 strategic-sub/unsub spine):** (D-11) PASS-REQUIRED subscribe — revert unless `_passHorizonOf(subscriber) >= currentLevel` (deity always covers; keep the `:942` crossing eviction for outgrown passes); (D-12) PURCHASE-GROUNDED subscribe — revert unless purchased-today OR a funded immediate cover-buy executes (kills the `GameAfkingModule.sol:455-457` unfunded-forfeit path; the `5cb707f2` `:1124` advance bypass left as-is, now provably backed by a real buy); (D-13) the protocol self-subscribers `DegenerusVault:483` + `StakedDegenerusStonk:388` (no-pass / unfunded-at-construction) are EXEMPT from BOTH gates — LOAD-BEARING for bootstrap, USER-confirmed. (D-14) re-run + reconcile `REGRESSION-BASELINE-v56.md` after 357-00 (F-356-01 narrows; the D-11/D-12 supersession reds `vm.skip`-dropped + re-proven via new positive proofs), re-freeze at HEAD'. The hardening may warrant formal new SEC-* REQ-IDs before planning so the closure flip re-attests them. Full detail: `357-CONTEXT.md` D-01/D-11/D-12/D-13/D-14.
 
-## ▶ ACTIVE Milestone Roadmap (v59.0 — phases 370-374 — ACTIVE 2026-06-04; baseline = the v58.0-audited frozen contract subject `2b26ec91`)
+## ✅ SHIPPED Milestone Roadmap (v60.0 — combined close 2026-06-06; v59 IMPL phases 370-374 folded + the off-phase maximal audit; baseline `2b26ec91`; v59 IMPL `4577cfb6` → v60 fix HEAD `2bee6d6f`; closure signal `MILESTONE_V60_AT_HEAD_2bee6d6faa2f66a9231d4b9bd01a53d09f40ff5e`)
+
+> _As-shipped phase dispositions: **370 SPEC ✅** (2026-06-04) · **371 IMPL ✅** (`4577cfb6`; SOLV-02 corrected `c0565ee4`) · **372 GAS ⊘ dropped** (folded into the v60 gasceil hunt → `6d2c8d0c`) · **373 TST ↪ folded** into the v60 maximal audit · **374 TERMINAL ↪ folded** into the v60 audit (`audit/FINDINGS-v60.0.md`). The table below is the as-planned v59 record._
 
 Shape: SPEC → IMPL → GAS → TST → TERMINAL (the established v54.0 + v55.0 + v56.0 + v57.0 audit-milestone shape WITH a dedicated GAS phase). The first contract-modifying milestone since v57.0 (v58.0 was document-only). **ONE contract-boundary HARD STOP** — 371 IMPL (the ONE carefully-sequenced batched diff: the 5 fixable v58.0 council findings [F-01 CRIT salvage uint32-trunc · F-02 HIGH afking `affiliateBase` unit slip · F-03/F-04 MED whale-pass remainder solvency-identity corrections · F-05 LOW `pendingBurnie` presale 2×] + the deferred pass-stat seed [Change A inclusive 1–10 pass-coverage window · Change B mint-streak front-load · Change C lazy pass during a century purchase phase], producer-before-consumer: STREAK-01 `BitPackingLib` shift promotion before STREAK-02's helper, SOLV-01 return-value before the BAF caller fold); 372 GAS is the gas-neutrality measurement gate (rides the same boundary if a net tune, else records Outcome-A no-diff per the v55 350 / v56 / v57 precedent — the expected outcome, since Change A/C are gate/comparison-only + the F-04 fix is a single warm add; the binding all-evict STAGE has ~19% headroom at 13.60M cold; NO structural loop added — F-06's structural gap-resolution change is WONTFIX). **FULL close — the internal 3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v59.0.md` run IN-MILESTONE at TERMINAL (374), NOT deferred** (F-03/F-04 touch the solvency spine + Change A/B/C interact with the lazy-pass far-future-ticket queueing path → like v54.0/v55.0/v56.0/v57.0 and unlike v50.0/v51.0). The COV-01 second-model `area-solvency` XMODEL re-run runs EARLY at SPEC (370) so any CONFIRMED new solvency finding folds into the SAME IMPL diff (the v58.0 Gemini solvency leg refused via Plan-Mode — close that coverage gap before relying on the F-03/F-04 corrections). Baseline = the v58.0-audited frozen subject `2b26ec91`. Design-lock inputs `audit/FINDINGS-v58.0.md` + `.planning/PLAN-PASS-STAT-FRONTLOAD.md` (`[[pass-stat-frontload-window-seed]]`). **No research** (fully-specced fixes + a designed seed). Hard floor on EVERY change: RNG-freeze intact + SOLVENCY-01 re-attested (F-03/F-04 RESTORE the `claimablePool == Σ claimableWinnings + Σ afkingFunding` identity; the rest are off the ETH/`claimablePool` path or BURNIE-credit/stat/gate-only). **F-06 LOW = WONTFIX / working-as-intended + F-07 INFO = no fix → Out of Scope.**
 
