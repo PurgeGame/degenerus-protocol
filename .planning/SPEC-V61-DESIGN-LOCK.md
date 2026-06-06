@@ -244,3 +244,42 @@ CURSE-04 (CURE) fires inside **`_purchaseForWith`** — a buy path that the **Tr
 - The PACK repack (PACK-02) mutates the **balances mapping** — a DIFFERENT storage slot.
 
 → Track A (balances mapping) and Track B (`mintPacked_`) touch **DIFFERENT storage slots** → there is **no write-after-write conflict** between the CURE and the PACK repack, even though both execute on the same `_purchaseForWith` buy path. The two tracks are therefore **independent** and may be authored in either relative order. (Within Track B, CURSE-04's own fold into the `mintPacked_` RMW must additionally avoid clobbering the leg-specific stamps `recordMintData` / `_recordLootboxMintDay` — a Track-B-internal RMW discipline, not a cross-track hazard. Empirical clobber-freedom of bits 215-222 across all 12 `mintPacked_` writers is established in §3.)
+
+---
+
+## 5. Coverage — the three Phase-375 Success Criteria
+
+Mapping each Phase-375 Success Criterion to where this SPEC satisfies it.
+
+**SC1 — The open knobs are LOCKED in writing** (packing sequencing · `AfkingSpent` breadth · `purchaseWith`-dead · curse cap + staleness basis · smite protocol-skip + self-smite).
+→ Satisfied in **§1 Locked Knobs**: D-01 (packing sequencing, accessor-first, PACK-01 → PACK-02 → AFPAY-01..07) · D-02 (`AfkingSpent` at every afking debit) · D-03 (`CURSE_COUNT_CAP = 20`) · D-04 (smite/curse protocol-addr skip) · D-05 (staleness basis `_currentMintDay()`) · Verification Item 1 (`purchaseWith` DEAD → leave untouched) · Verification Item 2 (self-smite harmless-by-design → no guard). All five D-decisions carry a LOCKED value + rationale + affected REQ-IDs; both verification verdicts cite `375-ANCHOR-REATTESTATION.md`.
+
+**SC2 — Every cited anchor is re-attested against `2bee6d6f` with drift corrected.**
+→ Satisfied in **§2 (the 4 CORRECTED corrections)** + **§3 (the full 29-anchor re-attested table, grounded on `2bee6d6f`, folded from `375-ANCHOR-REATTESTATION.md`)**. Every anchor cited in §1 and §4 uses its §3 re-attested line; the 4 drifts (`claimablePool` decl `:365`, `_purchaseForWith` `:1093`, `_recordLootboxMintDay` `:1000`, sDGNRS read `:932`) are corrected and used at the baseline line throughout, NOT the `375-CONTEXT.md` `~:NNN`.
+
+**SC3 — The producer-before-consumer edit order is mapped** (CURSE before SMITE within Track B; PACK accessor before repack within Track A; the SOLVENCY accessor location).
+→ Satisfied in **§4 Producer-before-consumer edit-order map**: Track A (PACK-01 accessor → PACK-02 repack → AFPAY waterfall — accessor-before-repack, PACK-before-AFPAY) · Track B (CURSE-01..07 → SMITE-01 — CURSE-before-SMITE) · the CURE-vs-PACK-repack write-after-write cross-check · the SOLVENCY accessor-invariant home pinned at the end of §3 (the accessor layer, re-attested to `Storage:358/365/851` + `PayoutUtils:25/39/63` + the `GameAfkingModule` afking pair) for SEC-02.
+
+### Coverage self-check — no locked decision or verification item omitted
+
+Cross-checking against `375-CONTEXT.md` `<decisions>` — every locked decision and SPEC-execution item is present in this SPEC:
+
+| `375-CONTEXT.md` item | Present in SPEC |
+|---|---|
+| D-01 accessor-first sequencing | §1 D-01 + §4 Track A |
+| D-02 `AfkingSpent` breadth | §1 D-02 |
+| D-03 `CURSE_COUNT_CAP = 20` | §1 D-03 + §4 CURSE-07 |
+| D-04 protocol-addr skip | §1 D-04 + §4 CURSE-03 / SMITE-01 |
+| D-05 staleness basis `_currentMintDay()` | §1 D-05 + §4 CURSE-03 |
+| Anchor re-attestation vs `2bee6d6f` | §2 + §3 |
+| `purchaseWith` dead-confirm | §1 Verification Item 1 |
+| Self-smite sanity | §1 Verification Item 2 |
+| Edit-order map (Track A + Track B) | §4 |
+| CURE-vs-PACK-repack cross-check | §4 Cross-check |
+| SOLVENCY accessor-invariant location | §3 (SOLVENCY home) + §1 Hard Floor |
+
+No locked decision (D-01..D-05) and no verification item (`purchaseWith`-dead, self-smite, SOLVENCY location) from `375-CONTEXT.md` is omitted.
+
+### Forward note (376 IMPL → 378 TST)
+
+The 17 contract REQ-IDs (**AFPAY-01..07 · PACK-01/02 · CURSE-01..07 · SMITE-01**) are authored at **Phase 376** in the Track A / Track B order above (the ONE batched `contracts/*.sol` diff, held at the contract-commit boundary for hand-review). **SEC-01** (RNG-freeze intact), **SEC-02** (SOLVENCY-01 re-attested at the accessor-layer home), and **TST-01..06** are proven empirically at **Phase 378**.
