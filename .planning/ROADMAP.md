@@ -38,7 +38,7 @@
 
 ### Phases
 
-- [ ] **Phase 375: SPEC — Design-Lock (open knobs) + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map** - Settle the open decisions in writing so IMPL authors a fully reconciled diff: AFPAY feature-first vs accessor-first packing sequencing + `AfkingSpent` emission breadth + confirm `purchaseWith` is dead; CURSE counter cap (rec 20 pts) + the staleness day-basis; SMITE protocol-addr skip (rec keep VAULT/SDGNRS/GNRUS) + self-smite sanity; re-attest every cited `file:line` anchor against the frozen baseline `2bee6d6f`; and map the producer-before-consumer edit order (CURSE infra before SMITE; PACK accessor before repack; the SOLVENCY accessor-invariant location). Paper-only, ZERO `contracts/*.sol`.
+- [x] **Phase 375: SPEC — Design-Lock (open knobs) + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map** - Settle the open decisions in writing so IMPL authors a fully reconciled diff: AFPAY feature-first vs accessor-first packing sequencing + `AfkingSpent` emission breadth + confirm `purchaseWith` is dead; CURSE counter cap (rec 20 pts) + the staleness day-basis; SMITE protocol-addr skip (rec keep VAULT/SDGNRS/GNRUS) + self-smite sanity; re-attest every cited `file:line` anchor against the frozen baseline `2bee6d6f`; and map the producer-before-consumer edit order (CURSE infra before SMITE; PACK accessor before repack; the SOLVENCY accessor-invariant location). Paper-only, ZERO `contracts/*.sol`.
 - [ ] **Phase 376: IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE)** - Land the single reconciled `contracts/*.sol` diff producer-before-consumer: the afking-as-payment waterfall (AFPAY-01..07) on today's two mappings, then the accessor-layer claimable/afking slot-packing (PACK-01/02) folded feature-first; the cashout-curse counter + APPLY + SET + cure + bounty-stamp + `decurse` (CURSE-01..07); and deity-smite on the shared counter (SMITE-01). Applied to `contracts/` and locally compiling (`forge build` clean), then HELD at the contract-commit boundary for explicit user hand-review. CONTRACT-BOUNDARY HARD STOP (`autonomous:false` at the commit gate).
 - [ ] **Phase 377: GAS — Gas-Neutrality Gate (curse APPLY zero-SLOAD · packing no cold slot · no advance-ceiling regression)** - Confirm the bundle adds no regression under the security-over-gas floor: CURSE-02 APPLY rides the `packed` slot already loaded at `_playerActivityScore:248` (zero new SLOAD on the hot read); the PACK repack adds no cold slot (one slot/player — a winner prepaying afking saves a ~20k cold SSTORE); AFPAY's shared-helper afking draw + SMITE's burn add no `advanceGame`-ceiling regression. Expected outcome = gas-neutral/positive-by-construction → recorded as Outcome-A no-diff per the v55 350 / v56 / v57 / v59 precedent; any net behavior-preserving tune rides the same batched USER-APPROVED diff. (Owns no REQ-ID — the gas-neutrality measurement gate.)
 - [ ] **Phase 378: TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze Intact + SOLVENCY-01 Re-Attested (SEC-01/02)** - Prove the milestone behaviorally correct + the hard security floor empirically against the frozen `2bee6d6f` baseline: TST-01 AFPAY waterfall (DirectEth-skips-claimable-taps-afking, fresh-rate affiliate, no rebuy bonus, no auto-buy double-draw) · TST-02 PACK (packed round-trip, `claimablePool == Σ`, gameOver afking-half preserved, no cross-half carry) · TST-03 CURSE SET (+2 stale-only, all exemptions, stacking, saturation) · TST-04 CURE+bounty+`decurse` · TST-05 SMITE (gate/immunity/ceiling/burn/shared-counter/cure) · TST-06 NON-WIDENING vs `2bee6d6f`; plus SEC-01 (RNG-freeze intact) + SEC-02 (SOLVENCY-01 re-attested). Tests AGENT-committable.
@@ -59,7 +59,7 @@
 
 **Plans**: 2 plans
   - [x] 375-01-PLAN.md — Re-attest every cited anchor vs `2bee6d6f` (drift corrected) + resolve the `purchaseWith`-dead / self-smite / SOLVENCY-accessor verification items → `375-ANCHOR-REATTESTATION.md`
-  - [ ] 375-02-PLAN.md — Author `SPEC-V61-DESIGN-LOCK.md`: lock the knobs D-01..D-05, fold the re-attested anchor table, map the producer-before-consumer edit order (Track A PACK→AFPAY / Track B CURSE→SMITE)
+  - [x] 375-02-PLAN.md — Author `SPEC-V61-DESIGN-LOCK.md`: lock the knobs D-01..D-05, fold the re-attested anchor table, map the producer-before-consumer edit order (Track A PACK→AFPAY / Track B CURSE→SMITE)
 **UI hint**: no
 
 ### Phase 376: IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE)
@@ -125,7 +125,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 375. SPEC — Design-Lock + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map | v61.0 | 1/2 | In Progress|  |
+| 375. SPEC — Design-Lock + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map | v61.0 | 2/2 | Complete | 2026-06-06 |
 | 376. IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE) | v61.0 | 0/TBD | Not started | - |
 | 377. GAS — Gas-Neutrality Gate (curse APPLY zero-SLOAD · packing no cold slot) | v61.0 | 0/TBD | Not started | - |
 | 378. TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | v61.0 | 0/TBD | Not started | - |

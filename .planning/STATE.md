@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v61.0
 milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
-status: executing
-last_updated: "2026-06-06T21:06:22.843Z"
-last_activity: 2026-06-06 -- Phase 375 Plan 01 complete (anchor re-attestation vs 2bee6d6f; purchaseWith dead, self-smite harmless, SOLVENCY home pinned)
+status: verifying
+last_updated: "2026-06-06T21:16:09.215Z"
+last_activity: 2026-06-06 -- Phase 375 COMPLETE (both plans; SPEC-V61-DESIGN-LOCK.md authored — knobs D-01..D-05 locked, re-attested anchor table folded, Track A/B edit order mapped)
 progress:
   total_phases: 10
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 3
-  percent: 10
+  completed_plans: 4
+  percent: 20
 ---
 
 # Project State
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP.md (v61.0 🚧 ACTIVE — phases 375-379, once roadmapped) + .planning/REQUIREMENTS.md (v61.0 reqs, once defined) + .planning/MILESTONES.md (v60.0 entry, top). v61 design inputs (design-locked): .planning/PLAN-V61-MILESTONE-SCOPE.md + PLAN-V61-AFKING-AS-PAYMENT-SOURCE.md + PLAN-CASHOUT-CURSE.md + PLAN-V61-DEITY-SMITE.md (`[[v61-milestone-seed]]`). Baseline = the v60.0 closure HEAD `2bee6d6f` (10 commits ahead of origin, NOT pushed). v60.0 archive: .planning/milestones/v60.0-ROADMAP.md + v60.0-REQUIREMENTS.md; canonical audit deliverable audit/FINDINGS-v60.0.md (chmod 444). **NEXT = /gsd-plan-phase 375 (SPEC).**
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 375 SPEC — Plan 01 (anchor re-attestation vs `2bee6d6f`) ✅ COMPLETE; next = Plan 02 (fold the re-attested table into the SPEC design-lock + edit-order map). Artifact: `375-ANCHOR-REATTESTATION.md` (29 anchors, 4 CORRECTED; `purchaseWith` DEAD, self-smite harmless, SOLVENCY home = PACK accessor layer).
+**Current focus:** Phase 375 SPEC ✅ COMPLETE (both plans). Plan 01 = anchor re-attestation vs `2bee6d6f` (`375-ANCHOR-REATTESTATION.md`); Plan 02 = the design-lock SPEC `.planning/SPEC-V61-DESIGN-LOCK.md` (knobs D-01..D-05 locked, the 29-anchor re-attested table folded with the 4 CORRECTED lines `:365`/`_purchaseForWith :1093`/`:1000`/`:932`, Track A PACK→AFPAY / Track B CURSE→SMITE edit order + the CURE-vs-PACK-repack write-after-write cross-check, SOLVENCY home pinned for SEC-02). Phase ready for verification → next = 376 IMPL (the ONE batched contract diff, HARD STOP).
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,11 +32,11 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 
 ## Current Position
 
-Phase: 375 (spec-design-lock-open-knobs-anchor-re-attestation-vs-2bee6d6) — EXECUTING
-Plan: 2 of 2 (Plan 01 ✅ complete — anchor re-attestation; Plan 02 = SPEC fold + edit-order map)
-Status: Executing Phase 375 — Plan 01 done, Plan 02 next
-Next up: 375 Plan 02 (fold `375-ANCHOR-REATTESTATION.md` into the SPEC design-lock + edit-order map) → 376 IMPL (the ONE batched diff, contract boundary) → 377 GAS → 378 TST → 379 TERMINAL (FULL in-milestone close)
-Last activity: 2026-06-06 -- Phase 375 Plan 01 complete
+Phase: 375 (spec-design-lock-open-knobs-anchor-re-attestation-vs-2bee6d6) — COMPLETE (ready for verification)
+Plan: 2 of 2 ✅ (Plan 01 ✅ anchor re-attestation; Plan 02 ✅ SPEC design-lock + edit-order map)
+Status: Phase complete — ready for verification
+Next up: 376 IMPL (the ONE batched contract diff AFPAY+PACK+CURSE+SMITE, producer-before-consumer Track A/B per `SPEC-V61-DESIGN-LOCK.md`; CONTRACT-BOUNDARY HARD STOP) → 377 GAS → 378 TST → 379 TERMINAL (FULL in-milestone close)
+Last activity: 2026-06-06 -- Phase 375 Plan 02 complete (SPEC design-lock authored)
 
 ## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
 

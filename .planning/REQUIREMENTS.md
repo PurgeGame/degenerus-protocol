@@ -45,7 +45,7 @@
 
 ### SPEC — design-lock + anchor re-attestation (375)
 
-- [ ] **SPEC-01** (SPEC): Re-attest every cited `file:line` anchor against the frozen baseline `2bee6d6f`; LOCK the open knobs — AFPAY feature-first vs accessor-first packing sequencing + `AfkingSpent` emission breadth + the `purchaseWith`-dead confirmation (`MintModule:858` — only def + `IDegenerusGameModules:242` + stale comments, no call site); CURSE counter cap (rec 20 pts) + the staleness day-basis (`_currentMintDay` vs `_simulatedDayIndex`, ≤1-day skew); SMITE protocol-addr skip (rec keep VAULT/SDGNRS/GNRUS — sDGNRS score feeds its redemption snapshot) + self-smite sanity; and map the producer-before-consumer edit order (CURSE counter/cure/APPLY BEFORE SMITE; the PACK accessor layer BEFORE the repack; the SOLVENCY invariant accessor location). Paper-only, ZERO `contracts/*.sol`.
+- [x] **SPEC-01** (SPEC): Re-attest every cited `file:line` anchor against the frozen baseline `2bee6d6f`; LOCK the open knobs — AFPAY feature-first vs accessor-first packing sequencing + `AfkingSpent` emission breadth + the `purchaseWith`-dead confirmation (`MintModule:858` — only def + `IDegenerusGameModules:242` + stale comments, no call site); CURSE counter cap (rec 20 pts) + the staleness day-basis (`_currentMintDay` vs `_simulatedDayIndex`, ≤1-day skew); SMITE protocol-addr skip (rec keep VAULT/SDGNRS/GNRUS — sDGNRS score feeds its redemption snapshot) + self-smite sanity; and map the producer-before-consumer edit order (CURSE counter/cure/APPLY BEFORE SMITE; the PACK accessor layer BEFORE the repack; the SOLVENCY invariant accessor location). Paper-only, ZERO `contracts/*.sol`.
 
 ### SEC — hard security floor (378)
 
@@ -86,7 +86,7 @@
 
 | REQ-ID | Phase | Type | Status |
 |--------|-------|------|--------|
-| SPEC-01 | 375 | SPEC | Pending |
+| SPEC-01 | 375 | SPEC | Complete |
 | AFPAY-01 | 376 | IMPL | Pending |
 | AFPAY-02 | 376 | IMPL | Pending |
 | AFPAY-03 | 376 | IMPL | Pending |
