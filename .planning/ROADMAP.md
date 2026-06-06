@@ -57,7 +57,9 @@
   2. Every cited anchor is re-attested against `2bee6d6f` with any drift corrected.
   3. The producer-before-consumer edit order is mapped (CURSE before SMITE; PACK accessor before repack).
 
-**Plans**: TBD
+**Plans**: 2 plans
+  - [ ] 375-01-PLAN.md — Re-attest every cited anchor vs `2bee6d6f` (drift corrected) + resolve the `purchaseWith`-dead / self-smite / SOLVENCY-accessor verification items → `375-ANCHOR-REATTESTATION.md`
+  - [ ] 375-02-PLAN.md — Author `SPEC-V61-DESIGN-LOCK.md`: lock the knobs D-01..D-05, fold the re-attested anchor table, map the producer-before-consumer edit order (Track A PACK→AFPAY / Track B CURSE→SMITE)
 **UI hint**: no
 
 ### Phase 376: IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE)
@@ -123,7 +125,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 375. SPEC — Design-Lock + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map | v61.0 | 0/TBD | Not started | - |
+| 375. SPEC — Design-Lock + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map | v61.0 | 0/2 | Not started | - |
 | 376. IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE) | v61.0 | 0/TBD | Not started | - |
 | 377. GAS — Gas-Neutrality Gate (curse APPLY zero-SLOAD · packing no cold slot) | v61.0 | 0/TBD | Not started | - |
 | 378. TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | v61.0 | 0/TBD | Not started | - |
