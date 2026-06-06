@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v61.0
 milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
-status: verifying
-last_updated: "2026-06-06T21:16:09.215Z"
+status: ready_to_plan
+last_updated: 2026-06-06T21:23:48.484Z
 last_activity: 2026-06-06 -- Phase 375 COMPLETE (both plans; SPEC-V61-DESIGN-LOCK.md authored — knobs D-01..D-05 locked, re-attested anchor table folded, Track A/B edit order mapped)
 progress:
   total_phases: 10
@@ -11,6 +11,7 @@ progress:
   total_plans: 6
   completed_plans: 4
   percent: 20
+stopped_at: Phase 375 complete (2/2) — ready to discuss Phase 376
 ---
 
 # Project State
@@ -20,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP.md (v61.0 🚧 ACTIVE — phases 375-379, once roadmapped) + .planning/REQUIREMENTS.md (v61.0 reqs, once defined) + .planning/MILESTONES.md (v60.0 entry, top). v61 design inputs (design-locked): .planning/PLAN-V61-MILESTONE-SCOPE.md + PLAN-V61-AFKING-AS-PAYMENT-SOURCE.md + PLAN-CASHOUT-CURSE.md + PLAN-V61-DEITY-SMITE.md (`[[v61-milestone-seed]]`). Baseline = the v60.0 closure HEAD `2bee6d6f` (10 commits ahead of origin, NOT pushed). v60.0 archive: .planning/milestones/v60.0-ROADMAP.md + v60.0-REQUIREMENTS.md; canonical audit deliverable audit/FINDINGS-v60.0.md (chmod 444). **NEXT = /gsd-plan-phase 375 (SPEC).**
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 375 SPEC ✅ COMPLETE (both plans). Plan 01 = anchor re-attestation vs `2bee6d6f` (`375-ANCHOR-REATTESTATION.md`); Plan 02 = the design-lock SPEC `.planning/SPEC-V61-DESIGN-LOCK.md` (knobs D-01..D-05 locked, the 29-anchor re-attested table folded with the 4 CORRECTED lines `:365`/`_purchaseForWith :1093`/`:1000`/`:932`, Track A PACK→AFPAY / Track B CURSE→SMITE edit order + the CURE-vs-PACK-repack write-after-write cross-check, SOLVENCY home pinned for SEC-02). Phase ready for verification → next = 376 IMPL (the ONE batched contract diff, HARD STOP).
+**Current focus:** Phase 376 — impl — the one batched contract diff (afpay + pack + curse + smite)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,11 +33,11 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 
 ## Current Position
 
-Phase: 375 (spec-design-lock-open-knobs-anchor-re-attestation-vs-2bee6d6) — COMPLETE (ready for verification)
-Plan: 2 of 2 ✅ (Plan 01 ✅ anchor re-attestation; Plan 02 ✅ SPEC design-lock + edit-order map)
-Status: Phase complete — ready for verification
+Phase: 376
+Plan: Not started
+Status: Ready to plan
 Next up: 376 IMPL (the ONE batched contract diff AFPAY+PACK+CURSE+SMITE, producer-before-consumer Track A/B per `SPEC-V61-DESIGN-LOCK.md`; CONTRACT-BOUNDARY HARD STOP) → 377 GAS → 378 TST → 379 TERMINAL (FULL in-milestone close)
-Last activity: 2026-06-06 -- Phase 375 Plan 02 complete (SPEC design-lock authored)
+Last activity: 2026-06-06
 
 ## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
 

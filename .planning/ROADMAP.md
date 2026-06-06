@@ -125,7 +125,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 375. SPEC — Design-Lock + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map | v61.0 | 2/2 | Complete | 2026-06-06 |
+| 375. SPEC — Design-Lock + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map | v61.0 | 2/2 | Complete    | 2026-06-06 |
 | 376. IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE) | v61.0 | 0/TBD | Not started | - |
 | 377. GAS — Gas-Neutrality Gate (curse APPLY zero-SLOAD · packing no cold slot) | v61.0 | 0/TBD | Not started | - |
 | 378. TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | v61.0 | 0/TBD | Not started | - |
