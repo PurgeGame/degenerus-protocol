@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v61.0
 milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
 status: executing
-last_updated: "2026-06-06T20:52:08.119Z"
-last_activity: 2026-06-06 -- Phase 375 planning complete
+last_updated: "2026-06-06T21:06:22.843Z"
+last_activity: 2026-06-06 -- Phase 375 Plan 01 complete (anchor re-attestation vs 2bee6d6f; purchaseWith dead, self-smite harmless, SOLVENCY home pinned)
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 6
-  completed_plans: 2
+  completed_plans: 3
   percent: 10
 ---
 
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP.md (v61.0 🚧 ACTIVE — phases 375-379, once roadmapped) + .planning/REQUIREMENTS.md (v61.0 reqs, once defined) + .planning/MILESTONES.md (v60.0 entry, top). v61 design inputs (design-locked): .planning/PLAN-V61-MILESTONE-SCOPE.md + PLAN-V61-AFKING-AS-PAYMENT-SOURCE.md + PLAN-CASHOUT-CURSE.md + PLAN-V61-DEITY-SMITE.md (`[[v61-milestone-seed]]`). Baseline = the v60.0 closure HEAD `2bee6d6f` (10 commits ahead of origin, NOT pushed). v60.0 archive: .planning/milestones/v60.0-ROADMAP.md + v60.0-REQUIREMENTS.md; canonical audit deliverable audit/FINDINGS-v60.0.md (chmod 444). **NEXT = /gsd-plan-phase 375 (SPEC).**
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v61.0 — Phase 375 SPEC design-lock (afking-as-payment-source + cashout-curse + deity-smite; SPEC→IMPL→GAS→TST→TERMINAL, phases 375-379; 375 open knobs locked 2026-06-06 incl. **accessor-first** PACK/AFPAY sequencing, AfkingSpent-every-debit, CURSE_COUNT_CAP=20, protocol-addr skip kept)
+**Current focus:** Phase 375 SPEC — Plan 01 (anchor re-attestation vs `2bee6d6f`) ✅ COMPLETE; next = Plan 02 (fold the re-attested table into the SPEC design-lock + edit-order map). Artifact: `375-ANCHOR-REATTESTATION.md` (29 anchors, 4 CORRECTED; `purchaseWith` DEAD, self-smite harmless, SOLVENCY home = PACK accessor layer).
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,11 +32,11 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 
 ## Current Position
 
-Phase: 375 (SPEC)
-Plan: Not started
-Status: Ready to execute
-Next up: 375 SPEC (design-lock the open knobs + re-attest anchors vs `2bee6d6f` + edit-order map) → 376 IMPL (the ONE batched diff, contract boundary) → 377 GAS → 378 TST → 379 TERMINAL (FULL in-milestone close)
-Last activity: 2026-06-06 -- Phase 375 planning complete
+Phase: 375 (spec-design-lock-open-knobs-anchor-re-attestation-vs-2bee6d6) — EXECUTING
+Plan: 2 of 2 (Plan 01 ✅ complete — anchor re-attestation; Plan 02 = SPEC fold + edit-order map)
+Status: Executing Phase 375 — Plan 01 done, Plan 02 next
+Next up: 375 Plan 02 (fold `375-ANCHOR-REATTESTATION.md` into the SPEC design-lock + edit-order map) → 376 IMPL (the ONE batched diff, contract boundary) → 377 GAS → 378 TST → 379 TERMINAL (FULL in-milestone close)
+Last activity: 2026-06-06 -- Phase 375 Plan 01 complete
 
 ## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
 
@@ -726,6 +726,11 @@ Audit deliverables:
 | Phase 370 P01 | 1 session | 2 tasks | 1 file (370-01-SPEC.md, 329 lines — anchor re-attestation + F-03 variant lock + edit-order map + WINDOW-01 verification) + 1 SUMMARY; ZERO contracts |
 
 ## Decisions
+
+- [Phase 375]: Plan 01 — `purchaseWith` confirmed **DEAD** at `2bee6d6f` → leave untouched at 376 IMPL. Five refs only: def `MintModule:858` + interface `IDegenerusGameModules:242` + 3 stale doc-comments (`AdvanceModule:759`, `MintModule:1122`, `GameAfkingModule:1097`); the `.selector`/call grep returned only a parenthetical inside a comment → NO call site, NO selector, NO delegatecall dispatch (the fn is `external`, reachable only via a Game dispatch stub that does not exist for it). The AFPAY waterfall lands in the live `_purchaseForWith` (`MintModule:1093`) / `_processMintPayment` (`DegenerusGame:1054`), not via this dead entry.
+- [Phase 375]: Plan 01 — self-smite confirmed **HARMLESS-BY-DESIGN** (STRIDE T-375-03 accept). The shared `uint8` curse counter has ONE consumer — the APPLY at `MintStreakUtils:320 scoreBps = bonusBps;` (subtract `curse*100` bps, floored 0) — which can only LOWER the activity score (never beneficial; a lower score = smaller century/streak multipliers). `smite` burns the caller's OWN 200 BURNIE via `burnCoin(msg.sender, PRICE_COIN_UNIT/5)` (`BurnieCoin:572 onlyGame`, pure sink, no ETH/mint/pool touch). `_bountyEligible` (`MintStreakUtils:30`) does NOT read the counter → no bounty/keeper/score-floor/positive-EV path. The ≥5-stack ceiling + trivial self-cure add no asymmetry. No self-smite guard required (the D-04 VAULT/SDGNRS/GNRUS skip stays for the redemption-snapshot reason, unrelated).
+- [Phase 375]: Plan 01 — SOLVENCY-01 invariant home pinned to the **PACK accessor layer** (D-01) for SEC-02 (378): re-attested enforcement surface = the invariant statement `DegenerusGameStorage.sol:358` + `claimablePool` decl **:365** + canonical `_settleClaimableShortfall` **:851** (→ `_settleShortfall` at IMPL, paired `claimablePool -=` at :857) + the 2 centralized claimable credits `DegenerusGamePayoutUtils.sol:25/39/63` + the afking credit/debit pair in `GameAfkingModule` (337 / ~791). The no-double-draw boundary is empirical: `_deliverAfkingBuy` (`GameAfkingModule:777`) debits afking+claimablePool inline and `_processMintPayment` has ZERO references in that module → the auto-buy path is fully isolated from the manual `purchase()` chain.
+- [Phase 375]: Plan 01 — anchor re-attestation vs frozen `2bee6d6f`: **29 anchors across 13 files**, 4 CORRECTED (the SPEC must cite the baseline line): (1) `claimablePool uint128` decl @ **365** — CONTEXT's ~:838-839 is the `_setCurrentPrizePool` width-safety doc-comment, NOT the decl; (2) cure host = **`_purchaseForWith` @ 1093** — CONTEXT's `_purchaseWithFor` ~:1285 is a name-transposition, 1285 is inside its body; (3) `_recordLootboxMintDay` @ **1000** (cited ~:983); (4) sDGNRS redemption activity-score read @ **932** (cited ~:942). Spot-checks PASS: `purchaseWith` @ 858; `AFFILIATE_BONUS_POINTS_SHIFT = 209` ends bit 214 + `LEVEL_UNITS_SHIFT = 228` → `[215-222]` free (header documents `[215-227] (unused)`) for `CURSE_COUNT_SHIFT = 215`; no full-slot `mintPacked_` writer clobbers 215-222 (all 12 writes field-isolated RMW; `setPacked` keystone `(data & ~(mask<<shift)) | ((value&mask)<<shift)`). Paper-only: `git status --porcelain contracts/` empty.
 
 - [Phase 370]: Plan 01 — v59.0 F-03/SOLV-01 LOCKED to **variant (a)**: return the BAF whale-pass `remainder` from `_queueWhalePassClaimCore` (`PayoutUtils:45`, change to `returns (uint256)`, drop the inline `claimablePool += uint128(remainder)` at `:58`) and fold it into the BAF caller's `claimableDelta` (`JackpotModule:1949`, + reconcile the second caller `:2001`) so the existing single `memFuture -= claimed` (`AdvanceModule:902`) / `claimablePool += claimableDelta` (`:972`) accounting debits `futurePrizePool` for it — mirrors `_addClaimableEth` (`:730-740`, credits via `_creditClaimable` and returns the wei for the caller to fold, no inline pool bump). **Variant (b) push-remainder-back-to-`futurePrizePool` REJECTED** on a decisive structural fact: in the BAF path `futurePrizePool` is a stale cached local `memFuture` (read once `AdvanceModule:801`, single writeback `_setPrizePools` `:968`), so a mid-loop `_setFuturePrizePool` push-back inside `runBafJackpot` is silently CLOBBERED; `_processSoloBucketWinner` (`:1382`) can use the push-back shape only because it runs OUTSIDE that cached-`memFuture` window. SOLV-02 (F-04) = confirm-only single add `claimablePool += uint128(remainder);` at `DecimatorModule:596` (no variant). SALV-01 = custom-error widening `if (n == 0 || n > type(uint32).max) revert E();` at `MintStreakUtils:174` (repo uses `revert E()` not `require`).
 - [Phase 370]: Plan 01 — v59.0 anchor re-attestation vs frozen `2b26ec91`: **24 anchors grep-verified across 7 groups** (SALV/AFAFF/SOLV/PRESALE + Change A/B/C), drifts ±1–2 lines corrected to AS-FOUND (the council read approximate context-pack cites). Two structural corrections: the F-03/F-04 `claimWinnings :1588` cite resolves to **`DegenerusGame.sol:1588`** (not a module); the decimator `:392-399`/`:596` decl cites drift to the AS-FOUND `_creditDecJackpotClaimCore:385` / `_awardDecimatorLootbox:580`. STREAK-01 shift-160 promotion confirmed a **clean no-conflict add** — the `BitPackingLib.sol` bit-layout doc ALREADY reserves `[160-183] MINT_STREAK_LAST_COMPLETED` with `[154-159] unused`, bracketed by `WHALE_BUNDLE_TYPE_SHIFT=152`/`HAS_DEITY_PASS_SHIFT=184`; the local at `MintStreakUtils:19` + 4 refs (`:22/:72/:94/:105`) repoint to the library (preserve the `MINT_STREAK_FIELDS_MASK` dual-field clear). Edit-order = producer-before-consumer: STREAK-01 before STREAK-02; SOLV-01 return-value before the BAF caller fold; the other 6 reqs order-free.
