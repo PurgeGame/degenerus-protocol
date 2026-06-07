@@ -222,3 +222,69 @@ offsets 28/29, shifting the fields above DOWN 2 bytes AND the low time fields' w
   but the two in-union siblings are carried-red by the non-widening discipline (carried reds are left red,
   not fixed), so their out-of-union fuzz twins are documented here rather than force-fixed. NOT flagged
   `## CONTRACT-CHANGE-NEEDED`.
+
+---
+
+## Task 3 — Consolidated ledger + interim non-widening check
+
+### Full-suite counts
+
+| Snapshot | passed | failed | skipped | total |
+|----------|-------:|-------:|--------:|------:|
+| pre-378-03 (378-01/02 already landed) | 546 | 177 | 103 | 826 |
+| **post-378-03 (this plan)** | **657** | **66** | **103** | **826** |
+
+378-03 narrowed 177→66 failed (111 tests red→green), ALL via slot/offset recalibration of stale
+harness constants (the allowed non-widening narrowing) — ZERO contract edits.
+
+### Files brought FULLY GREEN by 378-03 (slot-stale class cleared)
+
+AfKingConcurrency, V56SubHardening (the crossing-eviction + D-11/12/13 surface), DegeneretteHeroScore,
+VrfRotationLiveness, VrfRotationOrphanIndex, RngFreezeAndRemovalProofs, LootboxRngLifecycle,
+KeeperFaucetResistance, RngLockRotationDeterminism (surfaced by the interim check below).
+
+### Interim non-widening check (the Task-3 guardrail; the binding gate is 378-05)
+
+Captured every HEAD forge red NAME (`forge test`, default profile) and reconciled against
+`(2bee6d6f baseline union ∪ accepted-slot-shift-staleness ∪ accepted-v61-behavior ∪ documented class-(c))`:
+
+- **63 unique HEAD red names.**
+- **60 are in the 2bee6d6f by-name union** ⇒ CARRIED (pre-existing; left red by design).
+- **3 are out-of-union**, each a DOCUMENTED class-(c) accepted-staleness candidate:
+  `testFuzzTwoBlockOpenNoBlockEntropy` (C-1), `test_gapBackfillEntropyUnique_fuzz` +
+  `test_gapBackfillWithMidDayPending_fuzz` (C-2).
+- **`live − (union ∪ documented) == ∅`** — every HEAD red is accounted for. NO unexplained regression.
+- **~111 of the 172 baseline names are now GREEN** at HEAD (the recalibration narrowing; `BASE − live ≠ ∅`
+  is allowed and expected — reds the v61 TST work fixed).
+
+> **One red the interim check caught and resolved:** `testFuzz_RotationFreezeInvariant_MidDay`
+> (RngLockRotationDeterminism) was initially out-of-union with `vm.assume rejected too many inputs`.
+> Investigation showed `_readMidDayFlag` read the stale `SLOT_LOOTBOX_RNG_INDEX=37`; the wrong-slot
+> read never satisfied the `== 1` predicate so `vm.assume(false)` fired on every input. This was
+> class-(a) slot-stale (not bucket-A fuzz exhaustion) — recalibrated 37→36 / 38→37 → GREEN (2/2).
+> This is exactly the unexplained-red the interim check exists to surface.
+
+### Classification tally (the ~32-file tail + the interim-surfaced file)
+
+- **class-(a) slot-stale recalibrated GREEN:** the dominant class — the NoPass()/panic/InvalidBet()/
+  BatchAlreadyTaken()/E()/index-0/word-store/rngLockedFlag-poke families across both clusters.
+- **class-(b) v61-behavior:** NONE required. No HEAD red was traced to a legitimately-changed v61
+  behavior whose expectation needed updating — every behavioral residual was either CARRIED (in-union,
+  pre-existing) or a documented out-of-union fuzz twin of a carried sibling. (The v61 behavior surface —
+  AfkingSpent emits, curse-penalized score, afking-covered shortfalls, the Degenerette afking tier with
+  InvalidBet() preserved, the affiliate fresh/recycled split — is PROVEN POSITIVELY by the new TST-01..06
+  proofs authored in 378-04/05, not by mutating these regression harnesses.)
+- **carried baseline red (in-union, left red):** 60 names — the residual pre-existing reds (harness-
+  isolation `_queueTickets` panics, deferred-lootbox-open materialization, finalize-hook events,
+  mintBurnie advance-bounty fixtures, gap-backfill encoding, affiliate score calibration, presale tier
+  shape, boon-roll probabilities, fuzz exhaustion).
+- **class-(c) documented (no contract fix):** 3 — C-1 + C-2, all accepted-staleness (shared root with
+  carried in-union siblings; no v61 contract change; NOT confirmed bugs).
+
+### Contract-boundary compliance
+
+ZERO mainnet `*.sol` edits across all of 378-03. `git status --porcelain` on the contract tree empty at
+every commit; contract tree-hash `87e3b45b46879ec80c4fe6a689b4c17ccae482f1` unchanged plan start→end
+(⇒ the content fingerprint `fcdd999ce2ddb0cac9e04b49242522b896cf56c67c18e213cd0f6dd5b6aa8aaf` from
+378-01 preserved). NO `## CONTRACT-CHANGE-NEEDED`: no class-(c) candidate is a confirmed-real contract
+bug where the test is correct and a contract fix is the sole resolution.

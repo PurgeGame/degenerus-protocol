@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v61.0
 milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
 status: executing
-last_updated: "2026-06-07T08:30:00.000Z"
-last_activity: "2026-06-07 -- Phase 378 plan 02 executed (gas-harness slot recalibration: 6 harnesses -> v61 slots; STAGE_2 all-evict re-measured LIVE = 13.61M / 3.09M headroom < 16.7M)"
+last_updated: "2026-06-07T12:00:00.000Z"
+last_activity: "2026-06-07 -- Phase 378 plan 03 executed (triage ~32-file tail: slot-stale recalibrated GREEN, full suite 177->66 failed [111 red->green]; interim non-widening check PASSED [63 HEAD reds = 60 carried + 3 documented class-(c)]; zero .sol edits)"
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 15
-  completed_plans: 10
-  percent: 35
+  completed_plans: 11
+  percent: 38
 ---
 
 # Project State
@@ -33,10 +33,11 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 ## Current Position
 
 Phase: 378 (tst-proving-tests-rng-freeze-solvency) — ▶ IN PROGRESS. **378-01 ✅** (TST foundation: authoritative v61 layout via forge inspect + slot recalibration key + StorageFoundation/redemption recalibrated + frozen-baseline `2bee6d6f` red set BY NAME; commits `8da54ed5`/`bad1889e`/`5de3ccb8`). **378-02 ✅** (gas-harness recalibration: 6 slot-hardcoded gas harnesses -> authoritative v61 slots, the slot-stale NoPass/panic class resolved [V56AfkingGasMarginal 16/16 green; 25 passed/0 failed/12 skipped across the 6 suites]; STAGE_2 binding all-evict worst case re-measured LIVE on v61 = 13.61M / 3.09M headroom < 16.7M ceiling -> PACK 1-slot-neutral on the evict path; commits `3aadcf49`/`09870c57`; zero .sol edits). 376 ✅ `b97a7a2e` · 377 ✅ Outcome-A `056481ea` (all local, NOT pushed).
-Plan: `378-tst-proving-tests-rng-freeze-solvency/378-PLAN-TRIAGE.md` (the focused-session playbook); next plan `378-03` (accepted-v61-behavior reds).
-Status: 378-02 complete; ready for 378-03.
-Key 378-01/02 findings (for downstream plans): balancesPacked root UNMOVED at slot 7 (redemption + Sweep claimable pokes need only the SEMANTIC low-128 fix); slot-shift delta is region-dependent NOT uniform -1 (subs -3, lootbox/degenerette -2, mint/rng -1); authoritative v61 slots in `378-01-RECALIBRATION-KEY.md` (re-confirmed live via forge inspect in 378-02); STAGE_2 binding worst case pinned at 13.61M / 3.09M headroom on v61; baseline ceiling 533/183/103 (172 names) in `test/REGRESSION-BASELINE-v61.md`; Hardhat baseline blocked by absent test/adversarial dir (forge is primary).
-Next up (FOCUSED 378 session): (3) **378-03** accepted-v61-behavior reds (triage-(b)); (4) 378-04/05 write TST-01..06 + the final non-widening gate; (5) 378-06 SEC-01/02. All test-side/committable, per-unit commits. Then 379 TERMINAL (FULL close + FINDINGS-v61.0).
+**378-03 ✅** (triage the ~32-file behavior/non-gas tail + 1 interim-surfaced file into (a)/(b)/carried/(c): the slot-stale class recalibrated to the authoritative v61 layout brought the full suite **177->66 failed** [111 tests red->green]; the interim non-widening check PASSED — 63 HEAD red names = 60 in the 2bee6d6f by-name union [CARRIED] + 3 out-of-union DOCUMENTED class-(c) accepted-staleness candidates, `live − (union ∪ documented) == ∅`, ~111 of 172 baseline names now GREEN; NO class-(b) expectation rewrites needed [v61 behavior is proven positively by 378-04/05's TST proofs, not by mutating regression harnesses]; `InvalidBet()` preserved [the 24-InvalidBet bucket was 100% slot-stale]; deliverable `378-03-CANDIDATE-FINDINGS.md`; commits `3c04615c`/`631b5c85`/`ff4b0e9b`; zero .sol edits).
+Plan: `378-tst-proving-tests-rng-freeze-solvency/378-03-PLAN.md` (executed); next plan `378-04` (TST-01..06 proofs).
+Status: 378-03 complete; ready for 378-04.
+Key 378-01/02/03 findings (for downstream plans): balancesPacked root UNMOVED at slot 7 (claimable pokes need only the SEMANTIC low-128 fix); slot-shift delta is region-dependent NOT uniform -1 (subs -3, lootbox/degenerette -2, mint/rng -1, slot-0 fields -2, low time-field widths narrowed: dailyIdx uint24 @ byte 3 read >>24, rngRequestTime uint48 @ byte 6 read >>48); authoritative v61 slots in `378-01-RECALIBRATION-KEY.md`; baseline ceiling 533/183/103 (172 names) in `test/REGRESSION-BASELINE-v61.md`; post-378-03 full suite **657/66/103**; the 3 documented class-(c) candidates (C-1 deferred-lootbox-open materialization, C-2 gap-backfill uint24/uint32 encoding) are accepted-staleness twins of carried siblings, NOT contract bugs; contract tree-hash `87e3b45b` / fingerprint `fcdd999c` preserved.
+Next up (FOCUSED 378 session): (4) **378-04** write TST-01..06 (positive v61-behavior proofs); (5) 378-05 the final non-widening gate; (6) 378-06 SEC-01/02. All test-side/committable, per-unit commits. Then 379 TERMINAL (FULL close + FINDINGS-v61.0).
 377 GAS = Outcome-A (gas-neutral, no contract tune); findings `377-GAS-FINDINGS.md`. 376 EIP-170 reclaim via de-view read getters; details `376-03-SUMMARY.md`.
 Last activity: 2026-06-07 -- Phase 378 plan 02 executed (gas-harness slot recalibration: 6 harnesses -> v61 slots; STAGE_2 all-evict re-measured LIVE = 13.61M / 3.09M headroom < 16.7M)
 

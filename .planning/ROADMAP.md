@@ -133,7 +133,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 378-03-PLAN.md — Behavior-update triage (a/b/c) across the remaining ~32 failing files; recalibrate residual slot-stale, update v61-behavior expectations, document class-(c) candidate findings (TST-06)
+- [x] 378-03-PLAN.md — Behavior-update triage (a/b/c) across the ~32-file tail (+1 interim-surfaced file): slot-stale recalibrated to authoritative v61 layout → full suite 177→66 failed (111 red→green); interim non-widening check PASSED (63 HEAD reds = 60 carried in-union + 3 documented class-(c) accepted-staleness; `live − (union ∪ documented) == ∅`); NO class-(b) rewrites needed (v61 behavior proven positively by 378-04/05); `InvalidBet()` preserved (24-bucket was 100% slot-stale); deliverable `378-03-CANDIDATE-FINDINGS.md`; zero .sol edits (TST-06) ✅ `3c04615c`/`631b5c85`/`ff4b0e9b`
 
 **Wave 4** *(blocked on Wave 3)*
 
