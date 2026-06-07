@@ -32,12 +32,12 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 
 ## Current Position
 
-Phase: 377 (gas-neutrality-gate) — ✅ OUTCOME-A (gas-neutral; no contract tune). 376 IMPL ✅ COMMITTED `b97a7a2e` (USER-approved hand-review 2026-06-06; local, NOT pushed — 32 ahead of origin).
-Plan: 377 complete (measurement gate, owns no REQ-ID). Findings: `377-gas-neutrality-gate/377-GAS-FINDINGS.md`.
-Status: v61 does NOT regress the advanceGame DoS-ceiling chain. advanceGame/jackpot/decimator/boon/bingo modules byte-UNCHANGED; PACK accessor impls 1-slot-neutral; curse APPLY zero-new-SLOAD. Measured v61 worst-case (clean harnesses): jackpot 305-winner 7.28M, ticket batch warm 9.74M; binding STAGE_2 subscriber all-evict 13.60M (referenced + structurally neutral, 3.17M headroom < 16.7M). AFPAY/curse-SET/decurse/smite are OFF the advanceGame chain (user txs) — accepted feature costs.
-Next up: 378 TST — recalibrate the 6 slot-hardcoded gas/keeper harnesses (V56AfkingGasMarginal + sweep/router/keeper) + the vm.load redemption tests for the v61 storage-slot shift (PACK fold removed afkingFunding → slots shifted); re-measure STAGE_2 live; prove SEC-01/02 (RNG-freeze + SOLVENCY-01) + TST-01..06. Then 379 TERMINAL (FULL close + FINDINGS-v61.0).
-376 EIP-170 reclaim: de-view read getters (USER-selected) → `decClaimable` de-dup to DecimatorModule + `previewSellFarFutureTickets` → MintModule. Details: `376-03-SUMMARY.md`.
-Last activity: 2026-06-06 -- 376 committed b97a7a2e; 377 GAS = Outcome-A (gas-neutral, no tune)
+Phase: 378 (tst-proving-tests-rng-freeze-solvency) — ▶ IN PROGRESS, foundation laid (failure baseline + slot-shift recalibration key + plan). 376 ✅ `b97a7a2e` · 377 ✅ Outcome-A `056481ea` (both local, NOT pushed — 33 ahead of origin).
+Plan: `378-tst-proving-tests-rng-freeze-solvency/378-PLAN-TRIAGE.md` (the focused-session playbook).
+Status: 378 runtime failure baseline on v61 HEAD = **525 passed / 396 failed** — dominated by the storage-slot-shift signature (98 NoPass stale-slot pass-grants + 62 panic wrong-slot writes) across ~32 slot-hardcoded files + the repo's known pre-existing red. ⚠ v61-delta NOT yet isolated → "no v61 regression" is NOT certified until a baseline-`2bee6d6f` NON-WIDENING by-name comparison runs (the v55/56/57 methodology). The PACK fold = uniform −1 slot shift for post-balances slots (StorageFoundation's pre-fold slots 0/2/11 unaffected); authoritative layout via `forge clean && forge build` (include_storage=true) then `forge inspect`.
+Next up (FOCUSED 378 session): (1) baseline NON-WIDENING comparison → isolate the v61-delta; (2) recalibrate the −1 slot shift across the ~32 slot-hardcoded harnesses + re-measure STAGE_2 live; (3) update accepted-v61-behavior reds; (4) write TST-01..06; (5) prove SEC-01/02. All test-side/committable, per-unit commits. Then 379 TERMINAL (FULL close + FINDINGS-v61.0).
+377 GAS = Outcome-A (gas-neutral, no contract tune); findings `377-GAS-FINDINGS.md`. 376 EIP-170 reclaim via de-view read getters; details `376-03-SUMMARY.md`.
+Last activity: 2026-06-06 -- 378 foundation: failure baseline 525/396 captured + slot-shift recalibration plan; heavy lifting → focused session
 
 ## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
 
