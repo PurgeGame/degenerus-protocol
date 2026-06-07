@@ -334,3 +334,43 @@ behavioral surface (TST-01..06 + SEC-01/02) is PROVEN by the new forge proving t
 **Subject restored.** `git diff HEAD -- contracts/` empty; contracts/ fingerprint
 `fcdd999ce2ddb0cac9e04b49242522b896cf56c67c18e213cd0f6dd5b6aa8aaf`; `forge build` clean on the
 v61 HEAD subject. This baseline is the frozen ceiling for the 378-05 TST-06 non-widening gate.
+
+---
+
+## 7. TST-06 FINAL VERDICT — NON-WIDENING HOLDS (folded from 378-05, 2026-06-07)
+
+The 378-05 TST-06 gate ran the FULL forge suite at the v61 working HEAD against this §3 ceiling.
+Full ledger: `.planning/phases/378-tst-proving-tests-rng-freeze-solvency/378-05-NONWIDENING-LEDGER.md`.
+
+- **Live HEAD: 711 passed / 66 unique failing NAMES / 103 skipped** (clean forge cache).
+- **`UNION` = 172 (§3 BASE) ∪ 3 (378-03 class-(c) candidates C-1/C-2) ∪ 3 (carried VRFPath
+  invariants) = 178 names** (deduped).
+- **`live − UNION == ∅` BY NAME → NON-WIDENING HOLDS.** The 66 live reds = 60 carried §3 + 3
+  documented class-(c) + 3 carried VRFPath bucket-A invariants. **112 baseline names narrowed to
+  GREEN** (the 378-01/02/03 recalibration). **54 new proving tests** (TST-01..05) additive green.
+  ZERO new v61 contract regression; NO `## CONTRACT-CHANGE-NEEDED`.
+
+**§3-union scope correction (the only addition this verdict makes):** the §3 enumeration scoped to
+`test*` NAMES and omitted the `invariant_*` family. Three VRFPath stateful-fuzz invariants —
+`invariant_allGapDaysBackfilled`, `invariant_rngUnlockedAfterSwap`, `invariant_stallRecoveryValid`
+(`test/fuzz/invariant/VRFPathInvariants.inv.t.sol`) — appear in the live HEAD set. They were
+surfaced out-of-union by the gate, then **PROVEN PRE-EXISTING at `2bee6d6f`**: a non-destructive
+checkout of the full `2bee6d6f` test tree + contracts reproduced the SAME 3 invariant failures with
+byte-identical messages (`Suite result: FAILED. 4 passed; 3 failed`). They are carried bucket-A
+non-deterministic reds (the §4 Bucket-A class; the v61 diff touches no VRF-swap / gap-backfill /
+rngLocked logic — that lives in `DegenerusGameAdvanceModule`, untouched). Added to the union as
+CARRIED with that evidence, NOT widened-to-hide-a-regression. (A VRFPathHandler slot-stale
+hypothesis was investigated — recalibrating the handler's `dailyIdx`/lootbox-word reads to the v61
+layout did NOT change the outcome, and the baseline reproduces with its own handler — so the reds
+are a genuine pre-existing ghost-counter property; the handler probe was reverted byte-clean.)
+
+**Hardhat:** `npm test` cannot complete (the `test/adversarial/*.test.js` glob is absent at both
+baseline and HEAD → `MODULE_NOT_FOUND` before any spec loads — the §6 documented limitation, env-
+not-v61). The runnable `test/unit` subset ran at HEAD (930 passing / 67 failing / 3 pending; the 67
+are pre-existing affiliate-cap / pool-split / roll / access-control families, NOT the v61 contract
+surface, none accounting-insolvency or RNG-freeze). Corroborating only; the forge by-name verdict is
+PRIMARY. Comparison is BY NAME, never by count (T-378-05-02).
+
+**Contracts byte-frozen:** tree-hash `87e3b45b46879ec80c4fe6a689b4c17ccae482f1` / fingerprint
+`fcdd999ce2ddb0cac9e04b49242522b896cf56c67c18e213cd0f6dd5b6aa8aaf` preserved; `git status
+--porcelain contracts/` empty; the non-destructive baseline checkout HARD-restored to HEAD.
