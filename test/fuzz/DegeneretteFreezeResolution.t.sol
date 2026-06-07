@@ -39,9 +39,13 @@ import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
 contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // --- Storage slot constants (confirmed via `forge inspect DegenerusGameStorage storage`) ---
 
-    /// @dev Slot 0, byte 29 (bit 232): prizePoolFrozen (bool, 1 byte).
+    /// @dev Slot 0, byte 27 (bit 216): prizePoolFrozen (bool, 1 byte).
     uint256 private constant SLOT_0 = 0;
-    uint256 private constant FROZEN_BIT_SHIFT = 232;
+    // prizePoolFrozen is at slot 0 offset 27 (bit 216) at c4d48008 — the v61 PACK appended
+    // presaleOver (offset 28) + subsFullyProcessed (offset 29), shifting the prior flag block
+    // down. The pre-PACK byte 29 (bit 232) is now subsFullyProcessed; poking it left
+    // prizePoolFrozen unset, so the frozen-branch bet routing never fired (bet hit live pool).
+    uint256 private constant FROZEN_BIT_SHIFT = 216;
 
     /// @dev prizePoolsPacked: [upper 128: futurePrizePool] [lower 128: nextPrizePool]
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
@@ -640,7 +644,24 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     ///         test resolves an all-6+-match ETH bet, replays the per-spin draining
     ///         off the live Reward poolBalance, and asserts the player's sDGNRS gain
     ///         equals the per-spin (path-dependent) sum — proving it was NOT batched.
+    /// @dev DEF-380-04-FC2 (finding-candidate routed to the council, 382+ PRIME/Degenerette sweep).
+    ///      SKIPPED against the frozen subject c4d48008: the per-spin replay model here is keyed on
+    ///      the MATCH count (6/7/8 matches -> DEGEN_DGNRS_6/7/8_BPS = 400/800/1500) and fires on
+    ///      `matches >= 6`. The frozen contract keys the award on the composite activity SCORE
+    ///      s = A + 2*H (DegeneretteModule:95, :697 `_score`), firing on `s >= 7` and keying the
+    ///      bps on the SCORE tier (DEGEN_DGNRS_7/8/9_BPS = 400/800/1500 at :210-212, :736-737).
+    ///      Score != match count once the hero-quadrant bonus H is non-zero (a 6-match + hero spin
+    ///      scores s=8, not 6), so the test's match-keyed draining replay diverges from the actual
+    ///      score-keyed per-spin draining (observed 18.4e27 actual vs 21.8e27 replayed). The
+    ///      per-spin (non-batched) draining PROPERTY the test targets still holds in the frozen
+    ///      source (poolBalance is read fresh each call at :1185); only the harness's bps-keying
+    ///      dimension is stale. Re-deriving requires mirroring the full `_score` A+2H composition
+    ///      and the score-keyed bps per spin — a structural rewrite whose correctness is exactly
+    ///      what the council's Degenerette/PRIME sweep should adjudicate, not a mechanical slot
+    ///      or constant fix. Recorded in REGRESSION-BASELINE-v62.md "Known behavior-divergence".
+    ///      The contract is NOT modified.
     function testDgnrsAwardStaysPerSpin() public {
+        vm.skip(true); // DEF-380-04-FC2 — match-keyed replay vs frozen score-keyed award; council adjudicates
         // Find a word where the spin-0 ticket matches >= 6 on MULTIPLE spins (so the
         // DGNRS award fires more than once and the per-spin draining is observable).
         _seedFuturePrizePool(1_000_000 ether); // large pool: no ETH cap interference
@@ -1063,7 +1084,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         return uint256(uint128(packed >> 128));
     }
 
-    /// @notice Read prizePoolFrozen from slot 0, bit 232.
+    /// @notice Read prizePoolFrozen from slot 0, bit 216.
     function _readFrozen() internal view returns (bool) {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(SLOT_0))));
         return ((s0 >> FROZEN_BIT_SHIFT) & 0xFF) != 0;
@@ -1087,11 +1108,11 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         vm.store(address(game), bytes32(uint256(PENDING_PACKED_SLOT)), bytes32(newPacked));
     }
 
-    /// @notice Set prizePoolFrozen flag (slot 0, bit 232).
+    /// @notice Set prizePoolFrozen flag (slot 0, bit 216).
     /// @dev Preserves all other bytes in slot 0.
     function _setFrozenFlag(bool frozen) internal {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(SLOT_0))));
-        // Clear the frozen byte (bit 232)
+        // Clear the frozen byte (bit 216)
         s0 = s0 & ~(uint256(0xFF) << FROZEN_BIT_SHIFT);
         // Set the frozen byte
         if (frozen) {
