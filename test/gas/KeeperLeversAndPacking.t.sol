@@ -44,12 +44,13 @@ contract KeeperLeversAndPacking is DeployProtocol {
     // Storage-slot constants (RE-DERIVED via `forge inspect storage DegenerusGame`)
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 38 (v55 append shifted +1); lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38;
+    /// @dev lootboxRngPacked at slot 36 (forge inspect DegenerusGame storageLayout, v61); lootboxRngIndex is
+    ///      the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 39;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
     /// @dev lootboxEthBase mapping root slot (uint48 index => address => base). First-deposit signal.
-    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 23;
+    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 22;
 
     // -------------------------------------------------------------------------
     // Constants

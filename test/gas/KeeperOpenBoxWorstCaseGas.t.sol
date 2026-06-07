@@ -40,26 +40,25 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      RouterWorstCaseGas / V55RevertFreeEvCap / V55FreezeDeterminism (`_settleGame`/`_settleClean` VRF
 ///      drain, `_setupFundedLootboxSubs`, `depositAfkingFunding` funding, `_grantDeityPass`, the Sub-stamp
 ///      slot reads). The OLD `_buyBox` HUMAN-deposit helper is REFRAMED to a funded LOOTBOX-mode SUB
-///      stamped via a new-day STAGE. All pinned slots RE-DERIVED via `forge inspect storage DegenerusGame`
-///      (the v55 append shifted the afking mappings: `_subscribers = 68`, `_subOf = 66`,
-///      `rngWordByDay = 11`; the stale donor `lootboxEthBase = 22` is now 23, but the afking open reads NO
-///      cold ledger so that slot is no longer load-bearing here). Test-only: ZERO contracts/*.sol mutated
-///      (`git diff 453f8073 HEAD -- contracts/` EMPTY).
+///      stamped via a new-day STAGE. All pinned slots taken from `forge inspect DegenerusGame storageLayout`
+///      against the v61 subject: `_subOf = 62`, `_subscribers = 64`, `rngWordByDay = 10`; the afking open
+///      reads NO cold ledger so lootboxEthBase is not load-bearing here. Test-only: ZERO contracts/*.sol
+///      mutated.
 contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`)
     // -------------------------------------------------------------------------
 
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 11; // mapping(uint32 => uint256) — the afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = 65;           // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 67;     // address[] _subscribers (slot holds the length)
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
+    uint256 private constant SUBOF_SLOT = 62;           // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 64;     // address[] _subscribers (slot holds the length)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot,
     // 241/256 bits used — the markers are uint24 each, not the old uint32 232-bit layout).
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
 
-    uint256 private constant MINTPACKED_SLOT = 10;
+    uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184;
 
     // -------------------------------------------------------------------------
@@ -386,7 +385,7 @@ contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
         }
     }
 
-    // ---- Sub-stamp slot reads (RE-DERIVED slot 66 + verified offsets) ----
+    // ---- Sub-stamp slot reads (_subOf at slot 62 + verified offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);

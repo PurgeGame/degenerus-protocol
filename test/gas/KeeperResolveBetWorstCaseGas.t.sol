@@ -50,16 +50,16 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     // Storage-slot constants (DegenerusGame; confirmed via `forge inspect storage`)
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 38 (v55 append shifted +1, RE-DERIVED via forge inspect storage
-    ///      DegenerusGame); lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38;
-    /// @dev lootboxRngWordByIndex mapping root slot (v55: 38 -> 39).
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 39;
-    /// @dev degeneretteBets mapping root slot (address => betId => packed) (v55: 45 -> 46).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 45;
-    /// @dev degeneretteBetNonce mapping root slot (address => uint64) (v55: 46 -> 47).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 46;
-    /// @dev prizePoolsPacked at slot 2 ((future << 128) | next) — unchanged in v55.
+    /// @dev lootboxRngPacked at slot 36 (forge inspect DegenerusGame storageLayout, v61); lootboxRngIndex is
+    ///      the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
+    /// @dev lootboxRngWordByIndex mapping root slot (uint48 index => word).
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
+    /// @dev degeneretteBets mapping root slot (address => betId => packed).
+    uint256 private constant DEGENERETTE_BETS_SLOT = 43;
+    /// @dev degeneretteBetNonce mapping root slot (address => uint64).
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 44;
+    /// @dev prizePoolsPacked at slot 2 ((future << 128) | next).
     uint256 private constant PRIZE_POOLS_SLOT = 2;
 
     // -------------------------------------------------------------------------
@@ -610,7 +610,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         }
     }
 
-    /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 36).
+    /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 37).
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         vm.store(address(game), slot, bytes32(rngWord));

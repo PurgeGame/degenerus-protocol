@@ -37,27 +37,27 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///
 /// @dev Live `DeployProtocol` fixture (the STAGE writes Game storage). Reuses the validated game-resident
 ///      driving harness ported from V55RevertFreeEvCap (`_settleClean` VRF drain, `_setupFundedSubs`,
-///      `depositAfkingFunding`, `_grantDeityPass`, the Sub-stamp slot reads). All pinned slots RE-DERIVED
-///      via `forge inspect storage DegenerusGame` (the AfKing-standalone `SUBOF_SLOT=65`/`AUTOBUY_SLOT=4`
-///      layout is WRONG: the game-resident `_subscribers = 68`, `_subOf = 66`, `claimableWinnings = 7`).
-///      Test-only: ZERO contracts/*.sol mutated (`git diff 453f8073 HEAD -- contracts/` EMPTY).
+///      `depositAfkingFunding`, `_grantDeityPass`, the Sub-stamp slot reads). All pinned slots taken from
+///      `forge inspect DegenerusGame storageLayout` against the v61 subject: the game-resident
+///      `_subOf = 62`, `_subscribers = 64`, `_subscriberIndex = 65`, and `balancesPacked = 7` (its low-128
+///      half holds the claimable semantics). Test-only: ZERO contracts/*.sol mutated.
 contract SweepPerPlayerWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`)
     // -------------------------------------------------------------------------
 
-    uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7;   // mapping(address => uint256) — the SUB-04 reinvest read
+    uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7;   // balancesPacked root — the SUB-04 reinvest read masks the low-128 claimable half
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;       // uint128 @ slot 1, byte 16 (SOLVENCY-01 tandem)
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant SUBOF_SLOT = 65;              // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 67;        // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68;   // mapping(address => uint256) _subscriberIndex
+    uint256 private constant SUBOF_SLOT = 62;              // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 64;        // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 65;   // mapping(address => uint256) _subscriberIndex
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot —
     // the markers are uint24 each, not the old uint32 232-bit layout).
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
 
-    uint256 private constant MINTPACKED_SLOT = 10;
+    uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184;
 
     // -------------------------------------------------------------------------
@@ -256,12 +256,17 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Credit `who` claimableWinnings AND bump claimablePool in tandem (SOLVENCY-01 balanced; the
-    ///      351-02 test-infra reality) so a claimable-funded slice's `claimablePool -=` does not underflow.
+    /// @dev Credit `who`'s claimable half of balancesPacked AND bump claimablePool in tandem (SOLVENCY-01
+    ///      balanced; the 351-02 test-infra reality) so a claimable-funded slice's `claimablePool -=` does not
+    ///      underflow. balancesPacked = [afking:high128 | claimable:low128]; the credit adds to the low half
+    ///      and PRESERVES the afking high half (a claimable-only seed can never corrupt _afkingOf).
     function _setClaimable(address who, uint256 amount) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(CLAIMABLE_WINNINGS_SLOT)));
         uint256 cur = uint256(vm.load(address(game), slot));
-        vm.store(address(game), slot, bytes32(cur + amount));
+        uint256 newLow = uint256(uint128(cur)) + amount;
+        require(newLow <= type(uint128).max, "claimable seed fits the low 128 half");
+        uint256 packed = (cur & (uint256(type(uint128).max) << 128)) | newLow;
+        vm.store(address(game), slot, bytes32(packed));
         _bumpClaimablePool(amount);
     }
 
@@ -295,7 +300,7 @@ contract SweepPerPlayerWorstCaseGas is DeployProtocol {
         }
     }
 
-    // ---- Sub-stamp slot reads (RE-DERIVED slot 66 + verified offsets) ----
+    // ---- Sub-stamp slot reads (_subOf at slot 62 + verified offsets) ----
 
     function _lastBoughtDayOf(address who) internal view returns (uint32) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (OFF_LASTBOUGHT * 8);

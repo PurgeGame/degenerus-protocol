@@ -46,23 +46,23 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      repo idiom) + the validated game-resident driving harness ported from V55RevertFreeEvCap /
 ///      V55FreezeDeterminism (`_settleGame`/`_settleClean` VRF drain, `_setupFundedLootboxSubs`,
 ///      `depositAfkingFunding` funding, `_grantDeityPass`, the Sub-stamp slot reads). All pinned slots
-///      RE-DERIVED via `forge inspect storage DegenerusGame` (the v55 append shifted the afking mappings:
-///      `_subscribers = 68`, `_subOf = 66`, `rngWordByDay = 11`, `lootboxEthBase = 23`,
-///      `lootboxRngPacked = 38`, `lootboxRngWordByIndex = 39`). Test-only: ZERO contracts/*.sol mutated
-///      (`git diff 453f8073 HEAD -- contracts/` EMPTY). Run with --isolate for true per-call gas.
+///      taken from `forge inspect DegenerusGame storageLayout` against the v61 subject:
+///      `_subOf = 62`, `_subscribers = 64`, `_subscriberIndex = 65`, `_subCursor = 66`, `rngWordByDay = 10`,
+///      `lootboxEthBase = 22`, `lootboxRngPacked = 36`, `lootboxRngWordByIndex = 37`. Test-only: ZERO
+///      contracts/*.sol mutated. Run with --isolate for true per-call gas.
 contract RouterWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`)
     // -------------------------------------------------------------------------
 
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 11;             // mapping(uint32 => uint256) — the afking box's DAY-keyed word
-    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 23;            // first-deposit signal (human box)
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38;          // [0:47] lootboxRngIndex
-    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 39;   // mapping(uint48 => uint256) (human box)
-    uint256 private constant SUBOF_SLOT = 65;                       // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 67;                 // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68;            // mapping(address => uint256) _subscriberIndex
-    uint256 private constant SUBCURSOR_SLOT = 69;                   // _subCursor (uint16 @ byte 0) | _afkingResetDay (@ byte 4)
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;             // mapping(uint24 => uint256) — the afking box's DAY-keyed word
+    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 22;            // first-deposit signal (human box)
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;          // [0:47] lootboxRngIndex
+    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 37;   // mapping(uint48 => uint256) (human box)
+    uint256 private constant SUBOF_SLOT = 62;                       // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 64;                 // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 65;            // mapping(address => uint256) _subscriberIndex
+    uint256 private constant SUBCURSOR_SLOT = 66;                   // _subCursor (uint16 @ byte 0) + _subOpenCursor (@ byte 2) + _afkingResetDay (@ byte 4)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot,
     // 241/256 bits used — the markers are uint24 each, not the old uint32 232-bit layout).
@@ -93,7 +93,7 @@ contract RouterWorstCaseGas is DeployProtocol {
     uint256 private constant LOOTBOX_WEI = 1 ether; // >= LOOTBOX_MIN; a real first-deposit human box
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
-    uint256 private constant MINTPACKED_SLOT = 10;
+    uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184;
     uint256 private _lastFulfilledReqId;
 
@@ -499,7 +499,7 @@ contract RouterWorstCaseGas is DeployProtocol {
         }
     }
 
-    // ---- Sub-stamp slot reads (RE-DERIVED slot 66 + verified offsets) ----
+    // ---- Sub-stamp slot reads (_subOf at slot 62 + verified offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
@@ -518,7 +518,7 @@ contract RouterWorstCaseGas is DeployProtocol {
         return uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
     }
 
-    /// @dev Read the STAGE cursor `_subCursor` (slot 70, byte 0, uint16) — the number of set entries the
+    /// @dev Read the STAGE cursor `_subCursor` (slot 66, byte 0, uint16) — the number of set entries the
     ///      current cycle's STAGE has advanced past (the weighted-budget chunk advances it by as many subs
     ///      as fit the gas-weight budget).
     function _subCursor() internal view returns (uint256) {
