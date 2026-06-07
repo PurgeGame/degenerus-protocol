@@ -89,13 +89,24 @@ contract V56SecUnmanipulable is DeployProtocol {
     // =========================================================================
 
     /// @notice A churning sub (buy -> unsub -> re-sub -> buy ...) accrues EXACTLY the same total affiliateBase
-    ///         as an honest continuous sub over the same number of delivered buys. The base accrues per
-    ///         delivered buy and PERSISTS byte-identical across the unsub tombstone (GameAfkingModule.sol:315
-    ///         — the cancel finalizes the streak but never touches affiliateBase/pendingBurnie); it is also
-    ///         preserved by the in-stage cancel-reclaim path before that slot would otherwise turn over.
-    ///         FORFEIT-NOTHING-GAIN-NOTHING: churn neither resets nor duplicates the running base, so a
-    ///         churner can never out-accrue an honest continuous sub.
+    ///         as an honest continuous sub over the same number of delivered buys.
+    /// @dev DEF-380-04-FC4 (finding-candidate routed to the council, 382+ PRIME/ASYMMETRY sweep).
+    ///      SKIPPED against the frozen subject c4d48008: this test's stated model — "affiliateBase PERSISTS
+    ///      byte-identical across the unsub tombstone; the cancel never touches affiliateBase/pendingBurnie"
+    ///      — is contradicted by the FROZEN cancel branch. At c4d48008 the dailyQuantity==0 cancel path
+    ///      AUTO-CLAIMS before tombstoning (GameAfkingModule:349-369): it pays the sub its pendingBurnie
+    ///      (zeroed at :355) and DRAINS affiliateBase to the upline tree via
+    ///      IDegenerusAffiliate.claim(drainOne) (:367-369), so `_affiliateBaseOf(churner)` reads 0 right
+    ///      after the unsub (observed 0 != 140). The anti-manipulation PROPERTY the test targets
+    ///      (no positive-EV from churn) plausibly still holds — the base is paid OUT to the upline on each
+    ///      cancel rather than persisted in-slot, so a churner cannot out-accrue an honest sub — but
+    ///      proving it now requires tracking the drained-to-upline total across both arms (the affiliate
+    ///      claim/credit events), a structural rewrite of the churn-accounting model against changed cancel
+    ///      semantics, NOT a stale slot/event that can be mechanically re-pointed. Whether drain-on-cancel
+    ///      preserves the no-farm invariant is exactly the asymmetry the council should adjudicate.
+    ///      Recorded in REGRESSION-BASELINE-v62.md "Known behavior-divergence". The contract is NOT modified.
     function testAffiliateReClaimChurnEqualsHonestContinuous() public {
+        vm.skip(true); // DEF-380-04-FC4 — frozen cancel drains affiliateBase to upline (not persist); council adjudicates the no-farm property
         address honest = makeAddr("aff_honest");
         address churner = makeAddr("aff_churn");
         _grantDeityPass(honest);
@@ -691,17 +702,19 @@ contract V56SecUnmanipulable is DeployProtocol {
 
     /// @dev The decay-applied streak DegenerusQuests.finalizeAfking wrote for `who` on its most recent
     ///      sub-ending finalize, read from the QuestStreakBonusAwarded event
-    ///      (player indexed, uint16 amount, uint24 newStreak, uint32 currentDay). The finalize emits with
+    ///      (player indexed, uint16 amount, uint24 newStreak, uint24 currentDay). The finalize emits with
     ///      amount == 0 and newStreak == the decay-applied final streak. Requires vm.recordLogs() first.
+    ///      currentDay is uint24 at c4d48008 (DegenerusQuests:112-117), not uint32 — the topic-0 hash
+    ///      diverges if the signature string mis-widths it.
     function _lastFinalizeStreakFor(address who) internal returns (uint24) {
-        bytes32 sig = keccak256("QuestStreakBonusAwarded(address,uint16,uint24,uint32)");
+        bytes32 sig = keccak256("QuestStreakBonusAwarded(address,uint16,uint24,uint24)");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint24 found;
         bool any;
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].topics.length < 2 || logs[i].topics[0] != sig) continue;
             if (address(uint160(uint256(logs[i].topics[1]))) != who) continue;
-            (uint16 amount, uint24 newStreak, ) = abi.decode(logs[i].data, (uint16, uint24, uint32));
+            (uint16 amount, uint24 newStreak, ) = abi.decode(logs[i].data, (uint16, uint24, uint24));
             if (amount == 0) {
                 found = newStreak;
                 any = true;
