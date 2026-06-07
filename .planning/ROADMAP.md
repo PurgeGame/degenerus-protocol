@@ -129,7 +129,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 378-02-PLAN.md — Gas-harness slot recalibration (the 6 slot-hardcoded harnesses) + STAGE_2 subscriber all-evict live re-measure on v61 (TST-06)
+- [x] 378-02-PLAN.md — Gas-harness slot recalibration (the 6 slot-hardcoded harnesses → authoritative v61 slots; NoPass/panic slot-stale class resolved, V56AfkingGasMarginal 16/16) + STAGE_2 subscriber all-evict live re-measure on v61 = 13.61M / 3.09M headroom < 16.7M (PACK 1-slot-neutral on the evict path) (TST-06) ✅ `3aadcf49`/`09870c57`
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -172,7 +172,7 @@ Plans:
 | 375. SPEC — Design-Lock + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map | v61.0 | 2/2 | Complete    | 2026-06-06 |
 | 376. IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE) | v61.0 | 0/3 | Planned     | 2026-06-06 |
 | 377. GAS — Gas-Neutrality Gate (curse APPLY zero-SLOAD · packing no cold slot) | v61.0 | 0/TBD | Not started | - |
-| 378. TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | v61.0 | 0/6 | Planned     | 2026-06-07 |
+| 378. TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | v61.0 | 2/6 | In Progress | 2026-06-07 |
 | 379. TERMINAL — Delta Audit + 3-Skill Sweep + FINDINGS-v61.0 + Closure Flip | v61.0 | 0/TBD | Not started | - |
 
 > **🔒 v61.0 CONTRACT-BOUNDARY HARD STOP (ONE gate — 376 IMPL · 377 GAS rides the same boundary if it produces a net diff).** Phase 376 IMPL is THE contract phase — the batched diff (AFPAY + PACK + CURSE + SMITE, producer-before-consumer: CURSE infra before SMITE, PACK accessor before repack) is applied to `contracts/` and locally compiled (`forge build` clean) but HELD at the contract-commit boundary, NEVER committed without explicit user hand-review. `ContractAddresses.sol` freely modifiable; tests + planning + docs AGENT-committable.

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v61.0
 milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
 status: executing
-last_updated: "2026-06-07T07:43:21.000Z"
-last_activity: 2026-06-07 -- Phase 378 plan 01 executed (TST foundation: slot recalibration + frozen baseline)
+last_updated: "2026-06-07T08:30:00.000Z"
+last_activity: "2026-06-07 -- Phase 378 plan 02 executed (gas-harness slot recalibration: 6 harnesses -> v61 slots; STAGE_2 all-evict re-measured LIVE = 13.61M / 3.09M headroom < 16.7M)"
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 15
-  completed_plans: 9
-  percent: 32
+  completed_plans: 10
+  percent: 35
 ---
 
 # Project State
@@ -32,13 +32,13 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 
 ## Current Position
 
-Phase: 378 (tst-proving-tests-rng-freeze-solvency) — ▶ IN PROGRESS. **378-01 ✅** (TST foundation: authoritative v61 layout via forge inspect + slot recalibration key + StorageFoundation/redemption recalibrated + frozen-baseline `2bee6d6f` red set BY NAME; commits `8da54ed5`/`bad1889e`/`5de3ccb8`). 376 ✅ `b97a7a2e` · 377 ✅ Outcome-A `056481ea` (all local, NOT pushed).
-Plan: `378-tst-proving-tests-rng-freeze-solvency/378-PLAN-TRIAGE.md` (the focused-session playbook); next plan `378-02-PLAN.md`.
-Status: 378-01 complete; ready for 378-02.
-Key 378-01 findings (for downstream plans): balancesPacked root UNMOVED at slot 7 (redemption pokes need only the SEMANTIC low-128 fix); slot-shift delta is region-dependent NOT uniform -1 (subs -3, lootbox -2, mint/rng -1); authoritative v61 slots in `378-01-RECALIBRATION-KEY.md`; baseline ceiling 533/183/103 (172 names) in `test/REGRESSION-BASELINE-v61.md`; Hardhat baseline blocked by absent test/adversarial dir (forge is primary).
-Next up (FOCUSED 378 session): (2) **378-02** gas-harness recalibration (6 harnesses → authoritative slots per the key) + STAGE_2 live re-measure; (3) 378-03 accepted-v61-behavior reds; (4) 378-04/05 write TST-01..06 + the final non-widening gate; (5) 378-06 SEC-01/02. All test-side/committable, per-unit commits. Then 379 TERMINAL (FULL close + FINDINGS-v61.0).
+Phase: 378 (tst-proving-tests-rng-freeze-solvency) — ▶ IN PROGRESS. **378-01 ✅** (TST foundation: authoritative v61 layout via forge inspect + slot recalibration key + StorageFoundation/redemption recalibrated + frozen-baseline `2bee6d6f` red set BY NAME; commits `8da54ed5`/`bad1889e`/`5de3ccb8`). **378-02 ✅** (gas-harness recalibration: 6 slot-hardcoded gas harnesses -> authoritative v61 slots, the slot-stale NoPass/panic class resolved [V56AfkingGasMarginal 16/16 green; 25 passed/0 failed/12 skipped across the 6 suites]; STAGE_2 binding all-evict worst case re-measured LIVE on v61 = 13.61M / 3.09M headroom < 16.7M ceiling -> PACK 1-slot-neutral on the evict path; commits `3aadcf49`/`09870c57`; zero .sol edits). 376 ✅ `b97a7a2e` · 377 ✅ Outcome-A `056481ea` (all local, NOT pushed).
+Plan: `378-tst-proving-tests-rng-freeze-solvency/378-PLAN-TRIAGE.md` (the focused-session playbook); next plan `378-03` (accepted-v61-behavior reds).
+Status: 378-02 complete; ready for 378-03.
+Key 378-01/02 findings (for downstream plans): balancesPacked root UNMOVED at slot 7 (redemption + Sweep claimable pokes need only the SEMANTIC low-128 fix); slot-shift delta is region-dependent NOT uniform -1 (subs -3, lootbox/degenerette -2, mint/rng -1); authoritative v61 slots in `378-01-RECALIBRATION-KEY.md` (re-confirmed live via forge inspect in 378-02); STAGE_2 binding worst case pinned at 13.61M / 3.09M headroom on v61; baseline ceiling 533/183/103 (172 names) in `test/REGRESSION-BASELINE-v61.md`; Hardhat baseline blocked by absent test/adversarial dir (forge is primary).
+Next up (FOCUSED 378 session): (3) **378-03** accepted-v61-behavior reds (triage-(b)); (4) 378-04/05 write TST-01..06 + the final non-widening gate; (5) 378-06 SEC-01/02. All test-side/committable, per-unit commits. Then 379 TERMINAL (FULL close + FINDINGS-v61.0).
 377 GAS = Outcome-A (gas-neutral, no contract tune); findings `377-GAS-FINDINGS.md`. 376 EIP-170 reclaim via de-view read getters; details `376-03-SUMMARY.md`.
-Last activity: 2026-06-07 -- Phase 378 plan 01 executed (TST foundation: slot recalibration key + StorageFoundation/redemption fixes + frozen-baseline 2bee6d6f red set BY NAME)
+Last activity: 2026-06-07 -- Phase 378 plan 02 executed (gas-harness slot recalibration: 6 harnesses -> v61 slots; STAGE_2 all-evict re-measured LIVE = 13.61M / 3.09M headroom < 16.7M)
 
 ## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
 
