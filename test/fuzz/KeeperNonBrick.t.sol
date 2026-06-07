@@ -37,37 +37,39 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      `forge inspect storage DegenerusGame`. Test-only: ZERO `contracts/*.sol` mutation.
 contract KeeperNonBrick is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Storage slot constants (DegenerusGame; RE-DERIVED via `forge inspect storage DegenerusGame`).
-    // The v55 afking append shifted ~7 mappings by 1 (351-03/04) — every constant re-derived.
+    // Storage slot constants (DegenerusGame; authoritative per `forge inspect DegenerusGame
+    // storageLayout` at subject c4d48008 — see 380-01-LAYOUT-KEY.md). The v61 PACK fold collapsed
+    // claimableWinnings+afkingFunding into balancesPacked (slot 7) and shifted the post-balances
+    // mappings; the shift is REGION-DEPENDENT, not uniform. Every constant re-derived from the layout.
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 38 (RE-DERIVED: was 37); lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38;
-    /// @dev lootboxRngWordByIndex mapping root slot (RE-DERIVED: was 38).
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 39;
-    /// @dev degeneretteBets mapping root slot (address => betId => packed) (RE-DERIVED: was 45).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 45;
-    /// @dev degeneretteBetNonce mapping root slot (address => uint64) (RE-DERIVED: was 46).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 46;
-    /// @dev lootboxEth mapping root slot (uint48 index => address => packed) (RE-DERIVED: was 15).
-    uint256 private constant LOOTBOX_ETH_SLOT = 16;
-    /// @dev lootboxEthBase mapping root slot (RE-DERIVED: was 22).
-    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 23;
-    /// @dev rngLockedFlag is bool at slot 0 offset 21 bytes = bit 168.
-    uint256 private constant RNG_LOCKED_SHIFT = 168;
-    /// @dev gameOver is bool at slot 0 offset 23 bytes = bit 184.
-    uint256 private constant GAME_OVER_SHIFT = 184;
+    /// @dev lootboxRngPacked at slot 36; lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
+    /// @dev lootboxRngWordByIndex mapping root slot.
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
+    /// @dev degeneretteBets mapping root slot (address => betId => packed).
+    uint256 private constant DEGENERETTE_BETS_SLOT = 43;
+    /// @dev degeneretteBetNonce mapping root slot (address => uint64).
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 44;
+    /// @dev lootboxEth mapping root slot (uint48 index => address => packed).
+    uint256 private constant LOOTBOX_ETH_SLOT = 15;
+    /// @dev lootboxEthBase mapping root slot.
+    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 22;
+    /// @dev rngLockedFlag is bool at slot 0 offset 19 bytes = bit 152.
+    uint256 private constant RNG_LOCKED_SHIFT = 152;
+    /// @dev gameOver is bool at slot 0 offset 21 bytes = bit 168.
+    uint256 private constant GAME_OVER_SHIFT = 168;
 
-    // Game-resident afking storage (RE-DERIVED; the de-custody AfKing 4-slot layout is GONE).
+    // Game-resident afking storage. The v61 fold removed the separate afkingFunding mapping; the
+    // afking balance is now the high 128 bits of balancesPacked (slot 7), claimable the low 128.
     uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 @ slot 1, byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7; // mapping(address => uint256) (RE-DERIVED)
-    uint256 private constant AFKING_FUNDING_SLOT = 8; // mapping(address => uint256)
-    uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit @ bit 184)
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 11; // mapping(uint32 => uint256) — the afking box's DAY-keyed word
-    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 67; // address[] _subscribers
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // mapping(address => uint256) _subscriberIndex (1-indexed)
+    uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7; // balancesPacked root; low 128 bits = claimable
+    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit @ bit 184)
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word
+    uint256 private constant SUBOF_SLOT = 62; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 64; // address[] _subscribers
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 65; // mapping(address => uint256) _subscriberIndex (1-indexed)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack
     // narrowed `amount` to uint24 and the day markers to uint24).
