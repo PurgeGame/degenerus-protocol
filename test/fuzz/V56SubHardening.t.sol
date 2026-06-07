@@ -269,22 +269,27 @@ contract V56SubHardening is DeployProtocol {
         uint32 pendingAfterFirst = _pendingBurnieOf(p);
         assertGt(pendingAfterFirst, 0, "non-vacuity: the first cover-buy accrued the flat slot-0 BURNIE");
 
-        // Churn N times in the SAME day: cancel (dailyQuantity = 0 tombstones IN PLACE — the record + the
-        // lastAutoBoughtDay stamp are retained; the swap-pop happens later in the STAGE, so the slot stays
-        // in the set with dailyQuantity 0) -> re-subscribe (NEW run again, wasActive == false because the
-        // stored dailyQuantity is 0, but lastAutoBoughtDay == today -> the HEAD''' guard at :451 keeps the
-        // snapshot + skips a second cover-buy -> NO slot-0 re-accrual).
+        // Churn N times in the SAME day: cancel (dailyQuantity = 0) -> re-subscribe. The frozen cancel
+        // branch (GameAfkingModule:349-363) AUTO-CLAIMS before tombstoning — it pays out the accrued
+        // pendingBurnie via coinflip.creditFlip and zeroes the slot (c.pendingBurnie = 0 at :355) — so
+        // pendingBurnie reads 0 right after each cancel. The re-subscribe is a NEW run (wasActive == false,
+        // stored dailyQuantity is 0) but lastAutoBoughtDay == today, so the idempotency guard at :521 keeps
+        // the snapshot and SKIPS a second cover-buy -> NO slot-0 re-accrual. So after each cancel/re-sub
+        // cycle pendingBurnie stays 0: the per-day flat reward was accrued (and paid out) EXACTLY ONCE,
+        // never re-accrued per cycle. (The drain-on-cancel is the c4d48008 behavior; the prior model
+        // expected pendingBurnie to PERSIST unchanged at 100, which the auto-claim cancel contradicts.)
         for (uint256 i; i < 5; i++) {
-            _subscribeLootbox(p, 0);   // cancel — tombstone in place, lastAutoBoughtDay retained
+            _subscribeLootbox(p, 0);   // cancel — auto-claims + zeroes pendingBurnie, tombstones in place
             assertEq(_dailyQtyOf(p), 0, "cancel wrote the dailyQuantity=0 tombstone in place");
+            assertEq(_pendingBurnieOf(p), 0, "cancel auto-claimed + zeroed pendingBurnie (drain-on-cancel)");
             _subscribeLootbox(p, 1);   // re-subscribe SAME day — the NEW-run idempotency guard fires
             assertGt(_subscriberIndexOf(p), 0, "re-subscribe keeps the sub active");
             assertEq(_dailyQtyOf(p), 1, "re-subscribe restored the dailyQuantity (a NEW run, wasActive==false)");
             assertEq(_lastBoughtDayOf(p), today, "the stamp survived the churn (still today)");
             assertEq(
                 _pendingBurnieOf(p),
-                pendingAfterFirst,
-                "CHURN-IDEMPOTENCY: pendingBurnie UNCHANGED across same-day churn (slot-0 accrued once, not per cycle)"
+                0,
+                "CHURN-IDEMPOTENCY: re-subscribe does NOT re-accrue the slot-0 flat reward (guard skips the cover-buy; cancel already paid it out)"
             );
         }
 
