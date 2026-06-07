@@ -228,6 +228,16 @@ invariant) is now a real, exercised seeder.
 - **Carry to 384:** the end-to-end advanceGame gas harness will supersede the isolated-stage
   `AdvanceStageWorstCaseGas` reference kept here.
 
+## Self-Check: PASSED
+
+- Files (all FOUND): `test/fuzz/ActivityScoreStreakGas.t.sol`, `test/gas/AdvanceStageWorstCaseGas.t.sol`,
+  `test/fuzz/helpers/SolvencyObligations.sol`, `test/fuzz/handlers/DegeneretteHandler.sol`,
+  `test/fuzz/invariant/DegeneretteBet.inv.t.sol`, this SUMMARY.
+- Commits (all FOUND): `afda4d62` (Task 1, FOUND-04), `a3dff395` (Task 2, FOUND-05),
+  `fc4b1d41` (SUMMARY).
+- Both gas-probes tracked (no longer untracked); `git status` in scope is clean.
+- Frozen contract tree unchanged: `bbffe99ede11adadcabcc9b81295566176575d47`.
+
 ---
 *Phase: 380-foundation-test-fix-green-baseline*
 *Completed: 2026-06-07*
