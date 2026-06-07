@@ -70,7 +70,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
 
     /// @dev The materialized-box event — the byte-identity oracle's source signature.
     bytes32 private constant LOOTBOX_OPENED_SIG =
-        keccak256("LootBoxOpened(address,uint48,uint32,uint256,uint24,uint32,uint256,bool)");
+        keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
 
     /// @dev LOOTBOX_EV_BENEFIT_CAP = 10 ether (DegenerusGameStorage.sol:1336).
     uint256 private constant EV_BENEFIT_CAP = 10 ether;
@@ -86,7 +86,6 @@ contract V55RevertFreeEvCap is DeployProtocol {
     struct Box {
         bool present;
         uint48 lootboxIndex;
-        uint32 day;
         uint256 amount;
         uint24 futureLevel;
         uint32 futureTickets;
@@ -726,8 +725,8 @@ contract V55RevertFreeEvCap is DeployProtocol {
             ) {
                 b.present = true;
                 b.lootboxIndex = uint48(uint256(logs[i].topics[2]));
-                (b.day, b.amount, b.futureLevel, b.futureTickets, b.burnie, b.roundedUp) =
-                    abi.decode(logs[i].data, (uint32, uint256, uint24, uint32, uint256, bool));
+                (b.amount, b.futureLevel, b.futureTickets, b.burnie, b.roundedUp) =
+                    abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 return b;
             }
         }

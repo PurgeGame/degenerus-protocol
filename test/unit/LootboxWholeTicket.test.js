@@ -593,10 +593,11 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       // scaled ticket count). The ticket-queue path uses a SEPARATE `whole`
       // local; `scaledTickets` is reassigned only by the distress bonus (a
       // still-scaled value) BEFORE the collapse, never by the collapse itself.
-      // The emit signature is `(player, index, day, fullAmount, rollLevel,
-      // scaledTickets, burnieAmount, roundedUp)`.
+      // The emit signature is the 7-arg `(player, index, fullAmount, rollLevel,
+      // scaledTickets, burnieAmount, roundedUp)` (the `day` arg was dropped in
+      // 4cb9ccbf "lootbox event day cleanup").
       const lootboxOpenedEmit =
-        /emit LootBoxOpened\(\s*player,\s*index,\s*day,\s*fullAmount,\s*rollLevel,\s*scaledTickets,/;
+        /emit LootBoxOpened\(\s*player,\s*index,\s*fullAmount,\s*rollLevel,\s*scaledTickets,/;
       expect(
         source.match(lootboxOpenedEmit),
         "LootBoxOpened emit must consume `scaledTickets` (scaled) in the per-roll signature"
@@ -775,16 +776,16 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.equal(0);
     });
 
-    it("[07b] the `LootBoxOpened` emit threads the `index` parameter into the `lootboxIndex` slot and `day` into the `day` slot", function () {
+    it("[07b] the `LootBoxOpened` emit threads the `index` parameter into the `lootboxIndex` slot", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The per-roll emit signature is
-      // `(player, index, day, fullAmount, rollLevel, scaledTickets,
-      //   burnieAmount, roundedUp)`.
+      // The per-roll 7-arg emit signature is
+      // `(player, index, fullAmount, rollLevel, scaledTickets, burnieAmount,
+      //   roundedUp)` (the `day` arg was dropped in 4cb9ccbf).
       expect(
-        /emit LootBoxOpened\(\s*player,\s*index,\s*day,\s*fullAmount,\s*rollLevel,\s*scaledTickets,\s*burnieAmount,\s*roundedUp\s*\)/.test(
+        /emit LootBoxOpened\(\s*player,\s*index,\s*fullAmount,\s*rollLevel,\s*scaledTickets,\s*burnieAmount,\s*roundedUp\s*\)/.test(
           source
         ),
-        "LootBoxOpened emit must thread (player, index, day, fullAmount, rollLevel, scaledTickets, burnieAmount, roundedUp)"
+        "LootBoxOpened emit must thread (player, index, fullAmount, rollLevel, scaledTickets, burnieAmount, roundedUp)"
       ).to.equal(true);
 
       // `_resolveLootboxCommon` signature still carries `uint48 index` (it

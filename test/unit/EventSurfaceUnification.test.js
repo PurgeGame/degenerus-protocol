@@ -5,10 +5,10 @@
 // Verifies the Phase 277 event-surface unification + sentinel retirement:
 //   - LootboxTicketRoll is fully removed (event def + emit sites) from both the
 //     LootboxModule contract and the IDegenerusGameModules interface.
-//   - LootBoxOpened / JackpotTicketWin carry their post-Phase-277 signatures (the
-//     LootBoxOpened index/day mislabel is fixed; both gain a trailing non-indexed
-//     `bool roundedUp`). BurnieLootOpen is REMOVED in v47 (BURNIE-lootbox surface
-//     deleted — terminal-paradox closure).
+//   - LootBoxOpened / JackpotTicketWin carry their current signatures (both gain a
+//     trailing non-indexed `bool roundedUp`; LootBoxOpened dropped its `day` arg in
+//     4cb9ccbf "lootbox event day cleanup" — now 7 args, 2 indexed). BurnieLootOpen
+//     is REMOVED in v47 (BURNIE-lootbox surface deleted — terminal-paradox closure).
 //   - The `index != type(uint48).max` behavior-gating sentinel in
 //     _resolveLootboxCommon is retired; auto-resolve callers pass index=0,
 //     emitLootboxEvent=false, and payColdBustConsolation=false; the unified
@@ -153,13 +153,13 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       expect(frag, "LootBoxOpened event fragment missing from ABI").to.not.equal(
         null
       );
-      // Post-Phase-277 field list: fixed index/day mislabel + trailing roundedUp;
-      // the bonusBurnie breakdown field is dropped (folded into `burnie`).
+      // Current field list (the `day` arg was dropped in commit 4cb9ccbf "lootbox
+      // event day cleanup"): trailing roundedUp; the bonusBurnie breakdown field is
+      // folded into `burnie`. 7 args, 2 indexed (player + lootboxIndex).
       const types = frag.inputs.map((i) => `${i.type}${i.indexed ? " indexed" : ""}`);
       expect(types).to.deep.equal([
         "address indexed",
         "uint48 indexed",
-        "uint32",
         "uint256",
         "uint24",
         "uint32",
@@ -170,7 +170,6 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       expect(names).to.deep.equal([
         "player",
         "lootboxIndex",
-        "day",
         "amount",
         "futureLevel",
         "futureTickets",
@@ -287,14 +286,14 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       ).to.equal(0);
     });
 
-    it("[03c] auto-resolve callers pass index=0 (3rd positional), emitLootboxEvent=false (8th positional), and payColdBustConsolation=false (9th positional) to _resolveLootboxCommon", function () {
+    it("[03c] auto-resolve callers pass index=0 (2nd positional), emitLootboxEvent=false (7th positional), and payColdBustConsolation=false (8th positional) to _resolveLootboxCommon", function () {
       const src = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
-      // _resolveLootboxCommon positional arg order (now 12 args — the refactor
-      // added a trailing `bool allowSplit` param; the index/emit/consolation
-      // positions are unchanged):
-      //   1 player, 2 day, 3 index, 4 amount, 5 targetLevel, 6 currentLevel,
-      //   7 seed, 8 emitLootboxEvent, 9 payColdBustConsolation,
-      //   10 distressEth, 11 totalPackedEth, 12 allowSplit
+      // _resolveLootboxCommon positional arg order (11 args — `day` was threaded
+      // out of the resolve helpers in 4cb9ccbf "lootbox event day cleanup"; the
+      // trailing `bool allowSplit` param remains):
+      //   1 player, 2 index, 3 amount, 4 targetLevel, 5 currentLevel,
+      //   6 seed, 7 emitLootboxEvent, 8 payColdBustConsolation,
+      //   9 distressEth, 10 totalPackedEth, 11 allowSplit
       for (const fnSig of [
         "function resolveLootboxDirect(",
         "function resolveRedemptionLootbox(",
@@ -314,19 +313,19 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
         const args = splitTopLevelArgs(callArgs);
         expect(
           args.length,
-          `${fnSig} _resolveLootboxCommon must receive 12 positional args (post-refactor allowSplit shape)`
-        ).to.equal(12);
+          `${fnSig} _resolveLootboxCommon must receive 11 positional args (day-dropped allowSplit shape)`
+        ).to.equal(11);
         expect(
-          args[2],
-          `${fnSig} must pass index=0 as the 3rd positional arg (D-277-AR-INDEX-01)`
+          args[1],
+          `${fnSig} must pass index=0 as the 2nd positional arg (D-277-AR-INDEX-01)`
         ).to.equal("0");
         expect(
-          args[7],
-          `${fnSig} must pass emitLootboxEvent=false as the 8th positional arg (D-277-AR-SILENT-01)`
+          args[6],
+          `${fnSig} must pass emitLootboxEvent=false as the 7th positional arg (D-277-AR-SILENT-01)`
         ).to.equal("false");
         expect(
-          args[8],
-          `${fnSig} must pass payColdBustConsolation=false as the 9th positional arg (D-277-AR-SILENT-01)`
+          args[7],
+          `${fnSig} must pass payColdBustConsolation=false as the 8th positional arg (D-277-AR-SILENT-01)`
         ).to.equal("false");
         // The retired sentinel value must not appear in the caller body.
         expect(
@@ -409,17 +408,17 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       const emitArgList = extractCallArgs(body, "emit LootBoxOpened(");
       expect(emitArgList, "LootBoxOpened emit not found").to.not.equal(null);
       const emitArgs = splitTopLevelArgs(emitArgList);
-      // Positional order matches the event def:
-      //   player, lootboxIndex(index), day, fullAmount, futureLevel(rollLevel),
-      //   scaledTickets, burnie(burnieAmount), roundedUp
-      expect(emitArgs.length).to.equal(8);
+      // Positional order matches the current 7-arg event def (the `day` arg was
+      // dropped in 4cb9ccbf "lootbox event day cleanup"):
+      //   player, lootboxIndex(index), amount(fullAmount), futureLevel(rollLevel),
+      //   futureTickets(scaledTickets), burnie(burnieAmount), roundedUp
+      expect(emitArgs.length).to.equal(7);
       expect(emitArgs[0]).to.equal("player");
       expect(emitArgs[1]).to.equal("index"); // lootboxIndex slot fed the `index` param
-      expect(emitArgs[2]).to.equal("day"); // day slot fed the `day` param
-      expect(emitArgs[3]).to.equal("fullAmount"); // box pre-split amount
-      expect(emitArgs[4]).to.equal("rollLevel"); // this roll's queue level
-      expect(emitArgs[5]).to.equal("scaledTickets"); // scaled, un-mutated by the collapse
-      expect(emitArgs[7]).to.equal("roundedUp");
+      expect(emitArgs[2]).to.equal("fullAmount"); // box pre-split amount
+      expect(emitArgs[3]).to.equal("rollLevel"); // this roll's queue level
+      expect(emitArgs[4]).to.equal("scaledTickets"); // scaled, un-mutated by the collapse
+      expect(emitArgs[6]).to.equal("roundedUp");
     });
 
     // [04d] BurnieLootOpen manual-emit field-consistency — REMOVED (v47): the

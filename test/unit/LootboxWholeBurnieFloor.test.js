@@ -157,16 +157,16 @@ describe("LootboxWholeBurnieFloor — Phase 279 Wave 2 TST-BUR-01", function () 
   });
 
   describe("Field-consistency: `LootBoxOpened` reads the bare floored `burnieAmount` local — no separate pre-floor snapshot", function () {
-    it("[02a] the `LootBoxOpened` emit carries `burnieAmount` as its 7th positional arg, and no other floored/unfloored `burnie*` snapshot is introduced between the floor and the emit", function () {
+    it("[02a] the `LootBoxOpened` emit carries `burnieAmount` as its 6th positional arg, and no other floored/unfloored `burnie*` snapshot is introduced between the floor and the emit", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
         extractBody(source, "function _settleLootboxRoll(")
       );
       expect(body, "`_settleLootboxRoll` body not found").to.not.equal(null);
 
-      // The emit threads `burnieAmount` as its 7th positional arg (the per-roll
-      // signature: player, index, day, fullAmount, rollLevel, scaledTickets,
-      // burnieAmount, roundedUp).
+      // The emit threads `burnieAmount` as its 6th positional arg (the per-roll
+      // 7-arg signature, `day` dropped in 4cb9ccbf: player, index, fullAmount,
+      // rollLevel, scaledTickets, burnieAmount, roundedUp).
       const emitMatch = body.match(/emit LootBoxOpened\(([\s\S]*?)\);/);
       expect(emitMatch, "`LootBoxOpened` emit not found").to.not.equal(null);
       const emitArgs = emitMatch[1]
@@ -175,11 +175,11 @@ describe("LootboxWholeBurnieFloor — Phase 279 Wave 2 TST-BUR-01", function () 
         .filter((a) => a.length > 0);
       expect(
         emitArgs.length,
-        "`LootBoxOpened` emit must supply 8 positional args"
-      ).to.equal(8);
+        "`LootBoxOpened` emit must supply 7 positional args"
+      ).to.equal(7);
       expect(
-        emitArgs[6],
-        "the 7th `LootBoxOpened` arg must be the bare floored `burnieAmount` local"
+        emitArgs[5],
+        "the 6th `LootBoxOpened` arg must be the bare floored `burnieAmount` local"
       ).to.equal("burnieAmount");
 
       // Between the floor and the emit, `burnieAmount` is the only `burnie*`

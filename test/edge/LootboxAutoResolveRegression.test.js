@@ -245,11 +245,11 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       expect(body.includes("type(uint48).max")).to.equal(false);
       const args = extractResolveCommonArgs(body);
       expect(args, "_resolveLootboxCommon call args not parsed").to.not.equal(null);
-      // v47 positional: 3rd arg = index, 8th arg = emitLootboxEvent (the old 5-bool
-      // presale/allowPasses/allowBoons gating params were removed → 2-bool / 11 args).
-      expect(args[2], "resolveLootboxDirect must pass index = 0").to.equal("0");
+      // Positional (day dropped from the helper in 4cb9ccbf "lootbox event day
+      // cleanup" → 11 args): 2nd arg = index, 7th arg = emitLootboxEvent.
+      expect(args[1], "resolveLootboxDirect must pass index = 0").to.equal("0");
       expect(
-        args[7],
+        args[6],
         "resolveLootboxDirect must pass emitLootboxEvent = false"
       ).to.equal("false");
     });
@@ -263,9 +263,9 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       expect(body.includes("type(uint48).max")).to.equal(false);
       const args = extractResolveCommonArgs(body);
       expect(args, "_resolveLootboxCommon call args not parsed").to.not.equal(null);
-      expect(args[2], "resolveRedemptionLootbox must pass index = 0").to.equal("0");
+      expect(args[1], "resolveRedemptionLootbox must pass index = 0").to.equal("0");
       expect(
-        args[7],
+        args[6],
         "resolveRedemptionLootbox must pass emitLootboxEvent = false"
       ).to.equal("false");
     });
@@ -302,8 +302,9 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
         /if \(payColdBustConsolation && whole == 0\)/.test(source),
         "the manual cold-bust consolation must be gated on `payColdBustConsolation && whole == 0`"
       ).to.equal(true);
-      // (3) Both auto-resolve callers pass emitLootboxEvent = false (v47 8th
-      //     positional) AND payColdBustConsolation = false (v47 9th positional).
+      // (3) Both auto-resolve callers pass emitLootboxEvent = false (7th
+      //     positional) AND payColdBustConsolation = false (8th positional) — the
+      //     `day` arg was dropped from the helper in 4cb9ccbf (11-arg shape).
       for (const fnSig of [
         "function resolveLootboxDirect(",
         "function resolveRedemptionLootbox(",
@@ -315,11 +316,11 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
           null
         );
         expect(
-          args[7],
+          args[6],
           `${fnSig} must pass emitLootboxEvent = false`
         ).to.equal("false");
         expect(
-          args[8],
+          args[7],
           `${fnSig} must pass payColdBustConsolation = false`
         ).to.equal("false");
       }
@@ -454,9 +455,11 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
 
     it("[04e] auto-resolve callers pass `index = 0` — the value gates nothing and is emitted nowhere after sentinel retirement", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Post-Phase-277 the `uint48 index` parameter is purely the event
-      // identifier on the manual `LootBoxOpened` emit. Auto-resolve callers,
-      // which emit nothing, pass the clean `0` default (D-277-AR-INDEX-01).
+      // The `uint48 index` parameter is purely the event identifier on the manual
+      // `LootBoxOpened` emit. Auto-resolve callers, which emit nothing, pass the
+      // clean `0` default (D-277-AR-INDEX-01). It is the 2nd positional arg of
+      // `_resolveLootboxCommon` (the `day` arg was dropped from the helper in
+      // 4cb9ccbf "lootbox event day cleanup").
       for (const fnSig of [
         "function resolveLootboxDirect(",
         "function resolveRedemptionLootbox(",
@@ -468,7 +471,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
         expect(args, `${fnSig} _resolveLootboxCommon args not parsed`).to.not.equal(
           null
         );
-        expect(args[2], `${fnSig} must pass index = 0`).to.equal("0");
+        expect(args[1], `${fnSig} must pass index = 0`).to.equal("0");
       }
     });
   });

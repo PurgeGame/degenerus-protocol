@@ -30,8 +30,8 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///   - afking box open = `game.mintBurnie()`'s open leg (GameAfkingModule.sol:1000-1009, only when
 ///     `!advanceDue`) — the afking standalone `autoOpen` selector collides with the human `autoOpen(uint256)`
 ///     so it is NOT re-exposed on the Game; the open is reached through `mintBurnie`.
-///   - the `LootBoxOpened(player, lootboxIndex, day, amount, futureLevel, futureTickets, burnie, roundedUp)`
-///     event (LootboxModule.sol:68) is the materialized-traits observable: both `resolveAfkingBox` and
+///   - the `LootBoxOpened(player, lootboxIndex, amount, futureLevel, futureTickets, burnie, roundedUp)`
+///     event (LootboxModule.sol:63) is the materialized-traits observable: both `resolveAfkingBox` and
 ///     `openLootBox` pass `emitLootboxEvent = true`, so a byte-by-byte field compare IS the box-identity
 ///     oracle (robust to any future resolution refactor — NOT golden snapshots).
 ///   RE-DERIVED every pinned slot via `forge inspect storage DegenerusGame` (the v55 afking append shifted
@@ -61,7 +61,7 @@ contract V55FreezeDeterminism is DeployProtocol {
 
     /// @dev keccak256 of the materialized-box event — the byte-identity oracle's source signature.
     bytes32 private constant LOOTBOX_OPENED_SIG =
-        keccak256("LootBoxOpened(address,uint48,uint32,uint256,uint24,uint32,uint256,bool)");
+        keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -70,7 +70,6 @@ contract V55FreezeDeterminism is DeployProtocol {
     struct Box {
         bool present;
         uint48 lootboxIndex;
-        uint32 day;
         uint256 amount;
         uint24 futureLevel;
         uint32 futureTickets;
@@ -127,9 +126,9 @@ contract V55FreezeDeterminism is DeployProtocol {
         // FREEZE-03: the materialized box is BYTE-IDENTICAL across the two block contexts (the seed froze
         // on the stamped day + the stamped amount/score, carrying no block.* entropy).
         _assertBoxByteIdentical(box1, box2, "FREEZE-03 stamped-day determinism");
-        // And the seed's day field is the STAMPED day, not the open-time day (the live day moved between
-        // setUp and the open, but the box's `day` field is the frozen stamp day).
-        assertEq(box1.day, stampDay, "the box's day field IS the stamped day (frozen seed day)");
+        // And the box resolved against the STAMPED day, not the open-time day (the live day moved between
+        // setUp and the open, but the open advanced lastOpenedDay to the frozen stamp day).
+        assertEq(_lastOpenedDayOf(afk), stampDay, "the box materialized against the stamped day (frozen seed day)");
     }
 
     /// @notice The box outcome is INVARIANT under block-entropy perturbation (prevrandao/coinbase/blockhash
@@ -254,7 +253,9 @@ contract V55FreezeDeterminism is DeployProtocol {
         // `lootboxIndex` is a storage tag (afking passes 0; the human passes its real index), NOT a resolved
         // trait — excluded from the trait compare.
         assertEq(afkBox.futureLevel, humBox.futureLevel, "DIFFERENTIAL: same targetLevel (shared seed, same live level)");
-        assertEq(afkBox.day, humBox.day, "DIFFERENTIAL: same seed day");
+        // The seed day is pinned identically on both arms by construction (_setRngWordByDay(day,…) on the
+        // afking arm, _forceLootboxDay(index, player, day) on the human arm), so the resolved traits below ARE
+        // the same-seed-day equivalence (the event no longer carries a `day` field to re-assert here).
         assertEq(afkBox.amount, humBox.amount, "DIFFERENTIAL: same scaledAmount (adj == amount, no cap divergence)");
         assertEq(afkBox.futureTickets, humBox.futureTickets, "DIFFERENTIAL: same futureTickets");
         assertEq(afkBox.burnie, humBox.burnie, "DIFFERENTIAL: same BURNIE award");
@@ -501,8 +502,8 @@ contract V55FreezeDeterminism is DeployProtocol {
             ) {
                 b.present = true;
                 b.lootboxIndex = uint48(uint256(logs[i].topics[2]));
-                (b.day, b.amount, b.futureLevel, b.futureTickets, b.burnie, b.roundedUp) =
-                    abi.decode(logs[i].data, (uint32, uint256, uint24, uint32, uint256, bool));
+                (b.amount, b.futureLevel, b.futureTickets, b.burnie, b.roundedUp) =
+                    abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 return b;
             }
         }
@@ -513,7 +514,6 @@ contract V55FreezeDeterminism is DeployProtocol {
     ///      resolved trait — excluded from the determinism compare (which replays the SAME afking stamp,
     ///      so the index is 0 on both sides anyway, but the differential reuses this helper's trait subset).
     function _assertBoxByteIdentical(Box memory a, Box memory b, string memory tag) internal {
-        assertEq(a.day, b.day, string(abi.encodePacked(tag, ": day")));
         assertEq(a.amount, b.amount, string(abi.encodePacked(tag, ": amount")));
         assertEq(a.futureLevel, b.futureLevel, string(abi.encodePacked(tag, ": futureLevel")));
         assertEq(a.futureTickets, b.futureTickets, string(abi.encodePacked(tag, ": futureTickets")));

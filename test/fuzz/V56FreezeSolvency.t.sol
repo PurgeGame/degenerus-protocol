@@ -68,7 +68,7 @@ contract V56FreezeSolvency is DeployProtocol {
 
     /// @dev keccak256 of the materialized-box event — the byte-identity oracle's source signature.
     bytes32 private constant LOOTBOX_OPENED_SIG =
-        keccak256("LootBoxOpened(address,uint48,uint32,uint256,uint24,uint32,uint256,bool)");
+        keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
 
     /// @dev QUEST_SLOT0_REWARD / 1 ether = 100 whole BURNIE accrued to pendingBurnie per delivered buy.
     uint256 private constant SLOT0_BURNIE_PER_BUY = 100;
@@ -82,7 +82,6 @@ contract V56FreezeSolvency is DeployProtocol {
     struct Box {
         bool present;
         uint48 lootboxIndex;
-        uint32 day;
         uint256 amount;
         uint24 futureLevel;
         uint32 futureTickets;
@@ -302,7 +301,7 @@ contract V56FreezeSolvency is DeployProtocol {
     /// @notice TWO-BLOCK DETERMINISM (the freeze observable): open the SAME stamp twice at DIFFERENT blocks
     ///         (vm.roll/warp + perturbed prevrandao/coinbase) and the materialized box is BYTE-IDENTICAL —
     ///         the single-roll open seed `keccak256(abi.encode(rngWordByDay[stampDay], player, stampDay,
-    ///         amount))` carries NO block.* entropy. The box's `day` field is the FROZEN stamp day (the live
+    ///         amount))` carries NO block.* entropy. The box resolves against the FROZEN stamp day (the live
     ///         day moved between stamp and open). Adapted from V55FreezeDeterminism:91+ to the v56 harness.
     function testStampedDayOpenAtTwoBlocksByteIdentical() public {
         address afk = makeAddr("freeze_twoblock");
@@ -333,7 +332,10 @@ contract V56FreezeSolvency is DeployProtocol {
 
         // FREEZE: byte-identical across the two block contexts (the seed froze on the stamped day; no block.*).
         _assertBoxByteIdentical(box1, box2, "RNG-freeze two-block determinism");
-        assertEq(box1.day, stampDay, "the box's day field IS the frozen stamp day (single-roll open, no open-time entropy)");
+        // The materialization bound to the FROZEN stamp day: the seed is rngWordByDay[stampDay] and the open
+        // advanced lastOpenedDay to that same stampDay (the live day moved between stamp and open, yet the box
+        // resolved against the frozen stamp day — no open-time entropy).
+        assertEq(_lastOpenedDayOf(afk), stampDay, "the box materialized against the frozen stamp day (single-roll open, no open-time entropy)");
     }
 
     /// @notice TWO-BLOCK DETERMINISM fuzz: for RANDOM perturbed open-block contexts (prevrandao/coinbase/
@@ -412,8 +414,8 @@ contract V56FreezeSolvency is DeployProtocol {
             ) {
                 b.present = true;
                 b.lootboxIndex = uint48(uint256(logs[i].topics[2]));
-                (b.day, b.amount, b.futureLevel, b.futureTickets, b.burnie, b.roundedUp) =
-                    abi.decode(logs[i].data, (uint32, uint256, uint24, uint32, uint256, bool));
+                (b.amount, b.futureLevel, b.futureTickets, b.burnie, b.roundedUp) =
+                    abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 return b;
             }
         }
@@ -434,7 +436,6 @@ contract V56FreezeSolvency is DeployProtocol {
     ///      lootboxIndex is a storage tag (NOT a resolved trait) — excluded (both opens replay the SAME stamp,
     ///      so it is identical anyway).
     function _assertBoxByteIdentical(Box memory a, Box memory b, string memory tag) internal {
-        assertEq(a.day, b.day, string(abi.encodePacked(tag, ": day")));
         assertEq(a.amount, b.amount, string(abi.encodePacked(tag, ": amount")));
         assertEq(a.futureLevel, b.futureLevel, string(abi.encodePacked(tag, ": futureLevel")));
         assertEq(a.futureTickets, b.futureTickets, string(abi.encodePacked(tag, ": futureTickets")));

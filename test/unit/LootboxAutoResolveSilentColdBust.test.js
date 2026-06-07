@@ -149,11 +149,12 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
 
     it("[02b] both auto-resolve callers (resolveLootboxDirect + resolveRedemptionLootbox) pass `index = 0`, `emitLootboxEvent = false`, and `payColdBustConsolation = false`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // `_resolveLootboxCommon` positional args (now 12 — the refactor appended a
-      // trailing `bool allowSplit`): player(1), day(2), index(3), amount(4),
-      // targetLevel(5), currentLevel(6), seed(7), emitLootboxEvent(8),
-      // payColdBustConsolation(9), distressEth(10), totalPackedEth(11),
-      // allowSplit(12). The auto-resolve callers pass `index = 0`,
+      // `_resolveLootboxCommon` positional args (11 — `day` was threaded out of the
+      // resolve helpers in 4cb9ccbf "lootbox event day cleanup"; the trailing
+      // `bool allowSplit` remains): player(1), index(2), amount(3),
+      // targetLevel(4), currentLevel(5), seed(6), emitLootboxEvent(7),
+      // payColdBustConsolation(8), distressEth(9), totalPackedEth(10),
+      // allowSplit(11). The auto-resolve callers pass `index = 0`,
       // `emitLootboxEvent = false`, and `payColdBustConsolation = false`
       // (silent on cold-bust).
       for (const fnName of ["function resolveLootboxDirect(", "function resolveRedemptionLootbox("]) {
@@ -184,10 +185,10 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
           .split(",")
           .map((a) => a.replace(/\/\/.*$/gm, "").trim())
           .filter((a) => a.length > 0);
-        expect(args.length, `${fnName}: _resolveLootboxCommon must receive 12 positional args (post-refactor allowSplit shape)`).to.equal(12);
-        expect(args[2], `${fnName} must pass index = 0 (3rd positional)`).to.equal("0");
-        expect(args[7], `${fnName} must pass emitLootboxEvent = false (8th positional)`).to.equal("false");
-        expect(args[8], `${fnName} must pass payColdBustConsolation = false (9th positional)`).to.equal("false");
+        expect(args.length, `${fnName}: _resolveLootboxCommon must receive 11 positional args (day-dropped allowSplit shape)`).to.equal(11);
+        expect(args[1], `${fnName} must pass index = 0 (2nd positional)`).to.equal("0");
+        expect(args[6], `${fnName} must pass emitLootboxEvent = false (7th positional)`).to.equal("false");
+        expect(args[7], `${fnName} must pass payColdBustConsolation = false (8th positional)`).to.equal("false");
         expect(
           body.includes("type(uint48).max"),
           `${fnName} must NOT reference the retired type(uint48).max sentinel`
