@@ -57,9 +57,9 @@
 - [x] **TST-01** (TST): AFPAY waterfall — DirectEth taps afking but skips claimable; Claimable/Combined draw claimable→sentinel then afking→0; the afking portion gets fresh-rate affiliate + lootbox activity score + presale credit with NO rebuy bonus; `AfkingSpent` emitted; reverts when both claimable + afking are short; NO double-draw with the afking auto-buy path (`_deliverAfkingBuy`/`_queueTicketsScaled` never reach `_processMintPayment`).
 - [x] **TST-02** (TST): PACK — packed `[afking|claimable]` round-trips at every credit/debit/read site via the accessors; `claimablePool == Σ` holds; gameOver claimable-zeroing preserves the VAULT/SDGNRS/GNRUS afking halves; no 127→128 cross-half carry; behavior-identical to the two-mapping baseline.
 - [x] **TST-03** (TST): CURSE SET — +2 only on a stale (≥5d) cashout, never for infra / gameOver / deity / whale / active-afker; penalty `curse*100` bps floored 0 visible across all consumers + the public view + frozen snapshots; stacking N → `min(2N, cap)`; same-day second claim reverts (sentinel) so no in-day stacking; saturates at the cap, never wraps the uint8.
-- [ ] **TST-04** (TST): CURE + bounty + decurse — `curseCount` resets to 0 on a ≥1-ticket buy (direct / batch / affiliate / whale bundle / lootbox ≥ ticket), fresh ETH or claimable; a sub-ticket / small-lootbox buy stamps `DAY_SHIFT` (bounty-eligible, halts growth) but does NOT cure; a manual lootbox buyer is now `_bountyEligible`; `decurse` clears for 100 BURNIE (reverts if already 0, emits `Decursed`).
-- [ ] **TST-05** (TST): SMITE — the `ownerOf` gate rejects a non-deity caller (no burn); an active-afker smitee reverts before the burn; a target ≥5 stacks reverts; a successful smite burns 200 BURNIE + adds one stack (+2 pts) saturating at the shared cap + emits `Smited`; cashout-curse and smite share one counter; a single ≥1-ticket buy (or `decurse`) clears both sources.
-- [ ] **TST-06** (TST): NON-WIDENING vs the frozen baseline `2bee6d6f` — the forge + Hardhat suite enumerated BY NAME (every pre-existing red), the v61 changes add green, the carried harness layout/RNG artifacts stay characterized (no new contract regression).
+- [x] **TST-04** (TST): CURE + bounty + decurse — `curseCount` resets to 0 on a ≥1-ticket buy (direct / batch / affiliate / whale bundle / lootbox ≥ ticket), fresh ETH or claimable; a sub-ticket / small-lootbox buy stamps `DAY_SHIFT` (bounty-eligible, halts growth) but does NOT cure; a manual lootbox buyer is now `_bountyEligible`; `decurse` clears for 100 BURNIE (reverts if already 0, emits `Decursed`). _(378-05: V61CureBountyDecurse.t.sol, 13 green; cure proven on every `purchase()` host path × {fresh ETH, claimable}; the "whale bundle" cure is the `purchase()`-host ticket+lootbox bundle — the separate `purchaseWhaleBundle()` pass-host does NOT cure, proven by contrast.)_
+- [x] **TST-05** (TST): SMITE — the `ownerOf` gate rejects a non-deity caller (no burn); an active-afker smitee reverts before the burn; a target ≥5 stacks reverts; a successful smite burns 200 BURNIE + adds one stack (+2 pts) saturating at the shared cap + emits `Smited`; cashout-curse and smite share one counter; a single ≥1-ticket buy (or `decurse`) clears both sources. _(378-05: V61Smite.t.sol, 10 green; every revert leg asserts BURNIE unchanged = pre-burn; smite saturates at its own 10-point ceiling, the 20 cap proven on the cashout path in V61CurseSet.)_
+- [x] **TST-06** (TST): NON-WIDENING vs the frozen baseline `2bee6d6f` — the forge + Hardhat suite enumerated BY NAME (every pre-existing red), the v61 changes add green, the carried harness layout/RNG artifacts stay characterized (no new contract regression). _(378-05: live forge HEAD 711/66/103; `live − union == ∅` by name = 60 carried + 3 documented class-(c) + 3 carried VRFPath invariants proven red @ `2bee6d6f`; 112 narrowed green; 54 new tests additive; Hardhat `npm test` env-blocked, `test/unit` 930/67/3 corroborating. Deliverable `378-05-NONWIDENING-LEDGER.md`; verdict folded into `test/REGRESSION-BASELINE-v61.md` §7.)_
 
 ### AUDIT — terminal close (379)
 
@@ -109,9 +109,9 @@
 | TST-01 | 378 | TST | Complete |
 | TST-02 | 378 | TST | Complete |
 | TST-03 | 378 | TST | Complete |
-| TST-04 | 378 | TST | Pending |
-| TST-05 | 378 | TST | Pending |
-| TST-06 | 378 | TST | Pending |
+| TST-04 | 378 | TST | Complete |
+| TST-05 | 378 | TST | Complete |
+| TST-06 | 378 | TST | Complete |
 | AUDIT-01 | 379 | TERMINAL | Pending |
 
 **27/27 v61.0 requirements mapped to exactly one phase** — 375 SPEC: 1 · 376 IMPL: 17 · 377 GAS: 0 · 378 TST: 8 · 379 TERMINAL: 1. Per-category: AFPAY 7 · PACK 2 · CURSE 7 · SMITE 1 · SPEC 1 · SEC 2 · TST 6 · AUDIT 1. 0 orphaned, 0 duplicated. Phase 377 GAS owns no REQ-ID (the gas-neutrality measurement gate).

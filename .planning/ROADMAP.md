@@ -141,7 +141,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4)*
 
-- [ ] 378-05-PLAN.md — Proving tests TST-04 (CURE+bounty+decurse) + TST-05 (SMITE) + TST-06 (final NON-WIDENING by-name comparison vs the 378-01 baseline)
+- [x] 378-05-PLAN.md — Proving tests TST-04 (CURE+bounty+decurse) + TST-05 (SMITE) + TST-06 (final NON-WIDENING by-name): 2 new forge files, 23 tests all GREEN (V61CureBountyDecurse 13 · V61Smite 10); cure on every `purchase()` host path × {fresh ETH, claimable}, cure-before-score + whale-bundle-no-cure by contrast, sub-ticket/manual-lootbox DAY_SHIFT bounty stamp, decurse 100-BURNIE + `Decursed` + revert-if-0 + permissionless; smite ownerOf-gate/active-afker-immunity/5-stack-ceiling all pre-burn + 200-BURNIE success + shared counter + single-cure-clears-both; TST-06 NON-WIDENING HOLDS (full forge HEAD 711/66/103, `live − union == ∅` by name = 60 carried + 3 class-(c) + 3 carried VRFPath invariants proven red @ `2bee6d6f`; 112 narrowed green; 54 new tests additive; Hardhat `npm test` env-blocked [absent `test/adversarial`], `test/unit` 930/67/3 corroborating); verdict folded into `test/REGRESSION-BASELINE-v61.md` §7; NO CONTRACT-CHANGE-NEEDED; contracts byte-frozen `87e3b45b`/`fcdd999c`; zero .sol edits (TST-04/05/06) ✅ `01b827aa`/`38e63ef4`/`097c9064`
 
 **Wave 6** *(blocked on Wave 5)*
 
