@@ -48,75 +48,115 @@
 
 ### Phase Details (v62.0)
 
-**Phase 380: FOUNDATION — Test-Fix & Green Baseline**
-Goal: A green full-suite (forge + Hardhat, 0 failures) as the audit's safety floor + the oracle the council's findings get reproduced against.
-Depends on: none (subject-agnostic; runs first).
-Success criteria:
-1. The ~176 stale-fixture / layout-drift forge failures repaired via `forge inspect storageLayout`-derived slots (no hard-coded slots); event-schema-delta + v60 storage-collapse + DegeneretteBetInvariant test debt fixed.
-2. Untracked gas-probes committed-or-removed; obsolete SKIP-marked tests deleted; per-fix PoCs consolidated.
-3. GREEN full-suite baseline established + recorded (supersedes the carried-red `REGRESSION-BASELINE-v61.md` ledger).
-Requirements: FOUND-01..06.
+### Phase 380: FOUNDATION — Test-Fix & Green Baseline
 
-**Phase 381: INVARIANT FUZZ — Durable Property Net**
-Goal: The durable property net that catches compositions + asymmetries automatically, council-reviewed for completeness.
-Depends on: 380.
-Success criteria:
-1. SOLVENCY · RNG-FREEZE · GAS-CEILING · ENQUEUE · POOL-CONSERVATION invariants implemented + green over N runs (GameSeeder etch).
-2. The council cross-checks the property SET (what's missing? what reachable sequence violates an unstated invariant?); convergent gaps folded in (FUZZ-06).
-3. The advanceGame <16.7M property reusable by Phase 384.
-Requirements: FUZZ-01..06.
+**Goal**: A green full-suite (forge + Hardhat, 0 failures) as the audit's safety floor + the oracle the council's findings get reproduced against.
+**Type**: FOUND
+**Depends on**: Nothing (first v62.0 phase; subject-agnostic — runs before the audit subject is consumed)
+**Requirements**: FOUND-01, FOUND-02, FOUND-03, FOUND-04, FOUND-05, FOUND-06
+**Success Criteria** (what must be TRUE):
 
-**Phase 382: PRIME — v61 New Code + Forgiving-Funding (council-LED)**
-Goal: Council-led audit of the freshest, highest-density, solvency-touching surface.
-Depends on: 380, 381.
-Success criteria:
-1. Subject SHA re-locked at HEAD (`c4d48008`) + anchors re-attested before the sweep.
-2. Council FIRED at the by-design spine (afking-pay solvency · pack carry · curse/smite · the forgiving-funding `_mintCost` parity + `receive()` blast radius) and every convergent/divergent finding adjudicated vs frozen `c4d48008`. [cross-model gate — a no-finding verdict needs the council pass on record]
-3. SOLVENCY-01 holds across the overpay→afking paths; `_mintCost` matches the canonical price; receive() blast radius mapped.
-Requirements: PRIME-01..04.
+  1. The ~176 stale-fixture / layout-drift forge failures repaired via `forge inspect storageLayout`-derived slots (no hard-coded slots); event-schema-delta + v60 storage-collapse + DegeneretteBetInvariant test debt fixed.
+  2. Untracked gas-probes committed-or-removed; obsolete SKIP-marked tests deleted; per-fix PoCs consolidated.
+  3. GREEN full-suite baseline established + recorded (supersedes the carried-red `REGRESSION-BASELINE-v61.md` ledger).
 
-**Phase 383: ASYMMETRY SWEEP (council-LED)**
-Goal: Find the one diverging sibling across every N-implementation family (the WHALE-01 shape).
-Depends on: 380, 381.
-Success criteria:
-1. Council FIRED at the sibling families + every diff adjudicated vs frozen source. [cross-model gate]
-2. Box-enqueue invariant holds (no v61/`c4d48008` path skips enqueue); the forgiving-funding overpay→afking consistent across all spend paths.
-3. Every RNG-consume site traced backward to commitment-time freeze; pool/credit mutations paired + conserved.
-Requirements: ASYM-01..06.
+**UI hint**: no
 
-**Phase 384: advanceGame COMPOSITION + e2e Gas Harness (council-LED)**
-Goal: No advanceGame tx exceeds 16.7M across any reachable sequence; no two-stages-in-one-tx fall-through.
-Depends on: 380, 381.
-Success criteria:
-1. End-to-end advanceGame gas harness (real `advanceGame()`, GameSeeder etch) asserts EVERY tx < 16.7M (targets < 10M) across fuzzed reachable states.
-2. Council FIRED at the stage graph + gas profile + adjudicated. [cross-model gate]
-3. Known fall-throughs (game-over→terminal-jackpot, entropy→ticket) re-verified post-`c4d48008`.
-Requirements: COMPO-01..03.
+### Phase 381: INVARIANT FUZZ — Durable Property Net
 
-**Phase 385: VRF / GAS-BOUNDED-LOOP SWEEP (council-LED)**
-Goal: Every gas-limited-context loop is bounded by a numeric cap, not an unenforced invariant.
-Depends on: 380, 381.
-Success criteria:
-1. Council FIRED at the loop inventory + adjudicated. [cross-model gate]
-2. Bounded loops re-verified (orphan-index max 1 · gap-days 120 · deity-refund 32 · subscriber 1000); new-loop hunt clean (esp. v61/`c4d48008`).
-Requirements: LOOP-01..03.
+**Goal**: The durable property net that catches compositions + asymmetries automatically, council-reviewed for completeness.
+**Type**: FUZZ
+**Depends on**: Phase 380 (consumes the green baseline as its oracle)
+**Requirements**: FUZZ-01, FUZZ-02, FUZZ-03, FUZZ-04, FUZZ-05, FUZZ-06
+**Success Criteria** (what must be TRUE):
 
-**Phase 386: PERIPHERAL CONTRACTS (council-LED)**
-Goal: Council-led coverage of the surrounding contracts + cross-contract seams (lighter in v60).
-Depends on: 380, 381.
-Success criteria:
-1. Council FIRED per peripheral (Vault · sDGNRS · Affiliate · Burnie/Coinflip · Stonk/GNRUS · DeityPass · Admin) + the delegatecall seams + adjudicated. [cross-model gate]
-2. C-2 stETH-strand fix held; delegatecall interface/selector correctness (`IDegenerusGame` et al. match impls); reentrancy on external token calls checked.
-Requirements: PERIPH-01..06.
+  1. SOLVENCY · RNG-FREEZE · GAS-CEILING · ENQUEUE · POOL-CONSERVATION invariants implemented + green over N runs (GameSeeder etch).
+  2. The council cross-checks the property SET (what's missing? what reachable sequence violates an unstated invariant?); convergent gaps folded in (FUZZ-06).
+  3. The advanceGame <16.7M property reusable by Phase 384.
 
-**Phase 387: TERMINAL — Council-on-Refuted + FINDINGS-v62.0 + Closure Flip**
-Goal: Consolidate, re-test the refuted, ship the deliverable, flip closure.
-Depends on: 382, 383, 384, 385, 386.
-Success criteria:
-1. Council re-run on ALL Claude-refuted findings; consolidated + deduped; skeptic pass before any CATASTROPHE/HIGH; Write-capable subagents git-status-verified.
-2. `audit/FINDINGS-v62.0.md` (chmod 444) records each area's council pass + verdict + adjudication; any CONFIRMED finding → gated fix else document-only.
-3. Atomic closure flip with `MILESTONE_V62_AT_HEAD_<sha>`; all 38 reqs re-attested; KNOWN-ISSUES byte-unmodified unless a genuine new finding.
-Requirements: AUDIT-01..02.
+**UI hint**: no
+
+### Phase 382: PRIME — v61 New Code + Forgiving-Funding (council-LED)
+
+**Goal**: Council-led audit of the freshest, highest-density, solvency-touching surface (v61's afking-as-payment / curse / smite + the committed forgiving-funding change `c4d48008`).
+**Type**: SWEEP
+**Depends on**: Phase 380, Phase 381
+**Requirements**: PRIME-01, PRIME-02, PRIME-03, PRIME-04
+**Success Criteria** (what must be TRUE):
+
+  1. Subject SHA re-locked at HEAD (`c4d48008`) + anchors re-attested before the sweep.
+  2. Council FIRED at the by-design spine (afking-pay solvency · pack carry · curse/smite · the forgiving-funding `_mintCost` parity + `receive()` blast radius) and every convergent/divergent finding adjudicated vs frozen `c4d48008`. [cross-model gate — a no-finding verdict needs the council pass on record]
+  3. SOLVENCY-01 holds across the overpay→afking paths; `_mintCost` matches the canonical price; receive() blast radius mapped.
+
+**UI hint**: no
+
+### Phase 383: ASYMMETRY SWEEP (council-LED)
+
+**Goal**: Find the one diverging sibling across every N-implementation family (the WHALE-01 shape).
+**Type**: SWEEP
+**Depends on**: Phase 380, Phase 381
+**Requirements**: ASYM-01, ASYM-02, ASYM-03, ASYM-04, ASYM-05, ASYM-06
+**Success Criteria** (what must be TRUE):
+
+  1. Council FIRED at the sibling families + every diff adjudicated vs frozen source. [cross-model gate]
+  2. Box-enqueue invariant holds (no v61/`c4d48008` path skips enqueue); the forgiving-funding overpay→afking consistent across all spend paths.
+  3. Every RNG-consume site traced backward to commitment-time freeze; pool/credit mutations paired + conserved.
+
+**UI hint**: no
+
+### Phase 384: advanceGame COMPOSITION + e2e Gas Harness (council-LED)
+
+**Goal**: No advanceGame tx exceeds 16.7M across any reachable sequence; no two-stages-in-one-tx fall-through.
+**Type**: SWEEP
+**Depends on**: Phase 380, Phase 381
+**Requirements**: COMPO-01, COMPO-02, COMPO-03
+**Success Criteria** (what must be TRUE):
+
+  1. End-to-end advanceGame gas harness (real `advanceGame()`, GameSeeder etch) asserts EVERY tx < 16.7M (targets < 10M) across fuzzed reachable states.
+  2. Council FIRED at the stage graph + gas profile + adjudicated. [cross-model gate]
+  3. Known fall-throughs (game-over→terminal-jackpot, entropy→ticket) re-verified post-`c4d48008`.
+
+**UI hint**: no
+
+### Phase 385: VRF / GAS-BOUNDED-LOOP SWEEP (council-LED)
+
+**Goal**: Every gas-limited-context loop is bounded by a numeric cap, not an unenforced invariant.
+**Type**: SWEEP
+**Depends on**: Phase 380, Phase 381
+**Requirements**: LOOP-01, LOOP-02, LOOP-03
+**Success Criteria** (what must be TRUE):
+
+  1. Council FIRED at the loop inventory + adjudicated. [cross-model gate]
+  2. Bounded loops re-verified (orphan-index max 1 · gap-days 120 · deity-refund 32 · subscriber 1000); new-loop hunt clean (esp. v61/`c4d48008`).
+
+**UI hint**: no
+
+### Phase 386: PERIPHERAL CONTRACTS (council-LED)
+
+**Goal**: Council-led coverage of the surrounding contracts + cross-contract seams (lighter in v60).
+**Type**: SWEEP
+**Depends on**: Phase 380, Phase 381
+**Requirements**: PERIPH-01, PERIPH-02, PERIPH-03, PERIPH-04, PERIPH-05, PERIPH-06
+**Success Criteria** (what must be TRUE):
+
+  1. Council FIRED per peripheral (Vault · sDGNRS · Affiliate · Burnie/Coinflip · Stonk/GNRUS · DeityPass · Admin) + the delegatecall seams + adjudicated. [cross-model gate]
+  2. C-2 stETH-strand fix held; delegatecall interface/selector correctness (`IDegenerusGame` et al. match impls); reentrancy on external token calls checked.
+
+**UI hint**: no
+
+### Phase 387: TERMINAL — Council-on-Refuted + FINDINGS-v62.0 + Closure Flip
+
+**Goal**: Consolidate, re-test the refuted, ship the deliverable, flip closure.
+**Type**: TERMINAL
+**Depends on**: Phase 382, Phase 383, Phase 384, Phase 385, Phase 386
+**Requirements**: AUDIT-01, AUDIT-02
+**Success Criteria** (what must be TRUE):
+
+  1. Council re-run on ALL Claude-refuted findings; consolidated + deduped; skeptic pass before any CATASTROPHE/HIGH; Write-capable subagents git-status-verified.
+  2. `audit/FINDINGS-v62.0.md` (chmod 444) records each area's council pass + verdict + adjudication; any CONFIRMED finding → gated fix else document-only.
+  3. Atomic closure flip with `MILESTONE_V62_AT_HEAD_<sha>`; all 38 reqs re-attested; KNOWN-ISSUES byte-unmodified unless a genuine new finding.
+
+**UI hint**: no
 
 ---
 
