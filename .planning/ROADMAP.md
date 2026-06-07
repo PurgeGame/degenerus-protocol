@@ -125,7 +125,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 378-01-PLAN.md — Foundation: storage-layout recalibration key (forge inspect, confirm the PACK −1 post-balances shift) + StorageFoundation/redemption Game-resident slot fixes + capture the frozen-baseline `2bee6d6f` red set BY NAME (TST-06)
+- [x] 378-01-PLAN.md — Foundation: storage-layout recalibration key (forge inspect; delta is region-dependent, NOT uniform −1; balancesPacked root UNMOVED at slot 7) + StorageFoundation/redemption Game-resident slot fixes (semantic low-128) + frozen-baseline `2bee6d6f` red set BY NAME captured (533/183/103, 172 names) (TST-06) ✅ `8da54ed5`/`bad1889e`/`5de3ccb8`
 
 **Wave 2** *(blocked on Wave 1)*
 

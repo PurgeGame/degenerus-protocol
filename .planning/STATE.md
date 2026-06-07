@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v61.0
 milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
 status: executing
-last_updated: "2026-06-07T06:56:55.882Z"
-last_activity: 2026-06-07 -- Phase 378 planning complete
+last_updated: "2026-06-07T07:43:21.000Z"
+last_activity: 2026-06-07 -- Phase 378 plan 01 executed (TST foundation: slot recalibration + frozen baseline)
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 15
-  completed_plans: 7
-  percent: 30
+  completed_plans: 9
+  percent: 32
 ---
 
 # Project State
@@ -32,12 +32,13 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 
 ## Current Position
 
-Phase: 378 (tst-proving-tests-rng-freeze-solvency) — ▶ IN PROGRESS, foundation laid (failure baseline + slot-shift recalibration key + plan). 376 ✅ `b97a7a2e` · 377 ✅ Outcome-A `056481ea` (both local, NOT pushed — 33 ahead of origin).
-Plan: `378-tst-proving-tests-rng-freeze-solvency/378-PLAN-TRIAGE.md` (the focused-session playbook).
-Status: Ready to execute
-Next up (FOCUSED 378 session): (1) baseline NON-WIDENING comparison → isolate the v61-delta; (2) recalibrate the −1 slot shift across the ~32 slot-hardcoded harnesses + re-measure STAGE_2 live; (3) update accepted-v61-behavior reds; (4) write TST-01..06; (5) prove SEC-01/02. All test-side/committable, per-unit commits. Then 379 TERMINAL (FULL close + FINDINGS-v61.0).
+Phase: 378 (tst-proving-tests-rng-freeze-solvency) — ▶ IN PROGRESS. **378-01 ✅** (TST foundation: authoritative v61 layout via forge inspect + slot recalibration key + StorageFoundation/redemption recalibrated + frozen-baseline `2bee6d6f` red set BY NAME; commits `8da54ed5`/`bad1889e`/`5de3ccb8`). 376 ✅ `b97a7a2e` · 377 ✅ Outcome-A `056481ea` (all local, NOT pushed).
+Plan: `378-tst-proving-tests-rng-freeze-solvency/378-PLAN-TRIAGE.md` (the focused-session playbook); next plan `378-02-PLAN.md`.
+Status: 378-01 complete; ready for 378-02.
+Key 378-01 findings (for downstream plans): balancesPacked root UNMOVED at slot 7 (redemption pokes need only the SEMANTIC low-128 fix); slot-shift delta is region-dependent NOT uniform -1 (subs -3, lootbox -2, mint/rng -1); authoritative v61 slots in `378-01-RECALIBRATION-KEY.md`; baseline ceiling 533/183/103 (172 names) in `test/REGRESSION-BASELINE-v61.md`; Hardhat baseline blocked by absent test/adversarial dir (forge is primary).
+Next up (FOCUSED 378 session): (2) **378-02** gas-harness recalibration (6 harnesses → authoritative slots per the key) + STAGE_2 live re-measure; (3) 378-03 accepted-v61-behavior reds; (4) 378-04/05 write TST-01..06 + the final non-widening gate; (5) 378-06 SEC-01/02. All test-side/committable, per-unit commits. Then 379 TERMINAL (FULL close + FINDINGS-v61.0).
 377 GAS = Outcome-A (gas-neutral, no contract tune); findings `377-GAS-FINDINGS.md`. 376 EIP-170 reclaim via de-view read getters; details `376-03-SUMMARY.md`.
-Last activity: 2026-06-07 -- Phase 378 planning complete
+Last activity: 2026-06-07 -- Phase 378 plan 01 executed (TST foundation: slot recalibration key + StorageFoundation/redemption fixes + frozen-baseline 2bee6d6f red set BY NAME)
 
 ## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
 
@@ -48,7 +49,7 @@ Shape: SPEC → IMPL → GAS → TST → TERMINAL. ONE batched contract diff —
 | 375 | SPEC — Design-Lock + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map | SPEC | SPEC-01 | Not started |
 | 376 | IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE) | IMPL (CONTRACT BOUNDARY) | AFPAY-01..07 · PACK-01/02 · CURSE-01..07 · SMITE-01 | Not started |
 | 377 | GAS — Gas-Neutrality Gate (curse APPLY zero-SLOAD · packing no cold slot) | GAS (CONTRACT BOUNDARY — net diff, else Outcome-A) | (none) | Not started |
-| 378 | TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | TST | SEC-01/02 · TST-01..06 | Not started |
+| 378 | TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | TST | SEC-01/02 · TST-01..06 | ▶ In progress (01 ✅) |
 | 379 | TERMINAL — Delta Audit + 3-Skill Sweep + FINDINGS-v61.0 + Closure Flip | TERMINAL (FULL close) | AUDIT-01 | Not started |
 
 **Coverage:** 27/27 mapped to one phase (375: 1 · 376: 17 · 377: 0 · 378: 8 · 379: 1); 0 orphaned, 0 duplicated. Per-category: AFPAY 7 · PACK 2 · CURSE 7 · SMITE 1 · SPEC 1 · SEC 2 · TST 6 · AUDIT 1. Phase 377 GAS owns NO REQ-ID (the gas-neutrality measurement gate). Full detail in `.planning/ROADMAP.md`; per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
