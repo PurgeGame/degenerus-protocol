@@ -268,6 +268,13 @@ contract AdvanceStageWorstCaseGas is Test {
             emit log_named_uint("per_eth_winner_marginal_gas", perWinner);
             // A per-winner cold credit (~20-25k) is a bounded O(1); assert it cannot scale to a DoS.
             assertLt(perWinner, 200_000, "per-ETH-winner marginal is a bounded O(1) cold credit (no magnitude scaling)");
+        } else {
+            // Guard the probe's precondition so a degenerate measurement FAILS rather than silently
+            // skipping the marginal bound: more winners (305 vs the low count) MUST cost more gas.
+            assertTrue(
+                gasHi > gasLo && DAILY_ETH_MAX_WINNERS > loWinners,
+                "degenerate ETH-jackpot measurement: 305-winner gas did not exceed the low-winner gas"
+            );
         }
     }
 
@@ -371,6 +378,11 @@ contract AdvanceStageWorstCaseGas is Test {
             uint256 analytic550 = 500_000 + perTrait * 275; // fixed overhead + ~275 traits
             emit log_named_uint("analytic_550_write_chunk_from_measured_marginal", analytic550);
             assertLt(analytic550, EIP7825_TX_GAS_CAP, "analytic 550-write chunk from the measured per-trait marginal < the EIP cap");
+        } else {
+            // Guard the probe's precondition so a degenerate measurement FAILS rather than silently
+            // skipping the per-trait marginal + analytic bound: the 200-owed batch MUST cost more
+            // gas than the 100-owed batch.
+            assertGt(gasHi, gasLo, "degenerate ticket-batch measurement: 200-owed gas did not exceed the 100-owed gas");
         }
     }
 
@@ -415,10 +427,20 @@ contract AdvanceStageWorstCaseGas is Test {
         emit log_named_uint("BINDING_STAGE_gas", binding);
         emit log_named_uint("TIGHTEST_HEADROOM_to_16p7M_gas", EIP7825_TX_GAS_CAP - binding);
 
-        // No stage reaches the EIP cap; the binding stage (all-evict subs, ~13.6M) clears it with margin.
+        // LOAD-BEARING safety check: no advanceGame stage reaches the EIP-7825 tx cap. This is the
+        // real correctness assertion and it depends only on numbers THIS file measures live
+        // (jackpotGas, ticketGas) plus the referenced subscriber/gap-backfill magnitudes.
         assertLt(binding, EIP7825_TX_GAS_CAP, "no advanceGame stage reaches the 16,777,216 EIP-7825 cap");
-        // The binding stage is the subscriber STAGE (chunked), NOT the jackpot — the jackpot is ~7.5M.
-        assertEq(binding, allEvictStageGas, "the BINDING stage is the all-evict subscriber STAGE (2), not the jackpot");
+        // The two stages measured live in THIS file (jackpot ~7.5M, ticket batch) are each well
+        // below the referenced subscriber STAGE (2) magnitude — so the binding stage is the
+        // subscriber STAGE, not the jackpot. Asserted as a documented UPPER BOUND on the live
+        // stages rather than an exact `assertEq` to the cross-harness constant `allEvictStageGas`
+        // (13_603_709, copied from V56AfkingGasMarginal and NOT re-measured here): an exact equality
+        // would flip to a stale fiction the moment that constant drifts (compiler/refactor) or the
+        // measured live stages crossed it. The PRECISE binding-stage gas is (re-)measured by the
+        // Phase 384 end-to-end advanceGame harness, which supersedes this single-file probe.
+        assertLe(jackpotGas, allEvictStageGas, "live 305-winner jackpot stays within the referenced subscriber STAGE (2) magnitude (precise re-measure: Phase 384 e2e harness)");
+        assertLe(ticketGas, allEvictStageGas, "live ticket-batch chunk stays within the referenced subscriber STAGE (2) magnitude (precise re-measure: Phase 384 e2e harness)");
         assertLt(jackpotGas, allEvictStageGas, "the 305-winner jackpot (~7.5M) is well below the binding subscriber STAGE (~13.6M)");
     }
 }

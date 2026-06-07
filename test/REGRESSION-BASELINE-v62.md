@@ -47,7 +47,7 @@ fail_on_revert=false`, `via_ir=true`) on a CLEAN fixture (`forge clean && forge 
 
 | | passed | failed | skipped | total |
 |---|---|---|---|---|
-| **`c4d48008` GREEN baseline** | **790** | **3** | **109** | **902** |
+| **`c4d48008` GREEN baseline** | **789** | **3** | **110** | **902** |
 
 - **105 test suites.** ONE suite contains the only failures: `VRFPathInvariants.inv.t.sol` (4 passed
   / 3 failed). Every other suite is GREEN.
@@ -127,7 +127,8 @@ churn-idempotency drain-on-cancel `pendingBurnie` model.)
 
 `test_midDayRequest_doesNotBlockDaily` (FC1), `testDgnrsAwardStaysPerSpin` (FC2),
 `testResultsEqualityValueInvariant` (FC3), `testAffiliateReClaimChurnEqualsHonestContinuous` (FC4),
-`testBindingConsistencyDailyDrain` (FC5), `test_gapBackfillWithMidDayPending_fuzz` (FC6).
+`testBindingConsistencyDailyDrain` + `testBindingConsistencyMidDayCrossDay` (FC5 — both binding tests),
+`test_gapBackfillWithMidDayPending_fuzz` (FC6).
 
 ---
 
@@ -147,7 +148,7 @@ carried red is forbidden.
 | **DEF-380-04-FC2** | `testDgnrsAwardStaysPerSpin` (DegeneretteFreezeResolution) | the test keys the per-spin DGNRS award on the MATCH count (6/7/8 → 400/800/1500 BPS, fires on `matches >= 6`); the frozen contract keys it on the composite activity SCORE `s = A + 2*H` (fires on `s >= 7`, DegeneretteModule:95/697) — a Degenerette award-model question |
 | **DEF-380-04-FC3** | `testResultsEqualityValueInvariant` (DegeneretteResolveRepeg) | the ETH/BURNIE value-invariants are green, but the WWXRP arm diverges by a small additive amount (+1000e18 / +0.0004%) — the by-design `_wwxrpBonusBucket` per-spin uplift the replay omits; a Degenerette-RTP question (cf. the WWXRP-worthless-by-design ruling) |
 | **DEF-380-04-FC4** | `testAffiliateReClaimChurnEqualsHonestContinuous` (V56SecUnmanipulable) | the test models `affiliateBase` PERSISTING byte-identical across an unsub tombstone; the frozen cancel path AUTO-CLAIMS + drains `affiliateBase` to the upline before tombstoning (GameAfkingModule:349-369) — the strategic-sub/unsub no-farm property |
-| **DEF-380-04-FC5** | `testBindingConsistencyDailyDrain` (RngIndexDrainBinding) | the RNG-binding invariant ("the daily-drain entropy == `lootboxRngWordByIndex[boundIdx]`") is no longer observable — the slimmed `TraitsGenerated(address,uint256,uint32)` event dropped the `entropy` field; `baseKey` is the ticket key, not the entropy, so aligning would assert nothing about the binding — an RNG-window observability question |
+| **DEF-380-04-FC5** | `testBindingConsistencyDailyDrain` AND `testBindingConsistencyMidDayCrossDay` (RngIndexDrainBinding — BOTH binding tests) | the RNG-binding invariant ("the drain entropy == `lootboxRngWordByIndex[boundIdx]`") is no longer observable — the slimmed `TraitsGenerated(address,uint256,uint32)` event dropped the `entropy` field; `baseKey` is the ticket key, not the entropy, so aligning would assert nothing about the binding. Both tests decode that dropped field, so both are skipped under this id (the mid-day sibling otherwise passed vacuously via an always-empty capture early-return). Compounding the event-slimming: at c4d48008 the two drains bind to DIFFERENT entropy — `processFutureTicketBatch` consumes the caller-passed daily `rngWord` (AdvanceModule:478), only `processTicketBatch` consumes `lootboxRngWordByIndex[LR_INDEX-1]` (MintModule:690) — and both emit the identical 3-field event, so the per-batch entropy→index binding is not re-pointable at storage without changing what the test proves — an RNG-window observability question |
 | **DEF-380-04-FC6** | `test_gapBackfillWithMidDayPending_fuzz` (VRFPathCoverage) | a mid-day `requestLootboxRng` left PENDING across a multi-day stall + coordinator swap backfills ZERO gap days on resume, even though the 5 sibling gap-backfill tests + a clean-setup probe backfill fine and a re-fulfill loop does not change it — the SAME mid-day-stall-recovery surface as FC1 and the carried `invariant_allGapDaysBackfilled` |
 
 **Cross-reference:** FC1 + FC6 + the §2 carried `invariant_allGapDaysBackfilled`/`…stallRecoveryValid`/
@@ -203,13 +204,18 @@ trusted (the hardhat-compile-regenerates-ContractAddresses landmine).
 
 ---
 
-## 6. The full skip census (109 skipped)
+## 6. The full skip census (110 skipped)
 
 Skips are intentional, not failures. The notable `vm.skip(true)` markers:
 
-- **6 finding-candidate skips (DEF-380-04-FC1..FC6)** — §4, routed to the council. One each in
-  `VRFCore.t.sol`, `DegeneretteFreezeResolution.t.sol`, `DegeneretteResolveRepeg.t.sol`,
-  `V56SecUnmanipulable.t.sol`, `RngIndexDrainBinding.t.sol`, `VRFPathCoverage.t.sol`.
+- **6 finding-candidate IDs (DEF-380-04-FC1..FC6) across 7 skipped tests** — §4, routed to the
+  council. One each in `VRFCore.t.sol`, `DegeneretteFreezeResolution.t.sol`,
+  `DegeneretteResolveRepeg.t.sol`, `V56SecUnmanipulable.t.sol`, `VRFPathCoverage.t.sol`; and
+  **TWO in `RngIndexDrainBinding.t.sol` — both `testBindingConsistencyDailyDrain` AND
+  `testBindingConsistencyMidDayCrossDay` skip under the single id DEF-380-04-FC5** (same
+  dropped-`entropy`-field cause; the mid-day sibling previously passed VACUOUSLY via an always-empty
+  capture early-return and was tightened to a skip in the 380 review follow-up — net: one forge test
+  moved pass→skip, 790/109 → 789/110).
 - **16 intentional-by-design skips in `RngLockDeterminism.t.sol`** — the deliberate Option-C
   `vm.skip` blocks per `D-301-VMSKIP-MECHANISM-01` / the Phase-301 RNGLOCK determinism catalog
   (`RNGLOCK-FIXREC.md` cross-reference). NOT obsolete; documented in the file header.

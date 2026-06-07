@@ -36,5 +36,14 @@ contract ActivityScoreStreakGasTest is DeployProtocol {
         emit log_named_uint("   getPlayerQuestView gas (heavy alt)", fullGas);
         emit log_named_uint("   delta B over raw (fix cost)", effGas > rawGas ? effGas - rawGas : 0);
         emit log_named_uint("   delta heavy over B (gas B saves)", fullGas > effGas ? fullGas - effGas : 0);
+
+        // Sanity floor so this gas probe contributes a real signal rather than a vacuous green:
+        // each read must consume non-zero gas (a 0 would mean the call was elided/reverted, making
+        // the comparison meaningless), and the SHIPPED lightweight getter (B) must not cost more
+        // than the heavy full-struct view (A, getPlayerQuestView) it was introduced to undercut.
+        assertGt(effGas, 0, "effectiveBaseStreak read consumed no gas (call elided/reverted)");
+        assertGt(fullGas, 0, "getPlayerQuestView read consumed no gas (call elided/reverted)");
+        assertGt(rawGas, 0, "raw playerQuestStates read consumed no gas (call elided/reverted)");
+        assertLe(effGas, fullGas, "SHIPPED effectiveBaseStreak (B) must not cost more than the heavy getPlayerQuestView (A)");
     }
 }

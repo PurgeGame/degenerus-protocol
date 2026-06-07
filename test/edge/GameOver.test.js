@@ -238,26 +238,35 @@ describe("GameOver", function () {
   // The early-gameover (levels 0-9) deity refund is min(deityPassPricePaid[owner],
   // 20 ETH) per owner (GameOverModule:111-115). A standard pass is bought at 24/25
   // ETH (> the 20 ETH cap), so the cap binds and the refund is exactly 20 ETH —
-  // asserted via the claimable delta (>= 20 ETH; terminal jackpot may add more).
+  // asserted as the EXACT claimable delta (== 20 ETH). These buyers hold no tickets/
+  // jackpot position, so the full delta is the refund; asserting equality (not gte)
+  // makes a removed-clamp over-refund (24/25 ETH) FAIL.
   describe("deity pass refund at level 0", function () {
     it("deity pass holders get the capped 20 ETH refund (min(pricePaid, 20 ETH)) when gameOver at level 0", async function () {
       const { game, deployer, alice, mockVRF } = await loadFixture(
         deployFullProtocol
       );
 
+      // Pass 0 (k=0): totalPrice = DEITY_PASS_BASE (24 ETH); recorded pricePaid = 24 ETH > the
+      // 20 ETH cap, so min(pricePaid, 20 ETH) binds at exactly 20 ETH.
       await game
         .connect(alice)
         .purchaseDeityPass(alice.address, 0, { value: eth(24) });
 
       expect(await game.level()).to.equal(0n);
 
+      // Alice holds ONLY a deity pass (no tickets, no jackpot bucket), so her entire
+      // claimable delta across gameOver is the deity refund — nothing else is credited.
+      const claimBefore = await game.claimableWinningsOf(alice.address);
+
       await advanceTime(SECONDS_912_DAYS + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
       expect(await game.gameOver()).to.equal(true);
 
-      const claimable = await game.claimableWinningsOf(alice.address);
-      // At least 20 ETH deity refund; terminal jackpot may add more
-      expect(claimable).to.be.gte(eth(20));
+      const claimAfter = await game.claimableWinningsOf(alice.address);
+      // EXACT cap, not gte: a removed min(pricePaid, 20 ETH) clamp would refund the full
+      // 24 ETH pricePaid and this strict equality would FAIL (the regression the oracle must catch).
+      expect(claimAfter - claimBefore).to.equal(eth(20));
     });
 
     it("multiple deity pass holders all get refunds at level 0", async function () {
@@ -265,6 +274,8 @@ describe("GameOver", function () {
         deployFullProtocol
       );
 
+      // Pass 0 (k=0): totalPrice = 24 ETH; pass 1 (k=1): totalPrice = 24 + (1*2/2) = 25 ETH.
+      // Both recorded pricePaid values exceed the 20 ETH cap, so each refund is exactly 20 ETH.
       const price1 = eth(24);
       await game
         .connect(alice)
@@ -275,14 +286,20 @@ describe("GameOver", function () {
         .connect(bob)
         .purchaseDeityPass(bob.address, 1, { value: price2 });
 
+      // Both hold ONLY deity passes (no tickets/jackpot position), so the full claimable
+      // delta across gameOver is the capped refund.
+      const aliceBefore = await game.claimableWinningsOf(alice.address);
+      const bobBefore = await game.claimableWinningsOf(bob.address);
+
       await advanceTime(SECONDS_912_DAYS + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
 
-      const aliceClaimable = await game.claimableWinningsOf(alice.address);
-      const bobClaimable = await game.claimableWinningsOf(bob.address);
-      // At least 20 ETH deity refund each; terminal jackpot may add more
-      expect(aliceClaimable).to.be.gte(eth(20));
-      expect(bobClaimable).to.be.gte(eth(20));
+      const aliceAfter = await game.claimableWinningsOf(alice.address);
+      const bobAfter = await game.claimableWinningsOf(bob.address);
+      // EXACT cap, not gte: a removed min(pricePaid, 20 ETH) clamp would refund 24 / 25 ETH
+      // (the full pricePaid) and these strict equalities would FAIL.
+      expect(aliceAfter - aliceBefore).to.equal(eth(20));
+      expect(bobAfter - bobBefore).to.equal(eth(20));
     });
   });
 

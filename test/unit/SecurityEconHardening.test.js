@@ -237,11 +237,13 @@ describe("SecurityEconHardening", function () {
       const aliceClaimAfter = await game.claimableWinningsOf(alice.address);
       const bobClaimAfter = await game.claimableWinningsOf(bob.address);
 
-      // Each buyer paid > 20 ETH (24/25 ETH), so min(deityPassPricePaid, 20e18)
-      // caps the deity refund at exactly 20 ETH; terminal jackpot may add more
-      // since deity pass holders also hold tickets -> assert the >= 20 ETH floor.
-      expect(aliceClaimAfter - aliceClaimBefore).to.be.gte(eth(20));
-      expect(bobClaimAfter - bobClaimBefore).to.be.gte(eth(20));
+      // Pass 0 (k=0): recorded pricePaid = 24 ETH; pass 1 (k=1): pricePaid = 25 ETH. Both
+      // exceed the 20 ETH cap, so min(deityPassPricePaid, 20e18) binds at exactly 20 ETH each.
+      // These buyers hold ONLY a deity pass (no tickets/jackpot position), so the entire
+      // claimable delta is the refund -> assert the EXACT cap, not a one-sided floor: a removed
+      // min(pricePaid, 20e18) clamp would credit the full 24/25 ETH and FAIL this equality.
+      expect(aliceClaimAfter - aliceClaimBefore).to.equal(eth(20));
+      expect(bobClaimAfter - bobClaimBefore).to.equal(eth(20));
     });
   });
 

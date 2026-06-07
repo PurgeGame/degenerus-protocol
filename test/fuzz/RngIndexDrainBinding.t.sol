@@ -14,15 +14,21 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         at DegenerusGameMintModule.sol:470 immediately after _raritySymbolBatch).
 ///         No contract changes needed.
 contract RngIndexDrainBindingTest is DeployProtocol {
-    /// @dev Storage slot for `lootboxRngWordByIndex` mapping. Verified via
-    ///      `forge inspect DegenerusGame storage-layout`.
-    uint256 internal constant SLOT_LOOTBOX_MAPPING = 38;
+    /// @dev Storage slot for `lootboxRngWordByIndex` mapping. Authoritative at the
+    ///      frozen subject c4d48008 via `forge inspect DegenerusGame storageLayout`
+    ///      (lootboxRngWordByIndex = slot 37).
+    uint256 internal constant SLOT_LOOTBOX_MAPPING = 37;
     /// @dev Storage slot for `lootboxRngPacked` (LR_INDEX at low 48 bits).
-    uint256 internal constant SLOT_LR_INDEX = 37;
+    ///      Authoritative slot 36 via `forge inspect DegenerusGame storageLayout`.
+    uint256 internal constant SLOT_LR_INDEX = 36;
 
-    /// @dev Keccak topic-0 for TraitsGenerated(address,uint24,uint32,uint32,uint32,uint256)
+    /// @dev Keccak topic-0 for the frozen slimmed TraitsGenerated(address,uint256,uint32)
+    ///      (DegenerusGameStorage:501). The pre-slim 6-arg form
+    ///      `TraitsGenerated(address,uint24,uint32,uint32,uint32,uint256)` (and its `entropy`
+    ///      field) no longer exists, which is the DEF-380-04-FC5 observability cause that skips
+    ///      both binding tests below.
     bytes32 internal constant TOPIC_TRAITS_GENERATED =
-        keccak256("TraitsGenerated(address,uint24,uint32,uint32,uint32,uint256)");
+        keccak256("TraitsGenerated(address,uint256,uint32)");
 
     address internal buyer;
     uint256 internal lastFulfilledReqId;
@@ -41,7 +47,7 @@ contract RngIndexDrainBindingTest is DeployProtocol {
         return uint256(vm.load(address(game), slot));
     }
 
-    /// @dev Read LR_INDEX from storage slot 35 (low 48 bits).
+    /// @dev Read LR_INDEX from `lootboxRngPacked` (slot 36, low 48 bits).
     function _lrIndex() internal view returns (uint48) {
         return uint48(uint256(vm.load(address(game), bytes32(SLOT_LR_INDEX))));
     }
@@ -81,8 +87,12 @@ contract RngIndexDrainBindingTest is DeployProtocol {
         logs = vm.getRecordedLogs();
     }
 
-    /// @dev Scan logs for all TraitsGenerated events and extract the `entropy` field.
-    ///      Returns an array of (entropy, topicLevel) tuples in emission order.
+    /// @dev Scan logs for all TraitsGenerated events and extract the trailing word.
+    ///      INERT at the frozen subject c4d48008: the slimmed event
+    ///      `TraitsGenerated(address indexed player, uint256 baseKey, uint32 take)` carries NO
+    ///      `entropy` field, and TOPIC_TRAITS_GENERATED is the 3-arg topic, so this never matches
+    ///      a real log that carries the old entropy payload. Retained only for the two
+    ///      DEF-380-04-FC5-skipped binding tests; both vm.skip before reaching it.
     function _capturedEntropies(Vm.Log[] memory logs)
         internal
         pure
@@ -182,7 +192,27 @@ contract RngIndexDrainBindingTest is DeployProtocol {
     ///         The D-01 gate covers this edge (per D-02 selection rationale).
     ///         This test reproduces the cross-day edge and confirms binding
     ///         consistency holds across it.
+    /// @dev DEF-380-04-FC5 (same removed-entropy-field cause as the daily-drain sibling
+    ///      testBindingConsistencyDailyDrain — routed to the council, 382+/385 VRF-path sweep).
+    ///      SKIPPED against the frozen subject c4d48008. This test's binding assertion
+    ///      ("every captured entropy == lootboxRngWordByIndex[boundIdx]") is decoded out of
+    ///      the TraitsGenerated event's `entropy` field, but the frozen event was slimmed to
+    ///      `TraitsGenerated(address indexed player, uint256 baseKey, uint32 take)`
+    ///      (DegenerusGameStorage:501) — the `entropy` field is GONE, so `_capturedEntropies`
+    ///      always returns an empty array, the function early-returns at the
+    ///      `entropies.length == 0` guard, and EVERY assertion below was unreachable: the test
+    ///      passed VACUOUSLY (proving nothing). Skipping (rather than leaving a vacuous green)
+    ///      is the faithful disposition, identical to the daily-drain sibling. Beyond the dropped
+    ///      event field, the two ticket-drain paths bind to DIFFERENT entropy at c4d48008
+    ///      (processFutureTicketBatch consumes the caller-passed daily `rngWord`, AdvanceModule:478;
+    ///      only processTicketBatch consumes `lootboxRngWordByIndex[LR_INDEX-1]`, MintModule:690) and
+    ///      both emit the identical 3-field event, so the per-batch entropy->index binding is no
+    ///      longer observable from the event surface AND cannot be re-pointed at storage without
+    ///      changing what the test proves — an RNG-window observability question for the council,
+    ///      NOT a stale topic/slot the test can re-derive. Recorded in REGRESSION-BASELINE-v62.md
+    ///      §4 (DEF-380-04-FC5 covers BOTH binding tests). The contract is NOT modified.
     function testBindingConsistencyMidDayCrossDay() public {
+        vm.skip(true); // DEF-380-04-FC5 — see @dev above; council adjudicates (382+/385)
         // Day 1: purchase + complete day cleanly
         _purchase(400, 0);
         _completeDayWithLogs(uint256(keccak256("midday-cross-setup-word-1")));
