@@ -49,8 +49,8 @@
 
 ### SEC — hard security floor (378)
 
-- [ ] **SEC-01** (TST): RNG-freeze intact across all changes — no new player-manipulable VRF-derived read/write: AFPAY/PACK are ledger-only, CURSE/SMITE touch only the activity-score / curse-counter slots, none read `rngWord`. Proven empirically (determinism) + carried to the adversarial close (379).
-- [ ] **SEC-02** (TST): SOLVENCY-01 re-attested — `claimablePool == Σ(claimableWinnings + afkingFunding)` holds across the AFPAY waterfall + the PACK repack + curse/smite (off the ETH path); `claimablePool` never exceeds `bal + stETH` after an afking-funded buy, a packed-balance credit/debit, a stale cashout, and a smite. Proven empirically (solvency-invariant) + carried adversarial.
+- [x] **SEC-01** (TST): RNG-freeze intact across all changes — no new player-manipulable VRF-derived read/write: AFPAY/PACK are ledger-only, CURSE/SMITE touch only the activity-score / curse-counter slots, none read `rngWord`. Proven empirically (determinism) + carried to the adversarial close (379).
+- [x] **SEC-02** (TST): SOLVENCY-01 re-attested — `claimablePool == Σ(claimableWinnings + afkingFunding)` holds across the AFPAY waterfall + the PACK repack + curse/smite (off the ETH path); `claimablePool` never exceeds `bal + stETH` after an afking-funded buy, a packed-balance credit/debit, a stale cashout, and a smite. Proven empirically (solvency-invariant) + carried adversarial.
 
 ### TST — proving regression tests (378)
 
@@ -104,8 +104,8 @@
 | CURSE-06 | 376 | IMPL | Pending |
 | CURSE-07 | 376 | IMPL | Pending |
 | SMITE-01 | 376 | IMPL | Pending |
-| SEC-01 | 378 | TST | Pending |
-| SEC-02 | 378 | TST | Pending |
+| SEC-01 | 378 | TST | Complete |
+| SEC-02 | 378 | TST | Complete |
 | TST-01 | 378 | TST | Complete |
 | TST-02 | 378 | TST | Complete |
 | TST-03 | 378 | TST | Complete |
