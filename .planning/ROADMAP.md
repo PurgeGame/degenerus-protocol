@@ -121,7 +121,31 @@ Plans:
   3. SOLVENCY-01 re-attested (`claimablePool == Σ`, never exceeds `bal + stETH`).
   4. Suite NON-WIDENING by name vs `2bee6d6f`.
 
-**Plans**: TBD
+**Plans**: 6 plans (6 sequential waves — one plan per wave; all share one Foundry build env so no parallelism; all `autonomous: true`, test-side only, ZERO contract edits)
+Plans:
+**Wave 1**
+
+- [ ] 378-01-PLAN.md — Foundation: storage-layout recalibration key (forge inspect, confirm the PACK −1 post-balances shift) + StorageFoundation/redemption Game-resident slot fixes + capture the frozen-baseline `2bee6d6f` red set BY NAME (TST-06)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 378-02-PLAN.md — Gas-harness slot recalibration (the 6 slot-hardcoded harnesses) + STAGE_2 subscriber all-evict live re-measure on v61 (TST-06)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 378-03-PLAN.md — Behavior-update triage (a/b/c) across the remaining ~32 failing files; recalibrate residual slot-stale, update v61-behavior expectations, document class-(c) candidate findings (TST-06)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 378-04-PLAN.md — Proving tests TST-01 (AFPAY waterfall) + TST-02 (PACK) + TST-03 (CURSE SET)
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 378-05-PLAN.md — Proving tests TST-04 (CURE+bounty+decurse) + TST-05 (SMITE) + TST-06 (final NON-WIDENING by-name comparison vs the 378-01 baseline)
+
+**Wave 6** *(blocked on Wave 5)*
+
+- [ ] 378-06-PLAN.md — SEC-01 (RNG-freeze empirical determinism) + SEC-02 (SOLVENCY-01 invariant across the afking spend paths)
 **UI hint**: no
 
 ### Phase 379: TERMINAL — Delta Audit + 3-Skill Adversarial Sweep + FINDINGS-v61.0 + Closure Flip
@@ -148,7 +172,7 @@ Plans:
 | 375. SPEC — Design-Lock + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map | v61.0 | 2/2 | Complete    | 2026-06-06 |
 | 376. IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE) | v61.0 | 0/3 | Planned     | 2026-06-06 |
 | 377. GAS — Gas-Neutrality Gate (curse APPLY zero-SLOAD · packing no cold slot) | v61.0 | 0/TBD | Not started | - |
-| 378. TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | v61.0 | 0/TBD | Not started | - |
+| 378. TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | v61.0 | 0/6 | Planned     | 2026-06-07 |
 | 379. TERMINAL — Delta Audit + 3-Skill Sweep + FINDINGS-v61.0 + Closure Flip | v61.0 | 0/TBD | Not started | - |
 
 > **🔒 v61.0 CONTRACT-BOUNDARY HARD STOP (ONE gate — 376 IMPL · 377 GAS rides the same boundary if it produces a net diff).** Phase 376 IMPL is THE contract phase — the batched diff (AFPAY + PACK + CURSE + SMITE, producer-before-consumer: CURSE infra before SMITE, PACK accessor before repack) is applied to `contracts/` and locally compiled (`forge build` clean) but HELD at the contract-commit boundary, NEVER committed without explicit user hand-review. `ContractAddresses.sol` freely modifiable; tests + planning + docs AGENT-committable.
