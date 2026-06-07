@@ -57,8 +57,9 @@ contract RedemptionStethFallback is DeployProtocol {
     //                          CONSTANTS / SLOTS
     // =====================================================================
 
-    /// @dev DegenerusGame.claimableWinnings (internal mapping) at slot 7 per the v44 layout the
-    ///      redemption harness seeds at (RedemptionGas / StakedStonkRedemption precedent).
+    /// @dev DegenerusGame.balancesPacked (internal mapping) at slot 7 (v61 PACK fold). The
+    ///      low 128 bits = claimable (the old claimableWinnings semantics, _claimableOf); the
+    ///      high 128 bits = afking funding (_afkingOf). A claimable seed writes the LOW half only.
     uint256 internal constant GAME_CLAIMABLE_SLOT = 7;
 
     /// @dev DegenerusGame.claimablePool lives in the upper 128 bits of slot 1 (RedemptionGas /
@@ -125,10 +126,13 @@ contract RedemptionStethFallback is DeployProtocol {
     //                       SEEDING / READER HELPERS
     // =====================================================================
 
-    /// @dev Seed the game's claimableWinnings[SDGNRS] (slot 7) ETH credit.
+    /// @dev Seed the game's claimable[SDGNRS] (low 128 bits of balancesPacked[SDGNRS], slot 7).
+    ///      Preserves the afking high half so a claimable-only seed cannot corrupt _afkingOf.
     function _setGameClaimableSdgnrs(uint256 amount) internal {
         bytes32 slot = keccak256(abi.encode(address(sdgnrs), GAME_CLAIMABLE_SLOT));
-        vm.store(address(game), slot, bytes32(amount));
+        uint256 word = uint256(vm.load(address(game), slot));
+        word = (word & (type(uint256).max << 128)) | uint128(amount);
+        vm.store(address(game), slot, bytes32(word));
     }
 
     /// @dev Seed the game's claimablePool (upper 128 bits of slot 1).
@@ -138,10 +142,11 @@ contract RedemptionStethFallback is DeployProtocol {
         vm.store(address(game), bytes32(uint256(GAME_SLOT1)), bytes32(slot1Val));
     }
 
-    /// @dev Read raw claimableWinnings[SDGNRS] (so a hypothetical wrap/underflow is observable).
+    /// @dev Read claimable[SDGNRS] = low 128 bits of balancesPacked[SDGNRS] (so a hypothetical
+    ///      wrap/underflow of the claimable half is observable; the afking high half is masked off).
     function _claimableSdgnrs() internal view returns (uint256) {
         bytes32 slot = keccak256(abi.encode(address(sdgnrs), GAME_CLAIMABLE_SLOT));
-        return uint256(vm.load(address(game), slot));
+        return uint128(uint256(vm.load(address(game), slot)));
     }
 
     /// @dev Resolve a day's pool by pranking the game (bypass the full advance + VRF cycle for a

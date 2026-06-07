@@ -53,12 +53,15 @@ contract RedemptionGasTest is DeployProtocol {
         vm.prank(address(game));
         sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, player, PLAYER_SDGNRS);
 
-        // Fund the Game with ETH and credit sDGNRS via claimableWinnings
-        // (during active game, all sDGNRS ETH backing is in claimableWinnings on the Game)
+        // Fund the Game with ETH and credit sDGNRS's claimable balance.
+        // (during active game, all sDGNRS ETH backing is in claimable on the Game)
         vm.deal(address(game), 100 ether);
-        // claimableWinnings mapping is at slot 7; compute slot for sDGNRS's entry
+        // balancesPacked mapping is at slot 7 (v61 PACK fold); claimable is the LOW 128 bits.
+        // Write only the low half so the afking high half (_afkingOf) is preserved.
         bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
-        vm.store(address(game), claimableSlot, bytes32(uint256(100 ether)));
+        uint256 packedVal = uint256(vm.load(address(game), claimableSlot));
+        packedVal = (packedVal & (type(uint256).max << 128)) | uint128(uint256(100 ether));
+        vm.store(address(game), claimableSlot, bytes32(packedVal));
         // claimablePool is uint128 at slot 1, offset 16 (upper 128 bits)
         uint256 slot1Val = uint256(vm.load(address(game), bytes32(uint256(1))));
         slot1Val = (slot1Val & type(uint128).max) | (uint256(100 ether) << 128);

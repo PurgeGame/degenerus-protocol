@@ -104,12 +104,15 @@ contract StakedStonkRedemption is DeployProtocol {
         // (RedemptionGas.t.sol setUp precedent).
         vm.warp(block.timestamp + 1 days);
 
-        // Fund game with 100 ETH backing + credit it to sDGNRS's claimableWinnings entry so
-        // proportional payout math has nonzero totalMoney. Slot 7 = claimableWinnings mapping;
-        // slot 1 upper 128 bits = claimablePool. Both writes mirror RedemptionGas.t.sol :32-38.
+        // Fund game with 100 ETH backing + credit sDGNRS's claimable balance so proportional
+        // payout math has nonzero totalMoney. Slot 7 = balancesPacked mapping (v61 PACK fold),
+        // claimable in the LOW 128 bits; slot 1 upper 128 bits = claimablePool. Both writes
+        // mirror RedemptionGas.t.sol. The low-half write preserves the afking high half.
         vm.deal(address(game), 100 ether);
         bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
-        vm.store(address(game), claimableSlot, bytes32(uint256(100 ether)));
+        uint256 packedVal = uint256(vm.load(address(game), claimableSlot));
+        packedVal = (packedVal & (type(uint256).max << 128)) | uint128(uint256(100 ether));
+        vm.store(address(game), claimableSlot, bytes32(packedVal));
         uint256 slot1Val = uint256(vm.load(address(game), bytes32(uint256(1))));
         slot1Val = (slot1Val & type(uint128).max) | (uint256(100 ether) << 128);
         vm.store(address(game), bytes32(uint256(1)), bytes32(slot1Val));
@@ -738,12 +741,13 @@ contract StakedStonkRedemption is DeployProtocol {
     // worktree checkout of this same contract) makes the second call wrap and the assertion FAIL.
     // The 323-03 SUMMARY records the captured pre-fix failure output.
 
-    /// @dev Read claimableWinnings[SDGNRS] (internal mapping @ slot 7) via vm.load. Same slot the
-    ///      setUp seeds. Reading the raw word lets the post-fix invariant assert it never wrapped
-    ///      toward 2^256.
+    /// @dev Read claimable[SDGNRS] = low 128 bits of balancesPacked[SDGNRS] (slot 7, v61 PACK
+    ///      fold) via vm.load. Same slot the setUp seeds. Masking to the low half lets the
+    ///      post-fix invariant assert the claimable half never wrapped toward 2^128 independent
+    ///      of the afking high half.
     function _claimableSdgnrs() internal view returns (uint256) {
         bytes32 slot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
-        return uint256(vm.load(address(game), slot));
+        return uint128(uint256(vm.load(address(game), slot)));
     }
 
     /// @dev Drive the exact pre-fix wrap site: call resolveRedemptionLootbox twice as SDGNRS. The
@@ -765,8 +769,11 @@ contract StakedStonkRedemption is DeployProtocol {
         // sDGNRS's own claimable slice is small (so the pre-fix UNCHECKED `claimableWinnings[SDGNRS]
         // -= amount` wraps on the second claimant). Decoupling the two is what exposes the wrap —
         // a single shared value would revert on claimablePool before claimableWinnings could wrap.
+        // slot 7 = balancesPacked (v61); seed the claimable LOW half, preserve the afking high half.
         bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
-        vm.store(address(game), claimableSlot, bytes32(seedClaimable));
+        uint256 packed = uint256(vm.load(address(game), claimableSlot));
+        packed = (packed & (type(uint256).max << 128)) | uint128(seedClaimable);
+        vm.store(address(game), claimableSlot, bytes32(packed));
         uint256 globalPool = 1000 ether; // global claimablePool has ample headroom (other players)
         uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(1))));
         slot1 = (slot1 & type(uint128).max) | (uint256(uint128(globalPool)) << 128);
@@ -853,9 +860,12 @@ contract StakedStonkRedemption is DeployProtocol {
     ///      is large enough to cover both, so both submits succeed and claimable never wraps.
     function testReproTwoClaimantFullFlowNoUnderflow() public {
         // Seed a generous claimable so both submits' MAX(175%) pulls succeed.
+        // slot 7 = balancesPacked (v61); seed the claimable LOW half, preserve the afking high half.
         uint256 seedClaimable = 100 ether;
         bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
-        vm.store(address(game), claimableSlot, bytes32(seedClaimable));
+        uint256 packed = uint256(vm.load(address(game), claimableSlot));
+        packed = (packed & (type(uint256).max << 128)) | uint128(seedClaimable);
+        vm.store(address(game), claimableSlot, bytes32(packed));
         uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(1))));
         slot1 = (slot1 & type(uint128).max) | (uint256(uint128(seedClaimable)) << 128);
         vm.store(address(game), bytes32(uint256(1)), bytes32(slot1));
@@ -923,10 +933,13 @@ contract StakedStonkRedemption is DeployProtocol {
         uint256 burnAmount = 1000 ether;
 
         // Drive totalMoney up via sDGNRS's own ETH balance (so ethValueOwed > 0 → maxIncrement > 0),
-        // but STARVE claimableWinnings[SDGNRS] (the segregation source the CHECKED pull draws from).
+        // but STARVE claimable[SDGNRS] (the segregation source the CHECKED pull draws from).
+        // slot 7 = balancesPacked (v61); starve the claimable LOW half, preserve the afking high half.
         vm.deal(address(sdgnrs), 100 ether);
         bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
-        vm.store(address(game), claimableSlot, bytes32(uint256(1)));
+        uint256 packed = uint256(vm.load(address(game), claimableSlot));
+        packed = (packed & (type(uint256).max << 128)) | uint128(uint256(1));
+        vm.store(address(game), claimableSlot, bytes32(packed));
         uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(1))));
         slot1 = (slot1 & type(uint128).max) | (uint256(1) << 128);
         vm.store(address(game), bytes32(uint256(1)), bytes32(slot1));
@@ -945,7 +958,10 @@ contract StakedStonkRedemption is DeployProtocol {
         assertLt(_claimableSdgnrs(), uint256(type(uint96).max), "drain: claimable wrapped on shortfall");
 
         // Recover claimable (the AfKing drain reverses / the pool refills) → the burn now succeeds.
-        vm.store(address(game), claimableSlot, bytes32(uint256(100 ether)));
+        // Refill the claimable LOW half of balancesPacked, preserving the afking high half.
+        packed = uint256(vm.load(address(game), claimableSlot));
+        packed = (packed & (type(uint256).max << 128)) | uint128(uint256(100 ether));
+        vm.store(address(game), claimableSlot, bytes32(packed));
         slot1 = uint256(vm.load(address(game), bytes32(uint256(1))));
         slot1 = (slot1 & type(uint128).max) | (uint256(100 ether) << 128);
         vm.store(address(game), bytes32(uint256(1)), bytes32(slot1));
@@ -964,11 +980,14 @@ contract StakedStonkRedemption is DeployProtocol {
     //   REDEEM-08: BURNIE-can't-block-ETH + R1/R3/R4 refinement coverage
     // =====================================================================
 
-    /// @dev Seed a generous claimableWinnings[SDGNRS] + claimablePool + game ETH so submit-time
+    /// @dev Seed a generous claimable[SDGNRS] + claimablePool + game ETH so submit-time
     ///      MAX(175%) segregation pulls succeed. Reused by the Task-2 full-flow tests.
+    ///      slot 7 = balancesPacked (v61); seed the claimable LOW half, preserve the afking high half.
     function _seedRedemptionBacking(uint256 amount) internal {
         bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
-        vm.store(address(game), claimableSlot, bytes32(amount));
+        uint256 packed = uint256(vm.load(address(game), claimableSlot));
+        packed = (packed & (type(uint256).max << 128)) | uint128(amount);
+        vm.store(address(game), claimableSlot, bytes32(packed));
         uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(1))));
         slot1 = (slot1 & type(uint128).max) | (uint256(uint128(amount)) << 128);
         vm.store(address(game), bytes32(uint256(1)), bytes32(slot1));

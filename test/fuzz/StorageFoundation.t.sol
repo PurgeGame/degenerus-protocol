@@ -90,25 +90,27 @@ contract StorageFoundationTest is Test {
     // STOR-01: Field Placement Tests
     // =====================================================================
 
-    /// @dev Verify ticketWriteSlot at Slot 0, offset 28; prizePoolFrozen at offset 29.
-    ///      ticketsFullyProcessed at Slot 0 offset 26; gameOverPossible at Slot 0 offset 27.
+    /// @dev Verify ticketWriteSlot at Slot 0, offset 26; prizePoolFrozen at offset 27.
+    ///      ticketsFullyProcessed at Slot 0 offset 24; gameOverPossible at Slot 0 offset 25.
+    ///      presaleOver (offset 28) and subsFullyProcessed (offset 29) occupy the two high
+    ///      bytes of slot 0 above these flags.
     function testSlot0FieldOffsets() public {
-        // ticketWriteSlot at slot 0 offset 28 (bit 224)
+        // ticketWriteSlot at slot 0 offset 26 (bit 208)
         harness.setTicketWriteSlot(true);
         bytes32 slot0 = vm.load(address(harness), bytes32(uint256(0)));
-        assertEq(uint8(uint256(slot0) >> 224), 1, "ticketWriteSlot not at slot 0 offset 28");
+        assertEq(uint8(uint256(slot0) >> 208), 1, "ticketWriteSlot not at slot 0 offset 26");
 
-        // prizePoolFrozen at slot 0 offset 29 (bit 232)
+        // prizePoolFrozen at slot 0 offset 27 (bit 216)
         harness.setTicketWriteSlot(false);
         harness.setPrizePoolFrozen(true);
         slot0 = vm.load(address(harness), bytes32(uint256(0)));
-        assertEq(uint8(uint256(slot0) >> 232), 1, "prizePoolFrozen not at slot 0 offset 29");
+        assertEq(uint8(uint256(slot0) >> 216), 1, "prizePoolFrozen not at slot 0 offset 27");
 
-        // ticketsFullyProcessed at slot 0 offset 26 (bit 208)
+        // ticketsFullyProcessed at slot 0 offset 24 (bit 192)
         harness.setPrizePoolFrozen(false);
         harness.setTicketsFullyProcessed(true);
         slot0 = vm.load(address(harness), bytes32(uint256(0)));
-        assertEq(uint8(uint256(slot0) >> 208), 1, "ticketsFullyProcessed not at slot 0 offset 26");
+        assertEq(uint8(uint256(slot0) >> 192), 1, "ticketsFullyProcessed not at slot 0 offset 24");
     }
 
     /// @dev Verify prizePoolsPacked at Slot 2 and prizePoolPendingPacked at Slot 11.
