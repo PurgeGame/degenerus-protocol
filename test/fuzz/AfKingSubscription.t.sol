@@ -68,7 +68,7 @@ contract AfKingSubscription is DeployProtocol {
         keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
 
     /// @dev Game-resident module event signatures (emitter == address(game) via delegatecall).
-    bytes32 private constant EXTENDED_FREE_SIG = keccak256("SubscriptionExtendedFree(address,uint32)");
+    bytes32 private constant EXTENDED_FREE_SIG = keccak256("SubscriptionExtendedFree(address,uint24)");
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
