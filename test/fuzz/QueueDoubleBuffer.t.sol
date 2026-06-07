@@ -90,6 +90,10 @@ contract QueueDoubleBufferTest is Test {
     uint24 constant TICKET_SLOT_BIT = 1 << 23;
 
     function setUp() public {
+        // Warp past JACKPOT_RESET_TIME (82620s) so GameTimeLib.currentDayIndexAt(block.timestamp)
+        // does not underflow when a queue write reaches _livenessTriggered -> _simulatedDayIndex.
+        // Foundry's default block.timestamp is 1; ts - JACKPOT_RESET_TIME would revert Panic(0x11).
+        vm.warp(block.timestamp + 1 days);
         harness = new QueueHarness();
     }
 
@@ -234,6 +238,10 @@ contract MidDaySwapTest is Test {
     uint24 constant TICKET_SLOT_BIT = 1 << 23;
 
     function setUp() public {
+        // Warp past JACKPOT_RESET_TIME (82620s) so GameTimeLib.currentDayIndexAt(block.timestamp)
+        // does not underflow when a queue write reaches _livenessTriggered -> _simulatedDayIndex.
+        // Foundry's default block.timestamp is 1; ts - JACKPOT_RESET_TIME would revert Panic(0x11).
+        vm.warp(block.timestamp + 1 days);
         harness = new QueueHarness();
     }
 
