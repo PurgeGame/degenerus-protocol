@@ -32,12 +32,12 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 
 ## Current Position
 
-Phase: 376 (impl-the-one-batched-contract-diff-afpay-pack-curse-smite) — ⏸ HELD at the contract-commit boundary (blocking-human gate, 376-03 Task 2)
-Plan: 3 of 3 (all work done; awaiting USER hand-review of the batched `contracts/*.sol` diff)
-Status: ALL 17 reqs applied + EIP-170 RESOLVED (DegenerusGame 24,342 B / MintModule 24,356 B, both < 24,576) + full `forge build` (contracts + tests) exits 0. Diff HELD, NOT committed. Gate evidence in `376-03-SUMMARY.md`.
-Next up: USER hand-reviews the batched `contracts/*.sol` diff → approves (their gated commit: `mv .git/hooks/pre-commit .git/hooks/pre-commit.bak` → commit → restore) or requests changes → then 377 GAS → 378 TST (TST-01..06 + SEC-01/02) → 379 TERMINAL (FULL in-milestone close).
-EIP-170 reclaim (this session): de-view read getters (USER-selected) → `decClaimable` de-dup to DecimatorModule + `previewSellFarFutureTickets` → MintModule (drops the far-future quote helpers from the Game). Two hero-getter moves applied-then-reverted as unnecessary churn. Details: `376-03-SUMMARY.md` + `376-EXEC-HANDOFF.md`.
-Last activity: 2026-06-06 -- Phase 376 IMPL: EIP-170 blocker resolved, full build green, contracts HELD for hand-review
+Phase: 377 (gas-neutrality-gate) — ✅ OUTCOME-A (gas-neutral; no contract tune). 376 IMPL ✅ COMMITTED `b97a7a2e` (USER-approved hand-review 2026-06-06; local, NOT pushed — 32 ahead of origin).
+Plan: 377 complete (measurement gate, owns no REQ-ID). Findings: `377-gas-neutrality-gate/377-GAS-FINDINGS.md`.
+Status: v61 does NOT regress the advanceGame DoS-ceiling chain. advanceGame/jackpot/decimator/boon/bingo modules byte-UNCHANGED; PACK accessor impls 1-slot-neutral; curse APPLY zero-new-SLOAD. Measured v61 worst-case (clean harnesses): jackpot 305-winner 7.28M, ticket batch warm 9.74M; binding STAGE_2 subscriber all-evict 13.60M (referenced + structurally neutral, 3.17M headroom < 16.7M). AFPAY/curse-SET/decurse/smite are OFF the advanceGame chain (user txs) — accepted feature costs.
+Next up: 378 TST — recalibrate the 6 slot-hardcoded gas/keeper harnesses (V56AfkingGasMarginal + sweep/router/keeper) + the vm.load redemption tests for the v61 storage-slot shift (PACK fold removed afkingFunding → slots shifted); re-measure STAGE_2 live; prove SEC-01/02 (RNG-freeze + SOLVENCY-01) + TST-01..06. Then 379 TERMINAL (FULL close + FINDINGS-v61.0).
+376 EIP-170 reclaim: de-view read getters (USER-selected) → `decClaimable` de-dup to DecimatorModule + `previewSellFarFutureTickets` → MintModule. Details: `376-03-SUMMARY.md`.
+Last activity: 2026-06-06 -- 376 committed b97a7a2e; 377 GAS = Outcome-A (gas-neutral, no tune)
 
 ## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
 
