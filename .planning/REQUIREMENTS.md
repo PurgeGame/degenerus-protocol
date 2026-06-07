@@ -54,9 +54,9 @@
 
 ### TST — proving regression tests (378)
 
-- [ ] **TST-01** (TST): AFPAY waterfall — DirectEth taps afking but skips claimable; Claimable/Combined draw claimable→sentinel then afking→0; the afking portion gets fresh-rate affiliate + lootbox activity score + presale credit with NO rebuy bonus; `AfkingSpent` emitted; reverts when both claimable + afking are short; NO double-draw with the afking auto-buy path (`_deliverAfkingBuy`/`_queueTicketsScaled` never reach `_processMintPayment`).
-- [ ] **TST-02** (TST): PACK — packed `[afking|claimable]` round-trips at every credit/debit/read site via the accessors; `claimablePool == Σ` holds; gameOver claimable-zeroing preserves the VAULT/SDGNRS/GNRUS afking halves; no 127→128 cross-half carry; behavior-identical to the two-mapping baseline.
-- [ ] **TST-03** (TST): CURSE SET — +2 only on a stale (≥5d) cashout, never for infra / gameOver / deity / whale / active-afker; penalty `curse*100` bps floored 0 visible across all consumers + the public view + frozen snapshots; stacking N → `min(2N, cap)`; same-day second claim reverts (sentinel) so no in-day stacking; saturates at the cap, never wraps the uint8.
+- [x] **TST-01** (TST): AFPAY waterfall — DirectEth taps afking but skips claimable; Claimable/Combined draw claimable→sentinel then afking→0; the afking portion gets fresh-rate affiliate + lootbox activity score + presale credit with NO rebuy bonus; `AfkingSpent` emitted; reverts when both claimable + afking are short; NO double-draw with the afking auto-buy path (`_deliverAfkingBuy`/`_queueTicketsScaled` never reach `_processMintPayment`).
+- [x] **TST-02** (TST): PACK — packed `[afking|claimable]` round-trips at every credit/debit/read site via the accessors; `claimablePool == Σ` holds; gameOver claimable-zeroing preserves the VAULT/SDGNRS/GNRUS afking halves; no 127→128 cross-half carry; behavior-identical to the two-mapping baseline.
+- [x] **TST-03** (TST): CURSE SET — +2 only on a stale (≥5d) cashout, never for infra / gameOver / deity / whale / active-afker; penalty `curse*100` bps floored 0 visible across all consumers + the public view + frozen snapshots; stacking N → `min(2N, cap)`; same-day second claim reverts (sentinel) so no in-day stacking; saturates at the cap, never wraps the uint8.
 - [ ] **TST-04** (TST): CURE + bounty + decurse — `curseCount` resets to 0 on a ≥1-ticket buy (direct / batch / affiliate / whale bundle / lootbox ≥ ticket), fresh ETH or claimable; a sub-ticket / small-lootbox buy stamps `DAY_SHIFT` (bounty-eligible, halts growth) but does NOT cure; a manual lootbox buyer is now `_bountyEligible`; `decurse` clears for 100 BURNIE (reverts if already 0, emits `Decursed`).
 - [ ] **TST-05** (TST): SMITE — the `ownerOf` gate rejects a non-deity caller (no burn); an active-afker smitee reverts before the burn; a target ≥5 stacks reverts; a successful smite burns 200 BURNIE + adds one stack (+2 pts) saturating at the shared cap + emits `Smited`; cashout-curse and smite share one counter; a single ≥1-ticket buy (or `decurse`) clears both sources.
 - [ ] **TST-06** (TST): NON-WIDENING vs the frozen baseline `2bee6d6f` — the forge + Hardhat suite enumerated BY NAME (every pre-existing red), the v61 changes add green, the carried harness layout/RNG artifacts stay characterized (no new contract regression).
@@ -106,9 +106,9 @@
 | SMITE-01 | 376 | IMPL | Pending |
 | SEC-01 | 378 | TST | Pending |
 | SEC-02 | 378 | TST | Pending |
-| TST-01 | 378 | TST | Pending |
-| TST-02 | 378 | TST | Pending |
-| TST-03 | 378 | TST | Pending |
+| TST-01 | 378 | TST | Complete |
+| TST-02 | 378 | TST | Complete |
+| TST-03 | 378 | TST | Complete |
 | TST-04 | 378 | TST | Pending |
 | TST-05 | 378 | TST | Pending |
 | TST-06 | 378 | TST | Pending |

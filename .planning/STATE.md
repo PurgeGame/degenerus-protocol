@@ -3,24 +3,24 @@ gsd_state_version: 1.0
 milestone: v61.0
 milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
 status: executing
-last_updated: "2026-06-07T12:00:00.000Z"
-last_activity: "2026-06-07 -- Phase 378 plan 03 executed (triage ~32-file tail: slot-stale recalibrated GREEN, full suite 177->66 failed [111 red->green]; interim non-widening check PASSED [63 HEAD reds = 60 carried + 3 documented class-(c)]; zero .sol edits)"
+last_updated: "2026-06-07T09:30:15.471Z"
+last_activity: "2026-06-07 -- Phase 378 plan 04 executed (proving tests TST-01/02/03: V61AfpayWaterfall 10 + V61Pack 8 + V61CurseSet 13 = 31 tests all GREEN vs the shipped v61 impl; falsifiability spot-checked; NO CONTRACT-CHANGE-NEEDED; contracts byte-frozen fcdd999c; zero .sol edits; commits 82067d8a/df0fb002/91a6a4f1)"
 progress:
   total_phases: 10
   completed_phases: 3
   total_plans: 15
-  completed_plans: 11
-  percent: 38
+  completed_plans: 12
+  percent: 33
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP.md (v61.0 🚧 ACTIVE — phases 375-379, once roadmapped) + .planning/REQUIREMENTS.md (v61.0 reqs, once defined) + .planning/MILESTONES.md (v60.0 entry, top). v61 design inputs (design-locked): .planning/PLAN-V61-MILESTONE-SCOPE.md + PLAN-V61-AFKING-AS-PAYMENT-SOURCE.md + PLAN-CASHOUT-CURSE.md + PLAN-V61-DEITY-SMITE.md (`[[v61-milestone-seed]]`). Baseline = the v60.0 closure HEAD `2bee6d6f` (10 commits ahead of origin, NOT pushed). v60.0 archive: .planning/milestones/v60.0-ROADMAP.md + v60.0-REQUIREMENTS.md; canonical audit deliverable audit/FINDINGS-v60.0.md (chmod 444). **NEXT = /gsd-plan-phase 376 (IMPL).**
+See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP.md (v61.0 🚧 ACTIVE — phases 375-379, once roadmapped) + .planning/REQUIREMENTS.md (v61.0 reqs, once defined) + .planning/MILESTONES.md (v60.0 entry, top). v61 design inputs (design-locked): .planning/PLAN-V61-MILESTONE-SCOPE.md + PLAN-V61-AFKING-AS-PAYMENT-SOURCE.md + PLAN-CASHOUT-CURSE.md + PLAN-V61-DEITY-SMITE.md (`[[v61-milestone-seed]]`). Baseline = the v60.0 closure HEAD `2bee6d6f` (10 commits ahead of origin, NOT pushed). v60.0 archive: .planning/milestones/v60.0-ROADMAP.md + v60.0-REQUIREMENTS.md; canonical audit deliverable audit/FINDINGS-v60.0.md (chmod 444). **NEXT = /gsd-execute-phase 378 plan 378-05 (TST-04/05/06).**
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 376 — impl-the-one-batched-contract-diff-afpay-pack-curse-smite
+**Current focus:** Phase 378 TST — proving tests; 378-04 (TST-01/02/03) ✅, next 378-05 (TST-04/05/06)
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -34,12 +34,14 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 
 Phase: 378 (tst-proving-tests-rng-freeze-solvency) — ▶ IN PROGRESS. **378-01 ✅** (TST foundation: authoritative v61 layout via forge inspect + slot recalibration key + StorageFoundation/redemption recalibrated + frozen-baseline `2bee6d6f` red set BY NAME; commits `8da54ed5`/`bad1889e`/`5de3ccb8`). **378-02 ✅** (gas-harness recalibration: 6 slot-hardcoded gas harnesses -> authoritative v61 slots, the slot-stale NoPass/panic class resolved [V56AfkingGasMarginal 16/16 green; 25 passed/0 failed/12 skipped across the 6 suites]; STAGE_2 binding all-evict worst case re-measured LIVE on v61 = 13.61M / 3.09M headroom < 16.7M ceiling -> PACK 1-slot-neutral on the evict path; commits `3aadcf49`/`09870c57`; zero .sol edits). 376 ✅ `b97a7a2e` · 377 ✅ Outcome-A `056481ea` (all local, NOT pushed).
 **378-03 ✅** (triage the ~32-file behavior/non-gas tail + 1 interim-surfaced file into (a)/(b)/carried/(c): the slot-stale class recalibrated to the authoritative v61 layout brought the full suite **177->66 failed** [111 tests red->green]; the interim non-widening check PASSED — 63 HEAD red names = 60 in the 2bee6d6f by-name union [CARRIED] + 3 out-of-union DOCUMENTED class-(c) accepted-staleness candidates, `live − (union ∪ documented) == ∅`, ~111 of 172 baseline names now GREEN; NO class-(b) expectation rewrites needed [v61 behavior is proven positively by 378-04/05's TST proofs, not by mutating regression harnesses]; `InvalidBet()` preserved [the 24-InvalidBet bucket was 100% slot-stale]; deliverable `378-03-CANDIDATE-FINDINGS.md`; commits `3c04615c`/`631b5c85`/`ff4b0e9b`; zero .sol edits).
-Plan: `378-tst-proving-tests-rng-freeze-solvency/378-03-PLAN.md` (executed); next plan `378-04` (TST-01..06 proofs).
-Status: 378-03 complete; ready for 378-04.
+**378-04 ✅** (proving tests TST-01/02/03: 3 new forge files, **31 tests all GREEN** vs the shipped v61 impl — V61AfpayWaterfall.t.sol [10: the AFPAY waterfall msg.value->claimable->afking across all 3 pay-kinds + the shared `_settleShortfall` sink, AfkingSpent at exact amounts, both-short E(), DirectEth-lootbox shortfall covered by afking (AFPAY-03), no-double-draw], V61Pack.t.sol [8: balancesPacked accessor round-trip + RAW-slot half-isolation, `claimablePool == Σ` under a seeded sequence, gameOver infra-afking-half preservation, no cross-half carry, two-mapping equivalence], V61CurseSet.t.sol [13: +2 stale-cashout SET, every exemption BY CONTRAST, `curse*100`-bps penalty floored 0 on the public view + a frozen afking snapshot, min(2N,20) saturation no uint8 wrap, same-day-second-claim revert]); **NO CONTRACT-CHANGE-NEEDED** (v61 behavior matches the design-lock spec); falsifiability spot-checked per surface; contracts byte-frozen `fcdd999c`; commits `82067d8a`/`df0fb002`/`91a6a4f1`; zero .sol edits).
+Plan: `378-tst-proving-tests-rng-freeze-solvency/378-04-PLAN.md` (executed); next plan `378-05` (TST-04 CURE+bounty+decurse · TST-05 SMITE · TST-06 final NON-WIDENING).
+Status: 378-04 complete; ready for 378-05.
 Key 378-01/02/03 findings (for downstream plans): balancesPacked root UNMOVED at slot 7 (claimable pokes need only the SEMANTIC low-128 fix); slot-shift delta is region-dependent NOT uniform -1 (subs -3, lootbox/degenerette -2, mint/rng -1, slot-0 fields -2, low time-field widths narrowed: dailyIdx uint24 @ byte 3 read >>24, rngRequestTime uint48 @ byte 6 read >>48); authoritative v61 slots in `378-01-RECALIBRATION-KEY.md`; baseline ceiling 533/183/103 (172 names) in `test/REGRESSION-BASELINE-v61.md`; post-378-03 full suite **657/66/103**; the 3 documented class-(c) candidates (C-1 deferred-lootbox-open materialization, C-2 gap-backfill uint24/uint32 encoding) are accepted-staleness twins of carried siblings, NOT contract bugs; contract tree-hash `87e3b45b` / fingerprint `fcdd999c` preserved.
-Next up (FOCUSED 378 session): (4) **378-04** write TST-01..06 (positive v61-behavior proofs); (5) 378-05 the final non-widening gate; (6) 378-06 SEC-01/02. All test-side/committable, per-unit commits. Then 379 TERMINAL (FULL close + FINDINGS-v61.0).
+Next up (FOCUSED 378 session): (5) **378-05** TST-04 (CURE+bounty+decurse) + TST-05 (SMITE) + TST-06 (final NON-WIDENING by-name vs the 378-01 baseline); (6) 378-06 SEC-01/02. All test-side/committable, per-unit commits. Then 379 TERMINAL (FULL close + FINDINGS-v61.0).
+378-04 reusable findings (for 378-05/06): `_processMintPayment` is private (drive via the live public `purchase()` — sole call site recordMint:498); `SettleClaimableShortfallTester` runs the EXACT production `_settleShortfall`/accessor bodies (clean direct-accessor proving harness with setters/getters/settle/sentinelError); maybeCurse staleness basis is `_currentMintDay()` == `dailyIdx` (the monotonic advance counter == 1 at fresh deploy, NOT the wall clock) — seed `dailyIdx` via a field-isolated slot-0 RMW (bit 24, uint24) to make a `lastEthDay`-0 claimant stale; the afking lootbox sub `scorePlus1` (Sub slot offset 6, uint16) is a readable FROZEN activity-score snapshot; smite/decurse live in GameAfkingModule (game.smite/game.decurse delegatecall), `Smited(deityId,smitee)`/`Decursed(curer,target)` events, 200/100 BURNIE via burnCoin.
 377 GAS = Outcome-A (gas-neutral, no contract tune); findings `377-GAS-FINDINGS.md`. 376 EIP-170 reclaim via de-view read getters; details `376-03-SUMMARY.md`.
-Last activity: 2026-06-07 -- Phase 378 plan 02 executed (gas-harness slot recalibration: 6 harnesses -> v61 slots; STAGE_2 all-evict re-measured LIVE = 13.61M / 3.09M headroom < 16.7M)
+Last activity: 2026-06-07 -- Phase 378 plan 04 executed (proving tests TST-01/02/03: 31 tests all GREEN vs the shipped v61 impl; NO CONTRACT-CHANGE-NEEDED; contracts byte-frozen fcdd999c; commits 82067d8a/df0fb002/91a6a4f1)
 
 ## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
 
@@ -50,7 +52,7 @@ Shape: SPEC → IMPL → GAS → TST → TERMINAL. ONE batched contract diff —
 | 375 | SPEC — Design-Lock + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map | SPEC | SPEC-01 | Not started |
 | 376 | IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE) | IMPL (CONTRACT BOUNDARY) | AFPAY-01..07 · PACK-01/02 · CURSE-01..07 · SMITE-01 | Not started |
 | 377 | GAS — Gas-Neutrality Gate (curse APPLY zero-SLOAD · packing no cold slot) | GAS (CONTRACT BOUNDARY — net diff, else Outcome-A) | (none) | Not started |
-| 378 | TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | TST | SEC-01/02 · TST-01..06 | ▶ In progress (01 ✅) |
+| 378 | TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | TST | SEC-01/02 · TST-01..06 | ▶ In progress (01/02/03/04 ✅ — TST-01/02/03 proven) |
 | 379 | TERMINAL — Delta Audit + 3-Skill Sweep + FINDINGS-v61.0 + Closure Flip | TERMINAL (FULL close) | AUDIT-01 | Not started |
 
 **Coverage:** 27/27 mapped to one phase (375: 1 · 376: 17 · 377: 0 · 378: 8 · 379: 1); 0 orphaned, 0 duplicated. Per-category: AFPAY 7 · PACK 2 · CURSE 7 · SMITE 1 · SPEC 1 · SEC 2 · TST 6 · AUDIT 1. Phase 377 GAS owns NO REQ-ID (the gas-neutrality measurement gate). Full detail in `.planning/ROADMAP.md`; per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
