@@ -133,10 +133,12 @@ contract VRFStallEdgeCases is DeployProtocol {
         _resumeAfterSwap(newVRF, vrfWord);
 
         // _backfillGapDays called with vrfWord for gap days 3..7 (startDay=3, endDay=8)
-        // Verify each gap day word equals the deterministic keccak256 derivation
+        // Verify each gap day word equals the deterministic keccak256 derivation. The frozen
+        // _backfillGapDays (AdvanceModule:1843-1845) packs the gap day as uint24 (its loop counter
+        // type), so the preimage day width is 3 bytes — match it exactly with uint24(d).
         uint256[] memory words = new uint256[](5);
         for (uint32 d = 3; d <= 7; d++) {
-            uint256 expected = uint256(keccak256(abi.encodePacked(vrfWord, d)));
+            uint256 expected = uint256(keccak256(abi.encodePacked(vrfWord, uint24(d))));
             if (expected == 0) expected = 1;
             uint256 actual = game.rngWordForDay(uint24(d));
             assertEq(actual, expected, "Gap day word must match keccak256(vrfWord, day)");
@@ -194,8 +196,10 @@ contract VRFStallEdgeCases is DeployProtocol {
         uint256 resumeWord = 0xCAFE0001;
         _resumeAfterSwap(newVRF, resumeWord);
 
-        // Gap day 3 should be backfilled with keccak256(resumeWord, 3)
-        uint256 expected = uint256(keccak256(abi.encodePacked(resumeWord, uint32(3))));
+        // Gap day 3 should be backfilled with keccak256(resumeWord, uint24(3)). The frozen
+        // _backfillGapDays (AdvanceModule:1843-1845) packs the gap day as uint24 (its loop
+        // counter type), so the preimage day width is 3 bytes, not 4.
+        uint256 expected = uint256(keccak256(abi.encodePacked(resumeWord, uint24(3))));
         if (expected == 0) expected = 1;
         assertEq(game.rngWordForDay(3), expected, "Single gap day backfill matches keccak256");
 
@@ -767,9 +771,19 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Current day 6 was processed normally (not a gap day)
         assertTrue(game.rngWordForDay(6) != 0, "Current day 6 processed");
 
-        // Game advanced past the gap successfully -- dailyIdx should be 6
+        // The frozen advance processes a multi-day gap ONE day at a time: after the backfill it
+        // breaks at STAGE_GAP_BACKFILLED without unlocking (AdvanceModule:363-366), then each
+        // subsequent advance clamps `day` to dailyIdx+1 while that backfilled day's word exists
+        // (the RNGREUSE clamp, AdvanceModule:182-184) and unlocks day-by-day — never jumping
+        // dailyIdx straight to the wall-clock day in one resume (each backfilled day pays its own
+        // jackpot in its own tx to stay under the per-tx gas ceiling). So _resumeAfterSwap's
+        // unlock-on-first-day loop exits at dailyIdx == 3; drive further advances to walk it to 6.
+        for (uint256 i = 0; i < 50; i++) {
+            if (_readDailyIdx() >= 6) break;
+            game.advanceGame();
+        }
         uint48 idx = _readDailyIdx();
-        assertEq(idx, 6, "dailyIdx advanced past gap to current day");
+        assertEq(idx, 6, "dailyIdx walks day-by-day past the gap to the current day");
     }
 
     /// @notice Unit: wall-clock day advances during stall but dailyIdx does not.
