@@ -63,7 +63,7 @@
 
 ### AUDIT — terminal close (379)
 
-- [ ] **AUDIT-01** (TERMINAL): delta-audit (every changed surface across the 17 contract reqs NON-WIDENING vs `2bee6d6f` with grep/diff anchors, zero orphan hunks; RNG-freeze + the SOLVENCY-01 identity re-attested with anchors) + the mandatory 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/economic-analyst` + `/zero-day-hunter`; `/degen-skeptic` = the dual-gate filter per `D-271-ADVERSARIAL-02`) focused on the afking-payment solvency accounting + the PACK repack + the curse/smite activity-score path + `audit/FINDINGS-v61.0.md` (chmod 444) + the atomic closure flip with the `MILESTONE_V61_AT_HEAD_<sha>` signal; re-attest all v61.0 requirements against the frozen closure HEAD; KNOWN-ISSUES.md byte-unmodified unless a genuine new finding is recorded.
+- [x] **AUDIT-01** (TERMINAL): delta-audit (every changed surface across the 17 contract reqs NON-WIDENING vs `2bee6d6f` with grep/diff anchors, zero orphan hunks; RNG-freeze + the SOLVENCY-01 identity re-attested with anchors) + the mandatory 3-skill genuine-PARALLEL adversarial sweep (`/contract-auditor` + `/economic-analyst` + `/zero-day-hunter`; `/degen-skeptic` = the dual-gate filter per `D-271-ADVERSARIAL-02`) focused on the afking-payment solvency accounting + the PACK repack + the curse/smite activity-score path + `audit/FINDINGS-v61.0.md` (chmod 444) + the atomic closure flip with the `MILESTONE_V61_AT_HEAD_<sha>` signal; re-attest all v61.0 requirements against the frozen closure HEAD; KNOWN-ISSUES.md byte-unmodified unless a genuine new finding is recorded.
 
 ---
 
@@ -112,6 +112,6 @@
 | TST-04 | 378 | TST | Complete |
 | TST-05 | 378 | TST | Complete |
 | TST-06 | 378 | TST | Complete |
-| AUDIT-01 | 379 | TERMINAL | Pending |
+| AUDIT-01 | 379 | TERMINAL | Complete |
 
 **27/27 v61.0 requirements mapped to exactly one phase** — 375 SPEC: 1 · 376 IMPL: 17 · 377 GAS: 0 · 378 TST: 8 · 379 TERMINAL: 1. Per-category: AFPAY 7 · PACK 2 · CURSE 7 · SMITE 1 · SPEC 1 · SEC 2 · TST 6 · AUDIT 1. 0 orphaned, 0 duplicated. Phase 377 GAS owns no REQ-ID (the gas-neutrality measurement gate).
