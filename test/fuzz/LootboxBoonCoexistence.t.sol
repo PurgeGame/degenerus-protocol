@@ -19,16 +19,16 @@ contract LootboxBoonCoexistence is DeployProtocol {
     // Storage slot constants (from `forge inspect DegenerusGame storage-layout`)
     // ──────────────────────────────────────────────────────────────────────
 
-    // v47: presale-box storage additions shifted the DegenerusGame layout. Authoritative slots
-    // from `forge inspect` at fb29ed51: boonPacked 59->61, lootboxRngPacked 35->37,
-    // lootboxRngWordByIndex 36->38, lootboxDay 37->39, lootboxEthBase 19->22 (lootboxEth @15 unchanged).
-    uint256 constant SLOT_BOON_PACKED     = 61;   // mapping(address => BoonPacked)
+    // Authoritative slots from `forge inspect DegenerusGame storageLayout` at c4d48008.
+    // The v55 lootbox restructure removed `lootboxDay` and added `lootboxPurchasePacked`
+    // (the per-(index,player) scorePlus1/adj the open reads); openLootBox no longer reads a
+    // stored day or the EV-benefit mapping for the roll.
+    uint256 constant SLOT_BOON_PACKED     = 58;   // mapping(address => BoonPacked)
     uint256 constant SLOT_LOOTBOX_ETH     = 15;   // mapping(uint48 => mapping(address => uint256))
-    uint256 constant SLOT_LOOTBOX_RNG_IDX = 37;   // lootboxRngPacked (low 48 bits = lootboxRngIndex)
-    uint256 constant SLOT_LOOTBOX_WORD    = 38;   // mapping(uint48 => uint256) lootboxRngWordByIndex
-    uint256 constant SLOT_LOOTBOX_DAY     = 39;   // mapping(uint48 => mapping(address => uint32)) lootboxDay
+    uint256 constant SLOT_LOOTBOX_RNG_IDX = 36;   // lootboxRngPacked (low 48 bits = lootboxRngIndex)
+    uint256 constant SLOT_LOOTBOX_WORD    = 37;   // mapping(uint48 => uint256) lootboxRngWordByIndex
+    uint256 constant SLOT_LOOTBOX_PURCHASE = 38;  // mapping(uint48 => mapping(address => uint256)) lootboxPurchasePacked
     uint256 constant SLOT_LOOTBOX_BASE    = 22;   // mapping(uint48 => mapping(address => uint256)) lootboxEthBase
-    uint256 constant SLOT_LOOTBOX_EV      = 45;   // v47: see _seedLootbox note re EV-score restructure
 
     // BoonPacked bit layout (slot0)
     uint256 constant BP_COINFLIP_DAY_SHIFT  = 0;
@@ -133,11 +133,9 @@ contract LootboxBoonCoexistence is DeployProtocol {
         // lootboxEthBase[index][player] = ethAmount
         vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_BASE, index, player), bytes32(ethAmount));
 
-        // lootboxDay[index][player] = day
-        vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_DAY, index, player), bytes32(uint256(day)));
-
-        // lootboxEvScorePacked[index][player] = 1 (neutral score, +1 encoding)
-        vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_EV, index, player), bytes32(uint256(1)));
+        // lootboxPurchasePacked[index][player] = scorePlus1=1 (neutral score, +1 encoding);
+        // openLootBox unpacks scorePlus1 = uint16(word) and requires it >= 1 for the EV multiplier.
+        vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_PURCHASE, index, player), bytes32(uint256(1)));
 
         // lootboxRngWordByIndex[index] = vrfWord
         vm.store(address(game), _simpleMappingSlot(SLOT_LOOTBOX_WORD, index), bytes32(vrfWord));

@@ -86,13 +86,15 @@ contract VRFLifecycle is DeployProtocol {
         assertEq(game.level(), 0, "Game should start at level 0");
 
         // Fund a buyer with enough ETH to hit the 50 ETH nextPrizePool target.
-        // Presale lootbox split: 40% to nextPrizePool. Ticket cost also contributes
-        // 90% of 0.01 ETH to nextPrizePool. Need ~200 purchases of 1 ETH lootbox
-        // to ensure we exceed the 50 ETH bootstrap threshold accounting for all splits.
+        // At c4d48008 each 1.01-ETH lootbox+ticket buy contributes ~0.109 ETH to
+        // nextPrizePool (the forgiving-funding split routes most of the spend to the
+        // claimable/afking/future pools), so ~460 buys are needed to cross the 50-ETH
+        // bootstrap target (prizePoolTargetView). 480 gives a safety margin over the
+        // 50.14-ETH crossing point measured against the frozen subject.
         address buyer = makeAddr("buyer");
-        vm.deal(buyer, 500 ether);
+        vm.deal(buyer, 1000 ether);
 
-        for (uint256 i = 0; i < 200; i++) {
+        for (uint256 i = 0; i < 480; i++) {
             vm.prank(buyer);
             game.purchase{value: 1.01 ether}(
                 buyer,
