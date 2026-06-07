@@ -1677,9 +1677,12 @@ contract CoverageGap222 is DeployProtocol {
         );
         // v47: game.purchaseBurnieLootbox removed (BURNIE-lootbox surface deleted); its
         // negative-auth probe is dropped — the selector no longer exists to be access-controlled.
-        assertFalse(o1, "game.purchaseWhaleBundle rejected non-authorized caller");
-        assertFalse(o2, "game.purchaseLazyPass rejected non-authorized caller");
-        assertFalse(o3, "game.purchaseDeityPass rejected non-authorized caller");
+        // Whale bundle (2.4 ETH) and deity pass (24 ETH) are underfunded by the 1 ETH
+        // send and still revert. The lazy pass (0.24 ETH benefit) now succeeds: the 0.76
+        // ETH overpay is credited to the payer's afking instead of reverting.
+        assertFalse(o1, "purchaseWhaleBundle reverts when underfunded");
+        assertTrue(o2, "purchaseLazyPass accepts overpay (excess -> afking)");
+        assertFalse(o3, "purchaseDeityPass reverts when underfunded");
     }
 
     // ====================================================================

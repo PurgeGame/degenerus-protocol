@@ -928,6 +928,21 @@ abstract contract DegenerusGameStorage {
         balancesPacked[player] -= weiAmount << 128;
     }
 
+    /// @notice Emitted when ETH is credited to a player's prepaid afking balance.
+    event AfkingFunded(address indexed player, uint256 amount);
+
+    /// @dev Credit excess/stray ETH to a player's withdrawable prepaid afking balance,
+    ///      preserving the solvency identity (claimablePool tracks the afking half). Used to
+    ///      absorb purchase overpay and bare sends instead of reverting, stranding, or routing
+    ///      to the prize pool — the ETH is already held by the contract, so this just records
+    ///      the liability. Withdrawable via withdrawAfkingFunding (pre final sweep).
+    function _creditAfkingValue(address player, uint256 weiAmount) internal {
+        if (weiAmount == 0) return;
+        _creditAfking(player, weiAmount);
+        claimablePool += uint128(weiAmount);
+        emit AfkingFunded(player, weiAmount);
+    }
+
     // =========================================================================
     // Loot Box State & Presale Toggle
     // =========================================================================

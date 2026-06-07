@@ -1115,14 +1115,34 @@ contract DegenerusGameMintModule is
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) private {
+        // Single-tx path: cap fresh ETH at the mint cost and credit any overpay to the
+        // payer's withdrawable afking, so excess never reverts or strands. The afking
+        // ticket-buy path (purchaseWith) bypasses this, so it is unaffected.
+        uint256 cost = _mintCost(ticketQuantity, lootBoxAmount);
+        uint256 fresh = payKind == MintPaymentKind.Claimable
+            ? 0
+            : (msg.value < cost ? msg.value : cost);
+        if (msg.value > fresh) _creditAfkingValue(msg.sender, msg.value - fresh);
         _purchaseForWith(
             buyer,
             ticketQuantity,
             lootBoxAmount,
             affiliateCode,
             payKind,
-            msg.value
+            fresh
         );
+    }
+
+    /// @dev Fresh-ETH cost of a single-tx mint: whole-ticket price (at the active purchase
+    ///      level) plus the lootbox spend.
+    function _mintCost(uint256 ticketQuantity, uint256 lootBoxAmount)
+        private
+        view
+        returns (uint256)
+    {
+        return (PriceLookupLib.priceForLevel(
+            jackpotPhaseFlag ? level : level + 1
+        ) * ticketQuantity) / (4 * TICKET_SCALE) + lootBoxAmount;
     }
 
     function _purchaseForWith(
@@ -1485,14 +1505,30 @@ contract DegenerusGameMintModule is
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         uint256 boxAmount
-    ) external {
-        // Mint leg first: consumes msg.value and accrues presaleBoxCredit, so the
-        // just-earned credit is available to gate the box bought below.
-        _purchaseFor(buyer, ticketQuantity, lootBoxAmount, affiliateCode, payKind);
-        // Box leg pays purely from claimable (no fresh ETH passed); the mint already
-        // consumed msg.value. The box queues at the SAME current LR_INDEX as the mint
-        // leg's lootbox (LR_INDEX does not advance mid-tx), so both share one index.
-        _buyPresaleBoxFor(buyer, boxAmount, 0);
+    ) external payable {
+        // Split msg.value across both legs so the box accepts the same funding mix as
+        // every other purchase. The mint leg takes fresh ETH up to its own cost — capped
+        // so the Combined/DirectEth payment guards never revert on or strand overpay;
+        // the remainder funds the box as fresh ETH, with claimable/afking covering any
+        // box shortfall. Claimable payKind sends no fresh ETH to the mint leg, leaving
+        // all of msg.value for the box.
+        uint256 mintCost = _mintCost(ticketQuantity, lootBoxAmount);
+        uint256 mintFresh = payKind == MintPaymentKind.Claimable
+            ? 0
+            : (msg.value < mintCost ? msg.value : mintCost);
+        // Mint leg first: accrues the 25% presale-box credit that gates the box below.
+        _purchaseForWith(
+            buyer,
+            ticketQuantity,
+            lootBoxAmount,
+            affiliateCode,
+            payKind,
+            mintFresh
+        );
+        // Box leg gets the leftover fresh ETH; it queues at the SAME current LR_INDEX as
+        // the mint leg's lootbox (LR_INDEX does not advance mid-tx), so both share one
+        // index for co-resolution.
+        _buyPresaleBoxFor(buyer, boxAmount, msg.value - mintFresh);
     }
 
     /// @dev Core credit-gated presale-box buy: clamp-to-50 close, 1:1 credit consume,
@@ -1511,8 +1547,11 @@ contract DegenerusGameMintModule is
         // MIN floor on the REQUESTED amount, BEFORE the exactly-50 clamp, so a
         // sub-floor gap to the 50-ETH cap can never lock the close.
         if (boxAmount < PRESALE_BOX_MIN) revert E();
-        // No overpay vs the requested amount (CPAY: msg.value > cost reverts).
-        if (valueForBox > boxAmount) revert E();
+        // Overpay vs the requested amount is credited to the payer's afking, not reverted.
+        if (valueForBox > boxAmount) {
+            _creditAfkingValue(msg.sender, valueForBox - boxAmount);
+            valueForBox = boxAmount;
+        }
 
         uint256 sold = presaleBoxEthSold;
         uint256 remaining = PRESALE_BOX_ETH_CAP - sold; // sold <= cap by construction
@@ -1529,7 +1568,7 @@ contract DegenerusGameMintModule is
             presaleBoxCredit[buyer] -= applied;
         }
 
-        // Payment: msg.value first (capped at the applied amount; clamp excess refunded),
+        // Payment: msg.value first (capped at the applied amount; clamp excess -> afking),
         // claimable shortfall for the rest (STRICT 1-wei sentinel preserved).
         uint256 freshUsed = valueForBox > applied ? applied : valueForBox;
         uint256 refund = valueForBox - freshUsed;
@@ -1571,10 +1610,9 @@ contract DegenerusGameMintModule is
 
         emit PresaleBoxBuy(buyer, index, applied, closing);
 
-        if (refund != 0) {
-            (bool ok, ) = payable(msg.sender).call{value: refund}("");
-            if (!ok) revert E();
-        }
+        // Fresh ETH the clamp-to-50 left unused is credited to the payer's afking, not
+        // sent back via a value call (no reentrancy surface, consistent with overpay).
+        _creditAfkingValue(msg.sender, refund);
     }
 
     /// @dev Execute ticket purchase: payment, boost, affiliate routing, quest unit accumulation.

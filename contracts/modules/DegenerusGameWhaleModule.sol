@@ -258,9 +258,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             totalPrice = unitPrice * quantity;
         }
 
-        // Claimable-pay: msg.value first, claimableWinnings covers the rest.
-        if (msg.value > totalPrice) revert E();
-        _settleShortfall(buyer, totalPrice - msg.value, true);
+        // Claimable-pay: msg.value first (overpay -> payer's afking), claimable covers the rest.
+        uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
+        _creditAfkingValue(msg.sender, msg.value - freshPaid);
+        _settleShortfall(buyer, totalPrice - freshPaid, true);
         // Coin-presale-box credit accrual: 25% of the committed ETH while presale open.
         if (!presaleOver) {
             presaleBoxCredit[buyer] += totalPrice / 4;
@@ -485,9 +486,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             s1 = bpLazy.slot1;
             bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
         }
-        // Claimable-pay: msg.value first, claimableWinnings covers the rest.
-        if (msg.value > totalPrice) revert E();
-        _settleShortfall(buyer, totalPrice - msg.value, true);
+        // Claimable-pay: msg.value first (overpay -> payer's afking), claimable covers the rest.
+        uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
+        _creditAfkingValue(msg.sender, msg.value - freshPaid);
+        _settleShortfall(buyer, totalPrice - freshPaid, true);
         // Coin-presale-box credit accrual: 25% of the benefit value while presale open.
         if (!presaleOver) {
             presaleBoxCredit[buyer] += benefitValue / 4;
@@ -591,9 +593,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             // Consume boon regardless of expiry — clear deity pass fields
             bpDeity.slot1 = s1Deity & BP_DEITY_PASS_CLEAR;
         }
-        // Claimable-pay: msg.value first, claimableWinnings covers the rest.
-        if (msg.value > totalPrice) revert E();
-        _settleShortfall(buyer, totalPrice - msg.value, true);
+        // Claimable-pay: msg.value first (overpay -> payer's afking), claimable covers the rest.
+        uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
+        _creditAfkingValue(msg.sender, msg.value - freshPaid);
+        _settleShortfall(buyer, totalPrice - freshPaid, true);
 
         uint24 passLevel = level + 1;
 

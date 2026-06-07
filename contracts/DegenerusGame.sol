@@ -721,9 +721,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Buy tickets/lootbox AND a presale box in one tx, sharing one RNG index.
-    /// @dev The mint leg (msg.value) earns 25% presale-box credit; the box leg is then
-    ///      gated by that credit and paid from the caller's claimable (CPAY-02 ledger
-    ///      move). Both queue at one index for co-resolution.
+    /// @dev The mint leg earns 25% presale-box credit that gates the box leg. msg.value is
+    ///      split across both legs (mint cost first, remainder to the box), so the box is
+    ///      funded by the same mix as any other purchase — fresh ETH, claimable, or afking
+    ///      per payKind. Both queue at one index for co-resolution.
     /// @param buyer Player to receive both legs (address(0) = msg.sender).
     /// @param ticketQuantity Tickets to buy (0 to skip).
     /// @param lootBoxAmount ETH lootbox spend (0 to skip).
@@ -1536,11 +1537,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 amount
     );
 
-    /// @notice Emitted when prepaid afking ETH is funded for a player.
-    /// @param player The player whose afkingFunding bucket was credited.
-    /// @param amount ETH amount funded (wei).
-    event AfkingFunded(address indexed player, uint256 amount);
-
     /// @notice Emitted when a funding source withdraws its prepaid afking ETH.
     /// @param player The funding source (msg.sender) whose bucket was debited.
     /// @param amount ETH amount withdrawn (wei).
@@ -1626,10 +1622,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param player The beneficiary whose afkingFunding bucket is credited.
     function depositAfkingFunding(address player) external payable {
         if (player == address(0)) revert E();
-        if (msg.value == 0) return;
-        _creditAfking(player, msg.value);
-        claimablePool += uint128(msg.value);
-        emit AfkingFunded(player, msg.value);
+        _creditAfkingValue(player, msg.value);
     }
 
     /// @notice Withdraw prepaid afking ETH — the funding source reclaims its own balance.
@@ -3048,16 +3041,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  This allows external contributions to jackpot rewards.              |
       +======================================================================+*/
 
-    /// @notice Accept ETH and add to the future pool reserve.
-    /// @dev Plain ETH transfers are routed to jackpot reserves.
+    /// @notice Accept plain ETH and credit it to the sender's prepaid afking balance.
+    /// @dev Bare transfers become the sender's own withdrawable afking funds (not a prize-pool
+    ///      donation). Blocked once the game is over, since post-sweep afking is unwithdrawable.
     receive() external payable {
         if (gameOver) revert E();
-        if (prizePoolFrozen) {
-            (uint128 pNext, uint128 pFuture) = _getPendingPools();
-            _setPendingPools(pNext, pFuture + uint128(msg.value));
-        } else {
-            (uint128 next, uint128 future) = _getPrizePools();
-            _setPrizePools(next, future + uint128(msg.value));
-        }
+        _creditAfkingValue(msg.sender, msg.value);
     }
 }
