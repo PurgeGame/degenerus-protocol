@@ -155,10 +155,15 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         _claimDgnrs(bob);
     }
 
-    /// @notice Score below AFFILIATE_DGNRS_MIN_SCORE (10 ETH) reverts
+    /// @notice Score below AFFILIATE_DGNRS_MIN_SCORE (10 ETH) reverts.
+    ///         The claim gate is `score < AFFILIATE_DGNRS_MIN_SCORE` (10 ether) at
+    ///         DegenerusGameBingoModule:226. An affiliate who never recorded a buy under
+    ///         their own code has score 0 (genuinely below the 10-ether floor), so the
+    ///         claim reverts at the gate. A single qualifying buy now scores far above the
+    ///         floor (the score is mint-quantity-weighted, not commission-ETH-capped), so
+    ///         the zero-score affiliate is the faithful below-min case for this gate.
     function test_revertBelowMinScore() public {
-        // 1 buyer → ~0.5 ETH score (per-sender commission cap)
-        _buyOne(CODE_BOB);
+        // bob created CODE_BOB in setUp but never recorded a buy under it -> score 0.
         _setLevel(1);
         _setAllocation(1, 1_000_000 ether);
 

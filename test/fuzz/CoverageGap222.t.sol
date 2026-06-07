@@ -1270,25 +1270,23 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok, "gnrus.burnAtGameOver rejected caller before game over");
     }
 
-    function test_gap_gnrus_propose_vote_paths() public {
+    function test_gap_gnrus_setCharity_vote_paths() public {
         address charity = makeAddr("charity");
+        // setCharity(uint8,address) is vault-owner-gated (GNRUS:380) -> an arbitrary
+        // caller is rejected with Unauthorized. (The frozen governance surface has no
+        // `propose(address)`; slate management is the vault-owner setCharity entrypoint.)
         vm.prank(buyer);
         (bool o1, ) = address(gnrus).call(
-            abi.encodeWithSignature("propose(address)", charity)
+            abi.encodeWithSignature("setCharity(uint8,address)", uint8(3), charity)
         );
+        // vote(uint8) is permissionless but rejects an empty slot / a zero-weight voter
+        // (GNRUS:570-590). buyer holds no sDGNRS and slot 1 is empty at deploy -> rejected.
         vm.prank(buyer);
         (bool o2, ) = address(gnrus).call(
-            abi.encodeWithSignature(
-                "vote(uint48,bool)",
-                uint48(1),
-                true
-            )
+            abi.encodeWithSignature("vote(uint8)", uint8(1))
         );
-        // propose is open to any caller (creates a new proposal id).
-        assertTrue(o1, "gnrus.propose created new charity proposal");
-        // vote(1, true) rejected: buyer has no DGNRS voting weight, so
-        // the vote is rejected (or the proposal id 1 is not active).
-        assertFalse(o2, "gnrus.vote rejected caller without voting weight");
+        assertFalse(o1, "gnrus.setCharity rejected non-vault-owner caller");
+        assertFalse(o2, "gnrus.vote rejected empty-slot / zero-weight caller");
     }
 
     function test_gap_gnrus_pickCharity_guard() public {
