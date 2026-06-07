@@ -952,6 +952,41 @@ contract DegenerusGameMintModule is
         uint256 burnieTokens
     );
 
+    /// @notice Quote a far-future salvage swap WITHOUT executing (the UI offer; -EV by design).
+    /// @dev Read-only twin of sellFarFutureTickets: shares the exact valuation (curve + daily
+    ///      per-player jitter + ETH/BURNIE split) the executing path uses, so the displayed offer
+    ///      matches what would be paid. Reverts on an ineligible distance / zero quantity; does NOT
+    ///      check ownership (a quote for the given bundle). When sDGNRS holds no BURNIE (or the seed
+    ///      targets zero) the whole cash leg is paid in ETH; conserved as ethCashWei + value(burnieTokens).
+    /// @return totalFaceWei Sum of priceForLevel(L) * n over all lines (the bundle's face value).
+    /// @return totalBudget Total ETH sDGNRS would pay (the -EV offer).
+    /// @return ticketWei Portion delivered as current-level tickets.
+    /// @return ethCashWei Cash portion delivered as withdrawable ETH claimable.
+    /// @return burnieTokens Cash portion delivered as BURNIE (transferred from sDGNRS).
+    function previewSellFarFutureTickets(
+        address player,
+        uint32[] calldata levels,
+        uint256[] calldata quantities
+    )
+        external
+        view
+        returns (
+            uint256 totalFaceWei,
+            uint256 totalBudget,
+            uint256 ticketWei,
+            uint256 ethCashWei,
+            uint256 burnieTokens
+        )
+    {
+        uint256 cashWei;
+        (totalFaceWei, totalBudget, ticketWei, cashWei) = _quoteFarFutureSwap(
+            player,
+            levels,
+            quantities
+        );
+        (ethCashWei, burnieTokens) = _quoteFarFutureBurnieSplit(player, cashWei);
+    }
+
     /// @notice Sell far-future ticket entries to sDGNRS (current-level tickets + cash; -EV exit).
     /// @dev Delegatecalled from DegenerusGame.sellFarFutureTickets with an already-resolved `player`
     ///      (so no _resolvePlayer here). Mass-sells WHOLE far-future tickets (6 <= d = L - currentLevel
@@ -994,7 +1029,7 @@ contract DegenerusGameMintModule is
         // so NO pendingRedemptionEthValue term is needed; NO daily cap. The full budget is gated even
         // though only the ETH part leaves claimable below (the BURNIE part is paid from sDGNRS-owned
         // BURNIE) — a strictly more conservative funding check.
-        if (claimableWinnings[ContractAddresses.SDGNRS] < totalBudget + 1 ether)
+        if (_claimableOf(ContractAddresses.SDGNRS) < totalBudget + 1 ether)
             revert E();
 
         // Split the cash leg: pay an ETH part (claimable relabel) + a BURNIE part transferred from
@@ -1023,8 +1058,8 @@ contract DegenerusGameMintModule is
         // BURNIE part never touches claimable (claimablePool unchanged) — solvency-positive:
         // ethRelabel <= totalBudget.
         uint256 ethRelabel = ticketWei + ethCashWei;
-        claimableWinnings[ContractAddresses.SDGNRS] -= ethRelabel;
-        claimableWinnings[player] += ethRelabel;
+        _debitClaimable(ContractAddresses.SDGNRS, ethRelabel);
+        _creditClaimable(player, ethRelabel);
         // BURNIE part: deduct from sDGNRS (wallet holdings first, then its claimable coinflip
         // stake — the burnCoin shortfall path) and pay the player as flip credit, not a token
         // transfer. burnieTokens <= sDGNRS's spendable (quote cap), so the burn always covers.
@@ -1116,7 +1151,7 @@ contract DegenerusGameMintModule is
         uint256 totalCost = ticketCost + lootBoxAmount;
         if (totalCost == 0) revert E();
 
-        uint256 initialClaimable = claimableWinnings[buyer];
+        uint256 initialClaimable = _claimableOf(buyer);
 
         // ethValue is the per-slice fresh-ETH portion (== msg.value for single-tx callers; the
         // explicit afking ticket-buy slice routed through purchaseWith from the process STAGE).
@@ -1124,24 +1159,28 @@ contract DegenerusGameMintModule is
         uint256 lootboxFreshEth = 0;
         uint256 lootboxClaimableUsed = 0;
         if (lootBoxAmount != 0) {
-            // Lootbox payment uses msg.value first; optional claimable shortfall.
+            // Lootbox payment uses msg.value first; afking covers any shortfall, and
+            // claimable too unless the buyer insisted on DirectEth.
             if (remainingEth >= lootBoxAmount) {
                 lootboxFreshEth = lootBoxAmount;
                 unchecked {
                     remainingEth -= lootBoxAmount;
                 }
             } else {
-                // Allow claimable to cover lootbox shortfall unless user insisted on DirectEth.
-                if (payKind == MintPaymentKind.DirectEth) revert E();
                 lootboxFreshEth = remainingEth;
                 uint256 shortfall = lootBoxAmount - remainingEth;
                 remainingEth = 0;
 
-                // Snapshot basis: the lootbox shortfall draws against the claimable
-                // captured at function entry (the mint leg's claimable use is tracked
-                // separately via initialClaimable/finalClaimable).
-                _settleClaimableShortfall(buyer, initialClaimable, shortfall);
-                lootboxClaimableUsed = shortfall;
+                // Draw the shortfall from claimable (live balance == the entry snapshot
+                // here; the mint leg has not run yet) then afking. afking is fresh-ETH-
+                // equivalent for routing; claimable is recycled. DirectEth skips claimable.
+                (uint256 cUsed, uint256 aUsed) = _settleShortfall(
+                    buyer,
+                    shortfall,
+                    payKind != MintPaymentKind.DirectEth
+                );
+                lootboxFreshEth += aUsed;
+                lootboxClaimableUsed = cUsed;
             }
         }
 
@@ -1171,6 +1210,9 @@ contract DegenerusGameMintModule is
         uint48 lbIndex;
         bool lbFirstDeposit;
         if (lootBoxAmount != 0) {
+            // Manual lootbox buyers stamp the mint day too (bounty eligibility); a no-op when
+            // the ticket leg already stamped it today, closing the plain-vs-bundled gap.
+            _recordLootboxMintDay(buyer, mintPacked_[buyer]);
             lbIndex = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
             bool presale = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0;
 
@@ -1281,6 +1323,12 @@ contract DegenerusGameMintModule is
             }
         }
 
+        // --- Cure: any buy worth >= 1 ticket clears the cashout/smite curse, so the curing
+        //     buy already scores un-penalized (cleared before the score read below). ---
+        if (totalCost >= priceWei) {
+            _clearCurse(buyer);
+        }
+
         // --- Compute score ONCE (post-action, per D-08) ---
         uint256 cachedScore = _playerActivityScore(buyer, questStreak);
 
@@ -1386,7 +1434,7 @@ contract DegenerusGameMintModule is
 
         uint256 finalClaimable = payKind == MintPaymentKind.DirectEth
             ? initialClaimable
-            : claimableWinnings[buyer];
+            : _claimableOf(buyer);
         uint256 totalClaimableUsed = initialClaimable > finalClaimable
             ? initialClaimable - finalClaimable
             : 0;
@@ -1486,7 +1534,7 @@ contract DegenerusGameMintModule is
         uint256 freshUsed = valueForBox > applied ? applied : valueForBox;
         uint256 refund = valueForBox - freshUsed;
         uint256 shortfall = applied - freshUsed;
-        _settleClaimableShortfall(buyer, claimableWinnings[buyer], shortfall);
+        _settleShortfall(buyer, shortfall, true);
 
         // 80/20 routing: claimablePool += applied; VAULT 80% + SDGNRS 20% claimable.
         // The claimable-funded portion (shortfall) nets pool delta 0 (debited above,
@@ -1609,6 +1657,7 @@ contract DegenerusGameMintModule is
         } else {
             uint32 mintUnits = adjustedQty32;
 
+            uint256 claimableBefore = _claimableOf(buyer);
             IDegenerusGame(address(this)).recordMint{value: value}(
                 buyer,
                 targetLevel,
@@ -1617,19 +1666,11 @@ contract DegenerusGameMintModule is
                 payKind
             );
 
-            uint256 freshEth;
-            if (payKind == MintPaymentKind.DirectEth) {
-                if (value < costWei) revert E();
-                freshEth = costWei;
-            } else if (payKind == MintPaymentKind.Claimable) {
-                if (value != 0) revert E();
-                freshEth = 0;
-            } else if (payKind == MintPaymentKind.Combined) {
-                if (value > costWei) revert E();
-                freshEth = value;
-            } else {
-                revert E();
-            }
+            // Fresh ETH for the affiliate split = ticket cost minus the recycled claimable
+            // portion recordMint just drew; the afking-drawn portion counts as fresh (own
+            // principal -> fresh-rate affiliate, including the lootbox activity score). Pay-kind
+            // validation already ran inside recordMint's payment processing.
+            uint256 freshEth = costWei - (claimableBefore - _claimableOf(buyer));
 
             // Day before final jackpot draw (not turbo): +100 BURNIE per ticket for affiliates
             // Basis inflated by 7/5 (lvl 0-3, 25% rate) or 3/2 (lvl 4+, 20% rate) to yield +100 after scaling
@@ -1681,14 +1722,29 @@ contract DegenerusGameMintModule is
                     0
                 );
             } else {
-                kickback += affiliate.payAffiliate(
-                    _ethToBurnieValue(costWei, priceWei),
-                    affiliateCode,
-                    buyer,
-                    affiliateLevel,
-                    false,
-                    0
-                );
+                // Claimable (and pure-claimable Combined): the claimable portion is recycled;
+                // any afking-drawn portion (freshEth) earns the fresh rate.
+                if (freshEth != 0) {
+                    kickback += affiliate.payAffiliate(
+                        freshBurnie,
+                        affiliateCode,
+                        buyer,
+                        affiliateLevel,
+                        true,
+                        0
+                    );
+                }
+                uint256 recycled = costWei - freshEth;
+                if (recycled != 0) {
+                    kickback += affiliate.payAffiliate(
+                        _ethToBurnieValue(recycled, priceWei),
+                        affiliateCode,
+                        buyer,
+                        affiliateLevel,
+                        false,
+                        0
+                    );
+                }
             }
 
             bonusCredit = kickback;

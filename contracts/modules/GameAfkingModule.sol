@@ -334,7 +334,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 fundingSource != subscriber)
                 ? fundingSource
                 : subscriber;
-            afkingFunding[fundDest] += msg.value;
+            _creditAfking(fundDest, msg.value);
             claimablePool += uint128(msg.value);
         }
 
@@ -474,7 +474,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                         ? _fundingSourceOf[subscriber]
                         : subscriber;
                     if (
-                        (src == subscriber ? playerFunding : afkingFunding[src]) >=
+                        (src == subscriber ? playerFunding : _afkingOf(src)) >=
                         ethValue
                     ) {
                         _deliverAfkingBuy(
@@ -540,7 +540,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                         ? _fundingSourceOf[subscriber]
                         : subscriber;
                     if (
-                        (src == subscriber ? playerFunding : afkingFunding[src]) >=
+                        (src == subscriber ? playerFunding : _afkingOf(src)) >=
                         ethValue
                     ) {
                         _setStreakBase(s, snap); // funded day-0 — keep the snapshot
@@ -703,8 +703,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // afkingSnapshot / claimableWinningsOf exactly.
         uint256 claimable = _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0
             ? 0
-            : claimableWinnings[player];
-        playerFunding = afkingFunding[player];
+            : _claimableOf(player);
+        playerFunding = _afkingOf(player);
 
         // Total quantity = max(dailyQuantity, reinvestPct% of claimable / price).
         uint256 effectiveQty = sub.dailyQuantity;
@@ -788,14 +788,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         bool coverBuy
     ) private {
         if (ethValue != 0) {
-            afkingFunding[src] -= ethValue;
+            _debitAfking(src, ethValue);
             claimablePool -= uint128(ethValue);
         }
         // Reinvest/drainFirst claimable portion of the cost. The _resolveBuy 1-wei sentinel
         // guarantees claimableUse <= claimable - 1, so this never underflows. claimableWinnings
         // rides in claimablePool, so the pool moves in tandem (the SOLVENCY-01 invariant).
         if (claimableUse != 0) {
-            claimableWinnings[player] -= claimableUse;
+            _debitClaimable(player, claimableUse);
             claimablePool -= uint128(claimableUse);
         }
 
@@ -1265,7 +1265,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // never `src`) — a funding skip is transient for them (no-op-and-retry, stays in
             // the set). The exemption is the pinned-address branch only; there is no flag.
             if (
-                (src == player ? playerFunding : afkingFunding[src]) < ethValue
+                (src == player ? playerFunding : _afkingOf(src)) < ethValue
             ) {
                 if (
                     player == ContractAddresses.VAULT ||
@@ -1653,4 +1653,81 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         base = s.affiliateBase;
         s.affiliateBase = 0;
     }
+
+    /// @notice Emitted when a curse is cleared via the permissionless paid cure.
+    event Decursed(address indexed curer, address indexed target);
+
+    /// @notice Emitted when a deity adds a curse stack to a smitee.
+    event Smited(uint256 indexed deityId, address indexed smitee);
+
+    /// @notice Cashout-curse SET (delegatecall target from the Game's claimWinnings): a stale
+    ///         ghost-cashout adds a saturating +2 stack. Cheapest-first bails skip the SSTORE
+    ///         for infra addresses (protects the sDGNRS redemption-snapshot score), gameOver, a
+    ///         non-stale claimant, deity/whale-pass holders, an active afker, and an already-
+    ///         capped counter. Net: +2 only on a stale cashout by a non-exempt, below-cap player.
+    function maybeCurse(address player) external {
+        if (
+            player == ContractAddresses.VAULT ||
+            player == ContractAddresses.SDGNRS ||
+            player == ContractAddresses.GNRUS
+        ) return;
+        if (gameOver) return;
+        uint256 packed = mintPacked_[player];
+        uint24 lastEthDay = uint24(
+            (packed >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_32
+        );
+        if (lastEthDay + 5 > _currentMintDay()) return; // claimed within the 5-day window
+        if ((packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1 != 0) return;
+        uint24 frozenUntilLevel = uint24(
+            (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24
+        );
+        uint8 bundleType = uint8(
+            (packed >> BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT) & 3
+        );
+        if (frozenUntilLevel >= level && (bundleType == 1 || bundleType == 3)) return;
+        if (_subOf[player].dailyQuantity != 0) return;
+        if ((packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8 >= CURSE_COUNT_CAP) return;
+        _applyCurseStack(player);
+    }
+
+    /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 BURNIE.
+    /// @dev No _resolvePlayer — clearing another player's curse is purely beneficial. Reverts
+    ///      when the target already has no curse so the caller never wastes the burn.
+    function decurse(address target) external {
+        uint256 curse = (mintPacked_[target] >> BitPackingLib.CURSE_COUNT_SHIFT) &
+            BitPackingLib.MASK_8;
+        if (curse == 0) revert E();
+        coin.burnCoin(msg.sender, PRICE_COIN_UNIT / 10);
+        _clearCurse(target);
+        emit Decursed(msg.sender, target);
+    }
+
+    /// @notice A deity (soulbound pass owner) adds a saturating +2 curse stack to `smitee` for
+    ///         200 BURNIE. Validated before the burn: active afkers are immune (the sole
+    ///         immunity), the smite path caps at a 10-point (5-stack) ceiling below the 20-point
+    ///         counter cap, and the protocol addresses are skipped (the redemption-snapshot
+    ///         reason). Self-smite is allowed — harmless, since the counter only lowers the score.
+    function smite(uint256 deityId, address smitee) external {
+        if (
+            IDegenerusDeityPassOwner(ContractAddresses.DEITY_PASS).ownerOf(deityId) !=
+            msg.sender
+        ) revert E();
+        if (_subOf[smitee].dailyQuantity != 0) revert E(); // active-afker immunity
+        uint256 curse = (mintPacked_[smitee] >> BitPackingLib.CURSE_COUNT_SHIFT) &
+            BitPackingLib.MASK_8;
+        if (curse >= 10) revert E(); // 5-stack smite ceiling (1 stack = 2 points)
+        if (
+            smitee == ContractAddresses.VAULT ||
+            smitee == ContractAddresses.SDGNRS ||
+            smitee == ContractAddresses.GNRUS
+        ) revert E(); // protocol-addr skip
+        coin.burnCoin(msg.sender, PRICE_COIN_UNIT / 5);
+        _applyCurseStack(smitee);
+        emit Smited(deityId, smitee);
+    }
+}
+
+/// @dev Minimal deity-pass owner view for the smite gate (soulbound, tokenId = symbolId 0-31).
+interface IDegenerusDeityPassOwner {
+    function ownerOf(uint256 tokenId) external view returns (address);
 }

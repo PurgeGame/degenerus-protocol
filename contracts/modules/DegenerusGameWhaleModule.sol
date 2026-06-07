@@ -260,7 +260,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Claimable-pay: msg.value first, claimableWinnings covers the rest.
         if (msg.value > totalPrice) revert E();
-        _settleClaimableShortfall(buyer, claimableWinnings[buyer], totalPrice - msg.value);
+        _settleShortfall(buyer, totalPrice - msg.value, true);
         // Coin-presale-box credit accrual: 25% of the committed ETH while presale open.
         if (!presaleOver) {
             presaleBoxCredit[buyer] += totalPrice / 4;
@@ -487,7 +487,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
         // Claimable-pay: msg.value first, claimableWinnings covers the rest.
         if (msg.value > totalPrice) revert E();
-        _settleClaimableShortfall(buyer, claimableWinnings[buyer], totalPrice - msg.value);
+        _settleShortfall(buyer, totalPrice - msg.value, true);
         // Coin-presale-box credit accrual: 25% of the benefit value while presale open.
         if (!presaleOver) {
             presaleBoxCredit[buyer] += benefitValue / 4;
@@ -593,7 +593,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
         // Claimable-pay: msg.value first, claimableWinnings covers the rest.
         if (msg.value > totalPrice) revert E();
-        _settleClaimableShortfall(buyer, claimableWinnings[buyer], totalPrice - msg.value);
+        _settleShortfall(buyer, totalPrice - msg.value, true);
 
         uint24 passLevel = level + 1;
 
@@ -992,27 +992,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
 
         emit LootBoxBoostConsumed(player, day, amount, boostedAmount, boostBps);
-    }
-
-    /// @dev Record the current day in player's packed data for lootbox activity tracking.
-    /// @param player The player address.
-    /// @param cachedPacked The caller's cached mintPacked_ value to avoid a redundant SLOAD.
-    function _recordLootboxMintDay(
-        address player,
-        uint256 cachedPacked
-    ) private {
-        uint24 day = _simulatedDayIndex();
-        uint24 prevDay = uint24(
-            (cachedPacked >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_32
-        );
-        if (prevDay == day) {
-            return;
-        }
-        uint256 clearedDay = cachedPacked &
-            ~(BitPackingLib.MASK_32 << BitPackingLib.DAY_SHIFT);
-        mintPacked_[player] =
-            clearedDay |
-            (uint256(day) << BitPackingLib.DAY_SHIFT);
     }
 
     // =========================================================================

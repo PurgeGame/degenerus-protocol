@@ -438,6 +438,30 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint256));
     }
 
+    /// @notice Permissionless paid cure of `target`'s cashout/smite curse (100 BURNIE).
+    /// @dev Thin delegatecall dispatch stub into GameAfkingModule's decurse body.
+    function decurse(address target) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_AFKING_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(IGameAfkingModule.decurse.selector, target)
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Deity-gated smite: add a curse stack to `smitee` for 200 BURNIE.
+    /// @dev Thin delegatecall dispatch stub into GameAfkingModule's smite body.
+    function smite(uint256 deityId, address smitee) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_AFKING_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IGameAfkingModule.smite.selector, deityId, smitee
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
     /*+======================================================================+
       |                       MINT RECORDING                                 |
       +======================================================================+
@@ -1056,30 +1080,33 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 amount,
         MintPaymentKind payKind
     ) private returns (uint256 prizeContribution, uint256 newClaimableBalance) {
+        uint256 ethUsed;
         uint256 claimableUsed;
         if (payKind == MintPaymentKind.DirectEth) {
-            // Direct ETH: allow overpay; ignore remainder for accounting
-            if (msg.value < amount) revert E();
-            prizeContribution = amount;
-            // newClaimableBalance stays 0 (caller checks claimableUsed first)
+            // Direct ETH: fresh ETH first (overpay ignored), afking covers any shortfall;
+            // claimable is skipped on this kind.
+            ethUsed = msg.value < amount ? msg.value : amount;
         } else if (payKind == MintPaymentKind.Claimable) {
-            // Pure claimable: no ETH allowed, must have sufficient balance
+            // No fresh ETH allowed: draw claimable to the 1-wei sentinel, then afking.
             if (msg.value != 0) revert E();
-            uint256 claimable = claimableWinnings[player];
-            // Require claimable > amount to preserve 1 wei sentinel (prevents cold→warm SSTORE)
-            if (claimable <= amount) revert E();
-            unchecked {
-                newClaimableBalance = claimable - amount;
+            uint256 claimable = _claimableOf(player);
+            if (claimable > 1) {
+                uint256 available = claimable - 1; // Preserve 1 wei sentinel
+                claimableUsed = amount < available ? amount : available;
+                if (claimableUsed != 0) {
+                    unchecked {
+                        newClaimableBalance = claimable - claimableUsed;
+                    }
+                    _debitClaimable(player, claimableUsed);
+                }
             }
-            claimableWinnings[player] = newClaimableBalance;
-            claimableUsed = amount;
-            prizeContribution = amount;
         } else if (payKind == MintPaymentKind.Combined) {
-            // Combined: ETH first, then fill remainder from claimable
+            // ETH first, then claimable to the sentinel, then afking for any remainder.
             if (msg.value > amount) revert E();
+            ethUsed = msg.value;
             uint256 remaining = amount - msg.value;
             if (remaining != 0) {
-                uint256 claimable = claimableWinnings[player];
+                uint256 claimable = _claimableOf(player);
                 if (claimable > 1) {
                     uint256 available = claimable - 1; // Preserve 1 wei sentinel
                     claimableUsed = remaining < available
@@ -1089,17 +1116,26 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                         unchecked {
                             newClaimableBalance = claimable - claimableUsed;
                         }
-                        claimableWinnings[player] = newClaimableBalance;
-                        remaining -= claimableUsed;
+                        _debitClaimable(player, claimableUsed);
                     }
                 }
             }
-            if (remaining != 0) revert E(); // Must fully cover cost
-            prizeContribution = msg.value + claimableUsed;
         } else {
             revert E();
         }
-        // Update claimablePool accounting
+
+        // Afking tier: the player's prepaid afking covers whatever fresh ETH + claimable did
+        // not. afking is fresh-ETH-equivalent (own deposited principal), so it counts toward
+        // prizeContribution. Reverts when the three tiers together fall short of the cost.
+        uint256 afkingUsed;
+        uint256 shortfall = amount - ethUsed - claimableUsed;
+        if (shortfall != 0) {
+            if (_afkingOf(player) < shortfall) revert E();
+            afkingUsed = shortfall;
+            _debitAfking(player, afkingUsed);
+        }
+        prizeContribution = ethUsed + claimableUsed + afkingUsed;
+
         if (claimableUsed != 0) {
             claimablePool -= uint128(claimableUsed);
             emit ClaimableSpent(
@@ -1109,6 +1145,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 payKind,
                 amount
             );
+        }
+        if (afkingUsed != 0) {
+            claimablePool -= uint128(afkingUsed);
+            emit AfkingSpent(player, afkingUsed);
         }
     }
 
@@ -1459,42 +1499,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function decClaimable(
         address player,
         uint24 lvl
-    ) external view returns (uint256 amountWei, bool winner) {
-        DecClaimRound storage round = decClaimRounds[lvl];
-        if (round.poolWei == 0) {
-            return (0, false);
-        }
-
-        uint256 totalBurn = uint256(round.totalBurn);
-        if (totalBurn == 0) return (0, false);
-
-        DecEntry storage e = decBurn[lvl][player];
-        if (e.claimed != 0) return (0, false);
-
-        uint8 denom = e.bucket;
-        uint8 sub = e.subBucket;
-        uint192 entryBurn = e.burn;
-        if (denom == 0 || entryBurn == 0) return (0, false);
-
-        uint64 packedOffsets = decBucketOffsetPacked[lvl];
-        uint8 winningSub = _unpackDecWinningSubbucket(packedOffsets, denom);
-        if (sub != winningSub) return (0, false);
-
-        amountWei = (round.poolWei * uint256(entryBurn)) / totalBurn;
-        winner = amountWei != 0;
-    }
-
-    /// @dev Unpack a winning subbucket from the packed uint64.
-    /// @param packed Packed winning subbuckets.
-    /// @param denom Denominator to unpack (2-12).
-    /// @return Winning subbucket for this denom.
-    function _unpackDecWinningSubbucket(
-        uint64 packed,
-        uint8 denom
-    ) private pure returns (uint8) {
-        if (denom < 2) return 0;
-        uint8 shift = (denom - 2) << 2;
-        return uint8((packed >> shift) & 0xF);
+    ) external returns (uint256 amountWei, bool winner) {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_DECIMATOR_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameDecimatorModule.decClaimable.selector,
+                    player,
+                    lvl
+                )
+            );
+        if (!ok) _revertDelegate(data);
+        return abi.decode(data, (uint256, bool));
     }
 
     /*+========================================================================================+
@@ -1556,6 +1572,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function claimWinnings(address player) external {
         player = _resolvePlayer(player);
         _claimWinningsInternal(player, false);
+        // Cashout-curse SET runs in the Game's context via delegatecall (hosted in
+        // GameAfkingModule to keep the Game under the EIP-170 ceiling).
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_AFKING_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(IGameAfkingModule.maybeCurse.selector, player)
+            );
+        if (!ok) _revertDelegate(data);
     }
 
     /// @notice Claim accrued ETH winnings with stETH-first payout.
@@ -1567,21 +1591,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     function _claimWinningsInternal(address player, bool stethFirst) private {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert E();
-        uint256 amount = claimableWinnings[player];
+        uint256 amount = _claimableOf(player);
         // Decision B (GAMEOVER-01): post-gameOver the claim ALSO pays the caller's prepaid
         // afking ETH (lazy per-player merge — no unbounded loop). Pre-gameOver afkingFunding
         // stays its own bucket (spent by afking auto-buys / reclaimed via withdrawAfkingFunding).
         // Both this merge and withdrawAfkingFunding zero the SAME bucket → no double-spend.
-        uint256 afking = gameOver ? afkingFunding[player] : 0;
+        uint256 afking = gameOver ? _afkingOf(player) : 0;
         if (amount <= 1 && afking == 0) revert E();
         uint256 payout;
         unchecked {
             if (amount > 1) {
-                claimableWinnings[player] = 1; // Leave sentinel
+                _debitClaimable(player, amount - 1); // Leave sentinel
                 payout = amount - 1;
             }
             if (afking != 0) {
-                afkingFunding[player] = 0;
+                _debitAfking(player, afking);
                 payout += afking;
             }
         }
@@ -1603,7 +1627,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function depositAfkingFunding(address player) external payable {
         if (player == address(0)) revert E();
         if (msg.value == 0) return;
-        afkingFunding[player] += msg.value;
+        _creditAfking(player, msg.value);
         claimablePool += uint128(msg.value);
         emit AfkingFunded(player, msg.value);
     }
@@ -1618,11 +1642,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function withdrawAfkingFunding(uint256 amount) external {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert E();
         if (amount == 0) return;
-        uint256 bal = afkingFunding[msg.sender];
+        uint256 bal = _afkingOf(msg.sender);
         if (amount > bal) revert E();
-        unchecked {
-            afkingFunding[msg.sender] = bal - amount;
-        }
+        _debitAfking(msg.sender, amount);
         claimablePool -= uint128(amount); // tandem release (checked math)
         (bool ok, ) = msg.sender.call{value: amount}("");
         if (!ok) revert E();
@@ -1633,7 +1655,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param player The player to query.
     /// @return The player's afkingFunding balance (wei).
     function afkingFundingOf(address player) external view returns (uint256) {
-        return afkingFunding[player];
+        return _afkingOf(player);
     }
 
     /// @notice Claim DGNRS affiliate rewards for the current level.
@@ -2063,10 +2085,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // ETH leg (as today): the claimable[SDGNRS] ledger AND the game's liquid ETH both cover
         // `amount` — segregate the at-risk ETH out to sDGNRS. CHECKED debit (no unchecked); CEI.
         if (
-            claimableWinnings[ContractAddresses.SDGNRS] >= amount &&
+            _claimableOf(ContractAddresses.SDGNRS) >= amount &&
             address(this).balance >= amount
         ) {
-            claimableWinnings[ContractAddresses.SDGNRS] -= amount;
+            _debitClaimable(ContractAddresses.SDGNRS, amount);
             claimablePool -= uint128(amount);
             (bool ok, ) = payable(ContractAddresses.SDGNRS).call{value: amount}("");
             if (!ok) revert E();
@@ -2134,7 +2156,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256[] calldata quantities
     )
         external
-        view
         returns (
             uint256 totalFaceWei,
             uint256 totalBudget,
@@ -2143,13 +2164,24 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             uint256 burnieTokens
         )
     {
-        uint256 cashWei;
-        (totalFaceWei, totalBudget, ticketWei, cashWei) = _quoteFarFutureSwap(
-            player,
-            levels,
-            quantities
-        );
-        (ethCashWei, burnieTokens) = _quoteFarFutureBurnieSplit(player, cashWei);
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_MINT_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameMintModule
+                        .previewSellFarFutureTickets
+                        .selector,
+                    player,
+                    levels,
+                    quantities
+                )
+            );
+        if (!ok) _revertDelegate(data);
+        return
+            abi.decode(
+                data,
+                (uint256, uint256, uint256, uint256, uint256)
+            );
     }
 
     /*+===============================================================================================+
@@ -2212,8 +2244,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 ethBal = address(this).balance;
         if (ethBal < amount) revert E();
         // Vault and DGNRS claimable can be settled in stETH, so exclude from ETH reserve
-        uint256 stethSettleable = claimableWinnings[ContractAddresses.VAULT] +
-            claimableWinnings[ContractAddresses.SDGNRS];
+        uint256 stethSettleable = _claimableOf(ContractAddresses.VAULT) +
+            _claimableOf(ContractAddresses.SDGNRS);
         uint256 reserve = claimablePool > stethSettleable
             ? claimablePool - stethSettleable
             : 0;
@@ -2720,7 +2752,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return Claimable amount in wei (excludes sentinel).
     function getWinnings() external view returns (uint256) {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return 0;
-        uint256 stored = claimableWinnings[msg.sender];
+        uint256 stored = _claimableOf(msg.sender);
         if (stored <= 1) return 0;
         unchecked {
             return stored - 1;
@@ -2734,7 +2766,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         address player
     ) external view returns (uint256) {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return 0;
-        return claimableWinnings[player];
+        return _claimableOf(player);
     }
 
     /// @notice Batched afking read — mintPrice + rngLock + per-player claimable in ONE call.
@@ -2754,8 +2786,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         claimables = new uint256[](n);
         afkingFundings = new uint256[](n);
         for (uint256 i; i < n; ) {
-            claimables[i] = swept ? 0 : claimableWinnings[players[i]];
-            afkingFundings[i] = afkingFunding[players[i]]; // raw — mirrors afkingFundingOf (D-MR-01)
+            claimables[i] = swept ? 0 : _claimableOf(players[i]);
+            afkingFundings[i] = _afkingOf(players[i]); // raw — mirrors afkingFundingOf (D-MR-01)
             unchecked {
                 ++i;
             }

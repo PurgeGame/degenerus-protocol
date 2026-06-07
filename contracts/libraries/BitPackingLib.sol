@@ -19,7 +19,8 @@ pragma solidity 0.8.34;
  *      [184]     HAS_DEITY_PASS_SHIFT        - Deity pass flag (1 bit)
  *      [185-208] AFFILIATE_BONUS_LEVEL_SHIFT - Cached affiliate bonus level (24 bits)
  *      [209-214] AFFILIATE_BONUS_POINTS_SHIFT - Cached affiliate bonus points (6 bits)
- *      [215-227] (unused)
+ *      [215-222] CURSE_COUNT_SHIFT            - Cashout/smite curse counter (8 bits)
+ *      [223-227] (unused)
  *      [228-243] LEVEL_UNITS_SHIFT           - Units purchased at current level (16 bits)
  *      [244-255] (reserved)
  */
@@ -39,6 +40,9 @@ library BitPackingLib {
 
     /// @notice 6-bit mask for affiliate bonus points field
     uint256 internal constant MASK_6 = (uint256(1) << 6) - 1;
+
+    /// @notice 8-bit mask for the curse counter field
+    uint256 internal constant MASK_8 = (uint256(1) << 8) - 1;
 
     // -------------------------------------------------------------------------
     // Bit Shift Positions
@@ -80,6 +84,9 @@ library BitPackingLib {
 
     /// @notice Bit position for cached affiliate bonus points (bits 209-214)
     uint256 internal constant AFFILIATE_BONUS_POINTS_SHIFT = 209;
+
+    /// @notice Bit position for the cashout/smite curse counter (bits 215-222)
+    uint256 internal constant CURSE_COUNT_SHIFT = 215;
 
     /// @notice Bit position for level units count (bits 228-243)
     uint256 internal constant LEVEL_UNITS_SHIFT = 228;

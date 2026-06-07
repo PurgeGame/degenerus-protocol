@@ -1134,7 +1134,7 @@ contract StakedStonkRedemption is DeployProtocol {
         tester.setClaimable(buyer, basis);
         tester.setClaimablePool(basis); // single buyer ⇒ pool == Σ claimableWinnings == basis
 
-        tester.settle(buyer, basis, shortfall);
+        tester.settle(buyer, shortfall, true);
 
         // Paired debit: both dropped by exactly `shortfall`; invariant preserved.
         assertEq(tester.getClaimable(buyer), basis - shortfall, "R3: claimableWinnings[buyer] != basis - shortfall");
@@ -1151,6 +1151,6 @@ contract StakedStonkRedemption is DeployProtocol {
         // matches its 4-byte id (the tester re-exposes it as `sentinelError()` for a tight check).
         uint256 cur = tester.getClaimable(buyer);
         vm.expectRevert(tester.sentinelError());
-        tester.settle(buyer, cur, cur); // basis == shortfall → `basis <= shortfall` → revert
+        tester.settle(buyer, cur, true); // shortfall == claimable: claimable to sentinel, then afking (0) short → revert E()
     }
 }

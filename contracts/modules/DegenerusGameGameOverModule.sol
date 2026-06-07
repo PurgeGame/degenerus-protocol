@@ -58,16 +58,6 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
     // error E() — inherited from DegenerusGameStorage
 
-    /// @notice Emitted when winnings are credited to a player's claimable balance
-    /// @param player The player who earned the winnings
-    /// @param recipient The address receiving the credit (same as player)
-    /// @param amount The amount credited in wei
-    event PlayerCredited(
-        address indexed player,
-        address indexed recipient,
-        uint256 amount
-    );
-
     /// @notice Process game over by distributing remaining funds via jackpots.
     /// @dev Called when liveness guards trigger (1yr deploy timeout or 120-day inactivity).
     ///      Sets terminal gameOver flag.
@@ -127,8 +117,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
                         refund = budget;
                     }
                     if (refund != 0) {
+                        _creditClaimable(owner, refund);
                         unchecked {
-                            claimableWinnings[owner] += refund;
                             totalRefunded += refund;
                             budget -= refund;
                         }
@@ -209,12 +199,12 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
         _goWrite(GO_SWEPT_SHIFT, GO_SWEPT_MASK, 1);
 
-        uint256 owedV  = claimableWinnings[ContractAddresses.VAULT];
-        uint256 owedSD = claimableWinnings[ContractAddresses.SDGNRS];
-        uint256 owedG  = claimableWinnings[ContractAddresses.GNRUS];
-        claimableWinnings[ContractAddresses.VAULT]  = 0;
-        claimableWinnings[ContractAddresses.SDGNRS] = 0;
-        claimableWinnings[ContractAddresses.GNRUS]  = 0;
+        uint256 owedV  = _claimableOf(ContractAddresses.VAULT);
+        uint256 owedSD = _claimableOf(ContractAddresses.SDGNRS);
+        uint256 owedG  = _claimableOf(ContractAddresses.GNRUS);
+        _debitClaimable(ContractAddresses.VAULT, owedV);
+        _debitClaimable(ContractAddresses.SDGNRS, owedSD);
+        _debitClaimable(ContractAddresses.GNRUS, owedG);
         claimablePool = 0;
 
         // Shutdown VRF subscription (fire-and-forget; failure must not block sweep)

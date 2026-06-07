@@ -352,10 +352,10 @@ abstract contract DegenerusGameStorage {
     ///      Access through _getCurrentPrizePool()/_setCurrentPrizePool() helpers.
     uint128 internal currentPrizePool;
 
-    /// @dev Aggregate ETH liability across all claimableWinnings AND afkingFunding entries.
+    /// @dev Aggregate ETH liability across all packed balances (claimable + afking halves).
     ///      Used for solvency checks: game must hold >= claimablePool ETH.
     ///
-    ///      INVARIANT: claimablePool == Σ claimableWinnings[*] + Σ afkingFunding[*]
+    ///      INVARIANT: claimablePool == Σ (claimable + afking halves of balancesPacked[*])
     ///      Maintained by crediting/debiting every component in tandem.
     ///      NOTE: During decimator settlement, the full pool is reserved in claimablePool
     ///      before individual claims are credited, temporarily breaking equality.
@@ -404,20 +404,18 @@ abstract contract DegenerusGameStorage {
     // Token State and Jackpot Mechanics
     // =========================================================================
 
-    /// @dev ETH claimable by players from jackpot winnings.
-    ///      Credited by jackpot logic; withdrawn via claim function.
+    /// @dev Per-player ETH balances packed into one slot: [afking:high128 | claimable:low128].
+    ///      - claimable (low 128 bits): ETH claimable from jackpot winnings.
+    ///      - afking (high 128 bits): prepaid AfKing subscription funding.
+    ///      Both halves ride inside claimablePool (no separate aggregate); each mutation moves
+    ///      claimablePool in tandem at the call site. Read and written only through the
+    ///      _claimableOf / _afkingOf / _credit* / _debit* accessors, which split and recombine
+    ///      the two halves; per-player ETH <= total supply (~1.2e26 wei << 2^128), so neither
+    ///      half can overflow.
     ///
-    ///      SECURITY: Pull pattern — players withdraw their own funds.
-    ///      Prevents reentrancy by separating credit from transfer.
-    mapping(address => uint256) internal claimableWinnings;
-
-    /// @dev Per-player prepaid afking ETH (AfKing subscription funding), distinct from
-    ///      claimableWinnings. No separate aggregate — the systemwide afking total rides
-    ///      inside claimablePool; every afkingFunding mutation moves claimablePool in tandem.
-    ///
-    ///      SECURITY: Pull pattern — the funding source withdraws its own balance via
-    ///      withdrawAfkingFunding; spent by afking auto-buys keyed on the funder.
-    mapping(address => uint256) internal afkingFunding;
+    ///      SECURITY: Pull pattern — players and funders withdraw their own funds (the claim
+    ///      function / withdrawAfkingFunding), separating credit from transfer.
+    mapping(address => uint256) internal balancesPacked;
 
     /// @dev Nested mapping: level -> trait ID (0-255) -> array of ticket holders.
     ///      Used for jackpot winner selection: random index into trait's array.
@@ -545,6 +543,13 @@ abstract contract DegenerusGameStorage {
 
     /// @notice Emitted when final sweep forfeits unclaimed winnings 30 days post-gameover.
     event FinalSwept(uint256 totalFunds);
+
+    /// @dev Emitted when ETH is credited to a player's claimable balance.
+    event PlayerCredited(address indexed player, address indexed recipient, uint256 amount);
+
+    /// @dev Emitted whenever prepaid afking ETH is spent to fund a buy (the afking-as-payment
+    ///      waterfall's third tier) — full observability of where afking principal goes.
+    event AfkingSpent(address indexed player, uint256 amount);
 
     /// @notice Emitted when a boon is consumed by a player.
     event BoonConsumed(address indexed player, uint8 boonType, uint16 boostBps);
@@ -841,21 +846,86 @@ abstract contract DegenerusGameStorage {
         currentPrizePool = uint128(val);
     }
 
-    /// @dev Canonical CPAY claimable-shortfall settle (SPEC R3). Consumes `shortfall`
-    ///      wei from `basis` (the caller's chosen claimable balance — a fresh
-    ///      `claimableWinnings[buyer]` read or a same-call snapshot), preserving the
-    ///      STRICT 1-wei sentinel, and pairs the claimable debit with an equal
-    ///      `claimablePool` debit so the invariant `claimablePool == Σ claimableWinnings`
-    ///      holds. Single definition so the sentinel + paired debit cannot drift
-    ///      across the ETH-in paths that accept claimable shortfall.
-    function _settleClaimableShortfall(address buyer, uint256 basis, uint256 shortfall) internal {
-        if (shortfall != 0) {
-            if (basis <= shortfall) revert E();
-            unchecked {
-                claimableWinnings[buyer] = basis - shortfall;
+    /// @dev Canonical shortfall settle: cover `shortfall` wei from the buyer's own balances,
+    ///      claimable first (only when `allowClaimable`) then prepaid afking. Tier 1 draws
+    ///      claimable down to the STRICT 1-wei sentinel; tier 2 drains afking toward 0 (no
+    ///      sentinel). Each debit pairs an equal `claimablePool` debit so the solvency total
+    ///      stays exact, and an afking draw emits AfkingSpent. Reverts E() when the two tiers
+    ///      together cannot cover the shortfall. Single sink so the sentinel + paired debits
+    ///      cannot drift across the ETH-in paths that accept claimable/afking shortfall.
+    /// @return claimableUsed Wei drawn from claimable. @return afkingUsed Wei drawn from afking.
+    function _settleShortfall(address buyer, uint256 shortfall, bool allowClaimable)
+        internal
+        returns (uint256 claimableUsed, uint256 afkingUsed)
+    {
+        if (shortfall == 0) return (0, 0);
+        if (allowClaimable) {
+            uint256 claimable = _claimableOf(buyer);
+            if (claimable > 1) {
+                uint256 available = claimable - 1; // preserve the 1-wei sentinel
+                claimableUsed = shortfall < available ? shortfall : available;
+                if (claimableUsed != 0) {
+                    _debitClaimable(buyer, claimableUsed);
+                    claimablePool -= uint128(claimableUsed);
+                }
             }
-            claimablePool -= uint128(shortfall);
         }
+        uint256 remaining = shortfall - claimableUsed;
+        if (remaining != 0) {
+            if (_afkingOf(buyer) < remaining) revert E();
+            afkingUsed = remaining;
+            _debitAfking(buyer, afkingUsed);
+            claimablePool -= uint128(afkingUsed);
+            emit AfkingSpent(buyer, afkingUsed);
+        }
+    }
+
+    // =========================================================================
+    // Balance accessors — claimable / afking (the only readers/writers of the
+    // shared per-player slot). claimableWinnings and afkingFunding are folded
+    // into one word per player; every balance flows through these so the
+    // split/recombine stays consistent. claimablePool pairing is kept at the
+    // call sites (the solvency total is maintained in tandem there).
+    // =========================================================================
+
+    /// @dev A player's claimable winnings balance (low 128 bits of the packed slot).
+    function _claimableOf(address player) internal view returns (uint256) {
+        return uint128(balancesPacked[player]);
+    }
+
+    /// @dev A player's prepaid afking balance (high 128 bits of the packed slot).
+    function _afkingOf(address player) internal view returns (uint256) {
+        return balancesPacked[player] >> 128;
+    }
+
+    /// @dev Credit claimable (the low half). A full-word add is safe: per-player ETH <= total
+    ///      supply (~1.2e26 wei << 2^128), so claimable + amount never carries into the afking half.
+    function _creditClaimable(address beneficiary, uint256 weiAmount) internal {
+        if (weiAmount == 0) return;
+        balancesPacked[beneficiary] += weiAmount;
+        emit PlayerCredited(beneficiary, beneficiary, weiAmount);
+    }
+
+    /// @dev Debit claimable (the low half). Guard low >= amount so the subtraction never borrows
+    ///      from the afking half — a low-half borrow would be invisible to 0.8's full-word check.
+    function _debitClaimable(address player, uint256 weiAmount) internal {
+        if (weiAmount == 0) return;
+        if (uint128(balancesPacked[player]) < weiAmount) revert E();
+        balancesPacked[player] -= weiAmount;
+    }
+
+    /// @dev Credit afking (the high half). A full-word add is safe: afking + amount <= 2*supply
+    ///      << 2^128 (no overflow), and amount << 128 leaves the claimable low half untouched.
+    function _creditAfking(address player, uint256 weiAmount) internal {
+        if (weiAmount == 0) return;
+        balancesPacked[player] += weiAmount << 128;
+    }
+
+    /// @dev Debit afking (the high half). The full-word subtraction is naturally fail-loud: if
+    ///      afking < amount the whole word underflows and 0.8 reverts (no silent low-half borrow).
+    function _debitAfking(address player, uint256 weiAmount) internal {
+        if (weiAmount == 0) return;
+        balancesPacked[player] -= weiAmount << 128;
     }
 
     // =========================================================================

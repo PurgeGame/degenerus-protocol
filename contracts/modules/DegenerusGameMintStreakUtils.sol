@@ -317,6 +317,14 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             }
         }
 
+        // Cashout/smite curse penalty: each point lowers the activity score by 100 bps,
+        // floored at 0. Rides the mintPacked_ word already loaded above (zero new SLOAD).
+        uint256 curse = (packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8;
+        if (curse != 0) {
+            uint256 penaltyBps = curse * 100;
+            bonusBps = bonusBps > penaltyBps ? bonusBps - penaltyBps : 0;
+        }
+
         scoreBps = bonusBps;
     }
 
@@ -329,5 +337,63 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         uint32 questStreak
     ) internal view returns (uint256 scoreBps) {
         return _playerActivityScore(player, questStreak, _activeTicketLevel());
+    }
+
+    // =========================================================================
+    // Cashout / smite curse counter (mintPacked_ bits 215-222)
+    // =========================================================================
+
+    /// @dev Curse cap = 20 points (-2000 bps max). Doubles as the uint8-wrap guard: a
+    ///      saturating +2 can never wrap the 8-bit field 254->0.
+    uint8 internal constant CURSE_COUNT_CAP = 20;
+
+    /// @dev Add a saturating +2 curse stack to `target` (no SSTORE once at the cap).
+    function _applyCurseStack(address target) internal {
+        uint256 packed = mintPacked_[target];
+        uint256 curse = (packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8;
+        if (curse >= CURSE_COUNT_CAP) return;
+        uint256 newCurse = curse + 2;
+        if (newCurse > CURSE_COUNT_CAP) newCurse = CURSE_COUNT_CAP;
+        mintPacked_[target] = BitPackingLib.setPacked(
+            packed,
+            BitPackingLib.CURSE_COUNT_SHIFT,
+            BitPackingLib.MASK_8,
+            newCurse
+        );
+    }
+
+    /// @dev Clear `target`'s curse counter to 0 (field-isolated; no SSTORE when already 0).
+    function _clearCurse(address target) internal {
+        uint256 packed = mintPacked_[target];
+        if ((packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8 == 0) return;
+        mintPacked_[target] = BitPackingLib.setPacked(
+            packed,
+            BitPackingLib.CURSE_COUNT_SHIFT,
+            BitPackingLib.MASK_8,
+            0
+        );
+    }
+
+    /// @dev The current cashout/smite curse points for `player` (UI view).
+    function curseCountOf(address player) external view returns (uint8) {
+        return uint8((mintPacked_[player] >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8);
+    }
+
+    /// @dev Stamp the current simulated day into `player`'s DAY_SHIFT field for lootbox
+    ///      activity / bounty eligibility (no-op when already stamped today). Shared by the
+    ///      pass-bundled lootbox leg and the plain standalone lootbox buy.
+    function _recordLootboxMintDay(address player, uint256 cachedPacked) internal {
+        uint24 day = _simulatedDayIndex();
+        uint24 prevDay = uint24(
+            (cachedPacked >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_32
+        );
+        if (prevDay == day) {
+            return;
+        }
+        uint256 clearedDay = cachedPacked &
+            ~(BitPackingLib.MASK_32 << BitPackingLib.DAY_SHIFT);
+        mintPacked_[player] =
+            clearedDay |
+            (uint256(day) << BitPackingLib.DAY_SHIFT);
     }
 }

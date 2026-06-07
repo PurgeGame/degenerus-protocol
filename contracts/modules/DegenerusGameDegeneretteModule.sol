@@ -577,14 +577,27 @@ contract DegenerusGameDegeneretteModule is
         uint256 ethPaid
     ) private {
         if (currency == CURRENCY_ETH) {
-            // Check ETH payment covers bet, or pull from claimable
+            // ETH covers the bet first, then claimable to the 1-wei sentinel, then afking.
             if (ethPaid > totalBet) revert InvalidBet();
             if (ethPaid < totalBet) {
                 uint256 fromClaimable = totalBet - ethPaid;
-                if (claimableWinnings[player] <= fromClaimable)
-                    revert InvalidBet();
-                claimableWinnings[player] -= fromClaimable;
-                claimablePool -= uint128(fromClaimable);
+                uint256 claimable = _claimableOf(player);
+                uint256 cUsed;
+                if (claimable > 1) {
+                    uint256 available = claimable - 1; // preserve the 1-wei sentinel
+                    cUsed = fromClaimable < available ? fromClaimable : available;
+                    if (cUsed != 0) {
+                        _debitClaimable(player, cUsed);
+                        claimablePool -= uint128(cUsed);
+                    }
+                }
+                uint256 remaining = fromClaimable - cUsed;
+                if (remaining != 0) {
+                    if (_afkingOf(player) < remaining) revert InvalidBet();
+                    _debitAfking(player, remaining);
+                    claimablePool -= uint128(remaining);
+                    emit AfkingSpent(player, remaining);
+                }
             }
 
             // Update pool and pending

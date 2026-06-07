@@ -268,6 +268,22 @@ interface IDegenerusGameMintModule {
         uint256[] calldata queueIndices
     ) external;
 
+    /// @notice Quote a far-future salvage swap WITHOUT executing (read-only -EV offer).
+    function previewSellFarFutureTickets(
+        address player,
+        uint32[] calldata levels,
+        uint256[] calldata quantities
+    )
+        external
+        view
+        returns (
+            uint256 totalFaceWei,
+            uint256 totalBudget,
+            uint256 ticketWei,
+            uint256 ethCashWei,
+            uint256 burnieTokens
+        );
+
     /// @notice Buys a credit-gated coin-presale box (ETH + claimable shortfall)
     /// @param buyer Player receiving the box
     /// @param boxAmount Requested box ETH (>= 0.01 ETH, pre-clamp)
@@ -504,6 +520,15 @@ interface IGameAfkingModule {
     /// @param sub The subscriber whose affiliate base is drained.
     /// @return base The drained whole-BURNIE affiliate base (0 if already drained).
     function drainAffiliateBase(address sub) external returns (uint256 base);
+
+    /// @notice Cashout-curse SET hook, delegatecalled from the Game's claimWinnings.
+    function maybeCurse(address player) external;
+
+    /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 BURNIE.
+    function decurse(address target) external;
+
+    /// @notice Deity-gated smite: add a saturating curse stack to `smitee` for 200 BURNIE.
+    function smite(uint256 deityId, address smitee) external;
 
     /// @notice For each funded sub it stamps the per-sub box fields (lootbox mode) or
     ///         queues whole tickets (ticket mode), debits afkingFunding, and advances

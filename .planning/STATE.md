@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v61.0
 milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
 status: executing
-last_updated: "2026-06-06T22:30:42.549Z"
-last_activity: 2026-06-06 -- Phase 376 planning complete
+last_updated: "2026-06-06T22:40:45.312Z"
+last_activity: 2026-06-06 -- Phase 376 execution started
 progress:
   total_phases: 10
   completed_phases: 2
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP.md (v61.0 🚧 ACTIVE — phases 375-379, once roadmapped) + .planning/REQUIREMENTS.md (v61.0 reqs, once defined) + .planning/MILESTONES.md (v60.0 entry, top). v61 design inputs (design-locked): .planning/PLAN-V61-MILESTONE-SCOPE.md + PLAN-V61-AFKING-AS-PAYMENT-SOURCE.md + PLAN-CASHOUT-CURSE.md + PLAN-V61-DEITY-SMITE.md (`[[v61-milestone-seed]]`). Baseline = the v60.0 closure HEAD `2bee6d6f` (10 commits ahead of origin, NOT pushed). v60.0 archive: .planning/milestones/v60.0-ROADMAP.md + v60.0-REQUIREMENTS.md; canonical audit deliverable audit/FINDINGS-v60.0.md (chmod 444). **NEXT = /gsd-plan-phase 376 (IMPL).**
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 376 — impl — the one batched contract diff (afpay + pack + curse + smite)
+**Current focus:** Phase 376 — impl-the-one-batched-contract-diff-afpay-pack-curse-smite
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,11 +32,12 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 
 ## Current Position
 
-Phase: 376
-Plan: Not started
-Status: Ready to execute
-Next up: 376 IMPL (the ONE batched contract diff AFPAY+PACK+CURSE+SMITE, producer-before-consumer Track A/B per `SPEC-V61-DESIGN-LOCK.md`; CONTRACT-BOUNDARY HARD STOP) → 377 GAS → 378 TST → 379 TERMINAL (FULL in-milestone close)
-Last activity: 2026-06-06 -- Phase 376 planning complete
+Phase: 376 (impl-the-one-batched-contract-diff-afpay-pack-curse-smite) — ⏸ HELD at the contract-commit boundary (blocking-human gate, 376-03 Task 2)
+Plan: 3 of 3 (all work done; awaiting USER hand-review of the batched `contracts/*.sol` diff)
+Status: ALL 17 reqs applied + EIP-170 RESOLVED (DegenerusGame 24,342 B / MintModule 24,356 B, both < 24,576) + full `forge build` (contracts + tests) exits 0. Diff HELD, NOT committed. Gate evidence in `376-03-SUMMARY.md`.
+Next up: USER hand-reviews the batched `contracts/*.sol` diff → approves (their gated commit: `mv .git/hooks/pre-commit .git/hooks/pre-commit.bak` → commit → restore) or requests changes → then 377 GAS → 378 TST (TST-01..06 + SEC-01/02) → 379 TERMINAL (FULL in-milestone close).
+EIP-170 reclaim (this session): de-view read getters (USER-selected) → `decClaimable` de-dup to DecimatorModule + `previewSellFarFutureTickets` → MintModule (drops the far-future quote helpers from the Game). Two hero-getter moves applied-then-reverted as unnecessary churn. Details: `376-03-SUMMARY.md` + `376-EXEC-HANDOFF.md`.
+Last activity: 2026-06-06 -- Phase 376 IMPL: EIP-170 blocker resolved, full build green, contracts HELD for hand-review
 
 ## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
 

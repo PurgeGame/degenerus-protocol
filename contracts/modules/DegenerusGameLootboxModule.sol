@@ -50,11 +50,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // Events
     // =========================================================================
 
-    /// @notice Emitted when ETH is credited to a player's claimable balance.
-    /// @param player Winner address credited.
-    /// @param recipient Recipient address (may differ from player for delegated claims).
-    /// @param amount ETH amount credited (in wei).
-    event PlayerCredited(address indexed player, address indexed recipient, uint256 amount);
 
     /// @notice Emitted when an ETH lootbox is successfully opened
     /// @param player The player who opened the lootbox

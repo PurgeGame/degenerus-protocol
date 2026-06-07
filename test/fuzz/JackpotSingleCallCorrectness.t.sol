@@ -33,7 +33,7 @@ contract JackpotSingleCallHarness is DegenerusGameJackpotModule {
     // -- read-only accounting views (the credit sinks _processDailyEth writes) --
 
     function claimableOf(address who) external view returns (uint256) {
-        return claimableWinnings[who];
+        return _claimableOf(who);
     }
 
     function whalePassOf(address who) external view returns (uint256) {
