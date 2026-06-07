@@ -46,12 +46,12 @@ contract V56FreezeSolvency is DeployProtocol {
     // -------------------------------------------------------------------------
     uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 @ slot 1, byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit @ bit 184)
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 11; // mapping(uint32 => uint256) — the afking box DAY-keyed word
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38; // [0:47] lootboxRngIndex
-    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 39; // mapping(uint48 => uint256)
-    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // mapping(address => uint256) _subscriberIndex (1-indexed)
+    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit @ bit 184)
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint32 => uint256) — the afking box DAY-keyed word
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36; // [0:47] lootboxRngIndex
+    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 37; // mapping(uint48 => uint256)
+    uint256 private constant SUBOF_SLOT = 62; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 65; // mapping(address => uint256) _subscriberIndex (1-indexed)
 
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
     //   scorePlus1 u16 @6 · amount u24 @8 (milli-ETH)
@@ -545,7 +545,7 @@ contract V56FreezeSolvency is DeployProtocol {
         arr[1] = b;
     }
 
-    // ---- Sub-slot + claimablePool reads (slot 66 + the v56 offsets; slot 1 byte 16) ----
+    // ---- Sub-slot + claimablePool reads (_subOf slot 62 + the v56 offsets; slot 1 byte 16) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);

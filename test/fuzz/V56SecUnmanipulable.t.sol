@@ -42,9 +42,9 @@ contract V56SecUnmanipulable is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the v56 Sub-slot offset block (V56AfkingGasMarginal:68-89)
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 65;            // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // mapping(address => uint256) _subscriberIndex (1-indexed)
-    uint256 private constant MINTPACKED_SLOT = 10;       // mintPacked_ mapping root (deity bit @ bit 184)
+    uint256 private constant SUBOF_SLOT = 62;            // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 65; // mapping(address => uint256) _subscriberIndex (1-indexed)
+    uint256 private constant MINTPACKED_SLOT = 9;        // mintPacked_ mapping root (deity bit @ bit 184)
 
     //   dailyQuantity u8 @0 · validThroughLevel u24 @1 · reinvestPct u8 @4 · flags u8 @5
     //   scorePlus1 u16 @6 · amount u24 @8
@@ -62,9 +62,9 @@ contract V56SecUnmanipulable is DeployProtocol {
 
     uint256 private constant DEITY_SHIFT = 184;
 
-    /// @dev The game `level` lives in slot 0 at byte 14 (uint24) — poked up to drive the pass-eviction
+    /// @dev The game `level` lives in slot 0 at byte 12 (uint24) — poked up to drive the pass-eviction
     ///      crossing (the fixture level does not advance organically over the harness's day loop).
-    uint256 private constant LEVEL_OFF = 14;
+    uint256 private constant LEVEL_OFF = 12;
 
     /// @dev QUEST_SLOT0_REWARD / 1 ether = 100 whole BURNIE accrued to pendingBurnie per delivered buy.
     uint256 private constant SLOT0_BURNIE_PER_BUY = 100;
@@ -657,7 +657,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Poke the game `level` (slot 0, byte 14, uint24) up so the pass-validity crossing fires.
+    /// @dev Poke the game `level` (slot 0, byte 12, uint24) up so the pass-validity crossing fires.
     function _setLevel(uint24 lvl) internal {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         s0 &= ~(uint256(0xFFFFFF) << (LEVEL_OFF * 8));
@@ -722,7 +722,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         arr[1] = b;
     }
 
-    // ---- Sub-slot reads (slot 66 + the v56 offsets) ----
+    // ---- Sub-slot reads (_subOf slot 62 + the v56 offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);

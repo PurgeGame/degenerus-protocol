@@ -49,13 +49,13 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      subs are driven through the public game.subscribe() API. Test-only: no contracts/*.sol mutated.
 contract AfKingConcurrency is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`;
-    // the old AfKing-standalone SUBOF_SLOT=65 / SUBSCRIBER_INDEX_SLOT=68 constants were WRONG).
+    // Game-resident storage slots (via `forge inspect DegenerusGame storageLayout`).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 67; // _subscribers address[] (length here; data at keccak(68))
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // _subscriberIndex mapping root (1-indexed)
-    uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit lives here)
+    uint256 private constant SUBOF_SLOT = 62; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 64; // _subscribers address[] (length here; data at keccak(64))
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 65; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant SUBCURSOR_SLOT = 66; // _subCursor uint16 at offset 0 (the STAGE walk cursor)
+    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit lives here)
 
     // Sub packed-field byte offsets (cumulative little-endian within the single packed slot —
     // DegenerusGameStorage.sol:1895 is the authoritative layout; the v56 compute-on-read re-pack
@@ -583,7 +583,7 @@ contract AfKingConcurrency is DeployProtocol {
         }
     }
 
-    // ---- Sub field reads (RE-DERIVED game-resident slot 66 + the verified packed offsets) ----
+    // ---- Sub field reads (game-resident _subOf slot 62 + the verified packed offsets) ----
 
     function _subSlot(address who) internal pure returns (bytes32) {
         return keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
@@ -610,15 +610,15 @@ contract AfKingConcurrency is DeployProtocol {
         return uint8(_subField(who, OFF_FLAGS, 8));
     }
 
-    /// @dev `subsFullyProcessed` (slot 0, offset 31, bool) — the per-day afking-done gate.
+    /// @dev `subsFullyProcessed` (slot 0, offset 29, bool) — the per-day afking-done gate.
     function _subsFullyProcessed() internal view returns (bool) {
         uint256 p0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        return uint8(p0 >> (31 * 8)) != 0;
+        return uint8(p0 >> (29 * 8)) != 0;
     }
 
-    /// @dev `_subCursor` (slot 69, offset 0, uint16) — the STAGE walk cursor.
+    /// @dev `_subCursor` (slot 66, offset 0, uint16) — the STAGE walk cursor.
     function _subCursorVal() internal view returns (uint16) {
-        return uint16(uint256(vm.load(address(game), bytes32(uint256(69)))));
+        return uint16(uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))));
     }
 
     /// @dev Open the afking reset gate exactly as the contract does on a new-day entry
@@ -627,15 +627,15 @@ contract AfKingConcurrency is DeployProtocol {
     ///      fields the contract writes (the idle fixture's real day index saturates without ticket
     ///      purchases, so the gate is opened directly rather than via a real day rollover).
     function _openAfkingResetGate() internal {
-        // _subCursor = 0 (slot 69, offset 0, uint16).
-        bytes32 s69 = bytes32(uint256(69));
-        uint256 p69 = uint256(vm.load(address(game), s69));
-        p69 &= ~uint256(0xFFFF);
-        vm.store(address(game), s69, bytes32(p69));
-        // subsFullyProcessed = false (slot 0, offset 31).
+        // _subCursor = 0 (slot 66, offset 0, uint16).
+        bytes32 sCursor = bytes32(uint256(SUBCURSOR_SLOT));
+        uint256 pCursor = uint256(vm.load(address(game), sCursor));
+        pCursor &= ~uint256(0xFFFF);
+        vm.store(address(game), sCursor, bytes32(pCursor));
+        // subsFullyProcessed = false (slot 0, offset 29).
         bytes32 s0 = bytes32(uint256(0));
         uint256 p0 = uint256(vm.load(address(game), s0));
-        p0 &= ~(uint256(0xFF) << (31 * 8));
+        p0 &= ~(uint256(0xFF) << (29 * 8));
         vm.store(address(game), s0, bytes32(p0));
     }
 
@@ -648,17 +648,17 @@ contract AfKingConcurrency is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Read `who`'s 1-indexed subscriber index (RE-DERIVED slot 69); 0 = not in set.
+    /// @dev Read `who`'s 1-indexed subscriber index (slot 65); 0 = not in set.
     function _subscriberIndexOf(address who) internal view returns (uint256) {
         return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)))));
     }
 
-    /// @dev `_subscribers.length` (RE-DERIVED slot 68 holds the array length).
+    /// @dev `_subscribers.length` (slot 64 holds the array length).
     function _subscribersLen() internal view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
     }
 
-    /// @dev `_subscribers[i]` (data at keccak256(68) + i).
+    /// @dev `_subscribers[i]` (data at keccak256(64) + i).
     function _subscriberAt(uint256 i) internal view returns (address) {
         bytes32 base = keccak256(abi.encode(uint256(SUBSCRIBERS_SLOT)));
         return address(uint160(uint256(vm.load(address(game), bytes32(uint256(base) + i)))));

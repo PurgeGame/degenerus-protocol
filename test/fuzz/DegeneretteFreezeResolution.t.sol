@@ -50,10 +50,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     uint256 private constant PENDING_PACKED_SLOT = 11;
 
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 38;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
 
-    /// @dev lootboxRngPacked at slot 37 (v47: presale-box storage additions); lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 37;
+    /// @dev lootboxRngPacked at slot 36; lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
 
     /// @dev Salt used in degenerette bet resolution for the first spin.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
@@ -63,9 +63,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     /// @dev claimablePool (uint128) lives in slot 1, byte 16.
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;
     /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 45;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 43;
     /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 46;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 44;
     /// @dev BurnieCoin.balanceOf mapping root slot.
     uint256 private constant BURNIE_BALANCEOF_SLOT = 1;
     /// @dev WrappedWrappedXRP.balanceOf / totalSupply slots.
@@ -109,7 +109,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // placeDegeneretteBet reverts with E() when lootboxRngIndex == 0.
         // Seed it to 1 so the bet check passes. The word at index 1 starts
         // as 0 (no pending RNG), which is the required state for bet placement.
-        // lootboxRngIndex is the low 48 bits of lootboxRngPacked (slot 37).
+        // lootboxRngIndex is the low 48 bits of lootboxRngPacked (slot 36).
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
         lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(1);
         vm.store(
@@ -1041,7 +1041,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         wwxrp.mintPrize(who, amount);
     }
 
-    /// @dev Read the current degeneretteBetNonce for a player (slot 46) = newest betId.
+    /// @dev Read the current degeneretteBetNonce for a player (slot 44) = newest betId.
     function _betNonce(address who) internal view returns (uint64) {
         bytes32 slot = keccak256(abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT)));
         return uint64(uint256(vm.load(address(game), slot)));
@@ -1101,7 +1101,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     /// @notice Inject a lootbox RNG word for a given index.
-    /// @dev Writes to the lootboxRngWordByIndex mapping at slot 38.
+    /// @dev Writes to the lootboxRngWordByIndex mapping at slot 37.
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         vm.store(address(game), slot, bytes32(rngWord));

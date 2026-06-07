@@ -50,9 +50,10 @@ contract AfKingSubscription is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // _subscriberIndex mapping root (1-indexed)
-    uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit lives here)
+    uint256 private constant SUBOF_SLOT = 62; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant FUNDING_SOURCE_SLOT = 63; // _fundingSourceOf mapping root (address => address)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 65; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit lives here)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack
     // narrowed validThroughLevel + the day markers to uint24).
@@ -374,8 +375,8 @@ contract AfKingSubscription is DeployProtocol {
         game.depositAfkingFunding{value: amount}(who);
     }
 
-    /// @dev Grant `who` the permanent deity bit so _passHorizonOf(who) == type(uint24).max. RE-DERIVED
-    ///      slot: mintPacked_ is slot 10 on DegenerusGame (the old helper used slot 9 — WRONG).
+    /// @dev Grant `who` the permanent deity bit so _passHorizonOf(who) == type(uint24).max. mintPacked_
+    ///      is slot 9 on DegenerusGame (the deity bit lives at HAS_DEITY_PASS_SHIFT within the packed word).
     function _grantDeityPass(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
@@ -386,7 +387,7 @@ contract AfKingSubscription is DeployProtocol {
     /// @dev Force `who`'s sub into the crossing branch: write validThroughLevel = 0 (so any
     ///      currentLevel > 0 triggers the crossing). Clear lastAutoBoughtDay so the AlreadyAutoBought
     ///      skip does not fire first. Also bump game.level from 0 to 1 so the crossing is reachable.
-    ///      `level` is uint24 packed at DegenerusGameStorage slot 0 bytes 14..16.
+    ///      `level` is uint24 packed at DegenerusGameStorage slot 0 bytes 12..14.
     function _forceCrossingDue(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
@@ -396,14 +397,14 @@ contract AfKingSubscription is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
         // Bump game.level to 1 if currently 0 so `currentLevel > validThroughLevel = 0` is true.
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        uint256 levelMask = uint256(0xFFFFFF) << (14 * 8);
-        if (uint24((slot0 & levelMask) >> (14 * 8)) == 0) {
-            slot0 = (slot0 & ~levelMask) | (uint256(1) << (14 * 8));
+        uint256 levelMask = uint256(0xFFFFFF) << (12 * 8);
+        if (uint24((slot0 & levelMask) >> (12 * 8)) == 0) {
+            slot0 = (slot0 & ~levelMask) | (uint256(1) << (12 * 8));
             vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
         }
     }
 
-    // ---- Sub field reads (RE-DERIVED game-resident slot 66 + verified packed offsets) ----
+    // ---- Sub field reads (game-resident _subOf slot 62 + verified packed offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
@@ -418,15 +419,15 @@ contract AfKingSubscription is DeployProtocol {
         return uint32(_subField(who, OFF_VALIDTHROUGH, 24));
     }
 
-    /// @dev Read `who`'s 1-indexed subscriber index (RE-DERIVED slot 69); 0 = not in set.
+    /// @dev Read `who`'s 1-indexed subscriber index (slot 65); 0 = not in set.
     function _subscriberIndexOf(address who) internal view returns (uint256) {
         return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)))));
     }
 
-    /// @dev Read `who`'s fundingSource from the sparse `_fundingSourceOf` map (RE-DERIVED slot 66).
+    /// @dev Read `who`'s fundingSource from the sparse `_fundingSourceOf` map (slot 63).
     ///      address(0) = self-funded (the common case stores nothing).
     function _fundingSourceOf(address who) internal view returns (address) {
-        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(66)))))));
+        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(FUNDING_SOURCE_SLOT)))))));
     }
 
     // ---- Event drain (emitter == address(game) — the game-resident module emits via delegatecall) ----
