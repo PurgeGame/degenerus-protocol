@@ -29,9 +29,10 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
  *   - level==0 && currentDay - purchaseStartDay > DEPLOY_IDLE_TIMEOUT_DAYS  (pre-game 365-day idle timeout)
  *   - level!=0 && currentDay - purchaseStartDay > 120                       (post-game 120-day death clock)
  *
- * Deity pass refunds:
- *   - Level 0, not jackpot phase: Full refund of deityPassPaidTotal[owner]
- *   - Levels 1-9: Fixed 20 ETH per pass purchased
+ * Deity pass refunds (GameOverModule:105-135):
+ *   - Levels 0-9: min(deityPassPricePaid[owner], 20 ETH) per owner, FIFO,
+ *                 budget-capped (a standard 24/25 ETH pass is above the cap, so
+ *                 the refund is exactly 20 ETH)
  *   - Level 10+: No refund
  */
 describe("GameOver", function () {
@@ -234,8 +235,12 @@ describe("GameOver", function () {
   // 3. Deity pass refund at level 0
   // =========================================================================
 
+  // The early-gameover (levels 0-9) deity refund is min(deityPassPricePaid[owner],
+  // 20 ETH) per owner (GameOverModule:111-115). A standard pass is bought at 24/25
+  // ETH (> the 20 ETH cap), so the cap binds and the refund is exactly 20 ETH —
+  // asserted via the claimable delta (>= 20 ETH; terminal jackpot may add more).
   describe("deity pass refund at level 0", function () {
-    it("deity pass holders get flat 20 ETH refund when gameOver at level 0", async function () {
+    it("deity pass holders get the capped 20 ETH refund (min(pricePaid, 20 ETH)) when gameOver at level 0", async function () {
       const { game, deployer, alice, mockVRF } = await loadFixture(
         deployFullProtocol
       );

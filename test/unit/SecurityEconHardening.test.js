@@ -172,13 +172,22 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // FIX-05: Deity pass refund clears deityPassPurchasedCount
+  // Deity pass early-gameover refund — price-paid model (c4d48008)
+  //
+  // The contract tracks `deityPassPricePaid[buyer]` (a uint96 = the ETH price the
+  // buyer paid; WhaleModule:605) and refunds `min(deityPassPricePaid[owner], 20e18)`
+  // per owner at an early gameover (level < 10), then clamps to the remaining
+  // budget FIFO (GameOverModule:105-135). There is no per-buyer purchase counter
+  // and no "refund clears the count" step — the boon-ownership gate is the
+  // HAS_DEITY_PASS bit, and the refund cap is the price-paid value above. A
+  // standard-priced pass (24/25 ETH) is above the 20 ETH cap, so the cap binds and
+  // the refund is exactly 20 ETH.
   // =========================================================================
-  describe("FIX-05: Deity pass refund uses purchasedCount for payout", function () {
-    it("deityPassCount increments on purchase", async function () {
+  describe("Deity pass refund uses deityPassPricePaid (min(pricePaid, 20 ETH)) for payout", function () {
+    it("a deity pass NFT is minted on purchase", async function () {
       const { game, deityPass, alice } = await loadFixture(deployFullProtocol);
 
-      // Before purchase, count is 0
+      // Before purchase, the buyer holds no deity pass NFT.
       expect(
         await deityPass.balanceOf(alice.address)
       ).to.equal(0);
@@ -188,13 +197,14 @@ describe("SecurityEconHardening", function () {
         .connect(alice)
         .purchaseDeityPass(alice.address, 0, { value: eth(24) });
 
-      // After purchase, count is 1
+      // After purchase, the buyer holds exactly one deity pass NFT (the
+      // HAS_DEITY_PASS gate blocks a second; deityPassPricePaid records the price).
       expect(
         await deityPass.balanceOf(alice.address)
       ).to.equal(1);
     });
 
-    it("gameOver refund credits 20 ETH per purchased pass (level 0)", async function () {
+    it("gameOver refund credits min(deityPassPricePaid, 20 ETH) per pass = 20 ETH for a standard pass (level 0)", async function () {
       const { game, deityPass, deployer, alice, bob, mockVRF } =
         await loadFixture(deployFullProtocol);
 
@@ -227,8 +237,9 @@ describe("SecurityEconHardening", function () {
       const aliceClaimAfter = await game.claimableWinningsOf(alice.address);
       const bobClaimAfter = await game.claimableWinningsOf(bob.address);
 
-      // Each buyer should get at least 20 ETH refund (deity payout);
-      // terminal jackpot may add more since deity pass holders also hold tickets
+      // Each buyer paid > 20 ETH (24/25 ETH), so min(deityPassPricePaid, 20e18)
+      // caps the deity refund at exactly 20 ETH; terminal jackpot may add more
+      // since deity pass holders also hold tickets -> assert the >= 20 ETH floor.
       expect(aliceClaimAfter - aliceClaimBefore).to.be.gte(eth(20));
       expect(bobClaimAfter - bobClaimBefore).to.be.gte(eth(20));
     });
