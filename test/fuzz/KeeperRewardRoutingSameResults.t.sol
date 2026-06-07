@@ -597,7 +597,9 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     ///      contract computes (`_tqReadKey`: !writeSlot ? lvl|BIT : lvl).
     function _ticketWriteSlot() internal view returns (bool) {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        return ((slot0 >> (28 * 8)) & 0x1) != 0;
+        // ticketWriteSlot is at slot 0 byte 26 at c4d48008 (the v61 PACK appended presaleOver@28 +
+        // subsFullyProcessed@29; the pre-PACK byte 28 is now presaleOver).
+        return ((slot0 >> (26 * 8)) & 0x1) != 0;
     }
 
     /// @dev The current read key for a level — byte-faithful to DegenerusGameStorage._tqReadKey.
@@ -620,12 +622,14 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         vm.store(address(game), lenSlot, bytes32(len + 1));
     }
 
-    /// @dev Set the ticketsFullyProcessed bool (SLOT 0 byte 26), preserving every other field in slot 0.
+    /// @dev Set the ticketsFullyProcessed bool (SLOT 0 byte 24 at c4d48008), preserving every other
+    ///      field in slot 0. The pre-PACK byte 26 is now ticketWriteSlot — poking it left
+    ///      ticketsFullyProcessed unchanged (advanceDue stayed false) AND flipped the read-slot.
     function _setTicketsFullyProcessed(bool v) internal {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        uint256 mask = uint256(0xFF) << (26 * 8);
+        uint256 mask = uint256(0xFF) << (24 * 8);
         slot0 &= ~mask;
-        if (v) slot0 |= (uint256(1) << (26 * 8));
+        if (v) slot0 |= (uint256(1) << (24 * 8));
         vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
     }
 
