@@ -132,6 +132,13 @@ None. Test-only changes; no `contracts/*.sol` modification, no new attack surfac
 - **FOUND-02 + FOUND-03 satisfied for their named scope.** The event-schema-delta net is green (forge LIVE suite 7/7 + 5 JS suites); the deity storage-collapse framing matches the frozen source (grep-clean).
 - **One precise hand-off to Plan 380-04:** the gameover-VRF drive harness fulfill-loop fix (DEF-380-02-01) — turning the GameOver/SecurityEconHardening dynamic gameover tests green belongs to the full-suite gate, with the root cause + recipe already documented.
 
+## Self-Check: PASSED
+
+- Created files exist: `380-02-SUMMARY.md`, `deferred-items.md` — both FOUND.
+- Task commits exist: `ce8c25fa` (Task 1), `4cc3becf` (Task 2), `2c7342c3` (docs) — all FOUND.
+- Frozen-tree assertion: `HEAD:contracts` == `bbffe99ede11adadcabcc9b81295566176575d47` — OK (byte-untouched throughout).
+- Verification gates: forge schema suites 7 passed / 0 failed (V56FreezeSolvency LIVE 7/7); 5 JS suites green; no 8-arg LootBoxOpened sig in test/; no removed deity fields in the 2 files; ContractAddresses.sol clean after every hardhat run.
+
 ---
 *Phase: 380-foundation-test-fix-green-baseline*
 *Completed: 2026-06-07*
