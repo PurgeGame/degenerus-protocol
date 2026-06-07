@@ -36,9 +36,10 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 ///         contract-guarded at HEAD, and this helper keeps `claimablePool` in the post-GO set so any
 ///         regression of that guard is still caught.)
 library SolvencyObligations {
-    /// @dev Authoritative slot for `prizePoolPendingPacked` on DegenerusGame
-    ///      (forge inspect contracts/DegenerusGame.sol:DegenerusGame storageLayout @ HEAD).
-    ///      Packed `(uint256(future) << 128) | uint256(next)`, matching _setPendingPools.
+    /// @dev Authoritative slot for `prizePoolPendingPacked` on DegenerusGame, re-attested at the
+    ///      frozen audit subject c4d48008 via `forge inspect DegenerusGame storageLayout`
+    ///      (prizePoolPendingPacked: slot 11, offset 0, full uint256). Packed
+    ///      `(uint256(future) << 128) | uint256(next)`, matching _setPendingPools.
     uint256 internal constant PRIZE_POOL_PENDING_PACKED_SLOT = 11;
 
     // Cheatcode address (forge-std Vm). Used to read the no-external-view pending buffer.

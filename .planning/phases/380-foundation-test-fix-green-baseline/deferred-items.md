@@ -77,3 +77,31 @@ an unrelated harness path are not auto-fixed here.
 **No contract change implicated.** The frozen subject is correct by construction; the gap
 is in the test harness's gameover drive, to be re-derived against the frozen source at the
 380-04 gate.
+
+## From Plan 380-03 (SolvencyObligations slot re-attest + DegeneretteBet invariant seed)
+
+### DEF-380-03-01 — `VRFPathInvariants.inv.t.sol` 3 reds (VRF stall/recovery/coordinator-swap state)
+
+**Discovered during:** Task 1 full-invariant-suite regression sweep (`forge test --match-path
+"test/fuzz/invariant/*"`), run to confirm the DegeneretteBet seed caused no collateral red.
+
+**Suite affected:** `test/fuzz/invariant/VRFPathInvariants.inv.t.sol` (4 passed / 3 failed):
+- `VRFPath: gap day missing rngWordForDay after recovery: 51 != 0`
+- `VRFPath: rngLocked true after coordinator swap: 1 != 0`
+- `VRFPath: invalid stall-to-recovery state transition: 1 != 0`
+
+**Proof it is OUT OF SCOPE for 380-03 (not caused by this plan's edits):** the failing suite
+imports `DeployProtocol` + `VRFPathHandler` ONLY — it imports NEITHER `SolvencyObligations`
+NOR `DegeneretteHandler`, the two helpers this plan touched. The three files 380-03 modified
+(`SolvencyObligations.sol`, `DegeneretteHandler.sol`, `DegeneretteBet.inv.t.sol`) share zero
+code with `VRFPathHandler` / the VRFPath invariant, so they cannot perturb its outcome. The
+plan's own DegeneretteBet suite is 5/5 green.
+
+**Likely class (NOT diagnosed/fixed here):** same family as DEF-380-02-01 — a fixed-step VRF
+drive harness (`VRFPathHandler`) whose stall->recovery / coordinator-swap drive shape drifted
+against the frozen subject `c4d48008` (the `rngLocked`/`rngWordForDay` latch needs a different
+advance+fulfill cadence than the handler issues). Frozen `AdvanceModule`/VRF code paths are
+byte-identical baseline->subject; this is harness-drive drift, not a contract defect.
+
+**Disposition:** belongs to the Plan 380-04 full-suite green gate (the VRF-path forge harness
+recalibration), alongside the DEF-380-02-01 JS gameover-drive fix. NOT a contract finding.

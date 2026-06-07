@@ -15,6 +15,16 @@ contract DegeneretteHandler is Test {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
 
+    /// @dev Re-attested @ c4d48008 (forge inspect DegenerusGame storageLayout):
+    ///      `lootboxRngPacked` slot 36 (LR_INDEX lives in its low 48 bits) and
+    ///      `lootboxRngWordByIndex` slot 37 (mapping(uint48 => uint256)). placeDegeneretteBet
+    ///      gates on (LR_INDEX != 0) AND (lootboxRngWordByIndex[LR_INDEX] == 0); resolution
+    ///      gates on lootboxRngWordByIndex[betIndex] != 0. The handler seeds both so the fuzzer
+    ///      reaches a non-vacuous place->resolve sequence regardless of call ordering.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
+    uint48 private constant SEED_LR_INDEX = 1;
+
     // --- Ghost variables ---
     uint256 public ghost_totalEthWagered;
     uint256 public ghost_totalEthPayout;
@@ -81,8 +91,8 @@ contract DegeneretteHandler is Test {
         uint256 totalBet = uint256(amountPerTicket) * uint256(ticketCount);
         if (totalBet > currentActor.balance) return;
 
-        // First ensure the actor has purchased tickets (to have a valid lootbox RNG index)
-        _ensureActivePurchasePhase();
+        // Open the lootbox RNG window so placeDegeneretteBet's index-gate is satisfiable.
+        _ensureLootboxIndexOpen();
 
         vm.prank(currentActor);
         try game.placeDegeneretteBet{value: totalBet}(
@@ -117,6 +127,9 @@ contract DegeneretteHandler is Test {
 
         uint64[] memory ids = new uint64[](1);
         ids[0] = betId;
+
+        // Fill the bet's lootbox word so the resolve RNG-ready gate is satisfiable.
+        _fillLootboxWordForResolve();
 
         uint256 claimableBefore = game.claimableWinningsOf(currentActor);
 
@@ -185,10 +198,52 @@ contract DegeneretteHandler is Test {
 
     // --- Internal helpers ---
 
-    /// @dev Ensure we are in purchase phase and have a valid lootbox RNG index
-    function _ensureActivePurchasePhase() private {
-        // Try a small purchase if needed to populate lootbox state
-        // The placeDegeneretteBet will revert if lootbox RNG index is 0
+    /// @dev Make a Degenerette bet placeable: placeDegeneretteBet reverts unless the lootbox
+    ///      RNG index is non-zero AND lootboxRngWordByIndex[index] is still zero (the open,
+    ///      not-yet-rolled window). The unguided fuzzer drives the game to game-over long before
+    ///      a real purchase opens that window, so without this seed every placeEthBet early-returns
+    ///      and the solvency invariant passes vacuously (betsPlaced stays 0). We force LR_INDEX to a
+    ///      fixed open index (word still zero) so the live placeDegeneretteBet path actually executes
+    ///      against real ETH. This is the same mechanism the DegeneretteHeroScore unit harness uses.
+    function _ensureLootboxIndexOpen() private {
+        uint256 lrPacked = uint256(
+            vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))
+        );
+        uint48 index = uint48(lrPacked);
+        if (index == 0) {
+            lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(SEED_LR_INDEX);
+            vm.store(
+                address(game),
+                bytes32(LOOTBOX_RNG_PACKED_SLOT),
+                bytes32(lrPacked)
+            );
+            index = SEED_LR_INDEX;
+        }
+        // Keep the word at the active index zero so the place-gate (word == 0) holds.
+        bytes32 wordSlot = keccak256(abi.encode(uint256(index), LOOTBOX_RNG_WORD_SLOT));
+        if (uint256(vm.load(address(game), wordSlot)) != 0) {
+            vm.store(address(game), wordSlot, bytes32(uint256(0)));
+        }
+    }
+
+    /// @dev Make a placed bet resolvable: _resolveFullTicketBet reverts (RngNotReady) unless
+    ///      lootboxRngWordByIndex[betIndex] is non-zero. Fill the active index's word with a
+    ///      deterministic non-zero entropy so resolveDegeneretteBets executes its live payout +
+    ///      claimable-credit path (exercising the post-resolve solvency leg too).
+    function _fillLootboxWordForResolve() private {
+        uint256 lrPacked = uint256(
+            vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))
+        );
+        uint48 index = uint48(lrPacked);
+        if (index == 0) return;
+        bytes32 wordSlot = keccak256(abi.encode(uint256(index), LOOTBOX_RNG_WORD_SLOT));
+        if (uint256(vm.load(address(game), wordSlot)) == 0) {
+            vm.store(
+                address(game),
+                wordSlot,
+                bytes32(uint256(keccak256(abi.encodePacked("degenerette_resolve_word", index))) | 1)
+            );
+        }
     }
 
     /// @dev Sanitize custom ticket to have valid traits per quadrant
