@@ -60,6 +60,13 @@
   2. Untracked gas-probes committed-or-removed; obsolete SKIP-marked tests deleted; per-fix PoCs consolidated.
   3. GREEN full-suite baseline established + recorded (supersedes the carried-red `REGRESSION-BASELINE-v61.md` ledger).
 
+**Plans**: 4 plans (3 parallel repair plans in wave 1 + the wave-2 green-baseline gate)
+
+  - [ ] 380-01-PLAN.md — FOUND-01: re-derive the authoritative c4d48008 storage layout + recalibrate the slot-hardcoded forge harnesses (StorageFoundation · VRF/VrfRotation/LootboxRng · Keeper/V56Sub/Queue/FarFuture)
+  - [ ] 380-02-PLAN.md — FOUND-02 + FOUND-03: refresh the LootBoxOpened 7-arg event-schema-delta tests + the v60 deity storage-collapse tests (deityPassPricePaid + min(pricePaid,20e))
+  - [ ] 380-03-PLAN.md — FOUND-04 + FOUND-05: re-attest the SolvencyObligations slot + seed the DegeneretteBet invariant + commit-or-remove the untracked gas-probes + delete obsolete SKIP tests
+  - [ ] 380-04-PLAN.md — FOUND-06: establish + record the GREEN full-suite baseline (REGRESSION-BASELINE-v62.md), superseding the carried-red v61 ledger (wave 2; depends on 01/02/03)
+
 **UI hint**: no
 
 ### Phase 381: INVARIANT FUZZ — Durable Property Net

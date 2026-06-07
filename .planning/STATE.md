@@ -32,10 +32,10 @@ See: .planning/PROJECT.md (Current Milestone: v62.0 section) + .planning/ROADMAP
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-06-07 — Milestone v62.0 started
+Phase: 380 — FOUNDATION: Test-Fix & Green Baseline (planned)
+Plan: 380-01..04 (4 plans / 2 waves — wave 1: 01/02/03 parallel repairs, wave 2: 04 green-baseline gate)
+Status: Planned — ready for /gsd-execute-phase 380
+Last activity: 2026-06-07 — Phase 380 planned (FOUND-01..06; test-only, autonomous; subject c4d48008)
 
 ## ▶ ACTIVE Milestone Roadmap (v62.0 — phases 380-387 — ACTIVE 2026-06-07; baseline = v61.0 closure HEAD `b97a7a2e`; subject locked at `c4d48008`)
 
