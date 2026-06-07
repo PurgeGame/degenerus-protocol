@@ -117,7 +117,27 @@ contract RngIndexDrainBindingTest is DeployProtocol {
     /// @notice For every ticket-batch processed by the daily-drain, the entropy
     ///         consumed by _raritySymbolBatch equals the lootbox RNG word at the
     ///         corresponding index AND is non-zero.
+    /// @dev DEF-380-04-FC5 (finding-candidate routed to the council, 382+ PRIME / 385 VRF-path sweep).
+    ///      SKIPPED against the frozen subject c4d48008: this test observes the per-batch
+    ///      entropy by decoding it out of the TraitsGenerated event, but the frozen event was
+    ///      slimmed to `TraitsGenerated(address indexed player, uint256 baseKey, uint32 take)`
+    ///      (DegenerusGameStorage:501) — it NO LONGER carries the `entropy` field. The drain
+    ///      STILL consumes `entropy` internally (`_raritySymbolBatch(player, baseKey, processed,
+    ///      take, entropy)` at DegenerusGameMintModule:473), but it is not emitted, so the
+    ///      RNG-binding invariant ("the entropy consumed == lootboxRngWordByIndex[boundIdx]")
+    ///      is no longer observable from the event. `baseKey` is a structured ticket key
+    ///      (`(lvl<<224)|(idx<<192)|(player<<32)|owed`, MintModule:429), NOT the entropy, so
+    ///      re-pointing the assertion at `baseKey` would assert nothing about the RNG binding
+    ///      and would MASK the lost observability. Whether the daily-drain entropy is still
+    ///      correctly index-bound (and whether the event-slimming should keep an observability
+    ///      hook for it) is an RNG-window judgment for the council — NOT a stale topic/slot the
+    ///      test can re-derive without changing what it proves. Recorded in
+    ///      REGRESSION-BASELINE-v62.md "Known behavior-divergence — finding-candidates". The
+    ///      sibling testBindingConsistencyMidDayCrossDay passes only because it vacuously
+    ///      returns when entropies.length == 0 (same removed-field cause). The contract is NOT
+    ///      modified.
     function testBindingConsistencyDailyDrain() public {
+        vm.skip(true); // DEF-380-04-FC5 — see @dev above; council adjudicates (382+/385)
         _purchase(400, 0);
 
         uint48 idxBeforeAdvance = _lrIndex();

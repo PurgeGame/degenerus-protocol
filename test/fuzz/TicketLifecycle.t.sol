@@ -684,10 +684,12 @@ contract TicketLifecycleTest is DeployProtocol {
             if (idx > 0) indices[i] = idx;
         }
 
-        // Drive advance cycle to finalize lootbox RNG
-        _driveAdvanceCycle();
-
-        // Ensure all indices have RNG words (fallback via vm.store)
+        // Finalize the lootbox RNG word for the captured indices DIRECTLY (vm.store) rather
+        // than via a full advance cycle. At c4d48008 a full _driveAdvanceCycle would advance
+        // the lootbox RNG index past these boxes AND resolve buyer3's queued box through the
+        // daily lootbox-processing path before the explicit openLootBox below runs — leaving an
+        // empty box (the permissionless lootbox-resolution-timing behavior). Seeding the word
+        // here keeps the box intact so the explicit open exercises the near/far ticket roll.
         for (uint256 i = 0; i < 8; i++) {
             if (indices[i] > 0 && _lootboxRngWord(indices[i]) == 0) {
                 _storeLootboxRngWord(indices[i], 1000 + i);
