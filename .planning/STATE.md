@@ -1,26 +1,26 @@
 ---
 gsd_state_version: 1.0
-milestone: v61.0
-milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
-status: Awaiting next milestone
-last_updated: "2026-06-07T14:20:33.131Z"
-last_activity: 2026-06-07 — Milestone v61.0 completed and archived
+milestone: v62.0
+milestone_name: Blind-Spot-Driven Pre-C4A Audit
+status: planning
+last_updated: "2026-06-07T14:40:51.770Z"
+last_activity: 2026-06-07
 progress:
-  total_phases: 10
-  completed_phases: 4
-  total_plans: 15
-  completed_plans: 13
-  percent: 40
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP.md (v61.0 🚧 ACTIVE — phases 375-379, once roadmapped) + .planning/REQUIREMENTS.md (v61.0 reqs, once defined) + .planning/MILESTONES.md (v60.0 entry, top). v61 design inputs (design-locked): .planning/PLAN-V61-MILESTONE-SCOPE.md + PLAN-V61-AFKING-AS-PAYMENT-SOURCE.md + PLAN-CASHOUT-CURSE.md + PLAN-V61-DEITY-SMITE.md (`[[v61-milestone-seed]]`). Baseline = the v60.0 closure HEAD `2bee6d6f` (10 commits ahead of origin, NOT pushed). v60.0 archive: .planning/milestones/v60.0-ROADMAP.md + v60.0-REQUIREMENTS.md; canonical audit deliverable audit/FINDINGS-v60.0.md (chmod 444). **NEXT = /gsd-plan-phase 379 then /gsd-execute-phase 379 (TERMINAL — delta-audit + 3-skill parallel sweep + audit/FINDINGS-v61.0.md + the atomic closure flip with MILESTONE_V61_AT_HEAD_<sha>).**
+See: .planning/PROJECT.md (Current Milestone: v62.0 section) + .planning/ROADMAP.md (v62.0 roadmap, once written) + .planning/REQUIREMENTS.md (v62.0 reqs, once defined) + .planning/MILESTONES.md (v61.0 entry, top) + .planning/AUDIT-V62-PLAN.md (the full STEP 0–5 plan). Baseline = the v61.0 closure HEAD `b97a7a2e` (62 commits ahead of origin, NOT pushed). v61.0 archive: .planning/milestones/v61.0-ROADMAP.md + v61.0-REQUIREMENTS.md + v61.0-phases/; canonical audit deliverable audit/FINDINGS-v61.0.md (chmod 444). **NEXT = define v62.0 requirements → roadmap → /gsd-plan-phase 380 (FOUNDATION-FIRST: STEP 5 test-fix + invariant fuzz before the STEP 0–4 audit sweep).**
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v61.0 SHIPPED 2026-06-07 — Phase 379 TERMINAL closed: the 3-lens genuine-parallel adversarial sweep (security+gas · economic · zero-day) = **0 contract-change-needed**; `audit/FINDINGS-v61.0.md` (chmod 444); `MILESTONE_V61_AT_HEAD_b97a7a2e`. Contract tree byte-identical to the IMPL throughout. NOT pushed (push + v62 = USER steps).
+**Current focus:** v62.0 STARTED 2026-06-07 — Blind-Spot-Driven Pre-C4A Audit (foundation-first). Defining requirements. Attacks the recurring bug SHAPES (compositions · parallel-path asymmetries · shared RNG-window state · write-only/dead state), not a feature rotation. Audit-only: contract subject FROZEN at the v61.0 closure `b97a7a2e`; no planned `contracts/*.sol` change (a confirmed finding routes to a gated fix, else document-only `audit/FINDINGS-v62.0.md`). v61.0 SHIPPED 2026-06-07 (closure `MILESTONE_V61_AT_HEAD_b97a7a2e`, 0 contract-change-needed); 62 commits ahead of origin, NOT pushed (push = a separate USER step).
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,10 +32,10 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 
 ## Current Position
 
-Phase: Milestone v61.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-07 — Milestone v61.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-06-07 — Milestone v62.0 started
 
 ## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
 
