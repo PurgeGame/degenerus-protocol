@@ -80,16 +80,16 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     // the AfKing-standalone SUBOF_SLOT=65 / TICKET_QUEUE_SLOT=12 / TICKETS_OWED_PACKED_SLOT=13 were WRONG).
     // -------------------------------------------------------------------------
 
-    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBOF_SLOT = 62; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13 of the Sub slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 67; // _subscribers address[] (length here)
-    uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)
+    uint256 private constant SUBSCRIBERS_SLOT = 64; // _subscribers address[] (length here)
+    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
     uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 packed at offset 16 of slot 1
-    uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7; // mapping(address => uint256)
-    uint256 private constant TICKET_QUEUE_SLOT = 13; // mapping(uint24 => address[]) (RE-DERIVED: was 12)
-    uint256 private constant TICKETS_OWED_PACKED_SLOT = 14; // mapping(uint24 => mapping(address => uint40)) (RE-DERIVED: was 13)
+    uint256 private constant BALANCES_PACKED_SLOT = 7; // mapping(address => uint256) balancesPacked [afking:high128 | claimable:low128]
+    uint256 private constant TICKET_QUEUE_SLOT = 12; // mapping(uint24 => address[])
+    uint256 private constant TICKETS_OWED_PACKED_SLOT = 13; // mapping(uint24 => mapping(address => uint40))
 
     FFKeyHarness private ffk;
     address private keeper;
@@ -501,7 +501,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         _settleGame(vrfWord);
     }
 
-    /// @dev Grant `who` the permanent deity bit (RE-DERIVED slot: mintPacked_ is slot 10).
+    /// @dev Grant `who` the permanent deity bit (mintPacked_ is slot 9).
     function _grantDeityPass(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
@@ -517,7 +517,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         game.depositAfkingFunding{value: amount}(who);
     }
 
-    /// @dev Read `who`'s lastAutoBoughtDay (RE-DERIVED slot 66, uint24 bytes 11..13 of the packed Sub slot).
+    /// @dev Read `who`'s lastAutoBoughtDay (_subOf slot 62, uint24 bytes 11..13 of the packed Sub slot).
     function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
@@ -527,14 +527,20 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     // ---- claimable seeding (with the tandem claimablePool credit so SOLVENCY-01 stays balanced) ----
 
     function _claimableSlot(address who) internal pure returns (bytes32) {
-        return keccak256(abi.encode(who, CLAIMABLE_WINNINGS_SLOT));
+        return keccak256(abi.encode(who, BALANCES_PACKED_SLOT));
     }
 
     /// @dev Seed claimableWinnings[who] = amt and bump claimablePool by the delta so the invariant
-    ///      claimablePool >= sum(claimableWinnings[*]) is preserved.
+    ///      claimablePool >= sum(claimableWinnings[*]) is preserved. balancesPacked packs claimable in
+    ///      the low 128 bits and afking in the high 128 — write only the low half so a claimable seed
+    ///      never corrupts the afking funding half.
     function _seedClaimable(address who, uint256 amt) internal {
+        require(amt <= type(uint128).max, "claimable seed exceeds uint128");
         uint256 prev = game.claimableWinningsOf(who);
-        vm.store(address(game), _claimableSlot(who), bytes32(amt));
+        bytes32 bSlot = _claimableSlot(who);
+        uint256 packedBal = uint256(vm.load(address(game), bSlot));
+        uint256 afkingHalf = packedBal & ~((uint256(1) << 128) - 1);
+        vm.store(address(game), bSlot, bytes32(afkingHalf | amt));
         uint256 packedSlot1 = uint256(vm.load(address(game), bytes32(CLAIMABLE_POOL_SLOT)));
         uint256 lower = packedSlot1 & ((uint256(1) << 128) - 1);
         uint256 pool = packedSlot1 >> 128;
@@ -548,7 +554,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         vm.store(address(game), bytes32(CLAIMABLE_POOL_SLOT), bytes32(newPacked));
     }
 
-    // ---- far-future ticket seeding (RE-DERIVED slots 13/14) ----
+    // ---- far-future ticket seeding (ticketQueue slot 12 / ticketsOwedPacked slot 13) ----
 
     function _ownedPackedSlot(uint24 key, address who) internal pure returns (bytes32) {
         bytes32 inner = keccak256(abi.encode(uint256(key), TICKETS_OWED_PACKED_SLOT));
@@ -627,15 +633,15 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     /// @dev Latch the terminal gameOver public bool WITHOUT setting the gameover-time slot, so
     ///      handleFinalSweep early-returns harmlessly ("Game not over yet" at GO_TIME==0) and advanceGame
-    ///      takes the gameover branch (mult=0). `gameOver` is the bool at byte 23 of EVM SLOT 0 (the
+    ///      takes the gameover branch (mult=0). `gameOver` is the bool at byte 21 of EVM SLOT 0 (the
     ///      timing/FSM/flags pack). Set only that byte, preserving every other field, and confirm the
     ///      public getter flips.
     function _latchGameOver() internal {
-        bytes32 slot = bytes32(uint256(0)); // SLOT 0 — the timing/FSM/flag pack holding gameOver at byte 23
+        bytes32 slot = bytes32(uint256(0)); // SLOT 0 — the timing/FSM/flag pack holding gameOver at byte 21
         uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << (23 * 8));
+        packed |= (uint256(1) << (21 * 8));
         vm.store(address(game), slot, bytes32(packed));
-        require(game.gameOver(), "_latchGameOver: gameOver did not flip (slot 0 byte 23)");
+        require(game.gameOver(), "_latchGameOver: gameOver did not flip (slot 0 byte 21)");
     }
 
     // ---- real ticket-backlog driving ----

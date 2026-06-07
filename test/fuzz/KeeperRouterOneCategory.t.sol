@@ -69,25 +69,24 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // the AfKing-standalone SUBOF_SLOT=65 / AUTOBUY_SLOT=4 / lootbox slots 37/38 were WRONG).
     // -------------------------------------------------------------------------
 
-    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBOF_SLOT = 62; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
-    uint256 private constant SUBSCRIBERS_SLOT = 67; // _subscribers address[] (length here)
-    uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)
+    uint256 private constant SUBSCRIBERS_SLOT = 64; // _subscribers address[] (length here)
+    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
-    /// @dev lootboxRngPacked at slot 38 (RE-DERIVED: was 37); index = low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38;
-    /// @dev lootboxRngWordByIndex mapping root slot (RE-DERIVED: was 38).
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 39;
+    /// @dev lootboxRngPacked at slot 36; index = low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
+    /// @dev lootboxRngWordByIndex mapping root slot.
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
     /// @dev lootboxEthBase mapping root slot (uint48 index => address => base). First-deposit signal.
-    ///      RE-DERIVED: was 22, now 23 via `forge inspect storage DegenerusGame`.
-    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 23;
+    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 22;
 
     /// @dev ticketQueue mapping root (uint24 => address[]) + ticketsOwedPacked
     ///      (uint24 => address => uint40) — for forcing advanceDue via a read-slot backlog.
-    uint256 private constant TICKET_QUEUE_SLOT = 13;
-    uint256 private constant TICKETS_OWED_PACKED_SLOT = 14;
+    uint256 private constant TICKET_QUEUE_SLOT = 12;
+    uint256 private constant TICKETS_OWED_PACKED_SLOT = 13;
     uint24 private constant TICKET_SLOT_BIT = 1 << 23; // mirrors DegenerusGameStorage.TICKET_SLOT_BIT
 
     uint256 private constant FIXED_WORD = uint256(keccak256("keeper_router_one_category_word"));
@@ -551,7 +550,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         game.depositAfkingFunding{value: amount}(who);
     }
 
-    /// @dev Grant `who` the permanent deity bit (RE-DERIVED slot: mintPacked_ is slot 10).
+    /// @dev Grant `who` the permanent deity bit (mintPacked_ is slot 9).
     function _grantDeityPass(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
@@ -559,7 +558,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    // ---- Sub field reads (RE-DERIVED slot 66 + verified offsets) ----
+    // ---- Sub field reads (_subOf slot 62 + verified offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
@@ -576,14 +575,14 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
     // ---- gameover latch ----
 
-    /// @dev Latch the terminal gameOver public bool (byte 23 of SLOT 0) WITHOUT setting the gameover-time
+    /// @dev Latch the terminal gameOver public bool (byte 21 of SLOT 0) WITHOUT setting the gameover-time
     ///      slot, so the advance takes the gameover branch (mult=0) harmlessly.
     function _latchGameOver() internal {
         bytes32 slot = bytes32(uint256(0));
         uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << (23 * 8));
+        packed |= (uint256(1) << (21 * 8));
         vm.store(address(game), slot, bytes32(packed));
-        require(game.gameOver(), "_latchGameOver: gameOver did not flip (slot 0 byte 23)");
+        require(game.gameOver(), "_latchGameOver: gameOver did not flip (slot 0 byte 21)");
     }
 
     // ---- human box helpers (the unrewarded human autoOpen escape) ----
@@ -597,7 +596,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         );
     }
 
-    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 38).
+    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 36).
     function _activeLootboxIndex() internal view returns (uint48) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
         return uint48(packed & 0xFFFFFFFFFFFF);

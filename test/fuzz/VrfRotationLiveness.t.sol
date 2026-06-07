@@ -28,17 +28,17 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///              (:1741): NO re-issue -- delivered word preserved, advance proceeds.
 ///
 /// @dev    Storage slots are authoritative per `forge inspect DegenerusGame storage-layout`:
-///         slot 35 = lootboxRngPacked (LR_INDEX in low bits, LR_MID_DAY at bit 224 mask 0xFF),
-///         slot 36 = lootboxRngWordByIndex mapping (lootboxRngWordByIndex[i] at
-///         keccak256(abi.encode(uint256(i), uint256(38)))),
+///         slot 36 = lootboxRngPacked (LR_INDEX in low bits, LR_MID_DAY at bit 224 mask 0xFF),
+///         slot 37 = lootboxRngWordByIndex mapping (lootboxRngWordByIndex[i] at
+///         keccak256(abi.encode(uint256(i), uint256(37)))),
 ///         slot 3 = rngWordCurrent, slot 0 packed = rngRequestTime at bit offset 64.
 ///         ZERO contracts/ mutation -- audit-only (D-43N-AUDIT-ONLY-01).
 contract VrfRotationLiveness is DeployProtocol {
     /// @dev Storage slot constants (authoritative storage-layout, not the drifted analog).
     uint256 private constant SLOT_PACKED_0 = 0;
     uint256 private constant SLOT_RNG_WORD_CURRENT = 3;
-    uint256 private constant SLOT_LOOTBOX_PACKED = 37;
-    uint256 private constant SLOT_LOOTBOX_WORD_MAP = 38;
+    uint256 private constant SLOT_LOOTBOX_PACKED = 36;
+    uint256 private constant SLOT_LOOTBOX_WORD_MAP = 37;
     /// @dev LR_MID_DAY occupies byte 28 of lootboxRngPacked (bit offset 224, mask 0xFF).
     uint256 private constant LR_MID_DAY_BIT = 224;
 
@@ -59,7 +59,7 @@ contract VrfRotationLiveness is DeployProtocol {
     // Storage-read helpers (slots authoritative per forge inspect)
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @dev Read LR_INDEX (the low bits of lootboxRngPacked at slot 35).
+    /// @dev Read LR_INDEX (the low bits of lootboxRngPacked at slot 36).
     function _readLootboxRngIndex() internal view returns (uint48) {
         return uint48(uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_PACKED))));
     }
@@ -70,7 +70,7 @@ contract VrfRotationLiveness is DeployProtocol {
         return (packed >> LR_MID_DAY_BIT) & 0xFF;
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from the slot-38 mapping.
+    /// @dev Read lootboxRngWordByIndex[index] from the slot-37 mapping.
     function _readLootboxWord(uint48 index) internal view returns (uint256) {
         bytes32 slot = keccak256(abi.encode(uint256(index), SLOT_LOOTBOX_WORD_MAP));
         return uint256(vm.load(address(game), slot));
@@ -81,10 +81,10 @@ contract VrfRotationLiveness is DeployProtocol {
         return uint256(vm.load(address(game), bytes32(uint256(SLOT_RNG_WORD_CURRENT))));
     }
 
-    /// @dev Read rngRequestTime from packed slot 0, bits [64:112] (uint48, bit offset 64).
+    /// @dev Read rngRequestTime from packed slot 0, bits [48:96] (uint48, bit offset 48).
     function _readRngRequestTime() internal view returns (uint48) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0))));
-        return uint48(packed >> 64);
+        return uint48(packed >> 48);
     }
 
     // ──────────────────────────────────────────────────────────────────────

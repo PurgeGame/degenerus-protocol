@@ -75,14 +75,14 @@ contract VRFStallEdgeCases is DeployProtocol {
         }
     }
 
-    /// @dev Read lootboxRngIndex directly from storage slot 35 (lower 48 bits of lootboxRngPacked).
+    /// @dev Read lootboxRngIndex directly from storage slot 36 (lower 48 bits of lootboxRngPacked).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(37)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(36)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 36).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 37).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(38)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(37)));
         return uint256(vm.load(address(game), slot));
     }
 
@@ -96,16 +96,16 @@ contract VRFStallEdgeCases is DeployProtocol {
         return uint256(vm.load(address(game), bytes32(uint256(SLOT_VRF_REQUEST_ID))));
     }
 
-    /// @dev Read rngRequestTime from packed slot 0, bytes [8:14] (uint48, bit offset 64).
+    /// @dev Read rngRequestTime from packed slot 0, bytes [6:12] (uint48, bit offset 48).
     function _readRngRequestTime() internal view returns (uint48) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0))));
-        return uint48(packed >> 64);
+        return uint48(packed >> 48);
     }
 
-    /// @dev Read dailyIdx from packed slot 0, bytes [4:8] (uint32, bit offset 32).
+    /// @dev Read dailyIdx from packed slot 0, bytes [3:6] (uint24, bit offset 24).
     function _readDailyIdx() internal view returns (uint48) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0))));
-        return uint48(packed >> 32);
+        return uint48(uint24(packed >> 24));
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -345,7 +345,7 @@ contract VRFStallEdgeCases is DeployProtocol {
     /// @dev Storage slot for totalFlipReversals (verified via forge inspect).
     uint256 constant SLOT_TOTAL_FLIP_REVERSALS = 5;
     /// @dev Storage slot for lootboxRngPacked (midDayTicketRngPending at bits 224-231).
-    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 37;
+    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 36;
 
     /// @notice Unit: coordinator swap with a daily request in flight preserves the RNG lock
     ///         and re-issues the request on the new coordinator; intentionally-kept variables
@@ -470,7 +470,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // The reserved index this mid-day request is bound to (LR_INDEX - 1)
         uint48 reservedIndex = _lootboxRngIndex() - 1;
 
-        // Verify midDayTicketRngPending is set (bits 224-231 of lootboxRngPacked slot 35)
+        // Verify midDayTicketRngPending is set (bits 224-231 of lootboxRngPacked slot 36)
         uint256 lrPacked = uint256(
             vm.load(address(game), bytes32(uint256(SLOT_LOOTBOX_RNG_PACKED)))
         );
@@ -480,7 +480,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Coordinator swap (mid-day in flight -> preserve LR_MID_DAY + re-issue for the same index)
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
-        // Verify midDayTicketRngPending PRESERVED (bits 224-231 of lootboxRngPacked slot 35)
+        // Verify midDayTicketRngPending PRESERVED (bits 224-231 of lootboxRngPacked slot 36)
         lrPacked = uint256(
             vm.load(address(game), bytes32(uint256(SLOT_LOOTBOX_RNG_PACKED)))
         );

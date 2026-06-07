@@ -60,18 +60,17 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      Test-only: NO contracts/*.sol is mutated.
 contract RngFreezeAndRemovalProofs is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Storage slot constants (DegenerusGame; confirmed via `forge inspect storage`,
-    // authoritative post-deletion layout per 317-08: lootboxRngPacked=35, word map=36)
+    // Storage slot constants (DegenerusGame; confirmed via `forge inspect DegenerusGame storageLayout`).
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 37 (v47: +2 from presale-box storage additions); lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 37;
+    /// @dev lootboxRngPacked at slot 36; lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 38;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
     /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 45;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 43;
     /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 46;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 44;
     /// @dev lootboxEthBase mapping root slot (uint48 index => address => packed).
     uint256 private constant LOOTBOX_ETH_BASE_SLOT = 22;
 

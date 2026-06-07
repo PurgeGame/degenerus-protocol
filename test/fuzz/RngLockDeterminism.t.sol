@@ -44,10 +44,10 @@ contract RngLockDeterminism is DeployProtocol {
     uint256 constant SLOT_PACKED_0 = 0;
     uint256 constant SLOT_RNG_WORD_CURRENT = 3;
     uint256 constant SLOT_VRF_REQUEST_ID = 4;
-    // RE-DERIVED via `forge inspect storage DegenerusGame` (the v55 afking append shifted these by 1):
-    // lootboxRngPacked 37→38 (the lootbox RNG index lives in bits[0:47]), lootboxRngWordByIndex 38→39.
-    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 38;
-    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 39;
+    // Via `forge inspect DegenerusGame storageLayout`:
+    // lootboxRngPacked = slot 36 (the lootbox RNG index lives in bits[0:47]), lootboxRngWordByIndex = slot 37.
+    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 36;
+    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 37;
     // Defensive slot constants for sec4 RunTerminalDecimatorJackpot
     // contribution. Exact values are placeholders; aggregator hash captures
     // post-resolution storage state at these slots for byte-identity
@@ -2185,9 +2185,9 @@ contract RngLockDeterminism is DeployProtocol {
         try game.mintBurnie() {} catch {} // must not abort the lock
     }
 
-    /// @dev Read lootboxEthBase[index][who] (slot 23, RE-DERIVED: was 22 — the v55 afking append shifted
-    ///      it by 1) — the first-deposit signal, zeroed on open (the un-opened/opened oracle for a box).
-    uint256 constant SLOT_LOOTBOX_ETH_BASE = 23;
+    /// @dev Read lootboxEthBase[index][who] (slot 22) — the first-deposit signal, zeroed on open
+    ///      (the un-opened/opened oracle for a box).
+    uint256 constant SLOT_LOOTBOX_ETH_BASE = 22;
 
     function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
         bytes32 inner = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_ETH_BASE)));
