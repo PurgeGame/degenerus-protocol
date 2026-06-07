@@ -59,6 +59,10 @@ contract TicketRoutingTest is Test {
     address buyer = address(0xBEEF);
 
     function setUp() public {
+        // Warp past JACKPOT_RESET_TIME (82620s) so the inherited _queueTickets ->
+        // _livenessTriggered -> GameTimeLib.currentDayIndexAt(block.timestamp) day math
+        // does not underflow (ts - JACKPOT_RESET_TIME) at the default ts=1.
+        vm.warp(block.timestamp + 1 days);
         harness = new TicketRoutingHarness();
         harness.setLevel(10);
     }
