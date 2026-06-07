@@ -172,7 +172,7 @@ Plans:
 | 375. SPEC — Design-Lock + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map | v61.0 | 2/2 | Complete    | 2026-06-06 |
 | 376. IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE) | v61.0 | 0/3 | Planned     | 2026-06-06 |
 | 377. GAS — Gas-Neutrality Gate (curse APPLY zero-SLOAD · packing no cold slot) | v61.0 | 0/TBD | Not started | - |
-| 378. TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | v61.0 | 6/6 | Complete   | 2026-06-07 |
+| 378. TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | v61.0 | 6/6 | Complete    | 2026-06-07 |
 | 379. TERMINAL — Delta Audit + 3-Skill Sweep + FINDINGS-v61.0 + Closure Flip | v61.0 | 0/TBD | Not started | - |
 
 > **🔒 v61.0 CONTRACT-BOUNDARY HARD STOP (ONE gate — 376 IMPL · 377 GAS rides the same boundary if it produces a net diff).** Phase 376 IMPL is THE contract phase — the batched diff (AFPAY + PACK + CURSE + SMITE, producer-before-consumer: CURSE infra before SMITE, PACK accessor before repack) is applied to `contracts/` and locally compiled (`forge build` clean) but HELD at the contract-commit boundary, NEVER committed without explicit user hand-review. `ContractAddresses.sol` freely modifiable; tests + planning + docs AGENT-committable.
