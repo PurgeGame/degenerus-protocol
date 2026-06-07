@@ -37,7 +37,7 @@
 
 ### Phases
 
-- [ ] **Phase 380: FOUNDATION — Test-Fix & Green Baseline (Claude-built)** - Repair the regression net so a green full-suite (forge + Hardhat, 0 failures) is the audit's safety floor + oracle: re-derive stale/drifted slots from `forge inspect storageLayout` (not hard-coded), refresh the event-schema-delta + v60 whale/pass storage-collapse test debt, re-seed DegeneretteBetInvariant, commit-or-remove the untracked gas-probes, establish + record the GREEN baseline. ⚠ guard the `hardhat compile --force` → ContractAddresses.sol regen landmine. Subject-agnostic (runs before the subject is consumed). FOUND-01..06.
+- [x] **Phase 380: FOUNDATION — Test-Fix & Green Baseline (Claude-built)** - Repair the regression net so a green full-suite (forge + Hardhat, 0 failures) is the audit's safety floor + oracle: re-derive stale/drifted slots from `forge inspect storageLayout` (not hard-coded), refresh the event-schema-delta + v60 whale/pass storage-collapse test debt, re-seed DegeneretteBetInvariant, commit-or-remove the untracked gas-probes, establish + record the GREEN baseline. ⚠ guard the `hardhat compile --force` → ContractAddresses.sol regen landmine. Subject-agnostic (runs before the subject is consumed). FOUND-01..06. (completed 2026-06-07)
 - [ ] **Phase 381: INVARIANT FUZZ — Durable Property Net (Claude-built + council property-review)** - Stand up the invariant-fuzz suite (the durable answer that catches compositions + asymmetries): SOLVENCY · RNG-FREEZE · GAS-CEILING (no advanceGame tx > 16.7M) · ENQUEUE · POOL-CONSERVATION, on the GameSeeder etch pattern; then FIRE the council to cross-check the property SET for completeness (XMODEL — what's missing?) and fold convergent gaps in. FUZZ-01..06.
 - [ ] **Phase 382: PRIME — v61 New Code + Forgiving-Funding (council-LED)** - Council-led audit of the highest-bug-density surface: v61's afking-as-payment / cashout-curse / deity-smite AND the committed forgiving-funding change `c4d48008` (the `_mintCost` parity, the `receive()` blast radius, the overpay→afking SOLVENCY-01 identity), against ALL threat classes + composition. RE-LOCK the subject SHA + re-attest anchors first. PRIME-01..04.
 - [ ] **Phase 383: ASYMMETRY SWEEP (council-LED)** - Council-led diff of every N-implementation family for the one diverging sibling (the WHALE-01 shape): box-creation/auto-open enqueue invariant · whale/lazy/deity pass types · jackpot distribution (305/50 caps, shared math) · every RNG-consume site (traced backward to freeze) · pool/credit conservation; verify the forgiving-funding overpay→afking is consistent across purchase/combo/whale×3/presale-box. ASYM-01..06.
@@ -62,10 +62,10 @@
 
 **Plans**: 4 plans (3 parallel repair plans in wave 1 + the wave-2 green-baseline gate)
 
-  - [ ] 380-01-PLAN.md — FOUND-01: re-derive the authoritative c4d48008 storage layout + recalibrate the slot-hardcoded forge harnesses (StorageFoundation · VRF/VrfRotation/LootboxRng · Keeper/V56Sub/Queue/FarFuture)
-  - [ ] 380-02-PLAN.md — FOUND-02 + FOUND-03: refresh the LootBoxOpened 7-arg event-schema-delta tests + the v60 deity storage-collapse tests (deityPassPricePaid + min(pricePaid,20e))
-  - [ ] 380-03-PLAN.md — FOUND-04 + FOUND-05: re-attest the SolvencyObligations slot + seed the DegeneretteBet invariant + commit-or-remove the untracked gas-probes + delete obsolete SKIP tests
-  - [ ] 380-04-PLAN.md — FOUND-06: establish + record the GREEN full-suite baseline (REGRESSION-BASELINE-v62.md), superseding the carried-red v61 ledger (wave 2; depends on 01/02/03)
+  - [x] 380-01-PLAN.md — FOUND-01: re-derive the authoritative c4d48008 storage layout + recalibrate the slot-hardcoded forge harnesses (StorageFoundation · VRF/VrfRotation/LootboxRng · Keeper/V56Sub/Queue/FarFuture)
+  - [x] 380-02-PLAN.md — FOUND-02 + FOUND-03: refresh the LootBoxOpened 7-arg event-schema-delta tests + the v60 deity storage-collapse tests (deityPassPricePaid + min(pricePaid,20e))
+  - [x] 380-03-PLAN.md — FOUND-04 + FOUND-05: re-attest the SolvencyObligations slot + seed the DegeneretteBet invariant + commit-or-remove the untracked gas-probes + delete obsolete SKIP tests
+  - [x] 380-04-PLAN.md — FOUND-06: establish + record the GREEN full-suite baseline (REGRESSION-BASELINE-v62.md), superseding the carried-red v61 ledger (wave 2; depends on 01/02/03)
 
 **UI hint**: no
 

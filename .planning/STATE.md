@@ -2,25 +2,26 @@
 gsd_state_version: 1.0
 milestone: v62.0
 milestone_name: Blind-Spot-Driven Pre-C4A Audit
-status: planning
-last_updated: "2026-06-07T14:40:51.770Z"
-last_activity: 2026-06-07
+status: ready_to_plan
+last_updated: 2026-06-07T22:45:43.813Z
+last_activity: 2026-06-07 -- Phase 380 COMPLETE (4/4); green v62 baseline recorded; ready to plan 381
 progress:
-  total_phases: 0
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 8
+  completed_phases: 1
+  total_plans: 4
+  completed_plans: 4
+  percent: 13
+stopped_at: Phase 380 complete (4/4) — ready to discuss Phase 381
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v62.0 section) + .planning/ROADMAP.md (v62.0 roadmap, once written) + .planning/REQUIREMENTS.md (v62.0 reqs, once defined) + .planning/MILESTONES.md (v61.0 entry, top) + .planning/AUDIT-V62-PLAN.md (the full STEP 0–5 plan). Baseline = the v61.0 closure HEAD `b97a7a2e` (62 commits ahead of origin, NOT pushed). v61.0 archive: .planning/milestones/v61.0-ROADMAP.md + v61.0-REQUIREMENTS.md + v61.0-phases/; canonical audit deliverable audit/FINDINGS-v61.0.md (chmod 444). **NEXT = define v62.0 requirements → roadmap → /gsd-plan-phase 380 (FOUNDATION-FIRST: STEP 5 test-fix + invariant fuzz before the STEP 0–4 audit sweep).**
+See: .planning/PROJECT.md (Current Milestone: v62.0 section) + .planning/ROADMAP.md (v62.0 roadmap, once written) + .planning/REQUIREMENTS.md (v62.0 reqs, once defined) + .planning/MILESTONES.md (v61.0 entry, top) + .planning/AUDIT-V62-PLAN.md (the full STEP 0–5 plan). Baseline = the v61.0 closure HEAD `b97a7a2e` (62 commits ahead of origin, NOT pushed). v61.0 archive: .planning/milestones/v61.0-ROADMAP.md + v61.0-REQUIREMENTS.md + v61.0-phases/; canonical audit deliverable audit/FINDINGS-v61.0.md (chmod 444). **NEXT = /gsd-plan-phase 381 (INVARIANT FUZZ — the durable property net; FOUNDATION-FIRST: 380 test-fix → green baseline DONE, 381 fuzz next, both before the 382+ council sweeps).**
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v62.0 STARTED 2026-06-07 — Blind-Spot-Driven Pre-C4A Audit (foundation-first). Defining requirements. Attacks the recurring bug SHAPES (compositions · parallel-path asymmetries · shared RNG-window state · write-only/dead state), not a feature rotation. **THE METHOD = CROSS-MODEL-LED (the defining premise, USER 2026-06-07):** the convergent council (Gemini + Codex) is the PRIMARY FINDER in every sweep area — Claude orchestrates + adjudicates findings vs frozen source + builds the test/fuzz foundation + synthesizes, NOT the primary bug-finder (Claude-only audits have repeatedly missed what the council found in v60). Audit subject = working HEAD (the v61.0 closure `b97a7a2e` + USER in-flight pre-audit deltas, e.g. the combo funding-mix parity tweak), exact SHA locked before the council sweeps (382); baseline = `b97a7a2e`. The audit plans no NEW `contracts/*.sol` change of its own (a finding routes to a gated fix, else document-only `audit/FINDINGS-v62.0.md`). v61.0 SHIPPED 2026-06-07 (closure `MILESTONE_V61_AT_HEAD_b97a7a2e`, 0 contract-change-needed); 62 commits ahead of origin, NOT pushed (push = a separate USER step).
+**Current focus:** v62.0 EXECUTING — Blind-Spot-Driven Pre-C4A Audit (foundation-first). ✅ **Phase 380 FOUNDATION COMPLETE 2026-06-07** — green full-suite baseline `test/REGRESSION-BASELINE-v62.md` @ subject `c4d48008` (forge **789 pass / 3 carried bucket-A VRFPath invariants / 110 skip**, 0 deterministic failures; supersedes the carried-red v61 ledger); 6 council finding-candidates **FC1–FC6** + an affiliate-score asymmetry flag (~2500× ETH→score) routed forward to the sweeps; contracts byte-frozen `bbffe99e`; gsd-verifier 11/11 + code-review oracle-holes (vacuous binding test, weakened deity-refund assertion) fixed. **NEXT = Phase 381 INVARIANT FUZZ** (Claude-built durable property net) before the council sweeps (382+). Attacks recurring bug SHAPES (compositions · parallel-path asymmetries · shared RNG-window state · write-only/dead state), not a feature rotation. **THE METHOD = CROSS-MODEL-LED (defining premise, USER 2026-06-07):** the convergent council (Gemini + Codex) is the PRIMARY FINDER per sweep area — Claude orchestrates + adjudicates findings vs frozen source + builds the test/fuzz foundation + synthesizes, NOT the primary bug-finder (Claude-only audits repeatedly missed what the council found in v60). Baseline = `b97a7a2e`; subject locked = `c4d48008` (= `b97a7a2e` + the committed forgiving-funding change). The audit plans no NEW `contracts/*.sol` change of its own (a finding routes to a gated fix, else document-only `audit/FINDINGS-v62.0.md`). Local commits NOT pushed (push = a separate USER step).
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,10 +33,10 @@ See: .planning/PROJECT.md (Current Milestone: v62.0 section) + .planning/ROADMAP
 
 ## Current Position
 
-Phase: 380 — FOUNDATION: Test-Fix & Green Baseline (planned)
-Plan: 380-01..04 (4 plans / 2 waves — wave 1: 01/02/03 parallel repairs, wave 2: 04 green-baseline gate)
-Status: Planned — ready for /gsd-execute-phase 380
-Last activity: 2026-06-07 — Phase 380 planned (FOUND-01..06; test-only, autonomous; subject c4d48008)
+Phase: 381 — INVARIANT FUZZ (Durable Property Net) — ready to plan (Claude-built; FUZZ-01..06)
+Plan: Not started
+Status: Ready to plan — Phase 380 FOUNDATION complete (4/4); green oracle `REGRESSION-BASELINE-v62.md` is the safety floor for the council sweeps
+Last activity: 2026-06-07 — Phase 380 complete: green baseline (789/3/110) recorded @ c4d48008; FC1–FC6 + affiliate-score asymmetry routed to council; verifier 11/11; review oracle-holes fixed
 
 ## ▶ ACTIVE Milestone Roadmap (v62.0 — phases 380-387 — ACTIVE 2026-06-07; baseline = v61.0 closure HEAD `b97a7a2e`; subject locked at `c4d48008`)
 
