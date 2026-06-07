@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v61.0
 milestone_name: AfKing-as-Payment-Source + Cashout-Curse + Deity-Smite
 status: executing
-last_updated: "2026-06-06T22:40:45.312Z"
-last_activity: 2026-06-06 -- Phase 376 execution started
+last_updated: "2026-06-07T06:56:55.882Z"
+last_activity: 2026-06-07 -- Phase 378 planning complete
 progress:
   total_phases: 10
-  completed_phases: 2
-  total_plans: 9
-  completed_plans: 4
-  percent: 20
+  completed_phases: 3
+  total_plans: 15
+  completed_plans: 7
+  percent: 30
 ---
 
 # Project State
@@ -34,10 +34,10 @@ See: .planning/PROJECT.md (Current Milestone: v61.0 section) + .planning/ROADMAP
 
 Phase: 378 (tst-proving-tests-rng-freeze-solvency) — ▶ IN PROGRESS, foundation laid (failure baseline + slot-shift recalibration key + plan). 376 ✅ `b97a7a2e` · 377 ✅ Outcome-A `056481ea` (both local, NOT pushed — 33 ahead of origin).
 Plan: `378-tst-proving-tests-rng-freeze-solvency/378-PLAN-TRIAGE.md` (the focused-session playbook).
-Status: 378 runtime failure baseline on v61 HEAD = **525 passed / 396 failed** — dominated by the storage-slot-shift signature (98 NoPass stale-slot pass-grants + 62 panic wrong-slot writes) across ~32 slot-hardcoded files + the repo's known pre-existing red. ⚠ v61-delta NOT yet isolated → "no v61 regression" is NOT certified until a baseline-`2bee6d6f` NON-WIDENING by-name comparison runs (the v55/56/57 methodology). The PACK fold = uniform −1 slot shift for post-balances slots (StorageFoundation's pre-fold slots 0/2/11 unaffected); authoritative layout via `forge clean && forge build` (include_storage=true) then `forge inspect`.
+Status: Ready to execute
 Next up (FOCUSED 378 session): (1) baseline NON-WIDENING comparison → isolate the v61-delta; (2) recalibrate the −1 slot shift across the ~32 slot-hardcoded harnesses + re-measure STAGE_2 live; (3) update accepted-v61-behavior reds; (4) write TST-01..06; (5) prove SEC-01/02. All test-side/committable, per-unit commits. Then 379 TERMINAL (FULL close + FINDINGS-v61.0).
 377 GAS = Outcome-A (gas-neutral, no contract tune); findings `377-GAS-FINDINGS.md`. 376 EIP-170 reclaim via de-view read getters; details `376-03-SUMMARY.md`.
-Last activity: 2026-06-06 -- 378 foundation: failure baseline 525/396 captured + slot-shift recalibration plan; heavy lifting → focused session
+Last activity: 2026-06-07 -- Phase 378 planning complete
 
 ## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
 
