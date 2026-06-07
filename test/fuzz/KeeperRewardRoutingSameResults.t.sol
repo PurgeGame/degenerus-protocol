@@ -69,11 +69,11 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     // (PRESERVED VERBATIM: 351-04/05/08 port this topic-decode).
     // -------------------------------------------------------------------------
 
-    /// @dev keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)") — emitted once per
+    /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — emitted once per
     ///      creditFlip. topics[1] is the indexed player (recipient isolation); the non-indexed
     ///      `amount` is the first 32 bytes of `data`.
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)");
+        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
 
     // -------------------------------------------------------------------------
     // DegenerusGame pinned slot layout (RE-DERIVED via `forge inspect storage DegenerusGame`;

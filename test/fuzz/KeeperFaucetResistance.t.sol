@@ -76,10 +76,10 @@ contract KeeperFaucetResistance is DeployProtocol {
     /// @dev BURNIE per-ETH conversion unit (DegenerusGameStorage / Coinflip).
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
 
-    /// @dev keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)") — the event creditFlip
+    /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — the event creditFlip
     ///      emits once per credit; used to count creditFlip emissions.
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)");
+        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q' — first-spin salt
 

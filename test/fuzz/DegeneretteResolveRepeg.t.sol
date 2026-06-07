@@ -80,10 +80,10 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     // Event topics
     // =========================================================================
 
-    /// @dev keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)") — emitted EXACTLY once
+    /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — emitted EXACTLY once
     ///      per creditFlip via _addDailyFlip; the count + amount oracle for the flat-ONE reward.
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)");
+        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
 
     /// @dev FullTicketResult topic0 — one per resolved spin (the raw per-spin payout source).
     bytes32 private constant FULL_TICKET_RESULT_SIG =

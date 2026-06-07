@@ -59,10 +59,10 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // creditFlip-count oracle (recipient-isolated)
     // -------------------------------------------------------------------------
 
-    /// @dev keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)") — emitted once per
+    /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — emitted once per
     ///      creditFlip. The indexed `player` is topics[1] (recipient isolation).
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)");
+        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
 
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`;

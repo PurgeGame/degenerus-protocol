@@ -63,9 +63,9 @@ contract AfKingSubscription is DeployProtocol {
 
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
-    /// @dev keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)") — one per creditFlip.
+    /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — one per creditFlip.
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)");
+        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
 
     /// @dev Game-resident module event signatures (emitter == address(game) via delegatecall).
     bytes32 private constant EXTENDED_FREE_SIG = keccak256("SubscriptionExtendedFree(address,uint32)");

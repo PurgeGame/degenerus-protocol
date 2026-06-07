@@ -56,10 +56,10 @@ contract KeeperLeversAndPacking is DeployProtocol {
     // Constants
     // -------------------------------------------------------------------------
 
-    /// @dev keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)") — emitted once per
+    /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — emitted once per
     ///      creditFlip via _addDailyFlip; used to count creditFlip emissions.
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint32,uint256,uint256)");
+        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
 
     uint48 private constant INDEX = 1;
     uint256 private constant LOOTBOX_WEI = 1 ether; // >= LOOTBOX_MIN
