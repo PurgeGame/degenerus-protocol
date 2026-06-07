@@ -37,17 +37,20 @@ Plan: —
 Status: Defining requirements
 Last activity: 2026-06-07 — Milestone v62.0 started
 
-## ▶ ACTIVE Milestone Roadmap (v61.0 — phases 375-379 — ACTIVE 2026-06-06; baseline = v60.0 closure HEAD `2bee6d6f`)
+## ▶ ACTIVE Milestone Roadmap (v62.0 — phases 380-387 — ACTIVE 2026-06-07; baseline = v61.0 closure HEAD `b97a7a2e`; subject locked at `c4d48008`)
 
-Shape: SPEC → IMPL → GAS → TST → TERMINAL. ONE batched contract diff — (1) AfKing-as-payment waterfall `msg.value → claimable → afking` across every non-mintBurnie spend path + the feature-first claimable/afking slot-packing; (2) cashout-curse counter (+2 pts/ghost-cashout, −100 bps/pt off the activity score, cured by ≥1-ticket buy or `decurse` 100 BURNIE, active afker exempt); (3) deity-smite (200 BURNIE → +1 stack on the same counter, active afker = sole immunity). **ONE contract-boundary HARD STOP at 376 IMPL** (producer-before-consumer: CURSE infra before SMITE, PACK accessor before repack). **FULL in-milestone close at 379** (3-skill genuine-PARALLEL adversarial sweep + delta-audit + `audit/FINDINGS-v61.0.md`, NOT deferred). Hard floor: RNG-freeze intact (all 3 read no `rngWord`) + SOLVENCY-01 re-attested (`claimablePool == Σ(claimable + afking)`). Design-lock inputs: `PLAN-V61-MILESTONE-SCOPE.md` + the 3 plan docs. No research (fully design-locked).
+Shape: FOUNDATION → FUZZ → PRIME → ASYM → COMPO → LOOP → PERIPH → TERMINAL. **CROSS-MODEL-LED** — the convergent council (Gemini + Codex) is the PRIMARY finder in every sweep area (382-386); Claude orchestrates + adjudicates vs frozen `c4d48008` + builds the test/fuzz foundation + synthesizes (a no-finding verdict needs the council pass on record). **FOUNDATION-FIRST:** 380 (test-fix → green baseline) + 381 (invariant fuzz) are Claude-built and run BEFORE the council sweeps; 387 is the terminal close (council-on-refuted + `audit/FINDINGS-v62.0.md`). Audit-only (no NEW `contracts/*.sol` change planned; a council-surfaced, adjudicated finding routes to a gated fix). Full detail: `.planning/ROADMAP.md` (v62.0 section); scope + the 38 REQ-IDs: `.planning/REQUIREMENTS.md`; method: `.planning/AUDIT-V62-PLAN.md`.
 
 | Phase | Name | Type | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 375 | SPEC — Design-Lock + Anchor Re-Attestation vs `2bee6d6f` + Edit-Order Map | SPEC | SPEC-01 | Not started |
-| 376 | IMPL — The ONE Batched Contract Diff (AFPAY + PACK + CURSE + SMITE) | IMPL (CONTRACT BOUNDARY) | AFPAY-01..07 · PACK-01/02 · CURSE-01..07 · SMITE-01 | Not started |
-| 377 | GAS — Gas-Neutrality Gate (curse APPLY zero-SLOAD · packing no cold slot) | GAS (CONTRACT BOUNDARY — net diff, else Outcome-A) | (none) | Not started |
-| 378 | TST — One Proving Test per Surface (TST-01..06) + RNG-Freeze + SOLVENCY-01 | TST | SEC-01/02 · TST-01..06 | ▶ In progress (01/02/03/04/05 ✅ — TST-01..06 proven, NON-WIDENING holds; next 378-06 SEC-01/02) |
-| 379 | TERMINAL — Delta Audit + 3-Skill Sweep + FINDINGS-v61.0 + Closure Flip | TERMINAL (FULL close) | AUDIT-01 | Not started |
+| 380 | FOUNDATION — Test-Fix & Green Baseline | FOUND (Claude-built) | FOUND-01..06 | Not started |
+| 381 | INVARIANT FUZZ — Durable Property Net | FUZZ (Claude-built + council property-review) | FUZZ-01..06 | Not started |
+| 382 | PRIME — v61 New Code + Forgiving-Funding | SWEEP (council-LED) | PRIME-01..04 | Not started |
+| 383 | ASYMMETRY SWEEP | SWEEP (council-LED) | ASYM-01..06 | Not started |
+| 384 | advanceGame COMPOSITION + e2e Gas Harness | SWEEP (council-LED) | COMPO-01..03 | Not started |
+| 385 | VRF / GAS-BOUNDED-LOOP SWEEP | SWEEP (council-LED) | LOOP-01..03 | Not started |
+| 386 | PERIPHERAL CONTRACTS | SWEEP (council-LED) | PERIPH-01..06 | Not started |
+| 387 | TERMINAL — Council-on-Refuted + FINDINGS-v62.0 + Closure Flip | TERMINAL | AUDIT-01/02 | Not started |
 
 **Coverage:** 27/27 mapped to one phase (375: 1 · 376: 17 · 377: 0 · 378: 8 · 379: 1); 0 orphaned, 0 duplicated. Per-category: AFPAY 7 · PACK 2 · CURSE 7 · SMITE 1 · SPEC 1 · SEC 2 · TST 6 · AUDIT 1. Phase 377 GAS owns NO REQ-ID (the gas-neutrality measurement gate). Full detail in `.planning/ROADMAP.md`; per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
 
