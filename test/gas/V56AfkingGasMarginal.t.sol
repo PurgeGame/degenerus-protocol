@@ -58,19 +58,19 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @dev Live `DeployProtocol` fixture; reuses the validated game-resident driving harness (the
 ///      `_settleGame`/`_settleClean` VRF drain, the funded-sub setup, `depositAfkingFunding` funding,
 ///      `_grantDeityPass`, the Sub-slot reads, the snapshot/revert two-near-N form) ported from
-///      V55AfkingGasMarginal. All pinned slots RE-DERIVED via `forge inspect DegenerusGame storage` /
-///      `storageLayout` against the e18af451 tree (`_subOf = 66`, `_subscribers = 68`, `_subCursor = 70:0`,
-///      `_subOpenCursor = 70:2`, `rngWordByDay = 11`; the Sub field byte offsets re-derived from the v56
-///      re-pack). Test-only: ZERO contracts/*.sol mutated (`git diff e18af451 -- contracts/` EMPTY).
+///      V55AfkingGasMarginal. All pinned slots taken from `forge inspect DegenerusGame storageLayout`
+///      against the v61 subject (`_subOf = 62`, `_subscribers = 64`, `_subCursor = 66:0`,
+///      `_subOpenCursor = 66:2`, `rngWordByDay = 10`; the Sub field byte offsets are the v56 re-pack,
+///      unchanged by the PACK fold). Test-only: ZERO contracts/*.sol mutated.
 contract V56AfkingGasMarginal is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Game-resident storage slots (RE-DERIVED via `forge inspect DegenerusGame storage` @ e18af451)
+    // Game-resident storage slots (forge inspect DegenerusGame storageLayout, v61)
     // -------------------------------------------------------------------------
 
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 11; // mapping(uint32 => uint256) — the afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = 65;           // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 67;     // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBCURSOR_SLOT = 69;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint32 @ byte 4)
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
+    uint256 private constant SUBOF_SLOT = 62;           // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 64;     // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBCURSOR_SLOT = 66;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4)
 
     // Sub packed-field byte offsets — RE-DERIVED via `forge inspect DegenerusGame storageLayout` after the
     // v56 compute-on-read re-pack: `amount` narrowed uint32→uint24 (so everything after it shifts down one
@@ -89,7 +89,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     uint256 private constant OFF_PENDINGBURNIE = 27; // uint32 pendingBurnie     (bytes 27..30)
     uint256 private constant OFF_STREAKLATCH = 31; // uint8 subStreakLatch       (byte 31; bit7 ever-sub, bits0-6 streak)
 
-    uint256 private constant MINTPACKED_SLOT = 10;
+    uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184;
 
     /// @dev The packed header slot 0 holds `purchaseStartDay` (uint32 @ byte 0) + `dailyIdx` (uint32 @ byte 4)
@@ -1282,7 +1282,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         }
     }
 
-    // ---- Sub-slot reads (RE-DERIVED slot 66 + v56 offsets) ----
+    // ---- Sub-slot reads (_subOf at slot 62 + v56 offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
         uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
@@ -1346,20 +1346,20 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.store(address(game), bytes32(uint256(HEADER_SLOT)), bytes32(cur));
     }
 
-    /// @dev Read the STAGE cursor `_subCursor` (slot 70, byte 0, uint16) — advances by SUB_STAGE_BATCH on a
+    /// @dev Read the STAGE cursor `_subCursor` (slot 66, byte 0, uint16) — advances by SUB_STAGE_BATCH on a
     ///      full chunk.
     function _subCursor() internal view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) & 0xFFFF;
     }
 
-    /// @dev Read the afking-open cursor `_subOpenCursor` (slot 70, byte 2, uint16) — the afking-side open
+    /// @dev Read the afking-open cursor `_subOpenCursor` (slot 66, byte 2, uint16) — the afking-side open
     ///      walk (drainAfkingBoxes -> _autoOpen). Distinct from the human boxCursor (byte 8) — LIVE-01
     ///      cursor independence.
     function _subOpenCursor() internal view returns (uint256) {
         return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 16) & 0xFFFF;
     }
 
-    /// @dev Read the human-box cursor `boxCursor` (slot 70, byte 8, uint48) — the human open walk
+    /// @dev Read the human-box cursor `boxCursor` (slot 66, byte 8, uint48) — the human open walk
     ///      (_openHumanBoxes over boxPlayers[index]). Distinct from _subOpenCursor (byte 2).
     function _boxCursor() internal view returns (uint256) {
         return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 64) & 0xFFFFFFFFFFFF;
