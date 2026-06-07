@@ -1338,6 +1338,19 @@ contract RngLockDeterminism is DeployProtocol {
             vm.assume(false);
         }
 
+        // At c4d48008 a game purchase routes proceeds to the staking pools, not a direct
+        // sDGNRS mint to the buyer — so seed the holder's sDGNRS balance (StakedDegenerusStonk
+        // balanceOf @ slot 1) and bump totalSupply (slot 0) to keep the supply identity intact,
+        // so the redemption burn below is reachable for the fuzzer (avoids the vm.assume(false)
+        // exhaustion the empty-balance buy used to cause). This exercises the SAME per-day-keyed
+        // redemption RNG-freeze path the test guards.
+        {
+            bytes32 balSlot = keccak256(abi.encode(uint256(uint160(holder)), uint256(1)));
+            vm.store(address(sdgnrs), balSlot, bytes32(uint256(100 ether)));
+            uint256 ts = uint256(vm.load(address(sdgnrs), bytes32(uint256(0))));
+            vm.store(address(sdgnrs), bytes32(uint256(0)), bytes32(ts + 100 ether));
+        }
+
         // v44 MIN_BURN_AMOUNT floor: bound legal-burn range to [1e18, 100e18]
         uint256 burnAmount = bound(burnAmountSeed, 1e18, 100e18);
 
