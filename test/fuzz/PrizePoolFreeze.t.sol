@@ -209,11 +209,18 @@ contract FreezeLifecycleTest is Test {
     // =====================================================================
 
     /// @dev Simulate 5 jackpot days: freeze persists, accumulators grow, unfreeze merges all.
+    ///      The first _swapAndFreeze pre-seeds the pending FUTURE buffer with 1% of the live
+    ///      future pool (futureBal / 100) and subtracts that seed from the live future pool
+    ///      (DegenerusGameStorage:778-790). So pending future carries an extra `seed` over the
+    ///      raw day accumulation, live future drops by `seed` at the first freeze, and the seed
+    ///      rolls back into live future at unfreeze (net live future = original + accumulated).
     function testMultiDayAccumulatorPersistence() public {
         // Initial live pool values
         harness.exposed_setPrizePools(10000, 20000);
+        uint128 seed = uint128(20000) / 100; // _swapAndFreeze seeds pending future with 1% of live future
 
-        // Day 1: First swapAndFreeze -> activates freeze, zeros pending
+        // Day 1: First swapAndFreeze -> activates freeze, seeds pending future with `seed`,
+        // and debits `seed` from the live future pool.
         harness.exposed_swapAndFreeze(0);
         assertTrue(harness.getFrozen());
 
@@ -232,17 +239,17 @@ contract FreezeLifecycleTest is Test {
             totalNextAdded += dayNextShare;
             totalFutureAdded += dayFutureShare;
 
-            // Verify pending grows monotonically
+            // Verify pending grows monotonically (future carries the +seed pre-seed)
             (pNext, pFuture) = harness.exposed_getPendingPools();
             assertEq(pNext, totalNextAdded, "pending next should grow monotonically");
-            assertEq(pFuture, totalFutureAdded, "pending future should grow monotonically");
+            assertEq(pFuture, seed + totalFutureAdded, "pending future = seed + accumulated");
 
-            // Verify live pools unchanged throughout
+            // Verify live pools unchanged throughout (future is debited by `seed` at first freeze)
             (uint128 next, uint128 future) = harness.exposed_getPrizePools();
             assertEq(next, 10000, "live next must remain constant during jackpot phase");
-            assertEq(future, 20000, "live future must remain constant during jackpot phase");
+            assertEq(future, 20000 - seed, "live future is debited by the 1% freeze seed");
 
-            // Days 2-5: subsequent swapAndFreeze should NOT zero accumulators
+            // Days 2-5: subsequent swapAndFreeze (already frozen) is pool-neutral (ticket-slot swap only)
             if (day < 5) {
                 harness.exposed_swapAndFreeze(0);
                 assertTrue(harness.getFrozen(), "must remain frozen between jackpot days");
@@ -250,7 +257,7 @@ contract FreezeLifecycleTest is Test {
                 // Verify accumulators survived the re-freeze
                 (pNext, pFuture) = harness.exposed_getPendingPools();
                 assertEq(pNext, totalNextAdded, "pending next must survive re-freeze");
-                assertEq(pFuture, totalFutureAdded, "pending future must survive re-freeze");
+                assertEq(pFuture, seed + totalFutureAdded, "pending future must survive re-freeze");
             }
         }
 
@@ -259,14 +266,15 @@ contract FreezeLifecycleTest is Test {
         assertEq(totalNextAdded, 1500, "sanity: total next");
         assertEq(totalFutureAdded, 3000, "sanity: total future");
 
-        // Unfreeze: all 5 days of pending merge into live
+        // Unfreeze: all 5 days of pending (incl. the seed) merge into live; the seed rolls back
+        // into live future so net live future = original 20000 + accumulated 3000.
         harness.exposed_unfreezePool();
 
         assertFalse(harness.getFrozen(), "should be unfrozen after jackpot phase");
 
         (uint128 finalNext, uint128 finalFuture) = harness.exposed_getPrizePools();
         assertEq(finalNext, 10000 + 1500, "live next should absorb all 5 days of pending");
-        assertEq(finalFuture, 20000 + 3000, "live future should absorb all 5 days of pending");
+        assertEq(finalFuture, 20000 + 3000, "live future = original + accumulated (seed rolled back)");
 
         // Pending should be zeroed
         (uint128 pn, uint128 pf) = harness.exposed_getPendingPools();
@@ -279,34 +287,39 @@ contract FreezeLifecycleTest is Test {
     // =====================================================================
 
     /// @dev Full lifecycle: set live -> freeze -> add pending -> unfreeze -> verify live = original + pending.
+    ///      The freeze pre-seeds pending future with 1% of live future (futureBal / 100) and debits that
+    ///      seed from the live future pool (DegenerusGameStorage:778-790). The explicit setPendingPools
+    ///      below overwrites that seed, so at unfreeze the live future absorbs only the overwritten pending
+    ///      against the seed-debited live future (net: original - seed + pendingFuture).
     function testFreezeUnfreezeRoundTrip() public {
         // Set initial live values
         harness.exposed_setPrizePools(7777, 8888);
+        uint128 seed = uint128(8888) / 100; // pending-future pre-seed = 1% of live future
 
         // Freeze
         harness.exposed_swapAndFreeze(0);
         assertTrue(harness.getFrozen());
 
-        // Pending should be zeroed by freeze
+        // Pending future is pre-seeded with `seed` (1% of live future); pending next stays 0
         (uint128 pNext, uint128 pFuture) = harness.exposed_getPendingPools();
         assertEq(pNext, 0);
-        assertEq(pFuture, 0);
+        assertEq(pFuture, seed, "freeze pre-seeds pending future with 1% of live future");
 
-        // Simulate purchase: add to pending
-        harness.exposed_setPendingPools(333, 444);
-
-        // Live should still be original values
+        // Live future is debited by the seed; live next unchanged
         (uint128 next, uint128 future) = harness.exposed_getPrizePools();
         assertEq(next, 7777, "live next unchanged during freeze");
-        assertEq(future, 8888, "live future unchanged during freeze");
+        assertEq(future, 8888 - seed, "live future debited by the freeze seed");
+
+        // Simulate purchase: overwrite pending with explicit values
+        harness.exposed_setPendingPools(333, 444);
 
         // Unfreeze
         harness.exposed_unfreezePool();
 
-        // Verify: live = original + pending
+        // Verify: live = seed-debited-live + overwritten pending
         (next, future) = harness.exposed_getPrizePools();
         assertEq(next, 7777 + 333, "live next = original + pending after unfreeze");
-        assertEq(future, 8888 + 444, "live future = original + pending after unfreeze");
+        assertEq(future, (8888 - seed) + 444, "live future = seed-debited live + pending after unfreeze");
 
         // Verify: pending zeroed, flag cleared
         (pNext, pFuture) = harness.exposed_getPendingPools();
