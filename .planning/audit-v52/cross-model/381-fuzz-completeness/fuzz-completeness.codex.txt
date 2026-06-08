@@ -1,0 +1,39 @@
+**Missing invariant:** ready-box auto-open completeness.
+
+For every finalized lootbox RNG index `i` where `lootboxRngWordByIndex[i] != 0`, any persisted human box at that index should be permissionlessly openable by `openBoxes()`, and the open should not be owner-timable against a later live `level`.
+
+**Violating sequence:**
+
+1. Precondition: normal active game, `rngLockedFlag == false`, current day RNG already recorded, `lootboxRngIndex = N`.
+2. Alice calls `purchase(Alice, 0, 1 ether, 0, DirectEth)`.
+   - Writes `lootboxEth[N][Alice]`, `lootboxEthBase[N][Alice]`.
+   - Enqueues Alice in `boxPlayers[N]`.
+3. Keeper calls `requestLootboxRng()`.
+   - Advances `lootboxRngPacked` low-48 `LR_INDEX` from `N` to `N + 1`.
+4. VRF fulfills.
+   - `rawFulfillRandomWords` writes `lootboxRngWordByIndex[N] = word`.
+   - Active `LR_INDEX` remains `N + 1`.
+5. Anyone calls `openBoxes(100)`.
+   - `_openHumanBoxes()` reads `index = LR_INDEX = N + 1`.
+   - Since `lootboxRngWordByIndex[N + 1] == 0`, it returns `0`.
+   - Alice’s ready box at `N` remains unopened.
+6. Alice waits until a favorable future level and calls `openLootBox(Alice, N)`.
+   - `openLootBox` uses `currentLevel = level + 1` at open time.
+   - The VRF word and offset are already knowable, so Alice can choose when `targetLevel = currentLevel + knownOffset` lands on a desired level.
+
+**State/slots involved:**
+
+- `lootboxRngPacked` low 48 bits (`LR_INDEX`, slot 36 in this layout).
+- `lootboxRngWordByIndex[N]` mapping root slot 37.
+- `boxPlayers[N]`.
+- `lootboxEth[N][Alice]`, `lootboxEthBase[N][Alice]`.
+- Open-time `level` consumed by `DegenerusGameLootboxModule.openLootBox`.
+
+**Why FUZZ-01..05 miss it:**
+
+- FUZZ-04 only proves the box is enqueued, not that `openBoxes()` can open the finalized index.
+- FUZZ-02 checks freeze mutation, not post-fulfillment consumption/liveness.
+- FUZZ-01/FUZZ-05 remain green because ETH backing/pool conservation is intact.
+- FUZZ-03 remains green because `advanceGame()` gas is unaffected.
+
+**Severity:** High for RNG/fairness. This breaks the protocol’s stated anti-timing assumption for lootboxes. The fix is to assert and implement auto-open over the finalized/readable index, effectively `LR_INDEX - 1` for freshly fulfilled rounds, and to include presale-box records too. Presale-only boxes have the same completeness gap because `_openHumanBoxes()` skips entries with `lootboxEthBase[index][player] == 0`, leaving `presaleBoxEth[index][player]` manual-only.
