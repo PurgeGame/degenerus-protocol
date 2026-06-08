@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {BoxCreationHandler} from "../handlers/BoxCreationHandler.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -84,6 +85,17 @@ contract BoxEnqueue is DeployProtocol {
 
         handler = new BoxCreationHandler(game, deityPass, mockVRF, 5);
         targetContract(address(handler));
+
+        // The falsifiability seams (debugSeedUnenqueuedBox / debugClearBox) are TEST-ONLY hooks used solely by
+        // the focused falsifiability test — they vm.store an un-enqueued box record to prove the invariant can
+        // fail. Exclude them from the fuzz campaign so the always-on invariant only ever sees boxes created
+        // through the REAL entrypoints (which always enqueue at c4d48008); otherwise the fuzzer could seed a
+        // persisted-but-unenqueued record and either spuriously trip the invariant or, by clearing it, mask the
+        // real action mix. The campaign must reflect genuine contract behaviour, not a seeded bug shape.
+        bytes4[] memory excluded = new bytes4[](2);
+        excluded[0] = BoxCreationHandler.debugSeedUnenqueuedBox.selector;
+        excluded[1] = BoxCreationHandler.debugClearBox.selector;
+        excludeSelector(StdInvariant.FuzzSelector({addr: address(handler), selectors: excluded}));
     }
 
     // =========================================================================
