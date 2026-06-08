@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v62.0
 milestone_name: Blind-Spot-Driven Pre-C4A Audit
 status: executing
-last_updated: "2026-06-08T04:10:00.000Z"
-last_activity: 2026-06-08 -- Phase 381 plan 03 (FUZZ-03 GAS-CEILING) executed GREEN
+last_updated: "2026-06-08T05:05:00.000Z"
+last_activity: 2026-06-08 -- Phase 381 plan 04 (FUZZ-04 BOX-ENQUEUE) executed GREEN
 progress:
   total_phases: 13
   completed_phases: 1
   total_plans: 10
-  completed_plans: 7
+  completed_plans: 8
   percent: 13
 ---
 
@@ -33,9 +33,9 @@ See: .planning/PROJECT.md (Current Milestone: v62.0 section) + .planning/ROADMAP
 ## Current Position
 
 Phase: 381 — INVARIANT FUZZ (Durable Property Net) — EXECUTING (Claude-built; FUZZ-01..06)
-Plan: 381-03 done (FUZZ-03 GAS-CEILING GREEN); 381-02 (FUZZ-02) + 381-01 (FUZZ-01) done. NEXT = 381-04 (ENQUEUE) / 381-05 (POOL-CONSERVATION). Hard stops: 381-06 council autonomous:false, NO contract edits, no advance to 382.
-Status: Executing — Wave 1 in progress (3/6 plans GREEN)
-Last activity: 2026-06-08 -- Phase 381 plan 03 (FUZZ-03 GAS-CEILING) executed GREEN; reusable AdvanceGasCeiling component (Phase 384 imports it) + 1000-run fuzz over reachable worst-case advanceGame pre-states + the v60 game-over composition regression, every tx <= 16,777,216 (max ~6.6M); ZERO contract edits
+Plan: 381-04 done (FUZZ-04 BOX-ENQUEUE GREEN); 381-03 (FUZZ-03) + 381-02 (FUZZ-02) + 381-01 (FUZZ-01) done. NEXT = 381-05 (POOL-CONSERVATION). Hard stops: 381-06 council autonomous:false, NO contract edits, no advance to 382.
+Status: Executing — Wave 1 in progress (4/6 plans GREEN)
+Last activity: 2026-06-08 -- Phase 381 plan 04 (FUZZ-04 BOX-ENQUEUE) executed GREEN; the WHALE-01 one-shot promoted into the always-on invariant_everyPersistedBoxIsEnqueued over the FULL box-creating action-space (BoxCreationHandler drives mint-with-lootbox + whale/lazy/deity pass + coin-presale box + an openBoxes/advance+VRF-fulfill drain); reuses the one-shot's BoxQueueViewer etch overlay (+ presaleBoxBaseFor), asserts every tracked (index,owner) with base!=0 is in boxPlayers[index] (opened boxes base==0 excluded); 256 runs / 32768 calls / 0 reverts; non-vacuity proven across 4 distinct creation paths (16 boxes); falsifiability proven via a seeded persisted-but-unenqueued box; ZERO contract edits
 
 ## ▶ ACTIVE Milestone Roadmap (v62.0 — phases 380-387 — ACTIVE 2026-06-07; baseline = v61.0 closure HEAD `b97a7a2e`; subject locked at `c4d48008`)
 
@@ -44,7 +44,7 @@ Shape: FOUNDATION → FUZZ → PRIME → ASYM → COMPO → LOOP → PERIPH → 
 | Phase | Name | Type | Requirements | Status |
 |-------|------|------|--------------|--------|
 | 380 | FOUNDATION — Test-Fix & Green Baseline | FOUND (Claude-built) | FOUND-01..06 | ✅ Complete |
-| 381 | INVARIANT FUZZ — Durable Property Net | FUZZ (Claude-built + council property-review) | FUZZ-01..06 | ▶ Executing (FUZZ-01 + FUZZ-02 + FUZZ-03 GREEN) |
+| 381 | INVARIANT FUZZ — Durable Property Net | FUZZ (Claude-built + council property-review) | FUZZ-01..06 | ▶ Executing (FUZZ-01 + FUZZ-02 + FUZZ-03 + FUZZ-04 GREEN) |
 | 382 | PRIME — v61 New Code + Forgiving-Funding | SWEEP (council-LED) | PRIME-01..04 | Not started |
 | 383 | ASYMMETRY SWEEP | SWEEP (council-LED) | ASYM-01..06 | Not started |
 | 384 | advanceGame COMPOSITION + e2e Gas Harness | SWEEP (council-LED) | COMPO-01..03 | Not started |
