@@ -38,7 +38,7 @@
 ### Phases
 
 - [x] **Phase 380: FOUNDATION — Test-Fix & Green Baseline (Claude-built)** - Repair the regression net so a green full-suite (forge + Hardhat, 0 failures) is the audit's safety floor + oracle: re-derive stale/drifted slots from `forge inspect storageLayout` (not hard-coded), refresh the event-schema-delta + v60 whale/pass storage-collapse test debt, re-seed DegeneretteBetInvariant, commit-or-remove the untracked gas-probes, establish + record the GREEN baseline. ⚠ guard the `hardhat compile --force` → ContractAddresses.sol regen landmine. Subject-agnostic (runs before the subject is consumed). FOUND-01..06. (completed 2026-06-07)
-- [ ] **Phase 381: INVARIANT FUZZ — Durable Property Net (Claude-built + council property-review)** - Stand up the invariant-fuzz suite (the durable answer that catches compositions + asymmetries): SOLVENCY · RNG-FREEZE · GAS-CEILING (no advanceGame tx > 16.7M) · ENQUEUE · POOL-CONSERVATION, on the GameSeeder etch pattern; then FIRE the council to cross-check the property SET for completeness (XMODEL — what's missing?) and fold convergent gaps in. FUZZ-01..06.
+- [ ] **Phase 381: INVARIANT FUZZ — Durable Property Net (Claude-built + council property-review)** - Stand up the invariant-fuzz suite (the durable answer that catches compositions + asymmetries): SOLVENCY · RNG-FREEZE · GAS-CEILING (no advanceGame tx > 16.7M) · ENQUEUE · POOL-CONSERVATION, on the GameSeeder etch pattern; then FIRE the council to cross-check the property SET for completeness (XMODEL — what's missing?) and fold convergent gaps in. FUZZ-01..06. **6 plans** (5 parallel property plans wave 1 + the wave-2 council completeness review).
 - [ ] **Phase 382: PRIME — v61 New Code + Forgiving-Funding (council-LED)** - Council-led audit of the highest-bug-density surface: v61's afking-as-payment / cashout-curse / deity-smite AND the committed forgiving-funding change `c4d48008` (the `_mintCost` parity, the `receive()` blast radius, the overpay→afking SOLVENCY-01 identity), against ALL threat classes + composition. RE-LOCK the subject SHA + re-attest anchors first. PRIME-01..04.
 - [ ] **Phase 383: ASYMMETRY SWEEP (council-LED)** - Council-led diff of every N-implementation family for the one diverging sibling (the WHALE-01 shape): box-creation/auto-open enqueue invariant · whale/lazy/deity pass types · jackpot distribution (305/50 caps, shared math) · every RNG-consume site (traced backward to freeze) · pool/credit conservation; verify the forgiving-funding overpay→afking is consistent across purchase/combo/whale×3/presale-box. ASYM-01..06.
 - [ ] **Phase 384: advanceGame COMPOSITION + e2e Gas Harness (council-LED)** - Build an END-TO-END `advanceGame` gas harness (real `advanceGame()`, GameSeeder etch) fuzzing reachable states asserting EVERY tx < 16.7M (targets < 10M); council-led hunt for a two-stages-in-one-tx fall-through (the gasceil shape) + re-verify the known fall-throughs post-`c4d48008`. COMPO-01..03.
@@ -80,6 +80,15 @@
   1. SOLVENCY · RNG-FREEZE · GAS-CEILING · ENQUEUE · POOL-CONSERVATION invariants implemented + green over N runs (GameSeeder etch).
   2. The council cross-checks the property SET (what's missing? what reachable sequence violates an unstated invariant?); convergent gaps folded in (FUZZ-06).
   3. The advanceGame <16.7M property reusable by Phase 384.
+
+**Plans**: 6 plans (5 parallel property plans in wave 1 + the wave-2 council completeness review)
+
+  - [ ] 381-01-PLAN.md — FUZZ-01 SOLVENCY: widen the canonical packed-balance Σ identity + backing bound (V61SolvencyAfpay) to a multi-surface action-space (pass/presale/claim buyers) via a new SolvencyActionHandler
+  - [ ] 381-02-PLAN.md — FUZZ-02 RNG-FREEZE: promote the scenario freeze coverage into one canonical fuzzed invariant (RngWindowFreeze) — every enumerated in-window SLOAD frozen [request→unlock] vs an in-window player action
+  - [ ] 381-03-PLAN.md — FUZZ-03 GAS-CEILING: extract the GameSeeder-etch + drive-real-advanceGame + assert-every-tx-≤-16,777,216 into a REUSABLE component (AdvanceGasCeiling) Phase 384 consumes (SC3) + fuzz it over reachable pre-states
+  - [ ] 381-04-PLAN.md — FUZZ-04 ENQUEUE: promote the WHALE-01 one-shot into a fuzzed always-on invariant (BoxEnqueue) — every persisted box (base≠0) enqueued in boxPlayers[index] until opened, over all box-creating paths
+  - [ ] 381-05-PLAN.md — FUZZ-05 POOL-CONSERVATION: BUILD the futurePool↔nextPool↔claimablePool conservation invariant (PoolConservation) — total backed + no unbacked credit minted across transfers
+  - [ ] 381-06-PLAN.md — FUZZ-06 XMODEL: assemble the property-set + action-space → dispatch the Gemini+Codex council for completeness → adjudicate vs frozen c4d48008 → fold ONLY convergent reproducible gaps (dispatch autonomous:false; never blocks on a speculative gap)
 
 **UI hint**: no
 
