@@ -21,7 +21,9 @@ interface IGameLootboxModuleRRL {
     function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external;
 }
 
-/// @title V62RedemptionReentrancy -- empirical reproduction of finding V62-03.
+/// @title V62RedemptionReentrancy -- regression for finding V62-03 (now verifies the FIX: the
+///        stETH-before-ETH reorder in _payEth holds SOLVENCY-01 through a reentrant claim). The
+///        vuln description below is retained as context for what the fix prevents.
 ///
 /// @notice V62-03 (adjudicated vs frozen c4d48008): StakedDegenerusStonk.sol has NO reentrancy
 ///         guard. `claimRedemption(day)` decrements `pendingRedemptionEthValue -= totalRolledEth`
@@ -156,7 +158,7 @@ contract V62RedemptionReentrancy is DeployProtocol {
     ///         attacker re-enters burn() during the mixed _payEth ETH .call. The reentrant submit
     ///         double-counts the in-flight stETH as free backing and reserves a NEW redemption; the
     ///         outer claim then ships the stETH out, leaving pendingRedemptionEthValue unbacked.
-    function test_V62_03_RedemptionReentrancyBreaksReserveIdentity() public {
+    function test_V62_03_RedemptionReentrancyHoldsReserveIdentity() public {
         // ---- 1. Outer gambling burn on day D. Reserves 175% MAX into pendingRedemptionEthValue;
         //         the ETH leg of pullRedemptionReserve segregates that ETH into sDGNRS's balance. ----
         uint24 dayD = game.currentDayView();
@@ -259,34 +261,33 @@ contract V62RedemptionReentrancy is DeployProtocol {
             emit log_named_uint("UNBACKED reservation deficit (pending - held)", pendingAfterClaim - backingAfterClaim);
         }
 
-        // ---- HEADLINE: the reentrancy broke the redemption reserve / SOLVENCY-01 identity.
-        //      pendingRedemptionEthValue now EXCEEDS the ETH+stETH the contract actually holds
-        //      (the reservation is unbacked). The identity held at equality BEFORE the claim. ----
-        assertTrue(reentrantBurnSucceeded, "V62-03: reentrant burn() must succeed inside the _payEth ETH hook");
-        assertGt(reentrantCount, 0, "V62-03: at least one reentrant gambling burn must land in the hook");
-        assertGt(
+        // ---- HEADLINE (FIXED): the stETH-before-ETH reorder in _payEth holds SOLVENCY-01 through
+        //      the reentrant claim. The owed stETH ships BEFORE the untrusted ETH .call, so the
+        //      reservation tracker never exceeds the ETH+stETH the contract holds. ----
+        assertTrue(reentrantBurnSucceeded, "V62-03: reentry is still reachable (no guard) -- the fix neutralizes its EFFECT, not the reentry");
+        assertGt(reentrantCount, 0, "V62-03: the reentrant gambling burns still land in the hook");
+        assertLe(
             pendingAfterClaim,
             backingAfterClaim,
-            "V62-03: reserve identity NOT broken (pendingRedemptionEthValue <= ETH+stETH held)"
+            "V62-03 FIXED: reserve identity holds (pendingRedemptionEthValue <= ETH+stETH held)"
         );
+        assertTrue(_reserveIdentityHolds(), "V62-03 FIXED: SOLVENCY-01 holds after the reentrant claim");
 
-        // ---- MECHANISM: the reentrant submit double-counted the in-flight (owed-but-unsent) stETH.
-        //      At the hook, the claim had ALREADY decremented pending for the rolled amount (so the
-        //      reservation no longer covered the owed stETH) yet the stETH was STILL in the contract.
-        //      The reentrant submit read that stETH as free backing (nonzero) and reserved against it. ----
-        assertEq(pendingAtHook, 0, "V62-03: outer claim must release the reservation before the hook (pending == 0 at hook)");
-        assertGt(inFlightSteth, 0, "V62-03: in-flight (owed) stETH must still be custodied at the hook");
-        assertGt(
+        // ---- MECHANISM (FIXED): CEI. The outer claim decremented pending (pending == 0 at hook),
+        //      AND the fix already shipped the owed stETH out before the ETH .call fired — so at the
+        //      hook the in-flight owed stETH is GONE. The reentrant submit reads zero free stETH
+        //      backing and reserves NOTHING against phantom backing. ----
+        assertEq(pendingAtHook, 0, "V62-03: outer claim releases the reservation before the hook (pending == 0 at hook)");
+        assertEq(inFlightSteth, 0, "V62-03 FIXED: owed stETH already shipped before the ETH hook (stETH-before-ETH CEI)");
+        assertEq(
             reentrantStethBacking,
             0,
-            "V62-03: reentrant submit must have observed nonzero stETH backing (the in-flight owed stETH)"
+            "V62-03 FIXED: reentrant submit saw no free stETH backing (the owed stETH was already sent)"
         );
-        // The reservation accumulated by the reentrant burns equals the post-claim unbacked pending
-        // (the outer reservation was fully released at the hook; everything left is reentrant).
         assertEq(
             pendingAfterReentrant,
-            pendingAfterClaim,
-            "V62-03: post-claim pending must be exactly the reentrant-accumulated (unbacked) reservation"
+            pendingAtHook,
+            "V62-03 FIXED: reentrant burns reserved nothing extra (no phantom backing to double-count)"
         );
     }
 }

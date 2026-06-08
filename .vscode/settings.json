@@ -1,0 +1,12 @@
+{
+  // Format Solidity with Foundry's `forge fmt` (config in foundry.toml [fmt], line_length 120),
+  // NOT prettier-at-80 — which wraps every function signature and reformats the entire file on
+  // save, diverging from the existing codebase style. The JuanBlanco "solidity" extension reads
+  // "solidity.formatter": "forge"; the NomicFoundation extension uses forge fmt automatically when
+  // foundry.toml is present. If your formatter still churns the file, set editor.formatOnSave
+  // false for [solidity] below and run `forge fmt` manually instead.
+  "solidity.formatter": "forge",
+  "[solidity]": {
+    "editor.formatOnSave": true
+  }
+}

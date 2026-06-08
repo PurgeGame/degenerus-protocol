@@ -950,11 +950,14 @@ contract StakedDegenerusStonk {
         } else {
             uint256 ethOut = ethBal;
             uint256 stethOut = amount - ethOut;
+            // stETH first, untrusted ETH .call LAST (CEI): otherwise a reentrant burn()/claim in the
+            // player's ETH hook sees the in-flight stETH (no longer reserved — claimRedemption already
+            // decremented pendingRedemptionEthValue) as free backing and over-reserves, breaking SOLVENCY-01.
+            if (!steth.transfer(player, stethOut)) revert TransferFailed();
             if (ethOut > 0) {
                 (bool success, ) = player.call{value: ethOut}("");
                 if (!success) revert TransferFailed();
             }
-            if (!steth.transfer(player, stethOut)) revert TransferFailed();
         }
     }
 

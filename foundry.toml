@@ -26,6 +26,17 @@ remappings = [
     "forge-std/=lib/forge-std/src/",
 ]
 
+# Solidity formatting via `forge fmt`. line_length 120 matches the existing codebase (single-line
+# signatures that fit) — VS Code should format .sol with forge fmt, NOT prettier-at-80 (which wraps
+# every signature and churns the whole file on save). See .vscode/settings.json.
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = false
+int_types = "long"
+quote_style = "double"
+number_underscore = "thousands"
+
 # Fuzz testing config
 [fuzz]
 runs = 1000
