@@ -1,0 +1,30 @@
+All line refs are for `c4d48008`.
+
+**Finding 1**
+PROPERTY violated: active-afker immunity does not agree with afking pass eviction.
+
+CALL SEQUENCE: Alice has an afking sub with `dailyQuantity != 0` and `validThroughLevel = L`. The game advances into `level = L + 1` at the last-purchase RNG request (`DegenerusGameAdvanceModule.sol:1710-1714`). Before the next afking process stage evicts Alice via `currentLevel > sub.validThroughLevel` (`GameAfkingModule.sol:1214-1228`), Alice calls `claimWinnings`. `maybeCurse` sees the stale cashout but returns only because `_subOf[Alice].dailyQuantity != 0` (`GameAfkingModule.sol:1688`). Same stale non-afker would get `_applyCurseStack`.
+
+STATE VAR + LINE: `_subOf[].dailyQuantity/validThroughLevel` (`DegenerusGameStorage.sol:2056`, `2061`), curse in `mintPacked_` bits 215-222 (`BitPackingLib.sol:88-89`), curse penalty consumer (`DegenerusGameMintStreakUtils.sol:320-326`).
+
+SEVERITY: MED. The player permanently avoids the stale-cashout +2 curse and keeps activity-score-dependent EV higher; a deity smite in the same window also reverts at `GameAfkingModule.sol:1715`.
+
+WHY PROTECTIONS FAIL: eviction checks pass validity, but `maybeCurse`/`smite` check only `dailyQuantity`. Later eviction cannot retroactively set the missed curse.
+
+**Finding 2**
+PROPERTY violated: combo mint/box fresh-ETH split does not match canonical ticket retargeting during final jackpot RNG lock.
+
+CALL SEQUENCE: At level 4 jackpot phase, final jackpot RNG is locked, so `_callTicketPurchase` retargets tickets to level 5 (`GameAfkingModule.sol` not involved; `DegenerusGameMintModule.sol:1649-1658`). Alice has enough presale box credit and calls `buyLootboxAndPresaleBox` with `ticketQuantity=400`, `boxAmount=0.05 ether`, `msg.value=0.07 ether`. The combo split computes `mintCost` using `priceForLevel(level)` = `0.01 ether` (`DegenerusGameMintModule.sol:1515-1527`, `_mintCost` at `1143-1145`), so only `0.01 ether` reaches the mint leg. The canonical mint then charges level 5 price `0.02 ether` and reverts unless Alice already has `0.01 ether` claimable/afking. The box remainder that would cover the missing ETH is not processed until after the mint (`1531`), so it never helps.
+
+STATE VAR + LINE: `jackpotPhaseFlag/rngLockedFlag/jackpotCounter` retarget path (`DegenerusGameMintModule.sol:1644-1658`), packed balances/aggregate reserve (`DegenerusGameStorage.sol:355-365`, `407-418`), presale credit (`DegenerusGameStorage.sol:966-968`).
+
+SEVERITY: LOW. Narrow timing and no solvency loss, but a fully funded combo buy can revert or require pre-existing afking/claimable while ordinary self `purchase` masks the same price delta by crediting overpay before mint.
+
+WHY PROTECTIONS FAIL: `_settleShortfall` only sees buyer balances; the combo path reserves `msg.value - mintFresh` for the later box leg instead of making it available to the mint leg first.
+
+**Clean Areas**
+Afking-as-payment solvency looks intact: `_creditAfkingValue` pairs high-half credits with `claimablePool +=` (`DegenerusGameStorage.sol:939-943`), `_settleShortfall` debits claimable/afking with paired `claimablePool -=` (`857-879`), afking delivery does the same (`GameAfkingModule.sol:790-799`), and withdraw/claim use CEI (`DegenerusGame.sol:1588-1644`).
+
+Slot packing looks safe: low-half debit is explicitly guarded against borrowing from afking (`DegenerusGameStorage.sol:911-914`), high-half debit fails loud, and realistic ETH amounts cannot approach 128-bit half overflow.
+
+FC4 is clean on cancel: `subscribe(... dailyQuantity=0)` drains pending BURNIE and calls `DegenerusAffiliate.claim([subscriber])` before tombstoning (`GameAfkingModule.sol:346-373`); affiliate then atomically read-and-zeros `affiliateBase` via `drainAffiliateBase` (`DegenerusAffiliate.sol:648-655`, `GameAfkingModule.sol:1650-1655`). No double-spend or strand on the cancel path.

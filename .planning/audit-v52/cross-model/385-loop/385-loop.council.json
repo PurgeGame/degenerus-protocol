@@ -1,0 +1,7 @@
+{
+  "label": "385-loop",
+  "schema": "",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/audit-v52/cross-model/385-loop/385-loop.gemini.txt", "codex": ".planning/audit-v52/cross-model/385-loop/385-loop.codex.txt"}
+}

@@ -1,0 +1,7 @@
+{
+  "label": "383-asym",
+  "schema": "",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/audit-v52/cross-model/383-asym/383-asym.gemini.txt", "codex": ".planning/audit-v52/cross-model/383-asym/383-asym.codex.txt"}
+}

@@ -2,69 +2,87 @@
 
 > Mutable working ledger; consolidated into `audit/FINDINGS-v62.0.md` (chmod 444) at Phase 387 TERMINAL.
 > Subject = frozen `c4d48008`. Method = CROSS-MODEL-LED (gemini + codex primary; Claude adjudicates vs
-> frozen source + reproduces convergent findings on the 380/381 harness). v62 is **document-only** — every
-> CONFIRMED finding routes to a USER-gated, batched contract fix; NOTHING is fixed/committed autonomously.
+> frozen source + reproduces convergent findings on the harness). v62 is **document-only** — every CONFIRMED
+> finding routes to a USER-gated, batched contract fix; NOTHING is fixed/committed autonomously.
 
 ## Severity legend
 CRIT (fund-loss / permanent brick) · HIGH (exploitable edge or broken core guarantee) · MED (degraded
-guarantee, bounded impact) · LOW/INFO (hardening / observation) · REFUTED · BY-DESIGN.
+guarantee, bounded impact) · LOW/INFO · REFUTED · BY-DESIGN.
 
 ---
 
-## CONFIRMED FINDINGS
+## CONFIRMED FINDINGS (route to USER-gated batched fix)
 
 ### V62-01 — Permissionless lootbox auto-open is structurally dead for human + presale boxes — **MED–HIGH**
-- **Source:** 381-06 council (codex C1), adjudicated vs `c4d48008`, **empirically reproduced**
-  (`test/repro/C1BoxAutoOpen.t.sol`, 2/2 pass, zero contract mutation; independently re-run by orchestrator).
-- **Defect:** boxes enqueue at `boxPlayers[LR_INDEX]`, but VRF words land at `LR_INDEX − 1` (the request
-  pre-increments the index). `_openHumanBoxes`/`boxesPending` read the **active** `LR_INDEX`
-  (DegenerusGame.sol:1889/1899), so the just-finalized box at `LR_INDEX − 1` is never auto-opened. Presale
-  boxes are additionally skipped by the `lootboxEthBase==0` guard (:1912). Afking-cover leg is immune
-  (keys off `rngWordByDay`), the differential tell.
-- **Reproduced behavior:** word lands at N=2, LR_INDEX=3 → `openBoxes(50)` opens 0, base unchanged across
-  repeated calls + further LR_INDEX advance; manual `openLootBox(actor,2)` opens it. Same on daily path.
-- **Impact:** re-opens the WHALE-01 anti-timing vector (v60) for the mainline human/presale box classes —
-  with the permissionless valve dead, the box owner solely controls open timing (open-time `currentLevel`
-  steer; seed itself frozen). No fund-loss / no solvency or RNG-freeze break.
-- **Candidate fix (USER-gated, NOT applied):** point the `openBoxes`/`boxesPending` index reads at
-  `LR_INDEX − 1` (where words land) + include the presale-box leg; ship the after-fix regression (assert
-  `openBoxes` drains a ready box).
-- **Status:** OPEN — routed to USER-gated batched fix. Re-examined under 383 ASYM-02 + 384 COMPO.
+- **Origin:** 381-06 council (codex C1); adjudicated + **empirically reproduced** (`test/repro/C1BoxAutoOpen.t.sol`, 2/2, re-run by orchestrator; zero contract mutation).
+- **Defect:** boxes enqueue at `boxPlayers[LR_INDEX]` but VRF words land at `LR_INDEX − 1` (request pre-increments). `_openHumanBoxes`/`boxesPending` read the active `LR_INDEX` (DegenerusGame.sol:1889/1899) → finalized box at `LR_INDEX − 1` never auto-opens; presale boxes also skipped by `lootboxEthBase==0` guard (:1912). Afking-cover leg immune (keys off `rngWordByDay`).
+- **Impact:** re-opens the WHALE-01 anti-timing vector for mainline human/presale boxes — owner solely controls open timing. No fund-loss / no solvency or RNG-freeze break.
+- **Fix (gated, NOT applied):** point `openBoxes`/`boxesPending` reads at `LR_INDEX − 1`; include the presale leg.
+
+### V62-02 — advanceGame gas brick: subscriber-evict chunk + 120-day gap-backfill compose in one tx — **HIGH**
+- **Origin:** 384 council — **CONVERGENT (gemini + codex)**; adjudicated vs source (measured pieces on the real harness).
+- **Defect:** the new-day path runs the afking subscriber STAGE then falls through to `rngGate`→`_backfillGapDays` with **no intervening stage-break** (AdvanceModule.sol:336→341). On a 121+ day VRF-stall recovery with a large funded subscriber set, a saturated final all-evict chunk (~13.6M, measured `testResidualR1`) + the 120-day backfill (~7.1M) ≈ **~20.7M > 16,777,216** in ONE `advanceGame` tx → permanent game-over-advance brick. The v60 decouple (`6d2c8d0c`, AdvanceModule:363) covers backfill↔terminal-jackpot only, NOT finalSubscriberChunk↔backfill.
+- **Coverage hole:** the binding pieces are proven only in isolation (13.6M evict chunk; 7.3M backfill with 24 trivial subs); no gas test composes a saturated final chunk WITH the backfill. `AdvanceGasCeiling.sol`/`GameSeeder` seeds `rngWordByDay[day]` non-zero (bypassing backfill) + no subscribers.
+- **Reproduction:** see `test/repro/V62GasBrickCompose.t.sol` (orchestrator) — drives the composed tx and asserts > 16.7M.
+- **Fix (gated, NOT applied):** insert a stage-break between subscriber-stage completion and `rngGate`/`_backfillGapDays` (mirror the v60 gap decouple on the upstream side), so the two heavy stages never share a tx.
+
+### V62-03 — sDGNRS redemption reentrancy → stETH double-counted as backing — **HIGH (solvency spine)**
+- **Origin:** 386 council (codex); adjudicated vs source (order-of-operations + no-guard + worked numeric model).
+- **Defect:** `claimRedemption` decrements `pendingRedemptionEthValue` and deletes the claim BEFORE payout (StakedDegenerusStonk.sol:728/733); `_payEth` mixed branch sends direct ETH via `player.call` BEFORE transferring the stETH remainder (:948 then :953) with NO reentrancy guard anywhere in the contract. In the ETH receive hook the attacker reentrantly calls `burn()` (reachable when `!gameOver && !rngLocked`); the reentrant backing calc `ethBal + stethBal + claimableEth − pending` (:867-869) still counts the in-flight `stethOut` (not yet sent, no longer reserved) as free backing → over-reserves a new redemption (`pullRedemptionReserve`, +175%) → `pendingRedemptionEthValue` exceeds ETH+stETH held → breaks SOLVENCY-01; dilutes/strands later redeemers.
+- **Reproduction:** see `test/repro/V62RedemptionReentrancy.t.sol` (orchestrator).
+- **Fix (gated, NOT applied):** transfer stETH BEFORE the untrusted ETH `.call` (exactly as `DegenerusVault.burnEth` :846-847 already does), or add a reentrancy guard to the claim/burn paths.
+
+### V62-04 — False game-over from a >120-day VRF stall consuming the death clock — **LOW–MED**
+- **Origin:** 384 council (gemini G2); adjudicated CONFIRMED, bounded.
+- **Defect:** `_handleGameOverPath` runs BEFORE the `purchaseStartDay`-extending `_backfillGapDays` (AdvanceModule:208 vs :1235); `_livenessTriggered` checks `currentDay − psd > 120` on the un-extended psd → a 120+ day stall latches game-over before the stall-credit applies.
+- **Bounded:** needs a 4-month governance failure to rotate the coordinator (normal recovery 20h–7d); the design intent is that a long unrecoverable VRF outage SHOULD drain to players — so the "false" framing is debatable. Document; no urgent fix.
+
+### V62-05 — Deity pass `ticketStartLevel` 50-boundary overshoot drops 1–2 paid levels — **LOW** (CONVERGENT codex+gemini)
+- WhaleModule.sol:639-641 `((passLevel+1)/50)*50+1` → passLevel 49→start 51 (loses 49,50); whale anchors at `passLevel`. Buyer-only under-delivery; no solvency/theft. Fix: `ticketStartLevel = passLevel` for whale parity.
+
+### V62-06 — Lazy-pass boon price-basis: box/lootbox sized on undiscounted value — **LOW**
+- WhaleModule.sol:491/519 size presale-box credit + lootbox-10% on undiscounted `benefitValue` while the buyer pays a boon-discounted price; whale/deity use the discounted `totalPrice`. Bounded by the boon discount; gated behind earning a boon.
+
+### V62-07 — `resolveLootboxDirect` seed omits index/betId → correlated rewards — **LOW/INFO**
+- LootboxModule.sol:762 `seed = keccak(rngWord, player, amount)`; same player + same lootbox index batch + same summed `betLootboxShare` → identical box reward. No EV / no freshness break (all inputs frozen at commitment); a fairness/diversity quirk only.
 
 ---
 
-## NET-GAPS (property the fuzz net should add; not themselves findings)
-- **NETGAP-02 — advanceGame liveness (non-revert).** No invariant forbids `advanceGame()` reverting in a
-  due/unlocked state (tests only `try/catch`). Green-foldable. Owner: 384 COMPO / 385 LOOP (advanceGame
-  harness lives there). From 381-06 gemini G2 net-gap.
+## NET-GAPS / DESIGN SEAMS (not findings)
+- **NETGAP-02 — advanceGame non-revert liveness:** no invariant forbids `advanceGame()` reverting in a due/unlocked state. G1 (broken-coordinator revert) is an external-VRF dependency recoverable via `updateVrfCoordinatorAndSub` (Admin gate keys on `lastVrfProcessed`, independent of liveness) → not a contract bug. The non-revert property is still worth folding as an invariant (deferred).
+- **Mid-day lootbox boon-roll live-state seam (codex C, 385):** `_rollLootboxBoons` reads some live inputs (`deityEligible`, level) after the mid-day word is public (no `rngLockedFlag`). REFUTED on EV: the reward (seed/amount/score) is frozen; the only player-mutable input is `deityEligible`, flippable only via a ≥24 ETH irreversible deity purchase — economically absurd for a sub-budget boon. Defensible seam; documented, no fix.
+
+---
+
+## OPEN CANDIDATE — adjudication pending (cap-truncated coverage)
+- **Coinflip presale-bonus-flag freshness (codex 385 F2) — ~MED, UNADJUDICATED.** Daily coinflip payout reads `lootboxPresaleActiveFlag()` (+6pp presale bonus) which is not frozen at the daily VRF request and is readable after the word is public; a lootbox buy crossing `LOOTBOX_PRESALE_ETH_CAP` clears `PS_ACTIVE`. codex: "payout-parameter manipulation, not bet-after-randomness" (new stake can't join the resolving day, `_targetFlipDay = wall-day+1`). Narrow (presale = game start). Flagged for follow-up; not yet traced backward to a verdict.
 
 ---
 
 ## REFUTED / BY-DESIGN (recorded so they are not re-flagged)
-- **G2 (381-06)** unbounded `_backfillOrphanedLootboxIndices` revert → **REFUTED**: scan breaks on first
-  filled index; `LR_INDEX` structurally ≤1 ahead; already net-asserted by `VRFPathInvariants.inv.t.sol`.
-- **G1 (381-06)** free-mint `dailyHeroWagers` → **REFUTED**: ETH-only credit, every unit backed by a
-  debited `msg.value`/`claimablePool`; afking funding moves `claimablePool` in tandem (SOLVENCY-01).
-
----
-
-## CARRIED CANDIDATES — to adjudicate in the sweeps (from Phase 380 hand-off)
-- **affiliate-score magnitude (~2500× ETH→score)** — a 1.01-ETH affiliate buy yields ~25,250-ether
-  `affiliateScore` (mint-qty-weighted, not ETH-capped). Intended unit vs over-allocation/asymmetry? → 383 ASYM.
-- **FC1** mid-day-blocks-next-advance (VRFCore) → 385 LOOP/VRF.
-- **FC2** Degenerette award match-key vs frozen score-key (DegeneretteFreezeResolution) → 383 ASYM.
-- **FC3** WWXRP +0.0004% `_wwxrpBonusBucket` uplift (DegeneretteResolveRepeg) → 383/386 (note WWXRP by-design).
-- **FC4** frozen cancel auto-claims + drains `affiliateBase` (V56SecUnmanipulable) → 382 PRIME / 386 affiliate.
-- **FC5** entropy-binding no longer observable in slimmed TraitsGenerated event (RngIndexDrainBinding) → 385 VRF.
-- **FC6** mid-day-pending stall+swap backfills zero gap days (VRFPathCoverage) → 385 LOOP/VRF.
+- **B near-future ticket jackpot-stuffing (DOMINANT-class, gemini)** — REFUTED: the daily ETH/coin jackpot draws from `traitBurnTicket[lvl]` snapshotted pre-RNG via the `_swapAndFreeze` slot-swap; the only live `ticketQueue` read (far-future coin) is rng-locked; write/read/far-future key spaces are bit-disjoint. gemini misread the buffer.
+- **E affiliate multi-sub claim theft (gemini)** — REFUTED: `claim` enforces a same-affiliate guard `if (_referrerAddress(sub) != a) revert` (Affiliate.sol:651) — a mixed-upline batch reverts; per-sub base drained from the sub's own slot; crediting `a` is correct.
+- **Affiliate-score magnitude ~2500× (carried 380)** — REFUTED: both `payAffiliate` and afking `claim` accumulate `_totalAffiliateScore` in 1e18 BURNIE base units; differing reward rates (20–25% vs flat-7%) are intended economics.
+- **F subscriber ticket-scaling DoS (gemini)** — REFUTED: `_queueTicketsScaled` is O(1) per buyer (single packed `ticketsOwedPacked` slot, ≤1 `push` per (level,buyer)); trait resolution write-budgeted (550).
+- **G1 broken-coordinator permanent revert (codex)** — REFUTED: external-VRF dependency, recoverable via governance `updateVrfCoordinatorAndSub`.
+- **C mid-day boon-roll / H redemption-lootbox RNG** — REFUTED (see seams / atomic-rngGate ordering).
+- **Whale LAST_LEVEL regression (gemini)** — REFUTED: `_applyWhalePassStats` sets LAST_LEVEL to ≥ level+100 (raises, never regresses); `recordMintData` skips LEVEL_COUNT while frozen.
+- **382-F1 curse/smite immunity via dailyQuantity (codex)** — BY-DESIGN: `dailyQuantity!=0` is the canonical active-afker predicate; the inclusive-eviction lag is USER-locked; no EV.
+- **382-F2 combo-buy revert (codex)** — REFUTED: `_mintCost` retarget matches `_purchaseForWith`; presale leg unreachable in jackpot phase.
+- **FC5 entropy-binding** — ENFORCED on-chain (event-only slimming). **FC6 coordinator-swap backfill** — SAFE (reissues same reserved index). **G1/G2 liveness** — see V62-04.
+- **F4 IDegenerusGame interface stubs / F5 vault stETH-strand** — INFO/REFUTED: interfaces are inert; `DegenerusVault.burnEth` pays stETH before ETH (the safe ordering sDGNRS lacks — see V62-03).
+- **FC1 mid-day pending ticket RNG stalls next advance (codex 385 F3)** — LOW: temporary, self-recovering via `retryLootboxRng` after `MIDDAY_RNG_RETRY_TIMEOUT` (no index increment, no permanent brick).
 
 ---
 
 ## SWEEP PROGRESS
-- [x] 381-06 FUZZ-06 council completeness — 1 finding (V62-01), 2 refuted, 1 net-gap.
-- [ ] 382 PRIME (PRIME-01..04) — v61 new code (afking-as-payment + pack · cashout-curse · deity-smite).
-- [ ] 383 ASYM (ASYM-01..06) — parallel-path families + affiliate-score + FC2/FC3.
-- [ ] 384 COMPO (COMPO-01..03) — advanceGame composition + e2e gas + NETGAP-02 liveness.
-- [ ] 385 LOOP (LOOP-01..03) — VRF / gas-bounded loops + FC1/FC5/FC6.
-- [ ] 386 PERIPH (PERIPH-01..06) — peripheral contracts + FC4 affiliate.
-- [ ] 387 TERMINAL — consolidate → audit/FINDINGS-v62.0.md + closure.
+- [x] 381-06 FUZZ-06 — V62-01.
+- [x] 382 PRIME — 0 new confirmed (F1 by-design, F2 refuted, afking solvency/packing/FC4 clean).
+- [x] 383 ASYM — V62-05 (deity, convergent), V62-06 (lazy boon), V62-07 (seed collision); affiliate-score + LAST_LEVEL + jackpot symmetry refuted.
+- [x] 384 COMPO — **V62-02 (HIGH gas brick, convergent)** + V62-04 (LOW–MED stall game-over); F/G1 refuted.
+- [x] 385 LOOP — bounded loops re-verified; B refuted; FC1 LOW; coinflip-presale-flag MED OPEN; FC5/FC6 clean.
+- [x] 386 PERIPH — **V62-03 (HIGH redemption reentrancy)** + V62-05 (deity, convergent); E + affiliate-score + F4/F5 refuted; BURNIE/deity/admin/Vault clean.
+- [ ] 387 TERMINAL — reproduce V62-02/03 → consolidate → audit/FINDINGS-v62.0.md + closure.
+
+## TALLY
+3 actionable (V62-01 MED–HIGH, V62-02 HIGH, V62-03 HIGH) + 4 LOW (V62-04..07) + 1 MED OPEN (coinflip-presale-flag) + 2 design seams. ~15 council candidates refuted/by-design.

@@ -1,0 +1,7 @@
+{
+  "label": "384-compo",
+  "schema": "",
+  "models": ["gemini", "codex"],
+  "skipped": [],
+  "outputs": {"gemini": ".planning/audit-v52/cross-model/384-compo/384-compo.gemini.txt", "codex": ".planning/audit-v52/cross-model/384-compo/384-compo.codex.txt"}
+}

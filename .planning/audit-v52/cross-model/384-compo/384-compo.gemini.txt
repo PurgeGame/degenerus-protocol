@@ -1,0 +1,46 @@
+I have identified three critical findings in the `advanceGame` chain at commit `c4d48008`:
+
+1.  **COMPO-01 / COMPO-02: Gap-Backfill + Subscriber Stage Gas Brick**
+    *   **Mechanism:** `_runSubscriberStage` (Afking process STAGE) runs before `rngGate`. If the wall-clock day rolls over during a VRF recovery (e.g., after a stall), `_runSubscriberStage` resets and processes a full chunk (~9.2M gas). It then falls through into `rngGate`, which calls `_backfillGapDays` for up to 120 days (~9M gas).
+    *   **Impact:** Total gas (~18.2M) exceeds the EIP-7825 16.7M limit, causing a permanent Out-Of-Gas revert. Since Game Over is blocked during the Jackpot Phase, a stall recovery in that phase will permanently brick the game.
+
+2.  **COMPO-02: Subscriber Ticket Scaling Gas-DoS**
+    *   **Mechanism:** `processSubscriberStage` uses a fixed gas-weight of 4 per ticket-mode subscriber, assuming a small `dailyQuantity`. However, `dailyQuantity` is a `uint8` (max 255) and is not validated or factored into the weight.
+    *   **Impact:** 125 subscribers with `dailyQuantity = 255` will fit into one 500-weight chunk but will perform over 127,000 storage pushes (~600M+ gas), far exceeding the 16.7M ceiling and 30M block limit, permanently bricking the advance chain.
+
+3.  **NETGAP-02: False Game-Over Liveness Failure**
+    *   **Mechanism:** `_handleGameOverPath` triggers if the game hasn't advanced in 120 days. It calls `_gameOverEntropy`, which applies the latest VRF word but **completely skips** the `_backfillGapDays` logic.
+    *   **Impact:** The `purchaseStartDay` (death clock anchor) is never updated to account for the VRF stall duration. This causes a false Game Over liquidation even if the game was actively being advanced but was simply waiting for a stalled VRF response.
+
+I will now draft the formal audit report. Does this strategy align with your expectations?
+
+# Council Sweep 384 Audit Report — Degenerus Protocol
+
+**Source Commit:** `c4d48008`
+
+## PROPERTY · COMPO-01 / COMPO-02: Gap-Backfill + Subscriber Stage Gas Brick
+*   **Reachable Pre-state:** Game is in the **Jackpot Phase** (`inJackpot == true`). A VRF stall occurred for ~120 days. The VRF word for the stall resolution eventually arrives (via callback or 12h fallback). No one calls `advanceGame()` until the wall-clock day rolls over to the next day (Day $D+1$).
+*   **Call Sequence:** `advanceGame()` is called on Day $D+1$.
+*   **Heavy Stage:** `_runSubscriberStage` (Afking process STAGE) falling through to `rngGate`/_backfillGapDays.
+    *   `contracts/modules/DegenerusGameAdvanceModule.sol:351` (falling through)
+    *   `contracts/modules/DegenerusGameAdvanceModule.sol:369` (rngGate)
+*   **Mechanism:** Because the day ticked over, `_afkingResetDay != day` triggers, resetting `subsFullyProcessed = false`. `_runSubscriberStage` processes a full chunk (500 weight), consuming **~9.2M gas** (per developer comments). It sets `subsFullyProcessed = true` and **falls through** into `rngGate`. `rngGate` detects the 120-day gap and calls `_backfillGapDays`, which iterates 120 times, performing coinflip payouts for every stall day. `_backfillGapDays` consumes **~9M gas** (per developer comments).
+*   **Severity:** **HIGH (Gas-DoS / Permanent Brick)**. The total transaction gas (~18.2M) exceeds the EIP-7825 16,777,216 gas ceiling, causing a permanent Out-Of-Gas revert. Since Game Over is blocked during the Jackpot Phase, the protocol is permanently bricked.
+
+## PROPERTY · COMPO-02: Subscriber Ticket Scaling Gas-DoS
+*   **Reachable Pre-state:** 125 users have active afking subscriptions with `dailyQuantity = 255` in ticket mode (`useTickets = true`).
+*   **Call Sequence:** `advanceGame()` is called.
+*   **Heavy Stage:** `_runSubscriberStage`
+    *   `contracts/modules/DegenerusGameAdvanceModule.sol:351`
+*   **Mechanism:** `processSubscriberStage` uses a budget of **500 weight**. It assigns a fixed weight of **4** to ticket-mode subscribers, regardless of their `dailyQuantity`. Thus, a single chunk can process 125 such subscribers. Each subscriber triggers `_deliverAfkingBuy`, which calls `_queueTicketsScaled`. This performs `(dailyQuantity * 4)` storage pushes to `ticketQueue`. For `dailyQuantity = 255`, this is **1,020 pushes**. 125 subscribers * 1,020 pushes = **127,500 SSTOREs**.
+*   **Severity:** **HIGH (Gas-DoS / Permanent Brick)**. At ~5k gas per push, this transaction requires **~637M gas**, far exceeding the 16.7M ceiling and 30M block limit, permanently bricking game advancement.
+
+## PROPERTY · NETGAP-02: False Game-Over Liveness Failure
+*   **Reachable Pre-state:** A VRF stall occurs for > 120 days (e.g., Day 10 to Day 131).
+*   **Call Sequence:** `advanceGame()` is called on Day 131.
+*   **Heavy Stage:** `_handleGameOverPath`
+    *   `contracts/modules/DegenerusGameAdvanceModule.sol:290`
+*   **Mechanism:** `_handleGameOverPath` triggers because `day (131) > purchaseStartDay (10) + 120`. It calls `_gameOverEntropy`, which applies the VRF word to the current day but **completely skips** the `_backfillGapDays` logic. `_backfillGapDays` is the only site that increments `purchaseStartDay` to account for stall duration.
+*   **Severity:** **MEDIUM/HIGH (Liveness / Protocol Liquidation)**. The protocol enters `handleGameOverDrain` and liquidates the treasury, falsely treating a VRF stall as player inactivity. This violates the core design mandate that "gap days don't count toward the 120-day inactivity timeout."
+
+[Active Topic: Drafting Audit Report]

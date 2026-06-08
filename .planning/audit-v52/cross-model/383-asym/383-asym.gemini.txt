@@ -1,0 +1,27 @@
+Through the ASYMMETRY council sweep of commit `c4d48008`, I have identified several divergences in parallel-path families, ranging from unintended stat regressions to massive unit-mismatches in affiliate scoring.
+
+### ASYM-03 — Pass types: Lazy Pass price-basis asymmetry
+PROPERTY · `_purchaseLazyPass` credits presale boxes and lootbox-10% rewards using the undiscounted `benefitValue` (e.g. 0.24 ETH) even when the buyer pays a discounted `totalPrice` via a Boon. Sibling paths (`WhaleBundle`, `DeityPass`) correctly use the discounted `totalPrice` (ETH paid). · `presaleBoxCredit` + `_recordLootboxEntry` at `WhaleModule.sol:493/498` · **LOW** · Boon-users get "free" box credit and a larger lootbox relative to their actual ETH committed.
+
+### ASYM-03 — Pass types: Whale Pass `LAST_LEVEL` regression
+PROPERTY · `_applyWhalePassStats` (used by `claimWhalePass` and Decimator claims) sets `LAST_LEVEL` directly to the `newFrozenLevel`. If a player's `LAST_LEVEL` was already higher (e.g. level 500) than the pass's horizon (e.g. level 200), the stat regresses. This allows the player to "re-mint" level 500, causing `LEVEL_COUNT` to double-dip in `MintModule.recordMintData` (which only skips `total++` if `lvl == prevLevel`). · `mintPacked_[player]` (LAST_LEVEL field) at `storage/DegenerusGameStorage.sol:1316-1321` · **LOW** · Inflates Activity Score via `levelCount` double-counting.
+
+### ASYM-05 — RNG-consume: `resolveLootboxDirect` seed collision
+PROPERTY · `resolveLootboxDirect` (used by Decimator and Degenerette) generates its `seed` using `keccak256(abi.encode(rngWord, player, amount))`. Unlike the standard `openLootBox` path, it omits the `index` (or `betId`). A player resolving multiple boxes (e.g. from multiple Degenerette bets) at the same index with the same amount will receive identical rewards (same boons/passes). · `seed` at `modules/DegenerusGameLootboxModule.sol:762` · **LOW** · Lack of domain separation for multi-box resolutions in a single window.
+
+### ASYM-06 — Pool/credit updates: SYMMETRIC
+FAMILY VERIFIED SYMMETRIC: Pool mutations for `claimablePool`, `futurePrizePool`, and `nextPrizePool` are correctly paired across all modules. `DegeneretteModule` correctly debits the `runningFuture` local before flushing to `futurePrizePool` while simultaneously crediting `claimablePool`. `JackpotModule` distributions (including solo-bucket 75/25 conversion) conserve the solvency spine.
+
+### CARRIED — (a) Affiliate-score magnitude: Unit Asymmetry
+PROPERTY · Manual `payAffiliate` (ETH path) credits the leaderboard in ETH units (0.25 ETH per 1 ETH spend). Afking `claim` (BURNIE path) credits the leaderboard in BURNIE units (1750 BURNIE per 1 ETH spend). The afking path yields an `affiliateScore` ~100,000× larger than the manual path for the same ETH commitment. · `_totalAffiliateScore[lvl]` at `DegenerusAffiliate.sol:550` (manual) vs `DegenerusAffiliate.sol:681` (afking) · **MEDIUM** · Non-afking affiliates can never compete for Top Affiliate bonuses (mint traits); the afking "sideloader" completely dominates the leaderboard.
+
+### CARRIED — (b) FC2 Degenerette score-key: SYMMETRIC
+FAMILY VERIFIED SYMMETRIC: `DegeneretteModule` correctly snapshots the `activityScore` at bet time and uses this frozen value for both ROI calculation and lootbox-EV resolution. The addition of `streakBaseLevel` to `_playerActivityScore` allows the snapshot to correctly represent the `level + 1` horizon at bet time.
+
+### CARRIED — (c) FC3 WWXRP uplift: SYMMETRIC
+FAMILY VERIFIED SYMMETRIC: The `_wwxrpBonusBucket` uplift is consistently applied and reflects the redistribution of the "Worthless WWXRP" bonus ROI into the top score tiers. While WWXRP is by-design worthless, the internal math for the 5% bonus redistribution is consistent and bounded by the `WWXRP_BONUS_FACTOR_SCALE`.
+
+Strategic Intent: Audit completed for ASYMMETRY parallel-path families. Findings identified in pass-type price basis, stat regression, and affiliate unit-mismatch.
+Summary: I have completed the audit of the Degenerus Protocol focusing on asymmetrical paths. I identified a Lazy Pass price-basis bug, a Whale Pass stat regression that allows double-dipping, a seed collision in direct lootbox resolution, and a massive 100,000x unit mismatch on the affiliate leaderboard. Other areas, including pool conservation and Degenerette scoring, were found to be symmetric.
+
+**Strategic Intent:** Conclude the audit and present findings.
