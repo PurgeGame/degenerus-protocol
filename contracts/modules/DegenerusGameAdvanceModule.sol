@@ -73,6 +73,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      re-entry (gapDays == 0 next call), dailyIdx is not yet advanced, so advanceDue()
     ///      stays true and the next advance pays the jackpot with the same frozen word.
     uint8 private constant STAGE_GAP_BACKFILLED = 12;
+    /// @dev The funded subscriber set drained to its end this advance AND a multi-day VRF-stall
+    ///      gap backfill is pending. rngGate (and its backfill) is deferred to the next advance so
+    ///      the heavy completing subscriber chunk and the up-to-120-day backfill never share one tx
+    ///      (the upstream mirror of STAGE_GAP_BACKFILLED). subsFullyProcessed is already set and
+    ///      dailyIdx is not advanced, so advanceDue() stays true: the next advance runs the backfill
+    ///      alone, then defers the jackpot via STAGE_GAP_BACKFILLED.
+    uint8 private constant STAGE_SUBS_BACKFILL_DEFERRED = 13;
     event DailyRngApplied(
         uint24 day,
         uint256 rawWord,
@@ -328,12 +335,30 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         stage = STAGE_SUBS_WORKING;
                         break;
                     }
+                    // The set drained to its end THIS tx — a heavy completing chunk (up to the
+                    // weight budget, or a saturated all-evict swap-pop chunk that empties the set
+                    // in one pass). If a multi-day VRF-stall gap backfill is ALSO pending, defer
+                    // rngGate to the next advance so the completing subscriber chunk and the
+                    // up-to-120-day backfill never share one tx and blow the per-tx gas ceiling.
+                    // Upstream mirror of the STAGE_GAP_BACKFILLED decouple: same gate rngGate uses
+                    // to enter _backfillGapDays. dailyIdx is unadvanced and rngWordByDay[day] is
+                    // unset, so advanceDue() stays true and the next advance runs the (idempotent)
+                    // rngGate — it backfills, then defers the jackpot via STAGE_GAP_BACKFILLED.
+                    subsFullyProcessed = true;
+                    if (
+                        rngWordCurrent != 0 &&
+                        rngRequestTime != 0 &&
+                        day > dailyIdx + 1 &&
+                        rngWordByDay[dailyIdx + 1] == 0
+                    ) {
+                        stage = STAGE_SUBS_BACKFILL_DEFERRED;
+                        break;
+                    }
+                } else {
+                    // Empty set — nothing was stamped, no heavy chunk to segregate. Fall through
+                    // to rngGate (a lone backfill stays under the per-tx ceiling).
+                    subsFullyProcessed = true;
                 }
-                // Cursor reached the set end (or the set is empty) — the whole funded
-                // set is stamped for this cycle. Fall through to rngGate. subsFullyProcessed
-                // resets to false for the next day at _swapTicketSlot (the per-day reset,
-                // alongside ticketsFullyProcessed).
-                subsFullyProcessed = true;
             }
 
             // RNG: use existing word or request new one

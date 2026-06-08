@@ -100,6 +100,7 @@ guarantee, bounded impact) · LOW/INFO · REFUTED · BY-DESIGN.
 The audit (380–387) is closed; these are the follow-on fix phases. NO fix committed without USER diff review.
 - **R / V62-03** (HIGH, solvency) — sDGNRS redemption reentrancy: stETH-before-ETH ordering / guard.
 - **R / V62-02** (HIGH) — advanceGame gas brick: stage-break before the upstream gap-backfill composition.
+  **DONE** (applied, UNCOMMITTED, 814/3/110 green — see REMEDIATION OUTCOME below).
 - **R / V62-01** (MED–HIGH) — lootbox auto-open: off-by-one (`LR_INDEX-1`) + gas-bounded MULTI-INDEX sweep
   (step budget) + presale leg included + `boxIndexComplete` frontier view. **IN PROGRESS** (contract edits
   applied, not committed; 3 encoded-bug tests to recalibrate; worst-case fuzz pending).
@@ -155,3 +156,35 @@ Status: applied to the working tree, NOT committed (USER diff review + commit ga
 > HEAD (superseded by `V56AfkingGasMarginal`), and `SweepWorstCaseDrain` post-dates c4d48008, so no
 > controlled common scenario exists across the two trees. The win is established by the EIP-170 trajectory
 > (empirical) + the worst-case structural opcode accounting + the AFTER anchors above.
+
+## REMEDIATION OUTCOME — V62-02 (advanceGame gas brick) — stage-break before the upstream gap-backfill (applied, UNCOMMITTED, green)
+Status: applied to the working tree, NOT committed (USER diff review + commit gate pending). Forge suite
+**814 pass / 3 carried-VRFPath fail / 110 skip** (exact baseline parity). `DegenerusGame` EIP-170 unchanged
+(23,882) — the fix lives in the separately-deployed `DegenerusGameAdvanceModule` (19,057, well under cap).
+
+### Change (`contracts/modules/DegenerusGameAdvanceModule.sol`)
+- New stage `STAGE_SUBS_BACKFILL_DEFERRED` (13). When the afking subscriber STAGE drains the funded set to its
+  end in a chunk AND a multi-day VRF-stall gap backfill is pending, `advanceGame` breaks BEFORE `rngGate` — the
+  **upstream** mirror of the v60 `STAGE_GAP_BACKFILLED` decouple. The heavy completing subscriber chunk runs
+  alone in one tx; the backfill (then the jackpot) run in their own subsequent txs, each under the per-tx ceiling.
+- The defer gate is the EXACT condition `rngGate` uses to enter `_backfillGapDays`
+  (`rngWordCurrent != 0 && rngRequestTime != 0 && day > dailyIdx+1 && rngWordByDay[dailyIdx+1] == 0`), so it
+  defers IFF `rngGate` would actually backfill this call: normal (no-gap) days fall through unchanged (NO extra
+  tx), and the empty-subscriber-set case still falls through (a lone backfill is already under ceiling).
+- `dailyIdx` unadvanced + `rngWordByDay[day]` unset on the break → `advanceDue()` stays true; the next advance
+  runs the idempotent `rngGate` (backfills, then defers the jackpot via `STAGE_GAP_BACKFILLED`). Liveness /
+  monotonic progress preserved (NETGAP-02 respected: no revert in a due/unlocked state).
+
+### Proof (worst-case-first, EIP-7825 = 16,777,216)
+- `test/repro/V62GasBrickCompose.t.sol` — flipped from brick-repro to fix regression guard. COLD binding regime:
+  the all-evict subscriber chunk (tx1 **13.45M**) and the 120-day gap backfill (tx2 **6.83M**) were composing to
+  **~20.3M > cap** (the brick); now two txs, each < cap, with `advanceDue` true between them. Boundary control
+  (≥500-weight chunk breaks at the partial-drain check → no compose) intact.
+- `V56AfkingGasMarginal::testGapResumePerAdvanceCeilingAndDecouple` — updated to the 3-leg sequence
+  (STAGE-defer N **0.51M** → gap backfill N+1 **6.80M** → deferred jackpot N+2 **0.27M**), each < cap;
+  same-frozen-word + exactly-once `purchaseStartDay`-bump invariants preserved across the resume.
+- Full suite 814/3/110. The 3 residual reds are the documented carried bucket-A `VRFPathInvariants`
+  (gap-backfill / coordinator-swap / stall) — UNCHANGED by this fix (same failure messages; stash-compare
+  vs baseline confirms no new violation, only the non-deterministic counter shifts 61→28). The fix addresses a
+  GAS composition, not the gap-backfill correctness modeling those invariants probe (FC1/FC6), so it correctly
+  does NOT clear them.

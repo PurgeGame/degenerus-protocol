@@ -100,6 +100,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     uint256 private constant HEADER_SLOT = 0;
     uint256 private constant OFF_PURCHASE_START_DAY = 0; // uint32 @ byte 0
     uint256 private constant OFF_DAILY_IDX = 4;          // uint32 @ byte 4
+    uint256 private constant OFF_SUBS_FULLY_PROCESSED = 29; // bool @ byte 29 (afking STAGE drain-complete flag)
 
     // -------------------------------------------------------------------------
     // Dual-bound + worst-case / measurement constants
@@ -456,9 +457,12 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///         single advanceGame call). At a worst-case SUBSCRIBER_CAP=1000 STAGE the backfill advance ALSO
     ///         processes the resumed-day STAGE, so the cap fix (500->1000) is load-bearing here.
     function testGapResumePerAdvanceCeilingAndDecouple() public {
-        // Heavy state: a full STAGE at the cap-relevant scale (the resumed-day advance also runs the STAGE).
-        // Keep the funded set large but measurable in one tx; the STAGE is weight-budgeted so a chunk caps
-        // itself regardless, and the decouple is what bounds the gap+jackpot composition.
+        // Heavy state: a funded STAGE at the cap-relevant scale. On a gap resume the STAGE completes in
+        // advance N and DEFERS the backfill (STAGE_SUBS_BACKFILL_DEFERRED) rather than composing with it, so
+        // the three heavy legs each get their own tx: advance N = the STAGE chunk, advance N+1 = the gap
+        // backfill alone, advance N+2 = the deferred daily jackpot. None of the three ever share a tx, so each
+        // stays under the per-tx ceiling regardless of how heavy the STAGE chunk is (the V62-02 close — an
+        // all-evict ~13.3M chunk + a ~7M backfill would otherwise compose to ~20M > 16,777,216 and brick).
         address[] memory subs = _setupFundedSubs(N_HI, "gr_", 5 ether, false);
 
         // Reconstruct the proof's reachable worst-case resume state (test-only direct-storage injection, the
@@ -492,61 +496,83 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(rngWordByDay(idxBeforeStall + 1) == 0, "fixture: the gap range is unbackfilled pre-resume");
         require(game.advanceDue(), "fixture: advanceDue on resume");
 
-        // ---- Advance N: the gap-backfill advance (must break at STAGE_GAP_BACKFILLED, pay NO jackpot) ----
+        // ---- Advance N: the STAGE defer leg (the STAGE completes, then breaks STAGE_SUBS_BACKFILL_DEFERRED
+        // because a gap backfill is pending — rngGate does NOT run yet, so NO backfill, NO jackpot) ----
         uint256 gasBeforeN = gasleft();
         game.advanceGame();
         uint256 advNGas = gasBeforeN - gasleft();
 
-        // D-06: advance N is strictly under the EIP-7825 per-tx ceiling.
-        emit log_named_uint("gap_backfill_advance_N_gas", advNGas);
-        assertLt(advNGas, EIP7825_TX_GAS_CAP, "D-06: the gap-backfill advance N is strictly < 16,777,216 (EIP-7825)");
+        // D-06: advance N (the lone STAGE chunk) is strictly under the EIP-7825 per-tx ceiling.
+        emit log_named_uint("stage_defer_advance_N_gas", advNGas);
+        assertLt(advNGas, EIP7825_TX_GAS_CAP, "D-06: the STAGE-defer advance N is strictly < 16,777,216 (EIP-7825)");
 
-        // D-07 invariants on advance N (the decouple defer leg):
-        //  - the gap range is now backfilled (so rngGate is idempotent next call: rngWordByDay[day] != 0).
-        assertTrue(rngWordByDay(idxBeforeStall + 1) != 0, "D-07: advance N backfilled the gap (idempotent re-entry: gapDays==0)");
-        //  - dailyIdx NOT advanced past the stall point (no _unlockRng reached on the gap break) -> advanceDue stays true.
-        assertEq(_dailyIdx(), idxBeforeStall, "D-07: advance N did NOT advance dailyIdx (no _unlockRng on the gap break)");
-        assertTrue(game.advanceDue(), "D-07: advanceDue() stays true between advance N and advance N+1 (jackpot deferred)");
+        // Non-vacuity + segregation invariants on advance N (the V62-02 upstream decouple leg):
+        //  - the STAGE actually ran and completed (STAGE_SUBS_BACKFILL_DEFERRED is only reachable past it).
+        assertTrue(_subsFullyProcessed(), "V62-02: the STAGE completed in advance N (subsFullyProcessed set)");
+        //  - the gap is NOT backfilled yet (rngGate did not run) — the backfill is segregated OUT of the STAGE tx.
+        assertTrue(rngWordByDay(idxBeforeStall + 1) == 0, "V62-02: advance N did NOT backfill (segregated from the STAGE chunk)");
+        //  - the resumed day's word is NOT committed yet (rngGate did not run on N).
+        assertTrue(rngWordByDay(resumeDay) == 0, "V62-02: advance N did NOT run rngGate (resumed-day word uncommitted)");
+        //  - dailyIdx NOT advanced and purchaseStartDay NOT bumped (no rngGate, no _unlockRng) -> advanceDue stays true.
+        assertEq(_dailyIdx(), idxBeforeStall, "V62-02: advance N did NOT advance dailyIdx");
+        assertEq(_purchaseStartDay(), psdBeforeResume, "V62-02: advance N did NOT bump purchaseStartDay (rngGate deferred)");
+        assertTrue(game.advanceDue(), "V62-02: advanceDue() stays true after the STAGE-defer break (liveness preserved)");
+
+        // ---- Advance N+1: the gap-backfill leg (STAGE skipped now — subsFullyProcessed; rngGate backfills the
+        // gap ALONE and breaks STAGE_GAP_BACKFILLED, deferring the jackpot downstream) ----
+        uint256 gasBeforeNp1 = gasleft();
+        game.advanceGame();
+        uint256 advNp1Gas = gasBeforeNp1 - gasleft();
+
+        // D-06: advance N+1 (the lone backfill) is strictly under the EIP-7825 per-tx ceiling.
+        emit log_named_uint("gap_backfill_advance_Np1_gas", advNp1Gas);
+        assertLt(advNp1Gas, EIP7825_TX_GAS_CAP, "D-06: the gap-backfill advance N+1 is strictly < 16,777,216 (a SEPARATE tx from the STAGE chunk)");
+
+        // D-07 invariants on advance N+1 (the gap backfill, decoupled from BOTH the STAGE and the jackpot):
+        //  - the gap range is now backfilled (so rngGate is idempotent next call: rngWordByDay[idx+1] != 0).
+        assertTrue(rngWordByDay(idxBeforeStall + 1) != 0, "D-07: advance N+1 backfilled the gap (idempotent re-entry next call)");
+        //  - dailyIdx still NOT advanced (no _unlockRng on the gap break) -> advanceDue stays true.
+        assertEq(_dailyIdx(), idxBeforeStall, "D-07: advance N+1 did NOT advance dailyIdx (no _unlockRng on the gap break)");
+        assertTrue(game.advanceDue(), "D-07: advanceDue() stays true between advance N+1 and advance N+2 (jackpot deferred)");
         //  - purchaseStartDay bumped EXACTLY ONCE by the gap count (the death-clock extension, the single bump).
         //    rngGate computes gapCount = day - idx - 1 = resumeDay - idxBeforeStall - 1 (uncapped at the psd
         //    bump site; the 120-day cap is only on the backfill LOOP, _backfillGapDays).
-        uint32 psdAfterN = _purchaseStartDay();
+        uint32 psdAfterNp1 = _purchaseStartDay();
         uint256 expectedBump = uint256(resumeDay - idxBeforeStall - 1);
-        assertEq(uint256(psdAfterN - psdBeforeResume), expectedBump, "D-07: purchaseStartDay bumped exactly once by the gap count (resumeDay - dailyIdx - 1)");
+        assertEq(uint256(psdAfterNp1 - psdBeforeResume), expectedBump, "D-07: purchaseStartDay bumped exactly once by the gap count (resumeDay - dailyIdx - 1)");
 
-        // The resumed day's frozen word was landed by advance N's normal-daily-rng path (rngGate applied the
-        // resumed day BEFORE the decouple break), so it is already non-zero here. advance N+1 reads the SAME
-        // word to pay the deferred jackpot — it is NOT re-rolled (the decouple defers DISTRIBUTION, never the
-        // word). The word being committed on N (not N+1) is the freeze property the decouple preserves.
-        uint256 resumeWordOnN = rngWordByDay(resumeDay);
-        require(resumeWordOnN != 0, "fixture: the resumed-day word landed on advance N (committed pre-defer)");
+        // The resumed day's frozen word was landed by advance N+1's normal-daily-rng path (rngGate applied the
+        // resumed day right after the backfill, before the decouple break). advance N+2 reads the SAME word to
+        // pay the deferred jackpot — it is NOT re-rolled (the decouple defers DISTRIBUTION, never the word).
+        uint256 resumeWordOnNp1 = rngWordByDay(resumeDay);
+        require(resumeWordOnNp1 != 0, "fixture: the resumed-day word landed on advance N+1 (committed pre-defer)");
 
-        // ---- Advance N+1: the deferred-distribution advance (re-entry is idempotent: rngWordByDay[day] != 0
-        // -> gapDays == 0; the resumed day's jackpot distributes HERE, NOT on N). The D-06 per-tx ceiling for
-        // N+1 is the pre-existing payDailyJackpot bound (<= DAILY_ETH_MAX_WINNERS = 305, the proof's ~6M
-        // measured row + the dedicated jackpot suites) — the NEW fact the decouple establishes is that this
-        // distribution executes in a SEPARATE tx from the gap backfill, so the two never compose into one tx.
-        // We bracket N+1 via a low-level call so the gas-to-completion (or to the synthetic-fixture jackpot
-        // boundary — the cheap STAGE/open marginal fixture builds no full prize-pool/ticket economics) is
-        // captured regardless, and assert it stays under the EIP cap. The word-unchanged + same-word checks
-        // confirm N+1 reads the frozen word committed on N.
-        uint256 gbNp1 = gasleft();
-        (bool okNp1, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
-        uint256 advNp1Gas = gbNp1 - gasleft();
-        okNp1; // completion is fixture-state-dependent; the per-tx GAS is the load-bearing D-06 measurement.
+        // ---- Advance N+2: the deferred-distribution advance (re-entry is idempotent: rngWordByDay[idx+1] != 0
+        // -> gapDays == 0; the daily jackpot distributes HERE, NOT on N+1). The D-06 per-tx ceiling for N+2 is
+        // the pre-existing payDailyJackpot bound (<= DAILY_ETH_MAX_WINNERS = 305, the proof's ~6M measured row +
+        // the dedicated jackpot suites) — the NEW fact the decouple establishes is that this distribution
+        // executes in a SEPARATE tx from the gap backfill, so the two never compose into one tx. We bracket N+2
+        // via a low-level call so the gas-to-completion (or to the synthetic-fixture jackpot boundary — the
+        // cheap STAGE/open marginal fixture builds no full prize-pool/ticket economics) is captured regardless,
+        // and assert it stays under the EIP cap.
+        uint256 gbNp2 = gasleft();
+        (bool okNp2, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        uint256 advNp2Gas = gbNp2 - gasleft();
+        okNp2; // completion is fixture-state-dependent; the per-tx GAS is the load-bearing D-06 measurement.
 
-        emit log_named_uint("deferred_jackpot_advance_Np1_gas", advNp1Gas);
-        emit log_named_uint("deferred_jackpot_advance_Np1_completed", okNp1 ? 1 : 0);
-        // D-06: the deferred-distribution advance N+1 stays strictly under the EIP-7825 per-tx ceiling — and,
-        // critically, it is a SEPARATE tx from advance N (proven above): the gap-backfill ~7M and the jackpot
-        // distribution NEVER share one tx (the composition breach Codex found is closed by the decouple).
-        assertLt(advNp1Gas, EIP7825_TX_GAS_CAP, "D-06: the deferred-jackpot advance N+1 is strictly < 16,777,216 (and is a SEPARATE tx from the gap-backfill N)");
+        emit log_named_uint("deferred_jackpot_advance_Np2_gas", advNp2Gas);
+        emit log_named_uint("deferred_jackpot_advance_Np2_completed", okNp2 ? 1 : 0);
+        // D-06: the deferred-distribution advance N+2 stays strictly under the EIP-7825 per-tx ceiling — and,
+        // critically, it is a SEPARATE tx from the gap backfill N+1: the gap-backfill ~7M and the jackpot
+        // distribution NEVER share one tx (the original Codex composition breach), and neither shares the tx
+        // with the STAGE chunk (the V62-02 upstream breach).
+        assertLt(advNp2Gas, EIP7825_TX_GAS_CAP, "D-06: the deferred-jackpot advance N+2 is strictly < 16,777,216 (a SEPARATE tx from the gap-backfill N+1)");
 
-        // D-07: advance N+1 read the SAME frozen resumed-day word committed on advance N (never re-rolled).
-        assertEq(rngWordByDay(resumeDay), resumeWordOnN, "D-07: the deferred jackpot reads the SAME frozen resumed-day word (committed on N, no re-roll on N+1)");
-        // D-07: purchaseStartDay was bumped EXACTLY ONCE across the whole resume (advance N+1 must NOT bump it
-        // again — the death-clock extension is a single event tied to the gap backfill, gapDays == 0 on N+1).
-        assertEq(_purchaseStartDay(), psdAfterN, "D-07: purchaseStartDay NOT bumped again on advance N+1 (exactly-once across the resume; idempotent gapDays==0)");
+        // D-07: advance N+2 read the SAME frozen resumed-day word committed on advance N+1 (never re-rolled).
+        assertEq(rngWordByDay(resumeDay), resumeWordOnNp1, "D-07: the deferred jackpot reads the SAME frozen resumed-day word (committed on N+1, no re-roll on N+2)");
+        // D-07: purchaseStartDay was bumped EXACTLY ONCE across the whole resume (advance N+2 must NOT bump it
+        // again — the death-clock extension is a single event tied to the gap backfill, gapDays == 0 on N+2).
+        assertEq(_purchaseStartDay(), psdAfterNp1, "D-07: purchaseStartDay NOT bumped again on advance N+2 (exactly-once across the resume; idempotent gapDays==0)");
 
         emit log_named_uint("subscriber_cap_used", SUBSCRIBER_CAP);
         // Non-vacuity: the funded subs still exist (the resume processed them, did not drop the fixture).
@@ -1342,6 +1368,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
     function _dailyIdx() internal view returns (uint32) {
         uint256 p = uint256(vm.load(address(game), bytes32(uint256(HEADER_SLOT)))) >> (OFF_DAILY_IDX * 8);
         return uint32(p & 0xFFFFFFFF);
+    }
+
+    /// @dev Read `subsFullyProcessed` (slot 0 byte 29, bool) — set true once the afking STAGE drains the funded
+    ///      set for the cycle. After advance N it proves the STAGE actually ran and completed (the
+    ///      STAGE_SUBS_BACKFILL_DEFERRED break is only reachable past a completed STAGE), so the defer leg is
+    ///      non-vacuous.
+    function _subsFullyProcessed() internal view returns (bool) {
+        return ((uint256(vm.load(address(game), bytes32(uint256(HEADER_SLOT)))) >> (OFF_SUBS_FULLY_PROCESSED * 8)) & 0xFF) != 0;
     }
 
     /// @dev Field-surgical write of one packed header (slot 0) field, preserving every other flag/field in the
