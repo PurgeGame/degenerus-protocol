@@ -131,8 +131,8 @@ contract LootboxBoonCoexistence is DeployProtocol {
         uint256 vrfWord
     ) internal {
         // lootboxEth[index][player] = the single folded word: amount[0:128] (=ethAmount),
-        // adj=0, scorePlus1=1 (neutral score, +1 encoding) at [192:208], distress=0. openLootBox
-        // unpacks scorePlus1 and requires it >= 1 for the EV multiplier; the purchaseLevel field is
+        // adj=0, score=1 (a low raw activity score) at [192:208], distress=0. openLootBox unpacks
+        // score and feeds it straight to the EV multiplier (no offset); the purchaseLevel field is
         // gone (vestigial — the box rolls from the LIVE level at open). purchaseLevel is unused now.
         purchaseLevel; // silence unused-parameter (kept in the signature for callers)
         uint256 packed = (ethAmount & LB_AMOUNT_MASK) | (uint256(1) << LB_SCORE_SHIFT);

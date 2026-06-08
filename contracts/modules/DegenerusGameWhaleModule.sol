@@ -860,7 +860,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 packed = lootboxEth[index][buyer];
         uint256 existingAmount = packed & LB_AMOUNT_MASK;
 
-        uint16 scorePlus1;
+        uint16 score;
         uint64 adj;
         if (existingAmount == 0) {
             // Purchase-time EV-cap tally (first deposit). The score is snapshotted
@@ -868,9 +868,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             // level + 1 (== the resolver's currentLevel = level + 1). A bonus box
             // (mult > NEUTRAL) draws add = min(deposit, CAP - used) from the shared
             // per-(player, level) accumulator; sub-neutral/neutral boxes draw zero cap.
-            uint256 score = IDegenerusGame(address(this)).playerActivityScore(buyer);
-            scorePlus1 = uint16(score + 1);
-            uint256 mult = _lootboxEvMultiplierFromScore(score);
+            uint256 activityScore = IDegenerusGame(address(this)).playerActivityScore(buyer);
+            score = uint16(activityScore);
+            uint256 mult = _lootboxEvMultiplierFromScore(activityScore);
             if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
                 uint256 used = lootboxEvBenefitUsedByLevel[buyer][level + 1];
                 uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
@@ -888,13 +888,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             // on lootboxRngWordByIndex != 0, so this is producer-only.
             IDegenerusGame(address(this)).enqueueBoxForAutoOpen(index, buyer);
         } else {
-            // Subsequent deposit: the frozen score+1 and accumulated adj come from the box's
+            // Subsequent deposit: the frozen score and accumulated adj come from the box's
             // prior packed word; the multiplier stays FROZEN from the first-deposit snapshot.
-            (, uint64 priorAdj, uint16 priorScorePlus1, ) = _unpackLootbox(packed);
-            scorePlus1 = priorScorePlus1;
+            (, uint64 priorAdj, uint16 priorScore, ) = _unpackLootbox(packed);
+            score = priorScore;
             adj = priorAdj;
             if (lootboxAmount != 0) {
-                uint256 mult = _lootboxEvMultiplierFromScore(uint256(priorScorePlus1 - 1));
+                uint256 mult = _lootboxEvMultiplierFromScore(uint256(priorScore));
                 if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
                     uint256 used = lootboxEvBenefitUsedByLevel[buyer][level + 1];
                     uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
@@ -923,7 +923,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             distressUnits += boostedAmount / LB_DISTRESS_SCALE;
         }
 
-        lootboxEth[index][buyer] = _packLootbox(newAmount, adj, scorePlus1, distressUnits);
+        lootboxEth[index][buyer] = _packLootbox(newAmount, adj, score, distressUnits);
 
         // One box-buy event across paths (same topic as the mint module's LootBoxBuy), on every
         // deposit. presale=false — a pass-bundled box is never a presale box.

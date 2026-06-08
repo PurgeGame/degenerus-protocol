@@ -857,7 +857,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         } else {
             // Lootbox box. The per-buy manual side-effects (handlePurchase, affiliate ×2, the
             // per-buy creditFlip) are deferred to the in-slot accrue (affiliate pulled via
-            // drainAffiliateBase; the slot-0 reward into pendingBurnie). The frozen scorePlus1
+            // drainAffiliateBase; the slot-0 reward into pendingBurnie). The frozen score
             // (the EV input at open, off the compute-on-read streak — no STATICCALL) is computed
             // once for either box shape.
             uint256 activityScore = _playerActivityScore(
@@ -865,9 +865,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 _afkingStreak(sub, processDay),
                 currentLevel + 1
             );
-            uint16 scorePlus1 = activityScore + 1 > type(uint16).max
+            uint16 score = activityScore > type(uint16).max
                 ? type(uint16).max
-                : uint16(activityScore + 1);
+                : uint16(activityScore);
             if (coverBuy) {
                 // Subscribe-time grounding box: a full INDEXED box on the live lootbox index,
                 // resolved off lootboxRngWordByIndex (a future word). Rides the auto-open queue,
@@ -877,16 +877,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     player,
                     currentLevel,
                     amount,
-                    scorePlus1,
+                    score,
                     activityScore
                 );
                 sub.lastOpenedDay = uint24(processDay);
             } else {
                 // Daily STAGE Sub-stamp box: the warm Sub slot IS the box record (no cold
-                // ledger); the EV-cap RMW is deferred to OPEN, fed this frozen scorePlus1, and
+                // ledger); the EV-cap RMW is deferred to OPEN, fed this frozen score, and
                 // the level + EV-cap key read LIVE at open. milli-ETH stamp (the EV/seed input
                 // only — the ETH debit used the full wei ethValue).
-                sub.scorePlus1 = scorePlus1;
+                sub.score = score;
                 sub.amount = uint24(_packEthToMilliEth(amount));
             }
         }
@@ -947,13 +947,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @param player The box recipient.
     /// @param currentLevel The live game level (== the STAGE's hoisted currentLevel).
     /// @param amount The lootbox spend in wei (boons off ⇒ no boost; amount == spend).
-    /// @param scorePlus1 The frozen activity-score+1 EV input (first deposit only).
-    /// @param activityScore The raw activity score backing scorePlus1 (first-deposit EV mult).
+    /// @param score The frozen activity score EV input (first deposit only).
+    /// @param activityScore The raw activity score (first-deposit EV mult; == score, uncapped).
     function _recordAfkingCoverBox(
         address player,
         uint24 currentLevel,
         uint256 amount,
-        uint16 scorePlus1,
+        uint16 score,
         uint256 activityScore
     ) private {
         uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
@@ -961,10 +961,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint256 packed = lootboxEth[index][player];
         uint256 existingAmount = packed & LB_AMOUNT_MASK;
 
-        uint16 sp1;
+        uint16 sc;
         uint64 adj;
         if (existingAmount == 0) {
-            sp1 = scorePlus1;
+            sc = score;
             if (
                 _lootboxEvMultiplierFromScore(activityScore) >
                 LOOTBOX_EV_NEUTRAL_BPS
@@ -983,15 +983,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             IGameRouter(address(this)).enqueueBoxForAutoOpen(index, player);
         } else {
             // Subsequent deposit at the same un-advanced index (only reachable in the
-            // pre-first-advance genesis window): the frozen score+1 and accumulated adj come
+            // pre-first-advance genesis window): the frozen score and accumulated adj come
             // from the box's prior packed word, the multiplier stays FROZEN from the
             // first-deposit snapshot.
-            (, uint64 priorAdj, uint16 priorSp1, ) = _unpackLootbox(packed);
-            sp1 = priorSp1;
+            (, uint64 priorAdj, uint16 priorScore, ) = _unpackLootbox(packed);
+            sc = priorScore;
             adj = priorAdj;
             if (amount != 0) {
                 if (
-                    _lootboxEvMultiplierFromScore(uint256(priorSp1 - 1)) >
+                    _lootboxEvMultiplierFromScore(uint256(priorScore)) >
                     LOOTBOX_EV_NEUTRAL_BPS
                 ) {
                     uint256 used = lootboxEvBenefitUsedByLevel[player][capKey];
@@ -1012,7 +1012,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // fields land in the single lootboxEth slot.
         uint256 distressUnits = (packed >> LB_DISTRESS_SHIFT) & LB_DISTRESS_MASK;
         lootboxEth[index][player] =
-            _packLootbox(existingAmount + amount, adj, sp1, distressUnits);
+            _packLootbox(existingAmount + amount, adj, sc, distressUnits);
         _lrWrite(
             LR_PENDING_ETH_SHIFT,
             LR_PENDING_ETH_MASK,
@@ -1084,7 +1084,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///         (no reclaim / evict / funding-kill / re-stamp), so its paid-for box is never
     ///         orphaned. For each funded, well-formed sub it then builds the `_resolveBuy`
     ///         slice (REVERT-01) and, per mode (P2): a LOOTBOX sub STAMPS the two
-    ///         genuinely-per-sub box inputs (`scorePlus1`, `amount`) warm-dirty into the
+    ///         genuinely-per-sub box inputs (`score`, `amount`) warm-dirty into the
     ///         single-slot Sub record (BOX-02) — the box is materialized LATER by the open
     ///         leg at the LIVE level (349.1-03); a TICKET sub QUEUES whole tickets NOW via
     ///         the MintModule `purchaseWith` path (no box). Both modes debit
@@ -1102,7 +1102,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      the warm Sub stamp is the box record (no cold ledger). boons OFF ⇒ `amount` = spend.
     /// @dev DOUBLE-DRAW GUARD (EVCAP-01 producer): the lootbox path STAMPS only — the
     ///      single EV-cap RMW happens at OPEN, fed the FROZEN `evMultiplierBps`
-    ///      derived from the stamped `scorePlus1`. The ticket path defers all EV to the
+    ///      derived from the stamped `score`. The ticket path defers all EV to the
     ///      MintModule buy (it computes the ticket's own activity score on the buy path).
     /// @dev NO error-swallowing valve (REVERT-02 no-valve, D-348-04): a funded slice is
     ///      revert-free by construction (REVERT-01); there is no pre-emptive lootbox skip;
@@ -1388,7 +1388,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev Materialize ONE subscriber's stamped afking box (the freeze-critical open).
     ///      The box's word comes from `rngWordByDay[sub.lastAutoBoughtDay]` (the frozen
     ///      stamp day); the level and the EV-cap key read live inside `resolveAfkingBox`;
-    ///      the per-sub inputs (amount, scorePlus1) come from the Sub record. Day-keyed
+    ///      the per-sub inputs (amount, score) come from the Sub record. Day-keyed
     ///      no-double-open: the leg runs only while `lastOpenedDay < lastAutoBoughtDay`
     ///      (pre-gated by `_afkingBoxReady`), and advances the marker
     ///      (`lastOpenedDay = lastAutoBoughtDay`) BEFORE the resolve (effects-before-
@@ -1397,7 +1397,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      (the live-level twin of `resolveLootboxDirect`) with: the stamped spend (boons
     ///      OFF ⇒ amount == spend), the frozen process `day` = `lastAutoBoughtDay`, the
     ///      frozen day's word `rngWordByDay[day]`, and the frozen
-    ///      `activityScore = scorePlus1 - 1`. The draw math and the single EV-cap RMW live in
+    ///      `activityScore = score`. The draw math and the single EV-cap RMW live in
     ///      `resolveAfkingBox`; this leg is the thin cursor/marker/dispatch shell.
     ///      `resolveAfkingBox` is the one freeze-correct seam (the public
     ///      `resolveLootboxDirect` derives its seed from the live day and would NOT freeze the
@@ -1424,7 +1424,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     _unpackMilliEthToWei(uint64(sub.amount)), // milli-ETH → wei
                     day,
                     word,
-                    uint16(sub.scorePlus1) - 1
+                    uint16(sub.score)
                 )
             );
         if (!ok) _revertDelegate(data);

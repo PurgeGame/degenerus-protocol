@@ -215,10 +215,10 @@ contract KeeperLeversAndPacking is DeployProtocol {
     ///         from the first-deposit signal.
     /// @dev    v55 (D-351-01 RE-DERIVE): the game-resident `Sub` (DegenerusGameStorage.sol:1867) is EIGHT
     ///         fields summing to 29 used bytes (<= 32 = one slot) — the box-redesign added the per-sub
-    ///         stamp fields (`scorePlus1` uint16 + `amount` uint96) + the `lastOpenedDay` uint32 marker,
+    ///         stamp fields (`score` uint16 + `amount` uint96) + the `lastOpenedDay` uint32 marker,
     ///         dropped the standalone `fundingSource` (relocated to the sparse `_fundingSourceOf` map):
     ///           uint8 dailyQuantity(1) + uint32 validThroughLevel(4) + uint8 reinvestPct(1)
-    ///           + uint8 flags(1) + uint16 scorePlus1(2) + uint96 amount(12) + uint32 lastAutoBoughtDay(4)
+    ///           + uint8 flags(1) + uint16 score(2) + uint96 amount(12) + uint32 lastAutoBoughtDay(4)
     ///           + uint32 lastOpenedDay(4) = 29 bytes. The INTENT — single-slot packing, no NEW hot-path
     ///         storage — is unchanged; only the shape it proves against (greps STORAGE_SRC, not AFKING_SRC).
     function testGas04PackingAndNoNewHotPathStorageSourcePresence() public view {
@@ -234,7 +234,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
             _structFieldBytes(storage_, "uint24 validThroughLevel;", 3) +
             _structFieldBytes(storage_, "uint8 reinvestPct;", 1) +
             _structFieldBytes(storage_, "uint8 flags;", 1) +
-            _structFieldBytes(storage_, "uint16 scorePlus1;", 2) +
+            _structFieldBytes(storage_, "uint16 score;", 2) +
             _structFieldBytes(storage_, "uint24 amount;", 3) +
             _structFieldBytes(storage_, "uint24 lastAutoBoughtDay;", 3) +
             _structFieldBytes(storage_, "uint24 lastOpenedDay;", 3) +

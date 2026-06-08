@@ -372,7 +372,7 @@ interface IDegenerusGameLootboxModule {
     /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend)
     /// @param day The boundary-pinned process day stamped at process (frozen seed input)
     /// @param rngWord The frozen stamp day's word rngWordByDay[day], passed by the caller (§1)
-    /// @param activityScore The stamped activity-score bps (scorePlus1 - 1, frozen EV input)
+    /// @param activityScore The stamped activity-score bps (the frozen EV input)
     function resolveAfkingBox(
         address player,
         uint256 amount,

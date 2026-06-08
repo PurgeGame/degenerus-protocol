@@ -959,13 +959,13 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Loot box state per RNG index per player, packed into one word. The amount may
     ///      accumulate within an index across deposits; the frozen-at-deposit EV inputs
-    ///      (adjustedPortion, score+1) and the distress fraction ride alongside it so a box
+    ///      (adjustedPortion, score) and the distress fraction ride alongside it so a box
     ///      lives in a single slot. All four fields are frozen at deposit and read-only at
     ///      open. distress is stored at 0.01-ETH granularity (distressEth / LB_DISTRESS_SCALE).
     ///      Bit layout (LSB -> MSB):
     ///      - [0:128]    amount        (uint128; boosted ETH in wei, drives the EV roll + pool credit)
     ///      - [128:192]  adjustedPortion (uint64; cap-eligible ETH that received the bonus, <= 10 ETH)
-    ///      - [192:208]  score + 1     (uint16; 0 = unset; the frozen EV multiplier knob)
+    ///      - [192:208]  score         (uint16; the frozen EV multiplier knob)
     ///      - [208:256]  distressUnits (uint48; distressEth / 1e16, the 25%-ticket-bonus basis)
     mapping(uint48 => mapping(address => uint256)) internal lootboxEth;
 
@@ -1537,25 +1537,25 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Pack a lootbox box into one uint256 word (the lootboxEth slot).
-    ///      Layout: amount at [0:128], adjustedPortion at [128:192], score+1 at [192:208],
+    ///      Layout: amount at [0:128], adjustedPortion at [128:192], score at [192:208],
     ///      distressUnits at [208:256]. distressUnits is distressEth / LB_DISTRESS_SCALE,
     ///      already scaled by the caller. Each field is masked to its width before shifting
     ///      so an over-wide argument cannot alias an adjacent field.
-    function _packLootbox(uint256 amount, uint64 adj, uint16 scorePlus1, uint256 distressUnits)
+    function _packLootbox(uint256 amount, uint64 adj, uint16 score, uint256 distressUnits)
         internal pure returns (uint256) {
         return (amount & LB_AMOUNT_MASK)
             | (uint256(adj) & LB_ADJ_MASK) << LB_ADJ_SHIFT
-            | (uint256(scorePlus1) & LB_SCORE_MASK) << LB_SCORE_SHIFT
+            | (uint256(score) & LB_SCORE_MASK) << LB_SCORE_SHIFT
             | (distressUnits & LB_DISTRESS_MASK) << LB_DISTRESS_SHIFT;
     }
 
     /// @dev Unpack a lootbox box word into its four fields. distressUnits is at
     ///      0.01-ETH granularity; multiply by LB_DISTRESS_SCALE for wei.
     function _unpackLootbox(uint256 word)
-        internal pure returns (uint256 amount, uint64 adj, uint16 scorePlus1, uint256 distressUnits) {
+        internal pure returns (uint256 amount, uint64 adj, uint16 score, uint256 distressUnits) {
         amount = word & LB_AMOUNT_MASK;
         adj = uint64((word >> LB_ADJ_SHIFT) & LB_ADJ_MASK);
-        scorePlus1 = uint16((word >> LB_SCORE_SHIFT) & LB_SCORE_MASK);
+        score = uint16((word >> LB_SCORE_SHIFT) & LB_SCORE_MASK);
         distressUnits = (word >> LB_DISTRESS_SHIFT) & LB_DISTRESS_MASK;
     }
 
@@ -2009,13 +2009,13 @@ abstract contract DegenerusGameStorage {
     ///      bits, 0 free), so the whole record reads/writes as a single warm slot with no
     ///      extra cold slot:
     ///        config (40b):  dailyQuantity(8) + validThroughLevel(24) + reinvestPct(8) + flags(8)
-    ///        per-sub stamp (40b): scorePlus1(16) + amount(24, milli-ETH)
+    ///        per-sub stamp (40b): score(16) + amount(24, milli-ETH)
     ///        markers (96b): lastAutoBoughtDay(24) + lastOpenedDay(24) + afkCoveredThroughDay(24) + afkingStartDay(24)
     ///        accumulator (72b): affiliateBase(32) + pendingBurnie(32) + subStreakLatch(8)
     ///      There is NO per-day epoch: the box resolves at the LIVE level at open (no
     ///      stored roll floor) and sources its RNG word from
     ///      `rngWordByDay[lastAutoBoughtDay]`, so the only frozen-at-stamp inputs are the
-    ///      two genuinely-per-sub fields — `scorePlus1` (activity score) and `amount`
+    ///      two genuinely-per-sub fields — `score` (activity score) and `amount`
     ///      (mp×qty spend). `fundingSource` lives in the sparse `_fundingSourceOf` map
     ///      (absent ⇒ self, the common case stores nothing). `lastAutoBoughtDay`
     ///      double-duties as the success-marker AND the frozen seed `day`.
@@ -2065,9 +2065,9 @@ abstract contract DegenerusGameStorage {
         /// @dev bit 0 free; bit 1 = drainGameCreditFirst; bit 2 = useTickets.
         uint8 flags;
         // --- per-sub stamp (48 bits) ---
-        /// @dev Stamp: frozen activityScore + 1 (the EV multiplier input at open).
+        /// @dev Stamp: the frozen activity score (the EV multiplier input at open).
         ///      Genuinely per-sub (each subscriber's own activity score).
-        uint16 scorePlus1;
+        uint16 score;
         /// @dev Stamp: spend in milli-ETH (0.001-ETH units; boons off, so amount ==
         ///      spend, = mp × effectiveQty). Milli-ETH in a uint24 (16,777 ETH/buy of
         ///      headroom — a single auto-buy never approaches it); packed via

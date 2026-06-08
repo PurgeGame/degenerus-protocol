@@ -1230,13 +1230,13 @@ contract DegenerusGameMintModule is
         uint48 lbIndex;
         bool lbFirstDeposit;
         // The box's amount + distress fraction are computed here (score-independent); the EV
-        // inputs (adj, score+1) are computed in the score block below, then all four pack into
-        // the single lootboxEth slot in ONE SSTORE. The prior frozen score+1 / adj (for a
+        // inputs (adj, score) are computed in the score block below, then all four pack into
+        // the single lootboxEth slot in ONE SSTORE. The prior frozen score / adj (for a
         // subsequent deposit) are snapshotted here from the pre-deposit packed word.
         uint256 lbNewAmount;
         uint256 lbDistressUnits;
         uint64 lbPriorAdj;
-        uint16 lbPriorScorePlus1;
+        uint16 lbPriorScore;
         if (lootBoxAmount != 0) {
             // Manual lootbox buyers stamp the mint day too (bounty eligibility); a no-op when
             // the ticket leg already stamped it today, closing the plain-vs-bundled gap.
@@ -1246,7 +1246,7 @@ contract DegenerusGameMintModule is
 
             uint256 packed = lootboxEth[lbIndex][buyer];
             uint256 existingAmount = packed & LB_AMOUNT_MASK;
-            (, lbPriorAdj, lbPriorScorePlus1, ) = _unpackLootbox(packed);
+            (, lbPriorAdj, lbPriorScore, ) = _unpackLootbox(packed);
 
             if (existingAmount == 0) {
                 lbFirstDeposit = true;
@@ -1402,12 +1402,12 @@ contract DegenerusGameMintModule is
             // open level == the resolver's currentLevel = level + 1). Bonus boxes
             // (mult > NEUTRAL) draw add = min(deposit, CAP - used) from the shared
             // per-(player, level) accumulator and accumulate adjustedPortion; sub-neutral/
-            // neutral boxes draw zero cap. amount + adj + score+1 + distressUnits then land
+            // neutral boxes draw zero cap. amount + adj + score + distressUnits then land
             // in the single lootboxEth slot in one SSTORE.
-            uint16 lbScorePlus1;
+            uint16 lbScore;
             uint64 lbAdj;
             if (lbFirstDeposit) {
-                lbScorePlus1 = uint16(cachedScore + 1);
+                lbScore = uint16(cachedScore);
                 uint256 mult = _lootboxEvMultiplierFromScore(cachedScore);
                 if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
                     uint256 used = lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1];
@@ -1419,14 +1419,14 @@ contract DegenerusGameMintModule is
                     lbAdj = uint64(add);
                 }
             } else {
-                // Subsequent deposit: the frozen score+1 and accumulated adj come from the
+                // Subsequent deposit: the frozen score and accumulated adj come from the
                 // box's PRIOR packed word (snapshotted above), the multiplier stays frozen
                 // from the first-deposit snapshot.
-                lbScorePlus1 = lbPriorScorePlus1;
+                lbScore = lbPriorScore;
                 lbAdj = lbPriorAdj;
                 if (lootBoxAmount != 0) {
                     uint256 mult = _lootboxEvMultiplierFromScore(
-                        uint256(lbPriorScorePlus1 - 1)
+                        uint256(lbPriorScore)
                     );
                     if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
                         uint256 used = lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1];
@@ -1442,7 +1442,7 @@ contract DegenerusGameMintModule is
                 }
             }
             lootboxEth[lbIndex][buyer] =
-                _packLootbox(lbNewAmount, lbAdj, lbScorePlus1, lbDistressUnits);
+                _packLootbox(lbNewAmount, lbAdj, lbScore, lbDistressUnits);
         }
 
         // Coin-presale-box credit accrual: while the box presale is open, every ETH

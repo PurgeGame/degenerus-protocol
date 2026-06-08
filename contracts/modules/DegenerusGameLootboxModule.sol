@@ -499,7 +499,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @custom:reverts RngNotReady When the lootbox is queued but its RNG word is not yet set.
     function _openLootBoxLeg(address player, uint48 index) internal returns (bool opened) {
         uint256 packed = lootboxEth[index][player];
-        (uint256 amount, uint64 adj, uint16 scorePlus1, uint256 distressUnits) =
+        (uint256 amount, uint64 adj, uint16 score, uint256 distressUnits) =
             _unpackLootbox(packed);
         if (amount == 0) return false;
 
@@ -511,8 +511,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // window. Auto-open (the permissionless openBoxes bounty) opens every ready box ASAP and a
         // holder cannot prevent it, so the open level is NOT player-timable: the holder can never
         // steer the box to a level they prefer, whichever way the level cuts. The EV multiplier
-        // stays FROZEN at deposit (`scorePlus1`) — that is the anti-gaming knob. One unified roll
-        // basis with `resolveAfkingBox` / `resolveLootboxDirect`. amount, adj, score+1, and the
+        // stays FROZEN at deposit (`score`) — that is the anti-gaming knob. One unified roll
+        // basis with `resolveAfkingBox` / `resolveLootboxDirect`. amount, adj, score, and the
         // distress fraction all ride in the single packed lootboxEth word.
 
         // Seed = the per-index VRF anchor `rngWord` (fixed at the index's advance, never knowable at
@@ -527,10 +527,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Apply the activity score EV multiplier to the reward amount (80% to 135%).
-        // scorePlus1 is the score+1 snapshot written at first deposit on every
-        // ETH-lootbox allocation path; raw activity score maxes at ~318%, so the
-        // encoding is always >=1 and the multiplier uses the committed score.
-        uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(scorePlus1 - 1));
+        // score is the raw activity-score snapshot written at first deposit on every
+        // ETH-lootbox allocation path and frozen thereafter; the multiplier uses the
+        // committed score.
+        uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(score));
         // Frozen application: penalty/neutral boxes scale the full amount; a bonus box
         // scales only the cap-eligible adjustedPortion (frozen at deposit time) and pays
         // the remainder at 100%. No cap SLOAD/SSTORE here — the cap was drawn at deposit.
@@ -541,7 +541,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // distress was stored at 0.01-ETH granularity; restore to wei for the bonus ratio.
         uint256 distressEth = distressUnits * LB_DISTRESS_SCALE;
 
-        // Clear amount, adj, score+1, and distress in one SSTORE of the whole word.
+        // Clear amount, adj, score, and distress in one SSTORE of the whole word.
         lootboxEth[index][player] = 0;
         _resolveLootboxCommon(
             player,
@@ -939,7 +939,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend).
     /// @param day The boundary-pinned PROCESS day stamped at process (FREEZE-03 seed).
     /// @param rngWord The frozen stamp day's word `rngWordByDay[day]`, passed by the caller (§1).
-    /// @param activityScore The stamped activity-score bps (scorePlus1 - 1, FROZEN EV input).
+    /// @param activityScore The stamped activity-score bps (the FROZEN EV input).
     function resolveAfkingBox(
         address player,
         uint256 amount,
