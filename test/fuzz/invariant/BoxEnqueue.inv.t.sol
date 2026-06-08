@@ -27,10 +27,11 @@ contract BoxQueueViewer is DegenerusGame {
         return false;
     }
 
-    /// @notice The persisted lootbox amount (the [232:amount] field). base != 0 => a persisted, not-yet-opened
-    ///         box; base == 0 => already resolved (drained on open) and correctly absent from the queue.
+    /// @notice The persisted lootbox amount (the [0:128] amount sub-field of the folded lootboxEth word).
+    ///         amount != 0 => a persisted, not-yet-opened box; amount == 0 => already resolved (drained on
+    ///         open, the whole word cleared in one SSTORE) and correctly absent from the queue.
     function lootboxAmountFor(uint48 index, address who) external view returns (uint256) {
-        return lootboxEth[index][who] & ((1 << 232) - 1);
+        return lootboxEth[index][who] & LB_AMOUNT_MASK;
     }
 
     /// @notice The persisted presale-box applied-ETH base (the low 96-bit field; the closing flag at bit 255

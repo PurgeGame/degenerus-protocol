@@ -51,17 +51,17 @@ contract KeeperFaucetResistance is DeployProtocol {
     // 37/38/19 and the AfKing-standalone SUBOF_SLOT=65 were WRONG).
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 36; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
+    /// @dev lootboxRngPacked at slot 35 (post V62 lootbox repack: was 36); lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;
 
-    /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
+    /// @dev lootboxRngWordByIndex mapping root slot (post V62 lootbox repack: was 37).
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
 
-    /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 43;
+    /// @dev degeneretteBets mapping root slot (post V62 repack: was 43, also stale pre-repack).
+    uint256 private constant DEGENERETTE_BETS_SLOT = 40;
 
-    /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 44;
+    /// @dev degeneretteBetNonce mapping root slot (post V62 repack: was 44, also stale pre-repack).
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 41;
 
     /// @dev WWXRP balanceOf mapping root slot.
     uint256 private constant WWXRP_BALANCEOF_SLOT = 2;
@@ -114,8 +114,8 @@ contract KeeperFaucetResistance is DeployProtocol {
     // Game-resident afking storage-slot constants (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
 
-    /// @dev _subOf mapping root (one packed Sub slot per subscriber).
-    uint256 private constant SUBOF_SLOT = 62;
+    /// @dev _subOf mapping root (one packed Sub slot per subscriber) (post V62 repack: was 62).
+    uint256 private constant SUBOF_SLOT = 58;
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)

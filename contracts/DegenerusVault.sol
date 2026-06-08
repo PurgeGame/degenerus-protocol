@@ -34,8 +34,6 @@ interface IDegenerusGamePlayerActions {
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) external payable;
-    /// @notice Open a lootbox for a player.
-    function openLootBox(address player, uint48 lootboxIndex) external;
     /// @notice Claim accumulated ETH winnings for a player.
     function claimWinnings(address player) external;
     /// @notice Claim winnings preferring stETH over ETH.
@@ -571,13 +569,6 @@ contract DegenerusVault {
     function gamePurchaseTicketsBurnie(uint256 ticketQuantity) external onlyVaultOwner {
         if (ticketQuantity == 0) revert Insufficient();
         gamePlayer.purchaseCoin(address(this), ticketQuantity);
-    }
-
-    /// @notice Open a lootbox owned by the vault
-    /// @param lootboxIndex Index of the lootbox to open
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function gameOpenLootBox(uint48 lootboxIndex) external onlyVaultOwner {
-        gamePlayer.openLootBox(address(this), lootboxIndex);
     }
 
     /// @notice Purchase a deity pass using an active boon for the vault

@@ -958,10 +958,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ) private {
         uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
         uint24 capKey = currentLevel + 1; // resolver open level == the per-(player, level) cap key
-        uint256 existingAmount = lootboxEth[index][player] & ((1 << 232) - 1);
+        uint256 packed = lootboxEth[index][player];
+        uint256 existingAmount = packed & LB_AMOUNT_MASK;
 
+        uint16 sp1;
+        uint64 adj;
         if (existingAmount == 0) {
-            uint64 adj;
+            sp1 = scorePlus1;
             if (
                 _lootboxEvMultiplierFromScore(activityScore) >
                 LOOTBOX_EV_NEUTRAL_BPS
@@ -974,52 +977,42 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 lootboxEvBenefitUsedByLevel[player][capKey] = used + add;
                 adj = uint64(add);
             }
-            lootboxPurchasePacked[index][player] = _packLootboxPurchase(
-                scorePlus1,
-                adj,
-                capKey // baseLevel+1: vestigial post-grace-removal (openLootBox drops it)
-            );
             // First deposit for this (index, player): enqueue for the permissionless auto-open
             // cursor (the consumer gates each index on lootboxRngWordByIndex != 0, so this is
             // producer-only). The box is discovered via that cursor walk, not an event.
             IGameRouter(address(this)).enqueueBoxForAutoOpen(index, player);
-        } else if (amount != 0) {
+        } else {
             // Subsequent deposit at the same un-advanced index (only reachable in the
-            // pre-first-advance genesis window): accumulate the EV-cap with the multiplier
-            // FROZEN from the first-deposit score read back from the packed word.
-            (uint16 sp1, uint64 adj0, uint24 blp1) = _unpackLootboxPurchase(
-                lootboxPurchasePacked[index][player]
-            );
-            if (
-                _lootboxEvMultiplierFromScore(uint256(sp1 - 1)) >
-                LOOTBOX_EV_NEUTRAL_BPS
-            ) {
-                uint256 used = lootboxEvBenefitUsedByLevel[player][capKey];
-                uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
-                    ? 0
-                    : LOOTBOX_EV_BENEFIT_CAP - used;
-                uint256 add = amount < remaining ? amount : remaining;
-                if (add != 0) {
-                    lootboxEvBenefitUsedByLevel[player][capKey] = used + add;
-                    lootboxPurchasePacked[index][player] = _packLootboxPurchase(
-                        sp1,
-                        adj0 + uint64(add),
-                        blp1
-                    );
+            // pre-first-advance genesis window): the frozen score+1 and accumulated adj come
+            // from the box's prior packed word, the multiplier stays FROZEN from the
+            // first-deposit snapshot.
+            (, uint64 priorAdj, uint16 priorSp1, ) = _unpackLootbox(packed);
+            sp1 = priorSp1;
+            adj = priorAdj;
+            if (amount != 0) {
+                if (
+                    _lootboxEvMultiplierFromScore(uint256(priorSp1 - 1)) >
+                    LOOTBOX_EV_NEUTRAL_BPS
+                ) {
+                    uint256 used = lootboxEvBenefitUsedByLevel[player][capKey];
+                    uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
+                        ? 0
+                        : LOOTBOX_EV_BENEFIT_CAP - used;
+                    uint256 add = amount < remaining ? amount : remaining;
+                    if (add != 0) {
+                        lootboxEvBenefitUsedByLevel[player][capKey] = used + add;
+                        adj = priorAdj + uint64(add);
+                    }
                 }
             }
         }
 
-        uint256 existingBase = lootboxEthBase[index][player];
-        if (existingAmount != 0 && existingBase == 0) {
-            existingBase = existingAmount;
-        }
-        lootboxEthBase[index][player] = existingBase + amount;
-        // purchaseLevel (high 24 bits) is vestigial post-grace-removal — openLootBox rolls from
-        // the LIVE level. boons OFF ⇒ no boost, so the stored amount is the raw spend.
+        // boons OFF for afking covers ⇒ no boost, so the stored amount is the raw spend; the
+        // afking path never writes distress (preserved as zero in the packed word). All live
+        // fields land in the single lootboxEth slot.
+        uint256 distressUnits = (packed >> LB_DISTRESS_SHIFT) & LB_DISTRESS_MASK;
         lootboxEth[index][player] =
-            (uint256(capKey) << 232) |
-            (existingAmount + amount);
+            _packLootbox(existingAmount + amount, adj, sp1, distressUnits);
         _lrWrite(
             LR_PENDING_ETH_SHIFT,
             LR_PENDING_ETH_MASK,

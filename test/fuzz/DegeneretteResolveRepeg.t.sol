@@ -46,16 +46,16 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     // Storage slot constants (confirmed via `forge inspect ... storage`)
     // =========================================================================
 
-    /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
-    /// @dev lootboxRngPacked at slot 36; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
+    /// @dev lootboxRngWordByIndex mapping root slot (post V62 lootbox repack: was 37).
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
+    /// @dev lootboxRngPacked at slot 35 (post V62 lootbox repack: was 36); lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;
     /// @dev prizePoolsPacked: [upper 128: futurePrizePool] [lower 128: nextPrizePool].
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
     /// @dev claimablePool (uint128) lives in slot 1, byte 16 (high 128 bits).
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;
-    /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 44;
+    /// @dev degeneretteBetNonce mapping root slot (address => uint64) (post V62 repack: was 44, also stale pre-repack).
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 41;
 
     /// @dev Salt used in degenerette bet resolution for the first spin.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
@@ -591,8 +591,8 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     // (byte-faithful copies of DegeneretteFreezeResolution.t.sol)
     // =========================================================================
 
-    /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 43;
+    /// @dev degeneretteBets mapping root slot (address => betId => packed) (post V62 repack: was 43, also stale pre-repack).
+    uint256 private constant DEGENERETTE_BETS_SLOT = 40;
 
     /// @dev Read the packed degeneretteBets slot for (player, betId). Non-zero == unresolved.
     function _betSlot(address who, uint64 betId) internal view returns (uint256) {

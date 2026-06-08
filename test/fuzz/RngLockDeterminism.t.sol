@@ -44,10 +44,14 @@ contract RngLockDeterminism is DeployProtocol {
     uint256 constant SLOT_PACKED_0 = 0;
     uint256 constant SLOT_RNG_WORD_CURRENT = 3;
     uint256 constant SLOT_VRF_REQUEST_ID = 4;
-    // Via `forge inspect DegenerusGame storageLayout`:
-    // lootboxRngPacked = slot 36 (the lootbox RNG index lives in bits[0:47]), lootboxRngWordByIndex = slot 37.
-    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 36;
-    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 37;
+    // Via `solc --storage-layout` on the working tree (post V62 lootbox repack — the folded
+    // lootboxEth word + removed lootboxEthBase/Burnie/Purchase/Distress shifted later slots down):
+    // lootboxRngPacked = slot 35 (the lootbox RNG index lives in bits[0:47]), lootboxRngWordByIndex = slot 36.
+    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 35;
+    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 36;
+    // lootboxEth (the single folded box word) = slot 15; amount is the low 128 bits (the box-owed signal).
+    uint256 constant SLOT_LOOTBOX_ETH = 15;
+    uint256 constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
     // Defensive slot constants for sec4 RunTerminalDecimatorJackpot
     // contribution. Exact values are placeholders; aggregator hash captures
     // post-resolution storage state at these slots for byte-identity
@@ -345,8 +349,9 @@ contract RngLockDeterminism is DeployProtocol {
         }
         if (action == 9) {
             uint48 idx = uint48(bound(nonce, 0, 1000));
-            vm.prank(vaultOwner);
-            try vault.gameOpenLootBox(idx) {} catch { return; }
+            // Opening boxes for any address is permissionless; the vault owns the box,
+            // anyone may open it via game.openBox(vault, idx).
+            try game.openBox(address(vault), idx) {} catch { return; }
             return;
         }
         if (action == 10) {
@@ -924,7 +929,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 buyerClaimablePre = game.claimableWinningsOf(buyer);
 
         vm.prank(buyer);
-        game.openLootBox(buyer, purchaseIndex);
+        game.openBox(buyer, purchaseIndex);
 
         (uint256 amountAfterOpen, bool presaleAfterOpen) =
             game.lootboxStatus(buyer, purchaseIndex);
@@ -960,7 +965,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 buyerClaimablePreB = game.claimableWinningsOf(buyer);
 
         vm.prank(buyer);
-        game.openLootBox(buyer, purchaseIndex);
+        game.openBox(buyer, purchaseIndex);
 
         (uint256 baselineAmount, bool baselinePresale) =
             game.lootboxStatus(buyer, purchaseIndex);
@@ -2198,14 +2203,14 @@ contract RngLockDeterminism is DeployProtocol {
         try game.mintBurnie() {} catch {} // must not abort the lock
     }
 
-    /// @dev Read lootboxEthBase[index][who] (slot 22) — the first-deposit signal, zeroed on open
-    ///      (the un-opened/opened oracle for a box).
-    uint256 constant SLOT_LOOTBOX_ETH_BASE = 22;
-
+    /// @dev Read the lootboxEth amount sub-field (bits [0:128]) for [index][who] — the box-owed
+    ///      signal, zeroed on open (the un-opened/opened oracle for a box). Post-repack this is the
+    ///      first-deposit signal: it goes non-zero on first deposit and is cleared on a successful
+    ///      open (the old lootboxEthBase mapping it replaced was folded away into this word).
     function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_ETH_BASE)));
+        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_ETH)));
         bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        return uint256(vm.load(address(game), leaf));
+        return uint256(vm.load(address(game), leaf)) & LB_AMOUNT_MASK;
     }
 
     /// @notice TST-01 — no marooned boxes (locked autoOpen no-op + post-unlock cursor open).
@@ -2261,7 +2266,7 @@ contract RngLockDeterminism is DeployProtocol {
         );
         // The box is openable at its index — it materializes post-unlock; none stranded.
         vm.prank(boxOwner);
-        game.openLootBox(boxOwner, boxIndex);
+        game.openBox(boxOwner, boxIndex);
         assertEq(
             _lootboxEthBase(boxIndex, boxOwner), 0,
             "no-maroon: the deferred box materializes post-unlock (first-deposit signal zeroed)"
@@ -2272,28 +2277,63 @@ contract RngLockDeterminism is DeployProtocol {
         // (unlocked) and autoOpen walks the cursor and opens it — the SAME-boxes-open guarantee.
         address boxOwner2 = makeAddr("tst01-no-maroon-owner2");
         vm.deal(boxOwner2, 100 ether);
-        uint48 activeIndex = _readLootboxRngIndex();
+        uint48 queuedIndex = _readLootboxRngIndex();
         vm.prank(boxOwner2);
         game.purchase{value: 1.01 ether}(
             boxOwner2, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth
         );
-        assertGt(_lootboxEthBase(activeIndex, boxOwner2), 0, "no-maroon: 2nd box queued at active index");
-        // Land the active index's word (unlocked) so the cursor can walk a word-ready box.
-        _injectActiveLootboxWord(activeIndex, uint256(keccak256("tst01-no-maroon-word2")));
+        assertGt(_lootboxEthBase(queuedIndex, boxOwner2), 0, "no-maroon: 2nd box queued at the round's index");
+        // The relocated multi-index sweep opens FINALIZED indices (boxCursorIndex .. LR_INDEX-1) —
+        // words land at LR_INDEX-1. Advance LR_INDEX by one so the box at queuedIndex becomes the
+        // just-finalized index the sweep reads, then land its word there. (The old buggy read acted
+        // at the ACTIVE index; injecting at the active index is now an unreachable state.)
+        _advanceLootboxRngIndexByOne();
+        assertEq(_readLootboxRngIndex(), queuedIndex + 1, "no-maroon: LR_INDEX advanced past the queued box (now finalized)");
+        _parkBoxFrontier(queuedIndex); // start the sweep at the finalized index (lower indices drained)
+        _injectActiveLootboxWord(queuedIndex, uint256(keccak256("tst01-no-maroon-word2")));
         assertFalse(game.rngLocked(), "no-maroon: unlocked for the cursor-open");
-        assertTrue(game.boxesPending(), "no-maroon: boxesPending() true once the active-index word lands");
+        assertTrue(game.boxesPending(), "no-maroon: boxesPending() true once the finalized-index word lands");
         uint256 openedViaCursor = game.openBoxes(100);
         assertGt(openedViaCursor, 0, "no-maroon: autoOpen walks the cursor and opens the queued box");
         assertEq(
-            _lootboxEthBase(activeIndex, boxOwner2), 0,
+            _lootboxEthBase(queuedIndex, boxOwner2), 0,
             "no-maroon: the cursor-opened box materialized (signal zeroed) - none marooned"
         );
     }
 
-    /// @dev Land a VRF word at `index` in lootboxRngWordByIndex (the harness's verified slot 38,
+    /// @dev Land a VRF word at `index` in lootboxRngWordByIndex (the harness's verified slot 36,
     ///      matching _lootboxRngWord). Mirrors CrankOpenBoxWorstCaseGas's _injectLootboxRngWord.
     function _injectActiveLootboxWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_RNG_WORD_BY_INDEX)));
         vm.store(address(game), slot, bytes32(rngWord));
+    }
+
+    /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 35) by one,
+    ///      mirroring requestLootboxRng's pre-increment. This finalizes the prior index (a box at
+    ///      it now sits at LR_INDEX-1, the index the relocated sweep opens) without touching any
+    ///      other packed lootboxRng field.
+    function _advanceLootboxRngIndexByOne() internal {
+        bytes32 slot = bytes32(uint256(SLOT_LOOTBOX_RNG_INDEX));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        uint48 idx = uint48(packed);
+        uint256 mask = (uint256(1) << 48) - 1;
+        packed = (packed & ~mask) | (uint256(idx + 1) & mask);
+        vm.store(address(game), slot, bytes32(packed));
+    }
+
+    /// @dev Park the auto-open frontier (boxCursorIndex byte 13, boxCursor byte 7 — both in slot
+    ///      62) at `index` with a zero in-index cursor, so the relocated multi-index sweep begins
+    ///      exactly at this finalized index (the realistic state where every lower index is already
+    ///      drained). Without this the sweep would orphan-break at the first un-worded lower index.
+    uint256 constant SLOT_BOX_CURSORS = 62;
+    function _parkBoxFrontier(uint48 index) internal {
+        bytes32 slot = bytes32(uint256(SLOT_BOX_CURSORS));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        // Clear boxCursor (byte 7, uint48) and boxCursorIndex (byte 13, uint48), then set the index.
+        uint256 cursorMask = (uint256(1) << 48) - 1;
+        packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0
+        packed &= ~(cursorMask << (13 * 8));  // clear boxCursorIndex field
+        packed |= (uint256(index) & cursorMask) << (13 * 8);
+        vm.store(address(game), slot, bytes32(packed));
     }
 }

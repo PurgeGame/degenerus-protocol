@@ -24,14 +24,16 @@ import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
 /// Credit, the per-index VRF word, and (where a SMALL-pool clamp scenario is needed) the pool
 /// balance are seeded via vm.store -- test scaffolding only; ZERO contracts/*.sol modifications.
 contract PresaleBoxDrain is DeployProtocol {
-    // ── Storage slots (verified via `forge inspect DegenerusGameStorage storage-layout`) ──
-    uint256 constant SLOT_PACKED_0 = 0;                 // presaleOver @ byte 30
+    // ── Storage slots (RE-DERIVED via `solc --storage-layout`, working tree, post V62 lootbox repack.
+    //    presaleBoxEth* / credit / sold are BEFORE the first removed mapping → unchanged; the rng pack/
+    //    word + presaleBoxDgnrsPoolStart shifted down by the removed/folded lootbox mappings.) ──
+    uint256 constant SLOT_PACKED_0 = 0;                 // presaleOver @ byte 28
     uint256 constant SLOT_PRESALE_BOX_ETH_SOLD = 16;    // uint96
     uint256 constant SLOT_PRESALE_BOX_CREDIT = 17;      // mapping(address => uint256)
     uint256 constant SLOT_PRESALE_BOX_ETH = 18;         // mapping(uint48 => mapping(address => uint256))
-    uint256 constant SLOT_PRESALE_BOX_DGNRS_POOL_START = 32; // uint256
-    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 36;      // LR_INDEX = low 48 bits
-    uint256 constant SLOT_LOOTBOX_RNG_WORD = 37;        // mapping(uint48 => uint256)
+    uint256 constant SLOT_PRESALE_BOX_DGNRS_POOL_START = 31; // uint256
+    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 35;      // LR_INDEX = low 48 bits
+    uint256 constant SLOT_LOOTBOX_RNG_WORD = 36;        // mapping(uint48 => uint256)
 
     // ── Contract constants mirrored from DegenerusGameLootboxModule (the FIXED curve) ──
     // base = poolStart / 40 DGNRS-per-ETH; tier multiplier in tenths; reward divisor 400.
@@ -173,7 +175,7 @@ contract PresaleBoxDrain is DeployProtocol {
         _setRngWord(index, word1);
         uint256 before1 = _poolBal();
         vm.prank(tier1Buyer);
-        game.openPresaleBox(tier1Buyer, index);
+        game.openBox(tier1Buyer, index);
         uint256 reward1 = before1 - _poolBal();
         assertGt(reward1, 0, "tier1 drew DGNRS");
 
@@ -182,7 +184,7 @@ contract PresaleBoxDrain is DeployProtocol {
         _setRngWord(index, word5);
         uint256 before5 = _poolBal();
         vm.prank(tier5Buyer);
-        game.openPresaleBox(tier5Buyer, index);
+        game.openBox(tier5Buyer, index);
         uint256 reward5 = before5 - _poolBal();
         assertGt(reward5, 0, "tier5 drew DGNRS");
 
@@ -255,7 +257,7 @@ contract PresaleBoxDrain is DeployProtocol {
             _setRngWord(index, word);
             uint256 poolBefore = _poolBal();
             vm.prank(buyers[i]);
-            game.openPresaleBox(buyers[i], index);
+            game.openBox(buyers[i], index);
             uint256 drew = poolBefore - _poolBal();
             assertLe(drew, poolBefore, "no per-box draw exceeds live pool (clamp)");
             opened++;
@@ -271,7 +273,7 @@ contract PresaleBoxDrain is DeployProtocol {
         _setRngWord(index, closerWord);
         uint256 poolBeforeClose = _poolBal();
         vm.prank(closer);
-        game.openPresaleBox(closer, index); // no revert == clamp held end-to-end
+        game.openBox(closer, index); // no revert == clamp held end-to-end
         uint256 poolAfterClose = _poolBal();
 
         // The closing sweep (transferFromPool of the remainder) drew at most the dust that was
@@ -352,13 +354,13 @@ contract PresaleBoxDrain is DeployProtocol {
                 // them so the run is complete and the closer is reached.
                 _setRngWord(index, _wordForBand(buyers[i], boxAmount, bands[i]));
                 vm.prank(buyers[i]);
-                game.openPresaleBox(buyers[i], index);
+                game.openBox(buyers[i], index);
                 continue;
             }
             _setRngWord(index, _wordForBand(buyers[i], boxAmount, bands[i]));
             uint256 poolBefore = _poolBal();
             vm.prank(buyers[i]);
-            game.openPresaleBox(buyers[i], index);
+            game.openBox(buyers[i], index);
             cumulativeBoxDraw += poolBefore - _poolBal();
         }
 
@@ -374,7 +376,7 @@ contract PresaleBoxDrain is DeployProtocol {
         _setRngWord(index, _wordForBand(closer, boxAmount, 2));
         uint256 poolBeforeClose = _poolBal();
         vm.prank(closer);
-        game.openPresaleBox(closer, index);
+        game.openBox(closer, index);
         uint256 swept = poolBeforeClose - _poolBal();
 
         // Dust bound (T-327-01-FC2): <= poolStart/100 (1%). The v47 /1_000 curve left the

@@ -37,24 +37,24 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      `forge inspect storage DegenerusGame`. Test-only: ZERO `contracts/*.sol` mutation.
 contract KeeperNonBrick is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Storage slot constants (DegenerusGame; authoritative per `forge inspect DegenerusGame
-    // storageLayout` at subject c4d48008 — see 380-01-LAYOUT-KEY.md). The v61 PACK fold collapsed
-    // claimableWinnings+afkingFunding into balancesPacked (slot 7) and shifted the post-balances
-    // mappings; the shift is REGION-DEPENDENT, not uniform. Every constant re-derived from the layout.
+    // Storage slot constants (DegenerusGame; RE-DERIVED via `solc --storage-layout` on the working
+    // tree after the V62 lootbox repack — the folded lootboxEth word + removed lootboxEthBase/Burnie/
+    // Purchase/Distress shifted later slots down (region-dependent). The prior 36/37/43/44/62/64/65
+    // pins were stale; corrected to the authoritative values below.
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 36; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
+    /// @dev lootboxRngPacked at slot 35; lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
     /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 43;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 40;
     /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 44;
-    /// @dev lootboxEth mapping root slot (uint48 index => address => packed).
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 41;
+    /// @dev lootboxEth (the single folded box word) mapping root slot. The amount sub-field (low 128
+    ///      bits) is the box-owed signal that replaced the removed lootboxEthBase mapping.
     uint256 private constant LOOTBOX_ETH_SLOT = 15;
-    /// @dev lootboxEthBase mapping root slot.
-    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 22;
+    uint256 private constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
     /// @dev rngLockedFlag is bool at slot 0 offset 19 bytes = bit 152.
     uint256 private constant RNG_LOCKED_SHIFT = 152;
     /// @dev gameOver is bool at slot 0 offset 21 bytes = bit 168.
@@ -67,9 +67,9 @@ contract KeeperNonBrick is DeployProtocol {
     uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7; // balancesPacked root; low 128 bits = claimable
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit @ bit 184)
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word
-    uint256 private constant SUBOF_SLOT = 62; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 64; // address[] _subscribers
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 65; // mapping(address => uint256) _subscriberIndex (1-indexed)
+    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 60; // address[] _subscribers
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 61; // mapping(address => uint256) _subscriberIndex (1-indexed)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack
     // narrowed `amount` to uint24 and the day markers to uint24).

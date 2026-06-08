@@ -19,7 +19,7 @@ contract BoxQueueViewer is DegenerusGame {
     }
 
     function lootboxAmountFor(uint48 index, address who) external view returns (uint256) {
-        return lootboxEth[index][who] & ((1 << 232) - 1);
+        return lootboxEth[index][who] & LB_AMOUNT_MASK;
     }
 }
 

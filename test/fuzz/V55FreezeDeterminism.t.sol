@@ -42,13 +42,20 @@ contract V55FreezeDeterminism is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 11; // mapping(uint32 => uint256) — the afking box's DAY-keyed word
-    uint256 private constant LOOTBOX_ETH_SLOT = 16; // mapping(uint48 => mapping(address => uint256)) [232:amount | 24:lvl]
-    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 23; // first-deposit signal (RE-DERIVED: was 22)
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38; // [0:47] lootboxRngIndex (RE-DERIVED: was 37)
-    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 39; // mapping(uint48 => uint256) (RE-DERIVED: was 38)
+    // RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack (the
+    // folded lootboxEth word + removed lootboxEthBase/Burnie/Purchase/Distress shifted later slots
+    // down). The prior 65/10/11/16/23/38/39 pins were stale; corrected to authoritative values.
+    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word
+    // lootboxEth (the single folded box word): amount[0:128] | adj[128:192] | scorePlus1[192:208] |
+    // distressUnits[208:256]. Replaces the former separate lootboxEth/lootboxEthBase/lootboxPurchasePacked.
+    uint256 private constant LOOTBOX_ETH_SLOT = 15;
+    uint256 private constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
+    uint256 private constant LB_ADJ_SHIFT = 128;
+    uint256 private constant LB_SCORE_SHIFT = 192;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35; // [0:47] lootboxRngIndex
+    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 36; // mapping(uint48 => uint256)
 
     // Sub packed-field byte offsets — the v56 compute-on-read re-pack (single 256-bit slot):
     //   scorePlus1 u16 @6 · amount u24 @8 · lastAutoBoughtDay u24 @11 · lastOpenedDay u24 @14.
@@ -482,7 +489,7 @@ contract V55FreezeDeterminism is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(player);
-        game.openLootBox(player, index);
+        game.openBox(player, index);
         Box memory b = _decodeLootBoxOpenedFor(player);
         // Belt-and-braces: the human box opened at the SAME live level (baseLevel == currentLevel), so the
         // differential is a fixed-live-level equivalence (not a level-frozen claim).
@@ -643,31 +650,44 @@ contract V55FreezeDeterminism is DeployProtocol {
         vm.store(address(game), leaf, bytes32(word));
     }
 
+    /// @dev Post-repack the open seed carries NO day term (the box binds to the per-index word,
+    ///      not a stored day). The former lootboxDay mapping is gone — kept as a no-op so callers
+    ///      that pinned a day to match a (now-removed) day preimage term still type-check.
     function _forceLootboxDay(uint48 index, address who, uint32 day) internal {
-        vm.store(address(game), _lootboxLeaf(40, index, who), bytes32(uint256(day))); // lootboxDay = slot 40
+        index; who; day; // no-op: the resolution no longer reads a per-(index,player) day
     }
 
-    /// @dev lootboxPurchasePacked = slot 41, packing [0:16] scorePlus1 | [16:80] adj | [80:104]
-    ///      baseLevelPlus1. Pin scorePlus1 = score+1 (the EV input), adj = amount (the cap-eligible portion;
-    ///      for amount <= 10 ETH this equals the afking arm's `adjustedPortion`, so the bonus branch is
-    ///      byte-identical), baseLevelPlus1 = 0 (=> graceLevel == currentLevel => baseLevel == currentLevel).
+    /// @dev The frozen EV inputs (scorePlus1 + adj) now ride in the SINGLE folded lootboxEth word,
+    ///      not a separate lootboxPurchasePacked slot. Pin scorePlus1 = score+1 (the EV input) and
+    ///      adj = amount (the cap-eligible portion; for amount <= 10 ETH this equals the afking arm's
+    ///      adjustedPortion, so the bonus branch is byte-identical). Folded together with the amount
+    ///      in _forceLootboxAmount — this writes the score+adj sub-fields, preserving the amount.
     function _forceLootboxPurchasePacked(uint48 index, address who, uint16 score, uint256 amount) internal {
-        uint256 word = uint256(uint16(score) + 1) | (uint256(uint64(amount)) << 16); // baseLevelPlus1 = 0
-        vm.store(address(game), _lootboxLeaf(41, index, who), bytes32(word));
+        bytes32 leaf = _lootboxLeaf(LOOTBOX_ETH_SLOT, index, who);
+        uint256 word = uint256(vm.load(address(game), leaf));
+        // Clear adj[128:192] + scorePlus1[192:208], then set them (amount[0:128] preserved).
+        word &= ~(uint256(0xFFFFFFFFFFFFFFFF) << LB_ADJ_SHIFT);
+        word &= ~(uint256(0xFFFF) << LB_SCORE_SHIFT);
+        word |= (uint256(uint64(amount)) << LB_ADJ_SHIFT);
+        word |= (uint256(uint16(score) + 1) << LB_SCORE_SHIFT);
+        vm.store(address(game), leaf, bytes32(word));
     }
 
-    /// @dev lootboxEth = slot 16: [0:232] amount | [232:256] purchaseLevel. Pin amount + purchaseLevel ==
-    ///      currentLevel (so a NON-grace fallback also resolves baseLevel == currentLevel), and set
-    ///      lootboxEthBase non-zero so the box materializes from a forced ledger entry.
+    /// @dev The single folded lootboxEth word (slot 15): amount[0:128] is the box-owed signal that
+    ///      drives the EV roll. purchaseLevel is gone (vestigial — the box rolls from the LIVE level
+    ///      at open). Set the amount sub-field; the score/adj sub-fields are written separately by
+    ///      _forceLootboxPurchasePacked (the open reads scorePlus1 + adj + amount from this one word).
     function _forceLootboxAmount(uint48 index, address who, uint256 amount, uint24 currentLevel) internal {
-        bytes32 leaf = _lootboxLeaf(16, index, who);
-        uint256 packed = (uint256(currentLevel) << 232) | (amount & ((uint256(1) << 232) - 1));
-        vm.store(address(game), leaf, bytes32(packed));
-        vm.store(address(game), _lootboxLeaf(LOOTBOX_ETH_BASE_SLOT, index, who), bytes32(amount));
+        currentLevel; // no longer stored — the box rolls from the live level at open
+        bytes32 leaf = _lootboxLeaf(LOOTBOX_ETH_SLOT, index, who);
+        uint256 word = uint256(vm.load(address(game), leaf));
+        word &= ~LB_AMOUNT_MASK;
+        word |= (amount & LB_AMOUNT_MASK);
+        vm.store(address(game), leaf, bytes32(word));
     }
 
     function _lootboxAmountRaw(uint48 index, address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), _lootboxLeaf(16, index, who))) & ((uint256(1) << 232) - 1);
+        return uint256(vm.load(address(game), _lootboxLeaf(LOOTBOX_ETH_SLOT, index, who))) & LB_AMOUNT_MASK;
     }
 
     function _u(uint256 v) internal pure returns (string memory) {

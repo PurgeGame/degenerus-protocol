@@ -40,11 +40,12 @@ contract BoxCreationHandler is Test {
     // -------------------------------------------------------------------------
     uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS score bit (subscribe/pass gate)
-    uint256 private constant LR_PACKED_SLOT = 36; // lootboxRngPacked; LR_INDEX = low 48 bits
+    uint256 private constant LR_PACKED_SLOT = 35; // lootboxRngPacked; LR_INDEX = low 48 bits (post V62 repack)
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
     uint256 private constant PRESALE_BOX_CREDIT_SLOT = 17; // mapping(address => uint256)
-    uint256 private constant LOOTBOX_ETH_SLOT = 15; // mapping(uint48 => mapping(address => uint256)) [232:amount][24:level]
-    uint256 private constant LOOTBOX_AMOUNT_MASK = (uint256(1) << 232) - 1;
+    // The folded lootboxEth word: amount[0:128] | adj[128:192] | scorePlus1[192:208] | distress[208:256].
+    uint256 private constant LOOTBOX_ETH_SLOT = 15; // mapping(uint48 => mapping(address => uint256))
+    uint256 private constant LOOTBOX_AMOUNT_MASK = (uint256(1) << 128) - 1; // amount sub-field [0:128]
 
     // -------------------------------------------------------------------------
     // A tracked (index, owner) record — the invariant asserts each persisted one is enqueued.
@@ -347,13 +348,13 @@ contract BoxCreationHandler is Test {
     // Falsifiability seams (used ONLY by the BoxEnqueue falsifiability test, never by a fuzzed action)
     // =========================================================================
 
-    /// @dev FALSIFIABILITY seam: simulate the WHALE-01 bug shape — a persisted lootboxEth record (base != 0)
-    ///      that was NOT pushed into boxPlayers[index]. Writes the lootbox amount field of
+    /// @dev FALSIFIABILITY seam: simulate the WHALE-01 bug shape — a persisted lootboxEth record (amount != 0)
+    ///      that was NOT pushed into boxPlayers[index]. Writes the lootbox amount sub-field of
     ///      lootboxEth[index][who] (slot 15 nested mapping) via a field-isolated vm.store WITHOUT calling any
     ///      enqueue site, so boxPlayersContains(index, who) stays false. This is exactly the persisted-but-
     ///      unenqueued state the invariant must catch; it is NOT used by any fuzzed action (the campaign creates
-    ///      boxes only through real entrypoints, which always enqueue at c4d48008). The level high bits are left
-    ///      untouched; only the [232:amount] field is set.
+    ///      boxes only through real entrypoints, which always enqueue). The adj/score/distress high bits are
+    ///      left untouched; only the amount sub-field [0:128] is set (the box-owed signal).
     function debugSeedUnenqueuedBox(uint48 index, address who, uint256 amount) external {
         bytes32 slot = _lootboxEthSlot(index, who);
         uint256 packed = uint256(vm.load(address(game), slot));

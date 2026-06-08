@@ -21,10 +21,12 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     bytes32 constant CODE_BOB   = bytes32("BOB");
     bytes32 constant CODE_CAROL = bytes32("CAROL");
 
-    // Storage slots (verified via forge inspect DegenerusGame storageLayout).
+    // Storage slots (RE-DERIVED via `solc --storage-layout`, working tree, post V62 lootbox repack:
+    // the folded lootboxEth word + removed lootboxEthBase/Burnie/Purchase/Distress shifted later
+    // slots down. levelDgnrsAllocation/Claimed were 27/28; now 26/27.)
     uint256 constant SLOT_LEVEL = 0; // level is at slot 0, offset 12, 3 bytes (uint24)
-    uint256 constant SLOT_LEVEL_DGNRS_ALLOCATION = 27;
-    uint256 constant SLOT_LEVEL_DGNRS_CLAIMED = 28;
+    uint256 constant SLOT_LEVEL_DGNRS_ALLOCATION = 26;
+    uint256 constant SLOT_LEVEL_DGNRS_CLAIMED = 27;
 
     uint256 buyerNonce;
 

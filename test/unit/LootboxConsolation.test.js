@@ -18,7 +18,7 @@
 //
 // `_queueTickets` is called unconditionally; its `if (quantity == 0) return;`
 // early-return absorbs the `whole == 0` cold-bust case silently. The WWXRP
-// consolation is paid on the surviving manual lootbox path — `openLootBox` —
+// consolation is paid on the surviving manual lootbox path — `openBox` —
 // which passes `payColdBustConsolation = true`. It is gated by a dedicated
 // `payColdBustConsolation` flag, NOT by `emitLootboxEvent`. The two
 // auto-resolve callers (`resolveLootboxDirect`, `resolveRedemptionLootbox`)
@@ -139,7 +139,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       // `if (payColdBustConsolation && whole == 0)` gate must appear (the NatSpec
       // comment block between the gate and the call widens the gap).
       // Auto-resolve callers pass `payColdBustConsolation = false`, so they never
-      // reach the consolation; the surviving manual caller (`openLootBox`) passes
+      // reach the consolation; the surviving manual caller (`openBox`) passes
       // `payColdBustConsolation = true` and can trigger it. (v47: the BURNIE-lootbox
       // manual caller `openBurnieLootBox` was removed.)
       const window = source.slice(Math.max(0, mintPrize - 600), mintPrize);
@@ -169,7 +169,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // The sentinel branch is retired: `_queueTickets(player, rollLevel,
       // whole, false)` is a single source site in `_settleLootboxRoll`,
-      // reached unconditionally for every path (manual openLootBox + both
+      // reached unconditionally for every path (manual openBox + both
       // auto-resolve callers). Its `if (quantity == 0) return;` early-return
       // absorbs the cold-bust case.
       const callLine = "_queueTickets(player, rollLevel, whole, false)";
@@ -289,10 +289,10 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
     // caller `openBurnieLootBox` was removed (terminal-paradox closure). This case
     // exercised the gate decision with payColdBustConsolation=true on behalf of that
     // removed caller; the identical gate decision for the surviving manual caller
-    // (openLootBox, also payColdBustConsolation=true) is covered by [04b], so no
+    // (openBox, also payColdBustConsolation=true) is covered by [04b], so no
     // coverage is lost. Removed-by-design, not skipped.
 
-    it("[04b] openLootBox cold-bust PAYS the consolation — payColdBustConsolation=true ⇒ fires on whole==0", async function () {
+    it("[04b] openBox cold-bust PAYS the consolation — payColdBustConsolation=true ⇒ fires on whole==0", async function () {
       const tester = await deployTester();
       for (const scaledPre of [1, 47, 50, 99]) {
         const fires = await tester.coldBustConsolationFires(
@@ -302,7 +302,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
         );
         expect(
           fires,
-          `openLootBox cold-bust at scaledPre=${scaledPre} must PAY the consolation`
+          `openBox cold-bust at scaledPre=${scaledPre} must PAY the consolation`
         ).to.equal(true);
       }
     });

@@ -52,14 +52,15 @@ contract VRFPathCoverage is DeployProtocol {
         }
     }
 
-    /// @dev Read lootboxRngIndex from lootboxRngPacked (storage slot 36, low 48 bits = LR_INDEX).
+    /// @dev Read lootboxRngIndex from lootboxRngPacked (storage slot 35, low 48 bits = LR_INDEX)
+    ///      (post V62 lootbox repack: was 36).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(36)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(35)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 37).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 36, post V62 repack: was 37).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(37)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(36)));
         return uint256(vm.load(address(game), slot));
     }
 

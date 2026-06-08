@@ -40,22 +40,20 @@ contract V55RevertFreeEvCap is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
+    // RE-DERIVED via `solc --storage-layout` on the working tree (post V62 lootbox repack — the prior
+    // pins were v55/v61-era stale; the folded lootboxEth word + removed mappings shifted slots down).
     uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 @ slot 1, byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7; // mapping(address => uint256)
-    uint256 private constant AFKING_FUNDING_SLOT = 8; // mapping(address => uint256)
-    uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit @ bit 184)
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 11; // mapping(uint32 => uint256) — the afking box's DAY-keyed word
-    uint256 private constant LOOTBOX_ETH_SLOT = 16; // mapping(uint48 => mapping(address => uint256))
-    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 23; // first-deposit signal
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38; // [0:47] lootboxRngIndex
-    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 39; // mapping(uint48 => uint256)
-    uint256 private constant LOOTBOX_DAY_SLOT = 40; // mapping(uint48 => mapping(address => uint32))
-    uint256 private constant LOOTBOX_PURCHASE_PACKED_SLOT = 40; // mapping(uint48 => mapping(address => uint256))
-    uint256 private constant EV_BENEFIT_USED_SLOT = 47; // mapping(address => mapping(uint24 => uint256)) — the TST-03 budget
-    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 67; // address[] _subscribers
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // mapping(address => uint256) _subscriberIndex
+    uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7; // balancesPacked root; low 128 bits = claimable
+    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit @ bit 184)
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word
+    uint256 private constant LOOTBOX_ETH_SLOT = 15; // the single folded box word (amount[0:128] = box-owed signal)
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35; // [0:47] lootboxRngIndex
+    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 36; // mapping(uint48 => uint256)
+    uint256 private constant EV_BENEFIT_USED_SLOT = 42; // mapping(address => mapping(uint24 => uint256)) — the TST-03 budget
+    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 60; // address[] _subscribers
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 61; // mapping(address => uint256) _subscriberIndex
 
     uint256 private constant GAME_OVER_SHIFT = 184;
 
@@ -636,7 +634,7 @@ contract V55RevertFreeEvCap is DeployProtocol {
         // (the open reads the FROZEN adj — no second draw; the draw was buy-time).
         _forceLootboxWord(index, uint256(keccak256("human-shared-word")));
         vm.prank(buyer);
-        game.openLootBox(buyer, index);
+        game.openBox(buyer, index);
     }
 
     /// @dev Credit `who` claimableWinnings AND bump claimablePool in tandem (SOLVENCY-01 balanced; the

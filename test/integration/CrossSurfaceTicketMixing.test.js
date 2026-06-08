@@ -385,8 +385,8 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     // PRIMARY ASSERTION (D-278-TST-CROSS-DEPTH-01): a live-state raw
     // `provider.getStorage` read of the genuinely-shared
     // `ticketsOwedPacked[wk][buyer]` slot, driven through the REAL
-    // `openLootBox` entry point full-stack (purchase -> requestLootboxRng ->
-    // VRF fulfill -> openLootBox). The whole-ticket lootbox path routes through
+    // `openBox` entry point full-stack (purchase -> requestLootboxRng ->
+    // VRF fulfill -> openBox). The whole-ticket lootbox path routes through
     // `_queueTickets`, which carries the `rem` byte of the packed slot
     // UNTOUCHED — so `rem` must stay 0 across every whole-ticket open. Only
     // `_queueTicketsScaled` (the mint-boost path) ever writes a non-zero `rem`.
@@ -396,7 +396,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     // surfaces (manual lootbox, auto-resolve lootbox, jackpot ticket-roll) plus
     // a mint-boost open to be driven full-stack through their real entry
     // points. The current test harness can deterministically drive ONLY the
-    // manual `openLootBox` entry point end-to-end (v47: the `openBurnieLootBox`
+    // manual `openBox` entry point end-to-end (v47: the `openBurnieLootBox`
     // BURNIE-lootbox entry point was removed — terminal-paradox closure):
     //   - `resolveLootboxDirect` has NO public DegenerusGame entry point — it is
     //     a cross-module delegatecall target only (documented in
@@ -415,7 +415,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     //     by the harness.
     // Per that precedent body, this block uses:
     //   [CROSS-01a/b] the live-state `provider.getStorage` read driven through
-    //     the REAL `openLootBox` entry point full-stack — the PRIMARY assertion
+    //     the REAL `openBox` entry point full-stack — the PRIMARY assertion
     //     for the surfaces the harness CAN reach (manual lootbox path), with a
     //     soft-skip if the simulator denies lootbox-RNG reachability (matching
     //     the LootboxOpenGas.test.js `reachOpenableLootbox` soft-skip precedent).
@@ -552,7 +552,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       ).to.equal(0n);
     });
 
-    it("[CROSS-01b] live-state: driving the REAL `openLootBox` entry point full-stack leaves the shared `ticketsOwedPacked` `rem` byte at 0 (whole-ticket path never writes rem)", async function () {
+    it("[CROSS-01b] live-state: driving the REAL `openBox` entry point full-stack leaves the shared `ticketsOwedPacked` `rem` byte at 0 (whole-ticket path never writes rem)", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, alice } = fixture;
       const gameAddress = await game.getAddress();
@@ -600,8 +600,8 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         ).to.equal(0);
       }
 
-      // Drive the REAL openLootBox entry point full-stack.
-      await game.connect(alice).openLootBox(alice.address, index);
+      // Drive the REAL openBox entry point full-stack.
+      await game.connect(alice).openBox(alice.address, index);
 
       // Re-snapshot every watched level: the whole-ticket `_queueTickets` path
       // carries the rem byte untouched, so rem must STILL be 0 everywhere —
@@ -628,7 +628,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       // valid run — the rem-byte invariant above is the load-bearing assertion.
       if (!sawWholeTicketAward) {
         console.warn(
-          "[TST-CROSS-01b] note — openLootBox did not queue whole tickets in the " +
+          "[TST-CROSS-01b] note — openBox did not queue whole tickets in the " +
             "watched level range (non-ticket lootbox reward roll); the rem == 0 " +
             "invariant still held across all watched levels"
         );

@@ -15,12 +15,12 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         No contract changes needed.
 contract RngIndexDrainBindingTest is DeployProtocol {
     /// @dev Storage slot for `lootboxRngWordByIndex` mapping. Authoritative at the
-    ///      frozen subject c4d48008 via `forge inspect DegenerusGame storageLayout`
-    ///      (lootboxRngWordByIndex = slot 37).
-    uint256 internal constant SLOT_LOOTBOX_MAPPING = 37;
+    ///      working tree via `solc --storage-layout` (post V62 lootbox repack:
+    ///      lootboxRngWordByIndex = slot 36, was 37).
+    uint256 internal constant SLOT_LOOTBOX_MAPPING = 36;
     /// @dev Storage slot for `lootboxRngPacked` (LR_INDEX at low 48 bits).
-    ///      Authoritative slot 36 via `forge inspect DegenerusGame storageLayout`.
-    uint256 internal constant SLOT_LR_INDEX = 36;
+    ///      Authoritative slot 35 (post V62 lootbox repack: was 36).
+    uint256 internal constant SLOT_LR_INDEX = 35;
 
     /// @dev Keccak topic-0 for the frozen slimmed TraitsGenerated(address,uint256,uint32)
     ///      (DegenerusGameStorage:501). The pre-slim 6-arg form

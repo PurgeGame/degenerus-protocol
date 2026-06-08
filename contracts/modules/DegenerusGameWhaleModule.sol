@@ -371,7 +371,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Lootbox: 10% of price
         uint256 lootboxAmount = (totalPrice * WHALE_LOOTBOX_BPS) / 10_000;
-        _recordLootboxEntry(buyer, lootboxAmount, passLevel, data);
+        _recordLootboxEntry(buyer, lootboxAmount, data);
     }
 
     /**
@@ -527,7 +527,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _recordLootboxEntry(
             buyer,
             lootboxAmount,
-            currentLevel + 1,
             mintPacked_[buyer]
         );
     }
@@ -681,7 +680,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _recordLootboxEntry(
             buyer,
             lootboxAmount,
-            passLevel,
             mintPacked_[buyer]
         );
 
@@ -853,7 +851,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     function _recordLootboxEntry(
         address buyer,
         uint256 lootboxAmount,
-        uint24 purchaseLevel,
         uint256 cachedPacked
     ) private {
         uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
@@ -861,17 +858,18 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _recordLootboxMintDay(buyer, cachedPacked);
 
         uint256 packed = lootboxEth[index][buyer];
-        uint256 existingAmount = packed & ((1 << 232) - 1);
+        uint256 existingAmount = packed & LB_AMOUNT_MASK;
 
+        uint16 scorePlus1;
+        uint64 adj;
         if (existingAmount == 0) {
             // Purchase-time EV-cap tally (first deposit). The score is snapshotted
             // inline (DIV-2) and the multiplier frozen from it; the cap key is
-            // level + 1 (== the resolver's currentLevel = level + 1), distinct from the
-            // level + 2 baseLevel sentinel packed into the word (DIV-1). A bonus box
+            // level + 1 (== the resolver's currentLevel = level + 1). A bonus box
             // (mult > NEUTRAL) draws add = min(deposit, CAP - used) from the shared
             // per-(player, level) accumulator; sub-neutral/neutral boxes draw zero cap.
             uint256 score = IDegenerusGame(address(this)).playerActivityScore(buyer);
-            uint64 adj;
+            scorePlus1 = uint16(score + 1);
             uint256 mult = _lootboxEvMultiplierFromScore(score);
             if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
                 uint256 used = lootboxEvBenefitUsedByLevel[buyer][level + 1];
@@ -882,66 +880,50 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 lootboxEvBenefitUsedByLevel[buyer][level + 1] = used + add;
                 adj = uint64(add);
             }
-            lootboxPurchasePacked[index][buyer] = _packLootboxPurchase(
-                uint16(score + 1),
-                adj,
-                uint24(level + 2)
-            );
             // First deposit for this (index, buyer): enqueue for the permissionless
             // box auto-open cursor, exactly like the human-mint and afking-cover box
             // paths. Without it a pass-bundled lootbox never auto-opens, letting the
-            // sole opener (manual openLootBox is operator-gated) hold the box and time
+            // sole opener (manual openBox is operator-gated) hold the box and time
             // the open against the known per-index word. The consumer gates each index
             // on lootboxRngWordByIndex != 0, so this is producer-only.
             IDegenerusGame(address(this)).enqueueBoxForAutoOpen(index, buyer);
+        } else {
+            // Subsequent deposit: the frozen score+1 and accumulated adj come from the box's
+            // prior packed word; the multiplier stays FROZEN from the first-deposit snapshot.
+            (, uint64 priorAdj, uint16 priorScorePlus1, ) = _unpackLootbox(packed);
+            scorePlus1 = priorScorePlus1;
+            adj = priorAdj;
+            if (lootboxAmount != 0) {
+                uint256 mult = _lootboxEvMultiplierFromScore(uint256(priorScorePlus1 - 1));
+                if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
+                    uint256 used = lootboxEvBenefitUsedByLevel[buyer][level + 1];
+                    uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
+                        ? 0
+                        : LOOTBOX_EV_BENEFIT_CAP - used;
+                    uint256 add = lootboxAmount < remaining ? lootboxAmount : remaining;
+                    if (add != 0) {
+                        lootboxEvBenefitUsedByLevel[buyer][level + 1] = used + add;
+                        adj = priorAdj + uint64(add);
+                    }
+                }
+            }
         }
         // Subsequent deposits accumulate onto the existing box — no day-coherence gate and no stored
         // day (the box binds to lootboxRngWordByIndex[index] and rolls from the LIVE open level, so
         // cross-day deposits at an un-advanced index are harmless).
 
         uint256 boostedAmount = _applyLootboxBoostOnPurchase(buyer, lootboxAmount);
-        uint256 existingBase = lootboxEthBase[index][buyer];
-        if (existingAmount != 0 && existingBase == 0) {
-            existingBase = existingAmount;
-        }
-        lootboxEthBase[index][buyer] = existingBase + lootboxAmount;
-
         uint256 newAmount = existingAmount + boostedAmount;
-        lootboxEth[index][buyer] = (uint256(purchaseLevel) << 232) | newAmount;
         _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, _lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK) + _packEthToMilliEth(lootboxAmount));
 
-        // Purchase-time EV-cap tally (subsequent deposit). The multiplier is FROZEN
-        // from the first-deposit score snapshot read back from the packed word; the cap
-        // key is level + 1 (== the resolver's currentLevel). A bonus box accumulates
-        // adjustedPortion via RMW; score+1 and baseLevel+1 are preserved.
-        if (existingAmount != 0 && lootboxAmount != 0) {
-            (
-                uint16 scorePlus1,
-                uint64 adj,
-                uint24 baseLevelPlus1
-            ) = _unpackLootboxPurchase(lootboxPurchasePacked[index][buyer]);
-            uint256 mult = _lootboxEvMultiplierFromScore(uint256(scorePlus1 - 1));
-            if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
-                uint256 used = lootboxEvBenefitUsedByLevel[buyer][level + 1];
-                uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
-                    ? 0
-                    : LOOTBOX_EV_BENEFIT_CAP - used;
-                uint256 add = lootboxAmount < remaining ? lootboxAmount : remaining;
-                if (add != 0) {
-                    lootboxEvBenefitUsedByLevel[buyer][level + 1] = used + add;
-                    lootboxPurchasePacked[index][buyer] = _packLootboxPurchase(
-                        scorePlus1,
-                        adj + uint64(add),
-                        baseLevelPlus1
-                    );
-                }
-            }
+        // Track distress-mode portion (0.01-ETH granularity) for the proportional ticket bonus
+        // at open time; it rides in the same packed slot, accumulated per-deposit.
+        uint256 distressUnits = (packed >> LB_DISTRESS_SHIFT) & LB_DISTRESS_MASK;
+        if (_isDistressMode()) {
+            distressUnits += boostedAmount / LB_DISTRESS_SCALE;
         }
 
-        // Track distress-mode portion for proportional ticket bonus at open time
-        if (_isDistressMode()) {
-            lootboxDistressEth[index][buyer] += boostedAmount;
-        }
+        lootboxEth[index][buyer] = _packLootbox(newAmount, adj, scorePlus1, distressUnits);
 
         // One box-buy event across paths (same topic as the mint module's LootBoxBuy), on every
         // deposit. presale=false — a pass-bundled box is never a presale box.

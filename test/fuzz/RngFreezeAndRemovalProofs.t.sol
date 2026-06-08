@@ -60,19 +60,25 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      Test-only: NO contracts/*.sol is mutated.
 contract RngFreezeAndRemovalProofs is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Storage slot constants (DegenerusGame; confirmed via `forge inspect DegenerusGame storageLayout`).
+    // Storage slot constants (DegenerusGame; RE-DERIVED via `solc --storage-layout` on the working
+    // tree after the V62 lootbox repack — the folded lootboxEth word + removed
+    // lootboxEthBase/Burnie/Purchase/Distress shifted later slots down. The prior 43/44 degenerette
+    // pins were ALSO stale pre-repack; corrected to the authoritative 40/41 here.)
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 36; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
+    /// @dev lootboxRngPacked at slot 35; lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
     /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 43;
+    uint256 private constant DEGENERETTE_BETS_SLOT = 40;
     /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 44;
-    /// @dev lootboxEthBase mapping root slot (uint48 index => address => packed).
-    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 22;
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 41;
+    /// @dev lootboxEth (the single folded box word) mapping root slot. The amount sub-field (low
+    ///      128 bits) is the box-owed signal (set on first deposit, zeroed on open) — it replaced
+    ///      the removed lootboxEthBase mapping the old pin read.
+    uint256 private constant LOOTBOX_ETH_SLOT = 15;
+    uint256 private constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
 
     // -------------------------------------------------------------------------
     // Crank reward peg mirror (the contract's own FIXED constants, REW-03)
@@ -145,9 +151,12 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
 
     /// @notice SAFE-04 (boxes): a crank-driven box open BEFORE the word lands is skipped at the
-    ///         autoOpen cursor orphan gate (`lootboxRngWordByIndex[index] == 0 -> return`,
-    ///         DegenerusGame:1603) AND the LootboxModule:485 openLootBox RngNotReady guard — no
-    ///         pre-word open. After the word lands the SAME crank opens the box (signal cleared).
+    ///         autoOpen cursor orphan gate (`lootboxRngWordByIndex[idx] == 0 -> break`,
+    ///         DegenerusGameLootboxModule.openHumanBoxes) AND the LootboxModule openLootBox
+    ///         RngNotReady guard — no pre-word open. After the word lands the SAME crank opens the
+    ///         box (signal cleared). The box is queued at the round's index, then the index is
+    ///         advanced by one so it sits at LR_INDEX-1 — the finalized index the relocated
+    ///         multi-index sweep reads (the sweep opens boxCursorIndex .. LR_INDEX-1).
     function testCrankBoxOpenStaysPostUnlock() public {
         address boxOwner = makeAddr("box_owner");
         uint48 idx = _activeLootboxIndex();
@@ -158,7 +167,13 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             "box enqueued (first-deposit signal set)"
         );
 
-        // PRE-WORD: word at idx is 0 -> autoOpen returns at the cursor orphan gate. No open.
+        // Finalize the box's index: advance LR_INDEX so the box at idx becomes LR_INDEX-1 (the
+        // index the sweep opens), and park the open frontier there (lower indices drained).
+        _advanceLootboxRngIndexByOne();
+        assertEq(_activeLootboxIndex(), idx + 1, "LR_INDEX advanced; box index idx is now finalized");
+        _parkBoxFrontier(idx);
+
+        // PRE-WORD: word at idx is 0 -> the sweep orphan-breaks at idx + openLootBox RngNotReady. No open.
         assertEq(
             _injectedWord(idx),
             0,
@@ -169,10 +184,10 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         assertGt(
             _lootboxEthBase(idx, boxOwner),
             0,
-            "pre-word: box NOT opened (cursor orphan gate + openLootBox RngNotReady)"
+            "pre-word: box NOT opened (sweep orphan-break + openLootBox RngNotReady)"
         );
 
-        // POST-WORD: land the word -> the SAME crank opens the box (signal cleared on open).
+        // POST-WORD: land the word at the finalized index -> the SAME crank opens the box.
         _injectLootboxRngWord(idx, FIXED_WORD);
         vm.prank(cranker);
         game.openBoxes(100);
@@ -879,6 +894,36 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         vm.store(address(game), slot, bytes32(rngWord));
     }
 
+    /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 35) by one,
+    ///      mirroring requestLootboxRng's pre-increment, so a box queued at the prior index now sits
+    ///      at LR_INDEX-1 — the just-finalized index the relocated multi-index sweep opens.
+    function _advanceLootboxRngIndexByOne() internal {
+        uint256 packed = uint256(
+            vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))
+        );
+        uint48 idx = uint48(packed & 0xFFFFFFFFFFFF);
+        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | uint256(idx + 1);
+        vm.store(
+            address(game),
+            bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)),
+            bytes32(packed)
+        );
+    }
+
+    /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 62)
+    ///      at `index` with a zero in-index cursor, so the relocated sweep begins exactly at this
+    ///      finalized index (the realistic state where lower indices are drained). Without this the
+    ///      sweep would orphan-break at the first un-worded lower index.
+    function _parkBoxFrontier(uint48 index) internal {
+        bytes32 slot = bytes32(uint256(62));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        uint256 cursorMask = (uint256(1) << 48) - 1;
+        packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0
+        packed &= ~(cursorMask << (13 * 8));  // clear boxCursorIndex field
+        packed |= (uint256(index) & cursorMask) << (13 * 8);
+        vm.store(address(game), slot, bytes32(packed));
+    }
+
     function _injectedWord(uint48 index) internal view returns (uint256) {
         bytes32 slot = keccak256(
             abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT))
@@ -891,10 +936,10 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         address who
     ) internal view returns (uint256) {
         bytes32 inner = keccak256(
-            abi.encode(uint256(index), uint256(LOOTBOX_ETH_BASE_SLOT))
+            abi.encode(uint256(index), uint256(LOOTBOX_ETH_SLOT))
         );
         bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        return uint256(vm.load(address(game), leaf));
+        return uint256(vm.load(address(game), leaf)) & LB_AMOUNT_MASK;
     }
 
     function _readBetPacked(

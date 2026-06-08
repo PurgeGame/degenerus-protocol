@@ -285,11 +285,11 @@ interface IDegenerusGame {
     /// @return active True if presale is active.
     function lootboxPresaleActiveFlag() external view returns (bool active);
 
-    /// @notice Open a lootbox for a specific lootbox index and claim rewards.
-    /// @dev Claims ETH, DGNRS, WWXRP, and potential boons/boosts.
+    /// @notice Open every box queued at an RNG index — the ETH-lootbox leg, the coin-presale-box
+    ///         leg, or both. Claims ETH, DGNRS, WWXRP, and potential boons/boosts.
     /// @param player The player address to open for (address(0) = msg.sender).
-    /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
-    function openLootBox(address player, uint48 lootboxIndex) external;
+    /// @param index The RNG index the box(es) queued at.
+    function openBox(address player, uint48 index) external;
 
     /// @notice Buy a credit-gated coin-presale box (ETH + claimable shortfall).
     /// @param buyer Player to receive the box (address(0) = msg.sender).
@@ -312,16 +312,6 @@ interface IDegenerusGame {
         uint256 boxAmount
     ) external payable;
 
-    /// @notice Open a coin-presale box once RNG for its index is available.
-    /// @param player Player that owns the box (address(0) = msg.sender).
-    /// @param index The RNG index the box queued at.
-    function openPresaleBox(address player, uint48 index) external;
-
-    /// @notice Open a co-queued lootbox + presale box in one tx.
-    /// @param player Player that owns the index (address(0) = msg.sender).
-    /// @param index The shared RNG index.
-    function openLootboxAndPresaleBox(address player, uint48 index) external;
-
     /// @notice Spendable coin-presale-box credit accrued by a player.
     /// @param player Player to query.
     /// @return credit Remaining credit (consumed 1:1 when buying a box).
@@ -333,7 +323,7 @@ interface IDegenerusGame {
 
     /// @notice Enqueue a player's first box deposit at an index for the box auto-open.
     /// @dev Self-call only (invoked from the mint module first-deposit path). The
-    ///      first-deposit signal is lootboxEthBase == 0; one enqueue per (index, player).
+    ///      first-deposit signal is lootboxEth amount == 0; one enqueue per (index, player).
     /// @param index Lootbox RNG index the deposit was assigned to.
     /// @param player Depositing player.
     function enqueueBoxForAutoOpen(uint48 index, address player) external;

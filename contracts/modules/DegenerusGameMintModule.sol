@@ -1229,6 +1229,14 @@ contract DegenerusGameMintModule is
         // --- Lootbox setup (pool splits, RNG request, presale/distress tracking) ---
         uint48 lbIndex;
         bool lbFirstDeposit;
+        // The box's amount + distress fraction are computed here (score-independent); the EV
+        // inputs (adj, score+1) are computed in the score block below, then all four pack into
+        // the single lootboxEth slot in ONE SSTORE. The prior frozen score+1 / adj (for a
+        // subsequent deposit) are snapshotted here from the pre-deposit packed word.
+        uint256 lbNewAmount;
+        uint256 lbDistressUnits;
+        uint64 lbPriorAdj;
+        uint16 lbPriorScorePlus1;
         if (lootBoxAmount != 0) {
             // Manual lootbox buyers stamp the mint day too (bounty eligibility); a no-op when
             // the ticket leg already stamped it today, closing the plain-vs-bundled gap.
@@ -1237,12 +1245,11 @@ contract DegenerusGameMintModule is
             bool presale = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0;
 
             uint256 packed = lootboxEth[lbIndex][buyer];
-            uint256 existingAmount = packed & ((1 << 232) - 1);
+            uint256 existingAmount = packed & LB_AMOUNT_MASK;
+            (, lbPriorAdj, lbPriorScorePlus1, ) = _unpackLootbox(packed);
 
             if (existingAmount == 0) {
                 lbFirstDeposit = true;
-                // score+1 and baseLevel+1 (cachedLevel + 1, DIV-1) are packed into
-                // lootboxPurchasePacked after score computation below.
                 // First deposit for this (index, buyer): enqueue the box index for
                 // the permissionless box auto-open cursor. The consumer-side
                 // walk gates each index on lootboxRngWordByIndex != 0 (VRF
@@ -1256,16 +1263,7 @@ contract DegenerusGameMintModule is
             // pre-first-advance genesis window) are harmless.
 
             uint256 boostedAmount = _applyLootboxBoostOnPurchase(buyer, lootBoxAmount);
-            uint256 existingBase = lootboxEthBase[lbIndex][buyer];
-            if (existingAmount != 0 && existingBase == 0) {
-                existingBase = existingAmount;
-            }
-            lootboxEthBase[lbIndex][buyer] = existingBase + lootBoxAmount;
-
-            uint256 newAmount = existingAmount + boostedAmount;
-            lootboxEth[lbIndex][buyer] =
-                (uint256(cachedLevel + 1) << 232) |
-                newAmount;
+            lbNewAmount = existingAmount + boostedAmount;
             _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, _lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK) + _packEthToMilliEth(lootBoxAmount));
 
             if (presale) {
@@ -1280,8 +1278,12 @@ contract DegenerusGameMintModule is
             }
 
             bool distress = _isDistressMode();
+            // Distress fraction rides in the packed slot at 0.01-ETH granularity. Accumulate
+            // the per-deposit units (sub-0.01-ETH residue on the bonus basis is accepted); the
+            // existing units come from the box's prior packed word.
+            lbDistressUnits = (packed >> LB_DISTRESS_SHIFT) & LB_DISTRESS_MASK;
             if (distress) {
-                lootboxDistressEth[lbIndex][buyer] += boostedAmount;
+                lbDistressUnits += boostedAmount / LB_DISTRESS_SCALE;
             }
             // Rake-free: ALL lootbox ETH (presale and after) routes 100% to the
             // prize pools. Distress routes 100% next; otherwise 90% future / 10% next.
@@ -1399,10 +1401,13 @@ contract DegenerusGameMintModule is
             // first-deposit score snapshot; the cap key is cachedLevel + 1 (the lootbox
             // open level == the resolver's currentLevel = level + 1). Bonus boxes
             // (mult > NEUTRAL) draw add = min(deposit, CAP - used) from the shared
-            // per-(player, level) accumulator and accumulate adjustedPortion into the
-            // packed word; sub-neutral/neutral boxes draw zero cap.
+            // per-(player, level) accumulator and accumulate adjustedPortion; sub-neutral/
+            // neutral boxes draw zero cap. amount + adj + score+1 + distressUnits then land
+            // in the single lootboxEth slot in one SSTORE.
+            uint16 lbScorePlus1;
+            uint64 lbAdj;
             if (lbFirstDeposit) {
-                uint64 adj;
+                lbScorePlus1 = uint16(cachedScore + 1);
                 uint256 mult = _lootboxEvMultiplierFromScore(cachedScore);
                 if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
                     uint256 used = lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1];
@@ -1411,38 +1416,33 @@ contract DegenerusGameMintModule is
                         : LOOTBOX_EV_BENEFIT_CAP - used;
                     uint256 add = lootBoxAmount < remaining ? lootBoxAmount : remaining;
                     lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1] = used + add;
-                    adj = uint64(add);
+                    lbAdj = uint64(add);
                 }
-                lootboxPurchasePacked[lbIndex][buyer] = _packLootboxPurchase(
-                    uint16(cachedScore + 1),
-                    adj,
-                    uint24(cachedLevel + 1)
-                );
-            } else if (lootBoxAmount != 0) {
-                (
-                    uint16 scorePlus1,
-                    uint64 adj,
-                    uint24 baseLevelPlus1
-                ) = _unpackLootboxPurchase(lootboxPurchasePacked[lbIndex][buyer]);
-                uint256 mult = _lootboxEvMultiplierFromScore(
-                    uint256(scorePlus1 - 1)
-                );
-                if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
-                    uint256 used = lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1];
-                    uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
-                        ? 0
-                        : LOOTBOX_EV_BENEFIT_CAP - used;
-                    uint256 add = lootBoxAmount < remaining ? lootBoxAmount : remaining;
-                    if (add != 0) {
-                        lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1] = used + add;
-                        lootboxPurchasePacked[lbIndex][buyer] = _packLootboxPurchase(
-                            scorePlus1,
-                            adj + uint64(add),
-                            baseLevelPlus1
-                        );
+            } else {
+                // Subsequent deposit: the frozen score+1 and accumulated adj come from the
+                // box's PRIOR packed word (snapshotted above), the multiplier stays frozen
+                // from the first-deposit snapshot.
+                lbScorePlus1 = lbPriorScorePlus1;
+                lbAdj = lbPriorAdj;
+                if (lootBoxAmount != 0) {
+                    uint256 mult = _lootboxEvMultiplierFromScore(
+                        uint256(lbPriorScorePlus1 - 1)
+                    );
+                    if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
+                        uint256 used = lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1];
+                        uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
+                            ? 0
+                            : LOOTBOX_EV_BENEFIT_CAP - used;
+                        uint256 add = lootBoxAmount < remaining ? lootBoxAmount : remaining;
+                        if (add != 0) {
+                            lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1] = used + add;
+                            lbAdj = lbPriorAdj + uint64(add);
+                        }
                     }
                 }
             }
+            lootboxEth[lbIndex][buyer] =
+                _packLootbox(lbNewAmount, lbAdj, lbScorePlus1, lbDistressUnits);
         }
 
         // Coin-presale-box credit accrual: while the box presale is open, every ETH
@@ -1606,6 +1606,10 @@ contract DegenerusGameMintModule is
             // Latch the terminal in the crossing buy (stops further credit accrual
             // and box buys). The swept pool remainder is paid at this box's open.
             presaleOver = true;
+            // This crossing buy sits at the highest index any presale box can occupy. The sweep
+            // flips presaleDrained once it advances past this index (all presale boxes opened),
+            // after which the open paths skip the cold presaleBoxEth SLOAD.
+            presaleCloseIndex = index;
         }
 
         emit PresaleBoxBuy(buyer, index, applied, closing);

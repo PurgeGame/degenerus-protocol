@@ -233,7 +233,7 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       // Same seed as the silent cold-bust test above (slice=99). The Bernoulli
       // math is shared by every path per D-275-HOIST-01 — so every caller sees
       // whole=0. The DIFFERENCE is the `payColdBustConsolation` gate downstream:
-      //   - Manual caller `openLootBox` (payColdBustConsolation = true): the
+      //   - Manual caller `openBox` (payColdBustConsolation = true): the
       //     `if (payColdBustConsolation && whole == 0)` gate opens — pays
       //     LOOTBOX_WWXRP_CONSOLATION via wwxrp.mintPrize (observable via the WWXRP
       //     ERC-20 `Transfer` event). (v47: the BURNIE-lootbox manual caller

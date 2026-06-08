@@ -41,12 +41,13 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      WRONG). Test-only: no contracts/*.sol mutated.
 contract V55SetMutationOpenE is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
+    // Game-resident storage slots (RE-DERIVED via `solc --storage-layout`, working tree, post V62
+    // lootbox repack — the prior 65/67/68/10 pins were stale; corrected to authoritative values).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 65; // _subOf mapping root
-    uint256 private constant SUBSCRIBERS_SLOT = 67; // _subscribers address[] (length here; data at keccak(68))
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 68; // _subscriberIndex mapping root (1-indexed)
-    uint256 private constant MINTPACKED_SLOT = 10; // mintPacked_ mapping root (deity bit)
+    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root
+    uint256 private constant SUBSCRIBERS_SLOT = 60; // _subscribers address[] (length here; data at keccak(60))
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 61; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
 
     // Sub packed-field byte offsets — the v56 compute-on-read re-pack (single 256-bit slot).
     // OFF_DAILY/OFF_VALIDTHROUGH did not move; scorePlus1/amount/day-markers shifted down.

@@ -326,20 +326,16 @@ interface IDegenerusGameMintModule {
 /// @title IDegenerusGameLootboxModule
 /// @notice Interface for opening lootboxes and managing boons
 interface IDegenerusGameLootboxModule {
-    /// @notice Opens a standard lootbox for a player
-    /// @param player Address of the lootbox owner
-    /// @param lootboxIndex Index of the lootbox to open
-    function openLootBox(address player, uint48 lootboxIndex) external;
-
-    /// @notice Opens a coin-presale box for a player
+    /// @notice Opens every box queued at an RNG index for a player — lootbox, presale, or both
     /// @param player Address of the box owner
-    /// @param index RNG index the box queued at
-    function openPresaleBox(address player, uint48 index) external;
+    /// @param index Shared RNG index the box(es) queued at
+    function openBox(address player, uint48 index) external;
 
-    /// @notice Opens a co-queued lootbox + presale box in one tx
-    /// @param player Address of the index owner
-    /// @param index Shared RNG index
-    function openLootboxAndPresaleBox(address player, uint48 index) external;
+    /// @notice Permissionless multi-index human-box auto-open sweep (the human leg of
+    ///         openBoxes). Runs in the Game's storage via delegatecall.
+    /// @param budget Maximum entries (opens + skips + index-headers) scanned this call
+    /// @return opened Total human boxes opened this call
+    function openHumanBoxes(uint256 budget) external returns (uint256 opened);
 
     /// @notice Resolves a lootbox directly with provided randomness
     /// @param player Address of the lootbox owner

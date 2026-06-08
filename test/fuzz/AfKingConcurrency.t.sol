@@ -51,10 +51,10 @@ contract AfKingConcurrency is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (via `forge inspect DegenerusGame storageLayout`).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 62; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 64; // _subscribers address[] (length here; data at keccak(64))
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 65; // _subscriberIndex mapping root (1-indexed)
-    uint256 private constant SUBCURSOR_SLOT = 66; // _subCursor uint16 at offset 0 (the STAGE walk cursor)
+    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root (address => Sub, one packed slot) (post V62 repack: was 62)
+    uint256 private constant SUBSCRIBERS_SLOT = 60; // _subscribers address[] (length here; data at keccak(60)) (post V62 repack: was 64)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 61; // _subscriberIndex mapping root (1-indexed) (post V62 repack: was 65)
+    uint256 private constant SUBCURSOR_SLOT = 62; // _subCursor uint16 at offset 0 (the STAGE walk cursor) (post V62 repack: was 66)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit lives here)
 
     // Sub packed-field byte offsets (cumulative little-endian within the single packed slot —

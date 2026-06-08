@@ -67,10 +67,12 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // Game-resident storage slots (forge inspect DegenerusGame storageLayout, v61)
     // -------------------------------------------------------------------------
 
+    // RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack — the
+    // folded lootboxEth word + removed lootboxEthBase/Burnie/Purchase/Distress shifted later slots down.
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = 62;           // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 64;     // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBCURSOR_SLOT = 66;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4)
+    uint256 private constant SUBOF_SLOT = 58;           // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 60;     // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBCURSOR_SLOT = 62;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4) + boxCursor (uint48 @ byte 7) + boxCursorIndex (uint48 @ byte 13)
 
     // Sub packed-field byte offsets — RE-DERIVED via `forge inspect DegenerusGame storageLayout` after the
     // v56 compute-on-read re-pack: `amount` narrowed uint32→uint24 (so everything after it shifts down one
@@ -786,9 +788,15 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // Pre: every box pending.
         for (uint256 i; i < n; ++i) require(_lastOpenedDayOf(subs[i]) < stampDay, "fixture: each afking box pending");
 
-        // Drain in tiny bounded chunks; each chunk must stay < the cap; the cursor must advance.
+        // Drain in tiny bounded chunks until BOTH legs are empty (openBoxes returns 0). Each lootbox-mode
+        // sub carries two pending boxes after the STAGE: the afking-cover box (drained by the afking leg,
+        // drainAfkingBoxes) AND a human lootbox box at the next index (drained by the relocated multi-index
+        // human sweep, openHumanBoxes). openBoxes routes the per-call budget to the afking leg first, then
+        // the human sweep — so a full drain takes more chunks than just the afking count. Loop until a chunk
+        // opens nothing (the genuine fully-drained state the re-open no-op assertion below requires); each
+        // chunk must stay under the per-tx ceiling and the cursors must advance.
         uint256 totalOpened;
-        for (uint256 c; c < 40 && totalOpened < n; ++c) {
+        for (uint256 c; c < 80; ++c) {
             vm.prank(makeAddr(string(abi.encodePacked("vd_op_", _u(c)))));
             uint256 gb = gasleft();
             uint256 op = game.openBoxes(2);
@@ -1346,23 +1354,23 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.store(address(game), bytes32(uint256(HEADER_SLOT)), bytes32(cur));
     }
 
-    /// @dev Read the STAGE cursor `_subCursor` (slot 66, byte 0, uint16) — advances by SUB_STAGE_BATCH on a
+    /// @dev Read the STAGE cursor `_subCursor` (slot 62, byte 0, uint16) — advances by SUB_STAGE_BATCH on a
     ///      full chunk.
     function _subCursor() internal view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) & 0xFFFF;
     }
 
-    /// @dev Read the afking-open cursor `_subOpenCursor` (slot 66, byte 2, uint16) — the afking-side open
-    ///      walk (drainAfkingBoxes -> _autoOpen). Distinct from the human boxCursor (byte 8) — LIVE-01
+    /// @dev Read the afking-open cursor `_subOpenCursor` (slot 62, byte 2, uint16) — the afking-side open
+    ///      walk (drainAfkingBoxes -> _autoOpen). Distinct from the human boxCursor (byte 7) — LIVE-01
     ///      cursor independence.
     function _subOpenCursor() internal view returns (uint256) {
         return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 16) & 0xFFFF;
     }
 
-    /// @dev Read the human-box cursor `boxCursor` (slot 66, byte 8, uint48) — the human open walk
-    ///      (_openHumanBoxes over boxPlayers[index]). Distinct from _subOpenCursor (byte 2).
+    /// @dev Read the human-box cursor `boxCursor` (slot 62, byte 7, uint48) — the human open walk
+    ///      (openHumanBoxes over boxPlayers[index]). Distinct from _subOpenCursor (byte 2).
     function _boxCursor() internal view returns (uint256) {
-        return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 64) & 0xFFFFFFFFFFFF;
+        return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 56) & 0xFFFFFFFFFFFF;
     }
 
     /// @dev Read the DAY-keyed afking word `rngWordByDay[day]` (the open leg's seed + readiness gate).

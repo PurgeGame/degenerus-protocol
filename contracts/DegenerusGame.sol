@@ -756,33 +756,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Open a coin-presale box once RNG for its index is available.
-    /// @param player Player that owns the box (address(0) = msg.sender).
-    /// @param index The RNG index the box queued at.
-    function openPresaleBox(address player, uint48 index) external {
+    /// @notice Open every box queued at an RNG index — the ETH-lootbox leg, the coin-presale-box
+    ///         leg, or both (each robust to being empty). Permissionless: anyone may open another
+    ///         player's ready boxes (the economically-incentivized auto-open bounty path).
+    /// @param player Player that owns the box(es) (address(0) = msg.sender).
+    /// @param index The RNG index the box(es) queued at.
+    function openBox(address player, uint48 index) external {
         player = _resolvePlayer(player);
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameLootboxModule.openPresaleBox.selector,
-                    player,
-                    index
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Open a co-queued lootbox + presale box in one tx (two domain-separated draws).
-    /// @param player Player that owns the index (address(0) = msg.sender).
-    /// @param index The shared RNG index.
-    function openLootboxAndPresaleBox(address player, uint48 index) external {
-        player = _resolvePlayer(player);
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_LOOTBOX_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameLootboxModule.openLootboxAndPresaleBox.selector,
+                    IDegenerusGameLootboxModule.openBox.selector,
                     player,
                     index
                 )
@@ -862,27 +847,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                     IDegenerusGameWhaleModule.purchaseDeityPass.selector,
                     buyer,
                     symbolId
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Open a loot box once RNG for its lootbox index is available.
-    /// @param player Player address that owns the loot box (address(0) = msg.sender).
-    /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
-    function openLootBox(address player, uint48 lootboxIndex) external {
-        player = _resolvePlayer(player);
-        _openLootBoxFor(player, lootboxIndex);
-    }
-
-    function _openLootBoxFor(address player, uint48 lootboxIndex) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_LOOTBOX_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameLootboxModule.openLootBox.selector,
-                    player,
-                    lootboxIndex
                 )
             );
         if (!ok) _revertDelegate(data);
@@ -1727,25 +1691,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      farm net-negative, so it is intentionally NOT pegged to the per-resolve marginal.
     uint256 private constant RESOLVE_FLAT_BURNIE = 1e18;
 
-    /// @dev Cursor into the box auto-open queue for the current lootbox RNG index.
-    ///      Concurrent same-tx callers self-partition via the advancing cursor.
-    ///      Reset to zero when the active index advances (collision-free walk).
-    uint48 internal boxCursor;
-
-    /// @dev Index against which the cursor currently walks (boxCursor day-reset key).
-    uint48 internal boxCursorIndex;
-
-    /// @dev Players with an open box queued per lootbox RNG index, enqueued once at
-    ///      first deposit (the lootboxEthBase == 0 signal). Keyed on the lootbox index,
-    ///      which re-couples to the VRF-rotation orphan-index keyspace — the box auto-open
-    ///      walk MUST gate each open on lootboxRngWordByIndex[index] != 0 so an index
-    ///      orphaned mid-day by an emergency coordinator rotation is skipped until the
-    ///      a303ae18 detect-preserve-re-issue path lands the re-issued word.
-    mapping(uint48 => address[]) internal boxPlayers;
-
     /// @notice Enqueue a player's first box deposit at an index for the box auto-open.
     /// @dev Self-call only (invoked from the mint module first-deposit path via
-    ///      IDegenerusGame(address(this))). The first-deposit signal is lootboxEthBase == 0;
+    ///      IDegenerusGame(address(this))). The first-deposit signal is lootboxEth amount == 0;
     ///      the open-time zeroing (LootboxModule) is the dequeue. One SSTORE per (index, player).
     /// @param index Lootbox RNG index the deposit was assigned to.
     /// @param player Depositing player.
@@ -1830,25 +1778,40 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return _bountyEligible(who);
     }
 
-    /// @notice O(1) discovery: are there openable boxes for the active lootbox index?
-    /// @dev rngLock-aware (RD-3): FALSE during rngLock so the open leg no-ops in the freeze;
-    ///      TRUE for a mid-day-resolved round whose VRF word landed and we are not locked.
-    ///      No unbounded scan (ROUTER-04).
+    /// @notice O(1) discovery hint: is there an openable box at the current open frontier?
+    /// @dev rngLock/liveness-aware: FALSE during the freeze (the open leg no-ops). Checks the
+    ///      frontier index (boxCursorIndex, clamped to the genesis index 1) against LR_INDEX-1
+    ///      where words land. O(1), no scan; a drained frontier with boxes at a higher finalized
+    ///      index self-heals as the next sweep advances the frontier.
     function boxesPending() external view returns (bool) {
-        if (rngLockedFlag) return false;
-        uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
-        if (lootboxRngWordByIndex[index] == 0) return false;
-        uint256 effectiveCursor = boxCursorIndex == index ? boxCursor : 0;
-        return boxPlayers[index].length > effectiveCursor;
+        if (rngLockedFlag || _livenessTriggered()) return false;
+        uint48 active = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+        if (active <= 1) return false;
+        uint48 finalized = active - 1; // words land at LR_INDEX-1 (the just-finalized index)
+        uint48 idx = boxCursorIndex == 0 ? 1 : boxCursorIndex; // the open frontier
+        if (idx > finalized) return false; // swept up to the un-finalized active index
+        if (lootboxRngWordByIndex[idx] == 0) return false; // frontier index not yet worded
+        uint256 effectiveCursor = boxCursorIndex == idx ? boxCursor : 0;
+        return boxPlayers[idx].length > effectiveCursor;
     }
 
-    /// @notice Permissionless liveness valve: open up to `maxCount` ready boxes total —
-    ///         AFKING boxes FIRST, then human boxes with whatever budget remains — so any
-    ///         backlog of either type can always be cleared in caller-sized chunks that stay
-    ///         under the 16.7M per-tx ceiling. Uncapped by design: the caller picks a
-    ///         maxCount their gas affords (each box is uniform O(1), so the tx cost is
-    ///         maxCount-bounded). Unrewarded — only mintBurnie() pays a bounty.
-    /// @param maxCount Max boxes to open this call across both queues (afking + human).
+    /// @notice True once the permissionless sweep has fully distributed every box at `index`
+    ///         (the monotonic open frontier boxCursorIndex has advanced past it). The active /
+    ///         finalizing index is not yet complete; indices below the frontier are drained.
+    /// @param index Lootbox RNG index to query.
+    function boxIndexComplete(uint48 index) external view returns (bool) {
+        return index < boxCursorIndex;
+    }
+
+    /// @notice Permissionless liveness valve: open ready boxes — AFKING boxes FIRST (up to maxCount),
+    ///         then the human-box multi-index sweep with the remaining budget — so any backlog of
+    ///         either type clears in caller-sized chunks that stay under the 16.7M per-tx ceiling.
+    ///         The caller picks a maxCount their gas affords. For the afking leg maxCount caps boxes
+    ///         opened; for the human sweep the remaining budget caps ENTRIES SCANNED (opens + skips),
+    ///         which keeps the tx gas-bounded even past a long already-opened / presale-only prefix and
+    ///         lets successive calls catch the open frontier up across many finalized indices.
+    ///         Unrewarded — only mintBurnie() pays a bounty.
+    /// @param maxCount Afking boxes opened + human-sweep entries scanned, both bounded by this.
     /// @return opened Total boxes opened (afking + human).
     function openBoxes(uint256 maxCount) external returns (uint256 opened) {
         if (maxCount == 0) return 0;
@@ -1864,60 +1827,22 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             );
         if (!ok) _revertDelegate(data);
         uint256 openedAfking = abi.decode(data, (uint256));
-        // Then human boxes with the remaining budget.
+        // Then human boxes with the remaining budget — the multi-index sweep lives in the
+        // lootbox module (delegatecall runs it in this Game's storage), mirroring the afking
+        // leg above. AUTO-03 walk + per-entry both-leg open are byte-equivalent there.
         if (openedAfking < maxCount) {
-            opened = _openHumanBoxes(maxCount - openedAfking);
+            (ok, data) = ContractAddresses
+                .GAME_LOOTBOX_MODULE
+                .delegatecall(
+                    abi.encodeWithSelector(
+                        IDegenerusGameLootboxModule.openHumanBoxes.selector,
+                        maxCount - openedAfking
+                    )
+                );
+            if (!ok) _revertDelegate(data);
+            opened = abi.decode(data, (uint256));
         }
         opened += openedAfking;
-    }
-
-    /// @dev AUTO-03 human-box leg of openBoxes(): walk boxPlayers[activeIndex] from the
-    ///      self-partitioning boxCursor, opening up to `maxCount` ready boxes; returns the count
-    ///      opened. STRUCTURAL re-issue coupling (the v45 orphan-index landmine): each open is
-    ///      gated on lootboxRngWordByIndex[index] != 0, mirroring the LootboxModule RngNotReady
-    ///      guard — an index orphaned mid-day by an emergency VRF rotation is skipped until the
-    ///      re-issued word lands. Every box is uniform O(1) under the v50 whale-pass refactor
-    ///      (WHALE-01/02: the open boon writes whalePassClaims[player] += grant, materialization
-    ///      deferred to player-paid claimWhalePass), so the worst case is maxCount × per-box.
-    function _openHumanBoxes(uint256 maxCount) internal returns (uint256 opened) {
-        // Entry-gate (RD-5): the open path has exactly two revert sources — rngLock and the
-        // terminal-jackpot liveness control. Excluding both pre-loop makes the loop body
-        // guaranteed-non-reverting, so dropping the per-item try/catch cannot maroon a tail.
-        // rngLock-block (RD-3): the open leg no-ops during the freeze.
-        if (rngLockedFlag || _livenessTriggered()) return 0;
-
-        uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
-        // Day/index-reset the cursor when the active index advances (collision-free walk).
-        if (boxCursorIndex != index) {
-            boxCursorIndex = index;
-            boxCursor = 0;
-        }
-
-        // The orphan-index re-issue coupling: a box is openable only once its index has a
-        // VRF word. A zero word means the index is not ready OR was orphaned by a mid-day
-        // rotation; either way the walk skips the whole index until the re-issued word lands.
-        if (lootboxRngWordByIndex[index] == 0) return 0;
-
-        address[] storage queue = boxPlayers[index];
-        uint256 qlen = queue.length;
-        uint256 cursor = boxCursor;
-
-        // Flat opened-count guard — every box is uniform O(1) cost under WHALE-01/02.
-        while (cursor < qlen && opened < maxCount) {
-            address player = queue[cursor];
-            unchecked {
-                ++cursor;
-            }
-            // Skip already-emptied boxes (the first-deposit signal is reset on open).
-            if (lootboxEthBase[index][player] == 0) continue;
-            // Guaranteed-non-reverting under the entry-gate: open directly (no try/catch).
-            _autoOpenBox(index, player);
-            unchecked {
-                ++opened;
-            }
-        }
-
-        boxCursor = uint48(cursor);
     }
 
     /// @notice Self-call wrapper resolving a single Degenerette bet (per-item isolation).
@@ -1939,15 +1864,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 )
             );
         if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Open a single queued lootbox (internal helper for autoOpen).
-    /// @dev Reuses the lootbox module openLootBox path, which preserves the RngNotReady
-    ///      guard and the one-reward-per-item box-zeroing untouched.
-    /// @param index Lootbox RNG index.
-    /// @param player Box owner.
-    function _autoOpenBox(uint48 index, address player) internal {
-        _openLootBoxFor(player, index);
     }
 
     /// @dev Convert an ETH wei amount to BURNIE coinflip-credit value at a given price.
@@ -2502,9 +2418,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         address player,
         uint48 lootboxIndex
     ) external view returns (uint256 amount, bool presale) {
-        // Direct storage access - lootboxEth stores packed amount in lower 232 bits
+        // Direct storage access - lootboxEth stores the box amount in the low 128 bits.
         uint256 packed = lootboxEth[lootboxIndex][player];
-        amount = packed & ((1 << 232) - 1);
+        amount = packed & LB_AMOUNT_MASK;
         presale = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0;
     }
 

@@ -40,18 +40,18 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      RouterWorstCaseGas / V55RevertFreeEvCap / V55FreezeDeterminism (`_settleGame`/`_settleClean` VRF
 ///      drain, `_setupFundedLootboxSubs`, `depositAfkingFunding` funding, `_grantDeityPass`, the Sub-stamp
 ///      slot reads). The OLD `_buyBox` HUMAN-deposit helper is REFRAMED to a funded LOOTBOX-mode SUB
-///      stamped via a new-day STAGE. All pinned slots taken from `forge inspect DegenerusGame storageLayout`
-///      against the v61 subject: `_subOf = 62`, `_subscribers = 64`, `rngWordByDay = 10`; the afking open
-///      reads NO cold ledger so lootboxEthBase is not load-bearing here. Test-only: ZERO contracts/*.sol
-///      mutated.
+///      stamped via a new-day STAGE. All pinned slots RE-DERIVED via `solc --storage-layout` on the
+///      working tree after the V62 lootbox repack: `_subOf = 58`, `_subscribers = 60`, `rngWordByDay
+///      = 10`; the afking open reads NO cold ledger so the folded lootboxEth word is not load-bearing
+///      here. Test-only: ZERO contracts/*.sol mutated.
 contract KeeperOpenBoxWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`)
+    // Game-resident storage slots (RE-DERIVED via `solc --storage-layout`, working tree)
     // -------------------------------------------------------------------------
 
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = 62;           // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 64;     // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBOF_SLOT = 58;           // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 60;     // address[] _subscribers (slot holds the length)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot,
     // 241/256 bits used — the markers are uint24 each, not the old uint32 232-bit layout).

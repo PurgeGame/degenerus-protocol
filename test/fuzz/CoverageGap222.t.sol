@@ -1108,13 +1108,8 @@ contract CoverageGap222 is DeployProtocol {
         );
         // v47: vault.gamePurchaseBurnieLootbox removed (BURNIE-lootbox surface deleted); its
         // negative-auth probe is dropped — the selector no longer exists to be access-controlled.
-        vm.prank(buyer);
-        (bool o4, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "gameOpenLootBox(uint48)",
-                uint48(0)
-            )
-        );
+        // vault.gameOpenLootBox removed: opening boxes for any address is permissionless, so the
+        // vault needs no owner-gated open wrapper — there is no selector left to access-control.
         vm.prank(buyer);
         (bool o5, ) = address(vault).call{value: 1 ether}(
             abi.encodeWithSignature(
@@ -1125,7 +1120,6 @@ contract CoverageGap222 is DeployProtocol {
         );
         assertFalse(o1, "vault.gamePurchase rejected non-vaultOwner caller");
         assertFalse(o2, "vault.gamePurchaseTicketsBurnie rejected non-vaultOwner caller");
-        assertFalse(o4, "vault.gameOpenLootBox rejected non-vaultOwner caller");
         assertFalse(o5, "vault.gamePurchaseDeityPassFromBoon rejected non-vaultOwner caller");
     }
 
@@ -1578,18 +1572,18 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok, "payCoinflipBountyDgnrs rejected non-coinflip caller");
     }
 
-    function test_gap_game_openLootBox_paths() public {
+    function test_gap_game_openBox_paths() public {
         vm.prank(buyer);
         (bool o1, ) = address(game).call(
             abi.encodeWithSignature(
-                "openLootBox(address,uint48)",
+                "openBox(address,uint48)",
                 buyer,
                 uint48(0)
             )
         );
         // v47: game.openBurnieLootBox removed (BURNIE-lootbox surface deleted); its negative-auth
         // probe is dropped — the selector no longer exists to be access-controlled.
-        assertFalse(o1, "game.openLootBox rejected non-authorized caller");
+        assertFalse(o1, "game.openBox reverts when no box is queued for caller");
     }
 
     function test_gap_game_degenerette_paths() public {

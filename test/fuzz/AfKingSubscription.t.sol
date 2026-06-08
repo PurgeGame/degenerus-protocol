@@ -50,9 +50,9 @@ contract AfKingSubscription is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 62; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant FUNDING_SOURCE_SLOT = 63; // _fundingSourceOf mapping root (address => address)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 65; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root (address => Sub, one packed slot) (post V62 repack: was 62)
+    uint256 private constant FUNDING_SOURCE_SLOT = 59; // _fundingSourceOf mapping root (address => address) (post V62 repack: was 63)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 61; // _subscriberIndex mapping root (1-indexed) (post V62 repack: was 65)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit lives here)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack

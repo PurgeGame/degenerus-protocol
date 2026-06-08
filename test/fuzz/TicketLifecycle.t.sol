@@ -1357,7 +1357,7 @@ contract TicketLifecycleTest is DeployProtocol {
             if (rngWord == 0) continue;
 
             vm.prank(buyer3);
-            try game.openLootBox(buyer3, indices[i]) {
+            try game.openBox(buyer3, indices[i]) {
                 successes++;
             } catch (bytes memory reason) {
                 // Check if the revert is specifically RngLocked
@@ -2046,14 +2046,15 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      Checks the current read key for the queue autoBuy. The write side may have
     ///      nonzero entries from later transitions (vault perpetual writes to past levels).
     ///      The read key being zero proves the level was fully processed during its lifecycle.
-    /// @dev Read lootboxRngIndex directly from storage slot 36 (low 48 bits of lootboxRngPacked).
+    /// @dev Read lootboxRngIndex directly from storage slot 35 (low 48 bits of lootboxRngPacked)
+    ///      (post V62 lootbox repack: was 36).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(36)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(35)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 37).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 36, post V62 repack: was 37).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(37)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(36)));
         return uint256(vm.load(address(game), slot));
     }
 
@@ -2092,8 +2093,8 @@ contract TicketLifecycleTest is DeployProtocol {
 
     // ==================== Lootbox Helpers ====================
 
-    /// @dev Storage slot for lootboxRngWordByIndex mapping (confirmed via forge inspect)
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
+    /// @dev Storage slot for lootboxRngWordByIndex mapping (post V62 lootbox repack: was 37).
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
 
     /// @notice Purchase tickets with a lootbox ETH allocation. Returns the lootbox RNG index.
     /// @param who Buyer address
@@ -2135,7 +2136,7 @@ contract TicketLifecycleTest is DeployProtocol {
         if (rngWord == 0) return; // Skip if RNG not available (caller should have seeded it)
 
         vm.prank(who);
-        try game.openLootBox(who, lootboxIndex) {} catch {}
+        try game.openBox(who, lootboxIndex) {} catch {}
     }
 
     /// @notice Store a deterministic lootbox RNG word via vm.store.

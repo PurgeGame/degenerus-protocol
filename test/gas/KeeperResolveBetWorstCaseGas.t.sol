@@ -52,13 +52,13 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
     /// @dev lootboxRngPacked at slot 36 (forge inspect DegenerusGame storageLayout, v61); lootboxRngIndex is
     ///      the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
-    /// @dev lootboxRngWordByIndex mapping root slot (uint48 index => word).
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
-    /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 43;
-    /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 44;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35; // post V62 lootbox repack: was 36
+    /// @dev lootboxRngWordByIndex mapping root slot (uint48 index => word) (post V62 repack: was 37).
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
+    /// @dev degeneretteBets mapping root slot (address => betId => packed) (post V62 repack: was 43, also stale pre-repack).
+    uint256 private constant DEGENERETTE_BETS_SLOT = 40;
+    /// @dev degeneretteBetNonce mapping root slot (address => uint64) (post V62 repack: was 44, also stale pre-repack).
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 41;
     /// @dev prizePoolsPacked at slot 2 ((future << 128) | next).
     uint256 private constant PRIZE_POOLS_SLOT = 2;
 

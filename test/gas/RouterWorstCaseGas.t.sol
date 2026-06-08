@@ -46,23 +46,23 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      repo idiom) + the validated game-resident driving harness ported from V55RevertFreeEvCap /
 ///      V55FreezeDeterminism (`_settleGame`/`_settleClean` VRF drain, `_setupFundedLootboxSubs`,
 ///      `depositAfkingFunding` funding, `_grantDeityPass`, the Sub-stamp slot reads). All pinned slots
-///      taken from `forge inspect DegenerusGame storageLayout` against the v61 subject:
-///      `_subOf = 62`, `_subscribers = 64`, `_subscriberIndex = 65`, `_subCursor = 66`, `rngWordByDay = 10`,
-///      `lootboxEthBase = 22`, `lootboxRngPacked = 36`, `lootboxRngWordByIndex = 37`. Test-only: ZERO
+///      RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack:
+///      `_subOf = 58`, `_subscribers = 60`, `_subscriberIndex = 61`, cursor pack `= 62`, `rngWordByDay = 10`,
+///      `lootboxEth = 15`, `lootboxRngPacked = 35`, `lootboxRngWordByIndex = 36`. Test-only: ZERO
 ///      contracts/*.sol mutated. Run with --isolate for true per-call gas.
 contract RouterWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
-    // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`)
+    // Game-resident storage slots (RE-DERIVED via `solc --storage-layout`, working tree)
     // -------------------------------------------------------------------------
 
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;             // mapping(uint24 => uint256) — the afking box's DAY-keyed word
-    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 22;            // first-deposit signal (human box)
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;          // [0:47] lootboxRngIndex
-    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 37;   // mapping(uint48 => uint256) (human box)
-    uint256 private constant SUBOF_SLOT = 62;                       // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 64;                 // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 65;            // mapping(address => uint256) _subscriberIndex
-    uint256 private constant SUBCURSOR_SLOT = 66;                   // _subCursor (uint16 @ byte 0) + _subOpenCursor (@ byte 2) + _afkingResetDay (@ byte 4)
+    uint256 private constant LOOTBOX_ETH_SLOT = 15;                 // folded box word; amount[0:128] = box-owed signal
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;          // [0:47] lootboxRngIndex
+    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 36;   // mapping(uint48 => uint256) (human box)
+    uint256 private constant SUBOF_SLOT = 58;                       // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = 60;                 // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBSCRIBER_INDEX_SLOT = 61;            // mapping(address => uint256) _subscriberIndex
+    uint256 private constant SUBCURSOR_SLOT = 62;                   // _subCursor (uint16 @ byte 0) + _subOpenCursor (@ byte 2) + _afkingResetDay (@ byte 4)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot,
     // 241/256 bits used — the markers are uint24 each, not the old uint32 232-bit layout).

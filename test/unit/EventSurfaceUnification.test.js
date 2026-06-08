@@ -518,7 +518,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       ).to.equal(false);
       // The consolation predicate explicitly tests payColdBustConsolation —
       // proving it cannot fire on the auto-resolve (payColdBustConsolation=false)
-      // path, while the surviving manual caller (openLootBox) passes
+      // path, while the surviving manual caller (openBox) passes
       // payColdBustConsolation=true and DOES pay it. (The BURNIE-lootbox manual
       // caller openBurnieLootBox was removed in v47.) The gate now lives in the
       // per-roll `_settleLootboxRoll` helper.

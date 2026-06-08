@@ -44,13 +44,11 @@ contract KeeperLeversAndPacking is DeployProtocol {
     // Storage-slot constants (RE-DERIVED via `forge inspect storage DegenerusGame`)
     // -------------------------------------------------------------------------
 
-    /// @dev lootboxRngPacked at slot 36 (forge inspect DegenerusGame storageLayout, v61); lootboxRngIndex is
-    ///      the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
+    /// @dev lootboxRngPacked at slot 35 (RE-DERIVED via `solc --storage-layout` on the working tree
+    ///      after the V62 lootbox repack); lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
-    /// @dev lootboxEthBase mapping root slot (uint48 index => address => base). First-deposit signal.
-    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 22;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
 
     // -------------------------------------------------------------------------
     // Constants
@@ -254,9 +252,10 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertEq(_countOccurrences(storage_, "bool drainGameCreditFirst;"), 0, "GAS-04: drainGameCreditFirst bool folded into flags");
         assertEq(_countOccurrences(storage_, "bool useTickets;"), 0, "GAS-04: useTickets bool folded into flags");
 
-        // boxCursor / boxCursorIndex are uint48 (the packed cursor pair).
-        assertGt(_countOccurrences(game_, "uint48 internal boxCursor;"), 0, "GAS-04: boxCursor is uint48");
-        assertGt(_countOccurrences(game_, "uint48 internal boxCursorIndex;"), 0, "GAS-04: boxCursorIndex is uint48");
+        // boxCursor / boxCursorIndex are uint48 (the packed cursor pair). Declared in the storage
+        // base (DegenerusGameStorage.sol), so the byte-presence grep targets STORAGE_SRC.
+        assertGt(_countOccurrences(storage_, "uint48 internal boxCursor;"), 0, "GAS-04: boxCursor is uint48");
+        assertGt(_countOccurrences(storage_, "uint48 internal boxCursorIndex;"), 0, "GAS-04: boxCursorIndex is uint48");
 
         // No new hot-path storage: enqueueBoxForAutoOpen is the ONLY crank-added storage write (the
         // first-deposit enqueue), an onlySelf external fn — NOT on the bet/box-placement hot path.
@@ -281,16 +280,20 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(degenerette, "revert RngNotReady()"), 0, "G1: RngNotReady resolve/placement guard byte-present");
         assertGt(_countOccurrences(degenerette, "if (rngWord == 0) revert RngNotReady();"), 0, "G1: bet resolve RngNotReady freeze guard");
 
-        // G2 — RngNotReady open-box guard / orphan-index skip (autoOpen returns a count -> `return 0;`).
-        assertGt(_countOccurrences(game_, "if (lootboxRngWordByIndex[index] == 0) return 0;"), 0, "G2: autoOpen orphan-index / RngNotReady skip (return 0)");
+        // G2 — RngNotReady open-box guard / orphan-index skip. The relocated multi-index sweep
+        // (DegenerusGameLootboxModule.openHumanBoxes) never advances past an un-worded index: it
+        // BREAKs the walk (resuming once the re-issued word lands), so its boxes are never marooned.
+        assertGt(_countOccurrences(lootbox, "if (lootboxRngWordByIndex[idx] == 0) break;"), 0, "G2: sweep orphan-index skip (break, never advance past an un-worded index)");
         assertGt(_countOccurrences(lootbox, "revert RngNotReady()"), 0, "G2: LootboxModule open RngNotReady guard byte-present");
 
         // G3 — one-reward-per-item: bet delete.
         assertGt(_countOccurrences(degenerette, "delete degeneretteBets[player][betId];"), 0, "G3: bet delete one-reward guard");
 
-        // G4 — one-reward-per-item: box zeroing + autoOpen already-emptied skip.
-        assertGt(_countOccurrences(lootbox, "lootboxEthBase[index][player] = 0;"), 0, "G4: box base zeroing one-reward guard");
-        assertGt(_countOccurrences(game_, "if (lootboxEthBase[index][player] == 0) continue;"), 0, "G4: autoOpen already-opened skip");
+        // G4 — one-reward-per-item: box zeroing + autoOpen already-emptied skip. Post-repack the box
+        // lives in the single folded lootboxEth word; open clears it in one SSTORE, and the sweep
+        // skips an entry whose lootbox amount AND presale leg are both already zero (already drained).
+        assertGt(_countOccurrences(lootbox, "lootboxEth[index][player] = 0;"), 0, "G4: box zeroing one-reward guard (single folded word)");
+        assertGt(_countOccurrences(lootbox, "(lootboxEth[idx][player] & LB_AMOUNT_MASK) == 0 &&"), 0, "G4: sweep already-opened skip (both legs zero -> continue)");
 
         // G5 — double-crank short-circuit BatchAlreadyTaken (degeneretteResolve).
         assertGt(_countOccurrences(game_, "revert BatchAlreadyTaken();"), 0, "G5: double-crank short-circuit BatchAlreadyTaken");
@@ -300,9 +303,12 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // afking per-sub STAGE is revert-free by construction (D-348-04 no valve); asserted ABSENT.
         assertEq(_countOccurrences(game_, "this._batchPurchaseUnit{value: slice}"), 0, "G6 (D-351-02): batchPurchase per-slice try REMOVED (no valve under D-348-04)");
 
-        // G7 — crank per-item onlySelf isolation (the onlySelf wrappers + the onlySelf guard).
+        // G7 — crank per-item isolation. The bet path keeps the onlySelf wrapper + guard; the
+        // human-box open per-item isolation moved into the lootbox module's sweep, where each entry
+        // resolves in isolation via _openBoxBoth (both legs, robust to either empty,
+        // guaranteed-non-reverting under the entry-gate) — so a long queue can never gas-wall the tx.
         assertGt(_countOccurrences(game_, "function _degeneretteResolveBet("), 0, "G7: _degeneretteResolveBet onlySelf wrapper");
-        assertGt(_countOccurrences(game_, "function _autoOpenBox("), 0, "G7: _autoOpenBox onlySelf wrapper");
+        assertGt(_countOccurrences(lootbox, "_openBoxBoth(player, idx, checkPresale);"), 0, "G7: per-entry box-open isolation (the sweep opens one entry at a time)");
         assertGt(_countOccurrences(game_, "if (msg.sender != address(this)) revert E();"), 0, "G7: onlySelf (msg.sender == self) guard byte-present");
 
         // G9 — (v49 batchPurchase AF_KING keeper gate) DROPPED, D-351-02. v55: the afking auth is the
@@ -325,7 +331,9 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // G13 — rngLocked / gameOver freeze guards. The open path no-ops during the freeze (RD-3).
         assertGt(_countOccurrences(game_, "if (rngLockedFlag) revert RngLocked();"), 0, "G13: rngLocked pre-check byte-present");
         assertGt(_countOccurrences(game_, "if (gameOver) revert E();"), 0, "G13: gameOver pre-check byte-present");
-        assertGt(_countOccurrences(game_, "if (rngLockedFlag || _livenessTriggered()) return 0;"), 0, "G13 (RD-3): autoOpen rngLock/liveness freeze no-op");
+        // The human-box sweep's rngLock/liveness freeze no-op moved into the lootbox module's
+        // openHumanBoxes entry-gate (the sweep is delegatecall'd from openBoxes).
+        assertGt(_countOccurrences(lootbox, "if (rngLockedFlag || _livenessTriggered()) return 0;"), 0, "G13 (RD-3): sweep rngLock/liveness freeze no-op (relocated to openHumanBoxes)");
     }
 
     /// @notice Anti-vacuity backstop for the grep gates: the comment-stripped sources are non-empty and a

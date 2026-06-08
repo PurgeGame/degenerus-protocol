@@ -100,14 +100,15 @@ contract LootboxRngLifecycle is DeployProtocol {
         ts = block.timestamp;
     }
 
-    /// @dev Read lootboxRngIndex directly from storage slot 36 (low 48 bits of lootboxRngPacked).
+    /// @dev Read lootboxRngIndex directly from storage slot 35 (low 48 bits of lootboxRngPacked)
+    ///      (post V62 lootbox repack: was 36).
     function _readLootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(36)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(35)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 37).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 36, post V62 repack: was 37).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(37)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(36)));
         return uint256(vm.load(address(game), slot));
     }
 
@@ -633,7 +634,7 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // openLootBox should succeed (word available, no RngNotReady revert)
         vm.prank(buyer);
-        game.openLootBox(buyer, purchaseIndex);
+        game.openBox(buyer, purchaseIndex);
     }
 
     /// @notice Full mid-day lifecycle: purchase -> requestLootboxRng -> VRF fulfill -> openLootBox.
@@ -662,7 +663,7 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // openLootBox should succeed
         vm.prank(buyer);
-        game.openLootBox(buyer, purchaseIndex);
+        game.openBox(buyer, purchaseIndex);
     }
 
     /// @notice Attempting openLootBox before VRF fulfillment reverts with RngNotReady.
@@ -684,7 +685,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         // openLootBox must revert with RngNotReady
         vm.prank(buyer);
         vm.expectRevert(abi.encodeWithSignature("RngNotReady()"));
-        game.openLootBox(buyer, purchaseIndex);
+        game.openBox(buyer, purchaseIndex);
     }
 
     /// @notice Multiple indices: purchases at different indices each use their respective VRF word.
@@ -717,9 +718,9 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // Open both lootboxes -- both should succeed
         vm.prank(buyer);
-        game.openLootBox(buyer, indexN);
+        game.openBox(buyer, indexN);
 
         vm.prank(buyer);
-        game.openLootBox(buyer, indexN1);
+        game.openBox(buyer, indexN1);
     }
 }

@@ -39,7 +39,7 @@ import {RngWindowFreezeHandler} from "../handlers/RngWindowFreezeHandler.sol";
 contract RngWindowFreeze is DeployProtocol {
     RngWindowFreezeHandler public handler;
 
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35; // post V62 lootbox repack: was 36
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
 

@@ -19,16 +19,20 @@ contract LootboxBoonCoexistence is DeployProtocol {
     // Storage slot constants (from `forge inspect DegenerusGame storage-layout`)
     // ──────────────────────────────────────────────────────────────────────
 
-    // Authoritative slots from `forge inspect DegenerusGame storageLayout` at c4d48008.
-    // The v55 lootbox restructure removed `lootboxDay` and added `lootboxPurchasePacked`
-    // (the per-(index,player) scorePlus1/adj the open reads); openLootBox no longer reads a
-    // stored day or the EV-benefit mapping for the roll.
-    uint256 constant SLOT_BOON_PACKED     = 58;   // mapping(address => BoonPacked)
-    uint256 constant SLOT_LOOTBOX_ETH     = 15;   // mapping(uint48 => mapping(address => uint256))
-    uint256 constant SLOT_LOOTBOX_RNG_IDX = 36;   // lootboxRngPacked (low 48 bits = lootboxRngIndex)
-    uint256 constant SLOT_LOOTBOX_WORD    = 37;   // mapping(uint48 => uint256) lootboxRngWordByIndex
-    uint256 constant SLOT_LOOTBOX_PURCHASE = 38;  // mapping(uint48 => mapping(address => uint256)) lootboxPurchasePacked
-    uint256 constant SLOT_LOOTBOX_BASE    = 22;   // mapping(uint48 => mapping(address => uint256)) lootboxEthBase
+    // Authoritative slots from `solc --storage-layout` on the working tree (post lootbox repack).
+    // The V62 lootbox repack FOLDED lootboxEthBase / lootboxPurchasePacked / lootboxDistressEth into
+    // the single lootboxEth word (amount[0:128] | adj[128:192] | scorePlus1[192:208] |
+    // distressUnits[208:256]) and removed the dead lootboxBurnie mapping, shifting later slots down.
+    uint256 constant SLOT_BOON_PACKED     = 54;   // mapping(address => BoonPacked)
+    uint256 constant SLOT_LOOTBOX_ETH     = 15;   // mapping(uint48 => mapping(address => uint256)) (folded word)
+    uint256 constant SLOT_LOOTBOX_RNG_IDX = 35;   // lootboxRngPacked (low 48 bits = lootboxRngIndex)
+    uint256 constant SLOT_LOOTBOX_WORD    = 36;   // mapping(uint48 => uint256) lootboxRngWordByIndex
+
+    // Packed lootboxEth bit layout (mirrors DegenerusGameStorage _packLootbox).
+    uint256 constant LB_AMOUNT_MASK    = (uint256(1) << 128) - 1; // amount   [0:128]
+    uint256 constant LB_ADJ_SHIFT      = 128;                     // adj      [128:192]
+    uint256 constant LB_SCORE_SHIFT    = 192;                     // score+1  [192:208]
+    uint256 constant LB_DISTRESS_SHIFT = 208;                     // distress [208:256]
 
     // BoonPacked bit layout (slot0)
     uint256 constant BP_COINFLIP_DAY_SHIFT  = 0;
@@ -126,16 +130,13 @@ contract LootboxBoonCoexistence is DeployProtocol {
         uint48 day,
         uint256 vrfWord
     ) internal {
-        // lootboxEth[index][player] = (purchaseLevel << 232) | ethAmount
-        uint256 packed = (uint256(purchaseLevel) << 232) | ethAmount;
+        // lootboxEth[index][player] = the single folded word: amount[0:128] (=ethAmount),
+        // adj=0, scorePlus1=1 (neutral score, +1 encoding) at [192:208], distress=0. openLootBox
+        // unpacks scorePlus1 and requires it >= 1 for the EV multiplier; the purchaseLevel field is
+        // gone (vestigial — the box rolls from the LIVE level at open). purchaseLevel is unused now.
+        purchaseLevel; // silence unused-parameter (kept in the signature for callers)
+        uint256 packed = (ethAmount & LB_AMOUNT_MASK) | (uint256(1) << LB_SCORE_SHIFT);
         vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_ETH, index, player), bytes32(packed));
-
-        // lootboxEthBase[index][player] = ethAmount
-        vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_BASE, index, player), bytes32(ethAmount));
-
-        // lootboxPurchasePacked[index][player] = scorePlus1=1 (neutral score, +1 encoding);
-        // openLootBox unpacks scorePlus1 = uint16(word) and requires it >= 1 for the EV multiplier.
-        vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_PURCHASE, index, player), bytes32(uint256(1)));
 
         // lootboxRngWordByIndex[index] = vrfWord
         vm.store(address(game), _simpleMappingSlot(SLOT_LOOTBOX_WORD, index), bytes32(vrfWord));
@@ -177,7 +178,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
             _setupLootbox(player, index, 10 ether, 1, currentDay, vrfWord);
 
             vm.prank(player);
-            try game.openLootBox(player, index) {
+            try game.openBox(player, index) {
                 // Count emitted LootBoxReward events by checking boonPacked state changes
                 // (events are hard to count in Foundry without vm.expectEmit, but we can
                 // check if any non-coinflip boon tier was written)
@@ -224,7 +225,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
         _setupLootbox(player, 999, 10 ether, 1, currentDay, vrfWord);
 
         vm.prank(player);
-        try game.openLootBox(player, 999) {} catch {
+        try game.openBox(player, 999) {} catch {
             // Revert is acceptable (e.g., rngLocked contention)
             return;
         }
@@ -265,7 +266,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
         _setupLootbox(player, 888, 10 ether, 1, currentDay, vrfWord);
 
         vm.prank(player);
-        try game.openLootBox(player, 888) {} catch {
+        try game.openBox(player, 888) {} catch {
             return;
         }
 
@@ -304,7 +305,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
             uint8 lootboxBefore = _readLootboxTier(player);
 
             vm.prank(player);
-            try game.openLootBox(player, index) {} catch {
+            try game.openBox(player, index) {} catch {
                 continue;
             }
 

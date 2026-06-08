@@ -40,7 +40,7 @@
 // Lifecycle reachability: lootbox open requires (a) a purchase that allocates
 // lootboxes, (b) a `requestLootboxRng()` outside the daily advance window that
 // requests VRF entropy for the lootbox index, (c) `mockVRF.fulfillRandomWords`
-// for the lootbox request id, then (d) `openLootBox(player, index)`. The
+// for the lootbox request id, then (d) `openBox(player, index)`. The
 // simulator's purchase/advance state machine may not always permit step (b) or
 // (c) (e.g. when the activity threshold isn't met or the daily-advance window
 // blocks lootbox-RNG requests). The soft-skip pattern follows the existing
@@ -207,26 +207,26 @@ describe("Phase 266 GAS-01 — lootbox-open entry-point gas regression at v36.0 
   this.timeout(600_000);
   after(function () { restoreAddresses(); });
 
-  describe("openLootBox (ETH lootbox) — per-open gas envelope ±300 gas", function () {
+  describe("openBox (ETH lootbox) — per-open gas envelope ±300 gas", function () {
     it(`gasUsed within ENTRY_POINT_DELTA_TOLERANCE of pinned REF; per-open delta <= ${PER_OPEN_GAS_DELTA_BOUND}`, async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, alice } = fixture;
 
       const probe = await reachOpenableLootbox(fixture);
       if (probe.reason !== null) {
-        console.warn(`[GAS-01 openLootBox] soft-skip — ${probe.reason} (matches AdvanceGameGas L1014/L1027 precedent)`);
+        console.warn(`[GAS-01 openBox] soft-skip — ${probe.reason} (matches AdvanceGameGas L1014/L1027 precedent)`);
         this.skip();
         return;
       }
 
       const index = await findOpenableEthIndex(game, alice);
       if (index === null) {
-        console.warn(`[GAS-01 openLootBox] soft-skip — no openable ETH lootbox index found for alice in probe range`);
+        console.warn(`[GAS-01 openBox] soft-skip — no openable ETH lootbox index found for alice in probe range`);
         this.skip();
         return;
       }
 
-      const tx = await game.connect(alice).openLootBox(alice.address, index);
+      const tx = await game.connect(alice).openBox(alice.address, index);
       const receipt = await tx.wait();
       const measured = Number(receipt.gasUsed);
 
@@ -236,23 +236,23 @@ describe("Phase 266 GAS-01 — lootbox-open entry-point gas regression at v36.0 
         const drift = Math.abs(measured - OPEN_LOOTBOX_GAS_REF);
         expect(
           drift <= ENTRY_POINT_DELTA_TOLERANCE,
-          `openLootBox drift ${drift} > tolerance ${ENTRY_POINT_DELTA_TOLERANCE}; measured ${measured} vs REF ${OPEN_LOOTBOX_GAS_REF}`,
+          `openBox drift ${drift} > tolerance ${ENTRY_POINT_DELTA_TOLERANCE}; measured ${measured} vs REF ${OPEN_LOOTBOX_GAS_REF}`,
         ).to.equal(true);
 
         const perOpenDelta = measured - OPEN_LOOTBOX_GAS_REF;
         expect(
           perOpenDelta <= PER_OPEN_GAS_DELTA_BOUND,
-          `openLootBox per-open delta ${perOpenDelta} > ${PER_OPEN_GAS_DELTA_BOUND} (re-derive worst case before re-pinning)`,
+          `openBox per-open delta ${perOpenDelta} > ${PER_OPEN_GAS_DELTA_BOUND} (re-derive worst case before re-pinning)`,
         ).to.equal(true);
       } else {
-        console.log(`[GAS-01 openLootBox] REF placeholder is 0 — pin ${measured} into OPEN_LOOTBOX_GAS_REF and re-run.`);
+        console.log(`[GAS-01 openBox] REF placeholder is 0 — pin ${measured} into OPEN_LOOTBOX_GAS_REF and re-run.`);
       }
     });
   });
 
   // openBurnieLootBox (BURNIE lootbox) per-open gas envelope — REMOVED (v47): the
   // BURNIE-lootbox surface (openBurnieLootBox + the game.lootboxBurnie view) was
-  // removed (terminal-paradox closure). The openLootBox describe above exercises the
+  // removed (terminal-paradox closure). The openBox describe above exercises the
   // same _resolveLootboxCommon body and provides the primary GAS-01 measurement.
   // Removed-by-design, not skipped.
 
@@ -261,17 +261,17 @@ describe("Phase 266 GAS-01 — lootbox-open entry-point gas regression at v36.0 
       // resolveLootboxDirect is invoked via cross-module delegatecall from the
       // jackpot decimator path; it has no public entry point in DegenerusGame.
       // The gas envelope is dominated by the same _resolveLootboxCommon body
-      // exercised by openLootBox above, plus a thin `_lootboxEvMultiplierBps`
+      // exercised by openBox above, plus a thin `_lootboxEvMultiplierBps`
       // wrapper. Direct gas measurement requires a delegatecall harness, which
-      // is structurally different from the user-callable openLootBox path.
+      // is structurally different from the user-callable openBox path.
       // Per `feedback_gas_worst_case.md` the theoretical-worst-case header
       // bounds this entry point's regression contribution; the empirical pin
-      // is satisfied by the openLootBox measurement above (same _resolveLootboxCommon
+      // is satisfied by the openBox measurement above (same _resolveLootboxCommon
       // body). Soft-skip the empirical run with the diagnostic note.
       console.warn(
         `[GAS-01 resolveLootboxDirect] soft-skip — no public-entry-point harness available; ` +
         `theoretical-worst-case header bounds this surface's regression. The shared ` +
-        `_resolveLootboxCommon body is exercised by the openLootBox empirical measurement above; ` +
+        `_resolveLootboxCommon body is exercised by the openBox empirical measurement above; ` +
         `resolveLootboxDirect adds only the activity-score multiplier wrapper (~50-150 gas).`,
       );
       console.log(`[REF-CAPTURE] RESOLVE_LOOTBOX_DIRECT_GAS_REF   = (deferred — see soft-skip note)`);

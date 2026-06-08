@@ -53,11 +53,11 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     /// @dev prizePoolPendingPacked: [upper 128: futurePending] [lower 128: nextPending]
     uint256 private constant PENDING_PACKED_SLOT = 11;
 
-    /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
+    /// @dev lootboxRngWordByIndex mapping root slot (post V62 lootbox repack: was 37).
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
 
-    /// @dev lootboxRngPacked at slot 36; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
+    /// @dev lootboxRngPacked at slot 35 (post V62 lootbox repack: was 36); lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;
 
     /// @dev Salt used in degenerette bet resolution for the first spin.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
@@ -66,10 +66,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
     /// @dev claimablePool (uint128) lives in slot 1, byte 16.
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;
-    /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 43;
-    /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 44;
+    /// @dev degeneretteBets mapping root slot (post V62 repack: was 43, also stale pre-repack).
+    uint256 private constant DEGENERETTE_BETS_SLOT = 40;
+    /// @dev degeneretteBetNonce mapping root slot (post V62 repack: was 44, also stale pre-repack).
+    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 41;
     /// @dev BurnieCoin.balanceOf mapping root slot.
     uint256 private constant BURNIE_BALANCEOF_SLOT = 1;
     /// @dev WrappedWrappedXRP.balanceOf / totalSupply slots.

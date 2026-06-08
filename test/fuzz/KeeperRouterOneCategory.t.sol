@@ -65,23 +65,27 @@ contract KeeperRouterOneCategory is DeployProtocol {
         keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
 
     // -------------------------------------------------------------------------
-    // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`;
-    // the AfKing-standalone SUBOF_SLOT=65 / AUTOBUY_SLOT=4 / lootbox slots 37/38 were WRONG).
+    // Game-resident storage slots (RE-DERIVED via `solc --storage-layout` on the working tree after
+    // the V62 lootbox repack — the folded lootboxEth word + removed lootboxEthBase/Burnie/Purchase/
+    // Distress shifted later slots down. The prior _subOf=62 / _subscribers=64 / lootbox 36/37/22
+    // pins are now stale; corrected to the authoritative values below.)
     // -------------------------------------------------------------------------
 
-    uint256 private constant SUBOF_SLOT = 62; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBOF_SLOT = 58; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant OFF_LASTBOUGHT = 11; // uint24 lastAutoBoughtDay (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 14; // uint24 lastOpenedDay     (bytes 14..16)
-    uint256 private constant SUBSCRIBERS_SLOT = 64; // _subscribers address[] (length here)
+    uint256 private constant SUBSCRIBERS_SLOT = 60; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
-    /// @dev lootboxRngPacked at slot 36; index = low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36;
+    /// @dev lootboxRngPacked at slot 35; index = low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37;
-    /// @dev lootboxEthBase mapping root slot (uint48 index => address => base). First-deposit signal.
-    uint256 private constant LOOTBOX_ETH_BASE_SLOT = 22;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36;
+    /// @dev lootboxEth (the single folded box word) mapping root slot. The amount sub-field (low 128
+    ///      bits) is the first-deposit / box-owed signal that replaced the removed lootboxEthBase.
+    uint256 private constant LOOTBOX_ETH_SLOT = 15;
+    uint256 private constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
 
     /// @dev ticketQueue mapping root (uint24 => address[]) + ticketsOwedPacked
     ///      (uint24 => address => uint40) — for forcing advanceDue via a read-slot backlog.
@@ -349,6 +353,11 @@ contract KeeperRouterOneCategory is DeployProtocol {
         _settleGame(0xE5C0_0001);
         uint48 index = _activeLootboxIndex();
         _buyBox(boxOwner, LOOTBOX_WEI);
+        // The relocated multi-index sweep opens FINALIZED indices (boxCursorIndex .. LR_INDEX-1);
+        // words land at LR_INDEX-1. Advance LR_INDEX so the box at `index` is the just-finalized
+        // index the sweep reads, park the frontier there, then land its word.
+        _advanceLootboxRngIndexByOne();
+        _parkBoxFrontier(index);
         _injectLootboxRngWord(index, FIXED_WORD);
         assertGt(_lootboxEthBase(index, boxOwner), 0, "pre: human box queued + un-opened");
         assertTrue(game.boxesPending(), "pre: a human box is pending");
@@ -596,23 +605,46 @@ contract KeeperRouterOneCategory is DeployProtocol {
         );
     }
 
-    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 36).
+    /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 35).
     function _activeLootboxIndex() internal view returns (uint48) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
         return uint48(packed & 0xFFFFFFFFFFFF);
     }
 
-    /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 39).
+    /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 36).
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         vm.store(address(game), slot, bytes32(rngWord));
     }
 
-    /// @dev Read lootboxEthBase[index][who] — the first-deposit signal, zeroed on open.
+    /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 35) by one,
+    ///      mirroring requestLootboxRng's pre-increment, so a box queued at the prior index sits at
+    ///      LR_INDEX-1 — the finalized index the relocated multi-index sweep reads.
+    function _advanceLootboxRngIndexByOne() internal {
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
+        uint48 idx = uint48(packed & 0xFFFFFFFFFFFF);
+        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | uint256(idx + 1);
+        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(packed));
+    }
+
+    /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 62)
+    ///      at `index` so the relocated sweep begins exactly at this finalized index.
+    function _parkBoxFrontier(uint48 index) internal {
+        bytes32 slot = bytes32(uint256(62));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        uint256 cursorMask = (uint256(1) << 48) - 1;
+        packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0
+        packed &= ~(cursorMask << (13 * 8));  // clear boxCursorIndex field
+        packed |= (uint256(index) & cursorMask) << (13 * 8);
+        vm.store(address(game), slot, bytes32(packed));
+    }
+
+    /// @dev Read the lootboxEth amount sub-field (bits [0:128]) for [index][who] — the box-owed
+    ///      signal, zeroed on open (replaced the removed lootboxEthBase first-deposit signal).
     function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_ETH_BASE_SLOT)));
+        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_ETH_SLOT)));
         bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        return uint256(vm.load(address(game), leaf));
+        return uint256(vm.load(address(game), leaf)) & LB_AMOUNT_MASK;
     }
 
     // ---- read-slot ticket seeding (force advanceDue via a non-empty current-level read slot) ----

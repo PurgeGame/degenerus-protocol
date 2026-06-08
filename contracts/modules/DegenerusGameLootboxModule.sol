@@ -32,7 +32,7 @@ interface IWrappedWrappedXRP {
  *
  * ## Functions
  *
- * - Lootbox opening (openLootBox, resolveLootboxDirect, resolveRedemptionLootbox)
+ * - Box opening (openBox, resolveLootboxDirect, resolveRedemptionLootbox)
  * - Deity boon system (deityBoonSlots, issueDeityBoon)
  */
 contract DegenerusGameLootboxModule is DegenerusGameStorage {
@@ -489,25 +489,22 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         scaledAmount = adjustedValue + neutralPortion;
     }
 
-    /// @notice Open an ETH lootbox once RNG is available
-    /// @dev Applies activity score EV multiplier with a 10 ETH cap per account per level.
-    /// @param player Player address to open lootbox for
-    /// @param index The RNG index of the lootbox
-    /// @custom:reverts E When lootbox amount is zero
-    /// @custom:reverts RngNotReady When RNG word has not been set for this index
-    function openLootBox(address player, uint48 index) external {
-
+    /// @dev Open the ETH-lootbox leg of an index for a player, if one is queued. Applies the
+    ///      frozen activity-score EV multiplier (the 10 ETH cap was drawn at deposit). Returns
+    ///      false (no-op) when no lootbox is queued, so the unified open path can still resolve
+    ///      the presale leg; the manual `openBox` shell turns an all-empty index into a revert.
+    /// @param player Player address to open the lootbox for.
+    /// @param index The RNG index of the lootbox.
+    /// @return opened True if a lootbox leg was resolved.
+    /// @custom:reverts RngNotReady When the lootbox is queued but its RNG word is not yet set.
+    function _openLootBoxLeg(address player, uint48 index) internal returns (bool opened) {
         uint256 packed = lootboxEth[index][player];
-        uint256 amount = packed & ((1 << 232) - 1);
-        if (amount == 0) revert E();
+        (uint256 amount, uint64 adj, uint16 scorePlus1, uint256 distressUnits) =
+            _unpackLootbox(packed);
+        if (amount == 0) return false;
 
         uint256 rngWord = lootboxRngWordByIndex[index];
         if (rngWord == 0) revert RngNotReady();
-
-        uint256 baseAmount = lootboxEthBase[index][player];
-        if (baseAmount == 0) {
-            baseAmount = amount;
-        }
 
         uint24 currentLevel = level + 1;
         // The box rolls from the LIVE level at open — no stored purchase-level basis, no grace
@@ -515,9 +512,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // holder cannot prevent it, so the open level is NOT player-timable: the holder can never
         // steer the box to a level they prefer, whichever way the level cuts. The EV multiplier
         // stays FROZEN at deposit (`scorePlus1`) — that is the anti-gaming knob. One unified roll
-        // basis with `resolveAfkingBox` / `resolveLootboxDirect`.
-        uint256 purchaseWord = lootboxPurchasePacked[index][player];
-        (uint16 scorePlus1, uint64 adj, ) = _unpackLootboxPurchase(purchaseWord);
+        // basis with `resolveAfkingBox` / `resolveLootboxDirect`. amount, adj, score+1, and the
+        // distress fraction all ride in the single packed lootboxEth word.
 
         // Seed = the per-index VRF anchor `rngWord` (fixed at the index's advance, never knowable at
         // deposit) + player + amount. No day term: the box binds to the index word for uniqueness and
@@ -542,15 +538,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             ? (amount * evMultiplierBps) / 10_000
             : (uint256(adj) * evMultiplierBps) / 10_000 + (amount - uint256(adj));
 
-        uint256 distressEth = lootboxDistressEth[index][player];
+        // distress was stored at 0.01-ETH granularity; restore to wei for the bonus ratio.
+        uint256 distressEth = distressUnits * LB_DISTRESS_SCALE;
 
+        // Clear amount, adj, score+1, and distress in one SSTORE of the whole word.
         lootboxEth[index][player] = 0;
-        lootboxEthBase[index][player] = 0;
-        // Clear score+1, adjustedPortion, and baseLevel+1 in one SSTORE of the whole word.
-        lootboxPurchasePacked[index][player] = 0;
-        if (distressEth != 0) {
-            lootboxDistressEth[index][player] = 0;
-        }
         _resolveLootboxCommon(
             player,
             index,
@@ -564,52 +556,130 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             amount,
             true
         );
+        return true;
     }
 
-    /// @notice Open a coin-presale box once RNG for its index is available.
-    /// @dev Boon-less, own resolution (NOT a _resolveLootboxCommon caller): a
-    ///      credit-funded box can never mint a whale pass. 50/40/10 BURNIE/DGNRS/WWXRP.
-    /// @param player Player that owns the box (resolved by the entrypoint).
-    /// @param index The lootbox RNG index the box queued at.
-    /// @custom:reverts E When no box is queued at this index for the player.
-    /// @custom:reverts RngNotReady When the committed RNG word is not yet set.
-    function openPresaleBox(address player, uint48 index) external {
-        uint256 stored = presaleBoxEth[index][player];
-        if (stored == 0) revert E();
-        uint256 rngWord = lootboxRngWordByIndex[index];
-        if (rngWord == 0) revert RngNotReady();
-        presaleBoxEth[index][player] = 0; // dequeue
-        _resolvePresaleBox(player, index, stored, rngWord);
+    /// @notice Open every box queued at an RNG index for a player — the ETH-lootbox leg, the
+    ///         coin-presale-box leg, or both (one committed word, two domain-separated draws,
+    ///         each leg robust to being empty). The unified manual open entrypoint.
+    /// @param player Player that owns the box(es) (resolved by the entrypoint).
+    /// @param index The shared RNG index the box(es) queued at.
+    /// @custom:reverts E When neither leg has a box queued at this index for the player.
+    /// @custom:reverts RngNotReady When a queued leg's committed RNG word is not yet set.
+    function openBox(address player, uint48 index) external {
+        // Probe the presale leg until the sweep has drained presale (free slot-0 read of the flag).
+        if (!_openBoxBoth(player, index, !presaleDrained)) revert E();
     }
 
-    /// @notice Open a co-queued lootbox + presale box in one tx (one committed word,
-    ///         two domain-separated draws). Robust to either leg being empty.
-    /// @param player Player that owns the index (resolved by the entrypoint).
+    /// @dev Both-leg open body, shared by the manual `openBox` entrypoint and the human-box
+    ///      sweep. Resolves the lootbox leg (if queued) then, when `checkPresale`, the presale-box
+    ///      leg (if queued); each robust to being empty. The `player` is the ALREADY-resolved
+    ///      owner (callers bypass the game's _resolvePlayer wrapper, which would re-gate on the
+    ///      game contract as msg.sender). Runs in the game's storage context.
+    /// @param player Box owner (already resolved).
     /// @param index The shared RNG index.
-    function openLootboxAndPresaleBox(address player, uint48 index) external {
-        // Lootbox leg: resolve only if one is queued (its own existing seed derivation).
-        // Nested delegatecall into this module's own openLootBox with the ALREADY-resolved
-        // player (bypasses the game's _resolvePlayer wrapper, which would re-gate on the
-        // game contract as msg.sender). Runs in the game's storage context.
-        if ((lootboxEth[index][player] & ((1 << 232) - 1)) != 0) {
-            (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE
-                .delegatecall(
-                    abi.encodeWithSelector(this.openLootBox.selector, player, index)
-                );
-            if (!ok) {
-                assembly {
-                    revert(add(data, 0x20), mload(data))
-                }
+    /// @param checkPresale Whether to probe the presale-box leg — the caller passes `!presaleDrained`.
+    ///        Once the sweep has drained presale (flag set) the cold presaleBoxEth SLOAD is skipped
+    ///        for every entry; the sweep caches the flag once per call.
+    /// @return any True if at least one leg was resolved.
+    function _openBoxBoth(address player, uint48 index, bool checkPresale) internal returns (bool any) {
+        // Lootbox leg: resolves (and reports) only if one is queued — its own seed derivation.
+        if (_openLootBoxLeg(player, index)) any = true;
+        // Presale-box leg: probed only while presale boxes are outstanding. Boon-less, own
+        // resolution (NOT a _resolveLootboxCommon caller): a credit-funded box can never mint a
+        // whale pass. 50/40/10 BURNIE/DGNRS/WWXRP.
+        if (checkPresale) {
+            uint256 stored = presaleBoxEth[index][player];
+            if (stored != 0) {
+                uint256 rngWord = lootboxRngWordByIndex[index];
+                if (rngWord == 0) revert RngNotReady();
+                presaleBoxEth[index][player] = 0; // dequeue
+                _resolvePresaleBox(player, index, stored, rngWord);
+                any = true;
             }
         }
-        // Presale-box leg: resolve only if one is queued (the salted derivation).
-        uint256 stored = presaleBoxEth[index][player];
-        if (stored != 0) {
-            uint256 rngWord = lootboxRngWordByIndex[index];
-            if (rngWord == 0) revert RngNotReady();
-            presaleBoxEth[index][player] = 0;
-            _resolvePresaleBox(player, index, stored, rngWord);
+    }
+
+    /// @notice AUTO-03 human-box leg of openBoxes(): a permissionless, gas-bounded MULTI-INDEX sweep.
+    /// @dev Delegatecall entrypoint from DegenerusGame.openBoxes — runs in the Game's storage
+    ///      context, mirroring the afking leg's drainAfkingBoxes delegatecall. Walks the open
+    ///      frontier from boxCursorIndex up to LR_INDEX-1 (the finalized indices — words land at
+    ///      LR_INDEX-1, one behind the pre-incremented active index), opening every ready box at
+    ///      each index, then advancing to the next. `budget` bounds the ENTRIES scanned this call:
+    ///      opens AND skips each cost one step, so a long skip-prefix (already-opened or
+    ///      presale-only entries) can never gas-wall the tx — progress is monotonic and persists
+    ///      across calls via (boxCursorIndex, boxCursor). Each entry resolves BOTH legs via
+    ///      _openBoxBoth (lootbox + presale, robust to either empty). Orphan-index
+    ///      coupling (the v45 landmine): the sweep STOPS at any index whose VRF word has not landed
+    ///      (orphaned mid-day by a coordinator rotation) instead of advancing past it, so its boxes
+    ///      are never marooned — it resumes once the re-issued word lands. Every leg is O(1)
+    ///      (WHALE-01/02 defers materialization to claimWhalePass).
+    /// @param budget Maximum entries (opens + skips + index-headers) scanned this call.
+    /// @return opened Total human boxes opened this call.
+    function openHumanBoxes(uint256 budget) external returns (uint256 opened) {
+        // Entry-gate (RD-5): the open path's revert sources — rngLock and the terminal-jackpot
+        // liveness control — are excluded pre-loop so the loop body is guaranteed-non-reverting.
+        if (rngLockedFlag || _livenessTriggered()) return 0;
+
+        uint48 active = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+        if (active <= 1) return 0; // no finalized index yet (LR_INDEX is genesis-1, monotonic)
+        uint48 finalized = active - 1; // highest openable index — where the word lands
+
+        uint48 idx = boxCursorIndex;
+        if (idx == 0) idx = 1; // index 0 is unused; the genesis box index is 1
+        uint256 cur = boxCursor;
+        // Free slot-0 read (the entry-gate above already SLOAD'd slot 0 for rngLockedFlag): probe
+        // the presale leg until presale is fully drained. The flag is flipped (below) once this
+        // sweep advances past presaleCloseIndex, after which every entry skips the cold
+        // presaleBoxEth SLOAD. Cached once per call.
+        bool checkPresale = !presaleDrained;
+
+        uint256 steps; // entries + index-headers scanned this call — bounds the tx gas
+        while (idx <= finalized && steps < budget) {
+            unchecked {
+                ++steps; // each index visit costs a step (bounds an empty-index crawl)
+            }
+            // Orphan-index coupling: never advance past an un-worded index, or its boxes maroon.
+            if (lootboxRngWordByIndex[idx] == 0) break;
+
+            address[] storage queue = boxPlayers[idx];
+            uint256 qlen = queue.length;
+            while (cur < qlen && steps < budget) {
+                address player = queue[cur];
+                unchecked {
+                    ++cur;
+                    ++steps;
+                }
+                // Open if EITHER leg is still owed: the lootbox leg (lootboxEth amount) or the
+                // presale leg (presaleBoxEth). Both are zeroed on open, so a zero/zero entry is
+                // already-drained (or never carried a box of this type) and is skipped.
+                if (
+                    (lootboxEth[idx][player] & LB_AMOUNT_MASK) == 0 &&
+                    (!checkPresale || presaleBoxEth[idx][player] == 0)
+                ) continue;
+                // Guaranteed-non-reverting under the entry-gate + the word!=0 index gate above:
+                // resolves the lootbox AND presale legs (each robust to being empty). The presale
+                // leg is probed only while boxes are outstanding (checkPresale).
+                _openBoxBoth(player, idx, checkPresale);
+                unchecked {
+                    ++opened;
+                }
+            }
+
+            if (cur < qlen) break; // budget hit mid-index — resume here next call
+            unchecked {
+                ++idx; // index fully swept — advance the open frontier (this index is now complete)
+            }
+            cur = 0;
         }
+
+        boxCursorIndex = idx;
+        boxCursor = uint48(cur);
+        // Presale is fully drained once the cursor has advanced PAST the close index (every box at
+        // indices <= presaleCloseIndex is now opened). One-way, sweep-only; gated on presaleOver so
+        // it never fires before the close index is meaningful (zero while presale is open / never
+        // closed). Thereafter every open path skips the cold presaleBoxEth SLOAD.
+        if (presaleOver && !presaleDrained && idx > presaleCloseIndex) presaleDrained = true;
     }
 
     /// @dev Resolve a presale box: 50% BURNIE / 40% DGNRS / 10% WWXRP off the salted
@@ -851,12 +921,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      path (gated by real game-state, identical to the auto-resolve callers); BOX-01
     ///      governs the AMOUNT field, not the roll.
     ///
-    ///      Tail flags match the HUMAN `openLootBox` for outcome parity (an afking box must be
+    ///      Tail flags match the HUMAN box open (`_openLootBoxLeg`) for outcome parity (an afking box must be
     ///      identical to a normal box in every way that matters): `emitLootboxEvent = true`
     ///      (emits `LootBoxOpened` like any box open) and `payColdBustConsolation = true` (a
     ///      bust pays the same WWXRP consolation a human box does). The ONE intentional
     ///      exception is the distress bonus — `distressEth = 0` / `totalPackedEth = 0`: the
-    ///      human value is frozen at buy in the cold-ledger `lootboxDistressEth`, which the
+    ///      human value is frozen at buy in the packed lootboxEth distress field, which the
     ///      stamp-only afking box never writes (BOX-02). Deliberately omitted as a mega-niche
     ///      end-game feature (active only the final day before game-over, by which point
     ///      afking subscribers are gone). No `RngNotReady` guard here — the caller (the
@@ -879,7 +949,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ) external {
         if (amount == 0) return;
 
-        // Byte-identical to openLootBox (:534) / resolveLootboxDirect (:768): the
+        // Byte-identical to the human box open (`_openLootBoxLeg`) / resolveLootboxDirect: the
         // abi.encode preimage — with the FROZEN stamped `day` (§1, prevents seed-grinding by
         // open-timing) and the CALLER-PASSED frozen-day word `rngWordByDay[day]` (§1).
         uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
@@ -1051,9 +1121,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      collision-free vs primary chunk 0) for BOTH its reward draw AND its own re-rolled
     ///      target level (seed2 bits[0..39], unused by chunk 1's reward draw).
     /// @param emitLootboxEvent Whether to emit the `LootBoxOpened` event; `true` for
-    ///        `openLootBox`, `false` for both auto-resolve callers
+    ///        `_openLootBoxLeg`, `false` for both auto-resolve callers
     /// @param payColdBustConsolation Whether a ticket-path cold-bust (`whole == 0`) pays
-    ///        the `LOOTBOX_WWXRP_CONSOLATION`; `true` for the manual caller `openLootBox`,
+    ///        the `LOOTBOX_WWXRP_CONSOLATION`; `true` for the manual caller `_openLootBoxLeg`,
     ///        `false` for the auto-resolve callers (`resolveLootboxDirect`,
     ///        `resolveRedemptionLootbox`), which stay silent on cold-bust
     /// @param distressEth Portion of lootbox ETH bought during distress mode (pre-EV-scaling basis)
@@ -1173,7 +1243,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 unchecked { whole += 1; }
                 roundedUp = true;
             }
-            // `_queueTickets` early-returns on `whole == 0`. The manual caller (`openLootBox`)
+            // `_queueTickets` early-returns on `whole == 0`. The manual caller (`_openLootBoxLeg`)
             // pays the WWXRP cold-bust consolation here; auto-resolve callers stay silent.
             _queueTickets(player, rollLevel, whole, false);
             if (payColdBustConsolation && whole == 0) {

@@ -64,9 +64,9 @@ contract RngWindowFreezeHandler is Test {
     // RngFreezeAndRemovalProofs + V56FreezeSolvency — NOT the stale VRFPath literals).
     // -------------------------------------------------------------------------
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) day word
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 36; // lootboxRngPacked; low 48 bits = index cursor
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 37; // mapping(uint48 => uint256) lootbox word
-    uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF; // low 48 bits of slot 36
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 35; // lootboxRngPacked (post V62 repack: was 36); low 48 bits = index cursor
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 36; // mapping(uint48 => uint256) lootbox word (post V62 repack: was 37)
+    uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF; // low 48 bits of slot 35
     uint256 private constant DAILY_IDX_BYTE_OFF = 3; // dailyIdx uint24 @ slot 0 byte 3
     uint256 private constant DAILY_IDX_MASK = 0xFFFFFF; // uint24
 

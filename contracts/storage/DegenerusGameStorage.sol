@@ -63,8 +63,9 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | [27:28] prizePoolFrozen          bool     Prize pool freeze active flag      |
  * | [28:29] presaleOver              bool     Coin-presale-box terminal latch    |
  * | [29:30] subsFullyProcessed       bool     Afking STAGE drain-complete flag    |
+ * | [30:31] presaleDrained           bool     All presale boxes opened (sweep)    |
  * +-----------------------------------------------------------------------------+
- *   Total: 30 bytes used (2 bytes padding)
+ *   Total: 31 bytes used (1 byte padding)
  *
  * +-----------------------------------------------------------------------------+
  * | EVM SLOT 1 (32 bytes) -- Prize Pools                                        |
@@ -341,6 +342,15 @@ abstract contract DegenerusGameStorage {
     ///      `rngLockedFlag` / `ticketsFullyProcessed`, which the advance-path STAGE
     ///      already SLOADs, so its read/write is free.
     bool internal subsFullyProcessed;
+
+    /// @dev One-way "all coin-presale boxes have been opened" flag. False until the auto-open sweep
+    ///      has advanced its cursor PAST presaleCloseIndex — i.e. every box at indices <= the close
+    ///      index is opened, so none can remain. Lives in slot-0 padding byte [30:31], which every
+    ///      open path already SLOADs (`level` / `rngLockedFlag`), so the gate `!presaleDrained` is a
+    ///      free read: once set, the post-presale sweep AND manual opens skip the cold presaleBoxEth
+    ///      SLOAD. Flipped only by the in-order sweep (never the manual path), so an out-of-order
+    ///      manual open of the closing box cannot trip it early and strand a still-queued box.
+    bool internal presaleDrained;
 
     // =========================================================================
     // EVM SLOT 1: Prize Pools
@@ -947,10 +957,28 @@ abstract contract DegenerusGameStorage {
     // Loot Box State & Presale Toggle
     // =========================================================================
 
-    /// @dev Loot box ETH per RNG index per player (amount may accumulate within an index).
-    ///      Packed: [232 bits: amount] [24 bits: purchase level]
-    ///      Purchase level locked at buy time - if you open late, you lose it.
+    /// @dev Loot box state per RNG index per player, packed into one word. The amount may
+    ///      accumulate within an index across deposits; the frozen-at-deposit EV inputs
+    ///      (adjustedPortion, score+1) and the distress fraction ride alongside it so a box
+    ///      lives in a single slot. All four fields are frozen at deposit and read-only at
+    ///      open. distress is stored at 0.01-ETH granularity (distressEth / LB_DISTRESS_SCALE).
+    ///      Bit layout (LSB -> MSB):
+    ///      - [0:128]    amount        (uint128; boosted ETH in wei, drives the EV roll + pool credit)
+    ///      - [128:192]  adjustedPortion (uint64; cap-eligible ETH that received the bonus, <= 10 ETH)
+    ///      - [192:208]  score + 1     (uint16; 0 = unset; the frozen EV multiplier knob)
+    ///      - [208:256]  distressUnits (uint48; distressEth / 1e16, the 25%-ticket-bonus basis)
     mapping(uint48 => mapping(address => uint256)) internal lootboxEth;
+
+    /// @dev Bit offsets / masks for the packed lootboxEth word.
+    uint256 internal constant LB_AMOUNT_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF; // 128 bits
+    uint256 internal constant LB_ADJ_SHIFT = 128;
+    uint256 internal constant LB_ADJ_MASK = 0xFFFFFFFFFFFFFFFF;                    // 64 bits
+    uint256 internal constant LB_SCORE_SHIFT = 192;
+    uint256 internal constant LB_SCORE_MASK = 0xFFFF;                             // 16 bits
+    uint256 internal constant LB_DISTRESS_SHIFT = 208;
+    uint256 internal constant LB_DISTRESS_MASK = 0xFFFFFFFFFFFF;                  // 48 bits
+    /// @dev Distress ETH is stored at 0.01-ETH (1e16 wei) granularity in the packed slot.
+    uint256 internal constant LB_DISTRESS_SCALE = 1e16;
 
     // =========================================================================
     // Coin-Presale-Box State
@@ -1056,10 +1084,6 @@ abstract contract DegenerusGameStorage {
     ///      Stores number of half whale passes (100 tickets each = 50 levels × 2 tickets).
     ///      Unified storage for all deferred lootbox rewards (BAF, jackpot, decimator).
     mapping(address => uint256) internal whalePassClaims;
-
-    /// @dev Base (pre-boost) lootbox ETH per RNG index per player.
-    ///      Tracks unboosted amounts so boosts apply at purchase time, not open time.
-    mapping(uint48 => mapping(address => uint256)) internal lootboxEthBase;
 
     /// @dev True once a WWXRP Degenerette jackpot in this level/10 bracket has
     ///      awarded its one whale halfpass. Rationed globally per bracket: the
@@ -1512,26 +1536,27 @@ abstract contract DegenerusGameStorage {
         return uint256(whole) * LR_BURNIE_SCALE;
     }
 
-    /// @dev Pack a lootbox purchase snapshot into one uint256 word.
-    ///      Layout: score+1 at [0:16], adjustedPortion at [16:80], baseLevel+1 at [80:104];
-    ///      bits [104:256] are reserved and written as zero.
-    ///      baseLevelPlus1 is already encoded by the caller (per-module sentinel offset);
-    ///      this helper does not normalize it. Each field is masked to its width before
-    ///      shifting so an over-wide argument cannot alias an adjacent field.
-    function _packLootboxPurchase(uint16 scorePlus1, uint64 adj, uint24 baseLevelPlus1)
+    /// @dev Pack a lootbox box into one uint256 word (the lootboxEth slot).
+    ///      Layout: amount at [0:128], adjustedPortion at [128:192], score+1 at [192:208],
+    ///      distressUnits at [208:256]. distressUnits is distressEth / LB_DISTRESS_SCALE,
+    ///      already scaled by the caller. Each field is masked to its width before shifting
+    ///      so an over-wide argument cannot alias an adjacent field.
+    function _packLootbox(uint256 amount, uint64 adj, uint16 scorePlus1, uint256 distressUnits)
         internal pure returns (uint256) {
-        return uint256(scorePlus1) & 0xFFFF
-            | (uint256(adj) & 0xFFFFFFFFFFFFFFFF) << 16
-            | (uint256(baseLevelPlus1) & 0xFFFFFF) << 80;
+        return (amount & LB_AMOUNT_MASK)
+            | (uint256(adj) & LB_ADJ_MASK) << LB_ADJ_SHIFT
+            | (uint256(scorePlus1) & LB_SCORE_MASK) << LB_SCORE_SHIFT
+            | (distressUnits & LB_DISTRESS_MASK) << LB_DISTRESS_SHIFT;
     }
 
-    /// @dev Unpack a lootbox purchase snapshot word into its three fields.
-    ///      Reads score+1 from [0:16], adjustedPortion from [16:80], baseLevel+1 from [80:104].
-    function _unpackLootboxPurchase(uint256 word)
-        internal pure returns (uint16 scorePlus1, uint64 adj, uint24 baseLevelPlus1) {
-        scorePlus1 = uint16(word);
-        adj = uint64(word >> 16);
-        baseLevelPlus1 = uint24(word >> 80);
+    /// @dev Unpack a lootbox box word into its four fields. distressUnits is at
+    ///      0.01-ETH granularity; multiply by LB_DISTRESS_SCALE for wei.
+    function _unpackLootbox(uint256 word)
+        internal pure returns (uint256 amount, uint64 adj, uint16 scorePlus1, uint256 distressUnits) {
+        amount = word & LB_AMOUNT_MASK;
+        adj = uint64((word >> LB_ADJ_SHIFT) & LB_ADJ_MASK);
+        scorePlus1 = uint16((word >> LB_SCORE_SHIFT) & LB_SCORE_MASK);
+        distressUnits = (word >> LB_DISTRESS_SHIFT) & LB_DISTRESS_MASK;
     }
 
     /// @dev Calculates EV multiplier from a raw activity score.
@@ -1563,21 +1588,6 @@ abstract contract DegenerusGameStorage {
 
     /// @dev RNG words keyed by lootbox RNG index.
     mapping(uint48 => uint256) internal lootboxRngWordByIndex;
-
-    /// @dev Per-(index, player) lootbox purchase snapshot packed into one uint256 word.
-    ///      Bit layout (LSB -> MSB):
-    ///      - [0:16]    score + 1     (uint16; 0 = unset)
-    ///      - [16:80]   adjustedPortion (uint64; cap-eligible ETH that received the bonus, <= 10 ETH)
-    ///      - [80:104]  baseLevel + 1 (uint24; 0 = unset; per-module sentinel offset)
-    ///      - [104:256] free          (reserved, written as zero)
-    mapping(uint48 => mapping(address => uint256)) internal lootboxPurchasePacked;
-
-    // =========================================================================
-    // Lootbox Bonus Tracking & BURNIE Lootboxes
-    // =========================================================================
-
-    /// @dev BURNIE lootbox amounts keyed by lootbox RNG index and player.
-    mapping(uint48 => mapping(address => uint256)) internal lootboxBurnie;
 
     // =========================================================================
     // Deity Boon Tracking
@@ -1677,15 +1687,6 @@ abstract contract DegenerusGameStorage {
     ///      Amounts stored in units of 1e14 wei (0.0001 ETH) to fit 32 bits
     ///      (max ~429,500 ETH per symbol per day).
     mapping(uint24 => uint256[4]) internal dailyHeroWagers;
-
-    // =========================================================================
-    // Distress-Mode Lootbox Tracking
-    // =========================================================================
-
-    /// @dev ETH portion of a lootbox purchased during distress mode (final 6 hours
-    ///      before gameover liveness guard). Used at open time to apply a 25% ticket
-    ///      bonus proportional to the distress fraction of the total lootbox value.
-    mapping(uint48 => mapping(address => uint256)) internal lootboxDistressEth;
 
     // =========================================================================
     // Segregated Yield Accumulator
@@ -2180,4 +2181,30 @@ abstract contract DegenerusGameStorage {
     ///      (at the start of the new day, not trailing after the prior day completes),
     ///      firing exactly once per day regardless of which RNG path runs.
     uint24 internal _afkingResetDay;
+
+    // =========================================================================
+    // Human-Box Auto-Open Sweep State
+    // =========================================================================
+
+    /// @dev Cursor into the box auto-open queue for the current lootbox RNG index.
+    ///      Concurrent same-tx callers self-partition via the advancing cursor.
+    ///      Reset to zero when the active index advances (collision-free walk).
+    uint48 internal boxCursor;
+
+    /// @dev Index against which the cursor currently walks (boxCursor day-reset key).
+    uint48 internal boxCursorIndex;
+
+    /// @dev RNG index of the coin-presale-box close (the 50-ETH-crossing buy) — the highest index
+    ///      any presale box can occupy. Set once when presaleOver latches. Packs into the cursor
+    ///      slot (free read in the sweep, which already loads boxCursorIndex); the sweep flips
+    ///      presaleDrained once boxCursorIndex advances past it. Zero while presale never closes.
+    uint48 internal presaleCloseIndex;
+
+    /// @dev Players with an open box queued per lootbox RNG index, enqueued once at
+    ///      first deposit (the lootboxEth amount == 0 signal). Keyed on the lootbox index,
+    ///      which re-couples to the VRF-rotation orphan-index keyspace — the box auto-open
+    ///      walk MUST gate each open on lootboxRngWordByIndex[index] != 0 so an index
+    ///      orphaned mid-day by an emergency coordinator rotation is skipped until the
+    ///      a303ae18 detect-preserve-re-issue path lands the re-issued word.
+    mapping(uint48 => address[]) internal boxPlayers;
 }
