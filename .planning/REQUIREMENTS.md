@@ -28,8 +28,8 @@
 ### FUZZ — Invariant fuzz suite (STEP 5b; Claude-built + council property-review)
 > Properties asserted across random reachable action sequences — exactly what catches compositions + asymmetries that point-tests miss, and the durable oracle the council's findings get checked against. Build on the GameSeeder etch pattern (`test/fuzz/PassBoxAutoOpenEnqueue.t.sol`, `test/gas/GameOverCompositionAdvanceGas.t.sol`).
 
-- [ ] **FUZZ-01** (FUZZ): SOLVENCY — `claimablePool == Σ claimableWinnings` (post-v61: `Σ(claimableWinnings + afkingFunding)` across the packed balance) AND `balance + stETH ≥ claimablePool`, holds across any action sequence.
-- [ ] **FUZZ-02** (FUZZ): RNG-FREEZE — every VRF-consumed value is frozen [request → unlock] vs a player acting inside the window (`[[v45-vrf-freeze-invariant]]`; trace BACKWARD from each consumer).
+- [x] **FUZZ-01** (FUZZ): SOLVENCY — `claimablePool == Σ claimableWinnings` (post-v61: `Σ(claimableWinnings + afkingFunding)` across the packed balance) AND `balance + stETH ≥ claimablePool`, holds across any action sequence. — DONE 381-01 (V61SolvencyAfpay + SolvencyActionHandler).
+- [x] **FUZZ-02** (FUZZ): RNG-FREEZE — every VRF-consumed value is frozen [request → unlock] vs a player acting inside the window (`[[v45-vrf-freeze-invariant]]`; trace BACKWARD from each consumer). — DONE 381-02 (RngWindowFreeze.inv.t.sol + RngWindowFreezeHandler; enumerated in-window SLOAD set incl. non-VRF cursors; 256/128 GREEN, non-vacuous + falsifiable).
 - [ ] **FUZZ-03** (FUZZ): GAS-CEILING — no `advanceGame` tx exceeds 16,777,216 gas across any reachable action sequence (TARGETS < 10M — `[[v56-batch-sizing-10m-target-16p7m-ceiling]]`).
 - [ ] **FUZZ-04** (FUZZ): ENQUEUE — every persisted box (`lootboxEth`/`presaleBoxEth` with base != 0) is in `boxPlayers[index]` until opened (never held un-enqueued — the WHALE-01 invariant, as a fuzz property).
 - [ ] **FUZZ-05** (FUZZ): POOL-CONSERVATION — `futurePrizePool ↔ nextPrizePool ↔ claimablePool` transfers conserve the total; no unbacked credit minted.

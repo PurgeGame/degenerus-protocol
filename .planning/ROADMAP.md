@@ -83,8 +83,8 @@
 
 **Plans**: 6 plans (5 parallel property plans in wave 1 + the wave-2 council completeness review)
 
-  - [ ] 381-01-PLAN.md — FUZZ-01 SOLVENCY: widen the canonical packed-balance Σ identity + backing bound (V61SolvencyAfpay) to a multi-surface action-space (pass/presale/claim buyers) via a new SolvencyActionHandler
-  - [ ] 381-02-PLAN.md — FUZZ-02 RNG-FREEZE: promote the scenario freeze coverage into one canonical fuzzed invariant (RngWindowFreeze) — every enumerated in-window SLOAD frozen [request→unlock] vs an in-window player action
+  - [x] 381-01-PLAN.md — FUZZ-01 SOLVENCY: widen the canonical packed-balance Σ identity + backing bound (V61SolvencyAfpay) to a multi-surface action-space (pass/presale/claim buyers) via a new SolvencyActionHandler ✅ GREEN (f2bb6d73)
+  - [x] 381-02-PLAN.md — FUZZ-02 RNG-FREEZE: promote the scenario freeze coverage into one canonical fuzzed invariant (RngWindowFreeze) — every enumerated in-window SLOAD frozen [request→unlock] vs an in-window player action ✅ GREEN (7d073d6a)
   - [ ] 381-03-PLAN.md — FUZZ-03 GAS-CEILING: extract the GameSeeder-etch + drive-real-advanceGame + assert-every-tx-≤-16,777,216 into a REUSABLE component (AdvanceGasCeiling) Phase 384 consumes (SC3) + fuzz it over reachable pre-states
   - [ ] 381-04-PLAN.md — FUZZ-04 ENQUEUE: promote the WHALE-01 one-shot into a fuzzed always-on invariant (BoxEnqueue) — every persisted box (base≠0) enqueued in boxPlayers[index] until opened, over all box-creating paths
   - [ ] 381-05-PLAN.md — FUZZ-05 POOL-CONSERVATION: BUILD the futurePool↔nextPool↔claimablePool conservation invariant (PoolConservation) — total backed + no unbacked credit minted across transfers

@@ -4,13 +4,13 @@ milestone: v62.0
 milestone_name: Blind-Spot-Driven Pre-C4A Audit
 status: executing
 last_updated: "2026-06-08T02:33:28.373Z"
-last_activity: 2026-06-08 -- Phase 381 planning complete
+last_activity: 2026-06-08 -- Phase 381 plan 02 (FUZZ-02 RNG-FREEZE) executed GREEN
 progress:
   total_phases: 13
   completed_phases: 1
   total_plans: 10
-  completed_plans: 4
-  percent: 8
+  completed_plans: 6
+  percent: 12
 ---
 
 # Project State
@@ -32,10 +32,10 @@ See: .planning/PROJECT.md (Current Milestone: v62.0 section) + .planning/ROADMAP
 
 ## Current Position
 
-Phase: 381 — INVARIANT FUZZ (Durable Property Net) — ready to plan (Claude-built; FUZZ-01..06)
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-08 -- Phase 381 planning complete
+Phase: 381 — INVARIANT FUZZ (Durable Property Net) — EXECUTING (Claude-built; FUZZ-01..06)
+Plan: 381-02 done (FUZZ-02 RNG-FREEZE GREEN); 381-01 (FUZZ-01) done. NEXT = 381-03 (Wave-1/2 continuation). Hard stops: 381-06 council autonomous:false, NO contract edits, no advance to 382.
+Status: Executing — Wave 1 in progress (2/6 plans GREEN)
+Last activity: 2026-06-08 -- Phase 381 plan 02 (FUZZ-02 RNG-FREEZE) executed GREEN; freeze invariant durable + non-vacuous + falsifiable over 256/128; ZERO contract edits
 
 ## ▶ ACTIVE Milestone Roadmap (v62.0 — phases 380-387 — ACTIVE 2026-06-07; baseline = v61.0 closure HEAD `b97a7a2e`; subject locked at `c4d48008`)
 
@@ -43,8 +43,8 @@ Shape: FOUNDATION → FUZZ → PRIME → ASYM → COMPO → LOOP → PERIPH → 
 
 | Phase | Name | Type | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 380 | FOUNDATION — Test-Fix & Green Baseline | FOUND (Claude-built) | FOUND-01..06 | Not started |
-| 381 | INVARIANT FUZZ — Durable Property Net | FUZZ (Claude-built + council property-review) | FUZZ-01..06 | Not started |
+| 380 | FOUNDATION — Test-Fix & Green Baseline | FOUND (Claude-built) | FOUND-01..06 | ✅ Complete |
+| 381 | INVARIANT FUZZ — Durable Property Net | FUZZ (Claude-built + council property-review) | FUZZ-01..06 | ▶ Executing (FUZZ-01 + FUZZ-02 GREEN) |
 | 382 | PRIME — v61 New Code + Forgiving-Funding | SWEEP (council-LED) | PRIME-01..04 | Not started |
 | 383 | ASYMMETRY SWEEP | SWEEP (council-LED) | ASYM-01..06 | Not started |
 | 384 | advanceGame COMPOSITION + e2e Gas Harness | SWEEP (council-LED) | COMPO-01..03 | Not started |
