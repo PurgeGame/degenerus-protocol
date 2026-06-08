@@ -4,13 +4,13 @@ milestone: v62.0
 milestone_name: Blind-Spot-Driven Pre-C4A Audit
 status: executing
 last_updated: "2026-06-08T07:00:00.000Z"
-last_activity: 2026-06-08 -- Phase 381 plan 06 (FUZZ-06 council completeness) DONE — finding V62-01 (box auto-open dead) reproduced, G1/G2 refuted; Wave-1+2 complete
+last_activity: 2026-06-08 -- Phase 381 CLOSED (FUZZ-01..06, 24/24 net green, 0 fail) → finding V62-01; Phase 382 PRIME council sweep starting
 progress:
   total_phases: 13
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 10
   completed_plans: 10
-  percent: 15
+  percent: 23
 ---
 
 # Project State
