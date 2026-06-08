@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v62.0
 milestone_name: Blind-Spot-Driven Pre-C4A Audit
-status: ready_to_plan
-last_updated: 2026-06-07T22:45:43.813Z
-last_activity: 2026-06-07 -- Phase 380 COMPLETE (4/4); green v62 baseline recorded; ready to plan 381
+status: executing
+last_updated: "2026-06-08T02:33:28.373Z"
+last_activity: 2026-06-08 -- Phase 381 planning complete
 progress:
-  total_phases: 8
+  total_phases: 13
   completed_phases: 1
-  total_plans: 4
+  total_plans: 10
   completed_plans: 4
-  percent: 13
-stopped_at: Phase 380 complete (4/4) — ready to discuss Phase 381
+  percent: 8
 ---
 
 # Project State
@@ -35,8 +34,8 @@ See: .planning/PROJECT.md (Current Milestone: v62.0 section) + .planning/ROADMAP
 
 Phase: 381 — INVARIANT FUZZ (Durable Property Net) — ready to plan (Claude-built; FUZZ-01..06)
 Plan: Not started
-Status: Ready to plan — Phase 380 FOUNDATION complete (4/4); green oracle `REGRESSION-BASELINE-v62.md` is the safety floor for the council sweeps
-Last activity: 2026-06-07 — Phase 380 complete: green baseline (789/3/110) recorded @ c4d48008; FC1–FC6 + affiliate-score asymmetry routed to council; verifier 11/11; review oracle-holes fixed
+Status: Ready to execute
+Last activity: 2026-06-08 -- Phase 381 planning complete
 
 ## ▶ ACTIVE Milestone Roadmap (v62.0 — phases 380-387 — ACTIVE 2026-06-07; baseline = v61.0 closure HEAD `b97a7a2e`; subject locked at `c4d48008`)
 
