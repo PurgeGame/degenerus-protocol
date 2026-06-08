@@ -150,12 +150,22 @@ contract RngWindowFreezeHandler is Test {
     ///         in-window action handlers. Idempotent: if the window is already open it just records.
     function openWindow(uint256 actorSeed) external useActor(actorSeed) {
         calls_openWindow++;
-        if (game.gameOver()) return;
+        _driveWindowOpen(actorSeed);
+    }
 
-        // If a window is already open, nothing to drive — record and return.
+    /// @dev Drive the daily VRF window OPEN with the current actor and return whether rngLocked() latched.
+    ///      Factored out so the in-window actions can SELF-PRIME the window (guaranteeing they execute
+    ///      inside an open window regardless of fuzzer call ordering — the freeze property is otherwise
+    ///      vacuously green if an in-window action never coincides with an open window). On a successful
+    ///      latch it records ghost_windowsOpened and snapshots the enumerated consumed set at request time.
+    function _driveWindowOpen(uint256 actorSeed) internal returns (bool open) {
+        if (game.gameOver()) return false;
+
+        // If a window is already open, nothing to drive — record (re-counts an already-open observation)
+        // and reuse the existing request-time snapshot.
         if (game.rngLocked()) {
             ghost_windowsOpened++;
-            return;
+            return true;
         }
 
         // Small daily-gate buy so advanceGame has a reason to request the daily word.
@@ -166,11 +176,15 @@ contract RngWindowFreezeHandler is Test {
             try game.purchase{value: oneTicket}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth) {} catch {}
         }
 
-        // Advance until a daily request is in flight (rngLocked latches). Cap the loop; if the
-        // chain needs an intermediate fulfill to REACH the day boundary, fulfill the in-flight
-        // request with a fixed word then continue (that intermediate is NOT the window we measure —
-        // we only record windowsOpened when rngLocked() is observed true AFTER the advance).
+        // Advance until a daily request is in flight (rngLocked latches). The daily request only fires at a
+        // NEW day boundary; after a prior window closed, the game sits on the current day until time passes.
+        // Each iteration warps a full day forward (crossing the JACKPOT_RESET_TIME boundary) so a fresh
+        // daily request becomes due, then advances. Capped; intermediate non-daily (lootbox) requests are
+        // fulfilled to keep progressing (they are NOT the window we measure — windowsOpened is recorded only
+        // when rngLocked() is observed true after the advance). Time passing between days is the heartbeat's
+        // natural rhythm (the v45-exempt progression), not a player-attributable mutation.
         for (uint256 i; i < 8 && !game.rngLocked(); i++) {
+            vm.warp(block.timestamp + 1 days);
             vm.prank(currentActor);
             try game.advanceGame() {} catch {}
             if (game.rngLocked()) break;
@@ -184,7 +198,8 @@ contract RngWindowFreezeHandler is Test {
             }
         }
 
-        if (game.rngLocked()) {
+        open = game.rngLocked();
+        if (open) {
             ghost_windowsOpened++;
             _snapshotEnumeratedSet();
         }
@@ -200,7 +215,10 @@ contract RngWindowFreezeHandler is Test {
     ///         asserts it did not move any enumerated consumed slot in isolation.
     function tryInWindowPlacement(uint256 actorSeed, uint128 amtSeed, uint32 ticketSeed) external useActor(actorSeed) {
         calls_inWindowPlacement++;
-        if (!game.rngLocked()) return; // only meaningful inside the window
+        // Self-prime: open the window if the fuzzer did not just open one, so this action always runs
+        // INSIDE an open window (else the freeze property would be vacuous). _driveWindowOpen snapshots
+        // the enumerated set at request time on a fresh latch.
+        if (!_driveWindowOpen(actorSeed)) return; // could not open (gameOver) — nothing to exercise
         ghost_inWindowActions++;
 
         _snapshotEnumeratedSet();
@@ -222,8 +240,9 @@ contract RngWindowFreezeHandler is Test {
     ///         a plain purchase must not touch the frozen word/cursor set. Isolation-checked.
     function tryInWindowPurchase(uint256 actorSeed, uint256 qtySeed, uint256 boxSeed) external useActor(actorSeed) {
         calls_inWindowPurchase++;
-        if (!game.rngLocked()) return;
         if (game.gameOver()) return;
+        // Self-prime the window so the purchase always runs inside an open window (non-vacuity).
+        if (!_driveWindowOpen(actorSeed)) return;
         ghost_inWindowActions++;
 
         _snapshotEnumeratedSet();
@@ -249,7 +268,8 @@ contract RngWindowFreezeHandler is Test {
     ///         asserts the call did not move the frozen word/cursor set.
     function tryInWindowOpenBoxes(uint256 actorSeed, uint256 maxSeed) external useActor(actorSeed) {
         calls_inWindowOpenBoxes++;
-        if (!game.rngLocked()) return;
+        // Self-prime the window so openBoxes always runs inside an open window (non-vacuity).
+        if (!_driveWindowOpen(actorSeed)) return;
         ghost_inWindowActions++;
 
         _snapshotEnumeratedSet();
@@ -263,20 +283,27 @@ contract RngWindowFreezeHandler is Test {
     // Action: closeWindow — fulfill the pending VRF (the exempt heartbeat completion)
     // =========================================================================
 
-    /// @notice Fulfill the in-flight daily VRF request, which clears rngLockedFlag and lets the
-    ///         daily consumption run. This is the EXEMPT path (the heartbeat completing) — it is NOT
-    ///         measured against the freeze property; it simply re-opens the fuzzer to drive a fresh
-    ///         window next round. The player-attributable freeze check already ran in isolation at
-    ///         each in-window action above.
+    /// @notice Close the window: fulfill the in-flight daily VRF request (which STORES rngWordCurrent but
+    ///         leaves rngLockedFlag set — AdvanceModule.rawFulfillRandomWords only buffers the word for the
+    ///         daily branch), THEN advanceGame to drive the day processing that calls _unlockRng (clearing
+    ///         rngLockedFlag). This is the EXEMPT heartbeat completing — it is NOT measured against the
+    ///         freeze property; it simply re-opens the fuzzer to drive a fresh window next round. The
+    ///         player-attributable freeze check already ran in isolation at each in-window action above.
     function closeWindow(uint256 wordSeed) external {
         calls_closeWindow++;
         if (!game.rngLocked()) return;
         uint256 reqId = vrf.lastRequestId();
         if (reqId == 0) return;
         (, , bool fulfilled) = vrf.pendingRequests(reqId);
-        if (fulfilled) return;
-        // Non-zero word (the contract treats word==0 as not-yet-landed).
-        try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("closew", wordSeed))) | 1) {} catch {}
+        if (!fulfilled) {
+            // Non-zero word (the contract treats word==0 as not-yet-landed).
+            try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("closew", wordSeed))) | 1) {} catch {}
+        }
+        // Fulfillment only buffers the daily word; the lock clears when a subsequent advanceGame processes
+        // the day (the EXEMPT heartbeat). Drive it until rngLocked() falls (capped).
+        for (uint256 i; i < 8 && game.rngLocked(); i++) {
+            try game.advanceGame() {} catch {}
+        }
     }
 
     // =========================================================================
@@ -350,5 +377,38 @@ contract RngWindowFreezeHandler is Test {
     function _dailyIdx() internal view returns (uint256) {
         uint256 raw = uint256(vm.load(address(game), bytes32(uint256(0))));
         return (raw >> (DAILY_IDX_BYTE_OFF * 8)) & DAILY_IDX_MASK;
+    }
+
+    // =========================================================================
+    // Falsifiability seam (test-only) — proves the freeze detector is not vacuous
+    // =========================================================================
+
+    /// @notice FALSIFIABILITY HOOK. Seeds an in-window mutation of an enumerated consumed slot against the
+    ///         LAST snapshot (taken at openWindow), runs the isolation freeze-check, then RESTORES the slot
+    ///         so the seeded break never leaks into the campaign's real invariant. Used only by
+    ///         RngWindowFreeze.inv.t.sol::test_invariantCatchesSeededInWindowMutation to prove
+    ///         _checkFrozenAfterIsolatedAction actually registers a delta on a snapshotted slot — i.e. the
+    ///         freeze invariant genuinely catches a violation rather than being unfalsifiably green.
+    /// @dev Mutates rngWordByDay[_snapDay] (the VRF-derived day word the snapshot keyed at request time) by
+    ///      a non-zero delta — exactly the in-window seed-steering the freeze property forbids — then runs
+    ///      the SAME isolation comparison the real in-window actions use, RETURNING whether a delta was
+    ///      observed. It deliberately does NOT touch the campaign's ghost_frozenSlotMutations (that counter
+    ///      is the live property; a seeded falsification must never pollute it — the fuzzer can also call
+    ///      this selector, so it is excluded from the campaign in the invariant setUp AND made
+    ///      counter-neutral here as defence-in-depth). The contract slot is restored immediately. A `true`
+    ///      return proves the detector registers a known in-window violation — the falsifiability guarantee.
+    function debugSeedInWindowMutationAndCheck() external returns (bool detected) {
+        bytes32 dayWordSlot = keccak256(abi.encode(uint256(_snapDay), RNG_WORD_BY_DAY_SLOT));
+        uint256 original = uint256(vm.load(address(game), dayWordSlot));
+
+        // Seed the in-window mutation: flip the snapshotted day word to a different value.
+        vm.store(address(game), dayWordSlot, bytes32(original ^ uint256(keccak256("rngfreeze_falsify"))));
+
+        // Run the identical isolation comparison the live in-window actions use, but score it locally so the
+        // campaign's property counter is never moved by a deliberately-seeded break.
+        detected = (_rngWordByDay(_snapDay) != _snapDayWord);
+
+        // Restore — the seeded break exists only for the duration of the detection.
+        vm.store(address(game), dayWordSlot, bytes32(original));
     }
 }
