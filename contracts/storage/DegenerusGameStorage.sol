@@ -2186,12 +2186,14 @@ abstract contract DegenerusGameStorage {
     // Human-Box Auto-Open Sweep State
     // =========================================================================
 
-    /// @dev Cursor into the box auto-open queue for the current lootbox RNG index.
-    ///      Concurrent same-tx callers self-partition via the advancing cursor.
-    ///      Reset to zero when the active index advances (collision-free walk).
+    /// @dev Entry position within boxPlayers[boxCursorIndex] for the box auto-open sweep.
+    ///      Persists across calls when a budget runs out mid-index; reset to zero each
+    ///      time the sweep fully drains an index and advances the frontier.
     uint48 internal boxCursor;
 
-    /// @dev Index against which the cursor currently walks (boxCursor day-reset key).
+    /// @dev The sweep's open frontier: the lowest lootbox RNG index not yet fully swept.
+    ///      Monotonic — advances one index at a time as each queue drains, and never
+    ///      moves past an index whose VRF word has not landed (orphan-index guard).
     uint48 internal boxCursorIndex;
 
     /// @dev RNG index of the coin-presale-box close (the 50-ETH-crossing buy) — the highest index

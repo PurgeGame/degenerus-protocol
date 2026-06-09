@@ -63,8 +63,10 @@ interface IDegenerusAffiliate {
     function affiliateBonusPointsBest(uint24 currLevel, address player) external view returns (uint256 points);
 
     /// @notice Get the referrer address for a player.
-    /// @dev Returns address(0) if player has no valid referrer.
+    /// @dev Never returns address(0): resolves to the VAULT when the player has no valid
+    ///      referrer (code unset, locked, vault-coded, or its owner unresolvable), so
+    ///      referral chains always terminate at the VAULT.
     /// @param player The player to look up.
-    /// @return The referrer's address, or address(0) if none.
+    /// @return The referrer's address (the VAULT when the player has no real referrer).
     function getReferrer(address player) external view returns (address);
 }
