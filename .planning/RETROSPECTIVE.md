@@ -721,6 +721,39 @@ The test + audit close of the v61 feature diff (contract subject FROZEN at IMPL 
 
 ---
 
+## Milestone: v62.0 — Cross-Model-Led Blind-Spot Audit (Foundation-First) + Findings Remediation
+
+**Shipped:** 2026-06-09
+**Phases:** 8 (380-387) | **Plans:** 10 (380 FOUNDATION: 4 · 381 FUZZ: 6) + the 382-386 council sweeps (closed via the FINDINGS doc, not per-phase plans)
+
+### What Was Built
+A foundation-first cross-model audit of the v61+forgiving-funding subject `c4d48008`: 380 drove the full forge suite to a GREEN baseline; 381 built a durable always-on invariant net (FUZZ-01..06 — SOLVENCY · RNG-FREEZE · GAS-CEILING · BOX-ENQUEUE · POOL-CONSERVATION); 382-386 ran the Gemini+Codex council sweeps (each with the council pass on record); 387 consolidated `audit/FINDINGS-v62.0.md`. The audit surfaced 3 actionable findings (V62-01 MED-HIGH, V62-02/03 HIGH) + 4 LOW + 1 open MED + ~15 refuted, each actionable one empirically reproduced; all were then REMEDIATED under USER hand-review (`32f0cb43`/`c4a6c81c`/`7e54f450`/`3444aed0`/`77580320`).
+
+### What Worked
+- **The cross-model premise validated itself.** All 3 actionable findings were council-surfaced and exactly the class prior Claude-only passes (v58/v60/v61) glided past — V62-02 was convergent (Gemini+Codex independently), V62-01 fell out of the 381-06 council completeness review of Claude's own invariant set.
+- Foundation-first paid off: a green oracle + an always-on invariant net meant findings were reproduced against a clean suite, and the FUZZ-03 gas-ceiling component was directly reusable by the COMPO sweep.
+- Reproduction-first findings: each of the 3 ships a `test/repro/*.t.sol` that flips from characterizing-the-bug to asserting-the-fix as its remediation's regression test.
+- The audit ran fully autonomously overnight (resumed cleanly after an IDE crash) with the contract subject git-verified byte-frozen throughout — zero audit-time source mutation.
+
+### What Was Inefficient
+- The autonomous run closed sweep areas 382/383/385/386 via the consolidated FINDINGS doc rather than per-phase PLAN/SUMMARY files, so the formal GSD phase directories + STATE frontmatter drifted from reality (STATE still read `audit-complete-remediation-gated` after the fixes had landed AND pushed) — the milestone close had to reconcile this by hand.
+- `gsd-sdk` state/milestone handlers still mis-handle this repo's custom STATE.md (same as v61) — the close was done manually rather than via `milestone.complete`.
+
+### Patterns Established
+- **Council-LED sweep with "the council pass on record" as the no-finding gate** — a clear verdict for any area requires the external pass, not Claude saturation. This is the v62 defining method, and it earned its keep.
+- **Audit→remediation-in-cycle** when the audit finds real bugs (vs the document-only v58 / the 0-contract-change v61) — the findings doc is authored first against the frozen subject, then the gated fixes land and the repros flip to regression tests.
+
+### Key Lessons
+- A Claude-only audit is not sufficient evidence of "clear" on a mature codebase — the convergent external council remains the primary finder; budget the orchestrate/adjudicate/reproduce loop around it, not around Claude hunting solo.
+- An autonomous run that closes work via a consolidated deliverable instead of the per-phase artifacts will leave the planning tracker stale — schedule the bookkeeping reconcile as part of the close, and don't trust the auto-router's phase counts in that window.
+
+### Cost Observations
+- Model mix: opus throughout (orchestration / adjudication / foundation + fuzz build / synthesis); the council legs (Gemini 3 Pro + Codex) ran off-cap.
+- Sessions: 1 autonomous overnight run (interrupted by an IDE crash, resumed) + a separate USER-gated remediation pass.
+- Notable: the council legs are the cheap, high-yield part of the loop — ~5 min/area, off the Claude cap, and the sole source of every actionable finding this milestone.
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -748,6 +781,8 @@ The test + audit close of the v61 feature diff (contract subject FROZEN at IMPL 
 | v41.0 | 9 | 9 | First multi-finding milestone in v25..v41 audit history (3 of 3 F-41-NN RESOLVED_AT_V41); first on-chain-replayable F-NN-NN finding (F-41-01 mint-batch at blocks 10862393..10862412); supersede chain as milestone shape (Phase 285 SUPERSEDED-AT-PHASE-288 + Phase 286 REVISED-AT-PHASE-289) with both fixes shipped to git history; 3-skill PARALLEL adversarial pass run TWICE per single milestone (original + RE-PASS-on-fix per D-284-ADVERSARIAL-RE-PASS-01); FLAG-ONLY user-posture audit phase (Phase 287 JPSURF; 27 SLOAD READ-SET catalog; 0 VIOLATIONs; 3 residuals routed to user triage); single-writer storage slot as structural-fix primitive (`dailyIdx` closed F-41-02 + F-41-03 collaterally at net −36 bytes); REDUCED-SCOPE user authorization on test coverage propagated through commit message → §4 finding block → §9 closure-verdict (TST-FIX evidence-class shift PRODUCTION_REPLAYABLE → ALGORITHM_VERIFIED); closure signal SHA backfill commit pattern (`c6997520` backfills `315978a0` into deliverable post-flip) |
 | v42.0 | 8 | 13 | Mid-sweep USER-APPROVED contract commit (`123f2dac` retryLootboxRng) absorbed as 4th audit-subject surface during SWEEP window without phase-chain restructure (D-297-RETRY-INTEGRATION-01 captured §3.A row-group + §3.B exception annotation + §3.C 4th invariant in terminal phase context); HYBRID adversarial invocation pattern (D-296-INVOKE-01 — `/contract-auditor` SEQUENTIAL_MAIN_CONTEXT + `/zero-day-hunter` + `/economic-analyst` PARALLEL_SUBAGENT); Tier-1 ACCEPT_AS_DOCUMENTED resolution path with §4.2 + §9.NN.iv `ADVERSARIAL_TIER_1_RESOLVED` audit-trail visibility (D-297-VERDICT-01) keeping §9 closure verdict math strict at `0 of 0 F-42-NN`; BURNIE gap-closure as in-phase amendment (Phase 294 `38319463` per D-294-CALLER-UNIFORM-01) extending DPNERF to inline-duplicate BURNIE site at `_awardDailyCoinToTraitWinners` per `feedback_verify_call_graph_against_source.md`; planner-private DRAFT → promote at terminal phase with explicit T2 verification artifact (`297-FINDINGS-VERIFY.md` ALL_PASS gate); 2-commit sequential SHA orchestration with stable `<commit-1-sha>` placeholder convention (D-297-CLOSURE-01); 4-surface §3.A/B/C attestation matrix with new-public-entry-point exception annotation; 8 consecutive READ-only milestones (v32→v42) for the contracts/test source tree at terminal phase |
 | v60.0 (incl. v59 IMPL) | 5 folded + off-phase audit | 2 (v59 SPEC) + audit rounds | First SINGLE-COMBINED milestone close (v59 IMPL + the v60 maximal audit as one unit, v59-titled artifacts archived under the v60 label); external-led audit operating model (rationed Gemini/Codex fresh-eyes hunters aimed at the "safe/by-design" spine + abundant Claude deep-verify/PoC — LIFECYCLE vindication: Claude-refuted, both externals confirmed); 3-lens recall-preserving verdict (confirm=triggering-trace / refute=named-guard / ≥1 confirm kept); every-surface round-2 rotation run to completion; end-to-end worst-case composition PoC as the gas-ceiling gate (17.54M→6.37M); baseline-diff (not "0 failures") as the regression gate vs the unrefreshed forge harness; off-phase audit reconciled into GSD state retroactively; rogue Write-capable subagent edited mainnet .sol mid-hunt (reverted) → git-status-verify discipline |
+| v61.0 | 5 (375-379) | 378=6 test-only (376=3 contract, hand-reviewed) | Fingerprint-guarded autonomous overnight run (contract fingerprint `fcdd999c` re-verified before every commit + after every spawned agent → 28 commits, zero .sol); strictly-sequential no-worktree waves for Foundry-artifact safety + resumability; falsifiability spot-checks (invert→confirm-fail→restore) catch ceremonial tests; BY-NAME non-widening diff as the only valid "no new regression" cert on a storage-layout change; `MILESTONE_V<N>_AT_HEAD_<subject-sha>` signal as the de-facto tag (git tags unused since v43); region-dependent (not uniform −1) PACK slot-shift recalibration via `forge inspect` |
+| v62.0 | 8 (380-387) | 10 (380:4 + 381:6) + 382-386 council sweeps | First CROSS-MODEL-LED audit — the convergent council (Gemini + Codex) is the PRIMARY finder per sweep area, Claude orchestrates/adjudicates/reproduces, and a no-finding verdict needs the council pass on record; premise validated (all 3 actionable findings council-surfaced + missed by prior Claude-only passes — V62-02 convergent, V62-01 fell out of the 381-06 council review of Claude's own invariant set); foundation-first (green baseline + always-on invariant net FUZZ-01..06 before the sweeps, the gas-ceiling component reused by COMPO); reproduction-first findings (each `test/repro/*.t.sol` flips to its fix's regression test); first audit→remediation-in-cycle since v60 (vs document-only v58 / 0-change v61); autonomous overnight run resumed after an IDE crash with zero audit-time source mutation; sweep areas closed via the consolidated FINDINGS doc (not per-phase artifacts) → stale GSD phase-dir + STATE tracking reconciled by hand at close |
 
 ### Top Lessons (Verified Across Milestones)
 
