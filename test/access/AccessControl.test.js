@@ -77,7 +77,7 @@ describe("AccessControl", function () {
       const { coinflip, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        coinflip.connect(alice).processCoinflipPayouts(false, 12345n, 1n)
+        coinflip.connect(alice).processCoinflipPayouts(0, 12345n, 1n)
       ).to.be.revertedWithCustomError(coinflip, "OnlyDegenerusGame");
     });
 

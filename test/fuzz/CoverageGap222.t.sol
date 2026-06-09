@@ -509,10 +509,10 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool ok, ) = address(coinflip).call(
             abi.encodeWithSignature(
-                "processCoinflipPayouts(bool,uint256,uint32)",
-                true,
+                "processCoinflipPayouts(uint8,uint256,uint24)",
+                uint8(0),
                 uint256(1),
-                uint32(1)
+                uint24(1)
             )
         );
         assertFalse(ok, "processCoinflipPayouts rejected non-game caller");

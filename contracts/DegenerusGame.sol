@@ -254,7 +254,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  • RNG must be ready (not locked) or recently stale (12h timeout)                      |
       |                                                                                        |
       |  Presale: packed presale-active toggle (orthogonal to state machine)                    |
-      |  • Starts active: 62% bonus BURNIE from loot boxes, bonusFlip active                    |
+      |  • Starts active: 62% bonus BURNIE from loot boxes                                       |
       |  • Auto-ends when PURCHASE→JACKPOT, or admin can end manually (one-way, cannot re-enable) |
       +========================================================================================+*/
 

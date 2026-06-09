@@ -361,14 +361,22 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 }
             }
 
-            // RNG: use existing word or request new one
-            bool bonusFlip = (inJackpot && jackpotCounter == 0) || lvl == 0;
+            // RNG: use existing word or request new one. Precompute the day's coinflip reward
+            // bonus from the frozen level (replacing the old player-flippable presale flag that
+            // was read live at payout): +2 on a bonus day (level 0 or a level's first jackpot
+            // day), +6 on a post-BAF x0-level first-jackpot-day (levels 10, 20, 30, …; level 0
+            // is excluded — no BAF precedes it), 0 otherwise. Sized so a recycling (auto-rebuy)
+            // player nets ~99.9% / ~101.9% RTP once the 0.75% recycle bonus compounds in.
+            bool bonusDay = (inJackpot && jackpotCounter == 0) || lvl == 0;
+            uint8 coinflipBonus = bonusDay
+                ? (lvl != 0 && lvl % 10 == 0 ? 6 : 2)
+                : 0;
             (uint256 rngWord, uint32 gapDays) = rngGate(
                 ts,
                 day,
                 purchaseLevel,
                 lastPurchase,
-                bonusFlip
+                coinflipBonus
             );
             psd += uint24(gapDays);
             if (rngWord == 1) {
@@ -1230,7 +1238,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint24 day,
         uint24 lvl,
         bool isTicketJackpotDay,
-        bool bonusFlip
+        uint8 coinflipBonus
     ) internal returns (uint256 word, uint32 gapDays) {
         // Already recorded for today
         if (rngWordByDay[day] != 0) return (rngWordByDay[day], 0);
@@ -1249,7 +1257,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             uint24 idx = dailyIdx;
             if (day > idx + 1 && rngWordByDay[idx + 1] == 0) {
                 uint24 gapCount = day - idx - 1;
-                _backfillGapDays(currentWord, idx + 1, day, bonusFlip);
+                _backfillGapDays(currentWord, idx + 1, day);
 
                 // Backfill any lootbox indices that never got a VRF word (orphaned by stall).
                 // Uses fresh VRF entropy, not predictable on-chain state.
@@ -1263,7 +1271,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
             // Normal daily RNG processing (request from current day)
             currentWord = _applyDailyRng(day, currentWord);
-            coinflip.processCoinflipPayouts(bonusFlip, currentWord, day);
+            coinflip.processCoinflipPayouts(coinflipBonus, currentWord, day);
             quests.rollDailyQuest(day, currentWord);
 
             // Resolve the sentinel-stamped gambling-burn pool if any (INV-13). Reading the
@@ -1326,11 +1334,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (currentWord != 0 && rngRequestTime != 0) {
             currentWord = _applyDailyRng(day, currentWord);
             if (lvl != 0) {
-                coinflip.processCoinflipPayouts(
-                    isTicketJackpotDay,
-                    currentWord,
-                    day
-                );
+                // Gameover settles the final day's flips but never grants a bonus (0).
+                coinflip.processCoinflipPayouts(0, currentWord, day);
             }
             // Resolve the sentinel-stamped gambling-burn pool if any (INV-13). Same shape as the
             // rngGate redemption resolution path — sentinel-keyed so multi-day stalls resolve
@@ -1364,11 +1369,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 unchecked { fallbackWord -= totalFlipReversals; }
                 fallbackWord = _applyDailyRng(day, fallbackWord);
                 if (lvl != 0) {
-                    coinflip.processCoinflipPayouts(
-                        isTicketJackpotDay,
-                        fallbackWord,
-                        day
-                    );
+                    // Gameover settles the final day's flips but never grants a bonus (0).
+                    coinflip.processCoinflipPayouts(0, fallbackWord, day);
                 }
                 // Resolve the sentinel-stamped gambling-burn pool if any (INV-13). Fallback path
                 // uses fallbackWord for the roll; sentinel still names the stuck day so resolves
@@ -1855,12 +1857,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @param vrfWord The first post-gap VRF random word.
     /// @param startDay First gap day (dailyIdx + 1).
     /// @param endDay Current day (exclusive — not backfilled, handled by normal path).
-    /// @param bonusFlip Whether presale bonus applies to coinflip resolution.
     function _backfillGapDays(
         uint256 vrfWord,
         uint24 startDay,
-        uint24 endDay,
-        bool bonusFlip
+        uint24 endDay
     ) private {
         // Cap at 120 gap days to stay within block gas limit (~9M gas).
         // Backfills oldest days first (most likely to have active coinflips).
@@ -1871,7 +1871,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             );
             if (derivedWord == 0) derivedWord = 1;
             rngWordByDay[gapDay] = derivedWord;
-            coinflip.processCoinflipPayouts(bonusFlip, derivedWord, gapDay);
+            // Gap days are calendar days that elapsed during the stall (no advance ran on
+            // them), so none is a level-0 or first-jackpot day — always non-bonus (0).
+            coinflip.processCoinflipPayouts(0, derivedWord, gapDay);
             emit DailyRngApplied(gapDay, derivedWord, 0, derivedWord);
             unchecked {
                 ++gapDay;

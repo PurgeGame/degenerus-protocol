@@ -760,11 +760,12 @@ contract BurnieCoinflip {
       +======================================================================+*/
 
     /// @notice Process coinflip payout for a day (called by game contract).
-    /// @param bonusFlip True if presale lootbox bonus applies to this day.
+    /// @param bonus Reward-percent bonus for this day, precomputed by the caller from frozen state:
+    ///        0 = normal day, 2 = bonus day (level 0 or a first jackpot day), 6 = x0-level bonus day.
     /// @param rngWord VRF-derived random word for determining win/loss and bonus.
     /// @param epoch The day index being resolved.
     function processCoinflipPayouts(
-        bool bonusFlip,
+        uint8 bonus,
         uint256 rngWord,
         uint24 epoch
     ) external onlyDegenerusGameContract {
@@ -773,7 +774,7 @@ contract BurnieCoinflip {
 
         // Determine payout bonus percent:
         // ~5% each for extreme bonus outcomes (50% or 150%), rest is [78%, 115%]
-        // Presale bonus adds +6pp, so max is 156% during presale
+        // Bonus days add +2 (or +6 on x0 levels), so max is 156% on an x0 bonus day
         uint256 roll = seedWord % 20;
         uint16 rewardPercent;
         if (roll == 0) {
@@ -787,11 +788,12 @@ contract BurnieCoinflip {
             );
         }
         IDegenerusGame game = degenerusGame;
-        bool presaleBonus = bonusFlip && game.lootboxPresaleActiveFlag();
-        if (presaleBonus) {
-            unchecked {
-                rewardPercent += 6;
-            }
+        // Apply the day's coinflip bonus, precomputed by the caller from frozen protocol state
+        // (not a player-flippable flag): 0 on a normal day, +2 on a bonus day (level 0 or a
+        // level's first jackpot day), +6 on a post-BAF x0-level bonus day. Sized so a recycling
+        // player nets ~99.9% / ~101.9% RTP after the recycle bonus compounds. Adding 0 is a no-op.
+        unchecked {
+            rewardPercent += bonus;
         }
 
         // Preserve original 50/50 win roll.

@@ -54,8 +54,20 @@ guarantee, bounded impact) · LOW/INFO · REFUTED · BY-DESIGN.
 
 ---
 
-## OPEN CANDIDATE — adjudication pending (cap-truncated coverage)
-- **Coinflip presale-bonus-flag freshness (codex 385 F2) — ~MED, UNADJUDICATED.** Daily coinflip payout reads `lootboxPresaleActiveFlag()` (+6pp presale bonus) which is not frozen at the daily VRF request and is readable after the word is public; a lootbox buy crossing `LOOTBOX_PRESALE_ETH_CAP` clears `PS_ACTIVE`. codex: "payout-parameter manipulation, not bet-after-randomness" (new stake can't join the resolving day, `_targetFlipDay = wall-day+1`). Narrow (presale = game start). Flagged for follow-up; not yet traced backward to a verdict.
+## RESOLVED CANDIDATE — coinflip bonus freshness (was the OPEN coinflip presale-flag MED)
+- **Coinflip presale-bonus-flag freshness (codex 385 F2) — RESOLVED by redesign (USER-directed), applied UNCOMMITTED.**
+  The daily coinflip bonus read `lootboxPresaleActiveFlag()` LIVE at payout (not frozen at the daily VRF request);
+  a lootbox buy crossing `LOOTBOX_PRESALE_ETH_CAP` (200 ETH) clears `PS_ACTIVE`, so a player could toggle the bonus
+  after the day's word was public (payout-parameter manipulation — new stake can't join the resolving day,
+  `_targetFlipDay = wall-day+1`). **Fix:** dropped the presale-flag read entirely; the bonus is now keyed to the
+  FROZEN, protocol-advanced level. `advanceGame` precomputes `uint8 coinflipBonus` and passes it to
+  `processCoinflipPayouts` (which just does `rewardPercent += bonus`): **0** on a normal day, **+2** on a bonus day
+  (level 0 or a level's first jackpot day), **+6** on a post-BAF x0-level first-jackpot-day (levels 10/20/30…;
+  level 0 excluded — no BAF precedes it). Backfilled gap days and gameover settlement always pass **0** (never a
+  bonus). Tiers sized so a recycling (auto-rebuy) player nets ~99.9% / ~101.9% RTP once the 0.75% recycle bonus
+  compounds (fresh-money bettors land ~0.75% under). Touches BurnieCoinflip + IBurnieCoinflip + AdvanceModule
+  (+ a DegenerusGame banner comment); the `processCoinflipPayouts` signature changed `(bool,uint256,uint24)` →
+  `(uint8,uint256,uint24)`. Full suite 814/3/110 (baseline parity).
 
 ---
 

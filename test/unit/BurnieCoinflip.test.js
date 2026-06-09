@@ -65,7 +65,7 @@ async function deposit(coinflip, player, amount) {
  * Simulate one full day: impersonate the game contract and call processCoinflipPayouts.
  * Returns the tx so callers can inspect events.
  */
-async function resolveDay(hreEthers, game, coinflip, epoch, rngWord, bonusFlip = false) {
+async function resolveDay(hreEthers, game, coinflip, epoch, rngWord, bonus = 0) {
   const gameAddr = await game.getAddress();
   await hreEthers.provider.send("hardhat_impersonateAccount", [gameAddr]);
   await hreEthers.provider.send("hardhat_setBalance", [
@@ -75,7 +75,7 @@ async function resolveDay(hreEthers, game, coinflip, epoch, rngWord, bonusFlip =
   const gameSigner = await hreEthers.getSigner(gameAddr);
   const tx = await coinflip
     .connect(gameSigner)
-    .processCoinflipPayouts(bonusFlip, rngWord, epoch);
+    .processCoinflipPayouts(bonus, rngWord, epoch);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return tx;
 }
@@ -198,7 +198,7 @@ describe("BurnieCoinflip", function () {
     it("reverts when caller is not the game contract", async function () {
       const { coinflip, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        coinflip.connect(alice).processCoinflipPayouts(false, 1n, 1n)
+        coinflip.connect(alice).processCoinflipPayouts(0, 1n, 1n)
       ).to.be.revertedWithCustomError(coinflip, "OnlyDegenerusGame");
     });
 
