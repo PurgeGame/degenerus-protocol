@@ -2944,17 +2944,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                    TESTING FUNCTIONS                                 |
-      +======================================================================+
-      |  Admin-only functions for testing and simulation purposes.           |
-      |  WARNING: These functions should NEVER be deployed to mainnet.       |
-      +======================================================================+*/
-
-    /*+======================================================================+
       |                    RECEIVE FUNCTION                                  |
       +======================================================================+
-      |  Accept plain ETH transfers and route to reward pool.                |
-      |  This allows external contributions to jackpot rewards.              |
+      |  Accept plain ETH and credit it to the sender's prepaid afking       |
+      |  balance (withdrawable; not a prize-pool donation).                  |
       +======================================================================+*/
 
     /// @notice Accept plain ETH and credit it to the sender's prepaid afking balance.
