@@ -330,8 +330,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
 
         address affiliateAddr = affiliate.getReferrer(buyer);
-        address upline = address(0);
-        address upline2 = address(0);
+        address upline;
+        address upline2;
         if (affiliateAddr != address(0)) {
             upline = affiliate.getReferrer(affiliateAddr);
             if (upline != address(0)) {
@@ -449,7 +449,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // Levels 0-2: flat 0.24 ETH worth of benefits, balance → bonus tickets
         // Boon at 0-2: same benefits, discounted payment
         // Levels 3+: baseCost, boon applies discount to baseCost
-        // benefitValue = undiscounted value used for presale-box credit/lootbox/pool splits
+        // benefitValue = undiscounted package value; derives totalPrice + the level 0-2 bonus
+        // tickets. Presale-box credit, lootbox, and pool splits all scale on totalPrice (paid).
         uint256 totalPrice;
         uint256 benefitValue;
         uint32 bonusTickets;
@@ -490,9 +491,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
         _creditAfkingValue(msg.sender, msg.value - freshPaid);
         _settleShortfall(buyer, totalPrice - freshPaid, true);
-        // Coin-presale-box credit accrual: 25% of the benefit value while presale open.
+        // Coin-presale-box credit accrual: 25% of the price paid while presale open.
         if (!presaleOver) {
-            presaleBoxCredit[buyer] += benefitValue / 4;
+            presaleBoxCredit[buyer] += totalPrice / 4;
         }
 
         _activate10LevelPass(buyer, startLevel, LAZY_PASS_TICKETS_PER_LEVEL);
@@ -522,8 +523,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             );
         }
 
-        // Award lootbox as 10% of pass value
-        uint256 lootboxAmount = (benefitValue * LAZY_PASS_LOOTBOX_BPS) / 10_000;
+        // Award lootbox as 10% of the price paid
+        uint256 lootboxAmount = (totalPrice * LAZY_PASS_LOOTBOX_BPS) / 10_000;
         _recordLootboxEntry(
             buyer,
             lootboxAmount,
@@ -624,8 +625,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // DGNRS rewards
         address affiliateAddr = affiliate.getReferrer(buyer);
-        address upline = address(0);
-        address upline2 = address(0);
+        address upline;
+        address upline2;
         if (affiliateAddr != address(0)) {
             upline = affiliate.getReferrer(affiliateAddr);
             if (upline != address(0)) {
@@ -634,15 +635,18 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
         _rewardDeityPassDgnrs(buyer, affiliateAddr, upline, upline2);
 
-        // Queue whale-equivalent tickets: 40/lvl bonus (1-10), 2/lvl standard (11-100)
-        uint24 ticketStartLevel = passLevel <= 4
-            ? 1
-            : uint24(((passLevel + 1) / 50) * 50 + 1);
+        // The deity buyer's OWN jackpot benefit is the virtual symbol-bucket entries
+        // (JackpotModule via deityBySymbol) — they get NO queued tickets. The whale pass the
+        // purchase confers goes to the deity's affiliate (affiliateAddr is always non-zero —
+        // getReferrer defaults to VAULT when the buyer has no real referrer): queued immediately
+        // for 100 levels from passLevel (= level + 1), 40/lvl over the level-1-10 bonus window +
+        // 2/lvl standard, plus the whale-pass freeze/stat boost.
+        uint24 ticketStartLevel = passLevel;
         for (uint24 i = 0; i < 100; ) {
             uint24 lvl = ticketStartLevel + i;
             bool isBonus = (lvl >= passLevel && lvl <= WHALE_BONUS_END_LEVEL);
             _queueTickets(
-                buyer,
+                affiliateAddr,
                 lvl,
                 isBonus
                     ? WHALE_BONUS_TICKETS_PER_LEVEL
@@ -653,6 +657,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 ++i;
             }
         }
+        _applyWhalePassStats(affiliateAddr, ticketStartLevel);
 
         // Fund distribution: pre-game 70/30, post-game 95/5 (future/next)
         uint256 nextShare;

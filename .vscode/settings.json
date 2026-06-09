@@ -7,6 +7,9 @@
   // false for [solidity] below and run `forge fmt` manually instead.
   "solidity.formatter": "forge",
   "[solidity]": {
-    "editor.formatOnSave": true
+    // Disabled: an active prettier-solidity formatter churns the whole file on save (strips the
+    // 1_000 numeric separators, single-lines every signature) instead of using forge fmt. Run
+    // `forge fmt` manually. Re-enable once the workspace default formatter is forge, not prettier.
+    "editor.formatOnSave": false
   }
 }

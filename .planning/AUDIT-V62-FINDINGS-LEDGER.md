@@ -32,16 +32,18 @@ guarantee, bounded impact) · LOW/INFO · REFUTED · BY-DESIGN.
 - **Reproduction:** see `test/repro/V62RedemptionReentrancy.t.sol` (orchestrator).
 - **Fix (gated, NOT applied):** transfer stETH BEFORE the untrusted ETH `.call` (exactly as `DegenerusVault.burnEth` :846-847 already does), or add a reentrancy guard to the claim/burn paths.
 
-### V62-04 — False game-over from a >120-day VRF stall consuming the death clock — **LOW–MED**
+### V62-04 — False game-over from a >120-day VRF stall consuming the death clock — **BY-DESIGN / WONTFIX** (USER ruling 2026-06-08)
 - **Origin:** 384 council (gemini G2); adjudicated CONFIRMED, bounded.
-- **Defect:** `_handleGameOverPath` runs BEFORE the `purchaseStartDay`-extending `_backfillGapDays` (AdvanceModule:208 vs :1235); `_livenessTriggered` checks `currentDay − psd > 120` on the un-extended psd → a 120+ day stall latches game-over before the stall-credit applies.
-- **Bounded:** needs a 4-month governance failure to rotate the coordinator (normal recovery 20h–7d); the design intent is that a long unrecoverable VRF outage SHOULD drain to players — so the "false" framing is debatable. Document; no urgent fix.
+- **Mechanism:** `_handleGameOverPath` runs BEFORE the `purchaseStartDay`-extending `_backfillGapDays` (AdvanceModule:208 vs :1235); `_livenessTriggered` checks `currentDay − psd > 120` on the un-extended psd → a 120+ day stall latches game-over.
+- **USER RULING: a 120-day VRF stall → game-over is INTENDED.** A 4-month unrecoverable VRF/keeper outage SHOULD drain to players (the death-clock is meant to fire). Not a defect; do NOT re-flag.
 
-### V62-05 — Deity pass `ticketStartLevel` 50-boundary overshoot drops 1–2 paid levels — **LOW** (CONVERGENT codex+gemini)
-- WhaleModule.sol:639-641 `((passLevel+1)/50)*50+1` → passLevel 49→start 51 (loses 49,50); whale anchors at `passLevel`. Buyer-only under-delivery; no solvency/theft. Fix: `ticketStartLevel = passLevel` for whale parity.
+### V62-05 — Deity pass `ticketStartLevel` 50-boundary snap — **SUPERSEDED by a deity redesign** (USER 2026-06-08), applied UNCOMMITTED
+- Original finding: `WhaleModule ((passLevel+1)/50)*50+1` snaps the deity buyer's 100-level ticket window to a 50-block → drops imminent levels (passLevel 49→start 51) and wastes past-level tickets (passLevel 30→start 1). Buyer-only under-delivery.
+- **USER ruling: deity tickets are meant to be VIRTUAL, not queued.** The redesign (applied) DELETES the deity buyer's self-queued ticket loop entirely (their jackpot benefit is the virtual symbol-bucket entries in `JackpotModule` via `deityBySymbol`), and re-homes the "whale pass acquired on purchase" to the **deity's affiliate** — queued immediately for 100 levels from `passLevel` (= level + 1, no snap), 40/lvl over the level-1-10 bonus window + 2/lvl standard, plus `_applyWhalePassStats` (freeze/stat boost). `affiliateAddr` is always non-zero (`getReferrer` defaults to VAULT when the buyer has no real referrer — USER ruling: VAULT receives it, consistent with the existing deity DGNRS reward), so it's always granted. So the snap fix is moot — the whole loop moved + redirected.
 
-### V62-06 — Lazy-pass boon price-basis: box/lootbox sized on undiscounted value — **LOW**
-- WhaleModule.sol:491/519 size presale-box credit + lootbox-10% on undiscounted `benefitValue` while the buyer pays a boon-discounted price; whale/deity use the discounted `totalPrice`. Bounded by the boon discount; gated behind earning a boon.
+### V62-06 — Lazy-pass boon price-basis: box/lootbox sized on undiscounted value — **FIXED** (USER-directed), applied UNCOMMITTED
+- `WhaleModule` lazy-pass sized the presale-box credit (`benefitValue / 4`) + lootbox (`benefitValue * 10%`) on the UNDISCOUNTED package value while the buyer paid a boon-discounted `totalPrice` (the pool split already used `totalPrice`; deity/whale already use `totalPrice`).
+- **Fix:** both now scale on `totalPrice` (actual ETH paid). `benefitValue` retained only to derive `totalPrice` + the level-0-2 bonus tickets.
 
 ### V62-07 — `resolveLootboxDirect` seed omits index/betId → correlated rewards — **LOW/INFO**
 - LootboxModule.sol:762 `seed = keccak(rngWord, player, amount)`; same player + same lootbox index batch + same summed `betLootboxShare` → identical box reward. No EV / no freshness break (all inputs frozen at commitment); a fairness/diversity quirk only.
