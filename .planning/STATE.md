@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v62.0
 milestone_name: Blind-Spot-Driven Pre-C4A Audit
-status: audit-complete-remediation-gated
-last_updated: "2026-06-08T08:30:00.000Z"
-last_activity: 2026-06-08 -- v62.0 AUDIT COMPLETE (380-387 all closed). audit/FINDINGS-v62.0.md (chmod 444): 3 actionable (V62-01 MED-HIGH, V62-02/03 HIGH) all reproduced + ~15 refuted. REMEDIATION GATE OPEN (USER-gated fixes).
+status: milestone-complete
+last_updated: "2026-06-09T15:00:00.000Z"
+last_activity: 2026-06-09 -- v62.0 SHIPPED + CLOSED. The cross-model council found 3 actionable findings (V62-01 MED-HIGH lootbox auto-open dead, V62-02 HIGH advanceGame gas-brick 20.26M, V62-03 HIGH sDGNRS redemption reentrancy) -- ALL REMEDIATED under USER hand-review + coinflip-freshness MED + 2 whale LOWs fixed; V62-04 monitor-by-design, V62-07 WONTFIX. Remediation c4d48008->77580320 (13 files +515/-508). PUSHED to origin/main @ 77580320. Closure signal MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893. Archived to .planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}. NEXT = /gsd-new-milestone.
 progress:
   total_phases: 13
-  completed_phases: 8
+  completed_phases: 13
   total_plans: 10
   completed_plans: 10
   percent: 100
@@ -17,10 +17,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (Current Milestone: v62.0 section) + .planning/ROADMAP.md (v62.0 roadmap, once written) + .planning/REQUIREMENTS.md (v62.0 reqs, once defined) + .planning/MILESTONES.md (v61.0 entry, top) + .planning/AUDIT-V62-PLAN.md (the full STEP 0–5 plan). Baseline = the v61.0 closure HEAD `b97a7a2e` (62 commits ahead of origin, NOT pushed). v61.0 archive: .planning/milestones/v61.0-ROADMAP.md + v61.0-REQUIREMENTS.md + v61.0-phases/; canonical audit deliverable audit/FINDINGS-v61.0.md (chmod 444). **NEXT = /gsd-plan-phase 381 (INVARIANT FUZZ — the durable property net; FOUNDATION-FIRST: 380 test-fix → green baseline DONE, 381 fuzz next, both before the 382+ council sweeps).**
+See: .planning/PROJECT.md (Current State section) + .planning/ROADMAP.md (v62.0 = top milestone, ✅ SHIPPED) + .planning/MILESTONES.md (v62.0 entry, top) + .planning/AUDIT-V62-PLAN.md (the full STEP 0–5 plan). v62.0 archive: .planning/milestones/v62.0-ROADMAP.md + v62.0-REQUIREMENTS.md + v62.0-phases/; canonical audit deliverable audit/FINDINGS-v62.0.md (chmod 444) + AUDIT-V62-REPORT.html. Baseline was v61.0 closure HEAD `b97a7a2e`; audit subject `c4d48008`; remediated to `77580320` (PUSHED — `origin/main` @ `77580320`, in sync; the milestone-close doc commits ride on top, unpushed). **NEXT = /gsd-new-milestone** (scope the next cycle — candidate: the still-separate v50/v51 FINDINGS backfill + v52 consolidated cross-model audit; one pre-C4A thread = confirm the coinflip presale-flag MED backward-trace agrees with its `3444aed0` fix).
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v62.0 EXECUTING — Blind-Spot-Driven Pre-C4A Audit (foundation-first). ✅ **Phase 380 FOUNDATION COMPLETE 2026-06-07** — green full-suite baseline `test/REGRESSION-BASELINE-v62.md` @ subject `c4d48008` (forge **789 pass / 3 carried bucket-A VRFPath invariants / 110 skip**, 0 deterministic failures; supersedes the carried-red v61 ledger); 6 council finding-candidates **FC1–FC6** + an affiliate-score asymmetry flag (~2500× ETH→score) routed forward to the sweeps; contracts byte-frozen `bbffe99e`; gsd-verifier 11/11 + code-review oracle-holes (vacuous binding test, weakened deity-refund assertion) fixed. **NEXT = Phase 381 INVARIANT FUZZ** (Claude-built durable property net) before the council sweeps (382+). Attacks recurring bug SHAPES (compositions · parallel-path asymmetries · shared RNG-window state · write-only/dead state), not a feature rotation. **THE METHOD = CROSS-MODEL-LED (defining premise, USER 2026-06-07):** the convergent council (Gemini + Codex) is the PRIMARY FINDER per sweep area — Claude orchestrates + adjudicates findings vs frozen source + builds the test/fuzz foundation + synthesizes, NOT the primary bug-finder (Claude-only audits repeatedly missed what the council found in v60). Baseline = `b97a7a2e`; subject locked = `c4d48008` (= `b97a7a2e` + the committed forgiving-funding change). The audit plans no NEW `contracts/*.sol` change of its own (a finding routes to a gated fix, else document-only `audit/FINDINGS-v62.0.md`). Local commits NOT pushed (push = a separate USER step).
+**Current focus:** Between milestones — **v62.0 SHIPPED + CLOSED 2026-06-09.** The Blind-Spot-Driven Pre-C4A Audit (CROSS-MODEL-LED, foundation-first) ran phases 380-387 and validated its defining premise: the convergent council (Gemini + Codex) surfaced **3 actionable findings prior Claude-only audits missed** — V62-01 MED-HIGH (permissionless lootbox auto-open dead for human/presale boxes), V62-02 HIGH (advanceGame gas-brick composition, reproduced cold 20,255,533 gas > 16.7M, convergent), V62-03 HIGH (sDGNRS redemption reentrancy breaking SOLVENCY-01). **ALL actionable findings REMEDIATED** under USER hand-review (V62-01 `32f0cb43` · V62-03 `c4a6c81c` · V62-02 `7e54f450` · coinflip-freshness MED `3444aed0` · V62-05/06 LOW `77580320`); V62-04 = monitor-by-design; V62-07 = WONTFIX (USER ruling 2026-06-09). +4 LOW + ~15 refuted/by-design. AUDIT FULLY CLOSED — every finding fixed / by-design / wontfix; PUSHED to origin. Closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`.
 
 ## ⚠ v50.0 + v51.0 AUDIT DEBT → v52 (carry forward — separate cross-model track)
 
@@ -32,25 +32,25 @@ See: .planning/PROJECT.md (Current Milestone: v62.0 section) + .planning/ROADMAP
 
 ## Current Position
 
-Phase: 381 — INVARIANT FUZZ (Durable Property Net) — EXECUTING (Claude-built; FUZZ-01..06)
-Plan: 381-05 done (FUZZ-05 POOL-CONSERVATION GREEN); 381-04 (FUZZ-04) + 381-03 (FUZZ-03) + 381-02 (FUZZ-02) + 381-01 (FUZZ-01) done. NEXT = 381-06 (council property-review, autonomous:false). Hard stops: 381-06 council autonomous:false, NO contract edits, no advance to 382.
-Status: Executing — Wave 1 COMPLETE (5/6 plans GREEN; 381-06 council is the remaining hard-stop)
-Last activity: 2026-06-08 -- Phase 381 plan 05 (FUZZ-05 POOL-CONSERVATION) executed GREEN; the genuine GAP built (case (c)) — PoolConservation.inv.t.sol asserts the conservation property the existing weak checks MISS: (1) invariant_totalPoolsFullyBacked strengthens MultiLevel's balance>=claimablePool (one pool) to sum(currentPrizePool+nextPrizePool+futurePrizePool+claimablePool) <= balance+stETH (all four); (2) invariant_noUnbackedCreditMinted is the real conservation oracle — sum(4 pools) <= startingBacking + ghost_realInflow, so an internal future->next->current / skim / jackpot transfer can only RESHAPE the split, never mint unbacked credit. Driven by PoolFlowHandler (buy=real inflow, advance=advanceGame x3 + VRF-fulfill triggering _consolidatePoolsAndRewardJackpots, claim=real outflow; ghost_realInflow/Outflow/advances; never vm.stores a pool). 5 tests / 256 runs / 32768 calls / 0 reverts; non-vacuity proven (ghost_advances=6, sum4pools==realInflow exactly 0.175 ETH after directly-driven transfers); falsifiability proven via a seeded unbacked futurePrizePool inflation (slot 2 high half) tripping BOTH bounds; ZERO contract edits (git status --short -- contracts/ EMPTY)
+Milestone: v62.0 — ✅ SHIPPED + CLOSED 2026-06-09 (between milestones; no active phase).
+Audit outcome: 3 actionable findings (V62-01 MED-HIGH, V62-02/03 HIGH) FOUND by the cross-model council + ALL REMEDIATED; coinflip-freshness MED + 2 whale LOWs fixed; V62-04 monitor-by-design; V62-07 WONTFIX; ~15 refuted/by-design. 0 OPEN findings.
+Closure: signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`; remediation `c4d48008`→`77580320` (13 files +515/−508); PUSHED (`origin/main` @ `77580320`). Archived to `.planning/milestones/v62.0-{ROADMAP,REQUIREMENTS,phases}`.
+Next: `/gsd-new-milestone` — scope the next cycle.
 
-## ▶ ACTIVE Milestone Roadmap (v62.0 — phases 380-387 — ACTIVE 2026-06-07; baseline = v61.0 closure HEAD `b97a7a2e`; subject locked at `c4d48008`)
+## ✅ SHIPPED Milestone Roadmap (v62.0 — phases 380-387 — SHIPPED 2026-06-09; baseline = v61.0 closure HEAD `b97a7a2e`; subject `c4d48008`; remediated `77580320`; closure signal `MILESTONE_V62_AT_HEAD_77580320b88e77438c893602a068548961824893`)
 
 Shape: FOUNDATION → FUZZ → PRIME → ASYM → COMPO → LOOP → PERIPH → TERMINAL. **CROSS-MODEL-LED** — the convergent council (Gemini + Codex) is the PRIMARY finder in every sweep area (382-386); Claude orchestrates + adjudicates vs frozen `c4d48008` + builds the test/fuzz foundation + synthesizes (a no-finding verdict needs the council pass on record). **FOUNDATION-FIRST:** 380 (test-fix → green baseline) + 381 (invariant fuzz) are Claude-built and run BEFORE the council sweeps; 387 is the terminal close (council-on-refuted + `audit/FINDINGS-v62.0.md`). Audit-only (no NEW `contracts/*.sol` change planned; a council-surfaced, adjudicated finding routes to a gated fix). Full detail: `.planning/ROADMAP.md` (v62.0 section); scope + the 38 REQ-IDs: `.planning/REQUIREMENTS.md`; method: `.planning/AUDIT-V62-PLAN.md`.
 
 | Phase | Name | Type | Requirements | Status |
 |-------|------|------|--------------|--------|
 | 380 | FOUNDATION — Test-Fix & Green Baseline | FOUND (Claude-built) | FOUND-01..06 | ✅ Complete |
-| 381 | INVARIANT FUZZ — Durable Property Net | FUZZ (Claude-built + council property-review) | FUZZ-01..06 | ▶ Executing (FUZZ-01 + FUZZ-02 + FUZZ-03 + FUZZ-04 + FUZZ-05 GREEN; FUZZ-06 council = remaining) |
-| 382 | PRIME — v61 New Code + Forgiving-Funding | SWEEP (council-LED) | PRIME-01..04 | Not started |
-| 383 | ASYMMETRY SWEEP | SWEEP (council-LED) | ASYM-01..06 | Not started |
-| 384 | advanceGame COMPOSITION + e2e Gas Harness | SWEEP (council-LED) | COMPO-01..03 | Not started |
-| 385 | VRF / GAS-BOUNDED-LOOP SWEEP | SWEEP (council-LED) | LOOP-01..03 | Not started |
-| 386 | PERIPHERAL CONTRACTS | SWEEP (council-LED) | PERIPH-01..06 | Not started |
-| 387 | TERMINAL — Council-on-Refuted + FINDINGS-v62.0 + Closure Flip | TERMINAL | AUDIT-01/02 | Not started |
+| 381 | INVARIANT FUZZ — Durable Property Net | FUZZ (Claude-built + council property-review) | FUZZ-01..06 | ✅ Complete (FUZZ-01..05 GREEN; 381-06 council surfaced V62-01) |
+| 382 | PRIME — v61 New Code + Forgiving-Funding | SWEEP (council-LED) | PRIME-01..04 | ✅ Complete (council pass on record) |
+| 383 | ASYMMETRY SWEEP | SWEEP (council-LED) | ASYM-01..06 | ✅ Complete (V62-05/06 surfaced) |
+| 384 | advanceGame COMPOSITION + e2e Gas Harness | SWEEP (council-LED) | COMPO-01..03 | ✅ Complete (V62-02 convergent) |
+| 385 | VRF / GAS-BOUNDED-LOOP SWEEP | SWEEP (council-LED) | LOOP-01..03 | ✅ Complete (coinflip MED + V62-04 surfaced) |
+| 386 | PERIPHERAL CONTRACTS | SWEEP (council-LED) | PERIPH-01..06 | ✅ Complete (V62-03 surfaced) |
+| 387 | TERMINAL — Council-on-Refuted + FINDINGS-v62.0 + Closure Flip | TERMINAL | AUDIT-01/02 | ✅ Complete (FINDINGS-v62.0.md shipped) |
 
 **Coverage:** 27/27 mapped to one phase (375: 1 · 376: 17 · 377: 0 · 378: 8 · 379: 1); 0 orphaned, 0 duplicated. Per-category: AFPAY 7 · PACK 2 · CURSE 7 · SMITE 1 · SPEC 1 · SEC 2 · TST 6 · AUDIT 1. Phase 377 GAS owns NO REQ-ID (the gas-neutrality measurement gate). Full detail in `.planning/ROADMAP.md`; per-requirement mapping in `.planning/REQUIREMENTS.md` Traceability.
 
