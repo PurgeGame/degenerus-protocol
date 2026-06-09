@@ -45,8 +45,9 @@ guarantee, bounded impact) · LOW/INFO · REFUTED · BY-DESIGN.
 - `WhaleModule` lazy-pass sized the presale-box credit (`benefitValue / 4`) + lootbox (`benefitValue * 10%`) on the UNDISCOUNTED package value while the buyer paid a boon-discounted `totalPrice` (the pool split already used `totalPrice`; deity/whale already use `totalPrice`).
 - **Fix:** both now scale on `totalPrice` (actual ETH paid). `benefitValue` retained only to derive `totalPrice` + the level-0-2 bonus tickets.
 
-### V62-07 — `resolveLootboxDirect` seed omits index/betId → correlated rewards — **LOW/INFO**
-- LootboxModule.sol:762 `seed = keccak(rngWord, player, amount)`; same player + same lootbox index batch + same summed `betLootboxShare` → identical box reward. No EV / no freshness break (all inputs frozen at commitment); a fairness/diversity quirk only.
+### V62-07 — `resolveLootboxDirect` seed omits index/betId → correlated rewards — **WONTFIX** (USER ruling 2026-06-09)
+- `resolveLootboxDirect` (Degenerette/Decimator direct path, NOT the index-keyed box-open path) seeds `keccak(rngWord, player, amount)`. A collision needs the same player to hit two direct resolutions with the same `amount` in the same daily `rngWord` (e.g. an equal-amount Degenerette + Decimator box same day). The index-keyed openBox path can't collide at all (one box per (index,buyer); each index has its own VRF word).
+- **USER RULING: WONTFIX** — almost certain to never occur, and zero impact if it does (no EV change, no freshness/manipulation — every input frozen at commitment; pure reward-diversity cosmetic). Do NOT re-flag.
 
 ---
 
