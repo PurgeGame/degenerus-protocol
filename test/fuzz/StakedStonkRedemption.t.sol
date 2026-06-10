@@ -249,7 +249,8 @@ contract StakedStonkRedemption is DeployProtocol {
         }
 
         // Burn — must succeed (gambling path; not gameOver / not rngLocked / not livenessTriggered
-        // at deploy-time state).
+        // at deploy-time state). Prime the current view day's RNG to satisfy the burn-admission gate.
+        _primeCurrentDayRng();
         vm.prank(actor);
         sdgnrs.burn(amount);
 
@@ -305,6 +306,7 @@ contract StakedStonkRedemption is DeployProtocol {
         // resolveRedemptionPeriod early-returns at the `if (ethBase == 0)` guard — no state
         // mutation, the per-day write would never fire).
         uint32 dayBurn = game.currentDayView();
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amount);
 
@@ -373,6 +375,7 @@ contract StakedStonkRedemption is DeployProtocol {
 
         // Step 1: burn on dayBurn
         uint32 dayBurn = game.currentDayView();
+        _primeCurrentDayRng();
         vm.prank(actor);
         sdgnrs.burn(amount);
 
@@ -457,6 +460,9 @@ contract StakedStonkRedemption is DeployProtocol {
 
         uint32 dayD = game.currentDayView();
 
+        // Prime dayD's RNG once — all three same-day burns share the admission gate.
+        _primeCurrentDayRng();
+
         // Burn 1 — capture per-burn delta
         uint96 evPre1 = 0; // claim slot is zero-init pre-burn-1
         vm.prank(actor);
@@ -528,6 +534,11 @@ contract StakedStonkRedemption is DeployProtocol {
         // PriorDayUnresolved revert. The sentinel must equal currentDayView (= dayD) or 0; we
         // set it to dayD for parity with the burned-by-day pool's seed.
         vm.store(address(sdgnrs), bytes32(uint256(SLOT_PENDING_RESOLVE_DAY)), bytes32(uint256(dayD)));
+
+        // Prime dayD's RNG so both the exact-cap burn and the over-cap burn pass the admission
+        // gate and reach the supply-cap guard (the over-cap case must revert Insufficient, not
+        // the gate).
+        _primeCurrentDayRng();
 
         // Verify seed visible
         (, uint64 sBefore, uint64 bnBefore) = _readPendingByDay(dayD);
@@ -604,6 +615,10 @@ contract StakedStonkRedemption is DeployProtocol {
 
         // Pre-stamp sentinel so INV-13 guard does NOT trip
         vm.store(address(sdgnrs), bytes32(uint256(SLOT_PENDING_RESOLVE_DAY)), bytes32(uint256(dayD)));
+
+        // Prime dayD's RNG so the burn passes the admission gate and reaches the EV-cap check
+        // (the burn must revert ExceedsDailyRedemptionCap, not BurnsBlockedBeforeDailyRng).
+        _primeCurrentDayRng();
 
         // Any burn that produces ethValueOwed > 0 (post gwei-snap) must revert. FUZZ_MIN_AMOUNT
         // (100 ether) yields ethValueOwed ~12.5 gwei post-snap > 0 → cap check trips. Fuzz the
@@ -688,7 +703,10 @@ contract StakedStonkRedemption is DeployProtocol {
         // Precondition: sentinel == 0 at deploy-time fresh state (no prior burns).
         assertEq(uint256(sdgnrs.pendingResolveDay()), 0, "sentinel: pre-burn sentinel must be 0 (fresh state)");
 
-        // First burn of dayD — sentinel stamps to dayD
+        // First burn of dayD — sentinel stamps to dayD. Prime dayD's RNG (admission gate); the
+        // game-side RNG word does not touch the sStonk sentinel, so the fresh-state precondition
+        // above and the stamp assertion below remain valid.
+        _primeCurrentDayRng();
         vm.prank(actor);
         sdgnrs.burn(amount);
         assertEq(uint256(sdgnrs.pendingResolveDay()), uint256(dayD), "sentinel: post first-burn must stamp pendingResolveDay = dayD");
@@ -710,6 +728,8 @@ contract StakedStonkRedemption is DeployProtocol {
         // re-stamps to the new currentDayView.
         uint32 dayD1 = game.currentDayView();
         assertEq(uint256(dayD1), uint256(dayD) + 1, "sentinel: precondition - wall day must have advanced");
+        // New view day after the warp — prime dayD1's RNG to pass the admission gate.
+        _primeCurrentDayRng();
         vm.prank(actor);
         sdgnrs.burn(amount);
         assertEq(uint256(sdgnrs.pendingResolveDay()), uint256(dayD1), "sentinel: first burn of new day must re-stamp sentinel to new dayD1");
@@ -874,6 +894,9 @@ contract StakedStonkRedemption is DeployProtocol {
         uint32 dayBurn = game.currentDayView();
         uint256 burnAmount = 1000 ether;
 
+        // Prime dayBurn's RNG once — both same-day submits share the admission gate.
+        _primeCurrentDayRng();
+
         // Both redeemers submit on the SAME day.
         vm.prank(playerA);
         sdgnrs.burn(burnAmount);
@@ -947,6 +970,11 @@ contract StakedStonkRedemption is DeployProtocol {
         uint256 supplyBefore = sdgnrs.totalSupply();
         uint256 balBefore = sdgnrs.balanceOf(playerA);
 
+        // Prime dayBurn's RNG so the burn passes the admission gate and the revert it hits is the
+        // intended shortfall fail-closed (CHECKED pullRedemptionReserve underflow), not the gate.
+        // Both this fail-closed burn and the post-recovery burn below land on dayBurn → one prime.
+        _primeCurrentDayRng();
+
         // Fail-closed: the burn reverts because the CHECKED pull can't segregate the MAX.
         vm.prank(playerA);
         vm.expectRevert();
@@ -1014,6 +1042,7 @@ contract StakedStonkRedemption is DeployProtocol {
         // sDGNRS holds a large BURNIE balance at deploy (the 2M creator mint observed in the trace),
         // so the redeemer's proportional BURNIE share is non-trivial — exactly the case a pre-fix
         // BURNIE-reserve leg could have stalled. Submit settles it all at submit.
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(burnAmount);
 
@@ -1069,6 +1098,7 @@ contract StakedStonkRedemption is DeployProtocol {
             + coinflip.coinflipAmount(playerA);
         uint256 redeemerStakeBefore = coinflip.coinflipAmount(playerA);
 
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(burnAmount);
 
@@ -1107,6 +1137,7 @@ contract StakedStonkRedemption is DeployProtocol {
         uint256 burnAmount = 1000 ether;
         uint16 roll = 100; // rolled < MAX_ROLL(175) so the MAX→rolled lowering is observable
 
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(burnAmount);
 

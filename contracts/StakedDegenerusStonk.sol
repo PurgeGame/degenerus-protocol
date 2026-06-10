@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
+import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 
 /// @notice Interface for game contract player-facing functions used by sDGNRS.
@@ -37,8 +38,6 @@ interface IDegenerusGamePlayer {
     function gameOver() external view returns (bool);
     /// @notice Check if the liveness-timeout game-over trigger is active (State 1 precursor).
     function livenessTriggered() external view returns (bool);
-    /// @notice Get current day index.
-    function currentDayView() external view returns (uint24);
     /// @notice Get RNG word for a specific day.
     function rngWordForDay(uint24 day) external view returns (uint256);
     /// @notice Get player's activity score.
@@ -109,6 +108,11 @@ contract StakedDegenerusStonk {
 
     /// @notice Thrown when burns are attempted during RNG resolution
     error BurnsBlockedDuringRng();
+
+    /// @notice Thrown when a gambling burn is attempted before the current day's VRF word is recorded
+    ///         (the pre-request window). Admitting it would stamp a not-yet-drawn day, leaving the
+    ///         lootbox leg's rngWordForDay(day + 1) zero and fully predictable at claim.
+    error BurnsBlockedBeforeDailyRng();
 
     /// @notice Thrown when burns are attempted after liveness fires but before gameOver latches.
     ///         Gambling-path redemptions submitted in this window would resolve but the
@@ -834,7 +838,17 @@ contract StakedDegenerusStonk {
         if (amount == 0 || amount > bal) revert Insufficient();
         if (amount < MIN_BURN_AMOUNT) revert BurnTooSmall();
 
-        uint24 currentPeriod = game.currentDayView();
+        // Wall-clock day index computed locally: currentDayView() is a pure function of
+        // block.timestamp (GameTimeLib), so this is identical to game.currentDayView() without the CALL.
+        uint24 currentPeriod = GameTimeLib.currentDayIndex();
+
+        // Admit gambling burns only once the current day's VRF word is recorded. The pre-request
+        // window is blocked here; the request->fulfilment window is already blocked by the rngLocked
+        // guard in burn()/burnWrapped(). This pins the stamp to a drawn day (currentPeriod ==
+        // dailyIdx), so the pool always resolves on the NEXT day's draw and the lootbox leg's
+        // rngWordForDay(currentPeriod + 1) reads that resolving word — never a not-yet-drawn (zero,
+        // fully predictable) future word.
+        if (game.rngWordForDay(currentPeriod) == 0) revert BurnsBlockedBeforeDailyRng();
 
         // Single-pool invariant (INV-13): if any prior day still holds an unresolved pool,
         // block this burn. AdvanceModule resolves the stamped day on the next successful advance;

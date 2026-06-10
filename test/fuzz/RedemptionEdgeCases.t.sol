@@ -222,6 +222,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Step 1: prior-day burn populates pendingByDay[dayPrior]
         uint256 amountPrior = bound(amountSeedPrior, FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100);
+        _primeCurrentDayRng();
         vm.prank(playerB);
         sdgnrs.burn(amountPrior);
 
@@ -266,6 +267,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Step 3: day-D burn from player A in the gap window
         uint256 amountFresh = bound(amountSeedFresh, FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100);
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amountFresh);
 
@@ -308,6 +310,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Step 1: day-(D-1) burn from playerA
         uint256 amount = bound(amountSeed, FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100);
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amount);
 
@@ -370,6 +373,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Day D burn
         uint32 dayD = game.currentDayView();
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amount);
 
@@ -379,6 +383,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Day D+1 burn
         uint32 dayD1 = game.currentDayView();
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amount);
 
@@ -388,6 +393,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Day D+2 burn
         uint32 dayD2 = game.currentDayView();
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amount);
 
@@ -455,6 +461,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         uint16 roll = uint16(bound(uint256(rollSeed), 25, 175));
 
         uint32 dayD = game.currentDayView();
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amountA);
 
@@ -509,6 +516,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         uint256 amount = bound(amountSeed, FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100);
         uint32 dayD = game.currentDayView();
 
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amount);
 
@@ -552,6 +560,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         uint16 roll = uint16(bound(uint256(rollSeed), 25, 175));
 
         uint32 dayD = game.currentDayView();
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amount);
 
@@ -631,6 +640,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Step 1: Player A burns day D
         uint32 dayD = game.currentDayView();
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amountA);
 
@@ -652,6 +662,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         // cleared at step 2. The burn lands in pendingByDay[D+1] (fresh slot) and re-stamps
         // sentinel = D+1. Note: redemptionPeriods[D+1] is a DIFFERENT mapping key than
         // redemptionPeriods[D], so any subsequent resolve of D+1 writes that distinct slot.
+        _primeCurrentDayRng();
         vm.prank(playerB);
         sdgnrs.burn(amountB);
 
@@ -708,6 +719,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Variant 1: gameOver fires BEFORE resolve
         uint32 dayD = game.currentDayView();
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amount);
 
@@ -751,6 +763,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Variant 2: gameOver fires AFTER resolve, BEFORE claim
         uint32 dayD2 = game.currentDayView();
+        _primeCurrentDayRng();
         vm.prank(playerC);
         sdgnrs.burn(amount);
 
@@ -795,6 +808,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Track expected per-player ethValueOwed (the gwei-snapped value written at burn)
         uint96[] memory evs = new uint96[](n);
+        _primeCurrentDayRng();
         for (uint256 i = 0; i < n; i++) {
             address actor = _pickActor(i);
             vm.prank(actor);
@@ -851,6 +865,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         uint32 dayD = game.currentDayView();
         // The malicious contract calls burn() itself via internal helper (since burn() uses
         // msg.sender as the burner). We prank with the malicious contract as msg.sender.
+        _primeCurrentDayRng();
         vm.prank(address(malicious));
         sdgnrs.burn(amount);
 
@@ -989,6 +1004,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         uint256 supplyPre = sdgnrs.totalSupply();
 
         // Burn proceeds (positive assertion: no revert)
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amount);
 
@@ -1059,7 +1075,9 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Sub-scenario 1: burn exact-cap = 500 tokens = 500e18 raw (under composite ceiling-divide
         // semantics, amountWhole = 500). cap check: 0 + 500 > 1000/2=500 → FALSE → succeeds.
+        // Prime first so the burn passes the daily-rng admission gate and reaches the cap math.
         uint256 capExact = 500 ether;
+        _primeCurrentDayRng();
         vm.prank(actor);
         sdgnrs.burn(capExact);
 
@@ -1122,7 +1140,9 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Any burn that adds > 0 ethValueOwed must revert ExceedsDailyRedemptionCap.
         // FUZZ_MIN_AMOUNT (100 ether) yields ethValueOwed ~12 gwei > 0 post snap.
+        // Prime first so the burn clears the daily-rng admission gate and reaches the EV-cap check.
         uint256 amount = FUZZ_MIN_AMOUNT;
+        _primeCurrentDayRng();
         vm.prank(actor);
         vm.expectRevert(StakedDegenerusStonk.ExceedsDailyRedemptionCap.selector);
         sdgnrs.burn(amount);
@@ -1150,6 +1170,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Execute a real burn on day D to seed the pendingByDay pool + sentinel naturally.
         // (Required for the day-D resolve to actually fire — early-returns on empty pool.)
+        _primeCurrentDayRng();
         vm.prank(actor);
         sdgnrs.burn(FUZZ_MIN_AMOUNT);
 
@@ -1177,6 +1198,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         // Day-(D+1) burn from same actor — must succeed; the day-D claim slot remains
         // byte-identical (composite-key independence).
         uint32 dayD1 = game.currentDayView();
+        _primeCurrentDayRng();
         vm.prank(actor);
         sdgnrs.burn(FUZZ_MIN_AMOUNT);
 
@@ -1214,6 +1236,7 @@ contract RedemptionEdgeCases is DeployProtocol {
 
         // Day D-1: burn from A
         uint32 dayPrior = game.currentDayView();
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amount1);
 
@@ -1227,6 +1250,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         assertEq(uint256(rollPriorPostResolve), uint256(roll1), "EDGE-17: precondition - dayPrior.roll first-write");
 
         // Late-day burn on day D from B (after D-1 was resolved + deleted)
+        _primeCurrentDayRng();
         vm.prank(playerB);
         sdgnrs.burn(amount2);
 
@@ -1276,6 +1300,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         uint32 dayD = game.currentDayView();
 
         // Burn a meaningful amount so the claim path has work to do
+        _primeCurrentDayRng();
         vm.prank(actor);
         sdgnrs.burn(FUZZ_MIN_AMOUNT);
 
@@ -1317,6 +1342,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         address burner = playerA;
 
         // Burn on day D — sentinel stamps to D
+        _primeCurrentDayRng();
         vm.prank(burner);
         sdgnrs.burn(amount);
 
@@ -1383,6 +1409,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         // Snapshot balance + supply pre-burn to assert mutation
         uint256 balPre = sdgnrs.balanceOf(playerC);
         uint256 supplyPre = sdgnrs.totalSupply();
+        _primeCurrentDayRng();
         vm.prank(playerC);
         sdgnrs.burn(MIN_BURN_AMOUNT);
         assertEq(sdgnrs.balanceOf(playerC), balPre - MIN_BURN_AMOUNT, "EDGE-20: balanceOf[C] decrement");

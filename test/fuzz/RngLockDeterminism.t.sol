@@ -1329,8 +1329,9 @@ contract RngLockDeterminism is DeployProtocol {
         // FLIPPED at v44.0: RNGLOCK-FIXREC.md sec103 -- V-184 sStonk cross-day re-roll CATASTROPHE -- D-43N-V44-HANDOFF-111 strict-assertion attestation; structural closure via per-day storage keying (304-SPEC §3 EDGE-07)
         vm.assume(vrfWord != 0);
 
+        // Burn on the day _completeDay just drew (the gate needs the current day's word recorded);
+        // the single warp to the next wall-day is deferred to AFTER the burn so its pool resolves there.
         _completeDay(0xDEAD0012);
-        vm.warp(block.timestamp + 1 days);
 
         address holder = makeAddr("sStonkHolder");
         vm.deal(holder, 100 ether);
@@ -1359,11 +1360,17 @@ contract RngLockDeterminism is DeployProtocol {
         // v44 MIN_BURN_AMOUNT floor: bound legal-burn range to [1e18, 100e18]
         uint256 burnAmount = bound(burnAmountSeed, 1e18, 100e18);
 
+        // Burn on the current (already-drawn) day so the admission gate passes; it stamps this day,
+        // whose pool then resolves on the next day's VRF (window-b) after the warp below.
         vm.prank(holder);
         try sdgnrs.burn(burnAmount) returns (uint256, uint256, uint256) {
         } catch {
             vm.assume(false);
         }
+
+        // Advance to the next wall-day so the upcoming advanceGame requests a fresh VRF — the word
+        // that resolves this burn's pool — instead of replaying the now-recorded current-day word.
+        vm.warp(block.timestamp + 1 days);
 
         uint256 preLockSnap = _snapshotPreLock();
 

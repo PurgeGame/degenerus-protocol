@@ -162,6 +162,9 @@ contract V62RedemptionReentrancy is DeployProtocol {
         // ---- 1. Outer gambling burn on day D. Reserves 175% MAX into pendingRedemptionEthValue;
         //         the ETH leg of pullRedemptionReserve segregates that ETH into sDGNRS's balance. ----
         uint24 dayD = game.currentDayView();
+        // Land day D's daily RNG so the gambling-burn admission gate (rngWordForDay(D) != 0) admits
+        // this burn; under the gate the pool resolves on the NEXT day's draw (window-(b)).
+        _primeCurrentDayRng();
         attacker.outerBurn(BURN_AMOUNT);
 
         (uint96 owedBase, ) = sdgnrs.pendingRedemptions(address(attacker), uint24(dayD));
@@ -230,6 +233,11 @@ contract V62RedemptionReentrancy is DeployProtocol {
 
         // ---- 4. Fire the claim. The mixed _payEth .call re-enters the attacker; it submits new
         //         gambling burns while the stethOut is still custodied. ----
+        // The reentrant burns inside the hook land on the CURRENT view day (D+1, after the +1-day
+        // warp above), so land that day's daily RNG to admit them through the burn gate. This also
+        // sets rngWordForDay(D+1) — the word the claim's lootbox leg keys to — mirroring the live
+        // game where day+1's word is always drawn by claim time.
+        _primeCurrentDayRng();
         attacker.claim(dayD);
 
         // Capture the backing the reentrant submit observed.

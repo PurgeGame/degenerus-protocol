@@ -939,8 +939,14 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             return poolWei;
         }
 
-        // Store packed offsets for claim validation
-        decBucketOffsetPacked[lvl] = packedOffsets;
+        // Store packed offsets at lvl + 1, not lvl, so they never alias the regular decimator
+        // round's decBucketOffsetPacked[lvl]: `level` lags the active purchase level by one, so a
+        // gameover at this level can coexist with a live, unclaimed regular round keyed at lvl, and
+        // sharing the key would let this terminal write corrupt that round's winning subbuckets.
+        // lvl + 1 is safe — that level's regular round can only resolve once `level` reaches it
+        // (precluded by this gameover), and no regular round resolves after gameover, so the slot is
+        // exclusively this terminal round's. The terminal claim path reads the same lvl + 1 slot.
+        decBucketOffsetPacked[lvl + 1] = packedOffsets;
 
         // Snapshot claim round (single slot — no rngWord needed for terminal claims)
         lastTerminalDecClaimRound.lvl = lvl;
@@ -984,7 +990,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             return (0, false);
         }
 
-        uint64 packedOffsets = decBucketOffsetPacked[lvl];
+        // Terminal offset lives at lvl + 1 (see runTerminalDecimatorJackpot) to avoid aliasing the
+        // regular round's decBucketOffsetPacked[lvl].
+        uint64 packedOffsets = decBucketOffsetPacked[lvl + 1];
         uint8 winningSub = _unpackDecWinningSubbucket(packedOffsets, e.bucket);
         if (e.subBucket != winningSub) return (0, false);
 
@@ -1012,7 +1020,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         // Use totalBurn == 0 as claimed flag (set to 0 after claiming)
         uint88 weight = e.weightedBurn;
 
-        uint64 packedOffsets = decBucketOffsetPacked[lvl];
+        // Terminal offset lives at lvl + 1 (see runTerminalDecimatorJackpot) to avoid aliasing the
+        // regular round's decBucketOffsetPacked[lvl].
+        uint64 packedOffsets = decBucketOffsetPacked[lvl + 1];
         uint8 winningSub = _unpackDecWinningSubbucket(packedOffsets, e.bucket);
         if (e.subBucket != winningSub) revert TerminalDecNotWinner();
 

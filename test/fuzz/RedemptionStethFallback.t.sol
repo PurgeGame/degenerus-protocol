@@ -194,6 +194,7 @@ contract RedemptionStethFallback is DeployProtocol {
         uint256 sdgnrsBalBefore = address(sdgnrs).balance;
         uint256 pendingBefore = sdgnrs.pendingRedemptionEthValue();
 
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(BURN_AMOUNT);
 
@@ -248,6 +249,7 @@ contract RedemptionStethFallback is DeployProtocol {
 
         uint32 burnDay = game.currentDayView();
 
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(BURN_AMOUNT);
 
@@ -343,6 +345,7 @@ contract RedemptionStethFallback is DeployProtocol {
         mockStETH.mint(address(sdgnrs), 100 ether);
 
         uint32 burnDay = game.currentDayView();
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(BURN_AMOUNT);
 
@@ -399,6 +402,7 @@ contract RedemptionStethFallback is DeployProtocol {
         uint256 pendingBefore = sdgnrs.pendingRedemptionEthValue();
 
         // MUST NOT REVERT despite claimable[SDGNRS] == 0 and game ETH == 0 — the donated stETH covers.
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(BURN_AMOUNT);
 
@@ -442,7 +446,10 @@ contract RedemptionStethFallback is DeployProtocol {
         uint256 supplyBefore = sdgnrs.totalSupply();
 
         // The burn must revert fail-closed (the game's pullRedemptionReserve reverts E() when neither
-        // pure leg covers; that propagates out of burn()).
+        // pure leg covers; that propagates out of burn()). Prime the current day's RNG FIRST so the
+        // burn passes the admission gate and reaches the INTENDED coverage revert rather than tripping
+        // BurnsBlockedBeforeDailyRng (which would mask the fail-closed property under test).
+        _primeCurrentDayRng();
         vm.prank(playerA);
         vm.expectRevert();
         sdgnrs.burn(BURN_AMOUNT);
@@ -478,6 +485,7 @@ contract RedemptionStethFallback is DeployProtocol {
 
         // --- Claimant A: ETH leg ---
         uint256 pendingBeforeA = sdgnrs.pendingRedemptionEthValue();
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(BURN_AMOUNT);
         uint256 maxIncrA = sdgnrs.pendingRedemptionEthValue() - pendingBeforeA;
@@ -495,6 +503,9 @@ contract RedemptionStethFallback is DeployProtocol {
         uint256 poolBeforeB = game.claimablePoolView(); // 0
         uint256 pendingBeforeB = sdgnrs.pendingRedemptionEthValue();
 
+        // Same period as A (no warp since A's burn) — day already drawn, so this is a no-op, but
+        // primed explicitly to keep B's burn self-sufficient under the admission gate.
+        _primeCurrentDayRng();
         vm.prank(playerB);
         sdgnrs.burn(BURN_AMOUNT);
         uint256 maxIncrB = sdgnrs.pendingRedemptionEthValue() - pendingBeforeB;
@@ -551,6 +562,7 @@ contract RedemptionStethFallback is DeployProtocol {
 
         uint32 day = game.currentDayView();
 
+        _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(BURN_AMOUNT);
 
@@ -678,8 +690,12 @@ contract RedemptionStethFallback is DeployProtocol {
     // =====================================================================
 
     /// @dev Advance the wall day (so we are off the burn day) then resolve `day` at `roll`.
+    ///      After the warp the current view day is `day + 1`; prime its RNG word so the subsequent
+    ///      claimRedemption(day) lootbox leg (which reads rngWordForDay(day + 1)) resolves on a drawn
+    ///      day rather than a not-yet-drawn zero word (window-(b) flow under the burn-side gate).
     function _advanceWallDayAndResolve(uint32 day, uint16 roll) internal {
         vm.warp(block.timestamp + 1 days);
+        _primeCurrentDayRng();
         _resolveDay(day, roll);
     }
 

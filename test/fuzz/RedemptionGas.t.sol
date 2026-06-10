@@ -76,6 +76,7 @@ contract RedemptionGasTest is DeployProtocol {
     function test_gas_burn_gambling() external {
         // Game is active (not gameOver), rngLocked is false
         // Player burns sDGNRS -> enters gambling claim queue
+        _primeCurrentDayRng(); // satisfy the daily-RNG burn-admission gate
         vm.prank(player);
         sdgnrs.burn(PLAYER_SDGNRS / 10); // burn 10% of holdings
     }
@@ -88,6 +89,7 @@ contract RedemptionGasTest is DeployProtocol {
         dgnrs.transfer(player, PLAYER_SDGNRS / 10);
 
         // Player calls burnWrapped on sDGNRS which routes through DGNRS.burnForSdgnrs
+        _primeCurrentDayRng(); // satisfy the daily-RNG burn-admission gate
         vm.prank(player);
         sdgnrs.burnWrapped(PLAYER_SDGNRS / 10);
     }
@@ -99,6 +101,7 @@ contract RedemptionGasTest is DeployProtocol {
     /// @notice Gas benchmark: resolveRedemptionPeriod() called by game contract
     function test_gas_resolveRedemptionPeriod() external {
         // First, create a pending redemption via burn
+        _primeCurrentDayRng(); // satisfy the daily-RNG burn-admission gate
         vm.prank(player);
         sdgnrs.burn(PLAYER_SDGNRS / 10);
 
@@ -115,6 +118,7 @@ contract RedemptionGasTest is DeployProtocol {
     /// @notice Gas benchmark: claimRedemption() after full resolve lifecycle
     function test_gas_claimRedemption() external {
         // Step 1: Player burns sDGNRS (creates gambling claim)
+        _primeCurrentDayRng(); // satisfy the daily-RNG burn-admission gate
         vm.prank(player);
         sdgnrs.burn(PLAYER_SDGNRS / 10);
 
@@ -162,6 +166,7 @@ contract RedemptionGasTest is DeployProtocol {
     function test_gas_hasPendingRedemptions_true() external {
         uint32 currentDay = game.currentDayView();
         // Create a pending redemption
+        _primeCurrentDayRng(); // satisfy the daily-RNG burn-admission gate
         vm.prank(player);
         sdgnrs.burn(PLAYER_SDGNRS / 10);
 
@@ -207,6 +212,9 @@ contract RedemptionGasTest is DeployProtocol {
     ///      per-op attribution.
     function test_gas_regression_burn() external {
         // Worst-case state: first burn of a fresh day, all relevant slots cold.
+        // Prime the day's RNG outside the gasleft() bracket so the measured figure isolates
+        // the burn call; the gate's per-burn rngWordForDay read is still inside the bracket.
+        _primeCurrentDayRng();
         vm.prank(player);
         uint256 gasBefore = gasleft();
         sdgnrs.burn(PLAYER_SDGNRS / 10);
@@ -235,6 +243,7 @@ contract RedemptionGasTest is DeployProtocol {
     ///      the full v43 lifecycle's gas envelope is unambiguously a non-regression.
     function test_gas_regression_claim() external {
         // Setup: burn + resolve + coinflip mocks (matches test_gas_claimRedemption setUp pattern)
+        _primeCurrentDayRng(); // satisfy the daily-RNG burn-admission gate (setup, outside claim bracket)
         vm.prank(player);
         sdgnrs.burn(PLAYER_SDGNRS / 10);
 

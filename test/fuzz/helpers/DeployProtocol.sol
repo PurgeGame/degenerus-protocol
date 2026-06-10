@@ -155,4 +155,20 @@ abstract contract DeployProtocol is Test {
         // GNRUS: self-mints 1T to address(this), no cross-contract constructor calls
         gnrus = new GNRUS();                            // N+24 = nonce 29
     }
+
+    /// @dev Satisfy the gambling-burn admission gate (rngWordForDay(currentDay) != 0) by landing a
+    ///      deterministic non-zero word for the current view day in the game's rngWordByDay map
+    ///      (mapping(uint32 => uint256) at storage slot 10), mirroring a completed daily draw.
+    ///      Self-validating: reverts if that slot is stale. No-op when the day is already drawn.
+    function _primeCurrentDayRng() internal {
+        uint24 d = game.currentDayView();
+        if (game.rngWordForDay(d) == 0) {
+            vm.store(
+                address(game),
+                keccak256(abi.encode(uint256(d), uint256(10))),
+                bytes32(uint256(keccak256(abi.encode("primeRng", d))))
+            );
+        }
+        require(game.rngWordForDay(d) != 0, "primeRng: rngWordByDay slot mismatch");
+    }
 }

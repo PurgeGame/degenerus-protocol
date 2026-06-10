@@ -327,6 +327,12 @@ contract RedemptionHandler is Test {
             vm.deal(address(game), 0);
         }
 
+        // Satisfy the gambling-burn admission gate: _submitGamblingClaimFrom reverts
+        // BurnsBlockedBeforeDailyRng unless the current view day's VRF word is recorded. Land a
+        // non-zero rngWordByDay[today] so the burn is admitted and reaches the reservation logic
+        // (the fail-closed branch still fires downstream when neither ETH nor stETH leg covers).
+        _primeCurrentDayRng(today);
+
         // Capture pre-pull claimable[SDGNRS] + reservation so we can detect which leg ran.
         uint256 claimableBeforePull = _gameClaimableSdgnrs();
         uint256 pendingBeforePull = sdgnrs.pendingRedemptionEthValue();
@@ -402,6 +408,23 @@ contract RedemptionHandler is Test {
     function _gameClaimableSdgnrs() internal view returns (uint256) {
         bytes32 slot = keccak256(abi.encode(ContractAddresses.SDGNRS, uint256(7)));
         return uint256(vm.load(address(game), slot));
+    }
+
+    /// @dev Satisfy the gambling-burn admission gate by landing a deterministic non-zero word for
+    ///      `day` in the game's rngWordByDay map (mapping(uint32 => uint256) @ storage slot 10),
+    ///      mirroring a completed daily draw. No-op when the day is already drawn; self-validating.
+    ///      Mirrors DeployProtocol._primeCurrentDayRng (the validated helper) at the handler's site
+    ///      so every gambling burn the fuzzer/lever drives is admitted on its current view day.
+    function _primeCurrentDayRng(uint32 day) internal {
+        uint24 d = uint24(day);
+        if (game.rngWordForDay(d) == 0) {
+            vm.store(
+                address(game),
+                keccak256(abi.encode(uint256(d), uint256(10))),
+                bytes32(uint256(keccak256(abi.encode("primeRng", d))))
+            );
+        }
+        require(game.rngWordForDay(d) != 0, "primeRng: rngWordByDay slot mismatch");
     }
 
     // =========================================================================
@@ -570,6 +593,11 @@ contract RedemptionHandler is Test {
         // If the stamped day is today (or zero), this is a normal-path burn; only proceed
         // when the stamped day is strictly less than today (the stuck-pool window).
         if (stamp == 0 || stamp == today) return;
+
+        // Pass the gambling-burn admission gate (rngWordForDay(today) != 0) so the burn reaches the
+        // PriorDayUnresolved sentinel revert this exerciser targets, rather than short-circuiting on
+        // BurnsBlockedBeforeDailyRng (which the gate would otherwise raise first).
+        _primeCurrentDayRng(today);
 
         vm.prank(currentActor);
         try sdgnrs.burn(1e18) {

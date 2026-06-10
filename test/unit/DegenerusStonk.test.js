@@ -36,6 +36,17 @@ async function giveSDGNRS(sdgnrs, game, recipient, amount) {
   const gameSigner = await hre.ethers.getSigner(gameAddr);
   await sdgnrs.connect(gameSigner).transferFromPool(Pool.Reward, recipient, amount);
   await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [gameAddr] });
+  // Land the current day's VRF word so a subsequent gambling burn passes the admission gate
+  // (rngWordForDay(currentDay) != 0). rngWordByDay is mapping(uint32 => uint256) at game slot 10.
+  const currentDay = await game.currentDayView();
+  const rngSlot = hre.ethers.keccak256(
+    hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256", "uint256"], [BigInt(currentDay), 10n])
+  );
+  await hre.network.provider.send("hardhat_setStorageAt", [
+    gameAddr,
+    rngSlot,
+    "0x" + "de".repeat(32),
+  ]);
 }
 
 // Helper: credit `amount` (wei) to sDGNRS's claimableWinnings entry in the Game
