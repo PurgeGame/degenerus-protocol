@@ -2321,28 +2321,28 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function _payoutWithStethFallback(address to, uint256 amount) private {
         if (amount == 0) return;
 
-        // Try ETH first (preferred for player claims)
+        // ETH is preferred for player claims, but the untrusted ETH .call MUST run LAST (CEI):
+        // _claimWinningsInternal has already debited claimablePool by the full payout, so sending
+        // ETH while the stETH remainder is still held would let a reentrant distributeYieldSurplus
+        // read that in-flight stETH as unreserved backing and over-distribute it. Mirrors the
+        // stETH-before-ETH ordering of _payoutWithEthFallback and the sDGNRS _payEth path.
         uint256 ethBal = address(this).balance;
         uint256 ethSend = amount <= ethBal ? amount : ethBal;
-        if (ethSend != 0) {
-            (bool okEth, ) = payable(to).call{value: ethSend}("");
-            if (!okEth) revert E();
-        }
         uint256 remaining = amount - ethSend;
-        if (remaining == 0) return;
 
-        // Fall back to stETH for remainder
-        uint256 stBal = steth.balanceOf(address(this));
-        uint256 stSend = remaining <= stBal ? remaining : stBal;
-        _transferSteth(to, stSend);
+        // Move the stETH leg out first (a stETH transfer hands no control to `to`); any stETH
+        // shortfall is folded into the single ETH .call below.
+        if (remaining != 0) {
+            uint256 stBal = steth.balanceOf(address(this));
+            uint256 stSend = remaining <= stBal ? remaining : stBal;
+            _transferSteth(to, stSend);
+            ethSend += remaining - stSend;
+        }
 
-        // Retry ETH for any remaining (handles edge cases)
-        uint256 leftover = remaining - stSend;
-        if (leftover != 0) {
-            // Retry with any refreshed ETH (e.g., if stETH was short but ETH arrived).
-            uint256 ethRetry = address(this).balance;
-            if (ethRetry < leftover) revert E();
-            (bool ok, ) = payable(to).call{value: leftover}("");
+        // Untrusted ETH .call LAST — all ledger debits and the stETH transfer have completed.
+        if (ethSend != 0) {
+            if (address(this).balance < ethSend) revert E();
+            (bool ok, ) = payable(to).call{value: ethSend}("");
             if (!ok) revert E();
         }
     }
