@@ -212,6 +212,30 @@ contract StakedStonkRedemption is DeployProtocol {
     }
 
     // =====================================================================
+    //   test_GamblingBurnRevertsBeforeDailyRng (v62 redemption-zero-seed gate)
+    // =====================================================================
+
+    /// @notice Pins the `BurnsBlockedBeforeDailyRng` admission gate (the post-v62 redemption
+    ///         pre-draw guard in `StakedDegenerusStonk._submitGamblingClaimFrom`): a gambling burn
+    ///         submitted before the current day's VRF word is recorded must revert. Every other
+    ///         test in this suite calls `_primeCurrentDayRng()` first, so removing the gate would
+    ///         otherwise go undetected — the lootbox leg would then read a zero, fully-predictable
+    ///         `rngWordForDay(day + 1)`. Reinjecting the pre-gate code flips this test to FAIL.
+    function test_GamblingBurnRevertsBeforeDailyRng() public {
+        // No _primeCurrentDayRng(): the current day's VRF word is unset at deploy-time state.
+        assertEq(
+            game.rngWordForDay(uint24(game.currentDayView())),
+            0,
+            "precondition: current day's RNG word must be unprimed (pre-draw window)"
+        );
+        // Valid gambling burn (>= MIN_BURN_AMOUNT, <= funding, well under the 160-ETH EV cap):
+        // the only admission failure it can hit is the pre-draw gate.
+        vm.prank(playerA);
+        vm.expectRevert(StakedDegenerusStonk.BurnsBlockedBeforeDailyRng.selector);
+        sdgnrs.burn(FUZZ_MIN_AMOUNT);
+    }
+
+    // =====================================================================
     //         testFuzz_BurnLandsInCurrentDayPool (ROADMAP-canonical)
     // =====================================================================
 
