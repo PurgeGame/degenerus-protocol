@@ -759,11 +759,16 @@ contract DegenerusGameDegeneretteModule is
             }
         }
 
-        // One lootbox per betId, on the summed lootbox-share, using this bet's
-        // rngWord (the per-spin lootboxWord salt is dropped — the box now rolls
-        // once per bet). Never summed across betIds (resolution-batch-invariant).
+        // One lootbox per betId, on the summed lootbox-share. The box seed binds the immutable
+        // betId (keccak'd with the index word) so each of a player's bets at the same index rolls
+        // independently; the live lootbox-share is NOT a seed input. Never summed across betIds.
         if (betLootboxShare > 0) {
-            _resolveLootboxDirect(player, betLootboxShare, rngWord, activityScore);
+            _resolveLootboxDirect(
+                player,
+                betLootboxShare,
+                uint256(keccak256(abi.encode(rngWord, betId))),
+                activityScore
+            );
         }
 
         emit FullTicketResolved(

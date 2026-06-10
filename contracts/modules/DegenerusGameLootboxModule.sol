@@ -826,10 +826,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (amount == 0) return;
 
         uint24 currentLevel = level + 1;
-        // Freeze-safe seed with NO live day: claim timing cannot re-roll the outcome (rngWord
-        // already domain-separates per claim). No live day is read here at all — boon expiry uses
-        // the boon path's own currentDay, and the event day is unused for player-timed claims.
-        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, amount)));
+        // Freeze-safe seed: only the committed rngWord — which the caller domain-separates per
+        // resolution (Degenerette mixes the immutable betId, the decimator passes its per-level
+        // word) — and the player feed it. No live, post-word-reveal input enters the seed, so
+        // neither claim timing nor a futurePrizePool nudge can re-roll the outcome. No live day is
+        // read here either — boon expiry uses the boon path's own currentDay.
+        uint256 seed = uint256(keccak256(abi.encode(rngWord, player)));
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
