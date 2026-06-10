@@ -150,9 +150,14 @@ interface IDegenerusGameDecimatorModule {
     /// @return amountWei Pro-rata payout amount.
     function consumeDecClaim(address player, uint24 lvl) external returns (uint256 amountWei);
 
-    /// @notice Claim Decimator jackpot for caller.
+    /// @notice Permissionlessly resolve `player`'s Decimator jackpot claim (value credits to player).
+    /// @param player Winner whose claim to resolve.
     /// @param lvl Level to claim from (must be the last decimator).
-    function claimDecimatorJackpot(uint24 lvl) external;
+    function claimDecimatorJackpot(address player, uint24 lvl) external;
+
+    /// @notice Permissionlessly resolve Decimator jackpot claims for a batch of players.
+    /// @dev Non-claimable entries are skipped, not reverted.
+    function claimDecimatorJackpotMany(address[] calldata players, uint24 lvl) external;
 
     /// @notice Check if player can claim Decimator jackpot for a level.
     /// @param player Address to check.
@@ -180,7 +185,7 @@ interface IDegenerusGameDecimatorModule {
         uint256 rngWord
     ) external returns (uint256 returnAmountWei);
 
-    /// @notice Claim terminal decimator jackpot.
+    /// @notice Claim terminal decimator jackpot for caller.
     function claimTerminalDecimatorJackpot() external;
 
     /// @notice Check terminal decimator claimable amount.
@@ -360,6 +365,11 @@ interface IDegenerusGameLootboxModule {
         uint256 rngWord,
         uint16 activityScore
     ) external;
+
+    /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.
+    /// @param player Claimant credited.
+    /// @param amount Total direct-half value (msg.value ETH + the stETH remainder pulled here).
+    function creditRedemptionDirect(address player, uint256 amount) external payable;
 
     /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed
     ///         frozen-day word.

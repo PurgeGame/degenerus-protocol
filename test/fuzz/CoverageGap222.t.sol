@@ -938,7 +938,11 @@ contract CoverageGap222 is DeployProtocol {
         );
         vm.prank(buyer);
         (bool o2, ) = address(sdgnrs).call(
-            abi.encodeWithSignature("claimRedemption(uint32)", uint32(0))
+            abi.encodeWithSignature(
+                "claimRedemption(address,uint24)",
+                buyer,
+                uint24(0)
+            )
         );
         vm.prank(buyer);
         (bool o3, ) = address(sdgnrs).call(
@@ -1203,13 +1207,6 @@ contract CoverageGap222 is DeployProtocol {
             )
         );
         vm.prank(buyer);
-        (bool o2, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "jackpotsClaimDecimator(uint24)",
-                uint24(0)
-            )
-        );
-        vm.prank(buyer);
         (bool o3, ) = address(vault).call(
             abi.encodeWithSignature(
                 "sdgnrsBurn(uint256)",
@@ -1235,7 +1232,6 @@ contract CoverageGap222 is DeployProtocol {
             )
         );
         assertFalse(o1, "vault.wwxrpMint rejected non-vaultOwner caller");
-        assertFalse(o2, "vault.jackpotsClaimDecimator rejected non-vaultOwner caller");
         assertFalse(o3, "vault.sdgnrsBurn rejected non-vaultOwner caller");
         assertFalse(o4, "vault.sdgnrsClaimRedemption rejected non-vaultOwner caller");
         assertFalse(o5, "vault.burnCoin rejected caller with no DGVB shares");
@@ -1522,7 +1518,8 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o6, ) = address(game).call(
             abi.encodeWithSignature(
-                "claimDecimatorJackpot(uint24)",
+                "claimDecimatorJackpot(address,uint24)",
+                buyer,
                 uint24(0)
             )
         );

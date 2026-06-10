@@ -21,36 +21,34 @@ interface IGameLootboxModuleRRL {
     function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external;
 }
 
-/// @title V62RedemptionReentrancy -- regression for finding V62-03 (now verifies the FIX: the
-///        stETH-before-ETH reorder in _payEth holds SOLVENCY-01 through a reentrant claim). The
-///        vuln description below is retained as context for what the fix prevents.
+/// @title V62RedemptionReentrancy -- regression for finding V62-03 (verifies the layered FIX).
+///        The vuln description below is retained as context for what the fixes prevent.
 ///
 /// @notice V62-03 (adjudicated vs frozen c4d48008): StakedDegenerusStonk.sol has NO reentrancy
-///         guard. `claimRedemption(day)` decrements `pendingRedemptionEthValue -= totalRolledEth`
-///         and deletes the per-(player,day) claim slot BEFORE the payout (sStonk:728/:731). The
-///         payout's `_payEth(player, ethDirect)` MIXED branch (ethDirect > liquid ETH) sends
-///         `ethOut = ethBal` to the player via `player.call{value:ethOut}` FIRST (sStonk:954), THEN
-///         `steth.transfer(player, stethOut)` (sStonk:957). The ETH `.call` re-enters the attacker's
-///         receive() hook while `stethOut` is STILL custodied in the sDGNRS contract.
+///         guard. `claimRedemption` decrements `pendingRedemptionEthValue -= totalRolledEth`
+///         and deletes the per-(player,day) claim slot BEFORE the payout. The payout's
+///         `_payEth(player, ethDirect)` MIXED branch (ethDirect > liquid ETH) originally sent
+///         `ethOut = ethBal` to the player via `player.call{value:ethOut}` FIRST, THEN
+///         `steth.transfer(player, stethOut)`. The ETH `.call` re-enters the attacker's
+///         receive() hook while `stethOut` is STILL custodied in the sDGNRS contract, letting a
+///         reentrant burn() count the in-flight stETH as free backing — breaking the redemption
+///         reserve / SOLVENCY-01 identity
+///           pendingRedemptionEthValue <= ETH held + stETH held.
 ///
-///         Inside the hook the attacker re-enters `burn()` (the gambling-redemption submit path,
-///         reachable while !gameOver && !rngLocked && !livenessTriggered). The reentrant backing
-///         calc (`_submitGamblingClaimFrom`, sStonk:866-870) reads
-///           ethBal     = address(this).balance        (sStonk:866)
-///           stethBal   = steth.balanceOf(address(this))(sStonk:867)  <- STILL holds the in-flight stethOut
-///           totalMoney = ethBal + stethBal + claimableEth - pendingRedemptionEthValue (sStonk:869)
-///         The owed-but-not-yet-transferred `stethOut` is counted as FREE backing because
-///         pendingRedemptionEthValue no longer reserves it (it was decremented at :728 before the
-///         hook fired). The reentrant submit then reserves a NEW redemption via
-///         `game.pullRedemptionReserve(maxIncrement)` at the 175% MAX (sStonk:904-911), incrementing
-///         pendingRedemptionEthValue. The OUTER claim then transfers `stethOut` OUT of the contract
-///         (sStonk:957). Net: pendingRedemptionEthValue is reserved against stETH the contract has
-///         already promised away -> the redemption reserve / SOLVENCY-01 identity
-///           pendingRedemptionEthValue <= ETH held + stETH held
-///         is broken.
+///         TWO independent layers now close the class, pinned by one test each:
 ///
-/// @dev TEST-ONLY. No contracts/*.sol are touched. Subject is the working-tree contracts, verified
-///      byte-identical to c4d48008 for StakedDegenerusStonk.sol and DegenerusGame.sol.
+///         1. test_V62_03_LiveClaim_RunsNoClaimantCode — the live-game claim routes BOTH halves
+///            to the GAME (direct half = game-claimable credit, lootbox half = lootbox funding)
+///            and pushes NOTHING at the claimant, so no claimant-controlled code runs at all:
+///            the re-entry surface is gone by construction mid-game.
+///
+///         2. test_V62_03_GameOverClaim_PayEthCEIHoldsReserveIdentity — _payEth survives only on
+///            the post-gameOver path (100% direct, self-claim). Its stETH-before-ETH order
+///            (CEI) ships the owed stETH BEFORE the untrusted ETH .call, so a reentrant
+///            gameOver deterministic burn() inside the hook reads backing that EXCLUDES the
+///            in-flight stETH and extracts nothing extra.
+///
+/// @dev TEST-ONLY. No contracts/*.sol are touched.
 ///      Run: forge test --match-path test/repro/V62RedemptionReentrancy.t.sol -vv
 contract V62RedemptionReentrancy is DeployProtocol {
     // =====================================================================
@@ -154,11 +152,11 @@ contract V62RedemptionReentrancy is DeployProtocol {
     //                          THE REPRO
     // =====================================================================
 
-    /// @notice End-to-end: a single attacker contract burns, the day resolves, and on claim the
-    ///         attacker re-enters burn() during the mixed _payEth ETH .call. The reentrant submit
-    ///         double-counts the in-flight stETH as free backing and reserves a NEW redemption; the
-    ///         outer claim then ships the stETH out, leaving pendingRedemptionEthValue unbacked.
-    function test_V62_03_RedemptionReentrancyHoldsReserveIdentity() public {
+    /// @notice Layer 1 — the LIVE-GAME claim runs no claimant-controlled code at all. Both
+    ///         halves of the rolled ETH route to the GAME (direct half = game-claimable credit,
+    ///         lootbox half = lootbox funding); nothing is pushed at the claimant, so an armed
+    ///         attacker's receive() hook never fires and the re-entry surface does not exist.
+    function test_V62_03_LiveClaim_RunsNoClaimantCode() public {
         // ---- 1. Outer gambling burn on day D. Reserves 175% MAX into pendingRedemptionEthValue;
         //         the ETH leg of pullRedemptionReserve segregates that ETH into sDGNRS's balance. ----
         uint24 dayD = game.currentDayView();
@@ -169,8 +167,6 @@ contract V62RedemptionReentrancy is DeployProtocol {
 
         (uint96 owedBase, ) = sdgnrs.pendingRedemptions(address(attacker), uint24(dayD));
         assertGt(uint256(owedBase), 0, "precondition: outer burn must record a positive claim base");
-        uint256 pendingAfterSubmit = sdgnrs.pendingRedemptionEthValue();
-        assertGt(pendingAfterSubmit, 0, "precondition: submit must reserve the 175% MAX");
         assertTrue(_reserveIdentityHolds(), "precondition: reserve identity holds right after submit");
 
         // ---- 2. Advance the wall day and resolve day D at the MAX roll (175%) so the rolled payout
@@ -178,125 +174,142 @@ contract V62RedemptionReentrancy is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         _resolveDay(dayD, 175);
 
-        // Rolled ETH the claim will release; direct half is what _payEth pays the attacker.
         uint256 totalRolledEth = (uint256(owedBase) * 175) / 100;
         uint256 ethDirect = totalRolledEth / 2;
+        uint256 lootboxEth = totalRolledEth - ethDirect;
 
-        // ---- 3. Engineer the MIXED _payEth branch at claim time: liquid ETH strictly between 0 and
-        //         ethDirect, with stETH custodied to cover the remainder. We move all but `seedEth`
-        //         of sDGNRS's ETH balance into stETH custody (mint stETH to sDGNRS, drain its ETH).
-        //         seedEth (the .call value that fires the hook) is set to a small positive fraction
-        //         of ethDirect so 0 < ethBal < ethDirect. ----
-        uint256 seedEth = ethDirect / 4; // strictly between 0 and ethDirect
-        assertGt(seedEth, 0, "precondition: seedEth must be > 0 so the ETH .call hook fires");
-
-        // Re-shape sDGNRS custody so liquid ETH is below ethDirect (forces the mixed _payEth branch)
-        // while total backing (ETH + stETH) EXACTLY covers pendingRedemptionEthValue (reserve identity
-        // holds going in, at equality — no masking headroom). This models a fully-reserved contract
-        // whose backing is partly held as stETH (a normal state: the submit reserve can take the stETH
-        // leg, or stETH arrives as yield). Set ETH to seedEth and stETH to the exact remainder.
+        // ---- 3. Custody shaping: liquid ETH strictly between 0 and the rolled amount with stETH
+        //         covering the exact remainder (no headroom), so BOTH game legs exercise the
+        //         msg.value + stETH-remainder funding mix. ----
+        uint256 seedEth = ethDirect / 4;
+        assertGt(seedEth, 0, "precondition: seedEth must be > 0");
         uint256 pendingNow = sdgnrs.pendingRedemptionEthValue();
         vm.deal(address(sdgnrs), seedEth);
-        // stETH custody = pendingNow - seedEth, so (ETH + stETH) == pendingNow exactly (no headroom).
         mockStETH.mint(address(sdgnrs), pendingNow - seedEth);
-
-        // Snapshot the reserve identity BEFORE the claim.
-        uint256 pendingBeforeClaim = sdgnrs.pendingRedemptionEthValue();
-        uint256 backingBeforeClaim = address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs));
-        emit log_named_uint("pendingRedemptionEthValue BEFORE claim", pendingBeforeClaim);
-        emit log_named_uint("ETH+stETH held       BEFORE claim", backingBeforeClaim);
-        emit log_named_uint("sDGNRS ETH           BEFORE claim", address(sdgnrs).balance);
-        emit log_named_uint("sDGNRS stETH         BEFORE claim", mockStETH.balanceOf(address(sdgnrs)));
         assertTrue(_reserveIdentityHolds(), "precondition: reserve identity holds right before claim");
-        assertLt(address(sdgnrs).balance, ethDirect, "precondition: ETH < ethDirect (forces _payEth mixed branch)");
-        assertGt(address(sdgnrs).balance, 0, "precondition: ETH > 0 (mixed branch fires the .call hook)");
 
-        // Deplete the GAME's liquid ETH and claimable[SDGNRS] so the reentrant submit's
-        // pullRedemptionReserve CANNOT take the ETH leg (which would pull fresh ETH in to back the
-        // new reservation, shifting the harm to an over-debit of the game's claimable instead). With
-        // the ETH leg unavailable, pullRedemptionReserve takes the stETH leg: a pure no-op that only
-        // INCREMENTS pendingRedemptionEthValue (via the caller) and brings NO new asset in — it
-        // relies on the in-flight stETH still sitting in sDGNRS. The outer claim then ships that
-        // stETH out, so the reservation ends up unbacked. (Mid-game ETH depletion is the documented
-        // stETH-leg precondition; see RedemptionStethFallback test (b).)
+        // Deplete the GAME's liquid ETH and claimable[SDGNRS]: the claim must succeed with the
+        // value arriving from sDGNRS custody alone (stETH pulls), not from any game-side reserve.
         vm.deal(address(game), 0);
         _setGameClaimableSdgnrs(0);
         _setGameClaimablePool(0);
 
-        // Arm the attacker to reentrantly submit fresh gambling burns inside its receive() hook.
-        // Loop up to 64× so accumulated unbacked reservations overcome the 175% over-collateral
-        // cushion left as residual free backing after the outer claim. Each iteration reserves a new
-        // 175% MAX against the (double-counted) in-flight stETH via the pullRedemptionReserve stETH
-        // leg, which brings NO asset in. Per-iteration amount is small enough to stay under the
-        // 160 ETH per-(wallet,day) EV cap and the 50% per-day supply cap.
+        // Arm the attacker exactly as the pre-fix exploit would — the hook must never fire.
         attacker.arm(BURN_AMOUNT / 4, 64);
 
-        // ---- 4. Fire the claim. The mixed _payEth .call re-enters the attacker; it submits new
-        //         gambling burns while the stethOut is still custodied. ----
-        // The reentrant burns inside the hook land on the CURRENT view day (D+1, after the +1-day
-        // warp above), so land that day's daily RNG to admit them through the burn gate. This also
-        // sets rngWordForDay(D+1) — the word the claim's lootbox leg keys to — mirroring the live
-        // game where day+1's word is always drawn by claim time.
+        // ---- 4. Fire the claim (sets rngWordForDay(D+1), the word the lootbox leg keys to). ----
         _primeCurrentDayRng();
+        uint256 attackerEthBefore = address(attacker).balance;
+        uint256 attackerStethBefore = mockStETH.balanceOf(address(attacker));
+        uint256 gameValueBefore = address(game).balance + mockStETH.balanceOf(address(game));
         attacker.claim(dayD);
 
-        // Capture the backing the reentrant submit observed.
+        // ---- HEADLINE: no claimant code ran — the re-entry surface is gone by construction. ----
+        assertFalse(attacker.reentered(), "V62-03 L1: claimant hook fired during a live-game claim");
+        assertEq(attacker.reentrantBurnCount(), 0, "V62-03 L1: reentrant burns landed in the hook");
+        assertEq(address(attacker).balance, attackerEthBefore, "V62-03 L1: live-game claim pushed ETH at the claimant");
+        assertEq(
+            mockStETH.balanceOf(address(attacker)),
+            attackerStethBefore,
+            "V62-03 L1: live-game claim pushed stETH at the claimant"
+        );
+
+        // The direct half landed as a game-claimable credit; the full rolled value moved to the
+        // GAME (seedEth as msg.value, the remainder as stETH pulls across the two legs).
+        assertEq(
+            game.claimableWinningsOf(address(attacker)),
+            ethDirect,
+            "V62-03 L1: direct half must credit the claimant's game claimable"
+        );
+        assertEq(
+            address(game).balance + mockStETH.balanceOf(address(game)) - gameValueBefore,
+            ethDirect + lootboxEth,
+            "V62-03 L1: full rolled value must arrive at the game"
+        );
+
+        // Reservation fully released and the reserve identity holds.
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "V62-03 L1: reservation not fully released");
+        assertTrue(_reserveIdentityHolds(), "V62-03 L1: SOLVENCY-01 holds after the claim");
+    }
+
+    /// @notice Layer 2 — the POST-GAMEOVER claim still pays via _payEth (100% direct, self-claim,
+    ///         no lootbox leg). Its stETH-before-ETH order (CEI) ships the owed stETH BEFORE the
+    ///         untrusted ETH .call, so the attacker's hook re-enters a gameOver deterministic
+    ///         burn() against backing that EXCLUDES the in-flight stETH and extracts nothing.
+    function test_V62_03_GameOverClaim_PayEthCEIHoldsReserveIdentity() public {
+        // ---- 1. Outer gambling burn + resolve at the MAX roll, exactly as in Layer 1. ----
+        uint24 dayD = game.currentDayView();
+        _primeCurrentDayRng();
+        attacker.outerBurn(BURN_AMOUNT);
+
+        (uint96 owedBase, ) = sdgnrs.pendingRedemptions(address(attacker), uint24(dayD));
+        assertGt(uint256(owedBase), 0, "precondition: outer burn must record a positive claim base");
+
+        vm.warp(block.timestamp + 1 days);
+        _resolveDay(dayD, 175);
+
+        // gameOver latches AFTER the resolve: the claim now pays 100% direct via _payEth.
+        vm.mockCall(address(game), abi.encodeWithSelector(game.gameOver.selector), abi.encode(true));
+
+        uint256 totalRolledEth = (uint256(owedBase) * 175) / 100;
+        uint256 ethDirect = totalRolledEth; // gameOver: no lootbox leg
+
+        // ---- 2. Engineer the MIXED _payEth branch: liquid ETH strictly between 0 and ethDirect,
+        //         stETH covering the exact remainder (no masking headroom). ----
+        uint256 seedEth = ethDirect / 4;
+        assertGt(seedEth, 0, "precondition: seedEth must be > 0 so the ETH .call hook fires");
+        uint256 pendingNow = sdgnrs.pendingRedemptionEthValue();
+        vm.deal(address(sdgnrs), seedEth);
+        mockStETH.mint(address(sdgnrs), pendingNow - seedEth);
+        assertLt(address(sdgnrs).balance, ethDirect, "precondition: ETH < ethDirect (forces _payEth mixed branch)");
+
+        // Zero the game-side claimable so the reentrant deterministic burn's backing read has no
+        // claimable term — its only possible phantom source is the in-flight stETH itself.
+        vm.deal(address(game), 0);
+        _setGameClaimableSdgnrs(0);
+        _setGameClaimablePool(0);
+
+        // Arm the attacker: the hook re-enters burn(), which under gameOver is the DETERMINISTIC
+        // path — it would pay out immediately against any backing it can see.
+        attacker.arm(BURN_AMOUNT / 4, 64);
+
+        // ---- 3. Fire the self-claim. The mixed _payEth ships stETH first, then the ETH .call
+        //         fires the hook. ----
+        uint256 attackerEthBefore = address(attacker).balance;
+        uint256 attackerStethBefore = mockStETH.balanceOf(address(attacker));
+        attacker.claim(dayD);
+
         bool reentrantBurnSucceeded = attacker.reentered();
-        uint256 reentrantStethBacking = attacker.reentrantStethBalanceSeen();
-        uint256 inFlightSteth = attacker.inFlightStethAtHook();
         uint256 reentrantCount = attacker.reentrantBurnCount();
+        uint256 inFlightSteth = attacker.inFlightStethAtHook();
+        uint256 reentrantStethBacking = attacker.reentrantStethBalanceSeen();
         uint256 pendingAtHook = attacker.pendingSeenAtHook();
-        uint256 pendingAfterReentrant = attacker.pendingSeenAfterReentrantBurns();
 
         emit log_named_string("reentrant burn succeeded", reentrantBurnSucceeded ? "YES" : "NO");
-        emit log_named_uint("reentrant burns landed (count)     ", reentrantCount);
-        emit log_named_uint("stETH balance reentrant submit saw", reentrantStethBacking);
-        emit log_named_uint("in-flight stETH owed at hook       ", inFlightSteth);
+        emit log_named_uint("reentrant burns landed (count)      ", reentrantCount);
+        emit log_named_uint("in-flight stETH owed at hook        ", inFlightSteth);
+        emit log_named_uint("stETH balance reentrant burn saw    ", reentrantStethBacking);
         emit log_named_uint("pending at hook (post outer release)", pendingAtHook);
-        emit log_named_uint("pending after reentrant burns       ", pendingAfterReentrant);
 
-        // ---- 5. Reserve identity AFTER the full sequence. ----
-        uint256 pendingAfterClaim = sdgnrs.pendingRedemptionEthValue();
-        uint256 backingAfterClaim = address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs));
-        emit log_named_uint("pendingRedemptionEthValue AFTER  claim", pendingAfterClaim);
-        emit log_named_uint("ETH+stETH held       AFTER  claim", backingAfterClaim);
-        emit log_named_uint("sDGNRS ETH           AFTER  claim", address(sdgnrs).balance);
-        emit log_named_uint("sDGNRS stETH         AFTER  claim", mockStETH.balanceOf(address(sdgnrs)));
-        emit log_named_uint("game claimable[SDGNRS] AFTER claim", uint128(uint256(vm.load(address(game), keccak256(abi.encode(address(sdgnrs), GAME_CLAIMABLE_SLOT))))));
-        emit log_named_uint("game ETH balance       AFTER claim", address(game).balance);
+        // ---- HEADLINE: the re-entry is reachable (no guard) but extracts NOTHING — the owed
+        //      stETH shipped before the hook, so the deterministic burns see zero backing. ----
+        assertTrue(reentrantBurnSucceeded, "V62-03 L2: reentry is still reachable (no guard) -- the fix neutralizes its EFFECT");
+        assertGt(reentrantCount, 0, "V62-03 L2: the reentrant gameOver burns still land in the hook");
+        assertEq(pendingAtHook, 0, "V62-03 L2: outer claim releases the reservation before the hook");
+        assertEq(inFlightSteth, 0, "V62-03 L2: owed stETH already shipped before the ETH hook (stETH-before-ETH CEI)");
+        assertEq(reentrantStethBacking, 0, "V62-03 L2: reentrant burn saw no free stETH backing");
 
-        if (pendingAfterClaim > backingAfterClaim) {
-            emit log_named_uint("UNBACKED reservation deficit (pending - held)", pendingAfterClaim - backingAfterClaim);
-        }
-
-        // ---- HEADLINE (FIXED): the stETH-before-ETH reorder in _payEth holds SOLVENCY-01 through
-        //      the reentrant claim. The owed stETH ships BEFORE the untrusted ETH .call, so the
-        //      reservation tracker never exceeds the ETH+stETH the contract holds. ----
-        assertTrue(reentrantBurnSucceeded, "V62-03: reentry is still reachable (no guard) -- the fix neutralizes its EFFECT, not the reentry");
-        assertGt(reentrantCount, 0, "V62-03: the reentrant gambling burns still land in the hook");
-        assertLe(
-            pendingAfterClaim,
-            backingAfterClaim,
-            "V62-03 FIXED: reserve identity holds (pendingRedemptionEthValue <= ETH+stETH held)"
-        );
-        assertTrue(_reserveIdentityHolds(), "V62-03 FIXED: SOLVENCY-01 holds after the reentrant claim");
-
-        // ---- MECHANISM (FIXED): CEI. The outer claim decremented pending (pending == 0 at hook),
-        //      AND the fix already shipped the owed stETH out before the ETH .call fired — so at the
-        //      hook the in-flight owed stETH is GONE. The reentrant submit reads zero free stETH
-        //      backing and reserves NOTHING against phantom backing. ----
-        assertEq(pendingAtHook, 0, "V62-03: outer claim releases the reservation before the hook (pending == 0 at hook)");
-        assertEq(inFlightSteth, 0, "V62-03 FIXED: owed stETH already shipped before the ETH hook (stETH-before-ETH CEI)");
+        // The attacker's TOTAL receipts equal exactly the one entitled payout (ethDirect): seedEth
+        // arrived as the .call value, the remainder as the pre-hook stETH ship. The reentrant
+        // deterministic burns inside the hook burned tokens against zero backing and added nothing.
         assertEq(
-            reentrantStethBacking,
-            0,
-            "V62-03 FIXED: reentrant submit saw no free stETH backing (the owed stETH was already sent)"
+            (address(attacker).balance - attackerEthBefore) +
+                (mockStETH.balanceOf(address(attacker)) - attackerStethBefore),
+            ethDirect,
+            "V62-03 L2: attacker receipts != the single entitled payout (reentry extracted value)"
         );
-        assertEq(
-            pendingAfterReentrant,
-            pendingAtHook,
-            "V62-03 FIXED: reentrant burns reserved nothing extra (no phantom backing to double-count)"
-        );
+
+        assertTrue(_reserveIdentityHolds(), "V62-03 L2: SOLVENCY-01 holds after the reentrant claim");
     }
 }
 
@@ -333,7 +346,7 @@ contract Attacker {
     }
 
     function claim(uint24 day) external {
-        sdgnrs.claimRedemption(day);
+        sdgnrs.claimRedemption(address(this), day);
     }
 
     /// @dev Fired by the mixed _payEth ETH .call. While this runs the outer claim has NOT yet

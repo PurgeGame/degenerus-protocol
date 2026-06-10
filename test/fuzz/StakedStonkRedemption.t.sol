@@ -376,17 +376,18 @@ contract StakedStonkRedemption is DeployProtocol {
     //         testFuzz_ClaimReadsCorrectDay (ROADMAP-canonical)
     // =====================================================================
 
-    /// @notice claimRedemption(day) reads the (msg.sender, day) composite-key slot — not
-    ///         (sender, day ± 1) — pays out the correct rolled amount, and clears the slot on
+    /// @notice claimRedemption(player, day) reads the (player, day) composite-key slot — not
+    ///         (player, day ± 1) — credits the correct rolled amount, and clears the slot on
     ///         full-claim path. Adjacent days' claim slots are byte-identical pre/post.
     /// @dev Tests `claimRedemption` in isolation. Anchors: SPEC-02 (composite key), SPEC-04 (d)
-    ///      (delete-on-full-claim). The expected ETH delivered to the player is
-    ///      `(claim.ethValueOwed * roll / 100) / 2` (50% direct, 50% routed to lootbox under live
-    ///      game). With gwei-aligned ethValueOwed (D-305-GWEI-SNAP-01) and roll ∈ [25, 175], the
-    ///      arithmetic `× roll / 100` is exact since gcd(1e9, 100) = 100. The 50/50 split is
-    ///      integer division; if totalRolledEth is odd-wei, the split would skew 1 wei, but
-    ///      gwei-aligned values × any roll are always even multiples of 100, so totalRolledEth
-    ///      is always divisible by 2 — ethDirect == totalRolledEth / 2 exactly.
+    ///      (delete-on-full-claim). The expected direct credit (into the player's game claimable;
+    ///      live game pushes nothing at the claimant) is `(claim.ethValueOwed * roll / 100) / 2`
+    ///      (50% direct, 50% routed to lootbox under live game). With gwei-aligned ethValueOwed
+    ///      (D-305-GWEI-SNAP-01) and roll ∈ [25, 175], the arithmetic `× roll / 100` is exact
+    ///      since gcd(1e9, 100) = 100. The 50/50 split is integer division; if totalRolledEth is
+    ///      odd-wei, the split would skew 1 wei, but gwei-aligned values × any roll are always
+    ///      even multiples of 100, so totalRolledEth is always divisible by 2 — ethDirect ==
+    ///      totalRolledEth / 2 exactly.
     /// forge-config: default.fuzz.runs = 10000
     function testFuzz_ClaimReadsCorrectDay(
         uint256 actorSeed,
@@ -428,14 +429,20 @@ contract StakedStonkRedemption is DeployProtocol {
         uint256 expectedTotalRolledEth = (uint256(evBurnPre) * uint256(roll)) / 100;
         uint256 expectedEthDirect = expectedTotalRolledEth / 2;
 
-        // Step 3: claim — capture ETH delta
+        // Step 3: claim — capture the player's game-claimable delta (live game routes the
+        // direct half into game claimable; nothing is pushed at the claimant's wallet).
         uint256 ethBefore = actor.balance;
+        uint256 claimableBefore = game.claimableWinningsOf(actor);
         vm.prank(actor);
-        sdgnrs.claimRedemption(uint24(dayBurn));
-        uint256 ethDelta = actor.balance - ethBefore;
+        sdgnrs.claimRedemption(actor, uint24(dayBurn));
 
-        // Positive: payout matches expected EXACTLY (D-305-GWEI-SNAP-01 zero-drift)
-        assertEq(ethDelta, expectedEthDirect, "claim: ETH delivered != expected (ethValueOwed * roll / 100 / 2)");
+        // Positive: credit matches expected EXACTLY (D-305-GWEI-SNAP-01 zero-drift)
+        assertEq(actor.balance - ethBefore, 0, "claim: live-game claim must not push ETH at the claimant");
+        assertEq(
+            game.claimableWinningsOf(actor) - claimableBefore,
+            expectedEthDirect,
+            "claim: game claimable credited != expected (ethValueOwed * roll / 100 / 2)"
+        );
 
         // Slot cleared on claim (v47 claim is ETH-only; burnieOwed field removed).
         (uint96 evBurnPost, ) = sdgnrs.pendingRedemptions(actor, uint24(dayBurn));
@@ -946,9 +953,9 @@ contract StakedStonkRedemption is DeployProtocol {
         _resolveDay(dayBurn, 100);
 
         vm.prank(playerA);
-        sdgnrs.claimRedemption(uint24(dayBurn));
+        sdgnrs.claimRedemption(playerA, uint24(dayBurn));
         vm.prank(playerB);
-        sdgnrs.claimRedemption(uint24(dayBurn));
+        sdgnrs.claimRedemption(playerB, uint24(dayBurn));
 
         uint256 claimableAfterClaims = _claimableSdgnrs();
         assertEq(
@@ -1053,9 +1060,9 @@ contract StakedStonkRedemption is DeployProtocol {
     ///         deleted). The claim's ETH delivered equals the rolled segregated amount, period.
     /// @dev Drives a full submit → resolve → claim with sDGNRS holding a large BURNIE balance (so a
     ///      pre-fix BURNIE-reserve apparatus would have had a fat BURNIE leg to settle/stall on). The
-    ///      ETH leg is asserted to equal (claim.ethValueOwed * roll / 100) / 2 (the live-game 50%
-    ///      direct split — the 50% lootbox leg is routed via the setUp no-op mock), independent of
-    ///      any BURNIE.
+    ///      direct credit (game claimable) is asserted to equal (claim.ethValueOwed * roll / 100) / 2
+    ///      (the live-game 50% direct split — the 50% lootbox leg is routed via the setUp no-op
+    ///      mock), independent of any BURNIE.
     function testBurnieCannotBlockEthLeg() public {
         _seedRedemptionBacking(100 ether);
 
@@ -1079,16 +1086,16 @@ contract StakedStonkRedemption is DeployProtocol {
         uint256 expectedTotalRolled = (uint256(evOwed) * uint256(roll)) / 100;
         uint256 expectedEthDirect = expectedTotalRolled / 2; // live game: 50% direct, 50% lootbox
 
-        uint256 ethBefore = playerA.balance;
+        uint256 claimableBefore = game.claimableWinningsOf(playerA);
         vm.prank(playerA);
-        sdgnrs.claimRedemption(uint24(dayBurn));
-        uint256 ethDelta = playerA.balance - ethBefore;
+        sdgnrs.claimRedemption(playerA, uint24(dayBurn));
+        uint256 creditDelta = game.claimableWinningsOf(playerA) - claimableBefore;
 
-        // ETH leg pays in full irrespective of BURNIE — there is no BURNIE leg to block it.
+        // ETH leg credits in full irrespective of BURNIE — there is no BURNIE leg to block it.
         assertEq(
-            ethDelta,
+            creditDelta,
             expectedEthDirect,
-            "REDEEM-08: ETH leg did not pay full rolled/2 - BURNIE must not be able to block ETH"
+            "REDEEM-08: ETH leg did not credit full rolled/2 - BURNIE must not be able to block ETH"
         );
         // Claim slot fully cleared (ETH-only full-claim path).
         (uint96 evAfter, ) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));

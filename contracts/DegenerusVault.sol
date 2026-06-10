@@ -40,8 +40,6 @@ interface IDegenerusGamePlayerActions {
     function claimWinningsStethFirst() external;
     /// @notice Claim whale pass for a player.
     function claimWhalePass(address player) external;
-    /// @notice Claim decimator jackpot for a specific level.
-    function claimDecimatorJackpot(uint24 lvl) external;
     /// @notice Purchase a deity pass with ETH.
     function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
     /// @notice Place full-ticket bets on degenerette.
@@ -101,8 +99,8 @@ interface ICoinPlayerActions {
 interface IStakedDegenerusStonkBurn {
     /// @notice Burn sDGNRS to claim proportional backing assets.
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
-    /// @notice Claim a resolved gambling-burn redemption for day `day` (SPEC-02 composite key).
-    function claimRedemption(uint24 day) external;
+    /// @notice Claim a resolved gambling-burn redemption for `player` on day `day` (SPEC-02 composite key).
+    function claimRedemption(address player, uint24 day) external;
 }
 
 /// @notice Interface for WWXRP vault-minting used by DegenerusVault.
@@ -704,13 +702,6 @@ contract DegenerusVault {
         wwxrpToken.vaultMintTo(to, amount);
     }
 
-    /// @notice Claim a decimator jackpot for the vault
-    /// @param lvl Jackpot level to claim
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function jackpotsClaimDecimator(uint24 lvl) external onlyVaultOwner {
-        gamePlayer.claimDecimatorJackpot(lvl);
-    }
-
     /// @notice Burn vault-held sDGNRS to claim proportional backing assets
     /// @dev ETH/stETH received flows into vault reserves, increasing DGVE value.
     /// @param amount Amount of sDGNRS to burn
@@ -729,7 +720,7 @@ contract DegenerusVault {
     /// @param day Wall-clock day whose redemption to claim.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function sdgnrsClaimRedemption(uint24 day) external onlyVaultOwner {
-        sdgnrsToken.claimRedemption(day);
+        sdgnrsToken.claimRedemption(address(this), day);
     }
 
     // ---------------------------------------------------------------------

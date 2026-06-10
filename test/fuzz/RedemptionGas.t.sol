@@ -155,7 +155,7 @@ contract RedemptionGasTest is DeployProtocol {
 
         // Step 5: Player claims the day they burned + resolved against
         vm.prank(player);
-        sdgnrs.claimRedemption(uint24(currentDay));
+        sdgnrs.claimRedemption(player, uint24(currentDay));
     }
 
     // =====================================================================
@@ -272,7 +272,7 @@ contract RedemptionGasTest is DeployProtocol {
         // Bracket: measure ONLY the claimRedemption(uint32 day) call.
         vm.prank(player);
         uint256 gasBefore = gasleft();
-        sdgnrs.claimRedemption(uint24(currentDay));
+        sdgnrs.claimRedemption(player, uint24(currentDay));
         uint256 actualGas = gasBefore - gasleft();
 
         emit log_named_uint("actual_claim_gas", actualGas);

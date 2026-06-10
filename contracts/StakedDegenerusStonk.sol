@@ -44,6 +44,8 @@ interface IDegenerusGamePlayer {
     function playerActivityScore(address player) external view returns (uint256);
     /// @notice Resolve a redemption lootbox (sDGNRS forwards ETH as msg.value; GAME pulls any stETH remainder).
     function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external payable;
+    /// @notice Credit a redemption's direct half to `player`'s game claimable (same ETH + stETH-remainder funding).
+    function creditRedemptionDirect(address player, uint256 amount) external payable;
     /// @notice Segregate redemption ETH out of claimableWinnings[SDGNRS] into the sDGNRS balance.
     function pullRedemptionReserve(uint256 amount) external;
 }
@@ -695,21 +697,54 @@ contract StakedDegenerusStonk {
         if (pendingResolveDay == dayToResolve) pendingResolveDay = 0;
     }
 
-    /// @notice Claim a resolved gambling-burn redemption for day `day` (SPEC-02).
+    /// @notice Claim a resolved gambling-burn redemption for `player` on day `day` (SPEC-02).
     /// @dev Requires `redemptionPeriods[day] != 0` (period resolved). Reads composite-keyed
-    ///      `pendingRedemptions[msg.sender][day]`; deletes that slot per SPEC-04 (d).
-    ///      ETH-only: BURNIE is fully settled at submit (no claim-time BURNIE leg). 50% of rolled
-    ///      ETH is paid direct from this contract's segregated balance, 50% is forwarded to the
-    ///      Game as real ETH (msg.value) for lootbox rewards; post-gameOver, 100% paid direct.
-    /// @param day Wall-clock day whose claim this caller is settling.
-    function claimRedemption(uint24 day) external {
-        address player = msg.sender;
-        PendingRedemption storage claim = pendingRedemptions[player][day];
-        if (claim.ethValueOwed == 0) revert NoClaim();
+    ///      `pendingRedemptions[player][day]`; deletes that slot per SPEC-04 (d).
+    ///      ETH-only: BURNIE is fully settled at submit (no claim-time BURNIE leg).
+    ///      Live game: PERMISSIONLESS — anyone may settle `player`'s claim, all value to `player`.
+    ///      Both halves of the rolled ETH route to the Game (50% credits the player's claimable
+    ///      winnings, 50% funds lootbox rewards), so a third-party trigger pushes no ETH and the
+    ///      winner holds no exclusive timing control over the lootbox draw.
+    ///      Post-gameOver: SELF-CLAIM only — 100% direct push with no lootbox leg (no timing
+    ///      edge); a game-claimable credit would forfeit in the post-gameover sweep.
+    /// @param player Claimant whose redemption to settle.
+    /// @param day Wall-clock day whose claim to settle.
+    function claimRedemption(address player, uint24 day) external {
+        if (pendingRedemptions[player][day].ethValueOwed == 0) revert NoClaim();
 
         uint16 roll = redemptionPeriods[day];
         if (roll == 0) revert NotResolved();
 
+        bool isGameOver = game.gameOver();
+        if (isGameOver && player != msg.sender) revert Unauthorized();
+
+        _claimRedemptionFor(player, day, roll, isGameOver);
+    }
+
+    /// @notice Claim resolved gambling-burn redemptions for a batch of players on day `day`.
+    /// @dev Players with nothing pending for `day` are skipped, not reverted, so one stale
+    ///      address can't poison a mass-claim sweep. Post-gameOver only the caller's own entry
+    ///      settles (self-claim rule); all others are skipped.
+    /// @param players Claimants whose redemptions to settle.
+    /// @param day Wall-clock day whose claims to settle.
+    function claimRedemptionMany(address[] calldata players, uint24 day) external {
+        uint16 roll = redemptionPeriods[day];
+        if (roll == 0) revert NotResolved();
+
+        bool isGameOver = game.gameOver();
+        for (uint256 i; i < players.length; ++i) {
+            address player = players[i];
+            if (isGameOver && player != msg.sender) continue;
+            if (pendingRedemptions[player][day].ethValueOwed == 0) continue;
+            _claimRedemptionFor(player, day, roll, isGameOver);
+        }
+    }
+
+    /// @dev Shared settle core for the single and batch claim entry points. Callers must have
+    ///      verified the pending claim exists, the period is resolved, and (post-gameOver) the
+    ///      self-claim rule.
+    function _claimRedemptionFor(address player, uint24 day, uint16 roll, bool isGameOver) private {
+        PendingRedemption storage claim = pendingRedemptions[player][day];
         uint16 claimActivityScore = claim.activityScore;
 
         // Total rolled ETH. Per-claimant floor division may leave up to (n-1) wei
@@ -717,7 +752,6 @@ contract StakedDegenerusStonk {
         uint256 totalRolledEth = (claim.ethValueOwed * roll) / 100;
 
         // 50/50 split (unless gameOver → 100% direct)
-        bool isGameOver = game.gameOver();
         uint256 ethDirect;
         uint256 lootboxEth;
         if (isGameOver) {
@@ -736,12 +770,17 @@ contract StakedDegenerusStonk {
 
         emit RedemptionClaimed(player, roll, ethDirect, lootboxEth);
 
-        // Fund the lootbox leg BEFORE the direct payout (CEI: the untrusted .call goes last).
-        // The leg mixes ETH and stETH like _payEth — msg.value carries the ETH, the GAME pulls any
-        // remainder as stETH — so a mid-game ETH-depleted contract can't strand the claim on an
-        // ETH-only forward. ETH is reserved for the player's direct half first; the pool-bound leg
-        // is medium-indifferent and absorbs the stETH shortfall. The MAX reservation guarantees
-        // ETH + stETH >= rolled, so the stETH remainder is always coverable.
+        if (isGameOver) {
+            // 100% direct push (self-claim enforced by callers; the untrusted .call comes after
+            // the slot delete above — CEI).
+            _payEth(player, ethDirect);
+            return;
+        }
+
+        // Live game: both legs move to the Game. Each leg mixes ETH and stETH like _payEth —
+        // msg.value carries the ETH on hand, the GAME pulls any remainder as stETH — so a
+        // mid-game ETH-depleted contract can't strand the claim on an ETH-only forward. The MAX
+        // reservation guarantees ETH + stETH >= rolled, so the stETH remainder is always coverable.
         if (lootboxEth != 0) {
             uint16 actScore = claimActivityScore > 0 ? claimActivityScore - 1 : 0;
             // Key the lootbox draw to the NEXT day's word (day+1) - unknown when the burn was
@@ -751,15 +790,17 @@ contract StakedDegenerusStonk {
             uint256 rngWord = game.rngWordForDay(day + 1);
             uint256 entropy = uint256(keccak256(abi.encode(rngWord, player)));
             uint256 bal = address(this).balance;
-            uint256 ethForLootbox = bal > ethDirect
-                ? (bal - ethDirect < lootboxEth ? bal - ethDirect : lootboxEth)
-                : 0;
+            uint256 ethForLootbox = bal < lootboxEth ? bal : lootboxEth;
             game.resolveRedemptionLootbox{value: ethForLootbox}(player, lootboxEth, entropy, actScore);
         }
 
-        // Player's direct half last (untrusted .call; CEI — the slot deletes above precede it).
-        // ETH was reserved for it above, so it pays pure ETH whenever the contract holds enough.
-        _payEth(player, ethDirect);
+        // Direct half: credit into the player's game claimable (a permissionless trigger must
+        // not push ETH at the player); the player withdraws via the access-gated claimWinnings.
+        if (ethDirect != 0) {
+            uint256 bal = address(this).balance;
+            uint256 ethForDirect = bal < ethDirect ? bal : ethDirect;
+            game.creditRedemptionDirect{value: ethForDirect}(player, ethDirect);
+        }
     }
 
     // =====================================================================

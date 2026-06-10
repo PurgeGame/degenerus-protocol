@@ -5,6 +5,7 @@ import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
+import {IStETH} from "../interfaces/IStETH.sol";
 
 import {IDegenerusGameBoonModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
@@ -150,6 +151,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Reference to the WWXRP token contract
     IWrappedWrappedXRP internal constant wwxrp = IWrappedWrappedXRP(ContractAddresses.WWXRP);
+
+    /// @notice Reference to the stETH token (redemption-direct stETH-remainder pull)
+    IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
 
 
     // =========================================================================
@@ -885,6 +889,28 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             0,
             true
         );
+    }
+
+    /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.
+    /// @dev Delegatecall target of the Game's creditRedemptionDirect stub, so msg.sender (sDGNRS),
+    ///      msg.value, and address(this) (the Game) are all the caller's. The value arrives with the
+    ///      same funding mix as resolveRedemptionLootbox — msg.value covers 0..amount and the rest is
+    ///      pulled as stETH (sDGNRS pre-approves GAME for max) — so a mid-game ETH-depleted sDGNRS
+    ///      still settles. The credit rides the claimable reserve (claimablePool in tandem); the
+    ///      arriving value backs it and the player withdraws via the access-gated claimWinnings.
+    /// @param player Claimant credited.
+    /// @param amount Total direct-half value (msg.value ETH + the stETH remainder pulled here).
+    function creditRedemptionDirect(address player, uint256 amount) external payable {
+        if (msg.sender != ContractAddresses.SDGNRS) revert E();
+        if (msg.value > amount) revert E();
+        if (amount == 0) return;
+        uint256 stethPortion;
+        unchecked { stethPortion = amount - msg.value; }
+        if (stethPortion != 0) {
+            if (!steth.transferFrom(msg.sender, address(this), stethPortion)) revert E();
+        }
+        _creditClaimable(player, amount);
+        claimablePool += uint128(amount);
     }
 
     /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed

@@ -225,9 +225,14 @@ interface IDegenerusGame {
     /// @return amountWei Pro-rata payout amount.
     function consumeDecClaim(address player, uint24 lvl) external returns (uint256 amountWei);
 
-    /// @notice Claim Decimator jackpot for caller.
+    /// @notice Permissionlessly resolve `player`'s Decimator jackpot claim (value credits to player).
+    /// @param player Winner whose claim to resolve.
     /// @param lvl Level to claim from (must be the last decimator).
-    function claimDecimatorJackpot(uint24 lvl) external;
+    function claimDecimatorJackpot(address player, uint24 lvl) external;
+
+    /// @notice Permissionlessly resolve Decimator jackpot claims for a batch of players.
+    /// @dev Non-claimable entries are skipped, not reverted.
+    function claimDecimatorJackpotMany(address[] calldata players, uint24 lvl) external;
 
     /// @notice Claim terminal Decimator jackpot for caller.
     /// @dev Only callable post-GAMEOVER. Level is read from the resolved claim round.

@@ -1425,9 +1425,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint256));
     }
 
-    /// @notice Claim Decimator jackpot for caller.
+    /// @notice Permissionlessly resolve `player`'s Decimator jackpot claim (value credits to player).
+    /// @param player Winner whose claim to resolve.
     /// @param lvl Level to claim from (must be the last decimator).
-    function claimDecimatorJackpot(uint24 lvl) external {
+    function claimDecimatorJackpot(address player, uint24 lvl) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DECIMATOR_MODULE
             .delegatecall(
@@ -1435,9 +1436,25 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                     IDegenerusGameDecimatorModule
                         .claimDecimatorJackpot
                         .selector,
+                    player,
                     lvl
                 )
             );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Permissionlessly resolve Decimator jackpot claims for a batch of players
+    ///         (address[] players, uint24 lvl).
+    /// @dev Non-claimable entries are skipped, not reverted. The signature matches the module
+    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
+    ///      the array here would cost contract-size headroom for no behavior change.
+    function claimDecimatorJackpotMany(
+        address[] calldata,
+        uint24
+    ) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_DECIMATOR_MODULE
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
@@ -1972,6 +1989,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             remaining -= box;
             rngWord = uint256(keccak256(abi.encode(rngWord)));
         }
+    }
+
+    /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.
+    /// @dev Called by sDGNRS during a live-game claimRedemption. The value arrives with the same
+    ///      funding mix as resolveRedemptionLootbox: msg.value covers 0..amount and the rest is
+    ///      pulled as stETH via transferFrom (sDGNRS pre-approves GAME for max). The credit rides
+    ///      the claimable reserve (claimablePool in tandem). Body lives in the lootbox module (the
+    ///      sole redemption-side payable entry); the thin stub forwards the calldata + msg.value.
+    ///      Signature: creditRedemptionDirect(address player, uint256 amount). `amount` is the
+    ///      total direct-half value (msg.value ETH + the stETH remainder pulled in the module).
+    function creditRedemptionDirect(address, uint256) external payable {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_LOOTBOX_MODULE
+            .delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
     }
 
     /// @notice Physically segregate the sDGNRS redemption reservation as pure ETH or pure stETH.

@@ -489,13 +489,16 @@ contract RedemptionHandler is Test {
 
         uint256 supplyBefore = sdgnrs.totalSupply();
         uint256 ethBefore = currentActor.balance;
+        uint256 claimableBefore = game.claimableWinningsOf(currentActor);
         uint256 burnieBefore = coin.balanceOf(currentActor);
 
         vm.recordLogs();
         vm.prank(currentActor);
-        try sdgnrs.claimRedemption(uint24(claimDay)) {
+        try sdgnrs.claimRedemption(currentActor, uint24(claimDay)) {
             ghost_claimCount++;
-            ghost_totalEthClaimed += currentActor.balance - ethBefore;
+            // Live game credits the direct half into game claimable; gameOver pushes wallet ETH.
+            ghost_totalEthClaimed += (currentActor.balance - ethBefore) +
+                (game.claimableWinningsOf(currentActor) - claimableBefore);
             ghost_totalBurnieClaimed += coin.balanceOf(currentActor) - burnieBefore;
 
             // Parse RedemptionClaimed event for split tracking (INV-08 in legacy harness).
@@ -525,11 +528,16 @@ contract RedemptionHandler is Test {
             }
         } catch {}
 
-        // No-double-claim probe — keeps legacy ghost_doubleClaim counter live.
+        // No-double-claim probe — keeps legacy ghost_doubleClaim counter live. Watches both
+        // payout media: wallet ETH (gameOver push) and game claimable (live-game credit).
         uint256 ethBeforeReClaim = currentActor.balance;
+        uint256 claimableBeforeReClaim = game.claimableWinningsOf(currentActor);
         vm.prank(currentActor);
-        try sdgnrs.claimRedemption(uint24(claimDay)) {
-            if (currentActor.balance > ethBeforeReClaim) {
+        try sdgnrs.claimRedemption(currentActor, uint24(claimDay)) {
+            if (
+                currentActor.balance > ethBeforeReClaim ||
+                game.claimableWinningsOf(currentActor) > claimableBeforeReClaim
+            ) {
                 ghost_doubleClaim++;
             }
         } catch {}

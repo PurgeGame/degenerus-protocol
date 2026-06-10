@@ -322,26 +322,66 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @custom:reverts DecClaimInactive When no decimator snapshot exists for this level.
     /// @custom:reverts DecAlreadyClaimed When caller has already claimed for this level.
     /// @custom:reverts DecNotWinner When caller's subbucket did not win.
-    function claimDecimatorJackpot(uint24 lvl) external {
-        // Block claims while prize pools are frozen (active during VRF window).
-        // This path writes to futurePrizePool (lootbox portion) — allowing it
-        // during freeze would corrupt the live pool that advanceGame operates on.
+    function claimDecimatorJackpot(address player, uint24 lvl) external {
+        // Permissionless: anyone may resolve `player`'s claim — all value credits to `player` (the
+        // winner), never the caller. Taking the winner's exclusive claim timing away removes the
+        // lootbox round-up from any single party's control. Resolution-into-claimable only (no ETH
+        // leaves here); the player withdraws via the access-gated claimWinnings.
         if (prizePoolFrozen) revert E();
 
+        _claimDecimatorJackpotFor(player, lvl);
+    }
+
+    /// @notice Permissionlessly resolve Decimator jackpot claims for a batch of players.
+    /// @dev Non-claimable entries (already claimed / non-winner) are skipped, not reverted,
+    ///      so one stale address can't poison a mass-claim sweep.
+    /// @param players Winners whose claims to resolve.
+    /// @param lvl Level to claim from (must be the last decimator).
+    /// @custom:reverts DecClaimInactive When no decimator snapshot exists for this level.
+    function claimDecimatorJackpotMany(
+        address[] calldata players,
+        uint24 lvl
+    ) external {
+        if (prizePoolFrozen) revert E();
+
+        DecClaimRound storage round = decClaimRounds[lvl];
+        if (round.poolWei == 0) revert DecClaimInactive();
+
+        uint64 packedOffsets = decBucketOffsetPacked[lvl];
+        uint256 totalBurn = uint256(round.totalBurn);
+        for (uint256 i; i < players.length; ++i) {
+            DecEntry storage e = decBurn[lvl][players[i]];
+            if (e.claimed != 0) continue;
+            if (
+                _decClaimableFromEntry(
+                    round.poolWei,
+                    totalBurn,
+                    e,
+                    packedOffsets
+                ) == 0
+            ) continue;
+            _claimDecimatorJackpotFor(players[i], lvl);
+        }
+    }
+
+    /// @dev Shared claim core for the single and batch entry points. Callers must check
+    ///      prizePoolFrozen first — this path writes to futurePrizePool (lootbox portion);
+    ///      allowing it during freeze would corrupt the live pool that advanceGame operates on.
+    function _claimDecimatorJackpotFor(address player, uint24 lvl) private {
         // Capture the winning entry's bucket before the claim consumes it; the bucket encodes
         // the activity score sealed at decimator-burn time (see _minScoreForBucket), freezing
         // the lootbox EV multiplier instead of reading a live, post-word score at claim.
-        uint8 winBucket = decBurn[lvl][msg.sender].bucket;
-        uint256 amountWei = _consumeDecClaim(msg.sender, lvl);
+        uint8 winBucket = decBurn[lvl][player].bucket;
+        uint256 amountWei = _consumeDecClaim(player, lvl);
 
         if (gameOver) {
-            _creditClaimable(msg.sender, amountWei);
-            emit DecimatorClaimed(msg.sender, lvl, amountWei, amountWei, 0);
+            _creditClaimable(player, amountWei);
+            emit DecimatorClaimed(player, lvl, amountWei, amountWei, 0);
             return;
         }
 
         uint256 lootboxPortion = _creditDecJackpotClaimCore(
-            msg.sender,
+            player,
             amountWei,
             decClaimRounds[lvl].rngWord,
             _minScoreForBucket(winBucket, lvl)
@@ -350,7 +390,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             _setFuturePrizePool(_getFuturePrizePool() + lootboxPortion);
         }
         emit DecimatorClaimed(
-            msg.sender,
+            player,
             lvl,
             amountWei,
             amountWei - lootboxPortion,
@@ -962,6 +1002,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
     /// @notice Claim terminal decimator jackpot for caller.
     /// @dev Only callable post-GAMEOVER. Level is read from the resolved claim round.
+    ///      Self-claim only: the payout is a pure claimable credit with no lootbox leg,
+    ///      so there is no resolution-timing edge to neutralize here.
     function claimTerminalDecimatorJackpot() external {
         uint256 amountWei = _consumeTerminalDecClaim(msg.sender);
 

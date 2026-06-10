@@ -283,29 +283,43 @@ contract RedemptionStethFallback is DeployProtocol {
 
         _assertSolvency("(b) post-submit");
 
-        // === Claim pays stETH (RFALL-03 claim-asset selection matches the reserved asset) ===
+        // === Claim moves the direct half in stETH (RFALL-03 claim-asset selection matches the
+        //     reserved asset; the medium lands at the GAME, backing the player's claimable credit) ===
         // Resolve at roll=100 (1:1) and claim. With game.gameOver()==false the claim splits 50/50
         // (direct/lootbox); the lootbox leg is mocked to a no-op, so only the direct half moves.
         _advanceWallDayAndResolve(burnDay, 100);
 
         uint256 playerEthBefore = playerA.balance;
         uint256 playerStethBefore = mockStETH.balanceOf(playerA);
+        uint256 playerClaimableBefore = game.claimableWinningsOf(playerA);
+        uint256 gameStethBefore = mockStETH.balanceOf(address(game));
 
         vm.prank(playerA);
-        sdgnrs.claimRedemption(uint24(burnDay));
+        sdgnrs.claimRedemption(playerA, uint24(burnDay));
 
-        // sDGNRS held ZERO ETH (game depleted, ETH leg never ran), so the direct payout MUST be stETH
-        // via _payEth's ETH-first/stETH-fallback (ethBal == 0 → entire amount paid in stETH).
-        uint256 ethPaid = playerA.balance - playerEthBefore;
-        uint256 stethPaid = mockStETH.balanceOf(playerA) - playerStethBefore;
-        assertEq(ethPaid, 0, "(b) claim: no ETH should be paid (sDGNRS holds no ETH)");
-        assertGt(stethPaid, 0, "(b) claim: direct payout must be delivered in stETH (RFALL-03)");
+        // Live game: nothing is pushed at the claimant — the direct half is a game-claimable credit.
+        assertEq(playerA.balance - playerEthBefore, 0, "(b) claim: no ETH pushed at the claimant (live game)");
+        assertEq(
+            mockStETH.balanceOf(playerA) - playerStethBefore,
+            0,
+            "(b) claim: no stETH pushed at the claimant (live game)"
+        );
+        uint256 credited = game.claimableWinningsOf(playerA) - playerClaimableBefore;
+        assertGt(credited, 0, "(b) claim: direct half must credit the player's game claimable");
 
-        // Conservation: the direct payout equals the segregated ETH leaving sDGNRS's stETH balance.
+        // sDGNRS held ZERO ETH (game depleted, ETH leg never ran), so the direct half MUST move
+        // into the GAME as stETH (msg.value == 0 → the full amount arrives via the stETH pull).
+        assertEq(
+            mockStETH.balanceOf(address(game)) - gameStethBefore,
+            credited,
+            "(b) claim: direct half must arrive at the game in stETH (RFALL-03)"
+        );
+
+        // Conservation: the credited amount equals the segregated value leaving sDGNRS's stETH balance.
         assertEq(
             mockStETH.balanceOf(address(sdgnrs)),
-            sdgnrsStethBefore - stethPaid,
-            "(b) conservation: sDGNRS stETH decreased by exactly the direct payout"
+            sdgnrsStethBefore - credited,
+            "(b) conservation: sDGNRS stETH decreased by exactly the direct credit"
         );
 
         _assertSolvency("(b) post-claim");
@@ -354,23 +368,29 @@ contract RedemptionStethFallback is DeployProtocol {
         assertEq(address(sdgnrs).balance, 0, "(b2) precondition: sDGNRS must hold ZERO ETH (depleted)");
         uint256 gameStethBefore = mockStETH.balanceOf(address(game));
         uint256 playerStethBefore = mockStETH.balanceOf(playerA);
+        uint256 playerClaimableBefore = game.claimableWinningsOf(playerA);
 
         // THE PoC: pre-fix this reverts (ETH-only {value: lootboxEth} forward against a 0 balance);
         // post-fix it succeeds via the stETH pull.
         vm.prank(playerA);
-        sdgnrs.claimRedemption(uint24(burnDay));
+        sdgnrs.claimRedemption(playerA, uint24(burnDay));
 
-        // The lootbox half was funded by a stETH pull into the game (msg.value was 0).
+        // Both halves were funded by stETH pulls into the game (msg.value was 0 on each leg).
         assertGt(
             mockStETH.balanceOf(address(game)),
             gameStethBefore,
-            "(b2) lootbox leg must have pulled stETH into the game (mixed-fund path)"
+            "(b2) both legs must have pulled stETH into the game (mixed-fund path)"
         );
-        // The player's direct half was paid in stETH (no ETH anywhere to draw on).
-        assertGt(
+        // The player's direct half landed as a game-claimable credit (nothing pushed at the claimant).
+        assertEq(
             mockStETH.balanceOf(playerA),
             playerStethBefore,
-            "(b2) direct half must be paid in stETH"
+            "(b2) no stETH pushed at the claimant (live game)"
+        );
+        assertGt(
+            game.claimableWinningsOf(playerA),
+            playerClaimableBefore,
+            "(b2) direct half must credit the player's game claimable"
         );
         _assertSolvency("(b2) post-claim");
     }
@@ -519,22 +539,26 @@ contract RedemptionStethFallback is DeployProtocol {
         // --- Resolve the shared period (roll=100 = 1:1) and claim both ---
         _advanceWallDayAndResolve(day, 100);
 
-        // Claimant A
-        uint256 aEthBefore = playerA.balance;
-        uint256 aStethBefore = mockStETH.balanceOf(playerA);
+        // Claimant A — the live-game direct half lands as a game-claimable credit.
+        uint256 aClaimableBefore = game.claimableWinningsOf(playerA);
         vm.prank(playerA);
-        sdgnrs.claimRedemption(uint24(day));
-        uint256 aPaid = (playerA.balance - aEthBefore) + (mockStETH.balanceOf(playerA) - aStethBefore);
-        assertGt(aPaid, 0, "(e) A must be paid the rolled (direct) amount");
+        sdgnrs.claimRedemption(playerA, uint24(day));
+        assertGt(
+            game.claimableWinningsOf(playerA) - aClaimableBefore,
+            0,
+            "(e) A must be credited the rolled (direct) amount"
+        );
         _assertSolvency("(e) post-A-claim");
 
         // Claimant B
-        uint256 bEthBefore = playerB.balance;
-        uint256 bStethBefore = mockStETH.balanceOf(playerB);
+        uint256 bClaimableBefore = game.claimableWinningsOf(playerB);
         vm.prank(playerB);
-        sdgnrs.claimRedemption(uint24(day));
-        uint256 bPaid = (playerB.balance - bEthBefore) + (mockStETH.balanceOf(playerB) - bStethBefore);
-        assertGt(bPaid, 0, "(e) B must be paid the rolled (direct) amount");
+        sdgnrs.claimRedemption(playerB, uint24(day));
+        assertGt(
+            game.claimableWinningsOf(playerB) - bClaimableBefore,
+            0,
+            "(e) B must be credited the rolled (direct) amount"
+        );
         _assertSolvency("(e) post-B-claim");
 
         // No double-spend: claimable[SDGNRS] never went below its post-A value via B's path; the raw
@@ -569,13 +593,15 @@ contract RedemptionStethFallback is DeployProtocol {
         _advanceWallDayAndResolve(day, 100);
 
         // The coinflip claimCoinflipsForRedemption mock returns 0 (BURNIE side delivers nothing), yet
-        // the ETH-value (stETH here) claim path completes and pays the player.
-        uint256 ethBefore = playerA.balance;
-        uint256 stethBefore = mockStETH.balanceOf(playerA);
+        // the ETH-value (stETH here) claim path completes and credits the player's game claimable.
+        uint256 claimableBefore = game.claimableWinningsOf(playerA);
         vm.prank(playerA);
-        sdgnrs.claimRedemption(uint24(day));
-        uint256 paid = (playerA.balance - ethBefore) + (mockStETH.balanceOf(playerA) - stethBefore);
-        assertGt(paid, 0, "(f) BURNIE shortfall must NOT block the ETH/stETH redemption payout");
+        sdgnrs.claimRedemption(playerA, uint24(day));
+        assertGt(
+            game.claimableWinningsOf(playerA) - claimableBefore,
+            0,
+            "(f) BURNIE shortfall must NOT block the ETH/stETH redemption credit"
+        );
 
         _assertSolvency("(f)");
     }

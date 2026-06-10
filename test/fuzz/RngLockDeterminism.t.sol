@@ -411,8 +411,8 @@ contract RngLockDeterminism is DeployProtocol {
         }
         if (action == 19) {
             uint24 lvl = uint24(bound(nonce, 0, 100));
-            vm.prank(vaultOwner);
-            try vault.jackpotsClaimDecimator(lvl) {} catch { return; }
+            // Permissionless: anyone resolves the vault's decimator claim (credits the vault).
+            try game.claimDecimatorJackpot(address(vault), lvl) {} catch { return; }
             return;
         }
         if (action == 20) {
@@ -1116,7 +1116,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 playerClaimablePre = game.claimableWinningsOf(player);
 
         vm.prank(player);
-        try game.claimDecimatorJackpot(claimLevel) {} catch {}
+        try game.claimDecimatorJackpot(player, claimLevel) {} catch {}
 
         bytes32 perturbedOutputs = keccak256(
             abi.encode(
@@ -1142,7 +1142,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 playerClaimablePreB = game.claimableWinningsOf(player);
 
         vm.prank(player);
-        try game.claimDecimatorJackpot(claimLevel) {} catch {}
+        try game.claimDecimatorJackpot(player, claimLevel) {} catch {}
 
         bytes32 baselineOutputs = keccak256(
             abi.encode(
