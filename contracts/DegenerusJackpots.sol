@@ -162,15 +162,17 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  These hooks build state used by jackpot resolution.                 |
       +======================================================================+*/
 
-    /// @notice Record a coinflip stake for BAF leaderboard tracking.
-    /// @dev Called by COIN or COINFLIP contract on every manual coinflip. Silently ignores vault address.
+    /// @notice Record a coinflip win for BAF score tracking.
+    /// @dev Called by COINFLIP when a player's winnings settle. VAULT accrues a BAF score like any
+    ///      player — so it can rank in the score-ranked ticket slices whose tickets it holds — but
+    ///      is kept OFF the top-4 leaderboard (no _updateBafTop), so it can never take the
+    ///      top-bettor slices. sDGNRS gets no BAF score at all: it is skipped upstream at the
+    ///      recordBafFlip call site (its free per-level flips would otherwise dominate the slices).
     /// @param player Address of the player.
     /// @param lvl Current game level (BAF bracket).
-    /// @param amount Raw coinflip stake amount.
+    /// @param amount Winning coinflip payout credited to the player's BAF score.
     /// @custom:access Restricted to COIN or COINFLIP via onlyCoin modifier.
     function recordBafFlip(address player, uint24 lvl, uint256 amount) external override onlyCoin {
-        if (player == ContractAddresses.VAULT || player == ContractAddresses.SDGNRS) return;
-
         uint256 currentEpoch = bafEpoch[lvl];
         if (bafPlayerEpoch[lvl][player] != currentEpoch) {
             bafPlayerEpoch[lvl][player] = currentEpoch;
@@ -181,7 +183,11 @@ contract DegenerusJackpots is IDegenerusJackpots {
         unchecked { total += amount; }
         bafTotals[lvl][player] = total;
 
-        _updateBafTop(lvl, player, total);
+        // VAULT accrues a score (above) but stays off the leaderboard: it can never win the
+        // top-bettor slices, while still ranking in the score-ranked ticket slices it holds.
+        if (player != ContractAddresses.VAULT) {
+            _updateBafTop(lvl, player, total);
+        }
         emit BafFlipRecorded(player, lvl, amount, total);
     }
 

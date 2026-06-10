@@ -535,9 +535,9 @@ contract BurnieCoinflip {
             }
         }
 
-        // sDGNRS is excluded from BAF in jackpots (recordBafFlip returns early).
-        // Skip the BAF section entirely so this path doesn't hit the rngLocked guard
-        // when called from processCoinflipPayouts during advanceGame.
+        // sDGNRS gets no BAF score: skip the recordBafFlip call entirely for it. This is also
+        // load-bearing for advanceGame — the daily coinflip resolution auto-claims sDGNRS here,
+        // and skipping the BAF section keeps that path off the rngLocked guard below.
         if (winningBafCredit != 0 && player != ContractAddresses.SDGNRS) {
             if (!levelCached) {
                 cachedLevel = game.level();
