@@ -310,9 +310,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Whale pass price (200 tickets over levels 10-109)
     uint256 private constant LOOTBOX_WHALE_PASS_PRICE =
         4.50 ether;
-    /// @dev Half whale pass price (100 tickets over levels 10-109)
-    uint256 private constant HALF_WHALE_PASS_PRICE =
-        2.25 ether;
     /// @dev Threshold above which lootbox is split into two rolls (0.5 ETH scaled)
     uint256 private constant LOOTBOX_SPLIT_THRESHOLD =
         0.5 ether;
@@ -525,10 +522,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // by timing the open. The boon path reads its own live day internally.
         uint256 seed = uint256(keccak256(abi.encode(rngWord, player, amount)));
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
-
-        if (targetLevel < currentLevel) {
-            targetLevel = currentLevel;
-        }
 
         // Apply the activity score EV multiplier to the reward amount (80% to 135%).
         // score is the raw activity-score snapshot written at first deposit on every
@@ -1027,7 +1020,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         address deity
     ) external view returns (uint8[3] memory slots, uint8 usedMask, uint24 day) {
         day = _simulatedDayIndex();
-        if (rngWordByDay[day] == 0) return (slots, usedMask, day);
+        uint256 rngWord = rngWordByDay[day];
+        if (rngWord == 0) return (slots, usedMask, day);
         if (deityBoonDay[deity] == day) {
             usedMask = deityBoonUsedMask[deity];
         }
@@ -1035,7 +1029,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         bool decimatorAllowed = _isDecimatorWindow();
         bool deityPassAvailable = deityPassOwners.length < DEITY_PASS_MAX_TOTAL;
         for (uint8 i = 0; i < DEITY_DAILY_BOON_COUNT; ) {
-            slots[i] = _deityBoonForSlot(deity, day, i, decimatorAllowed, deityPassAvailable);
+            slots[i] = _deityBoonForSlot(deity, day, i, decimatorAllowed, deityPassAvailable, rngWord);
             unchecked { ++i; }
         }
     }
@@ -1059,7 +1053,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (mintPacked_[deity] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) revert E();
 
         uint24 day = _simulatedDayIndex();
-        if (rngWordByDay[day] == 0) revert E();
+        uint256 rngWord = rngWordByDay[day];
+        if (rngWord == 0) revert E();
         if (deityBoonDay[deity] != day) {
             deityBoonDay[deity] = day;
             deityBoonUsedMask[deity] = 0;
@@ -1074,7 +1069,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         bool decimatorAllowed = _isDecimatorWindow();
         bool deityPassAvailable = deityPassOwners.length < DEITY_PASS_MAX_TOTAL;
-        uint8 boonType = _deityBoonForSlot(deity, day, slot, decimatorAllowed, deityPassAvailable);
+        uint8 boonType = _deityBoonForSlot(deity, day, slot, decimatorAllowed, deityPassAvailable, rngWord);
         _applyBoon(recipient, boonType, day, day, 0, true);
 
         emit DeityBoonIssued(deity, recipient, day, slot, boonType);
@@ -1110,17 +1105,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Computes the lootbox value allocated to the boon/pass draw: a fixed BPS of
-    ///      the resolution amount, capped at `LOOTBOX_BOON_MAX_BUDGET` and never exceeding
-    ///      the amount itself.
+    ///      the resolution amount, capped at `LOOTBOX_BOON_MAX_BUDGET`.
     /// @param amount ETH-equivalent resolution amount
     /// @return boonBudget Amount allocated to the boon/pass draw
     function _lootboxBoonBudget(uint256 amount) private pure returns (uint256 boonBudget) {
         boonBudget = (amount * LOOTBOX_BOON_BUDGET_BPS) / 10_000;
         if (boonBudget > LOOTBOX_BOON_MAX_BUDGET) {
             boonBudget = LOOTBOX_BOON_MAX_BUDGET;
-        }
-        if (boonBudget > amount) {
-            boonBudget = amount;
         }
     }
 
@@ -1174,10 +1165,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 totalPackedEth,
         bool allowSplit
     ) private {
-        if (targetLevel < currentLevel) {
-            targetLevel = currentLevel;
-        }
-
         uint256 boonBudget = _lootboxBoonBudget(amount);
         uint256 mainAmount = amount - boonBudget;
         uint256 amountFirst = mainAmount;
@@ -1215,7 +1202,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (amountSecond != 0) {
             uint256 seed2 = EntropyLib.hash2(seed, 1);
             uint24 level2 = _rollTargetLevel(currentLevel, seed2);
-            if (level2 < currentLevel) level2 = currentLevel;
             _settleLootboxRoll(
                 player, index, amountSecond, amount, level2, seed2,
                 emitLootboxEvent, payColdBustConsolation, distressEth, totalPackedEth
@@ -1249,7 +1235,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 targetPrice = PriceLookupLib.priceForLevel(rollLevel);
         if (targetPrice == 0) revert E();
 
-        (uint256 burnieOut, uint32 scaledTickets, ) =
+        (uint256 burnieOut, uint32 scaledTickets) =
             _resolveLootboxRoll(player, rollAmount, fullAmount, targetPrice, rollSeed);
 
         // Floored to whole-BURNIE (1 BURNIE = 1 ether); sub-1-BURNIE residue evaporates.
@@ -1837,7 +1823,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; first invocation uses primary chunk, ETH-amount-second branch uses seed2 = EntropyLib.hash2(seed, 1))
     /// @return burnieOut BURNIE tokens to award
     /// @return ticketsOut Tickets to queue for future level
-    /// @return applyPresaleMultiplier Whether BURNIE should get presale multiplier
     /// @dev Bit budget (consumed from `seed`):
     ///        - pathRoll: bits[40..55]     via uint16(seed >> 40) % 20  (bias 0.02%)
     ///        - DGNRS tier sub-call slice: bits[56..79] (consumed by _lootboxDgnrsReward)
@@ -1850,13 +1835,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 seed
     )
         private
-        returns (
-            uint256 burnieOut,
-            uint32 ticketsOut,
-            bool applyPresaleMultiplier
-        )
+        returns (uint256 burnieOut, uint32 ticketsOut)
     {
-        if (amount == 0) return (0, 0, false);
+        if (amount == 0) return (0, 0);
 
         uint256 roll = uint16(seed >> 40) % 20;
         if (roll < 11) {
@@ -1867,7 +1848,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if (ticketsScaled != 0) {
                 ticketsOut = ticketsScaled;
             }
-            applyPresaleMultiplier = false;
         } else if (roll < 13) {
             // 10% chance: DGNRS tokens
             uint256 dgnrsAmount = _lootboxDgnrsReward(amount, seed);
@@ -1881,7 +1861,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     );
                 }
             }
-            applyPresaleMultiplier = false;
         } else if (roll < 15) {
             // 10% chance: WWXRP tokens. Payout via `wwxrp.mintPrize`; observable
             // off-chain through the WWXRP ERC-20 `Transfer` event (`0x0` -> player)
@@ -1890,7 +1869,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if (wwxrpAmount != 0) {
                 wwxrp.mintPrize(player, wwxrpAmount);
             }
-            applyPresaleMultiplier = false;
         } else {
             // 25% chance: large BURNIE reward with variance
             uint256 varianceRoll = uint16(seed >> 80) % 20;
@@ -1907,7 +1885,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
             uint256 burnieBudget = (amount * largeBurnieBps) / 10_000;
             burnieOut = (burnieBudget * PRICE_COIN_UNIT) / targetPrice;
-            applyPresaleMultiplier = true;
         }
     }
 
@@ -2040,15 +2017,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param slot The slot index (0-2)
     /// @param decimatorAllowed Whether decimator boons can be generated
     /// @param deityPassAvailable Whether deity passes are still available for purchase
+    /// @param rngWord The day's VRF word (`rngWordByDay[day]`, nonzero-checked by the caller)
     /// @return boonType The boon type (1-31)
     function _deityBoonForSlot(
         address deity,
         uint24 day,
         uint8 slot,
         bool decimatorAllowed,
-        bool deityPassAvailable
-    ) private view returns (uint8 boonType) {
-        uint256 seed = uint256(keccak256(abi.encode(rngWordByDay[day], deity, day, slot)));
+        bool deityPassAvailable,
+        uint256 rngWord
+    ) private pure returns (uint8 boonType) {
+        uint256 seed = uint256(keccak256(abi.encode(rngWord, deity, day, slot)));
         uint256 total = decimatorAllowed
             ? BOON_WEIGHT_TOTAL
             : BOON_WEIGHT_TOTAL_NO_DECIMATOR;

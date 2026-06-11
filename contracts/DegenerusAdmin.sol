@@ -199,7 +199,7 @@ contract DegenerusAdmin {
 
     enum Vote { None, Approve, Reject }
     enum ProposalPath { Admin, Community }
-    enum ProposalState { Active, Executed, Killed, Expired }
+    enum ProposalState { Active, Executed, Killed }
 
     /// @dev Packed into 3 storage slots (down from 7).
     ///      Weights and snapshot stored as whole tokens (wei / 1e18). Max 1T = fits uint40 (1.1T max).
@@ -212,7 +212,7 @@ contract DegenerusAdmin {
         uint40 createdAt;              // slot 1: block.timestamp at creation
         uint40 votingSnapshot;         // slot 1: voting sDGNRS at proposal time (whole tokens)
         ProposalPath path;             // slot 1: Admin or Community
-        ProposalState state;           // slot 1: Active, Executed, Killed, Expired
+        ProposalState state;           // slot 1: Active, Executed, or Killed (expiry computed live from createdAt)
         address coordinator;           // slot 2: proposed VRF coordinator
         uint40 approveWeight;          // slot 2: cumulative sDGNRS approve weight (whole tokens)
         uint40 rejectWeight;           // slot 2: cumulative sDGNRS reject weight (whole tokens)
@@ -342,7 +342,7 @@ contract DegenerusAdmin {
         uint40 createdAt;              // slot 1: block.timestamp at creation
         uint40 votingSnapshot;         // slot 1: voting sDGNRS at proposal time (whole tokens)
         ProposalPath path;             // slot 1: Admin or Community
-        ProposalState state;           // slot 1: Active, Executed, Killed, Expired
+        ProposalState state;           // slot 1: Active, Executed, or Killed (expiry computed live from createdAt)
         address feed;                  // slot 2: proposed feed address (zero = disable)
         uint40 approveWeight;          // slot 2: cumulative sDGNRS approve weight (whole tokens)
         uint40 rejectWeight;           // slot 2: cumulative sDGNRS reject weight (whole tokens)
@@ -503,13 +503,13 @@ contract DegenerusAdmin {
             }
         }
 
+        uint256 circ = sDGNRS.votingSupply();
         ProposalPath path;
         if (vault.isVaultOwner(msg.sender)) {
             if (stall < FEED_ADMIN_STALL_THRESHOLD) revert NotStalled();
             path = ProposalPath.Admin;
         } else {
             if (stall < FEED_COMMUNITY_STALL_THRESHOLD) revert NotStalled();
-            uint256 circ = sDGNRS.votingSupply();
             if (circ == 0 || sDGNRS.balanceOf(msg.sender) * BPS < circ * COMMUNITY_PROPOSE_BPS)
                 revert InsufficientStake();
             path = ProposalPath.Community;
@@ -523,7 +523,7 @@ contract DegenerusAdmin {
         // p.state = ProposalState.Active (default 0)
         p.feed = newFeed;
         // approveWeight and rejectWeight start at 0
-        p.votingSnapshot = uint40(sDGNRS.votingSupply() / 1 ether);
+        p.votingSnapshot = uint40(circ / 1 ether);
 
         activeFeedProposalId[msg.sender] = proposalId;
 
@@ -543,24 +543,27 @@ contract DegenerusAdmin {
         if (_feedHealthy(linkEthPriceFeed)) revert FeedHealthy();
 
         FeedProposal storage p = feedProposals[proposalId];
-        _requireActiveProposal(p.state, p.createdAt, FEED_PROPOSAL_LIFETIME);
+        uint40 createdAt = p.createdAt;
+        _requireActiveProposal(p.state, createdAt, FEED_PROPOSAL_LIFETIME);
 
         // Record vote only if caller has sDGNRS; otherwise skip to threshold checks (poke)
+        (uint40 aw, uint40 rw) = (p.approveWeight, p.rejectWeight);
         uint40 weight = _voterWeight();
         if (weight != 0) {
-            (p.approveWeight, p.rejectWeight) = _applyVote(
+            (aw, rw) = _applyVote(
                 approve, weight,
                 feedVotes[proposalId][msg.sender],
                 feedVoteWeight[proposalId][msg.sender],
-                p.approveWeight, p.rejectWeight
+                aw, rw
             );
+            (p.approveWeight, p.rejectWeight) = (aw, rw);
             feedVotes[proposalId][msg.sender] = approve ? Vote.Approve : Vote.Reject;
             feedVoteWeight[proposalId][msg.sender] = weight;
             emit FeedVoteCast(proposalId, msg.sender, approve, uint256(weight) * 1 ether);
         }
 
         Resolution r = _resolveThreshold(
-            p.approveWeight, p.rejectWeight, p.votingSnapshot, feedThreshold(proposalId)
+            aw, rw, p.votingSnapshot, _feedThresholdFrom(createdAt)
         );
         if (r == Resolution.Execute) {
             _executeFeedSwap(proposalId);
@@ -577,7 +580,12 @@ contract DegenerusAdmin {
     /// @param proposalId ID of the feed proposal.
     /// @return Threshold in basis points (e.g. 5000 = 50%).
     function feedThreshold(uint256 proposalId) public view returns (uint16) {
-        uint256 elapsed = block.timestamp - uint256(feedProposals[proposalId].createdAt);
+        return _feedThresholdFrom(feedProposals[proposalId].createdAt);
+    }
+
+    /// @dev Feed threshold decay ladder keyed on the proposal's creation time.
+    function _feedThresholdFrom(uint40 createdAt) private view returns (uint16) {
+        uint256 elapsed = block.timestamp - uint256(createdAt);
         if (elapsed >= FEED_PROPOSAL_LIFETIME) return 0;
         if (elapsed >= 72 hours) return 1500;  // 15%
         if (elapsed >= 48 hours) return 2500;  // 25%
@@ -590,11 +598,12 @@ contract DegenerusAdmin {
     /// @return True if all execution conditions are met.
     function canExecuteFeedSwap(uint256 proposalId) external view returns (bool) {
         FeedProposal storage p = feedProposals[proposalId];
-        if (!_isActiveProposal(p.state, p.createdAt, FEED_PROPOSAL_LIFETIME)) return false;
+        uint40 createdAt = p.createdAt;
+        if (!_isActiveProposal(p.state, createdAt, FEED_PROPOSAL_LIFETIME)) return false;
         if (_feedHealthy(linkEthPriceFeed)) return false;
 
         return _resolveThreshold(
-            p.approveWeight, p.rejectWeight, p.votingSnapshot, feedThreshold(proposalId)
+            p.approveWeight, p.rejectWeight, p.votingSnapshot, _feedThresholdFrom(createdAt)
         ) == Resolution.Execute;
     }
 
@@ -666,13 +675,13 @@ contract DegenerusAdmin {
         uint48 lastVrf = gameAdmin.lastVrfProcessed();
         uint256 stall = block.timestamp - uint256(lastVrf);
 
+        uint256 circ = sDGNRS.votingSupply();
         ProposalPath path;
         if (vault.isVaultOwner(msg.sender)) {
             if (stall < ADMIN_STALL_THRESHOLD) revert NotStalled();
             path = ProposalPath.Admin;
         } else {
             if (stall < COMMUNITY_STALL_THRESHOLD) revert NotStalled();
-            uint256 circ = sDGNRS.votingSupply();
             if (circ == 0 || sDGNRS.balanceOf(msg.sender) * BPS < circ * COMMUNITY_PROPOSE_BPS)
                 revert InsufficientStake();
             path = ProposalPath.Community;
@@ -686,7 +695,7 @@ contract DegenerusAdmin {
         // p.state = ProposalState.Active (default 0)
         p.coordinator = newCoordinator;
         p.keyHash = newKeyHash;
-        p.votingSnapshot = uint40(sDGNRS.votingSupply() / 1 ether);
+        p.votingSnapshot = uint40(circ / 1 ether);
 
         activeProposalId[msg.sender] = proposalId;
 
@@ -707,25 +716,28 @@ contract DegenerusAdmin {
             revert NotStalled();
 
         Proposal storage p = proposals[proposalId];
-        _requireActiveProposal(p.state, p.createdAt, PROPOSAL_LIFETIME);
+        uint40 createdAt = p.createdAt;
+        _requireActiveProposal(p.state, createdAt, PROPOSAL_LIFETIME);
 
         // Record vote only if caller has sDGNRS; otherwise skip to threshold checks (poke)
         // Safe: VRF dead = supply frozen (no advances, unwrapTo blocked)
+        (uint40 aw, uint40 rw) = (p.approveWeight, p.rejectWeight);
         uint40 weight = _voterWeight();
         if (weight != 0) {
-            (p.approveWeight, p.rejectWeight) = _applyVote(
+            (aw, rw) = _applyVote(
                 approve, weight,
                 votes[proposalId][msg.sender],
                 voteWeight[proposalId][msg.sender],
-                p.approveWeight, p.rejectWeight
+                aw, rw
             );
+            (p.approveWeight, p.rejectWeight) = (aw, rw);
             votes[proposalId][msg.sender] = approve ? Vote.Approve : Vote.Reject;
             voteWeight[proposalId][msg.sender] = weight;
             emit VoteCast(proposalId, msg.sender, approve, uint256(weight) * 1 ether);
         }
 
         Resolution r = _resolveThreshold(
-            p.approveWeight, p.rejectWeight, p.votingSnapshot, threshold(proposalId)
+            aw, rw, p.votingSnapshot, _thresholdFrom(createdAt)
         );
         if (r == Resolution.Execute) {
             _executeSwap(proposalId);
@@ -740,7 +752,12 @@ contract DegenerusAdmin {
     /// @param proposalId ID of the proposal.
     /// @return Threshold in basis points (e.g. 5000 = 50%).
     function threshold(uint256 proposalId) public view returns (uint16) {
-        uint256 elapsed = block.timestamp - uint256(proposals[proposalId].createdAt);
+        return _thresholdFrom(proposals[proposalId].createdAt);
+    }
+
+    /// @dev Threshold decay ladder keyed on the proposal's creation time.
+    function _thresholdFrom(uint40 createdAt) private view returns (uint16) {
+        uint256 elapsed = block.timestamp - uint256(createdAt);
         if (elapsed >= 168 hours) return 0;
         if (elapsed >= 144 hours) return 500;   // 5%
         if (elapsed >= 120 hours) return 1000;  // 10%
@@ -755,14 +772,15 @@ contract DegenerusAdmin {
     /// @return True if all execution conditions are met.
     function canExecute(uint256 proposalId) external view returns (bool) {
         Proposal storage p = proposals[proposalId];
-        if (!_isActiveProposal(p.state, p.createdAt, PROPOSAL_LIFETIME)) return false;
+        uint40 createdAt = p.createdAt;
+        if (!_isActiveProposal(p.state, createdAt, PROPOSAL_LIFETIME)) return false;
 
         // Stall check
         uint48 lastVrf = gameAdmin.lastVrfProcessed();
         if (block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD) return false;
 
         return _resolveThreshold(
-            p.approveWeight, p.rejectWeight, p.votingSnapshot, threshold(proposalId)
+            p.approveWeight, p.rejectWeight, p.votingSnapshot, _thresholdFrom(createdAt)
         ) == Resolution.Execute;
     }
 

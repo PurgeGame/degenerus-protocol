@@ -117,19 +117,6 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * See inline comments for each variable group below.
  */
 
-interface IDegenerusQuestView {
-    function playerQuestStates(
-        address player
-    )
-        external
-        view
-        returns (
-            uint32 streak,
-            uint24 lastCompletedDay,
-            uint128[2] memory progress,
-            bool[2] memory completed
-        );
-}
 abstract contract DegenerusGameStorage {
     // =========================================================================
     // CONSTANTS
@@ -141,8 +128,6 @@ abstract contract DegenerusGameStorage {
         IBurnieCoinflip(ContractAddresses.COINFLIP);
     IDegenerusQuests internal constant quests =
         IDegenerusQuests(ContractAddresses.QUESTS);
-    IDegenerusQuestView internal constant questView =
-        IDegenerusQuestView(ContractAddresses.QUESTS);
     IDegenerusAffiliate internal constant affiliate =
         IDegenerusAffiliate(ContractAddresses.AFFILIATE);
     IStakedDegenerusStonk internal constant dgnrs =
@@ -597,11 +582,11 @@ abstract contract DegenerusGameStorage {
         bool rngBypass
     ) internal {
         if (quantity == 0) return;
-        emit TicketsQueued(buyer, targetLevel, quantity);
         // Block new tickets once the liveness-timeout game-over trigger is
         // active -- terminal jackpot must not be manipulable by adding tickets
         // after the VRF word that resolves it becomes known.
         if (_livenessTriggered()) revert E();
+        emit TicketsQueued(buyer, targetLevel, quantity);
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
         uint24 wk = isFarFuture
@@ -610,7 +595,7 @@ abstract contract DegenerusGameStorage {
         uint40 packed = ticketsOwedPacked[wk][buyer];
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
-        if (owed == 0 && rem == 0) {
+        if (packed == 0) {
             ticketQueue[wk].push(buyer);
         }
         unchecked {
@@ -642,7 +627,7 @@ abstract contract DegenerusGameStorage {
         uint40 packed = ticketsOwedPacked[wk][buyer];
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
-        if (owed == 0 && rem == 0) {
+        if (packed == 0) {
             ticketQueue[wk].push(buyer);
         }
 
@@ -696,7 +681,7 @@ abstract contract DegenerusGameStorage {
             uint40 packed = ticketsOwedPacked[wk][buyer];
             uint32 owed = uint32(packed >> 8);
             uint8 rem = uint8(packed);
-            if (owed == 0 && rem == 0) {
+            if (packed == 0) {
                 ticketQueue[wk].push(buyer);
             }
             unchecked {
@@ -1453,24 +1438,22 @@ abstract contract DegenerusGameStorage {
     uint256 internal vrfSubscriptionId;
 
     // =========================================================================
-    // Lootbox RNG Packed Slot (6 variables in 232/256 bits)
+    // Lootbox RNG Packed Slot (5 variables in 232/256 bits)
     // =========================================================================
     //
     // Layout (LSB -> MSB):
     //   [bits   0:47]   lootboxRngIndex          uint48   (281T indices)
     //   [bits  48:111]  lootboxRngPendingEth     uint64   (scaled /1e15, 0.001 ETH res, max ~18,446 ETH)
     //   [bits 112:175]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, max ~18,446 ETH)
-    //   [bits 176:183]  lootboxRngMinLinkBalance  uint8   (whole LINK, 0-255 LINK)
+    //   [bits 176:183]  (unused)
     //   [bits 184:223]  lootboxRngPendingBurnie  uint40   (scaled /1e18, 1 BURNIE res, max ~1.1T BURNIE)
     //   [bits 224:231]  midDayTicketRngPending   uint8    (bool flag, 8 bits)
 
     /// @dev Packed lootbox RNG state. See layout comment above.
-    ///      Initialized with lootboxRngIndex=1, lootboxRngThreshold=1 ether (scaled=1000),
-    ///      lootboxRngMinLinkBalance=14 LINK (whole).
+    ///      Initialized with lootboxRngIndex=1, lootboxRngThreshold=1 ether (scaled=1000).
     uint256 internal lootboxRngPacked =
         uint256(1)                                  // lootboxRngIndex = 1
-        | (uint256(1000) << 112)                    // lootboxRngThreshold = 1 ether / 1e15 = 1000
-        | (uint256(14) << 176);                     // lootboxRngMinLinkBalance = 14 LINK (whole)
+        | (uint256(1000) << 112);                   // lootboxRngThreshold = 1 ether / 1e15 = 1000
 
     // ---- lootboxRng shifts and masks ----
     uint256 internal constant LR_INDEX_SHIFT = 0;
@@ -1479,8 +1462,6 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LR_PENDING_ETH_MASK = 0xFFFFFFFFFFFFFFFF;      // 64 bits
     uint256 internal constant LR_THRESHOLD_SHIFT = 112;
     uint256 internal constant LR_THRESHOLD_MASK = 0xFFFFFFFFFFFFFFFF;        // 64 bits
-    uint256 internal constant LR_MIN_LINK_SHIFT = 176;
-    uint256 internal constant LR_MIN_LINK_MASK = 0xFF;                       // 8 bits
     uint256 internal constant LR_PENDING_BURNIE_SHIFT = 184;
     uint256 internal constant LR_PENDING_BURNIE_MASK = 0xFFFFFFFFFF;         // 40 bits
     uint256 internal constant LR_MID_DAY_SHIFT = 224;

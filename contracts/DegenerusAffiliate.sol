@@ -423,7 +423,6 @@ contract DegenerusAffiliate {
         // -----------------------------------------------------------------
         bytes32 storedCode = playerReferralCode[sender];
         AffiliateCodeInfo memory info;
-        bool infoSet;
         bool noReferrer;
         AffiliateCodeInfo memory vaultInfo = AffiliateCodeInfo({
             owner: ContractAddresses.VAULT,
@@ -460,8 +459,8 @@ contract DegenerusAffiliate {
                     storedCode = code;
                 }
             }
-            infoSet = true;
         } else {
+            bool infoSet;
             if (code != bytes32(0) && code != storedCode && _vaultReferralMutable(storedCode)) {
                 address resolved = _resolveCodeOwner(code);
                 if (resolved != address(0) && resolved != sender) {
@@ -898,9 +897,15 @@ contract DegenerusAffiliate {
         if (score >= LOOTBOX_TAPER_END_SCORE) {
             return (amt * LOOTBOX_TAPER_MIN_BPS) / BPS_DENOMINATOR;
         }
-        uint256 excess = uint256(score) - LOOTBOX_TAPER_START_SCORE;
-        uint256 range = uint256(LOOTBOX_TAPER_END_SCORE) - LOOTBOX_TAPER_START_SCORE;
-        uint256 reductionBps = (BPS_DENOMINATOR - LOOTBOX_TAPER_MIN_BPS) * excess / range;
+        uint256 reductionBps;
+        unchecked {
+            // score is in [LOOTBOX_TAPER_START_SCORE, LOOTBOX_TAPER_END_SCORE) here — the call-site
+            // gate and the early return above bound it — so the subtractions cannot underflow and
+            // the bps product fits comfortably in uint256.
+            uint256 excess = uint256(score) - LOOTBOX_TAPER_START_SCORE;
+            uint256 range = uint256(LOOTBOX_TAPER_END_SCORE) - LOOTBOX_TAPER_START_SCORE;
+            reductionBps = (BPS_DENOMINATOR - LOOTBOX_TAPER_MIN_BPS) * excess / range;
+        }
         return (amt * (BPS_DENOMINATOR - reductionBps)) / BPS_DENOMINATOR;
     }
 

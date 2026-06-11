@@ -12,9 +12,6 @@ interface IStETH {
     /// @param to Recipient address.
     /// @param amount Transfer amount in wei.
     function transfer(address to, uint256 amount) external returns (bool);
-    /// @param spender Address to approve.
-    /// @param amount Allowance amount in wei.
-    function approve(address spender, uint256 amount) external returns (bool);
 }
 
 /// @dev Admin interface for VRF shutdown during final sweep.
@@ -193,8 +190,9 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///      Also shuts down the VRF subscription and sweeps LINK to vault.
     /// @custom:reverts E When ETH or stETH transfer fails
     function handleFinalSweep() external {
-        if (_goRead(GO_TIME_SHIFT, GO_TIME_MASK) == 0) return; // Game not over yet
-        if (block.timestamp < _goRead(GO_TIME_SHIFT, GO_TIME_MASK) + 30 days) return; // Too early
+        uint256 goTime = _goRead(GO_TIME_SHIFT, GO_TIME_MASK);
+        if (goTime == 0) return; // Game not over yet
+        if (block.timestamp < goTime + 30 days) return; // Too early
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return; // Already swept
 
         _goWrite(GO_SWEPT_SHIFT, GO_SWEPT_MASK, 1);

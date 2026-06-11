@@ -130,7 +130,6 @@ contract BurnieCoinflip {
     uint16 private constant COINFLIP_EXTRA_RANGE = 38;
     uint16 private constant BPS_DENOMINATOR = 10_000;
     uint16 private constant RECYCLE_BONUS_BPS = 75;
-    uint48 private constant JACKPOT_RESET_TIME = 82620;
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
     uint8 private constant COIN_CLAIM_DAYS = 90;
     uint8 private constant COIN_CLAIM_FIRST_DAYS = 30;
@@ -415,8 +414,6 @@ contract BurnieCoinflip {
         uint24 bafResolvedDay;
         bool bafResolvedDayCached;
         uint256 lossCount;
-        bool levelCached;
-        uint24 cachedLevel;
 
         uint256 oldCarry = state.autoRebuyCarry;
         if (rebuyActive) {
@@ -539,10 +536,7 @@ contract BurnieCoinflip {
         // load-bearing for advanceGame — the daily coinflip resolution auto-claims sDGNRS here,
         // and skipping the BAF section keeps that path off the rngLocked guard below.
         if (winningBafCredit != 0 && player != ContractAddresses.SDGNRS) {
-            if (!levelCached) {
-                cachedLevel = game.level();
-                levelCached = true;
-            }
+            uint24 cachedLevel = game.level();
             (
                 uint24 purchaseLevel_,
                 bool inJackpotPhase,
@@ -832,16 +826,18 @@ contract BurnieCoinflip {
         flipsClaimableDay = epoch;
 
         // Accumulate bounty pool for next window
+        uint128 newBounty;
         unchecked {
             // Gas-optimized: wraps on overflow, which would effectively reset the bounty.
-            currentBounty = currentBounty_ + uint128(PRICE_COIN_UNIT);
+            newBounty = currentBounty_ + uint128(PRICE_COIN_UNIT);
         }
+        currentBounty = newBounty;
 
         emit CoinflipDayResolved(
             epoch,
             win,
             rewardPercent,
-            currentBounty,
+            newBounty,
             bountyPaid,
             to
         );

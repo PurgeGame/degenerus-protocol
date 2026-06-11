@@ -150,9 +150,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  private to prevent external dependency on specific values.          |
       +======================================================================+*/
 
-    /// @dev Deploy idle timeout in days (for efficient day-index comparison).
-    uint32 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 365; // 1 year
-
     /// @dev Share of ticket purchases routed to future prize pool (10%).
     uint16 private constant PURCHASE_TO_FUTURE_BPS = 1000;
 
@@ -1671,20 +1668,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Convert an ETH wei amount to BURNIE coinflip-credit value at a given price.
-    ///      Zero-guarded (OPEN-B): a zero amount or price yields zero reward and never
-    ///      reverts the settlement. Mirrors the mint module _ethToBurnieValue idiom.
-    /// @param amountWei ETH amount (wei) to convert.
-    /// @param priceWei Reference mint price (wei).
-    /// @return BURNIE-denominated value (18 decimals).
-    function _ethToBurnieValue(
-        uint256 amountWei,
-        uint256 priceWei
-    ) private pure returns (uint256) {
-        if (amountWei == 0 || priceWei == 0) return 0;
-        return (amountWei * PRICE_COIN_UNIT) / priceWei;
-    }
-
     /*+======================================================================+
       |                    LOOTBOX CLAIMS                                   |
       +======================================================================+*/
@@ -2142,8 +2125,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
 
         // Untrusted ETH .call LAST — all ledger debits and the stETH transfer have completed.
+        // An insufficient self-balance fails the value transfer itself (callee never runs),
+        // so the !ok revert below covers the shortfall case.
         if (ethSend != 0) {
-            if (address(this).balance < ethSend) revert E();
             (bool ok, ) = payable(to).call{value: ethSend}("");
             if (!ok) revert E();
         }

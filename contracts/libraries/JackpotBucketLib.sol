@@ -291,19 +291,21 @@ library JackpotBucketLib {
 
     /// @dev Return bucket order (largest count first; ties keep lower index).
     function bucketOrderLargestFirst(uint16[4] memory counts) internal pure returns (uint8[4] memory order) {
-        uint8 largestIdx;
-        uint16 largestCount = counts[0];
-        for (uint8 i = 1; i < 4; ++i) {
-            if (counts[i] > largestCount) {
-                largestCount = counts[i];
-                largestIdx = i;
+        unchecked {
+            uint8 largestIdx;
+            uint16 largestCount = counts[0];
+            for (uint8 i = 1; i < 4; ++i) {
+                if (counts[i] > largestCount) {
+                    largestCount = counts[i];
+                    largestIdx = i;
+                }
             }
-        }
-        order[0] = largestIdx;
-        uint8 k = 1;
-        for (uint8 i; i < 4; ++i) {
-            if (i != largestIdx) {
-                order[k++] = i;
+            order[0] = largestIdx;
+            uint8 k = 1;
+            for (uint8 i; i < 4; ++i) {
+                if (i != largestIdx) {
+                    order[k++] = i;
+                }
             }
         }
     }

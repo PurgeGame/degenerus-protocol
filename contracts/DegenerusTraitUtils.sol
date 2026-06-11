@@ -98,7 +98,7 @@ library DegenerusTraitUtils {
       +======================================================================+*/
 
     /// @notice Maps a 32-bit random input to a color tier 0-7 with heavy-tail probability
-    /// @dev Scales uint32 (0 to 2^32-1) into [0, 256) using uint64 intermediate to avoid overflow,
+    /// @dev Scales uint32 (0 to 2^32-1) into [0, 256) by taking the top 8 bits (rnd >> 24),
     ///      then maps to a color tier via descending-probability thresholds.
     ///
     ///      Color tier thresholds (256-resolution):
@@ -114,7 +114,7 @@ library DegenerusTraitUtils {
     /// @return Color tier 0-7 with heavy-tail distribution
     function weightedColorBucket(uint32 rnd) internal pure returns (uint8) {
         unchecked {
-            uint32 scaled = uint32((uint64(rnd) * 256) >> 32);
+            uint32 scaled = rnd >> 24;
             if (scaled < 64) return 0;
             if (scaled < 128) return 1;
             if (scaled < 192) return 2;

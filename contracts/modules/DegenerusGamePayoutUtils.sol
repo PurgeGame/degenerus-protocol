@@ -18,7 +18,7 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
     /// @param boxEth Box proceeds in wei to route.
     function _creditBoxProceeds(uint256 boxEth) internal {
         if (boxEth == 0) return;
-        uint256 sdgnrsShare = (boxEth * 20) / 100;
+        uint256 sdgnrsShare = boxEth / 5;
         claimablePool += uint128(boxEth);
         _creditClaimable(ContractAddresses.VAULT, boxEth - sdgnrsShare);
         _creditClaimable(ContractAddresses.SDGNRS, sdgnrsShare);
@@ -36,7 +36,7 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
         if (winner == address(0) || amount == 0) return 0;
 
         uint256 fullHalfPasses = amount / HALF_WHALE_PASS_PRICE;
-        uint256 remainder = amount - (fullHalfPasses * HALF_WHALE_PASS_PRICE);
+        uint256 remainder = amount % HALF_WHALE_PASS_PRICE;
 
         if (fullHalfPasses != 0) {
             whalePassClaims[winner] += fullHalfPasses;

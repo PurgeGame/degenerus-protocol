@@ -77,15 +77,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // Constants
     // -------------------------------------------------------------------------
 
-    /// @dev 5% boost to lootbox value in basis points.
-    uint16 private constant LOOTBOX_BOOST_5_BONUS_BPS = 500;
-
-    /// @dev 15% boost to lootbox value in basis points.
-    uint16 private constant LOOTBOX_BOOST_15_BONUS_BPS = 1500;
-
-    /// @dev 25% boost to lootbox value in basis points.
-    uint16 private constant LOOTBOX_BOOST_25_BONUS_BPS = 2500;
-
     /// @dev Maximum lootbox value eligible for boost (10 ETH scaled).
     uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
 
@@ -322,7 +313,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         );
         for (uint24 i = 0; i < 100; ) {
             uint24 lvl = ticketStartLevel + i;
-            bool isBonus = (lvl >= passLevel && lvl <= WHALE_BONUS_END_LEVEL);
+            bool isBonus = lvl <= WHALE_BONUS_END_LEVEL;
             _queueTickets(buyer, lvl, isBonus ? bonusTickets : standardTickets, false);
             unchecked {
                 ++i;
@@ -483,8 +474,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             }
         }
         if (hasValidBoon) {
-            // Re-read slot1 in case deity path already cleared, then clear lazy pass fields
-            s1 = bpLazy.slot1;
+            // Clear lazy pass fields (consumed)
             bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
         }
         // Claimable-pay: msg.value first (overpay -> payer's afking), claimable covers the rest.
@@ -644,7 +634,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint24 ticketStartLevel = passLevel;
         for (uint24 i = 0; i < 100; ) {
             uint24 lvl = ticketStartLevel + i;
-            bool isBonus = (lvl >= passLevel && lvl <= WHALE_BONUS_END_LEVEL);
+            bool isBonus = lvl <= WHALE_BONUS_END_LEVEL;
             _queueTickets(
                 affiliateAddr,
                 lvl,
@@ -782,13 +772,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @param affiliateAddr Direct referrer (receives 0.5% of affiliate pool).
     /// @param upline Second-level referrer (receives 0.1% of affiliate pool).
     /// @param upline2 Third-level referrer (receives 0.05% of affiliate pool).
-    /// @return buyerDgnrs The amount of DGNRS transferred to the buyer.
     function _rewardDeityPassDgnrs(
         address buyer,
         address affiliateAddr,
         address upline,
         address upline2
-    ) private returns (uint96 buyerDgnrs) {
+    ) private {
         uint256 whaleReserve = dgnrs.poolBalance(
             IStakedDegenerusStonk.Pool.Whale
         );
@@ -796,28 +785,23 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             uint256 totalReward = (whaleReserve * DEITY_WHALE_POOL_BPS) /
                 10_000;
             if (totalReward != 0) {
-                uint256 paid = dgnrs.transferFromPool(
+                dgnrs.transferFromPool(
                     IStakedDegenerusStonk.Pool.Whale,
                     buyer,
                     totalReward
                 );
-                if (paid != 0) {
-                    buyerDgnrs = paid > type(uint96).max
-                        ? type(uint96).max
-                        : uint96(paid);
-                }
             }
         }
 
         uint256 affiliateReserve = dgnrs.poolBalance(
             IStakedDegenerusStonk.Pool.Affiliate
         );
-        if (affiliateReserve == 0) return buyerDgnrs;
+        if (affiliateReserve == 0) return;
         // Reserve the outstanding level claim allocation so deity purchases
         // cannot drain tokens owed to affiliate claimants.
         uint256 reserved = levelDgnrsAllocation[level] -
             levelDgnrsClaimed[level];
-        if (reserved >= affiliateReserve) return buyerDgnrs;
+        if (reserved >= affiliateReserve) return;
         affiliateReserve -= reserved;
 
         if (affiliateAddr != address(0)) {
@@ -850,7 +834,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 upline2Share
             );
         }
-        return buyerDgnrs;
     }
 
     function _recordLootboxEntry(
@@ -859,6 +842,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 cachedPacked
     ) private {
         uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+        uint24 capKey = level + 1; // resolver open level == the per-(player, level) cap key
 
         _recordLootboxMintDay(buyer, cachedPacked);
 
@@ -877,12 +861,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             score = uint16(activityScore);
             uint256 mult = _lootboxEvMultiplierFromScore(activityScore);
             if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
-                uint256 used = lootboxEvBenefitUsedByLevel[buyer][level + 1];
+                uint256 used = lootboxEvBenefitUsedByLevel[buyer][capKey];
                 uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
                     ? 0
                     : LOOTBOX_EV_BENEFIT_CAP - used;
                 uint256 add = lootboxAmount < remaining ? lootboxAmount : remaining;
-                lootboxEvBenefitUsedByLevel[buyer][level + 1] = used + add;
+                lootboxEvBenefitUsedByLevel[buyer][capKey] = used + add;
                 adj = uint64(add);
             }
             // First deposit for this (index, buyer): enqueue for the permissionless
@@ -898,18 +882,16 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             (, uint64 priorAdj, uint16 priorScore, ) = _unpackLootbox(packed);
             score = priorScore;
             adj = priorAdj;
-            if (lootboxAmount != 0) {
-                uint256 mult = _lootboxEvMultiplierFromScore(uint256(priorScore));
-                if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
-                    uint256 used = lootboxEvBenefitUsedByLevel[buyer][level + 1];
-                    uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
-                        ? 0
-                        : LOOTBOX_EV_BENEFIT_CAP - used;
-                    uint256 add = lootboxAmount < remaining ? lootboxAmount : remaining;
-                    if (add != 0) {
-                        lootboxEvBenefitUsedByLevel[buyer][level + 1] = used + add;
-                        adj = priorAdj + uint64(add);
-                    }
+            uint256 mult = _lootboxEvMultiplierFromScore(uint256(priorScore));
+            if (mult > LOOTBOX_EV_NEUTRAL_BPS) {
+                uint256 used = lootboxEvBenefitUsedByLevel[buyer][capKey];
+                uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP
+                    ? 0
+                    : LOOTBOX_EV_BENEFIT_CAP - used;
+                uint256 add = lootboxAmount < remaining ? lootboxAmount : remaining;
+                if (add != 0) {
+                    lootboxEvBenefitUsedByLevel[buyer][capKey] = used + add;
+                    adj = priorAdj + uint64(add);
                 }
             }
         }

@@ -422,17 +422,14 @@ contract DegenerusQuests is IDegenerusQuests {
 
         uint16 prevStreak = state.streak;
         uint32 updated = uint32(prevStreak) + uint32(amount);
-        if (updated > type(uint16).max) {
-            state.streak = type(uint16).max;
-        } else {
-            state.streak = uint16(updated);
-        }
+        uint16 newStreak = updated > type(uint16).max ? type(uint16).max : uint16(updated);
+        state.streak = newStreak;
 
         uint24 currentDay24 = uint24(currentDay);
         if (state.lastActiveDay < currentDay24) {
             state.lastActiveDay = currentDay24;
         }
-        emit QuestStreakBonusAwarded(player, amount, state.streak, currentDay);
+        emit QuestStreakBonusAwarded(player, amount, newStreak, currentDay);
     }
 
     /**
@@ -449,8 +446,9 @@ contract DegenerusQuests is IDegenerusQuests {
         if (player == address(0) || amount == 0) return;
         PlayerQuestState storage state = questPlayerState[player];
         uint256 updated = uint256(state.streakShield) + amount;
-        state.streakShield = updated > type(uint8).max ? type(uint8).max : uint8(updated);
-        emit QuestStreakShieldGranted(player, amount, state.streakShield);
+        uint8 newShield = updated > type(uint8).max ? type(uint8).max : uint8(updated);
+        state.streakShield = newShield;
+        emit QuestStreakShieldGranted(player, amount, newShield);
     }
 
     /**

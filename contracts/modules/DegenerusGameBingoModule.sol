@@ -149,8 +149,9 @@ contract DegenerusGameBingoModule is
         }
 
         // ---- Per-player (level, quadrant) dedup (EFFECT) ----
-        if (bingoClaimed[level][msg.sender] & qMask != 0) revert AlreadyClaimed();
-        bingoClaimed[level][msg.sender] |= qMask;
+        uint8 claimedBits = bingoClaimed[level][msg.sender];
+        if (claimedBits & qMask != 0) revert AlreadyClaimed();
+        bingoClaimed[level][msg.sender] = claimedBits | qMask;
 
         // ---- Tier cascade (EFFECTS — bits set before any external call) ----
         // Quadrant-first is checked BEFORE symbol-first (the binding ordering,
@@ -242,7 +243,9 @@ contract DegenerusGameBingoModule is
 
         levelDgnrsClaimed[currLevel] += paid;
 
-        if (isDeityHolder && score != 0) {
+        // score != 0 is guaranteed here: reward = (allocation * score) / denominator
+        // reverted above when reward == 0, which a zero score would force.
+        if (isDeityHolder) {
             uint256 bonus = (score * AFFILIATE_DGNRS_DEITY_BONUS_BPS) / 10_000;
             uint256 cap = (AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH *
                 PRICE_COIN_UNIT) / PriceLookupLib.priceForLevel(level);

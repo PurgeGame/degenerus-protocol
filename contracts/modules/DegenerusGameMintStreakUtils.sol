@@ -101,7 +101,15 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         address player,
         uint24 currentMintLevel
     ) internal view returns (uint24 streak) {
-        uint256 packed = mintPacked_[player];
+        return _mintStreakEffectiveFromPacked(mintPacked_[player], currentMintLevel);
+    }
+
+    /// @dev Effective mint streak computed from an already-loaded mintPacked_ word
+    ///      (resets if a level was missed).
+    function _mintStreakEffectiveFromPacked(
+        uint256 packed,
+        uint24 currentMintLevel
+    ) internal pure returns (uint24 streak) {
         uint256 lastCompleted = (packed >> BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) &
             BitPackingLib.MASK_24;
         if (lastCompleted == 0) return 0;
@@ -243,6 +251,22 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         uint32 questStreak,
         uint24 streakBaseLevel
     ) internal view returns (uint256 scoreBps) {
+        return _playerActivityScoreAt(player, questStreak, streakBaseLevel, level);
+    }
+
+    /// @dev Activity score body operating on a caller-supplied current level, so every
+    ///      level comparison (pass window, mint count, affiliate cache) shares one read.
+    /// @param player The player address to calculate score for.
+    /// @param questStreak Quest streak value (pre-fetched from handler return or external view).
+    /// @param streakBaseLevel Level used for mint streak calculation.
+    /// @param currLevel The game's current level.
+    /// @return scoreBps Total activity score in basis points.
+    function _playerActivityScoreAt(
+        address player,
+        uint32 questStreak,
+        uint24 streakBaseLevel,
+        uint24 currLevel
+    ) internal view returns (uint256 scoreBps) {
         if (player == address(0)) return 0;
 
         uint256 packed = mintPacked_[player];
@@ -250,8 +274,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         uint24 levelCount = uint24(
             (packed >> BitPackingLib.LEVEL_COUNT_SHIFT) & BitPackingLib.MASK_24
         );
-        uint24 streak = _mintStreakEffective(player, streakBaseLevel);
-        uint24 currLevel = level;
+        uint24 streak = _mintStreakEffectiveFromPacked(packed, streakBaseLevel);
         uint24 frozenUntilLevel = uint24(
             (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
                 BitPackingLib.MASK_24
@@ -328,7 +351,9 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         scoreBps = bonusBps;
     }
 
-    /// @dev Convenience wrapper using _activeTicketLevel() as streakBaseLevel.
+    /// @dev Convenience wrapper using the active ticket level (current level during
+    ///      jackpot phase, next level otherwise) as streakBaseLevel, derived from a
+    ///      single hoisted level read shared with the score body.
     /// @param player The player address to calculate score for.
     /// @param questStreak Quest streak value (pre-fetched from handler return or external view).
     /// @return scoreBps Total activity score in basis points.
@@ -336,7 +361,14 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         address player,
         uint32 questStreak
     ) internal view returns (uint256 scoreBps) {
-        return _playerActivityScore(player, questStreak, _activeTicketLevel());
+        uint24 currLevel = level;
+        return
+            _playerActivityScoreAt(
+                player,
+                questStreak,
+                jackpotPhaseFlag ? currLevel : currLevel + 1,
+                currLevel
+            );
     }
 
     // =========================================================================

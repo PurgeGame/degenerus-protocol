@@ -168,7 +168,7 @@ contract Icons32Data {
     /// @custom:reverts OnlyCreator When caller is not ContractAddresses.CREATOR
     /// @custom:reverts AlreadyFinalized When finalize() has already been called
     /// @custom:reverts InvalidQuadrant When quadrant is not 0, 1, or 2
-    function setSymbols(uint256 quadrant, string[8] memory symbols) external {
+    function setSymbols(uint256 quadrant, string[8] calldata symbols) external {
         if (msg.sender != ContractAddresses.CREATOR) revert OnlyCreator();
         if (_finalized) revert AlreadyFinalized();
 

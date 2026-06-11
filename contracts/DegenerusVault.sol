@@ -8,8 +8,6 @@ import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
 
 /// @notice Interface for game player actions on DegenerusGame contract used by DegenerusVault.
 interface IDegenerusGamePlayerActions {
-    /// @notice Advance the game to the next level/day.
-    function advanceGame() external;
     /// @notice Crank the unified keeper router (advance + box opens), paying any earned bounty.
     function mintBurnie() external;
     /// @notice Queue this caller's perpetual tickets for levels 1-100 (VAULT/SDGNRS only, once).
@@ -107,8 +105,6 @@ interface IStakedDegenerusStonkBurn {
 interface IWWXRPMint {
     /// @notice Mint WWXRP to a recipient from vault's uncirculating reserve.
     function vaultMintTo(address to, uint256 amount) external;
-    /// @notice Get remaining vault mint allowance.
-    function vaultMintAllowance() external view returns (uint256);
 }
 
 /*
@@ -296,9 +292,7 @@ contract DegenerusVaultShare {
     /// @param to Recipient address
     /// @param amount Amount to mint
     /// @custom:reverts Unauthorized If caller is not the vault
-    /// @custom:reverts ZeroAddress If to is address(0)
     function vaultMint(address to, uint256 amount) external onlyVault {
-        if (to == address(0)) revert ZeroAddress();
         unchecked {
             totalSupply += amount;
             balanceOf[to] += amount;
@@ -743,9 +737,7 @@ contract DegenerusVault {
         uint256 supplyBefore = share.totalSupply();
         uint256 vaultBal = coinToken.balanceOf(address(this));
         uint256 claimable = coinflipPlayer.previewClaimCoinflips(address(this));
-        if (vaultBal != 0 || claimable != 0) {
-            coinBal += vaultBal + claimable;
-        }
+        coinBal += vaultBal + claimable;
         coinOut = (coinBal * amount) / supplyBefore;
 
         share.vaultBurn(msg.sender, amount);
@@ -943,10 +935,8 @@ contract DegenerusVault {
         mainReserve = allowance;
         uint256 vaultBal = coinToken.balanceOf(address(this));
         uint256 claimable = coinflipPlayer.previewClaimCoinflips(address(this));
-        if (vaultBal != 0 || claimable != 0) {
-            unchecked {
-                mainReserve += vaultBal + claimable;
-            }
+        unchecked {
+            mainReserve += vaultBal + claimable;
         }
     }
 

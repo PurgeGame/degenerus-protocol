@@ -218,12 +218,14 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
 
         // Prevent double-snapshotting: return pool if this level already snapshotted
-        if (decClaimRounds[lvl].poolWei != 0) {
+        DecClaimRound storage round = decClaimRounds[lvl];
+        if (round.poolWei != 0) {
             return poolWei;
         }
 
         uint256 totalBurn;
         uint64 packedOffsets;
+        uint256[13][13] storage levelTotals = decBucketBurnTotal[lvl];
 
         // Select winning subbucket for each denominator (2-12)
         uint256 decSeed = rngWord;
@@ -237,7 +239,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             );
 
             // Accumulate burn total from winning subbucket
-            uint256 subTotal = decBucketBurnTotal[lvl][denom][winningSub];
+            uint256 subTotal = levelTotals[denom][winningSub];
             if (subTotal != 0) {
                 totalBurn += subTotal;
             }
@@ -257,9 +259,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         emit DecimatorResolved(lvl, packedOffsets, poolWei, totalBurn);
 
         // Snapshot claim round for this level (persistent — no expiry)
-        decClaimRounds[lvl].poolWei = poolWei;
-        decClaimRounds[lvl].totalBurn = uint232(totalBurn);
-        decClaimRounds[lvl].rngWord = rngWord;
+        round.poolWei = poolWei;
+        round.totalBurn = uint232(totalBurn);
+        round.rngWord = rngWord;
 
         return 0; // All funds held for claims
     }
@@ -611,13 +613,12 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     ) private {
         if (winner == address(0) || amount == 0) return;
         if (amount > LOOTBOX_CLAIM_THRESHOLD) {
+            // amount > 5 ether here, so fullHalfPasses = amount / 2.25 ether >= 2.
             uint256 fullHalfPasses = amount / HALF_WHALE_PASS_PRICE;
             uint256 remainder = amount - (fullHalfPasses * HALF_WHALE_PASS_PRICE);
-            if (fullHalfPasses != 0) {
-                uint24 startLevel = level + 1;
-                _applyWhalePassStats(winner, startLevel);
-                _queueTicketRange(winner, startLevel, 100, uint32(fullHalfPasses), false);
-            }
+            uint24 startLevel = level + 1;
+            _applyWhalePassStats(winner, startLevel);
+            _queueTicketRange(winner, startLevel, 100, uint32(fullHalfPasses), false);
             if (remainder >= 0.01 ether) {
                 // Sub-half-pass remainder: resolve it as a futurePool-backed lootbox (like any
                 // small decimator claim), staying in futurePrizePool where the caller put it so

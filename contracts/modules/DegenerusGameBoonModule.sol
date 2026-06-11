@@ -328,9 +328,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         }
 
         uint16 bonus = pending > type(uint16).max ? type(uint16).max : uint16(pending);
-        if (currentDay != 0 && bonus != 0) {
-            quests.awardQuestStreakBonus(player, bonus, currentDay);
-        }
+        quests.awardQuestStreakBonus(player, bonus, currentDay);
         emit BoonConsumed(player, 5, bonus);
     }
 }

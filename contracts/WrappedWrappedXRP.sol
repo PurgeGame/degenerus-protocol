@@ -132,11 +132,6 @@ contract WrappedWrappedXRP {
         return totalSupply + vaultAllowance;
     }
 
-    /// @notice Vault mint allowance remaining (uncirculating reserve)
-    function vaultMintAllowance() external view returns (uint256) {
-        return vaultAllowance;
-    }
-
     /*+======================================================================+
       |                       ERC20 FUNCTIONS                                |
       +======================================================================+

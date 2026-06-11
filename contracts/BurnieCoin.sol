@@ -42,8 +42,6 @@ interface IBurnieCoinflip {
         address player,
         uint256 amount
     ) external returns (uint256 consumed);
-    /// @notice Credit flip stake to a player (used for quest rewards).
-    function creditFlip(address player, uint256 amount) external;
 }
 
 contract BurnieCoin {
@@ -689,17 +687,14 @@ contract BurnieCoin {
       +======================================================================+*/
 
     /// @dev Adjust decimator bucket based on activity score bonus.
-    ///      Higher bonus yields lower bucket (better odds), capped at DECIMATOR_ACTIVITY_CAP_BPS.
+    ///      Higher bonus yields lower bucket (better odds); bonusBps arrives
+    ///      pre-capped at DECIMATOR_ACTIVITY_CAP_BPS by the sole caller.
     function _adjustDecimatorBucket(
         uint256 bonusBps,
         uint8 minBucket
     ) private pure returns (uint8 adjustedBucket) {
         adjustedBucket = DECIMATOR_BUCKET_BASE;
         if (bonusBps == 0) return adjustedBucket;
-
-        if (bonusBps > DECIMATOR_ACTIVITY_CAP_BPS) {
-            bonusBps = DECIMATOR_ACTIVITY_CAP_BPS;
-        }
 
         uint256 range = uint256(DECIMATOR_BUCKET_BASE) - uint256(minBucket);
         uint256 reduction = (range *

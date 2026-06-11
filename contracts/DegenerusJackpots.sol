@@ -11,6 +11,7 @@ pragma solidity 0.8.34;
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 import {IDegenerusJackpots} from "./interfaces/IDegenerusJackpots.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
+import {EntropyLib} from "./libraries/EntropyLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 // ===========================================================================
@@ -294,7 +295,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
             unchecked {
                 ++salt;
             }
-            entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
+            entropy = EntropyLib.hash2(entropy, salt);
             uint256 prize = P / 20;
             uint8 pick = 2 + uint8(entropy & 1);
             (address w, ) = _bafTop(lvl, pick);
@@ -311,7 +312,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
         // Slice D: 5% to far-future ticket holders (3% 1st / 2% 2nd by BAF score).
         {
             unchecked { ++salt; }
-            entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
+            entropy = EntropyLib.hash2(entropy, salt);
             address[] memory farTickets = degenerusGame.sampleFarFutureTickets(entropy);
 
             uint256 farFirst = (P * 3) / 100;
@@ -353,7 +354,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
         // Slice D2: 5% to far-future ticket holders, 2nd independent draw (3% 1st / 2% 2nd by BAF score).
         {
             unchecked { ++salt; }
-            entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
+            entropy = EntropyLib.hash2(entropy, salt);
             address[] memory farTickets = degenerusGame.sampleFarFutureTickets(entropy);
 
             uint256 farFirst = (P * 3) / 100;
@@ -409,7 +410,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 unchecked {
                     ++salt;
                 }
-                entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
+                entropy = EntropyLib.hash2(entropy, salt);
 
                 // Level targeting varies by BAF type:
                 // Non-x00: 20 rounds from lvl, 30 rounds random from lvl+1..lvl+4
@@ -417,12 +418,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 uint24 targetLvl;
                 if (isCentury) {
                     if (round < 4) targetLvl = lvl;
-                    else if (round < 8) targetLvl = lvl + 1 + uint24(entropy % 3);
                     else if (round < 12) targetLvl = lvl + 1 + uint24(entropy % 3);
-                    else {
-                        uint24 maxBack = lvl > 99 ? 99 : lvl - 1;
-                        targetLvl = maxBack > 0 ? lvl - 1 - uint24(entropy % maxBack) : lvl;
-                    }
+                    else targetLvl = lvl - 1 - uint24(entropy % 99);
                 } else {
                     if (round < 20) targetLvl = lvl;
                     else targetLvl = lvl + 1 + uint24(entropy % 4);

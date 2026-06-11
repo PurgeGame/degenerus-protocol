@@ -5,7 +5,6 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusGameLootboxModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 
@@ -462,7 +461,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 ) {
                     uint256 mp = _mintPriceInContext();
                     (
-                        ,
                         uint256 ethValue,
                         uint256 buyAmount,
                         bool isTicket,
@@ -507,7 +505,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 s.afkCoveredThroughDay = uint24(today);
                 s.afkingStartDay = uint24(today);
 
-                (, , , bool[2] memory done) = questView.playerQuestStates(subscriber);
+                (, , , bool[2] memory done) = quests.playerQuestStates(subscriber);
                 if (s.lastOpenedDay < s.lastAutoBoughtDay) {
                     // A pending unopened box (this or a prior day) already grounds the run on a real
                     // purchase. Keep the snapshot and leave the box markers untouched so the open leg
@@ -528,7 +526,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 } else {
                     uint256 mp = _mintPriceInContext();
                     (
-                        ,
                         uint256 ethValue,
                         uint256 buyAmount,
                         bool isTicket,
@@ -657,9 +654,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///            always meets any min-spend floor; no skip/decline needed;
     ///        (4) 1-wei claimable sentinel → leaves claimable > cost / basis > shortfall →
     ///            never Game:976 (Claimable claimable<=amount) nor Storage:843 (settle);
-    ///        (5) ev = cost - claimableUse with claimableUse ∈ [0, cost], enum-typed
-    ///            payKind ∈ {Claimable, DirectEth, Combined} → never Game:985/1003/1006
-    ///            nor an out-of-range MintPaymentKind enum-cast Panic 0x21.
+    ///        (5) ethValue = cost - claimableUse with claimableUse ∈ [0, cost] → never
+    ///            Game:985/1003/1006.
     ///      ⚠ Dual TICKET_SCALE (§3-i, LOAD-BEARING): the ticket entry-unit `amount`
     ///      uses `AFKING_TICKET_SCALE = 400`; the Game's `/ (4 * 100)` recompute uses the
     ///      inherited Storage `TICKET_SCALE = 100` — the two constants are NOT collapsed,
@@ -671,7 +667,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      (== afkingSnapshot's claimable / claimableWinningsOf, incl. the 1-wei sentinel)
     ///      and `playerFunding` is the raw `afkingFunding[player]` (== afkingFundingOf,
     ///      D-MR-01), read as in-context SLOADs. View — no state writes.
-    /// @return payKind Payment mode (DirectEth / Claimable / Combined) for the slice.
     /// @return ethValue Fresh-ETH portion debited from the funder's afkingFunding (0 = pure claimable).
     /// @return amount Ticket entry-units (isTicket) or lootbox spend in wei (!isTicket).
     /// @return isTicket True = buy `amount` ticket entry-units; false = buy an `amount`-wei lootbox.
@@ -685,7 +680,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         internal
         view
         returns (
-            MintPaymentKind payKind,
             uint256 ethValue,
             uint256 amount,
             bool isTicket,
@@ -731,9 +725,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             : reinvestSpend;
         if (claimable > 0 && claimableUse >= claimable) claimableUse = claimable - 1;
         ethValue = cost - claimableUse;
-        payKind = ethValue == 0
-            ? MintPaymentKind.Claimable
-            : (claimableUse == 0 ? MintPaymentKind.DirectEth : MintPaymentKind.Combined);
     }
 
     /*------------------------------------------------------------------
@@ -1226,10 +1217,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 }
             }
 
-            // Funding resolution (cost + payment mode + ethValue slice). The slice builder
+            // Funding resolution (cost + ethValue slice). The slice builder
             // computes everything revert-free by construction.
             (
-                ,
                 uint256 ethValue,
                 uint256 amount,
                 bool isTicket,
@@ -1654,8 +1644,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @notice Cashout-curse SET (delegatecall target from the Game's claimWinnings): a stale
     ///         ghost-cashout adds a saturating +2 stack. Cheapest-first bails skip the SSTORE
     ///         for infra addresses (protects the sDGNRS redemption-snapshot score), gameOver, a
-    ///         non-stale claimant, deity/whale-pass holders, an active afker, and an already-
-    ///         capped counter. Net: +2 only on a stale cashout by a non-exempt, below-cap player.
+    ///         non-stale claimant, deity/whale-pass holders, an already-capped counter, and an
+    ///         active afker. Net: +2 only on a stale cashout by a non-exempt, below-cap player.
     function maybeCurse(address player) external {
         if (
             player == ContractAddresses.VAULT ||
@@ -1676,8 +1666,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             (packed >> BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT) & 3
         );
         if (frozenUntilLevel >= level && (bundleType == 1 || bundleType == 3)) return;
-        if (_subOf[player].dailyQuantity != 0) return;
         if ((packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8 >= CURSE_COUNT_CAP) return;
+        if (_subOf[player].dailyQuantity != 0) return;
         _applyCurseStack(player);
     }
 

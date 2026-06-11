@@ -4,14 +4,10 @@ pragma solidity 0.8.34;
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 
-/// @notice Minimal interface for sDGNRS balance/supply snapshots used by GNRUS governance.
+/// @notice Minimal interface for sDGNRS balance snapshots used by GNRUS governance.
 interface ISDGNRSSnapshot {
-    /// @notice Get total supply of sDGNRS.
-    function totalSupply() external view returns (uint256);
     /// @notice Get sDGNRS balance for an address.
     function balanceOf(address account) external view returns (uint256);
-    /// @notice Get voting supply (excludes pools, wrapper, vault).
-    function votingSupply() external view returns (uint256);
 }
 
 /// @notice Minimal interface for DegenerusGame donation-facing functions used by GNRUS.
@@ -20,8 +16,6 @@ interface IDegenerusGameDonations {
     function claimWinnings(address player) external;
     /// @notice View claimable ETH winnings for a player.
     function claimableWinningsOf(address player) external view returns (uint256);
-    /// @notice Check if game is over.
-    function gameOver() external view returns (bool);
 }
 
 /// @notice Minimal interface for DegenerusVault owner check used by GNRUS governance.
@@ -56,9 +50,6 @@ contract GNRUS {
 
     /// @notice Thrown when transfer, transferFrom, or approve is called (soulbound)
     error TransferDisabled();
-
-    /// @notice Thrown when zero address is provided where not allowed
-    error ZeroAddress();
 
     /// @notice Thrown when ETH or stETH transfer fails
     error TransferFailed();
@@ -242,7 +233,7 @@ contract GNRUS {
     /// @dev sDGNRS token for governance vote weight snapshots
     ISDGNRSSnapshot private constant sdgnrs = ISDGNRSSnapshot(ContractAddresses.SDGNRS);
 
-    /// @dev Game contract for gameOver checks
+    /// @dev Game contract for winnings claims backing redemptions
     IDegenerusGameDonations private constant game = IDegenerusGameDonations(ContractAddresses.GAME);
 
     /// @dev Vault contract for owner (>50.1% DGVE) checks
@@ -264,7 +255,9 @@ contract GNRUS {
 
     /// @notice Deploys GNRUS with 1T supply minted to the contract itself (unallocated pool)
     constructor() {
-        _mint(address(this), INITIAL_SUPPLY);
+        totalSupply = INITIAL_SUPPLY;
+        balanceOf[address(this)] = INITIAL_SUPPLY;
+        emit Transfer(address(0), address(this), INITIAL_SUPPLY);
     }
 
     // =====================================================================
@@ -610,7 +603,7 @@ contract GNRUS {
     ///      (3) Winner phase against CURRENT (pre-flush) slate: iterate slots 0..MAX_ACTIVE_SLOTS-1 with strict `>`
     ///          so ties resolve to lowest active slot index.
     ///      (4) Distribution math: 2% of unallocated GNRUS via BPS.
-    ///      (5) Apply distribution iff bitmap non-empty AND some slot has weight AND distribution > 0:
+    ///      (5) Apply distribution iff some active slot has weight AND distribution > 0:
     ///          balanceOf write + Transfer event + LevelResolved event + lastWinningRecipient updated to the
     ///          paid recipient. The lastWinningRecipient write is conditional on the paid branch only — a
     ///          skipped level leaves the prior winner block unchanged.
@@ -648,8 +641,10 @@ contract GNRUS {
         uint256 unallocated = balanceOf[address(this)];
         uint256 distribution = (unallocated * DISTRIBUTION_BPS) / BPS_DENOM;
 
-        // 5. Apply distribution iff (current slate non-empty) AND (some slot has weight) AND (distribution > 0).
-        bool paid = (bitmap != 0) && (bestSlot != type(uint8).max) && (distribution != 0);
+        // 5. Apply distribution iff (some active slot has weight) AND (distribution > 0).
+        //    bestSlot is only assigned inside the bitmap-gated branch, so bestSlot != max
+        //    implies the current slate is non-empty.
+        bool paid = (bestSlot != type(uint8).max) && (distribution != 0);
         if (paid) {
             address recipient = currentSlate[bestSlot];
             unchecked { balanceOf[address(this)] = unallocated - distribution; }
@@ -692,18 +687,4 @@ contract GNRUS {
 
     /// @notice Accept ETH from game claimWinnings and direct deposits
     receive() external payable {}
-
-    // =====================================================================
-    //                           PRIVATE
-    // =====================================================================
-
-    /// @dev Mint GNRUS tokens to an address
-    function _mint(address to, uint256 amount) private {
-        if (to == address(0)) revert ZeroAddress();
-        unchecked {
-            totalSupply += amount;
-            balanceOf[to] += amount;
-        }
-        emit Transfer(address(0), to, amount);
-    }
 }

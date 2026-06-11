@@ -132,14 +132,6 @@ contract DegenerusGameDegeneretteModule is
         }
     }
 
-    /// @dev Reverts if msg.sender is not the player and not an approved operator.
-    /// @param player The player address to check approval for.
-    function _requireApproved(address player) private view {
-        if (msg.sender != player && !operatorApprovals[player][msg.sender]) {
-            revert NotApproved();
-        }
-    }
-
     /// @dev Resolves the player address, defaulting to msg.sender if zero address is passed.
     ///      Validates operator approval if player differs from msg.sender.
     /// @param player The player address (or zero for msg.sender).
@@ -149,7 +141,7 @@ contract DegenerusGameDegeneretteModule is
     ) private view returns (address resolved) {
         if (player == address(0)) return msg.sender;
         if (player != msg.sender) {
-            _requireApproved(player);
+            if (!operatorApprovals[player][msg.sender]) revert NotApproved();
         }
         return player;
     }
@@ -346,7 +338,6 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant MASK_8 = 0xFF;
     uint256 private constant MASK_16 = 0xFFFF;
     uint256 private constant MASK_32 = 0xFFFFFFFF;
-    uint256 private constant MASK_48 = (uint256(1) << 48) - 1;
     uint256 private constant MASK_128 = (uint256(1) << 128) - 1;
 
     // -------------------------------------------------------------------------
@@ -456,13 +447,15 @@ contract DegenerusGameDegeneretteModule is
         uint32 customTicket,
         uint8 heroQuadrant
     ) private {
+        uint24 lvl = level;
         uint256 totalBet = _placeDegeneretteBetCore(
             player,
             currency,
             amountPerTicket,
             ticketCount,
             customTicket,
-            heroQuadrant
+            heroQuadrant,
+            lvl
         );
 
         _collectBetFunds(player, currency, totalBet, msg.value);
@@ -474,7 +467,7 @@ contract DegenerusGameDegeneretteModule is
                 totalBet,
                 currency == CURRENCY_ETH,
                 currency == CURRENCY_ETH
-                    ? PriceLookupLib.priceForLevel(level + 1)
+                    ? PriceLookupLib.priceForLevel(lvl + 1)
                     : 0
             );
         }
@@ -486,7 +479,8 @@ contract DegenerusGameDegeneretteModule is
         uint128 amountPerTicket,
         uint8 ticketCount,
         uint32 customTicket,
-        uint8 heroQuadrant
+        uint8 heroQuadrant,
+        uint24 lvl
     ) private returns (uint256 totalBet) {
         // Per-currency spin cap (currency is validated to ETH/BURNIE/WWXRP by
         // _validateMinBet below; the WWXRP arm — CURRENCY_WWXRP — is the default).
@@ -513,7 +507,7 @@ contract DegenerusGameDegeneretteModule is
         // playerQuestStates read would let the zombie streak persist indefinitely.
         uint32 questStreak = quests.effectiveBaseStreak(player);
         uint16 activityScore = uint16(
-            _playerActivityScore(player, questStreak, level + 1)
+            _playerActivityScore(player, questStreak, lvl + 1)
         );
 
         // Pack the bet (isRandom=false, hasCustom=true always)
@@ -663,6 +657,9 @@ contract DegenerusGameDegeneretteModule is
             : 0;
 
         uint32 playerTicket = customTicket;
+        // Gold-quadrant count is a pure function of the player's pick — identical
+        // for every spin of this bet, so it is computed once here.
+        uint8 goldCount = _countGoldQuadrants(playerTicket);
 
         uint256 totalPayout;
         uint32 firstResultTicket;
@@ -698,7 +695,7 @@ contract DegenerusGameDegeneretteModule is
 
             // Calculate payout (dispatches on the per-N score table)
             uint256 payout = _fullTicketPayout(
-                playerTicket,
+                goldCount,
                 s,
                 currency,
                 amountPerTicket,
@@ -1007,14 +1004,15 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @dev Returns the per-N WWXRP factor for a bucket B ∈ {6, 7, 8, 9}.
-    ///      Buckets outside that range yield zero (no bonus). Per-N factors are
-    ///      derived from each N's basePayout schedule + binomial-convolution
-    ///      P_N(S) + 10/30/30/30 split so total ETH bonus EV = exactly 5.000% per N.
+    ///      Precondition: bucket ∈ {6..9} — `_wwxrpBonusBucket` returns 0 or 6..9
+    ///      (S is arithmetically capped at 9) and the sole call site is gated on
+    ///      `bucket != 0`. Per-N factors are derived from each N's basePayout
+    ///      schedule + binomial-convolution P_N(S) + 10/30/30/30 split so total
+    ///      ETH bonus EV = exactly 5.000% per N.
     /// @param N Gold-quadrant count of the player ticket (0..4).
-    /// @param bucket WWXRP bonus bucket from `_wwxrpBonusBucket(s)` (6..9 or 0).
+    /// @param bucket WWXRP bonus bucket from `_wwxrpBonusBucket(s)` (6..9).
     /// @return factor 64-bit factor; multiply with `bonusRoiBps` and divide by `WWXRP_BONUS_FACTOR_SCALE`.
     function _wwxrpFactor(uint8 N, uint8 bucket) private pure returns (uint256 factor) {
-        if (bucket < 6 || bucket > 9) return 0;
         uint256 packed;
         if (N == 0) packed = WWXRP_FACTORS_N0_PACKED;
         else if (N == 1) packed = WWXRP_FACTORS_N1_PACKED;
@@ -1025,12 +1023,12 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @dev Calculates Full Ticket payout based on the score S and activity score ROI.
-    ///      Dispatches to one of 5 per-N tables indexed by gold-quadrant count of
-    ///      the player's pick (`N = _countGoldQuadrants(playerTicket)`). Each
+    ///      Dispatches to one of 5 per-N tables indexed by N, the gold-quadrant
+    ///      count of the player's pick (computed once per bet by the caller). Each
     ///      per-N table is calibrated so basePayoutEV = exactly 100 centi-x
     ///      against P_N(S) — equal EV across picks within rounding. The hero is
     ///      scored into S (S = A + 2*H), so there is no separate hero multiplier.
-    /// @param playerTicket The player's ticket (packed traits).
+    /// @param N Gold-quadrant count of the player ticket (0..4).
     /// @param s The composite score (0-9).
     /// @param currency Currency type (0=ETH, 1=BURNIE, 3=WWXRP).
     /// @param betAmount The bet amount per ticket.
@@ -1038,14 +1036,13 @@ contract DegenerusGameDegeneretteModule is
     /// @param wwxrpHighRoi The WWXRP high-value ROI (0 if not WWXRP).
     /// @return payout The payout amount.
     function _fullTicketPayout(
-        uint32 playerTicket,
+        uint8 N,
         uint8 s,
         uint8 currency,
         uint128 betAmount,
         uint256 roiBps,
         uint256 wwxrpHighRoi
     ) private pure returns (uint256 payout) {
-        uint8 N = _countGoldQuadrants(playerTicket);
         uint256 basePayoutBps = _getBasePayoutBps(N, s);
 
         // Bonus ROI is redistributed into the top score buckets via per-N factor lookup.
@@ -1166,11 +1163,11 @@ contract DegenerusGameDegeneretteModule is
     // Claimable ETH Credit
     // -------------------------------------------------------------------------
 
-    /// @dev Adds ETH to a player's claimable winnings balance.
+    /// @dev Adds ETH to a player's claimable winnings balance. The sole call site
+    ///      is gated on a nonzero amount.
     /// @param beneficiary The address to credit.
-    /// @param weiAmount The amount in wei to credit.
+    /// @param weiAmount The amount in wei to credit (nonzero).
     function _addClaimableEth(address beneficiary, uint256 weiAmount) private {
-        if (weiAmount == 0) return;
         claimablePool += uint128(weiAmount);
         _creditClaimable(beneficiary, weiAmount);
     }

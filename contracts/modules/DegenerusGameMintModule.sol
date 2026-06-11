@@ -109,10 +109,7 @@ contract DegenerusGameMintModule is
     /// @dev Absolute minimum ticket buy-in (ETH equivalent).
     uint256 private constant TICKET_MIN_BUYIN_WEI = 0.0025 ether;
 
-    /// @dev Lootbox boost amounts applied to the next lootbox purchase.
-    uint16 private constant LOOTBOX_BOOST_5_BONUS_BPS = 500;
-    uint16 private constant LOOTBOX_BOOST_15_BONUS_BPS = 1500;
-    uint16 private constant LOOTBOX_BOOST_25_BONUS_BPS = 2500;
+    /// @dev Lootbox boost value cap and expiry for the next lootbox purchase.
     uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
     uint32 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
 
@@ -895,6 +892,7 @@ contract DegenerusGameMintModule is
             // Block BURNIE tickets when drip projection cannot cover nextPool deficit.
             if (gameOverPossible) revert GameOverPossible();
 
+            uint24 cachedLevel = level;
             (
                 ,
                 uint32 adjustedQty32,
@@ -907,7 +905,7 @@ contract DegenerusGameMintModule is
                     true,
                     bytes32(0),
                     0,
-                    level,
+                    cachedLevel,
                     jackpotPhaseFlag
                 );
 
@@ -917,7 +915,7 @@ contract DegenerusGameMintModule is
             // burned inside _callTicketPurchase.
             {
                 uint256 nextLevelPrice = PriceLookupLib.priceForLevel(
-                    level + 1
+                    cachedLevel + 1
                 );
                 (uint256 questReward, , , bool questCompleted) = quests
                     .handlePurchase(
@@ -1416,8 +1414,10 @@ contract DegenerusGameMintModule is
                         ? 0
                         : LOOTBOX_EV_BENEFIT_CAP - used;
                     uint256 add = lootBoxAmount < remaining ? lootBoxAmount : remaining;
-                    lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1] = used + add;
-                    lbAdj = uint64(add);
+                    if (add != 0) {
+                        lootboxEvBenefitUsedByLevel[buyer][cachedLevel + 1] = used + add;
+                        lbAdj = uint64(add);
+                    }
                 }
             } else {
                 // Subsequent deposit: the frozen score and accumulated adj come from the
@@ -1886,29 +1886,5 @@ contract DegenerusGameMintModule is
         bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
 
         emit BoostUsed(player, day, amount, boostedAmount, boostBps);
-    }
-
-    /// @dev Route quest progress to DegenerusQuests (standalone mint path only).
-    ///      ETH mints: returns reward for caller to batch with kickbacks.
-    ///      BURNIE mints: reward creditFlipped internally by handler (nothing to batch).
-    function _questMint(
-        address player,
-        uint32 quantity,
-        bool paidWithEth,
-        uint256 mintPrice
-    ) private returns (uint256) {
-        (uint256 reward, uint8 questType, , bool completed) = quests.handleMint(
-            player,
-            quantity,
-            paidWithEth,
-            mintPrice
-        );
-        if (completed) {
-            if (paidWithEth && questType == 1) {
-                _recordMintStreakForLevel(player, _activeTicketLevel());
-            }
-            if (paidWithEth) return reward;
-        }
-        return 0;
     }
 }

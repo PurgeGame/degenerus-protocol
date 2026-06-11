@@ -142,8 +142,10 @@ contract DegenerusDeityPass {
             symbolIdx,
             isCrypto
         );
-        if (renderer != address(0)) {
+        address rendererAddr = renderer;
+        if (rendererAddr != address(0)) {
             (bool ok, string memory extSvg) = _tryRenderExternal(
+                rendererAddr,
                 tokenId,
                 quadrant,
                 symbolIdx,
@@ -178,12 +180,13 @@ contract DegenerusDeityPass {
     ) private view returns (string memory) {
         uint32 fitSym1e6 = _symbolFitScale(quadrant, symbolIdx);
         uint32 sSym1e6 = uint32((uint256(2) * SYMBOL_HALF_SIZE * fitSym1e6) / ICON_VB);
-        (int256 txm, int256 tyn) = _symbolTranslate(ICON_VB, ICON_VB, sSym1e6);
+        // Center the scaled icon: translate by -(viewBox * scale) / 2 on each axis.
+        int256 t = -(int256(uint256(ICON_VB)) * int256(uint256(sSym1e6))) / 2;
 
         string memory symbolGroup = string(
             abi.encodePacked(
                 "<g transform='",
-                _mat6(sSym1e6, txm, tyn),
+                _mat6(sSym1e6, t, t),
                 isCrypto
                     ? "'><g style='vector-effect:non-scaling-stroke'>"
                     : "'><g class='nonCrypto' style='vector-effect:non-scaling-stroke'>",
@@ -192,13 +195,14 @@ contract DegenerusDeityPass {
             )
         );
 
+        string memory ncColor = _nonCryptoSymbolColor;
         return string(abi.encodePacked(
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-51 -51 102 102">'
             '<defs>'
             '<style>.nonCrypto *{fill:',
-            _nonCryptoSymbolColor,
+            ncColor,
             '!important;stroke:',
-            _nonCryptoSymbolColor,
+            ncColor,
             '!important;}</style>'
             '</defs>'
             '<rect x="-50" y="-50" width="100" height="100" rx="12" fill="',
@@ -212,6 +216,7 @@ contract DegenerusDeityPass {
     }
 
     function _tryRenderExternal(
+        address rendererAddr,
         uint256 tokenId,
         uint8 quadrant,
         uint8 symbolIdx,
@@ -219,7 +224,7 @@ contract DegenerusDeityPass {
         string memory iconPath,
         bool isCrypto
     ) private view returns (bool ok, string memory svg) {
-        try IDeityPassRendererV1(renderer).render(
+        try IDeityPassRendererV1(rendererAddr).render(
             tokenId,
             quadrant,
             symbolIdx,
@@ -256,18 +261,6 @@ contract DegenerusDeityPass {
         if (quadrant == 1 && symbolIdx == 6) return 820_000;
         if (quadrant == 3 && symbolIdx == 7) return 780_000;
         return 890_000;
-    }
-
-    function _symbolTranslate(
-        uint16 w,
-        uint16 h,
-        uint32 sSym1e6
-    ) private pure returns (int256 txm, int256 tyn) {
-        int256 scale = int256(uint256(sSym1e6));
-        int256 w1e6 = int256(uint256(w)) * scale;
-        int256 h1e6 = int256(uint256(h)) * scale;
-        txm = -w1e6 / 2;
-        tyn = -h1e6 / 2;
     }
 
     function _mat6(
