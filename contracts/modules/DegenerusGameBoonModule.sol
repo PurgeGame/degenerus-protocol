@@ -112,12 +112,14 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
 
     /// @notice Clear all expired boons for a player and report if any remain active.
     /// @dev Called via nested delegatecall from LootboxModule during lootbox resolution.
+    ///      Payable: redemption-claim resolution carries the sDGNRS ETH leg as msg.value,
+    ///      which delegatecall keeps in flight through this nested dispatch.
     ///      Loads both packed slots (2 SLOADs), checks all boon categories for deity
     ///      and time-based expiry, clears expired fields in memory, writes back only
     ///      changed slots (at most 2 SSTOREs).
     /// @param player The player address to check and clear expired boons for
     /// @return hasAnyBoon True if the player has at least one active (non-expired) boon
-    function checkAndClearExpiredBoon(address player) external returns (bool hasAnyBoon) {
+    function checkAndClearExpiredBoon(address player) external payable returns (bool hasAnyBoon) {
         uint24 currentDay = uint24(_simulatedDayIndex());
         BoonPacked storage bp = boonPacked[player];
         uint256 s0 = bp.slot0;
@@ -277,8 +279,10 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
 
     /// @notice Consume a pending activity boon and apply it to player stats.
     /// @dev Called via nested delegatecall from LootboxModule during lootbox resolution.
+    ///      Payable: redemption-claim resolution carries the sDGNRS ETH leg as msg.value,
+    ///      which delegatecall keeps in flight through this nested dispatch.
     /// @param player Player address
-    function consumeActivityBoon(address player) external {
+    function consumeActivityBoon(address player) external payable {
         if (player == address(0)) return;
         BoonPacked storage bp = boonPacked[player];
         uint256 s1 = bp.slot1;

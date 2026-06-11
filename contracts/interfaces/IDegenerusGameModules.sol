@@ -364,7 +364,7 @@ interface IDegenerusGameLootboxModule {
         uint256 amount,
         uint256 rngWord,
         uint16 activityScore
-    ) external;
+    ) external payable;
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.
     /// @param player Claimant credited.
@@ -429,11 +429,11 @@ interface IDegenerusGameBoonModule {
     /// @notice Clear all expired boons for a player
     /// @param player Address of the player
     /// @return hasAnyBoon True if any active boon remains
-    function checkAndClearExpiredBoon(address player) external returns (bool hasAnyBoon);
+    function checkAndClearExpiredBoon(address player) external payable returns (bool hasAnyBoon);
 
     /// @notice Consume a pending activity boon and apply to player stats
     /// @param player Address of the player
-    function consumeActivityBoon(address player) external;
+    function consumeActivityBoon(address player) external payable;
 }
 
 /// @title IDegenerusGameDegeneretteModule

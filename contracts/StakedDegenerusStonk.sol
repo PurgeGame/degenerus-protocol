@@ -392,9 +392,10 @@ contract StakedDegenerusStonk {
         game.subscribe(address(this), true, false, 1, 2, address(0));
         coinflip.setCoinflipAutoRebuy(address(this), true, 0);
 
-        // Pre-approve GAME to pull stETH for the redemption-lootbox leg. claimRedemption funds
-        // that leg with stETH (resolveRedemptionLootboxSteth → transferFrom) whenever liquid ETH
-        // is short, so the claim can't strand mid-game on an ETH-only forward.
+        // Pre-approve GAME to pull stETH for both redemption claim legs. claimRedemption funds
+        // each leg (resolveRedemptionLootbox / creditRedemptionDirect) with msg.value ETH and the
+        // GAME pulls any remainder via transferFrom whenever liquid ETH is short, so the claim
+        // can't strand mid-game on an ETH-only forward.
         steth.approve(ContractAddresses.GAME, type(uint256).max);
     }
 

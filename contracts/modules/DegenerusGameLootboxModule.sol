@@ -858,12 +858,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Resolve a redemption lootbox with a snapshotted activity score
     /// @dev Called via delegatecall from Game when sDGNRS sends lootbox ETH during claimRedemption.
-    ///      Uses provided activity score instead of reading current (score was snapshotted at submission).
+    ///      Payable: the Game stub forwards sDGNRS's ETH leg and delegatecall keeps that msg.value
+    ///      in flight here. Uses provided activity score instead of reading current (score was
+    ///      snapshotted at submission).
     /// @param player Player address to resolve for
     /// @param amount ETH amount for the lootbox resolution
     /// @param rngWord RNG word to use for resolution
     /// @param activityScore Raw activity score (bps) snapshotted at burn submission
-    function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external {
+    function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external payable {
         if (amount == 0) return;
 
         uint24 currentLevel = level + 1;
