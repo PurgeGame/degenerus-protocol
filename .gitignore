@@ -24,3 +24,6 @@ scripts/*.db
 # Internal audit/review docs — keep only the contest readme visible
 audit/*
 !audit/C4A-CONTEST-README.md
+
+# Machine-local bytecode-identity snapshot (scripts/bytecode-manifest.sh)
+.bytecode-manifest
