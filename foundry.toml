@@ -53,6 +53,14 @@ dictionary_weight = 80
 include_storage = true
 include_push_bytes = true
 
+# Fast inner-loop profile: skips via-IR (the bulk of compile time) for LOGIC
+# iteration only. Gas numbers shift and via-IR-specific codegen is unexercised,
+# so the default profile remains the pre-commit gate. Usage:
+#   FOUNDRY_PROFILE=lite forge test --no-match-path 'test/gas/*' --match-path <suite>
+[profile.lite]
+via_ir = false
+optimizer = false
+
 [profile.deep.fuzz]
 runs = 10000
 max_test_rejects = 131072
