@@ -11,6 +11,8 @@ pragma solidity 0.8.34;
  *      - Manages the daily coinflip system with a flat recycle bonus
  *      - Integrates with BurnieCoin for burn/mint operations
  *      - Handles the bounty system and quest rewards
+ *      - Seeds the initial BURNIE emission as flip stakes (200k/day, days 1-20, to
+ *        VAULT and sDGNRS); arms sDGNRS perpetual auto-rebuy after the seed window
  *
  * @dev INTERACTIONS:
  *      - Burns BURNIE from players on deposit (via BurnieCoin.burnForCoinflip)
@@ -135,6 +137,10 @@ contract BurnieCoinflip {
     uint8 private constant COIN_CLAIM_FIRST_DAYS = 30;
     uint16 private constant AUTO_REBUY_OFF_CLAIM_DAYS_MAX = 1095;
     uint24 private constant MAX_BAF_BRACKET = (type(uint24).max / 10) * 10;
+    /// @dev Initial-emission seed stakes: 200k BURNIE per day for days 1-20, each to
+    ///      VAULT and sDGNRS. All initial BURNIE must survive a coinflip before minting.
+    uint256 private constant SEED_FLIP_DAILY = 200_000 ether;
+    uint24 private constant SEED_FLIP_DAYS = 20;
     IDegenerusQuests internal constant questModule =
         IDegenerusQuests(ContractAddresses.QUESTS);
 
@@ -165,8 +171,10 @@ contract BurnieCoinflip {
     uint128 public biggestFlipEver;
     address internal bountyOwedTo;
 
-    // RNG state
+    // RNG state (packs with bountyOwedTo)
     uint24 internal flipsClaimableDay;
+    /// @dev One-shot latch: sDGNRS perpetual auto-rebuy arms once the final seeded day settles.
+    bool internal sdgnrsAutoRebuyArmed;
 
     // Leaderboard
     struct PlayerScore {
@@ -175,7 +183,22 @@ contract BurnieCoinflip {
     }
     mapping(uint24 => PlayerScore) internal coinflipTopByDay;
 
-    // No constructor needed — all contract references are compile-time constants.
+    /// @notice Seeds the initial BURNIE emission as flip stakes: 200k per day for days 1-20,
+    ///         each to VAULT and sDGNRS. Direct storage writes (not _addDailyFlip) keep the
+    ///         seeds off the daily top-bettor leaderboard and the bounty/biggest-flip records.
+    ///         Nothing mints up front — each day's seed only becomes claimable BURNIE if it
+    ///         survives that day's flip.
+    constructor() {
+        for (uint24 d = 1; d <= SEED_FLIP_DAYS; ) {
+            coinflipBalance[d][ContractAddresses.VAULT] = SEED_FLIP_DAILY;
+            coinflipBalance[d][ContractAddresses.SDGNRS] = SEED_FLIP_DAILY;
+            emit CoinflipStakeUpdated(ContractAddresses.VAULT, d, SEED_FLIP_DAILY, SEED_FLIP_DAILY);
+            emit CoinflipStakeUpdated(ContractAddresses.SDGNRS, d, SEED_FLIP_DAILY, SEED_FLIP_DAILY);
+            unchecked {
+                ++d;
+            }
+        }
+    }
 
     /*+======================================================================+
       |                         MODIFIERS                                    |
@@ -749,6 +772,44 @@ contract BurnieCoinflip {
         }
     }
 
+    /// @notice Claim up to `amount` of the auto-rebuy carry as minted BURNIE while
+    ///         staying on auto-rebuy; the remainder keeps rolling.
+    /// @dev Settles all resolved days FIRST — wins roll into the carry per the
+    ///      take-profit config and a pending loss zeroes it — then withdraws from the
+    ///      settled carry. Blocked during the RNG lock for the same reason as the
+    ///      rebuy toggle: the carry is the pending day's stake, and the day's word may
+    ///      already be on-chain before the resolution walk applies it. Take-profit
+    ///      chunks surfaced by the settle bank into claimableStored (claimCoinflips
+    ///      territory); this function pays out of the carry only.
+    /// @param player The player to claim for (address(0) for msg.sender, else operator-approved).
+    /// @param amount Maximum carry to claim.
+    /// @return claimed Actual amount of BURNIE minted from the carry.
+    function claimCoinflipCarry(
+        address player,
+        uint256 amount
+    ) external returns (uint256 claimed) {
+        player = _resolvePlayer(player);
+        if (degenerusGame.rngLocked()) revert RngLocked();
+        PlayerCoinflipState storage state = playerState[player];
+        if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
+
+        uint256 mintable = _claimCoinflipsInternal(player, false);
+        if (mintable != 0) {
+            state.claimableStored = uint128(
+                uint256(state.claimableStored) + mintable
+            );
+        }
+
+        uint256 carry = state.autoRebuyCarry;
+        claimed = amount < carry ? amount : carry;
+        if (claimed != 0) {
+            unchecked {
+                state.autoRebuyCarry = uint128(carry - claimed);
+            }
+            burnie.mintForGame(player, claimed);
+        }
+    }
+
     /*+======================================================================+
       |                    RNG PROCESSING                                    |
       +======================================================================+*/
@@ -842,9 +903,30 @@ contract BurnieCoinflip {
             to
         );
 
-        // Keep sDGNRS flip cursor current — reuses _claimCoinflipsInternal
-        // (BAF skipped for sDGNRS, no rngLocked guard on this path).
-        _claimCoinflipsInternal(ContractAddresses.SDGNRS, false);
+        // Keep sDGNRS's flip cursor current (BAF is skipped for sDGNRS, so both paths
+        // stay off the rngLocked guard). During the seed window each settled win is
+        // claimed straight to its wallet balance, where it backs redemptions. Once
+        // auto-rebuy is armed, winnings are NEVER claimed: they settle into the
+        // rolling carry (the return is structurally zero under 0-take-profit rebuy)
+        // and BURNIE leaves sDGNRS's flip position solely through a redemption's
+        // burn+consume leg.
+        if (sdgnrsAutoRebuyArmed) {
+            _claimCoinflipsInternal(ContractAddresses.SDGNRS, false);
+        } else {
+            _claimCoinflipsAmount(ContractAddresses.SDGNRS, type(uint256).max, true);
+
+            // Once the final seeded day settles, sDGNRS goes on perpetual auto-rebuy
+            // (0 take-profit): every later flip credit rolls win-after-win until a loss.
+            if (epoch >= SEED_FLIP_DAYS) {
+                sdgnrsAutoRebuyArmed = true;
+                PlayerCoinflipState storage sdgnrsState = playerState[
+                    ContractAddresses.SDGNRS
+                ];
+                sdgnrsState.autoRebuyEnabled = true;
+                sdgnrsState.autoRebuyStartDay = sdgnrsState.lastClaim;
+                emit CoinflipAutoRebuyToggled(ContractAddresses.SDGNRS, true);
+            }
+        }
     }
 
     /*+======================================================================+

@@ -485,8 +485,10 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     function testResolutionDeltasIndependentOfRewardGate() public {
         _seedFuturePrizePool(1_000_000 ether);
 
+        // Word chosen so the BURNIE bet b1 (betId 2) WINS its bet-keyed survival flip
+        // (keccak(word, betId) & 1 == 1) — keeps the BURNIE non-vacuity assert live.
         uint48 index = 1;
-        uint256 word = uint256(keccak256("gate_independence_word"));
+        uint256 word = uint256(keccak256("gate_independence_word_v3"));
         uint32 ticket = _winningTicketFor(index, word);
 
         _fundBurnie(player, 1_000 ether);

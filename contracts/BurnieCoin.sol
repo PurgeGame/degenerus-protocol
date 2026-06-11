@@ -12,7 +12,9 @@ pragma solidity 0.8.34;
  *      - Coinflip integration: claims via BurnieCoinflip.sol for transfer shortfall coverage
  *      - Decimator burns: Burn-to-participate for decimator jackpot eligibility
  *      - Quest integration: Daily quest rolls, streak tracking, slot rewards
- *      - Vault escrow: 2M BURNIE virtual reserve, minted only on ContractAddresses.VAULT withdrawal
+ *      - Vault escrow: virtual BURNIE reserve, minted only on ContractAddresses.VAULT withdrawal
+ *      - Initial emission: no direct seeds — BurnieCoinflip stakes 200k/day for the first
+ *        20 days each to VAULT and sDGNRS, so all BURNIE survives a coinflip before minting
  *
  * @dev CRITICAL INVARIANTS:
  *      - totalSupply + vaultAllowance = supplyIncUncirculated
@@ -171,8 +173,9 @@ contract BurnieCoin {
 
     /// @notice Total circulating supply (excludes ContractAddresses.VAULT's virtual allowance).
     /// @dev Increases on mint, decreases on burn. Always equals sum of all balanceOf entries.
-    Supply private _supply =
-        Supply({totalSupply: 0, vaultAllowance: uint128(2_000_000 ether)});
+    ///      Starts fully zero: the initial emission arrives as BurnieCoinflip seed stakes,
+    ///      so every BURNIE survives a coinflip before it can mint.
+    Supply private _supply;
 
     /// @notice One-shot latch for the gameover BURNIE tombstone flood (set on first flood).
     bool private _tombstoneFlooded;
@@ -215,15 +218,6 @@ contract BurnieCoin {
     /// @dev Reference to the coinflip contract for claim/consume operations.
     IBurnieCoinflip internal constant coinflip =
         IBurnieCoinflip(ContractAddresses.COINFLIP);
-
-    /*+======================================================================+
-      |                         CONSTRUCTOR                                  |
-      +======================================================================+*/
-
-    /// @notice Seeds the sDGNRS backing reserve with 2 M BURNIE (fresh supply).
-    constructor() {
-        _mint(ContractAddresses.SDGNRS, 2_000_000 ether);
-    }
 
     /*+======================================================================+
       |                         VIEW HELPERS                                 |

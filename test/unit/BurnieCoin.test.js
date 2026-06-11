@@ -83,14 +83,14 @@ describe("BurnieCoin", function () {
       expect(await coin.decimals()).to.equal(18);
     });
 
-    it("totalSupply is 2M on deploy (sDGNRS backing reserve)", async function () {
+    it("totalSupply is 0 on deploy (initial emission arrives as coinflip seed stakes)", async function () {
       const { coin } = await getFixture();
-      expect(await coin.totalSupply()).to.equal(eth(2_000_000));
+      expect(await coin.totalSupply()).to.equal(0n);
     });
 
-    it("vaultMintAllowance is 2,000,000 BURNIE on deploy", async function () {
+    it("vaultMintAllowance is 0 on deploy (vault emission arrives as coinflip seed stakes)", async function () {
       const { coin } = await getFixture();
-      expect(await coin.vaultMintAllowance()).to.equal(eth(2_000_000));
+      expect(await coin.vaultMintAllowance()).to.equal(0n);
     });
 
     it("supplyIncUncirculated equals totalSupply + vaultAllowance", async function () {
@@ -336,7 +336,7 @@ describe("BurnieCoin", function () {
 
       await stopImpersonate(gameAddr);
       expect(await coin.balanceOf(alice.address)).to.equal(eth(1000));
-      expect(await coin.totalSupply()).to.equal(eth(2_000_000) + eth(1000));
+      expect(await coin.totalSupply()).to.equal(eth(1000));
     });
 
     it("reverts with OnlyGame when called by non-GAME address", async function () {
@@ -487,7 +487,12 @@ describe("BurnieCoin", function () {
     });
 
     it("mints from vault allowance to recipient and reduces allowance", async function () {
-      const { coin, vault, alice } = await getFixture();
+      const { coin, vault, game, alice } = await getFixture();
+      // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
+      const gameAddr = await game.getAddress();
+      const gameSigner = await impersonate(gameAddr);
+      await coin.connect(gameSigner).vaultEscrow(eth(1000));
+      await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
       const allowBefore = await coin.vaultMintAllowance();
@@ -502,7 +507,12 @@ describe("BurnieCoin", function () {
     });
 
     it("increases totalSupply when minting from vault allowance", async function () {
-      const { coin, vault, alice } = await getFixture();
+      const { coin, vault, game, alice } = await getFixture();
+      // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
+      const gameAddr = await game.getAddress();
+      const gameSigner = await impersonate(gameAddr);
+      await coin.connect(gameSigner).vaultEscrow(eth(1000));
+      await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
       const totalBefore = await coin.totalSupply();
@@ -514,7 +524,12 @@ describe("BurnieCoin", function () {
     });
 
     it("emits VaultAllowanceSpent and Transfer events", async function () {
-      const { coin, vault, alice } = await getFixture();
+      const { coin, vault, game, alice } = await getFixture();
+      // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
+      const gameAddr = await game.getAddress();
+      const gameSigner = await impersonate(gameAddr);
+      await coin.connect(gameSigner).vaultEscrow(eth(1000));
+      await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
 
@@ -552,7 +567,12 @@ describe("BurnieCoin", function () {
     });
 
     it("supplyIncUncirculated remains constant after vaultMintTo (supply up, allowance down)", async function () {
-      const { coin, vault, alice } = await getFixture();
+      const { coin, vault, game, alice } = await getFixture();
+      // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
+      const gameAddr = await game.getAddress();
+      const gameSigner = await impersonate(gameAddr);
+      await coin.connect(gameSigner).vaultEscrow(eth(1000));
+      await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
       const before = await coin.supplyIncUncirculated();

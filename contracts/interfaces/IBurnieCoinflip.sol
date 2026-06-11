@@ -33,6 +33,18 @@ interface IBurnieCoinflip {
     /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
 
+    /// @notice Claim up to `amount` of the auto-rebuy carry as minted BURNIE while staying on auto-rebuy.
+    /// @dev Settles all resolved days first (wins roll into the carry, a pending loss zeroes it),
+    ///      then withdraws from the settled carry; the remainder keeps rolling. Blocked during
+    ///      the RNG lock. Take-profit chunks surfaced by the settle bank into the claimable side.
+    /// @param player The player claiming (address(0) for msg.sender).
+    /// @param amount Maximum carry to claim.
+    /// @return claimed The actual amount minted from the carry.
+    /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
+    /// @custom:reverts RngLocked If a VRF request is pending.
+    /// @custom:reverts AutoRebuyNotEnabled If the player is not on auto-rebuy.
+    function claimCoinflipCarry(address player, uint256 amount) external returns (uint256 claimed);
+
     /// @notice Claim coinflip winnings via BurnieCoin contract to cover token transfers/burns.
     /// @dev Access restricted to BurnieCoin contract only. Processes pending claims and mints tokens.
     /// @param player The player claiming.

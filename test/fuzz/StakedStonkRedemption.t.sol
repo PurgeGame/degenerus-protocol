@@ -1039,6 +1039,13 @@ contract StakedStonkRedemption is DeployProtocol {
     //   REDEEM-08: BURNIE-can't-block-ETH + R1/R3/R4 refinement coverage
     // =====================================================================
 
+    /// @dev Fund sDGNRS's held BURNIE balance via the GAME-gated mint (the post-seed-window
+    ///      state: daily-claimed flip wins sit on its wallet as redemption backing).
+    function _fundSdgnrsBurnie(uint256 amount) internal {
+        vm.prank(address(game));
+        coin.mintForGame(ContractAddresses.SDGNRS, amount);
+    }
+
     /// @dev Seed a generous claimable[SDGNRS] + claimablePool + game ETH so submit-time
     ///      MAX(175%) segregation pulls succeed. Reused by the Task-2 full-flow tests.
     ///      slot 7 = balancesPacked (v61); seed the claimable LOW half, preserve the afking high half.
@@ -1070,9 +1077,11 @@ contract StakedStonkRedemption is DeployProtocol {
         uint256 burnAmount = 1000 ether;
         uint16 roll = 100;
 
-        // sDGNRS holds a large BURNIE balance at deploy (the 2M creator mint observed in the trace),
-        // so the redeemer's proportional BURNIE share is non-trivial — exactly the case a pre-fix
-        // BURNIE-reserve leg could have stalled. Submit settles it all at submit.
+        // Fund sDGNRS with a large held BURNIE balance (the post-seed-window state: claimed
+        // flip wins sit on its wallet), so the redeemer's proportional BURNIE share is
+        // non-trivial — exactly the case a pre-fix BURNIE-reserve leg could have stalled.
+        // Submit settles it all at submit.
+        _fundSdgnrsBurnie(2_000_000 ether);
         _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(burnAmount);
@@ -1123,6 +1132,10 @@ contract StakedStonkRedemption is DeployProtocol {
 
         uint256 burnAmount = 1000 ether;
         address SDGNRS = ContractAddresses.SDGNRS;
+
+        // Fund sDGNRS with held BURNIE backing (post-seed-window state: claimed flip
+        // wins on its wallet) so burnieOwed = backing * amount / supply > 0.
+        _fundSdgnrsBurnie(2_000_000 ether);
 
         uint256 universeBefore = coin.totalSupply()
             + coinflip.coinflipAmount(SDGNRS)

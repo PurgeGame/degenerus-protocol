@@ -56,16 +56,38 @@ describe("Deploy Pipeline", function () {
       expect(await f.game.gameOver()).to.equal(false);
     });
 
-    it("BurnieCoin: initial totalSupply is 2M (sDGNRS backing reserve)", async function () {
+    it("BurnieCoin: initial totalSupply is 0 (emission arrives as coinflip seed stakes)", async function () {
       const f = await loadFixture(deployFullProtocol);
-      expect(await f.coin.totalSupply()).to.equal(hre.ethers.parseEther("2000000"));
+      expect(await f.coin.totalSupply()).to.equal(0n);
     });
 
-    it("BurnieCoin: vaultMintAllowance is 2M", async function () {
+    it("BurnieCoin: vaultMintAllowance is 0 (vault emission arrives as coinflip seed stakes)", async function () {
       const f = await loadFixture(deployFullProtocol);
-      expect(await f.coin.vaultMintAllowance()).to.equal(
-        hre.ethers.parseEther("2000000")
+      expect(await f.coin.vaultMintAllowance()).to.equal(0n);
+    });
+
+    it("BurnieCoinflip: days 1-20 each stake 200k for VAULT and sDGNRS", async function () {
+      const f = await loadFixture(deployFullProtocol);
+      const seed = hre.ethers.parseEther("200000");
+      const vaultAddr = await f.vault.getAddress();
+      const sdgnrsAddr = await f.sdgnrs.getAddress();
+      // coinflipBalance is internal; the next-day stake is visible via coinflipAmount
+      // only for the target day, so spot-check via the deploy-time events instead:
+      // day-1 and day-20 stakes were written in the constructor. Assert through the
+      // CoinflipStakeUpdated events emitted at deploy.
+      const events = await f.coinflip.queryFilter(
+        f.coinflip.filters.CoinflipStakeUpdated()
       );
+      const byKey = new Map();
+      for (const ev of events) {
+        byKey.set(`${ev.args.player}-${ev.args.day}`, ev.args.newTotal);
+      }
+      for (const day of [1n, 20n]) {
+        expect(byKey.get(`${vaultAddr}-${day}`)).to.equal(seed);
+        expect(byKey.get(`${sdgnrsAddr}-${day}`)).to.equal(seed);
+      }
+      expect(byKey.has(`${vaultAddr}-${21n}`)).to.equal(false);
+      expect(byKey.has(`${sdgnrsAddr}-${21n}`)).to.equal(false);
     });
 
     it("StakedDegenerusStonk: DGNRS contract holds creator's 20% as sDGNRS", async function () {

@@ -357,8 +357,11 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         _seedFuturePrizePool(1_000_000 ether);
 
         // Three bets sharing the seeded lootbox index 1 (placement requires word==0).
+        // Word chosen so the BURNIE bet (betId 2) WINS its bet-keyed survival flip
+        // (keccak(word, betId) & 1 == 1) — the doubled-mint path is exercised
+        // non-vacuously below.
         uint48 index = 1;
-        uint256 word = uint256(keccak256("tier1_mixed_batch_word"));
+        uint256 word = uint256(keccak256("tier1_mixed_batch_word_v3"));
 
         // ETH bet: 4 spins, winning ticket; BURNIE bet: 3 spins; WWXRP bet: 2 spins.
         // Use the spin-0 winning combo as the custom ticket for each (>= 2 matches
@@ -411,14 +414,22 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         assertEq(payoutCappedCount, 0, "Tier-1: large pool -> no spin should cap");
 
+        // BURNIE survival flip (bet-keyed double-or-nothing on the bet's summed payout):
+        // the mint is 2x the per-spin sum on a winning flip, 0 on a losing one. The
+        // chosen word wins the flip for this bet, so the doubled path is live.
+        uint256 expectedBurnieMint = (uint256(
+            keccak256(abi.encode(word, burnieBet))
+        ) & 1 == 1) ? expectedBurnie * 2 : 0;
+        assertGt(expectedBurnieMint, 0, "Tier-1: word must win the BURNIE survival flip");
+
         // Tier-1 byte-identical assertions.
         uint256 burnieDelta = coin.balanceOf(player) - preBurnie;
         uint256 wwxrpDelta = wwxrp.balanceOf(player) - preWwxrp;
         uint256 claimableDelta = game.claimableWinningsOf(player) - preClaimable;
         uint256 claimablePoolDelta = _readClaimablePool() - preClaimablePool;
 
-        assertEq(burnieDelta, expectedBurnie,
-            "Tier-1: BURNIE mint delta == Sum of per-spin BURNIE payouts (additive)");
+        assertEq(burnieDelta, expectedBurnieMint,
+            "Tier-1: BURNIE mint delta == 2x Sum of per-spin BURNIE payouts (survival flip won)");
         assertEq(wwxrpDelta, expectedWwxrp,
             "Tier-1: WWXRP mint delta == Sum of per-spin WWXRP payouts (additive)");
         assertEq(claimableDelta, expectedEthShare,
@@ -434,6 +445,55 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         emit log_named_uint("tier1_eth_claimable_delta", claimableDelta);
         emit log_named_uint("tier1_burnie_delta", burnieDelta);
         emit log_named_uint("tier1_wwxrp_delta", wwxrpDelta);
+    }
+
+    /// @notice BURNIE survival-flip LOSS path: a bet whose bet-keyed flip
+    ///         (keccak(word, betId) & 1 == 0) loses mints NOTHING, even though its
+    ///         raw spins paid (per-spin FullTicketResult events sum > 0).
+    function testBurnieSurvivalFlipLossZeroesMint() public {
+        _seedFuturePrizePool(1_000_000 ether);
+
+        // Word chosen so betId 1 LOSES the survival flip; the spin-0 self-match
+        // ticket guarantees the raw per-spin payouts are nonzero.
+        uint48 index = 1;
+        uint256 word = uint256(keccak256("survival_flip_loss_word_v3"));
+        uint32 ticket = _winningTicketFor(index, word);
+
+        _fundBurnie(player, 1_000 ether);
+        uint64 betId = _placeBet(CURRENCY_BURNIE, 200 ether, 3, ticket);
+        assertEq(
+            uint256(keccak256(abi.encode(word, betId))) & 1,
+            0,
+            "precondition: the chosen word loses the survival flip for this bet"
+        );
+
+        _injectLootboxRngWord(index, word);
+
+        uint256 preBurnie = coin.balanceOf(player);
+
+        uint64[] memory betIds = new uint64[](1);
+        betIds[0] = betId;
+        vm.recordLogs();
+        vm.prank(player);
+        game.resolveDegeneretteBets(address(0), betIds);
+
+        // Raw spins paid: Σ FullTicketResult payouts > 0 (the flip zeroed the mint,
+        // not the spins).
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 rawSum;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == FULL_TICKET_RESULT_SIG) {
+                (, , , uint256 payout) = abi.decode(logs[i].data, (uint8, uint32, uint8, uint256));
+                rawSum += payout;
+            }
+        }
+        assertGt(rawSum, 0, "non-vacuity: the raw spins paid before the flip");
+
+        assertEq(
+            coin.balanceOf(player),
+            preBurnie,
+            "losing survival flip zeroes the BURNIE mint"
+        );
     }
 
     // =========================================================================

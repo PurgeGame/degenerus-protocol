@@ -8,15 +8,14 @@ import {WhaleHandler} from "../handlers/WhaleHandler.sol";
 import {BurnieCoin} from "../../../contracts/BurnieCoin.sol";
 
 /// @title CoinSupplyInvariant -- Proves BurnieCoin supply conservation (FUZZ-02)
-/// @notice Asserts that totalSupply + vaultAllowance == supplyIncUncirculated
-///         and that supplyIncUncirculated never drops below the initial 2M vault seed.
+/// @notice Asserts that totalSupply + vaultAllowance == supplyIncUncirculated.
+///         There is no supply floor: BurnieCoin deploys with zero supply and zero
+///         vault allowance (the initial emission arrives as BurnieCoinflip seed
+///         stakes), and burns shrink the combined supply.
 contract CoinSupplyInvariant is DeployProtocol {
     GameHandler public gameHandler;
     VRFHandler public vrfHandler;
     WhaleHandler public whaleHandler;
-
-    /// @dev Initial vault allowance seed (2M BURNIE)
-    uint256 constant INITIAL_VAULT_ALLOWANCE = 2_000_000 ether;
 
     function setUp() public {
         _deployProtocol();
@@ -43,20 +42,6 @@ contract CoinSupplyInvariant is DeployProtocol {
             total + allowance,
             combined,
             "BurnieCoin: totalSupply + vaultAllowance != supplyIncUncirculated"
-        );
-    }
-
-    /// @notice Vault allowance + totalSupply should never drop below initial seed
-    /// @dev supplyIncUncirculated starts at 2M (all in vaultAllowance) and only grows
-    ///      via creditCoin/mint operations. Burns reduce totalSupply but can increase
-    ///      vaultAllowance (vault burns), so the combined value is monotonically non-decreasing.
-    function invariant_supplyFloor() public view {
-        uint256 combined = coin.supplyIncUncirculated();
-
-        assertGe(
-            combined,
-            INITIAL_VAULT_ALLOWANCE,
-            "BurnieCoin: supplyIncUncirculated dropped below initial 2M seed"
         );
     }
 

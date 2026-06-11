@@ -46,11 +46,13 @@ contract BurnieTombstone is DeployProtocol {
     /// @dev The one-shot flood constant (BurnieCoin.BURNIE_TOMBSTONE_WEI = 1e36).
     uint256 internal constant TOMBSTONE_WEI = 1e36;
 
-    /// @dev Constructor seed of the VAULT mint allowance (BurnieCoin._supply.vaultAllowance).
-    uint256 internal constant SEED_VAULT_ALLOWANCE = 2_000_000 ether;
+    /// @dev Initial VAULT mint allowance (zero — the initial emission arrives as
+    ///      BurnieCoinflip seed stakes, not a constructor allowance).
+    uint256 internal constant SEED_VAULT_ALLOWANCE = 0;
 
-    /// @dev Constructor mint to SDGNRS (BurnieCoin._mint(SDGNRS, 2_000_000 ether)) = circulating seed.
-    uint256 internal constant SEED_CIRCULATING = 2_000_000 ether;
+    /// @dev Initial circulating supply (zero — no constructor mint; BURNIE only mints
+    ///      after surviving a coinflip).
+    uint256 internal constant SEED_CIRCULATING = 0;
 
     /// @dev DGVB / DGVE initial share supply (DegenerusVaultShare.INITIAL_SUPPLY = 1T * 1e18 = 1e30),
     ///      all minted to CREATOR.
@@ -74,7 +76,7 @@ contract BurnieTombstone is DeployProtocol {
     /// @notice The 1e36 flood does NOT change circulating totalSupply().
     function test_BTOMB03_TotalSupplyUntouched() public {
         uint256 tsBefore = coin.totalSupply();
-        assertEq(tsBefore, SEED_CIRCULATING, "precondition: circulating seed = 2M");
+        assertEq(tsBefore, SEED_CIRCULATING, "precondition: circulating seed = 0");
 
         vm.prank(GAME);
         coin.tombstoneAtGameOver();
@@ -97,7 +99,7 @@ contract BurnieTombstone is DeployProtocol {
         uint256 uncircBefore = coin.supplyIncUncirculated();
         uint256 tsBefore = coin.totalSupply();
 
-        assertEq(allowanceBefore, SEED_VAULT_ALLOWANCE, "precondition: seeded allowance = 2M");
+        assertEq(allowanceBefore, SEED_VAULT_ALLOWANCE, "precondition: seeded allowance = 0");
         assertEq(
             uncircBefore,
             SEED_CIRCULATING + SEED_VAULT_ALLOWANCE,
@@ -192,11 +194,11 @@ contract BurnieTombstone is DeployProtocol {
     //   (e) CHECKED ADD — holds at the seeded+escrowed value; live cap control
     // =====================================================================
 
-    /// @notice The checked _toUint128 add holds at a realistic high allowance (seeded 2M + a large
+    /// @notice The checked _toUint128 add holds at a realistic high allowance (a large
     ///         escrow) — no SupplyOverflow, result == existing + 1e36.
     function test_BTOMB03_CheckedAddNoOverflow() public {
         // Escrow a large additional allowance as GAME (vaultEscrow is GAME-or-VAULT gated). Push the
-        // existing allowance to a plausible high value well above the 2M seed.
+        // existing allowance to a plausible high value.
         uint256 escrow = 1_000_000_000_000 ether; // 1e30 wei
         vm.prank(GAME);
         coin.vaultEscrow(escrow);
@@ -265,7 +267,7 @@ contract BurnieTombstone is DeployProtocol {
     ///         correct-magnitude pro-rata payout.
     ///
     ///         burnCoin computes: coinOut = (coinBal * amount) / supplyBefore where coinBal includes
-    ///         vaultMintAllowance() (post-flood ≈ 1e36 + 2M seed). The intermediate product
+    ///         vaultMintAllowance() (post-flood ≈ 1e36). The intermediate product
     ///         coinBal * amount must not overflow uint256, and the remainder mint via vaultMintTo
     ///         (which casts the share to uint128 and debits the allowance) must not revert.
     function test_BTOMB03_DgvbClaimNoOverflowOn1e36Share() public {
@@ -282,7 +284,7 @@ contract BurnieTombstone is DeployProtocol {
 
         // CREATOR holds the entire DGVB share supply (DGVB_INITIAL_SUPPLY = 1e30, minted in the
         // DegenerusVaultShare constructor, untouched at fresh deploy). The vault's BURNIE balance and
-        // coinflip claimable are both 0 here, so coinBal == vaultMintAllowance() ≈ 1e36 + 2M seed.
+        // coinflip claimable are both 0 here, so coinBal == vaultMintAllowance() ≈ 1e36.
         uint256 dgvbSupply = DGVB_INITIAL_SUPPLY;
 
         // Burn 1% of the DGVB supply (1e28 shares) — a clean fractional pro-rata claim that does NOT

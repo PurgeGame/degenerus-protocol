@@ -66,8 +66,6 @@ interface IBurnieCoinflipPlayer {
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
     /// @notice Settle a redemption's BURNIE share at submit: burn+consume sDGNRS backing, credit redeemer.
     function redeemBurnieShare(address redeemer, uint256 base) external;
-    /// @notice Configure auto-rebuy mode for coinflips (player == self for sDGNRS).
-    function setCoinflipAutoRebuy(address player, bool enabled, uint256 takeProfit) external;
 }
 
 /// @notice Interface for DGNRS wrapper contract used by sDGNRS.
@@ -381,16 +379,18 @@ contract StakedDegenerusStonk {
         game.initPerpetualTickets();
 
         // SUB-09 protocol-owned self-subscription: claimable-only daily lootbox
-        // buy of flat quantity 1 with a 2% claimable reinvest, plus full BURNIE-flip
-        // recycle at the kept flat recycle rate. Self-consent — sDGNRS IS the player
-        // (player == msg.sender). sDGNRS holds the permanent deity pass (granted in
-        // the DegenerusGame constructor), so the afking's pass-OR-pay gate takes the
-        // free 30-day extend at zero cost.
+        // buy of flat quantity 1 with a 2% claimable reinvest. Self-consent —
+        // sDGNRS IS the player (player == msg.sender). sDGNRS holds the permanent
+        // deity pass (granted in the DegenerusGame constructor), so the afking's
+        // pass-OR-pay gate takes the free 30-day extend at zero cost.
         // v55.0 ARCH-03: the afking surface is GAME-resident (AfKing dissolved);
         // self-subscribe directly against the GAME (subscriber == msg.sender ⇒
         // the GAME's SUB-02 self-consent path, no operator approval needed).
+        // Coinflip auto-rebuy is NOT enabled here: during the 20-day seed window
+        // sDGNRS's daily flip wins mint to its wallet balance (redemption backing);
+        // BurnieCoinflip arms perpetual auto-rebuy (0 take-profit) once the final
+        // seeded day settles.
         game.subscribe(address(this), true, false, 1, 2, address(0));
-        coinflip.setCoinflipAutoRebuy(address(this), true, 0);
 
         // Pre-approve GAME to pull stETH for both redemption claim legs. claimRedemption funds
         // each leg (resolveRedemptionLootbox / creditRedemptionDirect) with msg.value ETH and the

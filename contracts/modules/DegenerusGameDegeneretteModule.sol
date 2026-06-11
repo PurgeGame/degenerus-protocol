@@ -34,6 +34,8 @@ interface IWrappedWrappedXRP {
  * @notice Delegate-called module handling Degenerette symbol-roll bets.
  * @dev Uses lootbox RNG index/word for randomness. All storage reads/writes operate
  *      on the inherited DegenerusGameStorage. Supports ETH, BURNIE, and WWXRP currencies.
+ *      BURNIE payouts face a per-bet survival flip (double-or-nothing) at resolution,
+ *      so all BURNIE entering existence survives at least one coinflip.
  */
 contract DegenerusGameDegeneretteModule is
     DegenerusGamePayoutUtils,
@@ -77,7 +79,8 @@ contract DegenerusGameDegeneretteModule is
     /// @param player The player address.
     /// @param betId The bet ID.
     /// @param ticketCount Number of spins resolved.
-    /// @param totalPayout Total payout across all tickets.
+    /// @param totalPayout Total payout across all tickets (for BURNIE bets: after the
+    ///        survival flip — doubled or zeroed vs the per-spin FullTicketResult sums).
     /// @param resultTicket The spin-0 result ticket (additional spin results are derived per spinIndex).
     event FullTicketResolved(
         address indexed player,
@@ -756,6 +759,25 @@ contract DegenerusGameDegeneretteModule is
             }
         }
 
+        // BURNIE survival flip: every BURNIE payout must survive one fair coinflip before
+        // it mints — the bet's whole payout double-or-nothings on a single bet-keyed flip
+        // (EV-neutral: x2 at 50/50). The seed is the per-bet lootbox seed, which BURNIE
+        // bets never otherwise consume (lootbox-share is ETH-only). Both rngWord and betId
+        // are committed before the VRF word lands, so the outcome is fixed at fulfillment;
+        // a losing bet pays zero whether resolved or abandoned, so selective resolution
+        // earns nothing. The accumulator holds exactly this bet's payout once (added per
+        // spin), so doubling adds it again and zeroing subtracts it back out. The outcome
+        // reads off FullTicketResolved: totalPayout vs the per-spin FullTicketResult sums.
+        if (currency == CURRENCY_BURNIE && totalPayout != 0) {
+            if (uint256(keccak256(abi.encode(rngWord, betId))) & 1 == 1) {
+                acc.burnieMint += totalPayout;
+                totalPayout *= 2;
+            } else {
+                acc.burnieMint -= totalPayout;
+                totalPayout = 0;
+            }
+        }
+
         // One lootbox per betId, on the summed lootbox-share. The box seed binds the immutable
         // betId (keccak'd with the index word) so each of a player's bets at the same index rolls
         // independently; the live lootbox-share is NOT a seed input. Never summed across betIds.
@@ -794,9 +816,11 @@ contract DegenerusGameDegeneretteModule is
     ///      emitted. Frozen-pool branch retains its solvency-check posture
     ///      (pending future debit with revert-on-insufficient).
     ///
-    ///      CURRENCY_BURNIE pays directly via the coin mint; CURRENCY_WWXRP pays
-    ///      directly via the wwxrp mint. Neither honors the 3-tier split (which
-    ///      applies only to the lootbox-convertible ETH path).
+    ///      CURRENCY_BURNIE accumulates toward the coin mint (the per-bet survival
+    ///      flip in _resolveFullTicketBet then doubles or zeroes the bet's total
+    ///      before the flush); CURRENCY_WWXRP pays directly via the wwxrp mint.
+    ///      Neither honors the 3-tier split (which applies only to the
+    ///      lootbox-convertible ETH path).
     /// @param player The player to receive the payout.
     /// @param currency The currency type (0=ETH, 1=BURNIE, 3=WWXRP).
     /// @param betAmount The per-ticket bet amount (uint128) — the tier-threshold reference.
