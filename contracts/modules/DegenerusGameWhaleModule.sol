@@ -891,7 +891,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             // sole opener (manual openBox is operator-gated) hold the box and time
             // the open against the known per-index word. The consumer gates each index
             // on lootboxRngWordByIndex != 0, so this is producer-only.
-            IDegenerusGame(address(this)).enqueueBoxForAutoOpen(index, buyer);
+            boxPlayers[index].push(buyer);
         } else {
             // Subsequent deposit: the frozen score and accumulated adj come from the box's
             // prior packed word; the multiplier stays FROZEN from the first-deposit snapshot.

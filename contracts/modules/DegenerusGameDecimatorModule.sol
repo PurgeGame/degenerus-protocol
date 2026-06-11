@@ -301,20 +301,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         e.claimed = 1;
     }
 
-    /// @notice Consume Decimator claim on behalf of player.
-    /// @dev Used for game-initiated claims.
-    /// @param player Address to claim for.
-    /// @param lvl Level to claim from.
-    /// @return amountWei Pro-rata payout amount.
-    /// @custom:access Restricted to game contract.
-    function consumeDecClaim(
-        address player,
-        uint24 lvl
-    ) external returns (uint256 amountWei) {
-        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
-        return _consumeDecClaim(player, lvl);
-    }
-
     /// @notice Claim Decimator jackpot for caller.
     /// @dev Public function for players to claim their own jackpot.
     ///      Credits payout to player's claimable balance.

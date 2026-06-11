@@ -9,6 +9,7 @@ import {
     MintPaymentKind
 } from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
+import {IDegenerusGameBoonModule} from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
@@ -1255,7 +1256,7 @@ contract DegenerusGameMintModule is
                 // walk gates each index on lootboxRngWordByIndex != 0 (VRF
                 // orphan-index protection), so enqueue is producer-only here. The
                 // per-buy LootBoxBuy event (below) carries the index for off-chain.
-                IDegenerusGame(address(this)).enqueueBoxForAutoOpen(lbIndex, buyer);
+                boxPlayers[lbIndex].push(buyer);
             }
             // Subsequent deposits accumulate onto the existing box. No day-coherence gate and no
             // stored day at all: the box binds to lootboxRngWordByIndex[index] and rolls from the
@@ -1340,7 +1341,7 @@ contract DegenerusGameMintModule is
             if (questCompleted) {
                 lootboxFlipCredit += questReward;
                 if (ethMintSpendWei > 0 && questType == 1) {
-                    IDegenerusGame(address(this)).recordMintQuestStreak(buyer);
+                    _recordMintStreakForLevel(buyer, _activeTicketLevel());
                 }
             }
         }
@@ -1599,7 +1600,7 @@ contract DegenerusGameMintModule is
             (uint256(uint96(sold)) << PRESALE_BOX_SOLD_SHIFT) |
             (closing ? PRESALE_BOX_CLOSING_FLAG : 0);
         // First box deposit at this index: enqueue for the permissionless auto-open.
-        IDegenerusGame(address(this)).enqueueBoxForAutoOpen(index, buyer);
+        boxPlayers[index].push(buyer);
 
         presaleBoxEthSold = uint96(sold + applied);
         if (closing) {
@@ -1617,6 +1618,16 @@ contract DegenerusGameMintModule is
         // Fresh ETH the clamp-to-50 left unused is credited to the payer's afking, not
         // sent back via a value call (no reentrancy surface, consistent with overpay).
         _creditAfkingValue(msg.sender, refund);
+    }
+
+    /// @dev Bubble up revert reason from delegatecall failure.
+    ///      Uses assembly to preserve original error data.
+    /// @param reason The error bytes from failed delegatecall.
+    function _revertDelegate(bytes memory reason) private pure {
+        if (reason.length == 0) revert E();
+        assembly ("memory-safe") {
+            revert(add(32, reason), mload(reason))
+        }
     }
 
     /// @dev Execute ticket purchase: payment, boost, affiliate routing, quest unit accumulation.
@@ -1644,7 +1655,8 @@ contract DegenerusGameMintModule is
         )
     {
         if (quantity == 0) revert E();
-        if (_livenessTriggered()) revert E();
+        // Liveness is gated by both callers (_purchaseForWith / _purchaseCoinFor)
+        // before any state is touched, so it is not re-evaluated here.
         uint8 cachedComp = compressedJackpotFlag;
         uint8 cachedCnt = jackpotCounter;
         targetLevel = cachedJpFlag ? cachedLevel : cachedLevel + 1;
@@ -1672,8 +1684,19 @@ contract DegenerusGameMintModule is
 
         uint256 adjustedQuantity = quantity;
         if (!payInCoin) {
-            uint16 boostBps = IDegenerusGame(address(this))
-                .consumePurchaseBoost(buyer);
+            // Nested delegatecall straight into the boon module (this frame already
+            // runs in the Game's storage context), skipping the external self-call
+            // round trip through the Game dispatcher.
+            (bool boostOk, bytes memory boostData) = ContractAddresses
+                .GAME_BOON_MODULE
+                .delegatecall(
+                    abi.encodeWithSelector(
+                        IDegenerusGameBoonModule.consumePurchaseBoost.selector,
+                        buyer
+                    )
+                );
+            if (!boostOk) _revertDelegate(boostData);
+            uint16 boostBps = abi.decode(boostData, (uint16));
             if (boostBps != 0) {
                 uint256 cappedValue = costWei > LOOTBOX_BOOST_MAX_VALUE
                     ? LOOTBOX_BOOST_MAX_VALUE
@@ -1882,7 +1905,7 @@ contract DegenerusGameMintModule is
         );
         if (completed) {
             if (paidWithEth && questType == 1) {
-                IDegenerusGame(address(this)).recordMintQuestStreak(player);
+                _recordMintStreakForLevel(player, _activeTicketLevel());
             }
             if (paidWithEth) return reward;
         }

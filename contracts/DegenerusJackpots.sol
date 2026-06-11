@@ -11,6 +11,7 @@ pragma solidity 0.8.34;
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 import {IDegenerusJackpots} from "./interfaces/IDegenerusJackpots.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
+import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 // ===========================================================================
 // External Interfaces
@@ -88,6 +89,26 @@ contract DegenerusJackpots is IDegenerusJackpots {
         uint96 score;
     }
 
+    /// @notice Per-player BAF state for a bracket level.
+    /// @dev Packed into single slot: total (192) + epoch (64) = 256 bits.
+    ///      A total whose epoch is stale (bracket already resolved) reads as zero.
+    struct BafPlayer {
+        /// @notice Accumulated winning-flip stake (saturates at uint192.max).
+        uint192 total;
+        /// @notice Bracket epoch the total belongs to.
+        uint64 epoch;
+    }
+
+    /// @notice Per-level BAF bracket state.
+    /// @dev Packed into single slot: epoch (64) + topLen (8). Both are touched by
+    ///      every flip credit, so sharing a slot makes the second read warm.
+    struct BafLevel {
+        /// @notice Epoch counter, incremented on jackpot resolution (lazy-resets player totals).
+        uint64 epoch;
+        /// @notice Current length of the bafTop board (0-4).
+        uint8 topLen;
+    }
+
     /*+======================================================================+
       |                            CONSTANT STATE                            |
       +======================================================================+
@@ -117,20 +138,14 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Per-player BAF totals and top-4 leaderboard per level.              |
       +======================================================================+*/
 
-    /// @notice Accumulated coinflip stake per player per BAF bracket level.
-    mapping(uint24 => mapping(address => uint256)) internal bafTotals;
+    /// @notice Accumulated coinflip stake + owning epoch per player per BAF bracket level.
+    mapping(uint24 => mapping(address => BafPlayer)) internal bafPlayer;
 
     /// @notice Top-4 coinflip bettors for BAF per level (sorted by score descending).
     mapping(uint24 => PlayerScore[4]) internal bafTop;
 
-    /// @notice Current length of bafTop array for each level (0-4).
-    mapping(uint24 => uint8) internal bafTopLen;
-
-    /// @notice Epoch counter per BAF bracket, incremented on jackpot resolution.
-    mapping(uint24 => uint256) internal bafEpoch;
-
-    /// @notice Player's last-known epoch per BAF bracket (for lazy reset).
-    mapping(uint24 => mapping(address => uint256)) internal bafPlayerEpoch;
+    /// @notice Epoch counter + bafTop board length per BAF bracket level.
+    mapping(uint24 => BafLevel) internal bafLevel;
 
     /// @notice Day index of the most recent BAF jackpot resolution (any bracket).
     uint24 internal lastBafResolvedDay;
@@ -173,15 +188,13 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param amount Winning coinflip payout credited to the player's BAF score.
     /// @custom:access Restricted to COIN or COINFLIP via onlyCoin modifier.
     function recordBafFlip(address player, uint24 lvl, uint256 amount) external override onlyCoin {
-        uint256 currentEpoch = bafEpoch[lvl];
-        if (bafPlayerEpoch[lvl][player] != currentEpoch) {
-            bafPlayerEpoch[lvl][player] = currentEpoch;
-            bafTotals[lvl][player] = 0;
-        }
-
-        uint256 total = bafTotals[lvl][player];
+        uint64 currentEpoch = bafLevel[lvl].epoch;
+        BafPlayer memory ps = bafPlayer[lvl][player];
+        // A stale epoch means the bracket already resolved: restart the total from zero.
+        uint256 total = ps.epoch == currentEpoch ? ps.total : 0;
         unchecked { total += amount; }
-        bafTotals[lvl][player] = total;
+        if (total > type(uint192).max) total = type(uint192).max;
+        bafPlayer[lvl][player] = BafPlayer({total: uint192(total), epoch: currentEpoch});
 
         // VAULT accrues a score (above) but stays off the leaderboard: it can never win the
         // top-bettor slices, while still ranking in the score-ranked ticket slices it holds.
@@ -247,6 +260,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
         uint256 entropy = rngWord;
         uint256 salt;
+        // The bracket epoch is fixed for the whole resolution: read it once and
+        // thread it through every per-candidate score read.
+        uint64 currentEpoch = bafLevel[lvl].epoch;
 
         {
             // Slice A: 10% to the top BAF bettor for the level.
@@ -309,7 +325,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
             uint256 fLen = farTickets.length;
             for (uint256 i; i < fLen; ) {
                 address cand = farTickets[i];
-                uint256 score = _bafScore(cand, lvl);
+                uint256 score = _bafScore(cand, lvl, currentEpoch);
                 if (score > bestScore || best == address(0)) {
                     second = best;
                     secondScore = bestScore;
@@ -351,7 +367,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
             uint256 fLen = farTickets.length;
             for (uint256 i; i < fLen; ) {
                 address cand = farTickets[i];
-                uint256 score = _bafScore(cand, lvl);
+                uint256 score = _bafScore(cand, lvl, currentEpoch);
                 if (score > bestScore || best == address(0)) {
                     second = best;
                     secondScore = bestScore;
@@ -425,7 +441,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
                 for (uint256 i; i < limit; ) {
                     address cand = tickets[i];
-                    uint256 score = _bafScore(cand, lvl);
+                    uint256 score = _bafScore(cand, lvl, currentEpoch);
                     if (score > bestScore) {
                         second = best;
                         secondScore = bestScore;
@@ -494,10 +510,21 @@ contract DegenerusJackpots is IDegenerusJackpots {
             mstore(amounts, n)
         }
 
-        // Clean up leaderboard state for this level
-        _clearBafTop(lvl);
-        unchecked { ++bafEpoch[lvl]; }
-        lastBafResolvedDay = degenerusGame.currentDayView();
+        // Clean up leaderboard state for this level: clear the board entries, then
+        // reset the length and bump the epoch in a single slot write.
+        {
+            uint8 boardLen = bafLevel[lvl].topLen;
+            for (uint8 i; i < boardLen; ) {
+                delete bafTop[lvl][i];
+                unchecked { ++i; }
+            }
+            unchecked {
+                bafLevel[lvl] = BafLevel({epoch: currentEpoch + 1, topLen: 0});
+            }
+        }
+        // Day computed locally: identical to game.currentDayView() (pure GameTimeLib
+        // wall-clock) without the external call.
+        lastBafResolvedDay = GameTimeLib.currentDayIndex();
         return (winners, amounts, toReturn);
     }
 
@@ -510,7 +537,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param lvl Level whose BAF was skipped.
     /// @custom:access Restricted to game contract via onlyGame modifier.
     function markBafSkipped(uint24 lvl) external onlyGame {
-        uint24 today = degenerusGame.currentDayView();
+        // Day computed locally: identical to game.currentDayView() (pure GameTimeLib
+        // wall-clock) without the external call.
+        uint24 today = GameTimeLib.currentDayIndex();
         lastBafResolvedDay = today;
         emit BafSkipped(lvl, today);
     }
@@ -554,10 +583,12 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @dev Get player's BAF score for a level.
     /// @param player Address to query.
     /// @param lvl Level number.
-    /// @return Accumulated coinflip total (0 if player not in this level).
-    function _bafScore(address player, uint24 lvl) private view returns (uint256) {
-        if (bafPlayerEpoch[lvl][player] != bafEpoch[lvl]) return 0;
-        return bafTotals[lvl][player];
+    /// @param currentEpoch The bracket's current epoch (read once per resolution by callers).
+    /// @return Accumulated coinflip total (0 if the stored epoch is stale).
+    function _bafScore(address player, uint24 lvl, uint64 currentEpoch) private view returns (uint256) {
+        BafPlayer memory ps = bafPlayer[lvl][player];
+        if (ps.epoch != currentEpoch) return 0;
+        return ps.total;
     }
 
     /// @dev Convert raw score to capped uint96 (whole tokens only).
@@ -580,7 +611,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     function _updateBafTop(uint24 lvl, address player, uint256 stake) private {
         uint96 score = _score96(stake);
         PlayerScore[4] storage board = bafTop[lvl];
-        uint8 len = bafTopLen[lvl];
+        uint8 len = bafLevel[lvl].topLen;
 
         // Check if player already on leaderboard
         uint8 existing = 4; // sentinel: not found
@@ -621,7 +652,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 }
             }
             board[insert] = PlayerScore({player: player, score: score});
-            bafTopLen[lvl] = len + 1;
+            bafLevel[lvl].topLen = len + 1;
             return;
         }
 
@@ -643,25 +674,10 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @return player Address at position (address(0) if empty).
     /// @return score Player's score.
     function _bafTop(uint24 lvl, uint8 idx) private view returns (address player, uint96 score) {
-        uint8 len = bafTopLen[lvl];
+        uint8 len = bafLevel[lvl].topLen;
         if (idx >= len) return (address(0), 0);
         PlayerScore memory entry = bafTop[lvl][idx];
         return (entry.player, entry.score);
-    }
-
-    /// @dev Clear leaderboard state for a level after jackpot resolution.
-    /// @param lvl Level number.
-    function _clearBafTop(uint24 lvl) private {
-        uint8 len = bafTopLen[lvl];
-        if (len != 0) {
-            delete bafTopLen[lvl];
-        }
-        for (uint8 i; i < len; ) {
-            delete bafTop[lvl][i];
-            unchecked {
-                ++i;
-            }
-        }
     }
 
     /*+======================================================================+

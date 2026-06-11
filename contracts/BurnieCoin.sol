@@ -313,7 +313,6 @@ contract BurnieCoin {
     /// @param amount The amount to transfer (18 decimals).
     /// @return True on success.
     function transfer(address to, uint256 amount) external returns (bool) {
-        _claimCoinflipShortfall(msg.sender, amount);
         _transfer(msg.sender, to, amount);
         return true;
     }
@@ -342,7 +341,6 @@ contract BurnieCoin {
                 emit Approval(from, msg.sender, newAllowance);
             }
         }
-        _claimCoinflipShortfall(from, amount);
         _transfer(from, to, amount);
         return true;
     }
@@ -354,13 +352,23 @@ contract BurnieCoin {
 
     /// @notice Internal transfer helper.
     /// @dev Reverts on zero address or insufficient balance (via Solidity 0.8+ underflow check).
+    ///      A shortfall against the sender's balance is covered from unclaimed coinflip
+    ///      winnings (skipped while the RNG window is locked), sharing this function's
+    ///      balance read; the claim credits balanceOf, so the debit re-reads after it.
     /// @param from The source address.
     /// @param to The destination address.
     /// @param amount The amount to transfer.
     function _transfer(address from, address to, uint256 amount) internal {
         if (from == address(0) || to == address(0)) revert ZeroAddress();
-        // Solidity 0.8+ reverts on underflow if balanceOf[from] < amount
-        balanceOf[from] -= amount;
+        uint256 balance = balanceOf[from];
+        if (balance < amount && !degenerusGame.rngLocked()) {
+            unchecked {
+                coinflip.claimCoinflipsFromBurnie(from, amount - balance);
+            }
+            balance = balanceOf[from];
+        }
+        // Solidity 0.8+ reverts on underflow if the (possibly topped-up) balance < amount
+        balanceOf[from] = balance - amount;
 
         if (to == ContractAddresses.VAULT) {
             // Vault receives no circulating BURNIE; redirect to mint allowance.
@@ -448,16 +456,6 @@ contract BurnieCoin {
         ) revert OnlyGame();
         if (amount == 0) return;
         _mint(to, amount);
-    }
-
-    function _claimCoinflipShortfall(address player, uint256 amount) private {
-        if (amount == 0) return;
-        if (degenerusGame.rngLocked()) return;
-        uint256 balance = balanceOf[player];
-        if (balance >= amount) return;
-        unchecked {
-            coinflip.claimCoinflipsFromBurnie(player, amount - balance);
-        }
     }
 
     function _consumeCoinflipShortfall(

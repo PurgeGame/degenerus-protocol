@@ -180,14 +180,6 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok, "claimAffiliateDgnrs rejected zero-balance caller");
     }
 
-    /// @notice Exercise recordMintQuestStreak (onlyCoin-gated external call).
-    function test_gap_recordMintQuestStreak_nonCoin_reverts() public {
-        vm.prank(buyer);
-        (bool ok, ) = address(game).call(
-            abi.encodeWithSignature("recordMintQuestStreak(address)", buyer)
-        );
-        assertFalse(ok, "recordMintQuestStreak rejected non-coin caller");
-    }
 
     /// @notice Exercise recordMint (onlyCoin-gated).
     function test_gap_recordMint_guard() public {
@@ -243,7 +235,7 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok2, "syncAfKingLazyPassFromCoin rejected non-coin caller");
     }
 
-    /// @notice Exercise consumeCoinflipBoon / consumeDecimatorBoon / consumePurchaseBoost (gated).
+    /// @notice Exercise consumeCoinflipBoon / consumeDecimatorBoon (gated).
     function test_gap_boon_consumers() public {
         vm.prank(buyer);
         (bool ok1, ) = address(game).call(
@@ -253,13 +245,8 @@ contract CoverageGap222 is DeployProtocol {
         (bool ok2, ) = address(game).call(
             abi.encodeWithSignature("consumeDecimatorBoon(address)", buyer)
         );
-        vm.prank(buyer);
-        (bool ok3, ) = address(game).call(
-            abi.encodeWithSignature("consumePurchaseBoost(address)", buyer)
-        );
         assertFalse(ok1, "consumeCoinflipBoon rejected non-authorized caller");
         assertFalse(ok2, "consumeDecimatorBoon rejected non-authorized caller");
-        assertFalse(ok3, "consumePurchaseBoost rejected non-authorized caller");
     }
 
     /// @notice Exercise issueDeityBoon (onlyGame-gated).
@@ -1508,14 +1495,6 @@ contract CoverageGap222 is DeployProtocol {
             )
         );
         vm.prank(buyer);
-        (bool o5, ) = address(game).call(
-            abi.encodeWithSignature(
-                "consumeDecClaim(address,uint24)",
-                buyer,
-                uint24(0)
-            )
-        );
-        vm.prank(buyer);
         (bool o6, ) = address(game).call(
             abi.encodeWithSignature(
                 "claimDecimatorJackpot(address,uint24)",
@@ -1537,7 +1516,6 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(o2, "game.runBafJackpot rejected external caller");
         assertFalse(o3, "game.runTerminalDecimatorJackpot rejected external caller");
         assertFalse(o4, "game.runTerminalJackpot rejected external caller");
-        assertFalse(o5, "game.consumeDecClaim rejected non-authorized caller");
         assertFalse(o6, "game.claimDecimatorJackpot rejected caller without claim");
         assertFalse(o7, "game.recordTerminalDecBurn rejected external caller");
     }

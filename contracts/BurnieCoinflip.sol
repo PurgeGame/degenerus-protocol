@@ -1039,8 +1039,12 @@ contract BurnieCoinflip {
             bool rngLocked_,
 
         ) = degenerusGame.purchaseInfo();
+        // Early-return on the purchaseInfo flags so normal days cost a single
+        // external read; level/gameOver are only consulted once those pass.
+        if (inJackpotPhase || !lastPurchaseDay_ || !rngLocked_) return false;
         uint24 lvl = degenerusGame.level();
-        locked = (!inJackpotPhase) && !degenerusGame.gameOver() && lastPurchaseDay_ && rngLocked_ && lvl != 0 && (lvl % 10 == 0);
+        if (lvl == 0 || lvl % 10 != 0) return false;
+        locked = !degenerusGame.gameOver();
     }
 
     /// @dev Calculate recycling bonus for daily flip deposits (0.75% bonus, capped at 1000 BURNIE).

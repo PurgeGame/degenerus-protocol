@@ -30,15 +30,15 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         (`processCoinflipPayouts` + `(rngWord & 1) == 1`) is byte-identical.
 ///
 /// @notice v50.0 D-IMPL-02 trivial freeze-side migrations (Plan 335-05 Task 5):
-///   - The v45 KEPT-pass-view attestation is migrated to the v50.0 `lazyPassHorizon` view
-///     (`testKeptLazyPassHorizonPresent`). Plan 335-01 Task 2 added
-///     `lazyPassHorizon(address) returns uint24` alongside the legacy v49 boolean pass-view (which
-///     is still KEPT for non-AfKing callers); the migrated test pins the new view's exposure.
+///   - The v45 KEPT-pass-view attestation now pins the AfKing module's in-context
+///     `_passHorizonOf` read (`testKeptPassHorizonReadPresent`) — the canonical pass-horizon
+///     semantics (deity sentinel / frozenUntilLevel). The Game-side external mirrors were
+///     removed as zero-on-chain-caller surface.
 ///   - Two trivial positive freeze-side assertions are added: (1) the box-open
 ///     `whalePassClaims +=` write at the LootboxModule's whale-pass activation site (Plan 335-02)
 ///     targets a NON-FROZEN slot — the accumulator is a pending-claim slot per
 ///     334-WHALE04-FREEZE-PROOF §1, not a VRF-influenced slot; (2) the AfKing crossing's
-///     `lazyPassHorizon` external view read is a NON-RNG-WINDOW read — calling it does not touch
+///     `_passHorizonOf` in-context read is a NON-RNG-WINDOW read — it does not write
 ///     `mintPacked_` or any VRF-frozen slot (334-WHALE04-FREEZE-PROOF §5).
 ///   - The DEEPER RNG-freeze fuzz of the deferred-claim path (the WhaleModule:1018
 ///     `claimWhalePass` invariant under rngLock) lives at Phase 336 / TST-01 freeze leg
@@ -416,27 +416,23 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         }
     }
 
-    /// @notice v50.0 reconciliation: the new `lazyPassHorizon` view (Plan 335-01 Task 2) is present
-    ///         and exposed. Replaces the v49 `testKeptHasAnyLazyPassPresent` attestation. The
-    ///         underlying invariant — a pass-query view exists on the Game contract — survives the
-    ///         migration; only the view's name (and richer return type) changes.
-    /// @dev    `lazyPassHorizon(address) returns uint24` returns `type(uint24).max` for a deity-bit
-    ///         holder (the sentinel) and the unpacked `frozenUntilLevel` for a lazy-pass holder. The
-    ///         legacy v49 boolean pass-view ALSO remains on the contract (Plan 335-01 preserved
-    ///         it for non-AfKing callers); a future regression deleting EITHER would flip RED.
-    function testKeptLazyPassHorizonPresent() public view {
-        // Exposed externally on the live contract: VAULT carries the permanent deity bit so the
-        // horizon returns the sentinel value (type(uint24).max).
-        assertEq(
-            game.lazyPassHorizon(ContractAddresses.VAULT),
-            type(uint24).max,
-            "lazyPassHorizon returns the deity sentinel (uint24.max) for the deity-bit holder"
-        );
-        string memory src = vm.readFile("contracts/DegenerusGame.sol");
+    /// @notice The canonical pass-horizon read is the AfKing module's in-context
+    ///         `_passHorizonOf` (deity holders → the type(uint24).max sentinel; lazy/whale
+    ///         holders → their `frozenUntilLevel`). The Game-side external mirrors
+    ///         (`hasAnyLazyPass` / `lazyPassHorizon`) were removed as zero-on-chain-caller
+    ///         surface; this attestation pins the surviving in-context read so a future
+    ///         regression deleting it flips RED.
+    function testKeptPassHorizonReadPresent() public view {
+        string memory src = vm.readFile("contracts/modules/GameAfkingModule.sol");
         assertGt(
-            _countOccurrences(src, "lazyPassHorizon"),
+            _countOccurrences(src, "function _passHorizonOf(address player) internal view returns (uint24)"),
             0,
-            "lazyPassHorizon identifier present in DegenerusGame.sol (Plan 335-01 Task 2)"
+            "canonical in-context pass-horizon read present in GameAfkingModule.sol"
+        );
+        assertGt(
+            _countOccurrences(src, "type(uint24).max"),
+            0,
+            "deity sentinel (type(uint24).max) present in the module horizon semantics"
         );
     }
 
@@ -446,7 +442,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     // The DEEPER RNG-freeze fuzz proof of the deferred-claim path lives at Phase 336 / TST-01
     // freeze leg per 335-CONTEXT.md D-IMPL-02. These two tests pin the TRIVIAL property only:
     //   (1) the box-open `whalePassClaims +=` write (Plan 335-02) targets a non-frozen slot;
-    //   (2) the AfKing crossing's `lazyPassHorizon` view read (Plan 335-04) is a non-RNG-window read.
+    //   (2) the AfKing crossing's `_passHorizonOf` in-context read (Plan 335-04) is a non-RNG-window read.
     // 336 owns the deeper freeze-fuzz extension of `RngLockDeterminism.t.sol` (deferred-claim
     // path × rngLock interaction × write-set equivalence).
     // =========================================================================
@@ -474,26 +470,19 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // accumulator (WHALE04-FREEZE-PROOF §1 — non-VRF-influenced, not in the freeze write-set).
     }
 
-    /// @notice v50.0 / WHALE04-FREEZE-PROOF §5: the AfKing crossing's `lazyPassHorizon(player)`
-    ///         external view read (Plan 335-04 _autoBuy:628) is a NON-RNG-WINDOW read. The view
-    ///         reads `mintPacked_[player]` (a frozen-slot for VRF purposes) but does NOT WRITE; the
-    ///         freeze invariant is about writes to frozen slots, not reads. Trivial assertion: call
-    ///         `lazyPassHorizon` from a test, assert no revert AND no state change to the player's
-    ///         `mintPacked_` slot (via vm.load before/after).
-    function testLazyPassHorizonReadDoesNotPerturbFrozenSlots() public {
-        address probe = makeAddr("freeze_probe");
-        _grantDeityPass(probe);
-
-        // mintPacked_ for `probe` (slot 9, the standard mapping mintPacked_[address]).
-        bytes32 mintPackedSlot = keccak256(abi.encode(probe, uint256(9)));
-        bytes32 before_ = vm.load(address(game), mintPackedSlot);
-
-        uint24 horizon = game.lazyPassHorizon(probe);
-
-        bytes32 after_ = vm.load(address(game), mintPackedSlot);
-
-        assertEq(horizon, type(uint24).max, "deity-bit holder: horizon == sentinel");
-        assertEq(after_, before_, "lazyPassHorizon is a pure view: mintPacked_ slot UNCHANGED across the call");
+    /// @notice WHALE04-FREEZE-PROOF §5: the AfKing crossing's pass-horizon read is a
+    ///         NON-RNG-WINDOW read. It reads `mintPacked_[player]` (a frozen slot for VRF
+    ///         purposes) but does NOT WRITE — the read happens in-context via the module's
+    ///         `_passHorizonOf`, declared `internal view`, so the no-write property is
+    ///         compiler-enforced. This attestation pins the `view` mutability so a future
+    ///         regression relaxing it flips RED.
+    function testPassHorizonReadIsViewOnly() public view {
+        string memory src = vm.readFile("contracts/modules/GameAfkingModule.sol");
+        assertGt(
+            _countOccurrences(src, "function _passHorizonOf(address player) internal view"),
+            0,
+            "pass-horizon read is `internal view` (no writes to frozen slots possible)"
+        );
     }
 
     /// @dev Grant `who` the permanent deity-pass bit (shift 184) in DegenerusGame.mintPacked_ (slot 9).

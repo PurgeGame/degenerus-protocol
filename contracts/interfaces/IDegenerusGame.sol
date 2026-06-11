@@ -98,12 +98,6 @@ interface IDegenerusGame {
     /// @return boostBps Boost amount in basis points.
     function consumeDecimatorBoon(address player) external returns (uint16 boostBps);
 
-    /// @notice Consume purchase boost for purchase bonus.
-    /// @dev Grants bonus to next ticket purchase.
-    /// @param player The player consuming the boost.
-    /// @return boostBps Boost amount in basis points.
-    function consumePurchaseBoost(address player) external returns (uint16 boostBps);
-
     /// @notice Get raw deity boon state for off-chain or viewer contract computation.
     /// @param deity The deity address to query.
     function deityBoonData(
@@ -219,12 +213,6 @@ interface IDegenerusGame {
     /// @param bonusTargetLevel Target level for the primary bonus coin distribution.
     function emitDailyWinningTraits(uint24 lvl, uint256 randWord, uint24 bonusTargetLevel) external;
 
-    /// @notice Consume Decimator claim on behalf of player.
-    /// @param player Address to claim for.
-    /// @param lvl Level to claim from.
-    /// @return amountWei Pro-rata payout amount.
-    function consumeDecClaim(address player, uint24 lvl) external returns (uint256 amountWei);
-
     /// @notice Permissionlessly resolve `player`'s Decimator jackpot claim (value credits to player).
     /// @param player Winner whose claim to resolve.
     /// @param lvl Level to claim from (must be the last decimator).
@@ -237,18 +225,6 @@ interface IDegenerusGame {
     /// @notice Claim terminal Decimator jackpot for caller.
     /// @dev Only callable post-GAMEOVER. Level is read from the resolved claim round.
     function claimTerminalDecimatorJackpot() external;
-
-    /// @notice Check if player can claim Decimator jackpot for a level.
-    /// @param player Address to check.
-    /// @param lvl Level to check (must be the last decimator).
-    /// @return amountWei Claimable amount (0 if not winner or already claimed).
-    /// @return winner True if player is a winner for this level.
-    function decClaimable(address player, uint24 lvl) external view returns (uint256 amountWei, bool winner);
-
-    /// @notice Record mint streak completion after a 1x price ETH quest completes.
-    /// @dev Called by GAME contract (via MintModule delegatecall).
-    /// @param player The player who completed the quest.
-    function recordMintQuestStreak(address player) external;
 
     /// @notice Physically segregate sDGNRS redemption ETH out of claimable into sDGNRS balance.
     /// @dev Access: sDGNRS only. CHECKED debit of claimableWinnings[SDGNRS] + claimablePool, then
@@ -326,13 +302,6 @@ interface IDegenerusGame {
     /// @return remaining ETH still buyable in boxes (0 once presaleOver / sold out).
     function presaleBoxEthRemaining() external view returns (uint256 remaining);
 
-    /// @notice Enqueue a player's first box deposit at an index for the box auto-open.
-    /// @dev Self-call only (invoked from the mint module first-deposit path). The
-    ///      first-deposit signal is lootboxEth amount == 0; one enqueue per (index, player).
-    /// @param index Lootbox RNG index the deposit was assigned to.
-    /// @param player Depositing player.
-    function enqueueBoxForAutoOpen(uint48 index, address player) external;
-
     /// @notice Place Full Ticket Degenerette bets (4 traits, match-based payouts).
     /// @param player The betting player (address(0) = msg.sender).
     /// @param currency Currency type (0=ETH, 1=BURNIE, 2=unsupported, 3=WWXRP).
@@ -369,14 +338,6 @@ interface IDegenerusGame {
         view
         returns (uint256 packed);
 
-    /// @notice Sample up to 4 trait burn tickets from a random trait and recent level (last 20).
-    /// @dev View function for BAF scatter selection; uses provided entropy.
-    /// @param entropy Random entropy for sampling (typically from VRF).
-    /// @return lvl The sampled level.
-    /// @return trait The sampled trait ID.
-    /// @return tickets Array of player addresses holding sampled tickets.
-    function sampleTraitTickets(uint256 entropy) external view returns (uint24 lvl, uint8 trait, address[] memory tickets);
-
     /// @notice Sample up to 4 trait burn tickets from a specific level.
     /// @dev View function for BAF scatter selection targeting a specific level.
     /// @param targetLvl The level to sample from.
@@ -403,12 +364,6 @@ interface IDegenerusGame {
 
     /// @notice Whether a player holds a deity pass.
     function hasDeityPass(address player) external view returns (bool);
-
-    /// @notice Whether a player holds any active lazy pass (Deity, Whale bundle, or Lazy).
-    /// @dev Read by the AfKing subscription afking as its pass-OR-pay gate.
-    /// @param player The player to query.
-    /// @return True if the player holds any of the three pass types.
-    function hasAnyLazyPass(address player) external view returns (bool);
 
     /// @notice Get raw bit-packed mint data for a player.
     /// @param player Player address to query.
@@ -455,4 +410,100 @@ interface IDegenerusGame {
     function getDailyHeroWager(uint24 day, uint8 quadrant, uint8 symbol) external view returns (uint256 wagerUnits);
     /// @notice Get the winning hero symbol and amount for a given day.
     function getDailyHeroWinner(uint24 day) external view returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount);
+
+    // -------------------------------------------------------------------------
+    // Raw-forwarded dispatch stubs
+    //
+    // The Game-side implementations of these functions forward msg.data to their
+    // module unchanged (signature-identical selectors), so their parameters are
+    // unnamed at the implementation site. These declarations carry the canonical
+    // named-parameter NatSpec for the Game's external ABI.
+    // -------------------------------------------------------------------------
+
+    /// @notice Configure the Chainlink VRF coordinator and subscription (one-shot wire).
+    /// @param coordinator_ Address of the VRF coordinator contract.
+    /// @param subId Chainlink VRF subscription ID.
+    /// @param keyHash_ Key hash for the VRF request.
+    function wireVrf(address coordinator_, uint256 subId, bytes32 keyHash_) external;
+
+    /// @notice Update VRF coordinator, subscription, and key hash configuration.
+    /// @param newCoordinator New VRF coordinator address.
+    /// @param newSubId New subscription ID.
+    /// @param newKeyHash New key hash for VRF requests.
+    function updateVrfCoordinatorAndSub(address newCoordinator, uint256 newSubId, bytes32 newKeyHash) external;
+
+    /// @notice VRF callback to receive random words.
+    /// @dev Coordinator-gated in the module body (delegatecall preserves msg.sender).
+    /// @param requestId The ID of the VRF request being fulfilled.
+    /// @param randomWords Array of random words returned by VRF.
+    function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external;
+
+    /// @notice The SINGLE AfKing subscription entrypoint: create / replace (dailyQuantity >= 1)
+    ///         or cancel (dailyQuantity == 0) for `player` (self when address(0)/msg.sender).
+    /// @param player Subscriber (address(0) = msg.sender).
+    /// @param drainGameCreditFirst Spend game credit before fresh ETH.
+    /// @param useTickets Deliver tickets (true) or lootbox deposits (false).
+    /// @param dailyQuantity Daily delivery quantity; 0 cancels the subscription.
+    /// @param reinvestPct Claimable reinvest percentage (0..100); 0 = no reinvest.
+    /// @param fundingSource Account funding the subscription (operator-approval gated).
+    function subscribe(
+        address player,
+        bool drainGameCreditFirst,
+        bool useTickets,
+        uint8 dailyQuantity,
+        uint8 reinvestPct,
+        address fundingSource
+    ) external payable;
+
+    /// @notice Permissionless BURNIE claim — pays each sub its accrued pendingBurnie in one
+    ///         creditFlip and zeroes it; always credits the sub, never the caller.
+    /// @param subs Subscribers to pay out.
+    function claimAfkingBurnie(address[] calldata subs) external;
+
+    /// @notice Affiliate-only atomic read-and-zero of a sub's accrued affiliateBase.
+    /// @param sub The subscriber whose affiliate base is drained.
+    /// @return base The drained whole-BURNIE affiliate base (0 if already drained).
+    function drainAffiliateBase(address sub) external returns (uint256 base);
+
+    /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 BURNIE.
+    /// @param target The cursed player to cure.
+    function decurse(address target) external;
+
+    /// @notice Deity-gated smite: add a saturating curse stack to `smitee` for 200 BURNIE.
+    /// @param deityId The smiting deity's pass ID (caller must hold it).
+    /// @param smitee The player receiving the curse stack.
+    function smite(uint256 deityId, address smitee) external;
+
+    /// @notice Claim DGNRS affiliate rewards for the current level.
+    /// @param player Affiliate address to claim for (address(0) = msg.sender).
+    function claimAffiliateDgnrs(address player) external;
+
+    /// @notice Quote a far-future salvage swap WITHOUT executing (read-only in effect;
+    ///         declared non-view because the Game dispatches it via delegatecall).
+    /// @param player Ticket holder being quoted.
+    /// @param levels Far-future levels to quote.
+    /// @param quantities Ticket quantities per level (parallel to `levels`).
+    /// @return totalFaceWei Total face value of the quoted tickets.
+    /// @return totalBudget Salvage budget available against the quote.
+    /// @return ticketWei Per-ticket face value used for the quote.
+    /// @return ethCashWei ETH leg of the offer.
+    /// @return burnieTokens BURNIE leg of the offer.
+    function previewSellFarFutureTickets(
+        address player,
+        uint32[] calldata levels,
+        uint256[] calldata quantities
+    )
+        external
+        returns (
+            uint256 totalFaceWei,
+            uint256 totalBudget,
+            uint256 ticketWei,
+            uint256 ethCashWei,
+            uint256 burnieTokens
+        );
+
+    /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.
+    /// @param player Claimant credited.
+    /// @param amount Total direct-half value (msg.value ETH + the stETH remainder pulled here).
+    function creditRedemptionDirect(address player, uint256 amount) external payable;
 }

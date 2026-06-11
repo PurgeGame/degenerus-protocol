@@ -21,7 +21,6 @@ import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 interface IGameRouter {
     function advanceGame() external returns (uint8 mult);
     function advanceDue() external view returns (bool);
-    function enqueueBoxForAutoOpen(uint48 index, address player) external;
 }
 
 /**
@@ -586,11 +585,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                           In-context views (CONSENT-01)
     ------------------------------------------------------------------*/
     /// @dev In-context pass-horizon read (the AFSUB pass-gating producer, D-11).
-    ///      Mirrors the Game's `lazyPassHorizon` (:1582) so the
-    ///      subscribe-time write + the process-pass crossing re-read share the exact
-    ///      horizon semantics: deity holders return the type(uint24).max sentinel;
-    ///      everyone else returns their frozenUntilLevel. Single definition (one
-    ///      canonical horizon read), called at subscribe + the crossing branch.
+    ///      The canonical horizon semantics: deity holders return the type(uint24).max
+    ///      sentinel; everyone else returns their frozenUntilLevel. Single definition
+    ///      (one canonical horizon read), called at the subscribe-time write + the
+    ///      process-pass crossing re-read so both share the exact same semantics.
     function _passHorizonOf(address player) internal view returns (uint24) {
         uint256 packed = mintPacked_[player];
         if (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) {
@@ -980,7 +978,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // First deposit for this (index, player): enqueue for the permissionless auto-open
             // cursor (the consumer gates each index on lootboxRngWordByIndex != 0, so this is
             // producer-only). The box is discovered via that cursor walk, not an event.
-            IGameRouter(address(this)).enqueueBoxForAutoOpen(index, player);
+            boxPlayers[index].push(player);
         } else {
             // Subsequent deposit at the same un-advanced index (only reachable in the
             // pre-first-advance genesis window): the frozen score and accumulated adj come

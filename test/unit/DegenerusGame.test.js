@@ -412,18 +412,6 @@ describe("DegenerusGame", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 12. recordMintQuestStreak access control
-  // ---------------------------------------------------------------------------
-  describe("recordMintQuestStreak", function () {
-    it("reverts when called by unauthorized address", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        game.connect(alice).recordMintQuestStreak(alice.address)
-      ).to.be.reverted;
-    });
-  });
-
-  // ---------------------------------------------------------------------------
   // 13. payCoinflipBountyDgnrs access control
   // ---------------------------------------------------------------------------
   describe("payCoinflipBountyDgnrs", function () {

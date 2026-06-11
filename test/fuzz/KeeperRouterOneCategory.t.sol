@@ -597,7 +597,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // ---- human box helpers (the unrewarded human autoOpen escape) ----
 
     /// @dev Buy a real human lootbox-mode deposit via the public mint API. The first deposit for
-    ///      (index, buyer) fires the `lootboxEthBase == 0` signal -> enqueueBoxForAutoOpen.
+    ///      (index, buyer) fires the `lootboxEthBase == 0` signal -> the inlined boxPlayers push.
     function _buyBox(address buyer, uint256 lootboxAmount) internal {
         vm.prank(buyer);
         game.purchase{value: lootboxAmount + 0.01 ether}(

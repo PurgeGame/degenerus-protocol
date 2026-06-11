@@ -34,7 +34,7 @@ import {QuestInfo} from "../../contracts/interfaces/IDegenerusQuests.sol";
 ///      `finalizeAfking`) and the COIN address for the `onlyCoin` progress handlers
 ///      (`handleMint`/`handleFlip`/...). State is read through the `playerQuestStates` view (streak) and
 ///      direct `vm.load` of the single-slot PlayerQuestState (RE-DERIVED via `forge inspect
-///      DegenerusQuests storageLayout`: `questPlayerState` root = slot 2; the struct packs into one
+///      DegenerusQuests storageLayout`: `questPlayerState` root = slot 1; the struct packs into one
 ///      256-bit word — lastActiveDay u24 byte-3, streak u16 byte-9, afkingActive bool byte-13).
 ///      Test-only: ZERO contracts/*.sol mutated.
 contract V56QuestNonPerturb is DeployProtocol {
@@ -43,7 +43,7 @@ contract V56QuestNonPerturb is DeployProtocol {
     // -------------------------------------------------------------------------
 
     /// @dev questPlayerState mapping root (address => PlayerQuestState, one packed 256-bit slot).
-    uint256 private constant QUEST_PLAYER_STATE_SLOT = 2;
+    uint256 private constant QUEST_PLAYER_STATE_SLOT = 1;
 
     // PlayerQuestState packed-field byte offsets within its single slot.
     uint256 private constant OFF_LAST_ACTIVE_DAY = 3;  // uint24 lastActiveDay (bytes 3..5)

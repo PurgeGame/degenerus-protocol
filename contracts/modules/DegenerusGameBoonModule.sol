@@ -60,9 +60,12 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     }
 
     /// @notice Consume a player's purchase boost and return the bonus BPS
+    /// @dev Called via nested delegatecall from MintModule during ticket purchase.
+    ///      Payable: the purchase carries its ETH as msg.value, which delegatecall
+    ///      keeps in flight through this nested dispatch.
     /// @param player The player address to consume boost for
     /// @return boostBps The bonus in basis points (0 if no boost, 500/1500/2500 otherwise)
-    function consumePurchaseBoost(address player) external returns (uint16 boostBps) {
+    function consumePurchaseBoost(address player) external payable returns (uint16 boostBps) {
         if (player == address(0)) return 0;
         BoonPacked storage bp = boonPacked[player];
         uint256 s0 = bp.slot0;

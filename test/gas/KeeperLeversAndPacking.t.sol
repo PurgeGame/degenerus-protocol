@@ -211,8 +211,8 @@ contract KeeperLeversAndPacking is DeployProtocol {
     // =========================================================================
 
     /// @notice GAS-04: the game-resident `Sub` struct packs to ONE slot (RE-DERIVED), `boxCursor`/
-    ///         `boxCursorIndex` are uint48, and the crank adds storage ONLY via `enqueueBoxForAutoOpen`
-    ///         from the first-deposit signal.
+    ///         `boxCursorIndex` are uint48, and the crank adds storage ONLY via the first-deposit
+    ///         `boxPlayers` push (inlined at the module first-deposit sites).
     /// @dev    v55 (D-351-01 RE-DERIVE): the game-resident `Sub` (DegenerusGameStorage.sol:1867) is EIGHT
     ///         fields summing to 29 used bytes (<= 32 = one slot) — the box-redesign added the per-sub
     ///         stamp fields (`score` uint16 + `amount` uint96) + the `lastOpenedDay` uint32 marker,
@@ -257,9 +257,12 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(storage_, "uint48 internal boxCursor;"), 0, "GAS-04: boxCursor is uint48");
         assertGt(_countOccurrences(storage_, "uint48 internal boxCursorIndex;"), 0, "GAS-04: boxCursorIndex is uint48");
 
-        // No new hot-path storage: enqueueBoxForAutoOpen is the ONLY crank-added storage write (the
-        // first-deposit enqueue), an onlySelf external fn — NOT on the bet/box-placement hot path.
-        assertEq(_countOccurrences(game_, "function enqueueBoxForAutoOpen("), 1, "GAS-04: single enqueueBoxForAutoOpen (first-deposit enqueue)");
+        // No new hot-path storage: the first-deposit enqueue is the ONLY crank-added storage
+        // write, inlined at the module first-deposit sites as a direct `boxPlayers[...].push`
+        // (the Game-side enqueueBoxForAutoOpen self-call stub was removed with its round trip).
+        assertEq(_countOccurrences(game_, "function enqueueBoxForAutoOpen("), 0, "GAS-04: no Game-side enqueue stub (enqueue inlined in modules)");
+        string memory mintModule_ = vm.readFile("contracts/modules/DegenerusGameMintModule.sol");
+        assertGt(_countOccurrences(mintModule_, "boxPlayers[lbIndex].push(buyer);"), 0, "GAS-04: first-deposit enqueue push present in MintModule");
     }
 
     // =========================================================================

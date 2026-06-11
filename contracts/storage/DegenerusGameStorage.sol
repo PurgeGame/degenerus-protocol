@@ -2056,7 +2056,7 @@ abstract contract DegenerusGameStorage {
         /// @dev 0 = paused / never-subscribed; minimum 1 when active.
         uint8 dailyQuantity;
         /// @dev Game-level horizon through which the sub's pass coverage extends
-        ///      (lazyPassHorizon snapshot at subscribe; refreshed on crossing;
+        ///      (_passHorizonOf snapshot at subscribe; refreshed on crossing;
         ///      deity sentinel = type(uint24).max; non-pass = 0). uint24 gives ~16.7M
         ///      levels of headroom and the deity sentinel type(uint24).max fits exactly.
         uint24 validThroughLevel;

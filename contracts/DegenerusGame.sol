@@ -280,14 +280,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      - RNG gating ensures fairness (no manipulation during VRF window)
     ///      - Batched processing prevents DoS from large queues
     ///
+    ///      The signature matches the module function exactly (identical selector), so the calldata
+    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
     function advanceGame() external returns (uint8 mult) {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_ADVANCE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameAdvanceModule.advanceGame.selector
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
         mult = abi.decode(data, (uint8));
     }
@@ -301,48 +299,35 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Wire VRF config from the VRF ADMIN contract.
     /// @dev Access: ADMIN only. Overwrites any existing config on each call.
     ///      SECURITY: Config can be changed via emergency rotation (updateVrfCoordinatorAndSub).
-    /// @param coordinator_ Chainlink VRF V2.5 coordinator address.
-    /// @param subId VRF subscription ID for LINK billing.
-    /// @param keyHash_ VRF key hash identifying the oracle and gas lane.
     /// @custom:reverts E If caller is not ADMIN.
-    function wireVrf(
-        address coordinator_,
-        uint256 subId,
-        bytes32 keyHash_
-    ) external {
+    /// @dev Signature: wireVrf(address coordinator_, uint256 subId, bytes32 keyHash_) —
+    ///      Chainlink VRF V2.5 coordinator address, VRF subscription ID for LINK billing,
+    ///      and the VRF key hash identifying the oracle and gas lane. The signature matches
+    ///      the module function exactly (identical selector), so the calldata forwards as-is —
+    ///      re-encoding here would cost contract-size headroom for no behavior change.
+    function wireVrf(address, uint256, bytes32) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_ADVANCE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameAdvanceModule.wireVrf.selector,
-                    coordinator_,
-                    subId,
-                    keyHash_
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level (v51.0).
     /// @dev Dispatches to GAME_BINGO_MODULE via delegatecall; void return.
-    /// @param level The level to claim on (uint24 storage-key width).
-    /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
-    /// @param slots Per-color positions in traitBurnTicket[level][traitId] the caller occupies.
+    ///      Signature: claimBingo(uint24 level, uint8 symbol, uint32[8] slots) — the level to
+    ///      claim on (uint24 storage-key width), the symbol 0-31 (quadrant = symbol >> 3,
+    ///      symInQ = symbol & 7), and the per-color positions in traitBurnTicket[level][traitId]
+    ///      the caller occupies. The signature matches the module function exactly (identical
+    ///      selector), so the calldata forwards as-is — re-encoding here would cost contract-size
+    ///      headroom for no behavior change.
     function claimBingo(
-        uint24 level,
-        uint8 symbol,
-        uint32[8] calldata slots
+        uint24,
+        uint8,
+        uint32[8] calldata
     ) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_BINGO_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameBingoModule.claimBingo.selector,
-                    level,
-                    symbol,
-                    slots
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
@@ -371,68 +356,59 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      non-self (OPENE-04-approved) fundingSource for an operator-funded sub, else the
     ///      subscriber (claimablePool in tandem) — so the deposit funds the bucket the
     ///      draws debit.
+    ///      Signature: subscribe(address player, bool drainGameCreditFirst, bool useTickets,
+    ///      uint8 dailyQuantity, uint8 reinvestPct, address fundingSource). The signature matches
+    ///      the module function exactly (identical selector), so the calldata forwards as-is —
+    ///      re-encoding here would cost contract-size headroom for no behavior change.
     function subscribe(
-        address player,
-        bool drainGameCreditFirst,
-        bool useTickets,
-        uint8 dailyQuantity,
-        uint8 reinvestPct,
-        address fundingSource
+        address,
+        bool,
+        bool,
+        uint8,
+        uint8,
+        address
     ) external payable {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IGameAfkingModule.subscribe.selector,
-                    player,
-                    drainGameCreditFirst,
-                    useTickets,
-                    dailyQuantity,
-                    reinvestPct,
-                    fundingSource
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
     /// @notice Unified permissionless afking router: do ONE category of pending work
     ///         (advance → afking-box open) and pay ONE bounty (PLACE-02). The bounty
     ///         credits msg.sender (preserved via delegatecall).
+    /// @dev The signature matches the module function exactly (identical selector), so the calldata
+    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
     function mintBurnie() external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(IGameAfkingModule.mintBurnie.selector)
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
     /// @notice Permissionless BURNIE claim — pays each listed sub its accrued `pendingBurnie`
     ///         (the per-delivered-day quest reward + ticket buyer-bonus) in one creditFlip,
     ///         zeroed. Always credits the sub, never the caller.
-    function claimAfkingBurnie(address[] calldata subs) external {
+    /// @dev Signature: claimAfkingBurnie(address[] subs). The signature matches the module
+    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
+    ///      the array here would cost contract-size headroom for no behavior change.
+    function claimAfkingBurnie(address[] calldata) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IGameAfkingModule.claimAfkingBurnie.selector,
-                    subs
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
     /// @notice Affiliate-only drain of a sub's accrued `affiliateBase`, zeroed and
     ///         returned to the caller. Routed from DegenerusAffiliate.claim(); the
     ///         module impl enforces the AFFILIATE-only access gate under delegatecall.
-    function drainAffiliateBase(address sub) external returns (uint256) {
+    /// @dev Signature: drainAffiliateBase(address sub). The signature matches the module
+    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
+    ///      here would cost contract-size headroom for no behavior change.
+    function drainAffiliateBase(address) external returns (uint256) {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IGameAfkingModule.drainAffiliateBase.selector, sub
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
         if (data.length == 0) revert E();
         return abi.decode(data, (uint256));
@@ -440,25 +416,25 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Permissionless paid cure of `target`'s cashout/smite curse (100 BURNIE).
     /// @dev Thin delegatecall dispatch stub into GameAfkingModule's decurse body.
-    function decurse(address target) external {
+    ///      Signature: decurse(address target). The signature matches the module function
+    ///      exactly (identical selector), so the calldata forwards as-is — re-encoding here
+    ///      would cost contract-size headroom for no behavior change.
+    function decurse(address) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(IGameAfkingModule.decurse.selector, target)
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
     /// @notice Deity-gated smite: add a curse stack to `smitee` for 200 BURNIE.
     /// @dev Thin delegatecall dispatch stub into GameAfkingModule's smite body.
-    function smite(uint256 deityId, address smitee) external {
+    ///      Signature: smite(uint256 deityId, address smitee). The signature matches the module
+    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
+    ///      here would cost contract-size headroom for no behavior change.
+    function smite(uint256, address) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IGameAfkingModule.smite.selector, deityId, smitee
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
@@ -520,15 +496,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
 
         _recordMintDataModule(player, lvl, mintUnits);
-    }
-
-    /// @notice Record mint streak completion after a 1x price ETH quest completes.
-    /// @dev Access: GAME contract only (via MintModule delegatecall).
-    /// @param player The player who completed the quest.
-    function recordMintQuestStreak(address player) external {
-        if (msg.sender != ContractAddresses.GAME) revert E();
-        uint24 mintLevel = _activeTicketLevel();
-        _recordMintStreakForLevel(player, mintLevel);
     }
 
     /// @notice Pay DGNRS bounty for the biggest flip record holder.
@@ -906,11 +873,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Consume coinflip boon for next coinflip stake bonus.
     /// @dev Access: COIN or COINFLIP contract only.
-    /// @param player The player whose boon to consume.
+    ///      Signature: consumeCoinflipBoon(address player) — the player whose boon to consume.
+    ///      The signature matches the module function exactly (identical selector), so the
+    ///      calldata forwards as-is — re-encoding here would cost contract-size headroom for
+    ///      no behavior change.
     /// @return boostBps The boost in basis points to apply.
     /// @custom:reverts E If caller is not COIN or COINFLIP contract.
     function consumeCoinflipBoon(
-        address player
+        address
     ) external returns (uint16 boostBps) {
         if (
             msg.sender != ContractAddresses.COIN &&
@@ -918,12 +888,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         ) revert E();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_BOON_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameBoonModule.consumeCoinflipBoon.selector,
-                    player
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
         return abi.decode(data, (uint16));
     }
@@ -942,27 +907,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameBoonModule.consumeDecimatorBoost.selector,
-                    player
-                )
-            );
-        if (!ok) _revertDelegate(data);
-        return abi.decode(data, (uint16));
-    }
-
-    /// @notice Consume purchase boost for purchase bonus.
-    /// @dev Access: self-call only (from delegate modules).
-    /// @param player The player whose boost to consume.
-    /// @return boostBps The boost in basis points to apply.
-    /// @custom:reverts E If caller is not self-call context.
-    function consumePurchaseBoost(
-        address player
-    ) external returns (uint16 boostBps) {
-        if (msg.sender != address(this)) revert E();
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_BOON_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameBoonModule.consumePurchaseBoost.selector,
                     player
                 )
             );
@@ -1183,31 +1127,23 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Record a Decimator burn for jackpot eligibility.
     /// @dev Access: COIN contract only (enforced in module).
-    /// @param player Address of the player.
-    /// @param lvl Current game level.
-    /// @param bucket Player's chosen denominator (2-12).
-    /// @param baseAmount Burn amount before multiplier.
-    /// @param multBps Multiplier in basis points (10000 = 1x).
+    ///      Signature: recordDecBurn(address player, uint24 lvl, uint8 bucket, uint256 baseAmount,
+    ///      uint256 multBps) — the player, the current game level, the player's chosen denominator
+    ///      (2-12), the burn amount before multiplier, and the multiplier in basis points
+    ///      (10000 = 1x). The signature matches the module function exactly (identical selector),
+    ///      so the calldata forwards as-is — re-encoding here would cost contract-size headroom for
+    ///      no behavior change.
     /// @return bucketUsed The bucket actually used (may differ from requested if not an improvement).
     function recordDecBurn(
-        address player,
-        uint24 lvl,
-        uint8 bucket,
-        uint256 baseAmount,
-        uint256 multBps
+        address,
+        uint24,
+        uint8,
+        uint256,
+        uint256
     ) external returns (uint8 bucketUsed) {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DECIMATOR_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule.recordDecBurn.selector,
-                    player,
-                    lvl,
-                    bucket,
-                    baseAmount,
-                    multBps
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
         if (data.length == 0) revert E();
         return abi.decode(data, (uint8));
@@ -1215,26 +1151,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Snapshot Decimator jackpot winners for deferred claims.
     /// @dev Access: Game-only (self-call).
-    /// @param poolWei Total ETH prize pool for this level.
-    /// @param lvl Level number being resolved.
-    /// @param rngWord VRF-derived randomness seed.
+    ///      Signature: runDecimatorJackpot(uint256 poolWei, uint24 lvl, uint256 rngWord) — the
+    ///      total ETH prize pool for this level, the level number being resolved, and the
+    ///      VRF-derived randomness seed. The signature matches the module function exactly
+    ///      (identical selector), so the calldata forwards as-is — re-encoding here would cost
+    ///      contract-size headroom for no behavior change.
     /// @return returnAmountWei Amount to return (non-zero if no winners or already snapshotted).
     function runDecimatorJackpot(
-        uint256 poolWei,
-        uint24 lvl,
-        uint256 rngWord
+        uint256,
+        uint24,
+        uint256
     ) external returns (uint256 returnAmountWei) {
         if (msg.sender != address(this)) revert E();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DECIMATOR_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule.runDecimatorJackpot.selector,
-                    poolWei,
-                    lvl,
-                    rngWord
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
         if (data.length == 0) revert E();
         return abi.decode(data, (uint256));
@@ -1242,26 +1173,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Execute BAF jackpot at a level-multiple-of-10 transition.
     /// @dev Access: Game-only (self-call from AdvanceModule orchestration).
-    /// @param poolWei ETH allocated to this BAF tier.
-    /// @param lvl Level being resolved.
-    /// @param rngWord VRF-derived randomness seed.
+    ///      Signature: runBafJackpot(uint256 poolWei, uint24 lvl, uint256 rngWord) — the ETH
+    ///      allocated to this BAF tier, the level being resolved, and the VRF-derived randomness
+    ///      seed. The signature matches the module function exactly (identical selector), so the
+    ///      calldata forwards as-is — re-encoding here would cost contract-size headroom for no
+    ///      behavior change.
     /// @return claimableDelta ETH added to claimable pool.
     function runBafJackpot(
-        uint256 poolWei,
-        uint24 lvl,
-        uint256 rngWord
+        uint256,
+        uint24,
+        uint256
     ) external returns (uint256 claimableDelta) {
         if (msg.sender != address(this)) revert E();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.runBafJackpot.selector,
-                    poolWei,
-                    lvl,
-                    rngWord
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
         if (data.length == 0) revert E();
         return abi.decode(data, (uint256));
@@ -1273,68 +1199,50 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Record a terminal decimator burn.
     /// @dev Delegatecalls to DecimatorModule. Access: coin contract only.
-    /// @param player Address of the player performing the burn.
-    /// @param lvl Current game level.
-    /// @param baseAmount Burn amount before time-weighted multiplier.
+    ///      Signature: recordTerminalDecBurn(address player, uint24 lvl, uint256 baseAmount) —
+    ///      the player performing the burn, the current game level, and the burn amount before
+    ///      the time-weighted multiplier. The signature matches the module function exactly
+    ///      (identical selector), so the calldata forwards as-is — re-encoding here would cost
+    ///      contract-size headroom for no behavior change.
     function recordTerminalDecBurn(
-        address player,
-        uint24 lvl,
-        uint256 baseAmount
+        address,
+        uint24,
+        uint256
     ) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DECIMATOR_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule
-                        .recordTerminalDecBurn
-                        .selector,
-                    player,
-                    lvl,
-                    baseAmount
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
     /// @notice Apply the caller's final-day terminal decimator streak boost.
     /// @dev Delegatecalls to DecimatorModule. Permissionless; credits msg.sender.
+    ///      The signature matches the module function exactly (identical selector), so the calldata
+    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
     function boostTerminalDecimator() external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DECIMATOR_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule
-                        .boostTerminalDecimator
-                        .selector
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
     /// @notice Resolve terminal decimator at GAMEOVER.
     /// @dev Access: Game-only (self-call from handleGameOverDrain).
-    /// @param poolWei Total ETH prize pool for terminal decimator resolution.
-    /// @param lvl Level number at which gameover was triggered.
-    /// @param rngWord VRF-derived randomness seed for winner selection.
+    ///      Signature: runTerminalDecimatorJackpot(uint256 poolWei, uint24 lvl, uint256 rngWord) —
+    ///      the total ETH prize pool for terminal decimator resolution, the level number at which
+    ///      gameover was triggered, and the VRF-derived randomness seed for winner selection. The
+    ///      signature matches the module function exactly (identical selector), so the calldata
+    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
     /// @return returnAmountWei Amount to return (non-zero if no winners or already resolved).
     function runTerminalDecimatorJackpot(
-        uint256 poolWei,
-        uint24 lvl,
-        uint256 rngWord
+        uint256,
+        uint24,
+        uint256
     ) external returns (uint256 returnAmountWei) {
         if (msg.sender != address(this)) revert E();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DECIMATOR_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule
-                        .runTerminalDecimatorJackpot
-                        .selector,
-                    poolWei,
-                    lvl,
-                    rngWord
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
         if (data.length == 0) revert E();
         return abi.decode(data, (uint256));
@@ -1351,26 +1259,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
     /// @dev Access: Game-only (self-call). Delegatecalls to JackpotModule.
     ///      Updates claimablePool internally — callers must NOT double-count.
-    /// @param poolWei Total ETH to distribute.
-    /// @param targetLvl Level to sample winners from.
-    /// @param rngWord VRF entropy seed.
+    ///      Signature: runTerminalJackpot(uint256 poolWei, uint24 targetLvl, uint256 rngWord) —
+    ///      the total ETH to distribute, the level to sample winners from, and the VRF entropy
+    ///      seed. The signature matches the module function exactly (identical selector), so the
+    ///      calldata forwards as-is — re-encoding here would cost contract-size headroom for no
+    ///      behavior change.
     /// @return paidWei Total ETH distributed.
     function runTerminalJackpot(
-        uint256 poolWei,
-        uint24 targetLvl,
-        uint256 rngWord
+        uint256,
+        uint24,
+        uint256
     ) external returns (uint256 paidWei) {
         if (msg.sender != address(this)) revert E();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.runTerminalJackpot.selector,
-                    poolWei,
-                    targetLvl,
-                    rngWord
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
         if (data.length == 0) revert E();
         return abi.decode(data, (uint256));
@@ -1379,67 +1282,32 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Emit DailyWinningTraits via jackpot module.
     /// @dev Access: Game-only (self-call). Delegatecalls to JackpotModule.
     ///      Used at purchaseLevel==1 where payDailyJackpot is skipped.
-    /// @param lvl Unused (preserved for signature compatibility).
-    /// @param randWord VRF entropy seed.
-    /// @param bonusTargetLevel Target level for the first coin distribution.
+    ///      Signature: emitDailyWinningTraits(uint24 lvl, uint256 randWord, uint24 bonusTargetLevel)
+    ///      — lvl is unused (preserved for signature compatibility), then the VRF entropy seed and
+    ///      the target level for the first coin distribution. The signature matches the module
+    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
+    ///      here would cost contract-size headroom for no behavior change.
     function emitDailyWinningTraits(
-        uint24 lvl,
-        uint256 randWord,
-        uint24 bonusTargetLevel
+        uint24,
+        uint256,
+        uint24
     ) external {
         if (msg.sender != address(this)) revert E();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.emitDailyWinningTraits.selector,
-                    lvl,
-                    randWord,
-                    bonusTargetLevel
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Consume Decimator claim on behalf of player.
-    /// @dev Access: Game-only (self-call).
-    /// @param player Address to claim for.
-    /// @param lvl Level to claim from.
-    /// @return amountWei Pro-rata payout amount.
-    function consumeDecClaim(
-        address player,
-        uint24 lvl
-    ) external returns (uint256 amountWei) {
-        if (msg.sender != address(this)) revert E();
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DECIMATOR_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule.consumeDecClaim.selector,
-                    player,
-                    lvl
-                )
-            );
-        if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert E();
-        return abi.decode(data, (uint256));
     }
 
     /// @notice Permissionlessly resolve `player`'s Decimator jackpot claim (value credits to player).
-    /// @param player Winner whose claim to resolve.
-    /// @param lvl Level to claim from (must be the last decimator).
-    function claimDecimatorJackpot(address player, uint24 lvl) external {
+    /// @dev Signature: claimDecimatorJackpot(address player, uint24 lvl) — the winner whose
+    ///      claim to resolve, and the level to claim from (must be the last decimator). The
+    ///      signature matches the module function exactly (identical selector), so the calldata
+    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
+    function claimDecimatorJackpot(address, uint24) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DECIMATOR_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule
-                        .claimDecimatorJackpot
-                        .selector,
-                    player,
-                    lvl
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
@@ -1460,40 +1328,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Claim terminal Decimator jackpot for caller.
     /// @dev Only callable post-GAMEOVER. Level is read from the resolved claim round.
+    ///      The signature matches the module function exactly (identical selector), so the calldata
+    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
     function claimTerminalDecimatorJackpot() external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DECIMATOR_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule
-                        .claimTerminalDecimatorJackpot
-                        .selector
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Check if player can claim Decimator jackpot for a level.
-    /// @param player Address to check.
-    /// @param lvl Level to check.
-    /// @return amountWei Claimable amount (0 if not winner or already claimed).
-    /// @return winner True if player is a winner for this level.
-    function decClaimable(
-        address player,
-        uint24 lvl
-    ) external returns (uint256 amountWei, bool winner) {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DECIMATOR_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule.decClaimable.selector,
-                    player,
-                    lvl
-                )
-            );
-        if (!ok) _revertDelegate(data);
-        return abi.decode(data, (uint256, bool));
-    }
 
     /*+========================================================================================+
       |                    CLAIMING WINNINGS (ETH)                                             |
@@ -1638,59 +1481,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      module call): the body invokes dgnrs.transferFromPool (onlyGame) and
     ///      coinflip.creditFlip (onlyFlipCreditors), both of which authorize on
     ///      msg.sender == GAME — so the logic has to execute in the Game's context.
-    /// @param player Affiliate address to claim for (address(0) = msg.sender).
-    function claimAffiliateDgnrs(address player) external {
+    ///      Signature: claimAffiliateDgnrs(address player) — the affiliate address to claim for
+    ///      (address(0) = msg.sender). The signature matches the module function exactly
+    ///      (identical selector), so the calldata forwards as-is — re-encoding here would cost
+    ///      contract-size headroom for no behavior change.
+    function claimAffiliateDgnrs(address) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_BINGO_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameBingoModule.claimAffiliateDgnrs.selector,
-                    player
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-    }
-
-    /*+======================================================================+
-      |                    LAZY PASS GATE                                  |
-      +======================================================================+*/
-
-    /// @notice Whether a player holds any active lazy pass (Deity, Whale bundle, or Lazy).
-    /// @dev True if the permanent Deity bit is set, or the whale-bundle/lazy freeze still
-    ///      covers the current level — `frozenUntilLevel >= level`, so coverage runs through
-    ///      `frozenUntilLevel` inclusively, matching the AfKing pass gate (`lazyPassHorizon`),
-    ///      which keeps a sub through `frozenUntilLevel` inclusively.
-    /// @param player Player address to check.
-    /// @return True if the player holds any of the three pass types.
-    function hasAnyLazyPass(address player) external view returns (bool) {
-        uint256 packed = mintPacked_[player];
-        if (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) return true;
-
-        uint24 frozenUntilLevel = uint24(
-            (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
-                BitPackingLib.MASK_24
-        );
-        return frozenUntilLevel >= level;
-    }
-
-    /// @dev Per-pass-type level horizon, read once at the AfKing subscribe-time
-    ///      encoding and again exactly at the validity crossing. Deity holders
-    ///      return the `uint24` sentinel max (a permanent horizon by D-11);
-    ///      lazy/whale holders return their `frozenUntilLevel`; everyone else
-    ///      returns 0. Cheap stored-field-compare in the AfKing per-iter check
-    ///      (`currentLevel <= validThroughLevel`) consumes this horizon without
-    ///      re-reading the pass on the non-crossing path (GASOPT-05 preserved).
-    /// @param player Player address to check.
-    /// @return The level horizon through which the player's pass coverage extends.
-    function lazyPassHorizon(address player) external view returns (uint24) {
-        uint256 packed = mintPacked_[player];
-        if (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) {
-            return type(uint24).max;
-        }
-        return uint24(
-            (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
-                BitPackingLib.MASK_24
-        );
     }
 
     /*+======================================================================+
@@ -1707,17 +1506,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      the bet-stake gate (>=3 placed bets at the house edge) makes every self-resolve
     ///      farm net-negative, so it is intentionally NOT pegged to the per-resolve marginal.
     uint256 private constant RESOLVE_FLAT_BURNIE = 1e18;
-
-    /// @notice Enqueue a player's first box deposit at an index for the box auto-open.
-    /// @dev Self-call only (invoked from the mint module first-deposit path via
-    ///      IDegenerusGame(address(this))). The first-deposit signal is lootboxEth amount == 0;
-    ///      the open-time zeroing (LootboxModule) is the dequeue. One SSTORE per (index, player).
-    /// @param index Lootbox RNG index the deposit was assigned to.
-    /// @param player Depositing player.
-    function enqueueBoxForAutoOpen(uint48 index, address player) external {
-        if (msg.sender != address(this)) revert E();
-        boxPlayers[index].push(player);
-    }
 
     /// @notice Permissionlessly resolve a caller-supplied list of Degenerette bets.
     /// @dev AUTO-01/02. Items are parallel arrays: item i = (players[i], betIds[i]),
@@ -2091,10 +1879,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return ticketWei Portion delivered as current-level tickets.
     /// @return ethCashWei Cash portion delivered as withdrawable ETH claimable.
     /// @return burnieTokens Cash portion delivered as BURNIE (transferred from sDGNRS).
+    /// @dev Signature: previewSellFarFutureTickets(address player, uint32[] levels,
+    ///      uint256[] quantities). The signature matches the module function exactly (identical
+    ///      selector), so the calldata forwards as-is — re-encoding the arrays here would cost
+    ///      contract-size headroom for no behavior change.
     function previewSellFarFutureTickets(
-        address player,
-        uint32[] calldata levels,
-        uint256[] calldata quantities
+        address,
+        uint32[] calldata,
+        uint256[] calldata
     )
         external
         returns (
@@ -2107,16 +1899,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_MINT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameMintModule
-                        .previewSellFarFutureTickets
-                        .selector,
-                    player,
-                    levels,
-                    quantities
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
         return
             abi.decode(
@@ -2222,55 +2005,44 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Emergency VRF coordinator rotation (governance-gated).
     /// @dev Access: ADMIN only. Stall duration enforced by Admin governance.
-    /// @param newCoordinator New VRF coordinator address.
-    /// @param newSubId New subscription ID.
-    /// @param newKeyHash New key hash for the gas lane.
+    ///      Signature: updateVrfCoordinatorAndSub(address newCoordinator, uint256 newSubId,
+    ///      bytes32 newKeyHash) — the new VRF coordinator address, the new subscription ID, and
+    ///      the new key hash for the gas lane. The signature matches the module function exactly
+    ///      (identical selector), so the calldata forwards as-is — re-encoding here would cost
+    ///      contract-size headroom for no behavior change.
     /// @custom:reverts E If caller is not ADMIN.
     function updateVrfCoordinatorAndSub(
-        address newCoordinator,
-        uint256 newSubId,
-        bytes32 newKeyHash
+        address,
+        uint256,
+        bytes32
     ) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_ADVANCE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameAdvanceModule
-                        .updateVrfCoordinatorAndSub
-                        .selector,
-                    newCoordinator,
-                    newSubId,
-                    newKeyHash
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
     /// @notice Request lootbox RNG when activity threshold and LINK conditions are met.
     /// @dev Callable by anyone. Reverts if daily RNG has not been consumed, if request
     ///      windows are locked, or if pending lootbox value is below threshold.
+    ///      The signature matches the module function exactly (identical selector), so the calldata
+    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
     function requestLootboxRng() external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_ADVANCE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameAdvanceModule.requestLootboxRng.selector
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
     /// @notice Retry a stalled mid-day lootbox RNG request after the timeout window.
     /// @dev Callable by anyone. Reverts unless a mid-day swap is committed, the VRF
     ///      callback has not delivered, and the retry timeout has elapsed.
+    ///      The signature matches the module function exactly (identical selector), so the calldata
+    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
     function retryLootboxRng() external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_ADVANCE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameAdvanceModule.retryLootboxRng.selector
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
@@ -2310,21 +2082,19 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Access: VRF coordinator only.
     ///      Applies any queued nudges before storing the word.
     ///      SECURITY: Validates requestId and coordinator address.
-    /// @param requestId The request ID to match.
-    /// @param randomWords Array containing the random word (length 1).
+    ///      Signature: rawFulfillRandomWords(uint256 requestId, uint256[] randomWords) — the
+    ///      request ID to match, and the array containing the random word (length 1). The
+    ///      coordinator-only msg.sender gate lives in the module body (delegatecall preserves
+    ///      msg.sender). The signature matches the module function exactly (identical selector),
+    ///      so the calldata forwards as-is — re-encoding the array here would cost contract-size
+    ///      headroom for no behavior change.
     function rawFulfillRandomWords(
-        uint256 requestId,
-        uint256[] calldata randomWords
+        uint256,
+        uint256[] calldata
     ) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_ADVANCE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameAdvanceModule.rawFulfillRandomWords.selector,
-                    requestId,
-                    randomWords
-                )
-            );
+            .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
@@ -2764,56 +2534,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  Used for scatter draws and promotional mechanics.                   |
       +======================================================================+*/
 
-    /// @notice Sample up to 4 trait burn tickets from a random trait and recent level.
-    /// @dev Samples from last 20 levels. Uses entropy to select level, trait, and offset.
-    ///      Returns empty array if no tickets exist for selected level/trait.
-    /// @param entropy Random seed (typically VRF word) for selection.
-    /// @return lvlSel Selected level.
-    /// @return traitSel Selected trait ID.
-    /// @return tickets Array of up to 4 ticket holder addresses.
-    function sampleTraitTickets(
-        uint256 entropy
-    )
-        external
-        view
-        returns (uint24 lvlSel, uint8 traitSel, address[] memory tickets)
-    {
-        uint24 currentLvl = level;
-        if (currentLvl <= 1) {
-            return (0, 0, new address[](0));
-        }
-
-        uint24 maxOffset = currentLvl - 1;
-        if (maxOffset > 20) maxOffset = 20;
-
-        uint256 word = entropy;
-        uint24 offset;
-        unchecked {
-            offset = uint24(word % maxOffset) + 1; // 1..maxOffset
-            lvlSel = currentLvl - offset;
-        }
-
-        traitSel = uint8(word >> 24); // use a disjoint byte from the VRF word
-        address[] storage arr = traitBurnTicket[lvlSel][traitSel];
-        uint256 len = arr.length;
-        if (len == 0) {
-            return (lvlSel, traitSel, new address[](0));
-        }
-
-        uint256 take = len > 4 ? 4 : len; // only need a small sample for scatter draws
-        tickets = new address[](take);
-        uint256 start = (word >> 40) % len; // consume another slice for the start offset
-        for (uint256 i; i < take; ) {
-            tickets[i] = arr[(start + i) % len];
-            unchecked {
-                ++i;
-            }
-        }
-    }
-
     /// @notice Sample up to 4 trait burn tickets from a specific level.
-    /// @dev Simplified variant of sampleTraitTickets for targeted level sampling.
-    ///      Used by BAF scatter to sample the next level's ticket holders.
+    /// @dev Used by BAF scatter to sample the next level's ticket holders.
     /// @param targetLvl The level to sample from.
     /// @param entropy Random seed (typically VRF word) for trait and offset selection.
     /// @return traitSel Selected trait ID.

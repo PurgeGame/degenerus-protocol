@@ -144,12 +144,6 @@ interface IDegenerusGameDecimatorModule {
         uint256 rngWord
     ) external returns (uint256 returnAmountWei);
 
-    /// @notice Consume Decimator claim on behalf of player.
-    /// @param player Address to claim for.
-    /// @param lvl Level to claim from.
-    /// @return amountWei Pro-rata payout amount.
-    function consumeDecClaim(address player, uint24 lvl) external returns (uint256 amountWei);
-
     /// @notice Permissionlessly resolve `player`'s Decimator jackpot claim (value credits to player).
     /// @param player Winner whose claim to resolve.
     /// @param lvl Level to claim from (must be the last decimator).
@@ -419,7 +413,7 @@ interface IDegenerusGameBoonModule {
     /// @notice Consumes a player's purchase boost boon
     /// @param player Address of the player
     /// @return boostBps Boost value in basis points
-    function consumePurchaseBoost(address player) external returns (uint16 boostBps);
+    function consumePurchaseBoost(address player) external payable returns (uint16 boostBps);
 
     /// @notice Consumes a player's decimator boost boon
     /// @param player Address of the player

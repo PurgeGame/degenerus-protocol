@@ -11,10 +11,10 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 /// @notice The box-creating family the ASYM-02 sweep enumerates has FOUR enqueue sites, each guarded by a
 ///         first-deposit check that pushes the (index, owner) into boxPlayers[index] for the permissionless
 ///         openBoxes() auto-opener:
-///           - mint-with-lootbox purchase           (MintModule first-deposit -> enqueueBoxForAutoOpen)
-///           - whale / lazy / deity pass bundle      (WhaleModule._recordLootboxEntry -> enqueueBoxForAutoOpen)
-///           - presale box                           (MintModule._buyPresaleBoxFor -> enqueueBoxForAutoOpen)
-///           - afking-cover subscribe-grounding box  (GameAfkingModule._recordAfkingCoverBox -> enqueueBoxForAutoOpen)
+///           - mint-with-lootbox purchase           (MintModule first-deposit -> boxPlayers push)
+///           - whale / lazy / deity pass bundle      (WhaleModule._recordLootboxEntry -> boxPlayers push)
+///           - presale box                           (MintModule._buyPresaleBoxFor -> boxPlayers push)
+///           - afking-cover subscribe-grounding box  (GameAfkingModule._recordAfkingCoverBox -> boxPlayers push)
 ///
 ///         This handler exercises each path in a randomized sequence through the REAL entrypoints (never a
 ///         vm.store of a box record — the box is created by the contract so the enqueue site actually fires),
@@ -242,7 +242,7 @@ contract BoxCreationHandler is Test {
     /// @notice Buy a presale box. Presale-box credit is normally earned 25% on buys; here it is seeded directly
     ///         (the established PresaleBoxDrain idiom — a CREDIT allowance write at slot 17, NOT a box-record
     ///         write) so the box is created reliably through the REAL buyPresaleBox entrypoint, which writes
-    ///         presaleBoxEth and enqueues via the real enqueueBoxForAutoOpen. boxAmount bounded [0.01, 2] ETH.
+    ///         presaleBoxEth and enqueues via the real inlined boxPlayers push. boxAmount bounded [0.01, 2] ETH.
     function buyPresaleBox(uint256 actorSeed, uint256 amtSeed) external useActor(actorSeed) {
         calls_presale++;
         if (game.gameOver()) return;

@@ -231,12 +231,13 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @notice Definition of a quest that is active for the current day.
-     * @dev Stored in the `activeQuests` array (one per slot).
+     * @dev In-memory working shape; both active quests are persisted together in the
+     *      single packed `activeQuestsPacked` slot (64 bits per quest record).
      *
-     * Layout (memory):
-     * +-------------+----------+-------+---------+
-     * | day (32b)   | type(8b) | flags | version |
-     * +-------------+----------+-------+---------+
+     * Record layout (low to high bits):
+     * +-------------+----------+-----------+--------------+
+     * | day (24b)   | type(8b) | flags(8b) | version(24b) |
+     * +-------------+----------+-----------+--------------+
      *
      * Version Semantics:
      * - Increments when quest is first seeded each day
@@ -247,7 +248,6 @@ contract DegenerusQuests is IDegenerusQuests {
         uint8 questType;  // One of the QUEST_TYPE_* constants
         uint8 flags;      // Difficulty flags (HIGH/VERY_HIGH)
         uint24 version;     // Bumped when quest mutates mid-day to reset stale player progress
-        // 24 bits free
     }
 
     /**
@@ -293,8 +293,11 @@ contract DegenerusQuests is IDegenerusQuests {
     //                              QUEST STORAGE
     // =========================================================================
 
-    /// @notice Active quests for the current day (indexed by slot 0/1).
-    DailyQuest[QUEST_SLOT_COUNT] private activeQuests;
+    /// @notice Active quests for the current day, packed into a single slot.
+    ///         Each quest record is 64 bits: day (24b) | questType (8b) | flags (8b) | version (24b),
+    ///         with slot 0 in bits 0-63 and slot 1 in bits 64-127 (upper 128 bits unused).
+    ///         Read/written via `_loadActiveQuests` / `_storeActiveQuests` (one SLOAD/SSTORE per pair).
+    uint256 private activeQuestsPacked;
 
     /// @notice Per-player quest state including progress, streak, and streak shields.
     mapping(address => PlayerQuestState) private questPlayerState;
@@ -314,6 +317,41 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice Per-player level quest state.
     ///         Packed: version (8b) | progress (128b) | completed (1b at bit 136).
     mapping(address => uint256) private levelQuestPlayerState;
+
+    // =========================================================================
+    //                       ACTIVE-QUEST PACK / UNPACK
+    // =========================================================================
+
+    /// @dev Materializes both active quests from the packed slot with a single SLOAD.
+    function _loadActiveQuests() private view returns (DailyQuest[QUEST_SLOT_COUNT] memory quests) {
+        uint256 packed = activeQuestsPacked;
+        quests[0] = _unpackQuestRecord(uint64(packed));
+        quests[1] = _unpackQuestRecord(uint64(packed >> 64));
+    }
+
+    /// @dev Persists both active quests into the packed slot with a single SSTORE.
+    function _storeActiveQuests(DailyQuest[QUEST_SLOT_COUNT] memory quests) private {
+        activeQuestsPacked =
+            uint256(_packQuestRecord(quests[0])) |
+            (uint256(_packQuestRecord(quests[1])) << 64);
+    }
+
+    /// @dev Decodes one 64-bit quest record: day (24b) | questType (8b) | flags (8b) | version (24b).
+    function _unpackQuestRecord(uint64 record) private pure returns (DailyQuest memory quest) {
+        quest.day = uint24(record);
+        quest.questType = uint8(record >> 24);
+        quest.flags = uint8(record >> 32);
+        quest.version = uint24(record >> 40);
+    }
+
+    /// @dev Encodes one quest into its 64-bit record: day (24b) | questType (8b) | flags (8b) | version (24b).
+    function _packQuestRecord(DailyQuest memory quest) private pure returns (uint64) {
+        return
+            uint64(quest.day) |
+            (uint64(quest.questType) << 24) |
+            (uint64(quest.flags) << 32) |
+            (uint64(quest.version) << 40);
+    }
 
     // =========================================================================
     //                              MODIFIERS
@@ -345,7 +383,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @param day Quest day identifier.
     /// @param entropy VRF entropy word.
     function rollDailyQuest(uint24 day, uint256 entropy) external onlyGame {
-        DailyQuest[QUEST_SLOT_COUNT] storage quests = activeQuests;
+        DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         if (quests[0].day == day) return;
 
         // Slot 0: always MINT_ETH — just bump day+version
@@ -359,6 +397,7 @@ contract DegenerusQuests is IDegenerusQuests {
             _canRollDecimatorQuest()
         );
         _seedQuestType(quests[1], day, bonusType);
+        _storeActiveQuests(quests);
 
         emit QuestSlotRolled(day, 0, QUEST_TYPE_MINT_ETH, 0, quests[0].version);
         emit QuestSlotRolled(day, 1, bonusType, 0, quests[1].version);
@@ -523,7 +562,7 @@ contract DegenerusQuests is IDegenerusQuests {
         onlyCoin
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
-        DailyQuest[QUEST_SLOT_COUNT] memory quests = activeQuests;
+        DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         uint24 currentDay = _currentQuestDay(quests);
         PlayerQuestState storage state = questPlayerState[player];
         if (player == address(0) || quantity == 0 || currentDay == 0) {
@@ -637,7 +676,7 @@ contract DegenerusQuests is IDegenerusQuests {
         onlyCoin
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
-        DailyQuest[QUEST_SLOT_COUNT] memory quests = activeQuests;
+        DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         uint24 currentDay = _currentQuestDay(quests);
         PlayerQuestState storage state = questPlayerState[player];
         if (player == address(0) || flipCredit == 0 || currentDay == 0) {
@@ -696,7 +735,7 @@ contract DegenerusQuests is IDegenerusQuests {
         onlyCoin
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
-        DailyQuest[QUEST_SLOT_COUNT] memory quests = activeQuests;
+        DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         uint24 currentDay = _currentQuestDay(quests);
         PlayerQuestState storage state = questPlayerState[player];
         if (player == address(0) || burnAmount == 0 || currentDay == 0) {
@@ -755,7 +794,7 @@ contract DegenerusQuests is IDegenerusQuests {
         onlyCoin
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
-        DailyQuest[QUEST_SLOT_COUNT] memory quests = activeQuests;
+        DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         uint24 currentDay = _currentQuestDay(quests);
         PlayerQuestState storage state = questPlayerState[player];
         if (player == address(0) || amount == 0 || currentDay == 0) {
@@ -824,7 +863,7 @@ contract DegenerusQuests is IDegenerusQuests {
         onlyCoin
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
-        DailyQuest[QUEST_SLOT_COUNT] memory quests = activeQuests;
+        DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         uint24 currentDay = _currentQuestDay(quests);
         PlayerQuestState storage state = questPlayerState[player];
         if (player == address(0) || currentDay == 0) {
@@ -973,7 +1012,7 @@ contract DegenerusQuests is IDegenerusQuests {
         onlyCoin
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
-        DailyQuest[QUEST_SLOT_COUNT] memory quests = activeQuests;
+        DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         uint24 currentDay = _currentQuestDay(quests);
         PlayerQuestState storage state = questPlayerState[player];
         if (player == address(0) || amount == 0 || currentDay == 0) {
@@ -1032,10 +1071,10 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @dev Returns active quests as stored (no in-memory conversions).
-     * @return local Memory copy of active quests array.
+     * @return local Memory copy of the active quest pair.
      */
     function _materializeActiveQuestsForView() private view returns (DailyQuest[QUEST_SLOT_COUNT] memory local) {
-        local = activeQuests;
+        local = _loadActiveQuests();
     }
 
     /**
@@ -1054,7 +1093,7 @@ contract DegenerusQuests is IDegenerusQuests {
         override
         returns (uint32 streak, uint24 lastCompletedDay, uint128[2] memory progress, bool[2] memory completed)
     {
-        DailyQuest[QUEST_SLOT_COUNT] memory local = activeQuests;
+        DailyQuest[QUEST_SLOT_COUNT] memory local = _loadActiveQuests();
         PlayerQuestState memory state = questPlayerState[player];
         uint24 currentDay = _currentQuestDay(local);
         streak = state.streak;
@@ -1920,14 +1959,15 @@ contract DegenerusQuests is IDegenerusQuests {
     // -------------------------------------------------------------------------
 
     /**
-     * @dev Seeds a quest slot with a new quest definition.
+     * @dev Seeds a quest slot with a new quest definition (in memory; the caller
+     *      persists the pair via `_storeActiveQuests`).
      *      Always bumps version to invalidate any stale player progress.
-     * @param quest Storage reference to the quest slot.
+     * @param quest Memory reference to the quest slot being composed.
      * @param day The quest day identifier.
      * @param questType The quest type to seed.
      */
     function _seedQuestType(
-        DailyQuest storage quest,
+        DailyQuest memory quest,
         uint24 day,
         uint8 questType
     ) private {

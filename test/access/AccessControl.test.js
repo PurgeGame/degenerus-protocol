@@ -156,13 +156,6 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(game, "E");
     });
 
-    it("recordMintQuestStreak: reverts when called by alice (only COIN)", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        game.connect(alice).recordMintQuestStreak(alice.address)
-      ).to.be.revertedWithCustomError(game, "E");
-    });
   });
 
   // ---------------------------------------------------------------------------
