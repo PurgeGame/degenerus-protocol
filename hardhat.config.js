@@ -40,7 +40,7 @@ const config = {
           viaIR: true,
           // L1 mainnet deploy target. Must be explicit: hardhat falls back to
           // paris for solc versions it does not recognize.
-          evmVersion: "prague",
+          evmVersion: "osaka",
           optimizer: {
             enabled: true,
             runs: 50
