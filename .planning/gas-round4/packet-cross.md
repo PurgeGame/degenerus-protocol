@@ -1,0 +1,28 @@
+# Gas round-4 packet — cross
+
+Line numbers reference the AUDIT-TIME source (three gas rounds ago) — locate by code content, NOT line number.
+
+
+## QUESTS-13 [redundant_external_call / warm] GameAfkingModule.sol L511 (caller); DegenerusQuests.sol L1049-L1073 (playerQuestStates) — file: modules/GameAfkingModule.sol
+**Description:** GameAfkingModule's afking-start path calls playerQuestStates(subscriber) and discards streak, lastCompletedDay, and the uint128[2] progress array — it consumes only the bool[2] completion flags (done[0]). playerQuestStates materializes both quest slots, copies the player struct, runs per-slot progress validity + native-unit conversion, and ABI-encodes the full tuple across the contract boundary.
+**Change:** Add a lean view to DegenerusQuests, e.g. `function questCompletionToday(address player) external view returns (bool slot0, bool slot1)` implemented as two _questCompleted checks against activeQuests (or a raw `(lastSyncDay == day) ? completionMask : 0` read), and switch GameAfkingModule L511 to it. Requires an interface addition in IDegenerusQuests.
+**Excerpt (audit-time):**
+```solidity
+(, , , bool[2] memory done) = questView.playerQuestStates(subscriber);
+```
+**Risk notes:** Cross-contract change (Quests + interface + AfkingModule). playerQuestStates itself must stay (interface-required, also a frontend surface). Completion-flag semantics must match _questCompleted exactly (lastSyncDay day-gate).
+**Skeptic reasoning:** Verified: GameAfkingModule L511 destructures playerQuestStates and consumes ONLY done[0] (L517; the L566 hit is a comment) — streak/lastCompletedDay/progress discarded. playerQuestStates does per-slot progress-validity checks, native-unit multiplications, and a ~6-word ABI return, all wasted. The lean getter is safe to add (contracts are pre-deploy; Quests is standalone; the questView constant is the local IDegenerusQuestView interface in DegenerusGameStorage, which can gain the method without touching IDegenerusQuests). The one correctness subtlety is faithfully replicating _questCompleted (L1553-1563): keyed on quest.day (the last ROLLED day, not 'today') + lastSyncDay == quest.day + mask bit — this matters in the pre-roll window where quest.day is still yesterday; the getter must reproduce that exact behavior, not take a caller-passed day.
+**Implementation notes:** Implement the new view inside DegenerusQuests by calling the existing _questCompleted per slot against activeQuests (do NOT shortcut with a today-parameter); add it to the IDegenerusQuestView interface in DegenerusGameStorage.sol; swap the L511 call. playerQuestStates itself stays (IDegenerusQuests-required, frontend surface).
+**Invariant impact:** none | **Risk:** low
+
+## RT-QUESTS-AFFILIATE-15 [other / warm] L511 (consumer of DegenerusQuests.sol L1049-L1073) — file: modules/GameAfkingModule.sol
+**Description:** Afking subscribe calls quests.playerQuestStates(subscriber) but consumes only done[0] (slot-0 completed today). The view loads both activeQuests slots, the full player state, and computes per-slot native-progress conversions and validity for data that is discarded (streak, lastCompletedDay, progress[2], done[1]), plus ABI-encodes the array returns.
+**Change:** Add a narrow accessor to DegenerusQuests, e.g. `function slot0CompletedToday(address player) external view returns (bool)` returning `_questCompleted(state, activeQuests[0], 0)` from one quest-slot SLOAD + one state SLOAD, and call it from GameAfkingModule L511. Requires touching both contracts (new external function + changed call site).
+**Excerpt (audit-time):**
+```solidity
+(, , , bool[2] memory done) = questView.playerQuestStates(subscriber);
+```
+**Risk notes:** Cross-contract API addition; value must replicate _questCompleted exactly (lastSyncDay == quest day && mask bit 0). Lower priority than the pure-local findings; only worth it if Quests is being recompiled anyway.
+**Skeptic reasoning:** Verified: GameAfkingModule L511 is the ONLY on-chain consumer of playerQuestStates (grep across all of contracts/: the other hits are interface declarations and a comment), and it consumes only done[0] (L517; L566 is a comment) — streak, lastCompletedDay, progress[2], done[1] are all discarded. playerQuestStates loads both activeQuests slots + player state and performs per-slot validity/conversion math plus array returndata encoding; a narrow `slot0CompletedToday` accessor returning `quest.day != 0 && state.lastSyncDay == activeQuests[0].day && (state.completionMask & 1) != 0` (the exact _questCompleted(state, quest, 0) predicate, L1553-1563) needs one activeQuests[0] SLOAD + one state SLOAD. At the call site, beginAfking (L504) has just warmed the player-state slot, so the realized saving is dominated by the avoided cold activeQuests[1] SLOAD plus math and returndata. Cross-contract change (new external view in Quests + module call-site + interface), so it carries coordination cost — only worth bundling with the other approved Quests edits, as the finding itself says.
+**Implementation notes:** Replicate _questCompleted exactly including the quest.day != 0 guard. Prefer a module-local interface over editing IDegenerusQuestView in storage/DegenerusGameStorage.sol (interfaces carry no storage, but keeping the storage file untouched avoids needless blast radius). View function is also off-chain-callable; no access gate needed.
+**Invariant impact:** none | **Risk:** low
