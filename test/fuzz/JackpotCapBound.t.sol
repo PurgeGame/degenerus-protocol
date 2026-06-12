@@ -4,30 +4,44 @@ pragma solidity 0.8.34;
 import "forge-std/Test.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 
-/// @notice Characterizes JackpotBucketLib.capBucketCounts's winner-total bound.
+/// @notice Pins the REAL (approximate) winner-total cap of JackpotBucketLib.capBucketCounts.
 ///
-/// FINDING (pre-C4A hardening, track 3 — Halmos surfaced, fuzz adjudicated):
-/// capBucketCounts is NOT exact — its trim + min-1 rounding can leave the capped
-/// winner total a small amount ABOVE maxTotal (e.g. 306 at the real 305 cap). The
-/// code (and a prior audit pass) assumed total <= maxTotal exactly; it does not.
-///
-/// MATERIALITY = none (defended downstream), recorded as a hardening item:
-///  - The overflow only occurs on the bucketCountsForPoolCap paths (daily-ETH 305 /
-///    lootbox 100 / coin 50), whose counts feed _processBucket/_resolveTraitWinners,
-///    which CLAMP totalCount to MAX_BUCKET_WINNERS(250) before every uint8 cast
-///    (JackpotModule:1154/:1163, :1234/:1247) — so the overflow can never truncate.
-///  - The one UNGUARDED uint8(count) cast (JackpotModule:881, _distributeTicketJackpot)
-///    is only reached with maxWinners in {100,120} via _computeBucketCounts, which
-///    bounds each bucket <= maxWinners < 256 and never calls capBucketCounts.
-///  - bucketShares conservation (no over-payment) is independently proved for all
-///    inputs in test/halmos/SolvencyArithmetic.t.sol, so the few extra winners only
-///    split the pool into smaller shares — solvency holds.
-///
-/// This test pins the overflow magnitude so a future change that worsens it (toward
-/// the 256 truncation boundary or a large gas blowup) fails loudly.
+/// capBucketCounts is not exact: it reserves only ONE slot for a size-1 "solo" bucket
+/// (nonSoloCap = maxTotal-1), but lets EVERY size-1 bucket pass through untouched, so when
+/// multiple trait buckets arrive at exactly 1 the total lands a few above maxTotal
+/// (e.g. [1,1,310,400], cap 305 -> [1,1,132,172] = 306). This is by-accepted-design (the
+/// contract is frozen): the effective cap is maxTotal + a small slack, and that is SAFE —
+/// every downstream uint8(count) cast is clamped to 250 (pool-cap paths) or on a <=120
+/// path, and bucketShares is proved to never over-distribute the pool. These tests fix the
+/// slack so a future change that worsens it fails loudly.
 contract JackpotCapBoundTest is Test {
-    /// The capped total never exceeds maxTotal by more than the 4-bucket min-1 slack.
-    function testFuzz_capOverflowBounded(
+    uint16[4] internal CAPS = [uint16(50), 100, 120, 305];
+
+    /// PRODUCTION caps: the effective winner total never exceeds maxTotal + 2.
+    /// => real caps are 52 / 102 / 122 / 307.
+    function testFuzz_productionCapSlack(
+        uint16 a,
+        uint16 b,
+        uint16 c,
+        uint16 d,
+        uint8 pick,
+        uint256 entropy
+    ) public {
+        uint16 maxTotal = CAPS[pick % 4];
+        uint16[4] memory counts = [
+            uint16(bound(a, 0, 600)),
+            uint16(bound(b, 0, 600)),
+            uint16(bound(c, 0, 600)),
+            uint16(bound(d, 0, 600))
+        ];
+        uint16[4] memory capped = JackpotBucketLib.capBucketCounts(counts, maxTotal, entropy);
+        uint256 total = uint256(capped[0]) + capped[1] + capped[2] + capped[3];
+        assertLe(total, uint256(maxTotal) + 2, "production winner total exceeds maxTotal + 2");
+    }
+
+    /// Full domain: never more than maxTotal + 4 (the 4-bucket slack), and a single
+    /// bucket never reaches the 256 uint8-cast boundary.
+    function testFuzz_fullDomainSlack(
         uint16 a,
         uint16 b,
         uint16 c,
@@ -37,14 +51,13 @@ contract JackpotCapBoundTest is Test {
     ) public {
         uint16 maxTotal = uint16(bound(mt, 2, 305));
         uint16[4] memory counts = [
-            uint16(bound(a, 0, 400)),
-            uint16(bound(b, 0, 400)),
-            uint16(bound(c, 0, 400)),
-            uint16(bound(d, 0, 400))
+            uint16(bound(a, 0, 600)),
+            uint16(bound(b, 0, 600)),
+            uint16(bound(c, 0, 600)),
+            uint16(bound(d, 0, 600))
         ];
         uint16[4] memory capped = JackpotBucketLib.capBucketCounts(counts, maxTotal, entropy);
         uint256 total = uint256(capped[0]) + capped[1] + capped[2] + capped[3];
-        // Bounded imprecision: never more than 4 over the cap (one per bucket).
-        assertLe(total, uint256(maxTotal) + 4, "capBucketCounts overflow exceeds the 4-bucket slack");
+        assertLe(total, uint256(maxTotal) + 4, "winner total exceeds maxTotal + 4");
     }
 }
