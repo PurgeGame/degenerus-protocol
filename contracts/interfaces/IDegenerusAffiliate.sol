@@ -9,7 +9,7 @@ interface IDegenerusAffiliate {
     /// @dev Handles referral resolution, reward scaling, and multi-tier distribution.
     ///      Fresh ETH rewards: 25% (levels 0-3), 20% (levels 4+).
     ///      Recycled ETH rewards: 5% (all levels).
-    ///      Access restricted to COIN and GAME purchase paths.
+    ///      Access restricted to GAME purchase paths.
     /// @param amount Base reward amount (18 decimals).
     /// @param code Affiliate code provided with the transaction (may be bytes32(0)).
     /// @param sender The player making the purchase.

@@ -226,14 +226,10 @@ contract BurnieCoinflip {
         _;
     }
 
-    /// @dev Restricts access to the burn-consume callers: BurnieCoin (shortfall consume for burns)
-    ///      and SDGNRS (consume its own coinflip stake during redemption settle).
+    /// @dev Restricts access to BurnieCoin, which claims/consumes a player's unclaimed
+    ///      coinflip winnings to cover transfer and burn shortfalls.
     modifier onlyBurnieCoin() {
-        address sender = msg.sender;
-        if (
-            sender != ContractAddresses.COIN &&
-            sender != ContractAddresses.SDGNRS
-        ) revert OnlyBurnieCoin();
+        if (msg.sender != ContractAddresses.COIN) revert OnlyBurnieCoin();
         _;
     }
 
@@ -245,19 +241,8 @@ contract BurnieCoinflip {
     /// @param player The depositor (address(0) or msg.sender for self-deposit, otherwise operator-approved).
     /// @param amount Amount of BURNIE to deposit (min 100 BURNIE, or 0 to settle pending claims).
     function depositCoinflip(address player, uint256 amount) external {
-        address caller;
-        bool directDeposit;
-        if (player == address(0) || player == msg.sender) {
-            caller = msg.sender;
-            directDeposit = true;
-        } else {
-            if (!degenerusGame.isOperatorApproved(player, msg.sender)) {
-                revert NotApproved();
-            }
-            caller = player;
-            directDeposit = false;
-        }
-        _depositCoinflip(caller, amount, directDeposit);
+        address caller = _resolvePlayer(player);
+        _depositCoinflip(caller, amount, caller == msg.sender);
     }
 
     /// @dev Internal deposit for daily coinflip mode.
@@ -275,8 +260,12 @@ contract BurnieCoinflip {
         }
 
         uint256 mintable = _claimCoinflipsInternal(caller, false);
+        // storedAfter mirrors claimableStored through this frame; no call below can
+        // mutate it (burnForCoinflip and handleFlip never reach a claimable writer).
+        uint128 storedAfter = state.claimableStored;
         if (mintable != 0) {
-            state.claimableStored = uint128(uint256(state.claimableStored) + mintable);
+            storedAfter = uint128(uint256(storedAfter) + mintable);
+            state.claimableStored = storedAfter;
         }
 
         if (amount == 0) {
@@ -307,7 +296,7 @@ contract BurnieCoinflip {
         uint256 creditedFlip = amount + questReward;
         uint256 rollAmount = state.autoRebuyEnabled
             ? state.autoRebuyCarry
-            : uint256(state.claimableStored);
+            : uint256(storedAfter);
         uint256 rebetAmount = creditedFlip <= rollAmount
             ? creditedFlip
             : rollAmount;
@@ -353,20 +342,6 @@ contract BurnieCoinflip {
         address player,
         uint256 amount
     ) external onlyBurnieCoin returns (uint256 claimed) {
-        return _claimCoinflipsAmount(player, amount, true);
-    }
-
-    /// @notice Claim coinflip winnings for sDGNRS redemption (skips RNG lock).
-    /// @dev Access: sDGNRS only. Used during claimRedemption() when wallet balance
-    ///      is insufficient and coinflip winnings need to be sourced.
-    /// @param player The player whose coinflip winnings to claim.
-    /// @param amount Maximum BURNIE to claim.
-    /// @return claimed Actual amount of BURNIE minted and claimed.
-    function claimCoinflipsForRedemption(
-        address player,
-        uint256 amount
-    ) external returns (uint256 claimed) {
-        if (msg.sender != ContractAddresses.SDGNRS) revert OnlyStakedDegenerusStonk();
         return _claimCoinflipsAmount(player, amount, true);
     }
 
@@ -559,7 +534,6 @@ contract BurnieCoinflip {
         // load-bearing for advanceGame — the daily coinflip resolution auto-claims sDGNRS here,
         // and skipping the BAF section keeps that path off the rngLocked guard below.
         if (winningBafCredit != 0 && player != ContractAddresses.SDGNRS) {
-            uint24 cachedLevel = game.level();
             (
                 uint24 purchaseLevel_,
                 bool inJackpotPhase,
@@ -567,10 +541,17 @@ contract BurnieCoinflip {
                 bool rngLocked_,
 
             ) = game.purchaseInfo();
-            bool over = game.gameOver();
+            // The active ticket level is level+1 during the purchase phase and level
+            // during the jackpot phase, so the game level derives from the same
+            // atomic purchaseInfo snapshot (purchaseLevel_ >= 1 outside jackpot phase).
+            uint24 cachedLevel = inJackpotPhase
+                ? purchaseLevel_
+                : purchaseLevel_ - 1;
+            // lastPurchaseDay_ is true only outside the jackpot phase, so it alone
+            // restricts this guard to purchase-phase states. No game-over state can
+            // reach it: every gameOver latch leaves jackpotPhaseFlag set or
+            // lastPurchaseDay false, and neither is ever written again post-latch.
             if (
-                !inJackpotPhase &&
-                !over &&
                 lastPurchaseDay_ &&
                 rngLocked_ &&
                 cachedLevel != 0 &&
@@ -579,9 +560,9 @@ contract BurnieCoinflip {
                 revert RngLocked();
             }
             uint24 bafLevel = cachedLevel;
-            if (!inJackpotPhase && !over) {
+            if (!inJackpotPhase) {
                 bafLevel = purchaseLevel_;
-            } else if (inJackpotPhase && cachedLevel != 0 && cachedLevel % 10 == 0) {
+            } else if (cachedLevel != 0 && cachedLevel % 10 == 0) {
                 bafLevel = cachedLevel + 1;
             }
             uint24 bafLvl = _bafBracketLevel(bafLevel);
@@ -650,8 +631,8 @@ contract BurnieCoinflip {
             if (recordAmount > record && !game.rngLocked()) {
                 address currentBountyOwner = bountyOwedTo;
                 uint128 bounty = currentBounty;
-                // Guard against overflow: cap at uint128.max for record tracking
-                if (recordAmount > type(uint128).max) revert Insufficient();
+                // recordAmount fits uint128: it was already burned via BurnieCoin._burn,
+                // whose supply accounting bounds every burn amount to uint128.
                 biggestFlipEver = uint128(recordAmount);
                 emit BiggestFlipUpdated(player, recordAmount);
 
@@ -685,10 +666,10 @@ contract BurnieCoinflip {
         uint256 takeProfit
     ) external {
         bool fromGame = msg.sender == ContractAddresses.GAME;
-        if (player == address(0)) {
-            player = msg.sender;
-        } else if (!fromGame && player != msg.sender) {
-            _requireApproved(player);
+        if (fromGame) {
+            if (player == address(0)) player = msg.sender;
+        } else {
+            player = _resolvePlayer(player);
         }
         _setCoinflipAutoRebuy(player, enabled, takeProfit, !fromGame);
     }
@@ -722,19 +703,11 @@ contract BurnieCoinflip {
                 state.autoRebuyStop = uint128(takeProfit);
                 emit CoinflipAutoRebuyStopSet(player, takeProfit);
             } else {
-                if (strict) {
-                    state.autoRebuyStop = uint128(takeProfit);
-                    state.autoRebuyEnabled = true;
-                    state.autoRebuyStartDay = state.lastClaim;
-                    emit CoinflipAutoRebuyStopSet(player, takeProfit);
-                    emit CoinflipAutoRebuyToggled(player, true);
-                } else {
-                    state.autoRebuyEnabled = true;
-                    state.autoRebuyStartDay = state.lastClaim;
-                    emit CoinflipAutoRebuyToggled(player, true);
-                    state.autoRebuyStop = uint128(takeProfit);
-                    emit CoinflipAutoRebuyStopSet(player, takeProfit);
-                }
+                state.autoRebuyStop = uint128(takeProfit);
+                state.autoRebuyEnabled = true;
+                state.autoRebuyStartDay = state.lastClaim;
+                emit CoinflipAutoRebuyStopSet(player, takeProfit);
+                emit CoinflipAutoRebuyToggled(player, true);
             }
         } else {
             mintable = _claimCoinflipsInternal(player, true);
@@ -1112,17 +1085,20 @@ contract BurnieCoinflip {
     {
         (
             ,
-            bool inJackpotPhase,
+            ,
             bool lastPurchaseDay_,
             bool rngLocked_,
 
         ) = degenerusGame.purchaseInfo();
         // Early-return on the purchaseInfo flags so normal days cost a single
-        // external read; level/gameOver are only consulted once those pass.
-        if (inJackpotPhase || !lastPurchaseDay_ || !rngLocked_) return false;
+        // external read; level is only consulted once those pass.
+        // lastPurchaseDay_ is true only outside the jackpot phase, so it alone
+        // restricts the lock to purchase-phase states. No game-over state can
+        // reach here: every gameOver latch leaves jackpotPhaseFlag set or
+        // lastPurchaseDay false, and neither is ever written again post-latch.
+        if (!lastPurchaseDay_ || !rngLocked_) return false;
         uint24 lvl = degenerusGame.level();
-        if (lvl == 0 || lvl % 10 != 0) return false;
-        locked = !degenerusGame.gameOver();
+        locked = lvl != 0 && lvl % 10 == 0;
     }
 
     /// @dev Calculate recycling bonus for daily flip deposits (0.75% bonus, capped at 1000 BURNIE).
@@ -1202,12 +1178,5 @@ contract BurnieCoinflip {
             }
         }
         return player;
-    }
-
-    /// @dev Check if caller is approved to act on behalf of player.
-    function _requireApproved(address player) private view {
-        if (msg.sender != player && !degenerusGame.isOperatorApproved(player, msg.sender)) {
-            revert NotApproved();
-        }
     }
 }

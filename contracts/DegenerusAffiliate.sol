@@ -22,7 +22,7 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
  *      - Leaderboard: tracks top affiliate per level for mint trait bonus
  *
  * @dev SECURITY:
- *      - Access control: payAffiliate (coin/game)
+ *      - Access control: payAffiliate (game)
  *      - Referral locking: invalid codes lock slot (REF_CODE_LOCKED sentinel)
  *      - Fixed contract addresses at deploy (no re-pointing)
  */
@@ -30,11 +30,13 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 /// @notice Interface for quest handler calls from the affiliate contract.
 interface IDegenerusQuestsAffiliate {
     /// @notice Record affiliate quest progress and return reward.
+    /// @dev Declares only the leading `reward` word of the callee's return data;
+    ///      surplus returndata is ignored per ABI decoding rules.
     /// @param player The affiliate receiving the base reward.
     /// @param amount The base affiliate amount (before quest bonus).
     /// @return reward Quest reward amount earned (0 if quest not completed).
     function handleAffiliate(address player, uint256 amount)
-        external returns (uint256 reward, uint8, uint32, bool);
+        external returns (uint256 reward);
 }
 
 /// @notice Interface for crediting FLIP stakes directly via the coinflip contract.
@@ -122,7 +124,7 @@ contract DegenerusAffiliate {
     //                              ERRORS
     // =====================================================================
 
-    /// @notice Thrown when caller is not in the authorized set (coin, game).
+    /// @notice Thrown when caller is not the game contract.
     error OnlyAuthorized();
 
 
@@ -370,7 +372,7 @@ contract DegenerusAffiliate {
      * @dev Core payout logic. Handles referral resolution, reward scaling,
      *      and multi-tier distribution.
      *
- * ACCESS: coin or game only.
+ * ACCESS: game only.
      *
      * REWARD FLOW:
      * +--------------------------------------------------------------------+
@@ -412,65 +414,50 @@ contract DegenerusAffiliate {
         // -----------------------------------------------------------------
         // ACCESS CONTROL
         // -----------------------------------------------------------------
-        // SECURITY: Only trusted contracts can distribute affiliate rewards.
-        if (
-            msg.sender != ContractAddresses.COIN &&
-            msg.sender != ContractAddresses.GAME
-        ) revert OnlyAuthorized();
+        // SECURITY: Only the game contract can distribute affiliate rewards.
+        if (msg.sender != ContractAddresses.GAME) revert OnlyAuthorized();
 
         // -----------------------------------------------------------------
         // REFERRAL RESOLUTION
         // -----------------------------------------------------------------
         bytes32 storedCode = playerReferralCode[sender];
-        AffiliateCodeInfo memory info;
+        address affiliateAddr;
+        uint8 kickbackPct;
         bool noReferrer;
-        AffiliateCodeInfo memory vaultInfo = AffiliateCodeInfo({
-            owner: ContractAddresses.VAULT,
-            kickback: 0
-        });
 
         if (storedCode == bytes32(0)) {
             // No stored code - resolve provided code or default to VAULT.
             if (code == bytes32(0)) {
-                // Blank referral: lock to VAULT as default.
+                // Blank referral: lock to VAULT as default (0% kickback).
                 _setReferralCode(sender, REF_CODE_LOCKED);
                 storedCode = AFFILIATE_CODE_VAULT;
-                info = vaultInfo;
+                affiliateAddr = ContractAddresses.VAULT;
                 noReferrer = true;
             } else {
                 // Try custom code first, then default (address-derived) code.
-                address resolved = _resolveCodeOwner(code);
+                (address resolved, uint8 resolvedKickback) = _resolveCodeInfo(code);
                 if (resolved == address(0) || resolved == sender) {
-                    // Invalid/self-referral: lock to VAULT as default.
+                    // Invalid/self-referral: lock to VAULT as default (0% kickback).
                     _setReferralCode(sender, REF_CODE_LOCKED);
                     storedCode = AFFILIATE_CODE_VAULT;
-                    info = vaultInfo;
+                    affiliateAddr = ContractAddresses.VAULT;
                     noReferrer = true;
                 } else {
                     // Valid code (custom or default): store it permanently.
                     _setReferralCode(sender, code);
-                    AffiliateCodeInfo storage customInfo = affiliateCode[code];
-                    if (customInfo.owner != address(0)) {
-                        info = customInfo;
-                    } else {
-                        // Default code: 0% kickback.
-                        info = AffiliateCodeInfo({ owner: resolved, kickback: 0 });
-                    }
+                    affiliateAddr = resolved;
+                    kickbackPct = resolvedKickback;
                     storedCode = code;
                 }
             }
         } else {
             bool infoSet;
             if (code != bytes32(0) && code != storedCode && _vaultReferralMutable(storedCode)) {
-                address resolved = _resolveCodeOwner(code);
+                (address resolved, uint8 resolvedKickback) = _resolveCodeInfo(code);
                 if (resolved != address(0) && resolved != sender) {
                     _setReferralCode(sender, code);
-                    AffiliateCodeInfo storage customInfo = affiliateCode[code];
-                    if (customInfo.owner != address(0)) {
-                        info = customInfo;
-                    } else {
-                        info = AffiliateCodeInfo({ owner: resolved, kickback: 0 });
-                    }
+                    affiliateAddr = resolved;
+                    kickbackPct = resolvedKickback;
                     storedCode = code;
                     infoSet = true;
                 }
@@ -478,25 +465,14 @@ contract DegenerusAffiliate {
             if (!infoSet) {
                 if (storedCode == REF_CODE_LOCKED) {
                     storedCode = AFFILIATE_CODE_VAULT;
-                    info = vaultInfo;
+                    affiliateAddr = ContractAddresses.VAULT;
                     noReferrer = true;
                 } else {
                     // Use the stored code (custom or default).
-                    AffiliateCodeInfo storage customInfo = affiliateCode[storedCode];
-                    if (customInfo.owner != address(0)) {
-                        info = customInfo;
-                    } else {
-                        info = AffiliateCodeInfo({ owner: _resolveCodeOwner(storedCode), kickback: 0 });
-                    }
+                    (affiliateAddr, kickbackPct) = _resolveCodeInfo(storedCode);
                 }
             }
         }
-
-        // -----------------------------------------------------------------
-        // REWARD CALCULATION SETUP
-        // -----------------------------------------------------------------
-        address affiliateAddr = info.owner;
-        uint8 kickbackPct = info.kickback;
 
         // -----------------------------------------------------------------
         // REWARD CALCULATION
@@ -559,35 +535,27 @@ contract DegenerusAffiliate {
         // DISTRIBUTION — winner-takes-all weighted roll
         // -----------------------------------------------------------------
         if (affiliateShareBase != 0) {
+            // Shared payout-roll entropy: deterministic per (day, sender, storedCode).
+            uint256 entropy = uint256(
+                keccak256(
+                    abi.encodePacked(
+                        AFFILIATE_ROLL_TAG,
+                        GameTimeLib.currentDayIndex(),
+                        sender,
+                        storedCode
+                    )
+                )
+            );
             if (noReferrer) {
                 // No real referrer — 50/50 flip between VAULT and DGNRS.
-                uint256 entropy = uint256(
-                    keccak256(
-                        abi.encodePacked(
-                            AFFILIATE_ROLL_TAG,
-                            GameTimeLib.currentDayIndex(),
-                            sender,
-                            storedCode
-                        )
-                    )
-                );
                 address winner = (entropy % 2 == 0)
                     ? ContractAddresses.VAULT
                     : ContractAddresses.DGNRS;
-                _routeAffiliateReward(winner, affiliateShareBase);
+                coinflip.creditFlip(winner, affiliateShareBase);
             } else {
                 // 75/20/5 weighted roll: affiliate, upline1, upline2.
                 // PRNG is known — accepted design tradeoff (EV-neutral, manipulation only redistributive between affiliates).
-                uint256 roll = uint256(
-                    keccak256(
-                        abi.encodePacked(
-                            AFFILIATE_ROLL_TAG,
-                            GameTimeLib.currentDayIndex(),
-                            sender,
-                            storedCode
-                        )
-                    )
-                ) % 20;
+                uint256 roll = entropy % 20;
 
                 // 0-14 = affiliate (75%), 15-18 = upline1 (20%), 19 = upline2 (5%)
                 address winner;
@@ -600,8 +568,8 @@ contract DegenerusAffiliate {
 
                 // Winner gets the full pot + quest credit for the full amount.
                 if (winner != sender) {
-                    (uint256 questReward,,,) = quests.handleAffiliate(winner, affiliateShareBase);
-                    _routeAffiliateReward(winner, affiliateShareBase + questReward);
+                    uint256 questReward = quests.handleAffiliate(winner, affiliateShareBase);
+                    coinflip.creditFlip(winner, affiliateShareBase + questReward);
                 }
             }
         }
@@ -649,7 +617,8 @@ contract DegenerusAffiliate {
         for (uint256 i; i < n; ) {
             address sub = subs[i];
             // SAME-AFFILIATE batch: every sub MUST resolve to the same direct affiliate (mixed reverts).
-            if (_referrerAddress(sub) != a) revert Insufficient();
+            // subs[0] defines `a`, so only later entries need the check.
+            if (i != 0 && _referrerAddress(sub) != a) revert Insufficient();
 
             // Atomic read-and-zero at the storage owner: a duplicate sub drains 0 the second time.
             uint256 b = afkingDrain.drainAffiliateBase(sub);
@@ -753,6 +722,8 @@ contract DegenerusAffiliate {
                 if (currLevel <= offset) break;
                 uint24 lvl = currLevel - offset;
                 sum += affiliateCoinEarned[lvl][player];
+                // Points hit the AFFILIATE_BONUS_MAX cap at 25 ether; further reads cannot change the result.
+                if (sum >= 25 ether) break;
                 ++offset;
             }
         }
@@ -801,6 +772,20 @@ contract DegenerusAffiliate {
         return address(0);
     }
 
+    /// @dev Resolve code owner and kickback with a single storage read: custom code lookup
+    ///      first, then address-derived default code (0% kickback). Owner is address(0) only
+    ///      if the code is unregistered AND not a valid default code.
+    function _resolveCodeInfo(bytes32 code) private view returns (address owner, uint8 kickback) {
+        AffiliateCodeInfo storage ci = affiliateCode[code];
+        owner = ci.owner;
+        kickback = ci.kickback;
+        if (owner == address(0) && uint256(code) <= type(uint160).max) {
+            // Default code: low 20 bytes encode the owner address directly.
+            owner = address(uint160(uint256(code)));
+            kickback = 0;
+        }
+    }
+
     /**
      * @notice Get the referrer's address for a player.
      * @dev Returns VAULT if player has no referrer or is locked to VAULT.
@@ -847,16 +832,6 @@ contract DegenerusAffiliate {
         if (playerReferralCode[player] != bytes32(0)) revert Insufficient();
         _setReferralCode(player, code_);
         emit Affiliate(0, code_, player); // 0 = player referred
-    }
-
-    /// @dev Route affiliate rewards as coinflip credit.
-    ///      Amounts are already BURNIE-denominated (MintModule converts via _ethToBurnieValue).
-    function _routeAffiliateReward(
-        address player,
-        uint256 amount
-    ) private {
-        if (player == address(0) || amount == 0) return;
-        coinflip.creditFlip(player, amount);
     }
 
     /**

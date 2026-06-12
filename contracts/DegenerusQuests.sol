@@ -16,7 +16,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  * This contract operates as an external standalone contract (NOT delegatecall)
  * called by the Degenerus ContractAddresses.COIN contract. It manages:
  *   1. Daily quest rolling using VRF entropy
- *   2. Per-player progress tracking with version-gated resets
+ *   2. Per-player progress tracking with day-gated resets
  *   3. Streak accounting with fixed rewards/targets
  *
  * Security Model
@@ -37,11 +37,10 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  *
  * Progress Freshness
  * -----------------------------------------------------------------------------
- * Each quest has a monotonic `version` field (bumped once per day when seeded, and
- * surfaced to indexers). Player progress is tagged with the day it was recorded;
- * when that day no longer matches the active quest day, stale progress is reset via
- * `_questSyncProgress`. Because a slot is only ever re-seeded on a day change, the
- * day tag alone is sufficient — no per-player version copy is kept.
+ * Player progress is tagged with the day it was recorded; when that day no longer
+ * matches the active quest day, stale progress is reset via `_questSyncProgress`.
+ * Because a slot is only ever re-seeded on a day change, the day tag alone is
+ * sufficient — no per-player version copy is kept.
  *
  * Streak System
  * -----------------------------------------------------------------------------
@@ -235,19 +234,13 @@ contract DegenerusQuests is IDegenerusQuests {
      *      single packed `activeQuestsPacked` slot (64 bits per quest record).
      *
      * Record layout (low to high bits):
-     * +-------------+----------+-----------+--------------+
-     * | day (24b)   | type(8b) | flags(8b) | version(24b) |
-     * +-------------+----------+-----------+--------------+
-     *
-     * Version Semantics:
-     * - Increments when quest is first seeded each day
-     * - Player progress is invalidated when version mismatches
+     * +-------------+----------+
+     * | day (24b)   | type(8b) |
+     * +-------------+----------+
      */
     struct DailyQuest {
         uint24 day;       // Quest day identifier (derived by caller, not block timestamp)
         uint8 questType;  // One of the QUEST_TYPE_* constants
-        uint8 flags;      // Difficulty flags (HIGH/VERY_HIGH)
-        uint24 version;     // Bumped when quest mutates mid-day to reset stale player progress
     }
 
     /**
@@ -294,7 +287,7 @@ contract DegenerusQuests is IDegenerusQuests {
     // =========================================================================
 
     /// @notice Active quests for the current day, packed into a single slot.
-    ///         Each quest record is 64 bits: day (24b) | questType (8b) | flags (8b) | version (24b),
+    ///         Each quest record is 64 bits: day (24b) | questType (8b), upper record bits unused,
     ///         with slot 0 in bits 0-63 and slot 1 in bits 64-127 (upper 128 bits unused).
     ///         Read/written via `_loadActiveQuests` / `_storeActiveQuests` (one SLOAD/SSTORE per pair).
     uint256 private activeQuestsPacked;
@@ -302,12 +295,9 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice Per-player quest state including progress, streak, and streak shields.
     mapping(address => PlayerQuestState) private questPlayerState;
 
-    /// @notice Monotonically increasing version counter for daily quest invalidation.
-    uint24 private questVersionCounter = 1;
-
     /// @notice Active level quest type (1-9). Zero means no quest active.
     ///         Zeroed at level transition RNG request, set when RNG arrives.
-    ///         Packs with questVersionCounter and levelQuestVersion in one slot.
+    ///         Packs with levelQuestVersion in one slot.
     uint8 private levelQuestType;
 
     /// @notice Version counter for level quest invalidation. Bumps on each rollLevelQuest.
@@ -336,21 +326,15 @@ contract DegenerusQuests is IDegenerusQuests {
             (uint256(_packQuestRecord(quests[1])) << 64);
     }
 
-    /// @dev Decodes one 64-bit quest record: day (24b) | questType (8b) | flags (8b) | version (24b).
+    /// @dev Decodes one 64-bit quest record: day (24b) | questType (8b).
     function _unpackQuestRecord(uint64 record) private pure returns (DailyQuest memory quest) {
         quest.day = uint24(record);
         quest.questType = uint8(record >> 24);
-        quest.flags = uint8(record >> 32);
-        quest.version = uint24(record >> 40);
     }
 
-    /// @dev Encodes one quest into its 64-bit record: day (24b) | questType (8b) | flags (8b) | version (24b).
+    /// @dev Encodes one quest into its 64-bit record: day (24b) | questType (8b).
     function _packQuestRecord(DailyQuest memory quest) private pure returns (uint64) {
-        return
-            uint64(quest.day) |
-            (uint64(quest.questType) << 24) |
-            (uint64(quest.flags) << 32) |
-            (uint64(quest.version) << 40);
+        return uint64(quest.day) | (uint64(quest.questType) << 24);
     }
 
     // =========================================================================
@@ -386,7 +370,7 @@ contract DegenerusQuests is IDegenerusQuests {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         if (quests[0].day == day) return;
 
-        // Slot 0: always MINT_ETH — just bump day+version
+        // Slot 0: always MINT_ETH — just stamp the day
         _seedQuestType(quests[0], day, QUEST_TYPE_MINT_ETH);
 
         // Slot 1: weighted random (distinct from slot 0)
@@ -399,8 +383,9 @@ contract DegenerusQuests is IDegenerusQuests {
         _seedQuestType(quests[1], day, bonusType);
         _storeActiveQuests(quests);
 
-        emit QuestSlotRolled(day, 0, QUEST_TYPE_MINT_ETH, 0, quests[0].version);
-        emit QuestSlotRolled(day, 1, bonusType, 0, quests[1].version);
+        // The version position carries the day tag — the freshness marker for the roll.
+        emit QuestSlotRolled(day, 0, QUEST_TYPE_MINT_ETH, 0, day);
+        emit QuestSlotRolled(day, 1, bonusType, 0, day);
     }
 
     /**
@@ -526,7 +511,7 @@ contract DegenerusQuests is IDegenerusQuests {
     // 1. Early-exit if player/amount invalid or no active quest day
     // 2. Sync player state (reset streak if day missed, snapshot baseStreak)
     // 3. Find matching quest slot for the action type
-    // 4. Sync slot progress (reset if day/version changed)
+    // 4. Sync slot progress (reset if day changed)
     // 5. Accumulate progress and check against fixed target
     // 6. On completion, credit rewards and check if other slot also completes
     //
@@ -539,8 +524,8 @@ contract DegenerusQuests is IDegenerusQuests {
     /**
      * @notice Handle mint progress for a player; covers both BURNIE and ETH paid mints.
      * @dev Access: COIN or COINFLIP contract only.
-     *      Iterates both slots since both could theoretically match (though in practice
-     *      the rolling logic ensures only one slot has each mint type).
+     *      Slot 0 is always the MINT_ETH quest and the slot-1 bonus roll excludes the
+     *      primary type, so each mint kind checks exactly one slot.
      * @param player The player who performed the mint.
      * @param quantity Number of tickets minted.
      * @param paidWithEth True if ETH was used (MINT_ETH quest), false for BURNIE (MINT_BURNIE).
@@ -569,89 +554,44 @@ contract DegenerusQuests is IDegenerusQuests {
 
         _questSyncState(state, player, currentDay);
 
-        uint256 totalReward;
-        bool anyCompleted;
         uint8 outQuestType = paidWithEth ? QUEST_TYPE_MINT_ETH : QUEST_TYPE_MINT_BURNIE;
         uint32 outStreak = state.streak;
 
-        // Check both slots for matching mint quest type.
-        // Level quest progress is batched into the first matching slot call;
-        // subsequent slots pass zero levelDelta to avoid double-counting.
-        bool levelQuestHandled;
-        for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
-            DailyQuest memory quest = quests[slot];
-            if (quest.day != currentDay) {
-                unchecked {
-                    ++slot;
+        // Slot 0 is always the MINT_ETH quest and the slot-1 bonus roll excludes the
+        // primary type, so each mint kind can only ever match one fixed slot:
+        // MINT_ETH -> slot 0, MINT_BURNIE -> slot 1.
+        uint8 slot = paidWithEth ? 0 : 1;
+        DailyQuest memory quest = quests[slot];
+        if (quest.day == currentDay && quest.questType == outQuestType) {
+            uint256 delta = paidWithEth ? uint256(quantity) * mintPrice : quantity;
+            uint256 target = _questTargetValue(quest, slot, mintPrice);
+            (reward, questType, streak, completed) = _questHandleProgressSlot(
+                player,
+                state,
+                quests,
+                quest,
+                slot,
+                delta,
+                target,
+                currentDay,
+                mintPrice,
+                outQuestType,
+                delta,
+                mintPrice
+            );
+            if (completed) {
+                if (!paidWithEth && reward != 0) {
+                    coinflip.creditFlip(player, reward);
                 }
-                continue;
+                return (reward, questType, streak, true);
             }
-            if (
-                (!paidWithEth && quest.questType == QUEST_TYPE_MINT_BURNIE) ||
-                (paidWithEth && quest.questType == QUEST_TYPE_MINT_ETH)
-            ) {
-                outQuestType = quest.questType;
-                if (paidWithEth) {
-                    uint256 delta = uint256(quantity) * mintPrice;
-                    uint256 target = _questTargetValue(quest, slot, mintPrice);
-                    (reward, questType, streak, completed) = _questHandleProgressSlot(
-                        player,
-                        state,
-                        quests,
-                        quest,
-                        slot,
-                        delta,
-                        target,
-                        currentDay,
-                        mintPrice,
-                        QUEST_TYPE_MINT_ETH,
-                        levelQuestHandled ? 0 : delta,
-                        mintPrice
-                    );
-                } else {
-                    uint256 target = _questTargetValue(quest, slot, mintPrice);
-                    (reward, questType, streak, completed) = _questHandleProgressSlot(
-                        player,
-                        state,
-                        quests,
-                        quest,
-                        slot,
-                        quantity,
-                        target,
-                        currentDay,
-                        mintPrice,
-                        QUEST_TYPE_MINT_BURNIE,
-                        levelQuestHandled ? 0 : quantity,
-                        mintPrice
-                    );
-                }
-                levelQuestHandled = true;
-                if (completed) {
-                    totalReward += reward;
-                    outQuestType = questType;
-                    outStreak = streak;
-                    anyCompleted = true;
-                }
-            }
-            unchecked {
-                ++slot;
-            }
+        } else if (paidWithEth) {
+            // No daily quest slot matched — still credit level quest progress
+            _handleLevelQuestProgress(player, QUEST_TYPE_MINT_ETH, uint256(quantity) * mintPrice, mintPrice);
+        } else {
+            _handleLevelQuestProgress(player, QUEST_TYPE_MINT_BURNIE, quantity, 0);
         }
-        // If no daily quest slot matched, still credit level quest progress
-        if (!levelQuestHandled) {
-            if (paidWithEth) {
-                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_ETH, uint256(quantity) * mintPrice, mintPrice);
-            } else {
-                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_BURNIE, quantity, 0);
-            }
-        }
-        if (anyCompleted) {
-            if (!paidWithEth && totalReward != 0) {
-                coinflip.creditFlip(player, totalReward);
-            }
-            return (totalReward, outQuestType, outStreak, true);
-        }
-        return (0, outQuestType, state.streak, false);
+        return (0, outQuestType, outStreak, false);
     }
 
     /**
@@ -688,9 +628,8 @@ contract DegenerusQuests is IDegenerusQuests {
             return (0, QUEST_TYPE_FLIP, state.streak, false);
         }
 
-        _questSyncProgress(state, slotIndex, currentDay);
         uint16 progressAfter = _clampedAddU16(
-            _progressOf(state, slotIndex),
+            _questSyncProgress(state, slotIndex, currentDay),
             _toStoredProgress(quest.questType, flipCredit)
         );
         _setProgressOf(state, slotIndex, progressAfter);
@@ -746,9 +685,8 @@ contract DegenerusQuests is IDegenerusQuests {
         if (slotIndex == type(uint8).max) {
             return (0, QUEST_TYPE_DECIMATOR, state.streak, false);
         }
-        _questSyncProgress(state, slotIndex, currentDay);
         uint16 progressAfter = _clampedAddU16(
-            _progressOf(state, slotIndex),
+            _questSyncProgress(state, slotIndex, currentDay),
             _toStoredProgress(quest.questType, burnAmount)
         );
         _setProgressOf(state, slotIndex, progressAfter);
@@ -805,9 +743,8 @@ contract DegenerusQuests is IDegenerusQuests {
         if (slotIndex == type(uint8).max) {
             return (0, QUEST_TYPE_AFFILIATE, state.streak, false);
         }
-        _questSyncProgress(state, slotIndex, currentDay);
         uint16 progressAfter = _clampedAddU16(
-            _progressOf(state, slotIndex),
+            _questSyncProgress(state, slotIndex, currentDay),
             _toStoredProgress(quest.questType, amount)
         );
         _setProgressOf(state, slotIndex, progressAfter);
@@ -882,60 +819,51 @@ contract DegenerusQuests is IDegenerusQuests {
 
         // --- ETH mint quest progress ---
         // Gross ETH spend on tickets + lootboxes (fresh + recycled) is credited 1:1
-        // in wei to the MINT_ETH quest.
+        // in wei to the MINT_ETH quest. Slot 0 is always the MINT_ETH quest, so only
+        // that slot can match.
         if (ethMintSpendWei != 0) {
-            bool levelQuestHandled;
-            for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
-                DailyQuest memory quest = quests[slot];
-                if (quest.day == currentDay && quest.questType == QUEST_TYPE_MINT_ETH) {
-                    outQuestType = QUEST_TYPE_MINT_ETH;
-                    uint256 target = _questTargetValue(quest, slot, mintPrice);
-                    (uint256 r, uint8 qt, uint32 s, bool c) = _questHandleProgressSlot(
-                        player, state, quests, quest, slot,
-                        ethMintSpendWei, target, currentDay, mintPrice,
-                        QUEST_TYPE_MINT_ETH, levelQuestHandled ? 0 : ethMintSpendWei,
-                        levelQuestPrice
-                    );
-                    levelQuestHandled = true;
-                    if (c) {
-                        ethMintReward += r;
-                        outQuestType = qt;
-                        outStreak = s;
-                        anyCompleted = true;
-                    }
+            DailyQuest memory quest = quests[0];
+            if (quest.day == currentDay && quest.questType == QUEST_TYPE_MINT_ETH) {
+                outQuestType = QUEST_TYPE_MINT_ETH;
+                uint256 target = _questTargetValue(quest, 0, mintPrice);
+                (uint256 r, uint8 qt, uint32 s, bool c) = _questHandleProgressSlot(
+                    player, state, quests, quest, 0,
+                    ethMintSpendWei, target, currentDay, mintPrice,
+                    QUEST_TYPE_MINT_ETH, ethMintSpendWei,
+                    levelQuestPrice
+                );
+                if (c) {
+                    ethMintReward += r;
+                    outQuestType = qt;
+                    outStreak = s;
+                    anyCompleted = true;
                 }
-                unchecked { ++slot; }
-            }
-            if (!levelQuestHandled) {
+            } else {
                 _handleLevelQuestProgress(player, QUEST_TYPE_MINT_ETH, ethMintSpendWei, levelQuestPrice);
             }
         }
 
         // --- BURNIE mint quest progress ---
+        // The slot-1 bonus roll excludes the primary MINT_ETH type, so MINT_BURNIE
+        // can only ever be the slot-1 quest.
         if (burnieMintQty != 0) {
-            bool levelQuestHandled;
-            for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
-                DailyQuest memory quest = quests[slot];
-                if (quest.day == currentDay && quest.questType == QUEST_TYPE_MINT_BURNIE) {
-                    outQuestType = QUEST_TYPE_MINT_BURNIE;
-                    uint256 target = _questTargetValue(quest, slot, 0);
-                    (uint256 r, uint8 qt, uint32 s, bool c) = _questHandleProgressSlot(
-                        player, state, quests, quest, slot,
-                        burnieMintQty, target, currentDay, 0,
-                        QUEST_TYPE_MINT_BURNIE, levelQuestHandled ? 0 : burnieMintQty,
-                        levelQuestPrice
-                    );
-                    levelQuestHandled = true;
-                    if (c) {
-                        burnieMintReward += r;
-                        outQuestType = qt;
-                        outStreak = s;
-                        anyCompleted = true;
-                    }
+            DailyQuest memory quest = quests[1];
+            if (quest.day == currentDay && quest.questType == QUEST_TYPE_MINT_BURNIE) {
+                outQuestType = QUEST_TYPE_MINT_BURNIE;
+                uint256 target = _questTargetValue(quest, 1, 0);
+                (uint256 r, uint8 qt, uint32 s, bool c) = _questHandleProgressSlot(
+                    player, state, quests, quest, 1,
+                    burnieMintQty, target, currentDay, 0,
+                    QUEST_TYPE_MINT_BURNIE, burnieMintQty,
+                    levelQuestPrice
+                );
+                if (c) {
+                    burnieMintReward += r;
+                    outQuestType = qt;
+                    outStreak = s;
+                    anyCompleted = true;
                 }
-                unchecked { ++slot; }
-            }
-            if (!levelQuestHandled) {
+            } else {
                 _handleLevelQuestProgress(player, QUEST_TYPE_MINT_BURNIE, burnieMintQty, levelQuestPrice);
             }
         }
@@ -946,9 +874,8 @@ contract DegenerusQuests is IDegenerusQuests {
 
             (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_LOOTBOX);
             if (slotIndex != type(uint8).max) {
-                _questSyncProgress(state, slotIndex, currentDay);
                 uint16 progressAfter = _clampedAddU16(
-                    _progressOf(state, slotIndex),
+                    _questSyncProgress(state, slotIndex, currentDay),
                     _toStoredProgress(quest.questType, lootBoxAmount)
                 );
                 _setProgressOf(state, slotIndex, progressAfter);
@@ -984,7 +911,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (anyCompleted) {
             return (totalReturned, outQuestType, outStreak, true);
         }
-        return (0, outQuestType != 0 ? outQuestType : quests[0].questType, state.streak, false);
+        return (0, outQuestType != 0 ? outQuestType : quests[0].questType, outStreak, false);
     }
 
     /**
@@ -1080,7 +1007,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param player The player address to query.
      * @return streak Current streak count.
      * @return lastCompletedDay Last day where a streak was credited (first slot completion).
-     * @return progress Per-slot progress values (only valid if day/version match).
+     * @return progress Per-slot progress values (only valid if the day matches).
      * @return completed Per-slot completion flags for current day.
      */
     function playerQuestStates(
@@ -1098,7 +1025,7 @@ contract DegenerusQuests is IDegenerusQuests {
         lastCompletedDay = state.lastCompletedDay;
         for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
             DailyQuest memory quest = local[slot];
-            // Only return progress if it's valid for the current quest day/version
+            // Only return progress if it's valid for the current quest day
             progress[slot] = _questProgressValid(state, quest, slot, currentDay)
                 ? uint128(_toNativeProgress(quest.questType, _progressOfMem(state, slot)))
                 : 0;
@@ -1394,15 +1321,6 @@ contract DegenerusQuests is IDegenerusQuests {
         return slot == 0 ? s.lastProgressDay0 : s.lastProgressDay1;
     }
 
-    /**
-     * @dev Increments and returns the quest version counter.
-     *      Used to invalidate stale progress when a new quest is seeded for the day.
-     * @return newVersion The new version number.
-     */
-    function _nextQuestVersion() private returns (uint24 newVersion) {
-        newVersion = questVersionCounter++;
-    }
-
     // -------------------------------------------------------------------------
     // Progress Handling
     // -------------------------------------------------------------------------
@@ -1440,9 +1358,8 @@ contract DegenerusQuests is IDegenerusQuests {
         uint256 levelDelta,
         uint256 levelQuestPrice
     ) private returns (uint256 reward, uint8 questType, uint32 streak, bool completed) {
-        _questSyncProgress(state, slot, quest.day);
         uint16 progressAfter = _clampedAddU16(
-            _progressOf(state, slot),
+            _questSyncProgress(state, slot, quest.day),
             _toStoredProgress(quest.questType, delta)
         );
         _setProgressOf(state, slot, progressAfter);
@@ -1518,28 +1435,33 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /**
-     * @dev Clears progress for a slot when the tracked day differs from the active day.
-     *      A slot is only ever re-seeded on a day change (rollDailyQuest is idempotent per
-     *      day), so the day tag alone invalidates stale progress — progress from a previous
-     *      day cannot be applied to today's quest.
+     * @dev Syncs a slot's progress day-tag and returns the effective current progress.
+     *      When the tracked day differs from the active day, stale progress is discarded:
+     *      only the day tag is written here and 0 is returned — every caller
+     *      unconditionally stores its updated progress right after, so the zero never
+     *      needs its own store. A slot is only ever re-seeded on a day change
+     *      (rollDailyQuest is idempotent per day), so the day tag alone invalidates
+     *      stale progress — progress from a previous day cannot be applied to today's
+     *      quest.
      * @param state Storage reference to player's quest state.
      * @param slot The slot index to sync.
      * @param currentDay The current quest day.
+     * @return The effective progress base for the slot (0 when stale).
      */
     function _questSyncProgress(
         PlayerQuestState storage state,
         uint8 slot,
         uint24 currentDay
-    ) private {
-        uint24 currentDay24 = uint24(currentDay);
-        if (_lastProgressDayOf(state, slot) != currentDay24) {
-            _setLastProgressDayOf(state, slot, currentDay24);
-            _setProgressOf(state, slot, 0);
+    ) private returns (uint16) {
+        if (_lastProgressDayOf(state, slot) != currentDay) {
+            _setLastProgressDayOf(state, slot, currentDay);
+            return 0;
         }
+        return _progressOf(state, slot);
     }
 
     /**
-     * @dev Progress is only valid when it matches the active quest day and version.
+     * @dev Progress is only valid when it matches the active quest day.
      * @param state Player's quest state (memory copy for view functions).
      * @param quest The quest to validate against.
      * @param slot The slot index.
@@ -1557,27 +1479,6 @@ contract DegenerusQuests is IDegenerusQuests {
         }
         uint24 questDay = uint24(quest.day);
         return _lastProgressDayOfMem(state, slot) == questDay;
-    }
-
-    /**
-     * @dev Storage-aware variant of _questProgressValid to avoid copying state to memory.
-     * @param state Player's quest state (storage).
-     * @param quest The quest to validate against.
-     * @param slot The slot index.
-     * @param currentDay The current quest day.
-     * @return True if progress is valid and should be used.
-     */
-    function _questProgressValidStorage(
-        PlayerQuestState storage state,
-        DailyQuest memory quest,
-        uint8 slot,
-        uint24 currentDay
-    ) private view returns (bool) {
-        if (quest.day == 0 || quest.day != currentDay) {
-            return false;
-        }
-        uint24 questDay = uint24(quest.day);
-        return _lastProgressDayOf(state, slot) == questDay;
     }
 
     /**
@@ -1860,6 +1761,13 @@ contract DegenerusQuests is IDegenerusQuests {
             return (reward, questType, streak, false);
         }
 
+        // A slot-1 completion is only reachable once slot 0 is already completed
+        // (every caller gates on completionMask bit 0), so there is no other slot
+        // left to complete.
+        if (slot == 1) {
+            return (reward, questType, streak, true);
+        }
+
         // Check the other slot; if it already meets the target, complete it now
         uint8 otherSlot = slot ^ 1; // XOR to flip 0↔1
         (
@@ -1934,7 +1842,10 @@ contract DegenerusQuests is IDegenerusQuests {
         uint8 slot,
         uint256 mintPrice
     ) private view returns (bool) {
-        if (!_questProgressValidStorage(state, quest, slot, quest.day)) return false;
+        // The sole caller (_maybeCompleteOther) has already verified
+        // quest.day == currentDay != 0, so progress freshness only needs the
+        // player's day-tag to match the quest day.
+        if (_lastProgressDayOf(state, slot) != quest.day) return false;
         uint256 progress = _progressOf(state, slot);
         uint256 currentPrice = mintPrice;
         if (
@@ -1958,8 +1869,8 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @dev Seeds a quest slot with a new quest definition (in memory; the caller
-     *      persists the pair via `_storeActiveQuests`).
-     *      Always bumps version to invalidate any stale player progress.
+     *      persists the pair via `_storeActiveQuests`). The new day tag invalidates
+     *      any stale player progress.
      * @param quest Memory reference to the quest slot being composed.
      * @param day The quest day identifier.
      * @param questType The quest type to seed.
@@ -1968,10 +1879,9 @@ contract DegenerusQuests is IDegenerusQuests {
         DailyQuest memory quest,
         uint24 day,
         uint8 questType
-    ) private {
+    ) private pure {
         quest.day = day;
         quest.questType = questType;
-        quest.version = _nextQuestVersion();
     }
 
     /**
@@ -2001,13 +1911,14 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Checks if a player is eligible for the level quest.
     ///      Requires (levelStreak >= 5 OR any active pass) AND (levelUnits >= 4 this level).
     /// @param player The player address to check.
+    /// @param lvl The current game level (fetched once by the caller).
     /// @return True if the player meets both gates.
-    function _isLevelQuestEligible(address player) internal view returns (bool) {
+    function _isLevelQuestEligible(address player, uint24 lvl) internal view returns (bool) {
         uint256 packed = questGame.mintPackedFor(player);
 
         // Activity gate: 4+ units minted this level
         uint24 unitsLvl = uint24(packed >> 104);
-        if (unitsLvl != questGame.level() + 1) return false;
+        if (unitsLvl != lvl + 1) return false;
         uint16 units = uint16(packed >> 228);
         if (units < 4) return false;
 
@@ -2050,7 +1961,7 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /// @dev Shared level quest progress handler called by each of the 6 handlers.
-    ///      Reads levelQuestType and levelQuestVersion (share slot with questVersionCounter)
+    ///      Reads levelQuestType and levelQuestVersion (packed in one slot)
     ///      to get both level and type. Short-circuits on type mismatch before any
     ///      player state read. Eligibility is deferred to the completion boundary —
     ///      ineligible players accumulate phantom progress that can never complete.
@@ -2086,8 +1997,10 @@ contract DegenerusQuests is IDegenerusQuests {
 
         uint256 target = _levelQuestTargetValue(lqType, mintPrice);
         if (uint256(progress) >= target) {
-            // Gate eligibility only at completion
-            if (!_isLevelQuestEligible(player)) {
+            // Gate eligibility only at completion; the level is fetched once and
+            // shared with the completion event.
+            uint24 lvl = questGame.level();
+            if (!_isLevelQuestEligible(player, lvl)) {
                 packed = uint256(currentVersion) | (uint256(progress) << 8);
                 levelQuestPlayerState[player] = packed;
                 return;
@@ -2097,7 +2010,7 @@ contract DegenerusQuests is IDegenerusQuests {
                    | (uint256(1) << 136);
             levelQuestPlayerState[player] = packed;
             coinflip.creditFlip(player, 800 ether);
-            emit LevelQuestCompleted(player, questGame.level() + 1, lqType, 800 ether);
+            emit LevelQuestCompleted(player, lvl + 1, lqType, 800 ether);
         } else {
             packed = uint256(currentVersion) | (uint256(progress) << 8);
             levelQuestPlayerState[player] = packed;
@@ -2124,6 +2037,6 @@ contract DegenerusQuests is IDegenerusQuests {
         }
 
         target = _levelQuestTargetValue(questType, questGame.mintPrice());
-        eligible = _isLevelQuestEligible(player);
+        eligible = _isLevelQuestEligible(player, questGame.level());
     }
 }
