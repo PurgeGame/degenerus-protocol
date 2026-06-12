@@ -791,22 +791,25 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         );
     }
 
-    /// @notice RM-02 structural: `_addClaimableEth` is the 2-arg deterministic credit form
-    ///         (`function _addClaimableEth(address beneficiary, uint256 weiAmount)`) — no entropy
-    ///         param, no auto-rebuy branch — confirming the jackpot ETH credit path consumes no
-    ///         VRF word and always credits claimable (the freeze-obligation retirement).
-    function testAddClaimableEthIsTwoArgNoEntropy() public view {
+    /// @notice RM-02 structural: the jackpot ETH credit path is the 2-arg deterministic
+    ///         `_creditClaimable(beneficiary, weiAmount)` storage form — no entropy param,
+    ///         no auto-rebuy branch, no module-local wrapper — confirming the credit path
+    ///         consumes no VRF word and always credits claimable (the freeze-obligation
+    ///         retirement).
+    function testClaimableCreditPathNoEntropy() public view {
         string memory src = _stripComments(
             vm.readFile("contracts/modules/DegenerusGameJackpotModule.sol")
         );
-        // The 2-arg signature is present ...
+        // Credits route through the deterministic storage helper, with no wrapper in between ...
         assertGt(
-            _countOccurrences(
-                src,
-                "function _addClaimableEth(\n        address beneficiary,\n        uint256 weiAmount\n    )"
-            ),
+            _countOccurrences(src, "_creditClaimable("),
             0,
-            "_addClaimableEth is the 2-arg (beneficiary, weiAmount) deterministic credit form"
+            "_creditClaimable is the deterministic (beneficiary, weiAmount) credit form"
+        );
+        assertEq(
+            _countOccurrences(src, "_addClaimableEth"),
+            0,
+            "no module-local credit wrapper around _creditClaimable"
         );
         // ... and the legacy entropy-threaded auto-rebuy credit symbols are gone.
         assertEq(
@@ -818,6 +821,46 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             _countOccurrences(src, "autoRebuyState"),
             0,
             "no autoRebuyState read in the credit path"
+        );
+    }
+
+    /// @notice Structural: the coinflip claim/deposit transition locks consult no game-over
+    ///         state, and the facts that make that safe are pinned in place.
+    /// @dev The RngLocked claim guard and the deposit-path transition lock both require
+    ///      purchaseInfo's `lastPurchaseDay_` (= !jackpotPhaseFlag && lastPurchaseDay), which is
+    ///      false in every game-over state: the century/decimator latch freezes
+    ///      jackpotPhaseFlag=true (set in lockstep with lastPurchaseDay=false at jackpot entry),
+    ///      the liveness latch is unreachable while lastPurchaseDay or jackpotPhaseFlag is set,
+    ///      and post-latch advances short-circuit to the final sweep so neither flag is written
+    ///      again. Each fact below failing means the gameOver-free lock shape must be re-derived.
+    function testCoinflipTransitionLocksNeedNoGameOverConsult() public view {
+        string memory flip = _stripComments(vm.readFile("contracts/BurnieCoinflip.sol"));
+        // The locks themselves consult no game-over state anywhere in the coinflip.
+        assertEq(
+            _countOccurrences(flip, ".gameOver()"),
+            0,
+            "no gameOver() consult anywhere in BurnieCoinflip (locks rely on lastPurchaseDay_)"
+        );
+
+        // Fact 1: the liveness latch cannot fire while either lock conjunct is satisfiable.
+        string memory storage_ = _stripComments(
+            vm.readFile("contracts/storage/DegenerusGameStorage.sol")
+        );
+        assertGt(
+            _countOccurrences(storage_, "if (lastPurchaseDay || jackpotPhaseFlag) return false;"),
+            0,
+            "_livenessTriggered early-returns while lastPurchaseDay or jackpotPhaseFlag is set"
+        );
+
+        // Fact 2: jackpot entry sets the flag pair in lockstep, so a century/decimator
+        // latch (which happens with jackpotPhaseFlag=true) freezes lastPurchaseDay_=false.
+        string memory adv = _stripComments(
+            vm.readFile("contracts/modules/DegenerusGameAdvanceModule.sol")
+        );
+        assertGt(
+            _countOccurrences(adv, "jackpotPhaseFlag = true;\n\n                lastPurchaseDay = false;"),
+            0,
+            "jackpot entry writes jackpotPhaseFlag=true and lastPurchaseDay=false in lockstep"
         );
     }
 

@@ -176,38 +176,69 @@ describe("JackpotNearFutureCoinFloor — Phase 279 Wave 2 TST-BUR-02", function 
     });
   });
 
-  describe("Budget-evaporation structural proof: a sub-1-BURNIE `baseAmount` floors `amount` to 0 and the existing winner-guard silently skips the emit + creditFlip", function () {
-    it("[02a] index-ordering: the `if (winner != address(0) && amount != 0)` guard precedes the `JackpotBurnieWin` emit, which precedes the `coinflip.creditFlip(winner, amount)` call", function () {
+  describe("Budget-evaporation structural proof: a sub-1-BURNIE `baseAmount` floors `amount` to 0 and the selection loop is skipped before any emit or credit", function () {
+    it("[02a] index-ordering: the `baseAmount == 0` early-return precedes the loop; inside it the winner-guard precedes the `JackpotBurnieWin` emit, which precedes the batch accumulation; the single `creditFlipBatch` call sits after the loop behind `anyWinner`", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       const body = stripLineComments(
         extractBody(source, "function _awardDailyCoinToTraitWinners(")
       );
       expect(body, "`_awardDailyCoinToTraitWinners` body not found").to.not.equal(null);
 
+      const floorReturnIdx = body.search(
+        /if\s*\(\s*baseAmount\s*==\s*0\s*\)\s*return\s*;/
+      );
       const guardIdx = body.search(
         /if\s*\(\s*winner\s*!=\s*address\(0\)\s*&&\s*amount\s*!=\s*0\s*\)/
       );
       const emitIdx = body.indexOf("emit JackpotBurnieWin(");
-      const creditIdx = body.indexOf("coinflip.creditFlip(winner, amount)");
+      const accumIdx = body.indexOf("batchPlayers[i] = winner");
+      const batchCallIdx = body.indexOf(
+        "coinflip.creditFlipBatch(batchPlayers, batchAmounts)"
+      );
+      const anyWinnerGateIdx = body.search(/if\s*\(\s*anyWinner\s*\)/);
 
+      expect(
+        floorReturnIdx,
+        "`if (baseAmount == 0) return;` floor early-return not found"
+      ).to.be.greaterThan(-1);
       expect(
         guardIdx,
         "`if (winner != address(0) && amount != 0)` guard not found"
       ).to.be.greaterThan(-1);
       expect(emitIdx, "`JackpotBurnieWin` emit not found").to.be.greaterThan(-1);
       expect(
-        creditIdx,
-        "`coinflip.creditFlip(winner, amount)` call not found"
+        accumIdx,
+        "`batchPlayers[i] = winner` batch accumulation not found"
+      ).to.be.greaterThan(-1);
+      expect(
+        batchCallIdx,
+        "`coinflip.creditFlipBatch(batchPlayers, batchAmounts)` call not found"
+      ).to.be.greaterThan(-1);
+      expect(
+        anyWinnerGateIdx,
+        "`if (anyWinner)` gate on the batch call not found"
       ).to.be.greaterThan(-1);
 
       expect(
+        floorReturnIdx,
+        "the `baseAmount == 0` early-return must precede the winner-guard so a floored budget skips the whole selection loop"
+      ).to.be.lessThan(guardIdx);
+      expect(
         guardIdx,
-        "the `amount != 0` guard must precede the `JackpotBurnieWin` emit so a floored-to-0 `amount` silently skips the emit"
+        "the `amount != 0` guard must precede the `JackpotBurnieWin` emit so a zero `amount` silently skips the emit"
       ).to.be.lessThan(emitIdx);
       expect(
         emitIdx,
-        "the `JackpotBurnieWin` emit must precede the `creditFlip` call (both inside the guard)"
-      ).to.be.lessThan(creditIdx);
+        "the `JackpotBurnieWin` emit must precede the batch accumulation (both inside the guard)"
+      ).to.be.lessThan(accumIdx);
+      expect(
+        anyWinnerGateIdx,
+        "the `anyWinner` gate must precede the batch call so an all-skipped loop makes no external call"
+      ).to.be.lessThan(batchCallIdx);
+      expect(
+        accumIdx,
+        "the batch accumulation must precede the post-loop `creditFlipBatch` call"
+      ).to.be.lessThan(batchCallIdx);
     });
   });
 

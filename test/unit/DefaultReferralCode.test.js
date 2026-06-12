@@ -44,11 +44,11 @@ function toBytes32(str) {
 }
 
 /**
- * Call payAffiliate as the coin contract (impersonation).
+ * Call payAffiliate as the game contract (impersonation).
  */
-async function payAffiliateAsCoin(
+async function payAffiliateAsGame(
   hreEthers,
-  coin,
+  game,
   affiliate,
   amount,
   code,
@@ -57,26 +57,26 @@ async function payAffiliateAsCoin(
   isFreshEth,
   lootboxActivityScore = 0
 ) {
-  const coinAddr = await coin.getAddress();
-  await hreEthers.provider.send("hardhat_impersonateAccount", [coinAddr]);
+  const gameAddr = await game.getAddress();
+  await hreEthers.provider.send("hardhat_impersonateAccount", [gameAddr]);
   await hreEthers.provider.send("hardhat_setBalance", [
-    coinAddr,
+    gameAddr,
     "0x1000000000000000000",
   ]);
-  const coinSigner = await hreEthers.getSigner(coinAddr);
+  const gameSigner = await hreEthers.getSigner(gameAddr);
   const tx = await affiliate
-    .connect(coinSigner)
+    .connect(gameSigner)
     .payAffiliate(amount, code, sender, lvl, isFreshEth, lootboxActivityScore);
-  await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [coinAddr]);
+  await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return tx;
 }
 
 /**
- * staticCall payAffiliate as coin to get the return value.
+ * staticCall payAffiliate as game to get the return value.
  */
-async function payAffiliateAsCoinStatic(
+async function payAffiliateAsGameStatic(
   hreEthers,
-  coin,
+  game,
   affiliate,
   amount,
   code,
@@ -85,17 +85,17 @@ async function payAffiliateAsCoinStatic(
   isFreshEth,
   lootboxActivityScore = 0
 ) {
-  const coinAddr = await coin.getAddress();
-  await hreEthers.provider.send("hardhat_impersonateAccount", [coinAddr]);
+  const gameAddr = await game.getAddress();
+  await hreEthers.provider.send("hardhat_impersonateAccount", [gameAddr]);
   await hreEthers.provider.send("hardhat_setBalance", [
-    coinAddr,
+    gameAddr,
     "0x1000000000000000000",
   ]);
-  const coinSigner = await hreEthers.getSigner(coinAddr);
+  const gameSigner = await hreEthers.getSigner(gameAddr);
   const result = await affiliate
-    .connect(coinSigner)
+    .connect(gameSigner)
     .payAffiliate.staticCall(amount, code, sender, lvl, isFreshEth, lootboxActivityScore);
-  await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [coinAddr]);
+  await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return result;
 }
 
@@ -213,12 +213,12 @@ describe("Default Referral Codes", function () {
   // =========================================================================
   describe("payAffiliate with default codes", function () {
     it("resolves default code on first purchase and stores it", async function () {
-      const { affiliate, coin, alice, bob } = await loadFixture(deployFullProtocol);
+      const { affiliate, game, coin, alice, bob } = await loadFixture(deployFullProtocol);
       const code = defaultCodeFor(alice.address);
 
       // First purchase by bob with alice's default code
-      await payAffiliateAsCoin(
-        hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true
+      await payAffiliateAsGame(
+        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true
       );
 
       // Bob's referrer should now be alice
@@ -226,17 +226,17 @@ describe("Default Referral Codes", function () {
     });
 
     it("subsequent purchases recall the stored default code", async function () {
-      const { affiliate, coin, alice, bob } = await loadFixture(deployFullProtocol);
+      const { affiliate, game, coin, alice, bob } = await loadFixture(deployFullProtocol);
       const code = defaultCodeFor(alice.address);
 
       // First purchase stores the code
-      await payAffiliateAsCoin(
-        hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true
+      await payAffiliateAsGame(
+        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true
       );
 
       // Second purchase with no code — should still use alice's default code
-      await payAffiliateAsCoin(
-        hre.ethers, coin, affiliate, eth(1), ZERO_BYTES32, bob.address, 1, true
+      await payAffiliateAsGame(
+        hre.ethers, game, affiliate, eth(1), ZERO_BYTES32, bob.address, 1, true
       );
 
       // Alice should have affiliate score from both purchases
@@ -245,21 +245,21 @@ describe("Default Referral Codes", function () {
     });
 
     it("returns 0 kickback for default codes (0% kickback)", async function () {
-      const { affiliate, coin, alice, bob } = await loadFixture(deployFullProtocol);
+      const { affiliate, game, coin, alice, bob } = await loadFixture(deployFullProtocol);
       const code = defaultCodeFor(alice.address);
 
-      const kickback = await payAffiliateAsCoinStatic(
-        hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true
+      const kickback = await payAffiliateAsGameStatic(
+        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true
       );
       expect(kickback).to.equal(0n);
     });
 
     it("tracks affiliate score for default code affiliates", async function () {
-      const { affiliate, coin, alice, bob } = await loadFixture(deployFullProtocol);
+      const { affiliate, game, coin, alice, bob } = await loadFixture(deployFullProtocol);
       const code = defaultCodeFor(alice.address);
 
-      await payAffiliateAsCoin(
-        hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true
+      await payAffiliateAsGame(
+        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true
       );
 
       // Fresh ETH L1 => 25% => 0.25 ETH scaled
@@ -267,12 +267,12 @@ describe("Default Referral Codes", function () {
     });
 
     it("self-referral via default code locks to VAULT", async function () {
-      const { affiliate, coin, alice } = await loadFixture(deployFullProtocol);
+      const { affiliate, game, coin, alice } = await loadFixture(deployFullProtocol);
       const selfCode = defaultCodeFor(alice.address);
 
       // Alice tries to use her own default code
-      await payAffiliateAsCoin(
-        hre.ethers, coin, affiliate, eth(1), selfCode, alice.address, 1, true
+      await payAffiliateAsGame(
+        hre.ethers, game, affiliate, eth(1), selfCode, alice.address, 1, true
       );
 
       // Should be locked to VAULT
@@ -288,7 +288,7 @@ describe("Default Referral Codes", function () {
   // =========================================================================
   describe("Upline chains with default codes", function () {
     it("default code affiliate has upline from their own referral", async function () {
-      const { affiliate, coin, alice, bob, carol } = await loadFixture(deployFullProtocol);
+      const { affiliate, game, coin, alice, bob, carol } = await loadFixture(deployFullProtocol);
 
       // Set up chain: carol referred by alice (custom code), bob referred by carol (default code)
       const aliceCustom = toBytes32("ACHAIN");
@@ -303,8 +303,8 @@ describe("Default Referral Codes", function () {
       expect(await affiliate.getReferrer(carol.address)).to.equal(alice.address);
 
       // Pay affiliate — carol gets base, alice gets upline1
-      await payAffiliateAsCoin(
-        hre.ethers, coin, affiliate, eth(1), carolDefault, bob.address, 1, true
+      await payAffiliateAsGame(
+        hre.ethers, game, affiliate, eth(1), carolDefault, bob.address, 1, true
       );
 
       // Carol should have affiliate score
@@ -312,7 +312,7 @@ describe("Default Referral Codes", function () {
     });
 
     it("default code affiliate with no referral has VAULT as upline", async function () {
-      const { affiliate, coin, alice, bob, vault } = await loadFixture(deployFullProtocol);
+      const { affiliate, game, coin, alice, bob, vault } = await loadFixture(deployFullProtocol);
       const aliceDefault = defaultCodeFor(alice.address);
 
       // Alice has never been referred — her upline should be VAULT
@@ -331,7 +331,7 @@ describe("Default Referral Codes", function () {
   // =========================================================================
   describe("Custom and default code coexistence", function () {
     it("custom code takes priority when registered", async function () {
-      const { affiliate, coin, alice, bob } = await loadFixture(deployFullProtocol);
+      const { affiliate, game, coin, alice, bob } = await loadFixture(deployFullProtocol);
 
       // Alice creates a custom code with 10% kickback
       const customCode = toBytes32("ACUSTOM");
@@ -344,14 +344,14 @@ describe("Default Referral Codes", function () {
       expect(await affiliate.getReferrer(bob.address)).to.equal(alice.address);
 
       // And should have kickback
-      const kickback = await payAffiliateAsCoinStatic(
-        hre.ethers, coin, affiliate, eth(1), customCode, bob.address, 1, true
+      const kickback = await payAffiliateAsGameStatic(
+        hre.ethers, game, affiliate, eth(1), customCode, bob.address, 1, true
       );
       expect(kickback).to.be.gt(0n);
     });
 
     it("default code gives 0 kickback vs custom code with kickback", async function () {
-      const { affiliate, coin, alice, bob, carol } = await loadFixture(deployFullProtocol);
+      const { affiliate, game, coin, alice, bob, carol } = await loadFixture(deployFullProtocol);
 
       // Custom code with 25% kickback
       const customCode = toBytes32("KICK25");
@@ -360,13 +360,13 @@ describe("Default Referral Codes", function () {
       const defaultCode = defaultCodeFor(alice.address);
 
       // Bob uses custom code
-      const customKickback = await payAffiliateAsCoinStatic(
-        hre.ethers, coin, affiliate, eth(1), customCode, bob.address, 1, true
+      const customKickback = await payAffiliateAsGameStatic(
+        hre.ethers, game, affiliate, eth(1), customCode, bob.address, 1, true
       );
 
       // Carol uses default code
-      const defaultKickback = await payAffiliateAsCoinStatic(
-        hre.ethers, coin, affiliate, eth(1), defaultCode, carol.address, 1, true
+      const defaultKickback = await payAffiliateAsGameStatic(
+        hre.ethers, game, affiliate, eth(1), defaultCode, carol.address, 1, true
       );
 
       expect(customKickback).to.be.gt(0n);
@@ -401,11 +401,11 @@ describe("Default Referral Codes", function () {
     });
 
     it("payAffiliate with unregistered high-byte code locks to VAULT", async function () {
-      const { affiliate, coin, alice, vault } = await loadFixture(deployFullProtocol);
+      const { affiliate, game, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const fakeCode = toBytes32("BOGUS");
 
-      await payAffiliateAsCoin(
-        hre.ethers, coin, affiliate, eth(1), fakeCode, alice.address, 1, true
+      await payAffiliateAsGame(
+        hre.ethers, game, affiliate, eth(1), fakeCode, alice.address, 1, true
       );
 
       expect(await affiliate.getReferrer(alice.address)).to.equal(

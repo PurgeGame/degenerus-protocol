@@ -144,9 +144,10 @@ contract KeeperLeversAndPacking is DeployProtocol {
             "GAS-02 (v55): mintBurnie does ONE CEI-last bounty creditFlip per tx (one-category router)"
         );
         // The one-category structural early-return (no advance+open bounty stacked in one tx): the advance
-        // branch then the `else` open branch — exactly one category routed per call.
+        // branch then the `else` open branch — exactly one category routed per call. The predicate is the
+        // in-context mirror of the Game's external advanceDue (same reads, no self-call round-trip).
         assertGt(
-            _countOccurrences(afking, "if (IGameRouter(address(this)).advanceDue()) {"),
+            _countOccurrences(afking, "if (_advanceDueInContext()) {"),
             0,
             "GAS-02 (v55): mintBurnie's one-category early-return (advance branch) byte-present"
         );

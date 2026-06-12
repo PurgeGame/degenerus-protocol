@@ -135,14 +135,7 @@ contract RedemptionGasTest is DeployProtocol {
             abi.encode(uint16(100), true)
         );
 
-        // Step 4: Mock claimCoinflipsForRedemption to avoid revert on BURNIE payout
-        vm.mockCall(
-            address(coinflip),
-            abi.encodeWithSelector(coinflip.claimCoinflipsForRedemption.selector),
-            abi.encode(uint256(0))
-        );
-
-        // Step 4b (v47): claim now forwards 50% of rolled ETH to the Game's `resolveRedemptionLootbox`
+        // Step 4 (v47): claim now forwards 50% of rolled ETH to the Game's `resolveRedemptionLootbox`
         // (external payable) which delegatecalls the LootboxModule materialization. That path needs a
         // seeded lootbox RNG index/word to not revert; the claim-path gas benchmark is out of scope for
         // lootbox internals (LootboxRngLifecycle.t.sol covers those), so mock it to a no-op — same
@@ -255,11 +248,6 @@ contract RedemptionGasTest is DeployProtocol {
             address(coinflip),
             abi.encodeWithSelector(coinflip.getCoinflipDayResult.selector, currentDay),
             abi.encode(uint16(100), true)
-        );
-        vm.mockCall(
-            address(coinflip),
-            abi.encodeWithSelector(coinflip.claimCoinflipsForRedemption.selector),
-            abi.encode(uint256(0))
         );
         // v47: claim forwards real ETH to the Game's external-payable resolveRedemptionLootbox; mock
         // it to a no-op so the claim-path benchmark does not measure (and revert on) lootbox internals.
