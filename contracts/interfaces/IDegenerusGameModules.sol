@@ -211,16 +211,6 @@ interface IDegenerusGameWhaleModule {
 /// @title IDegenerusGameMintModule
 /// @notice Interface for minting operations and purchase processing
 interface IDegenerusGameMintModule {
-    /// @notice Records mint data and updates Activity Score metrics
-    /// @param player Address of the minting player
-    /// @param lvl Current game level
-    /// @param mintUnits Number of units being minted
-    function recordMintData(
-        address player,
-        uint24 lvl,
-        uint32 mintUnits
-    ) external payable;
-
     /// @notice Processes a ticket and lootbox purchase
     /// @param buyer Address of the buyer
     /// @param ticketQuantity Number of tickets to purchase
@@ -384,16 +374,6 @@ interface IDegenerusGameLootboxModule {
         uint256 rngWord,
         uint16 activityScore
     ) external;
-
-    /// @notice Returns deity boon slot information
-    /// @param deity Address of the deity
-    /// @return slots Array of 3 boon slot types
-    /// @return usedMask Bitmask of which slots have been used
-    /// @return day The day these slots were generated for
-    function deityBoonSlots(address deity)
-        external
-        view
-        returns (uint8[3] memory slots, uint8 usedMask, uint24 day);
 
     /// @notice Issues a deity boon from a deity to a recipient
     /// @param deity Address of the deity issuing the boon

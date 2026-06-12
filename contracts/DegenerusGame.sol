@@ -453,17 +453,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      Prize contribution is split between nextPrizePool and futurePrizePool.
     ///
     /// @param player The player address to record mint for.
-    /// @param lvl The level at which mint is occurring.
     /// @param costWei Total cost in wei for this mint.
-    /// @param mintUnits Number of mint units purchased.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
     /// @return newClaimableBalance Player's claimable balance after deduction (0 if DirectEth).
     /// @custom:reverts E If caller is not self-call context or payment validation fails.
     function recordMint(
         address player,
-        uint24 lvl,
         uint256 costWei,
-        uint32 mintUnits,
         MintPaymentKind payKind
     ) external payable returns (uint256 newClaimableBalance) {
         if (msg.sender != address(this)) revert E();
@@ -491,8 +487,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 );
             }
         }
-
-        _recordMintDataModule(player, lvl, mintUnits);
     }
 
     /// @notice Pay DGNRS bounty for the biggest flip record holder.
@@ -1093,29 +1087,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         assembly ("memory-safe") {
             revert(add(32, reason), mload(reason))
         }
-    }
-
-    /// @dev Record mint data via mint module delegatecall.
-    ///      Updates player's mint history.
-    /// @param player Player address being credited.
-    /// @param lvl Level at which mint occurred.
-    /// @param mintUnits Number of mint units purchased.
-    function _recordMintDataModule(
-        address player,
-        uint24 lvl,
-        uint32 mintUnits
-    ) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_MINT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameMintModule.recordMintData.selector,
-                    player,
-                    lvl,
-                    mintUnits
-                )
-            );
-        if (!ok) _revertDelegate(data);
     }
 
     /*+========================================================================================+

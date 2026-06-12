@@ -22,6 +22,15 @@ interface IGameRouter {
     function advanceGame() external returns (uint8 mult);
 }
 
+/// @title IQuestCompletionView
+/// @notice Minimal quest-view surface for the day-0 grounding check: the per-slot
+///         completion flags alone, skipping the full `playerQuestStates` tuple
+///         (streak / lastCompletedDay / progress) and its per-slot validity and
+///         native-unit conversion work.
+interface IQuestCompletionView {
+    function questCompletionToday(address player) external view returns (bool slot0, bool slot1);
+}
+
 /**
  * @title GameAfkingModule
  * @author Burnie Degenerus
@@ -494,13 +503,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 s.afkCoveredThroughDay = uint24(today);
                 s.afkingStartDay = uint24(today);
 
-                (, , , bool[2] memory done) = quests.playerQuestStates(subscriber);
+                (bool done0, ) = IQuestCompletionView(address(quests)).questCompletionToday(subscriber);
                 if (s.lastOpenedDay < s.lastAutoBoughtDay) {
                     // A pending unopened box (this or a prior day) already grounds the run on a real
                     // purchase. Keep the snapshot and leave the box markers untouched so the open leg
                     // still materializes it — re-stamping here would orphan the prepaid box.
                     _setStreakBase(s, snap);
-                } else if (done[0]) {
+                } else if (done0) {
                     _setStreakBase(s, snap); // funded (manual) day-0 — keep the snapshot
                     s.lastAutoBoughtDay = uint24(today);
                     s.lastOpenedDay = uint24(today); // no pending box
@@ -554,7 +563,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                         _setStreakBase(s, 0);
                     } else {
                         // A NEW run must be grounded on a real purchase: already bought
-                        // today (the done[0] branch above) or a funded in-tx cover-buy (the
+                        // today (the done0 branch above) or a funded in-tx cover-buy (the
                         // branch above). An unfunded start would free-ride the advance gate.
                         revert MustPurchaseToBeginAfking();
                     }

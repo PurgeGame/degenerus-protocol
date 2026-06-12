@@ -1037,6 +1037,22 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /**
+     * @notice Per-slot completion flags for the active quest day — the lean form of
+     *         `playerQuestStates` for callers that need only the flags. Costs one
+     *         packed quest-pair SLOAD plus one player-state SLOAD; no streak,
+     *         progress-validity, or native-unit conversion work.
+     * @param player The player address to query.
+     * @return slot0 True if the player has completed quest slot 0 for its active day.
+     * @return slot1 True if the player has completed quest slot 1 for its active day.
+     */
+    function questCompletionToday(address player) external view returns (bool slot0, bool slot1) {
+        DailyQuest[QUEST_SLOT_COUNT] memory local = _loadActiveQuests();
+        PlayerQuestState memory state = questPlayerState[player];
+        slot0 = _questCompleted(state, local[0], 0);
+        slot1 = _questCompleted(state, local[1], 1);
+    }
+
+    /**
      * @notice Player-specific view of quests with fixed requirements and progress.
      * @dev Handles streak decay preview: if player missed a day (gap > 1), the effective
      *      streak shown is 0, matching what would happen on their next action.

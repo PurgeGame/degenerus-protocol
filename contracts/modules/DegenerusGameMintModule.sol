@@ -29,7 +29,7 @@ import {EntropyLib} from "../libraries/EntropyLib.sol";
  *
  * ## Functions
  *
- * - `recordMintData`: Track per-player mint history and update Activity Score metrics
+ * - `_recordMintData`: Track per-player mint history and update Activity Score metrics
  *
  * ## Activity Score System
  *
@@ -156,8 +156,9 @@ contract DegenerusGameMintModule is
 
     /**
      * @notice Record mint metadata and update Activity Score metrics.
-     * @dev Called via delegatecall from DegenerusGame during recordMint().
-     *      Updates the player's Activity Score metrics for tracking engagement.
+     * @dev Runs at the return point of the recordMint self-call on the ETH-purchase path
+     *      (the coin path never records mint data). Pure mintPacked_ accounting — touches
+     *      no claimable or pool state.
      *
      * @param player Address of the player making the purchase.
      * @param lvl Target level for this purchase (level+1 during purchase phase, level during jackpot phase).
@@ -174,11 +175,11 @@ contract DegenerusGameMintModule is
      * - New level with <4 units: Only track units, don't count as "minted"
      * - New level with ≥4 units: Update level count total and refresh affiliate bonus cache
      */
-    function recordMintData(
+    function _recordMintData(
         address player,
         uint24 lvl,
         uint32 mintUnits
-    ) external payable {
+    ) internal {
         // Load previous packed data
         uint256 prevData = mintPacked_[player];
         uint256 data;
@@ -419,6 +420,11 @@ contract DegenerusGameMintModule is
         uint32 used;
         uint32 processed; // Track within-player progress
 
+        // Trait-batch scratch buffers shared by every entry this call (zeroed between
+        // entries inside _raritySymbolBatch), so memory does not grow per queue entry.
+        uint32[256] memory counts;
+        uint8[256] memory touchedTraits;
+
         while (idx < total && used < writesBudget) {
             address player = queue[idx];
             uint40 packed = owedMap[player];
@@ -468,7 +474,15 @@ contract DegenerusGameMintModule is
             uint32 take = owed > maxT ? maxT : owed;
             if (take == 0) break;
 
-            _raritySymbolBatch(player, baseKey, processed, take, entropy);
+            _raritySymbolBatch(
+                player,
+                baseKey,
+                processed,
+                take,
+                entropy,
+                counts,
+                touchedTraits
+            );
             emit TraitsGenerated(player, baseKey, take);
 
             // Calculate actual write cost
@@ -505,7 +519,6 @@ contract DegenerusGameMintModule is
 
         worked = (used > 0);
         writesUsed = used;
-        ticketCursor = uint32(idx);
         finished = (idx >= total);
         if (finished) {
             delete ticketQueue[rk];
@@ -523,6 +536,11 @@ contract DegenerusGameMintModule is
                 ticketCursor = 0;
                 ticketLevel = 0;
             }
+        } else {
+            // Mid-queue stop: persist the resume cursor. The finished paths above
+            // write their own terminal cursor/level pair, so the shared packed slot
+            // is stored exactly once per path.
+            ticketCursor = uint32(idx);
         }
     }
 
@@ -535,16 +553,20 @@ contract DegenerusGameMintModule is
     /// @param startIndex Starting position within this player's owed tickets for this batch.
     /// @param count Number of ticket entries to process this batch.
     /// @param entropyWord VRF entropy for trait generation.
+    /// @param counts Caller-allocated all-zero scratch tracking how many times each trait
+    ///               was generated; the touched entries are re-zeroed before return, so one
+    ///               allocation serves every entry of a batch loop.
+    /// @param touchedTraits Caller-allocated scratch listing the traits generated this call
+    ///                      (only the first `touchedLen` entries are read).
     function _raritySymbolBatch(
         address player,
         uint256 baseKey,
         uint32 startIndex,
         uint32 count,
-        uint256 entropyWord
+        uint256 entropyWord,
+        uint32[256] memory counts,
+        uint8[256] memory touchedTraits
     ) private {
-        // Memory arrays to track which traits were generated and how many times.
-        uint32[256] memory counts;
-        uint8[256] memory touchedTraits;
         uint16 touchedLen;
 
         uint32 endIndex;
@@ -608,6 +630,8 @@ contract DegenerusGameMintModule is
         for (uint16 u; u < touchedLen; ) {
             uint8 traitId = touchedTraits[u];
             uint32 occurrences = counts[traitId];
+            // Restore the all-zero invariant on the shared scratch buffer.
+            counts[traitId] = 0;
 
             assembly ("memory-safe") {
                 // Get array length slot and current length.
@@ -688,6 +712,11 @@ contract DegenerusGameMintModule is
         uint256 entropy = lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
         uint32 processed;
 
+        // Trait-batch scratch buffers shared by every entry this call (zeroed between
+        // entries inside _raritySymbolBatch), so memory does not grow per queue entry.
+        uint32[256] memory counts;
+        uint8[256] memory touchedTraits;
+
         while (idx < total && used < writesBudget) {
             (uint32 writesUsed, uint32 take, bool advance) = _processOneTicketEntry(
                 queue[idx],
@@ -696,7 +725,9 @@ contract DegenerusGameMintModule is
                 writesBudget - used,
                 processed,
                 entropy,
-                idx
+                idx,
+                counts,
+                touchedTraits
             );
             if (writesUsed == 0 && !advance) break;
             unchecked {
@@ -714,14 +745,16 @@ contract DegenerusGameMintModule is
             }
         }
 
-        ticketCursor = uint32(idx);
-
         if (idx >= total) {
             delete ticketQueue[rk];
             ticketCursor = 0;
             ticketLevel = 0;
             return true;
         }
+        // Mid-queue stop: persist the resume cursor. The finished path above writes
+        // its own terminal cursor/level pair, so the shared packed slot is stored
+        // exactly once per path.
+        ticketCursor = uint32(idx);
         return false;
     }
 
@@ -762,7 +795,9 @@ contract DegenerusGameMintModule is
         uint32 room,
         uint32 processed,
         uint256 entropy,
-        uint256 queueIdx
+        uint256 queueIdx,
+        uint32[256] memory counts,
+        uint8[256] memory touchedTraits
     ) private returns (uint32 writesUsed, uint32 take, bool advance) {
         uint40 packed = owedMap[player];
         uint32 owed = uint32(packed >> 8);
@@ -795,7 +830,15 @@ contract DegenerusGameMintModule is
         }
         if (take == 0) return (0, 0, false);
 
-        _raritySymbolBatch(player, baseKey, processed, take, entropy);
+        _raritySymbolBatch(
+            player,
+            baseKey,
+            processed,
+            take,
+            entropy,
+            counts,
+            touchedTraits
+        );
         emit TraitsGenerated(player, baseKey, take);
 
         writesUsed =
@@ -1114,34 +1157,53 @@ contract DegenerusGameMintModule is
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) private {
+        (
+            bool cachedJpFlag,
+            uint24 cachedLevel,
+            uint256 priceWei,
+            uint256 ticketCost
+        ) = _purchaseCostInputs(ticketQuantity);
         // Single-tx path: cap fresh ETH at the mint cost and credit any overpay to the
         // payer's withdrawable afking, so excess never reverts or strands. The afking
         // ticket-buy path (purchaseWith) bypasses this, so it is unaffected.
-        uint256 cost = _mintCost(ticketQuantity, lootBoxAmount);
+        uint256 cost = ticketCost + lootBoxAmount;
         uint256 fresh = payKind == MintPaymentKind.Claimable
             ? 0
             : (msg.value < cost ? msg.value : cost);
         if (msg.value > fresh) _creditAfkingValue(msg.sender, msg.value - fresh);
-        _purchaseForWith(
+        _purchaseForWithCached(
             buyer,
             ticketQuantity,
             lootBoxAmount,
             affiliateCode,
             payKind,
-            fresh
+            fresh,
+            cachedJpFlag,
+            cachedLevel,
+            priceWei,
+            ticketCost
         );
     }
 
-    /// @dev Fresh-ETH cost of a single-tx mint: whole-ticket price (at the active purchase
-    ///      level) plus the lootbox spend.
-    function _mintCost(uint256 ticketQuantity, uint256 lootBoxAmount)
+    /// @dev Phase flag, level, whole-ticket price at the active purchase level, and the
+    ///      ticket cost of `ticketQuantity` — read and computed once per purchase, then
+    ///      threaded into _purchaseForWithCached so no caller recomputes them.
+    function _purchaseCostInputs(uint256 ticketQuantity)
         private
         view
-        returns (uint256)
+        returns (
+            bool cachedJpFlag,
+            uint24 cachedLevel,
+            uint256 priceWei,
+            uint256 ticketCost
+        )
     {
-        return (PriceLookupLib.priceForLevel(
-            jackpotPhaseFlag ? level : level + 1
-        ) * ticketQuantity) / (4 * TICKET_SCALE) + lootBoxAmount;
+        cachedJpFlag = jackpotPhaseFlag;
+        cachedLevel = level;
+        priceWei = PriceLookupLib.priceForLevel(
+            cachedJpFlag ? cachedLevel : cachedLevel + 1
+        );
+        ticketCost = (priceWei * ticketQuantity) / (4 * TICKET_SCALE);
     }
 
     function _purchaseForWith(
@@ -1152,20 +1214,45 @@ contract DegenerusGameMintModule is
         MintPaymentKind payKind,
         uint256 ethValue
     ) private {
+        (
+            bool cachedJpFlag,
+            uint24 cachedLevel,
+            uint256 priceWei,
+            uint256 ticketCost
+        ) = _purchaseCostInputs(ticketQuantity);
+        _purchaseForWithCached(
+            buyer,
+            ticketQuantity,
+            lootBoxAmount,
+            affiliateCode,
+            payKind,
+            ethValue,
+            cachedJpFlag,
+            cachedLevel,
+            priceWei,
+            ticketCost
+        );
+    }
+
+    /// @dev Core purchase body. `cachedJpFlag`/`cachedLevel`/`priceWei`/`ticketCost` are the
+    ///      caller's same-frame _purchaseCostInputs snapshot (no external call sits between
+    ///      that read and this frame, so the values cannot have changed).
+    function _purchaseForWithCached(
+        address buyer,
+        uint256 ticketQuantity,
+        uint256 lootBoxAmount,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind,
+        uint256 ethValue,
+        bool cachedJpFlag,
+        uint24 cachedLevel,
+        uint256 priceWei,
+        uint256 ticketCost
+    ) private {
         if (_livenessTriggered()) revert E();
         uint256 lootboxFlipCredit;
-        bool cachedJpFlag = jackpotPhaseFlag;
-        uint24 cachedLevel = level;
-        uint24 purchaseLevel = cachedJpFlag ? cachedLevel : cachedLevel + 1;
-        uint256 priceWei = PriceLookupLib.priceForLevel(purchaseLevel);
 
         if (lootBoxAmount != 0 && lootBoxAmount < LOOTBOX_MIN) revert E();
-
-        uint256 ticketCost = 0;
-
-        if (ticketQuantity != 0) {
-            ticketCost = (priceWei * ticketQuantity) / (4 * TICKET_SCALE);
-        }
 
         uint256 totalCost = ticketCost + lootBoxAmount;
         if (totalCost == 0) revert E();
@@ -1240,8 +1327,13 @@ contract DegenerusGameMintModule is
             // Manual lootbox buyers stamp the mint day too (bounty eligibility); a no-op when
             // the ticket leg already stamped it today, closing the plain-vs-bundled gap.
             _recordLootboxMintDay(buyer, mintPacked_[buyer]);
-            lbIndex = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
-            bool presale = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0;
+            // Single SLOAD of each packed slot, written back once below. Nothing in
+            // between touches lootboxRngPacked or presaleStatePacked (the queue push
+            // writes boxPlayers; the boost consume writes boonPacked only).
+            uint256 lrWord = lootboxRngPacked;
+            lbIndex = uint48((lrWord >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
+            uint256 psWord = presaleStatePacked;
+            bool presale = ((psWord >> PS_ACTIVE_SHIFT) & PS_ACTIVE_MASK) != 0;
 
             uint256 packed = lootboxEth[lbIndex][buyer];
             uint256 existingAmount = packed & LB_AMOUNT_MASK;
@@ -1263,10 +1355,14 @@ contract DegenerusGameMintModule is
 
             uint256 boostedAmount = _applyLootboxBoostOnPurchase(buyer, lootBoxAmount);
             lbNewAmount = existingAmount + boostedAmount;
-            _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, _lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK) + _packEthToMilliEth(lootBoxAmount));
+            uint256 newPendingEth = ((lrWord >> LR_PENDING_ETH_SHIFT) &
+                LR_PENDING_ETH_MASK) + _packEthToMilliEth(lootBoxAmount);
+            lootboxRngPacked =
+                (lrWord & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT)) |
+                ((newPendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT);
 
             if (presale) {
-                uint256 psPacked = presaleStatePacked;
+                uint256 psPacked = psWord;
                 uint256 newMintEth = ((psPacked >> PS_MINT_ETH_SHIFT) & PS_MINT_ETH_MASK) + lootBoxAmount;
                 psPacked = (psPacked & ~(PS_MINT_ETH_MASK << PS_MINT_ETH_SHIFT))
                          | ((newMintEth & PS_MINT_ETH_MASK) << PS_MINT_ETH_SHIFT);
@@ -1333,7 +1429,12 @@ contract DegenerusGameMintModule is
                     burnieMintUnits,
                     lootBoxAmount,
                     priceWei,
-                    PriceLookupLib.priceForLevel(cachedLevel + 1)
+                    // During the purchase phase the purchase level IS cachedLevel + 1,
+                    // so priceWei already equals priceForLevel(cachedLevel + 1); only
+                    // jackpot-phase buys need the lookup.
+                    cachedJpFlag
+                        ? PriceLookupLib.priceForLevel(cachedLevel + 1)
+                        : priceWei
                 );
             questStreak = streak;
             if (questCompleted) {
@@ -1513,18 +1614,28 @@ contract DegenerusGameMintModule is
         // the remainder funds the box as fresh ETH, with claimable/afking covering any
         // box shortfall. Claimable payKind sends no fresh ETH to the mint leg, leaving
         // all of msg.value for the box.
-        uint256 mintCost = _mintCost(ticketQuantity, lootBoxAmount);
+        (
+            bool cachedJpFlag,
+            uint24 cachedLevel,
+            uint256 priceWei,
+            uint256 ticketCost
+        ) = _purchaseCostInputs(ticketQuantity);
+        uint256 mintCost = ticketCost + lootBoxAmount;
         uint256 mintFresh = payKind == MintPaymentKind.Claimable
             ? 0
             : (msg.value < mintCost ? msg.value : mintCost);
         // Mint leg first: accrues the 25% presale-box credit that gates the box below.
-        _purchaseForWith(
+        _purchaseForWithCached(
             buyer,
             ticketQuantity,
             lootBoxAmount,
             affiliateCode,
             payKind,
-            mintFresh
+            mintFresh,
+            cachedJpFlag,
+            cachedLevel,
+            priceWei,
+            ticketCost
         );
         // Box leg gets the leftover fresh ETH; it queues at the SAME current LR_INDEX as
         // the mint leg's lootbox (LR_INDEX does not advance mid-tx), so both share one
@@ -1655,21 +1766,31 @@ contract DegenerusGameMintModule is
         )
     {
         if (quantity == 0) revert E();
-        // Liveness is gated by both callers (_purchaseForWith / _purchaseCoinFor)
+        // Liveness is gated by both callers (_purchaseForWithCached / _purchaseCoinFor)
         // before any state is touched, so it is not re-evaluated here.
-        uint8 cachedComp = compressedJackpotFlag;
-        uint8 cachedCnt = jackpotCounter;
+        // compressedJackpotFlag / jackpotCounter are consumed only on jackpot-phase
+        // buys (every use below is short-circuit-gated on cachedJpFlag), so the
+        // slot-0 reads are skipped during the purchase phase. nextStep mirrors the
+        // JackpotModule step size for the level's remaining daily jackpots.
+        uint8 cachedComp;
+        uint8 cachedCnt;
+        uint8 nextStep = 1;
+        if (cachedJpFlag) {
+            cachedComp = compressedJackpotFlag;
+            cachedCnt = jackpotCounter;
+            if (
+                cachedComp == 1 &&
+                cachedCnt > 0 &&
+                cachedCnt < JACKPOT_LEVEL_CAP - 1
+            ) {
+                nextStep = 2;
+            }
+        }
         targetLevel = cachedJpFlag ? cachedLevel : cachedLevel + 1;
         // Last jackpot day fix: route to level+1 to prevent stranded tickets
         // (_endPhase breaks before _unlockRng, so no future daily draw at this level)
         if (cachedJpFlag && rngLockedFlag) {
-            uint8 step = cachedComp == 2
-                ? JACKPOT_LEVEL_CAP
-                : (cachedComp == 1 &&
-                    cachedCnt > 0 &&
-                    cachedCnt < JACKPOT_LEVEL_CAP - 1)
-                    ? 2
-                    : 1;
+            uint8 step = cachedComp == 2 ? JACKPOT_LEVEL_CAP : nextStep;
             if (cachedCnt + step >= JACKPOT_LEVEL_CAP)
                 targetLevel = cachedLevel + 1;
         }
@@ -1725,11 +1846,13 @@ contract DegenerusGameMintModule is
             uint256 claimableBefore = _claimableOf(buyer);
             IDegenerusGame(address(this)).recordMint{value: value}(
                 buyer,
-                targetLevel,
                 costWei,
-                mintUnits,
                 payKind
             );
+            // Mint-data recording runs at the self-call's return point — after recordMint's
+            // payment processing, before the freshEth read (it touches neither claimable nor
+            // pool state either way).
+            _recordMintData(buyer, targetLevel, mintUnits);
 
             // Fresh ETH for the affiliate split = ticket cost minus the recycled claimable
             // portion recordMint just drew; the afking-drawn portion counts as fresh (own
@@ -1743,13 +1866,7 @@ contract DegenerusGameMintModule is
                 ? _ethToBurnieValue(freshEth, priceWei)
                 : 0;
             if (freshBurnie != 0 && cachedJpFlag && cachedComp != 2) {
-                // Compute next step size (mirrors JackpotModule logic)
-                uint8 _nextStep = (cachedComp == 1 &&
-                    cachedCnt > 0 &&
-                    cachedCnt < JACKPOT_LEVEL_CAP - 1)
-                    ? 2
-                    : 1;
-                if (cachedCnt + _nextStep >= JACKPOT_LEVEL_CAP) {
+                if (cachedCnt + nextStep >= JACKPOT_LEVEL_CAP) {
                     freshBurnie = targetLevel <= 3
                         ? (freshBurnie * 7) / 5
                         : (freshBurnie * 3) / 2;

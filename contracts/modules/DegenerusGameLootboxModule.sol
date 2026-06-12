@@ -34,7 +34,7 @@ interface IWrappedWrappedXRP {
  * ## Functions
  *
  * - Box opening (openBox, resolveLootboxDirect, resolveRedemptionLootbox)
- * - Deity boon system (deityBoonSlots, issueDeityBoon)
+ * - Deity boon system (issueDeityBoon)
  */
 contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // =========================================================================
@@ -500,11 +500,29 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @custom:reverts RngNotReady When the lootbox is queued but its RNG word is not yet set.
     function _openLootBoxLeg(address player, uint48 index) internal returns (bool opened) {
         uint256 packed = lootboxEth[index][player];
+        // Early-out before the rngWord SLOAD when no lootbox leg is queued (the presale leg
+        // loads the word itself).
+        if ((packed & LB_AMOUNT_MASK) == 0) return false;
+        return _openLootBoxLegWith(player, index, packed, lootboxRngWordByIndex[index]);
+    }
+
+    /// @dev Lootbox-leg body operating on pre-loaded values: `packed` is the player's
+    ///      lootboxEth word at `index`, `rngWord` the index's committed VRF word. The
+    ///      sweep (`openHumanBoxes`) loads both once per entry/index and threads them down;
+    ///      the manual shell (`_openLootBoxLeg`) loads them itself. Values cannot go stale
+    ///      between load and use: no callee on this path hands control to player code, and
+    ///      a lootboxEth write at a worded index is unreachable from the buy path.
+    /// @custom:reverts RngNotReady When a lootbox is queued but `rngWord` is zero.
+    function _openLootBoxLegWith(
+        address player,
+        uint48 index,
+        uint256 packed,
+        uint256 rngWord
+    ) internal returns (bool opened) {
         (uint256 amount, uint64 adj, uint16 score, uint256 distressUnits) =
             _unpackLootbox(packed);
         if (amount == 0) return false;
 
-        uint256 rngWord = lootboxRngWordByIndex[index];
         if (rngWord == 0) revert RngNotReady();
 
         uint24 currentLevel = level + 1;
@@ -568,16 +586,16 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (!_openBoxBoth(player, index, !presaleDrained)) revert E();
     }
 
-    /// @dev Both-leg open body, shared by the manual `openBox` entrypoint and the human-box
-    ///      sweep. Resolves the lootbox leg (if queued) then, when `checkPresale`, the presale-box
-    ///      leg (if queued); each robust to being empty. The `player` is the ALREADY-resolved
-    ///      owner (callers bypass the game's _resolvePlayer wrapper, which would re-gate on the
-    ///      game contract as msg.sender). Runs in the game's storage context.
+    /// @dev Both-leg open body for the manual `openBox` entrypoint (the sweep threads
+    ///      pre-loaded values into `_openLootBoxLegWith` directly). Resolves the lootbox leg
+    ///      (if queued) then, when `checkPresale`, the presale-box leg (if queued); each robust
+    ///      to being empty. The `player` is the ALREADY-resolved owner (callers bypass the
+    ///      game's _resolvePlayer wrapper, which would re-gate on the game contract as
+    ///      msg.sender). Runs in the game's storage context.
     /// @param player Box owner (already resolved).
     /// @param index The shared RNG index.
-    /// @param checkPresale Whether to probe the presale-box leg — the caller passes `!presaleDrained`.
-    ///        Once the sweep has drained presale (flag set) the cold presaleBoxEth SLOAD is skipped
-    ///        for every entry; the sweep caches the flag once per call.
+    /// @param checkPresale Whether to probe the presale-box leg — the caller passes `!presaleDrained`,
+    ///        skipping the cold presaleBoxEth SLOAD once presale is fully drained.
     /// @return any True if at least one leg was resolved.
     function _openBoxBoth(address player, uint48 index, bool checkPresale) internal returns (bool any) {
         // Lootbox leg: resolves (and reports) only if one is queued — its own seed derivation.
@@ -605,8 +623,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      each index, then advancing to the next. `budget` bounds the ENTRIES scanned this call:
     ///      opens AND skips each cost one step, so a long skip-prefix (already-opened or
     ///      presale-only entries) can never gas-wall the tx — progress is monotonic and persists
-    ///      across calls via (boxCursorIndex, boxCursor). Each entry resolves BOTH legs via
-    ///      _openBoxBoth (lootbox + presale, robust to either empty). Orphan-index
+    ///      across calls via (boxCursorIndex, boxCursor). Each entry resolves BOTH legs
+    ///      (lootbox + presale, robust to either empty) from values loaded once per entry —
+    ///      the skip-check reads are threaded into the opens. Orphan-index
     ///      coupling (the v45 landmine): the sweep STOPS at any index whose VRF word has not landed
     ///      (orphaned mid-day by a coordinator rotation) instead of advancing past it, so its boxes
     ///      are never marooned — it resumes once the re-issued word lands. Every leg is O(1)
@@ -637,7 +656,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 ++steps; // each index visit costs a step (bounds an empty-index crawl)
             }
             // Orphan-index coupling: never advance past an un-worded index, or its boxes maroon.
-            if (lootboxRngWordByIndex[idx] == 0) break;
+            // The word is loaded once per index and threaded into every open below.
+            uint256 word = lootboxRngWordByIndex[idx];
+            if (word == 0) break;
 
             address[] storage queue = boxPlayers[idx];
             uint256 qlen = queue.length;
@@ -648,16 +669,23 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     ++steps;
                 }
                 // Open if EITHER leg is still owed: the lootbox leg (lootboxEth amount) or the
-                // presale leg (presaleBoxEth). Both are zeroed on open, so a zero/zero entry is
-                // already-drained (or never carried a box of this type) and is skipped.
-                if (
-                    (lootboxEth[idx][player] & LB_AMOUNT_MASK) == 0 &&
-                    (!checkPresale || presaleBoxEth[idx][player] == 0)
-                ) continue;
+                // presale leg (presaleBoxEth, probed only while boxes are outstanding). Both are
+                // zeroed on open, so a zero/zero entry is already-drained (or never carried a box
+                // of this type) and is skipped. Each leg's word is loaded ONCE here and threaded
+                // into its open — the skip-check values double as the open's inputs.
+                uint256 packed = lootboxEth[idx][player];
+                uint256 stored = checkPresale ? presaleBoxEth[idx][player] : 0;
+                if ((packed & LB_AMOUNT_MASK) == 0 && stored == 0) continue;
                 // Guaranteed-non-reverting under the entry-gate + the word!=0 index gate above:
-                // resolves the lootbox AND presale legs (each robust to being empty). The presale
-                // leg is probed only while boxes are outstanding (checkPresale).
-                _openBoxBoth(player, idx, checkPresale);
+                // resolves the lootbox AND presale legs (each robust to being empty). The cached
+                // values cannot go stale across the lootbox leg's external calls: no callee on
+                // that path hands control to player code, and a presaleBoxEth write at a worded
+                // index is unreachable from the buy path.
+                _openLootBoxLegWith(player, idx, packed, word);
+                if (stored != 0) {
+                    presaleBoxEth[idx][player] = 0; // dequeue before resolution
+                    _resolvePresaleBox(player, idx, stored, word);
+                }
                 unchecked {
                     ++opened;
                 }
@@ -691,8 +719,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 stored,
         uint256 rngWord
     ) private {
+        // A queued record always carries non-zero amount bits (the buy path packs
+        // applied >= the box minimum), so a non-zero `stored` implies amount != 0.
         uint256 amount = stored & PRESALE_BOX_AMOUNT_MASK;
-        if (amount == 0) return;
         uint256 soldBefore = (stored >> PRESALE_BOX_SOLD_SHIFT) & PRESALE_BOX_AMOUNT_MASK;
         bool closing = (stored & PRESALE_BOX_CLOSING_FLAG) != 0;
 
@@ -719,15 +748,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 burnieBps = PRESALE_BOX_BURNIE_HIGH_BASE_BPS +
                     (varianceRoll - 16) * PRESALE_BOX_BURNIE_HIGH_STEP_BPS;
             }
+            // priceForLevel returns a non-zero constant for every level.
             uint256 priceWei = PriceLookupLib.priceForLevel(level + 1);
-            if (priceWei != 0) {
-                uint256 burnieBudget = (amount * burnieBps) / 10_000;
-                burnieOut = (burnieBudget * PRICE_COIN_UNIT) / priceWei;
-                // Floor to whole BURNIE (1 BURNIE = 1 ether), mirroring the lootbox.
-                burnieOut = (burnieOut / 1 ether) * 1 ether;
-                if (burnieOut != 0) {
-                    coinflip.creditFlip(player, burnieOut);
-                }
+            uint256 burnieBudget = (amount * burnieBps) / 10_000;
+            burnieOut = (burnieBudget * PRICE_COIN_UNIT) / priceWei;
+            // Floor to whole BURNIE (1 BURNIE = 1 ether), mirroring the lootbox.
+            burnieOut = (burnieOut / 1 ether) * 1 ether;
+            if (burnieOut != 0) {
+                coinflip.creditFlip(player, burnieOut);
             }
         } else if (outcome < 90) {
             // 40% DGNRS: 5-tier %-of-pool curve keyed on the FROZEN buy-time cumulative.
@@ -1009,31 +1037,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // Deity Boon Functions
     // =========================================================================
 
-    /// @notice Get a deity's available boon slots for the current day
-    /// @dev Returns deterministically generated boon types based on deity address and day.
-    ///      Decimator boons only appear when decimator window is open.
-    /// @param deity The deity pass holder address
-    /// @return slots Array of 3 boon types (1-31) for each slot
-    /// @return usedMask Bitmask of which slots have been used today (bit 0 = slot 0, etc.)
-    /// @return day The current day index
-    function deityBoonSlots(
-        address deity
-    ) external view returns (uint8[3] memory slots, uint8 usedMask, uint24 day) {
-        day = _simulatedDayIndex();
-        uint256 rngWord = rngWordByDay[day];
-        if (rngWord == 0) return (slots, usedMask, day);
-        if (deityBoonDay[deity] == day) {
-            usedMask = deityBoonUsedMask[deity];
-        }
-
-        bool decimatorAllowed = _isDecimatorWindow();
-        bool deityPassAvailable = deityPassOwners.length < DEITY_PASS_MAX_TOTAL;
-        for (uint8 i = 0; i < DEITY_DAILY_BOON_COUNT; ) {
-            slots[i] = _deityBoonForSlot(deity, day, i, decimatorAllowed, deityPassAvailable, rngWord);
-            unchecked { ++i; }
-        }
-    }
-
     /// @notice Issue a deity boon to a recipient
     /// @dev Deity can issue up to 3 boons per day, one per recipient per day.
     /// @param deity The deity pass holder issuing the boon
@@ -1055,13 +1058,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 day = _simulatedDayIndex();
         uint256 rngWord = rngWordByDay[day];
         if (rngWord == 0) revert E();
+        // Day rollover starts from an empty mask without zeroing storage: a stale
+        // mask under a stale day is never read (every reader gates on
+        // deityBoonDay[deity] == day) and the single terminal write below replaces it.
+        uint8 mask;
         if (deityBoonDay[deity] != day) {
             deityBoonDay[deity] = day;
-            deityBoonUsedMask[deity] = 0;
+        } else {
+            mask = deityBoonUsedMask[deity];
         }
         if (deityBoonRecipientDay[recipient] == day) revert E();
 
-        uint8 mask = deityBoonUsedMask[deity];
         uint8 slotMask = uint8(1) << slot;
         if ((mask & slotMask) != 0) revert E();
         deityBoonUsedMask[deity] = mask | slotMask;
@@ -1179,7 +1186,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // Box-level boon work runs ONCE (not per roll). Boons always roll on every ETH lootbox
         // path (the haircut above always pairs with a spent boon budget); pass-type boons stay
         // gated by real game-state inside the roll.
-        _rollLootboxBoons(player, amount, boonBudget, seed);
+        _rollLootboxBoons(player, amount, boonBudget, currentLevel, seed);
         // consumeActivityBoon is a no-op unless a pending bonus is set; gate the BoonModule
         // delegatecall on a direct read of the (warm) pending field, skipping the call frame on
         // the common no-boon box.
@@ -1232,8 +1239,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 totalPackedEth
     ) private {
         if (rollAmount == 0) return;
+        // priceForLevel returns a non-zero constant for every level, so targetPrice is
+        // always a safe divisor downstream.
         uint256 targetPrice = PriceLookupLib.priceForLevel(rollLevel);
-        if (targetPrice == 0) revert E();
 
         (uint256 burnieOut, uint32 scaledTickets) =
             _resolveLootboxRoll(player, rollAmount, fullAmount, targetPrice, rollSeed);
@@ -1292,11 +1300,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player Player address
     /// @param originalAmount Amount used for chance calculations
     /// @param boonBudget Amount of lootbox value allocated to boon/pass draw
+    /// @param currentLevel Current game level (level + 1, threaded from the resolution caller)
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; no advance)
     function _rollLootboxBoons(
         address player,
         uint256 originalAmount,
         uint256 boonBudget,
+        uint24 currentLevel,
         uint256 seed
     ) private {
         if (player == address(0) || originalAmount == 0) return;
@@ -1314,19 +1324,25 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         uint24 currentDay = _simulatedDayIndex();
-        uint24 currentLevel = level + 1;
 
-        uint24 lazyPassLevel = currentLevel == 0 ? 1 : currentLevel + 1;
-        uint256 lazyPassValue = _lazyPassPriceForLevel(lazyPassLevel);
+        uint256 lazyPassValue = _lazyPassPriceForLevel(currentLevel + 1);
 
         bool decimatorAllowed = _isDecimatorWindow();
-        bool deityEligible =
-            (mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0 && deityPassOwners.length < DEITY_PASS_MAX_TOTAL);
+        // The owner-count SLOAD stays short-circuited away when the player already
+        // holds a deity pass; when read, the count is threaded into _boonPoolStats.
+        uint256 deityPassCount;
+        bool deityEligible;
+        if (mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) {
+            deityPassCount = deityPassOwners.length;
+            deityEligible = deityPassCount < DEITY_PASS_MAX_TOTAL;
+        }
 
         (uint256 totalWeight, uint256 avgMaxValue) = _boonPoolStats(
             decimatorAllowed,
             deityEligible,
-            lazyPassValue
+            lazyPassValue,
+            currentLevel,
+            deityPassCount
         );
         if (totalWeight == 0 || avgMaxValue == 0) return;
 
@@ -1351,12 +1367,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         _applyBoon(player, boonType, 0, currentDay, originalAmount, false);
     }
 
-    /// @dev Convert BURNIE amount to ETH value using current price.
+    /// @dev Convert BURNIE amount to ETH value using current price (`priceWei` is
+    ///      always a non-zero price-table constant).
     function _burnieToEthValue(
         uint256 burnieAmount,
         uint256 priceWei
     ) private pure returns (uint256 valueWei) {
-        if (burnieAmount == 0 || priceWei == 0) return 0;
+        if (burnieAmount == 0) return 0;
         valueWei = (burnieAmount * priceWei) / PRICE_COIN_UNIT;
     }
 
@@ -1378,13 +1395,19 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      The two pass-type boons (the whale-pass jackpot and the lazy-pass discount
     ///      awards) are always included; the lazy-pass weights are gated by a non-zero
     ///      `lazyPassValue` (real game-state).
+    /// @param currentLevel Current game level (level + 1, threaded from the caller)
+    /// @param deityPassCount Deity-pass owner count, loaded by the caller; meaningful
+    ///        only when `deityEligible`
     function _boonPoolStats(
         bool decimatorAllowed,
         bool deityEligible,
-        uint256 lazyPassValue
-    ) private view returns (uint256 totalWeight, uint256 avgMaxValue) {
+        uint256 lazyPassValue,
+        uint24 currentLevel,
+        uint256 deityPassCount
+    ) private pure returns (uint256 totalWeight, uint256 avgMaxValue) {
         uint256 weightedMax = 0;
-        uint256 priceWei = PriceLookupLib.priceForLevel(level);
+        // currentLevel == level + 1, so this is the price at the stored `level`.
+        uint256 priceWei = PriceLookupLib.priceForLevel(currentLevel - 1);
 
         // Coinflip boons (max bonus on 100k BURNIE deposit)
         uint256 coinflipMax5 = _burnieToEthValue(
@@ -1466,7 +1489,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         // Deity pass discount boons (if eligible)
         if (deityEligible) {
-            uint256 k = deityPassOwners.length;
+            uint256 k = deityPassCount;
             uint256 deityPrice = DEITY_PASS_BASE + (k * (k + 1) * 1 ether) / 2;
             uint256 deityMax10 = (deityPrice * 1000) / 10_000;
             uint256 deityMax25 = (deityPrice * 2000) / 10_000;
@@ -1894,7 +1917,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      Bit budget (consumed from `seed`):
     ///        - varianceRoll: bits[96..119] via uint24(seed >> 96) % 10_000 (bias 0.045%)
     /// @param budgetWei ETH budget for tickets
-    /// @param priceWei Price per ticket at target level
+    /// @param priceWei Price per ticket at target level (a non-zero price-table constant)
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; no advance)
     /// @return countScaled Number of tickets × TICKET_SCALE
     function _lootboxTicketCount(
@@ -1902,7 +1925,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 priceWei,
         uint256 seed
     ) private pure returns (uint32 countScaled) {
-        if (budgetWei == 0 || priceWei == 0) {
+        if (budgetWei == 0) {
             return 0;
         }
 
@@ -1990,11 +2013,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Get the value for a lazy pass at a specific level.
     ///      Value equals the sum of per-level ticket prices across 10 levels.
     /// @param passLevel The lazy pass start level
-    /// @return The value in ETH (scaled by cost divisor), or 0 if invalid level
+    /// @return The value in ETH (scaled by cost divisor)
     function _lazyPassPriceForLevel(
         uint24 passLevel
     ) private pure returns (uint256) {
-        if (passLevel == 0) return 0;
         uint256 total = 0;
         for (uint24 i = 0; i < 10; ) {
             total += PriceLookupLib.priceForLevel(passLevel + i);

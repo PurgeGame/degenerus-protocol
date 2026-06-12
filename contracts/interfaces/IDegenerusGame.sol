@@ -73,16 +73,12 @@ interface IDegenerusGame {
     /// @notice Record a ticket purchase and calculate rewards.
     /// @dev Access restricted to GAME self-call only (delegatecall modules via address(this)).
     /// @param player The player making the purchase.
-    /// @param lvl The current game level.
     /// @param costWei Total cost in wei.
-    /// @param mintUnits Number of units purchased.
     /// @param payKind Payment method used.
     /// @return newClaimableBalance Updated claimable balance if using claimable payment.
     function recordMint(
         address player,
-        uint24 lvl,
         uint256 costWei,
-        uint32 mintUnits,
         MintPaymentKind payKind
     ) external payable returns (uint256 newClaimableBalance);
 

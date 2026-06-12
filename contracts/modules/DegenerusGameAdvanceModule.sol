@@ -173,6 +173,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         mult = 1;
         uint48 ts = uint48(block.timestamp);
         uint24 day = _simulatedDayIndexAt(ts);
+        // dailyIdx and rngLockedFlag are stable across every read below: their
+        // only writers (_unlockRng, _finalizeRngRequest) execute after the last
+        // use of these locals, or on paths that return before reaching it.
+        uint24 dIdx = dailyIdx;
+        bool locked = rngLockedFlag;
         // RNGREUSE guard: never resolve a NEW wall-day with a prior day's still-unsealed
         // VRF word. If the in-progress day (dailyIdx+1) already recorded its word but was
         // not yet sealed (_unlockRng deferred behind chunked drains / a pending daily
@@ -181,8 +186,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // the deferred jackpot half stays on its Phase-1 word, and the afking box keeps a
         // real word. The next advance picks up the wall-day with a fresh VRF request.
         // Distinct from a VRF gap stall (rngWordByDay[dailyIdx+1] == 0 → backfill path).
-        if (day > dailyIdx + 1 && rngWordByDay[dailyIdx + 1] != 0) {
-            day = dailyIdx + 1;
+        if (day > dIdx + 1 && rngWordByDay[dIdx + 1] != 0) {
+            day = dIdx + 1;
         }
         bool inJackpot = jackpotPhaseFlag;
         uint24 lvl = level;
@@ -193,7 +198,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // rngGate will take the fresh-word path instead of _requestRng, so
         // the level pre-increment would be missed and the (lastPurchase &&
         // rngLockedFlag) ternary below would compute purchaseLevel = 0.
-        if (!inJackpot && !lastPurchaseDay && !rngLockedFlag) {
+        if (!inJackpot && !lastPurchaseDay && !locked) {
             uint32 purchaseDays = day - psd;
             if (
                 purchaseDays <= 1 && _getNextPrizePool() >= levelPrizePool[lvl]
@@ -205,7 +210,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
         bool lastPurchase = (!inJackpot) && lastPurchaseDay;
         // Level already incremented at RNG request when lastPurchase=true
-        uint24 purchaseLevel = (lastPurchase && rngLockedFlag) ? lvl : lvl + 1;
+        uint24 purchaseLevel = (lastPurchase && locked) ? lvl : lvl + 1;
         if (!inJackpot && !lastPurchase) {
             (bool goReturn, uint8 goStage) = _handleGameOverPath(day, lvl);
             if (goReturn) {
@@ -217,7 +222,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
 
         // --- Mid-day path: same-day queue draining ---
-        if (day == dailyIdx) {
+        if (day == dIdx) {
             // Step 1: Finish draining the read slot if not yet fully processed
             if (!ticketsFullyProcessed) {
                 // If mid-day ticket swap is pending, wait for VRF word before
@@ -348,8 +353,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     if (
                         rngWordCurrent != 0 &&
                         rngRequestTime != 0 &&
-                        day > dailyIdx + 1 &&
-                        rngWordByDay[dailyIdx + 1] == 0
+                        day > dIdx + 1 &&
+                        rngWordByDay[dIdx + 1] == 0
                     ) {
                         stage = STAGE_SUBS_BACKFILL_DEFERRED;
                         break;
@@ -459,10 +464,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
             // === PURCHASE PHASE ===
             if (!inJackpot) {
-                // Pre-target: daily jackpots while building prize pool
-                if (!lastPurchaseDay) {
+                // Pre-target: daily jackpots while building prize pool.
+                // lastPurchase equals lastPurchaseDay here (read after the turbo
+                // write, inside !inJackpot, with no writer on the path between).
+                if (!lastPurchase) {
                     if (purchaseLevel == 1) {
-                        _emitDailyWinningTraits(1, rngWord, 1);
+                        // Self-call into GAME (which delegatecalls the jackpot
+                        // module) so msg.sender == address(this) passes the
+                        // module's OnlyGame check.
+                        IDegenerusGame(address(this)).emitDailyWinningTraits(
+                            1,
+                            rngWord,
+                            1
+                        );
                         _payDailyCoinJackpot(1, rngWord, 1, 1);
                         uint256 saltedRng = uint256(
                             keccak256(
@@ -735,10 +749,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function _rewardTopAffiliate(uint24 lvl) private {
         (address top, ) = affiliate.affiliateTop(lvl);
 
+        uint256 poolBalance = dgnrs.poolBalance(
+            IStakedDegenerusStonk.Pool.Affiliate
+        );
         if (top != address(0)) {
-            uint256 poolBalance = dgnrs.poolBalance(
-                IStakedDegenerusStonk.Pool.Affiliate
-            );
             uint256 dgnrsReward = (poolBalance * AFFILIATE_POOL_REWARD_BPS) /
                 10_000;
             uint256 paid = dgnrs.transferFromPool(
@@ -747,15 +761,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 dgnrsReward
             );
             emit AffiliateDgnrsReward(top, lvl, paid);
+            // transferFromPool returns the exact pool decrement (clamped to the
+            // available balance, zero on the empty-pool path), so the remaining
+            // pool is derivable without a second external read.
+            poolBalance -= paid;
         }
 
         // Segregate 5% of remaining affiliate pool for per-affiliate claims.
         // Scores at index lvl are frozen (new scores go to lvl + 1).
-        uint256 remainingPool = dgnrs.poolBalance(
-            IStakedDegenerusStonk.Pool.Affiliate
-        );
         levelDgnrsAllocation[lvl] =
-            (remainingPool * AFFILIATE_DGNRS_LEVEL_BPS) /
+            (poolBalance * AFFILIATE_DGNRS_LEVEL_BPS) /
             10_000;
     }
 
@@ -1068,22 +1083,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Emit DailyWinningTraits via self-call into GAME, which delegatecalls JackpotModule.
-    ///      Used at purchaseLevel==1 where payDailyJackpot is skipped.
-    ///      Self-call preserves msg.sender == address(this) across the delegatecall so the
-    ///      JackpotModule's OnlyGame check passes.
-    function _emitDailyWinningTraits(
-        uint24 lvl,
-        uint256 randWord,
-        uint24 bonusTargetLevel
-    ) private {
-        IDegenerusGame(address(this)).emitDailyWinningTraits(
-            lvl,
-            randWord,
-            bonusTargetLevel
-        );
-    }
-
     /// @notice Request lootbox RNG when activity threshold is met.
     /// @dev Standalone function for mid-day lootbox RNG requests.
     ///      Cannot be called while daily RNG is locked (jackpot resolution).
@@ -1146,16 +1145,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
 
         // VRF request (reverts on failure)
-        uint256 id = vrfCoordinator.requestRandomWords(
-            VRFRandomWordsRequest({
-                keyHash: vrfKeyHash,
-                subId: vrfSubscriptionId,
-                requestConfirmations: VRF_MIDDAY_CONFIRMATIONS,
-                callbackGasLimit: VRF_CALLBACK_GAS_LIMIT,
-                numWords: 1,
-                extraArgs: hex""
-            })
-        );
+        uint256 id = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
 
         // Advance lootbox index so new purchases target the NEXT RNG
         _lrAdvanceIndexClearPending();
@@ -1185,16 +1175,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         );
         if (linkBal < MIN_LINK_FOR_LOOTBOX_RNG) revert E();
 
-        uint256 id = vrfCoordinator.requestRandomWords(
-            VRFRandomWordsRequest({
-                keyHash: vrfKeyHash,
-                subId: vrfSubscriptionId,
-                requestConfirmations: VRF_MIDDAY_CONFIRMATIONS,
-                callbackGasLimit: VRF_CALLBACK_GAS_LIMIT,
-                numWords: 1,
-                extraArgs: hex""
-            })
-        );
+        uint256 id = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
 
         vrfRequestId = id;
         rngRequestTime = uint48(block.timestamp);
@@ -1622,17 +1603,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @param lvl Current level.
     function _requestRng(bool isTicketJackpotDay, uint24 lvl) private {
         // Hard revert if Chainlink request fails; this intentionally halts game progress until VRF funding/config is fixed.
-        uint256 id = vrfCoordinator.requestRandomWords(
-            VRFRandomWordsRequest({
-                keyHash: vrfKeyHash,
-                subId: vrfSubscriptionId,
-                requestConfirmations: VRF_REQUEST_CONFIRMATIONS,
-                callbackGasLimit: VRF_CALLBACK_GAS_LIMIT,
-                numWords: 1,
-                extraArgs: hex"" // Empty for LINK payment (default)
-            })
+        _finalizeRngRequest(
+            isTicketJackpotDay,
+            lvl,
+            _requestVrfWord(VRF_REQUEST_CONFIRMATIONS)
         );
-        _finalizeRngRequest(isTicketJackpotDay, lvl, id);
     }
 
     function _tryRequestRng(
