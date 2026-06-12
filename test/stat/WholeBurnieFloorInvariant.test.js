@@ -22,7 +22,7 @@
 //
 // NEGATIVE CROSS-SITE ASSERTION (D-40N-BUR-MINTBOOST-OUT-01):
 //   The mint-boost flip-credit `coinflip.creditFlip(buyer, lootboxFlipCredit)`
-//   inside `_purchaseForWith` (DegenerusGameMintModule.sol) — is explicitly OUT
+//   inside `_purchaseForWithCached` (DegenerusGameMintModule.sol) — is explicitly OUT
 //   of v40.0 BUR scope: `lootboxFlipCredit` is a deterministic
 //   mint-amount-derived value, NOT an RNG amount, and stays status-quo
 //   fractional. This test proves NO whole-BURNIE floor was added to that path.
@@ -231,32 +231,32 @@ describe("WholeBurnieFloorInvariant (stat-suite) — Phase 279 Wave 2 TST-BUR-04
   });
 
   describe("Negative cross-site assertion: the mint-boost flip-credit path stayed status-quo fractional (D-40N-BUR-MINTBOOST-OUT-01)", function () {
-    it("[03a] `_purchaseForWith` in DegenerusGameMintModule.sol contains `creditFlip(buyer, lootboxFlipCredit)` (positive pin to the right call site)", function () {
+    it("[03a] `_purchaseForWithCached` in DegenerusGameMintModule.sol contains `creditFlip(buyer, lootboxFlipCredit)` (positive pin to the right call site)", function () {
       const source = fs.readFileSync(MINT_MODULE_PATH, "utf8");
-      // The flip-credit accumulator + creditFlip moved from `_purchaseFor` (now a
-      // thin msg.value wrapper) into `_purchaseForWith` during the afking
-      // ETH-slice refactor; the pin follows it there.
+      // The flip-credit accumulator + creditFlip lives in `_purchaseForWithCached`
+      // (the shared purchase body; `_purchaseFor` / `_purchaseForWith` are thin
+      // wrappers that resolve cost inputs and forward); the pin follows it there.
       const body = stripLineComments(
-        extractBody(source, "function _purchaseForWith(")
+        extractBody(source, "function _purchaseForWithCached(")
       );
-      expect(body, "`_purchaseForWith` body not found").to.not.equal(null);
+      expect(body, "`_purchaseForWithCached` body not found").to.not.equal(null);
       expect(
         body.includes("creditFlip(buyer, lootboxFlipCredit)"),
-        "`_purchaseForWith` must contain `creditFlip(buyer, lootboxFlipCredit)` — the mint-boost flip-credit call site (positive pin)"
+        "`_purchaseForWithCached` must contain `creditFlip(buyer, lootboxFlipCredit)` — the mint-boost flip-credit call site (positive pin)"
       ).to.equal(true);
     });
 
-    it("[03b] `_purchaseForWith` applies NO whole-BURNIE floor to `lootboxFlipCredit` — the mint-boost path is OUT of v40.0 BUR scope (D-40N-BUR-MINTBOOST-OUT-01)", function () {
+    it("[03b] `_purchaseForWithCached` applies NO whole-BURNIE floor to `lootboxFlipCredit` — the mint-boost path is OUT of v40.0 BUR scope (D-40N-BUR-MINTBOOST-OUT-01)", function () {
       const source = fs.readFileSync(MINT_MODULE_PATH, "utf8");
       const body = stripLineComments(
-        extractBody(source, "function _purchaseForWith(")
+        extractBody(source, "function _purchaseForWithCached(")
       );
-      expect(body, "`_purchaseForWith` body not found").to.not.equal(null);
+      expect(body, "`_purchaseForWithCached` body not found").to.not.equal(null);
       // No `(... / 1 ether) * 1 ether` floor expression anywhere in the
       // function body — the mint-boost flip-credit stays status-quo fractional.
       expect(
         /\/\s*1 ether\s*\)\s*\*\s*1 ether/.test(body),
-        "`_purchaseForWith` must NOT apply a `/ 1 ether) * 1 ether` whole-BURNIE floor (mint-boost is OUT of BUR scope — D-40N-BUR-MINTBOOST-OUT-01)"
+        "`_purchaseForWithCached` must NOT apply a `/ 1 ether) * 1 ether` whole-BURNIE floor (mint-boost is OUT of BUR scope — D-40N-BUR-MINTBOOST-OUT-01)"
       ).to.equal(false);
       // Specifically, `lootboxFlipCredit` is never reassigned through a floor.
       expect(

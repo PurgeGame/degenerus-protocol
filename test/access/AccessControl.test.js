@@ -148,9 +148,7 @@ describe("AccessControl", function () {
       await expect(
         game.connect(alice).recordMint(
           alice.address, // player
-          0,             // lvl
           eth("0.01"),   // costWei
-          1,             // mintUnits
           0              // payKind = DirectEth
         )
       ).to.be.revertedWithCustomError(game, "E");

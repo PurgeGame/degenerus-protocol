@@ -55,8 +55,8 @@ contract VRFPathInvariants is DeployProtocol {
     // TEST-02: Stall-to-Recovery State Machine
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// @notice Stall-to-recovery transitions are valid: rngLocked false after swap,
-    ///         gap days have words after resume
+    /// @notice Stall-to-recovery transitions are valid: a coordinator swap preserves
+    ///         the lock state, gap days have words after resume
     function invariant_stallRecoveryValid() public view {
         assertEq(
             handler.ghost_stateViolations(),
@@ -65,12 +65,14 @@ contract VRFPathInvariants is DeployProtocol {
         );
     }
 
-    /// @notice rngLocked is always false immediately after coordinator swap
-    function invariant_rngUnlockedAfterSwap() public view {
+    /// @notice A coordinator swap never flips rngLocked in either direction: a daily
+    ///         request in flight keeps the lock until the re-issued word lands (freeze
+    ///         discipline); an idle or mid-day-only state stays unlocked.
+    function invariant_swapPreservesLockState() public view {
         assertEq(
             handler.ghost_stateViolations(),
             0,
-            "VRFPath: rngLocked true after coordinator swap"
+            "VRFPath: coordinator swap flipped rngLocked"
         );
     }
 

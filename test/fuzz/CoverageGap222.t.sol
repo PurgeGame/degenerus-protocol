@@ -186,11 +186,9 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "recordMint(address,uint24,uint256,uint32,uint8)",
+                "recordMint(address,uint256,uint8)",
                 buyer,
-                uint24(0),
                 uint256(1),
-                uint32(1),
                 uint8(0)
             )
         );

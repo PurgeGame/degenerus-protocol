@@ -31,6 +31,7 @@ contract VRFPathHandler is Test {
     uint256 public ghost_recoveryCount;
     uint256 public ghost_stateViolations;
     bool public ghost_swapPending;
+    bool public ghost_livenessLatched;
 
     // --- Ghost variables: TEST-03 (gap backfill) ---
     uint256 public ghost_maxGapSize;
@@ -51,16 +52,36 @@ contract VRFPathHandler is Test {
         return uint48(uint256(vm.load(address(game), bytes32(uint256(35)))));
     }
 
-    /// @dev Read dailyIdx from storage slot 0 (uint32 at byte offset 4 = bits 32-63).
+    /// @dev Read dailyIdx from storage slot 0 (uint24 at byte offset 3 = bits 24-47).
     function _dailyIdx() internal view returns (uint48) {
         uint256 raw = uint256(vm.load(address(game), bytes32(uint256(0))));
-        return uint48(uint32(raw >> 32));
+        return uint48(uint24(raw >> 24));
     }
 
     /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 36, post V62 repack: was 38).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(36)));
         return uint256(vm.load(address(game), slot));
+    }
+
+    /// @dev Mirror of the contract's _livenessTriggered() (DegenerusGameStorage), read from
+    ///      one slot-0 load: purchaseStartDay uint24 at byte 0, rngRequestTime uint48 at
+    ///      byte 6, level uint24 at byte 12, jackpotPhaseFlag bool at byte 15,
+    ///      lastPurchaseDay bool at byte 17. Constants mirror _DEPLOY_IDLE_TIMEOUT_DAYS
+    ///      (365), the 120-day mid-game idle timeout, and _VRF_GRACE_PERIOD (14 days).
+    ///      Once true at an advanceGame entry, that advance routes into the staged
+    ///      terminal flow, whose entropy path (_gameOverEntropy) by design does NOT
+    ///      backfill gap days.
+    function _livenessMirror() internal view returns (bool) {
+        uint256 raw = uint256(vm.load(address(game), bytes32(uint256(0))));
+        if (uint8(raw >> 136) != 0 || uint8(raw >> 120) != 0) return false; // lastPurchaseDay || jackpotPhaseFlag
+        uint24 lvl = uint24(raw >> 96);
+        uint256 psd = uint24(raw);
+        uint256 currentDay = game.currentDayView();
+        if (lvl == 0 && currentDay > psd + 365) return true;
+        if (lvl != 0 && currentDay > psd + 120) return true;
+        uint48 rngStart = uint48(raw >> 48);
+        return rngStart != 0 && block.timestamp - rngStart >= 14 days;
     }
 
     modifier useActor(uint256 seed) {
@@ -131,6 +152,11 @@ contract VRFPathHandler is Test {
         // Capture dailyIdx BEFORE advanceGame updates it — this is the contract's
         // gap start reference (rngGate backfills from dailyIdx+1 to currentDay).
         uint48 dailyIdxBefore = _dailyIdx();
+        // Latch liveness at entry: an advance that runs while the trigger holds routes
+        // into the staged terminal flow (gap backfill not owed from then on). Evaluated
+        // pre-call because the terminal fallback zeroes rngRequestTime, hiding the
+        // VRF-grace trigger from any later read.
+        if (_livenessMirror()) ghost_livenessLatched = true;
 
         try game.advanceGame() {} catch {
             return;
@@ -153,29 +179,41 @@ contract VRFPathHandler is Test {
         // Only check gap days after the FULL recovery cycle completes:
         // advanceGame transitioned the game from locked to unlocked, meaning
         // the VRF word was consumed and gap days were backfilled in this call.
-        // Skip check if game ended via liveness timeout — the game-over path
-        // uses _gameOverEntropy which does NOT call _backfillGapDays.
+        // Skip check once liveness has latched — the staged terminal flow uses
+        // _gameOverEntropy which does NOT call _backfillGapDays, and it unlocks
+        // before the gameOver flag flips at the end of the staged sequence.
+        if (ghost_swapPending && ghost_livenessLatched) {
+            ghost_swapPending = false;
+        }
         if (ghost_swapPending && lockedBefore && !lockedAfter && !game.gameOver()) {
-            uint32 dayAfter = game.currentDayView();
-
-            if (dayAfter > dailyIdxBefore) {
-                // Full recovery cycle completed -- check gap days.
-                // The contract backfills from dailyIdx+1 to currentDay (capped at 120).
-                // We mirror this range exactly.
-                if (dayAfter > dailyIdxBefore + 1) {
-                    uint32 gapStart = uint32(dailyIdxBefore + 1);
-                    uint32 gapEnd = dayAfter;
-                    if (gapEnd - gapStart > 120) gapEnd = gapStart + 120;
-                    for (uint32 d = gapStart; d < gapEnd; d++) {
-                        if (game.rngWordForDay(uint24(d)) == 0) {
-                            ghost_gapBackfillFailures++;
-                        }
+            // The recovery consumes the in-flight word for the day it was requested for and
+            // advances dailyIdx to THAT day — it does NOT jump straight to currentDay. The
+            // contract fills [dailyIdx+1, processedDay) as gap days (capped at 120) and the
+            // processed day itself, then sets dailyIdx = processedDay. So the days guaranteed
+            // worded by this transition run from dailyIdxBefore+1 through dailyIdxAfter, NOT to
+            // currentDay (later calendar days are normal one-per-advance catch-up, each its own
+            // lock cycle). Mirror that exact range, not the wall-clock day.
+            uint48 dailyIdxAfter = _dailyIdx();
+            if (dailyIdxAfter > dailyIdxBefore) {
+                // The processed day always carries the freshly-applied word.
+                if (game.rngWordForDay(uint24(dailyIdxAfter)) == 0) {
+                    ghost_gapBackfillFailures++;
+                }
+                // Backfilled gap days [dailyIdxBefore+1, dailyIdxAfter), capped at 120 exactly
+                // as _backfillGapDays does (a >120-day stall leaves the middle days unfilled
+                // by design, so they are out of scope for this assertion).
+                uint32 gapStart = uint32(dailyIdxBefore + 1);
+                uint32 gapEnd = uint32(dailyIdxAfter);
+                if (gapEnd - gapStart > 120) gapEnd = gapStart + 120;
+                for (uint32 d = gapStart; d < gapEnd; d++) {
+                    if (game.rngWordForDay(uint24(d)) == 0) {
+                        ghost_gapBackfillFailures++;
                     }
+                }
 
-                    uint256 gapSize = uint256(gapEnd - gapStart);
-                    if (gapSize > ghost_maxGapSize) {
-                        ghost_maxGapSize = gapSize;
-                    }
+                uint256 gapSize = uint256(uint32(dailyIdxAfter) - gapStart);
+                if (gapSize > ghost_maxGapSize) {
+                    ghost_maxGapSize = gapSize;
                 }
 
                 ghost_swapPending = false;
@@ -246,6 +284,7 @@ contract VRFPathHandler is Test {
         if (game.gameOver()) return;
 
         ghost_dayBeforeSwap = game.currentDayView();
+        bool lockedBefore = game.rngLocked();
 
         MockVRFCoordinator newVRF = new MockVRFCoordinator();
         uint256 newSubId = newVRF.createSubscription();
@@ -264,8 +303,12 @@ contract VRFPathHandler is Test {
         ghost_stallCount++;
         ghost_swapPending = true;
 
-        // TEST-02: rngLocked must be false after swap
-        if (game.rngLocked()) {
+        // TEST-02: the swap re-points config and re-issues any in-flight request but
+        // never flips the lock in either direction — a daily request in flight keeps
+        // rngLocked=true until the re-issued word lands (freeze discipline: unlocking
+        // early would open a player-action window inside the commitment span), and an
+        // idle or mid-day-only state keeps rngLocked=false.
+        if (game.rngLocked() != lockedBefore) {
             ghost_stateViolations++;
         }
     }
