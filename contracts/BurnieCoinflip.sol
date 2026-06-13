@@ -144,12 +144,6 @@ contract BurnieCoinflip {
     IDegenerusQuests internal constant questModule =
         IDegenerusQuests(ContractAddresses.QUESTS);
 
-    // Coinflip day result struct
-    struct CoinflipDayResult {
-        uint16 rewardPercent;
-        bool win;
-    }
-
     // Player coinflip state (packed where possible)
     struct PlayerCoinflipState {
         uint128 claimableStored;
@@ -160,9 +154,12 @@ contract BurnieCoinflip {
         uint128 autoRebuyCarry;
     }
 
-    // Daily coinflip storage
-    mapping(uint24 => mapping(address => uint256)) internal coinflipBalance;
-    mapping(uint24 => CoinflipDayResult) internal coinflipDayResult;
+    // Daily coinflip storage. coinflipStakePacked banks 2 days per slot (key =
+    // day>>1, 128-bit wei lanes, lossless — flip credits can be sub-1-BURNIE);
+    // coinflipDayResultPacked banks 32 days per slot (key = day>>5, 8-bit lanes,
+    // 3-state). Access via the helpers.
+    mapping(uint24 => mapping(address => uint256)) internal coinflipStakePacked;
+    mapping(uint24 => uint256) internal coinflipDayResultPacked;
     mapping(address => PlayerCoinflipState) internal playerState;
 
 
@@ -190,8 +187,8 @@ contract BurnieCoinflip {
     ///         survives that day's flip.
     constructor() {
         for (uint24 d = 1; d <= SEED_FLIP_DAYS; ) {
-            coinflipBalance[d][ContractAddresses.VAULT] = SEED_FLIP_DAILY;
-            coinflipBalance[d][ContractAddresses.SDGNRS] = SEED_FLIP_DAILY;
+            _setFlipStake(d, ContractAddresses.VAULT, SEED_FLIP_DAILY);
+            _setFlipStake(d, ContractAddresses.SDGNRS, SEED_FLIP_DAILY);
             emit CoinflipStakeUpdated(ContractAddresses.VAULT, d, SEED_FLIP_DAILY, SEED_FLIP_DAILY);
             emit CoinflipStakeUpdated(ContractAddresses.SDGNRS, d, SEED_FLIP_DAILY, SEED_FLIP_DAILY);
             unchecked {
@@ -350,8 +347,7 @@ contract BurnieCoinflip {
     /// @return rewardPercent The reward percentage for that day.
     /// @return win Whether the flip was a win.
     function getCoinflipDayResult(uint24 day) external view returns (uint16 rewardPercent, bool win) {
-        CoinflipDayResult memory result = coinflipDayResult[day];
-        return (result.rewardPercent, result.win);
+        return _dayResult(day);
     }
 
     /// @notice Consume coinflip winnings via BurnieCoin for burns (no mint).
@@ -462,9 +458,7 @@ contract BurnieCoinflip {
 
         // Auto-rebuy-off processes a larger fixed window while keeping tx cost bounded.
         while (remaining != 0 && cursor <= latest) {
-            CoinflipDayResult memory result = coinflipDayResult[cursor];
-            uint16 rewardPercent = result.rewardPercent;
-            bool win = result.win;
+            (uint16 rewardPercent, bool win) = _dayResult(cursor);
 
             // Skip unresolved days (gaps from testnet day-advance or missed resolution)
             if (rewardPercent == 0 && !win) {
@@ -472,7 +466,7 @@ contract BurnieCoinflip {
                 continue;
             }
 
-            uint256 storedStake = coinflipBalance[cursor][player];
+            uint256 storedStake = _flipStake(cursor, player);
             uint256 stake = storedStake;
             if (rebuyActive && carry != 0) {
                 stake += carry;
@@ -480,7 +474,7 @@ contract BurnieCoinflip {
 
             if (storedStake != 0) {
                 // Clear stake whether win or loss (loss = forfeit principal)
-                coinflipBalance[cursor][player] = 0;
+                _setFlipStake(cursor, player, 0);
             }
 
             if (stake != 0) {
@@ -616,11 +610,11 @@ contract BurnieCoinflip {
         // Determine which future day this stake applies to (always the next window).
         uint24 targetDay = _targetFlipDay();
 
-        uint256 prevStake = coinflipBalance[targetDay][player];
+        uint256 prevStake = _flipStake(targetDay, player);
         uint256 newStake = prevStake + coinflipDeposit;
 
         // Update player's stake for target day
-        coinflipBalance[targetDay][player] = newStake;
+        _setFlipStake(targetDay, player, newStake);
         _updateTopDayBettor(player, newStake, targetDay);
         emit CoinflipStakeUpdated(player, targetDay, coinflipDeposit, newStake);
 
@@ -828,10 +822,7 @@ contract BurnieCoinflip {
         bool win = (rngWord & 1) == 1;
 
         // Record the day's result for future claims
-        coinflipDayResult[epoch] = CoinflipDayResult({
-            rewardPercent: rewardPercent,
-            win: win
-        });
+        _storeDayResult(epoch, rewardPercent, win);
 
         // Bounty resolution: if someone armed the bounty, remove half; if win, credit that half to them.
         uint128 currentBounty_ = currentBounty;
@@ -986,7 +977,7 @@ contract BurnieCoinflip {
     /// @notice Get player's current coinflip stake for next day.
     function coinflipAmount(address player) external view returns (uint256) {
         uint24 targetDay = _targetFlipDay();
-        return coinflipBalance[targetDay][player];
+        return _flipStake(targetDay, player);
     }
 
     /// @notice Get player's auto-rebuy configuration.
@@ -1045,20 +1036,20 @@ contract BurnieCoinflip {
             cursor = startDay + 1;
         }
         while (remaining != 0 && cursor <= latestDay) {
-            CoinflipDayResult memory result = coinflipDayResult[cursor];
+            (uint16 rewardPercent, bool win) = _dayResult(cursor);
             // Skip unresolved days (both fields zero) instead of breaking,
             // to handle gaps from testnet day-advance or missed resolution.
-            if (result.rewardPercent == 0 && !result.win) {
+            if (rewardPercent == 0 && !win) {
                 unchecked { ++cursor; --remaining; }
                 continue;
             }
 
-            if (result.win) {
-                uint256 flipStake = coinflipBalance[cursor][player];
+            if (win) {
+                uint256 flipStake = _flipStake(cursor, player);
                 if (flipStake != 0) {
                     // Payout = principal + (principal * rewardPercent%)
                     uint256 payout = flipStake +
-                        (flipStake * uint256(result.rewardPercent)) /
+                        (flipStake * uint256(rewardPercent)) /
                         100;
                     total += payout;
                 }
@@ -1073,6 +1064,46 @@ contract BurnieCoinflip {
     /*+======================================================================+
       |                    INTERNAL HELPER FUNCTIONS                         |
       +======================================================================+*/
+
+    /// @dev Player stake for `day` in wei (2 days/slot, 128-bit lanes, lossless).
+    ///      Stored in wei — flip credits (keeper advance rewards, redemption shares)
+    ///      can be sub-1-BURNIE, so whole-token granularity would zero them. Fresh
+    ///      SLOAD — never cached across the claim loop's external calls.
+    function _flipStake(uint24 day, address p) internal view returns (uint256) {
+        return uint128(coinflipStakePacked[day >> 1][p] >> ((day & 1) * 128));
+    }
+
+    /// @dev Masked write of `day`'s stake lane, preserving the sibling day. weiAmount
+    ///      is provably <= uint128 (BurnieCoin caps total supply at uint128, and a
+    ///      stake never exceeds supply). Fresh SLOAD/SSTORE.
+    function _setFlipStake(uint24 day, address p, uint256 weiAmount) internal {
+        uint256 shift = (day & 1) * 128;
+        uint24 key = day >> 1;
+        uint256 w = coinflipStakePacked[key][p];
+        w = (w & ~(uint256(type(uint128).max) << shift)) | (weiAmount << shift);
+        coinflipStakePacked[key][p] = w;
+    }
+
+    /// @dev Day result for `day` (32 days/slot, 8-bit lanes). 3-state byte:
+    ///      0 = unresolved, 1 = resolved loss, 50..156 = resolved win at that reward%.
+    ///      win is derived (byte >= 50, since every win stores reward >= 50); losing
+    ///      days don't retain the (functionally unused) reward%. Resolution detection
+    ///      stays `rewardPercent != 0` — a resolved loss reads back as 1, not 0.
+    function _dayResult(uint24 day) internal view returns (uint16 rewardPercent, bool win) {
+        uint8 b = uint8(coinflipDayResultPacked[day >> 5] >> ((day & 31) * 8));
+        rewardPercent = b;
+        win = b >= 50;
+    }
+
+    /// @dev Masked write of `day`'s result lane, preserving the other 31 days.
+    function _storeDayResult(uint24 day, uint16 rewardPercent, bool win) internal {
+        uint256 b = win ? uint256(rewardPercent) : 1; // win: 50..156; loss: nonzero sentinel
+        uint256 shift = (day & 31) * 8;
+        uint24 key = day >> 5;
+        uint256 w = coinflipDayResultPacked[key];
+        w = (w & ~(uint256(0xFF) << shift)) | (b << shift);
+        coinflipDayResultPacked[key] = w;
+    }
 
     /// @dev Check if coinflip deposits are locked during BAF resolution levels.
     ///      Only blocks at levels where BAF jackpot fires (every 10th). Deposits
