@@ -232,9 +232,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ------------------------------------------------------------------*/
     /// @dev ETH-equivalent advance/open-bounty target per unit of work (in ETH wei).
     ///      A frozen constant (a module cannot hold a deploy-time immutable in the
-    ///      Game's storage context). ⚠ The bounty target tune is the GAS phase's charge;
-    ///      this carries the current value unchanged.
-    uint256 internal constant BOUNTY_ETH_TARGET = 885_000_000;
+    ///      Game's storage context). Sized so the BURNIE bounty's ETH-value reimburses
+    ///      the crank's gas at the ~0.5-gwei reference: the advance leg (unit·2·mult)
+    ///      covers a heavy multi-million-gas advance, the open leg (unit·k/5) a
+    ///      ~74k/box drain. The reward is an illiquid coinflip credit, so cranking is
+    ///      liveness work rather than a clean farm even when it roughly breaks even.
+    uint256 internal constant BOUNTY_ETH_TARGET = 885_000_000_000_000;
 
     /// @dev Advance reward ratio (2× · mult). The process STAGE rides the advance
     ///      bounty (PLACE-02 §6): mintBurnie's advance leg pays `unit · 2 · mult`, scaling

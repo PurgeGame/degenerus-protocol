@@ -133,9 +133,9 @@ contract BurnieCoinflip {
     uint16 private constant BPS_DENOMINATOR = 10_000;
     uint16 private constant RECYCLE_BONUS_BPS = 75;
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
-    uint8 private constant COIN_CLAIM_DAYS = 90;
-    uint8 private constant COIN_CLAIM_FIRST_DAYS = 30;
-    uint16 private constant AUTO_REBUY_OFF_CLAIM_DAYS_MAX = 1095;
+    uint16 private constant COIN_CLAIM_DAYS = 365;
+    uint16 private constant COIN_CLAIM_FIRST_DAYS = 30;
+    uint16 private constant AUTO_REBUY_OFF_CLAIM_DAYS_MAX = 1460;
     uint24 private constant MAX_BAF_BRACKET = (type(uint24).max / 10) * 10;
     /// @dev Initial-emission seed stakes: 200k BURNIE per day for days 1-20, each to
     ///      VAULT and sDGNRS. All initial BURNIE must survive a coinflip before minting.
@@ -420,7 +420,7 @@ contract BurnieCoinflip {
         if (start >= latest) return mintable;
 
         // Enforce claim window unless auto-rebuy is enabled (settles back to enable day).
-        uint8 windowDays = start == 0 ? COIN_CLAIM_FIRST_DAYS : COIN_CLAIM_DAYS;
+        uint16 windowDays = start == 0 ? COIN_CLAIM_FIRST_DAYS : COIN_CLAIM_DAYS;
         uint24 minClaimableDay;
         if (rebuyActive) {
             minClaimableDay = state.autoRebuyStartDay;
@@ -1019,7 +1019,7 @@ contract BurnieCoinflip {
         uint24 startDay = playerState[player].lastClaim;
         if (startDay >= latestDay) return 0;
 
-        uint8 windowDays = startDay == 0 ? COIN_CLAIM_FIRST_DAYS : COIN_CLAIM_DAYS;
+        uint16 windowDays = startDay == 0 ? COIN_CLAIM_FIRST_DAYS : COIN_CLAIM_DAYS;
         uint24 minClaimableDay;
         unchecked {
             minClaimableDay = latestDay > windowDays
@@ -1030,7 +1030,7 @@ contract BurnieCoinflip {
             startDay = minClaimableDay;
         }
 
-        uint8 remaining = windowDays;
+        uint16 remaining = windowDays;
         uint24 cursor;
         unchecked {
             cursor = startDay + 1;
