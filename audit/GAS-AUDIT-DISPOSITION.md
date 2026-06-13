@@ -3,9 +3,10 @@
 Generated 2026-06-11 after commits 16f57728 / dd09cb99 / 554f83fd.
 Reconciled 2026-06-12 after round 4 (ca0efea5): the 50 round-4 IDs moved from the open table into Handled.
 Round 5 applied 2026-06-12 (Game core + Vault + GNRUS): 17 more IDs moved into Handled.
+Round 6 applied 2026-06-12 (WWXRP + Degenerette + Bingo, commit bfd639be): 17 more IDs moved into Handled (14 edits + 3 subsumed/already-applied).
 IDs below are HANDLED — do not re-apply. Everything else in GAS-AUDIT-2026-06-10.{md,json} is open.
 
-## Handled (137 + 62 round 3 + 50 round 4 + 17 round 5)
+## Handled (137 + 62 round 3 + 50 round 4 + 17 round 5 + 17 round 6)
 
 - **ADMIN-01** — APPLIED commit dd09cb99 — proposeFeedSwap: hoisted sDGNRS.votingSupply() into a single `circ` read above the path branch; votingSnapshot now uses 
 - **ADMIN-02** — APPLIED commit dd09cb99 — propose: identical hoist — single votingSupply() read above the path branch, votingSnapshot reuses `circ` in contracts/D
@@ -291,7 +292,30 @@ returned 17/17 FAITHFUL with zero unexplained hunks.
 - **TOKENS-06** — APPLIED round 5 — burn() writes cached `burnerBal - amount` (checked; freshness proven across the claim call)
 - **TOKENS-08** — APPLIED round 5 sub-changes (b)+(c) ONLY (PARTIAL per skeptic; (a) omitted — never trade worst-case for typical in the advance chain) — flush phase incl. both packed writes gated on pSet != 0; running masks in both pickCharity loops
 
-## Open, non-rejected (93 after round 5)
+### Round 6 (2026-06-12) — WrappedWrappedXRP / DegeneretteModule / BingoModule (commit bfd639be)
+
+Packets + adjudications + applied records: `.planning/gas-round6/packet-{wwxrp,degenerette,bingo}.md` + APPLIED-LEDGER.md.
+3 reviewer fan-out passes returned 17/17 FAITHFUL with zero unexplained hunks.
+
+- **TOKENS-13** — APPLIED round 6 — dominated `amount == 0` revert deleted from mintPrize + ZeroAmount error + natspec line (all 5 call sites re-verified to gate nonzero)
+- **TOKENS-14** — APPLIED round 6 — permanently-unreachable MINTER_COIN auth branch + constant removed (BurnieCoin has zero wwxrp references; frozen contracts)
+- **TOKENS-15** — APPLIED round 6 — vaultMintTo `to == address(0)` check deleted (identical check in _mint dominates, same error, rollback identical)
+- **TOKENS-16** — APPLIED round 6 — vaultMintTo `amount == 0` early-return deleted (vault-side guard at DegenerusVault.wwxrpMint dominates; sole caller, frozen)
+- **TOKENS-19** — APPLIED round 6 — non-standard Approval emission on finite-allowance transferFrom deleted (~1,750/call; allowance queryable via public mapping)
+- **TOKENS-21** — APPLIED round 6 — _burn `from == address(0)` check deleted (balanceOf[0]==0 invariant via _mint/_transfer to-checks, both retained); burnForGame natspec line dropped
+- **DEGENERETTE-02** — APPLIED round 6 — inline ETH shortfall waterfall replaced by canonical _settleShortfall(player, totalBet - ethPaid, true); revert delta InvalidBet→E on insufficient afking (failure path only, no test pinned it)
+- **DEGENERETTE-03** — CLOSED round 6 (NHR adjudicated) — SUBSUMED by RT-CLAIMS-11: _lrAdd gives one SLOAD by construction, mooting the skeptic's CSE-evidence gate; wrap-on-mask truncation preserved verbatim
+- **DEGENERETTE-05** — APPLIED round 6 — prizePoolFrozen snapshot lazied from resolveBets entry into _distributePayout's first-ETH-win pool load; struct comment updated
+- **DEGENERETTE-10** — APPLIED round 6 — maxSpins ternary + _validateMinBet merged into one dispatch chain (explicit WWXRP arm, else UnsupportedCurrency); zero-amount check folded into min-bet check (all MIN_BETs nonzero, same selector); _validateMinBet deleted; revert order/selector deltas on compound-invalid inputs only
+- **RT-CLAIMS-11** — APPLIED round 6 — new DegenerusGameStorage._lrAdd(shift, mask, delta): one SLOAD, field' = ((field + delta) & mask), one SSTORE; both _collectBetFunds RMW sites swapped; no layout change
+- **RT-CLAIMS-14** — CLOSED round 6 — SUBSUMED: round 2's DEGENERETTE-04 (dd09cb99) already caches uint24 lvl and threads it through _placeDegeneretteBetCore; no redundant level read remains on the placement path
+- **SMALLMODS-03** — APPLIED round 6 — traitBurnTicket[level] bucket ref + traitBase hoisted out of claimBingo's 8-iteration ownership loop (disjoint bit ranges verified; loop stays read-only)
+- **SMALLMODS-05** — APPLIED round 6 — firstQuadrant/firstSymbol cached (uint8 fq / uint32 fs), tier booleans derived from caches, three |= → plain assignments (bit-identical; CEI unchanged)
+- **SMALLMODS-08** — APPLIED round 6 — _requireApproved collapsed into _resolvePlayer (dominated first conjunct); Game's own copies untouched
+- **SMALLMODS-09** — APPLIED round 6 — inheritance reduced to DegenerusGameStorage (parents were storage-free abstracts); gates: storageLayout byte-identical, methodIdentifiers delta = {curseCountOf} only, no test calls curseCountOf on the module address
+- **SMALLMODS-17** — CLOSED round 6 — ALREADY APPLIED in live source (stale open entry): both Game stubs (claimBingo, claimAffiliateDgnrs) forward msg.data with unnamed params since the round-1 msg.data-forwarding family
+
+## Open, non-rejected (76 after round 6)
 
 | id | verdict | category | freq | file | est. save |
 |---|---|---|---|---|---|
@@ -312,16 +336,6 @@ returned 17/17 FAITHFUL with zero unexplained hunks.
 | LIBS-04 | APPROVED | idiom | warm | libraries/EntropyLib.sol | ~40-70 gas per loop iteration (one iteration per 5 ETH of re |
 | LIBS-01 | APPROVED | bytecode_dedup | hot | libraries/PriceLookupLib.sol | Levels >=100 (the long-run regime, called per purchase/quote |
 | LIBS-02 | APPROVED | idiom | hot | libraries/PriceLookupLib.sol | ~10-20 gas/call vs the branch chain (DIV+SHR+AND+MUL ≈ 4 ops |
-| SMALLMODS-03 | APPROVED | loop | warm | modules/DegenerusGameBingoModule.sol | ~50-70 gas/iteration x 7 redundant iterations ≈ 350-500 per  |
-| SMALLMODS-05 | APPROVED | redundant_sload | warm | modules/DegenerusGameBingoModule.sol | ~150-250 per quadrant-first/symbol-first claim (1-2 warm SLO |
-| SMALLMODS-08 | APPROVED | redundant_check | warm | modules/DegenerusGameBingoModule.sol | ~10 per claimAffiliateDgnrs with an explicit player arg |
-| SMALLMODS-09 | APPROVED | dead_code | cold | modules/DegenerusGameBingoModule.sol | 0 |
-| SMALLMODS-17 | APPROVED | idiom | warm | modules/DegenerusGameBingoModule.sol | ~150-400 per claimBingo (skips uint32[8] calldata->stack->me |
-| DEGENERETTE-02 | APPROVED | bytecode_dedup | hot | modules/DegenerusGameDegeneretteModule.sol | ~0 (one extra internal JUMP); value is consistency with the  |
-| DEGENERETTE-05 | APPROVED | redundant_sload | hot | modules/DegenerusGameDegeneretteModule.sol | ~100 gas per resolveBets call that produces no ETH pool-touc |
-| DEGENERETTE-10 | APPROVED | idiom | hot | modules/DegenerusGameDegeneretteModule.sol | ~20-40 gas per placement (2-3 duplicate comparisons + a call |
-| RT-CLAIMS-11 | APPROVED | idiom | hot | modules/DegenerusGameDegeneretteModule.sol | ~100-120 gas per degenerette bet placement (plus equal savin |
-| RT-CLAIMS-14 | APPROVED | redundant_sload | hot | modules/DegenerusGameDegeneretteModule.sol | ~100 gas per ETH degenerette bet placement (0 for BURNIE/WWX |
 | MINT-12 | APPROVED | redundant_check | cold | modules/DegenerusGameMintStreakUtils.sol | ~600-1000 per salvage swap (1 warm SLOAD + keccak + encodePa |
 | MINT-15 | APPROVED | bytecode_dedup | cold | modules/DegenerusGameMintStreakUtils.sol | ~0 on-chain (marginally shallower selector search in 5 modul |
 | RT-AFKING-WHALE-07 | APPROVED | redundant_sload | hot | modules/DegenerusGameMintStreakUtils.sol | ~97 per activity-score computation (warm SLOAD avoided) — fi |
@@ -334,12 +348,6 @@ returned 17/17 FAITHFUL with zero unexplained hunks.
 | RT-PACKING-05 | APPROVED | storage_packing | warm | storage/DegenerusGameStorage.sol | ~2,100 per whale-pass/deity purchase (reserved check: 2 cold |
 | RT-PACKING-06 | APPROVED | storage_packing | warm | storage/DegenerusGameStorage.sol | ~2,100 per decimator claim (poolWei+totalBurn now one cold S |
 | RT-IDIOMS-08 | APPROVED | loop | warm | storage/DegenerusGameStorage.sol | ~20,000 per 100-level whale bundle purchase (~200/iteration  |
-| TOKENS-13 | APPROVED | redundant_check | warm | WrappedWrappedXRP.sol | ~25 per prize mint (lootbox WWXRP outcomes ~10% of opens, de |
-| TOKENS-14 | APPROVED | dead_code | warm | WrappedWrappedXRP.sol | ~25 per COINFLIP-path mint (GAME-path mints short-circuit at |
-| TOKENS-15 | APPROVED | redundant_check | cold | WrappedWrappedXRP.sol | ~25 per vaultMintTo (vault-owner admin mint, rare) |
-| TOKENS-16 | APPROVED | redundant_check | cold | WrappedWrappedXRP.sol | ~15 per vaultMintTo (rare admin path) |
-| TOKENS-19 | APPROVED | event | warm | WrappedWrappedXRP.sol | ~1,800 per non-infinite-allowance transferFrom |
-| TOKENS-21 | APPROVED | redundant_check | warm | WrappedWrappedXRP.sol | ~22 per WWXRP game-bet burn (modules/DegenerusGameDegenerett |
 | RT-COINFLIP-10 | NEEDS_HUMAN_REVIEW | dead_code | hot | BurnieCoin.sol | ~15-20 per third-party transferFrom (one PUSH20+EQ+JUMPI) |
 | BURNIE-10 | NEEDS_HUMAN_REVIEW | loop | hot | BurnieCoinflip.sol | ~50 per loop iteration if the compiler hoists the invariant  |
 | BURNIE-16 | NEEDS_HUMAN_REVIEW | unused_function | cold | BurnieCoinflip.sol | ~22 dispatcher comparison per call to later selectors (negli |
@@ -355,7 +363,6 @@ returned 17/17 FAITHFUL with zero unexplained hunks.
 | ADVANCE-13 | NEEDS_HUMAN_REVIEW | other | cold | modules/DegenerusGameAdvanceModule.sol | ~10-20 gas per level transition (stack plumbing) |
 | RT-ADVANCE-10 | NEEDS_HUMAN_REVIEW | redundant_external_call | warm | modules/DegenerusGameAdvanceModule.sol | ~2,000-3,000 per purchase-phase day: one delegatecall round- |
 | WHALEBOON-16 | NEEDS_HUMAN_REVIEW | other | hot | modules/DegenerusGameBoonModule.sol | ~2700-3500 per boonless flip resolution (cold module account |
-| DEGENERETTE-03 | NEEDS_HUMAN_REVIEW | redundant_sload | hot | modules/DegenerusGameDegeneretteModule.sol | ~100 gas per ETH or BURNIE bet placement (one warm SLOAD eli |
 | SMALLMODS-16 | NEEDS_HUMAN_REVIEW | bytecode_dedup | cold | modules/DegenerusGameGameOverModule.sol | ~2,000-4,000 once at game over (drops one CALL + Game dispat |
 | RT-MINT-02 | NEEDS_HUMAN_REVIEW | redundant_external_call | hot | modules/DegenerusGameMintModule.sol | ~7,500-8,500 per fresh-ETH ticket purchase (6,700 net value- |
 | RT-MINT-06 | NEEDS_HUMAN_REVIEW | redundant_external_call | hot | modules/DegenerusGameMintModule.sol | ~1,500-3,000 per merged pair with per-leg events preserved ( |
