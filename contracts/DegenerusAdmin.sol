@@ -316,11 +316,24 @@ contract DegenerusAdmin {
     /// @notice Proposal data by ID (1-indexed).
     mapping(uint256 => Proposal) public proposals;
 
+    /// @dev Per-voter vote direction + weight, packed into one slot (6 bytes).
+    struct VoterRecord {
+        Vote v;     // vote direction
+        uint40 w;   // weight at time of vote (whole tokens)
+    }
+
+    /// @dev Vote direction + weight per voter per proposal (packed slot).
+    mapping(uint256 => mapping(address => VoterRecord)) private voterRecords;
+
     /// @notice Vote direction per voter per proposal.
-    mapping(uint256 => mapping(address => Vote)) public votes;
+    function votes(uint256 proposalId, address voter) external view returns (Vote) {
+        return voterRecords[proposalId][voter].v;
+    }
 
     /// @notice Vote weight recorded at time of vote (whole tokens).
-    mapping(uint256 => mapping(address => uint40)) public voteWeight;
+    function voteWeight(uint256 proposalId, address voter) external view returns (uint40) {
+        return voterRecords[proposalId][voter].w;
+    }
 
     /// @notice Tracks each address's current active proposal ID (0 = none).
     mapping(address => uint256) public activeProposalId;
@@ -354,11 +367,18 @@ contract DegenerusAdmin {
     /// @notice Feed proposal data by ID (1-indexed).
     mapping(uint256 => FeedProposal) public feedProposals;
 
+    /// @dev Vote direction + weight per voter per feed proposal (packed slot).
+    mapping(uint256 => mapping(address => VoterRecord)) private feedVoterRecords;
+
     /// @notice Vote direction per voter per feed proposal.
-    mapping(uint256 => mapping(address => Vote)) public feedVotes;
+    function feedVotes(uint256 proposalId, address voter) external view returns (Vote) {
+        return feedVoterRecords[proposalId][voter].v;
+    }
 
     /// @notice Vote weight recorded at time of feed vote (whole tokens).
-    mapping(uint256 => mapping(address => uint40)) public feedVoteWeight;
+    function feedVoteWeight(uint256 proposalId, address voter) external view returns (uint40) {
+        return feedVoterRecords[proposalId][voter].w;
+    }
 
     /// @notice Tracks each address's current active feed proposal ID (0 = none).
     mapping(address => uint256) public activeFeedProposalId;
@@ -549,15 +569,12 @@ contract DegenerusAdmin {
         (uint40 aw, uint40 rw) = (p.approveWeight, p.rejectWeight);
         uint40 weight = _voterWeight();
         if (weight != 0) {
-            (aw, rw) = _applyVote(
-                approve, weight,
-                feedVotes[proposalId][msg.sender],
-                feedVoteWeight[proposalId][msg.sender],
-                aw, rw
-            );
+            VoterRecord memory vr = feedVoterRecords[proposalId][msg.sender];
+            (aw, rw) = _applyVote(approve, weight, vr.v, vr.w, aw, rw);
             (p.approveWeight, p.rejectWeight) = (aw, rw);
-            feedVotes[proposalId][msg.sender] = approve ? Vote.Approve : Vote.Reject;
-            feedVoteWeight[proposalId][msg.sender] = weight;
+            feedVoterRecords[proposalId][msg.sender] = VoterRecord(
+                approve ? Vote.Approve : Vote.Reject, weight
+            );
             emit FeedVoteCast(proposalId, msg.sender, approve, uint256(weight) * 1 ether);
         }
 
@@ -723,15 +740,12 @@ contract DegenerusAdmin {
         (uint40 aw, uint40 rw) = (p.approveWeight, p.rejectWeight);
         uint40 weight = _voterWeight();
         if (weight != 0) {
-            (aw, rw) = _applyVote(
-                approve, weight,
-                votes[proposalId][msg.sender],
-                voteWeight[proposalId][msg.sender],
-                aw, rw
-            );
+            VoterRecord memory vr = voterRecords[proposalId][msg.sender];
+            (aw, rw) = _applyVote(approve, weight, vr.v, vr.w, aw, rw);
             (p.approveWeight, p.rejectWeight) = (aw, rw);
-            votes[proposalId][msg.sender] = approve ? Vote.Approve : Vote.Reject;
-            voteWeight[proposalId][msg.sender] = weight;
+            voterRecords[proposalId][msg.sender] = VoterRecord(
+                approve ? Vote.Approve : Vote.Reject, weight
+            );
             emit VoteCast(proposalId, msg.sender, approve, uint256(weight) * 1 ether);
         }
 
