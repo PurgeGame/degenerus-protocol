@@ -79,15 +79,12 @@ contract StakedStonkRedemption is DeployProtocol {
     /// @dev Storage slot of the `pendingByDay` mapping. v47: shifted from 11 to 10 because the
     ///      `pendingRedemptionBurnie` (internal uint256) at slot 10 was removed (BURNIE settled at
     ///      submit). Embedded inline so the test file is self-contained.
-    uint256 internal constant SLOT_PENDING_BY_DAY = 10;
+    /// @dev POST RT-PACKING-12: scalars packed into slot 0, mappings shifted down (pendingByDay 10->7).
+    uint256 internal constant SLOT_PENDING_BY_DAY = 7;
 
     /// @dev Storage slot of the outer `pendingRedemptions` mapping (composite key:
-    ///      mapping(address => mapping(uint32 => PendingRedemption))). Slot 7 per v44 layout.
-    uint256 internal constant SLOT_PENDING_REDEMPTIONS = 7;
-
-    /// @dev Storage slot of the `pendingResolveDay` sentinel (uint32). v47: shifted from 12 -> 11
-    ///      by the `pendingRedemptionBurnie` removal.
-    uint256 internal constant SLOT_PENDING_RESOLVE_DAY = 11;
+    ///      mapping(address => mapping(uint32 => PendingRedemption))). POST RT-PACKING-12: 7->5.
+    uint256 internal constant SLOT_PENDING_REDEMPTIONS = 5;
 
     // =====================================================================
     //                          ACTORS
@@ -168,6 +165,14 @@ contract StakedStonkRedemption is DeployProtocol {
     function _resolveDay(uint32 dayToResolve, uint16 roll) internal {
         vm.prank(address(game));
         sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
+    }
+
+    /// @dev Set `_pendingResolveDay` (slot 0, lane [224:247]) via a masked store so the packed
+    ///      `_totalSupply` / `_pendingRedemptionEthValue` lanes survive (POST RT-PACKING-12).
+    function _storePendingResolveDay(uint24 dayD) internal {
+        uint256 slot0 = uint256(vm.load(address(sdgnrs), bytes32(uint256(0))));
+        slot0 = (slot0 & ~(uint256(0xffffff) << 224)) | (uint256(dayD) << 224);
+        vm.store(address(sdgnrs), bytes32(uint256(0)), bytes32(slot0));
     }
 
     /// @dev Read packed `pendingByDay[day]` slot and unpack the 3×uint64 fields per the v47 layout
@@ -564,7 +569,7 @@ contract StakedStonkRedemption is DeployProtocol {
         // Pre-stamp the sentinel so the INV-13 guard inside burn does NOT trip the
         // PriorDayUnresolved revert. The sentinel must equal currentDayView (= dayD) or 0; we
         // set it to dayD for parity with the burned-by-day pool's seed.
-        vm.store(address(sdgnrs), bytes32(uint256(SLOT_PENDING_RESOLVE_DAY)), bytes32(uint256(dayD)));
+        _storePendingResolveDay(uint24(dayD));
 
         // Prime dayD's RNG so both the exact-cap burn and the over-cap burn pass the admission
         // gate and reach the supply-cap guard (the over-cap case must revert Insufficient, not
@@ -645,7 +650,7 @@ contract StakedStonkRedemption is DeployProtocol {
         assertEq(uint256(asSeed), 1, "evCap: pre-seed activityScore mismatch");
 
         // Pre-stamp sentinel so INV-13 guard does NOT trip
-        vm.store(address(sdgnrs), bytes32(uint256(SLOT_PENDING_RESOLVE_DAY)), bytes32(uint256(dayD)));
+        _storePendingResolveDay(uint24(dayD));
 
         // Prime dayD's RNG so the burn passes the admission gate and reaches the EV-cap check
         // (the burn must revert ExceedsDailyRedemptionCap, not BurnsBlockedBeforeDailyRng).

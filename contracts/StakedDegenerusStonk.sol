@@ -209,8 +209,26 @@ contract StakedDegenerusStonk {
     //                          ERC20 STATE
     // =====================================================================
 
-    /// @notice Total supply of sDGNRS tokens
-    uint256 public totalSupply;
+    /// @notice Total supply of sDGNRS tokens.
+    /// @dev Narrowed to uint128 (<= INITIAL_SUPPLY 1e30 << uint128 max 3.4e38, monotonically
+    ///      non-increasing after construction) and co-located with the two redemption-reservation
+    ///      scalars so the compiler packs all three into slot 0 (128+96+24 = 248/256 bits). Each
+    ///      access is an independent masked SLOAD/SSTORE — read-fresh/write-fresh, identical to
+    ///      separate slots (no manual cached word survives across a call). The public `totalSupply()`
+    ///      / `pendingRedemptionEthValue()` / `pendingResolveDay()` getters preserve the original ABI.
+    uint128 private _totalSupply;
+
+    /// @dev Total physically-segregated redemption ETH across all unresolved periods. uint96 holds
+    ///      7.9e28 wei (~658x the total ETH supply) — real-ETH-bounded, safe. Packed into slot 0.
+    uint96 private _pendingRedemptionEthValue;
+
+    /// @notice Wall-day of the currently-pending unresolved gambling-burn pool, or 0 if none.
+    /// @dev Enforces INV-13 (single-pool invariant): at most one day's pool may be unresolved at any
+    ///      time. Set by `_submitGamblingClaimFrom` on the first burn of a day; cleared by
+    ///      `resolveRedemptionPeriod` when that day's pool resolves. Read by AdvanceModule to derive
+    ///      `dayToResolve` directly. Game day 0 is unreachable by construction, so 0 unambiguously
+    ///      means "no pool pending". Packed into slot 0.
+    uint24 private _pendingResolveDay;
 
     /// @notice Token balance for each address
     mapping(address => uint256) public balanceOf;
@@ -228,8 +246,11 @@ contract StakedDegenerusStonk {
         PresaleBox
     }
 
-    /// @notice Balances for each reward pool
-    uint256[5] private poolBalances;
+    /// @notice Balances for each reward pool.
+    /// @dev uint128 elements: the compiler packs the 5 lanes into 3 slots in index order
+    ///      (Whale|Affiliate, Lootbox|Reward, PresaleBox), co-locating the warm whale/affiliate pair
+    ///      debited together in a pass purchase. Each balance is <= INITIAL_SUPPLY (1e30) << uint128 max.
+    uint128[5] private poolBalances;
 
     // =====================================================================
     //                   GAMBLING BURN STATE
@@ -268,18 +289,7 @@ contract StakedDegenerusStonk {
     mapping(address => mapping(uint24 => PendingRedemption)) public pendingRedemptions;
     mapping(uint24 => uint16) public redemptionPeriods;   // day => resolved roll (0 = unresolved, 25-175 = resolved)
 
-    uint256 public pendingRedemptionEthValue;      // total physically-segregated ETH across all periods
     mapping(uint24 => DayPending) internal pendingByDay;
-
-    /// @notice Wall-day of the currently-pending unresolved gambling-burn pool, or 0 if none.
-    /// @dev Enforces INV-13 (single-pool invariant): at most one day's pool may be unresolved at
-    ///      any time. Set by `_submitGamblingClaimFrom` on first burn of a day; cleared by
-    ///      `resolveRedemptionPeriod` when that day's pool is resolved. Read by AdvanceModule to
-    ///      derive `dayToResolve` directly — replaces the brittle `day - 1` derivation under
-    ///      multi-day RNG stalls. Game day 0 is unreachable by construction
-    ///      (`_simulatedDayIndexAt` underflows at day-1 → day 1 is the lowest legitimate value),
-    ///      so 0 unambiguously means "no pool pending".
-    uint24 public pendingResolveDay;
 
     // =====================================================================
     //                          CONSTANTS
@@ -391,11 +401,12 @@ contract StakedDegenerusStonk {
         _mint(ContractAddresses.DGNRS, creatorAmount);
         _mint(address(this), poolTotal);
 
-        poolBalances[uint8(Pool.Whale)] = whaleAmount;
-        poolBalances[uint8(Pool.Affiliate)] = affiliateAmount;
-        poolBalances[uint8(Pool.Lootbox)] = lootboxAmount;
-        poolBalances[uint8(Pool.Reward)] = rewardAmount;
-        poolBalances[uint8(Pool.PresaleBox)] = presaleBoxAmount;
+        // Pool amounts are BPS slices of INITIAL_SUPPLY (1e30) << uint128 max — narrowing is safe.
+        poolBalances[uint8(Pool.Whale)] = uint128(whaleAmount);
+        poolBalances[uint8(Pool.Affiliate)] = uint128(affiliateAmount);
+        poolBalances[uint8(Pool.Lootbox)] = uint128(lootboxAmount);
+        poolBalances[uint8(Pool.Reward)] = uint128(rewardAmount);
+        poolBalances[uint8(Pool.PresaleBox)] = uint128(presaleBoxAmount);
 
         game.claimWhalePass(address(0));
 
@@ -499,10 +510,28 @@ contract StakedDegenerusStonk {
         return poolBalances[_poolIndex(pool)];
     }
 
+    /// @notice Total supply of sDGNRS tokens (ERC20). ABI-preserving view over the packed slot-0 field.
+    function totalSupply() external view returns (uint256) {
+        return _totalSupply;
+    }
+
+    /// @notice Total physically-segregated redemption ETH across all unresolved periods (wei).
+    /// @dev ABI-preserving view over the packed slot-0 field (cross-contract + harness readers).
+    function pendingRedemptionEthValue() external view returns (uint256) {
+        return _pendingRedemptionEthValue;
+    }
+
+    /// @notice Wall-day of the currently-pending unresolved gambling-burn pool, or 0 if none.
+    /// @dev ABI-preserving view over the packed slot-0 field (AdvanceModule reads this to derive
+    ///      `dayToResolve`).
+    function pendingResolveDay() external view returns (uint24) {
+        return _pendingResolveDay;
+    }
+
     /// @notice sDGNRS supply held by governance-eligible addresses.
     /// @dev Excludes undistributed pools (held by this contract), DGNRS wrapper, and vault.
     function votingSupply() external view returns (uint256) {
-        return totalSupply
+        return _totalSupply
             - balanceOf[address(this)]
             - balanceOf[ContractAddresses.DGNRS]
             - balanceOf[ContractAddresses.VAULT];
@@ -526,12 +555,12 @@ contract StakedDegenerusStonk {
             amount = available;
         }
         unchecked {
-            poolBalances[idx] = available - amount;
+            poolBalances[idx] = uint128(available - amount);
             balanceOf[address(this)] -= amount;
         }
         if (to == address(this)) {
             // Self-win: burn instead of no-op transfer, increasing value per remaining token
-            totalSupply -= amount;
+            _totalSupply = uint128(_totalSupply - amount);
             emit Transfer(address(this), address(0), amount);
         } else {
             balanceOf[to] += amount;
@@ -557,9 +586,9 @@ contract StakedDegenerusStonk {
             amount = available;
         }
         unchecked {
-            poolBalances[fromIdx] = available - amount;
+            poolBalances[fromIdx] = uint128(available - amount);
         }
-        poolBalances[toIdx] += amount;
+        poolBalances[toIdx] = uint128(poolBalances[toIdx] + amount);
         emit PoolRebalance(from, to, amount);
         return amount;
     }
@@ -571,7 +600,7 @@ contract StakedDegenerusStonk {
         if (bal == 0) return;
         unchecked {
             balanceOf[address(this)] = 0;
-            totalSupply -= bal;
+            _totalSupply = uint128(_totalSupply - bal);
         }
         delete poolBalances;
         emit Transfer(address(this), address(0), bal);
@@ -637,17 +666,17 @@ contract StakedDegenerusStonk {
     function _deterministicBurnFrom(address beneficiary, address burnFrom, uint256 amount) private returns (uint256 ethOut, uint256 stethOut) {
         uint256 bal = balanceOf[burnFrom];
         if (amount == 0 || amount > bal) revert Insufficient();
-        uint256 supplyBefore = totalSupply;
+        uint256 supplyBefore = _totalSupply;
 
         uint256 ethBal = address(this).balance;
         uint256 stethBal = steth.balanceOf(address(this));
         uint256 claimableEth = _claimableWinnings();
-        uint256 totalMoney = ethBal + stethBal + claimableEth - pendingRedemptionEthValue;
+        uint256 totalMoney = ethBal + stethBal + claimableEth - _pendingRedemptionEthValue;
         uint256 totalValueOwed = (totalMoney * amount) / supplyBefore;
 
         unchecked {
             balanceOf[burnFrom] = bal - amount;
-            totalSupply -= amount;
+            _totalSupply = uint128(_totalSupply - amount);
         }
         emit Transfer(burnFrom, address(0), amount);
 
@@ -712,7 +741,8 @@ contract StakedDegenerusStonk {
         // amount. The MAX − rolled difference is over-pulled ETH that stays as free backing.
         uint256 segregatedMax = (ethBase * MAX_ROLL) / 100;
         uint256 rolledEth = (ethBase * roll) / 100;
-        pendingRedemptionEthValue = pendingRedemptionEthValue - segregatedMax + rolledEth;
+        // Checked arithmetic preserved (reverts on underflow as before); narrowing cast is safe.
+        _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue - segregatedMax + rolledEth);
 
         // Store per-day result (write before emit before delete per SPEC-04 (c))
         redemptionPeriods[dayToResolve] = roll;
@@ -723,7 +753,7 @@ contract StakedDegenerusStonk {
         delete pendingByDay[dayToResolve];
 
         // Clear the single-pool sentinel if this resolve targeted the stamped day (INV-13).
-        if (pendingResolveDay == dayToResolve) pendingResolveDay = 0;
+        if (_pendingResolveDay == dayToResolve) _pendingResolveDay = 0;
     }
 
     /// @notice Claim a resolved gambling-burn redemption for `player` on day `day` (SPEC-02).
@@ -820,7 +850,8 @@ contract StakedDegenerusStonk {
 
         // Release the rolled ETH segregation (both direct and lootbox portions leave sDGNRS).
         // The MAX − rolled over-pull (segregated at submit) stays in this contract as free backing.
-        pendingRedemptionEthValue -= totalRolledEth;
+        // Checked arithmetic preserved; narrowing cast is safe (result is the remaining segregated ETH).
+        _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue - totalRolledEth);
 
         // Full claim: clear the (player, day) slot entirely per SPEC-04 (d).
         delete pendingRedemptions[player][day];
@@ -884,18 +915,18 @@ contract StakedDegenerusStonk {
     /// @return stethOut stETH that would be received
     /// @return burnieOut BURNIE that would be received (0 during gameOver)
     function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
-        uint256 supply = totalSupply;
+        uint256 supply = _totalSupply;
         if (amount == 0 || amount > supply) return (0, 0, 0);
 
         uint256 ethBal = address(this).balance;
         uint256 stethBal = steth.balanceOf(address(this));
         uint256 claimableEth = _claimableWinnings();
-        uint256 totalMoney = ethBal + stethBal + claimableEth - pendingRedemptionEthValue;
+        uint256 totalMoney = ethBal + stethBal + claimableEth - _pendingRedemptionEthValue;
         uint256 totalValueOwed = (totalMoney * amount) / supply;
 
         uint256 ethAvailable = ethBal + claimableEth;
-        if (ethAvailable > pendingRedemptionEthValue) {
-            ethAvailable -= pendingRedemptionEthValue;
+        if (ethAvailable > _pendingRedemptionEthValue) {
+            ethAvailable -= _pendingRedemptionEthValue;
         } else {
             ethAvailable = 0;
         }
@@ -962,9 +993,9 @@ contract StakedDegenerusStonk {
         // Single-pool invariant (INV-13): if any prior day still holds an unresolved pool,
         // block this burn. AdvanceModule resolves the stamped day on the next successful advance;
         // burns are only permitted to land in today's pool or onto an already-active today's pool.
-        uint24 stamp = pendingResolveDay;
+        uint24 stamp = _pendingResolveDay;
         if (stamp != 0 && stamp != currentPeriod) revert PriorDayUnresolved();
-        if (stamp == 0) pendingResolveDay = currentPeriod;
+        if (stamp == 0) _pendingResolveDay = currentPeriod;
 
         DayPending storage pool = pendingByDay[currentPeriod];
 
@@ -972,7 +1003,7 @@ contract StakedDegenerusStonk {
         // supplySnapshot stored in whole tokens (1e18 raw divisor): INITIAL_SUPPLY = 1e30 → 1e12
         // whole tokens, comfortably under uint64.max (~1.84e19).
         if (pool.supplySnapshot == 0 && pool.burned == 0) {
-            pool.supplySnapshot = uint64(totalSupply / 1e18);
+            pool.supplySnapshot = uint64(_totalSupply / 1e18);
         }
         // Ceiling-divide amount→whole tokens so cap accounting is conservative even when amount
         // isn't an exact multiple of 1e18. INV-10 (per-day supply cap) holds: pool.burned * 1e18
@@ -981,7 +1012,7 @@ contract StakedDegenerusStonk {
         if (uint256(pool.burned) + amountWhole > uint256(pool.supplySnapshot) / 2) revert Insufficient();
         pool.burned += uint64(amountWhole);
 
-        uint256 supplyBefore = totalSupply;
+        uint256 supplyBefore = _totalSupply;
 
         // Compute proportional ETH base. pendingRedemptionEthValue is subtracted because that ETH
         // (already segregated into this contract's balance for prior gambling-burn claimants) is
@@ -989,7 +1020,7 @@ contract StakedDegenerusStonk {
         uint256 ethBal = address(this).balance;
         uint256 stethBal = steth.balanceOf(address(this));
         uint256 claimableEth = _claimableWinnings();
-        uint256 totalMoney = ethBal + stethBal + claimableEth - pendingRedemptionEthValue;
+        uint256 totalMoney = ethBal + stethBal + claimableEth - _pendingRedemptionEthValue;
         uint256 ethValueOwed = (totalMoney * amount) / supplyBefore;
 
         // Compute proportional BURNIE base from sDGNRS's full BURNIE backing (held + coinflip stake).
@@ -1008,7 +1039,7 @@ contract StakedDegenerusStonk {
         // Burn sDGNRS
         unchecked {
             balanceOf[burnFrom] = bal - amount;
-            totalSupply -= amount;
+            _totalSupply = uint128(_totalSupply - amount);
         }
         emit Transfer(burnFrom, address(0), amount);
 
@@ -1031,7 +1062,8 @@ contract StakedDegenerusStonk {
         if (maxIncrement != 0) {
             game.pullRedemptionReserve(maxIncrement);
         }
-        pendingRedemptionEthValue += maxIncrement;
+        // Checked add preserved; narrowing cast is safe (cumulative segregated ETH << uint96 max).
+        _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue + maxIncrement);
 
         // === BURNIE: settle the whole share at submit (conserved, no reserve, no roll) ===
         // redeemBurnieShare burns/consumes `burnieOwed` of sDGNRS's own BURNIE backing and credits
@@ -1106,7 +1138,8 @@ contract StakedDegenerusStonk {
     function _mint(address to, uint256 amount) private {
         if (to == address(0)) revert ZeroAddress();
         unchecked {
-            totalSupply += amount;
+            // Only reached in the constructor (totals <= INITIAL_SUPPLY 1e30 << uint128 max).
+            _totalSupply = uint128(_totalSupply + amount);
             balanceOf[to] += amount;
         }
         emit Transfer(address(0), to, amount);

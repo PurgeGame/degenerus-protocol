@@ -85,22 +85,23 @@ contract RedemptionHandler is Test {
     //  pendingByDay               | 10   | mapping(uint32 => DayPending)   [v47: was 11]
     //  pendingResolveDay          | 11   | uint32 (public)                 [v47: was 12]
     //
-    //  v47 SHIFT: the `pendingRedemptionBurnie` (internal uint256) slot @10 was DELETED (BURNIE
-    //  settled at submit, no per-period reserve scalar), so pendingByDay 11->10 and
-    //  pendingResolveDay 12->11. Slots 0-9 are unchanged (all precede the removed slot).
+    //  POST RT-PACKING-12: the three solvency scalars (totalSupply, pendingRedemptionEthValue,
+    //  pendingResolveDay) are packed into slot 0, so the mappings shifted down: pendingRedemptions
+    //  7->5, redemptionPeriods 8->6, pendingByDay 10->7. The two scalars are read via their public
+    //  getters (slot-0 lanes, not raw loads).
 
     /// @notice Slot index of `pendingRedemptions` mapping (outer key player => inner mapping).
-    uint256 public constant SLOT_PENDING_REDEMPTIONS = 7;
-    /// @notice Slot index of `redemptionPeriods` mapping (key day => RedemptionPeriod).
-    uint256 public constant SLOT_REDEMPTION_PERIODS = 8;
-    /// @notice Slot index of `pendingRedemptionEthValue` (public uint256).
-    uint256 public constant SLOT_PENDING_REDEMPTION_ETH_VALUE = 9;
+    uint256 public constant SLOT_PENDING_REDEMPTIONS = 5;
+    /// @notice Slot index of `redemptionPeriods` mapping (key day => roll).
+    uint256 public constant SLOT_REDEMPTION_PERIODS = 6;
+    /// @notice `pendingRedemptionEthValue` is packed into slot 0, lane [128:223]; read via the
+    ///         `pendingRedemptionEthValue()` getter, not a raw slot load.
+    uint256 public constant SLOT_PENDING_REDEMPTION_ETH_VALUE = 0;
     /// @notice Slot index of `pendingByDay` mapping (key day => DayPending packed 3×uint64).
-    ///         v47: shifted from 11 -> 10 by the `pendingRedemptionBurnie` removal.
-    uint256 public constant SLOT_PENDING_BY_DAY = 10;
-    /// @notice Slot index of `pendingResolveDay` (public uint32 sentinel).
-    ///         v47: shifted from 12 -> 11 by the `pendingRedemptionBurnie` removal.
-    uint256 public constant SLOT_PENDING_RESOLVE_DAY = 11;
+    uint256 public constant SLOT_PENDING_BY_DAY = 7;
+    /// @notice `pendingResolveDay` is packed into slot 0, lane [224:247]; read via the
+    ///         `pendingResolveDay()` getter, not a raw slot load.
+    uint256 public constant SLOT_PENDING_RESOLVE_DAY = 0;
 
     // =========================================================================
     //                          GHOST VARIABLES (legacy)

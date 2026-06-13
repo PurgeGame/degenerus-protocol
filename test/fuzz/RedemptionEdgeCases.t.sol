@@ -92,9 +92,8 @@ contract RedemptionEdgeCases is DeployProtocol {
     uint256 internal constant FUZZ_MIN_AMOUNT = 100 ether;
 
     /// @dev Slot index of `pendingByDay` mapping (re-derived inline so the edge-case file is
-    ///      self-contained). v47: shifted from 11 to 10 because the `pendingRedemptionBurnie`
-    ///      (internal uint256) at slot 10 was removed (BURNIE settled at submit).
-    uint256 internal constant SLOT_PENDING_BY_DAY = 10;
+    ///      self-contained). POST RT-PACKING-12: scalars packed into slot 0, mappings shifted down 10->7.
+    uint256 internal constant SLOT_PENDING_BY_DAY = 7;
 
     // Keeper box-bounty mirror (StakedDegenerusStonk private constants). TEST-MIRROR SYNC: if the
     // contract changes these, re-sync — the bounty assertion cross-validates the observed creditFlip.
@@ -179,6 +178,14 @@ contract RedemptionEdgeCases is DeployProtocol {
     function _resolveDay(uint32 dayToResolve, uint16 roll) internal {
         vm.prank(address(game));
         sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
+    }
+
+    /// @dev Set `_pendingResolveDay` (slot 0, lane [224:247]) via a masked store so the packed
+    ///      `_totalSupply` / `_pendingRedemptionEthValue` lanes survive (POST RT-PACKING-12).
+    function _storePendingResolveDay(uint24 dayD) internal {
+        uint256 slot0 = uint256(vm.load(address(sdgnrs), bytes32(uint256(0))));
+        slot0 = (slot0 & ~(uint256(0xffffff) << 224)) | (uint256(dayD) << 224);
+        vm.store(address(sdgnrs), bytes32(uint256(0)), bytes32(slot0));
     }
 
     /// @dev Read packed `pendingByDay[day]` slot and unpack the 3×uint64 fields.
@@ -1081,10 +1088,8 @@ contract RedemptionEdgeCases is DeployProtocol {
         vm.store(address(sdgnrs), slotPbD, bytes32(packed));
 
         // Also pre-set pendingResolveDay = dayD so the INV-13 sentinel check passes inside burn.
-        // pendingResolveDay is at slot 11 (uint32, lower bits) — v47: shifted from 12 by the
-        // pendingRedemptionBurnie@10 removal.
-        bytes32 slotSentinel = bytes32(uint256(11));
-        vm.store(address(sdgnrs), slotSentinel, bytes32(uint256(dayD)));
+        // pendingResolveDay is packed into slot 0, lane [224:247] (POST RT-PACKING-12).
+        _storePendingResolveDay(uint24(dayD));
 
         // Verify the snapshot is now visible
         (, uint64 sBefore, uint64 bnBefore) = _readPendingByDay(dayD);
@@ -1143,7 +1148,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         // bits 96-111). The former burnieOwed field (old bits 96-191) was removed, so activityScore
         // moved from bit 192 down to bit 96.
         uint256 packed = uint256(MAX_DAILY_REDEMPTION_EV) | (uint256(1) << 96); // activityScore=1 (set)
-        bytes32 outerSlot = keccak256(abi.encode(actor, uint256(7))); // SLOT_PENDING_REDEMPTIONS=7
+        bytes32 outerSlot = keccak256(abi.encode(actor, uint256(5))); // SLOT_PENDING_REDEMPTIONS=5 (POST RT-PACKING-12)
         bytes32 claimSlot = keccak256(abi.encode(uint256(dayD), outerSlot));
         vm.store(address(sdgnrs), claimSlot, bytes32(packed));
 
@@ -1152,9 +1157,8 @@ contract RedemptionEdgeCases is DeployProtocol {
         assertEq(uint256(evSeeded), MAX_DAILY_REDEMPTION_EV, "EDGE-15: seed ethValueOwed mismatch");
         assertEq(uint256(asSeeded), 1, "EDGE-15: seed activityScore mismatch");
 
-        // Pre-set sentinel so burn passes INV-13 guard (pendingResolveDay slot 11 — v47 shift from 12)
-        bytes32 slotSentinel = bytes32(uint256(11));
-        vm.store(address(sdgnrs), slotSentinel, bytes32(uint256(dayD)));
+        // Pre-set sentinel so burn passes INV-13 guard (pendingResolveDay packed in slot 0, POST RT-PACKING-12).
+        _storePendingResolveDay(uint24(dayD));
 
         // Any burn that adds > 0 ethValueOwed must revert ExceedsDailyRedemptionCap.
         // FUZZ_MIN_AMOUNT (100 ether) yields ethValueOwed ~12 gwei > 0 post snap.
@@ -1198,7 +1202,7 @@ contract RedemptionEdgeCases is DeployProtocol {
         // independence.
         // v47 packing: activityScore is at bit 96 (burnieOwed field removed).
         uint256 packedD = uint256(MAX_DAILY_REDEMPTION_EV) | (uint256(1) << 96);
-        bytes32 outerSlot = keccak256(abi.encode(actor, uint256(7)));
+        bytes32 outerSlot = keccak256(abi.encode(actor, uint256(5))); // SLOT_PENDING_REDEMPTIONS=5 (POST RT-PACKING-12)
         bytes32 claimSlotD = keccak256(abi.encode(uint256(dayD), outerSlot));
         vm.store(address(sdgnrs), claimSlotD, bytes32(packedD));
 
