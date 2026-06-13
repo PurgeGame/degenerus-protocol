@@ -2,8 +2,7 @@
 pragma solidity 0.8.34;
 
 import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
-import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
-import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
+import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
@@ -22,10 +21,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  *      its own three bitfields (bingoClaimed / firstQuadrant / firstSymbol). CEI:
  *      effects (the bit sets) precede interactions (transferFromPool / creditFlip).
  */
-contract DegenerusGameBingoModule is
-    DegenerusGamePayoutUtils,
-    DegenerusGameMintStreakUtils
-{
+contract DegenerusGameBingoModule is DegenerusGameStorage {
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -136,9 +132,10 @@ contract DegenerusGameBingoModule is
         // traitId = (quadrant << 6) | (c << 3) | symInQ. Guard the index against the
         // array length BEFORE the read so a bad index fails closed with one clean
         // custom error (no bare Panic(0x32)).
+        address[][256] storage levelBuckets = traitBurnTicket[level];
+        uint256 traitBase = (uint256(quadrant) << 6) | uint256(symInQ);
         for (uint256 c = 0; c < 8; ) {
-            uint8 traitId = uint8((uint256(quadrant) << 6) | (c << 3) | uint256(symInQ));
-            address[] storage holders = traitBurnTicket[level][traitId];
+            address[] storage holders = levelBuckets[uint8(traitBase | (c << 3))];
             uint256 slot = slots[c];
             if (slot >= holders.length || holders[slot] != msg.sender) {
                 revert NotSlotOwner();
@@ -157,19 +154,21 @@ contract DegenerusGameBingoModule is
         // Quadrant-first is checked BEFORE symbol-first (the binding ordering,
         // 339-TIER-PRECEDENCE §2). A quadrant-first marks BOTH bits — the
         // double-pay-trap guard (§4) — and suppresses the symbol-first bonus.
-        bool isQuadrantFirst = (firstQuadrant[level] & qMask) == 0;
-        bool isSymbolFirst = (firstSymbol[level] & sMask) == 0;
+        uint8 fq = firstQuadrant[level];
+        uint32 fs = firstSymbol[level];
+        bool isQuadrantFirst = (fq & qMask) == 0;
+        bool isSymbolFirst = (fs & sMask) == 0;
 
         uint256 dgnrsBps;
         uint256 burnie;
         if (isQuadrantFirst) {
-            firstQuadrant[level] |= qMask;
-            firstSymbol[level] |= sMask; // BOTH bits — closes the double-pay window
+            firstQuadrant[level] = fq | qMask;
+            firstSymbol[level] = fs | sMask; // BOTH bits — closes the double-pay window
             dgnrsBps = FIRST_QUADRANT_DGNRS_BPS;
             burnie = FIRST_QUADRANT_BURNIE;
             emit FirstQuadrantBingo(msg.sender, level, symbol);
         } else if (isSymbolFirst) {
-            firstSymbol[level] |= sMask;
+            firstSymbol[level] = fs | sMask;
             dgnrsBps = REGULAR_DGNRS_BPS + FIRST_SYMBOL_BONUS_DGNRS_BPS;
             burnie = REGULAR_BURNIE + FIRST_SYMBOL_BONUS_BURNIE;
             emit FirstSymbolBingo(msg.sender, level, symbol);
@@ -200,9 +199,9 @@ contract DegenerusGameBingoModule is
     // dispatch stub shaped like claimBingo. It is reached via the Game's
     // delegatecall (so the outbound msg.sender to SDGNRS / coinflip is GAME, which
     // both transferFromPool [onlyGame] and creditFlip [onlyFlipCreditors] require);
-    // a direct call to this module address would revert at those gates. The two
-    // private caller-resolution helpers (_resolvePlayer / _requireApproved) travel
-    // with it (operatorApprovals is inherited from DegenerusGameStorage).
+    // a direct call to this module address would revert at those gates. The private
+    // caller-resolution helper (_resolvePlayer) travels with it (operatorApprovals
+    // is inherited from DegenerusGameStorage).
     // -------------------------------------------------------------------------
 
     /// @notice Claim DGNRS affiliate rewards for the current level.
@@ -268,13 +267,9 @@ contract DegenerusGameBingoModule is
         address player
     ) private view returns (address resolved) {
         if (player == address(0)) return msg.sender;
-        if (player != msg.sender) _requireApproved(player);
-        return player;
-    }
-
-    function _requireApproved(address player) private view {
-        if (msg.sender != player && !operatorApprovals[player][msg.sender]) {
+        if (player != msg.sender && !operatorApprovals[player][msg.sender]) {
             revert NotApproved();
         }
+        return player;
     }
 }

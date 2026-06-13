@@ -389,7 +389,7 @@ contract DegenerusGameDegeneretteModule is
         uint256 ethClaimable; // summed ETH claimable across all bets
         uint256 burnieMint; // summed BURNIE mint across all bets
         uint256 wwxrpMint; // summed WWXRP mint across all bets
-        bool poolFrozen; // prizePoolFrozen snapshot (stable across the call)
+        bool poolFrozen; // prizePoolFrozen snapshot (loaded with the pool locals)
         bool poolLoaded; // running pool locals initialized?
         uint256 runningFuture; // unfrozen: running futurePrizePool
         uint128 pendingNext; // frozen: running pending next pool
@@ -412,7 +412,6 @@ contract DegenerusGameDegeneretteModule is
         if (_livenessTriggered()) revert E();
         player = _resolvePlayer(player);
         ResolveAcc memory acc;
-        acc.poolFrozen = prizePoolFrozen;
         uint256 len = betIds.length;
         for (uint256 i; i < len; ) {
             _resolveBet(player, betIds[i], acc);
@@ -485,22 +484,30 @@ contract DegenerusGameDegeneretteModule is
         uint8 heroQuadrant,
         uint24 lvl
     ) private returns (uint256 totalBet) {
-        // Per-currency spin cap (currency is validated to ETH/BURNIE/WWXRP by
-        // _validateMinBet below; the WWXRP arm — CURRENCY_WWXRP — is the default).
-        uint8 maxSpins = currency == CURRENCY_ETH
-            ? MAX_SPINS_ETH
-            : currency == CURRENCY_BURNIE
-                ? MAX_SPINS_BURNIE
-                : MAX_SPINS_WWXRP;
+        // Single per-currency dispatch: spin cap + min bet together. The explicit
+        // WWXRP arm keeps any unknown currency out of the WWXRP bounds — unsupported
+        // values reject here, the only currency-validation point.
+        uint8 maxSpins;
+        uint256 minBet;
+        if (currency == CURRENCY_ETH) {
+            maxSpins = MAX_SPINS_ETH;
+            minBet = MIN_BET_ETH;
+        } else if (currency == CURRENCY_BURNIE) {
+            maxSpins = MAX_SPINS_BURNIE;
+            minBet = MIN_BET_BURNIE;
+        } else if (currency == CURRENCY_WWXRP) {
+            maxSpins = MAX_SPINS_WWXRP;
+            minBet = MIN_BET_WWXRP;
+        } else {
+            revert UnsupportedCurrency();
+        }
         if (ticketCount == 0 || ticketCount > maxSpins) revert InvalidBet();
-        if (amountPerTicket == 0) revert InvalidBet();
+        if (uint256(amountPerTicket) < minBet) revert InvalidBet();
         if (heroQuadrant >= 4) revert InvalidBet();
 
         uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
         if (index == 0) revert E();
         if (lootboxRngWordByIndex[index] != 0) revert RngNotReady();
-
-        _validateMinBet(currency, amountPerTicket);
 
         totalBet = uint256(amountPerTicket) * uint256(ticketCount);
         // Decay-aware effective quest streak (mirrors the DECSTREAK chokepoint fix): a streak
@@ -553,19 +560,6 @@ contract DegenerusGameDegeneretteModule is
         }
     }
 
-    /// @dev Validates minimum bet amount for currency.
-    function _validateMinBet(uint8 currency, uint128 amount) private pure {
-        if (currency == CURRENCY_ETH) {
-            if (uint256(amount) < MIN_BET_ETH) revert InvalidBet();
-        } else if (currency == CURRENCY_BURNIE) {
-            if (uint256(amount) < MIN_BET_BURNIE) revert InvalidBet();
-        } else if (currency == CURRENCY_WWXRP) {
-            if (uint256(amount) < MIN_BET_WWXRP) revert InvalidBet();
-        } else {
-            revert UnsupportedCurrency();
-        }
-    }
-
     /// @dev Processes bet funds (burn tokens, handle ETH, check pool).
     function _collectBetFunds(
         address player,
@@ -574,27 +568,11 @@ contract DegenerusGameDegeneretteModule is
         uint256 ethPaid
     ) private {
         if (currency == CURRENCY_ETH) {
-            // ETH covers the bet first, then claimable to the 1-wei sentinel, then afking.
+            // ETH covers the bet first; any shortfall draws claimable (to the 1-wei
+            // sentinel) then afking via the canonical single-sink waterfall.
             if (ethPaid > totalBet) revert InvalidBet();
             if (ethPaid < totalBet) {
-                uint256 fromClaimable = totalBet - ethPaid;
-                uint256 claimable = _claimableOf(player);
-                uint256 cUsed;
-                if (claimable > 1) {
-                    uint256 available = claimable - 1; // preserve the 1-wei sentinel
-                    cUsed = fromClaimable < available ? fromClaimable : available;
-                    if (cUsed != 0) {
-                        _debitClaimable(player, cUsed);
-                        claimablePool -= uint128(cUsed);
-                    }
-                }
-                uint256 remaining = fromClaimable - cUsed;
-                if (remaining != 0) {
-                    if (_afkingOf(player) < remaining) revert InvalidBet();
-                    _debitAfking(player, remaining);
-                    claimablePool -= uint128(remaining);
-                    emit AfkingSpent(player, remaining);
-                }
+                _settleShortfall(player, totalBet - ethPaid, true);
             }
 
             // Update pool and pending
@@ -605,12 +583,12 @@ contract DegenerusGameDegeneretteModule is
                 (uint128 next, uint128 future) = _getPrizePools();
                 _setPrizePools(next, future + uint128(totalBet));
             }
-            _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, _lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK) + _packEthToMilliEth(totalBet));
+            _lrAdd(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, _packEthToMilliEth(totalBet));
             // No max payout check needed: ETH payouts are capped at 10% of pool at distribution
             // time, so solvency is guaranteed regardless of jackpot size
         } else if (currency == CURRENCY_BURNIE) {
             coin.burnCoin(player, totalBet);
-            _lrWrite(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK, _lrRead(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK) + _packBurnieToWhole(totalBet));
+            _lrAdd(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK, _packBurnieToWhole(totalBet));
         } else if (currency == CURRENCY_WWXRP) {
             wwxrp.burnForGame(player, totalBet);
         }
@@ -862,6 +840,7 @@ contract DegenerusGameDegeneretteModule is
             // have held — byte-identical to per-spin. Flushed once by resolveBets.
             if (!acc.poolLoaded) {
                 acc.poolLoaded = true;
+                acc.poolFrozen = prizePoolFrozen;
                 if (acc.poolFrozen) {
                     (acc.pendingNext, acc.pendingFuture) = _getPendingPools();
                 } else {

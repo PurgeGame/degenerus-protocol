@@ -59,9 +59,6 @@ contract WrappedWrappedXRP {
     /// @notice Thrown when zero address is provided where not allowed
     error ZeroAddress();
 
-    /// @notice Thrown when amount parameter is zero
-    error ZeroAmount();
-
     /// @notice Thrown when sender has insufficient token balance
     error InsufficientBalance();
 
@@ -116,9 +113,6 @@ contract WrappedWrappedXRP {
 
     /// @dev Game contract address authorized to mint WWXRP
     address internal constant MINTER_GAME = ContractAddresses.GAME;
-
-    /// @dev Coin contract address authorized to mint WWXRP
-    address internal constant MINTER_COIN = ContractAddresses.COIN;
 
     /// @dev Coinflip contract address authorized to mint WWXRP
     address internal constant MINTER_COINFLIP = ContractAddresses.COINFLIP;
@@ -177,7 +171,6 @@ contract WrappedWrappedXRP {
         if (allowed != type(uint256).max) {
             if (allowed < amount) revert InsufficientAllowance();
             allowance[from][msg.sender] = allowed - amount;
-            emit Approval(from, msg.sender, allowed - amount);
         }
         _transfer(from, to, amount);
         return true;
@@ -213,7 +206,6 @@ contract WrappedWrappedXRP {
     /// @param from The address to burn tokens from
     /// @param amount The amount to burn
     function _burn(address from, uint256 amount) internal {
-        if (from == address(0)) revert ZeroAddress();
         if (balanceOf[from] < amount) revert InsufficientBalance();
 
         balanceOf[from] -= amount;
@@ -229,21 +221,15 @@ contract WrappedWrappedXRP {
       +======================================================================+*/
 
     /// @notice Mint WWXRP to a recipient (for lootbox/game prizes)
-    /// @dev Only callable by authorized minters (game/coin/coinflip contracts).
+    /// @dev Only callable by authorized minters (game/coinflip contracts).
     /// @param to Recipient of the minted WWXRP
     /// @param amount Amount to mint (18 decimals)
     /// @custom:reverts OnlyMinter When caller is not an authorized minter
-    /// @custom:reverts ZeroAmount When amount is zero
     /// @custom:reverts ZeroAddress When to is address(0)
     function mintPrize(address to, uint256 amount) external {
-        if (
-            msg.sender != MINTER_GAME &&
-            msg.sender != MINTER_COIN &&
-            msg.sender != MINTER_COINFLIP
-        ) {
+        if (msg.sender != MINTER_GAME && msg.sender != MINTER_COINFLIP) {
             revert OnlyMinter();
         }
-        if (amount == 0) revert ZeroAmount();
 
         _mint(to, amount);
     }
@@ -257,8 +243,6 @@ contract WrappedWrappedXRP {
     /// @custom:reverts InsufficientVaultAllowance When amount exceeds remaining allowance
     function vaultMintTo(address to, uint256 amount) external {
         if (msg.sender != MINTER_VAULT) revert OnlyVault();
-        if (to == address(0)) revert ZeroAddress();
-        if (amount == 0) return;
 
         uint256 allowanceVault = vaultAllowance;
         if (amount > allowanceVault) revert InsufficientVaultAllowance();
@@ -274,7 +258,6 @@ contract WrappedWrappedXRP {
     /// @param from Address to burn from
     /// @param amount Amount to burn (18 decimals)
     /// @custom:reverts OnlyMinter When caller is not the game contract
-    /// @custom:reverts ZeroAddress When from is address(0)
     /// @custom:reverts InsufficientBalance When from has insufficient balance
     function burnForGame(address from, uint256 amount) external {
         if (msg.sender != MINTER_GAME) revert OnlyMinter();

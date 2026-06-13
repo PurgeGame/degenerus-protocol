@@ -1513,6 +1513,16 @@ abstract contract DegenerusGameStorage {
         lootboxRngPacked = (lootboxRngPacked & ~(mask << shift)) | ((value & mask) << shift);
     }
 
+    /// @dev Add a delta to a field of the packed lootbox RNG slot in one load + store.
+    ///      The summed field re-masks before the merge — the same wrap-on-mask
+    ///      semantics as _lrWrite(shift, mask, _lrRead(shift, mask) + delta).
+    function _lrAdd(uint256 shift, uint256 mask, uint256 delta) internal {
+        uint256 packed = lootboxRngPacked;
+        lootboxRngPacked =
+            (packed & ~(mask << shift)) |
+            (((((packed >> shift) & mask) + delta) & mask) << shift);
+    }
+
     /// @dev Pack a wei amount to milli-ETH (divide by 1e15). 0.001 ETH resolution.
     function _packEthToMilliEth(uint256 wei_) internal pure returns (uint64) {
         return uint64(wei_ / LR_ETH_SCALE);
