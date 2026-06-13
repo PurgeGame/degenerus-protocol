@@ -16,12 +16,6 @@ interface IStakedDegenerusStonk {
     function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
 }
 
-/// @notice Minimal ERC20 interface for token transfers.
-interface IERC20Minimal {
-    /// @notice Transfer tokens to a recipient.
-    function transfer(address to, uint256 amount) external returns (bool);
-}
-
 /// @dev Game interface for RNG lock (unwrap guard), game-over check (burn guard), and level (vesting).
 interface IDegenerusGame {
     function rngLocked() external view returns (bool);
@@ -101,7 +95,6 @@ contract DegenerusStonk {
     uint256 private constant CREATOR_TOTAL   = 200_000_000_000 * 1e18;  // 200B total
 
     IStakedDegenerusStonk private constant stonk = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
-    IERC20Minimal private constant burnie = IERC20Minimal(ContractAddresses.COIN);
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
     IDegenerusVault private constant vault = IDegenerusVault(ContractAddresses.VAULT);
     IDegenerusGame private constant game = IDegenerusGame(ContractAddresses.GAME);
@@ -216,13 +209,15 @@ contract DegenerusStonk {
     //                          BURN (Public)
     // =====================================================================
 
-    /// @notice Burn DGNRS to claim proportional ETH + stETH + BURNIE from sDGNRS backing
+    /// @notice Burn DGNRS to claim proportional ETH + stETH from sDGNRS backing
     /// @dev ETH sent last (checks-effects-interactions). Only available post-gameOver;
     ///      during active game, players must use burnWrapped() via sDGNRS gambling path.
+    ///      The post-gameOver sDGNRS burn pays no BURNIE (burnieOut is always 0; the
+    ///      return slot is kept for ABI stability).
     /// @param amount Amount of DGNRS to burn (18 decimals).
     /// @return ethOut ETH received from backing.
     /// @return stethOut stETH received from backing.
-    /// @return burnieOut BURNIE received from backing.
+    /// @return burnieOut Always 0 (kept for ABI stability).
     /// @custom:reverts GameNotOver If called during active game (Seam-1 fix).
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
         _burn(msg.sender, amount);
@@ -230,9 +225,6 @@ contract DegenerusStonk {
 
         (ethOut, stethOut, burnieOut) = stonk.burn(amount);
 
-        if (burnieOut != 0) {
-            if (!burnie.transfer(msg.sender, burnieOut)) revert TransferFailed();
-        }
         if (stethOut != 0) {
             if (!steth.transfer(msg.sender, stethOut)) revert TransferFailed();
         }
@@ -302,7 +294,8 @@ contract DegenerusStonk {
     /// @dev Permissionless. Burns all sDGNRS held by this contract and forwards the
     ///      ETH/stETH output. stETH sent first, then ETH (CEI).
     function yearSweep() external {
-        if (!game.gameOver()) revert SweepNotReady();
+        // goTime != 0 <=> gameOver: the sole gameOver latch writes the timestamp
+        // atomically, so the check below covers the game-over gate too.
         uint48 goTime = game.gameOverTimestamp();
         if (goTime == 0 || block.timestamp < uint256(goTime) + 365 days) revert SweepNotReady();
 
@@ -348,12 +341,6 @@ contract DegenerusStonk {
     /// @param amount Amount of DGNRS to burn
     function burnForSdgnrs(address player, uint256 amount) external {
         if (msg.sender != ContractAddresses.SDGNRS) revert Unauthorized();
-        uint256 bal = balanceOf[player];
-        if (amount == 0 || amount > bal) revert Insufficient();
-        unchecked {
-            balanceOf[player] = bal - amount;
-            totalSupply -= amount;
-        }
-        emit Transfer(player, address(0), amount);
+        _burn(player, amount);
     }
 }

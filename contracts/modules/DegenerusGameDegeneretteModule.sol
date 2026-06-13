@@ -11,6 +11,7 @@ import {
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
+import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
@@ -747,7 +748,7 @@ contract DegenerusGameDegeneretteModule is
         // spin), so doubling adds it again and zeroing subtracts it back out. The outcome
         // reads off FullTicketResolved: totalPayout vs the per-spin FullTicketResult sums.
         if (currency == CURRENCY_BURNIE && totalPayout != 0) {
-            if (uint256(keccak256(abi.encode(rngWord, betId))) & 1 == 1) {
+            if (EntropyLib.hash2(rngWord, betId) & 1 == 1) {
                 acc.burnieMint += totalPayout;
                 totalPayout *= 2;
             } else {
@@ -763,7 +764,7 @@ contract DegenerusGameDegeneretteModule is
             _resolveLootboxDirect(
                 player,
                 betLootboxShare,
-                uint256(keccak256(abi.encode(rngWord, betId))),
+                EntropyLib.hash2(rngWord, betId),
                 activityScore
             );
         }

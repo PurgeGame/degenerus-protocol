@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
+import {EntropyLib} from "./libraries/EntropyLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 
@@ -586,9 +587,12 @@ contract StakedDegenerusStonk {
     /// @custom:reverts BurnsBlockedDuringRng If called during active VRF request (rngLocked).
     /// @custom:reverts BurnsBlockedDuringLiveness If liveness fired but gameOver has not yet latched.
     function burnWrapped(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
-        if (game.livenessTriggered() && !game.gameOver()) revert BurnsBlockedDuringLiveness();
+        // burnForSdgnrs makes no external calls, so gameOver cannot change
+        // between the gate and the branch — one read serves both.
+        bool isOver = game.gameOver();
+        if (!isOver && game.livenessTriggered()) revert BurnsBlockedDuringLiveness();
         dgnrsWrapper.burnForSdgnrs(msg.sender, amount);
-        if (game.gameOver()) {
+        if (isOver) {
             (ethOut, stethOut) = _deterministicBurnFrom(msg.sender, ContractAddresses.DGNRS, amount);
             return (ethOut, stethOut, 0);
         }
@@ -711,15 +715,13 @@ contract StakedDegenerusStonk {
     /// @param player Claimant whose redemption to settle.
     /// @param day Wall-clock day whose claim to settle.
     function claimRedemption(address player, uint24 day) external {
-        if (pendingRedemptions[player][day].ethValueOwed == 0) revert NoClaim();
-
         uint16 roll = redemptionPeriods[day];
         if (roll == 0) revert NotResolved();
 
         bool isGameOver = game.gameOver();
         if (isGameOver && player != msg.sender) revert Unauthorized();
 
-        _claimRedemptionFor(player, day, roll, isGameOver);
+        if (!_claimRedemptionFor(player, day, roll, isGameOver)) revert NoClaim();
     }
 
     /// @notice Claim resolved gambling-burn redemptions for a batch of players on day `day`.
@@ -736,16 +738,17 @@ contract StakedDegenerusStonk {
         for (uint256 i; i < players.length; ++i) {
             address player = players[i];
             if (isGameOver && player != msg.sender) continue;
-            if (pendingRedemptions[player][day].ethValueOwed == 0) continue;
             _claimRedemptionFor(player, day, roll, isGameOver);
         }
     }
 
     /// @dev Shared settle core for the single and batch claim entry points. Callers must have
-    ///      verified the pending claim exists, the period is resolved, and (post-gameOver) the
-    ///      self-claim rule.
-    function _claimRedemptionFor(address player, uint24 day, uint16 roll, bool isGameOver) private {
-        PendingRedemption storage claim = pendingRedemptions[player][day];
+    ///      verified the period is resolved and (post-gameOver) the self-claim rule; the
+    ///      pending-claim existence check lives here (one slot load), returning false on an
+    ///      empty (player, day) slot so the batch path skips and the single path reverts.
+    function _claimRedemptionFor(address player, uint24 day, uint16 roll, bool isGameOver) private returns (bool) {
+        PendingRedemption memory claim = pendingRedemptions[player][day];
+        if (claim.ethValueOwed == 0) return false;
         uint16 claimActivityScore = claim.activityScore;
 
         // Total rolled ETH. Per-claimant floor division may leave up to (n-1) wei
@@ -775,7 +778,7 @@ contract StakedDegenerusStonk {
             // 100% direct push (self-claim enforced by callers; the untrusted .call comes after
             // the slot delete above — CEI).
             _payEth(player, ethDirect);
-            return;
+            return true;
         }
 
         // Live game: both legs move to the Game. Each leg mixes ETH and stETH like _payEth —
@@ -789,7 +792,7 @@ contract StakedDegenerusStonk {
             // draw. Only reached when !gameOver (lootboxEth != 0); in a live game day+1's word
             // is always set by claim time (the daily advance, or gap-backfill after a stall).
             uint256 rngWord = game.rngWordForDay(day + 1);
-            uint256 entropy = uint256(keccak256(abi.encode(rngWord, player)));
+            uint256 entropy = EntropyLib.hash2(rngWord, uint256(uint160(player)));
             uint256 bal = address(this).balance;
             uint256 ethForLootbox = bal < lootboxEth ? bal : lootboxEth;
             game.resolveRedemptionLootbox{value: ethForLootbox}(player, lootboxEth, entropy, actScore);
@@ -802,6 +805,7 @@ contract StakedDegenerusStonk {
             uint256 ethForDirect = bal < ethDirect ? bal : ethDirect;
             game.creditRedemptionDirect{value: ethForDirect}(player, ethDirect);
         }
+        return true;
     }
 
     // =====================================================================

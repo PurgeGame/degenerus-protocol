@@ -34,7 +34,7 @@ interface IDegenerusCoinJackpotView {
 /// @title DegenerusJackpots
 /// @author Burnie Degenerus
 /// @notice Standalone contract managing the BAF jackpot system.
-/// @dev BurnieCoin forwards flips into this contract; game calls to resolve jackpots.
+/// @dev BurnieCoinflip forwards flips into this contract; game calls to resolve jackpots.
 ///      - BAF: Leaderboard-based distribution to top coinflip bettors
 ///      - Decimator: handled in the game decimator module
 /// @custom:security-contact burnie@degener.us
@@ -157,10 +157,10 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Access control for trusted callers only.                            |
       +======================================================================+*/
 
-    /// @dev Restricts function to coin or coinflip contract.
-    /// @custom:reverts OnlyCoin When caller is not the coin or coinflip contract.
+    /// @dev Restricts function to the coinflip contract.
+    /// @custom:reverts OnlyCoin When caller is not the coinflip contract.
     modifier onlyCoin() {
-        if (msg.sender != ContractAddresses.COIN && msg.sender != ContractAddresses.COINFLIP) revert OnlyCoin();
+        if (msg.sender != ContractAddresses.COINFLIP) revert OnlyCoin();
         _;
     }
 
@@ -172,9 +172,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
     }
 
     /*+======================================================================+
-      |                      COIN CONTRACT HOOKS                             |
+      |                      COINFLIP CONTRACT HOOKS                         |
       +======================================================================+
-      |  Called by BurnieCoin to record coinflip activity.                   |
+      |  Called by BurnieCoinflip to record coinflip activity.               |
       |  These hooks build state used by jackpot resolution.                 |
       +======================================================================+*/
 
@@ -187,7 +187,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param player Address of the player.
     /// @param lvl Current game level (BAF bracket).
     /// @param amount Winning coinflip payout credited to the player's BAF score.
-    /// @custom:access Restricted to COIN or COINFLIP via onlyCoin modifier.
+    /// @custom:access Restricted to COINFLIP via onlyCoin modifier.
     function recordBafFlip(address player, uint24 lvl, uint256 amount) external override onlyCoin {
         uint64 currentEpoch = bafLevel[lvl].epoch;
         BafPlayer memory ps = bafPlayer[lvl][player];
@@ -309,8 +309,10 @@ contract DegenerusJackpots is IDegenerusJackpots {
             }
         }
 
-        // Slice D: 5% to far-future ticket holders (3% 1st / 2% 2nd by BAF score).
-        {
+        // Slices D and D2: two independent 5% draws to far-future ticket holders
+        // (3% 1st / 2% 2nd by BAF score). The ++salt at the head of each pass keeps
+        // the salt/entropy sequence (2 then 3 after slice B) and draw independence.
+        for (uint256 pass; pass < 2; ) {
             unchecked { ++salt; }
             entropy = EntropyLib.hash2(entropy, salt);
             address[] memory farTickets = degenerusGame.sampleFarFutureTickets(entropy);
@@ -349,48 +351,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
             } else {
                 toReturn += farSecond;
             }
-        }
-
-        // Slice D2: 5% to far-future ticket holders, 2nd independent draw (3% 1st / 2% 2nd by BAF score).
-        {
-            unchecked { ++salt; }
-            entropy = EntropyLib.hash2(entropy, salt);
-            address[] memory farTickets = degenerusGame.sampleFarFutureTickets(entropy);
-
-            uint256 farFirst = (P * 3) / 100;
-            uint256 farSecond = P / 50;
-
-            address best;
-            uint256 bestScore;
-            address second;
-            uint256 secondScore;
-
-            uint256 fLen = farTickets.length;
-            for (uint256 i; i < fLen; ) {
-                address cand = farTickets[i];
-                uint256 score = _bafScore(cand, lvl, currentEpoch);
-                if (score > bestScore || best == address(0)) {
-                    second = best;
-                    secondScore = bestScore;
-                    best = cand;
-                    bestScore = score;
-                } else if ((score > secondScore || second == address(0)) && cand != best) {
-                    second = cand;
-                    secondScore = score;
-                }
-                unchecked { ++i; }
-            }
-
-            if (_creditOrRefund(best, farFirst, tmpW, tmpA, n)) {
-                unchecked { ++n; }
-            } else {
-                toReturn += farFirst;
-            }
-            if (_creditOrRefund(second, farSecond, tmpW, tmpA, n)) {
-                unchecked { ++n; }
-            } else {
-                toReturn += farSecond;
-            }
+            unchecked { ++pass; }
         }
 
         // Scatter slice: 200 total draws (4 tickets * 50 rounds). Per round, take top-2 by BAF score.
@@ -622,20 +583,18 @@ contract DegenerusJackpots is IDegenerusJackpots {
             }
         }
 
-        // Case 1: Player already on board - update and re-sort if improved
+        // Case 1: Player already on board - shift down and re-place if improved
+        // (same shift-then-place idiom as Cases 2/3; strict > keeps tie order).
         if (existing < 4) {
             if (score <= board[existing].score) return; // No improvement
-            board[existing].score = score;
-            // Bubble up if score increased
             uint8 idx = existing;
-            while (idx > 0 && board[idx].score > board[idx - 1].score) {
-                PlayerScore memory tmp = board[idx - 1];
-                board[idx - 1] = board[idx];
-                board[idx] = tmp;
+            while (idx > 0 && score > board[idx - 1].score) {
+                board[idx] = board[idx - 1];
                 unchecked {
                     --idx;
                 }
             }
+            board[idx] = PlayerScore({player: player, score: score});
             return;
         }
 

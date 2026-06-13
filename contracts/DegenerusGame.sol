@@ -2166,7 +2166,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         levelCount = uint24(
             (packed >> BitPackingLib.LEVEL_COUNT_SHIFT) & BitPackingLib.MASK_24
         );
-        streak = _mintStreakEffective(player, _activeTicketLevel());
+        streak = _mintStreakEffectiveFromPacked(packed, _activeTicketLevel());
+    }
+
+    /// @dev The current cashout/smite curse points for `player` (UI view).
+    function curseCountOf(address player) external view returns (uint8) {
+        return uint8((mintPacked_[player] >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8);
     }
 
     /*+======================================================================+

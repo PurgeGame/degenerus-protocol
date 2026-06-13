@@ -3,10 +3,10 @@ pragma solidity 0.8.34;
 
 /**
  * @title EntropyLib
- * @notice Shared PRNG utility: keccak scratch-slot mix of two uint256 words
- * @dev `hash2` is the sole primitive — a full-diffusion keccak256 over the
- *      EVM scratch space, suited to consumers that read low bits of a word
- *      derived from structured (high-bit) input.
+ * @notice Shared PRNG utility: keccak scratch-slot hashing of one or two words
+ * @dev Full-diffusion keccak256 over the EVM scratch space, suited to
+ *      consumers that read low bits of a word derived from structured
+ *      (high-bit) input.
  */
 library EntropyLib {
     /**
@@ -25,6 +25,20 @@ library EntropyLib {
             mstore(0x00, a)
             mstore(0x20, b)
             r := keccak256(0x00, 0x40)
+        }
+    }
+
+    /**
+     * @notice Keccak of a single uint256 input using the EVM scratch slot.
+     * @dev Equivalent to `uint256(keccak256(abi.encode(a)))` without the
+     *      bytes-memory allocation — byte-identical preimage (one raw word).
+     * @param a Input word.
+     * @return r Full-entropy 256-bit hash.
+     */
+    function hash1(uint256 a) internal pure returns (uint256 r) {
+        assembly ("memory-safe") {
+            mstore(0x00, a)
+            r := keccak256(0x00, 0x20)
         }
     }
 }

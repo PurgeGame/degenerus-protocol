@@ -136,12 +136,9 @@ contract DegenerusDeityPass {
         }
         bool isCrypto = quadrant == 0;
 
-        string memory svg = _renderSvgInternal(
-            iconPath,
-            quadrant,
-            symbolIdx,
-            isCrypto
-        );
+        // External renderer first; the internal render runs only when the
+        // renderer is unset, the call fails, or it returns empty (fallback).
+        string memory svg;
         address rendererAddr = renderer;
         if (rendererAddr != address(0)) {
             (bool ok, string memory extSvg) = _tryRenderExternal(
@@ -156,6 +153,14 @@ contract DegenerusDeityPass {
             if (ok && bytes(extSvg).length != 0) {
                 svg = extSvg;
             }
+        }
+        if (bytes(svg).length == 0) {
+            svg = _renderSvgInternal(
+                iconPath,
+                quadrant,
+                symbolIdx,
+                isCrypto
+            );
         }
 
         string memory json = string(abi.encodePacked(

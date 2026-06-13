@@ -497,8 +497,7 @@ contract DegenerusAdmin {
         uint256 existing = activeFeedProposalId[msg.sender];
         if (existing != 0) {
             FeedProposal storage ep = feedProposals[existing];
-            if (ep.state == ProposalState.Active &&
-                block.timestamp - uint256(ep.createdAt) < FEED_PROPOSAL_LIFETIME) {
+            if (_isActiveProposal(ep.state, ep.createdAt, FEED_PROPOSAL_LIFETIME)) {
                 revert AlreadyHasActiveProposal();
             }
         }
@@ -617,8 +616,9 @@ contract DegenerusAdmin {
         uint256 count = feedProposalCount;
         for (uint256 i = start; i <= count; i++) {
             if (i == proposalId) continue;
-            if (feedProposals[i].state == ProposalState.Active) {
-                feedProposals[i].state = ProposalState.Killed;
+            FeedProposal storage q = feedProposals[i];
+            if (q.state == ProposalState.Active) {
+                q.state = ProposalState.Killed;
                 emit FeedProposalKilled(i);
             }
         }
@@ -666,8 +666,7 @@ contract DegenerusAdmin {
         uint256 existing = activeProposalId[msg.sender];
         if (existing != 0) {
             Proposal storage ep = proposals[existing];
-            if (ep.state == ProposalState.Active &&
-                block.timestamp - uint256(ep.createdAt) < PROPOSAL_LIFETIME) {
+            if (_isActiveProposal(ep.state, ep.createdAt, PROPOSAL_LIFETIME)) {
                 revert AlreadyHasActiveProposal();
             }
         }
@@ -944,8 +943,9 @@ contract DegenerusAdmin {
         uint256 count = proposalCount;
         for (uint256 i = start; i <= count; i++) {
             if (i == exceptId) continue;
-            if (proposals[i].state == ProposalState.Active) {
-                proposals[i].state = ProposalState.Killed;
+            Proposal storage q = proposals[i];
+            if (q.state == ProposalState.Active) {
+                q.state = ProposalState.Killed;
                 emit ProposalKilled(i);
             }
         }
@@ -1005,11 +1005,18 @@ contract DegenerusAdmin {
         if (gameAdmin.gameOver()) revert GameOver();
 
         address coord = coordinator;
+        address feed = linkEthPriceFeed;
 
-        (uint96 bal, , , , ) = IVRFCoordinatorV2_5Owner(coord).getSubscription(
-            subId
-        );
-        uint256 mult = _linkRewardMultiplier(uint256(bal));
+        // Reward valuation is disabled until governance installs a price feed —
+        // skip the subscription read + multiplier math entirely in that state
+        // (mult stays 0 and the post-funding return below covers it).
+        uint256 mult;
+        if (feed != address(0)) {
+            (uint96 bal, , , , ) = IVRFCoordinatorV2_5Owner(coord).getSubscription(
+                subId
+            );
+            mult = _linkRewardMultiplier(uint256(bal));
+        }
 
         try
             linkToken.transferAndCall(coord, amount, abi.encode(subId))
@@ -1020,12 +1027,7 @@ contract DegenerusAdmin {
         }
         if (mult == 0) return;
 
-        uint256 ethEquivalent;
-        try this.linkAmountToEth(amount) returns (uint256 eth) {
-            ethEquivalent = eth;
-        } catch {
-            return;
-        }
+        uint256 ethEquivalent = _linkAmountToEth(amount, feed);
         if (ethEquivalent == 0) return;
 
         uint256 priceWei = gameAdmin.mintPrice();
@@ -1046,24 +1048,41 @@ contract DegenerusAdmin {
     function linkAmountToEth(
         uint256 amount
     ) external view returns (uint256 ethAmount) {
-        address feed = linkEthPriceFeed;
+        return _linkAmountToEth(amount, linkEthPriceFeed);
+    }
+
+    /// @dev Valuation core: returns 0 on a missing feed, zero amount, any feed
+    ///      revert, invalid/stale round data, or a multiplication overflow from
+    ///      an absurd feed answer — a broken or hostile governance-installed
+    ///      feed can never block the donation path.
+    function _linkAmountToEth(
+        uint256 amount,
+        address feed
+    ) private view returns (uint256) {
         if (feed == address(0) || amount == 0) return 0;
 
-        (
+        try IAggregatorV3(feed).latestRoundData() returns (
             uint80 roundId,
             int256 answer,
-            ,
+            uint256,
             uint256 updatedAt,
             uint80 answeredInRound
-        ) = IAggregatorV3(feed).latestRoundData();
-        if (answer <= 0 || updatedAt == 0 || answeredInRound < roundId)
-            return 0;
-        if (updatedAt > block.timestamp) return 0;
-        unchecked {
-            if (block.timestamp - updatedAt > LINK_ETH_MAX_STALE) return 0;
-        }
+        ) {
+            if (answer <= 0 || updatedAt == 0 || answeredInRound < roundId)
+                return 0;
+            if (updatedAt > block.timestamp) return 0;
+            unchecked {
+                if (block.timestamp - updatedAt > LINK_ETH_MAX_STALE) return 0;
+            }
 
-        ethAmount = (amount * uint256(answer)) / 1 ether;
+            uint256 a = uint256(answer);
+            if (amount > type(uint256).max / a) return 0;
+            unchecked {
+                return (amount * a) / 1 ether;
+            }
+        } catch {
+            return 0;
+        }
     }
 
     /// @dev Calculate reward multiplier based on subscription LINK balance.

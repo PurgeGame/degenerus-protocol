@@ -1180,13 +1180,18 @@ contract DegenerusGameMintModule is
             uint256 burnieTokens
         )
     {
+        uint24 cl = _activeTicketLevel();
+        uint256 oneTicketWei = PriceLookupLib.priceForLevel(cl);
+        uint256 seed = _farFutureSeed(player);
         uint256 cashWei;
         (totalFaceWei, totalBudget, ticketWei, cashWei) = _quoteFarFutureSwap(
-            player,
             levels,
-            quantities
+            quantities,
+            cl,
+            oneTicketWei,
+            seed
         );
-        (ethCashWei, burnieTokens) = _quoteFarFutureBurnieSplit(player, cashWei);
+        (ethCashWei, burnieTokens) = _quoteFarFutureBurnieSplit(cashWei, oneTicketWei, seed);
     }
 
     /// @notice Sell far-future ticket entries to sDGNRS (current-level tickets + cash; -EV exit).
@@ -1217,13 +1222,15 @@ contract DegenerusGameMintModule is
             queueIndices.length != len
         ) revert E();
 
-        uint256 oneTicketWei = PriceLookupLib.priceForLevel(_activeTicketLevel());
+        uint24 cl = _activeTicketLevel();
+        uint256 oneTicketWei = PriceLookupLib.priceForLevel(cl);
+        uint256 seed = _farFutureSeed(player);
         (
             ,
             uint256 totalBudget,
             uint256 ticketWei,
             uint256 cashWei
-        ) = _quoteFarFutureSwap(player, levels, quantities);
+        ) = _quoteFarFutureSwap(levels, quantities, cl, oneTicketWei, seed);
         if (totalBudget < oneTicketWei) revert E(); // too small to deliver even 1 whole ticket
 
         // Fund fail-closed from sDGNRS's OWN claimable, leaving a >=1 ETH floor. The gambling-burn
@@ -1238,8 +1245,9 @@ contract DegenerusGameMintModule is
         // sDGNRS-owned BURNIE, with an ETH fallback when sDGNRS holds no BURNIE. The split conserves
         // the cash-leg value (ethCashWei + value(burnieTokens) == cashWei), so the offer is unchanged.
         (uint256 ethCashWei, uint256 burnieTokens) = _quoteFarFutureBurnieSplit(
-            player,
-            cashWei
+            cashWei,
+            oneTicketWei,
+            seed
         );
 
         // Debit the seller's far entries (owed is in entries, 4 per whole ticket; swap-pop on full

@@ -15,6 +15,7 @@ import {
 } from "../interfaces/IVRFCoordinator.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
+import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
@@ -964,9 +965,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // --- x00 keep roll (5d4 dice: 30-65% keep, avg ~47.5%) ---
         // Operates on post-jackpot memFuture — all reward jackpots drew first.
         if ((lvl % 100) == 0) {
-            uint256 seed = uint256(
-                keccak256(abi.encodePacked(rngWord, FUTURE_KEEP_TAG))
-            );
+            uint256 seed = EntropyLib.hash2(rngWord, uint256(FUTURE_KEEP_TAG));
             uint256 total;
             unchecked {
                 total =
@@ -1397,7 +1396,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         for (uint24 searchDay = 1; searchDay < searchLimit; ) {
             uint256 w = rngWordByDay[searchDay];
             if (w != 0) {
-                combined = uint256(keccak256(abi.encodePacked(combined, w)));
+                combined = EntropyLib.hash2(combined, w);
                 unchecked {
                     ++found;
                 }

@@ -23,25 +23,20 @@ library PriceLookupLib {
         if (targetLevel < 5) return 0.01 ether;
         if (targetLevel < 10) return 0.02 ether;
 
-        // Levels 10-99 (first full cycle without intro tiers)
-        if (targetLevel < 30) return 0.04 ether;
-        if (targetLevel < 60) return 0.08 ether;
-        if (targetLevel < 90) return 0.12 ether;
-        if (targetLevel < 100) return 0.16 ether;
-
+        // Levels 10-99 share the repeating-cycle tiers: their cycleOffset equals
+        // the level itself and is never 0 in that range, so one chain serves all
+        // levels >= 10.
         uint256 cycleOffset = targetLevel % 100;
 
-        // Price tiers within the repeating 100-level cycle (levels 100+)
         if (cycleOffset == 0) {
             return 0.24 ether; // Milestone levels: 100, 200, 300...
-        } else if (cycleOffset < 30) {
-            return 0.04 ether; // Early cycle: x01-x29
-        } else if (cycleOffset < 60) {
-            return 0.08 ether; // Mid cycle: x30-x59
-        } else if (cycleOffset < 90) {
-            return 0.12 ether; // Late cycle: x60-x89
-        } else {
-            return 0.16 ether; // Final cycle: x90-x99
+        }
+        // Non-milestone cycle prices are 0.04 ether multiples keyed by decade
+        // (the tier table above): offsets 1-29 -> 1x, 30-59 -> 2x, 60-89 -> 3x,
+        // 90-99 -> 4x. Nibble table indexed by cycleOffset / 10; max product
+        // 0.04 ether * 15 cannot overflow.
+        unchecked {
+            return 0.04 ether * ((0x4333222111 >> ((cycleOffset / 10) * 4)) & 0xF);
         }
     }
 }

@@ -1569,7 +1569,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         uint24 questDay = _simulatedDayIndex();
         uint32 mainTraitsPacked = _rollWinningTraits(randWord, true);
-        uint256 saltedRng = uint256(keccak256(abi.encodePacked(randWord, BONUS_TRAITS_TAG)));
+        uint256 saltedRng = EntropyLib.hash2(randWord, uint256(BONUS_TRAITS_TAG));
         uint32 bonusTraitsPacked = _rollWinningTraits(saltedRng, true);
         emit DailyWinningTraits(questDay, mainTraitsPacked, bonusTraitsPacked, bonusTargetLevel);
     }
@@ -1762,7 +1762,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         bool isBonus
     ) private view returns (uint32 packed) {
         uint256 r = isBonus
-            ? uint256(keccak256(abi.encodePacked(randWord, BONUS_TRAITS_TAG)))
+            ? EntropyLib.hash2(randWord, uint256(BONUS_TRAITS_TAG))
             : randWord;
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(r);
         _applyHeroOverride(traits, r, randWord);
@@ -1788,9 +1788,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         _applyHeroResult(traits, randWord, hasHeroWinner, heroQuadrant, heroSymbol);
         mainPacked = JackpotBucketLib.packWinningTraits(traits);
 
-        uint256 rBonus = uint256(
-            keccak256(abi.encodePacked(randWord, BONUS_TRAITS_TAG))
-        );
+        uint256 rBonus = EntropyLib.hash2(randWord, uint256(BONUS_TRAITS_TAG));
         traits = JackpotBucketLib.getRandomTraits(rBonus);
         _applyHeroResult(traits, rBonus, hasHeroWinner, heroQuadrant, heroSymbol);
         bonusPacked = JackpotBucketLib.packWinningTraits(traits);

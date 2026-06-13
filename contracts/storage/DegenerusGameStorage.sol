@@ -672,12 +672,18 @@ abstract contract DegenerusGameStorage {
         // Block new tickets once liveness-timeout is active (see _queueTickets).
         if (_livenessTriggered()) revert E();
         emit TicketsQueuedRange(buyer, startLevel, numLevels, ticketsPerLevel);
-        uint24 currentLevel = level; // cache outside loop to avoid repeated SLOAD
+        // Loop-invariant slot-0 reads cached outside the loop (the body's mapping
+        // SSTOREs block the optimizer from hoisting them; neither value has a
+        // writer reachable from the body). The per-level lock check observes the
+        // same locked value either way.
+        uint24 currentLevel = level;
+        bool rngLockedCached = rngLockedFlag;
+        uint24 writeSlotBit = ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0);
         uint24 lvl = startLevel;
         for (uint24 i = 0; i < numLevels; ) {
             bool isFarFuture = lvl > currentLevel + 5;
-            if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
-            uint24 wk = isFarFuture ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
+            if (isFarFuture && rngLockedCached && !rngBypass) revert RngLocked();
+            uint24 wk = isFarFuture ? _tqFarFutureKey(lvl) : (lvl | writeSlotBit);
             uint40 packed = ticketsOwedPacked[wk][buyer];
             uint32 owed = uint32(packed >> 8);
             uint8 rem = uint8(packed);

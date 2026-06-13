@@ -96,14 +96,6 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         mintPacked_[player] = updated;
     }
 
-    /// @dev Effective mint streak (resets if a level was missed).
-    function _mintStreakEffective(
-        address player,
-        uint24 currentMintLevel
-    ) internal view returns (uint24 streak) {
-        return _mintStreakEffectiveFromPacked(mintPacked_[player], currentMintLevel);
-    }
-
     /// @dev Effective mint streak computed from an already-loaded mintPacked_ word
     ///      (resets if a level was missed).
     function _mintStreakEffectiveFromPacked(
@@ -146,14 +138,20 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ///      ownership (the executing path checks holdings at debit). The split clamps the ticket leg
     ///      to <= totalBudget so the preview is safe for a too-small bundle (the executing path
     ///      separately requires totalBudget >= one whole current ticket).
+    /// @param cl The active ticket level (caller-computed, shared with the split).
+    /// @param oneTicketWei priceForLevel(cl) (caller-computed, shared with the split).
+    /// @param seed The per-player daily salvage seed (_farFutureSeed — one computation
+    ///        site keeps preview/exec parity by construction).
     /// @return totalFaceWei Sum of priceForLevel(L) * n over all lines.
     /// @return totalBudget Sum of jittered, distance-scaled budgets (ETH sDGNRS would pay).
     /// @return ticketWei Current-level ticket leg (jittered share, floored at 1 whole ticket).
     /// @return cashWei Withdrawable cash residual (totalBudget - ticketWei).
     function _quoteFarFutureSwap(
-        address player,
         uint32[] calldata levels,
-        uint256[] calldata quantities
+        uint256[] calldata quantities,
+        uint24 cl,
+        uint256 oneTicketWei,
+        uint256 seed
     )
         internal
         view
@@ -164,12 +162,6 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             uint256 cashWei
         )
     {
-        uint24 cl = _activeTicketLevel();
-        uint256 seed = uint256(
-            keccak256(
-                abi.encodePacked(player, rngWordByDay[_simulatedDayIndex() - 1])
-            )
-        );
         uint256 jitterMult = 7000 + (seed % 4001); // fraction multiplier [70%, 110%]
         uint256 ticketShareBps = 4000 + ((seed >> 128) % 4001); // ticket share [40%,80%] (cash [20%,60%])
 
@@ -190,7 +182,6 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             }
         }
 
-        uint256 oneTicketWei = PriceLookupLib.priceForLevel(cl);
         ticketWei = (totalBudget * ticketShareBps) / 10_000;
         if (ticketWei < oneTicketWei) ticketWei = oneTicketWei;
         if (ticketWei > totalBudget) ticketWei = totalBudget; // preview-safety clamp (too-small bundle)
@@ -205,27 +196,23 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ///      conserved: ethCashWei + (value of burnieTokens) == cashWei, so the offer stays <= the
     ///      no-arb ceiling regardless of the split. Both the preview and the executing path call this,
     ///      so the displayed ETH/BURNIE breakdown matches what is paid.
-    /// @param player Seller (seeds the per-player jitter, identical to _quoteFarFutureSwap).
     /// @param cashWei The cash residual being split (totalBudget - ticketWei).
+    /// @param priceWei priceForLevel(active ticket level) (caller-computed).
+    /// @param seed The per-player daily salvage seed (same word as _quoteFarFutureSwap).
     /// @return ethCashWei ETH part relabeled to the player (cashWei - the BURNIE part's ETH value).
     /// @return burnieTokens BURNIE base units transferred from sDGNRS to the player.
     function _quoteFarFutureBurnieSplit(
-        address player,
-        uint256 cashWei
+        uint256 cashWei,
+        uint256 priceWei,
+        uint256 seed
     ) internal view returns (uint256 ethCashWei, uint256 burnieTokens) {
         if (cashWei == 0) return (0, 0);
 
-        uint256 seed = uint256(
-            keccak256(
-                abi.encodePacked(player, rngWordByDay[_simulatedDayIndex() - 1])
-            )
-        );
         // Third slice (distinct window from the jitter [bits 0..] and ticket-share [bits 128..]
         // slices): an ETH target in [0, cashWei].
         uint256 targetEth = ((seed >> 64) % (cashWei + 1));
         if (targetEth == 0) return (cashWei, 0);
 
-        uint256 priceWei = PriceLookupLib.priceForLevel(_activeTicketLevel());
         if (priceWei == 0) return (cashWei, 0);
 
         // Cap the BURNIE part at sDGNRS-owned BURNIE (wallet + claimable coinflip stake), valued at
@@ -237,6 +224,17 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         uint256 burnieEth = (burnieTokens * priceWei) / PRICE_COIN_UNIT;
         if (burnieEth > cashWei) burnieEth = cashWei; // defensive; rounding can never exceed cashWei
         ethCashWei = cashWei - burnieEth;
+    }
+
+    /// @dev Per-player daily salvage seed: the seller hashed with the SETTLED prior-day
+    ///      VRF word (freeze-safe). Single computation site shared by the swap quote and
+    ///      the BURNIE split so preview and execution always derive the same offer.
+    function _farFutureSeed(address player) internal view returns (uint256) {
+        return uint256(
+            keccak256(
+                abi.encodePacked(player, rngWordByDay[_simulatedDayIndex() - 1])
+            )
+        );
     }
 
     /// @dev Shared activity score computation with explicit quest streak and streak base level.
@@ -404,11 +402,6 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             BitPackingLib.MASK_8,
             0
         );
-    }
-
-    /// @dev The current cashout/smite curse points for `player` (UI view).
-    function curseCountOf(address player) external view returns (uint8) {
-        return uint8((mintPacked_[player] >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8);
     }
 
     /// @dev Stamp the current simulated day into `player`'s DAY_SHIFT field for lootbox

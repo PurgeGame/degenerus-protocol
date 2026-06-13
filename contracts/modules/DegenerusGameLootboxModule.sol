@@ -856,7 +856,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // word) — and the player feed it. No live, post-word-reveal input enters the seed, so
         // neither claim timing nor a futurePrizePool nudge can re-roll the outcome. No live day is
         // read here either — boon expiry uses the boon path's own currentDay.
-        uint256 seed = uint256(keccak256(abi.encode(rngWord, player)));
+        uint256 seed = EntropyLib.hash2(rngWord, uint256(uint160(player)));
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
@@ -922,7 +922,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 box = remaining > 5 ether ? 5 ether : remaining;
             _resolveRedemptionChunk(player, box, rngWord, activityScore);
             remaining -= box;
-            rngWord = uint256(keccak256(abi.encode(rngWord)));
+            rngWord = EntropyLib.hash1(rngWord);
         }
     }
 
